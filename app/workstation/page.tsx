@@ -243,12 +243,19 @@ export default function WorkStationPage({ isEmbedded = false }: { isEmbedded?: b
 
     const [userImage, setUserImage] = useState(session?.user?.image || "/assets/default-avatar.png");
 
-    // 🔥 TRAVA DE SEGURANÇA DA ROTA: Se for professor tentando acessar a rota raiz /workstation, joga para a sidebar
+    // Redireciona qualquer acesso direto a /workstation para a workstation correta
     useEffect(() => {
-        if (isTeacher && pathname === '/workstation' && !isEmbedded) {
-            router.replace('/workstation/teacher/profile');
+        if (isEmbedded || status === "loading" || isSyncing) return;
+
+        if (pathname === '/workstation') {
+            if (isTeacher) {
+                router.replace('/workstation/teacher/profile');
+            } else {
+                // Alunos e visitantes vão para a workstation unificada do aluno
+                router.replace('/workstation/student/profile');
+            }
         }
-    }, [isTeacher, pathname, isEmbedded, router]);
+    }, [isTeacher, pathname, isEmbedded, router, status, isSyncing]);
 
     const getTargetRoom = () => {
         if (kycStatus === "rejected") return null;
@@ -401,7 +408,10 @@ export default function WorkStationPage({ isEmbedded = false }: { isEmbedded?: b
         );
     }
 
-    if (status === "unauthenticated") { router.replace("/"); return null; }
+    if (status === "unauthenticated" && !isEmbedded) {
+        router.replace("/workstation/student/profile");
+        return null;
+    }
 
     const cardBaseStyle = `relative overflow-hidden transition-all duration-300 border shrink-0 ${theme.cardBorder}`;
 

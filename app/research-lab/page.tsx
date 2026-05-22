@@ -178,7 +178,7 @@ const ChatInput = ({ value, onChange, onSend, isTyping, placeholder, lang = 'pt-
     );
 };
 
-export default function HomeworkPage() {
+export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: boolean }) {
     const { t } = useTranslation();
     const { data: session, status } = useSession();
 
@@ -488,7 +488,10 @@ export default function HomeworkPage() {
     if (!mounted || status === "loading") return <div className="w-full h-full flex items-center justify-center bg-slate-100"><IosLoader status="INICIANDO..." /></div>;
 
     return (
-        <div className={`relative transition-all duration-500 overflow-hidden flex font-sans w-full h-screen bg-slate-100 dark:bg-[#030014] ${isFocusMode ? 'pt-4' : 'pt-[100px]'}`}>
+        <div className={`relative transition-all duration-500 overflow-hidden flex font-sans w-full bg-slate-100 dark:bg-[#030014]
+            ${isEmbedded ? 'h-full' : 'h-screen'}
+            ${!isEmbedded ? (isFocusMode ? 'pt-4' : 'pt-[100px]') : ''}
+        `}>
 
             {/* NOTIFICAÇÃO FLUTUANTE (TOAST) */}
             <AnimatePresence>
@@ -505,34 +508,39 @@ export default function HomeworkPage() {
                 )}
             </AnimatePresence>
 
-            <AnimatePresence>
-                {!isFocusMode && (
-                    <motion.div initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -100 }} className="absolute top-0 left-0 w-full z-50">
-                        <Navbar />
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Navbar — apenas fora do modo embutido */}
+            {!isEmbedded && (
+                <AnimatePresence>
+                    {!isFocusMode && (
+                        <motion.div initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -100 }} className="absolute top-0 left-0 w-full z-50">
+                            <Navbar />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            )}
 
-            {/* SIDEBAR ULTRA-FINA */}
-            <motion.nav
-                onMouseEnter={() => setIsSidebarOpen(true)}
-                onMouseLeave={() => setIsSidebarOpen(false)}
-                animate={{ width: isSidebarOpen ? 180 : 54 }}
-                className={`fixed left-4 z-[550] flex flex-col py-6 rounded-[24px] border shadow-2xl bg-white dark:bg-[#0a0a0a] border-slate-300 dark:border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? 'top-4 h-[calc(100vh-32px)]' : 'top-[100px] h-[calc(100vh-140px)]'}`}
-            >
-                <div className="flex flex-col gap-4 px-2.5">
-                    <button onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
-                        <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-                        {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
-                    </button>
-                    <button onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl ${isFocusMode ? 'bg-cyan-500 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100'}`}>
-                        {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
-                        {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
-                    </button>
-                </div>
-            </motion.nav>
+            {/* SIDEBAR ULTRA-FINA — oculta quando embutido (workstation provê a navegação) */}
+            {!isEmbedded && (
+                <motion.nav
+                    onMouseEnter={() => setIsSidebarOpen(true)}
+                    onMouseLeave={() => setIsSidebarOpen(false)}
+                    animate={{ width: isSidebarOpen ? 180 : 54 }}
+                    className={`fixed left-4 z-[550] flex flex-col py-6 rounded-[24px] border shadow-2xl bg-white dark:bg-[#0a0a0a] border-slate-300 dark:border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? 'top-4 h-[calc(100vh-32px)]' : 'top-[100px] h-[calc(100vh-140px)]'}`}
+                >
+                    <div className="flex flex-col gap-4 px-2.5">
+                        <button onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
+                            <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
+                        </button>
+                        <button onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl ${isFocusMode ? 'bg-cyan-500 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100'}`}>
+                            {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
+                        </button>
+                    </div>
+                </motion.nav>
+            )}
 
-            <main className="flex-1 flex gap-8 p-6 pl-[80px] h-full overflow-hidden">
+            <main className={`flex-1 flex gap-8 p-6 ${!isEmbedded ? 'pl-[80px]' : ''} h-full overflow-hidden`}>
 
                 {/* COLUNA 1: ESTUDO (PDF + SCRIBE + QUIZ) */}
                 <div className={`w-1/2 h-full flex flex-col gap-8 overflow-y-auto custom-scrollbar pb-32 pr-2 ${isChatLeft ? 'order-first' : 'order-last'}`}>

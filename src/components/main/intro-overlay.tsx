@@ -20,7 +20,7 @@ type Props = {
     onDone?: () => void;
 };
 
-const PT_TEXT = "Clique para entrar na Zaeon";
+const PT_TEXT = "Toque_para_iniciar";
 const ZH_CHARS = "点击进入系统链接世界网络数据启动矩阵核心希望之星日月星辰";
 
 function GlitchChar({ originalChar, targetLang, index, hasStarted }: { originalChar: string, targetLang: 'pt' | 'zh', index: number, hasStarted: boolean }) {

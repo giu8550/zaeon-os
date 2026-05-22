@@ -31,28 +31,10 @@ import StarsCanvas from "@/components/main/star-background";
 // ============================================================================
 // DADOS DE PESQUISA
 // ============================================================================
-interface Participants {
-    grads: number;
-    masters: number;
-    phds: number;
-}
-
-interface ResearchDetails {
-    agents: string[];
-    writing: number;
-    methodology: number;
-    impact: number;
-    clarity: number;
-    rank: string;
-}
-
 interface ResearchItem {
     id: number;
     title: string;
-    participants: Participants;
-    progress: number;
-    status: string;
-    details: ResearchDetails;
+    desc: string;
 }
 
 const TITLES: string[] = [
@@ -70,70 +52,26 @@ const TITLES: string[] = [
     "Filtração de Microplásticos via Membranas de Quitina",
 ];
 
-const AGENT_NAMES: string[] = ["Alpha-Node", "Synapse-X", "Core-V", "Flux-8", "Vertex-Alpha", "Omni-1", "Nexus-9"];
-
-const getRank = (score: number): string => {
-    if (score >= 95) return "SS";
-    if (score >= 85) return "S";
-    if (score >= 70) return "A";
-    if (score >= 50) return "B";
-    return "C";
-};
-
-const getProgressLabel = (p: number): string => {
-    if (p < 25) return "Explorando";
-    if (p < 51) return "Validando";
-    if (p < 75) return "Construindo";
-    if (p < 99) return "Aguardando Revisão Humana";
-    return "Concluído";
-};
+const DESCRIPTIONS: string[] = [
+    "Pesquisa focada na utilização de cepas modificadas de Escherichia coli para sintetizar grafeno de alta qualidade a baixo custo de forma sustentável.",
+    "Estudo da condutividade elétrica e sinapses do micélio fúngico para projetar sistemas de bio-computação avançados e eficientes.",
+    "Engenharia de uma nova enzima catalisadora capaz de degradar plásticos do tipo PET em poucas horas, revolucionando a reciclagem global.",
+    "Desenvolvimento de concreto enriquecido com esporos biológicos que preenchem microfissuras automaticamente na presença de umidade.",
+    "Sistemas bio-miméticos projetados para recuperar CO2 atmosférico e convertê-lo em combustíveis limpos e oxigênio com alta eficiência.",
+    "Sensores avançados que traduzem impulsos elétricos e químicos de vegetais em sinais digitais legíveis para computadores.",
+    "Processo bio-sustentável que emprega micro-organismos específicos para recuperar e purificar metais valiosos de resíduos eletrônicos.",
+    "Polímero biocompatível equipado com receptores integrados para fornecer sensibilidade tátil e térmica de alta precisão em próteses.",
+    "Modelagem preditiva inspirada na evolução natural para projetar e simular novas estruturas proteicas e funcionais inovadoras.",
+    "Codificação de grandes volumes de informação binária em cadeias estáveis de nucleotídeos de DNA para armazenamento de longo prazo.",
+    "Manipulação de genes de organismos marinhos para criar plantas ornamentais luminosas adequadas para a via pública.",
+    "Filtros de base biológica projetados a partir de resíduos de crustáceos para capturar partículas microscópicas de plástico em águas fluviais."
+];
 
 const RESEARCH_DATA: ResearchItem[] = Array.from({ length: 35 }).map((_, i) => {
-    let progress;
-    if (i === 0) progress = 75;
-    else if (i === 1) progress = 69;
-    else if (i === 2) progress = 65;
-    else progress = Math.floor(Math.random() * 46) + 5;
-
-    let phds = 0;
-    let masters = 0;
-    if (i < 4) {
-        phds = Math.floor(Math.random() * 3) + 1;
-        masters = Math.floor(Math.random() * 4) + 1;
-    } else if (i < 18) {
-        masters = Math.floor(Math.random() * 4) + 1;
-    }
-
-    const writing = Math.floor(Math.random() * 40) + 60;
-    const methodology = Math.floor(Math.random() * 40) + 60;
-    const impact = Math.floor(Math.random() * 40) + 60;
-    const clarity = Math.floor(Math.random() * 40) + 60;
-    const avgScore = (writing + methodology + impact + clarity) / 4;
-
-    const agentCount = Math.floor(Math.random() * 4) + 2;
-    const projectAgents: string[] = [];
-    for (let k = 0; k < agentCount; k++) {
-        projectAgents.push(AGENT_NAMES[k % AGENT_NAMES.length]);
-    }
-
     return {
         id: i + 1,
         title: TITLES[i % TITLES.length] + (i > 11 ? ` [Fase ${Math.floor(i / 5)}]` : ""),
-        participants: {
-            grads: Math.floor(Math.random() * 8) + 2,
-            masters,
-            phds,
-        },
-        progress,
-        status: progress > 50 ? "Construindo" : "Em Andamento",
-        details: {
-            agents: projectAgents,
-            writing,
-            methodology,
-            impact,
-            clarity,
-            rank: getRank(avgScore),
-        },
+        desc: DESCRIPTIONS[i % DESCRIPTIONS.length]
     };
 });
 
@@ -266,7 +204,7 @@ const DimensionalCodex = ({ pages }: { pages: typeof MANIFESTO_PAGES }) => {
         <div className="relative group perspective-2000 w-full flex justify-center z-30">
             <motion.div
                 initial={{ opacity: 0, rotateY: -15 }} animate={{ opacity: 1, rotateY: 0 }}
-                className={`relative w-full max-w-2xl h-[480px] rounded-[2.5rem] p-3 shadow-2xl flex flex-col overflow-visible transition-colors duration-500
+                className={`relative w-full max-w-2xl h-[450px] md:h-[480px] rounded-[2.5rem] p-3 shadow-2xl flex flex-col overflow-visible transition-colors duration-500
                     ${isCodexDark ? 'bg-[#0a0a0f] border-white/5' : 'bg-slate-200 border-slate-300'}`}
             >
                 <div className="absolute top-10 -left-0.5 w-0.5 h-10 bg-cyan-500/40 rounded-full blur-[1px]" />
@@ -347,114 +285,26 @@ const DimensionalCodex = ({ pages }: { pages: typeof MANIFESTO_PAGES }) => {
 };
 
 function ResearchCard({ item }: { item: ResearchItem }) {
-    const [isExpanded, setIsExpanded] = useState<boolean>(false);
-
     return (
         <motion.div
-            layout
-            onClick={() => setIsExpanded(!isExpanded)}
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className={`p-5 rounded-2xl border transition-all cursor-pointer group relative overflow-hidden flex-shrink-0
-        ${isExpanded
-                    ? "bg-white dark:bg-[#1e293b] border-cyan-500/50 shadow-2xl z-10"
-                    : "bg-white/40 dark:bg-white/[0.03] border-slate-200 dark:border-white/5 hover:border-cyan-500/30 dark:hover:border-cyan-500/20"
-                }`}
+            whileHover={{ y: -5, scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            className="p-5 rounded-2xl border bg-white/40 dark:bg-white/[0.03] border-slate-200 dark:border-white/5 hover:border-cyan-500/30 dark:hover:border-cyan-500/20 shadow-sm hover:shadow-[0_10px_35px_-10px_rgba(34,211,238,0.15)] transition-all duration-300 flex flex-col justify-start text-left"
         >
-            <div className="flex justify-between items-start mb-3">
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg transition-colors ${isExpanded ? "bg-cyan-600 text-white" : "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400"}`}>
-                        <BeakerIcon className="w-4 h-4" />
-                    </div>
-                    <div>
-                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase max-w-md leading-tight text-left">
-                            {item.title}
-                        </h4>
-                        {(item.details.rank === "S" || item.details.rank === "SS") && (
-                            <span className="text-[9px] font-black text-amber-500 ml-1 text-left block mt-1">Rank {item.details.rank}</span>
-                        )}
-                    </div>
+            <div className="flex items-center gap-3 mb-3">
+                <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 shrink-0">
+                    <BeakerIcon className="w-4 h-4" />
                 </div>
-
-                <div className="flex flex-col items-end gap-1">
-                    <span className={`text-[9px] font-black px-2 py-1 rounded-md uppercase ${item.progress > 90 ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-slate-200 dark:bg-white/10 text-slate-500"}`}>
-                        {item.status}
-                    </span>
-                    {isExpanded && <ChevronDownIcon className="w-3 h-3 text-slate-400 animate-bounce" />}
-                </div>
+                <h4 className="text-xs md:text-sm font-bold text-slate-800 dark:text-slate-200 uppercase leading-tight tracking-tight">
+                    {item.title}
+                </h4>
             </div>
-
-            <div className="flex gap-4 mb-4 pl-11 text-left">
-                {item.participants.phds > 0 && (
-                    <div className="text-[9px] text-slate-500 dark:text-slate-400"><b className="text-slate-800 dark:text-white">{item.participants.phds}</b> PhDs</div>
-                )}
-                {item.participants.masters > 0 && (
-                    <div className="text-[9px] text-slate-500 dark:text-slate-400"><b className="text-slate-800 dark:text-white">{item.participants.masters}</b> Mestres</div>
-                )}
-                <div className="text-[9px] text-slate-500 dark:text-slate-400"><b className="text-slate-800 dark:text-white">{item.participants.grads}</b> Graduandos</div>
-            </div>
-
-            <div className="pl-11">
-                <div className="flex justify-between text-[9px] font-bold mb-1 text-slate-800 dark:text-white">
-                    <span className="uppercase tracking-wide">{getProgressLabel(item.progress)}</span>
-                    <span>{item.progress}%</span>
-                </div>
-                <div className="w-full h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
-                    <motion.div
-                        initial={{ width: 0 }} whileInView={{ width: `${item.progress}%` }} transition={{ duration: 1.5, ease: "easeOut" }}
-                        className={`h-full rounded-full ${item.progress > 90 ? "bg-gradient-to-r from-emerald-500 to-teal-400" : "bg-gradient-to-r from-slate-800 to-cyan-500 dark:from-cyan-600 dark:to-blue-500"}`}
-                    />
-                </div>
-            </div>
-
-            <AnimatePresence>
-                {isExpanded && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                        <div className="mt-6 pt-4 border-t border-slate-200 dark:border-white/5 pl-2 text-left">
-                            <div className="mb-4">
-                                <h5 className="text-[10px] font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
-                                    <ServerStackIcon className="w-3 h-3" /> Agentes no Fluxo de Trabalho
-                                </h5>
-                                <div className="flex flex-wrap gap-2">
-                                    {item.details.agents.map((agent: string, idx: number) => (
-                                        <span key={idx} className="text-[9px] px-2 py-1 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 rounded border border-cyan-500/20">{agent}</span>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
-                                {[
-                                    { label: "Qualidade da Escrita", val: item.details.writing },
-                                    { label: "Metodologia", val: item.details.methodology },
-                                    { label: "Impacto", val: item.details.impact },
-                                    { label: "Clareza e Estrutura", val: item.details.clarity },
-                                ].map((metric, idx: number) => (
-                                    <div key={idx}>
-                                        <div className="flex justify-between text-[9px] mb-1">
-                                            <span className="text-slate-500">{metric.label}</span>
-                                            <span className="font-mono text-slate-700 dark:text-slate-300">{metric.val}/100</span>
-                                        </div>
-                                        <div className="h-1 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
-                                            <div style={{ width: `${metric.val}%` }} className={`h-full rounded-full ${metric.val > 80 ? "bg-emerald-500" : "bg-slate-400"}`} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="flex items-center justify-between mt-4 bg-slate-50 dark:bg-black/20 p-3 rounded-xl">
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] uppercase text-slate-400">Classificação do Projeto</span>
-                                    <span className={`text-2xl font-black ${item.details.rank === "SS" ? "text-purple-500" : item.details.rank === "S" ? "text-amber-500" : "text-slate-700 dark:text-white"}`}>
-                                        {item.details.rank}
-                                    </span>
-                                </div>
-                                <span className="text-[9px] font-mono text-slate-400 uppercase tracking-widest">Trilha Acadêmica</span>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <p className="text-xs text-slate-500 dark:text-white/50 leading-relaxed font-light">
+                {item.desc}
+            </p>
         </motion.div>
     );
 }
@@ -517,7 +367,7 @@ const AgentSection = () => {
                         whileInView={{ opacity: 1, scale: 1 }}
                         viewport={{ once: true }}
                         whileHover={{ boxShadow: "0 0 40px rgba(34, 211, 238, 0.15)" }}
-                        className={`flex-1 w-full max-w-4xl rounded-[2.5rem] bg-white/60 dark:bg-[#030014]/60 backdrop-blur-2xl border border-blue-200/50 dark:border-cyan-500/30 p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_0_30px_rgba(0,0,0,0.6)] flex flex-col transition-all duration-500 overflow-hidden ${showResearch ? 'h-[700px]' : 'h-auto'}`}
+                        className={`flex-1 w-full max-w-4xl rounded-[2.5rem] bg-white/60 dark:bg-[#030014]/60 backdrop-blur-2xl border border-blue-200/50 dark:border-cyan-500/30 p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_0_30px_rgba(0,0,0,0.6)] flex flex-col transition-all duration-500 overflow-hidden ${showResearch ? 'h-[500px] md:h-[700px]' : 'h-auto'}`}
                     >
                         <div className="w-full p-6 rounded-3xl bg-slate-900 dark:bg-[#0f172a] border border-white/10 shadow-xl overflow-hidden relative group shrink-0 text-left">
                             <div className="absolute top-0 right-0 p-4 opacity-10 dark:opacity-20">
@@ -559,7 +409,7 @@ const AgentSection = () => {
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: "100%" }}
                                     exit={{ opacity: 0, height: 0 }}
-                                    className="flex-1 overflow-y-auto pr-2 custom-scrollbar flex flex-col gap-4 mt-6"
+                                    className="flex-1 overflow-y-auto pr-2 custom-scrollbar grid grid-cols-1 md:grid-cols-2 gap-4 mt-6"
                                 >
                                     {RESEARCH_DATA.map((item: ResearchItem) => (
                                         <ResearchCard key={item.id} item={item} />
@@ -591,14 +441,14 @@ const AgentSection = () => {
 // --- SECTION: BLOCKCHAIN ---
 const BlockchainSection = () => {
     return (
-        <section className="relative z-30 min-h-screen w-full flex flex-col items-center justify-center p-12 lg:p-32 overflow-hidden transition-colors duration-500">
+        <section className="relative z-30 min-h-screen w-full flex flex-col items-center justify-center p-6 md:p-12 lg:p-32 overflow-hidden transition-colors duration-500">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
 
-            <div className="mb-20 text-center relative z-10">
+            <div className="mb-12 md:mb-20 text-center relative z-10">
                 <h4 className="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-400 mb-4 opacity-90">
                     Códice do Sistema
                 </h4>
-                <h2 className="text-5xl md:text-7xl font-black text-slate-900 dark:text-white tracking-tighter mb-4 transition-colors">
+                <h2 className="text-3xl md:text-5xl lg:text-7xl font-black text-slate-900 dark:text-white tracking-tighter mb-4 transition-colors">
                     VERDADE IMUTÁVEL
                 </h2>
                 <div className="flex items-center justify-center gap-4 text-cyan-600 dark:text-cyan-500 font-mono text-[10px] uppercase tracking-[0.5em]">
@@ -615,46 +465,19 @@ const BlockchainSection = () => {
                         viewport={{ once: true }}
                         transition={{ delay: idx * 0.1 }}
                         whileHover={{ y: -5 }}
-                        className={`p-8 rounded-[2rem] flex flex-col transition-all duration-500 group relative
+                        className={`p-6 md:p-8 rounded-[2rem] flex flex-col transition-all duration-500 group relative
                             ${data.isCurrent
                                 ? 'bg-cyan-50/80 dark:bg-cyan-900/10 border-2 border-cyan-500/50 dark:border-cyan-500/50 shadow-[0_0_40px_rgba(34,211,238,0.2)] dark:shadow-[0_0_40px_rgba(34,211,238,0.1)] scale-[1.02] z-10'
                                 : 'bg-white/80 dark:bg-white/5 border border-blue-200/50 dark:border-white/10 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-white/10 shadow-lg dark:shadow-none hover:border-cyan-500/30'
                             }
                         `}
                     >
-                        <div className="flex items-center justify-between mb-6">
-                            <div className={`flex items-center gap-3 px-3 py-1.5 rounded-full border ${data.isCurrent ? 'bg-cyan-500 text-white border-cyan-500 shadow-lg shadow-cyan-500/30' : 'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10'}`}>
-                                <CalendarDaysIcon className="w-4 h-4" />
-                                <span className="text-xs font-black tracking-widest">
-                                    {data.year}
-                                </span>
-                            </div>
-
-                            {data.isCurrent && (
-                                <span className="flex h-2.5 w-2.5 relative">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
-                                </span>
-                            )}
-                        </div>
-
                         <h3 className={`text-xl font-bold mb-4 tracking-tight transition-colors ${data.isCurrent ? 'text-slate-900 dark:text-cyan-50' : 'text-slate-800 dark:text-white'}`}>
                             {data.title}
                         </h3>
-                        <p className={`text-sm leading-relaxed font-light mb-6 flex-1 transition-colors ${data.isCurrent ? 'text-slate-700 dark:text-cyan-100/70' : 'text-slate-500 dark:text-white/50'}`}>
+                        <p className={`text-sm leading-relaxed font-light transition-colors ${data.isCurrent ? 'text-slate-700 dark:text-cyan-100/70' : 'text-slate-500 dark:text-white/50'}`}>
                             {data.desc}
                         </p>
-
-                        {data.formula && (
-                            <div className={`mt-auto p-4 rounded-xl font-serif italic text-center transition-colors ${data.isCurrent ? 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-800 dark:text-cyan-300' : 'bg-blue-50 dark:bg-black/40 border border-blue-100 dark:border-white/5 text-cyan-700 dark:text-cyan-300/80'}`}>
-                                {data.formula}
-                            </div>
-                        )}
-                        {data.code && (
-                            <div className="mt-auto p-4 rounded-xl bg-slate-800 dark:bg-black/60 border border-slate-700 dark:border-white/5 font-mono text-[9px] text-emerald-400 overflow-hidden text-ellipsis italic transition-colors">
-                                {data.code}
-                            </div>
-                        )}
                     </motion.div>
                 ))}
             </div>
