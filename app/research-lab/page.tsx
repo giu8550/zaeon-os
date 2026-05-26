@@ -9,7 +9,13 @@ import "@/src/i18n";
 
 // --- IMPORTS ---
 import { Navbar } from "@/components/main/navbar";
-import { Mic, MicOff } from "lucide-react";
+import { Mic, MicOff, Coffee } from "lucide-react";
+import dynamic from "next/dynamic";
+
+const StudyRoomContent = dynamic(() => import("@/app/workstation/student/StudyRoomContent"), { ssr: false });
+const StudentLoungeContent = dynamic(() => import("@/app/workstation/student/StudentLoungeContent"), { ssr: false });
+const TeacherLoungeContent = dynamic(() => import("@/app/workstation/teacher/LoungeContent"), { ssr: false });
+const ResearchesPage = dynamic(() => import("@/app/study-rooms/lounge/main-lounge/researches/page"), { ssr: false });
 import ResearchRoomTour from "@/components/onboard/ResearchRoomTour";
 
 // --- ICONS ---
@@ -24,7 +30,7 @@ import {
     EyeIcon, PowerIcon, BeakerIcon, ChatBubbleLeftRightIcon, ClipboardDocumentIcon,
     DocumentChartBarIcon, CheckBadgeIcon,
     LanguageIcon, PhotoIcon, LockClosedIcon, GlobeAltIcon, PencilSquareIcon, CloudArrowUpIcon,
-    NewspaperIcon
+    NewspaperIcon, AcademicCapIcon
 } from "@heroicons/react/24/outline";
 
 import NewsPanel from "@/components/research/NewsPanel";
@@ -378,8 +384,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const { t } = useTranslation();
     const { data: session, status } = useSession();
 
-    // --- MURAL & EDITOR TAB STATES ---
-    const [activeTab, setActiveTab] = useState<"editor" | "mural" | "news" | "profile">("editor");
+    // --- TAB STATES ---
+    const [activeTab, setActiveTab] = useState<"pesquisa" | "sala-de-estudos" | "pesquisas" | "lounge" | "pevem" | "news" | "profile">("pesquisa");
     const [selectedImages, setSelectedImages] = useState<string[]>([]);
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [muralSearchQuery, setMuralSearchQuery] = useState("");
@@ -608,9 +614,9 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
 
             showToast(`Pesquisa publicada como ${visibility === "public" ? "Pública" : "Privada"}!`);
             setIsPublishOpen(false);
-            
+
             await fetchMuralData();
-            setActiveTab("mural");
+            setActiveTab("pesquisas");
         } catch (error) {
             console.error(error);
             showToast("Erro ao publicar na rede.");
@@ -672,7 +678,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const tabParam = params.get('tab');
-        if (tabParam && ['editor', 'mural', 'news', 'profile'].includes(tabParam)) {
+        if (tabParam && ['pesquisa', 'sala-de-estudos', 'pesquisas', 'lounge', 'pevem', 'news', 'profile'].includes(tabParam)) {
             setActiveTab(tabParam as any);
         }
     }, []);
@@ -1004,16 +1010,24 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         setActiveTab(tab as any);
     };
 
+    const isTeacher = (session?.user as any)?.role === 'teacher';
+
     const getTabMeta = () => {
         switch (activeTab) {
-            case "mural":
-                return { title: "Mural de Pesquisas", subtitle: "Pesquisas publicadas pela comunidade Zaeon" };
+            case "sala-de-estudos":
+                return { title: "Sala de Estudos", subtitle: "Aulas, comunidade, provas e projetos do seu curso" };
+            case "pesquisas":
+                return { title: "Pesquisas", subtitle: "Todas as pesquisas iniciadas via agente" };
+            case "lounge":
+                return { title: "Lounge", subtitle: isTeacher ? "Espaço informal para conversa entre docentes" : "Espaço informal para conversa entre estudantes" };
+            case "pevem":
+                return { title: "Pevem News", subtitle: "Notificações e atualizações do sistema Pevem" };
             case "news":
                 return { title: "Central de Notícias", subtitle: "Atualizações, relatórios e eventos do ecossistema acadêmico" };
             case "profile":
                 return { title: "Identidade Neural", subtitle: "Seu perfil, conquistas e rede de colaboração" };
             default:
-                return { title: "Laboratório de Pesquisa", subtitle: "Seu espaço de criação e exportação ABNT" };
+                return { title: "Pesquisa", subtitle: "Agente de pesquisa, biblioteca de PDFs e exportação ABNT" };
         }
     };
     const tabMeta = getTabMeta();
@@ -1066,48 +1080,82 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                     animate={{ width: isSidebarOpen ? 180 : 54 }}
                     className={`fixed left-4 z-[550] flex flex-col py-6 rounded-[24px] border shadow-2xl bg-white dark:bg-[#0a0a0a] border-slate-300 dark:border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? 'top-4 h-[calc(100vh-32px)]' : 'top-[100px] h-[calc(100vh-140px)]'}`}
                 >
-                    <div className="flex flex-col gap-4 px-2.5">
-                        <button onClick={() => setActiveTab("editor")} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'editor' ? 'bg-purple-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}>
-                            <PencilSquareIcon className="w-5 h-5 shrink-0 group-hover:text-purple-400" />
-                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Escrever</span>}
+                    <div className="flex flex-col gap-3 px-2.5">
+                        {/* Pesquisa */}
+                        <button onClick={() => setActiveTab("pesquisa")} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'pesquisa' ? 'bg-purple-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}>
+                            <AcademicCapIcon className="w-5 h-5 shrink-0 group-hover:text-purple-400" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Pesquisa</span>}
                         </button>
-                        <button onClick={() => setActiveTab("mural")} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'mural' ? 'bg-cyan-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}>
-                            <GlobeAltIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-400" />
-                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Mural</span>}
+
+                        {/* Sala de Estudos */}
+                        <button onClick={() => setActiveTab("sala-de-estudos")} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'sala-de-estudos' ? 'bg-blue-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}>
+                            <DocumentTextIcon className="w-5 h-5 shrink-0 group-hover:text-blue-400" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Sala de Estudos</span>}
                         </button>
+
+                        {/* Pesquisas */}
+                        <button onClick={() => setActiveTab("pesquisas")} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'pesquisas' ? 'bg-emerald-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}>
+                            <BeakerIcon className="w-5 h-5 shrink-0 group-hover:text-emerald-400" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Pesquisas</span>}
+                        </button>
+
+                        {/* Lounge */}
+                        <button onClick={() => setActiveTab("lounge")} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'lounge' ? 'bg-violet-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}>
+                            <Coffee className="w-5 h-5 shrink-0 group-hover:text-violet-400" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Lounge</span>}
+                        </button>
+
+                        <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
+
+                        {/* Pevem News */}
+                        <button onClick={() => setActiveTab("pevem")} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'pevem' ? 'bg-orange-500 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}>
+                            <RocketLaunchIcon className="w-5 h-5 shrink-0 group-hover:text-orange-400" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Pevem</span>}
+                        </button>
+
+                        {/* Notícias */}
                         <button
                             data-tour="news-tab"
                             onClick={() => handleTabChange("news")}
                             className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'news' ? 'bg-amber-500 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}
                         >
                             <NewspaperIcon className="w-5 h-5 shrink-0" />
-                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">News</span>}
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Notícias</span>}
                         </button>
+
+                        {/* Perfil */}
                         <button
                             data-tour="profile-tab"
                             onClick={() => handleTabChange("profile")}
                             className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'profile' ? 'bg-violet-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}
                         >
                             <UserCircleIcon className="w-5 h-5 shrink-0" />
-                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Profile</span>}
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Perfil</span>}
                         </button>
+
                         <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
-                        <button data-tour="layout-toggle" onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
-                            <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
-                        </button>
-                        <button data-tour="focus-mode" onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}>
-                            {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
-                            {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
-                        </button>
+
+                        {/* Layout & Focus (only show for pesquisa) */}
+                        {activeTab === 'pesquisa' && (
+                            <>
+                                <button data-tour="layout-toggle" onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
+                                    <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
+                                    {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
+                                </button>
+                                <button data-tour="focus-mode" onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}>
+                                    {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
+                                    {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
+                                </button>
+                            </>
+                        )}
                     </div>
                 </motion.nav>
             )}
 
             <main className={`flex-1 flex flex-col ${!isEmbedded ? 'pl-[80px]' : ''} h-full overflow-hidden p-6 gap-6`}>
                 
-                {/* CABEÇALHO/NAVEGAÇÃO DO MURAL E EDITOR */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
+                {/* CABEÇALHO */}
+                <div className="flex items-end justify-between shrink-0">
                     <div>
                         <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
                             {tabMeta.title}
@@ -1116,44 +1164,10 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             {tabMeta.subtitle}
                         </p>
                     </div>
-                    
-                    {/* Tab Switcher (Visible on both modes, responsive) */}
-                    <div className="flex p-1 bg-white/60 dark:bg-black/60 backdrop-blur-md rounded-2xl border border-slate-300 dark:border-white/10 shadow-lg shrink-0">
-                        <button 
-                            onClick={() => setActiveTab("editor")} 
-                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'editor' ? 'bg-purple-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-200/50 dark:hover:bg-white/5'}`}
-                        >
-                            <PencilSquareIcon className="w-3.5 h-3.5" />
-                            Escrever
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("mural")}
-                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'mural' ? 'bg-cyan-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-200/50 dark:hover:bg-white/5'}`}
-                        >
-                            <GlobeAltIcon className="w-3.5 h-3.5" />
-                            Mural
-                        </button>
-                        <button
-                            data-tour="news-tab-pill"
-                            onClick={() => handleTabChange("news")}
-                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'news' ? 'bg-amber-500 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-200/50 dark:hover:bg-white/5'}`}
-                        >
-                            <NewspaperIcon className="w-4 h-4" />
-                            News
-                        </button>
-                        <button
-                            data-tour="profile-tab-pill"
-                            onClick={() => handleTabChange("profile")}
-                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'profile' ? 'bg-violet-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-200/50 dark:hover:bg-white/5'}`}
-                        >
-                            <UserCircleIcon className="w-4 h-4" />
-                            Profile
-                        </button>
-                    </div>
                 </div>
 
                 <div className="flex-1 flex gap-8 overflow-hidden h-full">
-                    {activeTab === "editor" && (
+                    {activeTab === "pesquisa" && (
                         <>
                             {/* COLUNA 1: ESTUDO (PDF + SCRIBE + QUIZ) */}
                             <div className={`w-1/2 h-full flex flex-col gap-8 overflow-y-auto custom-scrollbar pb-32 pr-2 ${isChatLeft ? 'order-first' : 'order-last'}`}>
@@ -1244,6 +1258,54 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                             )}
                                         </div>
                                     )}
+                                </section>
+
+                                {/* APOIO AUDIOVISUAL */}
+                                <section data-tour="youtube" onClick={() => setActiveSection('videos')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('videos')}`}>
+                                    <div className="flex items-center gap-4 mb-6">
+                                        <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-black px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
+                                            <VideoCameraIcon className="w-4 h-4" /> Apoio Audiovisual
+                                        </span>
+                                        <div className="ml-auto">
+                                            <button
+                                                onClick={() => setIsAddVideoModalOpen(true)}
+                                                className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full text-[10px] font-black uppercase shadow-md flex items-center gap-2 transition-colors"
+                                            >
+                                                <PlusIcon className="w-3.5 h-3.5" /> Adicionar Vídeo
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-row gap-6 overflow-x-auto pb-4 pt-2 min-h-[220px] custom-scrollbar">
+                                        {videos.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic m-auto">Nenhum vídeo adicionado. Clique em "Adicionar Vídeo" para colar um link.</span>}
+                                        {videos.map(vid => (
+                                            <div key={vid.id} className="flex-shrink-0 w-[360px] h-[200px] bg-slate-200 dark:bg-black rounded-[24px] overflow-hidden shadow-md relative group/vid border border-slate-300 dark:border-white/10">
+                                                <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${vid.youtubeId}`} frameBorder="0" allowFullScreen />
+                                                <button onClick={(e) => { e.stopPropagation(); setVideos(prev => prev.filter(v => v.id !== vid.id)); }} className="absolute top-3 right-3 p-3 bg-black dark:bg-white text-white dark:text-black rounded-xl opacity-0 group-hover/vid:opacity-100 transition-opacity hover:scale-105 shadow-xl"><TrashIcon className="w-5 h-5" /></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+
+                                {/* AGENTE QUIZ */}
+                                <section data-tour="specialists" onClick={() => setActiveSection('examiner')} className={`flex flex-col h-[520px] shrink-0 rounded-[32px] overflow-hidden ${getCardStyle('examiner')}`}>
+                                    <div className="p-5 border-b border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase text-orange-700 dark:text-orange-400 tracking-widest border border-orange-300 px-4 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30">Quiz</span>
+                                        <div className="w-10 h-10 rounded-full border border-slate-300 shadow-sm overflow-hidden"><img src="/agents/examiner.png" className="w-full h-full object-cover" /></div>
+                                    </div>
+                                    <div ref={examinerChatRef} className="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar bg-white dark:bg-[#0f172a]/50">
+                                        {specialistChatHistory.examiner.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic flex items-center justify-center h-full text-center px-4">Peça ao Quiz para fazer perguntas sobre o assunto da sua pesquisa e teste seus conhecimentos.</span>}
+                                        {specialistChatHistory.examiner.map((msg, i) => <ChatBubble key={i} role={msg.role} text={msg.text} agentName="Quiz" agentImg="/agents/examiner.png" userImg={session?.user?.image} />)}
+                                        {isExaminerTyping && <div className="text-[11px] text-orange-600 font-black uppercase tracking-widest animate-pulse ml-12">Quiz está a avaliar...</div>}
+                                    </div>
+                                    <div className="p-4 bg-slate-50 dark:bg-black border-t border-slate-300 dark:border-white/10">
+                                        <ChatInput
+                                            value={examinerPrompt}
+                                            onChange={setExaminerPrompt}
+                                            onSend={() => handleSpecialistQuery('examiner', examinerPrompt)}
+                                            isTyping={isExaminerTyping}
+                                            placeholder="Fale ou escreva a sua resposta..."
+                                        />
+                                    </div>
                                 </section>
 
                                 {/* IMAGENS DE REFERÊNCIA */}
@@ -1394,56 +1456,38 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                         </>
                     )}
 
-                    {activeTab === "mural" && (
-                        /* STUDY SUPPORT VIEW (MURAL TAB) */
-                        <div className="w-full h-full overflow-y-auto custom-scrollbar pb-32 pr-2 flex flex-col gap-8 text-left">
-                            {/* Apoio Audiovisual Card */}
-                            <section data-tour="youtube" onClick={() => setActiveSection('videos')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('videos')}`}>
-                                <div className="flex items-center gap-4 mb-6">
-                                    <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-black px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
-                                        <VideoCameraIcon className="w-4 h-4" /> Apoio Audiovisual
-                                    </span>
-                                    <div className="ml-auto">
-                                        <button 
-                                            onClick={() => setIsAddVideoModalOpen(true)}
-                                            className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full text-[10px] font-black uppercase shadow-md flex items-center gap-2 transition-colors"
-                                        >
-                                            <PlusIcon className="w-3.5 h-3.5" /> Adicionar Vídeo
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="flex flex-row gap-6 overflow-x-auto pb-4 pt-2 min-h-[220px] custom-scrollbar">
-                                    {videos.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic m-auto">Nenhum vídeo adicionado. Clique em "Adicionar Vídeo" para colar um link.</span>}
-                                    {videos.map(vid => (
-                                        <div key={vid.id} className="flex-shrink-0 w-[360px] h-[200px] bg-slate-200 dark:bg-black rounded-[24px] overflow-hidden shadow-md relative group/vid border border-slate-300 dark:border-white/10">
-                                            <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${vid.youtubeId}`} frameBorder="0" allowFullScreen />
-                                            <button onClick={(e) => { e.stopPropagation(); setVideos(prev => prev.filter(v => v.id !== vid.id)); }} className="absolute top-3 right-3 p-3 bg-black dark:bg-white text-white dark:text-black rounded-xl opacity-0 group-hover/vid:opacity-100 transition-opacity hover:scale-105 shadow-xl"><TrashIcon className="w-5 h-5" /></button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
+                    {activeTab === "sala-de-estudos" && (
+                        <div className="w-full h-full overflow-hidden">
+                            <StudyRoomContent />
+                        </div>
+                    )}
 
-                            {/* Agente Quiz Card */}
-                            <section data-tour="specialists" onClick={() => setActiveSection('examiner')} className={`flex flex-col h-[520px] shrink-0 rounded-[32px] overflow-hidden ${getCardStyle('examiner')}`}>
-                                <div className="p-5 border-b border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
-                                    <span className="text-[10px] font-black uppercase text-orange-700 dark:text-orange-400 tracking-widest border border-orange-300 px-4 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30">Quiz</span>
-                                    <div className="w-10 h-10 rounded-full border border-slate-300 shadow-sm overflow-hidden"><img src="/agents/examiner.png" className="w-full h-full object-cover" /></div>
-                                </div>
-                                <div ref={examinerChatRef} className="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar bg-white dark:bg-[#0f172a]/50">
-                                    {specialistChatHistory.examiner.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic flex items-center justify-center h-full text-center px-4">Peça ao Quiz para fazer perguntas sobre o assunto da sua pesquisa e teste seus conhecimentos.</span>}
-                                    {specialistChatHistory.examiner.map((msg, i) => <ChatBubble key={i} role={msg.role} text={msg.text} agentName="Quiz" agentImg="/agents/examiner.png" userImg={session?.user?.image} />)}
-                                    {isExaminerTyping && <div className="text-[11px] text-orange-600 font-black uppercase tracking-widest animate-pulse ml-12">Quiz está a avaliar...</div>}
-                                </div>
-                                <div className="p-4 bg-slate-50 dark:bg-black border-t border-slate-300 dark:border-white/10">
-                                    <ChatInput
-                                        value={examinerPrompt}
-                                        onChange={setExaminerPrompt}
-                                        onSend={() => handleSpecialistQuery('examiner', examinerPrompt)}
-                                        isTyping={isExaminerTyping}
-                                        placeholder="Fale ou escreva a sua resposta..."
-                                    />
-                                </div>
-                            </section>
+                    {activeTab === "pesquisas" && (
+                        <div className="w-full h-full overflow-y-auto custom-scrollbar">
+                            <ResearchesPage />
+                        </div>
+                    )}
+
+                    {activeTab === "lounge" && (
+                        <div className="w-full h-full overflow-y-auto custom-scrollbar">
+                            {isTeacher ? <TeacherLoungeContent /> : <StudentLoungeContent />}
+                        </div>
+                    )}
+
+                    {activeTab === "pevem" && (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-6">
+                            <div className="w-20 h-20 rounded-[28px] bg-orange-500/10 flex items-center justify-center">
+                                <RocketLaunchIcon className="w-10 h-10 text-orange-500" />
+                            </div>
+                            <div className="text-center max-w-sm">
+                                <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-widest mb-2">Pevem News</h2>
+                                <p className="text-xs text-slate-500 dark:text-white/40 leading-relaxed">
+                                    Esta seção estará disponível em breve. Aqui você receberá notificações e atualizações do sistema Pevem integrado à Zaeon.
+                                </p>
+                            </div>
+                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-[0.3em] border border-orange-500/30 px-4 py-2 rounded-full bg-orange-500/5">
+                                Em Desenvolvimento
+                            </span>
                         </div>
                     )}
 
