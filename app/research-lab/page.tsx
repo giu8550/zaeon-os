@@ -27,6 +27,7 @@ import {
 
 // --- COMPONENTS ---
 import ResearchCardPDF from "@/components/ui/ResearchCardPDF";
+import { ABNT_TEMPLATE, parseAbntMarkers, isEmptyOrTemplate } from '@/lib/abntTemplate';
 
 // --- TYPES ---
 interface StudyDoc { id: string; title: string; url: string; file?: File; }
@@ -396,7 +397,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [workType, setWorkType] = useState<"Artigo" | "Relatório" | "TCC" | null>(null);
     const [isWorkTypeMenuOpen, setIsWorkTypeMenuOpen] = useState(false);
     const [docTitle, setDocTitle] = useState("minha_pesquisa.pdf");
-    const [docContent, setDocContent] = useState("");
+    const [docContent, setDocContent] = useState(ABNT_TEMPLATE);
+    const [hintOpen, setHintOpen] = useState(true);
     const [activeProject, setActiveProject] = useState<any>(null);
 
     // --- DATA STATES ---
@@ -871,6 +873,9 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         setAbntWarnings([]);
         setExportProgress(["Estruturando seções com IA (ABNT Structurer)..."]);
 
+        // Tenta parsear marcadores estruturados do editor
+        const parsedSections = parseAbntMarkers(docContent);
+
         try {
             const response = await fetch('/api/documents/abnt-export', {
                 method: 'POST',
@@ -888,6 +893,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                     year: abntMeta.year,
                     format,
                     fontChoice: abntMeta.fontChoice,
+                    parsedSections: parsedSections ?? undefined,
                 }),
             });
 
@@ -1212,10 +1218,48 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                 </div>
 
                                 {/* ÁREA DE TEXTO DA FOLHA */}
-                                <div className="flex-1 p-12 md:p-16 overflow-y-auto custom-scrollbar">
+                                <div className="flex-1 p-12 md:p-16 overflow-y-auto custom-scrollbar flex flex-col gap-4">
+                                    {/* ── ABNT HINT BAR ── */}
+                                    {(isEmptyOrTemplate(docContent) || hintOpen) && (
+                                        <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/80 dark:bg-indigo-950/40 overflow-hidden text-left shrink-0">
+                                            <button
+                                                onClick={() => setHintOpen(h => !h)}
+                                                className="w-full flex items-center justify-between px-5 py-3 text-[11px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400"
+                                            >
+                                                <span className="flex items-center gap-2">
+                                                    <SparklesIcon className="w-3.5 h-3.5" />
+                                                    Como escrever na Zaeon para exportação ABNT automática
+                                                </span>
+                                                <span>{hintOpen ? '▲' : '▼'}</span>
+                                            </button>
+                                            {hintOpen && (
+                                                <div className="px-5 pb-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-indigo-700 dark:text-indigo-300 leading-relaxed">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-black">① Use # para seções principais</span>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]"># INTRODUÇÃO</code>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]"># METODOLOGIA</code>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]"># CONCLUSÃO</code>
+                                                        <span className="text-indigo-500 dark:text-indigo-400 text-[10px]">Títulos ficam em MAIÚSCULAS automaticamente.</span>
+                                                    </div>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-black">② Use ## para subseções</span>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]">## Revisão da Literatura</code>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]">## Análise dos Dados</code>
+                                                        <span className="text-indigo-500 dark:text-indigo-400 text-[10px]">Subseções recebem numeração automática (ex: 2.1).</span>
+                                                    </div>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-black">③ Escreva as referências em # REFERÊNCIAS</span>
+                                                        <span className="text-indigo-500 dark:text-indigo-400 text-[10px]">O sistema detecta e formata cada entrada conforme ABNT NBR 6023:2018. Uma referência por linha.</span>
+                                                        <span className="mt-1 font-black text-green-600 dark:text-green-400">✓ Estruturado → exportação ABNT perfeita</span>
+                                                        <span className="font-black text-amber-600 dark:text-amber-400">⚠ Sem marcadores → IA tenta inferir (pode errar)</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     <textarea
                                         value={docContent} onChange={(e) => setDocContent(e.target.value)}
-                                        className="w-full h-full resize-none outline-none bg-transparent text-[17px] leading-loose text-black dark:text-white placeholder:text-slate-400 font-serif"
+                                        className="w-full flex-1 min-h-[400px] resize-none outline-none bg-transparent text-[17px] leading-loose text-black dark:text-white placeholder:text-slate-400 font-serif"
                                         placeholder="Sua pesquisa começa aqui..."
                                     />
                                 </div>
