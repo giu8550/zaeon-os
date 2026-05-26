@@ -16,10 +16,15 @@ export async function GET(req: Request) {
         const cacheKey = `feed_posts_${room}`;
 
         // 🔥 3. TENTA LER DO REDIS PRIMEIRO (Hyper-Fast)
-        // O Upstash já faz o parse automático do JSON, então não precisamos de JSON.parse()
-        const cachedFeed = await redis.get(cacheKey);
-        if (cachedFeed) {
-            return NextResponse.json(cachedFeed);
+        // Só lê do Redis se NÃO for a sala de pesquisa (para respeitar a filtragem privada em tempo real)
+        const session = await getServerSession(authOptions);
+        const userEmail = session?.user?.email || "";
+
+        if (room !== "research") {
+            const cachedFeed = await redis.get(cacheKey);
+            if (cachedFeed) {
+                return NextResponse.json(cachedFeed);
+            }
         }
 
         // Se não tem no Redis, bate no MongoDB
@@ -40,30 +45,42 @@ export async function GET(req: Request) {
         });
 
         // Formatando para o frontend
-        const formattedPosts = posts.map(post => ({
-            id: post.id,
-            user: post.user,
-            userId: post.author?.id || post.userId,
-            userEmail: post.author?.email || "",
-            userImage: post.author?.image || post.userImage,
-            content: post.content,
-            createdAt: post.createdAt ? post.createdAt.toISOString() : new Date().toISOString(),
-            likes: post.likes || [],
-            room: post.room,
-            comments: post.comments.map(c => ({
-                id: c.id,
-                user: c.user,
-                userId: c.author?.id || c.userId,
-                userEmail: c.author?.email || "",
-                userImage: c.author?.image,
-                content: c.content,
-                createdAt: c.createdAt ? c.createdAt.toISOString() : new Date().toISOString()
-            }))
-        }));
+        const formattedPosts = posts
+            .filter(post => {
+                if (post.room === "research" && post.tags && post.tags.includes("private")) {
+                    return post.author?.email === userEmail;
+                }
+                return true;
+            })
+            .map(post => ({
+                id: post.id,
+                user: post.user,
+                userId: post.author?.id || post.userId,
+                userEmail: post.author?.email || "",
+                userImage: post.author?.image || post.userImage,
+                content: post.content,
+                title: post.title,
+                images: post.images || [],
+                tags: post.tags || [],
+                attachments: post.attachments,
+                createdAt: post.createdAt ? post.createdAt.toISOString() : new Date().toISOString(),
+                likes: post.likes || [],
+                room: post.room,
+                comments: post.comments.map(c => ({
+                    id: c.id,
+                    user: c.user,
+                    userId: c.author?.id || c.userId,
+                    userEmail: c.author?.email || "",
+                    userImage: c.author?.image,
+                    content: c.content,
+                    createdAt: c.createdAt ? c.createdAt.toISOString() : new Date().toISOString()
+                }))
+            }));
 
-        // 🔥 4. SALVA O RESULTADO NO REDIS PARA OS PRÓXIMOS ACESSOS
-        // 'ex: 60' faz o cache expirar sozinho em 60 segundos por segurança
-        await redis.set(cacheKey, formattedPosts, { ex: 60 });
+        // 🔥 4. SALVA O RESULTADO NO REDIS PARA OS PRÓXIMOS ACESSOS (apenas para salas normais)
+        if (room !== "research") {
+            await redis.set(cacheKey, formattedPosts, { ex: 60 });
+        }
 
         return NextResponse.json(formattedPosts);
     } catch (error) {
@@ -80,7 +97,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
         }
 
-        const { content, room } = await req.json();
+        const { content, room, title, images, tags, attachments } = await req.json();
 
         if (!content || !room) {
             return NextResponse.json({ error: "Conteúdo e Sala são obrigatórios" }, { status: 400 });
@@ -98,6 +115,10 @@ export async function POST(req: Request) {
             data: {
                 content,
                 room,
+                title: title || null,
+                images: images || [],
+                tags: tags || [],
+                attachments: attachments || null,
                 user: session.user.name || "Operative",
                 userImage: session.user.image || "",
                 userId: dbUser.id
@@ -119,6 +140,10 @@ export async function POST(req: Request) {
             userEmail: newPost.author?.email || "",
             userImage: newPost.author?.image || newPost.userImage,
             content: newPost.content,
+            title: newPost.title,
+            images: newPost.images || [],
+            tags: newPost.tags || [],
+            attachments: newPost.attachments,
             createdAt: newPost.createdAt ? newPost.createdAt.toISOString() : new Date().toISOString(),
             likes: newPost.likes || [],
             room: newPost.room,

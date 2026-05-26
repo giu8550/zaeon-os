@@ -175,8 +175,22 @@ const TextBlock = ({
     );
 };
 
+interface MoleculeNode {
+    readonly level: string;
+    readonly title: string;
+    readonly subtitle?: string;
+    readonly description: string;
+    readonly tags: readonly string[];
+    readonly glowColor: string;
+    readonly borderClass: string;
+    readonly bgClass: string;
+    readonly tagClass: string;
+    readonly textClass: string;
+    readonly pulseClass: string;
+}
+
 // ─── MOLECULE DATA ────────────────────────────────────────────────────────────
-const MOLECULE_NODES = [
+const MOLECULE_NODES: readonly MoleculeNode[] = [
     {
         level: "01",
         title: "Crie, Contrate & Colabore",
@@ -218,7 +232,7 @@ const MOLECULE_NODES = [
         textClass: "text-emerald-400",
         pulseClass: "border-emerald-400/30",
     },
-] as const;
+];
 
 // ─── FLOW BOND ────────────────────────────────────────────────────────────────
 // Analogia: como o fio de energia que conecta dois átomos numa molécula —

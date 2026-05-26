@@ -22,7 +22,7 @@ import {
     BookOpenIcon, DocumentTextIcon, PlayCircleIcon,
     EyeIcon, PowerIcon, BeakerIcon, ChatBubbleLeftRightIcon, ClipboardDocumentIcon,
     DocumentChartBarIcon, CheckBadgeIcon,
-    LanguageIcon
+    LanguageIcon, PhotoIcon, LockClosedIcon, GlobeAltIcon, PencilSquareIcon, CloudArrowUpIcon
 } from "@heroicons/react/24/outline";
 
 // --- COMPONENTS ---
@@ -39,6 +39,15 @@ const generateSafeId = () => {
         return crypto.randomUUID();
     }
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
+
+const imageToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = error => reject(error);
+    });
 };
 
 // --- SUB-COMPONENTS ---
@@ -178,9 +187,199 @@ const ChatInput = ({ value, onChange, onSend, isTyping, placeholder, lang = 'pt-
     );
 };
 
+const MuralCard = ({ post, currentUserEmail, onLike, onAddComment, onDeleteComment, showToast }: { post: any, currentUserEmail: string, onLike: (id: string) => void, onAddComment: (postId: string, text: string) => void, onDeleteComment: (postId: string, commentId: string) => void, showToast: (msg: string) => void }) => {
+    const [isCommentOpen, setIsCommentOpen] = useState(false);
+    const [commentText, setCommentText] = useState("");
+    const isLiked = post.likes?.includes(currentUserEmail);
+    const isPrivate = post.tags?.includes("private");
+
+    return (
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 rounded-[32px] border-2 border-slate-300 dark:border-white/10 bg-white dark:bg-[#0f172a] shadow-xl flex flex-col gap-4 relative overflow-hidden text-left"
+        >
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-300 dark:border-white/20 bg-slate-100 dark:bg-black flex items-center justify-center shrink-0">
+                    <img 
+                        src={post.userImage || "/agents/aura.png"} 
+                        alt={post.user} 
+                        className="w-full h-full object-cover" 
+                        onError={(e) => (e.currentTarget.src = `https://ui-avatars.com/api/?name=${post.user}&background=random`)}
+                    />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center flex-wrap gap-2">
+                        <span className="text-sm font-black text-black dark:text-white truncate">{post.user}</span>
+                        {post.isSeed ? (
+                            <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30">ledger</span>
+                        ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">user</span>
+                        )}
+                        {isPrivate ? (
+                            <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 flex items-center gap-1"><LockClosedIcon className="w-2.5 h-2.5" /> privado</span>
+                        ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1"><GlobeAltIcon className="w-2.5 h-2.5" /> público</span>
+                        )}
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">{new Date(post.createdAt).toLocaleDateString()}</span>
+                </div>
+            </div>
+
+            <div>
+                <h3 className="text-lg font-black text-black dark:text-white mb-2 leading-snug">{post.title}</h3>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{post.content}</p>
+            </div>
+
+            {post.images && post.images.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                    {post.images.map((img: string, i: number) => (
+                        <div key={i} className="rounded-xl overflow-hidden aspect-video border border-slate-300 dark:border-white/10 bg-black cursor-pointer hover:opacity-90 transition-opacity">
+                            <img src={img.startsWith('data:') ? img : `data:image/png;base64,${img}`} alt={`Imagem ${i+1}`} className="w-full h-full object-cover" />
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {((post.attachments?.files && post.attachments.files.length > 0) || (post.attachments?.citations && post.attachments.citations.length > 0)) && (
+                <div className="mt-2 bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/5 rounded-2xl p-4 flex flex-col gap-3">
+                    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><BookOpenIcon className="w-3.5 h-3.5" /> Bibliotecas e Fontes</span>
+                    
+                    {post.attachments.files && post.attachments.files.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                            {post.attachments.files.map((file: string, i: number) => (
+                                <span key={i} className="px-3 py-1 rounded-xl text-[10px] font-bold bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-sm">
+                                    <DocumentTextIcon className="w-3.5 h-3.5 text-red-500" />
+                                    {file}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
+                    {post.attachments.citations && post.attachments.citations.length > 0 && (
+                        <div className="flex flex-col gap-1.5 border-t border-slate-200 dark:border-white/5 pt-2.5">
+                            {post.attachments.citations.map((cit: any, i: number) => (
+                                <div key={i} className="text-xs text-slate-600 dark:text-slate-400 font-serif italic border-l-2 border-cyan-500 pl-3 py-0.5 leading-normal">
+                                    {typeof cit === 'string' ? cit : cit.text}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <div className="flex items-center gap-6 border-t border-slate-200 dark:border-white/5 pt-4 mt-auto">
+                <button 
+                    onClick={() => {
+                        if (post.isSeed) {
+                            showToast("LEDGER de nó integrado: interação desabilitada.");
+                            return;
+                        }
+                        onLike(post.id);
+                    }}
+                    className={`flex items-center gap-2 text-xs font-black uppercase tracking-wider transition-colors ${isLiked ? 'text-rose-500' : 'text-slate-500 hover:text-rose-500'}`}
+                >
+                    <HeartIcon className={`w-5 h-5 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
+                    <span>{post.likes?.length || 0}</span>
+                </button>
+
+                {!isPrivate && (
+                    <button 
+                        onClick={() => setIsCommentOpen(!isCommentOpen)}
+                        className={`flex items-center gap-2 text-xs font-black uppercase tracking-wider transition-colors ${isCommentOpen ? 'text-cyan-500' : 'text-slate-500 hover:text-cyan-500'}`}
+                    >
+                        <ChatBubbleLeftRightIcon className="w-5 h-5" />
+                        <span>{post.comments?.length || 0}</span>
+                    </button>
+                )}
+
+                {isPrivate && (
+                    <span className="text-[10px] text-slate-500 font-bold uppercase ml-auto tracking-widest flex items-center gap-1"><LockClosedIcon className="w-3.5 h-3.5" /> Interações restritas</span>
+                )}
+            </div>
+
+            <AnimatePresence>
+                {isCommentOpen && !isPrivate && (
+                    <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden border-t border-slate-200 dark:border-white/5 pt-4 flex flex-col gap-4"
+                    >
+                        {post.comments && post.comments.length > 0 && (
+                            <div className="flex flex-col gap-3 max-h-[200px] overflow-y-auto custom-scrollbar pr-1 bg-slate-50/50 dark:bg-black/20 p-3 rounded-2xl">
+                                {post.comments.map((comment: any) => (
+                                    <div key={comment.id} className="flex gap-2.5 items-start text-xs border-b border-slate-100 dark:border-white/5 pb-2.5 last:border-b-0 last:pb-0 text-left">
+                                        <div className="w-7 h-7 rounded-full overflow-hidden border border-slate-300 dark:border-white/20 bg-slate-100 dark:bg-black flex items-center justify-center shrink-0">
+                                            <img src={comment.userImage || "/logo.png"} alt={comment.user} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.src = `https://ui-avatars.com/api/?name=${comment.user}&background=random`)} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-black text-black dark:text-white truncate">{comment.user}</span>
+                                                <span className="text-[9px] text-slate-400 font-bold">{new Date(comment.createdAt).toLocaleDateString()}</span>
+                                            </div>
+                                            <p className="text-slate-700 dark:text-slate-300 font-medium leading-relaxed mt-0.5">{comment.content}</p>
+                                        </div>
+                                        {(comment.userEmail === currentUserEmail || comment.userId === currentUserEmail) && (
+                                            <button 
+                                                onClick={() => onDeleteComment(post.id, comment.id)}
+                                                className="p-1 hover:bg-red-500/20 text-slate-400 hover:text-red-500 rounded-lg transition-colors shrink-0"
+                                            >
+                                                <TrashIcon className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-2 bg-slate-100 dark:bg-black/60 rounded-full border border-slate-300 dark:border-white/20 p-1.5 pl-4 focus-within:ring-2 focus-within:ring-cyan-500/30 transition-all shadow-sm">
+                            <input
+                                type="text"
+                                placeholder="Adicione um comentário..."
+                                value={commentText}
+                                onChange={(e) => setCommentText(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && commentText.trim()) {
+                                        onAddComment(post.id, commentText);
+                                        setCommentText("");
+                                    }
+                                }}
+                                className="flex-1 bg-transparent border-none outline-none text-[12px] text-black dark:text-white placeholder:text-slate-400"
+                            />
+                            <button 
+                                onClick={() => {
+                                    if (commentText.trim()) {
+                                        onAddComment(post.id, commentText);
+                                        setCommentText("");
+                                    }
+                                }}
+                                disabled={!commentText.trim()}
+                                className="w-8 h-8 rounded-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white flex items-center justify-center shrink-0 transition-colors shadow-sm"
+                            >
+                                <PaperAirplaneIcon className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </motion.div>
+    );
+};
+
 export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: boolean }) {
     const { t } = useTranslation();
     const { data: session, status } = useSession();
+
+    // --- MURAL & EDITOR TAB STATES ---
+    const [activeTab, setActiveTab] = useState<"mural" | "editor">("editor");
+    const [selectedImages, setSelectedImages] = useState<string[]>([]);
+    const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+    const [muralSearchQuery, setMuralSearchQuery] = useState("");
+    const [muralPosts, setMuralPosts] = useState<any[]>([]);
+    const [isMuralLoading, setIsMuralLoading] = useState(false);
+    const [isAddVideoModalOpen, setIsAddVideoModalOpen] = useState(false);
+    const [videoUrlInput, setVideoUrlInput] = useState("");
 
     // --- CORE STATES ---
     const [mounted, setMounted] = useState(false);
@@ -206,7 +405,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [videos, setVideos] = useState<VideoItem[]>([]);
     const [activeFileContext, setActiveFileContext] = useState<string | null>(null);
     const [processingFileId, setProcessingFileId] = useState<string | null>(null);
-    const [activePdfTab, setActivePdfTab] = useState<"chat" | "citations">("chat");
+    const [activePdfTab, setActivePdfTab] = useState<"chat" | "writer" | "citations">("chat");
 
     const [savedCitations, setSavedCitations] = useState<CitationNote[]>([]);
     const [citationContent, setCitationContent] = useState<string | null>(null);
@@ -231,6 +430,19 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [isSystemProcessing, setIsSystemProcessing] = useState(false);
     const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
+    // --- ABNT EXPORT STATES ---
+    const [abntStep, setAbntStep] = useState<1 | 2>(1);
+    const [abntMeta, setAbntMeta] = useState({
+        institution: "",
+        advisor: "",
+        city: "",
+        year: new Date().getFullYear().toString(),
+        fontChoice: "Times New Roman" as "Times New Roman" | "Arial",
+    });
+    const [isExporting, setIsExporting] = useState(false);
+    const [exportProgress, setExportProgress] = useState<string[]>([]);
+    const [abntWarnings, setAbntWarnings] = useState<string[]>([]);
+
     // --- MODALS ---
     const [isPublishOpen, setIsPublishOpen] = useState(false);
     const [publishFormat, setPublishFormat] = useState<"pdf" | "docx" | null>(null);
@@ -239,6 +451,161 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const pdfChatRef = useRef<HTMLDivElement>(null);
     const scribeChatRef = useRef<HTMLDivElement>(null);
     const examinerChatRef = useRef<HTMLDivElement>(null);
+
+    const fetchMuralData = async () => {
+        setIsMuralLoading(true);
+        try {
+            const [resResearch, resPosts] = await Promise.all([
+                fetch('/api/research'),
+                fetch('/api/posts?room=research')
+            ]);
+            const researchData = await resResearch.json();
+            const postsData = await resPosts.json();
+
+            const mappedResearch = researchData.map((project: any) => {
+                return {
+                    id: `seed-${project.id}`,
+                    user: "AI Core Ledger",
+                    userId: "system",
+                    userEmail: "system@zaeon.ai",
+                    userImage: "/logo.png",
+                    title: project.title,
+                    content: `Iniciamos a pesquisa do protocolo de nível ${project.details?.rank || 'A'}. Participantes ativos: ${project.participants?.grads || 0} Graduandos, ${project.participants?.masters || 0} Mestrandos e ${project.participants?.phds || 0} Doutores. O progresso atual do desenvolvimento é de ${project.progress}%. Agentes envolvidos no processamento de nós: ${project.details?.agents?.join(', ') || 'Nenhum'}.`,
+                    images: [],
+                    tags: ["Ledger", project.details?.rank || "A", project.status].filter(Boolean),
+                    attachments: {
+                        citations: [
+                            { id: `cit-${project.id}`, text: `Protocol Node ${project.id} - Rank ${project.details?.rank}` }
+                        ],
+                        files: project.details?.agents?.map((a: string) => `${a.toLowerCase().replace(/ /g, '_')}_report.pdf`) || []
+                    },
+                    createdAt: new Date(Date.now() - (1000 * 60 * 60 * 24 * (Number(project.id) % 10 || 1))).toISOString(),
+                    likes: ["system@zaeon.ai"],
+                    room: "research",
+                    comments: [],
+                    isSeed: true
+                };
+            });
+
+            const combined = [...postsData, ...mappedResearch].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setMuralPosts(combined);
+        } catch (error) {
+            console.error("Erro ao carregar Mural:", error);
+            showToast("Erro ao carregar dados do Mural.");
+        } finally {
+            setIsMuralLoading(false);
+        }
+    };
+
+    const handleLikePost = async (postId: string) => {
+        try {
+            const response = await fetch('/api/posts/like', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ postId })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setMuralPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: data.likes } : p));
+            } else {
+                showToast("Erro ao curtir pesquisa.");
+            }
+        } catch (error) {
+            console.error(error);
+            showToast("Erro ao conectar ao servidor.");
+        }
+    };
+
+    const handleAddComment = async (postId: string, text: string) => {
+        try {
+            const response = await fetch('/api/posts/comment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ postId, content: text })
+            });
+            if (response.ok) {
+                const newComment = await response.json();
+                setMuralPosts(prev => prev.map(p => {
+                    if (p.id === postId) {
+                        return {
+                            ...p,
+                            comments: [...(p.comments || []), newComment]
+                        };
+                    }
+                    return p;
+                }));
+                showToast("Comentário publicado!");
+            } else {
+                showToast("Erro ao comentar.");
+            }
+        } catch (error) {
+            console.error(error);
+            showToast("Erro ao conectar ao servidor.");
+        }
+    };
+
+    const handleDeleteComment = async (postId: string, commentId: string) => {
+        try {
+            const response = await fetch(`/api/posts/comment?id=${commentId}`, {
+                method: 'DELETE'
+            });
+            if (response.ok) {
+                setMuralPosts(prev => prev.map(p => {
+                    if (p.id === postId) {
+                        return {
+                            ...p,
+                            comments: (p.comments || []).filter((c: any) => c.id !== commentId)
+                        };
+                    }
+                    return p;
+                }));
+                showToast("Comentário removido.");
+            } else {
+                showToast("Erro ao remover comentário.");
+            }
+        } catch (error) {
+            console.error(error);
+            showToast("Erro ao conectar ao servidor.");
+        }
+    };
+
+    const handlePublishToMural = async (visibility: "public" | "private") => {
+        setIsSystemProcessing(true);
+        try {
+            const payload = {
+                content: docContent || "Nenhum conteúdo descritivo fornecido.",
+                room: "research",
+                title: docTitle || "Pesquisa sem título",
+                images: selectedImages,
+                tags: [visibility, workType].filter(Boolean),
+                attachments: {
+                    citations: savedCitations,
+                    files: studyFiles.map(f => f.title)
+                }
+            };
+
+            const response = await fetch('/api/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error("Erro ao publicar pesquisa.");
+            }
+
+            showToast(`Pesquisa publicada como ${visibility === "public" ? "Pública" : "Privada"}!`);
+            setIsPublishOpen(false);
+            
+            await fetchMuralData();
+            setActiveTab("mural");
+        } catch (error) {
+            console.error(error);
+            showToast("Erro ao publicar na rede.");
+        } finally {
+            setIsSystemProcessing(false);
+        }
+    };
 
     useEffect(() => {
         setMounted(true);
@@ -252,6 +619,12 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
             }
         }
     }, []);
+
+    useEffect(() => {
+        if (status !== "loading") {
+            fetchMuralData();
+        }
+    }, [status]);
 
     useEffect(() => { if (pdfChatRef.current) pdfChatRef.current.scrollTo({ top: pdfChatRef.current.scrollHeight, behavior: 'smooth' }); }, [pdfChatHistory, isPdfTyping, activePdfTab]);
     useEffect(() => { if (scribeChatRef.current) scribeChatRef.current.scrollTo({ top: scribeChatRef.current.scrollHeight, behavior: 'smooth' }); }, [specialistChatHistory.scribe, isScribeTyping]);
@@ -434,6 +807,19 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         } catch (err) { console.error(err); }
     };
 
+    const handleAddVideo = (url: string) => {
+        const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+        const match = url.match(regex);
+        if (match && match[1]) {
+            setVideos(prev => [{ id: generateSafeId(), youtubeId: match[1] }, ...prev]);
+            setVideoUrlInput("");
+            setIsAddVideoModalOpen(false);
+            showToast("Vídeo adicionado com sucesso!");
+        } else {
+            showToast("URL do YouTube inválido.");
+        }
+    };
+
     const handleSaveWorkspace = async (e: React.MouseEvent) => {
         e.stopPropagation();
         if (saveState === "saving") return;
@@ -480,12 +866,85 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         } catch (e) { console.error(e); } finally { setIsSystemProcessing(false); }
     };
 
+    const handleABNTExport = async (format: "pdf" | "docx") => {
+        setIsExporting(true);
+        setAbntWarnings([]);
+        setExportProgress(["Estruturando seções com IA (ABNT Structurer)..."]);
+
+        try {
+            const response = await fetch('/api/documents/abnt-export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: docTitle.replace(/\.pdf$/i, '').replace(/\.docx$/i, ''),
+                    content: docContent,
+                    workType: workType || 'Artigo',
+                    citations: savedCitations,
+                    author: session?.user?.name || "Autor",
+                    institution: abntMeta.institution,
+                    course: (session?.user as any)?.course || "",
+                    advisor: abntMeta.advisor || undefined,
+                    city: abntMeta.city,
+                    year: abntMeta.year,
+                    format,
+                    fontChoice: abntMeta.fontChoice,
+                }),
+            });
+
+            setExportProgress(prev => [...prev, "Aplicando normas NBR 14724:2011...", "Gerando arquivo final..."]);
+
+            if (response.status === 503) {
+                const json = await response.json();
+                showToast("Serviço ABNT offline. Rode o abnt-service na porta 8001.");
+                return;
+            }
+
+            if (!response.ok) {
+                const json = await response.json().catch(() => ({}));
+                showToast(json.error || "Erro ao gerar documento ABNT.");
+                return;
+            }
+
+            // Exibe warnings retornados pelo agente
+            const warningsHeader = response.headers.get('X-ABNT-Warnings');
+            if (warningsHeader) {
+                const warns = JSON.parse(warningsHeader) as string[];
+                if (warns.length > 0) setAbntWarnings(warns);
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const safeName = (docTitle || 'pesquisa').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '');
+            a.download = `${safeName}_ABNT.${format === 'pdf' ? 'pdf' : 'docx'}`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            showToast(`Documento ABNT exportado com sucesso!`);
+            setIsSaveModalOpen(false);
+            setAbntStep(1);
+        } catch (err) {
+            console.error(err);
+            showToast("Erro inesperado ao exportar documento ABNT.");
+        } finally {
+            setIsExporting(false);
+            setExportProgress([]);
+        }
+    };
+
     const getCardStyle = (sectionName: string) => {
         const isActive = activeSection === sectionName;
         return `transition-all duration-300 border-2 ${isActive ? 'border-cyan-500 ring-4 ring-cyan-500/10' : 'border-slate-300 dark:border-white/10'} bg-white dark:bg-[#0f172a] shadow-xl`;
     };
 
-    if (!mounted || status === "loading") return <div className="w-full h-full flex items-center justify-center bg-slate-100"><IosLoader status="INICIANDO..." /></div>;
+    if (!mounted || status === "loading") {
+        return (
+            <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-[#030014]">
+                <IosLoader status="Carregando laboratório..." />
+            </div>
+        );
+    }
 
     return (
         <div className={`relative transition-all duration-500 overflow-hidden flex font-sans w-full bg-slate-100 dark:bg-[#030014]
@@ -528,11 +987,20 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                     className={`fixed left-4 z-[550] flex flex-col py-6 rounded-[24px] border shadow-2xl bg-white dark:bg-[#0a0a0a] border-slate-300 dark:border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? 'top-4 h-[calc(100vh-32px)]' : 'top-[100px] h-[calc(100vh-140px)]'}`}
                 >
                     <div className="flex flex-col gap-4 px-2.5">
+                        <button onClick={() => setActiveTab("editor")} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'editor' ? 'bg-purple-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}>
+                            <PencilSquareIcon className="w-5 h-5 shrink-0 group-hover:text-purple-400" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Escrever</span>}
+                        </button>
+                        <button onClick={() => setActiveTab("mural")} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'mural' ? 'bg-cyan-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}>
+                            <GlobeAltIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-400" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Mural</span>}
+                        </button>
+                        <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
                         <button onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
                             <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
                         </button>
-                        <button onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl ${isFocusMode ? 'bg-cyan-500 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100'}`}>
+                        <button onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl ${isFocusMode ? 'bg-cyan-50 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100'}`}>
                             {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
                         </button>
@@ -540,188 +1008,293 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                 </motion.nav>
             )}
 
-            <main className={`flex-1 flex gap-8 p-6 ${!isEmbedded ? 'pl-[80px]' : ''} h-full overflow-hidden`}>
-
-                {/* COLUNA 1: ESTUDO (PDF + SCRIBE + QUIZ) */}
-                <div className={`w-1/2 h-full flex flex-col gap-8 overflow-y-auto custom-scrollbar pb-32 pr-2 ${isChatLeft ? 'order-first' : 'order-last'}`}>
-                    <input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" multiple onChange={(e) => handleFiles(e.target.files)} />
-
-                    {/* CHAT COM PDF & CITAÇÕES */}
-                    <section onClick={() => setActiveSection('pdf')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('pdf')}`}>
-                        <div className="flex items-center gap-4 mb-6">
-                            <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-black px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
-                                <BookOpenIcon className="w-4 h-4" /> Biblioteca
-                            </span>
-                            <div className="ml-auto">
-                                <ActionButton icon={PlusIcon} label="Adicionar PDF" onClick={() => fileInputRef.current?.click()} colorClass="text-black dark:text-white hover:text-cyan-500" />
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-100 dark:bg-white/5 rounded-2xl p-4 mb-6 border border-slate-300 dark:border-white/10">
-                            <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar items-center min-h-[150px]">
-                                {studyFiles.length === 0 && <span className="text-xs text-black dark:text-white font-medium italic">Arraste PDFs ou adicione-os no botão +.</span>}
-                                {studyFiles.map(doc => (
-                                    <div key={doc.id} className="w-[180px] shrink-0 transition-transform hover:-translate-y-1">
-                                        <ResearchCardPDF title={doc.title} fileUrl={doc.url} isProcessing={processingFileId === doc.id} onDelete={() => setStudyFiles(prev => prev.filter(f => f.id !== doc.id))} onPlay={() => handlePlayDocument(doc)} />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {activeFileContext && (
-                            <div className="border-t border-slate-300 dark:border-white/20 pt-6">
-                                <div className="flex p-1.5 bg-slate-200 dark:bg-white/10 rounded-xl w-fit mb-6 border border-slate-300 dark:border-white/20 shadow-inner">
-                                    <button onClick={() => setActivePdfTab('chat')} className={`px-6 py-2.5 rounded-lg text-[11px] font-black uppercase transition-all ${activePdfTab === 'chat' ? 'bg-white text-cyan-600 shadow-md' : 'text-black dark:text-white hover:bg-white/50'}`}>Chat</button>
-                                    <button onClick={() => setActivePdfTab('citations')} className={`px-6 py-2.5 rounded-lg text-[11px] font-black uppercase transition-all ${activePdfTab === 'citations' ? 'bg-white text-purple-600 shadow-md' : 'text-black dark:text-white hover:bg-white/50'}`}>Citações</button>
-                                </div>
-
-                                {activePdfTab === 'chat' ? (
-                                    <div className="flex flex-col gap-2">
-                                        <div ref={pdfChatRef} className="h-[250px] overflow-y-auto bg-slate-50 dark:bg-black/50 p-5 rounded-2xl border border-slate-300 dark:border-white/10 shadow-inner custom-scrollbar">
-                                            {pdfChatHistory.length === 0 && <span className="text-black dark:text-white text-xs font-medium italic">Nenhum resumo gerado.</span>}
-                                            {pdfChatHistory.map((msg, i) => <ChatBubble key={i} role={msg.role} text={msg.text} agentName="Aura" agentImg="/agents/aura.png" userImg={session?.user?.image} />)}
-                                            {isPdfTyping && <div className="text-[10px] font-bold animate-pulse text-cyan-600 ml-12">Aura está a analisar...</div>}
-                                        </div>
-                                        <ChatInput
-                                            value={pdfPrompt}
-                                            onChange={setPdfPrompt}
-                                            onSend={handlePdfQuestion}
-                                            isTyping={isPdfTyping}
-                                            placeholder="Pergunte ao PDF..."
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col gap-4">
-                                        <div className="flex items-center gap-4 mb-2">
-                                            <span className="text-black dark:text-white text-[12px] font-black uppercase">Base de Citações</span>
-                                            <button onClick={handleGenerateCitations} className="px-5 py-2.5 bg-black dark:bg-white text-white dark:text-black rounded-full text-[10px] font-black uppercase shadow-md flex items-center gap-2"><SparklesIcon className="w-3.5 h-3.5" /> Extrair do PDF</button>
-                                            {citationContent && <button onClick={handleSaveCitation} className="p-3 bg-emerald-100 rounded-full shadow-md"><BookmarkIcon className="w-4 h-4 text-emerald-600" /></button>}
-                                        </div>
-                                        <div className="flex gap-3 overflow-x-auto p-4 bg-slate-50 dark:bg-black rounded-2xl shadow-inner border border-slate-300 dark:border-white/10 min-h-[90px]">
-                                            {savedCitations.length === 0 && <span className="text-xs text-black dark:text-white font-medium italic m-auto">Nenhuma citação salva.</span>}
-                                            {savedCitations.map(cit => <div key={cit.id} onClick={() => setActiveCitationText(cit.text)} className="w-12 h-12 bg-yellow-200 rounded-xl flex items-center justify-center cursor-pointer shadow-md border border-yellow-400 hover:-translate-y-1 transition-transform"><DocumentTextIcon className="w-5 h-5 text-yellow-800" /></div>)}
-                                        </div>
-                                        <div className="p-5 bg-slate-100 dark:bg-white/5 rounded-2xl border border-slate-300 dark:border-white/20 min-h-[120px] relative">
-                                            <p className="text-sm font-medium text-black dark:text-white whitespace-pre-wrap">{activeCitationText || citationContent || "Visualize citações aqui..."}</p>
-                                            {(activeCitationText || citationContent) && <button onClick={() => copyToClipboard(activeCitationText || citationContent || "")} className="absolute top-3 right-3 p-2 bg-white dark:bg-black border border-slate-300 rounded-lg shadow-md"><ClipboardDocumentIcon className="w-4 h-4 text-black dark:text-white" /></button>}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </section>
-
-                    {/* SCRIBE CHAT */}
-                    <section onClick={() => setActiveSection('scribe')} className={`flex flex-col h-[480px] shrink-0 rounded-[32px] overflow-hidden ${getCardStyle('scribe')}`}>
-                        <div className="p-5 border-b border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase text-purple-700 dark:text-purple-400 tracking-widest border border-purple-300 px-4 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/30">Escritor Acadêmico</span>
-                            <div className="w-10 h-10 rounded-full border border-slate-300 shadow-sm overflow-hidden"><img src="/agents/scribe.png" className="w-full h-full object-cover" /></div>
-                        </div>
-                        <div ref={scribeChatRef} className="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar bg-white dark:bg-[#0f172a]/50">
-                            {specialistChatHistory.scribe.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic flex items-center justify-center h-full text-center px-4">Peça ao Scribe para reescrever e refinar seus textos.</span>}
-                            {specialistChatHistory.scribe.map((msg, i) => <ChatBubble key={i} role={msg.role} text={msg.text} agentName="Scribe" agentImg="/agents/scribe.png" userImg={session?.user?.image} />)}
-                            {isScribeTyping && <div className="text-[11px] text-purple-600 font-black uppercase tracking-widest animate-pulse ml-12">Scribe está a redigir...</div>}
-                        </div>
-                        <div className="p-4 bg-slate-50 dark:bg-black border-t border-slate-300 dark:border-white/10">
-                            <ChatInput
-                                value={scribePrompt}
-                                onChange={setScribePrompt}
-                                onSend={() => handleSpecialistQuery('scribe', scribePrompt)}
-                                isTyping={isScribeTyping}
-                                placeholder="Dite ou escreva o seu rascunho..."
-                            />
-                        </div>
-                    </section>
-
-                    {/* QUIZ CHAT */}
-                    <section onClick={() => setActiveSection('examiner')} className={`flex flex-col h-[480px] shrink-0 rounded-[32px] overflow-hidden ${getCardStyle('examiner')}`}>
-                        <div className="p-5 border-b border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase text-orange-700 dark:text-orange-400 tracking-widest border border-orange-300 px-4 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30">Testador de Conhecimento</span>
-                            <div className="w-10 h-10 rounded-full border border-slate-300 shadow-sm overflow-hidden"><img src="/agents/examiner.png" className="w-full h-full object-cover" /></div>
-                        </div>
-                        <div ref={examinerChatRef} className="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar bg-white dark:bg-[#0f172a]/50">
-                            {specialistChatHistory.examiner.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic flex items-center justify-center h-full text-center px-4">Peça ao Examiner para testar seu conhecimento sobre o PDF.</span>}
-                            {specialistChatHistory.examiner.map((msg, i) => <ChatBubble key={i} role={msg.role} text={msg.text} agentName="Examiner" agentImg="/agents/examiner.png" userImg={session?.user?.image} />)}
-                            {isExaminerTyping && <div className="text-[11px] text-orange-600 font-black uppercase tracking-widest animate-pulse ml-12">Examiner está a avaliar...</div>}
-                        </div>
-                        <div className="p-4 bg-slate-50 dark:bg-black border-t border-slate-300 dark:border-white/10">
-                            <ChatInput
-                                value={examinerPrompt}
-                                onChange={setExaminerPrompt}
-                                onSend={() => handleSpecialistQuery('examiner', examinerPrompt)}
-                                isTyping={isExaminerTyping}
-                                placeholder="Fale ou escreva a sua resposta..."
-                            />
-                        </div>
-                    </section>
-
-                    {/* VIDEOS */}
-                    <section onClick={() => setActiveSection('videos')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('videos')}`}>
-                        <div className="flex items-center gap-4 mb-6">
-                            <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-bold px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
-                                <VideoCameraIcon className="w-4 h-4" /> Apoio Audiovisual
-                            </span>
-                            <div className="ml-auto">
-                                <ActionButton icon={ClipboardIcon} label="Colar Link" onClick={handlePasteVideo} />
-                            </div>
-                        </div>
-                        <div className="flex flex-row gap-6 overflow-x-auto pb-4 pt-2 min-h-[220px] custom-scrollbar">
-                            {videos.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic m-auto">Cole links do YouTube para referências visuais.</span>}
-                            {videos.map(vid => (
-                                <div key={vid.id} className="flex-shrink-0 w-[360px] h-[200px] bg-slate-200 dark:bg-black rounded-[24px] overflow-hidden shadow-md relative group/vid border border-slate-300 dark:border-white/10">
-                                    <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${vid.youtubeId}`} frameBorder="0" allowFullScreen />
-                                    <button onClick={(e) => { e.stopPropagation(); setVideos(prev => prev.filter(v => v.id !== vid.id)); }} className="absolute top-3 right-3 p-3 bg-black dark:bg-white text-white dark:text-black rounded-xl opacity-0 group-hover/vid:opacity-100 transition-opacity hover:scale-105 shadow-xl"><TrashIcon className="w-5 h-5" /></button>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
+            <main className={`flex-1 flex flex-col ${!isEmbedded ? 'pl-[80px]' : ''} h-full overflow-hidden p-6 gap-6`}>
+                
+                {/* CABEÇALHO/NAVEGAÇÃO DO MURAL E EDITOR */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
+                            {activeTab === "mural" ? "Mural de Pesquisas" : "Laboratório de Pesquisa"}
+                        </h1>
+                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1">
+                            {activeTab === "mural" 
+                                ? "Explore o conhecimento acadêmico descentralizado da rede"
+                                : "Construa e analise sua produção acadêmica com IA"
+                            }
+                        </p>
+                    </div>
+                    
+                    {/* Tab Switcher (Visible on both modes, responsive) */}
+                    <div className="flex p-1 bg-white/60 dark:bg-black/60 backdrop-blur-md rounded-2xl border border-slate-300 dark:border-white/10 shadow-lg shrink-0">
+                        <button 
+                            onClick={() => setActiveTab("editor")} 
+                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'editor' ? 'bg-purple-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-200/50 dark:hover:bg-white/5'}`}
+                        >
+                            <PencilSquareIcon className="w-3.5 h-3.5" />
+                            Escrever
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab("mural")} 
+                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'mural' ? 'bg-cyan-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-200/50 dark:hover:bg-white/5'}`}
+                        >
+                            <GlobeAltIcon className="w-3.5 h-3.5" />
+                            Mural
+                        </button>
+                    </div>
                 </div>
 
-                {/* COLUNA 2: FOLHA A4 (MÓDULO INTEIRO É A FOLHA) */}
-                <div onClick={() => setActiveSection('doc')} className={`w-1/2 flex flex-col h-[calc(100vh-140px)] rounded-[32px] shadow-2xl transition-all border-4 ${activeSection === 'doc' ? 'border-cyan-500 ring-8 ring-cyan-500/10' : 'border-white dark:border-[#0f172a]'} ${!isChatLeft ? 'order-first' : 'order-last'} bg-white dark:bg-[#0f172a] overflow-hidden`}>
+                <div className="flex-1 flex gap-8 overflow-hidden h-full">
+                    {activeTab === "editor" ? (
+                        <>
+                            {/* COLUNA 1: ESTUDO (PDF + SCRIBE + QUIZ) */}
+                            <div className={`w-1/2 h-full flex flex-col gap-8 overflow-y-auto custom-scrollbar pb-32 pr-2 ${isChatLeft ? 'order-first' : 'order-last'}`}>
+                                <input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" multiple onChange={(e) => handleFiles(e.target.files)} />
 
-                    {/* CABEÇALHO DA FOLHA */}
-                    <div className="h-20 flex items-center px-10 shrink-0 border-b border-slate-100 dark:border-white/5 bg-transparent">
-                        <DocumentTextIcon className="w-6 h-6 text-black dark:text-white mr-4" />
-                        <input value={docTitle} onChange={(e) => setDocTitle(e.target.value)} className="bg-transparent text-black dark:text-white text-2xl font-black focus:outline-none w-full placeholder:text-slate-300" />
-                    </div>
+                                {/* CHAT COM PDF & CITAÇÕES */}
+                                <section onClick={() => setActiveSection('pdf')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('pdf')}`}>
+                                    <div className="flex items-center gap-4 mb-6">
+                                        <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-black px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
+                                            <BookOpenIcon className="w-4 h-4" /> Biblioteca
+                                        </span>
+                                        <div className="ml-auto">
+                                            <ActionButton icon={PlusIcon} label="Adicionar PDF" onClick={() => fileInputRef.current?.click()} colorClass="text-black dark:text-white hover:text-cyan-500" />
+                                        </div>
+                                    </div>
 
-                    {/* ÁREA DE TEXTO DA FOLHA */}
-                    <div className="flex-1 p-12 md:p-16 overflow-y-auto custom-scrollbar">
-                        <textarea
-                            value={docContent} onChange={(e) => setDocContent(e.target.value)}
-                            className="w-full h-full resize-none outline-none bg-transparent text-[17px] leading-loose text-black dark:text-white placeholder:text-slate-400 font-serif"
-                            placeholder="Sua pesquisa começa aqui..."
-                        />
-                    </div>
+                                    <div className="bg-slate-100 dark:bg-white/5 rounded-2xl p-4 mb-6 border border-slate-300 dark:border-white/10">
+                                        <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar items-center min-h-[150px]">
+                                            {studyFiles.length === 0 && <span className="text-xs text-black dark:text-white font-medium italic">Arraste PDFs ou adicione-os no botão +.</span>}
+                                            {studyFiles.map(doc => (
+                                                <div key={doc.id} className="w-[180px] shrink-0 transition-transform hover:-translate-y-1">
+                                                    <ResearchCardPDF title={doc.title} fileUrl={doc.url} isProcessing={processingFileId === doc.id} onDelete={() => setStudyFiles(prev => prev.filter(f => f.id !== doc.id))} onPlay={() => handlePlayDocument(doc)} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
 
-                    {/* RODAPÉ DA FOLHA (AÇÕES) */}
-                    <div className="p-6 flex justify-between items-center px-10 bg-slate-50/50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5">
-                        <div className="relative">
-                            <button onClick={(e) => { e.stopPropagation(); setIsWorkTypeMenuOpen(!isWorkTypeMenuOpen); }} className="px-6 py-2.5 rounded-full text-[11px] font-black transition-all flex items-center gap-2 border-2 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30">
-                                <SparklesIcon className="w-4 h-4" /> {workType || 'Definir Trabalho'}
-                            </button>
-                            <AnimatePresence>{isWorkTypeMenuOpen && (
-                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-full mb-4 left-0 bg-white dark:bg-black border-2 border-slate-200 dark:border-white/20 rounded-2xl shadow-2xl w-44 overflow-hidden z-[200]">
-                                    {["Artigo", "Relatório", "TCC"].map(type => <div key={type} onClick={(e) => { e.stopPropagation(); setWorkType(type as any); setIsWorkTypeMenuOpen(false); }} className="px-5 py-4 text-[11px] font-black uppercase text-black dark:text-white hover:bg-slate-50 dark:hover:bg-white/10 cursor-pointer">{type}</div>)}
-                                </motion.div>
-                            )}</AnimatePresence>
+                                    {activeFileContext && (
+                                        <div className="border-t border-slate-300 dark:border-white/20 pt-6">
+                                            <div className="flex p-1.5 bg-slate-200 dark:bg-white/10 rounded-xl w-fit mb-6 border border-slate-300 dark:border-white/20 shadow-inner">
+                                                <button onClick={() => setActivePdfTab('chat')} className={`px-6 py-2.5 rounded-lg text-[11px] font-black uppercase transition-all ${activePdfTab === 'chat' ? 'bg-white text-cyan-600 shadow-md' : 'text-black dark:text-white hover:bg-white/50'}`}>Chat</button>
+                                                <button onClick={() => setActivePdfTab('writer')} className={`px-6 py-2.5 rounded-lg text-[11px] font-black uppercase transition-all ${activePdfTab === 'writer' ? 'bg-white text-purple-600 shadow-md' : 'text-black dark:text-white hover:bg-white/50'}`}>Escritor</button>
+                                                <button onClick={() => setActivePdfTab('citations')} className={`px-6 py-2.5 rounded-lg text-[11px] font-black uppercase transition-all ${activePdfTab === 'citations' ? 'bg-white text-indigo-600 shadow-md' : 'text-black dark:text-white hover:bg-white/50'}`}>Citações</button>
+                                            </div>
+
+                                            {activePdfTab === 'chat' && (
+                                                <div className="flex flex-col gap-2">
+                                                    <div ref={pdfChatRef} className="h-[250px] overflow-y-auto bg-slate-50 dark:bg-black/50 p-5 rounded-2xl border border-slate-300 dark:border-white/10 shadow-inner custom-scrollbar">
+                                                        {pdfChatHistory.length === 0 && <span className="text-black dark:text-white text-xs font-medium italic">Nenhum resumo gerado.</span>}
+                                                        {pdfChatHistory.map((msg, i) => <ChatBubble key={i} role={msg.role} text={msg.text} agentName="Aura" agentImg="/agents/aura.png" userImg={session?.user?.image} />)}
+                                                        {isPdfTyping && <div className="text-[10px] font-bold animate-pulse text-cyan-600 ml-12">Aura está a analisar...</div>}
+                                                    </div>
+                                                    <ChatInput
+                                                        value={pdfPrompt}
+                                                        onChange={setPdfPrompt}
+                                                        onSend={handlePdfQuestion}
+                                                        isTyping={isPdfTyping}
+                                                        placeholder="Pergunte ao PDF..."
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {activePdfTab === 'writer' && (
+                                                <div className="flex flex-col gap-2">
+                                                    <div ref={scribeChatRef} className="h-[250px] overflow-y-auto bg-slate-50 dark:bg-black/50 p-5 rounded-2xl border border-slate-300 dark:border-white/10 shadow-inner custom-scrollbar">
+                                                        {specialistChatHistory.scribe.length === 0 && <span className="text-black dark:text-white text-xs font-medium italic">Nenhum rascunho ou texto gerado.</span>}
+                                                        {specialistChatHistory.scribe.map((msg, i) => <ChatBubble key={i} role={msg.role} text={msg.text} agentName="Scribe" agentImg="/agents/scribe.png" userImg={session?.user?.image} />)}
+                                                        {isScribeTyping && <div className="text-[10px] font-bold animate-pulse text-purple-600 ml-12">Scribe está a redigir...</div>}
+                                                    </div>
+                                                    <ChatInput
+                                                        value={scribePrompt}
+                                                        onChange={setScribePrompt}
+                                                        onSend={() => handleSpecialistQuery('scribe', scribePrompt)}
+                                                        isTyping={isScribeTyping}
+                                                        placeholder="Peça ao Scribe para redigir ou reescrever..."
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {activePdfTab === 'citations' && (
+                                                <div className="flex flex-col gap-4">
+                                                    <div className="flex items-center gap-4 mb-2">
+                                                        <span className="text-black dark:text-white text-[12px] font-black uppercase">Base de Citações</span>
+                                                        <button onClick={handleGenerateCitations} className="px-5 py-2.5 bg-black dark:bg-white text-white dark:text-black rounded-full text-[10px] font-black uppercase shadow-md flex items-center gap-2"><SparklesIcon className="w-3.5 h-3.5" /> Extrair do PDF</button>
+                                                        {citationContent && <button onClick={handleSaveCitation} className="p-3 bg-emerald-100 rounded-full shadow-md"><BookmarkIcon className="w-4 h-4 text-emerald-600" /></button>}
+                                                    </div>
+                                                    <div className="flex gap-3 overflow-x-auto p-4 bg-slate-50 dark:bg-black rounded-2xl shadow-inner border border-slate-300 dark:border-white/10 min-h-[90px]">
+                                                        {savedCitations.length === 0 && <span className="text-xs text-black dark:text-white font-medium italic m-auto">Nenhuma citação salva.</span>}
+                                                        {savedCitations.map(cit => <div key={cit.id} onClick={() => setActiveCitationText(cit.text)} className="w-12 h-12 bg-yellow-200 rounded-xl flex items-center justify-center cursor-pointer shadow-md border border-yellow-400 hover:-translate-y-1 transition-transform"><DocumentTextIcon className="w-5 h-5 text-yellow-800" /></div>)}
+                                                    </div>
+                                                    <div className="p-5 bg-slate-100 dark:bg-white/5 rounded-2xl border border-slate-300 dark:border-white/20 min-h-[120px] relative">
+                                                        <p className="text-sm font-medium text-black dark:text-white whitespace-pre-wrap">{activeCitationText || citationContent || "Visualize citações aqui..."}</p>
+                                                        {(activeCitationText || citationContent) && <button onClick={() => copyToClipboard(activeCitationText || citationContent || "")} className="absolute top-3 right-3 p-2 bg-white dark:bg-black border border-slate-300 rounded-lg shadow-md"><ClipboardDocumentIcon className="w-4 h-4 text-black dark:text-white" /></button>}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </section>
+
+                                {/* IMAGENS DE REFERÊNCIA */}
+                                <section className="p-6 rounded-[32px] shrink-0 border-2 border-slate-300 dark:border-white/10 bg-white dark:bg-[#0f172a] shadow-xl flex flex-col gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-black px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
+                                            <PhotoIcon className="w-4 h-4" /> Imagens de Referência
+                                        </span>
+                                        <div className="ml-auto">
+                                            <ActionButton 
+                                                icon={PlusIcon} 
+                                                label="Adicionar Imagem" 
+                                                onClick={() => {
+                                                    const imgInput = document.getElementById('image-upload-input');
+                                                    imgInput?.click();
+                                                }} 
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    <input 
+                                        type="file" 
+                                        id="image-upload-input" 
+                                        className="hidden" 
+                                        accept="image/*" 
+                                        multiple 
+                                        onChange={async (e) => {
+                                            const files = e.target.files;
+                                            if (!files) return;
+                                            const newImages: string[] = [];
+                                            for (let i = 0; i < files.length; i++) {
+                                                try {
+                                                    const base64 = await imageToBase64(files[i]);
+                                                    newImages.push(base64);
+                                                } catch (err) {
+                                                    console.error("Erro ao converter imagem:", err);
+                                                }
+                                            }
+                                            setSelectedImages(prev => [...prev, ...newImages]);
+                                        }} 
+                                    />
+
+                                    <div className="bg-slate-100 dark:bg-white/5 rounded-2xl p-4 border border-slate-300 dark:border-white/10">
+                                        {selectedImages.length === 0 ? (
+                                            <span className="text-xs text-black dark:text-white font-medium italic block py-4 text-center">
+                                                Nenhuma imagem anexada.
+                                            </span>
+                                        ) : (
+                                            <div className="grid grid-cols-3 gap-3">
+                                                {selectedImages.map((img, idx) => (
+                                                    <div key={idx} className="relative group rounded-xl overflow-hidden aspect-video border border-slate-300 dark:border-white/10 bg-black">
+                                                        <img src={img} alt={`Anexo ${idx + 1}`} className="w-full h-full object-cover" />
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => setSelectedImages(prev => prev.filter((_, i) => i !== idx))} 
+                                                            className="absolute top-1 right-1 p-1 bg-red-600 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 shadow-lg flex items-center justify-center animate-all"
+                                                        >
+                                                            <XMarkIcon className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+
+
+                            </div>
+
+                            {/* COLUNA 2: FOLHA A4 */}
+                            <div onClick={() => setActiveSection('doc')} className={`w-1/2 flex flex-col h-full rounded-[32px] shadow-2xl transition-all border-4 ${activeSection === 'doc' ? 'border-cyan-500 ring-8 ring-cyan-500/10' : 'border-white dark:border-[#0f172a]'} ${!isChatLeft ? 'order-first' : 'order-last'} bg-white dark:bg-[#0f172a] overflow-hidden`}>
+
+                                {/* CABEÇALHO DA FOLHA */}
+                                <div className="h-20 flex items-center px-10 shrink-0 border-b border-slate-100 dark:border-white/5 bg-transparent">
+                                    <DocumentTextIcon className="w-6 h-6 text-black dark:text-white mr-4" />
+                                    <input value={docTitle} onChange={(e) => setDocTitle(e.target.value)} className="bg-transparent text-black dark:text-white text-2xl font-black focus:outline-none w-full placeholder:text-slate-300" />
+                                </div>
+
+                                {/* ÁREA DE TEXTO DA FOLHA */}
+                                <div className="flex-1 p-12 md:p-16 overflow-y-auto custom-scrollbar">
+                                    <textarea
+                                        value={docContent} onChange={(e) => setDocContent(e.target.value)}
+                                        className="w-full h-full resize-none outline-none bg-transparent text-[17px] leading-loose text-black dark:text-white placeholder:text-slate-400 font-serif"
+                                        placeholder="Sua pesquisa começa aqui..."
+                                    />
+                                </div>
+
+                                {/* RODAPÉ DA FOLHA (AÇÕES) */}
+                                <div className="p-6 flex justify-between items-center px-10 bg-slate-50/50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5">
+                                    <div className="relative">
+                                        <button onClick={(e) => { e.stopPropagation(); setIsWorkTypeMenuOpen(!isWorkTypeMenuOpen); }} className="px-6 py-2.5 rounded-full text-[11px] font-black transition-all flex items-center gap-2 border-2 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30">
+                                            <SparklesIcon className="w-4 h-4" /> {workType || 'Definir Trabalho'}
+                                        </button>
+                                        <AnimatePresence>{isWorkTypeMenuOpen && (
+                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-full mb-4 left-0 bg-white dark:bg-black border-2 border-slate-200 dark:border-white/20 rounded-2xl shadow-2xl w-44 overflow-hidden z-[200]">
+                                                {["Artigo", "Relatório", "TCC"].map(type => <div key={type} onClick={(e) => { e.stopPropagation(); setWorkType(type as any); setIsWorkTypeMenuOpen(false); }} className="px-5 py-4 text-[11px] font-black uppercase text-black dark:text-white hover:bg-slate-50 dark:hover:bg-white/10 cursor-pointer">{type}</div>)}
+                                            </motion.div>
+                                        )}</AnimatePresence>
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        {/* BOTÃO SALVAR QUE ABRE O MODAL */}
+                                        <button onClick={(e) => { e.stopPropagation(); setIsSaveModalOpen(true); }} className="px-6 py-2.5 rounded-full text-[11px] font-black flex items-center gap-2 border-2 border-black dark:border-white text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 uppercase tracking-widest transition-colors w-[120px] justify-center">
+                                            <ArrowDownTrayIcon className="w-4 h-4" /> Salvar
+                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); setIsPublishOpen(true); }} className="px-8 py-2.5 rounded-full text-[11px] font-black flex items-center gap-2 bg-black dark:bg-white text-white dark:text-black hover:scale-105 transition-all uppercase tracking-widest shadow-xl">Publicar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        /* STUDY SUPPORT VIEW (MURAL TAB) */
+                        <div className="w-full h-full overflow-y-auto custom-scrollbar pb-32 pr-2 flex flex-col gap-8 text-left">
+                            {/* Apoio Audiovisual Card */}
+                            <section onClick={() => setActiveSection('videos')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('videos')}`}>
+                                <div className="flex items-center gap-4 mb-6">
+                                    <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-black px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
+                                        <VideoCameraIcon className="w-4 h-4" /> Apoio Audiovisual
+                                    </span>
+                                    <div className="ml-auto">
+                                        <button 
+                                            onClick={() => setIsAddVideoModalOpen(true)}
+                                            className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full text-[10px] font-black uppercase shadow-md flex items-center gap-2 transition-colors"
+                                        >
+                                            <PlusIcon className="w-3.5 h-3.5" /> Adicionar Vídeo
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex flex-row gap-6 overflow-x-auto pb-4 pt-2 min-h-[220px] custom-scrollbar">
+                                    {videos.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic m-auto">Nenhum vídeo adicionado. Clique em "Adicionar Vídeo" para colar um link.</span>}
+                                    {videos.map(vid => (
+                                        <div key={vid.id} className="flex-shrink-0 w-[360px] h-[200px] bg-slate-200 dark:bg-black rounded-[24px] overflow-hidden shadow-md relative group/vid border border-slate-300 dark:border-white/10">
+                                            <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${vid.youtubeId}`} frameBorder="0" allowFullScreen />
+                                            <button onClick={(e) => { e.stopPropagation(); setVideos(prev => prev.filter(v => v.id !== vid.id)); }} className="absolute top-3 right-3 p-3 bg-black dark:bg-white text-white dark:text-black rounded-xl opacity-0 group-hover/vid:opacity-100 transition-opacity hover:scale-105 shadow-xl"><TrashIcon className="w-5 h-5" /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            {/* Agente Quiz Card */}
+                            <section onClick={() => setActiveSection('examiner')} className={`flex flex-col h-[520px] shrink-0 rounded-[32px] overflow-hidden ${getCardStyle('examiner')}`}>
+                                <div className="p-5 border-b border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase text-orange-700 dark:text-orange-400 tracking-widest border border-orange-300 px-4 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30">Quiz</span>
+                                    <div className="w-10 h-10 rounded-full border border-slate-300 shadow-sm overflow-hidden"><img src="/agents/examiner.png" className="w-full h-full object-cover" /></div>
+                                </div>
+                                <div ref={examinerChatRef} className="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar bg-white dark:bg-[#0f172a]/50">
+                                    {specialistChatHistory.examiner.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic flex items-center justify-center h-full text-center px-4">Peça ao Quiz para fazer perguntas sobre o assunto da sua pesquisa e teste seus conhecimentos.</span>}
+                                    {specialistChatHistory.examiner.map((msg, i) => <ChatBubble key={i} role={msg.role} text={msg.text} agentName="Quiz" agentImg="/agents/examiner.png" userImg={session?.user?.image} />)}
+                                    {isExaminerTyping && <div className="text-[11px] text-orange-600 font-black uppercase tracking-widest animate-pulse ml-12">Quiz está a avaliar...</div>}
+                                </div>
+                                <div className="p-4 bg-slate-50 dark:bg-black border-t border-slate-300 dark:border-white/10">
+                                    <ChatInput
+                                        value={examinerPrompt}
+                                        onChange={setExaminerPrompt}
+                                        onSend={() => handleSpecialistQuery('examiner', examinerPrompt)}
+                                        isTyping={isExaminerTyping}
+                                        placeholder="Fale ou escreva a sua resposta..."
+                                    />
+                                </div>
+                            </section>
                         </div>
-
-                        <div className="flex gap-3">
-                            {/* BOTÃO SALVAR MINIMALISTA SEM MODAL */}
-                            <button onClick={handleSaveWorkspace} disabled={saveState === "saving"} className="px-6 py-2.5 rounded-full text-[11px] font-black flex items-center gap-2 border-2 border-black dark:border-white text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 uppercase tracking-widest transition-colors w-[120px] justify-center">
-                                {saveState === "saving" ? (
-                                    <><ArrowPathIcon className="w-4 h-4 animate-spin" /> ...</>
-                                ) : saveState === "saved" ? (
-                                    <><CheckBadgeIcon className="w-4 h-4 text-emerald-500" /> Salvo</>
-                                ) : (
-                                    <><ArrowDownTrayIcon className="w-4 h-4" /> Salvar</>
-                                )}
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); setIsPublishOpen(true); }} className="px-8 py-2.5 rounded-full text-[11px] font-black flex items-center gap-2 bg-black dark:bg-white text-white dark:text-black hover:scale-105 transition-all uppercase tracking-widest shadow-xl">Publicar</button>
-                        </div>
-                    </div>
+                    )}
                 </div>
             </main>
 
@@ -750,25 +1323,304 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                 )}
             </AnimatePresence>
 
-            {/* MODALS - PUBLICAR */}
+            {/* MODAL - ADICIONAR VÍDEO */}
+            <AnimatePresence>
+                {isAddVideoModalOpen && (
+                    <div className="fixed inset-0 z-[700] flex items-center justify-center p-6">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAddVideoModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0, scale: 0.9, y: 40 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 40 }} className="relative w-full max-w-md bg-white dark:bg-[#0a0a0a] rounded-[32px] p-8 shadow-2xl border border-slate-200 dark:border-white/10 text-left">
+                            <button onClick={() => setIsAddVideoModalOpen(false)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500"><XMarkIcon className="w-5 h-5" /></button>
+                            <h3 className="text-xl font-black text-black dark:text-white mb-2">Adicionar Vídeo de Apoio</h3>
+                            <p className="text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider">Cole o link do YouTube abaixo:</p>
+                            
+                            <div className="flex flex-col gap-4">
+                                <div className="flex items-center gap-2 bg-slate-100 dark:bg-black/60 rounded-full border border-slate-300 dark:border-white/20 p-1.5 pl-4 focus-within:ring-2 focus-within:ring-cyan-500/30 transition-all shadow-sm">
+                                    <input
+                                        type="text"
+                                        placeholder="https://www.youtube.com/watch?v=..."
+                                        value={videoUrlInput}
+                                        onChange={(e) => setVideoUrlInput(e.target.value)}
+                                        className="flex-1 bg-transparent border-none outline-none text-xs text-black dark:text-white placeholder:text-slate-400"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-3 mt-2">
+                                    <button 
+                                        onClick={() => {
+                                            setIsAddVideoModalOpen(false);
+                                            setVideoUrlInput("");
+                                        }} 
+                                        className="px-6 py-2.5 rounded-full text-[10px] font-black border-2 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 uppercase tracking-widest transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button 
+                                        onClick={() => handleAddVideo(videoUrlInput)}
+                                        disabled={!videoUrlInput.trim()}
+                                        className="px-8 py-2.5 rounded-full text-[10px] font-black bg-cyan-600 text-white hover:bg-cyan-500 disabled:opacity-50 uppercase tracking-widest shadow-xl transition-all"
+                                    >
+                                        Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* MODAL — SALVAR & EXPORTAR ABNT */}
+            <AnimatePresence>
+                {isSaveModalOpen && (
+                    <div className="fixed inset-0 z-[600] flex items-center justify-center p-6">
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            onClick={() => { if (!isExporting) { setIsSaveModalOpen(false); setAbntStep(1); setAbntWarnings([]); } }}
+                            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.92, y: 32 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.92, y: 32 }}
+                            className="relative w-full max-w-md bg-white dark:bg-[#0a0a0a] rounded-[32px] p-8 shadow-2xl border border-slate-200 dark:border-white/10 text-left"
+                        >
+                            {!isExporting && (
+                                <button
+                                    onClick={() => { setIsSaveModalOpen(false); setAbntStep(1); setAbntWarnings([]); }}
+                                    className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500"
+                                >
+                                    <XMarkIcon className="w-5 h-5" />
+                                </button>
+                            )}
+
+                            {/* ── PROCESSANDO ── */}
+                            {isExporting && (
+                                <div className="flex flex-col items-center gap-6 py-4">
+                                    <div className="relative w-12 h-12">
+                                        {[...Array(8)].map((_, i) => (
+                                            <motion.div
+                                                key={i}
+                                                className="absolute w-[2px] h-[10px] bg-cyan-500 rounded-full"
+                                                style={{ left: "50%", top: "20%", transformOrigin: "50% 200%", rotate: i * 45 }}
+                                                animate={{ opacity: [0.1, 1, 0.1] }}
+                                                transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.1 }}
+                                            />
+                                        ))}
+                                    </div>
+                                    <div className="w-full flex flex-col gap-2">
+                                        {exportProgress.map((step, i) => (
+                                            <motion.div
+                                                key={i}
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider"
+                                            >
+                                                <span className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
+                                                {step}
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-widest animate-pulse">Aguarde — formatando conforme ABNT NBR 14724:2011...</p>
+                                </div>
+                            )}
+
+                            {/* ── PASSO 1: METADADOS ── */}
+                            {!isExporting && abntStep === 1 && (
+                                <>
+                                    <div className="mb-6">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-cyan-500">Passo 1 de 2</span>
+                                        </div>
+                                        <h3 className="text-xl font-black text-black dark:text-white">Exportar com ABNT</h3>
+                                        <p className="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-wider">Preencha os metadados do trabalho</p>
+                                    </div>
+
+                                    {/* Warnings de sessões anteriores */}
+                                    {abntWarnings.length > 0 && (
+                                        <div className="mb-4 p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30">
+                                            {abntWarnings.map((w, i) => (
+                                                <p key={i} className="text-[10px] text-amber-700 dark:text-amber-400 font-bold">⚠ {w}</p>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="flex flex-col gap-3">
+                                        <div>
+                                            <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">Instituição *</label>
+                                            <input
+                                                value={abntMeta.institution}
+                                                onChange={e => setAbntMeta(prev => ({ ...prev, institution: e.target.value }))}
+                                                placeholder="Universidade Federal..."
+                                                className="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-black dark:text-white text-sm focus:border-cyan-500 outline-none transition-colors"
+                                            />
+                                        </div>
+
+                                        {workType === "TCC" && (
+                                            <div>
+                                                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">Orientador(a)</label>
+                                                <input
+                                                    value={abntMeta.advisor}
+                                                    onChange={e => setAbntMeta(prev => ({ ...prev, advisor: e.target.value }))}
+                                                    placeholder="Prof. Dr. Nome Sobrenome"
+                                                    className="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-black dark:text-white text-sm focus:border-cyan-500 outline-none transition-colors"
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="flex gap-3">
+                                            <div className="flex-1">
+                                                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">Cidade *</label>
+                                                <input
+                                                    value={abntMeta.city}
+                                                    onChange={e => setAbntMeta(prev => ({ ...prev, city: e.target.value }))}
+                                                    placeholder="São Paulo"
+                                                    className="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-black dark:text-white text-sm focus:border-cyan-500 outline-none transition-colors"
+                                                />
+                                            </div>
+                                            <div className="w-24">
+                                                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">Ano *</label>
+                                                <input
+                                                    value={abntMeta.year}
+                                                    onChange={e => setAbntMeta(prev => ({ ...prev, year: e.target.value }))}
+                                                    placeholder="2026"
+                                                    maxLength={4}
+                                                    className="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-black dark:text-white text-sm focus:border-cyan-500 outline-none transition-colors"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-2">Fonte</label>
+                                            <div className="flex gap-2">
+                                                {(["Times New Roman", "Arial"] as const).map(f => (
+                                                    <button
+                                                        key={f}
+                                                        onClick={() => setAbntMeta(prev => ({ ...prev, fontChoice: f }))}
+                                                        className={`flex-1 py-2.5 rounded-xl text-[11px] font-black border-2 transition-all ${abntMeta.fontChoice === f ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600 dark:text-cyan-400' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}
+                                                    >
+                                                        {f}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Salvar na nuvem — mantém funcionalidade original */}
+                                        <div className="pt-1 border-t border-slate-100 dark:border-white/5">
+                                            <button
+                                                onClick={async (e) => { setIsSaveModalOpen(false); await handleSaveWorkspace(e); }}
+                                                className="w-full py-3 px-4 rounded-2xl text-[11px] font-black border-2 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-cyan-500 hover:text-cyan-500 flex items-center gap-3 transition-all"
+                                            >
+                                                <CloudArrowUpIcon className="w-5 h-5 text-cyan-500 shrink-0" />
+                                                Salvar na Nuvem (sem formatação ABNT)
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end mt-6">
+                                        <button
+                                            onClick={() => setAbntStep(2)}
+                                            disabled={!abntMeta.institution.trim() || !abntMeta.city.trim() || !abntMeta.year.trim()}
+                                            className="px-8 py-3 rounded-full text-[11px] font-black bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white uppercase tracking-widest shadow-xl transition-all flex items-center gap-2"
+                                        >
+                                            Próximo → Formato
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* ── PASSO 2: ESCOLHA DO FORMATO ── */}
+                            {!isExporting && abntStep === 2 && (
+                                <>
+                                    <div className="mb-6">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <button onClick={() => setAbntStep(1)} className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 hover:text-cyan-500 transition-colors">← Voltar</button>
+                                            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-cyan-500">Passo 2 de 2</span>
+                                        </div>
+                                        <h3 className="text-xl font-black text-black dark:text-white">Escolha o formato</h3>
+                                        <p className="text-[11px] font-bold text-slate-500 mt-1">O documento será formatado automaticamente pela IA com todas as regras ABNT NBR 14724:2011.</p>
+                                    </div>
+
+                                    {/* Resumo dos metadados */}
+                                    <div className="mb-4 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[10px] text-slate-500 space-y-0.5">
+                                        <p><span className="font-black text-black dark:text-white">Instituição:</span> {abntMeta.institution}</p>
+                                        {abntMeta.advisor && <p><span className="font-black text-black dark:text-white">Orientador:</span> {abntMeta.advisor}</p>}
+                                        <p><span className="font-black text-black dark:text-white">Local/Ano:</span> {abntMeta.city}, {abntMeta.year}</p>
+                                        <p><span className="font-black text-black dark:text-white">Fonte:</span> {abntMeta.fontChoice} 12pt</p>
+                                        <p><span className="font-black text-black dark:text-white">Citações:</span> {savedCitations.length} referência(s) salva(s)</p>
+                                    </div>
+
+                                    <div className="flex flex-col gap-3">
+                                        <button
+                                            onClick={() => handleABNTExport("pdf")}
+                                            className="w-full py-5 px-5 rounded-2xl text-xs font-black border-2 border-slate-200 dark:border-white/20 text-black dark:text-white hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center gap-4 transition-all text-left"
+                                        >
+                                            <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+                                                <DocumentTextIcon className="w-5 h-5 text-red-600" />
+                                            </div>
+                                            <div>
+                                                <div className="font-black text-sm text-black dark:text-white">PDF — ABNT</div>
+                                                <div className="text-[10px] text-slate-500 font-normal normal-case mt-0.5">Download em PDF com formatação acadêmica completa</div>
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            onClick={() => handleABNTExport("docx")}
+                                            className="w-full py-5 px-5 rounded-2xl text-xs font-black border-2 border-slate-200 dark:border-white/20 text-black dark:text-white hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 flex items-center gap-4 transition-all text-left"
+                                        >
+                                            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                                                <DocumentTextIcon className="w-5 h-5 text-blue-600" />
+                                            </div>
+                                            <div>
+                                                <div className="font-black text-sm text-black dark:text-white">Word (.docx) — ABNT</div>
+                                                <div className="text-[10px] text-slate-500 font-normal normal-case mt-0.5">Download editável com todas as normas aplicadas</div>
+                                            </div>
+                                        </button>
+                                    </div>
+
+                                    <p className="mt-4 text-[9px] text-slate-400 text-center leading-relaxed">
+                                        A IA irá estruturar, revisar e formatar seu texto.<br />
+                                        Margens 3/2/3/2cm · {abntMeta.fontChoice} 12pt · Entrelinha 1,5
+                                    </p>
+                                </>
+                            )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* MODALS - PUBLICAR NO MURAL */}
             <AnimatePresence>
                 {isPublishOpen && (
                     <div className="fixed inset-0 z-[600] flex items-center justify-center p-6">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setIsPublishOpen(false); setPublishFormat(null); }} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                        <motion.div initial={{ opacity: 0, scale: 0.9, y: 40 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 40 }} className="relative w-full max-w-md bg-white dark:bg-black rounded-[32px] p-10 shadow-2xl border-4 border-black dark:border-white">
-                            <h3 className="text-2xl font-black text-black dark:text-white mb-2">Publicar {workType || 'Trabalho'}</h3>
-                            <p className="text-sm font-bold text-slate-500 mb-6">Escolha o formato:</p>
-                            <div className="flex flex-col gap-3 mb-6">
-                                {(["pdf", "docx"] as const).map(fmt => (
-                                    <button key={fmt} onClick={() => setPublishFormat(fmt)} className={`w-full py-4 px-5 rounded-2xl text-sm font-black border-2 transition-all flex items-center justify-between uppercase tracking-wider ${publishFormat === fmt ? 'border-cyan-500 text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30' : 'border-slate-200 dark:border-white/20 text-black dark:text-white hover:border-black dark:hover:border-white'}`}>
-                                        <span>{fmt === 'pdf' ? 'PDF (Adobe)' : 'DOCX (Word)'}</span>
-                                        {publishFormat === fmt && <CheckBadgeIcon className="w-6 h-6 text-cyan-600" />}
-                                    </button>
-                                ))}
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPublishOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0, scale: 0.9, y: 40 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 40 }} className="relative w-full max-w-md bg-white dark:bg-[#0a0a0a] rounded-[32px] p-8 shadow-2xl border border-slate-200 dark:border-white/10 text-left">
+                            <button onClick={() => setIsPublishOpen(false)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500"><XMarkIcon className="w-5 h-5" /></button>
+                            <h3 className="text-xl font-black text-black dark:text-white mb-2">Publicar no Mural</h3>
+                            <p className="text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider">Escolha a visibilidade da publicação:</p>
+                            
+                            <div className="flex flex-col gap-3">
+                                {/* Opção Público */}
+                                <button 
+                                    onClick={() => handlePublishToMural("public")}
+                                    className="w-full py-4 px-5 rounded-2xl text-xs font-black border-2 border-slate-200 dark:border-white/20 text-black dark:text-white hover:border-cyan-500 hover:text-cyan-500 flex items-center gap-4 transition-all text-left uppercase tracking-wider"
+                                >
+                                    <GlobeAltIcon className="w-6 h-6 text-cyan-500 shrink-0" />
+                                    <div>
+                                        <div className="font-black text-sm">Público</div>
+                                        <div className="text-[10px] text-slate-500 normal-case font-normal font-sans">Aparece no Mural de todos. Permite likes e comentários.</div>
+                                    </div>
+                                </button>
+
+                                {/* Opção Privado */}
+                                <button 
+                                    onClick={() => handlePublishToMural("private")}
+                                    className="w-full py-4 px-5 rounded-2xl text-xs font-black border-2 border-slate-200 dark:border-white/20 text-black dark:text-white hover:border-purple-500 hover:text-purple-500 flex items-center gap-4 transition-all text-left uppercase tracking-wider"
+                                >
+                                    <LockClosedIcon className="w-6 h-6 text-purple-500 shrink-0" />
+                                    <div>
+                                        <div className="font-black text-sm">Privado</div>
+                                        <div className="text-[10px] text-slate-500 normal-case font-normal font-sans">Fica visível apenas para você no seu Mural feed.</div>
+                                    </div>
+                                </button>
                             </div>
-                            <button onClick={handlePublish} disabled={!publishFormat || isSystemProcessing} className="w-full bg-black dark:bg-white text-white dark:text-black font-black py-4 rounded-2xl transition-all uppercase tracking-widest text-sm disabled:opacity-50 flex items-center justify-center gap-2 hover:scale-[1.02]">
-                                {isSystemProcessing ? <IosLoader status="Exportando" /> : <><ArrowDownTrayIcon className="w-5 h-5" /> Iniciar Download</>}
-                            </button>
                         </motion.div>
                     </div>
                 )}
