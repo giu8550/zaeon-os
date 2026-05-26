@@ -23,8 +23,13 @@ import {
     BookOpenIcon, DocumentTextIcon, PlayCircleIcon,
     EyeIcon, PowerIcon, BeakerIcon, ChatBubbleLeftRightIcon, ClipboardDocumentIcon,
     DocumentChartBarIcon, CheckBadgeIcon,
-    LanguageIcon, PhotoIcon, LockClosedIcon, GlobeAltIcon, PencilSquareIcon, CloudArrowUpIcon
+    LanguageIcon, PhotoIcon, LockClosedIcon, GlobeAltIcon, PencilSquareIcon, CloudArrowUpIcon,
+    NewspaperIcon
 } from "@heroicons/react/24/outline";
+
+import NewsPanel from "@/components/research/NewsPanel";
+import ProfilePanel from "@/components/research/ProfilePanel";
+import MiniTourToast from "@/components/research/MiniTourToast";
 
 // --- COMPONENTS ---
 import ResearchCardPDF from "@/components/ui/ResearchCardPDF";
@@ -374,7 +379,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const { data: session, status } = useSession();
 
     // --- MURAL & EDITOR TAB STATES ---
-    const [activeTab, setActiveTab] = useState<"mural" | "editor">("editor");
+    const [activeTab, setActiveTab] = useState<"editor" | "mural" | "news" | "profile">("editor");
     const [selectedImages, setSelectedImages] = useState<string[]>([]);
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [muralSearchQuery, setMuralSearchQuery] = useState("");
@@ -391,6 +396,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [activeSection, setActiveSection] = useState<"pdf" | "scribe" | "examiner" | "videos" | "doc" | null>(null);
     const [showTour, setShowTour] = useState(false);
     const [onboardSaved, setOnboardSaved] = useState(false);
+    const [miniTourTab, setMiniTourTab] = useState<string | null>(null);
+    const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set());
 
     // --- NOTIFICATION STATE ---
     const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -660,6 +667,15 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
             }
         }
     }, [status]);
+
+    // Handle ?tab= query param for deep linking
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab');
+        if (tabParam && ['editor', 'mural', 'news', 'profile'].includes(tabParam)) {
+            setActiveTab(tabParam as any);
+        }
+    }, []);
 
     const toggleFocusMode = () => {
         const newMode = !isFocusMode;
@@ -973,6 +989,35 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         return `transition-all duration-300 border-2 ${isActive ? 'border-cyan-500 ring-4 ring-cyan-500/10' : 'border-slate-300 dark:border-white/10'} bg-white dark:bg-[#0f172a] shadow-xl`;
     };
 
+    const triggerMiniTour = (tab: string) => {
+        if (['news', 'profile'].includes(tab)) {
+            setMiniTourTab(tab);
+            setTimeout(() => setMiniTourTab(null), 6000);
+        }
+    };
+
+    const handleTabChange = (tab: string) => {
+        if (!visitedTabs.has(tab)) {
+            setVisitedTabs(prev => new Set([...prev, tab]));
+            triggerMiniTour(tab);
+        }
+        setActiveTab(tab as any);
+    };
+
+    const getTabMeta = () => {
+        switch (activeTab) {
+            case "mural":
+                return { title: "Mural de Pesquisas", subtitle: "Pesquisas publicadas pela comunidade Zaeon" };
+            case "news":
+                return { title: "Central de Notícias", subtitle: "Atualizações, relatórios e eventos do ecossistema acadêmico" };
+            case "profile":
+                return { title: "Identidade Neural", subtitle: "Seu perfil, conquistas e rede de colaboração" };
+            default:
+                return { title: "Laboratório de Pesquisa", subtitle: "Seu espaço de criação e exportação ABNT" };
+        }
+    };
+    const tabMeta = getTabMeta();
+
     if (!mounted || status === "loading") {
         return (
             <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-[#030014]">
@@ -1030,6 +1075,22 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             <GlobeAltIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-400" />
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Mural</span>}
                         </button>
+                        <button
+                            data-tour="news-tab"
+                            onClick={() => handleTabChange("news")}
+                            className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'news' ? 'bg-amber-500 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}
+                        >
+                            <NewspaperIcon className="w-5 h-5 shrink-0" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">News</span>}
+                        </button>
+                        <button
+                            data-tour="profile-tab"
+                            onClick={() => handleTabChange("profile")}
+                            className={`flex items-center gap-3 p-2 rounded-xl transition-all ${activeTab === 'profile' ? 'bg-violet-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 group'}`}
+                        >
+                            <UserCircleIcon className="w-5 h-5 shrink-0" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Profile</span>}
+                        </button>
                         <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
                         <button data-tour="layout-toggle" onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
                             <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
@@ -1049,13 +1110,10 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
                     <div>
                         <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
-                            {activeTab === "mural" ? "Mural de Pesquisas" : "Laboratório de Pesquisa"}
+                            {tabMeta.title}
                         </h1>
                         <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1">
-                            {activeTab === "mural" 
-                                ? "Explore o conhecimento acadêmico descentralizado da rede"
-                                : "Construa e analise sua produção acadêmica com IA"
-                            }
+                            {tabMeta.subtitle}
                         </p>
                     </div>
                     
@@ -1068,18 +1126,34 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             <PencilSquareIcon className="w-3.5 h-3.5" />
                             Escrever
                         </button>
-                        <button 
-                            onClick={() => setActiveTab("mural")} 
+                        <button
+                            onClick={() => setActiveTab("mural")}
                             className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'mural' ? 'bg-cyan-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-200/50 dark:hover:bg-white/5'}`}
                         >
                             <GlobeAltIcon className="w-3.5 h-3.5" />
                             Mural
                         </button>
+                        <button
+                            data-tour="news-tab-pill"
+                            onClick={() => handleTabChange("news")}
+                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'news' ? 'bg-amber-500 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-200/50 dark:hover:bg-white/5'}`}
+                        >
+                            <NewspaperIcon className="w-4 h-4" />
+                            News
+                        </button>
+                        <button
+                            data-tour="profile-tab-pill"
+                            onClick={() => handleTabChange("profile")}
+                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'profile' ? 'bg-violet-600 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-200/50 dark:hover:bg-white/5'}`}
+                        >
+                            <UserCircleIcon className="w-4 h-4" />
+                            Profile
+                        </button>
                     </div>
                 </div>
 
                 <div className="flex-1 flex gap-8 overflow-hidden h-full">
-                    {activeTab === "editor" ? (
+                    {activeTab === "editor" && (
                         <>
                             {/* COLUNA 1: ESTUDO (PDF + SCRIBE + QUIZ) */}
                             <div className={`w-1/2 h-full flex flex-col gap-8 overflow-y-auto custom-scrollbar pb-32 pr-2 ${isChatLeft ? 'order-first' : 'order-last'}`}>
@@ -1318,7 +1392,9 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                 </div>
                             </div>
                         </>
-                    ) : (
+                    )}
+
+                    {activeTab === "mural" && (
                         /* STUDY SUPPORT VIEW (MURAL TAB) */
                         <div className="w-full h-full overflow-y-auto custom-scrollbar pb-32 pr-2 flex flex-col gap-8 text-left">
                             {/* Apoio Audiovisual Card */}
@@ -1368,6 +1444,18 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                     />
                                 </div>
                             </section>
+                        </div>
+                    )}
+
+                    {activeTab === "news" && (
+                        <div className="w-full h-full overflow-y-auto custom-scrollbar">
+                            <NewsPanel className="pb-24" />
+                        </div>
+                    )}
+
+                    {activeTab === "profile" && (
+                        <div className="w-full h-full overflow-y-auto custom-scrollbar">
+                            <ProfilePanel className="pb-24" />
                         </div>
                     )}
                 </div>
@@ -1703,6 +1791,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
 
             {/* Interactive onboarding tour for first-time users */}
             {showTour && <ResearchRoomTour onComplete={() => setShowTour(false)} />}
+            <MiniTourToast tab={miniTourTab} onDismiss={() => setMiniTourTab(null)} />
         </div>
     );
 }

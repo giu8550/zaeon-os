@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRouter } from 'next/navigation';
 import { XMarkIcon, ChevronRightIcon, ChevronLeftIcon } from '@heroicons/react/24/outline';
 
 interface TourStep {
@@ -11,8 +10,6 @@ interface TourStep {
   title: string;
   description: string;
   position: 'center' | 'right' | 'left' | 'top' | 'bottom';
-  hasNavigation?: boolean;
-  navigationTarget?: string;
   isLast?: boolean;
 }
 
@@ -88,13 +85,25 @@ const TOUR_STEPS: TourStep[] = [
     position: 'right',
   },
   {
+    id: 'news-tab',
+    target: '[data-tour="news-tab"]',
+    title: '📰 Aba de Notícias',
+    description: 'Acesse relatórios mensais e novidades do ecossistema Zaeon direto na sua sala. Publicações filtradas por relevância acadêmica.',
+    position: 'right',
+  },
+  {
+    id: 'profile-tab',
+    target: '[data-tour="profile-tab"]',
+    title: '🧬 Seu Perfil Neural',
+    description: 'Visualize seu progresso, objetivos e identidade acadêmica. A Matriz de Objetivos registra seus checkpoints diários.',
+    position: 'right',
+  },
+  {
     id: 'mural-teaser',
     target: null,
     title: '🌐 Próximo: O Mural da Comunidade',
-    description: 'Quando terminar aqui, explore o Mural — onde você se conecta com outros estudantes, compartilha descobertas e colabora em tempo real.',
+    description: 'Explore o Mural — onde você se conecta com outros estudantes, compartilha descobertas e colabora em tempo real.',
     position: 'center',
-    hasNavigation: true,
-    navigationTarget: '/workstation/profiles?tour=true',
   },
   {
     id: 'finish',
@@ -120,7 +129,6 @@ interface Props {
 export default function ResearchRoomTour({ onComplete }: Props) {
   const [step, setStep] = useState(0);
   const [spotlight, setSpotlight] = useState<SpotlightRect | null>(null);
-  const router = useRouter();
   const current = TOUR_STEPS[step];
 
   const updateSpotlight = useCallback(() => {
@@ -153,13 +161,8 @@ export default function ResearchRoomTour({ onComplete }: Props) {
       onComplete();
       return;
     }
-    if (current.hasNavigation && current.navigationTarget) {
-      onComplete();
-      router.push(current.navigationTarget);
-      return;
-    }
     setStep(s => s + 1);
-  }, [current, onComplete, router]);
+  }, [current, onComplete]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -261,7 +264,7 @@ export default function ResearchRoomTour({ onComplete }: Props) {
                   onClick={e => { e.stopPropagation(); handleNext(); }}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-black uppercase tracking-wider transition-all"
                 >
-                  {current.isLast ? 'Concluir' : current.hasNavigation ? 'Ver Mural' : 'Próximo'}
+                  {current.isLast ? 'Concluir' : 'Próximo'}
                   {!current.isLast && <ChevronRightIcon className="w-3.5 h-3.5" />}
                 </button>
               </div>
