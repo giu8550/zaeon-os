@@ -632,6 +632,12 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     useEffect(() => { if (scribeChatRef.current) scribeChatRef.current.scrollTo({ top: scribeChatRef.current.scrollHeight, behavior: 'smooth' }); }, [specialistChatHistory.scribe, isScribeTyping]);
     useEffect(() => { if (examinerChatRef.current) examinerChatRef.current.scrollTo({ top: examinerChatRef.current.scrollHeight, behavior: 'smooth' }); }, [specialistChatHistory.examiner, isExaminerTyping]);
 
+    useEffect(() => {
+        return () => {
+            window.dispatchEvent(new CustomEvent('zaeon-focus-mode', { detail: false }));
+        };
+    }, []);
+
     const toggleFocusMode = () => {
         const newMode = !isFocusMode;
         setIsFocusMode(newMode);
@@ -1006,7 +1012,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
                         </button>
-                        <button onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl ${isFocusMode ? 'bg-cyan-50 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100'}`}>
+                        <button data-tour="focus-mode" onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}>
                             {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
                         </button>
