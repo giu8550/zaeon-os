@@ -23,10 +23,12 @@ model User {
   bio             String?   
   age             Int?
   gender          String?
-  countryCode     String?   // <--- NOVO: Salva a bandeira escolhida no onboarding
-  torsoImage      String?   
-  role            String?   
-  phone           String?   
+  countryCode         String?
+  city                String?
+  onboardingComplete  Boolean   @default(false)
+  torsoImage          String?
+  role                String?
+  phone               String?   
   
   // Gamification & Skill Tree
   level           Int       @default(1)

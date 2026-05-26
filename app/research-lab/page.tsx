@@ -10,6 +10,7 @@ import "@/src/i18n";
 // --- IMPORTS ---
 import { Navbar } from "@/components/main/navbar";
 import { Mic, MicOff } from "lucide-react";
+import ResearchRoomTour from "@/components/onboard/ResearchRoomTour";
 
 // --- ICONS ---
 import {
@@ -27,6 +28,7 @@ import {
 
 // --- COMPONENTS ---
 import ResearchCardPDF from "@/components/ui/ResearchCardPDF";
+import { ABNT_TEMPLATE, parseAbntMarkers, isEmptyOrTemplate } from '@/lib/abntTemplate';
 
 // --- TYPES ---
 interface StudyDoc { id: string; title: string; url: string; file?: File; }
@@ -387,6 +389,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [isChatLeft, setIsChatLeft] = useState(false);
     const [isFocusMode, setIsFocusMode] = useState(false);
     const [activeSection, setActiveSection] = useState<"pdf" | "scribe" | "examiner" | "videos" | "doc" | null>(null);
+    const [showTour, setShowTour] = useState(false);
+    const [onboardSaved, setOnboardSaved] = useState(false);
 
     // --- NOTIFICATION STATE ---
     const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -396,7 +400,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [workType, setWorkType] = useState<"Artigo" | "Relatório" | "TCC" | null>(null);
     const [isWorkTypeMenuOpen, setIsWorkTypeMenuOpen] = useState(false);
     const [docTitle, setDocTitle] = useState("minha_pesquisa.pdf");
-    const [docContent, setDocContent] = useState("");
+    const [docContent, setDocContent] = useState(ABNT_TEMPLATE);
+    const [hintOpen, setHintOpen] = useState(true);
     const [activeProject, setActiveProject] = useState<any>(null);
 
     // --- DATA STATES ---
@@ -629,6 +634,32 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     useEffect(() => { if (pdfChatRef.current) pdfChatRef.current.scrollTo({ top: pdfChatRef.current.scrollHeight, behavior: 'smooth' }); }, [pdfChatHistory, isPdfTyping, activePdfTab]);
     useEffect(() => { if (scribeChatRef.current) scribeChatRef.current.scrollTo({ top: scribeChatRef.current.scrollHeight, behavior: 'smooth' }); }, [specialistChatHistory.scribe, isScribeTyping]);
     useEffect(() => { if (examinerChatRef.current) examinerChatRef.current.scrollTo({ top: examinerChatRef.current.scrollHeight, behavior: 'smooth' }); }, [specialistChatHistory.examiner, isExaminerTyping]);
+
+    useEffect(() => {
+        return () => {
+            window.dispatchEvent(new CustomEvent('zaeon-focus-mode', { detail: false }));
+        };
+    }, []);
+
+    // Save onboard cookie data after OAuth if present
+    useEffect(() => {
+        if (status !== 'authenticated' || onboardSaved) return;
+        if (!document.cookie.includes('zaeon_onboard=')) return;
+        fetch('/api/onboard/save', { method: 'POST' })
+            .then(() => setOnboardSaved(true))
+            .catch(console.error);
+    }, [status, onboardSaved]);
+
+    // Mount tour on first login when ?tour=true
+    useEffect(() => {
+        if (status === 'authenticated') {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('tour') === 'true') {
+                const timer = setTimeout(() => setShowTour(true), 800);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [status]);
 
     const toggleFocusMode = () => {
         const newMode = !isFocusMode;
@@ -871,6 +902,9 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         setAbntWarnings([]);
         setExportProgress(["Estruturando seções com IA (ABNT Structurer)..."]);
 
+        // Tenta parsear marcadores estruturados do editor
+        const parsedSections = parseAbntMarkers(docContent);
+
         try {
             const response = await fetch('/api/documents/abnt-export', {
                 method: 'POST',
@@ -888,6 +922,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                     year: abntMeta.year,
                     format,
                     fontChoice: abntMeta.fontChoice,
+                    parsedSections: parsedSections ?? undefined,
                 }),
             });
 
@@ -996,11 +1031,11 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Mural</span>}
                         </button>
                         <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
-                        <button onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
+                        <button data-tour="layout-toggle" onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
                             <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
                         </button>
-                        <button onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl ${isFocusMode ? 'bg-cyan-50 text-white shadow-md' : 'text-black dark:text-white hover:bg-slate-100'}`}>
+                        <button data-tour="focus-mode" onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}>
                             {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
                         </button>
@@ -1051,7 +1086,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                 <input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" multiple onChange={(e) => handleFiles(e.target.files)} />
 
                                 {/* CHAT COM PDF & CITAÇÕES */}
-                                <section onClick={() => setActiveSection('pdf')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('pdf')}`}>
+                                <section data-tour="pdf-upload" onClick={() => setActiveSection('pdf')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('pdf')}`}>
                                     <div className="flex items-center gap-4 mb-6">
                                         <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-black px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
                                             <BookOpenIcon className="w-4 h-4" /> Biblioteca
@@ -1077,7 +1112,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                             <div className="flex p-1.5 bg-slate-200 dark:bg-white/10 rounded-xl w-fit mb-6 border border-slate-300 dark:border-white/20 shadow-inner">
                                                 <button onClick={() => setActivePdfTab('chat')} className={`px-6 py-2.5 rounded-lg text-[11px] font-black uppercase transition-all ${activePdfTab === 'chat' ? 'bg-white text-cyan-600 shadow-md' : 'text-black dark:text-white hover:bg-white/50'}`}>Chat</button>
                                                 <button onClick={() => setActivePdfTab('writer')} className={`px-6 py-2.5 rounded-lg text-[11px] font-black uppercase transition-all ${activePdfTab === 'writer' ? 'bg-white text-purple-600 shadow-md' : 'text-black dark:text-white hover:bg-white/50'}`}>Escritor</button>
-                                                <button onClick={() => setActivePdfTab('citations')} className={`px-6 py-2.5 rounded-lg text-[11px] font-black uppercase transition-all ${activePdfTab === 'citations' ? 'bg-white text-indigo-600 shadow-md' : 'text-black dark:text-white hover:bg-white/50'}`}>Citações</button>
+                                                <button data-tour="citations" onClick={() => setActivePdfTab('citations')} className={`px-6 py-2.5 rounded-lg text-[11px] font-black uppercase transition-all ${activePdfTab === 'citations' ? 'bg-white text-indigo-600 shadow-md' : 'text-black dark:text-white hover:bg-white/50'}`}>Citações</button>
                                             </div>
 
                                             {activePdfTab === 'chat' && (
@@ -1087,6 +1122,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                                         {pdfChatHistory.map((msg, i) => <ChatBubble key={i} role={msg.role} text={msg.text} agentName="Aura" agentImg="/agents/aura.png" userImg={session?.user?.image} />)}
                                                         {isPdfTyping && <div className="text-[10px] font-bold animate-pulse text-cyan-600 ml-12">Aura está a analisar...</div>}
                                                     </div>
+                                                    <div data-tour="ai-chat">
                                                     <ChatInput
                                                         value={pdfPrompt}
                                                         onChange={setPdfPrompt}
@@ -1094,6 +1130,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                                         isTyping={isPdfTyping}
                                                         placeholder="Pergunte ao PDF..."
                                                     />
+                                                    </div>
                                                 </div>
                                             )}
 
@@ -1212,10 +1249,48 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                 </div>
 
                                 {/* ÁREA DE TEXTO DA FOLHA */}
-                                <div className="flex-1 p-12 md:p-16 overflow-y-auto custom-scrollbar">
+                                <div className="flex-1 p-12 md:p-16 overflow-y-auto custom-scrollbar flex flex-col gap-4">
+                                    {/* ── ABNT HINT BAR ── */}
+                                    {(isEmptyOrTemplate(docContent) || hintOpen) && (
+                                        <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/80 dark:bg-indigo-950/40 overflow-hidden text-left shrink-0">
+                                            <button
+                                                onClick={() => setHintOpen(h => !h)}
+                                                className="w-full flex items-center justify-between px-5 py-3 text-[11px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400"
+                                            >
+                                                <span className="flex items-center gap-2">
+                                                    <SparklesIcon className="w-3.5 h-3.5" />
+                                                    Como escrever na Zaeon para exportação ABNT automática
+                                                </span>
+                                                <span>{hintOpen ? '▲' : '▼'}</span>
+                                            </button>
+                                            {hintOpen && (
+                                                <div className="px-5 pb-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-indigo-700 dark:text-indigo-300 leading-relaxed">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-black">① Use # para seções principais</span>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]"># INTRODUÇÃO</code>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]"># METODOLOGIA</code>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]"># CONCLUSÃO</code>
+                                                        <span className="text-indigo-500 dark:text-indigo-400 text-[10px]">Títulos ficam em MAIÚSCULAS automaticamente.</span>
+                                                    </div>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-black">② Use ## para subseções</span>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]">## Revisão da Literatura</code>
+                                                        <code className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg px-2 py-1 font-mono text-[10px]">## Análise dos Dados</code>
+                                                        <span className="text-indigo-500 dark:text-indigo-400 text-[10px]">Subseções recebem numeração automática (ex: 2.1).</span>
+                                                    </div>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-black">③ Escreva as referências em # REFERÊNCIAS</span>
+                                                        <span className="text-indigo-500 dark:text-indigo-400 text-[10px]">O sistema detecta e formata cada entrada conforme ABNT NBR 6023:2018. Uma referência por linha.</span>
+                                                        <span className="mt-1 font-black text-green-600 dark:text-green-400">✓ Estruturado → exportação ABNT perfeita</span>
+                                                        <span className="font-black text-amber-600 dark:text-amber-400">⚠ Sem marcadores → IA tenta inferir (pode errar)</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     <textarea
                                         value={docContent} onChange={(e) => setDocContent(e.target.value)}
-                                        className="w-full h-full resize-none outline-none bg-transparent text-[17px] leading-loose text-black dark:text-white placeholder:text-slate-400 font-serif"
+                                        className="w-full flex-1 min-h-[400px] resize-none outline-none bg-transparent text-[17px] leading-loose text-black dark:text-white placeholder:text-slate-400 font-serif"
                                         placeholder="Sua pesquisa começa aqui..."
                                     />
                                 </div>
@@ -1247,7 +1322,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                         /* STUDY SUPPORT VIEW (MURAL TAB) */
                         <div className="w-full h-full overflow-y-auto custom-scrollbar pb-32 pr-2 flex flex-col gap-8 text-left">
                             {/* Apoio Audiovisual Card */}
-                            <section onClick={() => setActiveSection('videos')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('videos')}`}>
+                            <section data-tour="youtube" onClick={() => setActiveSection('videos')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('videos')}`}>
                                 <div className="flex items-center gap-4 mb-6">
                                     <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-black px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
                                         <VideoCameraIcon className="w-4 h-4" /> Apoio Audiovisual
@@ -1273,7 +1348,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             </section>
 
                             {/* Agente Quiz Card */}
-                            <section onClick={() => setActiveSection('examiner')} className={`flex flex-col h-[520px] shrink-0 rounded-[32px] overflow-hidden ${getCardStyle('examiner')}`}>
+                            <section data-tour="specialists" onClick={() => setActiveSection('examiner')} className={`flex flex-col h-[520px] shrink-0 rounded-[32px] overflow-hidden ${getCardStyle('examiner')}`}>
                                 <div className="p-5 border-b border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
                                     <span className="text-[10px] font-black uppercase text-orange-700 dark:text-orange-400 tracking-widest border border-orange-300 px-4 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30">Quiz</span>
                                     <div className="w-10 h-10 rounded-full border border-slate-300 shadow-sm overflow-hidden"><img src="/agents/examiner.png" className="w-full h-full object-cover" /></div>
@@ -1547,7 +1622,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                         <p><span className="font-black text-black dark:text-white">Citações:</span> {savedCitations.length} referência(s) salva(s)</p>
                                     </div>
 
-                                    <div className="flex flex-col gap-3">
+                                    <div className="flex flex-col gap-3" data-tour="save-research">
                                         <button
                                             onClick={() => handleABNTExport("pdf")}
                                             className="w-full py-5 px-5 rounded-2xl text-xs font-black border-2 border-slate-200 dark:border-white/20 text-black dark:text-white hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center gap-4 transition-all text-left"
@@ -1625,6 +1700,9 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                     </div>
                 )}
             </AnimatePresence>
+
+            {/* Interactive onboarding tour for first-time users */}
+            {showTour && <ResearchRoomTour onComplete={() => setShowTour(false)} />}
         </div>
     );
 }
