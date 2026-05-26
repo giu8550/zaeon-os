@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CameraIcon, ArrowPathIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, TrashIcon, PencilIcon, CheckIcon, Cog6ToothIcon, ArrowsRightLeftIcon } from "@heroicons/react/24/outline";
+import { CameraIcon, ArrowPathIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, TrashIcon, PencilIcon, CheckIcon, Cog6ToothIcon, ArrowsRightLeftIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import NextImage from "next/image";
+import { useSearchParams } from "next/navigation";
 
 interface PersonalPhoto {
     id: string;
@@ -23,8 +24,17 @@ const EMPTY_FRAME: PersonalPhoto = {
 };
 
 // 🔥 NOVO: Recebe o ID do usuário que estamos visitando. Se for undefined, é o NOSSO mural.
+const MURAL_TOUR = [
+    { title: '🌐 O Mural da Comunidade', description: 'Aqui vivem os estudantes Zaeon. Veja perfis, projetos em andamento e colaborações ativas.' },
+    { title: '🪪 Seu Perfil', description: 'Clique no seu avatar para editar seu perfil. Adicione seus projetos, áreas de interesse e links.' },
+    { title: '🤝 Conectar', description: 'Encontre colegas do mesmo curso ou universidade. Colaboração começa com uma conexão.' },
+    { title: '🎓 Pronto para voar!', description: 'Sua conta está ativa. Agora é com você. Boa sorte no TCC!' },
+];
+
 export default function NetworkMural({ visitedUserId }: { visitedUserId?: string }) {
     const isVisitorMode = !!visitedUserId; // Se existe um ID, somos visitantes!
+    const searchParams = useSearchParams();
+    const [muralTourStep, setMuralTourStep] = useState<number | null>(null);
 
     const [photos, setPhotos] = useState<PersonalPhoto[]>([]);
     const [active, setActive] = useState(0);
@@ -41,6 +51,13 @@ export default function NetworkMural({ visitedUserId }: { visitedUserId?: string
     // Se estivermos no modo visitante e não houver fotos, mostramos apenas 1 frame vazio bonito.
     // Se for o nosso mural, mostramos o frame de "Adicionar".
     const displayItems = photos.length > 0 ? [...photos, EMPTY_FRAME] : [EMPTY_FRAME];
+
+    useEffect(() => {
+        if (searchParams?.get('tour') === 'true') {
+            const timer = setTimeout(() => setMuralTourStep(0), 600);
+            return () => clearTimeout(timer);
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         const loadPhotos = async () => {
@@ -412,6 +429,54 @@ export default function NetworkMural({ visitedUserId }: { visitedUserId?: string
                     ))}
                 </div>
             )}
+
+            {/* Mini-tour overlay — shown on ?tour=true after first login */}
+            <AnimatePresence>
+                {muralTourStep !== null && (
+                    <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-sm flex items-center justify-center pointer-events-auto">
+                        <motion.div
+                            key={muralTourStep}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            transition={{ duration: 0.22 }}
+                            className="w-80 bg-white dark:bg-[#111] border border-slate-200 dark:border-white/15 rounded-3xl shadow-2xl p-6 flex flex-col gap-4"
+                        >
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1">
+                                    <h3 className="font-black text-base text-black dark:text-white">{MURAL_TOUR[muralTourStep].title}</h3>
+                                    <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 leading-relaxed">{MURAL_TOUR[muralTourStep].description}</p>
+                                </div>
+                                <button onClick={() => setMuralTourStep(null)} className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 transition-all">
+                                    <XMarkIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div className="flex gap-1">
+                                    {MURAL_TOUR.map((_, i) => (
+                                        <div key={i} className={`rounded-full transition-all ${i === muralTourStep ? 'w-4 h-1.5 bg-cyan-400' : 'w-1.5 h-1.5 bg-slate-200 dark:bg-white/20'}`} />
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        if (muralTourStep >= MURAL_TOUR.length - 1) {
+                                            setMuralTourStep(null);
+                                        } else {
+                                            setMuralTourStep(s => (s ?? 0) + 1);
+                                        }
+                                    }}
+                                    className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-black uppercase tracking-wider transition-all"
+                                >
+                                    {muralTourStep >= MURAL_TOUR.length - 1 ? 'Concluir' : 'Próximo'}
+                                </button>
+                            </div>
+                            <button onClick={() => setMuralTourStep(null)} className="text-center text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-all uppercase tracking-widest font-bold">
+                                Pular
+                            </button>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
