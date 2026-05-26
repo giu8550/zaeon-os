@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSession } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import "@/src/i18n";
 
@@ -384,8 +383,6 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [isAddVideoModalOpen, setIsAddVideoModalOpen] = useState(false);
     const [videoUrlInput, setVideoUrlInput] = useState("");
 
-    const searchParams = useSearchParams();
-
     // --- CORE STATES ---
     const [mounted, setMounted] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -655,11 +652,14 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
 
     // Mount tour on first login when ?tour=true
     useEffect(() => {
-        if (status === 'authenticated' && searchParams?.get('tour') === 'true') {
-            const timer = setTimeout(() => setShowTour(true), 800);
-            return () => clearTimeout(timer);
+        if (status === 'authenticated') {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('tour') === 'true') {
+                const timer = setTimeout(() => setShowTour(true), 800);
+                return () => clearTimeout(timer);
+            }
         }
-    }, [status, searchParams]);
+    }, [status]);
 
     const toggleFocusMode = () => {
         const newMode = !isFocusMode;

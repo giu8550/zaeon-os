@@ -12,15 +12,7 @@ import Image from 'next/image';
 import { signIn } from 'next-auth/react';
 import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
-
-const ALL_COURSES = [
-    "Ciência da Computação", "Engenharia de Software", "Sistemas de Informação", "Análise e Desenvolvimento de Sistemas", "Engenharia da Computação", "Redes de Computadores", "Segurança da Informação / Cibersegurança", "Banco de Dados", "Inteligência Artificial", "Ciência de Dados", "Computação em Nuvem", "Internet das Coisas", "Robótica", "Jogos Digitais", "Design Digital / UX / UI",
-    "Computer Science", "Software Engineering", "Information Systems",
-    "Medicina", "Enfermagem", "Odontologia", "Farmácia", "Fisioterapia", "Nutrição", "Psicologia", "Fonoaudiologia", "Terapia Ocupacional", "Biomedicina", "Educação Física",
-    "Ciências Biológicas", "Biologia", "Biotecnologia", "Bioquímica", "Bioinformática", "Ecologia",
-    "Matemática", "Matemática Aplicada", "Estatística", "Física", "Astronomia", "Astrofísica", "Geofísica", "Meteorologia",
-    "História", "Geografia", "Filosofia", "Sociologia", "Antropologia", "Ciência Política", "Relações Internacionais", "Letras", "Linguística", "Pedagogia", "Artes", "Música", "Teatro", "Dança", "Cinema e Audiovisual", "Arquivologia", "Biblioteconomia", "Museologia", "Serviço Social", "Comunicação Social", "Jornalismo", "Publicidade e Propaganda", "Editoração", "Produção Cultural", "Direito", "Teologia"
-].sort();
+import { ALL_COURSES } from '@/constants/courses';
 
 const PARTNER_INSTITUTIONS = [
     { id: 'unilab', name: 'UNILAB', logo: '/assets/unilab-logo.png' },
