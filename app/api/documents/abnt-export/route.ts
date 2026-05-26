@@ -20,6 +20,51 @@ interface ABNTExportRequest {
     year: string;
     format: 'pdf' | 'docx';
     fontChoice?: string;
+    parsedSections?: Array<{
+        type: string;
+        title: string;
+        content: string;
+        subsections: Array<{ title: string; content: string }>;
+    }>;
+}
+
+async function generateMetaWithGemini(request: ABNTExportRequest): Promise<{
+    resumo: string;
+    palavras_chave: string[];
+}> {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS || '{}');
+    const vertexAI = new VertexAI({
+        project: credentials.project_id || process.env.GOOGLE_PROJECT_ID,
+        location: process.env.GOOGLE_LOCATION || 'us-central1',
+        googleAuthOptions: {
+            credentials: {
+                client_email: credentials.client_email,
+                private_key: credentials.private_key,
+            },
+        },
+    });
+
+    const model = vertexAI.getGenerativeModel({ model: 'gemini-2.0-flash-001' });
+
+    const prompt = `Você é um assistente acadêmico. Analise o texto abaixo e retorne EXCLUSIVAMENTE um JSON válido (sem markdown) com:
+{
+  "resumo": "parágrafo único, até 500 palavras, terceira pessoa",
+  "palavras_chave": ["termo1", "termo2", "termo3"]
+}
+
+TÍTULO: ${request.title}
+TIPO: ${request.workType}
+TEXTO:
+${request.content.substring(0, 3000)}`;
+
+    const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
+    });
+
+    const rawText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+    return JSON.parse(cleaned);
 }
 
 async function structureWithGemini(request: ABNTExportRequest): Promise<{
@@ -76,7 +121,12 @@ Schema obrigatório:
   }
 }
 
-Regras: normalize títulos para MAIÚSCULAS; se não houver seções claras, identifique pelo conteúdo; gere resumo se não houver; extraia 3-5 palavras-chave; NUNCA retorne markdown.`;
+Regras: normalize títulos para MAIÚSCULAS; se não houver seções claras, identifique pelo conteúdo; gere resumo se não houver; extraia 3-5 palavras-chave; NUNCA retorne markdown.
+
+DICA: O texto pode conter marcadores explícitos no formato:
+  # TÍTULO DA SEÇÃO (seção principal)
+  ## Título da Subseção (subseção)
+Quando presentes, USE-OS como delimitadores de seção em vez de inferir pelo conteúdo.`;
 
     const prompt = `${abntStructurerPersona}
 
@@ -126,43 +176,78 @@ export async function POST(req: Request) {
             );
         }
 
-        // Step 1: Structure content with Gemini
+        // Step 1: Structure content
         let structured;
-        try {
-            structured = await structureWithGemini(body);
-        } catch (err) {
-            console.error('[ABNT] Gemini structuring failed:', err);
-            // Fallback: use raw content as a single development section
+
+        if (body.parsedSections && body.parsedSections.length > 0) {
+            // Fast-path: front-end already parsed # markers — skip Gemini section detection
+            const hasIntro = body.parsedSections.some(s => s.type === 'introducao');
+            const hasConclusion = body.parsedSections.some(s => s.type === 'conclusao');
+            const hasRefs = body.parsedSections.some(s => s.type === 'referencias');
+
+            let resumo = '';
+            let palavras_chave: string[] = [];
+            try {
+                const meta = await generateMetaWithGemini(body);
+                resumo = meta.resumo;
+                palavras_chave = meta.palavras_chave;
+            } catch {
+                resumo = body.content.substring(0, 500);
+                palavras_chave = ['Pesquisa', 'Acadêmico', 'Zaeon'];
+            }
+
+            const warnings: string[] = [];
+            if (!hasIntro) warnings.push('Seção de Introdução não encontrada.');
+            else if (!hasConclusion) warnings.push('Seção de Conclusão não encontrada.');
+
             structured = {
-                resumo: body.content.substring(0, 500),
-                palavras_chave: ['Pesquisa', 'Acadêmico', 'Zaeon'],
-                sections: [
-                    {
-                        type: 'introducao',
-                        title: 'INTRODUÇÃO',
-                        content: 'Introdução ao trabalho acadêmico.',
-                        subsections: [],
-                    },
-                    {
-                        type: 'desenvolvimento',
-                        title: 'DESENVOLVIMENTO',
-                        content: body.content,
-                        subsections: [],
-                    },
-                    {
-                        type: 'conclusao',
-                        title: 'CONCLUSÃO',
-                        content: 'Considerações finais do trabalho.',
-                        subsections: [],
-                    },
-                ],
+                resumo,
+                palavras_chave,
+                sections: body.parsedSections,
                 validation: {
-                    has_introduction: false,
-                    has_conclusion: false,
-                    has_references: false,
-                    warnings: ['Estruturação automática via IA falhou. Conteúdo inserido como desenvolvimento.'],
+                    has_introduction: hasIntro,
+                    has_conclusion: hasConclusion,
+                    has_references: hasRefs,
+                    warnings,
                 },
             };
+        } else {
+            // Fallback: Gemini does full structuring (existing behavior)
+            try {
+                structured = await structureWithGemini(body);
+            } catch (err) {
+                console.error('[ABNT] Gemini structuring failed:', err);
+                structured = {
+                    resumo: body.content.substring(0, 500),
+                    palavras_chave: ['Pesquisa', 'Acadêmico', 'Zaeon'],
+                    sections: [
+                        {
+                            type: 'introducao',
+                            title: 'INTRODUÇÃO',
+                            content: 'Introdução ao trabalho acadêmico.',
+                            subsections: [],
+                        },
+                        {
+                            type: 'desenvolvimento',
+                            title: 'DESENVOLVIMENTO',
+                            content: body.content,
+                            subsections: [],
+                        },
+                        {
+                            type: 'conclusao',
+                            title: 'CONCLUSÃO',
+                            content: 'Considerações finais do trabalho.',
+                            subsections: [],
+                        },
+                    ],
+                    validation: {
+                        has_introduction: false,
+                        has_conclusion: false,
+                        has_references: false,
+                        warnings: ['Estruturação automática via IA falhou. Conteúdo inserido como desenvolvimento.'],
+                    },
+                };
+            }
         }
 
         // Step 2: Build DocumentPayload for Python service
