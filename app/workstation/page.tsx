@@ -251,8 +251,8 @@ export default function WorkStationPage({ isEmbedded = false }: { isEmbedded?: b
             if (isTeacher) {
                 router.replace('/workstation/teacher/profile');
             } else {
-                // Alunos e visitantes vão para a workstation unificada do aluno
-                router.replace('/workstation/student/profile');
+                // Alunos e visitantes vão para o perfil na Research Room
+                router.replace('/research-lab?tab=profile');
             }
         }
     }, [isTeacher, pathname, isEmbedded, router, status, isSyncing]);
