@@ -30,7 +30,8 @@ no servidor** — não confiamos na palavra do LLM. Sem prova → não vira fato
 | Tema | Decisão |
 |------|---------|
 | Layout da janela de prompt | **A — barra enxuta** (beca + label + campo + enviar, uma linha) |
-| Integração na aba Comunidade | **C — substituir o feed/globo** pelo workspace do Omega Scholar |
+| Integração na aba Comunidade | **C — substituir o feed/globo** pelo workspace do Omega Scholar (redesign completo, página bonita) |
+| Prova de citação | PDF baixável + visualizador inline que **abre na página citada**; locator a nível de **página** (sem linha exata) |
 | Fluxo ao enviar | Thread estilo **Claude Code** (progresso: pesquisando → indo mais fundo → encontrei), tom **leve, descontraído e amigável** (PT-BR) |
 | Persistência | **Banco de dados (Prisma / MongoDB)** — por usuário, sobrevive a reload |
 | Fontes acadêmicas | Semantic Scholar, OpenAlex, arXiv, CrossRef + **Unpaywall/CORE/Europe PMC** para full-text aberto |
@@ -56,8 +57,9 @@ research-lab/page.tsx  (aba "sala-de-estudos": esconde o <h1> do título)
 
 POST /api/ai/scholar           ← orquestrador streaming (NDJSON)
 GET  /api/ai/scholar/sessions  ← lista/carrega histórico do usuário
+GET  /api/ai/scholar/pdf       ← proxy de PDF OA (CORS + anti-SSRF; ver §7.5)
 lib/prisma.ts                  ← singleton Prisma (novo; ver §8)
-lib/scholar/*                  ← lógica de fontes, dedup, verificação (servidor)
+lib/scholar/*                  ← fontes, dedup, extração de PDF (pdfjs), verificação (servidor)
 ```
 
 ### Fluxo
@@ -120,11 +122,17 @@ e, quando aplicável, `fetchFullText(doi|id)` → `{ paragraphs: string[] }`.
 | CORE | full-text open-access | `api.core.ac.uk/v3` | chave gratuita (env); pulada se ausente |
 | Europe PMC | full-text biomédico (XML com seções/parágrafos) | `ebi.ac.uk/europepmc` | não |
 
-**Política de full-text:** tenta a cadeia (arXiv → Unpaywall → CORE → Europe PMC). Se nada abrir,
-o paper fica **abstract-only** (claims só podem ser ancorados no resumo, e marcados como tal).
+**Política de full-text (prioriza o PDF real):** sempre que houver PDF open-access (arXiv tem PDF
+direto; senão Unpaywall → CORE → Europe PMC), **baixamos o PDF** e extraímos o texto **por página**
+com `pdfjs-dist` (já nas deps). Cada parágrafo recuperado fica atribuído ao **número da página**. Isso
+permite a prova tangível pedida pelo usuário: o paper fica disponível para download e cada citação
+aponta a **página exata** onde aparece. Se nenhum PDF abrir, cai para o full-text textual (XML do
+Europe PMC / HTML do arXiv, com seção) e, em último caso, **abstract-only** (claims só ancorados no
+resumo e marcados como tal). `pdfUrl` é persistido para download + visualização inline.
 
 **Modelo `Paper` normalizado:** `{ id, title, authors[], year, venue, doi?, arxivId?, url?, pdfUrl?,
-abstract?, citationCount?, openAccess: bool, sources: string[], retrievedText?: { kind: "abstract"|"fulltext", paragraphs: { idx, section?, text }[] } }`.
+abstract?, citationCount?, openAccess: bool, sources: string[], retrievedText?: { kind:
+"pdf"|"fulltext"|"abstract", paragraphs: { idx, page?, section?, text }[] } }`.
 
 ---
 
@@ -137,15 +145,17 @@ Para cada Evidence Record produzido pelo LLM:
      de linha e pontuação não essencial).
    - Se ainda falhar, **fuzzy** (similaridade ≥ 0.92 sobre janela deslizante) para tolerar reticências/OCR.
 3. Se encontrado: `verified = true`; preenche `locator`:
-   - full-text → `{ kind: "fulltext", section?, paragraph: idx }` (ex.: "Seção 3.2.2, parágrafo 1").
+   - PDF → `{ kind: "pdf", page: n, paragraph?: idx }` (ex.: "Página 4") — **prova principal**.
+   - full-text textual → `{ kind: "fulltext", section?, paragraph: idx }` (ex.: "Seção 3.2.2, parág. 1").
    - abstract → `{ kind: "abstract", sentence?: n }` (ex.: "Resumo, frase 2").
 4. Se não encontrado: `verified = false` → **não é exibido como fato**. Vai para uma lista
    "não confirmadas" rebaixada/oculta (nunca apresentado como verdade).
 
-**Honestidade de precisão:** número de linha exato NÃO é exposto pelas APIs. Entregamos
-locator a nível de **seção/parágrafo** (ou "Resumo/frase N") + a `quote` verbatim (permite Ctrl-F) +
-link direto ao DOI/PDF. Papers abstract-only são rotulados explicitamente. Não prometemos linha
-exata em lugar nenhum da UI.
+**Prova tangível (pedido central do usuário):** para papers com PDF, a UI mostra o **paper para
+download** e, ao clicar numa citação, **abre o PDF na página citada** (visualizador inline) com a
+`quote` verbatim ao lado — o usuário vê a frase no documento real. Número de linha dentro da página
+NÃO é exposto pelas APIs, então não o prometemos; a garantia é **página + quote verbatim + PDF em
+mãos** (e checagem programática de que a frase existe). Papers abstract-only são rotulados como tal.
 
 **Evidence Record (persistido):**
 `{ paperId, claim, quote, locator, confidence: "high"|"medium"|"low", verified: bool, fullTextAvailable: bool }`
@@ -162,12 +172,17 @@ Mapeamento de confiança segue §10.1 do OMEGA (high = full-text lido/verificado
 - Estados: idle / running (campo desabilitado + spinner sutil). Enter ou clique → `ctx.runQuery(value)`.
 
 ### 7.2 `OmegaScholarWorkspace` (novo) — `.../omega/OmegaScholarWorkspace.tsx`
-Renderizado na tab `community` dentro de `StudyRoomContent` (substitui o dynamic import do globo).
+Renderizado na tab `community` dentro de `StudyRoomContent`, **substituindo inteiramente** o globo/feed
+(removido desta superfície). É um **redesign completo e caprichado** da aba Comunidade — qualidade
+frontend-design, coeso com a estética violeta do Omega Scholar — exibindo todo o output do agente.
 - **Activity thread** (topo): linhas de progresso (amigáveis, com checks) + `answer` sintetizada.
 - **Módulos** (grid):
-  - **Referências:** card por paper (título, autores, ano, venue, DOI/arXiv, OA?). Expande para os
-    Evidence Records: claim + `quote` (itálico, destacado) + locator + selo **✓ VERIFICADO** + confiança
-    + link DOI/PDF. Botão "Copiar BibTeX" (via CrossRef).
+  - **Referências:** card por paper (título, autores, ano, venue, DOI/arXiv, OA?, citações). Ações:
+    **Download do PDF** + **"Copiar BibTeX"** (CrossRef). Expande para os Evidence Records: claim +
+    `quote` (itálico, destacado) + locator + selo **✓ VERIFICADO** + confiança. Clicar numa citação
+    com locator de PDF **abre o visualizador inline** (`@react-pdf-viewer/core`, já nas deps) **na
+    página citada**, com a `quote` ao lado para conferência imediata. Sem PDF → mostra a frase + link
+    ao DOI e o rótulo de seção/abstract.
   - **Insights & Síntese:** resumo executivo, tendências, contradições.
   - **Arquivos:** entregáveis gerados (`literature-review.md`, `references.bib`) com download.
   - **Lacunas / Research Questions:** gap analysis + RQ Cards (template §3.2 do OMEGA).
@@ -193,6 +208,12 @@ Renderizado na tab `community` dentro de `StudyRoomContent` (substitui o dynamic
 > As páginas standalone `app/study-rooms/*/community/page.tsx` (globo) **não são alteradas nem
 > removidas** — continuam servindo suas rotas próprias. Só muda o que a tab Comunidade do
 > `StudyRoomContent` renderiza.
+
+### 7.5 `GET /api/ai/scholar/pdf` (novo, proxy de PDF)
+Visualizar/baixar PDFs OA de outros domínios direto no browser esbarra em CORS. Esta rota faz proxy
+do PDF e o stream-a com headers adequados, permitindo o visualizador inline e o download.
+**Anti-SSRF:** só aceita URLs que **já estão persistidas** em alguma `ScholarSession` do usuário
+(valida contra o banco); recusa esquemas não-http(s) e hosts/IPs privados. Sem isso, não proxia.
 
 ---
 
@@ -240,7 +261,10 @@ Não refatorar rotas existentes neste escopo.
 ## 10. Testes
 
 - **`lib/scholar/verify.ts`:** unit tests — exato/normalizado/fuzzy; rejeita quote inexistente; locator
-  correto para full-text vs abstract; hifenização de quebra de linha.
+  correto para PDF (página) vs full-text (seção) vs abstract; hifenização de quebra de linha.
+- **`lib/scholar/pdf.ts`:** extração por página com `pdfjs-dist` sobre um PDF fixture — confere que cada
+  parágrafo recebe o `page` certo (base da prova "página exata").
+- **`/api/ai/scholar/pdf`:** recusa URL não persistida (anti-SSRF) e host privado; proxia URL válida.
 - **`lib/scholar/dedup.ts`:** dedup por DOI e por título normalizado (overlap > 0.85).
 - **Fontes:** parsers testados com fixtures de resposta real (sem rede nos testes).
 - **Rota `/api/ai/scholar`:** teste de integração com Gemini e fetch mockados — asserta a ordem de
