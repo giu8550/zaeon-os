@@ -3,7 +3,7 @@ import { useState } from "react";
 import { GraduationCap, ArrowUp, Loader2 } from "lucide-react";
 import { useOmegaScholar } from "./OmegaScholarContext";
 
-export default function OmegaScholarBar() {
+export default function OmegaScholarBar({ flushTop = false }: { flushTop?: boolean }) {
   const { runQuery, status } = useOmegaScholar();
   const [value, setValue] = useState("");
   const busy = status === "running";
@@ -11,7 +11,7 @@ export default function OmegaScholarBar() {
   const submit = () => { if (value.trim() && !busy) { runQuery(value); setValue(""); } };
 
   return (
-    <div className="mx-6 mt-6 p-5 rounded-[2rem] bg-gradient-to-r from-violet-500/15 to-purple-500/5 border border-white/30 dark:border-white/10 relative overflow-hidden">
+    <div className={`mx-6 ${flushTop ? "mt-0" : "mt-6"} p-5 rounded-[2rem] bg-gradient-to-r from-violet-500/15 to-purple-500/5 border border-white/30 dark:border-white/10 relative overflow-hidden`}>
       <div className="absolute -top-8 -right-8 w-40 h-40 bg-violet-400/10 rounded-full blur-[50px] pointer-events-none" />
       <div className="relative z-10 flex items-center gap-3">
         <div className="w-12 h-12 rounded-2xl bg-white/30 dark:bg-white/5 flex items-center justify-center border border-white/40 dark:border-white/10 shrink-0">

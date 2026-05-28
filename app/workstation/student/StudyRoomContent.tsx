@@ -218,7 +218,7 @@ function NoRoomFound() {
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
-export default function StudyRoomContent() {
+export default function StudyRoomContent({ flushTop = false }: { flushTop?: boolean } = {}) {
     const { data: session } = useSession();
 
     const course = (session?.user as any)?.course as string | undefined;
@@ -268,7 +268,7 @@ export default function StudyRoomContent() {
         <div className="flex flex-col h-full">
 
             {/* ── OMEGA SCHOLAR BAR (replaces the old ROOM HEADER) ───── */}
-            <OmegaScholarBar />
+            <OmegaScholarBar flushTop={flushTop} />
 
             {/* ── MAIN CARD: TABS + CONTENT ───────────────────────────── */}
             {/*

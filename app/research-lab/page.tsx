@@ -1133,30 +1133,29 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Perfil</span>}
                         </button>
 
-                        <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
+                    </div>
 
-                        {/* Layout & Focus (only show for pesquisa) */}
-                        {activeTab === 'pesquisa' && (
-                            <>
-                                <button data-tour="layout-toggle" onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
-                                    <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-                                    {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
-                                </button>
-                                <button data-tour="focus-mode" onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}>
-                                    {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
-                                    {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
-                                </button>
-                            </>
-                        )}
+                    {/* EXTRAS — fixos no rodapé da sidebar: alternar direção do layout + modo foco */}
+                    <div className="mt-auto px-2.5 pt-3 flex flex-col gap-3">
+                        <div className="h-[1px] bg-slate-300 dark:bg-white/10" />
+                        <button data-tour="layout-toggle" onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
+                            <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
+                        </button>
+                        <button data-tour="focus-mode" onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}>
+                            {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
+                        </button>
                     </div>
                 </motion.nav>
             )}
 
-            <main className={`flex-1 flex flex-col ${!isEmbedded ? 'pl-[80px]' : ''} h-full overflow-hidden p-6 gap-6`}>
-                
-                {/* CABEÇALHO */}
-                <div className="flex items-end justify-between shrink-0">
-                    {activeTab !== "sala-de-estudos" && (
+            <main className={`flex-1 flex flex-col ${!isEmbedded ? 'pl-[80px]' : ''} h-full overflow-hidden ${activeTab === 'sala-de-estudos' ? 'px-6 pb-6' : 'p-6'} gap-6`}>
+
+                {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
+                    alinhada à borda superior da sidebar */}
+                {activeTab !== "sala-de-estudos" && (
+                    <div className="flex items-end justify-between shrink-0">
                         <div>
                             <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
                                 {tabMeta.title}
@@ -1165,8 +1164,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                 {tabMeta.subtitle}
                             </p>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 <div className="flex-1 flex gap-8 overflow-hidden h-full">
                     {activeTab === "pesquisa" && (
@@ -1460,7 +1459,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
 
                     {activeTab === "sala-de-estudos" && (
                         <div className="w-full h-full overflow-hidden">
-                            <StudyRoomContent />
+                            <StudyRoomContent flushTop />
                         </div>
                     )}
 
