@@ -33,6 +33,9 @@ export async function GET(req: Request) {
   if (!allowed) return new Response("Forbidden", { status: 403 });
 
   const upstream = await fetch(target, { signal: AbortSignal.timeout(20000) });
+  if (upstream.redirected && !isSafePublicHttpUrl(upstream.url)) {
+    return new Response("Blocked redirect to private host", { status: 403 });
+  }
   if (!upstream.ok || !/pdf/i.test(upstream.headers.get("content-type") ?? "")) {
     return new Response("Upstream error", { status: 502 });
   }

@@ -44,17 +44,20 @@ export async function POST(req: Request) {
         // SEARCH (parallel)
         const bases = basesForDomain(plan.domain);
         const queries = plan.queries.length ? plan.queries : [prompt];
-        const results = await searchAll(queries[0], bases);
+        const usedQueries = queries.slice(0, 3);
+        const resultSets = await Promise.all(usedQueries.map((q) => searchAll(q, bases)));
         let pool: Paper[] = [];
-        for (const r of results) {
-          send({
-            type: "phase",
-            phase: "searching",
-            source: r.source,
-            count: r.papers.length,
-            message: `✓ ${r.source}: ${r.papers.length} papers`,
-          });
-          pool = pool.concat(r.papers);
+        for (const results of resultSets) {
+          for (const r of results) {
+            send({
+              type: "phase",
+              phase: "searching",
+              source: r.source,
+              count: r.papers.length,
+              message: `✓ ${r.source}: ${r.papers.length} papers`,
+            });
+            pool = pool.concat(r.papers);
+          }
         }
 
         // DEDUP + FULL TEXT (top N)
