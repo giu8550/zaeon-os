@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { type ReactNode, createContext, useContext, useState, useCallback } from "react";
 import type { ScholarEvent } from "@/lib/scholar/types";
 
 interface Phase { phase: string; message: string; }

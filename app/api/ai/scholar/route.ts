@@ -6,6 +6,7 @@ import { dedupePapers } from "@/lib/scholar/dedup";
 import { resolveFullText } from "@/lib/scholar/fulltext";
 import { planQuery, synthesize } from "@/lib/scholar/synthesize";
 import { assembleResults } from "@/lib/scholar/assemble";
+import { buildReferencesBib } from "@/lib/scholar/bibtex";
 import { planTone } from "@/lib/scholar/prompt";
 import type { Paper, ScholarEvent } from "@/lib/scholar/types";
 
@@ -96,6 +97,9 @@ export async function POST(req: Request) {
         });
 
         send({ type: "answer", text: r.answer });
+
+        const bib = await buildReferencesBib(r.references);
+        if (bib.trim()) r.files.push({ name: "references.bib", kind: "bibtex", content: bib });
 
         const saved = await prisma.scholarSession.update({
           where: { id: created.id },

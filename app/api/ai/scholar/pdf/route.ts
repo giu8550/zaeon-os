@@ -32,17 +32,25 @@ export async function GET(req: Request) {
   );
   if (!allowed) return new Response("Forbidden", { status: 403 });
 
-  const upstream = await fetch(target, { signal: AbortSignal.timeout(20000) });
-  if (upstream.redirected && !isSafePublicHttpUrl(upstream.url)) {
-    return new Response("Blocked redirect to private host", { status: 403 });
+  // Follow redirects manually, validating every hop against the SSRF guard.
+  let current = target;
+  let upstream: Response | null = null;
+  for (let hop = 0; hop < 5; hop++) {
+    if (!isSafePublicHttpUrl(current)) {
+      return new Response("Blocked redirect to private host", { status: 403 });
+    }
+    upstream = await fetch(current, { redirect: "manual", signal: AbortSignal.timeout(20000) });
+    const loc = upstream.headers.get("location");
+    if (upstream.status >= 300 && upstream.status < 400 && loc) {
+      current = new URL(loc, current).toString();
+      continue;
+    }
+    break;
   }
-  if (!upstream.ok || !/pdf/i.test(upstream.headers.get("content-type") ?? "")) {
+  if (!upstream || !upstream.ok || !/pdf/i.test(upstream.headers.get("content-type") ?? "")) {
     return new Response("Upstream error", { status: 502 });
   }
   return new Response(upstream.body, {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Cache-Control": "private, max-age=3600",
-    },
+    headers: { "Content-Type": "application/pdf", "Cache-Control": "private, max-age=3600" },
   });
 }
