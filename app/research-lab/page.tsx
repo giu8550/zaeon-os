@@ -1156,14 +1156,16 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                 
                 {/* CABEÇALHO */}
                 <div className="flex items-end justify-between shrink-0">
-                    <div>
-                        <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
-                            {tabMeta.title}
-                        </h1>
-                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1">
-                            {tabMeta.subtitle}
-                        </p>
-                    </div>
+                    {activeTab !== "sala-de-estudos" && (
+                        <div>
+                            <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
+                                {tabMeta.title}
+                            </h1>
+                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1">
+                                {tabMeta.subtitle}
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex-1 flex gap-8 overflow-hidden h-full">
