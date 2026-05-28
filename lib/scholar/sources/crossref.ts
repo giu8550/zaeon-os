@@ -2,7 +2,7 @@ import type { Paper } from "../types";
 
 export function parseCrossref(json: any): Paper[] {
   return (json?.message?.items ?? []).map((it: any): Paper => ({
-    id: `doi:${it.DOI}`,
+    id: it.DOI ? `doi:${it.DOI}` : `crossref:${it.URL ?? (Array.isArray(it.title) ? it.title[0] : it.title) ?? "unknown"}`,
     title: Array.isArray(it.title) ? it.title[0] : (it.title ?? ""),
     authors: (it.author ?? []).map((a: any) => [a.given, a.family].filter(Boolean).join(" ")),
     year: it.issued?.["date-parts"]?.[0]?.[0] ?? undefined,

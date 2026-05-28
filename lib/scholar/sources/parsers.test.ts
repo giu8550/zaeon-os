@@ -75,6 +75,11 @@ describe("parseCrossref", () => {
     expect(out[0]).toMatchObject({ id: "doi:10.1/z", title: "The Title", venue: "J. Stuff", year: 1843, citationCount: 3 });
     expect(out[0].authors).toEqual(["Ada Lovelace"]);
   });
+  it("uses URL-based fallback id when DOI is absent", () => {
+    const out = parseCrossref({ message: { items: [{ title: ["No DOI Here"], URL: "http://x/ch1", author: [] }] } });
+    expect(out[0].id).toBe("crossref:http://x/ch1");
+    expect(out[0].doi).toBeUndefined();
+  });
 });
 
 describe("parseEuropePmcXml", () => {

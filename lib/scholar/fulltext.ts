@@ -1,4 +1,4 @@
-import type { Paper, RetrievedText } from "./types";
+import type { Paper } from "./types";
 import { isSafePublicHttpUrl } from "./ssrf";
 import { extractPdfParagraphs } from "./pdf";
 import { unpaywallPdfUrl } from "./sources/unpaywall";
@@ -15,7 +15,7 @@ async function fetchPdfBytes(url: string): Promise<Uint8Array | null> {
   } catch { return null; }
 }
 
-// Mutates+returns the paper with retrievedText filled by the best available source.
+// Returns a new paper with retrievedText filled by the best available source.
 export async function resolveFullText(paper: Paper): Promise<Paper> {
   // 1) Try a PDF (arXiv / existing pdfUrl / Unpaywall) → page-attributed paragraphs (best proof)
   let pdfUrl = paper.pdfUrl;
