@@ -31,7 +31,8 @@ export function parseOpenAlex(json: any): Paper[] {
 
 export async function searchOpenAlex(query: string, limit = 15): Promise<{ papers: Paper[]; status: "ok" | "rate_limited" | "error" }> {
   try {
-    const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${limit}`;
+    const email = process.env.UNPAYWALL_EMAIL ? `&mailto=${encodeURIComponent(process.env.UNPAYWALL_EMAIL)}` : "";
+    const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${limit}${email}`;
     const res = await fetchWithRetry(url, {}, { retries: 3 });
     if (!res.ok) return { papers: [], status: res.status === 429 ? "rate_limited" : "error" };
     return { papers: parseOpenAlex(await res.json()), status: "ok" };

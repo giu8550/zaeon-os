@@ -4,6 +4,7 @@ import { parseOpenAlex, reconstructAbstract } from "./openalex";
 import { parseArxiv } from "./arxiv";
 import { parseCrossref } from "./crossref";
 import { parseEuropePmcXml } from "./europepmc";
+import { parsePubmedSummary } from "./pubmed";
 
 describe("parseSemanticScholar", () => {
   it("maps fields and derives doi id + openAccess", () => {
@@ -90,5 +91,29 @@ describe("parseEuropePmcXml", () => {
       { idx: 0, section: "Intro", text: "First para ." },
       { idx: 1, section: "Intro", text: "Second." },
     ]);
+  });
+});
+
+describe("parsePubmedSummary", () => {
+  it("maps esummary fields, derives doi id + year", () => {
+    const out = parsePubmedSummary({ result: {
+      uids: ["12345"],
+      "12345": {
+        title: "CRISPR gene editing",
+        authors: [{ name: "Doudna J" }, { name: "Charpentier E" }],
+        pubdate: "2014 Mar 15",
+        fulljournalname: "Science",
+        articleids: [{ idtype: "pubmed", value: "12345" }, { idtype: "doi", value: "10.1/abc" }],
+      },
+    }});
+    expect(out[0]).toMatchObject({ id: "doi:10.1/abc", title: "CRISPR gene editing", venue: "Science", year: 2014, doi: "10.1/abc" });
+    expect(out[0].authors).toEqual(["Doudna J", "Charpentier E"]);
+    expect(out[0].url).toBe("https://pubmed.ncbi.nlm.nih.gov/12345/");
+  });
+  it("falls back to pubmed: id when no doi, returns [] for empty", () => {
+    expect(parsePubmedSummary({})).toEqual([]);
+    const out = parsePubmedSummary({ result: { uids: ["9"], "9": { title: "X", pubdate: "2020", source: "J Med" } } });
+    expect(out[0].id).toBe("pubmed:9");
+    expect(out[0].venue).toBe("J Med");
   });
 });

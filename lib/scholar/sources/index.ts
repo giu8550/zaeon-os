@@ -3,8 +3,9 @@ import { searchSemanticScholar } from "./semanticScholar";
 import { searchOpenAlex } from "./openalex";
 import { searchArxiv } from "./arxiv";
 import { searchCrossref } from "./crossref";
+import { searchPubmed } from "./pubmed";
 
-export type SourceName = "semanticscholar" | "openalex" | "arxiv" | "crossref";
+export type SourceName = "semanticscholar" | "openalex" | "arxiv" | "crossref" | "pubmed";
 
 export interface SourceResult { source: SourceName; papers: Paper[]; status: "ok" | "rate_limited" | "error"; }
 
@@ -13,13 +14,14 @@ export const SOURCE_FN: Record<SourceName, (q: string, limit?: number) => Promis
   openalex: searchOpenAlex,
   arxiv: searchArxiv,
   crossref: searchCrossref,
+  pubmed: searchPubmed,
 };
 
 // Domain → ordered priority (see spec §6.1). Always includes the multidisciplinary anchors.
 export function basesForDomain(domain?: string): SourceName[] {
   const d = (domain ?? "").toLowerCase();
   if (/cs|ml|ai|comput|software|engenharia/.test(d)) return ["arxiv", "semanticscholar", "openalex", "crossref"];
-  if (/med|bio|saúde|health|neuro/.test(d)) return ["semanticscholar", "openalex", "crossref"]; // PubMed/EuropePMC added in 2.2
+  if (/med|bio|saúde|health|neuro/.test(d)) return ["pubmed", "semanticscholar", "openalex", "crossref"];
   if (/phys|astro|math|física|matemática/.test(d)) return ["arxiv", "semanticscholar", "openalex"];
   return ["semanticscholar", "openalex", "arxiv", "crossref"];
 }

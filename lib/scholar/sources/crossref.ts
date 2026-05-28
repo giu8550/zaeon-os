@@ -18,7 +18,8 @@ export function parseCrossref(json: any): Paper[] {
 
 export async function searchCrossref(query: string, limit = 10): Promise<{ papers: Paper[]; status: "ok" | "rate_limited" | "error" }> {
   try {
-    const url = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}&select=DOI,title,author,issued,container-title,URL,is-referenced-by-count`;
+    const email = process.env.UNPAYWALL_EMAIL ? `&mailto=${encodeURIComponent(process.env.UNPAYWALL_EMAIL)}` : "";
+    const url = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}&select=DOI,title,author,issued,container-title,URL,is-referenced-by-count${email}`;
     const res = await fetchWithRetry(url, {}, { retries: 3 });
     if (!res.ok) return { papers: [], status: res.status === 429 ? "rate_limited" : "error" };
     return { papers: parseCrossref(await res.json()), status: "ok" };
@@ -28,7 +29,8 @@ export async function searchCrossref(query: string, limit = 10): Promise<{ paper
 // Verified BibTeX via CrossRef transform; null on failure (caller builds manual fallback).
 export async function fetchBibtex(doi: string): Promise<string | null> {
   try {
-    const res = await fetchWithRetry(`https://api.crossref.org/works/${encodeURIComponent(doi)}/transform/application/x-bibtex`, {
+    const email = process.env.UNPAYWALL_EMAIL ? `?mailto=${encodeURIComponent(process.env.UNPAYWALL_EMAIL)}` : "";
+    const res = await fetchWithRetry(`https://api.crossref.org/works/${encodeURIComponent(doi)}/transform/application/x-bibtex${email}`, {
       headers: { Accept: "application/x-bibtex" },
     }, { retries: 3 });
     if (!res.ok) return null;
