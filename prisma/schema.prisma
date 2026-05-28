@@ -302,3 +302,22 @@ model TeacherDocument {
 
   teacher     User @relation("TeacherDocuments", fields: [teacherId], references: [id])
 }
+
+model ScholarSession {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  room       String?
+  query      String
+  domain     String?
+  status     String   @default("running") // running | done | error
+  thread     Json?    // progress phases + synthesized answer
+  references Json?    // Paper[]  (see lib/scholar/types.ts)
+  evidence   Json?    // EvidenceRecord[]  (only verified shown as fact)
+  insights   Json?    // { summary, trends[], contradictions[] }
+  gaps       Json?    // { description, rqCards[] }
+  files      Json?    // [{ name, kind, content }]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+}
