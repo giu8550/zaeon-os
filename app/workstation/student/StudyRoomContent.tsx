@@ -8,8 +8,11 @@ import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Users, BookOpen, ClipboardList, FolderOpen,
-    FlaskConical, Newspaper, User, GraduationCap, Lock,
+    FlaskConical, Newspaper, User, Lock,
 } from "lucide-react";
+import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
+import OmegaScholarBar from "./omega/OmegaScholarBar";
+import OmegaScholarWorkspace from "./omega/OmegaScholarWorkspace";
 
 // ─── ROOM MAPPING ────────────────────────────────────────────────────────────
 const ROOM_MAPPING: Record<string, string[]> = {
@@ -261,25 +264,11 @@ export default function StudyRoomContent() {
     const ActiveComponent = DYNAMIC_COMPONENTS[room]?.[activeTab];
 
     return (
+        <OmegaScholarProvider room={room} onStart={() => setActiveTab("community")}>
         <div className="flex flex-col h-full">
 
-            {/* ── ROOM HEADER ─────────────────────────────────────────── */}
-            <div className={`mx-6 mt-6 p-5 rounded-[2rem] bg-gradient-to-r ${meta.gradient} border border-white/30 dark:border-white/10 relative overflow-hidden`}>
-                <div className={`absolute -top-8 -right-8 w-40 h-40 ${meta.glow} rounded-full blur-[50px] pointer-events-none`} />
-                <div className="relative z-10 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/30 dark:bg-white/5 flex items-center justify-center border border-white/40 dark:border-white/10">
-                        <GraduationCap className={`${meta.color}`} size={20} />
-                    </div>
-                    <div>
-                        <h2 className="text-base font-black tracking-tight text-slate-800 dark:text-white">
-                            {meta.name}
-                        </h2>
-                        {course && (
-                            <p className="text-[11px] text-slate-500 dark:text-white/40 mt-0.5">{course}</p>
-                        )}
-                    </div>
-                </div>
-            </div>
+            {/* ── OMEGA SCHOLAR BAR (replaces the old ROOM HEADER) ───── */}
+            <OmegaScholarBar />
 
             {/* ── MAIN CARD: TABS + CONTENT ───────────────────────────── */}
             {/*
@@ -352,7 +341,9 @@ export default function StudyRoomContent() {
                     style={{ transform: "translateZ(0)" }}
                 >
                     <div className="absolute inset-0 overflow-y-auto" style={{ isolation: "isolate" }}>
-                        {!ActiveComponent ? (
+                        {activeTab === "community" ? (
+                            <OmegaScholarWorkspace />
+                        ) : !ActiveComponent ? (
                             <NoRoomFound />
                         ) : (
                             <AnimatePresence mode="wait">
@@ -374,5 +365,6 @@ export default function StudyRoomContent() {
                 </div>
             </div>
         </div>
+        </OmegaScholarProvider>
     );
 }

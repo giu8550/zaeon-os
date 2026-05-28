@@ -47,3 +47,6 @@ Thumbs.db
 abnt-service/venv/
 __pycache__/
 *.pyc
+
+# Superpowers brainstorm mockups
+.superpowers/

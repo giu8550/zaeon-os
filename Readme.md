@@ -452,6 +452,7 @@ Each study room has 8 curated presets:
 - MongoDB Atlas connection string
 - Google Cloud project with Vertex AI enabled
 - Google OAuth credentials (for NextAuth)
+- **Python 3.10+ and LibreOffice** — required only for the `abnt-service` backend (ABNT document export). Install LibreOffice with `brew install libreoffice` (macOS) or `sudo apt install libreoffice` (Linux).
 
 ### Environment Variables (`.env.local`)
 
@@ -479,15 +480,43 @@ PUSHER_CLUSTER="..."
 # Redis (Upstash)
 UPSTASH_REDIS_REST_URL="..."
 UPSTASH_REDIS_REST_TOKEN="..."
+
+# ABNT backend (Python microservice — see "Run Locally")
+# Where the Next app reaches the abnt-service. Defaults to http://localhost:8001 if unset.
+ABNT_SERVICE_URL="http://localhost:8001"
+
+# Omega Scholar research agent (academic full-text)
+UNPAYWALL_EMAIL="you@example.com"   # any email you control — Unpaywall's politeness/contact field
+CORE_API_KEY=""                     # optional; free key from core.ac.uk. CORE is skipped if unset
 ```
 
 ### Run Locally
 
+The app runs as **two processes**: the Next.js frontend/API, and the `abnt-service` Python backend it calls for ABNT document export. Run each in its own terminal.
+
+**Terminal 1 — Next.js app** (frontend + API routes + Socket.IO, port 3000):
+
 ```bash
 npm install
 npx prisma generate
-npm run dev             # → http://localhost:3000
+npm run dev             # → http://localhost:3000  (runs server.js, not `next dev`)
 ```
+
+`npm run dev` is the only entry point for the web app — it executes the custom `server.js`, which boots Next.js **and** the Socket.IO server together. (`npm run build` then `npm start` is the production equivalent.)
+
+**Terminal 2 — `abnt-service` backend** (FastAPI, port 8001):
+
+```bash
+cd abnt-service
+python -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload   # → http://localhost:8001
+```
+
+The Next app reaches it via `ABNT_SERVICE_URL` (default `http://localhost:8001`). It's only needed for ABNT export — the rest of the app runs without it, but ABNT export will show "Serviço ABNT offline" until it's up. Quick check: `curl http://localhost:8001/health`. See `abnt-service/README.md` for details.
+
+> **Tests:** `npm test` (Vitest) runs the `lib/scholar/*` unit suite; `npm run test:watch` for watch mode.
 
 ---
 

@@ -1,0 +1,34 @@
+import type { Paper } from "../types";
+
+export function parseArxiv(xml: string): Paper[] {
+  const entries = xml.split("<entry>").slice(1);
+  return entries.map((e): Paper => {
+    const get = (tag: string) => (e.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1] ?? "").trim();
+    const idUrl = get("id");
+    const arxivId = idUrl.match(/abs\/([^v]+)(v\d+)?/)?.[1] ?? idUrl.split("/").pop() ?? "";
+    const authors = Array.from(e.matchAll(/<name>([\s\S]*?)<\/name>/g)).map((m) => m[1].trim());
+    const pdf = (e.match(/<link[^>]*title="pdf"[^>]*href="([^"]+)"/) ?? [])[1];
+    return {
+      id: `arxiv:${arxivId}`,
+      title: get("title").replace(/\s+/g, " "),
+      authors,
+      year: Number(get("published").slice(0, 4)) || undefined,
+      venue: "arXiv",
+      arxivId,
+      url: idUrl,
+      pdfUrl: pdf ? pdf.replace(/^http:/, "https:") : `https://arxiv.org/pdf/${arxivId}.pdf`,
+      abstract: get("summary").replace(/\s+/g, " "),
+      openAccess: true,
+      sources: ["arxiv"],
+    };
+  });
+}
+
+export async function searchArxiv(query: string, limit = 15): Promise<Paper[]> {
+  try {
+    const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}&sortBy=relevance`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return [];
+    return parseArxiv(await res.text());
+  } catch { return []; }
+}
