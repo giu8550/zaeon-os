@@ -1,4 +1,5 @@
 import type { Paper } from "../types";
+import { fetchWithRetry } from "../http";
 
 export function parseCrossref(json: any): Paper[] {
   return (json?.message?.items ?? []).map((it: any): Paper => ({
@@ -15,22 +16,21 @@ export function parseCrossref(json: any): Paper[] {
   }));
 }
 
-export async function searchCrossref(query: string, limit = 10): Promise<Paper[]> {
+export async function searchCrossref(query: string, limit = 10): Promise<{ papers: Paper[]; status: "ok" | "rate_limited" | "error" }> {
   try {
     const url = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}&select=DOI,title,author,issued,container-title,URL,is-referenced-by-count`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
-    return parseCrossref(await res.json());
-  } catch { return []; }
+    const res = await fetchWithRetry(url, {}, { retries: 3 });
+    if (!res.ok) return { papers: [], status: res.status === 429 ? "rate_limited" : "error" };
+    return { papers: parseCrossref(await res.json()), status: "ok" };
+  } catch { return { papers: [], status: "error" }; }
 }
 
 // Verified BibTeX via CrossRef transform; null on failure (caller builds manual fallback).
 export async function fetchBibtex(doi: string): Promise<string | null> {
   try {
-    const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}/transform/application/x-bibtex`, {
+    const res = await fetchWithRetry(`https://api.crossref.org/works/${encodeURIComponent(doi)}/transform/application/x-bibtex`, {
       headers: { Accept: "application/x-bibtex" },
-      signal: AbortSignal.timeout(10000),
-    });
+    }, { retries: 3 });
     if (!res.ok) return null;
     return (await res.text()).trim();
   } catch { return null; }

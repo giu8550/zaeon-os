@@ -6,7 +6,9 @@ import { searchCrossref } from "./crossref";
 
 export type SourceName = "semanticscholar" | "openalex" | "arxiv" | "crossref";
 
-export const SOURCE_FN: Record<SourceName, (q: string, limit?: number) => Promise<Paper[]>> = {
+export interface SourceResult { source: SourceName; papers: Paper[]; status: "ok" | "rate_limited" | "error"; }
+
+export const SOURCE_FN: Record<SourceName, (q: string, limit?: number) => Promise<{ papers: Paper[]; status: "ok" | "rate_limited" | "error" }>> = {
   semanticscholar: searchSemanticScholar,
   openalex: searchOpenAlex,
   arxiv: searchArxiv,
@@ -22,6 +24,6 @@ export function basesForDomain(domain?: string): SourceName[] {
   return ["semanticscholar", "openalex", "arxiv", "crossref"];
 }
 
-export async function searchAll(query: string, sources: SourceName[]): Promise<{ source: SourceName; papers: Paper[] }[]> {
-  return Promise.all(sources.map(async (s) => ({ source: s, papers: await SOURCE_FN[s](query) })));
+export async function searchAll(query: string, sources: SourceName[]): Promise<SourceResult[]> {
+  return Promise.all(sources.map(async (s) => { const r = await SOURCE_FN[s](query); return { source: s, ...r }; }));
 }

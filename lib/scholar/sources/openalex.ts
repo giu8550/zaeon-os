@@ -1,4 +1,5 @@
 import type { Paper } from "../types";
+import { fetchWithRetry } from "../http";
 
 export function reconstructAbstract(inv?: Record<string, number[]>): string | undefined {
   if (!inv) return undefined;
@@ -28,11 +29,11 @@ export function parseOpenAlex(json: any): Paper[] {
   });
 }
 
-export async function searchOpenAlex(query: string, limit = 15): Promise<Paper[]> {
+export async function searchOpenAlex(query: string, limit = 15): Promise<{ papers: Paper[]; status: "ok" | "rate_limited" | "error" }> {
   try {
     const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${limit}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
-    return parseOpenAlex(await res.json());
-  } catch { return []; }
+    const res = await fetchWithRetry(url, {}, { retries: 3 });
+    if (!res.ok) return { papers: [], status: res.status === 429 ? "rate_limited" : "error" };
+    return { papers: parseOpenAlex(await res.json()), status: "ok" };
+  } catch { return { papers: [], status: "error" }; }
 }

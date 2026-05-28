@@ -8,10 +8,11 @@ import { planQuery, synthesize } from "@/lib/scholar/synthesize";
 import { assembleResults } from "@/lib/scholar/assemble";
 import { buildReferencesBib } from "@/lib/scholar/bibtex";
 import { planTone } from "@/lib/scholar/prompt";
+import { mapLimit } from "@/lib/scholar/http";
 import type { Paper, ScholarEvent } from "@/lib/scholar/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -42,29 +43,28 @@ export async function POST(req: Request) {
         send({ type: "phase", phase: "planning", message: planTone(prompt) });
         const plan = await planQuery(prompt);
 
-        // SEARCH (parallel)
+        // SEARCH (sequential queries to ease rate limits)
         const bases = basesForDomain(plan.domain);
         const queries = plan.queries.length ? plan.queries : [prompt];
-        const usedQueries = queries.slice(0, 3);
-        const resultSets = await Promise.all(usedQueries.map((q) => searchAll(q, bases)));
+        const usedQueries = [...new Set(queries.map((q) => q.trim()).filter(Boolean))].slice(0, 2);
         let pool: Paper[] = [];
-        for (const results of resultSets) {
+        for (const q of usedQueries) {
+          const results = await searchAll(q, bases);
           for (const r of results) {
-            send({
-              type: "phase",
-              phase: "searching",
-              source: r.source,
-              count: r.papers.length,
-              message: `✓ ${r.source}: ${r.papers.length} papers`,
-            });
+            const msg = r.status === "ok"
+              ? `✓ ${r.source}: ${r.papers.length} papers`
+              : r.status === "rate_limited"
+                ? `⏳ ${r.source}: limite de requisições atingido (tentei reenviar)`
+                : `⚠ ${r.source}: indisponível agora`;
+            send({ type: "phase", phase: "searching", source: r.source, count: r.papers.length, message: msg });
             pool = pool.concat(r.papers);
           }
         }
 
         // DEDUP + FULL TEXT (top N)
         const unique = dedupePapers(pool);
-        const top = unique.slice(0, 14);
-        const withText = await Promise.all(top.map(resolveFullText));
+        const top = unique.slice(0, 10);
+        const withText = await mapLimit(top, 3, (p) => resolveFullText(p));
         const ftCount = withText.filter(
           (p) => p.retrievedText && p.retrievedText.kind !== "abstract"
         ).length;

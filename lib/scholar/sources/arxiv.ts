@@ -1,4 +1,5 @@
 import type { Paper } from "../types";
+import { fetchWithRetry } from "../http";
 
 export function parseArxiv(xml: string): Paper[] {
   const entries = xml.split("<entry>").slice(1);
@@ -24,11 +25,11 @@ export function parseArxiv(xml: string): Paper[] {
   });
 }
 
-export async function searchArxiv(query: string, limit = 15): Promise<Paper[]> {
+export async function searchArxiv(query: string, limit = 15): Promise<{ papers: Paper[]; status: "ok" | "rate_limited" | "error" }> {
   try {
     const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}&sortBy=relevance`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
-    return parseArxiv(await res.text());
-  } catch { return []; }
+    const res = await fetchWithRetry(url, {}, { retries: 3 });
+    if (!res.ok) return { papers: [], status: res.status === 429 ? "rate_limited" : "error" };
+    return { papers: parseArxiv(await res.text()), status: "ok" };
+  } catch { return { papers: [], status: "error" }; }
 }

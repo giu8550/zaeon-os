@@ -1,4 +1,5 @@
 import type { Paper } from "../types";
+import { fetchWithRetry } from "../http";
 
 export function parseSemanticScholar(json: any): Paper[] {
   return (json?.data ?? []).map((p: any): Paper => ({
@@ -18,12 +19,14 @@ export function parseSemanticScholar(json: any): Paper[] {
   }));
 }
 
-export async function searchSemanticScholar(query: string, limit = 15): Promise<Paper[]> {
+export async function searchSemanticScholar(query: string, limit = 15): Promise<{ papers: Paper[]; status: "ok" | "rate_limited" | "error" }> {
   try {
     const fields = "title,authors,year,venue,externalIds,abstract,openAccessPdf,citationCount,url";
     const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=${fields}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
-    return parseSemanticScholar(await res.json());
-  } catch { return []; }
+    const key = process.env.SEMANTIC_SCHOLAR_API_KEY;
+    const headers: Record<string, string> = key ? { "x-api-key": key } : {};
+    const res = await fetchWithRetry(url, { headers }, { retries: 3 });
+    if (!res.ok) return { papers: [], status: res.status === 429 ? "rate_limited" : "error" };
+    return { papers: parseSemanticScholar(await res.json()), status: "ok" };
+  } catch { return { papers: [], status: "error" }; }
 }
