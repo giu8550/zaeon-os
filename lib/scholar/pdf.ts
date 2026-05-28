@@ -20,8 +20,9 @@ export function paragraphsFromPages(pages: { page: number; text: string }[]): Pa
 
 // Impure: extract per-page text with pdfjs-dist (Node, no worker), then attribute.
 export async function extractPdfParagraphs(data: Uint8Array): Promise<Paragraph[]> {
-  // legacy build runs in Node without a worker
-  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  // legacy build runs in Node without a worker (this build ships as pdf.js, not .mjs)
+  // @ts-ignore - the legacy pdfjs build has no bundled type declarations
+  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.js");
   const doc = await pdfjs.getDocument({ data, useWorkerFetch: false, isEvalSupported: false, disableFontFace: true }).promise;
   const pages: { page: number; text: string }[] = [];
   for (let n = 1; n <= doc.numPages; n++) {
