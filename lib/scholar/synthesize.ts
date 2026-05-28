@@ -16,11 +16,14 @@ export async function planQuery(query: string): Promise<Plan> {
 // Feed ONLY retrieved text; the model must quote verbatim from it.
 // (RawSynthesis is defined in ./types so assemble.ts can import it independently.)
 export async function synthesize(query: string, papers: Paper[]): Promise<RawSynthesis> {
-  const corpus = papers.map((p) => ({
-    paperId: p.id,
-    title: p.title,
-    text: (p.retrievedText?.paragraphs ?? []).map((x) => x.text).join("\n\n").slice(0, 6000),
-  }));
+  // Only feed papers we actually retrieved text for — never let the model "fill in" ungrounded papers.
+  const corpus = papers
+    .filter((p) => p.retrievedText)
+    .map((p) => ({
+      paperId: p.id,
+      title: p.title,
+      text: (p.retrievedText?.paragraphs ?? []).map((x) => x.text).join("\n\n").slice(0, 6000),
+    }));
   const user = `Pergunta: ${query}
 
 PAPERS (use SOMENTE este texto; quote verbatim a partir daqui):
