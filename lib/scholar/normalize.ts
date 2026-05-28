@@ -17,8 +17,12 @@ export function tokenize(s: string): string[] {
 
 // overlap coefficient over token sets (robust to length differences)
 export function titleOverlap(a: string, b: string): number {
-  const A = new Set(tokenize(a));
-  const B = new Set(tokenize(b));
+  const tokA = tokenize(a);
+  const tokB = tokenize(b);
+  // Guard: if either title has fewer than 3 tokens, short-subset false-merges are likely
+  if (tokA.length < 3 || tokB.length < 3) return 0;
+  const A = new Set(tokA);
+  const B = new Set(tokB);
   if (A.size === 0 || B.size === 0) return 0;
   let inter = 0;
   for (const t of A) if (B.has(t)) inter++;

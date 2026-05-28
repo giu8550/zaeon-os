@@ -14,21 +14,23 @@ function buildLocator(kind: RetrievedText["kind"], p: Paragraph): Locator {
   return { kind: "abstract" };
 }
 
-// word-shingle overlap over a sliding window; deterministic, no deps
+// contiguous bigram overlap; order-sensitive, deterministic, no deps
 export function fuzzyContains(haystack: string, needle: string, threshold = 0.92): boolean {
   const H = tokenize(haystack);
   const N = tokenize(needle);
-  if (N.length === 0) return false;
-  if (N.length > H.length) return false;
-  const needleSet = new Set(N);
-  let best = 0;
-  for (let i = 0; i + N.length <= H.length; i++) {
-    let hit = 0;
-    for (let j = 0; j < N.length; j++) if (needleSet.has(H[i + j])) hit++;
-    best = Math.max(best, hit / N.length);
-    if (best >= threshold) return true;
+  if (N.length < 2) return false;
+  // Build set of haystack bigrams
+  const haystackBigrams = new Set<string>();
+  for (let i = 0; i + 1 < H.length; i++) {
+    haystackBigrams.add(H[i] + " " + H[i + 1]);
   }
-  return false;
+  // Count needle bigrams present in haystack bigram set
+  const totalNeedleBigrams = N.length - 1;
+  let present = 0;
+  for (let i = 0; i + 1 < N.length; i++) {
+    if (haystackBigrams.has(N[i] + " " + N[i + 1])) present++;
+  }
+  return present / totalNeedleBigrams >= threshold;
 }
 
 export function verifyQuote(quote: string, rt: RetrievedText): VerifyResult {

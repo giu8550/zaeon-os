@@ -23,4 +23,13 @@ describe("titleOverlap", () => {
   it("is high for near-duplicate titles", () => {
     expect(titleOverlap("Attention Is All You Need", "Attention is All You Need (v2)")).toBeGreaterThan(0.85);
   });
+  it("returns 0 when first title has fewer than 3 tokens (short-subset guard)", () => {
+    expect(titleOverlap("Networks", "Graph Neural Networks")).toBe(0);
+  });
+  it("returns 0 when second title has fewer than 3 tokens (short-subset guard)", () => {
+    expect(titleOverlap("Graph Neural Networks", "Networks")).toBe(0);
+  });
+  it("returns 0 when both titles are short subsets of each other", () => {
+    expect(titleOverlap("The Model", "The Transformer Model")).toBe(0);
+  });
 });

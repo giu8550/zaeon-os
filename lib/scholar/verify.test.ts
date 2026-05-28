@@ -54,6 +54,12 @@ describe("fuzzyContains", () => {
   it("rejects unrelated text", () => {
     expect(fuzzyContains("the cat sat on the mat", "quantum chromodynamics lattice", 0.85)).toBe(false);
   });
+  it("REJECTS scrambled word order (bigram order-sensitivity)", () => {
+    expect(fuzzyContains(
+      "multi-head attention allows the model to jointly attend to information",
+      "the model allows attention head multi", 0.85
+    )).toBe(false);
+  });
 });
 
 describe("verifyEvidence (batch anti-hallucination)", () => {
@@ -71,5 +77,6 @@ describe("verifyEvidence (batch anti-hallucination)", () => {
     expect(out[0].verified).toBe(true);
     expect(out[1].verified).toBe(false);
     expect(out[2].verified).toBe(false);
+    expect(out[2].locator).toBeUndefined();
   });
 });
