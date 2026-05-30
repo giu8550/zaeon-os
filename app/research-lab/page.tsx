@@ -21,7 +21,7 @@ import ResearchRoomTour from "@/components/onboard/ResearchRoomTour";
 // --- ICONS ---
 import {
     PlusIcon, ChevronRightIcon, BookmarkIcon,
-    VideoCameraIcon, ClipboardIcon, SparklesIcon, TrashIcon,
+    ClipboardIcon, SparklesIcon, TrashIcon,
     PaperAirplaneIcon, UserCircleIcon,
     ArrowPathIcon, CommandLineIcon, HeartIcon, CalculatorIcon,
     ArrowDownTrayIcon, PlayIcon,
@@ -36,6 +36,7 @@ import {
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
 import MiniTourToast from "@/components/research/MiniTourToast";
+import SavedCitationsSection from "./SavedCitationsSection";
 
 // --- COMPONENTS ---
 import ResearchCardPDF from "@/components/ui/ResearchCardPDF";
@@ -43,7 +44,6 @@ import { ABNT_TEMPLATE, parseAbntMarkers, isEmptyOrTemplate } from '@/lib/abntTe
 
 // --- TYPES ---
 interface StudyDoc { id: string; title: string; url: string; file?: File; }
-interface VideoItem { id: string; youtubeId: string; }
 interface CitationNote { id: string; text: string; }
 
 // --- UTILS ---
@@ -391,15 +391,13 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [muralSearchQuery, setMuralSearchQuery] = useState("");
     const [muralPosts, setMuralPosts] = useState<any[]>([]);
     const [isMuralLoading, setIsMuralLoading] = useState(false);
-    const [isAddVideoModalOpen, setIsAddVideoModalOpen] = useState(false);
-    const [videoUrlInput, setVideoUrlInput] = useState("");
 
     // --- CORE STATES ---
     const [mounted, setMounted] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isChatLeft, setIsChatLeft] = useState(false);
     const [isFocusMode, setIsFocusMode] = useState(false);
-    const [activeSection, setActiveSection] = useState<"pdf" | "scribe" | "examiner" | "videos" | "doc" | null>(null);
+    const [activeSection, setActiveSection] = useState<"pdf" | "scribe" | "examiner" | "doc" | null>(null);
     const [showTour, setShowTour] = useState(false);
     const [onboardSaved, setOnboardSaved] = useState(false);
     const [miniTourTab, setMiniTourTab] = useState<string | null>(null);
@@ -420,7 +418,6 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     // --- DATA STATES ---
     const [studyFiles, setStudyFiles] = useState<StudyDoc[]>([]);
     const [pendingUpload, setPendingUpload] = useState<File | null>(null);
-    const [videos, setVideos] = useState<VideoItem[]>([]);
     const [activeFileContext, setActiveFileContext] = useState<string | null>(null);
     const [processingFileId, setProcessingFileId] = useState<string | null>(null);
     const [activePdfTab, setActivePdfTab] = useState<"chat" | "writer" | "citations">("chat");
@@ -851,27 +848,6 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         } catch (err) { console.error(err); }
     };
 
-    const handlePasteVideo = async () => {
-        try {
-            const text = await navigator.clipboard.readText();
-            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-            const match = text.match(regex);
-            if (match && match[1]) setVideos(prev => [{ id: generateSafeId(), youtubeId: match[1] }, ...prev]);
-        } catch (err) { console.error(err); }
-    };
-
-    const handleAddVideo = (url: string) => {
-        const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-        const match = url.match(regex);
-        if (match && match[1]) {
-            setVideos(prev => [{ id: generateSafeId(), youtubeId: match[1] }, ...prev]);
-            setVideoUrlInput("");
-            setIsAddVideoModalOpen(false);
-            showToast("Vídeo adicionado com sucesso!");
-        } else {
-            showToast("URL do YouTube inválido.");
-        }
-    };
 
     const handleSaveWorkspace = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -1133,30 +1109,29 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Perfil</span>}
                         </button>
 
-                        <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
+                    </div>
 
-                        {/* Layout & Focus (only show for pesquisa) */}
-                        {activeTab === 'pesquisa' && (
-                            <>
-                                <button data-tour="layout-toggle" onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
-                                    <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-                                    {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
-                                </button>
-                                <button data-tour="focus-mode" onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}>
-                                    {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
-                                    {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
-                                </button>
-                            </>
-                        )}
+                    {/* EXTRAS — fixos no rodapé da sidebar: alternar direção do layout + modo foco */}
+                    <div className="mt-auto px-2.5 pt-3 flex flex-col gap-3">
+                        <div className="h-[1px] bg-slate-300 dark:bg-white/10" />
+                        <button data-tour="layout-toggle" onClick={() => setIsChatLeft(!isChatLeft)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group">
+                            <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}
+                        </button>
+                        <button data-tour="focus-mode" onClick={toggleFocusMode} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}>
+                            {isFocusMode ? <EyeIcon className="w-5 h-5" /> : <PowerIcon className="w-5 h-5" />}
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase">Foco</span>}
+                        </button>
                     </div>
                 </motion.nav>
             )}
 
-            <main className={`flex-1 flex flex-col ${!isEmbedded ? 'pl-[80px]' : ''} h-full overflow-hidden p-6 gap-6`}>
-                
-                {/* CABEÇALHO */}
-                <div className="flex items-end justify-between shrink-0">
-                    {activeTab !== "sala-de-estudos" && (
+            <main className={`flex-1 flex flex-col ${!isEmbedded ? 'pl-[80px]' : ''} h-full overflow-hidden ${activeTab === 'sala-de-estudos' ? 'px-6 pb-6' : 'p-6'} gap-6`}>
+
+                {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
+                    alinhada à borda superior da sidebar */}
+                {activeTab !== "sala-de-estudos" && (
+                    <div className="flex items-end justify-between shrink-0">
                         <div>
                             <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
                                 {tabMeta.title}
@@ -1165,8 +1140,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                 {tabMeta.subtitle}
                             </p>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 <div className="flex-1 flex gap-8 overflow-hidden h-full">
                     {activeTab === "pesquisa" && (
@@ -1262,31 +1237,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                     )}
                                 </section>
 
-                                {/* APOIO AUDIOVISUAL */}
-                                <section data-tour="youtube" onClick={() => setActiveSection('videos')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('videos')}`}>
-                                    <div className="flex items-center gap-4 mb-6">
-                                        <span className="bg-black dark:bg-white text-white dark:text-black text-[11px] font-black px-5 py-2 rounded-full uppercase tracking-widest flex items-center gap-2 shadow-md">
-                                            <VideoCameraIcon className="w-4 h-4" /> Apoio Audiovisual
-                                        </span>
-                                        <div className="ml-auto">
-                                            <button
-                                                onClick={() => setIsAddVideoModalOpen(true)}
-                                                className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full text-[10px] font-black uppercase shadow-md flex items-center gap-2 transition-colors"
-                                            >
-                                                <PlusIcon className="w-3.5 h-3.5" /> Adicionar Vídeo
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-row gap-6 overflow-x-auto pb-4 pt-2 min-h-[220px] custom-scrollbar">
-                                        {videos.length === 0 && <span className="text-sm text-black dark:text-white font-medium italic m-auto">Nenhum vídeo adicionado. Clique em "Adicionar Vídeo" para colar um link.</span>}
-                                        {videos.map(vid => (
-                                            <div key={vid.id} className="flex-shrink-0 w-[360px] h-[200px] bg-slate-200 dark:bg-black rounded-[24px] overflow-hidden shadow-md relative group/vid border border-slate-300 dark:border-white/10">
-                                                <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${vid.youtubeId}`} frameBorder="0" allowFullScreen />
-                                                <button onClick={(e) => { e.stopPropagation(); setVideos(prev => prev.filter(v => v.id !== vid.id)); }} className="absolute top-3 right-3 p-3 bg-black dark:bg-white text-white dark:text-black rounded-xl opacity-0 group-hover/vid:opacity-100 transition-opacity hover:scale-105 shadow-xl"><TrashIcon className="w-5 h-5" /></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </section>
+                                {/* CITAÇÕES SALVAS */}
+                                <SavedCitationsSection />
 
                                 {/* AGENTE QUIZ */}
                                 <section data-tour="specialists" onClick={() => setActiveSection('examiner')} className={`flex flex-col h-[520px] shrink-0 rounded-[32px] overflow-hidden ${getCardStyle('examiner')}`}>
@@ -1460,7 +1412,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
 
                     {activeTab === "sala-de-estudos" && (
                         <div className="w-full h-full overflow-hidden">
-                            <StudyRoomContent />
+                            <StudyRoomContent flushTop />
                         </div>
                     )}
 
@@ -1532,49 +1484,6 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                 )}
             </AnimatePresence>
 
-            {/* MODAL - ADICIONAR VÍDEO */}
-            <AnimatePresence>
-                {isAddVideoModalOpen && (
-                    <div className="fixed inset-0 z-[700] flex items-center justify-center p-6">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAddVideoModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                        <motion.div initial={{ opacity: 0, scale: 0.9, y: 40 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 40 }} className="relative w-full max-w-md bg-white dark:bg-[#0a0a0a] rounded-[32px] p-8 shadow-2xl border border-slate-200 dark:border-white/10 text-left">
-                            <button onClick={() => setIsAddVideoModalOpen(false)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500"><XMarkIcon className="w-5 h-5" /></button>
-                            <h3 className="text-xl font-black text-black dark:text-white mb-2">Adicionar Vídeo de Apoio</h3>
-                            <p className="text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider">Cole o link do YouTube abaixo:</p>
-                            
-                            <div className="flex flex-col gap-4">
-                                <div className="flex items-center gap-2 bg-slate-100 dark:bg-black/60 rounded-full border border-slate-300 dark:border-white/20 p-1.5 pl-4 focus-within:ring-2 focus-within:ring-cyan-500/30 transition-all shadow-sm">
-                                    <input
-                                        type="text"
-                                        placeholder="https://www.youtube.com/watch?v=..."
-                                        value={videoUrlInput}
-                                        onChange={(e) => setVideoUrlInput(e.target.value)}
-                                        className="flex-1 bg-transparent border-none outline-none text-xs text-black dark:text-white placeholder:text-slate-400"
-                                    />
-                                </div>
-                                <div className="flex justify-end gap-3 mt-2">
-                                    <button 
-                                        onClick={() => {
-                                            setIsAddVideoModalOpen(false);
-                                            setVideoUrlInput("");
-                                        }} 
-                                        className="px-6 py-2.5 rounded-full text-[10px] font-black border-2 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 uppercase tracking-widest transition-colors"
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button 
-                                        onClick={() => handleAddVideo(videoUrlInput)}
-                                        disabled={!videoUrlInput.trim()}
-                                        className="px-8 py-2.5 rounded-full text-[10px] font-black bg-cyan-600 text-white hover:bg-cyan-500 disabled:opacity-50 uppercase tracking-widest shadow-xl transition-all"
-                                    >
-                                        Adicionar
-                                    </button>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
 
             {/* MODAL — SALVAR & EXPORTAR ABNT */}
             <AnimatePresence>

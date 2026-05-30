@@ -75,7 +75,7 @@ const ROOM_META: Record<string, {
 // ─── TAB DEFINITIONS ─────────────────────────────────────────────────────────
 const ROOM_TABS: Record<string, Array<{ id: string; label: string; icon: React.ComponentType<any> }>> = {
     cyber: [
-        { id: "community",  label: "Comunidade", icon: Users         },
+        { id: "community",  label: "Estudos",    icon: Users         },
         { id: "classes",    label: "Aulas",       icon: BookOpen      },
         { id: "exams",      label: "Provas",       icon: ClipboardList },
         { id: "projects",   label: "Projetos",     icon: FolderOpen    },
@@ -83,7 +83,7 @@ const ROOM_TABS: Record<string, Array<{ id: string; label: string; icon: React.C
         { id: "profile",    label: "Perfil",       icon: User          },
     ],
     med: [
-        { id: "community",  label: "Comunidade", icon: Users         },
+        { id: "community",  label: "Estudos",    icon: Users         },
         { id: "classes",    label: "Aulas",       icon: BookOpen      },
         { id: "exams",      label: "Provas",       icon: ClipboardList },
         { id: "projects",   label: "Projetos",     icon: FolderOpen    },
@@ -92,7 +92,7 @@ const ROOM_TABS: Record<string, Array<{ id: string; label: string; icon: React.C
         { id: "profile",    label: "Perfil",       icon: User          },
     ],
     bio: [
-        { id: "community",  label: "Comunidade", icon: Users         },
+        { id: "community",  label: "Estudos",    icon: Users         },
         { id: "classes",    label: "Aulas",       icon: BookOpen      },
         { id: "exams",      label: "Provas",       icon: ClipboardList },
         { id: "projects",   label: "Projetos",     icon: FolderOpen    },
@@ -101,7 +101,7 @@ const ROOM_TABS: Record<string, Array<{ id: string; label: string; icon: React.C
         { id: "profile",    label: "Perfil",       icon: User          },
     ],
     quantic: [
-        { id: "community",  label: "Comunidade", icon: Users         },
+        { id: "community",  label: "Estudos",    icon: Users         },
         { id: "classes",    label: "Aulas",       icon: BookOpen      },
         { id: "exams",      label: "Provas",       icon: ClipboardList },
         { id: "projects",   label: "Projetos",     icon: FolderOpen    },
@@ -110,7 +110,7 @@ const ROOM_TABS: Record<string, Array<{ id: string; label: string; icon: React.C
         { id: "profile",    label: "Perfil",       icon: User          },
     ],
     humanities: [
-        { id: "community",  label: "Comunidade", icon: Users         },
+        { id: "community",  label: "Estudos",    icon: Users         },
         { id: "classes",    label: "Aulas",       icon: BookOpen      },
         { id: "exams",      label: "Provas",       icon: ClipboardList },
         { id: "projects",   label: "Projetos",     icon: FolderOpen    },
@@ -119,7 +119,7 @@ const ROOM_TABS: Record<string, Array<{ id: string; label: string; icon: React.C
         { id: "profile",    label: "Perfil",       icon: User          },
     ],
     lounge: [
-        { id: "community",  label: "Comunidade", icon: Users         },
+        { id: "community",  label: "Estudos",    icon: Users         },
         { id: "classes",    label: "Aulas",       icon: BookOpen      },
         { id: "exams",      label: "Provas",       icon: ClipboardList },
         { id: "projects",   label: "Projetos",     icon: FolderOpen    },
@@ -218,7 +218,7 @@ function NoRoomFound() {
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
-export default function StudyRoomContent() {
+export default function StudyRoomContent({ flushTop = false }: { flushTop?: boolean } = {}) {
     const { data: session } = useSession();
 
     const course = (session?.user as any)?.course as string | undefined;
@@ -264,11 +264,11 @@ export default function StudyRoomContent() {
     const ActiveComponent = DYNAMIC_COMPONENTS[room]?.[activeTab];
 
     return (
-        <OmegaScholarProvider room={room} onStart={() => setActiveTab("community")}>
+        <OmegaScholarProvider room={room}>
         <div className="flex flex-col h-full">
 
             {/* ── OMEGA SCHOLAR BAR (replaces the old ROOM HEADER) ───── */}
-            <OmegaScholarBar />
+            <OmegaScholarBar flushTop={flushTop} onOpenResults={() => setActiveTab("community")} />
 
             {/* ── MAIN CARD: TABS + CONTENT ───────────────────────────── */}
             {/*
