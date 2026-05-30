@@ -3,9 +3,15 @@ import { prisma } from "@/src/lib/prisma";
 import { buildValidationError, normaliseCode } from "@/lib/convite/validate";
 
 export async function POST(req: Request) {
-  const { code: rawCode } = await req.json();
+  let rawCode: string;
+  try {
+    const body = await req.json();
+    rawCode = body?.code ?? "";
+  } catch {
+    return NextResponse.json({ error: "Corpo da requisição inválido." }, { status: 400 });
+  }
 
-  const shapeError = buildValidationError(rawCode ?? "");
+  const shapeError = buildValidationError(rawCode);
   if (shapeError) {
     return NextResponse.json({ error: shapeError }, { status: 400 });
   }
