@@ -78,7 +78,12 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
     setLoading(true);
     setError(null);
 
-    const exclude = isRefresh && result ? [...excludeTitles, result.suggestion.title] : excludeTitles;
+    // Build exclude list from accumulated state + current suggestion (if refreshing)
+    const currentTitle = result?.suggestion.title;
+    const exclude =
+      isRefresh && currentTitle
+        ? [...excludeTitles, currentTitle]
+        : excludeTitles;
 
     try {
       const res = await fetch("/api/ai/research-suggest", {
@@ -89,14 +94,17 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Erro ${res.status}`);
+        throw new Error((data as { error?: string }).error || `Erro ${res.status}`);
       }
 
-      const data: EngineResponse = await res.json();
-      setResult(data);
-      if (isRefresh && result) {
-        setExcludeTitles(prev => [...prev, result.suggestion.title]);
+      const data = await res.json() as EngineResponse;
+      // Persist the title we just excluded so future refreshes keep avoiding it
+      if (isRefresh && currentTitle) {
+        setExcludeTitles(prev =>
+          prev.includes(currentTitle) ? prev : [...prev, currentTitle]
+        );
       }
+      setResult(data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";
       setError(message);

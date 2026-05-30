@@ -14,14 +14,18 @@ from models import SuggestRequest, SuggestResponse, SuggestionItem, RefItem, Inl
 from prompts import build_system_prompt, build_user_message
 
 _MODEL_NAME = "gemini-2.0-flash"
+_model: genai.GenerativeModel | None = None
 
 
 def _get_model() -> genai.GenerativeModel:
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY or GOOGLE_API_KEY env var not set")
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel(_MODEL_NAME)
+    global _model
+    if _model is None:
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY or GOOGLE_API_KEY env var not set")
+        genai.configure(api_key=api_key)
+        _model = genai.GenerativeModel(_MODEL_NAME)
+    return _model
 
 
 def _extract_json(raw: str) -> dict[str, Any]:
