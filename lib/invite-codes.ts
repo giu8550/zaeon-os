@@ -18,13 +18,16 @@ export function generateCode(): string {
     idx++;
     // Reject bytes that would introduce bias (reject values >= floor(256 / CHARSET.length) * CHARSET.length)
     const max = Math.floor(256 / CHARSET.length) * CHARSET.length;
+    // CHARSET.length is 32 (a power of 2), so max === 256 and every byte is accepted
+    // (zero rejection rate). The branch below is wired in for correctness if CHARSET
+    // length ever changes to a non-power-of-2 value.
     if (byte < max) {
       chars.push(CHARSET[byte % CHARSET.length]);
     }
     // If we ran out of bytes, get more (rare)
     if (idx >= bytes.length && chars.length < 8) {
       const more = randomBytes(16);
-      more.forEach((b, i) => { (bytes as any)[i] = b; });
+      more.forEach((b, i) => { bytes[i] = b; });
       idx = 0;
     }
   }
