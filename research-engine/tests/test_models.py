@@ -1,7 +1,7 @@
 # research-engine/tests/test_models.py
 import pytest
 from pydantic import ValidationError
-from models import SuggestRequest, SuggestResponse, SuggestionItem, RefItem
+from models import SuggestRequest, SuggestResponse, SuggestionItem, RefItem, InlineCitation
 
 
 def test_suggest_request_valid():
@@ -58,3 +58,30 @@ def test_gap_score_out_of_range_fails():
             novelty_angle="N",
             gap_score=1.5,
         )
+
+
+def test_gap_score_below_zero_fails():
+    with pytest.raises(ValidationError):
+        SuggestionItem(
+            type="Exploratória",
+            title="T",
+            rationale="R",
+            novelty_angle="N",
+            gap_score=-0.1,
+        )
+
+
+def test_ref_item_invalid_source_fails():
+    with pytest.raises(ValidationError):
+        RefItem(
+            source="Web",
+            title="T",
+            authors="A",
+            year="2022",
+            venue="V",
+        )
+
+
+def test_suggest_request_whitespace_topic_fails():
+    with pytest.raises(ValidationError):
+        SuggestRequest(topic="   ", level="grad")
