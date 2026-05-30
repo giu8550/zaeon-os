@@ -21,7 +21,7 @@ const UserSchema = new Schema({
     verificationDoc: String,
 
     // Invite system
-    referredBy: String,       // userId of inviter
+    referredBy: { type: Schema.Types.ObjectId, ref: 'User' },  // userId of inviter (bare ObjectId, no FK enforcement)
     myInviteCode: String,     // this user's shareable code
     inviteCodeUsed: String,   // code they used to register
     subject: String,          // teachers: discipline they teach

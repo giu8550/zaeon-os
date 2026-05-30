@@ -49,9 +49,9 @@ model User {
   verificationDoc   String?
 
   // Invite system
-  referredBy      String?  @db.ObjectId
+  referredBy      String?  @db.ObjectId  // bare ObjectId — no Prisma relation (avoids circular User→User FK, populated in application layer)
   myInviteCode    String?  @unique
-  inviteCodeUsed  String?
+  inviteCodeUsed  String?              // denormalized audit: the human-readable code string (e.g. "ZA3K-X9QM")
   subject         String?
 
   createdAt       DateTime? @default(now())
