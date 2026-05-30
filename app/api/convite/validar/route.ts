@@ -1,0 +1,37 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/src/lib/prisma";
+import { buildValidationError, normaliseCode } from "@/lib/convite/validate";
+
+export async function POST(req: Request) {
+  const { code: rawCode } = await req.json();
+
+  const shapeError = buildValidationError(rawCode ?? "");
+  if (shapeError) {
+    return NextResponse.json({ error: shapeError }, { status: 400 });
+  }
+
+  const code = normaliseCode(rawCode);
+
+  const inviteCode = await prisma.inviteCode.findUnique({ where: { code } });
+  if (!inviteCode) {
+    return NextResponse.json({ error: "Código não encontrado." }, { status: 404 });
+  }
+  if (inviteCode.usedCount >= inviteCode.maxUses) {
+    return NextResponse.json(
+      { error: "Este código já atingiu o limite de usos." },
+      { status: 410 }
+    );
+  }
+
+  const sessionToken = crypto.randomUUID();
+
+  const response = NextResponse.json({ ok: true, sessionToken, inviteCode: code });
+  response.cookies.set("convite_session", sessionToken, {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 3600,
+    path: "/",
+  });
+
+  return response;
+}
