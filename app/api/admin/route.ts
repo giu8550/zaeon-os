@@ -41,6 +41,7 @@ export async function GET(req: Request) {
             kycStatus: user.kycStatus || "pending",
             institution: user.institution || "",
             verificationDoc: user.verificationDoc || null,
+            inviteCodeUsed: user.inviteCodeUsed || null,
             submittedAt: user.createdAt ? new Date(user.createdAt).toISOString() : new Date().toISOString(),
         }));
 
