@@ -16,10 +16,6 @@ const StudyRoomContent = dynamic(() => import("@/app/workstation/student/StudyRo
 const StudentLoungeContent = dynamic(() => import("@/app/workstation/student/StudentLoungeContent"), { ssr: false });
 const TeacherLoungeContent = dynamic(() => import("@/app/workstation/teacher/LoungeContent"), { ssr: false });
 const ResearchesPage = dynamic(() => import("@/app/study-rooms/lounge/main-lounge/researches/page"), { ssr: false });
-const ResearchSuggestionPanel = dynamic(
-  () => import("@/components/research/ResearchSuggestionPanel"),
-  { ssr: false }
-);
 import ResearchRoomTour from "@/components/onboard/ResearchRoomTour";
 
 // --- ICONS ---
@@ -970,10 +966,6 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         }
     };
 
-    const handleSelectResearchTitle = (title: string) => {
-        setDocTitle(title);
-    };
-
     const getCardStyle = (sectionName: string) => {
         const isActive = activeSection === sectionName;
         return `transition-all duration-300 border-2 ${isActive ? 'border-cyan-500 ring-4 ring-cyan-500/10' : 'border-slate-300 dark:border-white/10'} bg-white dark:bg-[#0f172a] shadow-xl`;
@@ -1157,14 +1149,6 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             {/* COLUNA 1: ESTUDO (PDF + SCRIBE + QUIZ) */}
                             <div className={`w-1/2 h-full flex flex-col gap-8 overflow-y-auto custom-scrollbar pb-32 pr-2 ${isChatLeft ? 'order-first' : 'order-last'}`}>
                                 <input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" multiple onChange={(e) => handleFiles(e.target.files)} />
-
-                                {/* SUGESTÃO DE PESQUISA */}
-                                <div className="bg-[#030014] rounded-[2rem] shrink-0">
-                                  <ResearchSuggestionPanel
-                                    docTitle={docTitle}
-                                    onSelectTitle={handleSelectResearchTitle}
-                                  />
-                                </div>
 
                                 {/* CHAT COM PDF & CITAÇÕES */}
                                 <section data-tour="pdf-upload" onClick={() => setActiveSection('pdf')} className={`p-6 rounded-[32px] shrink-0 ${getCardStyle('pdf')}`}>
