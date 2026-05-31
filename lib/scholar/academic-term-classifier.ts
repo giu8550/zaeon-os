@@ -24,7 +24,7 @@ const MORPH: RegExp[] = [
   /\bquantum\b/,
 ];
 const DOI_RE = /10\.\d{4,9}\/[-._;()/:a-z0-9]+/;          // on normalized (lowercased) text
-const ARXIV_RE = /\b(?:arxiv:\s*)?\d{4}\.\d{4,5}(?:v\d+)?\b/;
+const ARXIV_RE = /\b(?:(?:arxiv:\s*)\d{4}\.\d{4,5}(?:v\d+)?|\d{4}\.\d{4,5}v\d+)\b/;
 const CHEM_RE = /\b(?:[A-Z][a-z]?\d*){2,}\b/;             // on RAW text; must contain a digit
 
 function norm(s: string): string {
@@ -51,7 +51,7 @@ export function isAcademicTerm(input: string): AcademicTermResult {
   // Multiword: left boundary, free on the right (plural-tolerant). Single: tolerate "+s".
   const hasTerm = (term: string): boolean =>
     term.includes(" ")
-      ? padded.includes(" " + term)
+      ? padded.includes(" " + term + " ") || padded.includes(" " + term + "s ")
       : wordSet.has(term) || wordSet.has(term + "s");
   // Bases: exact match (avoids "core"->"cores" etc.).
   const hasBase = (b: string): boolean =>
@@ -79,6 +79,12 @@ export function isAcademicTerm(input: string): AcademicTermResult {
   const chemMatch = raw.match(CHEM_RE);
   const hasChem = !!chemMatch && /\d/.test(chemMatch[0]);
 
+  // Scoring weights (additive, capped at 1; threshold 0.55):
+  //  - each lexicon/base term ~0.35 (cap 3 → 1.05 max) — two terms (0.70) pass
+  //  - each morphology hit ~0.45 (cap 2 → 0.90)
+  //  - any base name present +0.60 (strong signal)
+  //  - DOI/arXiv typographic id +0.80 (near-certain)
+  //  - chemical formula +0.30 (weak; needs support)
   let score = 0;
   score += 0.35 * Math.min(matchedTerms.length, 3);
   score += 0.45 * Math.min(morphHits, 2);

@@ -71,7 +71,7 @@ describe("isAcademicTerm", () => {
     expect(r.confidence).toBeLessThan(0.55);
   });
 
-  it("identifica domínio de domínio único", () => {
+  it("identifica domínio único", () => {
     expect(isAcademicTerm("graphene oxide synthesis").domain).toBe("chem");
     expect(isAcademicTerm("philosophy of epistemology").domain).toBe("human");
     expect(isAcademicTerm("reinforcement learning algorithm").domain).toBe("cs");
@@ -86,5 +86,9 @@ describe("isAcademicTerm", () => {
   it("um único termo comum não cruza o threshold (anti-ruído)", () => {
     expect(isAcademicTerm("comprei materiais escolares").isAcademic).toBe(false);
     expect(isAcademicTerm("qual o melhor framework de javascript").isAcademic).toBe(false);
+  });
+
+  it("número de versão não aciona o sinal arXiv (anti-falso-positivo)", () => {
+    expect(isAcademicTerm("app version 2103.14030").isAcademic).toBe(false);
   });
 });
