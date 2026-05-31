@@ -18,7 +18,7 @@ export default function PdfViewerModal({ pdfUrl, page, quote, onClose }:
         <div className="p-4 border-b border-slate-100 dark:border-white/10 flex items-start gap-3">
           <div className="flex-1">
             <p className="text-[10px] font-black uppercase tracking-widest text-violet-500">Página {page} — trecho citado</p>
-            <p className="text-xs italic text-slate-600 dark:text-white/60 mt-1">"{quote}"</p>
+            <p className="text-xs italic text-slate-600 dark:text-white/60 mt-1">&quot;{quote}&quot;</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10"><X size={18} /></button>
         </div>

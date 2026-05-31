@@ -199,16 +199,16 @@ export default function HederaHackathonFeature() {
 
                 <WeekSection weekNum={3} title="O Paradigma Hashgraph" icon={LightBulbIcon}>
                     <p>
-                        Na terceira semana, a curva de aprendizado atingiu seu ponto mais íngreme. A maioria dos que já conheciam blockchain estavam acostumados com Ethereum. A Zaeon precisou desconstruir meses de vícios de programação. "Hedera não é uma blockchain tradicional", ecoavam os mentores pelas salas. "É um Grafo Acíclico Dirigido (DAG). Esqueçam a lentidão; estamos falando de finalidade em segundos".
+                        Na terceira semana, a curva de aprendizado atingiu seu ponto mais íngreme. A maioria dos que já conheciam blockchain estavam acostumados com Ethereum. A Zaeon precisou desconstruir meses de vícios de programação. &quot;Hedera não é uma blockchain tradicional&quot;, ecoavam os mentores pelas salas. &quot;É um Grafo Acíclico Dirigido (DAG). Esqueçam a lentidão; estamos falando de finalidade em segundos&quot;.
                     </p>
                     <p>
-                        O <em>"Aha! Moment"</em> (momento de epifania) coletivo ocorreu na quarta-feira daquela semana. Quando a primeira equipe conseguiu emitir um token na Testnet usando o <em>Hedera Token Service (HTS)</em> pagando frações de centavo e processando a transação instantaneamente, os olhos brilharam. Eles entenderam o poder do que tinham nas mãos.
+                        O <em>&quot;Aha! Moment&quot;</em> (momento de epifania) coletivo ocorreu na quarta-feira daquela semana. Quando a primeira equipe conseguiu emitir um token na Testnet usando o <em>Hedera Token Service (HTS)</em> pagando frações de centavo e processando a transação instantaneamente, os olhos brilharam. Eles entenderam o poder do que tinham nas mãos.
                     </p>
                 </WeekSection>
 
                 <WeekSection weekNum={4} title="O Chapéu Seletor" icon={UserGroupIcon}>
                     <p>
-                        Maio chegava ao fim e a Zaeon instituiu o que chamaram de "Chapéu Seletor". Dos 468 indivíduos presentes, as habilidades foram mapeadas em quadros brancos. Quem domina React? Quem entende de criptografia? Quem sabe vender uma ideia (Pitch)?
+                        Maio chegava ao fim e a Zaeon instituiu o que chamaram de &quot;Chapéu Seletor&quot;. Dos 468 indivíduos presentes, as habilidades foram mapeadas em quadros brancos. Quem domina React? Quem entende de criptografia? Quem sabe vender uma ideia (Pitch)?
                     </p>
                     <p>
                         Foi um exercício brutal de diplomacia, unindo pessoas que mal se conheciam em células de combate tecnológico. No final da sexta-feira, o caos havia sido organizado: <strong>50 esquadrões (equipes)</strong> haviam nascido, cada um com um líder, um desenvolvedor backend, um frontend e um estrategista de negócios.
@@ -246,13 +246,13 @@ export default function HederaHackathonFeature() {
                         O <em>Hedera Hackathon Africa</em> havia extrapolado suas barreiras continentais. Mais de <strong>1.000 projetos</strong> estavam sendo construídos simultaneamente por startups financiadas na Europa, programadores veteranos na Ásia e gênios do Vale do Silício. Para piorar (ou melhorar), a premiação total anunciada ultrapassava <strong>1 Milhão de Dólares</strong>.
                     </p>
                     <p>
-                        A síndrome do impostor varreu a sala. Um estudante de Cabo Verde levantou-se, olhou para seu notebook com tela trincada e disse: <em>"Nós estamos jogando xadrez contra o Deep Blue"</em>. A moral da tropa despencou.
+                        A síndrome do impostor varreu a sala. Um estudante de Cabo Verde levantou-se, olhou para seu notebook com tela trincada e disse: <em>&quot;Nós estamos jogando xadrez contra o Deep Blue&quot;</em>. A moral da tropa despencou.
                     </p>
                 </WeekSection>
 
                 <WeekSection weekNum={8} title="O Sangue Frio da Zaeon" icon={ShieldCheckIcon}>
                     <p>
-                        A Semana 8 exigiu que a Zaeon atuasse menos como engenheira de software e mais como psicóloga de trincheira. Uma reunião geral foi convocada. A mensagem passada pelos mentores foi cirúrgica: <em>"Restrições geram criatividade. Um dev no Vale do Silício não entende os problemas reais do Sul Global. Eles estão construindo cassinos virtuais; vocês estão construindo soluções de remessa transfronteiriça para famílias desbancarizadas. A realidade é o nosso diferencial."</em>
+                        A Semana 8 exigiu que a Zaeon atuasse menos como engenheira de software e mais como psicóloga de trincheira. Uma reunião geral foi convocada. A mensagem passada pelos mentores foi cirúrgica: <em>&quot;Restrições geram criatividade. Um dev no Vale do Silício não entende os problemas reais do Sul Global. Eles estão construindo cassinos virtuais; vocês estão construindo soluções de remessa transfronteiriça para famílias desbancarizadas. A realidade é o nosso diferencial.&quot;</em>
                     </p>
                     <p>
                         A fala funcionou. O medo deu lugar a uma teimosia voraz. A partir daquela semana, os projetos deixaram de ser genéricos e se voltaram agressivamente para dores reais do continente africano e brasileiro: agricultura rastreável, identidades digitais para refugiados e micropagamentos.
@@ -284,7 +284,7 @@ export default function HederaHackathonFeature() {
 
                 <WeekSection weekNum={9} title="A Moedor de Carne" icon={BoltIcon}>
                     <p>
-                        Julho iniciou com a contagem regressiva oficial. O prazo de entrega era no final do mês. A Semana 9 marcou o início do <em>"Crunch Time"</em>. Energéticos, cafés requentados e salgados da cantina viraram a base da pirâmide alimentar. O desgaste físico era evidente. Estudantes dormiam sobre os teclados, acordavam com marcas de teclas no rosto e continuavam digitando.
+                        Julho iniciou com a contagem regressiva oficial. O prazo de entrega era no final do mês. A Semana 9 marcou o início do <em>&quot;Crunch Time&quot;</em>. Energéticos, cafés requentados e salgados da cantina viraram a base da pirâmide alimentar. O desgaste físico era evidente. Estudantes dormiam sobre os teclados, acordavam com marcas de teclas no rosto e continuavam digitando.
                     </p>
                 </WeekSection>
 
@@ -296,25 +296,25 @@ export default function HederaHackathonFeature() {
 
                 <WeekSection weekNum={11} title="O Colapso da Testnet" icon={BugAntIcon}>
                     <p>
-                        Na Semana 11, a Lei de Murphy imperou. Com o mundo inteiro testando as aplicações para a entrega final, a Testnet (rede de testes) da Hedera apresentou lentidões esporádicas. Códigos que funcionavam perfeitamente no dia anterior agora retornavam erros de <code>TIMEOUT</code>. O pânico generalizou-se. "Meu contrato não faz o deploy, o hackathon acaba em 5 dias!", gritava um líder de equipe.
+                        Na Semana 11, a Lei de Murphy imperou. Com o mundo inteiro testando as aplicações para a entrega final, a Testnet (rede de testes) da Hedera apresentou lentidões esporádicas. Códigos que funcionavam perfeitamente no dia anterior agora retornavam erros de <code>TIMEOUT</code>. O pânico generalizou-se. &quot;Meu contrato não faz o deploy, o hackathon acaba em 5 dias!&quot;, gritava um líder de equipe.
                     </p>
                 </WeekSection>
 
                 <WeekSection weekNum={12} title="A Fita Adesiva Digital" icon={CodeBracketIcon}>
                     <p>
-                        A Semana 12 foi a aceitação do imperfeito. Sob a orientação da Zaeon, as equipes pararam de criar <em>features</em> novas. A ordem era: <em>"Comentem o código que está quebrado. Escondam botões que não funcionam. Garantam o Caminho Feliz (Happy Path)"</em>. Tratava-se de fita adesiva digital. As 50 equipes embalaram seus projetos, orgulhosos de suas criações capengas, mas funcionais. O botão de enviar já brilhava na tela.
+                        A Semana 12 foi a aceitação do imperfeito. Sob a orientação da Zaeon, as equipes pararam de criar <em>features</em> novas. A ordem era: <em>&quot;Comentem o código que está quebrado. Escondam botões que não funcionam. Garantam o Caminho Feliz (Happy Path)&quot;</em>. Tratava-se de fita adesiva digital. As 50 equipes embalaram seus projetos, orgulhosos de suas criações capengas, mas funcionais. O botão de enviar já brilhava na tela.
                     </p>
                 </WeekSection>
 
                 <WeekSection weekNum={13} title="O E-mail que Mudou Tudo" icon={ClockIcon}>
                     <p>
-                        Era sexta-feira, véspera do fechamento. O silêncio da exaustão pairava no ar. E então, o som uníssono de 50 celulares recebendo uma notificação. O assunto do e-mail da DoraHacks dizia: <strong>"Update: Deadline Extended"</strong>.
+                        Era sexta-feira, véspera do fechamento. O silêncio da exaustão pairava no ar. E então, o som uníssono de 50 celulares recebendo uma notificação. O assunto do e-mail da DoraHacks dizia: <strong>&quot;Update: Deadline Extended&quot;</strong>.
                     </p>
                     <p className="p-6 rounded-[2rem] bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 italic text-slate-900 dark:text-slate-100 mt-6 shadow-sm">
                         O hackathon não terminaria em Julho. O escopo global do evento obrigou a organização a adiar o prazo para o final de Outubro — exatamente no Dia das Bruxas.
                     </p>
                     <p className="mt-6">
-                        Ouviram-se risos histéricos e xingamentos em quatro idiomas diferentes. Seis meses de prazo extra significavam que os 1.000 adversários teriam tempo para construir obras de arte. As equipes da Unilab teriam que arrancar sua "fita adesiva digital" e reescrever a fundação de seus projetos do zero absoluto.
+                        Ouviram-se risos histéricos e xingamentos em quatro idiomas diferentes. Seis meses de prazo extra significavam que os 1.000 adversários teriam tempo para construir obras de arte. As equipes da Unilab teriam que arrancar sua &quot;fita adesiva digital&quot; e reescrever a fundação de seus projetos do zero absoluto.
                     </p>
                 </WeekSection>
 
@@ -331,25 +331,25 @@ export default function HederaHackathonFeature() {
 
                 <WeekSection weekNum={14} title="O Shutdown Forçado" icon={ShieldCheckIcon}>
                     <p>
-                        A primeira reação da Zaeon na Semana 14 (início de Agosto) foi drástica. Eles trancaram as portas do laboratório. <em>"Vão para casa, vão dormir, vão ver a família. Ninguém toca em um teclado por sete dias"</em>. A prevenção do <em>burnout</em> era vital. Aquela semana de silêncio salvou a sanidade do grupo.
+                        A primeira reação da Zaeon na Semana 14 (início de Agosto) foi drástica. Eles trancaram as portas do laboratório. <em>&quot;Vão para casa, vão dormir, vão ver a família. Ninguém toca em um teclado por sete dias&quot;</em>. A prevenção do <em>burnout</em> era vital. Aquela semana de silêncio salvou a sanidade do grupo.
                     </p>
                 </WeekSection>
 
                 <WeekSection weekNum={15} title="O Despertar da Vergonha" icon={LightBulbIcon}>
                     <p>
-                        Ao retornarem na Semana 15 com mentes descansadas, os alunos olharam para o código que quase enviaram em Julho e sentiram calafrios. "Como íamos submeter isso?", riu Amina, a estudante do Senegal. A prorrogação permitiu que a mediocridade ditada pela pressa fosse completamente extirpada. O padrão mudou de "Hackathon" para "Startup Grade" (Nível de Empresa).
+                        Ao retornarem na Semana 15 com mentes descansadas, os alunos olharam para o código que quase enviaram em Julho e sentiram calafrios. &quot;Como íamos submeter isso?&quot;, riu Amina, a estudante do Senegal. A prorrogação permitiu que a mediocridade ditada pela pressa fosse completamente extirpada. O padrão mudou de &quot;Hackathon&quot; para &quot;Startup Grade&quot; (Nível de Empresa).
                     </p>
                 </WeekSection>
 
                 <WeekSection weekNum={18} title="O Esquadrão Vermelho" icon={BugAntIcon}>
                     <p>
-                        Pulando para o final de Setembro (Semana 18), a Zaeon implementou a <em>"Red Team Week"</em>. Os mentores assumiram o papel de hackers maliciosos. O objetivo? Quebrar os contratos inteligentes dos alunos, drenar os tokens falsos e roubar identidades na Testnet. Foi um banho de sangue digital. Projetos de meses foram hackeados em 5 minutos. A lição foi dura, mas garantiu que as 50 soluções se tornassem verdadeiros cofres na blockchain.
+                        Pulando para o final de Setembro (Semana 18), a Zaeon implementou a <em>&quot;Red Team Week&quot;</em>. Os mentores assumiram o papel de hackers maliciosos. O objetivo? Quebrar os contratos inteligentes dos alunos, drenar os tokens falsos e roubar identidades na Testnet. Foi um banho de sangue digital. Projetos de meses foram hackeados em 5 minutos. A lição foi dura, mas garantiu que as 50 soluções se tornassem verdadeiros cofres na blockchain.
                     </p>
                 </WeekSection>
 
                 <WeekSection weekNum={21} title="O Refinamento UX/UI" icon={CpuChipIcon}>
                     <p>
-                        Outubro trouxe a brisa final. Nas Semanas 21 e 22, o <em>backend</em> foi "congelado". Nenhuma linha lógica poderia ser alterada. O foco migrou 100% para o design. Os DApps da Unilab ganharam animações fluidas, temas escuros, acessibilidade e interfaces desenhadas para funcionar em smartphones antigos — uma necessidade vital para a usabilidade real na África e no interior do Brasil.
+                        Outubro trouxe a brisa final. Nas Semanas 21 e 22, o <em>backend</em> foi &quot;congelado&quot;. Nenhuma linha lógica poderia ser alterada. O foco migrou 100% para o design. Os DApps da Unilab ganharam animações fluidas, temas escuros, acessibilidade e interfaces desenhadas para funcionar em smartphones antigos — uma necessidade vital para a usabilidade real na África e no interior do Brasil.
                     </p>
                 </WeekSection>
 
@@ -358,7 +358,7 @@ export default function HederaHackathonFeature() {
                         Semana 24. O dia 31 de Outubro amanheceu denso. As salas do Campus dos Malês, que outrora pareciam um mercado caótico de linguagens e desespero, agora exalavam o silêncio focado de um centro de controle aeroespacial.
                     </p>
                     <p>
-                        Um por um, os 50 repositórios no GitHub foram tornados públicos. Os vídeos de Pitch, agora profissionais e confiantes, foram upados. Às 23h45, quinze minutos antes do limite global, a última equipe apertou o botão "Submit".
+                        Um por um, os 50 repositórios no GitHub foram tornados públicos. Os vídeos de Pitch, agora profissionais e confiantes, foram upados. Às 23h45, quinze minutos antes do limite global, a última equipe apertou o botão &quot;Submit&quot;.
                     </p>
                     <p>
                         Não houve gritos, apenas um longo suspiro coletivo e palmas lentas que começaram no fundo da sala e contagiaram o corredor. O Colosso de Hedera havia sido domado.
@@ -376,7 +376,7 @@ export default function HederaHackathonFeature() {
                 <div className="mt-24 p-12 md:p-16 rounded-[3rem] backdrop-blur-[40px] bg-indigo-500/5 dark:bg-white/5 border border-indigo-500/10 dark:border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.05)] text-center relative overflow-hidden">
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent" />
                     <p className="text-xl md:text-3xl font-serif italic text-slate-900 dark:text-slate-100 leading-relaxed font-medium">
-                        "O Hedera Hackathon Africa de 2025 ainda durou mais 120 dias e veio acabar oficialmente apenas em março de 2026, após exaustiva implementação dos projetos vencedores na prática. Infelizmente a Zaeon atrasou a prestação de contas com a FUNCAP, nossa equipe foi de apenas 3 pessoas e tivemos que conciliar muitas coisas. Mas conseguimos graças a Deus."
+                        &quot;O Hedera Hackathon Africa de 2025 ainda durou mais 120 dias e veio acabar oficialmente apenas em março de 2026, após exaustiva implementação dos projetos vencedores na prática. Infelizmente a Zaeon atrasou a prestação de contas com a FUNCAP, nossa equipe foi de apenas 3 pessoas e tivemos que conciliar muitas coisas. Mas conseguimos graças a Deus.&quot;
                     </p>
                 </div>
 
