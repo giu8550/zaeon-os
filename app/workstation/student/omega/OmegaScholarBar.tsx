@@ -10,8 +10,7 @@ interface OmegaScholarBarProps {
 }
 
 export default function OmegaScholarBar({ flushTop = false, onOpenResults }: OmegaScholarBarProps) {
-  const { runQuery, status, phases, error } = useOmegaScholar();
-  const [value, setValue] = useState("");
+  const { runQuery, status, phases, error, draft, setDraft } = useOmegaScholar();
   const busy = status === "running";
 
   // ── Elapsed timer ──────────────────────────────────────────────────────────
@@ -32,9 +31,9 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
   }, [status]);
 
   const submit = () => {
-    if (value.trim() && !busy) {
-      runQuery(value);
-      setValue("");
+    if (draft.trim() && !busy) {
+      runQuery(draft);
+      setDraft("");
     }
   };
 
@@ -62,8 +61,9 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
           {/* input row */}
           <div className="flex items-center gap-2 mt-2">
             <input
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
+              data-academic-input="true"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
               disabled={busy}
               placeholder="Pesquise, revise a literatura, peça citações…"
