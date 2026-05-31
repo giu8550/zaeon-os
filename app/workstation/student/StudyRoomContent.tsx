@@ -13,6 +13,7 @@ import {
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
 import OmegaScholarBar from "./omega/OmegaScholarBar";
 import OmegaScholarWorkspace from "./omega/OmegaScholarWorkspace";
+import StudyRoomSuggestionDock from "./omega/StudyRoomSuggestionDock";
 
 // ─── ROOM MAPPING ────────────────────────────────────────────────────────────
 const ROOM_MAPPING: Record<string, string[]> = {
@@ -269,6 +270,9 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
 
             {/* ── OMEGA SCHOLAR BAR (replaces the old ROOM HEADER) ───── */}
             <OmegaScholarBar flushTop={flushTop} onOpenResults={() => setActiveTab("community")} />
+
+            {/* ── DOCK DE SUGESTÃO CONTEXTUAL (aparece em termo acadêmico) ── */}
+            <StudyRoomSuggestionDock />
 
             {/* ── MAIN CARD: TABS + CONTENT ───────────────────────────── */}
             {/*
