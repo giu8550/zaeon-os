@@ -139,7 +139,7 @@ function PaperCard({ p, evidence, onOpenViewer }: {
                 <span className="text-[9px] text-slate-400">{locatorLabel(e.locator)} · confiança {e.confidence}</span>
               </div>
               <p className="text-xs text-slate-700 dark:text-white/70 mt-1.5">{e.claim}</p>
-              <p className="text-[11px] italic text-slate-500 dark:text-white/50 mt-1 bg-violet-500/5 rounded-lg px-2 py-1.5">"{e.quote}"</p>
+              <p className="text-[11px] italic text-slate-500 dark:text-white/50 mt-1 bg-violet-500/5 rounded-lg px-2 py-1.5">&quot;{e.quote}&quot;</p>
               {p.pdfUrl && e.locator?.kind === "pdf" && (
                 <button
                   onClick={() => onOpenViewer(p.pdfUrl!, (e.locator as any).page, e.quote)}

@@ -1,0 +1,76 @@
+{
+  "bases": [
+    "arxiv", "pubmed", "medline", "biorxiv", "medrxiv", "scielo", "scopus",
+    "semantic scholar", "openalex", "crossref", "unpaywall", "europe pmc",
+    "clinicaltrials", "cochrane", "ieee xplore", "acm", "chemrxiv", "pubchem",
+    "inspire-hep", "nasa ads", "ncbi", "uniprot", "ensembl", "ssrn", "repec",
+    "nber", "philpapers", "figshare", "doaj", "zenodo", "jstor", "osf",
+    "web of science", "google scholar", "researchgate", "psyarxiv", "socarxiv"
+  ],
+  "domains": {
+    "cs": [
+      "deep learning", "machine learning", "aprendizado de maquina", "transformer",
+      "llm", "rede neural", "neural network", "redes neurais", "reinforcement learning",
+      "aprendizado por reforco", "federated learning", "graph neural network", "gnn",
+      "computer vision", "visao computacional", "fine-tuning", "algoritmo", "algorithm",
+      "inteligencia artificial", "ciencia de dados", "data science", "overfitting",
+      "gradient descent", "backpropagation", "ciencia da computacao", "engenharia de software",
+      "processamento de linguagem natural", "nlp", "embedding"
+    ],
+    "bio": [
+      "crispr", "genoma", "genome", "gene", "proteina", "protein", "sequenciamento",
+      "sequencing", "biotecnologia", "bioinformatica", "enzima", "enzyme", "celula",
+      "cell", "microbioma", "microbiome", "ecologia", "fotossintese", "photosynthesis",
+      "bioquimica", "rna", "dna", "mutacao", "mutation", "organismo", "bacteria",
+      "biologia molecular"
+    ],
+    "med": [
+      "ensaio clinico", "clinical trial", "diagnostico", "diagnosis", "terapia",
+      "therapy", "paciente", "patient", "cancer", "tumor", "vacina", "vaccine",
+      "farmaco", "drug", "epidemiologia", "epidemiology", "medicina", "enfermagem",
+      "imunologia", "immunology", "biomarcador", "biomarker", "fmri", "cortex",
+      "neuronio", "sinapse", "neurociencia", "neuroscience", "patologia", "comorbidade"
+    ],
+    "phys": [
+      "quantico", "mecanica quantica", "quantum mechanics", "dft", "relatividade",
+      "relativity", "particula", "particle", "fermion", "boson", "astrofisica",
+      "astrophysics", "cosmologia", "cosmology", "termodinamica", "thermodynamics",
+      "fisica", "supercondutor", "superconductor", "plasma", "fotonica", "photonics",
+      "eletromagnetismo", "fluido"
+    ],
+    "chem": [
+      "graphene", "grafeno", "oxido", "oxide", "synthesis", "sintese", "catalise",
+      "catalysis", "polimero", "polymer", "molecula", "molecule", "reagente",
+      "composto", "compound", "espectroscopia", "spectroscopy", "cromatografia",
+      "chromatography", "nanomaterial", "quimica", "solvente", "reacao quimica"
+    ],
+    "eng": [
+      "semicondutor", "semiconductor", "nanotubo", "nanotube", "fotovoltaico",
+      "photovoltaic", "biorreator", "bioreactor", "materiais", "materials",
+      "aerodinamica", "aerodynamics", "robotica", "robotics", "sensor", "atuador",
+      "microfluidica", "microfluidics", "engenharia estrutural", "turbina"
+    ],
+    "human": [
+      "filosofia", "philosophy", "epistemologia", "epistemology", "historiografia",
+      "fenomenologia", "phenomenology", "hermeneutica", "linguistica", "linguistics",
+      "semiotica", "etica", "ontologia", "narrativa", "literatura comparada",
+      "metafisica", "estetica"
+    ],
+    "social": [
+      "sociologia", "sociology", "antropologia", "anthropology", "econometria",
+      "econometrics", "pib", "inflacao", "politica fiscal", "ciencia politica",
+      "political science", "pedagogia", "curriculo", "educacao", "jurisprudencia",
+      "legislacao", "direito", "desigualdade", "etnografia", "ethnography",
+      "ensaio randomizado", "demografia"
+    ],
+    "multi": [
+      "revisao sistematica", "systematic review", "meta-analise", "metanalise",
+      "meta-analysis", "estudo de coorte", "cohort study", "hipotese", "hypothesis",
+      "metodologia", "methodology", "interdisciplinar", "interdisciplinary",
+      "framework", "teorema", "theorem", "corpus", "dataset", "empirico", "empirical",
+      "qualitativo", "quantitativo", "amostragem", "sampling", "validade",
+      "peer review", "revisao de literatura", "literature review", "in vitro",
+      "in vivo", "in silico", "preprint", "estado da arte"
+    ]
+  }
+}

@@ -152,7 +152,7 @@ export default function InstitucionalReportPage() {
                             No pós-evento, a realidade foi ainda mais exigente. Desde a primeira semana de Dezembro até a última semana de Março, cada ciclo de sete dias foi consumido pela necessidade de implementar iterativamente as soluções vencedoras diretamente na mainnet da Hedera. Estávamos concorrendo contra projetos de ponta, desenvolvidos por startups do Vale do Silício e da Europa.
                         </p>
                         <blockquote className="border-l-[3px] border-indigo-400/50 pl-6 py-2 my-8 italic text-lg font-medium text-slate-900 dark:text-slate-100 bg-white/20 dark:bg-black/10 backdrop-blur-md rounded-r-2xl">
-                            "A escolha era binária: paralisar o suporte técnico diário das equipes para preencher formulários institucionais, ou garantir que o Nordeste e o Brasil entregassem códigos invioláveis e produtos de nível internacional a cada novo sprint semanal."
+                            &quot;A escolha era binária: paralisar o suporte técnico diário das equipes para preencher formulários institucionais, ou garantir que o Nordeste e o Brasil entregassem códigos invioláveis e produtos de nível internacional a cada novo sprint semanal.&quot;
                         </blockquote>
                         <p>
                             A equipe Zaeon escolheu a entrega. Cada hora útil de nossa equipe enxuta foi dedicada a depurar <em>Smart Contracts</em> e agir como barreira de contenção contra o <em>burnout</em> dos alunos. O atraso na formalização não foi um ato de negligência, mas um sacrifício operacional necessário semana a semana para garantir a execução técnica de um feito histórico.

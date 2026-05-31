@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import NextImage from "next/image";
-import { 
-    IdentificationIcon, 
-    CalendarDaysIcon, 
-    AcademicCapIcon, 
+import {
+    IdentificationIcon,
+    CalendarDaysIcon,
+    AcademicCapIcon,
     BookOpenIcon,
     UserIcon,
     FingerPrintIcon,
@@ -14,15 +14,17 @@ import {
     ShieldCheckIcon,
     EnvelopeIcon,
     GlobeAmericasIcon,
-    CheckBadgeIcon
+    CheckBadgeIcon,
+    KeyIcon
 } from "@heroicons/react/24/outline";
 
 // --- TYPES AMPLIADOS ---
-interface UserRequest { 
-    id: string; name: string; email: string; role: string; 
+interface UserRequest {
+    id: string; name: string; email: string; role: string;
     course: string; age: number; gender: string; countryCode: string;
     institution: string | null; verificationDoc: string | null;
-    kycStatus: string; academicLevel: string; submittedAt: string; 
+    inviteCodeUsed: string | null;
+    kycStatus: string; academicLevel: string; submittedAt: string;
 }
 
 const ACADEMIC_LEVELS = ["Graduação", "Mestrado", "Doutorado", "Pós-Doutorado"];
@@ -36,6 +38,129 @@ const DetailBoard = ({ title, value, icon: Icon, isActive }: any) => (
         <p className={`text-sm font-bold truncate ${isActive ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-800 dark:text-white'}`}>{value}</p>
     </div>
 );
+
+interface InviteCodeRow {
+  id: string;
+  code: string;
+  usedCount: number;
+  maxUses: number;
+  ownerName: string;
+}
+
+function InviteCodesPanel() {
+  const [open, setOpen] = useState(false);
+  const [codes, setCodes] = useState<InviteCodeRow[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const fetchCodes = async () => {
+    const res = await fetch("/api/admin/convites");
+    if (res.ok) setCodes(await res.json());
+  };
+
+  const generate = async (quantidade: number) => {
+    setGenerating(true);
+    try {
+      await fetch("/api/admin/convites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantidade }),
+      });
+      await fetchCodes();
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const copyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopied(code);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const toggle = () => {
+    if (!open) fetchCodes();
+    setOpen((v) => !v);
+  };
+
+  return (
+    <div className="mb-4">
+      <button
+        onClick={toggle}
+        className="w-full flex items-center justify-between px-5 py-3 bg-white/40 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[20px] hover:border-cyan-500/30 transition-all"
+      >
+        <div className="flex items-center gap-3">
+          <KeyIcon className="w-4 h-4 text-cyan-500" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-white/60">
+            Invite Codes
+          </span>
+          {codes.length > 0 && (
+            <span className="text-[9px] bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 px-2 py-0.5 rounded-full font-bold">
+              {codes.length}
+            </span>
+          )}
+        </div>
+        <span className="text-white/30 text-xs">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-2 bg-white/40 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[20px] p-4 space-y-3"
+        >
+          <div className="flex gap-2">
+            {[1, 5, 10].map((n) => (
+              <button
+                key={n}
+                onClick={() => generate(n)}
+                disabled={generating}
+                className="flex-1 py-2 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-[10px] font-black uppercase tracking-wider hover:bg-cyan-500 hover:text-black transition-all disabled:opacity-40"
+              >
+                {generating ? "…" : `Gerar ${n}`}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar">
+            {codes.map((c) => (
+              <div
+                key={c.id}
+                className={`flex items-center justify-between px-3 py-2 rounded-xl border ${
+                  c.usedCount >= c.maxUses
+                    ? "opacity-40 border-transparent bg-white/5"
+                    : "border-white/5 bg-black/10 dark:bg-white/5"
+                }`}
+              >
+                <div>
+                  <span className="font-mono text-sm font-bold text-white tracking-wider">
+                    {c.code}
+                  </span>
+                  <span className="ml-3 text-[10px] text-slate-400">
+                    {c.usedCount}/{c.maxUses} · {c.ownerName}
+                  </span>
+                </div>
+                {c.usedCount < c.maxUses && (
+                  <button
+                    onClick={() => copyCode(c.code)}
+                    className="text-[9px] font-black uppercase tracking-wider text-cyan-500 hover:text-cyan-400 transition-colors"
+                  >
+                    {copied === c.code ? "✓" : "Copiar"}
+                  </button>
+                )}
+              </div>
+            ))}
+            {codes.length === 0 && (
+              <p className="text-center text-[11px] text-white/20 py-3">
+                Nenhum código gerado ainda.
+              </p>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
 
 export default function ProfileModule({ glassPanel }: { glassPanel: string }) {
     const [requests, setRequests] = useState<UserRequest[]>([]);
@@ -102,6 +227,9 @@ export default function ProfileModule({ glassPanel }: { glassPanel: string }) {
             
             {/* LISTA LATERAL */}
             <div className={`w-[380px] rounded-[45px] flex flex-col overflow-hidden ${glassPanel}`}>
+                <div className="px-6 pt-6">
+                  <InviteCodesPanel />
+                </div>
                 <div className="p-8 border-b border-slate-200 dark:border-white/10 flex justify-between items-center">
                     <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Node Queue</h2>
                     <span className="text-[10px] font-bold bg-cyan-500 text-black px-3 py-1 rounded-full">{requests.length}</span>
@@ -145,6 +273,7 @@ export default function ProfileModule({ glassPanel }: { glassPanel: string }) {
                                 <DetailBoard title="Gender" value={selectedReq.gender} icon={UserIcon} isActive={false} />
                                 <DetailBoard title="Institution" value={selectedReq.institution?.toUpperCase() || "Manual Entry"} icon={GlobeAmericasIcon} isActive={false} />
                                 <DetailBoard title="Registry Date" value={new Date(selectedReq.submittedAt).toLocaleDateString()} icon={CalendarDaysIcon} isActive={false} />
+                                <DetailBoard title="Via Convite" value={selectedReq.inviteCodeUsed || "—"} icon={KeyIcon} isActive={false} />
                             </div>
 
                             {/* VISUALIZADOR DE DOCUMENTO (IMAGEM OU PDF) */}

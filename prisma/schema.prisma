@@ -44,9 +44,15 @@ model User {
   // Admin & Verification
   kycStatus         String  @default("pending")
   academicLevel     String  @default("Graduação") // <--- NOVO: Graduação, Mestrado, Doutorado... (Definido pelo Admin)
-  documents         Json?   
-  institution       String?   
-  verificationDoc   String? 
+  documents         Json?
+  institution       String?
+  verificationDoc   String?
+
+  // Invite system
+  referredBy      String?  @db.ObjectId  // bare ObjectId — no Prisma relation (avoids circular User→User FK, populated in application layer)
+  myInviteCode    String?  @unique
+  inviteCodeUsed  String?              // denormalized audit: the human-readable code string (e.g. "ZA3K-X9QM")
+  subject         String?
 
   createdAt       DateTime? @default(now())
   updatedAt       DateTime? @updatedAt
@@ -75,6 +81,8 @@ model User {
   // 🔥 NOVO: Links de convite gerados
   teacherLinks     ClassLink[] @relation("TeacherLinks")
 
+  ownedInviteCodes InviteCode[] @relation("OwnedInviteCodes")
+
   // 🔥 CRÍTICO: Sincroniza o Prisma com o NextAuth (coleção 'users')
   @@map("users") 
 }
@@ -93,6 +101,36 @@ model ClassLink {
   createdAt DateTime @default(now())
   
   teacher   User     @relation("TeacherLinks", fields: [teacherId], references: [id])
+}
+
+// --- SISTEMA DE CONVITES ---
+model InviteCode {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  code      String   @unique
+  ownerId   String?  @db.ObjectId
+  owner     User?    @relation("OwnedInviteCodes", fields: [ownerId], references: [id])
+  usedCount Int      @default(0)
+  maxUses   Int      @default(3)
+  createdAt DateTime @default(now())
+
+  @@map("invite_codes")
+}
+
+model PendingRegistration {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken    String   @unique
+  inviteCode      String
+  name            String   @default("")
+  age             Int      @default(0)
+  area            String   @default("")
+  role            String   @default("")
+  subject         String?
+  institution     String   @default("")
+  verificationDoc String?
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+
+  @@map("pending_registrations")
 }
 
 // --- MEMÓRIA DO LOUNGE & SALAS ---

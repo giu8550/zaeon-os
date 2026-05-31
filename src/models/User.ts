@@ -20,6 +20,12 @@ const UserSchema = new Schema({
     // O Documento Principal (Base64 da Imagem ou PDF)
     verificationDoc: String,
 
+    // Invite system
+    referredBy: { type: Schema.Types.ObjectId, ref: 'User' },  // userId of inviter (bare ObjectId, no FK enforcement)
+    myInviteCode: String,     // this user's shareable code
+    inviteCodeUsed: String,   // code they used to register
+    subject: String,          // teachers: discipline they teach
+
     // --- DADOS DE IDENTIDADE ---
     phone: String,
     identityId: String,
