@@ -12,6 +12,8 @@ interface OmegaState {
   error: string | null;
 }
 interface OmegaCtx extends OmegaState {
+  draft: string;
+  setDraft: (v: string) => void;
   runQuery: (prompt: string) => Promise<void>;
   loadSession: (s: any) => void;
 }
@@ -27,6 +29,9 @@ export function OmegaScholarProvider({ room, onStart, children }:
   { room?: string; onStart?: () => void; children: ReactNode }) {
   const [state, setState] = useState<OmegaState>({
     status: "idle", query: "", phases: [], answer: "", session: null, error: null });
+
+  // Draft do input da barra, elevado ao contexto para o dock de sugestão observá-lo.
+  const [draft, setDraft] = useState("");
 
   const runQuery = useCallback(async (prompt: string) => {
     if (!prompt.trim()) return;
@@ -72,5 +77,5 @@ export function OmegaScholarProvider({ room, onStart, children }:
     setState({ status: "done", query: s.query, phases: [], answer: s?.thread?.answer ?? "", session: s, error: null });
   }, []);
 
-  return <Ctx.Provider value={{ ...state, runQuery, loadSession }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ ...state, draft, setDraft, runQuery, loadSession }}>{children}</Ctx.Provider>;
 }
