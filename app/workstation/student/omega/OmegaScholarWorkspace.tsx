@@ -7,6 +7,7 @@ import ReferencesModule from "./modules/ReferencesModule";
 import InsightsModule from "./modules/InsightsModule";
 import FilesModule from "./modules/FilesModule";
 import GapsModule from "./modules/GapsModule";
+import OmegaSuggestionHighlight from "./OmegaSuggestionHighlight";
 
 const TABS = [
   { id: "refs", label: "Referências", icon: BookMarked },
@@ -28,6 +29,7 @@ export default function OmegaScholarWorkspace() {
   return (
     <div className="h-full overflow-y-auto custom-scrollbar p-6">
       <ActivityThread />
+      <OmegaSuggestionHighlight />
 
       {status === "idle" && (
         <div className="text-center text-slate-400 dark:text-white/30 text-sm py-16">
