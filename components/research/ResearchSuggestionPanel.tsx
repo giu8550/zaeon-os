@@ -1,6 +1,7 @@
 // components/research/ResearchSuggestionPanel.tsx
 "use client";
 import { useState, useEffect } from "react";
+import type { Termometro } from "@/lib/scholar/termometro";
 
 type Level = "grad" | "msc" | "phd" | "postdoc";
 
@@ -24,6 +25,7 @@ interface Suggestion {
 interface EngineResponse {
   suggestion: Suggestion;
   references: RefItem[];
+  termometro?: Termometro;
   inline_citation?: { quote: string; source: string; doi?: string } | null;
 }
 
@@ -114,6 +116,9 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
   }
 
   const currentLevel = LEVELS.find(l => l.id === level)!;
+
+  const brl = (n: number) =>
+    n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
   return (
     <div
@@ -246,6 +251,41 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
               Usar como título no editor →
             </button>
           )}
+        </div>
+      )}
+
+      {/* ── TERMÔMETRO ── */}
+      {result?.termometro && !loading && (
+        <div className="mx-5 mb-3.5 grid grid-cols-2 gap-2">
+          {/* Tempo médio */}
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07]">
+            <p className="text-[7px] font-black uppercase tracking-[.18em] text-white/25 mb-1">Tempo médio</p>
+            <p className="text-[13px] font-extrabold text-cyan-300/90">{result.termometro.researchTime.label}</p>
+          </div>
+          {/* Bolsa */}
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07]">
+            <p className="text-[7px] font-black uppercase tracking-[.18em] text-white/25 mb-1">Bolsa · {result.termometro.scholarship.probability}</p>
+            <p className="text-[13px] font-extrabold text-emerald-300/90">{brl(result.termometro.scholarship.monthlyValueBRL)}<span className="text-[8px] font-bold text-white/30">/mês</span></p>
+            <p className="text-[7px] text-white/30 mt-0.5">até {brl(result.termometro.scholarship.monthlyValueRangeBRL[1])} · {result.termometro.scholarship.agencies.join(" · ")}</p>
+          </div>
+          {/* Gap / originalidade */}
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07]">
+            <p className="text-[7px] font-black uppercase tracking-[.18em] text-white/25 mb-1.5">Originalidade</p>
+            <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+              <div className="h-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)]" style={{ width: `${Math.round(result.termometro.gapScore * 100)}%` }} />
+            </div>
+            <p className="text-[8px] text-white/35 mt-1">{result.termometro.gapLabel}</p>
+          </div>
+          {/* Alvo de publicação */}
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07]">
+            <p className="text-[7px] font-black uppercase tracking-[.18em] text-white/25 mb-1">Alvo publicação</p>
+            <p className="text-[13px] font-extrabold text-violet-300/90">{result.termometro.publication.qualis}</p>
+            <p className="text-[7px] text-white/30 mt-0.5">{result.termometro.publication.tier}</p>
+          </div>
+          {/* Nota do cenário */}
+          <div className="col-span-2 p-2.5 rounded-xl bg-cyan-400/[0.04] border border-cyan-400/10">
+            <p className="text-[8px] text-white/40 leading-snug">💡 {result.termometro.scholarship.note}</p>
+          </div>
         </div>
       )}
 
