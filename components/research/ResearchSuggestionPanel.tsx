@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import type { Termometro } from "@/lib/scholar/termometro";
+import AuthGateNotice from "./AuthGateNotice";
 
 type Level = "grad" | "msc" | "phd" | "postdoc";
 
@@ -67,6 +68,7 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EngineResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
   const [excludeTitles, setExcludeTitles] = useState<string[]>([]);
 
   // Keep topic in sync if docTitle changes from outside
@@ -79,6 +81,7 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
     if (!topic.trim()) return;
     setLoading(true);
     setError(null);
+    setAuthRequired(false);
 
     // Build exclude list from accumulated state + current suggestion (if refreshing)
     const currentTitle = result?.suggestion.title;
@@ -93,6 +96,11 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: topic.trim(), level, exclude_titles: exclude }),
       });
+
+      if (res.status === 401) {
+        setAuthRequired(true);
+        return;
+      }
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -206,6 +214,9 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
           {error}
         </div>
       )}
+
+      {/* ── AUTH GATE (401) ── */}
+      {authRequired && <AuthGateNotice className="mx-5 mb-4" />}
 
       {/* ── LOADING SKELETON ── */}
       {loading && !result && (
@@ -330,7 +341,7 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
       )}
 
       {/* ── EMPTY STATE ── */}
-      {!result && !loading && !error && (
+      {!result && !loading && !error && !authRequired && (
         <div className="px-5 pb-6 pt-2 text-center">
           <p className="text-[10px] text-white/20 leading-relaxed">
             Selecione o nível, confirme o tema e clique em <strong className="text-white/30">Gerar ✦</strong>
