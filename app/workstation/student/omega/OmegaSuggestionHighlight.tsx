@@ -1,6 +1,6 @@
 "use client";
 import ResearchSuggestionPanel from "@/components/research/ResearchSuggestionPanel";
-import OmegaRelatedProjects from "./OmegaRelatedProjects";
+import OmegaRelatedResearch from "./OmegaRelatedResearch";
 import { useOmegaScholar } from "./OmegaScholarContext";
 
 // Highlight de sugestão dentro da aba Omega, semeado pela query/draft atual do Omega.
@@ -17,7 +17,7 @@ export default function OmegaSuggestionHighlight() {
         collapsible
         defaultCollapsed
       />
-      <OmegaRelatedProjects />
+      <OmegaRelatedResearch />
     </div>
   );
 }
