@@ -4,7 +4,7 @@ import type { ScholarEvent } from "@/lib/scholar/types";
 
 interface Phase { phase: string; message: string; }
 interface OmegaState {
-  status: "idle" | "running" | "done" | "error";
+  status: "idle" | "running" | "done" | "error" | "unauthorized";
   query: string;
   phases: Phase[];
   answer: string;
@@ -42,6 +42,16 @@ export function OmegaScholarProvider({ room, onStart, children }:
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, room }),
       });
+      // Sessão ausente/expirada: o servidor responde 401 (texto, não NDJSON).
+      // Tratamos explicitamente para não travar o stream — a UI mostra o gate de login.
+      if (res.status === 401) {
+        setState((s) => ({ ...s, status: "unauthorized", error: null }));
+        return;
+      }
+      if (!res.ok) {
+        setState((s) => ({ ...s, status: "error", error: `Erro ${res.status}` }));
+        return;
+      }
       if (!res.body) throw new Error("Sem stream");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();

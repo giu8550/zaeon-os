@@ -8,6 +8,7 @@ import InsightsModule from "./modules/InsightsModule";
 import FilesModule from "./modules/FilesModule";
 import GapsModule from "./modules/GapsModule";
 import OmegaSuggestionHighlight from "./OmegaSuggestionHighlight";
+import AuthGateNotice from "@/components/research/AuthGateNotice";
 
 const TABS = [
   { id: "refs", label: "Referências", icon: BookMarked },
@@ -29,7 +30,11 @@ export default function OmegaScholarWorkspace() {
   return (
     <div className="h-full overflow-y-auto custom-scrollbar p-6">
       <ActivityThread />
-      <OmegaSuggestionHighlight />
+      {status !== "unauthorized" && <OmegaSuggestionHighlight />}
+
+      {status === "unauthorized" && (
+        <AuthGateNotice className="my-10 max-w-md mx-auto" />
+      )}
 
       {status === "idle" && (
         <div className="text-center text-slate-400 dark:text-white/30 text-sm py-16">
