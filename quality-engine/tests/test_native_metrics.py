@@ -57,6 +57,13 @@ def test_citation_density_detects_abnt():
     assert citation_density("Texto sem nenhuma citação aqui.") == 0
 
 
+def test_citation_density_multi_parenthetical():
+    # Duas citações num só parêntese (caso ABNT comum) devem contar como 2.
+    single = citation_density("Conforme (OHNO, 1988), a prática consolidou-se no setor.")
+    multi = citation_density("Conforme (OHNO, 1988; WOMACK et al., 1990), consolidou-se.")
+    assert multi > single > 0
+
+
 def test_nominalization_rate_positive():
     assert nominalization_rate("A operacionalização e a ressignificação da informação.") > 0.2
 
@@ -67,7 +74,8 @@ def test_ai_fingerprint_detects():
 
 
 def test_flags_uniform_sentences():
-    uniform = "O dado subiu hoje cedo. O dado caiu hoje cedo. O dado subiu hoje cedo."
+    uniform = ("O dado subiu hoje cedo. O dado caiu hoje cedo. O dado subiu hoje cedo. "
+               "O dado caiu hoje cedo.")
     assert "uniformidade" in paragraph_flags(uniform)
 
 

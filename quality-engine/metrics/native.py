@@ -16,9 +16,14 @@ from segmentation import split_sentences, tokenize, content_tokens, count_syllab
 from lexicons import ALL_CONNECTIVES, AI_FINGERPRINT, NOMINALIZATION_SUFFIXES
 
 _CITATION_PATTERNS = [
-    re.compile(r"\([A-ZÀ-Ý][A-ZÀ-Ýa-zà-ÿ]+(?:\s+et\s+al\.)?,?\s*\d{4}[a-z]?\)"),  # (SILVA, 2020)
-    re.compile(r"\b[A-ZÀ-Ý][a-zà-ÿ]+\s*\(\d{4}[a-z]?\)"),                          # Souza (2019)
-    re.compile(r"\[\d{1,3}\]"),                                                      # [12]
+    # Autor-data ABNT com sobrenome em CAIXA ALTA — casa em qualquer posição,
+    # inclusive múltiplas citações num só parêntese:
+    # (SILVA, 2020) · (OHNO, 1988; WOMACK et al., 1990)
+    re.compile(r"[A-ZÀ-Ý]{2,}(?:\s+et\s+al\.?)?,\s*\d{4}[a-z]?"),
+    # Citação narrativa: Souza (2019), Souza et al. (2019)
+    re.compile(r"\b[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+et\s+al\.?)?\s*\(\d{4}[a-z]?\)"),
+    # Numérica: [12]
+    re.compile(r"\[\d{1,3}\]"),
 ]
 
 # Marcadores aproximados de fronteira de oração (proxy de complexidade).
@@ -143,7 +148,7 @@ def paragraph_flags(text: str) -> list[str]:
         flags.append("nominalizacao_excessiva")
     if ai_fingerprint_rate(text) > 1.5:
         flags.append("lexico_ia")
-    if len(split_sentences(text)) >= 3 and sentence_length_cv(text) < 0.20:
+    if len(split_sentences(text)) >= 4 and sentence_length_cv(text) < 0.18:
         flags.append("uniformidade")
     return flags
 
