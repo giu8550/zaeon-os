@@ -1,15 +1,14 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
-import { basesForDomain, searchAll } from "@/lib/scholar/sources";
-import { dedupePapers } from "@/lib/scholar/dedup";
+import { retrievePapers, mergeDisplayReferences, MIN_RESULTS } from "@/lib/scholar/retrieve";
 import { resolveFullText } from "@/lib/scholar/fulltext";
 import { planQuery, synthesize } from "@/lib/scholar/synthesize";
 import { assembleResults } from "@/lib/scholar/assemble";
 import { buildReferencesBib } from "@/lib/scholar/bibtex";
 import { planTone } from "@/lib/scholar/prompt";
 import { mapLimit } from "@/lib/scholar/http";
-import type { Paper, ScholarEvent } from "@/lib/scholar/types";
+import type { ScholarEvent } from "@/lib/scholar/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -43,26 +42,28 @@ export async function POST(req: Request) {
         send({ type: "phase", phase: "planning", message: planTone(prompt) });
         const plan = await planQuery(prompt);
 
-        // SEARCH (sequential queries to ease rate limits)
-        const bases = basesForDomain(plan.domain);
+        // SEARCH (garante ≥ MIN_RESULTS pesquisas)
         const queries = plan.queries.length ? plan.queries : [prompt];
-        const usedQueries = [...new Set(queries.map((q) => q.trim()).filter(Boolean))].slice(0, 2);
-        let pool: Paper[] = [];
-        for (const q of usedQueries) {
-          const results = await searchAll(q, bases);
-          for (const r of results) {
-            const msg = r.status === "ok"
-              ? `✓ ${r.source}: ${r.papers.length} papers`
-              : r.status === "rate_limited"
-                ? `⏳ ${r.source}: limite de requisições atingido (tentei reenviar)`
-                : `⚠ ${r.source}: indisponível agora`;
-            send({ type: "phase", phase: "searching", source: r.source, count: r.papers.length, message: msg });
-            pool = pool.concat(r.papers);
-          }
-        }
+        const retrieved = await retrievePapers(queries, {
+          domain: plan.domain,
+          minResults: MIN_RESULTS,
+          onSource: (r) =>
+            send({
+              type: "phase",
+              phase: "searching",
+              source: r.source,
+              count: r.papers.length,
+              message:
+                r.status === "ok"
+                  ? `✓ ${r.source}: ${r.papers.length} papers`
+                  : r.status === "rate_limited"
+                    ? `⏳ ${r.source}: limite de requisições atingido (tentei reenviar)`
+                    : `⚠ ${r.source}: indisponível agora`,
+            }),
+        });
+        const unique = retrieved.papers;
 
-        // DEDUP + FULL TEXT (top N)
-        const unique = dedupePapers(pool);
+        // FULL TEXT (top N — síntese profunda só nos primeiros, por qualidade/velocidade)
         const top = unique.slice(0, 10);
         const withText = await mapLimit(top, 3, (p) => resolveFullText(p));
         const ftCount = withText.filter(
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
           phase: "dedup",
           unique: unique.length,
           fulltext: ftCount,
-          message: `✓ ${unique.length} únicos · full-text aberto de ${ftCount}`,
+          message: `✓ ${unique.length} pesquisas encontradas · full-text aberto de ${ftCount}`,
         });
 
         // SYNTHESIZE
@@ -101,12 +102,15 @@ export async function POST(req: Request) {
         const bib = await buildReferencesBib(r.references);
         if (bib.trim()) r.files.push({ name: "references.bib", kind: "bibtex", content: bib });
 
+        // Referências exibidas (≥12): citações verificadas primeiro, depois descobertas relacionadas.
+        const displayReferences = mergeDisplayReferences(r.references, unique, MIN_RESULTS);
+
         const saved = await prisma.scholarSession.update({
           where: { id: created.id },
           data: {
             status: "done",
             domain: plan.domain || null,
-            references: r.references as any,
+            references: displayReferences as any,
             evidence: r.evidence as any,
             insights: r.insights as any,
             gaps: r.gaps as any,
