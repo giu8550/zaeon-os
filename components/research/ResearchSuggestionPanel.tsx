@@ -33,6 +33,8 @@ interface EngineResponse {
 interface Props {
   docTitle?: string;
   onSelectTitle?: (title: string) => void;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }
 
 const LEVELS: { id: Level; icon: string; name: string; tag: string; tagClass: string }[] = [
@@ -62,7 +64,8 @@ const TYPE_LABEL_STYLES: Record<string, string> = {
   Pioneira:     "bg-cyan-400/12 text-cyan-300/70 border border-cyan-400/20",
 };
 
-export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }: Props) {
+export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, collapsible = false, defaultCollapsed = false }: Props) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [level, setLevel] = useState<Level>("postdoc");
   const [topic, setTopic] = useState(docTitle || "");
   const [loading, setLoading] = useState(false);
@@ -134,7 +137,10 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
       className="w-full bg-white/[0.03] border border-white/[0.07] rounded-[2rem] backdrop-blur-2xl overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.4)]"
     >
       {/* ── HEADER ── */}
-      <div className="px-5 py-4 border-b border-white/[0.05] flex items-center justify-between">
+      <div
+        className={`px-5 py-4 border-b border-white/[0.05] flex items-center justify-between ${collapsible ? "cursor-pointer select-none" : ""}`}
+        onClick={collapsible ? () => setCollapsed((c) => !c) : undefined}
+      >
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 bg-cyan-400/10 border border-cyan-400/20 rounded-[9px] flex items-center justify-center text-sm">
             🧭
@@ -142,12 +148,26 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
           <span className="text-[11px] font-black uppercase tracking-[.15em] text-cyan-400">
             Sugestão de Pesquisa
           </span>
+          {collapsible && collapsed && (
+            <span className="text-[7px] font-bold uppercase tracking-[.12em] text-white/25 border border-white/10 px-2 py-0.5 rounded-full">
+              standby
+            </span>
+          )}
         </div>
-        <span className="text-[8px] font-bold uppercase tracking-[.1em] text-cyan-400/50 border border-cyan-400/15 px-2.5 py-1 rounded-full bg-cyan-400/[0.05]">
-          IA · Gemini
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[8px] font-bold uppercase tracking-[.1em] text-cyan-400/50 border border-cyan-400/15 px-2.5 py-1 rounded-full bg-cyan-400/[0.05]">
+            IA · Gemini
+          </span>
+          {collapsible && (
+            <span className={`text-cyan-400/60 text-[11px] leading-none transition-transform duration-200 ${collapsed ? "" : "rotate-90"}`}>
+              ▸
+            </span>
+          )}
+        </div>
       </div>
 
+      {(!collapsible || !collapsed) && (
+      <>
       {/* ── LEVEL SELECTOR ── */}
       <div className="px-5 py-3.5 border-b border-white/[0.05]">
         <p className="text-[8px] font-black uppercase tracking-[.18em] text-white/20 mb-2.5">
@@ -347,6 +367,8 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle }
             Selecione o nível, confirme o tema e clique em <strong className="text-white/30">Gerar ✦</strong>
           </p>
         </div>
+      )}
+      </>
       )}
     </div>
   );
