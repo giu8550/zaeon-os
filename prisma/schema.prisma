@@ -352,10 +352,26 @@ model ScholarSession {
   references Json?    // Paper[]  (see lib/scholar/types.ts)
   evidence   Json?    // EvidenceRecord[]  (only verified shown as fact)
   insights   Json?    // { summary, trends[], contradictions[] }
-  gaps       Json?    // { description, rqCards[] }
-  files      Json?    // [{ name, kind, content }]
+  gaps       Json?    // { description, rqCards[] }  (mantido para auditoria; fora da UI desde Sugestão)
+  files      Json?    // [{ name, kind, content }]   (mantido para auditoria; fora da UI desde Sugestão)
+  suggestions Json?   // ForgeResponse (Suggestion Forge, porta 8003) — ver lib/scholar/types.ts
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@index([userId])
+}
+
+model PastResearchChat {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String   @db.ObjectId
+  researchId       String   // id estável do card (string p/ acomodar mock e real)
+  scholarSessionId String?  @db.ObjectId // FK lógica p/ ScholarSession se já pesquisada
+  title            String
+  contextJson      Json     // snapshot: participants, agents, métricas, references, doi, downloadUrl
+  messages         Json     // [{ id, role, content, createdAt, citations? }]
+  pinned           Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId, researchId])
 }

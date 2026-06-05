@@ -1,6 +1,6 @@
 "use client";
-import { type ReactNode, createContext, useContext, useState, useCallback } from "react";
-import type { ScholarEvent } from "@/lib/scholar/types";
+import { type ReactNode, createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
+import type { ScholarEvent, Suggestion, ForgeResponse } from "@/lib/scholar/types";
 
 interface Phase { phase: string; message: string; }
 interface OmegaState {
@@ -10,12 +10,17 @@ interface OmegaState {
   answer: string;
   session: any | null;
   error: string | null;
+  // Suggestion Forge (engine 8003)
+  suggestions: Suggestion[] | null;
+  suggestionsCoverage: string | null;
+  loadingSuggestions: boolean;
 }
 interface OmegaCtx extends OmegaState {
   draft: string;
   setDraft: (v: string) => void;
   runQuery: (prompt: string) => Promise<void>;
   loadSession: (s: any) => void;
+  fetchSuggestions: (opts?: { count?: number; exclude?: string[] }) => Promise<void>;
 }
 
 const Ctx = createContext<OmegaCtx | null>(null);
@@ -25,18 +30,24 @@ export const useOmegaScholar = () => {
   return c;
 };
 
+const EMPTY_FORGE = { suggestions: null, suggestionsCoverage: null, loadingSuggestions: false } as const;
+
 export function OmegaScholarProvider({ room, onStart, children }:
   { room?: string; onStart?: () => void; children: ReactNode }) {
   const [state, setState] = useState<OmegaState>({
-    status: "idle", query: "", phases: [], answer: "", session: null, error: null });
+    status: "idle", query: "", phases: [], answer: "", session: null, error: null, ...EMPTY_FORGE });
 
   // Draft do input da barra, elevado ao contexto para o dock de sugestão observá-lo.
   const [draft, setDraft] = useState("");
 
+  // Snapshot do estado para callbacks assíncronos lerem a sessão corrente sem stale-closure.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const runQuery = useCallback(async (prompt: string) => {
     if (!prompt.trim()) return;
     onStart?.(); // parent switches activeTab → "community"
-    setState({ status: "running", query: prompt, phases: [], answer: "", session: null, error: null });
+    setState({ status: "running", query: prompt, phases: [], answer: "", session: null, error: null, ...EMPTY_FORGE });
     try {
       const res = await fetch("/api/ai/scholar", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -84,8 +95,62 @@ export function OmegaScholarProvider({ room, onStart, children }:
   }, [room, onStart]);
 
   const loadSession = useCallback((s: any) => {
-    setState({ status: "done", query: s.query, phases: [], answer: s?.thread?.answer ?? "", session: s, error: null });
+    // Hidrata sugestões já persistidas (ForgeResponse em ScholarSession.suggestions), se houver.
+    const stored: ForgeResponse | null = s?.suggestions ?? null;
+    setState({
+      status: "done", query: s.query, phases: [], answer: s?.thread?.answer ?? "", session: s, error: null,
+      suggestions: stored?.suggestions ?? null,
+      suggestionsCoverage: stored?.coverage_summary ?? null,
+      loadingSuggestions: false,
+    });
   }, []);
 
-  return <Ctx.Provider value={{ ...state, draft, setDraft, runQuery, loadSession }}>{children}</Ctx.Provider>;
+  const fetchSuggestions = useCallback(async (opts?: { count?: number; exclude?: string[] }) => {
+    const sess = stateRef.current.session;
+    if (!sess || (sess.references?.length ?? 0) < 3) return;
+    const isMore = !!opts?.exclude?.length;
+    setState((s) => ({ ...s, loadingSuggestions: true }));
+    try {
+      const res = await fetch("/api/ai/suggestion-forge", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: sess.query,
+          level: sess.user_level ?? "msc", // nível só calibra apresentação; default seguro
+          references: sess.references ?? [],
+          count: opts?.count ?? 5,
+          exclude_titles: opts?.exclude ?? [],
+          sessionId: sess.id,
+        }),
+      });
+      if (!res.ok) {
+        setState((s) => ({ ...s, loadingSuggestions: false }));
+        return;
+      }
+      const data: ForgeResponse = await res.json();
+      setState((s) => ({
+        ...s,
+        loadingSuggestions: false,
+        suggestions: isMore && s.suggestions ? [...s.suggestions, ...data.suggestions] : data.suggestions,
+        suggestionsCoverage: data.coverage_summary ?? s.suggestionsCoverage,
+      }));
+    } catch {
+      setState((s) => ({ ...s, loadingSuggestions: false }));
+    }
+  }, []);
+
+  // Auto-forge: quando uma pesquisa nova termina (done) com ≥3 refs e o usuário
+  // não desativou, dispara a forja automaticamente. Sessões carregadas que já têm
+  // sugestões persistidas não re-forjam (suggestions !== null).
+  useEffect(() => {
+    if (state.status !== "done" || !state.session || state.suggestions || state.loadingSuggestions) return;
+    const disabled = typeof window !== "undefined" && window.localStorage.getItem("zaeon:omega:autoforge") === "off";
+    if (disabled) return;
+    if ((state.session.references?.length ?? 0) >= 3) void fetchSuggestions();
+  }, [state.status, state.session, state.suggestions, state.loadingSuggestions, fetchSuggestions]);
+
+  return (
+    <Ctx.Provider value={{ ...state, draft, setDraft, runQuery, loadSession, fetchSuggestions }}>
+      {children}
+    </Ctx.Provider>
+  );
 }

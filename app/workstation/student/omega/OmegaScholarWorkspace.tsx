@@ -1,26 +1,27 @@
 "use client";
 import { useEffect, useState } from "react";
-import { BookMarked, Lightbulb, FolderOpen, Target } from "lucide-react";
+import { BookMarked, Lightbulb, Sparkles } from "lucide-react";
 import { useOmegaScholar } from "./OmegaScholarContext";
 import ActivityThread from "./ActivityThread";
 import ReferencesModule from "./modules/ReferencesModule";
 import InsightsModule from "./modules/InsightsModule";
-import FilesModule from "./modules/FilesModule";
-import GapsModule from "./modules/GapsModule";
+import SuggestionForgeModule from "./modules/SuggestionForgeModule";
 import OmegaSuggestionHighlight from "./OmegaSuggestionHighlight";
 import AuthGateNotice from "@/components/research/AuthGateNotice";
+import PastResearchChatModal from "@/components/research/PastResearchChatModal";
+import type { Suggestion } from "@/lib/scholar/types";
 
 const TABS = [
   { id: "refs", label: "Referências", icon: BookMarked },
   { id: "insights", label: "Insights & Síntese", icon: Lightbulb },
-  { id: "files", label: "Arquivos", icon: FolderOpen },
-  { id: "gaps", label: "Lacunas / RQ", icon: Target },
+  { id: "suggestions", label: "Sugestão", icon: Sparkles },
 ];
 
 export default function OmegaScholarWorkspace() {
   const { session, status } = useOmegaScholar();
   const [mod, setMod] = useState("refs");
   const [history, setHistory] = useState<any[]>([]);
+  const [chatSuggestion, setChatSuggestion] = useState<Suggestion | null>(null);
 
   useEffect(() => {
     fetch("/api/ai/scholar/sessions").then((r) => r.json()).then((d) => setHistory(d.sessions ?? [])).catch(() => {});
@@ -58,8 +59,7 @@ export default function OmegaScholarWorkspace() {
           </div>
           {mod === "refs" && <ReferencesModule references={s.references ?? []} evidence={s.evidence ?? []} />}
           {mod === "insights" && <InsightsModule insights={s.insights} />}
-          {mod === "files" && <FilesModule files={s.files ?? []} />}
-          {mod === "gaps" && <GapsModule gaps={s.gaps} />}
+          {mod === "suggestions" && <SuggestionForgeModule onMiniChat={setChatSuggestion} />}
         </>
       )}
 
@@ -72,6 +72,14 @@ export default function OmegaScholarWorkspace() {
             ))}
           </div>
         </div>
+      )}
+
+      {chatSuggestion && (
+        <PastResearchChatModal
+          item={{ id: chatSuggestion.id, title: chatSuggestion.title }}
+          seedContext={chatSuggestion as unknown as Record<string, unknown>}
+          onClose={() => setChatSuggestion(null)}
+        />
       )}
     </div>
   );

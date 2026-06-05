@@ -1,0 +1,29 @@
+{
+  "suggestions": [
+    {
+      "title": "Proposta superestimada que viola o invariante I-1",
+      "rationale": "Rationale com mais de vinte caracteres para satisfazer o contrato do modelo.",
+      "novelty_angle": "Ângulo inflado de novidade",
+      "gap_type": "interdisciplinar",
+      "gap_score": 0.9,
+      "axes": {
+        "difficulty": "grad",
+        "innovation": 0.95,
+        "relevance": 0.9,
+        "estimated_months_min": 6,
+        "estimated_months_max": 10
+      },
+      "desdobramentos": {
+        "publication_targets": ["Nature"],
+        "required_methods": ["método inflado"],
+        "material_resources": [],
+        "prerequisites": [],
+        "risks": ["risco subestimado"],
+        "milestones": ["M1", "M2", "M3"],
+        "evidence_refs": [0],
+        "cross_link_refs": []
+      }
+    }
+  ],
+  "coverage_summary": "Resposta deliberadamente superconfiante para testar a calibração reversa do servidor."
+}

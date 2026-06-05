@@ -74,3 +74,46 @@ export type ScholarEvent =
   | { type: "answer"; text: string }
   | { type: "done"; session: any }
   | { type: "error"; message: string };
+
+// --- Suggestion Forge (engine 8003) — ver suggestion-forge/engine_spec.md §2 ---
+export type AcademicLevel = "grad" | "msc" | "phd" | "postdoc";
+export type QualityTier = "regular" | "muito_bom" | "excelente" | "excepcional";
+export type GapType = "empirica" | "metodologica" | "geografica" | "temporal" | "interdisciplinar";
+
+export interface SuggestionAxes {
+  difficulty: AcademicLevel;
+  relevance: number;
+  innovation: number;
+  estimated_months_min: number;
+  estimated_months_max: number;
+}
+
+export interface SuggestionDesdobramento {
+  publication_targets: string[];
+  required_methods: string[];
+  material_resources: string[];
+  prerequisites: string[];
+  risks: string[];
+  milestones: string[];
+  evidence_refs: number[];
+  cross_link_refs: number[];
+}
+
+export interface Suggestion {
+  id: string;
+  title: string;
+  rationale: string;
+  novelty_angle: string;
+  gap_type: GapType;
+  gap_score: number;
+  axes: SuggestionAxes;
+  quality_tier: QualityTier;
+  desdobramentos: SuggestionDesdobramento;
+}
+
+export interface ForgeResponse {
+  suggestions: Suggestion[];
+  coverage_summary: string;
+  generated_at: string;
+  gemini_overconfidence_count?: number;
+}
