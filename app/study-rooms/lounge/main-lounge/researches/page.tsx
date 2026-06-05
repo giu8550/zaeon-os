@@ -8,7 +8,9 @@ import {
   ChevronDownIcon,
   ServerStackIcon,
   LockClosedIcon,
+  ChatBubbleLeftRightIcon,
 } from "@heroicons/react/24/outline";
+import PastResearchChatModal from "@/components/research/PastResearchChatModal";
 
 // --- TYPES & INTERFACES ---
 interface Participants {
@@ -125,13 +127,13 @@ const RESEARCH_DATA: ResearchItem[] = Array.from({ length: 35 }).map((_, i) => {
 });
 
 // --- SUB-COMPONENT: RESEARCH CARD ---
-function ResearchCard({ item }: { item: ResearchItem }) {
+function ResearchCard({ item, onOpenChat }: { item: ResearchItem; onOpenChat: (item: ResearchItem) => void }) {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
   return (
     <motion.div
       layout
-      onClick={() => setIsExpanded(!isExpanded)}
+      onClick={() => onOpenChat(item)}
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
@@ -167,6 +169,9 @@ function ResearchCard({ item }: { item: ResearchItem }) {
         </div>
 
         <div className="flex flex-col items-end gap-1">
+          <span className="text-[9px] text-blue-500/80 inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <ChatBubbleLeftRightIcon className="w-3 h-3" /> abrir chat
+          </span>
           <span
             className={`text-[9px] font-black px-2 py-1 rounded-md uppercase ${
               item.progress > 90 ? "bg-green-500/20 text-green-600 dark:text-green-400" : "bg-slate-200 dark:bg-white/10 text-slate-500"
@@ -174,7 +179,12 @@ function ResearchCard({ item }: { item: ResearchItem }) {
           >
             {item.status}
           </span>
-          {isExpanded && <ChevronDownIcon className="w-3 h-3 text-slate-400 animate-bounce" />}
+          <button
+            onClick={(e) => { e.stopPropagation(); setIsExpanded((v) => !v); }}
+            className="text-[9px] font-bold text-slate-400 hover:text-blue-500 inline-flex items-center gap-0.5"
+          >
+            Detalhes <ChevronDownIcon className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+          </button>
         </div>
       </div>
 
@@ -296,6 +306,7 @@ function ResearchCard({ item }: { item: ResearchItem }) {
 
 // --- MAIN COMPONENT ---
 export default function ResearchModule() {
+  const [chatItem, setChatItem] = useState<ResearchItem | null>(null);
   return (
     <div className="w-full h-full flex flex-col gap-6">
       {/* Top: Agent Hub */}
@@ -342,9 +353,11 @@ export default function ResearchModule() {
       {/* Grid */}
       <div className="grid grid-cols-1 gap-4 pb-20">
         {RESEARCH_DATA.map((item: ResearchItem) => (
-          <ResearchCard key={item.id} item={item} />
+          <ResearchCard key={item.id} item={item} onOpenChat={setChatItem} />
         ))}
       </div>
+
+      {chatItem && <PastResearchChatModal item={chatItem} onClose={() => setChatItem(null)} />}
     </div>
   );
 }

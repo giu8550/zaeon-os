@@ -50,3 +50,10 @@ __pycache__/
 
 # Superpowers brainstorm mockups
 .superpowers/
+
+# Python venv for suggestion-forge engine
+suggestion-forge/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage

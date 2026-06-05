@@ -1,0 +1,30 @@
+{
+  "topic": "synthetic DNA data storage",
+  "user_level": "phd",
+  "count": 3,
+  "language": "pt-BR",
+  "exclude_titles": [],
+  "references": [
+    {
+      "title": "Towards practical, high-capacity, low-maintenance information storage in synthesized DNA",
+      "authors": "Goldman, N. et al.",
+      "year": "2013",
+      "venue": "Nature",
+      "doi": "10.1038/nature11875"
+    },
+    {
+      "title": "Random access in large-scale DNA data storage",
+      "authors": "Organick, L. et al.",
+      "year": "2018",
+      "venue": "Nature Biotechnology",
+      "doi": "10.1038/nbt.4079"
+    },
+    {
+      "title": "DNA Fountain enables a robust and efficient storage architecture",
+      "authors": "Erlich, Y., Zielinski, D.",
+      "year": "2017",
+      "venue": "Science",
+      "doi": "10.1126/science.aaj2038"
+    }
+  ]
+}

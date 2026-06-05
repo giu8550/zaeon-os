@@ -1,15 +1,27 @@
 import { VertexAI } from "@google-cloud/vertexai";
 
-export function getGeminiModel(systemInstruction?: string, opts?: { temperature?: number }) {
+function makeVertex() {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS || "{}");
-  const vertexAI = new VertexAI({
+  return new VertexAI({
     project: credentials.project_id || process.env.GOOGLE_PROJECT_ID,
     location: process.env.GOOGLE_LOCATION || "us-central1",
     googleAuthOptions: { credentials: { client_email: credentials.client_email, private_key: credentials.private_key } },
   });
-  return vertexAI.getGenerativeModel({
+}
+
+export function getGeminiModel(systemInstruction?: string, opts?: { temperature?: number }) {
+  return makeVertex().getGenerativeModel({
     model: "gemini-2.0-flash-001",
     generationConfig: { temperature: opts?.temperature ?? 0.2, responseMimeType: "application/json" },
+    ...(systemInstruction ? { systemInstruction: { role: "system", parts: [{ text: systemInstruction }] } } : {}),
+  });
+}
+
+// Free-text model for streaming chat (no JSON mime — emits prose tokens).
+export function getGeminiChatModel(systemInstruction?: string, opts?: { temperature?: number }) {
+  return makeVertex().getGenerativeModel({
+    model: "gemini-2.0-flash-001",
+    generationConfig: { temperature: opts?.temperature ?? 0.4 },
     ...(systemInstruction ? { systemInstruction: { role: "system", parts: [{ text: systemInstruction }] } } : {}),
   });
 }
