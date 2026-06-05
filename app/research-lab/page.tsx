@@ -41,6 +41,8 @@ import SavedCitationsSection from "./SavedCitationsSection";
 // --- COMPONENTS ---
 import ResearchCardPDF from "@/components/ui/ResearchCardPDF";
 import { ABNT_TEMPLATE, parseAbntMarkers, isEmptyOrTemplate } from '@/lib/abntTemplate';
+import AcademicThermometer from "@/components/research/AcademicThermometer";
+import { mapAcademicLevel } from "@/lib/quality/segment";
 
 // --- TYPES ---
 interface StudyDoc { id: string; title: string; url: string; file?: File; }
@@ -413,6 +415,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [docTitle, setDocTitle] = useState("minha_pesquisa.pdf");
     const [docContent, setDocContent] = useState(ABNT_TEMPLATE);
     const [hintOpen, setHintOpen] = useState(true);
+    const [reviewMode, setReviewMode] = useState(false);
     const [activeProject, setActiveProject] = useState<any>(null);
 
     // --- DATA STATES ---
@@ -1378,11 +1381,21 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                             )}
                                         </div>
                                     )}
-                                    <textarea
-                                        value={docContent} onChange={(e) => setDocContent(e.target.value)}
-                                        className="w-full flex-1 min-h-[400px] resize-none outline-none bg-transparent text-[17px] leading-loose text-black dark:text-white placeholder:text-slate-400 font-serif"
-                                        placeholder="Sua pesquisa começa aqui..."
+                                    <AcademicThermometer
+                                        docContent={docContent}
+                                        title={docTitle}
+                                        workType={workType ?? "TCC"}
+                                        academicLevel={mapAcademicLevel((session?.user as any)?.academicLevel)}
+                                        reviewMode={reviewMode}
+                                        onToggleReview={() => setReviewMode((v) => !v)}
                                     />
+                                    {!reviewMode && (
+                                        <textarea
+                                            value={docContent} onChange={(e) => setDocContent(e.target.value)}
+                                            className="w-full flex-1 min-h-[400px] resize-none outline-none bg-transparent text-[17px] leading-loose text-black dark:text-white placeholder:text-slate-400 font-serif"
+                                            placeholder="Sua pesquisa começa aqui..."
+                                        />
+                                    )}
                                 </div>
 
                                 {/* RODAPÉ DA FOLHA (AÇÕES) */}
