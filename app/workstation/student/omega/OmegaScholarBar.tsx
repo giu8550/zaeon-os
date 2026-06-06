@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { GraduationCap, ArrowUp, Loader2, Flame, CheckCircle2, AlertCircle } from "lucide-react";
+import { GraduationCap, ArrowUp, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOmegaScholar } from "./OmegaScholarContext";
+import AgentSwarmLoader from "@/components/research/AgentSwarmLoader";
 
 interface OmegaScholarBarProps {
   flushTop?: boolean;
@@ -36,8 +37,6 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
       setDraft("");
     }
   };
-
-  const latestPhase = phases[phases.length - 1]?.message ?? null;
 
   return (
     <div
@@ -89,33 +88,8 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
                 transition={{ duration: 0.2 }}
                 className="mt-3 overflow-hidden"
               >
-                {/* burning-tokens row */}
-                <motion.div
-                  animate={{ opacity: [0.7, 1, 0.7] }}
-                  transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-                  className="flex items-center gap-2"
-                >
-                  <Flame size={14} className="text-orange-400 shrink-0" />
-                  <span className="text-xs font-semibold text-orange-400">
-                    queimando tokens
-                  </span>
-                  <span className="text-xs text-slate-400 dark:text-white/40 tabular-nums">
-                    · {elapsed}s
-                  </span>
-                </motion.div>
-
-                {/* latest phase message */}
-                {latestPhase && (
-                  <motion.p
-                    key={latestPhase}
-                    initial={{ opacity: 0, x: -4 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="mt-1 text-[11px] text-slate-400 dark:text-white/35 truncate"
-                  >
-                    {latestPhase}
-                  </motion.p>
-                )}
+                {/* enxame de agentes (compacto) — substitui "queimando tokens" */}
+                <AgentSwarmLoader compact phases={phases} status={status} elapsed={elapsed} />
               </motion.div>
             )}
 
