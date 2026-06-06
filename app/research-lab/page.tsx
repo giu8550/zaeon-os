@@ -1423,11 +1423,11 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                         </>
                     )}
 
-                    {activeTab === "sala-de-estudos" && (
-                        <div className="w-full h-full overflow-hidden">
-                            <StudyRoomContent flushTop />
-                        </div>
-                    )}
+                    {/* Sempre montado (escondido fora da aba) — preserva a pesquisa do Omega
+                        em andamento ao trocar de aba (não reseta o stream/estado). */}
+                    <div className={`w-full h-full overflow-hidden ${activeTab === "sala-de-estudos" ? "" : "hidden"}`}>
+                        <StudyRoomContent flushTop />
+                    </div>
 
                     {activeTab === "pesquisas" && (
                         <div className="w-full h-full overflow-y-auto custom-scrollbar">
