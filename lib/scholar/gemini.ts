@@ -31,9 +31,27 @@ export function getGeminiChatModel(systemInstruction?: string, opts?: { temperat
   });
 }
 
+/** Junta o texto das partes reais da resposta (ignora partes "thought", se houver).
+ *  Mais robusto que pegar só parts[0]. */
+export function extractText(result: any): string {
+  const parts = result?.response?.candidates?.[0]?.content?.parts ?? [];
+  return parts
+    .filter((p: any) => p && !p.thought)
+    .map((p: any) => (typeof p.text === "string" ? p.text : ""))
+    .join("")
+    .trim();
+}
+
 export async function geminiJson<T>(systemInstruction: string, userPrompt: string, opts?: { temperature?: number; model?: string }): Promise<T> {
   const model = getGeminiModel(systemInstruction, opts);
   const result = await model.generateContent(userPrompt);
-  const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-  return JSON.parse(text) as T;
+  const finishReason = result?.response?.candidates?.[0]?.finishReason ?? "?";
+  const cleaned = extractText(result).replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+  // Erros diagnósticos (em vez de "{}" silencioso) — ajudam a achar a causa real.
+  if (!cleaned) throw new Error(`Gemini retornou resposta vazia (finishReason=${finishReason})`);
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    throw new Error(`Gemini retornou JSON inválido (finishReason=${finishReason}): ${cleaned.slice(0, 160)}`);
+  }
 }

@@ -1,4 +1,4 @@
-import { getGeminiModel } from "./gemini";
+import { getGeminiModel, extractText } from "./gemini";
 import { buildSuggestSystemPrompt, buildSuggestUserMessage } from "./prompts-suggest";
 import { retrievePapers } from "./retrieve";
 import { buildTermometro, type Termometro } from "./termometro";
@@ -55,7 +55,7 @@ export function paperToRefItem(p: Paper): RefItem {
 async function defaultLlm(system: string, user: string): Promise<string> {
   const model = getGeminiModel(system, { temperature: 0.8 });
   const result = await model.generateContent(user);
-  return result.response.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+  return extractText(result) || "{}";
 }
 
 export async function generateSuggestion(input: SuggestInput, deps: SuggestDeps = {}): Promise<SuggestResult> {
