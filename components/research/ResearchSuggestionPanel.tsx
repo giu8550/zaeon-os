@@ -1,8 +1,11 @@
 // components/research/ResearchSuggestionPanel.tsx
 "use client";
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import type { Termometro } from "@/lib/scholar/termometro";
 import AuthGateNotice from "./AuthGateNotice";
+import ThinkingStream from "./ThinkingStream";
+import GlitchOnce from "./GlitchOnce";
 
 type Level = "grad" | "msc" | "phd" | "postdoc";
 
@@ -238,13 +241,10 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
       {/* ── AUTH GATE (401) ── */}
       {authRequired && <AuthGateNotice className="mx-5 mb-4" />}
 
-      {/* ── LOADING SKELETON ── */}
-      {loading && !result && (
-        <div className="mx-5 mb-3.5 p-4 rounded-2xl border border-cyan-400/12 bg-cyan-400/[0.04] animate-pulse">
-          <div className="h-2.5 w-24 bg-white/10 rounded mb-3" />
-          <div className="h-4 w-full bg-white/10 rounded mb-2" />
-          <div className="h-4 w-4/5 bg-white/10 rounded mb-3" />
-          <div className="h-2.5 w-3/4 bg-white/[0.07] rounded" />
+      {/* ── LOADING: a IA pensando (interpolando dados…) ── */}
+      {loading && (
+        <div className="mx-5 mb-3.5 p-4 rounded-2xl border border-cyan-400/12 bg-cyan-400/[0.04]">
+          <ThinkingStream running label="forjando uma proposta relevante" />
         </div>
       )}
 
@@ -268,7 +268,7 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
           </div>
 
           <p className="text-[12px] font-extrabold text-white/90 leading-[1.45] mb-1.5">
-            {result.suggestion.title}
+            <GlitchOnce text={result.suggestion.title} />
           </p>
           <p className="text-[10px] text-white/35 leading-[1.55] mb-2.5">
             {result.suggestion.rationale}
@@ -333,8 +333,11 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
           </div>
 
           {result.references.map((ref, i) => (
-            <div
+            <motion.div
               key={i}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: Math.min(i * 0.05, 0.5) }}
               className="px-3.5 py-2.5 border-t border-white/[0.03] flex items-start gap-2"
             >
               <span className={`text-[7px] font-black uppercase tracking-[.08em] px-2 py-0.5 rounded-[8px] shrink-0 mt-0.5 ${SOURCE_STYLES[ref.source] ?? SOURCE_STYLES["DOI"]}`}>
@@ -349,7 +352,7 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
                   {ref.authors} · {ref.year} · {ref.venue}
                 </p>
               </div>
-            </div>
+            </motion.div>
           ))}
 
           <div className="px-3.5 py-2">
