@@ -1,6 +1,7 @@
 "use client";
 import { type ReactNode, createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import type { ScholarEvent, Suggestion, ForgeResponse } from "@/lib/scholar/types";
+import type { Prereq } from "@/lib/scholar/prereqs";
 
 interface Phase { phase: string; message: string; }
 interface OmegaState {
@@ -14,6 +15,10 @@ interface OmegaState {
   suggestions: Suggestion[] | null;
   suggestionsCoverage: string | null;
   loadingSuggestions: boolean;
+  // Conhecimentos Prévios (engine de contexto)
+  prereqs: Prereq[] | null;
+  prereqsSummary: string | null;
+  loadingPrereqs: boolean;
 }
 interface OmegaCtx extends OmegaState {
   draft: string;
@@ -21,6 +26,7 @@ interface OmegaCtx extends OmegaState {
   runQuery: (prompt: string) => Promise<void>;
   loadSession: (s: any) => void;
   fetchSuggestions: (opts?: { count?: number; exclude?: string[] }) => Promise<void>;
+  fetchPrereqs: () => Promise<void>;
 }
 
 const Ctx = createContext<OmegaCtx | null>(null);
@@ -31,11 +37,12 @@ export const useOmegaScholar = () => {
 };
 
 const EMPTY_FORGE = { suggestions: null, suggestionsCoverage: null, loadingSuggestions: false } as const;
+const EMPTY_PREREQS = { prereqs: null, prereqsSummary: null, loadingPrereqs: false } as const;
 
 export function OmegaScholarProvider({ room, onStart, children }:
   { room?: string; onStart?: () => void; children: ReactNode }) {
   const [state, setState] = useState<OmegaState>({
-    status: "idle", query: "", phases: [], answer: "", session: null, error: null, ...EMPTY_FORGE });
+    status: "idle", query: "", phases: [], answer: "", session: null, error: null, ...EMPTY_FORGE, ...EMPTY_PREREQS });
 
   // Draft do input da barra, elevado ao contexto para o dock de sugestão observá-lo.
   const [draft, setDraft] = useState("");
@@ -47,7 +54,7 @@ export function OmegaScholarProvider({ room, onStart, children }:
   const runQuery = useCallback(async (prompt: string) => {
     if (!prompt.trim()) return;
     onStart?.(); // parent switches activeTab → "community"
-    setState({ status: "running", query: prompt, phases: [], answer: "", session: null, error: null, ...EMPTY_FORGE });
+    setState({ status: "running", query: prompt, phases: [], answer: "", session: null, error: null, ...EMPTY_FORGE, ...EMPTY_PREREQS });
     try {
       const res = await fetch("/api/ai/scholar", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -102,6 +109,7 @@ export function OmegaScholarProvider({ room, onStart, children }:
       suggestions: stored?.suggestions ?? null,
       suggestionsCoverage: stored?.coverage_summary ?? null,
       loadingSuggestions: false,
+      ...EMPTY_PREREQS,
     });
   }, []);
 
@@ -138,6 +146,31 @@ export function OmegaScholarProvider({ room, onStart, children }:
     }
   }, []);
 
+  // Conhecimentos Prévios — gera sob demanda (ex.: ao abrir a aba). Não persiste.
+  const fetchPrereqs = useCallback(async () => {
+    const sess = stateRef.current.session;
+    if (!sess || stateRef.current.loadingPrereqs) return;
+    setState((s) => ({ ...s, loadingPrereqs: true }));
+    try {
+      const res = await fetch("/api/ai/scholar/prereqs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: sess.query,
+          references: sess.references ?? [],
+          insights: sess.insights ?? null,
+        }),
+      });
+      if (!res.ok) {
+        setState((s) => ({ ...s, loadingPrereqs: false }));
+        return;
+      }
+      const data = await res.json();
+      setState((s) => ({ ...s, loadingPrereqs: false, prereqs: data.prereqs ?? [], prereqsSummary: data.summary ?? null }));
+    } catch {
+      setState((s) => ({ ...s, loadingPrereqs: false }));
+    }
+  }, []);
+
   // Auto-forge: quando uma pesquisa nova termina (done) com ≥3 refs e o usuário
   // não desativou, dispara a forja automaticamente. Sessões carregadas que já têm
   // sugestões persistidas não re-forjam (suggestions !== null).
@@ -149,7 +182,7 @@ export function OmegaScholarProvider({ room, onStart, children }:
   }, [state.status, state.session, state.suggestions, state.loadingSuggestions, fetchSuggestions]);
 
   return (
-    <Ctx.Provider value={{ ...state, draft, setDraft, runQuery, loadSession, fetchSuggestions }}>
+    <Ctx.Provider value={{ ...state, draft, setDraft, runQuery, loadSession, fetchSuggestions, fetchPrereqs }}>
       {children}
     </Ctx.Provider>
   );
