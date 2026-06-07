@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BookMarked, Lightbulb, BookOpen, Sparkles } from "lucide-react";
 import { useOmegaScholar } from "./OmegaScholarContext";
 import ActivityThread from "./ActivityThread";
@@ -7,6 +7,7 @@ import ReferencesModule from "./modules/ReferencesModule";
 import InsightsModule from "./modules/InsightsModule";
 import PrereqsModule from "./modules/PrereqsModule";
 import OmegaRelatedResearch from "./OmegaRelatedResearch";
+import PastResearchList from "./PastResearchList";
 import ResearchSuggestionPanel from "@/components/research/ResearchSuggestionPanel";
 import AuthGateNotice from "@/components/research/AuthGateNotice";
 
@@ -21,6 +22,7 @@ export default function OmegaScholarWorkspace() {
   const { session, status, query, draft, setDraft } = useOmegaScholar();
   const [mod, setMod] = useState("refs");
   const [history, setHistory] = useState<any[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/ai/scholar/sessions").then((r) => r.json()).then((d) => setHistory(d.sessions ?? [])).catch(() => {});
@@ -28,8 +30,15 @@ export default function OmegaScholarWorkspace() {
 
   const s = session;
   const seed = (query || draft || "").trim();
+
+  // Reabrir uma pesquisa anterior: vai pra aba Referências e sobe ao topo.
+  const handleOpened = () => {
+    setMod("refs");
+    containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
-    <div className="h-full overflow-y-auto custom-scrollbar p-6">
+    <div ref={containerRef} className="h-full overflow-y-auto custom-scrollbar p-6">
       <ActivityThread />
 
       {status === "unauthorized" && (
@@ -71,16 +80,7 @@ export default function OmegaScholarWorkspace() {
       {/* Pesquisas relacionadas — no final, logo acima do histórico */}
       {status !== "unauthorized" && <OmegaRelatedResearch />}
 
-      {history.length > 0 && (
-        <div className="mt-8">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Pesquisas anteriores</p>
-          <div className="flex gap-2 flex-wrap">
-            {history.map((h) => (
-              <span key={h.id} className="text-[11px] text-slate-500 dark:text-white/50 bg-black/[0.03] dark:bg-white/5 rounded-full px-3 py-1.5">{h.query}</span>
-            ))}
-          </div>
-        </div>
-      )}
+      <PastResearchList items={history} activeId={s?.id} onOpened={handleOpened} />
     </div>
   );
 }
