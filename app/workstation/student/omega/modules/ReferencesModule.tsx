@@ -63,7 +63,33 @@ function PaperCard({ p, evidence, onOpenViewer }: {
 
   return (
     <div className="rounded-2xl bg-white/70 dark:bg-white/[0.04] border border-black/8 dark:border-white/12 p-5 space-y-3">
-      {/* Header: title + action buttons */}
+      {/* Trecho verificado — agora NO TOPO (o trecho da referência vem primeiro) */}
+      {verifiedEvidence.length > 0 && (
+        <div className="space-y-2">
+          {verifiedEvidence.map((e, i) => (
+            <div key={i} className="rounded-xl bg-black/[0.03] dark:bg-black/30 border-l-2 border-violet-500 p-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 text-[9px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-2 py-0.5">
+                  <CheckCircle2 size={10} /> VERIFICADO
+                </span>
+                <span className="text-[9px] text-slate-400">{locatorLabel(e.locator)} · confiança {e.confidence}</span>
+              </div>
+              <p className="text-xs text-slate-700 dark:text-white/70 mt-1.5">{e.claim}</p>
+              <p className="text-[11px] italic text-slate-500 dark:text-white/50 mt-1 bg-violet-500/5 rounded-lg px-2 py-1.5">&quot;{e.quote}&quot;</p>
+              {p.pdfUrl && e.locator?.kind === "pdf" && (
+                <button
+                  onClick={() => onOpenViewer(p.pdfUrl!, (e.locator as any).page, e.quote)}
+                  className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-blue-500 hover:underline"
+                >
+                  <FileText size={11} /> ver no paper (pág. {(e.locator as any).page})
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* A referência em si — título/autores + botões (a "forma de escrita" vem ABAIXO do trecho) */}
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm text-slate-800 dark:text-white leading-snug">{p.title}</p>
@@ -108,7 +134,7 @@ function PaperCard({ p, evidence, onOpenViewer }: {
         </div>
       </div>
 
-      {/* ABNT citation block */}
+      {/* ABNT citation block — a referência formatada (forma de escrita) */}
       <div className="rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200/60 dark:border-white/8 px-3 py-2.5">
         <div className="flex items-start justify-between gap-2">
           <p className="text-[11px] font-mono text-slate-600 dark:text-white/60 leading-relaxed select-all flex-1">
@@ -126,32 +152,6 @@ function PaperCard({ p, evidence, onOpenViewer }: {
           ABNT NBR 6023
         </p>
       </div>
-
-      {/* Verified evidence records — KEPT intact */}
-      {verifiedEvidence.length > 0 && (
-        <div className="space-y-2">
-          {verifiedEvidence.map((e, i) => (
-            <div key={i} className="rounded-xl bg-black/[0.03] dark:bg-black/30 border-l-2 border-violet-500 p-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-[9px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-2 py-0.5">
-                  <CheckCircle2 size={10} /> VERIFICADO
-                </span>
-                <span className="text-[9px] text-slate-400">{locatorLabel(e.locator)} · confiança {e.confidence}</span>
-              </div>
-              <p className="text-xs text-slate-700 dark:text-white/70 mt-1.5">{e.claim}</p>
-              <p className="text-[11px] italic text-slate-500 dark:text-white/50 mt-1 bg-violet-500/5 rounded-lg px-2 py-1.5">&quot;{e.quote}&quot;</p>
-              {p.pdfUrl && e.locator?.kind === "pdf" && (
-                <button
-                  onClick={() => onOpenViewer(p.pdfUrl!, (e.locator as any).page, e.quote)}
-                  className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-blue-500 hover:underline"
-                >
-                  <FileText size={11} /> ver no paper (pág. {(e.locator as any).page})
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
