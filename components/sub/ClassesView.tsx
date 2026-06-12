@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   MapPin, User, Activity, Clock, ChevronUp, ChevronDown, 
-  Power, Send, Sparkles, X, AlertCircle, StickyNote,
+  Power, Send, Sparkles, X,
   FileText, Plus, Database, Bot, File, Briefcase, Pen, Globe,
   Users, Layers, Share2, Copy, ArrowUpRight,
   Hash, UploadCloud, Trash2, Check, Brain, Cpu, Puzzle, ExternalLink
@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import NextImage from 'next/image';
+import { ProFeaturePanel } from '@/components/ui/ProFeaturePanel';
 
 // --- INITIAL DATA ---
 const initialSchedule: any[] = []; 
@@ -29,134 +30,6 @@ const CLASS_COLORS = [
     "from-rose-400 to-red-500",
     "from-amber-400 to-orange-500"
 ];
-
-// --- COMPONENT: REAL-TIME TRACKER ---
-const RealTimeModule = ({ classes, pluggedDay, gadgetOn, dragConstraints, session, themeColor = 'cyan' }: any) => {
-    const t = getThemeClasses(themeColor);
-    const [currentTime, setCurrentTime] = useState(new Date());
-    const awardedXPClasses = useRef<Set<string>>(new Set()); 
-
-    useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 60000); 
-        return () => clearInterval(timer);
-    }, []);
-
-    const isActive = gadgetOn && pluggedDay !== null;
-    const currentHour = currentTime.getHours();
-    const currentRealDayIdx = (currentTime.getDay() + 6) % 7; 
-    const isPluggedOnToday = pluggedDay === currentRealDayIdx;
-
-    const activeClassNow = useMemo(() => {
-        if (!isActive || !isPluggedOnToday) return null;
-        return classes.find((c: any) => 
-            !c.isDraft && 
-            c.days.includes(pluggedDay + 1) && 
-            currentHour >= c.hour && 
-            currentHour < c.endHour
-        );
-    }, [classes, isActive, isPluggedOnToday, currentHour, pluggedDay]);
-
-    let progress = 0;
-    let earnedXP = 0;
-    let totalXP = 0;
-
-    if (activeClassNow) {
-        const totalMinutes = (activeClassNow.endHour - activeClassNow.hour) * 60;
-        const minutesPassed = (currentHour - activeClassNow.hour) * 60 + currentTime.getMinutes();
-        progress = Math.min(100, Math.max(0, (minutesPassed / totalMinutes) * 100));
-        
-        totalXP = (activeClassNow.endHour - activeClassNow.hour) * 1;
-        earnedXP = Math.floor((progress / 100) * totalXP);
-    }
-
-    useEffect(() => {
-        if (activeClassNow && progress >= 100 && session?.user?.email) {
-            const classKey = `${activeClassNow.id}-${currentTime.toDateString()}`; 
-            
-            if (!awardedXPClasses.current.has(classKey)) {
-                awardedXPClasses.current.add(classKey);
-                
-                fetch('/api/user/xp', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ xpToAdd: totalXP })
-                }).catch(err => console.error("Falha ao registrar XP:", err));
-            }
-        }
-    }, [progress, activeClassNow, session, totalXP, currentTime]);
-
-    if (!isActive) {
-        return (
-            <motion.div drag dragConstraints={dragConstraints} className="group w-80 h-[380px] relative z-10" onClick={(e) => e.stopPropagation()}>
-                <div className="w-full h-full bg-[#0a0a0a]/90 backdrop-blur-2xl border border-white/10 p-5 rounded-[2.5rem] shadow-xl flex flex-col items-center justify-center relative overflow-hidden">
-                    <Sparkles size={24} className="text-white/20 mb-2" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">Real-Time Tracker Offline<br/>Plug gadget into current day</span>
-                </div>
-            </motion.div>
-        );
-    }
-
-    if (!activeClassNow) {
-        return (
-            <motion.div drag dragConstraints={dragConstraints} className="group w-80 h-[380px] relative z-10" onClick={(e) => e.stopPropagation()}>
-                <div className={`w-full h-full bg-[#0a0a0a]/90 backdrop-blur-2xl border ${t.border} ${t.shadow} p-5 rounded-[2.5rem] flex flex-col items-center justify-center relative overflow-hidden`}>
-                    <div className="absolute top-5 left-5 flex items-center gap-2">
-                        <div className={`w-1.5 h-1.5 ${t.fill} rounded-full animate-ping`} />
-                        <span className={`text-[9px] font-bold uppercase tracking-widest ${t.text}`}>Monitoring Active</span>
-                    </div>
-                    <Clock size={24} className={`${t.text} opacity-50 mb-2`} />
-                    <span className="text-[12px] font-bold uppercase tracking-widest text-white/70 text-center">No Active Session<br/>at this hour</span>
-                </div>
-            </motion.div>
-        );
-    }
-
-    return (
-        <motion.div drag dragConstraints={dragConstraints} className="group w-80 h-[380px] relative z-10" onClick={(e) => e.stopPropagation()}>
-            <div className={`w-full h-full bg-[#0a0a0a]/90 backdrop-blur-2xl border ${t.border} ${t.shadow} p-6 rounded-[2.5rem] flex flex-col justify-between relative overflow-hidden`}>
-                <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                    <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 ${t.fill} rounded-full animate-pulse`} />
-                        <span className={`text-[9px] font-bold uppercase tracking-widest ${t.text}`}>Session Live</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-white/50">{currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                </div>
-
-                <div className="flex flex-col items-center justify-center flex-1 py-4">
-                    <span className="text-[10px] text-white/50 uppercase tracking-widest mb-1">You are currently in</span>
-                    <h2 className="text-xl font-black text-white text-center leading-tight mb-4 drop-shadow-md">{activeClassNow.name}</h2>
-                    
-                    <div className="w-full flex items-center justify-between text-[10px] font-mono text-white/50 mb-2 px-1">
-                        <span>{activeClassNow.hour}:00</span>
-                        <span>{activeClassNow.endHour}:00</span>
-                    </div>
-                    
-                    <div className={`w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/10 relative`}>
-                        <motion.div 
-                            className={`h-full bg-gradient-to-r ${t.from} ${t.to}`}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            transition={{ duration: 1 }}
-                        />
-                    </div>
-
-                    
-                    <div className="w-full flex items-center justify-between mt-6 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl">
-                        <div className="flex flex-col">
-                            <span className="text-[8px] uppercase tracking-widest text-white/40">XP Earned</span>
-                            <span className="text-lg font-black text-yellow-400">+{earnedXP}</span>
-                        </div>
-                        <div className="h-6 w-px bg-white/10" />
-                        <div className="flex flex-col text-right">
-                            <span className="text-[8px] uppercase tracking-widest text-white/40">Total Bounty</span>
-                            <span className="text-lg font-black text-white/80">{totalXP}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </motion.div>
-    );
-};
 
 // --- COMPONENT: COLLECTIVE BUILD NODE ---
 const CollectiveZone = ({ classes, currentUser, dragConstraints, themeColor = 'cyan' }: any) => {
@@ -520,8 +393,6 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     
     const [gadgetOn, setGadgetOn] = useState(false);
     const [pluggedDay, setPluggedDay] = useState<number | null>(null);
-    const [showSticky, setShowSticky] = useState(true);
-    const [stickyText, setStickyText] = useState("");
 
     const [liquidChatHistory, setLiquidChatHistory] = useState<{ role: 'user' | 'agent', text: string }[]>([
         { role: 'agent', text: "Zaeon initialized. Ready." }
@@ -586,7 +457,6 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
 
         const loadLocal = () => {
             const savedClasses = localStorage.getItem('zaeon_schedule_data');
-            const savedSticky = localStorage.getItem('zaeon_sticky_note');
             const savedPluggedDay = localStorage.getItem('zaeon_plugged_day');
             const savedGadgetOn = localStorage.getItem('zaeon_gadget_on');
             
@@ -595,7 +465,6 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
             const savedModules = localStorage.getItem('zaeon_user_modules');
 
             if (savedClasses) setClasses(JSON.parse(savedClasses));
-            if (savedSticky) setStickyText(savedSticky);
             if (savedPluggedDay) setPluggedDay(JSON.parse(savedPluggedDay));
             if (savedGadgetOn) setGadgetOn(JSON.parse(savedGadgetOn));
             
@@ -617,7 +486,6 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                     if (res.data && res.data.schedule && res.data.schedule.length > 0) {
                         const d = res.data;
                         if (d.schedule && Array.isArray(d.schedule)) setClasses(d.schedule);
-                        if (d.stickyNote) setStickyText(d.stickyNote);
                         if (d.layoutState) {
                            setPluggedDay(d.layoutState.pluggedDay ?? null);
                            setGadgetOn(d.layoutState.gadgetOn ?? false);
@@ -647,7 +515,6 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     useEffect(() => {
         if (isDataLoaded) {
             localStorage.setItem('zaeon_schedule_data', JSON.stringify(classes));
-            localStorage.setItem('zaeon_sticky_note', stickyText);
             localStorage.setItem('zaeon_plugged_day', JSON.stringify(pluggedDay));
             localStorage.setItem('zaeon_gadget_on', JSON.stringify(gadgetOn));
             localStorage.setItem('zaeon_liquid_chat', JSON.stringify(liquidChatHistory));
@@ -661,7 +528,6 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                     body: JSON.stringify({
                         userId: session.user.email,
                         schedule: classes,
-                        stickyNote: stickyText,
                         zaeonChat: liquidChatHistory,
                         library: storedPdfs,
                         personalModules: userModules,
@@ -670,7 +536,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                 }).catch(err => console.error("Falha ao sincronizar com MongoDB:", err));
             }
         }
-    }, [classes, stickyText, pluggedDay, gadgetOn, liquidChatHistory, storedPdfs, userModules, isDataLoaded, session]);
+    }, [classes, pluggedDay, gadgetOn, liquidChatHistory, storedPdfs, userModules, isDataLoaded, session]);
 
     const handleBackgroundClick = () => {
         if (selectedClass?.isDraft) {
@@ -860,6 +726,60 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
         }
     };
 
+    // Core Active aplica a ferramenta update_schedule retornada pelo agente (cria/edita a agenda).
+    const DAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
+    const applyScheduleTool = (args: any): string => {
+        const action = String(args?.action || 'add').toLowerCase();
+        const day = Number(args?.day);
+        const hour = Number(args?.hour);
+        const duration = Number(args?.duration) || 2;
+        const name = args?.name ? String(args.name) : "";
+
+        if (action === 'add') {
+            if (!day || !hour) return "Não consegui criar a aula: dia ou horário ausente.";
+            const newClass = {
+                id: Date.now(),
+                name: name || "Nova aula",
+                teacher: args?.teacher || "",
+                room: args?.room || "",
+                location: args?.room || "Online",
+                days: [day],
+                hour,
+                endHour: hour + duration,
+                duration,
+                color: CLASS_COLORS[classes.length % CLASS_COLORS.length],
+                isDraft: false,
+            };
+            setClasses(prev => [...prev, newClass]);
+            return `✅ Adicionei "${newClass.name}" à agenda (${DAY_LABELS[day - 1]} ${hour}h–${hour + duration}h).`;
+        }
+
+        const matches = (c: any) =>
+            (name && c.name?.toLowerCase() === name.toLowerCase()) ||
+            ((c.days || []).includes(day) && Number(c.hour) === hour);
+
+        if (action === 'remove') {
+            let removed = false;
+            setClasses(prev => prev.filter(c => { const m = matches(c); if (m) removed = true; return !m; }));
+            return removed ? "🗑️ Removi a aula da agenda." : "Não encontrei essa aula para remover.";
+        }
+        if (action === 'update') {
+            let updated = false;
+            setClasses(prev => prev.map(c => {
+                if (!matches(c)) return c;
+                updated = true;
+                return {
+                    ...c,
+                    ...(args.teacher ? { teacher: args.teacher } : {}),
+                    ...(args.room ? { room: args.room, location: args.room } : {}),
+                    ...(hour ? { hour, endHour: hour + duration, duration } : {}),
+                };
+            }));
+            return updated ? "✏️ Atualizei a aula na agenda." : "Não encontrei essa aula para atualizar.";
+        }
+        return "Ação de agenda não reconhecida.";
+    };
+
     const handleZaeonMessage = async () => {
         if (!zaeonInput.trim()) return;
         const msg = zaeonInput;
@@ -867,11 +787,23 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
         setZaeonInput("");
         setIsZaeonProcessing(true);
         try {
-            const libraryContext = storedPdfs.length > 0 ? `Available Files: ${storedPdfs.map(f => f.title).join(", ")}` : "No files in library.";
-            const response = await fetch('/api/ai/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: msg, agent: "ethernaut", systemContext: `User is in Zaeon Lab. ${libraryContext}` }) });
+            const libraryContext = storedPdfs.length > 0 ? `Arquivos na biblioteca: ${storedPdfs.map(f => f.title).join(", ")}.` : "Biblioteca vazia.";
+            const agendaContext = classes.length > 0
+                ? `Agenda atual do aluno: ${classes.map((c: any) => `${c.name || 'Aula'} [${(c.days || []).map((d: number) => DAY_LABELS[d - 1]).join('/')} ${c.hour}-${c.endHour}h${c.teacher ? `, prof. ${c.teacher}` : ''}]`).join('; ')}.`
+                : "A agenda do aluno está vazia.";
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: msg, agent: "core_active", systemContext: `${agendaContext} ${libraryContext}` }),
+            });
             const data = await response.json();
-            setLiquidChatHistory(prev => [...prev, { role: 'agent', text: data.text || "Data retrieved." }]);
-        } catch (e) { setLiquidChatHistory(prev => [...prev, { role: 'agent', text: "Connection offline." }]); } finally { setIsZaeonProcessing(false); }
+            if (data?.toolCall?.name === 'update_schedule') {
+                const applied = applyScheduleTool(data.toolCall.args);
+                setLiquidChatHistory(prev => [...prev, { role: 'agent', text: applied }]);
+            } else {
+                setLiquidChatHistory(prev => [...prev, { role: 'agent', text: data.text || "Pronto." }]);
+            }
+        } catch (e) { setLiquidChatHistory(prev => [...prev, { role: 'agent', text: "Conexão offline." }]); } finally { setIsZaeonProcessing(false); }
     };
 
     const handleUserModuleDrop = (e: React.DragEvent, moduleId: number) => {
@@ -956,12 +888,27 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
 
             <div className="flex justify-start items-start gap-8 flex-wrap z-20 relative w-full max-w-[1400px] mx-auto pb-10 min-h-[400px]">
 
-                {/* REAL-TIME TRACKER MODULE */}
-                <RealTimeModule classes={classes} pluggedDay={pluggedDay} gadgetOn={gadgetOn} session={session} dragConstraints={constraintsRef} themeColor={themeColor} />
+                {/* ZAEON CORE ACTIVE — largest block in the line (replaces the old Real-Time Tracker) */}
+                <div className="w-[440px] h-[420px] bg-white/70 dark:bg-black/40 backdrop-blur-3xl border border-white/30 dark:border-white/10 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative z-10">
+                    <div className="h-16 border-b border-white/20 flex items-center px-6 gap-4 bg-white/10">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#8b5cf6] to-[#22d3ee] shadow-lg flex items-center justify-center border border-white/20"><Bot size={20} className="text-white" /></div>
+                        <div className="flex flex-col">
+                            <span className="text-sm font-black text-slate-800 dark:text-white tracking-widest uppercase">Zaeon</span>
+                            <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span><span className="text-[9px] text-slate-500 dark:text-white/40 font-bold uppercase tracking-tighter">Core Active</span></div>
+                        </div>
+                    </div>
+                    <div ref={zaeonChatScrollRef} className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide">{liquidChatHistory.map((m, i) => (<div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed backdrop-blur-md shadow-sm ${m.role === 'user' ? 'bg-[#8b5cf6] text-white font-bold' : 'bg-white/80 dark:bg-white/5 text-slate-900 dark:text-white/90 border border-white/20'}`}>{m.text}</div></div>))}</div>
+                    <div className="p-4 bg-white/10 border-t border-white/20">
+                        <div className="flex items-center gap-2 bg-slate-200/50 dark:bg-black/30 rounded-full px-2 py-2 border border-white/30 dark:border-white/5">
+                            <input value={zaeonInput} onChange={(e) => setZaeonInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleZaeonMessage()} className="bg-transparent flex-1 text-xs text-slate-900 dark:text-white px-3 outline-none placeholder:text-slate-500 dark:placeholder:text-white/20" placeholder="Pergunte ao Core Active…" disabled={isZaeonProcessing} />
+                            <button onClick={handleZaeonMessage} disabled={isZaeonProcessing} className="w-9 h-9 rounded-full bg-[#8b5cf6] flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg"><Send size={14} className="text-white" /></button>
+                        </div>
+                    </div>
+                </div>
 
                 {/* SCHEDULE */}
-                <motion.div ref={agendaRef} drag dragConstraints={constraintsRef} className="group w-[360px] h-[320px] relative z-10" onClick={(e) => e.stopPropagation()}>
-                    <div className={`w-full h-full backdrop-blur-xl border border-white/10 p-5 rounded-[2.5rem] shadow-xl flex flex-col items-center justify-between relative overflow-hidden bg-[#172554]/90 dark:bg-black/40`}>
+                <motion.div ref={agendaRef} className="group w-[300px] h-[300px] relative z-10" onClick={(e) => e.stopPropagation()}>
+                    <div className={`w-full h-full backdrop-blur-xl border border-white/10 p-5 rounded-[2.5rem] shadow-xl flex flex-col items-center justify-between relative overflow-hidden bg-[#0f172a]/95 dark:bg-black/40`}>
                         <div className="w-full flex justify-between items-center mb-2 pointer-events-none">
                             <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/60">Agenda</span>
                             {pluggedDay !== null && <div className={`w-1.5 h-1.5 ${t.fill} rounded-full animate-ping ${t.shadow}`}></div>}
@@ -1015,7 +962,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                 </motion.div>
 
                 {/* DETAILS CARD EDITÁVEL */}
-                <motion.div drag dragConstraints={constraintsRef} className="group w-52 h-52 relative z-30" onClick={(e) => e.stopPropagation()}>
+                <motion.div className="group w-44 h-44 relative z-30" onClick={(e) => e.stopPropagation()}>
                     <div 
                         className={`w-full h-full bg-white/90 dark:bg-black/40 backdrop-blur-xl border border-slate-300 dark:border-white/10 p-5 rounded-[2.5rem] shadow-xl flex flex-col justify-between relative overflow-hidden transition-colors duration-500 cursor-pointer ${selectedClass ? `bg-gradient-to-br ${selectedClass.color.replace('from-', 'bg-').split(' ')[0]} bg-opacity-90 dark:bg-opacity-20` : ''}`}
                         onClick={handleCycleColor}
@@ -1111,29 +1058,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                     </div>
                 </motion.div>
 
-                {/* STICKY & PLUG */}
-                <AnimatePresence>
-                    {showSticky && (
-                        <motion.div drag dragConstraints={constraintsRef} className="group w-40 h-40 relative z-20" onClick={(e) => e.stopPropagation()}>
-                            <div className="w-full h-full bg-[#fbbf24] border border-yellow-600/30 p-5 rounded-[2rem] shadow-xl flex flex-col relative overflow-hidden">
-                                <button onClick={() => setShowSticky(false)} className="absolute top-3 right-3 text-yellow-900/40 hover:text-yellow-900 transition-colors opacity-0 group-hover:opacity-100 z-20"><X size={14} /></button>
-                                <div className="flex items-center gap-2 text-yellow-900 mb-2 font-black">
-                                    <AlertCircle size={12} />
-                                    <span className="text-[8px] font-black uppercase tracking-widest">Sticky Note</span>
-                                </div>
-                                <textarea
-                                    value={stickyText}
-                                    onChange={(e) => setStickyText(e.target.value)}
-                                    className="w-full h-full bg-transparent border-none outline-none resize-none text-[10px] text-yellow-900 font-black font-mono placeholder-yellow-900/40 leading-relaxed scrollbar-hide z-10"
-                                    placeholder="Take a note..."
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                />
-                                <div className="h-0.5 w-12 bg-yellow-900/20 rounded-full mt-auto self-end pointer-events-none"></div>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
+                {/* PLUG (agenda gadget) */}
                 <AnimatePresence>
                     {pluggedDay === null && (
                         <motion.div layoutId="gadget-fuse" drag onDragEnd={handleGadgetDragEnd} dragConstraints={constraintsRef} className="group w-16 h-24 relative z-50" onClick={(e) => e.stopPropagation()}>
@@ -1152,94 +1077,36 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                 </AnimatePresence>
             </div>
 
-            {/* 4. ZAEON CHAT & GADGETS */}
-            <div className="w-full flex justify-center py-20 relative z-20">
-                <motion.div drag dragConstraints={constraintsRef} className="group relative flex items-center gap-10" onClick={(e) => e.stopPropagation()}>
-                    
-                    <div className="absolute inset-0 pointer-events-none overflow-visible">
-                        {[{ yStart: 130, yEnd: 100, delay: 0 }, { yStart: 320, yEnd: 350, delay: 0.2 }].map((cord, idx) => (
-                            <div key={idx} className="absolute left-[384px] top-0 overflow-visible">
-                                <svg width="100" height="450" className="absolute top-0 overflow-visible">
-                                    <path 
-                                        d={`M 0 ${cord.yStart} C 50 ${cord.yStart}, 50 ${cord.yEnd}, 100 ${cord.yEnd}`} 
-                                        fill="none" 
-                                        stroke="rgba(34, 211, 238, 0.25)" 
-                                        strokeWidth="3" 
-                                    />
-                                    <motion.path 
-                                        d={`M 0 ${cord.yStart} C 50 ${cord.yStart}, 50 ${cord.yEnd}, 100 ${cord.yEnd}`} 
-                                        fill="none" 
-                                        stroke="#22d3ee" 
-                                        strokeWidth="4" 
-                                        strokeDasharray="15 35" 
-                                        initial={{ strokeDashoffset: 0 }} 
-                                        animate={{ strokeDashoffset: -100 }} 
-                                        transition={{ duration: 1.5, repeat: Infinity, ease: "linear", delay: cord.delay }} 
-                                        className="drop-shadow-[0_0_12px_rgba(34,211,238,0.9)]" 
-                                    />
-                                </svg>
-                            </div>
+            {/* 4. LIBRARY & PLUGINS (static row) */}
+            <div className="w-full flex justify-center flex-wrap gap-6 py-10 relative z-20 max-w-[1400px] mx-auto">
+                {/* LIBRARY MODULE */}
+                <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); const pdfs = files.filter(f => f.type === 'application/pdf').map(f => ({ id: Math.random().toString(36).substr(2, 9), title: f.name, type: 'pdf' as const, size: (f.size / 1024 / 1024).toFixed(1) + 'mb' })); setStoredPdfs(prev => [...prev, ...pdfs]); }} className="h-32 w-[340px] max-w-[450px] bg-white/70 dark:bg-black/60 backdrop-blur-3xl border border-white/40 dark:border-white/10 rounded-[1.8rem] p-4 flex flex-col relative shadow-2xl">
+                    <div className="flex items-center justify-between mb-3 border-b border-white/20 pb-2">
+                        <div className="flex items-center gap-2"><Database size={13} className="text-[#22d3ee]" /><span className="text-[10px] font-black uppercase tracking-widest">Library</span></div>
+                    </div>
+                    <div className="flex gap-2 items-center h-full overflow-x-auto scrollbar-hide pr-2">
+                        {storedPdfs.map(pdf => (
+                            <motion.div key={pdf.id} className="group/item w-20 h-20 bg-white/10 rounded-xl border border-white/20 flex flex-col items-center justify-center gap-0.5 p-2 relative">
+                                <button onClick={(e) => { e.stopPropagation(); handleDeletePdf(pdf.id); }} className="absolute bottom-1 right-1 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded-md opacity-0 group-hover/item:opacity-100 transition-opacity z-20">
+                                    <Trash2 size={10} />
+                                </button>
+                                <FileText size={22} className="text-[#22d3ee]" />
+                                <span className="text-[8px] text-slate-900 dark:text-white font-black truncate w-full block text-center">{pdf.title}</span>
+                            </motion.div>
                         ))}
+                        <label className="w-16 h-20 rounded-xl border-2 border-dashed border-white/30 flex items-center justify-center text-white hover:bg-white/10 hover:border-[#8b5cf6] cursor-pointer transition-all group/add shrink-0"><input type="file" className="hidden" accept=".pdf" onChange={handleLibraryUpload} /><Plus size={20} className="group-hover/add:scale-125 transition-transform" /></label>
                     </div>
+                </div>
 
-                    <div className="w-96 h-[450px] bg-white/10 dark:bg-black/40 bg-white/70 backdrop-blur-3xl border border-white/30 dark:border-white/10 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative z-10 transition-all duration-500">
-                        <div className="h-16 border-b border-white/20 flex items-center px-6 gap-4 bg-white/10">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-cyan-400 shadow-lg flex items-center justify-center border border-white/20"><Bot size={20} className="text-white" /></div>
-                            <div className="flex flex-col">
-                                <span className="text-sm font-black text-slate-800 dark:text-white tracking-widest uppercase">Zaeon</span>
-                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span><span className="text-[9px] text-slate-500 dark:text-white/40 font-bold uppercase tracking-tighter">Core Active</span></div>
-                            </div>
-                            <div className="ml-auto">
-                                <label className="cursor-pointer text-slate-400 hover:text-cyan-400 transition-colors">
-                                    <input type="file" className="hidden" onChange={(e) => {
-                                        if (e.target.files && e.target.files.length > 0) {
-                                            alert(`File ${e.target.files[0].name} selected for Zaeon.`);
-                                        }
-                                    }}/>
-                                    <UploadCloud size={16} />
-                                </label>
-                            </div>
-                        </div>
-                        <div ref={zaeonChatScrollRef} className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide">{liquidChatHistory.map((m, i) => (<div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed backdrop-blur-md shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white font-bold' : 'bg-white/80 dark:bg-white/5 text-slate-900 dark:text-white/90 border border-white/20'}`}>{m.text}</div></div>))}</div>
-                        <div className="p-4 bg-white/10 border-t border-white/20">
-                            <div className="flex items-center gap-2 bg-slate-200/50 dark:bg-black/30 rounded-full px-2 py-2 border border-white/30 dark:border-white/5">
-                                <input value={zaeonInput} onChange={(e) => setZaeonInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleZaeonMessage()} className="bg-transparent flex-1 text-xs text-slate-900 dark:text-white px-3 outline-none placeholder:text-slate-500 dark:placeholder:text-white/20" placeholder="Ask Zaeon..." disabled={isZaeonProcessing} />
-                                <button onClick={handleZaeonMessage} disabled={isZaeonProcessing} className="w-9 h-9 rounded-full bg-blue-600 dark:bg-cyan-500 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg"><Send size={14} className="text-white" /></button>
-                            </div>
+                {/* PLUGINS MODULE */}
+                <div className="h-32 w-[260px] max-w-[450px] bg-white/70 dark:bg-black/60 backdrop-blur-3xl border border-white/40 dark:border-white/10 rounded-[1.8rem] p-4 flex flex-col relative shadow-2xl">
+                    <div className="flex items-center justify-between mb-3 border-b border-white/20 pb-2">
+                        <div className="flex items-center gap-2">
+                            <Puzzle size={13} className="text-[#8b5cf6]" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Plugins</span>
                         </div>
                     </div>
-
-                    <div className="flex flex-col gap-14 z-10">
-                        {/* LIBRARY MODULE */}
-                        <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); const pdfs = files.filter(f => f.type === 'application/pdf').map(f => ({ id: Math.random().toString(36).substr(2, 9), title: f.name, type: 'pdf' as const, size: (f.size / 1024 / 1024).toFixed(1) + 'mb' })); setStoredPdfs(prev => [...prev, ...pdfs]); }} className="h-32 min-w-[150px] max-w-[450px] bg-white/70 dark:bg-black/60 backdrop-blur-3xl border border-white/40 dark:border-white/10 rounded-[1.8rem] p-4 flex flex-col relative shadow-2xl">
-                            <div className="flex items-center justify-between mb-3 border-b border-blue-200/50 dark:border-white/20 pb-2">
-                                <div className="flex items-center gap-2"><Database size={13} className="text-blue-600 dark:text-cyan-400" /><span className="text-[10px] font-black uppercase tracking-widest">Library</span></div>
-                            </div>
-                            <div className="flex gap-2 items-center h-full overflow-x-auto scrollbar-hide pr-2">
-                                {storedPdfs.map(pdf => (
-                                    <motion.div key={pdf.id} className="group/item w-20 h-20 bg-blue-50/50 dark:bg-white/10 rounded-xl border border-blue-200/50 dark:border-white/20 flex flex-col items-center justify-center gap-0.5 p-2 relative">
-                                        <button onClick={(e) => { e.stopPropagation(); handleDeletePdf(pdf.id); }} className="absolute bottom-1 right-1 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded-md opacity-0 group-hover/item:opacity-100 transition-opacity z-20">
-                                            <Trash2 size={10} />
-                                        </button>
-                                        <FileText size={22} className="text-blue-600 dark:text-cyan-400" />
-                                        <span className="text-[8px] text-slate-900 dark:text-white font-black truncate w-full block text-center">{pdf.title}</span>
-                                    </motion.div>
-                                ))}
-                                <label className="w-16 h-20 rounded-xl border-2 border-dashed border-blue-300/50 dark:border-white/30 flex items-center justify-center text-blue-400 dark:text-white hover:bg-blue-50 dark:hover:bg-white/10 hover:border-blue-500 cursor-pointer transition-all group/add shrink-0"><input type="file" className="hidden" accept=".pdf" onChange={handleLibraryUpload} /><Plus size={20} className="group-hover/add:scale-125 transition-transform" /></label>
-                            </div>
-                        </div>
-
-                        {/* PLUGINS MODULE (ANTIGO FABRICATOR) */}
-                        <div className="h-32 min-w-[150px] max-w-[450px] bg-white/70 dark:bg-black/60 backdrop-blur-3xl border border-white/40 dark:border-white/10 rounded-[1.8rem] p-4 flex flex-col relative shadow-2xl">
-                            <div className="flex items-center justify-between mb-3 border-b border-purple-200/50 dark:border-white/20 pb-2">
-                                <div className="flex items-center gap-2">
-                                    <Puzzle size={13} className="text-purple-600 dark:text-purple-400" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest">Plugins</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </motion.div>
+                </div>
             </div>
 
             {/* 5. BACKPACK MINIMALISTA (AGORA NA DIREITA PARA NÃO SOBREPOR AS IAs) */}
@@ -1317,8 +1184,14 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                 ))}
             </div>
 
-            {/* COLLECTIVE BUILD ZONE */}
-            <CollectiveZone classes={classes} currentUser={session?.user} dragConstraints={constraintsRef} />
+            {/* COLLECTIVE BUILD ZONE — Pro-gated (CollectiveZone component above kept, not rendered) */}
+            <div className="w-full flex justify-center pb-20 relative z-20">
+                <ProFeaturePanel
+                    title="Collective Build Node"
+                    description="Ambiente coletivo para criar trabalhos em tempo real com seus amigos — disponível apenas no Pro."
+                    tooltip="Recurso Pro — em breve"
+                />
+            </div>
 
             {/* NEURAL EDITOR (Garantido no final) */}
             <CollabEditor dragConstraints={constraintsRef} />
