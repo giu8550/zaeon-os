@@ -1,0 +1,107 @@
+# Stack do Zaeon Agent Gateway. Espelha o padrão do zenith-warmer em escala reduzida.
+# Sobe na VPS. `web` (Next) e `adapter` (whatsmeow Go) entram quando prontos — ver notas.
+#
+#   docker compose up -d
+#
+# PONTOS DE PAUSA (preencher no .env da VPS): credencial GCP, secrets, URL do adapter.
+
+services:
+  # ---------------- infra ----------------
+  postgres:
+    image: pgvector/pgvector:pg16          # Postgres 16 + extensão vector já embutida
+    container_name: zaeon_postgres
+    environment:
+      POSTGRES_USER: zaeon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zaeon}
+      POSTGRES_DB: zaeon_agent
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./migrations/001_pgvector.sql:/docker-entrypoint-initdb.d/001_pgvector.sql:ro
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zaeon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:                                   # fila arq + cache + dedup
+    image: redis:7-alpine
+    container_name: zaeon_redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis_data:/data"]
+    ports: ["6379:6379"]
+
+  redis-bridge:                            # barramento wa:cmd / wa:evt (porta não-default)
+    image: redis:7-alpine
+    container_name: zaeon_redis_bridge
+    command: ["redis-server", "--port", "6380"]
+    ports: ["6380:6380"]
+
+  # ---------------- agent-gateway ----------------
+  agent-api:
+    build: .
+    container_name: zaeon_agent_api
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://zaeon:${POSTGRES_PASSWORD:-zaeon}@postgres/zaeon_agent
+      REDIS_URL: redis://redis:6379/0
+      BRIDGE_REDIS_URL: redis://redis-bridge:6380/0
+    depends_on: [postgres, redis, redis-bridge]
+    ports: ["8000:8000"]
+
+  agent-worker:                            # turnos arq (um turno por job)
+    build: .
+    container_name: zaeon_agent_worker
+    command: ["python", "-m", "arq", "app.worker.worker.WorkerSettings"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://zaeon:${POSTGRES_PASSWORD:-zaeon}@postgres/zaeon_agent
+      REDIS_URL: redis://redis:6379/0
+      BRIDGE_REDIS_URL: redis://redis-bridge:6380/0
+    depends_on: [postgres, redis, redis-bridge]
+
+  agent-inbound:                           # consumer wa:evt → enfileira turno (a ponte)
+    build: .
+    container_name: zaeon_agent_inbound
+    command: ["python", "-m", "app.worker.inbound_runner"]
+    env_file: [.env]
+    environment:
+      BRIDGE_REDIS_URL: redis://redis-bridge:6380/0
+    depends_on: [redis-bridge]
+    # NOTA: só processa de verdade quando o adapter Go publicar inbound (ADR-001 Decisão 2).
+
+  # ---------------- observabilidade ----------------
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: zaeon_prometheus
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data:/prometheus
+    ports: ["9090:9090"]
+
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: zaeon_loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes: ["loki_data:/loki"]
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: zaeon_grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes: ["grafana_data:/var/lib/grafana"]
+    depends_on: [prometheus, loki]
+    ports: ["3001:3000"]
+
+  # ---------------- a ligar depois ----------------
+  # web:        # Next.js (output: standalone) — falta o Dockerfile do web (tarefa #2)
+  # adapter:    # whatsmeow Go dedicado pro Zaeon — lado Go (tarefas #13). Publica wa:evt.
+
+volumes:
+  pg_data:
+  redis_data:
+  prom_data:
+  loki_data:
+  grafana_data:

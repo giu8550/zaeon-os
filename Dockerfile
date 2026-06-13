@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.6
+# Imagem do `web` (Next 14 + custom server com Socket.IO em server.js).
+#
+# NOTA (importante): NÃO usamos `output: standalone`. Standalone só inclui o que o Next
+# traça — e o `socket.io` é usado pelo server.js (custom server), fora do grafo do Next,
+# então ficaria de fora e a imagem subiria quebrada. Por isso carregamos as deps de fato.
+# Debian slim (não alpine) p/ evitar dores com binários nativos (sharp, three, etc.).
+
+# ───────────────────────── Stage 1: builder ─────────────────────────
+FROM node:20-bookworm-slim AS builder
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    DATABASE_URL="mongodb://placeholder:27017/build"   # só p/ o prisma generate não reclamar
+
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npx --yes prisma generate && npm run build
+
+# ───────────────────────── Stage 2: runtime ─────────────────────────
+FROM node:20-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000
+
+RUN useradd --create-home --uid 10001 zaeon
+# Copia o app já buildado + node_modules (inclui socket.io e o client Prisma gerado)
+COPY --from=builder /app ./
+USER zaeon
+
+EXPOSE 3000
+# start do package.json: NODE_ENV=production node server.js
+CMD ["node", "server.js"]

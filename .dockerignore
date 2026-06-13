@@ -1,0 +1,20 @@
+# Contexto do build do `web` (raiz). Não mandar lixo nem o subprojeto Python.
+node_modules
+.next
+out
+build
+.git
+.env
+.env.*
+*.local
+agent-gateway/
+backend/node_modules
+abnt-service/venv
+**/__pycache__
+**/.venv
+**/.pytest_cache
+**/.mypy_cache
+.DS_Store
+*.md
+.vercel
+coverage

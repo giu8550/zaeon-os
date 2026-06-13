@@ -1,0 +1,29 @@
+groups:
+  - name: zaeon_agent
+    interval: 30s
+    rules:
+      - alert: AgentApiDown
+        expr: up{job="zaeon_agent_api"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "agent-api fora do ar"
+          description: "O Prometheus não consegue raspar /metrics da agent-api há 1m."
+
+      - alert: HighDedupRate
+        # muitos descartes por duplicidade pode indicar loop de reentrega do adapter
+        expr: rate(zaeon_agent_dedup_skips_total[5m]) > 1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Alta taxa de dedup no inbound"
+          description: "Mais de 1 msg/s sendo descartada por duplicidade — checar o adapter."
+
+      - alert: NoInboundTraffic
+        # nenhuma mensagem recebida em 30m durante horário ativo pode ser ponte caída
+        expr: increase(zaeon_agent_inbound_total[30m]) == 0
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "Sem inbound há 30m"
+          description: "Pode ser normal (madrugada) ou a ponte/adapter parou de publicar."

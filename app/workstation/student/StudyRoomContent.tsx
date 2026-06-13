@@ -256,14 +256,19 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                                     ref={el => { tabRefs.current[i] = el; }}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`
-                                        relative flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl
+                                        relative flex items-center gap-1.5 px-3.5 py-2.5 rounded-[12px] border
                                         text-[11px] font-semibold whitespace-nowrap
-                                        transition-colors duration-150
+                                        transition-all duration-150
                                         ${isActive
-                                            ? "text-black dark:text-white"
-                                            : "text-slate-400 dark:text-white/35 hover:text-slate-600 dark:hover:text-white/60 hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
+                                            ? "text-white border-transparent"
+                                            : "text-slate-400 dark:text-white/40 border-transparent hover:text-slate-600 dark:hover:text-white/70 hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
                                         }
                                     `}
+                                    style={isActive ? {
+                                        background: "linear-gradient(180deg, rgba(255,255,255,0.20), rgba(255,255,255,0.05))",
+                                        border: "1px solid rgba(255,255,255,0.26)",
+                                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42), 0 8px 18px -8px rgba(139,92,246,0.8)",
+                                    } : undefined}
                                 >
                                     <Icon size={12} strokeWidth={isActive ? 2.2 : 1.5} />
                                     {tab.label}
