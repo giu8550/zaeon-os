@@ -268,97 +268,6 @@ const CollectiveZone = ({ classes, currentUser, dragConstraints, themeColor = 'c
     );
 };
 
-const CollabEditor = ({ dragConstraints, themeColor = 'cyan' }: any) => {
-    const t = getThemeClasses(themeColor);
-    const { data: session } = useSession();
-    
-    const [title, setTitle] = useState("");
-    const [subtitle, setSubtitle] = useState("");
-    const [tagsInput, setTagsInput] = useState("");
-    const [content, setContent] = useState("");
-    const [isPublishing, setIsPublishing] = useState(false);
-
-    const handlePublish = async () => {
-        if (!session?.user) {
-            alert("Operative access required. Please login.");
-            return;
-        }
-
-        if (!title.trim() || !content.trim()) {
-            alert("Title and content are required to publish.");
-            return;
-        }
-        setIsPublishing(true);
-        const tagsArray = tagsInput.split(',').map(t => t.trim().replace('#', '')).filter(Boolean);
-
-        try {
-            const res = await fetch('/api/cyber', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title, subtitle, content, tags: tagsArray,
-                    user: session?.user?.name || "Operative",
-                    userImage: session?.user?.image || "",
-                    userId: (session?.user as any)?.id || null
-                })
-            });
-            if (res.ok) {
-                setTitle(""); setSubtitle(""); setTagsInput(""); setContent("");
-            }
-        } catch (error) {
-            console.error("Error publishing:", error);
-        } finally {
-            setIsPublishing(false);
-        }
-    };
-
-    return (
-        <div className="w-full max-w-[1400px] flex flex-col items-center mb-20 relative z-30">            
-            <motion.div drag dragConstraints={dragConstraints} whileHover={{ cursor: "grab" }} whileDrag={{ cursor: "grabbing", zIndex: 100 }} className={`relative w-full bg-white/80 dark:bg-black/30 backdrop-blur-3xl border border-slate-300 dark:border-white/10 rounded-[2.5rem] p-8 shadow-xl dark:shadow-2xl flex flex-col gap-6 overflow-hidden`} onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between border-b border-slate-300/50 dark:border-white/10 pb-4">
-                    <div className="flex items-center gap-3">
-                        <div className={`p-2 ${t.bg} rounded-xl border ${t.border} ${t.text}`}><Pen size={20} /></div>
-                        <div><h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 dark:text-white">Neural Editor</h3><p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">Drafting research papers & blogs</p></div>
-                    </div>
-                </div>
-                <div className="flex flex-col gap-4">
-                    <input 
-                        type="text" 
-                        value={title} onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Untitled Article..." 
-                        className="text-3xl font-black bg-transparent border-none outline-none text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/20"
-                    />
-                    <input 
-                        type="text" 
-                        value={subtitle} onChange={(e) => setSubtitle(e.target.value)}
-                        placeholder="Add a subtitle or brief description..." 
-                        className="text-sm font-medium bg-transparent border-none outline-none text-slate-600 dark:text-slate-400 placeholder:text-slate-400 dark:placeholder:text-white/10"
-                    />
-                    <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-500 text-xs font-bold">
-                        <Hash size={12} />
-                        <input 
-                            type="text" 
-                            value={tagsInput} onChange={(e) => setTagsInput(e.target.value)}
-                            placeholder="Add tags (e.g., Zaeon, Research)" 
-                            className="bg-transparent outline-none w-full text-indigo-600 dark:text-indigo-500 placeholder:text-indigo-400/60 dark:placeholder:text-indigo-500/40" 
-                        />
-                    </div>
-                    <div className="w-full h-px bg-slate-200 dark:bg-white/5 my-2"></div>
-                    <textarea 
-                        value={content} onChange={(e) => setContent(e.target.value)}
-                        className="w-full h-64 bg-transparent border-none outline-none resize-none text-sm leading-relaxed text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-white/10 custom-scrollbar" 
-                        placeholder="Start typing your research content here..."
-                    />
-                </div>
-                <div className="flex justify-end pt-4 border-t border-slate-300/50 dark:border-white/10">
-                    <button onClick={handlePublish} disabled={isPublishing} className={`flex items-center gap-2 px-6 py-2 ${t.fill} hover:opacity-90 text-white rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed`}>
-                        <Send size={12} /> Publish to Feed
-                    </button>
-                </div>
-            </motion.div>
-        </div>
-    );
-};
 
 export interface ClassesViewProps {
     room: string;
@@ -393,6 +302,15 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     
     const [gadgetOn, setGadgetOn] = useState(false);
     const [pluggedDay, setPluggedDay] = useState<number | null>(null);
+
+    // Relógio para a barra "tempo atual" da agenda (atualiza a cada minuto).
+    // null no SSR → setado no cliente (evita mismatch de hidratação).
+    const [now, setNow] = useState<Date | null>(null);
+    useEffect(() => {
+        setNow(new Date());
+        const t = setInterval(() => setNow(new Date()), 60_000);
+        return () => clearInterval(t);
+    }, []);
 
     const [liquidChatHistory, setLiquidChatHistory] = useState<{ role: 'user' | 'agent', text: string }[]>([
         { role: 'agent', text: "Zaeon initialized. Ready." }
@@ -847,6 +765,13 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     const totalHours = maxHour - minHour;
     const hours = Array.from({ length: totalHours + 1 }, (_, i) => minHour + i);
 
+    // Aula acontecendo AGORA (alimenta a fitinha "tempo atual" abaixo da agenda).
+    const DAY_NOW = now ? (((now.getDay() + 6) % 7) + 1) : null;
+    const HOUR_NOW = now ? now.getHours() + now.getMinutes() / 60 : null;
+    const currentClass = (DAY_NOW != null && HOUR_NOW != null)
+        ? classes.find((c: any) => (c.days || []).includes(DAY_NOW) && Number(c.hour) <= HOUR_NOW && HOUR_NOW < Number(c.endHour))
+        : null;
+
     return (
         <div ref={constraintsRef} onClick={handleBackgroundClick} className="relative min-h-screen w-full flex flex-col items-center p-8 bg-transparent font-sans selection:bg-cyan-500/30 text-slate-900 dark:text-white transition-colors duration-500 overflow-x-hidden">
             <div className="h-10 pointer-events-none"></div>
@@ -886,39 +811,85 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                 )}
             </AnimatePresence>
 
-            <div className="flex justify-start items-start gap-8 flex-wrap z-20 relative w-full max-w-[1400px] mx-auto pb-10 min-h-[400px]">
+            <div className="w-full max-w-[1400px] mx-auto pb-10 flex items-stretch justify-center gap-8 flex-wrap z-20 relative">
 
-                {/* ZAEON CORE ACTIVE — largest block in the line (replaces the old Real-Time Tracker) */}
-                <div className="w-[440px] h-[420px] bg-white/70 dark:bg-black/40 backdrop-blur-3xl border border-white/30 dark:border-white/10 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative z-10">
-                    <div className="h-16 border-b border-white/20 flex items-center px-6 gap-4 bg-white/10">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#8b5cf6] to-[#22d3ee] shadow-lg flex items-center justify-center border border-white/20"><Bot size={20} className="text-white" /></div>
-                        <div className="flex flex-col">
-                            <span className="text-sm font-black text-slate-800 dark:text-white tracking-widest uppercase">Zaeon</span>
-                            <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span><span className="text-[9px] text-slate-500 dark:text-white/40 font-bold uppercase tracking-tighter">Core Active</span></div>
+                {/* GRUPO: CORE ACTIVE + FIOS DE ENERGIA + LIBRARY/PLUGINS (mesma altura) */}
+                <div className="relative flex items-stretch gap-12">
+                    {/* FIOS DE ENERGIA — religam o chat à library/plugins (fluido elétrico animado) */}
+                    <div className="absolute inset-0 pointer-events-none overflow-visible z-0">
+                        {[{ yStart: 130, yEnd: 105, delay: 0 }, { yStart: 300, yEnd: 320, delay: 0.3 }].map((cord, idx) => (
+                            <div key={idx} className="absolute left-[440px] top-0 overflow-visible">
+                                <svg width="48" height="420" className="absolute top-0 overflow-visible">
+                                    <path d={`M 0 ${cord.yStart} C 24 ${cord.yStart}, 24 ${cord.yEnd}, 48 ${cord.yEnd}`} fill="none" stroke="rgba(139,92,246,0.2)" strokeWidth="3" />
+                                    <motion.path d={`M 0 ${cord.yStart} C 24 ${cord.yStart}, 24 ${cord.yEnd}, 48 ${cord.yEnd}`} fill="none" stroke="#8b5cf6" strokeWidth="4" strokeDasharray="12 26" initial={{ strokeDashoffset: 0 }} animate={{ strokeDashoffset: -76 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear", delay: cord.delay }} className="drop-shadow-[0_0_10px_rgba(139,92,246,0.9)]" />
+                                </svg>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* ZAEON CORE ACTIVE */}
+                    <div className="w-[440px] h-[420px] bg-white/70 dark:bg-black/40 backdrop-blur-3xl border border-white/30 dark:border-white/10 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative z-10">
+                        <div className="h-16 border-b border-white/20 flex items-center px-6 gap-4 bg-white/10">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#8b5cf6] to-[#22d3ee] shadow-lg flex items-center justify-center border border-white/20"><Bot size={20} className="text-white" /></div>
+                            <div className="flex flex-col">
+                                <span className="text-sm font-black text-slate-800 dark:text-white tracking-widest uppercase">Zaeon</span>
+                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span><span className="text-[9px] text-slate-500 dark:text-white/40 font-bold uppercase tracking-tighter">Core Active</span></div>
+                            </div>
+                        </div>
+                        <div ref={zaeonChatScrollRef} className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide">{liquidChatHistory.map((m, i) => (<div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed backdrop-blur-md shadow-sm ${m.role === 'user' ? 'bg-[#8b5cf6] text-white font-bold' : 'bg-white/80 dark:bg-white/5 text-slate-900 dark:text-white/90 border border-white/20'}`}>{m.text}</div></div>))}</div>
+                        <div className="p-4 bg-white/10 border-t border-white/20">
+                            <div className="flex items-center gap-2 bg-slate-200/50 dark:bg-black/30 rounded-full px-2 py-2 border border-white/30 dark:border-white/5">
+                                <input value={zaeonInput} onChange={(e) => setZaeonInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleZaeonMessage()} className="bg-transparent flex-1 text-xs text-slate-900 dark:text-white px-3 outline-none placeholder:text-slate-500 dark:placeholder:text-white/20" placeholder="Pergunte ao Core Active…" disabled={isZaeonProcessing} />
+                                <button onClick={handleZaeonMessage} disabled={isZaeonProcessing} className="w-9 h-9 rounded-full bg-[#8b5cf6] flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg"><Send size={14} className="text-white" /></button>
+                            </div>
                         </div>
                     </div>
-                    <div ref={zaeonChatScrollRef} className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide">{liquidChatHistory.map((m, i) => (<div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed backdrop-blur-md shadow-sm ${m.role === 'user' ? 'bg-[#8b5cf6] text-white font-bold' : 'bg-white/80 dark:bg-white/5 text-slate-900 dark:text-white/90 border border-white/20'}`}>{m.text}</div></div>))}</div>
-                    <div className="p-4 bg-white/10 border-t border-white/20">
-                        <div className="flex items-center gap-2 bg-slate-200/50 dark:bg-black/30 rounded-full px-2 py-2 border border-white/30 dark:border-white/5">
-                            <input value={zaeonInput} onChange={(e) => setZaeonInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleZaeonMessage()} className="bg-transparent flex-1 text-xs text-slate-900 dark:text-white px-3 outline-none placeholder:text-slate-500 dark:placeholder:text-white/20" placeholder="Pergunte ao Core Active…" disabled={isZaeonProcessing} />
-                            <button onClick={handleZaeonMessage} disabled={isZaeonProcessing} className="w-9 h-9 rounded-full bg-[#8b5cf6] flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg"><Send size={14} className="text-white" /></button>
+
+                    {/* LIBRARY + PLUGINS — coluna conectada pelos fios, mesma altura do chat */}
+                    <div className="w-[210px] h-[420px] flex flex-col gap-4 z-10">
+                        <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); const pdfs = files.filter(f => f.type === 'application/pdf').map(f => ({ id: Math.random().toString(36).substr(2, 9), title: f.name, type: 'pdf' as const, size: (f.size / 1024 / 1024).toFixed(1) + 'mb' })); setStoredPdfs(prev => [...prev, ...pdfs]); }} className="flex-1 min-h-0 bg-white/70 dark:bg-black/60 backdrop-blur-3xl border border-white/40 dark:border-white/10 rounded-[1.8rem] p-4 flex flex-col relative shadow-2xl overflow-hidden">
+                            <div className="flex items-center justify-between mb-3 border-b border-white/20 pb-2">
+                                <div className="flex items-center gap-2"><Database size={13} className="text-[#22d3ee]" /><span className="text-[10px] font-black uppercase tracking-widest">Library</span></div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 items-start content-start h-full overflow-y-auto scrollbar-hide pr-1">
+                                {storedPdfs.map(pdf => (
+                                    <motion.div key={pdf.id} className="group/item w-16 h-16 bg-white/10 rounded-xl border border-white/20 flex flex-col items-center justify-center gap-0.5 p-1.5 relative shrink-0">
+                                        <button onClick={(e) => { e.stopPropagation(); handleDeletePdf(pdf.id); }} className="absolute bottom-1 right-1 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded-md opacity-0 group-hover/item:opacity-100 transition-opacity z-20">
+                                            <Trash2 size={9} />
+                                        </button>
+                                        <FileText size={18} className="text-[#22d3ee]" />
+                                        <span className="text-[7px] text-slate-900 dark:text-white font-black truncate w-full block text-center">{pdf.title}</span>
+                                    </motion.div>
+                                ))}
+                                <label className="w-14 h-16 rounded-xl border-2 border-dashed border-white/30 flex items-center justify-center text-white hover:bg-white/10 hover:border-[#8b5cf6] cursor-pointer transition-all group/add shrink-0"><input type="file" className="hidden" accept=".pdf" onChange={handleLibraryUpload} /><Plus size={18} className="group-hover/add:scale-125 transition-transform" /></label>
+                            </div>
+                        </div>
+                        <div className="flex-1 min-h-0 bg-white/70 dark:bg-black/60 backdrop-blur-3xl border border-white/40 dark:border-white/10 rounded-[1.8rem] p-4 flex flex-col relative shadow-2xl">
+                            <div className="flex items-center justify-between mb-3 border-b border-white/20 pb-2">
+                                <div className="flex items-center gap-2">
+                                    <Puzzle size={13} className="text-[#8b5cf6]" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Plugins</span>
+                                </div>
+                            </div>
+                            <div className="flex-1 flex items-center justify-center text-white/20 text-[9px] font-bold uppercase tracking-widest">Em breve</div>
                         </div>
                     </div>
                 </div>
 
-                {/* SCHEDULE */}
-                <motion.div ref={agendaRef} className="group w-[300px] h-[300px] relative z-10" onClick={(e) => e.stopPropagation()}>
-                    <div className={`w-full h-full backdrop-blur-xl border border-white/10 p-5 rounded-[2.5rem] shadow-xl flex flex-col items-center justify-between relative overflow-hidden bg-[#0f172a]/95 dark:bg-black/40`}>
-                        <div className="w-full flex justify-between items-center mb-2 pointer-events-none">
+                {/* AGENDA (com detalhes embutidos) + fitinha de tempo atual — 35% menor, alinhada ao topo */}
+                <div className="w-[195px] self-start flex flex-col items-center gap-1.5 z-10">
+                <motion.div ref={agendaRef} className="group w-full h-[273px] relative z-10" onClick={(e) => e.stopPropagation()}>
+                    <div className={`w-full h-full backdrop-blur-xl border border-white/10 p-4 rounded-[2.5rem] shadow-xl flex flex-col relative overflow-hidden bg-[#0f172a]/95 dark:bg-black/40`}>
+                        <div className="w-full flex justify-between items-center mb-2 pointer-events-none shrink-0">
                             <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/60">Agenda</span>
                             {pluggedDay !== null && <div className={`w-1.5 h-1.5 ${t.fill} rounded-full animate-ping ${t.shadow}`}></div>}
                         </div>
-                        <div className="w-full flex gap-2 justify-between h-full pointer-events-auto relative">
+                        <div className="w-full flex gap-2 justify-between flex-1 min-h-0 pointer-events-auto relative">
                             {/* Grid de Horas */}
                             <div className="absolute inset-0 flex flex-col-reverse justify-between opacity-10 pointer-events-none z-0">
                                 {hours.map(h => <div key={h} className="w-full h-px bg-white"></div>)}
                             </div>
-                            
+
                             {days.map((day, dIdx) => (
                                 <div 
                                     key={day} 
@@ -952,163 +923,94 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                                         })}
                                     </div>
                                     <div className="mt-2 w-full flex flex-col items-center justify-end h-8 relative">
-                                        {pluggedDay === dIdx ? (<motion.div layoutId="gadget-fuse" onClick={(e) => {e.stopPropagation(); setPluggedDay(null);}} className="w-full h-6 bg-[#222] border-t-2 border-cyan-500 rounded-b-md shadow-[0_0_10px_#22d3ee] flex items-center justify-center cursor-pointer hover:bg-[#333]"><div className={`w-2 h-2 rounded-full ${gadgetOn ? 'bg-cyan-400 shadow-[0_0_5px_#22d3ee]' : 'bg-gray-600'}`}></div></motion.div>) : (<div className="w-full h-1 bg-white/10 rounded-full mb-1"></div>)}
+                                        {pluggedDay === dIdx ? (<div className="w-full h-1.5 bg-gradient-to-r from-violet-400 to-cyan-400 rounded-full mb-1 shadow-[0_0_8px_#8b5cf6] animate-pulse" />) : (<div className="w-full h-1 bg-white/10 rounded-full mb-1"></div>)}
                                         <span className={`text-[7px] font-bold transition-colors ${pluggedDay === dIdx ? 'text-cyan-300' : 'text-white/40'}`}>{day[0]}</span>
                                     </div>
                                 </div>
                             ))}
                         </div>
-                    </div>
-                </motion.div>
 
-                {/* DETAILS CARD EDITÁVEL */}
-                <motion.div className="group w-44 h-44 relative z-30" onClick={(e) => e.stopPropagation()}>
-                    <div 
-                        className={`w-full h-full bg-white/90 dark:bg-black/40 backdrop-blur-xl border border-slate-300 dark:border-white/10 p-5 rounded-[2.5rem] shadow-xl flex flex-col justify-between relative overflow-hidden transition-colors duration-500 cursor-pointer ${selectedClass ? `bg-gradient-to-br ${selectedClass.color.replace('from-', 'bg-').split(' ')[0]} bg-opacity-90 dark:bg-opacity-20` : ''}`}
-                        onClick={handleCycleColor}
-                    >
-                        {selectedClass ? (
-                            <>
-                                <button onClick={(e) => { e.stopPropagation(); handleCloseDetails(); }} className="absolute top-4 right-4 z-50 text-slate-500 dark:text-white/50 hover:text-slate-800 dark:hover:text-white"><X size={12}/></button>
-                                <div className={`absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-br ${selectedClass.color} rounded-full blur-[40px] opacity-40 ${(hasUnsavedChanges || selectedClass.isDraft) ? 'animate-pulse' : ''} pointer-events-none`}></div>
-                                
-                                <div className="relative z-10 flex justify-between items-start mt-2" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center gap-1.5 bg-white/50 dark:bg-white/10 px-2 py-1 rounded-full border border-slate-200 dark:border-white/5">
-                                        <MapPin size={10} className="text-slate-700 dark:text-white/80" />
-                                        <input 
-                                            type="text" 
-                                            value={selectedClass.room}
-                                            onChange={(e) => handleUpdateClass('room', e.target.value)}
-                                            className="w-16 bg-transparent border-none outline-none text-[9px] font-bold text-slate-800 dark:text-white/90 placeholder-slate-400 dark:placeholder-white/50"
-                                            placeholder="Room"
-                                        />
-                                    </div>
-                                    <div className="flex gap-1 z-20">
-                                        {(hasUnsavedChanges || selectedClass.isDraft) && (
-                                            <button 
-                                                onClick={handleSaveClass}
-                                                className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 rounded-full text-emerald-600 dark:text-emerald-400 transition-colors shadow-sm dark:shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-                                                title="Save Class"
-                                            >
-                                                <Check size={12} />
-                                            </button>
-                                        )}
-                                        <button 
-                                            onClick={(e) => handleDeleteClass(e, selectedClass.id)}
-                                            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 dark:bg-red-500/20 dark:hover:bg-red-500/40 border border-red-500/30 rounded-full text-red-600 dark:text-red-400 transition-colors"
-                                            title="Delete Class"
-                                        >
-                                            <Trash2 size={12} />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="relative z-10 mt-2 flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-                                    <input 
-                                        type="text"
-                                        value={selectedClass.name}
-                                        onChange={(e) => handleUpdateClass('name', e.target.value)}
-                                        className="text-sm font-bold text-slate-900 dark:text-white leading-tight drop-shadow-sm dark:drop-shadow-md bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-white/20 focus:border-slate-400 dark:focus:border-white/50 outline-none w-full transition-colors"
-                                        placeholder="Class Name"
-                                    />
-                                    
-                                    <div className="flex items-center gap-1.5 text-indigo-600 dark:text-cyan-300">
-                                        <Clock size={12} />
-                                        <div className="flex items-center gap-1">
-                                            <input 
-                                                type="number" 
-                                                value={selectedClass.hour === "" ? "" : selectedClass.hour}
-                                                onChange={(e) => handleUpdateClass('hour', e.target.value)}
-                                                className="w-8 bg-transparent border-b border-transparent hover:border-indigo-300 dark:hover:border-cyan-300/30 focus:border-indigo-400 dark:focus:border-cyan-300 outline-none text-[10px] font-mono font-medium tracking-wide text-center"
-                                                placeholder="8"
-                                            />
-                                            <span className="text-[10px] font-mono text-slate-600 dark:text-cyan-300">:00 - </span>
-                                            <input 
-                                                type="number" 
-                                                value={selectedClass.endHour === "" ? "" : selectedClass.endHour}
-                                                onChange={(e) => handleUpdateClass('endHour', e.target.value)}
-                                                className="w-8 bg-transparent border-b border-transparent hover:border-indigo-300 dark:hover:border-cyan-300/30 focus:border-indigo-400 dark:focus:border-cyan-300 outline-none text-[10px] font-mono font-medium tracking-wide text-center"
-                                                placeholder="10"
-                                            />
-                                            <span className="text-[10px] font-mono text-slate-600 dark:text-cyan-300">:00</span>
+                        {/* DETALHES EMBUTIDOS — parte da própria agenda (substitui o card de detalhes solto) */}
+                        <div className="mt-3 pt-3 border-t border-white/10 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {selectedClass ? (
+                                <div className="flex flex-col gap-1.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <input type="text" value={selectedClass.name} onChange={(e) => handleUpdateClass('name', e.target.value)} placeholder="Nome da aula" className="flex-1 min-w-0 bg-transparent text-[12px] font-bold text-white outline-none border-b border-transparent focus:border-white/30" />
+                                        <div className="flex gap-1 shrink-0">
+                                            {(hasUnsavedChanges || selectedClass.isDraft) && (
+                                                <button onClick={handleSaveClass} className="p-1 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 rounded-full text-emerald-400" title="Salvar"><Check size={11} /></button>
+                                            )}
+                                            <button onClick={(e) => handleDeleteClass(e, selectedClass.id)} className="p-1 bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 rounded-full text-red-400" title="Excluir"><Trash2 size={11} /></button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleCloseDetails(); }} className="p-1 text-white/40 hover:text-white" title="Fechar"><X size={11} /></button>
                                         </div>
                                     </div>
-                                </div>
-
-                                <div className="relative z-10 bg-white/60 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-2 rounded-xl flex items-center gap-2 backdrop-blur-md mt-auto" onClick={(e) => e.stopPropagation()}>
-                                    <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-gradient-to-br dark:from-white/10 dark:to-transparent flex items-center justify-center text-slate-500 dark:text-white/70 shrink-0"><User size={10} /></div>
-                                    <div className="flex flex-col min-w-0 w-full">
-                                        <span className="text-[7px] uppercase text-slate-500 dark:text-white/30 font-bold">Mentor</span>
-                                        <input 
-                                            type="text"
-                                            value={selectedClass.teacher}
-                                            onChange={(e) => handleUpdateClass('teacher', e.target.value)}
-                                            className="text-[9px] font-medium text-slate-800 dark:text-white/90 truncate bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-white/20 focus:border-slate-400 dark:focus:border-white/50 outline-none w-full"
-                                            placeholder="Teacher Name"
-                                        />
+                                    <div className="flex items-center gap-1.5 text-[10px] text-white/70">
+                                        <Clock size={11} className="text-cyan-300 shrink-0" />
+                                        <input type="number" value={selectedClass.hour === "" ? "" : selectedClass.hour} onChange={(e) => handleUpdateClass('hour', e.target.value)} placeholder="8" className="w-7 bg-transparent text-center font-mono outline-none border-b border-white/20 focus:border-cyan-300" />
+                                        <span className="font-mono">–</span>
+                                        <input type="number" value={selectedClass.endHour === "" ? "" : selectedClass.endHour} onChange={(e) => handleUpdateClass('endHour', e.target.value)} placeholder="10" className="w-7 bg-transparent text-center font-mono outline-none border-b border-white/20 focus:border-cyan-300" />
+                                        <span className="font-mono mr-1">h</span>
+                                        <MapPin size={11} className="text-white/60 shrink-0" />
+                                        <input type="text" value={selectedClass.room} onChange={(e) => handleUpdateClass('room', e.target.value)} placeholder="Sala" className="w-12 bg-transparent outline-none border-b border-white/20 focus:border-white/40" />
+                                        <button onClick={(e) => { e.stopPropagation(); handleCycleColor(); }} className={`ml-auto w-5 h-5 rounded-full bg-gradient-to-br ${selectedClass.color} border border-white/30 shrink-0`} title="Trocar cor" />
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-[10px] text-white/70">
+                                        <User size={11} className="text-white/60 shrink-0" />
+                                        <input type="text" value={selectedClass.teacher} onChange={(e) => handleUpdateClass('teacher', e.target.value)} placeholder="Professor" className="flex-1 min-w-0 bg-transparent outline-none border-b border-white/20 focus:border-white/40" />
                                     </div>
                                 </div>
-                            </>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-white/20 gap-2 pointer-events-none">
-                                <Plus size={16} className="text-slate-400 dark:text-white/40" />
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-center">Click empty day<br/>to add Class</span>
-                            </div>
-                        )}
+                            ) : (
+                                <div className="flex items-center justify-center gap-2 text-white/30 text-[9px] font-bold uppercase tracking-widest py-1.5 pointer-events-none">
+                                    <Plus size={12} /> Clique num dia vazio para adicionar
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </motion.div>
-
-                {/* PLUG (agenda gadget) */}
-                <AnimatePresence>
-                    {pluggedDay === null && (
-                        <motion.div layoutId="gadget-fuse" drag onDragEnd={handleGadgetDragEnd} dragConstraints={constraintsRef} className="group w-16 h-24 relative z-50" onClick={(e) => e.stopPropagation()}>
-                            <div className="w-full h-full bg-gradient-to-b from-[#333] to-[#111] border border-gray-600 rounded-md shadow-[0_10px_20px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.2)] flex flex-col items-center justify-between p-2 relative overflow-hidden">
-                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-2 bg-yellow-600 rounded-t-sm shadow-sm"></div>
-                                <button onClick={() => setGadgetOn(!gadgetOn)} className={`w-8 h-8 rounded-full border-2 border-[#444] shadow-[0_2px_5px_rgba(0,0,0,0.5)] flex items-center justify-center transition-all ${gadgetOn ? 'bg-cyan-900 shadow-[inset_0_0_8px_#06b6d4]' : 'bg-[#222]'}`}>
-                                    <Power size={10} className={`transition-colors ${gadgetOn ? 'text-cyan-400' : 'text-gray-600'}`} />
+                {/* FITINHA "TEMPO ATUAL" — só aparece quando há aula acontecendo agora; não ocupa célula própria */}
+                {currentClass && (
+                    <div className={`w-full flex items-center gap-2 rounded-full px-3 py-1.5 bg-gradient-to-r ${currentClass.color} shadow-[0_0_14px_rgba(139,92,246,0.5)] border border-white/30`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
+                        <span className="text-[9px] font-black uppercase tracking-wider text-white truncate">{currentClass.name || 'Aula agora'}</span>
+                        <span className="text-[9px] font-mono text-white/90 ml-auto shrink-0 whitespace-nowrap">{currentClass.hour}h–{currentClass.endHour}h{currentClass.room ? ` · ${currentClass.room}` : ''}</span>
+                    </div>
+                )}
+                {/* GADGET DE ENERGIA — encaixa na base da agenda com conector neon */}
+                <AnimatePresence mode="wait">
+                    {pluggedDay !== null ? (
+                        <motion.div key="docked" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col items-center">
+                            {/* conector neon: liga a base da agenda ao gadget plugado */}
+                            <motion.div animate={{ opacity: [0.45, 1, 0.45] }} transition={{ duration: 1.1, repeat: Infinity }} className="w-[3px] h-4 -mt-1 bg-gradient-to-b from-violet-400 to-cyan-400 rounded-full shadow-[0_0_10px_#8b5cf6]" />
+                            <motion.div layoutId="gadget-fuse" onClick={(e) => { e.stopPropagation(); setPluggedDay(null); }} className="group w-12 h-14 relative cursor-pointer" title="Desconectar gadget">
+                                <div className={`w-full h-full bg-gradient-to-b from-[#333] to-[#111] rounded-md flex flex-col items-center justify-between p-1.5 relative overflow-hidden transition-all border ${gadgetOn ? 'border-violet-400/70 shadow-[0_0_16px_rgba(139,92,246,0.7),inset_0_1px_0_rgba(255,255,255,0.2)]' : 'border-violet-500/40 shadow-[0_0_9px_rgba(139,92,246,0.4)]'}`}>
+                                    <button onClick={(e) => { e.stopPropagation(); setGadgetOn(!gadgetOn); }} className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${gadgetOn ? 'bg-violet-900 border-violet-500 shadow-[inset_0_0_8px_#8b5cf6]' : 'bg-[#222] border-[#444]'}`}>
+                                        <Power size={9} className={gadgetOn ? 'text-violet-300' : 'text-gray-600'} />
+                                    </button>
+                                    <div className="w-full h-5 bg-black/60 rounded border border-white/5 flex items-center justify-center relative overflow-hidden">
+                                        {gadgetOn && <div className="absolute inset-0 bg-violet-500/25 animate-pulse"></div>}
+                                        <div className="w-full h-[1px] bg-gray-700"><motion.div animate={{ width: gadgetOn ? "100%" : "0%" }} className="h-full bg-gradient-to-r from-violet-400 to-cyan-400 shadow-[0_0_6px_#8b5cf6]" /></div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    ) : (
+                        <motion.div key="loose" layoutId="gadget-fuse" drag onDragEnd={handleGadgetDragEnd} dragConstraints={constraintsRef} className="group w-12 h-14 relative z-50 self-center shrink-0 cursor-grab active:cursor-grabbing" onClick={(e) => e.stopPropagation()} title="Arraste até a base da agenda para plugar">
+                            <div className="w-full h-full bg-gradient-to-b from-[#333] to-[#111] border border-gray-600 rounded-md shadow-[0_8px_16px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.2)] flex flex-col items-center justify-between p-1.5 relative overflow-hidden">
+                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-6 h-2 bg-yellow-600 rounded-t-sm shadow-sm"></div>
+                                <button onClick={(e) => { e.stopPropagation(); setGadgetOn(!gadgetOn); }} className={`w-6 h-6 rounded-full border-2 border-[#444] flex items-center justify-center transition-all ${gadgetOn ? 'bg-violet-900 shadow-[inset_0_0_8px_#8b5cf6]' : 'bg-[#222]'}`}>
+                                    <Power size={9} className={gadgetOn ? 'text-violet-400' : 'text-gray-600'} />
                                 </button>
-                                <div className="w-full h-8 bg-black/60 rounded border border-white/5 flex items-center justify-center relative overflow-hidden">
-                                    {gadgetOn && <div className="absolute inset-0 bg-cyan-500/20 animate-pulse"></div>}
-                                    <div className={`w-full h-[1px] bg-gray-700`}><motion.div animate={{ width: gadgetOn ? "100%" : "0%" }} className="h-full bg-cyan-400 shadow-[0_0_5px_#22d3ee]" /></div>
+                                <div className="w-full h-5 bg-black/60 rounded border border-white/5 flex items-center justify-center relative overflow-hidden">
+                                    <div className="w-full h-[1px] bg-gray-700"><motion.div animate={{ width: gadgetOn ? "100%" : "0%" }} className="h-full bg-violet-400 shadow-[0_0_5px_#8b5cf6]" /></div>
                                 </div>
                             </div>
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </div>
-
-            {/* 4. LIBRARY & PLUGINS (static row) */}
-            <div className="w-full flex justify-center flex-wrap gap-6 py-10 relative z-20 max-w-[1400px] mx-auto">
-                {/* LIBRARY MODULE */}
-                <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); const pdfs = files.filter(f => f.type === 'application/pdf').map(f => ({ id: Math.random().toString(36).substr(2, 9), title: f.name, type: 'pdf' as const, size: (f.size / 1024 / 1024).toFixed(1) + 'mb' })); setStoredPdfs(prev => [...prev, ...pdfs]); }} className="h-32 w-[340px] max-w-[450px] bg-white/70 dark:bg-black/60 backdrop-blur-3xl border border-white/40 dark:border-white/10 rounded-[1.8rem] p-4 flex flex-col relative shadow-2xl">
-                    <div className="flex items-center justify-between mb-3 border-b border-white/20 pb-2">
-                        <div className="flex items-center gap-2"><Database size={13} className="text-[#22d3ee]" /><span className="text-[10px] font-black uppercase tracking-widest">Library</span></div>
-                    </div>
-                    <div className="flex gap-2 items-center h-full overflow-x-auto scrollbar-hide pr-2">
-                        {storedPdfs.map(pdf => (
-                            <motion.div key={pdf.id} className="group/item w-20 h-20 bg-white/10 rounded-xl border border-white/20 flex flex-col items-center justify-center gap-0.5 p-2 relative">
-                                <button onClick={(e) => { e.stopPropagation(); handleDeletePdf(pdf.id); }} className="absolute bottom-1 right-1 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded-md opacity-0 group-hover/item:opacity-100 transition-opacity z-20">
-                                    <Trash2 size={10} />
-                                </button>
-                                <FileText size={22} className="text-[#22d3ee]" />
-                                <span className="text-[8px] text-slate-900 dark:text-white font-black truncate w-full block text-center">{pdf.title}</span>
-                            </motion.div>
-                        ))}
-                        <label className="w-16 h-20 rounded-xl border-2 border-dashed border-white/30 flex items-center justify-center text-white hover:bg-white/10 hover:border-[#8b5cf6] cursor-pointer transition-all group/add shrink-0"><input type="file" className="hidden" accept=".pdf" onChange={handleLibraryUpload} /><Plus size={20} className="group-hover/add:scale-125 transition-transform" /></label>
-                    </div>
-                </div>
-
-                {/* PLUGINS MODULE */}
-                <div className="h-32 w-[260px] max-w-[450px] bg-white/70 dark:bg-black/60 backdrop-blur-3xl border border-white/40 dark:border-white/10 rounded-[1.8rem] p-4 flex flex-col relative shadow-2xl">
-                    <div className="flex items-center justify-between mb-3 border-b border-white/20 pb-2">
-                        <div className="flex items-center gap-2">
-                            <Puzzle size={13} className="text-[#8b5cf6]" />
-                            <span className="text-[10px] font-black uppercase tracking-widest">Plugins</span>
-                        </div>
-                    </div>
                 </div>
             </div>
 
+            
             {/* 5. BACKPACK MINIMALISTA (AGORA NA DIREITA PARA NÃO SOBREPOR AS IAs) */}
             <div className="w-full flex justify-end gap-8 pb-32 pr-4 lg:pr-20 flex-wrap relative z-20 max-w-[1400px]">
                 {userModules.map((mod) => (
@@ -1194,7 +1096,6 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
             </div>
 
             {/* NEURAL EDITOR (Garantido no final) */}
-            <CollabEditor dragConstraints={constraintsRef} />
 
         </div>
     );
