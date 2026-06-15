@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { ArrowUp, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowUp, Loader2, CheckCircle2, AlertCircle, Brain } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOmegaScholar } from "./OmegaScholarContext";
 
@@ -10,21 +10,20 @@ interface OmegaScholarBarProps {
 }
 
 export default function OmegaScholarBar({ flushTop = false, onOpenResults }: OmegaScholarBarProps) {
-  const { runQuery, status, error, draft, setDraft } = useOmegaScholar();
+  const { runQuery, status, error, draft, setDraft, startedAt } = useOmegaScholar();
   const busy = status === "running";
 
   // ── Elapsed timer ──────────────────────────────────────────────────────────
+  // Usa o startedAt do contexto (persistido) → o tempo NÃO reinicia ao sair e voltar.
   const [elapsed, setElapsed] = useState(0);
-  const startRef = useRef<number | null>(null);
   useEffect(() => {
     if (status === "running") {
-      startRef.current = Date.now();
-      setElapsed(0);
-      const id = setInterval(() => setElapsed(Math.floor((Date.now() - (startRef.current ?? Date.now())) / 1000)), 1000);
+      const base = startedAt ?? Date.now();
+      setElapsed(Math.floor((Date.now() - base) / 1000));
+      const id = setInterval(() => setElapsed(Math.floor((Date.now() - base) / 1000)), 1000);
       return () => clearInterval(id);
     }
-    startRef.current = null;
-  }, [status]);
+  }, [status, startedAt]);
 
   // ── Contador de "tokens" (estilo Claude Code) enquanto pesquisa ──────────────
   const [tokens, setTokens] = useState(0);
@@ -35,16 +34,22 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
     return () => clearInterval(id);
   }, [status]);
 
+  const [deep, setDeep] = useState(false); // pensamento profundo: pesquisa mais longa e completa
+  // Modo econômico: o toggle "Profundo" só aparece se o admin liberou esta conta.
+  const [canDeep, setCanDeep] = useState(false);
+  useEffect(() => {
+    fetch("/api/ai/capabilities").then((r) => r.json()).then((d) => setCanDeep(!!d?.deepThink)).catch(() => setCanDeep(false));
+  }, []);
   const submit = () => {
     if (draft.trim() && !busy) {
-      runQuery(draft);
+      runQuery(draft, canDeep && deep);
       setDraft("");
     }
   };
 
   return (
     <div
-      className={`mx-6 ${flushTop ? "mt-0" : "mt-6"} px-3.5 py-2.5 rounded-[1.6rem] bg-gradient-to-r from-violet-500/15 to-purple-500/5 border border-white/30 dark:border-white/10 relative overflow-hidden`}
+      className={`${flushTop ? "mt-0 mx-0" : "mt-6 mx-6"} px-3.5 py-2.5 rounded-[1.6rem] bg-gradient-to-r from-violet-500/15 to-purple-500/5 border border-white/30 dark:border-white/10 relative overflow-hidden`}
     >
       <div className="absolute -top-8 -right-8 w-40 h-40 bg-violet-400/10 rounded-full blur-[50px] pointer-events-none" />
 
@@ -69,6 +74,19 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
           placeholder="Pesquise, revise a literatura, peça citações…"
           className="flex-1 min-w-0 bg-transparent border-none px-1 py-1.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-white/30 outline-none disabled:opacity-60"
         />
+
+        {canDeep && (
+          <button
+            onClick={() => setDeep((v) => !v)}
+            disabled={busy}
+            title={deep ? "Pensamento profundo ligado — pesquisa mais completa (e mais demorada)" : "Pensamento profundo — pesquisa mais completa, porém mais longa"}
+            aria-pressed={deep}
+            className={`shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-full text-[10px] font-bold transition-all disabled:opacity-60 ${deep ? "text-white" : "text-slate-500 dark:text-white/45 bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10"}`}
+            style={deep ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+          >
+            <Brain size={13} /> {deep ? "Profundo" : "Rápido"}
+          </button>
+        )}
 
         <button
           onClick={submit}
@@ -97,13 +115,9 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
           <motion.div key="done" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
             <div className="flex items-center gap-2 pl-8 pt-1.5">
               <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
-              <span className="text-xs text-emerald-400 font-semibold">Pronto! Resultados em Estudos</span>
-              <button
-                onClick={() => onOpenResults?.()}
-                className="ml-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 transition-colors"
-              >
-                Ver
-              </button>
+              <span className="text-xs text-slate-500 dark:text-white/50 tabular-nums">
+                Pesquisa feita em {elapsed}s · {tokens.toLocaleString("pt-BR")} tokens
+              </span>
             </div>
           </motion.div>
         )}

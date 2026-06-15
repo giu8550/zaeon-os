@@ -1,3 +1,4 @@
+import { vertexCredentials } from "@/lib/ai/vertex-credentials";
 import { NextResponse } from 'next/server';
 import { VertexAI, FunctionDeclarationSchemaType } from '@google-cloud/vertexai';
 import type { FunctionDeclaration } from '@google-cloud/vertexai';
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
         const { prompt } = await req.json();
 
         // 2. INICIALIZA O VERTEX AI
-        const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS || "{}");
+        const credentials = (() => { const __v = vertexCredentials(); return { project_id: __v.project, client_email: __v.client_email, private_key: __v.private_key }; })(); // robust parse
         const vertexAI = new VertexAI({
             project: credentials.project_id || process.env.GOOGLE_PROJECT_ID,
             location: process.env.GOOGLE_LOCATION || 'us-central1',
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
         });
 
         const generativeModel = vertexAI.getGenerativeModel({
-            model: 'gemini-2.0-flash-001',
+            model: (process.env.GEMINI_MODEL || 'gemini-2.5-flash'),
             generationConfig: { temperature: 0.1 }, // Baixa temperatura para ele ser analítico e focar em extrair os dados
             tools: [{ functionDeclarations: [searchStudentsTool] }]
         });

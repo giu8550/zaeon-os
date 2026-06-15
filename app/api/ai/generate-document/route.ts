@@ -1,7 +1,9 @@
+import { vertexCredentials } from "@/lib/ai/vertex-credentials";
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/src/lib/auth';
 import { VertexAI } from '@google-cloud/vertexai';
+import { guard } from '@/src/lib/ratelimit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Allow up to 60s for AI generation
@@ -69,6 +71,8 @@ export async function POST(req: Request) {
         if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
+        const rl = await guard(req, "ai-generate-document", "ai-heavy");
+        if (!rl.ok) return rl.response;
 
         const body = await req.json();
         const {
@@ -85,7 +89,7 @@ export async function POST(req: Request) {
         }
 
         // Initialize Vertex AI
-        const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS || "{}");
+        const credentials = (() => { const __v = vertexCredentials(); return { project_id: __v.project, client_email: __v.client_email, private_key: __v.private_key }; })(); // robust parse
         const vertexAI = new VertexAI({
             project: credentials.project_id || process.env.GOOGLE_PROJECT_ID,
             location: process.env.GOOGLE_LOCATION || 'us-central1',
@@ -98,7 +102,7 @@ export async function POST(req: Request) {
         });
 
         const generativeModel = vertexAI.getGenerativeModel({
-            model: 'gemini-2.0-flash-001',
+            model: (process.env.GEMINI_MODEL || 'gemini-2.5-flash'),
             generationConfig: {
                 temperature: 0.7,
                 maxOutputTokens: 8192,

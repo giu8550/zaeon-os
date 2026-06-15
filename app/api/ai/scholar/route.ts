@@ -9,13 +9,21 @@ import { buildReferencesBib } from "@/lib/scholar/bibtex";
 import { planTone } from "@/lib/scholar/prompt";
 import { mapLimit } from "@/lib/scholar/http";
 import type { ScholarEvent } from "@/lib/scholar/types";
+import { guard } from "@/src/lib/ratelimit";
+import { cacheDel } from "@/src/lib/cache";
+import { canDeepThink } from "@/lib/ai/deepThinkAccess";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+// Vercel: Hobby e Pro (padrão) limitam a função a 60s. 300 era rejeitado/cortado em prod
+// (a pesquisa "morria" no meio e não carregava). 60s + modo rápido (TOP_N=4) cabe no limite.
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return new Response("Unauthorized", { status: 401 });
+
+  const rl = await guard(req, "ai-scholar", "ai-heavy");
+  if (!rl.ok) return rl.response;
 
   // The session.user does NOT carry an id field — look it up from email.
   const dbUser = await prisma.user.findUnique({
@@ -24,8 +32,15 @@ export async function POST(req: Request) {
   });
   if (!dbUser) return new Response("Unauthorized", { status: 401 });
   const userId = dbUser.id;
+  await cacheDel(`sess:${userId}`); // nova pesquisa → invalida o cache da lista de sessões
 
-  const { prompt, room } = await req.json();
+  const { prompt, room, deep } = await req.json();
+  // Modo RÁPIDO (default) vs PROFUNDO (toggle do usuário). O custo de tempo está em
+  // abrir o full-text dos papers + sintetizar; no rápido reduzimos o N pra ser ágil.
+  // Modo econômico: só quem o admin liberou pode rodar o PROFUNDO; senão cai no rápido.
+  const isDeep = deep === true && (await canDeepThink(session.user.email));
+  const TOP_N = isDeep ? 10 : 4;
+  const FT_CONCURRENCY = isDeep ? 3 : 4;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -64,8 +79,9 @@ export async function POST(req: Request) {
         const unique = retrieved.papers;
 
         // FULL TEXT (top N — síntese profunda só nos primeiros, por qualidade/velocidade)
-        const top = unique.slice(0, 10);
-        const withText = await mapLimit(top, 3, (p) => resolveFullText(p));
+        // Rápido: menos papers (mais ágil). Profundo: 10 (mais completo, mais lento).
+        const top = unique.slice(0, TOP_N);
+        const withText = await mapLimit(top, FT_CONCURRENCY, (p) => resolveFullText(p));
         const ftCount = withText.filter(
           (p) => p.retrievedText && p.retrievedText.kind !== "abstract"
         ).length;
