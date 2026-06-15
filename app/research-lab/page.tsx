@@ -899,7 +899,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         // MODO LEVE (Vercel): resume do abstract/metadados — NÃO baixa o PDF, sem 502, via Groq.
         if (!capabilities().heavyRag) {
             setProcessingStage("ai");
-            setDocTitle(file.title);
+            // NÃO mexe no título da pesquisa — ele é o que o usuário escreveu, não o do PDF.
             try {
                 const r = await fetch('/api/ai/summarize-lite', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -926,7 +926,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
             });
             setActiveFileContext(base64Data);
             setProcessingStage("ai");
-            setDocTitle(file.title);
+            // NÃO mexe no título da pesquisa — ele é o que o usuário escreveu, não o do PDF.
             const response = await fetch('/api/ai/chat', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

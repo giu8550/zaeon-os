@@ -47,7 +47,13 @@ export async function POST(req: Request) {
   // /reforge força diversificação quando o usuário pede "forjar mais".
   const endpoint = built.exclude_titles.length > 0 ? "/reforge" : "/forge";
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 35_000);
+  const timer = setTimeout(() => controller.abort(), 12_000);
+
+  // O Suggestion Forge é um serviço externo (porta 8003) que NÃO roda na Vercel.
+  // Em vez de cuspir 503/504 (que sujava o console e quebrava a tela), degradamos
+  // gracioso: devolve um ForgeResponse vazio (200). A aba visível "Sugestões de
+  // pesquisa" usa /api/ai/research-suggest (Gemini), que funciona normalmente.
+  const EMPTY = { suggestions: [], coverage_summary: "", generated_at: new Date().toISOString() };
 
   let forgeRes: Response;
   try {
@@ -59,14 +65,12 @@ export async function POST(req: Request) {
     });
   } catch {
     clearTimeout(timer);
-    return json({ error: "Suggestion Forge offline. Rode suggestion-forge na porta 8003." }, 503);
+    return json(EMPTY, 200); // offline → vazio, sem erro
   }
   clearTimeout(timer);
 
   if (!forgeRes.ok) {
-    const detail = await forgeRes.text().catch(() => "");
-    const status = forgeRes.status === 422 ? 422 : forgeRes.status === 503 ? 503 : 502;
-    return json({ error: `Suggestion Forge respondeu ${forgeRes.status}.`, detail: detail.slice(0, 500) }, status);
+    return json(EMPTY, 200); // serviço respondeu erro → vazio, sem propagar 5xx
   }
 
   const result = await forgeRes.json();

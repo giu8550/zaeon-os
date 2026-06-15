@@ -6,6 +6,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { geminiText } from "@/lib/ai/gemini-text";
+import { cacheJson, hashKey } from "@/src/lib/cache";
+import { guard } from "@/src/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -26,6 +28,9 @@ export async function POST(req: Request) {
     });
     if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    const rl = await guard(req, "summarize-lite", "ai-light");
+    if (!rl.ok) return rl.response;
+
     const body = await req.json().catch(() => ({}));
     let { pdfUrl, title, abstract, authors } =
         body as { pdfUrl?: string; title?: string; abstract?: string; authors?: string[] };
@@ -34,6 +39,7 @@ export async function POST(req: Request) {
     if ((!abstract || !title) && (pdfUrl || title)) {
         const sessions = await prisma.scholarSession.findMany({
             where: { userId: dbUser.id }, select: { references: true },
+            orderBy: { createdAt: "desc" }, take: 40, // limita p/ não estourar o tempo (504)
         });
         for (const s of sessions) {
             const refs = Array.isArray(s.references) ? (s.references as any[]) : [];
@@ -61,7 +67,9 @@ export async function POST(req: Request) {
     ].filter(Boolean).join("\n");
 
     try {
-        const text = await geminiText({ system: SYSTEM, prompt: ctx, temperature: 0.5 });
+        // mesmo (título+abstract) → mesmo resumo, cacheado 7d (evita repagar e reduz 504).
+        const text = await cacheJson(hashKey("sumlite", ctx), 60 * 60 * 24 * 7,
+            () => geminiText({ system: SYSTEM, prompt: ctx, temperature: 0.5 }));
         return NextResponse.json({ text, mode: "lite", basis: abstract ? "abstract" : "title", context: ctx });
     } catch (e: any) {
         console.error("summarize-lite error:", e?.message);
