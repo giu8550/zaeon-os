@@ -192,6 +192,27 @@ style={{
 
 ---
 
+## 7.1 Zaeon Signal Colours (semântica de estado) — REGRA
+
+Padrão de sinalização da Zaeon, usado em luzes/anéis/indicadores (ex.: ícone do GitHub,
+barra ⟁, pontinhos de status). **Seguir em todo o produto.**
+
+| Cor | Hex | Significado | Comportamento |
+|---|---|---|---|
+| **Roxo** | `#8b5cf6` | **Processando / em andamento** | pisca (`animate-pulse`) enquanto a ação roda |
+| **Azul-ciano** | `#22d3ee` | **Conectado / estável / completo** | aceso, estável (sem piscar) |
+| **Vermelho** | `#f43f5e` | **Erro / desconectado / atenção** | pisca em pânico quando precisa de ação do usuário |
+| **Verde** | `#10b981` | **Pronto/ok pontual** (ex.: runtime Pyodide pronto) | pisca de leve |
+
+Exemplos aplicados:
+- **Ícone do GitHub**: anel **ciano** quando conectado e estável; **roxo piscando** durante
+  commit/push; **vermelho piscando** quando desconectado (clicar = login).
+- **Barra ⟁ / progresso**: gradiente roxo→ciano; durante a geração o glitch indica processamento.
+- **Fluxo de publicação**: o usuário é guiado a **commitar no GitHub primeiro** (botão roxo) e,
+  só após o commit, aparece **Publicar na Vercel** (botão ciano).
+
+---
+
 ## 8. Progress Bar
 
 Two-stage honest indicator (no fake ticker):

@@ -13,6 +13,7 @@ import { Mic, MicOff, Coffee } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const StudyRoomContent = dynamic(() => import("@/app/workstation/student/StudyRoomContent"), { ssr: false });
+const ProjectsContent = dynamic(() => import("@/app/research-lab/projects/ProjectsContent"), { ssr: false });
 const StudentLoungeContent = dynamic(() => import("@/app/workstation/student/StudentLoungeContent"), { ssr: false });
 const TeacherLoungeContent = dynamic(() => import("@/app/workstation/teacher/LoungeContent"), { ssr: false });
 const ResearchesPage = dynamic(() => import("@/app/study-rooms/lounge/main-lounge/researches/page"), { ssr: false });
@@ -34,7 +35,7 @@ import {
     EyeIcon, PowerIcon, BeakerIcon, ChatBubbleLeftRightIcon, ClipboardDocumentIcon,
     DocumentChartBarIcon, CheckBadgeIcon,
     LanguageIcon, PhotoIcon, LockClosedIcon, GlobeAltIcon, PencilSquareIcon, CloudArrowUpIcon,
-    NewspaperIcon, AcademicCapIcon
+    NewspaperIcon, AcademicCapIcon, CodeBracketIcon
 } from "@heroicons/react/24/outline";
 
 import NewsPanel from "@/components/research/NewsPanel";
@@ -407,7 +408,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const { data: session, status } = useSession();
 
     // --- TAB STATES ---
-    const [activeTab, setActiveTab] = useState<"pesquisa" | "sala-de-estudos" | "pesquisas" | "lounge" | "pevem" | "news" | "profile">("pesquisa");
+    const [activeTab, setActiveTab] = useState<"pesquisa" | "sala-de-estudos" | "projetos" | "pesquisas" | "lounge" | "pevem" | "news" | "profile">("pesquisa");
     const [selectedImages, setSelectedImages] = useState<string[]>([]);
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [muralSearchQuery, setMuralSearchQuery] = useState("");
@@ -776,7 +777,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const tabParam = params.get('tab');
-        if (tabParam && ['pesquisa', 'sala-de-estudos', 'pesquisas', 'lounge', 'pevem', 'news', 'profile'].includes(tabParam)) {
+        if (tabParam && ['pesquisa', 'sala-de-estudos', 'projetos', 'pesquisas', 'lounge', 'pevem', 'news', 'profile'].includes(tabParam)) {
             setActiveTab(tabParam as any);
         }
     }, []);
@@ -1298,6 +1299,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         switch (activeTab) {
             case "sala-de-estudos":
                 return { title: "Sala de Estudos", subtitle: "Aulas, comunidade, provas e projetos do seu curso" };
+            case "projetos":
+                return { title: "Projetos", subtitle: "IDE agêntica no navegador — diagramas, código e GitHub" };
             case "pesquisas":
                 return { title: "Pesquisas", subtitle: "Todas as pesquisas iniciadas via agente" };
             case "lounge":
@@ -1380,6 +1383,12 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Sala de Estudos</span>}
                         </button>
 
+                        {/* Projetos — IDE agêntica */}
+                        <button onClick={() => setActiveTab("projetos")} className={navItemCls(activeTab === 'projetos')} style={activeTab === 'projetos' ? navGlassPill('rgba(99,102,241,0.85)') : undefined}>
+                            <CodeBracketIcon className="w-5 h-5 shrink-0 group-hover:text-indigo-300" />
+                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Projetos</span>}
+                        </button>
+
                         {/* Pesquisas */}
                         <button onClick={() => setActiveTab("pesquisas")} className={navItemCls(activeTab === 'pesquisas')} style={activeTab === 'pesquisas' ? navGlassPill('rgba(16,185,129,0.85)') : undefined}>
                             <BeakerIcon className="w-5 h-5 shrink-0 group-hover:text-emerald-300" />
@@ -1431,11 +1440,11 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                 </motion.nav>
             )}
 
-            <main className={`flex-1 flex flex-col transition-all duration-300 ${!isEmbedded ? (isChatLeft ? 'pr-[80px]' : 'pl-[80px]') : ''} h-full overflow-hidden ${activeTab === 'sala-de-estudos' ? 'px-6 pb-6' : 'p-6'} gap-6`}>
+            <main className={`flex-1 flex flex-col transition-all duration-300 ${!isEmbedded ? (isChatLeft ? 'pr-[80px]' : 'pl-[80px]') : ''} h-full overflow-hidden ${activeTab === 'sala-de-estudos' || activeTab === 'projetos' ? 'px-6 pb-6' : 'p-6'} gap-6`}>
 
-                {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
-                    alinhada à borda superior da sidebar */}
-                {activeTab !== "sala-de-estudos" && activeTab !== "pesquisa" && (
+                {/* CABEÇALHO — oculto na Sala de Estudos e em Projetos: o módulo assume o
+                    topo (a barra ⟁ da IDE), alinhado à borda superior da sidebar */}
+                {activeTab !== "sala-de-estudos" && activeTab !== "pesquisa" && activeTab !== "projetos" && (
                     <div className="flex items-end justify-between shrink-0">
                         <div>
                             <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
@@ -1584,6 +1593,13 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                     <div className={`w-full h-full overflow-hidden ${activeTab === "sala-de-estudos" ? "" : "hidden"}`}>
                         <StudyRoomContent flushTop />
                     </div>
+
+                    {/* Projetos — IDE agêntica; sempre montada quando ativa, para preservar editor/agente */}
+                    {activeTab === "projetos" && (
+                        <div className="w-full h-full overflow-hidden">
+                            <ProjectsContent />
+                        </div>
+                    )}
 
                     {activeTab === "pesquisas" && (
                         <div className="w-full h-full overflow-y-auto custom-scrollbar">

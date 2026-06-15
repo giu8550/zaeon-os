@@ -36,10 +36,19 @@ model User {
   xp              Int       @default(0)
   skills          Json?     // <--- NOVO: O motor do RPG acadêmico (Ranks F-SS)
   
+  // Projetos IDE (agentic) — per-user GitHub App installation
+  githubInstallationId String?  // overrides GITHUB_APP_INSTALLATION_ID when the student installs the App on their own repos
+  githubDefaultRepo    String?  // "owner/name" the IDE opens by default
+  // GitHub OAuth user-to-server (modelo "conta pessoal do aluno"): cria/edita repos NA CONTA dele
+  githubUserToken      String?  // user-to-server access token (CIFRADO via lib/projects/crypto)
+  githubUserLogin      String?  // login do GitHub do aluno
+  githubRefreshToken   String?  // refresh token (CIFRADO) quando o App usa tokens expiráveis
+  githubTokenExpiresAt DateTime?
+
   // Identity
-  identityId      String?   
-  idType          String?   
-  walletAddress   String?   
+  identityId      String?
+  idType          String?
+  walletAddress   String?
   
   // Admin & Verification
   kycStatus         String  @default("pending")

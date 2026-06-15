@@ -15,7 +15,7 @@ function reducedMotion() {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
-export default function GlitchTerm({ term, done = false }: { term: string; done?: boolean }) {
+export default function GlitchTerm({ term, done = false, compact = false }: { term: string; done?: boolean; compact?: boolean }) {
   const [display, setDisplay] = useState(term);
   const raf = useRef<number | undefined>(undefined);
 
@@ -68,11 +68,11 @@ export default function GlitchTerm({ term, done = false }: { term: string; done?
   }, [term, done]);
 
   return (
-    <div className="flex items-center gap-2 sm:gap-3 min-w-0" aria-label={`Pesquisando: ${term}`}>
-      <Search className="text-violet-500 dark:text-cyan-400 shrink-0 w-5 h-5 sm:w-6 sm:h-6" aria-hidden />
+    <div className={`flex items-center gap-2 sm:gap-3 min-w-0 ${compact ? "overflow-hidden" : ""}`} aria-label={`Pesquisando: ${term}`}>
+      <Search className={`text-violet-500 dark:text-cyan-400 shrink-0 ${compact ? "w-4 h-4" : "w-5 h-5 sm:w-6 sm:h-6"}`} aria-hidden />
       <span
-        style={{ fontFamily: `"Noto Sans SC","Microsoft YaHei",sans-serif` }}
-        className="font-black tracking-tight break-words leading-tight text-xl sm:text-2xl md:text-3xl lg:text-4xl bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent"
+        style={{ fontFamily: `"Noto Sans SC","Microsoft YaHei",sans-serif`, maxWidth: "100%" }}
+        className={`font-black tracking-tight bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent ${compact ? "whitespace-nowrap overflow-hidden text-ellipsis leading-none text-base sm:text-lg" : "break-words leading-tight text-xl sm:text-2xl md:text-3xl lg:text-4xl"}`}
       >
         {display || " "}
       </span>

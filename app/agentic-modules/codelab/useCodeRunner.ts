@@ -117,24 +117,50 @@ export function useCodeRunner() {
   }, []);
 
   // ─── Run code ─────────────────────────────────────────────────────────────
-  const run = useCallback(async (code: string, lang: Language) => {
-    if (isRunning) return;
+  // Returns the collected outputs (in addition to pushing them to state) so an
+  // autonomous agent loop can read stderr and decide whether to self-correct.
+  // `files` (optional) are the other workspace files. For Python they are mounted
+  // into Pyodide's virtual FS so a multi-file project (imports/modules) runs for
+  // real — not just a single script.
+  const run = useCallback(async (
+    code: string,
+    lang: Language,
+    files?: { path: string; content: string }[],
+  ): Promise<RunOutput[]> => {
+    if (isRunning) return [];
     setIsRunning(true);
     setOutput([]);
-    push('info', `▶ Running ${lang}…`);
+
+    const collected: RunOutput[] = [];
+    const emit = (type: RunOutput['type'], text: string) => {
+      collected.push({ type, text, ts: Date.now() });
+      push(type, text);
+    };
+    emit('info', `▶ Running ${lang}…`);
 
     try {
       // ── Python via Pyodide ───────────────────────────────────────────────
       if (lang === 'python') {
         if (!isPyodideReady || !pyRef.current) {
-          push('stderr', pyodideError ?? 'Python runtime not ready yet. Please wait…');
+          emit('stderr', pyodideError ?? 'Python runtime not ready yet. Please wait…');
           setIsRunning(false);
-          return;
+          return collected;
         }
         const py = pyRef.current;
-        // Capture stdout via StringIO
+        // Mount the other workspace .py files into Pyodide's FS so imports resolve.
+        if (files?.length) {
+          for (const f of files) {
+            if (!f.path.endsWith('.py')) continue;
+            const parts = f.path.split('/');
+            let cur = '';
+            for (let i = 0; i < parts.length - 1; i++) { cur += (cur ? '/' : '') + parts[i]; try { py.FS.mkdir(cur); } catch { /* exists */ } }
+            try { py.FS.writeFile(f.path, f.content); } catch { /* ignore */ }
+          }
+        }
+        // Capture stdout via StringIO + ensure cwd is importable.
         py.runPython(`
 import sys, io
+if '' not in sys.path: sys.path.insert(0, '')
 _stdout_buf = io.StringIO()
 _stderr_buf = io.StringIO()
 sys.stdout = _stdout_buf
@@ -144,23 +170,23 @@ sys.stderr = _stderr_buf
           py.runPython(code);
           const stdout = py.runPython('_stdout_buf.getvalue()');
           const stderr = py.runPython('_stderr_buf.getvalue()');
-          if (stdout) push('stdout', stdout);
-          if (stderr) push('stderr', stderr);
+          if (stdout) emit('stdout', stdout);
+          if (stderr) emit('stderr', stderr);
         } catch (e: any) {
-          push('stderr', String(e));
+          emit('stderr', String(e));
         } finally {
           py.runPython('sys.stdout = sys.__stdout__; sys.stderr = sys.__stderr__');
         }
-        push('info', '✓ Done');
+        emit('info', '✓ Done');
         setIsRunning(false);
-        return;
+        return collected;
       }
 
       // ── HTML preview ─────────────────────────────────────────────────────
       if (lang === 'html') {
-        push('info', 'HTML preview opened in panel below ↓');
+        emit('info', 'HTML preview opened in panel below ↓');
         setIsRunning(false);
-        return;
+        return collected;
       }
 
       // ── JS / TS via sandboxed iframe ─────────────────────────────────────
@@ -190,7 +216,7 @@ sys.stderr = _stderr_buf
               cleanup();
               resolve();
             } else if (type && text !== undefined) {
-              push(type as RunOutput['type'], text);
+              emit(type as RunOutput['type'], text);
             }
           };
           window.addEventListener('message', handler);
@@ -200,19 +226,20 @@ sys.stderr = _stderr_buf
 
         iframe.src = url;
         await msgPromise;
-        push('info', '✓ Done');
+        emit('info', '✓ Done');
         setIsRunning(false);
-        return;
+        return collected;
       }
 
       // ── Other languages ───────────────────────────────────────────────────
-      push('info', `🚧 ${lang} execution is not yet supported in-browser.`);
-      push('info', 'Coming soon: Rust, Go, SQL via self-hosted Piston.');
+      emit('info', `🚧 ${lang} execution is not yet supported in-browser.`);
+      emit('info', 'Coming soon: Rust, Go, SQL via self-hosted Piston.');
     } catch (e: any) {
-      push('stderr', e.message ?? 'Unknown error');
+      emit('stderr', e.message ?? 'Unknown error');
     } finally {
       setIsRunning(false);
     }
+    return collected;
   }, [isRunning, isPyodideReady, pyodideError, push]);
 
   return { run, output, isRunning, isPyodideReady, pyodideError, clearOutput, iframeRef };
