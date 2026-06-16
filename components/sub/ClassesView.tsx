@@ -33,11 +33,13 @@ const CLASS_COLORS = [
 
 // AGENDA RADIAL — cores solidas + geometria do relogio de fatias
 const CLASS_SOLID = ["#10b981", "#3b82f6", "#6366f1", "#d946ef", "#f43f5e", "#f59e0b"];
-const colorHex = (g?: string) => { const i = CLASS_COLORS.indexOf(g || ""); return i >= 0 ? CLASS_SOLID[i] : "#8b5cf6"; };
+// Paleta basica para pintar as fatias (clique na fatia)
+const BASIC_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#22c55e", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef", "#ec4899", "#ffffff", "#64748b"];
+const colorHex = (g?: string) => { if (g && g[0] === "#") return g; const i = CLASS_COLORS.indexOf(g || ""); return i >= 0 ? CLASS_SOLID[i] : "#8b5cf6"; };
 const DAYS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
 const DAYS_FULL = ["Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado", "Domingo"];
 const AG_MIN = 6, AG_MAX = 22, AG_TOTAL = 16;
-const agAngle = (h: number) => -90 + ((h - AG_MIN) / AG_TOTAL) * 360;
+const agAngle = (h: number) => -90 + ((h % 12) / 12) * 360; // relogio 12h, 30graus/hora, sentido horario
 const agPolar = (cx: number, cy: number, r: number, deg: number) => { const a = (deg * Math.PI) / 180; return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }; };
 const agDonut = (cx: number, cy: number, rI: number, rO: number, h0: number, h1: number) => {
     const a0 = agAngle(h0), a1 = agAngle(h1);
@@ -333,6 +335,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
 
     // glitch leve quando uma aula nova entra
     const flashGlitch = (id: number) => { setGlitchClassId(id); setTimeout(() => setGlitchClassId((c) => (c === id ? null : c)), 1100); };
+    const setClassColor = (id: number, hex: string) => { setClasses((prev) => prev.map((c) => (c.id === id ? { ...c, color: hex } : c))); setColorPickId(null); };
 
     // cria rascunho de aula no dia selecionado, num horario dado
     const addDraftAt = (hour: number) => {
@@ -377,6 +380,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     const [selectedDay, setSelectedDay] = useState<number>(0);
     const [glitchClassId, setGlitchClassId] = useState<number | null>(null);
     const [dayNavOpen, setDayNavOpen] = useState(false);
+    const [colorPickId, setColorPickId] = useState<number | null>(null);
     
     // STATE - AI MODULES NO BACKPACK (Apenas 1 módulo inicial agora)
     const [userModules, setUserModules] = useState<UserModule[]>([
@@ -950,7 +954,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
 
                 {/* AGENDA RADIAL (relogio de fatias; dia no centro com setas) */}
                 <div className="flex-1 min-w-[300px] self-start flex flex-col items-center gap-3 z-10" onClick={(e) => e.stopPropagation()}>
-                    <div className="w-full max-w-[320px] bg-[#0f172a]/95 dark:bg-black/40 backdrop-blur-xl border border-white/10 rounded-[2.4rem] p-5 shadow-xl flex flex-col items-center gap-3">
+                    <div className="w-full max-w-[320px] bg-[#0f172a]/95 dark:bg-black/40 backdrop-blur-xl border border-white/15 rounded-[2.4rem] p-5 shadow-[0_0_50px_-10px_rgba(139,92,246,0.55),0_0_95px_-30px_rgba(34,211,238,0.45)] flex flex-col items-center gap-3 relative">
                         <div className="w-full flex items-center">
                             <span className="text-[9px] font-bold uppercase tracking-[0.22em] text-white/45">Agenda</span>
                         </div>
@@ -958,13 +962,13 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                         <div ref={agendaRef} className="relative">
                             <svg viewBox="0 0 300 300" width="240" height="240" className="touch-none">
                                 <circle cx="150" cy="150" r="103" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="34" />
-                                {[6,8,10,12,14,16,18,20,22].map((h) => { const p = agPolar(150,150,128, agAngle(h)); const p2 = agPolar(150,150, h % 4 === 2 ? 122 : 119, agAngle(h)); return <line key={h} x1={p.x} y1={p.y} x2={p2.x} y2={p2.y} stroke="rgba(255,255,255,0.22)" strokeWidth={h % 4 === 2 ? 2 : 1} />; })}
-                                {[6,10,14,18,22].map((h) => { const p = agPolar(150,150,140, agAngle(h)); return <text key={h} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="rgba(255,255,255,0.4)" fontSize="9" fontWeight="700">{h}h</text>; })}
+                                {Array.from({ length: 12 }).map((_, k) => { const a = -90 + k * 30; const p = agPolar(150,150,128, a); const p2 = agPolar(150,150, k % 3 === 0 ? 119 : 123, a); return <line key={k} x1={p.x} y1={p.y} x2={p2.x} y2={p2.y} stroke="rgba(255,255,255,0.22)" strokeWidth={k % 3 === 0 ? 2 : 1} />; })}
+                                {([["12",-90],["3",0],["6",90],["9",180]] as [string, number][]).map(([lbl, a]) => { const p = agPolar(150,150,140, a); return <text key={lbl} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="rgba(255,255,255,0.4)" fontSize="10" fontWeight="700">{lbl}</text>; })}
                                 {classesToRender.filter((c: any) => (c.days || []).includes(selectedDay + 1)).map((cls: any) => {
                                     const h0 = Math.max(AG_MIN, Math.min(AG_MAX - 0.25, Number(cls.hour) || AG_MIN));
                                     const h1 = Math.max(h0 + 0.25, Math.min(AG_MAX, Number(cls.endHour) || h0 + 1));
                                     return (
-                                        <path key={cls.id} d={agDonut(150,150,86,120,h0,h1)} fill={colorHex(cls.color)} className={`transition-all opacity-85 ${glitchClassId === cls.id ? 'agenda-glitch' : ''}`} style={{ stroke: 'rgba(0,0,0,0.18)', strokeWidth: 1 }} />
+                                        <path key={cls.id} d={agDonut(150,150,86,120,h0,h1)} fill={colorHex(cls.color)} onClick={(e) => { e.stopPropagation(); setColorPickId((p) => (p === cls.id ? null : cls.id)); }} className={`cursor-pointer transition-all hover:opacity-100 ${colorPickId === cls.id ? 'opacity-100' : 'opacity-85'} ${glitchClassId === cls.id ? 'agenda-glitch' : ''}`} style={{ stroke: colorPickId === cls.id ? '#fff' : 'rgba(0,0,0,0.18)', strokeWidth: colorPickId === cls.id ? 2 : 1 }} />
                                     );
                                 })}
                                 {DAY_NOW === selectedDay + 1 && HOUR_NOW != null && HOUR_NOW >= AG_MIN && HOUR_NOW <= AG_MAX && (() => { const p = agPolar(150,150,120, agAngle(HOUR_NOW as number)); return <g><line x1="150" y1="150" x2={p.x} y2={p.y} stroke="#fff" strokeWidth="2" className="opacity-70" /><circle cx={p.x} cy={p.y} r="3" fill="#22d3ee" /></g>; })()}
@@ -979,6 +983,14 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                                 </>
                             )}
                         </div>
+
+                        {colorPickId !== null && (
+                            <div className="w-full flex flex-wrap items-center justify-center gap-1.5">
+                                {BASIC_COLORS.map((hex) => (
+                                    <button key={hex} onClick={() => setClassColor(colorPickId as number, hex)} className="w-5 h-5 rounded-full border border-white/30 hover:scale-110 transition-transform shadow" style={{ background: hex }} title="Pintar a fatia" />
+                                ))}
+                            </div>
+                        )}
 
                         {/* EVENTOS DO DIA — preenchidos pela Zaeon (somente leitura) */}
                         <div className="w-full mt-1 pt-3 border-t border-white/10">
