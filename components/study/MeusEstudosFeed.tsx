@@ -533,10 +533,10 @@ export default function MeusEstudosFeed() {
         </button>
       )}
 
-      {/* ── BIBLIOTECA (direita) ── */}
+      {/* ── BIBLIOTECA (direita) — painel destacado do fundo (claro e escuro) ── */}
       {libOpen && (
-      <div className="lg:w-60 shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-white/10 flex flex-col min-h-0">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/10">
+      <div className="lg:w-64 shrink-0 flex flex-col min-h-0 lg:m-3 lg:rounded-2xl border-t lg:border border-slate-200 dark:border-white/12 bg-slate-100/80 dark:bg-[#0a0f1c] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:shadow-[0_8px_30px_-10px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.06)] overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03]">
           <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Biblioteca</span>
           <span className="text-[9px] font-mono text-slate-400">{library.length}</span>
           <button onClick={() => setShowAdd((v) => !v)} className="ml-auto p-1 rounded-lg text-slate-400 hover:text-cyan-500" title="Adicionar à biblioteca"><Plus size={15} /></button>
