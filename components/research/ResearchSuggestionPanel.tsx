@@ -229,7 +229,8 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
               disabled={loading || !topic.trim()}
               className="group relative inline-block px-9 py-3 rounded-2xl overflow-hidden bg-black/40 border border-cyan-500/30 text-white font-black text-[11px] uppercase tracking-[0.28em] shadow-2xl backdrop-blur-md transition-all duration-500 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
             >
-              <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600/40 via-cyan-500/40 to-blue-600/40 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
+              {/* flash: no hover varre 1x; ENQUANTO CARREGA fica indo e voltando até 100% */}
+              <span className={`absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600/40 via-cyan-500/40 to-blue-600/40 ${loading ? "zaeon-sweeping" : "-translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"}`} />
               <span className="relative z-10 group-hover:text-cyan-100 group-hover:drop-shadow-[0_0_10px_white] transition-all">
                 {loading ? "Gerando…" : "Gerar sugestão ✦"}
               </span>
@@ -332,6 +333,12 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
         )}
       </div>
       )}
+
+      {/* flash em loop (ida e volta) enquanto a sugestão é gerada */}
+      <style jsx global>{`
+        @keyframes zaeon-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+        .zaeon-sweeping { animation: zaeon-sweep 1.1s ease-in-out infinite alternate; }
+      `}</style>
     </div>
   );
 }
