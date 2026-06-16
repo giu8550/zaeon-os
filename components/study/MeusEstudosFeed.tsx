@@ -103,6 +103,22 @@ export default function MeusEstudosFeed() {
   const [zaeonStatus, setZaeonStatus] = useState("");
   // Título sendo "digitado" pela Zaeon com glitch (substitui o input enquanto cria)
   const [genTitle, setGenTitle] = useState<string | null>(null);
+  // A barra-agente só aparece ao clicar no ⟁ ao lado do título
+  const [barOpen, setBarOpen] = useState(false);
+  // Frases com emoção que rotacionam enquanto a Zaeon trabalha (são muitas etapas)
+  const ZAEON_PHRASES = [
+    "Mergulhando no assunto 🤿", "Garimpando as melhores ideias ✨", "Lendo nas entrelinhas 📚",
+    "Conectando os pontos 🧩", "Separando o que realmente importa", "Pensando como te explicar melhor 🧠",
+    "Dando forma ao seu estudo ✍️", "Caprichando nos detalhes", "Quase lá, montando tudo…",
+  ];
+  const [phraseIdx, setPhraseIdx] = useState(0);
+  useEffect(() => {
+    if (!zaeonBusy) return;
+    setPhraseIdx(0);
+    const id = setInterval(() => setPhraseIdx((p) => (p + 1) % ZAEON_PHRASES.length), 2200);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zaeonBusy]);
 
   const itemsRef = useRef<Item[]>([]);
   itemsRef.current = items;
@@ -391,7 +407,16 @@ export default function MeusEstudosFeed() {
       <div className="flex-1 min-w-0 flex flex-col p-5 sm:p-6">
         {/* título do estudo + espaços */}
         <div className="flex items-center gap-2 mb-3">
-          <NotebookPen size={18} className="text-cyan-600 dark:text-cyan-300 shrink-0" />
+          {/* ⟁ da Zaeon no lugar do caderno: clica → abre/fecha a barrinha-agente */}
+          <button
+            onClick={() => setBarOpen((v) => !v)}
+            title={barOpen ? "Fechar a Zaeon" : "Pedir um estudo à Zaeon"}
+            aria-pressed={barOpen}
+            className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-sm leading-none transition-all ${barOpen ? "text-white shadow-sm" : "text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10"}`}
+            style={barOpen ? { background: "linear-gradient(135deg,#2563eb,#06b6d4)" } : undefined}
+          >
+            <span className={`${zaeonBusy ? "animate-[spin_4s_linear_infinite]" : "animate-[spin_16s_linear_infinite]"} motion-reduce:animate-none`} style={{ filter: "drop-shadow(0 0 3px rgba(34,211,238,0.5))" }}>⟁</span>
+          </button>
           {genTitle !== null ? (
             // Zaeon "digitando" o nome do estudo (glitch + gradiente), no-wrap
             <span
@@ -427,38 +452,39 @@ export default function MeusEstudosFeed() {
           </div>
         </div>
 
-        {/* ── A BARRA-AGENTE de Meus Estudos: cria os estudos. Mistura das duas barras,
-              puxando pro azul, com mais destaque no escuro. ── */}
-        <div className="mb-3 rounded-2xl p-[1.5px] bg-gradient-to-r from-blue-500/70 via-cyan-400/70 to-sky-500/70 dark:from-blue-400/80 dark:via-cyan-400/80 dark:to-sky-400/80 dark:shadow-[0_0_24px_-4px_rgba(56,189,248,0.35)]">
-          <div className="rounded-2xl bg-white dark:bg-[#0a1020] px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <span className="text-cyan-500 dark:text-cyan-300 text-sm leading-none shrink-0 animate-[spin_14s_linear_infinite] motion-reduce:animate-none" style={{ filter: "drop-shadow(0 0 3px rgba(34,211,238,0.5))" }}>⟁</span>
-              <input
-                value={zaeonCmd}
-                onChange={(e) => setZaeonCmd(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") zaeonStudy(); }}
-                disabled={zaeonBusy}
-                placeholder="Zaeon, estude sobre… (ex.: fotossíntese, redes neurais, Revolução Francesa)"
-                className="flex-1 min-w-0 bg-transparent text-[13px] text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/35 focus:outline-none disabled:opacity-60"
-              />
-              <button onClick={zaeonStudy} disabled={zaeonBusy || !zaeonCmd.trim()}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-white text-[12px] font-bold disabled:opacity-40 shadow-sm"
-                style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}>
-                {zaeonBusy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Estudar
-              </button>
-            </div>
-            {zaeonStatus && (
-              <p className="mt-1.5 pl-6 text-[11px] text-cyan-600 dark:text-cyan-300 flex items-center gap-1.5">
-                {zaeonBusy && <span className="inline-flex gap-0.5">
-                  <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" />
-                  <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-                </span>}
-                {zaeonStatus}
-              </p>
-            )}
+        {/* ── BARRINHA-AGENTE: só aparece ao clicar no ⟁. Fina, azulada, destaque no dark. ── */}
+        {(barOpen || zaeonBusy) && (
+        <div className="mb-3 rounded-full p-[1.5px] bg-gradient-to-r from-blue-500/70 via-cyan-400/70 to-sky-500/70 dark:from-blue-400/80 dark:via-cyan-400/80 dark:to-sky-400/80 dark:shadow-[0_0_22px_-6px_rgba(56,189,248,0.4)]">
+          <div className="rounded-full bg-white dark:bg-[#0a1020] pl-3.5 pr-1.5 py-1 flex items-center gap-2">
+            <input
+              autoFocus
+              value={zaeonCmd}
+              onChange={(e) => setZaeonCmd(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") zaeonStudy(); if (e.key === "Escape") setBarOpen(false); }}
+              disabled={zaeonBusy}
+              placeholder="Zaeon, estude sobre…"
+              className="flex-1 min-w-0 bg-transparent text-[12.5px] text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/35 focus:outline-none disabled:opacity-60 py-1"
+            />
+            <button onClick={zaeonStudy} disabled={zaeonBusy || !zaeonCmd.trim()}
+              className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white disabled:opacity-40 shadow-sm"
+              style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }} title="Criar estudo">
+              {zaeonBusy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+            </button>
           </div>
         </div>
+        )}
+
+        {/* Status com EMOÇÃO — frases que rotacionam (são muitas etapas) */}
+        {(zaeonBusy || zaeonStatus) && (
+          <p className="mb-3 pl-9 text-[11px] text-cyan-600 dark:text-cyan-300 flex items-center gap-1.5">
+            {zaeonBusy && <span className="inline-flex gap-0.5">
+              <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" />
+              <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+            </span>}
+            {zaeonBusy ? ZAEON_PHRASES[phraseIdx] : zaeonStatus}
+          </p>
+        )}
 
         {/* a folha do caderno (também é drop target da biblioteca) */}
         <div
