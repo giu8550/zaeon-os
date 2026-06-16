@@ -87,7 +87,11 @@ function LevelThermometer({ value, onChange }: { value: Level; onChange: (l: Lev
 
   return (
     <div>
-      <p className="text-[9px] font-black uppercase tracking-[.18em] text-slate-400 dark:text-white/30 mb-2">Nível da pesquisa · segure e arraste</p>
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="w-6 h-6 rounded-[9px] flex items-center justify-center text-white text-[12px] shrink-0" style={{ background: "linear-gradient(135deg,#0ea5e9,#22d3ee)" }}>🌡️</span>
+        <span className="text-[13px] font-black tracking-tight text-slate-900 dark:text-white">Nível da pesquisa</span>
+        <span className="text-[9px] font-bold uppercase tracking-[.12em] text-slate-400 dark:text-white/35">segure e arraste</span>
+      </div>
       <div className="flex items-stretch gap-3">
         {/* coluna do termômetro */}
         <div

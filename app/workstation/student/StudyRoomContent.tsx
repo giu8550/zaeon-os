@@ -269,8 +269,8 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                                         text-[11px] font-semibold whitespace-nowrap
                                         transition-all duration-150
                                         ${isActive
-                                            ? "bg-gradient-to-b from-violet-100 to-violet-50 text-violet-700 border-violet-200 shadow-[0_8px_18px_-8px_rgba(139,92,246,0.45)] dark:from-white/20 dark:to-white/[0.05] dark:text-white dark:border-white/25 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.42),0_8px_18px_-8px_rgba(139,92,246,0.8)]"
-                                            : "text-slate-500 dark:text-white/40 border-transparent hover:text-slate-700 dark:hover:text-white/70 hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
+                                            ? "bg-gradient-to-b from-violet-200 to-violet-100 text-violet-800 border-violet-300 shadow-[0_8px_18px_-8px_rgba(139,92,246,0.5)] dark:from-white/20 dark:to-white/[0.05] dark:text-white dark:border-white/25 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.42),0_8px_18px_-8px_rgba(139,92,246,0.8)]"
+                                            : "bg-white text-slate-600 border-slate-200 shadow-sm hover:text-violet-700 hover:border-violet-300 hover:bg-violet-50 dark:bg-white/[0.04] dark:text-white/45 dark:border-white/10 dark:shadow-none dark:hover:text-white/70 dark:hover:bg-white/[0.07]"
                                         }
                                     `}
                                 >
