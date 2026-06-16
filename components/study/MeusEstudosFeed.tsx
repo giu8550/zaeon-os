@@ -374,9 +374,10 @@ export default function MeusEstudosFeed() {
     }
 
     // BLOCO DE TEXTO editável (título / subtítulo / parágrafo)
-    const cls = variant === "h1" ? "text-2xl font-black tracking-tight text-slate-900 dark:text-white"
-      : variant === "h2" ? "text-lg font-bold text-slate-800 dark:text-white/95"
-      : "text-[13px] leading-relaxed text-slate-700 dark:text-slate-200";
+    // Tipografia editorial (estilo Claude): títulos grandes, texto generoso e legível.
+    const cls = variant === "h1" ? "text-3xl sm:text-4xl font-black tracking-tight leading-tight text-slate-900 dark:text-white"
+      : variant === "h2" ? "text-xl sm:text-2xl font-bold tracking-tight leading-snug text-slate-800 dark:text-white/95"
+      : "text-[16px] sm:text-[17px] leading-[1.7] text-slate-700 dark:text-slate-200/90";
     const ph = variant === "h1" ? "Título" : variant === "h2" ? "Subtítulo" : "Escreva…";
     const onKey = (e: React.KeyboardEvent) => {
       if (e.key === "Backspace" && text === "") { e.preventDefault(); removeItem(it.id); }
@@ -486,6 +487,13 @@ export default function MeusEstudosFeed() {
           </p>
         )}
 
+        {/* Barra de loading enquanto a Zaeon monta o estudo */}
+        {zaeonBusy && (
+          <div className="mb-3 mx-0.5 h-1 rounded-full overflow-hidden bg-slate-200/70 dark:bg-white/10">
+            <div className="zaeon-loadbar h-full rounded-full" style={{ background: "linear-gradient(90deg,#2563eb,#22d3ee,#7c3aed)" }} />
+          </div>
+        )}
+
         {/* a folha do caderno (também é drop target da biblioteca) */}
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -569,6 +577,12 @@ export default function MeusEstudosFeed() {
         </div>
       </div>
       )}
+
+      {/* barra de loading indeterminada (segmento que vai e volta) */}
+      <style jsx global>{`
+        @keyframes zaeon-load { 0% { transform: translateX(-100%); width: 40%; } 50% { width: 60%; } 100% { transform: translateX(250%); width: 40%; } }
+        .zaeon-loadbar { animation: zaeon-load 1.3s ease-in-out infinite; }
+      `}</style>
     </div>
   );
 }

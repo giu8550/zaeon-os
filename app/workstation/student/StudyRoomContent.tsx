@@ -312,9 +312,12 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                     style={{ transform: "translateZ(0)" }}
                 >
                     <div className="absolute inset-0 overflow-y-auto" style={{ isolation: "isolate" }}>
-                        {activeTab === "meus-estudos" ? (
+                        {/* Meus Estudos fica SEMPRE montado (só escondido) → a geração da Zaeon
+                            e a barra de loading NÃO resetam ao trocar de submódulo/aba. */}
+                        <div className={activeTab === "meus-estudos" ? "h-full" : "hidden"}>
                             <MeusEstudosFeed />
-                        ) : activeTab === "community" ? (
+                        </div>
+                        {activeTab === "meus-estudos" ? null : activeTab === "community" ? (
                             <OmegaScholarWorkspace />
                         ) : activeTab === "projects" ? (
                             <ProFeaturePanel
