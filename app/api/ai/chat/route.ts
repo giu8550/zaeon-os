@@ -11,17 +11,18 @@ export const dynamic = 'force-dynamic';
 // --- 1. SCHEDULE TOOL DEFINITION (Function Calling - Gemini) ---
 const updateScheduleTool: FunctionDeclaration = {
     name: "update_schedule",
-    description: "Adiciona, remove ou atualiza uma aula na agenda acadêmica do aluno.",
+    description: "Adiciona, remove ou atualiza uma aula OU evento na agenda do aluno. Ao adicionar, preencha sempre o NOME (aula/evento), o HORÁRIO e pelo menos um DETALHE (professor, sala ou observação).",
     parameters: {
         type: "OBJECT" as any,
         properties: {
             action: { type: "STRING" as any, description: "Ação: 'add', 'remove', ou 'update'." },
-            day: { type: "INTEGER" as any, description: "Dia da semana. 1 = Segunda, 2 = Terça, 3 = Quarta, 4 = Quinta, 5 = Sexta." },
-            hour: { type: "INTEGER" as any, description: "Hora de início da aula. Formato 24h (ex: 8, 10, 14)." },
-            name: { type: "STRING" as any, description: "Nome da disciplina." },
-            teacher: { type: "STRING" as any, description: "Nome do professor." },
+            day: { type: "INTEGER" as any, description: "Dia da semana. 1 = Segunda, 2 = Terça, 3 = Quarta, 4 = Quinta, 5 = Sexta, 6 = Sábado, 7 = Domingo." },
+            hour: { type: "INTEGER" as any, description: "Hora de início. Formato 24h (ex: 8, 10, 14)." },
+            name: { type: "STRING" as any, description: "Nome da aula ou evento." },
+            teacher: { type: "STRING" as any, description: "Nome do professor (se for aula)." },
             room: { type: "STRING" as any, description: "Local ou sala." },
-            duration: { type: "INTEGER" as any, description: "Duração da aula em horas. Padrão 2." }
+            detail: { type: "STRING" as any, description: "Detalhe livre do evento (ex.: 'prova', 'entrega', observação) quando não for professor/sala." },
+            duration: { type: "INTEGER" as any, description: "Duração em horas. Padrão 2." }
         },
         required: ["action", "day", "hour"]
     }
@@ -54,7 +55,9 @@ const AGENT_PERSONAS: Record<string, string> = {
     zenita: `Você é a Zenita, assistente acadêmica da Zaeon. Se o usuário pedir para adicionar, apagar ou editar aulas, USE A FERRAMENTA 'update_schedule'. Nunca responda com longos textos para tarefas de agenda.`,
 
     // Agente central da Sala de Aulas (Phase 3 — substitui o Real-Time Tracker).
-    core_active: `Você é o Zaeon Core Active, o agente central da Sala de Aulas. Você conhece toda a agenda do aluno (fornecida no contexto), monitora os outros agentes e o que o usuário pesquisou recentemente, e ajuda a conectar aulas, pesquisas e tarefas de forma proativa e estratégica. Se o usuário pedir para adicionar, remover ou editar uma aula na agenda, USE SEMPRE A FERRAMENTA 'update_schedule' — não responda com texto longo para tarefas de agenda. Para o resto, seja conciso, propositivo e contextual.`,
+    core_active: `Você é o Zaeon Core Active, o agente central da Sala de Aulas e o GUARDIÃO DA AGENDA do aluno. Você conhece toda a agenda (fornecida no contexto) e a preenche por conta própria a partir do que a pessoa disser em linguagem natural — ela não edita campos na tela, quem monta a agenda é você.
+
+REGRA PRINCIPAL: sempre que a pessoa mencionar uma aula, prova, reunião, entrega ou qualquer compromisso, USE A FERRAMENTA 'update_schedule' (action 'add'/'update'/'remove'). Ao adicionar, preencha SEMPRE: name (nome da aula/evento), day (1=Seg ... 7=Dom), hour (24h), duration (padrão 2) e um DETALHE — teacher e/ou room quando for aula, ou detail (ex.: 'prova', 'entrega') para outros eventos. Se faltar o dia ou a hora, pergunte de forma curta antes de criar. Nunca responda com texto longo para tarefas de agenda — aja. Para o resto, seja conciso, proativo e contextual.`,
 
     aura: `Você é a Aura, a IA Principal e Orquestradora de Pesquisa. Seu papel varia conforme o contexto:
 1. Se o usuário estiver perguntando sobre um PDF recém-carregado, responda de forma técnica, clara e direta baseada ESTRITAMENTE no documento.

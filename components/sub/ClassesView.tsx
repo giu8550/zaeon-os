@@ -35,6 +35,7 @@ const CLASS_COLORS = [
 const CLASS_SOLID = ["#10b981", "#3b82f6", "#6366f1", "#d946ef", "#f43f5e", "#f59e0b"];
 const colorHex = (g?: string) => { const i = CLASS_COLORS.indexOf(g || ""); return i >= 0 ? CLASS_SOLID[i] : "#8b5cf6"; };
 const DAYS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
+const DAYS_FULL = ["Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado", "Domingo"];
 const AG_MIN = 6, AG_MAX = 22, AG_TOTAL = 16;
 const agAngle = (h: number) => -90 + ((h - AG_MIN) / AG_TOTAL) * 360;
 const agPolar = (cx: number, cy: number, r: number, deg: number) => { const a = (deg * Math.PI) / 180; return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }; };
@@ -342,6 +343,19 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     };
 
     // clicar no anel cria aula na hora correspondente
+    // valida a matricula quando uma aula com os mesmos dados do convite entra na agenda
+    const checkInviteMatch = (cls: any) => {
+        if (!invitedClass || !pendingInvite) return;
+        const sameSubject = (cls.name || "").toLowerCase().trim() === (invitedClass.subject || "").toLowerCase().trim();
+        const sameDay = (cls.days || []).some((d: number) => invitedClass.days.includes(d));
+        const sameHour = Number(cls.hour) === Number(invitedClass.hour);
+        if (sameSubject && sameDay && sameHour) {
+            fetch('/api/student/confirm-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: pendingInvite }) })
+                .then(() => { alert("Aula Validada! Vinculo com professor estabelecido. O Chat Seguro foi liberado."); setInvitedClass(null); router.replace(`/study-rooms/${room}`); })
+                .catch(console.error);
+        }
+    };
+
     const onRingClick = (e: React.MouseEvent) => {
         if (selectedClass && (selectedClass.isDraft || hasUnsavedChanges)) return;
         const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
@@ -362,6 +376,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     const [storedPdfs, setStoredPdfs] = useState<StoredDoc[]>([]);
     const [selectedDay, setSelectedDay] = useState<number>(0);
     const [glitchClassId, setGlitchClassId] = useState<number | null>(null);
+    const [dayNavOpen, setDayNavOpen] = useState(false);
     
     // STATE - AI MODULES NO BACKPACK (Apenas 1 módulo inicial agora)
     const [userModules, setUserModules] = useState<UserModule[]>([
@@ -701,9 +716,10 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
             if (!day || !hour) return "Não consegui criar a aula: dia ou horário ausente.";
             const newClass = {
                 id: Date.now(),
-                name: name || "Nova aula",
+                name: name || "Novo evento",
                 teacher: args?.teacher || "",
                 room: args?.room || "",
+                detail: args?.detail || "",
                 location: args?.room || "Online",
                 days: [day],
                 hour,
@@ -714,6 +730,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
             };
             setClasses(prev => [...prev, newClass]);
             flashGlitch(newClass.id);
+            checkInviteMatch(newClass);
             return `✅ Adicionei "${newClass.name}" à agenda (${DAY_LABELS[day - 1]} ${hour}h–${hour + duration}h).`;
         }
 
@@ -733,8 +750,10 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                 updated = true;
                 return {
                     ...c,
+                    ...(args.name ? { name: args.name } : {}),
                     ...(args.teacher ? { teacher: args.teacher } : {}),
                     ...(args.room ? { room: args.room, location: args.room } : {}),
+                    ...(args.detail ? { detail: args.detail } : {}),
                     ...(hour ? { hour, endHour: hour + duration, duration } : {}),
                 };
             }));
@@ -818,9 +837,9 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
         : null;
 
     return (
-        <div ref={constraintsRef} onClick={handleBackgroundClick} className="relative min-h-screen w-full flex flex-col items-start px-6 pt-3 pb-8 bg-transparent font-sans selection:bg-cyan-500/30 text-slate-900 dark:text-white transition-colors duration-500 overflow-x-hidden">
+        <div ref={constraintsRef} onClick={handleBackgroundClick} className="relative min-h-screen w-full flex flex-col items-start px-6 pt-8 pb-8 bg-transparent font-sans selection:bg-cyan-500/30 text-slate-900 dark:text-white transition-colors duration-500 overflow-x-hidden">
             <style>{`@keyframes agendaGlitch{0%{opacity:0;transform:translate(0,0)}15%{opacity:1;transform:translate(1.5px,-1px)}30%{transform:translate(-1.5px,1px)}45%{transform:translate(1px,1px)}60%{transform:translate(-1px,0)}100%{opacity:1;transform:translate(0,0)}}.agenda-glitch{animation:agendaGlitch .95s ease-out;transform-box:fill-box;transform-origin:center}`}</style>
-            <div className="h-4 pointer-events-none"></div>
+            <div className="h-10 pointer-events-none"></div>
 
             {/* CARTÃO DE COLA (PENDING INVITE) */}
             <AnimatePresence>
@@ -839,7 +858,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                                 <div>
                                     <h3 className={`text-xs font-black uppercase tracking-[0.2em] ${t.text} mb-1 drop-shadow-md`}>Matrícula Pendente</h3>
                                     <p className="text-[11px] font-medium text-white/70 max-w-sm leading-relaxed">
-                                        Para oficializar sua entrada na turma de <strong className="text-white">{invitedClass.teacherName}</strong>, use o botão <strong>+</strong> na agenda abaixo e registre <strong>exatamente os mesmos dados</strong> deste cartão.
+                                        Para oficializar sua entrada na turma de <strong className="text-white">{invitedClass.teacherName}</strong>, peça à <strong>Zaeon</strong> (no chat) para adicionar a aula com <strong>exatamente os mesmos dados</strong> deste cartão.
                                     </p>
                                 </div>
                             </div>
@@ -858,6 +877,22 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
             </AnimatePresence>
 
             <div className="w-full max-w-[1180px] pb-10 flex items-start justify-start gap-6 flex-wrap z-20 relative">
+
+                {/* FIOS DE ENERGIA — religam chat -> livraria/plugins -> agenda */}
+                <div className="hidden lg:block absolute z-0 pointer-events-none" style={{ left: 399, top: 58, width: 26, height: 24 }}>
+                    <svg width="26" height="24" className="overflow-visible">
+                        <line x1="0" y1="12" x2="26" y2="12" stroke="rgba(139,92,246,0.25)" strokeWidth="3" />
+                        <motion.line x1="0" y1="12" x2="26" y2="12" stroke="#8b5cf6" strokeWidth="3" strokeDasharray="5 12" initial={{ strokeDashoffset: 0 }} animate={{ strokeDashoffset: -34 }} transition={{ duration: 1.1, repeat: Infinity, ease: 'linear' }} style={{ filter: 'drop-shadow(0 0 6px rgba(139,92,246,0.95))' }} />
+                        <motion.circle cy="12" r="2.5" fill="#22d3ee" animate={{ cx: [0, 26] }} transition={{ duration: 1.1, repeat: Infinity, ease: 'linear' }} style={{ filter: 'drop-shadow(0 0 5px #22d3ee)' }} />
+                    </svg>
+                </div>
+                <div className="hidden lg:block absolute z-0 pointer-events-none" style={{ left: 713, top: 58, width: 26, height: 24 }}>
+                    <svg width="26" height="24" className="overflow-visible">
+                        <line x1="0" y1="12" x2="26" y2="12" stroke="rgba(34,211,238,0.25)" strokeWidth="3" />
+                        <motion.line x1="0" y1="12" x2="26" y2="12" stroke="#22d3ee" strokeWidth="3" strokeDasharray="5 12" initial={{ strokeDashoffset: 0 }} animate={{ strokeDashoffset: -34 }} transition={{ duration: 1.1, repeat: Infinity, ease: 'linear', delay: 0.25 }} style={{ filter: 'drop-shadow(0 0 6px rgba(34,211,238,0.95))' }} />
+                        <motion.circle cy="12" r="2.5" fill="#8b5cf6" animate={{ cx: [0, 26] }} transition={{ duration: 1.1, repeat: Infinity, ease: 'linear', delay: 0.25 }} style={{ filter: 'drop-shadow(0 0 5px #8b5cf6)' }} />
+                    </svg>
+                </div>
 
                 {/* CHAT ZAEON (limpo, sem divisorias) */}
                 <div className="w-[400px] h-[440px] bg-white/55 dark:bg-black/40 backdrop-blur-3xl border border-white/30 dark:border-white/10 rounded-[2.4rem] shadow-2xl flex flex-col overflow-hidden relative z-10">
@@ -905,90 +940,55 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                     </div>
                 </div>
 
-                {/* AGENDA RADIAL (relogio de fatias + roleta de dias) */}
+                {/* AGENDA RADIAL (relogio de fatias; dia no centro com setas) */}
                 <div className="flex-1 min-w-[300px] self-start flex flex-col items-center gap-3 z-10" onClick={(e) => e.stopPropagation()}>
                     <div className="w-full max-w-[320px] bg-[#0f172a]/95 dark:bg-black/40 backdrop-blur-xl border border-white/10 rounded-[2.4rem] p-5 shadow-xl flex flex-col items-center gap-3">
-                        <div className="w-full flex items-center justify-between">
-                            <span className="text-[9px] font-bold uppercase tracking-[0.22em] text-white/55">Agenda</span>
-                            <button onClick={() => addDraftAt(8)} className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center text-white/70 transition-colors" title="Nova aula neste dia"><Plus size={12} /></button>
+                        <div className="w-full flex items-center">
+                            <span className="text-[9px] font-bold uppercase tracking-[0.22em] text-white/45">Agenda</span>
                         </div>
 
                         <div ref={agendaRef} className="relative">
-                            <svg viewBox="0 0 300 300" width="240" height="240" onClick={onRingClick} className="cursor-pointer touch-none">
+                            <svg viewBox="0 0 300 300" width="240" height="240" className="touch-none">
                                 <circle cx="150" cy="150" r="103" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="34" />
                                 {[6,8,10,12,14,16,18,20,22].map((h) => { const p = agPolar(150,150,128, agAngle(h)); const p2 = agPolar(150,150, h % 4 === 2 ? 122 : 119, agAngle(h)); return <line key={h} x1={p.x} y1={p.y} x2={p2.x} y2={p2.y} stroke="rgba(255,255,255,0.22)" strokeWidth={h % 4 === 2 ? 2 : 1} />; })}
                                 {[6,10,14,18,22].map((h) => { const p = agPolar(150,150,140, agAngle(h)); return <text key={h} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="rgba(255,255,255,0.4)" fontSize="9" fontWeight="700">{h}h</text>; })}
                                 {classesToRender.filter((c: any) => (c.days || []).includes(selectedDay + 1)).map((cls: any) => {
                                     const h0 = Math.max(AG_MIN, Math.min(AG_MAX - 0.25, Number(cls.hour) || AG_MIN));
                                     const h1 = Math.max(h0 + 0.25, Math.min(AG_MAX, Number(cls.endHour) || h0 + 1));
-                                    const sel = selectedClass?.id === cls.id;
                                     return (
-                                        <path
-                                            key={cls.id}
-                                            d={agDonut(150,150,86,120,h0,h1)}
-                                            fill={colorHex(cls.color)}
-                                            onClick={(e) => { e.stopPropagation(); setSelectedClass(cls); setHasUnsavedChanges(false); }}
-                                            className={`cursor-pointer transition-all ${sel ? 'opacity-100' : 'opacity-80 hover:opacity-100'} ${glitchClassId === cls.id ? 'agenda-glitch' : ''}`}
-                                            style={{ stroke: sel ? '#fff' : 'rgba(0,0,0,0.18)', strokeWidth: sel ? 2 : 1, filter: sel ? 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' : 'none' }}
-                                        />
+                                        <path key={cls.id} d={agDonut(150,150,86,120,h0,h1)} fill={colorHex(cls.color)} className={`transition-all opacity-85 ${glitchClassId === cls.id ? 'agenda-glitch' : ''}`} style={{ stroke: 'rgba(0,0,0,0.18)', strokeWidth: 1 }} />
                                     );
                                 })}
                                 {DAY_NOW === selectedDay + 1 && HOUR_NOW != null && HOUR_NOW >= AG_MIN && HOUR_NOW <= AG_MAX && (() => { const p = agPolar(150,150,120, agAngle(HOUR_NOW as number)); return <g><line x1="150" y1="150" x2={p.x} y2={p.y} stroke="#fff" strokeWidth="2" className="opacity-70" /><circle cx={p.x} cy={p.y} r="3" fill="#22d3ee" /></g>; })()}
                                 <circle cx="150" cy="150" r="4" fill="#fff" className="opacity-80" />
-                                <text x="150" y="143" textAnchor="middle" fill="#fff" fontSize="20" fontWeight="800">{DAYS_PT[selectedDay]}</text>
-                                <text x="150" y="162" textAnchor="middle" fill="rgba(255,255,255,0.45)" fontSize="9" fontWeight="700">{classesToRender.filter((c: any) => (c.days || []).includes(selectedDay + 1)).length} aula(s)</text>
+                                <text x="150" y="148" textAnchor="middle" dominantBaseline="middle" onClick={() => setDayNavOpen((o) => !o)} fill="#fff" fontSize="17" fontWeight="800" style={{ cursor: 'pointer' }}>{DAYS_FULL[selectedDay]}</text>
+                                <text x="150" y="168" textAnchor="middle" onClick={() => setDayNavOpen((o) => !o)} fill="rgba(255,255,255,0.42)" fontSize="8.5" fontWeight="700" style={{ cursor: 'pointer' }}>{classesToRender.filter((c: any) => (c.days || []).includes(selectedDay + 1)).length} evento(s)</text>
                             </svg>
+                            {dayNavOpen && (
+                                <>
+                                    <button onClick={() => setSelectedDay((selectedDay + 6) % 7)} className="absolute left-[-8px] top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/12 hover:bg-white/22 text-white flex items-center justify-center backdrop-blur-md border border-white/15 z-20 text-sm shadow-lg">&#8249;</button>
+                                    <button onClick={() => setSelectedDay((selectedDay + 1) % 7)} className="absolute right-[-8px] top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/12 hover:bg-white/22 text-white flex items-center justify-center backdrop-blur-md border border-white/15 z-20 text-sm shadow-lg">&#8250;</button>
+                                </>
+                            )}
                         </div>
 
-                        {/* ROLETA DE DIAS */}
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => setSelectedDay((selectedDay + 6) % 7)} className="w-6 h-6 rounded-full bg-white/[0.08] hover:bg-white/[0.16] text-white/60 flex items-center justify-center transition-colors text-sm">&#8249;</button>
-                            <div className="relative w-[112px] h-[112px]">
-                                <div className="absolute left-1/2 -top-0.5 -translate-x-1/2 text-[#22d3ee] text-[10px] leading-none">&#9662;</div>
-                                <motion.div className="absolute inset-0" animate={{ rotate: -selectedDay * (360 / 7) }} transition={{ type: 'spring', stiffness: 120, damping: 15 }}>
-                                    {DAYS_PT.map((d, i) => { const p = agPolar(56,56,42, i * (360 / 7) - 90); return (
-                                        <button key={d} onClick={() => setSelectedDay(i)} style={{ left: p.x, top: p.y }} className="absolute -translate-x-1/2 -translate-y-1/2">
-                                            <motion.span animate={{ rotate: selectedDay * (360 / 7) }} transition={{ type: 'spring', stiffness: 120, damping: 15 }} className={`block text-[10px] font-black tracking-wide transition-colors ${i === selectedDay ? 'text-white' : 'text-white/30'}`}>{d}</motion.span>
-                                        </button>
-                                    ); })}
-                                </motion.div>
-                            </div>
-                            <button onClick={() => setSelectedDay((selectedDay + 1) % 7)} className="w-6 h-6 rounded-full bg-white/[0.08] hover:bg-white/[0.16] text-white/60 flex items-center justify-center transition-colors text-sm">&#8250;</button>
-                        </div>
-
-                        {/* DETALHES EMBUTIDOS */}
-                        <div className="w-full mt-1 pt-3 border-t border-white/10" onClick={(e) => e.stopPropagation()}>
-                            {selectedClass ? (
-                                <div className="flex flex-col gap-1.5">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <input type="text" value={selectedClass.name} onChange={(e) => handleUpdateClass('name', e.target.value)} placeholder="Nome da aula" className="flex-1 min-w-0 bg-transparent text-[12px] font-bold text-white outline-none border-b border-transparent focus:border-white/30" />
-                                        <div className="flex gap-1 shrink-0">
-                                            {(hasUnsavedChanges || selectedClass.isDraft) && (
-                                                <button onClick={handleSaveClass} className="p-1 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 rounded-full text-emerald-400" title="Salvar"><Check size={11} /></button>
-                                            )}
-                                            <button onClick={(e) => handleDeleteClass(e, selectedClass.id)} className="p-1 bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 rounded-full text-red-400" title="Excluir"><Trash2 size={11} /></button>
-                                            <button onClick={(e) => { e.stopPropagation(); handleCloseDetails(); }} className="p-1 text-white/40 hover:text-white" title="Fechar"><X size={11} /></button>
+                        {/* EVENTOS DO DIA — preenchidos pela Zaeon (somente leitura) */}
+                        <div className="w-full mt-1 pt-3 border-t border-white/10">
+                            {classesToRender.filter((c: any) => (c.days || []).includes(selectedDay + 1)).slice().sort((a: any, b: any) => (Number(a.hour) || 0) - (Number(b.hour) || 0)).map((c: any) => (
+                                <div key={c.id} className="group flex items-center gap-2 py-1.5">
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: colorHex(c.color) }} />
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-[12px] font-bold text-white truncate">{c.name || 'Evento'}</span>
+                                            <span className="text-[10px] font-mono text-white/45 shrink-0">{c.hour}h&#8211;{c.endHour}h</span>
                                         </div>
+                                        {(c.teacher || c.room || c.detail) && <span className="block text-[10px] text-white/45 truncate">{[c.teacher, c.room, c.detail].filter(Boolean).join(' · ')}</span>}
                                     </div>
-                                    <div className="flex items-center gap-1.5 text-[10px] text-white/70">
-                                        <Clock size={11} className="text-cyan-300 shrink-0" />
-                                        <input type="number" value={selectedClass.hour === "" ? "" : selectedClass.hour} onChange={(e) => handleUpdateClass('hour', e.target.value)} placeholder="8" className="w-7 bg-transparent text-center font-mono outline-none border-b border-white/20 focus:border-cyan-300" />
-                                        <span className="font-mono">&#8211;</span>
-                                        <input type="number" value={selectedClass.endHour === "" ? "" : selectedClass.endHour} onChange={(e) => handleUpdateClass('endHour', e.target.value)} placeholder="10" className="w-7 bg-transparent text-center font-mono outline-none border-b border-white/20 focus:border-cyan-300" />
-                                        <span className="font-mono mr-1">h</span>
-                                        <MapPin size={11} className="text-white/60 shrink-0" />
-                                        <input type="text" value={selectedClass.room} onChange={(e) => handleUpdateClass('room', e.target.value)} placeholder="Sala" className="w-12 bg-transparent outline-none border-b border-white/20 focus:border-white/40" />
-                                        <button onClick={(e) => { e.stopPropagation(); handleCycleColor(); }} className="ml-auto w-5 h-5 rounded-full border border-white/30 shrink-0" style={{ background: colorHex(selectedClass.color) }} title="Trocar cor" />
-                                    </div>
-                                    <div className="flex items-center gap-1.5 text-[10px] text-white/70">
-                                        <User size={11} className="text-white/60 shrink-0" />
-                                        <input type="text" value={selectedClass.teacher} onChange={(e) => handleUpdateClass('teacher', e.target.value)} placeholder="Professor" className="flex-1 min-w-0 bg-transparent outline-none border-b border-white/20 focus:border-white/40" />
-                                    </div>
+                                    <button onClick={(e) => handleDeleteClass(e, c.id)} className="opacity-0 group-hover:opacity-100 text-white/30 hover:text-rose-400 transition-all shrink-0" title="Remover"><X size={12} /></button>
                                 </div>
-                            ) : (
-                                <div className="flex items-center justify-center gap-2 text-white/30 text-[9px] font-bold uppercase tracking-widest py-1.5 pointer-events-none">
-                                    <Plus size={12} /> Toque no anel ou em + para criar
-                                </div>
+                            ))}
+                            {classesToRender.filter((c: any) => (c.days || []).includes(selectedDay + 1)).length === 0 && (
+                                <div className="text-center text-white/30 text-[10px] font-medium py-3 leading-relaxed">Peça a Zaeon para montar seu dia &#10022;<br/><span className="text-white/20">ex.: &ldquo;adiciona Cálculo seg 8h com prof. Ana, sala 204&rdquo;</span></div>
                             )}
                         </div>
                     </div>
@@ -997,7 +997,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                         <div className="w-full max-w-[320px] flex items-center gap-2 rounded-full px-3 py-1.5 border border-white/20" style={{ background: colorHex(currentClass.color) }}>
                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
                             <span className="text-[9px] font-black uppercase tracking-wider text-white truncate">{currentClass.name || 'Aula agora'}</span>
-                            <span className="text-[9px] font-mono text-white/90 ml-auto shrink-0 whitespace-nowrap">{currentClass.hour}h&#8211;{currentClass.endHour}h{currentClass.room ? ` &#183; ${currentClass.room}` : ''}</span>
+                            <span className="text-[9px] font-mono text-white/90 ml-auto shrink-0 whitespace-nowrap">{currentClass.hour}h&#8211;{currentClass.endHour}h{currentClass.room ? ` · ${currentClass.room}` : ''}</span>
                         </div>
                     )}
                 </div>
