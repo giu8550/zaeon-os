@@ -1,9 +1,8 @@
 "use client";
 import { useState } from "react";
-import { CheckCircle2, FileText, Download, Copy, Check, Library } from "lucide-react";
+import { CheckCircle2, FileText, Download, Library } from "lucide-react";
 import PdfViewerModal from "../PdfViewerModal";
 import type { EvidenceRecord, Paper } from "@/lib/scholar/types";
-import { formatAbntReference } from "@/lib/scholar/abnt";
 import { useLibraryFiles } from "@/lib/useLibraryFiles";
 
 function locatorLabel(l?: EvidenceRecord["locator"]) {
@@ -19,19 +18,10 @@ function PaperCard({ p, evidence, onOpenViewer }: {
   onOpenViewer: (url: string, page: number, quote: string) => void;
 }) {
   const { save, files } = useLibraryFiles();
-  const [copied, setCopied] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
 
-  const abnt = formatAbntReference(p);
   const paperId = p.doi ? `doi:${p.doi}` : p.id;
   const isSaved = files.some((f) => f.id === paperId);
-
-  function handleCopy() {
-    navigator.clipboard.writeText(abnt).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    });
-  }
 
   // Salva o ARQUIVO (só quando há pdfUrl) na biblioteca → aba "pesquisa".
   function handleSave() {
@@ -134,25 +124,6 @@ function PaperCard({ p, evidence, onOpenViewer }: {
             </button>
           )}
         </div>
-      </div>
-
-      {/* ABNT citation block — a referência formatada (forma de escrita) */}
-      <div className="rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200/60 dark:border-white/8 px-3 py-2.5">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-[11px] font-mono text-slate-600 dark:text-white/60 leading-relaxed select-all flex-1">
-            {abnt}
-          </p>
-          <button
-            onClick={handleCopy}
-            title="Copiar referência ABNT"
-            className="shrink-0 mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 dark:text-white/30 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-          >
-            {copied ? <><Check size={11} /> Copiado</> : <><Copy size={11} /> Copiar</>}
-          </button>
-        </div>
-        <p className="text-[9px] text-slate-400 dark:text-white/25 mt-1 font-medium tracking-wide uppercase">
-          ABNT NBR 6023
-        </p>
       </div>
     </div>
   );

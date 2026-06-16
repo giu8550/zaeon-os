@@ -34,6 +34,21 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
     return () => clearInterval(id);
   }, [status]);
 
+  // ── Frases lúdicas que rotacionam enquanto pesquisa (continuidade estilo Claude) ──
+  const PHRASES = [
+    "Vasculhando a literatura", "Lendo os papers", "Conectando as ideias",
+    "Separando o que importa", "Cruzando as fontes", "Sintetizando",
+    "Conferindo as evidências", "Montando sua resposta",
+  ];
+  const [phrase, setPhrase] = useState(0);
+  useEffect(() => {
+    if (status !== "running") return;
+    setPhrase(0);
+    const id = setInterval(() => setPhrase((p) => (p + 1) % PHRASES.length), 2600);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
   const [deep, setDeep] = useState(false); // pensamento profundo: pesquisa mais longa e completa
   // Modo econômico: o toggle "Profundo" só aparece se o admin liberou esta conta.
   const [canDeep, setCanDeep] = useState(false);
@@ -103,10 +118,20 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
         {status === "running" && (
           <motion.div key="running" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
             <div className="flex items-center gap-2 pl-8 pt-1.5">
-              <span className="text-xs font-mono text-cyan-600 dark:text-cyan-300/90 tabular-nums">
-                {tokens.toLocaleString("pt-BR")} <span className="text-slate-400 dark:text-white/30 font-sans">tokens</span>
+              {/* frase lúdica que troca + três pontinhos pulando (continuidade) */}
+              <span className="text-xs font-medium text-violet-600 dark:text-violet-300 inline-flex items-center gap-1">
+                <AnimatePresence mode="wait">
+                  <motion.span key={phrase} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.25 }}>
+                    {PHRASES[phrase]}
+                  </motion.span>
+                </AnimatePresence>
+                <span className="inline-flex gap-0.5 ml-0.5">
+                  <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" />
+                  <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </span>
               </span>
-              <span className="text-xs text-slate-400 dark:text-white/40 tabular-nums">· {elapsed}s</span>
+              <span className="text-xs text-slate-400 dark:text-white/40 tabular-nums ml-auto">{tokens.toLocaleString("pt-BR")} · {elapsed}s</span>
             </div>
           </motion.div>
         )}
