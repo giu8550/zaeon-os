@@ -68,10 +68,7 @@ const TYPE_LABEL_STYLES: Record<string, string> = {
 };
 
 /** Termômetro vertical de nível: pressione e arraste (ou clique num nível) pra mudar a profundidade. */
-function LevelThermometer({ value, onChange, onGenerate, loading, canGenerate }: {
-  value: Level; onChange: (l: Level) => void;
-  onGenerate: () => void; loading: boolean; canGenerate: boolean;
-}) {
+function LevelThermometer({ value, onChange }: { value: Level; onChange: (l: Level) => void }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const n = LEVELS.length;
@@ -127,13 +124,6 @@ function LevelThermometer({ value, onChange, onGenerate, loading, canGenerate }:
         </div>
       </div>
       <p className="mt-2 text-[10px] leading-snug text-slate-500 dark:text-white/45" dangerouslySetInnerHTML={{ __html: LEVEL_DESCRIPTIONS[value] }} />
-
-      {/* Gerar — ação final, no fim do termômetro (full-width, bom no mobile) */}
-      <button onClick={onGenerate} disabled={loading || !canGenerate}
-        className="mt-3 w-full py-3 rounded-2xl text-[11px] font-black uppercase tracking-[.1em] text-white disabled:opacity-40 transition-transform hover:scale-[1.01]"
-        style={{ background: "linear-gradient(135deg,#0ea5e9,#22d3ee)" }}>
-        {loading ? "Gerando…" : "Gerar sugestão ✦"}
-      </button>
     </div>
   );
 }
@@ -228,8 +218,34 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
           onKeyDown={e => e.key === "Enter" && fetchSuggestion(false)} placeholder="Tema da pesquisa…"
           className="w-full rounded-2xl px-4 py-3 text-[12px] focus:outline-none bg-slate-100 text-slate-900 placeholder:text-slate-400 border border-slate-200 focus:border-cyan-500/50 dark:bg-white/5 dark:text-white dark:placeholder:text-white/25 dark:border-white/10 dark:focus:border-cyan-400/40" />
 
-        {/* ── TERMÔMETRO DE NÍVEL (press-and-hold) + Gerar no fim ── */}
-        <LevelThermometer value={level} onChange={setLevel} onGenerate={() => fetchSuggestion(false)} loading={loading} canGenerate={!!topic.trim()} />
+        {/* ── TERMÔMETRO DE NÍVEL (press-and-hold) ── */}
+        <LevelThermometer value={level} onChange={setLevel} />
+
+        {/* ── BOTÃO PREMIUM (estilo about-us): Gerar → standby "Usar como título" ── */}
+        <div className="flex justify-center pt-0.5">
+          {!result || loading ? (
+            <button
+              onClick={() => fetchSuggestion(false)}
+              disabled={loading || !topic.trim()}
+              className="group relative inline-block px-9 py-3 rounded-2xl overflow-hidden bg-black/40 border border-cyan-500/30 text-white font-black text-[11px] uppercase tracking-[0.28em] shadow-2xl backdrop-blur-md transition-all duration-500 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+            >
+              <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600/40 via-cyan-500/40 to-blue-600/40 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
+              <span className="relative z-10 group-hover:text-cyan-100 group-hover:drop-shadow-[0_0_10px_white] transition-all">
+                {loading ? "Gerando…" : "Gerar sugestão ✦"}
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("zaeon:research:use-title", { detail: { title: result.suggestion.title } }))}
+              className="group relative inline-block px-9 py-3 rounded-2xl overflow-hidden border text-white font-black text-[11px] uppercase tracking-[0.24em] shadow-[0_0_24px_rgba(34,211,238,0.25)] backdrop-blur-md transition-all duration-500 hover:scale-105 animate-pulse hover:animate-none"
+              style={{ background: "linear-gradient(135deg, rgba(124,58,237,0.55), rgba(6,182,212,0.55))", borderColor: "rgba(34,211,238,0.45)" }}
+              title="Usar esta sugestão como título do trabalho (vai pra aba Pesquisa)"
+            >
+              <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
+              <span className="relative z-10">Usar como título do trabalho →</span>
+            </button>
+          )}
+        </div>
 
         {error && (
           <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-600 dark:text-rose-300 flex items-center justify-between gap-2">
@@ -256,9 +272,7 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
             </div>
             <p className="text-[13px] font-extrabold leading-[1.4] mb-1.5 text-slate-900 dark:text-white"><GlitchOnce text={result.suggestion.title} /></p>
             <p className="text-[11px] leading-[1.55] text-slate-600 dark:text-white/55">{result.suggestion.rationale}</p>
-            {onSelectTitle && (
-              <button onClick={() => onSelectTitle(result.suggestion.title)} className="mt-2.5 text-[10px] font-bold uppercase tracking-[.08em] text-cyan-600 dark:text-cyan-300 hover:underline">Usar como título →</button>
-            )}
+            {/* confirmar = botão premium abaixo do termômetro (standby) */}
           </div>
         )}
 

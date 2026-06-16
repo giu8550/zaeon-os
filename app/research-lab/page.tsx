@@ -1121,6 +1121,20 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
         return () => window.removeEventListener("zaeon:citationRemove", handler);
     }, []);
 
+    // Confirmar uma SUGESTÃO de pesquisa (Sala de Estudos) → vira o TÍTULO do trabalho
+    // na aba Pesquisa (correlação entre as páginas). Leva o usuário pra lá.
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const t = (e as CustomEvent).detail?.title;
+            if (typeof t === "string" && t.trim()) {
+                setDocTitle(t.trim());
+                setActiveTab("pesquisa");
+            }
+        };
+        window.addEventListener("zaeon:research:use-title", handler);
+        return () => window.removeEventListener("zaeon:research:use-title", handler);
+    }, []);
+
     // Arrastar (ou ＋ verde) um doc PRA folha → abre o PDF real numa aba pdfview (distinta do chat "play").
     // Só abre se o documento estiver REALMENTE disponível (blob de sessão antiga morre; host pode bloquear).
     const handleViewDoc = async (fileId: string) => {
