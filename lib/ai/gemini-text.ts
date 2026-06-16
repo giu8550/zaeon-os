@@ -14,6 +14,8 @@ export async function geminiText(opts: {
   system?: string;
   temperature?: number;
   model?: string;
+  /** Tempo máximo (ms) antes de desistir — evita pendurar a função até o 504 do Vercel. */
+  timeoutMs?: number;
 }): Promise<string> {
   const { project, client_email, private_key, location } = vertexCredentials();
   const vertexAI = new VertexAI({
@@ -28,7 +30,14 @@ export async function geminiText(opts: {
   const chat = model.startChat(
     opts.system ? { systemInstruction: { role: "system", parts: [{ text: opts.system }] } } : {},
   );
-  const result = await chat.sendMessage([{ text: opts.prompt }]);
+  // Corre contra um timeout: se o Vertex travar (modelo/credencial/região), falha rápido
+  // com erro claro em vez de pendurar até o gateway cortar (504).
+  const timeoutMs = opts.timeoutMs ?? 45_000;
+  const call = chat.sendMessage([{ text: opts.prompt }]);
+  const result: any = await Promise.race([
+    call,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("gemini_timeout")), timeoutMs)),
+  ]);
   return (
     result.response.candidates?.[0]?.content?.parts?.map((p: any) => p.text).filter(Boolean).join("") ?? ""
   );

@@ -447,6 +447,16 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     // --- DATA STATES ---
     const [studyFiles, setStudyFiles] = useState<StudyDoc[]>([]);
     const [pendingUpload, setPendingUpload] = useState<File | null>(null);
+    // URL de prévia do upload — criada UMA vez por arquivo e revogada no cleanup.
+    // (Antes era URL.createObjectURL() inline no <iframe>, recriado a cada render →
+    //  vazava e dava blob: ERR_FILE_NOT_FOUND.)
+    const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null);
+    useEffect(() => {
+        if (!pendingUpload) { setPendingPreviewUrl(null); return; }
+        const url = URL.createObjectURL(pendingUpload);
+        setPendingPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [pendingUpload]);
     const [activeFileContext, setActiveFileContext] = useState<string | null>(null);
     const [liteContext, setLiteContext] = useState<string | null>(null); // resumo leve (Vercel): metadados, sem PDF
     const { files: libraryFiles, save: saveLibraryFile } = useLibraryFiles();
@@ -1676,7 +1686,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                                 <button onClick={() => setPendingUpload(null)} className="p-2 bg-slate-200 dark:bg-white/10 rounded-full hover:bg-slate-300 dark:hover:bg-white/20 transition-colors"><XMarkIcon className="w-5 h-5 text-black dark:text-white" /></button>
                             </div>
                             <div className="flex-1 bg-slate-200 dark:bg-black/50 p-4 overflow-hidden">
-                                <iframe src={URL.createObjectURL(pendingUpload)} className="w-full h-full rounded-xl border border-slate-300 dark:border-white/10" />
+                                {pendingPreviewUrl && <iframe src={pendingPreviewUrl} className="w-full h-full rounded-xl border border-slate-300 dark:border-white/10" />}
                             </div>
                             <div className="p-6 bg-white dark:bg-[#0a0a0a] border-t border-slate-100 dark:border-white/5 flex justify-end gap-4">
                                 <button onClick={() => setPendingUpload(null)} className="px-6 py-3 rounded-full text-xs font-black border-2 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 uppercase tracking-widest transition-colors">Cancelar</button>

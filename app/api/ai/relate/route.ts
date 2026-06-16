@@ -24,7 +24,11 @@ só no que realmente merece destaque — nada de encher de marcadores.`;
 
 async function resolveMeta(userId: string, d: DocRef): Promise<DocRef> {
     if (d.abstract && d.title) return d;
-    const sessions = await prisma.scholarSession.findMany({ where: { userId }, select: { references: true } });
+    // limita p/ não carregar todas as sessões (causava 504): só as 40 mais recentes.
+    const sessions = await prisma.scholarSession.findMany({
+        where: { userId }, select: { references: true },
+        orderBy: { createdAt: "desc" }, take: 40,
+    });
     for (const s of sessions) {
         const refs = Array.isArray(s.references) ? (s.references as any[]) : [];
         const hit = refs.find((p) => (d.pdfUrl && p?.pdfUrl === d.pdfUrl) || (d.title && p?.title === d.title));
