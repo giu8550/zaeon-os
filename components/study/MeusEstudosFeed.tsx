@@ -97,6 +97,11 @@ export default function MeusEstudosFeed() {
   const [showAdd, setShowAdd] = useState(false);
   const [note, setNote] = useState("");
 
+  // Zaeon generativa: "estude sobre…" → escreve o estudo no feed em tempo real
+  const [zaeonCmd, setZaeonCmd] = useState("");
+  const [zaeonBusy, setZaeonBusy] = useState(false);
+  const [zaeonStatus, setZaeonStatus] = useState("");
+
   const itemsRef = useRef<Item[]>([]);
   itemsRef.current = items;
   const saveTimers = useRef<Record<string, any>>({});
@@ -153,6 +158,40 @@ export default function MeusEstudosFeed() {
   const addBlock = async (variant: "h1" | "h2" | "text") => {
     const it = await addItem({ type: "note", title: "", payload: { text: "", variant }, placement: "feed", order: nextOrder() });
     if (it) setFocusId(it.id);
+  };
+
+  // ── ZAEON GENERATIVA: comando em linguagem natural → blocos no feed (ao vivo) ──
+  const zaeonStudy = async () => {
+    const cmd = zaeonCmd.trim();
+    if (!cmd || zaeonBusy || !spaceId) return;
+    setZaeonBusy(true); setZaeonCmd(""); setZaeonStatus("Zaeon está pensando…");
+    try {
+      const r = await fetch("/api/study/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: cmd, spaceId }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !Array.isArray(d.blocks) || d.blocks.length === 0) {
+        setZaeonStatus("Não consegui montar agora. Tente reformular o comando.");
+        setTimeout(() => setZaeonStatus(""), 4000);
+        return;
+      }
+      const base = nextOrder();
+      setZaeonStatus("Zaeon está escrevendo no seu caderno…");
+      for (let i = 0; i < d.blocks.length; i++) {
+        const b = d.blocks[i];
+        const order = base + i;
+        if (b.kind === "link" && b.url) {
+          await addItem({ type: "link", title: String(b.text).slice(0, 80), payload: { url: b.url, text: b.text }, placement: "feed", order });
+        } else {
+          const variant = b.kind === "heading" ? "h1" : b.kind === "subheading" ? "h2" : "text";
+          await addItem({ type: "note", title: String(b.text).slice(0, 80), payload: { text: b.text, variant }, placement: "feed", order });
+        }
+        await new Promise((res) => setTimeout(res, 420)); // efeito "escrevendo ao vivo"
+      }
+      setZaeonStatus("Pronto! ✨");
+      setTimeout(() => setZaeonStatus(""), 2500);
+    } catch {
+      setZaeonStatus("Falha ao falar com a Zaeon.");
+      setTimeout(() => setZaeonStatus(""), 4000);
+    } finally { setZaeonBusy(false); }
   };
 
   // colar de outras abas (refs/insights/etc.) → cai na biblioteca
@@ -346,6 +385,38 @@ export default function MeusEstudosFeed() {
                 ))}
                 <button onClick={newSpace} className="w-full flex items-center gap-2 px-3 py-2 text-[13px] font-bold text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10 rounded-xl"><Plus size={14} /> Novo espaço</button>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── ZAEON GENERATIVA: "estude sobre…" → ela escreve no caderno ── */}
+        <div className="mb-3 rounded-2xl p-[1.5px] bg-gradient-to-r from-violet-500/60 via-cyan-400/60 to-violet-500/60">
+          <div className="rounded-2xl bg-white dark:bg-[#0c0b1a] px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-violet-500 dark:text-violet-300 shrink-0" />
+              <input
+                value={zaeonCmd}
+                onChange={(e) => setZaeonCmd(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") zaeonStudy(); }}
+                disabled={zaeonBusy}
+                placeholder="Zaeon, estude sobre… (ex.: fotossíntese, redes neurais, Revolução Francesa)"
+                className="flex-1 min-w-0 bg-transparent text-[13px] text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 focus:outline-none disabled:opacity-60"
+              />
+              <button onClick={zaeonStudy} disabled={zaeonBusy || !zaeonCmd.trim()}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-[12px] font-bold disabled:opacity-40"
+                style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}>
+                {zaeonBusy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Estudar
+              </button>
+            </div>
+            {zaeonStatus && (
+              <p className="mt-1.5 pl-6 text-[11px] text-violet-600 dark:text-violet-300 flex items-center gap-1.5">
+                {zaeonBusy && <span className="inline-flex gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" />
+                  <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </span>}
+                {zaeonStatus}
+              </p>
             )}
           </div>
         </div>
