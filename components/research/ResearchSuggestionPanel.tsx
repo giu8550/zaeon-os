@@ -68,7 +68,10 @@ const TYPE_LABEL_STYLES: Record<string, string> = {
 };
 
 /** Termômetro vertical de nível: pressione e arraste (ou clique num nível) pra mudar a profundidade. */
-function LevelThermometer({ value, onChange }: { value: Level; onChange: (l: Level) => void }) {
+function LevelThermometer({ value, onChange, onGenerate, loading, canGenerate }: {
+  value: Level; onChange: (l: Level) => void;
+  onGenerate: () => void; loading: boolean; canGenerate: boolean;
+}) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const n = LEVELS.length;
@@ -124,6 +127,13 @@ function LevelThermometer({ value, onChange }: { value: Level; onChange: (l: Lev
         </div>
       </div>
       <p className="mt-2 text-[10px] leading-snug text-slate-500 dark:text-white/45" dangerouslySetInnerHTML={{ __html: LEVEL_DESCRIPTIONS[value] }} />
+
+      {/* Gerar — ação final, no fim do termômetro (full-width, bom no mobile) */}
+      <button onClick={onGenerate} disabled={loading || !canGenerate}
+        className="mt-3 w-full py-3 rounded-2xl text-[11px] font-black uppercase tracking-[.1em] text-white disabled:opacity-40 transition-transform hover:scale-[1.01]"
+        style={{ background: "linear-gradient(135deg,#0ea5e9,#22d3ee)" }}>
+        {loading ? "Gerando…" : "Gerar sugestão ✦"}
+      </button>
     </div>
   );
 }
@@ -213,19 +223,13 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
 
       {(!collapsible || !collapsed) && (
       <div className="p-5 flex flex-col gap-4">
-        {/* ── TERMÔMETRO DE NÍVEL (press-and-hold) ── */}
-        <LevelThermometer value={level} onChange={setLevel} />
+        {/* ── TEMA ── */}
+        <input type="text" value={topic} onChange={e => setTopic(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && fetchSuggestion(false)} placeholder="Tema da pesquisa…"
+          className="w-full rounded-2xl px-4 py-3 text-[12px] focus:outline-none bg-slate-100 text-slate-900 placeholder:text-slate-400 border border-slate-200 focus:border-cyan-500/50 dark:bg-white/5 dark:text-white dark:placeholder:text-white/25 dark:border-white/10 dark:focus:border-cyan-400/40" />
 
-        {/* ── INPUT ── */}
-        <div className="flex gap-2 items-center">
-          <input type="text" value={topic} onChange={e => setTopic(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && fetchSuggestion(false)} placeholder="Tema da pesquisa…"
-            className="flex-1 rounded-2xl px-4 py-3 text-[12px] focus:outline-none bg-slate-100 text-slate-900 placeholder:text-slate-400 border border-slate-200 focus:border-cyan-500/50 dark:bg-white/5 dark:text-white dark:placeholder:text-white/25 dark:border-white/10 dark:focus:border-cyan-400/40" />
-          <button onClick={() => fetchSuggestion(false)} disabled={loading || !topic.trim()}
-            className="px-4 py-3 rounded-2xl text-[11px] font-black uppercase tracking-[.1em] text-white whitespace-nowrap disabled:opacity-40 transition-transform hover:scale-[1.02]" style={{ background: GRAD }}>
-            {loading ? "…" : "Gerar ✦"}
-          </button>
-        </div>
+        {/* ── TERMÔMETRO DE NÍVEL (press-and-hold) + Gerar no fim ── */}
+        <LevelThermometer value={level} onChange={setLevel} onGenerate={() => fetchSuggestion(false)} loading={loading} canGenerate={!!topic.trim()} />
 
         {error && (
           <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-600 dark:text-rose-300 flex items-center justify-between gap-2">
