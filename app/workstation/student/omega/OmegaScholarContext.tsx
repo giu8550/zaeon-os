@@ -190,18 +190,20 @@ export function OmegaScholarProvider({ room, onStart, children }:
         }),
       });
       if (!res.ok) {
-        setState((s) => ({ ...s, loadingSuggestions: false }));
+        // IMPORTANTE: marca suggestions=[] (não null) pra o auto-forge NÃO re-disparar em loop
+        // (evita o storm de 503 contra o suggestion-forge externo, que não roda na Vercel).
+        setState((s) => ({ ...s, loadingSuggestions: false, suggestions: s.suggestions ?? [] }));
         return;
       }
       const data: ForgeResponse = await res.json();
       setState((s) => ({
         ...s,
         loadingSuggestions: false,
-        suggestions: isMore && s.suggestions ? [...s.suggestions, ...data.suggestions] : data.suggestions,
+        suggestions: isMore && s.suggestions ? [...s.suggestions, ...(data.suggestions ?? [])] : (data.suggestions ?? []),
         suggestionsCoverage: data.coverage_summary ?? s.suggestionsCoverage,
       }));
     } catch {
-      setState((s) => ({ ...s, loadingSuggestions: false }));
+      setState((s) => ({ ...s, loadingSuggestions: false, suggestions: s.suggestions ?? [] }));
     }
   }, []);
 
