@@ -839,7 +839,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     return (
         <div ref={constraintsRef} onClick={handleBackgroundClick} className="relative min-h-screen w-full flex flex-col items-start px-6 pt-8 pb-8 bg-transparent font-sans selection:bg-cyan-500/30 text-slate-900 dark:text-white transition-colors duration-500 overflow-x-hidden">
             <style>{`@keyframes agendaGlitch{0%{opacity:0;transform:translate(0,0)}15%{opacity:1;transform:translate(1.5px,-1px)}30%{transform:translate(-1.5px,1px)}45%{transform:translate(1px,1px)}60%{transform:translate(-1px,0)}100%{opacity:1;transform:translate(0,0)}}.agenda-glitch{animation:agendaGlitch .95s ease-out;transform-box:fill-box;transform-origin:center}`}</style>
-            <div className="h-10 pointer-events-none"></div>
+            <div className="h-20 pointer-events-none"></div>
 
             {/* CARTÃO DE COLA (PENDING INVITE) */}
             <AnimatePresence>
