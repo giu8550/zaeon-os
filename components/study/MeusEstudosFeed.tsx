@@ -101,6 +101,8 @@ export default function MeusEstudosFeed() {
   const [zaeonCmd, setZaeonCmd] = useState("");
   const [zaeonBusy, setZaeonBusy] = useState(false);
   const [zaeonStatus, setZaeonStatus] = useState("");
+  // Título sendo "digitado" pela Zaeon com glitch (substitui o input enquanto cria)
+  const [genTitle, setGenTitle] = useState<string | null>(null);
 
   const itemsRef = useRef<Item[]>([]);
   itemsRef.current = items;
@@ -160,11 +162,33 @@ export default function MeusEstudosFeed() {
     if (it) setFocusId(it.id);
   };
 
+  // Caractere CJK aleatório (glitch do título)
+  const cjk = () => String.fromCharCode(0x4e00 + Math.floor(Math.random() * 0x3000));
+  // Revela o nome do estudo aos poucos, com glitch chinês na ponta que está "nascendo".
+  const revealTitle = (target: string) => new Promise<void>((resolve) => {
+    const chars = [...target];
+    let i = 0;
+    const tick = () => {
+      i++;
+      const shown = chars.slice(0, i).join("");
+      setGenTitle(i < chars.length ? shown + cjk() : shown);
+      if (i >= chars.length) { setGenTitle(target); resolve(); return; }
+      setTimeout(tick, 65 + Math.random() * 70);
+    };
+    tick();
+  });
+  // Persiste o título do espaço (sem depender do setState async)
+  const persistTitle = async (t: string) => {
+    setTitleDraft(t);
+    setSpaces((prev) => prev.map((s) => (s.id === spaceId ? { ...s, title: t } : s)));
+    try { await fetch("/api/study/spaces", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: spaceId, title: t }) }); } catch { /* ignore */ }
+  };
+
   // ── ZAEON GENERATIVA: comando em linguagem natural → blocos no feed (ao vivo) ──
   const zaeonStudy = async () => {
     const cmd = zaeonCmd.trim();
     if (!cmd || zaeonBusy || !spaceId) return;
-    setZaeonBusy(true); setZaeonCmd(""); setZaeonStatus("Zaeon está pensando…");
+    setZaeonBusy(true); setZaeonCmd(""); setZaeonStatus("Zaeon está pensando…"); setGenTitle(cmd);
     try {
       const r = await fetch("/api/study/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: cmd, spaceId }) });
       const d = await r.json().catch(() => ({}));
@@ -173,6 +197,10 @@ export default function MeusEstudosFeed() {
         setTimeout(() => setZaeonStatus(""), 4000);
         return;
       }
+      // O nome do estudo (framework "Meus Estudos") muda pro tema, com glitch cadenciado.
+      const studyName = String(d.title || cmd).slice(0, 80);
+      await revealTitle(studyName);
+      await persistTitle(studyName);
       const base = nextOrder();
       setZaeonStatus("Zaeon está escrevendo no seu caderno…");
       for (let i = 0; i < d.blocks.length; i++) {
@@ -191,7 +219,7 @@ export default function MeusEstudosFeed() {
     } catch {
       setZaeonStatus("Falha ao falar com a Zaeon.");
       setTimeout(() => setZaeonStatus(""), 4000);
-    } finally { setZaeonBusy(false); }
+    } finally { setZaeonBusy(false); setGenTitle(null); }
   };
 
   // colar de outras abas (refs/insights/etc.) → cai na biblioteca
@@ -364,14 +392,24 @@ export default function MeusEstudosFeed() {
         {/* título do estudo + espaços */}
         <div className="flex items-center gap-2 mb-3">
           <NotebookPen size={18} className="text-cyan-600 dark:text-cyan-300 shrink-0" />
-          <input
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={saveTitle}
-            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-            placeholder="Meus Estudos"
-            className="text-lg font-black tracking-tight bg-transparent text-slate-900 dark:text-white focus:outline-none focus:border-b focus:border-cyan-400/50 min-w-0 flex-1 max-w-xs"
-          />
+          {genTitle !== null ? (
+            // Zaeon "digitando" o nome do estudo (glitch + gradiente), no-wrap
+            <span
+              style={{ fontFamily: `"Noto Sans SC","Microsoft YaHei",sans-serif` }}
+              className="text-lg font-black tracking-tight bg-gradient-to-r from-blue-500 via-cyan-400 to-violet-500 bg-clip-text text-transparent min-w-0 flex-1 max-w-xs whitespace-nowrap overflow-hidden text-ellipsis leading-none"
+            >
+              {genTitle || "…"}
+            </span>
+          ) : (
+            <input
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              placeholder="Meus Estudos"
+              className="text-lg font-black tracking-tight bg-transparent text-slate-900 dark:text-white focus:outline-none focus:border-b focus:border-cyan-400/50 min-w-0 flex-1 max-w-xs"
+            />
+          )}
           <button onClick={newSpace} title="Novo estudo" className="p-1.5 rounded-lg text-white" style={{ background: GRAD }}><Plus size={14} /></button>
           <div className="relative">
             <button onClick={() => setSpaceMenu((v) => !v)} title="Trocar de estudo" className="p-1 text-slate-400 hover:text-cyan-500"><ChevronDown size={16} className={spaceMenu ? "rotate-180 transition-transform" : "transition-transform"} /></button>
@@ -389,31 +427,32 @@ export default function MeusEstudosFeed() {
           </div>
         </div>
 
-        {/* ── ZAEON GENERATIVA: "estude sobre…" → ela escreve no caderno ── */}
-        <div className="mb-3 rounded-2xl p-[1.5px] bg-gradient-to-r from-violet-500/60 via-cyan-400/60 to-violet-500/60">
-          <div className="rounded-2xl bg-white dark:bg-[#0c0b1a] px-3 py-2.5">
+        {/* ── A BARRA-AGENTE de Meus Estudos: cria os estudos. Mistura das duas barras,
+              puxando pro azul, com mais destaque no escuro. ── */}
+        <div className="mb-3 rounded-2xl p-[1.5px] bg-gradient-to-r from-blue-500/70 via-cyan-400/70 to-sky-500/70 dark:from-blue-400/80 dark:via-cyan-400/80 dark:to-sky-400/80 dark:shadow-[0_0_24px_-4px_rgba(56,189,248,0.35)]">
+          <div className="rounded-2xl bg-white dark:bg-[#0a1020] px-3 py-2.5">
             <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-violet-500 dark:text-violet-300 shrink-0" />
+              <span className="text-cyan-500 dark:text-cyan-300 text-sm leading-none shrink-0 animate-[spin_14s_linear_infinite] motion-reduce:animate-none" style={{ filter: "drop-shadow(0 0 3px rgba(34,211,238,0.5))" }}>⟁</span>
               <input
                 value={zaeonCmd}
                 onChange={(e) => setZaeonCmd(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") zaeonStudy(); }}
                 disabled={zaeonBusy}
                 placeholder="Zaeon, estude sobre… (ex.: fotossíntese, redes neurais, Revolução Francesa)"
-                className="flex-1 min-w-0 bg-transparent text-[13px] text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 focus:outline-none disabled:opacity-60"
+                className="flex-1 min-w-0 bg-transparent text-[13px] text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/35 focus:outline-none disabled:opacity-60"
               />
               <button onClick={zaeonStudy} disabled={zaeonBusy || !zaeonCmd.trim()}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-[12px] font-bold disabled:opacity-40"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}>
+                className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-white text-[12px] font-bold disabled:opacity-40 shadow-sm"
+                style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}>
                 {zaeonBusy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Estudar
               </button>
             </div>
             {zaeonStatus && (
-              <p className="mt-1.5 pl-6 text-[11px] text-violet-600 dark:text-violet-300 flex items-center gap-1.5">
+              <p className="mt-1.5 pl-6 text-[11px] text-cyan-600 dark:text-cyan-300 flex items-center gap-1.5">
                 {zaeonBusy && <span className="inline-flex gap-0.5">
-                  <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" />
-                  <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" />
+                  <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "300ms" }} />
                 </span>}
                 {zaeonStatus}
               </p>
