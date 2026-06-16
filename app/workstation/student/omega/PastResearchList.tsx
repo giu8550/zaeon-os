@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Clock, Loader2, FlaskConical } from "lucide-react";
 import { useOmegaScholar } from "./OmegaScholarContext";
+import GlitchTerm from "@/components/research/GlitchTerm";
 
 interface HistoryItem {
   id: string;
@@ -84,7 +85,8 @@ export default function PastResearchList({ items, activeId, onOpened }: {
                   {isLoading ? <Loader2 size={12} className="animate-spin" /> : <FlaskConical size={12} />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[12.5px] font-semibold text-slate-800 dark:text-white/85 leading-snug line-clamp-2">{h.query}</p>
+                  {/* Mesmo efeito glitch (CJK/roxo) das pesquisas ao vivo; nunca quebra a linha (compact) */}
+                  <GlitchTerm term={h.query} compact hideIcon size="sm" />
                   {meta && (
                     <p className="mt-1 inline-flex items-center gap-1 text-[10px] text-slate-400 dark:text-white/35">
                       <Clock size={9} /> {meta}
