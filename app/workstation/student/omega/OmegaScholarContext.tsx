@@ -24,6 +24,7 @@ interface OmegaState {
 interface OmegaCtx extends OmegaState {
   draft: string;
   setDraft: (v: string) => void;
+  glitchReplay: boolean; // replay do efeito glitch ao reabrir uma pesquisa do histórico
   runQuery: (prompt: string, deep?: boolean) => Promise<void>;
   loadSession: (s: any) => void;
   fetchSuggestions: (opts?: { count?: number; exclude?: string[] }) => Promise<void>;
@@ -49,6 +50,8 @@ export function OmegaScholarProvider({ room, onStart, children }:
 
   // Draft do input da barra, elevado ao contexto para o dock de sugestão observá-lo.
   const [draft, setDraft] = useState("");
+  // Quando reabrimos uma pesquisa do histórico, o glitch do título "toca" de novo por uns segundos.
+  const [glitchReplay, setGlitchReplay] = useState(false);
 
   // Snapshot do estado para callbacks assíncronos lerem a sessão corrente sem stale-closure.
   const stateRef = useRef(state);
@@ -107,6 +110,9 @@ export function OmegaScholarProvider({ room, onStart, children }:
   }, [room, onStart]);
 
   const loadSession = useCallback((s: any) => {
+    // Reabriu do histórico → toca o glitch do título por uns segundos.
+    setGlitchReplay(true);
+    setTimeout(() => setGlitchReplay(false), 4500);
     // Hidrata sugestões já persistidas (ForgeResponse em ScholarSession.suggestions), se houver.
     const stored: ForgeResponse | null = s?.suggestions ?? null;
     setState({
@@ -244,7 +250,7 @@ export function OmegaScholarProvider({ room, onStart, children }:
   }, [state.status, state.session, state.suggestions, state.loadingSuggestions, fetchSuggestions]);
 
   return (
-    <Ctx.Provider value={{ ...state, draft, setDraft, runQuery, loadSession, fetchSuggestions, fetchPrereqs }}>
+    <Ctx.Provider value={{ ...state, draft, setDraft, glitchReplay, runQuery, loadSession, fetchSuggestions, fetchPrereqs }}>
       {children}
     </Ctx.Provider>
   );
