@@ -1,6 +1,6 @@
 // components/research/ResearchSuggestionPanel.tsx
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import type { Termometro } from "@/lib/scholar/termometro";
 import AuthGateNotice from "./AuthGateNotice";
@@ -66,6 +66,67 @@ const TYPE_LABEL_STYLES: Record<string, string> = {
   Experimental: "bg-teal-400/10 text-teal-300/60 border border-teal-400/15",
   Pioneira:     "bg-cyan-400/12 text-cyan-300/70 border border-cyan-400/20",
 };
+
+/** Termômetro vertical de nível: pressione e arraste (ou clique num nível) pra mudar a profundidade. */
+function LevelThermometer({ value, onChange }: { value: Level; onChange: (l: Level) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const n = LEVELS.length;
+  const idx = Math.max(0, LEVELS.findIndex((l) => l.id === value));
+  const fillPct = ((idx + 1) / n) * 100; // bulbo sempre cheio; sobe com o nível
+
+  const setFromY = (clientY: number) => {
+    const el = trackRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const ratio = 1 - (clientY - r.top) / r.height; // 0 (base) .. 1 (topo)
+    let i = Math.round(ratio * (n - 1));
+    i = Math.max(0, Math.min(n - 1, i));
+    const next = LEVELS[i].id;
+    if (next !== value) onChange(next);
+  };
+
+  return (
+    <div>
+      <p className="text-[9px] font-black uppercase tracking-[.18em] text-slate-400 dark:text-white/30 mb-2">Nível da pesquisa · segure e arraste</p>
+      <div className="flex items-stretch gap-3">
+        {/* coluna do termômetro */}
+        <div
+          ref={trackRef}
+          onPointerDown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); setDragging(true); setFromY(e.clientY); }}
+          onPointerMove={(e) => { if (dragging) setFromY(e.clientY); }}
+          onPointerUp={() => setDragging(false)}
+          onPointerCancel={() => setDragging(false)}
+          className="relative w-9 shrink-0 rounded-full cursor-ns-resize select-none touch-none bg-slate-200 dark:bg-white/[0.06] border border-slate-300/60 dark:border-white/10"
+          style={{ height: 168 }}
+          role="slider" aria-valuemin={1} aria-valuemax={n} aria-valuenow={idx + 1} aria-label="Nível da pesquisa"
+          title="Segure e arraste pra mudar o nível"
+        >
+          {/* mercúrio */}
+          <div className="absolute left-1 right-1 bottom-1 rounded-full transition-[height] duration-200"
+            style={{ height: `calc(${fillPct}% - 4px)`, background: "linear-gradient(180deg,#22d3ee,#7c3aed)" }} />
+          {/* knob no topo do mercúrio */}
+          <div className="absolute left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white shadow-md border-2 border-cyan-400 transition-[bottom] duration-200 flex items-center justify-center text-[11px]"
+            style={{ bottom: `calc(${fillPct}% - 14px)` }}>{LEVELS[idx].icon}</div>
+        </div>
+
+        {/* níveis clicáveis (de cima = mais avançado) */}
+        <div className="flex-1 flex flex-col-reverse justify-between py-0.5">
+          {LEVELS.map((l) => {
+            const on = l.id === value;
+            return (
+              <button key={l.id} type="button" onClick={() => onChange(l.id)}
+                className={`text-left rounded-lg px-2 py-1 transition-colors ${on ? "bg-cyan-500/10" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"}`}>
+                <span className={`text-[11px] font-black ${on ? "text-cyan-700 dark:text-cyan-300" : "text-slate-500 dark:text-white/40"}`}>{l.icon} {l.name}</span>
+                <span className={`block text-[8px] font-bold uppercase tracking-wide ${on ? "text-cyan-600/80 dark:text-cyan-300/70" : "text-slate-400 dark:text-white/25"}`}>{l.tag}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <p className="mt-2 text-[10px] leading-snug text-slate-500 dark:text-white/45" dangerouslySetInnerHTML={{ __html: LEVEL_DESCRIPTIONS[value] }} />
+    </div>
+  );
+}
 
 export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, collapsible = false, defaultCollapsed = false }: Props) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -152,21 +213,8 @@ export default function ResearchSuggestionPanel({ docTitle = "", onSelectTitle, 
 
       {(!collapsible || !collapsed) && (
       <div className="p-5 flex flex-col gap-4">
-        {/* ── LEVEL SELECTOR ── */}
-        <div>
-          <p className="text-[9px] font-black uppercase tracking-[.18em] text-slate-400 dark:text-white/30 mb-2">Nível acadêmico</p>
-          <div className="grid grid-cols-4 gap-1.5">
-            {LEVELS.map(l => (
-              <button key={l.id} onClick={() => setLevel(l.id)}
-                className={`relative rounded-xl py-2.5 px-1 flex flex-col items-center gap-1 transition-all border text-center ${level === l.id ? "text-white border-transparent" : "bg-slate-100 dark:bg-white/[0.03] border-slate-200 dark:border-white/10 text-slate-500 dark:text-white/40 hover:border-cyan-400/30"}`}
-                style={level === l.id ? { background: GRAD } : undefined}>
-                <span className="text-base leading-none">{l.icon}</span>
-                <span className="text-[8.5px] font-black uppercase tracking-[.04em] leading-tight">{l.name}</span>
-              </button>
-            ))}
-          </div>
-          <p className="mt-2 text-[10px] leading-snug text-slate-500 dark:text-white/45" dangerouslySetInnerHTML={{ __html: LEVEL_DESCRIPTIONS[level] }} />
-        </div>
+        {/* ── TERMÔMETRO DE NÍVEL (press-and-hold) ── */}
+        <LevelThermometer value={level} onChange={setLevel} />
 
         {/* ── INPUT ── */}
         <div className="flex gap-2 items-center">
