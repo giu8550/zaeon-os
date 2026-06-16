@@ -204,7 +204,7 @@ export default function MeusEstudosFeed() {
   const zaeonStudy = async () => {
     const cmd = zaeonCmd.trim();
     if (!cmd || zaeonBusy || !spaceId) return;
-    setZaeonBusy(true); setZaeonCmd(""); setZaeonStatus("Zaeon está pensando…"); setGenTitle(cmd);
+    setZaeonBusy(true); setZaeonCmd(""); setZaeonStatus("Zaeon está pensando…"); setGenTitle(cmd); setBarOpen(false);
     try {
       const r = await fetch("/api/study/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: cmd, spaceId }) });
       const d = await r.json().catch(() => ({}));
@@ -452,8 +452,8 @@ export default function MeusEstudosFeed() {
           </div>
         </div>
 
-        {/* ── BARRINHA-AGENTE: só aparece ao clicar no ⟁. Fina, azulada, destaque no dark. ── */}
-        {(barOpen || zaeonBusy) && (
+        {/* ── BARRINHA-AGENTE: só aparece ao clicar no ⟁ (some enquanto a Zaeon pensa). ── */}
+        {barOpen && !zaeonBusy && (
         <div className="mb-3 rounded-full p-[1.5px] bg-gradient-to-r from-blue-500/70 via-cyan-400/70 to-sky-500/70 dark:from-blue-400/80 dark:via-cyan-400/80 dark:to-sky-400/80 dark:shadow-[0_0_22px_-6px_rgba(56,189,248,0.4)]">
           <div className="rounded-full bg-white dark:bg-[#0a1020] pl-3.5 pr-1.5 py-1 flex items-center gap-2">
             <input
