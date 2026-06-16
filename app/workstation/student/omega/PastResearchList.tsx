@@ -82,7 +82,7 @@ export default function PastResearchList({ items, activeId, onOpened }: {
                 ${isActive
                   ? "bg-violet-500/10 border-violet-400/50 dark:border-violet-400/40 shadow-[0_0_0_1px_rgba(139,92,246,0.35)]"
                   : "bg-white/50 dark:bg-white/[0.04] border-black/8 dark:border-white/10 hover:border-violet-400/40 hover:bg-white/70 dark:hover:bg-white/[0.07]"}
-                ${running || loadingId ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                ${running ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             >
               {/* apagar pesquisa */}
               <button

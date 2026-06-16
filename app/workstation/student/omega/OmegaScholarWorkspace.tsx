@@ -45,12 +45,6 @@ export default function OmegaScholarWorkspace() {
         <AuthGateNotice className="my-10 max-w-md mx-auto" />
       )}
 
-      {status === "idle" && (
-        <div className="text-center text-slate-400 dark:text-white/30 text-sm py-16">
-          Faça uma pergunta na barra do Omega Scholar acima — os resultados aparecem aqui. 🎓
-        </div>
-      )}
-
       {s && (
         <>
           {/* Trilho de abas — vidro fosco segmentado (Apple Glass), ativa = pílula clara com glow violeta */}
