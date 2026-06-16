@@ -907,20 +907,20 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                 </div>
 
                 {/* CHAT ZAEON (limpo, sem divisorias) */}
-                <div className="w-[400px] h-[440px] bg-white/55 dark:bg-black/40 backdrop-blur-3xl border border-white/30 dark:border-white/10 rounded-[2.4rem] shadow-2xl flex flex-col overflow-hidden relative z-10">
+                <div className="w-[400px] h-[440px] bg-[#0f172a]/95 dark:bg-black/40 backdrop-blur-xl border border-white/15 rounded-[2.4rem] shadow-[0_0_50px_-10px_rgba(139,92,246,0.55),0_0_95px_-30px_rgba(34,211,238,0.45)] flex flex-col overflow-hidden relative z-10">
                     <div className="px-6 pt-5 pb-1 flex items-center shrink-0">
                         <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#8b5cf6] to-[#22d3ee] shadow-[0_4px_14px_rgba(139,92,246,0.45)] flex items-center justify-center text-white text-[17px] leading-none font-bold select-none">&#10177;</div>
                     </div>
                     <div ref={zaeonChatScrollRef} className="flex-1 overflow-y-auto px-5 py-3 space-y-3 scrollbar-hide">
                         {liquidChatHistory.map((m, i) => (
                             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed shadow-sm ${m.role === 'user' ? 'bg-[#8b5cf6] text-white font-semibold' : 'bg-white/80 dark:bg-white/[0.06] text-slate-900 dark:text-white/90'}`}>{m.text}</div>
+                                <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed shadow-sm ${m.role === 'user' ? 'bg-[#8b5cf6] text-white font-semibold' : 'bg-white/[0.08] text-white/90'}`}>{m.text}</div>
                             </div>
                         ))}
                     </div>
                     <div className="px-4 pb-4 pt-1 shrink-0">
-                        <div className="flex items-center gap-1.5 bg-slate-200/40 dark:bg-white/[0.05] rounded-full pl-4 pr-1.5 py-1.5">
-                            <input value={zaeonInput} onChange={(e) => setZaeonInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleZaeonMessage()} className="bg-transparent flex-1 text-xs text-slate-900 dark:text-white outline-none placeholder:text-slate-500 dark:placeholder:text-white/25" placeholder="Pergunte a Zaeon..." disabled={isZaeonProcessing} />
+                        <div className="flex items-center gap-1.5 bg-white/[0.06] rounded-full pl-4 pr-1.5 py-1.5">
+                            <input value={zaeonInput} onChange={(e) => setZaeonInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleZaeonMessage()} className="bg-transparent flex-1 text-xs text-white outline-none placeholder:text-white/30" placeholder="Pergunte a Zaeon..." disabled={isZaeonProcessing} />
                             <button onClick={handleZaeonMessage} disabled={isZaeonProcessing} className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#8b5cf6] to-[#22d3ee] flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-md disabled:opacity-40"><ArrowUp size={15} strokeWidth={2.2} className="text-white" /></button>
                         </div>
                     </div>
@@ -928,27 +928,27 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
 
                 {/* LIVRARIA + PLUGINS (faixas horizontais finas) */}
                 <div className="w-[290px] flex flex-col gap-3 z-10">
-                    <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); const pdfs = files.filter(f => f.type === 'application/pdf').map(f => ({ id: Math.random().toString(36).substr(2, 9), title: f.name, type: 'pdf' as const, size: (f.size / 1024 / 1024).toFixed(1) + 'mb' })); setStoredPdfs(prev => [...prev, ...pdfs]); }} className="bg-white/55 dark:bg-black/45 backdrop-blur-3xl border border-white/35 dark:border-white/10 rounded-2xl px-4 py-3 flex flex-col gap-2 shadow-xl">
+                    <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); const pdfs = files.filter(f => f.type === 'application/pdf').map(f => ({ id: Math.random().toString(36).substr(2, 9), title: f.name, type: 'pdf' as const, size: (f.size / 1024 / 1024).toFixed(1) + 'mb' })); setStoredPdfs(prev => [...prev, ...pdfs]); }} className="bg-[#0f172a]/95 dark:bg-black/40 backdrop-blur-xl border border-white/15 rounded-2xl px-4 py-3 flex flex-col gap-2 shadow-[0_0_34px_-12px_rgba(139,92,246,0.5)]">
                         <div className="flex items-center gap-2">
                             <Database size={12} className="text-[#22d3ee]" />
-                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 dark:text-white/80">Livraria</span>
-                            <span className="ml-auto text-[8px] font-mono text-slate-400 dark:text-white/30">{storedPdfs.length}</span>
+                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/80">Livraria</span>
+                            <span className="ml-auto text-[8px] font-mono text-white/40">{storedPdfs.length}</span>
                         </div>
                         <div className="flex gap-2 items-center overflow-x-auto scrollbar-hide py-0.5">
                             {storedPdfs.map(pdf => (
                                 <div key={pdf.id} className="group/item w-14 h-14 bg-white/10 dark:bg-white/[0.04] rounded-xl border border-white/20 flex flex-col items-center justify-center gap-0.5 p-1 relative shrink-0">
                                     <button onClick={(e) => { e.stopPropagation(); handleDeletePdf(pdf.id); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity z-20"><X size={9} strokeWidth={3} /></button>
                                     <FileText size={16} className="text-[#22d3ee]" />
-                                    <span className="text-[6.5px] text-slate-800 dark:text-white/80 font-bold truncate w-full block text-center px-0.5">{pdf.title}</span>
+                                    <span className="text-[6.5px] text-white/80 font-bold truncate w-full block text-center px-0.5">{pdf.title}</span>
                                 </div>
                             ))}
-                            <label className="w-12 h-14 rounded-xl border border-dashed border-white/30 flex items-center justify-center text-slate-500 dark:text-white/60 hover:border-[#8b5cf6] hover:text-[#8b5cf6] cursor-pointer transition-all shrink-0"><input type="file" className="hidden" accept=".pdf" onChange={handleLibraryUpload} /><Plus size={16} /></label>
+                            <label className="w-12 h-14 rounded-xl border border-dashed border-white/25 flex items-center justify-center text-white/55 hover:border-[#8b5cf6] hover:text-[#8b5cf6] cursor-pointer transition-all shrink-0"><input type="file" className="hidden" accept=".pdf" onChange={handleLibraryUpload} /><Plus size={16} /></label>
                         </div>
                     </div>
-                    <div className="bg-white/55 dark:bg-black/45 backdrop-blur-3xl border border-white/35 dark:border-white/10 rounded-2xl px-4 py-3 flex items-center gap-2 shadow-xl">
+                    <div className="bg-[#0f172a]/95 dark:bg-black/40 backdrop-blur-xl border border-white/15 rounded-2xl px-4 py-3 flex items-center gap-2 shadow-[0_0_34px_-12px_rgba(34,211,238,0.45)]">
                         <Puzzle size={12} className="text-[#8b5cf6]" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 dark:text-white/80">Plugins</span>
-                        <span className="ml-auto text-[8px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25">Em breve</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/80">Plugins</span>
+                        <span className="ml-auto text-[8px] font-bold uppercase tracking-widest text-white/30">Em breve</span>
                     </div>
                 </div>
 
