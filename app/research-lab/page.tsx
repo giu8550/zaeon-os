@@ -420,6 +420,8 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
     const [mounted, setMounted] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isChatLeft, setIsChatLeft] = useState(false);
+    // Publica o lado da navbar p/ módulos espelharem o layout (canhoto/destro).
+    useEffect(() => { try { document.documentElement.dataset.navSide = isChatLeft ? "right" : "left"; window.dispatchEvent(new CustomEvent("zaeon:navside", { detail: isChatLeft ? "right" : "left" })); } catch { /* ignore */ } }, [isChatLeft]);
     const [isFocusMode, setIsFocusMode] = useState(false);
     const [activeSection, setActiveSection] = useState<"pdf" | "examiner" | "doc" | null>(null);
     const [showTour, setShowTour] = useState(false);

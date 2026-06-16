@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus, Trash2, Sparkles, Youtube, Loader2, ChevronDown, NotebookPen,
   X, GripVertical, ArrowLeftToLine, FileText, StickyNote, Link2, Heading1, Heading2, Pilcrow, Pencil,
-  PanelRightClose, PanelRightOpen,
+  PanelRightClose, PanelRightOpen, Image as ImageIcon, Music, Paperclip, UploadCloud,
 } from "lucide-react";
 
 type Item = { id: string; type: string; title: string; payload: any; summary: string | null; placement: string; order?: number; createdAt?: string };
@@ -26,7 +26,7 @@ type Space = { id: string; title: string };
 const GRAD = "linear-gradient(135deg,#0ea5e9,#22d3ee)";
 const LAST_KEY = "zaeon.study.lastSpace";
 const DT = "application/x-zaeon-item";
-const MEDIA = new Set(["ref", "insight", "synthesis", "base", "suggestion", "pdf", "video", "link"]);
+const MEDIA = new Set(["ref", "insight", "synthesis", "base", "suggestion", "pdf", "video", "link", "image", "audio", "file"]);
 
 /** Extrai o ID de um vídeo do YouTube de qualquer formato de link (ou null). */
 function ytId(input: string): string | null {
@@ -41,7 +41,7 @@ const soloYt = (t: string): string | null => {
   return ytId(s);
 };
 const typeIcon = (t: string) =>
-  t === "video" ? Youtube : t === "link" ? Link2 : t === "pdf" || t === "ref" ? FileText : StickyNote;
+  t === "video" ? Youtube : t === "link" ? Link2 : t === "image" ? ImageIcon : t === "audio" ? Music : t === "file" ? Paperclip : t === "pdf" || t === "ref" ? FileText : StickyNote;
 
 /** Textarea que cresce com o conteúdo (sem barra de rolagem por bloco). */
 function AutoGrow({ value, onChange, onKeyDown, placeholder, className, autoFocus }: {
@@ -105,6 +105,7 @@ export default function MeusEstudosFeed() {
   const [genTitle, setGenTitle] = useState<string | null>(null);
   // A barra-agente só aparece ao clicar no ⟁ ao lado do título
   const [barOpen, setBarOpen] = useState(false);
+  const [navRight, setNavRight] = useState(false); // navbar do lado direito (canhoto) -> espelha o layout
   // Frases com emoção que rotacionam enquanto a Zaeon trabalha (são muitas etapas)
   const ZAEON_PHRASES = [
     "Mergulhando no assunto 🤿", "Garimpando as melhores ideias ✨", "Lendo nas entrelinhas 📚",
@@ -123,6 +124,15 @@ export default function MeusEstudosFeed() {
   const itemsRef = useRef<Item[]>([]);
   itemsRef.current = items;
   const saveTimers = useRef<Record<string, any>>({});
+
+  // Compatibilidade canhoto/destro: espelha o feed quando a navbar vai pro lado direito.
+  useEffect(() => {
+    const read = () => setNavRight((document.documentElement.dataset.navSide || "left") === "right");
+    read();
+    const h = () => read();
+    window.addEventListener("zaeon:navside", h);
+    return () => window.removeEventListener("zaeon:navside", h);
+  }, []);
 
   const loadSpaces = useCallback(async () => {
     setError(null);
@@ -280,7 +290,19 @@ export default function MeusEstudosFeed() {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, placement: "library" } : i)));
     await fetch("/api/study/items", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, placement: "library" }) });
   };
+  // Joga um registro na lixeira da sala de pesquisa (localStorage zaeon.trash + evento de sync).
+  const trashPush = (id: string, title: string) => {
+    try {
+      const KEY = "zaeon.trash";
+      const list = JSON.parse(localStorage.getItem(KEY) || "[]");
+      const rec = { id: `study-${id}`, title: title || "Item de estudo", pdfUrl: "", source: "Sala de Estudos", savedAt: Date.now(), deletedAt: Date.now() };
+      localStorage.setItem(KEY, JSON.stringify([rec, ...list.filter((x: any) => x.id !== rec.id)]));
+      window.dispatchEvent(new CustomEvent("zaeon:trash"));
+    } catch { /* ignore */ }
+  };
   const removeItem = async (id: string) => {
+    const it = itemsRef.current.find((x) => x.id === id);
+    trashPush(id, it?.title || it?.payload?.name || it?.type || "Item");
     setItems((prev) => prev.filter((i) => i.id !== id));
     await fetch(`/api/study/items?id=${id}`, { method: "DELETE" });
   };
@@ -314,14 +336,39 @@ export default function MeusEstudosFeed() {
   };
   const delSpace = async (id: string) => {
     if (spaces.length <= 1) return;
-    if (typeof window !== "undefined" && !window.confirm("Excluir este espaço e tudo dentro?")) return;
+    const sp = spaces.find((s) => s.id === id);
+    trashPush(id, sp?.title || "Estudo"); // direto pra lixeira, sem modal
     await fetch(`/api/study/spaces?id=${id}`, { method: "DELETE" });
     const rest = spaces.filter((s) => s.id !== id);
     setSpaces(rest); setSpaceId(rest[0]?.id || ""); setSpaceMenu(false);
   };
 
+  // Qualquer arquivo (imagem, áudio, pdf, etc.) -> bloco no caderno/biblioteca (data URL).
+  const fileToItem = (file: File, placement: "feed" | "library", order?: number) => new Promise<void>((resolve) => {
+    if (file.size > 6 * 1024 * 1024) { setError(`"${file.name}" é grande demais por enquanto (máx ~6MB).`); setTimeout(() => setError(null), 4000); resolve(); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result || "");
+      const kind = file.type.startsWith("image/") ? "image" : file.type.startsWith("audio/") ? "audio" : file.type === "application/pdf" ? "pdf" : "file";
+      await addItem({ type: kind, title: file.name, payload: { dataUrl, name: file.name, mime: file.type, size: file.size }, placement, order });
+      resolve();
+    };
+    reader.readAsDataURL(file);
+  });
+  const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach((f) => fileToItem(f, "library"));
+    e.target.value = "";
+  };
+  // Colar imagem (Ctrl+V) cai direto no caderno como um bloco.
+  const onPaste = (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith("image/") || f.type.startsWith("audio/"));
+    if (files.length) { e.preventDefault(); const base = nextOrder(); files.forEach((f, i) => fileToItem(f, "feed", base + i)); }
+  };
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length) { const base = nextOrder(); files.forEach((f, i) => fileToItem(f, "feed", base + i)); return; }
     const id = e.dataTransfer.getData(DT);
     if (id) toFeed(id);
   };
@@ -343,6 +390,46 @@ export default function MeusEstudosFeed() {
             <button onClick={() => removeItem(it.id)} title="Remover" className="p-1 rounded bg-black/40 text-white hover:bg-black/60"><X size={12} /></button>
           </div>
           <VideoCard id={vid} title={it.title} />
+        </div>
+      );
+    }
+
+    // IMAGEM (colada/enviada) → preview no mural
+    if (it.type === "image" && it.payload?.dataUrl) {
+      return (
+        <div className="group relative my-3">
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100">
+            <button onClick={() => toLibrary(it.id)} title="Voltar p/ biblioteca" className="p-1 rounded bg-black/40 text-white hover:bg-black/60"><ArrowLeftToLine size={11} /></button>
+            <button onClick={() => removeItem(it.id)} title="Remover" className="p-1 rounded bg-black/40 text-white hover:bg-black/60"><X size={12} /></button>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={it.payload.dataUrl} alt={it.title || "imagem"} className="max-h-[420px] w-auto rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm" />
+        </div>
+      );
+    }
+    // ÁUDIO → player
+    if (it.type === "audio" && it.payload?.dataUrl) {
+      return (
+        <div className="group relative my-3 rounded-2xl border p-3 bg-slate-50 border-slate-200 dark:bg-white/[0.04] dark:border-white/10">
+          <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100">
+            <button onClick={() => toLibrary(it.id)} title="Voltar p/ biblioteca" className="text-slate-400 hover:text-cyan-500"><ArrowLeftToLine size={13} /></button>
+            <button onClick={() => removeItem(it.id)} title="Remover" className="text-slate-400 hover:text-rose-400"><X size={14} /></button>
+          </div>
+          <div className="flex items-center gap-1.5 mb-2"><Music size={13} className="text-cyan-600 dark:text-cyan-300" /><span className="text-[12px] font-bold text-slate-800 dark:text-white truncate">{it.title || "áudio"}</span></div>
+          <audio controls src={it.payload.dataUrl} className="w-full" />
+        </div>
+      );
+    }
+    // ARQUIVO / PDF enviado → link de download
+    if ((it.type === "file" || it.type === "pdf") && it.payload?.dataUrl) {
+      return (
+        <div className="group relative my-3 rounded-2xl border p-3.5 bg-slate-50 border-slate-200 dark:bg-white/[0.04] dark:border-white/10 flex items-center gap-2">
+          <Paperclip size={15} className="text-cyan-600 dark:text-cyan-300 shrink-0" />
+          <a href={it.payload.dataUrl} download={it.payload?.name || it.title || "arquivo"} className="text-[12px] font-semibold text-slate-800 dark:text-white truncate hover:underline">{it.title || it.payload?.name || "arquivo"}</a>
+          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100">
+            <button onClick={() => toLibrary(it.id)} title="Voltar p/ biblioteca" className="text-slate-400 hover:text-cyan-500"><ArrowLeftToLine size={13} /></button>
+            <button onClick={() => removeItem(it.id)} title="Remover" className="text-slate-400 hover:text-rose-400"><X size={14} /></button>
+          </div>
         </div>
       );
     }
@@ -403,7 +490,7 @@ export default function MeusEstudosFeed() {
   );
 
   return (
-    <div className="h-full flex flex-col lg:flex-row">
+    <div onPaste={onPaste} className={`h-full flex flex-col ${navRight ? "lg:flex-row-reverse" : "lg:flex-row"}`}>
       {/* ── CADERNO (centro) ── */}
       <div className="flex-1 min-w-0 flex flex-col p-5 sm:p-6">
         {/* título do estudo + espaços */}
@@ -439,7 +526,7 @@ export default function MeusEstudosFeed() {
           <div className="relative">
             <button onClick={() => setSpaceMenu((v) => !v)} title="Meus estudos" className="p-1 text-slate-400 hover:text-cyan-500"><ChevronDown size={16} className={spaceMenu ? "rotate-180 transition-transform" : "transition-transform"} /></button>
             {spaceMenu && (
-              <div className="absolute z-30 mt-1 w-60 right-0 rounded-2xl border p-1.5 shadow-xl bg-white border-slate-200 dark:bg-[#0c0b1a] dark:border-white/10">
+              <div className="absolute z-30 mt-1 w-60 right-0 max-h-80 overflow-y-auto custom-scrollbar rounded-2xl border p-1.5 shadow-xl bg-white border-slate-200 dark:bg-[#0c0b1a] dark:border-white/10">
                 {/* adicionar um estudo novo fica no topo */}
                 <button onClick={() => { newSpace(); setSpaceMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2 mb-1 text-[13px] font-bold text-white rounded-xl" style={{ background: GRAD }}><Plus size={14} /> Novo estudo</button>
                 {spaces.map((s) => (
@@ -549,7 +636,8 @@ export default function MeusEstudosFeed() {
               <input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveNote()} placeholder="nota ou link…" className="flex-1 min-w-0 rounded-xl px-2.5 py-1.5 text-[11px] bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none" />
               <button onClick={saveNote} disabled={!note.trim()} className="px-2 rounded-xl text-white disabled:opacity-40" style={{ background: GRAD }}><Plus size={13} /></button>
             </div>
-            <p className="text-[10px] text-slate-400 dark:text-white/30 leading-relaxed">Cole um link do YouTube direto num parágrafo do caderno pra assistir lá dentro.</p>
+            <label className="flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer" style={{ background: GRAD }}><UploadCloud size={13} /> Enviar arquivo<input type="file" multiple className="hidden" onChange={onPickFiles} /></label>
+            <p className="text-[10px] text-slate-400 dark:text-white/30 leading-relaxed">Imagem, áudio, PDF, qualquer arquivo. Você também pode colar (Ctrl+V) ou arrastar pro caderno.</p>
           </div>
         )}
 
