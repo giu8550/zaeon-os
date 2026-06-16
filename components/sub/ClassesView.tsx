@@ -773,10 +773,18 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
             const agendaContext = classes.length > 0
                 ? `Agenda atual do aluno: ${classes.map((c: any) => `${c.name || 'Aula'} [${(c.days || []).map((d: number) => DAY_LABELS[d - 1]).join('/')} ${c.hour}-${c.endHour}h${c.teacher ? `, prof. ${c.teacher}` : ''}]`).join('; ')}.`
                 : "A agenda do aluno está vazia.";
+            // Contexto temporal: resolve "hoje"/"amanhã" para o número do dia (1=Seg..7=Dom)
+            const _today = new Date();
+            const _dow = (((_today.getDay() + 6) % 7) + 1);
+            const _DOW = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"];
+            const dateContext = `DATA: hoje é ${_DOW[_dow - 1]} (day=${_dow}), ${_today.toLocaleDateString('pt-BR')}. Logo "hoje"=${_dow}, "amanhã"=${(_dow % 7) + 1}. Sempre horário 24h; duration = horaFim - horaInício.`;
+            // Histórico recente da conversa (slot-filling entre turnos)
+            const recent = liquidChatHistory.slice(-8).map((m) => `${m.role === 'user' ? 'Usuário' : 'Zaeon'}: ${m.text}`).join('\n');
+            const convoContext = recent ? `\nHISTÓRICO RECENTE DESTA CONVERSA (use para juntar informações já ditas e NÃO repetir perguntas):\n${recent}` : "";
             const response = await fetch('/api/ai/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: msg, agent: "core_active", systemContext: `${agendaContext} ${libraryContext}` }),
+                body: JSON.stringify({ prompt: msg, agent: "core_active", systemContext: `${dateContext}\n${agendaContext} ${libraryContext}${convoContext}` }),
             });
             const data = await response.json();
             if (data?.toolCall?.name === 'update_schedule') {
