@@ -57,6 +57,18 @@ model User {
   institution       String?
   verificationDoc   String?
 
+  // Planos / trial de estudante (ver lib/plans.ts + /api/trial/*)
+  plan            String?   @default("free")  // "free" | "plus"
+  plusUntil       DateTime?
+  trialGranted    Boolean   @default(false)
+  eduEmail        String?
+  eduVerified     Boolean   @default(false)
+
+  // Capacidades premium liberadas pelo admin (gating)
+  deepThinkEnabled     Boolean  @default(false)  // Modo Econômico: deep-thinking (Gemini Pro)
+  advancedVoiceEnabled Boolean  @default(false)  // Modo Voz Avançado (engine neural + comandos por voz)
+  voicePref            Json?    // { gender: 'f'|'m', voiceId, autoRead }
+
   // Invite system
   referredBy      String?  @db.ObjectId  // bare ObjectId — no Prisma relation (avoids circular User→User FK, populated in application layer)
   myInviteCode    String?  @unique
@@ -431,9 +443,9 @@ model StudyItem {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   userId    String   @db.ObjectId
   spaceId   String   @db.ObjectId
-  type      String   // ref | insight | synthesis | base | suggestion | pdf | video | note | link
+  type      String   // ref | insight | synthesis | base | suggestion | pdf | video | note | link | image | audio | file
   title     String   @default("")
-  payload   Json?    // texto, url, videoId, pdfUrl, etc.
+  payload   Json?    // texto, url, videoId, pdfUrl, dataUrl, etc.
   summary   String?  // resumo generativo (Flash)
   placement String   @default("library") // "library" (biblioteca, à direita) | "feed" (no canvas central)
   order     Int      @default(0)
@@ -441,4 +453,53 @@ model StudyItem {
 
   @@index([userId, spaceId])
   @@map("study_items")
+}
+
+// --- Verificação .edu p/ conceder o trial de estudante (/api/trial/edu/*) ---
+model EduVerification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  eduEmail  String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("edu_verifications")
+}
+
+// --- Proxies gerenciados pelo admin (/api/admin/proxies) ---
+model Proxy {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  label            String
+  host             String
+  port             Int      @default(0)
+  username         String?
+  password         String?
+  type             String   @default("socks5")
+  region           String   @default("BR")
+  status           String   @default("free") // free | assigned
+  assignedEmail    String?
+  assignedInstance String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("proxies")
+}
+
+// --- Jobs de autonomia por voz/agente (durável; Fase autonomia) ---
+model VoiceJob {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  kind      String   // research | study | write | code | schedule | summarize
+  input     String
+  status    String   @default("queued") // queued | running | streaming | done | error
+  progress  Int      @default(0)
+  result    Json?
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@map("voice_jobs")
 }
