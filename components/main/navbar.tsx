@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import logoPng from "@/app/zaeon-name.png";
 import ThemeToggle from "@/components/sub/ThemeToggle";
+import VoiceWaveIndicator from "@/components/voice/VoiceWaveIndicator";
 import "../../src/i18n";
 
 const TRACKS = [
@@ -192,20 +193,9 @@ export const Navbar = () => {
         </nav>
 
         <div className="flex items-center gap-6">
-          <div className={`flex items-center bg-white/5 backdrop-blur-2xl border border-white/10 rounded-full px-4 py-2 transition-all`}>
-            <div className="flex items-center gap-3 mr-4">
-              <button onClick={handlePrevTrack} className="text-foreground/40 hover:text-cyan-500">⏮</button>
-              <button onClick={togglePlay} className="text-foreground hover:text-cyan-500 text-xl w-6">{isPlaying ? "⏸" : "▶"}</button>
-              <button onClick={handleNextTrack} className="text-foreground/40 hover:text-cyan-500">⏭</button>
-            </div>
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowTrackName(!showTrackName)}>
-              <div className="flex items-end gap-[3px] h-5 w-auto">
-                {Array.from({ length: NUM_BARS }).map((_, i) => (
-                  <div key={i} ref={(el) => { barsRef.current[i] = el; }} className="w-[2.5px] rounded-t-[1px] bg-cyan-500 shadow-[0_0_5px_rgba(34,211,238,0.4)]" style={{ height: '20%' }} />
-                ))}
-              </div>
-              {showTrackName && <span className="text-[9px] font-black text-cyan-400 uppercase tracking-tighter ml-2">{getTrackName()}</span>}
-            </div>
+          {/* Módulo de VOZ da Zaeon (no lugar do antigo player de música): ondas ao falar. */}
+          <div className="flex items-center bg-white/5 backdrop-blur-2xl border border-white/10 rounded-full px-4 py-2 h-9">
+            <VoiceWaveIndicator size={18} />
           </div>
           <ThemeToggle />
         </div>

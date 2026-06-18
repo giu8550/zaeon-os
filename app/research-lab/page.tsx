@@ -41,6 +41,7 @@ import {
 
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
+import VoiceWaveIndicator from "@/components/voice/VoiceWaveIndicator";
 import MiniTourToast from "@/components/research/MiniTourToast";
 import SavedCitationsSection from "./SavedCitationsSection";
 import LibrarySavedFiles from "./LibrarySavedFiles";
@@ -1475,9 +1476,14 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
 
                     </div>
 
-                    {/* EXTRAS — fixos no rodapé da sidebar: alternar direção do layout + modo foco */}
-                    <div className="mt-auto px-2.5 pt-3 flex flex-col gap-3">
-                        <div className="h-[1px] bg-white/10" />
+                    {/* EXTRAS — fixos no rodapé da sidebar: voz (ondas verticais no foco) + layout + modo foco */}
+                    <div className="mt-auto px-2.5 pt-3 flex flex-col gap-3 items-center">
+                        {isFocusMode && (
+                            <div className="w-full flex justify-center pb-1" title="Voz da Zaeon">
+                                <VoiceWaveIndicator vertical size={22} />
+                            </div>
+                        )}
+                        <div className="h-[1px] bg-white/10 w-full" />
                         <button data-tour="layout-toggle" onClick={() => setIsChatLeft(!isChatLeft)} className={navItemCls(false)}>
                             <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-300" />
                             {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Layout</span>}

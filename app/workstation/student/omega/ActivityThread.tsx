@@ -7,7 +7,7 @@ import { Volume2, Square } from "lucide-react";
 
 export default function ActivityThread() {
   const { phases, answer, status, query, glitchReplay } = useOmegaScholar();
-  const { speak, stop, speaking } = useTTS();
+  const { speak, stop, activeText } = useTTS();
   if (status === "idle") return null;
   const loading = status === "running";
 
@@ -26,14 +26,14 @@ export default function ActivityThread() {
           {/* ouvir a resposta — Zaeon lê em voz alta (engine neural → fallback navegador) */}
           <div className="flex justify-end mb-2">
             <button
-              onClick={() => (speaking ? stop() : speak(answer))}
-              title={speaking ? "Parar leitura" : "Ouvir a resposta"}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors border ${speaking
+              onClick={() => (activeText === answer ? stop() : speak(answer))}
+              title={activeText === answer ? "Parar leitura" : "Ouvir a resposta"}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors border ${activeText === answer
                 ? "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border-cyan-400/40"
                 : "text-slate-500 dark:text-white/55 border-black/10 dark:border-white/10 hover:text-cyan-600 hover:border-cyan-400/40"}`}
             >
-              {speaking ? <Square size={12} /> : <Volume2 size={13} />}
-              {speaking ? "Parar" : "Ouvir"}
+              {activeText === answer ? <Square size={12} /> : <Volume2 size={13} />}
+              {activeText === answer ? "Parar" : "Ouvir"}
             </button>
           </div>
           <div className="text-sm leading-relaxed text-slate-700 dark:text-white/80 whitespace-pre-wrap">
