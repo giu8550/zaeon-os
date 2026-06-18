@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import type { WindowEntry } from "@/lib/useWindowStore";
 import RichText from "@/components/research/RichText";
 import { useCursorPos } from "@/lib/useCursorPos";
@@ -90,6 +90,15 @@ export default function ResearchShell({
   const [openPopover, setOpenPopover] = useState<"citations" | "quiz" | null>(null);
   const [showFolder, setShowFolder] = useState(false);
   const [fileDragOver, setFileDragOver] = useState(false);
+  // Mobile (<640px): empilha em coluna única (conversa em cima, documentos abaixo).
+  const [vw, setVw] = useState(0);
+  useEffect(() => {
+    const f = () => setVw(window.innerWidth);
+    f();
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, []);
+  const mobile = vw > 0 && vw < 640;
 
   const handlePlayFile = useCallback(
     (file: LibraryFile) => {
@@ -111,12 +120,13 @@ export default function ResearchShell({
   return (
     <div
       style={{
-        display: "grid",
-        gridTemplateColumns: flipped ? "1fr 3.2fr" : "3.2fr 1fr",
-        gap: 14,
-        height: "78vh",
-        minHeight: 600,
-        maxHeight: 820,
+        display: mobile ? "flex" : "grid",
+        flexDirection: mobile ? "column" : undefined,
+        gridTemplateColumns: mobile ? undefined : (flipped ? "1fr 3.2fr" : "3.2fr 1fr"),
+        gap: mobile ? 10 : 14,
+        height: mobile ? "auto" : "78vh",
+        minHeight: mobile ? "78vh" : 600,
+        maxHeight: mobile ? "none" : 820,
         borderRadius: 22,
         background: "rgba(22,22,34,0.55)",
         border: "1px solid rgba(255,255,255,0.12)",
@@ -124,8 +134,8 @@ export default function ResearchShell({
         WebkitBackdropFilter: "blur(40px) saturate(180%)",
         boxShadow:
           "0 40px 100px -30px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.10)",
-        padding: 14,
-        overflow: "hidden",
+        padding: mobile ? 10 : 14,
+        overflow: mobile ? "visible" : "hidden",
       }}
     >
       {/* ──────── LEFT PANEL (70%) ──────── */}
@@ -133,6 +143,8 @@ export default function ResearchShell({
         className="relative flex flex-col min-h-0 overflow-hidden rounded-[18px] transition-all"
         style={{
           order: flipped ? 2 : 0,
+          minHeight: mobile ? "60vh" : undefined,
+          flex: mobile ? "1 1 auto" : undefined,
           background: "rgba(255,255,255,0.045)",
           border: fileDragOver ? "1px solid rgba(34,197,94,0.75)" : "1px solid rgba(255,255,255,0.10)",
           boxShadow: fileDragOver
@@ -283,7 +295,8 @@ export default function ResearchShell({
         )}
       </div>
 
-      {/* ──────── RIGHT PANEL (30%) ──────── */}
+      {/* ──────── RIGHT PANEL (30%) — no mobile vira bloco abaixo, limitado e rolável ──────── */}
+      <div style={mobile ? { maxHeight: "40vh", minHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column" } : { display: "contents" }}>
       <DocumentDesktop
         processingFileId={processingFileId}
         processingStage={processingStage}
@@ -302,6 +315,7 @@ export default function ResearchShell({
         onView={(f) => onViewDoc?.(f.id)}
         flipped={flipped}
       />
+      </div>
     </div>
   );
 }
