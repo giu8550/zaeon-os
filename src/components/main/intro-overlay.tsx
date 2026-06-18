@@ -20,7 +20,7 @@ type Props = {
     onDone?: () => void;
 };
 
-const PT_TEXT = "Toque_para_iniciar";
+const PT_TEXT = "Iniciar";
 const ZH_CHARS = "点击进入系统链接世界网络数据启动矩阵核心希望之星日月星辰";
 
 function GlitchChar({ originalChar, targetLang, index, hasStarted }: { originalChar: string, targetLang: 'pt' | 'zh', index: number, hasStarted: boolean }) {
@@ -295,8 +295,11 @@ export default function MacSplash({ show = true, onDone }: Props) {
                                 transition={{ duration: 1 }}
                                 className="flex flex-col items-center w-full mt-4"
                             >
-                                <div className={`w-[200px] h-[3px] rounded-full bg-black/20 dark:bg-white/15 overflow-hidden transition-opacity duration-500 ${phase >= 1 ? 'opacity-100' : 'opacity-0'}`}>
-                                    <div ref={progressBarRef} className="h-full rounded-full bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.35)] dark:shadow-[0_0_8px_rgba(255,255,255,0.35)]" style={{ width: "0%", transition: "none" }} />
+                                <div className={`flex items-center gap-2.5 transition-opacity duration-500 ${phase >= 1 ? 'opacity-100' : 'opacity-0'}`}>
+                                    <div className="w-[200px] h-[3px] rounded-full bg-black/20 dark:bg-white/15 overflow-hidden">
+                                        <div ref={progressBarRef} className="h-full rounded-full bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.35)] dark:shadow-[0_0_8px_rgba(255,255,255,0.35)]" style={{ width: "0%", transition: "none" }} />
+                                    </div>
+                                    <span aria-hidden="true" className="text-cyan-500 dark:text-cyan-300 text-sm leading-none animate-[spin_4s_linear_infinite] motion-reduce:animate-none" style={{ filter: "drop-shadow(0 0 5px rgba(34,211,238,0.6))" }}>&#10177;</span>
                                 </div>
 
                                 {zhPhrase && <div className="mt-6 text-center text-[10px] tracking-widest text-sky-600 dark:text-sky-400/90 font-light">{zhPhrase}</div>}
