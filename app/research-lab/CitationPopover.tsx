@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useSavedCitations } from "@/lib/useSavedCitations";
+import SpeakButton from "@/components/voice/SpeakButton";
 
 interface CitationPopoverProps {
   /** Position relative to the containing element (the sheet wrapper). */
@@ -97,6 +98,7 @@ export default function CitationPopover({ pos, onClose }: CitationPopoverProps) 
               <p className="text-[10px] text-white/85 leading-snug flex-1 line-clamp-3">
                 {cit.abnt}
               </p>
+              <SpeakButton text={cit.quote || cit.abnt} size={12} title="Ouvir a citação" />
               <button
                 onClick={() => copy(cit.abnt, cit.id)}
                 className="shrink-0 text-[8.5px] font-bold text-cyan-300 px-1.5 py-0.5 rounded-[6px] transition-colors whitespace-nowrap"

@@ -20,6 +20,7 @@ import {
   PanelRightClose, PanelRightOpen, Image as ImageIcon, Music, Paperclip, UploadCloud,
 } from "lucide-react";
 import VoiceModeSwitch from "@/components/voice/VoiceModeSwitch";
+import SpeakButton from "@/components/voice/SpeakButton";
 
 type Item = { id: string; type: string; title: string; payload: any; summary: string | null; placement: string; order?: number; createdAt?: string };
 type Space = { id: string; title: string };
@@ -441,6 +442,7 @@ export default function MeusEstudosFeed() {
       return (
         <div className="group relative my-3 rounded-2xl border p-3.5 bg-slate-50 border-slate-200 shadow-sm dark:bg-white/[0.04] dark:border-white/10 dark:shadow-none">
           <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100">
+            <SpeakButton text={it.payload?.text || it.summary || it.title || ""} size={13} />
             <button onClick={() => toLibrary(it.id)} title="Voltar p/ biblioteca" className="text-slate-400 hover:text-cyan-500"><ArrowLeftToLine size={13} /></button>
             <button onClick={() => removeItem(it.id)} title="Remover" className="text-slate-400 hover:text-rose-400"><X size={14} /></button>
           </div>
@@ -473,6 +475,7 @@ export default function MeusEstudosFeed() {
     return (
       <div className="group relative -mx-2 px-2 py-0.5 rounded-lg hover:bg-black/[0.015] dark:hover:bg-white/[0.02]">
         <button onClick={() => removeItem(it.id)} title="Remover bloco" className="absolute -left-3 top-1.5 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-400"><X size={12} /></button>
+        {text.trim() && <div className="absolute -right-1 top-0.5 opacity-0 group-hover:opacity-100"><SpeakButton text={text} /></div>}
         <AutoGrow value={text} onChange={(v) => editText(it.id, v)} onKeyDown={onKey} placeholder={ph} className={cls} autoFocus={focusId === it.id} />
         {it.type === "note" && soloYt(text) && editingYt === it.id && (
           <button onClick={() => setEditingYt(null)} className="text-[10px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">▶ ver vídeo</button>

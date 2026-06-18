@@ -23,6 +23,7 @@ import {
 import { Bot, Mic, MicOff } from "lucide-react";
 import ZaeonLogo from "@/components/main/ZaeonLogo";
 import ZaeonTriangle from "@/components/main/ZaeonTriangle";
+import SpeakButton from "@/components/voice/SpeakButton";
 import type { AIState } from "@/components/main/ZaeonLogo";
 
 const TypewriterText = ({ text, onComplete }: { text: string, onComplete: () => void }) => {
@@ -522,6 +523,9 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                                                 msg.text
                                                             )}
                                                         </div>
+                                                        {!isMe && activeChat.isAgent && msg.id !== currentlyTypingMsgId && (
+                                                            <div className="mt-0.5"><SpeakButton text={msg.text} size={12} title="Ouvir" /></div>
+                                                        )}
                                                         {!isMe && msg.summon && (
                                                             <div className="mt-2 w-full">
                                                                 <div className="text-[9px] uppercase tracking-widest text-cyan-600 dark:text-cyan-400 font-black mb-1">{msg.summon.agent}</div>

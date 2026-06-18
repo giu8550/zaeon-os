@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useSavedCitations } from "@/lib/useSavedCitations";
 import { BookMarked, Copy, Check, Download, Trash2 } from "lucide-react";
+import SpeakButton from "@/components/voice/SpeakButton";
 
 export default function SavedCitationsSection() {
   const { citations, remove } = useSavedCitations();
@@ -45,7 +46,10 @@ export default function SavedCitationsSection() {
         <div className="flex flex-col gap-3 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
           {citations.map((c) => (
             <div key={c.id} className="rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-300 dark:border-white/10 p-4">
-              <p className="text-[13px] leading-relaxed text-slate-800 dark:text-slate-200 font-serif select-all">{c.abnt}</p>
+              <div className="flex items-start gap-2">
+                <p className="flex-1 text-[13px] leading-relaxed text-slate-800 dark:text-slate-200 font-serif select-all">{c.abnt}</p>
+                <SpeakButton text={c.abnt} title="Ouvir a citação" />
+              </div>
               <div className="flex items-center gap-2 mt-3">
                 <button onClick={() => copy(c.id, c.abnt)} className="inline-flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full border border-slate-300 dark:border-white/15 text-slate-600 dark:text-white/70 hover:border-violet-400">
                   {copiedId === c.id ? <><Check className="w-3 h-3 text-emerald-500" /> Copiado</> : <><Copy className="w-3 h-3" /> Copiar</>}
