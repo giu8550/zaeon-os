@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import VoiceModeSwitch from "@/components/voice/VoiceModeSwitch";
 import SpeakButton from "@/components/voice/SpeakButton";
+import { takeHandoff } from "@/lib/agents/handoff";
 
 type Item = { id: string; type: string; title: string; payload: any; summary: string | null; placement: string; order?: number; createdAt?: string };
 type Space = { id: string; title: string };
@@ -168,6 +169,15 @@ export default function MeusEstudosFeed() {
     loadItems(spaceId);
   }, [spaceId, loadItems]);
 
+  // Handoff da Zaeon (chat/voz): se ela mandou ESTUDAR um tópico, executa quando o espaço estiver pronto.
+  const handoffDoneRef = useRef(false);
+  useEffect(() => {
+    if (handoffDoneRef.current || !spaceId) return;
+    const ho = takeHandoff(["study"]);
+    if (ho?.topic) { handoffDoneRef.current = true; setBarOpen(true); void zaeonStudy(ho.topic); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaceId]);
+
   useEffect(() => { setTitleDraft(spaces.find((s) => s.id === spaceId)?.title || ""); }, [spaceId, spaces]);
 
   const ord = (i: Item) => (typeof i.order === "number" ? i.order : 0);
@@ -213,8 +223,8 @@ export default function MeusEstudosFeed() {
   };
 
   // ── ZAEON GENERATIVA: comando em linguagem natural → blocos no feed (ao vivo) ──
-  const zaeonStudy = async () => {
-    const cmd = zaeonCmd.trim();
+  const zaeonStudy = async (override?: string) => {
+    const cmd = (override ?? zaeonCmd).trim();
     if (!cmd || zaeonBusy || !spaceId) return;
     setZaeonBusy(true); setZaeonCmd(""); setZaeonStatus("Zaeon está pensando…"); setGenTitle(cmd); setBarOpen(false);
     try {
@@ -558,7 +568,7 @@ export default function MeusEstudosFeed() {
               className="flex-1 min-w-0 bg-transparent text-[12.5px] text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/35 focus:outline-none disabled:opacity-60 py-1"
             />
             <VoiceModeSwitch onTranscript={(t) => setZaeonCmd(t)} title="Falar para a Zaeon" size={14} />
-            <button onClick={zaeonStudy} disabled={zaeonBusy || !zaeonCmd.trim()}
+            <button onClick={() => zaeonStudy()} disabled={zaeonBusy || !zaeonCmd.trim()}
               className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white disabled:opacity-40 shadow-sm"
               style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }} title="Criar estudo">
               {zaeonBusy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}

@@ -27,6 +27,7 @@ import SpeakButton from "@/components/voice/SpeakButton";
 import { useVoiceMode } from "@/lib/voice/voiceMode";
 import useTTS from "@/lib/voice/useTTS";
 import VoiceOrbModal from "@/components/voice/VoiceOrbModal";
+import { setHandoff } from "@/lib/agents/handoff";
 import type { AIState } from "@/components/main/ZaeonLogo";
 
 const TypewriterText = ({ text, onComplete }: { text: string, onComplete: () => void }) => {
@@ -354,6 +355,11 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                     setZaeonMessages(prev => [...prev, { id: msgId, senderId: 'zaeon-agent', text: data.text, summon: data.summon }]);
                     setAiState("executing");
                     if (voiceMode === "active" && data.text) tts.speak(data.text); // modo ativo: fala a resposta
+                    // EXECUTA de verdade: guarda o handoff e leva pra sala (que roda a ação ao abrir)
+                    if (data.summon?.route) {
+                        if (data.summon.topic) setHandoff(data.summon.skill, data.summon.topic);
+                        setTimeout(() => { router.push(data.summon.route); setIsOpen(false); }, voiceMode === "active" ? 1200 : 350);
+                    }
                 }
             } catch (error) {
                 const msgId = Date.now();

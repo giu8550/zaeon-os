@@ -31,6 +31,11 @@ PIPER_VOICE_DIR = os.environ.get(
 PIPER_DEFAULT = os.environ.get("PIPER_VOICE", "pt_BR-faber-medium")
 KOKORO_LANG = os.environ.get("KOKORO_LANG", "p")  # 'p' = português (br) no Kokoro
 DEFAULT_VOICE = os.environ.get("ZAEON_TTS_DEFAULT", "aura-f")
+# Velocidade do Kokoro: < 1.0 deixa a fala mais lenta/suave (textura mais agradável).
+try:
+    KOKORO_SPEED = float(os.environ.get("ZAEON_TTS_SPEED", "0.92"))
+except ValueError:
+    KOKORO_SPEED = 0.92
 
 # Catálogo lógico de vozes exposto ao app. tier: 'free' | 'premium'.
 # 'engine' decide quem sintetiza; 'ref' é a voz nativa daquele engine.
@@ -76,7 +81,7 @@ def _synthesize_kokoro(text: str, ref: str) -> bytes:
 
     pipeline = _kokoro_pipeline()
     chunks: list = []
-    for _, _, audio in pipeline(text, voice=ref):
+    for _, _, audio in pipeline(text, voice=ref, speed=KOKORO_SPEED):
         # Kokoro devolve tensores do PyTorch — converte p/ numpy float32.
         arr = audio.detach().cpu().numpy() if hasattr(audio, "detach") else np.asarray(audio)
         chunks.append(arr.astype("float32").reshape(-1))

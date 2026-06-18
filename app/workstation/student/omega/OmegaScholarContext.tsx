@@ -2,6 +2,7 @@
 import { type ReactNode, createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import type { ScholarEvent, Suggestion, ForgeResponse } from "@/lib/scholar/types";
 import type { Prereq } from "@/lib/scholar/prereqs";
+import { takeHandoff } from "@/lib/agents/handoff";
 
 interface Phase { phase: string; message: string; }
 interface OmegaState {
@@ -131,6 +132,11 @@ export function OmegaScholarProvider({ room, onStart, children }:
   useEffect(() => {
     if (resumedRef.current) return;
     resumedRef.current = true;
+
+    // Handoff da Zaeon (chat/voz): se ela mandou PESQUISAR/ESCREVER um tópico, executa agora.
+    const ho = takeHandoff(["research", "write"]);
+    if (ho?.topic) { runQuery(ho.topic); return; }
+
     if (stateRef.current.status !== "idle") return;
 
     let run: { query: string; startedAt: number } | null = null;

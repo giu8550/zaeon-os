@@ -22,7 +22,9 @@ export default function VoiceWaveIndicator({
 }) {
   const { speaking, loading, stop } = useTTS();
   const active = speaking || loading;
-  const bars = [0, 1, 2, 3, 4];
+  const bars = [0, 1, 2, 3, 4, 5, 6, 7, 8]; // mais barras = onda mais detalhada
+  // alturas-base variadas (perfil de onda), além da animação
+  const profile = [0.45, 0.8, 0.55, 1, 0.65, 0.9, 0.5, 0.75, 0.4];
 
   if (!active) {
     // estado de repouso: ⟁ discreto (a voz toca por si quando há resposta)
@@ -51,11 +53,11 @@ export default function VoiceWaveIndicator({
           key={i}
           className="rounded-full bg-gradient-to-t from-violet-500 to-cyan-400 zaeon-wavebar"
           style={{
-            width: vertical ? "100%" : 3,
-            height: vertical ? 3 : "100%",
+            width: vertical ? `${40 + profile[i] * 60}%` : 2.5,
+            height: vertical ? 2.5 : `${40 + profile[i] * 60}%`,
             // @ts-expect-error CSS custom prop p/ o keyframe
-            "--d": `${0.7 + (i % 3) * 0.18}s`,
-            animationDelay: `${i * 0.09}s`,
+            "--d": `${0.6 + (i % 4) * 0.16}s`,
+            animationDelay: `${i * 0.07}s`,
           }}
         />
       ))}

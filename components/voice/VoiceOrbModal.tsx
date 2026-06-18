@@ -81,14 +81,14 @@ export default function VoiceOrbModal({
               {state === "thinking" ? (
                 <span className="text-white text-3xl animate-[spin_4s_linear_infinite] motion-reduce:animate-none" style={{ filter: "drop-shadow(0 0 6px rgba(255,255,255,0.6))" }}>&#10177;</span>
               ) : (
-                <div className="flex items-end gap-1.5 h-12">
-                  {[0, 1, 2, 3, 4].map((i) => (
+                <div className="flex items-center gap-[5px] h-14">
+                  {[0, 1, 2, 3, 4, 5, 6].map((i) => (
                     <motion.span
                       key={i}
-                      className="w-1.5 rounded-full bg-white/90"
-                      animate={{ height: ["18%", "100%", "40%", "85%", "25%"] }}
-                      transition={{ duration: 0.9 + (i % 3) * 0.2, repeat: Infinity, ease: "easeInOut", delay: i * 0.08 }}
-                      style={{ height: "40%" }}
+                      className="w-[3px] rounded-full bg-white/90"
+                      animate={{ height: ["22%", "95%", "45%", "100%", "35%", "75%", "30%"] }}
+                      transition={{ duration: 0.7 + (i % 4) * 0.18, repeat: Infinity, ease: "easeInOut", delay: i * 0.06 }}
+                      style={{ height: "45%" }}
                     />
                   ))}
                 </div>
