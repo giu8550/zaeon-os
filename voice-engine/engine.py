@@ -77,7 +77,9 @@ def _synthesize_kokoro(text: str, ref: str) -> bytes:
     pipeline = _kokoro_pipeline()
     chunks: list = []
     for _, _, audio in pipeline(text, voice=ref):
-        chunks.append(audio)
+        # Kokoro devolve tensores do PyTorch — converte p/ numpy float32.
+        arr = audio.detach().cpu().numpy() if hasattr(audio, "detach") else np.asarray(audio)
+        chunks.append(arr.astype("float32").reshape(-1))
     if not chunks:
         raise RuntimeError("Kokoro não gerou áudio.")
     audio = np.concatenate(chunks) if len(chunks) > 1 else chunks[0]
