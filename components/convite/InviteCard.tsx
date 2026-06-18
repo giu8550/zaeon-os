@@ -365,11 +365,6 @@ export default function InviteCard({ initialCode = "", onDone }: Props) {
                   style={{ background: GRAD, boxShadow: "0 12px 30px -10px rgba(34,211,238,0.55)" }}>
                   {saving ? <Loader2 size={15} className="animate-spin" /> : <>Aceitar convite <ArrowRight size={15} /></>}
                 </button>
-
-                <button type="button" onClick={() => onWantChat(sessionToken, inviteCode)}
-                  className="mx-auto inline-flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-white/45 hover:text-cyan-600 dark:hover:text-cyan-300 transition-colors">
-                  <Bot size={13} /> prefiro conversar com a IA
-                </button>
               </motion.div>
             )}
           </AnimatePresence>

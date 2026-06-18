@@ -7,6 +7,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { VertexAI } from "@google-cloud/vertexai";
+import { vertexCredentials } from "@/lib/ai/vertex-credentials";
 import { geminiText } from "@/lib/ai/gemini-text";
 import { cacheJson, hashKey } from "@/src/lib/cache";
 import { guard } from "@/src/lib/ratelimit";

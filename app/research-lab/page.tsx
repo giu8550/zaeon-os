@@ -1513,7 +1513,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
                             <input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" multiple onChange={(e) => handleFiles(e.target.files)} />
                             <ResearchShell
                                 workType={workType}
-                                onWorkType={setWorkType}
+                                onWorkType={(t) => setWorkType(t as typeof workType)}
                                 onRelate={handleRelateFiles}
                                 windows={wWindows}
                                 activeId={wActiveId}

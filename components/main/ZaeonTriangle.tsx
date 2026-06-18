@@ -46,7 +46,7 @@ function installPulseInterceptor() {
     const origOpen = window.XMLHttpRequest.prototype.open;
     window.XMLHttpRequest.prototype.open = function (this: any, method: string, url: string | URL, ...rest: any[]) {
       fire(String(url));
-      return origOpen.call(this, method, url as any, ...(rest as []));
+      return (origOpen as any).call(this, method, url as any, ...rest);
     } as any;
   }
 }
