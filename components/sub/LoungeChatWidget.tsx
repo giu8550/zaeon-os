@@ -99,6 +99,10 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     // 🔥 NOVOS ESTADOS PARA O MICROFONE
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
+    const wantListenRef = useRef(false);   // conversa por voz ativa (reabre o mic a cada turno)
+    const finalRef = useRef("");            // transcrição final da fala atual
+    const sendRef = useRef<(t?: string) => void>(() => {}); // ponte p/ enviar sem stale-closure
+    const prevSpeakingRef = useRef(false);
 
     // Estados para Modo Professor
     const [studentSearchQuery, setStudentSearchQuery] = useState("");
@@ -165,7 +169,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognitionRef.current = new SpeechRecognition();
-            recognitionRef.current.continuous = true;
+            recognitionRef.current.continuous = false;   // para no fim da fala → dispara onend → envia
             recognitionRef.current.interimResults = true;
             recognitionRef.current.lang = 'pt-BR';
 
@@ -174,30 +178,49 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     transcript += event.results[i][0].transcript;
                 }
+                finalRef.current = transcript;
                 setMessageInput(transcript);
             };
 
-            recognitionRef.current.onerror = (event: any) => {
-                console.error("Erro no reconhecimento de voz:", event.error);
-                setIsListening(false);
-            };
+            recognitionRef.current.onerror = () => { setIsListening(false); };
 
             recognitionRef.current.onend = () => {
                 setIsListening(false);
+                const said = finalRef.current.trim();
+                finalRef.current = "";
+                // conversa por voz: ao terminar de falar, ENVIA sozinho (sem Enter)
+                if (wantListenRef.current && said) {
+                    setMessageInput("");
+                    sendRef.current(said);
+                }
             };
         }
     }, []);
 
-    const toggleListening = () => {
-        if (isListening) {
-            recognitionRef.current?.stop();
-            setIsListening(false);
-        } else {
-            setMessageInput(""); // Limpa o input ao começar a ouvir
-            recognitionRef.current?.start();
-            setIsListening(true);
-        }
+    const startListening = () => {
+        if (isListening) return;
+        try { finalRef.current = ""; setMessageInput(""); recognitionRef.current?.start(); setIsListening(true); } catch { /* já rodando */ }
     };
+    const stopListening = () => {
+        wantListenRef.current = false;
+        try { recognitionRef.current?.stop(); } catch { /* ignore */ }
+        setIsListening(false);
+    };
+    const toggleListening = () => {
+        if (isListening || wantListenRef.current) { stopListening(); }
+        else { wantListenRef.current = true; startListening(); }
+    };
+
+    // Conversa contínua: quando a Zaeon TERMINA de falar (modo ativo), reabre o mic pro próximo turno.
+    useEffect(() => {
+        if (prevSpeakingRef.current && !tts.speaking && wantListenRef.current && !isZaeonTyping && !isListening) {
+            const t = setTimeout(() => { if (wantListenRef.current) startListening(); }, 350);
+            prevSpeakingRef.current = tts.speaking;
+            return () => clearTimeout(t);
+        }
+        prevSpeakingRef.current = tts.speaking;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tts.speaking, isZaeonTyping]);
 
     // 1. INICIALIZAÇÃO DO PUSHER (WEB SOCKET HUMANOS)
     useEffect(() => {
@@ -276,15 +299,14 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     }, [isOpen, activeChat]);
 
     // 🔥 5. FUNÇÃO DE ENVIAR MENSAGEM (Híbrida: Humano vs Zaeon) 🔥
-    const handleSendMessage = async () => {
-        if (!messageInput.trim() || !activeChat) return;
+    const handleSendMessage = async (textArg?: string) => {
+        const text = (typeof textArg === "string" ? textArg : messageInput).trim();
+        if (!text || !activeChat) return;
 
-        // Desliga o microfone se enviar a mensagem enquanto fala
-        if (isListening) {
-            toggleListening();
-        }
+        // Para o reconhecimento atual (a fala já virou texto); não desliga a conversa.
+        try { recognitionRef.current?.stop(); } catch { /* ignore */ }
+        setIsListening(false);
 
-        const text = messageInput.trim();
         setMessageInput("");
 
         const optimisticMsg = {
@@ -368,6 +390,10 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                 setAiState("executing");
             } finally {
                 setIsZaeonTyping(false);
+                // conversa por voz no modo passivo (sem fala dela): reabre o mic pro próximo turno
+                if (wantListenRef.current && voiceMode !== "active") {
+                    setTimeout(() => { if (wantListenRef.current) startListening(); }, 500);
+                }
             }
 
         } else {
@@ -380,6 +406,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
             } catch (error) { console.error(error); }
         }
     };
+    sendRef.current = handleSendMessage; // ponte sempre atualizada (sem stale-closure no reconhecimento)
 
     const handleRespondRequest = async (status: 'ACCEPTED' | 'REJECTED') => {
         if (!incomingRequest) return;
@@ -653,7 +680,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                         </button>
 
                                         <button
-                                            onClick={handleSendMessage}
+                                            onClick={() => handleSendMessage()}
                                             disabled={!messageInput.trim() || isZaeonTyping}
                                             className="w-8 h-8 rounded-full bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 flex items-center justify-center text-white transition-colors shadow-md shrink-0"
                                         >

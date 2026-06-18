@@ -31,14 +31,14 @@ const updateScheduleTool: FunctionDeclaration = {
 // --- SUMMON TOOL (Zaeon convoca um agente especialista) ---
 const summonAgentTool: FunctionDeclaration = {
     name: "summon_agent",
-    description: "Convoca um agente especialista para ajudar o usuário, com base na habilidade desejada. Use quando a pessoa quiser ESTUDAR um assunto, BUSCAR/ler pesquisa, ESCREVER um texto/documento, ou PROGRAMAR um projeto.",
+    description: "Convoca um agente especialista e JÁ EXECUTA a ação na sala certa. Use SEMPRE que a pessoa pedir para ESTUDAR um assunto, PESQUISAR/ler literatura, ESCREVER um texto, ou PROGRAMAR algo — em vez de só responder em texto. Preencha o 'topic' com o assunto exato.",
     parameters: {
         type: "OBJECT" as any,
         properties: {
             skill: { type: "STRING" as any, description: "Uma de: 'study' (estudar), 'research' (pesquisar), 'write' (escrever), 'code' (programar)." },
-            topic: { type: "STRING" as any, description: "O assunto/tema em linguagem natural (ex.: 'fotossíntese', 'redes neurais')." }
+            topic: { type: "STRING" as any, description: "O assunto/tema EXATO em linguagem natural (ex.: 'fotossíntese', 'redes neurais'). Obrigatório quando houver um assunto." }
         },
-        required: ["skill"]
+        required: ["skill", "topic"]
     }
 };
 
@@ -82,7 +82,7 @@ Você também conhece a plataforma inteira e guia com leveza. Agentes e salas:
 - Zaeon Code — IDE no navegador (sala Projetos), para estudantes de Computação/áreas correlatas.
 Salas no research-lab (?tab=): Pesquisa, Sala de Estudos, Projetos, Pesquisas, Lounge, Perfil. Há a Plugin Store; para estudantes, o Plano Plus é grátis (conta de estudante ou comprovante de matrícula).
 
-Quando fizer sentido, oriente com carinho para o lugar certo ("se quiser, te levo pra sala de Pesquisa — lá a Aura te ajuda com isso"). IMPORTANTE: quando a pessoa quiser ESTUDAR um assunto, BUSCAR/ler pesquisa, ESCREVER um texto ou PROGRAMAR algo, CONVOQUE o agente certo usando a ferramenta summon_agent (skill = study | research | write | code, e o topic), em vez de só explicar — você está agindo em nome dela. Se houver [CONTEXTO ADICIONAL FORNECIDO PELO SISTEMA], trate como verdade atual da plataforma. Acima de tudo, faça a pessoa se sentir bem-vinda e amparada.`,
+REGRA DE AÇÃO (muito importante): quando a pessoa pedir para ESTUDAR um assunto, PESQUISAR/ler literatura, ESCREVER um texto, ou PROGRAMAR algo, você DEVE chamar a ferramenta summon_agent (skill = study | research | write | code, com o topic = o assunto exato) — isso EXECUTA a ação de verdade na sala certa. NÃO responda só com texto dizendo que "vai chamar" — chame a ferramenta. Você está agindo em nome dela, não apenas explicando. Se houver [CONTEXTO ADICIONAL FORNECIDO PELO SISTEMA], trate como verdade atual da plataforma. Acima de tudo, faça a pessoa se sentir bem-vinda e amparada.`,
 
     // AGENTE ORQUESTRADOR — a "Zion": conhece todos os outros agentes e salas e
     // orienta o usuário pela plataforma inteira. É a porta central de ajuda/onboarding.
