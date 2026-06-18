@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { useTranslation } from "react-i18next";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, Mic } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useVoiceMode } from "@/lib/voice/voiceMode";
 
 const TIMELINE = {
     AUDIO_SRC: "/assets/sounds/boot-track.mp3",
@@ -99,6 +100,7 @@ function GlitchText({ text, targetLang, hasStarted }: { text: string, targetLang
 export default function MacSplash({ show = true, onDone }: Props) {
     const { theme, setTheme } = useTheme();
     const { i18n } = useTranslation();
+    const [voiceMode, setVoiceMode] = useVoiceMode(); // modo voz (passivo|ativo), disponível já na tela inicial
     const [mounted, setMounted] = useState(false);
 
     const [hasStarted, setHasStarted] = useState(false);
@@ -211,6 +213,20 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 isAudioPlaying.current = true;
                 setHasStarted(true);
                 window.dispatchEvent(new CustomEvent("zaeon-music-sync"));
+                // A música só serve pra destravar o áudio do navegador no clique.
+                // Some com fade-out de 15s e para — não fica tocando no fundo depois.
+                const startVol = typeof audio.volume === "number" ? audio.volume : 0.4;
+                const steps = 60;
+                let i = 0;
+                const fade = setInterval(() => {
+                    i++;
+                    audio.volume = Math.max(0, startVol * (1 - i / steps));
+                    if (i >= steps) {
+                        clearInterval(fade);
+                        try { audio.pause(); } catch { /* ignore */ }
+                        isAudioPlaying.current = false;
+                    }
+                }, 15000 / steps);
             }).catch((err: any) => {
                 console.warn("Bloqueio de áudio:", err);
                 setHasStarted(true);
@@ -271,7 +287,18 @@ export default function MacSplash({ show = true, onDone }: Props) {
                                             {theme === 'dark' ? <Sun className="w-[18px] h-[18px] text-white/80" /> : <Moon className="w-[18px] h-[18px] text-black/80" />}
                                         </div>
 
-                                        <div 
+                                        {/* MODO VOZ — entre tema e idioma. Ativa a voz da Zaeon (conversa) já daqui. */}
+                                        <div
+                                            title={voiceMode === "active" ? "Modo voz: ATIVO (a Zaeon conversa e fala)" : "Modo voz: passivo — toque para ativar"}
+                                            aria-pressed={voiceMode === "active"}
+                                            className={`flex items-center justify-center w-11 h-11 rounded-full backdrop-blur-xl cursor-pointer transition-all border shadow-sm hover:scale-110 active:scale-95 ${voiceMode === "active" ? "text-white border-cyan-300/50" : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border-black/10 dark:border-white/10"}`}
+                                            style={voiceMode === "active" ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+                                            onClick={(e) => { e.stopPropagation(); setVoiceMode(voiceMode === "active" ? "passive" : "active"); }}
+                                        >
+                                            <Mic className={`w-[18px] h-[18px] ${voiceMode === "active" ? "text-white" : "text-black/80 dark:text-white/80"}`} />
+                                        </div>
+
+                                        <div
                                             className="flex items-center justify-center px-5 h-11 rounded-full bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 backdrop-blur-xl cursor-pointer transition-all border border-black/10 dark:border-white/10 shadow-sm hover:scale-110 active:scale-95"
                                             onClick={(e) => { 
                                                 e.stopPropagation(); 
