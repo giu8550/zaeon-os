@@ -7,7 +7,6 @@ import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import logoPng from "@/app/zaeon-name.png";
 import ThemeToggle from "@/components/sub/ThemeToggle";
-import VoiceWaveIndicator from "@/components/voice/VoiceWaveIndicator";
 import "../../src/i18n";
 
 const TRACKS = [
@@ -193,10 +192,6 @@ export const Navbar = () => {
         </nav>
 
         <div className="flex items-center gap-6">
-          {/* Módulo de VOZ da Zaeon (no lugar do antigo player de música): ondas ao falar. */}
-          <div className="flex items-center bg-white/5 backdrop-blur-2xl border border-white/10 rounded-full px-4 py-2 h-9">
-            <VoiceWaveIndicator size={18} />
-          </div>
           <ThemeToggle />
         </div>
       </div>

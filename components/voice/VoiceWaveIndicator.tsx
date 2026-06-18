@@ -48,6 +48,11 @@ export default function VoiceWaveIndicator({
       className={`flex items-center justify-center gap-[3px] ${vertical ? "flex-col" : "flex-row"} ${className}`}
       style={{ width: vertical ? size + 10 : undefined, height: vertical ? undefined : size + 8 }}
     >
+      {/* núcleo (círculo) — distinto das ondas, pulsa enquanto fala */}
+      <span
+        className="rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 zaeon-wavecore shrink-0"
+        style={{ width: 6, height: 6, marginRight: vertical ? 0 : 2, marginBottom: vertical ? 2 : 0 }}
+      />
       {bars.map((i) => (
         <span
           key={i}
@@ -64,9 +69,11 @@ export default function VoiceWaveIndicator({
       <style jsx global>{`
         @keyframes zaeonWaveH { 0%,100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
         @keyframes zaeonWaveV { 0%,100% { transform: scaleX(0.35); } 50% { transform: scaleX(1); } }
+        @keyframes zaeonCore { 0%,100% { transform: scale(0.7); opacity: .65; } 50% { transform: scale(1.25); opacity: 1; } }
         .zaeon-wavebar { transform-origin: center; animation: zaeonWaveH var(--d, .8s) ease-in-out infinite; }
         .flex-col > .zaeon-wavebar { animation-name: zaeonWaveV; }
-        @media (prefers-reduced-motion: reduce) { .zaeon-wavebar { animation: none; } }
+        .zaeon-wavecore { animation: zaeonCore 1.1s ease-in-out infinite; box-shadow: 0 0 6px rgba(34,211,238,0.55); }
+        @media (prefers-reduced-motion: reduce) { .zaeon-wavebar, .zaeon-wavecore { animation: none; } }
       `}</style>
     </button>
   );

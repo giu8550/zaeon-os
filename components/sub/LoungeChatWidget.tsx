@@ -27,6 +27,7 @@ import SpeakButton from "@/components/voice/SpeakButton";
 import { useVoiceMode } from "@/lib/voice/voiceMode";
 import useTTS from "@/lib/voice/useTTS";
 import VoiceOrbModal from "@/components/voice/VoiceOrbModal";
+import VoiceWaveIndicator from "@/components/voice/VoiceWaveIndicator";
 import { setHandoff } from "@/lib/agents/handoff";
 import type { AIState } from "@/components/main/ZaeonLogo";
 
@@ -475,9 +476,6 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                 {!isOpen ? (
                     /* FECHADO — só o ícone da Zaeon girando (presença forte) */
                     <div className="relative flex items-center justify-center">
-                        {(unreadCount > 0 || incomingRequest) && (
-                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping z-10" />
-                        )}
                         <ZaeonTriangle size={34} />
                     </div>
                 ) : (
@@ -539,6 +537,8 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                             {activeChat.isAgent ? 'Sempre por perto' : 'Chat Seguro'}
                                         </span>
                                     </div>
+                                    {/* módulo de voz: anima quando a Zaeon está falando */}
+                                    {activeChat.isAgent && <div className="ml-auto pr-1"><VoiceWaveIndicator size={16} /></div>}
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
