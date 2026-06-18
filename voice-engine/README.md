@@ -7,9 +7,12 @@ local/host (padrão `abnt-service` 8001, `suggestion-forge` 8003). O Next consom
 
 ## Setup
 
+> ⚠️ **Python 3.10–3.12** (o Kokoro NÃO suporta 3.13). No macOS: `brew install python@3.12 espeak-ng`.
+
 ```bash
 cd voice-engine
-python3 -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -U pip
 pip install -r requirements.txt
 
 # Kokoro baixa os pesos no primeiro uso (HuggingFace). Para PT-BR use KOKORO_LANG=p.

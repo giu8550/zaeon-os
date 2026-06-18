@@ -522,10 +522,12 @@ The Next app reaches it via `ABNT_SERVICE_URL` (default `http://localhost:8001`)
 
 **Terminal 3 — `voice-engine` (OPCIONAL — só para a voz NEURAL; FastAPI, porta 8004):**
 
+> ⚠️ Requer **Python 3.10–3.12** (o Kokoro não roda no 3.13). macOS: `brew install python@3.12 espeak-ng`.
+
 ```bash
 cd voice-engine
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -U pip && pip install -r requirements.txt
 uvicorn main:app --port 8004     # → http://localhost:8004  (Kokoro baixa os pesos no 1º uso)
 ```
 
