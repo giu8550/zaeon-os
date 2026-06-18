@@ -485,6 +485,10 @@ UPSTASH_REDIS_REST_TOKEN="..."
 # Where the Next app reaches the abnt-service. Defaults to http://localhost:8001 if unset.
 ABNT_SERVICE_URL="http://localhost:8001"
 
+# Voice engine (TTS neural — OPCIONAL; ver "Run Locally", Terminal 3)
+# Sem isto, a voz usa o sintetizador do navegador (Web Speech). Default http://localhost:8004.
+VOICE_ENGINE_URL="http://localhost:8004"
+
 # Omega Scholar research agent (academic full-text)
 UNPAYWALL_EMAIL="you@example.com"   # any email you control — Unpaywall's politeness/contact field
 CORE_API_KEY=""                     # optional; free key from core.ac.uk. CORE is skipped if unset
@@ -515,6 +519,20 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload   # → http://localhost:80
 ```
 
 The Next app reaches it via `ABNT_SERVICE_URL` (default `http://localhost:8001`). It's only needed for ABNT export — the rest of the app runs without it, but ABNT export will show "Serviço ABNT offline" until it's up. Quick check: `curl http://localhost:8001/health`. See `abnt-service/README.md` for details.
+
+**Terminal 3 — `voice-engine` (OPCIONAL — só para a voz NEURAL; FastAPI, porta 8004):**
+
+```bash
+cd voice-engine
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --port 8004     # → http://localhost:8004  (Kokoro baixa os pesos no 1º uso)
+```
+
+O modo voz **funciona sem este serviço**: o ditado usa o reconhecimento do navegador (Web Speech) e os
+botões de "Ouvir" (🔊) caem na voz do navegador (`speechSynthesis`). O `voice-engine` só troca a voz por
+uma neural de melhor textura (Kokoro/Piper) via `VOICE_ENGINE_URL`. Quick check: `curl http://localhost:8004/health`.
+Detalhes em `voice-engine/README.md`. Modo de voz **passivo/ativo** fica no toggle do widget de chat.
 
 > **Tests:** `npm test` (Vitest) runs the `lib/scholar/*` unit suite; `npm run test:watch` for watch mode.
 
