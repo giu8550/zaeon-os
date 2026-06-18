@@ -1,8 +1,9 @@
-# Zaeon Voice Engine (TTS · Piper)
+# Zaeon Voice Engine v2 (TTS · Kokoro + Piper)
 
-Voz própria do agente de chat (Aura) da biblioteca. Gratuito, offline, textura agradável.
-**Não roda na Vercel** — local/host, no padrão dos engines `abnt-service` (8001) e
-`suggestion-forge` (8003). O Next consome via `POST /api/ai/voice` (`VOICE_ENGINE_URL`).
+Voz da Zaeon. **Kokoro** (Apache-2.0, natural, leve, roda em CPU em tempo real) é o
+engine padrão; **Piper** é o fallback offline. **Não roda na Vercel** — é um engine
+local/host (padrão `abnt-service` 8001, `suggestion-forge` 8003). O Next consome via
+`POST /api/ai/voice` (`VOICE_ENGINE_URL`).
 
 ## Setup
 
@@ -11,22 +12,39 @@ cd voice-engine
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# baixe uma voz PT-BR do Piper para ./voices (ou aponte PIPER_VOICE_DIR):
-#   https://huggingface.co/rhasspy/piper-voices  → pt_BR-faber-medium.onnx (+ .onnx.json)
-mkdir -p voices  # coloque os .onnx aqui
+# Kokoro baixa os pesos no primeiro uso (HuggingFace). Para PT-BR use KOKORO_LANG=p.
+# Fallback Piper: baixe uma voz PT-BR para ./voices (ou aponte PIPER_VOICE_DIR):
+#   https://huggingface.co/rhasspy/piper-voices → pt_BR-faber-medium.onnx (+ .onnx.json)
+mkdir -p voices
 
 uvicorn main:app --port 8004
 ```
 
-No app (Vercel/local), aponte o proxy para o engine:
+No app, aponte o proxy:
 ```
-VOICE_ENGINE_URL=http://localhost:8004   # ou o host onde você publicou
+VOICE_ENGINE_URL=http://localhost:8004   # ou o host da VPS
 ```
+
+## Endpoints
+- `GET /health` → `{status, voice}`
+- `GET /voices` → `{voices:[{id,label,gender,lang,tier}], default}`
+- `POST /synthesize` → `{audio_base64, mime, voice}`  (body: `{text, voice?}`)
+
+## Vozes (catálogo lógico em engine.py → VOICES)
+- `aura-f` (feminina, free, Kokoro) · `aura-m` (masculina, free, Kokoro)
+- `nova-f` (feminina, premium) · `piper-f` (fallback)
+
+Se o Kokoro falhar / não estiver instalado, a síntese cai automaticamente no Piper.
+Se nenhum modelo existir, o engine devolve 503 e o app degrada para a voz do navegador.
+
+## Env
+- `KOKORO_LANG` (default `p` = PT-BR), `ZAEON_TTS_DEFAULT` (default `aura-f`)
+- `PIPER_VOICE_DIR`, `PIPER_VOICE` (fallback)
 
 ## Testes
 ```bash
-.venv/bin/python -m pytest        # Piper mockado (não baixa modelo)
+.venv/bin/python -m pytest        # síntese mockada (não baixa modelos)
 ```
 
-## Contrato
-Veja `engine_spec.md`.
+## Roadmap (ver docs/VPS_VOICE_AUTONOMY_IMPLEMENTATION_PROMPT.md)
+- `/stream` (chunks, baixa latência) · Chatterbox (premium, requer GPU) · stt-engine (faster-whisper).

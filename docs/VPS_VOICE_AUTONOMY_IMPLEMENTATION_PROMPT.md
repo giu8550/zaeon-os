@@ -11,6 +11,24 @@
 
 ---
 
+## Decisões confirmadas (2026-06-18)
+
+- **VPS = Hostinger KVM 2** — 2 vCPU, **8 GB RAM**, 100 GB NVMe, **sem GPU**. Implicações:
+  - TTS = **Kokoro** (CPU, <2GB, tempo real) + **Piper** fallback. **Chatterbox/cloning fica para
+    quando houver GPU** (KVM com GPU ou upgrade). Sem XTTS (licença).
+  - STT = **faster-whisper `small`/`base` int8** (CPU) — 1 stream por vez no início; Web Speech como
+    fallback/escala.
+  - **Mongo (Atlas) e Redis (Upstash) gerenciados** — não rodar no host (poupa RAM dos 8 GB).
+  - **`next build` no CI** (GitHub Actions) e enviar artefato/`pull` — 2 vCPU sofre com build local.
+  - Orçar RAM: Next ~0.5–1 GB, voice(Kokoro) ~1–2 GB, stt(small) ~1–2 GB, sobra folga. OK no MVP.
+- **Deploy = Docker Compose + Caddy** (TLS automático). 1 container por serviço.
+- **Gating premium = OS DOIS**: `plan==='plus'` libera por padrão **+** override por usuário via
+  `User.advancedVoiceEnabled` (admin). `/api/ai/capabilities` expõe `advancedVoice`.
+- **Começar por: "voz boa local primeiro"** — voice-engine v2 (Kokoro) + `lib/voice/useTTS.ts` +
+  botão 🔊 na resposta da Pesquisa, rodando local. Infra VPS (Fase 0) vem logo em seguida.
+
+---
+
 ## 0. Por que agora (contexto real do repo)
 
 O projeto já está "meio caminho andado" para isso — e é por isso que o Vercel virou gargalo:

@@ -13,3 +13,16 @@ class SynthesizeResponse(BaseModel):
     audio_base64: str
     mime: str = "audio/wav"
     voice: str
+
+
+class VoiceInfo(BaseModel):
+    id: str
+    label: str
+    gender: str
+    lang: str
+    tier: str
+
+
+class VoicesResponse(BaseModel):
+    voices: list[VoiceInfo]
+    default: str

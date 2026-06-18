@@ -11,14 +11,19 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 
 import engine
-from models import SynthesizeRequest, SynthesizeResponse
+from models import SynthesizeRequest, SynthesizeResponse, VoicesResponse
 
-app = FastAPI(title="Zaeon Voice Engine", version="1.0.0")
+app = FastAPI(title="Zaeon Voice Engine", version="2.0.0")
 
 
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "voice": engine.DEFAULT_VOICE}
+
+
+@app.get("/voices", response_model=VoicesResponse)
+def voices() -> dict:
+    return {"voices": engine.list_voices(), "default": engine.DEFAULT_VOICE}
 
 
 @app.post("/synthesize", response_model=SynthesizeResponse)
@@ -29,7 +34,7 @@ def synthesize(req: SynthesizeRequest) -> dict:
     try:
         return engine.synthesize_base64(text, req.voice)
     except FileNotFoundError as exc:
-        # Modelo de voz ausente → 503 (o proxy degrada graciosamente).
+        # Nenhum modelo de voz disponível → 503 (o proxy degrada graciosamente).
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:  # noqa: BLE001 — falha de síntese vira 500 informativo
         raise HTTPException(status_code=500, detail=f"Falha na síntese: {exc}")
