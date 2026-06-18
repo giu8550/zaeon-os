@@ -14,6 +14,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import NextImage from 'next/image';
 import { ProFeaturePanel } from '@/components/ui/ProFeaturePanel';
 import VoiceModeSwitch from '@/components/voice/VoiceModeSwitch';
+import SpeakButton from '@/components/voice/SpeakButton';
 
 // --- INITIAL DATA ---
 const initialSchedule: any[] = []; 
@@ -914,8 +915,9 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                     </div>
                     <div ref={zaeonChatScrollRef} className="flex-1 overflow-y-auto px-5 py-3 space-y-3 scrollbar-hide">
                         {liquidChatHistory.map((m, i) => (
-                            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            <div key={i} className={`group flex items-end gap-1.5 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed shadow-sm ${m.role === 'user' ? 'bg-[#8b5cf6] text-white font-semibold' : 'bg-white/[0.08] text-white/90'}`}>{m.text}</div>
+                                {m.role === 'agent' && <span className="opacity-0 group-hover:opacity-100 transition-opacity"><SpeakButton text={m.text} size={12} /></span>}
                             </div>
                         ))}
                     </div>
