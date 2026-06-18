@@ -26,6 +26,7 @@ import ZaeonTriangle from "@/components/main/ZaeonTriangle";
 import SpeakButton from "@/components/voice/SpeakButton";
 import { useVoiceMode } from "@/lib/voice/voiceMode";
 import useTTS from "@/lib/voice/useTTS";
+import VoiceOrbModal from "@/components/voice/VoiceOrbModal";
 import type { AIState } from "@/components/main/ZaeonLogo";
 
 const TypewriterText = ({ text, onComplete }: { text: string, onComplete: () => void }) => {
@@ -711,6 +712,13 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <VoiceOrbModal
+                open={isListening || (voiceMode === "active" && (isZaeonTyping || tts.speaking))}
+                state={isListening ? "listening" : isZaeonTyping ? "thinking" : "speaking"}
+                caption={isListening ? (messageInput || "Pode falar — estou te ouvindo.") : undefined}
+                onClose={() => { if (isListening) toggleListening(); tts.stop(); }}
+            />
 
             <style jsx global>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 3px; }
