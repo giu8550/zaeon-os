@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { ArrowUp, Loader2, CheckCircle2, AlertCircle, Brain } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOmegaScholar } from "./OmegaScholarContext";
+import VoiceModeSwitch from "@/components/voice/VoiceModeSwitch";
 
 interface OmegaScholarBarProps {
   flushTop?: boolean;
@@ -89,6 +90,9 @@ export default function OmegaScholarBar({ flushTop = false, onOpenResults }: Ome
           placeholder="Pesquise, revise a literatura, peça citações…"
           className="flex-1 min-w-0 bg-transparent border-none px-1 py-1.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-white/30 outline-none disabled:opacity-60"
         />
+
+        {/* switch de voz próprio desta janela: dita na barra de pesquisa */}
+        <VoiceModeSwitch onTranscript={(t) => setDraft(t)} title="Falar a pesquisa" />
 
         {canDeep && (
           <button

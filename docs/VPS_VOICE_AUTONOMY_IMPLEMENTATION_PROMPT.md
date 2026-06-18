@@ -201,6 +201,21 @@ Objetivo: qualquer lugar com texto ganha (a) **ouvir** (TTS read-out) e (b) **fa
 
 ---
 
+## 4.3 Switch de voz POR JANELA (regra confirmada 2026-06-18)
+
+Cada janela de **chat/input** tem o **seu próprio switch de voz** (`components/voice/VoiceModeSwitch.tsx`),
+independente das outras — não é um toggle global. Onde houver um campo de comando/escrita, há um 🎙️.
+- Já plugado: barra da Pesquisa (Omega). A plugar: barra ⟁ de Meus Estudos, chat da Sala de Aula,
+  framework de texto da Pesquisa, chat de Projetos, Lounge.
+- O switch dita ao vivo no input (`onTranscript`) e fecha a frase em `onFinal`.
+
+**Janela de LOADING inicial (splash) — caso especial:** ela também tem switch de voz, mas o modo de
+áudio dela **NÃO abre o app**. Ele só **dispara pesquisas/comandos nas salas** (estudo, pesquisa, etc.)
+— ou seja, a pessoa fala um comando no splash e a Zaeon executa a ação na sala correspondente (via o
+runtime de autonomia §6), sem navegar/abrir a aplicação inteira. É um atalho de voz "headless": só o
+backend processa e o resultado materializa na sala certa. (Arquivos: `components/ui/MacSplash.tsx` e
+`app/study-rooms/*/loading.tsx`.)
+
 ## 5. Modal de Voz (ondas vocais estilizadas) — desktop + mobile
 
 Componente `components/voice/VoiceOrbModal.tsx`:
