@@ -9,6 +9,69 @@ import {
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import GenderDNA from '@/components/sub/GenderDNA';
+import NetworkMural from '@/app/workstation/profiles/NetworkMural';
+
+// chave de data local (YYYY-MM-DD), sem fuso atrapalhar
+const dkey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// Gráfico de presença estilo GitHub: cada dia presente acende um quadradinho azul.
+const PresenceGraph = () => {
+    const [weeks, setWeeks] = useState<{ k: string; present: boolean; future: boolean }[][]>([]);
+    const [count, setCount] = useState(0);
+    useEffect(() => {
+        const KEY = "zaeon.presence";
+        let set: Set<string>;
+        try { set = new Set<string>(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch { set = new Set<string>(); }
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const tk = dkey(today);
+        if (!set.has(tk)) { set.add(tk); try { localStorage.setItem(KEY, JSON.stringify([...set])); } catch { /* ignore */ } }
+        const WEEKS = 26;
+        const start = new Date(today);
+        start.setDate(today.getDate() - (WEEKS * 7 - 1));
+        start.setDate(start.getDate() - start.getDay()); // recua até domingo (alinha colunas)
+        const cells: { k: string; present: boolean; future: boolean }[] = [];
+        const cur = new Date(start);
+        for (let i = 0; i < (WEEKS + 2) * 7; i++) {
+            const k = dkey(cur);
+            cells.push({ k, present: set.has(k), future: cur > today });
+            if (cur >= today && cur.getDay() === 6) break; // fecha na última semana atual
+            cur.setDate(cur.getDate() + 1);
+        }
+        const grouped: { k: string; present: boolean; future: boolean }[][] = [];
+        for (let i = 0; i < cells.length; i += 7) grouped.push(cells.slice(i, i + 7));
+        setWeeks(grouped);
+        setCount(set.size);
+    }, []);
+    return (
+        <div className="w-full rounded-[2rem] bg-white/80 dark:bg-white/[0.02] border border-slate-300 dark:border-white/10 shadow-xl backdrop-blur-3xl p-6">
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                    <Target size={16} className="text-blue-500" />
+                    <span className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-700 dark:text-slate-200">Presença</span>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{count} {count === 1 ? "dia" : "dias"} na plataforma</span>
+            </div>
+            <div className="flex gap-[3px] overflow-x-auto custom-scrollbar pb-1">
+                {weeks.map((w, wi) => (
+                    <div key={wi} className="flex flex-col gap-[3px]">
+                        {w.map((c) => (
+                            <div key={c.k} title={c.k}
+                                className={`w-[12px] h-[12px] rounded-[3px] transition-colors ${c.future ? "bg-transparent" : c.present ? "bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.45)]" : "bg-slate-200 dark:bg-white/[0.06]"}`}
+                            />
+                        ))}
+                    </div>
+                ))}
+            </div>
+            <div className="flex items-center gap-1.5 mt-3 text-[9px] text-slate-400 uppercase tracking-widest font-bold">
+                <span>Menos</span>
+                <span className="w-[11px] h-[11px] rounded-[3px] bg-slate-200 dark:bg-white/[0.06]" />
+                <span className="w-[11px] h-[11px] rounded-[3px] bg-blue-500/40" />
+                <span className="w-[11px] h-[11px] rounded-[3px] bg-blue-500" />
+                <span>Mais</span>
+            </div>
+        </div>
+    );
+};
 
 const StringLine = ({ height }: { height: number }) => (
     <div className="absolute left-1/2 -translate-x-1/2 w-[1px] bg-slate-400/30 dark:bg-white/10 z-0 pointer-events-none"
@@ -270,6 +333,7 @@ function ProfilePanel({ className }: { className?: string }) {
         <div className={`w-full h-full flex flex-col gap-10 overflow-y-auto custom-scrollbar p-1 font-sans bg-transparent ${className ?? ''}`}>
             <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="w-full flex flex-col gap-6">
                 <FullWidthChart />
+                <PresenceGraph />
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
                     <div className="lg:col-span-2 h-full"><HabitMatrix weekData={weekData} monthName={monthName} /></div>
                     <div className="h-full"><SideModules /></div>
@@ -357,6 +421,11 @@ function ProfilePanel({ className }: { className?: string }) {
                         </div>
                     </div>
                 </div>
+            </motion.div>
+
+            {/* MURAL DE FOTOS — mesmo do perfil do professor (foto no mural) */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="w-full mt-2">
+                <NetworkMural />
             </motion.div>
         </div>
     );

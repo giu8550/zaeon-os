@@ -1461,15 +1461,7 @@ export default function HomeworkPage({ isEmbedded = false }: { isEmbedded?: bool
 
                         <div className="h-[1px] bg-white/10 my-1" />
 
-                        {/* Notícias */}
-                        <button
-                            data-tour="news-tab"
-                            onClick={() => handleTabChange("news")}
-                            className={navItemCls(activeTab === 'news')} style={activeTab === 'news' ? navGlassPill('rgba(245,158,11,0.85)') : undefined}
-                        >
-                            <NewspaperIcon className="w-5 h-5 shrink-0 group-hover:text-amber-300" />
-                            {isSidebarOpen && <span className="text-[10px] font-black uppercase whitespace-nowrap">Notícias</span>}
-                        </button>
+                        {/* Notícias saíram daqui: já estão na barra de navegação e no perfil. */}
 
                         {/* Perfil */}
                         <button
