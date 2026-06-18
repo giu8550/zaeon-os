@@ -19,6 +19,7 @@ import {
   X, GripVertical, ArrowLeftToLine, FileText, StickyNote, Link2, Heading1, Heading2, Pilcrow, Pencil,
   PanelRightClose, PanelRightOpen, Image as ImageIcon, Music, Paperclip, UploadCloud,
 } from "lucide-react";
+import VoiceModeSwitch from "@/components/voice/VoiceModeSwitch";
 
 type Item = { id: string; type: string; title: string; payload: any; summary: string | null; placement: string; order?: number; createdAt?: string };
 type Space = { id: string; title: string };
@@ -553,6 +554,7 @@ export default function MeusEstudosFeed() {
               placeholder="Zaeon, estude sobre…"
               className="flex-1 min-w-0 bg-transparent text-[12.5px] text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/35 focus:outline-none disabled:opacity-60 py-1"
             />
+            <VoiceModeSwitch onTranscript={(t) => setZaeonCmd(t)} title="Falar para a Zaeon" size={14} />
             <button onClick={zaeonStudy} disabled={zaeonBusy || !zaeonCmd.trim()}
               className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white disabled:opacity-40 shadow-sm"
               style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }} title="Criar estudo">

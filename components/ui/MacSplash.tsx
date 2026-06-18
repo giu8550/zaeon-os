@@ -179,7 +179,7 @@ export default function MacSplash({
 
                     {!hasStarted && (
                         <span className="text-white/80 tracking-[0.2em] text-xs font-medium animate-pulse">
-                            INITIATE ZAEON
+                            Iniciar
                         </span>
                     )}
                 </button>
@@ -192,22 +192,31 @@ export default function MacSplash({
                         </div>
                     ) : (
                         <>
-                            {/* Barra de Progresso */}
-                            <div className="w-[200px] h-[3px] rounded-full bg-white/15 overflow-hidden">
-                                <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                        width: `${Math.max(0.02, progress) * 100}%`,
-                                        transition: prefersReducedMotion
-                                            ? "none"
-                                            : "width 120ms cubic-bezier(.22,.61,.36,1)",
-                                        background:
-                                            "linear-gradient(90deg,rgba(255,255,255,.9),rgba(230,236,255,.95),rgba(255,255,255,.9))",
-                                        boxShadow: "0 0 8px rgba(255,255,255,0.35)",
-                                        transform: "translateZ(0)",
-                                        willChange: "width",
-                                    }}
-                                />
+                            {/* Barra de Progresso + triângulo ⟁ da Zaeon ao lado */}
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-[200px] h-[3px] rounded-full bg-white/15 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full"
+                                        style={{
+                                            width: `${Math.max(0.02, progress) * 100}%`,
+                                            transition: prefersReducedMotion
+                                                ? "none"
+                                                : "width 120ms cubic-bezier(.22,.61,.36,1)",
+                                            background:
+                                                "linear-gradient(90deg,rgba(255,255,255,.9),rgba(230,236,255,.95),rgba(255,255,255,.9))",
+                                            boxShadow: "0 0 8px rgba(255,255,255,0.35)",
+                                            transform: "translateZ(0)",
+                                            willChange: "width",
+                                        }}
+                                    />
+                                </div>
+                                <span
+                                    aria-hidden="true"
+                                    className={`text-cyan-300 text-sm leading-none ${prefersReducedMotion ? "" : "animate-[spin_4s_linear_infinite]"}`}
+                                    style={{ filter: "drop-shadow(0 0 5px rgba(34,211,238,0.7))" }}
+                                >
+                                    &#10177;
+                                </span>
                             </div>
 
                             {/* Frase em Mandarim */}

@@ -116,7 +116,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                 const firstName = userName ? userName.split(" ")[0] : "Operador";
 
                 setZaeonMessages([
-                    { id: 'intro', senderId: 'zaeon-agent', text: `Oi, ${firstName}. Que bom te ver por aqui. Eu sou a Zaeon e fico do seu lado pra ajudar no que você precisar — me conta, o que você quer fazer hoje?` }
+                    { id: 'intro', senderId: 'zaeon-agent', text: `Oi, ${firstName}. Que bom te ver por aqui. Fico do seu lado pra ajudar no que precisar — me conta, o que você quer fazer hoje?` }
                 ]);
 
                 if (!isOpen) {
@@ -434,7 +434,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                             <ZaeonTriangle size={16} />
                         </div>
                         <span className="text-xs font-black uppercase tracking-widest text-slate-800 dark:text-slate-200">
-                            {activeChat ? activeChat.name : "Rede Neural"}
+                            {activeChat ? (activeChat.isAgent ? "" : activeChat.name) : "Rede Neural"}
                         </span>
                     </div>
 
@@ -481,7 +481,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                         )}
                                     </div>
                                     <div className="flex flex-col truncate">
-                                        <span className="text-[11px] font-bold text-slate-800 dark:text-white truncate">{activeChat.name}</span>
+                                        {!activeChat.isAgent && <span className="text-[11px] font-bold text-slate-800 dark:text-white truncate">{activeChat.name}</span>}
                                         <span className={`text-[9px] font-medium ${activeChat.isAgent ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'}`}>
                                             {activeChat.isAgent ? 'Sempre por perto' : 'Chat Seguro'}
                                         </span>

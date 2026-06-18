@@ -13,6 +13,7 @@ import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import NextImage from 'next/image';
 import { ProFeaturePanel } from '@/components/ui/ProFeaturePanel';
+import VoiceModeSwitch from '@/components/voice/VoiceModeSwitch';
 
 // --- INITIAL DATA ---
 const initialSchedule: any[] = []; 
@@ -921,6 +922,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                     <div className="px-4 pb-4 pt-1 shrink-0">
                         <div className="flex items-center gap-1.5 bg-white/[0.06] rounded-full pl-4 pr-1.5 py-1.5">
                             <input value={zaeonInput} onChange={(e) => setZaeonInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleZaeonMessage()} className="bg-transparent flex-1 text-xs text-white outline-none placeholder:text-white/30" placeholder="Pergunte a Zaeon..." disabled={isZaeonProcessing} />
+                            <VoiceModeSwitch onTranscript={(t) => setZaeonInput(t)} title="Falar para a Zaeon" size={14} />
                             <button onClick={handleZaeonMessage} disabled={isZaeonProcessing} className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#8b5cf6] to-[#22d3ee] flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-md disabled:opacity-40"><ArrowUp size={15} strokeWidth={2.2} className="text-white" /></button>
                         </div>
                     </div>
