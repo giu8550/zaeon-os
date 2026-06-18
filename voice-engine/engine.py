@@ -124,9 +124,13 @@ def synthesize_wav(text: str, voice_id: str | None = None) -> tuple[bytes, str]:
     if entry["engine"] == "kokoro":
         try:
             return _synthesize_kokoro(text, entry["ref"]), entry["id"]
-        except Exception:
-            piper = _voice_entry("piper-f")  # degrada sem derrubar a requisição
-            return _synthesize_piper(text, piper["ref"]), piper["id"]
+        except Exception as ke:
+            # tenta o Piper; se ele também não estiver disponível, mostra o ERRO REAL do Kokoro
+            try:
+                piper = _voice_entry("piper-f")
+                return _synthesize_piper(text, piper["ref"]), piper["id"]
+            except Exception as pe:
+                raise RuntimeError(f"Kokoro falhou: {ke!r}. Piper indisponível: {pe!r}")
     return _synthesize_piper(text, entry["ref"]), entry["id"]
 
 
