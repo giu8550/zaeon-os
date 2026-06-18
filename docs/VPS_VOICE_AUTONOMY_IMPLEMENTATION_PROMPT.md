@@ -272,6 +272,27 @@ Transportar o "gadget de chat" do desktop para o mobile como **controle total po
 
 ---
 
+## 7.1 Modo de voz: PASSIVO vs ATIVO (regra confirmada 2026-06-18)
+
+A voz tem duas personalidades (persistidas em `lib/voice/voiceMode.ts`, `zaeon.voice.mode`):
+- **Passivo (default):** recebe o comando e executa com o mínimo de conversa — breve, direto,
+  aciona o agente certo sem narração.
+- **Ativo:** pode conversar com leveza e personalidade sobre o assunto (uma faísca de opinião/curiosidade)
+  e AO MESMO TEMPO despacha os agentes para executar. NÃO narra tarefas técnicas ("estou abrindo…");
+  fala a resposta (auto-TTS) e age. Mais "falante".
+- Implementado: `/api/ai/chat` aceita `voiceMode` e injeta a diretiva no system prompt; o widget de chat
+  tem o toggle Passiva/Ativa e, no modo ativo, fala a resposta automaticamente (useTTS).
+
+## 7.2 Mobile (proporções e layout)
+
+Alvo: viewports **360–430px** (base ~390px); breakpoint mobile `< 640px` (sm). Lógica estilo Claude/ChatGPT:
+- **Chat sempre presente** como centro: o widget (`LoungeChatWidget`) já vira quase full-screen no mobile
+  (largura ~vw-12, altura ~84vh) e mantém o ⟁ flutuante quando fechado. Voz em foco (Mic + modo ativo).
+- **Linha horizontal inferior** (a fazer): pastas/arquivos como chips roláveis na mesma faixa do input,
+  com **arrasta-e-solta** para o caderno/conversa. Reusar o padrão de chips já existente.
+- **Escrita navegável pela sidebar/módulo no tamanho da tela** (a fazer por sala): coluna única, sidebar
+  colapsável, alvos de toque ≥44px, sem hover-only, safe-areas. Começar pela **Pesquisa**.
+
 ## 8. Premium gating (Modo Voz Avançado é pago)
 
 Reusar o padrão do **Modo Econômico / deep-thinking** (`User.deepThinkEnabled`,

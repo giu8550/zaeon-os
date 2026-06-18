@@ -24,6 +24,8 @@ import { Bot, Mic, MicOff } from "lucide-react";
 import ZaeonLogo from "@/components/main/ZaeonLogo";
 import ZaeonTriangle from "@/components/main/ZaeonTriangle";
 import SpeakButton from "@/components/voice/SpeakButton";
+import { useVoiceMode } from "@/lib/voice/voiceMode";
+import useTTS from "@/lib/voice/useTTS";
 import type { AIState } from "@/components/main/ZaeonLogo";
 
 const TypewriterText = ({ text, onComplete }: { text: string, onComplete: () => void }) => {
@@ -106,6 +108,20 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     const [unreadCount, setUnreadCount] = useState(0);
     const [flash, setFlash] = useState(false);
     const [deepMode, setDeepMode] = useState(false); // pensamento profundo (Gemini Pro em chunks)
+    const [voiceMode, setVoiceModeState] = useVoiceMode(); // passivo | ativo
+    const tts = useTTS();
+
+    // Viewport p/ tornar o widget full-screen no mobile (alvo 360–430px).
+    const [vw, setVw] = useState(0);
+    useEffect(() => {
+        const f = () => setVw(window.innerWidth);
+        f();
+        window.addEventListener("resize", f);
+        return () => window.removeEventListener("resize", f);
+    }, []);
+    const isMobile = vw > 0 && vw < 640;
+    const openW = isMobile ? Math.min(vw - 12, 460) : 320;
+    const openH = isMobile ? Math.round((typeof window !== "undefined" ? window.innerHeight : 800) * 0.84) : 450;
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -321,6 +337,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                         body: JSON.stringify({
                             prompt: text,
                             agent: "zaeon",
+                            voiceMode, // passivo | ativo (personalidade da fala)
                             userData: savedOnboardingData, // 🔥 Memória injetada!
                             history: chatHistoryForGemini, // 🔥 Histórico do chat injetado!
                             systemContext: `Você é a Zaeon. O usuário com quem você está falando se chama ${userName}. O usuário está neste momento na rota/página: ${pathname}. Se ele perguntar sobre o que ele pode fazer aqui ou pedir ajuda contextual, use essa rota como base para explicar a interface ou funcionalidades desta área específica do sistema.`
@@ -335,6 +352,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                     // data.summon (quando a Zaeon convoca um agente) vira um card de handoff.
                     setZaeonMessages(prev => [...prev, { id: msgId, senderId: 'zaeon-agent', text: data.text, summon: data.summon }]);
                     setAiState("executing");
+                    if (voiceMode === "active" && data.text) tts.speak(data.text); // modo ativo: fala a resposta
                 }
             } catch (error) {
                 const msgId = Date.now();
@@ -405,8 +423,8 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
             layout
             initial={false}
             animate={{
-                height: isOpen ? 450 : 60,
-                width: isOpen ? 320 : 60,
+                height: isOpen ? openH : 60,
+                width: isOpen ? openW : 60,
             }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className={`fixed z-[999] flex flex-col overflow-hidden ${glassContainer} ${isOpen ? 'bottom-0 rounded-t-3xl' : 'bottom-5 rounded-full shadow-2xl'}
@@ -577,14 +595,25 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                     </AnimatePresence>
 
                                     {activeChat?.isAgent && (
-                                        <button
-                                            onClick={() => setDeepMode(v => !v)}
-                                            title="Pensamento profundo — raciocínio em etapas (mais lento)"
-                                            className={`self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${deepMode ? "text-white" : "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5"}`}
-                                            style={deepMode ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
-                                        >
-                                            ✦ {deepMode ? "Modo profundo ligado" : "Pensar mais a fundo"}
-                                        </button>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <button
+                                                onClick={() => setDeepMode(v => !v)}
+                                                title="Pensamento profundo — raciocínio em etapas (mais lento)"
+                                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${deepMode ? "text-white" : "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5"}`}
+                                                style={deepMode ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+                                            >
+                                                ✦ {deepMode ? "Modo profundo ligado" : "Pensar mais a fundo"}
+                                            </button>
+                                            <button
+                                                onClick={() => setVoiceModeState(voiceMode === "active" ? "passive" : "active")}
+                                                title={voiceMode === "active" ? "Voz ativa: conversa e age (fala as respostas)" : "Voz passiva: recebe e executa, sem falar"}
+                                                aria-pressed={voiceMode === "active"}
+                                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${voiceMode === "active" ? "text-white" : "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5"}`}
+                                                style={voiceMode === "active" ? { background: "linear-gradient(135deg,#0ea5e9,#22d3ee)" } : undefined}
+                                            >
+                                                🔊 {voiceMode === "active" ? "Voz ativa" : "Voz passiva"}
+                                            </button>
+                                        </div>
                                     )}
 
                                     <div className="flex items-center gap-2 bg-white dark:bg-[#0f172a] rounded-full border border-slate-300 dark:border-white/10 p-1 pl-4 shadow-inner focus-within:border-cyan-400 dark:focus-within:border-cyan-500/50 transition-colors">

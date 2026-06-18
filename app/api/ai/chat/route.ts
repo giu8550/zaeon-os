@@ -154,7 +154,7 @@ export async function POST(req: Request) {
         const rl = await guard(req, "ai-chat", "ai-heavy");
         if (!rl.ok) return rl.response;
         // 🔥 NOVO: Recebendo userData do frontend
-        const { prompt, agent, systemContext, fileData, userData } = await req.json();
+        const { prompt, agent, systemContext, fileData, userData, voiceMode } = await req.json();
         const agentKey = agent?.toLowerCase() || "aura";
         const persona = AGENT_PERSONAS[agentKey] || AGENT_PERSONAS.aura;
 
@@ -220,6 +220,14 @@ export async function POST(req: Request) {
 
         if (systemContext) {
             finalSystemInstruction += `\n\n=== CONTEXTO ADICIONAL FORNECIDO PELO SISTEMA ===\n${systemContext}`;
+        }
+
+        // Modo de voz (passivo/ativo) ajusta a personalidade da resposta falada.
+        if (voiceMode === "passive" || voiceMode === "active") {
+            const directive = voiceMode === "active"
+                ? `MODO VOZ ATIVO: você pode conversar com leveza, calor e personalidade sobre o assunto — comente brevemente — e AO MESMO TEMPO acione o agente certo para executar. NÃO narre tarefas técnicas; converse com naturalidade enquanto age. Seja humana e concisa.`
+                : `MODO VOZ PASSIVO: receba o comando e EXECUTE com o mínimo de conversa. Seja breve e direto, acione o agente certo sem rodeios nem narração.`;
+            finalSystemInstruction += `\n\n=== MODO DE VOZ ===\n${directive}`;
         }
 
         const chat = generativeModel.startChat({
