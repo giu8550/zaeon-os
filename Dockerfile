@@ -13,8 +13,14 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 \
     DATABASE_URL="mongodb://placeholder:27017/build"
 
+# openssl/ca-certificates: o Prisma precisa pra gerar/rodar o engine no Debian slim.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
-RUN npm ci
+# npm install (não `npm ci`): resolve sem exigir o lock 100% sincronizado e tolera
+# conflitos de peer (wagmi/aptos/web3 no mesmo projeto). Para beta é o caminho confiável.
+RUN npm install --no-audit --no-fund --legacy-peer-deps
 COPY . .
 RUN npx --yes prisma generate && npm run build
 
