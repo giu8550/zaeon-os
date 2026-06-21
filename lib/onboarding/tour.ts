@@ -46,17 +46,15 @@ export const TOUR_STEPS: TourStep[] = [
   { id: "gerar", hint: "✨ Gere a pesquisa a partir do estudo", target: '[data-tour="gerar"]', advanceEvent: "zaeon:research:newdoc",
     say: "Agora clica em **Gerar pesquisa** e depois em **Iniciar pesquisa** — eu transformo seu estudo num esboço real, com introdução, metodologia e a lacuna. ✍️" },
 
-  // — Sala de Pesquisa: ferramentas (explicativas, com destaque onde dá)
-  { id: "play", info: true, hint: "▶️ Ouça/leia um documento", cta: "Entendi",
-    say: "Chegamos na **Sala de Pesquisa** 💜. No painel da direita ficam **seus documentos** — dá um **play** num deles pra ouvir ou ler com calma." },
-  { id: "comparar", info: true, hint: "🔗 Compare dois documentos", cta: "Boa",
+  // — Sala de Pesquisa: ferramentas (com destaque no elemento, igual ao foco da sidebar)
+  { id: "play", info: true, hint: "▶️ Ouça/leia um documento", target: '[data-tour="docs-panel"]', cta: "Entendi",
+    say: "Chegamos na **Sala de Pesquisa** 💜. Neste painel ficam **seus documentos** — dá um **play** num deles pra ouvir ou ler com calma." },
+  { id: "comparar", info: true, hint: "🔗 Compare dois documentos", target: '[data-tour="docs-panel"]', cta: "Boa",
     say: "Quer cruzar ideias? **Arraste um documento sobre o outro** que eu **comparo** os dois e te entrego um resumo da relação." },
-  { id: "painel", info: true, hint: "🗂️ Painel de leitura + pastas", cta: "Show",
-    say: "Pra estudar em sequência, jogue documentos no **painel** e leia na ordem. E organize tudo em **pastas** pra não se perder." },
-  { id: "citacoes", info: true, hint: "🔖 Citações ABNT · 🗑️ lixeira", cta: "Perfeito",
-    say: "Salvou um trecho? Ele vira **citação em ABNT** — clica pra inserir no texto. O que você apagar vai pra **lixeira**, dá pra restaurar." },
-  { id: "tipo", info: true, hint: "🎓 TCC · Artigo · Relatório", cta: "Entendi",
-    say: "Lá em cima você troca entre **TCC, Artigo e Relatório** — cada um é uma sessão própria. Te ensino salvar/publicar em ABNT quando você chegar lá. 😉" },
+  { id: "citacoes", info: true, hint: "🔖 Citações ABNT · 🗑️ lixeira", target: '[data-tour="dock"]', cta: "Perfeito",
+    say: "Aqui embaixo: **Citações** (cada trecho salvo vira ABNT, clica pra inserir no texto), **Minhas coisas** (pastas/biblioteca) e a **Lixeira** — o que você apaga dá pra restaurar." },
+  { id: "tipo", info: true, hint: "🎓 TCC · Artigo · Relatório", target: '[data-tour="tipo"]', cta: "Entendi",
+    say: "Aqui você troca entre **TCC, Artigo e Relatório** — cada um é uma sessão própria. Te ensino salvar/publicar em ABNT quando você chegar lá. 😉" },
 
   // — Lounge: missão final — avança ao CLICAR
   { id: "lounge", hint: "🤝 Crie em grupo no Lounge", target: '[data-tour="lounge"]', clickTarget: true, tab: "lounge",
@@ -81,8 +79,26 @@ function sayCurrent() {
   try { window.dispatchEvent(new CustomEvent("zaeon:onboard:say", { detail: s.say })); } catch { /* */ }
 }
 
-export function startTour() {
+// ── MODO REPLAY (pra mim, testando): o tour reaparece a cada visita até eu dar o "Ok".
+//    Concluir/pular NÃO marca como feito enquanto o replay estiver ligado.
+export function isTourReplay(): boolean {
+  try { return localStorage.getItem("zaeon.tourReplay") === "1"; } catch { return false; }
+}
+export function setTourReplay(on: boolean) {
+  try {
+    if (on) { localStorage.setItem("zaeon.tourReplay", "1"); localStorage.removeItem("zaeon.tourDone"); }
+    else localStorage.removeItem("zaeon.tourReplay");
+  } catch { /* */ }
+}
+/** "Dei o Ok" — para o replay, marca como feito e encerra. */
+export function stopTourReplay() {
+  setTourReplay(false);
+  finishTour();
+}
+
+export function startTour(opts?: { replay?: boolean }) {
   if (typeof window === "undefined") return;
+  if (opts?.replay) setTourReplay(true);
   state = { active: true, index: 0 };
   persist(); emit();
   setTimeout(sayCurrent, 400); // deixa o chat widget montar
@@ -99,6 +115,8 @@ export function skipTour() { finishTour(); }
 export function finishTour() {
   state = { active: false, index: 0 };
   persist(); emit();
+  // Em replay, NÃO marca como feito → reaparece na próxima visita (até dar o Ok).
+  if (isTourReplay()) return;
   try { localStorage.setItem("zaeon.tourDone", "1"); } catch { /* */ }
   try { fetch("/api/onboard/tour", { method: "POST" }); } catch { /* */ }
 }

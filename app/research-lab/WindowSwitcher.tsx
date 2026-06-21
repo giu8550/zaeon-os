@@ -65,7 +65,7 @@ export default function WindowSwitcher({
 
       {/* ── SELETOR DE TIPO (lado direito): três botões fixos, sempre visíveis ── */}
       {onWorkType && (
-        <div className="ml-auto flex items-center gap-1 shrink-0 pl-2">
+        <div data-tour="tipo" className="ml-auto flex items-center gap-1 shrink-0 pl-2">
           <span className="text-[8px] font-black uppercase tracking-[0.16em] text-white/30 mr-0.5 hidden sm:inline">Tipo</span>
           {WORK_TYPES.map((type) => {
             const active = workType === type;

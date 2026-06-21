@@ -1237,9 +1237,18 @@ export default function HomeworkPage({
   // feito ao concluir/pular. Garante a aba inicial = Sala de Estudos.
   useEffect(() => {
     try {
-      const wantsOnboard = new URLSearchParams(window.location.search).get("onboard") === "1";
+      const onboardParam = new URLSearchParams(window.location.search).get("onboard");
+      const replayOn = localStorage.getItem("zaeon.tourReplay") === "1";
       const done = localStorage.getItem("zaeon.tourDone") === "1";
-      if (wantsOnboard && !done) {
+      // ?onboard=replay → liga o replay persistente (testar à vontade até dar o Ok).
+      if (onboardParam === "replay") {
+        setActiveTab("sala-de-estudos");
+        setTimeout(() => startTour({ replay: true }), 600);
+      } else if (replayOn) {
+        // Replay ligado: reabre o tour a cada visita, ignorando o "feito".
+        setActiveTab("sala-de-estudos");
+        setTimeout(() => startTour(), 600);
+      } else if (onboardParam === "1" && !done) {
         setActiveTab("sala-de-estudos");
         setTimeout(() => startTour(), 600);
       }

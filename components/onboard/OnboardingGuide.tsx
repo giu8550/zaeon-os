@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { TOUR_STEPS, getTour, subscribeTour, nextTour, skipTour } from "@/lib/onboarding/tour";
+import { TOUR_STEPS, getTour, subscribeTour, nextTour, skipTour, isTourReplay, stopTourReplay } from "@/lib/onboarding/tour";
 
 export default function OnboardingGuide() {
   const [mounted, setMounted] = useState(false);
@@ -92,7 +92,9 @@ export default function OnboardingGuide() {
           <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 transition-all" style={{ width: `${((tour.index + 1) / total) * 100}%` }} />
         </div>
         <div className="flex items-center justify-between gap-2">
-          <button onClick={skipTour} className="text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-white/80">Pular tour</button>
+          <button onClick={isTourReplay() ? stopTourReplay : skipTour} className="text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-white/80">
+            {isTourReplay() ? "✓ Ok, não repetir" : "Pular tour"}
+          </button>
           {step.info ? (
             <button onClick={() => nextTour()} className="px-4 py-2 rounded-full text-white text-[11px] font-black uppercase tracking-wide hover:scale-[1.03] transition-transform" style={{ background: "linear-gradient(135deg,#06b6d4,#7c3aed)" }}>
               {step.cta || "Ok"}

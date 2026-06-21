@@ -93,6 +93,7 @@ export default function DocumentDesktop({
 
   return (
     <div
+      data-tour="docs-panel"
       className={`rounded-[18px] flex flex-col p-3 overflow-hidden min-h-0 ${flipped ? "order-1" : ""}`}
       style={{
         background: "rgba(255,255,255,0.045)",
@@ -248,7 +249,7 @@ export default function DocumentDesktop({
       )}
 
       {/* Dock — fixed order, no drag */}
-      <div className="mt-auto pt-2.5 shrink-0">
+      <div data-tour="dock" className="mt-auto pt-2.5 shrink-0">
         <DraggableDock items={dockItems} onAction={handleDockAction} />
       </div>
     </div>
