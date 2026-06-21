@@ -7,6 +7,7 @@ import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import { ArrowLeftIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { useTranslation } from "react-i18next";
 import MacSplash from "@/components/ui/MacSplash";
+import { PLAN_INFO } from "@/lib/plans";
 
 // ─── SCRAMBLE TEXT HOOK ───────────────────────────────────────────────────────
 const CHAR_POOL = ["紀", "律", "知", "識", "未", "来", "革", "新", "卓", "越", "智", "慧", "能", "力"];
@@ -530,6 +531,37 @@ export default function AboutUsPage() {
 
                 {/* ── Molécula ── */}
                 <MoleculeSection />
+
+                {/* ── PLANOS ── */}
+                <div id="planos" className="relative z-40 max-w-6xl mx-auto px-4 pb-[12vh] scroll-mt-24">
+                    <div className="text-center mb-12">
+                        <h2 className="text-4xl md:text-6xl font-black text-white tracking-tighter drop-shadow-2xl">Planos</h2>
+                        <p className="text-cyan-300/70 text-sm font-bold uppercase tracking-[0.25em] mt-3">Comece grátis · evolua quando quiser</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                        {PLAN_INFO.map((p) => {
+                            const featured = p.id === "plus";
+                            return (
+                                <div key={p.id}
+                                    className={`relative rounded-[1.8rem] p-[1.5px] ${featured ? "bg-gradient-to-br from-violet-500 to-cyan-400 shadow-[0_20px_60px_-20px_rgba(34,211,238,0.6)]" : "bg-white/10"}`}>
+                                    <div className="h-full rounded-[1.7rem] bg-[#0b1120]/90 backdrop-blur-2xl border border-white/5 p-6 flex flex-col">
+                                        {featured && <span className="self-start mb-2 text-[9px] font-black uppercase tracking-widest text-white px-2 py-0.5 rounded-full" style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}>Mais popular</span>}
+                                        <h3 className="text-xl font-black text-white">{p.name}</h3>
+                                        <p className="text-[11px] text-white/50 uppercase tracking-widest mt-0.5">{p.tagline}</p>
+                                        <div className="my-4 text-cyan-300 font-black text-lg">{p.price}</div>
+                                        <ul className="flex flex-col gap-2 flex-1">
+                                            {p.perks.map((perk) => (
+                                                <li key={perk} className="flex items-start gap-2 text-[12px] text-white/75 leading-snug">
+                                                    <span className="text-cyan-400 mt-0.5">✦</span> {perk}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
 
                 {/* ── CTA ── */}
                 <motion.div

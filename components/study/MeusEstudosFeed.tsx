@@ -17,11 +17,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus, Trash2, Sparkles, Youtube, Loader2, ChevronDown, NotebookPen,
   X, GripVertical, ArrowLeftToLine, FileText, StickyNote, Link2, Heading1, Heading2, Pilcrow, Pencil,
-  PanelRightClose, PanelRightOpen, Image as ImageIcon, Music, Paperclip, UploadCloud,
+  PanelRightClose, PanelRightOpen, Image as ImageIcon, Music, Paperclip, UploadCloud, Play, Square,
 } from "lucide-react";
 import VoiceModeSwitch from "@/components/voice/VoiceModeSwitch";
 import SpeakButton from "@/components/voice/SpeakButton";
+import { useTTS } from "@/lib/voice/useTTS";
 import { takeHandoff } from "@/lib/agents/handoff";
+import { missionDone } from "@/lib/agents/mission";
 
 type Item = { id: string; type: string; title: string; payload: any; summary: string | null; placement: string; order?: number; createdAt?: string };
 type Space = { id: string; title: string };
@@ -95,6 +97,7 @@ export default function MeusEstudosFeed() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [editingYt, setEditingYt] = useState<string | null>(null); // bloco-vídeo em modo edição do link
   const [libOpen, setLibOpen] = useState(true); // biblioteca retraída/expandida
+  const tts = useTTS(); // controlador global de voz (modo leitura do estudo inteiro)
 
   // biblioteca: adicionar nota/link
   const [showAdd, setShowAdd] = useState(false);
@@ -174,7 +177,7 @@ export default function MeusEstudosFeed() {
   useEffect(() => {
     if (handoffDoneRef.current || !spaceId) return;
     const ho = takeHandoff(["study"]);
-    if (ho?.topic) { handoffDoneRef.current = true; setBarOpen(true); void zaeonStudy(ho.topic); }
+    if (ho?.topic) { handoffDoneRef.current = true; typeIntoBarAndRun(ho.topic).then(() => missionDone()).catch(() => missionDone("error")); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spaceId]);
 
@@ -185,6 +188,21 @@ export default function MeusEstudosFeed() {
   const feed = items.filter((i) => i.placement === "feed")
     .sort((a, b) => (ord(a) - ord(b)) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
   const nextOrder = () => (feed.length ? Math.max(...feed.map(ord)) + 1 : 0);
+
+  // MODO LEITURA: lê o estudo INTEIRO em voz, bloco a bloco, na ordem. Clicar
+  // de novo (ou em qualquer lugar que pare a voz) interrompe. Usa a sequência do
+  // controlador global (chunking automático p/ textos longos).
+  const readWholeStudy = () => {
+    if (tts.speaking) { tts.stop(); return; }
+    const parts: string[] = [];
+    const title = spaces.find((s) => s.id === spaceId)?.title?.trim();
+    if (title && title !== "Novo estudo" && title !== "Meus Estudos") parts.push(title);
+    for (const it of feed) {
+      if (it.type === "note") { const t = (it.payload?.text || "").trim(); if (t) parts.push(t); }
+      else if (it.title) parts.push(it.title);
+    }
+    if (parts.length) tts.speakSequence(parts);
+  };
 
   // ── criar item ────────────────────────────────────────────────────────────
   const addItem = useCallback(async (p: { type: string; title: string; payload?: any; placement?: string; order?: number }) => {
@@ -258,6 +276,21 @@ export default function MeusEstudosFeed() {
       setZaeonStatus("Falha ao falar com a Zaeon.");
       setTimeout(() => setZaeonStatus(""), 4000);
     } finally { setZaeonBusy(false); setGenTitle(null); }
+  };
+
+  // Fase 2.1 — DIGITA o tema na barra de comando real (efeito "agente digitando"),
+  // e só então executa. Usado pelo handoff de voz/chat: o usuário VÊ o texto sendo
+  // digitado no campo, igual ele faria. Funciona idêntico em texto, áudio e ligação.
+  const typeIntoBarAndRun = async (topic: string) => {
+    setBarOpen(true);
+    setZaeonCmd("");
+    const chars = [...topic];
+    for (let i = 0; i < chars.length; i++) {
+      setZaeonCmd(chars.slice(0, i + 1).join(""));
+      await new Promise((r) => setTimeout(r, 45 + Math.random() * 55));
+    }
+    await new Promise((r) => setTimeout(r, 350)); // respira antes de "enviar"
+    await zaeonStudy(topic);
   };
 
   // colar de outras abas (refs/insights/etc.) → cai na biblioteca
@@ -344,6 +377,7 @@ export default function MeusEstudosFeed() {
       if (!r.ok) throw new Error();
       const s = await r.json();
       setSpaces((p) => [...p, s]); setSpaceId(s.id); setSpaceMenu(false); setTitleDraft(s.title); setLoading(true);
+      setBarOpen(true); // novo estudo já abre a Zaeon pra começar com uma pesquisa inicial
     } catch { setError("Não consegui criar um novo estudo agora. Reinicie o servidor (next dev) e tente de novo."); }
   };
   const delSpace = async (id: string) => {
@@ -523,7 +557,7 @@ export default function MeusEstudosFeed() {
             // Zaeon "digitando" o nome do estudo (glitch + gradiente), no-wrap
             <span
               style={{ fontFamily: `"Noto Sans SC","Microsoft YaHei",sans-serif` }}
-              className="text-lg font-black tracking-tight bg-gradient-to-r from-blue-500 via-cyan-400 to-violet-500 bg-clip-text text-transparent min-w-0 flex-1 max-w-xs whitespace-nowrap overflow-hidden text-ellipsis leading-none"
+              className="text-lg font-black tracking-tight bg-gradient-to-r from-blue-500 via-cyan-400 to-violet-500 bg-clip-text text-transparent min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis leading-none"
             >
               {genTitle || "…"}
             </span>
@@ -534,24 +568,22 @@ export default function MeusEstudosFeed() {
               onBlur={saveTitle}
               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
               placeholder="Meus Estudos"
-              className="text-lg font-black tracking-tight bg-transparent text-slate-900 dark:text-white focus:outline-none focus:border-b focus:border-cyan-400/50 min-w-0 flex-1 max-w-xs"
+              title={titleDraft}
+              className="text-lg font-black tracking-tight bg-transparent text-slate-900 dark:text-white focus:outline-none focus:border-b focus:border-cyan-400/50 min-w-0 flex-1"
             />
           )}
-          <div className="relative">
-            <button onClick={() => setSpaceMenu((v) => !v)} title="Meus estudos" className="p-1 text-slate-400 hover:text-cyan-500"><ChevronDown size={16} className={spaceMenu ? "rotate-180 transition-transform" : "transition-transform"} /></button>
-            {spaceMenu && (
-              <div className="absolute z-30 mt-1 w-60 right-0 max-h-80 overflow-y-auto custom-scrollbar rounded-2xl border p-1.5 shadow-xl bg-white border-slate-200 dark:bg-[#0c0b1a] dark:border-white/10">
-                {/* adicionar um estudo novo fica no topo */}
-                <button onClick={() => { newSpace(); setSpaceMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2 mb-1 text-[13px] font-bold text-white rounded-xl" style={{ background: GRAD }}><Plus size={14} /> Novo estudo</button>
-                {spaces.map((s) => (
-                  <div key={s.id} className={`group flex items-center gap-1 rounded-xl ${s.id === spaceId ? "bg-cyan-500/10" : ""}`}>
-                    <button onClick={() => { setSpaceId(s.id); setSpaceMenu(false); }} className="flex-1 text-left px-3 py-2 text-[13px] text-slate-700 dark:text-slate-200 truncate">{s.title}</button>
-                    {spaces.length > 1 && <button onClick={() => delSpace(s.id)} className="opacity-0 group-hover:opacity-100 px-2 text-slate-400 hover:text-rose-400"><Trash2 size={13} /></button>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* PLAY: modo leitura do estudo INTEIRO (clica de novo = parar). Novo estudo
+              e troca de estudo vivem na biblioteca (e no ⟁ da Zaeon). */}
+          <button
+            onClick={readWholeStudy}
+            disabled={feed.length === 0 && !tts.speaking}
+            title={tts.speaking ? "Parar a leitura" : "Ler o estudo inteiro em voz"}
+            aria-label={tts.speaking ? "Parar a leitura" : "Ler o estudo inteiro em voz"}
+            className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${tts.speaking ? "text-white shadow-sm" : "text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10"}`}
+            style={tts.speaking ? { background: GRAD } : undefined}
+          >
+            {tts.speaking ? <Square size={15} /> : <Play size={15} />}
+          </button>
         </div>
 
         {/* ── BARRINHA-AGENTE: só aparece ao clicar no ⟁ (some enquanto a Zaeon pensa). ── */}
@@ -617,7 +649,7 @@ export default function MeusEstudosFeed() {
               <AddBar center />
             </div>
           ) : (
-            <div className="p-6 sm:p-8 max-w-2xl mx-auto flex flex-col">
+            <div className={`p-6 sm:p-8 max-w-2xl flex flex-col ${libOpen ? "mx-auto" : "lg:pl-10"}`}>
               {feed.map((it) => <div key={it.id}>{renderBlock(it)}</div>)}
               <div className="mt-4 pt-2"><AddBar /></div>
             </div>
@@ -660,17 +692,28 @@ export default function MeusEstudosFeed() {
           {/* ── ESTUDOS como arquivos de texto ── */}
           {spaces.length > 0 && (
             <>
-              <p className="px-1 pt-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30">Estudos</p>
+              <div className="flex items-center gap-1 px-1 pt-0.5">
+                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30">Estudos</p>
+                <button onClick={newSpace} title="Novo estudo (abre a Zaeon pra começar)" className="ml-auto text-slate-400 hover:text-cyan-500"><Plus size={13} /></button>
+              </div>
               {spaces.map((sp) => (
-                <button key={`sp-${sp.id}`} onClick={() => setSpaceId(sp.id)} title="Abrir este estudo"
-                  className={`group flex items-center gap-2 rounded-xl border p-2 text-left transition-colors ${sp.id === spaceId
+                <div key={`sp-${sp.id}`}
+                  className={`group flex items-center gap-2 rounded-xl border p-2 transition-colors ${sp.id === spaceId
                     ? "border-cyan-400/60 bg-cyan-500/5 dark:bg-cyan-500/10"
                     : "bg-white border-slate-200 shadow-sm hover:border-cyan-400/50 dark:bg-white/[0.04] dark:border-white/10 dark:shadow-none"}`}
                 >
-                  <FileText size={14} className="text-violet-500 dark:text-violet-300 shrink-0" />
-                  <span className="flex-1 min-w-0 text-[11px] font-medium text-slate-700 dark:text-white/90 truncate">{sp.title || "Estudo"}</span>
+                  <button onClick={() => setSpaceId(sp.id)} title="Abrir este estudo" className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                    <FileText size={14} className="text-violet-500 dark:text-violet-300 shrink-0" />
+                    <span className="flex-1 min-w-0 text-[11px] font-medium text-slate-700 dark:text-white/90 truncate">{sp.title || "Estudo"}</span>
+                  </button>
                   {sp.id === spaceId && <span className="text-[8px] font-black uppercase tracking-wide text-cyan-500 shrink-0">ativo</span>}
-                </button>
+                  {spaces.length > 1 && (
+                    <button onClick={() => delSpace(sp.id)} title="Apagar este estudo (vai pra lixeira)"
+                      className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-400 shrink-0">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
               ))}
             </>
           )}

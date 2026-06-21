@@ -14,6 +14,7 @@
 export const SUPER_ADMINS: string[] = [
   "zaeondao@gmail.com",
   "donmartinez@aluno.unilab.edu.br",
+  "martinez@zaeon.space",
 ];
 
 /** Valor canônico do papel de super admin no campo `User.role`. */

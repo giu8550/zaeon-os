@@ -43,6 +43,17 @@ const UserSchema = new Schema({
         }
     ],
 
+    // --- PLANOS & LIBERAÇÕES (modo econômico de tokens) ---
+    plan: { type: String, default: "free" },        // free | plus | pro | max
+    plusUntil: { type: Date, default: null },        // expiração do trial/Plus
+    trialGranted: { type: Boolean, default: false }, // já recebeu o mês grátis acadêmico
+    eduEmail: String,
+    eduVerified: { type: Boolean, default: false },
+    deepThinkEnabled: { type: Boolean, default: false },   // override: profundo ilimitado
+    advancedVoiceEnabled: { type: Boolean, default: false }, // override: voz avançada
+    projectsEnabled: { type: Boolean, default: false },      // override: sala Projetos
+    deepThinkUsedAt: { type: Date, default: null },          // cota diária do Plus
+
     // --- CONTROLE DE STATUS DO ADMIN ---
     kycStatus: {
         type: String,

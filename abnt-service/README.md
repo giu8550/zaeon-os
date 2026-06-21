@@ -5,21 +5,24 @@ Microserviço Python para geração de documentos acadêmicos conforme **ABNT NB
 ## Requisitos
 
 - Python 3.10+
-- LibreOffice (para conversão PDF): `brew install libreoffice` ou `sudo apt install libreoffice`
+- LibreOffice (para conversão PDF): `brew install --cask libreoffice` ou `sudo apt install libreoffice`
 
 ## Setup
 
 ```bash
 cd abnt-service
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ## Rodar
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+source .venv/bin/activate
+# use SEMPRE `python -m uvicorn` (não `uvicorn` direto): garante que roda o uvicorn
+# do venv ativo, evitando "No module named uvicorn/numpy" quando há um uvicorn global.
+python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 Serviço disponível em: `http://localhost:8001`

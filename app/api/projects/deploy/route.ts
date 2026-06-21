@@ -17,6 +17,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { assertEligibleOrThrow, ProjectsAccessError } from "@/lib/projects/access";
+import { effectivePlan, type PlanState } from "@/lib/plans";
 
 export const runtime = "nodejs";
 export const maxDuration = 10;
@@ -33,9 +34,12 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const dbUser = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true, course: true } });
+    const dbUser = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true, course: true, role: true, plan: true, plusUntil: true, trialGranted: true, projectsEnabled: true } });
     if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    assertEligibleOrThrow(dbUser.course);
+    {
+      const state: PlanState = { plan: dbUser.plan || "free", plusUntil: dbUser.plusUntil ?? null, trialGranted: !!dbUser.trialGranted };
+      assertEligibleOrThrow(dbUser.course, { email: session.user.email, role: dbUser.role, plan: effectivePlan(state), projectsEnabled: !!dbUser.projectsEnabled });
+    }
 
     const token = process.env.VERCEL_TOKEN;
     if (!token) {

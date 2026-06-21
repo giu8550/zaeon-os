@@ -4,14 +4,12 @@ import { getServerSession } from "next-auth";
 import connectToDatabase from "@/src/lib/db"; 
 import User from "@/src/models/User"; 
 import { authOptions } from "@/src/lib/auth";
-import { grantStudentTrial } from "@/lib/plans";
+import { grantStudentTrial, normalizePlan, type Plan } from "@/lib/plans";
+import { isSuperAdmin } from "@/lib/auth/roles";
 
-// --- LISTA DE EMAILS COM PODER DIVINO (Adicione outros se precisar) ---
-const ADMIN_EMAILS = ["zaeondao@gmail.com"];
-
-// Função auxiliar para verificar admin
-const checkIsAdmin = (email: string | null | undefined) => {
-    return email && ADMIN_EMAILS.includes(email.toLowerCase());
+// Admin = super admin (allowlist de fundadores em lib/auth/roles + role no banco).
+const checkIsAdmin = (email: string | null | undefined, role?: string | null) => {
+    return isSuperAdmin({ email, role });
 };
 
 // --- GET: LISTAR TODOS OS NODES ---
@@ -40,7 +38,11 @@ export async function GET(req: Request) {
             countryCode: user.countryCode || "br",
             role: user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "Student",
             kycStatus: user.kycStatus || "pending",
+            plan: normalizePlan(user.plan || "free"),
+            plusUntil: user.plusUntil ? new Date(user.plusUntil).toISOString() : null,
             deepThinkEnabled: !!user.deepThinkEnabled,
+            advancedVoiceEnabled: !!user.advancedVoiceEnabled,
+            projectsEnabled: !!user.projectsEnabled,
             institution: user.institution || "",
             verificationDoc: user.verificationDoc || null,
             inviteCodeUsed: user.inviteCodeUsed || null,
@@ -61,19 +63,35 @@ export async function PATCH(req: Request) {
         const session = await getServerSession(authOptions);
         
         // NOVA TRAVA DE SEGURANÇA À PROVA DE FALHAS
-        if (!checkIsAdmin(session?.user?.email)) {
+        if (!checkIsAdmin(session?.user?.email, (session?.user as any)?.role)) {
             return NextResponse.json({ error: "Acesso Negado: Privilégios insuficientes." }, { status: 403 });
         }
 
         await connectToDatabase();
-        const { userId, status, academicLevel, deepThinkEnabled } = await req.json();
+        const { userId, status, academicLevel, deepThinkEnabled, advancedVoiceEnabled, projectsEnabled, plan } = await req.json();
 
-        // Toggle do modo econômico: admin liga/desliga o pensamento profundo por usuário.
-        // (atualização isolada — não exige mexer no kycStatus)
-        if (typeof deepThinkEnabled === "boolean") {
-            const u = await User.findByIdAndUpdate(userId, { deepThinkEnabled }, { new: true });
+        // Toggles avulsos (modo econômico / voz avançada / sala Projetos) e mudança
+        // direta de plano. Atualização isolada — não exige mexer no kycStatus.
+        const flags: Record<string, unknown> = {};
+        if (typeof deepThinkEnabled === "boolean") flags.deepThinkEnabled = deepThinkEnabled;
+        if (typeof advancedVoiceEnabled === "boolean") flags.advancedVoiceEnabled = advancedVoiceEnabled;
+        if (typeof projectsEnabled === "boolean") flags.projectsEnabled = projectsEnabled;
+        if (typeof plan === "string") {
+            const p: Plan = normalizePlan(plan);
+            flags.plan = p;
+            // Mudança manual de plano pelo admin não expira (controle manual).
+            flags.plusUntil = null;
+        }
+        if (Object.keys(flags).length > 0) {
+            const u = await User.findByIdAndUpdate(userId, flags, { new: true });
             if (!u) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
-            return NextResponse.json({ success: true, deepThinkEnabled: !!u.deepThinkEnabled });
+            return NextResponse.json({
+                success: true,
+                plan: normalizePlan(u.plan || "free"),
+                deepThinkEnabled: !!u.deepThinkEnabled,
+                advancedVoiceEnabled: !!u.advancedVoiceEnabled,
+                projectsEnabled: !!u.projectsEnabled,
+            });
         }
 
         const update: Record<string, unknown> = { kycStatus: status };
@@ -103,7 +121,7 @@ export async function DELETE(req: Request) {
         const session = await getServerSession(authOptions);
         
         // NOVA TRAVA DE SEGURANÇA À PROVA DE FALHAS
-        if (!checkIsAdmin(session?.user?.email)) {
+        if (!checkIsAdmin(session?.user?.email, (session?.user as any)?.role)) {
             return NextResponse.json({ error: "Acesso Negado: Privilégios insuficientes." }, { status: 403 });
         }
 

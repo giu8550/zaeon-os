@@ -8,7 +8,8 @@ import {
     CurrencyDollarIcon,
     ArrowLeftIcon,
     DocumentChartBarIcon,
-    PuzzlePieceIcon
+    PuzzlePieceIcon,
+    SpeakerWaveIcon
 } from "@heroicons/react/24/outline";
 
 
@@ -16,6 +17,7 @@ import {
 import ProfileModule from "./modules/ProfileModule";
 import ReportsModule from "./modules/ReportsModule";
 import PluginsModule from "./modules/PluginsModule";
+import VoiceAccessModule from "./modules/VoiceAccessModule";
 
 // --- APPLE STYLE LOADER ---
 const AppleLoader = ({ status }: { status: string }) => (
@@ -54,7 +56,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, isOpen }: any) => (
 
 export default function AdminControlRoom() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<"profiles" | "reports" | "plugins" | "payments">("profiles");
+    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "reports" | "plugins" | "payments">("profiles");
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -91,6 +93,13 @@ export default function AdminControlRoom() {
                         label="Profiles"
                         active={activeTab === 'profiles'}
                         onClick={() => setActiveTab('profiles')}
+                        isOpen={isSidebarOpen}
+                    />
+                    <SidebarItem
+                        icon={SpeakerWaveIcon}
+                        label="Voz"
+                        active={activeTab === 'voice'}
+                        onClick={() => setActiveTab('voice')}
                         isOpen={isSidebarOpen}
                     />
                     <SidebarItem
@@ -138,6 +147,7 @@ export default function AdminControlRoom() {
                         className="w-full h-full flex flex-col"
                     >
                         {activeTab === 'profiles' && <ProfileModule glassPanel={glassPanel} />}
+                        {activeTab === 'voice' && <VoiceAccessModule glassPanel={glassPanel} />}
                         {activeTab === 'reports' && <ReportsModule glassPanel={glassPanel} />}
                         {activeTab === 'plugins' && <PluginsModule glassPanel={glassPanel} />}
 

@@ -9,12 +9,12 @@
  * Retorna: speak, stop, speaking (algo tocando), loading, activeText (qual texto).
  */
 import { useEffect, useState } from "react";
-import { speak, stop, subscribe, getTTSState, type TTSState } from "./ttsController";
+import { speak, speakSequence, stop, subscribe, getTTSState, type TTSState } from "./ttsController";
 
 export function useTTS() {
   const [s, setS] = useState<TTSState>(getTTSState());
   useEffect(() => subscribe(setS), []);
-  return { speak, stop, speaking: s.speaking, loading: s.loading, activeText: s.text };
+  return { speak, speakSequence, stop, speaking: s.speaking, loading: s.loading, activeText: s.text };
 }
 
 export default useTTS;

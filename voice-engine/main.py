@@ -8,12 +8,27 @@ Rodar:  uvicorn main:app --port 8004
 """
 from __future__ import annotations
 
+import threading
+
 from fastapi import FastAPI, HTTPException
 
 import engine
 from models import SynthesizeRequest, SynthesizeResponse, VoicesResponse
 
 app = FastAPI(title="Zaeon Voice Engine", version="2.0.0")
+
+
+@app.on_event("startup")
+def _warm_models() -> None:
+    """Aquece o Kokoro no boot (em background) — carrega pipeline + pesos antes da
+    primeira requisição real, eliminando o cold-start da primeira fala. Não bloqueia
+    a subida do servidor; se falhar, o 1º synth apenas paga o load (comportamento antigo)."""
+    def run() -> None:
+        try:
+            engine.synthesize_wav("Olá.", None)
+        except Exception:  # noqa: BLE001 — warmup é best-effort
+            pass
+    threading.Thread(target=run, daemon=True).start()
 
 
 @app.get("/health")

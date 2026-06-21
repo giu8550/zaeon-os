@@ -20,7 +20,7 @@ import {
     ArrowsRightLeftIcon
 } from "@heroicons/react/24/outline";
 // 🔥 ADICIONADO: Mic e MicOff
-import { Bot, Mic, MicOff } from "lucide-react";
+import { Bot, Mic, MicOff, PhoneCall, PhoneOff } from "lucide-react";
 import ZaeonLogo from "@/components/main/ZaeonLogo";
 import ZaeonTriangle from "@/components/main/ZaeonTriangle";
 import SpeakButton from "@/components/voice/SpeakButton";
@@ -29,6 +29,10 @@ import useTTS from "@/lib/voice/useTTS";
 import VoiceOrbModal from "@/components/voice/VoiceOrbModal";
 import VoiceWaveIndicator from "@/components/voice/VoiceWaveIndicator";
 import { setHandoff } from "@/lib/agents/handoff";
+import { useMission, startMission } from "@/lib/agents/mission";
+import { getAgentContext, hydrateAgentContext, setAgentContext, pushAgentAction } from "@/lib/agent/context";
+import { startPlan, usePlan, setStepStatus, advancePlan, finishPlan, type AgentStep } from "@/lib/agent/actions";
+import UpgradeCard from "@/components/ui/UpgradeCard";
 import type { AIState } from "@/components/main/ZaeonLogo";
 
 const TypewriterText = ({ text, onComplete }: { text: string, onComplete: () => void }) => {
@@ -101,6 +105,9 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
     const wantListenRef = useRef(false);   // conversa por voz ativa (reabre o mic a cada turno)
+    const [callOn, setCallOn] = useState(false); // "em chamada" (modo conversa mãos-livres)
+    const [voiceAllowed, setVoiceAllowed] = useState(true); // gating: voz é premium (Pulse+)
+    const [showUpgrade, setShowUpgrade] = useState(false);
     const finalRef = useRef("");            // transcrição final da fala atual
     const sendRef = useRef<(t?: string) => void>(() => {}); // ponte p/ enviar sem stale-closure
     const prevSpeakingRef = useRef(false);
@@ -117,6 +124,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     const [deepMode, setDeepMode] = useState(false); // pensamento profundo (Gemini Pro em chunks)
     const [voiceMode, setVoiceModeState] = useVoiceMode(); // passivo | ativo
     const tts = useTTS();
+    const mission = useMission(); // o que a Zaeon está executando agora (cockpit reativo)
 
     // Viewport p/ tornar o widget full-screen no mobile (alvo 360–430px).
     const [vw, setVw] = useState(0);
@@ -158,6 +166,18 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
         activeChatRef.current = activeChat;
         if (isOpen) setUnreadCount(0);
     }, [activeChat, isOpen]);
+
+    // World-state durável: hidrata do servidor e registra a sala/aba atual na URL.
+    useEffect(() => {
+        void hydrateAgentContext();
+    }, []);
+    useEffect(() => {
+        try {
+            const tab = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
+            const room = pathname?.split("/").filter(Boolean)[0] || null;
+            setAgentContext({ activeRoom: room, activeTab: tab });
+        } catch { /* ignore */ }
+    }, [pathname]);
 
     useEffect(() => {
         if (isOpen && activeChat) {
@@ -207,9 +227,20 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
         try { recognitionRef.current?.stop(); } catch { /* ignore */ }
         setIsListening(false);
     };
+    const requireVoice = () => { if (!voiceAllowed) { setShowUpgrade(true); return false; } return true; };
     const toggleListening = () => {
-        if (isListening || wantListenRef.current) { stopListening(); }
-        else { wantListenRef.current = true; startListening(); }
+        if (isListening || wantListenRef.current) { stopListening(); return; }
+        if (!requireVoice()) return;
+        wantListenRef.current = true; startListening();
+    };
+    // "Ligar pra Zaeon": modo conversa mãos-livres (estilo ChatGPT) — voz ativa + escuta contínua.
+    const startCall = () => {
+        if (callOn) { setCallOn(false); wantListenRef.current = false; stopListening(); tts.stop(); return; }
+        if (!requireVoice()) return;
+        setCallOn(true);
+        setVoiceModeState("active");
+        wantListenRef.current = true;
+        startListening();
     };
 
     // Conversa contínua: quando a Zaeon TERMINA de falar (modo ativo), reabre o mic pro próximo turno.
@@ -342,12 +373,12 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                     const ctx = `Usuário: ${userName}. Página: ${pathname}.`;
                     const planRes = await fetch('/api/ai/deepthink', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ step: 'plan', prompt: text, context: ctx }),
+                        body: JSON.stringify({ step: 'plan', prompt: text, context: ctx, history: chatHistoryForGemini }),
                     });
                     const planData = await planRes.json().catch(() => ({}));
                     const ansRes = await fetch('/api/ai/deepthink', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ step: 'answer', prompt: text, plan: planData.plan || '', context: ctx }),
+                        body: JSON.stringify({ step: 'answer', prompt: text, plan: planData.plan || '', context: ctx, history: chatHistoryForGemini }),
                     });
                     const ansData = await ansRes.json().catch(() => ({}));
                     const msgId = Date.now();
@@ -365,6 +396,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                             voiceMode, // passivo | ativo (personalidade da fala)
                             userData: savedOnboardingData, // 🔥 Memória injetada!
                             history: chatHistoryForGemini, // 🔥 Histórico do chat injetado!
+                            agentContext: getAgentContext(), // 🔥 World-state durável do workspace!
                             systemContext: `Você é a Zaeon. O usuário com quem você está falando se chama ${userName}. O usuário está neste momento na rota/página: ${pathname}. Se ele perguntar sobre o que ele pode fazer aqui ou pedir ajuda contextual, use essa rota como base para explicar a interface ou funcionalidades desta área específica do sistema.`
                         })
                     });
@@ -380,8 +412,27 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                     if (voiceMode === "active" && data.text) tts.speak(data.text); // modo ativo: fala a resposta
                     // EXECUTA de verdade: guarda o handoff e leva pra sala (que roda a ação ao abrir)
                     if (data.summon?.route) {
-                        if (data.summon.topic) setHandoff(data.summon.skill, data.summon.topic);
+                        if (data.summon.topic) {
+                            setHandoff(data.summon.skill, data.summon.topic);
+                            startMission(data.summon.skill, data.summon.topic, data.summon.route); // abre a "missão" (cockpit)
+                            // World-state durável: grava objetivo + ação recente (sobrevive a reload/device).
+                            setAgentContext({ currentGoal: `${data.summon.skill}: ${data.summon.topic}` });
+                            pushAgentAction("summon", `${data.summon.skill}:${data.summon.topic}`);
+                        }
+                        // Cockpit visível (Fase 2): mostra os passos da Zaeon agindo.
+                        // data.plan vem do servidor → idêntico em texto/áudio/ligação.
+                        if (Array.isArray(data.plan) && data.plan.length) runPlanVisually(data.plan);
                         setTimeout(() => { router.push(data.summon.route); setIsOpen(false); }, voiceMode === "active" ? 1200 : 350);
+                    }
+                    // TROCA DE SALA por voz/texto em tempo real (open_room). Dispara o
+                    // switch de aba mesmo já estando no research-lab (evento) + navega.
+                    if (data.navigate?.tab) {
+                        const tab = data.navigate.tab;
+                        if (Array.isArray(data.plan) && data.plan.length) runPlanVisually(data.plan);
+                        setAgentContext({ activeTab: tab });
+                        pushAgentAction("open_room", tab);
+                        try { window.dispatchEvent(new CustomEvent("zaeon:set-tab", { detail: tab })); } catch { /* ignore */ }
+                        setTimeout(() => { router.push(data.navigate.route); if (voiceMode !== "active") setIsOpen(false); }, 250);
                     }
                 }
             } catch (error) {
@@ -453,7 +504,25 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
 
     const displayMessages = activeChat?.isAgent ? zaeonMessages : chatHistory;
 
+    // Estado único da Zaeon (dirige o visual reativo: glow do FAB, etc.)
+    const agentState: "idle" | "listening" | "thinking" | "speaking" | "executing" =
+        isListening ? "listening"
+        : (isZaeonTyping || tts.loading) ? "thinking"   // carregando a voz = pensando (ondas só quando o áudio toca)
+        : tts.speaking ? "speaking"
+        : mission?.status === "running" ? "executing"
+        : "idle";
+    const stateGlow: Record<string, string> = {
+        idle: "transparent",
+        listening: "rgba(34,211,238,0.55)",
+        thinking: "rgba(139,92,246,0.6)",
+        speaking: "rgba(34,211,238,0.6)",
+        executing: "rgba(139,92,246,0.6)",
+    };
+    const openMission = () => { if (mission?.route) { router.push(mission.route); setIsOpen(false); } };
+
     return (
+        <>
+        <AgentActionRunner side={widgetPosition} />
         <motion.div
             layout
             initial={false}
@@ -476,7 +545,21 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                 {!isOpen ? (
                     /* FECHADO — só o ícone da Zaeon girando (presença forte) */
                     <div className="relative flex items-center justify-center">
-                        <ZaeonTriangle size={34} />
+                        {agentState !== "idle" && (
+                            <span className="absolute inset-0 -m-2 rounded-full" style={{ boxShadow: `0 0 18px 2px ${stateGlow[agentState]}` }} />
+                        )}
+                        {(agentState === "speaking" || agentState === "listening") ? (
+                            // enquanto fala/ouve, o FAB VIRA as ondas (clicar = parar)
+                            <VoiceWaveIndicator size={22} />
+                        ) : (
+                            <>
+                                {agentState !== "idle" && (
+                                    <span className="absolute inset-0 -m-1.5 rounded-full animate-ping motion-reduce:animate-none"
+                                        style={{ boxShadow: `0 0 0 2px ${stateGlow[agentState]}` }} />
+                                )}
+                                <ZaeonTriangle size={34} />
+                            </>
+                        )}
                     </div>
                 ) : (
                   <>
@@ -504,6 +587,24 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                   </>
                 )}
             </div>
+
+            {/* CARTÃO DE MISSÃO — o que a Zaeon está executando agora (cockpit reativo) */}
+            {isOpen && mission && (
+                <button onClick={openMission}
+                    className={`flex items-center gap-2 px-4 py-2 text-left border-b transition-colors ${mission.status === "done"
+                        ? "bg-cyan-500/10 border-cyan-400/20"
+                        : "bg-violet-500/10 border-violet-400/20"}`}
+                    title="Ver na sala">
+                    <span className={`shrink-0 w-2 h-2 rounded-full ${mission.status === "done" ? "bg-cyan-400" : "bg-violet-400 animate-pulse"}`} />
+                    <span className="flex-1 min-w-0 text-[11px] text-slate-700 dark:text-white/80 truncate">
+                        <span className="font-black uppercase tracking-wide mr-1">
+                            {mission.status === "done" ? "Pronto" : ({ study: "Estudando", research: "Pesquisando", write: "Escrevendo", code: "Programando" } as any)[mission.skill] || "Executando"}
+                        </span>
+                        {mission.topic}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-bold text-cyan-600 dark:text-cyan-300">ver →</span>
+                </button>
+            )}
 
             <AnimatePresence mode="wait">
                 {isOpen && (
@@ -538,7 +639,22 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                         </span>
                                     </div>
                                     {/* módulo de voz: anima quando a Zaeon está falando */}
-                                    {activeChat.isAgent && <div className="ml-auto pr-1"><VoiceWaveIndicator size={16} /></div>}
+                                    {activeChat.isAgent && (
+                                        <div className="ml-auto flex items-center gap-1.5">
+                                            <VoiceWaveIndicator size={16} />
+                                            <button
+                                                onClick={startCall}
+                                                title={callOn ? "Encerrar conversa por voz" : "Ligar pra Zaeon (conversa por voz)"}
+                                                aria-pressed={callOn}
+                                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${callOn
+                                                    ? "bg-rose-500 text-white shadow-[0_0_10px_rgba(244,63,94,0.4)]"
+                                                    : "text-white shadow-md"}`}
+                                                style={!callOn ? { background: "linear-gradient(135deg,#0ea5e9,#22d3ee)" } : undefined}
+                                            >
+                                                {callOn ? <PhoneOff size={14} /> : <PhoneCall size={14} />}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
@@ -639,7 +755,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                                 ✦ {deepMode ? "Modo profundo ligado" : "Pensar mais a fundo"}
                                             </button>
                                             <button
-                                                onClick={() => setVoiceModeState(voiceMode === "active" ? "passive" : "active")}
+                                                onClick={() => { if (voiceMode !== "active" && !requireVoice()) return; setVoiceModeState(voiceMode === "active" ? "passive" : "active"); }}
                                                 title={voiceMode === "active" ? "Voz ativa: conversa e age (fala as respostas)" : "Voz passiva: recebe e executa, sem falar"}
                                                 aria-pressed={voiceMode === "active"}
                                                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${voiceMode === "active" ? "text-white" : "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5"}`}
@@ -746,11 +862,19 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                 )}
             </AnimatePresence>
 
+            <UpgradeCard
+                open={showUpgrade}
+                title="Modo Voz Avançado"
+                message="Converse por voz com a Zaeon — ela fala, ouve e executa pra você. Esse recurso é dos planos pagos."
+                plan="Plus"
+                onClose={() => setShowUpgrade(false)}
+            />
+
             <VoiceOrbModal
-                open={isListening || (voiceMode === "active" && (isZaeonTyping || tts.speaking))}
-                state={isListening ? "listening" : isZaeonTyping ? "thinking" : "speaking"}
+                open={isListening || (voiceMode === "active" && (isZaeonTyping || tts.loading || tts.speaking))}
+                state={isListening ? "listening" : (isZaeonTyping || tts.loading) ? "thinking" : "speaking"}
                 caption={isListening ? (messageInput || "Pode falar — estou te ouvindo.") : undefined}
-                onClose={() => { if (isListening) toggleListening(); tts.stop(); }}
+                onClose={() => { wantListenRef.current = false; if (isListening) stopListening(); tts.stop(); }}
             />
 
             <style jsx global>{`
@@ -759,5 +883,79 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 10px; }
             `}</style>
         </motion.div>
+        </>
     );
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AgentActionRunner — o "cockpit" que mostra a Zaeon AGINDO (Fase 2).
+// Lê o plano do action-bus (lib/agent/actions) e renderiza os passos rodando, com
+// digitação animada. É dirigido por data.plan (resposta do servidor), então aparece
+// igual para texto, áudio e ligação — experiência uniforme entre os modos.
+// ─────────────────────────────────────────────────────────────────────────────
+// Anima o plano no cockpit: marca cada passo running→done com um ritmo natural.
+// Não re-executa navegação (isso o widget já faz uma vez) — é a camada VISÍVEL.
+async function runPlanVisually(steps: AgentStep[]) {
+    if (!startPlan(steps)) return;
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < steps.length; i++) {
+        setStepStatus(i, "running");
+        const s = steps[i];
+        // passo de digitação dura um pouco mais (efeito de "digitando o tema")
+        const dur = s.kind === "type" ? 900 + Math.min((s.detail?.length || 0) * 35, 1400)
+            : s.kind === "create" ? 1100
+            : s.kind === "navigate" ? 700
+            : 500;
+        await wait(dur);
+        setStepStatus(i, "done");
+        advancePlan();
+    }
+    finishPlan();
+}
+
+function AgentActionRunner({ side }: { side: "left" | "right" }) {
+    const plan = usePlan();
+    if (!plan) return null;
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16 }}
+            className={`fixed z-[1000] bottom-24 ${side === "right" ? "right-4 sm:right-8" : "left-4 sm:left-8"} w-[290px] rounded-2xl overflow-hidden border border-cyan-400/30 dark:border-cyan-500/25 bg-white/90 dark:bg-[#0b1220]/90 backdrop-blur-2xl shadow-[0_10px_40px_rgba(8,15,40,0.45)]`}
+        >
+            <div className="px-4 py-2.5 flex items-center gap-2 border-b border-slate-200 dark:border-white/10 bg-gradient-to-r from-violet-500/10 to-cyan-500/10">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-cyan-200">
+                    {plan.active ? "Zaeon executando" : "Zaeon concluiu"}
+                </span>
+            </div>
+            <div className="p-3 flex flex-col gap-1.5">
+                {plan.steps.map((s, i) => {
+                    const st = s.status || "pending";
+                    const color =
+                        st === "done" ? "text-cyan-600 dark:text-cyan-300"
+                        : st === "running" ? "text-violet-600 dark:text-violet-300"
+                        : st === "error" ? "text-red-500"
+                        : "text-slate-400 dark:text-slate-500";
+                    return (
+                        <div key={i} className="flex items-start gap-2.5">
+                            <span className={`mt-0.5 w-4 text-center text-[11px] ${color}`}>
+                                {st === "done" ? "✓" : st === "running" ? "◐" : st === "error" ? "×" : "○"}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                                <p className={`text-[11px] font-semibold leading-tight ${st === "pending" ? "text-slate-400 dark:text-slate-500" : "text-slate-800 dark:text-white"}`}>
+                                    {s.label}
+                                </p>
+                                {s.kind === "type" && s.detail && st !== "pending" && (
+                                    <p className="mt-0.5 text-[10px] font-mono text-cyan-700 dark:text-cyan-300 truncate">
+                                        “{s.detail}”{st === "running" && <span className="animate-pulse">▋</span>}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </motion.div>
+    );
+}

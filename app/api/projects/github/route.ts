@@ -20,6 +20,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { assertEligibleOrThrow, ProjectsAccessError } from "@/lib/projects/access";
+import { effectivePlan, type PlanState } from "@/lib/plans";
 import {
   GITHUB_ACTIONS,
   GITHUB_ACTION_MAP,
@@ -38,9 +39,11 @@ const DEFAULT_BRANCHES = new Set(["main", "master"]);
 async function getEligibleUser(email: string) {
   // NOTE: once `githubInstallationId` is migrated + the Prisma client regenerated,
   // add it to `select` and pass it to executeAction() for per-user installations.
-  const dbUser = await prisma.user.findUnique({ where: { email }, select: { id: true, course: true, role: true } });
+  const dbUser = await prisma.user.findUnique({ where: { email }, select: { id: true, course: true, role: true, plan: true, plusUntil: true, trialGranted: true, projectsEnabled: true } });
   if (!dbUser) return null;
-  assertEligibleOrThrow(dbUser.course, { email, role: dbUser.role }); // super admin sempre passa
+  const state: PlanState = { plan: dbUser.plan || "free", plusUntil: dbUser.plusUntil ?? null, trialGranted: !!dbUser.trialGranted };
+  // super admin / plano Pro-Max / liberação avulsa / curso elegível
+  assertEligibleOrThrow(dbUser.course, { email, role: dbUser.role, plan: effectivePlan(state), projectsEnabled: !!dbUser.projectsEnabled });
   return dbUser;
 }
 

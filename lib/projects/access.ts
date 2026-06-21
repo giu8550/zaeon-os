@@ -20,9 +20,15 @@
  */
 
 import { isSuperAdmin } from "@/lib/auth/roles";
+import { planCapabilities, normalizePlan } from "@/lib/plans";
 
 /** Contexto do usuário para o gate (super admin sempre passa). */
-export interface AccessContext { email?: string | null; role?: string | null }
+export interface AccessContext {
+  email?: string | null;
+  role?: string | null;
+  plan?: string | null;        // plano EFETIVO (pro/max liberam Projetos)
+  projectsEnabled?: boolean;   // liberação avulsa pelo admin
+}
 
 // ─── Canonical eligible courses (mirrors the "cyber" track) ────────────────────
 export const ELIGIBLE_COURSES: string[] = [
@@ -78,7 +84,7 @@ export interface EligibilityResult {
   /** Matched canonical course label, when an exact match was found. */
   matched?: string;
   /** Machine reason, useful for telemetry and the UI fallback copy. */
-  reason: "exact" | "keyword" | "no-course" | "out-of-scope" | "gate-disabled" | "super-admin";
+  reason: "exact" | "keyword" | "no-course" | "out-of-scope" | "gate-disabled" | "super-admin" | "plan" | "admin-release";
 }
 
 /**
@@ -98,6 +104,12 @@ export const PROJECTS_GATE_ENABLED = process.env.PROJECTS_COURSE_GATE !== "off";
 export function checkEligibility(course: string | null | undefined, ctx?: AccessContext): EligibilityResult {
   // Super admin (allowlist ou role) → passa sempre, independente de curso/gate.
   if (ctx && isSuperAdmin(ctx)) return { eligible: true, reason: "super-admin" };
+
+  // Plano Pro/Max → Projetos liberado pelo plano.
+  if (ctx?.plan && planCapabilities(normalizePlan(ctx.plan)).projects) return { eligible: true, reason: "plan" };
+
+  // Liberação avulsa pelo admin (User.projectsEnabled).
+  if (ctx?.projectsEnabled) return { eligible: true, reason: "admin-release" };
 
   // Gate desligado → todos entram. (Religar removendo PROJECTS_COURSE_GATE=off.)
   if (!PROJECTS_GATE_ENABLED) return { eligible: true, reason: "gate-disabled" };

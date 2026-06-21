@@ -55,8 +55,142 @@ export function stop() {
   set({ speaking: false, loading: false, text: null });
 }
 
-export async function speak(text: string, opts?: { voice?: string; gender?: "f" | "m" }) {
+// Limpa o texto para a VOZ: remove markdown (**negrito**, #, links, código) e emojis,
+// que o TTS leria literalmente ("asterisco asterisco", "rosto sorrindo").
+export function cleanForSpeech(text: string): string {
+  let t = text || "";
+  t = t.replace(/```[\s\S]*?```/g, " ");          // blocos de código
+  t = t.replace(/`([^`]+)`/g, "$1");              // código inline
+  t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, " ");    // imagens
+  t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");  // links → só o texto
+  t = t.replace(/^\s{0,3}#{1,6}\s+/gm, "");        // títulos #
+  t = t.replace(/^\s{0,3}>\s?/gm, "");             // citações >
+  t = t.replace(/^\s*[-*+]\s+/gm, "");             // marcadores de lista
+  t = t.replace(/[*_`#>~|]/g, "");                 // sobras de marcadores markdown
+  // emojis / símbolos pictográficos / setas / dingbats / variation selectors
+  t = t.replace(/[\u{1F000}-\u{1FAFF}\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, "");
+  t = t.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  return t;
+}
+
+// Divide em frases (corta em . ! ? … e quebras de linha).
+function splitSentences(text: string): string[] {
+  return (text || "").split(/(?<=[.!?…])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+}
+
+// Monta os pedaços da LEITURA otimizados para baixa latência:
+//  - 1º pedaço = só a 1ª frase (áudio começa quase na hora);
+//  - demais agrupam frases até ~420 chars (menos requisições, fala fluida).
+function buildSpeechChunks(parts: string[], max = 420): string[] {
+  const sentences = parts.flatMap((p) => splitSentences(cleanForSpeech(p)));
+  const chunks: string[] = [];
+  let cur = "";
+  for (const s of sentences) {
+    if (chunks.length === 0 && !cur) { chunks.push(s); continue; } // 1ª frase sozinha = start rápido
+    if (cur && cur.length + 1 + s.length > max) { chunks.push(cur); cur = ""; }
+    cur = cur ? `${cur} ${s}` : s;
+  }
+  if (cur) chunks.push(cur);
+  return chunks;
+}
+
+// Quebra um texto longo em pedaços <= max chars, preferindo cortar em fim de frase.
+function chunkText(text: string, max = 3200): string[] {
   const clean = (text || "").trim();
+  if (!clean) return [];
+  if (clean.length <= max) return [clean];
+  const out: string[] = [];
+  const parts = clean.split(/(?<=[.!?…])\s+|\n+/);
+  let cur = "";
+  for (const p of parts) {
+    const s = p.trim();
+    if (!s) continue;
+    if ((cur ? cur.length + 1 + s.length : s.length) > max) {
+      if (cur) { out.push(cur); cur = ""; }
+      if (s.length > max) { for (let i = 0; i < s.length; i += max) out.push(s.slice(i, i + max)); }
+      else cur = s;
+    } else {
+      cur = cur ? `${cur} ${s}` : s;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+// Resultado da síntese de um pedaço: áudio neural pronto, ou fallback do navegador.
+type Prepared = { kind: "audio"; url: string } | { kind: "browser"; text: string } | null;
+
+// SÓ sintetiza (não toca) — devolve o áudio pronto. Permite pré-carregar o próximo
+// pedaço enquanto o atual ainda está tocando (pipeline = sem gaps entre blocos).
+async function synthChunk(text: string, voiceId: string | undefined, ac: AbortController): Promise<Prepared> {
+  try {
+    const res = await fetch("/api/ai/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text.slice(0, 4000), voice: voiceId }),
+      signal: ac.signal,
+    });
+    if (ac.signal.aborted) return null;
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.audio_base64) return { kind: "audio", url: `data:${data.mime || "audio/wav"};base64,${data.audio_base64}` };
+    }
+  } catch { /* cai no fallback do navegador */ }
+  return { kind: "browser", text };
+}
+
+// Toca um pedaço JÁ sintetizado e resolve quando termina.
+function playPrepared(item: Prepared, ac: AbortController): Promise<void> {
+  return new Promise((resolve) => {
+    if (!item || ac.signal.aborted) return resolve();
+    if (item.kind === "audio") {
+      const a = new Audio(item.url);
+      audio = a;
+      a.onended = () => { if (audio === a) audio = null; resolve(); };
+      a.onerror = () => { if (audio === a) audio = null; resolve(); };
+      a.play().catch(() => { if (audio === a) audio = null; resolve(); });
+    } else if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      const u = new SpeechSynthesisUtterance(item.text);
+      u.lang = "pt-BR";
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+      window.speechSynthesis.speak(u);
+    } else resolve();
+  });
+}
+
+/** Lê uma SEQUÊNCIA de textos em ordem (modo leitura do estudo inteiro), com
+ *  PIPELINE: pré-sintetiza o próximo pedaço enquanto o atual toca → sem demora entre blocos. */
+export async function speakSequence(parts: string[], opts?: { voice?: string; gender?: "f" | "m" }) {
+  stop(); // mata fala/sequência anterior
+  const myCtrl = new AbortController();
+  ctrl = myCtrl; // stop() aborta a sequência inteira
+  const voiceId = opts?.voice || pref("zaeon.voice.id");
+  const chunks = buildSpeechChunks(parts);
+  if (!chunks.length) return;
+  set({ speaking: true, loading: true, text: chunks[0] });
+
+  // Buffer de LOOKAHEAD: dispara a síntese de até 3 pedaços à frente, então a
+  // reprodução nunca espera (o próximo já vem pronto enquanto o atual toca).
+  const LOOKAHEAD = 2;
+  const synth: (Promise<Prepared> | undefined)[] = [];
+  const ensure = (idx: number) => { if (idx < chunks.length && !synth[idx]) synth[idx] = synthChunk(chunks[idx], voiceId, myCtrl); };
+  for (let k = 0; k <= LOOKAHEAD; k++) ensure(k);
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (myCtrl.signal.aborted) return;
+    const prepared = await synth[i]!;
+    if (myCtrl.signal.aborted) return;
+    ensure(i + 1); ensure(i + 1 + LOOKAHEAD); // mantém o buffer cheio à frente
+    set({ speaking: true, loading: false, text: chunks[i] });
+    await playPrepared(prepared, myCtrl);
+    if (myCtrl.signal.aborted) return;
+  }
+  if (!myCtrl.signal.aborted) set({ speaking: false, loading: false, text: null });
+}
+
+export async function speak(text: string, opts?: { voice?: string; gender?: "f" | "m" }) {
+  const clean = cleanForSpeech(text); // tira markdown/emoji antes de falar
   if (!clean) return;
   stop(); // mata fala anterior + aborta requisição em voo (sem eco/double)
 

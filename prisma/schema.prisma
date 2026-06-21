@@ -65,9 +65,11 @@ model User {
   eduVerified     Boolean   @default(false)
 
   // Capacidades premium liberadas pelo admin (gating)
-  deepThinkEnabled     Boolean  @default(false)  // Modo Econômico: deep-thinking (Gemini Pro)
-  advancedVoiceEnabled Boolean  @default(false)  // Modo Voz Avançado (engine neural + comandos por voz)
+  deepThinkEnabled     Boolean  @default(false)  // Modo Econômico: deep-thinking (Gemini Pro) — override avulso do admin
+  advancedVoiceEnabled Boolean  @default(false)  // Modo Voz Avançado — override avulso do admin
+  projectsEnabled      Boolean  @default(false)  // aba Projetos (Zaeon Code) liberada avulso pelo admin
   voicePref            Json?    // { gender: 'f'|'m', voiceId, autoRead }
+  deepThinkUsedAt      DateTime? // último uso do profundo (cota diária do Pulse)
 
   // Invite system
   referredBy      String?  @db.ObjectId  // bare ObjectId — no Prisma relation (avoids circular User→User FK, populated in application layer)

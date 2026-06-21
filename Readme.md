@@ -18,13 +18,14 @@
 
 ## 🌍 Overview
 
-**Zaeon** is an **Operating System for Science** — a comprehensive academic workspace powering student-teacher collaboration, AI-driven research tools, real-time 3D scientific visualization, and a Liquidity Protocol for Intellectual Property (IP) built on the **VERY Network** (EVM-compatible blockchain).
+**Zaeon** is an **Operating System for Agents** — built to empower human skills regarded to science, work and business — through agentic mentors that have built-in knowledge gained from professionals of several areas.
+
+Think of zaeon like the place you go to hire an agent, to ask for a personal teacher or a **Situational Awareness** (EVM-c).
 
 **Three core pillars:**
-1. **Academic Workspace** — AI tools for students, teachers, and researchers
-2. **BioSim 3D Engine** — Voxel science visualizer powered by Gemini AI + Three.js
-3. **IP Liquidity Engine** — Tokenize research as tradeable on-chain assets
-
+1. **Situational Awareness(OPEN)** — Agents know who you are and what you need to do to achieve your goals. they are not passive observers, but active professionals with their hole to play in your life as you keep progressing on tasks.
+2. **Academic Workspace(OPEN)** — Agents have a pre-built set of tools, skills and knowledge for students, teachers, and researchers, but are also free to generate new tools and knowledge on demand.
+3. **Professional Workspace (BETA)** — The best agents are able to have jobs in the professional workspace, where they can work on tasks and projects for hundreds of areas.
 ---
 
 ## 📁 Repository Structure
@@ -485,10 +486,6 @@ UPSTASH_REDIS_REST_TOKEN="..."
 # Where the Next app reaches the abnt-service. Defaults to http://localhost:8001 if unset.
 ABNT_SERVICE_URL="http://localhost:8001"
 
-# Voice engine (TTS neural — OPCIONAL; ver "Run Locally", Terminal 3)
-# Sem isto, a voz usa o sintetizador do navegador (Web Speech). Default http://localhost:8004.
-VOICE_ENGINE_URL="http://localhost:8004"
-
 # Omega Scholar research agent (academic full-text)
 UNPAYWALL_EMAIL="you@example.com"   # any email you control — Unpaywall's politeness/contact field
 CORE_API_KEY=""                     # optional; free key from core.ac.uk. CORE is skipped if unset
@@ -519,22 +516,6 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload   # → http://localhost:80
 ```
 
 The Next app reaches it via `ABNT_SERVICE_URL` (default `http://localhost:8001`). It's only needed for ABNT export — the rest of the app runs without it, but ABNT export will show "Serviço ABNT offline" until it's up. Quick check: `curl http://localhost:8001/health`. See `abnt-service/README.md` for details.
-
-**Terminal 3 — `voice-engine` (OPCIONAL — só para a voz NEURAL; FastAPI, porta 8004):**
-
-> ⚠️ Requer **Python 3.10–3.12** (o Kokoro não roda no 3.13). macOS: `brew install python@3.12 espeak-ng`.
-
-```bash
-cd voice-engine
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -U pip && pip install -r requirements.txt
-uvicorn main:app --port 8004     # → http://localhost:8004  (Kokoro baixa os pesos no 1º uso)
-```
-
-O modo voz **funciona sem este serviço**: o ditado usa o reconhecimento do navegador (Web Speech) e os
-botões de "Ouvir" (🔊) caem na voz do navegador (`speechSynthesis`). O `voice-engine` só troca a voz por
-uma neural de melhor textura (Kokoro/Piper) via `VOICE_ENGINE_URL`. Quick check: `curl http://localhost:8004/health`.
-Detalhes em `voice-engine/README.md`. Modo de voz **passivo/ativo** fica no toggle do widget de chat.
 
 > **Tests:** `npm test` (Vitest) runs the `lib/scholar/*` unit suite; `npm run test:watch` for watch mode.
 

@@ -13,8 +13,16 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
     depends_on: [redis]
-    ports: ["3000:3000"]
+    # Não publica 3000 na internet: quem expõe é o Caddy (80/443) na frente.
+    # Para debug direto no VPS use `docker compose exec` ou um túnel SSH.
+    expose: ["3000"]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # ───────────── agent-gateway ─────────────
   agent-api:
@@ -114,6 +122,23 @@ services:
     ports: ["3001:3000"]
     restart: unless-stopped
 
+  # ───────────── proxy reverso + HTTPS automático (Caddy) ─────────────
+  # Único serviço público (80/443). Faz TLS automático via Let's Encrypt e
+  # encaminha pro web:3000 (com upgrade de WebSocket pro Socket.IO de fábrica).
+  caddy:
+    image: caddy:2-alpine
+    container_name: zaeon_caddy
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      BETA_DOMAIN: ${BETA_DOMAIN:-beta.zaeon.space}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@zaeon.space}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+
   # adapter:   # whatsmeow Go dedicado pro Zaeon — publica wa:evt (ADR-001, tarefa #13)
 
 volumes:
@@ -122,3 +147,5 @@ volumes:
   prom_data:
   loki_data:
   grafana_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,71 @@
+name: Deploy (VPS)
+
+# Deploy da beta no VPS Hostinger via SSH: atualiza o código e sobe os containers.
+# Roda no push pra main OU manualmente (workflow_dispatch). Só executa de verdade se
+# os secrets do VPS estiverem configurados (guard abaixo) — assim não falha à toa.
+#
+# Secrets necessários (Settings → Secrets and variables → Actions):
+#   VPS_HOST       → 187.77.226.64
+#   VPS_PORT       → 22022
+#   VPS_USER       → root
+#   VPS_SSH_KEY    → chave PRIVADA SSH (conteúdo completo) com acesso ao VPS
+#   DEPLOY_PATH    → caminho do repo no VPS (ex.: /opt/zaeon-os)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: "Rebuild das imagens (--build)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.VPS_HOST }}" ] && [ -n "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Secrets do VPS ausentes — deploy pulado. Configure VPS_HOST/VPS_SSH_KEY/etc."
+          fi
+
+  deploy:
+    needs: guard
+    if: needs.guard.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            # Qual compose subir: beta enxuto por padrão (web+redis+caddy).
+            # Para a stack completa, crie a var DEPLOY_COMPOSE=docker-compose.yml.
+            export COMPOSE_FILE="${{ vars.DEPLOY_COMPOSE || 'docker-compose.beta.yml' }}"
+            echo "→ Compose: $COMPOSE_FILE"
+            echo "→ Atualizando código…"
+            git fetch --all --prune
+            git reset --hard origin/main
+            echo "→ Subindo containers…"
+            docker compose up -d --build --remove-orphans
+            echo "→ Limpando imagens órfãs…"
+            docker image prune -f
+            echo "✓ Deploy concluído."

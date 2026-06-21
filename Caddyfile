@@ -1,0 +1,23 @@
+# Caddy — proxy reverso + HTTPS automático (Let's Encrypt) da beta Zaeon.
+# Domínio e e-mail vêm do .env (BETA_DOMAIN / ACME_EMAIL). O reverse_proxy já
+# faz upgrade de WebSocket sozinho — o Socket.IO do server.js funciona sem config extra.
+
+{
+	email {$ACME_EMAIL}
+	# Para testar sem domínio/TLS válido, descomente a linha abaixo (HTTP local):
+	# auto_https off
+}
+
+{$BETA_DOMAIN} {
+	encode zstd gzip
+
+	# Health check direto no proxy (não precisa subir até o app).
+	respond /healthz "ok" 200
+
+	reverse_proxy web:3000 {
+		# Repassa os headers reais pro Next/NextAuth atrás do proxy.
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+		header_up X-Real-IP {remote_host}
+	}
+}

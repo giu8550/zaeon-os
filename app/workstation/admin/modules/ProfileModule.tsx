@@ -15,7 +15,8 @@ import {
     EnvelopeIcon,
     GlobeAmericasIcon,
     CheckBadgeIcon,
-    KeyIcon
+    KeyIcon,
+    CurrencyDollarIcon
 } from "@heroicons/react/24/outline";
 
 // --- TYPES AMPLIADOS ---
@@ -26,7 +27,18 @@ interface UserRequest {
     inviteCodeUsed: string | null;
     kycStatus: string; academicLevel: string; submittedAt: string;
     deepThinkEnabled?: boolean;
+    advancedVoiceEnabled?: boolean;
+    projectsEnabled?: boolean;
+    plan?: "free" | "plus" | "pro" | "max";
+    plusUntil?: string | null;
 }
+
+const PLAN_OPTIONS: Array<{ id: "free" | "plus" | "pro" | "max"; label: string }> = [
+    { id: "free", label: "Free" },
+    { id: "plus", label: "Plus" },
+    { id: "pro", label: "Pro" },
+    { id: "max", label: "Max" },
+];
 
 const ACADEMIC_LEVELS = ["Graduação", "Mestrado", "Doutorado", "Pós-Doutorado"];
 
@@ -223,22 +235,30 @@ export default function ProfileModule({ glassPanel }: { glassPanel: string }) {
         } catch (e) { alert("Falha na comunicação com o Neural Core."); }
     };
 
-    // Modo econômico: liga/desliga o pensamento profundo (Gemini Pro) para este usuário.
-    const toggleDeepThink = async () => {
+    // Atualiza campos de plano/liberação do usuário selecionado (merge otimista).
+    const patchUser = async (fields: Partial<UserRequest>) => {
         if (!selectedReq) return;
-        const next = !selectedReq.deepThinkEnabled;
         try {
             const res = await fetch('/api/admin', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: selectedReq.id, deepThinkEnabled: next }),
+                body: JSON.stringify({ userId: selectedReq.id, ...fields }),
             });
             if (res.ok) {
-                setSelectedReq({ ...selectedReq, deepThinkEnabled: next });
-                setRequests((prev) => prev.map((r) => (r.id === selectedReq.id ? { ...r, deepThinkEnabled: next } : r)));
-            } else { alert('Não consegui atualizar o modo de IA.'); }
+                setSelectedReq({ ...selectedReq, ...fields });
+                setRequests((prev) => prev.map((r) => (r.id === selectedReq.id ? { ...r, ...fields } : r)));
+            } else { alert('Não consegui atualizar este usuário.'); }
         } catch { alert('Falha na comunicação com o Neural Core.'); }
     };
+
+    const toggleDeepThink = () => patchUser({ deepThinkEnabled: !selectedReq?.deepThinkEnabled });
+    const toggleVoice = () => patchUser({ advancedVoiceEnabled: !selectedReq?.advancedVoiceEnabled });
+    const toggleProjects = () => patchUser({ projectsEnabled: !selectedReq?.projectsEnabled });
+    const setPlan = (plan: "free" | "plus" | "pro" | "max") => patchUser({ plan });
+
+    // Pro/Max liberam a sala Projetos pelo próprio plano (independe do toggle avulso).
+    const planUnlocksProjects = selectedReq?.plan === "pro" || selectedReq?.plan === "max";
+    const planUnlocksDeep = planUnlocksProjects || selectedReq?.plan === "plus";
 
     return (
         <div className="flex-1 flex gap-8 overflow-hidden w-full h-full">
@@ -294,22 +314,69 @@ export default function ProfileModule({ glassPanel }: { glassPanel: string }) {
                                 <DetailBoard title="Via Convite" value={selectedReq.inviteCodeUsed || "—"} icon={KeyIcon} isActive={false} />
                             </div>
 
-                            {/* MODO ECONÔMICO — pensamento profundo (Gemini Pro) por usuário */}
-                            <div className="flex items-center justify-between gap-4 bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[28px] px-6 py-5">
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Pensamento Profundo (IA)</p>
-                                    <p className="text-sm font-bold text-slate-800 dark:text-white mt-1">{selectedReq.deepThinkEnabled ? "Liberado para este usuário" : "Bloqueado (modo econômico)"}</p>
-                                    <p className="text-[11px] text-slate-400 mt-0.5">Por padrão usuários comuns não usam deep thinking, pra economizar créditos.</p>
+                            {/* PLANO & LIBERAÇÕES — controle de custo de tokens por usuário */}
+                            <div className="bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[40px] p-8 space-y-6">
+                                <div>
+                                    <div className="flex items-center gap-2 ml-1 mb-4">
+                                        <CurrencyDollarIcon className="w-4 h-4 text-cyan-500" />
+                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Plano de Assinatura</label>
+                                        {selectedReq.plusUntil && (
+                                            <span className="text-[9px] text-slate-400 ml-2">expira {new Date(selectedReq.plusUntil).toLocaleDateString()}</span>
+                                        )}
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-3">
+                                        {PLAN_OPTIONS.map((p) => {
+                                            const active = (selectedReq.plan || "free") === p.id;
+                                            return (
+                                                <button
+                                                    key={p.id}
+                                                    onClick={() => setPlan(p.id)}
+                                                    className={`py-4 rounded-2xl text-[11px] font-black uppercase transition-all border ${active ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.4)]' : 'bg-slate-100 dark:bg-white/5 border-transparent text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10'}`}
+                                                >
+                                                    {p.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                                <button
-                                    onClick={toggleDeepThink}
-                                    role="switch"
-                                    aria-checked={!!selectedReq.deepThinkEnabled}
-                                    className={`relative shrink-0 w-14 h-8 rounded-full transition-colors ${selectedReq.deepThinkEnabled ? "bg-cyan-500" : "bg-slate-300 dark:bg-white/15"}`}
-                                    title={selectedReq.deepThinkEnabled ? "Desativar" : "Ativar"}
-                                >
-                                    <span className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${selectedReq.deepThinkEnabled ? "translate-x-6" : ""}`} />
-                                </button>
+
+                                <div className="grid grid-cols-1 gap-3">
+                                    {/* Pensamento profundo */}
+                                    <div className="flex items-center justify-between gap-4 bg-white/40 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[24px] px-5 py-4">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">Pensamento Profundo</p>
+                                            <p className="text-[11px] text-slate-400 mt-0.5">{planUnlocksDeep ? "Já liberado pelo plano." : "Override avulso (modo econômico)."}</p>
+                                        </div>
+                                        <button onClick={toggleDeepThink} role="switch" aria-checked={!!selectedReq.deepThinkEnabled}
+                                            className={`relative shrink-0 w-14 h-8 rounded-full transition-colors ${selectedReq.deepThinkEnabled ? "bg-cyan-500" : "bg-slate-300 dark:bg-white/15"}`}>
+                                            <span className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${selectedReq.deepThinkEnabled ? "translate-x-6" : ""}`} />
+                                        </button>
+                                    </div>
+
+                                    {/* Voz avançada */}
+                                    <div className="flex items-center justify-between gap-4 bg-white/40 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[24px] px-5 py-4">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">Voz Avançada</p>
+                                            <p className="text-[11px] text-slate-400 mt-0.5">Override avulso do motor de voz neural.</p>
+                                        </div>
+                                        <button onClick={toggleVoice} role="switch" aria-checked={!!selectedReq.advancedVoiceEnabled}
+                                            className={`relative shrink-0 w-14 h-8 rounded-full transition-colors ${selectedReq.advancedVoiceEnabled ? "bg-cyan-500" : "bg-slate-300 dark:bg-white/15"}`}>
+                                            <span className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${selectedReq.advancedVoiceEnabled ? "translate-x-6" : ""}`} />
+                                        </button>
+                                    </div>
+
+                                    {/* Sala Projetos */}
+                                    <div className="flex items-center justify-between gap-4 bg-white/40 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[24px] px-5 py-4">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">Sala Projetos (Zaeon Code)</p>
+                                            <p className="text-[11px] text-slate-400 mt-0.5">{planUnlocksProjects ? "Já liberado pelo plano Pro/Max." : "Override avulso (além de curso/plano)."}</p>
+                                        </div>
+                                        <button onClick={toggleProjects} role="switch" aria-checked={!!selectedReq.projectsEnabled}
+                                            className={`relative shrink-0 w-14 h-8 rounded-full transition-colors ${selectedReq.projectsEnabled ? "bg-cyan-500" : "bg-slate-300 dark:bg-white/15"}`}>
+                                            <span className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${selectedReq.projectsEnabled ? "translate-x-6" : ""}`} />
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* VISUALIZADOR DE DOCUMENTO (IMAGEM OU PDF) */}

@@ -4,6 +4,7 @@ import type { FunctionDeclaration } from '@google-cloud/vertexai';
 import { GEMINI_MODEL_FLASH } from '@/lib/ai/model';
 import { vertexCredentials } from '@/lib/ai/vertex-credentials';
 import { guard } from '@/src/lib/ratelimit';
+import { sanitizeHistory } from '@/lib/ai/history';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,36 @@ const summonAgentTool: FunctionDeclaration = {
         },
         required: ["skill", "topic"]
     }
+};
+
+// --- OPEN ROOM TOOL (a Zaeon NAVEGA entre salas por voz/texto, em tempo real) ---
+const openRoomTool: FunctionDeclaration = {
+    name: "open_room",
+    description: "Abre/troca para uma SALA da plataforma quando a pessoa pedir pra ir, abrir, voltar ou mudar de sala (ex.: 'me leva pra pesquisa', 'volta pro lounge', 'abre meus estudos'). Use quando NÃO há uma tarefa a executar — só navegação. Se houver tarefa (estudar/pesquisar/escrever/programar um tema), use summon_agent.",
+    parameters: {
+        type: "OBJECT" as any,
+        properties: {
+            room: { type: "STRING" as any, description: "Uma de: 'pesquisa', 'estudos', 'projetos', 'pesquisas-salvas', 'lounge', 'sala-de-aula', 'perfil'." },
+        },
+        required: ["room"]
+    }
+};
+
+// Mapa de salas → aba/rota (navegação da Zaeon entre as salas do research-lab).
+const ROOM_MAP: Record<string, { tab: string; label: string }> = {
+    "pesquisa": { tab: "pesquisa", label: "Pesquisa" },
+    "estudos": { tab: "sala-de-estudos", label: "Sala de Estudos" },
+    "sala-de-estudos": { tab: "sala-de-estudos", label: "Sala de Estudos" },
+    "projetos": { tab: "projetos", label: "Projetos (Zaeon Code)" },
+    "codigo": { tab: "projetos", label: "Projetos (Zaeon Code)" },
+    "zaeon-code": { tab: "projetos", label: "Projetos (Zaeon Code)" },
+    "pesquisas-salvas": { tab: "pesquisas", label: "Pesquisas salvas" },
+    "pesquisas": { tab: "pesquisas", label: "Pesquisas salvas" },
+    "lounge": { tab: "lounge", label: "Lounge" },
+    "sala-de-aula": { tab: "pevem", label: "Sala de Aula" },
+    "aulas": { tab: "pevem", label: "Sala de Aula" },
+    "perfil": { tab: "profile", label: "Perfil" },
+    "profile": { tab: "profile", label: "Perfil" },
 };
 
 // Mapa habilidade → agente/sala/rota (handoff da Zaeon).
@@ -82,7 +113,7 @@ Você também conhece a plataforma inteira e guia com leveza. Agentes e salas:
 - Zaeon Code — IDE no navegador (sala Projetos), para estudantes de Computação/áreas correlatas.
 Salas no research-lab (?tab=): Pesquisa, Sala de Estudos, Projetos, Pesquisas, Lounge, Perfil. Há a Plugin Store; para estudantes, o Plano Plus é grátis (conta de estudante ou comprovante de matrícula).
 
-REGRA DE AÇÃO (muito importante): quando a pessoa pedir para ESTUDAR um assunto, PESQUISAR/ler literatura, ESCREVER um texto, ou PROGRAMAR algo, você DEVE chamar a ferramenta summon_agent (skill = study | research | write | code, com o topic = o assunto exato) — isso EXECUTA a ação de verdade na sala certa. NÃO responda só com texto dizendo que "vai chamar" — chame a ferramenta. Você está agindo em nome dela, não apenas explicando. Se houver [CONTEXTO ADICIONAL FORNECIDO PELO SISTEMA], trate como verdade atual da plataforma. Acima de tudo, faça a pessoa se sentir bem-vinda e amparada.`,
+REGRA DE AÇÃO (muito importante): quando a pessoa pedir para ESTUDAR um assunto, PESQUISAR/ler literatura, ESCREVER um texto, ou PROGRAMAR algo, você DEVE chamar a ferramenta summon_agent (skill = study | research | write | code, com o topic = o assunto exato) — isso EXECUTA a ação de verdade na sala certa. NÃO responda só com texto dizendo que "vai chamar" — chame a ferramenta. Quando a pessoa só quiser TROCAR/IR para uma sala (sem um tema pra executar) — "me leva pra pesquisa", "volta pro lounge", "abre meus estudos", "vai pra sala de aula" — chame a ferramenta open_room (room = pesquisa | estudos | pesquisas-salvas | lounge | sala-de-aula | perfil). Você pode trocar de sala a qualquer momento, em tempo real, no meio da conversa por voz. Você está agindo em nome dela, não apenas explicando. Se houver [CONTEXTO ADICIONAL FORNECIDO PELO SISTEMA], trate como verdade atual da plataforma. Acima de tudo, faça a pessoa se sentir bem-vinda e amparada.`,
 
     // AGENTE ORQUESTRADOR — a "Zion": conhece todos os outros agentes e salas e
     // orienta o usuário pela plataforma inteira. É a porta central de ajuda/onboarding.
@@ -149,13 +180,32 @@ Regras obrigatórias:
 - NUNCA retorne markdown, blocos \`\`\`json ou qualquer texto fora do JSON`
 };
 
+// Formata o world-state (AgentContext) em texto enxuto pro prompt. Puro (server-safe).
+function formatAgentContext(c: any): string {
+    if (!c || typeof c !== "object") return "";
+    const bits: string[] = [];
+    if (c.activeTab) bits.push(`Sala/aba atual: ${c.activeTab}`);
+    if (c.currentGoal) bits.push(`Objetivo atual: ${c.currentGoal}`);
+    if (c.currentStudyId) bits.push(`Estudo aberto: ${c.currentStudyId}`);
+    if (c.currentResearchId) bits.push(`Pesquisa aberta: ${c.currentResearchId}`);
+    if (c.currentProjectId) bits.push(`Projeto aberto: ${c.currentProjectId}`);
+    if (Array.isArray(c.recentActions) && c.recentActions.length) {
+        const recent = c.recentActions.slice(-5).map((a: any) => `${a?.kind}${a?.detail ? `(${a.detail})` : ""}`);
+        bits.push(`Ações recentes: ${recent.join(", ")}`);
+    }
+    return bits.join("\n");
+}
+
 export async function POST(req: Request) {
     try {
         const rl = await guard(req, "ai-chat", "ai-heavy");
         if (!rl.ok) return rl.response;
-        // 🔥 NOVO: Recebendo userData do frontend
-        const { prompt, agent, systemContext, fileData, userData, voiceMode } = await req.json();
+        // 🔥 NOVO: Recebendo userData + history + agentContext do frontend
+        const { prompt, agent, systemContext, fileData, userData, voiceMode, history, agentContext } = await req.json();
         const agentKey = agent?.toLowerCase() || "aura";
+
+        // Histórico da conversa (memória entre turnos). Ver lib/ai/history.ts.
+        const chatHistory = sanitizeHistory(history);
         const persona = AGENT_PERSONAS[agentKey] || AGENT_PERSONAS.aura;
 
         // =================================================================
@@ -172,7 +222,7 @@ export async function POST(req: Request) {
         const tools = scheduleAgents.includes(agentKey)
             ? [{ functionDeclarations: [updateScheduleTool] }]
             : agentKey === "zaeon"
-                ? [{ functionDeclarations: [summonAgentTool] }]
+                ? [{ functionDeclarations: [summonAgentTool, openRoomTool] }]
                 : undefined;
         const generativeModel = vertexAI.getGenerativeModel({
             // Gemini Flash é a ÚNICA IA do app (lib/ai/model.ts). Troca via env GEMINI_MODEL.
@@ -222,6 +272,13 @@ export async function POST(req: Request) {
             finalSystemInstruction += `\n\n=== CONTEXTO ADICIONAL FORNECIDO PELO SISTEMA ===\n${systemContext}`;
         }
 
+        // World-state durável do workspace (sala/aba atual, entidades abertas, objetivo,
+        // ações recentes). Dá à IA "contexto real do projeto", não só da conversa.
+        const wsText = formatAgentContext(agentContext);
+        if (wsText) {
+            finalSystemInstruction += `\n\n=== ESTADO ATUAL DO WORKSPACE (use pra agir com contexto; não liste como robô) ===\n${wsText}`;
+        }
+
         // Modo de voz (passivo/ativo) ajusta a personalidade da resposta falada.
         if (voiceMode === "passive" || voiceMode === "active") {
             const directive = voiceMode === "active"
@@ -231,7 +288,8 @@ export async function POST(req: Request) {
         }
 
         const chat = generativeModel.startChat({
-            systemInstruction: { role: 'system', parts: [{ text: finalSystemInstruction }] }
+            systemInstruction: { role: 'system', parts: [{ text: finalSystemInstruction }] },
+            history: chatHistory, // 🔥 memória entre turnos (antes era ignorada → IA "esquecia" tudo)
         });
 
         const result = await chat.sendMessage(parts);
@@ -248,7 +306,30 @@ export async function POST(req: Request) {
                 const text = topic
                     ? `Combinado! Vou te levar pra ${s.verb} sobre “${topic}” — chamei ${s.agent} pra ficar com você nessa.`
                     : `Pode deixar, vou chamar ${s.agent} pra te ajudar com isso.`;
-                return NextResponse.json({ summon: { skill, topic, agent: s.agent, route, cta: s.cta }, text });
+                // Plano de passos VISÍVEIS (Fase 2): o cockpit mostra a Zaeon agindo.
+                // Mesmo objeto pra texto/áudio/ligação → experiência uniforme.
+                const plan = topic ? [
+                    { kind: "navigate", label: `Abrindo ${s.agent.split("·").pop()?.trim() || s.cta}`, route },
+                    { kind: "type", label: `Digitando o tema`, detail: topic },
+                    { kind: "create", label: `${s.verb[0].toUpperCase()}${s.verb.slice(1)} sobre “${topic}”`, skill, topic, route },
+                    { kind: "done", label: "Pronto — deixei tudo encaminhado pra você." },
+                ] : [
+                    { kind: "navigate", label: `Abrindo ${s.cta}`, route },
+                    { kind: "done", label: "Pronto." },
+                ];
+                return NextResponse.json({ summon: { skill, topic, agent: s.agent, route, cta: s.cta }, plan, text });
+            }
+            if (functionCall.name === "open_room") {
+                const args: any = functionCall.args || {};
+                const key = String(args.room || "").toLowerCase().trim();
+                const r = ROOM_MAP[key] || ROOM_MAP["pesquisa"];
+                const route = `/research-lab?tab=${r.tab}`;
+                const plan = [
+                    { kind: "navigate", label: `Abrindo ${r.label}`, route, tab: r.tab },
+                    { kind: "done", label: `Você está na ${r.label}.` },
+                ];
+                const text = `Pronto, te levei pra ${r.label}.`;
+                return NextResponse.json({ navigate: { tab: r.tab, route, label: r.label }, plan, text });
             }
             return NextResponse.json({
                 toolCall: { name: functionCall.name, args: functionCall.args },

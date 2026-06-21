@@ -1,0 +1,99 @@
+# ───────────────────────────────────────────────────────────────────────────
+# Compose da BETA — VPS 2 vCPU / 8 GB.  web + redis + caddy + voz + abnt.
+#   web (Next + Socket.IO) · redis · caddy (proxy/HTTPS) · voice-engine (Kokoro,
+#   CPU-only) · abnt-service (LibreOffice). Voz é gated por perfil no admin.
+#
+# Mongo é Atlas externo (DATABASE_URL/MONGODB_URI no .env). Sem postgres/agentes/
+# observabilidade (isso fica no docker-compose.yml completo, pra depois).
+#
+# Orçamento de RAM (limites): web 1.5g + voz 3g + abnt 1.2g + redis 0.38g + caddy 0.25g
+#   ≈ 6.3g  → cabe em 8g com swap de segurança (ver docs/BETA_DEPLOY.md).
+#
+# Subir:   docker compose -f docker-compose.beta.yml up -d --build
+# Logs:    docker compose -f docker-compose.beta.yml logs -f web caddy voice-engine
+# ───────────────────────────────────────────────────────────────────────────
+
+name: zaeon-beta
+
+services:
+  web:
+    build: { context: ., dockerfile: Dockerfile }
+    container_name: zaeon_web
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379/0
+      VOICE_ENGINE_URL: http://voice-engine:8004   # proxy /api/ai/voice
+      ABNT_SERVICE_URL: http://abnt-service:8001    # exportação ABNT
+    depends_on:
+      redis: { condition: service_started }
+      voice-engine: { condition: service_started }
+      abnt-service: { condition: service_started }
+    expose: ["3000"]            # público é só o Caddy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits: { memory: 1536m }
+
+  # ── Voz neural (Kokoro, CPU-only). Gated por perfil (admin → aba "Voz"). ──
+  voice-engine:
+    build: { context: ./voice-engine, dockerfile: Dockerfile }
+    container_name: zaeon_voice
+    environment:
+      KOKORO_LANG: p
+      HF_HOME: /app/.hf
+    volumes: ["hf_cache:/app/.hf"]   # cacheia os pesos do modelo entre restarts
+    expose: ["8004"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 3g }
+
+  # ── ABNT (FastAPI + LibreOffice headless) ──
+  abnt-service:
+    build: { context: ./abnt-service, dockerfile: Dockerfile }
+    container_name: zaeon_abnt
+    expose: ["8001"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 1200m }
+
+  redis:
+    image: redis:7-alpine
+    container_name: zaeon_redis
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes: ["redis_data:/data"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 384m }
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: zaeon_caddy
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      BETA_DOMAIN: ${BETA_DOMAIN:-beta.zaeon.space}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@zaeon.space}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+    deploy:
+      resources:
+        limits: { memory: 256m }
+
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:
+  hf_cache:        # pesos do Kokoro (HuggingFace) — evita re-download a cada restart

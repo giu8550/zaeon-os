@@ -20,7 +20,9 @@ pip install -r requirements.txt
 #   https://huggingface.co/rhasspy/piper-voices → pt_BR-faber-medium.onnx (+ .onnx.json)
 mkdir -p voices
 
-uvicorn main:app --port 8004
+source .venv/bin/activate
+python -m uvicorn main:app --port 8004
+
 ```
 
 No app, aponte o proxy:
