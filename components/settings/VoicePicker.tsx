@@ -18,7 +18,7 @@ interface Voice {
   tier: "free" | "premium";
 }
 
-const SAMPLE = "Olá! Sou a Zaeon. É assim que vou soar nos seus estudos.";
+const SAMPLE = "Olá, nós todos somos Zaeon. É assim que você vai ouvir a nossa voz.";
 
 export default function VoicePicker({ compact = false }: { compact?: boolean }) {
   const [voices, setVoices] = useState<Voice[]>([]);
