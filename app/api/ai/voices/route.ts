@@ -10,12 +10,12 @@ export const dynamic = "force-dynamic";
 const VOICE_URL = process.env.VOICE_ENGINE_URL ?? "http://localhost:8004";
 
 const FALLBACK = {
-  default: "nova-f",
+  default: "natural-br",
   voices: [
-    { id: "aura-f", label: "Aura (feminina)", gender: "f", lang: "pt-BR", tier: "free" },
-    { id: "aura-m", label: "Áureo (masculina)", gender: "m", lang: "pt-BR", tier: "free" },
-    { id: "nova-f", label: "Nova (feminina, premium)", gender: "f", lang: "pt-BR", tier: "premium" },
-    { id: "piper-f", label: "Piper (fallback)", gender: "f", lang: "pt-BR", tier: "free" },
+    { id: "natural-br", label: "Natural (pt-BR)", gender: "m", lang: "pt-BR", tier: "free" },
+    { id: "aura-f", label: "Aura (feminina, Kokoro)", gender: "f", lang: "pt-BR", tier: "free" },
+    { id: "aura-m", label: "Áureo (masculina, Kokoro)", gender: "m", lang: "pt-BR", tier: "free" },
+    { id: "nova-f", label: "Nova (feminina, Kokoro)", gender: "f", lang: "pt-BR", tier: "premium" },
   ],
 };
 

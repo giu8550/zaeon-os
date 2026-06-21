@@ -30,20 +30,22 @@ PIPER_VOICE_DIR = os.environ.get(
 )
 PIPER_DEFAULT = os.environ.get("PIPER_VOICE", "pt_BR-faber-medium")
 KOKORO_LANG = os.environ.get("KOKORO_LANG", "p")  # 'p' = português (br) no Kokoro
-DEFAULT_VOICE = os.environ.get("ZAEON_TTS_DEFAULT", "nova-f")  # premium por padrão (nunca cair na voz do navegador por falta de escolha)
-# Velocidade do Kokoro: < 1.0 deixa a fala mais lenta/suave (textura mais agradável).
+# Default = Piper pt-BR (faber). O pt-BR do Kokoro é experimental ("grade C") e soa
+# robótico; o Piper faber-medium é mais claro/natural em português. Kokoro fica como opção.
+DEFAULT_VOICE = os.environ.get("ZAEON_TTS_DEFAULT", "natural-br")
+# Velocidade do Kokoro: 1.0 = natural. (<1.0 tende a "arrastar" e piorar a textura.)
 try:
-    KOKORO_SPEED = float(os.environ.get("ZAEON_TTS_SPEED", "0.92"))
+    KOKORO_SPEED = float(os.environ.get("ZAEON_TTS_SPEED", "1.0"))
 except ValueError:
-    KOKORO_SPEED = 0.92
+    KOKORO_SPEED = 1.0
 
 # Catálogo lógico de vozes exposto ao app. tier: 'free' | 'premium'.
 # 'engine' decide quem sintetiza; 'ref' é a voz nativa daquele engine.
 VOICES: list[dict] = [
-    {"id": "aura-f", "label": "Aura (feminina)", "gender": "f", "lang": "pt-BR", "tier": "free", "engine": "kokoro", "ref": "pf_dora"},
-    {"id": "aura-m", "label": "Áureo (masculina)", "gender": "m", "lang": "pt-BR", "tier": "free", "engine": "kokoro", "ref": "pm_alex"},
-    {"id": "nova-f", "label": "Nova (feminina, premium)", "gender": "f", "lang": "pt-BR", "tier": "premium", "engine": "kokoro", "ref": "pf_dora"},
-    {"id": "piper-f", "label": "Piper (fallback)", "gender": "f", "lang": "pt-BR", "tier": "free", "engine": "piper", "ref": PIPER_DEFAULT},
+    {"id": "natural-br", "label": "Natural (pt-BR)", "gender": "m", "lang": "pt-BR", "tier": "free", "engine": "piper", "ref": PIPER_DEFAULT},
+    {"id": "aura-f", "label": "Aura (feminina, Kokoro)", "gender": "f", "lang": "pt-BR", "tier": "free", "engine": "kokoro", "ref": "pf_dora"},
+    {"id": "aura-m", "label": "Áureo (masculina, Kokoro)", "gender": "m", "lang": "pt-BR", "tier": "free", "engine": "kokoro", "ref": "pm_alex"},
+    {"id": "nova-f", "label": "Nova (feminina, Kokoro)", "gender": "f", "lang": "pt-BR", "tier": "premium", "engine": "kokoro", "ref": "pf_dora"},
 ]
 
 
@@ -132,7 +134,7 @@ def synthesize_wav(text: str, voice_id: str | None = None) -> tuple[bytes, str]:
         except Exception as ke:
             # tenta o Piper; se ele também não estiver disponível, mostra o ERRO REAL do Kokoro
             try:
-                piper = _voice_entry("piper-f")
+                piper = _voice_entry("natural-br")
                 return _synthesize_piper(text, piper["ref"]), piper["id"]
             except Exception as pe:
                 raise RuntimeError(f"Kokoro falhou: {ke!r}. Piper indisponível: {pe!r}")

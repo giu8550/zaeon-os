@@ -26,18 +26,19 @@ export async function retrievePapers(queries: string | string[], opts: RetrieveO
 
   const primary = basesForDomain(opts.domain);
   const perSource: RetrieveResult["perSource"] = [];
-  let pool: Paper[] = [];
+  const pool: Paper[] = [];
 
   const run = async (query: string, sources: SourceName[]) => {
     const results = await search(query, sources);
     for (const r of results) {
       opts.onSource?.(r);
       perSource.push({ source: r.source, count: r.papers.length, status: r.status });
-      pool = pool.concat(r.papers);
+      pool.push(...r.papers); // push in-place (seguro com queries em paralelo)
     }
   };
 
-  for (const q of qs) await run(q, primary);
+  // Queries em PARALELO (antes era sequencial → somava o tempo de cada uma).
+  await Promise.all(qs.map((q) => run(q, primary)));
   let unique = dedupePapers(pool);
 
   // Top-up: amplia para as fontes restantes (na query principal) se não bateu o mínimo.

@@ -15,7 +15,7 @@ function reducedMotion() {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
-export default function GlitchTerm({ term, done = false, compact = false, hideIcon = false, size = "md" }: { term: string; done?: boolean; compact?: boolean; hideIcon?: boolean; size?: "sm" | "md" }) {
+export default function GlitchTerm({ term, done = false, compact = false, hideIcon = false, size = "md", oneLine = false }: { term: string; done?: boolean; compact?: boolean; hideIcon?: boolean; size?: "sm" | "md"; oneLine?: boolean }) {
   const [display, setDisplay] = useState(term);
   const raf = useRef<number | undefined>(undefined);
 
@@ -28,7 +28,10 @@ export default function GlitchTerm({ term, done = false, compact = false, hideIc
 
     const rng = mulberry32(([...t].reduce((a, c) => a + c.charCodeAt(0), 0) % 100000) + 1);
     const len = [...t].length;
-    let face = randomCjk(len, rng);
+    // CJK/katakana ocupam ~2x a largura do latim → usa MENOS glifos pra não ficar
+    // mais volumoso que o original (evita estourar o layout em títulos grandes).
+    const faceLen = Math.max(1, Math.round(len * 0.55));
+    let face = randomCjk(faceLen, rng);
     let start: number | null = null;
     let lastPaint = 0;
 
@@ -54,7 +57,7 @@ export default function GlitchTerm({ term, done = false, compact = false, hideIc
         } else {
           const p = (phase - DWELL_LATIN - MORPH - DWELL_ZH) / MORPH;
           out = scramble(face, t, p, rng);
-          if (p > 0.97) face = randomCjk(len, rng); // nova face p/ o próximo ciclo
+          if (p > 0.97) face = randomCjk(faceLen, rng); // nova face p/ o próximo ciclo
         }
         setDisplay(out);
       }
@@ -68,11 +71,11 @@ export default function GlitchTerm({ term, done = false, compact = false, hideIc
   }, [term, done]);
 
   return (
-    <div className={`flex items-center gap-2 sm:gap-3 min-w-0 ${compact ? "overflow-hidden" : ""}`} aria-label={`Pesquisando: ${term}`}>
+    <div className={`flex items-center gap-2 sm:gap-3 min-w-0 ${compact || oneLine ? "overflow-hidden" : ""}`} aria-label={`Pesquisando: ${term}`}>
       {!hideIcon && <Search className={`text-violet-500 dark:text-cyan-400 shrink-0 ${compact ? "w-4 h-4" : "w-5 h-5 sm:w-6 sm:h-6"}`} aria-hidden />}
       <span
         style={{ fontFamily: `"Noto Sans SC","Microsoft YaHei",sans-serif`, maxWidth: "100%" }}
-        className={`font-black tracking-tight bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent ${compact ? `whitespace-nowrap overflow-hidden text-ellipsis leading-none ${size === "sm" ? "text-[12.5px]" : "text-base sm:text-lg"}` : "break-words leading-tight text-xl sm:text-2xl md:text-3xl lg:text-4xl"}`}
+        className={`font-black tracking-tight bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent ${compact ? `whitespace-nowrap overflow-hidden text-ellipsis leading-none ${size === "sm" ? "text-[12.5px]" : "text-base sm:text-lg"}` : oneLine ? "block w-full whitespace-nowrap overflow-hidden text-ellipsis leading-tight text-xl sm:text-2xl" : "break-words leading-tight text-xl sm:text-2xl md:text-3xl lg:text-4xl"}`}
       >
         {display || " "}
       </span>

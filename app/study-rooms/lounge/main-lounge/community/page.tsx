@@ -26,6 +26,7 @@ import {
     TrashIcon
 } from "@heroicons/react/24/outline";
 import { HeartIcon as HeartSolid } from "@heroicons/react/24/solid";
+import CollabModule from "@/components/lounge/CollabModule";
 
 const ROOM_MAPPING: Record<string, string[]> = {
     cyber: ["Ciência da Computação", "Engenharia de Software", "Sistemas de Informação", "Análise e Desenvolvimento de Sistemas", "Engenharia da Computação", "Redes de Computadores", "Segurança da Informação / Cibersegurança", "Banco de Dados", "Inteligência Artificial", "Ciência de Dados", "Computação em Nuvem", "Internet das Coisas", "Robótica", "Jogos Digitais", "Design Digital / UX / UI", "Computer Science", "Software Engineering"],
@@ -111,6 +112,34 @@ const LocationMarker = ({ lat, lon, label, cost, onClick }: any) => {
     );
 };
 
+// Pontos cosméticos traçando o Brasil sobre o globo (sem labels, sem "cost index").
+// Verde/amarelo (bandeira) só pra dar identidade — puramente decorativo.
+const BRAZIL_POINTS: [number, number][] = [
+    [5.2, -60.7], [2.8, -60.6], [-1.45, -48.5], [-2.5, -44.3], [-3.7, -38.5],
+    [-8.05, -34.9], [-12.97, -38.5], [-16.3, -39.0], [-20.3, -40.3], [-22.9, -43.2],
+    [-23.55, -46.6], [-25.4, -49.2], [-27.6, -48.5], [-30.0, -51.2], [-15.6, -56.1],
+    [-15.8, -47.9], [-19.9, -43.9], [-3.1, -60.0], [-10.9, -61.9], [-8.76, -63.9],
+];
+const COLOR_BR_GREEN = new THREE.Color("#22c55e");
+const COLOR_BR_YELLOW = new THREE.Color("#fbbf24");
+
+const CosmeticDot = ({ lat, lon, i }: { lat: number; lon: number; i: number }) => {
+    const ref = useRef<THREE.Mesh>(null);
+    const pos = latLonToVector3(lat, lon, 1.55);
+    useFrame(({ clock }) => {
+        if (ref.current) {
+            const s = 1 + Math.sin(clock.getElapsedTime() * 2 + i) * 0.25;
+            ref.current.scale.set(s, s, s);
+        }
+    });
+    return (
+        <mesh ref={ref} position={pos}>
+            <sphereGeometry args={[0.028, 12, 12]} />
+            <meshBasicMaterial color={i % 3 === 0 ? COLOR_BR_YELLOW : COLOR_BR_GREEN} toneMapped={false} />
+        </mesh>
+    );
+};
+
 const CyberGlobe = () => {
     const coreRef = useRef<THREE.Mesh>(null);
     const wireframeGroupRef = useRef<THREE.Group>(null);
@@ -128,12 +157,8 @@ const CyberGlobe = () => {
             </Sphere>
             <group ref={wireframeGroupRef}>
                 <Sphere args={[1.51, 32, 32]}><meshBasicMaterial color={COLOR_WIRE_BLUE} wireframe transparent opacity={0.12} /></Sphere>
-                <LocationMarker lat={37.09} lon={-95.71} label="USA" cost="HIGH" onClick={() => { }} />
-                <LocationMarker lat={-14.23} lon={-51.92} label="BRAZIL" cost="LOW" onClick={() => { }} />
-                <LocationMarker lat={51.16} lon={10.45} label="GERMANY" cost="MED" onClick={() => { }} />
-                <LocationMarker lat={35.86} lon={104.19} label="CHINA" cost="MED" onClick={() => { }} />
-                <LocationMarker lat={-25.27} lon={133.77} label="AUSTRALIA" cost="HIGH" onClick={() => { }} />
-                <LocationMarker lat={35.67} lon={139.65} label="JAPAN" cost="HIGH" onClick={() => { }} />
+                {/* Brasil em destaque — cosmético */}
+                {BRAZIL_POINTS.map(([lat, lon], i) => <CosmeticDot key={i} lat={lat} lon={lon} i={i} />)}
             </group>
         </group>
     );
@@ -268,6 +293,14 @@ export default function LoungeEarth() {
                     </h1>
                 </div>
 
+                {/* Texto sobre o globo */}
+                <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none px-6">
+                    <div className="text-center -translate-y-24 sm:-translate-y-28">
+                        <p className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-slate-800 dark:text-white drop-shadow-[0_2px_24px_rgba(34,211,238,0.55)]">em breve, seremos globais</p>
+                        <p className="text-sm sm:text-base font-mono uppercase tracking-[0.4em] text-cyan-600 dark:text-cyan-300 mt-2">— 2027 —</p>
+                    </div>
+                </div>
+
                 <Canvas camera={{ position: [0, -1.8, 6.5], fov: 40 }} className="w-full h-full bg-transparent">
                     <ambientLight intensity={0.6} />
                     <pointLight position={[10, 10, 10]} intensity={2.5} />
@@ -293,18 +326,17 @@ export default function LoungeEarth() {
                             <div className="bg-white/20 dark:bg-black/30 backdrop-blur-md border border-cyan-500/30 rounded-[2rem] p-8 shadow-xl text-center relative overflow-hidden group">
                                 <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-transparent to-cyan-500/10 opacity-30 group-hover:opacity-60 transition-opacity duration-700"></div>
                                 <div className="relative z-10 flex flex-col items-center gap-3">
-                                    <div className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 mb-1">
-                                        <SparklesIcon className="w-5 h-5 animate-pulse" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Zaeon Broadcast</span>
-                                    </div>
                                     <h2 className="text-xl md:text-2xl font-light text-slate-800 dark:text-white leading-relaxed font-mono px-4">
-                                        &quot;{globalMessage}&quot;
+                                        Trabalhe e estude junto com seus amigos em tempo real.
                                     </h2>
                                 </div>
                             </div>
                         </motion.div>
 
-                        <div className="relative w-full pt-4">
+                        {/* ESPAÇO COLABORATIVO — estudos/pesquisas com play → convite → co-criação */}
+                        <CollabModule />
+
+                        <div className="hidden">
                             <div className="absolute -top-6 w-full h-10 pointer-events-none opacity-50">
                                 <EnergyCord startX="50%" startY="0%" endX="16%" endY="100%" delay={0} />
                                 <EnergyCord startX="50%" startY="0%" endX="33%" endY="100%" delay={0.2} />
@@ -339,7 +371,7 @@ export default function LoungeEarth() {
                             </div>
                         </div>
 
-                        <div className="w-full min-h-[600px] bg-white/30 dark:bg-black/20 backdrop-blur-2xl border border-white/50 dark:border-white/10 rounded-[2.5rem] shadow-2xl flex flex-col relative overflow-hidden">
+                        <div className="hidden w-full min-h-[600px] bg-white/30 dark:bg-black/20 backdrop-blur-2xl border border-white/50 dark:border-white/10 rounded-[2.5rem] shadow-2xl flex flex-col relative overflow-hidden">
                             <div className="px-8 py-5 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center bg-white/40 dark:bg-white/5">
                                 <div className="flex items-center gap-3">
                                     <SignalIcon className={`w-5 h-5 ${isLoadingFeed ? 'animate-pulse text-slate-500' : 'text-cyan-600 dark:text-cyan-400'}`} />

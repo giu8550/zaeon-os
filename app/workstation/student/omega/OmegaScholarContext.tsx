@@ -28,6 +28,7 @@ interface OmegaCtx extends OmegaState {
   setDraft: (v: string) => void;
   glitchReplay: boolean; // replay do efeito glitch ao reabrir uma pesquisa do histórico
   runQuery: (prompt: string, deep?: boolean) => Promise<void>;
+  stopQuery: () => void;
   loadSession: (s: any) => void;
   fetchSuggestions: (opts?: { count?: number; exclude?: string[] }) => Promise<void>;
   fetchPrereqs: () => Promise<void>;
@@ -59,16 +60,29 @@ export function OmegaScholarProvider({ room, onStart, children }:
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Permite ABORTAR a pesquisa em curso (clicar no ⟁ enquanto carrega).
+  const abortRef = useRef<AbortController | null>(null);
+  const stopQuery = useCallback(() => {
+    try { abortRef.current?.abort(); } catch { /* ignore */ }
+    abortRef.current = null;
+    try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ }
+    setState((s) => (s.status === "running" ? { ...s, status: "idle", error: null } : s));
+  }, []);
+
   const runQuery = useCallback(async (prompt: string, deep = false) => {
     if (!prompt.trim()) return;
     onStart?.(); // parent switches activeTab → "community"
     const startedAt = Date.now();
+    const ac = new AbortController();
+    abortRef.current = ac;
     try { localStorage.setItem(RUN_KEY, JSON.stringify({ query: prompt, startedAt })); } catch { /* ignore */ }
     setState({ status: "running", query: prompt, phases: [], answer: "", session: null, error: null, startedAt, ...EMPTY_FORGE, ...EMPTY_PREREQS });
+    try { window.dispatchEvent(new CustomEvent("zaeon:research:start", { detail: prompt })); } catch { /* onboarding */ }
     try {
       const res = await fetch("/api/ai/scholar", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, room, deep }),
+        signal: ac.signal,
       });
       // Sessão ausente/expirada: o servidor responde 401 (texto, não NDJSON).
       // Tratamos explicitamente para não travar o stream — a UI mostra o gate de login.
@@ -91,7 +105,7 @@ export function OmegaScholarProvider({ room, onStart, children }:
         setState((s) => {
           if (ev.type === "phase") return { ...s, phases: [...s.phases, { phase: ev.phase, message: (ev as any).message ?? ev.phase }] };
           if (ev.type === "answer") return { ...s, answer: ev.text };
-          if (ev.type === "done") { try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ } return { ...s, status: "done", session: ev.session }; }
+          if (ev.type === "done") { try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ } try { window.dispatchEvent(new CustomEvent("zaeon:research:done")); } catch { /* onboarding */ } return { ...s, status: "done", session: ev.session }; }
           if (ev.type === "error") { try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ } return { ...s, status: "error", error: ev.message }; }
           return s;
         });
@@ -107,7 +121,11 @@ export function OmegaScholarProvider({ room, onStart, children }:
       // that don't append a final \n — e.g. a last `done` event).
       if (buf) dispatch(buf);
     } catch (e: any) {
+      // Usuário parou a pesquisa (abort) → volta pro estado limpo, sem erro.
+      if (e?.name === "AbortError") { setState((s) => ({ ...s, status: "idle", error: null })); return; }
       setState((s) => ({ ...s, status: "error", error: e?.message ?? "Erro" }));
+    } finally {
+      abortRef.current = null;
     }
   }, [room, onStart]);
 
@@ -257,7 +275,7 @@ export function OmegaScholarProvider({ room, onStart, children }:
   }, [state.status, state.session, state.suggestions, state.loadingSuggestions, fetchSuggestions]);
 
   return (
-    <Ctx.Provider value={{ ...state, draft, setDraft, glitchReplay, runQuery, loadSession, fetchSuggestions, fetchPrereqs }}>
+    <Ctx.Provider value={{ ...state, draft, setDraft, glitchReplay, runQuery, stopQuery, loadSession, fetchSuggestions, fetchPrereqs }}>
       {children}
     </Ctx.Provider>
   );

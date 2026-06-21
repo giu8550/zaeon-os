@@ -45,10 +45,19 @@ const NAV_ACTIVE: Record<string, string> = {
   violet: "bg-violet-500/15 dark:bg-violet-400/20 border-violet-400/50 text-violet-700 dark:text-violet-100 ring-1 ring-violet-400/40 shadow-[0_8px_24px_-8px_rgba(139,92,246,0.55)]",
   cyan: "bg-gradient-to-r from-violet-500/20 to-cyan-500/20 border-cyan-400/50 text-cyan-700 dark:text-cyan-100 ring-1 ring-cyan-400/40 shadow-[0_8px_24px_-8px_rgba(34,211,238,0.55)]",
 };
+// Selecionado = pill preta/degradê (mesma cor do framework da Sala de Pesquisa),
+// uniforme em claro e escuro — sem mais um arco-íris de cores por aba.
+// Selecionado: no ESCURO = mesma pill branca-glass das abas da Sala de Estudos;
+// no CLARO = charcoal acinzentado (tom do frame de pesquisa, não um preto chapado).
+const NAV_ACTIVE_PILL =
+  "bg-gradient-to-br from-[#1c1c28] to-[#15151f] text-white border-white/10 ring-1 ring-black/10 shadow-[0_10px_26px_-12px_rgba(0,0,0,0.55)] dark:from-white/20 dark:to-white/[0.05] dark:text-white dark:border-white/25 dark:ring-0 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.42),0_8px_18px_-8px_rgba(139,92,246,0.8)]";
 function navItem(active: boolean, accent: keyof typeof NAV_ACTIVE) {
-  return `${NAV_BASE} ${active ? NAV_ACTIVE[accent] : NAV_IDLE}`;
+  void accent; // accent mantido por compatibilidade; o ativo agora é sempre a pill preta
+  return `${NAV_BASE} ${active ? NAV_ACTIVE_PILL : NAV_IDLE}`;
 }
 import ResearchRoomTour from "@/components/onboard/ResearchRoomTour";
+import OnboardingGuide from "@/components/onboard/OnboardingGuide";
+import { startTour } from "@/lib/onboarding/tour";
 import { capabilities } from "@/lib/runtime/mode";
 import { useLibraryFiles } from "@/lib/useLibraryFiles";
 import RichText from "@/components/research/RichText";
@@ -95,6 +104,7 @@ import {
 
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
+import EditableProfile from "@/components/research/EditableProfile";
 import MiniTourToast from "@/components/research/MiniTourToast";
 import SavedCitationsSection from "./SavedCitationsSection";
 import LibrarySavedFiles from "./LibrarySavedFiles";
@@ -109,9 +119,11 @@ import {
   ABNT_TEMPLATE,
   parseAbntMarkers,
   isEmptyOrTemplate,
+  templateFor,
+  buildDocFromDraft,
+  type WorkType,
+  type DraftFields,
 } from "@/lib/abntTemplate";
-import AcademicThermometer from "@/components/research/AcademicThermometer";
-import { mapAcademicLevel } from "@/lib/quality/segment";
 
 // --- TYPES ---
 interface StudyDoc {
@@ -671,6 +683,9 @@ export default function HomeworkPage({
   const [isWorkTypeMenuOpen, setIsWorkTypeMenuOpen] = useState(false);
   const [docTitle, setDocTitle] = useState("minha_pesquisa.pdf");
   const [docContent, setDocContent] = useState(ABNT_TEMPLATE);
+  // MEMÓRIA POR TIPO: cada formato (TCC/Artigo/Relatório) é uma sessão de escrita própria.
+  const docsRef = useRef<Record<string, { content: string; title: string }>>({});
+  const workTypeRef = useRef<WorkType | null>(null);
   const [hintOpen, setHintOpen] = useState(true);
   const [reviewMode, setReviewMode] = useState(false);
   const [activeProject, setActiveProject] = useState<any>(null);
@@ -1028,30 +1043,74 @@ export default function HomeworkPage({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  // PERSISTÊNCIA do rascunho — o que o usuário escreve NÃO reseta no reload.
-  // Restaura na montagem; salva a cada mudança de texto/título/tipo.
+  // PERSISTÊNCIA POR TIPO — cada formato (TCC/Artigo/Relatório) guarda seu próprio
+  // rascunho (sessão). Trocar de tipo NÃO converte: abre a sessão daquele tipo.
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("zaeon_research_draft");
+      const raw = localStorage.getItem("zaeon_research_docs");
       if (raw) {
         const d = JSON.parse(raw);
-        if (typeof d.docContent === "string" && d.docContent.trim())
+        if (d.docs && typeof d.docs === "object") docsRef.current = d.docs;
+        const wt: WorkType | null = d.activeWorkType ?? null;
+        if (wt && docsRef.current[wt]) {
+          setWorkType(wt);
+          setDocContent(docsRef.current[wt].content);
+          setDocTitle(docsRef.current[wt].title);
+          return;
+        }
+        if (wt) setWorkType(wt);
+        return;
+      }
+      // Compat: rascunho antigo (único) → migra pra sessão do tipo salvo (ou TCC).
+      const legacy = localStorage.getItem("zaeon_research_draft");
+      if (legacy) {
+        const d = JSON.parse(legacy);
+        const wt: WorkType = d.workType || "TCC";
+        if (typeof d.docContent === "string" && d.docContent.trim()) {
+          docsRef.current[wt] = { content: d.docContent, title: d.docTitle || docTitle };
+          setWorkType(wt);
           setDocContent(d.docContent);
-        if (typeof d.docTitle === "string" && d.docTitle)
-          setDocTitle(d.docTitle);
-        if (d.workType) setWorkType(d.workType);
+          if (d.docTitle) setDocTitle(d.docTitle);
+        }
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     try {
+      if (workType) docsRef.current[workType] = { content: docContent, title: docTitle };
       localStorage.setItem(
-        "zaeon_research_draft",
-        JSON.stringify({ docContent, docTitle, workType }),
+        "zaeon_research_docs",
+        JSON.stringify({ docs: docsRef.current, activeWorkType: workType }),
       );
     } catch {}
   }, [docContent, docTitle, workType]);
+
+  // Troca o tipo SEM converter: salva a sessão atual e abre a do novo tipo (ou template vazio).
+  const switchWorkType = (next: WorkType) => {
+    if (next === workType) return;
+    if (workType) docsRef.current[workType] = { content: docContent, title: docTitle };
+    const saved = docsRef.current[next];
+    if (saved) {
+      setDocContent(saved.content);
+      setDocTitle(saved.title);
+    } else {
+      setDocContent(templateFor(next));
+    }
+    setWorkType(next);
+  };
+  workTypeRef.current = workType; // mantém o ref do tipo ativo p/ handlers de evento
+
+  // "Minhas coisas": novo trabalho (zera a folha do tipo atual) e excluir uma pesquisa salva.
+  const handleNewWork = () => {
+    setDocTitle("minha_pesquisa.pdf");
+    setDocContent(templateFor(workType));
+  };
+  const handleDeleteWork = (id: string) => {
+    fetch(`/api/ai/scholar/sessions?id=${id}`, { method: "DELETE" })
+      .then(() => setSessions((prev) => prev.filter((s) => s.id !== id)))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     return () => {
@@ -1102,6 +1161,27 @@ export default function HomeworkPage({
     }
   }, []);
 
+  // Deep-link ?session=<id> (vindo do menu inicial → Pesquisas): abre a ABA PESQUISA e
+  // carrega aquela pesquisa salva como DOCUMENTO (título + conteúdo) na folha de escrita.
+  useEffect(() => {
+    const sid = new URLSearchParams(window.location.search).get("session");
+    if (!sid) return;
+    setActiveTab("pesquisa");
+    fetch(`/api/ai/scholar/sessions?id=${sid}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const s = d?.session ?? d;
+        if (!s) return;
+        if (s.query) setDocTitle(String(s.query).slice(0, 120));
+        const ans =
+          (typeof s?.thread?.answer === "string" && s.thread.answer) ||
+          (typeof s?.thread?.synthesized === "string" && s.thread.synthesized) ||
+          (typeof s?.thread === "string" && s.thread) || "";
+        if (ans) setDocContent(String(ans));
+      })
+      .catch(() => {});
+  }, []);
+
   // Troca de sala em TEMPO REAL pela Zaeon (voz/chat): a widget dispara este evento
   // mesmo já estando no research-lab — o deep-link só roda no mount, então sem isto
   // a troca por voz não funcionaria estando na página. Ver lib/agent + LoungeChatWidget.
@@ -1113,6 +1193,67 @@ export default function HomeworkPage({
     };
     window.addEventListener("zaeon:set-tab", onSetTab);
     return () => window.removeEventListener("zaeon:set-tab", onSetTab);
+  }, []);
+
+  // "Iniciar pesquisa" (sugestão) → abre um DOCUMENTO NOVO na aba Pesquisa com o título.
+  // Pesquisa é estritamente pesquisa (não joga pra Sala de Estudos).
+  useEffect(() => {
+    const onNewDoc = (e: any) => {
+      const t = e?.detail?.title;
+      const fields = e?.detail?.fields as DraftFields | undefined;
+      const c = e?.detail?.content;
+      if (typeof t === "string" && t.trim()) {
+        const wt: WorkType = workTypeRef.current ?? "TCC";
+        setDocTitle(t.trim().slice(0, 120));
+        // Esboço gerado → encaixa os CAMPOS no framework do tipo ativo (sem repetir as seções).
+        if (fields && typeof fields === "object") {
+          setDocContent(buildDocFromDraft(wt, fields));
+        } else {
+          setDocContent(typeof c === "string" && c.trim() ? c : templateFor(wt));
+        }
+        if (!workTypeRef.current) setWorkType("TCC");
+        setActiveTab("pesquisa");
+      }
+    };
+    window.addEventListener("zaeon:research:newdoc", onNewDoc);
+    return () => window.removeEventListener("zaeon:research:newdoc", onNewDoc);
+  }, []);
+
+  // Deep-link ?worktype=TCC|Artigo|Relatório (menu inicial → Pesquisas): abre a aba
+  // Pesquisa NAQUELE tipo (a sessão salva dele), sem cair na Sala de Estudos.
+  useEffect(() => {
+    const wt = new URLSearchParams(window.location.search).get("worktype");
+    if (wt !== "TCC" && wt !== "Artigo" && wt !== "Relatório") return;
+    setActiveTab("pesquisa");
+    const saved = docsRef.current[wt];
+    if (saved) { setDocContent(saved.content); setDocTitle(saved.title); }
+    else setDocContent(templateFor(wt as WorkType));
+    setWorkType(wt as WorkType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Tour guiado da Zaeon: começa quando vem ?onboard=1 (card de boas-vindas) e o
+  // usuário ainda não fez (localStorage). O registro no servidor (User.tourDone) é
+  // feito ao concluir/pular. Garante a aba inicial = Sala de Estudos.
+  useEffect(() => {
+    try {
+      const onboardParam = new URLSearchParams(window.location.search).get("onboard");
+      const replayOn = localStorage.getItem("zaeon.tourReplay") === "1";
+      const done = localStorage.getItem("zaeon.tourDone") === "1";
+      // ?onboard=replay → liga o replay persistente (testar à vontade até dar o Ok).
+      if (onboardParam === "replay") {
+        setActiveTab("sala-de-estudos");
+        setTimeout(() => startTour({ replay: true }), 600);
+      } else if (replayOn) {
+        // Replay ligado: reabre o tour a cada visita, ignorando o "feito".
+        setActiveTab("sala-de-estudos");
+        setTimeout(() => startTour(), 600);
+      } else if (onboardParam === "1" && !done) {
+        setActiveTab("sala-de-estudos");
+        setTimeout(() => startTour(), 600);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleFocusMode = () => {
@@ -1386,41 +1527,12 @@ export default function HomeworkPage({
     }
   };
 
-  // 🔊 Voz da Aura. MODO VERCEL → speechSynthesis do navegador (grátis, pt-BR, sem servidor).
-  //                  MODO CONTAINER → engine HQ via /api/ai/voice. Ver lib/runtime/mode.
+  // 🔊 Voz da Aura — SEMPRE a voz premium (engine HQ via /api/ai/voice).
+  // Nada de speechSynthesis do navegador (a "voz do Google" foi removida de vez).
   const playVoice = async (text: string, msgId?: number) => {
     const clean = text.trim();
     if (!clean) return;
 
-    // --- Vercel: TTS do navegador ---
-    if (capabilities().voiceTts === "browser") {
-      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-        showToast("Seu navegador não suporta voz.");
-        return;
-      }
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(clean);
-      const voices = window.speechSynthesis.getVoices();
-      u.voice =
-        voices.find(
-          (v) =>
-            /pt.?BR/i.test(v.lang) &&
-            /google|luciana|natural|premium/i.test(v.name),
-        ) ||
-        voices.find((v) => /pt.?BR/i.test(v.lang)) ||
-        voices.find((v) => /^pt/i.test(v.lang)) ||
-        null;
-      u.lang = "pt-BR";
-      if (msgId != null) {
-        setVoiceLoadingId(msgId);
-        u.onend = () => setVoiceLoadingId(null);
-        u.onerror = () => setVoiceLoadingId(null);
-      }
-      window.speechSynthesis.speak(u);
-      return;
-    }
-
-    // --- Container: engine HQ ---
     if (msgId != null) setVoiceLoadingId(msgId);
     try {
       const res = await fetch("/api/ai/voice", {
@@ -1777,7 +1889,7 @@ export default function HomeworkPage({
         };
       default:
         return {
-          title: "Pesquisa",
+          title: "Sala de Pesquisa",
           subtitle: "Agente de pesquisa, biblioteca de PDFs e exportação ABNT",
         };
     }
@@ -1836,24 +1948,12 @@ export default function HomeworkPage({
           onMouseEnter={() => setIsSidebarOpen(true)}
           onMouseLeave={() => setIsSidebarOpen(false)}
           animate={{ width: isSidebarOpen ? 180 : 54 }}
-          className={`fixed left-4 z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl shadow-[0_12px_40px_-12px_rgba(15,23,42,0.45)] bg-white/70 dark:bg-[#0a0a0a]/60 border-white/40 dark:border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
+          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl shadow-[0_12px_40px_-12px_rgba(15,23,42,0.45)] bg-white/70 dark:bg-[#0a0a0a]/60 border-white/40 dark:border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
           <div className="flex flex-col gap-3 px-2.5">
-            {/* Pesquisa */}
+            {/* Sala de Estudos — topo da sidebar */}
             <button
-              onClick={() => setActiveTab("pesquisa")}
-              className={navItem(activeTab === "pesquisa", "purple")}
-            >
-              <AcademicCapIcon className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Pesquisa
-                </span>
-              )}
-            </button>
-
-            {/* Sala de Estudos */}
-            <button
+              data-tour="estudos"
               onClick={() => setActiveTab("sala-de-estudos")}
               className={navItem(activeTab === "sala-de-estudos", "blue")}
             >
@@ -1865,33 +1965,19 @@ export default function HomeworkPage({
               )}
             </button>
 
-            {/* Pesquisas */}
+            {/* Sala de Pesquisa (antiga "Pesquisa") */}
             <button
-              onClick={() => setActiveTab("pesquisas")}
-              className={navItem(activeTab === "pesquisas", "emerald")}
+              data-tour="pesquisa"
+              onClick={() => setActiveTab("pesquisa")}
+              className={navItem(activeTab === "pesquisa", "purple")}
             >
-              <BeakerIcon className="w-5 h-5 shrink-0" />
+              <AcademicCapIcon className="w-5 h-5 shrink-0" />
               {isSidebarOpen && (
                 <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Pesquisas
+                  Sala de Pesquisa
                 </span>
               )}
             </button>
-
-            {/* Lounge */}
-            <button
-              onClick={() => setActiveTab("lounge")}
-              className={navItem(activeTab === "lounge", "violet")}
-            >
-              <Coffee className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Lounge
-                </span>
-              )}
-            </button>
-
-            <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
 
             {/* Projetos — Zaeon Code (IDE agêntica; auto-protegida por plano/curso) */}
             <button
@@ -1906,10 +1992,26 @@ export default function HomeworkPage({
               )}
             </button>
 
+            {/* Lounge */}
+            <button
+              data-tour="lounge"
+              onClick={() => setActiveTab("lounge")}
+              className={navItem(activeTab === "lounge", "violet")}
+            >
+              <Coffee className="w-5 h-5 shrink-0" />
+              {isSidebarOpen && (
+                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+                  Lounge
+                </span>
+              )}
+            </button>
+
+            <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
+
             {/* Perfil */}
             <button
               data-tour="profile-tab"
-              onClick={() => handleTabChange("profile")}
+              onClick={() => setActiveTab("profile")}
               className={navItem(activeTab === "profile", "violet")}
             >
               <UserCircleIcon className="w-5 h-5 shrink-0" />
@@ -1921,8 +2023,8 @@ export default function HomeworkPage({
             </button>
           </div>
 
-          {/* EXTRAS — fixos no rodapé da sidebar: alternar direção do layout + modo foco */}
-          <div className="mt-auto px-2.5 pt-3 flex flex-col gap-3">
+          {/* EXTRAS — layout + foco; pb-16 deixa o cantinho inferior livre pro FAB da Zaeon encaixar */}
+          <div className="mt-auto px-2.5 pt-3 pb-16 flex flex-col gap-3">
             <div className="h-[1px] bg-slate-300 dark:bg-white/10" />
             <button
               data-tour="layout-toggle"
@@ -1955,11 +2057,11 @@ export default function HomeworkPage({
       )}
 
       <main
-        className={`flex-1 flex flex-col ${!isEmbedded ? "pl-[80px]" : ""} h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-6" : "p-6"} gap-6`}
+        className={`flex-1 flex flex-col ${!isEmbedded ? (isChatLeft ? "pr-[80px]" : "pl-[80px]") : ""} h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : "p-6"} gap-6`}
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
-        {activeTab !== "sala-de-estudos" && activeTab !== "pesquisa" && (
+        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos", "lounge"].includes(activeTab) && (
           <div className="flex items-end justify-between shrink-0">
             <div>
               <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
@@ -1984,8 +2086,9 @@ export default function HomeworkPage({
                 onChange={(e) => handleFiles(e.target.files)}
               />
               <ResearchShell
+                flipped={isChatLeft}
                 workType={workType}
-                onWorkType={setWorkType}
+                onWorkType={switchWorkType}
                 onRelate={handleRelateFiles}
                 windows={wWindows}
                 activeId={wActiveId}
@@ -1998,6 +2101,8 @@ export default function HomeworkPage({
                 onPlayFile={handlePlaySavedDoc}
                 onAdd={() => fileInputRef.current?.click()}
                 sessions={sessions}
+                onNewWork={handleNewWork}
+                onDeleteWork={handleDeleteWork}
                 onOpenSession={() => {
                   setActiveTab("sala-de-estudos");
                 }}
@@ -2037,16 +2142,6 @@ export default function HomeworkPage({
                           />
                         </div>
                       )}
-                      <AcademicThermometer
-                        docContent={docContent}
-                        title={docTitle}
-                        workType={workType ?? "TCC"}
-                        academicLevel={mapAcademicLevel(
-                          (session?.user as any)?.academicLevel,
-                        )}
-                        reviewMode={reviewMode}
-                        onToggleReview={() => setReviewMode((v) => !v)}
-                      />
                       {!reviewMode && (
                         <textarea
                           ref={textareaRef}
@@ -2286,30 +2381,8 @@ export default function HomeworkPage({
           )}
 
           {activeTab === "profile" && (
-            <div className="w-full h-full flex items-center justify-center p-8">
-              {/* Perfil temporariamente fora do ar — "em construção" até ficar estruturado. */}
-              <div className="w-full max-w-sm text-center flex flex-col items-center gap-4">
-                <span
-                  className="text-cyan-500 dark:text-cyan-300 text-3xl leading-none animate-[spin_16s_linear_infinite] motion-reduce:animate-none"
-                  style={{ filter: "drop-shadow(0 0 6px rgba(34,211,238,0.5))" }}
-                  aria-hidden
-                >
-                  ⟁
-                </span>
-                <div>
-                  <h2 className="text-lg font-black tracking-tight text-slate-800 dark:text-white">Perfil em construção</h2>
-                  <p className="text-[12px] text-slate-500 dark:text-white/45 mt-1 leading-relaxed">
-                    Estamos estruturando essa área. Volta já já — caprichada.
-                  </p>
-                </div>
-                <div className="w-full h-2 rounded-full bg-slate-200/80 dark:bg-white/10 overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: "35%", background: "linear-gradient(90deg,#2563eb,#22d3ee,#7c3aed)" }}
-                  />
-                </div>
-                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-white/30">em construção · 35%</span>
-              </div>
+            <div className="w-full h-full overflow-hidden">
+              <EditableProfile />
             </div>
           )}
         </div>
@@ -2785,7 +2858,8 @@ export default function HomeworkPage({
 
       {/* Interactive onboarding tour for first-time users */}
       {showTour && <ResearchRoomTour onComplete={() => setShowTour(false)} />}
-      <MiniTourToast tab={miniTourTab} onDismiss={() => setMiniTourTab(null)} />
+      {/* Tour guiado da Zaeon (golden path) */}
+      <OnboardingGuide />
     </div>
   );
 }

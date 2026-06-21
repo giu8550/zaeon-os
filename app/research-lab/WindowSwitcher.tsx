@@ -65,7 +65,7 @@ export default function WindowSwitcher({
 
       {/* ── SELETOR DE TIPO (lado direito): três botões fixos, sempre visíveis ── */}
       {onWorkType && (
-        <div className="ml-auto flex items-center gap-1 shrink-0 pl-2">
+        <div data-tour="tipo" className="ml-auto flex items-center gap-1 shrink-0 pl-2">
           <span className="text-[8px] font-black uppercase tracking-[0.16em] text-white/30 mr-0.5 hidden sm:inline">Tipo</span>
           {WORK_TYPES.map((type) => {
             const active = workType === type;
@@ -79,10 +79,10 @@ export default function WindowSwitcher({
                 style={
                   active
                     ? {
-                        color: "#06121a",
-                        background: "linear-gradient(135deg, #22d3ee, #0ea5e9)",
-                        border: "1px solid rgba(34,211,238,0.55)",
-                        boxShadow: "0 6px 16px -8px rgba(34,211,238,0.8)",
+                        color: "#fff",
+                        background: "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06))",
+                        border: "1px solid rgba(255,255,255,0.28)",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.45), 0 8px 20px -8px rgba(139,92,246,0.85)",
                       }
                     : { color: "#9a9ab8", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }
                 }

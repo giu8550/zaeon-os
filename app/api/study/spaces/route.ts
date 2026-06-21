@@ -22,10 +22,11 @@ async function uid(): Promise<string | null> {
 export async function GET() {
   const userId = await uid();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  let spaces = await prisma.studySpace.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
-  if (spaces.length === 0) {
+  // Inclui os espaços COMPARTILHADOS comigo (Lounge) além dos meus.
+  let spaces = await prisma.studySpace.findMany({ where: { OR: [{ userId }, { members: { has: userId } }] }, orderBy: { createdAt: "asc" } });
+  if (!spaces.some((s) => s.userId === userId)) {
     const s = await prisma.studySpace.create({ data: { userId, title: "Meus Estudos" } });
-    spaces = [s];
+    spaces = [s, ...spaces];
   }
   return NextResponse.json(spaces);
 }
@@ -44,7 +45,8 @@ export async function PATCH(req: Request) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json().catch(() => ({} as any));
   if (!body.id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
-  const owned = await prisma.studySpace.findFirst({ where: { id: String(body.id), userId }, select: { id: true } });
+  // Renomear: dono OU membro (co-autor do Lounge).
+  const owned = await prisma.studySpace.findFirst({ where: { id: String(body.id), OR: [{ userId }, { members: { has: userId } }] }, select: { id: true } });
   if (!owned) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   const s = await prisma.studySpace.update({ where: { id: owned.id }, data: { title: String(body.title || "").slice(0, 80) || "Meus Estudos" } });
   return NextResponse.json(s);

@@ -73,7 +73,7 @@ export default function AgentSwarmLoader({ phases, status, compact = false, elap
         <p className="text-[11px] text-slate-400 dark:text-white/40 truncate font-mono">
           {n ? (
             <>
-              <span className="text-cyan-500 dark:text-cyan-400/80">{n.icon}</span> {n.text}
+              <span className="inline-block align-middle mr-1 w-2 h-2 rounded-full border-[1.5px] border-cyan-500/80 dark:border-cyan-400/80 border-t-transparent animate-spin motion-reduce:animate-none" /> {n.text}
             </>
           ) : (
             "liberando agentes…"
@@ -84,12 +84,16 @@ export default function AgentSwarmLoader({ phases, status, compact = false, elap
     );
   }
 
+  const done = pct >= 100 || status === "done";
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2.5">
-        <span className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400/70 shrink-0 hidden sm:inline">
-          ⟁ liberando agentes na rede
+        {/* ⟁ sonar: pisca em anéis enquanto pesquisa; para de pulsar (ponta pra cima) em 100% */}
+        <span className="relative inline-flex items-center justify-center w-4 h-4 shrink-0">
+          {!done && <span className="absolute inset-0 rounded-full bg-cyan-400/30 animate-ping motion-reduce:animate-none" />}
+          <span className="relative text-cyan-600 dark:text-cyan-400 text-[12px] leading-none">⟁</span>
         </span>
+        <span className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400/70 shrink-0 hidden sm:inline">liberando agentes na rede</span>
         {Bar}
         <span className="text-[10px] font-mono text-slate-400 dark:text-white/40 tabular-nums shrink-0">{pct}%</span>
       </div>
@@ -100,9 +104,16 @@ export default function AgentSwarmLoader({ phases, status, compact = false, elap
       >
         {recent.map((p, i) => {
           const n = agentNarrative(p);
+          // o agente da última linha está TRABALHANDO (círculo girando); os anteriores concluíram (bolinha cheia)
+          const active = i === recent.length - 1 && status === "running";
           return (
             <p key={phases.length - recent.length + i} className="text-[10px] sm:text-[11px] text-slate-500 dark:text-white/55 truncate">
-              <span className="text-cyan-600 dark:text-cyan-400/80">{n.icon}</span> {n.text}
+              {active ? (
+                <span className="inline-block align-middle mr-1 w-2.5 h-2.5 rounded-full border-[1.5px] border-cyan-500/80 dark:border-cyan-400/80 border-t-transparent animate-spin motion-reduce:animate-none" />
+              ) : (
+                <span className="inline-block align-middle mr-1 w-1.5 h-1.5 rounded-full bg-cyan-500/70 dark:bg-cyan-400/70" />
+              )}
+              {n.text}
             </p>
           );
         })}

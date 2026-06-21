@@ -60,7 +60,11 @@ export async function GET(req: Request) {
     }
     break;
   }
-  if (!upstream || !upstream.ok || !/pdf/i.test(upstream.headers.get("content-type") ?? "")) {
+  // Muitos hosts servem PDF como octet-stream/binary (ou sem content-type) — antes
+  // isso era rejeitado e o PDF "não pegava". Agora aceitamos esses casos e os .pdf na URL.
+  const ct = (upstream?.headers.get("content-type") ?? "").toLowerCase();
+  const looksPdf = /pdf|octet-stream|binary|force-download/.test(ct) || /\.pdf(\?|#|$)/i.test(current);
+  if (!upstream || !upstream.ok || !looksPdf) {
     return new Response("Upstream error", { status: 502 });
   }
   return new Response(upstream.body, {

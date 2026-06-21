@@ -44,6 +44,7 @@ export async function GET(req: Request) {
             deepThinkEnabled: !!user.deepThinkEnabled,
             advancedVoiceEnabled: !!user.advancedVoiceEnabled,
             projectsEnabled: !!user.projectsEnabled,
+            tourDone: !!user.tourDone, // fez o onboarding guiado da Zaeon?
             institution: user.institution || "",
             verificationDoc: user.verificationDoc || null,
             inviteCodeUsed: user.inviteCodeUsed || null,

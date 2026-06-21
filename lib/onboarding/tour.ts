@@ -1,0 +1,122 @@
+"use client";
+
+/**
+ * Tour guiado da Zaeon (onboarding). Roteiro DECLARATIVO: a Zaeon "puxa assunto" no
+ * chat widget (autonomia), enquanto o overlay destaca o elemento da vez. Golden path:
+ * Estudos → pesquisar → resultado → gerar pesquisa → Sala de Pesquisa → Lounge.
+ *
+ * Estado em memória + localStorage; ao concluir/pular, marca no servidor
+ * (/api/onboard/tour → User.tourDone, visível no dashboard) — uma vez por usuário.
+ */
+export type TourStep = {
+  id: string;
+  say: string;               // fala da Zaeon (vai pro chat widget + VOZ)
+  hint: string;              // textinho curto (com emoji) no card, descrevendo a função
+  target?: string;           // seletor do elemento a destacar (coachmark)
+  clickTarget?: boolean;     // avança ao CLICAR no próprio elemento destacado (sem botão)
+  advanceEvent?: string;     // avança quando este window event dispara (ação concluída)
+  prefill?: string;          // pré-preenche a barra de pesquisa ao entrar no passo
+  tab?: string;              // garante a aba certa (dispara zaeon:set-tab)
+  info?: boolean;            // passo só explicativo → mostra um "Ok" leve pra seguir
+  cta?: string;              // rótulo do botão (só quando info)
+};
+
+export const TOUR_STEPS: TourStep[] = [
+  // — Abertura (voz): a Zaeon "liga" e se apresenta
+  { id: "hello", info: true, hint: "👋 Oi! Eu sou a Zaeon", cta: "Bora! 🚀",
+    say: "Oi! 🎙️ É a Zaeon falando — que honra te receber. Vou te dar uma volta rapidinha, conversando, e a gente desbloqueia uma fase nova nos seus estudos. Pode me ouvir aqui no cantinho a qualquer hora. Bora?" },
+
+  // — Sala de Estudos (= onde a pesquisa de estudo acontece) — avança ao CLICAR no ícone
+  { id: "estudos", hint: "📚 Comece pela sua Sala de Estudos", target: '[data-tour="estudos"]', clickTarget: true, tab: "sala-de-estudos",
+    say: "Clica em **Estudos** aqui na lateral 👇 — é onde eu pesquiso e escrevo estudos pra você. (No 'Meus Estudos' fica o caderno de blocos e a biblioteca, mas isso é pra depois.)" },
+
+  // — Pesquisar um estudo (tema sugerido) — avança quando a pesquisa COMEÇA
+  { id: "pesquisar", hint: "🔎 Pesquise um tema — deixei um pronto", target: '[data-academic-input="true"]', advanceEvent: "zaeon:research:start", prefill: "história do Brasil",
+    say: "Pra começar fácil, já deixei um tema na barra: **história do Brasil**. É só apertar **Enter** que eu pesquiso e monto o estudo. 🎙️" },
+
+  // — Enquanto pesquisa: voz puxando papo — avança quando o estudo FICA PRONTO
+  { id: "esperando", hint: "🎧 Eu te faço companhia por voz", advanceEvent: "zaeon:research:done",
+    say: "Enquanto eu trabalho, te faço companhia 😄 — e sim, eu converso por voz de verdade! Me conta: você curte mais história, exatas, ou tá começando agora?" },
+
+  // — Resultado: destaca as abas; explica salvar refs/trabalhos
+  { id: "resultado", info: true, hint: "📑 Referências · Insights · Base", target: '[data-tour="result-tabs"]', cta: "Salvei 👍",
+    say: "Pronto! 🎉 Olha as abas **Referências**, **Insights** e **Base**. Salva pelo menos **1 referência** e uns **2 trabalhos** — vão te servir na pesquisa." },
+
+  // — Gerar pesquisa — avança quando o esboço é criado (Iniciar pesquisa → newdoc)
+  { id: "gerar", hint: "✨ Gere a pesquisa a partir do estudo", target: '[data-tour="gerar"]', advanceEvent: "zaeon:research:newdoc",
+    say: "Agora clica em **Gerar pesquisa** e depois em **Iniciar pesquisa** — eu transformo seu estudo num esboço real, com introdução, metodologia e a lacuna. ✍️" },
+
+  // — Sala de Pesquisa: ferramentas (com destaque no elemento, igual ao foco da sidebar)
+  { id: "play", info: true, hint: "▶️ Ouça/leia um documento", target: '[data-tour="docs-panel"]', cta: "Entendi",
+    say: "Chegamos na **Sala de Pesquisa** 💜. Neste painel ficam **seus documentos** — dá um **play** num deles pra ouvir ou ler com calma." },
+  { id: "comparar", info: true, hint: "🔗 Compare dois documentos", target: '[data-tour="docs-panel"]', cta: "Boa",
+    say: "Quer cruzar ideias? **Arraste um documento sobre o outro** que eu **comparo** os dois e te entrego um resumo da relação." },
+  { id: "citacoes", info: true, hint: "🔖 Citações ABNT · 🗑️ lixeira", target: '[data-tour="dock"]', cta: "Perfeito",
+    say: "Aqui embaixo: **Citações** (cada trecho salvo vira ABNT, clica pra inserir no texto), **Minhas coisas** (pastas/biblioteca) e a **Lixeira** — o que você apaga dá pra restaurar." },
+  { id: "tipo", info: true, hint: "🎓 TCC · Artigo · Relatório", target: '[data-tour="tipo"]', cta: "Entendi",
+    say: "Aqui você troca entre **TCC, Artigo e Relatório** — cada um é uma sessão própria. Te ensino salvar/publicar em ABNT quando você chegar lá. 😉" },
+
+  // — Lounge: missão final — avança ao CLICAR
+  { id: "lounge", hint: "🤝 Crie em grupo no Lounge", target: '[data-tour="lounge"]', clickTarget: true, tab: "lounge",
+    say: "Última missão ✦: vai no **Lounge** e crie um estudo ou pesquisa **em conjunto** pra compartilhar com um amigo. Aprender junto é mais leve. É só me chamar quando precisar. Boa jornada! 🚀" },
+];
+
+type TourState = { active: boolean; index: number };
+let state: TourState = { active: false, index: 0 };
+const subs = new Set<(s: TourState) => void>();
+const emit = () => subs.forEach((f) => f(state));
+
+export function getTour(): TourState { return state; }
+export function subscribeTour(cb: (s: TourState) => void) { subs.add(cb); cb(state); return () => { subs.delete(cb); }; }
+
+function persist() { try { localStorage.setItem("zaeon.tour", JSON.stringify(state)); } catch { /* */ } }
+
+function sayCurrent() {
+  const s = TOUR_STEPS[state.index];
+  if (!s) return;
+  if (s.tab) { try { window.dispatchEvent(new CustomEvent("zaeon:set-tab", { detail: s.tab })); } catch { /* */ } }
+  if (s.prefill) { try { window.dispatchEvent(new CustomEvent("zaeon:tour:prefill", { detail: s.prefill })); } catch { /* */ } }
+  try { window.dispatchEvent(new CustomEvent("zaeon:onboard:say", { detail: s.say })); } catch { /* */ }
+}
+
+// ── MODO REPLAY (pra mim, testando): o tour reaparece a cada visita até eu dar o "Ok".
+//    Concluir/pular NÃO marca como feito enquanto o replay estiver ligado.
+export function isTourReplay(): boolean {
+  try { return localStorage.getItem("zaeon.tourReplay") === "1"; } catch { return false; }
+}
+export function setTourReplay(on: boolean) {
+  try {
+    if (on) { localStorage.setItem("zaeon.tourReplay", "1"); localStorage.removeItem("zaeon.tourDone"); }
+    else localStorage.removeItem("zaeon.tourReplay");
+  } catch { /* */ }
+}
+/** "Dei o Ok" — para o replay, marca como feito e encerra. */
+export function stopTourReplay() {
+  setTourReplay(false);
+  finishTour();
+}
+
+export function startTour(opts?: { replay?: boolean }) {
+  if (typeof window === "undefined") return;
+  if (opts?.replay) setTourReplay(true);
+  state = { active: true, index: 0 };
+  persist(); emit();
+  setTimeout(sayCurrent, 400); // deixa o chat widget montar
+}
+
+export function nextTour() {
+  if (state.index + 1 >= TOUR_STEPS.length) { finishTour(); return; }
+  state = { active: true, index: state.index + 1 };
+  persist(); emit(); sayCurrent();
+}
+
+export function skipTour() { finishTour(); }
+
+export function finishTour() {
+  state = { active: false, index: 0 };
+  persist(); emit();
+  // Em replay, NÃO marca como feito → reaparece na próxima visita (até dar o Ok).
+  if (isTourReplay()) return;
+  try { localStorage.setItem("zaeon.tourDone", "1"); } catch { /* */ }
+  try { fetch("/api/onboard/tour", { method: "POST" }); } catch { /* */ }
+}

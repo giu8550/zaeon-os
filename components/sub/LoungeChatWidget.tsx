@@ -80,10 +80,11 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     const isTeacher = (session?.user as any)?.role === "teacher" || (session?.user as any)?.role === "professor";
 
     const [isOpen, setIsOpen] = useState(defaultOpen);
-    const [widgetPosition, setWidgetPosition] = useState<'right' | 'left'>('right'); // 🔥 Estado de Posição L/R
+    const [widgetPosition, setWidgetPosition] = useState<'right' | 'left'>('left'); // default: encaixado no canto da sidebar (esquerda). Movível.
 
     const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'teachers'>('friends');
-    const [activeChat, setActiveChat] = useState<any | null>(null);
+    // Abre JÁ na conversa com a Zaeon (sem passo extra de clicar no perfil dela).
+    const [activeChat, setActiveChat] = useState<any | null>(ZAEON_AGENT);
     const [messageInput, setMessageInput] = useState("");
 
     const [realUserId, setRealUserId] = useState<string>(fallbackId);
@@ -125,6 +126,25 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     const [voiceMode, setVoiceModeState] = useVoiceMode(); // passivo | ativo
     const tts = useTTS();
     const mission = useMission(); // o que a Zaeon está executando agora (cockpit reativo)
+
+    // ONBOARDING: a Zaeon "puxa assunto" — cada passo do tour manda uma fala que
+    // aparece aqui no chat (abre o widget) e é falada por voz (autonomia de conversa).
+    useEffect(() => {
+        const onSay = (e: any) => {
+            const text = e?.detail;
+            if (typeof text !== "string" || !text.trim()) return;
+            setActiveChat(ZAEON_AGENT);
+            setIsOpen(true);
+            // Sensação de "ligação": entra no modo voz ativo → o overlay de chamada
+            // aparece enquanto a Zaeon fala (ela puxa assunto com firmeza).
+            try { setVoiceModeState("active"); } catch { /* ok */ }
+            setZaeonMessages((prev) => [...prev, { id: `ob-${Date.now()}`, senderId: "zaeon-agent", text }]);
+            try { tts.speak(text); } catch { /* voz é bônus */ }
+        };
+        window.addEventListener("zaeon:onboard:say", onSay);
+        return () => window.removeEventListener("zaeon:onboard:say", onSay);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Viewport p/ tornar o widget full-screen no mobile (alvo 360–430px).
     const [vw, setVw] = useState(0);
@@ -318,7 +338,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
         if (!isOpen || !activeChat || activeChat.isAgent) return;
         const fetchMessages = async () => {
             try {
-                const res = await fetch(`/api/chat/messages?targetId=${activeChat.id}&t=${Date.now()}`, { cache: 'no-store' });
+                const res = await fetch(`/api/ai/chat/messages?targetId=${activeChat.id}&t=${Date.now()}`, { cache: 'no-store' });
                 if (res.ok) {
                     const data = await res.json();
                     setChatHistory(data);
@@ -452,7 +472,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
             // ---> FLUXO HUMANO (Pusher) <---
             setChatHistory(prev => [...prev, optimisticMsg]);
             try {
-                await fetch('/api/aichat/messages', {
+                await fetch('/api/ai/chat/messages', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetId: activeChat.id, text })
                 });
             } catch (error) { console.error(error); }
@@ -527,12 +547,16 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
             layout
             initial={false}
             animate={{
-                height: isOpen ? openH : 60,
-                width: isOpen ? openW : 60,
+                height: isOpen ? openH : 52,
+                width: isOpen ? openW : 52,
             }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`fixed z-[999] flex flex-col overflow-hidden ${glassContainer} ${isOpen ? 'bottom-0 rounded-t-3xl' : 'bottom-5 rounded-full shadow-2xl'}
-            ${widgetPosition === 'right' ? 'right-4 sm:right-8' : 'left-4 sm:left-8'}`}
+            className={`fixed z-[999] flex flex-col overflow-hidden ${glassContainer} ${
+                isOpen
+                    ? `bottom-0 rounded-t-3xl ${widgetPosition === 'right' ? 'right-4 sm:right-8' : 'left-4 sm:left-8'}`
+                    // FECHADO: à esquerda encaixa no cantinho inferior da sidebar; à direita, canto normal.
+                    : `rounded-full shadow-2xl ${widgetPosition === 'right' ? 'bottom-5 right-4 sm:right-8' : 'bottom-[46px] left-[18px]'}`
+            }`}
             style={{ willChange: "width, height" }}
         >
             <div
@@ -557,22 +581,30 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                     <span className="absolute inset-0 -m-1.5 rounded-full animate-ping motion-reduce:animate-none"
                                         style={{ boxShadow: `0 0 0 2px ${stateGlow[agentState]}` }} />
                                 )}
-                                <ZaeonTriangle size={34} />
+                                <ZaeonTriangle size={28} spinning={false} />
                             </>
                         )}
                     </div>
                 ) : (
                   <>
                     <div className="flex items-center gap-3 relative">
-                        <div className="relative flex items-center justify-center w-6 h-6 rounded-full bg-cyan-500/10">
-                            <ZaeonTriangle size={16} />
-                        </div>
                         <span className="text-xs font-black uppercase tracking-widest text-slate-800 dark:text-slate-200">
-                            {activeChat ? (activeChat.isAgent ? "" : activeChat.name) : "Rede Neural"}
+                            {activeChat && !activeChat.isAgent ? activeChat.name : "Rede Neural"}
                         </span>
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {/* Ligar — só pro chat ABERTO no momento (hoje a chamada por voz é com a Zaeon) */}
+                        {activeChat?.isAgent && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); startCall(); }}
+                                title={callOn ? "Encerrar conversa por voz" : "Ligar pra Zaeon (conversa por voz)"}
+                                aria-pressed={callOn}
+                                className={`p-1 transition-colors ${callOn ? "text-rose-500" : "text-slate-400 hover:text-cyan-500"}`}
+                            >
+                                {callOn ? <PhoneOff className="w-4 h-4" /> : <PhoneCall className="w-4 h-4" />}
+                            </button>
+                        )}
                         <button
                             onClick={(e) => { e.stopPropagation(); setWidgetPosition(p => p === 'right' ? 'left' : 'right'); }}
                             className="text-slate-400 hover:text-cyan-500 transition-colors p-1"
@@ -606,6 +638,24 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                 </button>
             )}
 
+            {/* 3 CHATS: Colegas | Zaeon (△ pra cima) | Professores/Alunos — separados do conteúdo */}
+            {isOpen && (
+                <div className="flex items-stretch gap-1 p-2 border-b border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-black/20 shrink-0">
+                    <button onClick={() => { setActiveChat(null); setActiveTab('friends'); }}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!activeChat && activeTab === 'friends' ? 'bg-white dark:bg-[#1e293b] text-cyan-600 dark:text-cyan-400 shadow-sm border border-slate-200 dark:border-transparent' : 'text-slate-500 hover:bg-slate-200/60 dark:hover:bg-white/5'}`}>
+                        <UsersIcon className="w-3.5 h-3.5" /> Colegas
+                    </button>
+                    <button onClick={() => setActiveChat(ZAEON_AGENT)} title="Zaeon"
+                        className={`flex-1 flex items-center justify-center py-1.5 rounded-xl transition-all ${activeChat?.isAgent ? 'bg-cyan-500/15 shadow-sm border border-cyan-400/30' : 'hover:bg-slate-200/60 dark:hover:bg-white/5'}`}>
+                        <ZaeonTriangle size={18} spinning={false} />
+                    </button>
+                    <button onClick={() => { setActiveChat(null); setActiveTab('teachers'); }}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!activeChat && activeTab === 'teachers' ? 'bg-white dark:bg-[#1e293b] text-cyan-600 dark:text-cyan-400 shadow-sm border border-slate-200 dark:border-transparent' : 'text-slate-500 hover:bg-slate-200/60 dark:hover:bg-white/5'}`}>
+                        <AcademicCapIcon className="w-3.5 h-3.5" /> {isTeacher ? 'Alunos' : 'Professores'}
+                    </button>
+                </div>
+            )}
+
             <AnimatePresence mode="wait">
                 {isOpen && (
                     <motion.div
@@ -619,43 +669,25 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                         {activeChat ? (
                             /* ===================== CHAT VIEW (HUMANO & IA) ===================== */
                             <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-black/10">
+                                {/* Cabeçalho só p/ chat humano — na Zaeon não repete triângulo (a barra de 3 já o mostra) */}
+                                {!activeChat.isAgent && (
                                 <div className="flex items-center gap-3 p-3 border-b border-slate-200/50 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-md">
                                     <button onClick={() => setActiveChat(null)} className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
                                         <ChevronLeftIcon className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                                     </button>
-                                    <div className={`relative w-8 h-8 rounded-full overflow-hidden border bg-slate-200 dark:bg-black shrink-0 flex items-center justify-center ${activeChat.isAgent ? 'border-cyan-400 bg-cyan-100 dark:bg-cyan-900/30' : 'border-slate-300 dark:border-white/20'}`}>
-                                        {activeChat.isAgent ? (
-                                            <ZaeonTriangle size={22} />
-                                        ) : activeChat.image ? (
+                                    <div className="relative w-8 h-8 rounded-full overflow-hidden border bg-slate-200 dark:bg-black shrink-0 flex items-center justify-center border-slate-300 dark:border-white/20">
+                                        {activeChat.image ? (
                                             <Image src={activeChat.image} alt={activeChat.name} fill sizes="32px" className="object-cover" />
                                         ) : (
                                             <UserIcon className="w-full h-full p-1.5 text-slate-400" />
                                         )}
                                     </div>
                                     <div className="flex flex-col truncate">
-                                        {!activeChat.isAgent && <span className="text-[11px] font-bold text-slate-800 dark:text-white truncate">{activeChat.name}</span>}
-                                        <span className={`text-[9px] font-medium ${activeChat.isAgent ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'}`}>
-                                            {activeChat.isAgent ? 'Sempre por perto' : 'Chat Seguro'}
-                                        </span>
+                                        <span className="text-[11px] font-bold text-slate-800 dark:text-white truncate">{activeChat.name}</span>
+                                        <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400">Chat Seguro</span>
                                     </div>
-                                    {/* módulo de voz: anima quando a Zaeon está falando */}
-                                    {activeChat.isAgent && (
-                                        <div className="ml-auto flex items-center gap-1.5">
-                                            <VoiceWaveIndicator size={16} />
-                                            <button
-                                                onClick={startCall}
-                                                title={callOn ? "Encerrar conversa por voz" : "Ligar pra Zaeon (conversa por voz)"}
-                                                aria-pressed={callOn}
-                                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${callOn
-                                                    ? "bg-rose-500 text-white shadow-[0_0_10px_rgba(244,63,94,0.4)]"
-                                                    : "text-white shadow-md"}`}
-                                                style={!callOn ? { background: "linear-gradient(135deg,#0ea5e9,#22d3ee)" } : undefined}
-                                            >
-                                                {callOn ? <PhoneOff size={14} /> : <PhoneCall size={14} />}
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
+                                )}
 
                                 <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
                                     {displayMessages.length === 0 && !isZaeonTyping && (
@@ -807,41 +839,15 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                             </div>
 
                         ) : (
-                            /* ===================== MENU VIEW ===================== */
+                            /* ===================== LISTAS (Colegas / Professores·Alunos) ===================== */
                             <div className="flex-1 flex flex-col h-full bg-white/40 dark:bg-transparent">
-                                <div className="flex p-2 bg-slate-100/50 dark:bg-black/20 gap-2 border-b border-slate-200 dark:border-white/5">
-                                    <button onClick={() => setActiveTab('friends')} className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'friends' ? 'bg-white dark:bg-[#1e293b] text-cyan-600 dark:text-cyan-400 shadow-md border border-slate-200 dark:border-transparent' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5'}`}>
-                                        Colegas
-                                    </button>
-                                    {!isTeacher && (
-                                        <button onClick={() => setActiveTab('teachers')} className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'teachers' ? 'bg-white dark:bg-[#1e293b] text-cyan-600 dark:text-cyan-400 shadow-md border border-slate-200 dark:border-transparent' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5'}`}>
-                                            Professores
-                                        </button>
-                                    )}
-                                </div>
-
                                 <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
 
-                                    {/* ====== ABA COLEGAS ====== */}
+                                    {/* ====== COLEGAS ====== */}
                                     {activeTab === 'friends' && (
-                                        <div className="flex flex-col gap-1">
-                                            {/* 🔥 O SEGREDO: INJETANDO A ZAEON FIXA NO TOPO DOS AMIGOS */}
-                                            <div
-                                                onClick={() => setActiveChat(ZAEON_AGENT)}
-                                                className="flex items-center gap-3 p-2.5 rounded-2xl cursor-pointer transition-colors group border border-cyan-400/30 dark:border-cyan-500/30 bg-gradient-to-r from-cyan-50 to-white dark:from-cyan-950/20 dark:to-transparent mb-1 hover:shadow-md"
-                                            >
-                                                <div className="relative w-10 h-10 rounded-full border border-cyan-300 dark:border-cyan-400/50 bg-cyan-100 dark:bg-cyan-900/50 flex items-center justify-center shrink-0 shadow-inner">
-                                                    <ZaeonTriangle size={26} />
-                                                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full animate-pulse"></span>
-                                                </div>
-                                                <div className="flex flex-col flex-1 overflow-hidden">
-                                                    <span className="text-[11px] font-black text-cyan-700 dark:text-cyan-300 truncate">Zaeon OS</span>
-                                                    <span className="text-[9px] text-cyan-600/70 dark:text-cyan-400/70 truncate">Sua parceira na Zaeon</span>
-                                                </div>
-                                            </div>
-
-                                            {friends.length > 0 ? (
-                                                friends.map(friend => (
+                                        friends.length > 0 ? (
+                                            <div className="flex flex-col gap-1">
+                                                {friends.map(friend => (
                                                     <div key={friend.id} onClick={() => setActiveChat(friend)} className="flex items-center gap-3 p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer transition-colors group">
                                                         <div className="relative w-10 h-10 rounded-full border border-slate-300 dark:border-white/10 shadow-sm overflow-hidden bg-slate-200 dark:bg-black shrink-0">
                                                             {friend.image ? <Image src={friend.image} alt={friend.name} fill sizes="40px" className="object-cover" /> : <UserIcon className="w-full h-full p-2 text-slate-400" />}
@@ -851,9 +857,38 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                                             <span className="text-[9px] text-slate-400 dark:text-slate-500 truncate">Conectado na Rede</span>
                                                         </div>
                                                     </div>
-                                                ))
-                                            ) : null}
-                                        </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full opacity-50 gap-2 py-10">
+                                                <UsersIcon className="w-7 h-7 text-slate-400" />
+                                                <span className="text-[10px] text-slate-500 font-mono italic">Sem colegas ainda.</span>
+                                            </div>
+                                        )
+                                    )}
+
+                                    {/* ====== PROFESSORES (aluno) / ALUNOS (professor) ====== */}
+                                    {activeTab === 'teachers' && (
+                                        (isTeacher ? students : teachers).length > 0 ? (
+                                            <div className="flex flex-col gap-1">
+                                                {(isTeacher ? students : teachers).map((person: any) => (
+                                                    <div key={person.id} onClick={() => setActiveChat(person)} className="flex items-center gap-3 p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer transition-colors group">
+                                                        <div className="relative w-10 h-10 rounded-full border border-slate-300 dark:border-white/10 shadow-sm overflow-hidden bg-slate-200 dark:bg-black shrink-0">
+                                                            {person.image ? <Image src={person.image} alt={person.name} fill sizes="40px" className="object-cover" /> : <UserIcon className="w-full h-full p-2 text-slate-400" />}
+                                                        </div>
+                                                        <div className="flex flex-col flex-1 overflow-hidden">
+                                                            <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors truncate">{person.name}</span>
+                                                            <span className="text-[9px] text-slate-400 dark:text-slate-500 truncate">{isTeacher ? 'Seu aluno' : 'Seu professor'}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full opacity-50 gap-2 py-10">
+                                                <AcademicCapIcon className="w-7 h-7 text-slate-400" />
+                                                <span className="text-[10px] text-slate-500 font-mono italic">{isTeacher ? 'Sem alunos ainda.' : 'Sem professores ainda.'}</span>
+                                            </div>
+                                        )
                                     )}
                                 </div>
                             </div>

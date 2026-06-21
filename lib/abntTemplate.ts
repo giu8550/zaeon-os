@@ -62,9 +62,101 @@ export const ABNT_TEMPLATE = `# INTRODUÇÃO
 
 `;
 
-/** Verifica se o conteúdo é o template intacto ou está vazio */
+// ─── TEMPLATES POR TIPO DE TRABALHO ──────────────────────────────────────────
+// Cada formato é uma SESSÃO própria, com seu próprio esqueleto de seções. O
+// framework (as divisões do trabalho) mora AQUI — o esboço gerado só preenche o
+// miolo, sem repetir as regras/seções (essas vêm prontas do template).
+export type WorkType = 'Artigo' | 'Relatório' | 'TCC';
+
+interface SectionDef { title: string; subs?: string[]; }
+
+export const WORK_SECTIONS: Record<WorkType, SectionDef[]> = {
+  TCC: [
+    { title: 'INTRODUÇÃO' },
+    { title: 'REFERENCIAL TEÓRICO', subs: ['Conceitos Fundamentais', 'Estado da Arte'] },
+    { title: 'METODOLOGIA' },
+    { title: 'RESULTADOS E DISCUSSÃO' },
+    { title: 'CONCLUSÃO' },
+    { title: 'REFERÊNCIAS' },
+  ],
+  Artigo: [
+    { title: 'RESUMO' },
+    { title: 'INTRODUÇÃO' },
+    { title: 'METODOLOGIA' },
+    { title: 'RESULTADOS E DISCUSSÃO' },
+    { title: 'CONSIDERAÇÕES FINAIS' },
+    { title: 'REFERÊNCIAS' },
+  ],
+  'Relatório': [
+    { title: 'INTRODUÇÃO' },
+    { title: 'OBJETIVOS' },
+    { title: 'DESENVOLVIMENTO' },
+    { title: 'RESULTADOS' },
+    { title: 'CONCLUSÃO' },
+    { title: 'REFERÊNCIAS' },
+  ],
+};
+
+function renderSections(secs: SectionDef[], byTitle?: Record<string, string>): string {
+  return secs.map((s) => {
+    const body = byTitle?.[s.title]?.trim();
+    let block = `# ${s.title}\n\n${body ? body + '\n\n' : '\n\n\n'}`;
+    if (s.subs) for (const sub of s.subs) block += `## ${sub}\n\n\n\n`;
+    return block;
+  }).join('\n');
+}
+
+/** Esqueleto vazio do tipo (TCC = ABNT_TEMPLATE clássico). */
+export function templateFor(workType?: WorkType | null): string {
+  if (!workType) return ABNT_TEMPLATE;
+  if (workType === 'TCC') return ABNT_TEMPLATE; // mantém o template TCC original
+  return renderSections(WORK_SECTIONS[workType]);
+}
+
+/** Campos do esboço gerado pelo motor de pesquisa (research-draft). */
+export interface DraftFields {
+  resumo?: string;
+  palavrasChave?: string;
+  introducao?: string;
+  objetivos?: string;
+  justificativa?: string;
+  metodologia?: string;
+  referencias?: string;
+}
+
+/**
+ * Cruza o esboço gerado com o framework do tipo escolhido: preenche o MIOLO das
+ * seções existentes (sem inventar/duplicar seções). Objetivos e Justificativa
+ * caem na Introdução quando o tipo não tem seção própria pra eles.
+ */
+export function buildDocFromDraft(workType: WorkType | null | undefined, f: DraftFields): string {
+  const secs = WORK_SECTIONS[(workType ?? 'TCC') as WorkType] ?? WORK_SECTIONS.TCC;
+  const titles = secs.map((s) => s.title);
+  const has = (t: string) => titles.includes(t);
+  const content: Record<string, string> = {};
+
+  const kw = f.palavrasChave?.trim() ? `\n\nPalavras-chave: ${f.palavrasChave.trim()}` : '';
+  if (has('RESUMO') && f.resumo?.trim()) content['RESUMO'] = f.resumo.trim() + kw;
+
+  const intro: string[] = [];
+  if (f.resumo?.trim() && !has('RESUMO')) intro.push(f.resumo.trim());
+  if (f.introducao?.trim()) intro.push(f.introducao.trim());
+  if (!has('OBJETIVOS') && f.objetivos?.trim()) intro.push('Objetivos: ' + f.objetivos.trim());
+  if (f.justificativa?.trim()) intro.push('Justificativa (lacuna): ' + f.justificativa.trim());
+  if (intro.length && has('INTRODUÇÃO')) content['INTRODUÇÃO'] = intro.join('\n\n');
+
+  if (has('OBJETIVOS') && f.objetivos?.trim()) content['OBJETIVOS'] = f.objetivos.trim();
+  if (has('METODOLOGIA') && f.metodologia?.trim()) content['METODOLOGIA'] = f.metodologia.trim();
+  if (has('REFERÊNCIAS') && f.referencias?.trim()) content['REFERÊNCIAS'] = f.referencias.trim();
+
+  return renderSections(secs, content);
+}
+
+/** Verifica se o conteúdo é vazio ou um dos templates intactos (qualquer tipo). */
 export const isEmptyOrTemplate = (content: string): boolean => {
-  return content.trim() === '' || content.trim() === ABNT_TEMPLATE.trim();
+  const c = content.trim();
+  if (c === '' || c === ABNT_TEMPLATE.trim()) return true;
+  return (['Artigo', 'Relatório', 'TCC'] as WorkType[]).some((w) => templateFor(w).trim() === c);
 };
 
 /** Tipos de seção reconhecidos pelo title */
