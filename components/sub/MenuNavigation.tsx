@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronRightIcon, ChevronDownIcon, ArrowLeftIcon, ArrowRightStartOnRectangleIcon
 } from "@heroicons/react/24/outline";
-import { Bot, Send, ShieldCheck, Loader2, Mic, MicOff, Crown } from "lucide-react";
+import { Bot, Send, ShieldCheck, Loader2, Mic, MicOff, Crown, Trash2 } from "lucide-react";
 import { isSuperAdmin } from "@/lib/auth/roles";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -70,6 +70,7 @@ export default function MenuNavigation() {
   const [inviteAccessed, setInviteAccessed] = useState(false);
 
   // Menu reformado: módulos expansíveis com as últimas interações do usuário.
+  const [deletingAcc, setDeletingAcc] = useState(false);
   const [openModule, setOpenModule] = useState<ModuleKey | null>(null);
   const [recent, setRecent] = useState<{ research: RecentItem[]; studies: RecentItem[] }>({ research: [], studies: [] });
   const [recentProjects, setRecentProjects] = useState<RecentItem[]>([]);
@@ -597,6 +598,27 @@ export default function MenuNavigation() {
                     <span className="text-sm text-slate-900 dark:text-white">{t("menu.logout", "Disconnect")}</span>
                   </div>
                   <ArrowRightStartOnRectangleIcon className="h-4 w-4 opacity-30 text-slate-600 dark:text-white" />
+                </div>
+
+                {/* DELETAR CONTA — purga completa (reset fresh) + logout. Confirmação dupla. */}
+                <div
+                  onClick={async () => {
+                    if (deletingAcc) return;
+                    if (!window.confirm("Apagar sua conta? Isso remove TODOS os seus dados e libera o e-mail pra começar do zero. Não dá pra desfazer.")) return;
+                    setDeletingAcc(true);
+                    try {
+                      const r = await fetch("/api/account", { method: "DELETE" });
+                      if (!r.ok) { setDeletingAcc(false); window.alert("Não consegui apagar a conta agora. Tente de novo."); return; }
+                      await signOut({ callbackUrl: "/" });
+                    } catch { setDeletingAcc(false); window.alert("Erro de conexão."); }
+                  }}
+                  className="group relative overflow-hidden flex items-center justify-between rounded-2xl px-4 min-h-[52px] w-full transition-all duration-300 cursor-pointer font-medium border bg-red-50/60 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/30 dark:hover:bg-red-500/20"
+                >
+                  <div className="flex flex-col flex-1 pl-2">
+                    <span className="text-[9px] opacity-60 uppercase font-bold tracking-tighter">Zona de risco</span>
+                    <span className="text-sm">{deletingAcc ? "Apagando…" : "Deletar minha conta"}</span>
+                  </div>
+                  {deletingAcc ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} className="opacity-70" />}
                 </div>
               </motion.div>
             ) :
