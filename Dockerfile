@@ -9,9 +9,14 @@
 # ───────────────────────── Stage 1: builder ─────────────────────────
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
-# DATABASE_URL placeholder: só p/ o `prisma generate` não reclamar durante o build.
+# Placeholders SÓ de build: prisma generate e o next build (que importa as rotas, e
+# o src/lib/db.ts lança erro se MONGODB_URI estiver vazio). Os valores REAIS entram
+# em runtime via env_file (.env). Estes placeholders nunca conectam em nada.
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    DATABASE_URL="mongodb://placeholder:27017/build"
+    DATABASE_URL="mongodb://placeholder:27017/build" \
+    MONGODB_URI="mongodb://placeholder:27017/build" \
+    NEXTAUTH_SECRET="build-placeholder" \
+    NEXTAUTH_URL="http://localhost:3000"
 
 # openssl/ca-certificates: o Prisma precisa pra gerar/rodar o engine no Debian slim.
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
