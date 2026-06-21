@@ -10,11 +10,22 @@
  * independentemente do curso.
  */
 
-/** Fundadores — sempre super admin (case-insensitive). */
+// Admins extras via ENV (sem mexer no código): defina UMA ou várias contas como
+// super admin. Use NEXT_PUBLIC_SUPER_ADMIN_EMAILS (vale no cliente E no servidor) ou
+// SUPER_ADMIN_EMAILS (só servidor). Ex.: NEXT_PUBLIC_SUPER_ADMIN_EMAILS="voce@gmail.com"
+const ENV_SUPERS: string[] = (
+  process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS || process.env.SUPER_ADMIN_EMAILS || ""
+)
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+/** Fundadores — sempre super admin (case-insensitive). Allowlist do código + ENV. */
 export const SUPER_ADMINS: string[] = [
   "zaeondao@gmail.com",
   "donmartinez@aluno.unilab.edu.br",
   "martinez@zaeon.space",
+  ...ENV_SUPERS,
 ];
 
 /** Valor canônico do papel de super admin no campo `User.role`. */

@@ -1,22 +1,18 @@
 "use client";
 import { useOmegaScholar } from "./OmegaScholarContext";
-import GlitchTerm from "@/components/research/GlitchTerm";
 import AgentSwarmLoader from "@/components/research/AgentSwarmLoader";
 import useTTS from "@/lib/voice/useTTS";
-import { Volume2, Square } from "lucide-react";
+import { Volume2, Square, RefreshCw } from "lucide-react";
 
 export default function ActivityThread() {
-  const { phases, answer, status, query, glitchReplay } = useOmegaScholar();
+  const { phases, answer, status, query, runQuery } = useOmegaScholar();
   const { speak, stop, activeText } = useTTS();
   if (status === "idle") return null;
   const loading = status === "running";
 
   return (
-    <div className="rounded-3xl bg-black/[0.03] dark:bg-black/30 border border-black/5 dark:border-white/10 p-5 sm:p-6 mb-5">
-      {/* termo destacado com glitch latim ↔ chinês (mantém a lupa) */}
-      <div className="mb-4">
-        <GlitchTerm term={query} done={!(loading || glitchReplay)} />
-      </div>
+    <div className="pt-1 pb-2">
+      {/* Dentro do MODAL DA PESQUISA (violeta). Título glitch vive ao lado do ⟁; aqui só andamento + resposta. */}
 
       {/* cena de loading: enxame de agentes liberados na rede */}
       {loading && <AgentSwarmLoader phases={phases} status={status} />}
@@ -39,6 +35,18 @@ export default function ActivityThread() {
           <div className="text-sm leading-relaxed text-slate-700 dark:text-white/80 whitespace-pre-wrap">
             {answer}
           </div>
+        </div>
+      )}
+
+      {/* Só no ERRO: refazer. No sucesso, quem aparece é o "Gerar pesquisa" (abaixo). */}
+      {!loading && status === "error" && query && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={() => runQuery(query)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest text-violet-600 dark:text-violet-300 border border-violet-400/40 hover:bg-violet-500/10 transition-colors"
+          >
+            <RefreshCw size={13} /> Tentar novamente
+          </button>
         </div>
       )}
     </div>

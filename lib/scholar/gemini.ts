@@ -45,9 +45,20 @@ export function extractText(result: any): string {
     .trim();
 }
 
-export async function geminiJson<T>(systemInstruction: string, userPrompt: string, opts?: { temperature?: number; model?: string }): Promise<T> {
+// Timeout p/ as chamadas ao Vertex: sem isso, uma chamada que pendura (rede/credencial/
+// modelo lento) trava a pesquisa inteira (ex.: planning preso em ~13%). Com timeout, quem
+// chama (planQuery) cai no fallback e a pesquisa SEGUE.
+const GEMINI_TIMEOUT_MS = Number(process.env.SCHOLAR_GEMINI_TIMEOUT_MS || 30000);
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)),
+  ]);
+}
+
+export async function geminiJson<T>(systemInstruction: string, userPrompt: string, opts?: { temperature?: number; model?: string; timeoutMs?: number }): Promise<T> {
   const model = getGeminiModel(systemInstruction, opts);
-  const result = await model.generateContent(userPrompt);
+  const result = await withTimeout(model.generateContent(userPrompt), opts?.timeoutMs ?? GEMINI_TIMEOUT_MS, "Gemini");
   const finishReason = result?.response?.candidates?.[0]?.finishReason ?? "?";
   const cleaned = extractText(result).replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
   // Erros diagnósticos (em vez de "{}" silencioso) — ajudam a achar a causa real.

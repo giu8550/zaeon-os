@@ -80,9 +80,9 @@ export default function WindowSwitcher({
                   active
                     ? {
                         color: "#fff",
-                        background: "linear-gradient(135deg, #0f172a, #1e293b)",
-                        border: "1px solid rgba(255,255,255,0.18)",
-                        boxShadow: "0 6px 16px -8px rgba(0,0,0,0.7)",
+                        background: "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06))",
+                        border: "1px solid rgba(255,255,255,0.28)",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.45), 0 8px 20px -8px rgba(139,92,246,0.85)",
                       }
                     : { color: "#9a9ab8", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }
                 }

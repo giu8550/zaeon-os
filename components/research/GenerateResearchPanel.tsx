@@ -7,23 +7,16 @@
  */
 import { useState } from "react";
 import GlitchReveal from "./GlitchReveal";
+import type { DraftFields } from "@/lib/abntTemplate";
 
 interface Props {
   topic: string;
   references?: string[];
 }
 
-function extractResumo(md: string): string {
-  const m = md.match(/\*\*\s*resumo\s*:?\*\*\s*([^\n]+)/i);
-  if (m) return m[1].trim();
-  // fallback: 1ª linha de texto que não seja título/markup
-  const line = md.split("\n").map((l) => l.trim()).find((l) => l && !l.startsWith("#") && !l.startsWith("**"));
-  return line || "";
-}
-
 export default function GenerateResearchPanel({ topic, references = [] }: Props) {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ title: string; content: string; resumo: string } | null>(null);
+  const [result, setResult] = useState<{ title: string; fields: DraftFields } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function generate() {
@@ -35,7 +28,7 @@ export default function GenerateResearchPanel({ topic, references = [] }: Props)
         body: JSON.stringify({ topic: topic.trim(), references }),
       });
       const d = await r.json().catch(() => ({}));
-      if (r.ok && d.content) setResult({ title: d.title || topic, content: d.content, resumo: extractResumo(d.content) });
+      if (r.ok && d.fields) setResult({ title: d.title || topic, fields: d.fields });
       else setError(d.error || "Não consegui gerar agora. Tente de novo.");
     } catch {
       setError("Erro de conexão ao gerar a pesquisa.");
@@ -47,7 +40,8 @@ export default function GenerateResearchPanel({ topic, references = [] }: Props)
   function start() {
     if (!result) return;
     try {
-      window.dispatchEvent(new CustomEvent("zaeon:research:newdoc", { detail: { title: result.title, content: result.content } }));
+      // Manda os CAMPOS — a aba Pesquisa encaixa no framework do tipo ativo (TCC/Artigo/Relatório).
+      window.dispatchEvent(new CustomEvent("zaeon:research:newdoc", { detail: { title: result.title, fields: result.fields } }));
       window.dispatchEvent(new CustomEvent("zaeon:set-tab", { detail: "pesquisa" }));
     } catch { /* ignore */ }
   }
@@ -91,7 +85,7 @@ export default function GenerateResearchPanel({ topic, references = [] }: Props)
             </p>
             <button onClick={generate} className="shrink-0 rounded-lg px-2.5 py-1 text-[8px] font-black uppercase tracking-[.1em] text-cyan-600 dark:text-cyan-300 border border-cyan-500/20 hover:bg-cyan-500/10">↻ outra</button>
           </div>
-          {result.resumo && <p className="text-[11px] leading-[1.55] text-slate-600 dark:text-white/55 line-clamp-3">{result.resumo}</p>}
+          {result.fields.resumo && <p className="text-[11px] leading-[1.55] text-slate-600 dark:text-white/55 line-clamp-3">{result.fields.resumo}</p>}
         </div>
       )}
 

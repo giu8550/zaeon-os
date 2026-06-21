@@ -262,23 +262,22 @@ export default function MacSplash({ show = true, onDone }: Props) {
         <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white dark:bg-black transition-opacity duration-500" style={{ opacity }}>
             <div className="flex flex-col items-center justify-center px-6 w-full">
                 
-                <AnimatePresence mode="wait">
-                    {!hasStarted && (
-                        <motion.button 
-                            key="start-btn"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ duration: 0.8 }}
-                            onClick={handleInitiate} 
-                            className="flex flex-col items-center justify-center transition-all duration-300 relative w-full cursor-pointer hover:scale-105"
-                        >
-                            <span className="text-black dark:text-white tracking-[0.1em] sm:tracking-[0.15em] text-lg sm:text-2xl font-mono min-h-[40px] flex flex-wrap items-center justify-center drop-shadow-md">
-                                <GlitchText text={PT_TEXT} targetLang={targetLang} hasStarted={hasStarted} />
-                            </span>
-                        </motion.button>
-                    )}
-                </AnimatePresence>
+                {/* Sem AnimatePresence/exit aqui: ao iniciar, o "Iniciar" some na hora —
+                    antes ele "piscava" (o glitch resetava pra PT) durante a saída. */}
+                {!hasStarted && (
+                    <motion.button
+                        key="start-btn"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.8 }}
+                        onClick={handleInitiate}
+                        className="flex flex-col items-center justify-center transition-all duration-300 relative w-full cursor-pointer hover:scale-105"
+                    >
+                        <span className="text-black dark:text-white tracking-[0.1em] sm:tracking-[0.15em] text-lg sm:text-2xl font-mono min-h-[40px] flex flex-wrap items-center justify-center drop-shadow-md">
+                            <GlitchText text={PT_TEXT} targetLang={targetLang} hasStarted={hasStarted} />
+                        </span>
+                    </motion.button>
+                )}
 
                 <div className="h-[90px] flex flex-col items-center justify-start mt-6 w-full">
                     <AnimatePresence mode="wait">
@@ -316,19 +315,23 @@ export default function MacSplash({ show = true, onDone }: Props) {
                                             <Mic className={`w-[18px] h-[18px] ${voiceMode === "active" ? "text-white" : "text-black/80 dark:text-white/80"}`} />
                                         </div>
 
+                                        {/* Idioma = cores da bandeira (PT → Brasil, EN → EUA), sem texto */}
                                         <div
-                                            className="flex items-center justify-center px-5 h-11 rounded-full bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 backdrop-blur-xl cursor-pointer transition-all border border-black/10 dark:border-white/10 shadow-sm hover:scale-110 active:scale-95"
-                                            onClick={(e) => { 
-                                                e.stopPropagation(); 
+                                            title={(i18n.language || '').startsWith('en') ? "Idioma: Inglês — clique para Português" : "Idioma: Português — clique para Inglês"}
+                                            aria-label="Trocar idioma"
+                                            className="w-11 h-11 rounded-full cursor-pointer transition-all border border-black/10 dark:border-white/10 shadow-sm hover:scale-110 active:scale-95 overflow-hidden"
+                                            style={{
+                                                background: (i18n.language || '').startsWith('en')
+                                                    ? "linear-gradient(135deg,#b22234 0%,#b22234 38%,#ffffff 38%,#ffffff 62%,#3c3b6e 62%)"
+                                                    : "linear-gradient(135deg,#009b3a 0%,#009b3a 36%,#fedf00 36%,#fedf00 64%,#002776 64%)",
+                                            }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
                                                 const currentLang = i18n.language || '';
                                                 const newLang = currentLang.startsWith('en') ? 'pt' : 'en';
-                                                i18n.changeLanguage(newLang); 
+                                                i18n.changeLanguage(newLang);
                                             }}
-                                        >
-                                            <span className="text-[11px] font-semibold tracking-widest text-black/80 dark:text-white/80 uppercase">
-                                                {(i18n.language || '').startsWith('en') ? 'EN' : 'PT'}
-                                            </span>
-                                        </div>
+                                        />
                                     </div>
                                 )}
                             </motion.div>

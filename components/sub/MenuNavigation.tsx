@@ -15,7 +15,7 @@ import ZaeonLogo from "@/components/main/ZaeonLogo";
 import InviteButton from "@/components/sub/InviteButton";
 import VoicePicker from "@/components/settings/VoicePicker";
 
-type ModuleKey = "pesquisas" | "estudos" | "projetos";
+type ModuleKey = "estudos" | "pesquisas" | "projetos" | "lounge";
 interface RecentItem { id: string; title: string; href: string }
 
 // 🔥 Menu simplificado: Apenas opções vitais pós-login
@@ -74,7 +74,17 @@ export default function MenuNavigation() {
   const [openModule, setOpenModule] = useState<ModuleKey | null>(null);
   const [recent, setRecent] = useState<{ research: RecentItem[]; studies: RecentItem[] }>({ research: [], studies: [] });
   const [recentProjects, setRecentProjects] = useState<RecentItem[]>([]);
+  // Pesquisas = os DOCS salvos (TCC/Artigo/Relatório) — cada tipo é uma sessão (localStorage).
+  const [researchDocs, setResearchDocs] = useState<RecentItem[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
+  // Card de boas-vindas (1ª vez pós-login): check verde + começar onboarding.
+  const [showWelcome, setShowWelcome] = useState(false);
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    try { if (localStorage.getItem("zaeon.welcomeSeen") !== "1") setShowWelcome(true); } catch { /* ignore */ }
+  }, [status]);
+  const startOnboard = () => { try { localStorage.setItem("zaeon.welcomeSeen", "1"); } catch { /* ignore */ } setShowWelcome(false); router.push("/research-lab?tab=sala-de-estudos&onboard=1"); };
+  const dismissWelcome = () => { try { localStorage.setItem("zaeon.welcomeSeen", "1"); } catch { /* ignore */ } setShowWelcome(false); };
 
   useEffect(() => {
     try { setInviteAccessed(localStorage.getItem("zaeon.inviteAccessed") === "1"); } catch { /* ignore */ }
@@ -115,6 +125,22 @@ export default function MenuNavigation() {
           .map((p: any) => ({ id: String(p.id), title: p.name || "Projeto", href: `/research-lab?tab=projetos&project=${p.id}` }));
         setRecentProjects(top);
       }
+    } catch { /* ignore */ }
+    // Pesquisas REAIS = os docs TCC/Artigo/Relatório com conteúdo (não o template vazio).
+    try {
+      const raw = localStorage.getItem("zaeon_research_docs");
+      const docs = raw ? (JSON.parse(raw)?.docs || {}) : {};
+      const items: RecentItem[] = [];
+      for (const type of ["TCC", "Artigo", "Relatório"]) {
+        const doc = docs[type];
+        if (!doc?.content) continue;
+        // tira cabeçalhos/linhas vazias → se sobrar texto, é uma pesquisa de verdade
+        const body = String(doc.content).split("\n").filter((l: string) => l.trim() && !l.trim().startsWith("#")).join(" ").trim();
+        if (body.length < 3) continue;
+        const title = doc.title && doc.title !== "minha_pesquisa.pdf" ? doc.title : type;
+        items.push({ id: type, title: `${title} · ${type}`, href: `/research-lab?tab=pesquisa&worktype=${encodeURIComponent(type)}` });
+      }
+      setResearchDocs(items);
     } catch { /* ignore */ }
     return () => { alive = false; };
   }, [status]);
@@ -630,14 +656,48 @@ export default function MenuNavigation() {
               (
                 <motion.ul key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-2 w-full h-full justify-center overflow-y-auto custom-scrollbar pr-1">
 
-                  {/* PESQUISAS — expansível: últimas 3 + nova */}
-                  {renderModule("pesquisas", "Pesquisas", recent.research, "Nova pesquisa", "/research-lab?tab=pesquisa")}
+                  {/* CARD DE BOAS-VINDAS — check verde animado + iniciar onboarding */}
+                  {showWelcome && (
+                    <li className="w-full">
+                      <div className="relative overflow-hidden rounded-2xl border border-emerald-300/60 dark:border-emerald-400/25 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/10 dark:to-white/[0.02] p-4">
+                        <button onClick={dismissWelcome} aria-label="Fechar" className="absolute top-2.5 right-3 text-slate-400 hover:text-slate-700 dark:hover:text-white text-lg leading-none">×</button>
+                        <div className="flex items-start gap-3">
+                          <span className="w-10 h-10 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0 zaeon-welcome-pop">
+                            <svg viewBox="0 0 24 24" className="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 6L9 17l-5-5" className="zaeon-welcome-check" />
+                            </svg>
+                          </span>
+                          <div className="min-w-0 pr-4">
+                            <p className="text-[13px] font-black text-slate-900 dark:text-white">Conta verificada</p>
+                            <p className="text-[11.5px] text-slate-600 dark:text-white/65 leading-relaxed mt-0.5">
+                              Vejo um baita potencial em você. É uma honra te ajudar a desbloquear uma nova fase — bora começar?
+                            </p>
+                            <button onClick={startOnboard} className="mt-2.5 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-white text-[11px] font-black uppercase tracking-wide hover:scale-[1.03] transition-transform" style={{ background: "linear-gradient(135deg,#10b981,#06b6d4)" }}>
+                              Iniciar ✦
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <style jsx global>{`
+                        .zaeon-welcome-check { stroke-dasharray: 28; stroke-dashoffset: 28; animation: zaeon-check-draw 0.6s ease-out 0.15s forwards; }
+                        @keyframes zaeon-check-draw { to { stroke-dashoffset: 0; } }
+                        .zaeon-welcome-pop { animation: zaeon-pop 0.4s ease-out; }
+                        @keyframes zaeon-pop { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+                      `}</style>
+                    </li>
+                  )}
 
-                  {/* ESTUDOS — expansível: últimos 3 + novo */}
+                  {/* Mesma ordem da sidebar: Estudos · Pesquisas · Projetos (gated) · Lounge */}
                   {renderModule("estudos", "Estudos", recent.studies, "Novo estudo", "/research-lab?tab=sala-de-estudos")}
 
-                  {/* PROJETOS — só quem tem acesso ao Zaeon Code (recentes do localStorage) */}
+                  {/* PESQUISAS — só os docs salvos (TCC/Artigo/Relatório). Sem nenhum → só "Nova pesquisa". */}
+                  {renderModule("pesquisas", "Pesquisas", researchDocs, "Nova pesquisa", "/research-lab?tab=pesquisa")}
+
+                  {/* PROJETOS — só quem tem acesso ao Zaeon Code (poucos, por permissão) */}
                   {canUseProjects && renderModule("projetos", "Projetos", recentProjects, "Novo projeto", "/research-lab?tab=projetos")}
+
+                  {/* LOUNGE — co-criar com amigos */}
+                  {renderModule("lounge", "Lounge", [], "Criar em conjunto", "/research-lab?tab=lounge")}
 
                   {/* OPTIONS — concentra voz, idioma, convite, founder e logout */}
                   <li className="w-full" onClick={() => setIsOptionsOpen(true)}>

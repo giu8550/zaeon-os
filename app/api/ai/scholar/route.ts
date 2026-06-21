@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
-import { retrievePapers, mergeDisplayReferences, MIN_RESULTS } from "@/lib/scholar/retrieve";
+import { retrievePapers, MIN_RESULTS } from "@/lib/scholar/retrieve";
 import { resolveFullText } from "@/lib/scholar/fulltext";
 import { planQuery, synthesize } from "@/lib/scholar/synthesize";
 import { assembleResults } from "@/lib/scholar/assemble";
@@ -54,8 +54,10 @@ export async function POST(req: Request) {
         send({ type: "session", sessionId: created.id });
 
         // PLAN
+        console.log("[scholar] ▶ planning:", prompt.slice(0, 80));
         send({ type: "phase", phase: "planning", message: planTone(prompt) });
         const plan = await planQuery(prompt);
+        console.log("[scholar] ✓ planned → searching", plan.queries);
 
         // SEARCH (garante ≥ MIN_RESULTS pesquisas)
         const queries = plan.queries.length ? plan.queries : [prompt];
@@ -76,7 +78,21 @@ export async function POST(req: Request) {
                     : `⚠ ${r.source}: indisponível agora`,
             }),
         });
-        const unique = retrieved.papers;
+        // RELEVÂNCIA: só mantém papers que batem com o que o USUÁRIO pediu (título/abstract).
+        // Sem isso, busca vaga ("haskell") ancorava em papers de física (arXiv tem muito
+        // full-text aberto) → resposta/refs/base fora do tema. Se nada bate, segue vazio
+        // (melhor "não achei" do que ruído).
+        const STOP = new Set(["sobre", "para", "como", "qual", "quais", "que", "com", "dos", "das", "uma", "the", "and", "for", "with", "what"]);
+        const promptTerms = [...new Set((String(prompt).toLowerCase().match(/[a-zà-ú0-9]{4,}/gi) || []))].filter((t) => !STOP.has(t));
+        const isRelevant = (p: any) => {
+          if (!promptTerms.length) return true;
+          const hay = `${p.title ?? ""} ${p.abstract ?? ""} ${(p.keywords ?? []).join(" ")}`.toLowerCase();
+          return promptTerms.some((t) => hay.includes(t));
+        };
+        const filtered = retrieved.papers.filter(isRelevant);
+        // só aplica o filtro se sobrar algo; se zerar tudo, mantém o original (evita "sumir" geral)
+        const unique = filtered.length ? filtered : retrieved.papers;
+        console.log("[scholar] ✓ search:", retrieved.papers.length, "→ relevantes:", unique.length);
 
         // FULL TEXT (top N — síntese profunda só nos primeiros, por qualidade/velocidade)
         // Rápido: menos papers (mais ágil). Profundo: 10 (mais completo, mais lento).
@@ -100,7 +116,9 @@ export async function POST(req: Request) {
           message: "🧠 Indo mais fundo e conferindo cada citação…",
         });
         const grounded = withText.filter((p) => p.retrievedText);
+        console.log("[scholar] ▶ synthesizing from", grounded.length, "grounded papers");
         const raw = await synthesize(prompt, grounded);
+        console.log("[scholar] ✓ synthesized → verifying");
 
         // VERIFY + ASSEMBLE (deterministic; unit-tested in lib/scholar/assemble.test.ts)
         const r = assembleResults(prompt, grounded, raw);
@@ -118,8 +136,10 @@ export async function POST(req: Request) {
         const bib = await buildReferencesBib(r.references);
         if (bib.trim()) r.files.push({ name: "references.bib", kind: "bibtex", content: bib });
 
-        // Referências exibidas (≥12): citações verificadas primeiro, depois descobertas relacionadas.
-        const displayReferences = mergeDisplayReferences(r.references, unique, MIN_RESULTS);
+        // Referências exibidas = SÓ as que vieram do pedido do usuário (verificadas na síntese).
+        // NÃO completar até um mínimo com papers "descobertos" — isso enchia de ruído fora do
+        // tema (ex.: física em busca de "haskell"). Se vier pouco, mostra pouco.
+        const displayReferences = r.references;
 
         const saved = await prisma.scholarSession.update({
           where: { id: created.id },
@@ -134,8 +154,10 @@ export async function POST(req: Request) {
             thread: { answer: r.answer } as any,
           },
         });
+        console.log("[scholar] ✓ DONE:", created.id);
         send({ type: "done", session: saved });
       } catch (err: any) {
+        console.error("[scholar] x ERRO:", err?.message, err?.stack?.split("\n")?.[1]?.trim());
         send({ type: "error", message: err?.message ?? "Erro inesperado" });
       } finally {
         controller.close();

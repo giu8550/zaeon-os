@@ -7,8 +7,11 @@ export interface Plan { intent: string; domain: string; queries: string[]; }
 export async function planQuery(query: string): Promise<Plan> {
   const sys = "Classifique o pedido de pesquisa. Responda JSON {intent, domain, queries:[2-4 strings]}. domain em PT-BR (ex: 'CS/ML','Medicina','Economia').";
   try {
-    return await geminiJson<Plan>(sys, `Pedido: ${query}`);
-  } catch {
+    // Planning é uma classificação curta → timeout agressivo. Se o Gemini não responder
+    // rápido, cai no fallback e a pesquisa SEGUE (não trava em ~13-17%).
+    return await geminiJson<Plan>(sys, `Pedido: ${query}`, { timeoutMs: 12000 });
+  } catch (e) {
+    console.warn("[scholar] planQuery fallback:", (e as Error)?.message);
     return { intent: "search", domain: "", queries: [query] };
   }
 }

@@ -1,13 +1,13 @@
 "use client";
-import Typewriter from "@/components/research/Typewriter";
+import GlitchReveal from "@/components/research/GlitchReveal";
 
 export default function InsightsModule({ insights }: { insights: any }) {
   if (!insights) return null;
   return (
     <div className="space-y-3 text-sm">
-      {/* O resumo é "digitado" pela IA ao entrar na aba (typewriter). */}
-      <p className="text-slate-700 dark:text-white/80">
-        <Typewriter text={insights.summary ?? ""} />
+      {/* Insight revelado com glitch chinês roxo → assenta na cor normal. Grande, como o texto do estudo. */}
+      <p className="text-slate-700 dark:text-white/80 text-lg md:text-xl leading-relaxed">
+        <GlitchReveal text={insights.summary ?? ""} />
       </p>
       {!!insights.trends?.length && (
         <div><p className="text-[10px] font-black uppercase tracking-widest text-violet-500 mb-1">Tendências</p>

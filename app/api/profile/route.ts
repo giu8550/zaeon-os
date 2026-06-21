@@ -22,14 +22,14 @@ export async function GET() {
   });
   if (!u) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  let inviter: { name: string | null; image: string | null; course: string | null } | null = null;
+  let inviter: { id: string; name: string | null; image: string | null; course: string | null } | null = null;
   if (u.referredBy) {
     try {
       const inv = await prisma.user.findUnique({
         where: { id: u.referredBy },
-        select: { name: true, image: true, course: true },
+        select: { id: true, name: true, image: true, course: true },
       });
-      if (inv) inviter = { name: inv.name, image: inv.image, course: inv.course };
+      if (inv) inviter = { id: inv.id, name: inv.name, image: inv.image, course: inv.course };
     } catch { /* referredBy inválido → ignora */ }
   }
 

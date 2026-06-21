@@ -26,15 +26,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Usuário não identificado' }, { status: 400 });
         }
 
-        // 1. Busca o usuário no banco para pegar o ObjectID real
-        // Como o NextAuth geralmente devolve o email, buscamos por ele primeiro.
+        // 1. Busca o usuário. ATENÇÃO: `id` é ObjectId — consultar com string não-ObjectId
+        // (ex.: email) faz o Prisma estourar ("Malformed ObjectID") → 500. Só usa `id` se
+        // o valor parecer um ObjectId; senão busca só por email.
+        const isObjId = /^[a-f\d]{24}$/i.test(String(userId));
         const user = await prisma.user.findFirst({
-            where: {
-                OR: [
-                    { email: userId },
-                    { id: userId } // Caso o frontend já mande o ID direto
-                ]
-            }
+            where: isObjId ? { OR: [{ email: userId }, { id: userId }] } : { email: userId },
         });
 
         if (!user) {
@@ -86,14 +83,10 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'UserId required' }, { status: 400 });
         }
 
-        // Busca o usuário para pegar o ID correto
+        // Busca o usuário (ObjectId-safe: email não é ObjectId → não pode ir no campo `id`).
+        const isObjId = /^[a-f\d]{24}$/i.test(String(userId));
         const user = await prisma.user.findFirst({
-            where: {
-                OR: [
-                    { email: userId },
-                    { id: userId }
-                ]
-            }
+            where: isObjId ? { OR: [{ email: userId }, { id: userId }] } : { email: userId },
         });
 
         if (!user) {

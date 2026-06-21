@@ -4,7 +4,7 @@ import { BookOpen, RefreshCw } from "lucide-react";
 
 import { useOmegaScholar } from "../OmegaScholarContext";
 import ThinkingStream from "@/components/research/ThinkingStream";
-import Typewriter from "@/components/research/Typewriter";
+import GlitchReveal from "@/components/research/GlitchReveal";
 
 const DEPTH_STYLES: Record<string, string> = {
   "básico": "text-teal-300 bg-teal-400/10 border-teal-400/25",
@@ -49,8 +49,8 @@ export default function PrereqsModule() {
       {loadingPrereqs && <ThinkingStream running label="mapeando o que você precisa saber" />}
 
       {prereqsSummary && !loadingPrereqs && (
-        <p className="text-[12px] italic text-cyan-700/70 dark:text-cyan-300/50 leading-relaxed">
-          <Typewriter text={prereqsSummary} />
+        <p className="text-lg md:text-xl text-cyan-700/80 dark:text-cyan-300/70 leading-relaxed">
+          <GlitchReveal text={prereqsSummary} />
         </p>
       )}
 

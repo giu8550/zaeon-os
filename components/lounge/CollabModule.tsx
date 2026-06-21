@@ -413,6 +413,7 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
   const [focusBlock, setFocusBlock] = useState<string | null>(null);
   const dragId = useRef<string | null>(null);
   const { citations } = useSavedCitations(); // painel direito da Pesquisa (cópia da sala)
+  const { data: ceSession } = useSession();  // p/ salvar na conta do usuário
   const [dockPopover, setDockPopover] = useState<"citations" | "quiz" | null>(null);
   const [showFolder, setShowFolder] = useState(false);
   const [pubNote, setPubNote] = useState(false);
@@ -494,10 +495,24 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
 
   const reinvite = () => { if (!doc) return; const origin = typeof window !== "undefined" ? window.location.origin : ""; setShare({ link: `${origin}/c/${doc.token}`, title: doc.title }); };
 
-  // Salvar agora (força o PATCH imediato — além do autosave por debounce).
+  // Salvar = grava o doc compartilhado E persiste uma cópia em ABNT na conta do usuário
+  // (mesmo "Salvar na nuvem" da Sala de Pesquisa; o conteúdo já vem com os marcadores ABNT).
   const saveNow = async () => {
-    try { setSaving(true); await fetch(`/api/collab/${docId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, clientId: clientId.current }) }); setSavedFlash(true); setTimeout(() => setSavedFlash(false), 1600); }
-    catch { /* */ } finally { setSaving(false); }
+    if (saving) return;
+    setSaving(true);
+    try {
+      // 1) doc compartilhado (grupo)
+      await fetch(`/api/collab/${docId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, clientId: clientId.current }) });
+      // 2) cópia pessoal na nuvem (workspace), em formato ABNT
+      const k = (doc?.kind || "artigo").toLowerCase();
+      const wt = k.includes("tcc") ? "TCC" : k.includes("relat") ? "Relatório" : "Artigo";
+      const email = ceSession?.user?.email || myId;
+      await fetch("/api/workspace", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: email, workTitle: doc?.title || "Pesquisa", workContent: content, workType: wt }),
+      });
+      setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000);
+    } catch { /* */ } finally { setSaving(false); }
   };
 
   // Inserir no ponto do cursor da FOLHA de pesquisa (citação/documento do painel direito).
