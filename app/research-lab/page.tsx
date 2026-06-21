@@ -95,6 +95,7 @@ import {
 
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
+import EditableProfile from "@/components/research/EditableProfile";
 import MiniTourToast from "@/components/research/MiniTourToast";
 import SavedCitationsSection from "./SavedCitationsSection";
 import LibrarySavedFiles from "./LibrarySavedFiles";
@@ -1959,7 +1960,7 @@ export default function HomeworkPage({
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
-        {activeTab !== "sala-de-estudos" && activeTab !== "pesquisa" && (
+        {activeTab !== "sala-de-estudos" && activeTab !== "pesquisa" && activeTab !== "profile" && (
           <div className="flex items-end justify-between shrink-0">
             <div>
               <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
@@ -2286,30 +2287,8 @@ export default function HomeworkPage({
           )}
 
           {activeTab === "profile" && (
-            <div className="w-full h-full flex items-center justify-center p-8">
-              {/* Perfil temporariamente fora do ar — "em construção" até ficar estruturado. */}
-              <div className="w-full max-w-sm text-center flex flex-col items-center gap-4">
-                <span
-                  className="text-cyan-500 dark:text-cyan-300 text-3xl leading-none animate-[spin_16s_linear_infinite] motion-reduce:animate-none"
-                  style={{ filter: "drop-shadow(0 0 6px rgba(34,211,238,0.5))" }}
-                  aria-hidden
-                >
-                  ⟁
-                </span>
-                <div>
-                  <h2 className="text-lg font-black tracking-tight text-slate-800 dark:text-white">Perfil em construção</h2>
-                  <p className="text-[12px] text-slate-500 dark:text-white/45 mt-1 leading-relaxed">
-                    Estamos estruturando essa área. Volta já já — caprichada.
-                  </p>
-                </div>
-                <div className="w-full h-2 rounded-full bg-slate-200/80 dark:bg-white/10 overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: "35%", background: "linear-gradient(90deg,#2563eb,#22d3ee,#7c3aed)" }}
-                  />
-                </div>
-                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-white/30">em construção · 35%</span>
-              </div>
+            <div className="w-full h-full overflow-hidden">
+              <EditableProfile />
             </div>
           )}
         </div>

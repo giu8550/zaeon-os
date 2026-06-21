@@ -1,0 +1,274 @@
+"use client";
+
+/**
+ * EditableProfile — visual clássico Zaeon: CÁPSULA (à esquerda) com DNA girando e a foto
+ * no centro + conectores (nome/curso/nível). À DIREITA, uma ÁRVORE DE HABILIDADES (foco,
+ * disciplina, calma… e negativas como nervosismo) — hoje zeradas, prontas pra valores reais.
+ * Editável pelo próprio usuário (nome, curso → re-verificação). Sem títulos de módulo.
+ */
+import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { motion } from "framer-motion";
+import { Loader2, Check, Upload, FileText, UserCheck, ShieldCheck, ShieldAlert, Camera, Pencil, BookOpen, Award } from "lucide-react";
+import { ALL_COURSES } from "@/constants/courses";
+import NetworkMural from "@/app/workstation/profiles/NetworkMural";
+
+interface Inviter { name: string | null; image: string | null; course: string | null }
+interface ProfileData {
+  name: string; course: string; image: string | null;
+  kycStatus: string; eduVerified: boolean; plan: string; academicLevel: string; inviter: Inviter | null;
+}
+
+// Árvore de habilidades — estrutura pronta; `value` 0 até termos métricas reais.
+const SKILLS: { name: string; kind: "pos" | "neg"; value: number }[] = [
+  { name: "Foco", kind: "pos", value: 0 },
+  { name: "Atenção", kind: "pos", value: 0 },
+  { name: "Disciplina", kind: "pos", value: 0 },
+  { name: "Calma", kind: "pos", value: 0 },
+  { name: "Memória", kind: "pos", value: 0 },
+  { name: "Criatividade", kind: "pos", value: 0 },
+  { name: "Nervosismo", kind: "neg", value: 0 },
+  { name: "Procrastinação", kind: "neg", value: 0 },
+  { name: "Ansiedade", kind: "neg", value: 0 },
+  { name: "Dispersão", kind: "neg", value: 0 },
+];
+
+function RealisticDNA() {
+  return (
+    <motion.div animate={{ opacity: [0.7, 1, 0.7], scale: [0.98, 1.02, 0.98] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+      className="absolute inset-0 flex flex-col items-center justify-around py-6 z-0" style={{ perspective: "1000px" }} aria-hidden>
+      {[...Array(26)].map((_, i) => (
+        <motion.div key={i} className="relative w-16 h-[3px] flex items-center justify-between"
+          animate={{ rotateY: [0, 360] }} transition={{ duration: 8, repeat: Infinity, ease: "linear", delay: i * 0.15 }}>
+          <div className="w-3 h-3 rounded-full bg-cyan-400" />
+          <div className="flex-1 h-[2px] bg-gradient-to-r from-cyan-400 to-violet-500" />
+          <div className="w-3 h-3 rounded-full bg-violet-500" />
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
+function SkillBar({ name, kind, value }: { name: string; kind: "pos" | "neg"; value: number }) {
+  const grad = kind === "pos" ? "linear-gradient(90deg,#22d3ee,#3b82f6)" : "linear-gradient(90deg,#fb7185,#f59e0b)";
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-[12px] font-semibold text-slate-700 dark:text-white/80 w-28 shrink-0 truncate">{name}</span>
+      <div className="flex-1 h-2 rounded-full bg-slate-200/80 dark:bg-white/10 overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, value))}%`, background: grad }} />
+      </div>
+      <span className="text-[11px] font-mono text-slate-400 dark:text-white/40 w-6 text-right">{value}</span>
+    </div>
+  );
+}
+
+export default function EditableProfile() {
+  const [data, setData] = useState<ProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const [course, setCourse] = useState("");
+  const [doc, setDoc] = useState<string | null>(null);
+  const [docName, setDocName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [img, setImg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d) { setData(d); setName(d.name || ""); setCourse(d.course || ""); setImg(d.image || null); } })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const courseChanged = useMemo(() => !!data && course.trim() !== (data.course || "").trim(), [course, data]);
+  const courseValid = ALL_COURSES.some((c) => c.toLowerCase() === course.trim().toLowerCase());
+  const dirty = !!data && (name.trim() !== (data.name || "").trim() || courseChanged);
+
+  const onDoc = (f?: File) => {
+    if (!f) return;
+    if (f.size > 4 * 1024 * 1024) { setMsg("Comprovante muito grande (máx. 4MB)."); return; }
+    const r = new FileReader(); r.onload = () => { setDoc(String(r.result)); setDocName(f.name); }; r.readAsDataURL(f);
+  };
+
+  const onAvatar = (f?: File) => {
+    if (!f || !f.type.startsWith("image/")) return;
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const image = new window.Image();
+      image.onload = async () => {
+        const canvas = document.createElement("canvas");
+        const max = 512; let { width, height } = image;
+        if (width > height && width > max) { height = (height * max) / width; width = max; }
+        else if (height > max) { width = (width * max) / height; height = max; }
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d")!.drawImage(image, 0, 0, width, height);
+        const b64 = canvas.toDataURL("image/jpeg", 0.7);
+        try { const r = await fetch("/api/user/avatar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64 }) }); if (r.ok) setImg(b64); else setMsg("Não consegui salvar a foto."); }
+        catch { setMsg("Erro ao enviar a foto."); } finally { setUploading(false); }
+      };
+      image.src = String(ev.target?.result);
+    };
+    reader.readAsDataURL(f);
+  };
+
+  const save = async () => {
+    setMsg(null);
+    if (courseChanged && !courseValid) { setMsg("Escolha um curso válido da lista."); return; }
+    if (courseChanged && !doc) { setMsg("Mudar de curso exige reenviar o comprovante de matrícula."); return; }
+    setSaving(true);
+    try {
+      const r = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, course, verificationDoc: doc ?? undefined }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setMsg(d.error || "Não consegui salvar."); return; }
+      setData((p) => p ? { ...p, name: name.trim(), course: course.trim(), kycStatus: d.reverify ? "pending" : p.kycStatus, eduVerified: d.reverify ? false : p.eduVerified } : p);
+      setDoc(null); setDocName(""); setEditing(false);
+      setMsg(d.reverify ? "Curso atualizado — vamos reverificar seu comprovante." : "Perfil salvo!");
+      setTimeout(() => setMsg(null), 4000);
+    } catch { setMsg("Erro de conexão."); } finally { setSaving(false); }
+  };
+
+  if (loading) return <div className="w-full h-full flex items-center justify-center text-slate-400 dark:text-white/40"><Loader2 size={18} className="animate-spin" /></div>;
+
+  const card = "border px-4 py-2.5 rounded-2xl backdrop-blur-md shadow-lg bg-white/60 dark:bg-black/30 border-cyan-300/40 dark:border-cyan-400/20";
+  const label = "text-[8px] uppercase font-black tracking-widest text-slate-500 dark:text-white/45";
+  const value = "text-[13px] font-bold text-slate-900 dark:text-white";
+
+  return (
+    <div className="w-full h-full overflow-y-auto custom-scrollbar p-1">
+      <div className="max-w-5xl pb-10">
+        {/* Editar (sem título de módulo) */}
+        <div className="flex justify-end mb-1">
+          <button onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
+            <Pencil size={13} /> {editing ? "Cancelar" : "Editar"}
+          </button>
+        </div>
+
+        {/* HERO: cápsula (esquerda) + árvore de habilidades (direita) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+          {/* ESQUERDA: cápsula + conectores */}
+          <div className="flex items-start gap-2">
+            <div className="relative w-[150px] h-[360px] rounded-[80px] border-[3px] border-cyan-400/40 dark:border-cyan-400/30 backdrop-blur-2xl flex items-center justify-center shrink-0 shadow-[0_0_50px_-10px_rgba(34,211,238,0.4)] bg-white/30 dark:bg-cyan-950/10">
+              <RealisticDNA />
+              <motion.div animate={{ y: [-8, 8, -8] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }} className="relative z-10">
+                <label className="relative block w-28 h-28 rounded-full border-4 border-cyan-400/60 p-1 shadow-2xl cursor-pointer group/av bg-white dark:bg-black overflow-hidden">
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => onAvatar(e.target.files?.[0])} disabled={uploading} />
+                  {img ? <Image src={img} alt="avatar" fill className="object-cover rounded-full" />
+                    : <span className="absolute inset-0 flex items-center justify-center text-3xl font-black text-cyan-600 dark:text-cyan-300">{(name || "Z").charAt(0).toUpperCase()}</span>}
+                  <div className="absolute inset-0 bg-black/55 rounded-full flex flex-col items-center justify-center opacity-0 group-hover/av:opacity-100 transition-opacity">
+                    {uploading ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Camera className="w-7 h-7 text-white" />}
+                    <span className="text-[7px] uppercase font-bold text-white tracking-widest mt-0.5">{uploading ? "salvando" : "trocar"}</span>
+                  </div>
+                </label>
+              </motion.div>
+            </div>
+
+            <div className="flex flex-col gap-4 pt-10 -ml-1 flex-1 min-w-0">
+              <div className="flex items-center">
+                <div className="hidden sm:block w-6 h-[2px] bg-cyan-400/50 shrink-0" />
+                <div className={`${card} flex-1 flex items-center gap-3`}>
+                  <UserCheck size={18} className="text-cyan-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className={label}>Nome</div>
+                    {editing ? <input value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-transparent outline-none text-[13px] font-bold text-slate-900 dark:text-white border-b border-cyan-400/40" />
+                      : <div className={`${value} truncate`}>{name || "—"}</div>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <div className="hidden sm:block w-10 h-[2px] bg-cyan-400/50 shrink-0" />
+                <div className={`${card} flex-1`}>
+                  <div className="flex items-center gap-3">
+                    <BookOpen size={18} className="text-cyan-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className={label}>Curso</div>
+                      {editing ? <input list="ep-courses" value={course} onChange={(e) => setCourse(e.target.value)} placeholder="seu curso…" className="w-full bg-transparent outline-none text-[13px] font-bold text-slate-900 dark:text-white border-b border-cyan-400/40" />
+                        : <div className={`${value} truncate`}>{course || "Não declarado"}</div>}
+                    </div>
+                  </div>
+                  {editing && courseChanged && (
+                    <div className="mt-2 rounded-xl border border-amber-400/40 bg-amber-50 dark:bg-amber-500/10 p-2.5">
+                      <p className="text-[11px] text-amber-700 dark:text-amber-200 flex items-center gap-1.5 mb-1.5"><ShieldAlert size={13} /> Mudar de curso pede novo comprovante.</p>
+                      <label className="flex items-center justify-center gap-2 w-full py-2 rounded-lg border border-dashed cursor-pointer text-[11px] font-bold border-amber-400/50 text-amber-700 dark:text-amber-200 hover:bg-amber-500/10">
+                        {doc ? <><FileText size={13} /> {docName || "anexado"}</> : <><Upload size={13} /> Anexar comprovante</>}
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => onDoc(e.target.files?.[0])} />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <div className="hidden sm:block w-14 h-[2px] bg-cyan-400/50 shrink-0" />
+                <div className={`${card} flex-1 flex items-center gap-3`}>
+                  <Award size={18} className="text-cyan-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className={label}>Nível</div>
+                    <div className={`${value} flex items-center gap-2`}>
+                      {data?.academicLevel || "Graduação"}
+                      {data?.plan && data.plan !== "free" && <span className="px-2 py-0.5 rounded-full text-[9px] bg-cyan-500/15 text-cyan-700 dark:text-cyan-200 uppercase tracking-wider">{data.plan}</span>}
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-bold inline-flex items-center gap-1 ${data?.eduVerified ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}`}>
+                    {data?.eduVerified ? <ShieldCheck size={12} /> : <ShieldAlert size={12} />}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* DIREITA: árvore de habilidades */}
+          <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/[0.03] p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-white/45 mb-3">Habilidades</p>
+            <div className="flex flex-col gap-2.5 mb-4">
+              {SKILLS.filter((s) => s.kind === "pos").map((s) => <SkillBar key={s.name} {...s} />)}
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-rose-400/80 mb-3">A trabalhar</p>
+            <div className="flex flex-col gap-2.5">
+              {SKILLS.filter((s) => s.kind === "neg").map((s) => <SkillBar key={s.name} {...s} />)}
+            </div>
+            <p className="text-[10px] text-slate-400 dark:text-white/30 mt-4">Valores chegam conforme você usa a Zaeon.</p>
+          </div>
+        </div>
+
+        <datalist id="ep-courses">{ALL_COURSES.map((c) => <option key={c} value={c} />)}</datalist>
+
+        {msg && <p className="text-[12px] font-medium text-cyan-700 dark:text-cyan-300 mt-4">{msg}</p>}
+        {editing && (
+          <button onClick={save} disabled={!dirty || saving}
+            className="mt-4 px-7 py-3 rounded-full text-white font-black uppercase tracking-widest text-[12px] disabled:opacity-40 transition-transform hover:scale-[1.02] inline-flex items-center gap-2"
+            style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={15} />} Salvar
+          </button>
+        )}
+
+        {/* Convidado por */}
+        {data?.inviter && (
+          <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-4 mt-6">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-white/45 mb-2 flex items-center gap-1.5"><UserCheck size={13} /> Você foi convidado por</p>
+            <div className="flex items-center gap-3">
+              <span className="w-11 h-11 rounded-full overflow-hidden bg-cyan-100 dark:bg-cyan-500/15 flex items-center justify-center shrink-0">
+                {data.inviter.image ? <Image src={data.inviter.image} alt="" width={44} height={44} className="w-full h-full object-cover" />
+                  : <span className="font-black text-cyan-600 dark:text-cyan-300">{(data.inviter.name || "?").charAt(0).toUpperCase()}</span>}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{data.inviter.name || "Membro Zaeon"}</p>
+                {data.inviter.course && <p className="text-[11px] text-slate-500 dark:text-white/45 truncate">{data.inviter.course}</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mural de fotos */}
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-white/55 mb-2 mt-6">Seu mural</p>
+        <NetworkMural />
+      </div>
+    </div>
+  );
+}

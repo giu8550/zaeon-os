@@ -78,13 +78,14 @@ export default function NetworkMural({ visitedUserId }: { visitedUserId?: string
         loadPhotos();
     }, [visitedUserId, isVisitorMode]);
 
+    // Navegação liberada TAMBÉM no modo edição (só trava enquanto edita o texto de um card).
     const nextPhoto = useCallback(() => {
-        if (!editingId && !editModeGlobal) setActive((prev) => (prev + 1 < displayItems.length ? prev + 1 : prev));
-    }, [displayItems.length, editingId, editModeGlobal]);
+        if (!editingId) setActive((prev) => (prev + 1 < displayItems.length ? prev + 1 : prev));
+    }, [displayItems.length, editingId]);
 
     const prevPhoto = useCallback(() => {
-        if (!editingId && !editModeGlobal) setActive((prev) => (prev - 1 >= 0 ? prev - 1 : prev));
-    }, [editingId, editModeGlobal]);
+        if (!editingId) setActive((prev) => (prev - 1 >= 0 ? prev - 1 : prev));
+    }, [editingId]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -272,7 +273,7 @@ export default function NetworkMural({ visitedUserId }: { visitedUserId?: string
 
             <div className="flex items-center justify-center relative h-[450px] w-full max-w-6xl" style={{ transformStyle: "preserve-3d" }}>
 
-                {displayItems.length > 1 && !editingId && !editModeGlobal && (
+                {displayItems.length > 1 && !editingId && (
                     <>
                         <button onClick={prevPhoto} disabled={active === 0} className={`absolute left-4 md:left-10 z-50 p-3 rounded-full bg-white/10 border border-white/20 backdrop-blur-2xl text-slate-800 dark:text-white transition-all shadow-lg hover:bg-white/20 hover:scale-110 cursor-pointer ${active === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
                             <ChevronLeftIcon className="w-5 h-5" />
