@@ -80,7 +80,7 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     const isTeacher = (session?.user as any)?.role === "teacher" || (session?.user as any)?.role === "professor";
 
     const [isOpen, setIsOpen] = useState(defaultOpen);
-    const [widgetPosition, setWidgetPosition] = useState<'right' | 'left'>('right'); // 🔥 Estado de Posição L/R
+    const [widgetPosition, setWidgetPosition] = useState<'right' | 'left'>('left'); // default: encaixado no canto da sidebar (esquerda). Movível.
 
     const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'teachers'>('friends');
     // Abre JÁ na conversa com a Zaeon (sem passo extra de clicar no perfil dela).
@@ -126,6 +126,22 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     const [voiceMode, setVoiceModeState] = useVoiceMode(); // passivo | ativo
     const tts = useTTS();
     const mission = useMission(); // o que a Zaeon está executando agora (cockpit reativo)
+
+    // ONBOARDING: a Zaeon "puxa assunto" — cada passo do tour manda uma fala que
+    // aparece aqui no chat (abre o widget) e é falada por voz (autonomia de conversa).
+    useEffect(() => {
+        const onSay = (e: any) => {
+            const text = e?.detail;
+            if (typeof text !== "string" || !text.trim()) return;
+            setActiveChat(ZAEON_AGENT);
+            setIsOpen(true);
+            setZaeonMessages((prev) => [...prev, { id: `ob-${Date.now()}`, senderId: "zaeon-agent", text }]);
+            try { tts.speak(text); } catch { /* voz é bônus */ }
+        };
+        window.addEventListener("zaeon:onboard:say", onSay);
+        return () => window.removeEventListener("zaeon:onboard:say", onSay);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Viewport p/ tornar o widget full-screen no mobile (alvo 360–430px).
     const [vw, setVw] = useState(0);
@@ -528,12 +544,16 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
             layout
             initial={false}
             animate={{
-                height: isOpen ? openH : 60,
-                width: isOpen ? openW : 60,
+                height: isOpen ? openH : 52,
+                width: isOpen ? openW : 52,
             }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`fixed z-[999] flex flex-col overflow-hidden ${glassContainer} ${isOpen ? 'bottom-0 rounded-t-3xl' : 'bottom-5 rounded-full shadow-2xl'}
-            ${widgetPosition === 'right' ? 'right-4 sm:right-8' : 'left-4 sm:left-8'}`}
+            className={`fixed z-[999] flex flex-col overflow-hidden ${glassContainer} ${
+                isOpen
+                    ? `bottom-0 rounded-t-3xl ${widgetPosition === 'right' ? 'right-4 sm:right-8' : 'left-4 sm:left-8'}`
+                    // FECHADO: à esquerda encaixa no cantinho inferior da sidebar; à direita, canto normal.
+                    : `rounded-full shadow-2xl ${widgetPosition === 'right' ? 'bottom-5 right-4 sm:right-8' : 'bottom-[46px] left-[18px]'}`
+            }`}
             style={{ willChange: "width, height" }}
         >
             <div
@@ -558,18 +578,15 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                                     <span className="absolute inset-0 -m-1.5 rounded-full animate-ping motion-reduce:animate-none"
                                         style={{ boxShadow: `0 0 0 2px ${stateGlow[agentState]}` }} />
                                 )}
-                                <ZaeonTriangle size={34} />
+                                <ZaeonTriangle size={28} spinning={false} />
                             </>
                         )}
                     </div>
                 ) : (
                   <>
                     <div className="flex items-center gap-3 relative">
-                        <div className="relative flex items-center justify-center w-6 h-6 rounded-full bg-cyan-500/10">
-                            <ZaeonTriangle size={16} />
-                        </div>
                         <span className="text-xs font-black uppercase tracking-widest text-slate-800 dark:text-slate-200">
-                            {activeChat ? (activeChat.isAgent ? "" : activeChat.name) : "Rede Neural"}
+                            {activeChat && !activeChat.isAgent ? activeChat.name : "Rede Neural"}
                         </span>
                     </div>
 
@@ -625,9 +642,9 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                         className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!activeChat && activeTab === 'friends' ? 'bg-white dark:bg-[#1e293b] text-cyan-600 dark:text-cyan-400 shadow-sm border border-slate-200 dark:border-transparent' : 'text-slate-500 hover:bg-slate-200/60 dark:hover:bg-white/5'}`}>
                         <UsersIcon className="w-3.5 h-3.5" /> Colegas
                     </button>
-                    <button onClick={() => setActiveChat(ZAEON_AGENT)}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeChat?.isAgent ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 shadow-sm border border-cyan-400/30' : 'text-slate-500 hover:bg-slate-200/60 dark:hover:bg-white/5'}`}>
-                        <ZaeonTriangle size={14} /> Zaeon
+                    <button onClick={() => setActiveChat(ZAEON_AGENT)} title="Zaeon"
+                        className={`flex-1 flex items-center justify-center py-1.5 rounded-xl transition-all ${activeChat?.isAgent ? 'bg-cyan-500/15 shadow-sm border border-cyan-400/30' : 'hover:bg-slate-200/60 dark:hover:bg-white/5'}`}>
+                        <ZaeonTriangle size={18} spinning={false} />
                     </button>
                     <button onClick={() => { setActiveChat(null); setActiveTab('teachers'); }}
                         className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!activeChat && activeTab === 'teachers' ? 'bg-white dark:bg-[#1e293b] text-cyan-600 dark:text-cyan-400 shadow-sm border border-slate-200 dark:border-transparent' : 'text-slate-500 hover:bg-slate-200/60 dark:hover:bg-white/5'}`}>
@@ -649,30 +666,25 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
                         {activeChat ? (
                             /* ===================== CHAT VIEW (HUMANO & IA) ===================== */
                             <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-black/10">
+                                {/* Cabeçalho só p/ chat humano — na Zaeon não repete triângulo (a barra de 3 já o mostra) */}
+                                {!activeChat.isAgent && (
                                 <div className="flex items-center gap-3 p-3 border-b border-slate-200/50 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-md">
-                                    {!activeChat.isAgent && (
-                                        <button onClick={() => setActiveChat(null)} className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
-                                            <ChevronLeftIcon className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-                                        </button>
-                                    )}
-                                    <div className={`relative w-8 h-8 rounded-full overflow-hidden border bg-slate-200 dark:bg-black shrink-0 flex items-center justify-center ${activeChat.isAgent ? 'border-cyan-400 bg-cyan-100 dark:bg-cyan-900/30' : 'border-slate-300 dark:border-white/20'}`}>
-                                        {activeChat.isAgent ? (
-                                            <ZaeonTriangle size={22} />
-                                        ) : activeChat.image ? (
+                                    <button onClick={() => setActiveChat(null)} className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
+                                        <ChevronLeftIcon className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+                                    </button>
+                                    <div className="relative w-8 h-8 rounded-full overflow-hidden border bg-slate-200 dark:bg-black shrink-0 flex items-center justify-center border-slate-300 dark:border-white/20">
+                                        {activeChat.image ? (
                                             <Image src={activeChat.image} alt={activeChat.name} fill sizes="32px" className="object-cover" />
                                         ) : (
                                             <UserIcon className="w-full h-full p-1.5 text-slate-400" />
                                         )}
                                     </div>
                                     <div className="flex flex-col truncate">
-                                        <span className="text-[11px] font-bold text-slate-800 dark:text-white truncate">{activeChat.isAgent ? 'Zaeon' : activeChat.name}</span>
-                                        {!activeChat.isAgent && <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400">Chat Seguro</span>}
+                                        <span className="text-[11px] font-bold text-slate-800 dark:text-white truncate">{activeChat.name}</span>
+                                        <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400">Chat Seguro</span>
                                     </div>
-                                    {/* anima quando a Zaeon está falando (o botão de ligar foi pro topo) */}
-                                    {activeChat.isAgent && (
-                                        <div className="ml-auto"><VoiceWaveIndicator size={16} /></div>
-                                    )}
                                 </div>
+                                )}
 
                                 <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
                                     {displayMessages.length === 0 && !isZaeonTyping && (

@@ -29,6 +29,7 @@ model User {
   countryCode         String?
   city                String?
   onboardingComplete  Boolean   @default(false)
+  tourDone            Boolean   @default(false)   // tour guiado da Zaeon (onboarding) — visível no dashboard
   torsoImage          String?
   role                String?
   phone               String?   

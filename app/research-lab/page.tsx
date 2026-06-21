@@ -47,13 +47,17 @@ const NAV_ACTIVE: Record<string, string> = {
 };
 // Selecionado = pill preta/degradê (mesma cor do framework da Sala de Pesquisa),
 // uniforme em claro e escuro — sem mais um arco-íris de cores por aba.
+// Selecionado: no ESCURO = mesma pill branca-glass das abas da Sala de Estudos;
+// no CLARO = charcoal acinzentado (tom do frame de pesquisa, não um preto chapado).
 const NAV_ACTIVE_PILL =
-  "bg-gradient-to-br from-[#0f172a] to-[#1e293b] border-white/10 text-white ring-1 ring-white/10 shadow-[0_10px_26px_-10px_rgba(0,0,0,0.7)]";
+  "bg-gradient-to-br from-[#1c1c28] to-[#15151f] text-white border-white/10 ring-1 ring-black/10 shadow-[0_10px_26px_-12px_rgba(0,0,0,0.55)] dark:from-white/20 dark:to-white/[0.05] dark:text-white dark:border-white/25 dark:ring-0 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.42),0_8px_18px_-8px_rgba(139,92,246,0.8)]";
 function navItem(active: boolean, accent: keyof typeof NAV_ACTIVE) {
   void accent; // accent mantido por compatibilidade; o ativo agora é sempre a pill preta
   return `${NAV_BASE} ${active ? NAV_ACTIVE_PILL : NAV_IDLE}`;
 }
 import ResearchRoomTour from "@/components/onboard/ResearchRoomTour";
+import OnboardingGuide from "@/components/onboard/OnboardingGuide";
+import { startTour } from "@/lib/onboarding/tour";
 import { capabilities } from "@/lib/runtime/mode";
 import { useLibraryFiles } from "@/lib/useLibraryFiles";
 import RichText from "@/components/research/RichText";
@@ -1215,6 +1219,34 @@ export default function HomeworkPage({
     return () => window.removeEventListener("zaeon:research:newdoc", onNewDoc);
   }, []);
 
+  // Deep-link ?worktype=TCC|Artigo|Relatório (menu inicial → Pesquisas): abre a aba
+  // Pesquisa NAQUELE tipo (a sessão salva dele), sem cair na Sala de Estudos.
+  useEffect(() => {
+    const wt = new URLSearchParams(window.location.search).get("worktype");
+    if (wt !== "TCC" && wt !== "Artigo" && wt !== "Relatório") return;
+    setActiveTab("pesquisa");
+    const saved = docsRef.current[wt];
+    if (saved) { setDocContent(saved.content); setDocTitle(saved.title); }
+    else setDocContent(templateFor(wt as WorkType));
+    setWorkType(wt as WorkType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Tour guiado da Zaeon: começa quando vem ?onboard=1 (card de boas-vindas) e o
+  // usuário ainda não fez (localStorage). O registro no servidor (User.tourDone) é
+  // feito ao concluir/pular. Garante a aba inicial = Sala de Estudos.
+  useEffect(() => {
+    try {
+      const wantsOnboard = new URLSearchParams(window.location.search).get("onboard") === "1";
+      const done = localStorage.getItem("zaeon.tourDone") === "1";
+      if (wantsOnboard && !done) {
+        setActiveTab("sala-de-estudos");
+        setTimeout(() => startTour(), 600);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const toggleFocusMode = () => {
     const newMode = !isFocusMode;
     setIsFocusMode(newMode);
@@ -1912,6 +1944,7 @@ export default function HomeworkPage({
           <div className="flex flex-col gap-3 px-2.5">
             {/* Sala de Estudos — topo da sidebar */}
             <button
+              data-tour="estudos"
               onClick={() => setActiveTab("sala-de-estudos")}
               className={navItem(activeTab === "sala-de-estudos", "blue")}
             >
@@ -1925,6 +1958,7 @@ export default function HomeworkPage({
 
             {/* Sala de Pesquisa (antiga "Pesquisa") */}
             <button
+              data-tour="pesquisa"
               onClick={() => setActiveTab("pesquisa")}
               className={navItem(activeTab === "pesquisa", "purple")}
             >
@@ -1951,6 +1985,7 @@ export default function HomeworkPage({
 
             {/* Lounge */}
             <button
+              data-tour="lounge"
               onClick={() => setActiveTab("lounge")}
               className={navItem(activeTab === "lounge", "violet")}
             >
@@ -1967,7 +2002,7 @@ export default function HomeworkPage({
             {/* Perfil */}
             <button
               data-tour="profile-tab"
-              onClick={() => handleTabChange("profile")}
+              onClick={() => setActiveTab("profile")}
               className={navItem(activeTab === "profile", "violet")}
             >
               <UserCircleIcon className="w-5 h-5 shrink-0" />
@@ -1979,8 +2014,8 @@ export default function HomeworkPage({
             </button>
           </div>
 
-          {/* EXTRAS — fixos no rodapé da sidebar: alternar direção do layout + modo foco */}
-          <div className="mt-auto px-2.5 pt-3 flex flex-col gap-3">
+          {/* EXTRAS — layout + foco; pb-16 deixa o cantinho inferior livre pro FAB da Zaeon encaixar */}
+          <div className="mt-auto px-2.5 pt-3 pb-16 flex flex-col gap-3">
             <div className="h-[1px] bg-slate-300 dark:bg-white/10" />
             <button
               data-tour="layout-toggle"
@@ -2814,7 +2849,8 @@ export default function HomeworkPage({
 
       {/* Interactive onboarding tour for first-time users */}
       {showTour && <ResearchRoomTour onComplete={() => setShowTour(false)} />}
-      <MiniTourToast tab={miniTourTab} onDismiss={() => setMiniTourTab(null)} />
+      {/* Tour guiado da Zaeon (golden path) */}
+      <OnboardingGuide />
     </div>
   );
 }
