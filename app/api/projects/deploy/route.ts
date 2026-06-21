@@ -20,7 +20,8 @@ import { assertEligibleOrThrow, ProjectsAccessError } from "@/lib/projects/acces
 import { effectivePlan, type PlanState } from "@/lib/plans";
 
 export const runtime = "nodejs";
-export const maxDuration = 10;
+// VPS: sem o teto de 10s do Vercel.
+export const maxDuration = 120;
 
 /** Vercel project names: lowercase, [a-z0-9._-], <=100 chars. */
 function sanitizeName(raw: string): string {

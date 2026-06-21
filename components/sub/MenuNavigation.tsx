@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import {
-  ChevronRightIcon, ArrowLeftIcon, ArrowRightStartOnRectangleIcon
+  ChevronRightIcon, ChevronDownIcon, ArrowLeftIcon, ArrowRightStartOnRectangleIcon
 } from "@heroicons/react/24/outline";
-import { Bot, Send, ShieldCheck, Loader2, Mic, MicOff, Search, GraduationCap, Code2, Crown } from "lucide-react";
+import { Bot, Send, ShieldCheck, Loader2, Mic, MicOff, Crown } from "lucide-react";
 import { isSuperAdmin } from "@/lib/auth/roles";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -13,6 +13,10 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import Image from "next/image";
 import ZaeonLogo from "@/components/main/ZaeonLogo";
 import InviteButton from "@/components/sub/InviteButton";
+import VoicePicker from "@/components/settings/VoicePicker";
+
+type ModuleKey = "pesquisas" | "estudos" | "projetos";
+interface RecentItem { id: string; title: string; href: string }
 
 // 🔥 Menu simplificado: Apenas opções vitais pós-login
 const MENU_ITEMS = [
@@ -65,6 +69,12 @@ export default function MenuNavigation() {
   const [canUseProjects, setCanUseProjects] = useState(false);
   const [inviteAccessed, setInviteAccessed] = useState(false);
 
+  // Menu reformado: módulos expansíveis com as últimas interações do usuário.
+  const [openModule, setOpenModule] = useState<ModuleKey | null>(null);
+  const [recent, setRecent] = useState<{ research: RecentItem[]; studies: RecentItem[] }>({ research: [], studies: [] });
+  const [recentProjects, setRecentProjects] = useState<RecentItem[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
+
   useEffect(() => {
     try { setInviteAccessed(localStorage.getItem("zaeon.inviteAccessed") === "1"); } catch { /* ignore */ }
     if (status !== "authenticated") { setCanUseProjects(false); return; }
@@ -83,6 +93,29 @@ export default function MenuNavigation() {
     } else if (status === "authenticated") {
       setIsOnboardMode(false);
     }
+  }, [status]);
+
+  // Últimas interações: pesquisas + estudos (servidor) e projetos (localStorage).
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    let alive = true;
+    setLoadingRecent(true);
+    fetch("/api/menu/recent")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d) setRecent({ research: d.research || [], studies: d.studies || [] }); })
+      .catch(() => { /* offline */ })
+      .finally(() => { if (alive) setLoadingRecent(false); });
+    try {
+      const idx = JSON.parse(localStorage.getItem("zaeon.proj.index.v1") || "[]");
+      if (Array.isArray(idx)) {
+        const top = [...idx]
+          .sort((a, b) => (b?.updatedAt || 0) - (a?.updatedAt || 0))
+          .slice(0, 3)
+          .map((p: any) => ({ id: String(p.id), title: p.name || "Projeto", href: `/research-lab?tab=projetos&project=${p.id}` }));
+        setRecentProjects(top);
+      }
+    } catch { /* ignore */ }
+    return () => { alive = false; };
   }, [status]);
 
   // Busca Pesquisa (Usuários logados)
@@ -270,6 +303,60 @@ export default function MenuNavigation() {
   const cardSelected = "bg-white border-cyan-400 dark:bg-cyan-400/10 dark:border-cyan-400/40 text-cyan-600 dark:text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.2)] dark:shadow-[0_0_15px_rgba(34,211,238,0.15)]";
   const accentBar = (active: boolean) => `absolute left-1 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full transition-all duration-500 ${active ? "bg-cyan-500 dark:bg-cyan-400 opacity-100 scale-y-100" : "bg-transparent opacity-0 scale-y-0"}`;
 
+  // Um módulo expansível (Pesquisas/Estudos/Projetos) — SEM ícones, só o título e as
+  // últimas interações. Clicar num item leva direto ao documento; "+ novo" abre a sala.
+  const renderModule = (id: ModuleKey, label: string, items: RecentItem[], newLabel: string, newHref: string) => {
+    const open = openModule === id;
+    return (
+      <li className="w-full">
+        <div onClick={() => setOpenModule(open ? null : id)} className={cardBase}>
+          <div className={accentBar(open)} />
+          <span className="text-sm tracking-tight pl-2 truncate font-semibold">{label}</span>
+          <ChevronDownIcon className={`h-4 w-4 opacity-40 transition-transform duration-300 shrink-0 ${open ? "rotate-180" : ""}`} />
+        </div>
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key={`${id}-body`}
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="overflow-hidden"
+            >
+              <div className="flex flex-col gap-1 pl-3 pr-1 pt-1.5 pb-1">
+                {loadingRecent ? (
+                  <span className="text-[11px] text-slate-400 dark:text-white/30 px-2 py-1.5 flex items-center gap-1.5">
+                    <Loader2 size={12} className="animate-spin" /> Carregando…
+                  </span>
+                ) : items.length === 0 ? (
+                  <span className="text-[11px] text-slate-400 dark:text-white/30 px-2 py-1.5">Nada por aqui ainda.</span>
+                ) : (
+                  items.map((it) => (
+                    <div
+                      key={it.id}
+                      onClick={() => router.push(it.href)}
+                      className="group/item flex items-center justify-between rounded-xl px-3 py-2 cursor-pointer bg-white/40 dark:bg-white/[0.02] hover:bg-cyan-50 dark:hover:bg-cyan-500/10 border border-transparent hover:border-cyan-300/50 dark:hover:border-cyan-400/20 transition-colors"
+                    >
+                      <span className="text-[12px] text-slate-700 dark:text-white/80 truncate">{it.title}</span>
+                      <ChevronRightIcon className="h-3.5 w-3.5 opacity-0 group-hover/item:opacity-60 transition-opacity shrink-0" />
+                    </div>
+                  ))
+                )}
+                <button
+                  onClick={() => router.push(newHref)}
+                  className="mt-0.5 text-left text-[11px] font-bold uppercase tracking-wide text-cyan-600 dark:text-cyan-400/80 hover:text-cyan-500 dark:hover:text-cyan-300 px-3 py-1.5 transition-colors"
+                >
+                  + {newLabel}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </li>
+    );
+  };
+
   // ── DESLOGADO: painel de LOGIN (onboard em linguagem natural foi desativado) ──
   // Login só "passa" se a pessoa já tem conta OU preencheu um convite (gate no signIn do NextAuth).
   if (status !== "authenticated") {
@@ -455,10 +542,17 @@ export default function MenuNavigation() {
             /* FLUXO 2: OPÇÕES DE LINGUAGEM E LOGOUT     */
             /* ========================================= */
             isOptionsOpen ? (
-              <motion.div key="options" initial={{ x: 10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-3 w-full h-full justify-center">
-                <button onClick={() => setIsOptionsOpen(false)} className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400/80 hover:text-cyan-500 dark:hover:text-cyan-400 text-[10px] font-bold uppercase mb-2 ml-2 transition-colors">
+              <motion.div key="options" initial={{ x: 10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-3 w-full h-full overflow-y-auto custom-scrollbar pr-1">
+                <button onClick={() => { setIsOptionsOpen(false); }} className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400/80 hover:text-cyan-500 dark:hover:text-cyan-400 text-[10px] font-bold uppercase mb-1 ml-2 transition-colors shrink-0">
                   <ArrowLeftIcon className="w-3.5 h-3.5" /> {t("menu.back")}
                 </button>
+
+                {/* VOZ — escolha de voz da Zaeon */}
+                <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.02] p-3">
+                  <VoicePicker />
+                </div>
+
+                {/* IDIOMA */}
                 <div className={cardBase}>
                   <div className="flex flex-col flex-1 pl-2">
                     <span className="text-[9px] opacity-50 uppercase font-bold tracking-tighter text-slate-500 dark:text-white">{t("options.language")}</span>
@@ -471,6 +565,32 @@ export default function MenuNavigation() {
                   </select>
                   <ChevronRightIcon className="h-4 w-4 opacity-30 text-slate-600 dark:text-white" />
                 </div>
+
+                {/* CONVITE — gerar/compartilhar convite */}
+                <InviteButton variant="menu" />
+
+                {/* ACESSAR CONVITE — quando a pessoa já acessou um convite */}
+                {inviteAccessed && (
+                  <div onClick={() => router.push("/convite")} className={cardBase}>
+                    <div className={accentBar(false)} />
+                    <span className="text-sm tracking-tight pl-2 truncate">Acessar convite</span>
+                    <ChevronRightIcon className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                )}
+
+                {/* MODO FOUNDER — só admin supremo */}
+                {isFounder && (
+                  <div onClick={() => router.push("/workstation/admin")} className={`${cardBase} hover:border-amber-400/50 dark:hover:border-amber-400/40`}>
+                    <span className="absolute left-1 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full bg-amber-400" />
+                    <span className="flex items-center gap-3 pl-2 min-w-0">
+                      <Crown size={16} className="text-amber-500 dark:text-amber-300 shrink-0" />
+                      <span className="text-sm tracking-tight truncate">Modo Founder</span>
+                    </span>
+                    <ChevronRightIcon className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
+                  </div>
+                )}
+
+                {/* LOGOUT */}
                 <div className={`${cardBase} hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-500/20 dark:hover:border-red-500/40`} onClick={() => signOut()}>
                   <div className="flex flex-col flex-1 pl-2">
                     <span className="text-[9px] opacity-50 uppercase font-bold tracking-tighter text-slate-500 dark:text-white">Session</span>
@@ -485,64 +605,18 @@ export default function MenuNavigation() {
               /* FLUXO 3: MENU PADRÃO PÓS LOGIN            */
               /* ========================================= */
               (
-                <motion.ul key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-2 w-full h-full justify-center">
+                <motion.ul key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-2 w-full h-full justify-center overflow-y-auto custom-scrollbar pr-1">
 
-                  {/* INICIAR NOVA PESQUISA — leva à barra de pesquisa (destaque) */}
-                  <li className="w-full">
-                    <div onClick={() => router.push("/research-lab?tab=pesquisa")} className={`${cardBase} ring-1 ring-cyan-500/40 dark:ring-cyan-400/40 shadow-[0_0_20px_rgba(34,211,238,0.12)]`}>
-                      <div className="absolute left-1 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full bg-cyan-500 dark:bg-cyan-400" />
-                      <span className="flex items-center gap-3 pl-2 min-w-0">
-                        <Search size={17} className="text-cyan-500 dark:text-cyan-300 shrink-0" />
-                        <span className="flex flex-col min-w-0">
-                          <span className="text-[9px] uppercase tracking-widest text-slate-500 dark:text-white/40 font-bold">{workTitle ? "Núcleo de Pesquisa" : "Pesquisa"}</span>
-                          <span className="text-sm tracking-tight truncate">{isLoadingResearch ? "Orquestrando..." : workTitle ? `Continuar: ${workTitle}` : "Iniciar nova pesquisa"}</span>
-                        </span>
-                      </span>
-                      <ChevronRightIcon className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
-                    </div>
-                  </li>
+                  {/* PESQUISAS — expansível: últimas 3 + nova */}
+                  {renderModule("pesquisas", "Pesquisas", recent.research, "Nova pesquisa", "/research-lab?tab=pesquisa")}
 
-                  {/* INICIAR NOVO ESTUDO — sala de estudos / barra de pesquisa */}
-                  <li className="w-full">
-                    <div onClick={() => router.push("/research-lab?tab=sala-de-estudos")} className={cardBase}>
-                      <div className={accentBar(false)} />
-                      <span className="flex items-center gap-3 pl-2 min-w-0">
-                        <GraduationCap size={17} className="text-blue-500 dark:text-blue-300 shrink-0" />
-                        <span className="text-sm tracking-tight truncate">Iniciar novo estudo</span>
-                      </span>
-                      <ChevronRightIcon className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
-                    </div>
-                  </li>
+                  {/* ESTUDOS — expansível: últimos 3 + novo */}
+                  {renderModule("estudos", "Estudos", recent.studies, "Novo estudo", "/research-lab?tab=sala-de-estudos")}
 
-                  {/* INICIAR NOVO PROJETO — só quem tem acesso ao Zaeon Code */}
-                  {canUseProjects && (
-                    <li className="w-full">
-                      <div onClick={() => router.push("/research-lab?tab=projetos")} className={cardBase}>
-                        <div className={accentBar(false)} />
-                        <span className="flex items-center gap-3 pl-2 min-w-0">
-                          <Code2 size={17} className="text-sky-500 dark:text-sky-300 shrink-0" />
-                          <span className="text-sm tracking-tight truncate">Iniciar novo projeto</span>
-                        </span>
-                        <ChevronRightIcon className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
-                      </div>
-                    </li>
-                  )}
+                  {/* PROJETOS — só quem tem acesso ao Zaeon Code (recentes do localStorage) */}
+                  {canUseProjects && renderModule("projetos", "Projetos", recentProjects, "Novo projeto", "/research-lab?tab=projetos")}
 
-                  {/* CONVITE — no estilo do menu (saiu da navbar) */}
-                  <li className="w-full"><InviteButton variant="menu" /></li>
-
-                  {/* ACESSAR CONVITE — aparece depois que a pessoa acessou um convite */}
-                  {inviteAccessed && (
-                    <li className="w-full">
-                      <div onClick={() => router.push("/convite")} className={cardBase}>
-                        <div className={accentBar(false)} />
-                        <span className="text-sm tracking-tight pl-2 truncate">Acessar convite</span>
-                        <ChevronRightIcon className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    </li>
-                  )}
-
-                  {/* OPTIONS */}
+                  {/* OPTIONS — concentra voz, idioma, convite, founder e logout */}
                   <li className="w-full" onClick={() => setIsOptionsOpen(true)}>
                     <div className={cardBase}>
                       <div className={accentBar(false)} />
@@ -550,20 +624,6 @@ export default function MenuNavigation() {
                       <ChevronRightIcon className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </li>
-
-                  {/* MODO FOUNDER — visível apenas para o admin supremo */}
-                  {isFounder && (
-                    <li className="w-full" onClick={() => router.push("/workstation/admin")}>
-                      <div className={`${cardBase} hover:border-amber-400/50 dark:hover:border-amber-400/40`}>
-                        <span className="absolute left-1 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full bg-amber-400" />
-                        <span className="flex items-center gap-3 pl-2 min-w-0">
-                          <Crown size={17} className="text-amber-500 dark:text-amber-300 shrink-0" />
-                          <span className="text-sm tracking-tight truncate">Modo Founder</span>
-                        </span>
-                        <ChevronRightIcon className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
-                      </div>
-                    </li>
-                  )}
                 </motion.ul>
               )}
 

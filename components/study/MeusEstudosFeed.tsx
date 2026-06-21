@@ -147,8 +147,11 @@ export default function MeusEstudosFeed() {
       if (!r.ok) throw new Error(`status ${r.status}`);
       const data: Space[] = await r.json();
       setSpaces(data);
+      // Deep-link do menu inicial: ?space=<id> abre direto aquele estudo.
+      let fromUrl = "";
+      try { fromUrl = new URLSearchParams(window.location.search).get("space") || ""; } catch { /* ignore */ }
       const last = (typeof window !== "undefined" && localStorage.getItem(LAST_KEY)) || "";
-      const sid = data.find((s) => s.id === last)?.id || data[0]?.id || "";
+      const sid = data.find((s) => s.id === fromUrl)?.id || data.find((s) => s.id === last)?.id || data[0]?.id || "";
       setSpaceId(sid);
       if (!sid) setLoading(false);
     } catch {
@@ -205,9 +208,10 @@ export default function MeusEstudosFeed() {
   };
 
   // ── criar item ────────────────────────────────────────────────────────────
-  const addItem = useCallback(async (p: { type: string; title: string; payload?: any; placement?: string; order?: number }) => {
-    if (!spaceId) return null;
-    const r = await fetch("/api/study/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ spaceId, ...p }) });
+  const addItem = useCallback(async (p: { type: string; title: string; payload?: any; placement?: string; order?: number }, sid?: string) => {
+    const useId = sid || spaceId;
+    if (!useId) return null;
+    const r = await fetch("/api/study/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ spaceId: useId, ...p }) });
     if (r.ok) { const it = await r.json(); setItems((prev) => [it, ...prev]); return it as Item; }
     return null;
   }, [spaceId]);
@@ -234,10 +238,11 @@ export default function MeusEstudosFeed() {
     tick();
   });
   // Persiste o título do espaço (sem depender do setState async)
-  const persistTitle = async (t: string) => {
+  const persistTitle = async (t: string, sid?: string) => {
+    const useId = sid || spaceId;
     setTitleDraft(t);
-    setSpaces((prev) => prev.map((s) => (s.id === spaceId ? { ...s, title: t } : s)));
-    try { await fetch("/api/study/spaces", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: spaceId, title: t }) }); } catch { /* ignore */ }
+    setSpaces((prev) => prev.map((s) => (s.id === useId ? { ...s, title: t } : s)));
+    try { await fetch("/api/study/spaces", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: useId, title: t }) }); } catch { /* ignore */ }
   };
 
   // ── ZAEON GENERATIVA: comando em linguagem natural → blocos no feed (ao vivo) ──
@@ -245,8 +250,27 @@ export default function MeusEstudosFeed() {
     const cmd = (override ?? zaeonCmd).trim();
     if (!cmd || zaeonBusy || !spaceId) return;
     setZaeonBusy(true); setZaeonCmd(""); setZaeonStatus("Zaeon está pensando…"); setGenTitle(cmd); setBarOpen(false);
+
+    // Cada pedido à Zaeon = um NOVO estudo. Só escreve no atual se ele estiver VAZIO
+    // (ex.: estudo recém-criado pelo "+"). Assim não sobrescreve nem empilha no aberto.
+    let targetId = spaceId;
+    let freshBase = false;
+    const currentHasContent = itemsRef.current.some((i) => i.placement === "feed");
+    if (currentHasContent) {
+      try {
+        const rs = await fetch("/api/study/spaces", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: cmd.slice(0, 80) }) });
+        if (rs.ok) {
+          const s = await rs.json();
+          targetId = s.id; freshBase = true;
+          setSpaces((prev) => [...prev, s]);
+          setSpaceId(s.id);
+          setItems([]);
+        }
+      } catch { /* se falhar, escreve no atual mesmo */ }
+    }
+
     try {
-      const r = await fetch("/api/study/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: cmd, spaceId }) });
+      const r = await fetch("/api/study/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: cmd, spaceId: targetId }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !Array.isArray(d.blocks) || d.blocks.length === 0) {
         setZaeonStatus("Não consegui montar agora. Tente reformular o comando.");
@@ -256,17 +280,17 @@ export default function MeusEstudosFeed() {
       // O nome do estudo (framework "Meus Estudos") muda pro tema, com glitch cadenciado.
       const studyName = String(d.title || cmd).slice(0, 80);
       await revealTitle(studyName);
-      await persistTitle(studyName);
-      const base = nextOrder();
+      await persistTitle(studyName, targetId);
+      const base = freshBase ? 0 : nextOrder();
       setZaeonStatus("Zaeon está escrevendo no seu caderno…");
       for (let i = 0; i < d.blocks.length; i++) {
         const b = d.blocks[i];
         const order = base + i;
         if (b.kind === "link" && b.url) {
-          await addItem({ type: "link", title: String(b.text).slice(0, 80), payload: { url: b.url, text: b.text }, placement: "feed", order });
+          await addItem({ type: "link", title: String(b.text).slice(0, 80), payload: { url: b.url, text: b.text }, placement: "feed", order }, targetId);
         } else {
           const variant = b.kind === "heading" ? "h1" : b.kind === "subheading" ? "h2" : "text";
-          await addItem({ type: "note", title: String(b.text).slice(0, 80), payload: { text: b.text, variant }, placement: "feed", order });
+          await addItem({ type: "note", title: String(b.text).slice(0, 80), payload: { text: b.text, variant }, placement: "feed", order }, targetId);
         }
         await new Promise((res) => setTimeout(res, 420)); // efeito "escrevendo ao vivo"
       }

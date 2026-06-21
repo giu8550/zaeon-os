@@ -29,8 +29,9 @@ import { generate, type IdeLevel, type TaskKind, type ModelId } from "@/lib/ai/r
 import { requiresApproval } from "@/lib/projects/github-actions";
 
 export const runtime = "nodejs";
-// Vercel Hobby corta funções em 10s — mantemos explícito para não criar falsa expectativa.
-export const maxDuration = 10;
+// VPS (container persistente): sem o teto de 10s do Vercel. Damos folga pro agente
+// gerar multi-arquivo num passe só (antes era fatiado em filelist→genfile p/ caber em 10s).
+export const maxDuration = 120;
 
 const VALID_LEVELS: IdeLevel[] = ["prototype", "implementation", "autonomy"];
 const VALID_TASKS: TaskKind[] = [

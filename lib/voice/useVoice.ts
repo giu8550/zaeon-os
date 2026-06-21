@@ -55,21 +55,26 @@ export function useVoice(opts: UseVoiceOpts = {}) {
         if (!text?.trim()) return;
         const cap = capabilities();
         if (cap.voiceTts === "server") {
-            // Modo container: TTS de alta qualidade. Stub — cai pro navegador se a API não existir.
+            // Modo container: voz neural (Kokoro) via o MESMO proxy do ttsController.
+            // /api/ai/voice devolve { audio_base64, mime } — sem stub, sem voz do Google.
             try {
-                const r = await fetch("/api/voice/tts", {
+                const voiceId = (() => { try { return localStorage.getItem("zaeon.voice.id") || undefined; } catch { return undefined; } })();
+                const r = await fetch("/api/ai/voice", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ text, lang }),
+                    body: JSON.stringify({ text: text.slice(0, 4000), voice: voiceId }),
                 });
                 if (r.ok) {
-                    const blob = new Blob([await r.arrayBuffer()], { type: "audio/mpeg" });
-                    const audio = new Audio(URL.createObjectURL(blob));
-                    audioRef.current = audio;
-                    setSpeaking(true);
-                    audio.onended = () => setSpeaking(false);
-                    await audio.play();
-                    return;
+                    const data = await r.json().catch(() => null);
+                    if (data?.audio_base64) {
+                        const audio = new Audio(`data:${data.mime || "audio/wav"};base64,${data.audio_base64}`);
+                        audioRef.current = audio;
+                        setSpeaking(true);
+                        audio.onended = () => setSpeaking(false);
+                        audio.onerror = () => { setSpeaking(false); speakBrowser(text); };
+                        await audio.play().catch(() => { setSpeaking(false); speakBrowser(text); });
+                        return;
+                    }
                 }
             } catch { /* fallback abaixo */ }
         }

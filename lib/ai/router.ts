@@ -22,6 +22,7 @@
 
 import { VertexAI } from "@google-cloud/vertexai";
 import { GEMINI_MODEL, GEMINI_MODEL_FLASH, GEMINI_MODEL_PRO } from "./model";
+import { runtimeMode } from "@/lib/runtime/mode";
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -211,14 +212,18 @@ function getVertexModel(
     location: process.env.GOOGLE_LOCATION || "us-central1",
     googleAuthOptions: { credentials: { client_email, private_key } },
   });
+  // No VPS (container) não há teto de 10s: deixamos o Gemini "pensar" e damos um teto
+  // de saída maior → respostas melhores e completas. No modo vercel, mantemos o
+  // thinking OFF e o teto baixo (senão o thinking estoura o orçamento e trunca o JSON).
+  const container = runtimeMode() === "container";
+  const defaultMaxTokens = container ? 8192 : 2048;
   return v.getGenerativeModel({
     model: modelId || GEMINI_MODEL,
     generationConfig: {
       temperature: opts.temperature ?? 0.4,
-      maxOutputTokens: opts.maxOutputTokens ?? 2048,
-      // Disable Gemini 2.5 "thinking": on Vercel Hobby (10s cap) thinking eats the
-      // budget and returns truncated/empty JSON. Off → ~2x faster, complete output.
-      thinkingConfig: { thinkingBudget: 0 },
+      maxOutputTokens: opts.maxOutputTokens ?? defaultMaxTokens,
+      // container → thinking habilitado (default do modelo); vercel → desligado.
+      ...(container ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
       ...(opts.json ? { responseMimeType: "application/json" } : {}),
     } as any,
   });

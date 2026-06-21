@@ -753,8 +753,11 @@ export default function ProjectsContent() {
     const idx = loadProjIndex();
     if (idx.length) {
       const sorted = [...idx].sort((a, b) => b.updatedAt - a.updatedAt);
-      setProjects(idx); setProjectId(sorted[0].id);
-      const snap = loadSnap(sorted[0].id); if (snap) hydrateFromSnap(snap);
+      // Deep-link do menu inicial: ?project=<id> abre direto aquele projeto.
+      const wanted = searchParams.get("project");
+      const target = (wanted && idx.find((p) => p.id === wanted)?.id) || sorted[0].id;
+      setProjects(idx); setProjectId(target);
+      const snap = loadSnap(target); if (snap) hydrateFromSnap(snap);
     } else {
       const id = newProjectId(); const meta = { id, name: "Novo projeto", updatedAt: Date.now() };
       setProjects([meta]); setProjectId(id); saveProjIndex([meta]);
