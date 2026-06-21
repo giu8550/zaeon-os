@@ -126,11 +126,8 @@ export default function MacSplash({
     const handleInitiate = () => {
         if (hasStarted) return;
 
-        // 1. Toca o som de boot/música (substitua o caminho pelo seu arquivo)
-        const audio = new Audio("/assets/boot-music.mp3");
-        audio.play().catch(err => console.error("Erro ao reproduzir áudio:", err));
-
-        // 2. Inicia o carregamento visual
+        // (splash de /about e loadings — sem música; a música inicial é do intro-overlay
+        //  da home, que controla o áudio do navbar.)
         setHasStarted(true);
     };
 

@@ -30,7 +30,7 @@ PIPER_VOICE_DIR = os.environ.get(
 )
 PIPER_DEFAULT = os.environ.get("PIPER_VOICE", "pt_BR-faber-medium")
 KOKORO_LANG = os.environ.get("KOKORO_LANG", "p")  # 'p' = português (br) no Kokoro
-DEFAULT_VOICE = os.environ.get("ZAEON_TTS_DEFAULT", "aura-f")
+DEFAULT_VOICE = os.environ.get("ZAEON_TTS_DEFAULT", "nova-f")  # premium por padrão (nunca cair na voz do navegador por falta de escolha)
 # Velocidade do Kokoro: < 1.0 deixa a fala mais lenta/suave (textura mais agradável).
 try:
     KOKORO_SPEED = float(os.environ.get("ZAEON_TTS_SPEED", "0.92"))

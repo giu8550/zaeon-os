@@ -32,16 +32,23 @@ function pref(key: string): string | undefined {
   try { return localStorage.getItem(key) || undefined; } catch { return undefined; }
 }
 
+// Escolhe a melhor voz pt-BR do navegador para o gênero pedido. Usado SÓ no fallback
+// (engine offline) — as vozes nomeadas do catálogo (Aura/Áureo/Nova) vêm do Kokoro.
+function pickBrowserVoice(gender: "f" | "m"): SpeechSynthesisVoice | null {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  const pt = voices.filter((v) => /pt(-|_)?BR|portug/i.test(`${v.lang} ${v.name}`));
+  const fem = /(maria|luciana|francisca|fernanda|joana|female|mulher|feminin)/i;
+  const masc = /(daniel|felipe|ricardo|jorge|male|homem|masculin)/i;
+  return pt.find((v) => (gender === "f" ? fem : masc).test(v.name)) || pt[0] || voices[0] || null;
+}
+
 function browserSpeak(text: string, gender: "f" | "m") {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) { set({ speaking: false, loading: false, text: null }); return; }
   const synth = window.speechSynthesis;
   synth.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  const voices = synth.getVoices();
-  const pt = voices.filter((v) => /pt(-|_)?BR|portug/i.test(`${v.lang} ${v.name}`));
-  const fem = /(maria|luciana|francisca|fernanda|female|mulher)/i;
-  const masc = /(daniel|felipe|ricardo|male|homem)/i;
-  const pick = pt.find((v) => (gender === "f" ? fem : masc).test(v.name)) || pt[0] || voices[0];
+  const pick = pickBrowserVoice(gender);
   if (pick) { u.voice = pick; u.lang = pick.lang || "pt-BR"; } else u.lang = "pt-BR";
   u.onend = () => set({ speaking: false, loading: false, text: null });
   u.onerror = () => set({ speaking: false, loading: false, text: null });
@@ -139,8 +146,9 @@ async function synthChunk(text: string, voiceId: string | undefined, ac: AbortCo
   return { kind: "browser", text };
 }
 
-// Toca um pedaço JÁ sintetizado e resolve quando termina.
-function playPrepared(item: Prepared, ac: AbortController): Promise<void> {
+// Toca um pedaço JÁ sintetizado e resolve quando termina. `gender` é usado só no
+// fallback do navegador, para a voz casar (ao menos) com o gênero escolhido.
+function playPrepared(item: Prepared, ac: AbortController, gender: "f" | "m" = "f"): Promise<void> {
   return new Promise((resolve) => {
     if (!item || ac.signal.aborted) return resolve();
     if (item.kind === "audio") {
@@ -151,7 +159,8 @@ function playPrepared(item: Prepared, ac: AbortController): Promise<void> {
       a.play().catch(() => { if (audio === a) audio = null; resolve(); });
     } else if (typeof window !== "undefined" && "speechSynthesis" in window) {
       const u = new SpeechSynthesisUtterance(item.text);
-      u.lang = "pt-BR";
+      const pick = pickBrowserVoice(gender);
+      if (pick) { u.voice = pick; u.lang = pick.lang || "pt-BR"; } else u.lang = "pt-BR";
       u.onend = () => resolve();
       u.onerror = () => resolve();
       window.speechSynthesis.speak(u);
@@ -166,6 +175,7 @@ export async function speakSequence(parts: string[], opts?: { voice?: string; ge
   const myCtrl = new AbortController();
   ctrl = myCtrl; // stop() aborta a sequência inteira
   const voiceId = opts?.voice || pref("zaeon.voice.id");
+  const gender = (opts?.gender || (pref("zaeon.voice.gender") as "f" | "m") || "f");
   const chunks = buildSpeechChunks(parts);
   if (!chunks.length) return;
   set({ speaking: true, loading: true, text: chunks[0] });
@@ -183,7 +193,7 @@ export async function speakSequence(parts: string[], opts?: { voice?: string; ge
     if (myCtrl.signal.aborted) return;
     ensure(i + 1); ensure(i + 1 + LOOKAHEAD); // mantém o buffer cheio à frente
     set({ speaking: true, loading: false, text: chunks[i] });
-    await playPrepared(prepared, myCtrl);
+    await playPrepared(prepared, myCtrl, gender);
     if (myCtrl.signal.aborted) return;
   }
   if (!myCtrl.signal.aborted) set({ speaking: false, loading: false, text: null });

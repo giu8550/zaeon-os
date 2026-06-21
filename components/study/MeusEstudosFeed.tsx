@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import VoiceModeSwitch from "@/components/voice/VoiceModeSwitch";
 import SpeakButton from "@/components/voice/SpeakButton";
+import VoicePlayButton from "@/components/voice/VoicePlayButton";
 import { useTTS } from "@/lib/voice/useTTS";
 import { takeHandoff } from "@/lib/agents/handoff";
 import { missionDone } from "@/lib/agents/mission";
@@ -204,7 +205,16 @@ export default function MeusEstudosFeed() {
       if (it.type === "note") { const t = (it.payload?.text || "").trim(); if (t) parts.push(t); }
       else if (it.title) parts.push(it.title);
     }
-    if (parts.length) tts.speakSequence(parts);
+    if (parts.length) {
+      // Passa a voz/gênero escolhidos (Options → VoicePicker) explicitamente, pra
+      // leitura usar SEMPRE a voz selecionada — e, no fallback do navegador, casar o gênero.
+      let voice: string | undefined; let gender: "f" | "m" | undefined;
+      try {
+        voice = localStorage.getItem("zaeon.voice.id") || undefined;
+        gender = (localStorage.getItem("zaeon.voice.gender") as "f" | "m") || undefined;
+      } catch { /* ignore */ }
+      tts.speakSequence(parts, { voice, gender });
+    }
   };
 
   // ── criar item ────────────────────────────────────────────────────────────
@@ -283,8 +293,11 @@ export default function MeusEstudosFeed() {
       await persistTitle(studyName, targetId);
       const base = freshBase ? 0 : nextOrder();
       setZaeonStatus("Zaeon está escrevendo no seu caderno…");
+      // O título já vive no cabeçalho (fonte grande) — não repetir como bloco de texto.
+      const norm = (s: string) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
       for (let i = 0; i < d.blocks.length; i++) {
         const b = d.blocks[i];
+        if (b.kind === "heading" && norm(b.text) === norm(studyName)) continue;
         const order = base + i;
         if (b.kind === "link" && b.url) {
           await addItem({ type: "link", title: String(b.text).slice(0, 80), payload: { url: b.url, text: b.text }, placement: "feed", order }, targetId);
@@ -323,6 +336,19 @@ export default function MeusEstudosFeed() {
     window.addEventListener("zaeon:study:add", onAdd);
     return () => window.removeEventListener("zaeon:study:add", onAdd);
   }, [addItem]);
+
+  // "Estudar esse tema" (botão da pesquisa): gera um estudo a partir do tema, mesmo
+  // já estando no research-lab (o feed fica sempre montado, só escondido → handoff
+  // de mount não basta). O StudyThisButton dispara este evento.
+  useEffect(() => {
+    const onRun = (e: any) => {
+      const t = e?.detail?.topic;
+      if (t && spaceId && !zaeonBusy) void typeIntoBarAndRun(String(t)).catch(() => { /* ignore */ });
+    };
+    window.addEventListener("zaeon:study:run", onRun);
+    return () => window.removeEventListener("zaeon:study:run", onRun);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaceId, zaeonBusy]);
 
   const saveNote = async () => {
     const t = note.trim(); if (!t) return;
@@ -564,50 +590,65 @@ export default function MeusEstudosFeed() {
   return (
     <div onPaste={onPaste} className={`h-full flex flex-col ${navRight ? "lg:flex-row-reverse" : "lg:flex-row"}`}>
       {/* ── CADERNO (centro) ── */}
-      <div className="flex-1 min-w-0 flex flex-col p-5 sm:p-6">
-        {/* título do estudo + espaços */}
-        <div className="flex items-center gap-2 mb-3">
-          {/* ⟁ da Zaeon no lugar do caderno: clica → abre/fecha a barrinha-agente */}
+      <div className="flex-1 min-w-0 flex flex-col p-5 sm:p-6 relative">
+        {/* BOTÃO FLUTUANTE "Estudar esse tema" — surge quando há algo digitado na barra ⟁
+            (e a Zaeon não está ocupada). Estilo about-us. Gera o estudo a partir do tema. */}
+        {zaeonCmd.trim() && !zaeonBusy && (
           <button
-            onClick={() => setBarOpen((v) => !v)}
-            title={barOpen ? "Fechar a Zaeon" : "Pedir um estudo à Zaeon"}
-            aria-pressed={barOpen}
-            className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-sm leading-none transition-all ${barOpen ? "text-white shadow-sm" : "text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10"}`}
-            style={barOpen ? { background: "linear-gradient(135deg,#2563eb,#06b6d4)" } : undefined}
+            onClick={() => zaeonStudy()}
+            title="Estudar esse tema"
+            className="group absolute bottom-6 right-6 z-30 inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-white font-black text-[14px] tracking-tight transition-transform hover:scale-[1.04] active:scale-95"
+            style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)", boxShadow: "0 18px 44px -14px rgba(34,211,238,0.65)" }}
           >
-            <span className={`${zaeonBusy ? "animate-[spin_4s_linear_infinite]" : "animate-[spin_16s_linear_infinite]"} motion-reduce:animate-none`} style={{ filter: "drop-shadow(0 0 3px rgba(34,211,238,0.5))" }}>⟁</span>
+            <Sparkles size={18} /> Estudar esse tema
           </button>
-          {genTitle !== null ? (
-            // Zaeon "digitando" o nome do estudo (glitch + gradiente), no-wrap
-            <span
-              style={{ fontFamily: `"Noto Sans SC","Microsoft YaHei",sans-serif` }}
-              className="text-lg font-black tracking-tight bg-gradient-to-r from-blue-500 via-cyan-400 to-violet-500 bg-clip-text text-transparent min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis leading-none"
-            >
-              {genTitle || "…"}
-            </span>
-          ) : (
-            <input
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={saveTitle}
-              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-              placeholder="Meus Estudos"
-              title={titleDraft}
-              className="text-lg font-black tracking-tight bg-transparent text-slate-900 dark:text-white focus:outline-none focus:border-b focus:border-cyan-400/50 min-w-0 flex-1"
-            />
-          )}
-          {/* PLAY: modo leitura do estudo INTEIRO (clica de novo = parar). Novo estudo
-              e troca de estudo vivem na biblioteca (e no ⟁ da Zaeon). */}
-          <button
+        )}
+        {/* ── CABEÇALHO: pílula liquid-glass (⟁ + título grande) + Play funcional ── */}
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="flex-1 min-w-0 rounded-[28px] p-[1.5px] bg-gradient-to-r from-blue-500/40 via-cyan-400/40 to-violet-500/40 dark:from-blue-400/40 dark:via-cyan-400/40 dark:to-violet-400/40 shadow-[0_12px_36px_-16px_rgba(37,99,235,0.45)]">
+            <div className="rounded-[27px] flex items-center gap-2.5 px-2 py-2 bg-white/70 dark:bg-white/[0.05] backdrop-blur-2xl border border-white/70 dark:border-white/10">
+              {/* ⟁ da Zaeon: abre/fecha a barra de novo estudo */}
+              <button
+                onClick={() => setBarOpen((v) => !v)}
+                title={barOpen ? "Fechar a Zaeon" : "Pedir um estudo à Zaeon"}
+                aria-pressed={barOpen}
+                className={`shrink-0 self-center w-11 h-11 rounded-full flex items-center justify-center text-lg leading-none transition-all ${barOpen ? "text-white shadow-md" : "text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10"}`}
+                style={barOpen ? { background: "linear-gradient(135deg,#2563eb,#06b6d4)" } : undefined}
+              >
+                <span className={`${zaeonBusy ? "animate-[spin_4s_linear_infinite]" : "animate-[spin_16s_linear_infinite]"} motion-reduce:animate-none`} style={{ filter: "drop-shadow(0 0 4px rgba(34,211,238,0.55))" }}>⟁</span>
+              </button>
+              {genTitle !== null ? (
+                // Zaeon "digitando" o nome do estudo (glitch + gradiente) — pode quebrar linha
+                <span
+                  style={{ fontFamily: `"Noto Sans SC","Microsoft YaHei",sans-serif` }}
+                  className="flex-1 min-w-0 text-[26px] leading-tight font-black tracking-tight bg-gradient-to-r from-blue-500 via-cyan-400 to-violet-500 bg-clip-text text-transparent break-words"
+                >
+                  {genTitle || "…"}
+                </span>
+              ) : (
+                // Título SEMPRE completo: textarea que cresce em altura (sem corte/ellipsis)
+                <textarea
+                  ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onBlur={saveTitle}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } }}
+                  rows={1}
+                  placeholder="Meus Estudos"
+                  className="flex-1 min-w-0 resize-none overflow-hidden bg-transparent border-0 outline-none py-0.5 text-[26px] leading-tight font-black tracking-tight text-[#0b3a66] dark:text-white placeholder:text-[#0b3a66]/35 dark:placeholder:text-white/30"
+                />
+              )}
+            </div>
+          </div>
+          {/* PLAY: lê o estudo INTEIRO (clica de novo = parar). Liquid-glass + ondas do chat widget. */}
+          <VoicePlayButton
+            playing={tts.speaking}
+            loading={tts.loading}
             onClick={readWholeStudy}
             disabled={feed.length === 0 && !tts.speaking}
-            title={tts.speaking ? "Parar a leitura" : "Ler o estudo inteiro em voz"}
-            aria-label={tts.speaking ? "Parar a leitura" : "Ler o estudo inteiro em voz"}
-            className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${tts.speaking ? "text-white shadow-sm" : "text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10"}`}
-            style={tts.speaking ? { background: GRAD } : undefined}
-          >
-            {tts.speaking ? <Square size={15} /> : <Play size={15} />}
-          </button>
+            size={48}
+            label={tts.speaking ? "Parar a leitura" : "Ouvir o estudo inteiro"}
+          />
         </div>
 
         {/* ── BARRINHA-AGENTE: só aparece ao clicar no ⟁ (some enquanto a Zaeon pensa). ── */}

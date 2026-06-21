@@ -91,6 +91,10 @@ const nextConfig = {
             bodySizeLimit: '20mb',
         },
         serverComponentsExternalPackages: ["canvas", "sharp"],
+        // Tree-shaking dos barrels pesados (framer-motion/recharts são usados em todo
+        // lugar) → bundle inicial menor, telas abrindo mais rápido. lucide/heroicons já
+        // têm o modularizeImports acima; incluí-los aqui também é seguro.
+        optimizePackageImports: ["framer-motion", "recharts", "@heroicons/react", "lucide-react"],
     },
 
     // 5. Build e Qualidade
