@@ -28,6 +28,14 @@ COPY package*.json ./
 # (`prisma generate`) aqui, porque o schema ainda não foi copiado — geramos depois.
 RUN npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts
 COPY . .
+# Pusher (realtime) — variáveis NEXT_PUBLIC_* são EMBUTIDAS no build do Next, então
+# precisam existir AQUI (build-arg), não bastam em runtime. Vêm do .env via compose
+# (build.args). Vazias por padrão → o client tem guard e degrada sem realtime, nunca
+# quebra. NUNCA passe o PUSHER_SECRET aqui (secret é server-only, fica só em runtime).
+ARG NEXT_PUBLIC_PUSHER_KEY=""
+ARG NEXT_PUBLIC_PUSHER_CLUSTER=""
+ENV NEXT_PUBLIC_PUSHER_KEY=$NEXT_PUBLIC_PUSHER_KEY \
+    NEXT_PUBLIC_PUSHER_CLUSTER=$NEXT_PUBLIC_PUSHER_CLUSTER
 # agora o prisma/schema.prisma já está na imagem → gera o client e builda.
 RUN npx --yes prisma generate && npm run build
 

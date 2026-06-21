@@ -7,7 +7,14 @@
 services:
   # ───────────── web (Next + Socket.IO) ─────────────
   web:
-    build: { context: ., dockerfile: Dockerfile }
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # NEXT_PUBLIC_* são embutidas no build → vêm do .env como build-args.
+      # (PUSHER_SECRET NÃO entra aqui; é server-only, fica só no env_file de runtime.)
+      args:
+        NEXT_PUBLIC_PUSHER_KEY: ${NEXT_PUBLIC_PUSHER_KEY:-}
+        NEXT_PUBLIC_PUSHER_CLUSTER: ${NEXT_PUBLIC_PUSHER_CLUSTER:-}
     container_name: zaeon_web
     env_file: [.env]                       # DATABASE_URL (Atlas), NEXTAUTH, etc.
     environment:

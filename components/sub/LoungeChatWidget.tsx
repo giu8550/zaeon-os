@@ -277,9 +277,16 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
     // 1. INICIALIZAÇÃO DO PUSHER (WEB SOCKET HUMANOS)
     useEffect(() => {
         if (!realUserId) return;
-        const pusher = new PusherClient(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
-            cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
-        });
+        // Sem chave (ex.: build sem NEXT_PUBLIC_PUSHER_KEY) → NÃO instancia o Pusher.
+        // Antes isso lançava "You must pass your app key" e derrubava o app inteiro,
+        // já que o widget é montado globalmente. Agora degrada: sem realtime, sem crash.
+        const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
+        const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
+        if (!pusherKey || !pusherCluster) {
+            if (process.env.NODE_ENV !== "production") console.warn("[chat] Pusher sem env (NEXT_PUBLIC_PUSHER_KEY/CLUSTER) — realtime desligado.");
+            return;
+        }
+        const pusher = new PusherClient(pusherKey, { cluster: pusherCluster });
         const channel = pusher.subscribe(`user_${realUserId}`);
         channel.bind('new-message', (newMessage: any) => {
             if (activeChatRef.current?.id === newMessage.senderId) {
