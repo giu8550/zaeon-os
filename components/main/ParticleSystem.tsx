@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 
-const PARTICLE_COUNT = 1400;
+const PARTICLE_COUNT = 1000; // mais leve (era 1400) — fundo menos pesado
 const GLOBE_RADIUS_RATIO = 0.32;
 const SNAKE_THICKNESS = 45;
 const SNAKE_SPEED = 0.012;
@@ -173,11 +173,11 @@ const StarBackground: React.FC = () => {
                 }
 
                 ctx.fillStyle = p.color;
-                ctx.globalAlpha = isDark ? alpha : alpha * 0.7;
+                ctx.globalAlpha = isDark ? alpha * 0.72 : alpha * 0.5; // fundo mais leve
 
-                // Brilho do Overheat (Fase 4 apenas) — blur mais suave no ápice
+                // Brilho do Overheat (Fase 4 apenas) — blur do DNA mais leve (era 6)
                 if (phase === 4 && i % 4 === 0) {
-                    ctx.shadowBlur = 6;
+                    ctx.shadowBlur = 4;
                     ctx.shadowColor = p.color;
                 } else {
                     ctx.shadowBlur = 0;

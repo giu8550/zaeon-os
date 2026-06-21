@@ -77,14 +77,17 @@ export default function MenuNavigation() {
   // Pesquisas = os DOCS salvos (TCC/Artigo/Relatório) — cada tipo é uma sessão (localStorage).
   const [researchDocs, setResearchDocs] = useState<RecentItem[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
-  // Card de boas-vindas (1ª vez pós-login): check verde + começar onboarding.
+  // Card de boas-vindas: aparece pra QUEM NUNCA fez o tour (User.tourDone=false no servidor),
+  // não só na 1ª sessão. Some quando o usuário conclui o onboarding.
   const [showWelcome, setShowWelcome] = useState(false);
   useEffect(() => {
     if (status !== "authenticated") return;
-    try { if (localStorage.getItem("zaeon.welcomeSeen") !== "1") setShowWelcome(true); } catch { /* ignore */ }
+    let alive = true;
+    fetch("/api/onboard/tour").then((r) => (r.ok ? r.json() : null)).then((d) => { if (alive && d) setShowWelcome(!d.tourDone); }).catch(() => { /* offline */ });
+    return () => { alive = false; };
   }, [status]);
-  const startOnboard = () => { try { localStorage.setItem("zaeon.welcomeSeen", "1"); } catch { /* ignore */ } setShowWelcome(false); router.push("/research-lab?tab=sala-de-estudos&onboard=1"); };
-  const dismissWelcome = () => { try { localStorage.setItem("zaeon.welcomeSeen", "1"); } catch { /* ignore */ } setShowWelcome(false); };
+  const startOnboard = () => { setShowWelcome(false); router.push("/research-lab?tab=sala-de-estudos&onboard=1"); };
+  const dismissWelcome = () => { setShowWelcome(false); }; // esconde só nesta sessão; volta até concluir o tour
 
   useEffect(() => {
     try { setInviteAccessed(localStorage.getItem("zaeon.inviteAccessed") === "1"); } catch { /* ignore */ }
@@ -594,8 +597,7 @@ export default function MenuNavigation() {
                   <ChevronRightIcon className="h-4 w-4 opacity-30 text-slate-600 dark:text-white" />
                 </div>
 
-                {/* CONVITE — gerar/compartilhar convite */}
-                <InviteButton variant="menu" />
+                {/* (Convite saiu daqui: virou um card próprio à direita do menu, no hero-content) */}
 
                 {/* ACESSAR CONVITE — quando a pessoa já acessou um convite */}
                 {inviteAccessed && (
