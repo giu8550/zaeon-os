@@ -1837,7 +1837,7 @@ export default function HomeworkPage({
           onMouseEnter={() => setIsSidebarOpen(true)}
           onMouseLeave={() => setIsSidebarOpen(false)}
           animate={{ width: isSidebarOpen ? 180 : 54 }}
-          className={`fixed left-4 z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl shadow-[0_12px_40px_-12px_rgba(15,23,42,0.45)] bg-white/70 dark:bg-[#0a0a0a]/60 border-white/40 dark:border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
+          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl shadow-[0_12px_40px_-12px_rgba(15,23,42,0.45)] bg-white/70 dark:bg-[#0a0a0a]/60 border-white/40 dark:border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
           <div className="flex flex-col gap-3 px-2.5">
             {/* Pesquisa */}
@@ -1956,11 +1956,11 @@ export default function HomeworkPage({
       )}
 
       <main
-        className={`flex-1 flex flex-col ${!isEmbedded ? "pl-[80px]" : ""} h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-6" : "p-6"} gap-6`}
+        className={`flex-1 flex flex-col ${!isEmbedded ? (isChatLeft ? "pr-[80px]" : "pl-[80px]") : ""} h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-6" : "p-6"} gap-6`}
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
-        {activeTab !== "sala-de-estudos" && activeTab !== "pesquisa" && activeTab !== "profile" && (
+        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos", "lounge"].includes(activeTab) && (
           <div className="flex items-end justify-between shrink-0">
             <div>
               <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
@@ -1985,6 +1985,7 @@ export default function HomeworkPage({
                 onChange={(e) => handleFiles(e.target.files)}
               />
               <ResearchShell
+                flipped={isChatLeft}
                 workType={workType}
                 onWorkType={setWorkType}
                 onRelate={handleRelateFiles}
