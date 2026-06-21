@@ -10,35 +10,57 @@
  */
 export type TourStep = {
   id: string;
-  say: string;               // fala da Zaeon (vai pro chat widget)
+  say: string;               // fala da Zaeon (vai pro chat widget + VOZ)
+  hint: string;              // textinho curto (com emoji) no card, descrevendo a função
   target?: string;           // seletor do elemento a destacar (coachmark)
-  cta?: string;              // rótulo do botão de avançar
-  clickTarget?: boolean;     // avança ao clicar no próprio elemento destacado
+  clickTarget?: boolean;     // avança ao CLICAR no próprio elemento destacado (sem botão)
+  advanceEvent?: string;     // avança quando este window event dispara (ação concluída)
+  prefill?: string;          // pré-preenche a barra de pesquisa ao entrar no passo
   tab?: string;              // garante a aba certa (dispara zaeon:set-tab)
+  info?: boolean;            // passo só explicativo → mostra um "Ok" leve pra seguir
+  cta?: string;              // rótulo do botão (só quando info)
 };
 
 export const TOUR_STEPS: TourStep[] = [
-  // — Abertura: a Zaeon puxa assunto e se apresenta
-  { id: "hello", say: "Bom dia! ☀️ Eu sou a Zaeon. Que honra te receber — já vejo um baita potencial em você. Em uns 2 minutinhos eu te mostro tudo e a gente desbloqueia uma fase nova nos seus estudos. Bora? (E pode falar comigo por voz a qualquer hora — é só me chamar aqui no cantinho.)", cta: "Bora!" },
+  // — Abertura (voz): a Zaeon "liga" e se apresenta
+  { id: "hello", info: true, hint: "👋 Oi! Eu sou a Zaeon", cta: "Bora! 🚀",
+    say: "Oi! 🎙️ É a Zaeon falando — que honra te receber. Vou te dar uma volta rapidinha, conversando, e a gente desbloqueia uma fase nova nos seus estudos. Pode me ouvir aqui no cantinho a qualquer hora. Bora?" },
 
-  // — Sala de Estudos: caderno + biblioteca + pesquisa (estudo)
-  { id: "estudos", say: "Tudo começa nos seus **Estudos**. Clica em Estudos aqui na lateral. 👇", target: '[data-tour="estudos"]', clickTarget: true, tab: "sala-de-estudos" },
-  { id: "caderno", say: "Esta é a **Sala de Estudos** — um caderno vivo. Você escreve em blocos (título, subtítulo, texto), arrasta itens da sua **biblioteca** pra dentro e pode ouvir tudo em voz.", cta: "Legal" },
-  { id: "pesquisar", say: "E o atalho mágico 💜: digita aqui um assunto que você quer dominar e aperta **Enter** — eu pesquiso e escrevo um estudo inteiro pra você.", target: '[data-academic-input="true"]', cta: "Vou pesquisar" },
-  { id: "voz", say: "Enquanto eu escrevo, te faço companhia por **voz** — sim, eu converso de verdade! 😄 Me conta: o que te trouxe até aqui hoje?", cta: "Continuar" },
-  { id: "resultado", say: "Quando o estudo ficar pronto, olha as abas **Referências**, **Insights** e **Base**. Salva pelo menos **1 referência** e uns **2 trabalhos** — vão te servir já já.", cta: "Salvei" },
-  { id: "gerar", say: "Tá vendo o botão **Gerar pesquisa** logo abaixo da barra? Ele transforma seu estudo num esboço de verdade (introdução, metodologia, lacuna...). Clica nele e depois em **Iniciar pesquisa**.", cta: "Feito" },
+  // — Sala de Estudos (= onde a pesquisa de estudo acontece) — avança ao CLICAR no ícone
+  { id: "estudos", hint: "📚 Comece pela sua Sala de Estudos", target: '[data-tour="estudos"]', clickTarget: true, tab: "sala-de-estudos",
+    say: "Clica em **Estudos** aqui na lateral 👇 — é onde eu pesquiso e escrevo estudos pra você. (No 'Meus Estudos' fica o caderno de blocos e a biblioteca, mas isso é pra depois.)" },
 
-  // — Sala de Pesquisa: cada ferramenta, bem aos poucos
-  { id: "pesquisa", say: "Agora a **Sala de Pesquisa** — é onde você escreve o trabalho de verdade. Clica aqui. 👇", target: '[data-tour="pesquisa"]', clickTarget: true, tab: "pesquisa" },
-  { id: "play", say: "No painel da direita ficam **os seus documentos**. Dá um **play** num deles pra ouvir/ler com calma.", cta: "Entendi" },
-  { id: "comparar", say: "Quer cruzar ideias? **Arraste um documento sobre o outro** que eu **comparo** os dois e te entrego um resumo da relação.", cta: "Boa" },
-  { id: "painel", say: "Pra estudar em sequência, **jogue documentos no painel** e leia na ordem. E organize tudo em **pastas** pra não se perder.", cta: "Show" },
-  { id: "citacoes", say: "Salvou um trecho? Ele vira **citação em ABNT** — clica pra inserir no texto no ponto do cursor. O que você apagar vai pra **lixeira** (dá pra restaurar).", cta: "Perfeito" },
-  { id: "tipo", say: "Lá em cima você troca entre **TCC, Artigo e Relatório** — cada um é uma sessão própria de escrita. Te ensino o resto (salvar/publicar em ABNT) quando você chegar lá. 😉", cta: "Entendi" },
+  // — Pesquisar um estudo (tema sugerido) — avança quando a pesquisa COMEÇA
+  { id: "pesquisar", hint: "🔎 Pesquise um tema — deixei um pronto", target: '[data-academic-input="true"]', advanceEvent: "zaeon:research:start", prefill: "história do Brasil",
+    say: "Pra começar fácil, já deixei um tema na barra: **história do Brasil**. É só apertar **Enter** que eu pesquiso e monto o estudo. 🎙️" },
 
-  // — Lounge: missão final, em grupo
-  { id: "lounge", say: "Última missão ✦: vai no **Lounge** e cria um estudo ou pesquisa **em conjunto** pra compartilhar com um amigo — aprender junto é muito mais leve. Quando precisar, é só me chamar. Boa jornada! 🚀", target: '[data-tour="lounge"]', clickTarget: true, tab: "lounge", cta: "Concluir" },
+  // — Enquanto pesquisa: voz puxando papo — avança quando o estudo FICA PRONTO
+  { id: "esperando", hint: "🎧 Eu te faço companhia por voz", advanceEvent: "zaeon:research:done",
+    say: "Enquanto eu trabalho, te faço companhia 😄 — e sim, eu converso por voz de verdade! Me conta: você curte mais história, exatas, ou tá começando agora?" },
+
+  // — Resultado: destaca as abas; explica salvar refs/trabalhos
+  { id: "resultado", info: true, hint: "📑 Referências · Insights · Base", target: '[data-tour="result-tabs"]', cta: "Salvei 👍",
+    say: "Pronto! 🎉 Olha as abas **Referências**, **Insights** e **Base**. Salva pelo menos **1 referência** e uns **2 trabalhos** — vão te servir na pesquisa." },
+
+  // — Gerar pesquisa — avança quando o esboço é criado (Iniciar pesquisa → newdoc)
+  { id: "gerar", hint: "✨ Gere a pesquisa a partir do estudo", target: '[data-tour="gerar"]', advanceEvent: "zaeon:research:newdoc",
+    say: "Agora clica em **Gerar pesquisa** e depois em **Iniciar pesquisa** — eu transformo seu estudo num esboço real, com introdução, metodologia e a lacuna. ✍️" },
+
+  // — Sala de Pesquisa: ferramentas (explicativas, com destaque onde dá)
+  { id: "play", info: true, hint: "▶️ Ouça/leia um documento", cta: "Entendi",
+    say: "Chegamos na **Sala de Pesquisa** 💜. No painel da direita ficam **seus documentos** — dá um **play** num deles pra ouvir ou ler com calma." },
+  { id: "comparar", info: true, hint: "🔗 Compare dois documentos", cta: "Boa",
+    say: "Quer cruzar ideias? **Arraste um documento sobre o outro** que eu **comparo** os dois e te entrego um resumo da relação." },
+  { id: "painel", info: true, hint: "🗂️ Painel de leitura + pastas", cta: "Show",
+    say: "Pra estudar em sequência, jogue documentos no **painel** e leia na ordem. E organize tudo em **pastas** pra não se perder." },
+  { id: "citacoes", info: true, hint: "🔖 Citações ABNT · 🗑️ lixeira", cta: "Perfeito",
+    say: "Salvou um trecho? Ele vira **citação em ABNT** — clica pra inserir no texto. O que você apagar vai pra **lixeira**, dá pra restaurar." },
+  { id: "tipo", info: true, hint: "🎓 TCC · Artigo · Relatório", cta: "Entendi",
+    say: "Lá em cima você troca entre **TCC, Artigo e Relatório** — cada um é uma sessão própria. Te ensino salvar/publicar em ABNT quando você chegar lá. 😉" },
+
+  // — Lounge: missão final — avança ao CLICAR
+  { id: "lounge", hint: "🤝 Crie em grupo no Lounge", target: '[data-tour="lounge"]', clickTarget: true, tab: "lounge",
+    say: "Última missão ✦: vai no **Lounge** e crie um estudo ou pesquisa **em conjunto** pra compartilhar com um amigo. Aprender junto é mais leve. É só me chamar quando precisar. Boa jornada! 🚀" },
 ];
 
 type TourState = { active: boolean; index: number };
@@ -55,6 +77,7 @@ function sayCurrent() {
   const s = TOUR_STEPS[state.index];
   if (!s) return;
   if (s.tab) { try { window.dispatchEvent(new CustomEvent("zaeon:set-tab", { detail: s.tab })); } catch { /* */ } }
+  if (s.prefill) { try { window.dispatchEvent(new CustomEvent("zaeon:tour:prefill", { detail: s.prefill })); } catch { /* */ } }
   try { window.dispatchEvent(new CustomEvent("zaeon:onboard:say", { detail: s.say })); } catch { /* */ }
 }
 

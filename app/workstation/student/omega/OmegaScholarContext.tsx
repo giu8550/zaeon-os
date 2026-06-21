@@ -77,6 +77,7 @@ export function OmegaScholarProvider({ room, onStart, children }:
     abortRef.current = ac;
     try { localStorage.setItem(RUN_KEY, JSON.stringify({ query: prompt, startedAt })); } catch { /* ignore */ }
     setState({ status: "running", query: prompt, phases: [], answer: "", session: null, error: null, startedAt, ...EMPTY_FORGE, ...EMPTY_PREREQS });
+    try { window.dispatchEvent(new CustomEvent("zaeon:research:start", { detail: prompt })); } catch { /* onboarding */ }
     try {
       const res = await fetch("/api/ai/scholar", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -104,7 +105,7 @@ export function OmegaScholarProvider({ room, onStart, children }:
         setState((s) => {
           if (ev.type === "phase") return { ...s, phases: [...s.phases, { phase: ev.phase, message: (ev as any).message ?? ev.phase }] };
           if (ev.type === "answer") return { ...s, answer: ev.text };
-          if (ev.type === "done") { try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ } return { ...s, status: "done", session: ev.session }; }
+          if (ev.type === "done") { try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ } try { window.dispatchEvent(new CustomEvent("zaeon:research:done")); } catch { /* onboarding */ } return { ...s, status: "done", session: ev.session }; }
           if (ev.type === "error") { try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ } return { ...s, status: "error", error: ev.message }; }
           return s;
         });

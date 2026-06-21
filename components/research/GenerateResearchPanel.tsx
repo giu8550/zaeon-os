@@ -52,6 +52,7 @@ export default function GenerateResearchPanel({ topic, references = [] }: Props)
       <div className="flex justify-center">
         {!result || loading ? (
           <button
+            data-tour="gerar"
             onClick={generate}
             disabled={loading || !topic.trim()}
             className="group relative inline-block px-9 py-3 rounded-2xl overflow-hidden bg-black/40 border border-cyan-500/30 text-white font-black text-[11px] uppercase tracking-[0.28em] shadow-2xl backdrop-blur-md transition-all duration-500 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"

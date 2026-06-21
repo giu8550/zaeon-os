@@ -135,6 +135,9 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
             if (typeof text !== "string" || !text.trim()) return;
             setActiveChat(ZAEON_AGENT);
             setIsOpen(true);
+            // Sensação de "ligação": entra no modo voz ativo → o overlay de chamada
+            // aparece enquanto a Zaeon fala (ela puxa assunto com firmeza).
+            try { setVoiceModeState("active"); } catch { /* ok */ }
             setZaeonMessages((prev) => [...prev, { id: `ob-${Date.now()}`, senderId: "zaeon-agent", text }]);
             try { tts.speak(text); } catch { /* voz é bônus */ }
         };

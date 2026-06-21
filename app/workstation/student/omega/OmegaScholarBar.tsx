@@ -22,6 +22,13 @@ export default function OmegaScholarBar({ flushTop = false, collapsible = false 
   // Sem estudo → barra aberta (ícone + input). Estudo gerado (ou pesquisando) → fecha (só o ⟁).
   useEffect(() => { setExpanded(!hasResult && !busy); }, [hasResult, busy]);
 
+  // Onboarding: a Zaeon pré-preenche a barra com um tema sugerido (ex.: "história do Brasil").
+  useEffect(() => {
+    const onPrefill = (e: any) => { const t = e?.detail; if (typeof t === "string" && t) { setDraft(t); if (collapsible) setExpanded(true); } };
+    window.addEventListener("zaeon:tour:prefill", onPrefill);
+    return () => window.removeEventListener("zaeon:tour:prefill", onPrefill);
+  }, [collapsible, setDraft]);
+
   // ── Elapsed timer ──────────────────────────────────────────────────────────
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {

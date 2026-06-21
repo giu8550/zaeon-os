@@ -67,7 +67,7 @@ export default function OmegaScholarWorkspace() {
       {s && (
         <>
           {/* Trilho de abas — pills soltas (sem a "pill maior" envolvendo) */}
-          <div className="mb-4 flex w-fit max-w-full overflow-x-auto no-scrollbar gap-1.5">
+          <div data-tour="result-tabs" className="mb-4 flex w-fit max-w-full overflow-x-auto no-scrollbar gap-1.5">
             {TABS.map((t) => {
               const Icon = t.icon; const on = mod === t.id;
               const count = t.id === "refs" ? s.references?.length : undefined;
