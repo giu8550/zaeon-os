@@ -9,8 +9,9 @@
 # ───────────────────────── Stage 1: builder ─────────────────────────
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
+# DATABASE_URL placeholder: só p/ o `prisma generate` não reclamar durante o build.
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    DATABASE_URL="mongodb://placeholder:27017/build"   # só p/ o prisma generate não reclamar
+    DATABASE_URL="mongodb://placeholder:27017/build"
 
 COPY package*.json ./
 RUN npm ci
