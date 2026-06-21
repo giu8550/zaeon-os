@@ -13,13 +13,13 @@ import AuthGateNotice from "@/components/research/AuthGateNotice";
 
 const TABS = [
   { id: "refs", label: "Referências", icon: BookMarked },
-  { id: "insights", label: "Insights & Síntese", icon: Lightbulb },
+  { id: "insights", label: "Insights", icon: Lightbulb },
   { id: "prereqs", label: "Base", icon: BookOpen },
   { id: "suggest", label: "Sugestões de pesquisa", icon: Sparkles },
 ];
 
 export default function OmegaScholarWorkspace() {
-  const { session, status, query, draft, setDraft } = useOmegaScholar();
+  const { session, status, query, draft, setDraft, runQuery } = useOmegaScholar();
   const [mod, setMod] = useState("refs");
   const [history, setHistory] = useState<any[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -47,8 +47,8 @@ export default function OmegaScholarWorkspace() {
 
       {s && (
         <>
-          {/* Trilho de abas — vidro fosco segmentado (Apple Glass), ativa = pílula clara com glow violeta */}
-          <div className="mb-4 flex w-fit max-w-full overflow-x-auto no-scrollbar gap-1 p-1.5 rounded-2xl bg-white/40 dark:bg-white/[0.06] border border-white/50 dark:border-white/12 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
+          {/* Trilho de abas — pills soltas (sem a "pill maior" envolvendo) */}
+          <div className="mb-4 flex w-fit max-w-full overflow-x-auto no-scrollbar gap-1.5">
             {TABS.map((t) => {
               const Icon = t.icon; const on = mod === t.id;
               const count = t.id === "refs" ? s.references?.length : undefined;
@@ -66,7 +66,11 @@ export default function OmegaScholarWorkspace() {
           {mod === "insights" && <InsightsModule insights={s.insights} />}
           {mod === "prereqs" && <PrereqsModule />}
           {mod === "suggest" && (
-            <ResearchSuggestionPanel docTitle={seed} onSelectTitle={(t) => setDraft(t)} />
+            <ResearchSuggestionPanel
+              docTitle={seed}
+              onSelectTitle={(t) => setDraft(t)}
+              onStart={(t) => { setDraft(t); setMod("refs"); void runQuery(t); }}
+            />
           )}
         </>
       )}

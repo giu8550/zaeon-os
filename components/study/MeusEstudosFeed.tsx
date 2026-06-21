@@ -470,7 +470,7 @@ export default function MeusEstudosFeed() {
   };
 
   // ── render de um bloco do caderno ──────────────────────────────────────────
-  const renderBlock = (it: Item) => {
+  const renderBlock = (it: Item, idx?: number) => {
     const variant: "h1" | "h2" | "text" = it.payload?.variant || "text";
     const text: string = it.payload?.text ?? "";
     const isMedia = MEDIA.has(it.type);
@@ -559,8 +559,11 @@ export default function MeusEstudosFeed() {
 
     // BLOCO DE TEXTO editável (título / subtítulo / parágrafo)
     // Tipografia editorial (estilo Claude): títulos grandes, texto generoso e legível.
+    // O 1º bloco (logo abaixo do título) vira um SUBTÍTULO destacado, um pouco maior.
+    const isLead = idx === 0 && variant === "text";
     const cls = variant === "h1" ? "text-3xl sm:text-4xl font-black tracking-tight leading-tight text-slate-900 dark:text-white"
       : variant === "h2" ? "text-xl sm:text-2xl font-bold tracking-tight leading-snug text-slate-800 dark:text-white/95"
+      : isLead ? "text-xl sm:text-2xl font-semibold leading-snug text-slate-700 dark:text-white/90"
       : "text-[16px] sm:text-[17px] leading-[1.7] text-slate-700 dark:text-slate-200/90";
     const ph = variant === "h1" ? "Título" : variant === "h2" ? "Subtítulo" : "Escreva…";
     const onKey = (e: React.KeyboardEvent) => {
@@ -715,7 +718,7 @@ export default function MeusEstudosFeed() {
             </div>
           ) : (
             <div className={`p-6 sm:p-8 max-w-2xl flex flex-col ${libOpen ? "mx-auto" : "lg:pl-10"}`}>
-              {feed.map((it) => <div key={it.id}>{renderBlock(it)}</div>)}
+              {feed.map((it, idx) => <div key={it.id}>{renderBlock(it, idx)}</div>)}
               <div className="mt-4 pt-2"><AddBar /></div>
             </div>
           )}

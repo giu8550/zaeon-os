@@ -237,9 +237,6 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
         <OmegaScholarProvider room={room}>
         <div className="flex flex-col h-full">
 
-            {/* ── OMEGA SCHOLAR BAR (replaces the old ROOM HEADER) ───── */}
-            <OmegaScholarBar flushTop={flushTop} onOpenResults={() => setActiveTab("community")} />
-
             {/* ── DOCK DE SUGESTÃO CONTEXTUAL (aparece em termo acadêmico) ── */}
             <StudyRoomSuggestionDock />
 
@@ -255,8 +252,10 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                 {/* Tab bar header */}
                 <div ref={tabHeaderRef} className="relative flex-shrink-0 z-10 bg-white/50 dark:bg-slate-950/40">
 
-                    {/* Tab buttons row */}
-                    <div className="flex overflow-x-auto no-scrollbar px-3 pt-3 gap-0.5">
+                    {/* Linha de cima: ⟁ minimalista da pesquisa + as pills principais (mesma linha) */}
+                    <div className="flex items-center px-3 pt-3 gap-2">
+                      <OmegaScholarBar flushTop collapsible onOpenResults={() => setActiveTab("community")} />
+                      <div className="flex-1 min-w-0 flex overflow-x-auto no-scrollbar gap-0.5">
                         {allTabs.map((tab, i) => {
                             const isActive = activeTab === tab.id;
                             return (
@@ -278,6 +277,7 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                                 </button>
                             );
                         })}
+                      </div>
                     </div>
 
                     {/*
