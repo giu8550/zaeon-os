@@ -45,8 +45,13 @@ const NAV_ACTIVE: Record<string, string> = {
   violet: "bg-violet-500/15 dark:bg-violet-400/20 border-violet-400/50 text-violet-700 dark:text-violet-100 ring-1 ring-violet-400/40 shadow-[0_8px_24px_-8px_rgba(139,92,246,0.55)]",
   cyan: "bg-gradient-to-r from-violet-500/20 to-cyan-500/20 border-cyan-400/50 text-cyan-700 dark:text-cyan-100 ring-1 ring-cyan-400/40 shadow-[0_8px_24px_-8px_rgba(34,211,238,0.55)]",
 };
+// Selecionado = pill preta/degradê (mesma cor do framework da Sala de Pesquisa),
+// uniforme em claro e escuro — sem mais um arco-íris de cores por aba.
+const NAV_ACTIVE_PILL =
+  "bg-gradient-to-br from-[#0f172a] to-[#1e293b] border-white/10 text-white ring-1 ring-white/10 shadow-[0_10px_26px_-10px_rgba(0,0,0,0.7)]";
 function navItem(active: boolean, accent: keyof typeof NAV_ACTIVE) {
-  return `${NAV_BASE} ${active ? NAV_ACTIVE[accent] : NAV_IDLE}`;
+  void accent; // accent mantido por compatibilidade; o ativo agora é sempre a pill preta
+  return `${NAV_BASE} ${active ? NAV_ACTIVE_PILL : NAV_IDLE}`;
 }
 import ResearchRoomTour from "@/components/onboard/ResearchRoomTour";
 import { capabilities } from "@/lib/runtime/mode";
@@ -110,9 +115,11 @@ import {
   ABNT_TEMPLATE,
   parseAbntMarkers,
   isEmptyOrTemplate,
+  templateFor,
+  buildDocFromDraft,
+  type WorkType,
+  type DraftFields,
 } from "@/lib/abntTemplate";
-import AcademicThermometer from "@/components/research/AcademicThermometer";
-import { mapAcademicLevel } from "@/lib/quality/segment";
 
 // --- TYPES ---
 interface StudyDoc {
@@ -672,6 +679,9 @@ export default function HomeworkPage({
   const [isWorkTypeMenuOpen, setIsWorkTypeMenuOpen] = useState(false);
   const [docTitle, setDocTitle] = useState("minha_pesquisa.pdf");
   const [docContent, setDocContent] = useState(ABNT_TEMPLATE);
+  // MEMÓRIA POR TIPO: cada formato (TCC/Artigo/Relatório) é uma sessão de escrita própria.
+  const docsRef = useRef<Record<string, { content: string; title: string }>>({});
+  const workTypeRef = useRef<WorkType | null>(null);
   const [hintOpen, setHintOpen] = useState(true);
   const [reviewMode, setReviewMode] = useState(false);
   const [activeProject, setActiveProject] = useState<any>(null);
@@ -1029,30 +1039,74 @@ export default function HomeworkPage({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  // PERSISTÊNCIA do rascunho — o que o usuário escreve NÃO reseta no reload.
-  // Restaura na montagem; salva a cada mudança de texto/título/tipo.
+  // PERSISTÊNCIA POR TIPO — cada formato (TCC/Artigo/Relatório) guarda seu próprio
+  // rascunho (sessão). Trocar de tipo NÃO converte: abre a sessão daquele tipo.
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("zaeon_research_draft");
+      const raw = localStorage.getItem("zaeon_research_docs");
       if (raw) {
         const d = JSON.parse(raw);
-        if (typeof d.docContent === "string" && d.docContent.trim())
+        if (d.docs && typeof d.docs === "object") docsRef.current = d.docs;
+        const wt: WorkType | null = d.activeWorkType ?? null;
+        if (wt && docsRef.current[wt]) {
+          setWorkType(wt);
+          setDocContent(docsRef.current[wt].content);
+          setDocTitle(docsRef.current[wt].title);
+          return;
+        }
+        if (wt) setWorkType(wt);
+        return;
+      }
+      // Compat: rascunho antigo (único) → migra pra sessão do tipo salvo (ou TCC).
+      const legacy = localStorage.getItem("zaeon_research_draft");
+      if (legacy) {
+        const d = JSON.parse(legacy);
+        const wt: WorkType = d.workType || "TCC";
+        if (typeof d.docContent === "string" && d.docContent.trim()) {
+          docsRef.current[wt] = { content: d.docContent, title: d.docTitle || docTitle };
+          setWorkType(wt);
           setDocContent(d.docContent);
-        if (typeof d.docTitle === "string" && d.docTitle)
-          setDocTitle(d.docTitle);
-        if (d.workType) setWorkType(d.workType);
+          if (d.docTitle) setDocTitle(d.docTitle);
+        }
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     try {
+      if (workType) docsRef.current[workType] = { content: docContent, title: docTitle };
       localStorage.setItem(
-        "zaeon_research_draft",
-        JSON.stringify({ docContent, docTitle, workType }),
+        "zaeon_research_docs",
+        JSON.stringify({ docs: docsRef.current, activeWorkType: workType }),
       );
     } catch {}
   }, [docContent, docTitle, workType]);
+
+  // Troca o tipo SEM converter: salva a sessão atual e abre a do novo tipo (ou template vazio).
+  const switchWorkType = (next: WorkType) => {
+    if (next === workType) return;
+    if (workType) docsRef.current[workType] = { content: docContent, title: docTitle };
+    const saved = docsRef.current[next];
+    if (saved) {
+      setDocContent(saved.content);
+      setDocTitle(saved.title);
+    } else {
+      setDocContent(templateFor(next));
+    }
+    setWorkType(next);
+  };
+  workTypeRef.current = workType; // mantém o ref do tipo ativo p/ handlers de evento
+
+  // "Minhas coisas": novo trabalho (zera a folha do tipo atual) e excluir uma pesquisa salva.
+  const handleNewWork = () => {
+    setDocTitle("minha_pesquisa.pdf");
+    setDocContent(templateFor(workType));
+  };
+  const handleDeleteWork = (id: string) => {
+    fetch(`/api/ai/scholar/sessions?id=${id}`, { method: "DELETE" })
+      .then(() => setSessions((prev) => prev.filter((s) => s.id !== id)))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     return () => {
@@ -1142,11 +1196,18 @@ export default function HomeworkPage({
   useEffect(() => {
     const onNewDoc = (e: any) => {
       const t = e?.detail?.title;
+      const fields = e?.detail?.fields as DraftFields | undefined;
       const c = e?.detail?.content;
       if (typeof t === "string" && t.trim()) {
+        const wt: WorkType = workTypeRef.current ?? "TCC";
         setDocTitle(t.trim().slice(0, 120));
-        // Se veio o esboço completo (introdução/metodologia), abre com ele; senão, template ABNT.
-        setDocContent(typeof c === "string" && c.trim() ? c : ABNT_TEMPLATE);
+        // Esboço gerado → encaixa os CAMPOS no framework do tipo ativo (sem repetir as seções).
+        if (fields && typeof fields === "object") {
+          setDocContent(buildDocFromDraft(wt, fields));
+        } else {
+          setDocContent(typeof c === "string" && c.trim() ? c : templateFor(wt));
+        }
+        if (!workTypeRef.current) setWorkType("TCC");
         setActiveTab("pesquisa");
       }
     };
@@ -1425,41 +1486,12 @@ export default function HomeworkPage({
     }
   };
 
-  // 🔊 Voz da Aura. MODO VERCEL → speechSynthesis do navegador (grátis, pt-BR, sem servidor).
-  //                  MODO CONTAINER → engine HQ via /api/ai/voice. Ver lib/runtime/mode.
+  // 🔊 Voz da Aura — SEMPRE a voz premium (engine HQ via /api/ai/voice).
+  // Nada de speechSynthesis do navegador (a "voz do Google" foi removida de vez).
   const playVoice = async (text: string, msgId?: number) => {
     const clean = text.trim();
     if (!clean) return;
 
-    // --- Vercel: TTS do navegador ---
-    if (capabilities().voiceTts === "browser") {
-      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-        showToast("Seu navegador não suporta voz.");
-        return;
-      }
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(clean);
-      const voices = window.speechSynthesis.getVoices();
-      u.voice =
-        voices.find(
-          (v) =>
-            /pt.?BR/i.test(v.lang) &&
-            /google|luciana|natural|premium/i.test(v.name),
-        ) ||
-        voices.find((v) => /pt.?BR/i.test(v.lang)) ||
-        voices.find((v) => /^pt/i.test(v.lang)) ||
-        null;
-      u.lang = "pt-BR";
-      if (msgId != null) {
-        setVoiceLoadingId(msgId);
-        u.onend = () => setVoiceLoadingId(null);
-        u.onerror = () => setVoiceLoadingId(null);
-      }
-      window.speechSynthesis.speak(u);
-      return;
-    }
-
-    // --- Container: engine HQ ---
     if (msgId != null) setVoiceLoadingId(msgId);
     try {
       const res = await fetch("/api/ai/voice", {
@@ -1981,7 +2013,7 @@ export default function HomeworkPage({
       )}
 
       <main
-        className={`flex-1 flex flex-col ${!isEmbedded ? (isChatLeft ? "pr-[80px]" : "pl-[80px]") : ""} h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-6" : "p-6"} gap-6`}
+        className={`flex-1 flex flex-col ${!isEmbedded ? (isChatLeft ? "pr-[80px]" : "pl-[80px]") : ""} h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : "p-6"} gap-6`}
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
@@ -2012,7 +2044,7 @@ export default function HomeworkPage({
               <ResearchShell
                 flipped={isChatLeft}
                 workType={workType}
-                onWorkType={setWorkType}
+                onWorkType={switchWorkType}
                 onRelate={handleRelateFiles}
                 windows={wWindows}
                 activeId={wActiveId}
@@ -2025,6 +2057,8 @@ export default function HomeworkPage({
                 onPlayFile={handlePlaySavedDoc}
                 onAdd={() => fileInputRef.current?.click()}
                 sessions={sessions}
+                onNewWork={handleNewWork}
+                onDeleteWork={handleDeleteWork}
                 onOpenSession={() => {
                   setActiveTab("sala-de-estudos");
                 }}
@@ -2064,16 +2098,6 @@ export default function HomeworkPage({
                           />
                         </div>
                       )}
-                      <AcademicThermometer
-                        docContent={docContent}
-                        title={docTitle}
-                        workType={workType ?? "TCC"}
-                        academicLevel={mapAcademicLevel(
-                          (session?.user as any)?.academicLevel,
-                        )}
-                        reviewMode={reviewMode}
-                        onToggleReview={() => setReviewMode((v) => !v)}
-                      />
                       {!reviewMode && (
                         <textarea
                           ref={textareaRef}

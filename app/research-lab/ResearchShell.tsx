@@ -114,9 +114,6 @@ export default function ResearchShell({
     [addWindow, onSelectWindow, onPlayFile],
   );
 
-  const activeWin = windows.find((w) => w.id === activeId);
-  const isChatDoc = activeWin?.type === "document"; // só o chat da Aura mostra a barra de prompt
-
   return (
     <div
       style={{
@@ -124,9 +121,9 @@ export default function ResearchShell({
         flexDirection: mobile ? "column" : undefined,
         gridTemplateColumns: mobile ? undefined : (flipped ? "1fr 3.2fr" : "3.2fr 1fr"),
         gap: mobile ? 10 : 14,
-        height: mobile ? "auto" : "78vh",
+        height: mobile ? "auto" : "100%",
         minHeight: mobile ? "78vh" : 600,
-        maxHeight: mobile ? "none" : 820,
+        maxHeight: "none",
         borderRadius: 22,
         background: "rgba(22,22,34,0.55)",
         border: "1px solid rgba(255,255,255,0.12)",
@@ -279,20 +276,6 @@ export default function ResearchShell({
           )}
         </div>
 
-        {/* Prompt bar — só no chat da Aura (não no viewer de PDF nem na pesquisa) */}
-        {isChatDoc && (
-          <div
-            className="mx-3.5 mb-3.5 h-10 rounded-[13px] flex items-center gap-2 px-3 text-[11px] shrink-0"
-            style={{
-              color: "#a7e1ee",
-              background: "rgba(34,211,238,0.06)",
-              border: "1px solid rgba(34,211,238,0.20)",
-            }}
-          >
-            <span>💬 Conversar com este documento…</span>
-            <span style={{ marginLeft: "auto", opacity: 0.5 }}>↑</span>
-          </div>
-        )}
       </div>
 
       {/* ──────── RIGHT PANEL (30%) — no mobile vira bloco abaixo, limitado e rolável ──────── */}

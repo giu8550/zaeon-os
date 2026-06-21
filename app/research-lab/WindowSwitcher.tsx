@@ -79,10 +79,10 @@ export default function WindowSwitcher({
                 style={
                   active
                     ? {
-                        color: "#06121a",
-                        background: "linear-gradient(135deg, #22d3ee, #0ea5e9)",
-                        border: "1px solid rgba(34,211,238,0.55)",
-                        boxShadow: "0 6px 16px -8px rgba(34,211,238,0.8)",
+                        color: "#fff",
+                        background: "linear-gradient(135deg, #0f172a, #1e293b)",
+                        border: "1px solid rgba(255,255,255,0.18)",
+                        boxShadow: "0 6px 16px -8px rgba(0,0,0,0.7)",
                       }
                     : { color: "#9a9ab8", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }
                 }

@@ -32,29 +32,6 @@ function pref(key: string): string | undefined {
   try { return localStorage.getItem(key) || undefined; } catch { return undefined; }
 }
 
-// Escolhe a melhor voz pt-BR do navegador para o gênero pedido. Usado SÓ no fallback
-// (engine offline) — as vozes nomeadas do catálogo (Aura/Áureo/Nova) vêm do Kokoro.
-function pickBrowserVoice(gender: "f" | "m"): SpeechSynthesisVoice | null {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
-  const voices = window.speechSynthesis.getVoices();
-  const pt = voices.filter((v) => /pt(-|_)?BR|portug/i.test(`${v.lang} ${v.name}`));
-  const fem = /(maria|luciana|francisca|fernanda|joana|female|mulher|feminin)/i;
-  const masc = /(daniel|felipe|ricardo|jorge|male|homem|masculin)/i;
-  return pt.find((v) => (gender === "f" ? fem : masc).test(v.name)) || pt[0] || voices[0] || null;
-}
-
-function browserSpeak(text: string, gender: "f" | "m") {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) { set({ speaking: false, loading: false, text: null }); return; }
-  const synth = window.speechSynthesis;
-  synth.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  const pick = pickBrowserVoice(gender);
-  if (pick) { u.voice = pick; u.lang = pick.lang || "pt-BR"; } else u.lang = "pt-BR";
-  u.onend = () => set({ speaking: false, loading: false, text: null });
-  u.onerror = () => set({ speaking: false, loading: false, text: null });
-  synth.speak(u);
-}
-
 export function stop() {
   if (ctrl) { ctrl.abort(); ctrl = null; }
   if (audio) { audio.pause(); audio.src = ""; audio = null; }
@@ -142,8 +119,8 @@ async function synthChunk(text: string, voiceId: string | undefined, ac: AbortCo
       const data = await res.json().catch(() => null);
       if (data?.audio_base64) return { kind: "audio", url: `data:${data.mime || "audio/wav"};base64,${data.audio_base64}` };
     }
-  } catch { /* cai no fallback do navegador */ }
-  return { kind: "browser", text };
+  } catch { /* engine indisponível */ }
+  return null; // SEM fallback do navegador (nada de voz do Google) — só a voz premium
 }
 
 // Toca um pedaço JÁ sintetizado e resolve quando termina. `gender` é usado só no
@@ -157,14 +134,7 @@ function playPrepared(item: Prepared, ac: AbortController, gender: "f" | "m" = "
       a.onended = () => { if (audio === a) audio = null; resolve(); };
       a.onerror = () => { if (audio === a) audio = null; resolve(); };
       a.play().catch(() => { if (audio === a) audio = null; resolve(); });
-    } else if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      const u = new SpeechSynthesisUtterance(item.text);
-      const pick = pickBrowserVoice(gender);
-      if (pick) { u.voice = pick; u.lang = pick.lang || "pt-BR"; } else u.lang = "pt-BR";
-      u.onend = () => resolve();
-      u.onerror = () => resolve();
-      window.speechSynthesis.speak(u);
-    } else resolve();
+    } else resolve(); // pedaço sem áudio premium → pula em silêncio (sem voz do navegador)
   });
 }
 
@@ -225,17 +195,16 @@ export async function speak(text: string, opts?: { voice?: string; gender?: "f" 
         const a = new Audio(`data:${data.mime || "audio/wav"};base64,${data.audio_base64}`);
         audio = a;
         a.onended = () => { if (audio === a) { audio = null; set({ speaking: false, loading: false, text: null }); } };
-        a.onerror = () => { if (audio === a) { audio = null; browserSpeak(clean, gender); } };
+        a.onerror = () => { if (audio === a) { audio = null; set({ speaking: false, loading: false, text: null }); } };
         set({ loading: false });
-        await a.play().catch(() => { if (audio === a) { audio = null; browserSpeak(clean, gender); } });
+        await a.play().catch(() => { if (audio === a) { audio = null; set({ speaking: false, loading: false, text: null }); } });
         return;
       }
     }
-    set({ loading: false });
-    browserSpeak(clean, gender); // engine offline/sem áudio → navegador
+    // Engine indisponível/sem áudio → silêncio (NUNCA a voz do navegador/Google).
+    set({ speaking: false, loading: false, text: null });
   } catch {
     if (myCtrl.signal.aborted) return; // foi um stop(), não um erro real
-    set({ loading: false });
-    browserSpeak(clean, gender);
+    set({ speaking: false, loading: false, text: null });
   }
 }

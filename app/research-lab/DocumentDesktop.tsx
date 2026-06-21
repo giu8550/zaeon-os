@@ -161,6 +161,28 @@ export default function DocumentDesktop({
                 )}
               </div>
             ))}
+
+            {/* Biblioteca — os PDFs salvos também moram aqui (com apagar) */}
+            <div className="mt-3 pt-2.5 border-t border-white/10">
+              <p className="text-[8px] font-black uppercase tracking-[0.16em] text-white/30 mb-2">📚 Biblioteca</p>
+              {files.length === 0 ? (
+                <p className="text-[10px] text-white/35 italic text-center py-2">Nenhum documento ainda.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {files.map((f) => (
+                    <DocIcon
+                      key={f.id}
+                      file={f}
+                      onPlay={onPlayFile}
+                      processingId={processingFileId}
+                      onRelate={onRelate}
+                      onDelete={handleDelete}
+                      onView={onView}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2.5">
