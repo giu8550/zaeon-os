@@ -1103,6 +1103,27 @@ export default function HomeworkPage({
     }
   }, []);
 
+  // Deep-link ?session=<id> (vindo do menu inicial → Pesquisas): abre a ABA PESQUISA e
+  // carrega aquela pesquisa salva como DOCUMENTO (título + conteúdo) na folha de escrita.
+  useEffect(() => {
+    const sid = new URLSearchParams(window.location.search).get("session");
+    if (!sid) return;
+    setActiveTab("pesquisa");
+    fetch(`/api/ai/scholar/sessions?id=${sid}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const s = d?.session ?? d;
+        if (!s) return;
+        if (s.query) setDocTitle(String(s.query).slice(0, 120));
+        const ans =
+          (typeof s?.thread?.answer === "string" && s.thread.answer) ||
+          (typeof s?.thread?.synthesized === "string" && s.thread.synthesized) ||
+          (typeof s?.thread === "string" && s.thread) || "";
+        if (ans) setDocContent(String(ans));
+      })
+      .catch(() => {});
+  }, []);
+
   // Troca de sala em TEMPO REAL pela Zaeon (voz/chat): a widget dispara este evento
   // mesmo já estando no research-lab — o deep-link só roda no mount, então sem isto
   // a troca por voz não funcionaria estando na página. Ver lib/agent + LoungeChatWidget.
@@ -1114,6 +1135,23 @@ export default function HomeworkPage({
     };
     window.addEventListener("zaeon:set-tab", onSetTab);
     return () => window.removeEventListener("zaeon:set-tab", onSetTab);
+  }, []);
+
+  // "Iniciar pesquisa" (sugestão) → abre um DOCUMENTO NOVO na aba Pesquisa com o título.
+  // Pesquisa é estritamente pesquisa (não joga pra Sala de Estudos).
+  useEffect(() => {
+    const onNewDoc = (e: any) => {
+      const t = e?.detail?.title;
+      const c = e?.detail?.content;
+      if (typeof t === "string" && t.trim()) {
+        setDocTitle(t.trim().slice(0, 120));
+        // Se veio o esboço completo (introdução/metodologia), abre com ele; senão, template ABNT.
+        setDocContent(typeof c === "string" && c.trim() ? c : ABNT_TEMPLATE);
+        setActiveTab("pesquisa");
+      }
+    };
+    window.addEventListener("zaeon:research:newdoc", onNewDoc);
+    return () => window.removeEventListener("zaeon:research:newdoc", onNewDoc);
   }, []);
 
   const toggleFocusMode = () => {
@@ -1778,7 +1816,7 @@ export default function HomeworkPage({
         };
       default:
         return {
-          title: "Pesquisa",
+          title: "Sala de Pesquisa",
           subtitle: "Agente de pesquisa, biblioteca de PDFs e exportação ABNT",
         };
     }
@@ -1840,20 +1878,7 @@ export default function HomeworkPage({
           className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl shadow-[0_12px_40px_-12px_rgba(15,23,42,0.45)] bg-white/70 dark:bg-[#0a0a0a]/60 border-white/40 dark:border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
           <div className="flex flex-col gap-3 px-2.5">
-            {/* Pesquisa */}
-            <button
-              onClick={() => setActiveTab("pesquisa")}
-              className={navItem(activeTab === "pesquisa", "purple")}
-            >
-              <AcademicCapIcon className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Pesquisa
-                </span>
-              )}
-            </button>
-
-            {/* Sala de Estudos */}
+            {/* Sala de Estudos — topo da sidebar */}
             <button
               onClick={() => setActiveTab("sala-de-estudos")}
               className={navItem(activeTab === "sala-de-estudos", "blue")}
@@ -1866,15 +1891,28 @@ export default function HomeworkPage({
               )}
             </button>
 
-            {/* Pesquisas */}
+            {/* Sala de Pesquisa (antiga "Pesquisa") */}
             <button
-              onClick={() => setActiveTab("pesquisas")}
-              className={navItem(activeTab === "pesquisas", "emerald")}
+              onClick={() => setActiveTab("pesquisa")}
+              className={navItem(activeTab === "pesquisa", "purple")}
             >
-              <BeakerIcon className="w-5 h-5 shrink-0" />
+              <AcademicCapIcon className="w-5 h-5 shrink-0" />
               {isSidebarOpen && (
                 <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Pesquisas
+                  Sala de Pesquisa
+                </span>
+              )}
+            </button>
+
+            {/* Projetos — Zaeon Code (IDE agêntica; auto-protegida por plano/curso) */}
+            <button
+              onClick={() => setActiveTab("projetos")}
+              className={navItem(activeTab === "projetos", "cyan")}
+            >
+              <Code2 className="w-5 h-5 shrink-0" />
+              {isSidebarOpen && (
+                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+                  Projetos
                 </span>
               )}
             </button>
@@ -1893,19 +1931,6 @@ export default function HomeworkPage({
             </button>
 
             <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
-
-            {/* Projetos — Zaeon Code (IDE agêntica; auto-protegida por plano/curso) */}
-            <button
-              onClick={() => setActiveTab("projetos")}
-              className={navItem(activeTab === "projetos", "cyan")}
-            >
-              <Code2 className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Projetos
-                </span>
-              )}
-            </button>
 
             {/* Perfil */}
             <button

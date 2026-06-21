@@ -373,7 +373,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     };
 
     const [liquidChatHistory, setLiquidChatHistory] = useState<{ role: 'user' | 'agent', text: string }[]>([
-        { role: 'agent', text: "Zaeon initialized. Ready." }
+        { role: 'agent', text: "Oi! Aqui é a Zaeon. Eu cuido da sua agenda, do seu tempo e dos seus estudos — me conta suas aulas que eu encaixo tudo no seu dia." }
     ]);
     const [zaeonInput, setZaeonInput] = useState("");
     const [isZaeonProcessing, setIsZaeonProcessing] = useState(false);

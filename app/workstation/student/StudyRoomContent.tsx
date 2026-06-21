@@ -8,14 +8,12 @@ import { NotebookPen } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-    Users, BookOpen, ClipboardList, FolderOpen,
+    Users, BookOpen,
     FlaskConical, Newspaper, User, Lock,
 } from "lucide-react";
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
-import OmegaScholarBar from "./omega/OmegaScholarBar";
 import OmegaScholarWorkspace from "./omega/OmegaScholarWorkspace";
 import StudyRoomSuggestionDock from "./omega/StudyRoomSuggestionDock";
-import { ProFeaturePanel } from "@/components/ui/ProFeaturePanel";
 
 // ─── ROOM MAPPING ────────────────────────────────────────────────────────────
 const ROOM_MAPPING: Record<string, string[]> = {
@@ -76,14 +74,12 @@ const ROOM_META: Record<string, {
 };
 
 // ─── TAB DEFINITIONS ─────────────────────────────────────────────────────────
-// Submódulos da Sala de Estudos: só Estudos / Aulas / Provas / Projetos (mesmo
-// conjunto para todas as salas). Pesquisas/Notícias/Perfil vivem na sidebar da
-// Sala de Pesquisa, não aqui. Projetos é bloqueado por nível Pro (ver render).
+// Submódulos da Sala de Estudos: só Estudos / Aulas (mesmo conjunto para todas as
+// salas). Provas e Projetos saíram daqui. Pesquisas/Notícias/Perfil vivem na
+// sidebar da Sala de Pesquisa, não aqui.
 const SALA_TABS = [
-    { id: "community",  label: "Estudos",   icon: Users         },
-    { id: "classes",    label: "Aulas",     icon: BookOpen      },
-    { id: "exams",      label: "Provas",    icon: ClipboardList },
-    { id: "projects",   label: "Projetos",  icon: FolderOpen    },
+    { id: "community",  label: "Estudos",   icon: Users    },
+    { id: "classes",    label: "Aulas",     icon: BookOpen },
 ];
 const ROOM_TABS: Record<string, Array<{ id: string; label: string; icon: React.ComponentType<any> }>> = {
     cyber: SALA_TABS, med: SALA_TABS, bio: SALA_TABS,
@@ -252,10 +248,8 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                 {/* Tab bar header */}
                 <div ref={tabHeaderRef} className="relative flex-shrink-0 z-10 bg-white/50 dark:bg-slate-950/40">
 
-                    {/* Linha de cima: ⟁ minimalista da pesquisa + as pills principais (mesma linha) */}
-                    <div className="flex items-center px-3 pt-3 gap-2">
-                      <OmegaScholarBar flushTop collapsible onOpenResults={() => setActiveTab("community")} />
-                      <div className="flex-1 min-w-0 flex overflow-x-auto no-scrollbar gap-0.5">
+                    {/* Tab buttons row */}
+                    <div className="flex overflow-x-auto no-scrollbar px-3 pt-3 gap-0.5">
                         {allTabs.map((tab, i) => {
                             const isActive = activeTab === tab.id;
                             return (
@@ -277,7 +271,6 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                                 </button>
                             );
                         })}
-                      </div>
                     </div>
 
                     {/*
@@ -319,12 +312,6 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                         </div>
                         {activeTab === "meus-estudos" ? null : activeTab === "community" ? (
                             <OmegaScholarWorkspace />
-                        ) : activeTab === "projects" ? (
-                            <ProFeaturePanel
-                                title="Projetos"
-                                description="Ferramenta de projetos colaborativos — disponível apenas no plano Pro."
-                                tooltip="Ferramenta Pro — em breve"
-                            />
                         ) : !ActiveComponent ? (
                             <NoRoomFound />
                         ) : (

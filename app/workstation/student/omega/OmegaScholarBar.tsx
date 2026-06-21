@@ -4,6 +4,7 @@ import { ArrowUp, Loader2, CheckCircle2, AlertCircle, Brain } from "lucide-react
 import { motion, AnimatePresence } from "framer-motion";
 import { useOmegaScholar } from "./OmegaScholarContext";
 import VoiceModeSwitch from "@/components/voice/VoiceModeSwitch";
+import GlitchTerm from "@/components/research/GlitchTerm";
 
 interface OmegaScholarBarProps {
   flushTop?: boolean;
@@ -13,12 +14,13 @@ interface OmegaScholarBarProps {
 }
 
 export default function OmegaScholarBar({ flushTop = false, collapsible = false }: OmegaScholarBarProps) {
-  const { runQuery, status, error, draft, setDraft, startedAt } = useOmegaScholar();
+  const { runQuery, stopQuery, status, error, draft, setDraft, startedAt, session, query } = useOmegaScholar();
   const busy = status === "running";
-  const [expanded, setExpanded] = useState(false);
+  const hasResult = !!session;
+  const [expanded, setExpanded] = useState(!session);
 
-  // enquanto pesquisa, a barra some do campo de visão (fica só o ⟁ girando)
-  useEffect(() => { if (busy) setExpanded(false); }, [busy]);
+  // Sem estudo → barra aberta (ícone + input). Estudo gerado (ou pesquisando) → fecha (só o ⟁).
+  useEffect(() => { setExpanded(!hasResult && !busy); }, [hasResult, busy]);
 
   // ── Elapsed timer ──────────────────────────────────────────────────────────
   const [elapsed, setElapsed] = useState(0);
@@ -102,27 +104,39 @@ export default function OmegaScholarBar({ flushTop = false, collapsible = false 
     </div>
   );
 
-  // ── MODO MINIMALISTA: só o ⟁ roxo; clicar abre a barra (dropdown) ──
+  // ── MODO MINIMALISTA: ⟁ roxo + (na MESMA linha) a barra de input OU o último estudo.
+  //    Clica no ⟁ → mostra a barra; clica de novo → some a barra e volta o último estudo. ──
   if (collapsible) {
+    const lastStudy = (query || (session as any)?.query || "").trim();
     return (
-      <div className={`${flushTop ? "" : "mt-2 ml-2"} relative shrink-0`}>
+      <div className={`${flushTop ? "" : "mt-2"} flex items-center gap-2 mb-4`}>
         <button
-          onClick={() => { if (!busy) setExpanded((v) => !v); }}
-          disabled={busy}
+          onClick={() => { if (busy) stopQuery(); else setExpanded((v) => !v); }}
           aria-expanded={expanded}
-          title={busy ? "Pesquisando…" : "Pesquisar com a Zaeon"}
-          className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-violet-500/15 border border-violet-400/40 text-violet-600 dark:text-violet-300 disabled:cursor-not-allowed transition-transform hover:scale-105 disabled:hover:scale-100"
+          title={busy ? "Parar pesquisa" : expanded ? "Esconder a busca" : "Pesquisar o assunto do estudo"}
+          className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full border bg-violet-500/15 border-violet-400/40 text-violet-600 dark:text-violet-300 transition-transform hover:scale-105"
         >
           <span className={`text-[17px] leading-none ${busy ? "animate-[spin_3s_linear_infinite]" : ""} motion-reduce:animate-none`} style={{ filter: "drop-shadow(0 0 5px rgba(124,58,237,0.55))" }}>⟁</span>
         </button>
-        <AnimatePresence>
-          {expanded && !busy && (
-            <motion.div
-              initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }}
-              transition={{ duration: 0.16 }}
-              className="absolute top-full left-0 mt-2 z-50 w-[min(540px,86vw)] px-3.5 py-2.5 rounded-[1.4rem] bg-white/95 dark:bg-[#0a1020]/95 backdrop-blur-xl border border-violet-400/30 shadow-2xl"
+        <AnimatePresence initial={false} mode="wait">
+          {expanded && !busy ? (
+            <motion.div key="bar"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}
+              className="flex-1 min-w-0 px-3.5 py-1.5 rounded-[1.4rem] bg-gradient-to-r from-violet-500/12 to-purple-500/5 border border-violet-300/30 dark:border-white/10"
             >
               {inputRow}
+            </motion.div>
+          ) : (
+            <motion.div key="last"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}
+              className="flex-1 min-w-0 flex items-center overflow-hidden"
+            >
+              {lastStudy ? (
+                // o assunto aparece AO LADO do ⟁ com o glitch latim↔chinês (sem lupa — o ⟁ já é o ícone)
+                <GlitchTerm term={lastStudy.length > 80 ? lastStudy.slice(0, 80) + "…" : lastStudy} done={!busy} hideIcon oneLine />
+              ) : (
+                <span className="text-sm text-slate-400 dark:text-white/40">Pesquise o assunto do estudo</span>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
