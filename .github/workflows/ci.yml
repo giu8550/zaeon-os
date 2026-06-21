@@ -25,9 +25,12 @@ jobs:
     timeout-minutes: 20
 
     # Envs de placeholder só p/ o build não quebrar (sem segredos reais).
+    # MONGODB_URI é OBRIGATÓRIA: src/lib/db.ts lança erro no import se faltar, e o
+    # `next build` importa todas as rotas → sem ela o build do CI fica vermelho.
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       DATABASE_URL: "mongodb://placeholder:27017/build"
+      MONGODB_URI: "mongodb://placeholder:27017/build"
       NEXTAUTH_SECRET: "ci-placeholder-secret-not-used-in-prod"
       NEXTAUTH_URL: "http://localhost:3000"
 
