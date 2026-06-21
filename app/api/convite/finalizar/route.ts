@@ -55,6 +55,11 @@ export async function GET(request: Request) {
     myInviteCode: newCode,
   });
 
+  // Gênero escolhido no card de convite → usado na página de boas-vindas (pronome + estilo).
+  if (pending.gender === "f" || pending.gender === "m") {
+    (updateData as Record<string, unknown>).gender = pending.gender;
+  }
+
   // Fast-track do Plus: se o login Google é uma conta de estudante (.edu),
   // libera o Plano Plus na hora e marca como verificado. Caso contrário, o
   // cadastro fica "pending" na fila do admin (que analisa o comprovante).
@@ -95,5 +100,6 @@ export async function GET(request: Request) {
   await prisma.pendingRegistration.delete({ where: { sessionToken: st } });
   cookies().delete("convite_session");
 
-  redirect("/dashboard");
+  // Novo usuário → página de boas-vindas (gendered), que depois leva à Pesquisa/tour.
+  redirect("/bem-vindo");
 }

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const VOICE_URL = process.env.VOICE_ENGINE_URL ?? "http://localhost:8004";
 
 const FALLBACK = {
-  default: "aura-f",
+  default: "nova-f",
   voices: [
     { id: "aura-f", label: "Aura (feminina)", gender: "f", lang: "pt-BR", tier: "free" },
     { id: "aura-m", label: "Áureo (masculina)", gender: "m", lang: "pt-BR", tier: "free" },

@@ -139,7 +139,7 @@ const imageToBase64 = (file: File): Promise<string> => {
 };
 
 // --- SUB-COMPONENTS ---
-const IosLoader = ({ status }: { status: string }) => (
+const IosLoader = ({ status }: { status?: string }) => (
   <div className="flex flex-col items-center justify-center space-y-4 py-4">
     <div className="relative w-8 h-8">
       {[...Array(8)].map((_, i) => (
@@ -157,9 +157,12 @@ const IosLoader = ({ status }: { status: string }) => (
         />
       ))}
     </div>
-    <span className="text-[10px] font-black text-black dark:text-white uppercase tracking-[0.2em] animate-pulse">
-      {status}
-    </span>
+    {/* texto opcional — o load das salas mostra só o ícone + spinner, sem texto */}
+    {status ? (
+      <span className="text-[10px] font-black text-black dark:text-white uppercase tracking-[0.2em] animate-pulse">
+        {status}
+      </span>
+    ) : null}
   </div>
 );
 
@@ -616,6 +619,15 @@ export default function HomeworkPage({
   const { data: session, status } = useSession();
 
   // --- TAB STATES ---
+  // Inicializa JÁ a partir do ?tab= da URL (deep-link do menu inicial), pra a aba certa
+  // nascer no 1º render — sem depender de efeito (que tinha corrida e fazia "Estudos" cair
+  // em "pesquisa", o default). SSR cai no default; o cliente corrige no mount.
+  const initialTab = (() => {
+    if (typeof window === "undefined") return "pesquisa";
+    const t = new URLSearchParams(window.location.search).get("tab");
+    const VALID = ["pesquisa", "sala-de-estudos", "pesquisas", "lounge", "pevem", "projetos", "news", "profile"];
+    return t && VALID.includes(t) ? t : "pesquisa";
+  })();
   const [activeTab, setActiveTab] = useState<
     | "pesquisa"
     | "sala-de-estudos"
@@ -625,7 +637,7 @@ export default function HomeworkPage({
     | "projetos"
     | "news"
     | "profile"
-  >("pesquisa");
+  >(initialTab as any);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [muralSearchQuery, setMuralSearchQuery] = useState("");
@@ -1775,7 +1787,7 @@ export default function HomeworkPage({
   if (!mounted || status === "loading") {
     return (
       <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-[#030014]">
-        <IosLoader status="Carregando laboratório..." />
+        <IosLoader />
       </div>
     );
   }
@@ -1943,7 +1955,7 @@ export default function HomeworkPage({
       )}
 
       <main
-        className={`flex-1 flex flex-col ${!isEmbedded ? "pl-[80px]" : ""} h-full overflow-hidden ${activeTab === "sala-de-estudos" ? "px-6 pb-6" : "p-6"} gap-6`}
+        className={`flex-1 flex flex-col ${!isEmbedded ? "pl-[80px]" : ""} h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-6" : "p-6"} gap-6`}
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
@@ -2274,8 +2286,30 @@ export default function HomeworkPage({
           )}
 
           {activeTab === "profile" && (
-            <div className="w-full h-full overflow-y-auto custom-scrollbar">
-              <ProfilePanel className="pb-24" />
+            <div className="w-full h-full flex items-center justify-center p-8">
+              {/* Perfil temporariamente fora do ar — "em construção" até ficar estruturado. */}
+              <div className="w-full max-w-sm text-center flex flex-col items-center gap-4">
+                <span
+                  className="text-cyan-500 dark:text-cyan-300 text-3xl leading-none animate-[spin_16s_linear_infinite] motion-reduce:animate-none"
+                  style={{ filter: "drop-shadow(0 0 6px rgba(34,211,238,0.5))" }}
+                  aria-hidden
+                >
+                  ⟁
+                </span>
+                <div>
+                  <h2 className="text-lg font-black tracking-tight text-slate-800 dark:text-white">Perfil em construção</h2>
+                  <p className="text-[12px] text-slate-500 dark:text-white/45 mt-1 leading-relaxed">
+                    Estamos estruturando essa área. Volta já já — caprichada.
+                  </p>
+                </div>
+                <div className="w-full h-2 rounded-full bg-slate-200/80 dark:bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: "35%", background: "linear-gradient(90deg,#2563eb,#22d3ee,#7c3aed)" }}
+                  />
+                </div>
+                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-white/30">em construção · 35%</span>
+              </div>
             </div>
           )}
         </div>

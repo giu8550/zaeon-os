@@ -9,7 +9,8 @@ import {
     ArrowLeftIcon,
     DocumentChartBarIcon,
     PuzzlePieceIcon,
-    SpeakerWaveIcon
+    SpeakerWaveIcon,
+    UsersIcon
 } from "@heroicons/react/24/outline";
 
 
@@ -18,6 +19,7 @@ import ProfileModule from "./modules/ProfileModule";
 import ReportsModule from "./modules/ReportsModule";
 import PluginsModule from "./modules/PluginsModule";
 import VoiceAccessModule from "./modules/VoiceAccessModule";
+import InviteGroupsModule from "./modules/InviteGroupsModule";
 
 // --- APPLE STYLE LOADER ---
 const AppleLoader = ({ status }: { status: string }) => (
@@ -56,7 +58,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, isOpen }: any) => (
 
 export default function AdminControlRoom() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "reports" | "plugins" | "payments">("profiles");
+    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments">("profiles");
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -100,6 +102,13 @@ export default function AdminControlRoom() {
                         label="Voz"
                         active={activeTab === 'voice'}
                         onClick={() => setActiveTab('voice')}
+                        isOpen={isSidebarOpen}
+                    />
+                    <SidebarItem
+                        icon={UsersIcon}
+                        label="Convites"
+                        active={activeTab === 'invites'}
+                        onClick={() => setActiveTab('invites')}
                         isOpen={isSidebarOpen}
                     />
                     <SidebarItem
@@ -148,6 +157,7 @@ export default function AdminControlRoom() {
                     >
                         {activeTab === 'profiles' && <ProfileModule glassPanel={glassPanel} />}
                         {activeTab === 'voice' && <VoiceAccessModule glassPanel={glassPanel} />}
+                        {activeTab === 'invites' && <InviteGroupsModule glassPanel={glassPanel} />}
                         {activeTab === 'reports' && <ReportsModule glassPanel={glassPanel} />}
                         {activeTab === 'plugins' && <PluginsModule glassPanel={glassPanel} />}
 

@@ -17,6 +17,7 @@ export async function POST(req: Request) {
     role: "student" | "teacher";
     subject?: string;
     institution: string;
+    gender?: "f" | "m";
     verificationDoc?: string;
   };
 
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
     role,
     subject,
     institution,
+    gender,
     verificationDoc,
   } = body;
 
@@ -57,6 +59,7 @@ export async function POST(req: Request) {
       role,
       subject: subject?.trim() ?? null,
       institution: institution.trim(),
+      gender: gender === "f" || gender === "m" ? gender : null,
       verificationDoc: verificationDoc ?? null,
       expiresAt: new Date(Date.now() + 3600 * 1000),
     },
@@ -67,6 +70,7 @@ export async function POST(req: Request) {
       role,
       subject: subject?.trim() ?? null,
       institution: institution.trim(),
+      gender: gender === "f" || gender === "m" ? gender : null,
       verificationDoc: verificationDoc ?? null,
       expiresAt: new Date(Date.now() + 3600 * 1000),
     },

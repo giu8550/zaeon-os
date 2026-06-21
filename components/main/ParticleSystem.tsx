@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 
-const PARTICLE_COUNT = 2025;
+const PARTICLE_COUNT = 1400;
 const GLOBE_RADIUS_RATIO = 0.32;
 const SNAKE_THICKNESS = 45;
 const SNAKE_SPEED = 0.012;
@@ -175,9 +175,9 @@ const StarBackground: React.FC = () => {
                 ctx.fillStyle = p.color;
                 ctx.globalAlpha = isDark ? alpha : alpha * 0.7;
 
-                // Brilho do Overheat (Fase 4 apenas)
+                // Brilho do Overheat (Fase 4 apenas) — blur mais suave no ápice
                 if (phase === 4 && i % 4 === 0) {
-                    ctx.shadowBlur = 15;
+                    ctx.shadowBlur = 6;
                     ctx.shadowColor = p.color;
                 } else {
                     ctx.shadowBlur = 0;
@@ -196,7 +196,17 @@ const StarBackground: React.FC = () => {
         initParticles();
         draw();
 
-        const onResize = () => { applyDPR(); initParticles(); };
+        // No resize, só REAJUSTA o canvas (DPR/medidas) — NÃO reinicializa as partículas.
+        // Assim a animação não recomeça ao redimensionar no desktop nem ao focar/abrir o
+        // teclado no mobile (que dispara 'resize'). Ela só inicia de novo se a página carregar.
+        // Ignora resizes só de altura (barra de URL do mobile) pra não "piscar" o canvas.
+        let lastW = window.innerWidth;
+        const onResize = () => {
+            const w = window.innerWidth;
+            if (w === lastW) return; // mudou só a altura (URL bar mobile) → ignora
+            lastW = w;
+            applyDPR();
+        };
         window.addEventListener("resize", onResize);
         return () => { cancelAnimationFrame(animationId); window.removeEventListener("resize", onResize); };
     }, [theme, resolvedTheme, mounted]);

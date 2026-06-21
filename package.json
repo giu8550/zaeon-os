@@ -51,7 +51,6 @@
     "url": "https://github.com/web3-engineer/zaeon-os/issues"
   },
   "dependencies": {
-    "@aptos-labs/ts-sdk": "^5.2.0",
     "@auth/mongodb-adapter": "^3.11.1",
     "@google-cloud/vertexai": "^1.10.0",
     "@google/generative-ai": "^0.24.1",
@@ -64,14 +63,9 @@
     "@react-pdf-viewer/page-navigation": "^3.12.0",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
-    "@splinetool/react-spline": "^4.1.0",
-    "@tanstack/react-query": "^5.90.16",
     "@types/three": "^0.182.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
-    "@wepin/provider-js": "^0.0.35",
-    "@wepin/types": "^0.0.12",
-    "@wepin/wagmi-connector": "^2.0.0",
     "axios": "^1.13.2",
     "clsx": "^2.1.0",
     "crypto-js": "^4.2.0",
@@ -89,7 +83,6 @@
     "jsonwebtoken": "^9.0.3",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.552.0",
-    "maath": "^0.10.8",
     "mongodb": "^6.21.0",
     "mongoose": "^8.8.3",
     "next": "14.2.15",
@@ -105,13 +98,11 @@
     "react-dropzone": "^14.4.0",
     "react-i18next": "^16.5.0",
     "react-icons": "^5.0.1",
-    "react-intersection-observer": "^9.5.3",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.2.0",
-    "three": "^0.160.1",
-    "viem": "^2.43.5"
+    "three": "^0.160.1"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.3.0",

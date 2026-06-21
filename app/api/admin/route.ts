@@ -6,6 +6,7 @@ import User from "@/src/models/User";
 import { authOptions } from "@/src/lib/auth";
 import { grantStudentTrial, normalizePlan, type Plan } from "@/lib/plans";
 import { isSuperAdmin } from "@/lib/auth/roles";
+import { purgeUser } from "@/lib/admin/purgeUser";
 
 // Admin = super admin (allowlist de fundadores em lib/auth/roles + role no banco).
 const checkIsAdmin = (email: string | null | undefined, role?: string | null) => {
@@ -130,15 +131,14 @@ export async function DELETE(req: Request) {
 
         if (!userId) return NextResponse.json({ error: "ID Inválido" }, { status: 400 });
 
-        await connectToDatabase();
-        
-        const deletedUser = await User.findByIdAndDelete(userId);
-
-        if (!deletedUser) {
+        // Purga COMPLETA (cascata): User + dados ligados + auth (accounts/sessions) →
+        // some de vez, sem órfãos, e o próximo login Google nasce fresh.
+        const purged = await purgeUser({ id: userId });
+        if (!purged.ok) {
             return NextResponse.json({ error: "Nó não encontrado no banco" }, { status: 404 });
         }
 
-        return NextResponse.json({ success: true, message: "Nó desintegrado com sucesso" });
+        return NextResponse.json({ success: true, message: "Nó desintegrado com sucesso", removed: purged.removed });
     } catch (error) {
         console.error("ERRO NA PURGA:", error);
         return NextResponse.json({ error: "Erro interno ao deletar" }, { status: 500 });

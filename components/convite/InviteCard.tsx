@@ -51,6 +51,7 @@ export default function InviteCard({ initialCode = "", onDone }: Props) {
   const [area, setArea] = useState("");
   const [courseOpen, setCourseOpen] = useState(false);
   const [role, setRole] = useState<Role>("student");
+  const [gender, setGender] = useState<"f" | "m" | "">(""); // obrigatório → define o card de boas-vindas
   const [uni, setUni] = useState<BrazilianUniversity | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -119,16 +120,22 @@ export default function InviteCard({ initialCode = "", onDone }: Props) {
   const accept = async () => {
     setError(null);
     if (!name.trim() || !age || !uni) { setError("Preencha nome, idade e a sua instituição."); return; }
+    if (!gender) { setError("Escolha como prefere ser tratado(a)."); return; }
     if (!courseValid) { setError("Escolha o seu curso na lista."); return; }
     if (proof === "doc" && !doc) { setError("Anexe seu comprovante de matrícula, ou escolha entrar com a conta de estudante."); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/convite/salvar-pendente", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionToken, inviteCode, name, age: Number(age), area, role, institution: uni.name, verificationDoc: doc ?? undefined }),
+        body: JSON.stringify({ sessionToken, inviteCode, name, age: Number(age), area, role, institution: uni.name, gender, verificationDoc: doc ?? undefined }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setError(d.error || "Não foi possível salvar seus dados."); return; }
+      // Ponte p/ a página de boas-vindas (gendered) — sobrevive ao redirect do Google OAuth.
+      try {
+        localStorage.setItem("zaeon.gender", gender);
+        localStorage.setItem("zaeon.firstName", name.trim().split(/\s+/)[0] || "");
+      } catch { /* ignore */ }
       onDone(sessionToken);
     } catch { setError("Erro de conexão."); }
     finally { setSaving(false); }
@@ -270,6 +277,24 @@ export default function InviteCard({ initialCode = "", onDone }: Props) {
                       {label}
                     </button>
                   ))}
+                </div>
+
+                {/* tratamento (gênero) — define o card de boas-vindas (pronome + estilo). Glow obrigatório. */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-white/45 mb-1.5 pl-1">Como prefere ser tratado(a)?</p>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {([["f", "♀", "Feminino", "#ec4899"], ["m", "♂", "Masculino", "#3b82f6"]] as const).map(([v, sym, label, color]) => {
+                      const on = gender === v;
+                      return (
+                        <button key={v} type="button" onClick={() => setGender(v)}
+                          className={`flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[12px] font-bold transition-all border ${on ? "border-transparent text-white" : "text-slate-600 dark:text-white/60 bg-slate-100 dark:bg-white/[0.04] border-slate-200 dark:border-white/10"}`}
+                          style={on ? { background: v === "f" ? "linear-gradient(135deg,#ec4899,#f9a8d4)" : "linear-gradient(135deg,#3b82f6,#60a5fa)", boxShadow: `0 8px 22px -8px ${color}` } : undefined}>
+                          <span style={{ color: on ? "#fff" : color, filter: `drop-shadow(0 0 5px ${color})`, fontSize: 18, lineHeight: 1 }}>{sym}</span>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* universidade */}

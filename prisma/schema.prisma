@@ -155,6 +155,7 @@ model PendingRegistration {
   role            String   @default("")
   subject         String?
   institution     String   @default("")
+  gender          String?  // 'f' | 'm' — escolhido no card de convite (boas-vindas gendered)
   verificationDoc String?
   createdAt       DateTime @default(now())
   expiresAt       DateTime
