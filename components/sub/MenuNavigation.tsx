@@ -80,6 +80,7 @@ export default function MenuNavigation() {
   // Card de boas-vindas: aparece pra QUEM NUNCA fez o tour (User.tourDone=false no servidor),
   // não só na 1ª sessão. Some quando o usuário conclui o onboarding.
   const [showWelcome, setShowWelcome] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false); // escolha de voz retraída por padrão
   useEffect(() => {
     if (status !== "authenticated") return;
     let alive = true;
@@ -578,9 +579,14 @@ export default function MenuNavigation() {
                   <ArrowLeftIcon className="w-3.5 h-3.5" /> {t("menu.back")}
                 </button>
 
-                {/* VOZ — escolha de voz da Zaeon */}
-                <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.02] p-3">
-                  <VoicePicker />
+                {/* VOZ — retraída por padrão; abre pra escolher (libera espaço pro botão de apagar conta) */}
+                <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.02] overflow-hidden">
+                  <button onClick={() => setVoiceOpen((v) => !v)} className="w-full flex items-center gap-2 px-3 py-3">
+                    <Mic size={15} className="text-cyan-600 dark:text-cyan-300 shrink-0" />
+                    <span className="text-sm tracking-tight text-slate-800 dark:text-white flex-1 text-left">Voz da Zaeon</span>
+                    <ChevronDownIcon className={`h-4 w-4 opacity-40 transition-transform ${voiceOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {voiceOpen && <div className="px-3 pb-3"><VoicePicker /></div>}
                 </div>
 
                 {/* IDIOMA */}

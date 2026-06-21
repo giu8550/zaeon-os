@@ -145,13 +145,13 @@ export default function HeroPage() {
             transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.1 }}
             className="w-full max-w-[760px] z-20 mt-0 relative origin-left"
           >
-            <div className="flex items-start gap-4">
+            <div className="flex items-center gap-4">
               <div className="w-full max-w-[500px] shrink-0">
                 <MenuNavigation />
               </div>
-              {/* Convite agora é um CARD próprio, à direita do menu (some deslogado) */}
+              {/* Convite = card próprio à direita, centralizado na linha do menu (mais simétrico) */}
               {status === "authenticated" && (
-                <div className="hidden lg:flex w-56 shrink-0 flex-col mt-4">
+                <div className="hidden lg:flex w-56 shrink-0 flex-col">
                   <div className="rounded-[28px] p-4 backdrop-blur-2xl bg-white/40 dark:bg-cyan-950/10 border border-slate-200 dark:border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)]">
                     <p className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-white/55 mb-1.5 flex items-center gap-1.5"><UserPlus size={13} /> Convide</p>
                     <p className="text-[11px] text-slate-500 dark:text-white/50 mb-3 leading-relaxed">Traga um amigo pra Zaeon e cresçam juntos.</p>
