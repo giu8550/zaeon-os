@@ -19,9 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 
 COPY package*.json ./
 # npm install (não `npm ci`): resolve sem exigir o lock 100% sincronizado e tolera
-# conflitos de peer (wagmi/aptos/web3 no mesmo projeto). Para beta é o caminho confiável.
-RUN npm install --no-audit --no-fund --legacy-peer-deps
+# conflitos de peer (wagmi/aptos/web3). --ignore-scripts: NÃO roda o postinstall
+# (`prisma generate`) aqui, porque o schema ainda não foi copiado — geramos depois.
+RUN npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts
 COPY . .
+# agora o prisma/schema.prisma já está na imagem → gera o client e builda.
 RUN npx --yes prisma generate && npm run build
 
 # ───────────────────────── Stage 2: runtime ─────────────────────────
