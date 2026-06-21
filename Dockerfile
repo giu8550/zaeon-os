@@ -38,6 +38,12 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000
 
+# openssl + ca-certificates no RUNTIME (não só no build): o Prisma detecta a versão do
+# openssl em runtime pra localizar o Query Engine. Sem isso a detecção caía em
+# debian-openssl-1.1.x e não achava o engine → toda query Prisma dava 500.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --uid 10001 zaeon
 # Copia o app já buildado + node_modules (inclui socket.io e o client Prisma gerado)
 COPY --from=builder /app ./
