@@ -438,10 +438,12 @@ model StudySpace {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   userId    String   @db.ObjectId
   title     String   @default("Meus Estudos")
+  members   String[] @default([])   // co-autores (Lounge) — userIds com acesso de leitura/escrita
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([members])
   @@map("study_spaces")
 }
 
@@ -459,6 +461,27 @@ model StudyItem {
 
   @@index([userId, spaceId])
   @@map("study_items")
+}
+
+// ─── Lounge colaborativo — documento co-criado (estudo/pesquisa/relatório) ───
+// Cópia editável compartilhada: o original (StudySpace/ScholarSession) fica intacto.
+// Edição em grupo acontece só no Lounge. Real-time via Pusher (canal collab-<id>).
+model CollabDoc {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId    String   @db.ObjectId
+  title      String   @default("Documento colaborativo")
+  kind       String   @default("study")   // study | research | report
+  content    String   @default("")
+  members    String[] @default([])         // userIds (inclui o owner) — quem pode co-criar
+  token      String   @unique              // link de convite
+  sourceType String?                       // study | research (de onde foi copiado)
+  sourceId   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([members])
+  @@map("collab_docs")
 }
 
 // --- Verificação .edu p/ conceder o trial de estudante (/api/trial/edu/*) ---

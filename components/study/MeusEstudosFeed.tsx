@@ -85,7 +85,7 @@ function VideoCard({ id, title }: { id: string; title?: string }) {
   );
 }
 
-export default function MeusEstudosFeed() {
+export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: string } = {}) {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [spaceId, setSpaceId] = useState("");
   const [titleDraft, setTitleDraft] = useState("");
@@ -152,14 +152,16 @@ export default function MeusEstudosFeed() {
       let fromUrl = "";
       try { fromUrl = new URLSearchParams(window.location.search).get("space") || ""; } catch { /* ignore */ }
       const last = (typeof window !== "undefined" && localStorage.getItem(LAST_KEY)) || "";
-      const sid = data.find((s) => s.id === fromUrl)?.id || data.find((s) => s.id === last)?.id || data[0]?.id || "";
+      // Modo collab: TRAVA no espaço compartilhado (ignora url/last).
+      const sid = (collabSpaceId && data.find((s) => s.id === collabSpaceId)?.id) || (collabSpaceId || "") ||
+        data.find((s) => s.id === fromUrl)?.id || data.find((s) => s.id === last)?.id || data[0]?.id || "";
       setSpaceId(sid);
       if (!sid) setLoading(false);
     } catch {
       setError("Não consegui carregar seus estudos. Se você acabou de atualizar, reinicie o servidor (next dev).");
       setLoading(false);
     }
-  }, []);
+  }, [collabSpaceId]);
 
   useEffect(() => { void loadSpaces(); }, [loadSpaces]);
 
@@ -175,6 +177,23 @@ export default function MeusEstudosFeed() {
     try { localStorage.setItem(LAST_KEY, spaceId); } catch { /* ignore */ }
     loadItems(spaceId);
   }, [spaceId, loadItems]);
+
+  // CO-EDIÇÃO EM GRUPO (Lounge): poll dos itens do espaço compartilhado. Não aplica
+  // enquanto alguém está digitando aqui (foco num textarea) pra não atropelar a edição.
+  useEffect(() => {
+    if (!collabSpaceId || !spaceId) return;
+    const iv = setInterval(async () => {
+      try {
+        const ae = typeof document !== "undefined" ? document.activeElement : null;
+        if (ae && ae.tagName === "TEXTAREA") return;
+        const r = await fetch(`/api/study/items?spaceId=${spaceId}`);
+        if (!r.ok) return;
+        const fresh = await r.json();
+        setItems((prev) => (JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh));
+      } catch { /* ignore */ }
+    }, 3500);
+    return () => clearInterval(iv);
+  }, [collabSpaceId, spaceId]);
 
   // Handoff da Zaeon (chat/voz): se ela mandou ESTUDAR um tópico, executa quando o espaço estiver pronto.
   const handoffDoneRef = useRef(false);
@@ -266,7 +285,7 @@ export default function MeusEstudosFeed() {
     let targetId = spaceId;
     let freshBase = false;
     const currentHasContent = itemsRef.current.some((i) => i.placement === "feed");
-    if (currentHasContent) {
+    if (currentHasContent && !collabSpaceId) {
       try {
         const rs = await fetch("/api/study/spaces", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: cmd.slice(0, 80) }) });
         if (rs.ok) {
@@ -757,8 +776,8 @@ export default function MeusEstudosFeed() {
         )}
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 flex flex-col gap-2 min-h-[120px]">
-          {/* ── ESTUDOS como arquivos de texto ── */}
-          {spaces.length > 0 && (
+          {/* ── ESTUDOS como arquivos de texto (oculto no modo collab: o espaço é fixo) ── */}
+          {!collabSpaceId && spaces.length > 0 && (
             <>
               <div className="flex items-center gap-1 px-1 pt-0.5">
                 <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30">Estudos</p>

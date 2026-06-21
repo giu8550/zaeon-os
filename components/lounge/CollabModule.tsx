@@ -12,20 +12,26 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { useSession } from "next-auth/react";
 import PusherClient from "pusher-js";
+import { useSavedCitations } from "@/lib/useSavedCitations";
 import {
   Play, Link as LinkIcon, Copy, Check, Send, X, Users, ArrowLeft, ChevronDown,
   FileText, GraduationCap, Loader2, UserPlus, Trash2, Sparkles,
+  Heading1, Heading2, Pilcrow, GripVertical,
 } from "lucide-react";
 
 type Source = { id: string; title: string; kind: "study" | "research"; tag?: string; content?: string };
 type Collab = { id: string; title: string; kind: string; updatedAt: string; isOwner: boolean; memberCount: number };
 type Contact = { id: string; name: string | null; image: string | null; isInviter?: boolean };
 type Member = { id: string; name: string | null; image: string | null };
-type DocFull = { id: string; title: string; kind: string; sourceType: string | null; content: string; ownerId: string; isOwner: boolean; token: string; members: Member[] };
+type DocFull = { id: string; title: string; kind: string; sourceType: string | null; sourceId: string | null; content: string; ownerId: string; isOwner: boolean; token: string; members: Member[] };
+
+// Sala de Estudos REAL (mesmo componente da sala), montada no Lounge sobre o espaço compartilhado.
+const CollabStudyRoom = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
 
 const isResearchKind = (k: string) => ["research", "report", "tcc", "artigo", "relatório", "relatorio"].includes((k || "").toLowerCase());
 // Mesmos ícones da sidebar: Sala de Estudos = documento, Sala de Pesquisa = capelo.
@@ -55,6 +61,43 @@ function Portal({ children }: { children: React.ReactNode }) {
   useEffect(() => setMounted(true), []);
   if (!mounted || typeof document === "undefined") return null;
   return createPortal(children, document.body);
+}
+
+// ───────────────────────── Motor de BLOCOS (caderno colaborativo) ─────────────────────────
+// O doc é guardado como MARKDOWN (# / ## / texto); aqui viramos blocos editáveis/arrastáveis
+// e serializamos de volta — assim a co-edição ao vivo (string) e os blocos convivem.
+type Block = { id: string; variant: "h1" | "h2" | "text"; text: string };
+const bid = () => Math.random().toString(36).slice(2, 9);
+
+function parseBlocks(md: string): Block[] {
+  const out: Block[] = [];
+  let buf: string[] = [];
+  const flush = () => { const t = buf.join("\n").trim(); if (t) out.push({ id: bid(), variant: "text", text: t }); buf = []; };
+  for (const ln of (md || "").split("\n")) {
+    if (ln.startsWith("## ")) { flush(); out.push({ id: bid(), variant: "h2", text: ln.slice(3).trim() }); }
+    else if (ln.startsWith("# ")) { flush(); out.push({ id: bid(), variant: "h1", text: ln.slice(2).trim() }); }
+    else if (ln.trim() === "") flush();
+    else buf.push(ln);
+  }
+  flush();
+  return out.length ? out : [{ id: bid(), variant: "text", text: "" }];
+}
+function serializeBlocks(blocks: Block[]): string {
+  return blocks.map((b) => (b.variant === "h1" ? `# ${b.text}` : b.variant === "h2" ? `## ${b.text}` : b.text)).join("\n\n").trim();
+}
+
+/** Textarea que cresce com o conteúdo (cópia do caderno de Meus Estudos). */
+function AutoGrow({ value, onChange, onKeyDown, onFocus, onBlur, placeholder, className, autoFocus }: {
+  value: string; onChange: (v: string) => void; onKeyDown?: (e: React.KeyboardEvent) => void;
+  onFocus?: () => void; onBlur?: () => void; placeholder?: string; className?: string; autoFocus?: boolean;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { const el = ref.current; if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }, [value]);
+  useEffect(() => { if (autoFocus && ref.current) { ref.current.focus(); const v = ref.current.value; ref.current.setSelectionRange(v.length, v.length); } }, [autoFocus]);
+  return (
+    <textarea ref={ref} value={value} rows={1} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown} onFocus={onFocus} onBlur={onBlur}
+      className={`w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-slate-300 dark:placeholder:text-white/20 ${className || ""}`} />
+  );
 }
 
 export default function CollabModule() {
@@ -359,6 +402,10 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
   const [libSpaces, setLibSpaces] = useState<{ id: string; title: string }[]>([]);
   const [barOpen, setBarOpen] = useState(false);
   const [studyCmd, setStudyCmd] = useState("");
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [focusBlock, setFocusBlock] = useState<string | null>(null);
+  const dragId = useRef<string | null>(null);
+  const { citations } = useSavedCitations(); // painel direito da Pesquisa (cópia da sala)
 
   const clientId = useRef(Math.random().toString(36).slice(2));
   const focusedRef = useRef(false);
@@ -375,7 +422,7 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
   useEffect(() => {
     let alive = true;
     (async () => {
-      try { const r = await fetch(`/api/collab/${docId}`, { cache: "no-store" }); if (r.ok && alive) { const d: DocFull = await r.json(); setDoc(d); setContent(d.content || ""); } } catch { /* */ }
+      try { const r = await fetch(`/api/collab/${docId}`, { cache: "no-store" }); if (r.ok && alive) { const d: DocFull = await r.json(); setDoc(d); setContent(d.content || ""); setBlocks(parseBlocks(d.content || "")); } } catch { /* */ }
     })();
     return () => { alive = false; };
   }, [docId]);
@@ -389,7 +436,7 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
       if (data?.clientId === clientId.current || data?.fromUserId === myId) return;
       if (typeof data?.content !== "string") return;
       if (focusedRef.current && Date.now() - lastEditRef.current < 1500) pendingRemote.current = data.content;
-      else { setContent(data.content); setRemoteFlash(true); setTimeout(() => setRemoteFlash(false), 700); }
+      else { setContent(data.content); setBlocks(parseBlocks(data.content)); setRemoteFlash(true); setTimeout(() => setRemoteFlash(false), 700); }
     });
     ch.bind("presence", (data: any) => {
       if (!data || data.userId === myId) return;
@@ -407,7 +454,7 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
   useEffect(() => {
     const iv = setInterval(() => {
       if (pendingRemote.current !== null && (!focusedRef.current || Date.now() - lastEditRef.current > 1500)) {
-        setContent(pendingRemote.current); pendingRemote.current = null;
+        setContent(pendingRemote.current); setBlocks(parseBlocks(pendingRemote.current)); pendingRemote.current = null;
         setRemoteFlash(true); setTimeout(() => setRemoteFlash(false), 700);
       }
     }, 800);
@@ -463,22 +510,51 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
 
   const reinvite = () => { if (!doc) return; const origin = typeof window !== "undefined" ? window.location.origin : ""; setShare({ link: `${origin}/c/${doc.token}`, title: doc.title }); };
 
+  // Inserir no ponto do cursor da FOLHA de pesquisa (citação do painel direito).
+  const insertResearch = (snippet: string) => {
+    const pos = caretRef.current ?? content.length;
+    const before = content.slice(0, pos), after = content.slice(pos);
+    const sep = before && !before.endsWith("\n") ? "\n" : "";
+    const next = before + sep + snippet + after;
+    setContent(next); caretRef.current = (before + sep + snippet).length;
+    lastEditRef.current = Date.now(); ping("typing"); scheduleSave(next);
+  };
+
   // Biblioteca do caderno: só LÊ os estudos do usuário (read-only) pra arrastar/inserir. Nunca escreve neles.
   useEffect(() => {
     if (!doc || research) return;
     fetch("/api/study/spaces").then((r) => (r.ok ? r.json() : [])).then((d) => setLibSpaces(Array.isArray(d) ? d : [])).catch(() => {});
   }, [doc, research]);
 
-  // Insere texto no ponto do cursor do doc COMPARTILHADO (não toca nas salas individuais).
-  const insertAtCaret = (snippet: string) => {
-    const pos = caretRef.current ?? content.length;
-    const before = content.slice(0, pos), after = content.slice(pos);
-    const sep = before && !before.endsWith("\n") ? "\n\n" : "";
-    const next = before + sep + snippet + after;
-    setContent(next); caretRef.current = (before + sep + snippet).length; scheduleSave(next);
+  // ── Operações de BLOCO (caderno) — atualizam o doc compartilhado (markdown) e salvam ──
+  const blocksRef = useRef<Block[]>([]);
+  blocksRef.current = blocks;
+  const commitBlocks = (next: Block[]) => {
+    setBlocks(next); blocksRef.current = next;
+    const md = serializeBlocks(next);
+    setContent(md); lastEditRef.current = Date.now(); ping("typing"); scheduleSave(md);
+  };
+  const editBlock = (id: string, text: string) => commitBlocks(blocksRef.current.map((b) => (b.id === id ? { ...b, text } : b)));
+  const addBlock = (variant: Block["variant"], text = "", afterId?: string) => {
+    const nb: Block = { id: bid(), variant, text };
+    const cur = blocksRef.current;
+    const idx = afterId ? cur.findIndex((b) => b.id === afterId) : cur.length - 1;
+    const next = [...cur]; next.splice(idx + 1, 0, nb); commitBlocks(next); setFocusBlock(nb.id);
+  };
+  const removeBlock = (id: string) => {
+    const next = blocksRef.current.filter((b) => b.id !== id);
+    commitBlocks(next.length ? next : [{ id: bid(), variant: "text", text: "" }]);
+  };
+  const reorder = (overId: string) => {
+    const from = dragId.current; dragId.current = null;
+    if (!from || from === overId) return;
+    const arr = [...blocksRef.current];
+    const fi = arr.findIndex((b) => b.id === from); const ti = arr.findIndex((b) => b.id === overId);
+    if (fi < 0 || ti < 0) return;
+    const [m] = arr.splice(fi, 1); arr.splice(ti, 0, m); commitBlocks(arr);
   };
 
-  // Modo IA do caderno: gera um trecho e insere no doc compartilhado (barra ⟁ "estude sobre…").
+  // Modo IA do caderno: gera um trecho e ENTRA como bloco novo no doc compartilhado.
   const studyGenerate = async () => {
     const cmd = studyCmd.trim();
     if (!cmd || generating) return;
@@ -490,7 +566,7 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
       });
       const d = await r.json().catch(() => ({}));
       const gen = (d.text || "").trim();
-      if (gen) insertAtCaret(gen);
+      if (gen) addBlock("text", gen);
     } catch { /* */ } finally { setGenerating(false); ping("idle"); }
   };
 
@@ -521,8 +597,9 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
       </div>
 
       {research ? (
-        /* ═══ Cópia 1:1 da FOLHA de Pesquisa (título + textarea serifada + zoom) ═══ */
-        <div className={`flex-1 min-h-0 flex flex-col bg-white dark:bg-[#0f172a] overflow-hidden transition-shadow ${remoteFlash ? "ring-2 ring-cyan-400/30" : ""}`}>
+        /* ═══ Cópia 1:1 da Sala de Pesquisa: folha (esq) + painel de documentos/citações (dir) ═══ */
+        <div className="flex-1 min-h-0 flex">
+        <div className={`flex-1 min-w-0 flex flex-col bg-white dark:bg-[#0f172a] overflow-hidden transition-shadow ${remoteFlash ? "ring-2 ring-cyan-400/30" : ""}`}>
           <div className="h-14 flex items-center px-8 shrink-0 border-b border-slate-100 dark:border-white/5">
             <input value={doc?.title || ""} readOnly placeholder="Minha Pesquisa"
               className="bg-transparent text-black dark:text-white text-lg font-black focus:outline-none w-full placeholder:text-slate-300" />
@@ -549,8 +626,28 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
             </button>
           </div>
         </div>
+        {/* PAINEL DIREITO (cópia da Sala de Pesquisa): citações salvas; clicar insere no texto */}
+        <aside className="hidden md:flex w-60 shrink-0 flex-col border-l border-slate-200 dark:border-white/10 bg-slate-100/70 dark:bg-[#0a0f1c]">
+          <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Documentos & Citações</div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 flex flex-col gap-2">
+            {citations.length === 0 ? (
+              <p className="text-[11px] text-slate-400 dark:text-white/30 p-2 leading-relaxed">Suas citações salvas aparecem aqui — clique pra inserir no texto.</p>
+            ) : citations.map((c) => (
+              <button key={c.id} onClick={() => insertResearch(c.abnt)} title="Inserir citação"
+                className="text-left rounded-xl border p-2 cursor-pointer bg-white border-slate-200 shadow-sm hover:border-cyan-400/50 dark:bg-white/[0.04] dark:border-white/10 dark:shadow-none">
+                <span className="text-[11px] text-slate-700 dark:text-white/85 line-clamp-3">{c.abnt}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+        </div>
+      ) : (doc?.sourceType === "study" && doc?.sourceId) ? (
+        /* ═══ Sala de Estudos REAL (1:1) — co-edição em grupo sobre o espaço compartilhado ═══ */
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <CollabStudyRoom collabSpaceId={doc.sourceId} />
+        </div>
       ) : (
-        /* ═══ Cópia do caderno de Meus Estudos: caderno + BIBLIOTECA + modo IA, proporção 1:1 ═══ */
+        /* ═══ Fallback: caderno reconstruído (docs antigos sem espaço vinculado) ═══ */
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
           {/* CADERNO (centro) */}
           <div className="flex-1 min-w-0 flex flex-col p-5 sm:p-6">
@@ -584,17 +681,47 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
               </div>
             )}
 
-            {/* folha do caderno */}
-            <div className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-[1.5rem] border transition-colors ${remoteFlash ? "border-cyan-400/50 bg-cyan-500/[0.04]" : "border-slate-200 dark:border-white/10"}`}>
-              <div className={`p-6 sm:p-8 max-w-2xl flex flex-col ${libOpen ? "mx-auto" : "lg:pl-10"}`}>
-                <textarea
-                  ref={taRef} value={content}
-                  onChange={(e) => onChange(e.target.value)}
-                  onSelect={trackCaret} onClick={trackCaret} onKeyUp={trackCaret}
-                  onFocus={() => { focusedRef.current = true; }} onBlur={() => { focusedRef.current = false; trackCaret(); }}
-                  placeholder="Escreva o estudo aqui…"
-                  className="w-full min-h-[44vh] resize-none outline-none bg-transparent text-[16px] sm:text-[17px] leading-[1.7] text-slate-700 dark:text-slate-200/90 placeholder:text-slate-300 dark:placeholder:text-white/20"
-                />
+            {/* folha do caderno — também recebe itens arrastados da biblioteca */}
+            <div
+              onDragOver={(e) => { if (e.dataTransfer.types.includes("application/x-zaeon-lib")) e.preventDefault(); }}
+              onDrop={(e) => { const t = e.dataTransfer.getData("application/x-zaeon-lib"); if (t) { e.preventDefault(); addBlock("h2", t); } }}
+              className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-[1.5rem] border transition-colors ${remoteFlash ? "border-cyan-400/50 bg-cyan-500/[0.04]" : "border-slate-200 dark:border-white/10"}`}>
+              <div className={`p-6 sm:p-8 max-w-2xl flex flex-col gap-1 ${libOpen ? "mx-auto" : "lg:pl-10"}`}>
+                {blocks.map((b) => {
+                  const cls = b.variant === "h1" ? "text-3xl sm:text-4xl font-black tracking-tight leading-tight text-slate-900 dark:text-white"
+                    : b.variant === "h2" ? "text-xl sm:text-2xl font-bold tracking-tight leading-snug text-slate-800 dark:text-white/95"
+                    : "text-[16px] sm:text-[17px] leading-[1.7] text-slate-700 dark:text-slate-200/90";
+                  const ph = b.variant === "h1" ? "Título" : b.variant === "h2" ? "Subtítulo" : "Escreva…";
+                  return (
+                    <div key={b.id}
+                      className="group relative -mx-2 px-2 py-0.5 rounded-lg hover:bg-black/[0.015] dark:hover:bg-white/[0.02]"
+                      onDragOver={(e) => { if (dragId.current) e.preventDefault(); }}
+                      onDrop={() => reorder(b.id)}
+                    >
+                      <span draggable onDragStart={() => { dragId.current = b.id; }} onDragEnd={() => { dragId.current = null; }}
+                        title="Arraste para reordenar"
+                        className="absolute -left-4 top-1.5 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500"><GripVertical size={13} /></span>
+                      <button onClick={() => removeBlock(b.id)} title="Remover bloco" className="absolute -right-1 top-1 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-400"><X size={12} /></button>
+                      <AutoGrow value={b.text}
+                        onChange={(v) => editBlock(b.id, v)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey && b.variant !== "text") { e.preventDefault(); addBlock("text", "", b.id); }
+                          else if (e.key === "Backspace" && b.text === "") { e.preventDefault(); removeBlock(b.id); }
+                        }}
+                        onFocus={() => { focusedRef.current = true; }}
+                        onBlur={() => { focusedRef.current = false; }}
+                        placeholder={ph} className={cls} autoFocus={focusBlock === b.id} />
+                    </div>
+                  );
+                })}
+                {/* adicionar bloco (Título / Subtítulo / Texto) */}
+                <div className="mt-4 flex items-center gap-1.5">
+                  {([["h1", Heading1, "Título"], ["h2", Heading2, "Subtítulo"], ["text", Pilcrow, "Texto"]] as const).map(([v, Icon, lbl]) => (
+                    <button key={v} onClick={() => addBlock(v)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-white text-slate-600 border-slate-200 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-300 dark:bg-white/[0.06] dark:text-white/55 dark:border-white/10 dark:hover:bg-cyan-500/15 dark:hover:text-cyan-300">
+                      <Icon size={13} /> {lbl}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -620,10 +747,10 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
                 {libSpaces.length === 0 ? (
                   <p className="text-[11px] text-slate-400 dark:text-white/30 p-2 leading-relaxed">Seus estudos aparecem aqui. Clique pra trazer o título pro caderno.</p>
                 ) : libSpaces.map((sp) => (
-                  <button key={sp.id} title="Inserir no caderno"
-                    draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", `## ${sp.title}\n`)}
-                    onClick={() => insertAtCaret(`## ${sp.title}\n`)}
-                    className="group flex items-center gap-2 rounded-xl border p-2 text-left cursor-pointer bg-white border-slate-200 shadow-sm hover:border-cyan-400/50 dark:bg-white/[0.04] dark:border-white/10 dark:shadow-none">
+                  <button key={sp.id} title="Clique ou arraste pro caderno"
+                    draggable onDragStart={(e) => e.dataTransfer.setData("application/x-zaeon-lib", sp.title)}
+                    onClick={() => addBlock("h2", sp.title)}
+                    className="group flex items-center gap-2 rounded-xl border p-2 text-left cursor-grab active:cursor-grabbing bg-white border-slate-200 shadow-sm hover:border-cyan-400/50 dark:bg-white/[0.04] dark:border-white/10 dark:shadow-none">
                     <FileText size={14} className="text-violet-500 dark:text-violet-300 shrink-0" />
                     <span className="flex-1 min-w-0 text-[11px] font-medium text-slate-700 dark:text-white/90 truncate">{sp.title || "Estudo"}</span>
                   </button>
