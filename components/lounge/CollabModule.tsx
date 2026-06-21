@@ -18,10 +18,11 @@ import { motion } from "framer-motion";
 import { useSession } from "next-auth/react";
 import PusherClient from "pusher-js";
 import { useSavedCitations } from "@/lib/useSavedCitations";
+import DocumentDesktop from "@/app/research-lab/DocumentDesktop";
 import {
   Play, Link as LinkIcon, Copy, Check, Send, X, Users, ArrowLeft, ChevronDown,
   FileText, GraduationCap, Loader2, UserPlus, Trash2, Sparkles,
-  Heading1, Heading2, Pilcrow, GripVertical,
+  Heading1, Heading2, Pilcrow, GripVertical, Save,
 } from "lucide-react";
 
 type Source = { id: string; title: string; kind: "study" | "research"; tag?: string; content?: string };
@@ -182,14 +183,20 @@ export default function CollabModule() {
     { key: "research" as const, label: "Pesquisas", icon: GraduationCap, count: sources.research.length, accent: "violet" },
   ];
 
-  // Editor aberto → ocupa a página (sobe como parte dela), sem modal flutuante.
+  // Editor aberto → TELA CHEIA (vira a sala): escapa do feed estreito do Lounge via Portal.
+  // "Sair" fecha e a página do Lounge volta como estava.
   if (openId) {
     return (
-      <div className="w-full max-w-5xl mx-auto">
-        <CollabEditor docId={openId} myId={myId} contacts={contacts} onClose={() => { setOpenId(null); loadCollabs(); }} />
+      <>
+        <Portal>
+          {/* Tela cheia da SALA — respeita a navbar (topo) e a sidebar (esquerda), não cobre. */}
+          <div className="fixed z-[200] top-[96px] left-[84px] right-4 bottom-4 bg-slate-100 dark:bg-[#030014] flex flex-col rounded-[20px]">
+            <CollabEditor docId={openId} myId={myId} contacts={contacts} onClose={() => { setOpenId(null); loadCollabs(); }} />
+          </div>
+        </Portal>
         {confirmDel && <Portal><ConfirmDelete collab={confirmDel} onCancel={() => setConfirmDel(null)} onConfirm={() => deleteCollab(confirmDel)} /></Portal>}
         {toast && <Portal><div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[900] px-5 py-3 rounded-full bg-black text-white text-[12px] font-bold shadow-2xl">{toast}</div></Portal>}
-      </div>
+      </>
     );
   }
 
@@ -406,6 +413,10 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
   const [focusBlock, setFocusBlock] = useState<string | null>(null);
   const dragId = useRef<string | null>(null);
   const { citations } = useSavedCitations(); // painel direito da Pesquisa (cópia da sala)
+  const [dockPopover, setDockPopover] = useState<"citations" | "quiz" | null>(null);
+  const [showFolder, setShowFolder] = useState(false);
+  const [pubNote, setPubNote] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
 
   const clientId = useRef(Math.random().toString(36).slice(2));
   const focusedRef = useRef(false);
@@ -481,36 +492,15 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
   const onChange = (v: string) => { setContent(v); caretRef.current = taRef.current?.selectionStart ?? v.length; ping("typing"); scheduleSave(v); };
   const trackCaret = () => { caretRef.current = taRef.current?.selectionStart ?? caretRef.current; };
 
-  // Zaeon gera texto NO CURSOR (não cria trabalho novo).
-  const zaeonAtCaret = async () => {
-    if (generating) return;
-    setGenerating(true); ping("generating");
-    const pos = caretRef.current ?? content.length;
-    const before = content.slice(0, pos);
-    const after = content.slice(pos);
-    try {
-      const r = await fetch("/api/ai/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: `Você está co-escrevendo um documento acadêmico (${doc?.kind || "estudo"}). Continue o texto a partir do ponto indicado, de forma coesa e no mesmo tom. Gere só o trecho a inserir (sem preâmbulo, sem repetir o que já está escrito).\n\n--- ANTES DO CURSOR ---\n${before.slice(-1800)}\n\n--- DEPOIS DO CURSOR ---\n${after.slice(0, 400)}`,
-          agent: "zaeon",
-        }),
-      });
-      const d = await r.json().catch(() => ({}));
-      const gen = (d.text || "").trim();
-      if (gen) {
-        const sep = before && !before.endsWith("\n") && !before.endsWith(" ") ? " " : "";
-        const next = before + sep + gen + after;
-        setContent(next);
-        caretRef.current = (before + sep + gen).length;
-        scheduleSave(next);
-      } else { /* nada gerado */ }
-    } catch { /* */ } finally { setGenerating(false); ping("idle"); }
-  };
-
   const reinvite = () => { if (!doc) return; const origin = typeof window !== "undefined" ? window.location.origin : ""; setShare({ link: `${origin}/c/${doc.token}`, title: doc.title }); };
 
-  // Inserir no ponto do cursor da FOLHA de pesquisa (citação do painel direito).
+  // Salvar agora (força o PATCH imediato — além do autosave por debounce).
+  const saveNow = async () => {
+    try { setSaving(true); await fetch(`/api/collab/${docId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, clientId: clientId.current }) }); setSavedFlash(true); setTimeout(() => setSavedFlash(false), 1600); }
+    catch { /* */ } finally { setSaving(false); }
+  };
+
+  // Inserir no ponto do cursor da FOLHA de pesquisa (citação/documento do painel direito).
   const insertResearch = (snippet: string) => {
     const pos = caretRef.current ?? content.length;
     const before = content.slice(0, pos), after = content.slice(pos);
@@ -572,7 +562,7 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      className="relative w-full flex flex-col h-[80vh] rounded-[26px] border border-violet-300/30 dark:border-white/10 bg-white dark:bg-[#0b1220] shadow-[0_18px_50px_-24px_rgba(124,58,237,0.45)] overflow-hidden">
+      className="relative w-full flex-1 min-h-0 flex flex-col rounded-[26px] border border-violet-300/30 dark:border-white/10 bg-white dark:bg-[#0b1220] shadow-[0_18px_50px_-24px_rgba(124,58,237,0.45)] overflow-hidden">
 
       {/* TOOLBAR fina: Sair · (fulano digitando) · membros · Convidar. Nada de frase fixa. */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.03] shrink-0">
@@ -621,24 +611,37 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
               <span className="text-[10px] tabular-nums text-slate-400 w-9 text-center">{Math.round(zoom * 100)}%</span>
               <button onClick={() => setZoom((z) => Math.min(2.2, +(z + 0.1).toFixed(2)))} className="w-7 h-7 rounded-lg text-slate-600 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/10 font-black">+</button>
             </div>
-            <button onClick={zaeonAtCaret} disabled={generating} className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-[11px] font-black uppercase tracking-wide disabled:opacity-60" style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}>
-              {generating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Zaeon escreve aqui
-            </button>
-          </div>
-        </div>
-        {/* PAINEL DIREITO (cópia da Sala de Pesquisa): citações salvas; clicar insere no texto */}
-        <aside className="hidden md:flex w-60 shrink-0 flex-col border-l border-slate-200 dark:border-white/10 bg-slate-100/70 dark:bg-[#0a0f1c]">
-          <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Documentos & Citações</div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 flex flex-col gap-2">
-            {citations.length === 0 ? (
-              <p className="text-[11px] text-slate-400 dark:text-white/30 p-2 leading-relaxed">Suas citações salvas aparecem aqui — clique pra inserir no texto.</p>
-            ) : citations.map((c) => (
-              <button key={c.id} onClick={() => insertResearch(c.abnt)} title="Inserir citação"
-                className="text-left rounded-xl border p-2 cursor-pointer bg-white border-slate-200 shadow-sm hover:border-cyan-400/50 dark:bg-white/[0.04] dark:border-white/10 dark:shadow-none">
-                <span className="text-[11px] text-slate-700 dark:text-white/85 line-clamp-3">{c.abnt}</span>
+            <div className="flex items-center gap-2">
+              <button onClick={saveNow} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-black uppercase tracking-wide border border-cyan-400/50 text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10">
+                {savedFlash ? <Check size={13} /> : <Save size={13} />} {savedFlash ? "Salvo" : "Salvar"}
               </button>
-            ))}
+              <button onClick={() => { setPubNote(true); setTimeout(() => setPubNote(false), 5000); }} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-white text-[11px] font-black uppercase tracking-wide" style={{ background: "linear-gradient(135deg,#10b981,#06b6d4)" }}>
+                <Send size={13} /> Publicar
+              </button>
+            </div>
           </div>
+          {pubNote && (
+            <div className="px-8 py-2 text-[11px] text-violet-700 dark:text-violet-300 bg-violet-500/10 border-t border-violet-400/20 shrink-0">
+              Publicar chega já já — por enquanto seu trabalho fica salvo aqui no Lounge. A Zaeon te ensina a publicar quando for a hora. ✦
+            </div>
+          )}
+        </div>
+        {/* PAINEL DIREITO REAL (mesmo da Sala de Pesquisa): Documentos / Citações / Lixeira —
+            o INVENTÁRIO PESSOAL de cada um (o que você recolhe fica disponível aqui no grupo).
+            Grid 1fr×1fr faz o DocumentDesktop preencher a coluna. */}
+        <aside className="hidden md:grid w-72 shrink-0 border-l border-slate-200 dark:border-white/10 p-2" style={{ gridTemplateRows: "1fr", gridTemplateColumns: "1fr" }}>
+          <DocumentDesktop
+            processingFileId={null}
+            onPlayFile={(f) => insertResearch(f.title || "")}
+            onView={(f) => insertResearch(f.title || "")}
+            openPopover={dockPopover}
+            onTogglePopover={setDockPopover}
+            citationCount={citations.length}
+            showFolder={showFolder}
+            onToggleFolder={() => setShowFolder((v) => !v)}
+            sessions={[]}
+            onOpenSession={() => {}}
+          />
         </aside>
         </div>
       ) : (doc?.sourceType === "study" && doc?.sourceId) ? (
