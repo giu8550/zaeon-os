@@ -3,11 +3,16 @@ name: CI
 # Verificação contínua: instala, gera Prisma, lint (não-bloqueante), testes e build.
 # O build aqui é a real checagem que o sandbox de dev não consegue rodar (Next build longo).
 
+# Economia de minutos: CI roda só em Pull Requests pra main (não em todo push de
+# toda branch). O deploy.yml cuida do push pra main, e o build pesado é no VPS.
+# Mudanças só de doc (.md/docs) não disparam o CI.
 on:
-  push:
-    branches: ["**"]
   pull_request:
     branches: [main, master]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:
 
 # Cancela runs antigos do mesmo ref quando chega um push novo.
 concurrency:

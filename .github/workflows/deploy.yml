@@ -14,6 +14,9 @@ name: Deploy (VPS)
 on:
   push:
     branches: [main]
+    paths-ignore:        # não redeploya por mudança só de doc
+      - "**.md"
+      - "docs/**"
   workflow_dispatch:
     inputs:
       rebuild:
