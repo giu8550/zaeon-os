@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sun, Moon, Mic } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -99,6 +100,7 @@ function GlitchText({ text, targetLang, hasStarted }: { text: string, targetLang
 
 export default function MacSplash({ show = true, onDone }: Props) {
     const { theme, setTheme } = useTheme();
+    const router = useRouter();
     const { i18n } = useTranslation();
     const [voiceMode, setVoiceMode] = useVoiceMode(); // modo voz (passivo|ativo), disponível já na tela inicial
     const [mounted, setMounted] = useState(false);
@@ -124,6 +126,16 @@ export default function MacSplash({ show = true, onDone }: Props) {
     useEffect(() => {
         setMounted(true);
     }, []);
+
+    // LOADING FUNCIONAL: enquanto a intro roda, pré-carrega de verdade o código das salas
+    // (sobretudo a Sala de Pesquisa) → quando o usuário entra, já está pronto, sem espera.
+    useEffect(() => {
+        try {
+            router.prefetch("/research-lab");
+            router.prefetch("/workstation");
+            router.prefetch("/plugin-store");
+        } catch { /* ignore */ }
+    }, [router]);
 
     // Wave Glitch Cycle
     useEffect(() => {
@@ -213,20 +225,26 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 isAudioPlaying.current = true;
                 setHasStarted(true);
                 window.dispatchEvent(new CustomEvent("zaeon-music-sync"));
-                // A música só serve pra destravar o áudio do navegador no clique.
-                // Some com fade-out de 15s e para — não fica tocando no fundo depois.
+                // Música inicial: toca ~60s no volume CHEIO e só então faz um fade-out LENTO
+                // (~10s, curva suave) e pausa. Antes ela fadeava desde o 1º segundo (15s) →
+                // parecia curta/cortada. Os timers sobrevivem ao fim do intro de propósito.
                 const startVol = typeof audio.volume === "number" ? audio.volume : 0.4;
+                const HOLD_MS = 33_000;
+                const FADE_MS = 10_000;
                 const steps = 60;
-                let i = 0;
-                const fade = setInterval(() => {
-                    i++;
-                    audio.volume = Math.max(0, startVol * (1 - i / steps));
-                    if (i >= steps) {
-                        clearInterval(fade);
-                        try { audio.pause(); } catch { /* ignore */ }
-                        isAudioPlaying.current = false;
-                    }
-                }, 15000 / steps);
+                setTimeout(() => {
+                    let i = 0;
+                    const fade = setInterval(() => {
+                        i++;
+                        const k = 1 - i / steps;
+                        audio.volume = Math.max(0, startVol * k * k); // ease-out, sem degrau
+                        if (i >= steps) {
+                            clearInterval(fade);
+                            try { audio.pause(); } catch { /* ignore */ }
+                            isAudioPlaying.current = false;
+                        }
+                    }, FADE_MS / steps);
+                }, HOLD_MS);
             }).catch((err: any) => {
                 console.warn("Bloqueio de áudio:", err);
                 setHasStarted(true);
