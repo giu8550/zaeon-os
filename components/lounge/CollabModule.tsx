@@ -108,11 +108,13 @@ export default function CollabModule() {
   // Tom suave por gênero do usuário LOGADO — tinge só os cards (Lounge é o espaço
   // mais "soft" da Zaeon). Rosa = feminino, azul = masculino, neutro = default.
   const _g = String((session?.user as any)?.gender || "").toLowerCase();
+  // Estética dos cards da workstation (highlightCard + textHighlight): grandes,
+  // bem coloridos por gênero (tudo rosa p/ mulher, tudo azul p/ homem), título com glow.
   const cardTheme = (_g.includes("femin") || _g === "female")
-    ? { card: "bg-pink-50/70 dark:bg-pink-950/20 border-pink-200/70 dark:border-pink-500/25 shadow-[0_12px_34px_-14px_rgba(244,114,182,0.5)]", chip: "bg-pink-500/15 text-pink-500 dark:text-pink-300", play: "linear-gradient(135deg,#ec4899,#f472b6)", tag: "bg-pink-500" }
+    ? { card: "bg-pink-50/80 dark:bg-pink-950/30 border-pink-300/50 dark:border-pink-500/30 shadow-[0_16px_44px_-16px_rgba(236,72,153,0.55)]", chip: "bg-pink-500/20 text-pink-600 dark:text-pink-200", title: "text-pink-900 dark:text-white dark:drop-shadow-[0_0_10px_rgba(255,182,193,0.85)]", play: "linear-gradient(135deg,#ec4899,#f472b6)", tag: "bg-pink-500" }
     : (_g.includes("mascul") || _g === "male")
-    ? { card: "bg-sky-50/70 dark:bg-blue-950/20 border-sky-200/70 dark:border-blue-500/25 shadow-[0_12px_34px_-14px_rgba(56,189,248,0.5)]", chip: "bg-sky-500/15 text-sky-500 dark:text-sky-300", play: "linear-gradient(135deg,#2563eb,#38bdf8)", tag: "bg-sky-500" }
-    : { card: "bg-white/60 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 shadow-[0_12px_34px_-16px_rgba(0,0,0,0.45)]", chip: "bg-cyan-500/15 text-cyan-500 dark:text-cyan-300", play: "linear-gradient(135deg,#0ea5e9,#22d3ee)", tag: "bg-violet-500" };
+    ? { card: "bg-sky-50/80 dark:bg-blue-950/35 border-sky-300/50 dark:border-blue-500/30 shadow-[0_16px_44px_-16px_rgba(56,189,248,0.55)]", chip: "bg-sky-500/20 text-sky-600 dark:text-sky-200", title: "text-blue-900 dark:text-white dark:drop-shadow-[0_0_12px_rgba(34,211,238,0.9)]", play: "linear-gradient(135deg,#2563eb,#38bdf8)", tag: "bg-sky-500" }
+    : { card: "bg-white/70 dark:bg-white/[0.05] border-slate-200 dark:border-white/10 shadow-[0_16px_44px_-18px_rgba(0,0,0,0.5)]", chip: "bg-cyan-500/15 text-cyan-500 dark:text-cyan-300", title: "text-slate-900 dark:text-white", play: "linear-gradient(135deg,#0ea5e9,#22d3ee)", tag: "bg-violet-500" };
 
   const [sources, setSources] = useState<{ studies: Source[]; research: Source[] }>({ studies: [], research: [] });
   const [collabs, setCollabs] = useState<Collab[]>([]);
@@ -284,13 +286,13 @@ function Empty({ text }: { text: string }) {
   return <p className="text-[13px] text-slate-400 dark:text-white/30 italic py-1">{text}</p>;
 }
 
-type CardTheme = { card: string; chip: string; play: string; tag: string };
+type CardTheme = { card: string; chip: string; title: string; play: string; tag: string };
 
 function SourceCard({ s, creating, onPlay, theme }: { s: Source; creating: boolean; onPlay: () => void; theme: CardTheme }) {
   return (
-    <div className={`flex items-center gap-3.5 p-4 rounded-3xl border backdrop-blur-xl transition-transform hover:scale-[1.01] ${theme.card}`}>
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${theme.chip}`}><FileText size={22} /></div>
-      <p className="font-ornament text-lg font-bold text-slate-800 dark:text-white truncate min-w-0 flex-1 leading-snug">{s.title}</p>
+    <div className={`group flex items-center gap-4 p-5 rounded-3xl border backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] ${theme.card}`}>
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${theme.chip}`}><FileText size={26} /></div>
+      <p className={`font-ornament text-xl font-black tracking-tight truncate min-w-0 flex-1 leading-snug ${theme.title}`}>{s.title}</p>
       <PlayBtn creating={creating} onClick={onPlay} grad={theme.play} />
     </div>
   );
@@ -298,10 +300,10 @@ function SourceCard({ s, creating, onPlay, theme }: { s: Source; creating: boole
 
 function ResearchCard({ s, creating, onPlay, theme }: { s: Source; creating: boolean; onPlay: () => void; theme: CardTheme }) {
   return (
-    <div className={`flex items-center gap-3.5 p-4 rounded-3xl border backdrop-blur-xl transition-transform hover:scale-[1.01] ${theme.card}`}>
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${theme.chip}`}><GraduationCap size={22} /></div>
+    <div className={`group flex items-center gap-4 p-5 rounded-3xl border backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] ${theme.card}`}>
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${theme.chip}`}><GraduationCap size={26} /></div>
       <div className="min-w-0 flex-1">
-        <p className="font-ornament text-lg font-bold text-slate-800 dark:text-white truncate leading-snug">{s.title}</p>
+        <p className={`font-ornament text-xl font-black tracking-tight truncate leading-snug ${theme.title}`}>{s.title}</p>
         {/* UMA tag só — o tipo do trabalho (TCC OU Artigo OU Relatório) */}
         {s.tag && <span className={`mt-1.5 inline-block px-2.5 py-0.5 rounded-full text-[12px] font-black uppercase tracking-wide text-white ${theme.tag}`}>{s.tag}</span>}
       </div>

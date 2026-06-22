@@ -96,11 +96,9 @@ export default function DocumentDesktop({
       data-tour="docs-panel"
       className={`rounded-[18px] flex flex-col p-3 overflow-hidden min-h-0 ${flipped ? "order-1" : ""}`}
       style={{
-        // Preto quase acinzentado — mesmo tom do frame/modal da Sala de Pesquisa,
-        // como se a barra/dock fizesse parte do modal (liquid glass com profundidade).
-        background: "linear-gradient(180deg, rgba(22,22,34,0.96) 0%, rgba(15,15,25,0.97) 100%)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), 0 18px 50px -24px rgba(0,0,0,0.75)",
+        background: "rgba(255,255,255,0.045)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
       }}
     >
       <h3
