@@ -705,7 +705,6 @@ export default function HomeworkPage({
   const [internalDoc, setInternalDoc] = useState<{ title: string; content: string } | null>(null);
   // Cache do PDF no Vertex (token-saving): o chat usa o cacheName em vez de reenviar o PDF.
   const [pdfCache, setPdfCache] = useState<{ name: string; expireTime: string } | null>(null);
-  const [crossPickerOpen, setCrossPickerOpen] = useState(false); // dropdown "Cruzar com pesquisa salva"
   const { files: libraryFiles, save: saveLibraryFile } = useLibraryFiles();
   // Window store SUBIDO pra cá — pra o merge também abrir abas (não só o play).
   const {
@@ -831,6 +830,10 @@ export default function HomeworkPage({
 
   // --- LOADING & ACTION STATES ---
   const [isPdfTyping, setIsPdfTyping] = useState(false);
+  // Erro do resumo (mostra mensagem + botão "Tentar de novo" no painel) e o último
+  // arquivo tocado, pra o retry reabrir exatamente ele.
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const lastPlayedFileRef = useRef<{ id: string; title: string; pdfUrl: string } | null>(null);
   const [isExaminerTyping, setIsExaminerTyping] = useState(false);
   const [isCitationTyping, setIsCitationTyping] = useState(false);
   const [isSystemProcessing, setIsSystemProcessing] = useState(false);
@@ -1159,6 +1162,7 @@ export default function HomeworkPage({
       setDocTitle(saved.title);
     } else {
       setDocContent(templateFor(next));
+      setDocTitle("minha_pesquisa.pdf"); // cada tipo começa com título PRÓPRIO (não herda o do anterior)
     }
     setWorkType(next);
   };
@@ -1433,11 +1437,12 @@ export default function HomeworkPage({
     setActiveSection("pdf");
     setInternalDoc(null); // sai do modo "documento gerado" ao abrir um arquivo da biblioteca
     setPdfCache(null); // cache do PDF anterior não vale mais
+    setPdfError(null); // limpa erro anterior
+    lastPlayedFileRef.current = file; // pro botão "Tentar de novo"
 
     // MODO LEVE (Vercel): resume do abstract/metadados — NÃO baixa o PDF, sem 502, via Groq.
     if (!capabilities().heavyRag) {
       setProcessingStage("ai");
-      setDocTitle(file.title);
       try {
         const r = await fetch("/api/ai/summarize-lite", {
           method: "POST",
@@ -1452,7 +1457,7 @@ export default function HomeworkPage({
           { role: "ai", text: d.text || "Não consegui resumir agora." },
         ]);
       } catch {
-        showToast("Erro ao gerar o resumo leve.");
+        setPdfError("Não consegui gerar o resumo agora.");
       } finally {
         setIsPdfTyping(false);
         setProcessingFileId(null);
@@ -1470,7 +1475,6 @@ export default function HomeworkPage({
         // Em vez de travar, cai no resumo LEVE por metadados → dá pra conversar pelo
         // abstract em vez de não abrir nada.
         setProcessingStage("ai");
-        setDocTitle(file.title);
         try {
           const r = await fetch("/api/ai/summarize-lite", {
             method: "POST",
@@ -1490,7 +1494,7 @@ export default function HomeworkPage({
             },
           ]);
         } catch {
-          showToast("Não consegui abrir esse arquivo agora.");
+          setPdfError("Não consegui abrir esse arquivo agora.");
         }
         return; // o finally externo limpa os estados de processamento
       }
@@ -1503,7 +1507,6 @@ export default function HomeworkPage({
       });
       setActiveFileContext(base64Data);
       setProcessingStage("ai");
-      setDocTitle(file.title);
       // Cacheia o PDF uma vez (Vertex) → os turnos seguintes usam o cacheName (sem reenviar
       // o PDF). Falhou/pequeno demais → cache null e seguimos inline (base64Data).
       let cache: { name: string; expireTime: string } | null = null;
@@ -1531,13 +1534,22 @@ export default function HomeworkPage({
       });
       const data = await response.json();
       if (data.text) setPdfChatHistory([{ role: "ai", text: data.text }]);
+      else setPdfError("A IA não retornou o resumo. Tente de novo.");
     } catch (e) {
-      showToast("Erro ao abrir o arquivo salvo.");
+      setPdfError("Erro ao abrir o arquivo. Toque em tentar de novo.");
     } finally {
       setIsPdfTyping(false);
       setProcessingFileId(null);
       setProcessingStage(null);
     }
+  };
+
+  // Reabre o último arquivo tocado — botão "Tentar de novo" do painel de resumo.
+  const retryPlaySavedDoc = () => {
+    const f = lastPlayedFileRef.current;
+    if (!f) return;
+    setPdfError(null);
+    void handlePlaySavedDoc(f);
   };
 
   // Baixa um PDF salvo pelo proxy e devolve base64 (ou null se falhar — upload/blob/403/400).
@@ -1659,60 +1671,6 @@ export default function HomeworkPage({
           text: "Erro ao relacionar os documentos.",
           loading: false,
         },
-      }));
-    }
-  };
-
-  // Cruzar o DOCUMENTO GERADO (texto do editor) com uma PESQUISA SALVA — relação pelo
-  // TEXTO dos dois (sem PDF, sem 403). Carrega o conteúdo da sessão (mesmo formato do
-  // deep-link ?session=) e manda os dois corpos pro /api/ai/relate (modo texto).
-  const handleCrossDocWithSession = async (sid: string, sTitle: string) => {
-    setCrossPickerOpen(false);
-    if (!docContent.trim()) {
-      showToast("Escreva algo no documento primeiro.");
-      return;
-    }
-    const relId = "rel-" + generateSafeId();
-    const shortA = docTitle.length > 12 ? docTitle.slice(0, 12) + "…" : docTitle;
-    const shortB = sTitle.length > 12 ? sTitle.slice(0, 12) + "…" : sTitle;
-    const title = `${docTitle} × ${sTitle}`;
-    wAddWindow({ id: relId, label: `${shortA} × ${shortB}`, emoji: "🔗", type: "document" });
-    wSetActiveId(relId); // mostra a aba de relação na hora
-    setRelSummaries((prev) => ({ ...prev, [relId]: { title, text: "", loading: true } }));
-    showToast("Cruzando os dois documentos — carregando ✨");
-    try {
-      const sr = await fetch(`/api/ai/scholar/sessions?id=${encodeURIComponent(sid)}`);
-      const sd = sr.ok ? await sr.json() : null;
-      const s = sd?.session ?? sd;
-      const otherText =
-        (typeof s?.thread?.answer === "string" && s.thread.answer) ||
-        (typeof s?.thread?.synthesized === "string" && s.thread.synthesized) ||
-        (typeof s?.thread === "string" && s.thread) ||
-        "";
-      if (!otherText) {
-        setRelSummaries((prev) => ({
-          ...prev,
-          [relId]: { title, text: "Essa pesquisa salva não tem conteúdo pra cruzar.", loading: false },
-        }));
-        return;
-      }
-      const res = await fetch("/api/ai/relate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          a: { title: docTitle, text: docContent },
-          b: { title: sTitle, text: otherText },
-        }),
-      });
-      const d = await res.json();
-      setRelSummaries((prev) => ({
-        ...prev,
-        [relId]: { title, text: d.text || "Não consegui relacionar agora.", loading: false },
-      }));
-    } catch {
-      setRelSummaries((prev) => ({
-        ...prev,
-        [relId]: { title, text: "Erro ao cruzar os documentos.", loading: false },
       }));
     }
   };
@@ -2487,61 +2445,6 @@ export default function HomeworkPage({
                       </div>
 
                       <div className="flex gap-3">
-                        {/* CONVERSAR COM ESTE DOCUMENTO — chat pelo texto gerado (sem PDF/403). */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!docContent.trim()) {
-                              showToast("Escreva algo no documento primeiro.");
-                              return;
-                            }
-                            setActiveFileContext(null);
-                            setLiteContext(null);
-                            setPdfCache(null);
-                            setInternalDoc({ title: docTitle, content: docContent });
-                            setPdfChatHistory([
-                              {
-                                role: "ai",
-                                text: `Pode perguntar o que quiser sobre **${docTitle}** — respondo com base no que está escrito aqui.`,
-                              },
-                            ]);
-                            showToast("Conversa aberta — pergunte sobre o documento 💬");
-                          }}
-                          className="px-6 py-2.5 rounded-full text-[11px] font-black flex items-center gap-2 border-2 border-cyan-500 text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10 uppercase tracking-widest transition-colors justify-center"
-                        >
-                          💬 Conversar
-                        </button>
-                        {/* CRUZAR COM UMA PESQUISA SALVA — relação pelo texto dos dois (sem PDF/403). */}
-                        <div className="relative" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => setCrossPickerOpen((o) => !o)}
-                            className="px-6 py-2.5 rounded-full text-[11px] font-black flex items-center gap-2 border-2 border-violet-500 text-violet-600 dark:text-violet-300 hover:bg-violet-500/10 uppercase tracking-widest transition-colors justify-center"
-                          >
-                            🔗 Cruzar
-                          </button>
-                          {crossPickerOpen && (
-                            <div className="absolute bottom-full mb-2 left-0 z-20 w-64 max-h-60 overflow-y-auto custom-scrollbar rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 shadow-2xl p-2">
-                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 py-1">
-                                Cruzar com pesquisa salva
-                              </p>
-                              {sessions.length === 0 && (
-                                <p className="text-[11px] text-slate-500 px-2 py-2">
-                                  Nenhuma pesquisa salva ainda.
-                                </p>
-                              )}
-                              {sessions.map((s) => (
-                                <button
-                                  key={s.id}
-                                  onClick={() => handleCrossDocWithSession(s.id, s.title)}
-                                  className="w-full text-left px-2 py-2 rounded-lg text-[12px] text-slate-700 dark:text-white/80 hover:bg-violet-500/10 truncate"
-                                  title={s.title}
-                                >
-                                  {s.title}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
                         {/* BOTÃO SALVAR QUE ABRE O MODAL */}
                         <button
                           onClick={(e) => {
@@ -2582,10 +2485,19 @@ export default function HomeworkPage({
                       ref={pdfChatRef}
                       className="flex-1 px-5 py-3 overflow-y-auto space-y-2 custom-scrollbar bg-slate-50 dark:bg-black/50"
                     >
-                      {pdfChatHistory.length === 0 && (
-                        <span className="text-xs text-black dark:text-white font-medium italic">
-                          Nenhum resumo gerado.
-                        </span>
+                      {/* ERRO + tentar de novo (substitui o antigo "Nenhum resumo gerado") */}
+                      {pdfError && !isPdfTyping && (
+                        <div className="flex flex-col items-start gap-2 p-3 rounded-2xl bg-red-50 dark:bg-red-500/10 border border-red-300/60 dark:border-red-400/20">
+                          <p className="text-[12px] text-red-700 dark:text-red-300 font-medium leading-snug">
+                            ⚠️ {pdfError}
+                          </p>
+                          <button
+                            onClick={retryPlaySavedDoc}
+                            className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wide px-3.5 py-1.5 rounded-full bg-red-600 hover:bg-red-500 text-white transition-colors"
+                          >
+                            ↻ Tentar de novo
+                          </button>
+                        </div>
                       )}
                       {pdfChatHistory.map((msg, i) => {
                         if (msg.role !== "ai")
@@ -2645,9 +2557,28 @@ export default function HomeworkPage({
                           </div>
                         );
                       })}
+                      {/* ESTADO DE ESPERA RICO — mostra o que a Aura está fazendo + três pontinhos. */}
                       {isPdfTyping && (
-                        <div className="text-[10px] font-bold animate-pulse text-cyan-600 ml-12">
-                          Aura está a analisar...
+                        <div className="flex items-center gap-3 px-1 py-2">
+                          <img
+                            src="/agents/aura.png"
+                            alt="Aura"
+                            className="w-7 h-7 rounded-full shrink-0 ring-2 ring-cyan-400/40"
+                          />
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[12px] font-bold text-cyan-700 dark:text-cyan-300">
+                              {processingStage === "pdf"
+                                ? "Baixando e lendo o documento"
+                                : processingStage === "ai"
+                                  ? "Escrevendo o resumo"
+                                  : "Aura está pensando"}
+                            </span>
+                            <span className="flex items-center gap-1" aria-hidden>
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+                            </span>
+                          </div>
                         </div>
                       )}
                     </div>
