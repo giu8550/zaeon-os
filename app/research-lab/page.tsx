@@ -702,6 +702,8 @@ export default function HomeworkPage({
   // Conversar com o DOCUMENTO GERADO (estudo/pesquisa do editor): usa o texto que o app
   // já tem (docContent), não o proxy de PDF (que dá 403 p/ docs internos). → /api/ai/doc/chat.
   const [internalDoc, setInternalDoc] = useState<{ title: string; content: string } | null>(null);
+  // Cache do PDF no Vertex (token-saving): o chat usa o cacheName em vez de reenviar o PDF.
+  const [pdfCache, setPdfCache] = useState<{ name: string; expireTime: string } | null>(null);
   const [crossPickerOpen, setCrossPickerOpen] = useState(false); // dropdown "Cruzar com pesquisa salva"
   const { files: libraryFiles, save: saveLibraryFile } = useLibraryFiles();
   // Window store SUBIDO pra cá — pra o merge também abrir abas (não só o play).
@@ -1367,6 +1369,7 @@ export default function HomeworkPage({
     setIsPdfTyping(true);
     setActiveSection("pdf");
     setInternalDoc(null); // sai do modo "documento gerado" ao abrir um arquivo da biblioteca
+    setPdfCache(null); // cache do PDF anterior não vale mais
 
     // MODO LEVE (Vercel): resume do abstract/metadados — NÃO baixa o PDF, sem 502, via Groq.
     if (!capabilities().heavyRag) {
@@ -1380,6 +1383,7 @@ export default function HomeworkPage({
         });
         const d = await r.json();
         setActiveFileContext(null);
+        setPdfCache(null);
         setLiteContext(d.context || null);
         setPdfChatHistory([
           { role: "ai", text: d.text || "Não consegui resumir agora." },
@@ -1399,8 +1403,33 @@ export default function HomeworkPage({
         `/api/ai/scholar/pdf?url=${encodeURIComponent(file.pdfUrl)}`,
       );
       if (!res.ok) {
-        showToast("Não consegui abrir esse arquivo agora.");
-        return;
+        // O proxy de PDF falhou (400/403: upload/blob ou paper fora das referências).
+        // Em vez de travar, cai no resumo LEVE por metadados → dá pra conversar pelo
+        // abstract em vez de não abrir nada.
+        setProcessingStage("ai");
+        setDocTitle(file.title);
+        try {
+          const r = await fetch("/api/ai/summarize-lite", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pdfUrl: file.pdfUrl, title: file.title }),
+          });
+          const d = await r.json();
+          setActiveFileContext(null);
+          setPdfCache(null);
+          setLiteContext(d.context || null);
+          setPdfChatHistory([
+            {
+              role: "ai",
+              text:
+                d.text ||
+                "Não consegui abrir o PDF, mas posso conversar pelos metadados deste trabalho.",
+            },
+          ]);
+        } catch {
+          showToast("Não consegui abrir esse arquivo agora.");
+        }
+        return; // o finally externo limpa os estados de processamento
       }
       const blob = await res.blob();
       const base64Data: string = await new Promise((resolve, reject) => {
@@ -1412,13 +1441,28 @@ export default function HomeworkPage({
       setActiveFileContext(base64Data);
       setProcessingStage("ai");
       setDocTitle(file.title);
+      // Cacheia o PDF uma vez (Vertex) → os turnos seguintes usam o cacheName (sem reenviar
+      // o PDF). Falhou/pequeno demais → cache null e seguimos inline (base64Data).
+      let cache: { name: string; expireTime: string } | null = null;
+      try {
+        const cr = await fetch("/api/ai/pdf/cache", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileData: base64Data, title: file.title }),
+        });
+        const cd = await cr.json().catch(() => null);
+        if (cd?.cacheName) cache = { name: cd.cacheName, expireTime: cd.expireTime || "" };
+      } catch {
+        /* sem cache → inline */
+      }
+      setPdfCache(cache);
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: `Analise o documento "${file.title}" e gere um resumo.`,
           agent: "aura",
-          fileData: base64Data,
+          ...(cache ? { cacheName: cache.name } : { fileData: base64Data }),
           systemContext: buildSystemContext(),
         }),
       });
@@ -1433,7 +1477,26 @@ export default function HomeworkPage({
     }
   };
 
-  // Arrastar uma pesquisa sobre outra → resumo da RELAÇÃO. Nível por modo (Vercel/Groq ↔ Gemini).
+  // Baixa um PDF salvo pelo proxy e devolve base64 (ou null se falhar — upload/blob/403/400).
+  const fetchPdfBase64 = async (pdfUrl: string): Promise<string | null> => {
+    try {
+      const res = await fetch(`/api/ai/scholar/pdf?url=${encodeURIComponent(pdfUrl)}`);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onload = () => resolve((reader.result as string).split(",")[1] || null);
+        reader.onerror = () => resolve(null);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  // Arrastar uma pesquisa sobre outra → resumo da RELAÇÃO.
+  // Tenta a comparação RICA (os 2 PDFs inteiros → Gemini multimodal). Se algum PDF não
+  // baixar (upload/blob/403), cai no nível metadados (título+abstract) — sem 400.
   const handleRelateFiles = async (sourceId: string, targetId: string) => {
     const a = libraryFiles.find((f) => f.id === sourceId);
     const b = libraryFiles.find((f) => f.id === targetId);
@@ -1459,15 +1522,29 @@ export default function HomeworkPage({
     }));
     showToast("Nova aba de relação aberta — carregando ✨");
     try {
-      const mode = capabilities().heavyRag ? "gemini" : "vercel";
+      // Baixa os dois PDFs em paralelo. Ambos OK → comparação rica (Gemini lê os PDFs
+      // inteiros); senão → metadados (o route faz o fallback, sem 400).
+      const [aPdf, bPdf] = await Promise.all([
+        fetchPdfBase64(a.pdfUrl),
+        fetchPdfBase64(b.pdfUrl),
+      ]);
+      const bothPdfs = !!aPdf && !!bPdf;
       const res = await fetch("/api/ai/relate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode,
-          a: { pdfUrl: a.pdfUrl, title: a.title },
-          b: { pdfUrl: b.pdfUrl, title: b.title },
-        }),
+        body: JSON.stringify(
+          bothPdfs
+            ? {
+                mode: "gemini",
+                a: { pdfUrl: a.pdfUrl, title: a.title, fileData: aPdf },
+                b: { pdfUrl: b.pdfUrl, title: b.title, fileData: bPdf },
+              }
+            : {
+                mode: "vercel",
+                a: { pdfUrl: a.pdfUrl, title: a.title },
+                b: { pdfUrl: b.pdfUrl, title: b.title },
+              },
+        ),
       });
       const d = await res.json();
       setRelSummaries((prev) => ({
@@ -1580,25 +1657,64 @@ export default function HomeworkPage({
         return;
       }
 
-      const response = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: currentPrompt,
-          // modo leve (sem PDF) → Groq, sem Vertex/sem 502; modo pesado → Aura/Gemini multimodal
-          agent: liteContext && !activeFileContext ? "groq_bypassed" : "aura",
-          ...(activeFileContext ? { fileData: activeFileContext } : {}),
-          history: historyForGemini,
-          systemContext:
-            buildSystemContext() +
-            (liteContext && !activeFileContext
-              ? `\n\n[DOCUMENTO (metadados do artigo)]:\n${liteContext}`
-              : ""),
-        }),
+      // PDF cacheado → manda o cacheName (sem reenviar o PDF). Cache expirou
+      // ({ cacheExpired }) → recria UMA vez a partir do base64 e tenta de novo; se não
+      // der, cai pro inline daquele turno.
+      const chatBody = (extra: Record<string, unknown>) => ({
+        prompt: currentPrompt,
+        agent: liteContext && !activeFileContext ? "groq_bypassed" : "aura",
+        history: historyForGemini,
+        systemContext:
+          buildSystemContext() +
+          (liteContext && !activeFileContext
+            ? `\n\n[DOCUMENTO (metadados do artigo)]:\n${liteContext}`
+            : ""),
+        ...extra,
       });
-      const data = await response.json();
-      if (data.text)
+      const post = (extra: Record<string, unknown>) =>
+        fetch("/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(chatBody(extra)),
+        }).then((r) => r.json());
+
+      let data: any;
+      if (pdfCache) {
+        data = await post({ cacheName: pdfCache.name });
+        if (data?.cacheExpired) {
+          let recreated: { name: string; expireTime: string } | null = null;
+          if (activeFileContext) {
+            try {
+              const cr = await fetch("/api/ai/pdf/cache", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fileData: activeFileContext }),
+              });
+              const cd = await cr.json().catch(() => null);
+              if (cd?.cacheName) recreated = { name: cd.cacheName, expireTime: cd.expireTime || "" };
+            } catch {
+              /* segue pro inline */
+            }
+          }
+          setPdfCache(recreated);
+          data = recreated
+            ? await post({ cacheName: recreated.name })
+            : await post(activeFileContext ? { fileData: activeFileContext } : {});
+        }
+        // Turno cacheado falhou sem ser cacheExpired (ex.: 500) → tenta inline uma vez,
+        // pra não engolir a pergunta em silêncio.
+        if (!data?.text && !data?.cacheExpired && activeFileContext) {
+          data = await post({ fileData: activeFileContext });
+        }
+      } else {
+        data = await post(activeFileContext ? { fileData: activeFileContext } : {});
+      }
+      if (data?.text) {
         setPdfChatHistory((prev) => [...prev, { role: "ai", text: data.text }]);
+      } else if (!data?.cacheExpired) {
+        // resposta sem texto (erro do servidor) → avisa em vez de sumir com o turno
+        showToast("Não consegui responder agora.");
+      }
     } catch (e) {
       console.error(e);
       showToast("Falha de conexão.");
@@ -2293,6 +2409,7 @@ export default function HomeworkPage({
                             }
                             setActiveFileContext(null);
                             setLiteContext(null);
+                            setPdfCache(null);
                             setInternalDoc({ title: docTitle, content: docContent });
                             setPdfChatHistory([
                               {
