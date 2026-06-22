@@ -61,7 +61,8 @@ import ResearchRoomTour from "@/components/onboard/ResearchRoomTour";
 import OnboardingGuide from "@/components/onboard/OnboardingGuide";
 import { startTour } from "@/lib/onboarding/tour";
 import { capabilities } from "@/lib/runtime/mode";
-import { useLibraryFiles } from "@/lib/useLibraryFiles";
+import { useLibraryFiles, type LibraryFile } from "@/lib/useLibraryFiles";
+import { speak as ttsSpeak } from "@/lib/voice/ttsController";
 import RichText from "@/components/research/RichText";
 import { useWindowStore } from "@/lib/useWindowStore";
 
@@ -717,6 +718,8 @@ export default function HomeworkPage({
   const [relSummaries, setRelSummaries] = useState<
     Record<string, { title: string; text: string; loading?: boolean }>
   >({});
+  // id da janela (pdf-…) → arquivo aberto no viewer de PDF (arrastar pra folha / botão ＋).
+  const [pdfDocs, setPdfDocs] = useState<Record<string, LibraryFile>>({});
   const [processingFileId, setProcessingFileId] = useState<string | null>(null);
   const [processingStage, setProcessingStage] = useState<"pdf" | "ai" | null>(
     null,
@@ -1538,6 +1541,38 @@ export default function HomeworkPage({
   };
 
   // Baixa um PDF salvo pelo proxy e devolve base64 (ou null se falhar — upload/blob/403/400).
+  // Abrir o PDF REAL na folha (arrastar pra folha, ou o botão ＋ verde do ícone). Estava
+  // sem fio em page.tsx (recurso perdido num refactor) → arrastar pra ver "não fazia nada".
+  const handleViewDoc = async (fileId: string) => {
+    const file = libraryFiles.find((f) => f.id === fileId);
+    if (!file) { showToast("Documento não encontrado na biblioteca."); return; }
+    if (!file.pdfUrl) { showToast("Esse documento não tem PDF para visualizar."); return; }
+    const winId = `pdf-${file.id}`;
+    if (wWindows.some((w) => w.id === winId)) { wSetActiveId(winId); return; } // já aberto → só ativa
+    // Upload (blob:) de uma sessão anterior morre no reload → verifica antes de abrir.
+    if (file.pdfUrl.startsWith("blob:")) {
+      try {
+        const r = await fetch(file.pdfUrl);
+        if (!r.ok) throw new Error();
+      } catch {
+        showToast("Esse upload expirou ao recarregar. Suba o PDF de novo para visualizar.");
+        return;
+      }
+    }
+    setPdfDocs((prev) => ({ ...prev, [winId]: file }));
+    wAddWindow({ id: winId, label: file.title.slice(0, 18), emoji: "📄", type: "pdfview" });
+    wSetActiveId(winId);
+  };
+
+  // Seleção no PDF gerou uma citação → salva na aba de citações.
+  const handleSaveCite = (c: import("@/lib/useSavedCitations").SavedCitation) => {
+    savePersistedCitation(c);
+    showToast("Citação salva na aba Citações.");
+  };
+
+  // Nível do engine de citação conforme o runtime (Vercel simples vs container robusto).
+  const citeMode: "vercel" | "gemini" = capabilities().heavyRag ? "gemini" : "vercel";
+
   const fetchPdfBase64 = async (pdfUrl: string): Promise<string | null> => {
     try {
       const res = await fetch(`/api/ai/scholar/pdf?url=${encodeURIComponent(pdfUrl)}`);
@@ -1793,24 +1828,11 @@ export default function HomeworkPage({
 
     if (msgId != null) setVoiceLoadingId(msgId);
     try {
-      const res = await fetch("/api/ai/voice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: clean }),
-      });
-      if (!res.ok) {
-        showToast("Voz indisponível agora.");
-        return;
-      }
-      const data = await res.json().catch(() => null);
-      if (data?.audio_base64) {
-        audioRef.current?.pause();
-        const audio = new Audio(
-          `data:${data.mime || "audio/wav"};base64,${data.audio_base64}`,
-        );
-        audioRef.current = audio;
-        await audio.play().catch(() => {});
-      }
+      // MESMO caminho do chat widget (useTTS → ttsController): quebra o texto em pedaços
+      // de ~420 chars, um POST /api/ai/voice por pedaço → o Gemini-TTS responde rápido e
+      // não estoura o timeout do proxy (era a causa do 503 com texto longo na sala).
+      void audioRef; // (legado — o áudio agora é gerido pelo ttsController global)
+      await ttsSpeak(clean);
     } catch {
       showToast("Voz indisponível agora.");
     } finally {
@@ -2348,6 +2370,10 @@ export default function HomeworkPage({
                 workType={workType}
                 onWorkType={switchWorkType}
                 onRelate={handleRelateFiles}
+                onViewDoc={handleViewDoc}
+                pdfDocs={pdfDocs}
+                onCite={handleSaveCite}
+                citeMode={citeMode}
                 windows={wWindows}
                 activeId={wActiveId}
                 onSelectWindow={wSetActiveId}
