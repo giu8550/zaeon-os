@@ -128,7 +128,8 @@ export default function OmegaScholarBar({ flushTop = false, collapsible = false 
         <AnimatePresence initial={false} mode="wait">
           {expanded && !busy ? (
             <motion.div key="bar"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}
+              initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0 }}
+              transition={{ duration: 2.5, ease: "easeOut" }}
               className="flex-1 min-w-0 px-3.5 py-1.5 rounded-[1.4rem] bg-gradient-to-r from-violet-500/12 to-purple-500/5 border border-violet-300/30 dark:border-white/10"
             >
               {inputRow}

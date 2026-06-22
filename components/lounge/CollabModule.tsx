@@ -105,6 +105,15 @@ export default function CollabModule() {
   const { data: session } = useSession();
   const myId = (session?.user as any)?.id || "";
 
+  // Tom suave por gênero do usuário LOGADO — tinge só os cards (Lounge é o espaço
+  // mais "soft" da Zaeon). Rosa = feminino, azul = masculino, neutro = default.
+  const _g = String((session?.user as any)?.gender || "").toLowerCase();
+  const cardTheme = (_g.includes("femin") || _g === "female")
+    ? { card: "bg-pink-50/70 dark:bg-pink-950/20 border-pink-200/70 dark:border-pink-500/25 shadow-[0_12px_34px_-14px_rgba(244,114,182,0.5)]", chip: "bg-pink-500/15 text-pink-500 dark:text-pink-300", play: "linear-gradient(135deg,#ec4899,#f472b6)", tag: "bg-pink-500" }
+    : (_g.includes("mascul") || _g === "male")
+    ? { card: "bg-sky-50/70 dark:bg-blue-950/20 border-sky-200/70 dark:border-blue-500/25 shadow-[0_12px_34px_-14px_rgba(56,189,248,0.5)]", chip: "bg-sky-500/15 text-sky-500 dark:text-sky-300", play: "linear-gradient(135deg,#2563eb,#38bdf8)", tag: "bg-sky-500" }
+    : { card: "bg-white/60 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 shadow-[0_12px_34px_-16px_rgba(0,0,0,0.45)]", chip: "bg-cyan-500/15 text-cyan-500 dark:text-cyan-300", play: "linear-gradient(135deg,#0ea5e9,#22d3ee)", tag: "bg-violet-500" };
+
   const [sources, setSources] = useState<{ studies: Source[]; research: Source[] }>({ studies: [], research: [] });
   const [collabs, setCollabs] = useState<Collab[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -211,7 +220,7 @@ export default function CollabModule() {
               <button onClick={() => setOpenTrays((p) => ({ ...p, [t.key]: !p[t.key] }))} className="w-full flex items-center gap-3 px-4 py-3">
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-${t.accent}-500/15 text-${t.accent}-500`}><t.icon size={16} /></div>
                 <span className="text-[12px] font-black uppercase tracking-widest text-slate-700 dark:text-white/80 flex-1 text-left">{t.label}</span>
-                <span className="text-[10px] font-mono text-slate-400 dark:text-white/40 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5">{t.count}</span>
+                <span className="text-[12px] font-mono text-slate-400 dark:text-white/40 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5">{t.count}</span>
                 <ChevronDown size={16} className={`text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
               </button>
 
@@ -220,7 +229,7 @@ export default function CollabModule() {
                   {t.key === "study" && (
                     sources.studies.length ? (
                       <div className="flex flex-col gap-2.5">
-                        {sources.studies.map((s) => <SourceCard key={s.id} s={s} creating={creating === s.id} onPlay={() => createCollab(s)} />)}
+                        {sources.studies.map((s) => <SourceCard key={s.id} s={s} creating={creating === s.id} onPlay={() => createCollab(s)} theme={cardTheme} />)}
                       </div>
                     ) : <Empty text="Nenhum estudo ainda — crie um na Sala de Estudos." />
                   )}
@@ -228,7 +237,7 @@ export default function CollabModule() {
                     sources.research.length ? (
                       <div className="flex flex-col gap-2.5">
                         {sources.research.map((s) => (
-                          <ResearchCard key={s.id} s={s} creating={creating === s.id} onPlay={() => createCollab(s)} />
+                          <ResearchCard key={s.id} s={s} creating={creating === s.id} onPlay={() => createCollab(s)} theme={cardTheme} />
                         ))}
                       </div>
                     ) : <Empty text="Nenhuma pesquisa ainda — comece uma na sala de Pesquisa." />
@@ -242,7 +251,7 @@ export default function CollabModule() {
 
       {/* ── Colaborações ── */}
       <div>
-        <h3 className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-600 dark:text-white/55 mb-3 flex items-center gap-2"><Users size={13} /> Colaborações</h3>
+        <h3 className="text-[13px] font-black uppercase tracking-[0.25em] text-slate-600 dark:text-white/55 mb-3 flex items-center gap-2"><Users size={13} /> Colaborações</h3>
         {collabs.length === 0 ? (
           <Empty text="Nenhuma colaboração ainda. Dê play acima ou aceite o convite de um amigo." />
         ) : (
@@ -254,9 +263,9 @@ export default function CollabModule() {
                   <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0"><Icon size={17} /></div>
                   <button onClick={() => setOpenId(c.id)} className="min-w-0 flex-1 text-left">
                     <p className="text-[12px] font-bold text-slate-800 dark:text-white truncate">{c.title}</p>
-                    <p className="text-[9px] uppercase tracking-widest text-slate-400 dark:text-white/35">{c.isOwner ? "Você criou" : "Convidado"} · {c.memberCount} {c.memberCount === 1 ? "membro" : "membros"}</p>
+                    <p className="text-[11px] uppercase tracking-widest text-slate-400 dark:text-white/35">{c.isOwner ? "Você criou" : "Convidado"} · {c.memberCount} {c.memberCount === 1 ? "membro" : "membros"}</p>
                   </button>
-                  <button onClick={() => setOpenId(c.id)} className="text-[10px] font-bold text-cyan-600 dark:text-cyan-300 shrink-0 px-2">abrir →</button>
+                  <button onClick={() => setOpenId(c.id)} className="text-[12px] font-bold text-cyan-600 dark:text-cyan-300 shrink-0 px-2">abrir →</button>
                   <button onClick={() => setConfirmDel(c)} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0" title="Apagar"><Trash2 size={15} /></button>
                 </div>
               );
@@ -272,39 +281,41 @@ export default function CollabModule() {
 }
 
 function Empty({ text }: { text: string }) {
-  return <p className="text-[11px] text-slate-400 dark:text-white/30 italic py-1">{text}</p>;
+  return <p className="text-[13px] text-slate-400 dark:text-white/30 italic py-1">{text}</p>;
 }
 
-function SourceCard({ s, creating, onPlay }: { s: Source; creating: boolean; onPlay: () => void }) {
+type CardTheme = { card: string; chip: string; play: string; tag: string };
+
+function SourceCard({ s, creating, onPlay, theme }: { s: Source; creating: boolean; onPlay: () => void; theme: CardTheme }) {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.04]">
-      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-cyan-500/15 text-cyan-500"><FileText size={17} /></div>
-      <p className="text-[12px] font-bold text-slate-800 dark:text-white truncate min-w-0 flex-1">{s.title}</p>
-      <PlayBtn creating={creating} onClick={onPlay} />
+    <div className={`flex items-center gap-3.5 p-4 rounded-3xl border backdrop-blur-xl transition-transform hover:scale-[1.01] ${theme.card}`}>
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${theme.chip}`}><FileText size={22} /></div>
+      <p className="font-ornament text-lg font-bold text-slate-800 dark:text-white truncate min-w-0 flex-1 leading-snug">{s.title}</p>
+      <PlayBtn creating={creating} onClick={onPlay} grad={theme.play} />
     </div>
   );
 }
 
-function ResearchCard({ s, creating, onPlay }: { s: Source; creating: boolean; onPlay: () => void }) {
+function ResearchCard({ s, creating, onPlay, theme }: { s: Source; creating: boolean; onPlay: () => void; theme: CardTheme }) {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.04]">
-      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-violet-500/15 text-violet-500"><GraduationCap size={17} /></div>
+    <div className={`flex items-center gap-3.5 p-4 rounded-3xl border backdrop-blur-xl transition-transform hover:scale-[1.01] ${theme.card}`}>
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${theme.chip}`}><GraduationCap size={22} /></div>
       <div className="min-w-0 flex-1">
-        <p className="text-[12px] font-bold text-slate-800 dark:text-white truncate">{s.title}</p>
+        <p className="font-ornament text-lg font-bold text-slate-800 dark:text-white truncate leading-snug">{s.title}</p>
         {/* UMA tag só — o tipo do trabalho (TCC OU Artigo OU Relatório) */}
-        {s.tag && <span className="mt-1 inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide bg-violet-500 text-white">{s.tag}</span>}
+        {s.tag && <span className={`mt-1.5 inline-block px-2.5 py-0.5 rounded-full text-[12px] font-black uppercase tracking-wide text-white ${theme.tag}`}>{s.tag}</span>}
       </div>
-      <PlayBtn creating={creating} onClick={onPlay} />
+      <PlayBtn creating={creating} onClick={onPlay} grad={theme.play} />
     </div>
   );
 }
 
-function PlayBtn({ creating, onClick }: { creating: boolean; onClick: () => void }) {
+function PlayBtn({ creating, onClick, grad }: { creating: boolean; onClick: () => void; grad?: string }) {
   return (
     <button onClick={onClick} disabled={creating} title="Gerar convite de colaboração"
-      className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0 transition-transform hover:scale-105 disabled:opacity-50"
-      style={{ background: "linear-gradient(135deg,#0ea5e9,#22d3ee)" }}>
-      {creating ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} className="ml-0.5" />}
+      className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 transition-transform hover:scale-105 disabled:opacity-50"
+      style={{ background: grad || "linear-gradient(135deg,#0ea5e9,#22d3ee)" }}>
+      {creating ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} className="ml-0.5" />}
     </button>
   );
 }
@@ -362,14 +373,14 @@ function SharePopup({ link, title, contacts, onClose }: { link: string; title: s
 
           <div className="flex items-center gap-2 p-2 pl-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04]">
             <input readOnly value={link} className="flex-1 bg-transparent text-[12px] text-slate-700 dark:text-white/80 outline-none truncate" />
-            <button onClick={copy} className="px-3 py-2 rounded-xl text-white text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 shrink-0" style={{ background: copied ? "#10b981" : "linear-gradient(135deg,#0ea5e9,#22d3ee)" }}>
+            <button onClick={copy} className="px-3 py-2 rounded-xl text-white text-[13px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 shrink-0" style={{ background: copied ? "#10b981" : "linear-gradient(135deg,#0ea5e9,#22d3ee)" }}>
               {copied ? <><Check size={13} /> Copiado</> : <><Copy size={13} /> Copiar</>}
             </button>
           </div>
 
           {contacts.length > 0 && (
             <div className="mt-5">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-white/40 mb-2">Enviar direto pro chat</p>
+              <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 dark:text-white/40 mb-2">Enviar direto pro chat</p>
               <div className="flex flex-col gap-1.5 max-h-44 overflow-y-auto custom-scrollbar">
                 {contacts.map((c) => (
                   <div key={c.id} className={`flex items-center gap-3 p-2 rounded-2xl ${c.isInviter ? "border border-cyan-300/50 dark:border-cyan-400/25 bg-cyan-50/60 dark:bg-cyan-950/15" : "hover:bg-slate-100 dark:hover:bg-white/5"}`}>
@@ -378,9 +389,9 @@ function SharePopup({ link, title, contacts, onClose }: { link: string; title: s
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[12px] font-bold text-slate-800 dark:text-white truncate">{c.name || "Membro Zaeon"}</p>
-                      {c.isInviter && <p className="text-[9px] uppercase tracking-widest text-cyan-600 dark:text-cyan-300">quem te convidou</p>}
+                      {c.isInviter && <p className="text-[11px] uppercase tracking-widest text-cyan-600 dark:text-cyan-300">quem te convidou</p>}
                     </div>
-                    <button onClick={() => sendTo(c)} disabled={!!sent[c.id]} className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 shrink-0 transition-colors disabled:opacity-60" style={{ background: sent[c.id] ? "#10b981" : "rgba(14,165,233,0.12)", color: sent[c.id] ? "#fff" : "#0ea5e9" }}>
+                    <button onClick={() => sendTo(c)} disabled={!!sent[c.id]} className="px-3 py-1.5 rounded-full text-[12px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 shrink-0 transition-colors disabled:opacity-60" style={{ background: sent[c.id] ? "#10b981" : "rgba(14,165,233,0.12)", color: sent[c.id] ? "#fff" : "#0ea5e9" }}>
                       {sent[c.id] ? <><Check size={12} /> Enviado</> : <><Send size={12} /> Enviar</>}
                     </button>
                   </div>
@@ -581,24 +592,24 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
 
       {/* TOOLBAR fina: Sair · (fulano digitando) · membros · Convidar. Nada de frase fixa. */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.03] shrink-0">
-        <button onClick={onClose} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wide text-slate-600 dark:text-white/70 hover:bg-slate-200 dark:hover:bg-white/10">
+        <button onClick={onClose} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-black uppercase tracking-wide text-slate-600 dark:text-white/70 hover:bg-slate-200 dark:hover:bg-white/10">
           <ArrowLeft size={14} /> Sair
         </button>
         {peer && (
-          <span className="text-[11px] font-bold inline-flex items-center gap-1.5" style={{ color: peer.state === "generating" ? "#7c3aed" : "#0ea5e9" }}>
+          <span className="text-[13px] font-bold inline-flex items-center gap-1.5" style={{ color: peer.state === "generating" ? "#7c3aed" : "#0ea5e9" }}>
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: peer.state === "generating" ? "#7c3aed" : "#0ea5e9" }} />
             {peer.name} {peer.state === "generating" ? "está gerando…" : "está digitando…"}
           </span>
         )}
-        <span className="text-[9px] uppercase tracking-widest text-slate-300 dark:text-white/25 ml-1">{saving ? "salvando…" : "salvo"}</span>
+        <span className="text-[11px] uppercase tracking-widest text-slate-300 dark:text-white/25 ml-1">{saving ? "salvando…" : "salvo"}</span>
         <div className="flex -space-x-2 ml-auto mr-1">
           {(doc?.members || []).slice(0, 5).map((m) => (
             <span key={m.id} className="w-7 h-7 rounded-full overflow-hidden border-2 border-white dark:border-[#0b1220] bg-slate-200 dark:bg-black flex items-center justify-center" title={m.name || ""}>
-              {m.image ? <Image src={m.image} alt="" width={28} height={28} className="w-full h-full object-cover" /> : <span className="text-[10px] font-black text-slate-500">{(m.name || "?").charAt(0).toUpperCase()}</span>}
+              {m.image ? <Image src={m.image} alt="" width={28} height={28} className="w-full h-full object-cover" /> : <span className="text-[12px] font-black text-slate-500">{(m.name || "?").charAt(0).toUpperCase()}</span>}
             </span>
           ))}
         </div>
-        <button onClick={reinvite} className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 text-white shrink-0" style={{ background: "linear-gradient(135deg,#0ea5e9,#22d3ee)" }}><UserPlus size={12} /> Convidar</button>
+        <button onClick={reinvite} className="px-3 py-1.5 rounded-full text-[12px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 text-white shrink-0" style={{ background: "linear-gradient(135deg,#0ea5e9,#22d3ee)" }}><UserPlus size={12} /> Convidar</button>
       </div>
 
       {research ? (
@@ -623,20 +634,20 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
           <div className="p-4 flex justify-between items-center px-8 bg-slate-50/50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5 shrink-0">
             <div className="flex items-center gap-1 p-1 rounded-[12px] bg-white/50 dark:bg-black/30 border border-slate-200 dark:border-white/10">
               <button onClick={() => setZoom((z) => Math.max(0.7, +(z - 0.1).toFixed(2)))} className="w-7 h-7 rounded-lg text-slate-600 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/10 font-black">−</button>
-              <span className="text-[10px] tabular-nums text-slate-400 w-9 text-center">{Math.round(zoom * 100)}%</span>
+              <span className="text-[12px] tabular-nums text-slate-400 w-9 text-center">{Math.round(zoom * 100)}%</span>
               <button onClick={() => setZoom((z) => Math.min(2.2, +(z + 0.1).toFixed(2)))} className="w-7 h-7 rounded-lg text-slate-600 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/10 font-black">+</button>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={saveNow} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-black uppercase tracking-wide border border-cyan-400/50 text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10">
+              <button onClick={saveNow} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-black uppercase tracking-wide border border-cyan-400/50 text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/10">
                 {savedFlash ? <Check size={13} /> : <Save size={13} />} {savedFlash ? "Salvo" : "Salvar"}
               </button>
-              <button onClick={() => { setPubNote(true); setTimeout(() => setPubNote(false), 5000); }} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-white text-[11px] font-black uppercase tracking-wide" style={{ background: "linear-gradient(135deg,#10b981,#06b6d4)" }}>
+              <button onClick={() => { setPubNote(true); setTimeout(() => setPubNote(false), 5000); }} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-white text-[13px] font-black uppercase tracking-wide" style={{ background: "linear-gradient(135deg,#10b981,#06b6d4)" }}>
                 <Send size={13} /> Publicar
               </button>
             </div>
           </div>
           {pubNote && (
-            <div className="px-8 py-2 text-[11px] text-violet-700 dark:text-violet-300 bg-violet-500/10 border-t border-violet-400/20 shrink-0">
+            <div className="px-8 py-2 text-[13px] text-violet-700 dark:text-violet-300 bg-violet-500/10 border-t border-violet-400/20 shrink-0">
               Publicar chega já já — por enquanto seu trabalho fica salvo aqui no Lounge. A Zaeon te ensina a publicar quando for a hora. ✦
             </div>
           )}
@@ -735,7 +746,7 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
                 {/* adicionar bloco (Título / Subtítulo / Texto) */}
                 <div className="mt-4 flex items-center gap-1.5">
                   {([["h1", Heading1, "Título"], ["h2", Heading2, "Subtítulo"], ["text", Pilcrow, "Texto"]] as const).map(([v, Icon, lbl]) => (
-                    <button key={v} onClick={() => addBlock(v)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-white text-slate-600 border-slate-200 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-300 dark:bg-white/[0.06] dark:text-white/55 dark:border-white/10 dark:hover:bg-cyan-500/15 dark:hover:text-cyan-300">
+                    <button key={v} onClick={() => addBlock(v)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[13px] font-semibold border bg-white text-slate-600 border-slate-200 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-300 dark:bg-white/[0.06] dark:text-white/55 dark:border-white/10 dark:hover:bg-cyan-500/15 dark:hover:text-cyan-300">
                       <Icon size={13} /> {lbl}
                     </button>
                   ))}
@@ -748,7 +759,7 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
           {!libOpen && (
             <button onClick={() => setLibOpen(true)} title="Mostrar biblioteca"
               className="shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-white/10 flex lg:flex-col items-center justify-center gap-2 px-3 py-2 lg:py-3 text-slate-400 hover:text-cyan-500 hover:bg-cyan-500/5">
-              <span className="text-[10px] font-black uppercase tracking-[0.16em] lg:[writing-mode:vertical-rl] lg:rotate-180">Biblioteca</span>
+              <span className="text-[12px] font-black uppercase tracking-[0.16em] lg:[writing-mode:vertical-rl] lg:rotate-180">Biblioteca</span>
             </button>
           )}
 
@@ -756,21 +767,21 @@ function CollabEditor({ docId, myId, contacts, onClose }: { docId: string; myId:
           {libOpen && (
             <div className="lg:w-64 shrink-0 flex flex-col min-h-0 lg:m-3 lg:rounded-2xl border-t lg:border border-slate-200 dark:border-white/12 bg-slate-100/80 dark:bg-[#0a0f1c] overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03]">
-                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Biblioteca</span>
-                <span className="text-[9px] font-mono text-slate-400">{libSpaces.length}</span>
+                <span className="text-[12px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Biblioteca</span>
+                <span className="text-[11px] font-mono text-slate-400">{libSpaces.length}</span>
                 <button onClick={() => setLibOpen(false)} className="ml-auto p-1 rounded-lg text-slate-400 hover:text-cyan-500" title="Recolher biblioteca"><X size={15} /></button>
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 flex flex-col gap-2 min-h-[120px]">
-                <p className="px-1 pt-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30">Estudos</p>
+                <p className="px-1 pt-0.5 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30">Estudos</p>
                 {libSpaces.length === 0 ? (
-                  <p className="text-[11px] text-slate-400 dark:text-white/30 p-2 leading-relaxed">Seus estudos aparecem aqui. Clique pra trazer o título pro caderno.</p>
+                  <p className="text-[13px] text-slate-400 dark:text-white/30 p-2 leading-relaxed">Seus estudos aparecem aqui. Clique pra trazer o título pro caderno.</p>
                 ) : libSpaces.map((sp) => (
                   <button key={sp.id} title="Clique ou arraste pro caderno"
                     draggable onDragStart={(e) => e.dataTransfer.setData("application/x-zaeon-lib", sp.title)}
                     onClick={() => addBlock("h2", sp.title)}
                     className="group flex items-center gap-2 rounded-xl border p-2 text-left cursor-grab active:cursor-grabbing bg-white border-slate-200 shadow-sm hover:border-cyan-400/50 dark:bg-white/[0.04] dark:border-white/10 dark:shadow-none">
                     <FileText size={14} className="text-violet-500 dark:text-violet-300 shrink-0" />
-                    <span className="flex-1 min-w-0 text-[11px] font-medium text-slate-700 dark:text-white/90 truncate">{sp.title || "Estudo"}</span>
+                    <span className="flex-1 min-w-0 text-[13px] font-medium text-slate-700 dark:text-white/90 truncate">{sp.title || "Estudo"}</span>
                   </button>
                 ))}
               </div>

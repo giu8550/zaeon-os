@@ -560,15 +560,15 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
             <button onClick={() => removeItem(it.id)} title="Remover" className="text-slate-400 hover:text-rose-400"><X size={14} /></button>
           </div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300">{it.type}</span>
+            <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300">{it.type}</span>
             <span className="text-[12px] font-bold text-slate-800 dark:text-white truncate">{it.title || "(sem título)"}</span>
           </div>
           {it.type === "link" && url
             ? <a href={url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-cyan-600 dark:text-cyan-400 underline break-all">{url}</a>
             : <p className="text-[12px] text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{it.payload?.text || ""}</p>}
-          {it.summary && <div className="mt-2 rounded-xl bg-cyan-500/[0.07] border border-cyan-500/15 p-2 text-[11px] text-slate-700 dark:text-cyan-100/90 leading-relaxed"><span className="font-black text-cyan-700 dark:text-cyan-300">Resumo · </span>{it.summary}</div>}
+          {it.summary && <div className="mt-2 rounded-xl bg-cyan-500/[0.07] border border-cyan-500/15 p-2 text-[13px] text-slate-700 dark:text-cyan-100/90 leading-relaxed"><span className="font-black text-cyan-700 dark:text-cyan-300">Resumo · </span>{it.summary}</div>}
           {(it.payload?.text || it.title) && (
-            <button onClick={() => summarize(it)} disabled={busyId === it.id} className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline disabled:opacity-50">
+            <button onClick={() => summarize(it)} disabled={busyId === it.id} className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline disabled:opacity-50">
               {busyId === it.id ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />} {it.summary ? "Resumir de novo" : "Resumir"}
             </button>
           )}
@@ -580,7 +580,7 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
     // Tipografia editorial (estilo Claude): títulos grandes, texto generoso e legível.
     // O 1º bloco (logo abaixo do título) vira um SUBTÍTULO destacado, um pouco maior.
     const isLead = idx === 0 && variant === "text";
-    const cls = variant === "h1" ? "text-3xl sm:text-4xl font-black tracking-tight leading-tight text-slate-900 dark:text-white"
+    const cls = variant === "h1" ? "font-ornament text-3xl sm:text-4xl font-black tracking-tight leading-tight text-slate-900 dark:text-white"
       : variant === "h2" ? "text-xl sm:text-2xl font-bold tracking-tight leading-snug text-slate-800 dark:text-white/95"
       : isLead ? "text-xl sm:text-2xl font-semibold leading-snug text-slate-700 dark:text-white/90"
       : "text-[16px] sm:text-[17px] leading-[1.7] text-slate-700 dark:text-slate-200/90";
@@ -594,13 +594,13 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
         {text.trim() && <div className="absolute -right-1 top-0.5 opacity-0 group-hover:opacity-100"><SpeakButton text={text} /></div>}
         <AutoGrow value={text} onChange={(v) => editText(it.id, v)} onKeyDown={onKey} placeholder={ph} className={cls} autoFocus={focusId === it.id} />
         {it.type === "note" && soloYt(text) && editingYt === it.id && (
-          <button onClick={() => setEditingYt(null)} className="text-[10px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">▶ ver vídeo</button>
+          <button onClick={() => setEditingYt(null)} className="text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">▶ ver vídeo</button>
         )}
       </div>
     );
   };
 
-  const pillCls = "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-white text-slate-600 border-slate-200 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-300 dark:bg-white/[0.06] dark:text-white/55 dark:border-white/10 dark:hover:bg-cyan-500/15 dark:hover:text-cyan-300 dark:hover:border-cyan-400/30 transition-colors";
+  const pillCls = "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[13px] font-semibold border bg-white text-slate-600 border-slate-200 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-300 dark:bg-white/[0.06] dark:text-white/55 dark:border-white/10 dark:hover:bg-cyan-500/15 dark:hover:text-cyan-300 dark:hover:border-cyan-400/30 transition-colors";
   const AddBar = ({ center }: { center?: boolean }) => (
     <div className={`flex items-center gap-1.5 ${center ? "justify-center" : ""}`}>
       <button onClick={() => addBlock("h1")} className={pillCls}><Heading1 size={13} /> Título</button>
@@ -698,7 +698,7 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
 
         {/* Status com EMOÇÃO — frases que rotacionam (são muitas etapas) */}
         {(zaeonBusy || zaeonStatus) && (
-          <p className="mb-3 pl-9 text-[11px] text-cyan-600 dark:text-cyan-300 flex items-center gap-1.5">
+          <p className="mb-3 pl-9 text-[13px] text-cyan-600 dark:text-cyan-300 flex items-center gap-1.5">
             {zaeonBusy && <span className="inline-flex gap-0.5">
               <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" />
               <span className="w-1 h-1 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -749,8 +749,8 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
         <button onClick={() => setLibOpen(true)} title="Mostrar biblioteca"
           className="shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-white/10 flex lg:flex-col items-center justify-center gap-2 px-3 py-2 lg:py-3 text-slate-400 hover:text-cyan-500 hover:bg-cyan-500/5">
           <PanelRightOpen size={16} />
-          <span className="text-[10px] font-black uppercase tracking-[0.16em] lg:[writing-mode:vertical-rl] lg:rotate-180">Biblioteca</span>
-          <span className="text-[9px] font-mono">{library.length + spaces.length}</span>
+          <span className="text-[12px] font-black uppercase tracking-[0.16em] lg:[writing-mode:vertical-rl] lg:rotate-180">Biblioteca</span>
+          <span className="text-[11px] font-mono">{library.length + spaces.length}</span>
         </button>
       )}
 
@@ -758,8 +758,8 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
       {libOpen && (
       <div className="lg:w-64 shrink-0 flex flex-col min-h-0 lg:m-3 lg:rounded-2xl border-t lg:border border-slate-200 dark:border-white/12 bg-slate-100/80 dark:bg-[#0a0f1c] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:shadow-[0_8px_30px_-10px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.06)] overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03]">
-          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Biblioteca</span>
-          <span className="text-[9px] font-mono text-slate-400">{library.length + spaces.length}</span>
+          <span className="text-[12px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Biblioteca</span>
+          <span className="text-[11px] font-mono text-slate-400">{library.length + spaces.length}</span>
           <button onClick={() => setShowAdd((v) => !v)} className="ml-auto p-1 rounded-lg text-slate-400 hover:text-cyan-500" title="Adicionar à biblioteca"><Plus size={15} /></button>
           <button onClick={() => setLibOpen(false)} className="p-1 rounded-lg text-slate-400 hover:text-cyan-500" title="Recolher biblioteca"><PanelRightClose size={15} /></button>
         </div>
@@ -767,11 +767,11 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
         {showAdd && (
           <div className="px-3 py-3 border-b border-slate-200 dark:border-white/10 flex flex-col gap-2">
             <div className="flex gap-1.5">
-              <input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveNote()} placeholder="nota ou link…" className="flex-1 min-w-0 rounded-xl px-2.5 py-1.5 text-[11px] bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none" />
+              <input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveNote()} placeholder="nota ou link…" className="flex-1 min-w-0 rounded-xl px-2.5 py-1.5 text-[13px] bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none" />
               <button onClick={saveNote} disabled={!note.trim()} className="px-2 rounded-xl text-white disabled:opacity-40" style={{ background: GRAD }}><Plus size={13} /></button>
             </div>
-            <label className="flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer" style={{ background: GRAD }}><UploadCloud size={13} /> Enviar arquivo<input type="file" multiple className="hidden" onChange={onPickFiles} /></label>
-            <p className="text-[10px] text-slate-400 dark:text-white/30 leading-relaxed">Imagem, áudio, PDF, qualquer arquivo. Você também pode colar (Ctrl+V) ou arrastar pro caderno.</p>
+            <label className="flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[13px] font-bold text-white cursor-pointer" style={{ background: GRAD }}><UploadCloud size={13} /> Enviar arquivo<input type="file" multiple className="hidden" onChange={onPickFiles} /></label>
+            <p className="text-[12px] text-slate-400 dark:text-white/30 leading-relaxed">Imagem, áudio, PDF, qualquer arquivo. Você também pode colar (Ctrl+V) ou arrastar pro caderno.</p>
           </div>
         )}
 
@@ -780,7 +780,7 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
           {!collabSpaceId && spaces.length > 0 && (
             <>
               <div className="flex items-center gap-1 px-1 pt-0.5">
-                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30">Estudos</p>
+                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30">Estudos</p>
                 <button onClick={newSpace} title="Novo estudo (abre a Zaeon pra começar)" className="ml-auto text-slate-400 hover:text-cyan-500"><Plus size={13} /></button>
               </div>
               {spaces.map((sp) => (
@@ -791,9 +791,9 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
                 >
                   <button onClick={() => setSpaceId(sp.id)} title="Abrir este estudo" className="flex items-center gap-2 flex-1 min-w-0 text-left">
                     <FileText size={14} className="text-violet-500 dark:text-violet-300 shrink-0" />
-                    <span className="flex-1 min-w-0 text-[11px] font-medium text-slate-700 dark:text-white/90 truncate">{sp.title || "Estudo"}</span>
+                    <span className="flex-1 min-w-0 text-[13px] font-medium text-slate-700 dark:text-white/90 truncate">{sp.title || "Estudo"}</span>
                   </button>
-                  {sp.id === spaceId && <span className="text-[8px] font-black uppercase tracking-wide text-cyan-500 shrink-0">ativo</span>}
+                  {sp.id === spaceId && <span className="text-[10px] font-black uppercase tracking-wide text-cyan-500 shrink-0">ativo</span>}
                   {spaces.length > 1 && (
                     <button onClick={() => delSpace(sp.id)} title="Apagar este estudo (vai pra lixeira)"
                       className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-400 shrink-0">
@@ -808,7 +808,7 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
           {/* ── REFERÊNCIAS / itens salvos ── */}
           {library.length > 0 && (
             <>
-              <p className="px-1 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30">Salvos</p>
+              <p className="px-1 pt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30">Salvos</p>
               {library.map((it) => {
                 const Icon = typeIcon(it.type);
                 return (
@@ -820,7 +820,7 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
                   >
                     <GripVertical size={13} className="text-slate-300 dark:text-white/20 shrink-0" />
                     <Icon size={14} className="text-cyan-600 dark:text-cyan-300 shrink-0" />
-                    <span className="flex-1 min-w-0 text-[11px] font-medium text-slate-700 dark:text-white/90 truncate">{it.title || it.payload?.text?.slice(0, 40) || it.type}</span>
+                    <span className="flex-1 min-w-0 text-[13px] font-medium text-slate-700 dark:text-white/90 truncate">{it.title || it.payload?.text?.slice(0, 40) || it.type}</span>
                     <button onClick={() => removeItem(it.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-400 shrink-0"><Trash2 size={12} /></button>
                   </div>
                 );
@@ -829,7 +829,7 @@ export default function MeusEstudosFeed({ collabSpaceId }: { collabSpaceId?: str
           )}
 
           {loading || library.length > 0 ? null : (
-            <p className="text-[11px] text-slate-400 dark:text-white/30 p-2 leading-relaxed">Salve referências, vídeos e trabalhos aqui (pelo "+" ou pela pesquisa). Depois arraste pro caderno.</p>
+            <p className="text-[13px] text-slate-400 dark:text-white/30 p-2 leading-relaxed">Salve referências, vídeos e trabalhos aqui (pelo "+" ou pela pesquisa). Depois arraste pro caderno.</p>
           )}
         </div>
       </div>

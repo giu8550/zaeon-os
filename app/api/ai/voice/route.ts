@@ -36,22 +36,32 @@ export async function POST(req: Request) {
   if (text.length < 1) return json({ error: "Texto vazio." }, 400);
   if (text.length > 4000) return json({ error: "Texto muito longo (máx. 4000)." }, 400);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
-  try {
-    const res = await fetch(`${VOICE_URL}/synthesize`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice }),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return json({ error: "Engine de voz indisponível." }, 503);
-    const data = await res.json().catch(() => null);
-    if (!data?.audio_base64) return json({ error: "Resposta de voz inválida." }, 502);
-    return json(data, 200);
-  } catch {
-    clearTimeout(timer);
-    return json({ error: "Engine de voz indisponível (offline)." }, 503);
+  // Sintetiza UMA vez, com timeout próprio. Devolve o JSON da engine ou null (falhou).
+  async function synth(voiceId: string | undefined, timeoutMs: number): Promise<any | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${VOICE_URL}/synthesize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice: voiceId }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null);
+      return data?.audio_base64 ? data : null;
+    } catch {
+      clearTimeout(timer);
+      return null;
+    }
   }
+
+  // 1ª tentativa: a voz pedida (pode ser Kokoro, mais lenta na CPU do VPS).
+  let data = await synth(voice, 45_000);
+  // Fallback: se a voz pedida falhar/estourar o tempo e não for já o Piper rápido,
+  // tenta 'natural-br' (Piper) — garante áudio em vez de 503 silencioso.
+  if (!data && voice !== "natural-br") data = await synth("natural-br", 30_000);
+  if (!data) return json({ error: "Engine de voz indisponível." }, 503);
+  return json(data, 200);
 }
