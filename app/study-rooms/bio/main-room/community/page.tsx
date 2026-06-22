@@ -139,9 +139,11 @@ const CyberGlobe = () => {
 
 // --- 2. CABO DE ENERGIA (SVG) ---
 const EnergyCord = ({ startX, startY, endX, endY, delay = 0 }: any) => {
-    const path = `M ${startX} ${startY} C ${startX} ${endY}, ${endX} ${startY}, ${endX} ${endY}`;
+    // SVG path não aceita "%": normaliza pra número + viewBox 0..100 esticado.
+    const n = (v: any) => String(v).replace("%", "").trim();
+    const path = `M ${n(startX)} ${n(startY)} C ${n(startX)} ${n(endY)}, ${n(endX)} ${n(startY)}, ${n(endX)} ${n(endY)}`;
     return (
-        <svg className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible z-0">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible z-0">
             <path d={path} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
             <motion.path
                 d={path} fill="none" stroke="#22d3ee" strokeWidth="2" strokeDasharray="10 150"

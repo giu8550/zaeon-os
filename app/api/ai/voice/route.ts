@@ -32,7 +32,11 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({} as any));
   const text = typeof body.text === "string" ? body.text.trim() : "";
-  const voice = typeof body.voice === "string" ? body.voice : undefined;
+  // TEMPORÁRIO: o Kokoro (vozes femininas) é inviável na CPU do VPS (~8s+ por trecho)
+  // → 503. Até existir uma voz feminina rápida, forçamos o Piper (natural-br): ~0,2s,
+  // sempre responde. (Trocar/remover quando a voz feminina rápida entrar.)
+  const voice = "natural-br";
+  void body.voice;
   if (text.length < 1) return json({ error: "Texto vazio." }, 400);
   if (text.length > 4000) return json({ error: "Texto muito longo (máx. 4000)." }, 400);
 

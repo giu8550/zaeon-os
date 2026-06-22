@@ -1950,7 +1950,7 @@ export default function HomeworkPage({
           onMouseEnter={() => setIsSidebarOpen(true)}
           onMouseLeave={() => setIsSidebarOpen(false)}
           animate={{ width: isSidebarOpen ? 180 : 54 }}
-          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)] bg-gradient-to-b from-[#1c1c28] to-[#13131c] border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
+          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)] bg-[rgba(22,22,34,0.55)] border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
           <div className="flex flex-col gap-3 px-2.5">
             {/* Sala de Estudos — topo da sidebar */}

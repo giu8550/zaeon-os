@@ -221,6 +221,9 @@ export default function MacSplash({ show = true, onDone }: Props) {
         const audio = (window as any).zaeonAudio;
 
         if (audio) {
+            // Loop durante a intro: a faixa não "acaba" no meio (corte seco). O fade
+            // abaixo é o ÚNICO responsável por parar — assim o final é sempre suave.
+            audio.loop = true;
             audio.play().then(() => {
                 isAudioPlaying.current = true;
                 setHasStarted(true);
@@ -240,8 +243,9 @@ export default function MacSplash({ show = true, onDone }: Props) {
                         audio.volume = Math.max(0, startVol * k * k); // ease-out, sem degrau
                         if (i >= steps) {
                             clearInterval(fade);
-                            try { audio.pause(); } catch { /* ignore */ }
+                            try { audio.pause(); audio.loop = false; } catch { /* ignore */ }
                             isAudioPlaying.current = false;
+                            try { window.dispatchEvent(new CustomEvent("zaeon-music-end")); } catch { /* ignore */ }
                         }
                     }, FADE_MS / steps);
                 }, HOLD_MS);

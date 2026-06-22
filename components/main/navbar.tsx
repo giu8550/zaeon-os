@@ -17,6 +17,9 @@ const TRACKS = [
 
 // --- SINGLETON GLOBAL ---
 let globalAudio: HTMLAudioElement | null = null;
+// Enquanto a intro toca a música (com fade próprio), o navbar NÃO deve dar o
+// pause()/currentTime=0 seco no isHome — senão corta a música no meio do fade.
+let introMusicActive = false;
 let globalAudioCtx: AudioContext | null = null;
 let globalAnalyser: AnalyserNode | null = null;
 let globalSource: MediaElementAudioSourceNode | null = null;
@@ -100,7 +103,8 @@ export const Navbar = () => {
   }, [isHome, initAudioEngine]);
 
   useEffect(() => {
-    if (isHome && globalAudio) {
+    // Não corta enquanto a intro está tocando (ela tem fade próprio).
+    if (isHome && globalAudio && !introMusicActive) {
       globalAudio.pause();
       globalAudio.currentTime = 0;
       globalAudio.src = TRACKS[0];
@@ -112,13 +116,19 @@ export const Navbar = () => {
   // ESCUTA O COMANDO DE SYNC DO INTRO
   useEffect(() => {
     const handleMusicSync = () => {
+      introMusicActive = true; // intro assumiu a música → segura o pause do isHome
       if (globalAudio) {
-        setIsPlaying(true); 
+        setIsPlaying(true);
         initAudioEngine();
       }
     };
+    const handleMusicEnd = () => { introMusicActive = false; }; // fade terminou → volta ao normal
     window.addEventListener("zaeon-music-sync", handleMusicSync);
-    return () => window.removeEventListener("zaeon-music-sync", handleMusicSync);
+    window.addEventListener("zaeon-music-end", handleMusicEnd);
+    return () => {
+      window.removeEventListener("zaeon-music-sync", handleMusicSync);
+      window.removeEventListener("zaeon-music-end", handleMusicEnd);
+    };
   }, [initAudioEngine]);
 
   // --- NOVO: ESCUTA O SINAL DE MODO FOCO DAS SALAS ---
