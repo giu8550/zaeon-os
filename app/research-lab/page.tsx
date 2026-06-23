@@ -62,7 +62,7 @@ import OnboardingGuide from "@/components/onboard/OnboardingGuide";
 import { startTour } from "@/lib/onboarding/tour";
 import { capabilities } from "@/lib/runtime/mode";
 import { useLibraryFiles, type LibraryFile } from "@/lib/useLibraryFiles";
-import { speakSequence as ttsSpeakSequence } from "@/lib/voice/ttsController";
+import { speakSequence as ttsSpeakSequence, stop as ttsStop } from "@/lib/voice/ttsController";
 import RichText from "@/components/research/RichText";
 import { useWindowStore } from "@/lib/useWindowStore";
 
@@ -115,6 +115,7 @@ import { useSavedCitations } from "@/lib/useSavedCitations";
 import { applyCitationDrop } from "@/lib/citationInsert";
 import { extractCitationBlock } from "@/lib/scholar/chatCitation";
 import ResearchShell from "./ResearchShell";
+import ResearchReadingView from "./ResearchReadingView";
 
 // --- COMPONENTS ---
 import ResearchCardPDF from "@/components/ui/ResearchCardPDF";
@@ -1791,11 +1792,25 @@ export default function HomeworkPage({
       // "aborted" (o speak() comum manda tudo de uma vez — por isso só funcionava com
       // textos curtos, tipo o chat widget). Em pedaços curtos, cada chamada responde rápido.
       void audioRef; // (legado — o áudio é gerido pelo ttsController global)
-      await ttsSpeakSequence([clean]);
+      await ttsSpeakSequence([clean]); // sem curinga (resumo não é "documento inteiro")
     } catch {
       showToast("Voz indisponível agora.");
     } finally {
       if (msgId != null) setVoiceLoadingId(null);
+    }
+  };
+
+  // Ler a PESQUISA inteira (texto do editor) em voz — COM curinga de cold-start (é documento
+  // longo). Play/stop no lugar do caderninho da aba (WindowSwitcher), na voz escolhida.
+  const [readingResearch, setReadingResearch] = useState(false);
+  const readResearch = async () => {
+    if (readingResearch) { ttsStop(); setReadingResearch(false); return; }
+    if (!docContent.trim()) { showToast("Escreva algo na pesquisa primeiro."); return; }
+    setReadingResearch(true);
+    try {
+      await ttsSpeakSequence([docContent], { filler: true });
+    } finally {
+      setReadingResearch(false);
     }
   };
 
@@ -2329,6 +2344,8 @@ export default function HomeworkPage({
                 workType={workType}
                 onWorkType={switchWorkType}
                 onRelate={handleRelateFiles}
+                onReadResearch={readResearch}
+                isReadingResearch={readingResearch}
                 onViewDoc={handleViewDoc}
                 pdfDocs={pdfDocs}
                 onCite={handleSaveCite}
@@ -2369,6 +2386,11 @@ export default function HomeworkPage({
                       ref={editorRef}
                       className="relative flex-1 px-8 md:px-12 py-8 overflow-y-auto custom-scrollbar flex flex-col gap-4"
                     >
+                      {/* KARAOKÊ: ao ler a pesquisa em voz (▶ da aba), cobre o editor com a
+                          camada de leitura que destaca o trecho falado. */}
+                      {readingResearch && (
+                        <ResearchReadingView text={docContent} onStop={readResearch} />
+                      )}
                       {/* Barrinha sutil: pisca ao soltar uma citação */}
                       {citInsertFlash && (
                         <div
