@@ -57,9 +57,7 @@ function navItem(active: boolean, accent: keyof typeof NAV_ACTIVE) {
   void accent; // accent mantido por compatibilidade; o ativo agora é sempre a pill preta
   return `${NAV_BASE} ${active ? NAV_ACTIVE_PILL : NAV_IDLE}`;
 }
-import ResearchRoomTour from "@/components/onboard/ResearchRoomTour";
-import OnboardingGuide from "@/components/onboard/OnboardingGuide";
-import { startTour } from "@/lib/onboarding/tour";
+import { startTour, getTour, nextTour, TOUR_STEPS } from "@/lib/onboarding/tour";
 import { capabilities } from "@/lib/runtime/mode";
 import { useLibraryFiles, type LibraryFile } from "@/lib/useLibraryFiles";
 import { speakSequence as ttsSpeakSequence, stop as ttsStop } from "@/lib/voice/ttsController";
@@ -1245,6 +1243,19 @@ export default function HomeworkPage({
     try { localStorage.setItem("zaeon.lab.lastTab", activeTab); } catch { /* ignore */ }
   }, [activeTab]);
 
+  // O tour de onboarding COMEÇA no menu inicial (passo "menu-estudos"). Quando a
+  // pessoa abre a Sala de Estudos (chega aqui no lab), avança pro passo de pesquisar.
+  useEffect(() => {
+    try {
+      const t = getTour();
+      if (t.active && TOUR_STEPS[t.index]?.onMenu) {
+        setActiveTab("sala-de-estudos");
+        setTimeout(() => nextTour(), 300);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Deep-link ?session=<id> (vindo do menu inicial → Pesquisas): abre a ABA PESQUISA e
   // carrega aquela pesquisa salva como DOCUMENTO (título + conteúdo) na folha de escrita.
   useEffect(() => {
@@ -1727,23 +1738,27 @@ export default function HomeworkPage({
     if (!clean) return;
 
     if (msgId != null) setVoiceLoadingId(msgId);
+    setSummaryRead(clean); // liga o karaokê INLINE no painel do resumo (mesmos pedaços da voz)
     try {
       // speakSequence QUEBRA o resumo em pedaços de ~420 chars (1 POST /api/ai/voice por
       // pedaço). O resumo é LONGO; mandado inteiro, o Gemini-TTS estoura 30s e dá 503
       // "aborted" (o speak() comum manda tudo de uma vez — por isso só funcionava com
       // textos curtos, tipo o chat widget). Em pedaços curtos, cada chamada responde rápido.
       void audioRef; // (legado — o áudio é gerido pelo ttsController global)
-      await ttsSpeakSequence([clean]); // sem curinga (resumo não é "documento inteiro")
+      await ttsSpeakSequence([clean]); // mesmos pedaços do TCC → voz sai certa e o karaokê casa
     } catch {
       showToast("Voz indisponível agora.");
     } finally {
       if (msgId != null) setVoiceLoadingId(null);
+      setSummaryRead(null); // leitura terminou → tira o destaque
     }
   };
 
   // Ler a PESQUISA inteira (texto do editor) em voz — COM curinga de cold-start (é documento
   // longo). Play/stop no lugar do caderninho da aba (WindowSwitcher), na voz escolhida.
   const [readingResearch, setReadingResearch] = useState(false);
+  // Karaokê INLINE do resumo por voz: o texto sendo lido no painel do resumo (sem sair dele).
+  const [summaryRead, setSummaryRead] = useState<string | null>(null);
   const readResearch = async () => {
     if (readingResearch) { ttsStop(); setReadingResearch(false); return; }
     if (!docContent.trim()) { showToast("Escreva algo na pesquisa primeiro."); return; }
@@ -2440,15 +2455,11 @@ export default function HomeworkPage({
                           value={docContent}
                           onChange={(e) => setDocContent(e.target.value)}
                           onDragOver={(e) => {
-                            const t = e.dataTransfer.types;
-                            if (
-                              t.includes("text/zaeon-citation") ||
-                              t.includes("text/zaeon-file") ||
-                              t.includes("Files")
-                            ) {
-                              e.preventDefault();
-                              e.dataTransfer.dropEffect = "copy";
-                            }
+                            // Vários navegadores NÃO listam tipos MIME custom no dragover
+                            // (só no drop): permitimos o drop sempre e o handleEditorDrop
+                            // decide se é citação, imagem da biblioteca ou do desktop.
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "copy";
                           }}
                           onDrop={handleEditorDrop}
                           style={{
@@ -2520,7 +2531,12 @@ export default function HomeworkPage({
                   </div>
                 }
                 documentWindowContent={
-                  <div className="h-full flex flex-col bg-white dark:bg-[#0f172a]">
+                  <div className="relative h-full flex flex-col bg-white dark:bg-[#0f172a]">
+                    {/* Karaokê INLINE do resumo por voz — fica DENTRO deste painel (absolute
+                        inset-0), destaca trecho a trecho e NÃO sai do tamanho do painel. */}
+                    {summaryRead && (
+                      <ResearchReadingView text={summaryRead} onStop={() => { ttsStop(); setSummaryRead(null); }} />
+                    )}
                     <div className="flex items-center justify-end px-4 pt-3 shrink-0">
                       <button
                         onClick={() => setVoiceOn((v) => !v)}
@@ -3252,10 +3268,8 @@ export default function HomeworkPage({
         )}
       </AnimatePresence>
 
-      {/* Interactive onboarding tour for first-time users */}
-      {showTour && <ResearchRoomTour onComplete={() => setShowTour(false)} />}
-      {/* Tour guiado da Zaeon (golden path) */}
-      <OnboardingGuide />
+      {/* Tour guiado da Zaeon (golden path) agora é GLOBAL (montado no layout),
+          pra começar no menu inicial e continuar aqui. (Tour antigo removido.) */}
     </div>
   );
 }
