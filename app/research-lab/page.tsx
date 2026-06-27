@@ -1944,7 +1944,17 @@ export default function HomeworkPage({
           title: docTitle.replace(/\.pdf$/i, "").replace(/\.docx$/i, ""),
           content: docContent,
           workType: workType || "Artigo",
-          citations: citationNotes,
+          // envia campos estruturados (NBR 6023:2018) + text como fallback
+          citations: persistedCitations.map((c) => ({
+            id: c.id,
+            text: c.abnt,
+            authors: c.authors,
+            title: c.title,
+            year: c.year,
+            venue: c.venue,
+            doi: c.doi,
+            url: c.url,
+          })),
           author: session?.user?.name || "Autor",
           institution: abntMeta.institution,
           course: (session?.user as any)?.course || "",
@@ -2943,13 +2953,90 @@ export default function HomeworkPage({
                       <span className="font-black text-black dark:text-white">
                         Fonte:
                       </span>{" "}
-                      {abntMeta.fontChoice} 12pt
+                      {abntMeta.fontChoice}
                     </p>
                     <p>
                       <span className="font-black text-black dark:text-white">
                         Citações:
                       </span>{" "}
                       {citationNotes.length} referência(s) salva(s)
+                    </p>
+                  </div>
+
+                  {/* Painel: Formatação ABNT — defaults da norma já aplicados */}
+                  <div className="mb-4 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[9px] font-black uppercase tracking-[0.3em] text-cyan-500">
+                        Formatação ABNT (NBR 14724)
+                      </p>
+                      <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-slate-400">
+                        <LockClosedIcon className="w-2.5 h-2.5" /> Padrão da norma
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                      <p>
+                        <span className="font-black text-black dark:text-white">
+                          Fonte:
+                        </span>{" "}
+                        <span className="text-cyan-600 dark:text-cyan-400 font-black">
+                          {abntMeta.fontChoice}
+                        </span>
+                      </p>
+                      <p>
+                        <span className="font-black text-black dark:text-white">
+                          Tamanho:
+                        </span>{" "}
+                        12 pt
+                      </p>
+                      <p>
+                        <span className="font-black text-black dark:text-white">
+                          Entrelinha:
+                        </span>{" "}
+                        1,5
+                      </p>
+                      <p>
+                        <span className="font-black text-black dark:text-white">
+                          Alinhamento:
+                        </span>{" "}
+                        Justificado
+                      </p>
+                      <p className="col-span-2">
+                        <span className="font-black text-black dark:text-white">
+                          Margens:
+                        </span>{" "}
+                        3 cm sup/esq · 2 cm inf/dir
+                      </p>
+                      <p className="col-span-2">
+                        <span className="font-black text-black dark:text-white">
+                          Recuo de parágrafo:
+                        </span>{" "}
+                        1,25 cm (1ª linha)
+                      </p>
+                      <p className="col-span-2">
+                        <span className="font-black text-black dark:text-white">
+                          Citação longa:
+                        </span>{" "}
+                        recuo 4 cm · 10 pt · espaço simples
+                      </p>
+                      <p className="col-span-2">
+                        <span className="font-black text-black dark:text-white">
+                          Numeração:
+                        </span>{" "}
+                        canto superior direito
+                      </p>
+                      <p className="col-span-2">
+                        <span className="font-black text-black dark:text-white">
+                          Referências:
+                        </span>{" "}
+                        à esquerda, espaço simples, espaço entre entradas
+                      </p>
+                    </div>
+                    <p className="mt-2 text-[9px] text-slate-400 leading-relaxed">
+                      Aplicado automaticamente conforme a NBR 14724. Apenas a{" "}
+                      <span className="text-cyan-600 dark:text-cyan-400 font-black">
+                        fonte
+                      </span>{" "}
+                      é configurável (Passo 1).
                     </p>
                   </div>
 
@@ -2993,10 +3080,8 @@ export default function HomeworkPage({
                   </div>
 
                   <p className="mt-4 text-[9px] text-slate-400 text-center leading-relaxed">
-                    A IA irá estruturar, revisar e formatar seu texto.
-                    <br />
-                    Margens 3/2/3/2cm · {abntMeta.fontChoice} 12pt · Entrelinha
-                    1,5
+                    A IA irá estruturar, revisar e formatar seu texto conforme a
+                    norma.
                   </p>
                 </>
               )}
