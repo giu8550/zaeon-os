@@ -46,6 +46,8 @@ Thumbs.db
 
 # --- PYTHON ---
 abnt-service/venv/
+abnt-service/.venv/
+abnt-service/.pytest_cache/
 __pycache__/
 *.pyc
 
