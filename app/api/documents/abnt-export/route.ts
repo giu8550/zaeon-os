@@ -1,6 +1,7 @@
 import { vertexCredentials } from "@/lib/ai/vertex-credentials";
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { authOptions } from "@/src/lib/auth";
 import { VertexAI } from '@google-cloud/vertexai';
 
 export const maxDuration = 60;
@@ -12,7 +13,17 @@ interface ABNTExportRequest {
     title: string;
     content: string;
     workType: string;
-    citations: Array<{ id: string; text: string }>;
+    citations: Array<{
+        id: string;
+        text: string;
+        // Campos estruturados (NBR 6023:2018) — o worker formata determinísticamente
+        authors?: string[];
+        title?: string;
+        year?: number;
+        venue?: string;
+        doi?: string;
+        url?: string;
+    }>;
     author: string;
     institution: string;
     course: string;
@@ -32,6 +43,8 @@ interface ABNTExportRequest {
 async function generateMetaWithGemini(request: ABNTExportRequest): Promise<{
     resumo: string;
     palavras_chave: string[];
+    abstract: string;
+    keywords: string[];
 }> {
     const credentials = (() => { const __v = vertexCredentials(); return { project_id: __v.project, client_email: __v.client_email, private_key: __v.private_key }; })(); // robust parse
     const vertexAI = new VertexAI({
@@ -49,9 +62,13 @@ async function generateMetaWithGemini(request: ABNTExportRequest): Promise<{
 
     const prompt = `Você é um assistente acadêmico. Analise o texto abaixo e retorne EXCLUSIVAMENTE um JSON válido (sem markdown) com:
 {
-  "resumo": "parágrafo único, até 500 palavras, terceira pessoa",
-  "palavras_chave": ["termo1", "termo2", "termo3"]
+  "resumo": "parágrafo único, até 500 palavras, terceira pessoa, em português",
+  "palavras_chave": ["termo1", "termo2", "termo3"],
+  "abstract": "single paragraph, English version of the resumo, third person",
+  "keywords": ["term1", "term2", "term3"]
 }
+
+O "abstract" deve ser a versão em inglês do "resumo" e "keywords" a tradução de "palavras_chave".
 
 TÍTULO: ${request.title}
 TIPO: ${request.workType}
@@ -71,6 +88,8 @@ ${request.content.substring(0, 3000)}`;
 async function structureWithGemini(request: ABNTExportRequest): Promise<{
     resumo: string;
     palavras_chave: string[];
+    abstract: string;
+    keywords: string[];
     sections: Array<{
         type: string;
         title: string;
@@ -104,8 +123,10 @@ Retorne EXCLUSIVAMENTE um JSON válido, sem markdown, sem blocos de código, sem
 
 Schema obrigatório:
 {
-  "resumo": "parágrafo único, até 500 palavras, terceira pessoa",
+  "resumo": "parágrafo único, até 500 palavras, terceira pessoa, em português",
   "palavras_chave": ["termo1", "termo2", "termo3"],
+  "abstract": "single paragraph, English version of the resumo, third person",
+  "keywords": ["term1", "term2", "term3"],
   "sections": [
     {
       "type": "introducao|desenvolvimento|conclusao|custom",
@@ -122,12 +143,14 @@ Schema obrigatório:
   }
 }
 
-Regras: normalize títulos para MAIÚSCULAS; se não houver seções claras, identifique pelo conteúdo; gere resumo se não houver; extraia 3-5 palavras-chave; NUNCA retorne markdown.
+Regras: normalize títulos para MAIÚSCULAS; se não houver seções claras, identifique pelo conteúdo; gere resumo se não houver; extraia 3-5 palavras-chave; gere "abstract" (resumo em inglês) e "keywords" (palavras-chave em inglês); NUNCA retorne markdown.
 
 DICA: O texto pode conter marcadores explícitos no formato:
   # TÍTULO DA SEÇÃO (seção principal)
   ## Título da Subseção (subseção)
-Quando presentes, USE-OS como delimitadores de seção em vez de inferir pelo conteúdo.`;
+Quando presentes, USE-OS como delimitadores de seção em vez de inferir pelo conteúdo.
+
+IMPORTANTE: PRESERVE intactos os marcadores de imagem/figura no formato ![Título|Fonte](url) — não os altere, traduza, resuma ou remova, e mantenha cada um em seu próprio parágrafo (linha isolada) dentro da seção onde aparecem.`;
 
     const prompt = `${abntStructurerPersona}
 
@@ -161,6 +184,11 @@ ${request.citations.map((c, i) => `${i + 1}. ${c.text}`).join('\n') || 'Nenhuma 
 
 export async function POST(req: Request) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!session?.user?.email) {
+            return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
+        }
+
         const body: ABNTExportRequest = await req.json();
 
         if (!body.content?.trim()) {
@@ -188,10 +216,14 @@ export async function POST(req: Request) {
 
             let resumo = '';
             let palavras_chave: string[] = [];
+            let abstract = '';
+            let keywords: string[] = [];
             try {
                 const meta = await generateMetaWithGemini(body);
                 resumo = meta.resumo;
                 palavras_chave = meta.palavras_chave;
+                abstract = meta.abstract || '';
+                keywords = meta.keywords || [];
             } catch {
                 resumo = body.content.substring(0, 500);
                 palavras_chave = ['Pesquisa', 'Acadêmico', 'Zaeon'];
@@ -204,6 +236,8 @@ export async function POST(req: Request) {
             structured = {
                 resumo,
                 palavras_chave,
+                abstract,
+                keywords,
                 sections: body.parsedSections,
                 validation: {
                     has_introduction: hasIntro,
@@ -221,6 +255,8 @@ export async function POST(req: Request) {
                 structured = {
                     resumo: body.content.substring(0, 500),
                     palavras_chave: ['Pesquisa', 'Acadêmico', 'Zaeon'],
+                    abstract: '',
+                    keywords: [],
                     sections: [
                         {
                             type: 'introducao',
@@ -265,8 +301,18 @@ export async function POST(req: Request) {
             },
             resumo: structured.resumo,
             palavras_chave: structured.palavras_chave,
+            abstract: structured.abstract || null,
+            keywords: structured.keywords || [],
             sections: structured.sections,
-            references: body.citations.map((c) => ({ text: c.text })),
+            references: body.citations.map((c) => ({
+                text: c.text,
+                authors: c.authors || [],
+                title: c.title ?? null,
+                year: c.year ?? null,
+                venue: c.venue ?? null,
+                doi: c.doi ?? null,
+                url: c.url ?? null,
+            })),
             validation: structured.validation,
             format: body.format,
             font_choice: body.fontChoice || 'Times New Roman',

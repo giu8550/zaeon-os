@@ -32,7 +32,13 @@ SPACE_AFTER_TITLE_PT  = 12
 # ── Recuos ─────────────────────────────────────────────────────
 PARAGRAPH_INDENT_CM   = 1.25   # recuo de parágrafo (1ª linha)
 LONG_QUOTE_INDENT_CM  = 4.0    # citações longas: recuo esquerdo
-LONG_QUOTE_CHARS      = 250    # threshold para "citação longa"
+
+# ── Citações (NBR 10520) ───────────────────────────────────────
+# Citação direta longa = mais de 3 linhas → bloco recuado 4cm, 10pt, simples.
+# A "linha" é estimada pela largura útil da página (A4 menos margens 3+2cm =
+# 16cm, fonte 12pt ≈ 75 caracteres por linha; um pouco menos para Arial).
+LONG_QUOTE_MIN_LINES  = 3      # acima disso, citação vira bloco
+CHARS_PER_LINE        = 75     # estimativa de caracteres por linha (12pt, A4)
 
 # ── Numeração de páginas ───────────────────────────────────────
 # Aparece no canto superior direito
@@ -41,6 +47,23 @@ PAGE_NUMBER_FROM_PAGE = 1
 
 # ── Elementos pré-textuais obrigatórios ───────────────────────
 # Ordem: Capa → Folha de Rosto → Resumo → Sumário → Texto → Referências
+
+# ── Ilustrações / Figuras (NBR 14724:2024) ─────────────────────
+# Legenda no topo ("Figura N – Título", travessão), fonte embaixo, ambas em
+# tamanho menor (10pt), centralizadas; imagem centralizada.
+FIGURE_LABEL        = "Figura"
+FIGURE_CAPTION_DELIM = " – "          # travessão (en-dash), não hífen
+IMAGE_MAX_WIDTH_CM  = 15.0            # largura máxima da imagem (cabe na margem)
+IMAGE_MAX_BYTES     = 12 * 1024 * 1024  # 12 MB — proteção de download
+SOURCE_OWN_WORK     = "elaborado pelo próprio autor"      # figura/quadro (masc.)
+SOURCE_OWN_WORK_F   = "elaborada pelo próprio autor"      # tabela (fem.)
+
+# ── Tabelas (IBGE) e Quadros (NBR 14724:2024) ──────────────────
+# Tabela: título no topo, sem bordas verticais (3 traços horizontais), fonte
+# no rodapé. Quadro: caixa fechada (todas as bordas), dado qualitativo.
+TABLE_LABEL         = "Tabela"
+QUADRO_LABEL        = "Quadro"
+FONT_SIZE_TABLE_PT  = 10             # conteúdo de células (menor, uniforme)
 
 # ── Referências (NBR 6023:2018) ────────────────────────────────
 REFERENCES_TITLE = "REFERÊNCIAS"

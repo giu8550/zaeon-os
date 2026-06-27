@@ -15,7 +15,16 @@ class SectionData(BaseModel):
 
 
 class ReferenceData(BaseModel):
-    text: str  # já formatada em ABNT NBR 6023:2018 pelo agente Scholar
+    text: str = ""           # fallback pré-formatado (NBR 6023) — usado se não houver campos
+    # Campos estruturados (NBR 6023:2018) — quando presentes, o worker formata
+    # deterministicamente com o destaque (negrito) correto.
+    authors: List[str] = []
+    title: Optional[str] = None
+    year: Optional[int] = None
+    venue: Optional[str] = None
+    doi: Optional[str] = None
+    url: Optional[str] = None
+    access_date: Optional[str] = None  # "20 jan. 2026"; default = data de geração
 
 
 class CoverData(BaseModel):
@@ -40,6 +49,8 @@ class DocumentPayload(BaseModel):
     cover: CoverData
     resumo: str
     palavras_chave: List[str] = Field(..., min_length=1)
+    abstract: Optional[str] = None  # resumo em língua estrangeira (NBR 14724)
+    keywords: List[str] = []         # palavras-chave do abstract
     sections: List[SectionData]
     references: List[ReferenceData] = []
     validation: Optional[ValidationData] = None
