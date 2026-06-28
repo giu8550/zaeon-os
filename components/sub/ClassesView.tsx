@@ -12,7 +12,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import NextImage from 'next/image';
-import { ProFeaturePanel } from '@/components/ui/ProFeaturePanel';
 import VoiceModeSwitch from '@/components/voice/VoiceModeSwitch';
 import SpeakButton from '@/components/voice/SpeakButton';
 import StudentAulasModule from '@/components/aulas/StudentAulasModule';
@@ -388,7 +387,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     
     // STATE - AI MODULES NO BACKPACK (Apenas 1 módulo inicial agora)
     const [userModules, setUserModules] = useState<UserModule[]>([
-        { id: 1, title: "Personal Backpack", items: [] }
+        { id: 1, title: "Acesse outros modelos", items: [] }
     ]);
     
     // REF PARA JANELAS FLUTUANTES (Re-Foco)
@@ -457,7 +456,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
             
             if (savedModules) {
                 const parsedModules = JSON.parse(savedModules).filter((m: any) => m.id !== 2);
-                setUserModules(parsedModules.length > 0 ? parsedModules : [{ id: 1, title: "Personal Backpack", items: [] }]);
+                setUserModules(parsedModules.length > 0 ? parsedModules : [{ id: 1, title: "Acesse outros modelos", items: [] }]);
             }
 
             setIsDataLoaded(true);
@@ -478,7 +477,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                         if (d.library) setStoredPdfs(d.library);
                         if (d.personalModules) {
                              const p = d.personalModules.filter((m:any) => m.id !== 2);
-                             setUserModules(p.length ? p : [{ id: 1, title: "Personal Backpack", items: [] }]);
+                             setUserModules(p.length ? p : [{ id: 1, title: "Acesse outros modelos", items: [] }]);
                         }
                         setIsDataLoaded(true);
                     } else {
