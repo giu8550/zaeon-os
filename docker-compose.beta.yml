@@ -69,6 +69,10 @@ services:
         limits: { memory: 1g }   # era 3g (Kokoro); voz padrão é Gemini-TTS (nuvem), local só fallback Piper
 
   # ── ABNT (FastAPI + LibreOffice headless) ──
+  # web depende deste com condition: service_started (não service_healthy):
+  # se o abnt demorar/falhar no 1º boot (build do LibreOffice, OOM), o site sobe
+  # mesmo assim e a exportação degrada com 503 amigável. O healthcheck abaixo é
+  # só observabilidade (docker compose ps mostra healthy/unhealthy).
   abnt-service:
     build: { context: ./abnt-service, dockerfile: Dockerfile }
     container_name: zaeon_abnt
@@ -79,7 +83,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 40s
+      start_period: 90s
     deploy:
       resources:
         limits: { memory: 1200m }

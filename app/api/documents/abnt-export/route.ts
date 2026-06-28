@@ -315,8 +315,6 @@ export async function POST(req: Request) {
                 doi: c.doi ?? null,
                 url: c.url ?? null,
             })),
-            apendices: body.apendices || [],
-            anexos: body.anexos || [],
             validation: structured.validation,
             format: body.format,
             font_choice: body.fontChoice || 'Times New Roman',

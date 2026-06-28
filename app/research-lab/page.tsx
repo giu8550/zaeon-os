@@ -3164,13 +3164,13 @@ export default function HomeworkPage({
                   <div className="mb-4 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-[9px] font-black uppercase tracking-[0.3em] text-cyan-500">
-                        Formatação acadêmica
+                        Formatação ABNT (NBR 14724)
                       </p>
-                      <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        <LockClosedIcon className="w-2.5 h-2.5" /> NBR 14724
+                      <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-slate-400">
+                        <LockClosedIcon className="w-2.5 h-2.5" /> Padrão da norma
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-slate-600 dark:text-slate-300">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-slate-500">
                       <p>
                         <span className="font-black text-black dark:text-white">
                           Fonte:
@@ -3228,7 +3228,7 @@ export default function HomeworkPage({
                         à esquerda, espaço simples, espaço entre entradas
                       </p>
                     </div>
-                    <p className="mt-2 text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    <p className="mt-2 text-[9px] text-slate-400 leading-relaxed">
                       Aplicado automaticamente conforme a NBR 14724. Apenas a{" "}
                       <span className="text-cyan-600 dark:text-cyan-400 font-black">
                         fonte

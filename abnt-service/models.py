@@ -27,11 +27,6 @@ class ReferenceData(BaseModel):
     access_date: Optional[str] = None  # "20 jan. 2026"; default = data de geração
 
 
-class AppendixData(BaseModel):
-    title: str
-    content: str = ""
-
-
 class CoverData(BaseModel):
     author: str
     institution: str
