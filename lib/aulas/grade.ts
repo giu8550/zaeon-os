@@ -6,6 +6,10 @@
  * marksOutOf = 0 (entra como avaliação manual/assíncrona). A nota é a % de pontos
  * obtidos sobre o total auto-corrigível.
  */
+import { normalize } from "@/lib/aulas/normalize";
+import { parseCloze, parseDragwords, gradeBlanks } from "@/lib/aulas/fillBlanks";
+export { normalize };
+
 export type GradeOption = { text: string; isCorrect: boolean };
 export type PoolQuestion = { type: string; options?: GradeOption[]; accepted?: string[] };
 export type GradeQuestion = {
@@ -14,7 +18,7 @@ export type GradeQuestion = {
   marks?: number; // PONTOS do item
   options?: GradeOption[];
   accepted?: string[];
-  config?: { pool?: PoolQuestion[]; rounds?: number } | null; // roleta etc.
+  config?: { pool?: PoolQuestion[]; rounds?: number; text?: string; sentence?: string; words?: string[] } | null; // roleta / cloze / dragwords
 };
 export type RoulettePick = { index: number; answer?: string; choiceIndex?: number; transcript?: string };
 export type SubmittedAnswer = {
@@ -24,6 +28,7 @@ export type SubmittedAnswer = {
   transcript?: string;    // transcrição da resposta por voz
   audioUrl?: string;
   picks?: RoulettePick[]; // roleta: respostas das perguntas sorteadas
+  blanks?: (string | null)[]; // cloze/dragwords: 1 palavra por lacuna, na ordem
 };
 export type GradedAnswer = {
   questionId: string;
@@ -35,16 +40,6 @@ export type GradedAnswer = {
   audioUrl?: string;
 };
 export type GradeResult = { percentage: number; passed: boolean; graded: GradedAnswer[] };
-
-/** lowercase + sem acento + sem pontuação + espaços colapsados. */
-export function normalize(s: unknown): string {
-  return String(s ?? "")
-    .toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function matchesAccepted(text: string, accepted: string[]): boolean {
   const n = normalize(text);
@@ -105,6 +100,16 @@ export function gradeSubmission(
         }
         isCorrect = correct === picks.length;
         earnedThis = Math.round((marks * correct) / picks.length);
+      }
+    } else if (q.type === "cloze" || q.type === "dragwords") {
+      // Lacunas: crédito parcial pelos acertos posição-a-posição (gabarito vem do config).
+      const model = q.type === "cloze" ? parseCloze(q.config?.text || "") : parseDragwords(q.config || {});
+      const total = model.answers.length;
+      if (total > 0) {
+        marksOutOf = marks;
+        const { correct } = gradeBlanks(model.answers, Array.isArray(a?.blanks) ? a!.blanks! : []);
+        isCorrect = correct === total;
+        earnedThis = Math.round((marks * correct) / total);
       }
     } else {
       // open, voice sem gabarito, ou tipos ainda manuais → avaliação manual (não pontua aqui).

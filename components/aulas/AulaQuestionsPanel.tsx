@@ -25,7 +25,7 @@ export type AuthQ = {
   accepted?: string[];
   marks: number;
   noPaste?: boolean;
-  config?: { pool: AuthPoolQ[]; rounds: number };
+  config?: { pool?: AuthPoolQ[]; rounds?: number; text?: string; sentence?: string; words?: string[] };
 };
 
 const newId = () => `q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -37,6 +37,8 @@ export function blank(kind: string): AuthQ {
   if (kind === "q-written") { base.type = "input"; base.accepted = []; base.noPaste = true; }
   if (kind === "q-voice") base.accepted = [];
   if (kind === "q-roulette") { base.type = "roulette"; base.config = { pool: [{ text: "", type: "input", accepted: [] }], rounds: 1 }; }
+  if (kind === "q-cloze") { base.type = "cloze"; base.config = { text: "" }; }
+  if (kind === "q-dragwords") { base.type = "dragwords"; base.config = { sentence: "", words: [] }; }
   return base;
 }
 

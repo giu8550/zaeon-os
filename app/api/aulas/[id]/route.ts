@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { isTeacherSession } from "@/lib/aulas/roles";
+import { parseCloze, parseDragwords, shuffleSeeded } from "@/lib/aulas/fillBlanks";
 import { currentUser } from "@/lib/aulas/auth";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,11 @@ function stripOptions(opts: any): any {
 }
 function stripConfig(config: any): any {
   if (!config || typeof config !== "object") return undefined;
+  // cloze/dragwords: manda só parts + banco embaralhado; NUNCA o gabarito (answers/texto marcado).
+  if (typeof config.text === "string" || typeof config.sentence === "string") {
+    const m = typeof config.text === "string" ? parseCloze(config.text) : parseDragwords(config);
+    return { parts: m.parts, bank: shuffleSeeded(m.bank, String(config.text || config.sentence || "")), allowType: typeof config.text === "string" };
+  }
   const pool = Array.isArray(config.pool)
     ? config.pool.map((p: any) => ({ text: p.text, type: p.type, options: stripOptions(p.options) }))
     : undefined;

@@ -124,7 +124,7 @@ export type ParsedBlock = {
   accepted: string[];
   marks: number;           // pontos sugeridos
   noPaste?: boolean;
-  config?: { pool: { text: string; type: "choice" | "input"; options?: QuizOption[]; accepted: string[] }[]; rounds: number };
+  config?: { pool?: { text: string; type: "choice" | "input"; options?: QuizOption[]; accepted: string[] }[]; rounds?: number; text?: string; sentence?: string; words?: string[] };
 };
 
 function normRoulettePool(raw: any) {
@@ -171,6 +171,19 @@ export function buildQuestionBlock(raw: string, kind: string): ParsedBlock | nul
     const rRaw = parsed.config?.rounds ?? parsed.rounds;
     const rounds = Number.isFinite(rRaw) ? Math.max(1, Math.min(pool.length, Math.floor(rRaw))) : Math.min(3, pool.length);
     return { type: "roulette", text: (text || "Roleta de perguntas").slice(0, 200), accepted: [], marks, config: { pool, rounds } };
+  }
+  if (kind === "q-cloze") {
+    const t = typeof parsed.text === "string" ? parsed.text.trim() : "";
+    if (!t || !/\*[^*]+\*/.test(t)) return null;
+    return { type: "cloze", text: String(parsed.title || "Complete as lacunas").slice(0, 200), marks, accepted: [], config: { text: t.slice(0, 2000) } };
+  }
+  if (kind === "q-dragwords") {
+    const sentence = typeof parsed.config?.sentence === "string" ? parsed.config.sentence.trim()
+      : (typeof parsed.sentence === "string" ? parsed.sentence.trim() : "");
+    if (!sentence || !/\*[^*]+\*/.test(sentence)) return null;
+    const wordsRaw = parsed.config?.words ?? parsed.words;
+    const words = Array.isArray(wordsRaw) ? wordsRaw.filter((x: any) => typeof x === "string" && x.trim()).map((x: string) => x.trim().slice(0, 60)) : [];
+    return { type: "dragwords", text: String(parsed.title || "Arraste as palavras").slice(0, 200), marks, accepted: [], config: { sentence: sentence.slice(0, 2000), words } };
   }
   return null; // tipos scaffold ainda não geram bloco
 }
