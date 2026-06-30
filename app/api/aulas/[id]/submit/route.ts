@@ -32,6 +32,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         ...(a?.transcript != null ? { transcript: String(a.transcript) } : {}),
         ...(a?.audioUrl != null ? { audioUrl: String(a.audioUrl) } : {}),
         ...(Array.isArray(a?.picks) ? { picks: a.picks } : {}), // roleta (Lote 9)
+        ...(Array.isArray(a?.blanks) ? { blanks: a.blanks } : {}), // cloze/dragwords (fatia 2a)
       }))
     : [];
 

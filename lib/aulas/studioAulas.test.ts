@@ -4,13 +4,12 @@ import { buildQuestionBlock } from "./generateParse";
 import { gradeSubmission, type GradeQuestion } from "./grade";
 
 describe("blockTypes registry", () => {
-  it("has the 4 ready question types", () => {
-    expect(READY_BLOCKS.map((b) => b.kind).sort()).toEqual(["q-choice", "q-roulette", "q-voice", "q-written"]);
+  it("has the ready types (4 perguntas + cloze/dragwords da fatia 2a)", () => {
+    expect(READY_BLOCKS.map((b) => b.kind).sort()).toEqual(["q-choice", "q-cloze", "q-dragwords", "q-roulette", "q-voice", "q-written"]);
   });
-  it("registers the 5 game scaffolds (not ready)", () => {
+  it("os 3 jogos restantes seguem scaffold (not ready)", () => {
     const scaffold = AULA_BLOCKS.filter((b) => !b.ready).map((b) => b.kind);
-    expect(scaffold).toContain("q-cloze");
-    expect(scaffold).toContain("branching");
+    expect(scaffold.sort()).toEqual(["branching", "flashcards", "game-memory"]);
   });
   it("flashcards/memory/branching are not evaluable", () => {
     expect(EVALUABLE_KINDS.has("flashcards")).toBe(false);
@@ -53,7 +52,7 @@ describe("buildQuestionBlock", () => {
     ] } });
     const b = buildQuestionBlock(raw, "q-roulette");
     expect(b!.type).toBe("roulette");
-    expect(b!.config!.pool.length).toBe(2); // o 'open' sem gabarito é descartado
+    expect(b!.config!.pool!.length).toBe(2); // o 'open' sem gabarito é descartado
     expect(b!.config!.rounds).toBe(2);
   });
   it("returns null for scaffold kinds (games not ready)", () => {
