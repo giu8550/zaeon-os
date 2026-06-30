@@ -15,7 +15,7 @@ import { prisma } from "@/src/lib/prisma";
 
 export const runtime = "nodejs";
 
-const TYPES = new Set(["ref", "insight", "synthesis", "base", "suggestion", "pdf", "video", "note", "link", "image", "audio", "file", "studio"]);
+const TYPES = new Set(["ref", "insight", "synthesis", "base", "suggestion", "pdf", "video", "note", "link", "image", "audio", "file", "studio", "aula-question"]);
 
 async function uid(): Promise<string | null> {
   const session = await getServerSession(authOptions);

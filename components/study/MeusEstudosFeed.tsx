@@ -23,11 +23,14 @@ import VoiceModeSwitch from "@/components/voice/VoiceModeSwitch";
 import SpeakButton from "@/components/voice/SpeakButton";
 import VoicePlayButton from "@/components/voice/VoicePlayButton";
 import StudioDock from "@/components/studio/StudioDock";
-import AulaQuestionsPanel, { type AuthQ } from "@/components/aulas/AulaQuestionsPanel";
+import AulaQuestionsPanel, { type AuthQ, blank as blankQ } from "@/components/aulas/AulaQuestionsPanel";
+import QuestionEditor from "@/components/aulas/QuestionEditor";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import { detectHeadingShortcut } from "@/lib/study/blockMarkdown";
 import { prevEditableId, moveBlock } from "@/lib/study/blockOrder";
 import { filterSlash, type SlashOption } from "@/lib/study/slashMenu";
+import { filterAulaSlash } from "@/lib/aulas/aulaSlash";
+import { serializeFeed } from "@/lib/aulas/aulaBlocks";
 import { useTTS } from "@/lib/voice/useTTS";
 import ResearchReadingView from "@/app/research-lab/ResearchReadingView";
 import { takeHandoff } from "@/lib/agents/handoff";
@@ -260,6 +263,8 @@ export default function MeusEstudosFeed({ collabSpaceId, mode = "study" }: { col
   const feed = items.filter((i) => i.placement === "feed")
     .sort((a, b) => (ord(a) - ord(b)) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
   const nextOrder = () => (feed.length ? Math.max(...feed.map(ord)) + 1 : 0);
+  // "/" em modo teach lista também os blocos de pergunta (registro lib/aulas/blockTypes).
+  const slashOptsFor = (qy: string) => (teach ? [...filterSlash(qy), ...filterAulaSlash(qy)] : filterSlash(qy));
 
   // Parte D5 (só professor / teach): ENVIAR a aula — serializa os blocos do canvas em
   // markdown e cria/entrega uma Aula via /api/aulas (o aluno recebe pelo fluxo existente).
@@ -291,11 +296,13 @@ export default function MeusEstudosFeed({ collabSpaceId, mode = "study" }: { col
   };
   const sendToTurma = async (turmaId: string) => {
     const title = (spaces.find((s) => s.id === spaceId)?.title || "Aula").slice(0, 200);
-    const body = feedToMarkdown();
-    if (!body.trim() && teachQuestions.length === 0) { setSendMsg("Monte a aula (conteúdo ou perguntas) antes de enviar."); return; }
+    const body = feedToMarkdown(); // fallback p/ aulas antigas / clientes sem render de blocks
+    const { blocks, questions: canvasQs } = serializeFeed(feed);
+    const questions = [...canvasQs, ...teachQuestions]; // canvas primeiro; painel (atalho) no fim
+    if (!blocks.length && questions.length === 0) { setSendMsg("Monte a aula (conteúdo ou perguntas) antes de enviar."); return; }
     setSending(true);
     try {
-      const r = await fetch("/api/aulas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, body, questions: teachQuestions }) });
+      const r = await fetch("/api/aulas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, body, blocks, questions }) });
       if (!r.ok) { setSendMsg("Não consegui criar a aula."); return; }
       const d = await r.json();
       const aulaId = d?.aula?.id;
@@ -529,6 +536,19 @@ export default function MeusEstudosFeed({ collabSpaceId, mode = "study" }: { col
     return () => window.removeEventListener("zaeon:study:embed", onEmbed);
   }, [addItem]);
 
+  // Dock (teach): botão de um tipo de pergunta → insere um bloco de pergunta no fim do canvas.
+  useEffect(() => {
+    if (!teach) return;
+    const onInsert = (e: any) => {
+      const qk = e?.detail?.qkind; if (!qk) return;
+      const feedNow = itemsRef.current.filter((i) => i.placement === "feed");
+      const order = feedNow.length ? Math.max(...feedNow.map((i) => (typeof i.order === "number" ? i.order : 0))) + 1 : 0;
+      addItem({ type: "aula-question", title: "", payload: blankQ(qk), placement: "feed", order });
+    };
+    window.addEventListener("zaeon:aula:insert", onInsert);
+    return () => window.removeEventListener("zaeon:aula:insert", onInsert);
+  }, [teach, addItem]);
+
   // "Estudar esse tema" (botão da pesquisa / Play da Base / voz): enfileira o tópico e
   // deixa a fila resolver (cria espaço se preciso, espera a geração atual terminar).
   // O feed fica sempre montado (só escondido), então isto funciona mesmo fora da aba.
@@ -712,6 +732,11 @@ export default function MeusEstudosFeed({ collabSpaceId, mode = "study" }: { col
       setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, title: "", payload: { ...x.payload, text: "", variant } } : x)));
       persist(it.id);
       setFocusId(it.id);
+    } else if (opt.kind === "aula") {
+      // bloco de PERGUNTA: limpa o "/comando" e insere um bloco de pergunta logo após.
+      setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, title: "", payload: { ...x.payload, text: "" } } : x)));
+      persist(it.id);
+      addItem({ type: "aula-question", title: "", payload: blankQ(opt.key), placement: "feed", order: ord(it) });
     } else {
       setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, title: "", payload: { ...x.payload, text: "" } } : x)));
       persist(it.id);
@@ -735,6 +760,15 @@ export default function MeusEstudosFeed({ collabSpaceId, mode = "study" }: { col
           onRemove={() => removeItem(it.id)}
           onSaveLibrary={() => saveStudioToLibrary(it)}
         />
+      );
+    }
+    // BLOCO DE PERGUNTA (teach) → editor inline reutilizado do painel.
+    if (it.type === "aula-question") {
+      const aq = (it.payload || {}) as AuthQ;
+      return (
+        <QuestionEditor q={aq}
+          onSet={(patch) => { setItems((prev) => prev.map((x) => x.id === it.id ? { ...x, payload: { ...x.payload, ...patch } } : x)); persist(it.id); }}
+          onDel={() => removeItem(it.id)} />
       );
     }
     const variant: "h1" | "h2" | "text" = it.payload?.variant || "text";
@@ -835,7 +869,7 @@ export default function MeusEstudosFeed({ collabSpaceId, mode = "study" }: { col
     const onKey = (e: React.KeyboardEvent) => {
       // Menu "/" aberto: setas navegam, Enter escolhe, Esc fecha (intercepta o Enter normal).
       if (slashFor === it.id) {
-        const opts = filterSlash(slashQuery);
+        const opts = slashOptsFor(slashQuery);
         if (e.key === "ArrowDown") { e.preventDefault(); setSlashIndex((n) => Math.min(opts.length - 1, n + 1)); return; }
         if (e.key === "ArrowUp") { e.preventDefault(); setSlashIndex((n) => Math.max(0, n - 1)); return; }
         if (e.key === "Enter") { e.preventDefault(); const o = opts[slashIndex] || opts[0]; if (o) selectSlash(it, o); return; }
@@ -980,7 +1014,7 @@ export default function MeusEstudosFeed({ collabSpaceId, mode = "study" }: { col
         )}
 
         {/* ── STUDIO DA ZAEON: transforma o estudo em guia/FAQ/flashcards/mapa/linha do tempo ── */}
-        <StudioDock spaceId={spaceId} />
+        <StudioDock spaceId={spaceId} teach={teach} />
 
         {/* ── BARRINHA-AGENTE: só aparece ao clicar no ⟁ (some enquanto a Zaeon pensa). ── */}
         {barOpen && !zaeonBusy && (
@@ -1065,7 +1099,7 @@ export default function MeusEstudosFeed({ collabSpaceId, mode = "study" }: { col
                   {renderBlock(it, idx)}
                   {slashFor === it.id && (
                     <div className="absolute left-2 top-9 z-30 w-56 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0a1020] shadow-xl py-1 max-h-64 overflow-y-auto custom-scrollbar">
-                      {filterSlash(slashQuery).map((opt, i) => (
+                      {slashOptsFor(slashQuery).map((opt, i) => (
                         <button
                           key={opt.key}
                           type="button"
@@ -1077,7 +1111,7 @@ export default function MeusEstudosFeed({ collabSpaceId, mode = "study" }: { col
                           {opt.kind === "studio" && <span className="text-[9px] uppercase tracking-wide text-slate-400">studio</span>}
                         </button>
                       ))}
-                      {filterSlash(slashQuery).length === 0 && <div className="px-3 py-1.5 text-[12px] text-slate-400">nada encontrado</div>}
+                      {slashOptsFor(slashQuery).length === 0 && <div className="px-3 py-1.5 text-[12px] text-slate-400">nada encontrado</div>}
                     </div>
                   )}
                 </div>

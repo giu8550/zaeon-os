@@ -621,6 +621,7 @@ model Aula {
   turmaId     String?   @db.ObjectId         // null enquanto rascunho geral
   title       String
   body        String?                        // markdown (base generativa)
+  blocks      Json?                          // sequência ordenada de blocos (fatia rica); null = aula antiga (usa body)
   youtubeIds  String[]  @default([])         // vídeos indexados
   status      String    @default("draft")    // draft | sent
   sentAt      DateTime?

@@ -9,6 +9,12 @@ export type Aula = {
   status: "draft" | "sent";
   sentAt: string | null;
   createdAt: string;
+  blocks?: Array<
+    | { kind: "text"; md: string }
+    | { kind: "video"; youtubeId: string }
+    | { kind: "studio"; studioKind: string; title?: string; data?: unknown }
+    | { kind: "q"; questionId: string; qkind: string }
+  > | null;
 };
 
 export type QuizMeta = { id: string; title: string; passingPct: number };

@@ -128,6 +128,22 @@ export default function StudentAulasModule() {
     setConfirmDel(null);
   };
 
+  // Botão "Enviar respostas" OU card de resultado — reusado nos dois caminhos de render.
+  const renderSubmit = () => (
+    !result ? (
+      <button onClick={submit} disabled={submitting}
+        className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-white font-bold text-sm disabled:opacity-50"
+        style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}>
+        {submitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Enviar respostas
+      </button>
+    ) : (
+      <div className={`mt-5 rounded-2xl p-4 border ${result.passed ? "border-emerald-400/40 bg-emerald-500/10" : "border-amber-400/40 bg-amber-500/10"}`}>
+        <p className="text-lg font-black text-white">{result.passed ? "Aprovado! 🎉" : "Quase lá"} — {result.percentage}%</p>
+        <p className="text-[12.5px] text-white/60 mt-1">{result.passed ? "Aula concluída e registrada." : "Você pode revisar e tentar de novo."}</p>
+      </div>
+    )
+  );
+
   return (
     <div className="w-full max-w-3xl mx-auto">
       <div className="flex items-center gap-2 mb-3">
@@ -182,45 +198,58 @@ export default function StudentAulasModule() {
             <div className="p-5 sm:p-7">
               <h2 className="text-2xl font-black tracking-tight text-white mb-4 bg-gradient-to-r from-cyan-300 to-violet-300 bg-clip-text text-transparent">{detail.aula.title}</h2>
 
-              {detail.aula.youtubeIds?.length > 0 && (
-                <div className="grid gap-3 mb-5 sm:grid-cols-2">
-                  {detail.aula.youtubeIds.map((yid) => (
-                    <div key={yid} className="aspect-video rounded-xl overflow-hidden border border-white/10">
-                      <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${yid}`} title="Vídeo da aula" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                    </div>
-                  ))}
+              {detail.aula.blocks && detail.aula.blocks.length > 0 ? (
+                /* FLUXO RICO: percorre os blocos na ORDEM (texto/vídeo/pergunta intercalados). */
+                <div className="flex flex-col gap-5">
+                  {detail.aula.blocks.map((b, i) => {
+                    if (b.kind === "text") return <MiniMarkdown key={i} source={b.md} />;
+                    if (b.kind === "video") return (
+                      <div key={i} className="aspect-video rounded-xl overflow-hidden border border-white/10 max-w-2xl">
+                        <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${b.youtubeId}`} title="Vídeo da aula" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                      </div>
+                    );
+                    if (b.kind === "q") {
+                      const idx = detail.questions.findIndex((x) => x.id === b.questionId);
+                      if (idx < 0) return null;
+                      const q = detail.questions[idx];
+                      return <QuestionView key={i} q={q} idx={idx} state={answers[q.id] || {}} onChange={(patch) => setAns(q.id, patch)}
+                        graded={result?.graded.find((g) => g.questionId === q.id)} locked={!!result} />;
+                    }
+                    return null; // studio: fora do escopo do aluno na fatia 1
+                  })}
+                  {detail.questions.length > 0 && renderSubmit()}
                 </div>
-              )}
-
-              {detail.aula.body && <MiniMarkdown source={detail.aula.body} className="mb-6" />}
-
-              {detail.questions.length > 0 && (
-                <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Sparkles size={15} className="text-cyan-300" />
-                    <h4 className="text-sm font-black uppercase tracking-[0.14em] text-white/70">{detail.quiz?.title || "Quiz"}</h4>
-                  </div>
-
-                  <div className="flex flex-col gap-5">
-                    {detail.questions.map((q, idx) => (
-                      <QuestionView key={q.id} q={q} idx={idx} state={answers[q.id] || {}} onChange={(patch) => setAns(q.id, patch)}
-                        graded={result?.graded.find((g) => g.questionId === q.id)} locked={!!result} />
-                    ))}
-                  </div>
-
-                  {!result ? (
-                    <button onClick={submit} disabled={submitting}
-                      className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-white font-bold text-sm disabled:opacity-50"
-                      style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}>
-                      {submitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Enviar respostas
-                    </button>
-                  ) : (
-                    <div className={`mt-5 rounded-2xl p-4 border ${result.passed ? "border-emerald-400/40 bg-emerald-500/10" : "border-amber-400/40 bg-amber-500/10"}`}>
-                      <p className="text-lg font-black text-white">{result.passed ? "Aprovado! 🎉" : "Quase lá"} — {result.percentage}%</p>
-                      <p className="text-[12.5px] text-white/60 mt-1">{result.passed ? "Aula concluída e registrada." : "Você pode revisar e tentar de novo."}</p>
+              ) : (
+                /* FLUXO ANTIGO (compat): vídeos no topo, corpo markdown, perguntas no fim. */
+                <>
+                  {detail.aula.youtubeIds?.length > 0 && (
+                    <div className="grid gap-3 mb-5 sm:grid-cols-2">
+                      {detail.aula.youtubeIds.map((yid) => (
+                        <div key={yid} className="aspect-video rounded-xl overflow-hidden border border-white/10">
+                          <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${yid}`} title="Vídeo da aula" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                        </div>
+                      ))}
                     </div>
                   )}
-                </div>
+
+                  {detail.aula.body && <MiniMarkdown source={detail.aula.body} className="mb-6" />}
+
+                  {detail.questions.length > 0 && (
+                    <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Sparkles size={15} className="text-cyan-300" />
+                        <h4 className="text-sm font-black uppercase tracking-[0.14em] text-white/70">{detail.quiz?.title || "Quiz"}</h4>
+                      </div>
+                      <div className="flex flex-col gap-5">
+                        {detail.questions.map((q, idx) => (
+                          <QuestionView key={q.id} q={q} idx={idx} state={answers[q.id] || {}} onChange={(patch) => setAns(q.id, patch)}
+                            graded={result?.graded.find((g) => g.questionId === q.id)} locked={!!result} />
+                        ))}
+                      </div>
+                      {renderSubmit()}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

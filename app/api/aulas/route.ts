@@ -5,6 +5,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { isTeacherSession } from "@/lib/aulas/roles";
+import { resolveBlockRefs } from "@/lib/aulas/persistBlocks";
+import { aulaBlock } from "@/lib/aulas/blockTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -64,19 +66,25 @@ export async function POST(req: Request) {
   };
   const aula = await prisma.aula.create({ data });
 
-  // Lote 9 fatia 2: cria o QUIZ + perguntas (blocos interativos) junto da aula, se vierem.
+  // Fatia rica: cria o QUIZ + perguntas e grava a sequência ORDENADA (Aula.blocks).
+  // As perguntas vêm como blocos do canvas (questions) e os `blocks` referenciam-nas por
+  // qref → questionId real. Compat: requests sem `blocks` seguem criando perguntas no fim.
   const rawQs = Array.isArray(body.questions) ? (body.questions as any[]) : [];
+  const rawBlocks = Array.isArray(body.blocks) ? (body.blocks as any[]) : [];
   if (rawQs.length) {
     const quizData = { aulaId: aula.id, title: `Quiz — ${title}`.slice(0, 160), passingPct: 70 };
     const quiz = await prisma.aulaQuiz.create({ data: quizData });
     const QT = new Set(["choice", "input", "open", "voice", "roulette"]);
+    const idByRef: Record<string, string> = {};
     let order = 0;
     for (const q of rawQs) {
       if (!q || typeof q.text !== "string" || !q.text.trim()) continue;
+      // type subjacente vem do registro (baseType do kind); fallback ao q.type (compat).
+      const baseType = aulaBlock(typeof q.kind === "string" ? q.kind : "")?.baseType || (typeof q.type === "string" ? q.type : "open");
       const qData = {
         quizId: quiz.id,
         text: String(q.text).slice(0, 600),
-        type: QT.has(q.type) ? q.type : "open",
+        type: QT.has(baseType) ? baseType : "open",
         options: Array.isArray(q.options) ? (q.options as object) : undefined,
         accepted: Array.isArray(q.accepted) ? q.accepted.filter((x: any) => typeof x === "string").map((x: string) => String(x).slice(0, 200)) : [],
         marks: Number.isFinite(q.marks) && q.marks > 0 ? Math.min(20, Math.floor(q.marks)) : 1,
@@ -84,8 +92,14 @@ export async function POST(req: Request) {
         config: q.config && typeof q.config === "object" ? (q.config as object) : undefined,
         order: order++,
       };
-      await prisma.aulaQuestion.create({ data: qData });
+      const created = await prisma.aulaQuestion.create({ data: qData });
+      if (typeof q.id === "string") idByRef[q.id] = created.id;
+    }
+    if (rawBlocks.length) {
+      const persisted = resolveBlockRefs(rawBlocks as any, idByRef);
+      await prisma.aula.update({ where: { id: aula.id }, data: { blocks: persisted as object } });
     }
   }
-  return NextResponse.json({ aula });
+  const fresh = await prisma.aula.findUnique({ where: { id: aula.id } });
+  return NextResponse.json({ aula: fresh ?? aula });
 }
