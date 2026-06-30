@@ -2,7 +2,7 @@
  * Menu "/" do caderno (editor B1.3): opções + filtro PUROS (testável).
  * Estrutura transforma o bloco atual; "studio" gera e encaixa um módulo no cursor.
  */
-export type SlashKind = "struct" | "studio";
+export type SlashKind = "struct" | "studio" | "aula";
 
 export interface SlashOption {
   key: string; // h1|h2|text (estrutura) ou guide|mindmap|… (studio)

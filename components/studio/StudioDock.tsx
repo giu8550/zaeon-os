@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, ImageIcon, Film, ChevronDown } from "lucide-react";
 import type { TextKind } from "@/lib/studio/transformations";
+import { READY_BLOCKS } from "@/lib/aulas/blockTypes";
 
 type DockKind = TextKind | "podcast" | "image" | "video";
 
@@ -28,7 +29,7 @@ function embed(detail: any) {
   window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail }));
 }
 
-export default function StudioDock({ spaceId }: { spaceId?: string }) {
+export default function StudioDock({ spaceId, teach }: { spaceId?: string; teach?: boolean }) {
   const [busy, setBusy] = useState<DockKind | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -175,6 +176,13 @@ export default function StudioDock({ spaceId }: { spaceId?: string }) {
               <button onClick={() => generateAsync("video")} disabled={busy !== null} title="Gerar vídeo-resumo (slides + narração)" className={pillText}>
                 {busy === "video" ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />} Vídeo
               </button>
+              {/* 5) Blocos de PERGUNTA (só professor / teach) — inserem um bloco no canvas da aula. */}
+              {teach && READY_BLOCKS.map((b) => (
+                <button key={b.kind} onClick={() => window.dispatchEvent(new CustomEvent("zaeon:aula:insert", { detail: { qkind: b.kind } }))}
+                  title={`Inserir pergunta: ${b.label}`} className={pillText}>
+                  <span>{b.emoji}</span> {b.label}
+                </button>
+              ))}
             </>
           )}
         </div>
