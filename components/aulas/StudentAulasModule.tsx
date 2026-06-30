@@ -13,10 +13,11 @@ import { BookOpen, Loader2, CheckCircle2, Sparkles, Mic, Square, GraduationCap, 
 import MiniMarkdown from "./MiniMarkdown";
 import { useVoiceAnswer } from "./useVoiceAnswer";
 import { speak as ttsSpeak } from "@/lib/voice/ttsController";
+import WordDrag from "./WordDrag";
 import type { Aula, QuizMeta, Question, Progress, SubmitResult } from "./types";
 
 type Detail = { aula: Aula; quiz: QuizMeta | null; questions: Question[]; progress: Progress };
-type AnswerState = { answer?: string; choiceIndex?: number; transcript?: string; audioUrl?: string; picks?: { index: number; choiceIndex?: number; answer?: string }[] };
+type AnswerState = { answer?: string; choiceIndex?: number; transcript?: string; audioUrl?: string; picks?: { index: number; choiceIndex?: number; answer?: string }[]; blanks?: (string | null)[] };
 
 export default function StudentAulasModule() {
   const [aulas, setAulas] = useState<Aula[]>([]);
@@ -332,11 +333,32 @@ function QuestionView({ q, idx, state, onChange, graded, locked }: {
 
       {q.type === "roulette" && <RouletteView q={q} state={state} onChange={onChange} locked={locked} />}
 
+      {(q.type === "cloze" || q.type === "dragwords") && <FillBlanksView q={q} state={state} onChange={onChange} locked={locked} />}
+
       {graded && (
         <p className={`mt-2 text-[11.5px] font-bold ${graded.marksOutOf === 0 ? "text-white/40" : graded.isCorrect ? "text-emerald-300" : "text-rose-300"}`}>
           {graded.marksOutOf === 0 ? "Resposta registrada (avaliação manual)." : graded.isCorrect ? "Correta ✓" : "Incorreta ✗"}
         </p>
       )}
+    </div>
+  );
+}
+
+// LACUNAS (cloze/dragwords): mostra a frase com as lacunas e o WordDrag (arrastar/tocar/teclar/digitar).
+function FillBlanksView({ q, state, onChange, locked }: { q: Question; state: AnswerState; onChange: (p: AnswerState) => void; locked: boolean }) {
+  const parts = q.config?.parts || [];
+  const bank = q.config?.bank || [];
+  const nBlanks = parts.filter((p) => p.t === "blank").length;
+  const value = state.blanks || Array.from({ length: nBlanks }, () => null);
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-[13px] text-white/85 leading-relaxed">
+        {parts.map((p, i) => p.t === "text"
+          ? <span key={i}>{p.s}</span>
+          : <span key={i} className="inline-block mx-1 px-2 min-w-[56px] border-b-2 border-cyan-400/50 text-cyan-200 text-center">{value[p.i] || "____"}</span>)}
+      </p>
+      <WordDrag slots={nBlanks} bank={bank} value={value} allowType={q.config?.allowType}
+        locked={locked} onChange={(vv) => onChange({ blanks: vv })} />
     </div>
   );
 }

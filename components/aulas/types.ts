@@ -24,12 +24,16 @@ export type RoulettePoolQ = { text: string; type: "choice" | "input"; options?: 
 export type Question = {
   id: string;
   text: string;
-  type: "choice" | "input" | "open" | "voice" | "roulette";
+  type: "choice" | "input" | "open" | "voice" | "roulette" | "cloze" | "dragwords";
   options?: QuizOption[];
   accepted?: string[];
   marks: number;       // PONTOS do item
   noPaste?: boolean;   // resposta escrita: bloqueia colar
-  config?: { pool?: RoulettePoolQ[]; rounds?: number } | null; // roleta
+  config?: {
+    pool?: RoulettePoolQ[]; rounds?: number; // roleta
+    parts?: Array<{ t: "text"; s: string } | { t: "blank"; i: number }>; // cloze/dragwords (sanitizado)
+    bank?: string[]; allowType?: boolean;
+  } | null;
   order: number;
 };
 

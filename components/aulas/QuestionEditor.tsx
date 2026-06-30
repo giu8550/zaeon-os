@@ -86,6 +86,27 @@ export default function QuestionEditor({ q, onSet, onDel, controls, idx }: {
           <button onClick={() => onSet({ config: { pool: [...(q.config?.pool || []), { text: "", type: "input", accepted: [] }], rounds: q.config?.rounds || 1 } })} className="self-start text-[11px] text-cyan-300/80 hover:text-cyan-200 inline-flex items-center gap-1"><Plus size={11} /> pergunta no pool</button>
         </div>
       )}
+
+      {q.type === "cloze" && (
+        <div className="flex flex-col gap-1.5">
+          <textarea value={q.config?.text || ""} onChange={(e) => onSet({ config: { ...(q.config || {}), text: e.target.value } })} rows={3}
+            placeholder="Texto com lacunas: marque a resposta entre *asteriscos*. Ex.: A capital é *Brasília*."
+            className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-[13px] text-white placeholder:text-white/30 focus:outline-none focus:border-cyan-400/50 resize-none" />
+          <p className="text-[11px] text-white/40">Lacunas detectadas: {((q.config?.text || "").match(/\*[^*]+\*/g) || []).length} — o aluno digita ou arrasta.</p>
+        </div>
+      )}
+
+      {q.type === "dragwords" && (
+        <div className="flex flex-col gap-1.5">
+          <textarea value={q.config?.sentence || ""} onChange={(e) => onSet({ config: { ...(q.config || {}), sentence: e.target.value } })} rows={2}
+            placeholder="Frase com lacunas marcadas: O *gato* subiu no *telhado*."
+            className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-[13px] text-white placeholder:text-white/30 focus:outline-none focus:border-cyan-400/50 resize-none" />
+          <input value={(q.config?.words || []).join(", ")} onChange={(e) => onSet({ config: { ...(q.config || {}), words: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) } })}
+            placeholder="Palavras distratoras (vírgula) — entram no banco junto das respostas"
+            className="w-full rounded-md bg-white/5 border border-white/10 px-2 py-1 text-[12.5px] text-white placeholder:text-white/30 focus:outline-none focus:border-cyan-400/50" />
+          <p className="text-[11px] text-white/40">Lacunas detectadas: {((q.config?.sentence || "").match(/\*[^*]+\*/g) || []).length} — o aluno arrasta as palavras.</p>
+        </div>
+      )}
     </div>
   );
 }

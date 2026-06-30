@@ -31,11 +31,11 @@ export const AULA_BLOCKS: AulaBlockDef[] = [
     genHint: 'Gere um POOL de 4 a 6 perguntas variadas (choice e input) em config.pool [{text,type,options?,accepted?}], e config.rounds = quantas a roleta sorteia.' },
 
   // ── jogos interativos (scaffold — registrados, render/edição completos entram depois) ──
-  { kind: "q-cloze", label: "Completar lacunas", emoji: "🧩", evaluable: true, ready: false, baseType: "cloze",
+  { kind: "q-cloze", label: "Completar lacunas", emoji: "🧩", evaluable: true, ready: true, baseType: "cloze",
     genHint: 'Gere um texto com lacunas marcadas como *palavra* (a palavra entre asteriscos é a resposta). Tema dado pelo professor.' },
   { kind: "flashcards", label: "Cards de revisão", emoji: "🃏", evaluable: false, ready: false, baseType: "flashcards",
     genHint: 'Gere config.cards = [{front,back}] (pergunta↔resposta) de revisão sobre o tema.' },
-  { kind: "q-dragwords", label: "Arrastar palavras", emoji: "✋", evaluable: true, ready: false, baseType: "dragwords",
+  { kind: "q-dragwords", label: "Arrastar palavras", emoji: "✋", evaluable: true, ready: true, baseType: "dragwords",
     genHint: 'Gere config.sentence com vãos e config.words (banco de palavras) para arrastar ao lugar certo.' },
   { kind: "game-memory", label: "Jogo da memória", emoji: "🧠", evaluable: false, ready: false, baseType: "memory",
     genHint: 'Gere config.pairs = [{a,b}] (termo↔definição) para o jogo da memória.' },
