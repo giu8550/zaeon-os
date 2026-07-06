@@ -51,12 +51,18 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Segredos de runtime injetados pelo GitHub → materializados em .env.secrets no VPS.
+          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+          GOOGLE_PROJECT_ID_VALUE: ${{ secrets.GOOGLE_PROJECT_ID_VALUE }}
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 25m
+          # Repassa os segredos do bloco env: acima para dentro do script remoto.
+          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -67,8 +73,22 @@ jobs:
             echo "→ Atualizando código…"
             git fetch --all --prune
             git reset --hard origin/main
+            # Grava segredos de runtime FORA do git (compose lê via env_file: [.env, .env.secrets]).
+            if [ -n "${GOOGLE_CREDENTIALS_B64:-}" ]; then
+              echo "→ Gravando .env.secrets (credencial Vertex)…"
+              umask 177
+              {
+                echo "GOOGLE_CREDENTIALS=$(printf '%s' "$GOOGLE_CREDENTIALS_B64" | base64 -d | tr -d '\n')"
+                echo "GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID_VALUE}"
+              } > .env.secrets
+            else
+              echo "::warning::GOOGLE_CREDENTIALS_B64 vazio — mantendo .env.secrets atual (se houver)."
+              touch .env.secrets
+            fi
             echo "→ Subindo containers…"
             docker compose up -d --build --remove-orphans
+            # Garante que o web recarregue a credencial nova (é runtime-only).
+            docker compose up -d --force-recreate web
             echo "→ Limpando imagens órfãs…"
             docker image prune -f
             echo "✓ Deploy concluído."

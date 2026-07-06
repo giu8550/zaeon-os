@@ -71,3 +71,10 @@ service-account*.json
 
 # Cowork/Claude local cache
 .claude/
+vertex-smoke.js
+friend-sa.json
+.env.local.bak-*
+vertex-diag.js
+dev.log
+_PROD_B64_DELETE_AFTER.txt
+.env.secrets
