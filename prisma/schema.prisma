@@ -77,7 +77,12 @@ model User {
 
   // Invite system
   referredBy      String?  @db.ObjectId  // bare ObjectId — no Prisma relation (avoids circular User→User FK, populated in application layer)
-  myInviteCode    String?  @unique
+  // NÃO @unique: o código é atribuído de forma LAZY (signup deixa null; /api/convite/meu-codigo
+  // preenche na 1ª visita) → muitos users têm null, e um índice unique SIMPLES rejeita nulls
+  // repetidos (E11000 no db push). A unicidade real vem de InviteCode.code (retry no app). Para
+  // reforçar no banco, crie um índice PARCIAL no Atlas (unique só entre os atribuídos):
+  //   db.users.createIndex({ myInviteCode: 1 }, { unique: true, partialFilterExpression: { myInviteCode: { $type: "string" } } })
+  myInviteCode    String?
   inviteCodeUsed  String?              // denormalized audit: the human-readable code string (e.g. "ZA3K-X9QM")
   subject         String?
 
