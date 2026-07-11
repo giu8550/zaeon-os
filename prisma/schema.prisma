@@ -263,6 +263,23 @@ model Plugin {
   unlockRequirement String?  // Ex: "Nível 5 necessário"
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  // --- Envelope Agent Skills (PASSO 9 · spec agentskills.io + Zaeon). Aditivo/nullable p/ não
+  // quebrar linhas/uso existentes; o rename model Plugin→Skill (@@map) é o PR de UI separado. ---
+  slug          String?   // spec name: ^[a-z0-9]+(-[a-z0-9]+)*$ (unicidade validada no app)
+  license       String?
+  compatibility String?
+  allowedTools  String[]  // tools que a skill pode chamar
+  runtime       String?   // "ts" | "python" | "mcp"
+  risk          String?   // read | write | destructive
+  minPlan       String?   // gate por plano (9.10)
+  tier          String?   // T0..T3
+  courseTags    String[]
+  defaultOn     Boolean?  // liga por padrão (por fase)
+  sourceRepo    String?
+  sourceSha     String?
+  autoAuthored  Boolean?  // F4: destilada de uma trajetória aprovada (só o contrato agora)
+  metadata      Json?     // version em metadata.version; extras exportáveis em metadata.zaeon-*
 }
 
 model Account {
