@@ -77,7 +77,12 @@ model User {
 
   // Invite system
   referredBy      String?  @db.ObjectId  // bare ObjectId — no Prisma relation (avoids circular User→User FK, populated in application layer)
-  myInviteCode    String?  @unique
+  // NÃO @unique: o código é atribuído de forma LAZY (signup deixa null; /api/convite/meu-codigo
+  // preenche na 1ª visita) → muitos users têm null, e um índice unique SIMPLES rejeita nulls
+  // repetidos (E11000 no db push). A unicidade real vem de InviteCode.code (retry no app). Para
+  // reforçar no banco, crie um índice PARCIAL no Atlas (unique só entre os atribuídos):
+  //   db.users.createIndex({ myInviteCode: 1 }, { unique: true, partialFilterExpression: { myInviteCode: { $type: "string" } } })
+  myInviteCode    String?
   inviteCodeUsed  String?              // denormalized audit: the human-readable code string (e.g. "ZA3K-X9QM")
   subject         String?
 
@@ -264,6 +269,23 @@ model Plugin {
   unlockRequirement String?  // Ex: "Nível 5 necessário"
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  // --- Envelope Agent Skills (PASSO 9 · spec agentskills.io + Zaeon). Aditivo/nullable p/ não
+  // quebrar linhas/uso existentes; o rename model Plugin→Skill (@@map) é o PR de UI separado. ---
+  slug          String?   // spec name: ^[a-z0-9]+(-[a-z0-9]+)*$ (unicidade validada no app)
+  license       String?
+  compatibility String?
+  allowedTools  String[]  // tools que a skill pode chamar
+  runtime       String?   // "ts" | "python" | "mcp"
+  risk          String?   // read | write | destructive
+  minPlan       String?   // gate por plano (9.10)
+  tier          String?   // T0..T3
+  courseTags    String[]
+  defaultOn     Boolean?  // liga por padrão (por fase)
+  sourceRepo    String?
+  sourceSha     String?
+  autoAuthored  Boolean?  // F4: destilada de uma trajetória aprovada (só o contrato agora)
+  metadata      Json?     // version em metadata.version; extras exportáveis em metadata.zaeon-*
 }
 
 model Account {
@@ -576,6 +598,89 @@ model StudioArtifact {
   @@index([ownerId, kind])
   @@index([ownerId, createdAt])
   @@map("studio_artifacts")
+}
+
+// ─────────────────────────── MEMÓRIA · L1 (transcrição durável) ───────────────────────────
+// docs/MEMORY_AND_PERSISTENCE.md §2. É O ALICERCE: entrar na sala (qualquer device) e a
+// conversa estar lá. Uma Conversation por (userId, surface, scopeId). Generaliza o padrão
+// que o PastResearchChat já usa. Nenhum embedding aqui — restaurar = findMany por `at`.
+model Conversation {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String        @db.ObjectId
+  surface   String        // "estudos" | "pesquisa" | "aula" | "projetos" | "lounge"
+  scopeId   String?       // studyId | researchId | projectId (a "sala concreta"); null = geral
+  agentId   String?       // qual agente do roster (aura | revisor | escritor)
+  title     String?
+  pinned    Boolean       @default(false)
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId, surface, scopeId])
+  @@map("conversations")
+}
+
+model ChatMessage {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // "user" | "assistant"
+  text           String
+  meta           Json?        // artifacts, studioAction, citations, provenance
+  at             DateTime     @default(now())
+
+  @@index([conversationId, at])
+  @@map("chat_messages")
+}
+
+// Memória L3 (semântica) — projeção INDEXADA do L1 (docs/MEMORY_AND_PERSISTENCE.md §4.3).
+// Cada drawer é VERBATIM + embedding; recall barato (ANN, sem LLM) filtrado SEMPRE por userId.
+// Índice vetorial (Atlas): criar Vector Search sobre `embedding` (dims = EMBED_DIM de
+// lib/agent/memory.ts = 1536, cosine, filter em userId). Owner: `npx prisma db push` + índice Atlas.
+model MemoryDrawer {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId // isolamento multi-tenant — SEMPRE filtrar por isto
+  wingKind  String   // "usuario" | "curso" | "projeto" | "agente"
+  wingLabel String
+  room      String   // tópico/matéria
+  kind      String   // "mensagem" | "citacao" | "artefato" | "nota"
+  text      String   // VERBATIM (nunca resumido por LLM)
+  sourceRef String?  // conversationId/messageId/studyId de origem (deriva do L1)
+  embedding Float[]  // EMBED_DIM (1536, gemini-embedding-001) — ver lib/agent/memory.ts
+  meta      Json?    // provenance
+  at        DateTime @default(now())
+
+  // curadoria + re-rank (PR-M3 · A7/A9)
+  importance     Int? // peso relativo (curadoria)
+  lastAccessedAt DateTime? // recency: bump a cada hit; decay no re-rank
+  accessCount    Int       @default(0)
+  invalidatedAt  DateTime? // SUPERSEDE: drawer aposentado → nunca entra no recall
+  supersededBy   String?   @db.ObjectId // id do drawer que o substituiu
+
+  @@index([userId, wingKind, room])
+  @@index([userId, invalidatedAt])
+  @@map("memory_drawers")
+}
+
+// Conector MCP (PASSO 7 · §9.11). Credenciais: SÓ `authRef` (NOME da env var) — o segredo vive
+// no env/cofre, NUNCA no Mongo. `discoveredTools` = cache p/ detectar "degradado".
+model Connector {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  name             String    @unique // slug (namespaceia as tools: mcp:<name>:<tool>)
+  transport        String    // "http" | "stdio"
+  endpoint         String    // URL (http) ou linha de comando (stdio)
+  authType         String    @default("none") // "none" | "bearer" | "header"
+  authRef          String?   // NOME da env var com o segredo — nunca o segredo
+  minPlan          String    @default("free")
+  status           String    @default("desconectado") // desconectado|verificando|conectado|precisa_autorizar|erro|degradado
+  lastCheckedAt    DateTime?
+  lastError        String?
+  discoveredTools  String[]  // cache dos nomes de tools (base do "degradado")
+  enabledForAgents String[]  // agentes habilitados (ex.: ["aura"])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("connectors")
 }
 
 // ─── Aulas (LMS leve) — Turma é a entidade dona do vínculo professor↔alunos. ───

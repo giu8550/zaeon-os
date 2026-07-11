@@ -133,13 +133,13 @@ export function PodcastView({ audioUrl, data }: { audioUrl: string; data: any })
     <div className="space-y-3">
       <div className={`${card} p-3`}>
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <audio controls src={audioUrl} className="w-full" preload="metadata" />
+        <audio controls src={audioUrl} className="w-full [accent-color:#64748b]" style={{ accentColor: "#64748b" }} preload="metadata" />
       </div>
       {!!turns.length && (
         <div>
           <button
             onClick={() => setShowTranscript((v) => !v)}
-            className="text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline"
+            className="text-[12px] font-bold text-slate-600 dark:text-slate-300 hover:underline"
           >
             {showTranscript ? "Ocultar transcrição" : "Ver transcrição"}
           </button>
@@ -153,7 +153,7 @@ export function PodcastView({ audioUrl, data }: { audioUrl: string; data: any })
                       className={`max-w-[85%] rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed ${
                         b
                           ? "bg-violet-500/10 text-violet-900 dark:text-violet-100 rounded-br-sm"
-                          : "bg-cyan-500/10 text-cyan-900 dark:text-cyan-100 rounded-bl-sm"
+                          : "bg-slate-500/10 text-slate-800 dark:text-slate-100 rounded-bl-sm"
                       }`}
                     >
                       <span className="block text-[10px] font-black uppercase tracking-wide opacity-60">{t.speaker}</span>

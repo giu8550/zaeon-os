@@ -5,6 +5,7 @@ import {
   ChevronRightIcon, ChevronDownIcon, ArrowLeftIcon, ArrowRightStartOnRectangleIcon
 } from "@heroicons/react/24/outline";
 import { Bot, Send, ShieldCheck, Loader2, Mic, MicOff, Crown, Trash2, GraduationCap } from "lucide-react";
+import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 import { isSuperAdmin } from "@/lib/auth/roles";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -536,17 +537,12 @@ export default function MenuNavigation() {
                 </div>
 
                 {/* IDIOMA */}
-                <div className={cardBase}>
+                <div className={`${cardBase} cursor-default hover:border-slate-200 dark:hover:border-white/5 hover:bg-white/50 dark:hover:bg-white/[0.03]`}>
                   <div className="flex flex-col flex-1 pl-2">
                     <span className="text-[9px] opacity-50 uppercase font-bold tracking-tighter text-slate-500 dark:text-white">{t("options.language")}</span>
                     <span className="text-sm text-slate-900 dark:text-white">{i18n.language.toUpperCase()}</span>
                   </div>
-                  <select className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" value={i18n.language} onChange={(e) => i18n.changeLanguage(e.target.value)}>
-                    <option value="en">English</option>
-                    <option value="pt">Português</option>
-                    <option value="es">Español</option>
-                  </select>
-                  <ChevronRightIcon className="h-4 w-4 opacity-30 text-slate-600 dark:text-white" />
+                  <LanguageFlagToggle size={30} />
                 </div>
 
                 {/* CONVITE (T5) — convidar amigos = COMPARTILHAR meu link (código do usuário +

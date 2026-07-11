@@ -4,7 +4,7 @@ import {
     useState, useRef, useLayoutEffect, useEffect, useMemo, Suspense,
 } from "react";
 import dynamic from "next/dynamic";
-import { NotebookPen } from "lucide-react";
+import { Triangle } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -176,6 +176,10 @@ function NoRoomFound() {
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
+// ⚠️ MERGE base×main: o PR01 (co-working StudyCoworkChat) e o main (feed MeusEstudosFeed +
+// painel do professor) trouxeram abas/nomes diferentes p/ "Meus Estudos". Mantidos os DOIS —
+// CONFERIR a composição/rótulos das abas + QA de runtime antes de mergear na base.
+const StudyCoworkChat = dynamic(() => import("@/components/study/StudyCoworkChat"), { ssr: false });
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
 const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlunosPanel"), { ssr: false });
 
@@ -191,10 +195,11 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
         (session?.user as any)?.role === "professor" ||
         !!(session?.user as any)?.isAdmin ||
         isSuperAdminEmail((session?.user as any)?.email);
-    // "Meus Estudos" (feed mini-Notion) é a aba padrão, injetada antes das demais.
-    // "Meus Alunos" só aparece pro professor (gate isTeacher), ao lado de "Aulas".
+    // "Meus Estudos" (feed mini-Notion) é a aba padrão (main); "Meus Alunos" só pro professor (isTeacher).
+    // ⚠️ MERGE base×main: a aba "Aura" (co-working / chat) do PR01 vinha primeiro — CONFERIR se ela
+    // ainda entra na composição das abas abaixo (QA de runtime).
     const allTabs = useMemo(() => [
-        { id: "meus-estudos", label: "Meus Estudos", icon: NotebookPen },
+        { id: "meus-estudos", label: "Aura", icon: Triangle },
         ...tabs,
         ...(isTeacher ? [{ id: "students", label: "Meus Alunos", icon: GraduationCap }] : []),
     ], [tabs, isTeacher]);
@@ -283,6 +288,34 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                     <div className="flex overflow-x-auto no-scrollbar px-3 pt-3 gap-0.5">
                         {allTabs.map((tab, i) => {
                             const isActive = activeTab === tab.id;
+
+                            // A aba "Aura" (co-working) é a PILL DO AGENTE: ⟁ + nome ao lado,
+                            // nome destacado. Vive aqui na barra, ao lado de "Aulas".
+                            if (tab.id === "meus-estudos") {
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        ref={el => { tabRefs.current[i] = el; }}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        aria-label={`Agente ativo: ${tab.label}`}
+                                        className={`
+                                            relative flex items-center gap-1.5 pl-2 pr-3.5 py-1.5 rounded-[13px] border
+                                            font-tech whitespace-nowrap transition-all duration-150
+                                            ${isActive
+                                                ? "bg-gradient-to-b from-cyan-100 to-violet-100 text-slate-900 border-cyan-300 shadow-[0_8px_18px_-8px_rgba(34,211,238,0.55)] dark:from-cyan-400/20 dark:to-violet-500/15 dark:text-white dark:border-cyan-300/30 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_8px_20px_-8px_rgba(34,211,238,0.7)]"
+                                                : "bg-white text-slate-700 border-slate-200 shadow-sm hover:border-cyan-300 hover:bg-cyan-50/60 dark:bg-white/[0.04] dark:text-white/70 dark:border-white/10 dark:shadow-none dark:hover:bg-white/[0.07]"
+                                            }
+                                        `}
+                                    >
+                                        <span
+                                            className="w-6 h-6 shrink-0 flex items-center justify-center text-[15px] leading-none text-cyan-600 dark:text-cyan-300"
+                                            style={{ filter: "drop-shadow(0 0 5px rgba(34,211,238,0.55))" }}
+                                        >⟁</span>
+                                        <span className="text-[13px] font-bold tracking-[0.02em]">{tab.label}</span>
+                                    </button>
+                                );
+                            }
+
                             return (
                                 <button
                                     key={tab.id}
@@ -337,10 +370,13 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                     style={{ transform: "translateZ(0)" }}
                 >
                     <div className="absolute inset-0 overflow-y-auto" style={{ isolation: "isolate" }}>
-                        {/* Meus Estudos fica SEMPRE montado (só escondido) → a geração da Zaeon
-                            e a barra de loading NÃO resetam ao trocar de submódulo/aba. */}
+                        {/* "Meus Estudos" = CO-WORKING: chat estilo Claude com a Aura +
+                            biblioteca de artefatos à direita. Fica SEMPRE montado (só escondido)
+                            → a conversa e qualquer geração NÃO resetam ao trocar de aba.
+                            O editor completo de um estudo abre num modal a partir daqui.
+                            A aba "Estudos" (community) permanece intocada. */}
                         <div className={activeTab === "meus-estudos" ? "h-full" : "hidden"}>
-                            <MeusEstudosFeed />
+                            <StudyCoworkChat active={activeTab === "meus-estudos"} />
                         </div>
                         {activeTab === "meus-estudos" ? null : activeTab === "community" ? (
                             <OmegaScholarWorkspace />

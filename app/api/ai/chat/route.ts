@@ -6,6 +6,12 @@ import { vertexCredentials } from '@/lib/ai/vertex-credentials';
 import { guard } from '@/src/lib/ratelimit';
 import { sanitizeHistory } from '@/lib/ai/history';
 import { generateWithCache, CacheMissError } from "@/lib/ai/contextCache";
+import { studioGenerateTool, normalizeStudioKind, studioLabel, researchGenerateTool } from "@/lib/agent/tools";
+
+// Sentinela do stream: turno de tool-call não tem texto; o servidor emite esta
+// linha e o cliente executa a AÇÃO (gera o artefato no Studio). Ver StudyCoworkChat.
+const STUDIO_SENTINEL = "@@STUDIO_ACTION@@";
+const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";   // Sala de Pesquisa: gerar trabalho no doc
 import { buildPersona, DEFAULT_AGENT_ID } from "@/lib/ai/personas";
 
 export const maxDuration = 60;
@@ -118,7 +124,7 @@ export async function POST(req: Request) {
         const rl = await guard(req, "ai-chat", "ai-heavy");
         if (!rl.ok) return rl.response;
         // 🔥 NOVO: Recebendo userData + history + agentContext do frontend
-        const { prompt, agent, systemContext, fileData, userData, voiceMode, history, agentContext, cacheName } = await req.json();
+        const { prompt, agent, systemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface } = await req.json();
         const agentKey = agent?.toLowerCase() || DEFAULT_AGENT_ID;
 
         // Histórico da conversa (memória entre turnos). Ver lib/ai/history.ts.
@@ -143,7 +149,10 @@ export async function POST(req: Request) {
             ? [{ functionDeclarations: [updateScheduleTool, lessonsTool] }]
             : isHost
                 ? [{ functionDeclarations: [summonAgentTool, openRoomTool] }]
-                : undefined;
+                : agentKey === "aura"
+                    // Sala de Pesquisa (surface="pesquisa") → gera TRABALHO; senão → Studio.
+                    ? [{ functionDeclarations: [surface === "pesquisa" ? researchGenerateTool : studioGenerateTool] }]
+                    : undefined;
         const generativeModel = vertexAI.getGenerativeModel({
             // Gemini Flash é a ÚNICA IA do app (lib/ai/model.ts). Troca via env GEMINI_MODEL.
             model: GEMINI_MODEL_FLASH,
@@ -232,6 +241,124 @@ export async function POST(req: Request) {
             }
         }
 
+        // =================================================================
+        // AURA HARNESS (Fase 1) — laço agêntico atrás da flag AURA_HARNESS.
+        // Ligado por padrão; AURA_HARNESS="0" = kill-switch → cai no streaming legado
+        // abaixo (IDÊNTICO a hoje). Só o co-working da Aura EM TEXTO entra no laço; turnos
+        // com PDF/imagem (fileData) seguem pelo caminho legado (multimodal). Responde no
+        // MESMO protocolo (datilografia + sentinelas @@STUDIO_ACTION@@/@@RESEARCH_ACTION@@).
+        // =================================================================
+        if (stream === true && agentKey === "aura" && process.env.AURA_HARNESS !== "0" && !fileData) {
+            const [{ buildHarnessDeps, resolveHarnessOutput }, { runTrajectoryTraced }, { messageForError }, mem, { resolveUserId }] = await Promise.all([
+                import("@/lib/agent/aura-harness"),
+                import("@/lib/agent/trajectory"),
+                import("@/lib/agent/errors"),
+                import("@/lib/agent/memory-provider"),
+                import("@/lib/agent/transcript"),
+            ]);
+            const userId = await resolveUserId().catch(() => null); // dono do turno (memória filtra por isto)
+            const ac: any = (agentContext && typeof agentContext === "object") ? agentContext : {};
+            const hctx: any = {
+                ...ac,
+                userId: userId || undefined,
+                activeTab: surface || ac.activeTab || "sala-de-estudos", // academicMode vem daqui (pesquisa→enforced)
+                plan: "free",     // memória/studio/research = free; gate de plano é só compute pesado (PR03)
+                execMode: "auto", // HITL "guiado" entra no PR07
+                currentGoal: ac.currentGoal || String(prompt || "").slice(0, 200),
+            };
+            // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
+            const memBlock = userId ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: String(prompt || "") }).catch(() => "") : "";
+            const deps = buildHarnessDeps(hctx, {
+                systemContext: [systemContext, memBlock].filter(Boolean).join("\n\n") || undefined,
+                history: (chatHistory as any[]).map((h) => ({ role: h.role, text: h?.parts?.[0]?.text ?? "" })),
+            });
+            const encoder = new TextEncoder();
+            const rs = new ReadableStream<Uint8Array>({
+                async start(controller) {
+                    try {
+                        const { answer, state } = await runTrajectoryTraced(String(prompt || ""), hctx, deps);
+                        const out = resolveHarnessOutput(state, answer, surface, String(prompt || ""));
+                        // L3 write (A7, fire-and-forget): deriva o turno em drawers verbatim. Nunca bloqueia.
+                        if (userId) void mem.writeTurnMemory({ userId, surface: hctx.activeTab, scopeId: ac.currentStudyId ?? ac.currentResearchId ?? null, prompt: String(prompt || ""), answer });
+                        if (out.mode === "studio") {
+                            controller.enqueue(encoder.encode(STUDIO_SENTINEL + JSON.stringify({ type: "studio", kind: out.kind, topic: out.topic, text: out.text })));
+                        } else if (out.mode === "research") {
+                            controller.enqueue(encoder.encode(RESEARCH_SENTINEL + JSON.stringify({ type: "research", kind: out.kind, topic: out.topic, text: out.text })));
+                        } else {
+                            controller.enqueue(encoder.encode(out.text));
+                        }
+                    } catch (e: any) {
+                        // erro fatal → mensagem amigável (guardrail: nunca string à mão)
+                        controller.enqueue(encoder.encode(messageForError(String(e?.message ?? e))));
+                    }
+                    controller.close();
+                },
+            });
+            return new Response(rs, {
+                headers: {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",
+                },
+            });
+        }
+
+        // =================================================================
+        // STREAMING (output aos poucos) — usado pelo co-working (agente aura,
+        // sem tools → sem function-call, então é seguro streamar só texto).
+        // O cliente lê o corpo como text/plain e vai concatenando os pedaços.
+        // =================================================================
+        if (stream === true) {
+            const chatS = generativeModel.startChat({
+                systemInstruction: { role: 'system', parts: [{ text: finalSystemInstruction }] },
+                history: chatHistory,
+            });
+            const streamResult = await chatS.sendMessageStream(parts);
+            const encoder = new TextEncoder();
+            const rs = new ReadableStream<Uint8Array>({
+                async start(controller) {
+                    let call: any = null;   // functionCall detectada no stream (turno de tool)
+                    try {
+                        for await (const item of streamResult.stream) {
+                            const partsArr = item?.candidates?.[0]?.content?.parts || [];
+                            for (const p of partsArr) {
+                                if (p?.functionCall) call = p.functionCall;
+                                else if (p?.text) controller.enqueue(encoder.encode(p.text));
+                            }
+                        }
+                    } catch { /* encerra o que tiver */ }
+                    // TOOL-LOOP (Fase 0): studio_generate → AÇÃO pro cliente executar.
+                    if (call?.name === "studio_generate") {
+                        const a: any = call.args || {};
+                        const kind = normalizeStudioKind(String(a.kind || ""));
+                        const topic = typeof a.topic === "string" ? a.topic : "";
+                        const text = topic
+                            ? `Gerando ${studioLabel(kind)} sobre “${topic}” — já te mostro aqui.`
+                            : `Gerando ${studioLabel(kind)} — já te mostro aqui.`;
+                        controller.enqueue(encoder.encode(
+                            STUDIO_SENTINEL + JSON.stringify({ type: "studio", kind, topic, text }),
+                        ));
+                    } else if (call?.name === "research_generate") {
+                        const a: any = call.args || {};
+                        const kind = String(a.kind || "artigo").toLowerCase();
+                        const topic = typeof a.topic === "string" ? a.topic : "";
+                        const text = `Gerando o trabalho sobre “${topic}” — vou encaixar no seu documento.`;
+                        controller.enqueue(encoder.encode(
+                            RESEARCH_SENTINEL + JSON.stringify({ type: "research", kind, topic, text }),
+                        ));
+                    }
+                    controller.close();
+                },
+            });
+            return new Response(rs, {
+                headers: {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",
+                },
+            });
+        }
+
         const chat = generativeModel.startChat({
             systemInstruction: { role: 'system', parts: [{ text: finalSystemInstruction }] },
             history: chatHistory, // 🔥 memória entre turnos (antes era ignorada → IA "esquecia" tudo)
@@ -263,6 +390,22 @@ export async function POST(req: Request) {
                     { kind: "done", label: "Pronto." },
                 ];
                 return NextResponse.json({ summon: { skill, topic, agent: s.agent, route, cta: s.cta }, plan, text });
+            }
+            if (functionCall.name === "studio_generate") {
+                const args: any = functionCall.args || {};
+                const kind = normalizeStudioKind(String(args.kind || ""));
+                const topic = typeof args.topic === "string" ? args.topic : "";
+                const text = topic
+                    ? `Gerando ${studioLabel(kind)} sobre “${topic}” — já te mostro aqui.`
+                    : `Gerando ${studioLabel(kind)} — já te mostro aqui.`;
+                return NextResponse.json({ studioAction: { type: "studio", kind, topic, text }, text });
+            }
+            if (functionCall.name === "research_generate") {
+                const args: any = functionCall.args || {};
+                const kind = String(args.kind || "artigo").toLowerCase();
+                const topic = typeof args.topic === "string" ? args.topic : "";
+                const text = `Gerando o trabalho sobre “${topic}” — vou encaixar no seu documento.`;
+                return NextResponse.json({ researchAction: { type: "research", kind, topic, text }, text });
             }
             if (functionCall.name === "open_room") {
                 const args: any = functionCall.args || {};

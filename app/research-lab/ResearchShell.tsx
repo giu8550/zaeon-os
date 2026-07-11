@@ -6,6 +6,7 @@ import { useCursorPos } from "@/lib/useCursorPos";
 import { useSavedCitations } from "@/lib/useSavedCitations";
 import type { LibraryFile } from "@/lib/useLibraryFiles";
 import WindowSwitcher from "./WindowSwitcher";
+import ResearchChat from "@/components/research/ResearchChat";
 import DocumentDesktop from "./DocumentDesktop";
 import PdfViewer from "./PdfViewer";
 import type { SavedCitation } from "@/lib/useSavedCitations";
@@ -95,6 +96,15 @@ export default function ResearchShell({
   const [openPopover, setOpenPopover] = useState<"citations" | "quiz" | null>(null);
   const [showFolder, setShowFolder] = useState(false);
   const [fileDragOver, setFileDragOver] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);   // chat científico ↔ trabalho
+  const [docsCollapsed, setDocsCollapsed] = useState(false);  // retrair a barra de documentos
+
+  // Gerou um trabalho pelo chat (zaeon:research:newdoc) → fecha o chat e mostra o documento.
+  useEffect(() => {
+    const onNewDoc = () => setChatOpen(false);
+    window.addEventListener("zaeon:research:newdoc", onNewDoc);
+    return () => window.removeEventListener("zaeon:research:newdoc", onNewDoc);
+  }, []);
   // Mobile (<640px): empilha em coluna única (conversa em cima, documentos abaixo).
   const [vw, setVw] = useState(0);
   useEffect(() => {
@@ -124,7 +134,11 @@ export default function ResearchShell({
       style={{
         display: mobile ? "flex" : "grid",
         flexDirection: mobile ? "column" : undefined,
-        gridTemplateColumns: mobile ? undefined : (flipped ? "1fr 3.2fr" : "3.2fr 1fr"),
+        gridTemplateColumns: mobile
+          ? undefined
+          : (flipped
+              ? `${docsCollapsed ? "48px" : "15rem"} 1fr`
+              : `1fr ${docsCollapsed ? "48px" : "15rem"}`),
         gap: mobile ? 10 : 14,
         height: mobile ? "auto" : "100%",
         minHeight: mobile ? "78vh" : 600,
@@ -186,16 +200,26 @@ export default function ResearchShell({
         <WindowSwitcher
           windows={windows}
           activeId={activeId}
-          onSelect={onSelectWindow}
+          // Selecionar uma janela OU um tipo (TCC/Artigo/Relatório) leva pro trabalho:
+          // fecha o chat pra mostrar o documento.
+          onSelect={(id) => { setChatOpen(false); onSelectWindow(id); }}
           onClose={removeWindow}
           workType={workType}
-          onWorkType={onWorkType}
+          onWorkType={(t) => { setChatOpen(false); onWorkType?.(t); }}
           onReadResearch={onReadResearch}
           isReadingResearch={isReadingResearch}
+          chatOpen={chatOpen}
+          onToggleChat={() => setChatOpen((v) => !v)}
         />
 
         {/* Sheet area — all windows mounted, inactive ones hidden via display:none */}
         <div ref={containerRef} className="flex-1 relative min-h-0 overflow-hidden">
+          {/* Chat (Escritor/Revisor) sobrepõe o trabalho quando ligado na pill — alterna responsivo. */}
+          {chatOpen && (
+            <div className="absolute inset-0 z-[55]">
+              <ResearchChat workType={workType} />
+            </div>
+          )}
           {/* Research window (always mounted) */}
           <div
             className="h-full overflow-y-auto"
@@ -252,59 +276,63 @@ export default function ResearchShell({
               </div>
             ))}
 
-          {/* Quiz popover — stub for sub-project #5 */}
-          {openPopover === "quiz" && (
-            <div
-              style={{
-                position: "absolute",
-                top: posRef.current?.y ?? 0,
-                left: (posRef.current?.x ?? 0) + 10,
-                transform: "translateY(-50%)",
-                zIndex: 40,
-                width: 220,
-                borderRadius: 14,
-                padding: "14px 16px",
-                background: "rgba(15,15,28,0.92)",
-                border: "1px solid rgba(139,92,246,0.45)",
-                backdropFilter: "blur(24px)",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <p className="text-[10px] text-white/60 text-center">
-                🧠 Quiz — em breve
-              </p>
-              <button
-                onClick={() => setOpenPopover(null)}
-                className="absolute top-2 right-2 text-white/30 hover:text-white/70 text-base leading-none"
-              >
-                ×
-              </button>
-            </div>
-          )}
         </div>
 
       </div>
 
-      {/* ──────── RIGHT PANEL (30%) — no mobile vira bloco abaixo, limitado e rolável ──────── */}
-      <div style={mobile ? { maxHeight: "40vh", minHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column" } : { display: "contents" }}>
-      <DocumentDesktop
-        processingFileId={processingFileId}
-        processingStage={processingStage}
-        onPlayFile={handlePlayFile}
-        onAdd={onAdd}
-        openPopover={openPopover}
-        onTogglePopover={setOpenPopover}
-        citationCount={citations.length}
-        showFolder={showFolder}
-        onToggleFolder={() => setShowFolder((v) => !v)}
-        sessions={sessions}
-        onOpenSession={onOpenSession}
-        onNewWork={onNewWork}
-        onDeleteWork={onDeleteWork}
-        onRelate={onRelate}
-        onView={(f) => onViewDoc?.(f.id)}
-        flipped={flipped}
-      />
+      {/* ──────── RIGHT PANEL — barra de documentos, RETRÁTIL (como a biblioteca da Sala de Estudos) ──────── */}
+      <div
+        className={mobile ? "" : "relative h-full min-h-0 overflow-hidden"}
+        style={
+          mobile
+            ? { maxHeight: "40vh", minHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column" }
+            : { order: flipped ? 1 : 2 }
+        }
+      >
+        {!mobile && docsCollapsed ? (
+          /* Trilho recolhido — clique pra mostrar os documentos */
+          <button
+            onClick={() => setDocsCollapsed(false)}
+            title="Mostrar documentos"
+            className="h-full w-full flex flex-col items-center justify-center gap-2 rounded-[18px] text-white/45 hover:text-cyan-300 transition-colors"
+            style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.10)" }}
+          >
+            <span className="text-[13px]">📄</span>
+            <span className="text-[9px] font-black uppercase tracking-[0.16em] [writing-mode:vertical-rl] rotate-180">Documentos</span>
+          </button>
+        ) : (
+          <>
+            <div className={mobile ? "" : "h-full min-h-0 [&>*]:h-full"}>
+              <DocumentDesktop
+                processingFileId={processingFileId}
+                processingStage={processingStage}
+                onPlayFile={handlePlayFile}
+                onAdd={onAdd}
+                openPopover={openPopover}
+                onTogglePopover={setOpenPopover}
+                citationCount={citations.length}
+                showFolder={showFolder}
+                onToggleFolder={() => setShowFolder((v) => !v)}
+                sessions={sessions}
+                onOpenSession={onOpenSession}
+                onNewWork={onNewWork}
+                onDeleteWork={onDeleteWork}
+                onRelate={onRelate}
+                onView={(f) => onViewDoc?.(f.id)}
+                flipped={flipped}
+              />
+            </div>
+            {!mobile && (
+              <button
+                onClick={() => setDocsCollapsed(true)}
+                title="Recolher documentos"
+                className="absolute top-2 right-2 z-20 w-6 h-6 rounded-lg flex items-center justify-center text-white/40 hover:text-white/85 hover:bg-white/10 transition-colors"
+              >
+                <span className="text-[13px] leading-none">⟩</span>
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

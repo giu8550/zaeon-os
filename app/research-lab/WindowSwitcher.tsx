@@ -12,6 +12,9 @@ interface WindowSwitcherProps {
   /** Ler a pesquisa em voz — vira o ▶/⏹ no lugar do caderninho da aba do trabalho. */
   onReadResearch?: () => void;
   isReadingResearch?: boolean;
+  /** Pill do chat (Escritor/Revisor) ao lado do seletor de tipo — alterna chat ↔ trabalho. */
+  chatOpen?: boolean;
+  onToggleChat?: () => void;
 }
 
 const WORK_TYPES = ["Artigo", "Relatório", "TCC"] as const;
@@ -25,12 +28,36 @@ export default function WindowSwitcher({
   onWorkType,
   onReadResearch,
   isReadingResearch,
+  chatOpen,
+  onToggleChat,
 }: WindowSwitcherProps) {
   return (
     <div
       className="flex items-center gap-1.5 px-3 py-2.5 overflow-x-auto"
       style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
     >
+      {/* ── PILL DO CHAT (Escritor/Revisor): à ESQUERDA, alterna chat ↔ trabalho ── */}
+      {onToggleChat && (
+        <button
+          onClick={onToggleChat}
+          title={chatOpen ? "Voltar ao trabalho" : "Abrir o chat (Escritor/Revisor)"}
+          aria-pressed={chatOpen}
+          className="shrink-0 flex items-center gap-1.5 h-8 pl-2 pr-3 rounded-[11px] text-[11px] font-black uppercase tracking-wide whitespace-nowrap transition-all duration-150"
+          style={
+            chatOpen
+              ? {
+                  color: "#fff",
+                  background: "linear-gradient(180deg, rgba(34,211,238,0.35), rgba(124,58,237,0.20))",
+                  border: "1px solid rgba(34,211,238,0.45)",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 8px 20px -8px rgba(34,211,238,0.8)",
+                }
+              : { color: "#c9c9e0", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }
+          }
+        >
+          <span style={{ filter: "drop-shadow(0 0 4px rgba(34,211,238,0.6))" }}>⟁</span> Chat
+        </button>
+      )}
+
       {windows.map((w) => {
         const isActive = w.id === activeId;
         const isResearch = w.id === "research";
