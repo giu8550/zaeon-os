@@ -38,6 +38,7 @@ export type ToolResult = {
 
 /** O contexto que o runtime enxerga: world-state + os campos de gating (plano/execMode/curso/GPU). */
 export type ToolContext = AgentContext & {
+  userId?: string;      // dono do turno — memory_search FILTRA por isto (nunca cruza usuários)
   plan?: Plan;
   execMode?: ExecMode;
   courseTags?: string[];
@@ -190,8 +191,24 @@ export const memorySearchDef: ToolDef = {
   risk: "read",
   minPlan: "free",
   schema: stubSchema("memory_search", "Busca na memória de longo prazo do usuário (recall semântico verbatim)."),
-  async run() {
-    return { ok: false, error: "memória de longo prazo indisponível", code: "memory_unavailable", provenance: {} };
+  async run(args, ctx) {
+    const memUnavailable: ToolResult = { ok: false, error: "memória de longo prazo indisponível", code: "memory_unavailable", provenance: {} };
+    const userId = ctx.userId;
+    const query = String(args?.query ?? "").trim();
+    if (!userId || !query) return memUnavailable; // sem dono/consulta → degrada (nunca cruza usuários)
+    try {
+      const { getMemory, isMemoryConfigured } = await import("@/lib/agent/memory-provider");
+      if (!isMemoryConfigured()) return memUnavailable; // L3 não ligado → degrada limpo
+      const hits = await getMemory().search(query, { userId }, 8); // recall SEM LLM, filtrado por userId
+      const findings: Finding[] = hits.map((h) => ({
+        claim: h.text,
+        source: (h.meta as any)?.source,
+        confidence: "média",
+      }));
+      return { ok: true, findings, provenance: { toolsUsed: ["memory_search"], at: nowIso() } };
+    } catch {
+      return memUnavailable;
+    }
   },
 };
 

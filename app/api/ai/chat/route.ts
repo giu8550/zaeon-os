@@ -334,21 +334,27 @@ export async function POST(req: Request) {
         // MESMO protocolo (datilografia + sentinelas @@STUDIO_ACTION@@/@@RESEARCH_ACTION@@).
         // =================================================================
         if (stream === true && agentKey === "aura" && process.env.AURA_HARNESS !== "0" && !fileData) {
-            const [{ buildHarnessDeps, resolveHarnessOutput }, { runTrajectoryTraced }, { messageForError }] = await Promise.all([
+            const [{ buildHarnessDeps, resolveHarnessOutput }, { runTrajectoryTraced }, { messageForError }, mem, { resolveUserId }] = await Promise.all([
                 import("@/lib/agent/aura-harness"),
                 import("@/lib/agent/trajectory"),
                 import("@/lib/agent/errors"),
+                import("@/lib/agent/memory-provider"),
+                import("@/lib/agent/transcript"),
             ]);
+            const userId = await resolveUserId().catch(() => null); // dono do turno (memória filtra por isto)
             const ac: any = (agentContext && typeof agentContext === "object") ? agentContext : {};
             const hctx: any = {
                 ...ac,
+                userId: userId || undefined,
                 activeTab: surface || ac.activeTab || "sala-de-estudos", // academicMode vem daqui (pesquisa→enforced)
                 plan: "free",     // memória/studio/research = free; gate de plano é só compute pesado (PR03)
                 execMode: "auto", // HITL "guiado" entra no PR07
                 currentGoal: ac.currentGoal || String(prompt || "").slice(0, 200),
             };
+            // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
+            const memBlock = userId ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: String(prompt || "") }).catch(() => "") : "";
             const deps = buildHarnessDeps(hctx, {
-                systemContext,
+                systemContext: [systemContext, memBlock].filter(Boolean).join("\n\n") || undefined,
                 history: (chatHistory as any[]).map((h) => ({ role: h.role, text: h?.parts?.[0]?.text ?? "" })),
             });
             const encoder = new TextEncoder();
@@ -357,6 +363,8 @@ export async function POST(req: Request) {
                     try {
                         const { answer, state } = await runTrajectoryTraced(String(prompt || ""), hctx, deps);
                         const out = resolveHarnessOutput(state, answer, surface, String(prompt || ""));
+                        // L3 write (A7, fire-and-forget): deriva o turno em drawers verbatim. Nunca bloqueia.
+                        if (userId) void mem.writeTurnMemory({ userId, surface: hctx.activeTab, scopeId: ac.currentStudyId ?? ac.currentResearchId ?? null, prompt: String(prompt || ""), answer });
                         if (out.mode === "studio") {
                             controller.enqueue(encoder.encode(STUDIO_SENTINEL + JSON.stringify({ type: "studio", kind: out.kind, topic: out.topic, text: out.text })));
                         } else if (out.mode === "research") {
