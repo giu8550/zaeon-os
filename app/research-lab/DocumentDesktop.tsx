@@ -67,7 +67,7 @@ export default function DocumentDesktop({
       ? "Analisando com IA…"
       : "Concluído";
 
-  // Fixed dock order: upload → folder → citations → quiz
+  // Fixed dock order: upload → folder → citations → trash
   const dockItems: DockItem[] = [
     { id: "add", emoji: "＋", label: "Enviar PDF" },
     { id: "folder", emoji: "📁", label: "Minhas coisas", active: showFolder },
@@ -78,7 +78,6 @@ export default function DocumentDesktop({
       badge: citationCount,
       active: openPopover === "citations",
     },
-    { id: "quiz", emoji: "🧠", label: "Quiz", active: openPopover === "quiz" },
     { id: "trash", emoji: "🗑️", label: "Lixeira", badge: trashItems.length, active: showTrash },
   ];
 
@@ -87,8 +86,6 @@ export default function DocumentDesktop({
     if (id === "trash") { onTogglePopover(null); return setShowTrash((v) => !v); }
     if (id === "folder") { setShowTrash(false); onTogglePopover(null); return onToggleFolder(); }
     if (id === "citations") { setShowTrash(false); return onTogglePopover(openPopover === "citations" ? null : "citations"); }
-    if (id === "quiz")
-      return onTogglePopover(openPopover === "quiz" ? null : "quiz");
   };
 
   return (

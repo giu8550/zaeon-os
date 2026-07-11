@@ -1,0 +1,118 @@
+/**
+ * Tool registry da Aura (Fase 0 do harness).
+ *
+ * Fonte-da-verdade das ferramentas que a Aura pode CHAMAR (function-calling do
+ * Gemini). Fase 0 tem uma tool só: `studio_generate` — transforma o pedido
+ * ("gere um podcast sobre X") numa AÇÃO que o cliente executa reusando o Studio
+ * que já existe, e o artefato cai na conversa. Sem geração no servidor: mantém
+ * o Studio client-orchestrated como já é (mesmo padrão do summon/plan).
+ *
+ * Próximas fases somam tools aqui (literature_search, memory_search, examiner…).
+ */
+import type { FunctionDeclaration } from "@google-cloud/vertexai";
+
+// Kinds canônicos aceitos pelo Studio (bate com os endpoints /api/studio/*):
+//   texto (síncrono): guide | mindmap | timeline | flashcards | faq
+//   imagem (síncrono): image
+//   assíncrono (polling): podcast | video
+export type StudioKind =
+  | "guide" | "mindmap" | "timeline" | "flashcards" | "faq"
+  | "image" | "podcast" | "video";
+
+export const STUDIO_KINDS: StudioKind[] = [
+  "guide", "mindmap", "timeline", "flashcards", "faq", "image", "podcast", "video",
+];
+
+// Rótulo humano (PT-BR) por kind — usado na confirmação e no provenance.
+export const STUDIO_LABEL: Record<StudioKind, string> = {
+  guide: "guia de estudo",
+  mindmap: "mapa mental",
+  timeline: "linha do tempo",
+  flashcards: "flashcards",
+  faq: "FAQ",
+  image: "imagem",
+  podcast: "podcast",
+  video: "vídeo",
+};
+
+// Aceita sinônimos/PT que o modelo possa devolver → normaliza pro kind canônico.
+const ALIASES: Record<string, StudioKind> = {
+  guia: "guide", guide: "guide",
+  mapa: "mindmap", "mapa mental": "mindmap", mindmap: "mindmap", mapamental: "mindmap",
+  "linha do tempo": "timeline", linha_do_tempo: "timeline", timeline: "timeline",
+  flashcard: "flashcards", flashcards: "flashcards", cartoes: "flashcards",
+  faq: "faq", perguntas: "faq",
+  imagem: "image", image: "image", figura: "image",
+  podcast: "podcast", audio: "podcast", "áudio": "podcast",
+  video: "video", "vídeo": "video",
+};
+
+export function normalizeStudioKind(raw: string): StudioKind {
+  const k = (raw || "").trim().toLowerCase();
+  return ALIASES[k] || (STUDIO_KINDS.includes(k as StudioKind) ? (k as StudioKind) : "guide");
+}
+
+export function studioLabel(kind: StudioKind): string {
+  return STUDIO_LABEL[kind] || "artefato";
+}
+
+// ── Sala de Pesquisa: gerar um TRABALHO (aparece no documento). Espelha o studio. ──
+export type ResearchKind = "pesquisa" | "artigo" | "relatorio" | "tcc";
+export const RESEARCH_KINDS: ResearchKind[] = ["pesquisa", "artigo", "relatorio", "tcc"];
+
+// kind → WorkType do editor (Artigo | Relatório | TCC); "pesquisa" cai em Artigo.
+export function researchWorkType(kind: string): "Artigo" | "Relatório" | "TCC" {
+  const k = (kind || "").trim().toLowerCase();
+  if (k === "tcc") return "TCC";
+  if (k === "relatorio" || k === "relatório") return "Relatório";
+  return "Artigo"; // artigo | pesquisa | desconhecido
+}
+
+export const researchGenerateTool: FunctionDeclaration = {
+  name: "research_generate",
+  description:
+    "Gera um TRABALHO ACADÊMICO (artigo, relatório, TCC ou pesquisa) sobre um tema e o encaixa " +
+    "no documento da Sala de Pesquisa. Use quando a pessoa PEDIR pra gerar/criar/redigir um " +
+    "trabalho (ex.: 'gera um artigo sobre X', 'faz um TCC sobre Y', 'monta uma pesquisa disso'). " +
+    "Para conversar, tirar dúvida ou revisar um trecho, NÃO chame — responda em texto.",
+  parameters: {
+    type: "OBJECT" as any,
+    properties: {
+      kind: {
+        type: "STRING" as any,
+        description: "O tipo: artigo, relatorio, tcc ou pesquisa (paper geral).",
+      },
+      topic: {
+        type: "STRING" as any,
+        description: "O tema/assunto do trabalho em linguagem natural (ex.: 'fotossíntese').",
+      },
+    },
+    required: ["kind", "topic"],
+  },
+};
+
+// A FunctionDeclaration que a Aura enxerga. Descrição precisa = menos gatilho errado.
+export const studioGenerateTool: FunctionDeclaration = {
+  name: "studio_generate",
+  description:
+    "Gera um ARTEFATO do Studio a partir do estudo em foco e o encaixa na conversa. " +
+    "Use SOMENTE quando a pessoa PEDIR explicitamente para gerar/criar/fazer um artefato " +
+    "(ex.: 'gere um podcast sobre fotossíntese', 'faz um mapa mental disso', 'cria flashcards'). " +
+    "Para conversa normal ou dúvida, NÃO chame — responda em texto.",
+  parameters: {
+    type: "OBJECT" as any,
+    properties: {
+      kind: {
+        type: "STRING" as any,
+        description:
+          "O tipo do artefato. Um de: guide (guia), mindmap (mapa mental), timeline (linha do tempo), " +
+          "flashcards, faq, image (imagem), podcast (áudio 2 vozes), video (vídeo-resumo).",
+      },
+      topic: {
+        type: "STRING" as any,
+        description: "O assunto/tema em linguagem natural (ex.: 'fotossíntese'). Use o foco da conversa.",
+      },
+    },
+    required: ["kind"],
+  },
+};

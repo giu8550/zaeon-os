@@ -7,6 +7,8 @@ import { useTranslation } from "react-i18next";
 import { Sun, Moon, Mic } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useVoiceMode } from "@/lib/voice/voiceMode";
+import SponsorsMarquee from "@/components/main/SponsorsMarquee";
+import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 
 const TIMELINE = {
     AUDIO_SRC: "/assets/sounds/boot-track.mp3",
@@ -264,6 +266,8 @@ export default function MacSplash({ show = true, onDone }: Props) {
 
     return (
         <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white dark:bg-black transition-opacity duration-500" style={{ opacity }}>
+            {/* Sponsors rolando na borda inferior da tela inicial */}
+            <SponsorsMarquee />
             <div className="flex flex-col items-center justify-center px-6 w-full">
                 
                 {/* Sem AnimatePresence/exit aqui: ao iniciar, o "Iniciar" some na hora —
@@ -319,23 +323,8 @@ export default function MacSplash({ show = true, onDone }: Props) {
                                             <Mic className={`w-[18px] h-[18px] ${voiceMode === "active" ? "text-white" : "text-black/80 dark:text-white/80"}`} />
                                         </div>
 
-                                        {/* Idioma = cores da bandeira (PT → Brasil, EN → EUA), sem texto */}
-                                        <div
-                                            title={(i18n.language || '').startsWith('en') ? "Idioma: Inglês — clique para Português" : "Idioma: Português — clique para Inglês"}
-                                            aria-label="Trocar idioma"
-                                            className="w-11 h-11 rounded-full cursor-pointer transition-all border border-black/10 dark:border-white/10 shadow-sm hover:scale-110 active:scale-95 overflow-hidden"
-                                            style={{
-                                                background: (i18n.language || '').startsWith('en')
-                                                    ? "linear-gradient(135deg,#b22234 0%,#b22234 38%,#ffffff 38%,#ffffff 62%,#3c3b6e 62%)"
-                                                    : "linear-gradient(135deg,#009b3a 0%,#009b3a 36%,#fedf00 36%,#fedf00 64%,#002776 64%)",
-                                            }}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                const currentLang = i18n.language || '';
-                                                const newLang = currentLang.startsWith('en') ? 'pt' : 'en';
-                                                i18n.changeLanguage(newLang);
-                                            }}
-                                        />
+                                        {/* Idioma = UMA bandeira que cicla ao clicar; começa no Brasil */}
+                                        <LanguageFlagToggle size={44} startAtBrazil />
                                     </div>
                                 )}
                             </motion.div>

@@ -1270,16 +1270,21 @@ export default function HomeworkPage({
       const t = e?.detail?.title;
       const fields = e?.detail?.fields as DraftFields | undefined;
       const c = e?.detail?.content;
+      // O chat da Sala de Pesquisa manda o TIPO pedido (Artigo/Relatório/TCC) → gera nele.
+      const reqWt = e?.detail?.workType;
       if (typeof t === "string" && t.trim()) {
-        const wt: WorkType = workTypeRef.current ?? "TCC";
+        const wt: WorkType =
+          (reqWt === "TCC" || reqWt === "Artigo" || reqWt === "Relatório")
+            ? reqWt
+            : (workTypeRef.current ?? "TCC");
         setDocTitle(t.trim().slice(0, 120));
-        // Esboço gerado → encaixa os CAMPOS no framework do tipo ativo (sem repetir as seções).
+        // Esboço gerado → encaixa os CAMPOS no framework do tipo (sem repetir as seções).
         if (fields && typeof fields === "object") {
           setDocContent(buildDocFromDraft(wt, fields));
         } else {
           setDocContent(typeof c === "string" && c.trim() ? c : templateFor(wt));
         }
-        if (!workTypeRef.current) setWorkType("TCC");
+        setWorkType(wt);
         setActiveTab("pesquisa");
       }
     };

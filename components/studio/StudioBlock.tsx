@@ -114,7 +114,11 @@ export default function StudioBlock({
   };
 
   return (
-    <div className="my-3 rounded-2xl p-[1.5px] bg-gradient-to-r from-blue-500/30 via-cyan-400/30 to-violet-500/30">
+    <div className={`my-3 rounded-2xl p-[1.5px] bg-gradient-to-r ${
+      block.studioKind === "podcast"
+        ? "from-slate-400/30 via-slate-300/30 to-slate-400/30 dark:from-white/15 dark:via-white/10 dark:to-white/15"
+        : "from-blue-500/30 via-cyan-400/30 to-violet-500/30"
+    }`}>
       <div className="rounded-[15px] bg-white/85 dark:bg-[#0a1020]/90 backdrop-blur-2xl border border-white/70 dark:border-white/10">
         <div className="flex items-center gap-1.5 px-3 py-2">
           <button onClick={onToggle} className="flex items-center gap-1.5 flex-1 min-w-0 text-left" title={collapsed ? "Abrir" : "Fechar"}>

@@ -92,6 +92,12 @@ export const PLAN_INFO: { id: Plan; name: string; price: string; tagline: string
   },
   {
     id: "max", name: "Max", price: "R$250", tagline: "O arsenal completo",
-    perks: ["Tudo do Pro", "Ferramentas personalizadas", "Prioridade no suporte"],
+    perks: [
+      "Tudo do Pro",
+      "Melhor de vários: a Aura gera vários rascunhos e entrega o melhor",
+      "Geração científica pesada sob demanda — moléculas, proteínas, simulações",
+      "Agentes com skills avançadas + ferramentas personalizadas",
+      "Prioridade no suporte",
+    ],
   },
 ];

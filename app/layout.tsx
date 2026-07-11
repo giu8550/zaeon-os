@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Space_Grotesk, JetBrains_Mono, Outfit } from "next/font/google";
+import { Space_Grotesk, JetBrains_Mono, Outfit, Inter_Tight } from "next/font/google";
 
 import { siteConfig } from "@/config";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,14 @@ const outfit = Outfit({
     display: "swap",
 });
 
+// Fonte "tech" fina — usada no co-working da Sala de Estudos (pill de agente, composer).
+const interTight = Inter_Tight({
+    subsets: ["latin"],
+    variable: "--font-tech",
+    weight: ["300", "400", "500", "600", "700"],
+    display: "swap",
+});
+
 export const viewport: Viewport = { themeColor: "#030014" };
 export const metadata: Metadata = siteConfig;
 
@@ -53,6 +61,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                     spaceGrotesk.variable,
                     jetbrainsMono.variable,
                     outfit.variable,
+                    interTight.variable,
                     "font-sans"
                 )}
             >

@@ -558,3 +558,36 @@ model StudioArtifact {
   @@index([ownerId, createdAt])
   @@map("studio_artifacts")
 }
+
+// ─────────────────────────── MEMÓRIA · L1 (transcrição durável) ───────────────────────────
+// docs/MEMORY_AND_PERSISTENCE.md §2. É O ALICERCE: entrar na sala (qualquer device) e a
+// conversa estar lá. Uma Conversation por (userId, surface, scopeId). Generaliza o padrão
+// que o PastResearchChat já usa. Nenhum embedding aqui — restaurar = findMany por `at`.
+model Conversation {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String        @db.ObjectId
+  surface   String        // "estudos" | "pesquisa" | "aula" | "projetos" | "lounge"
+  scopeId   String?       // studyId | researchId | projectId (a "sala concreta"); null = geral
+  agentId   String?       // qual agente do roster (aura | revisor | escritor)
+  title     String?
+  pinned    Boolean       @default(false)
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId, surface, scopeId])
+  @@map("conversations")
+}
+
+model ChatMessage {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // "user" | "assistant"
+  text           String
+  meta           Json?        // artifacts, studioAction, citations, provenance
+  at             DateTime     @default(now())
+
+  @@index([conversationId, at])
+  @@map("chat_messages")
+}

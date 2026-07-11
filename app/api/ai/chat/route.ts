@@ -6,6 +6,12 @@ import { vertexCredentials } from '@/lib/ai/vertex-credentials';
 import { guard } from '@/src/lib/ratelimit';
 import { sanitizeHistory } from '@/lib/ai/history';
 import { generateWithCache, CacheMissError } from "@/lib/ai/contextCache";
+import { studioGenerateTool, normalizeStudioKind, studioLabel, researchGenerateTool } from "@/lib/agent/tools";
+
+// Sentinela do stream: turno de tool-call não tem texto; o servidor emite esta
+// linha e o cliente executa a AÇÃO (gera o artefato no Studio). Ver StudyCoworkChat.
+const STUDIO_SENTINEL = "@@STUDIO_ACTION@@";
+const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";   // Sala de Pesquisa: gerar trabalho no doc
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -100,7 +106,9 @@ RESOLVA DATAS E HORÁRIOS: use o bloco DATA do contexto para converter "hoje"/"a
 2. Se você receber um [CONTEXTO GLOBAL DA PESQUISA] nas instruções, atue como uma orientadora. Leia o que foi produzido por outros agentes (Examiner, Citações) e use isso para dialogar de forma inteligente. NÃO repita os logs como um robô ("Notei que o Examiner disse..."), mas aja como se você já soubesse de tudo e ofereça novas pautas, conexões de ideias e pontos cegos que o usuário precisa cobrir. Seja propositiva e estratégica.
 3. OBJETIVO ESPECIAL (quando houver um documento/PDF em contexto): além de conversar sobre o trabalho com voz própria e tom natural, conduza o usuário a destacar UMA citação importante sobre ele. Quando identificar um trecho que vale a pena guardar, apresente-o UMA única vez, num ponto natural da resposta, EXATAMENTE neste formato, incluindo os marcadores: ⟦CITACAO⟧"trecho verbatim do documento" — AUTOR (ANO)⟦/CITACAO⟧. Use o trecho VERBATIM do documento e uma referência curta. Não force em toda mensagem — proponha só quando for genuinamente relevante e no máximo uma citação por resposta.
 
-REGRA DE RESUMO/RESPOSTA: vá DIRETO ao conteúdo do trabalho. NÃO se apresente, NÃO diga "Zaeon" nem o seu próprio nome ("Aura"), e não fique chamando a pessoa por apelidos. Pode ter calor e entusiasmo, mas o foco é 100% o conteúdo e o objetivo — comece pelo que importa do documento, sem rodeios de abertura.`,
+REGRA DE RESUMO/RESPOSTA: vá DIRETO ao conteúdo do trabalho. NÃO se apresente, NÃO diga "Zaeon" nem o seu próprio nome ("Aura"), e não fique chamando a pessoa por apelidos. Pode ter calor e entusiasmo, mas o foco é 100% o conteúdo e o objetivo — comece pelo que importa do documento, sem rodeios de abertura.
+
+4. MODO CO-WORKING (quando o contexto indicar "co-working da Sala de Estudos"): você é uma parceira de estudo aberta — converse sobre QUALQUER assunto com naturalidade, como um chat livre, sem exigir um PDF. Quando ajudar o aprendizado, lembre a pessoa de que dá pra transformar o assunto em ARTEFATOS do Studio, que aparecem como cartões na própria conversa. Catálogo do Studio: Guia de estudo, Mapa mental, Linha do tempo, Flashcards, FAQ, Imagem, Podcast (áudio) e Vídeo. Se houver estudo(s) EM FOCO no contexto, priorize-os. Ofereça 1–2 artefatos concretos quando fizer sentido, sem empurrar a lista inteira. IMPORTANTE: quando a pessoa PEDIR explicitamente pra gerar/criar/fazer um artefato (ex.: "gere um podcast sobre X", "faz um mapa mental disso"), CHAME a ferramenta studio_generate (kind + topic) em vez de responder em texto — o artefato aparece sozinho na conversa. Para conversa/dúvida normal, responda em texto e nunca invente que já gerou um. ESCOPO FLEXÍVEL: aqui você pode responder com conhecimento geral (como uma LLM comum), sem exigir referência acadêmica; ao buscar/citar, amplie além do acadêmico (reportagens, artigos, web, enciclopédia) e NUNCA recuse por não achar fonte acadêmica — o rigor acadêmico pleno só entra quando pedirem pra CRIAR/REVISAR um trabalho (aí sim fontes reais). O modo estritamente acadêmico é o da Sala de Pesquisa.`,
 
     scholar: `Você é o Agente Scholar, Especialista em Citações Acadêmicas. Seu único objetivo é extrair trechos vitais (parágrafos inteiros verbatim) do documento fornecido e gerar as referências ESTRITAMENTE nas normas da ABNT (Associação Brasileira de Normas Técnicas). Formate as saídas exatamente como solicitado pelo usuário, sem introduções longas ou conversas paralelas. Mantenha um tom acadêmico e robótico.`,
 
@@ -204,7 +212,7 @@ export async function POST(req: Request) {
         const rl = await guard(req, "ai-chat", "ai-heavy");
         if (!rl.ok) return rl.response;
         // 🔥 NOVO: Recebendo userData + history + agentContext do frontend
-        const { prompt, agent, systemContext, fileData, userData, voiceMode, history, agentContext, cacheName } = await req.json();
+        const { prompt, agent, systemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface } = await req.json();
         const agentKey = agent?.toLowerCase() || "aura";
 
         // Histórico da conversa (memória entre turnos). Ver lib/ai/history.ts.
@@ -226,7 +234,10 @@ export async function POST(req: Request) {
             ? [{ functionDeclarations: [updateScheduleTool] }]
             : agentKey === "zaeon"
                 ? [{ functionDeclarations: [summonAgentTool, openRoomTool] }]
-                : undefined;
+                : agentKey === "aura"
+                    // Sala de Pesquisa (surface="pesquisa") → gera TRABALHO; senão → Studio.
+                    ? [{ functionDeclarations: [surface === "pesquisa" ? researchGenerateTool : studioGenerateTool] }]
+                    : undefined;
         const generativeModel = vertexAI.getGenerativeModel({
             // Gemini Flash é a ÚNICA IA do app (lib/ai/model.ts). Troca via env GEMINI_MODEL.
             model: GEMINI_MODEL_FLASH,
@@ -315,6 +326,62 @@ export async function POST(req: Request) {
             }
         }
 
+        // =================================================================
+        // STREAMING (output aos poucos) — usado pelo co-working (agente aura,
+        // sem tools → sem function-call, então é seguro streamar só texto).
+        // O cliente lê o corpo como text/plain e vai concatenando os pedaços.
+        // =================================================================
+        if (stream === true) {
+            const chatS = generativeModel.startChat({
+                systemInstruction: { role: 'system', parts: [{ text: finalSystemInstruction }] },
+                history: chatHistory,
+            });
+            const streamResult = await chatS.sendMessageStream(parts);
+            const encoder = new TextEncoder();
+            const rs = new ReadableStream<Uint8Array>({
+                async start(controller) {
+                    let call: any = null;   // functionCall detectada no stream (turno de tool)
+                    try {
+                        for await (const item of streamResult.stream) {
+                            const partsArr = item?.candidates?.[0]?.content?.parts || [];
+                            for (const p of partsArr) {
+                                if (p?.functionCall) call = p.functionCall;
+                                else if (p?.text) controller.enqueue(encoder.encode(p.text));
+                            }
+                        }
+                    } catch { /* encerra o que tiver */ }
+                    // TOOL-LOOP (Fase 0): studio_generate → AÇÃO pro cliente executar.
+                    if (call?.name === "studio_generate") {
+                        const a: any = call.args || {};
+                        const kind = normalizeStudioKind(String(a.kind || ""));
+                        const topic = typeof a.topic === "string" ? a.topic : "";
+                        const text = topic
+                            ? `Gerando ${studioLabel(kind)} sobre “${topic}” — já te mostro aqui.`
+                            : `Gerando ${studioLabel(kind)} — já te mostro aqui.`;
+                        controller.enqueue(encoder.encode(
+                            STUDIO_SENTINEL + JSON.stringify({ type: "studio", kind, topic, text }),
+                        ));
+                    } else if (call?.name === "research_generate") {
+                        const a: any = call.args || {};
+                        const kind = String(a.kind || "artigo").toLowerCase();
+                        const topic = typeof a.topic === "string" ? a.topic : "";
+                        const text = `Gerando o trabalho sobre “${topic}” — vou encaixar no seu documento.`;
+                        controller.enqueue(encoder.encode(
+                            RESEARCH_SENTINEL + JSON.stringify({ type: "research", kind, topic, text }),
+                        ));
+                    }
+                    controller.close();
+                },
+            });
+            return new Response(rs, {
+                headers: {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",
+                },
+            });
+        }
+
         const chat = generativeModel.startChat({
             systemInstruction: { role: 'system', parts: [{ text: finalSystemInstruction }] },
             history: chatHistory, // 🔥 memória entre turnos (antes era ignorada → IA "esquecia" tudo)
@@ -346,6 +413,22 @@ export async function POST(req: Request) {
                     { kind: "done", label: "Pronto." },
                 ];
                 return NextResponse.json({ summon: { skill, topic, agent: s.agent, route, cta: s.cta }, plan, text });
+            }
+            if (functionCall.name === "studio_generate") {
+                const args: any = functionCall.args || {};
+                const kind = normalizeStudioKind(String(args.kind || ""));
+                const topic = typeof args.topic === "string" ? args.topic : "";
+                const text = topic
+                    ? `Gerando ${studioLabel(kind)} sobre “${topic}” — já te mostro aqui.`
+                    : `Gerando ${studioLabel(kind)} — já te mostro aqui.`;
+                return NextResponse.json({ studioAction: { type: "studio", kind, topic, text }, text });
+            }
+            if (functionCall.name === "research_generate") {
+                const args: any = functionCall.args || {};
+                const kind = String(args.kind || "artigo").toLowerCase();
+                const topic = typeof args.topic === "string" ? args.topic : "";
+                const text = `Gerando o trabalho sobre “${topic}” — vou encaixar no seu documento.`;
+                return NextResponse.json({ researchAction: { type: "research", kind, topic, text }, text });
             }
             if (functionCall.name === "open_room") {
                 const args: any = functionCall.args || {};
