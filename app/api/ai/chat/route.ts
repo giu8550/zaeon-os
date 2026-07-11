@@ -327,6 +327,60 @@ export async function POST(req: Request) {
         }
 
         // =================================================================
+        // AURA HARNESS (Fase 1) — laço agêntico atrás da flag AURA_HARNESS.
+        // Ligado por padrão; AURA_HARNESS="0" = kill-switch → cai no streaming legado
+        // abaixo (IDÊNTICO a hoje). Só o co-working da Aura EM TEXTO entra no laço; turnos
+        // com PDF/imagem (fileData) seguem pelo caminho legado (multimodal). Responde no
+        // MESMO protocolo (datilografia + sentinelas @@STUDIO_ACTION@@/@@RESEARCH_ACTION@@).
+        // =================================================================
+        if (stream === true && agentKey === "aura" && process.env.AURA_HARNESS !== "0" && !fileData) {
+            const [{ buildHarnessDeps, resolveHarnessOutput }, { runTrajectoryTraced }, { messageForError }] = await Promise.all([
+                import("@/lib/agent/aura-harness"),
+                import("@/lib/agent/trajectory"),
+                import("@/lib/agent/errors"),
+            ]);
+            const ac: any = (agentContext && typeof agentContext === "object") ? agentContext : {};
+            const hctx: any = {
+                ...ac,
+                activeTab: surface || ac.activeTab || "sala-de-estudos", // academicMode vem daqui (pesquisa→enforced)
+                plan: "free",     // memória/studio/research = free; gate de plano é só compute pesado (PR03)
+                execMode: "auto", // HITL "guiado" entra no PR07
+                currentGoal: ac.currentGoal || String(prompt || "").slice(0, 200),
+            };
+            const deps = buildHarnessDeps(hctx, {
+                systemContext,
+                history: (chatHistory as any[]).map((h) => ({ role: h.role, text: h?.parts?.[0]?.text ?? "" })),
+            });
+            const encoder = new TextEncoder();
+            const rs = new ReadableStream<Uint8Array>({
+                async start(controller) {
+                    try {
+                        const { answer, state } = await runTrajectoryTraced(String(prompt || ""), hctx, deps);
+                        const out = resolveHarnessOutput(state, answer, surface, String(prompt || ""));
+                        if (out.mode === "studio") {
+                            controller.enqueue(encoder.encode(STUDIO_SENTINEL + JSON.stringify({ type: "studio", kind: out.kind, topic: out.topic, text: out.text })));
+                        } else if (out.mode === "research") {
+                            controller.enqueue(encoder.encode(RESEARCH_SENTINEL + JSON.stringify({ type: "research", kind: out.kind, topic: out.topic, text: out.text })));
+                        } else {
+                            controller.enqueue(encoder.encode(out.text));
+                        }
+                    } catch (e: any) {
+                        // erro fatal → mensagem amigável (guardrail: nunca string à mão)
+                        controller.enqueue(encoder.encode(messageForError(String(e?.message ?? e))));
+                    }
+                    controller.close();
+                },
+            });
+            return new Response(rs, {
+                headers: {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",
+                },
+            });
+        }
+
+        // =================================================================
         // STREAMING (output aos poucos) — usado pelo co-working (agente aura,
         // sem tools → sem function-call, então é seguro streamar só texto).
         // O cliente lê o corpo como text/plain e vai concatenando os pedaços.
