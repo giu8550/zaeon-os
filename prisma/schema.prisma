@@ -591,3 +591,32 @@ model ChatMessage {
   @@index([conversationId, at])
   @@map("chat_messages")
 }
+
+// Memória L3 (semântica) — projeção INDEXADA do L1 (docs/MEMORY_AND_PERSISTENCE.md §4.3).
+// Cada drawer é VERBATIM + embedding; recall barato (ANN, sem LLM) filtrado SEMPRE por userId.
+// Índice vetorial (Atlas): criar Vector Search sobre `embedding` (dims = EMBED_DIM de
+// lib/agent/memory.ts = 1536, cosine, filter em userId). Owner: `npx prisma db push` + índice Atlas.
+model MemoryDrawer {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId // isolamento multi-tenant — SEMPRE filtrar por isto
+  wingKind  String   // "usuario" | "curso" | "projeto" | "agente"
+  wingLabel String
+  room      String   // tópico/matéria
+  kind      String   // "mensagem" | "citacao" | "artefato" | "nota"
+  text      String   // VERBATIM (nunca resumido por LLM)
+  sourceRef String?  // conversationId/messageId/studyId de origem (deriva do L1)
+  embedding Float[]  // EMBED_DIM (1536, gemini-embedding-001) — ver lib/agent/memory.ts
+  meta      Json?    // provenance
+  at        DateTime @default(now())
+
+  // curadoria + re-rank (PR-M3 · A7/A9)
+  importance     Int? // peso relativo (curadoria)
+  lastAccessedAt DateTime? // recency: bump a cada hit; decay no re-rank
+  accessCount    Int       @default(0)
+  invalidatedAt  DateTime? // SUPERSEDE: drawer aposentado → nunca entra no recall
+  supersededBy   String?   @db.ObjectId // id do drawer que o substituiu
+
+  @@index([userId, wingKind, room])
+  @@index([userId, invalidatedAt])
+  @@map("memory_drawers")
+}
