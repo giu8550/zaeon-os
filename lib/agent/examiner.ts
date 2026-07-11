@@ -22,6 +22,7 @@ import {
   type ExaminerDecision,
   type ScholarDim,
   type EvidenceLevel,
+  type StudioRef,
 } from "@/lib/agent/contracts";
 
 export type ExaminerInput = {
@@ -187,13 +188,19 @@ export function critiqueForState(st: {
   spec: IntentSpec;
   draft?: StructuredAnswer;
   evidence?: Finding[];
+  artifacts?: StudioRef[];
 }): ExaminerVerdict {
+  // os artefatos vivem em st.artifacts (anexados no finalize); reflita-os no draft p/ o exame
+  // não marcar `lacuna` de `artifacts` que na verdade JÁ foram gerados pelas tools.
+  const base = st.draft ?? { nucleo: "" };
+  const draft: StructuredAnswer =
+    st.artifacts?.length && !base.artifacts?.length ? { ...base, artifacts: st.artifacts } : base;
   return critique({
     intent: st.intent,
     mode: st.mode,
     academicMode: st.academicMode,
     spec: st.spec,
-    draft: st.draft ?? { nucleo: "" },
+    draft,
     evidence: st.evidence,
   });
 }
