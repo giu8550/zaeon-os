@@ -1,0 +1,226 @@
+/**
+ * lib/agent/mcp.ts — PILAR CONECTORES (PASSO 7). Cliente MCP + mapeamento p/ ToolDef.
+ *
+ * A10 · o handshake (initialize/notifications/initialized/transport) vive SÓ em `connectMcp`,
+ * via `@modelcontextprotocol/sdk` (import TARDIO). O resto do código só vê `{listTools, callTool,
+ * ping, close}` — quando a spec RC 2026-07-28 mudar o handshake, muda-se 1 função.
+ *
+ * DOIS CANAIS DE ERRO (não misturar):
+ *   (1) resultado com `isError:true` = falha de EXECUÇÃO da tool → `ToolResult{ok:false}` (segue A1;
+ *       o modelo reage/contorna).
+ *   (2) erro de transporte / JSON-RPC = SAÚDE do conector → `status` + `messageForError` (nunca vira
+ *       observação do modelo).
+ *
+ * ⚠️ O SDK não está instalado neste ambiente e não há servidor MCP p/ smoke-test aqui. As partes
+ * PURAS (risco, mapeamento de schema, canais de erro, catálogo, máquina de estados) são testadas;
+ * `connectMcp` exige `npm i @modelcontextprotocol/sdk` + um servidor vivo (smoke-test do dono).
+ */
+import type { FunctionDeclaration } from "@google-cloud/vertexai";
+import type { Plan } from "@/lib/plans";
+import { registerTool, type ToolDef, type ToolResult, type ToolRisk } from "@/lib/agent/runtime";
+import { messageForError, classifyError } from "@/lib/agent/errors";
+
+// ───────────────────────────── tipos ─────────────────────────────
+export type McpTransportKind = "http" | "stdio";
+export type ConnectorAuthType = "none" | "bearer" | "header";
+
+export type ConnectorConfig = {
+  id?: string;
+  name: string;                 // slug único do conector (namespaceia as tools)
+  transport: McpTransportKind;
+  endpoint: string;             // URL (http) OU linha de comando (stdio)
+  authType?: ConnectorAuthType;
+  authRef?: string;             // NOME da env var com o segredo — NUNCA o segredo (fica fora do Mongo)
+  minPlan?: Plan;
+};
+
+/** desconectado→verificando→(conectado|precisa_autorizar|erro); degradado = tool sumiu vs cache. */
+export type ConnectorStatus = "desconectado" | "verificando" | "conectado" | "precisa_autorizar" | "erro" | "degradado";
+
+export type McpToolInfo = { name: string; description?: string; inputSchema?: any; annotations?: any };
+export type ConnectorHealth = { status: ConnectorStatus; tools?: McpToolInfo[]; error?: string; checkedAt: string };
+
+export interface McpClient {
+  listTools(): Promise<McpToolInfo[]>;
+  callTool(name: string, args: any): Promise<any>;
+  ping(): Promise<void>;
+  close(): Promise<void>;
+}
+
+// ───────────────────────────── helpers puros (testáveis) ─────────────────────────────
+
+/**
+ * Annotations do MCP são HINTS NÃO CONFIÁVEIS → default CONSERVADOR: sem hint = `write`
+ * (cai no REQUIRE_APPROVAL do permit no modo guiado). destrutivo > write > read.
+ */
+export function riskFromAnnotations(ann?: { readOnlyHint?: boolean; destructiveHint?: boolean } | null): ToolRisk {
+  if (ann?.destructiveHint) return "destructive";
+  if (ann?.readOnlyHint) return "read";
+  return "write";
+}
+
+const GEMINI_TYPE: Record<string, string> = {
+  object: "OBJECT", string: "STRING", number: "NUMBER", integer: "INTEGER", boolean: "BOOLEAN", array: "ARRAY",
+};
+function mapType(t: unknown): string {
+  const k = Array.isArray(t) ? String(t[0]) : String(t ?? "string");
+  return GEMINI_TYPE[k.toLowerCase()] ?? "STRING";
+}
+
+/** JSON Schema (MCP inputSchema) → parameters do FunctionDeclaration (o que o Gemini enxerga). */
+export function jsonSchemaToGemini(schema: any): FunctionDeclaration["parameters"] {
+  if (!schema || typeof schema !== "object") return { type: "OBJECT" as any, properties: {} };
+  const props: Record<string, any> = {};
+  for (const [key, v] of Object.entries<any>(schema.properties ?? {})) {
+    props[key] = { type: mapType(v?.type) as any, description: typeof v?.description === "string" ? v.description : undefined };
+  }
+  return { type: "OBJECT" as any, properties: props, required: Array.isArray(schema.required) ? schema.required : [] };
+}
+
+function extractMcpText(res: any): string {
+  const content = res?.content;
+  if (!Array.isArray(content)) return typeof res?.text === "string" ? res.text : "";
+  return content.filter((c: any) => c?.type === "text" && typeof c.text === "string").map((c: any) => c.text).join("\n").trim();
+}
+
+/**
+ * CANAL 1 (execução): mapeia o resultado de `callTool` → ToolResult. `isError:true` = falha da tool
+ * (ok:false, vira observação p/ o modelo, A1); senão o conteúdo textual vira um `finding`.
+ */
+export function mcpResultToToolResult(res: any, toolName: string, connector: string): ToolResult {
+  const used = `mcp:${connector}:${toolName}`;
+  const text = extractMcpText(res);
+  if (res?.isError) {
+    return { ok: false, error: text || "erro na execução da tool MCP", code: "tool_error", provenance: { toolsUsed: [used] } };
+  }
+  return {
+    ok: true,
+    findings: text ? [{ claim: text.slice(0, 2000), confidence: "média" }] : [],
+    provenance: { toolsUsed: [used], at: new Date().toISOString() },
+  };
+}
+
+/** CANAL 2 (saúde): erro de transporte/JSON-RPC → status do conector. 401/WWW-Authenticate = auth. */
+export function classifyConnectorError(msg: string): ConnectorStatus {
+  return /401|403|unauthor|forbidden|www-authenticate|invalid.token|precisa.autoriz/i.test(msg) ? "precisa_autorizar" : "erro";
+}
+
+/** Uma tool do MCP vira um ToolDef `runtime:"mcp"` — passa pelo mesmo `permit()` das demais. */
+export function mcpToolToToolDef(tool: McpToolInfo, connector: ConnectorConfig, callTool: (name: string, args: any) => Promise<any>): ToolDef {
+  return {
+    name: `mcp:${connector.name}:${tool.name}`,
+    runtime: "mcp",
+    risk: riskFromAnnotations(tool.annotations),
+    minPlan: connector.minPlan ?? "free",
+    schema: { name: tool.name, description: tool.description ?? "", parameters: jsonSchemaToGemini(tool.inputSchema) } as FunctionDeclaration,
+    async run(args) {
+      try {
+        return mcpResultToToolResult(await callTool(tool.name, args ?? {}), tool.name, connector.name);
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        return { ok: false, error: msg, code: classifyError(msg), provenance: { toolsUsed: [`mcp:${connector.name}:${tool.name}`] } };
+      }
+    },
+  };
+}
+
+// ───────────────────────────── o handshake (A10 — só aqui) ─────────────────────────────
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, r) => setTimeout(() => r(new Error(`mcp timeout (${ms}ms)`)), ms))]);
+}
+
+/** Headers de auth a partir do authRef (NOME da env var) — o segredo nunca sai do env/cofre. */
+function authHeaders(config: ConnectorConfig): Record<string, string> {
+  if (!config.authRef || config.authType === "none" || !config.authType) return {};
+  const secret = process.env[config.authRef];
+  if (!secret) return {};
+  return config.authType === "bearer" ? { Authorization: `Bearer ${secret}` } : { [config.authRef]: secret };
+}
+
+/** Abre o cliente MCP (import TARDIO do SDK). Faz initialize + notifications/initialized. */
+export async function connectMcp(config: ConnectorConfig, timeoutMs = 10_000): Promise<McpClient> {
+  // specifiers tipados como `string` (não-literal) → tsc não tenta resolver o SDK ausente
+  // (o dono instala `@modelcontextprotocol/sdk`); os testes injetam `connect`, nunca chegam aqui.
+  const clientMod: string = "@modelcontextprotocol/sdk/client/index.js";
+  const { Client } = await import(clientMod);
+  let transport: any;
+  if (config.transport === "http") {
+    const httpMod: string = "@modelcontextprotocol/sdk/client/streamableHttp.js";
+    const { StreamableHTTPClientTransport } = await import(httpMod);
+    transport = new StreamableHTTPClientTransport(new URL(config.endpoint), { requestInit: { headers: authHeaders(config) } });
+  } else {
+    const stdioMod: string = "@modelcontextprotocol/sdk/client/stdio.js";
+    const { StdioClientTransport } = await import(stdioMod);
+    const [command, ...args] = config.endpoint.split(/\s+/).filter(Boolean);
+    transport = new StdioClientTransport({ command, args });
+  }
+  const client = new Client({ name: "zaeon-aura", version: "1.0.0" }, { capabilities: {} });
+  await withTimeout(client.connect(transport), timeoutMs);
+  return {
+    listTools: async () => ((await client.listTools())?.tools ?? []) as McpToolInfo[],
+    callTool: async (name, args) => client.callTool({ name, arguments: args ?? {} }),
+    ping: async () => { await client.ping(); },
+    close: async () => { await client.close().catch(() => {}); },
+  };
+}
+
+export type ConnectFn = (config: ConnectorConfig, timeoutMs?: number) => Promise<McpClient>;
+
+/**
+ * "Testar conexão": round-trip REAL (initialize→initialized→tools/list→ping). `connect` é injetável
+ * p/ teste. Só o CANAL 2 (saúde) aqui — nunca vira observação do modelo.
+ */
+export async function testConnection(config: ConnectorConfig, opts?: { connect?: ConnectFn; timeoutMs?: number }): Promise<ConnectorHealth> {
+  const checkedAt = new Date().toISOString();
+  const connect = opts?.connect ?? connectMcp;
+  let client: McpClient | null = null;
+  try {
+    client = await connect(config, opts?.timeoutMs);
+    const tools = await client.listTools();
+    await client.ping();
+    return { status: "conectado", tools, checkedAt };
+  } catch (e: any) {
+    const msg = String(e?.message ?? e);
+    const status = classifyConnectorError(msg);
+    return { status, error: messageForError(status === "precisa_autorizar" ? "needs_approval" : msg), checkedAt };
+  } finally {
+    if (client) await client.close().catch(() => {});
+  }
+}
+
+/**
+ * Conecta e REGISTRA as tools do conector no runtime (cada uma passa pelo permit()). Cada
+ * ToolDef abre o cliente por-chamada (stateless; degradação-safe). Devolve a saúde + tools.
+ */
+export async function registerMcpConnector(config: ConnectorConfig, opts?: { connect?: ConnectFn }): Promise<ConnectorHealth> {
+  const connect = opts?.connect ?? connectMcp;
+  const health = await testConnection(config, { connect });
+  if (health.status !== "conectado" || !health.tools) return health;
+  const perCall = async (name: string, args: any) => {
+    const client = await connect(config);
+    try { return await client.callTool(name, args); } finally { await client.close().catch(() => {}); }
+  };
+  for (const tool of health.tools) registerTool(mcpToolToToolDef(tool, config, perCall));
+  return health;
+}
+
+/** Compara as tools atuais com o cache → `degradado` se alguma sumiu. */
+export function reconcileStatus(current: McpToolInfo[], cached: string[]): ConnectorStatus {
+  const now = new Set(current.map((t) => t.name));
+  const missing = cached.filter((n) => !now.has(n));
+  return missing.length ? "degradado" : "conectado";
+}
+
+// ───────────────────────────── catálogo (corrigido pela pesquisa §10.5) ─────────────────────────────
+export type CatalogEntry = ConnectorConfig & { label: string; note?: string; experimental?: boolean };
+
+export const MCP_CATALOG: CatalogEntry[] = [
+  { name: "openalex-research", label: "OpenAlex Research", transport: "stdio", endpoint: "npx -y @oksure/openalex-research-mcp", note: "1º smoke LOCAL (TS/npm, roda via npx)" },
+  { name: "paper-search", label: "Paper Search", transport: "stdio", endpoint: "python -m paper_search_mcp.server", note: "flagship E2E (python/stdio — VPS/CI)" },
+  { name: "biomcp", label: "BioMCP (med/bio)", transport: "stdio", endpoint: "npx -y biomcp", note: "salas med/bio" },
+  { name: "fetch", label: "Fetch (oficial)", transport: "stdio", endpoint: "npx -y @modelcontextprotocol/server-fetch" },
+  { name: "filesystem", label: "Filesystem (oficial)", transport: "stdio", endpoint: "npx -y @modelcontextprotocol/server-filesystem", note: "risco write — cai em aprovação" },
+  { name: "git", label: "Git (oficial)", transport: "stdio", endpoint: "npx -y @modelcontextprotocol/server-git" },
+  { name: "scholar", label: "Scholar (experimental)", transport: "stdio", endpoint: "npx -y scholar-mcp", experimental: true },
+  // NÃO incluir synthetic-sciences/openscience — não é servidor MCP (pesquisa §10.5).
+];

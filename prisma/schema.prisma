@@ -620,3 +620,24 @@ model MemoryDrawer {
   @@index([userId, invalidatedAt])
   @@map("memory_drawers")
 }
+
+// Conector MCP (PASSO 7 · §9.11). Credenciais: SÓ `authRef` (NOME da env var) — o segredo vive
+// no env/cofre, NUNCA no Mongo. `discoveredTools` = cache p/ detectar "degradado".
+model Connector {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  name             String    @unique // slug (namespaceia as tools: mcp:<name>:<tool>)
+  transport        String    // "http" | "stdio"
+  endpoint         String    // URL (http) ou linha de comando (stdio)
+  authType         String    @default("none") // "none" | "bearer" | "header"
+  authRef          String?   // NOME da env var com o segredo — nunca o segredo
+  minPlan          String    @default("free")
+  status           String    @default("desconectado") // desconectado|verificando|conectado|precisa_autorizar|erro|degradado
+  lastCheckedAt    DateTime?
+  lastError        String?
+  discoveredTools  String[]  // cache dos nomes de tools (base do "degradado")
+  enabledForAgents String[]  // agentes habilitados (ex.: ["aura"])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("connectors")
+}
