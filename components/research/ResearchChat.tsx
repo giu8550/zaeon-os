@@ -67,6 +67,8 @@ export default function ResearchChat({
   const wt = workType || "trabalho";
   const msgsRef = useRef<Msg[]>([]);
   msgsRef.current = messages;
+  const abortRef = useRef<AbortController | null>(null);
+  const stop = useCallback(() => { abortRef.current?.abort(); }, []);
 
   useEffect(() => {
     const el = listRef.current;
@@ -135,11 +137,14 @@ export default function ResearchChat({
     setSending(true);
     const patch = (text: string) => setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, text } : m)));
 
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       const r = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, agent: "aura", surface: "pesquisa", history, systemContext: SYS(wt), stream: true }),
+        signal: ctrl.signal,
       });
       if (!r.ok || !r.body) { patch("Não consegui responder agora. Tente de novo."); return; }
 
@@ -182,9 +187,10 @@ export default function ResearchChat({
           { role: "assistant", text: acc },
         ]);
       }
-    } catch {
-      patch("Falha de rede ao falar com o agente.");
+    } catch (e: any) {
+      patch(e?.name === "AbortError" ? "⏹ Parado." : "Falha de rede ao falar com o agente.");
     } finally {
+      abortRef.current = null;
       setSending(false);
     }
   }, [input, sending, messages, wt, runResearchGenerate]);
@@ -221,6 +227,7 @@ export default function ResearchChat({
             value={input}
             onChange={setInput}
             onSubmit={send}
+            onStop={stop}
             onToggleStudio={() => setPaletteOpen((v) => !v)}
             studioOpen={paletteOpen}
             busy={sending}

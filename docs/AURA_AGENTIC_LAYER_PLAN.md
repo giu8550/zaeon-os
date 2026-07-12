@@ -580,6 +580,65 @@ demandGpu Boolean @default(false) // T3: liga sob demanda quando a infra GPU exi
 ```
 Regra de resolução: uma skill roda se `planRank(user.plan) >= planRank(skill.minPlan)` **e** (`!skill.demandGpu` **ou** infra-GPU disponível) **e** o `courseTags`/`isLocked` permitem. Os campos legados (`tag` Livre/Alunos/VIP, `isLocked`, `unlockRequirement`) continuam como gating fino secundário (curso/nível), mas o **plano** é o gatilho primário. `runtime:"python"` só habilita quando o microserviço está no ar.
 
+### 9.11 Administração: Skills · Conectores · MCP (em **Opções** do menu inicial) — decisão Martinez 2026-07-11
+
+> **Princípio (do Martinez):** conector que a gente *acha* que está plugado, mas não dá pra conferir
+> ponta a ponta, é armadilha. **Tudo é plugável DE VERDADE, com estado real e testável** — paridade
+> com os conectores dos agentes atuais (Claude & cia). Isso vira **padrão do produto**, não extra.
+
+**Modelo unificado:** toda capacidade que a Aura chama é uma **Capability** com um `runtime`
+(`ts` | `python` | `mcp`) — o mesmo `ToolDef`/`Skill` do §9.5. Os três aparecem em **três espaços de
+administração separados** dentro de **Opções** (o menu inicial já guarda voz/convite/founder):
+- **Skills** — as habilidades de código (`ts`/`python`) instaladas da Sala de Skills. Liga/desliga por agente/curso, mostra as `tools` que cada uma expõe, o `runtime` e o `minPlan`.
+- **Conectores** — integrações curadas de **um clique** (bancos científicos, Drive, etc.): conectar → autorizar (OAuth/token) → **Testar conexão**.
+- **MCP** — avançado: adicionar **qualquer servidor MCP** por URL/stdio, ver o handshake e as tools que ele oferece, saúde da conexão.
+
+> **Marketplace × Administração são coisas diferentes** (não confundir): a **Sala de Skills** é onde se
+> DESCOBRE e instala (vitrine); **Opções** é onde se GERENCIA/CONFIGURA/VERIFICA o que já existe
+> (credenciais, saúde, liga-desliga). Uma acha, a outra confere.
+
+**Fluxo de configuração de um conector (verificável em cada passo):**
+1. **Adicionar** — do catálogo (1 clique) ou colar endpoint MCP (URL/comando) + credenciais.
+2. **Handshake** — cliente MCP faz `initialize` + `tools/list` → **descobre as tools reais** do servidor.
+3. **Registrar** — cada tool vira `ToolDef` `runtime:"mcp"` (schema vindo do MCP), passando pelo `permit()` (minPlan/risk).
+4. **Testar conexão (ponta a ponta)** — botão que faz round-trip real (ping / `tools/list` / chamada seca) → chip **verde/vermelho** com o erro real via `messageForError` (`lib/agent/errors.ts`). **É o que impede o "acha que está plugado".**
+5. **Ativar** — liga por `enabledForAgent`/curso, gated por plano.
+
+**Estados de conexão (como nos agentes atuais):** `desconectado` · `conectado` · `erro` · `precisa_autorizar` · `verificando`. Guardar `lastCheckedAt` + o último erro.
+
+**Modelo de dados (extensão do `Skill`/nova `Connector`):**
+```prisma
+// Capability unificada (estende Skill §9.5 com os campos de conector):
+transport   String?   // "builtin" | "http" | "stdio"  (só p/ runtime "mcp")
+endpoint    String?   // URL do servidor MCP ou comando stdio
+authType    String?   // "none" | "oauth" | "apikey"
+authRef     String?   // referência ao segredo (NUNCA o segredo cru; cofre à parte)
+status      String   @default("desconectado")
+lastCheckedAt DateTime?
+lastError   String?
+discoveredTools Json?  // o tools/list que o handshake retornou (cache)
+enabledForAgents String[] @default([])
+```
+**Catálogo de conectores MCP de arranque (semeado 2026-07-11 — verificar endpoint/licença na integração).**
+Escolhidos porque **espelham exatamente as skills K-Dense que já copiamos** (`paper-lookup`, `database-lookup`) — o conector MCP vira a ponte "de verdade" pra essas fontes:
+
+| Conector | Repo (verificar) | Cobre | Mapeia p/ nossa skill |
+|---|---|---|---|
+| **paper-search** | `openags/paper-search-mcp` | arXiv · PubMed · bioRxiv (MCP+CLI+Skills) | `paper-lookup` / `literature_search` |
+| **BioMCP** | `genomoncology/biomcp` | PubMed/PubTator3 · ClinicalTrials.gov · MyVariant | literatura biomédica + trials (sala med/bio) |
+| **openscience workbench** | `synthetic-sciences/openscience` | UniProt · PDB · Ensembl · ChEMBL · PubChem · OpenAlex · S2 (+~30 bancos) | `database-lookup` (100+ bancos, gated por curso) |
+| **arxiv** | `blazickjp/arxiv-mcp-server` | arXiv (busca/análise; `.mcpb` p/ Claude Desktop) | `paper-lookup` (foco exatas/CS) |
+| **scholar** | `pvliesdonk/scholar-mcp` | Semantic Scholar · OpenAlex · patentes · Open Library | `citation-management` / prior-art |
+| **openalex** | `oksure/openalex-research-mcp` | OpenAlex (240M works, citações, redes) | `literature-review` / mapa de citações |
+| **fetch / filesystem / git** | `modelcontextprotocol/servers` (oficiais) | web fetch, arquivos, git | utilidades genéricas (base do runtime `mcp`) |
+
+**1º conector a validar ponta a ponta:** `paper-search-mcp` (bate 1:1 com o `paper-lookup` e cobre 3 fontes de uma vez) — é o teste do fluxo handshake→registrar→**Testar conexão** completo. `openscience` é o alvo do `database-lookup` (Plus/T2, gated por curso). BioMCP entra nas salas med/bio.
+
+**Segurança:** credenciais fora do model (cofre/secret store), só `authRef`. Conector com `risk` write/destructive cai em `REQUIRE_APPROVAL` (o cartão HITL, §11.4). Cada conector respeita o `permit()` — plano + curso + aprovação.
+
+**É STANDARD:** administrar/verificar skills e conectores é capacidade-base de todo agente Zaeon
+(como memória). O que o **plano** gateia é o *uso* de capacidades caras (T2/T3), não a **gestão**.
+
 ---
 
 ## 10. Alinhamento: science-superpowers + open-science (auditoria de estrutura)
@@ -651,7 +710,42 @@ Cruzei os 8 repos (AI-Scientist · awesome-harness · MemPalace · scientific-ag
 
 **OpenClaudeScience / InternAgentS (MIT — avaliado 2026-07-11, só README):** clone open-source do "Claude Science" sobre **DeepAgents + LangGraph** (Next.js UI, model-agnostic: OpenAI-compat/DeepSeek/local). Mesma **categoria** do ai4s open-science → é **referência/benchmark**, não peça pro nosso harness de estudo (é desktop local-first Python/LangGraph; somos Next/Gemini único). README é crível e detalhado (rotas de API reais, catálogos de skill, MCP/SCP), mas **não auditei o código** e alguns recursos são "experimental" (SSH compute Linux-only). Reforços úteis: (1) **cartões de aprovação (HITL)** pra jobs de compute remoto — padrão a adotar no nosso **gate do Max/T3 sob demanda** (GPU/custo); (2) skills + conectores MCP/SCP (reforça 9.9); (3) **provenance + previews de artefato científico** (reforça a lacuna #1 do viewer + o `provenance`); (4) DeepAgents/LangGraph como opção de runtime, se um dia quisermos framework (hoje Gemini único por decisão). Nada fundamentalmente novo além do que o open-science já deu.
 
+**Hermes Agent (Nous Research, MIT — avaliado 2026-07-11, README + docs):** agente pessoal "que cresce com você" — Python **CLI/TUI + gateway** multiplataforma (Telegram/Discord/Slack/WhatsApp/Signal), **model-agnostic** (Portal/OpenRouter/…), backends serverless (Modal/Daytona), cron, subagentes, MCP, compatível com **agentskills.io**. **Mesma CATEGORIA do OpenClaw/OpenClaudeScience → NÃO é peça pro nosso harness** (é produto CLI/gateway Python; somos Next/Gemini único in-app). Mas o "closed learning loop" dele dá **4 transferências honestas** que afiam memória/skills (nenhuma exige dependência dele):
+1. **Busca de memória HÍBRIDA (texto + vetor), não só vetor.** Hermes faz *FTS5 session search + sumarização por LLM* pro recall cross-sessão. Reforça o que o `agent-gateway` já esboçou (pgvector + tsvector). → **no PR-M3, `memory_search` = Atlas `$vectorSearch` + índice `$text` do Mongo (híbrido), não só cosseno.** Melhora recall barato sem trocar o contrato do `memory.ts`.
+2. **Curadoria de memória com "nudge" (o agente decide o que guardar).** Além do nosso `isMemorable()` (heurística), uma **etapa opcional de curadoria no `finalize`**: o modelo propõe/rotula os drawers que valem (mantendo o texto **verbatim** no storage — nossa decisão de custo fica). → nota pro PR-M3.
+3. **Skill AUTO-AUTORADA a partir de trajetória bem-sucedida + auto-melhora em uso.** Casa com a Sala de Skills (§9) e com o best-of-N do ShinkaEvolve. → **capacidade da Fase 4**: depois de um `criar_trabalho` aprovado no examiner, a Aura pode propor destilar o procedimento numa Skill (SKILL.md) reutilizável.
+4. **Modelo de usuário evolutivo (estilo Honcho, dialético).** "Modelo de quem você é através das sessões" = um `wing:usuario` dedicado (preferências/nível/estilo), distinto da transcrição. Reforça persona + `academicLevel`. → referência p/ L3 (não adotar Honcho como dep; é ideia).
+**Divergência intencional:** gateway/CLI/model-agnostic/terminal-backends = superfície deles, não nossa (Gemini único, in-app). Fica como **referência**, igual OpenClaw/OpenClaudeScience.
+
 **ShinkaEvolve (Sakana, Apache-2.0 — avaliado 2026-07-11):** framework de **evolução de programas** (LLM-como-mutação + busca evolutiva com verificador/score). **Fora do escopo do harness de estudo** (evolui código pra bater métrica; precisa de verificador/GPU/Slurm — é T3 avançado, não gera aula/estudo/pesquisa). Duas transferências honestas: (1) **best-of-N com o crítico como fitness** — para gerações de peso no **modo Max**, gerar N rascunhos e deixar o `ExaminerVerdict`/ScholarEval escolher o melhor (intensifica o `revise`; caro em tokens → on-demand/Max). (2) **ShinkaEvolve como skill T3 da sala Projetos/Zaeon Code** ([[zaeon-projetos-ide]]) pra CS/engenharia evoluir/otimizar algoritmos (gated Max + curso; `npx skills add SakanaAI/ShinkaEvolve`). Reforça: padrão Agent Skills, disciplina de orçamento (`max_api_costs`), dedup por embedding (casa com MemPalace).
+
+### 10.5 Rodada Fable (2026-07-11) — digest da pesquisa dos 4 pilares
+
+> Pesquisa por README/docs/spec (sem clonar/rodar). Tudo abaixo é **aditivo** às decisões travadas
+> (Gemini único, memória standard/Atlas nativo, harness default-on) — onde um repo contradiz, só o
+> **mecanismo** entra, nunca a arquitetura. Encarnado no prompt do executor (`docs/EXECUTOR_PROMPT_AURA_E2E.md`).
+
+| # | Fonte | Licença | Mecanismo transferível | Camada Zaeon | Veredito |
+|---|---|---|---|---|---|
+| 1 | MongoDB `$rankFusion` (8.1+) | produto | RRF **nativo** num aggregation: sub-pipelines `$vectorSearch`+`$search` com pesos (rank_constant 60) | memória L3 recall | aditivo — refina o "vetor+`$text`"; fallback = fusão RRF app-side se cluster <8.1 |
+| 2 | mem0 | Apache-2.0 | write-gate: top-k similares → LLM decide **só a operação** ADD/SUPERSEDE/NOOP (nunca reescreve) | L3 curadoria (nudge) | aditivo verbatim-safe (o storage resumido deles contradiz → não adotar) |
+| 3 | Zep/Graphiti | Apache-2.0 | **invalidar, nunca deletar**: `invalidatedAt`+`supersededBy`; recall filtra `invalidatedAt:null`; retrieval zero-LLM | L3 schema | aditivo (grafo externo contradiz Mongo-nativo → só os campos) |
+| 4 | Letta/MemGPT | Apache-2.0 | **core block**: 1 doc "perfil" pinado, pequeno, sempre-no-contexto; manutenção **assíncrona** fora do hot path | L3 `wakeUp` | aditivo (self-editing contradiz verbatim → não adotar) |
+| 5 | Generative Agents / MemoryBank | papers | score = similaridade × recência (decay no último **acesso**) × importância; campos `importance`/`lastAccessedAt`/`accessCount` | L3 re-rank | aditivo |
+| 6 | PaperQA2 (FutureHouse) | Apache-2.0 | **RCS**: sumarização contextual por chunk *relativa à pergunta* + evidence-score gate antes do draft | gather/`criar_trabalho` | aditivo |
+| 7 | STORM (Stanford) | MIT | **perspective-guided planning**: N personas expandem sub-perguntas antes de congelar o outline | plan de `criar_trabalho` | aditivo (barato: cláusula no prompt do plan) |
+| 8 | AI-Scientist **v2** | Apache-2.0 | nó "buggy" **podado** (degrade-prune) em vez de abortar o run; BFTS paralelo | critique/erros | aditivo (BFTS caro → Max/T3) |
+| 9 | Aviary/LAB-Bench | Apache-2.0 | tarefa = ambiente tipado com eval programático → regressão do harness inteiro | vitest de trajetória | aditivo |
+| 10 | smolagents / OpenHands | Apache-2.0/MIT | **error-as-observation**: falha de tool volta ao contexto do modelo como observação estruturada; só fatal chega ao usuário | `errors.ts`/laço | aditivo — **fecha o buraco que o Martinez apontou** |
+| 11 | OTel GenAI semconv + Langfuse | spec/MIT | spans por fase/tool com `error.type` = nossa taxonomia; `ExaminerVerdict.score` gravado como **score no trace** (queryável) | observabilidade | aditivo |
+| 12 | LangGraph (retry/checkpoint) | MIT | retry em **exatamente uma camada** (anti retry-storm) + budget compartilhado desce a trajetória; resume do checkpoint, nunca replay de side effects | trajectory/erros | aditivo |
+| 13 | Agent Skills spec (agentskills.io) | open (Anthropic) | campos exatos do SKILL.md (name/description/license/compatibility/metadata/allowed-tools; **version em `metadata.version`**); disclosure em 3 níveis; validação lenient/strict; `activate_skill(enum)` | `Skill` model / PR11 | aditivo — fixa o contrato do marketplace |
+| 14 | Hermes `/learn` + skill-creator | MIT | auto-autoria: trajetória ≥N passos aprovada → destila SKILL.md draft (`autoAuthored:true`) + grade/prune periódico | F4 | aditivo (confirma §9) |
+| 15 | MCP spec 2025-11-25 + **RC 2026-07-28** | open | construir no SDK oficial TS (`@modelcontextprotocol/sdk` ≥1.29, MIT); **isolar o handshake** — a RC (finaliza 28/07/2026) remove `initialize`/`Mcp-Session-Id` (breaking); 2 canais de erro: `isError:true` (tool) ≠ JSON-RPC (protocolo); annotations = *hints* não confiáveis | cliente MCP / §9.11 | aditivo + **alerta de timing** |
+
+**Correções no catálogo §9.11 (verificação repo-a-repo):** `synthetic-sciences/openscience` **não é servidor MCP** (é workbench/app) → sai do catálogo de conectores, fica como prior art; `pvliesdonk/scholar-mcp` existe mas tem ~2★ → marcar experimental; `oksure/openalex-research-mcp` é **TS/npm (31 tools, MIT)** → melhor 1º smoke **local** (roda via `npx`, o mac não tem python); `openags/paper-search-mcp` (MIT, python/stdio) segue como **flagship E2E**, validado no VPS/CI; `genomoncology/biomcp` (MIT, stdio+HTTP) confirmado p/ med/bio; oficiais `fetch/filesystem/git` ok. Semantic Scholar: sem servidor OSS dominante — cobrir via paper-search/scholar-mcp ou wrapper próprio.
+
+**Descartes em 1 linha:** Biomni (registry declarativo — já temos ToolDef), Robin/Coscientist/ChemCrow (confirmam o loop, nada novo), SciAgents (grafo ontológico — só se um dia houver KG), cognee (pipeline graph+summarize contradiz verbatim; só o conceito de passe pós-ingestão), Honcho (AGPL — ideia do user-model ok, código não).
 
 ---
 
@@ -805,9 +899,9 @@ Implementar **Fase 0** já sob esta fundação: `lib/agent/tools.ts` (registry) 
 
 ### 13.0 Convenções (valem para TODO PR)
 - **Branch:** `aura/harness-prNN-slug` (ex.: `aura/harness-pr01-contracts`). **Escopo:** ≤ ~6 arquivos tocados; se passar, fatie mais.
-- **Flag:** todo comportamento novo do laço nasce atrás de `process.env.AURA_HARNESS` (server) / `localStorage "zaeon.harness"` (client). **Rollback = flag off** — a rota atual (`/api/ai/chat` tool-loop) continua funcionando intacta.
+- **Flag = KILL-SWITCH, LIGADO POR PADRÃO (decisão Martinez 2026-07-11).** O harness é o caminho **default** de TODO chat de IA, em TODAS as salas (estudos, pesquisa, aula, **projetos**, lounge). `process.env.AURA_HARNESS` só **desliga** quando `=== "0"` (emergência) → cai no tool-loop Fase 0 como **fallback** (que o `runTrajectory` já aciona sozinho, nunca lança). Segurança vem de **compatibilidade de saída** (mesmo formato que os chats leem) + **fail-safe do motor**, não de "flag off".
 - **Verificação (sem build no sandbox):** `ts.transpileModule` em todo `.ts/.tsx` tocado (category===1 = erro de sintaxe → bloqueia) + `vitest` onde houver lógica pura (router, permit, stop conditions). macOS do Martinez **não tem `python`** — microserviço só roda no VPS/CI, aqui valida-se só o contrato TS do cliente.
-- **DoD de cada PR:** (1) gate binário passou; (2) transpila; (3) flag off = comportamento idêntico ao de hoje; (4) 1 linha no `CHANGELOG` do PR dizendo qual contrato da §8/§11 foi encarnado.
+- **DoD de cada PR:** (1) gate binário passou; (2) transpila; (3) **sem regressão com o harness ligado** (cada sala responde igual-ou-melhor; `AURA_HARNESS="0"` = fallback legado); (4) 1 linha no `CHANGELOG` do PR dizendo qual contrato da §8/§11 foi encarnado.
 - **Provenance desde já:** todo `ToolResult` carrega `provenance` (10.1/10.2) — nunca deixar pra depois.
 
 ### 13.1 Trilha A — o motor (núcleo do harness)

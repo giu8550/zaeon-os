@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Loader2, Mic, Paperclip, Zap, Compass } from "lucide-react";
+import { ArrowUp, Loader2, Mic, Paperclip, Zap, Compass, Square } from "lucide-react";
 import useSTT from "@/lib/voice/useSTT";
 
 // execMode = automático (Aura vai ponta-a-ponta) × guiado (pausa nos gates HITL,
@@ -21,6 +21,8 @@ export type CoworkComposerProps = {
   value: string;
   onChange: (v: string) => void;
   onSubmit: () => void;
+  /** Parar a resposta/geração em andamento (gap N). Quando presente + busy, o enviar vira ⏹. */
+  onStop?: () => void;
   onToggleStudio: () => void;
   studioOpen?: boolean;
   busy?: boolean;
@@ -41,6 +43,7 @@ export default function CoworkComposer({
   value,
   onChange,
   onSubmit,
+  onStop,
   onToggleStudio,
   studioOpen = false,
   busy = false,
@@ -214,17 +217,29 @@ export default function CoworkComposer({
             </button>
           )}
 
-          {/* Enviar */}
-          <button
-            type="button"
-            onClick={() => value.trim() && !busy && onSubmit()}
-            disabled={!value.trim() || busy}
-            title="Enviar"
-            className="shrink-0 self-end mb-0.5 w-10 h-10 rounded-full flex items-center justify-center text-white transition-transform hover:scale-105 active:scale-95 disabled:opacity-30 disabled:hover:scale-100"
-            style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}
-          >
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={17} />}
-          </button>
+          {/* Enviar OU Parar (gap N §7): quando ocupado e há onStop, vira botão de parar. */}
+          {busy && onStop ? (
+            <button
+              type="button"
+              onClick={onStop}
+              title="Parar"
+              className="shrink-0 self-end mb-0.5 w-10 h-10 rounded-full flex items-center justify-center text-white transition-transform hover:scale-105 active:scale-95"
+              style={{ background: "linear-gradient(135deg,#e11d48,#f43f5e)" }}
+            >
+              <Square size={14} className="fill-current" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => value.trim() && !busy && onSubmit()}
+              disabled={!value.trim() || busy}
+              title="Enviar"
+              className="shrink-0 self-end mb-0.5 w-10 h-10 rounded-full flex items-center justify-center text-white transition-transform hover:scale-105 active:scale-95 disabled:opacity-30 disabled:hover:scale-100"
+              style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}
+            >
+              {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={17} />}
+            </button>
+          )}
         </div>
       </div>
     </div>

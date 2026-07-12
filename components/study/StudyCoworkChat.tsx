@@ -28,6 +28,7 @@ import AuraThinking from "@/components/study/AuraThinking";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
+import StudioGeneratingCard from "@/components/study/StudioGeneratingCard";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
@@ -43,10 +44,11 @@ type Space = { id: string; title: string };
 type Msg = {
   id: string;
   role: "user" | "assistant";
-  kind: "text" | "study" | "studio";
+  kind: "text" | "study" | "studio" | "studio-pending";
   text?: string;
   studyId?: string;
   studyTitle?: string;
+  studioKind?: string;        // p/ o cartão "gerando" (studio-pending)
   studioBlock?: StudioBlockData;
   at: number;
 };
@@ -81,6 +83,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   }, []);
   const msgsRef = useRef<Msg[]>([]);
   msgsRef.current = messages;
+  const abortRef = useRef<AbortController | null>(null);
+  const stop = useCallback(() => { abortRef.current?.abort(); }, []);
 
   // ── carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -140,7 +144,14 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         studioKind: d.studioKind, title: d.title, data: d.data ?? null,
         artifactId: d.artifactId, dataUrl: d.dataUrl,
       };
-      setMessages((prev) => [...prev, { id: uid(), role: "assistant", kind: "studio", studioBlock: block, at: Date.now() }]);
+      // Se existe um cartão "gerando" desse tipo, TROCA ele pelo artefato pronto
+      // (em vez de empilhar outro). Senão, anexa. (gap F §7)
+      setMessages((prev) => {
+        const i = prev.findIndex((m) => m.kind === "studio-pending" && m.studioKind === d.studioKind);
+        const done: Msg = { id: uid(), role: "assistant", kind: "studio", studioBlock: block, at: Date.now() };
+        if (i >= 0) { const next = prev.slice(); next[i] = done; return next; }
+        return [...prev, done];
+      });
       setStudioOpen(false);
     };
     window.addEventListener("zaeon:study:embed", onEmbed);
@@ -268,10 +279,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       ? `O usuário está no co-working da Sala de Estudos e FOCOU ${focusIds.length} estudo(s): ${focusTitles.join("; ")}. Concentre-se nesse(s) estudo(s) ao responder.`
       : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade e, quando ajudar, ofereça transformar o assunto em artefatos do Studio (Guia, Mapa mental, Linha do tempo, Flashcards, FAQ, Imagem, Podcast, Vídeo) ou gerar um estudo.`) + flexClause;
 
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       const r = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: ctrl.signal,
         body: JSON.stringify({
           prompt,
           agent: "aura",
@@ -327,7 +341,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           let action: any = null;
           try { action = JSON.parse(acc.slice(si + STUDIO_SENTINEL.length)); } catch { /* ignore */ }
           if (action?.kind) {
-            patchAsst(action.text || "Gerando o artefato…");
+            // vira CARTÃO "gerando" (gap F): o onEmbed troca por StudioBlock quando pronto.
+            setMessages((prev) => prev.map((m) =>
+              m.id === asstId ? { ...m, kind: "studio-pending", studioKind: action.kind, text: undefined, studyTitle: action.topic || prompt } : m));
             void runStudioAction(action.kind, action.topic || prompt);
           } else {
             patchAsst("Sem resposta agora.");
@@ -343,9 +359,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           ]);
         }
       }
-    } catch {
-      patchAsst("Falha de rede ao falar com a Aura.");
+    } catch (e: any) {
+      patchAsst(e?.name === "AbortError" ? "⏹ Parado." : "Falha de rede ao falar com a Aura.");
     } finally {
+      abortRef.current = null;
       setSending(false);
     }
   }, [input, sending, focusIds, spaceTitle, runStudioAction]);
@@ -455,6 +472,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                     </div>
                   );
                 }
+                if (m.kind === "studio-pending" && m.studioKind) {
+                  return (
+                    <div key={m.id} className="flex justify-start">
+                      <StudioGeneratingCard studioKind={m.studioKind} title={m.studyTitle} startedAt={m.at} />
+                    </div>
+                  );
+                }
                 return null;
               })
             )}
@@ -485,6 +509,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               value={input}
               onChange={setInput}
               onSubmit={send}
+              onStop={stop}
               onToggleStudio={() => setStudioOpen((v) => !v)}
               studioOpen={studioOpen}
               busy={sending}

@@ -29,6 +29,17 @@ export interface Capabilities {
   projects: boolean;          // aba Projetos (Zaeon Code) pelo plano
 }
 
+/** Ordem canônica dos tiers (free < plus < pro < max). Base do gating por `minPlan`. */
+export const PLAN_ORDER: Plan[] = ["free", "plus", "pro", "max"];
+/** Rank numérico do plano (free=0 … max=3). Usado pelo permit() do runtime das tools. */
+export function planRank(p?: string | null): number {
+  return PLAN_ORDER.indexOf(normalizePlan(p));
+}
+/** `true` se `plan` cobre (>=) o `minPlan` exigido. Comparador único de tier. */
+export function planAtLeast(plan: string | null | undefined, minPlan: Plan): boolean {
+  return planRank(plan) >= planRank(minPlan);
+}
+
 /** Normaliza valores antigos/desconhecidos. "pulse" (nome antigo) vira "plus". */
 export function normalizePlan(p?: string | null): Plan {
   if (p === "plus" || p === "pro" || p === "max") return p;
