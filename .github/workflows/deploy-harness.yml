@@ -1,0 +1,115 @@
+name: Harness (VPS ops)
+
+# Operações MANUAIS do harness da Aura no VPS — as partes que o deploy.yml NÃO faz:
+#   • liga/desliga a flag AURA_HARNESS no .env  (Fases C1 / E1 / F do runbook)
+#   • roda `prisma db push` p/ criar as coleções memory_drawers e connectors (Fase D1)
+#   • recria só o container web pra aplicar a flag/env sem redeploy de código
+#
+# Só roda por acionamento manual (workflow_dispatch → botão "Run workflow"). Usa a MESMA
+# chave/secret do deploy.yml (VPS_SSH_KEY), então não exige credencial nova. Compartilha
+# a concurrency `deploy-vps` com o deploy → nunca roda junto com um deploy normal.
+#
+# FORA DESTE WORKFLOW (Fase D2, manual): o índice Atlas Vector Search
+# `memory_drawers_vec` sobre `embedding` (dims 1536, cosine, filter em userId) tem que
+# ser criado na UI do Atlas (ou via Atlas Admin API). Sem ele o recall vetorial degrada
+# silencioso (memory_unavailable), não quebra o chat.
+#
+# Secrets reutilizados (já configurados p/ o deploy.yml):
+#   VPS_HOST, VPS_PORT, VPS_USER, VPS_SSH_KEY, DEPLOY_PATH
+
+on:
+  workflow_dispatch:
+    inputs:
+      flag:
+        description: "AURA_HARNESS (0 = dark launch/legado, 1 = harness ligado)"
+        type: choice
+        options: ["0", "1"]
+        default: "0"
+      db_push:
+        description: "Rodar prisma db push (cria memory_drawers/connectors) — Fase D1"
+        type: boolean
+        default: false
+      recreate_web:
+        description: "Recriar o container web pra aplicar a flag (--force-recreate)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-vps          # mesma group do deploy.yml → serializa, nunca corre junto
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.VPS_HOST }}" ] && [ -n "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Secrets do VPS ausentes — operação pulada. Configure VPS_HOST/VPS_SSH_KEY/etc."
+          fi
+
+  harness:
+    needs: guard
+    if: needs.guard.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Harness ops via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          FLAG: ${{ inputs.flag }}
+          DB_PUSH: ${{ inputs.db_push }}
+          RECREATE_WEB: ${{ inputs.recreate_web }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 15m
+          envs: FLAG,DB_PUSH,RECREATE_WEB
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            export COMPOSE_FILE="${{ vars.DEPLOY_COMPOSE || 'docker-compose.beta.yml' }}"
+            echo "→ Compose: $COMPOSE_FILE"
+
+            # ── C1/E1/F: set idempotente da flag no .env ──
+            touch .env
+            if grep -q '^AURA_HARNESS=' .env; then
+              sed -i "s/^AURA_HARNESS=.*/AURA_HARNESS=${FLAG}/" .env
+            else
+              echo "AURA_HARNESS=${FLAG}" >> .env
+            fi
+            echo "→ AURA_HARNESS agora = $(grep '^AURA_HARNESS=' .env)"
+
+            # ── D1: prisma db push (cria memory_drawers/connectors) — opt-in ──
+            if [ "${DB_PUSH}" = "true" ]; then
+              echo "→ prisma db push (cria coleções da memória)…"
+              docker compose exec -T web npx prisma db push
+            else
+              echo "→ prisma db push pulado (db_push=false)."
+            fi
+
+            # ── E1: recria só o web pra aplicar a flag/env (runtime-only) ──
+            if [ "${RECREATE_WEB}" = "true" ]; then
+              echo "→ Recriando container web…"
+              docker compose up -d --force-recreate web
+            else
+              echo "→ recreate_web=false — flag só terá efeito no próximo restart do web."
+            fi
+
+            # ── Health check final ──
+            # web só faz expose:3000 (rede interna, público é o Caddy) → localhost:3000 do
+            # host não alcança. Espelha o healthcheck do compose: node fetch DENTRO do web.
+            echo "→ Health (via container web):"
+            if docker compose exec -T web node -e "fetch('http://localhost:3000/api/health').then(r=>r.text()).then(t=>{console.log(t);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})"; then
+              echo ""
+            else
+              echo "::warning::health check falhou dentro do web (confira https://beta.zaeon.space/api/health e os logs do container)."
+            fi
+            echo "✓ Harness ops concluído (AURA_HARNESS=${FLAG})."
