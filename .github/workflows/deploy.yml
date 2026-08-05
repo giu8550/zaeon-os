@@ -85,6 +85,9 @@ jobs:
               echo "::warning::GOOGLE_CREDENTIALS_B64 vazio — mantendo .env.secrets atual (se houver)."
               touch .env.secrets
             fi
+            # GIT_SHA runtime-only → /api/health expõe o commit em prod. Anexado DEPOIS
+            # da materialização acima (que reescreve .env.secrets com `>`), senão seria clobado.
+            echo "GIT_SHA=$(git rev-parse --short HEAD)" >> .env.secrets
             echo "→ Subindo containers…"
             docker compose up -d --build --remove-orphans
             # Garante que o web recarregue a credencial nova (é runtime-only).
