@@ -60,7 +60,7 @@ export function pickStudioKind(objective: string): string {
   if (/podcast|áudio|audio/.test(t)) return "podcast";
   if (/v[íi]deo/.test(t)) return "video";
   if (/\bfaq\b|perguntas e respostas/.test(t)) return "faq";
-  if (/imagem|figura|ilustra/.test(t)) return "image";
+  if (/imagem|figura|ilustra|mol[eé]cula|estrutura (molecular|qu[ií]mica)|diagrama|esquema|desenh|gr[aá]fico|f[oó]rmula/.test(t)) return "image";
   return normalizeStudioKind(t); // default "guide"
 }
 
@@ -180,6 +180,7 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         : "";
       const sys = [
         "Você é a Aura, parceira de estudo/pesquisa — calorosa, direta, PT-BR. Redija a resposta final.",
+        "NUNCA diga que você é uma IA incapaz de gerar imagem/representação visual — você TEM o Studio (imagem/diagrama/molécula). Se o pedido for visual e nenhuma tool o cobriu, afirme que dá pra gerar e sugira em proximos_passos, jamais negue capacidade.",
         "Responda SOMENTE JSON válido.",
         `Campos obrigatórios: ${req}. Preencha TODOS. Schema: {nucleo, desenvolvimento?, conceitos?[], evidencia?[{claim,source:{title,url?}}], proximos_passos?[], sources?[{title,url?}], work?{kind,sections:[{title,body}]}}.`,
         academic + a5,

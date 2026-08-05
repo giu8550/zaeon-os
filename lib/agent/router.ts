@@ -40,7 +40,7 @@ const GREETING_RE =
   /(^|\s)(oi|ola|opa|eai|e ai|salve|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|beleza|blz|tudo bem|tchau)(\s|,|!|\?|$)/;
 
 const WORK_NOUNS = ["artigo", "tcc", "monografia", "dissertacao", "tese", "redacao", "ensaio", "relatorio", "paper", "resenha", "trabalho academico"];
-const STUDIO_NOUNS = ["mapa mental", "mindmap", "flashcard", "linha do tempo", "timeline", "podcast", "video", "quiz", "infografico", "slides", "apresentacao", "resumo visual", "guia de estudo", "guia de estudos"];
+const STUDIO_NOUNS = ["mapa mental", "mindmap", "flashcard", "linha do tempo", "timeline", "podcast", "video", "quiz", "infografico", "slides", "apresentacao", "resumo visual", "guia de estudo", "guia de estudos", "imagem", "figura", "ilustracao", "molecula", "estrutura molecular", "estrutura quimica", "diagrama", "esquema", "desenho", "grafico", "formula estrutural"];
 const SOURCE_SIGNALS = ["fontes", "referencias", "bibliografia", "papers", "artigos sobre", "literatura sobre", "estado da arte", "cite fontes"];
 const REVISE_SIGNALS = ["revise", "revisar", "revisao", "critique", "avalie meu", "avalie este", "avalie esse", "corrija", "corrigir", "de feedback", "melhore meu"];
 const EXPLAIN_SIGNALS = ["explique", "explicar", "explica", "o que e", "o que sao", "como funciona", "por que", "porque", "defina", "definir", "qual a diferenca", "diferenca entre", "me ensine"];
