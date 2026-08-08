@@ -97,6 +97,14 @@ describe("aura-harness · plan", () => {
     expect(steps[0].args.kind).toBe("mindmap");
   });
 
+  it("gerar_artefato visual → studio_generate kind=image (gate G1 ponta-a-ponta)", async () => {
+    const deps = buildHarnessDeps(ctx, { genJson: smartGen() });
+    const steps = await deps.plan(stFor({ intent: "gerar_artefato", mode: "elaborated", objective: "gera a molécula de serotonina" }));
+    expect(steps).toHaveLength(1);
+    expect(steps[0].tool).toBe("studio_generate");
+    expect(steps[0].args.kind).toBe("image");
+  });
+
   it("criar_trabalho research → A6 sub-perguntas × tools de coleta", async () => {
     const genJson = smartGen();
     const deps = buildHarnessDeps(ctx, { genJson });
@@ -113,6 +121,10 @@ describe("aura-harness · helpers puros", () => {
     expect(pickStudioKind("gera flashcards")).toBe("flashcards");
     expect(pickStudioKind("cria um podcast")).toBe("podcast");
     expect(pickStudioKind("me explica isso")).toBe("guide"); // default
+    // Gate G1 (patch visual): pedidos visuais mapeiam pro kind `image` do Studio.
+    expect(pickStudioKind("gera a molécula de serotonina")).toBe("image");
+    expect(pickStudioKind("faz uma imagem da mitocôndria")).toBe("image");
+    expect(pickStudioKind("desenha a estrutura química da cafeína")).toBe("image");
   });
 
   it("normalizeAnswer garante nucleo e coage arrays", () => {

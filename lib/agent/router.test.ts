@@ -42,6 +42,13 @@ describe("router · classifyHeuristic (sem rede)", () => {
     expect(r.mode).toBe("elaborated");
   });
 
+  it('pedido visual ("gera a molécula de X") → gerar_artefato (gate G1 anti-recusa)', () => {
+    // Trava o patch visual: o pedido de imagem/molécula NÃO cai em explicar_conceito
+    // (que faria a Aura "recusar" gerar visual) — vira artefato do Studio.
+    const r = classifyHeuristic("gera a molécula de serotonina", ctx("estudos"));
+    expect(r.intent).toBe("gerar_artefato");
+  });
+
   it("pedido de fontes → pesquisar_fontes", () => {
     const r = classifyHeuristic("me indique fontes sobre mudanças climáticas", ctx("pesquisa"));
     expect(r.intent).toBe("pesquisar_fontes");
