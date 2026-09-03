@@ -4,7 +4,7 @@ import { PlusIcon, TrashIcon, RocketLaunchIcon } from "@heroicons/react/24/outli
 
 interface PluginData {
     id: string; name: string; author: string; description: string;
-    category: "Essencial" | "Agentes" | "Mentorias";
+    category: "Essencial" | "Agentes" | "Mentores";
     tag: string; imageUrl: string; price: number; actionUrl: string; status: string;
     isLocked: boolean; unlockRequirement: string;
 }
@@ -80,7 +80,7 @@ export default function PluginsModule({ glassPanel }: { glassPanel: string }) {
                     <div className="max-w-2xl mx-auto space-y-10">
                         <input type="text" placeholder="Nome do plugin..." className="w-full bg-transparent text-5xl font-black outline-none border-none placeholder:text-slate-200 dark:placeholder:text-white/10" value={currentPlugin.name} onChange={(e) => setCurrentPlugin({...currentPlugin, name: e.target.value})} />
                         <div className="grid grid-cols-2 gap-8">
-                            <select className="w-full bg-slate-100 dark:bg-white/5 p-4 rounded-2xl outline-none font-bold text-sm" value={currentPlugin.category} onChange={(e) => setCurrentPlugin({...currentPlugin, category: e.target.value as any})}><option value="Essencial">Essencial</option><option value="Agentes">Agentes</option><option value="Mentorias">Mentorias</option></select>
+                            <select className="w-full bg-slate-100 dark:bg-white/5 p-4 rounded-2xl outline-none font-bold text-sm" value={currentPlugin.category} onChange={(e) => setCurrentPlugin({...currentPlugin, category: e.target.value as any})}><option value="Essencial">Essencial</option><option value="Agentes">Agentes</option><option value="Mentores">Mentores</option></select>
                             <div className="flex items-center gap-4 bg-slate-100 dark:bg-white/5 p-4 rounded-2xl">
                                 <input type="checkbox" checked={currentPlugin.isLocked} onChange={(e) => setCurrentPlugin({...currentPlugin, isLocked: e.target.checked})} className="w-5 h-5 accent-cyan-500" />
                                 <span className="text-[10px] font-black uppercase text-slate-400">Bloquear plugin</span>

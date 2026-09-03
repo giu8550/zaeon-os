@@ -27,6 +27,7 @@ import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
+import MentorPill from "@/components/study/MentorPill";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 
@@ -69,6 +70,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [dragOver, setDragOver] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
   const [quickThinking, setQuickThinking] = useState(false);
+  // Mentor ativo (SLUG, ex.: "farmacia") — null = Aura base. Vai como `mentor` a cada envio.
+  const [activeMentor, setActiveMentor] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
   const scrollToEnd = useCallback(() => {
@@ -283,6 +286,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             currentStudyId: focusIds[0],
             focusedStudyIds: focusIds,
           },
+          mentor: activeMentor ?? undefined,   // slug do mentor ativo → Aura com a voz da área
         }),
       });
 
@@ -348,7 +352,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     } finally {
       setSending(false);
     }
-  }, [input, sending, focusIds, spaceTitle, runStudioAction]);
+  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor]);
 
   const newStudy = useCallback(async () => {
     try {
@@ -491,6 +495,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               idle={messages.length === 0 && !sending}
               active={active && !openStudyId}
             >
+              {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
+              <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
               {focusChips}
             </CoworkComposer>
           </div>

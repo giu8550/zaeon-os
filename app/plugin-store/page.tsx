@@ -17,6 +17,7 @@ import {
     ShieldCheckIcon,
     XMarkIcon,
 } from "@heroicons/react/24/outline";
+import MentoresGrid from "@/components/mentors/MentoresGrid";
 
 // --- INTERFACE ---
 interface Plugin {
@@ -24,7 +25,7 @@ interface Plugin {
     name: string;
     author: string;
     description: string;
-    category: "Essencial" | "Agentes" | "Mentorias";
+    category: "Essencial" | "Agentes" | "Mentores";
     tag?: string;
     imageUrl?: string;
     price: number;
@@ -65,7 +66,7 @@ export default function PluginStorePage() {
     const [access, setAccess] = useState<Access | null>(null);
     const [showGate, setShowGate] = useState(false); // modal de elegibilidade
 
-    const categories = ["Todos", "Essencial", "Agentes", "Mentorias"];
+    const categories = ["Todos", "Essencial", "Agentes", "Mentores"];
 
     useEffect(() => {
         setMounted(true);
@@ -102,9 +103,11 @@ export default function PluginStorePage() {
 
     const filteredPlugins = plugins.filter(
         (p) =>
-            (category === "Todos" || p.category === category) &&
+            // "Mentorias" (nome antigo no banco) conta como "Mentores"
+            (category === "Todos" || p.category === category || (category === "Mentores" && (p.category as string) === "Mentorias")) &&
             p.name.toLowerCase().includes(search.toLowerCase()),
     );
+    const showMentores = category === "Todos" || category === "Mentores";
 
     const headerContainer =
         "pointer-events-auto w-full max-w-7xl h-16 rounded-full backdrop-blur-2xl transition-all duration-500 " +
@@ -200,8 +203,11 @@ export default function PluginStorePage() {
                     </div>
                 </div>
 
-                {/* GRID DE PLUGINS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20">
+                {/* ─── MENTORES (camada agêntica): plugue no chat ─────────────────── */}
+                {showMentores && <MentoresGrid search={search} />}
+
+                {/* GRID DE PLUGINS (some na categoria Mentores — lá só entram os mentores) */}
+                {category !== "Mentores" && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20">
                     {isLoading ? (
                         <div className="col-span-full py-32 text-center">
                             <div className="inline-block w-8 h-8 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mb-4" />
@@ -214,7 +220,7 @@ export default function PluginStorePage() {
                     ) : (
                         filteredPlugins.map((plugin) => <PluginCard key={plugin.id} plugin={plugin} cardStyle={cardStyle} />)
                     )}
-                </div>
+                </div>}
             </main>
 
             {/* MODAL: elegibilidade do Zaeon Code */}
@@ -338,7 +344,7 @@ function PluginCard({ plugin, cardStyle }: { plugin: Plugin; cardStyle: string }
     const getIcon = () => {
         switch (plugin.category) {
             case "Agentes": return <RocketLaunchIcon className="w-6 h-6" />;
-            case "Mentorias": return <AcademicCapIcon className="w-6 h-6" />;
+            case "Mentores": return <AcademicCapIcon className="w-6 h-6" />;
             default: return <PuzzlePieceIcon className="w-6 h-6" />;
         }
     };
