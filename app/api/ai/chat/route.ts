@@ -12,6 +12,7 @@ import { studioGenerateTool, normalizeStudioKind, studioLabel, researchGenerateT
 // linha e o cliente executa a AÇÃO (gera o artefato no Studio). Ver StudyCoworkChat.
 const STUDIO_SENTINEL = "@@STUDIO_ACTION@@";
 const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";   // Sala de Pesquisa: gerar trabalho no doc
+const STRUCTURED_SENTINEL = "@@STRUCTURED@@";      // harness: StructuredAnswer inteiro (render rico + artifacts inline)
 import { buildPersona, DEFAULT_AGENT_ID } from "@/lib/ai/personas";
 
 export const maxDuration = 60;
@@ -303,8 +304,10 @@ export async function POST(req: Request) {
                             controller.enqueue(encoder.encode(STUDIO_SENTINEL + JSON.stringify({ type: "studio", kind: out.kind, topic: out.topic, text: out.text })));
                         } else if (out.mode === "research") {
                             controller.enqueue(encoder.encode(RESEARCH_SENTINEL + JSON.stringify({ type: "research", kind: out.kind, topic: out.topic, text: out.text })));
+                        } else if (out.mode === "structured") {
+                            controller.enqueue(encoder.encode(STRUCTURED_SENTINEL + JSON.stringify(out.answer)));
                         } else {
-                            controller.enqueue(encoder.encode(out.text));
+                            controller.enqueue(encoder.encode(out.text)); // fallback texto (retrocompat)
                         }
                     } catch (e: any) {
                         // erro fatal → mensagem amigável (guardrail: nunca string à mão)

@@ -208,6 +208,7 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
 // ───────────────────────────── mapeamento p/ o protocolo do cliente ─────────────────────────────
 export type HarnessOutput =
   | { mode: "text"; text: string }
+  | { mode: "structured"; answer: StructuredAnswer }   // resposta rica (carrega artifacts[] inline)
   | { mode: "studio"; kind: string; topic: string; text: string }
   | { mode: "research"; kind: string; topic: string; text: string };
 
@@ -231,8 +232,10 @@ export function renderStructuredAnswer(a: StructuredAnswer): string {
 
 /**
  * Decide a saída no MESMO protocolo do cliente (StudyCoworkChat/ResearchChat):
- * artefato → sentinela (studio/research); senão → texto datilografado. `topic` cai no `prompt`
- * do cliente se vier vazio (o cliente usa `topic || prompt`).
+ *   research → sentinela (trabalho no documento) · studio → sentinela (artefato PURO)
+ *   · structured → sentinela com o StructuredAnswer inteiro (texto + artifacts[] na mesma bolha).
+ * `topic` cai no `prompt` do cliente se vier vazio (o cliente usa `topic || prompt`).
+ * `renderStructuredAnswer` segue exportado: é o fallback texto (cliente antigo / AURA_HARNESS=0).
  */
 export function resolveHarnessOutput(
   state: Pick<TrajectoryState, "intent" | "kind" | "artifacts">,
@@ -248,10 +251,11 @@ export function resolveHarnessOutput(
   if (state.intent === "criar_trabalho" && surface === "pesquisa") {
     return { mode: "research", kind: state.kind ?? "artigo", topic: objective, text: lead };
   }
-  // Artefato do Studio (mapa mental, flashcards, podcast…) → sentinela studio.
-  if (studioArt) {
+  // ARTEFATO PURO ("gera um mapa"): gerar_artefato com studioArt → sentinela studio (inalterado).
+  if (studioArt && state.intent === "gerar_artefato") {
     return { mode: "studio", kind: studioArt.studioKind, topic: objective, text: lead };
   }
-  // Resposta de texto (conversa, dúvida, explicação, fontes, revisão).
-  return { mode: "text", text: renderStructuredAnswer(answer) };
+  // Tudo mais (conversa, dúvida, explicação, fontes, revisão) → estruturado, carregando o
+  // answer COMPLETO — se vier artifacts[] (ex.: image), o cliente embute na mesma bolha.
+  return { mode: "structured", answer: arts.length && !answer.artifacts ? { ...answer, artifacts: arts } : answer };
 }
