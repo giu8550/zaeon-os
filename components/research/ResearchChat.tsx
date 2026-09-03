@@ -15,11 +15,15 @@ import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
+import StructuredAnswerView from "@/components/study/StructuredAnswerView";
+import type { StructuredAnswer } from "@/lib/agent/contracts";
 
-type Msg = { id: string; role: "user" | "assistant"; text: string };
+// `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
+type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer };
 
-// Deve bater com RESEARCH_SENTINEL de app/api/ai/chat/route.ts.
+// Devem bater com as sentinelas de app/api/ai/chat/route.ts.
 const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";
+const STRUCTURED_SENTINEL = "@@STRUCTURED@@";
 // L0 (docs/MEMORY_AND_PERSISTENCE.md): antes a conversa da Sala de Pesquisa ZERAVA
 // (sem persistência + desmonta ao trocar de aba). Agora espelha o thread e o rascunho.
 const THREAD_KEY_R = "zaeon.research.thread.v1";
@@ -158,11 +162,27 @@ export default function ResearchChat({
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
-        const si = acc.indexOf(RESEARCH_SENTINEL);
-        target = si >= 0 ? acc.slice(0, si) : acc;   // datilografa só o visível
+        const cut = [acc.indexOf(RESEARCH_SENTINEL), acc.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
+        target = cut.length ? acc.slice(0, Math.min(...cut)) : acc;   // datilografa só o visível
       }
+      const sti = acc.indexOf(STRUCTURED_SENTINEL);
       const si = acc.indexOf(RESEARCH_SENTINEL);
-      if (si >= 0) {
+      if (sti >= 0) {
+        // HARNESS: resposta estruturada → cartão rico na bolha placeholder.
+        target = ""; ended = true;
+        let ans: StructuredAnswer | null = null;
+        try { ans = JSON.parse(acc.slice(sti + STRUCTURED_SENTINEL.length)); } catch { /* ignore */ }
+        if (ans && typeof ans.nucleo === "string") {
+          const a = ans;
+          setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, answer: a, text: a.nucleo } : m)));
+          appendTranscript("pesquisa", null, [
+            { role: "user", text: prompt },
+            { role: "assistant", text: a.nucleo },
+          ]);
+        } else {
+          patch("Sem resposta agora.");
+        }
+      } else if (si >= 0) {
         // TOOL-LOOP: research_generate → gera o trabalho e encaixa no documento.
         target = ""; ended = true;
         let action: any = null;
@@ -197,6 +217,15 @@ export default function ResearchChat({
         <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2 py-5 flex flex-col gap-4">
           {messages.map((m) => {
             const isUser = m.role === "user";
+            if (!isUser && m.answer) {
+              return (
+                <div key={m.id} className="flex justify-start">
+                  <div className="max-w-[88%] w-full">
+                    <StructuredAnswerView answer={m.answer} onConcept={(c) => setInput(`Explique: ${c}`)} onNext={(s) => setInput(s)} />
+                  </div>
+                </div>
+              );
+            }
             return (
               <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
                 <div

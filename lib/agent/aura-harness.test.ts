@@ -140,9 +140,23 @@ describe("aura-harness · helpers puros", () => {
 describe("aura-harness · resolveHarnessOutput (protocolo do cliente)", () => {
   const base = { intent: "explicar_conceito", kind: undefined, artifacts: [] } as any;
 
-  it("texto quando não há artefato", () => {
-    const out = resolveHarnessOutput(base, { nucleo: "oi" }, "estudos", "obj");
-    expect(out.mode).toBe("text");
+  it("sem artefato → structured carregando o answer inteiro (render rico no cliente)", () => {
+    const out = resolveHarnessOutput(base, { nucleo: "oi", conceitos: ["a"] }, "estudos", "obj");
+    expect(out.mode).toBe("structured");
+    if (out.mode === "structured") { expect(out.answer.nucleo).toBe("oi"); expect(out.answer.conceitos).toEqual(["a"]); }
+  });
+
+  it("explicar_conceito COM artefato → structured preservando artifacts[] (texto + artefato inline)", () => {
+    const answer: StructuredAnswer = { nucleo: "N", artifacts: [{ studioKind: "image", title: "img" }] };
+    const out = resolveHarnessOutput({ intent: "explicar_conceito", artifacts: answer.artifacts } as any, answer, "estudos", "obj");
+    expect(out.mode).toBe("structured");
+    if (out.mode === "structured") expect(out.answer.artifacts?.[0]?.studioKind).toBe("image");
+  });
+
+  it("artifacts só no state (answer sem o campo) → structured os herda", () => {
+    const out = resolveHarnessOutput({ intent: "explicar_conceito", artifacts: [{ studioKind: "mindmap" }] } as any, { nucleo: "N" }, "estudos", "obj");
+    expect(out.mode).toBe("structured");
+    if (out.mode === "structured") expect(out.answer.artifacts?.[0]?.studioKind).toBe("mindmap");
   });
 
   it("artefato studio → sentinela studio (topic = objetivo)", () => {
@@ -161,14 +175,15 @@ describe("aura-harness · resolveHarnessOutput (protocolo do cliente)", () => {
 
 describe("aura-harness · integração motor+adaptador (ponta-a-ponta, sem rede)", () => {
   // classify é sobrescrito p/ não bater na rede (o router real cairia no fallback, mas com latência).
-  it("explicar_conceito → runTrajectory → saída de texto", async () => {
+  it("explicar_conceito → runTrajectory → saída estruturada", async () => {
     const runToolImpl = vi.fn(async () => ({ ok: true, findings: [{ claim: "f", source: { title: "S" }, confidence: "alta" as const }], provenance: {} }));
     const deps = buildHarnessDeps(ctx, { genJson: smartGen(), runToolImpl, retryDelayMs: 0 });
     deps.classify = async () => ({ intent: "explicar_conceito", mode: "elaborated", academicMode: "flexible" });
     const { answer, state } = await runTrajectoryTraced("explique entropia", ctx, deps);
     expect(answer.nucleo).toBeTruthy();
     expect(answer.provenance?.intent).toBe("explicar_conceito");
-    expect(resolveHarnessOutput(state, answer, "estudos", "explique entropia").mode).toBe("text");
+    // sem artefato, o harness entrega o StructuredAnswer inteiro (render rico no cliente)
+    expect(resolveHarnessOutput(state, answer, "estudos", "explique entropia").mode).toBe("structured");
   });
 
   it("gerar_artefato → runTrajectory (studio_generate real) → sentinela studio", async () => {
