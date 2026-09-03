@@ -88,10 +88,32 @@ jobs:
             # GIT_SHA runtime-only → /api/health expõe o commit em prod. Anexado DEPOIS
             # da materialização acima (que reescreve .env.secrets com `>`), senão seria clobado.
             echo "GIT_SHA=$(git rev-parse --short HEAD)" >> .env.secrets
+            # Harness da Aura LIGADO por padrão no deploy: só escreve se a flag estiver AUSENTE,
+            # p/ respeitar um kill-switch manual (AURA_HARNESS=0 via deploy-harness.yml) até
+            # alguém religar. Ausente == "1" no código, mas explícito evita ambiguidade no .env.
+            touch .env
+            if ! grep -q '^AURA_HARNESS=' .env; then
+              echo "AURA_HARNESS=1" >> .env
+              echo "→ AURA_HARNESS=1 (ligado no deploy)"
+            else
+              echo "→ AURA_HARNESS mantido: $(grep '^AURA_HARNESS=' .env)"
+            fi
             echo "→ Subindo containers…"
             docker compose up -d --build --remove-orphans
             # Garante que o web recarregue a credencial nova (é runtime-only).
             docker compose up -d --force-recreate web
+            # Schema ADITIVO junto do deploy (Mongo: cria coleções/índices novos — mentor_templates,
+            # plugged_mentors, memory_drawers…; nunca migra dados). Roda DENTRO do web novo, então
+            # usa o schema da imagem recém-buildada. Falha vira warning: o app sobe mesmo assim
+            # (as rotas degradam com fallback), e o índice único/coleção pode ser criado depois
+            # via deploy-harness.yml (db_push=true).
+            echo "→ prisma db push (schema aditivo)…"
+            # (sem --accept-data-loss: em modo não-interativo o Prisma RECUSA mudança destrutiva → só aditivo)
+            if docker compose exec -T web npx prisma db push --skip-generate 2>&1 | tail -20; then
+              echo "✓ db push ok"
+            else
+              echo "::warning::prisma db push falhou — app no ar; rode deploy-harness.yml com db_push=true e confira os logs do web."
+            fi
             echo "→ Limpando imagens órfãs…"
             docker image prune -f
             echo "✓ Deploy concluído."
