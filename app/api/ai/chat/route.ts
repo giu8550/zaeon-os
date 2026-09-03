@@ -125,8 +125,24 @@ export async function POST(req: Request) {
         const rl = await guard(req, "ai-chat", "ai-heavy");
         if (!rl.ok) return rl.response;
         // 🔥 NOVO: Recebendo userData + history + agentContext do frontend
-        const { prompt, agent, systemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface } = await req.json();
+        const { prompt, agent, systemContext: rawSystemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface, mentor, mentorId } = await req.json();
         const agentKey = agent?.toLowerCase() || DEFAULT_AGENT_ID;
+
+        // MENTOR ativo — `mentor:"farmacia"` (slug = a chave; `mentorId` ObjectId só como fallback).
+        // Um mentor NÃO é motor novo: é a Aura parametrizada — o personaText entra NA FRENTE do
+        // systemContext (legado, cache e harness leem a mesma variável) e a memória ganha
+        // wing = slug/userId. Só p/ agent="aura". Slug desconhecido = Aura base (nunca derruba o turno).
+        let systemContext: string | undefined = rawSystemContext;
+        let activeMentor: import("@/lib/agent/mentors-server").ResolvedMentor | null = null;
+        if ((mentor || mentorId) && agentKey === "aura") {
+            const [{ resolveMentor }, { resolveUserId: rid }] = await Promise.all([
+                import("@/lib/agent/mentors-server"),
+                import("@/lib/agent/transcript"),
+            ]);
+            const uid = await rid().catch(() => null);
+            activeMentor = await resolveMentor(mentor || mentorId, uid).catch(() => null);
+            if (activeMentor) systemContext = [activeMentor.context, rawSystemContext].filter(Boolean).join("\n\n");
+        }
 
         // Histórico da conversa (memória entre turnos). Ver lib/ai/history.ts.
         const chatHistory = sanitizeHistory(history);
@@ -266,9 +282,12 @@ export async function POST(req: Request) {
                 plan: "free",     // memória/studio/research = free; gate de plano é só compute pesado (PR03)
                 execMode: "auto", // HITL "guiado" entra no PR07
                 currentGoal: ac.currentGoal || String(prompt || "").slice(0, 200),
+                // Mentor ativo: andar de memória "<slug>/<userId>" (isola por mentor E por usuário).
+                mentor: activeMentor?.slug,
+                wing: activeMentor?.wing.label,
             };
             // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
-            const memBlock = userId ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: String(prompt || "") }).catch(() => "") : "";
+            const memBlock = userId ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: String(prompt || ""), wingLabel: activeMentor?.wing.label }).catch(() => "") : "";
             const deps = buildHarnessDeps(hctx, {
                 systemContext: [systemContext, memBlock].filter(Boolean).join("\n\n") || undefined,
                 history: (chatHistory as any[]).map((h) => ({ role: h.role, text: h?.parts?.[0]?.text ?? "" })),
@@ -280,7 +299,7 @@ export async function POST(req: Request) {
                         const { answer, state } = await runTrajectoryTraced(String(prompt || ""), hctx, deps);
                         const out = resolveHarnessOutput(state, answer, surface, String(prompt || ""));
                         // L3 write (A7, fire-and-forget): deriva o turno em drawers verbatim. Nunca bloqueia.
-                        if (userId) void mem.writeTurnMemory({ userId, surface: hctx.activeTab, scopeId: ac.currentStudyId ?? ac.currentResearchId ?? null, prompt: String(prompt || ""), answer });
+                        if (userId) void mem.writeTurnMemory({ userId, surface: hctx.activeTab, scopeId: ac.currentStudyId ?? ac.currentResearchId ?? null, prompt: String(prompt || ""), answer, wing: activeMentor?.wing });
                         if (out.mode === "studio") {
                             controller.enqueue(encoder.encode(STUDIO_SENTINEL + JSON.stringify({ type: "studio", kind: out.kind, topic: out.topic, text: out.text })));
                         } else if (out.mode === "research") {
