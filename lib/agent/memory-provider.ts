@@ -17,6 +17,7 @@ import {
   nullMemory,
   wingFromSurface,
   isMemorable,
+  type Wing,
   type MemoryAPI,
   type MemoryDeps,
   type MemoryScope,
@@ -50,11 +51,13 @@ export type TurnMemoryInput = {
   prompt: string;           // mensagem do usuário
   answer: StructuredAnswer; // resposta final (núcleo + evidência + artefatos)
   course?: string;
+  /** Override do andar (Mentores: { kind:"agente", label:"<slug>/<userId>" }). Default: derivado da surface. */
+  wing?: Wing;
 };
 
 /** Cada mensagem/citação/artefato de PESO vira um Drawer VERBATIM (nunca resumido). */
 export function deriveTurnDrawers(input: TurnMemoryInput): Drawer[] {
-  const wing = wingFromSurface(input.surface, { course: input.course });
+  const wing = input.wing ?? wingFromSurface(input.surface, { course: input.course });
   const room = input.scopeId || "geral";
   const sourceRef = input.scopeId || undefined;
   const out: Drawer[] = [];
@@ -83,13 +86,14 @@ export async function writeTurnMemory(input: TurnMemoryInput): Promise<void> {
  * Recall no início do turno → um bloco de systemContext pronto pra injetar. Inclui o "perfil"
  * pinado (se houver) + os drawers relevantes. Best-effort: erro/vazio → "". SEM LLM no hot path.
  */
-export async function wakeUpContext(args: { userId: string; surface: string; hint?: string }): Promise<string> {
+export async function wakeUpContext(args: { userId: string; surface: string; hint?: string; wingLabel?: string }): Promise<string> {
   if (!args.userId || !isMemoryConfigured()) return "";
   const scope: MemoryScope = { userId: args.userId };
   try {
     const [profile, recalled] = await Promise.all([
       getMemory().search("", { userId: args.userId, room: "perfil" }, 1).catch(() => [] as RecallHit[]),
-      getMemory().wakeUp({ ...scope, wingLabel: args.surface }, args.hint, 6).catch(() => [] as RecallHit[]),
+      // wingLabel explícito (Mentores: "<slug>/<userId>") estreita o recall ao andar do mentor.
+      getMemory().wakeUp({ ...scope, wingLabel: args.wingLabel ?? args.surface }, args.hint, 6).catch(() => [] as RecallHit[]),
     ]);
     const lines: string[] = [];
     if (profile[0]?.text) lines.push(`Perfil do usuário: ${profile[0].text}`);
