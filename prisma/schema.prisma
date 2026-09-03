@@ -63,6 +63,8 @@ model User {
 
   // Planos / trial de estudante (ver lib/plans.ts + /api/trial/*)
   plan            String?   @default("free")  // "free" | "plus"
+  // Mentor ativo no chat (MentorTemplate.id); null = Aura base. Ver /api/mentors/activate.
+  activeMentorId  String?   @db.ObjectId
   plusUntil       DateTime?
   trialGranted    Boolean   @default(false)
   eduEmail        String?
@@ -260,7 +262,7 @@ model Plugin {
   name              String
   author            String   @default("Zaeon Core")
   description       String
-  category          String   // Essencial, Agentes, Mentorias
+  category          String   // Essencial, Agentes, Mentores
   tag               String?  // Livre, Alunos, VIP
   imageUrl          String?  // capa do plugin (URL); fallback p/ ícone por categoria
   price             Float    @default(0)
@@ -684,27 +686,38 @@ model Connector {
 }
 
 // ── MENTORES (camada agêntica; termo do produto = Mentor, não "tutor de IA") ──
-// Cópia EDITÁVEL do seed em lib/agent/mentors.ts (upsert por slug via POST /api/mentors).
-// O personaText entra no systemContext do /api/ai/chat quando o mentor está ativo.
+// Um mentor NÃO é motor novo: é agent:"aura" (harness) parametrizado por persona de domínio
+// (systemContext), memória escopada (wing = slug/userId) e skills/artefatos do domínio.
+// MentorTemplate = catálogo (cópia EDITÁVEL do seed em lib/agent/mentors.ts; semeia via
+// POST /api/mentors/seed ou lazy no 1º GET /api/mentors). PluggedMentor = o que o usuário plugou.
 model MentorTemplate {
   id                 String   @id @default(auto()) @map("_id") @db.ObjectId
   slug               String   @unique // ^[a-z0-9]+(-[a-z0-9]+)*$ (ex.: "medicina", "eng-civil")
-  course             String   // nome do curso (constants/courses.ts quando existe)
+  course             String
   name               String   // codinome honorário (Osler, Noether…) — trocável
   emoji              String   @default("⟁")
-  personaId          String   // id da persona no runtime (= slug)
+  personaId          String   // = slug
   personaText        String   // texto ESPECÍFICO; a BASE comum é prefixada no runtime
-  enabledSkills      String[] // literature | memory | studio | code | molecule (as inexistentes degradam)
+  enabledSkills      String[] // literature | memory | studio | code | molecule (inexistentes degradam)
   signatureArtifacts String[]
   sources            String[]
-  academicLevel      String   @default("graduacao") // graduacao | pos
-  guardrail          String?  // saúde: educacional, nunca diagnóstico/prescrição/terapia
+  academicLevel      String   @default("graduacao")
+  guardrail          String?  // saúde: educacional, nunca diagnóstico/prescrição/terapia (obrigatório nos 5)
   order              Int      @default(0)
-  active             Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
 
   @@map("mentor_templates")
+}
+
+model PluggedMentor {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  templateId String   @db.ObjectId
+  enabled    Boolean  @default(true)
+  pluggedAt  DateTime @default(now())
+
+  @@unique([userId, templateId])
+  @@index([userId])
+  @@map("plugged_mentors")
 }
 
 // ─── Aulas (LMS leve) — Turma é a entidade dona do vínculo professor↔alunos. ───
