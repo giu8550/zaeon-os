@@ -28,6 +28,9 @@ import AuraThinking from "@/components/study/AuraThinking";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
+import StructuredAnswerView from "@/components/study/StructuredAnswerView";
+import type { StructuredAnswer } from "@/lib/agent/contracts";
+import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
@@ -38,16 +41,19 @@ const LAST_SPACE_KEY = "zaeon.study.lastSpace";
 // Sentinela do tool-loop (Fase 0): o backend emite isto quando a Aura chama
 // studio_generate; o cliente executa a geração. Deve bater com a de chat/route.ts.
 const STUDIO_SENTINEL = "@@STUDIO_ACTION@@";
+// Sentinela do harness (@@STRUCTURED@@): StructuredAnswer inteiro → StructuredAnswerView
+// (+ artefato inline). Parser + fallback pra texto em lib/agent/structured-client.ts.
 
 type Space = { id: string; title: string };
 type Msg = {
   id: string;
   role: "user" | "assistant";
-  kind: "text" | "study" | "studio";
-  text?: string;
+  kind: "text" | "study" | "studio" | "structured";
+  text?: string;             // em "structured" = nucleo (histórico/persistência)
   studyId?: string;
   studyTitle?: string;
-  studioBlock?: StudioBlockData;
+  studioBlock?: StudioBlockData;   // em "structured" = artefato embutido na MESMA bolha
+  answer?: StructuredAnswer;
   at: number;
 };
 
@@ -115,7 +121,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // Persiste o thread (só texto + estudos; artefatos pesados do Studio ficam na sessão).
   useEffect(() => {
     try {
-      const slim = messages.filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text));
+      const slim = messages
+        .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text))
+        .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m)); // artefato inline fica na sessão
       localStorage.setItem(THREAD_KEY, JSON.stringify(slim.slice(-60)));
     } catch { /* ignore */ }
   }, [messages]);
@@ -140,7 +148,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         studioKind: d.studioKind, title: d.title, data: d.data ?? null,
         artifactId: d.artifactId, dataUrl: d.dataUrl,
       };
-      setMessages((prev) => [...prev, { id: uid(), role: "assistant", kind: "studio", studioBlock: block, at: Date.now() }]);
+      if (d.attachMsgId) {
+        // artefato INLINE (harness): anexa à bolha estruturada existente, sem msg nova.
+        setMessages((prev) => prev.map((m) => (m.id === d.attachMsgId ? { ...m, studioBlock: block } : m)));
+      } else {
+        // palette manual / texto livre: comportamento de sempre (msg nova).
+        setMessages((prev) => [...prev, { id: uid(), role: "assistant", kind: "studio", studioBlock: block, at: Date.now() }]);
+      }
       setStudioOpen(false);
     };
     window.addEventListener("zaeon:study:embed", onEmbed);
@@ -191,7 +205,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // ── TOOL-LOOP (Fase 0): executa studio_generate reusando o Studio existente ──
   // Resolve o estudo-alvo (foco → 1º → cria um), gera o artefato e dispara o
   // evento "zaeon:study:embed" — o mesmo que o feed usa — e o cartão cai na conversa.
-  const runStudioAction = useCallback(async (kind: string, topic: string) => {
+  // `attachMsgId` (opcional): o artefato entra NA bolha indicada (resposta estruturada) em vez
+  // de virar msg nova — é assim que "texto + artefato" convivem na mesma resposta.
+  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string) => {
     const H = { "Content-Type": "application/json" };
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
     // estudo NOVO criado pelo tópico. Nunca pega um estudo arbitrário da biblioteca
@@ -204,7 +220,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       } catch { /* ignore */ }
     }
     if (!spaceId) return;
-    const fire = (detail: any) => window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail }));
+    const fire = (detail: any) => window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...detail, attachMsgId } }));
     try {
       if (kind === "podcast" || kind === "video") {
         const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId }) });
@@ -240,7 +256,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     setQuickThinking(isQuickPrompt(prompt));
 
     const history = msgsRef.current
-      .filter((m) => m.kind === "text" && m.text)
+      .filter((m) => (m.kind === "text" || m.kind === "structured") && m.text)
       .map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.text as string }] }));
 
     // mensagem da assistente entra vazia e vai sendo preenchida aos poucos (streaming)
@@ -316,12 +332,35 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           const { done, value } = await reader.read();
           if (done) break;
           acc += dec.decode(value, { stream: true });
-          const si = acc.indexOf(STUDIO_SENTINEL);
-          target = si >= 0 ? acc.slice(0, si) : acc;   // datilografa só o visível
+          const cut = [acc.indexOf(STUDIO_SENTINEL), acc.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
+          target = cut.length ? acc.slice(0, Math.min(...cut)) : acc;   // datilografa só o visível
         }
 
+        const structured = parseStructuredStream(acc);
         const si = acc.indexOf(STUDIO_SENTINEL);
-        if (si >= 0) {
+        if (structured) {
+          // HARNESS: resposta estruturada — converte a bolha placeholder em cartão rico.
+          // Payload malformado (stream cortado etc.) → degrada pra TEXTO, nunca pra vazio.
+          target = ""; ended = true;
+          if (structured.kind === "answer") {
+            const a = structured.answer;
+            setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, kind: "structured", answer: a, text: a.nucleo } : m)));
+            // artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
+            for (const art of a.artifacts ?? []) {
+              if (art.studioKind && !art.studioKind.startsWith("research:")) void runStudioAction(art.studioKind, prompt, asstId);
+            }
+            appendTranscript("estudos", focusIds[0] ?? null, [
+              { role: "user", text: prompt },
+              { role: "assistant", text: a.nucleo },
+            ]);
+          } else {
+            patchAsst(structured.text);
+            appendTranscript("estudos", focusIds[0] ?? null, [
+              { role: "user", text: prompt },
+              { role: "assistant", text: structured.text },
+            ]);
+          }
+        } else if (si >= 0) {
           // TOOL-LOOP (Fase 0): ação — não datilografa; encerra e trata.
           target = ""; ended = true;
           let action: any = null;
@@ -442,6 +481,22 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                           onFocus={addFocus}
                           onUnfocus={removeFocus}
                         />
+                      </div>
+                    </div>
+                  );
+                }
+                if (m.kind === "structured" && m.answer) {
+                  // resposta rica do harness; o artefato (se houver) entra no slot do cartão
+                  return (
+                    <div key={m.id} className="flex justify-start">
+                      <div className="max-w-[85%] w-full">
+                        <StructuredAnswerView
+                          answer={m.answer}
+                          onConcept={(c) => setInput(`Me explica melhor: ${c}`)}
+                          onNext={(s) => setInput(s)}
+                        >
+                          {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
+                        </StructuredAnswerView>
                       </div>
                     </div>
                   );
