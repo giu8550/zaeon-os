@@ -683,6 +683,30 @@ model Connector {
   @@map("connectors")
 }
 
+// ── MENTORES (camada agêntica; termo do produto = Mentor, não "tutor de IA") ──
+// Cópia EDITÁVEL do seed em lib/agent/mentors.ts (upsert por slug via POST /api/mentors).
+// O personaText entra no systemContext do /api/ai/chat quando o mentor está ativo.
+model MentorTemplate {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  slug               String   @unique // ^[a-z0-9]+(-[a-z0-9]+)*$ (ex.: "medicina", "eng-civil")
+  course             String   // nome do curso (constants/courses.ts quando existe)
+  name               String   // codinome honorário (Osler, Noether…) — trocável
+  emoji              String   @default("⟁")
+  personaId          String   // id da persona no runtime (= slug)
+  personaText        String   // texto ESPECÍFICO; a BASE comum é prefixada no runtime
+  enabledSkills      String[] // literature | memory | studio | code | molecule (as inexistentes degradam)
+  signatureArtifacts String[]
+  sources            String[]
+  academicLevel      String   @default("graduacao") // graduacao | pos
+  guardrail          String?  // saúde: educacional, nunca diagnóstico/prescrição/terapia
+  order              Int      @default(0)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("mentor_templates")
+}
+
 // ─── Aulas (LMS leve) — Turma é a entidade dona do vínculo professor↔alunos. ───
 // FKs são ObjectId "cru" (sem @relation), como `referredBy` no User — as queries
 // cruzam manualmente nas rotas (evita back-relations e não mexe no model User).

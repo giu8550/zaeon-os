@@ -124,8 +124,18 @@ export async function POST(req: Request) {
         const rl = await guard(req, "ai-chat", "ai-heavy");
         if (!rl.ok) return rl.response;
         // 🔥 NOVO: Recebendo userData + history + agentContext do frontend
-        const { prompt, agent, systemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface } = await req.json();
+        const { prompt, agent, systemContext: rawSystemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface, mentor } = await req.json();
         const agentKey = agent?.toLowerCase() || DEFAULT_AGENT_ID;
+
+        // MENTOR ativo (slug de lib/agent/mentors.ts): o personaText entra NA FRENTE do
+        // systemContext — e como legado, cache e harness leem a mesma variável, vale pros três.
+        // Slug inválido/desconhecido = sem mentor (nunca derruba o turno).
+        let systemContext: string | undefined = rawSystemContext;
+        if (mentor) {
+            const { resolveMentorContext } = await import("@/lib/agent/mentors-server");
+            const block = await resolveMentorContext(mentor).catch(() => null);
+            if (block) systemContext = [block, rawSystemContext].filter(Boolean).join("\n\n");
+        }
 
         // Histórico da conversa (memória entre turnos). Ver lib/ai/history.ts.
         const chatHistory = sanitizeHistory(history);
