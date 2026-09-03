@@ -30,6 +30,7 @@ import StudioPalette from "@/components/study/StudioPalette";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
+import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
@@ -40,8 +41,8 @@ const LAST_SPACE_KEY = "zaeon.study.lastSpace";
 // Sentinela do tool-loop (Fase 0): o backend emite isto quando a Aura chama
 // studio_generate; o cliente executa a geração. Deve bater com a de chat/route.ts.
 const STUDIO_SENTINEL = "@@STUDIO_ACTION@@";
-// Sentinela do harness: StructuredAnswer inteiro → StructuredAnswerView (+ artefato inline).
-const STRUCTURED_SENTINEL = "@@STRUCTURED@@";
+// Sentinela do harness (@@STRUCTURED@@): StructuredAnswer inteiro → StructuredAnswerView
+// (+ artefato inline). Parser + fallback pra texto em lib/agent/structured-client.ts.
 
 type Space = { id: string; title: string };
 type Msg = {
@@ -335,15 +336,14 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           target = cut.length ? acc.slice(0, Math.min(...cut)) : acc;   // datilografa só o visível
         }
 
-        const sti = acc.indexOf(STRUCTURED_SENTINEL);
+        const structured = parseStructuredStream(acc);
         const si = acc.indexOf(STUDIO_SENTINEL);
-        if (sti >= 0) {
+        if (structured) {
           // HARNESS: resposta estruturada — converte a bolha placeholder em cartão rico.
+          // Payload malformado (stream cortado etc.) → degrada pra TEXTO, nunca pra vazio.
           target = ""; ended = true;
-          let ans: StructuredAnswer | null = null;
-          try { ans = JSON.parse(acc.slice(sti + STRUCTURED_SENTINEL.length)); } catch { /* ignore */ }
-          if (ans && typeof ans.nucleo === "string") {
-            const a = ans;
+          if (structured.kind === "answer") {
+            const a = structured.answer;
             setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, kind: "structured", answer: a, text: a.nucleo } : m)));
             // artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
             for (const art of a.artifacts ?? []) {
@@ -354,7 +354,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               { role: "assistant", text: a.nucleo },
             ]);
           } else {
-            patchAsst("Sem resposta agora.");
+            patchAsst(structured.text);
+            appendTranscript("estudos", focusIds[0] ?? null, [
+              { role: "user", text: prompt },
+              { role: "assistant", text: structured.text },
+            ]);
           }
         } else if (si >= 0) {
           // TOOL-LOOP (Fase 0): ação — não datilografa; encerra e trata.

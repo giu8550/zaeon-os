@@ -17,13 +17,13 @@ import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
+import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 
 // `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
 type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer };
 
-// Devem bater com as sentinelas de app/api/ai/chat/route.ts.
+// Deve bater com RESEARCH_SENTINEL de app/api/ai/chat/route.ts (a estruturada vem do structured-client).
 const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";
-const STRUCTURED_SENTINEL = "@@STRUCTURED@@";
 // L0 (docs/MEMORY_AND_PERSISTENCE.md): antes a conversa da Sala de Pesquisa ZERAVA
 // (sem persistência + desmonta ao trocar de aba). Agora espelha o thread e o rascunho.
 const THREAD_KEY_R = "zaeon.research.thread.v1";
@@ -165,23 +165,19 @@ export default function ResearchChat({
         const cut = [acc.indexOf(RESEARCH_SENTINEL), acc.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
         target = cut.length ? acc.slice(0, Math.min(...cut)) : acc;   // datilografa só o visível
       }
-      const sti = acc.indexOf(STRUCTURED_SENTINEL);
+      const structured = parseStructuredStream(acc);
       const si = acc.indexOf(RESEARCH_SENTINEL);
-      if (sti >= 0) {
-        // HARNESS: resposta estruturada → cartão rico na bolha placeholder.
+      if (structured) {
+        // HARNESS: resposta estruturada → cartão rico; payload malformado → TEXTO (nunca vazio).
         target = ""; ended = true;
-        let ans: StructuredAnswer | null = null;
-        try { ans = JSON.parse(acc.slice(sti + STRUCTURED_SENTINEL.length)); } catch { /* ignore */ }
-        if (ans && typeof ans.nucleo === "string") {
-          const a = ans;
-          setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, answer: a, text: a.nucleo } : m)));
-          appendTranscript("pesquisa", null, [
-            { role: "user", text: prompt },
-            { role: "assistant", text: a.nucleo },
-          ]);
-        } else {
-          patch("Sem resposta agora.");
-        }
+        const text = structured.kind === "answer" ? structured.answer.nucleo : structured.text;
+        setMessages((prev) => prev.map((m) => (m.id === asstId
+          ? { ...m, text, answer: structured.kind === "answer" ? structured.answer : undefined }
+          : m)));
+        appendTranscript("pesquisa", null, [
+          { role: "user", text: prompt },
+          { role: "assistant", text },
+        ]);
       } else if (si >= 0) {
         // TOOL-LOOP: research_generate → gera o trabalho e encaixa no documento.
         target = ""; ended = true;
