@@ -2172,6 +2172,7 @@ export default function HomeworkPage({
           format,
           fontChoice: abntMeta.fontChoice,
           parsedSections: parsedSections ?? undefined,
+          researchWorkId: currentWorkIdRef.current ?? undefined, // conquista "trabalho concluído" → credencial Solana
         }),
       });
 

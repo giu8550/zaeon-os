@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { currentUser } from "@/lib/aulas/auth";
 import { gradeSubmission, type GradeQuestion, type SubmittedAnswer } from "@/lib/aulas/grade";
+import { onCourseCompleted } from "@/lib/solana/hooks";
 
 export const runtime = "nodejs";
 
@@ -60,6 +61,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const status = result.passed ? "completed" : (prev?.status === "completed" ? "completed" : "in_progress");
   if (prev) await prisma.aulaProgress.update({ where: { id: prev.id }, data: { status } });
   else await prisma.aulaProgress.create({ data: { aulaId: aula.id, studentId: me.id, status } });
+
+  // Conquista → credencial soulbound na Solana (fire-and-forget; idempotente; nunca bloqueia a nota).
+  if (status === "completed") {
+    onCourseCompleted(me.id, aula.id, aula.title, { percentage: result.percentage, passed: result.passed, submissionId: submission.id });
+  }
 
   return NextResponse.json({ submissionId: submission.id, percentage: result.percentage, passed: result.passed, graded: result.graded });
 }
