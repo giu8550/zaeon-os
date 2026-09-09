@@ -43,7 +43,8 @@ export async function answerOnWhatsApp({ userId, text }: BrainInput): Promise<Br
     .filter((m) => m.text && m.text.trim())
     .map((m) => ({ role: m.role === "assistant" ? "model" : "user", text: m.text.trim() }));
 
-  let answer: StructuredAnswer | null = null;
+  let answer: StructuredAnswer | null = null;   // o que vai pra memória L3 (estruturado)
+  let rendered = "";                             // o que vai pro Zap (texto)
   let via: BrainOutput["via"] = "fallback";
 
   if (process.env.AURA_HARNESS !== "0") {
@@ -64,9 +65,8 @@ export async function answerOnWhatsApp({ userId, text }: BrainInput): Promise<Br
       const deps = buildHarnessDeps(hctx, { systemContext, history });
       const { answer: a } = await runTrajectoryTraced(text, hctx, deps);
       answer = a;
+      rendered = renderStructuredAnswer(a); // mesmo render texto do cliente web (sem sentinelas)
       via = "harness";
-      // texto final = render markdown do StructuredAnswer (mesmo fallback texto do cliente web)
-      answer = { ...a, nucleo: renderStructuredAnswer(a) };
     } catch (e) {
       console.warn("[whatsapp:brain] harness falhou, caindo no Gemini direto:", (e as any)?.message ?? e);
     }
@@ -74,12 +74,15 @@ export async function answerOnWhatsApp({ userId, text }: BrainInput): Promise<Br
 
   if (!answer) {
     try {
-      const { getGeminiChatModel, extractText } = await import("@/lib/scholar/gemini");
+      const [{ getGeminiChatModel, extractText }, { sanitizeHistory }] = await Promise.all([
+        import("@/lib/scholar/gemini"),
+        import("@/lib/ai/history"),
+      ]);
       const model = getGeminiChatModel(`${persona}\n\n=== CONTEXTO ===\n${systemContext}`);
-      const chat = model.startChat({ history: history.map((h) => ({ role: h.role, parts: [{ text: h.text }] })) });
+      const chat = model.startChat({ history: sanitizeHistory(history) }); // começa em user, alternado
       const res = await chat.sendMessage(text);
       const out = extractText(res).trim();
-      if (out) { answer = { nucleo: out }; via = "gemini"; }
+      if (out) { answer = { nucleo: out }; rendered = out; via = "gemini"; }
     } catch (e) {
       console.warn("[whatsapp:brain] gemini falhou:", (e as any)?.message ?? e);
     }
@@ -87,10 +90,11 @@ export async function answerOnWhatsApp({ userId, text }: BrainInput): Promise<Br
 
   if (!answer) {
     const { messageForError } = await import("@/lib/agent/errors");
-    answer = { nucleo: messageForError("network") };
+    rendered = messageForError("network");
+    answer = { nucleo: rendered };
   }
 
-  const finalText = toWhatsAppText(answer.nucleo);
+  const finalText = toWhatsAppText(rendered || answer.nucleo);
 
   // L1 (transcript) + L3 (memória) — best-effort, nunca derruba a resposta
   try {

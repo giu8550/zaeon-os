@@ -21,7 +21,7 @@ const CODE_TTL_MS = 24 * 3_600_000;
 const MAX_LINKS_PER_TICK = 200;
 
 export function platformPhone(env: Record<string, string | undefined> = process.env): string | null {
-  return toE164(env.WHATSAPP_PLATFORM_PHONE ?? "") ;
+  return toE164(env.WHATSAPP_PLATFORM_PHONE ?? "");
 }
 
 async function planOf(userId: string): Promise<PlanState | null> {
