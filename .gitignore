@@ -78,3 +78,5 @@ vertex-diag.js
 dev.log
 _PROD_B64_DELETE_AFTER.txt
 .env.secrets
+
+*.b64
