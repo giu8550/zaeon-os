@@ -253,8 +253,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   }, [focusIds, spaces]);
 
   // ── envio pro chat da Aura ──────────────────────────────────────────────────
-  const send = useCallback(async () => {
-    const prompt = input.trim();
+  // `override` = envio direto (clique numa opção/conceito da resposta do harness),
+  // sem passar pelo campo de texto — B3 do backlog v2.
+  const send = useCallback(async (override?: string) => {
+    const prompt = (typeof override === "string" ? override : input).trim();
     if (!prompt || sending) return;
     setQuickThinking(isQuickPrompt(prompt));
 
@@ -496,8 +498,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                       <div className="max-w-[85%] w-full">
                         <StructuredAnswerView
                           answer={m.answer}
-                          onConcept={(c) => setInput(`Me explica melhor: ${c}`)}
-                          onNext={(s) => setInput(s)}
+                          onConcept={(c) => void send(`Me explica melhor: ${c}`)}
+                          onNext={(s) => void send(s)}
                         >
                           {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
                         </StructuredAnswerView>
@@ -543,7 +545,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             <CoworkComposer
               value={input}
               onChange={setInput}
-              onSubmit={send}
+              onSubmit={() => void send()}
               onToggleStudio={() => setStudioOpen((v) => !v)}
               studioOpen={studioOpen}
               busy={sending}
