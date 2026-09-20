@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2,
+  PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2, GitBranch,
 } from "lucide-react";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
@@ -33,8 +33,12 @@ import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
+import type { SkillNodeState } from "@/lib/skilltree/types";
+import type { SkillTreeData } from "@/components/study/SkillTreePanel";
 
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
+// Árvore de habilidades GENERATIVA (React Flow) — opt-in, drawer ao lado da conversa.
+const SkillTreePanel = dynamic(() => import("@/components/study/SkillTreePanel"), { ssr: false });
 
 const DT = "application/x-zaeon-item";
 const THREAD_KEY = "zaeon.cowork.thread.v1";
@@ -78,6 +82,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [quickThinking, setQuickThinking] = useState(false);
   // Mentor ativo (SLUG, ex.: "farmacia") — null = Aura base. Vai como `mentor` a cada envio.
   const [activeMentor, setActiveMentor] = useState<string | null>(null);
+  // Árvore de habilidades: drawer opt-in; o tópico nasce do estudo focado (ou digitado no painel).
+  const [treeOpen, setTreeOpen] = useState(false);
+  const [tree, setTree] = useState<SkillTreeData | null>(null);
+  const [skillNode, setSkillNode] = useState<{ topicSlug: string; nodeId: string; title: string } | null>(null);
+  const [treeRefresh, setTreeRefresh] = useState(0);
 
   const listRef = useRef<HTMLDivElement>(null);
   const scrollToEnd = useCallback(() => {
@@ -303,6 +312,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             activeTab: "sala-de-estudos",
             currentStudyId: focusIds[0],
             focusedStudyIds: focusIds,
+            // posição do aluno na árvore de habilidades → o mentor sabe onde você está (harness)
+            skillTopic: skillNode?.topicSlug ?? tree?.topicSlug,
+            skillNodeId: skillNode?.nodeId,
           },
           mentor: activeMentor ?? undefined,   // slug do mentor ativo → Aura com a voz da área
         }),
@@ -392,8 +404,16 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       patchAsst("Falha de rede ao falar com a Aura.");
     } finally {
       setSending(false);
+      // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
+      if (tree) setTreeRefresh((n) => n + 1);
     }
-  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor]);
+  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree]);
+
+  // Clicar num nó da árvore: conversa scopada naquele nó (vai pro composer + chip de foco).
+  const onNodeChat = useCallback((node: SkillNodeState, t: SkillTreeData) => {
+    setSkillNode({ topicSlug: t.topicSlug, nodeId: node.id, title: node.title });
+    setInput(`Quero dominar "${node.title}" (${t.topicLabel}). Me conduz com pistas e perguntas, sem entregar a resposta pronta.`);
+  }, []);
 
   const newStudy = useCallback(async () => {
     try {
@@ -406,8 +426,17 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   }, [openStudy]);
 
   const focusChips = useMemo(() => (
-    focusIds.length ? (
+    (focusIds.length || skillNode) ? (
       <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2">
+        {skillNode && (
+          <span className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-full text-[11.5px] font-tech
+            bg-gradient-to-r from-violet-500/15 to-cyan-400/15 text-violet-700 dark:text-cyan-200 border border-violet-400/40">
+            <GitBranch size={11} /> {skillNode.title}
+            <button type="button" onClick={() => setSkillNode(null)} title="Sair do nó" className="ml-0.5 rounded-full hover:bg-violet-500/20 p-0.5">
+              <X size={10} />
+            </button>
+          </span>
+        )}
         {focusIds.map((id) => (
           <span key={id} className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-full text-[11.5px] font-tech
             bg-cyan-500/10 text-cyan-700 dark:text-cyan-200 border border-cyan-400/30">
@@ -419,7 +448,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         ))}
       </div>
     ) : null
-  ), [focusIds, spaceTitle, removeFocus]);
+  ), [focusIds, spaceTitle, removeFocus, skillNode]);
 
   return (
     <div className="relative h-full flex lg:flex-row flex-col">
@@ -431,6 +460,20 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       />
       {/* ── COLUNA CENTRAL: conversa + composer ── */}
       <div className="relative flex-1 min-w-0 flex flex-col">
+
+        {/* ⟁ Árvore de habilidades — drawer opt-in por cima da conversa (não troca a tela) */}
+        {treeOpen && (
+          <div className="absolute inset-y-0 right-0 z-30 w-full sm:w-[460px] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]">
+            <SkillTreePanel
+              topic={focusIds[0] ? spaceTitle(focusIds[0]) : null}
+              focusNodeId={skillNode?.nodeId ?? null}
+              refreshKey={treeRefresh}
+              onTree={setTree}
+              onNodeChat={onNodeChat}
+              onClose={() => setTreeOpen(false)}
+            />
+          </div>
+        )}
 
         {/* Seta "ir para o final" — só aparece quando há conversa e não está no fim */}
         {messages.length > 0 && !atBottom && (
@@ -553,7 +596,21 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               active={active && !openStudyId}
             >
               {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
-              <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
+              <div className="flex items-center gap-2">
+                <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
+                <button
+                  type="button"
+                  onClick={() => setTreeOpen((v) => !v)}
+                  title="Árvore de habilidades do tópico"
+                  aria-pressed={treeOpen}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-bold font-tech border transition-colors
+                    ${treeOpen
+                      ? "bg-gradient-to-r from-violet-500/15 to-cyan-400/15 text-violet-700 dark:text-cyan-200 border-violet-400/40"
+                      : "text-slate-500 dark:text-white/50 border-slate-200 dark:border-white/10 hover:text-violet-600 hover:border-violet-300"}`}
+                >
+                  <GitBranch size={12} /> Árvore{tree ? ` ${tree.nodes.filter((n) => n.status === "mastered").length}/${tree.nodes.length}` : ""}
+                </button>
+              </div>
               {focusChips}
             </CoworkComposer>
           </div>
