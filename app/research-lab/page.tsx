@@ -105,6 +105,7 @@ import {
   NewspaperIcon,
   AcademicCapIcon,
 } from "@heroicons/react/24/outline";
+import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
@@ -342,7 +343,7 @@ const ChatInput = ({
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSendClick()}
+          onKeyDown={onEnterSubmit(handleSendClick)}
           disabled={isTyping}
           placeholder={isListening ? "Fale agora..." : placeholder}
           className="flex-1 bg-transparent border-none outline-none text-[13px] text-black dark:text-white placeholder:text-slate-400"

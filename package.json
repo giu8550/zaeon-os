@@ -100,6 +100,7 @@
     "react-dropzone": "^14.4.0",
     "react-i18next": "^16.5.0",
     "react-icons": "^5.0.1",
+    "reactflow": "^11.11.4",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",

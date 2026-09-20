@@ -860,4 +860,29 @@ model WhatsAppMessage {
   @@index([userId, at])
   @@index([userId, dedupeKey])
   @@map("whatsapp_messages")
+// ─── Árvore de Habilidades GENERATIVA (ver lib/skilltree/*) ────────────────────
+// 1 árvore por tópico (cache global, reusável por todos os usuários); o progresso é por usuário.
+model SkillTree {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  topicSlug  String   @unique          // normalizado do tópico ("fotossintese")
+  topicLabel String
+  nodes      Json                      // SkillNode[]: {id,title,branch,level,prereqs[],summary}
+  model      String                    // modelo/versão que gerou (provenance)
+  createdAt  DateTime @default(now())
+
+  @@map("skill_trees")
+}
+
+model SkillProgress {                  // progresso POR usuário e nó
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  topicSlug String
+  nodeId    String
+  mastery   Float    @default(0)       // 0..1
+  status    String   @default("locked") // locked|available|in_progress|mastered
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, topicSlug, nodeId])
+  @@index([userId, topicSlug])
+  @@map("skill_progress")
 }
