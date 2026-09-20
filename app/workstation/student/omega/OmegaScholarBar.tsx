@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useOmegaScholar } from "./OmegaScholarContext";
 import VoiceModeSwitch from "@/components/voice/VoiceModeSwitch";
 import GlitchTerm from "@/components/research/GlitchTerm";
+import { isSubmitEnter } from "@/lib/ui/enterSubmit";
 
 interface OmegaScholarBarProps {
   flushTop?: boolean;
@@ -90,7 +91,7 @@ export default function OmegaScholarBar({ flushTop = false, collapsible = false 
         autoFocus={collapsible}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape" && collapsible) setExpanded(false); }}
+        onKeyDown={(e) => { if (isSubmitEnter(e)) { e.preventDefault(); submit(); } if (e.key === "Escape" && collapsible) setExpanded(false); }}
         disabled={busy}
         placeholder="Pesquise o assunto do estudo…"
         className="flex-1 min-w-0 bg-transparent border-none px-1 py-1.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-white/30 outline-none disabled:opacity-60"
