@@ -1,26 +1,51 @@
 name: Deploy (VPS)
 
-# Deploy da beta no VPS Hostinger via SSH: atualiza o código e sobe os containers.
-# Roda no push pra main OU manualmente (workflow_dispatch). Só executa de verdade se
-# os secrets do VPS estiverem configurados (guard abaixo) — assim não falha à toa.
+# Deploy autônomo da Zaeon no VPS via SSH — estilo "coexist-prod": sobe a Zaeon
+# SEM derrubar outras stacks no mesmo servidor (ex.: ChipFlow/disparos), porque o
+# compose é isolado por nome de projeto (name: zaeon-beta) e a gente NÃO usa
+# --remove-orphans nem mexe em containers de fora do projeto.
 #
-# Secrets necessários (Settings → Secrets and variables → Actions):
-#   VPS_HOST       → 187.77.226.64
-#   VPS_PORT       → 22022
-#   VPS_USER       → root
-#   VPS_SSH_KEY    → chave PRIVADA SSH (conteúdo completo) com acesso ao VPS
-#   DEPLOY_PATH    → caminho do repo no VPS (ex.: /opt/zaeon-os)
+# Dispara no push pra main (ignora docs) OU manualmente (workflow_dispatch, com opções).
+# Só executa de verdade se os secrets do VPS existirem (guard) — assim não falha à toa.
+#
+# Blindagens que nasceram do deploy manual de 2026-09-14:
+#   • .env.secrets é ESCRITO pelo pipeline a partir do secret base64 → credencial
+#     Vertex sempre numa linha só (nunca mais o erro de "@ in variable name").
+#   • cria swap de 8G se não existir (a box travou por falta de RAM no build+voz).
+#   • sobe só web+redis+caddy por padrão (voice-engine/abnt são glutões de RAM e
+#     ficam opcionais — liguem com a var/opção with_voice).
+#   • health-gate: o job FALHA e mostra logs se o /api/health não responder.
+#
+# Secrets (Settings → Secrets and variables → Actions → New repository secret):
+#   VPS_HOST                → 75.119.140.97
+#   VPS_PORT                → 22
+#   VPS_USER                → root
+#   VPS_SSH_KEY             → chave PRIVADA SSH (conteúdo completo) com acesso ao VPS
+#   DEPLOY_PATH             → /root/zaeon-os
+#   GOOGLE_CREDENTIALS_B64  → base64 do JSON do service account (uma linha)
+#   GOOGLE_PROJECT_ID_VALUE → id do projeto Google
+# Vars opcionais (aba Variables):
+#   DEPLOY_COMPOSE          → override do compose (default docker-compose.beta.yml)
+#   DEPLOY_WITH_VOICE       → "true" liga voice-engine/abnt/pdf-loader no deploy
 
 on:
   push:
     branches: [main]
-    paths-ignore:        # não redeploya por mudança só de doc
+    paths-ignore:
       - "**.md"
       - "docs/**"
   workflow_dispatch:
     inputs:
       rebuild:
         description: "Rebuild das imagens (--build)"
+        type: boolean
+        default: true
+      with_voice:
+        description: "Subir também voice-engine/abnt/pdf-loader (come RAM)"
+        type: boolean
+        default: false
+      db_push:
+        description: "Rodar prisma db push (migra schema no Atlas)"
         type: boolean
         default: true
 
@@ -52,31 +77,41 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
-          # Segredos de runtime injetados pelo GitHub → materializados em .env.secrets no VPS.
           GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
           GOOGLE_PROJECT_ID_VALUE: ${{ secrets.GOOGLE_PROJECT_ID_VALUE }}
+          # opções (push usa defaults; dispatch respeita os inputs)
+          WITH_VOICE: ${{ github.event.inputs.with_voice || vars.DEPLOY_WITH_VOICE || 'false' }}
+          DB_PUSH: ${{ github.event.inputs.db_push || 'true' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 25m
-          # Repassa os segredos do bloco env: acima para dentro do script remoto.
-          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE
+          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
-            # Qual compose subir: beta enxuto por padrão (web+redis+caddy).
-            # Para a stack completa, crie a var DEPLOY_COMPOSE=docker-compose.yml.
             export COMPOSE_FILE="${{ vars.DEPLOY_COMPOSE || 'docker-compose.beta.yml' }}"
-            echo "→ Compose: $COMPOSE_FILE"
-            echo "→ Atualizando código…"
+            DC="docker compose -f $COMPOSE_FILE"
+            echo "→ Compose: $COMPOSE_FILE   with_voice=$WITH_VOICE   db_push=$DB_PUSH"
+
+            echo "→ Swap (blindagem de RAM)…"
+            if ! swapon --show | grep -q /swapfile; then
+              fallocate -l 8G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+              grep -q /swapfile /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+              echo "  swap de 8G criado."
+            else
+              echo "  swap já existe."
+            fi
+
+            echo "→ Atualizando código (main)…"
             git fetch --all --prune
             git reset --hard origin/main
-            # Grava segredos de runtime FORA do git (compose lê via env_file: [.env, .env.secrets]).
+
+            echo "→ Gravando .env.secrets (credencial Vertex em UMA linha)…"
+            umask 177
             if [ -n "${GOOGLE_CREDENTIALS_B64:-}" ]; then
-              echo "→ Gravando .env.secrets (credencial Vertex)…"
-              umask 177
               {
                 echo "GOOGLE_CREDENTIALS=$(printf '%s' "$GOOGLE_CREDENTIALS_B64" | base64 -d | tr -d '\n')"
                 echo "GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID_VALUE}"
@@ -85,35 +120,43 @@ jobs:
               echo "::warning::GOOGLE_CREDENTIALS_B64 vazio — mantendo .env.secrets atual (se houver)."
               touch .env.secrets
             fi
-            # GIT_SHA runtime-only → /api/health expõe o commit em prod. Anexado DEPOIS
-            # da materialização acima (que reescreve .env.secrets com `>`), senão seria clobado.
-            echo "GIT_SHA=$(git rev-parse --short HEAD)" >> .env.secrets
-            # Harness da Aura LIGADO por padrão no deploy: só escreve se a flag estiver AUSENTE,
-            # p/ respeitar um kill-switch manual (AURA_HARNESS=0 via deploy-harness.yml) até
-            # alguém religar. Ausente == "1" no código, mas explícito evita ambiguidade no .env.
-            touch .env
-            if ! grep -q '^AURA_HARNESS=' .env; then
-              echo "AURA_HARNESS=1" >> .env
-              echo "→ AURA_HARNESS=1 (ligado no deploy)"
+
+            # Serviços do deploy: enxuto por padrão; completo se WITH_VOICE=true.
+            if [ "$WITH_VOICE" = "true" ]; then
+              SERVICES=""            # vazio = todos do compose
+              NODEPS=""
             else
-              echo "→ AURA_HARNESS mantido: $(grep '^AURA_HARNESS=' .env)"
+              SERVICES="redis caddy web"
+              NODEPS="--no-deps"     # não puxa voice-engine/abnt (glutões)
             fi
-            echo "→ Subindo containers…"
-            docker compose up -d --build --remove-orphans
-            # Garante que o web recarregue a credencial nova (é runtime-only).
-            docker compose up -d --force-recreate web
-            # Schema ADITIVO junto do deploy (Mongo: cria coleções/índices novos — mentor_templates,
-            # plugged_mentors, memory_drawers…; nunca migra dados). Roda DENTRO do web novo, então
-            # usa o schema da imagem recém-buildada. Falha vira warning: o app sobe mesmo assim
-            # (as rotas degradam com fallback), e o índice único/coleção pode ser criado depois
-            # via deploy-harness.yml (db_push=true).
-            echo "→ prisma db push (schema aditivo)…"
-            # (sem --accept-data-loss: em modo não-interativo o Prisma RECUSA mudança destrutiva → só aditivo)
-            if docker compose exec -T web npx prisma db push --skip-generate 2>&1 | tail -20; then
-              echo "✓ db push ok"
-            else
-              echo "::warning::prisma db push falhou — app no ar; rode deploy-harness.yml com db_push=true e confira os logs do web."
+
+            echo "→ Subindo containers (coexist: não toca outras stacks)…"
+            $DC up -d --build $NODEPS $SERVICES
+            # web é runtime-only p/ a credencial → recria pra recarregar .env.secrets
+            $DC up -d --force-recreate --no-deps web
+
+            if [ "$DB_PUSH" = "true" ]; then
+              echo "→ prisma db push (schema no Atlas; dados intactos)…"
+              # --skip-generate: o client já vem do build; sem isso o Prisma tenta
+              # regenerar dentro do container e falha com EACCES em node_modules,
+              # o que (com set -e) derrubaria o deploy à toa.
+              $DC exec -T web npx prisma db push --skip-generate
             fi
+
+            echo "→ Health-gate…"
+            ok=0
+            for i in $(seq 1 20); do
+              if $DC exec -T web node -e "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+                ok=1; echo "  ✓ /api/health OK"; break
+              fi
+              echo "  … aguardando web ($i/20)"; sleep 6
+            done
+            if [ "$ok" != "1" ]; then
+              echo "::error::web não respondeu /api/health — mostrando logs e abortando."
+              $DC logs --tail=60 web
+              exit 1
+            fi
+
             echo "→ Limpando imagens órfãs…"
             docker image prune -f
-            echo "✓ Deploy concluído."
+            echo "✓ Deploy concluído — Zaeon no ar."

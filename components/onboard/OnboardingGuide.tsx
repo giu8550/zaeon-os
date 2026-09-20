@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSession } from "next-auth/react";
 import { getActiveSteps, getTour, subscribeTour, nextTour, skipTour } from "@/lib/onboarding/tour";
 
 export default function OnboardingGuide() {
@@ -21,8 +22,13 @@ export default function OnboardingGuide() {
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => subscribeTour(setTour), []);
 
+  // A2 (backlog v2): o tour só existe pra quem está logado. Sem sessão, nada de
+  // destaque, cardzinho nem listeners — mesmo que o localStorage diga "tour ativo".
+  const { status } = useSession();
+  const authed = status === "authenticated";
+
   const steps = getActiveSteps();
-  const step = tour.active ? steps[tour.index] : null;
+  const step = authed && tour.active ? steps[tour.index] : null;
 
   // Mede (e re-mede) o elemento destacado.
   useEffect(() => {

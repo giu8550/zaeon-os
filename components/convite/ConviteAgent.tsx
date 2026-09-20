@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PaperClipIcon } from "@heroicons/react/24/outline";
+import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 
 type Role = "student" | "teacher";
 
@@ -320,7 +321,7 @@ export default function ConviteAgent({ sessionToken, inviteCode, onComplete }: P
                   type={phase === "age" ? "number" : "text"}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                  onKeyDown={onEnterSubmit(handleSend)}
                   placeholder={
                     phase === "role"
                       ? "estudante / professor"

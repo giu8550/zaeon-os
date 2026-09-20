@@ -288,8 +288,15 @@ export async function POST(req: Request) {
             };
             // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
             const memBlock = userId ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: String(prompt || ""), wingLabel: activeMentor?.wing.label }).catch(() => "") : "";
+            // Árvore de habilidades: posição do aluno no tópico (dominados/disponíveis/nó em foco) +
+            // guardrail pedagógico → o mentor conduz pro próximo nó. Best-effort ("" sem tópico/L3).
+            const skillTopic = typeof ac.skillTopic === "string" && ac.skillTopic.trim() ? String(ac.skillTopic).trim() : null;
+            const skillNodeId = typeof ac.skillNodeId === "string" && ac.skillNodeId.trim() ? String(ac.skillNodeId).trim() : null;
+            const skillBlock = userId && skillTopic
+                ? await import("@/lib/skilltree/progress").then((m) => m.treeContextBlock(userId, skillTopic, skillNodeId)).catch(() => "")
+                : "";
             const deps = buildHarnessDeps(hctx, {
-                systemContext: [systemContext, memBlock].filter(Boolean).join("\n\n") || undefined,
+                systemContext: [systemContext, memBlock, skillBlock].filter(Boolean).join("\n\n") || undefined,
                 history: (chatHistory as any[]).map((h) => ({ role: h.role, text: h?.parts?.[0]?.text ?? "" })),
             });
             const encoder = new TextEncoder();
@@ -300,6 +307,13 @@ export async function POST(req: Request) {
                         const out = resolveHarnessOutput(state, answer, surface, String(prompt || ""));
                         // L3 write (A7, fire-and-forget): deriva o turno em drawers verbatim. Nunca bloqueia.
                         if (userId) void mem.writeTurnMemory({ userId, surface: hctx.activeTab, scopeId: ac.currentStudyId ?? ac.currentResearchId ?? null, prompt: String(prompt || ""), answer, wing: activeMentor?.wing });
+                        // Árvore: o mentor SOBE a maestria quando o aluno demonstra domínio do nó em foco
+                        // (juiz Flash, fire-and-forget — nunca atrasa nem derruba a resposta).
+                        if (userId && skillTopic && skillNodeId) {
+                            void import("@/lib/skilltree/assess")
+                                .then((m) => m.assessAndUpdate({ userId, topicSlug: skillTopic, nodeId: skillNodeId, message: String(prompt || "") }))
+                                .catch(() => null);
+                        }
                         if (out.mode === "studio") {
                             controller.enqueue(encoder.encode(STUDIO_SENTINEL + JSON.stringify({ type: "studio", kind: out.kind, topic: out.topic, text: out.text })));
                         } else if (out.mode === "research") {
