@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { currentUser } from "@/lib/aulas/auth";
+import { onCourseCompleted } from "@/lib/solana/hooks";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const me = await currentUser();
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const aula = await prisma.aula.findUnique({ where: { id: params.id }, select: { id: true, turmaId: true, status: true } });
+  const aula = await prisma.aula.findUnique({ where: { id: params.id }, select: { id: true, turmaId: true, status: true, title: true } });
   if (!aula || aula.status !== "sent" || !aula.turmaId) return NextResponse.json({ error: "Indisponível" }, { status: 403 });
   const member = await prisma.turmaMember.findFirst({ where: { turmaId: aula.turmaId, studentId: me.id }, select: { id: true } });
   if (!member) return NextResponse.json({ error: "Indisponível" }, { status: 403 });
@@ -32,6 +33,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const progress = prev
     ? await prisma.aulaProgress.update({ where: { id: prev.id }, data: { status, readingMs } })
     : await prisma.aulaProgress.create({ data: { aulaId: aula.id, studentId: me.id, status, readingMs } });
+
+  // Conquista → credencial soulbound na Solana (fire-and-forget; idempotente).
+  if (status === "completed" && prev?.status !== "completed") onCourseCompleted(me.id, aula.id, aula.title, { readingMs, via: "progress" });
 
   return NextResponse.json({ progress });
 }

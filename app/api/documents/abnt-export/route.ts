@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from "@/src/lib/auth";
 import { VertexAI } from '@google-cloud/vertexai';
+import { prisma } from '@/src/lib/prisma';
+import { onWorkFinalized } from '@/lib/solana/hooks';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -38,6 +40,7 @@ interface ABNTExportRequest {
         content: string;
         subsections: Array<{ title: string; content: string }>;
     }>;
+    researchWorkId?: string;  // ResearchWork salvo em "Minhas coisas" → conquista "trabalho concluído" (credencial Solana)
     apendices?: Array<{ title: string; content: string }>;  // pós-textuais (opcional)
     anexos?: Array<{ title: string; content: string }>;
 }
@@ -350,6 +353,25 @@ export async function POST(req: Request) {
 
         // Step 4: Stream binary back to browser
         const fileBytes = await serviceResponse.arrayBuffer();
+
+        // Conquista → credencial soulbound na Solana. Fire-and-forget: o export NUNCA espera o mint.
+        if (body.researchWorkId) {
+            const workId = String(body.researchWorkId);
+            const email = session.user.email;
+            void (async () => {
+                const me = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+                if (!me) return;
+                const owned = await prisma.researchWork.findFirst({ where: { id: workId, userId: me.id }, select: { id: true, title: true, workType: true } });
+                if (!owned) return;
+                onWorkFinalized(me.id, owned.id, (owned.title || body.title || 'Trabalho acadêmico').trim(), {
+                    workType: owned.workType || body.workType || null,
+                    format: body.format,
+                    citations: body.citations?.length ?? 0,
+                    sections: body.parsedSections?.length ?? 0,
+                    exportedAt: new Date().toISOString(),
+                });
+            })().catch((e) => console.warn('[ABNT] credencial (work) ignorada:', e));
+        }
         const isDocx = body.format === 'docx';
         const mimeType = isDocx
             ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

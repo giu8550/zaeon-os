@@ -10,6 +10,7 @@ import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import GenderDNA from '@/components/sub/GenderDNA';
 import NetworkMural from '@/app/workstation/profiles/NetworkMural';
+import AchievementsMural from '@/components/research/AchievementsMural';
 
 // chave de data local (YYYY-MM-DD), sem fuso atrapalhar
 const dkey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -334,6 +335,7 @@ function ProfilePanel({ className }: { className?: string }) {
             <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="w-full flex flex-col gap-6">
                 <FullWidthChart />
                 <PresenceGraph />
+                <AchievementsMural />
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
                     <div className="lg:col-span-2 h-full"><HabitMatrix weekData={weekData} monthName={monthName} /></div>
                     <div className="h-full"><SideModules /></div>
