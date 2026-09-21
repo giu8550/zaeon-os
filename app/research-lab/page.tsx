@@ -10,7 +10,7 @@ import "@/src/i18n";
 
 // --- IMPORTS ---
 import { Navbar } from "@/components/main/navbar";
-import { Mic, MicOff, Coffee, Code2 } from "lucide-react";
+import { Mic, MicOff, Coffee, Code2, Building2 } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const StudyRoomContent = dynamic(
@@ -650,7 +650,7 @@ export default function HomeworkPage({
   const initialTab = (() => {
     if (typeof window === "undefined") return "pesquisa";
     const params = new URLSearchParams(window.location.search);
-    const VALID = ["pesquisa", "sala-de-estudos", "pesquisas", "lounge", "pevem", "projetos", "news", "profile"];
+    const VALID = ["pesquisa", "sala-de-estudos", "pesquisas", "lounge", "pevem", "projetos", "escritorio", "news", "profile"];
     const t = params.get("tab");
     if (t && VALID.includes(t)) return t;                           // deep-link explícito de aba ganha
     if (params.get("session") || params.get("worktype")) return "pesquisa"; // deep-links de pesquisa
@@ -669,6 +669,7 @@ export default function HomeworkPage({
     | "lounge"
     | "pevem"
     | "projetos"
+    | "escritorio"
     | "news"
     | "profile"
   >(initialTab as any);
@@ -1320,6 +1321,7 @@ export default function HomeworkPage({
         "lounge",
         "pevem",
         "projetos",
+        "escritorio",
         "news",
         "profile",
       ].includes(tabParam)
@@ -1371,7 +1373,7 @@ export default function HomeworkPage({
   // mesmo já estando no research-lab — o deep-link só roda no mount, então sem isto
   // a troca por voz não funcionaria estando na página. Ver lib/agent + LoungeChatWidget.
   useEffect(() => {
-    const VALID = ["pesquisa", "sala-de-estudos", "pesquisas", "lounge", "pevem", "projetos", "news", "profile"];
+    const VALID = ["pesquisa", "sala-de-estudos", "pesquisas", "lounge", "pevem", "projetos", "escritorio", "news", "profile"];
     const onSetTab = (e: any) => {
       const tab = e?.detail;
       if (typeof tab === "string" && VALID.includes(tab)) setActiveTab(tab as any);
@@ -2401,6 +2403,19 @@ export default function HomeworkPage({
               )}
             </button>
 
+            {/* Escritório: os agentes da Zaeon como um lugar */}
+            <button
+              onClick={() => setActiveTab("escritorio")}
+              className={navItem(activeTab === "escritorio", "cyan")}
+            >
+              <Building2 className="w-5 h-5 shrink-0" />
+              {isSidebarOpen && (
+                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+                  Escritório
+                </span>
+              )}
+            </button>
+
             <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
 
             {/* Perfil */}
@@ -2770,6 +2785,18 @@ export default function HomeworkPage({
           {activeTab === "lounge" && (
             <div className="w-full h-full overflow-y-auto custom-scrollbar">
               {isTeacher ? <TeacherLoungeContent /> : <StudentLoungeContent />}
+            </div>
+          )}
+
+          {activeTab === "escritorio" && (
+            <div className="w-full h-full">
+              <EscritorioRoom
+                aoAbrirChat={(slug) => {
+                  // Falar com um agente = ir pra Sala de Estudos JÁ com ele escolhido.
+                  window.dispatchEvent(new CustomEvent("zaeon:mentor", { detail: { slug } }));
+                  setActiveTab("sala-de-estudos");
+                }}
+              />
             </div>
           )}
 
