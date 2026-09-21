@@ -234,3 +234,27 @@ describe("pickStudioKind · molécula não é imagem", () => {
     expect(pickStudioKind("me explica isso")).toBe("guide");
   });
 });
+
+describe("artifacts na resposta · o artefato nasce da explicação", () => {
+  const st = { intent: "explicar_conceito", objective: "cafeína" } as any;
+
+  it("preserva um ref de molécula (antes era descartado calado)", () => {
+    const a = normalizeAnswer({ nucleo: "x", artifacts: [{ studioKind: "molecule", title: "cafeína" }] } as any, st);
+    expect(a.artifacts?.[0]).toEqual({ studioKind: "molecule", title: "cafeína" });
+  });
+
+  it("descarta kind que o Studio não sabe montar", () => {
+    const a = normalizeAnswer({ nucleo: "x", artifacts: [{ studioKind: "holograma", title: "x" }] } as any, st);
+    expect(a.artifacts).toBeUndefined();
+  });
+
+  it("no máximo 2 — resposta não é galeria", () => {
+    const muitos = Array.from({ length: 5 }, (_, i) => ({ studioKind: "image", title: `a${i}` }));
+    const a = normalizeAnswer({ nucleo: "x", artifacts: muitos } as any, st);
+    expect(a.artifacts?.length).toBe(2);
+  });
+
+  it("sem artifacts, o campo nem aparece", () => {
+    expect(normalizeAnswer({ nucleo: "x" } as any, st).artifacts).toBeUndefined();
+  });
+});

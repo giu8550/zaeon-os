@@ -14,6 +14,7 @@
  */
 import { GEMINI_MODEL_FLASH, GEMINI_MODEL_PRO } from "@/lib/ai/model";
 import { classify } from "@/lib/agent/router";
+import { STUDIO_KINDS } from "@/lib/agent/tools";
 import { runToolByName, type ToolContext, type ApproveFn } from "@/lib/agent/runtime";
 import { critiqueForState } from "@/lib/agent/examiner";
 import { nullMemory } from "@/lib/agent/memory";
@@ -113,6 +114,16 @@ export function normalizeAnswer(out: Partial<StructuredAnswer> | null | undefine
   if (o.evidencia) answer.evidencia = asArray(o.evidencia).filter((e) => e && e.claim && e.source);
   if (o.sources) answer.sources = asArray(o.sources).filter((s: Source) => s && s.title);
   if (o.work && typeof o.work === "object") answer.work = o.work;
+  // `artifacts` vinha sendo DESCARTADO aqui — por isso artefato citado no meio de uma
+  // explicação nunca nascia: nem o prompt pedia, nem a normalização deixava passar.
+  // Teto de 2 pra resposta não virar galeria, e só kinds que o Studio sabe montar.
+  if (o.artifacts) {
+    const refs = asArray(o.artifacts)
+      .filter((a: any) => a && typeof a.studioKind === "string" && STUDIO_KINDS.includes(a.studioKind))
+      .slice(0, 2)
+      .map((a: any) => ({ studioKind: String(a.studioKind), title: a.title ? String(a.title) : undefined }));
+    if (refs.length) answer.artifacts = refs as StructuredAnswer["artifacts"];
+  }
   if (!answer.nucleo) answer.nucleo = "Não consegui elaborar uma resposta completa agora.";
   return answer;
 }
@@ -186,7 +197,13 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         "Você é a Aura, parceira de estudo/pesquisa — calorosa, direta, PT-BR. Redija a resposta final.",
         "NUNCA diga que você é uma IA incapaz de gerar imagem/representação visual — você TEM o Studio (imagem/diagrama/molécula). Se o pedido for visual e nenhuma tool o cobriu, afirme que dá pra gerar e sugira em proximos_passos, jamais negue capacidade.",
         "Responda SOMENTE JSON válido.",
-        `Campos obrigatórios: ${req}. Preencha TODOS. Schema: {nucleo, desenvolvimento?, conceitos?[], evidencia?[{claim,source:{title,url?}}], proximos_passos?[], sources?[{title,url?}], work?{kind,sections:[{title,body}]}}.`,
+        `Campos obrigatórios: ${req}. Preencha TODOS. Schema: {nucleo, desenvolvimento?, conceitos?[], evidencia?[{claim,source:{title,url?}}], proximos_passos?[], sources?[{title,url?}], work?{kind,sections:[{title,body}]}, artifacts?[{studioKind,title}]}.`,
+        // Artefato NASCE da explicação, não só de um pedido. Se a resposta gira em torno
+        // de uma substância química, a estrutura dela entra junto — o aluno não devia ter
+        // que pedir pra ver a molécula da cafeína numa resposta sobre cafeína.
+        'Se a resposta for SOBRE uma substância química específica (ex.: cafeína, glicose, etanol), inclua artifacts: [{"studioKind":"molecule","title":"<nome da substância>"}]. ' +
+        'O título deve ser SÓ o nome da substância, sem "molécula de". No máximo 1 molécula por resposta, e só quando a substância for o assunto — não cite de passagem. ' +
+        'Não invente substância: se não tiver certeza de que existe, deixe artifacts de fora.',
         academic + a5,
       ].join("\n");
       const user = `${preamble}Objetivo: ${st.objective}\nRaciocínio: ${st.reasoning ?? ""}\nEvidência:\n${evidenceBlock(st)}${obsBlock(observations)}`;

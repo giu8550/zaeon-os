@@ -412,9 +412,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           if (structured.kind === "answer") {
             const a = structured.answer;
             setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, kind: "structured", answer: a, text: a.nucleo, streaming: false, fresh: true } : m)));
-            // artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
+            // Artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
+            // O tópico é o `title` do ref, NÃO a pergunta inteira: "por que o café me
+            // deixa acordado" não resolve no PubChem; "cafeína" resolve.
             for (const art of a.artifacts ?? []) {
-              if (art.studioKind && !art.studioKind.startsWith("research:")) void runStudioAction(art.studioKind, prompt, asstId);
+              if (art.studioKind && !art.studioKind.startsWith("research:")) {
+                void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId);
+              }
             }
             appendTranscript("estudos", focusIds[0] ?? null, [
               { role: "user", text: prompt },
