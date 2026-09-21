@@ -27,6 +27,10 @@ name: Deploy (VPS)
 # Vars opcionais (aba Variables):
 #   DEPLOY_COMPOSE          → override do compose (default docker-compose.beta.yml)
 #   DEPLOY_WITH_VOICE       → "true" liga voice-engine/abnt/pdf-loader no deploy
+#   BETA_DOMAIN             → hostnames do Caddy (vírgula). Default cobre zaeon.com.br,
+#                             www e o sslip.io provisório — os três ao mesmo tempo.
+#   APP_URL                 → URL pública (default https://75-119-140-97.sslip.io);
+#                             vira NEXTAUTH_URL — trocar aqui quando o domínio mudar.
 
 on:
   push:
@@ -82,13 +86,19 @@ jobs:
           # opções (push usa defaults; dispatch respeita os inputs)
           WITH_VOICE: ${{ github.event.inputs.with_voice || vars.DEPLOY_WITH_VOICE || 'false' }}
           DB_PUSH: ${{ github.event.inputs.db_push || 'true' }}
+          # URL pública do app → vira NEXTAUTH_URL no compose (redirect do Google).
+          APP_URL: ${{ vars.APP_URL || 'https://75-119-140-97.sslip.io' }}
+          # Hostnames que o Caddy serve (e pra quem pede certificado). Lista separada
+          # por vírgula, SEM espaço (vai como env por SSH): o endereço provisório continua
+          # no ar enquanto o domínio novo sobe — trocar de endereço não derruba o site.
+          BETA_DOMAIN: ${{ vars.BETA_DOMAIN || 'zaeon.com.br,www.zaeon.com.br,75-119-140-97.sslip.io' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 25m
-          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH
+          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH,APP_URL,BETA_DOMAIN
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
