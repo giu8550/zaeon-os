@@ -718,6 +718,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                             <MagazineAnswerView
                               answer={m.answer}
                               streaming={!!m.streaming}
+                              recemChegada={!!m.fresh}
                               artefato={m.studioBlock ?? null}
                               onNext={(s) => void send(s)}
                               agente="Aura"

@@ -75,6 +75,11 @@ function metricasPara(largura: number): Metricas & { corpo: string; enfase: stri
   };
 }
 
+/** Tempo total da materialização, do primeiro ao último grafema. */
+const DURACAO_CHEGADA = 3200;
+/** Quanto cada letra leva pra "secar" do ciano pra tinta. */
+const DURACAO_LETRA = 420;
+
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -98,12 +103,15 @@ function lerCores(el: HTMLElement): Cores {
 export default function MagazineAnswerView({
   answer,
   streaming = false,
+  recemChegada = false,
   artefato,
   onNext,
   agente = "Aura",
 }: {
   answer: StructuredAnswer;
   streaming?: boolean;
+  /** Resposta que acabou de chegar (o `fresh` da mensagem) → materializa as letras. */
+  recemChegada?: boolean;
   artefato?: StudioBlockData | null;
   onNext?: (passo: string) => void;
   agente?: string;
@@ -292,30 +300,46 @@ export default function MagazineAnswerView({
   }, [fontesProntas, recalcular]);
 
   /* ── chegada das letras ──────────────────────────────────────────────────────── */
+  //
+  // O DETALHE QUE FAZIA A RESPOSTA APARECER DE SOCO: a resposta estruturada NÃO chega
+  // token a token. O harness manda `@@STRUCTURED@@` com o JSON inteiro no fim do stream,
+  // então `streaming` já é false quando o texto chega aqui — e o caminho "sem stream"
+  // acendia tudo de uma vez. A materialização existia e nunca rodava.
+  //
+  // Agora quem manda é `recemChegada` (o `fresh` da mensagem): resposta nova se
+  // materializa mesmo tendo chegado pronta. Só o histórico nasce instantâneo.
   useEffect(() => {
     const total = medidoRef.current?.totalGrafemas ?? 0;
     const nasc = nascimentoRef.current;
     if (!nasc || !total) return;
 
-    if (semMovimento || !streaming) {
-      // Sem movimento (ou resposta já pronta): tudo nasce agora, sem animação.
+    const animar = (recemChegada || streaming) && !semMovimento;
+    if (!animar) {
       for (let i = 0; i < nasc.length; i++) if (nasc[i] < 0) nasc[i] = 0;
       setAssentado(true);
       return;
     }
-    // Com stream: as letras que ainda não nasceram entram escalonadas.
-    const agora = performance.now();
-    let k = 0;
-    for (let i = 0; i < nasc.length; i++) {
-      if (nasc[i] < 0) { nasc[i] = agora + k * 12; k++; }
-    }
-  }, [palavrasDom, streaming, semMovimento]);
 
-  useEffect(() => { if (!streaming) setAssentado(true); }, [streaming]);
+    // Passo por letra calculado pra resposta INTEIRA levar ~DURACAO_CHEGADA, não importa
+    // se são 300 ou 3000 grafemas. Passo fixo fazia resposta longa demorar meia vida e
+    // resposta curta passar batido.
+    const aNascer: number[] = [];
+    for (let i = 0; i < nasc.length; i++) if (nasc[i] < 0) aNascer.push(i);
+    if (!aNascer.length) return;
+
+    const passo = clamp(DURACAO_CHEGADA / aNascer.length, 2, 10);
+    const agora = performance.now();
+    aNascer.forEach((i, k) => { nasc[i] = agora + k * passo; });
+
+    // Assenta (canvas some, DOM selecionável assume) só depois da última letra pousar.
+    const fim = aNascer.length * passo + DURACAO_LETRA + 120;
+    const t = setTimeout(() => setAssentado(true), fim);
+    return () => clearTimeout(t);
+  }, [palavrasDom, streaming, recemChegada, semMovimento]);
 
   /* ── desenho ─────────────────────────────────────────────────────────────────── */
   useEffect(() => {
-    if (assentado && !streaming) return; // canvas some; o DOM assume
+    if (assentado) return; // canvas some; o DOM selecionável assume
     let raf = 0;
     const desenhar = (agora: number) => {
       const canvas = cv.current;
@@ -353,7 +377,7 @@ export default function MagazineAnswerView({
           for (const g of res.glifos) {
             const t = nasc[g.gi];
             if (t < 0 || agora < t) continue;
-            const e = semMovimento ? 1 : ease(clamp((agora - t) / 420, 0, 1));
+            const e = semMovimento ? 1 : ease(clamp((agora - t) / DURACAO_LETRA, 0, 1));
             const f = g.enfase ? m.enfase : m.corpo;
             if (f !== fonteAtual) { ctx.font = f; fonteAtual = f; }
             ctx.globalAlpha = 0.25 + e * 0.75;
@@ -431,7 +455,7 @@ export default function MagazineAnswerView({
           ref={cv}
           aria-hidden="true"
           className="block w-full transition-opacity duration-500"
-          style={{ opacity: assentado && !streaming ? 0 : 1, touchAction: "pan-y", pointerEvents: "none" }}
+          style={{ opacity: assentado ? 0 : 1, touchAction: "pan-y", pointerEvents: "none" }}
         />
 
         {/* Texto em DOM: invisível durante o stream (só pro leitor de tela), visível e
@@ -439,8 +463,8 @@ export default function MagazineAnswerView({
         <div
           className="absolute inset-0 transition-opacity duration-500"
           style={{
-            opacity: assentado && !streaming ? 1 : 0,
-            pointerEvents: assentado && !streaming ? "auto" : "none",
+            opacity: assentado ? 1 : 0,
+            pointerEvents: assentado ? "auto" : "none",
             fontFamily: FAMILIA_CORPO,
             fontSize: mCor.tamanho,
           }}
