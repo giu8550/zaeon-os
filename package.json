@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.11.1",
+    "@chenglou/pretext": "^0.0.9",
     "@google-cloud/vertexai": "^1.10.0",
     "@google/generative-ai": "^0.24.1",
     "@heroicons/react": "^2.1.1",
