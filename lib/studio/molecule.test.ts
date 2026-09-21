@@ -41,6 +41,15 @@ describe("termo que o aluno escreve", () => {
     expect(limparTermo("  Glicose. ")).toBe("glicose");
   });
 
+  it("aguenta o PEDIDO INTEIRO — é isso que chega na prática", () => {
+    // Caso real de produção: o tópico vinha como a frase toda e o PubChem 404ava.
+    expect(limparTermo("consegue gerar molecula de cafeina")).toBe("cafeina");
+    expect(limparTermo("consegue gerar a molécula de cafeína pra mim?")).toBe("cafeína");
+    expect(limparTermo("me mostra a estrutura molecular da glicose")).toBe("glicose");
+    expect(limparTermo("quero ver a molécula de etanol")).toBe("etanol");
+    expect(limparTermo("Oi, pode fazer o modelo 3d da água?")).toBe("água");
+  });
+
   it("candidatos vão do mais fiel ao mais tolerante, sem repetir", () => {
     expect(candidatosLocais("cafeína")).toEqual(["cafeína", "cafeina"]);
     expect(candidatosLocais("etanol")).toEqual(["etanol"]);

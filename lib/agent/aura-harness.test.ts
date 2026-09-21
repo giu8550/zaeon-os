@@ -5,6 +5,7 @@ import {
   normalizeAnswer,
   renderStructuredAnswer,
   resolveHarnessOutput,
+  pareceRecusa,
   isRetryableCode,
 } from "./aura-harness";
 import { INTENTS, type StructuredAnswer } from "./contracts";
@@ -232,5 +233,41 @@ describe("pickStudioKind · molécula não é imagem", () => {
     expect(pickStudioKind("faz um mapa mental disso")).toBe("mindmap");
     expect(pickStudioKind("cria flashcards")).toBe("flashcards");
     expect(pickStudioKind("me explica isso")).toBe("guide");
+  });
+});
+
+describe("artifacts na resposta · o artefato nasce da explicação", () => {
+  const st = { intent: "explicar_conceito", objective: "cafeína" } as any;
+
+  it("preserva um ref de molécula (antes era descartado calado)", () => {
+    const a = normalizeAnswer({ nucleo: "x", artifacts: [{ studioKind: "molecule", title: "cafeína" }] } as any, st);
+    expect(a.artifacts?.[0]).toEqual({ studioKind: "molecule", title: "cafeína" });
+  });
+
+  it("descarta kind que o Studio não sabe montar", () => {
+    const a = normalizeAnswer({ nucleo: "x", artifacts: [{ studioKind: "holograma", title: "x" }] } as any, st);
+    expect(a.artifacts).toBeUndefined();
+  });
+
+  it("no máximo 2 — resposta não é galeria", () => {
+    const muitos = Array.from({ length: 5 }, (_, i) => ({ studioKind: "image", title: `a${i}` }));
+    const a = normalizeAnswer({ nucleo: "x", artifacts: muitos } as any, st);
+    expect(a.artifacts?.length).toBe(2);
+  });
+
+  it("sem artifacts, o campo nem aparece", () => {
+    expect(normalizeAnswer({ nucleo: "x" } as any, st).artifacts).toBeUndefined();
+  });
+});
+
+describe("recusa não passa na frente do artefato", () => {
+  it("reconhece o pedido de desculpas que o modelo às vezes redige", () => {
+    expect(pareceRecusa("Infelizmente o Studio está com um contratempo técnico")).toBe(true);
+    expect(pareceRecusa("Não consigo gerar a imagem da molécula agora")).toBe(true);
+    expect(pareceRecusa("Desculpe, não posso fazer isso")).toBe(true);
+  });
+  it("não confunde texto normal com recusa", () => {
+    expect(pareceRecusa("A cafeína bloqueia os receptores de adenosina")).toBe(false);
+    expect(pareceRecusa("Olha só a estrutura dela")).toBe(false);
   });
 });
