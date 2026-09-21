@@ -258,6 +258,12 @@ export function renderStructuredAnswer(a: StructuredAnswer): string {
  * `topic` cai no `prompt` do cliente se vier vazio (o cliente usa `topic || prompt`).
  * `renderStructuredAnswer` segue exportado: é o fallback texto (cliente antigo / AURA_HARNESS=0).
  */
+/** Heurística curta e explícita: só o suficiente pra não deixar recusa na frente do artefato. */
+export function pareceRecusa(texto: string): boolean {
+  const t = texto.toLowerCase();
+  return /n[ãa]o (consigo|posso|sou capaz)|infelizmente|contratempo t[ée]cnico|indispon[íi]vel no momento|desculpe/.test(t);
+}
+
 export function resolveHarnessOutput(
   state: Pick<TrajectoryState, "intent" | "kind" | "artifacts">,
   answer: StructuredAnswer,
@@ -266,7 +272,11 @@ export function resolveHarnessOutput(
 ): HarnessOutput {
   const arts = answer.artifacts ?? state.artifacts ?? [];
   const studioArt = arts.find((a) => a.studioKind && !a.studioKind.startsWith("research:"));
-  const lead = (answer.nucleo && answer.nucleo.trim()) || "Já te mostro aqui.";
+  // O modelo às vezes redige um pedido de desculpas ("não consigo gerar imagem…") e
+  // logo em seguida o artefato nasce — o aluno lê a recusa e o artefato juntos, e não
+  // entende nada. Quando o lead soa como recusa, o texto determinístico assume.
+  const bruto = (answer.nucleo && answer.nucleo.trim()) || "";
+  const lead = !bruto || pareceRecusa(bruto) ? "Já te mostro aqui." : bruto;
 
   // Sala de Pesquisa: pedido de TRABALHO → sentinela research (o cliente gera no documento).
   if (state.intent === "criar_trabalho" && surface === "pesquisa") {
@@ -274,7 +284,9 @@ export function resolveHarnessOutput(
   }
   // ARTEFATO PURO ("gera um mapa"): gerar_artefato com studioArt → sentinela studio (inalterado).
   if (studioArt && state.intent === "gerar_artefato") {
-    return { mode: "studio", kind: studioArt.studioKind, topic: objective, text: lead };
+    // `title` do ref antes do objetivo: o objetivo é a FRASE INTEIRA do aluno
+    // ("consegue gerar molecula de cafeina"), que não resolve em fonte nenhuma.
+    return { mode: "studio", kind: studioArt.studioKind, topic: studioArt.title?.trim() || objective, text: lead };
   }
   // Tudo mais (conversa, dúvida, explicação, fontes, revisão) → estruturado, carregando o
   // answer COMPLETO — se vier artifacts[] (ex.: image), o cliente embute na mesma bolha.

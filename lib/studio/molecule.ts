@@ -55,9 +55,19 @@ export function semAcento(s: string): string {
  */
 export function limparTermo(bruto: string): string {
   let t = (bruto || "").trim().toLowerCase();
-  t = t.replace(/^(a\s+)?(estrutura|formula|fórmula|molecula|molécula)\s+(molecular\s+)?(d[aeo]s?\s+)?/i, "");
+  // Pedido inteiro chega aqui ("consegue gerar a molécula de cafeína pra mim?").
+  // Descasca em camadas, do pedido pro substantivo. Não tenta ser esperto: só remove
+  // o que aparece o tempo todo. O que sobrar de frase o extrator do LLM resolve.
+  t = t.replace(/^(oi|olá|ola)[,!\s]+/i, "");
+  t = t.replace(/^(voc[eê]\s+)?(consegue|pode|poderia|d[áa]\s+pra|da\s+pra|quero|queria|gostaria\s+de|me)\s+/i, "");
+  t = t.replace(/^(gerar?|gera|criar?|cria|fazer?|faz|mostrar?|mostra|desenhar?|desenha|ver|exibir?)\s+/i, "");
+  t = t.replace(/^(me\s+)?(mostre|mostra|gere|crie|fa[çc]a)\s+/i, "");
+  t = t.replace(/^(a|o|as|os|um|uma)\s+/i, "");
+  t = t.replace(/^(estrutura|formula|fórmula|molecula|molécula|modelo)\s+(molecular|qu[íi]mica|3d)?\s*/i, "");
   t = t.replace(/^(d[aeo]s?\s+)/i, "");
-  t = t.replace(/[.?!,;]+$/g, "");
+  // Pontuação ANTES do "pra mim": com o "?" no fim, a âncora $ nunca casava.
+  t = t.replace(/[.?!,;]+$/g, "").trim();
+  t = t.replace(/\s+(pra|para)\s+(mim|voc[eê]|n[óo]s|eu)$/i, "");
   return t.trim();
 }
 
@@ -97,13 +107,20 @@ async function buscarSdf(cid: number, f: typeof fetch): Promise<{ sdf: string; t
   return null;
 }
 
-/** Último recurso: pedir ao modelo só o NOME em inglês. A estrutura nunca vem dele. */
-async function traduzirNome(termo: string): Promise<string> {
+/**
+ * Último recurso: EXTRAIR a substância da frase e devolver o nome em inglês do PubChem.
+ * Extrair, não só traduzir — o que chega aqui costuma ser o pedido inteiro do aluno, e
+ * nenhuma regex dá conta de todas as formas de pedir. A estrutura nunca vem do modelo:
+ * ele só aponta o nome, e o PubChem confirma ou nega.
+ */
+async function extrairNome(frase: string): Promise<string> {
   const system =
-    "Você converte o nome de uma substância química para o nome em INGLÊS usado no PubChem. " +
-    'Responda SOMENTE JSON: {"nome":"..."}. Se não for uma substância química, devolva {"nome":""}.';
+    "Da frase do usuário, identifique a SUBSTÂNCIA QUÍMICA de que ela fala e devolva o nome " +
+    "em INGLÊS como o PubChem conhece (ex.: caffeine, glucose, acetic acid). " +
+    'Responda SOMENTE JSON: {"nome":"..."}. Se a frase não falar de uma substância química ' +
+    'concreta, devolva {"nome":""}. Nunca invente substância.';
   try {
-    const out = await geminiJson<{ nome?: string }>(system, `Substância: ${termo}`);
+    const out = await geminiJson<{ nome?: string }>(system, `Frase: ${frase}`);
     return (out?.nome || "").trim();
   } catch {
     return "";
@@ -127,7 +144,8 @@ export async function resolverMolecula(
   }
 
   if (!props) {
-    const emIngles = await (opts.traduzir ?? traduzirNome)(termo);
+    // Manda a frase como veio: o extrator lida melhor com contexto do que com sobras.
+    const emIngles = await (opts.traduzir ?? extrairNome)(termoBruto || termo);
     if (emIngles) {
       props = await buscarProps(emIngles, f);
       if (props) nomeResolvido = emIngles;

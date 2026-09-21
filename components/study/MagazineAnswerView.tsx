@@ -33,8 +33,12 @@ import { medirTexto, emParagrafos, contarPalavras, normalizar, type TextoMedido 
 
 /* ─────────────────────────── critério de ativação (§10) ─────────────────────────── */
 
-/** Resposta curta continua no balão normal: revista com 3 linhas é exagero. */
-export const MIN_PALAVRAS_REVISTA = 120;
+/**
+ * Resposta curta continua no balão normal: revista com 3 linhas é exagero. 120 palavras
+ * se mostrou alto demais pra conversa de chat — quase nenhuma resposta passava, e o
+ * Modo Revista virou invisível. 70 é uns 5 parágrafos curtos: já tem corpo pra página.
+ */
+export const MIN_PALAVRAS_REVISTA = 70;
 
 /**
  * O corpo da página. `desenvolvimento` é opcional no contrato e SÓ o intent
