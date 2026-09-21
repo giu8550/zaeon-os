@@ -34,7 +34,14 @@ const ESTILOS: { id: Estilo; label: string; spec: any }[] = [
   { id: "esfera", label: "Volume", spec: { sphere: { scale: 0.9 } } },
 ];
 
-export default function MoleculeView({ data }: { data: MoleculeData }) {
+/**
+ * `nu`: a molécula como FIGURA de página, não como cartão. Sem moldura, sem botões,
+ * sem ficha — só a estrutura girando e uma legenda fina por baixo, dentro do próprio
+ * quadro. É o que permite o texto contornar um círculo de verdade no Modo Revista:
+ * um cartão com cabeçalho e botões nunca foi redondo, e fingir que era quebrava a
+ * página.
+ */
+export default function MoleculeView({ data, nu = false }: { data: MoleculeData; nu?: boolean }) {
   const box = useRef<HTMLDivElement | null>(null);
   const viewer = useRef<any>(null);
   const [estilo, setEstilo] = useState<Estilo>("bola");
@@ -70,8 +77,16 @@ export default function MoleculeView({ data }: { data: MoleculeData }) {
         if (vivo) setErro("Não consegui desenhar a molécula neste navegador.");
       }
     })();
+    // O quadro muda de tamanho quando a página recalcula o layout — sem isto o 3Dmol
+    // fica com o tamanho do primeiro frame e a molécula sai esticada ou minúscula.
+    const ro = new ResizeObserver(() => {
+      try { viewer.current?.resize?.(); viewer.current?.render?.(); } catch { /* ignore */ }
+    });
+    if (box.current) ro.observe(box.current);
+
     return () => {
       vivo = false;
+      ro.disconnect();
       try { viewer.current?.clear?.(); } catch { /* ignore */ }
       viewer.current = null;
     };
@@ -86,6 +101,26 @@ export default function MoleculeView({ data }: { data: MoleculeData }) {
     v.spin(novo);
     setGirando(novo);
   };
+
+  if (nu) {
+    return (
+      <figure className="relative w-full m-0" style={{ aspectRatio: "1 / 1" }}>
+        <div ref={box} className="absolute inset-0" />
+        {erro ? (
+          <figcaption className="absolute inset-0 grid place-items-center text-[11px] text-slate-500 dark:text-white/50 text-center px-4">
+            {erro}
+          </figcaption>
+        ) : (
+          <figcaption className="absolute inset-x-0 bottom-1 text-center text-[11px] font-bold text-slate-600 dark:text-white/60 pointer-events-none">
+            {data.termo}, {data.formula}
+            {data.tridimensional === false && (
+              <span className="block font-normal text-amber-600 dark:text-amber-400/90">estrutura plana (2D)</span>
+            )}
+          </figcaption>
+        )}
+      </figure>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">
