@@ -87,6 +87,26 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [quickThinking, setQuickThinking] = useState(false);
   // Mentor ativo (SLUG, ex.: "farmacia") — null = Aura base. Vai como `mentor` a cada envio.
   const [activeMentor, setActiveMentor] = useState<string | null>(null);
+
+  /**
+   * Avisa o Escritório (components/office) qual agente está ocupado. É o único estado
+   * REAL de trabalho que dá pra saber hoje: as fases do harness (route/plan/gather/…)
+   * são emitidas no servidor e não chegam ao navegador. Ver EscritorioRoom.
+   */
+  const avisarEscritorio = useCallback((slug: string | null, estado: "ocioso" | "trabalhando" | "falando") => {
+    if (!slug) return;
+    window.dispatchEvent(new CustomEvent("zaeon:agente", { detail: { slug, estado } }));
+  }, []);
+
+  // O Escritório pede "falar com o Kekulé" → o chat troca de mentor.
+  useEffect(() => {
+    const ouvir = (e: Event) => {
+      const slug = (e as CustomEvent<{ slug?: string }>).detail?.slug;
+      if (typeof slug === "string" && slug) setActiveMentor(slug);
+    };
+    window.addEventListener("zaeon:mentor", ouvir);
+    return () => window.removeEventListener("zaeon:mentor", ouvir);
+  }, []);
   // Árvore de habilidades: drawer opt-in; o tópico nasce do estudo focado (ou digitado no painel).
   const [treeOpen, setTreeOpen] = useState(false);
   const [tree, setTree] = useState<SkillTreeData | null>(null);
@@ -309,6 +329,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       { id: asstId, role: "assistant", kind: "text", text: "", streaming: true, at: Date.now() },
     ]);
     setInput("");
+    avisarEscritorio(activeMentor, "trabalhando");
     setSending(true);
 
     const patchAsst = (text: string) =>
@@ -431,12 +452,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     } catch {
       patchAsst("Falha de rede ao falar com a Aura.");
     } finally {
+      avisarEscritorio(activeMentor, "ocioso");
       setMessages((prev) => prev.map((m) => (m.id === asstId && m.streaming ? { ...m, streaming: false } : m)));
       setSending(false);
       // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
       if (tree) setTreeRefresh((n) => n + 1);
     }
-  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree]);
+  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio]);
 
   // Clicar num nó da árvore: conversa scopada naquele nó (vai pro composer + chip de foco).
   const onNodeChat = useCallback((node: SkillNodeState, t: SkillTreeData) => {

@@ -36,9 +36,19 @@ import { medirTexto, emParagrafos, contarPalavras, normalizar, type TextoMedido 
 /** Resposta curta continua no balão normal: revista com 3 linhas é exagero. */
 export const MIN_PALAVRAS_REVISTA = 120;
 
+/**
+ * O corpo da página. `desenvolvimento` é opcional no contrato e SÓ o intent
+ * `explicar_conceito` o exige — `conversa` e `duvida_rapida` mandam apenas `nucleo`.
+ * Exigir desenvolvimento deixava o Modo Revista praticamente desligado na prática.
+ */
+export function corpoDaResposta(a: StructuredAnswer | undefined): string {
+  return (a?.desenvolvimento?.trim() || a?.nucleo?.trim() || "");
+}
+
 export function podeVirarRevista(a: StructuredAnswer | undefined, temArtefato: boolean): boolean {
-  if (!a?.desenvolvimento) return false;
-  return temArtefato || contarPalavras(a.desenvolvimento) >= MIN_PALAVRAS_REVISTA;
+  const corpo = corpoDaResposta(a);
+  if (!corpo) return false;
+  return temArtefato || contarPalavras(corpo) >= MIN_PALAVRAS_REVISTA;
 }
 
 /* ─────────────────────────────────── tipografia ─────────────────────────────────── */
@@ -112,7 +122,9 @@ export default function MagazineAnswerView({
     [],
   );
 
-  const paragrafos = useMemo(() => emParagrafos(answer.desenvolvimento || ""), [answer.desenvolvimento]);
+  const paragrafos = useMemo(() => emParagrafos(corpoDaResposta(answer)), [answer]);
+  // Quando o corpo JÁ É o núcleo, mostrar o núcleo de novo em cima seria eco.
+  const temLinhaFina = !!answer.desenvolvimento?.trim() && !!answer.nucleo?.trim();
   const conceitos = useMemo(() => answer.conceitos ?? [], [answer.conceitos]);
 
   /** O artefato vira obstáculo redondo (molécula) ou retangular (o resto). */
@@ -365,7 +377,7 @@ export default function MagazineAnswerView({
         <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-white/45 font-bold">
           Por {agente}, na Sala de Estudos
         </p>
-        {answer.nucleo && (
+        {temLinhaFina && (
           <p
             className="text-slate-800 dark:text-white/90 leading-snug"
             style={{ fontFamily: FAMILIA_DISPLAY, fontWeight: 300, fontSize: "clamp(19px,2.4vw,26px)", maxWidth: "34ch" }}

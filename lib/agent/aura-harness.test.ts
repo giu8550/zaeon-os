@@ -122,9 +122,12 @@ describe("aura-harness · helpers puros", () => {
     expect(pickStudioKind("cria um podcast")).toBe("podcast");
     expect(pickStudioKind("me explica isso")).toBe("guide"); // default
     // Gate G1 (patch visual): pedidos visuais mapeiam pro kind `image` do Studio.
-    expect(pickStudioKind("gera a molécula de serotonina")).toBe("image");
     expect(pickStudioKind("faz uma imagem da mitocôndria")).toBe("image");
-    expect(pickStudioKind("desenha a estrutura química da cafeína")).toBe("image");
+    // MUDOU: molécula não é mais "image". Quando o G1 foi escrito, o viewer 3D não
+    // existia e desenhar era o melhor que dava. Agora existe (PubChem + 3Dmol), e
+    // estrutura química feita por gerador de imagem é bonita e errada.
+    expect(pickStudioKind("gera a molécula de serotonina")).toBe("molecule");
+    expect(pickStudioKind("desenha a estrutura química da cafeína")).toBe("molecule");
   });
 
   it("normalizeAnswer garante nucleo e coage arrays", () => {
@@ -205,5 +208,29 @@ describe("aura-harness · integração motor+adaptador (ponta-a-ponta, sem rede)
     const out = resolveHarnessOutput(state, answer, "estudos", "cria um mapa mental de fotossíntese");
     expect(out.mode).toBe("studio");
     if (out.mode === "studio") expect(out.kind).toBe("mindmap");
+  });
+});
+
+describe("pickStudioKind · molécula não é imagem", () => {
+  it("pedido de molécula vai pro viewer 3D, não pro gerador de imagem", () => {
+    for (const t of [
+      "mostra a molécula da cafeína",
+      "qual a estrutura molecular da glicose",
+      "me mostra a estrutura química do etanol",
+      "quero ver a fórmula estrutural do benzeno",
+    ]) {
+      expect(pickStudioKind(t)).toBe("molecule");
+    }
+  });
+
+  it("imagem continua sendo imagem", () => {
+    expect(pickStudioKind("faz uma ilustração da fotossíntese")).toBe("image");
+    expect(pickStudioKind("gera um diagrama do ciclo de Krebs")).toBe("image");
+  });
+
+  it("os outros artefatos não mudaram", () => {
+    expect(pickStudioKind("faz um mapa mental disso")).toBe("mindmap");
+    expect(pickStudioKind("cria flashcards")).toBe("flashcards");
+    expect(pickStudioKind("me explica isso")).toBe("guide");
   });
 });

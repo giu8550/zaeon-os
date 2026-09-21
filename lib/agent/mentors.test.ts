@@ -35,13 +35,17 @@ describe("mentors · seed dos 13", () => {
     }
   });
 
-  it("enabledSkills só usa skills conhecidas (memory/studio vivas; literature/code/molecule degradam)", () => {
+  it("enabledSkills só usa skills conhecidas (memory/studio/molecule vivas; literature/code degradam)", () => {
     for (const m of MENTOR_SEED) {
       for (const s of m.enabledSkills) expect(ALL_MENTOR_SKILLS).toContain(s);
       expect(m.enabledSkills).toContain("memory");
       expect(m.enabledSkills).toContain("studio");
     }
-    expect(degradedSkills(mentorBySlug("quimica")!)).toEqual(expect.arrayContaining(["molecule", "literature"]));
+    // `molecule` saiu da fila de espera: virou artefato de verdade (PubChem + 3Dmol,
+    // ver lib/studio/molecule.ts). O mentor de química para de degradar por causa dela.
+    const quimica = degradedSkills(mentorBySlug("quimica")!);
+    expect(quimica).not.toContain("molecule");
+    expect(quimica).toEqual(expect.arrayContaining(["literature"]));
     expect(degradedSkills(mentorBySlug("matematica")!)).toEqual([]);
   });
 

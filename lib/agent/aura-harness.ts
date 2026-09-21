@@ -60,7 +60,11 @@ export function pickStudioKind(objective: string): string {
   if (/podcast|áudio|audio/.test(t)) return "podcast";
   if (/v[íi]deo/.test(t)) return "video";
   if (/\bfaq\b|perguntas e respostas/.test(t)) return "faq";
-  if (/imagem|figura|ilustra|mol[eé]cula|estrutura (molecular|qu[ií]mica)|diagrama|esquema|desenh|gr[aá]fico|f[oó]rmula/.test(t)) return "image";
+  // Molécula ANTES de imagem: esta linha já capturava "molécula" e devolvia "image",
+  // de quando o viewer 3D não existia. Agora existe (PubChem + 3Dmol), e uma estrutura
+  // química desenhada por modelo de imagem é bonita e errada.
+  if (/mol[eé]cula|estrutura (molecular|qu[ií]mica)|f[oó]rmula estrutural/.test(t)) return "molecule";
+  if (/imagem|figura|ilustra|diagrama|esquema|desenh|gr[aá]fico|f[oó]rmula/.test(t)) return "image";
   return normalizeStudioKind(t); // default "guide"
 }
 
