@@ -32,6 +32,13 @@ export type StudioRef = {
   studioKind: string;      // guide | mindmap | timeline | flashcards | faq | image | podcast | video
   title?: string;
   artifactId?: string;
+  /**
+   * O aluno PEDIU este artefato com todas as letras (intent gerar_artefato), em vez de
+   * ele ter nascido do assunto. Muda só uma coisa: se falhar, pedido explícito merece
+   * aviso; artefato que a Aura trouxe por conta própria falha calado — ninguém pediu,
+   * ninguém precisa saber.
+   */
+  explicito?: boolean;
   provenance?: ProvenanceRecord;
 };
 

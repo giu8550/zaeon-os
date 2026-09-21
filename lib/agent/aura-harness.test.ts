@@ -7,6 +7,8 @@ import {
   resolveHarnessOutput,
   pareceRecusa,
   isRetryableCode,
+  ofertaDePlataforma,
+  historicoNoOrcamento,
 } from "./aura-harness";
 import { INTENTS, type StructuredAnswer } from "./contracts";
 import type { ToolContext } from "./runtime";
@@ -175,11 +177,25 @@ describe("aura-harness · resolveHarnessOutput (protocolo do cliente)", () => {
     if (out.mode === "structured") expect(out.answer.artifacts?.[0]?.studioKind).toBe("mindmap");
   });
 
-  it("artefato studio → sentinela studio (topic = objetivo)", () => {
-    const answer: StructuredAnswer = { nucleo: "gerando", artifacts: [{ studioKind: "mindmap", title: "mapa" }] };
+  // MUDOU DE PROPÓSITO: este teste congelava o comportamento antigo, em que pedir um
+  // artefato TROCAVA a resposta por um toco ("Já te mostro aqui.") + cartão. O artefato
+  // não é mais a resposta: o turno continua sendo texto e o artefato viaja junto.
+  it("gerar_artefato → structured com o texto E o artefato, marcado como explícito", () => {
+    const answer: StructuredAnswer = { nucleo: "Mapa mental é...", artifacts: [{ studioKind: "mindmap", title: "mapa" }] };
     const out = resolveHarnessOutput({ intent: "gerar_artefato", artifacts: answer.artifacts } as any, answer, "estudos", "mapa de X");
-    expect(out.mode).toBe("studio");
-    if (out.mode === "studio") { expect(out.kind).toBe("mindmap"); expect(out.topic).toBe("mapa de X"); }
+    expect(out.mode).toBe("structured");
+    if (out.mode === "structured") {
+      expect(out.answer.nucleo).toBe("Mapa mental é...");        // o texto sobrevive
+      expect(out.answer.artifacts?.[0]?.studioKind).toBe("mindmap");
+      expect(out.answer.artifacts?.[0]?.explicito).toBe(true);   // pedido → falha em voz alta
+    }
+  });
+
+  it("artefato que nasceu do assunto NÃO é explícito", () => {
+    const answer: StructuredAnswer = { nucleo: "N", artifacts: [{ studioKind: "molecule", title: "cafeína" }] };
+    const out = resolveHarnessOutput({ intent: "explicar_conceito", artifacts: answer.artifacts } as any, answer, "estudos", "por que o café desperta");
+    expect(out.mode).toBe("structured");
+    if (out.mode === "structured") expect(out.answer.artifacts?.[0]?.explicito).toBeUndefined();
   });
 
   it("criar_trabalho na pesquisa → sentinela research", () => {
@@ -202,13 +218,16 @@ describe("aura-harness · integração motor+adaptador (ponta-a-ponta, sem rede)
     expect(resolveHarnessOutput(state, answer, "estudos", "explique entropia").mode).toBe("structured");
   });
 
-  it("gerar_artefato → runTrajectory (studio_generate real) → sentinela studio", async () => {
+  it("gerar_artefato → runTrajectory (studio_generate real) → structured com artefato junto", async () => {
     const deps = buildHarnessDeps(ctx, { genJson: smartGen(), retryDelayMs: 0 });
     deps.classify = async () => ({ intent: "gerar_artefato", mode: "elaborated", academicMode: "flexible" });
     const { answer, state } = await runTrajectoryTraced("cria um mapa mental de fotossíntese", ctx, deps);
     const out = resolveHarnessOutput(state, answer, "estudos", "cria um mapa mental de fotossíntese");
-    expect(out.mode).toBe("studio");
-    if (out.mode === "studio") expect(out.kind).toBe("mindmap");
+    expect(out.mode).toBe("structured");
+    if (out.mode === "structured") {
+      expect(out.answer.nucleo).toBeTruthy();
+      expect(out.answer.artifacts?.[0]?.studioKind).toBe("mindmap");
+    }
   });
 });
 
@@ -299,5 +318,81 @@ describe("molécula que nasce do contexto", () => {
       { nucleo: "glicose e cafeína", substancias: ["cafeína"], artifacts: [{ studioKind: "molecule", title: "glicose" }] } as any, st,
     );
     expect(a.artifacts?.[0].title).toBe("glicose");
+  });
+});
+
+
+describe("ofertaDePlataforma · o cardápio de features não passa", () => {
+  // O critério é QUEM FAZ. Plataforma como sujeito = oferta; aluno como sujeito = estudo.
+  it("derruba a oferta em que a plataforma é o sujeito", () => {
+    for (const p of [
+      "Posso gerar um mapa mental disso pra você",
+      "Quer que eu monte flashcards desse conteúdo?",
+      "Vamos montar uma linha do tempo no Studio",
+      "Que tal eu criar um podcast sobre o tema?",
+      "Vou preparar um guia de estudos completo",
+    ]) expect(ofertaDePlataforma(p)).toBe(true);
+  });
+
+  it("deixa passar o passo de estudo, mesmo citando o mesmo substantivo", () => {
+    for (const p of [
+      "Monte a linha do tempo da Revolução Francesa de cabeça e compare com o livro",
+      "Desenhe o mapa mental no papel, sem consultar",
+      "Faça flashcards à mão: escrever fixa mais que ler",
+      "Reveja os conceitos de entropia antes de seguir",
+      "Leia o capítulo 4 e volte com dúvidas",
+    ]) expect(ofertaDePlataforma(p)).toBe(false);
+  });
+
+  it("o nome da sala nunca é conteúdo", () => {
+    expect(ofertaDePlataforma("Abra o Studio")).toBe(true);
+  });
+
+  it("normalizeAnswer descarta os passos-propaganda e mantém os de estudo", () => {
+    const a = normalizeAnswer(
+      { nucleo: "N", proximos_passos: ["Posso gerar um mapa mental", "Refaça os exercícios 3 a 7"] } as any,
+      { objective: "x" } as any,
+    );
+    expect(a.proximos_passos).toEqual(["Refaça os exercícios 3 a 7"]);
+  });
+
+  it("se TODOS os passos eram propaganda, o campo some (melhor vazio que vendedor)", () => {
+    const a = normalizeAnswer(
+      { nucleo: "N", proximos_passos: ["Quer que eu monte um podcast disso?", "Posso criar flashcards"] } as any,
+      { objective: "x" } as any,
+    );
+    expect(a.proximos_passos).toBeUndefined();
+  });
+});
+
+describe("historicoNoOrcamento · a conversa cabe inteira", () => {
+  const turnos = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ role: i % 2 ? "model" : "user", text: `turno ${i}` }));
+
+  it("com folga, leva TUDO (a janela velha cortava em 6)", () => {
+    const linhas = historicoNoOrcamento(turnos(40));
+    expect(linhas).toHaveLength(40);
+    expect(linhas[0]).toContain("turno 0");
+  });
+
+  it("estourando o orçamento, quem sobrevive é o FIM da conversa", () => {
+    const linhas = historicoNoOrcamento(turnos(40), 60);
+    expect(linhas.length).toBeGreaterThan(0);
+    expect(linhas[linhas.length - 1]).toContain("turno 39");
+    expect(linhas.join("\n")).not.toContain("turno 0");
+  });
+
+  it("mantém a ordem cronológica mesmo montando de trás pra frente", () => {
+    const linhas = historicoNoOrcamento(turnos(6));
+    expect(linhas.map((l) => l.split(" ").pop())).toEqual(["0", "1", "2", "3", "4", "5"]);
+  });
+
+  it("ignora turno vazio e rotula os papéis", () => {
+    const linhas = historicoNoOrcamento([
+      { role: "user", text: "oi" },
+      { role: "model", text: "   " },
+      { role: "model", text: "olá" },
+    ]);
+    expect(linhas).toEqual(["Usuário: oi", "Aura: olá"]);
   });
 });

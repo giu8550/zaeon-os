@@ -86,21 +86,78 @@ function obsBlock(obs: Observation[]): string {
     .join("\n")}`;
 }
 
-/** Bloco de contexto (systemContext + histórico recente) — dá paridade com o caminho legado. */
+/**
+ * Orçamento de caracteres do histórico no preâmbulo. A janela antiga eram 6 turnos
+ * cortados em 500 caracteres cada — ~3 mil caracteres de memória, o que fazia a Aura
+ * ser uma LLM excelente com amnésia de dez minutos. O Flash tem contexto de sobra;
+ * o gargalo era esta função, não o modelo.
+ */
+export const ORCAMENTO_HISTORICO = 24_000;
+/** Teto por turno: impede que um despejo de texto gigante coma a conversa inteira. */
+export const TETO_POR_TURNO = 4_000;
+
+/**
+ * Monta o histórico de trás pra frente até estourar o orçamento, e devolve na ordem
+ * cronológica. De trás pra frente porque, quando falta espaço, quem tem que sobreviver
+ * é o assunto de agora — não o "oi" do começo da tarde.
+ */
+export function historicoNoOrcamento(
+  history: { role: string; text: string }[],
+  orcamento = ORCAMENTO_HISTORICO,
+): string[] {
+  const linhas: string[] = [];
+  let gasto = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i];
+    const texto = String(h?.text ?? "").trim();
+    if (!texto) continue;
+    const linha = `${h.role === "user" ? "Usuário" : "Aura"}: ${texto.slice(0, TETO_POR_TURNO)}`;
+    if (gasto + linha.length > orcamento) break;
+    gasto += linha.length;
+    linhas.unshift(linha);
+  }
+  return linhas;
+}
+
+/** Bloco de contexto (systemContext + histórico) — dá paridade com o caminho legado. */
 function preambleBlock(opts: HarnessOpts): string {
   const bits: string[] = [];
   if (opts.systemContext) bits.push(`Contexto do sistema:\n${String(opts.systemContext).slice(0, 4000)}`);
   if (opts.history?.length) {
-    const recent = opts.history
-      .slice(-6)
-      .map((h) => `${h.role === "user" ? "Usuário" : "Aura"}: ${String(h.text ?? "").slice(0, 500)}`)
-      .join("\n");
-    if (recent) bits.push(`Conversa recente:\n${recent}`);
+    const linhas = historicoNoOrcamento(opts.history);
+    if (linhas.length) {
+      bits.push(
+        "Conversa até aqui (é a MESMA conversa — mantenha o assunto, os termos e o que já foi combinado; " +
+        "não se reapresente nem recomece do zero):\n" + linhas.join("\n"),
+      );
+    }
   }
   return bits.length ? bits.join("\n\n") + "\n\n" : "";
 }
 
 function asArray(v: unknown): any[] { return Array.isArray(v) ? v : v == null ? [] : [v]; }
+
+/**
+ * Rede determinística contra o cardápio de features. A instrução no prompt resolve a
+ * maioria dos casos, mas modelo é modelo: de vez em quando ele oferece "quer um mapa
+ * mental disso?" mesmo mandado não oferecer. Aqui o passo simplesmente não passa.
+ *
+ * O CRITÉRIO É QUEM FAZ, não qual substantivo aparece. Um passo de estudo manda o ALUNO
+ * fazer ("monte a linha do tempo de cabeça e compare com o livro") e é ótimo conteúdo.
+ * Uma oferta põe a PLATAFORMA como sujeito ("posso gerar", "quer que eu monte", "que
+ * tal eu criar") — ou cita o Studio pelo nome. Só essa cai.
+ *
+ * Preferimos deixar passar uma oferta a comer um passo de estudo legítimo: o filtro é
+ * a rede de segurança, não a regra. A regra está no prompt.
+ */
+const SUJEITO_PLATAFORMA = /\b(posso|poderia|vou|eu (?:gero|crio|monto|fa[çc]o|preparo)|quer(?:es)? que eu|se (?:quiser|preferir), (?:eu|te)|que tal (?:eu|gerarmos|criarmos)|deseja que eu|gostaria que eu|te (?:gero|crio|monto|preparo))\b/i;
+const RECURSO_DA_CASA = /\b(mapa mental|mindmap|flashcards?|linha do tempo|timeline|podcast|v[íi]deo|faq|infogr[áa]fico|guia de estudos?|quiz|apresenta[çc][ãa]o|slides|imagem|ilustra[çc][ãa]o)\b/i;
+
+export function ofertaDePlataforma(passo: string): boolean {
+  const t = String(passo || "");
+  if (/\bstudio\b/i.test(t)) return true; // o nome da sala nunca é conteúdo
+  return SUJEITO_PLATAFORMA.test(t) && RECURSO_DA_CASA.test(t);
+}
 
 /** garante o contrato mínimo do StructuredAnswer (nunca deixa o cliente sem `nucleo`). */
 export function normalizeAnswer(out: Partial<StructuredAnswer> | null | undefined, st: TrajectoryState): StructuredAnswer {
@@ -110,7 +167,10 @@ export function normalizeAnswer(out: Partial<StructuredAnswer> | null | undefine
   };
   if (typeof o.desenvolvimento === "string") answer.desenvolvimento = o.desenvolvimento;
   if (o.conceitos) answer.conceitos = asArray(o.conceitos).map(String).filter(Boolean);
-  if (o.proximos_passos) answer.proximos_passos = asArray(o.proximos_passos).map(String).filter(Boolean);
+  if (o.proximos_passos) {
+    const passos = asArray(o.proximos_passos).map(String).filter(Boolean).filter((p) => !ofertaDePlataforma(p));
+    if (passos.length) answer.proximos_passos = passos;
+  }
   if (o.evidencia) answer.evidencia = asArray(o.evidencia).filter((e) => e && e.claim && e.source);
   if (o.sources) answer.sources = asArray(o.sources).filter((s: Source) => s && s.title);
   if (o.work && typeof o.work === "object") answer.work = o.work;
@@ -205,7 +265,16 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         : "";
       const sys = [
         "Você é a Aura, parceira de estudo/pesquisa — calorosa, direta, PT-BR. Redija a resposta final.",
-        "NUNCA diga que você é uma IA incapaz de gerar imagem/representação visual — você TEM o Studio (imagem/diagrama/molécula). Se o pedido for visual e nenhuma tool o cobriu, afirme que dá pra gerar e sugira em proximos_passos, jamais negue capacidade.",
+        // O Studio é MOBÍLIA, não assunto. Esta linha antes dizia ao modelo "você TEM o
+        // Studio… sugira em proximos_passos" — e ele obedecia: toda resposta terminava
+        // num cardápio de features, o que deixa qualquer resposta genérica e quebra o fio
+        // da conversa. Quem decide se um artefato nasce é o código, com o dado real na mão.
+        "NUNCA fale sobre você mesma, sobre a plataforma, sobre o Studio, sobre ferramentas, " +
+        "recursos, botões ou o que você 'pode gerar'. Nada de cardápio de funcionalidades. " +
+        "Nunca se declare incapaz de mostrar algo visual — apenas não comente o assunto: " +
+        "responda o TEMA, que a parte visual é resolvida fora do texto.",
+        "proximos_passos, quando fizer sentido, são passos de ESTUDO (o que entender, ler, " +
+        "praticar ou checar a seguir) — jamais ofertas de recurso da plataforma.",
         "Responda SOMENTE JSON válido.",
         `Campos obrigatórios: ${req}. Preencha TODOS. Schema: {nucleo, desenvolvimento?, conceitos?[], evidencia?[{claim,source:{title,url?}}], proximos_passos?[], sources?[{title,url?}], work?{kind,sections:[{title,body}]}, artifacts?[{studioKind,title}]}.`,
         // Ao modelo pedimos EXTRAÇÃO, não decisão de produto: "que substâncias esta
@@ -292,13 +361,23 @@ export function resolveHarnessOutput(
   if (state.intent === "criar_trabalho" && surface === "pesquisa") {
     return { mode: "research", kind: state.kind ?? "artigo", topic: objective, text: lead };
   }
-  // ARTEFATO PURO ("gera um mapa"): gerar_artefato com studioArt → sentinela studio (inalterado).
-  if (studioArt && state.intent === "gerar_artefato") {
-    // `title` do ref antes do objetivo: o objetivo é a FRASE INTEIRA do aluno
-    // ("consegue gerar molecula de cafeina"), que não resolve em fonte nenhuma.
-    return { mode: "studio", kind: studioArt.studioKind, topic: studioArt.title?.trim() || objective, text: lead };
-  }
-  // Tudo mais (conversa, dúvida, explicação, fontes, revisão) → estruturado, carregando o
-  // answer COMPLETO — se vier artifacts[] (ex.: image), o cliente embute na mesma bolha.
-  return { mode: "structured", answer: arts.length && !answer.artifacts ? { ...answer, artifacts: arts } : answer };
+  // O ARTEFATO NÃO É MAIS A RESPOSTA.
+  //
+  // Antes, pedir "gera a molécula de cafeína" caía aqui e virava `mode: "studio"`: a
+  // resposta inteira era jogada fora e substituída por um toco ("Já te mostro aqui.")
+  // com um cartão embaixo. Isso custava caro de três formas — o aluno perdia a
+  // explicação, o turno entrava no histórico como um toco (e o modelo, no turno
+  // seguinte, não fazia ideia do que tinha acabado de acontecer), e o assunto morria
+  // ali, que é exatamente o "quebra o ritmo".
+  //
+  // Agora todo turno de conversa é texto. O artefato viaja JUNTO, em `artifacts[]`, e
+  // o cliente o materializa no Studio. Marcamos `explicito` quando ele foi pedido com
+  // todas as letras: é o que decide se uma falha vira aviso ou silêncio.
+  const comExplicito = studioArt && state.intent === "gerar_artefato"
+    ? arts.map((a) => (a === studioArt ? { ...a, explicito: true } : a))
+    : arts;
+  return {
+    mode: "structured",
+    answer: comExplicito.length ? { ...answer, artifacts: comExplicito } : answer,
+  };
 }
