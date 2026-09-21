@@ -53,6 +53,9 @@ model User {
   identityId      String?
   idType          String?
   walletAddress   String?
+  // Credenciais Solana (ver lib/solana/credentials.ts): cache do endereço da wallet CUSTODIAL
+  // criada pela Crossmint no 1º mint (email:<aluno>:solana). O aluno nunca vê seed phrase/gas.
+  solanaWallet    String?
   
   // Admin & Verification
   kycStatus         String  @default("pending")
@@ -861,6 +864,37 @@ model WhatsAppMessage {
   @@index([userId, dedupeKey])
   @@map("whatsapp_messages")
 }
+// ─── Credenciais soulbound (Solana) — toda conquista vira prova verificável do aluno ───
+// Emitidas via Crossmint (wallet custodial por e-mail, gasless) como cNFT soulbound (Bubblegum V2)
+// ou token-2022 non-transferable (alto valor: certificação de mentor). Leitura on-chain via Helius DAS.
+// A conquista do aluno NUNCA depende do mint: falha → status "error" e o app segue (degrada).
+model Credential {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String    @db.ObjectId
+  type              String                        // "skill" | "work" | "mentor-cert" | "course"
+  refId             String                        // nodeId/researchWorkId/aulaId/mentorCertId de origem
+  title             String
+  chain             String    @default("solana")
+  standard          String                        // "cnft" | "token2022-nt"
+  network           String    @default("devnet")  // devnet no hackathon; mainnet depois (só env)
+  assetId           String?                       // id on-chain (cNFT assetId / mint)
+  mintTx            String?
+  crossmintId       String?                       // id do NFT na Crossmint (GET /nfts/{id} p/ polling)
+  crossmintActionId String?                       // actionId da Crossmint (polling alternativo)
+  walletAddress     String?                       // wallet custodial do aluno (Crossmint)
+  status            String    @default("pending") // pending | minting | issued | error
+  error             String?                       // última mensagem de erro (diagnóstico)
+  metadata          Json?                         // trilha de evidência (provenance do harness)
+  issuedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([userId, type, refId])                 // idempotente: não cunha 2× a mesma conquista
+  @@index([userId])
+  @@index([status])
+  @@map("credentials")
+}
+
 // ─── Árvore de Habilidades GENERATIVA (ver lib/skilltree/*) ────────────────────
 // 1 árvore por tópico (cache global, reusável por todos os usuários); o progresso é por usuário.
 model SkillTree {

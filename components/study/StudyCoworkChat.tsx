@@ -32,6 +32,7 @@ import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlo
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
+import { typeStep, safeCut } from "@/lib/ui/typewriter";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import type { SkillNodeState } from "@/lib/skilltree/types";
 import type { SkillTreeData } from "@/components/study/SkillTreePanel";
@@ -59,6 +60,8 @@ type Msg = {
   studyTitle?: string;
   studioBlock?: StudioBlockData;   // em "structured" = artefato embutido na MESMA bolha
   answer?: StructuredAnswer;
+  streaming?: boolean;       // B2: resposta ainda chegando → cursor piscando
+  fresh?: boolean;           // B2: resposta estruturada recém-chegada → datilografa o núcleo
   at: number;
 };
 
@@ -135,7 +138,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     try {
       const slim = messages
         .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text))
-        .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m)); // artefato inline fica na sessão
+        .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m)) // artefato inline fica na sessão
+        .map(({ streaming, fresh, ...m }) => m); // B2: flags de animação não persistem (reload não re-digita)
       localStorage.setItem(THREAD_KEY, JSON.stringify(slim.slice(-60)));
     } catch { /* ignore */ }
   }, [messages]);
@@ -278,7 +282,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     setMessages((prev) => [
       ...prev,
       { id: uid(), role: "user", kind: "text", text: prompt, at: Date.now() },
-      { id: asstId, role: "assistant", kind: "text", text: "", at: Date.now() },
+      { id: asstId, role: "assistant", kind: "text", text: "", streaming: true, at: Date.now() },
     ]);
     setInput("");
     setSending(true);
@@ -330,20 +334,20 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         let shown = 0;         // quantas letras já reveladas
         let ended = false;
 
-        // Datilografia: revela letra a letra em ordem, suavizando os chunks do
-        // stream (chunky → digitação fluida, estilo Claude). Cadência com easing:
-        // vai mais rápido quando está longe do alvo e desacelera perto do fim.
+        // Datilografia (B2): revela em ordem, por frame (rAF), com TETO de letras por
+        // frame — os chunks do stream viram digitação contínua, sem "despejar" blocos.
         const typed = new Promise<void>((resolve) => {
-          const id = setInterval(() => {
+          const tick = () => {
             if (shown < target.length) {
-              const rem = target.length - shown;
-              shown = Math.min(target.length, shown + Math.max(1, Math.ceil(rem / 8)));
+              shown = safeCut(target, shown + typeStep(target.length - shown));
               patchAsst(target.slice(0, shown));
             } else if (ended) {
-              clearInterval(id);
               resolve();
+              return;
             }
-          }, 18);
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
         });
 
         for (;;) {
@@ -362,7 +366,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           target = ""; ended = true;
           if (structured.kind === "answer") {
             const a = structured.answer;
-            setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, kind: "structured", answer: a, text: a.nucleo } : m)));
+            setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, kind: "structured", answer: a, text: a.nucleo, streaming: false, fresh: true } : m)));
             // artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
             for (const art of a.artifacts ?? []) {
               if (art.studioKind && !art.studioKind.startsWith("research:")) void runStudioAction(art.studioKind, prompt, asstId);
@@ -403,6 +407,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     } catch {
       patchAsst("Falha de rede ao falar com a Aura.");
     } finally {
+      setMessages((prev) => prev.map((m) => (m.id === asstId && m.streaming ? { ...m, streaming: false } : m)));
       setSending(false);
       // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
       if (tree) setTreeRefresh((n) => n + 1);
@@ -501,6 +506,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-6 transition-colors ${dragOver ? "bg-cyan-500/[0.04]" : ""}`}
         >
           <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2 py-4 flex flex-col gap-4">
+            {/* B2: cursor piscando da resposta em streaming */}
+            <style>{`@keyframes zCaret { 0%,45% { opacity:1 } 50%,100% { opacity:0 } } .z-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-0.15em; background:currentColor; opacity:.7; animation: zCaret 1s steps(1) infinite; } @media (prefers-reduced-motion: reduce) { .z-caret { animation: none; } }`}</style>
             {messages.length === 0 ? null : (
               messages.map((m) => {
                 if (m.kind === "text") {
@@ -512,7 +519,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                           ? "bg-slate-100 text-slate-900 border border-slate-200/80 dark:bg-white/[0.09] dark:text-white/90 dark:border-white/10"
                           : "bg-white/80 dark:bg-white/[0.05] text-slate-800 dark:text-white/90 border border-slate-200/70 dark:border-white/10 backdrop-blur-xl"}`}>
                         {m.text
-                          ? m.text
+                          ? <>{m.text}{m.streaming && <span aria-hidden className="z-caret" />}</>
                           : (!isUser && <AuraThinking active phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                       </div>
                     </div>
@@ -541,6 +548,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                       <div className="max-w-[85%] w-full">
                         <StructuredAnswerView
                           answer={m.answer}
+                          typing={!!m.fresh}
                           onConcept={(c) => void send(`Me explica melhor: ${c}`)}
                           onNext={(s) => void send(s)}
                         >
