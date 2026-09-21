@@ -108,6 +108,8 @@ jobs:
             echo "→ Atualizando código (main)…"
             git fetch --all --prune
             git reset --hard origin/main
+            export GIT_SHA="$(git rev-parse --short HEAD)"
+            echo "-> Commit no deploy: $GIT_SHA"
 
             echo "→ Gravando .env.secrets (credencial Vertex em UMA linha)…"
             umask 177
