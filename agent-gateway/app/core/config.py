@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     ZAEON_INTERNAL_URL: Optional[str] = None
     ZAEON_INTERNAL_TOKEN: Optional[str] = None
 
+    # Bridge fino do Mentor no WhatsApp (docs/WHATSAPP_MENTOR.md): /webhook/wa → app.
+    # O cérebro é o harness do app; aqui só transporte. Segredo = o mesmo do app.
+    ZAEON_WEBHOOK_URL: str = "http://web:3000/api/whatsapp/webhook"
+    WHATSAPP_WEBHOOK_SECRET: Optional[str] = None
+
     # Evolution evogo — LEGADO/fallback (deprecado; ver ADR-001 Decisão 1)
     EVO_URL: Optional[str] = None
     EVO_API_KEY: Optional[str] = None

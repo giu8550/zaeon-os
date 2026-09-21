@@ -13,7 +13,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 
-export type Surface = "estudos" | "pesquisa" | "aula" | "projetos" | "lounge";
+export type Surface = "estudos" | "pesquisa" | "aula" | "projetos" | "lounge" | "whatsapp";
 export type Role = "user" | "assistant";
 export type TurnMsg = { role: Role; text: string; meta?: unknown };
 export type WireMsg = { id: string; role: Role; text: string; meta?: unknown; at: string };
@@ -84,5 +84,5 @@ export async function getRecent(
   return { conversationId: conv.id, messages };
 }
 
-const SURFACES: Surface[] = ["estudos", "pesquisa", "aula", "projetos", "lounge"];
+const SURFACES: Surface[] = ["estudos", "pesquisa", "aula", "projetos", "lounge", "whatsapp"];
 export const isSurface = (v: unknown): v is Surface => typeof v === "string" && SURFACES.includes(v as Surface);

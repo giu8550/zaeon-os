@@ -828,6 +828,42 @@ model AulaProgress {        // progresso/completude por aluno por aula
   @@index([studentId])
   @@map("aula_progress")
 }
+// ─── Mentor no WhatsApp (docs/WHATSAPP_MENTOR.md) ───
+// Vínculo número↔usuário feito por QR `wa.me` + código CONECTAR-XXXX (NÃO pareia a conta do
+// aluno). optIn = consentimento (o envio do código); "PARE" desliga. quietHours = não incomodar.
+model WhatsAppLink {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String    @unique @db.ObjectId
+  phone        String?                     // E.164 (+55…); null até o aluno mandar o código
+  verified     Boolean   @default(false)
+  optIn        Boolean   @default(false)
+  verifyCode   String?                     // código one-time do QR (CONECTAR-XXXX)
+  codeIssuedAt DateTime?
+  quietHours   Json?                       // { start: 22, end: 7, tz: "America/Sao_Paulo" }
+  linkedAt     DateTime?
+  lastMsgAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([phone])
+  @@index([verifyCode])
+  @@map("whatsapp_links")
+}
+
+// Auditoria + idempotência dos disparos (dedupeKey: "agenda:2026-09-09", "deadline:<docId>"…).
+model WhatsAppMessage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  dir       String   // "in" | "out"
+  kind      String   // chat | connect | stop | resume | agenda | review | deadline | tree | credential | test
+  text      String
+  dedupeKey String?
+  at        DateTime @default(now())
+
+  @@index([userId, at])
+  @@index([userId, dedupeKey])
+  @@map("whatsapp_messages")
+}
 // ─── Credenciais soulbound (Solana) — toda conquista vira prova verificável do aluno ───
 // Emitidas via Crossmint (wallet custodial por e-mail, gasless) como cNFT soulbound (Bubblegum V2)
 // ou token-2022 non-transferable (alto valor: certificação de mentor). Leitura on-chain via Helius DAS.

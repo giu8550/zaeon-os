@@ -101,6 +101,57 @@ services:
       resources:
         limits: { memory: 896m }
 
+  # ── Mentor no WhatsApp (docs/WHATSAPP_MENTOR.md) — perfil opcional `whatsapp` ──
+  #   Subir:  COMPOSE_PROFILES=whatsapp docker compose -f docker-compose.beta.yml up -d --build
+  #   agent-bridge = agent-gateway em modo BRIDGE FINO (/webhook/wa → web:/api/whatsapp/webhook).
+  #   Sem Postgres/pgvector/arq: o cérebro é o harness do web (Atlas). O sender de saída é o
+  #   Evolution abaixo (WHATSAPP_PROVIDER=evolution) OU o repo de disparos/ChipFlow
+  #   (WHATSAPP_PROVIDER=disparos, DISPAROS_URL) rodando no compose dele — ver runbook.
+  agent-bridge:
+    build: { context: ./agent-gateway, dockerfile: Dockerfile }
+    container_name: zaeon_agent_bridge
+    profiles: ["whatsapp"]
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: [.env]
+    environment:
+      ZAEON_WEBHOOK_URL: http://web:3000/api/whatsapp/webhook
+      # sem DB: o bridge não abre conexão; placeholder só pra Settings não reclamar
+      DATABASE_URL: postgresql+asyncpg://unused:unused@localhost/unused
+    depends_on:
+      web: { condition: service_started }
+    expose: ["8000"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 384m }
+
+  # Evolution API v1.x (sem Postgres; estado em volume). Instância ÚNICA da plataforma,
+  # conectada 1× por QR pelo admin (número da Zaeon). Webhook da instância → agent-bridge.
+  # ⚠️ Não-oficial (Baileys): risco de ban/ToS — MVP. Escala = WhatsApp Cloud API (troca de provider).
+  evolution:
+    image: atendai/evolution-api:v1.8.2
+    container_name: zaeon_evolution
+    profiles: ["whatsapp"]
+    environment:
+      SERVER_URL: http://evolution:8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-troque-esta-chave}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+      DATABASE_ENABLED: "false"
+      REDIS_ENABLED: "false"
+      RABBITMQ_ENABLED: "false"
+      WEBSOCKET_ENABLED: "false"
+      QRCODE_LIMIT: "30"
+      LOG_LEVEL: "ERROR,WARN"
+      DEL_INSTANCE: "false"
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    expose: ["8080"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 768m }
+
   redis:
     image: redis:7-alpine
     container_name: zaeon_redis
@@ -130,6 +181,8 @@ services:
 
 volumes:
   redis_data:
+  evolution_instances:   # sessão da instância única do WhatsApp (perfil whatsapp)
+  evolution_store:
   caddy_data:
   caddy_config:
   hf_cache:        # pesos do Kokoro (HuggingFace) — evita re-download a cada restart
