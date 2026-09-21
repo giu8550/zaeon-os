@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronRightIcon, ChevronDownIcon, ArrowLeftIcon, ArrowRightStartOnRectangleIcon
 } from "@heroicons/react/24/outline";
-import { Bot, Send, ShieldCheck, Loader2, Mic, MicOff, Crown, Trash2, GraduationCap } from "lucide-react";
+import { Bot, Send, ShieldCheck, UserPlus, Loader2, Mic, MicOff, Crown, Trash2, GraduationCap } from "lucide-react";
 import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 import { isSuperAdmin } from "@/lib/auth/roles";
 import { motion, AnimatePresence } from "framer-motion";
@@ -419,7 +419,7 @@ export default function MenuNavigation() {
                   onClick={() => router.push("/login")}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-slate-300 dark:border-white/15 text-slate-800 dark:text-white text-[12px] font-bold hover:border-cyan-400/60 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors"
                 >
-                  <ShieldCheck size={15} /> Entrar com e-mail
+                  <UserPlus size={15} /> Criar conta
                 </button>
               </>
             )}

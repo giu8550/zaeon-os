@@ -55,7 +55,7 @@ export default function WelcomeScreen({ token, collectedData }: Props) {
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.4 }}
-          className="flex flex-col gap-5 p-8 bg-slate-50 dark:bg-white/3 border border-slate-200 dark:border-white/8 rounded-3xl"
+          className="flex flex-col gap-5 p-8 bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-3xl"
         >
           {/* University identity */}
           <div className="flex items-center gap-4">
@@ -108,7 +108,7 @@ export default function WelcomeScreen({ token, collectedData }: Props) {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="flex flex-col gap-5 p-8 bg-slate-50 dark:bg-white/3 border border-slate-200 dark:border-white/8 rounded-3xl"
+          className="flex flex-col gap-5 p-8 bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-3xl"
         >
           <Testimonials />
 
