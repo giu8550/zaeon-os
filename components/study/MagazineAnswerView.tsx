@@ -34,11 +34,12 @@ import { medirTexto, emParagrafos, contarPalavras, normalizar, type TextoMedido 
 /* ─────────────────────────── critério de ativação (§10) ─────────────────────────── */
 
 /**
- * Resposta curta continua no balão normal: revista com 3 linhas é exagero. 120 palavras
- * se mostrou alto demais pra conversa de chat — quase nenhuma resposta passava, e o
- * Modo Revista virou invisível. 70 é uns 5 parágrafos curtos: já tem corpo pra página.
+ * Piso, não meta. 120 palavras deixou o Modo Revista invisível; 70 deixou ele
+ * INTERMITENTE, que é pior — a mesma sala mudava de cara a cada resposta e parecia
+ * defeito. Agora só a resposta de uma linha ("pode ser", "isso mesmo") fica no balão;
+ * o resto é sempre página. Consistência vale mais que a página perfeita.
  */
-export const MIN_PALAVRAS_REVISTA = 70;
+export const MIN_PALAVRAS_REVISTA = 25;
 
 /**
  * O corpo da página. `desenvolvimento` é opcional no contrato e SÓ o intent
@@ -115,6 +116,8 @@ export default function MagazineAnswerView({
   const [dica, setDica] = useState<{ x: number; y: number; termo: string; def: string } | null>(null);
 
   const medidoRef = useRef<TextoMedido | null>(null);
+  /** Altura real do cartão do artefato, medida no DOM (não chutada). */
+  const alturaArtefatoRef = useRef(0);
   const layoutRef = useRef<Resultado | null>(null);
   const nascimentoRef = useRef<Float64Array | null>(null);
   const coresRef = useRef<Cores | null>(null);
@@ -130,9 +133,6 @@ export default function MagazineAnswerView({
   // Quando o corpo JÁ É o núcleo, mostrar o núcleo de novo em cima seria eco.
   const temLinhaFina = !!answer.desenvolvimento?.trim() && !!answer.nucleo?.trim();
   const conceitos = useMemo(() => answer.conceitos ?? [], [answer.conceitos]);
-
-  /** O artefato vira obstáculo redondo (molécula) ou retangular (o resto). */
-  const formaArtefato = artefato?.studioKind === "molecule" ? "circulo" : "retangulo";
 
   /* ── medir + posicionar ──────────────────────────────────────────────────────── */
   const recalcular = useCallback(() => {
@@ -159,25 +159,26 @@ export default function MagazineAnswerView({
     }
 
     // artefato: mora na direita, mais ou menos na altura da 7ª linha, como na referência
+    // O OBSTÁCULO VEM DO TAMANHO REAL DO ARTEFATO, medido no DOM.
+    //
+    // A primeira versão reservava um CÍRCULO do tamanho do desenho da molécula — mas o
+    // que entra ali é o cartão inteiro do Studio: cabeçalho, botões de estilo, ficha com
+    // fórmula e peso. O cartão não cabia no círculo, vazava por cima do texto e estourava
+    // a altura calculada. Era isso que quebrava a página.
+    //
+    // Largura é decidida aqui (fração da coluna) e a ALTURA é medida. Assim não há laço:
+    // a medida não depende de nada que a medida mude.
     let caixaArtefato: { x: number; y: number; w: number; h: number } | null = null;
     if (artefato) {
-      if (formaArtefato === "circulo") {
-        const r = Math.round(W < 560 ? W * 0.24 : Math.min(W * 0.2, 140));
-        const cx = clamp(W * 0.68, r, W - r);
-        const cy = Math.max(r, metricas.entrelinha * 7.5);
-        obstaculos.push(obstaculoArtefato(cx, cy, r, metricas));
-        caixaArtefato = { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
-      } else {
-        // Abaixo de 560px o artefato ocupa a largura toda (§12/Q5): contornar numa
-        // coluna estreita deixaria frestas de três letras dos dois lados.
-        const largo = W < 560;
-        const w = largo ? W : Math.round(W * 0.42);
-        const h = Math.round(w * 0.62);
-        const x = largo ? 0 : W - w;
-        const y = metricas.entrelinha * (largo ? 6 : 5);
-        obstaculos.push({ tipo: "retangulo", x, y, w, h, pad: metricas.tamanho * 0.9 });
-        caixaArtefato = { x, y, w, h };
-      }
+      // Abaixo de 560px o artefato ocupa a largura toda (§12/Q5): contornar numa coluna
+      // estreita deixaria frestas de três letras dos dois lados.
+      const largo = W < 560;
+      const w = largo ? W : Math.round(W * 0.42);
+      const h = Math.max(alturaArtefatoRef.current || 0, 180);
+      const x = largo ? 0 : W - w;
+      const y = metricas.entrelinha * (largo ? 6 : 5);
+      obstaculos.push({ tipo: "retangulo", x, y, w, h, pad: metricas.tamanho * 0.9 });
+      caixaArtefato = { x, y, w, h };
     }
 
     const res = montarLayout(
@@ -220,7 +221,7 @@ export default function MagazineAnswerView({
       if (anterior) novo.set(anterior.subarray(0, Math.min(anterior.length, total)));
       nascimentoRef.current = novo;
     }
-  }, [paragrafos, conceitos, artefato, formaArtefato, streaming]);
+  }, [paragrafos, conceitos, artefato, streaming]);
 
   /* ── boot: fontes e observer montam UMA vez ─────────────────────────────────── */
   // `recalcular` muda a cada token do stream. Se o boot dependesse dele, a corrida das
@@ -257,6 +258,22 @@ export default function MagazineAnswerView({
 
     return () => { vivo = false; ro.disconnect(); };
   }, []);
+
+  /* ── mede o cartão do artefato e refaz o layout quando ele cresce ───────────── */
+  useEffect(() => {
+    const slot = slotArtefato.current;
+    if (!slot || !artefato) { alturaArtefatoRef.current = 0; return; }
+    const ro = new ResizeObserver(() => {
+      const h = Math.ceil(slot.getBoundingClientRect().height);
+      // Só refaz quando muda de verdade: evita laço de medida → layout → medida.
+      if (h > 0 && Math.abs(h - alturaArtefatoRef.current) > 2) {
+        alturaArtefatoRef.current = h;
+        recalcularRef.current();
+      }
+    });
+    ro.observe(slot);
+    return () => ro.disconnect();
+  }, [artefato]);
 
   /* ── re-medir quando texto, conceitos ou artefato mudam ─────────────────────── */
   useEffect(() => {
@@ -436,7 +453,9 @@ export default function MagazineAnswerView({
         </div>
 
         {/* o artefato é o componente de sempre, só posicionado */}
-        <div ref={slotArtefato} style={{ position: "absolute", display: "none" }}>
+        {/* O cartão real do Studio. Largura fixada pelo layout; altura é dele, e o
+            motor se adapta a ela (ResizeObserver acima). */}
+        <div ref={slotArtefato} style={{ position: "absolute", display: "none", overflow: "hidden" }}>
           {artefato && (
             <StudioBlock block={artefato} collapsed={false} onToggle={() => {}} />
           )}
