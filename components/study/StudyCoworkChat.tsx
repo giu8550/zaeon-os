@@ -74,6 +74,35 @@ type Msg = {
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+/**
+ * O que desta mensagem a Aura precisa reler no próximo turno.
+ *
+ * `m.text` de uma resposta estruturada é só o núcleo — a manchete. Mandar só isso de
+ * volta era condenar o modelo a uma conversa onde ele lembra do que PERGUNTARAM e
+ * esquece do que RESPONDEU. Aqui vai o corpo: núcleo + desenvolvimento, e os conceitos
+ * como âncora barata (é a lista de termos que a resposta cravou, meia dúzia de palavras
+ * que valem por parágrafos na hora de manter o vocabulário da conversa).
+ *
+ * O artefato NÃO entra: ele não é fala, e descrever o cartão no histórico é justamente
+ * o que fazia o modelo achar que o Studio era assunto.
+ */
+export function textoParaHistorico(m: {
+  kind?: string;
+  text?: string;
+  answer?: StructuredAnswer;
+  studyTitle?: string;
+}): string {
+  if (m.kind === "structured" && m.answer) {
+    const a = m.answer;
+    const partes = [a.nucleo?.trim(), a.desenvolvimento?.trim()].filter(Boolean) as string[];
+    if (a.conceitos?.length) partes.push("Conceitos: " + a.conceitos.join(" · "));
+    const corpo = partes.join("\n\n").trim();
+    if (corpo) return corpo;
+  }
+  if (m.kind === "study" && m.studyTitle) return `(estudo criado: ${m.studyTitle})`;
+  return (m.text ?? "").trim();
+}
+
 // Frase curta = pensamento rápido (não fica "Planejando" à toa). Enquanto o harness
 // real não classifica a intenção, isto mantém o loading honesto.
 const isQuickPrompt = (t: string) => t.trim().split(/\s+/).filter(Boolean).length <= 8;
@@ -406,9 +435,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     if (!prompt || sending) return;
     setQuickThinking(isQuickPrompt(prompt));
 
+    // O histórico levava só `m.text`, que numa resposta estruturada é o NÚCLEO — uma
+    // frase. Ou seja: a Aura relia as próprias respostas como manchetes sem matéria, e
+    // por isso "esquecia" o que tinha explicado dois turnos antes. Vai o corpo inteiro.
     const history = msgsRef.current
-      .filter((m) => (m.kind === "text" || m.kind === "structured") && m.text)
-      .map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.text as string }] }));
+      .map((m) => ({ role: m.role === "assistant" ? "model" : "user", texto: textoParaHistorico(m) }))
+      .filter((h) => h.texto)
+      .map((h) => ({ role: h.role, parts: [{ text: h.texto }] }));
 
     // mensagem da assistente entra vazia e vai sendo preenchida aos poucos (streaming)
     const asstId = uid();
@@ -433,9 +466,16 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       "reportagens, artigos, web, enciclopédia valem. NUNCA recuse por falta de fonte acadêmica; " +
       "se não houver paper, responda com o que há e sinalize a natureza da fonte. O rigor acadêmico " +
       "pleno só é obrigatório quando o pedido for criar/revisar um trabalho.";
+    // AQUI MORAVA O CARDÁPIO. A linha sem foco terminava com "ofereça transformar o
+    // assunto em artefatos do Studio (Guia, Mapa mental, Linha do tempo, Flashcards,
+    // FAQ, Imagem, Podcast, Vídeo)" — em TODO turno. O modelo obedecia, e a conversa
+    // virava um vendedor simpático: resposta rasa + menu. Artefato agora é decisão do
+    // código, a partir do assunto; o modelo só conversa.
     const systemContext = (focusIds.length
       ? `O usuário está no co-working da Sala de Estudos e FOCOU ${focusIds.length} estudo(s): ${focusTitles.join("; ")}. Concentre-se nesse(s) estudo(s) ao responder.`
-      : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade e, quando ajudar, ofereça transformar o assunto em artefatos do Studio (Guia, Mapa mental, Linha do tempo, Flashcards, FAQ, Imagem, Podcast, Vídeo) ou gerar um estudo.`) + flexClause;
+      : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade, mantendo o fio do assunto entre as mensagens.`)
+      + " Nunca ofereça recursos, ferramentas ou botões da plataforma, e nunca comente o que você 'pode gerar' — fale do tema."
+      + flexClause;
 
     try {
       const r = await fetch("/api/ai/chat", {
@@ -507,13 +547,16 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             // deixa acordado" não resolve no PubChem; "cafeína" resolve.
             for (const art of a.artifacts ?? []) {
               if (art.studioKind && !art.studioKind.startsWith("research:")) {
-                // silencioso: a Aura propôs por conta própria, então falha não vira aviso.
-                void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId, true);
+                // Pedido explícito falha em voz alta; artefato que a Aura trouxe de
+                // brinde falha calado — ninguém pediu, ninguém precisa saber.
+                void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId, !art.explicito);
               }
             }
+            // L1 grava o corpo, não a manchete: é esta transcrição que vira memória
+            // durável, e memória de manchete não serve pra nada depois.
             appendTranscript("estudos", focusIds[0] ?? null, [
               { role: "user", text: prompt },
-              { role: "assistant", text: a.nucleo },
+              { role: "assistant", text: textoParaHistorico({ kind: "structured", answer: a }) || a.nucleo },
             ]);
           } else {
             patchAsst(structured.text);
@@ -718,6 +761,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                             <MagazineAnswerView
                               answer={m.answer}
                               streaming={!!m.streaming}
+                              recemChegada={!!m.fresh}
                               artefato={m.studioBlock ?? null}
                               onNext={(s) => void send(s)}
                               agente="Aura"
