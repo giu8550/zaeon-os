@@ -9,6 +9,7 @@ import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 import { isSuperAdmin } from "@/lib/auth/roles";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { convitesAtivos } from "@/lib/convite/flag";
 import { useTranslation } from "react-i18next";
 import { signIn, signOut, useSession } from "next-auth/react";
 import Image from "next/image";
@@ -398,14 +399,30 @@ export default function MenuNavigation() {
             <span className="flex-1 h-px bg-slate-200 dark:bg-white/10" />
           </div>
 
+          {/* Porta de entrada. Com o cadastro aberto (padrão), é o e-mail; com
+              CONVITES_ATIVOS=1 volta a ser o convite, sem mexer em código. */}
           <div className="text-center">
-            <p className="text-[12px] text-slate-700 dark:text-white/75 mb-2">Novo por aqui? É preciso um convite.</p>
-            <button
-              onClick={() => router.push("/convite")}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-slate-300 dark:border-white/15 text-slate-800 dark:text-white text-[12px] font-bold hover:border-cyan-400/60 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors"
-            >
-              <ShieldCheck size={15} /> Tenho um convite
-            </button>
+            {convitesAtivos() ? (
+              <>
+                <p className="text-[12px] text-slate-700 dark:text-white/75 mb-2">Novo por aqui? É preciso um convite.</p>
+                <button
+                  onClick={() => router.push("/convite")}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-slate-300 dark:border-white/15 text-slate-800 dark:text-white text-[12px] font-bold hover:border-cyan-400/60 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors"
+                >
+                  <ShieldCheck size={15} /> Tenho um convite
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-[12px] text-slate-700 dark:text-white/75 mb-2">Novo por aqui? Basta o seu e-mail.</p>
+                <button
+                  onClick={() => router.push("/login")}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-slate-300 dark:border-white/15 text-slate-800 dark:text-white text-[12px] font-bold hover:border-cyan-400/60 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors"
+                >
+                  <ShieldCheck size={15} /> Entrar com e-mail
+                </button>
+              </>
+            )}
           </div>
         </nav>
         <div className="px-8 pb-4 text-[10px] text-slate-500 dark:text-white/45 tracking-[0.3em] font-medium mt-auto">

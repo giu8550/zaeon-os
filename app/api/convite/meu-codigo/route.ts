@@ -3,12 +3,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { generateCode } from "@/lib/invite-codes";
+import { convitesAtivos, CONVITES_OFF_PAYLOAD } from "@/lib/convite/flag";
 
 export const dynamic = "force-dynamic";
 
 // GET — devolve (e gera, se faltar) o código de convite pessoal do usuário logado,
 // para ele convidar novas pessoas pelo menu. Cada código tem 3 usos.
 export async function GET() {
+  // Convites de cadastro desligados (ver lib/convite/flag.ts). A rota continua aqui:
+  // é só ligar CONVITES_ATIVOS=1 pra ela voltar a responder.
+  if (!convitesAtivos()) return NextResponse.json(CONVITES_OFF_PAYLOAD, { status: 503 });
+
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

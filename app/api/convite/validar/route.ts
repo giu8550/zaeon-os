@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { buildValidationError, normaliseCode } from "@/lib/convite/validate";
+import { convitesAtivos, CONVITES_OFF_PAYLOAD } from "@/lib/convite/flag";
 
 export async function POST(req: Request) {
+  // Convites de cadastro desligados (ver lib/convite/flag.ts). A rota continua aqui:
+  // é só ligar CONVITES_ATIVOS=1 pra ela voltar a responder.
+  if (!convitesAtivos()) return NextResponse.json(CONVITES_OFF_PAYLOAD, { status: 503 });
+
   let rawCode: string;
   try {
     const body = await req.json();

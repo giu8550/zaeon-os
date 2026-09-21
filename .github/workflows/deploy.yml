@@ -88,10 +88,12 @@ jobs:
           DB_PUSH: ${{ github.event.inputs.db_push || 'true' }}
           # URL pública do app → vira NEXTAUTH_URL no compose (redirect do Google).
           APP_URL: ${{ vars.APP_URL || 'https://75-119-140-97.sslip.io' }}
-          # Hostnames que o Caddy serve (e pra quem pede certificado). Lista separada
-          # por vírgula, SEM espaço (vai como env por SSH): o endereço provisório continua
-          # no ar enquanto o domínio novo sobe — trocar de endereço não derruba o site.
-          BETA_DOMAIN: ${{ vars.BETA_DOMAIN || 'zaeon.com.br,www.zaeon.com.br,75-119-140-97.sslip.io' }}
+          # Hostnames do Caddy, separados por vírgula SEM espaço (vai como env por SSH).
+          # O default é só o endereço provisório DE PROPÓSITO: pedir certificado pra um
+          # domínio que ainda não resolve gasta tentativa de ACME à toa. Quando o DNS do
+          # zaeon.com.br subir, setar a Variable BETA_DOMAIN com a lista completa
+          # ('zaeon.com.br,www.zaeon.com.br,75-119-140-97.sslip.io') e redeployar.
+          BETA_DOMAIN: ${{ vars.BETA_DOMAIN || '75-119-140-97.sslip.io' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}

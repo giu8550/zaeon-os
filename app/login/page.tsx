@@ -12,7 +12,7 @@
  * Nos dois, a carteira custodial nasce junto (src/lib/auth.ts → provisionarWallet).
  */
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -51,7 +51,7 @@ function LoginInner() {
     if (status === "authenticated") router.replace(destino);
   }, [status, destino, router]);
 
-  const entrarPorEmail = async (ev: React.FormEvent) => {
+  const entrarPorEmail = async (ev: FormEvent) => {
     ev.preventDefault();
     const alvo = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alvo)) {
