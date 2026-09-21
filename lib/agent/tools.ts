@@ -96,9 +96,11 @@ export const studioGenerateTool: FunctionDeclaration = {
   name: "studio_generate",
   description:
     "Gera um ARTEFATO do Studio a partir do estudo em foco e o encaixa na conversa. " +
-    "Use SOMENTE quando a pessoa PEDIR explicitamente para gerar/criar/fazer um artefato " +
-    "(ex.: 'gere um podcast sobre fotossíntese', 'faz um mapa mental disso', 'cria flashcards'). " +
-    "Para conversa normal ou dúvida, NÃO chame — responda em texto.",
+    "Chame quando a pessoa PEDIR para gerar/criar/fazer um artefato " +
+    "(ex.: 'gere um podcast sobre fotossíntese', 'faz um mapa mental disso', 'cria flashcards') " +
+    "E TAMBÉM quando ela ACEITAR uma oferta que você mesmo fez ('ótima ideia', 'sim', 'pode gerar', " +
+    "'vamos'): aceitar é pedir. Nunca ofereça o mesmo artefato duas vezes — se já ofereceu e a " +
+    "pessoa topou, GERE. Para conversa normal ou dúvida, NÃO chame — responda em texto.",
   parameters: {
     type: "OBJECT" as any,
     properties: {
