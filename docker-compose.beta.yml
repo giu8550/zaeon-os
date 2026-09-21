@@ -32,6 +32,7 @@ services:
     # deploy a partir dos GitHub Actions secrets (ex.: GOOGLE_CREDENTIALS). O último vence.
     env_file: [.env, .env.secrets]
     environment:
+      GIT_SHA: ${GIT_SHA:-unknown}
       NODE_ENV: production
       REDIS_URL: redis://redis:6379/0
       VOICE_ENGINE_URL: http://voice-engine:8004   # proxy /api/ai/voice
