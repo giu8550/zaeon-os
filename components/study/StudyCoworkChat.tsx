@@ -341,7 +341,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     setMessages((prev) => [...prev, { id: uid(), role: "assistant", kind: "text", text: texto, at: Date.now() }]);
   }, []);
 
-  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string) => {
+  /**
+   * `silencioso`: artefato que a Aura decidiu mostrar sozinha (molécula que nasceu da
+   * explicação). Se falhar, cala — ninguém pediu, então avisar seria ruído. Pedido
+   * explícito continua reclamando alto: aí a pessoa está esperando.
+   */
+  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false) => {
     const H = { "Content-Type": "application/json" };
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
     // estudo NOVO criado pelo tópico. Nunca pega um estudo arbitrário da biblioteca
@@ -376,20 +381,20 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         const res = await fetch("/api/studio/molecule", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.meta?.sdf) fire({ studioKind: "molecule", title: data.title, data: data.meta, artifactId: data.id });
-        else avisarFalha(data?.error);
+        else if (!silencioso) avisarFalha(data?.error);
       } else if (kind === "image") {
         const res = await fetch("/api/studio/image", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.dataUrl) fire({ studioKind: "image", title: data.title || "Imagem", data: data.meta, dataUrl: data.dataUrl });
-        else avisarFalha(data?.error);
+        else if (!silencioso) avisarFalha(data?.error);
       } else {
         const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic, force: true }) });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.meta) fire({ studioKind: kind, title: data.title, data: data.meta });
-        else avisarFalha(data?.error);
+        else if (!silencioso) avisarFalha(data?.error);
       }
     } catch {
-      avisarFalha();
+      if (!silencioso) avisarFalha();
     }
   }, [focusIds, spaces, avisarFalha]);
 
@@ -502,7 +507,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             // deixa acordado" não resolve no PubChem; "cafeína" resolve.
             for (const art of a.artifacts ?? []) {
               if (art.studioKind && !art.studioKind.startsWith("research:")) {
-                void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId);
+                // silencioso: a Aura propôs por conta própria, então falha não vira aviso.
+                void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId, true);
               }
             }
             appendTranscript("estudos", focusIds[0] ?? null, [

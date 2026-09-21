@@ -271,3 +271,33 @@ describe("recusa não passa na frente do artefato", () => {
     expect(pareceRecusa("Olha só a estrutura dela")).toBe(false);
   });
 });
+
+describe("molécula que nasce do contexto", () => {
+  const st = { intent: "explicar_conceito", objective: "café" } as any;
+
+  it("substância citada NO TEXTO vira molécula sem ninguém pedir", () => {
+    const a = normalizeAnswer(
+      { nucleo: "O café te acorda por causa da cafeína.", substancias: ["cafeína"] } as any, st,
+    );
+    expect(a.artifacts?.[0]).toEqual({ studioKind: "molecule", title: "cafeína" });
+  });
+
+  it("substância que o modelo listou mas não falou NÃO vira artefato", () => {
+    const a = normalizeAnswer({ nucleo: "Uma conversa sobre hábitos.", substancias: ["teobromina"] } as any, st);
+    expect(a.artifacts).toBeUndefined();
+  });
+
+  it("só uma — resposta não é galeria", () => {
+    const a = normalizeAnswer(
+      { nucleo: "cafeína e teobromina", desenvolvimento: "as duas", substancias: ["cafeína", "teobromina"] } as any, st,
+    );
+    expect(a.artifacts?.length).toBe(1);
+  });
+
+  it("pedido explícito manda mais que a extração", () => {
+    const a = normalizeAnswer(
+      { nucleo: "glicose e cafeína", substancias: ["cafeína"], artifacts: [{ studioKind: "molecule", title: "glicose" }] } as any, st,
+    );
+    expect(a.artifacts?.[0].title).toBe("glicose");
+  });
+});

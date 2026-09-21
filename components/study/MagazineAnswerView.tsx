@@ -25,6 +25,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
+import MoleculeView from "@/components/studio/MoleculeView";
 import {
   montarLayout, obstaculoCapitular, obstaculoArtefato, topoDaLinha, baselineNaLinha,
   type Obstaculo, type Resultado, type Metricas,
@@ -34,11 +35,12 @@ import { medirTexto, emParagrafos, contarPalavras, normalizar, type TextoMedido 
 /* ─────────────────────────── critério de ativação (§10) ─────────────────────────── */
 
 /**
- * Resposta curta continua no balão normal: revista com 3 linhas é exagero. 120 palavras
- * se mostrou alto demais pra conversa de chat — quase nenhuma resposta passava, e o
- * Modo Revista virou invisível. 70 é uns 5 parágrafos curtos: já tem corpo pra página.
+ * Piso, não meta. 120 palavras deixou o Modo Revista invisível; 70 deixou ele
+ * INTERMITENTE, que é pior — a mesma sala mudava de cara a cada resposta e parecia
+ * defeito. Agora só a resposta de uma linha ("pode ser", "isso mesmo") fica no balão;
+ * o resto é sempre página. Consistência vale mais que a página perfeita.
  */
-export const MIN_PALAVRAS_REVISTA = 70;
+export const MIN_PALAVRAS_REVISTA = 25;
 
 /**
  * O corpo da página. `desenvolvimento` é opcional no contrato e SÓ o intent
@@ -115,6 +117,8 @@ export default function MagazineAnswerView({
   const [dica, setDica] = useState<{ x: number; y: number; termo: string; def: string } | null>(null);
 
   const medidoRef = useRef<TextoMedido | null>(null);
+  /** Altura real do cartão do artefato, medida no DOM (não chutada). */
+  const alturaArtefatoRef = useRef(0);
   const layoutRef = useRef<Resultado | null>(null);
   const nascimentoRef = useRef<Float64Array | null>(null);
   const coresRef = useRef<Cores | null>(null);
@@ -127,12 +131,11 @@ export default function MagazineAnswerView({
   );
 
   const paragrafos = useMemo(() => emParagrafos(corpoDaResposta(answer)), [answer]);
+  /** Molécula tem tratamento próprio: vira figura, não cartão. */
+  const ehMolecula = artefato?.studioKind === "molecule" && !!artefato?.data?.sdf;
   // Quando o corpo JÁ É o núcleo, mostrar o núcleo de novo em cima seria eco.
   const temLinhaFina = !!answer.desenvolvimento?.trim() && !!answer.nucleo?.trim();
   const conceitos = useMemo(() => answer.conceitos ?? [], [answer.conceitos]);
-
-  /** O artefato vira obstáculo redondo (molécula) ou retangular (o resto). */
-  const formaArtefato = artefato?.studioKind === "molecule" ? "circulo" : "retangulo";
 
   /* ── medir + posicionar ──────────────────────────────────────────────────────── */
   const recalcular = useCallback(() => {
@@ -159,20 +162,29 @@ export default function MagazineAnswerView({
     }
 
     // artefato: mora na direita, mais ou menos na altura da 7ª linha, como na referência
+    // DUAS FORMAS, porque são duas coisas diferentes.
+    //
+    // Molécula entra NUA (sem o cartão do Studio): é um quadrado com a estrutura girando
+    // e uma legenda fina dentro. Aí o círculo é honesto e o texto contorna de verdade.
+    // Foi fingir que o CARTÃO era redondo que quebrou a página antes — cartão tem
+    // cabeçalho, botões e ficha, e nada disso cabe num círculo.
+    //
+    // Qualquer outro artefato continua sendo cartão, e cartão é retângulo: a altura vem
+    // medida do DOM (ResizeObserver abaixo), nunca chutada.
     let caixaArtefato: { x: number; y: number; w: number; h: number } | null = null;
     if (artefato) {
-      if (formaArtefato === "circulo") {
-        const r = Math.round(W < 560 ? W * 0.24 : Math.min(W * 0.2, 140));
-        const cx = clamp(W * 0.68, r, W - r);
-        const cy = Math.max(r, metricas.entrelinha * 7.5);
+      const largo = W < 560;
+      if (ehMolecula && !largo) {
+        const r = Math.round(Math.min(W * 0.21, 150));
+        const cx = clamp(W * 0.7, r, W - r);
+        const cy = Math.max(r, metricas.entrelinha * 7);
         obstaculos.push(obstaculoArtefato(cx, cy, r, metricas));
         caixaArtefato = { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
       } else {
-        // Abaixo de 560px o artefato ocupa a largura toda (§12/Q5): contornar numa
-        // coluna estreita deixaria frestas de três letras dos dois lados.
-        const largo = W < 560;
+        // Coluna estreita: o artefato ocupa a largura toda (§12/Q5). Contornar num
+        // corredor de 300px deixaria frestas de três letras dos dois lados.
         const w = largo ? W : Math.round(W * 0.42);
-        const h = Math.round(w * 0.62);
+        const h = ehMolecula ? w : Math.max(alturaArtefatoRef.current || 0, 180);
         const x = largo ? 0 : W - w;
         const y = metricas.entrelinha * (largo ? 6 : 5);
         obstaculos.push({ tipo: "retangulo", x, y, w, h, pad: metricas.tamanho * 0.9 });
@@ -203,11 +215,11 @@ export default function MagazineAnswerView({
 
     // posiciona o componente do artefato por cima
     if (slotArtefato.current && caixaArtefato) {
-      const s = slotArtefato.current.style;
-      s.left = `${caixaArtefato.x}px`;
-      s.top = `${caixaArtefato.y}px`;
-      s.width = `${caixaArtefato.w}px`;
-      s.display = "block";
+      const st = slotArtefato.current.style;
+      st.left = `${caixaArtefato.x}px`;
+      st.top = `${caixaArtefato.y}px`;
+      st.width = `${caixaArtefato.w}px`;
+      st.display = "block";
     } else if (slotArtefato.current) {
       slotArtefato.current.style.display = "none";
     }
@@ -220,7 +232,7 @@ export default function MagazineAnswerView({
       if (anterior) novo.set(anterior.subarray(0, Math.min(anterior.length, total)));
       nascimentoRef.current = novo;
     }
-  }, [paragrafos, conceitos, artefato, formaArtefato, streaming]);
+  }, [paragrafos, conceitos, artefato, ehMolecula, streaming]);
 
   /* ── boot: fontes e observer montam UMA vez ─────────────────────────────────── */
   // `recalcular` muda a cada token do stream. Se o boot dependesse dele, a corrida das
@@ -257,6 +269,22 @@ export default function MagazineAnswerView({
 
     return () => { vivo = false; ro.disconnect(); };
   }, []);
+
+  /* ── mede o cartão do artefato e refaz o layout quando ele cresce ───────────── */
+  useEffect(() => {
+    const slot = slotArtefato.current;
+    if (!slot || !artefato || ehMolecula) { alturaArtefatoRef.current = 0; return; }
+    const ro = new ResizeObserver(() => {
+      const h = Math.ceil(slot.getBoundingClientRect().height);
+      // Só refaz quando muda de verdade: evita laço de medida → layout → medida.
+      if (h > 0 && Math.abs(h - alturaArtefatoRef.current) > 2) {
+        alturaArtefatoRef.current = h;
+        recalcularRef.current();
+      }
+    });
+    ro.observe(slot);
+    return () => ro.disconnect();
+  }, [artefato, ehMolecula]);
 
   /* ── re-medir quando texto, conceitos ou artefato mudam ─────────────────────── */
   useEffect(() => {
@@ -436,9 +464,25 @@ export default function MagazineAnswerView({
         </div>
 
         {/* o artefato é o componente de sempre, só posicionado */}
-        <div ref={slotArtefato} style={{ position: "absolute", display: "none" }}>
-          {artefato && (
-            <StudioBlock block={artefato} collapsed={false} onToggle={() => {}} />
+        {/* O cartão real do Studio. Largura fixada pelo layout; altura é dele, e o
+            motor se adapta a ela (ResizeObserver acima). */}
+        {/* Nasce fora da vista, mas COM tamanho: o 3Dmol mede o container na criação,
+            e um container display:none mediria zero — molécula em branco pra sempre.
+            O `recalcular` corrige posição e largura no primeiro frame. */}
+        <div
+          ref={slotArtefato}
+          style={{
+            position: "absolute",
+            left: -9999,
+            top: 0,
+            width: 240,
+            overflow: "hidden",
+            display: artefato ? "block" : "none",
+          }}
+        >
+          {artefato && (ehMolecula
+            ? <MoleculeView data={artefato.data} nu />
+            : <StudioBlock block={artefato} collapsed={false} onToggle={() => {}} />
           )}
         </div>
 

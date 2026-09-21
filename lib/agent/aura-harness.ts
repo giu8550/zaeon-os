@@ -114,8 +114,18 @@ export function normalizeAnswer(out: Partial<StructuredAnswer> | null | undefine
   if (o.evidencia) answer.evidencia = asArray(o.evidencia).filter((e) => e && e.claim && e.source);
   if (o.sources) answer.sources = asArray(o.sources).filter((s: Source) => s && s.title);
   if (o.work && typeof o.work === "object") answer.work = o.work;
-  // `artifacts` vinha sendo DESCARTADO aqui — por isso artefato citado no meio de uma
-  // explicação nunca nascia: nem o prompt pedia, nem a normalização deixava passar.
+  // A substância extraída vira molécula SE ela for mesmo assunto: precisa aparecer no
+  // texto da resposta. É a diferença entre "uma resposta sobre cafeína" e "uma resposta
+  // que citou cafeína de passagem". Uma só — resposta não é galeria. E o PubChem ainda
+  // pode negar depois; aí não nasce nada e ninguém é avisado, porque ninguém pediu.
+  const substancias = asArray((o as any).substancias).map(String).map((x) => x.trim()).filter(Boolean);
+  if (substancias.length && !o.artifacts) {
+    const corpo = `${answer.nucleo} ${answer.desenvolvimento ?? ""}`.toLowerCase();
+    const central = substancias.find((n) => n.length > 2 && corpo.includes(n.toLowerCase()));
+    if (central) answer.artifacts = [{ studioKind: "molecule", title: central }] as StructuredAnswer["artifacts"];
+  }
+  // `artifacts` explícito (pedido direto) continua mandando — e vinha sendo DESCARTADO
+  // aqui, que era por que artefato citado numa explicação nunca nascia.
   // Teto de 2 pra resposta não virar galeria, e só kinds que o Studio sabe montar.
   if (o.artifacts) {
     const refs = asArray(o.artifacts)
@@ -198,12 +208,12 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         "NUNCA diga que você é uma IA incapaz de gerar imagem/representação visual — você TEM o Studio (imagem/diagrama/molécula). Se o pedido for visual e nenhuma tool o cobriu, afirme que dá pra gerar e sugira em proximos_passos, jamais negue capacidade.",
         "Responda SOMENTE JSON válido.",
         `Campos obrigatórios: ${req}. Preencha TODOS. Schema: {nucleo, desenvolvimento?, conceitos?[], evidencia?[{claim,source:{title,url?}}], proximos_passos?[], sources?[{title,url?}], work?{kind,sections:[{title,body}]}, artifacts?[{studioKind,title}]}.`,
-        // Artefato NASCE da explicação, não só de um pedido. Se a resposta gira em torno
-        // de uma substância química, a estrutura dela entra junto — o aluno não devia ter
-        // que pedir pra ver a molécula da cafeína numa resposta sobre cafeína.
-        'Se a resposta for SOBRE uma substância química específica (ex.: cafeína, glicose, etanol), inclua artifacts: [{"studioKind":"molecule","title":"<nome da substância>"}]. ' +
-        'O título deve ser SÓ o nome da substância, sem "molécula de". No máximo 1 molécula por resposta, e só quando a substância for o assunto — não cite de passagem. ' +
-        'Não invente substância: se não tiver certeza de que existe, deixe artifacts de fora.',
+        // Ao modelo pedimos EXTRAÇÃO, não decisão de produto: "que substâncias esta
+        // resposta menciona?" é pergunta factual, que modelo responde bem. Se a molécula
+        // aparece na tela, quem decide é o código (normalizeAnswer) — e o PubChem confirma.
+        'Inclua também substancias: ["<nome>"] com as substâncias químicas concretas de que a resposta FALA ' +
+        '(ex.: cafeína, glicose, etanol, ácido acético). Só o nome, sem "molécula de". ' +
+        'Não liste se a resposta não falar de nenhuma, e nunca invente uma que você não tenha certeza que existe.',
         academic + a5,
       ].join("\n");
       const user = `${preamble}Objetivo: ${st.objective}\nRaciocínio: ${st.reasoning ?? ""}\nEvidência:\n${evidenceBlock(st)}${obsBlock(observations)}`;
