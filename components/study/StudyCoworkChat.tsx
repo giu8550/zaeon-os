@@ -32,6 +32,12 @@ import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlo
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import MagazineAnswerView, { podeVirarRevista } from "@/components/study/MagazineAnswerView";
 import MagazineBoundary from "@/components/study/MagazineBoundary";
+import ThreadTabs from "@/components/study/ThreadTabs";
+import {
+  carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread, tocarThread,
+  carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
+  TITULO_PADRAO, type Thread,
+} from "@/lib/chat/threads";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 import { typeStep, safeCut } from "@/lib/ui/typewriter";
@@ -44,7 +50,6 @@ const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed
 const SkillTreePanel = dynamic(() => import("@/components/study/SkillTreePanel"), { ssr: false });
 
 const DT = "application/x-zaeon-item";
-const THREAD_KEY = "zaeon.cowork.thread.v1";
 const LAST_SPACE_KEY = "zaeon.study.lastSpace";
 // Sentinela do tool-loop (Fase 0): o backend emite isto quando a Aura chama
 // studio_generate; o cliente executa a geração. Deve bater com a de chat/route.ts.
@@ -74,6 +79,16 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const isQuickPrompt = (t: string) => t.trim().split(/\s+/).filter(Boolean).length <= 8;
 
 export default function StudyCoworkChat({ active = true }: { active?: boolean }) {
+  // Abas de conversa. Antes havia UMA thread global (zaeon.cowork.thread.v1); agora cada
+  // aba tem histórico próprio, e a antiga vira a aba #1 na primeira carga (ver threads.ts).
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [abaAtiva, setAbaAtiva] = useState<string | null>(null);
+  const abaAtivaRef = useRef<string | null>(null);
+  abaAtivaRef.current = abaAtiva;
+  // Espelho das abas pra ler o valor atual dentro de callbacks sem recriá-los.
+  const threadsRef = useRef<Thread[]>([]);
+  threadsRef.current = threads;
+
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -137,10 +152,15 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     // cache limpo), cai no L1 durável (DB) via /api/ai/transcript. docs/MEMORY_AND_PERSISTENCE.md.
     let hadLocal = false;
     try {
-      const raw = localStorage.getItem(THREAD_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length) { setMessages(parsed); hadLocal = true; }
+      const lista = carregarThreads(localStorage);
+      const ativa = threadAtiva(localStorage, lista);
+      setThreads(lista);
+      threadsRef.current = lista;
+      setAbaAtiva(ativa);
+      abaAtivaRef.current = ativa;
+      if (ativa) {
+        const guardadas = carregarMensagens<Msg>(localStorage, ativa);
+        if (guardadas.length) { setMessages(guardadas); hadLocal = true; }
       }
     } catch { /* ignore */ }
     if (!hadLocal) {
@@ -162,7 +182,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text))
         .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m)) // artefato inline fica na sessão
         .map(({ streaming, fresh, ...m }) => m); // B2: flags de animação não persistem (reload não re-digita)
-      localStorage.setItem(THREAD_KEY, JSON.stringify(slim.slice(-60)));
+      const aba = abaAtivaRef.current;
+      if (aba) salvarMensagens(localStorage, aba, slim);
     } catch { /* ignore */ }
   }, [messages]);
 
@@ -221,6 +242,69 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       return [...prev, { id: uid(), role: "assistant", kind: "study", studyId: id, studyTitle: title, at: Date.now() }];
     });
   };
+
+  /** Guarda o que está na tela na aba atual antes de sair dela. */
+  const guardarAtual = useCallback(() => {
+    const aba = abaAtivaRef.current;
+    if (!aba) return;
+    const slim = messages
+      .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text))
+      .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m))
+      .map(({ streaming, fresh, ...m }) => m);
+    salvarMensagens(localStorage, aba, slim);
+  }, [messages]);
+
+  const trocarAba = useCallback((id: string) => {
+    if (id === abaAtivaRef.current) return;
+    guardarAtual();
+    abaAtivaRef.current = id;
+    setAbaAtiva(id);
+    marcarAtiva(localStorage, id);
+    setMessages(carregarMensagens<Msg>(localStorage, id));
+    const t = tocarThread(threadsRef.current, id);
+    threadsRef.current = t;
+    salvarThreads(localStorage, t);
+    setThreads(t);
+  }, [guardarAtual]);
+
+  // Nada de setState dentro do updater de outro setState: no StrictMode o updater roda
+  // DUAS vezes em dev, e "criar aba" viraria duas abas. Calcula fora, aplica uma vez.
+  const novaAba = useCallback(() => {
+    guardarAtual();
+    const { threads: lista, nova } = criarThread(threadsRef.current);
+    salvarThreads(localStorage, lista);
+    threadsRef.current = lista;
+    abaAtivaRef.current = nova.id;
+    setThreads(lista);
+    setAbaAtiva(nova.id);
+    marcarAtiva(localStorage, nova.id);
+    setMessages([]);
+  }, [guardarAtual]);
+
+  const fecharAba = useCallback((id: string) => {
+    const { threads: lista, proxima } = fecharThread(localStorage, threadsRef.current, id);
+    salvarThreads(localStorage, lista);
+    threadsRef.current = lista;
+    setThreads(lista);
+    if (id === abaAtivaRef.current) {
+      abaAtivaRef.current = proxima;
+      setAbaAtiva(proxima);
+      marcarAtiva(localStorage, proxima);
+      setMessages(carregarMensagens<Msg>(localStorage, proxima));
+    }
+  }, []);
+
+  /** A aba ganha nome da primeira coisa que a pessoa perguntou. */
+  const batizarSePreciso = useCallback((texto: string) => {
+    const aba = abaAtivaRef.current;
+    if (!aba) return;
+    const atual = threadsRef.current.find((t) => t.id === aba);
+    if (!atual || atual.titulo !== TITULO_PADRAO) return;
+    const lista = renomearThread(threadsRef.current, aba, tituloAPartirDe(texto));
+    threadsRef.current = lista;
+    salvarThreads(localStorage, lista);
+    setThreads(lista);
+  }, []);
 
   const openStudy = useCallback((id: string) => {
     try { localStorage.setItem(LAST_SPACE_KEY, id); } catch { /* ignore */ }
@@ -329,6 +413,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       { id: asstId, role: "assistant", kind: "text", text: "", streaming: true, at: Date.now() },
     ]);
     setInput("");
+    batizarSePreciso(prompt);
     avisarEscritorio(activeMentor, "trabalhando");
     setSending(true);
 
@@ -462,7 +547,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
       if (tree) setTreeRefresh((n) => n + 1);
     }
-  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio]);
+  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso]);
 
   // Clicar num nó da árvore: conversa scopada naquele nó (vai pro composer + chip de foco).
   const onNodeChat = useCallback((node: SkillNodeState, t: SkillTreeData) => {
@@ -545,6 +630,19 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             <ChevronDown size={18} />
           </button>
         )}
+
+        {/* Abas de conversa. Ficam ACIMA da conversa e dentro da sala: abrir conversa
+            nova nunca mexe na posição das salas (Estudos, Aulas, Pesquisa). */}
+        <div className="px-3 pt-2">
+          <ThreadTabs
+            threads={threads}
+            ativa={abaAtiva}
+            aoTrocar={trocarAba}
+            aoCriar={novaAba}
+            aoFechar={fecharAba}
+            ocupada={sending ? abaAtiva : null}
+          />
+        </div>
 
         {/* conversa (drop target de foco) */}
         <div
