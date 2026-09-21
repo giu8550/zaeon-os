@@ -860,6 +860,7 @@ model WhatsAppMessage {
   @@index([userId, at])
   @@index([userId, dedupeKey])
   @@map("whatsapp_messages")
+}
 // ─── Árvore de Habilidades GENERATIVA (ver lib/skilltree/*) ────────────────────
 // 1 árvore por tópico (cache global, reusável por todos os usuários); o progresso é por usuário.
 model SkillTree {
