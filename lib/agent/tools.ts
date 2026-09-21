@@ -20,7 +20,7 @@ export type StudioKind =
   | "image" | "podcast" | "video";
 
 export const STUDIO_KINDS: StudioKind[] = [
-  "guide", "mindmap", "timeline", "flashcards", "faq", "image", "podcast", "video",
+  "guide", "mindmap", "timeline", "flashcards", "faq", "image", "podcast", "video", "molecule",
 ];
 
 // Rótulo humano (PT-BR) por kind — usado na confirmação e no provenance.
@@ -45,6 +45,8 @@ const ALIASES: Record<string, StudioKind> = {
   imagem: "image", image: "image", figura: "image",
   podcast: "podcast", audio: "podcast", "áudio": "podcast",
   video: "video", "vídeo": "video",
+  molecula: "molecule", "molécula": "molecule", molecule: "molecule",
+  "estrutura molecular": "molecule", "estrutura 3d": "molecule", "modelo 3d": "molecule",
 };
 
 export function normalizeStudioKind(raw: string): StudioKind {
@@ -108,7 +110,9 @@ export const studioGenerateTool: FunctionDeclaration = {
         type: "STRING" as any,
         description:
           "O tipo do artefato. Um de: guide (guia), mindmap (mapa mental), timeline (linha do tempo), " +
-          "flashcards, faq, image (imagem), podcast (áudio 2 vozes), video (vídeo-resumo).",
+          "flashcards, faq, image (imagem), podcast (áudio 2 vozes), video (vídeo-resumo), " +
+          "molecule (estrutura molecular 3D de verdade, vinda do PubChem — use quando a pessoa quiser VER " +
+          "uma substância química: 'mostra a molécula da cafeína', 'como é a estrutura da glicose').",
       },
       topic: {
         type: "STRING" as any,

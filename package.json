@@ -67,6 +67,7 @@
     "@types/three": "^0.182.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
+    "3dmol": "^2.5.5",
     "axios": "^1.13.2",
     "clsx": "^2.1.0",
     "crypto-js": "^4.2.0",

@@ -30,6 +30,8 @@ import StudioPalette from "@/components/study/StudioPalette";
 import MentorPill from "@/components/study/MentorPill";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
+import MagazineAnswerView, { podeVirarRevista } from "@/components/study/MagazineAnswerView";
+import MagazineBoundary from "@/components/study/MagazineBoundary";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 import { typeStep, safeCut } from "@/lib/ui/typewriter";
@@ -265,6 +267,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           if (d.status === "done") { fire({ studioKind: kind, title: d.title, data: d.meta, artifactId: d.id }); return; }
           if (d.status === "error") return;
         }
+      } else if (kind === "molecule") {
+        // Não passa pelo pipeline de texto: a estrutura vem do PubChem, não de LLM.
+        const res = await fetch("/api/studio/molecule", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.meta?.sdf) fire({ studioKind: "molecule", title: data.title, data: data.meta, artifactId: data.id });
+        else avisarFalha(data?.error);
       } else if (kind === "image") {
         const res = await fetch("/api/studio/image", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
         const data = await res.json().catch(() => null);
@@ -559,17 +567,33 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                 }
                 if (m.kind === "structured" && m.answer) {
                   // resposta rica do harness; o artefato (se houver) entra no slot do cartão
+                  const padrao = (
+                    <StructuredAnswerView
+                      answer={m.answer}
+                      typing={!!m.fresh}
+                      onConcept={(c) => void send(`Me explica melhor: ${c}`)}
+                      onNext={(s) => void send(s)}
+                    >
+                      {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
+                    </StructuredAnswerView>
+                  );
+                  // MODO REVISTA: só em resposta longa ou com artefato (§10 do plano).
+                  // Resposta curta continua no balão — revista com 3 linhas é exagero.
+                  const revista = podeVirarRevista(m.answer, !!m.studioBlock);
                   return (
                     <div key={m.id} className="flex justify-start">
-                      <div className="max-w-[85%] w-full">
-                        <StructuredAnswerView
-                          answer={m.answer}
-                          typing={!!m.fresh}
-                          onConcept={(c) => void send(`Me explica melhor: ${c}`)}
-                          onNext={(s) => void send(s)}
-                        >
-                          {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
-                        </StructuredAnswerView>
+                      <div className={revista ? "w-full" : "max-w-[85%] w-full"}>
+                        {revista ? (
+                          <MagazineBoundary fallback={padrao}>
+                            <MagazineAnswerView
+                              answer={m.answer}
+                              streaming={!!m.streaming}
+                              artefato={m.studioBlock ?? null}
+                              onNext={(s) => void send(s)}
+                              agente="Aura"
+                            />
+                          </MagazineBoundary>
+                        ) : padrao}
                       </div>
                     </div>
                   );
