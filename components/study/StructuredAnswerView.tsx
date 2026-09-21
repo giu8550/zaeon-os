@@ -16,6 +16,7 @@
  * o texto bonito sem lib. `onConcept`/`onNext` viram novos prompts (como o Claude).
  */
 import { useMemo } from "react";
+import { useTypewriter } from "@/lib/ui/useTypewriter";
 import { ArrowUpRight, Quote } from "lucide-react";
 import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
 
@@ -60,9 +61,12 @@ export default function StructuredAnswerView({
   answer,
   onConcept,
   onNext,
+  typing = false,
   children,
 }: {
   answer: StructuredAnswer;
+  /** B2: datilografa o núcleo e só depois revela as demais seções. */
+  typing?: boolean;
   onConcept?: (c: string) => void;
   onNext?: (step: string) => void;
   children?: React.ReactNode;   // slot p/ artefatos (StudioBlock) embutidos
@@ -79,6 +83,8 @@ export default function StructuredAnswerView({
     return arr;
   }, [desenvolvimento, conceitos, evidencia, proximos_passos, children]);
   const delay = (name: string) => `${secs.indexOf(name) * 70}ms`;
+  const tw = useTypewriter(nucleo || "", typing);
+  const rest = tw.done; // o resto entra (com o fade-up escalonado) quando o núcleo termina
 
   return (
     <div className="relative max-w-[680px]">
@@ -86,6 +92,8 @@ export default function StructuredAnswerView({
         @keyframes zAurora { 0%,100% { opacity:.5; transform: translate3d(-4%,-3%,0) scale(1); } 50% { opacity:.8; transform: translate3d(4%,3%,0) scale(1.06); } }
         @keyframes zUp { from { opacity:0; transform: translateY(7px); } to { opacity:1; transform: none; } }
         .z-up { animation: zUp .5s cubic-bezier(.22,.61,.36,1) both; }
+        @keyframes zCaret { 0%,45% { opacity:1 } 50%,100% { opacity:0 } }
+        .z-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-0.15em; background:currentColor; opacity:.7; animation: zCaret 1s steps(1) infinite; }
       `}</style>
 
       {/* 1 · aurora difusa atrás do vidro */}
@@ -108,19 +116,20 @@ export default function StructuredAnswerView({
           {/* núcleo */}
           {nucleo && (
             <div className="z-up text-slate-800 dark:text-white/90" style={{ animationDelay: delay("nucleo") }}>
-              <Prose text={nucleo} lead />
+              <Prose text={tw.visible} lead />
+              {!tw.done && <span aria-hidden className="z-caret" />}
             </div>
           )}
 
           {/* desenvolvimento */}
-          {desenvolvimento && (
+          {rest && desenvolvimento && (
             <div className="z-up mt-3.5 text-slate-600 dark:text-white/70" style={{ animationDelay: delay("dev") }}>
               <Prose text={desenvolvimento} />
             </div>
           )}
 
           {/* conceitos — chips de vidro */}
-          {conceitos?.length ? (
+          {rest && conceitos?.length ? (
             <div className="z-up mt-4 flex flex-wrap gap-2" style={{ animationDelay: delay("conceitos") }}>
               {conceitos.map((c, i) => (
                 <button
@@ -136,12 +145,12 @@ export default function StructuredAnswerView({
           ) : null}
 
           {/* artefatos embutidos (StudioBlock via slot) */}
-          {children && (
+          {rest && children && (
             <div className="z-up mt-4" style={{ animationDelay: delay("art") }}>{children}</div>
           )}
 
           {/* evidência — rodapé de fontes com citações numeradas */}
-          {evidencia?.length ? (
+          {rest && evidencia?.length ? (
             <div className="z-up mt-4 pt-3 border-t border-white/50 dark:border-white/10" style={{ animationDelay: delay("evid") }}>
               <div className="flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-white/45 mb-2">
                 <Quote size={13} /> Fontes
@@ -168,7 +177,7 @@ export default function StructuredAnswerView({
           ) : null}
 
           {/* próximos passos — sugestões clicáveis (viram novo prompt) */}
-          {proximos_passos?.length ? (
+          {rest && proximos_passos?.length ? (
             <div className="z-up mt-4 flex flex-col gap-1.5" style={{ animationDelay: delay("next") }}>
               {proximos_passos.map((s, i) => (
                 <button
