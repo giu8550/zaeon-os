@@ -10,9 +10,9 @@
  * a partir daqui; o resolver server-side (`mentors-server.ts`) prefere o banco e cai
  * neste seed se a coleção estiver vazia/indisponível. Nomes = codinomes honorários.
  *
- * Skills que ainda não existem no runtime (`molecule`, `literature`, `code`) DEGRADAM:
- * o mentor mantém persona + texto; o artefato entra quando a skill/kind existir
- * (ex.: `molecule` = PR RICH_ARTIFACTS). Guardrails de saúde são obrigatórios.
+ * Skills que ainda não existem no runtime (`literature`, `code`) DEGRADAM: o mentor mantém
+ * persona + texto; o artefato entra quando a skill/kind existir. `molecule` JÁ existe —
+ * estrutura 3D real do PubChem (lib/studio/molecule.ts). Guardrails de saúde são obrigatórios.
  */
 
 export type MentorSkill = "literature" | "memory" | "studio" | "code" | "molecule";
@@ -34,7 +34,7 @@ export type MentorSeed = {
 };
 
 /** Skills que o runtime já resolve hoje; o resto degrada (persona fica, artefato espera). */
-export const RUNTIME_SKILLS: ReadonlySet<MentorSkill> = new Set(["memory", "studio"]);
+export const RUNTIME_SKILLS: ReadonlySet<MentorSkill> = new Set(["memory", "studio", "molecule"]);
 export const ALL_MENTOR_SKILLS: readonly MentorSkill[] = ["literature", "memory", "studio", "code", "molecule"];
 
 // ───────────────────────────── BASE COMUM (prefixo dos 13) ─────────────────────────────

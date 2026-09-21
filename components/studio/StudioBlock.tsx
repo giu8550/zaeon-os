@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, Save, Download, Trash2, Check, Volume2, Squa
 import {
   GuideView, FaqView, FlashcardsView, MindmapView, TimelineView, PodcastView, ImageView, VideoView,
 } from "@/components/studio/StudioArtifactViews";
+import MoleculeView from "@/components/studio/MoleculeView";
 import { artifactToText } from "@/lib/studio/artifact-text";
 import type { TextKind } from "@/lib/studio/transformations";
 import useTTS from "@/lib/voice/useTTS";
@@ -31,6 +32,7 @@ const KIND_META: Record<string, { emoji: string; label: string }> = {
   podcast: { emoji: "🎙️", label: "Podcast" },
   image: { emoji: "🖼️", label: "Imagem" },
   video: { emoji: "🎬", label: "Vídeo" },
+  molecule: { emoji: "⚛️", label: "Molécula" },
 };
 
 const TEXT_KINDS = new Set(["guide", "faq", "flashcards", "mindmap", "timeline"]);
@@ -46,6 +48,7 @@ function renderView(b: StudioBlockData) {
     case "podcast": return <PodcastView audioUrl={fileUrl} data={b.data} />;
     case "video": return <VideoView url={fileUrl} />;
     case "image": return <ImageView dataUrl={b.dataUrl || ""} prompt={b.data?.prompt} />;
+    case "molecule": return b.data?.sdf ? <MoleculeView data={b.data} /> : <div className="text-[12px] text-slate-400">Estrutura indisponível.</div>;
     default: return <div className="text-[12px] text-slate-400">Conteúdo indisponível.</div>;
   }
 }
@@ -98,6 +101,20 @@ export default function StudioBlock({
         a.href = block.dataUrl;
         a.download = `${safeName(block.title)}.png`;
         a.click();
+      }
+      return;
+    }
+    if (k === "molecule") {
+      // O SDF é o arquivo padrão de química: abre no Avogadro, PyMOL, ChemDraw, Jmol.
+      const sdf = block.data?.sdf;
+      if (typeof sdf === "string" && sdf) {
+        const blob = new Blob([sdf], { type: "chemical/x-mdl-sdfile" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${safeName(block.title)}.sdf`;
+        a.click();
+        URL.revokeObjectURL(url);
       }
       return;
     }

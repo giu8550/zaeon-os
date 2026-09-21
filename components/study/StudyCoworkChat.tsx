@@ -265,6 +265,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           if (d.status === "done") { fire({ studioKind: kind, title: d.title, data: d.meta, artifactId: d.id }); return; }
           if (d.status === "error") return;
         }
+      } else if (kind === "molecule") {
+        // Não passa pelo pipeline de texto: a estrutura vem do PubChem, não de LLM.
+        const res = await fetch("/api/studio/molecule", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.meta?.sdf) fire({ studioKind: "molecule", title: data.title, data: data.meta, artifactId: data.id });
+        else avisarFalha(data?.error);
       } else if (kind === "image") {
         const res = await fetch("/api/studio/image", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
         const data = await res.json().catch(() => null);
