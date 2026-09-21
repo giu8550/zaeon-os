@@ -25,12 +25,24 @@ export async function runTextGeneration(kind: TextKind, req: Request): Promise<R
   const sourceIds: string[] | undefined = Array.isArray(body.sourceIds) ? body.sourceIds.map(String) : undefined;
   const spaceId: string | undefined = typeof body.spaceId === "string" ? body.spaceId : undefined;
   const force = body.force === true;
+  const topic = typeof body.topic === "string" ? body.topic.trim() : "";
 
   const ctx = await loadStudyContext({ ownerId: userId, sourceIds, spaceId });
-  if (!ctx.text) return NextResponse.json({ error: "Sem conteúdo de estudo para usar." }, { status: 400 });
+
+  // Pedido nascido na CONVERSA ("faz um mapa mental disso") costuma chegar com um estudo
+  // recém-criado, ainda vazio — e aí a rota devolvia 400 e o cliente engolia. Com o tópico
+  // em mãos, gera a partir dele. Fica marcado como "do tópico": artefato assim sai do
+  // conhecimento do modelo, NÃO das fontes da pessoa, e misturar os dois seria desonesto
+  // num produto acadêmico.
+  const doTopico = !ctx.text && !!topic;
+  const material = ctx.text || (topic ? `Tópico pedido na conversa: ${topic}` : "");
+  const tituloBase = ctx.text ? ctx.title : topic;
+  if (!material) {
+    return NextResponse.json({ error: "Sem conteúdo de estudo para usar — e sem tópico." }, { status: 400 });
+  }
 
   // Cache por (kind + sourceIds): o Studio reusa o último artefato pronto.
-  if (!force) {
+  if (!force && !doTopico) {
     const existing = await prisma.studioArtifact.findFirst({
       where: { ownerId: userId, kind, status: "done" },
       orderBy: { createdAt: "desc" },
@@ -41,10 +53,10 @@ export async function runTextGeneration(kind: TextKind, req: Request): Promise<R
   }
 
   const spec = TEXT_TRANSFORMS[kind];
-  const { system, user } = spec.build(ctx.text);
+  const { system, user } = spec.build(material);
 
   const art = await prisma.studioArtifact.create({
-    data: { ownerId: userId, sourceIds: ctx.sourceIds, kind, status: "running", title: spec.title(ctx.title) },
+    data: { ownerId: userId, sourceIds: ctx.sourceIds, kind, status: "running", title: spec.title(tituloBase) },
   });
 
   try {

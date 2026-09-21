@@ -223,6 +223,18 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // evento "zaeon:study:embed" — o mesmo que o feed usa — e o cartão cai na conversa.
   // `attachMsgId` (opcional): o artefato entra NA bolha indicada (resposta estruturada) em vez
   // de virar msg nova — é assim que "texto + artefato" convivem na mesma resposta.
+  /**
+   * Artefato que não veio NÃO pode sumir calado: quem pediu uma imagem fica olhando pro
+   * "Gerando…" achando que trava. Uma bolha curta com o motivo real da API é mais honesta
+   * do que silêncio — e é o que permite diagnosticar sem abrir o log do servidor.
+   */
+  const avisarFalha = useCallback((motivo?: string) => {
+    const texto = motivo?.trim()
+      ? `Não consegui gerar esse artefato: ${motivo.trim()}`
+      : "Não consegui gerar esse artefato agora. Tenta de novo em instantes.";
+    setMessages((prev) => [...prev, { id: uid(), role: "assistant", kind: "text", text: texto, at: Date.now() }]);
+  }, []);
+
   const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string) => {
     const H = { "Content-Type": "application/json" };
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
@@ -254,16 +266,20 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           if (d.status === "error") return;
         }
       } else if (kind === "image") {
-        const res = await fetch("/api/studio/image", { method: "POST", headers: H, body: JSON.stringify({ spaceId }) });
+        const res = await fetch("/api/studio/image", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.dataUrl) fire({ studioKind: "image", title: data.title || "Imagem", data: data.meta, dataUrl: data.dataUrl });
+        else avisarFalha(data?.error);
       } else {
-        const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, force: true }) });
+        const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic, force: true }) });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.meta) fire({ studioKind: kind, title: data.title, data: data.meta });
+        else avisarFalha(data?.error);
       }
-    } catch { /* silencioso — a Fase 1 mostra erro no trace */ }
-  }, [focusIds, spaces]);
+    } catch {
+      avisarFalha();
+    }
+  }, [focusIds, spaces, avisarFalha]);
 
   // ── envio pro chat da Aura ──────────────────────────────────────────────────
   // `override` = envio direto (clique numa opção/conceito da resposta do harness),
