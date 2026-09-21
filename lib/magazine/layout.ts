@@ -48,10 +48,14 @@ export type Metricas = {
 };
 
 export type GlifoPosicionado = { ch: string; x: number; y: number; gi: number; enfase: boolean };
+/** A palavra inteira, já posicionada — é o que vira <span> no assentamento em DOM. */
+export type PalavraPosicionada = { texto: string; x: number; y: number; largura: number; chave: string | null; gi: number };
 export type MarcaTexto = { x: number; y: number; w: number; h: number; chave: string; gi: number };
 
 export type Resultado = {
   glifos: GlifoPosicionado[];
+  /** Mesmo conteúdo dos glifos, agrupado por palavra: o DOM final é montado daqui. */
+  palavras: PalavraPosicionada[];
   marcas: MarcaTexto[];
   /** Altura total ocupada pelo texto (sem contar obstáculos que descem mais). */
   altura: number;
@@ -127,6 +131,7 @@ function emitir(p: Palavra, x: number, y: number, m: Metricas, saida: Resultado)
   for (const c of p.chars) {
     saida.glifos.push({ ch: c.ch, x: x + c.dx, y: base, gi: c.gi, enfase: !!p.chave });
   }
+  saida.palavras.push({ texto: p.texto, x, y: base, largura: p.largura, chave: p.chave ?? null, gi: p.gi0 });
 }
 
 /**
@@ -140,7 +145,7 @@ export function montarLayout(
   m: Metricas,
   yInicial = 0,
 ): Resultado {
-  const saida: Resultado = { glifos: [], marcas: [], altura: 0, linhas: 0 };
+  const saida: Resultado = { glifos: [], palavras: [], marcas: [], altura: 0, linhas: 0 };
   const fresta = FRESTA_MINIMA(m.tamanho);
   const folgaMax = FOLGA_MAXIMA(m.tamanho);
   let y = yInicial;
