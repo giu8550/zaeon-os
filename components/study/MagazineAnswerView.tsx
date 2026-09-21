@@ -27,6 +27,7 @@ import type { StructuredAnswer } from "@/lib/agent/contracts";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import MoleculeView from "@/components/studio/MoleculeView";
 import { agendarChegada, chegadaInstantanea, DURACAO_LETRA } from "@/lib/magazine/chegada";
+import { familiaDaVariavel, fonteCanvas, aplicarFonte, QUEDA_CORPO, QUEDA_DISPLAY } from "@/lib/magazine/fontes";
 import {
   montarLayout, obstaculoCapitular, obstaculoArtefato, topoDaLinha, baselineNaLinha,
   type Obstaculo, type Resultado, type Metricas,
@@ -69,19 +70,35 @@ export function podeVirarRevista(a: StructuredAnswer | undefined, temArtefato: b
 
 /* ─────────────────────────────────── tipografia ─────────────────────────────────── */
 
+// Para o DOM (CSS de verdade resolve `var()` sem problema).
 const FAMILIA_CORPO = 'var(--font-revista-corpo), Georgia, "Times New Roman", serif';
 const FAMILIA_DISPLAY = 'var(--font-revista-display), Georgia, serif';
 
-function metricasPara(largura: number): Metricas & { corpo: string; enfase: string; capitular: string } {
+/**
+ * Para o CANVAS, que NÃO resolve `var()` — ver lib/magazine/fontes.ts. Resolvidas uma vez
+ * por render a partir do <html>; se a custom property ainda não existe (SSR, fonte não
+ * carregada), cai em Georgia e a medição continua honesta, só com outra fonte.
+ */
+function familiasDoCanvas() {
+  return {
+    corpo: familiaDaVariavel("--font-revista-corpo", QUEDA_CORPO),
+    display: familiaDaVariavel("--font-revista-display", QUEDA_DISPLAY),
+  };
+}
+
+function metricasPara(
+  largura: number,
+  fam: { corpo: string; display: string } = familiasDoCanvas(),
+): Metricas & { corpo: string; enfase: string; capitular: string } {
   const tamanho = largura < 560 ? 17 : 19;
   const entrelinha = Math.round(tamanho * 1.6);
   return {
     tamanho,
     entrelinha,
     espaco: 0, // preenchido pela medição
-    corpo: `400 ${tamanho}px ${FAMILIA_CORPO}`,
-    enfase: `600 ${tamanho}px ${FAMILIA_CORPO}`,
-    capitular: `600 ${Math.round(entrelinha * 3.05)}px ${FAMILIA_DISPLAY}`,
+    corpo: fonteCanvas(400, tamanho, fam.corpo),
+    enfase: fonteCanvas(600, tamanho, fam.corpo),
+    capitular: fonteCanvas(600, entrelinha * 3.05, fam.display),
   };
 }
 
@@ -170,7 +187,7 @@ export default function MagazineAnswerView({
 
     // capitular
     if (medido.capitular) {
-      ctx.font = m.capitular;
+      aplicarFonte(ctx, m.capitular, QUEDA_DISPLAY);
       obstaculos.push(obstaculoCapitular(ctx.measureText(medido.capitular).width + 12, metricas));
     }
 
@@ -285,13 +302,16 @@ export default function MagazineAnswerView({
 
     (async () => {
       try {
+        const fam = familiasDoCanvas();
         const fontes = (document as any)?.fonts;
         if (fontes?.load) {
           await Promise.race([
             Promise.all([
-              fontes.load(`400 19px ${FAMILIA_CORPO}`),
-              fontes.load(`600 19px ${FAMILIA_CORPO}`),
-              fontes.load(`600 90px ${FAMILIA_DISPLAY}`),
+              // Resolvidas: `document.fonts.load` usa o MESMO parser do ctx.font e
+              // rejeitava `var()` do mesmo jeito calado — a espera nunca esperou nada.
+              fontes.load(fonteCanvas(400, 19, fam.corpo)),
+              fontes.load(fonteCanvas(600, 19, fam.corpo)),
+              fontes.load(fonteCanvas(600, 90, fam.display)),
             ]),
             new Promise((r) => setTimeout(r, 2000)),
           ]);
@@ -377,7 +397,7 @@ export default function MagazineAnswerView({
           if (medido.capitular && nasc[0] >= 0 && agora >= nasc[0]) {
             const e = semMovimento ? 1 : ease(clamp((agora - nasc[0]) / 700, 0, 1));
             ctx.globalAlpha = e;
-            ctx.font = m.capitular;
+            aplicarFonte(ctx, m.capitular, QUEDA_DISPLAY);
             ctx.fillStyle = cores.ciano;
             ctx.fillText(medido.capitular, 0, 2 * m.entrelinha + baselineNaLinha(m) + (1 - e) * 16);
             ctx.globalAlpha = 1;
@@ -399,7 +419,7 @@ export default function MagazineAnswerView({
             if (t < 0 || agora < t) continue;
             const e = semMovimento ? 1 : ease(clamp((agora - t) / DURACAO_LETRA, 0, 1));
             const f = g.enfase ? m.enfase : m.corpo;
-            if (f !== fonteAtual) { ctx.font = f; fonteAtual = f; }
+            if (f !== fonteAtual) { aplicarFonte(ctx, f, QUEDA_CORPO); fonteAtual = f; }
             ctx.globalAlpha = 0.25 + e * 0.75;
             ctx.fillStyle = e < 1 ? cores.ciano : cores.tinta;
             ctx.fillText(g.ch, g.x, g.y + (1 - e) * 9);

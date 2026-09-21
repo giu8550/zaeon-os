@@ -7,6 +7,10 @@
  * não pode ser quebrada: a string de `ctx.font` aqui tem que ser idêntica à que desenha,
  * senão as larguras escorregam e o texto some por baixo do artefato.
  *
+ * E a string tem que ser ACEITA. `ctx.font` não resolve `var(--x)` e descarta a
+ * atribuição sem avisar — a página inteira foi medida em 10px sans-serif enquanto o DOM
+ * desenhava em 19px serif, e as palavras montavam umas nas outras. Ver ./fontes.ts.
+ *
  * Os grafemas saem do `Intl.Segmenter` (nativo, sem dependência): fatiar por `txt[i]`
  * parte emoji e marcas combinantes no meio, e aí a animação letra-a-letra desenha lixo.
  *
@@ -17,6 +21,7 @@
  * troca fácil se o profiling apontar a medição como gargalo.
  */
 import type { Palavra, Grafema } from "./layout";
+import { aplicarFonte, QUEDA_CORPO } from "./fontes";
 
 export type FonteSpec = {
   /** String pronta pro `ctx.font` do corpo. */
@@ -80,7 +85,10 @@ export function medirTexto(
       if (!bruto) continue;
       const chave = normalizar(bruto);
       const enfase = chaves.has(chave);
-      ctx.font = enfase ? fontes.enfase : fontes.corpo;
+      // `aplicarFonte` e não `ctx.font =`: o canvas recusa string inválida EM SILÊNCIO
+      // (foi assim que `var(--font-revista-corpo)` mediu a página inteira em 10px
+      // sans-serif por semanas). Aqui a recusa vira queda explícita.
+      aplicarFonte(ctx, enfase ? fontes.enfase : fontes.corpo, QUEDA_CORPO);
 
       const gs = grafemas(bruto);
       const chars: Grafema[] = [];
@@ -102,7 +110,7 @@ export function medirTexto(
     gi += 8; // um respiro de índices entre parágrafos, pra pausa da animação
   });
 
-  ctx.font = fontes.corpo;
+  aplicarFonte(ctx, fontes.corpo, QUEDA_CORPO);
   return { paragrafos: saida, espaco: ctx.measureText(" ").width, totalGrafemas: gi, capitular };
 }
 
