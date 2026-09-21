@@ -1,6 +1,11 @@
 # Caddy — proxy reverso + HTTPS automático (Let's Encrypt) da beta Zaeon.
-# Domínio e e-mail vêm do .env (BETA_DOMAIN / ACME_EMAIL). O reverse_proxy já
-# faz upgrade de WebSocket sozinho — o Socket.IO do server.js funciona sem config extra.
+# Domínio e e-mail vêm do ambiente (BETA_DOMAIN / ACME_EMAIL — o deploy.yml manda).
+# BETA_DOMAIN aceita VÁRIOS hostnames separados por vírgula: o endereço provisório
+# (sslip.io) e o definitivo (zaeon.com.br) convivem, cada um com seu certificado.
+# Se um deles ainda não resolve no DNS, o Caddy só falha o ACME DELE e segue servindo
+# os outros — por isso dá pra apontar o domínio novo antes de virar a chave.
+# O reverse_proxy já faz upgrade de WebSocket sozinho — o Socket.IO do server.js
+# funciona sem config extra.
 
 {
 	email {$ACME_EMAIL}

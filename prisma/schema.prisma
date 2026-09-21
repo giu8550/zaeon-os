@@ -54,8 +54,10 @@ model User {
   idType          String?
   walletAddress   String?
   // Credenciais Solana (ver lib/solana/credentials.ts): cache do endereço da wallet CUSTODIAL
-  // criada pela Crossmint no 1º mint (email:<aluno>:solana). O aluno nunca vê seed phrase/gas.
+  // criada pela Crossmint no 1º LOGIN (src/lib/auth.ts → events.createUser) ou, se ela não
+  // existir ainda, no 1º mint (email:<aluno>:solana). O aluno nunca vê seed phrase/gas.
   solanaWallet    String?
+  solanaWalletAt  DateTime?   // quando a wallet foi provisionada (diagnóstico do 1º login)
   
   // Admin & Verification
   kycStatus         String  @default("pending")

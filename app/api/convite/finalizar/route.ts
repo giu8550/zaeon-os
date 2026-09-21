@@ -7,8 +7,13 @@ import { generateCode } from "@/lib/invite-codes";
 import { buildUserUpdateData } from "@/lib/convite/migrate";
 import { checkEdu } from "@/lib/eduEligibility";
 import { grantStudentTrial } from "@/lib/plans";
+import { convitesAtivos } from "@/lib/convite/flag";
 
 export async function GET(request: Request) {
+  // Convites de cadastro desligados (ver lib/convite/flag.ts): quem cair aqui por um link
+  // velho vai pra entrada normal, em vez de tomar erro. Religa com CONVITES_ATIVOS=1.
+  if (!convitesAtivos()) return redirect("/login");
+
   const { searchParams } = new URL(request.url);
   const st = searchParams.get("st");
 

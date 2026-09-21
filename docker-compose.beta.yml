@@ -34,6 +34,12 @@ services:
     environment:
       GIT_SHA: ${GIT_SHA:-unknown}
       NODE_ENV: production
+      # Endereço público do app. O Google devolve o usuário no NEXTAUTH_URL: se ele
+      # apontar pra um domínio morto, o login quebra mesmo com client_id/secret certos
+      # (foi exatamente o que aconteceu com beta.zaeon.space). Trocar de domínio =
+      # setar a Variable APP_URL no repo (ou APP_URL no .env do VPS), nada mais.
+      NEXTAUTH_URL: ${APP_URL:-https://75-119-140-97.sslip.io}
+      NEXT_PUBLIC_APP_URL: ${APP_URL:-https://75-119-140-97.sslip.io}
       REDIS_URL: redis://redis:6379/0
       VOICE_ENGINE_URL: http://voice-engine:8004   # proxy /api/ai/voice
       ABNT_SERVICE_URL: http://abnt-service:8001    # exportação ABNT
