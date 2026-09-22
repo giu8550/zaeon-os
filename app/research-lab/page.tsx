@@ -34,6 +34,20 @@ const ProjectsContent = dynamic(
   () => import("@/app/research-lab/projects/ProjectsContent"),
   { ssr: false },
 );
+// Sala Escritório — os agentes como um lugar. `ssr: false` porque a cena é Three.js/R3F,
+// que só existe no navegador (o EscritorioRoom já isola o OfficeScene, mas a sala inteira
+// é client-only e não tem por que entrar no bundle de quem nunca abre a aba).
+//
+// ESTA LINHA FALTAVA. A aba existia, o botão existia, o componente existia — e o `<
+// EscritorioRoom />` lá embaixo apontava pra um identificador que nunca foi importado.
+// Em runtime isso é `undefined`, React levanta "Element type is invalid" e o usuário vê
+// "Application error: a client-side exception has occurred". O `tsc` avisava
+// (TS2304: Cannot find name 'EscritorioRoom'), mas next.config.mjs tem
+// `typescript: { ignoreBuildErrors: true }` — então o build passou e o erro foi pro ar.
+const EscritorioRoom = dynamic(
+  () => import("@/components/office/EscritorioRoom"),
+  { ssr: false },
+);
 
 // ── Sidebar liquid-glass: estilo dos botões (mesma lógica das "pills") ──────────
 // Vidro translúcido + borda suave + tint no hover; ativo = vidro colorido + ring + glow.
