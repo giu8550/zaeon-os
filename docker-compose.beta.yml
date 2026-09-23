@@ -32,6 +32,7 @@ services:
     # deploy a partir dos GitHub Actions secrets (ex.: GOOGLE_CREDENTIALS). O último vence.
     env_file: [.env, .env.secrets]
     environment:
+      GIT_SHA: ${GIT_SHA:-unknown}
       NODE_ENV: production
       # Endereço público do app. O Google devolve o usuário no NEXTAUTH_URL: se ele
       # apontar pra um domínio morto, o login quebra mesmo com client_id/secret certos
