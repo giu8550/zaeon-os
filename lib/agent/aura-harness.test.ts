@@ -100,11 +100,20 @@ describe("aura-harness · plan", () => {
     expect(steps[0].args.kind).toBe("mindmap");
   });
 
-  it("gerar_artefato visual → studio_generate kind=image (gate G1 ponta-a-ponta)", async () => {
+  // "molécula de serotonina" pedia kind=image de quando o viewer 3D não existia. Agora
+  // existe (PubChem + 3Dmol), e uma estrutura química desenhada por modelo de imagem é
+  // bonita e errada. O gate G1 continua valendo — mudou o kind certo, não a regra.
+  it("gerar_artefato de molécula → studio_generate kind=molecule (gate G1 ponta-a-ponta)", async () => {
     const deps = buildHarnessDeps(ctx, { genJson: smartGen() });
     const steps = await deps.plan(stFor({ intent: "gerar_artefato", mode: "elaborated", objective: "gera a molécula de serotonina" }));
     expect(steps).toHaveLength(1);
     expect(steps[0].tool).toBe("studio_generate");
+    expect(steps[0].args.kind).toBe("molecule");
+  });
+
+  it("gerar_artefato visual que NÃO é molécula → kind=image", async () => {
+    const deps = buildHarnessDeps(ctx, { genJson: smartGen() });
+    const steps = await deps.plan(stFor({ intent: "gerar_artefato", mode: "elaborated", objective: "faz uma ilustração da célula animal" }));
     expect(steps[0].args.kind).toBe("image");
   });
 

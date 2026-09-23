@@ -13,7 +13,7 @@ import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { checkEligibility } from "@/lib/projects/access";
 import { isSuperAdmin } from "@/lib/auth/roles";
-import { effectivePlan, type PlanState } from "@/lib/plans";
+import { effectivePlan, type PlanState, normalizePlan } from "@/lib/plans";
 
 export const runtime = "nodejs";
 
@@ -34,7 +34,7 @@ export async function GET() {
     });
     course = dbUser?.course ?? null;
     role = dbUser?.role ?? null;
-    const state: PlanState = { plan: dbUser?.plan || "free", plusUntil: dbUser?.plusUntil ?? null, trialGranted: !!dbUser?.trialGranted };
+    const state: PlanState = { plan: normalizePlan(dbUser?.plan), plusUntil: dbUser?.plusUntil ?? null, trialGranted: !!dbUser?.trialGranted };
     plan = effectivePlan(state);
     projectsEnabled = !!dbUser?.projectsEnabled;
   } catch { /* DB indisponível → trata como sem curso */ }

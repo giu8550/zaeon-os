@@ -17,7 +17,12 @@ import type { FunctionDeclaration } from "@google-cloud/vertexai";
 //   assíncrono (polling): podcast | video
 export type StudioKind =
   | "guide" | "mindmap" | "timeline" | "flashcards" | "faq"
-  | "image" | "podcast" | "video";
+  // `molecule` entrou na lista e nos ALIASES quando o viewer 3D nasceu, mas NÃO aqui nem
+  // no STUDIO_LABEL. Em runtime passava (a lista é quem filtra), só que `studioLabel`
+  // caía no fallback e o artefato se chamava "artefato: cafeína" em vez de
+  // "molécula: cafeína". Sete erros do tsc apontavam pra isto, escondidos pelo
+  // ignoreBuildErrors.
+  | "image" | "podcast" | "video" | "molecule";
 
 export const STUDIO_KINDS: StudioKind[] = [
   "guide", "mindmap", "timeline", "flashcards", "faq", "image", "podcast", "video", "molecule",
@@ -33,6 +38,7 @@ export const STUDIO_LABEL: Record<StudioKind, string> = {
   image: "imagem",
   podcast: "podcast",
   video: "vídeo",
+  molecule: "molécula",
 };
 
 // Aceita sinônimos/PT que o modelo possa devolver → normaliza pro kind canônico.

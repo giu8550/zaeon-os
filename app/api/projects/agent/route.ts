@@ -24,7 +24,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { assertEligibleOrThrow, ProjectsAccessError } from "@/lib/projects/access";
-import { effectivePlan, type PlanState } from "@/lib/plans";
+import { effectivePlan, type PlanState, normalizePlan } from "@/lib/plans";
 import { generate, type IdeLevel, type TaskKind, type ModelId } from "@/lib/ai/router";
 import { requiresApproval } from "@/lib/projects/github-actions";
 
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
 
     // Hard access gate — super admin / plano Pro-Max / liberação avulsa / curso.
     {
-      const state: PlanState = { plan: dbUser.plan || "free", plusUntil: dbUser.plusUntil ?? null, trialGranted: !!dbUser.trialGranted };
+      const state: PlanState = { plan: normalizePlan(dbUser.plan), plusUntil: dbUser.plusUntil ?? null, trialGranted: !!dbUser.trialGranted };
       assertEligibleOrThrow(dbUser.course, {
         email: session.user.email,
         role: dbUser.role,

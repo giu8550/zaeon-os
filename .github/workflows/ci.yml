@@ -56,6 +56,14 @@ jobs:
         run: npm run lint
         continue-on-error: true
 
+      # BLOQUEANTE, e de proposito. next.config.mjs tem ignoreBuildErrors: true, entao o
+      # `next build` passa por cima de QUALQUER erro de tipo — foi assim que um
+      # <EscritorioRoom /> sem import chegou em producao e virou "Application error" pro
+      # aluno. O tsc pega isso em ~20s; nenhum teste pegaria, porque nao ha teste de render
+      # de pagina. Enquanto o ignoreBuildErrors existir, ESTE passo e a unica rede.
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
       - name: Tests (vitest)
         run: npm test
 

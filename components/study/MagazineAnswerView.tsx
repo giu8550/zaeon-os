@@ -26,6 +26,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import MoleculeView from "@/components/studio/MoleculeView";
+import { agendarChegada, chegadaInstantanea, DURACAO_LETRA } from "@/lib/magazine/chegada";
+import { familiaDaVariavel, fonteCanvas, aplicarFonte, QUEDA_CORPO, QUEDA_DISPLAY } from "@/lib/magazine/fontes";
 import {
   montarLayout, obstaculoCapitular, obstaculoArtefato, topoDaLinha, baselineNaLinha,
   type Obstaculo, type Resultado, type Metricas,
@@ -43,6 +45,14 @@ import { medirTexto, emParagrafos, contarPalavras, normalizar, type TextoMedido 
 export const MIN_PALAVRAS_REVISTA = 25;
 
 /**
+ * Com artefato o piso cai, mas não some. `temArtefato ||` sozinho mandava pra página
+ * QUALQUER resposta com molécula, inclusive "A cafeína é um alcaloide." — e uma página
+ * de revista com cinco palavras não é uma página, é uma legenda perdida. Doze palavras
+ * é o mínimo pra existir texto contornando a figura.
+ */
+export const MIN_PALAVRAS_COM_ARTEFATO = 12;
+
+/**
  * O corpo da página. `desenvolvimento` é opcional no contrato e SÓ o intent
  * `explicar_conceito` o exige — `conversa` e `duvida_rapida` mandam apenas `nucleo`.
  * Exigir desenvolvimento deixava o Modo Revista praticamente desligado na prática.
@@ -54,31 +64,43 @@ export function corpoDaResposta(a: StructuredAnswer | undefined): string {
 export function podeVirarRevista(a: StructuredAnswer | undefined, temArtefato: boolean): boolean {
   const corpo = corpoDaResposta(a);
   if (!corpo) return false;
-  return temArtefato || contarPalavras(corpo) >= MIN_PALAVRAS_REVISTA;
+  const palavras = contarPalavras(corpo);
+  return palavras >= (temArtefato ? MIN_PALAVRAS_COM_ARTEFATO : MIN_PALAVRAS_REVISTA);
 }
 
 /* ─────────────────────────────────── tipografia ─────────────────────────────────── */
 
+// Para o DOM (CSS de verdade resolve `var()` sem problema).
 const FAMILIA_CORPO = 'var(--font-revista-corpo), Georgia, "Times New Roman", serif';
 const FAMILIA_DISPLAY = 'var(--font-revista-display), Georgia, serif';
 
-function metricasPara(largura: number): Metricas & { corpo: string; enfase: string; capitular: string } {
+/**
+ * Para o CANVAS, que NÃO resolve `var()` — ver lib/magazine/fontes.ts. Resolvidas uma vez
+ * por render a partir do <html>; se a custom property ainda não existe (SSR, fonte não
+ * carregada), cai em Georgia e a medição continua honesta, só com outra fonte.
+ */
+function familiasDoCanvas() {
+  return {
+    corpo: familiaDaVariavel("--font-revista-corpo", QUEDA_CORPO),
+    display: familiaDaVariavel("--font-revista-display", QUEDA_DISPLAY),
+  };
+}
+
+function metricasPara(
+  largura: number,
+  fam: { corpo: string; display: string } = familiasDoCanvas(),
+): Metricas & { corpo: string; enfase: string; capitular: string } {
   const tamanho = largura < 560 ? 17 : 19;
   const entrelinha = Math.round(tamanho * 1.6);
   return {
     tamanho,
     entrelinha,
     espaco: 0, // preenchido pela medição
-    corpo: `400 ${tamanho}px ${FAMILIA_CORPO}`,
-    enfase: `600 ${tamanho}px ${FAMILIA_CORPO}`,
-    capitular: `600 ${Math.round(entrelinha * 3.05)}px ${FAMILIA_DISPLAY}`,
+    corpo: fonteCanvas(400, tamanho, fam.corpo),
+    enfase: fonteCanvas(600, tamanho, fam.corpo),
+    capitular: fonteCanvas(600, entrelinha * 3.05, fam.display),
   };
 }
-
-/** Tempo total da materialização, do primeiro ao último grafema. */
-const DURACAO_CHEGADA = 3200;
-/** Quanto cada letra leva pra "secar" do ciano pra tinta. */
-const DURACAO_LETRA = 420;
 
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -165,7 +187,7 @@ export default function MagazineAnswerView({
 
     // capitular
     if (medido.capitular) {
-      ctx.font = m.capitular;
+      aplicarFonte(ctx, m.capitular, QUEDA_DISPLAY);
       obstaculos.push(obstaculoCapitular(ctx.measureText(medido.capitular).width + 12, metricas));
     }
 
@@ -179,22 +201,47 @@ export default function MagazineAnswerView({
     //
     // Qualquer outro artefato continua sendo cartão, e cartão é retângulo: a altura vem
     // medida do DOM (ResizeObserver abaixo), nunca chutada.
+    // PASSO 1 — quanto de página o texto ocupa SOZINHO.
+    //
+    // O artefato tinha tamanho e posição fixos (7ª linha, raio 150px) enquanto o texto
+    // tem o tamanho que tiver. Numa resposta curta o resultado era três linhas de texto,
+    // um buraco de 17 linhas e a molécula boiando no meio dele — nada "quebrado", só
+    // feio de um jeito que parece quebrado. A figura agora é medida CONTRA o texto.
+    const alturaTexto = montarLayout(
+      medido.paragrafos.map((palavras) => ({ palavras, completo: !streaming })),
+      obstaculos,
+      W,
+      metricas,
+    ).altura;
+    const LINHA_DE_REFERENCIA = 7; // a 7ª linha, como na página de revista que serviu de modelo
+
     let caixaArtefato: { x: number; y: number; w: number; h: number } | null = null;
     if (artefato) {
       const largo = W < 560;
       if (ehMolecula && !largo) {
-        const r = Math.round(Math.min(W * 0.21, 150));
+        // Raio: o teto de sempre, mas nunca maior que o texto que ele acompanha. O piso
+        // de 64px impede o outro extremo — uma molécula do tamanho de uma miniatura.
+        const r = Math.round(clamp(alturaTexto * 0.45, 64, Math.min(W * 0.21, 150)));
         const cx = clamp(W * 0.7, r, W - r);
-        const cy = Math.max(r, metricas.entrelinha * 7);
+        // Texto curto: a figura acompanha o texto (centro no meio dele). Texto longo:
+        // a 7ª linha de sempre, que é onde ela fica bonita numa página cheia.
+        const cy = alturaTexto < metricas.entrelinha * LINHA_DE_REFERENCIA * 1.5
+          ? Math.max(r, alturaTexto / 2)
+          : Math.max(r, metricas.entrelinha * LINHA_DE_REFERENCIA);
         obstaculos.push(obstaculoArtefato(cx, cy, r, metricas));
         caixaArtefato = { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
       } else {
         // Coluna estreita: o artefato ocupa a largura toda (§12/Q5). Contornar num
         // corredor de 300px deixaria frestas de três letras dos dois lados.
         const w = largo ? W : Math.round(W * 0.42);
-        const h = ehMolecula ? w : Math.max(alturaArtefatoRef.current || 0, 180);
+        // Molécula quadrada era `h = w` — num celular, um quadrado de 420px. Passa a ter
+        // teto, e o teto também respeita o texto.
+        const h = ehMolecula
+          ? Math.round(clamp(alturaTexto * 0.9, 160, Math.min(w, 320)))
+          : Math.max(alturaArtefatoRef.current || 0, 180);
         const x = largo ? 0 : W - w;
-        const y = metricas.entrelinha * (largo ? 6 : 5);
+        // Nunca começa depois do fim do texto: senão sobra um vão entre um e outro.
+        const y = Math.min(metricas.entrelinha * (largo ? 6 : 5), Math.max(metricas.entrelinha, alturaTexto));
         obstaculos.push({ tipo: "retangulo", x, y, w, h, pad: metricas.tamanho * 0.9 });
         caixaArtefato = { x, y, w, h };
       }
@@ -255,13 +302,16 @@ export default function MagazineAnswerView({
 
     (async () => {
       try {
+        const fam = familiasDoCanvas();
         const fontes = (document as any)?.fonts;
         if (fontes?.load) {
           await Promise.race([
             Promise.all([
-              fontes.load(`400 19px ${FAMILIA_CORPO}`),
-              fontes.load(`600 19px ${FAMILIA_CORPO}`),
-              fontes.load(`600 90px ${FAMILIA_DISPLAY}`),
+              // Resolvidas: `document.fonts.load` usa o MESMO parser do ctx.font e
+              // rejeitava `var()` do mesmo jeito calado — a espera nunca esperou nada.
+              fontes.load(fonteCanvas(400, 19, fam.corpo)),
+              fontes.load(fonteCanvas(600, 19, fam.corpo)),
+              fontes.load(fonteCanvas(600, 90, fam.display)),
             ]),
             new Promise((r) => setTimeout(r, 2000)),
           ]);
@@ -315,24 +365,14 @@ export default function MagazineAnswerView({
 
     const animar = (recemChegada || streaming) && !semMovimento;
     if (!animar) {
-      for (let i = 0; i < nasc.length; i++) if (nasc[i] < 0) nasc[i] = 0;
+      chegadaInstantanea(nasc);
       setAssentado(true);
       return;
     }
 
-    // Passo por letra calculado pra resposta INTEIRA levar ~DURACAO_CHEGADA, não importa
-    // se são 300 ou 3000 grafemas. Passo fixo fazia resposta longa demorar meia vida e
-    // resposta curta passar batido.
-    const aNascer: number[] = [];
-    for (let i = 0; i < nasc.length; i++) if (nasc[i] < 0) aNascer.push(i);
-    if (!aNascer.length) return;
-
-    const passo = clamp(DURACAO_CHEGADA / aNascer.length, 2, 10);
-    const agora = performance.now();
-    aNascer.forEach((i, k) => { nasc[i] = agora + k * passo; });
-
-    // Assenta (canvas some, DOM selecionável assume) só depois da última letra pousar.
-    const fim = aNascer.length * passo + DURACAO_LETRA + 120;
+    // Toda a aritmética (e as duas armadilhas dela) mora em lib/magazine/chegada.ts,
+    // que é puro e tem teste. Aqui só se obedece ao relógio que ela devolve.
+    const fim = agendarChegada(nasc, performance.now());
     const t = setTimeout(() => setAssentado(true), fim);
     return () => clearTimeout(t);
   }, [palavrasDom, streaming, recemChegada, semMovimento]);
@@ -357,7 +397,7 @@ export default function MagazineAnswerView({
           if (medido.capitular && nasc[0] >= 0 && agora >= nasc[0]) {
             const e = semMovimento ? 1 : ease(clamp((agora - nasc[0]) / 700, 0, 1));
             ctx.globalAlpha = e;
-            ctx.font = m.capitular;
+            aplicarFonte(ctx, m.capitular, QUEDA_DISPLAY);
             ctx.fillStyle = cores.ciano;
             ctx.fillText(medido.capitular, 0, 2 * m.entrelinha + baselineNaLinha(m) + (1 - e) * 16);
             ctx.globalAlpha = 1;
@@ -379,7 +419,7 @@ export default function MagazineAnswerView({
             if (t < 0 || agora < t) continue;
             const e = semMovimento ? 1 : ease(clamp((agora - t) / DURACAO_LETRA, 0, 1));
             const f = g.enfase ? m.enfase : m.corpo;
-            if (f !== fonteAtual) { ctx.font = f; fonteAtual = f; }
+            if (f !== fonteAtual) { aplicarFonte(ctx, f, QUEDA_CORPO); fonteAtual = f; }
             ctx.globalAlpha = 0.25 + e * 0.75;
             ctx.fillStyle = e < 1 ? cores.ciano : cores.tinta;
             ctx.fillText(g.ch, g.x, g.y + (1 - e) * 9);
