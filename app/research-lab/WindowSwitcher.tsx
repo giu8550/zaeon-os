@@ -1,5 +1,6 @@
 "use client";
 import type { WindowEntry } from "@/lib/useWindowStore";
+import type { WorkType } from "@/lib/abntTemplate";
 
 interface WindowSwitcherProps {
   windows: WindowEntry[];
@@ -8,7 +9,7 @@ interface WindowSwitcherProps {
   onClose: (id: string) => void;
   /** Tipo de trabalho — o pill "Minha pesquisa" vira "Meu TCC/Artigo/Relatório". */
   workType?: string | null;
-  onWorkType?: (t: string) => void;
+  onWorkType?: (t: WorkType) => void;
   /** Ler a pesquisa em voz — vira o ▶/⏹ no lugar do caderninho da aba do trabalho. */
   onReadResearch?: () => void;
   isReadingResearch?: boolean;
@@ -17,7 +18,10 @@ interface WindowSwitcherProps {
   onToggleChat?: () => void;
 }
 
-const WORK_TYPES = ["Artigo", "Relatório", "TCC"] as const;
+// Ancorada na união: se alguém trocar um rótulo aqui sem trocar o WorkType (ou vice-versa),
+// o tsc reclama na hora. Era a falta desse laço que deixava as duas listas poderem divergir
+// em silêncio — e o `(t: string)` da prop escondia a divergência até a hora do clique.
+const WORK_TYPES: readonly WorkType[] = ["Artigo", "Relatório", "TCC"];
 
 export default function WindowSwitcher({
   windows,

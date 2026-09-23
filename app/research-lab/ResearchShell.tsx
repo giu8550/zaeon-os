@@ -10,6 +10,7 @@ import ResearchChat from "@/components/research/ResearchChat";
 import DocumentDesktop from "./DocumentDesktop";
 import PdfViewer from "./PdfViewer";
 import type { SavedCitation } from "@/lib/useSavedCitations";
+import type { WorkType } from "@/lib/abntTemplate";
 
 interface ResearchShellProps {
   /**
@@ -35,9 +36,14 @@ interface ResearchShellProps {
   /** "Minhas coisas": criar um trabalho novo e excluir um trabalho salvo. */
   onNewWork?: () => void;
   onDeleteWork?: (id: string) => void;
-  /** Tipo de trabalho atual + setter — o pill "Minha pesquisa" reage a isto. */
-  workType?: string | null;
-  onWorkType?: (t: string) => void;
+  /** Tipo de trabalho atual + setter — o pill "Minha pesquisa" reage a isto.
+   *  `WorkType` e nao `string`: o `string` deixava esta prop aceitar qualquer coisa, e era
+   *  por isso que o tsc reclamava ao receber o `switchWorkType` da página, que é estrito.
+   *  Existem TRÊS WorkType no projeto (abntTemplate, quality/types e plans) — este caminho
+   *  usa o do abntTemplate ('Artigo' | 'Relatório' | 'TCC'), que é o que o WindowSwitcher
+   *  de fato emite. Os três deviam virar um só, mas isso é outra faxina. */
+  workType?: WorkType | null;
+  onWorkType?: (t: WorkType) => void;
   /** Arrastar um doc sobre outro → relacionar as pesquisas. */
   onRelate?: (sourceId: string, targetId: string) => void;
   /** Ler a pesquisa (texto do editor) em voz — botão play/stop na aba da pesquisa. */
