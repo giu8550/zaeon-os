@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    // Pasta de saída. Existe como variável porque `next build` e `next dev` compartilham
+    // `.next` por padrão: rodar o build local com o dev de pé troca os chunks debaixo do
+    // servidor e a página aberta passa a 404 em tudo — parece regressão do código e não é.
+    // Em produção e no CI a variável não existe, então continua `.next`.
+    distDir: process.env.NEXT_DIST_DIR || '.next',
     // 1. Autorização de domínios externos
     images: {
         remotePatterns: [

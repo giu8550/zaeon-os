@@ -1,6 +1,7 @@
 # --- ZAEON FRONTEND (Next.js / Node) ---
 node_modules/
 .next/
+.next-ci/
 out/
 build/
 .studio/
