@@ -405,3 +405,35 @@ describe("historicoNoOrcamento · a conversa cabe inteira", () => {
     expect(linhas).toEqual(["Usuário: oi", "Aura: olá"]);
   });
 });
+
+
+describe("destaques · expressões viram objeto da página", () => {
+  const st = { objective: "x" } as any;
+
+  it("extrai LaTeX e o rótulo", () => {
+    const a = normalizeAnswer(
+      { nucleo: "N", expressoes: [{ latex: "E = mc^2", rotulo: "energia de repouso" }] } as any, st);
+    expect(a.destaques).toEqual([{ latex: "E = mc^2", rotulo: "energia de repouso" }]);
+  });
+
+  it("tira os cifrões que o modelo insiste em mandar", () => {
+    const a = normalizeAnswer({ nucleo: "N", expressoes: [{ latex: "$$C_8H_{10}N_4O_2$$" }] } as any, st);
+    expect(a.destaques?.[0]?.latex).toBe("C_8H_{10}N_4O_2");
+  });
+
+  it("descarta entrada sem latex e corta em 3", () => {
+    const a = normalizeAnswer({ nucleo: "N", expressoes: [
+      { latex: "a" }, { rotulo: "sem latex" }, { latex: "  " }, { latex: "b" }, { latex: "c" }, { latex: "d" },
+    ] } as any, st);
+    expect(a.destaques?.map((d) => d.latex)).toEqual(["a", "b", "c"]);
+  });
+
+  it("sem expressões, o campo não existe (melhor ausente que vazio)", () => {
+    expect(normalizeAnswer({ nucleo: "N" } as any, st).destaques).toBeUndefined();
+  });
+
+  it("rótulo longo é cortado — legenda é legenda, não parágrafo", () => {
+    const a = normalizeAnswer({ nucleo: "N", expressoes: [{ latex: "x", rotulo: "l".repeat(80) }] } as any, st);
+    expect(a.destaques?.[0]?.rotulo?.length).toBe(40);
+  });
+});

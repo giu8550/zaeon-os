@@ -216,11 +216,46 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     } catch { /* ignore */ }
   }, [messages]);
 
-  // Autoscroll pro fim a cada mensagem.
-  useEffect(() => {
+  /**
+   * ROLAGEM: chat vai pro fim, PÁGINA vai pro começo.
+   *
+   * Isto aqui era `scrollTop = scrollHeight` sem condição. Para um balão de chat está
+   * certo — o mais novo está embaixo. Para uma página de revista está exatamente errado:
+   * uma página se lê do topo, e o topo é a linha fina. Quando a resposta é mais alta que
+   * a janela — ou seja, justamente quando ela vira uma página de verdade — a cabeça
+   * saía por cima e o aluno caía no meio do texto.
+   *
+   * O "às vezes" que se via era isso: resposta curta cabe inteira, e aí fim e começo
+   * aparecem juntos.
+   */
+  const ancorar = useCallback((idDaMensagem?: string) => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, sending]);
+    if (!el) return;
+    if (!idDaMensagem) { el.scrollTop = el.scrollHeight; return; }
+    const alvo = el.querySelector<HTMLElement>(`[data-msg="${idDaMensagem}"]`);
+    if (!alvo) { el.scrollTop = el.scrollHeight; return; }
+    // Topo da página logo abaixo do topo da lista, com um respiro.
+    //
+    // Por rect e não por `offsetTop`: `offsetTop` é medido contra o offsetParent, que só
+    // por acaso é o mesmo da lista — basta uma bolha nascer dentro de um wrapper
+    // posicionado pra conta dar em outro lugar, e era daí que vinha o "às vezes a
+    // primeira head fica fora de tela". A diferença de rects não depende de quem é pai
+    // de quem.
+    const topo = el.scrollTop + (alvo.getBoundingClientRect().top - el.getBoundingClientRect().top) - 12;
+    el.scrollTo({ top: Math.max(0, topo), behavior: "smooth" });
+  }, []);
+
+  /** A última mensagem é uma página de revista recém-chegada? */
+  const paginaNova = useCallback((): string | undefined => {
+    const ultima = msgsRef.current[msgsRef.current.length - 1];
+    if (!ultima || ultima.role !== "assistant" || ultima.kind !== "structured") return undefined;
+    if (!ultima.fresh || ultima.streaming) return undefined;
+    return podeVirarRevista(ultima.answer, !!ultima.studioBlock) ? ultima.id : undefined;
+  }, []);
+
+  useEffect(() => {
+    ancorar(paginaNova());
+  }, [messages, sending, ancorar, paginaNova]);
 
   const spaceTitle = useCallback(
     (id: string) => spaces.find((s) => s.id === id)?.title || "Estudo",
@@ -754,7 +789,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                   // Resposta curta continua no balão — revista com 3 linhas é exagero.
                   const revista = podeVirarRevista(m.answer, !!m.studioBlock);
                   return (
-                    <div key={m.id} className="flex justify-start">
+                    <div key={m.id} data-msg={m.id} className="flex justify-start">
                       <div className={revista ? "w-full" : "max-w-[85%] w-full"}>
                         {revista ? (
                           <MagazineBoundary fallback={padrao}>
@@ -762,6 +797,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                               answer={m.answer}
                               streaming={!!m.streaming}
                               recemChegada={!!m.fresh}
+                              aoAssentar={() => ancorar(m.id)}
                               artefato={m.studioBlock ?? null}
                               onNext={(s) => void send(s)}
                               agente="Aura"
