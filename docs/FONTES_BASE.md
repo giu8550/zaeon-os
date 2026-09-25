@@ -1,0 +1,97 @@
+# FONTES-BASE — código-fonte por feature (bill of materials)
+
+> Mapa definitivo: **cada feature da Zaeon → o(s) código(s)-fonte base**. Legenda de status:
+> **ADOTAR** = construímos em cima / portamos o padrão · **REFERÊNCIA** = roubamos só o mecanismo, não o código
+> · **DADOS** = API/fonte de fatos · **⚠️** = alerta de licença. Regra-mãe: rouba-se o mecanismo,
+> implementa-se nativo (Next/Gemini único) — como fizemos com o MemPalace. Compilado 2026 (Fable).
+
+---
+
+## 1. Harness — o motor (laço tipado)
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| `ai-boost/awesome-harness-engineering` | lista (MIT-ish) | laço ReAct, reasoning-sandwich, middleware/guardrails, deny-by-default | ADOTAR (padrão) |
+| `SakanaAI/AI-Scientist` (+v2) | Apache-2.0 | pipeline por estágios + crítico/reflexão; v2 = podar nó "buggy" | ADOTAR (padrão) |
+| `langchain-ai/langgraph` | MIT | estado tipado + checkpoint/retry numa camada | REFERÊNCIA |
+| `deepseek-ai/deepseek-harness` | MIT | **log-as-context** (contexto = projeção de log append-only) + hooks `pre-step`/`turn-stopping` | REFERÊNCIA (refinamento) |
+| `smolagents` · `OpenHands` | Apache-2.0 · MIT | **error-as-observation** (falha volta ao modelo como observação) | REFERÊNCIA |
+| `SakanaAI/ShinkaEvolve` | Apache-2.0 | best-of-N com crítico como fitness (modo Max) | REFERÊNCIA |
+
+## 2. Memória (L3 — contexto por usuário/tópico)
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| `MemPalace` | OSS | esquema verbatim wing/room/drawer + recall barato por embedding | ADOTAR (padrão, nativo Mongo Atlas) |
+| MongoDB **$rankFusion** (Atlas 8.1+) | produto | recall híbrido nativo (vetor + texto, RRF) | ADOTAR |
+| `mem0` · `Letta/MemGPT` · `Zep/Graphiti` | Apache-2.0 | curadoria ADD/SUPERSEDE/NOOP · perfil pinado · invalidar-não-deletar | REFERÊNCIA |
+| PubChem embeddings via `gemini-embedding-001` | API | embeddings (1536) | DADOS |
+
+## 3. Crítico / qualidade (examiner)
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| K-Dense `scientific-writer` (**ScholarEval**) | MIT | rubrica 8 dims + soundness/contribution → `ExaminerVerdict` | ADOTAR (padrão) |
+| K-Dense `science-superpowers` | MIT | pré-registro, red-team, verify-before-claiming | ADOTAR (conteúdo/markdown) |
+| `ai4s-research/open-science` | MIT | provenance + grading de evidência 4 níveis | ADOTAR (padrão) |
+
+## 4. Artefatos generativos inline (a "geração de UI")
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| `vercel/ai` (AI SDK) | Apache-2.0 | **base preferida**: modelo emite → componente inline (via Gemini function-calling + registry) | ADOTAR (padrão; lib opcional) |
+| `tambo-ai/tambo` | MIT | referência de API do registry tipado (⚠️ tem backend próprio — não acoplar) | REFERÊNCIA |
+| `StudioArtifactViews` (nosso) | — | o registry de viewers **já existe** | ADOTAR (in-house) |
+
+## 5. Molécula 3D + viewers ricos
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| `3dmol/3Dmol.js` | **BSD-3** | render 3D de molécula no navegador (single-file CDN) | ADOTAR |
+| **PubChem PUG-REST** · **RCSB PDB** | API pública | estrutura molécula/proteína por nome (SDF/PDB) | DADOS (proxy server-side) |
+| Mermaid · Chart.js · KaTeX · React Flow | MIT | diagrama · gráfico · fórmula · árvore | ADOTAR (libs) |
+
+## 6. Skills (marketplace + runtime)
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| **agentskills.io** (spec) | aberto (Anthropic) | formato `SKILL.md` (campos, progressive disclosure, validação) | ADOTAR (padrão) |
+| K-Dense `scientific-agent-skills` | MIT | catálogo (paper-lookup, database-lookup, citation…) | ADOTAR (catálogo) |
+| `NousResearch/hermes-agent` | MIT | skill auto-autorada a partir de trajetória aprovada | REFERÊNCIA |
+
+## 7. Conectores (MCP)
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| MCP spec + `@modelcontextprotocol/sdk` (TS) | MIT/aberto | cliente MCP (isolar handshake — RC 2026-07-28 breaking) | ADOTAR |
+| `openags/paper-search-mcp` | MIT | arXiv/PubMed/bioRxiv (flagship literatura) | ADOTAR (conector) |
+| `genomoncology/biomcp` | MIT | med/bio (PubMed/ClinicalTrials/variantes) | ADOTAR (conector) |
+| `oksure/openalex-research-mcp` | MIT | OpenAlex (TS/npx — 1º smoke local) | ADOTAR (conector) |
+| `modelcontextprotocol/servers` | MIT | fetch/filesystem/git oficiais | ADOTAR (utilitário) |
+| `pvliesdonk/scholar-mcp` | MIT | Semantic Scholar (⚠️ experimental, ~2★) | REFERÊNCIA |
+
+## 8. Camada agêntica — Tutores por domínio
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| K-Dense `scientific-agents` | MIT | 503 perfis `AGENTS.md` → persona/cérebro de cada tutor | ADOTAR (adaptar PT-BR) |
+| (nossos) `StudentAgent`/§9 + `getRoomForCourse` | — | roster, persona por curso, gating | ADOTAR (in-house) |
+
+## 9. Skill Tree (aprendizado gamificado, visível por tópico)
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| `24kchengYe/human-skill-tree` | **⚠️ app AGPL-3.0** · skills MIT/AGPL | estrutura da árvore (fases 0-6, teoria/exp/prático), unlock por maestria, guardrails de learning-science (Socrático/repetição espaçada) | ADOTAR o **padrão** (⚠️ NÃO copiar código do app — AGPL; skills MIT ok) |
+| React Flow | MIT | render da árvore | ADOTAR (lib) |
+| `HKUDS/DeepTutor` | (verificar) | tutoria personalizada vitalícia p/ assuntos complexos (MCP) | REFERÊNCIA |
+| (nosso) `User.skills Json` (RPG Ranks F-SS) | — | substrato de gamificação **já existe** | ADOTAR (in-house) |
+
+## 10. Camada mestra / probatória (professores, doutorado)
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| `princeton-nlp/LM-Science-Tutor` (**TutorEval**) | MIT | motor de exame: LLM-juiz nota resposta vs key-points de especialista; open/closed-book | ADOTAR (padrão do exame) |
+| (nosso) `examiner`/ScholarEval | — | o crítico elevado a `academicLevel: doutorado` | ADOTAR (in-house) |
+
+---
+
+## Alertas de licença (ler antes de codar)
+- **`human-skill-tree` (app) = AGPL-3.0** → copiar o código do app obrigaria abrir a Zaeon sob AGPL. **Só o padrão/estrutura + as `skills/` (MIT).** Nunca o código do app.
+- **`tambo`** → funciona, mas roda o loop/backend dele → **não acoplar**; usar como referência de API. Base de UI generativa preferida = `vercel/ai` (Apache-2.0) ou nativo.
+- **`deepseek-harness`** → developer preview com breaking changes → **estudar, não depender**.
+- **DeepTutor** → confirmar licença antes de qualquer uso de código.
+
+## Princípio único
+Tudo acima é **mecanismo/padrão/dados** — o código de produção é **nativo Next + Gemini único**. Adotamos
+libs de render (3Dmol/Mermaid/Chart.js/KaTeX/React Flow) e, opcionalmente, `vercel/ai` como camada fina.
+Os "ADOTAR (padrão)" a gente re-implementa; os "REFERÊNCIA" a gente só consulta.

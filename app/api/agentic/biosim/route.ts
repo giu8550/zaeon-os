@@ -27,6 +27,7 @@ import {
   isIntentAllowed,
   validateDescriptor,
 } from '@/app/agentic-modules/biosim3d/accessPolicy';
+import { resolvePubChem, looksLikeMoleculeName } from '@/lib/biosim/pubchem';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -101,13 +102,10 @@ async function callGemini(systemPrompt: string, userMessage: string, imagePart?:
 }
 
 // ─── Internal sub-route fetchers ──────────────────────────────────────────────
-async function fetchPubChem(name: string, baseUrl: string) {
-  const res = await fetch(`${baseUrl}/api/agentic/biosim/pubchem`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ name }),
-  });
-  return res.ok ? res.json() : null;
+// Chamada DIRETA à lib (sem hop HTTP interno) — cache + fetches paralelos embutidos.
+async function fetchPubChem(name: string, _baseUrl?: string) {
+  const r = await resolvePubChem(name);
+  return r.ok ? r : null;
 }
 
 async function fetchPDB(searchOrId: string, baseUrl: string) {
@@ -225,6 +223,39 @@ export async function POST(req: Request) {
         { error: `Unknown course room: "${courseRoom}"` },
         { status: 400 }
       );
+    }
+
+    // ── Fast-path: nome de molécula óbvio → PULA o Gemini (economiza 1-4s) ────
+    // Só quando não há imagem, a sala permite molécula, e o prompt parece um nome
+    // de composto. Se o PubChem não achar, cai no fluxo normal do classificador.
+    if (!imageFile && prompt && isIntentAllowed(courseRoom, 'molecule')) {
+      const fastName = looksLikeMoleculeName(prompt);
+      if (fastName) {
+        const result = await fetchPubChem(fastName);
+        if (result?.voxels?.length > 0) {
+          return NextResponse.json({
+            source:   'pubchem',
+            intent:   'molecule',
+            voxels:   result.voxels,
+            metadata: {
+              name:       result.name,
+              formula:    result.formula,
+              weight:     result.weight,
+              atomCount:  result.atomCount,
+              cid:        result.cid,
+              pubchemUrl: result.pubchemUrl,
+            },
+            descriptor: {
+              renderMode: 'molecule',
+              title: `${result.name ?? fastName} (${result.formula ?? ''})`,
+              description: `Estrutura 3D real do PubChem (CID ${result.cid}). ${result.atomCount} átomos, MM ${result.weight ?? '?'} g/mol.`,
+              hint: 'Cores CPK: C=cinza, N=azul, O=vermelho, H=branco, S=amarelo.',
+              parameters: { formula: fastName },
+              accentColor: '#22d3ee',
+            },
+          });
+        }
+      }
     }
 
     // ── Step 2: Classify with room-scoped system prompt ───────────────────────
