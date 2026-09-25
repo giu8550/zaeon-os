@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Loader2, Mic, Paperclip, Zap, Compass } from "lucide-react";
 import useSTT from "@/lib/voice/useSTT";
+import { useAutoFoco } from "@/lib/ui/autofoco";
 
 // execMode = automático (Aura vai ponta-a-ponta) × guiado (pausa nos gates HITL,
 // estilo plan-mode do Claude). Fase 0: só a casca — persiste a preferência p/ o
@@ -78,12 +79,14 @@ export default function CoworkComposer({
   };
 
   // Página inteligente: entrar no módulo = entrar direto na barra de input (cursor
-  // piscando), sem precisar clicar. Foca quando a aba fica ativa.
-  useEffect(() => {
-    if (!active) return;
-    const t = setTimeout(() => ref.current?.focus(), 60);
-    return () => clearTimeout(t);
-  }, [active]);
+  // piscando), sem precisar clicar.
+  //
+  // Isto AQUI chutava `setTimeout(..., 60)`. O problema é que `focus()` num elemento
+  // dentro de `display:none` é silenciosamente ignorado, e a sala nem sempre já está
+  // pintada aos 60ms — quando não estava, o foco simplesmente não acontecia e ninguém
+  // tentava de novo. O gancho espera o elemento ficar VISÍVEL em vez de apostar num
+  // número. Ver lib/ui/autofoco.ts.
+  useAutoFoco(ref, active);
 
   // Ditado por voz (áudio → texto). Guarda o texto que já existia ao começar a gravar
   // e vai concatenando a transcrição em cima dele.

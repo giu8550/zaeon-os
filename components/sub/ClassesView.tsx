@@ -15,6 +15,7 @@ import NextImage from 'next/image';
 import VoiceModeSwitch from '@/components/voice/VoiceModeSwitch';
 import SpeakButton from '@/components/voice/SpeakButton';
 import StudentAulasModule from '@/components/aulas/StudentAulasModule';
+import { useAutoFoco } from '@/lib/ui/autofoco';
 
 // --- INITIAL DATA ---
 const initialSchedule: any[] = []; 
@@ -64,6 +65,12 @@ const CollectiveZone = ({ classes, currentUser, dragConstraints, themeColor = 'c
     ]);
     const [teacherTasks, setTeacherTasks] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<'chat' | 'tasks'>('chat'); // Alternar entre Grupo e Tarefas
+
+    // Entrar na aba Grupo = cursor na caixa de mensagem, sem precisar clicar. O gancho
+    // espera o painel ficar visível em vez de chutar um atraso, e não rouba de ninguém
+    // que já esteja escrevendo em outro campo (ver lib/ui/autofoco.ts).
+    const chatRef = useRef<HTMLInputElement>(null);
+    useAutoFoco(chatRef, activeTab === 'chat');
 
     const savedClasses = classes.filter((c: any) => !c.isDraft);
 
@@ -212,7 +219,7 @@ const CollectiveZone = ({ classes, currentUser, dragConstraints, themeColor = 'c
                                 </div>
                                 <div className="p-3 bg-slate-50 dark:bg-black/20 border-t border-slate-200 dark:border-white/5">
                                     <div className="flex items-center gap-2 bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-full px-2 py-2 shadow-inner dark:shadow-none">
-                                        <input value={chatMsg} onChange={(e) => setChatMsg(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendGroupMessage()} placeholder={`Message ${activeClass?.name} group...`} className="flex-1 bg-transparent px-4 text-xs font-medium text-slate-800 dark:text-white placeholder:text-slate-400 outline-none" />
+                                        <input ref={chatRef} value={chatMsg} onChange={(e) => setChatMsg(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendGroupMessage()} placeholder={`Message ${activeClass?.name} group...`} className="flex-1 bg-transparent px-4 text-xs font-medium text-slate-800 dark:text-white placeholder:text-slate-400 outline-none" />
                                         <button onClick={sendGroupMessage} className={`w-8 h-8 ${t.fill} text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform`}><ArrowUpRight size={14} /></button>
                                     </div>
                                 </div>
@@ -381,6 +388,10 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
     const [chatMin, setChatMin] = useState(false); // Fase 6/B2: chat minimizável (estado persistido)
     useEffect(() => { try { setChatMin(localStorage.getItem("zaeon.aula.chatMin") === "1"); } catch { /* */ } }, []);
     useEffect(() => { try { localStorage.setItem("zaeon.aula.chatMin", chatMin ? "1" : "0"); } catch { /* */ } }, [chatMin]);
+
+    // O chat da Zaeon é O chat desta sala: abriu o painel, o cursor já está nele.
+    const zaeonRef = useRef<HTMLInputElement>(null);
+    useAutoFoco(zaeonRef, !chatMin);
 
     const [storedPdfs, setStoredPdfs] = useState<StoredDoc[]>([]);
     const [selectedDay, setSelectedDay] = useState<number>(0);
@@ -927,7 +938,7 @@ export default function ClassesView({ room, themeColor = 'cyan' }: ClassesViewPr
                             </div>
                             <div className="px-4 pb-4 pt-1 shrink-0">
                                 <div className="flex items-center gap-1.5 bg-white/[0.06] rounded-full pl-4 pr-1.5 py-1.5">
-                                    <input value={zaeonInput} onChange={(e) => setZaeonInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleZaeonMessage()} className="bg-transparent flex-1 text-xs text-white outline-none placeholder:text-white/30" placeholder="Pergunte a Zaeon..." disabled={isZaeonProcessing} />
+                                    <input ref={zaeonRef} value={zaeonInput} onChange={(e) => setZaeonInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleZaeonMessage()} className="bg-transparent flex-1 text-xs text-white outline-none placeholder:text-white/30" placeholder="Pergunte a Zaeon..." disabled={isZaeonProcessing} />
                                     <VoiceModeSwitch onTranscript={(t) => setZaeonInput(t)} title="Falar para a Zaeon" size={14} />
                                     <button onClick={handleZaeonMessage} disabled={isZaeonProcessing} className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#8b5cf6] to-[#22d3ee] flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-md disabled:opacity-40"><ArrowUp size={15} strokeWidth={2.2} className="text-white" /></button>
                                 </div>
