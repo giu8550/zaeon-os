@@ -9,6 +9,7 @@ import urllib.request
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.section import WD_SECTION
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
@@ -55,15 +56,13 @@ def build_abnt_document(payload: DocumentPayload) -> bytes:
         _add_body_section(doc, section, i, font, counters)
 
     doc.add_page_break()
-    _add_references(doc, payload.references, font, counters)
+    _add_references(doc, payload.references, font)
 
-    _add_appendices(doc, payload.apendices, "APÊNDICE", R.BM_APPENDIX, font, counters)
-    _add_appendices(doc, payload.anexos, "ANEXO", R.BM_ANNEX, font, counters)
+    # Pós-textuais, na ordem da NBR 14724: apêndice (do autor) antes de anexo (de terceiro).
+    _add_appendices(doc, payload.apendices, "APÊNDICE", font, counters)
+    _add_appendices(doc, payload.anexos, "ANEXO", font, counters)
 
     _add_page_numbers(doc)
-
-    if counters.get("footnotes"):
-        _build_footnotes_part(doc, counters["footnotes"], font)
 
     buf = io.BytesIO()
     doc.save(buf)
@@ -422,9 +421,7 @@ def _add_body_section(doc: Document, section_data, number: int, font: str, count
 
     for j, sub in enumerate(section_data.subsections, start=1):
         sub_title = f"{number}.{j} {sub.title.upper()}"
-        stp = _subsection_title(doc, sub_title, font)
-        if counters is not None:
-            _add_bookmark(stp, f"{R.BM_SECTION}{number}sub{j}", counters)
+        _subsection_title(doc, sub_title, font)
         for block in _split_paragraphs(sub.content):
             _add_paragraph(doc, block, font, counters)
 
@@ -446,7 +443,9 @@ def _add_paragraph(doc: Document, text: str, font: str, counters: dict = None):
         p.paragraph_format.first_line_indent = Cm(R.PARAGRAPH_INDENT_CM)
         p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
         p.paragraph_format.line_spacing = R.LINE_SPACING_BODY
-        _add_text_with_footnotes(p, text, font, counters)
+        run = p.add_run(text)
+        run.font.name = font
+        run.font.size = Pt(R.FONT_SIZE_BODY_PT)
 
 
 def _add_long_quote(doc: Document, text: str, font: str):
@@ -717,6 +716,62 @@ def _set_cell_borders(cell, top: bool = False, bottom: bool = False):
 
 
 # ── Referências ────────────────────────────────────────────────
+
+def _add_appendices(doc: Document, itens: list, rotulo: str, font: str, counters: dict = None):
+    """
+    Elementos pós-textuais (NBR 14724 §4.2.10 e §4.2.11).
+
+    APÊNDICE é material elaborado pelo próprio autor; ANEXO é material de terceiro. A
+    norma trata os dois igual na forma: cada um começa em página nova, é identificado por
+    letra maiúscula consecutiva, travessão e o título — "APÊNDICE A — Questionário
+    aplicado" — e o identificador é centralizado, em maiúsculas e negrito, como os títulos
+    sem indicativo numérico.
+
+    Travessão (—), não hífen: é a mesma regra que as legendas de figura já seguem aqui.
+
+    Não entram no sumário por indicativo numérico, mas entram no sumário como itens sem
+    número — por isso `outline_level=0` no parágrafo de identificação.
+
+    Lista vazia não gera página em branco: o `if not itens` é o que garante isso, e é o
+    caso normal, porque a maioria dos trabalhos não tem apêndice.
+    """
+    if not itens:
+        return
+
+    for i, item in enumerate(itens):
+        doc.add_page_break()
+        letra = _letra_do_indice(i)
+        titulo = (getattr(item, "title", "") or "").strip()
+        identificacao = f"{rotulo} {letra}" + (f" — {titulo}" if titulo else "")
+
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.space_before = Pt(R.SPACE_BEFORE_TITLE_PT)
+        p.paragraph_format.space_after = Pt(R.SPACE_AFTER_TITLE_PT)
+        run = p.add_run(identificacao.upper())
+        run.bold = True
+        run.font.name = font
+        run.font.size = Pt(R.FONT_SIZE_BODY_PT)
+        _set_outline_level(p, 0)
+
+        for bloco in _split_paragraphs(getattr(item, "content", "") or ""):
+            _add_paragraph(doc, bloco, font, counters)
+
+
+def _letra_do_indice(i: int) -> str:
+    """
+    0 -> A, 25 -> Z, 26 -> AA. A norma não prevê mais que 26, mas um trabalho com 27
+    apêndices não pode derrubar a exportação — e "AA" é mais honesto que estourar o
+    alfabeto e repetir "A".
+    """
+    letra = ""
+    i += 1
+    while i > 0:
+        i, resto = divmod(i - 1, 26)
+        letra = chr(ord("A") + resto) + letra
+    return letra
+
 
 def _add_references(doc: Document, references: list, font: str):
     _section_title(doc, R.REFERENCES_TITLE, font, outline_level=0)
