@@ -67,5 +67,21 @@ jobs:
       - name: Tests (vitest)
         run: npm test
 
+      # BLOQUEANTE, e de proposito. O abnt-service tinha 41 testes que NINGUEM rodava, e
+      # por isso um formatter com 6 nomes indefinidos — um deles no caminho por onde passa
+      # todo paragrafo — ficou meses em producao sem gerar um unico documento. O container
+      # subia, reiniciava em loop, e o app so dizia "servico ABNT offline". Teste que nao
+      # roda no CI nao e rede: e decoracao.
+      - name: Setup Python (worker ABNT)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tests (pytest — abnt-service)
+        working-directory: abnt-service
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          pytest -q
+
       - name: Build
         run: npx next build

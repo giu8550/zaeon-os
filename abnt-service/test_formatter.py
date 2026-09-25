@@ -23,6 +23,7 @@ from models import (
     SectionData,
     SubsectionData,
     ReferenceData,
+    AppendixData,
 )
 
 
@@ -440,3 +441,81 @@ def test_reference_alphabetical_order():
     i_alves = next(i for i, t in enumerate(texts) if "ALVES, Ana" in t)
     i_ulisses = next(i for i, t in enumerate(texts) if "ULISSES, Zeca" in t)
     assert i_alves < i_ulisses, "referências devem estar em ordem alfabética"
+
+
+# ── Pós-textuais: apêndice e anexo (NBR 14724 §4.2.10 / §4.2.11) ─
+
+APENDICE = AppendixData(title="Questionário aplicado", content="Pergunta um. Pergunta dois.")
+ANEXO = AppendixData(title="Parecer do comitê", content="Texto do parecer de terceiro.")
+
+
+def _ident(doc, rotulo, letra):
+    """O parágrafo de identificação, achado pelo rótulo + letra."""
+    return _find_para(doc, f"{rotulo} {letra}")
+
+
+def test_sem_apendice_nao_cria_pagina():
+    # O caso normal: a maioria dos trabalhos não tem apêndice, e uma página em
+    # branco no fim de um TCC é um defeito visível.
+    doc = _build()
+    assert _find_para(doc, "APÊNDICE") is None
+    assert _find_para(doc, "ANEXO") is None
+
+
+def test_apendice_identificado_com_letra_e_travessao():
+    doc = _build(apendices=[APENDICE])
+    p = _ident(doc, "APÊNDICE", "A")
+    assert p is not None
+    # Travessão, não hífen — mesma regra das legendas de figura.
+    assert "—" in p.text and "-" not in p.text.replace("—", "")
+    assert "QUESTIONÁRIO APLICADO" in p.text
+
+
+def test_identificacao_centralizada_e_negrito():
+    doc = _build(apendices=[APENDICE])
+    p = _ident(doc, "APÊNDICE", "A")
+    assert p.alignment == WD_ALIGN_PARAGRAPH.CENTER
+    assert all(r.bold for r in p.runs if r.text.strip())
+
+
+def test_letras_consecutivas():
+    doc = _build(apendices=[APENDICE, ANEXO])
+    assert _ident(doc, "APÊNDICE", "A") is not None
+    assert _ident(doc, "APÊNDICE", "B") is not None
+
+
+def test_apendice_e_anexo_sao_sequencias_independentes():
+    # Cada um recomeça no A: são elementos distintos na norma, não uma lista só.
+    doc = _build(apendices=[APENDICE], anexos=[ANEXO])
+    assert _ident(doc, "APÊNDICE", "A") is not None
+    assert _ident(doc, "ANEXO", "A") is not None
+
+
+def test_conteudo_do_apendice_sai_no_documento():
+    doc = _build(apendices=[APENDICE])
+    assert _find_para(doc, "Pergunta um") is not None
+
+
+def test_apendice_vem_depois_das_referencias():
+    doc = _build(apendices=[APENDICE])
+    textos = [p.text for p in doc.paragraphs]
+    i_ref = next(i for i, t in enumerate(textos) if R.REFERENCES_TITLE in t)
+    i_ap = next(i for i, t in enumerate(textos) if "APÊNDICE A" in t)
+    assert i_ap > i_ref
+
+
+def test_anexo_vem_depois_do_apendice():
+    doc = _build(apendices=[APENDICE], anexos=[ANEXO])
+    textos = [p.text for p in doc.paragraphs]
+    i_ap = next(i for i, t in enumerate(textos) if "APÊNDICE A" in t)
+    i_an = next(i for i, t in enumerate(textos) if "ANEXO A" in t)
+    assert i_an > i_ap
+
+
+def test_mais_de_vinte_e_seis_nao_derruba_a_exportacao():
+    # A norma não prevê 27 apêndices, mas estourar o alfabeto não pode virar
+    # exceção no meio de uma exportação de TCC.
+    from formatter import _letra_do_indice
+    assert _letra_do_indice(0) == "A"
+    assert _letra_do_indice(25) == "Z"
+    assert _letra_do_indice(26) == "AA"
