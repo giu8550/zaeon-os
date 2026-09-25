@@ -178,6 +178,17 @@ export function normalizeAnswer(out: Partial<StructuredAnswer> | null | undefine
   // texto da resposta. É a diferença entre "uma resposta sobre cafeína" e "uma resposta
   // que citou cafeína de passagem". Uma só — resposta não é galeria. E o PubChem ainda
   // pode negar depois; aí não nasce nada e ninguém é avisado, porque ninguém pediu.
+  // Destaques: no máximo 3, cada um com LaTeX não-vazio. Teto baixo de propósito —
+  // uma página com cinco fórmulas destacadas não destaca nada.
+  const expressoes = asArray((o as any).expressoes)
+    .filter((e: any) => e && typeof e.latex === "string" && e.latex.trim())
+    .slice(0, 3)
+    .map((e: any) => ({
+      latex: String(e.latex).trim().replace(/^\$+|\$+$/g, ""), // modelo às vezes manda com cifrão
+      rotulo: e.rotulo ? String(e.rotulo).trim().slice(0, 40) : undefined,
+    }));
+  if (expressoes.length) answer.destaques = expressoes;
+
   const substancias = asArray((o as any).substancias).map(String).map((x) => x.trim()).filter(Boolean);
   if (substancias.length && !o.artifacts) {
     const corpo = `${answer.nucleo} ${answer.desenvolvimento ?? ""}`.toLowerCase();
@@ -280,6 +291,13 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         // Ao modelo pedimos EXTRAÇÃO, não decisão de produto: "que substâncias esta
         // resposta menciona?" é pergunta factual, que modelo responde bem. Se a molécula
         // aparece na tela, quem decide é o código (normalizeAnswer) — e o PubChem confirma.
+        // Mesmo contrato do `substancias`: EXTRAÇÃO, não decisão de estilo. O modelo diz
+        // que expressões a resposta usa; o código decide se viram destaque na página.
+        'Inclua também expressoes: [{"latex":"...","rotulo":"..."}] com fórmulas, equações ou ' +
+        'expressões concretas que a resposta menciona — em LaTeX, sem cifrões (ex.: ' +
+        '"C_8H_{10}N_4O_2", "E = mc^2", "\\\\frac{dv}{dt} = a"). Só as que a resposta realmente ' +
+        'usa, no máximo 3, e nunca invente uma para enfeitar. `rotulo` é uma legenda de ' +
+        'duas ou três palavras, opcional.',
         'Inclua também substancias: ["<nome>"] com as substâncias químicas concretas de que a resposta FALA ' +
         '(ex.: cafeína, glicose, etanol, ácido acético). Só o nome, sem "molécula de". ' +
         'Não liste se a resposta não falar de nenhuma, e nunca invente uma que você não tenha certeza que existe.',

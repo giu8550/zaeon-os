@@ -29,7 +29,12 @@ import MoleculeView from "@/components/studio/MoleculeView";
 import { agendarChegada, chegadaInstantanea, DURACAO_LETRA } from "@/lib/magazine/chegada";
 import { familiaDaVariavel, fonteCanvas, aplicarFonte, QUEDA_CORPO, QUEDA_DISPLAY } from "@/lib/magazine/fontes";
 import {
-  montarLayout, obstaculoCapitular, obstaculoArtefato, topoDaLinha, baselineNaLinha,
+  medirDestaques, posicionarDestaques, FOLGA_DESTAQUE,
+  type DestaqueMedido,
+} from "@/lib/magazine/destaque";
+import "katex/dist/katex.min.css";
+import {
+  montarLayout, obstaculoCapitular, topoDaLinha, baselineNaLinha,
   type Obstaculo, type Resultado, type Metricas,
 } from "@/lib/magazine/layout";
 import { medirTexto, emParagrafos, contarPalavras, normalizar, type TextoMedido } from "@/lib/magazine/medir";
@@ -126,6 +131,7 @@ export default function MagazineAnswerView({
   answer,
   streaming = false,
   recemChegada = false,
+  aoAssentar,
   artefato,
   onNext,
   agente = "Aura",
@@ -134,26 +140,54 @@ export default function MagazineAnswerView({
   streaming?: boolean;
   /** Resposta que acabou de chegar (o `fresh` da mensagem) → materializa as letras. */
   recemChegada?: boolean;
+  /**
+   * Dispara quando a página terminou de assentar e a altura final é conhecida.
+   * Quem ancora a rolagem precisa disto: a altura do bloco só existe DEPOIS do
+   * layout, e ancorar antes disso ancora contra um número que ainda vai mudar.
+   */
+  aoAssentar?: () => void;
   artefato?: StudioBlockData | null;
   onNext?: (passo: string) => void;
   agente?: string;
 }) {
   const wrap = useRef<HTMLDivElement | null>(null);
   const cv = useRef<HTMLCanvasElement | null>(null);
-  const slotArtefato = useRef<HTMLDivElement | null>(null);
 
   const [largura, setLargura] = useState(0);
   const [assentado, setAssentado] = useState(false);
   const [dica, setDica] = useState<{ x: number; y: number; termo: string; def: string } | null>(null);
 
   const medidoRef = useRef<TextoMedido | null>(null);
-  /** Altura real do cartão do artefato, medida no DOM (não chutada). */
-  const alturaArtefatoRef = useRef(0);
   const layoutRef = useRef<Resultado | null>(null);
   const nascimentoRef = useRef<Float64Array | null>(null);
   const coresRef = useRef<Cores | null>(null);
   const [alturaBloco, setAlturaBloco] = useState(0);
   const [palavrasDom, setPalavrasDom] = useState<Resultado["palavras"]>([]);
+  /**
+   * A CAPITULAR COMO ELEMENTO, não como pincelada.
+   *
+   * Ela era desenhada só no canvas. Quando a materialização acabava, o canvas ia a
+   * `opacity: 0` e a cópia em DOM assumia — e essa cópia nunca teve capitular. Resultado:
+   * a letra aparecia por três segundos e evaporava, deixando o recuo órfão ("uando
+   * falamos…"). Agora ela vive no DOM desde o primeiro frame e não depende do canvas.
+   *
+   * `topo` sai de `baseline - actualBoundingBoxAscent`, medido no MESMO canvas e na MESMA
+   * fonte que reservou o espaço — é a única forma de o elemento cair exatamente no
+   * retângulo que o motor de layout abriu pra ele.
+   */
+  /**
+   * Destaques (LaTeX) já medidos. Ficam em ref porque `recalcular` é síncrono e não pode
+   * esperar a medição — quem mede é um efeito, que depois pede um recálculo. Na primeira
+   * passada a página sai sem eles e na segunda eles entram; como o layout é estável por
+   * prefixo, o texto não dança.
+   */
+  const destaquesRef = useRef<DestaqueMedido[]>([]);
+  const [destaquesPostos, setDestaquesPostos] = useState<
+    { d: DestaqueMedido; x: number; y: number; w: number; h: number }[]
+  >([]);
+  const [capitular, setCapitular] = useState<
+    { ch: string; topo: number; largura: number; fonte: string; tamanho: number } | null
+  >(null);
 
   const semMovimento = useMemo(
     () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -182,70 +216,68 @@ export default function MagazineAnswerView({
     const medido = medirTexto(ctx, paragrafos, { corpo: m.corpo, enfase: m.enfase }, conceitos);
     medidoRef.current = medido;
 
+    // NASCIMENTO DE CADA GRAFEMA. Sem este array o desenho não acontece: o laço pinta
+    // uma letra só depois de `nasc[gi]`, e a chegada só é agendada se ele existir. O
+    // array é PRESERVADO entre recálculos de propósito — uma letra que já nasceu não
+    // pode nascer outra vez porque a coluna mudou de largura; só as novas entram com
+    // -1 ("ainda não"), que é o que o streaming precisa pra continuar de onde parou.
+    const totalGrafemas = medido.totalGrafemas;
+    const anterior = nascimentoRef.current;
+    if (!anterior || anterior.length !== totalGrafemas) {
+      const proximo = new Float64Array(totalGrafemas).fill(-1);
+      if (anterior) proximo.set(anterior.subarray(0, Math.min(anterior.length, totalGrafemas)));
+      nascimentoRef.current = proximo;
+    }
+
     const metricas: Metricas = { tamanho: m.tamanho, entrelinha: m.entrelinha, espaco: medido.espaco };
     const obstaculos: Obstaculo[] = [];
 
     // capitular
     if (medido.capitular) {
-      aplicarFonte(ctx, m.capitular, QUEDA_DISPLAY);
-      obstaculos.push(obstaculoCapitular(ctx.measureText(medido.capitular).width + 12, metricas));
+      const fonteCap = aplicarFonte(ctx, m.capitular, QUEDA_DISPLAY);
+      const med = ctx.measureText(medido.capitular);
+      obstaculos.push(obstaculoCapitular(med.width + 12, metricas));
+      // Mesma baseline que o canvas usava pra desenhar; o topo do elemento sai dela
+      // menos a ascendente real da letra nessa fonte.
+      const baseline = 2 * metricas.entrelinha + baselineNaLinha(metricas);
+      const ascent = med.actualBoundingBoxAscent || metricas.entrelinha * 2.2;
+      setCapitular({
+        ch: medido.capitular,
+        topo: Math.round(baseline - ascent),
+        largura: Math.round(med.width),
+        fonte: fonteCap,
+        tamanho: Math.round(metricas.entrelinha * 3.05),
+      });
+    } else {
+      setCapitular(null);
     }
 
-    // artefato: mora na direita, mais ou menos na altura da 7ª linha, como na referência
-    // DUAS FORMAS, porque são duas coisas diferentes.
-    //
-    // Molécula entra NUA (sem o cartão do Studio): é um quadrado com a estrutura girando
-    // e uma legenda fina dentro. Aí o círculo é honesto e o texto contorna de verdade.
-    // Foi fingir que o CARTÃO era redondo que quebrou a página antes — cartão tem
-    // cabeçalho, botões e ficha, e nada disso cabe num círculo.
-    //
-    // Qualquer outro artefato continua sendo cartão, e cartão é retângulo: a altura vem
-    // medida do DOM (ResizeObserver abaixo), nunca chutada.
-    // PASSO 1 — quanto de página o texto ocupa SOZINHO.
-    //
-    // O artefato tinha tamanho e posição fixos (7ª linha, raio 150px) enquanto o texto
-    // tem o tamanho que tiver. Numa resposta curta o resultado era três linhas de texto,
-    // um buraco de 17 linhas e a molécula boiando no meio dele — nada "quebrado", só
-    // feio de um jeito que parece quebrado. A figura agora é medida CONTRA o texto.
-    const alturaTexto = montarLayout(
-      medido.paragrafos.map((palavras) => ({ palavras, completo: !streaming })),
-      obstaculos,
-      W,
-      metricas,
-    ).altura;
-    const LINHA_DE_REFERENCIA = 7; // a 7ª linha, como na página de revista que serviu de modelo
+    // DESTAQUES: estes SIM são obstáculo, e por mérito — já foram medidos antes desta
+    // função rodar (ver lib/magazine/destaque.ts). Tamanho conhecido, uma conta só.
+    const postos = posicionarDestaques(destaquesRef.current, W, metricas.entrelinha);
+    postos.forEach((caixa) => {
+      obstaculos.push({
+        tipo: "retangulo",
+        x: caixa.x, y: caixa.y, w: caixa.w, h: caixa.h,
+        pad: FOLGA_DESTAQUE,
+      });
+    });
 
-    let caixaArtefato: { x: number; y: number; w: number; h: number } | null = null;
-    if (artefato) {
-      const largo = W < 560;
-      if (ehMolecula && !largo) {
-        // Raio: o teto de sempre, mas nunca maior que o texto que ele acompanha. O piso
-        // de 64px impede o outro extremo — uma molécula do tamanho de uma miniatura.
-        const r = Math.round(clamp(alturaTexto * 0.45, 64, Math.min(W * 0.21, 150)));
-        const cx = clamp(W * 0.7, r, W - r);
-        // Texto curto: a figura acompanha o texto (centro no meio dele). Texto longo:
-        // a 7ª linha de sempre, que é onde ela fica bonita numa página cheia.
-        const cy = alturaTexto < metricas.entrelinha * LINHA_DE_REFERENCIA * 1.5
-          ? Math.max(r, alturaTexto / 2)
-          : Math.max(r, metricas.entrelinha * LINHA_DE_REFERENCIA);
-        obstaculos.push(obstaculoArtefato(cx, cy, r, metricas));
-        caixaArtefato = { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
-      } else {
-        // Coluna estreita: o artefato ocupa a largura toda (§12/Q5). Contornar num
-        // corredor de 300px deixaria frestas de três letras dos dois lados.
-        const w = largo ? W : Math.round(W * 0.42);
-        // Molécula quadrada era `h = w` — num celular, um quadrado de 420px. Passa a ter
-        // teto, e o teto também respeita o texto.
-        const h = ehMolecula
-          ? Math.round(clamp(alturaTexto * 0.9, 160, Math.min(w, 320)))
-          : Math.max(alturaArtefatoRef.current || 0, 180);
-        const x = largo ? 0 : W - w;
-        // Nunca começa depois do fim do texto: senão sobra um vão entre um e outro.
-        const y = Math.min(metricas.entrelinha * (largo ? 6 : 5), Math.max(metricas.entrelinha, alturaTexto));
-        obstaculos.push({ tipo: "retangulo", x, y, w, h, pad: metricas.tamanho * 0.9 });
-        caixaArtefato = { x, y, w, h };
-      }
-    }
+    // O ARTEFATO NÃO É MAIS OBSTÁCULO.
+    //
+    // Ele morava aqui dentro: o motor reservava um círculo (ou retângulo) no meio do rio
+    // e o texto contornava. Era de onde vinha a classe inteira de bug — duas contas, a
+    // que RESERVA e a que DESENHA, produzidas em momentos diferentes, tendo que
+    // concordar em pixel. A do artefato nunca pôde concordar: a molécula é um canvas 3D
+    // que monta sozinho e se mede depois, então o layout tinha que chutar e reconciliar.
+    //
+    // Agora ele vive na CABEÇA da página, ao lado da linha fina, fora do fluxo do texto.
+    // O corpo voltou a ser um rio limpo e o layout voltou a ser UMA passada — a segunda
+    // existia só para medir o texto antes de ancorar a figura.
+    //
+    // A regra que ficou: obstáculo é o que a gente consegue medir ANTES de diagramar
+    // (capitular, destaque em LaTeX). O que chega depois e tem vida própria vai pra
+    // cabeça.
 
     const res = montarLayout(
       medido.paragrafos.map((palavras) => ({ palavras, completo: !streaming })),
@@ -255,11 +287,11 @@ export default function MagazineAnswerView({
     );
     layoutRef.current = res;
 
-    const fundoArtefato = caixaArtefato ? caixaArtefato.y + caixaArtefato.h : 0;
-    const altura = Math.ceil(Math.max(res.altura, fundoArtefato + 12));
+    const altura = Math.ceil(res.altura);
     setAlturaBloco(altura);
     setLargura(W);
     setPalavrasDom(res.palavras);
+    setDestaquesPostos(postos.map((c, i) => ({ d: destaquesRef.current[i], ...c })));
 
     // canvas em DPR, com a MESMA transformação usada na medição
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -267,27 +299,33 @@ export default function MagazineAnswerView({
     canvas.height = Math.round(altura * dpr);
     canvas.style.height = `${altura}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }, [paragrafos, conceitos, streaming]);
 
-    // posiciona o componente do artefato por cima
-    if (slotArtefato.current && caixaArtefato) {
-      const st = slotArtefato.current.style;
-      st.left = `${caixaArtefato.x}px`;
-      st.top = `${caixaArtefato.y}px`;
-      st.width = `${caixaArtefato.w}px`;
-      st.display = "block";
-    } else if (slotArtefato.current) {
-      slotArtefato.current.style.display = "none";
+  /**
+   * Mede os destaques quando a resposta (ou a largura) muda, e só então pede um
+   * recálculo. A medição é assíncrona porque o KaTeX entra por import dinâmico e as
+   * fontes dele precisam carregar — mas ela acontece INTEIRA antes de virar obstáculo,
+   * que é o que separa isto da corrida da molécula.
+   */
+  const destaques = useMemo(() => answer.destaques ?? [], [answer.destaques]);
+  useEffect(() => {
+    let vivo = true;
+    if (!destaques.length) {
+      if (destaquesRef.current.length) { destaquesRef.current = []; recalcularRef.current?.(); }
+      return;
     }
-
-    // vetor de nascimento dos grafemas
-    const total = medido.totalGrafemas;
-    const anterior = nascimentoRef.current;
-    if (!anterior || anterior.length !== total) {
-      const novo = new Float64Array(total).fill(-1);
-      if (anterior) novo.set(anterior.subarray(0, Math.min(anterior.length, total)));
-      nascimentoRef.current = novo;
-    }
-  }, [paragrafos, conceitos, artefato, ehMolecula, streaming]);
+    const caixa = wrap.current;
+    const W = caixa?.clientWidth || 0;
+    if (!caixa || W <= 0) return;
+    // Teto = a coluna inteira. Não é 62% porque quem decide a FORMA (lateral ou faixa)
+    // é `posicionarDestaques`; aqui só se descarta o que não cabe de jeito nenhum.
+    void medirDestaques(destaques, W, caixa).then((medidos) => {
+      if (!vivo) return;
+      destaquesRef.current = medidos;
+      recalcularRef.current?.();
+    });
+    return () => { vivo = false; };
+  }, [destaques, largura]);
 
   /* ── boot: fontes e observer montam UMA vez ─────────────────────────────────── */
   // `recalcular` muda a cada token do stream. Se o boot dependesse dele, a corrida das
@@ -329,21 +367,6 @@ export default function MagazineAnswerView({
   }, []);
 
   /* ── mede o cartão do artefato e refaz o layout quando ele cresce ───────────── */
-  useEffect(() => {
-    const slot = slotArtefato.current;
-    if (!slot || !artefato || ehMolecula) { alturaArtefatoRef.current = 0; return; }
-    const ro = new ResizeObserver(() => {
-      const h = Math.ceil(slot.getBoundingClientRect().height);
-      // Só refaz quando muda de verdade: evita laço de medida → layout → medida.
-      if (h > 0 && Math.abs(h - alturaArtefatoRef.current) > 2) {
-        alturaArtefatoRef.current = h;
-        recalcularRef.current();
-      }
-    });
-    ro.observe(slot);
-    return () => ro.disconnect();
-  }, [artefato, ehMolecula]);
-
   /* ── re-medir quando texto, conceitos ou artefato mudam ─────────────────────── */
   useEffect(() => {
     if (fontesProntas) recalcular();
@@ -377,6 +400,14 @@ export default function MagazineAnswerView({
     return () => clearTimeout(t);
   }, [palavrasDom, streaming, recemChegada, semMovimento]);
 
+  // Avisa o pai UMA vez, quando a página está inteira e medida.
+  const avisouRef = useRef(false);
+  useEffect(() => {
+    if (!assentado || avisouRef.current || !alturaBloco) return;
+    avisouRef.current = true;
+    aoAssentar?.();
+  }, [assentado, alturaBloco, aoAssentar]);
+
   /* ── desenho ─────────────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (assentado) return; // canvas some; o DOM selecionável assume
@@ -393,15 +424,9 @@ export default function MagazineAnswerView({
           const m = metricasPara(largura || canvas.clientWidth);
           ctx.clearRect(0, 0, largura, alturaBloco);
 
-          // capitular
-          if (medido.capitular && nasc[0] >= 0 && agora >= nasc[0]) {
-            const e = semMovimento ? 1 : ease(clamp((agora - nasc[0]) / 700, 0, 1));
-            ctx.globalAlpha = e;
-            aplicarFonte(ctx, m.capitular, QUEDA_DISPLAY);
-            ctx.fillStyle = cores.ciano;
-            ctx.fillText(medido.capitular, 0, 2 * m.entrelinha + baselineNaLinha(m) + (1 - e) * 16);
-            ctx.globalAlpha = 1;
-          }
+          // A capitular NÃO é mais desenhada aqui — ela é um elemento em DOM (ver
+          // `capitular` no estado). Desenhar nos dois lugares dobraria a letra durante
+          // a materialização, e some de novo no fim.
 
           // marca-texto dos conceitos, crescendo da esquerda
           for (const mk of res.marcas) {
@@ -465,22 +490,57 @@ export default function MagazineAnswerView({
   }, [definicoes, largura]);
 
   const mCor = metricasPara(largura || 900);
+  /**
+   * A figura cabe ao lado da linha fina? A linha fina trava em 34ch; o que sobra é a
+   * coluna da figura. Abaixo de 560px não sobra o bastante para uma estrutura 3D ser
+   * legível, então ela desce.
+   */
+  const larguraUtil = largura || 900;
+  const cabecaLadoALado = larguraUtil >= 560;
+  // Empilhada, a figura NÃO pode ocupar a coluna inteira: ela é quadrada, então largura
+  // total vira altura total, e num telefone isso empurra a primeira linha do corpo pra
+  // fora da tela — que é exatamente a queixa de "a página não começa no começo". 200px
+  // ainda é uma estrutura 3D legível e deixa o texto aparecer na mesma dobra.
+  const larguraFigura = cabecaLadoALado
+    ? Math.round(clamp(larguraUtil * 0.32, 150, 260))
+    : Math.round(clamp(larguraUtil * 0.55, 150, 200));
 
   return (
     <div className="z-revista flex flex-col gap-4">
-      {/* cabeçalho editorial */}
+      {/* ── CABEÇA DA PÁGINA ─────────────────────────────────────────────────
+          Ordem de leitura: rótulo → linha fina → figura. A linha fina é estreita de
+          propósito (34ch é medida de leitura de revista), e é isso que abre a coluna
+          livre à direita onde a figura mora. Antes essa coluna ficava vazia e o
+          artefato ia brigar com o corpo do texto lá embaixo.
+
+          Coluna larga: lado a lado. Estreita (<560px, o mesmo ponto de quebra da
+          tipografia): a figura desce e fica centrada, com teto de 200px — contornar num
+          corredor de 170px deixaria frestas de três letras, e uma figura de largura
+          inteira seria alta demais pra caber na mesma dobra que o texto. */}
       <div className="flex flex-col gap-1">
         <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-white/45 font-bold">
           Por {agente}, na Sala de Estudos
         </p>
-        {temLinhaFina && (
-          <p
-            className="text-slate-800 dark:text-white/90 leading-snug"
-            style={{ fontFamily: FAMILIA_DISPLAY, fontWeight: 300, fontSize: "clamp(19px,2.4vw,26px)", maxWidth: "34ch" }}
-          >
-            {answer.nucleo}
-          </p>
-        )}
+        <div className={`flex gap-5 ${cabecaLadoALado ? "flex-row items-start" : "flex-col"}`}>
+          {temLinhaFina && (
+            <p
+              className="text-slate-800 dark:text-white/90 leading-snug flex-1 min-w-0"
+              style={{ fontFamily: FAMILIA_DISPLAY, fontWeight: 300, fontSize: "clamp(19px,2.4vw,26px)", maxWidth: "34ch" }}
+            >
+              {answer.nucleo}
+            </p>
+          )}
+          {artefato && (
+            <figure
+              className={cabecaLadoALado ? "shrink-0 m-0" : "shrink-0 m-0 self-center"}
+              style={{ width: larguraFigura }}
+            >
+              {ehMolecula
+                ? <MoleculeView data={artefato.data} nu />
+                : <StudioBlock block={artefato} collapsed={false} onToggle={() => {}} />}
+            </figure>
+          )}
+        </div>
       </div>
 
       {/* corpo: canvas animado + artefato por cima + DOM assentado no fim */}
@@ -491,6 +551,49 @@ export default function MagazineAnswerView({
         onMouseMove={aoMover}
         onMouseLeave={() => setDica(null)}
       >
+        {/* A capitular. Fica FORA do bloco que some com o canvas — por isso ela
+            permanece. `aria-hidden` porque a letra já está no texto para o leitor de
+            tela (o motor a retirou do fluxo, não do conteúdo). */}
+        {capitular && (
+          <span
+            key={`${capitular.ch}-${capitular.topo}-${largura}`}
+            aria-hidden="true"
+            className="z-revista-capitular"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: capitular.topo,
+              font: capitular.fonte,
+              lineHeight: 1,
+              pointerEvents: "none",
+            }}
+          >
+            {capitular.ch}
+          </span>
+        )}
+
+        {/* Os destaques. Vivem fora do bloco que some com o canvas, como a capitular:
+            são objetos da página, não pinceladas da animação. */}
+        {destaquesPostos.map((p, i) => (
+          <figure
+            key={`${p.d.latex}-${i}`}
+            className="z-revista-destaque m-0"
+            style={{ position: "absolute", left: p.x, top: p.y, width: p.w, height: p.h }}
+          >
+            {/* Em faixa a caixa é mais larga que a fórmula: centraliza, senão a
+                expressão fica encostada na borda com meia coluna de vazio ao lado. */}
+            <div
+              style={p.w > p.d.largura + 1 ? { textAlign: "center" } : undefined}
+              dangerouslySetInnerHTML={{ __html: p.d.html }}
+            />
+            {p.d.rotulo && (
+              <figcaption className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500 dark:text-white/40">
+                {p.d.rotulo}
+              </figcaption>
+            )}
+          </figure>
+        ))}
+
         <canvas
           ref={cv}
           aria-hidden="true"
@@ -525,29 +628,6 @@ export default function MagazineAnswerView({
               {p.texto}{" "}
             </span>
           ))}
-        </div>
-
-        {/* o artefato é o componente de sempre, só posicionado */}
-        {/* O cartão real do Studio. Largura fixada pelo layout; altura é dele, e o
-            motor se adapta a ela (ResizeObserver acima). */}
-        {/* Nasce fora da vista, mas COM tamanho: o 3Dmol mede o container na criação,
-            e um container display:none mediria zero — molécula em branco pra sempre.
-            O `recalcular` corrige posição e largura no primeiro frame. */}
-        <div
-          ref={slotArtefato}
-          style={{
-            position: "absolute",
-            left: -9999,
-            top: 0,
-            width: 240,
-            overflow: "hidden",
-            display: artefato ? "block" : "none",
-          }}
-        >
-          {artefato && (ehMolecula
-            ? <MoleculeView data={artefato.data} nu />
-            : <StudioBlock block={artefato} collapsed={false} onToggle={() => {}} />
-          )}
         </div>
 
         {dica && (
