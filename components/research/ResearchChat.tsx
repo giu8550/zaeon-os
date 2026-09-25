@@ -18,9 +18,10 @@ import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClien
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
+import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
 
 // `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
-type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer };
+type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string };
 
 // Deve bater com RESEARCH_SENTINEL de app/api/ai/chat/route.ts (a estruturada vem do structured-client).
 const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";
@@ -149,7 +150,7 @@ export default function ResearchChat({
 
       const reader = r.body.getReader();
       const dec = new TextDecoder();
-      let acc = "", target = "", shown = 0, ended = false;
+      let acc = "", limpo = "", faseVista = "", target = "", shown = 0, ended = false;
       const typed = new Promise<void>((resolve) => {
         const id = setInterval(() => {
           if (shown < target.length) {
@@ -162,11 +163,19 @@ export default function ResearchChat({
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
-        const cut = [acc.indexOf(RESEARCH_SENTINEL), acc.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
-        target = cut.length ? acc.slice(0, Math.min(...cut)) : acc;   // datilografa só o visível
+        // Mesmo contrato do co-working: o progresso sai do fio antes de qualquer conta.
+        const { limpo: lp, eventos } = separarProgresso(acc);
+        limpo = lp;
+        const f = faseCorrente(eventos);
+        if (f && f.rotulo !== faseVista) {
+          faseVista = f.rotulo;
+          setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: f.rotulo } : m)));
+        }
+        const cut = [limpo.indexOf(RESEARCH_SENTINEL), limpo.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
+        target = cut.length ? limpo.slice(0, Math.min(...cut)) : limpo;   // datilografa só o visível
       }
-      const structured = parseStructuredStream(acc);
-      const si = acc.indexOf(RESEARCH_SENTINEL);
+      const structured = parseStructuredStream(limpo);
+      const si = limpo.indexOf(RESEARCH_SENTINEL);
       if (structured) {
         // HARNESS: resposta estruturada → cartão rico; payload malformado → TEXTO (nunca vazio).
         target = ""; ended = true;
@@ -182,7 +191,7 @@ export default function ResearchChat({
         // TOOL-LOOP: research_generate → gera o trabalho e encaixa no documento.
         target = ""; ended = true;
         let action: any = null;
-        try { action = JSON.parse(acc.slice(si + RESEARCH_SENTINEL.length)); } catch { /* ignore */ }
+        try { action = JSON.parse(limpo.slice(si + RESEARCH_SENTINEL.length)); } catch { /* ignore */ }
         if (action?.kind) {
           patch(action.text || "Gerando o trabalho…");
           void runResearchGenerate(action.kind, action.topic || prompt);
@@ -190,17 +199,18 @@ export default function ResearchChat({
           patch("Sem resposta agora.");
         }
       } else {
-        target = acc; ended = true;
+        target = limpo; ended = true;
         await typed;
-        if (!acc.trim()) patch("Sem resposta agora.");
+        if (!limpo.trim()) patch("Sem resposta agora.");
         else appendTranscript("pesquisa", null, [
           { role: "user", text: prompt },
-          { role: "assistant", text: acc },
+          { role: "assistant", text: limpo },
         ]);
       }
     } catch {
       patch("Falha de rede ao falar com o agente.");
     } finally {
+      setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined } : m)));
       setSending(false);
     }
   }, [input, sending, messages, wt, runResearchGenerate]);
@@ -231,7 +241,7 @@ export default function ResearchChat({
                       : "rounded-r-2xl rounded-bl-2xl bg-slate-50 text-slate-800 border-l-2 border-cyan-500/60 text-justify dark:bg-white/[0.03] dark:text-white/90 dark:border-cyan-400/50"
                   }`}
                 >
-                  {m.text ? m.text : (!isUser && <AuraThinking active phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
+                  {m.text ? m.text : (!isUser && <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                 </div>
               </div>
             );

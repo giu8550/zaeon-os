@@ -40,6 +40,7 @@ import {
 } from "@/lib/chat/threads";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
+import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
 import { typeStep, safeCut } from "@/lib/ui/typewriter";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import type { SkillNodeState } from "@/lib/skilltree/types";
@@ -67,6 +68,7 @@ type Msg = {
   studyTitle?: string;
   studioBlock?: StudioBlockData;   // em "structured" = artefato embutido na MESMA bolha
   answer?: StructuredAnswer;
+  fase?: string;             // fase que o harness está narrando agora (só enquanto chega)
   streaming?: boolean;       // B2: resposta ainda chegando → cursor piscando
   fresh?: boolean;           // B2: resposta estruturada recém-chegada → datilografa o núcleo
   at: number;
@@ -539,7 +541,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       } else {
         const reader = r.body.getReader();
         const dec = new TextDecoder();
-        let acc = "";          // texto cru recebido
+        let acc = "";          // texto cru recebido (protocolo + conteúdo)
+        let limpo = "";        // o mesmo, sem os eventos de progresso
+        let faseVista = "";    // última fase já pintada — evita setState a cada chunk
         let target = "";       // parte VISÍVEL alvo (sem a sentinela)
         let shown = 0;         // quantas letras já reveladas
         let ended = false;
@@ -564,12 +568,21 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           const { done, value } = await reader.read();
           if (done) break;
           acc += dec.decode(value, { stream: true });
-          const cut = [acc.indexOf(STUDIO_SENTINEL), acc.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
-          target = cut.length ? acc.slice(0, Math.min(...cut)) : acc;   // datilografa só o visível
+          // O progresso sai do fio ANTES de qualquer outra conta: se ficasse no acumulado,
+          // a sentinela viraria texto datilografado na tela e contaminaria o fallback.
+          const { limpo: lp, eventos } = separarProgresso(acc);
+          limpo = lp;
+          const f = faseCorrente(eventos);
+          if (f && f.rotulo !== faseVista) {
+            faseVista = f.rotulo;
+            setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: f.rotulo } : m)));
+          }
+          const cut = [limpo.indexOf(STUDIO_SENTINEL), limpo.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
+          target = cut.length ? limpo.slice(0, Math.min(...cut)) : limpo;   // datilografa só o visível
         }
 
-        const structured = parseStructuredStream(acc);
-        const si = acc.indexOf(STUDIO_SENTINEL);
+        const structured = parseStructuredStream(limpo);
+        const si = limpo.indexOf(STUDIO_SENTINEL);
         if (structured) {
           // HARNESS: resposta estruturada — converte a bolha placeholder em cartão rico.
           // Payload malformado (stream cortado etc.) → degrada pra TEXTO, nunca pra vazio.
@@ -604,7 +617,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           // TOOL-LOOP (Fase 0): ação — não datilografa; encerra e trata.
           target = ""; ended = true;
           let action: any = null;
-          try { action = JSON.parse(acc.slice(si + STUDIO_SENTINEL.length)); } catch { /* ignore */ }
+          try { action = JSON.parse(limpo.slice(si + STUDIO_SENTINEL.length)); } catch { /* ignore */ }
           if (action?.kind) {
             patchAsst(action.text || "Gerando o artefato…");
             void runStudioAction(action.kind, action.topic || prompt);
@@ -612,13 +625,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             patchAsst("Sem resposta agora.");
           }
         } else {
-          target = acc; ended = true;
+          target = limpo; ended = true;
           await typed;                       // deixa a digitação alcançar o fim
-          if (!acc.trim()) patchAsst("Sem resposta agora.");
+          if (!limpo.trim()) patchAsst("Sem resposta agora.");
           // L1: grava o turno durável (fire-and-forget). scopeId = estudo focado, se houver.
           else appendTranscript("estudos", focusIds[0] ?? null, [
             { role: "user", text: prompt },
-            { role: "assistant", text: acc },
+            { role: "assistant", text: limpo },
           ]);
         }
       }
@@ -626,7 +639,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       patchAsst("Falha de rede ao falar com a Aura.");
     } finally {
       avisarEscritorio(activeMentor, "ocioso");
-      setMessages((prev) => prev.map((m) => (m.id === asstId && m.streaming ? { ...m, streaming: false } : m)));
+      setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined, ...(m.streaming ? { streaming: false } : null) } : m)));
       setSending(false);
       // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
       if (tree) setTreeRefresh((n) => n + 1);
@@ -752,7 +765,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                           : "bg-white/80 dark:bg-white/[0.05] text-slate-800 dark:text-white/90 border border-slate-200/70 dark:border-white/10 backdrop-blur-xl"}`}>
                         {m.text
                           ? <>{m.text}{m.streaming && <span aria-hidden className="z-caret" />}</>
-                          : (!isUser && <AuraThinking active phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
+                          : (!isUser && <AuraThinking active fase={m.fase} phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                       </div>
                     </div>
                   );

@@ -9,8 +9,10 @@
  *   - um shimmer varre o texto continuamente;
  *   - ao trocar de fase: digita → segura → apaga → digita a próxima.
  *
- * Fase 1 (agora): avança por tempo. Fase 2 (harness real): passar `phases`/índice
- * vindos do AuraTrajectory/action bus (ex.: ["Gerando o podcast"] quando for artefato).
+ * DUAS FONTES DE FASE. Sem `fase`, o rótulo avança POR TEMPO com uma sequência
+ * plausível — é o que existia, e continua valendo para quem não tem harness narrando.
+ * Com `fase`, manda o harness: o rótulo é o que a trajetória acabou de anunciar, e a
+ * tela para de inventar. Era o que este arquivo já prometia fazer um dia.
  */
 
 import { useEffect, useReducer, useRef } from "react";
@@ -22,10 +24,18 @@ type Mode = "type" | "hold" | "delete";
 export default function AuraThinking({
   active = true,
   phases = DEFAULT_PHASES,
+  fase,
 }: {
   active?: boolean;
   phases?: string[];
+  /** Fase REAL vinda do harness. Quando presente, manda nela e o relógio não opina. */
+  fase?: string | null;
 }) {
+  const roteiro = fase ? [fase] : phases;
+  // A dependência do efeito é uma STRING, de propósito: `phases` é um array literal no
+  // chamador, com identidade nova a cada render — usá-lo como dependência reiniciaria a
+  // animação para sempre, num laço que só apareceria como CPU queimando.
+  const chave = fase ? `f:${fase}` : `p:${phases.join("|")}`;
   const pi = useRef(0);     // índice da fase
   const ci = useRef(0);     // letras reveladas
   const mode = useRef<Mode>("type");
@@ -39,8 +49,8 @@ export default function AuraThinking({
     const TICK = 55;                        // velocidade base do "digitar"
     const HOLD_TICKS = Math.round(1000 / TICK);
     const id = setInterval(() => {
-      const word = phases[pi.current] ?? "";
-      const last = pi.current >= phases.length - 1;
+      const word = roteiro[pi.current] ?? "";
+      const last = pi.current >= roteiro.length - 1;
 
       if (mode.current === "type") {
         if (ci.current < word.length) ci.current++;
@@ -56,9 +66,11 @@ export default function AuraThinking({
     }, TICK);
 
     return () => clearInterval(id);
-  }, [active, phases]);
+    // `roteiro` é derivado de `chave` — reentra junto, sem entrar na lista por identidade.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, chave]);
 
-  const word = phases[pi.current] ?? "";
+  const word = roteiro[pi.current] ?? "";
   const shown = word.slice(0, Math.max(0, ci.current));
 
   return (

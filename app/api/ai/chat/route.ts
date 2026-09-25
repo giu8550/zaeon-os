@@ -266,43 +266,82 @@ export async function POST(req: Request) {
         // MESMO protocolo (datilografia + sentinelas @@STUDIO_ACTION@@/@@RESEARCH_ACTION@@).
         // =================================================================
         if (stream === true && agentKey === "aura" && process.env.AURA_HARNESS !== "0" && !fileData) {
-            const [{ buildHarnessDeps, resolveHarnessOutput }, { runTrajectoryTraced }, { messageForError }, mem, { resolveUserId }] = await Promise.all([
-                import("@/lib/agent/aura-harness"),
-                import("@/lib/agent/trajectory"),
-                import("@/lib/agent/errors"),
-                import("@/lib/agent/memory-provider"),
-                import("@/lib/agent/transcript"),
-            ]);
-            const userId = await resolveUserId().catch(() => null); // dono do turno (memória filtra por isto)
-            const ac: any = (agentContext && typeof agentContext === "object") ? agentContext : {};
-            const hctx: any = {
-                ...ac,
-                userId: userId || undefined,
-                activeTab: surface || ac.activeTab || "sala-de-estudos", // academicMode vem daqui (pesquisa→enforced)
-                plan: "free",     // memória/studio/research = free; gate de plano é só compute pesado (PR03)
-                execMode: "auto", // HITL "guiado" entra no PR07
-                currentGoal: ac.currentGoal || String(prompt || "").slice(0, 200),
-                // Mentor ativo: andar de memória "<slug>/<userId>" (isola por mentor E por usuário).
-                mentor: activeMentor?.slug,
-                wing: activeMentor?.wing.label,
-            };
-            // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
-            const memBlock = userId ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: String(prompt || ""), wingLabel: activeMentor?.wing.label }).catch(() => "") : "";
-            // Árvore de habilidades: posição do aluno no tópico (dominados/disponíveis/nó em foco) +
-            // guardrail pedagógico → o mentor conduz pro próximo nó. Best-effort ("" sem tópico/L3).
-            const skillTopic = typeof ac.skillTopic === "string" && ac.skillTopic.trim() ? String(ac.skillTopic).trim() : null;
-            const skillNodeId = typeof ac.skillNodeId === "string" && ac.skillNodeId.trim() ? String(ac.skillNodeId).trim() : null;
-            const skillBlock = userId && skillTopic
-                ? await import("@/lib/skilltree/progress").then((m) => m.treeContextBlock(userId, skillTopic, skillNodeId)).catch(() => "")
-                : "";
-            const deps = buildHarnessDeps(hctx, {
-                systemContext: [systemContext, memBlock, skillBlock].filter(Boolean).join("\n\n") || undefined,
-                history: (chatHistory as any[]).map((h) => ({ role: h.role, text: h?.parts?.[0]?.text ?? "" })),
-            });
             const encoder = new TextEncoder();
+            // TUDO o que precede a trajetória mora DENTRO do start(), de propósito.
+            //
+            // Antes, os imports, o resolveUserId, o wakeUpContext da memória e a árvore de
+            // habilidades eram aguardados aqui fora — o stream só abria depois deles. Medido
+            // no dev com a rota já quente: 5 segundos dos 15 de espera, um terço do total,
+            // antes do primeiro sinal de vida. Narrar só as fases do harness e deixar esse
+            // terço no escuro seria consertar pela metade.
+            //
+            // De quebra, um erro nessa preparação agora cai no catch do stream e vira
+            // mensagem amigável, em vez de derrubar a requisição inteira.
             const rs = new ReadableStream<Uint8Array>({
                 async start(controller) {
+                    let enfileirar: ((chunk: string) => void) | null =
+                        (chunk) => controller.enqueue(encoder.encode(chunk));
+                    // Fora do try porque o catch depende dele: a mensagem de erro amigável não
+                    // pode virar string à mão só porque o erro aconteceu cedo demais.
+                    const { messageForError } = await import("@/lib/agent/errors");
+                    // O primeiro sinal de vida sai ANTES de carregar o harness. Medido em dev
+                    // com a rota quente, carregar os módulos e identificar o dono do turno leva
+                    // uns segundos — em produção os módulos já vêm no bundle e isso encolhe,
+                    // mas "encolhe" não é "some", e tela morta no primeiro segundo é o pedaço
+                    // que o aluno mais sente: é o que ele olha logo depois de apertar enter.
+                    const { serializarProgresso } = await import("@/lib/agent/progresso");
+                    enfileirar(serializarProgresso({ fase: "acordar", rotulo: "Acordando a Aura" }));
                     try {
+                        const [{ buildHarnessDeps, resolveHarnessOutput }, { runTrajectoryTraced }, mem, { resolveUserId }] = await Promise.all([
+                            import("@/lib/agent/aura-harness"),
+                            import("@/lib/agent/trajectory"),
+                            import("@/lib/agent/memory-provider"),
+                            import("@/lib/agent/transcript"),
+                        ]);
+                        const userId = await resolveUserId().catch(() => null); // dono do turno (memória filtra por isto)
+                        const ac: any = (agentContext && typeof agentContext === "object") ? agentContext : {};
+                        const hctx: any = {
+                            ...ac,
+                            userId: userId || undefined,
+                            activeTab: surface || ac.activeTab || "sala-de-estudos", // academicMode vem daqui (pesquisa→enforced)
+                            plan: "free",     // memória/studio/research = free; gate de plano é só compute pesado (PR03)
+                            execMode: "auto", // HITL "guiado" entra no PR07
+                            currentGoal: ac.currentGoal || String(prompt || "").slice(0, 200),
+                            // Mentor ativo: andar de memória "<slug>/<userId>" (isola por mentor E por usuário).
+                            mentor: activeMentor?.slug,
+                            wing: activeMentor?.wing.label,
+                        };
+                        // Só anuncia quando é verdade: sem dono do turno não há memória pra reler.
+                        if (userId) enfileirar(serializarProgresso({ fase: "memoria", rotulo: "Retomando a conversa" }));
+                        // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
+                        const memBlock = userId ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: String(prompt || ""), wingLabel: activeMentor?.wing.label }).catch(() => "") : "";
+                        // Árvore de habilidades: posição do aluno no tópico (dominados/disponíveis/nó em foco) +
+                        // guardrail pedagógico → o mentor conduz pro próximo nó. Best-effort ("" sem tópico/L3).
+                        const skillTopic = typeof ac.skillTopic === "string" && ac.skillTopic.trim() ? String(ac.skillTopic).trim() : null;
+                        const skillNodeId = typeof ac.skillNodeId === "string" && ac.skillNodeId.trim() ? String(ac.skillNodeId).trim() : null;
+                        const skillBlock = userId && skillTopic
+                            ? await import("@/lib/skilltree/progress").then((m) => m.treeContextBlock(userId, skillTopic, skillNodeId)).catch(() => "")
+                            : "";
+                        const deps = buildHarnessDeps(hctx, {
+                            systemContext: [systemContext, memBlock, skillBlock].filter(Boolean).join("\n\n") || undefined,
+                            history: (chatHistory as any[]).map((h) => ({ role: h.role, text: h?.parts?.[0]?.text ?? "" })),
+                            // O CANAL DE PROGRESSO. Um turno elaborated são três chamadas de modelo
+                            // em sequência (plan → reason → draft), cinco se o crítico mandar revisar
+                            // — e até aqui o aluno via tela parada o tempo todo, porque este gancho
+                            // nunca era passado e todo `emit` do trajectory morria num `?.()`.
+                            //
+                            // `emit` é síncrono e `controller.enqueue` também: dá pra narrar de
+                            // dentro do laço sem esperar nada. E uma falha do canal nunca derruba a
+                            // resposta — progresso é enfeite, a resposta é o produto.
+                            onStep(step) {
+                                if (!enfileirar || step?.kind !== "say") return;
+                                const rotulo = String(step.label ?? "").trim();
+                                if (!rotulo) return;
+                                try {
+                                    enfileirar(serializarProgresso({ fase: String(step.detail ?? ""), rotulo }));
+                                } catch { /* stream fechado/abortado: segue sem narrar */ }
+                            },
+                        });
                         const { answer, state } = await runTrajectoryTraced(String(prompt || ""), hctx, deps);
                         const out = resolveHarnessOutput(state, answer, surface, String(prompt || ""));
                         // L3 write (A7, fire-and-forget): deriva o turno em drawers verbatim. Nunca bloqueia.
@@ -327,6 +366,7 @@ export async function POST(req: Request) {
                         // erro fatal → mensagem amigável (guardrail: nunca string à mão)
                         controller.enqueue(encoder.encode(messageForError(String(e?.message ?? e))));
                     }
+                    enfileirar = null; // nada narra depois do fim
                     controller.close();
                 },
             });
