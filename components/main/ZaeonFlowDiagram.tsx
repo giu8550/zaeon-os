@@ -71,12 +71,12 @@ const PACOTES = [
 
 /** Desktop: 4 linhas saindo da borda do card ate a beirada do cerebro. */
 const D = {
-    vb: "0 0 1000 410",
-    cardE: { x: 20, y: 28, w: 290, h: 355 },
-    cardS: { x: 690, y: 28, w: 290, h: 355 },
-    cerebro: { cx: 500, cy: 214, r: 92 },
-    linha: (i: number) => 132 + i * 55,
-    saida: (i: number) => 132 + i * 55,
+    vb: "0 0 1000 310",
+    cardE: { x: 20, y: 36, w: 290, h: 237 },
+    cardS: { x: 690, y: 36, w: 290, h: 237 },
+    cerebro: { cx: 500, cy: 155, r: 92 },
+    linha: (i: number) => 72 + i * 55,
+    saida: (i: number) => 72 + i * 55,
 };
 
 /**
@@ -119,12 +119,12 @@ const saidaD = (i: number) => {
 
 /** Mobile: o leque abre pela borda de baixo do card, nao pela lateral. */
 const M = {
-    vb: "0 0 360 780",
-    cardE: { x: 20, y: 28, w: 320, h: 210 },
-    cardS: { x: 20, y: 540, w: 320, h: 210 },
-    cerebro: { cx: 180, cy: 390, r: 64 },
-    linha: (i: number) => 100 + i * 36,
-    saida: (i: number) => 612 + i * 36,
+    vb: "0 0 360 580",
+    cardE: { x: 20, y: 20, w: 320, h: 162 },
+    cardS: { x: 20, y: 398, w: 320, h: 162 },
+    cerebro: { cx: 180, cy: 290, r: 64 },
+    linha: (i: number) => 50 + i * 34,
+    saida: (i: number) => 428 + i * 34,
     /** x de onde cada fluxo deixa o card: leque distribuido na largura. */
     coluna: (i: number) => 66 + i * 76,
 };
@@ -201,14 +201,7 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
         return (
             <>
                 <CardMoldura {...G.cardE} />
-                <Rotulo x={G.cardE.x + 24} y={G.cardE.y + 34}>
-                    você chega com
-                </Rotulo>
-
                 <CardMoldura {...G.cardS} />
-                <Rotulo x={G.cardS.x + 24} y={G.cardS.y + 34}>
-                    e sai com
-                </Rotulo>
 
                 {/* FLUXOS primeiro: passam por baixo dos cards e do texto. */}
                 {PARES.map((p, i) => (
@@ -395,19 +388,6 @@ function CardMoldura({ x, y, w, h }: { x: number; y: number; w: number; h: numbe
     );
 }
 
-function Rotulo({ x, y, children }: { x: number; y: number; children: React.ReactNode }) {
-    return (
-        <text
-            x={x}
-            y={y}
-            className="fill-slate-500 dark:fill-slate-500 font-mono"
-            fontSize={11}
-            letterSpacing="2.6"
-        >
-            {children}
-        </text>
-    );
-}
 
 function Texto({
     x,

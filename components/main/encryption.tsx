@@ -392,7 +392,7 @@ export default function Encryption() {
 
     return (
         <div className="w-full relative">
-            <section className="relative z-[30] w-full bg-transparent pt-24 md:pt-32 pb-12">
+            <section className="relative z-[30] w-full bg-transparent pt-12 md:pt-16 pb-12">
                 <div className="zaeon-borda">
                     <Rotulo>Como funciona</Rotulo>
                     <TituloSecao forte="Você chega com uma coisa." fraco="Sai com outra." />
