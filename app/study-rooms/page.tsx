@@ -219,7 +219,7 @@ export default function FeaturesPage() {
             </div>
 
             {/* Cabeçalho Flutuante */}
-            <div className="relative z-10 pt-20 pb-12 px-6 text-center flex flex-col items-center">
+            <div className="relative z-10 zaeon-borda pt-20 pb-12 flex flex-col items-start text-left">
                 <h1 className="text-4xl md:text-5xl lg:text-[4rem] font-light tracking-tighter max-w-4xl leading-[1.1] text-slate-900 dark:text-white drop-shadow-md">
                     Crie a sua própria <br className="hidden md:block" />
                     {/* Highlight Ciano Puro */}
@@ -230,7 +230,7 @@ export default function FeaturesPage() {
             </div>
 
             {/* CONTEINER DE CARROSSEL / ENERGIZAÇÃO */}
-            <div ref={containerRef} className="relative z-10 max-w-6xl mx-auto py-10 w-full">
+            <div ref={containerRef} className="relative z-10 zaeon-borda py-10 w-full">
 
                 {/* O FIO CENTRAL NEURAL */}
                 <div className="absolute top-0 bottom-0 left-6 md:left-1/2 w-[3px] bg-slate-300 dark:bg-white/10 md:-translate-x-1/2 rounded-full z-0">
