@@ -73,7 +73,7 @@ export default function Home() {
                     {/* Navbar removida daqui, pois agora ela mora e persiste no layout.tsx */}
 
                     {/* CORREÇÃO DE LAYOUT: O pt-[110px] empurra a página pra baixo da Navbar */}
-                    <div className="flex flex-col gap-20 pt-[110px] w-full">
+                    <div className="flex flex-col pt-[110px] w-full">
                         <HeroPage />
                         <Encryption />
                         <div id="study-rooms" className="w-full">

@@ -22,80 +22,8 @@ type Props = {
 };
 
 const PT_TEXT = "Iniciar";
-const ZH_CHARS = "点击进入系统链接世界网络数据启动矩阵核心希望之星日月星辰";
 
-function GlitchChar({ originalChar, targetLang, index, hasStarted }: { originalChar: string, targetLang: 'pt' | 'zh', index: number, hasStarted: boolean }) {
-    const [char, setChar] = useState(originalChar);
-    const [isGlitching, setIsGlitching] = useState(false);
 
-    // Keep a stable random chinese char for this instance
-    const [zhChar] = useState(() => ZH_CHARS[Math.floor(Math.random() * ZH_CHARS.length)]);
-
-    useEffect(() => {
-        if (hasStarted) {
-            setChar(originalChar);
-            setIsGlitching(false);
-            return;
-        }
-
-        let t1: NodeJS.Timeout, t2: NodeJS.Timeout;
-
-        const delay = index * 40; // Wave propagation delay
-
-        t1 = setTimeout(() => {
-            setIsGlitching(true);
-            t2 = setTimeout(() => {
-                setChar(targetLang === 'pt' ? originalChar : zhChar);
-                setIsGlitching(false);
-            }, 300); // peak of blur
-        }, delay);
-
-        return () => {
-            clearTimeout(t1);
-            clearTimeout(t2);
-        };
-    }, [targetLang, hasStarted, originalChar, zhChar, index]);
-
-    return (
-        <motion.span
-            animate={{ 
-                filter: isGlitching ? "blur(3px)" : "blur(0px)",
-                opacity: isGlitching ? 0.3 : 1,
-                scale: isGlitching ? 0.85 : 1
-            }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="inline-block"
-        >
-            {char}
-        </motion.span>
-    );
-}
-
-function GlitchText({ text, targetLang, hasStarted }: { text: string, targetLang: 'pt' | 'zh', hasStarted: boolean }) {
-    const words = text.split(' ');
-    let globalIndex = 0;
-
-    return (
-        <>
-            {words.map((word, wIdx) => (
-                <span key={wIdx} className="inline-flex whitespace-nowrap mx-[3px] sm:mx-[5px]">
-                    {word.split('').map((char, cIdx) => {
-                        const currentIndex = globalIndex++;
-                        return (
-                            <GlitchChar 
-                                key={cIdx} 
-                                originalChar={char} 
-                                targetLang={targetLang} 
-                                index={currentIndex} 
-                                hasStarted={hasStarted} 
-                            />
-                        );
-                    })}
-                </span>
-            ))}
-        </>
-    );
-}
 
 export default function MacSplash({ show = true, onDone }: Props) {
     const router = useRouter();
@@ -107,7 +35,6 @@ export default function MacSplash({ show = true, onDone }: Props) {
     const [visible, setVisible] = useState(show);
     const [opacity, setOpacity] = useState(0);
 
-    const [targetLang, setTargetLang] = useState<'pt' | 'zh'>('pt');
 
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const progressBarRef = useRef<HTMLDivElement>(null);
@@ -164,28 +91,6 @@ export default function MacSplash({ show = true, onDone }: Props) {
         } catch { /* ignore */ }
     }, [router]);
 
-    // Wave Glitch Cycle
-    useEffect(() => {
-        if (hasStarted) return;
-        
-        let t1: NodeJS.Timeout, t2: NodeJS.Timeout;
-        
-        const cycle = () => {
-            setTargetLang('zh');
-            t1 = setTimeout(() => {
-                setTargetLang('pt');
-                t2 = setTimeout(cycle, 4000); // Fica em Português por 4s
-            }, 2500); // Fica em Chinês por 2.5s (dá tempo pra onda ir e voltar)
-        };
-
-        t2 = setTimeout(cycle, 1500);
-
-        return () => { 
-            clearTimeout(t1); 
-            clearTimeout(t2); 
-        };
-    }, [hasStarted]);
-
     useEffect(() => {
         if (!show) return;
         setVisible(true);
@@ -203,23 +108,31 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 ? audio.currentTime : realTimeElapsed;
             const time = Math.max(audioTime, realTimeElapsed);
 
-            let currentGlobalPercent = 0;
+            // Os estagios continuam marcando o tempo do intro...
             if (time >= TIMELINE.STAGE_5_MOD_3_START) {
                 if (phaseRef.current < 4) { phaseRef.current = 4; setPhase(4); }
-                const elapsed = time - TIMELINE.STAGE_5_MOD_3_START;
-                currentGlobalPercent = 75 + Math.min((elapsed / 1.6) * 25, 25);
             } else if (time >= TIMELINE.STAGE_4_MOD_2_START) {
                 if (phaseRef.current < 3) { phaseRef.current = 3; setPhase(3); }
-                const elapsed = time - TIMELINE.STAGE_4_MOD_2_START;
-                currentGlobalPercent = 40 + Math.min((elapsed / 1.8) * 35, 35);
             } else if (time >= TIMELINE.STAGE_3_MOD_1_START) {
                 if (phaseRef.current < 2) { phaseRef.current = 2; setPhase(2); }
-                const elapsed = time - TIMELINE.STAGE_3_MOD_1_START;
-                currentGlobalPercent = Math.min((elapsed / 1.8) * 40, 40);
             } else if (time >= TIMELINE.STAGE_2_BAR_APPEARS) {
                 if (phaseRef.current < 1) { phaseRef.current = 1; setPhase(1); }
-                currentGlobalPercent = 1;
             }
+
+            // ...mas a BARRA e uma funcao continua do tempo, nao uma escada por
+            // estagio. Antes cada estagio tinha a sua propria rampa com o proprio
+            // teto, entao a barra ficava PRESA em 1% durante todo o estagio 2,
+            // RECUAVA para 0 ao entrar no estagio 3, e so ali comecava a andar --
+            // e voltava a congelar sempre que uma rampa batia no teto antes do
+            // estagio seguinte comecar. Era exatamente isso que fazia ela "nao
+            // parecer como deveria, so no comeco".
+            //
+            // Uma unica interpolacao do instante em que ela aparece ate o fim do
+            // intro e monotonica por construcao: nao ha degrau, nao ha recuo, e o
+            // que ela mostra passa a ser verdade (quanto falta de fato).
+            const inicioBarra = TIMELINE.STAGE_2_BAR_APPEARS;
+            const bruto = (time - inicioBarra) / (TIMELINE.TOTAL_DURATION - inicioBarra);
+            const currentGlobalPercent = Math.max(0, Math.min(1, bruto)) * 100;
 
             if (progressBarRef.current) progressBarRef.current.style.width = `${currentGlobalPercent}%`;
 
@@ -287,8 +200,6 @@ export default function MacSplash({ show = true, onDone }: Props) {
 
     if (!visible) return null;
 
-    const zhPhrase = phase >= 4 ? "世界之希望已诞生" : phase >= 3 ? "日月星辰皆为吾家" : phase >= 1 ? "万物归一" : "";
-
     return (
         <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black text-white transition-opacity duration-500" style={{ opacity }}>
             {/* FUNDO — loop costurado dos dois vídeos (último frame = primeiro, então
@@ -339,11 +250,12 @@ export default function MacSplash({ show = true, onDone }: Props) {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.9, ease: "easeOut" }}
                     >
-                        {/* O rótulo aqui é texto puro, sem o GlitchText: vidro líquido
-                            e caractere piscando são duas estéticas que competem no
-                            mesmo elemento. O GlitchText segue no arquivo — trocar de
-                            volta é uma linha. */}
-                        <LiquidGlassButton onClick={handleInitiate}>
+                        {/* O rótulo aqui é texto puro. Vidro líquido e caractere
+                            piscando são duas estéticas que competem no mesmo elemento,
+                            e o glitch PT/ZH que existia aqui saiu junto com os
+                            caracteres chineses do intro. */}
+                        <LiquidGlassButton
+                    superficie="escura" onClick={handleInitiate}>
                             {PT_TEXT}
                         </LiquidGlassButton>
                     </motion.div>
@@ -375,10 +287,7 @@ export default function MacSplash({ show = true, onDone }: Props) {
                                     <div className="w-[200px] h-[3px] rounded-full bg-black/20 dark:bg-white/15 overflow-hidden">
                                         <div ref={progressBarRef} className="h-full rounded-full bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.35)] dark:shadow-[0_0_8px_rgba(255,255,255,0.35)]" style={{ width: "0%", transition: "none" }} />
                                     </div>
-                                    <span aria-hidden="true" className="text-cyan-500 dark:text-cyan-300 text-sm leading-none animate-[spin_4s_linear_infinite] motion-reduce:animate-none" style={{ filter: "drop-shadow(0 0 5px rgba(34,211,238,0.6))" }}>&#10177;</span>
                                 </div>
-
-                                {zhPhrase && <div className="mt-6 text-center text-[10px] tracking-widest text-sky-600 dark:text-sky-400/90 font-light">{zhPhrase}</div>}
                             </motion.div>
                         )}
                     </AnimatePresence>

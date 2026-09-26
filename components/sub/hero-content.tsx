@@ -121,7 +121,7 @@ export default function HeroPage() {
   }, [status]);
 
   return (
-    <main className="w-full min-h-screen flex flex-col items-start justify-start relative zaeon-borda pt-24 md:pt-32 lg:pt-40 pb-20 overflow-hidden transition-colors duration-700 font-sans">
+    <main className="w-full flex flex-col items-start justify-start relative zaeon-borda pt-10 md:pt-16 pb-12 md:pb-16 overflow-hidden transition-colors duration-700 font-sans">
 
       {/* BACKGROUND LIMPO - Apenas o StarBackground visível */}
       <div className="absolute inset-0 z-0 pointer-events-none">
