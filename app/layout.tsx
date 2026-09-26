@@ -49,22 +49,6 @@ const interTight = Inter_Tight({
     display: "swap",
 });
 
-// Tipografia do Modo Revista (Sala de Estudos). Servidas pelo next/font — o canvas
-// mede a MESMA fonte que desenha, então elas precisam existir localmente, não num CDN.
-const fraunces = Fraunces({
-    subsets: ["latin"],
-    variable: "--font-revista-display",
-    weight: ["300", "600", "700"],
-    style: ["normal", "italic"],
-    display: "swap",
-});
-
-const newsreader = Newsreader({
-    subsets: ["latin"],
-    variable: "--font-revista-corpo",
-    weight: ["400", "600"],
-    display: "swap",
-});
 
 /**
  * `viewportFit: "cover"` e o que faz a pagina ocupar a tela inteira em aparelho
