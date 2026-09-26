@@ -94,13 +94,16 @@ jobs:
           # zaeon.com.br subir, setar a Variable BETA_DOMAIN com a lista completa
           # ('zaeon.com.br,www.zaeon.com.br,75-119-140-97.sslip.io') e redeployar.
           BETA_DOMAIN: ${{ vars.BETA_DOMAIN || '75-119-140-97.sslip.io' }}
+          # E-mail do ACME (Let's Encrypt manda aviso de expiração pra cá). O default do
+          # compose é um endereço em zaeon.space, domínio que EXPIROU — aviso indo pro vazio.
+          ACME_EMAIL: ${{ vars.ACME_EMAIL || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 25m
-          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH,APP_URL,BETA_DOMAIN
+          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH,APP_URL,BETA_DOMAIN,ACME_EMAIL
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
