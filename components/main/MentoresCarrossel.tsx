@@ -1,0 +1,214 @@
+"use client";
+
+import React, { useCallback, useEffect, useRef, useState } from "react";
+
+/**
+ * Carrossel dos MENTORES reais — os mesmos 13 que vivem na sala de Plugins.
+ *
+ * Fonte: `GET /api/mentors`, que e publico e ja devolve a forma certa para uma
+ * vitrine: slug, curso, codinome, emoji, tagline, artefatos assinatura, fontes,
+ * nivel academico, guardrail e `degradedSkills`. O `personaText` NAO vem nessa
+ * rota -- e isso e proposital e importante: as personas sao o produto, e um
+ * import direto de `lib/agent/mentors` colocaria os 13 prompts inteiros dentro
+ * do bundle publico da landing, legiveis por qualquer um com o DevTools aberto.
+ *
+ * O ELENCO abaixo nao e invencao nem placeholder: sao os mesmos nomes, cursos e
+ * taglines que a rota devolve, mantidos aqui so para dois casos reais -- o banco
+ * frio (o seed roda no primeiro GET; antes dele a colecao esta vazia) e a rota
+ * indisponivel. A landing e a primeira coisa que alguem ve; ela nao pode
+ * aparecer com uma prateleira vazia porque o Mongo demorou a acordar. Quando a
+ * rota responde, o que ela diz vale.
+ */
+
+type Mentor = {
+    slug: string;
+    course: string;
+    name: string;
+    emoji?: string;
+    tagline?: string | null;
+    signatureArtifacts?: string[];
+    academicLevel?: string;
+    guardrail?: string | null;
+};
+
+/** Os 13, na ordem do seed. So campos que a rota publica ja expoe. */
+const ELENCO: Mentor[] = [
+    { slug: "medicina", course: "Medicina", name: "Osler", tagline: "Pensa como um clínico e professor de medicina sênior.", signatureArtifacts: ["fluxograma clínico", "caso clínico"], guardrail: "Educacional" },
+    { slug: "enfermagem", course: "Enfermagem", name: "Nightingale", tagline: "Pensa como enfermeira(o) docente sênior.", signatureArtifacts: ["checklist de cuidado", "cálculo de dosagem"], guardrail: "Educacional" },
+    { slug: "biologia", course: "Biologia", name: "Darwin", tagline: "Pensa como biólogo(a) sênior — da célula ao ecossistema.", signatureArtifacts: ["timeline evolutiva", "molécula 3D"] },
+    { slug: "eng-computacao", course: "Engenharia da Computação", name: "Turing", tagline: "Debuga junto e ensina o padrão, não só o conserto.", signatureArtifacts: ["código", "diagrama", "curva de complexidade"] },
+    { slug: "eng-energias", course: "Engenharia de Energias", name: "Tesla", tagline: "Sempre mostra as contas.", signatureArtifacts: ["diagrama de sistema", "gráfico", "derivação"] },
+    { slug: "matematica", course: "Matemática", name: "Noether", tagline: "Valoriza a demonstração e a intuição por trás dela.", signatureArtifacts: ["prova passo a passo", "gráfico de função"] },
+    { slug: "fisica", course: "Física", name: "Feynman", tagline: "Parte do fenômeno e da intuição antes da matemática.", signatureArtifacts: ["diagrama", "plot", "derivação"] },
+    { slug: "agronomia", course: "Agronomia", name: "Borlaug", tagline: "Solo, clima e manejo com número em cima.", signatureArtifacts: ["curva de produtividade", "plano de manejo"] },
+    { slug: "quimica", course: "Química", name: "Mendeleev", tagline: "Mostra a estrutura antes de falar da reação.", signatureArtifacts: ["molécula 3D", "mecanismo de reação"] },
+    { slug: "eng-civil", course: "Engenharia Civil", name: "Eiffel", tagline: "Estrutura primeiro, estética depois.", signatureArtifacts: ["diagrama de esforços", "memorial de cálculo"] },
+    { slug: "veterinaria", course: "Medicina Veterinária", name: "Pasteur", tagline: "Clínica animal com raciocínio por mecanismo.", signatureArtifacts: ["caso clínico", "fluxo de procedimento"], guardrail: "Educacional" },
+    { slug: "psicologia", course: "Psicologia", name: "James", tagline: "Teoria com evidência, nunca aconselhamento clínico.", signatureArtifacts: ["mapa conceitual", "leitura crítica"], guardrail: "Educacional" },
+    { slug: "farmacia", course: "Farmácia", name: "Kekulé", tagline: "Da molécula ao efeito, passo a passo.", signatureArtifacts: ["molécula 3D", "via metabólica"], guardrail: "Educacional" },
+];
+
+export default function MentoresCarrossel({ className = "" }: { className?: string }) {
+    const [mentores, setMentores] = useState<Mentor[]>(ELENCO);
+    const [aoVivo, setAoVivo] = useState(false);
+    const trilhoRef = useRef<HTMLDivElement>(null);
+    const [podeVoltar, setPodeVoltar] = useState(false);
+    const [podeAvancar, setPodeAvancar] = useState(true);
+
+    useEffect(() => {
+        let vivo = true;
+        fetch("/api/mentors")
+            .then((r) => (r.ok ? r.json() : null))
+            .then((j) => {
+                if (!vivo || !Array.isArray(j) || j.length === 0) return;
+                setMentores(j);
+                setAoVivo(true);
+            })
+            .catch(() => {
+                /* banco frio ou rota fora: o ELENCO ja esta na tela */
+            });
+        return () => {
+            vivo = false;
+        };
+    }, []);
+
+    const sincronizarSetas = useCallback(() => {
+        const el = trilhoRef.current;
+        if (!el) return;
+        setPodeVoltar(el.scrollLeft > 8);
+        setPodeAvancar(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+    }, []);
+
+    useEffect(() => {
+        sincronizarSetas();
+        const el = trilhoRef.current;
+        if (!el) return;
+        el.addEventListener("scroll", sincronizarSetas, { passive: true });
+        window.addEventListener("resize", sincronizarSetas);
+        return () => {
+            el.removeEventListener("scroll", sincronizarSetas);
+            window.removeEventListener("resize", sincronizarSetas);
+        };
+    }, [sincronizarSetas, mentores.length]);
+
+    /** Anda um cartao por clique, medindo o cartao real em vez de chutar pixels. */
+    const andar = (direcao: 1 | -1) => {
+        const el = trilhoRef.current;
+        if (!el) return;
+        const cartao = el.firstElementChild as HTMLElement | null;
+        const passo = cartao ? cartao.getBoundingClientRect().width + 16 : el.clientWidth * 0.8;
+        el.scrollBy({ left: passo * direcao, behavior: "smooth" });
+    };
+
+    return (
+        <div className={className}>
+            <div className="mb-6 flex items-end justify-between gap-6">
+                <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-slate-500 dark:text-slate-500">
+                    {mentores.length} mentores
+                    {aoVivo ? " · ao vivo da sala de plugins" : ""}
+                </p>
+
+                {/* As setas sao conveniencia de desktop. No celular o dedo ja faz isso,
+                    e um par de botoes so rouba largura de tela. */}
+                <div className="hidden md:flex gap-2">
+                    <Seta direcao="anterior" ativa={podeVoltar} onClick={() => andar(-1)} />
+                    <Seta direcao="proximo" ativa={podeAvancar} onClick={() => andar(1)} />
+                </div>
+            </div>
+
+            {/* O trilho fica DENTRO da calha da pagina, entao o primeiro cartao nasce
+                na mesma margem do titulo e o ultimo visivel e cortado na borda do
+                container -- e o corte que diz "tem mais", sem precisar de texto.
+                Nao sangra ate a borda da tela de proposito: fazer isso exige 100vw,
+                que inclui a barra de rolagem e devolve a pagina a rolagem horizontal
+                que acabou de ser consertada. */}
+            <div
+                ref={trilhoRef}
+                className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+                {mentores.map((m) => (
+                    <Cartao key={m.slug} m={m} />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function Cartao({ m }: { m: Mentor }) {
+    const artefatos = (m.signatureArtifacts ?? []).slice(0, 3);
+    return (
+        <article className="snap-start shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] backdrop-blur-sm p-5 flex flex-col">
+            <div className="flex items-start justify-between">
+                <span
+                    aria-hidden="true"
+                    className="grid h-10 w-10 place-items-center rounded-xl border border-cyan-500/25 bg-cyan-500/10 text-lg text-cyan-600 dark:text-cyan-300"
+                >
+                    {m.emoji || "⟁"}
+                </span>
+                {m.guardrail ? (
+                    <span
+                        className="rounded-md border border-slate-200 dark:border-white/15 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500 dark:text-white/55"
+                        title={m.guardrail}
+                    >
+                        educacional
+                    </span>
+                ) : null}
+            </div>
+
+            <h3 className="mt-4 text-2xl font-semibold tracking-tight leading-none text-slate-900 dark:text-white">
+                {m.name}
+            </h3>
+            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300/90">
+                {m.course}
+            </p>
+
+            {m.tagline ? (
+                <p className="mt-4 text-[13.5px] leading-relaxed text-slate-600 dark:text-white/70 line-clamp-3">
+                    {m.tagline}
+                </p>
+            ) : null}
+
+            {artefatos.length > 0 ? (
+                <div className="mt-auto pt-5">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-slate-400 dark:text-white/35">
+                        entrega
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                        {artefatos.map((a) => (
+                            <span
+                                key={a}
+                                className="rounded-md bg-slate-100 dark:bg-white/[0.07] px-2 py-1 text-[11px] text-slate-600 dark:text-white/65"
+                            >
+                                {a}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+        </article>
+    );
+}
+
+function Seta({
+    direcao,
+    ativa,
+    onClick,
+}: {
+    direcao: "anterior" | "proximo";
+    ativa: boolean;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={!ativa}
+            aria-label={direcao === "anterior" ? "Mentores anteriores" : "Próximos mentores"}
+            className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 dark:border-white/12 bg-white/70 dark:bg-white/[0.05] text-slate-700 dark:text-white/80 transition-opacity disabled:opacity-25 hover:bg-white dark:hover:bg-white/[0.10]"
+        >
+            <span aria-hidden="true" className="text-sm leading-none">
+                {direcao === "anterior" ? "←" : "→"}
+            </span>
+        </button>
+    );
+}
