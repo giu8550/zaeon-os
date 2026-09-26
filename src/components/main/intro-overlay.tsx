@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { Sun, Moon, Mic } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useVoiceMode } from "@/lib/voice/voiceMode";
 import SponsorsMarquee from "@/components/main/SponsorsMarquee";
-import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
+import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 
 const TIMELINE = {
     AUDIO_SRC: "/assets/sounds/boot-track.mp3",
@@ -101,10 +98,8 @@ function GlitchText({ text, targetLang, hasStarted }: { text: string, targetLang
 }
 
 export default function MacSplash({ show = true, onDone }: Props) {
-    const { theme, setTheme } = useTheme();
     const router = useRouter();
     const { i18n } = useTranslation();
-    const [voiceMode, setVoiceMode] = useVoiceMode(); // modo voz (passivo|ativo), disponível já na tela inicial
     const [mounted, setMounted] = useState(false);
 
     const [hasStarted, setHasStarted] = useState(false);
@@ -127,6 +122,36 @@ export default function MacSplash({ show = true, onDone }: Props) {
 
     useEffect(() => {
         setMounted(true);
+    }, []);
+
+    // Quem pediu menos movimento no sistema fica no poster, sem vídeo. Vale
+    // também como rede: no Modo de Baixo Consumo o iOS bloqueia autoplay de
+    // qualquer forma, e nesse caso o poster é o que a pessoa vê.
+    // Dois masters, não um: o material original é 4:5 em pé. O master retrato
+    // mantém o enquadramento com moldura; o master paisagem é corte real, o
+    // vídeo deitado preenchendo a tela inteira — em pé no meio do monitor vira
+    // um totem com borrão dos lados.
+    // O critério é PROPORÇÃO, não largura: um celular deitado é largo e
+    // precisa do master paisagem; uma janela estreita no desktop precisa do
+    // retrato. Largura sozinha erra os dois casos.
+    const [ehRetrato, setEhRetrato] = useState(false);
+    useEffect(() => {
+        const mq = window.matchMedia("(max-aspect-ratio: 1/1)");
+        const sync = () => setEhRetrato(mq.matches);
+        sync();
+        mq.addEventListener("change", sync);
+        return () => mq.removeEventListener("change", sync);
+    }, []);
+
+    const fundo = ehRetrato ? "mobile" : "desktop";
+
+    const [semMovimento, setSemMovimento] = useState(false);
+    useEffect(() => {
+        const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const sync = () => setSemMovimento(mq.matches);
+        sync();
+        mq.addEventListener("change", sync);
+        return () => mq.removeEventListener("change", sync);
     }, []);
 
     // LOADING FUNCIONAL: enquanto a intro roda, pré-carrega de verdade o código das salas
@@ -265,7 +290,42 @@ export default function MacSplash({ show = true, onDone }: Props) {
     const zhPhrase = phase >= 4 ? "世界之希望已诞生" : phase >= 3 ? "日月星辰皆为吾家" : phase >= 1 ? "万物归一" : "";
 
     return (
-        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white dark:bg-black transition-opacity duration-500" style={{ opacity }}>
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black text-white transition-opacity duration-500" style={{ opacity }}>
+            {/* FUNDO — loop costurado dos dois vídeos (último frame = primeiro, então
+                não pisca ao repetir). Escurecido, desfocado e com vinheta ASSADOS no
+                arquivo: o navegador só decodifica no hardware, não roda filtro por
+                frame. Custa 404 KB; a versão sem tratamento custava 4,1 MB.
+                muted + playsInline não são opcionais — sem os dois o iOS recusa o
+                autoplay. A faixa já vem sem áudio do arquivo original. */}
+            <div className="absolute inset-0 overflow-hidden bg-black" aria-hidden="true">
+                {semMovimento ? (
+                    <img
+                        src={`/assets/intro-poster-${fundo}.jpg`}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                    />
+                ) : (
+                    <video
+                        key={fundo}
+                        className="absolute inset-0 h-full w-full object-cover"
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        preload="metadata"
+                        poster={`/assets/intro-poster-${fundo}.jpg`}
+                    >
+                        {/* Só mp4. O webm estava aqui pra economizar banda, mas depois
+                            do grão anti-banding o VP9 ficou MAIOR que o H.264 (ele
+                            codifica grão mal). Deixou de pagar a própria passagem. */}
+                        <source src={`/assets/intro-loop-${fundo}.mp4`} type="video/mp4" />
+                    </video>
+                )}
+                {/* Véu: garante contraste do "Iniciar" sobre QUALQUER frame do loop. */}
+                <div className="absolute inset-0 bg-black/45" />
+                {/* Vinheta: as bordas morrem no preto em vez de terminarem num corte. */}
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(0,0,0,0.78)_100%)]" />
+            </div>
             {/* Sponsors rolando na borda inferior da tela inicial */}
             <SponsorsMarquee />
             <div className="flex flex-col items-center justify-center px-6 w-full">
@@ -273,21 +333,23 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 {/* Sem AnimatePresence/exit aqui: ao iniciar, o "Iniciar" some na hora —
                     antes ele "piscava" (o glitch resetava pra PT) durante a saída. */}
                 {!hasStarted && (
-                    <motion.button
+                    <motion.div
                         key="start-btn"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.8 }}
-                        onClick={handleInitiate}
-                        className="flex flex-col items-center justify-center transition-all duration-300 relative w-full cursor-pointer hover:scale-105"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.9, ease: "easeOut" }}
                     >
-                        <span className="text-black dark:text-white tracking-[0.1em] sm:tracking-[0.15em] text-lg sm:text-2xl font-mono min-h-[40px] flex flex-wrap items-center justify-center drop-shadow-md">
-                            <GlitchText text={PT_TEXT} targetLang={targetLang} hasStarted={hasStarted} />
-                        </span>
-                    </motion.button>
+                        {/* O rótulo aqui é texto puro, sem o GlitchText: vidro líquido
+                            e caractere piscando são duas estéticas que competem no
+                            mesmo elemento. O GlitchText segue no arquivo — trocar de
+                            volta é uma linha. */}
+                        <LiquidGlassButton onClick={handleInitiate}>
+                            {PT_TEXT}
+                        </LiquidGlassButton>
+                    </motion.div>
                 )}
 
-                <div className="h-[90px] flex flex-col items-center justify-start mt-6 w-full">
+                <div className="h-[64px] flex flex-col items-center justify-start mt-8 w-full">
                     <AnimatePresence mode="wait">
                         {!hasStarted ? (
                             <motion.div 
@@ -298,35 +360,8 @@ export default function MacSplash({ show = true, onDone }: Props) {
                                 transition={{ duration: 0.8 }}
                                 className="flex flex-col items-center w-full"
                             >
-                                <div className="text-center text-[11px] tracking-widest text-sky-600 dark:text-sky-400/80 font-light mt-4 uppercase animate-pulse">
-                                    para uma melhor experiencia, recomendados que conecte fones de ouvido.
-                                </div>
 
-                                {/* Botões mais próximos e bonitos */}
-                                {mounted && (
-                                    <div className="flex flex-row gap-6 mt-8 justify-center items-center">
-                                        <div 
-                                            className="flex items-center justify-center w-11 h-11 rounded-full bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 backdrop-blur-xl cursor-pointer transition-all border border-black/10 dark:border-white/10 shadow-sm hover:scale-110 active:scale-95"
-                                            onClick={(e) => { e.stopPropagation(); setTheme(theme === "dark" ? "light" : "dark"); }}
-                                        >
-                                            {theme === 'dark' ? <Sun className="w-[18px] h-[18px] text-white/80" /> : <Moon className="w-[18px] h-[18px] text-black/80" />}
-                                        </div>
-
-                                        {/* MODO VOZ — entre tema e idioma. Ativa a voz da Zaeon (conversa) já daqui. */}
-                                        <div
-                                            title={voiceMode === "active" ? "Modo voz: ATIVO (a Zaeon conversa e fala)" : "Modo voz: passivo — toque para ativar"}
-                                            aria-pressed={voiceMode === "active"}
-                                            className={`flex items-center justify-center w-11 h-11 rounded-full backdrop-blur-xl cursor-pointer transition-all border shadow-sm hover:scale-110 active:scale-95 ${voiceMode === "active" ? "text-white border-cyan-300/50" : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border-black/10 dark:border-white/10"}`}
-                                            style={voiceMode === "active" ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
-                                            onClick={(e) => { e.stopPropagation(); setVoiceMode(voiceMode === "active" ? "passive" : "active"); }}
-                                        >
-                                            <Mic className={`w-[18px] h-[18px] ${voiceMode === "active" ? "text-white" : "text-black/80 dark:text-white/80"}`} />
-                                        </div>
-
-                                        {/* Idioma = UMA bandeira que cicla ao clicar; começa no Brasil */}
-                                        <LanguageFlagToggle size={44} startAtBrazil />
-                                    </div>
-                                )}
+                                
                             </motion.div>
                         ) : (
                             <motion.div 

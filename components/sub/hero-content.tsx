@@ -16,18 +16,101 @@ import { UserPlus } from "lucide-react";
 // Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
 // ficam mais discretos que os quatro principais.
 const MODELS_MAIN = [
-  { name: "GPT", org: "OpenAI" },
-  { name: "Claude", org: "Anthropic" },
-  { name: "Gemini", org: "Google" },
-  { name: "Grok", org: "xAI" },
+  { name: "GPT", org: "OpenAI", slug: "openai" },
+  { name: "Claude", org: "Anthropic", slug: "anthropic" },
+  { name: "Gemini", org: "Google", slug: "google" },
+  { name: "Grok", org: "xAI", slug: "xai" },
 ];
-const MODELS_MORE = ["Llama", "DeepSeek", "Mistral"];
+const MODELS_MORE = [
+  { name: "Llama", slug: "meta" },
+  { name: "DeepSeek", slug: "deepseek" },
+  { name: "Mistral", slug: "mistral" },
+];
 
-export default function HeroPage() {
+/**
+ * Logo do provedor, com o nome como rede de segurança.
+ *
+ * Os arquivos oficiais entram em `public/assets/models/<slug>.svg`. Enquanto não
+ * estiverem lá, o `onError` devolve o texto e a página não quebra — então este
+ * componente pode subir antes dos assets.
+ *
+ * NÃO desenhamos marca de terceiro à mão: logo de fabricante se pega no press
+ * kit dele, não se aproxima no olho.
+ *
+ * `dark:brightness-0 dark:invert` pinta tudo de branco no escuro, o que deixa os
+ * sete coerentes entre si. Algumas diretrizes de marca proíbem recolorir — se
+ * for o caso de alguma, é só tirar essas duas classes.
+ */
+function LogoModelo({ slug, name, org }: { slug: string; name: string; org?: string }) {
+  const [falhou, setFalhou] = useState(false);
+
+  if (falhou) {
+    return (
+      <>
+        <span className="font-medium">{name}</span>
+        {org ? <span className="text-slate-400 dark:text-slate-500"> · {org}</span> : null}
+      </>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/assets/models/${slug}.svg`}
+      alt={org ? `${name}, da ${org}` : name}
+      title={org ? `${name} · ${org}` : name}
+      onError={() => setFalhou(true)}
+      loading="lazy"
+      className="h-5 w-auto max-w-[110px] object-contain opacity-90 dark:brightness-0 dark:invert"
+    />
+  );
+}
+
+// Variante B do H1 — "Ninguém ___ sozinho.". O verbo gira, o remate fica parado.
+// Ordem: do concreto (o que a pessoa faz hoje) pro abstrato (onde ela quer chegar).
+const VERBOS = [
+  "trabalha",
+  "estuda",
+  "pesquisa",
+  "escreve",
+  "publica",
+  "evolui",
+  "cresce",
+  "prospera",
+];
+// Frase inteira, estável, para leitor de tela: um H1 não pode depender de qual
+// verbo estava na tela no instante da leitura.
+const FRASE_COMPLETA =
+  "Aqui ninguém trabalha, estuda, pesquisa, escreve, publica, evolui, cresce ou prospera sozinho.";
+
+export type HeroVariant = "ias" | "sozinho";
+
+export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant }) {
   const { t } = useTranslation();
   const { status } = useSession();
 
   const [showChatbox, setShowChatbox] = useState(false);
+  const [verboIndex, setVerboIndex] = useState(0);
+  const [semMovimento, setSemMovimento] = useState(false);
+
+  // Quem pediu menos movimento no sistema não recebe carrossel: fica no primeiro
+  // verbo, parado. Vale pra acessibilidade e pra bateria.
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setSemMovimento(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (variant !== "sozinho" || semMovimento) return;
+    const id = setInterval(
+      () => setVerboIndex((i) => (i + 1) % VERBOS.length),
+      2600
+    );
+    return () => clearInterval(id);
+  }, [variant, semMovimento]);
 
   // Redireciona diretamente para o chat caso já esteja logado
   useEffect(() => {
@@ -62,17 +145,58 @@ export default function HeroPage() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="relative flex flex-col items-start justify-center"
         >
-          <h1 className="text-3xl sm:text-4xl md:text-[3.5rem] font-light tracking-tighter text-slate-900 dark:text-white leading-[1.15] z-10 relative">
-            Todas as IAs. Um lugar só. <br className="hidden md:block" />
-            Feito pra{" "}
-            <span
-              className="cyber-glitch relative inline-block font-semibold text-cyan-600 dark:text-cyan-400"
-              data-text="ciência"
-            >
-              ciência
-            </span>
-            .
-          </h1>
+          {variant === "sozinho" ? (
+            <h1 className="text-[2rem] sm:text-4xl md:text-[3.5rem] font-light tracking-tighter text-slate-900 dark:text-white leading-[1.15] z-10 relative">
+              <span className="sr-only">{FRASE_COMPLETA}</span>
+              <span aria-hidden="true">
+                Aqui ninguém
+                {/* Slot em grid: TODOS os verbos ocupam a MESMA célula, então a largura
+                    do slot é a do verbo mais longo e o "sozinho." nunca pula quando o
+                    verbo troca. Sem número mágico, sem medir fonte.
+                    `justify-items-center` centraliza a palavra dentro do slot: sem isso
+                    um verbo curto encosta à esquerda e abre um buraco só de um lado,
+                    que é o que dava o aspecto torto. A margem em `em` afasta de AMBAS
+                    as palavras, então a folga vira espaçamento deliberado em vez de
+                    sobra de layout — e escala junto com o tamanho da fonte. */}
+                <span className="relative inline-grid justify-items-center align-baseline mx-[0.4em]">
+                  {VERBOS.map((v) => (
+                    <span
+                      key={v}
+                      className="col-start-1 row-start-1 invisible font-semibold"
+                    >
+                      {v}
+                    </span>
+                  ))}
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={VERBOS[verboIndex]}
+                      initial={{ opacity: 0, filter: "blur(8px)", y: 8 }}
+                      animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
+                      exit={{ opacity: 0, filter: "blur(8px)", y: -8 }}
+                      transition={{ duration: 0.45, ease: "easeInOut" }}
+                      className="cyber-glitch col-start-1 row-start-1 font-semibold text-cyan-600 dark:text-cyan-400"
+                      data-text={VERBOS[verboIndex]}
+                    >
+                      {VERBOS[verboIndex]}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
+                sozinho.
+              </span>
+            </h1>
+          ) : (
+            <h1 className="text-3xl sm:text-4xl md:text-[3.5rem] font-light tracking-tighter text-slate-900 dark:text-white leading-[1.15] z-10 relative">
+              Todas as IAs. Um lugar só. <br className="hidden md:block" />
+              Feito pra{" "}
+              <span
+                className="cyber-glitch relative inline-block font-semibold text-cyan-600 dark:text-cyan-400"
+                data-text="ciência"
+              >
+                ciência
+              </span>
+              .
+            </h1>
+          )}
 
           <AnimatePresence>
             {!showChatbox && (
@@ -83,14 +207,25 @@ export default function HeroPage() {
                 transition={{ duration: 0.4, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
-                  GPT, Claude, Gemini, Grok e mais — num sistema interativo onde você não só
-                  conversa, você{" "}
-                  <span className="text-slate-800 dark:text-slate-200 font-normal">
-                    produz conhecimento
-                  </span>
-                  .
-                </p>
+                {variant === "sozinho" ? (
+                  <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
+                    Todas as IAs num lugar só — GPT, Claude, Gemini, Grok e mais — num
+                    sistema onde você não só conversa, você{" "}
+                    <span className="text-slate-800 dark:text-slate-200 font-normal">
+                      produz conhecimento
+                    </span>
+                    .
+                  </p>
+                ) : (
+                  <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
+                    GPT, Claude, Gemini, Grok e mais — num sistema interativo onde você não só
+                    conversa, você{" "}
+                    <span className="text-slate-800 dark:text-slate-200 font-normal">
+                      produz conhecimento
+                    </span>
+                    .
+                  </p>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -141,18 +276,17 @@ export default function HeroPage() {
                 {MODELS_MAIN.map((m) => (
                   <span
                     key={m.name}
-                    className="text-xs text-slate-700 dark:text-slate-200 border border-slate-300/60 dark:border-white/12 rounded-lg px-3.5 py-2 bg-white/40 dark:bg-white/[0.03] backdrop-blur-sm"
+                    className="flex items-center text-xs text-slate-700 dark:text-slate-200 border border-slate-300/60 dark:border-white/12 rounded-lg px-3.5 py-2 bg-white/40 dark:bg-white/[0.03] backdrop-blur-sm"
                   >
-                    <span className="font-medium">{m.name}</span>
-                    <span className="text-slate-400 dark:text-slate-500"> · {m.org}</span>
+                    <LogoModelo slug={m.slug} name={m.name} org={m.org} />
                   </span>
                 ))}
-                {MODELS_MORE.map((name) => (
+                {MODELS_MORE.map((m) => (
                   <span
-                    key={name}
-                    className="text-xs text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/10 rounded-lg px-3.5 py-2 bg-white/30 dark:bg-white/[0.02]"
+                    key={m.name}
+                    className="flex items-center text-xs text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/10 rounded-lg px-3.5 py-2 bg-white/30 dark:bg-white/[0.02]"
                   >
-                    {name}
+                    <LogoModelo slug={m.slug} name={m.name} />
                   </span>
                 ))}
               </div>

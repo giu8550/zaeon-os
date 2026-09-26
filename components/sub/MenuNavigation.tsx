@@ -330,7 +330,7 @@ export default function MenuNavigation() {
 
   const visibleMenuItems = MENU_ITEMS.filter(item => item.labelKey === "menu.manual" ? isAdmin : true);
 
-  const panelClass = "w-full mt-4 rounded-[32px] overflow-hidden backdrop-blur-2xl transition-all duration-500 bg-white/40 dark:bg-cyan-950/10 border border-slate-200 dark:border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] flex flex-col min-h-[380px] max-h-[500px]";
+  const panelClass = "w-full mt-4 rounded-[32px] overflow-hidden backdrop-blur-2xl backdrop-saturate-[1.6] transition-all duration-500 bg-white/55 dark:bg-white/[0.06] border border-white/60 dark:border-white/[0.12] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.18),inset_0_1px_0_0_rgba(255,255,255,0.9),inset_0_-16px_30px_-20px_rgba(0,0,0,0.12)] dark:shadow-[0_30px_60px_-20px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.30),inset_0_-16px_30px_-20px_rgba(0,0,0,0.9)] flex flex-col min-h-[380px] max-h-[500px]";
   const cardBase = "group relative overflow-hidden flex items-center justify-between rounded-2xl px-4 min-h-[52px] w-full transition-all duration-300 cursor-pointer font-medium text-slate-800 dark:text-white bg-white/50 hover:bg-white/80 dark:bg-white/[0.03] dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/5 hover:border-cyan-400/50 dark:hover:border-cyan-400/30";
   const cardSelected = "bg-white border-cyan-400 dark:bg-cyan-400/10 dark:border-cyan-400/40 text-cyan-600 dark:text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.2)] dark:shadow-[0_0_15px_rgba(34,211,238,0.15)]";
   const accentBar = (active: boolean) => `absolute left-1 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full transition-all duration-500 ${active ? "bg-cyan-500 dark:bg-cyan-400 opacity-100 scale-y-100" : "bg-transparent opacity-0 scale-y-0"}`;
@@ -425,7 +425,7 @@ export default function MenuNavigation() {
             <p className="text-[12px] text-slate-700 dark:text-white/75 mb-2">Novo por aqui? É preciso um convite.</p>
             <button
               onClick={() => router.push("/convite")}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-slate-300 dark:border-white/15 text-slate-800 dark:text-white text-[12px] font-bold hover:border-cyan-400/60 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold transition-all duration-300 backdrop-blur-xl backdrop-saturate-150 bg-white/50 dark:bg-white/[0.07] border border-white/70 dark:border-white/[0.14] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28)] text-slate-800 dark:text-white hover:bg-white/75 dark:hover:bg-white/[0.13] hover:border-cyan-400/60 dark:hover:border-cyan-300/40 hover:scale-[1.02] active:scale-[0.98]"
             >
               <ShieldCheck size={15} /> Tenho um convite
             </button>
