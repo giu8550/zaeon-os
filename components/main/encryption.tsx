@@ -14,6 +14,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { useTranslation } from "react-i18next";
 import ZaeonFlowDiagram from "./ZaeonFlowDiagram";
+import { Rotulo, TituloSecao } from "@/components/layout/secao";
 
 // --- TICKER DE PATROCINADORES ---
 const SponsorsTicker = ({ opacity }: { opacity: any }) => {
@@ -126,7 +127,7 @@ const HireAgentsSection = () => {
     };
 
     return (
-        <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-16 mt-10 mb-20 z-40 relative px-4 bg-transparent">
+        <div className="w-full zaeon-borda flex flex-col lg:flex-row items-center justify-between gap-16 mt-10 mb-20 z-40 relative bg-transparent">
 
             {/* LADO ESQUERDO: Highlight */}
             <motion.div
@@ -294,7 +295,7 @@ const ProcessFlowchart = () => {
     const { t } = useTranslation();
 
     return (
-        <div className="w-full pt-20 pb-40 px-4 flex flex-col items-center justify-center bg-transparent relative z-40">
+        <div className="w-full zaeon-borda pt-20 pb-40 flex flex-col items-center justify-center bg-transparent relative z-40">
             {/* Título */}
             <h4 className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500 dark:text-white/40 mb-10 transition-colors duration-300">
                 {t("encryption.recognition", "Recognition")}
@@ -306,7 +307,7 @@ const ProcessFlowchart = () => {
                 viewport={{ once: true }}
                 transition={{ duration: 0.6 }}
                 className="
-                    relative w-full max-w-4xl rounded-[2rem] 
+                    relative w-full max-w-[1200px] rounded-[2rem] 
                     
                     /* --- MODO CLARO (Preto Transparente) --- */
                     border border-slate-200 bg-white/80 backdrop-blur-xl shadow-xl
@@ -391,13 +392,23 @@ export default function Encryption() {
 
     return (
         <div className="w-full relative">
-            <section
-                className="relative z-[30] w-full bg-transparent flex flex-col items-center pt-28 md:pt-36 pb-10"
-            >
-                {/* DIAGRAMA VIVO: entrada -> cerebro Zaeon -> saida */}
-                <ZaeonFlowDiagram className="w-full max-w-6xl px-4" />
+            <section className="relative z-[30] w-full bg-transparent pt-24 md:pt-32 pb-12">
+                <div className="zaeon-borda">
+                    <Rotulo>Como funciona</Rotulo>
+                    <TituloSecao forte="Você chega com uma coisa." fraco="Sai com outra." />
 
-                <div className="w-full mt-10 md:mt-16">
+                    {/* DIAGRAMA VIVO: entrada -> cerebro Zaeon -> saida.
+                        O painel nao e enfeite: o ParticleSystem da landing corre
+                        atras da pagina inteira e passava por cima do card da
+                        direita. Uma chapa escura com borda de 1px devolve o
+                        diagrama para um fundo calmo sem desligar o fundo. */}
+                    <div className="mt-12 md:mt-16 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-[#070b11]/75 backdrop-blur-sm px-4 py-8 md:px-10 md:py-12">
+                        <ZaeonFlowDiagram />
+                    </div>
+                </div>
+
+                {/* o marquee e de proposito full-bleed: ele corre de borda a borda */}
+                <div className="w-full mt-14 md:mt-20">
                     <SponsorsTicker opacity={1} />
                 </div>
             </section>
@@ -405,7 +416,12 @@ export default function Encryption() {
             {/* ========================================================= */}
             {/* SECÇÃO: CONTRATAÇÃO DE AGENTES (3D Cover Flow) E MARCAS   */}
             {/* ========================================================= */}
-            <div className="relative z-40 w-full flex flex-col items-center justify-center bg-transparent pt-10">
+            {/* overflow-x-clip: a pilha 3D de agentes e `absolute w-[340px]` e o leque
+                empurra os cards para fora da viewport no celular -- eram 46px de
+                scroll horizontal na pagina inteira. `clip` em vez de `hidden`
+                porque `hidden` criaria um contexto de rolagem e mataria qualquer
+                `sticky` daqui para dentro. */}
+            <div className="relative z-40 w-full overflow-x-clip flex flex-col items-center justify-center bg-transparent pt-10">
                 <HireAgentsSection />
                 <CompaniesVerticalTicker />
             </div>
