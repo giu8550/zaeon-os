@@ -19,13 +19,33 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
  * mover o dedo não deve disparar re-render 60 vezes por segundo.
  */
 
+type Tom = "neutro" | "destaque";
+type Tamanho = "md" | "lg";
+
 type Props = {
     children: React.ReactNode;
     onClick?: () => void;
     className?: string;
+    /**
+     * "neutro"   — vidro incolor. Para ação secundária ou única.
+     * "destaque" — vidro TINGIDO. Vidro incolor num botão primário derruba a
+     *              hierarquia: ele vira mais um. O tingimento mantém o material
+     *              e devolve o peso visual de ação principal.
+     */
+    tom?: Tom;
+    tamanho?: Tamanho;
+    /** Seta que avança no hover. Faz sentido em "vamos" e não em "cancelar". */
+    seta?: boolean;
 };
 
-export default function LiquidGlassButton({ children, onClick, className = "" }: Props) {
+export default function LiquidGlassButton({
+    children,
+    onClick,
+    className = "",
+    tom = "neutro",
+    tamanho = "lg",
+    seta = true,
+}: Props) {
     const ref = useRef<HTMLButtonElement>(null);
     const [pressionado, setPressionado] = useState(false);
     const [semMovimento, setSemMovimento] = useState(false);
@@ -75,6 +95,10 @@ export default function LiquidGlassButton({ children, onClick, className = "" }:
                     0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,.00), 0 8px 32px -8px rgba(0,0,0,.6); }
                     50%      { box-shadow: 0 0 22px 2px rgba(34,211,238,.18), 0 8px 32px -8px rgba(0,0,0,.6); }
                 }
+                @keyframes zaeon-respiro-destaque {
+                    0%, 100% { box-shadow: 0 0 14px 0 rgba(34,211,238,.20), 0 10px 34px -10px rgba(0,0,0,.65); }
+                    50%      { box-shadow: 0 0 34px 4px rgba(34,211,238,.42), 0 10px 34px -10px rgba(0,0,0,.65); }
+                }
             `}</style>
 
             <button
@@ -92,16 +116,24 @@ export default function LiquidGlassButton({ children, onClick, className = "" }:
                     ["--rx" as string]: "0deg",
                     ["--ry" as string]: "0deg",
                     transform: `perspective(700px) rotateX(var(--rx)) rotateY(var(--ry)) scale(${pressionado ? 0.965 : 1})`,
-                    animation: semMovimento ? undefined : "zaeon-respiro 5.5s ease-in-out infinite",
+                    animation: semMovimento
+                        ? undefined
+                        : tom === "destaque"
+                          ? "zaeon-respiro-destaque 4.5s ease-in-out infinite"
+                          : "zaeon-respiro 5.5s ease-in-out infinite",
                 }}
                 className={[
                     "group relative isolate overflow-hidden rounded-full",
-                    "px-12 py-4 sm:px-14 sm:py-[18px]",
+                    tamanho === "lg"
+                        ? "px-12 py-4 sm:px-14 sm:py-[18px]"
+                        : "px-9 py-3.5",
                     // O vidro em si. saturate puxa a cor do vídeo pra dentro do material,
                     // que é o que diferencia vidro de plástico fosco.
-                    "bg-white/[0.07] backdrop-blur-2xl backdrop-saturate-[1.8]",
+                    "backdrop-blur-2xl backdrop-saturate-[1.8]",
+                    tom === "destaque"
+                        ? "bg-cyan-400/[0.20] hover:bg-cyan-400/[0.28] active:bg-cyan-400/[0.34]"
+                        : "bg-white/[0.07] hover:bg-white/[0.12] active:bg-white/[0.16]",
                     "transition-[transform,background-color] duration-300 ease-out",
-                    "hover:bg-white/[0.12] active:bg-white/[0.16]",
                     "focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
                     "cursor-pointer select-none",
                     className,
@@ -115,7 +147,9 @@ export default function LiquidGlassButton({ children, onClick, className = "" }:
                     style={{
                         padding: "1px",
                         background:
-                            "linear-gradient(135deg, rgba(255,255,255,.85), rgba(255,255,255,.10) 38%, rgba(255,255,255,0) 58%, rgba(190,240,255,.55))",
+                            tom === "destaque"
+                                ? "linear-gradient(135deg, rgba(255,255,255,.95), rgba(165,243,252,.25) 38%, rgba(255,255,255,0) 58%, rgba(34,211,238,.75))"
+                                : "linear-gradient(135deg, rgba(255,255,255,.85), rgba(255,255,255,.10) 38%, rgba(255,255,255,0) 58%, rgba(190,240,255,.55))",
                         WebkitMask:
                             "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
                         WebkitMaskComposite: "xor",
@@ -159,12 +193,22 @@ export default function LiquidGlassButton({ children, onClick, className = "" }:
                     />
                 )}
 
-                <span className="relative z-10 flex items-center justify-center gap-3 text-[15px] sm:text-base font-medium tracking-[0.22em] text-white uppercase drop-shadow-[0_1px_6px_rgba(0,0,0,0.55)]">
+                <span
+                    className={[
+                        "relative z-10 flex items-center justify-center gap-3 font-medium text-white uppercase",
+                        "drop-shadow-[0_1px_6px_rgba(0,0,0,0.55)]",
+                        tamanho === "lg"
+                            ? "text-[15px] sm:text-base tracking-[0.22em]"
+                            : "text-[11px] tracking-[0.18em]",
+                    ].join(" ")}
+                >
                     {children}
                     {/* Seta que avança no hover — a única recompensa de movimento. */}
-                    <span className="inline-block translate-x-0 transition-transform duration-300 ease-out group-hover:translate-x-1 motion-reduce:transition-none">
-                        &rarr;
-                    </span>
+                    {seta ? (
+                        <span className="inline-block translate-x-0 transition-transform duration-300 ease-out group-hover:translate-x-1 motion-reduce:transition-none">
+                            &rarr;
+                        </span>
+                    ) : null}
                 </span>
             </button>
         </>

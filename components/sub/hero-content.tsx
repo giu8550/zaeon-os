@@ -8,6 +8,7 @@ import { UserIcon } from "@heroicons/react/24/outline";
 
 // Componentes Internos
 import MenuNavigation from "@/components/sub/MenuNavigation";
+import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 import InviteButton from "@/components/sub/InviteButton";
 import { UserPlus } from "lucide-react";
@@ -44,25 +45,27 @@ const MODELS_MORE = [
 function LogoModelo({ slug, name, org }: { slug: string; name: string; org?: string }) {
   const [falhou, setFalhou] = useState(false);
 
-  if (falhou) {
-    return (
-      <>
-        <span className="font-medium">{name}</span>
-        {org ? <span className="text-slate-400 dark:text-slate-500"> · {org}</span> : null}
-      </>
-    );
-  }
-
+  // Logo E nome, não logo NO LUGAR do nome. Duas razões concretas, descobertas
+  // olhando o resultado: (1) nem toda marca tem glifo disponível — GPT e Grok
+  // ficaram sem, e a fileira virou duas gramáticas misturadas; (2) glifo sozinho
+  // funciona pra quem já conhece a marca, e some pra quem não conhece, que é
+  // justamente o público que o mural existe pra impressionar.
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={`/assets/models/${slug}.svg`}
-      alt={org ? `${name}, da ${org}` : name}
-      title={org ? `${name} · ${org}` : name}
-      onError={() => setFalhou(true)}
-      loading="lazy"
-      className="h-5 w-auto max-w-[110px] object-contain opacity-90 dark:brightness-0 dark:invert"
-    />
+    <span className="inline-flex items-center gap-2">
+      {falhou ? null : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/assets/models/${slug}.svg`}
+          alt=""
+          aria-hidden="true"
+          onError={() => setFalhou(true)}
+          loading="lazy"
+          className="h-4 w-4 shrink-0 object-contain opacity-90 dark:brightness-0 dark:invert"
+        />
+      )}
+      <span className="font-medium">{name}</span>
+      {org ? <span className="text-slate-400 dark:text-slate-500">· {org}</span> : null}
+    </span>
   );
 }
 
@@ -241,13 +244,17 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
               transition={{ duration: 0.4, delay: 0.2 }}
               className="mt-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center justify-start"
             >
-              <button
+              {/* Mesmo material do "Iniciar", em vidro TINGIDO: vidro incolor aqui
+                  derrubaria a hierarquia e este é o primário da página. */}
+              <LiquidGlassButton
                 onClick={() => setShowChatbox(true)}
-                className="group relative flex items-center justify-center gap-3 px-10 py-4 rounded-full bg-cyan-500 text-slate-950 font-semibold uppercase tracking-[0.18em] text-[11px] overflow-hidden transition-all hover:scale-105 hover:shadow-[0_0_28px_rgba(34,211,238,0.45)]"
+                tom="destaque"
+                tamanho="md"
+                className="w-full sm:w-auto"
               >
                 <UserIcon className="w-4 h-4" />
                 Começar grátis
-              </button>
+              </LiquidGlassButton>
               <a
                 href="#modelos"
                 className="group relative flex items-center justify-center gap-3 px-10 py-4 rounded-full border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 font-medium uppercase tracking-[0.18em] text-[11px] transition-all hover:border-cyan-400 hover:scale-105 bg-transparent"
