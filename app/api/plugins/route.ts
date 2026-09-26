@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/src/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/src/lib/auth";
+import { isSuperAdmin } from "@/lib/auth/roles";
 
-const prisma = new PrismaClient();
+// 🔒 Só super-admin cria/edita/apaga itens da Store (actionUrl é renderado a todos).
+async function assertAdmin() {
+    const session = await getServerSession(authOptions);
+    return isSuperAdmin({ email: session?.user?.email, role: (session?.user as any)?.role });
+}
 
-// --- MÉTODO GET: LER PLUGINS DA STORE ---
+// --- MÉTODO GET: LER PLUGINS DA STORE (público, só leitura) ---
 export async function GET() {
     try {
         const plugins = await prisma.plugin.findMany({
@@ -18,11 +25,12 @@ export async function GET() {
 
 // --- MÉTODO POST: CRIAR OU ATUALIZAR PLUGIN ---
 export async function POST(req: Request) {
+    if (!(await assertAdmin())) return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     try {
         const body = await req.json();
-        
-        const { 
-            id, name, author, description, category, 
+
+        const {
+            id, name, author, description, category,
             tag, price, actionUrl, isLocked, unlockRequirement 
         } = body;
 
@@ -72,6 +80,7 @@ export async function POST(req: Request) {
 
 // --- MÉTODO DELETE: DELETAR PLUGIN ---
 export async function DELETE(req: Request) {
+    if (!(await assertAdmin())) return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     try {
         const { searchParams } = new URL(req.url);
         const id = searchParams.get("id");

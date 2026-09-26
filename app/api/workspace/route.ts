@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/src/lib/prisma'; // Certifique-se de que este é o caminho correto para o seu cliente Prisma
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/src/lib/auth';
 
 export async function POST(req: Request) {
     try {
@@ -22,17 +24,13 @@ export async function POST(req: Request) {
             workContent
         } = body;
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Usuário não identificado' }, { status: 400 });
+        // 🔒 SEGURANÇA: o dono do workspace vem da SESSÃO, nunca do body (`userId` ignorado).
+        const session = await getServerSession(authOptions);
+        const sessionEmail = session?.user?.email?.toLowerCase();
+        if (!sessionEmail) {
+            return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
         }
-
-        // 1. Busca o usuário. ATENÇÃO: `id` é ObjectId — consultar com string não-ObjectId
-        // (ex.: email) faz o Prisma estourar ("Malformed ObjectID") → 500. Só usa `id` se
-        // o valor parecer um ObjectId; senão busca só por email.
-        const isObjId = /^[a-f\d]{24}$/i.test(String(userId));
-        const user = await prisma.user.findFirst({
-            where: isObjId ? { OR: [{ email: userId }, { id: userId }] } : { email: userId },
-        });
+        const user = await prisma.user.findFirst({ where: { email: sessionEmail } });
 
         if (!user) {
             return NextResponse.json({ error: 'Usuário não encontrado no banco de dados' }, { status: 404 });
@@ -76,18 +74,13 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
     try {
-        const { searchParams } = new URL(req.url);
-        const userId = searchParams.get('userId');
-
-        if (!userId) {
-            return NextResponse.json({ error: 'UserId required' }, { status: 400 });
+        // 🔒 SEGURANÇA: o dono do workspace vem da SESSÃO, nunca da query.
+        const session = await getServerSession(authOptions);
+        const sessionEmail = session?.user?.email?.toLowerCase();
+        if (!sessionEmail) {
+            return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
         }
-
-        // Busca o usuário (ObjectId-safe: email não é ObjectId → não pode ir no campo `id`).
-        const isObjId = /^[a-f\d]{24}$/i.test(String(userId));
-        const user = await prisma.user.findFirst({
-            where: isObjId ? { OR: [{ email: userId }, { id: userId }] } : { email: userId },
-        });
+        const user = await prisma.user.findFirst({ where: { email: sessionEmail } });
 
         if (!user) {
             return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });

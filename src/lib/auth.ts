@@ -29,24 +29,33 @@ export const authOptions: NextAuthOptions = {
             },
             async authorize(credentials) {
                 if (!credentials?.email) return null;
+                const email = credentials.email.toLowerCase();
 
                 const client = (await clientPromise) as MongoClient;
                 const db = client.db();
-                
-                const user = await db.collection("users").findOne({ email: credentials.email.toLowerCase() });
 
-                if (user) {
-                    return {
-                        id: user._id.toString(),
-                        name: user.name,
-                        email: user.email,
-                        // 🔥 A CORREÇÃO ESTÁ AQUI: NÃO retornamos a imagem para o NextAuth!
-                        // Deixamos a imagem no banco. O cookie ficará ultra-leve.
-                        role: user.role
-                    };
+                const user = await db.collection("users").findOne({ email });
+                if (!user) return null;
+
+                // 🔒 SEGURANÇA: o login sem senha (Guest/onboarding) NUNCA pode entrar
+                // numa conta privilegiada — fecha o vetor de takeover de admin por email.
+                const role = String(user.role || "").toLowerCase();
+                if (
+                    ADMIN_EMAILS.includes(email) ||
+                    isSuperAdminEmail(email) ||
+                    role === "super_admin" ||
+                    role === "admin"
+                ) {
+                    return null;
                 }
-                
-                return null;
+
+                return {
+                    id: user._id.toString(),
+                    name: user.name,
+                    email: user.email,
+                    // Não retornamos imagem pro NextAuth (cookie leve).
+                    role: user.role,
+                };
             }
         })
     ],
