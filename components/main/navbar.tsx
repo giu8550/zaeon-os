@@ -184,7 +184,7 @@ export const Navbar = () => {
 
   return (
     <div 
-      className={`w-full h-[90px] fixed top-0 z-[100] flex justify-center items-center pointer-events-none font-sans transition-all duration-700 ease-in-out ${
+      className={`w-full h-[90px] fixed top-0 z-[100] pt-[env(safe-area-inset-top)] flex justify-center items-center pointer-events-none font-sans transition-all duration-700 ease-in-out ${
         isFocusMode ? "-translate-y-full opacity-0" : "translate-y-0 opacity-100"
       }`}
     >

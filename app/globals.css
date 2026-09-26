@@ -97,8 +97,18 @@ html { scroll-behavior: smooth; }
    Usa 100% e nao 100vw de proposito: 100vw inclui a barra de rolagem e
    empurraria a pagina uns pixels para a esquerda no desktop. */
 @layer components {
+    /* O `max(..., env(safe-area-inset-*))` so muda alguma coisa em aparelho com
+       entalhe DEITADO, onde a area segura come uns 44px de um dos lados: sem
+       ele o texto encosta na ilha. Em qualquer outro caso o env() vale 0px e a
+       conta continua sendo a do container. */
     .zaeon-borda {
-        padding-left: clamp(1.25rem, calc((100% - 1200px) / 2 + 3.5rem), 50%);
-        padding-right: clamp(1.25rem, calc((100% - 1200px) / 2 + 3.5rem), 50%);
+        padding-left: max(clamp(1.25rem, calc((100% - 1200px) / 2 + 3.5rem), 50%), env(safe-area-inset-left));
+        padding-right: max(clamp(1.25rem, calc((100% - 1200px) / 2 + 3.5rem), 50%), env(safe-area-inset-right));
     }
+}
+
+/* Queixo do iPhone / barra de gestos do Android: sem isso o rodape fica
+   escondido atras da barrinha quando o app roda instalado. */
+body {
+    padding-bottom: env(safe-area-inset-bottom);
 }

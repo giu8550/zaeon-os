@@ -68,12 +68,50 @@ const newsreader = Newsreader({
     display: "swap",
 });
 
-export const viewport: Viewport = { themeColor: "#030014" };
-export const metadata: Metadata = siteConfig;
+/**
+ * `viewportFit: "cover"` e o que faz a pagina ocupar a tela inteira em aparelho
+ * com entalhe/ilha; sem ele o iOS deixa duas tarjas da cor de fundo em cima e
+ * embaixo quando o app roda instalado. O preco disso sao os `env(safe-area-inset-*)`
+ * na navbar e no body (globals.css) -- os dois andam juntos: pedir `cover` sem
+ * tratar as bordas coloca a navbar embaixo do relogio.
+ *
+ * NAO existe `maximumScale`/`userScalable` aqui de proposito: bloquear o zoom
+ * deixa o app inacessivel para quem enxerga mal, e o iOS ignora mesmo assim.
+ *
+ * `themeColor` e um valor so, escuro, e nao um par por `prefers-color-scheme`:
+ * a Zaeon abre no escuro por padrao, entao um par pintaria a barra do navegador
+ * de branco para quem esta no claro do SO -- que e o descasamento pior.
+ */
+export const viewport: Viewport = {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+    themeColor: "#030014",
+};
+
+export const metadata: Metadata = {
+    ...siteConfig,
+    applicationName: "Zaeon",
+    // O manifesto vive em app/manifest.ts; o Next serve e linka sozinho.
+    appleWebApp: {
+        capable: true,
+        title: "Zaeon",
+        // "black-translucent" deixa o conteudo correr por baixo da barra de
+        // status; so e honesto porque a navbar recua com safe-area-inset-top.
+        statusBarStyle: "black-translucent",
+    },
+    icons: {
+        icon: [
+            { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+            { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+        ],
+        apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    },
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
     return (
-        <html lang="en" className="scroll-smooth" suppressHydrationWarning>
+        <html lang="pt-BR" className="scroll-smooth" suppressHydrationWarning>
             <body
                 className={cn(
                     "relative bg-white dark:bg-background text-foreground overflow-x-hidden overflow-y-scroll",
