@@ -44,3 +44,16 @@ body {
 .scrollbar-hidden { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-hidden::-webkit-scrollbar { display: none; }
 html { scroll-behavior: smooth; }
+/* ── Alinhamento da landing ─────────────────────────────────────────────── */
+/* Uma so margem esquerda para a pagina inteira. O padding e calculado para que
+   o conteudo comece exatamente onde comecaria um container de 1200px
+   centralizado com 56px de calha -- mas o elemento em si continua sangrando de
+   borda a borda, entao fundo, marquee e gradiente nao ficam espremidos junto.
+   Usa 100% e nao 100vw de proposito: 100vw inclui a barra de rolagem e
+   empurraria a pagina uns pixels para a esquerda no desktop. */
+@layer components {
+    .zaeon-borda {
+        padding-left: clamp(1.25rem, calc((100% - 1200px) / 2 + 3.5rem), 50%);
+        padding-right: clamp(1.25rem, calc((100% - 1200px) / 2 + 3.5rem), 50%);
+    }
+}

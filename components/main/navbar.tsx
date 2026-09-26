@@ -190,7 +190,7 @@ export const Navbar = () => {
     >
       {/* Navbar CHAPADA: barra full-width, hairline embaixo, sem pílula/borda redonda/sombra pesada. */}
       <div className="pointer-events-auto w-full h-[64px] backdrop-blur-xl bg-background/80 border-b border-foreground/10 flex items-center">
-        <div className="w-full max-w-[1300px] mx-auto flex items-center justify-between px-6 md:px-8">
+        <div className="w-full zaeon-borda flex items-center justify-between">
 
           <Link href="/" className="transition-opacity hover:opacity-80">
             <Image src={logoPng} alt="logo" width={220} height={100} priority className="h-9 w-auto invert dark:invert-0" />

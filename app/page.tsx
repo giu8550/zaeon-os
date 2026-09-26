@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 
-import HeroPage, { type HeroVariant } from "@/components/sub/hero-content";
+import HeroPage from "@/components/sub/hero-content";
 import Encryption from "@/components/main/encryption";
 import StudyRoomsPage from "@/app/study-rooms/page";
 import IntroOverlay from "@/src/components/main/intro-overlay";
@@ -23,17 +23,6 @@ export default function Home() {
     
     // NOVO: Estado para blindar contra o Hydration Error
     const [mounted, setMounted] = useState(false);
-
-    // Duas versoes do H1 vivendo juntas so pra decidir olhando. O default e a
-    // variante atual ("Todas as IAs"); ?hero=sozinho mostra a outra. Leitura do
-    // window depois do mount, que ja e onde este componente se protege de
-    // hydration error -- sem Suspense, sem useSearchParams.
-    const [heroVariant, setHeroVariant] = useState<HeroVariant>("ias");
-
-    useEffect(() => {
-        const v = new URLSearchParams(window.location.search).get("hero");
-        if (v === "sozinho" || v === "b") setHeroVariant("sozinho");
-    }, []);
 
     const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
@@ -85,7 +74,7 @@ export default function Home() {
 
                     {/* CORREÇÃO DE LAYOUT: O pt-[110px] empurra a página pra baixo da Navbar */}
                     <div className="flex flex-col gap-20 pt-[110px] w-full">
-                        <HeroPage variant={heroVariant} />
+                        <HeroPage />
                         <Encryption />
                         <div id="study-rooms" className="w-full">
                             <Suspense fallback={null}>
@@ -96,16 +85,6 @@ export default function Home() {
 
                     <Footer />
 
-                    {/* Chave de comparacao dos dois H1. So existe em dev: em
-                        producao este bloco nao e renderizado. */}
-                    {process.env.NODE_ENV === "development" && (
-                        <a
-                            href={heroVariant === "ias" ? "?hero=sozinho" : "?hero=ias"}
-                            className="fixed bottom-4 right-4 z-[200] rounded-full border border-cyan-500/40 bg-background/80 px-4 py-2 text-[11px] font-mono uppercase tracking-wider text-cyan-600 dark:text-cyan-400 backdrop-blur-md shadow-lg"
-                        >
-                            hero: {heroVariant} · trocar
-                        </a>
-                    )}
                 </motion.div>
             )}
         </main>

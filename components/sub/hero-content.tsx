@@ -86,9 +86,7 @@ const VERBOS = [
 const FRASE_COMPLETA =
   "Aqui ninguém trabalha, estuda, pesquisa, escreve, publica, evolui, cresce ou prospera sozinho.";
 
-export type HeroVariant = "ias" | "sozinho";
-
-export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant }) {
+export default function HeroPage() {
   const { t } = useTranslation();
   const { status } = useSession();
 
@@ -107,13 +105,13 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
   }, []);
 
   useEffect(() => {
-    if (variant !== "sozinho" || semMovimento) return;
+    if (semMovimento) return;
     const id = setInterval(
       () => setVerboIndex((i) => (i + 1) % VERBOS.length),
       2600
     );
     return () => clearInterval(id);
-  }, [variant, semMovimento]);
+  }, [semMovimento]);
 
   // Redireciona diretamente para o chat caso já esteja logado
   useEffect(() => {
@@ -123,7 +121,7 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
   }, [status]);
 
   return (
-    <main className="w-full min-h-screen flex flex-col items-start justify-start relative px-8 md:px-16 lg:px-24 pt-24 md:pt-32 lg:pt-40 pb-20 overflow-hidden transition-colors duration-700 font-sans">
+    <main className="w-full min-h-screen flex flex-col items-start justify-start relative zaeon-borda pt-24 md:pt-32 lg:pt-40 pb-20 overflow-hidden transition-colors duration-700 font-sans">
 
       {/* BACKGROUND LIMPO - Apenas o StarBackground visível */}
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -148,7 +146,6 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="relative flex flex-col items-start justify-center"
         >
-          {variant === "sozinho" ? (
             <h1 className="text-[2rem] sm:text-4xl md:text-[3.5rem] font-light tracking-tighter text-slate-900 dark:text-white leading-[1.15] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
               <span aria-hidden="true">
@@ -187,19 +184,6 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
                 sozinho.
               </span>
             </h1>
-          ) : (
-            <h1 className="text-3xl sm:text-4xl md:text-[3.5rem] font-light tracking-tighter text-slate-900 dark:text-white leading-[1.15] z-10 relative">
-              Todas as IAs. Um lugar só. <br className="hidden md:block" />
-              Feito pra{" "}
-              <span
-                className="cyber-glitch relative inline-block font-semibold text-cyan-600 dark:text-cyan-400"
-                data-text="ciência"
-              >
-                ciência
-              </span>
-              .
-            </h1>
-          )}
 
           <AnimatePresence>
             {!showChatbox && (
@@ -210,7 +194,6 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
                 transition={{ duration: 0.4, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                {variant === "sozinho" ? (
                   <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
                     Todas as IAs num lugar só — GPT, Claude, Gemini, Grok e mais — num
                     sistema onde você não só conversa, você{" "}
@@ -219,16 +202,6 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
                     </span>
                     .
                   </p>
-                ) : (
-                  <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
-                    GPT, Claude, Gemini, Grok e mais — num sistema interativo onde você não só
-                    conversa, você{" "}
-                    <span className="text-slate-800 dark:text-slate-200 font-normal">
-                      produz conhecimento
-                    </span>
-                    .
-                  </p>
-                )}
               </motion.div>
             )}
           </AnimatePresence>
