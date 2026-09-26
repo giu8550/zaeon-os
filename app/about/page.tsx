@@ -473,7 +473,7 @@ export default function AboutUsPage() {
                 {/* Hero Title */}
                 <CyberTitle
                     startAnimations={true}
-                    secondaryText="PLATAFORMA DE AGENTES IA"
+                    secondaryText="TODAS AS IAS · FEITO PRA CIÊNCIA"
                     mainText="ZAEON"
                     scrollText="Descubra mais"
                 />
@@ -485,14 +485,15 @@ export default function AboutUsPage() {
                         Para qualquer profissão. Para qualquer rotina.
                     </h2>
                     <p className="font-medium text-white/95">
-                        A Zaeon é onde você cria, contrata e usa agentes de inteligência artificial
-                        para te ajudar no dia a dia — seja você designer, advogado, médico, professor,
-                        empreendedor ou simplesmente curioso.
+                        A Zaeon reúne todas as IAs que você já conhece — GPT, Claude, Gemini, Grok e
+                        mais — num só lugar, dentro de um sistema interativo feito pra você não só
+                        conversar, mas <span className="text-white">produzir conhecimento</span> — seja
+                        você estudante, professor, pesquisador, empreendedor ou simplesmente curioso.
                     </p>
                     <p className="text-white/80">
-                        Cada agente tem voz, personalidade e habilidades definidas por quem o criou.{" "}
+                        Cada modelo com sua força, dentro de um só método científico.{" "}
                         <span className="text-cyan-400 font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.3)]">
-                            Não existe profissão que não caiba aqui.
+                            Não confie em uma IA. Faça ciência com várias.
                         </span>
                     </p>
                 </TextBlock>

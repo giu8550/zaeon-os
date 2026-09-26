@@ -24,7 +24,7 @@ export const Footer = () => {
           {COLUMNS.length === 0 ? (
             <div className="w-full text-center text-white/60 py-6">
               {/* Fallback discreto quando não há dados de rodapé */}
-              <span>Zaeon - AI Agents for a New World</span>
+              <span>Zaeon — todas as IAs, feito pra ciência.</span>
             </div>
           ) : (
             COLUMNS.map((column) => (
