@@ -22,15 +22,18 @@ export default function SponsorsMarquee() {
 
   return (
     <div className="absolute inset-x-0 bottom-0 z-20 pointer-events-none">
+      {/* Degradê acima da barra: ela derrete no vídeo em vez de aparecer como
+          uma faixa colada com aresta dura. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-full h-20 bg-gradient-to-t from-black/75 to-transparent" />
       <div
-        className="w-full overflow-hidden border-t border-black/10 dark:border-white/10
-          bg-white/40 dark:bg-black/40 backdrop-blur-md"
+        className="w-full overflow-hidden border-t border-white/[0.07]
+          bg-black/50 backdrop-blur-md"
       >
-        <div className="flex whitespace-nowrap py-2.5">
+        <div className="flex whitespace-nowrap py-3.5">
           <motion.div
             animate={{ x: ["0%", "-50%"] }}
             transition={{ ease: "linear", duration: 30, repeat: Infinity }}
-            className="flex items-center gap-8 px-6 shrink-0"
+            className="flex items-center gap-12 px-8 shrink-0"
           >
             {items.map((s, i) => (
               <a
@@ -39,10 +42,12 @@ export default function SponsorsMarquee() {
                 target="_blank"
                 rel="noopener noreferrer"
                 title={s.name}
-                className="pointer-events-auto relative flex items-center justify-center h-9 w-[110px] shrink-0
-                  opacity-60 hover:opacity-100 transition-opacity"
+                className="pointer-events-auto relative flex items-center justify-center h-12 w-[150px] shrink-0
+                  opacity-90 hover:opacity-100 transition-opacity
+                  [&_img]:brightness-110 [&_img]:contrast-105
+                  [&_img]:drop-shadow-[0_0_10px_rgba(255,255,255,0.28)]"
               >
-                <NextImage src={s.src} alt={s.name} fill className="object-contain" sizes="110px" />
+                <NextImage src={s.src} alt={s.name} fill className="object-contain" sizes="150px" />
               </a>
             ))}
           </motion.div>
