@@ -97,7 +97,24 @@ const nextConfig = {
         optimizePackageImports: ["framer-motion", "recharts", "@heroicons/react", "lucide-react"],
     },
 
-    // 5. Build e Qualidade
+    // 5. Service worker (public/sw.js). O Cache-Control é o que importa: se o
+    // próprio /sw.js ficasse em cache, o interruptor de emergência (DESLIGAR)
+    // não chegaria no aparelho. Vale no servidor custom porque o server.js
+    // delega tudo pro app.getRequestHandler().
+    async headers() {
+        return [
+            {
+                source: "/sw.js",
+                headers: [
+                    { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+                    { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+                    { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+                ],
+            },
+        ];
+    },
+
+    // 6. Build e Qualidade
     eslint: {
         ignoreDuringBuilds: true,
     },
