@@ -1,11 +1,9 @@
 "use client";
 
-import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
-import React, { useRef, useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import React, { useState, useEffect } from "react";
 import NextImage from "next/image";
 import {
-    PlayIcon,
-    XMarkIcon,
     CpuChipIcon,
     BeakerIcon,
     ScaleIcon,
@@ -15,6 +13,7 @@ import {
     ChevronRightIcon
 } from "@heroicons/react/24/solid";
 import { useTranslation } from "react-i18next";
+import ZaeonFlowDiagram from "./ZaeonFlowDiagram";
 
 // --- TICKER DE PATROCINADORES ---
 const SponsorsTicker = ({ opacity }: { opacity: any }) => {
@@ -68,16 +67,6 @@ const SponsorCard = ({ item }: { item: { name: string; src: string; url: string 
     );
 };
 
-const TypingEffect = ({ text, className }: { text: string; className: string }) => {
-    const characters = Array.from(text);
-    return (
-        <motion.div className={className} style={{ whiteSpace: "nowrap" }}>
-            {characters.map((char, i) => (
-                <motion.span key={i} initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ duration: 0.03, delay: i * 0.02 }} viewport={{ once: true }}>{char}</motion.span>
-            ))}
-        </motion.div>
-    );
-};
 
 // =========================================================================
 // NOVO: SECÇÃO DE CONTRATAÇÃO DE AGENTES (Stack 3D e Highlight)
@@ -391,9 +380,6 @@ const ProcessFlowchart = () => {
 
 // --- COMPONENTE PRINCIPAL (PÁGINA) ---
 export default function Encryption() {
-    const { t } = useTranslation();
-    const sectionRef = useRef<HTMLDivElement>(null);
-    const [isVideoOpen, setIsVideoOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -401,62 +387,19 @@ export default function Encryption() {
         return () => clearTimeout(timer);
     }, []);
 
-    const { scrollYProgress } = useScroll({
-        target: sectionRef,
-        offset: ["start start", "end end"]
-    });
-
-    const scale = useTransform(scrollYProgress, [0, 0.4, 0.8, 1], [0.95, 1.35, 1.35, 0.85]);
-    const videoOpacity = useTransform(scrollYProgress, [0, 0.15, 0.85, 1], [0.1, 1, 1, 0]);
-    const sponsorsOpacity = useTransform(scrollYProgress, [0.3, 0.5, 0.85, 1], [0, 1, 1, 0]);
-
     if (!mounted) return <div className="min-h-screen bg-transparent" />;
 
     return (
         <div className="w-full relative">
             <section
-                ref={sectionRef}
-                className="relative z-[30] min-h-[200vh] w-full bg-transparent flex flex-col items-center pt-40"
+                className="relative z-[30] w-full bg-transparent flex flex-col items-center pt-28 md:pt-36 pb-10"
             >
-                {/* TÍTULO PRINCIPAL DINÂMICO */}
-                <div className="w-full max-w-7xl text-center mb-16 px-4">
-                    <TypingEffect
-                        text={t("encryption.typing_title", "A new way to produce science.")}
-                        className="text-slate-900 dark:text-white text-[6vw] md:text-[64px] font-extralight tracking-tighter"
-                    />
+                {/* DIAGRAMA VIVO: entrada -> cerebro Zaeon -> saida */}
+                <ZaeonFlowDiagram className="w-full max-w-6xl px-4" />
+
+                <div className="w-full mt-10 md:mt-16">
+                    <SponsorsTicker opacity={1} />
                 </div>
-
-                {/* VÍDEO (STICKY) & PATROCINADORES */}
-                <div className="sticky top-0 h-screen w-full flex flex-col items-center justify-center pointer-events-none">
-                    <motion.div
-                        style={{ scale, opacity: videoOpacity }}
-                        className="relative w-[95%] max-w-[1200px] aspect-video bg-zinc-900 shadow-[0_0_80px_rgba(0,0,0,0.3)] rounded-[2.5rem] overflow-hidden group cursor-pointer pointer-events-auto"
-                        onClick={() => setIsVideoOpen(true)}
-                    >
-                        <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-                            <source src="/assets/encryption-bg.mp4" type="video/mp4" />
-                        </video>
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <PlayIcon className="w-20 h-20 text-white drop-shadow-2xl" />
-                        </div>
-                    </motion.div>
-
-                    <div className="w-full pointer-events-auto mt-auto mb-10">
-                        <SponsorsTicker opacity={sponsorsOpacity} />
-                    </div>
-                </div>
-
-                {/* MODAL DO VÍDEO */}
-                <AnimatePresence>
-                    {isVideoOpen && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
-                            <button onClick={() => setIsVideoOpen(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><XMarkIcon className="w-10 h-10" /></button>
-                            <div className="w-full max-w-6xl aspect-video rounded-3xl overflow-hidden shadow-2xl">
-                                <iframe className="w-full h-full" src="https://www.youtube.com/embed/SuaIDAqui?autoplay=1" allow="autoplay; fullscreen" />
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
             </section>
 
             {/* ========================================================= */}
