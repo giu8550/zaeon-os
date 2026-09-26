@@ -265,7 +265,7 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
           )}
         </AnimatePresence>
 
-        {/* MURAL DE MODELOS + TEASER DA TRIANGULAÇÃO */}
+        {/* MURAL DE MODELOS */}
         <AnimatePresence>
           {!showChatbox && (
             <motion.div
@@ -276,9 +276,6 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
               transition={{ duration: 0.5, delay: 0.35 }}
               className="mt-14 w-full max-w-3xl scroll-mt-28"
             >
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500 dark:text-slate-500 mb-4">
-                Todos num só lugar
-              </p>
               <div className="flex flex-wrap gap-3">
                 {MODELS_MAIN.map((m) => (
                   <span
@@ -298,12 +295,6 @@ export default function HeroPage({ variant = "ias" }: { variant?: HeroVariant })
                 ))}
               </div>
 
-              <div className="mt-6 flex items-center gap-2.5">
-                <span className="text-sm italic text-slate-500 dark:text-slate-400">
-                  Por que vários modelos? Porque ciência é triangular.
-                </span>
-                <span className="text-sm text-cyan-600 dark:text-cyan-400">→</span>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
