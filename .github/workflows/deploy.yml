@@ -88,11 +88,16 @@ jobs:
           DB_PUSH: ${{ github.event.inputs.db_push || 'true' }}
           # URL pública do app → vira NEXTAUTH_URL no compose (redirect do Google).
           APP_URL: ${{ vars.APP_URL || 'https://75-119-140-97.sslip.io' }}
-          # Hostnames do Caddy, separados por vírgula SEM espaço (vai como env por SSH).
+          # Hostnames do Caddy. O Caddy exige vírgula + ESPAÇO entre site addresses:
+          # 'a,b' derruba o container em loop ("Site addresses cannot contain a comma").
+          # Já aconteceu em 26/09 e tirou o HTTPS do ar. O script normaliza os dois
+          # formatos antes de subir, mas escreva a Variable com espaço mesmo assim.
           # O default é só o endereço provisório DE PROPÓSITO: pedir certificado pra um
           # domínio que ainda não resolve gasta tentativa de ACME à toa. Quando o DNS do
-          # zaeon.com.br subir, setar a Variable BETA_DOMAIN com a lista completa
-          # ('zaeon.com.br,www.zaeon.com.br,75-119-140-97.sslip.io') e redeployar.
+          # zaeon.com.br subir, setar a Variable BETA_DOMAIN e redeployar — feito em
+          # 26/09: hoje ela vale 'zaeon.com.br, 75-119-140-97.sslip.io'. O www fica FORA
+          # da lista: tem bloco próprio de redirect no Caddyfile, porque o client OAuth
+          # do Google não aceita o callback com www.
           BETA_DOMAIN: ${{ vars.BETA_DOMAIN || '75-119-140-97.sslip.io' }}
           # E-mail do ACME (Let's Encrypt manda aviso de expiração pra cá). O default do
           # compose é um endereço em zaeon.space, domínio que EXPIROU — aviso indo pro vazio.
@@ -146,6 +151,12 @@ jobs:
               SERVICES="redis caddy web"
               NODEPS="--no-deps"     # não puxa voice-engine/abnt (glutões)
             fi
+
+            # O Caddy quebra com "a,b" e aceita "a, b". Normaliza o que vier da
+            # Variable pra que um esquecimento de espaço não derrube o HTTPS.
+            BETA_DOMAIN="$(printf '%s' "$BETA_DOMAIN" | sed 's/[[:space:]]*,[[:space:]]*/, /g')"
+            export BETA_DOMAIN
+            echo "→ Hostnames do Caddy: $BETA_DOMAIN"
 
             echo "→ Subindo containers (coexist: não toca outras stacks)…"
             $DC up -d --build $NODEPS $SERVICES
