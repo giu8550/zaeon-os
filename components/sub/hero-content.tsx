@@ -3,34 +3,113 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { signIn, useSession } from "next-auth/react";
-import { SparklesIcon, UserIcon } from "@heroicons/react/24/outline";
+import { useSession } from "next-auth/react";
+import { UserIcon } from "@heroicons/react/24/outline";
 
 // Componentes Internos
 import MenuNavigation from "@/components/sub/MenuNavigation";
+import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 
-// Público-alvo que rotaciona no fim da frase ("...para <público>").
-const TARGET_WORDS = [
-  "você.",
-  "curiosos.",
-  "estudantes.",
-  "professores.",
-  "coordenadores.",
-  "empresários.",
-  "nerds.",
-  "geeks.",
+// Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
+// Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
+// ficam mais discretos que os quatro principais.
+const MODELS_MAIN = [
+  { name: "GPT", org: "OpenAI", slug: "openai" },
+  { name: "Claude", org: "Anthropic", slug: "anthropic" },
+  { name: "Gemini", org: "Google", slug: "google" },
+  { name: "Grok", org: "xAI", slug: "xai" },
 ];
+const MODELS_MORE = [
+  { name: "Llama", slug: "meta" },
+  { name: "DeepSeek", slug: "deepseek" },
+  { name: "Mistral", slug: "mistral" },
+];
+
+/**
+ * Logo do provedor, com o nome como rede de segurança.
+ *
+ * Os arquivos oficiais entram em `public/assets/models/<slug>.svg`. Enquanto não
+ * estiverem lá, o `onError` devolve o texto e a página não quebra — então este
+ * componente pode subir antes dos assets.
+ *
+ * NÃO desenhamos marca de terceiro à mão: logo de fabricante se pega no press
+ * kit dele, não se aproxima no olho.
+ *
+ * `dark:brightness-0 dark:invert` pinta tudo de branco no escuro, o que deixa os
+ * sete coerentes entre si. Algumas diretrizes de marca proíbem recolorir — se
+ * for o caso de alguma, é só tirar essas duas classes.
+ */
+function LogoModelo({ slug, name, org }: { slug: string; name: string; org?: string }) {
+  const [falhou, setFalhou] = useState(false);
+
+  // Logo E nome, não logo NO LUGAR do nome. Duas razões concretas, descobertas
+  // olhando o resultado: (1) nem toda marca tem glifo disponível — GPT e Grok
+  // ficaram sem, e a fileira virou duas gramáticas misturadas; (2) glifo sozinho
+  // funciona pra quem já conhece a marca, e some pra quem não conhece, que é
+  // justamente o público que o mural existe pra impressionar.
+  return (
+    <span className="inline-flex items-center gap-2">
+      {falhou ? null : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/assets/models/${slug}.svg`}
+          alt=""
+          aria-hidden="true"
+          onError={() => setFalhou(true)}
+          loading="lazy"
+          className="h-4 w-4 shrink-0 object-contain opacity-90 dark:brightness-0 dark:invert"
+        />
+      )}
+      <span className="font-medium">{name}</span>
+      {org ? <span className="text-slate-400 dark:text-slate-500">· {org}</span> : null}
+    </span>
+  );
+}
+
+// Variante B do H1 — "Ninguém ___ sozinho.". O verbo gira, o remate fica parado.
+// Ordem: do concreto (o que a pessoa faz hoje) pro abstrato (onde ela quer chegar).
+const VERBOS = [
+  "trabalha",
+  "estuda",
+  "pesquisa",
+  "escreve",
+  "publica",
+  "evolui",
+  "cresce",
+  "prospera",
+];
+// Frase inteira, estável, para leitor de tela: um H1 não pode depender de qual
+// verbo estava na tela no instante da leitura.
+const FRASE_COMPLETA =
+  "Aqui ninguém trabalha, estuda, pesquisa, escreve, publica, evolui, cresce ou prospera sozinho.";
 
 export default function HeroPage() {
   const { t } = useTranslation();
   const { status } = useSession();
 
   const [showChatbox, setShowChatbox] = useState(false);
-  const [wordIndex, setWordIndex] = useState(0);
-  // Trocadilho: "A gente" pisca pra "Agentes" de vez em quando (sincronizado com o verbo
-  // facilita↔facilitam). Fica a maior parte do tempo em "A gente" e dá flashes de "Agentes".
-  const [agenteOn, setAgenteOn] = useState(false);
+  const [verboIndex, setVerboIndex] = useState(0);
+  const [semMovimento, setSemMovimento] = useState(false);
+
+  // Quem pediu menos movimento no sistema não recebe carrossel: fica no primeiro
+  // verbo, parado. Vale pra acessibilidade e pra bateria.
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setSemMovimento(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (semMovimento) return;
+    const id = setInterval(
+      () => setVerboIndex((i) => (i + 1) % VERBOS.length),
+      2600
+    );
+    return () => clearInterval(id);
+  }, [semMovimento]);
 
   // Redireciona diretamente para o chat caso já esteja logado
   useEffect(() => {
@@ -39,29 +118,8 @@ export default function HeroPage() {
     }
   }, [status]);
 
-  // Rotaciona o público em destaque a cada 3 segundos
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setWordIndex((prev) => (prev + 1) % TARGET_WORDS.length);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Flicker "A gente" → "Agentes": ~2,8s em "A gente", ~0,8s em "Agentes" (loop).
-  useEffect(() => {
-    let to: ReturnType<typeof setTimeout>;
-    let on = false;
-    const tick = () => {
-      on = !on;
-      setAgenteOn(on);
-      to = setTimeout(tick, on ? 800 : 2800);
-    };
-    to = setTimeout(tick, 2800);
-    return () => clearTimeout(to);
-  }, []);
-
   return (
-    <main className="w-full min-h-screen flex flex-col items-start justify-start relative px-8 md:px-16 lg:px-24 pt-24 md:pt-32 lg:pt-40 pb-20 overflow-hidden transition-colors duration-700 font-sans">
+    <main className="w-full flex flex-col items-start justify-start relative zaeon-borda pt-10 md:pt-16 pb-12 md:pb-16 overflow-hidden transition-colors duration-700 font-sans">
 
       {/* BACKGROUND LIMPO - Apenas o StarBackground visível */}
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -69,7 +127,7 @@ export default function HeroPage() {
       </div>
 
       {/* ========================================= */}
-      {/* HIGHLIGHT (HERO) - MINIMALISTA & GLITCH   */}
+      {/* HERO v2 — TODAS AS IAS, FEITO PRA CIÊNCIA */}
       {/* ========================================= */}
       <motion.div
         animate={{
@@ -86,52 +144,68 @@ export default function HeroPage() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="relative flex flex-col items-start justify-center"
         >
-          <h1 className="text-3xl sm:text-4xl md:text-[3.5rem] font-light tracking-tighter text-slate-900 dark:text-white leading-[1.2] z-10 relative">
-            {/* Trocadilho: "A gente facilita" ↔ "Agentes facilitam" (sincronizado) */}
-            <span
-              className="cyber-glitch relative inline-block font-semibold text-cyan-600 dark:text-cyan-400"
-              data-text={agenteOn ? "Agentes" : "A gente"}
-            >
-              {agenteOn ? "Agentes" : "A gente"}
-            </span>{" "}
-            {agenteOn ? "facilitam" : "facilita"} a vida para <br className="hidden md:block" />
-
-            {/* Altura mínima garantida para evitar saltos no layout durante a troca de palavras */}
-            <div className="min-h-[1.2em] flex items-center justify-start mt-2 md:mt-4">
-              <AnimatePresence mode="wait">
-                <motion.span
-                  key={wordIndex}
-                  initial={{ opacity: 0, filter: "blur(8px)", y: 10, skewX: 10 }}
-                  animate={{ opacity: 1, filter: "blur(0px)", y: 0, skewX: 0 }}
-                  exit={{ opacity: 0, filter: "blur(8px)", y: -10, skewX: -10 }}
-                  transition={{ duration: 0.5, ease: "easeInOut" }}
-                  className="font-extralight tracking-widest text-cyan-600 dark:text-cyan-400 cyber-glitch relative inline-block"
-                  data-text={TARGET_WORDS[wordIndex]}
-                >
-                  {TARGET_WORDS[wordIndex]}
-                </motion.span>
-              </AnimatePresence>
-            </div>
-          </h1>
+            <h1 className="text-[2rem] sm:text-4xl md:text-[3.5rem] font-light tracking-tighter text-slate-900 dark:text-white leading-[1.15] z-10 relative">
+              <span className="sr-only">{FRASE_COMPLETA}</span>
+              <span aria-hidden="true">
+                Aqui ninguém
+                {/* Slot em grid: TODOS os verbos ocupam a MESMA célula, então a largura
+                    do slot é a do verbo mais longo e o "sozinho." nunca pula quando o
+                    verbo troca. Sem número mágico, sem medir fonte.
+                    `justify-items-center` centraliza a palavra dentro do slot: sem isso
+                    um verbo curto encosta à esquerda e abre um buraco só de um lado,
+                    que é o que dava o aspecto torto. A margem em `em` afasta de AMBAS
+                    as palavras, então a folga vira espaçamento deliberado em vez de
+                    sobra de layout — e escala junto com o tamanho da fonte. */}
+                <span className="relative inline-grid justify-items-center align-baseline mx-[0.4em]">
+                  {VERBOS.map((v) => (
+                    <span
+                      key={v}
+                      className="col-start-1 row-start-1 invisible font-semibold"
+                    >
+                      {v}
+                    </span>
+                  ))}
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={VERBOS[verboIndex]}
+                      initial={{ opacity: 0, filter: "blur(8px)", y: 8 }}
+                      animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
+                      exit={{ opacity: 0, filter: "blur(8px)", y: -8 }}
+                      transition={{ duration: 0.45, ease: "easeInOut" }}
+                      className="cyber-glitch col-start-1 row-start-1 font-semibold text-cyan-600 dark:text-cyan-400"
+                      data-text={VERBOS[verboIndex]}
+                    >
+                      {VERBOS[verboIndex]}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
+                sozinho.
+              </span>
+            </h1>
 
           <AnimatePresence>
             {!showChatbox && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, height: 0, marginTop: 0 }}
                 animate={{ opacity: 1, height: "auto", marginTop: 24 }}
                 exit={{ opacity: 0, height: 0, marginTop: 0 }}
                 transition={{ duration: 0.4, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
-                  A plataforma definitiva para orquestrar inteligências artificiais. Automatize fluxos de trabalho, ganhe eficiência e escale suas operações com agentes autônomos de última geração.
-                </p>
+                  <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
+                    Todas as IAs num lugar só — GPT, Claude, Gemini, Grok e mais — num
+                    sistema onde você não só conversa, você{" "}
+                    <span className="text-slate-800 dark:text-slate-200 font-normal">
+                      produz conhecimento
+                    </span>
+                    .
+                  </p>
               </motion.div>
             )}
           </AnimatePresence>
         </motion.div>
 
-        {/* Botões Iniciais - Sem fundo pesado, mantendo a visão do espaço */}
+        {/* CTAs */}
         <AnimatePresence>
           {!showChatbox && (
             <motion.div
@@ -141,21 +215,64 @@ export default function HeroPage() {
               transition={{ duration: 0.4, delay: 0.2 }}
               className="mt-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center justify-start"
             >
-              <button
+              {/* Mesmo material do "Iniciar", em vidro TINGIDO: vidro incolor aqui
+                  derrubaria a hierarquia e este é o primário da página. */}
+              <LiquidGlassButton
                 onClick={() => setShowChatbox(true)}
-                className="group relative flex items-center justify-center gap-3 px-10 py-4 rounded-full border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 font-medium uppercase tracking-[0.2em] text-[11px] overflow-hidden transition-all hover:border-cyan-400 dark:hover:shadow-[0_0_20px_rgba(34,211,238,0.2)] hover:scale-105 bg-transparent"
+                tom="destaque"
+                tamanho="md"
+                className="w-full sm:w-auto"
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent -translate-x-[100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
                 <UserIcon className="w-4 h-4" />
-                Entrar
-              </button>
+                Começar grátis
+              </LiquidGlassButton>
+              <a
+                href="#modelos"
+                className="group relative flex items-center justify-center gap-3 px-10 py-4 rounded-full border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 font-medium uppercase tracking-[0.18em] text-[11px] transition-all hover:border-cyan-400 hover:scale-105 bg-transparent"
+              >
+                Ver os modelos
+              </a>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* MURAL DE MODELOS */}
+        <AnimatePresence>
+          {!showChatbox && (
+            <motion.div
+              id="modelos"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.5, delay: 0.35 }}
+              className="mt-14 w-full max-w-3xl scroll-mt-28"
+            >
+              <div className="flex flex-wrap gap-3">
+                {MODELS_MAIN.map((m) => (
+                  <span
+                    key={m.name}
+                    className="flex items-center text-xs text-slate-700 dark:text-slate-200 border border-slate-300/60 dark:border-white/12 rounded-lg px-3.5 py-2 bg-white/40 dark:bg-white/[0.03] backdrop-blur-sm"
+                  >
+                    <LogoModelo slug={m.slug} name={m.name} org={m.org} />
+                  </span>
+                ))}
+                {MODELS_MORE.map((m) => (
+                  <span
+                    key={m.name}
+                    className="flex items-center text-xs text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/10 rounded-lg px-3.5 py-2 bg-white/30 dark:bg-white/[0.02]"
+                  >
+                    <LogoModelo slug={m.slug} name={m.name} />
+                  </span>
+                ))}
+              </div>
+
             </motion.div>
           )}
         </AnimatePresence>
       </motion.div>
 
       {/* ========================================= */}
-      {/* CHATBOX (Aparece ao clicar em Criar Agente) */}
+      {/* CHATBOX (Aparece ao logar / clicar começar) */}
       {/* ========================================= */}
       <AnimatePresence>
         {showChatbox && (
@@ -170,18 +287,21 @@ export default function HeroPage() {
               <div className="w-full max-w-[500px] shrink-0">
                 <MenuNavigation />
               </div>
-              {/* (Convite saiu daqui — agora vive só dentro de Opções, no menu) */}
+              {/* Convite NAO volta pra ca: o main moveu ele pra dentro de Opcoes,
+                  no menu, e MenuNavigation ja o renderiza. Dois pontos de convite
+                  na mesma tela ficaria repetido. Se um dia o card aqui for a
+                  escolha, e tirar de lá primeiro. */}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* CSS do Glitch Holográfico Elegante */}
+      {/* CSS do Glitch Holográfico Elegante (assinatura da casa) */}
       <style jsx global>{`
         .cyber-glitch {
           position: relative;
         }
-        
+
         .cyber-glitch::before,
         .cyber-glitch::after {
           content: attr(data-text);
@@ -193,16 +313,14 @@ export default function HeroPage() {
           background: transparent;
           pointer-events: none;
         }
-        
-        /* Camada 1: Ciano Deslocado */
+
         .cyber-glitch::before {
           left: 1px;
           text-shadow: -1px 0 rgba(6, 182, 212, 0.8);
           clip-path: polygon(0 0, 100% 0, 100% 10%, 0 10%);
           animation: glitch-elegant-1 3.5s infinite linear alternate-reverse;
         }
-        
-        /* Camada 2: Branco/Prata Subtil */
+
         .cyber-glitch::after {
           left: -1px;
           text-shadow: 1px 0 rgba(255, 255, 255, 0.3);
@@ -217,11 +335,11 @@ export default function HeroPage() {
           30% { clip-path: polygon(0 10%, 100% 10%, 100% 20%, 0 20%); transform: translate(0); }
           40% { clip-path: polygon(0 60%, 100% 60%, 100% 70%, 0 70%); transform: translate(-1px, 0); }
           50% { clip-path: polygon(0 30%, 100% 30%, 100% 40%, 0 40%); transform: translate(0); }
-          60%, 100% { clip-path: polygon(0 0, 0 0, 0 0, 0 0); transform: translate(0); } /* Pausa limpa sem glitch */
+          60%, 100% { clip-path: polygon(0 0, 0 0, 0 0, 0 0); transform: translate(0); }
         }
 
         @keyframes glitch-elegant-2 {
-          0%, 40% { clip-path: polygon(0 0, 0 0, 0 0, 0 0); transform: translate(0); } /* Pausa longa */
+          0%, 40% { clip-path: polygon(0 0, 0 0, 0 0, 0 0); transform: translate(0); }
           50% { clip-path: polygon(0 20%, 100% 20%, 100% 30%, 0 30%); transform: translate(1px, 0); }
           60% { clip-path: polygon(0 75%, 100% 75%, 100% 80%, 0 80%); transform: translate(-1px, 1px); }
           70% { clip-path: polygon(0 40%, 100% 40%, 100% 55%, 0 55%); transform: translate(0); }
