@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Space_Grotesk, JetBrains_Mono, Outfit, Inter_Tight, Fraunces, Newsreader } from "next/font/google";
+import { Space_Grotesk, JetBrains_Mono, Outfit, Inter_Tight } from "next/font/google";
 
 import { siteConfig } from "@/config";
 import { cn } from "@/lib/utils";
@@ -16,8 +16,6 @@ import GlobalClickSound from "@/components/main/GlobalClickSound";
 import { Navbar } from "@/components/main/navbar";
 // 🔥 Chat global da Zaeon (IA + Colegas/Professores, troca de lado).
 import { LoungeChatWidget } from "@/components/sub/LoungeChatWidget";
-// Tour de onboarding (global): começa no menu inicial e segue pro research-lab.
-import OnboardingGuide from "@/components/onboard/OnboardingGuide";
 
 import "../src/i18n";
 import "./globals.css";
@@ -119,8 +117,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                     jetbrainsMono.variable,
                     outfit.variable,
                     interTight.variable,
-                    fraunces.variable,
-                    newsreader.variable,
                     "font-sans"
                 )}
             >
@@ -132,7 +128,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <ThemeProvider
                     attribute="class"
                     defaultTheme="dark"
-                    enableSystem
                     disableTransitionOnChange
                 >
                     <AuthProvider>
@@ -142,9 +137,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
                             {/* 🔥 CHAT GLOBAL DA ZAEON (IA + Colegas/Professores) 🔥 */}
                             <LoungeChatWidget />
-
-                            {/* Tour de onboarding — global pra começar no menu e seguir pro lab */}
-                            <OnboardingGuide />
 
                         </Web3Provider>
                     </AuthProvider>

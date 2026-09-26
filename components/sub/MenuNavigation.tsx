@@ -4,19 +4,17 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronRightIcon, ChevronDownIcon, ArrowLeftIcon, ArrowRightStartOnRectangleIcon
 } from "@heroicons/react/24/outline";
-import { Bot, Send, ShieldCheck, UserPlus, Loader2, Mic, MicOff, Crown, Trash2, GraduationCap } from "lucide-react";
+import { Bot, Send, ShieldCheck, Loader2, Mic, MicOff, Crown, Trash2 } from "lucide-react";
 import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 import { isSuperAdmin } from "@/lib/auth/roles";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { convitesAtivos } from "@/lib/convite/flag";
 import { useTranslation } from "react-i18next";
 import { signIn, signOut, useSession } from "next-auth/react";
 import Image from "next/image";
 import ZaeonLogo from "@/components/main/ZaeonLogo";
 import InviteButton from "@/components/sub/InviteButton";
 import VoicePicker from "@/components/settings/VoicePicker";
-import { startTour, getTour, isTourReplay, setTourReplay, stopTourReplay } from "@/lib/onboarding/tour";
 
 type ModuleKey = "estudos" | "pesquisas" | "projetos" | "lounge";
 interface RecentItem { id: string; title: string; href: string }
@@ -48,6 +46,10 @@ export default function MenuNavigation() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
+  // ESTADOS PARA O MICROFONE
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
   // Dados do Perfil Extraídos pela IA (Foco Acadêmico/Produtividade)
   const [userData, setUserData] = useState({
     name: '',
@@ -66,6 +68,7 @@ export default function MenuNavigation() {
   const isFounder = isSuperAdmin({ email: session?.user?.email, role: (session?.user as any)?.role });
   // Acesso ao Zaeon Code (mostra "Iniciar novo projeto") + flag de convite acessado.
   const [canUseProjects, setCanUseProjects] = useState(false);
+  const [inviteAccessed, setInviteAccessed] = useState(false);
 
   // Menu reformado: módulos expansíveis com as últimas interações do usuário.
   const [deletingAcc, setDeletingAcc] = useState(false);
@@ -75,41 +78,21 @@ export default function MenuNavigation() {
   // Pesquisas = os DOCS salvos (TCC/Artigo/Relatório) — cada tipo é uma sessão (localStorage).
   const [researchDocs, setResearchDocs] = useState<RecentItem[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
+  // Card de boas-vindas: aparece pra QUEM NUNCA fez o tour (User.tourDone=false no servidor),
+  // não só na 1ª sessão. Some quando o usuário conclui o onboarding.
+  const [showWelcome, setShowWelcome] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false); // escolha de voz retraída por padrão
-  // Switch de Tutoriais (só super admin): liga/desliga o tour (replay) e roda na hora.
-  const [tutorialsOn, setTutorialsOn] = useState(false);
-  useEffect(() => { try { setTutorialsOn(isTourReplay()); } catch { /* ignore */ } }, []);
-  // Voz do tutorial (item 4 Lote 7): OPT-IN, OFF por padrão. Pra TODOS (não só founder).
-  const [onbVoiceOn, setOnbVoiceOn] = useState(false);
-  useEffect(() => { try { setOnbVoiceOn(localStorage.getItem("zaeon.onboard.voice") === "on"); } catch { /* */ } }, []);
-  const toggleOnbVoice = () => {
-    setOnbVoiceOn((v) => {
-      const nv = !v;
-      try { localStorage.setItem("zaeon.onboard.voice", nv ? "on" : "off"); } catch { /* */ }
-      return nv;
-    });
-  };
-  const toggleTutorials = () => {
-    if (tutorialsOn) { stopTourReplay(); setTutorialsOn(false); }            // desliga
-    else { setTourReplay(true); setTutorialsOn(true); setIsOptionsOpen(false); startTour(); } // liga + roda agora
-  };
-  // Onboarding do usuário comum: quem ainda NÃO fez o tour (User.tourDone=false) começa
-  // AUTOMATICAMENTE — sem card de boas-vindas (removido). O OnboardingGuide global mostra
-  // o 1º passo no menu (destaca Estudos). Roda 1x; concluir/pular marca tourDone no servidor.
-  const autoTourRef = useRef(false);
   useEffect(() => {
     if (status !== "authenticated") return;
     let alive = true;
-    fetch("/api/onboard/tour").then((r) => (r.ok ? r.json() : null)).then((d) => {
-      if (alive && d && !d.tourDone && !autoTourRef.current) {
-        autoTourRef.current = true;
-        try { if (!getTour().active) startTour(); } catch { /* ignore */ }
-      }
-    }).catch(() => { /* offline */ });
+    fetch("/api/onboard/tour").then((r) => (r.ok ? r.json() : null)).then((d) => { if (alive && d) setShowWelcome(!d.tourDone); }).catch(() => { /* offline */ });
     return () => { alive = false; };
   }, [status]);
+  const startOnboard = () => { setShowWelcome(false); router.push("/research-lab?tab=sala-de-estudos&onboard=1"); };
+  const dismissWelcome = () => { setShowWelcome(false); }; // esconde só nesta sessão; volta até concluir o tour
 
   useEffect(() => {
+    try { setInviteAccessed(localStorage.getItem("zaeon.inviteAccessed") === "1"); } catch { /* ignore */ }
     if (status !== "authenticated") { setCanUseProjects(false); return; }
     let alive = true;
     fetch("/api/projects/access")
@@ -208,10 +191,49 @@ export default function MenuNavigation() {
     }
   }, [isOnboardMode, messages.length]);
 
-  // (reconhecimento de voz removido da tela inicial — a voz fica no chat widget global)
+  // Lógica de Reconhecimento de Voz
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = i18n.language === 'pt' ? 'pt-BR' : 'en-US';
+
+      recognitionRef.current.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        setInputValue(transcript);
+      };
+
+      recognitionRef.current.onerror = (event: any) => {
+        console.error("Erro no reconhecimento de voz:", event.error);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    }
+  }, [i18n.language]);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      setInputValue("");
+      recognitionRef.current?.start();
+      setIsListening(true);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
+
+    if (isListening) toggleListening();
 
     const userText = inputValue;
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
@@ -308,17 +330,17 @@ export default function MenuNavigation() {
 
   const visibleMenuItems = MENU_ITEMS.filter(item => item.labelKey === "menu.manual" ? isAdmin : true);
 
-  const panelClass = "w-full mt-4 rounded-[32px] overflow-hidden backdrop-blur-2xl transition-all duration-500 bg-white/40 dark:bg-cyan-950/10 border border-slate-200 dark:border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] flex flex-col min-h-[380px] max-h-[500px]";
+  const panelClass = "w-full mt-4 rounded-[32px] overflow-hidden backdrop-blur-2xl backdrop-saturate-[1.6] transition-all duration-500 bg-white/55 dark:bg-white/[0.06] border border-white/60 dark:border-white/[0.12] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.18),inset_0_1px_0_0_rgba(255,255,255,0.9),inset_0_-16px_30px_-20px_rgba(0,0,0,0.12)] dark:shadow-[0_30px_60px_-20px_rgba(0,0,0,0.75),inset_0_1px_0_0_rgba(255,255,255,0.30),inset_0_-16px_30px_-20px_rgba(0,0,0,0.9)] flex flex-col min-h-[380px] max-h-[500px]";
   const cardBase = "group relative overflow-hidden flex items-center justify-between rounded-2xl px-4 min-h-[52px] w-full transition-all duration-300 cursor-pointer font-medium text-slate-800 dark:text-white bg-white/50 hover:bg-white/80 dark:bg-white/[0.03] dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/5 hover:border-cyan-400/50 dark:hover:border-cyan-400/30";
   const cardSelected = "bg-white border-cyan-400 dark:bg-cyan-400/10 dark:border-cyan-400/40 text-cyan-600 dark:text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.2)] dark:shadow-[0_0_15px_rgba(34,211,238,0.15)]";
   const accentBar = (active: boolean) => `absolute left-1 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full transition-all duration-500 ${active ? "bg-cyan-500 dark:bg-cyan-400 opacity-100 scale-y-100" : "bg-transparent opacity-0 scale-y-0"}`;
 
   // Um módulo expansível (Pesquisas/Estudos/Projetos) — SEM ícones, só o título e as
   // últimas interações. Clicar num item leva direto ao documento; "+ novo" abre a sala.
-  const renderModule = (id: ModuleKey, label: string, items: RecentItem[], newLabel: string, newHref: string, tourId?: string) => {
+  const renderModule = (id: ModuleKey, label: string, items: RecentItem[], newLabel: string, newHref: string) => {
     const open = openModule === id;
     return (
-      <li className="w-full" data-tour={tourId}>
+      <li className="w-full">
         <div onClick={() => setOpenModule(open ? null : id)} className={cardBase}>
           <div className={accentBar(open)} />
           <span className="text-sm tracking-tight pl-2 truncate font-semibold">{label}</span>
@@ -399,30 +421,14 @@ export default function MenuNavigation() {
             <span className="flex-1 h-px bg-slate-200 dark:bg-white/10" />
           </div>
 
-          {/* Porta de entrada. Com o cadastro aberto (padrão), é o e-mail; com
-              CONVITES_ATIVOS=1 volta a ser o convite, sem mexer em código. */}
           <div className="text-center">
-            {convitesAtivos() ? (
-              <>
-                <p className="text-[12px] text-slate-700 dark:text-white/75 mb-2">Novo por aqui? É preciso um convite.</p>
-                <button
-                  onClick={() => router.push("/convite")}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-slate-300 dark:border-white/15 text-slate-800 dark:text-white text-[12px] font-bold hover:border-cyan-400/60 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors"
-                >
-                  <ShieldCheck size={15} /> Tenho um convite
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-[12px] text-slate-700 dark:text-white/75 mb-2">Novo por aqui? Basta o seu e-mail.</p>
-                <button
-                  onClick={() => router.push("/login")}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-slate-300 dark:border-white/15 text-slate-800 dark:text-white text-[12px] font-bold hover:border-cyan-400/60 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors"
-                >
-                  <UserPlus size={15} /> Criar conta
-                </button>
-              </>
-            )}
+            <p className="text-[12px] text-slate-700 dark:text-white/75 mb-2">Novo por aqui? É preciso um convite.</p>
+            <button
+              onClick={() => router.push("/convite")}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold transition-all duration-300 backdrop-blur-xl backdrop-saturate-150 bg-white/50 dark:bg-white/[0.07] border border-white/70 dark:border-white/[0.14] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28)] text-slate-800 dark:text-white hover:bg-white/75 dark:hover:bg-white/[0.13] hover:border-cyan-400/60 dark:hover:border-cyan-300/40 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <ShieldCheck size={15} /> Tenho um convite
+            </button>
           </div>
         </nav>
         <div className="px-8 pb-4 text-[10px] text-slate-500 dark:text-white/45 tracking-[0.3em] font-medium mt-auto">
@@ -490,6 +496,20 @@ export default function MenuNavigation() {
               <div className="mt-auto pt-2 border-t border-slate-200 dark:border-white/5">
                 {step === 0 ? (
                   <div className="flex flex-col gap-2">
+                    <AnimatePresence>
+                      {isListening && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="flex justify-center items-center gap-2 mb-1"
+                        >
+                          <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse" />
+                          <span className="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-tighter">Zaeon está a ouvir...</span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     <div className="flex items-center gap-2 bg-white dark:bg-black/40 rounded-xl p-1.5 border border-slate-300 dark:border-white/10 focus-within:border-cyan-400 dark:focus-within:border-cyan-500/50 transition-colors shadow-sm dark:shadow-inner">
                       <input
                         autoFocus
@@ -498,9 +518,26 @@ export default function MenuNavigation() {
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                         disabled={isTyping}
-                        placeholder="Pergunte a Zaeon..."
+                        placeholder={isListening ? "Fale agora..." : "Pergunte a Zaeon..."}
                         className="flex-1 bg-transparent border-none outline-none text-[11px] text-slate-800 dark:text-white px-3 placeholder:text-slate-400"
                       />
+
+                      <button
+                        onClick={toggleListening}
+                        disabled={isTyping}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isListening
+                          ? "bg-red-500/20 text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]"
+                          : "bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-cyan-500"
+                          }`}
+                      >
+                        {isListening ? (
+                          <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1 }}>
+                            <MicOff size={14} />
+                          </motion.div>
+                        ) : (
+                          <Mic size={14} />
+                        )}
+                      </button>
 
                       <button
                         onClick={handleSendMessage}
@@ -562,56 +599,14 @@ export default function MenuNavigation() {
                   <LanguageFlagToggle size={30} />
                 </div>
 
-                {/* CONVITE (T5) — convidar amigos = COMPARTILHAR meu link (código do usuário +
-                    "Copiar link de convite"), não o resgate por dígitos. Reusa o InviteButton
-                    (busca /api/convite/meu-codigo). /convite segue como landing do convidado. */}
-                <InviteButton variant="menu" />
+                {/* (Convite saiu daqui: virou um card próprio à direita do menu, no hero-content) */}
 
-                {/* VOZ DO TUTORIAL — opt-in, OFF por padrão. Visível pra todos: ninguém leva voz
-                    sem querer (ex.: alguém numa sala de aula). */}
-                <div className={`${cardBase} cursor-default`}>
-                  <span className="flex items-center gap-3 pl-2 min-w-0">
-                    {onbVoiceOn ? <Mic size={16} className="text-cyan-500 dark:text-cyan-300 shrink-0" /> : <MicOff size={16} className="text-slate-400 shrink-0" />}
-                    <span className="flex flex-col min-w-0">
-                      <span className="text-sm tracking-tight truncate">Voz do tutorial</span>
-                      <span className="text-[9px] uppercase font-bold tracking-tighter text-slate-400 dark:text-white/40">
-                        {onbVoiceOn ? "Ligada — a Zaeon fala no tour" : "Desligada — tour só em texto"}
-                      </span>
-                    </span>
-                  </span>
-                  <button
-                    onClick={toggleOnbVoice}
-                    role="switch"
-                    aria-checked={onbVoiceOn}
-                    title={onbVoiceOn ? "Desligar a voz do tutorial" : "Ligar a voz do tutorial"}
-                    className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${onbVoiceOn ? "bg-cyan-500" : "bg-slate-300 dark:bg-white/15"}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${onbVoiceOn ? "translate-x-5" : ""}`} />
-                  </button>
-                </div>
-
-                {/* TUTORIAIS (escondido) — só super admin: liga/desliga o tour e roda na hora.
-                    Usuário comum não vê isto; ele passa pelo tour uma vez (card de boas-vindas). */}
-                {isFounder && (
-                  <div className={`${cardBase} cursor-default`}>
-                    <span className="flex items-center gap-3 pl-2 min-w-0">
-                      <GraduationCap size={16} className="text-cyan-500 dark:text-cyan-300 shrink-0" />
-                      <span className="flex flex-col min-w-0">
-                        <span className="text-sm tracking-tight truncate">Tutoriais</span>
-                        <span className="text-[9px] uppercase font-bold tracking-tighter text-slate-400 dark:text-white/40">
-                          {tutorialsOn ? "Ligado — roda a cada visita" : "Desligado"}
-                        </span>
-                      </span>
-                    </span>
-                    <button
-                      onClick={toggleTutorials}
-                      role="switch"
-                      aria-checked={tutorialsOn}
-                      title={tutorialsOn ? "Desligar tutoriais" : "Ligar tutoriais (roda agora)"}
-                      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${tutorialsOn ? "bg-cyan-500" : "bg-slate-300 dark:bg-white/15"}`}
-                    >
-                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${tutorialsOn ? "translate-x-5" : ""}`} />
-                    </button>
+                {/* ACESSAR CONVITE — quando a pessoa já acessou um convite */}
+                {inviteAccessed && (
+                  <div onClick={() => router.push("/convite")} className={cardBase}>
+                    <div className={accentBar(false)} />
+                    <span className="text-sm tracking-tight pl-2 truncate">Acessar convite</span>
+                    <ChevronRightIcon className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity" />
                   </div>
                 )}
 
@@ -665,8 +660,39 @@ export default function MenuNavigation() {
               (
                 <motion.ul key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-2 w-full h-full justify-center overflow-y-auto custom-scrollbar pr-1">
 
+                  {/* CARD DE BOAS-VINDAS — check verde animado + iniciar onboarding */}
+                  {showWelcome && (
+                    <li className="w-full">
+                      <div className="relative overflow-hidden rounded-2xl border border-emerald-300/60 dark:border-emerald-400/25 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/10 dark:to-white/[0.02] p-4">
+                        <button onClick={dismissWelcome} aria-label="Fechar" className="absolute top-2.5 right-3 text-slate-400 hover:text-slate-700 dark:hover:text-white text-lg leading-none">×</button>
+                        <div className="flex items-start gap-3">
+                          <span className="w-10 h-10 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0 zaeon-welcome-pop">
+                            <svg viewBox="0 0 24 24" className="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 6L9 17l-5-5" className="zaeon-welcome-check" />
+                            </svg>
+                          </span>
+                          <div className="min-w-0 pr-4">
+                            <p className="text-[13px] font-black text-slate-900 dark:text-white">Conta verificada</p>
+                            <p className="text-[11.5px] text-slate-600 dark:text-white/65 leading-relaxed mt-0.5">
+                              Vejo um baita potencial em você. É uma honra te ajudar a desbloquear uma nova fase — bora começar?
+                            </p>
+                            <button onClick={startOnboard} className="mt-2.5 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-white text-[11px] font-black uppercase tracking-wide hover:scale-[1.03] transition-transform" style={{ background: "linear-gradient(135deg,#10b981,#06b6d4)" }}>
+                              Iniciar ✦
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <style jsx global>{`
+                        .zaeon-welcome-check { stroke-dasharray: 28; stroke-dashoffset: 28; animation: zaeon-check-draw 0.6s ease-out 0.15s forwards; }
+                        @keyframes zaeon-check-draw { to { stroke-dashoffset: 0; } }
+                        .zaeon-welcome-pop { animation: zaeon-pop 0.4s ease-out; }
+                        @keyframes zaeon-pop { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+                      `}</style>
+                    </li>
+                  )}
+
                   {/* Mesma ordem da sidebar: Estudos · Pesquisas · Projetos (gated) · Lounge */}
-                  {renderModule("estudos", "Estudos", recent.studies, "Novo estudo", "/research-lab?tab=sala-de-estudos", "menu-estudos")}
+                  {renderModule("estudos", "Estudos", recent.studies, "Novo estudo", "/research-lab?tab=sala-de-estudos")}
 
                   {/* PESQUISAS — só os docs salvos (TCC/Artigo/Relatório). Sem nenhum → só "Nova pesquisa". */}
                   {renderModule("pesquisas", "Pesquisas", researchDocs, "Nova pesquisa", "/research-lab?tab=pesquisa")}
