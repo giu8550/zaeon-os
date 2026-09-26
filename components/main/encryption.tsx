@@ -6,6 +6,7 @@ import NextImage from "next/image";
 import { useTranslation } from "react-i18next";
 import ZaeonFlowDiagram from "./ZaeonFlowDiagram";
 import MentoresCarrossel from "./MentoresCarrossel";
+import EquipadosCom from "./EquipadosCom";
 import { Rotulo, TituloSecao } from "@/components/layout/secao";
 
 // --- TICKER DE PATROCINADORES ---
@@ -95,6 +96,8 @@ const HireAgentsSection = () => {
                 <div className="mt-10">
                     <MentoresCarrossel />
                 </div>
+
+                <EquipadosCom className="mt-14" />
             </motion.div>
         </div>
     );
@@ -102,49 +105,6 @@ const HireAgentsSection = () => {
 
 // =========================================================================
 // CARROSSEL VERTICAL DE MARCAS IA (Infinite Ticker)
-// =========================================================================
-const CompaniesVerticalTicker = () => {
-    const companies = [
-        { name: "OpenAI", src: "/companies/openai.png" },
-        { name: "Anthropic", src: "/companies/anthropic.png" },
-        { name: "Google", src: "/companies/google.png" },
-        { name: "Meta", src: "/companies/meta.png" },
-        { name: "Mistral", src: "/companies/mistral.png" },
-    ];
-    const tickerItems = [...companies, ...companies, ...companies];
-
-    return (
-        <div className="w-full max-w-sm flex flex-col items-center justify-center my-10 z-40 relative h-[350px] overflow-hidden bg-transparent">
-            <div className="absolute inset-0 z-20 pointer-events-none" style={{ background: 'linear-gradient(to bottom, var(--tw-gradient-stops))' }} />
-            <div className="absolute inset-0 z-20 pointer-events-none bg-gradient-to-b from-[#eef2f6] via-transparent to-[#eef2f6] dark:from-[#030508] dark:via-transparent dark:to-[#030508]" />
-
-            <div className="w-full flex justify-center mb-6 z-30 absolute top-4">
-                <h3 className="text-center text-[10px] font-black tracking-[0.4em] text-cyan-600 dark:text-cyan-400 uppercase bg-white/80 dark:bg-[#030508]/80 backdrop-blur-md px-6 py-2 rounded-full border border-slate-200 dark:border-white/10 shadow-sm">
-                    Equipados com
-                </h3>
-            </div>
-
-            <div className="relative h-full w-full flex justify-center pt-16">
-                <motion.div
-                    animate={{ y: ["0%", "-50%"] }}
-                    transition={{ ease: "linear", duration: 15, repeat: Infinity }}
-                    className="flex flex-col gap-6 w-[200px]"
-                >
-                    {tickerItems.map((item, i) => (
-                        <div
-                            key={i}
-                            className="relative flex items-center justify-center w-full h-[80px] rounded-[1.5rem] border border-slate-200 dark:border-white/5 bg-white/60 dark:bg-[#0a0a0f]/40 backdrop-blur-md shrink-0 transition-all duration-300 hover:border-cyan-400/50 group"
-                        >
-                            <div className="relative w-[70%] h-[50%] flex items-center justify-center grayscale group-hover:grayscale-0 transition-all duration-500 opacity-50 group-hover:opacity-100">
-                                <NextImage src={item.src} alt={item.name} fill className="object-contain" />
-                            </div>
-                        </div>
-                    ))}
-                </motion.div>
-            </div>
-        </div>
-    );
-};
 
 // --- FLUXOGRAMA "LIQUID GLASS" ---
 const ProcessFlowchart = () => {
@@ -279,7 +239,6 @@ export default function Encryption() {
                 `sticky` daqui para dentro. */}
             <div className="relative z-40 w-full overflow-x-clip flex flex-col items-center justify-center bg-transparent pt-10">
                 <HireAgentsSection />
-                <CompaniesVerticalTicker />
             </div>
 
             {/* FLUXOGRAMA NO FINAL (Intacto) */}
