@@ -18,8 +18,9 @@ export async function GET(req: Request) {
     try {
         const session = await getServerSession(authOptions);
 
-        if (!session) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        // 🔒 SEGURANÇA: era só `!session` → qualquer logado baixava PII/KYC de todos.
+        if (!checkIsAdmin(session?.user?.email, (session?.user as any)?.role)) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
         await connectToDatabase();

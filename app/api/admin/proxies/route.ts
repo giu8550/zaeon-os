@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/src/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/src/lib/auth";
+import { isSuperAdmin } from "@/lib/auth/roles";
 
-const prisma = new PrismaClient();
+// 🔒 Só super-admin acessa proxies (eles expõem usuário/senha).
+async function assertAdmin() {
+    const session = await getServerSession(authOptions);
+    return isSuperAdmin({ email: session?.user?.email, role: (session?.user as any)?.role });
+}
 
 // --- GET: listar proxies ---
 export async function GET() {
+    if (!(await assertAdmin())) return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     try {
         const proxies = await prisma.proxy.findMany({ orderBy: { createdAt: "desc" } });
         return NextResponse.json(proxies);
@@ -16,6 +24,7 @@ export async function GET() {
 
 // --- POST: criar ou atualizar proxy (upsert por ObjectId) ---
 export async function POST(req: Request) {
+    if (!(await assertAdmin())) return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     try {
         const body = await req.json();
         const {
@@ -61,6 +70,7 @@ export async function POST(req: Request) {
 
 // --- DELETE: remover proxy por id ---
 export async function DELETE(req: Request) {
+    if (!(await assertAdmin())) return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     try {
         const { searchParams } = new URL(req.url);
         const id = searchParams.get("id");
