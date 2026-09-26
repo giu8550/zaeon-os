@@ -30,7 +30,10 @@ export function Rotulo({
 }) {
     return (
         <p
-            className={`font-mono text-[11px] uppercase tracking-[0.28em] text-cyan-600 dark:text-cyan-400/80 ${className}`}
+            className={// cyan-700, nao 600: medido no navegador, cyan-600 sobre branco da 3,68:1 em
+// 11px, e a AA exige 4,5:1 para texto pequeno. cyan-700 da 5,36:1. No escuro
+// o problema nao existe (cyan-400 sobre quase-preto), entao so o claro muda.
+        `font-mono text-[11px] uppercase tracking-[0.28em] text-cyan-700 dark:text-cyan-400/80 ${className}`}
         >
             {children}
         </p>

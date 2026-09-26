@@ -54,6 +54,21 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
     const trilhoRef = useRef<HTMLDivElement>(null);
     const [podeVoltar, setPodeVoltar] = useState(false);
     const [podeAvancar, setPodeAvancar] = useState(true);
+    const [semMovimento, setSemMovimento] = useState(false);
+    /** Arrasto em curso ou foco dentro do trilho (hover NAO entra aqui, de proposito). */
+    const pausadoRef = useRef(false);
+    /** Marca a rolagem causada pelo proprio passo automatico. */
+    const programaticoRef = useRef(false);
+    /** Ate quando o passo automatico deve ficar quieto depois de um toque. */
+    const esperaAteRef = useRef(0);
+
+    useEffect(() => {
+        const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const sync = () => setSemMovimento(mq.matches);
+        sync();
+        mq.addEventListener("change", sync);
+        return () => mq.removeEventListener("change", sync);
+    }, []);
 
     useEffect(() => {
         let vivo = true;
@@ -79,26 +94,113 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
         setPodeAvancar(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
     }, []);
 
+    /** Handler do evento `scroll`: so ele decide que houve rolagem da pessoa. */
+    const aoRolar = useCallback(() => {
+        sincronizarSetas();
+        // Rolagem que nao partiu do passo automatico veio da pessoa: da tempo a ela.
+        if (!programaticoRef.current) esperaAteRef.current = Date.now() + 8000;
+    }, [sincronizarSetas]);
+
     useEffect(() => {
         sincronizarSetas();
         const el = trilhoRef.current;
         if (!el) return;
-        el.addEventListener("scroll", sincronizarSetas, { passive: true });
+        el.addEventListener("scroll", aoRolar, { passive: true });
         window.addEventListener("resize", sincronizarSetas);
         return () => {
-            el.removeEventListener("scroll", sincronizarSetas);
+            el.removeEventListener("scroll", aoRolar);
             window.removeEventListener("resize", sincronizarSetas);
         };
-    }, [sincronizarSetas, mentores.length]);
+    }, [sincronizarSetas, aoRolar, mentores.length]);
 
-    /** Anda um cartao por clique, medindo o cartao real em vez de chutar pixels. */
+    /** Largura de um passo = um cartao real medido agora, nunca um numero chutado. */
+    const passoAtual = (el: HTMLElement) => {
+        const cartao = el.firstElementChild as HTMLElement | null;
+        return cartao ? cartao.getBoundingClientRect().width + 16 : el.clientWidth * 0.8;
+    };
+
     const andar = (direcao: 1 | -1) => {
         const el = trilhoRef.current;
         if (!el) return;
-        const cartao = el.firstElementChild as HTMLElement | null;
-        const passo = cartao ? cartao.getBoundingClientRect().width + 16 : el.clientWidth * 0.8;
-        el.scrollBy({ left: passo * direcao, behavior: "smooth" });
+        el.scrollBy({ left: passoAtual(el) * direcao, behavior: "smooth" });
     };
+
+    /**
+     * O trilho anda sozinho: um passo a cada 3.2s, voltando ao inicio na ponta.
+     *
+     * O QUE O SEGURA -- e o que DELIBERADAMENTE nao segura:
+     *
+     * - ARRASTO / FOCO: enquanto a pessoa esta com o dedo no trilho ou navegando
+     *   por teclado dentro dele, o passo fica quieto.
+     * - ROLAGEM MANUAL: depois que ela mesma empurra, o passo espera 8s antes de
+     *   voltar a mandar. Sem isso um toque no celular brigaria com o timer meio
+     *   segundo depois. `programaticoRef` separa a rolagem que este efeito
+     *   causou da que veio do dedo -- as duas disparam o mesmo evento `scroll`,
+     *   entao sem essa marca nao da pra distinguir uma da outra.
+     * - FORA DA TELA: senao o trilho corre ate o fim enquanto ninguem olha e
+     *   quem rola ate aqui encontra a prateleira parada no ultimo cartao.
+     *
+     * NAO pausa no hover, e essa e a correcao desta versao. A primeira tentativa
+     * pausava, e na pratica o carrossel ficava PARADO: o trilho ocupa quase toda
+     * a largura util da secao, entao o ponteiro esta em cima dele praticamente
+     * o tempo todo em que a pessoa esta olhando para essa parte da pagina. Pausar
+     * no hover faz sentido num menu que revela conteudo; aqui os cartoes nao tem
+     * nada escondido atras do ponteiro, e o efeito colateral era o recurso
+     * inteiro parecer que nao existe.
+     *
+     * A checagem de visibilidade e um `getBoundingClientRect` no proprio tick, e
+     * nao um IntersectionObserver, por dois motivos: e uma leitura a cada 3.2s
+     * (nao por quadro), e nao depende de callback -- um observer criado enquanto
+     * a aba esta em segundo plano pode receber um unico callback "fora da tela" e
+     * nunca mais ser chamado, deixando o trilho travado para sempre.
+     *
+     * `prefers-reduced-motion` desliga o passo; as setas continuam.
+     */
+    // Rede de seguranca: se o dedo/mouse solta FORA do trilho, o `pointerup` do
+    // elemento nunca chega e o passo ficaria pausado para sempre. O do documento
+    // sempre chega.
+    useEffect(() => {
+        const soltou = () => {
+            // So conta se o arrasto tinha COMECADO no trilho; senao um clique
+            // qualquer na pagina silenciaria o carrossel por 8s.
+            if (!pausadoRef.current) return;
+            pausadoRef.current = false;
+            esperaAteRef.current = Date.now() + 8000;
+        };
+        document.addEventListener("pointerup", soltou);
+        document.addEventListener("pointercancel", soltou);
+        return () => {
+            document.removeEventListener("pointerup", soltou);
+            document.removeEventListener("pointercancel", soltou);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (semMovimento) return;
+        const el = trilhoRef.current;
+        if (!el) return;
+
+        const id = window.setInterval(() => {
+            if (pausadoRef.current || document.hidden) return;
+            if (Date.now() < esperaAteRef.current) return;
+
+            const r = el.getBoundingClientRect();
+            const naTela = r.bottom > 0 && r.top < window.innerHeight;
+            if (!naTela) return;
+
+            const fim = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
+            programaticoRef.current = true;
+            el.scrollTo({
+                left: fim ? 0 : el.scrollLeft + passoAtual(el),
+                behavior: "smooth",
+            });
+            window.setTimeout(() => {
+                programaticoRef.current = false;
+            }, 900);
+        }, 3200);
+
+        return () => window.clearInterval(id);
+    }, [semMovimento, mentores.length]);
 
     return (
         <div className={className}>
@@ -124,6 +226,19 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
                 que acabou de ser consertada. */}
             <div
                 ref={trilhoRef}
+                onPointerDown={() => {
+                    pausadoRef.current = true;
+                }}
+                onPointerUp={() => {
+                    pausadoRef.current = false;
+                    esperaAteRef.current = Date.now() + 8000;
+                }}
+                onFocusCapture={() => {
+                    pausadoRef.current = true;
+                }}
+                onBlurCapture={() => {
+                    pausadoRef.current = false;
+                }}
                 className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
                 {mentores.map((m) => (
