@@ -1,8 +1,6 @@
 // app/api/auth/guest-register/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/src/lib/prisma';
 
 export async function POST(req: Request) {
     try {
@@ -25,13 +23,18 @@ export async function POST(req: Request) {
             participation: { rank: "F", current: 0, next: 5, metricName: "Validations" }
         };
 
+        // 🔒 SEGURANÇA: nunca confiar no `role` vindo do cliente — só student/teacher.
+        // Impede self-provisionar admin/super_admin via esta rota.
+        const ALLOWED_ROLES = ['student', 'teacher'];
+        const safeRole = ALLOWED_ROLES.includes(String(data.role)) ? data.role : 'student';
+
         const newUser = await prisma.user.create({
             data: {
                 name: data.name,
                 email: data.contactEmail.toLowerCase(), // O email digitado no Modal
                 phone: data.phone,
                 course: data.course,
-                role: data.role,
+                role: safeRole,
                 age: data.age,
                 gender: data.gender,
                 countryCode: data.countryCode, 

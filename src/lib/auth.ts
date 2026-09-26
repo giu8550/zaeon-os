@@ -77,6 +77,12 @@ export const authOptions: NextAuthOptions = {
 
                 const existing = await users.findOne({ email });
                 if (existing) {
+                    // 🔒 SEGURANCA: a lista de e-mails fechava so os donos conhecidos.
+                    // Uma conta pode ter virado admin DEPOIS, pelo painel — e ai o login sem
+                    // senha entrava nela. O papel gravado no banco e a fonte da verdade.
+                    const papel = String(existing.role || "").toLowerCase();
+                    if (papel === "super_admin" || papel === "admin") return null;
+
                     return {
                         id: existing._id.toString(),
                         name: existing.name,
