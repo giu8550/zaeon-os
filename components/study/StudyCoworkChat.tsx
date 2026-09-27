@@ -247,17 +247,26 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     el.scrollTo({ top: Math.max(0, topo), behavior: "smooth" });
   }, []);
 
-  /** A última mensagem é uma página de revista recém-chegada? */
-  const paginaNova = useCallback((): string | undefined => {
-    const ultima = msgsRef.current[msgsRef.current.length - 1];
-    if (!ultima || ultima.role !== "assistant" || ultima.kind !== "structured") return undefined;
-    if (!ultima.fresh || ultima.streaming) return undefined;
-    return podeVirarRevista(ultima.answer, !!ultima.studioBlock) ? ultima.id : undefined;
-  }, []);
-
+  // Qual mensagem já foi ancorada no topo (pra ancorar UMA vez e não brigar com a
+  // leitura do aluno enquanto ela cresce).
+  const ancoradaRef = useRef<string | null>(null);
   useEffect(() => {
-    ancorar(paginaNova());
-  }, [messages, sending, ancorar, paginaNova]);
+    const ultima = msgsRef.current[msgsRef.current.length - 1];
+    // Resposta da Aura (texto OU revista): ancora no TOPO dela assim que aparece e NÃO
+    // fica perseguindo o fim enquanto o texto é escrito. Antes, durante o streaming
+    // `paginaNova()` devolvia undefined e `ancorar(undefined)` fazia
+    // `scrollTop = scrollHeight` a cada token — era isso que "jogava pro final" e não
+    // deixava acompanhar a abertura de um texto longo.
+    if (ultima && ultima.role === "assistant" && (ultima.kind === "structured" || ultima.kind === "text")) {
+      if (ancoradaRef.current !== ultima.id) {
+        ancoradaRef.current = ultima.id;
+        ancorar(ultima.id); // topo da resposta, uma vez
+      }
+      return; // enquanto a Aura escreve, o aluno controla a rolagem
+    }
+    // Chat curto / mensagem do usuário: só gruda no fim se ele já estava no fim.
+    if (atBottom) scrollToEnd();
+  }, [messages, sending, atBottom, ancorar, scrollToEnd]);
 
   const spaceTitle = useCallback(
     (id: string) => spaces.find((s) => s.id === id)?.title || "Estudo",
