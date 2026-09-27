@@ -28,6 +28,7 @@ import AuraThinking from "@/components/study/AuraThinking";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
+import ChatMarkdown from "@/components/study/ChatMarkdown";
 import StudioGeneratingCard from "@/components/study/StudioGeneratingCard";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 
@@ -441,7 +442,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                           ? "bg-slate-100 text-slate-900 border border-slate-200/80 dark:bg-white/[0.09] dark:text-white/90 dark:border-white/10"
                           : "bg-white/80 dark:bg-white/[0.05] text-slate-800 dark:text-white/90 border border-slate-200/70 dark:border-white/10 backdrop-blur-xl"}`}>
                         {m.text
-                          ? m.text
+                          ? (isUser ? m.text : <ChatMarkdown text={m.text} />)
                           : (!isUser && <AuraThinking active phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                       </div>
                     </div>

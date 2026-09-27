@@ -11,6 +11,7 @@ import MenuNavigation from "@/components/sub/MenuNavigation";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 import InviteButton from "@/components/sub/InviteButton";
+import MolecularText from "@/components/ui/MolecularText";
 import { UserPlus } from "lucide-react";
 
 // Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
@@ -121,7 +122,7 @@ export default function HeroPage() {
   }, [status]);
 
   return (
-    <main className="w-full flex flex-col items-start justify-start relative zaeon-borda pt-10 md:pt-16 pb-12 md:pb-16 overflow-hidden transition-colors duration-700 font-sans">
+    <main className="w-full flex flex-col items-center justify-center text-center relative zaeon-borda min-h-[86vh] pt-12 md:pt-16 pb-20 md:pb-28 overflow-hidden transition-colors duration-700 font-sans">
 
       {/* BACKGROUND LIMPO - Apenas o StarBackground visível */}
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -138,18 +139,18 @@ export default function HeroPage() {
           opacity: 1,
         }}
         transition={{ type: "spring", stiffness: 90, damping: 20 }}
-        className="flex flex-col items-start text-left max-w-4xl z-10 w-full origin-left"
+        className="flex flex-col items-center text-center max-w-4xl mx-auto z-10 w-full origin-center"
       >
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="relative flex flex-col items-start justify-center"
+          className="relative flex flex-col items-center justify-center"
         >
-            <h1 className="text-[2rem] sm:text-4xl md:text-[3.5rem] font-light tracking-tighter text-slate-900 dark:text-white leading-[1.15] z-10 relative">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.08] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
               <span aria-hidden="true">
-                Aqui ninguém
+                <MolecularText text="Aqui ninguém" />
                 {/* Slot em grid: TODOS os verbos ocupam a MESMA célula, então a largura
                     do slot é a do verbo mais longo e o "sozinho." nunca pula quando o
                     verbo troca. Sem número mágico, sem medir fonte.
@@ -181,7 +182,7 @@ export default function HeroPage() {
                     </motion.span>
                   </AnimatePresence>
                 </span>
-                sozinho.
+                <MolecularText text="sozinho." delay={0.25} />
               </span>
             </h1>
 
@@ -194,7 +195,7 @@ export default function HeroPage() {
                 transition={{ duration: 0.4, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                  <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
+                  <p className="max-w-2xl mx-auto text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
                     Todas as IAs num lugar só — GPT, Claude, Gemini, Grok e mais — num
                     sistema onde você não só conversa, você{" "}
                     <span className="text-slate-800 dark:text-slate-200 font-normal">
@@ -215,7 +216,7 @@ export default function HeroPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, filter: "blur(10px)" }}
               transition={{ duration: 0.4, delay: 0.2 }}
-              className="mt-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center justify-start"
+              className="mt-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center justify-center"
             >
               {/* Mesmo material do "Iniciar", em vidro TINGIDO: vidro incolor aqui
                   derrubaria a hierarquia e este é o primário da página. */}
@@ -238,39 +239,24 @@ export default function HeroPage() {
           )}
         </AnimatePresence>
 
-        {/* MURAL DE MODELOS */}
-        <AnimatePresence>
-          {!showChatbox && (
-            <motion.div
-              id="modelos"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.5, delay: 0.35 }}
-              className="mt-14 w-full max-w-3xl scroll-mt-28"
-            >
-              <div className="flex flex-wrap gap-3">
-                {MODELS_MAIN.map((m) => (
-                  <span
-                    key={m.name}
-                    className="flex items-center text-xs text-slate-700 dark:text-slate-200 border border-slate-300/60 dark:border-white/12 rounded-lg px-3.5 py-2 bg-white/40 dark:bg-white/[0.03] backdrop-blur-sm"
-                  >
-                    <LogoModelo slug={m.slug} name={m.name} org={m.org} />
-                  </span>
-                ))}
-                {MODELS_MORE.map((m) => (
-                  <span
-                    key={m.name}
-                    className="flex items-center text-xs text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/10 rounded-lg px-3.5 py-2 bg-white/30 dark:bg-white/[0.02]"
-                  >
-                    <LogoModelo slug={m.slug} name={m.name} />
-                  </span>
-                ))}
-              </div>
+        {/* MURAL DE MODELOS removido do hero — as IAs agora vivem só na seção
+            "Equipados com", abaixo dos cards dos agentes (encryption.tsx). */}
 
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Badges de confiança (padrão ChipFlow) */}
+        {!showChatbox && (
+          <ul className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+            {["Grátis para começar", "Sem cartão", "Todas as IAs num lugar só"].map((b) => (
+              <li key={b} className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15">
+                  <svg viewBox="0 0 20 20" className="h-3 w-3 text-emerald-500" fill="none" stroke="currentColor" strokeWidth={3} aria-hidden="true">
+                    <path d="M4 10l4 4 8-9" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                {b}
+              </li>
+            ))}
+          </ul>
+        )}
       </motion.div>
 
       {/* ========================================= */}
@@ -283,9 +269,9 @@ export default function HeroPage() {
             animate={{ opacity: 1, y: -20, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.1 }}
-            className="w-full max-w-[760px] z-20 mt-0 relative origin-left"
+            className="w-full max-w-[760px] mx-auto z-20 mt-0 relative origin-center"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center gap-4">
               <div className="w-full max-w-[500px] shrink-0">
                 <MenuNavigation />
               </div>

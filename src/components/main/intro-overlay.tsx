@@ -130,17 +130,16 @@ export default function MacSplash({ show = true, onDone }: Props) {
             // Uma unica interpolacao do instante em que ela aparece ate o fim do
             // intro e monotonica por construcao: nao ha degrau, nao ha recuo, e o
             // que ela mostra passa a ser verdade (quanto falta de fato).
-            const inicioBarra = TIMELINE.STAGE_2_BAR_APPEARS;
-            const bruto = (time - inicioBarra) / (TIMELINE.TOTAL_DURATION - inicioBarra);
-            const currentGlobalPercent = Math.max(0, Math.min(1, bruto)) * 100;
-
-            if (progressBarRef.current) progressBarRef.current.style.width = `${currentGlobalPercent}%`;
+            // A LARGURA da barra agora é animada por CSS (keyframe zaeonBootFill,
+            // 0→100% em TOTAL_DURATION) — não mais por ref/rAF. O ref imperativo
+            // corria com a montagem tardia do AnimatePresence (mode="wait") e a
+            // barra ficava presa, pintando só o 100% no fim. O loop aqui segue
+            // marcando as fases e o EXIT.
 
             if (time < TIMELINE.TOTAL_DURATION && !exitingRef.current) {
                 raf = requestAnimationFrame(loop);
             } else if (!exitingRef.current) {
                 exitingRef.current = true;
-                if (progressBarRef.current) progressBarRef.current.style.width = `100%`;
 
                 setTimeout(() => {
                     setOpacity(0);
@@ -209,29 +208,13 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 muted + playsInline não são opcionais — sem os dois o iOS recusa o
                 autoplay. A faixa já vem sem áudio do arquivo original. */}
             <div className="absolute inset-0 overflow-hidden bg-black" aria-hidden="true">
-                {semMovimento ? (
-                    <img
-                        src={`/assets/intro-poster-${fundo}.jpg`}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover"
-                    />
-                ) : (
-                    <video
-                        key={fundo}
-                        className="absolute inset-0 h-full w-full object-cover"
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
-                        preload="metadata"
-                        poster={`/assets/intro-poster-${fundo}.jpg`}
-                    >
-                        {/* Só mp4. O webm estava aqui pra economizar banda, mas depois
-                            do grão anti-banding o VP9 ficou MAIOR que o H.264 (ele
-                            codifica grão mal). Deixou de pagar a própria passagem. */}
-                        <source src={`/assets/intro-loop-${fundo}.mp4`} type="video/mp4" />
-                    </video>
-                )}
+                {/* Vídeo de fundo REMOVIDO — só o poster estático agora. Mais leve e
+                    sem decode de vídeo por cima da UI do intro (barra de progresso). */}
+                <img
+                    src={`/assets/intro-poster-${fundo}.jpg`}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                />
                 {/* Véu: garante contraste do "Iniciar" sobre QUALQUER frame do loop. */}
                 <div className="absolute inset-0 bg-black/45" />
                 {/* Vinheta: as bordas morrem no preto em vez de terminarem num corte. */}
@@ -262,7 +245,7 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 )}
 
                 <div className="h-[64px] flex flex-col items-center justify-start mt-8 w-full">
-                    <AnimatePresence mode="wait">
+                    <AnimatePresence>
                         {!hasStarted ? (
                             <motion.div 
                                 key="start-info"
@@ -285,7 +268,7 @@ export default function MacSplash({ show = true, onDone }: Props) {
                             >
                                 <div className={`flex items-center gap-2.5 transition-opacity duration-500 ${phase >= 1 ? 'opacity-100' : 'opacity-0'}`}>
                                     <div className="w-[200px] h-[3px] rounded-full bg-black/20 dark:bg-white/15 overflow-hidden">
-                                        <div ref={progressBarRef} className="h-full rounded-full bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.35)] dark:shadow-[0_0_8px_rgba(255,255,255,0.35)]" style={{ width: "0%", transition: "none" }} />
+                                        <div className="h-full rounded-full bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.35)] dark:shadow-[0_0_8px_rgba(255,255,255,0.35)]" style={{ width: "0%", animation: `zaeonBootFill ${TIMELINE.TOTAL_DURATION}s linear forwards` }} />
                                     </div>
                                 </div>
                             </motion.div>
@@ -293,6 +276,9 @@ export default function MacSplash({ show = true, onDone }: Props) {
                     </AnimatePresence>
                 </div>
             </div>
+            <style jsx global>{`
+                @keyframes zaeonBootFill { from { width: 0%; } to { width: 100%; } }
+            `}</style>
         </div>
     );
 }
