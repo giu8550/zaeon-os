@@ -43,6 +43,17 @@ class ValidationData(BaseModel):
     warnings: List[str] = []
 
 
+class AppendixData(BaseModel):
+    """
+    Pós-textual (NBR 14724): APÊNDICE é material do próprio autor, ANEXO é material de
+    terceiro. Os dois têm a mesma forma — o que muda é o rótulo, que quem chama informa.
+    O shape vem da rota do app (app/api/documents/abnt-export/route.ts), não foi inventado
+    aqui.
+    """
+    title: str
+    content: str
+
+
 class DocumentPayload(BaseModel):
     title: str
     work_type: str = Field(..., description="Artigo | TCC | Relatório")
@@ -53,6 +64,8 @@ class DocumentPayload(BaseModel):
     keywords: List[str] = []         # palavras-chave do abstract
     sections: List[SectionData]
     references: List[ReferenceData] = []
+    apendices: List[AppendixData] = []  # pós-textuais (APÊNDICE A, B, …)
+    anexos: List[AppendixData] = []     # pós-textuais (ANEXO A, B, …)
     validation: Optional[ValidationData] = None
     format: str = Field(..., description="pdf | docx")
     font_choice: str = Field(default="Times New Roman", description="Times New Roman | Arial")

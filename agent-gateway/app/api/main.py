@@ -32,39 +32,52 @@ async def metrics() -> Response:
 
 @app.post("/webhook/wa")
 async def whatsapp_webhook(request: Request) -> dict:
-    """Recebe eventos do Evolution. Só processa MESSAGES_UPSERT de entrada."""
+    """Recebe eventos do Evolution e REPASSA pro app (bridge fino — docs/WHATSAPP_MENTOR.md).
+
+    O cérebro (harness + mentor + memória) vive no app Next; aqui só normalizamos o evento e
+    fazemos um POST com o segredo compartilhado. Dedup por id da mensagem em memória
+    (processo único); o app é idempotente por lógica de negócio.
+    """
+    from app.bridge.forward import forward_to_app, to_app_payload
+    from app.core.config import settings
+
     payload: dict[str, Any] = await request.json()
-    if payload.get("event") != "messages.upsert":
+    normalized = to_app_payload(payload)
+    if normalized is None:
         return {"ignored": True}
 
-    msg = payload.get("data", {})
-    key = msg.get("key", {})
-    # ignora o que a própria instância enviou
-    if key.get("fromMe"):
-        return {"ignored": "fromMe"}
-
-    msg_id = key.get("id")
-    jid = key.get("remoteJid")
-    instance = payload.get("instance")
-
-    # dedup idempotente por msg_id (Redis SET NX) — evita turno duplicado
+    msg_id = normalized.get("messageId")
     if await _already_processed(msg_id):
         _dedup.inc()
         return {"deduped": True}
 
-    kind = "audio" if msg.get("message", {}).get("audioMessage") else "text"
+    kind = "audio" if (payload.get("data") or {}).get("message", {}).get("audioMessage") else "text"
     _inbound.labels(kind=kind).inc()
 
-    # enfileira o turno no arq (o worker gera e envia a resposta)
-    await _enqueue_turn({"instance": instance, "jid": jid, "msg_id": msg_id,
-                         "kind": kind, "raw": msg})
-    return {"queued": True}
+    if not settings.WHATSAPP_WEBHOOK_SECRET:
+        return {"forwarded": False, "error": "WHATSAPP_WEBHOOK_SECRET ausente"}
+    status, body = await forward_to_app(
+        normalized, url=settings.ZAEON_WEBHOOK_URL, secret=settings.WHATSAPP_WEBHOOK_SECRET,
+    )
+    return {"forwarded": status < 400, "status": status, "app": body}
+
+
+_SEEN: dict[str, float] = {}
+_SEEN_MAX = 5000
 
 
 async def _already_processed(msg_id: str | None) -> bool:
+    """Dedup em memória (bridge = processo único). Em escala: Redis SETNX wa:seen:{id}."""
     if not msg_id:
         return False
-    # TODO(pausa): redis SETNX f"wa:seen:{msg_id}" ex=3600
+    import time
+    now = time.time()
+    if msg_id in _SEEN:
+        return True
+    if len(_SEEN) >= _SEEN_MAX:
+        for k in [k for k, t in _SEEN.items() if now - t > 3600][:1000] or list(_SEEN)[:1000]:
+            _SEEN.pop(k, None)
+    _SEEN[msg_id] = now
     return False
 
 

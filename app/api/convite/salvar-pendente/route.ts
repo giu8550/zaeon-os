@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/src/lib/prisma";
+import { convitesAtivos, CONVITES_OFF_PAYLOAD } from "@/lib/convite/flag";
 
 export async function POST(req: Request) {
+  // Convites de cadastro desligados (ver lib/convite/flag.ts). A rota continua aqui:
+  // é só ligar CONVITES_ATIVOS=1 pra ela voltar a responder.
+  if (!convitesAtivos()) return NextResponse.json(CONVITES_OFF_PAYLOAD, { status: 503 });
+
   const cookieToken = cookies().get("convite_session")?.value;
   if (!cookieToken) {
     return NextResponse.json({ error: "Sessão inválida." }, { status: 401 });

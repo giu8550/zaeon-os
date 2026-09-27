@@ -1,102 +1,162 @@
 /**
- * lib/agent/router.ts — PR02 do runbook (§13.1). O CLASSIFICADOR barato na entrada
- * do laço: objetivo → { intent, mode, academicMode, kind? }. §11.2 do plano.
+ * lib/agent/router.ts — PR02 do runbook (§13.1; encarna §11.2). O ROUTER do harness.
  *
- * Estratégia: 1 chamada Gemini Flash com JSON forçado (geminiJson) + FALLBACK
- * heurístico 100% local (sem rede) que também é o resultado se o modelo falhar.
- * O router NUNCA lança — sempre devolve uma classificação usável. Server-side.
+ * classify(objective, ctx) → { intent, mode, academicMode, kind? }:
+ *   1 chamada Gemini Flash (JSON forçado, temp 0) + FALLBACK HEURÍSTICO sem rede.
+ * Barato por design (§7.4): o classificador NUNCA usa deep-think. Rede/credencial/timeout
+ * → cai na heurística determinística (nunca derruba o laço). Tipos: importe de contracts.ts.
  */
+import type { AgentContext } from "@/lib/agent/context";
 import {
-  INTENTS, isIntentId, academicModeForSurface,
-  type IntentId, type Mode, type AcademicMode, type WorkKind,
+  INTENTS,
+  INTENT_IDS,
+  isIntentId,
+  academicModeForSurface,
+  type IntentId,
+  type Mode,
+  type AcademicMode,
+  type WorkKind,
 } from "@/lib/agent/contracts";
-import { geminiJson } from "@/lib/scholar/gemini";
 
-export type ClassifyCtx = { surface?: string | null };
-export type Classification = { intent: IntentId; mode: Mode; academicMode: AcademicMode; kind?: WorkKind };
+export type RouterResult = {
+  intent: IntentId;
+  mode: Mode;
+  academicMode: AcademicMode;
+  kind?: WorkKind;
+};
 
-// ── Heurística local (barata, determinística, testável sem rede) ──────────────
+// ───────────────────────────── léxico da heurística (PT) ─────────────────────────────
+
+/** minúsculas sem acento — casa "gerá"/"redação"/"análise" sem depender de diacrítico. */
+const norm = (s: string) =>
+  (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+
+/** verbos de geração ("gere/cria/escreva um…") — palavra inteira p/ não casar substring. */
+const GEN_VERB_RE =
+  /(^|\s)(gere|gerar|gera|crie|criar|cria|faca|fazer|faz|monte|montar|produza|produzir|escreva|escrever|redija|redigir|elabore|elaborar|desenvolva|desenvolver|quero (?:um|uma)|preciso de (?:um|uma))(\s|$)/;
+
+/** saudações / small talk — palavra inteira (evita "coisa"→"oi"). */
+const GREETING_RE =
+  /(^|\s)(oi|ola|opa|eai|e ai|salve|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|beleza|blz|tudo bem|tchau)(\s|,|!|\?|$)/;
+
+const WORK_NOUNS = ["artigo", "tcc", "monografia", "dissertacao", "tese", "redacao", "ensaio", "relatorio", "paper", "resenha", "trabalho academico"];
+const STUDIO_NOUNS = ["mapa mental", "mindmap", "flashcard", "linha do tempo", "timeline", "podcast", "video", "quiz", "infografico", "slides", "apresentacao", "resumo visual", "guia de estudo", "guia de estudos", "imagem", "figura", "ilustracao", "molecula", "estrutura molecular", "estrutura quimica", "diagrama", "esquema", "desenho", "grafico", "formula estrutural"];
+const SOURCE_SIGNALS = ["fontes", "referencias", "bibliografia", "papers", "artigos sobre", "literatura sobre", "estado da arte", "cite fontes"];
+const REVISE_SIGNALS = ["revise", "revisar", "revisao", "critique", "avalie meu", "avalie este", "avalie esse", "corrija", "corrigir", "de feedback", "melhore meu"];
+const EXPLAIN_SIGNALS = ["explique", "explicar", "explica", "o que e", "o que sao", "como funciona", "por que", "porque", "defina", "definir", "qual a diferenca", "diferenca entre", "me ensine"];
+const DEEP_SIGNALS = /(a fundo|aprofund|detalhad|minucios|exaustiv|bem completo|passo a passo)/;
+
+const has = (t: string, arr: string[]) => arr.some((k) => t.includes(k));
 const WORK_KINDS: WorkKind[] = ["estudo", "pesquisa", "artigo", "tcc", "relatorio", "aula"];
-// verbos que denotam GERAR/CRIAR algo (não é conversa nem dúvida)
-const GEN_VERB = /\b(ger[ae]|cri[ae]|fa[çz]|monta|elabora|escrev[ae]|redi[jg]|produz|desenvolv)\w*\b/i;
-const ARTIFACT_WORD = /\b(podcast|v[íi]deo|mapa|flashcards?|linha do tempo|timeline|guia|faq|imagem|figura)\b/i;
-const WORK_WORD = /\b(tcc|artigo|relat[óo]rio|monografia|paper|disserta|reda[çc][ãa]o|aula|resenha|pesquisa)\b/i;
-const ASK_WORD = /\b(o que|oque|qual|quais|quem|quando|onde|por que|porqu[êe]|como|significa)\b/i;
-// verbos de EXPLICAÇÃO (pedem desenvolvimento, não resposta seca) → explicar_conceito
-const EXPLAIN_VERB = /\b(explica|explique|explicar|detalh\w*|defin\w*|aprofund\w*|ensina|discorre)\b/i;
-const REVISE_WORD = /\b(revis[ae]|corrig|argu[ie]|critica|avalia|melhora este|revise|feedback)\b/i;
 
-/** Detecta o WorkKind pedido (p/ criar_trabalho). Default "estudo" na sala de estudos, "pesquisa" na pesquisa. */
-export function detectWorkKind(text: string, surface?: string | null): WorkKind {
-  const t = (text || "").toLowerCase();
+function normalizeKind(k?: string): WorkKind | undefined {
+  const n = (k || "").toLowerCase().trim();
+  return (WORK_KINDS as string[]).includes(n) ? (n as WorkKind) : undefined;
+}
+
+/** infere o WorkKind pelo texto (fallback quando o Flash não devolve `kind`). */
+function workKindFrom(t: string): WorkKind | undefined {
   if (/\btcc\b|monografia/.test(t)) return "tcc";
-  if (/relat[óo]rio/.test(t)) return "relatorio";
-  if (/\bartigo\b|\bpaper\b/.test(t)) return "artigo";
+  if (/relatorio/.test(t)) return "relatorio";
   if (/\baula\b/.test(t)) return "aula";
-  if (/pesquisa|literatura|revis[ãa]o de literatura/.test(t)) return "pesquisa";
-  return surface === "pesquisa" ? "pesquisa" : "estudo";
+  if (/artigo|paper|dissertacao|tese|ensaio|resenha|redacao/.test(t)) return "artigo";
+  if (/pesquisa/.test(t)) return "pesquisa";
+  if (/estudo/.test(t)) return "estudo";
+  return undefined;
 }
 
-export function isQuickPrompt(text: string): boolean {
-  return (text || "").trim().split(/\s+/).filter(Boolean).length <= 8;
+/** ≤ 8 palavras = prompt "rápido" (handoff PR02). Vazio não conta. */
+export function isQuickPrompt(objective: string): boolean {
+  const words = norm(objective).split(/\s+/).filter(Boolean);
+  return words.length > 0 && words.length <= 8;
 }
 
-/** Fallback puro: nunca chama rede. Também é a rede-de-segurança do classify(). */
-export function heuristicClassify(objective: string, ctx: ClassifyCtx = {}): Classification {
-  const t = (objective || "").trim();
-  const academicMode = academicModeForSurface(ctx.surface);
-  let intent: IntentId;
-  let kind: WorkKind | undefined;
-
-  if (REVISE_WORD.test(t)) {
-    intent = "revisar";
-  } else if (GEN_VERB.test(t) && ARTIFACT_WORD.test(t)) {
-    intent = "gerar_artefato";
-  } else if (GEN_VERB.test(t) && WORK_WORD.test(t)) {
-    intent = "criar_trabalho";
-    kind = detectWorkKind(t, ctx.surface);
-  } else if (/\bfontes?\b|refer[êe]ncias?|bibliografia|cite/.test(t.toLowerCase())) {
-    intent = "pesquisar_fontes";
-  } else if (EXPLAIN_VERB.test(t)) {
-    intent = "explicar_conceito";
-  } else if (isQuickPrompt(t) && !ASK_WORD.test(t)) {
-    intent = "conversa";
-  } else if (isQuickPrompt(t)) {
-    intent = "duvida_rapida";
-  } else {
-    intent = "explicar_conceito";
+/** modo base da intenção; o usuário pode FORÇAR mais fundo (§8) — bump quick→elaborated→research. */
+function modeFor(intent: IntentId, t: string): Mode {
+  const base = INTENTS[intent].mode;
+  if (DEEP_SIGNALS.test(t)) {
+    if (base === "quick") return "elaborated";
+    if (base === "elaborated") return "research";
   }
-  return { intent, mode: INTENTS[intent].mode, academicMode, kind };
+  return base;
 }
-
-// ── Classificador com LLM (JSON forçado) + fallback ───────────────────────────
-const SYS =
-  "Você classifica a intenção do usuário numa plataforma educacional. Responda SÓ JSON " +
-  '{"intent": <um de: conversa|duvida_rapida|explicar_conceito|gerar_artefato|criar_trabalho|pesquisar_fontes|revisar>, ' +
-  '"kind": <se intent=criar_trabalho: estudo|pesquisa|artigo|tcc|relatorio|aula, senão null>}. ' +
-  "Regras: conversa=papo/saudação; duvida_rapida=pergunta curta; explicar_conceito=explicação; " +
-  "gerar_artefato=pediu artefato do Studio (mapa/flashcards/podcast/vídeo/imagem/guia/faq/timeline); " +
-  "criar_trabalho=pediu redigir um trabalho (estudo/pesquisa/artigo/tcc/relatório/aula); " +
-  "pesquisar_fontes=pediu referências/literatura; revisar=pediu revisar/arguir material dele.";
 
 /**
- * classify — 1 chamada Flash (JSON) com timeout curto; qualquer falha/inválido cai
- * na heurística. Nunca lança. `mode`/`academicMode` são sempre derivados dos contratos.
+ * Classificação SEM rede — fallback determinístico e testável (o gate do PR02).
+ * Precedência: criação forte → busca/revisão → geração genérica → explicação → curto → default.
  */
-export async function classify(objective: string, ctx: ClassifyCtx = {}): Promise<Classification> {
-  const academicMode = academicModeForSurface(ctx.surface);
+export function classifyHeuristic(objective: string, ctx: AgentContext): RouterResult {
+  const academicMode = academicModeForSurface(ctx.activeTab);
+  const t = norm(objective);
+  const genVerb = GEN_VERB_RE.test(t);
+
+  const decide = (intent: IntentId, kind?: WorkKind): RouterResult => ({
+    intent,
+    mode: modeFor(intent, t),
+    academicMode,
+    kind,
+  });
+
+  // 1) trabalho acadêmico completo — "escreva um artigo sobre X"
+  if (genVerb && has(t, WORK_NOUNS)) return decide("criar_trabalho", workKindFrom(t) ?? "artigo");
+  // 2) artefato de estudo — "crie um mapa mental sobre X"
+  if (genVerb && has(t, STUDIO_NOUNS)) return decide("gerar_artefato");
+  // 3) fontes / bibliografia
+  if (has(t, SOURCE_SIGNALS)) return decide("pesquisar_fontes");
+  // 4) revisão / crítica de algo do usuário
+  if (has(t, REVISE_SIGNALS)) return decide("revisar");
+  // 5) verbo de geração com tema, sem substantivo específico → artefato genérico
+  if (genVerb && /(^|\s)(sobre|acerca|a respeito)(\s|$)/.test(t)) return decide("gerar_artefato");
+  // 6) explicação de conceito
+  if (has(t, EXPLAIN_SIGNALS)) return decide("explicar_conceito");
+  // 7) prompt curto → conversa (saudação) | dúvida rápida
+  if (isQuickPrompt(objective)) return decide(GREETING_RE.test(t) ? "conversa" : "duvida_rapida");
+  // 8) default elaborado
+  return decide("explicar_conceito");
+}
+
+// ───────────────────────────── caminho principal (Gemini Flash) ─────────────────────────────
+
+const SYSTEM = [
+  "Você é o ROTEADOR de intenção da Aura (assistente de estudos e pesquisa acadêmica).",
+  "Classifique o pedido do usuário em UMA intenção. Responda SOMENTE JSON válido:",
+  '{"intent":"<intenção>","kind":"<estudo|pesquisa|artigo|tcc|relatorio|aula|null>"}',
+  `intenções válidas: ${INTENT_IDS.join(" | ")}.`,
+  "- conversa: saudação / small talk, sem tarefa.",
+  "- duvida_rapida: pergunta objetiva e curta.",
+  "- explicar_conceito: pedir explicação / entendimento de um tema.",
+  "- gerar_artefato: pedir artefato de estudo (mapa mental, flashcards, resumo, timeline, podcast, vídeo, quiz).",
+  "- criar_trabalho: pedir trabalho acadêmico completo (artigo, TCC, monografia, relatório, redação).",
+  "- pesquisar_fontes: pedir fontes / referências / bibliografia / papers.",
+  "- revisar: pedir revisão / crítica / correção de algo do usuário.",
+  '"kind" só quando intent="criar_trabalho"; senão null.',
+].join("\n");
+
+/**
+ * classify (§11.2): 1 chamada Flash barata (JSON forçado) com heurística de fallback.
+ * `academicMode` vem SEMPRE da sala (§8.8), nunca do modelo.
+ */
+export async function classify(objective: string, ctx: AgentContext): Promise<RouterResult> {
+  const fallback = classifyHeuristic(objective, ctx);
+  const text = (objective || "").trim();
+  if (!text) return fallback;
   try {
-    const out = await geminiJson<{ intent?: string; kind?: string | null }>(
-      SYS, `Superfície: ${ctx.surface ?? "estudos"}\nMensagem: ${objective}`,
+    // import tardio: mantém o router (e o teste da heurística) SEM carregar o Vertex/rede.
+    const { geminiJson } = await import("@/lib/scholar/gemini");
+    const out = await geminiJson<{ intent?: string; kind?: string }>(
+      SYSTEM,
+      `Sala="${ctx.activeTab ?? "?"}". Pedido:\n${text}`,
       { temperature: 0, timeoutMs: 8000 },
     );
-    if (out && isIntentId(out.intent)) {
-      const intent = out.intent;
-      const kind = intent === "criar_trabalho"
-        ? ((WORK_KINDS.includes(out.kind as WorkKind) ? out.kind : detectWorkKind(objective, ctx.surface)) as WorkKind)
+    const cand = out?.intent;
+    const intent: IntentId = isIntentId(cand) ? cand : fallback.intent;
+    const nt = norm(text);
+    const kind =
+      intent === "criar_trabalho"
+        ? normalizeKind(out?.kind) ?? workKindFrom(nt) ?? "artigo"
         : undefined;
-      return { intent, mode: INTENTS[intent].mode, academicMode, kind };
-    }
-  } catch { /* cai na heurística */ }
-  return heuristicClassify(objective, ctx);
+    return { intent, mode: modeFor(intent, nt), academicMode: academicModeForSurface(ctx.activeTab), kind };
+  } catch {
+    return fallback; // rede/credencial/timeout → heurística (nunca derruba o laço)
+  }
 }

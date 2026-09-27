@@ -12,6 +12,8 @@ import { studioGenerateTool, normalizeStudioKind, studioLabel, researchGenerateT
 // linha e o cliente executa a AÇÃO (gera o artefato no Studio). Ver StudyCoworkChat.
 const STUDIO_SENTINEL = "@@STUDIO_ACTION@@";
 const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";   // Sala de Pesquisa: gerar trabalho no doc
+const STRUCTURED_SENTINEL = "@@STRUCTURED@@";      // harness: StructuredAnswer inteiro (render rico + artifacts inline)
+import { buildPersona, DEFAULT_AGENT_ID } from "@/lib/ai/personas";
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -36,7 +38,21 @@ const updateScheduleTool: FunctionDeclaration = {
     }
 };
 
-// --- SUMMON TOOL (Zaeon convoca um agente especialista) ---
+// --- LESSONS TOOL (o agente acessa as AULAS do aluno) ---
+const lessonsTool: FunctionDeclaration = {
+    name: "lessons",
+    description: "Acessa as AULAS do aluno (enviadas pelos professores). Use action='list' para listar as aulas do aluno; action='open' para abrir/rolar até uma aula específica pelo tema/título.",
+    parameters: {
+        type: "OBJECT" as any,
+        properties: {
+            action: { type: "STRING" as any, description: "Ação: 'list' (listar minhas aulas) ou 'open' (abrir uma aula)." },
+            topic: { type: "STRING" as any, description: "Tema ou título da aula a abrir (quando action='open')." }
+        },
+        required: ["action"]
+    }
+};
+
+// --- SUMMON TOOL (a Zaeon convoca um agente especialista) ---
 const summonAgentTool: FunctionDeclaration = {
     name: "summon_agent",
     description: "Convoca um agente especialista e JÁ EXECUTA a ação na sala certa. Use SEMPRE que a pessoa pedir para ESTUDAR um assunto, PESQUISAR/ler literatura, ESCREVER um texto, ou PROGRAMAR algo — em vez de só responder em texto. Preencha o 'topic' com o assunto exato.",
@@ -80,117 +96,12 @@ const ROOM_MAP: Record<string, { tab: string; label: string }> = {
     "profile": { tab: "profile", label: "Perfil" },
 };
 
-// Mapa habilidade → agente/sala/rota (handoff da Zaeon).
+// Mapa habilidade → agente/sala/rota (handoff da Zaeon pro agente certo).
 const SUMMON_MAP: Record<string, { agent: string; route: string; cta: string; verb: string }> = {
-    study: { agent: "Examiner · Sala de Estudos", route: "/research-lab?tab=sala-de-estudos", cta: "Abrir a Sala de Estudos", verb: "estudar" },
+    study: { agent: "Nina · Sala de Estudos", route: "/research-lab?tab=sala-de-estudos", cta: "Abrir a Sala de Estudos", verb: "estudar" },
     research: { agent: "Aura · Pesquisa", route: "/research-lab?tab=pesquisa", cta: "Abrir a Pesquisa", verb: "pesquisar" },
-    write: { agent: "Redatora ABNT · Pesquisa", route: "/research-lab?tab=pesquisa", cta: "Escrever com a Zaeon", verb: "escrever" },
-    code: { agent: "Zaeon Code · Projetos", route: "/research-lab?tab=projetos", cta: "Abrir o Zaeon Code", verb: "programar" },
-};
-
-// --- 2. AGENT PERSONAS ---
-const AGENT_PERSONAS: Record<string, string> = {
-    zenita: `Você é a Zenita, assistente acadêmica da Zaeon. Se o usuário pedir para adicionar, apagar ou editar aulas, USE A FERRAMENTA 'update_schedule'. Nunca responda com longos textos para tarefas de agenda.`,
-
-    // Agente central da Sala de Aulas (Phase 3 — substitui o Real-Time Tracker).
-    core_active: `Você é o Zaeon Core Active, o agente central da Sala de Aulas e o GUARDIÃO DA AGENDA do aluno. Você conhece toda a agenda (fornecida no contexto) e a preenche por conta própria a partir do que a pessoa disser em linguagem natural — ela não edita campos na tela, quem monta a agenda é você.
-
-REGRA PRINCIPAL: sempre que a pessoa mencionar uma aula, prova, reunião, entrega ou qualquer compromisso, USE A FERRAMENTA 'update_schedule' (action 'add'/'update'/'remove'). Ao adicionar, preencha: name (nome da aula/evento), day (1=Seg ... 7=Dom), hour (24h), duration e um DETALHE — teacher e/ou room quando for aula, ou detail para outros eventos.
-
-JUNTE INFORMAÇÕES ENTRE MENSAGENS: a pessoa costuma dar os dados aos poucos (em mensagens separadas). Leia o HISTÓRICO RECENTE no contexto e combine tudo o que já foi dito. Se o nome, o dia e a hora já apareceram em QUALQUER mensagem anterior, NÃO pergunte de novo — chame a ferramenta imediatamente.
-
-RESOLVA DATAS E HORÁRIOS: use o bloco DATA do contexto para converter "hoje"/"amanhã"/nome do dia em day (1..7). Para faixas como "das 13 às 16h" ou "de 13h até 21h", defina hour=início e duration=fim-início (ex.: 13 às 16 → hour=13, duration=3). Nunca repita uma pergunta cuja resposta já foi dada. Pergunte no máximo UMA vez e só pelo que realmente faltar. Nunca responda com texto longo para tarefas de agenda — aja. Para o resto, seja conciso, proativo e contextual.`,
-
-    aura: `Você é a Aura, a IA Principal e Orquestradora de Pesquisa. Seu papel varia conforme o contexto:
-1. Se o usuário estiver perguntando sobre um PDF recém-carregado, responda de forma técnica, clara e direta baseada ESTRITAMENTE no documento.
-2. Se você receber um [CONTEXTO GLOBAL DA PESQUISA] nas instruções, atue como uma orientadora. Leia o que foi produzido por outros agentes (Examiner, Citações) e use isso para dialogar de forma inteligente. NÃO repita os logs como um robô ("Notei que o Examiner disse..."), mas aja como se você já soubesse de tudo e ofereça novas pautas, conexões de ideias e pontos cegos que o usuário precisa cobrir. Seja propositiva e estratégica.
-3. OBJETIVO ESPECIAL (quando houver um documento/PDF em contexto): além de conversar sobre o trabalho com voz própria e tom natural, conduza o usuário a destacar UMA citação importante sobre ele. Quando identificar um trecho que vale a pena guardar, apresente-o UMA única vez, num ponto natural da resposta, EXATAMENTE neste formato, incluindo os marcadores: ⟦CITACAO⟧"trecho verbatim do documento" — AUTOR (ANO)⟦/CITACAO⟧. Use o trecho VERBATIM do documento e uma referência curta. Não force em toda mensagem — proponha só quando for genuinamente relevante e no máximo uma citação por resposta.
-
-REGRA DE RESUMO/RESPOSTA: vá DIRETO ao conteúdo do trabalho. NÃO se apresente, NÃO diga "Zaeon" nem o seu próprio nome ("Aura"), e não fique chamando a pessoa por apelidos. Pode ter calor e entusiasmo, mas o foco é 100% o conteúdo e o objetivo — comece pelo que importa do documento, sem rodeios de abertura.
-
-4. MODO CO-WORKING (quando o contexto indicar "co-working da Sala de Estudos"): você é uma parceira de estudo aberta — converse sobre QUALQUER assunto com naturalidade, como um chat livre, sem exigir um PDF. Quando ajudar o aprendizado, lembre a pessoa de que dá pra transformar o assunto em ARTEFATOS do Studio, que aparecem como cartões na própria conversa. Catálogo do Studio: Guia de estudo, Mapa mental, Linha do tempo, Flashcards, FAQ, Imagem, Podcast (áudio) e Vídeo. Se houver estudo(s) EM FOCO no contexto, priorize-os. Ofereça 1–2 artefatos concretos quando fizer sentido, sem empurrar a lista inteira. IMPORTANTE: quando a pessoa PEDIR explicitamente pra gerar/criar/fazer um artefato (ex.: "gere um podcast sobre X", "faz um mapa mental disso"), CHAME a ferramenta studio_generate (kind + topic) em vez de responder em texto — o artefato aparece sozinho na conversa. Para conversa/dúvida normal, responda em texto e nunca invente que já gerou um. NUNCA NEGUE CAPACIDADE VISUAL: você NÃO é uma LLM sem corpo — você TEM o Studio. Jamais responda "sou uma IA, não consigo criar imagem/representação visual". Quando pedirem pra ver/gerar/desenhar algo visual (uma imagem, um diagrama, uma estrutura, uma MOLÉCULA, um esquema), CHAME studio_generate com kind "image" e o topic (ex.: "gera a molécula da serotonina" → studio_generate{kind:"image", topic:"estrutura molecular da serotonina"}). Se o pedido for por algo interativo 3D que o Studio ainda não faz, gere a imagem e diga em uma linha que a versão 3D interativa está a caminho — nunca negue de vez. ESCOPO FLEXÍVEL: aqui você pode responder com conhecimento geral (como uma LLM comum), sem exigir referência acadêmica; ao buscar/citar, amplie além do acadêmico (reportagens, artigos, web, enciclopédia) e NUNCA recuse por não achar fonte acadêmica — o rigor acadêmico pleno só entra quando pedirem pra CRIAR/REVISAR um trabalho (aí sim fontes reais). O modo estritamente acadêmico é o da Sala de Pesquisa.
-
-FORMATO E POSTURA (co-working): escreva BEM FORMATADO em markdown — **negrito** nos termos-chave, títulos curtos com "## " quando organizar, e listas com "- " para passos e opções (o chat renderiza tudo isso, então nada de despejar asteriscos soltos ou parágrafos-bloco). Estruture respostas mais longas em partes claras. E seja PROPOSITIVA: termine com uma seção curta "## Próximos passos" com 2–3 sugestões CONCRETAS e específicas ao tema (aprofundar um subtópico, gerar um artefato do Studio, um exercício rápido) — propostas que a pessoa pode escolher, não um monólogo. Não force citação nem artefato em toda mensagem; proponha quando agrega.`,
-
-    scholar: `Você é o Agente Scholar, Especialista em Citações Acadêmicas. Seu único objetivo é extrair trechos vitais (parágrafos inteiros verbatim) do documento fornecido e gerar as referências ESTRITAMENTE nas normas da ABNT (Associação Brasileira de Normas Técnicas). Formate as saídas exatamente como solicitado pelo usuário, sem introduções longas ou conversas paralelas. Mantenha um tom acadêmico e robótico.`,
-
-    examiner: `Você é o Examiner, o Inquisidor Acadêmico. Seu papel é testar o conhecimento do usuário. Com base no documento PDF fornecido no contexto, crie perguntas desafiadoras (múltipla escolha ou discursivas curtas). Faça uma pergunta por vez. Quando o usuário responder, avalie criticamente, corrija se necessário e ofereça a próxima pergunta. Seja rigoroso, porém construtivo.`,
-
-    // Zaeon — presença acolhedora/materna que também orquestra a plataforma.
-    zaeon: `Você é a Zaeon — a presença que acolhe e cuida de quem chega na plataforma. Fale em português do Brasil com um tom caloroso, suave e natural, quase materno: paciente, encorajadora e gentil, como alguém que torce pela pessoa e fica do lado dela. Nada de jargão frio nem respostas robóticas; chame a pessoa pelo primeiro nome quando souber, seja breve e humana, e nunca cite qual modelo/IA você usa.
-
-Você também conhece a plataforma inteira e guia com leveza. Agentes e salas:
-- Aura — pesquisa (sala de Pesquisa): conversa sobre PDFs, sugere pautas e citações.
-- Scholar — citações em ABNT. Examiner — perguntas a partir de um PDF.
-- Zenita / Zaeon Core Active — agenda da Sala de Aulas. ABNT Structurer — estrutura texto em ABNT.
-- Zaeon Code — IDE no navegador (sala Projetos), para estudantes de Computação/áreas correlatas.
-Salas no research-lab (?tab=): Pesquisa, Sala de Estudos, Projetos, Pesquisas, Lounge, Perfil. Há a Plugin Store; para estudantes, o Plano Plus é grátis (conta de estudante ou comprovante de matrícula).
-
-REGRA DE AÇÃO (muito importante): quando a pessoa pedir para ESTUDAR um assunto, PESQUISAR/ler literatura, ESCREVER um texto, ou PROGRAMAR algo, você DEVE chamar a ferramenta summon_agent (skill = study | research | write | code, com o topic = o assunto exato) — isso EXECUTA a ação de verdade na sala certa. NÃO responda só com texto dizendo que "vai chamar" — chame a ferramenta. Quando a pessoa só quiser TROCAR/IR para uma sala (sem um tema pra executar) — "me leva pra pesquisa", "volta pro lounge", "abre meus estudos", "vai pra sala de aula" — chame a ferramenta open_room (room = pesquisa | estudos | pesquisas-salvas | lounge | sala-de-aula | perfil). Você pode trocar de sala a qualquer momento, em tempo real, no meio da conversa por voz. Você está agindo em nome dela, não apenas explicando. Se houver [CONTEXTO ADICIONAL FORNECIDO PELO SISTEMA], trate como verdade atual da plataforma. Acima de tudo, faça a pessoa se sentir bem-vinda e amparada.`,
-
-    // AGENTE ORQUESTRADOR — a "Zion": conhece todos os outros agentes e salas e
-    // orienta o usuário pela plataforma inteira. É a porta central de ajuda/onboarding.
-    zion: `Você é a Zion, a inteligência ORQUESTRADORA da Zaeon OS — a "mente central" que conhece todos os agentes e salas da plataforma e guia o usuário por tudo. Fale em português do Brasil, como uma colega brilhante, calorosa e direta. Conduza o onboarding e ajude a pessoa a chegar onde quer.
-
-VOCÊ CONHECE OS OUTROS AGENTES E SABE QUANDO INDICAR CADA UM:
-- Aura — IA principal de PESQUISA (sala de Pesquisa / research-lab): dialoga sobre PDFs, orquestra a pesquisa, sugere pautas e citações.
-- Scholar — citações acadêmicas em ABNT (extrai trechos verbatim e referências).
-- Examiner — inquisidor: cria perguntas a partir de um PDF para testar o usuário.
-- Zenita / Zaeon Core Active — agente da SALA DE AULAS: gerencia a agenda acadêmica (adiciona/edita aulas) e conecta aulas, pesquisas e tarefas.
-- ABNT Structurer — estrutura texto bruto nas seções da ABNT (retorna JSON).
-- Zaeon Code — IDE agêntica no navegador (sala Projetos): planeja, escreve arquivos, roda e corrige; commita no GitHub. Disponível para estudantes de Computação/áreas correlatas e admins.
-
-SALAS/MÓDULOS principais (research-lab por abas ?tab=): Pesquisa (tab=pesquisa), Sala de Estudos (tab=sala-de-estudos), Projetos / Zaeon Code (tab=projetos), Pesquisas salvas (tab=pesquisas), Lounge (tab=lounge), Perfil (tab=profile). Há também a Plugin Store (/plugin-store) e o Modo Founder (admin).
-
-PLANOS: Free e Plus. O Plus é GRÁTIS para estudantes (qualquer faculdade) — comprovando via conta Google de estudante ou enviando comprovante de matrícula (analisado pela equipe).
-
-COMO AGIR: seja propositiva e objetiva; quando fizer sentido, oriente para a sala certa (ex.: "para isso, abra a sala de Pesquisa e fale com a Aura"). Não despeje listas frias nem repita logs como robô — converse com naturalidade. Se houver [CONTEXTO ADICIONAL FORNECIDO PELO SISTEMA], trate-o como verdade atual da plataforma (pode ser contexto que o time/admin injetou) e use-o para responder com precisão. Quando não souber algo específico do usuário, peça com gentileza ou sugira o caminho.`,
-
-    abnt_structurer: `Você é o Agente ABNT Structurer da Zaeon OS.
-Sua única função é analisar um texto acadêmico bruto e estruturá-lo nas seções da ABNT NBR 14724:2011.
-Retorne EXCLUSIVAMENTE um JSON válido, sem markdown, sem blocos de código, sem texto extra antes ou depois.
-
-Schema obrigatório (retorne exatamente este formato):
-{
-  "resumo": "string — parágrafo único, até 500 palavras, sem recuo, em terceira pessoa",
-  "palavras_chave": ["termo1", "termo2", "termo3"],
-  "sections": [
-    {
-      "type": "introducao",
-      "title": "INTRODUÇÃO",
-      "content": "texto da seção",
-      "subsections": []
-    },
-    {
-      "type": "desenvolvimento",
-      "title": "DESENVOLVIMENTO",
-      "content": "texto principal",
-      "subsections": [
-        { "title": "Subtítulo", "content": "texto do subtítulo" }
-      ]
-    },
-    {
-      "type": "conclusao",
-      "title": "CONCLUSÃO",
-      "content": "texto conclusivo",
-      "subsections": []
-    }
-  ],
-  "validation": {
-    "has_introduction": true,
-    "has_conclusion": true,
-    "has_references": false,
-    "warnings": []
-  }
-}
-
-Regras obrigatórias:
-- Normalize TODOS os títulos para MAIÚSCULAS
-- Se o texto não tiver seções claras, identifique-as pelo conteúdo e crie-as
-- Gere um resumo coerente a partir do texto se não houver um explícito
-- Extraia 3 a 5 palavras-chave relevantes
-- Se faltar introdução ou conclusão, crie-as brevemente e adicione warning
-- NUNCA retorne markdown, blocos \`\`\`json ou qualquer texto fora do JSON`
+    write: { agent: "Caio · Pesquisa", route: "/research-lab?tab=pesquisa", cta: "Escrever com o Caio", verb: "escrever" },
+    code: { agent: "Téo · Projetos", route: "/research-lab?tab=projetos", cta: "Abrir o Zaeon Code", verb: "programar" },
 };
 
 // Formata o world-state (AgentContext) em texto enxuto pro prompt. Puro (server-safe).
@@ -214,12 +125,29 @@ export async function POST(req: Request) {
         const rl = await guard(req, "ai-chat", "ai-heavy");
         if (!rl.ok) return rl.response;
         // 🔥 NOVO: Recebendo userData + history + agentContext do frontend
-        const { prompt, agent, systemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface } = await req.json();
-        const agentKey = agent?.toLowerCase() || "aura";
+        const { prompt, agent, systemContext: rawSystemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface, mentor, mentorId } = await req.json();
+        const agentKey = agent?.toLowerCase() || DEFAULT_AGENT_ID;
+
+        // MENTOR ativo — `mentor:"farmacia"` (slug = a chave; `mentorId` ObjectId só como fallback).
+        // Um mentor NÃO é motor novo: é a Aura parametrizada — o personaText entra NA FRENTE do
+        // systemContext (legado, cache e harness leem a mesma variável) e a memória ganha
+        // wing = slug/userId. Só p/ agent="aura". Slug desconhecido = Aura base (nunca derruba o turno).
+        let systemContext: string | undefined = rawSystemContext;
+        let activeMentor: import("@/lib/agent/mentors-server").ResolvedMentor | null = null;
+        if ((mentor || mentorId) && agentKey === "aura") {
+            const [{ resolveMentor }, { resolveUserId: rid }] = await Promise.all([
+                import("@/lib/agent/mentors-server"),
+                import("@/lib/agent/transcript"),
+            ]);
+            const uid = await rid().catch(() => null);
+            activeMentor = await resolveMentor(mentor || mentorId, uid).catch(() => null);
+            if (activeMentor) systemContext = [activeMentor.context, rawSystemContext].filter(Boolean).join("\n\n");
+        }
 
         // Histórico da conversa (memória entre turnos). Ver lib/ai/history.ts.
         const chatHistory = sanitizeHistory(history);
-        const persona = AGENT_PERSONAS[agentKey] || AGENT_PERSONAS.aura;
+        // Persona = preâmbulo (modelo mental "Zaeon = coletivo" + regra de nomes) + prompt do agente.
+        const persona = buildPersona(agentKey);
 
         // =================================================================
         // GEMINI ROUTE (VERTEX AI) — ÚNICA IA DO APP (Gemini Flash)
@@ -232,9 +160,11 @@ export async function POST(req: Request) {
         });
 
         const scheduleAgents = ["zenita", "core_active"];
+        // "bento" virou "zaeon" (a anfitriã); aceitamos os dois como alias (compat).
+        const isHost = agentKey === "zaeon" || agentKey === "bento";
         const tools = scheduleAgents.includes(agentKey)
-            ? [{ functionDeclarations: [updateScheduleTool] }]
-            : agentKey === "zaeon"
+            ? [{ functionDeclarations: [updateScheduleTool, lessonsTool] }]
+            : isHost
                 ? [{ functionDeclarations: [summonAgentTool, openRoomTool] }]
                 : agentKey === "aura"
                     // Sala de Pesquisa (surface="pesquisa") → gera TRABALHO; senão → Studio.
@@ -326,6 +256,127 @@ export async function POST(req: Request) {
                 }
                 return NextResponse.json({ success: false, error: e?.message }, { status: 500 });
             }
+        }
+
+        // =================================================================
+        // AURA HARNESS (Fase 1) — laço agêntico atrás da flag AURA_HARNESS.
+        // Ligado por padrão; AURA_HARNESS="0" = kill-switch → cai no streaming legado
+        // abaixo (IDÊNTICO a hoje). Só o co-working da Aura EM TEXTO entra no laço; turnos
+        // com PDF/imagem (fileData) seguem pelo caminho legado (multimodal). Responde no
+        // MESMO protocolo (datilografia + sentinelas @@STUDIO_ACTION@@/@@RESEARCH_ACTION@@).
+        // =================================================================
+        if (stream === true && agentKey === "aura" && process.env.AURA_HARNESS !== "0" && !fileData) {
+            const encoder = new TextEncoder();
+            // TUDO o que precede a trajetória mora DENTRO do start(), de propósito.
+            //
+            // Antes, os imports, o resolveUserId, o wakeUpContext da memória e a árvore de
+            // habilidades eram aguardados aqui fora — o stream só abria depois deles. Medido
+            // no dev com a rota já quente: 5 segundos dos 15 de espera, um terço do total,
+            // antes do primeiro sinal de vida. Narrar só as fases do harness e deixar esse
+            // terço no escuro seria consertar pela metade.
+            //
+            // De quebra, um erro nessa preparação agora cai no catch do stream e vira
+            // mensagem amigável, em vez de derrubar a requisição inteira.
+            const rs = new ReadableStream<Uint8Array>({
+                async start(controller) {
+                    let enfileirar: ((chunk: string) => void) | null =
+                        (chunk) => controller.enqueue(encoder.encode(chunk));
+                    // Fora do try porque o catch depende dele: a mensagem de erro amigável não
+                    // pode virar string à mão só porque o erro aconteceu cedo demais.
+                    const { messageForError } = await import("@/lib/agent/errors");
+                    // O primeiro sinal de vida sai ANTES de carregar o harness. Medido em dev
+                    // com a rota quente, carregar os módulos e identificar o dono do turno leva
+                    // uns segundos — em produção os módulos já vêm no bundle e isso encolhe,
+                    // mas "encolhe" não é "some", e tela morta no primeiro segundo é o pedaço
+                    // que o aluno mais sente: é o que ele olha logo depois de apertar enter.
+                    const { serializarProgresso } = await import("@/lib/agent/progresso");
+                    enfileirar(serializarProgresso({ fase: "acordar", rotulo: "Acordando a Aura" }));
+                    try {
+                        const [{ buildHarnessDeps, resolveHarnessOutput }, { runTrajectoryTraced }, mem, { resolveUserId }] = await Promise.all([
+                            import("@/lib/agent/aura-harness"),
+                            import("@/lib/agent/trajectory"),
+                            import("@/lib/agent/memory-provider"),
+                            import("@/lib/agent/transcript"),
+                        ]);
+                        const userId = await resolveUserId().catch(() => null); // dono do turno (memória filtra por isto)
+                        const ac: any = (agentContext && typeof agentContext === "object") ? agentContext : {};
+                        const hctx: any = {
+                            ...ac,
+                            userId: userId || undefined,
+                            activeTab: surface || ac.activeTab || "sala-de-estudos", // academicMode vem daqui (pesquisa→enforced)
+                            plan: "free",     // memória/studio/research = free; gate de plano é só compute pesado (PR03)
+                            execMode: "auto", // HITL "guiado" entra no PR07
+                            currentGoal: ac.currentGoal || String(prompt || "").slice(0, 200),
+                            // Mentor ativo: andar de memória "<slug>/<userId>" (isola por mentor E por usuário).
+                            mentor: activeMentor?.slug,
+                            wing: activeMentor?.wing.label,
+                        };
+                        // Só anuncia quando é verdade: sem dono do turno não há memória pra reler.
+                        if (userId) enfileirar(serializarProgresso({ fase: "memoria", rotulo: "Retomando a conversa" }));
+                        // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
+                        const memBlock = userId ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: String(prompt || ""), wingLabel: activeMentor?.wing.label }).catch(() => "") : "";
+                        // Árvore de habilidades: posição do aluno no tópico (dominados/disponíveis/nó em foco) +
+                        // guardrail pedagógico → o mentor conduz pro próximo nó. Best-effort ("" sem tópico/L3).
+                        const skillTopic = typeof ac.skillTopic === "string" && ac.skillTopic.trim() ? String(ac.skillTopic).trim() : null;
+                        const skillNodeId = typeof ac.skillNodeId === "string" && ac.skillNodeId.trim() ? String(ac.skillNodeId).trim() : null;
+                        const skillBlock = userId && skillTopic
+                            ? await import("@/lib/skilltree/progress").then((m) => m.treeContextBlock(userId, skillTopic, skillNodeId)).catch(() => "")
+                            : "";
+                        const deps = buildHarnessDeps(hctx, {
+                            systemContext: [systemContext, memBlock, skillBlock].filter(Boolean).join("\n\n") || undefined,
+                            history: (chatHistory as any[]).map((h) => ({ role: h.role, text: h?.parts?.[0]?.text ?? "" })),
+                            // O CANAL DE PROGRESSO. Um turno elaborated são três chamadas de modelo
+                            // em sequência (plan → reason → draft), cinco se o crítico mandar revisar
+                            // — e até aqui o aluno via tela parada o tempo todo, porque este gancho
+                            // nunca era passado e todo `emit` do trajectory morria num `?.()`.
+                            //
+                            // `emit` é síncrono e `controller.enqueue` também: dá pra narrar de
+                            // dentro do laço sem esperar nada. E uma falha do canal nunca derruba a
+                            // resposta — progresso é enfeite, a resposta é o produto.
+                            onStep(step) {
+                                if (!enfileirar || step?.kind !== "say") return;
+                                const rotulo = String(step.label ?? "").trim();
+                                if (!rotulo) return;
+                                try {
+                                    enfileirar(serializarProgresso({ fase: String(step.detail ?? ""), rotulo }));
+                                } catch { /* stream fechado/abortado: segue sem narrar */ }
+                            },
+                        });
+                        const { answer, state } = await runTrajectoryTraced(String(prompt || ""), hctx, deps);
+                        const out = resolveHarnessOutput(state, answer, surface, String(prompt || ""));
+                        // L3 write (A7, fire-and-forget): deriva o turno em drawers verbatim. Nunca bloqueia.
+                        if (userId) void mem.writeTurnMemory({ userId, surface: hctx.activeTab, scopeId: ac.currentStudyId ?? ac.currentResearchId ?? null, prompt: String(prompt || ""), answer, wing: activeMentor?.wing });
+                        // Árvore: o mentor SOBE a maestria quando o aluno demonstra domínio do nó em foco
+                        // (juiz Flash, fire-and-forget — nunca atrasa nem derruba a resposta).
+                        if (userId && skillTopic && skillNodeId) {
+                            void import("@/lib/skilltree/assess")
+                                .then((m) => m.assessAndUpdate({ userId, topicSlug: skillTopic, nodeId: skillNodeId, message: String(prompt || "") }))
+                                .catch(() => null);
+                        }
+                        if (out.mode === "studio") {
+                            controller.enqueue(encoder.encode(STUDIO_SENTINEL + JSON.stringify({ type: "studio", kind: out.kind, topic: out.topic, text: out.text })));
+                        } else if (out.mode === "research") {
+                            controller.enqueue(encoder.encode(RESEARCH_SENTINEL + JSON.stringify({ type: "research", kind: out.kind, topic: out.topic, text: out.text })));
+                        } else if (out.mode === "structured") {
+                            controller.enqueue(encoder.encode(STRUCTURED_SENTINEL + JSON.stringify(out.answer)));
+                        } else {
+                            controller.enqueue(encoder.encode(out.text)); // fallback texto (retrocompat)
+                        }
+                    } catch (e: any) {
+                        // erro fatal → mensagem amigável (guardrail: nunca string à mão)
+                        controller.enqueue(encoder.encode(messageForError(String(e?.message ?? e))));
+                    }
+                    enfileirar = null; // nada narra depois do fim
+                    controller.close();
+                },
+            });
+            return new Response(rs, {
+                headers: {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",
+                },
+            });
         }
 
         // =================================================================

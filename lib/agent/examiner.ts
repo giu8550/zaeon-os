@@ -1,117 +1,206 @@
 /**
- * lib/agent/examiner.ts — PR05 do runbook (§13.2) · §8.4 do plano.
- * O CRÍTICO (ScholarEval): recebe o draft + evidências e devolve um ExaminerVerdict.
- * Duas camadas: (1) checagem BARATA e determinística `sem_fonte` (cruza draft × evidência,
- * sem LLM); (2) avaliação ScholarEval via geminiJson (adaptativa por intenção). Nunca lança —
- * qualquer falha do LLM cai num veredito conservador derivado só da camada barata.
+ * lib/agent/examiner.ts — PR05 do runbook (§13.1; encarna §8.4). O CRÍTICO (ScholarEval).
+ *
+ * `critique(input) → ExaminerVerdict`: rubrica ScholarEval APLICADA ADAPTATIVAMENTE por intenção +
+ * checagens baratas determinísticas. A 1ª checagem é a mais barata — `sem_fonte`: cruza o
+ * rascunho × a evidência reunida (afirmação sem lastro em fonte verificável). TUDO aqui é puro e
+ * testável SEM LLM (é a base do stop-condition do `runTrajectory`, via `shouldRevise` do contracts).
+ * Um scorer LLM (ScholarEval real) pode ser INJETADO depois para refinar a rubrica; o default é
+ * heurístico e determinístico. Importe os tipos de contracts.ts; NÃO reinvente.
  */
-import { geminiJson } from "@/lib/scholar/gemini";
-import { GEMINI_MODEL_FLASH, GEMINI_MODEL_PRO } from "@/lib/ai/model";
+import type { Finding } from "@/lib/agent/runtime";
 import {
   INTENTS,
-  type IntentId, type StructuredAnswer, type ExaminerVerdict, type Issue,
-  type ExaminerRubric, type ScholarDim, type EvidenceLevel,
+  type IntentId,
+  type Mode,
+  type AcademicMode,
+  type IntentSpec,
+  type StructuredAnswer,
+  type Issue,
+  type ExaminerRubric,
+  type ExaminerVerdict,
+  type ExaminerDecision,
+  type ScholarDim,
+  type EvidenceLevel,
+  type StudioRef,
 } from "@/lib/agent/contracts";
 
-export type CritiqueInput = {
-  objective: string;
+export type ExaminerInput = {
   intent: IntentId;
-  academicMode: "enforced" | "flexible";
+  mode: Mode;
+  academicMode: AcademicMode;
   draft: StructuredAnswer;
+  evidence?: Finding[];
+  spec?: IntentSpec;
 };
 
-// Dims do ScholarEval por intenção (adaptativo): leve usa um subconjunto; pesado usa tudo.
-const DIMS_BY_INTENT: Partial<Record<IntentId, ScholarDim[]>> = {
-  explicar_conceito: ["problema", "escrita", "literatura"],
+// ScholarEval é ADAPTATIVA: cada intenção pesa só as dimensões que fazem sentido (§8.4).
+const DIMS_BY_INTENT: Record<IntentId, ScholarDim[]> = {
+  conversa: [],
+  duvida_rapida: ["escrita"],
+  explicar_conceito: ["problema", "literatura", "escrita"],
   gerar_artefato: ["problema", "escrita"],
-  pesquisar_fontes: ["literatura", "dados_fontes", "citacoes"],
   criar_trabalho: ["problema", "literatura", "metodologia", "dados_fontes", "analise", "resultados", "escrita", "citacoes"],
-  revisar: ["problema", "literatura", "metodologia", "analise", "resultados", "escrita", "citacoes"],
+  pesquisar_fontes: ["literatura", "dados_fontes", "citacoes"],
+  revisar: ["problema", "metodologia", "analise", "escrita", "citacoes"],
 };
 
-/** Camada barata: afirmações que exigem lastro mas o draft não tem evidência com fonte. */
-export function checkSemFonte(input: CritiqueInput): { issues: Issue[]; evidenceLevel: EvidenceLevel } {
-  const spec = INTENTS[input.intent];
-  const requiresEvidence = spec.required.includes("evidencia") || input.academicMode === "enforced";
-  const ev = input.draft.evidencia ?? [];
-  const withSource = ev.filter((e) => e.source && (e.source.title || e.source.url));
-  const issues: Issue[] = [];
-  let evidenceLevel: EvidenceLevel = withSource.length >= 3 ? 3 : withSource.length >= 1 ? 2 : 1;
+// Intenções cuja resposta PRECISA de lastro em fonte (base do `sem_fonte`).
+const INTENTS_NEED_SOURCE: IntentId[] = ["criar_trabalho", "pesquisar_fontes", "revisar"];
 
-  if (requiresEvidence && withSource.length === 0) {
-    issues.push({
-      tipo: "sem_fonte",
-      onde: "corpo",
-      porque: "O trabalho exige evidência com fonte, mas nenhuma afirmação está lastreada.",
-      sugestao: "Rode literature_search/memory_search e ancore as afirmações centrais em fontes reais.",
-    });
-    evidenceLevel = 1;
-  }
-  return { issues, evidenceLevel };
+const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+
+function isEmpty(v: unknown): boolean {
+  if (v == null) return true;
+  if (typeof v === "string") return v.trim().length === 0;
+  if (Array.isArray(v)) return v.length === 0;
+  return false;
 }
 
-const SYS =
-  "Você é um examinador acadêmico SEVERO PORÉM CONSTRUTIVO (ScholarEval). Avalie o rascunho e " +
-  'responda SÓ JSON: {"soundness":1-10,"contribution":1-10,"score":1-10,"decision":"aprovado|revisar|reprovado",' +
-  '"rubric":{<dim>:1-5,...},"issues":[{"tipo":"sem_fonte|lacuna|impreciso|confuso|raso","onde":"...","porque":"...","sugestao":"..."}]}. ' +
-  "Baixe a nota se houver afirmação sem fonte, lacuna face ao pedido, imprecisão factual, confusão ou rasura de profundidade. " +
-  "Seja calibrado contra viés de positividade: não aprove por gentileza.";
+/** quantas fontes/evidências ancoram este rascunho. */
+function sourceCount(input: ExaminerInput): number {
+  return (
+    (input.evidence?.length ?? 0) +
+    (input.draft.evidencia?.length ?? 0) +
+    (input.draft.sources?.length ?? 0)
+  );
+}
 
-function fallbackVerdict(cheap: { issues: Issue[]; evidenceLevel: EvidenceLevel }): ExaminerVerdict {
-  const hasBlocker = cheap.issues.some((i) => i.tipo === "sem_fonte");
-  return {
-    soundness: hasBlocker ? 4 : 6, contribution: 5, score: hasBlocker ? 5 : 6,
-    decision: hasBlocker ? "revisar" : "aprovado",
-    rubric: {}, evidenceLevel: cheap.evidenceLevel, integrity: [], issues: cheap.issues,
-  };
+/** A checagem MAIS BARATA (§8.4): afirmação sem lastro em fonte. Cruza rascunho × evidência. */
+export function checkSemFonte(input: ExaminerInput): Issue[] {
+  const needs = input.academicMode === "enforced" || INTENTS_NEED_SOURCE.includes(input.intent);
+  if (!needs) return [];
+  if (sourceCount(input) > 0) return [];
+  return [{
+    tipo: "sem_fonte",
+    onde: "resposta",
+    porque: "nenhuma afirmação está ancorada em fonte verificável",
+    sugestao: "buscar literatura (literature_search) e citar as fontes na evidência",
+  }];
+}
+
+/** Campos obrigatórios do schema da intenção que ficaram vazios (§8.1/8.3). */
+export function checkLacuna(input: ExaminerInput): Issue[] {
+  const spec = input.spec ?? INTENTS[input.intent];
+  return spec.required
+    .filter((f) => isEmpty((input.draft as Record<string, unknown>)[f as string]))
+    .map((f) => ({
+      tipo: "lacuna" as const,
+      onde: String(f),
+      porque: `campo obrigatório "${String(f)}" ausente ou vazio`,
+      sugestao: `preencher "${String(f)}"`,
+    }));
+}
+
+/** Profundidade abaixo do modo/intenção (raso). */
+function checkRaso(input: ExaminerInput): Issue[] {
+  if (input.mode === "quick") return [];
+  const len = (input.draft.nucleo ?? "").length + (input.draft.desenvolvimento ?? "").length;
+  if (len >= 120) return [];
+  return [{ tipo: "raso", onde: "desenvolvimento", porque: "profundidade abaixo do esperado para o modo", sugestao: "desenvolver o raciocínio e os exemplos" }];
+}
+
+// Penalidade por issue. `sem_fonte`/`lacuna` são CRÍTICAS: uma só já derruba o score abaixo do
+// `reviseThreshold` (7) — assim a decisão do examiner casa com o check inline do runTrajectory.
+const ISSUE_PENALTY: Record<Issue["tipo"], number> = {
+  sem_fonte: 4,
+  lacuna: 4,
+  impreciso: 2,
+  raso: 2,
+  confuso: 1,
+};
+
+function buildRubric(dims: ScholarDim[], issues: Issue[]): ExaminerRubric {
+  const semFonte = issues.some((i) => i.tipo === "sem_fonte");
+  const lacuna = issues.some((i) => i.tipo === "lacuna");
+  const raso = issues.some((i) => i.tipo === "raso");
+  const rubric: ExaminerRubric = {};
+  for (const d of dims) {
+    let v = 4;
+    if (semFonte && (d === "literatura" || d === "citacoes" || d === "dados_fontes")) v -= 2;
+    if (lacuna && (d === "escrita" || d === "resultados")) v -= 1;
+    if (raso && (d === "analise" || d === "metodologia")) v -= 1;
+    rubric[d] = clamp(v, 1, 5);
+  }
+  return rubric;
+}
+
+function evidenceLevelOf(n: number): EvidenceLevel {
+  if (n >= 3) return 3;
+  if (n >= 1) return 2;
+  return 1;
+}
+
+function decide(score: number, threshold: number, issues: Issue[]): ExaminerDecision {
+  const critical = issues.some((i) => i.tipo === "sem_fonte" || i.tipo === "lacuna");
+  if (score <= 3) return "reprovado";
+  if (score >= threshold && !critical) return "aprovado";
+  return "revisar";
 }
 
 /**
- * critique — camada barata + ScholarEval via LLM. `heavy` usa o Pro (criar_trabalho/revisar).
- * Sempre devolve um veredito válido; funde os issues das duas camadas.
+ * critique — o veredito ScholarEval (determinístico). Ordem barata→cara: sem_fonte → lacuna → raso.
+ * O score agrega penalidades; a decisão respeita o `reviseThreshold` da intenção (contracts).
  */
-export async function critique(input: CritiqueInput, opts?: { heavy?: boolean }): Promise<ExaminerVerdict> {
-  const cheap = checkSemFonte(input);
-  const dims = DIMS_BY_INTENT[input.intent] ?? ["problema", "escrita"];
-  const model = opts?.heavy ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH;
+export function critique(input: ExaminerInput): ExaminerVerdict {
+  const spec = input.spec ?? INTENTS[input.intent];
+  const dims = DIMS_BY_INTENT[input.intent] ?? [];
 
-  try {
-    const user =
-      `Intenção: ${input.intent} · Modo acadêmico: ${input.academicMode}\n` +
-      `Dimensões a pontuar (rubric): ${dims.join(", ")}\n` +
-      `Pedido do usuário: ${input.objective}\n\n` +
-      `RASCUNHO (JSON):\n${JSON.stringify(input.draft).slice(0, 12000)}`;
-    const v = await geminiJson<Partial<ExaminerVerdict>>(SYS, user, { model, temperature: 0.2, timeoutMs: 20000 });
+  const issues: Issue[] = [
+    ...checkSemFonte(input),
+    ...checkLacuna(input),
+    ...checkRaso(input),
+  ];
 
-    const rubric: ExaminerRubric = {};
-    for (const dK of dims) {
-      const n = (v.rubric as any)?.[dK];
-      if (typeof n === "number") rubric[dK] = Math.max(1, Math.min(5, n));
-    }
-    const clamp10 = (n: any, dflt: number) => (typeof n === "number" ? Math.max(1, Math.min(10, n)) : dflt);
-    const issues = mergeIssues(cheap.issues, Array.isArray(v.issues) ? (v.issues as Issue[]) : []);
-    const decision: ExaminerVerdict["decision"] =
-      cheap.issues.some((i) => i.tipo === "sem_fonte") ? "revisar"
-        : (v.decision === "aprovado" || v.decision === "revisar" || v.decision === "reprovado") ? v.decision : "revisar";
+  const score = clamp(
+    10 - issues.reduce((acc, i) => acc + (ISSUE_PENALTY[i.tipo] ?? 1), 0),
+    1,
+    10,
+  );
 
-    return {
-      soundness: clamp10(v.soundness, 6),
-      contribution: clamp10(v.contribution, 5),
-      score: clamp10(v.score, 6),
-      decision,
-      rubric,
-      evidenceLevel: cheap.evidenceLevel,
-      integrity: Array.isArray(v.integrity) ? v.integrity : [],
-      issues,
-    };
-  } catch {
-    return fallbackVerdict(cheap);
-  }
+  const semFonte = issues.some((i) => i.tipo === "sem_fonte");
+  const lacuna = issues.some((i) => i.tipo === "lacuna");
+  const raso = issues.some((i) => i.tipo === "raso");
+  const n = sourceCount(input);
+
+  const soundness = clamp(10 - (semFonte ? 4 : 0) - (n === 0 ? 1 : 0), 1, 10);
+  const contribution = clamp(10 - (lacuna ? 3 : 0) - (raso ? 2 : 0), 1, 10);
+
+  return {
+    soundness,
+    contribution,
+    score,
+    decision: decide(score, spec.reviseThreshold ?? 7, issues),
+    rubric: buildRubric(dims, issues),
+    evidenceLevel: evidenceLevelOf(n),
+    integrity: [], // achados de imagem/número/lógica/citação: aprofundado numa fase posterior
+    issues,
+    reflections: spec.reflections,
+    ensemble: spec.ensemble,
+  };
 }
 
-/** Funde issues barata + LLM sem duplicar `sem_fonte`. */
-function mergeIssues(cheap: Issue[], llm: Issue[]): Issue[] {
-  const hasCheapSemFonte = cheap.some((i) => i.tipo === "sem_fonte");
-  const llmClean = hasCheapSemFonte ? llm.filter((i) => i.tipo !== "sem_fonte") : llm;
-  return [...cheap, ...llmClean].slice(0, 12);
+/** Adaptador p/ o `HarnessDeps.critique(st)` do runTrajectory (mapeia o estado → ExaminerInput). */
+export function critiqueForState(st: {
+  intent: IntentId;
+  mode: Mode;
+  academicMode: AcademicMode;
+  spec: IntentSpec;
+  draft?: StructuredAnswer;
+  evidence?: Finding[];
+  artifacts?: StudioRef[];
+}): ExaminerVerdict {
+  // os artefatos vivem em st.artifacts (anexados no finalize); reflita-os no draft p/ o exame
+  // não marcar `lacuna` de `artifacts` que na verdade JÁ foram gerados pelas tools.
+  const base = st.draft ?? { nucleo: "" };
+  const draft: StructuredAnswer =
+    st.artifacts?.length && !base.artifacts?.length ? { ...base, artifacts: st.artifacts } : base;
+  return critique({
+    intent: st.intent,
+    mode: st.mode,
+    academicMode: st.academicMode,
+    spec: st.spec,
+    draft,
+    evidence: st.evidence,
+  });
 }

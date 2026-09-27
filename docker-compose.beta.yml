@@ -6,8 +6,10 @@
 # Mongo é Atlas externo (DATABASE_URL/MONGODB_URI no .env). Sem postgres/agentes/
 # observabilidade (isso fica no docker-compose.yml completo, pra depois).
 #
-# Orçamento de RAM (limites): web 1.5g + voz 3g + abnt 1.2g + redis 0.38g + caddy 0.25g
-#   ≈ 6.3g  → cabe em 8g com swap de segurança (ver docs/BETA_DEPLOY.md).
+# Orçamento de RAM (limites): web 1.5g + voz 1g + abnt 1.2g + redis 0.38g + caddy 0.25g
+#   + pdf-loader 0.896g ≈ 5.2g → folga ~2.8g em 8g.
+#   Voz padrão = Gemini-TTS (nuvem); voice-engine local só fallback Piper (Kokoro lazy).
+#   pdf-loader em modo FAST (sem OCR/Hybrid); ligar Hybrid só com 16 GB.
 #
 # Subir:   docker compose -f docker-compose.beta.yml up -d --build
 # Logs:    docker compose -f docker-compose.beta.yml logs -f web caddy voice-engine
@@ -30,14 +32,23 @@ services:
     # deploy a partir dos GitHub Actions secrets (ex.: GOOGLE_CREDENTIALS). O último vence.
     env_file: [.env, .env.secrets]
     environment:
+      GIT_SHA: ${GIT_SHA:-unknown}
       NODE_ENV: production
+      # Endereço público do app. O Google devolve o usuário no NEXTAUTH_URL: se ele
+      # apontar pra um domínio morto, o login quebra mesmo com client_id/secret certos
+      # (foi exatamente o que aconteceu com beta.zaeon.space). Trocar de domínio =
+      # setar a Variable APP_URL no repo (ou APP_URL no .env do VPS), nada mais.
+      NEXTAUTH_URL: ${APP_URL:-https://75-119-140-97.sslip.io}
+      NEXT_PUBLIC_APP_URL: ${APP_URL:-https://75-119-140-97.sslip.io}
       REDIS_URL: redis://redis:6379/0
       VOICE_ENGINE_URL: http://voice-engine:8004   # proxy /api/ai/voice
       ABNT_SERVICE_URL: http://abnt-service:8001    # exportação ABNT
+      PDF_LOADER_URL: http://pdf-loader:8005        # leitura estruturada de PDF
     depends_on:
       redis: { condition: service_started }
       voice-engine: { condition: service_started }
       abnt-service: { condition: service_started }
+      pdf-loader: { condition: service_started }
     expose: ["3000"]            # público é só o Caddy
     volumes: ["studio_data:/app/.studio"]   # artefatos do Studio (podcast/imagem) — persistem entre deploys
     restart: unless-stopped
@@ -57,23 +68,96 @@ services:
     container_name: zaeon_voice
     environment:
       KOKORO_LANG: p
+      ZAEON_TTS_DEFAULT: natural-br   # default Piper (Kokoro lazy, não infla RAM)
       HF_HOME: /app/.hf
     volumes: ["hf_cache:/app/.hf"]   # cacheia os pesos do modelo entre restarts
     expose: ["8004"]
     restart: unless-stopped
     deploy:
       resources:
-        limits: { memory: 3g }
+        limits: { memory: 1g }   # era 3g (Kokoro); voz padrão é Gemini-TTS (nuvem), local só fallback Piper
 
   # ── ABNT (FastAPI + LibreOffice headless) ──
+  # web depende deste com condition: service_started (não service_healthy):
+  # se o abnt demorar/falhar no 1º boot (build do LibreOffice, OOM), o site sobe
+  # mesmo assim e a exportação degrada com 503 amigável. O healthcheck abaixo é
+  # só observabilidade (docker compose ps mostra healthy/unhealthy).
   abnt-service:
     build: { context: ./abnt-service, dockerfile: Dockerfile }
     container_name: zaeon_abnt
     expose: ["8001"]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health', timeout=5).status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
     deploy:
       resources:
         limits: { memory: 1200m }
+
+  # ── pdf-loader (FastAPI + opendataloader-pdf, modo FAST). Leitura estruturada de PDF. ──
+  #    Sem OCR/Hybrid nesta VPS (RAM). Só rede interna (não publica porta).
+  pdf-loader:
+    build: { context: ./pdf-loader, dockerfile: Dockerfile }
+    container_name: zaeon_pdf
+    expose: ["8005"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 896m }
+
+  # ── Mentor no WhatsApp (docs/WHATSAPP_MENTOR.md) — perfil opcional `whatsapp` ──
+  #   Subir:  COMPOSE_PROFILES=whatsapp docker compose -f docker-compose.beta.yml up -d --build
+  #   agent-bridge = agent-gateway em modo BRIDGE FINO (/webhook/wa → web:/api/whatsapp/webhook).
+  #   Sem Postgres/pgvector/arq: o cérebro é o harness do web (Atlas). O sender de saída é o
+  #   Evolution abaixo (WHATSAPP_PROVIDER=evolution) OU o repo de disparos/ChipFlow
+  #   (WHATSAPP_PROVIDER=disparos, DISPAROS_URL) rodando no compose dele — ver runbook.
+  agent-bridge:
+    build: { context: ./agent-gateway, dockerfile: Dockerfile }
+    container_name: zaeon_agent_bridge
+    profiles: ["whatsapp"]
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: [.env]
+    environment:
+      ZAEON_WEBHOOK_URL: http://web:3000/api/whatsapp/webhook
+      # sem DB: o bridge não abre conexão; placeholder só pra Settings não reclamar
+      DATABASE_URL: postgresql+asyncpg://unused:unused@localhost/unused
+    depends_on:
+      web: { condition: service_started }
+    expose: ["8000"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 384m }
+
+  # Evolution API v1.x (sem Postgres; estado em volume). Instância ÚNICA da plataforma,
+  # conectada 1× por QR pelo admin (número da Zaeon). Webhook da instância → agent-bridge.
+  # ⚠️ Não-oficial (Baileys): risco de ban/ToS — MVP. Escala = WhatsApp Cloud API (troca de provider).
+  evolution:
+    image: atendai/evolution-api:v1.8.2
+    container_name: zaeon_evolution
+    profiles: ["whatsapp"]
+    environment:
+      SERVER_URL: http://evolution:8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-troque-esta-chave}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+      DATABASE_ENABLED: "false"
+      REDIS_ENABLED: "false"
+      RABBITMQ_ENABLED: "false"
+      WEBSOCKET_ENABLED: "false"
+      QRCODE_LIMIT: "30"
+      LOG_LEVEL: "ERROR,WARN"
+      DEL_INSTANCE: "false"
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    expose: ["8080"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 768m }
 
   redis:
     image: redis:7-alpine
@@ -104,6 +188,8 @@ services:
 
 volumes:
   redis_data:
+  evolution_instances:   # sessão da instância única do WhatsApp (perfil whatsapp)
+  evolution_store:
   caddy_data:
   caddy_config:
   hf_cache:        # pesos do Kokoro (HuggingFace) — evita re-download a cada restart

@@ -15,10 +15,15 @@ import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
+import StructuredAnswerView from "@/components/study/StructuredAnswerView";
+import type { StructuredAnswer } from "@/lib/agent/contracts";
+import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
+import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
 
-type Msg = { id: string; role: "user" | "assistant"; text: string };
+// `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
+type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string };
 
-// Deve bater com RESEARCH_SENTINEL de app/api/ai/chat/route.ts.
+// Deve bater com RESEARCH_SENTINEL de app/api/ai/chat/route.ts (a estruturada vem do structured-client).
 const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";
 // L0 (docs/MEMORY_AND_PERSISTENCE.md): antes a conversa da Sala de Pesquisa ZERAVA
 // (sem persistência + desmonta ao trocar de aba). Agora espelha o thread e o rascunho.
@@ -67,8 +72,6 @@ export default function ResearchChat({
   const wt = workType || "trabalho";
   const msgsRef = useRef<Msg[]>([]);
   msgsRef.current = messages;
-  const abortRef = useRef<AbortController | null>(null);
-  const stop = useCallback(() => { abortRef.current?.abort(); }, []);
 
   useEffect(() => {
     const el = listRef.current;
@@ -137,20 +140,17 @@ export default function ResearchChat({
     setSending(true);
     const patch = (text: string) => setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, text } : m)));
 
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
     try {
       const r = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, agent: "aura", surface: "pesquisa", history, systemContext: SYS(wt), stream: true }),
-        signal: ctrl.signal,
       });
       if (!r.ok || !r.body) { patch("Não consegui responder agora. Tente de novo."); return; }
 
       const reader = r.body.getReader();
       const dec = new TextDecoder();
-      let acc = "", target = "", shown = 0, ended = false;
+      let acc = "", limpo = "", faseVista = "", target = "", shown = 0, ended = false;
       const typed = new Promise<void>((resolve) => {
         const id = setInterval(() => {
           if (shown < target.length) {
@@ -163,15 +163,35 @@ export default function ResearchChat({
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
-        const si = acc.indexOf(RESEARCH_SENTINEL);
-        target = si >= 0 ? acc.slice(0, si) : acc;   // datilografa só o visível
+        // Mesmo contrato do co-working: o progresso sai do fio antes de qualquer conta.
+        const { limpo: lp, eventos } = separarProgresso(acc);
+        limpo = lp;
+        const f = faseCorrente(eventos);
+        if (f && f.rotulo !== faseVista) {
+          faseVista = f.rotulo;
+          setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: f.rotulo } : m)));
+        }
+        const cut = [limpo.indexOf(RESEARCH_SENTINEL), limpo.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
+        target = cut.length ? limpo.slice(0, Math.min(...cut)) : limpo;   // datilografa só o visível
       }
-      const si = acc.indexOf(RESEARCH_SENTINEL);
-      if (si >= 0) {
+      const structured = parseStructuredStream(limpo);
+      const si = limpo.indexOf(RESEARCH_SENTINEL);
+      if (structured) {
+        // HARNESS: resposta estruturada → cartão rico; payload malformado → TEXTO (nunca vazio).
+        target = ""; ended = true;
+        const text = structured.kind === "answer" ? structured.answer.nucleo : structured.text;
+        setMessages((prev) => prev.map((m) => (m.id === asstId
+          ? { ...m, text, answer: structured.kind === "answer" ? structured.answer : undefined }
+          : m)));
+        appendTranscript("pesquisa", null, [
+          { role: "user", text: prompt },
+          { role: "assistant", text },
+        ]);
+      } else if (si >= 0) {
         // TOOL-LOOP: research_generate → gera o trabalho e encaixa no documento.
         target = ""; ended = true;
         let action: any = null;
-        try { action = JSON.parse(acc.slice(si + RESEARCH_SENTINEL.length)); } catch { /* ignore */ }
+        try { action = JSON.parse(limpo.slice(si + RESEARCH_SENTINEL.length)); } catch { /* ignore */ }
         if (action?.kind) {
           patch(action.text || "Gerando o trabalho…");
           void runResearchGenerate(action.kind, action.topic || prompt);
@@ -179,18 +199,18 @@ export default function ResearchChat({
           patch("Sem resposta agora.");
         }
       } else {
-        target = acc; ended = true;
+        target = limpo; ended = true;
         await typed;
-        if (!acc.trim()) patch("Sem resposta agora.");
+        if (!limpo.trim()) patch("Sem resposta agora.");
         else appendTranscript("pesquisa", null, [
           { role: "user", text: prompt },
-          { role: "assistant", text: acc },
+          { role: "assistant", text: limpo },
         ]);
       }
-    } catch (e: any) {
-      patch(e?.name === "AbortError" ? "⏹ Parado." : "Falha de rede ao falar com o agente.");
+    } catch {
+      patch("Falha de rede ao falar com o agente.");
     } finally {
-      abortRef.current = null;
+      setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined } : m)));
       setSending(false);
     }
   }, [input, sending, messages, wt, runResearchGenerate]);
@@ -203,6 +223,15 @@ export default function ResearchChat({
         <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2 py-5 flex flex-col gap-4">
           {messages.map((m) => {
             const isUser = m.role === "user";
+            if (!isUser && m.answer) {
+              return (
+                <div key={m.id} className="flex justify-start">
+                  <div className="max-w-[88%] w-full">
+                    <StructuredAnswerView answer={m.answer} onConcept={(c) => setInput(`Explique: ${c}`)} onNext={(s) => setInput(s)} />
+                  </div>
+                </div>
+              );
+            }
             return (
               <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
                 <div
@@ -212,7 +241,7 @@ export default function ResearchChat({
                       : "rounded-r-2xl rounded-bl-2xl bg-slate-50 text-slate-800 border-l-2 border-cyan-500/60 text-justify dark:bg-white/[0.03] dark:text-white/90 dark:border-cyan-400/50"
                   }`}
                 >
-                  {m.text ? m.text : (!isUser && <AuraThinking active phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
+                  {m.text ? m.text : (!isUser && <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                 </div>
               </div>
             );
@@ -227,7 +256,6 @@ export default function ResearchChat({
             value={input}
             onChange={setInput}
             onSubmit={send}
-            onStop={stop}
             onToggleStudio={() => setPaletteOpen((v) => !v)}
             studioOpen={paletteOpen}
             busy={sending}

@@ -1,34 +1,39 @@
 /**
- * lib/agent/trajectory.ts — PR04 do runbook (§13.1) · §11.1 do plano.
- * O MOTOR do laço da Aura: a resposta como TRAJETÓRIA TIPADA multi-step.
- *   route → (quick? draft→finalize) → plan → loop{ gather → reason → draft → critique
- *   → shouldRevise? } → finalize (provenance + persistMemory + stream).
+ * lib/agent/trajectory.ts — PR04 do runbook (§13.1; encarna §11.1). O MOTOR `runTrajectory`.
  *
- * Pura ORQUESTRAÇÃO: toda I/O (LLM, tools, memória, stream) entra por `HarnessDeps`
- * injetável → transpila e testa sem rede. Stop conditions determinísticas. O
- * reasoning-sandwich (deep-think só em plan+critique) é decisão de quem implementa
- * `plan`/`critique`. Roda atrás da flag AURA_HARNESS (o chamador decide).
+ * O laço: route → (quick? draft→finalize) → plan → loop{ gather(Promise.all) → reason → draft →
+ * critique → shouldRevise? } → finalize. STOP-conditions determinísticas (aprovado/maxIter/
+ * orcamento/loop). `HarnessDeps` é INJETADO (classify/plan/runTool/reason/draft/critique/emit/
+ * persistMemory) — mantém o motor puro e testável. Reasoning-sandwich: as fases pesadas são só
+ * `plan` e `critique` (o adaptador escolhe Pro; o resto é Flash). NÃO chama rede aqui.
+ *
+ * Está atrás da flag `AURA_HARNESS` no NÍVEL DA ROTA (PASSO 3) — o motor em si é agnóstico.
  */
+import type { AgentContext } from "@/lib/agent/context";
+import type { AgentStep } from "@/lib/agent/actions";
+import type { Drawer } from "@/lib/agent/memory";
+import type { Finding, ToolResult } from "@/lib/agent/runtime";
+import type { RouterResult } from "@/lib/agent/router";
 import {
-  INTENTS, shouldRevise,
-  type IntentId, type Mode, type AcademicMode, type WorkKind,
-  type StructuredAnswer, type ExaminerVerdict, type Issue, type ProvenanceRecord,
+  INTENTS,
+  type IntentId,
+  type Mode,
+  type AcademicMode,
+  type WorkKind,
+  type IntentSpec,
+  type StructuredAnswer,
+  type ExaminerVerdict,
+  type ProvenanceRecord,
+  type Issue,
+  type Source,
+  type StudioRef,
 } from "@/lib/agent/contracts";
-import type { Finding, ToolResult, ToolCtx } from "@/lib/agent/runtime";
 
+// ───────────────────────────── tipos do laço (§11.1) ─────────────────────────────
 export type Phase = "route" | "plan" | "gather" | "reason" | "draft" | "critique" | "finalize";
 export type StopReason = "aprovado" | "orcamento" | "maxIter" | "loop" | "erro";
-
-/** Um passo do plano (o que o gather vai chamar). */
-export type Step = { tool: string; args?: any; note?: string };
-
-/** Passo emitido para o trace (action bus / stream). NÃO é o AgentStep de actions.ts
- *  (aquele tem união fechada) — o adaptador de UI mapeia isto → AgentStep. */
-export type TrajectoryStep = { phase: Phase; label: string; status: "running" | "done" | "error" };
-
+export type Step = { tool: string; args?: any };
 export type Budget = { tokens: number; ms: number };
-
-export type Classification = { intent: IntentId; mode: Mode; academicMode: AcademicMode; kind?: WorkKind };
 
 export type TrajectoryState = {
   objective: string;
@@ -36,158 +41,257 @@ export type TrajectoryState = {
   mode: Mode;
   academicMode: AcademicMode;
   kind?: WorkKind;
-  plan: Step[];
-  evidence: Finding[];
-  reasoning?: string;
-  draft?: StructuredAnswer;
-  critique: Issue[];
-  score?: number;
-  artifacts: NonNullable<StructuredAnswer["artifacts"]>;
-  memoryWrites: Finding[];      // o que o finalize vai persistir como drawers (L3)
+  spec: IntentSpec;
   phase: Phase;
   iter: number;
-  spent: { tokens: number; ms: number };
+  spent: Budget;
   budget: Budget;
+  plan: Step[];
+  evidence: Finding[];
+  artifacts: StudioRef[];
+  memoryWrites: Drawer[];
+  reasoning?: string;
+  draft?: StructuredAnswer;
+  critique?: Issue[];
+  score?: number;
+  degraded?: boolean;
+  prevNucleo?: string;
   stop?: StopReason;
+  traceId: string;
   startedAt: number;
 };
 
-/** As dependências de I/O do motor. Implementadas no wiring (route/PR-M3/etc.). */
+/** As dependências do harness — injetadas pelo adaptador (aura-harness). Motor não sabe de Gemini. */
 export interface HarnessDeps {
-  classify(objective: string, ctx: ToolCtx): Promise<Classification>;
-  plan(st: TrajectoryState): Promise<Step[]>;                 // reasoning-heavy (fatia 1 do sandwich)
-  runTool(name: string, args: any, ctx: ToolCtx): Promise<ToolResult>;
-  reason(st: TrajectoryState): Promise<string>;              // conecta evidence → reasoning
+  classify(objective: string, ctx: AgentContext): Promise<RouterResult>;
+  plan(st: TrajectoryState): Promise<Step[]>;
+  runTool(name: string, args: any, ctx: AgentContext): Promise<ToolResult>;
+  reason(st: TrajectoryState): Promise<string>;
   draft(st: TrajectoryState): Promise<StructuredAnswer>;
-  critique(st: TrajectoryState): Promise<ExaminerVerdict>;    // examiner (ScholarEval), fatia 2 do sandwich
-  emit(step: TrajectoryStep): void;                          // trace → action bus / stream
-  persistMemory(writes: Finding[], ctx: ToolCtx): Promise<void>;  // L3 write no finalize
-  budgetFor?(spec: (typeof INTENTS)[IntentId], mode: Mode): Budget;
+  critique(st: TrajectoryState): Promise<ExaminerVerdict>;
+  emit(step: AgentStep): void;
+  persistMemory(drawers: Drawer[]): Promise<void>;
 }
 
-const DEFAULT_BUDGET: Record<Mode, Budget> = {
-  quick: { tokens: 4_000, ms: 15_000 },
-  elaborated: { tokens: 16_000, ms: 45_000 },
-  research: { tokens: 60_000, ms: 180_000 },
+export type TrajectoryOpts = { budget?: Budget };
+
+// ───────────────────────────── orçamento + custo por fase ─────────────────────────────
+const BUDGET: Record<Mode, Budget> = {
+  quick: { tokens: 3_000, ms: 15_000 },
+  elaborated: { tokens: 12_000, ms: 60_000 },
+  research: { tokens: 40_000, ms: 180_000 },
+};
+const COST: Record<Phase, Budget> = {
+  route: { tokens: 300, ms: 500 },
+  plan: { tokens: 1_200, ms: 2_500 },
+  gather: { tokens: 400, ms: 1_500 },
+  reason: { tokens: 1_500, ms: 2_000 },
+  draft: { tokens: 1_800, ms: 2_500 },
+  critique: { tokens: 1_500, ms: 2_500 },
+  finalize: { tokens: 200, ms: 300 },
 };
 
-const mk = (phase: Phase, label = phase): TrajectoryStep => ({ phase, label, status: "running" });
+// Rótulos PT por fase — o `AgentStep.kind` é união FECHADA (navigate|create|type|say|done),
+// então mapeamos toda fase para kind:"say" e guardamos a fase real em `detail` (PR06 lê daí).
+const PHASE_LABEL: Record<Phase, string> = {
+  route: "Entendendo o pedido",
+  plan: "Planejando a resposta",
+  gather: "Reunindo evidências",
+  reason: "Raciocinando",
+  draft: "Redigindo",
+  critique: "Revisando criticamente",
+  finalize: "Finalizando",
+};
 
-function toFindings(res: ToolResult): Finding[] {
-  return res.ok && res.findings ? res.findings : [];
+const nowIso = () => new Date().toISOString();
+
+/** o harness está ligado? Ligado POR PADRÃO; `AURA_HARNESS="0"` é o kill-switch (fallback Fase 0). */
+export function harnessEnabled(): boolean {
+  return process.env.AURA_HARNESS !== "0";
+}
+
+// ───────────────────────────── helpers puros ─────────────────────────────
+function emit(d: HarnessDeps, st: TrajectoryState, phase: Phase, detail?: string): void {
+  st.phase = phase;
+  d.emit({ kind: "say", label: PHASE_LABEL[phase], detail: detail ?? phase });
+}
+
+function charge(st: TrajectoryState, phase: Phase, mult = 1): void {
+  st.spent.tokens += COST[phase].tokens * mult;
+  st.spent.ms += COST[phase].ms * mult;
 }
 
 function overBudget(st: TrajectoryState): boolean {
-  return st.spent.tokens >= st.budget.tokens || (Date.now() - st.startedAt) >= st.budget.ms;
+  return st.spent.tokens >= st.budget.tokens || st.spent.ms >= st.budget.ms;
 }
 
-function seedState(objective: string, r: Classification, budget: Budget): TrajectoryState {
+function safeSteps(steps: unknown): Step[] {
+  return (Array.isArray(steps) ? steps : [])
+    .filter((s): s is Step => !!s && typeof (s as any).tool === "string");
+}
+
+/** Só reúne na 1ª iteração (as revisões reaproveitam a evidência + os issues como guia). */
+function nextTools(st: TrajectoryState): Step[] {
+  return st.iter === 1 ? st.plan : [];
+}
+
+function toFindings(res: ToolResult): Finding[] {
+  return res.ok && Array.isArray(res.findings) ? res.findings : [];
+}
+
+/** intenções que dependem de evidência (memória/literatura) — base do sinal "degradado" (A3). */
+function needsEvidence(st: TrajectoryState): boolean {
+  return st.mode !== "quick" && st.spec.tools.some((t) => t === "literature_search" || t === "memory_search");
+}
+
+function collectSources(st: TrajectoryState): Source[] {
+  const out: Source[] = [];
+  const seen = new Set<string>();
+  const push = (s?: Source) => {
+    if (!s) return;
+    const k = `${s.title}|${s.url ?? ""}`;
+    if (!seen.has(k)) { seen.add(k); out.push(s); }
+  };
+  for (const f of st.evidence) push(f.source);
+  for (const e of st.draft?.evidencia ?? []) push(e.source);
+  for (const s of st.draft?.sources ?? []) push(s);
+  return out;
+}
+
+function buildProvenance(st: TrajectoryState): ProvenanceRecord {
+  const tools = [...new Set(st.plan.map((s) => s.tool))];
   return {
-    objective, intent: r.intent, mode: r.mode, academicMode: r.academicMode, kind: r.kind,
-    plan: [], evidence: [], critique: [], artifacts: [], memoryWrites: [],
-    phase: "route", iter: 0, spent: { tokens: 0, ms: 0 }, budget, startedAt: Date.now(),
+    by: "aura",
+    intent: st.intent,
+    toolsUsed: tools,
+    sources: collectSources(st),
+    model: st.mode === "research" ? "gemini-pro" : "gemini-flash",
+    at: nowIso(),
+    traceId: st.traceId,
   };
 }
 
-/** Passos ainda não executados nesta iteração (paraleliza tools independentes). */
-function nextTools(st: TrajectoryState): Step[] {
-  return st.plan.filter((s) => !!s.tool);
+function seedState(objective: string, r: RouterResult, opts?: TrajectoryOpts): TrajectoryState {
+  return {
+    objective,
+    intent: r.intent,
+    mode: r.mode,
+    academicMode: r.academicMode,
+    kind: r.kind,
+    spec: INTENTS[r.intent],
+    phase: "route",
+    iter: 0,
+    spent: { tokens: 0, ms: 0 },
+    budget: opts?.budget ? { ...opts.budget } : { ...BUDGET[r.mode] },
+    plan: [],
+    evidence: [],
+    artifacts: [],
+    memoryWrites: [],
+    traceId: `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    startedAt: Date.now(),
+  };
 }
 
-/**
- * O laço. Devolve o StructuredAnswer final (com provenance). Nunca lança: erros de
- * fase são capturados e viram stop="erro" com o melhor draft disponível.
- */
-export async function runTrajectory(
+async function finalize(st: TrajectoryState, d: HarnessDeps): Promise<StructuredAnswer> {
+  emit(d, st, "finalize");
+  charge(st, "finalize");
+  const answer: StructuredAnswer = st.draft ?? { nucleo: "" };
+  // anexa o que as tools reuniram, se o draft não trouxe
+  if ((!answer.artifacts || answer.artifacts.length === 0) && st.artifacts.length) answer.artifacts = st.artifacts;
+  if ((!answer.evidencia || answer.evidencia.length === 0) && st.evidence.length) {
+    answer.evidencia = st.evidence
+      .filter((f) => f.source)
+      .map((f) => ({ claim: f.claim, source: f.source as Source }));
+  }
+  const prov = buildProvenance(st);
+  answer.provenance = prov;
+  for (const a of answer.artifacts ?? []) if (!a.provenance) a.provenance = prov;
+  // memória NUNCA derruba a resposta (write best-effort). Derivação real (L1→Drawer) no PR-M3.
+  try { await d.persistMemory(st.memoryWrites); } catch { /* descarta */ }
+  return answer;
+}
+
+// ───────────────────────────── o motor (§11.1) ─────────────────────────────
+/** Versão instrumentada: devolve a resposta E o estado final (base dos testes de stop-condition). */
+export async function runTrajectoryTraced(
   objective: string,
-  ctx: ToolCtx,
+  ctx: AgentContext,
   d: HarnessDeps,
+  opts?: TrajectoryOpts,
 ): Promise<{ answer: StructuredAnswer; state: TrajectoryState }> {
-  let st: TrajectoryState;
-  try {
-    d.emit(mk("route"));
-    const r = await d.classify(objective, ctx);
-    const spec = INTENTS[r.intent];
-    const budget = (d.budgetFor?.(spec, r.mode)) ?? DEFAULT_BUDGET[r.mode];
-    st = seedState(objective, r, budget);
+  d.emit({ kind: "say", label: PHASE_LABEL.route, detail: "route" }); // 1º emit é antes do state existir
+  const r = await d.classify(objective, ctx);
+  const st = seedState(objective, r, opts);
+  charge(st, "route");
 
-    // QUICK: 1 tiro (conversa/dúvida) — sem plano, sem crítico.
-    if (r.mode === "quick") {
-      st.phase = "draft"; d.emit(mk("draft"));
-      st.draft = await d.draft(st);
-      st.stop = "aprovado";
-      return finalize(st, ctx, d);
-    }
+  // QUICK: 1 tiro (paridade com a Fase 0 — sem plano, sem crítico)
+  if (st.mode === "quick") {
+    emit(d, st, "draft");
+    st.draft = await d.draft(st);
+    charge(st, "draft");
+    st.stop = "aprovado";
+    return { answer: await finalize(st, d), state: st };
+  }
 
-    st.phase = "plan"; d.emit(mk("plan"));
-    st.plan = await d.plan(st);
+  emit(d, st, "plan"); // fatia 1 do sandwich (reasoning-heavy)
+  st.plan = safeSteps(await d.plan(st));
+  charge(st, "plan");
 
-    for (;;) {
-      st.iter++;
+  for (;;) {
+    st.iter++;
 
-      st.phase = "gather"; d.emit(mk("gather"));
-      const steps = nextTools(st);
-      const results = await Promise.all(
-        steps.map((s) => d.runTool(s.tool, s.args, ctx).catch((e) => toolErrLike(e))),
-      );
+    const steps = nextTools(st);
+    if (steps.length) {
+      emit(d, st, "gather");
+      const results = await Promise.all(steps.map((s) => d.runTool(s.tool, s.args ?? {}, ctx)));
       for (const res of results) {
         st.evidence.push(...toFindings(res));
         if (res.artifact) st.artifacts.push(res.artifact);
       }
-
-      st.phase = "reason"; d.emit(mk("reason"));
-      st.reasoning = await d.reason(st);
-
-      st.phase = "draft"; d.emit(mk("draft"));
-      st.draft = await d.draft(st);
-
-      if (spec.critic === "off") { st.stop = "aprovado"; break; }
-
-      st.phase = "critique"; d.emit(mk("critique"));
-      const v = await d.critique(st);
-      st.critique = v.issues; st.score = v.score;
-
-      if (!shouldRevise(v, spec, st.iter)) {
-        st.stop = v.decision === "aprovado" || v.score >= (spec.reviseThreshold ?? 7) ? "aprovado" : "maxIter";
-        break;
+      charge(st, "gather", steps.length);
+      // A3 · degradado ≠ sucesso silencioso: gather vazio quando se esperava evidência.
+      if (needsEvidence(st) && st.evidence.length === 0) {
+        st.degraded = true;
+        emit(d, st, "gather", "degradado: nenhuma evidência reunida");
       }
-      if (overBudget(st)) { st.stop = "orcamento"; break; }
-      // senão: revisa — os issues guiam o próximo gather/draft (o `plan`/`draft` os leem em st.critique).
     }
-    return finalize(st, ctx, d);
-  } catch (e) {
-    // fail-safe: devolve o que tiver, marcando erro (nunca derruba a rota).
-    const fallback: StructuredAnswer = { nucleo: "Não consegui concluir o raciocínio agora." };
-    const state = (typeof st! !== "undefined" ? st! : seedState(objective, { intent: "conversa", mode: "quick", academicMode: "flexible" }, DEFAULT_BUDGET.quick));
-    state.stop = "erro";
-    return { answer: state.draft ?? fallback, state };
+
+    emit(d, st, "reason");
+    st.reasoning = await d.reason(st);
+    charge(st, "reason");
+
+    emit(d, st, "draft");
+    st.draft = await d.draft(st);
+    charge(st, "draft");
+
+    // loop-guard: rascunho idêntico ao anterior → revisar não adianta.
+    if (st.prevNucleo !== undefined && st.draft?.nucleo === st.prevNucleo) { st.stop = "loop"; break; }
+    st.prevNucleo = st.draft?.nucleo;
+
+    if (st.spec.critic === "off") { st.stop = "aprovado"; break; }
+
+    emit(d, st, "critique"); // fatia 2 do sandwich (reasoning-heavy)
+    const v = await d.critique(st);
+    charge(st, "critique");
+    st.critique = v.issues;
+    st.score = v.score;
+
+    // STOP-conditions determinísticas (ordem do §11.1): aprovado → maxIter → orcamento.
+    if (v.decision === "aprovado" || (st.score ?? 0) >= (st.spec.reviseThreshold ?? 7)) { st.stop = "aprovado"; break; }
+    if (st.iter >= (st.spec.maxRevisions ?? 1)) { st.stop = "maxIter"; break; }
+    if (overBudget(st)) { st.stop = "orcamento"; break; }
+    // senão: revisa — os issues guiam o próximo reason/draft.
   }
+
+  return { answer: await finalize(st, d), state: st };
 }
 
-function toolErrLike(e: unknown): ToolResult {
-  return { ok: false, error: String((e as any)?.message ?? e), provenance: {} };
-}
-
-async function finalize(
-  st: TrajectoryState,
-  ctx: ToolCtx,
+/** O motor público (§11.1): devolve a resposta estruturada final. */
+export async function runTrajectory(
+  objective: string,
+  ctx: AgentContext,
   d: HarnessDeps,
-): Promise<{ answer: StructuredAnswer; state: TrajectoryState }> {
-  st.phase = "finalize"; d.emit({ phase: "finalize", label: "finalize", status: "done" });
-  const answer: StructuredAnswer = st.draft ?? { nucleo: "" };
-
-  // provenance mínimo (o wiring completa model/traceId).
-  const provenance: ProvenanceRecord = {
-    by: "aura", intent: st.intent, toolsUsed: st.plan.map((s) => s.tool),
-    sources: st.evidence.map((f) => f.source).filter(Boolean) as ProvenanceRecord["sources"],
-    model: "gemini", at: new Date().toISOString(), traceId: ctx.traceId ?? "",
-  };
-  answer.provenance = { ...provenance, ...(answer.provenance ?? {}) };
-  if (st.artifacts.length && !answer.artifacts) answer.artifacts = st.artifacts;
-
-  // L3: persiste o que virou memória (deriva do turno). Best-effort.
-  const writes = st.memoryWrites.length ? st.memoryWrites : st.evidence;
-  try { await d.persistMemory(writes, ctx); } catch { /* nunca derruba o finalize */ }
-
-  return { answer, state: st };
+  opts?: TrajectoryOpts,
+): Promise<StructuredAnswer> {
+  return (await runTrajectoryTraced(objective, ctx, d, opts)).answer;
 }

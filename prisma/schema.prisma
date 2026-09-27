@@ -53,6 +53,11 @@ model User {
   identityId      String?
   idType          String?
   walletAddress   String?
+  // Credenciais Solana (ver lib/solana/credentials.ts): cache do endereço da wallet CUSTODIAL
+  // criada pela Crossmint no 1º LOGIN (src/lib/auth.ts → events.createUser) ou, se ela não
+  // existir ainda, no 1º mint (email:<aluno>:solana). O aluno nunca vê seed phrase/gas.
+  solanaWallet    String?
+  solanaWalletAt  DateTime?   // quando a wallet foi provisionada (diagnóstico do 1º login)
   
   // Admin & Verification
   kycStatus         String  @default("pending")
@@ -63,6 +68,8 @@ model User {
 
   // Planos / trial de estudante (ver lib/plans.ts + /api/trial/*)
   plan            String?   @default("free")  // "free" | "plus"
+  // Mentor ativo no chat (MentorTemplate.id); null = Aura base. Ver /api/mentors/activate.
+  activeMentorId  String?   @db.ObjectId
   plusUntil       DateTime?
   trialGranted    Boolean   @default(false)
   eduEmail        String?
@@ -77,7 +84,12 @@ model User {
 
   // Invite system
   referredBy      String?  @db.ObjectId  // bare ObjectId — no Prisma relation (avoids circular User→User FK, populated in application layer)
-  myInviteCode    String?  @unique
+  // NÃO @unique: o código é atribuído de forma LAZY (signup deixa null; /api/convite/meu-codigo
+  // preenche na 1ª visita) → muitos users têm null, e um índice unique SIMPLES rejeita nulls
+  // repetidos (E11000 no db push). A unicidade real vem de InviteCode.code (retry no app). Para
+  // reforçar no banco, crie um índice PARCIAL no Atlas (unique só entre os atribuídos):
+  //   db.users.createIndex({ myInviteCode: 1 }, { unique: true, partialFilterExpression: { myInviteCode: { $type: "string" } } })
+  myInviteCode    String?
   inviteCodeUsed  String?              // denormalized audit: the human-readable code string (e.g. "ZA3K-X9QM")
   subject         String?
 
@@ -255,14 +267,32 @@ model Plugin {
   name              String
   author            String   @default("Zaeon Core")
   description       String
-  category          String   // Essencial, Agentes, Mentorias, Blockchain
+  category          String   // Essencial, Agentes, Mentores
   tag               String?  // Livre, Alunos, VIP
+  imageUrl          String?  // capa do plugin (URL); fallback p/ ícone por categoria
   price             Float    @default(0)
   actionUrl         String
   isLocked          Boolean  @default(false)
   unlockRequirement String?  // Ex: "Nível 5 necessário"
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  // --- Envelope Agent Skills (PASSO 9 · spec agentskills.io + Zaeon). Aditivo/nullable p/ não
+  // quebrar linhas/uso existentes; o rename model Plugin→Skill (@@map) é o PR de UI separado. ---
+  slug          String?   // spec name: ^[a-z0-9]+(-[a-z0-9]+)*$ (unicidade validada no app)
+  license       String?
+  compatibility String?
+  allowedTools  String[]  // tools que a skill pode chamar
+  runtime       String?   // "ts" | "python" | "mcp"
+  risk          String?   // read | write | destructive
+  minPlan       String?   // gate por plano (9.10)
+  tier          String?   // T0..T3
+  courseTags    String[]
+  defaultOn     Boolean?  // liga por padrão (por fase)
+  sourceRepo    String?
+  sourceSha     String?
+  autoAuthored  Boolean?  // F4: destilada de uma trajetória aprovada (só o contrato agora)
+  metadata      Json?     // version em metadata.version; extras exportáveis em metadata.zaeon-*
 }
 
 model Account {
@@ -407,7 +437,8 @@ model ScholarSession {
   domain     String?
   status     String   @default("running") // running | done | error
   thread     Json?    // progress phases + synthesized answer
-  references Json?    // Paper[]  (see lib/scholar/types.ts)
+  references Json?    // Paper[] VERIFICADAS (curadas, mostradas na aba Referências)
+  results    Json?    // Paper[] TODOS os descobertos/deduplicados (aba Resultados)
   evidence   Json?    // EvidenceRecord[]  (only verified shown as fact)
   insights   Json?    // { summary, trends[], contradictions[] }
   gaps       Json?    // { description, rqCards[] }  (mantido para auditoria; fora da UI desde Sugestão)
@@ -417,6 +448,22 @@ model ScholarSession {
   updatedAt  DateTime @updatedAt
 
   @@index([userId])
+}
+
+// "Minhas coisas" da Sala de Pesquisa: o TRABALHO real do usuário (título + texto do
+// editor). Diferente de ScholarSession (histórico de BUSCAS, criado a cada pesquisa) —
+// só ações de pesquisa/escrita na Sala de Pesquisa criam um ResearchWork.
+model ResearchWork {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  title     String?
+  content   String?
+  workType  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("research_works")
 }
 
 model PastResearchChat {
@@ -439,6 +486,7 @@ model StudySpace {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   userId    String   @db.ObjectId
   title     String   @default("Meus Estudos")
+  kind      String   @default("study") // study (Meus Estudos) | aula (canvas de criação de aula do professor)
   members   String[] @default([])   // co-autores (Lounge) — userIds com acesso de leitura/escrita
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -590,4 +638,288 @@ model ChatMessage {
 
   @@index([conversationId, at])
   @@map("chat_messages")
+}
+
+// Memória L3 (semântica) — projeção INDEXADA do L1 (docs/MEMORY_AND_PERSISTENCE.md §4.3).
+// Cada drawer é VERBATIM + embedding; recall barato (ANN, sem LLM) filtrado SEMPRE por userId.
+// Índice vetorial (Atlas): criar Vector Search sobre `embedding` (dims = EMBED_DIM de
+// lib/agent/memory.ts = 1536, cosine, filter em userId). Owner: `npx prisma db push` + índice Atlas.
+model MemoryDrawer {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId // isolamento multi-tenant — SEMPRE filtrar por isto
+  wingKind  String   // "usuario" | "curso" | "projeto" | "agente"
+  wingLabel String
+  room      String   // tópico/matéria
+  kind      String   // "mensagem" | "citacao" | "artefato" | "nota"
+  text      String   // VERBATIM (nunca resumido por LLM)
+  sourceRef String?  // conversationId/messageId/studyId de origem (deriva do L1)
+  embedding Float[]  // EMBED_DIM (1536, gemini-embedding-001) — ver lib/agent/memory.ts
+  meta      Json?    // provenance
+  at        DateTime @default(now())
+
+  // curadoria + re-rank (PR-M3 · A7/A9)
+  importance     Int? // peso relativo (curadoria)
+  lastAccessedAt DateTime? // recency: bump a cada hit; decay no re-rank
+  accessCount    Int       @default(0)
+  invalidatedAt  DateTime? // SUPERSEDE: drawer aposentado → nunca entra no recall
+  supersededBy   String?   @db.ObjectId // id do drawer que o substituiu
+
+  @@index([userId, wingKind, room])
+  @@index([userId, invalidatedAt])
+  @@map("memory_drawers")
+}
+
+// Conector MCP (PASSO 7 · §9.11). Credenciais: SÓ `authRef` (NOME da env var) — o segredo vive
+// no env/cofre, NUNCA no Mongo. `discoveredTools` = cache p/ detectar "degradado".
+model Connector {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  name             String    @unique // slug (namespaceia as tools: mcp:<name>:<tool>)
+  transport        String    // "http" | "stdio"
+  endpoint         String    // URL (http) ou linha de comando (stdio)
+  authType         String    @default("none") // "none" | "bearer" | "header"
+  authRef          String?   // NOME da env var com o segredo — nunca o segredo
+  minPlan          String    @default("free")
+  status           String    @default("desconectado") // desconectado|verificando|conectado|precisa_autorizar|erro|degradado
+  lastCheckedAt    DateTime?
+  lastError        String?
+  discoveredTools  String[]  // cache dos nomes de tools (base do "degradado")
+  enabledForAgents String[]  // agentes habilitados (ex.: ["aura"])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("connectors")
+}
+
+// ── MENTORES (camada agêntica; termo do produto = Mentor, não "tutor de IA") ──
+// Um mentor NÃO é motor novo: é agent:"aura" (harness) parametrizado por persona de domínio
+// (systemContext), memória escopada (wing = slug/userId) e skills/artefatos do domínio.
+// MentorTemplate = catálogo (cópia EDITÁVEL do seed em lib/agent/mentors.ts; semeia via
+// POST /api/mentors/seed ou lazy no 1º GET /api/mentors). PluggedMentor = o que o usuário plugou.
+model MentorTemplate {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  slug               String   @unique // ^[a-z0-9]+(-[a-z0-9]+)*$ (ex.: "medicina", "eng-civil")
+  course             String
+  name               String   // codinome honorário (Osler, Noether…) — trocável
+  emoji              String   @default("⟁")
+  personaId          String   // = slug
+  personaText        String   // texto ESPECÍFICO; a BASE comum é prefixada no runtime
+  enabledSkills      String[] // literature | memory | studio | code | molecule (inexistentes degradam)
+  signatureArtifacts String[]
+  sources            String[]
+  academicLevel      String   @default("graduacao")
+  guardrail          String?  // saúde: educacional, nunca diagnóstico/prescrição/terapia (obrigatório nos 5)
+  order              Int      @default(0)
+
+  @@map("mentor_templates")
+}
+
+model PluggedMentor {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  templateId String   @db.ObjectId
+  enabled    Boolean  @default(true)
+  pluggedAt  DateTime @default(now())
+
+  @@unique([userId, templateId])
+  @@index([userId])
+  @@map("plugged_mentors")
+}
+
+// ─── Aulas (LMS leve) — Turma é a entidade dona do vínculo professor↔alunos. ───
+// FKs são ObjectId "cru" (sem @relation), como `referredBy` no User — as queries
+// cruzam manualmente nas rotas (evita back-relations e não mexe no model User).
+model Turma {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  professorId String   @db.ObjectId
+  name        String   // "Cálculo I", "História 9ºB"…
+  createdAt   DateTime @default(now())
+
+  @@index([professorId])
+  @@map("turmas")
+}
+
+model TurmaMember {     // aluno↔turma (pivot); a relação que importa
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  turmaId   String   @db.ObjectId
+  studentId String   @db.ObjectId
+  joinedAt  DateTime @default(now())
+
+  @@unique([turmaId, studentId])
+  @@index([studentId])
+  @@map("turma_members")
+}
+
+model TurmaInvite {     // convite por token (rotulado pela turma/aula no card do chat)
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  turmaId   String    @db.ObjectId
+  token     String    @unique
+  label     String
+  uses      Int       @default(0)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([turmaId])
+  @@map("turma_invites")
+}
+
+model Aula {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  professorId String    @db.ObjectId
+  turmaId     String?   @db.ObjectId         // null enquanto rascunho geral
+  title       String
+  body        String?                        // markdown (base generativa)
+  blocks      Json?                          // sequência ordenada de blocos (fatia rica); null = aula antiga (usa body)
+  youtubeIds  String[]  @default([])         // vídeos indexados
+  status      String    @default("draft")    // draft | sent
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([professorId])
+  @@index([turmaId])
+  @@map("aulas")
+}
+
+model AulaQuiz {
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  aulaId     String  @unique @db.ObjectId
+  title      String
+  passingPct Int     @default(70)
+
+  @@map("aula_quizzes")
+}
+
+model AulaQuestion {
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  quizId   String   @db.ObjectId
+  text     String
+  type     String   // choice | input | open | voice | roulette | cloze | dragwords | … (ver lib/aulas/blockTypes)
+  options  Json?    // [{text,isCorrect,explanation}] (choice)
+  accepted String[] @default([]) // respostas aceitas (input)
+  marks    Int      @default(1)  // PONTOS do item (editável no painel de pontuação — Lote 9)
+  noPaste  Boolean  @default(false) // resposta escrita: bloqueia colar (anti-cola casual)
+  config   Json?    // dados específicos do módulo (roleta pool/rounds, cloze, dragwords, memória, ramificado)
+  order    Int
+
+  @@index([quizId])
+  @@map("aula_questions")
+}
+
+model AulaQuizSubmission {   // tentativa + nota (assertividade)
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  quizId     String   @db.ObjectId
+  studentId  String   @db.ObjectId
+  percentage Float
+  passed     Boolean
+  answers    Json     // [{questionId, answer, audioUrl?, transcript?, isCorrect, marks, marksOutOf}]
+  createdAt  DateTime @default(now())
+
+  @@index([quizId])
+  @@index([studentId])
+  @@map("aula_quiz_submissions")
+}
+
+model AulaProgress {        // progresso/completude por aluno por aula
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  aulaId    String   @db.ObjectId
+  studentId String   @db.ObjectId
+  status    String   @default("new") // new | in_progress | completed
+  readingMs Int      @default(0)     // tempo de leitura (modo foco)
+  updatedAt DateTime @updatedAt
+
+  @@unique([aulaId, studentId])
+  @@index([studentId])
+  @@map("aula_progress")
+}
+// ─── Mentor no WhatsApp (docs/WHATSAPP_MENTOR.md) ───
+// Vínculo número↔usuário feito por QR `wa.me` + código CONECTAR-XXXX (NÃO pareia a conta do
+// aluno). optIn = consentimento (o envio do código); "PARE" desliga. quietHours = não incomodar.
+model WhatsAppLink {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String    @unique @db.ObjectId
+  phone        String?                     // E.164 (+55…); null até o aluno mandar o código
+  verified     Boolean   @default(false)
+  optIn        Boolean   @default(false)
+  verifyCode   String?                     // código one-time do QR (CONECTAR-XXXX)
+  codeIssuedAt DateTime?
+  quietHours   Json?                       // { start: 22, end: 7, tz: "America/Sao_Paulo" }
+  linkedAt     DateTime?
+  lastMsgAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([phone])
+  @@index([verifyCode])
+  @@map("whatsapp_links")
+}
+
+// Auditoria + idempotência dos disparos (dedupeKey: "agenda:2026-09-09", "deadline:<docId>"…).
+model WhatsAppMessage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  dir       String   // "in" | "out"
+  kind      String   // chat | connect | stop | resume | agenda | review | deadline | tree | credential | test
+  text      String
+  dedupeKey String?
+  at        DateTime @default(now())
+
+  @@index([userId, at])
+  @@index([userId, dedupeKey])
+  @@map("whatsapp_messages")
+}
+// ─── Credenciais soulbound (Solana) — toda conquista vira prova verificável do aluno ───
+// Emitidas via Crossmint (wallet custodial por e-mail, gasless) como cNFT soulbound (Bubblegum V2)
+// ou token-2022 non-transferable (alto valor: certificação de mentor). Leitura on-chain via Helius DAS.
+// A conquista do aluno NUNCA depende do mint: falha → status "error" e o app segue (degrada).
+model Credential {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String    @db.ObjectId
+  type              String                        // "skill" | "work" | "mentor-cert" | "course"
+  refId             String                        // nodeId/researchWorkId/aulaId/mentorCertId de origem
+  title             String
+  chain             String    @default("solana")
+  standard          String                        // "cnft" | "token2022-nt"
+  network           String    @default("devnet")  // devnet no hackathon; mainnet depois (só env)
+  assetId           String?                       // id on-chain (cNFT assetId / mint)
+  mintTx            String?
+  crossmintId       String?                       // id do NFT na Crossmint (GET /nfts/{id} p/ polling)
+  crossmintActionId String?                       // actionId da Crossmint (polling alternativo)
+  walletAddress     String?                       // wallet custodial do aluno (Crossmint)
+  status            String    @default("pending") // pending | minting | issued | error
+  error             String?                       // última mensagem de erro (diagnóstico)
+  metadata          Json?                         // trilha de evidência (provenance do harness)
+  issuedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([userId, type, refId])                 // idempotente: não cunha 2× a mesma conquista
+  @@index([userId])
+  @@index([status])
+  @@map("credentials")
+}
+
+// ─── Árvore de Habilidades GENERATIVA (ver lib/skilltree/*) ────────────────────
+// 1 árvore por tópico (cache global, reusável por todos os usuários); o progresso é por usuário.
+model SkillTree {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  topicSlug  String   @unique          // normalizado do tópico ("fotossintese")
+  topicLabel String
+  nodes      Json                      // SkillNode[]: {id,title,branch,level,prereqs[],summary}
+  model      String                    // modelo/versão que gerou (provenance)
+  createdAt  DateTime @default(now())
+
+  @@map("skill_trees")
+}
+
+model SkillProgress {                  // progresso POR usuário e nó
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  topicSlug String
+  nodeId    String
+  mastery   Float    @default(0)       // 0..1
+  status    String   @default("locked") // locked|available|in_progress|mastered
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, topicSlug, nodeId])
+  @@index([userId, topicSlug])
+  @@map("skill_progress")
 }

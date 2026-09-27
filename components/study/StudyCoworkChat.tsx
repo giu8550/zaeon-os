@@ -21,46 +21,105 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2,
+  PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2, GitBranch,
 } from "lucide-react";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
+import MentorPill from "@/components/study/MentorPill";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
-import ChatMarkdown from "@/components/study/ChatMarkdown";
-import StudioGeneratingCard from "@/components/study/StudioGeneratingCard";
+import StructuredAnswerView from "@/components/study/StructuredAnswerView";
+import MagazineAnswerView, { podeVirarRevista } from "@/components/study/MagazineAnswerView";
+import MagazineBoundary from "@/components/study/MagazineBoundary";
+import ThreadTabs from "@/components/study/ThreadTabs";
+import {
+  carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread, tocarThread,
+  carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
+  TITULO_PADRAO, type Thread,
+} from "@/lib/chat/threads";
+import type { StructuredAnswer } from "@/lib/agent/contracts";
+import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
+import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
+import { typeStep, safeCut } from "@/lib/ui/typewriter";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
+import type { SkillNodeState } from "@/lib/skilltree/types";
+import type { SkillTreeData } from "@/components/study/SkillTreePanel";
 
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
+// Árvore de habilidades GENERATIVA (React Flow) — opt-in, drawer ao lado da conversa.
+const SkillTreePanel = dynamic(() => import("@/components/study/SkillTreePanel"), { ssr: false });
 
 const DT = "application/x-zaeon-item";
-const THREAD_KEY = "zaeon.cowork.thread.v1";
 const LAST_SPACE_KEY = "zaeon.study.lastSpace";
 // Sentinela do tool-loop (Fase 0): o backend emite isto quando a Aura chama
 // studio_generate; o cliente executa a geração. Deve bater com a de chat/route.ts.
 const STUDIO_SENTINEL = "@@STUDIO_ACTION@@";
+// Sentinela do harness (@@STRUCTURED@@): StructuredAnswer inteiro → StructuredAnswerView
+// (+ artefato inline). Parser + fallback pra texto em lib/agent/structured-client.ts.
 
 type Space = { id: string; title: string };
 type Msg = {
   id: string;
   role: "user" | "assistant";
-  kind: "text" | "study" | "studio" | "studio-pending";
-  text?: string;
+  kind: "text" | "study" | "studio" | "structured";
+  text?: string;             // em "structured" = nucleo (histórico/persistência)
   studyId?: string;
   studyTitle?: string;
-  studioKind?: string;        // p/ o cartão "gerando" (studio-pending)
-  studioBlock?: StudioBlockData;
+  studioBlock?: StudioBlockData;   // em "structured" = artefato embutido na MESMA bolha
+  answer?: StructuredAnswer;
+  fase?: string;             // fase que o harness está narrando agora (só enquanto chega)
+  streaming?: boolean;       // B2: resposta ainda chegando → cursor piscando
+  fresh?: boolean;           // B2: resposta estruturada recém-chegada → datilografa o núcleo
   at: number;
 };
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+/**
+ * O que desta mensagem a Aura precisa reler no próximo turno.
+ *
+ * `m.text` de uma resposta estruturada é só o núcleo — a manchete. Mandar só isso de
+ * volta era condenar o modelo a uma conversa onde ele lembra do que PERGUNTARAM e
+ * esquece do que RESPONDEU. Aqui vai o corpo: núcleo + desenvolvimento, e os conceitos
+ * como âncora barata (é a lista de termos que a resposta cravou, meia dúzia de palavras
+ * que valem por parágrafos na hora de manter o vocabulário da conversa).
+ *
+ * O artefato NÃO entra: ele não é fala, e descrever o cartão no histórico é justamente
+ * o que fazia o modelo achar que o Studio era assunto.
+ */
+export function textoParaHistorico(m: {
+  kind?: string;
+  text?: string;
+  answer?: StructuredAnswer;
+  studyTitle?: string;
+}): string {
+  if (m.kind === "structured" && m.answer) {
+    const a = m.answer;
+    const partes = [a.nucleo?.trim(), a.desenvolvimento?.trim()].filter(Boolean) as string[];
+    if (a.conceitos?.length) partes.push("Conceitos: " + a.conceitos.join(" · "));
+    const corpo = partes.join("\n\n").trim();
+    if (corpo) return corpo;
+  }
+  if (m.kind === "study" && m.studyTitle) return `(estudo criado: ${m.studyTitle})`;
+  return (m.text ?? "").trim();
+}
 
 // Frase curta = pensamento rápido (não fica "Planejando" à toa). Enquanto o harness
 // real não classifica a intenção, isto mantém o loading honesto.
 const isQuickPrompt = (t: string) => t.trim().split(/\s+/).filter(Boolean).length <= 8;
 
 export default function StudyCoworkChat({ active = true }: { active?: boolean }) {
+  // Abas de conversa. Antes havia UMA thread global (zaeon.cowork.thread.v1); agora cada
+  // aba tem histórico próprio, e a antiga vira a aba #1 na primeira carga (ver threads.ts).
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [abaAtiva, setAbaAtiva] = useState<string | null>(null);
+  const abaAtivaRef = useRef<string | null>(null);
+  abaAtivaRef.current = abaAtiva;
+  // Espelho das abas pra ler o valor atual dentro de callbacks sem recriá-los.
+  const threadsRef = useRef<Thread[]>([]);
+  threadsRef.current = threads;
+
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -72,6 +131,33 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [dragOver, setDragOver] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
   const [quickThinking, setQuickThinking] = useState(false);
+  // Mentor ativo (SLUG, ex.: "farmacia") — null = Aura base. Vai como `mentor` a cada envio.
+  const [activeMentor, setActiveMentor] = useState<string | null>(null);
+
+  /**
+   * Avisa o Escritório (components/office) qual agente está ocupado. É o único estado
+   * REAL de trabalho que dá pra saber hoje: as fases do harness (route/plan/gather/…)
+   * são emitidas no servidor e não chegam ao navegador. Ver EscritorioRoom.
+   */
+  const avisarEscritorio = useCallback((slug: string | null, estado: "ocioso" | "trabalhando" | "falando") => {
+    if (!slug) return;
+    window.dispatchEvent(new CustomEvent("zaeon:agente", { detail: { slug, estado } }));
+  }, []);
+
+  // O Escritório pede "falar com o Kekulé" → o chat troca de mentor.
+  useEffect(() => {
+    const ouvir = (e: Event) => {
+      const slug = (e as CustomEvent<{ slug?: string }>).detail?.slug;
+      if (typeof slug === "string" && slug) setActiveMentor(slug);
+    };
+    window.addEventListener("zaeon:mentor", ouvir);
+    return () => window.removeEventListener("zaeon:mentor", ouvir);
+  }, []);
+  // Árvore de habilidades: drawer opt-in; o tópico nasce do estudo focado (ou digitado no painel).
+  const [treeOpen, setTreeOpen] = useState(false);
+  const [tree, setTree] = useState<SkillTreeData | null>(null);
+  const [skillNode, setSkillNode] = useState<{ topicSlug: string; nodeId: string; title: string } | null>(null);
+  const [treeRefresh, setTreeRefresh] = useState(0);
 
   const listRef = useRef<HTMLDivElement>(null);
   const scrollToEnd = useCallback(() => {
@@ -84,8 +170,6 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   }, []);
   const msgsRef = useRef<Msg[]>([]);
   msgsRef.current = messages;
-  const abortRef = useRef<AbortController | null>(null);
-  const stop = useCallback(() => { abortRef.current?.abort(); }, []);
 
   // ── carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -99,10 +183,15 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     // cache limpo), cai no L1 durável (DB) via /api/ai/transcript. docs/MEMORY_AND_PERSISTENCE.md.
     let hadLocal = false;
     try {
-      const raw = localStorage.getItem(THREAD_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length) { setMessages(parsed); hadLocal = true; }
+      const lista = carregarThreads(localStorage);
+      const ativa = threadAtiva(localStorage, lista);
+      setThreads(lista);
+      threadsRef.current = lista;
+      setAbaAtiva(ativa);
+      abaAtivaRef.current = ativa;
+      if (ativa) {
+        const guardadas = carregarMensagens<Msg>(localStorage, ativa);
+        if (guardadas.length) { setMessages(guardadas); hadLocal = true; }
       }
     } catch { /* ignore */ }
     if (!hadLocal) {
@@ -120,16 +209,55 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // Persiste o thread (só texto + estudos; artefatos pesados do Studio ficam na sessão).
   useEffect(() => {
     try {
-      const slim = messages.filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text));
-      localStorage.setItem(THREAD_KEY, JSON.stringify(slim.slice(-60)));
+      const slim = messages
+        .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text))
+        .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m)) // artefato inline fica na sessão
+        .map(({ streaming, fresh, ...m }) => m); // B2: flags de animação não persistem (reload não re-digita)
+      const aba = abaAtivaRef.current;
+      if (aba) salvarMensagens(localStorage, aba, slim);
     } catch { /* ignore */ }
   }, [messages]);
 
-  // Autoscroll pro fim a cada mensagem.
-  useEffect(() => {
+  /**
+   * ROLAGEM: chat vai pro fim, PÁGINA vai pro começo.
+   *
+   * Isto aqui era `scrollTop = scrollHeight` sem condição. Para um balão de chat está
+   * certo — o mais novo está embaixo. Para uma página de revista está exatamente errado:
+   * uma página se lê do topo, e o topo é a linha fina. Quando a resposta é mais alta que
+   * a janela — ou seja, justamente quando ela vira uma página de verdade — a cabeça
+   * saía por cima e o aluno caía no meio do texto.
+   *
+   * O "às vezes" que se via era isso: resposta curta cabe inteira, e aí fim e começo
+   * aparecem juntos.
+   */
+  const ancorar = useCallback((idDaMensagem?: string) => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, sending]);
+    if (!el) return;
+    if (!idDaMensagem) { el.scrollTop = el.scrollHeight; return; }
+    const alvo = el.querySelector<HTMLElement>(`[data-msg="${idDaMensagem}"]`);
+    if (!alvo) { el.scrollTop = el.scrollHeight; return; }
+    // Topo da página logo abaixo do topo da lista, com um respiro.
+    //
+    // Por rect e não por `offsetTop`: `offsetTop` é medido contra o offsetParent, que só
+    // por acaso é o mesmo da lista — basta uma bolha nascer dentro de um wrapper
+    // posicionado pra conta dar em outro lugar, e era daí que vinha o "às vezes a
+    // primeira head fica fora de tela". A diferença de rects não depende de quem é pai
+    // de quem.
+    const topo = el.scrollTop + (alvo.getBoundingClientRect().top - el.getBoundingClientRect().top) - 12;
+    el.scrollTo({ top: Math.max(0, topo), behavior: "smooth" });
+  }, []);
+
+  /** A última mensagem é uma página de revista recém-chegada? */
+  const paginaNova = useCallback((): string | undefined => {
+    const ultima = msgsRef.current[msgsRef.current.length - 1];
+    if (!ultima || ultima.role !== "assistant" || ultima.kind !== "structured") return undefined;
+    if (!ultima.fresh || ultima.streaming) return undefined;
+    return podeVirarRevista(ultima.answer, !!ultima.studioBlock) ? ultima.id : undefined;
+  }, []);
+
+  useEffect(() => {
+    ancorar(paginaNova());
+  }, [messages, sending, ancorar, paginaNova]);
 
   const spaceTitle = useCallback(
     (id: string) => spaces.find((s) => s.id === id)?.title || "Estudo",
@@ -145,14 +273,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         studioKind: d.studioKind, title: d.title, data: d.data ?? null,
         artifactId: d.artifactId, dataUrl: d.dataUrl,
       };
-      // Se existe um cartão "gerando" desse tipo, TROCA ele pelo artefato pronto
-      // (em vez de empilhar outro). Senão, anexa. (gap F §7)
-      setMessages((prev) => {
-        const i = prev.findIndex((m) => m.kind === "studio-pending" && m.studioKind === d.studioKind);
-        const done: Msg = { id: uid(), role: "assistant", kind: "studio", studioBlock: block, at: Date.now() };
-        if (i >= 0) { const next = prev.slice(); next[i] = done; return next; }
-        return [...prev, done];
-      });
+      if (d.attachMsgId) {
+        // artefato INLINE (harness): anexa à bolha estruturada existente, sem msg nova.
+        setMessages((prev) => prev.map((m) => (m.id === d.attachMsgId ? { ...m, studioBlock: block } : m)));
+      } else {
+        // palette manual / texto livre: comportamento de sempre (msg nova).
+        setMessages((prev) => [...prev, { id: uid(), role: "assistant", kind: "studio", studioBlock: block, at: Date.now() }]);
+      }
       setStudioOpen(false);
     };
     window.addEventListener("zaeon:study:embed", onEmbed);
@@ -182,6 +309,69 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     });
   };
 
+  /** Guarda o que está na tela na aba atual antes de sair dela. */
+  const guardarAtual = useCallback(() => {
+    const aba = abaAtivaRef.current;
+    if (!aba) return;
+    const slim = messages
+      .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text))
+      .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m))
+      .map(({ streaming, fresh, ...m }) => m);
+    salvarMensagens(localStorage, aba, slim);
+  }, [messages]);
+
+  const trocarAba = useCallback((id: string) => {
+    if (id === abaAtivaRef.current) return;
+    guardarAtual();
+    abaAtivaRef.current = id;
+    setAbaAtiva(id);
+    marcarAtiva(localStorage, id);
+    setMessages(carregarMensagens<Msg>(localStorage, id));
+    const t = tocarThread(threadsRef.current, id);
+    threadsRef.current = t;
+    salvarThreads(localStorage, t);
+    setThreads(t);
+  }, [guardarAtual]);
+
+  // Nada de setState dentro do updater de outro setState: no StrictMode o updater roda
+  // DUAS vezes em dev, e "criar aba" viraria duas abas. Calcula fora, aplica uma vez.
+  const novaAba = useCallback(() => {
+    guardarAtual();
+    const { threads: lista, nova } = criarThread(threadsRef.current);
+    salvarThreads(localStorage, lista);
+    threadsRef.current = lista;
+    abaAtivaRef.current = nova.id;
+    setThreads(lista);
+    setAbaAtiva(nova.id);
+    marcarAtiva(localStorage, nova.id);
+    setMessages([]);
+  }, [guardarAtual]);
+
+  const fecharAba = useCallback((id: string) => {
+    const { threads: lista, proxima } = fecharThread(localStorage, threadsRef.current, id);
+    salvarThreads(localStorage, lista);
+    threadsRef.current = lista;
+    setThreads(lista);
+    if (id === abaAtivaRef.current) {
+      abaAtivaRef.current = proxima;
+      setAbaAtiva(proxima);
+      marcarAtiva(localStorage, proxima);
+      setMessages(carregarMensagens<Msg>(localStorage, proxima));
+    }
+  }, []);
+
+  /** A aba ganha nome da primeira coisa que a pessoa perguntou. */
+  const batizarSePreciso = useCallback((texto: string) => {
+    const aba = abaAtivaRef.current;
+    if (!aba) return;
+    const atual = threadsRef.current.find((t) => t.id === aba);
+    if (!atual || atual.titulo !== TITULO_PADRAO) return;
+    const lista = renomearThread(threadsRef.current, aba, tituloAPartirDe(texto));
+    threadsRef.current = lista;
+    salvarThreads(localStorage, lista);
+    setThreads(lista);
+  }, []);
+
   const openStudy = useCallback((id: string) => {
     try { localStorage.setItem(LAST_SPACE_KEY, id); } catch { /* ignore */ }
     setOpenStudyId(id);
@@ -203,7 +393,26 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // ── TOOL-LOOP (Fase 0): executa studio_generate reusando o Studio existente ──
   // Resolve o estudo-alvo (foco → 1º → cria um), gera o artefato e dispara o
   // evento "zaeon:study:embed" — o mesmo que o feed usa — e o cartão cai na conversa.
-  const runStudioAction = useCallback(async (kind: string, topic: string) => {
+  // `attachMsgId` (opcional): o artefato entra NA bolha indicada (resposta estruturada) em vez
+  // de virar msg nova — é assim que "texto + artefato" convivem na mesma resposta.
+  /**
+   * Artefato que não veio NÃO pode sumir calado: quem pediu uma imagem fica olhando pro
+   * "Gerando…" achando que trava. Uma bolha curta com o motivo real da API é mais honesta
+   * do que silêncio — e é o que permite diagnosticar sem abrir o log do servidor.
+   */
+  const avisarFalha = useCallback((motivo?: string) => {
+    const texto = motivo?.trim()
+      ? `Não consegui gerar esse artefato: ${motivo.trim()}`
+      : "Não consegui gerar esse artefato agora. Tenta de novo em instantes.";
+    setMessages((prev) => [...prev, { id: uid(), role: "assistant", kind: "text", text: texto, at: Date.now() }]);
+  }, []);
+
+  /**
+   * `silencioso`: artefato que a Aura decidiu mostrar sozinha (molécula que nasceu da
+   * explicação). Se falhar, cala — ninguém pediu, então avisar seria ruído. Pedido
+   * explícito continua reclamando alto: aí a pessoa está esperando.
+   */
+  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false) => {
     const H = { "Content-Type": "application/json" };
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
     // estudo NOVO criado pelo tópico. Nunca pega um estudo arbitrário da biblioteca
@@ -216,7 +425,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       } catch { /* ignore */ }
     }
     if (!spaceId) return;
-    const fire = (detail: any) => window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail }));
+    const fire = (detail: any) => window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...detail, attachMsgId } }));
     try {
       if (kind === "podcast" || kind === "video") {
         const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId }) });
@@ -233,36 +442,54 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           if (d.status === "done") { fire({ studioKind: kind, title: d.title, data: d.meta, artifactId: d.id }); return; }
           if (d.status === "error") return;
         }
+      } else if (kind === "molecule") {
+        // Não passa pelo pipeline de texto: a estrutura vem do PubChem, não de LLM.
+        const res = await fetch("/api/studio/molecule", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.meta?.sdf) fire({ studioKind: "molecule", title: data.title, data: data.meta, artifactId: data.id });
+        else if (!silencioso) avisarFalha(data?.error);
       } else if (kind === "image") {
-        const res = await fetch("/api/studio/image", { method: "POST", headers: H, body: JSON.stringify({ spaceId }) });
+        const res = await fetch("/api/studio/image", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.dataUrl) fire({ studioKind: "image", title: data.title || "Imagem", data: data.meta, dataUrl: data.dataUrl });
+        else if (!silencioso) avisarFalha(data?.error);
       } else {
-        const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, force: true }) });
+        const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic, force: true }) });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.meta) fire({ studioKind: kind, title: data.title, data: data.meta });
+        else if (!silencioso) avisarFalha(data?.error);
       }
-    } catch { /* silencioso — a Fase 1 mostra erro no trace */ }
-  }, [focusIds, spaces]);
+    } catch {
+      if (!silencioso) avisarFalha();
+    }
+  }, [focusIds, spaces, avisarFalha]);
 
   // ── envio pro chat da Aura ──────────────────────────────────────────────────
-  const send = useCallback(async () => {
-    const prompt = input.trim();
+  // `override` = envio direto (clique numa opção/conceito da resposta do harness),
+  // sem passar pelo campo de texto — B3 do backlog v2.
+  const send = useCallback(async (override?: string) => {
+    const prompt = (typeof override === "string" ? override : input).trim();
     if (!prompt || sending) return;
     setQuickThinking(isQuickPrompt(prompt));
 
+    // O histórico levava só `m.text`, que numa resposta estruturada é o NÚCLEO — uma
+    // frase. Ou seja: a Aura relia as próprias respostas como manchetes sem matéria, e
+    // por isso "esquecia" o que tinha explicado dois turnos antes. Vai o corpo inteiro.
     const history = msgsRef.current
-      .filter((m) => m.kind === "text" && m.text)
-      .map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.text as string }] }));
+      .map((m) => ({ role: m.role === "assistant" ? "model" : "user", texto: textoParaHistorico(m) }))
+      .filter((h) => h.texto)
+      .map((h) => ({ role: h.role, parts: [{ text: h.texto }] }));
 
     // mensagem da assistente entra vazia e vai sendo preenchida aos poucos (streaming)
     const asstId = uid();
     setMessages((prev) => [
       ...prev,
       { id: uid(), role: "user", kind: "text", text: prompt, at: Date.now() },
-      { id: asstId, role: "assistant", kind: "text", text: "", at: Date.now() },
+      { id: asstId, role: "assistant", kind: "text", text: "", streaming: true, at: Date.now() },
     ]);
     setInput("");
+    batizarSePreciso(prompt);
+    avisarEscritorio(activeMentor, "trabalhando");
     setSending(true);
 
     const patchAsst = (text: string) =>
@@ -276,17 +503,21 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       "reportagens, artigos, web, enciclopédia valem. NUNCA recuse por falta de fonte acadêmica; " +
       "se não houver paper, responda com o que há e sinalize a natureza da fonte. O rigor acadêmico " +
       "pleno só é obrigatório quando o pedido for criar/revisar um trabalho.";
+    // AQUI MORAVA O CARDÁPIO. A linha sem foco terminava com "ofereça transformar o
+    // assunto em artefatos do Studio (Guia, Mapa mental, Linha do tempo, Flashcards,
+    // FAQ, Imagem, Podcast, Vídeo)" — em TODO turno. O modelo obedecia, e a conversa
+    // virava um vendedor simpático: resposta rasa + menu. Artefato agora é decisão do
+    // código, a partir do assunto; o modelo só conversa.
     const systemContext = (focusIds.length
       ? `O usuário está no co-working da Sala de Estudos e FOCOU ${focusIds.length} estudo(s): ${focusTitles.join("; ")}. Concentre-se nesse(s) estudo(s) ao responder.`
-      : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade e, quando ajudar, ofereça transformar o assunto em artefatos do Studio (Guia, Mapa mental, Linha do tempo, Flashcards, FAQ, Imagem, Podcast, Vídeo) ou gerar um estudo.`) + flexClause;
+      : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade, mantendo o fio do assunto entre as mensagens.`)
+      + " Nunca ofereça recursos, ferramentas ou botões da plataforma, e nunca comente o que você 'pode gerar' — fale do tema."
+      + flexClause;
 
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
     try {
       const r = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal: ctrl.signal,
         body: JSON.stringify({
           prompt,
           agent: "aura",
@@ -297,7 +528,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             activeTab: "sala-de-estudos",
             currentStudyId: focusIds[0],
             focusedStudyIds: focusIds,
+            // posição do aluno na árvore de habilidades → o mentor sabe onde você está (harness)
+            skillTopic: skillNode?.topicSlug ?? tree?.topicSlug,
+            skillNodeId: skillNode?.nodeId,
           },
+          mentor: activeMentor ?? undefined,   // slug do mentor ativo → Aura com a voz da área
         }),
       });
 
@@ -306,67 +541,116 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       } else {
         const reader = r.body.getReader();
         const dec = new TextDecoder();
-        let acc = "";          // texto cru recebido
+        let acc = "";          // texto cru recebido (protocolo + conteúdo)
+        let limpo = "";        // o mesmo, sem os eventos de progresso
+        let faseVista = "";    // última fase já pintada — evita setState a cada chunk
         let target = "";       // parte VISÍVEL alvo (sem a sentinela)
         let shown = 0;         // quantas letras já reveladas
         let ended = false;
 
-        // Datilografia: revela letra a letra em ordem, suavizando os chunks do
-        // stream (chunky → digitação fluida, estilo Claude). Cadência com easing:
-        // vai mais rápido quando está longe do alvo e desacelera perto do fim.
+        // Datilografia (B2): revela em ordem, por frame (rAF), com TETO de letras por
+        // frame — os chunks do stream viram digitação contínua, sem "despejar" blocos.
         const typed = new Promise<void>((resolve) => {
-          const id = setInterval(() => {
+          const tick = () => {
             if (shown < target.length) {
-              const rem = target.length - shown;
-              shown = Math.min(target.length, shown + Math.max(1, Math.ceil(rem / 8)));
+              shown = safeCut(target, shown + typeStep(target.length - shown));
               patchAsst(target.slice(0, shown));
             } else if (ended) {
-              clearInterval(id);
               resolve();
+              return;
             }
-          }, 18);
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
         });
 
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
           acc += dec.decode(value, { stream: true });
-          const si = acc.indexOf(STUDIO_SENTINEL);
-          target = si >= 0 ? acc.slice(0, si) : acc;   // datilografa só o visível
+          // O progresso sai do fio ANTES de qualquer outra conta: se ficasse no acumulado,
+          // a sentinela viraria texto datilografado na tela e contaminaria o fallback.
+          const { limpo: lp, eventos } = separarProgresso(acc);
+          limpo = lp;
+          const f = faseCorrente(eventos);
+          if (f && f.rotulo !== faseVista) {
+            faseVista = f.rotulo;
+            setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: f.rotulo } : m)));
+          }
+          const cut = [limpo.indexOf(STUDIO_SENTINEL), limpo.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
+          target = cut.length ? limpo.slice(0, Math.min(...cut)) : limpo;   // datilografa só o visível
         }
 
-        const si = acc.indexOf(STUDIO_SENTINEL);
-        if (si >= 0) {
+        const structured = parseStructuredStream(limpo);
+        const si = limpo.indexOf(STUDIO_SENTINEL);
+        if (structured) {
+          // HARNESS: resposta estruturada — converte a bolha placeholder em cartão rico.
+          // Payload malformado (stream cortado etc.) → degrada pra TEXTO, nunca pra vazio.
+          target = ""; ended = true;
+          if (structured.kind === "answer") {
+            const a = structured.answer;
+            setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, kind: "structured", answer: a, text: a.nucleo, streaming: false, fresh: true } : m)));
+            // Artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
+            // O tópico é o `title` do ref, NÃO a pergunta inteira: "por que o café me
+            // deixa acordado" não resolve no PubChem; "cafeína" resolve.
+            for (const art of a.artifacts ?? []) {
+              if (art.studioKind && !art.studioKind.startsWith("research:")) {
+                // Pedido explícito falha em voz alta; artefato que a Aura trouxe de
+                // brinde falha calado — ninguém pediu, ninguém precisa saber.
+                void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId, !art.explicito);
+              }
+            }
+            // L1 grava o corpo, não a manchete: é esta transcrição que vira memória
+            // durável, e memória de manchete não serve pra nada depois.
+            appendTranscript("estudos", focusIds[0] ?? null, [
+              { role: "user", text: prompt },
+              { role: "assistant", text: textoParaHistorico({ kind: "structured", answer: a }) || a.nucleo },
+            ]);
+          } else {
+            patchAsst(structured.text);
+            appendTranscript("estudos", focusIds[0] ?? null, [
+              { role: "user", text: prompt },
+              { role: "assistant", text: structured.text },
+            ]);
+          }
+        } else if (si >= 0) {
           // TOOL-LOOP (Fase 0): ação — não datilografa; encerra e trata.
           target = ""; ended = true;
           let action: any = null;
-          try { action = JSON.parse(acc.slice(si + STUDIO_SENTINEL.length)); } catch { /* ignore */ }
+          try { action = JSON.parse(limpo.slice(si + STUDIO_SENTINEL.length)); } catch { /* ignore */ }
           if (action?.kind) {
-            // vira CARTÃO "gerando" (gap F): o onEmbed troca por StudioBlock quando pronto.
-            setMessages((prev) => prev.map((m) =>
-              m.id === asstId ? { ...m, kind: "studio-pending", studioKind: action.kind, text: undefined, studyTitle: action.topic || prompt } : m));
+            patchAsst(action.text || "Gerando o artefato…");
             void runStudioAction(action.kind, action.topic || prompt);
           } else {
             patchAsst("Sem resposta agora.");
           }
         } else {
-          target = acc; ended = true;
+          target = limpo; ended = true;
           await typed;                       // deixa a digitação alcançar o fim
-          if (!acc.trim()) patchAsst("Sem resposta agora.");
+          if (!limpo.trim()) patchAsst("Sem resposta agora.");
           // L1: grava o turno durável (fire-and-forget). scopeId = estudo focado, se houver.
           else appendTranscript("estudos", focusIds[0] ?? null, [
             { role: "user", text: prompt },
-            { role: "assistant", text: acc },
+            { role: "assistant", text: limpo },
           ]);
         }
       }
-    } catch (e: any) {
-      patchAsst(e?.name === "AbortError" ? "⏹ Parado." : "Falha de rede ao falar com a Aura.");
+    } catch {
+      patchAsst("Falha de rede ao falar com a Aura.");
     } finally {
-      abortRef.current = null;
+      avisarEscritorio(activeMentor, "ocioso");
+      setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined, ...(m.streaming ? { streaming: false } : null) } : m)));
       setSending(false);
+      // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
+      if (tree) setTreeRefresh((n) => n + 1);
     }
-  }, [input, sending, focusIds, spaceTitle, runStudioAction]);
+  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso]);
+
+  // Clicar num nó da árvore: conversa scopada naquele nó (vai pro composer + chip de foco).
+  const onNodeChat = useCallback((node: SkillNodeState, t: SkillTreeData) => {
+    setSkillNode({ topicSlug: t.topicSlug, nodeId: node.id, title: node.title });
+    setInput(`Quero dominar "${node.title}" (${t.topicLabel}). Me conduz com pistas e perguntas, sem entregar a resposta pronta.`);
+  }, []);
 
   const newStudy = useCallback(async () => {
     try {
@@ -379,8 +663,17 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   }, [openStudy]);
 
   const focusChips = useMemo(() => (
-    focusIds.length ? (
+    (focusIds.length || skillNode) ? (
       <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2">
+        {skillNode && (
+          <span className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-full text-[11.5px] font-tech
+            bg-gradient-to-r from-violet-500/15 to-cyan-400/15 text-violet-700 dark:text-cyan-200 border border-violet-400/40">
+            <GitBranch size={11} /> {skillNode.title}
+            <button type="button" onClick={() => setSkillNode(null)} title="Sair do nó" className="ml-0.5 rounded-full hover:bg-violet-500/20 p-0.5">
+              <X size={10} />
+            </button>
+          </span>
+        )}
         {focusIds.map((id) => (
           <span key={id} className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-full text-[11.5px] font-tech
             bg-cyan-500/10 text-cyan-700 dark:text-cyan-200 border border-cyan-400/30">
@@ -392,7 +685,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         ))}
       </div>
     ) : null
-  ), [focusIds, spaceTitle, removeFocus]);
+  ), [focusIds, spaceTitle, removeFocus, skillNode]);
 
   return (
     <div className="relative h-full flex lg:flex-row flex-col">
@@ -404,6 +697,20 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       />
       {/* ── COLUNA CENTRAL: conversa + composer ── */}
       <div className="relative flex-1 min-w-0 flex flex-col">
+
+        {/* ⟁ Árvore de habilidades — drawer opt-in por cima da conversa (não troca a tela) */}
+        {treeOpen && (
+          <div className="absolute inset-y-0 right-0 z-30 w-full sm:w-[460px] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]">
+            <SkillTreePanel
+              topic={focusIds[0] ? spaceTitle(focusIds[0]) : null}
+              focusNodeId={skillNode?.nodeId ?? null}
+              refreshKey={treeRefresh}
+              onTree={setTree}
+              onNodeChat={onNodeChat}
+              onClose={() => setTreeOpen(false)}
+            />
+          </div>
+        )}
 
         {/* Seta "ir para o final" — só aparece quando há conversa e não está no fim */}
         {messages.length > 0 && !atBottom && (
@@ -421,6 +728,19 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           </button>
         )}
 
+        {/* Abas de conversa. Ficam ACIMA da conversa e dentro da sala: abrir conversa
+            nova nunca mexe na posição das salas (Estudos, Aulas, Pesquisa). */}
+        <div className="px-3 pt-2">
+          <ThreadTabs
+            threads={threads}
+            ativa={abaAtiva}
+            aoTrocar={trocarAba}
+            aoCriar={novaAba}
+            aoFechar={fecharAba}
+            ocupada={sending ? abaAtiva : null}
+          />
+        </div>
+
         {/* conversa (drop target de foco) */}
         <div
           ref={listRef}
@@ -431,6 +751,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-6 transition-colors ${dragOver ? "bg-cyan-500/[0.04]" : ""}`}
         >
           <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2 py-4 flex flex-col gap-4">
+            {/* B2: cursor piscando da resposta em streaming */}
+            <style>{`@keyframes zCaret { 0%,45% { opacity:1 } 50%,100% { opacity:0 } } .z-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-0.15em; background:currentColor; opacity:.7; animation: zCaret 1s steps(1) infinite; } @media (prefers-reduced-motion: reduce) { .z-caret { animation: none; } }`}</style>
             {messages.length === 0 ? null : (
               messages.map((m) => {
                 if (m.kind === "text") {
@@ -442,8 +764,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                           ? "bg-slate-100 text-slate-900 border border-slate-200/80 dark:bg-white/[0.09] dark:text-white/90 dark:border-white/10"
                           : "bg-white/80 dark:bg-white/[0.05] text-slate-800 dark:text-white/90 border border-slate-200/70 dark:border-white/10 backdrop-blur-xl"}`}>
                         {m.text
-                          ? (isUser ? m.text : <ChatMarkdown text={m.text} />)
-                          : (!isUser && <AuraThinking active phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
+                          ? <>{m.text}{m.streaming && <span aria-hidden className="z-caret" />}</>
+                          : (!isUser && <AuraThinking active fase={m.fase} phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                       </div>
                     </div>
                   );
@@ -464,19 +786,47 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                     </div>
                   );
                 }
+                if (m.kind === "structured" && m.answer) {
+                  // resposta rica do harness; o artefato (se houver) entra no slot do cartão
+                  const padrao = (
+                    <StructuredAnswerView
+                      answer={m.answer}
+                      typing={!!m.fresh}
+                      onConcept={(c) => void send(`Me explica melhor: ${c}`)}
+                      onNext={(s) => void send(s)}
+                    >
+                      {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
+                    </StructuredAnswerView>
+                  );
+                  // MODO REVISTA: só em resposta longa ou com artefato (§10 do plano).
+                  // Resposta curta continua no balão — revista com 3 linhas é exagero.
+                  const revista = podeVirarRevista(m.answer, !!m.studioBlock);
+                  return (
+                    <div key={m.id} data-msg={m.id} className="flex justify-start">
+                      <div className={revista ? "w-full" : "max-w-[85%] w-full"}>
+                        {revista ? (
+                          <MagazineBoundary fallback={padrao}>
+                            <MagazineAnswerView
+                              answer={m.answer}
+                              streaming={!!m.streaming}
+                              recemChegada={!!m.fresh}
+                              aoAssentar={() => ancorar(m.id)}
+                              artefato={m.studioBlock ?? null}
+                              onNext={(s) => void send(s)}
+                              agente="Aura"
+                            />
+                          </MagazineBoundary>
+                        ) : padrao}
+                      </div>
+                    </div>
+                  );
+                }
                 if (m.kind === "studio" && m.studioBlock) {
                   return (
                     <div key={m.id} className="flex justify-start">
                       <div className="max-w-[85%] w-full">
                         <StudioBlock block={m.studioBlock} collapsed={false} />
                       </div>
-                    </div>
-                  );
-                }
-                if (m.kind === "studio-pending" && m.studioKind) {
-                  return (
-                    <div key={m.id} className="flex justify-start">
-                      <StudioGeneratingCard studioKind={m.studioKind} title={m.studyTitle} startedAt={m.at} />
                     </div>
                   );
                 }
@@ -509,14 +859,29 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             <CoworkComposer
               value={input}
               onChange={setInput}
-              onSubmit={send}
-              onStop={stop}
+              onSubmit={() => void send()}
               onToggleStudio={() => setStudioOpen((v) => !v)}
               studioOpen={studioOpen}
               busy={sending}
               idle={messages.length === 0 && !sending}
               active={active && !openStudyId}
             >
+              {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
+              <div className="flex items-center gap-2">
+                <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
+                <button
+                  type="button"
+                  onClick={() => setTreeOpen((v) => !v)}
+                  title="Árvore de habilidades do tópico"
+                  aria-pressed={treeOpen}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-bold font-tech border transition-colors
+                    ${treeOpen
+                      ? "bg-gradient-to-r from-violet-500/15 to-cyan-400/15 text-violet-700 dark:text-cyan-200 border-violet-400/40"
+                      : "text-slate-500 dark:text-white/50 border-slate-200 dark:border-white/10 hover:text-violet-600 hover:border-violet-300"}`}
+                >
+                  <GitBranch size={12} /> Árvore{tree ? ` ${tree.nodes.filter((n) => n.status === "mastered").length}/${tree.nodes.length}` : ""}
+                </button>
+              </div>
               {focusChips}
             </CoworkComposer>
           </div>

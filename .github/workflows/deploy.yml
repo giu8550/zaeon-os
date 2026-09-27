@@ -27,6 +27,10 @@ name: Deploy (VPS)
 # Vars opcionais (aba Variables):
 #   DEPLOY_COMPOSE          → override do compose (default docker-compose.beta.yml)
 #   DEPLOY_WITH_VOICE       → "true" liga voice-engine/abnt/pdf-loader no deploy
+#   BETA_DOMAIN             → hostnames do Caddy (vírgula). Default cobre zaeon.com.br,
+#                             www e o sslip.io provisório — os três ao mesmo tempo.
+#   APP_URL                 → URL pública (default https://75-119-140-97.sslip.io);
+#                             vira NEXTAUTH_URL — trocar aqui quando o domínio mudar.
 
 on:
   push:
@@ -82,13 +86,29 @@ jobs:
           # opções (push usa defaults; dispatch respeita os inputs)
           WITH_VOICE: ${{ github.event.inputs.with_voice || vars.DEPLOY_WITH_VOICE || 'false' }}
           DB_PUSH: ${{ github.event.inputs.db_push || 'true' }}
+          # URL pública do app → vira NEXTAUTH_URL no compose (redirect do Google).
+          APP_URL: ${{ vars.APP_URL || 'https://75-119-140-97.sslip.io' }}
+          # Hostnames do Caddy. O Caddy exige vírgula + ESPAÇO entre site addresses:
+          # 'a,b' derruba o container em loop ("Site addresses cannot contain a comma").
+          # Já aconteceu em 26/09 e tirou o HTTPS do ar. O script normaliza os dois
+          # formatos antes de subir, mas escreva a Variable com espaço mesmo assim.
+          # O default é só o endereço provisório DE PROPÓSITO: pedir certificado pra um
+          # domínio que ainda não resolve gasta tentativa de ACME à toa. Quando o DNS do
+          # zaeon.com.br subir, setar a Variable BETA_DOMAIN e redeployar — feito em
+          # 26/09: hoje ela vale 'zaeon.com.br, 75-119-140-97.sslip.io'. O www fica FORA
+          # da lista: tem bloco próprio de redirect no Caddyfile, porque o client OAuth
+          # do Google não aceita o callback com www.
+          BETA_DOMAIN: ${{ vars.BETA_DOMAIN || '75-119-140-97.sslip.io' }}
+          # E-mail do ACME (Let's Encrypt manda aviso de expiração pra cá). O default do
+          # compose é um endereço em zaeon.space, domínio que EXPIROU — aviso indo pro vazio.
+          ACME_EMAIL: ${{ vars.ACME_EMAIL || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 25m
-          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH
+          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH,APP_URL,BETA_DOMAIN,ACME_EMAIL
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -108,6 +128,8 @@ jobs:
             echo "→ Atualizando código (main)…"
             git fetch --all --prune
             git reset --hard origin/main
+            export GIT_SHA="$(git rev-parse --short HEAD)"
+            echo "-> Commit no deploy: $GIT_SHA"
 
             echo "→ Gravando .env.secrets (credencial Vertex em UMA linha)…"
             umask 177
@@ -129,6 +151,12 @@ jobs:
               SERVICES="redis caddy web"
               NODEPS="--no-deps"     # não puxa voice-engine/abnt (glutões)
             fi
+
+            # O Caddy quebra com "a,b" e aceita "a, b". Normaliza o que vier da
+            # Variable pra que um esquecimento de espaço não derrube o HTTPS.
+            BETA_DOMAIN="$(printf '%s' "$BETA_DOMAIN" | sed 's/[[:space:]]*,[[:space:]]*/, /g')"
+            export BETA_DOMAIN
+            echo "→ Hostnames do Caddy: $BETA_DOMAIN"
 
             echo "→ Subindo containers (coexist: não toca outras stacks)…"
             $DC up -d --build $NODEPS $SERVICES

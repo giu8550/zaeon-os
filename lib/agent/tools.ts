@@ -17,10 +17,15 @@ import type { FunctionDeclaration } from "@google-cloud/vertexai";
 //   assíncrono (polling): podcast | video
 export type StudioKind =
   | "guide" | "mindmap" | "timeline" | "flashcards" | "faq"
-  | "image" | "podcast" | "video";
+  // `molecule` entrou na lista e nos ALIASES quando o viewer 3D nasceu, mas NÃO aqui nem
+  // no STUDIO_LABEL. Em runtime passava (a lista é quem filtra), só que `studioLabel`
+  // caía no fallback e o artefato se chamava "artefato: cafeína" em vez de
+  // "molécula: cafeína". Sete erros do tsc apontavam pra isto, escondidos pelo
+  // ignoreBuildErrors.
+  | "image" | "podcast" | "video" | "molecule";
 
 export const STUDIO_KINDS: StudioKind[] = [
-  "guide", "mindmap", "timeline", "flashcards", "faq", "image", "podcast", "video",
+  "guide", "mindmap", "timeline", "flashcards", "faq", "image", "podcast", "video", "molecule",
 ];
 
 // Rótulo humano (PT-BR) por kind — usado na confirmação e no provenance.
@@ -33,6 +38,7 @@ export const STUDIO_LABEL: Record<StudioKind, string> = {
   image: "imagem",
   podcast: "podcast",
   video: "vídeo",
+  molecule: "molécula",
 };
 
 // Aceita sinônimos/PT que o modelo possa devolver → normaliza pro kind canônico.
@@ -45,6 +51,8 @@ const ALIASES: Record<string, StudioKind> = {
   imagem: "image", image: "image", figura: "image",
   podcast: "podcast", audio: "podcast", "áudio": "podcast",
   video: "video", "vídeo": "video",
+  molecula: "molecule", "molécula": "molecule", molecule: "molecule",
+  "estrutura molecular": "molecule", "estrutura 3d": "molecule", "modelo 3d": "molecule",
 };
 
 export function normalizeStudioKind(raw: string): StudioKind {
@@ -96,9 +104,11 @@ export const studioGenerateTool: FunctionDeclaration = {
   name: "studio_generate",
   description:
     "Gera um ARTEFATO do Studio a partir do estudo em foco e o encaixa na conversa. " +
-    "Use SOMENTE quando a pessoa PEDIR explicitamente para gerar/criar/fazer um artefato " +
-    "(ex.: 'gere um podcast sobre fotossíntese', 'faz um mapa mental disso', 'cria flashcards'). " +
-    "Para conversa normal ou dúvida, NÃO chame — responda em texto.",
+    "Chame quando a pessoa PEDIR para gerar/criar/fazer um artefato " +
+    "(ex.: 'gere um podcast sobre fotossíntese', 'faz um mapa mental disso', 'cria flashcards') " +
+    "E TAMBÉM quando ela ACEITAR uma oferta que você mesmo fez ('ótima ideia', 'sim', 'pode gerar', " +
+    "'vamos'): aceitar é pedir. Nunca ofereça o mesmo artefato duas vezes — se já ofereceu e a " +
+    "pessoa topou, GERE. Para conversa normal ou dúvida, NÃO chame — responda em texto.",
   parameters: {
     type: "OBJECT" as any,
     properties: {
@@ -106,7 +116,9 @@ export const studioGenerateTool: FunctionDeclaration = {
         type: "STRING" as any,
         description:
           "O tipo do artefato. Um de: guide (guia), mindmap (mapa mental), timeline (linha do tempo), " +
-          "flashcards, faq, image (imagem), podcast (áudio 2 vozes), video (vídeo-resumo).",
+          "flashcards, faq, image (imagem), podcast (áudio 2 vozes), video (vídeo-resumo), " +
+          "molecule (estrutura molecular 3D de verdade, vinda do PubChem — use quando a pessoa quiser VER " +
+          "uma substância química: 'mostra a molécula da cafeína', 'como é a estrutura da glicose').",
       },
       topic: {
         type: "STRING" as any,

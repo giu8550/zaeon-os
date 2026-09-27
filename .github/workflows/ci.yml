@@ -38,6 +38,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prisma validate (falha rapido se o schema estiver invalido)
+        run: npx --yes prisma@6 validate
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -54,8 +56,32 @@ jobs:
         run: npm run lint
         continue-on-error: true
 
+      # BLOQUEANTE, e de proposito. next.config.mjs tem ignoreBuildErrors: true, entao o
+      # `next build` passa por cima de QUALQUER erro de tipo — foi assim que um
+      # <EscritorioRoom /> sem import chegou em producao e virou "Application error" pro
+      # aluno. O tsc pega isso em ~20s; nenhum teste pegaria, porque nao ha teste de render
+      # de pagina. Enquanto o ignoreBuildErrors existir, ESTE passo e a unica rede.
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
       - name: Tests (vitest)
         run: npm test
+
+      # BLOQUEANTE, e de proposito. O abnt-service tinha 41 testes que NINGUEM rodava, e
+      # por isso um formatter com 6 nomes indefinidos — um deles no caminho por onde passa
+      # todo paragrafo — ficou meses em producao sem gerar um unico documento. O container
+      # subia, reiniciava em loop, e o app so dizia "servico ABNT offline". Teste que nao
+      # roda no CI nao e rede: e decoracao.
+      - name: Setup Python (worker ABNT)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tests (pytest — abnt-service)
+        working-directory: abnt-service
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          pytest -q
 
       - name: Build
         run: npx next build

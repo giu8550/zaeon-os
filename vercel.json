@@ -1,5 +1,0 @@
-{
-  "functions": {
-    "app/api/ai/scholar/route.ts": { "maxDuration": 300 }
-  }
-}

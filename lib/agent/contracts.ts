@@ -32,6 +32,13 @@ export type StudioRef = {
   studioKind: string;      // guide | mindmap | timeline | flashcards | faq | image | podcast | video
   title?: string;
   artifactId?: string;
+  /**
+   * O aluno PEDIU este artefato com todas as letras (intent gerar_artefato), em vez de
+   * ele ter nascido do assunto. Muda só uma coisa: se falhar, pedido explícito merece
+   * aviso; artefato que a Aura trouxe por conta própria falha calado — ninguém pediu,
+   * ninguém precisa saber.
+   */
+  explicito?: boolean;
   provenance?: ProvenanceRecord;
 };
 
@@ -47,12 +54,27 @@ export type ProvenanceRecord = {
   inputsHash?: string;   // hash dos inputs (reprodutibilidade)
 };
 
+/**
+ * Uma expressão que merece sair do meio da frase e virar objeto na página: fórmula
+ * química, equação, definição curta. Vem em LaTeX porque é a notação que o modelo já
+ * sabe escrever e que o KaTeX sabe desenhar.
+ *
+ * O contrato com o modelo é de EXTRAÇÃO, não de estilo: ele diz quais expressões a
+ * resposta menciona; quem decide se viram destaque, e como, é o código. Mesmo padrão
+ * do `substancias` → molécula, que é o que funcionou.
+ */
+export type Destaque = {
+  latex: string;            // "C_8H_{10}N_4O_2", "E = mc^2"
+  rotulo?: string;          // legenda curta ("cafeína", "energia de repouso")
+};
+
 export type StructuredAnswer = {
   nucleo: string;                                   // resposta direta (sempre)
   desenvolvimento?: string;                         // derivação / passo a passo
   conceitos?: string[];                             // âncoras do tema
   evidencia?: { claim: string; source: Source }[];  // afirmações COM fonte (deriva do L3/memory)
   proximos_passos?: string[];                       // artefato sugerido / o que estudar
+  destaques?: Destaque[];                           // expressões que viram objeto na página
   artifacts?: StudioRef[];                          // Studio gerados (cada um com provenance)
   work?: { kind: WorkKind; sections: { title: string; body: string }[] }; // criar_trabalho
   sources?: Source[];                               // pesquisar_fontes

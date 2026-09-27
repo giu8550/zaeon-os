@@ -9,9 +9,12 @@ import urllib.request
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.section import WD_SECTION
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+from docx.opc.part import Part
+from docx.opc.packuri import PackURI
 
 import abnt_rules as R
 from models import DocumentPayload
@@ -28,8 +31,12 @@ def build_abnt_document(payload: DocumentPayload) -> bytes:
     _setup_page(doc)
     _setup_base_style(doc, font)
 
+    # ── Seção 1: CAPA (não contada, sem numeração) ──
     _add_cover_page(doc, payload, font)
-    doc.add_page_break()
+
+    # ── Seção 2: PRÉ-TEXTUAIS (contadas a partir da folha de rosto = pág. 1) ──
+    pretextual = _new_section(doc)
+    _set_section_start_page(pretextual, 1)  # capa não conta; folha de rosto = 1
 
     _add_title_page(doc, payload, font)
     doc.add_page_break()
@@ -51,6 +58,10 @@ def build_abnt_document(payload: DocumentPayload) -> bytes:
     doc.add_page_break()
     _add_references(doc, payload.references, font)
 
+    # Pós-textuais, na ordem da NBR 14724: apêndice (do autor) antes de anexo (de terceiro).
+    _add_appendices(doc, payload.apendices, "APÊNDICE", font, counters)
+    _add_appendices(doc, payload.anexos, "ANEXO", font, counters)
+
     _add_page_numbers(doc)
 
     buf = io.BytesIO()
@@ -60,6 +71,43 @@ def build_abnt_document(payload: DocumentPayload) -> bytes:
 
 
 # ── Configuração de página ─────────────────────────────────────
+
+def _setup_section(section):
+    section.page_width  = Cm(R.PAGE_WIDTH_CM)
+    section.page_height = Cm(R.PAGE_HEIGHT_CM)
+    section.left_margin   = Cm(R.MARGIN_LEFT_CM)
+    section.right_margin  = Cm(R.MARGIN_RIGHT_CM)
+    section.top_margin    = Cm(R.MARGIN_TOP_CM)
+    section.bottom_margin = Cm(R.MARGIN_BOTTOM_CM)
+
+
+def _new_section(doc: Document):
+    """Quebra de seção (nova página) com a mesma configuração de página ABNT."""
+    section = doc.add_section(WD_SECTION.NEW_PAGE)
+    _setup_section(section)
+    return section
+
+
+def _set_section_start_page(section, start: int):
+    sectPr = section._sectPr
+    pgNumType = sectPr.find(qn('w:pgNumType'))
+    if pgNumType is None:
+        pgNumType = OxmlElement('w:pgNumType')
+        sectPr.append(pgNumType)
+    pgNumType.set(qn('w:start'), str(start))
+
+
+def _set_section_continue(section):
+    """Remove o 'start' herdado (add_section copia o sectPr anterior) para a
+    numeração continuar em vez de reiniciar."""
+    sectPr = section._sectPr
+    pgNumType = sectPr.find(qn('w:pgNumType'))
+    if pgNumType is not None:
+        if qn('w:start') in pgNumType.attrib:
+            del pgNumType.attrib[qn('w:start')]
+        if not pgNumType.attrib:
+            sectPr.remove(pgNumType)
+
 
 def _setup_page(doc: Document):
     section = doc.sections[0]
@@ -669,6 +717,62 @@ def _set_cell_borders(cell, top: bool = False, bottom: bool = False):
 
 # ── Referências ────────────────────────────────────────────────
 
+def _add_appendices(doc: Document, itens: list, rotulo: str, font: str, counters: dict = None):
+    """
+    Elementos pós-textuais (NBR 14724 §4.2.10 e §4.2.11).
+
+    APÊNDICE é material elaborado pelo próprio autor; ANEXO é material de terceiro. A
+    norma trata os dois igual na forma: cada um começa em página nova, é identificado por
+    letra maiúscula consecutiva, travessão e o título — "APÊNDICE A — Questionário
+    aplicado" — e o identificador é centralizado, em maiúsculas e negrito, como os títulos
+    sem indicativo numérico.
+
+    Travessão (—), não hífen: é a mesma regra que as legendas de figura já seguem aqui.
+
+    Não entram no sumário por indicativo numérico, mas entram no sumário como itens sem
+    número — por isso `outline_level=0` no parágrafo de identificação.
+
+    Lista vazia não gera página em branco: o `if not itens` é o que garante isso, e é o
+    caso normal, porque a maioria dos trabalhos não tem apêndice.
+    """
+    if not itens:
+        return
+
+    for i, item in enumerate(itens):
+        doc.add_page_break()
+        letra = _letra_do_indice(i)
+        titulo = (getattr(item, "title", "") or "").strip()
+        identificacao = f"{rotulo} {letra}" + (f" — {titulo}" if titulo else "")
+
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.space_before = Pt(R.SPACE_BEFORE_TITLE_PT)
+        p.paragraph_format.space_after = Pt(R.SPACE_AFTER_TITLE_PT)
+        run = p.add_run(identificacao.upper())
+        run.bold = True
+        run.font.name = font
+        run.font.size = Pt(R.FONT_SIZE_BODY_PT)
+        _set_outline_level(p, 0)
+
+        for bloco in _split_paragraphs(getattr(item, "content", "") or ""):
+            _add_paragraph(doc, bloco, font, counters)
+
+
+def _letra_do_indice(i: int) -> str:
+    """
+    0 -> A, 25 -> Z, 26 -> AA. A norma não prevê mais que 26, mas um trabalho com 27
+    apêndices não pode derrubar a exportação — e "AA" é mais honesto que estourar o
+    alfabeto e repetir "A".
+    """
+    letra = ""
+    i += 1
+    while i > 0:
+        i, resto = divmod(i - 1, 26)
+        letra = chr(ord("A") + resto) + letra
+    return letra
+
+
 def _add_references(doc: Document, references: list, font: str):
     _section_title(doc, R.REFERENCES_TITLE, font, outline_level=0)
 
@@ -826,37 +930,29 @@ def _blank_line(doc: Document, font: str):
 # ── Numeração de páginas ───────────────────────────────────────
 
 def _add_page_numbers(doc: Document):
-    """
-    Adiciona numeração de páginas no canto superior direito (header).
-    Começa a exibir a partir da 1ª página (capa).
-    """
-    for section in doc.sections:
+    """Numeração no canto superior direito, visível SOMENTE na parte textual
+    (última seção). Capa e pré-textuais ficam sem número (NBR 14724)."""
+    last = len(doc.sections) - 1
+    for i, section in enumerate(doc.sections):
         header = section.header
         header.is_linked_to_previous = False
-
-        # Limpa conteúdo anterior do header
         for para in header.paragraphs:
             para.clear()
-
-        if header.paragraphs:
-            p = header.paragraphs[0]
-        else:
-            p = header.add_paragraph()
-
+        p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         p.paragraph_format.first_line_indent = Cm(0)
+
+        if i != last:
+            continue  # capa e pré-textuais: header vazio (sem número)
 
         run = p.add_run()
         fldChar1 = OxmlElement('w:fldChar')
         fldChar1.set(qn('w:fldCharType'), 'begin')
-
         instrText = OxmlElement('w:instrText')
         instrText.set(qn('xml:space'), 'preserve')
         instrText.text = 'PAGE'
-
         fldChar2 = OxmlElement('w:fldChar')
         fldChar2.set(qn('w:fldCharType'), 'end')
-
         run._r.append(fldChar1)
         run._r.append(instrText)
         run._r.append(fldChar2)

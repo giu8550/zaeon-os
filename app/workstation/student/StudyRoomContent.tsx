@@ -8,9 +8,10 @@ import { Triangle } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-    Users, BookOpen,
+    Users, BookOpen, GraduationCap,
     FlaskConical, Newspaper, User, Lock,
 } from "lucide-react";
+import { isSuperAdminEmail } from "@/lib/auth/roles";
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
 import OmegaScholarWorkspace from "./omega/OmegaScholarWorkspace";
 import StudyRoomSuggestionDock from "./omega/StudyRoomSuggestionDock";
@@ -175,10 +176,12 @@ function NoRoomFound() {
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
-// A aba "Meus Estudos" É o co-working (chat + biblioteca à direita). O editor de
-// estudo (MeusEstudosFeed) é aberto pelo próprio chat, num modal. A aba "Estudos"
-// (community/OmegaScholarWorkspace) NÃO muda.
+// ⚠️ MERGE base×main: o PR01 (co-working StudyCoworkChat) e o main (feed MeusEstudosFeed +
+// painel do professor) trouxeram abas/nomes diferentes p/ "Meus Estudos". Mantidos os DOIS —
+// CONFERIR a composição/rótulos das abas + QA de runtime antes de mergear na base.
 const StudyCoworkChat = dynamic(() => import("@/components/study/StudyCoworkChat"), { ssr: false });
+const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
+const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlunosPanel"), { ssr: false });
 
 export default function StudyRoomContent({ flushTop = false }: { flushTop?: boolean } = {}) {
     const { data: session } = useSession();
@@ -187,11 +190,19 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
     const room   = getRoomForCourse(course);
     const meta   = ROOM_META[room] ?? ROOM_META["lounge"];
     const tabs   = ROOM_TABS[room] ?? [];
-    // Ordem: Aura → Estudos → Aulas. A aba "Aura" (co-working / chat) vem primeiro.
+    const isTeacher =
+        (session?.user as any)?.role === "teacher" ||
+        (session?.user as any)?.role === "professor" ||
+        !!(session?.user as any)?.isAdmin ||
+        isSuperAdminEmail((session?.user as any)?.email);
+    // "Meus Estudos" (feed mini-Notion) é a aba padrão (main); "Meus Alunos" só pro professor (isTeacher).
+    // ⚠️ MERGE base×main: a aba "Aura" (co-working / chat) do PR01 vinha primeiro — CONFERIR se ela
+    // ainda entra na composição das abas abaixo (QA de runtime).
     const allTabs = useMemo(() => [
         { id: "meus-estudos", label: "Aura", icon: Triangle },
         ...tabs,
-    ], [tabs]);
+        ...(isTeacher ? [{ id: "students", label: "Meus Alunos", icon: GraduationCap }] : []),
+    ], [tabs, isTeacher]);
 
     // Padrão = a aba "Aura" (chats/co-working). Só cai numa aba de estudo/pesquisa se
     // o usuário SAIU da sala estando nela — restaurado da persistência no efeito abaixo.
@@ -212,6 +223,28 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
         if (!tabRestored.current || !room) return;
         try { localStorage.setItem(`zaeon:lastTab:${room}`, activeTab); } catch { /* ignore */ }
     }, [activeTab, room]);
+
+    // Deep-link do menu inicial: ?space=<id> → abre direto em "Meus Estudos"
+    // (o MeusEstudosFeed resolve qual estudo carregar pelo mesmo param). Sem isso,
+    // clicar num estudo no menu caía na aba "Estudos" genérica, não no estudo.
+    useEffect(() => {
+        try {
+            if (new URLSearchParams(window.location.search).get("space")) {
+                setActiveTab("meus-estudos");
+            }
+        } catch { /* ignore */ }
+    }, []);
+
+    // "Estudar esse tema" / handoff de voz pode pedir a aba Meus Estudos em runtime.
+    // Aceita set-subtab (legado) E set-tab (tour) — só para os ids de aba DESTA sala
+    // (community/classes/meus-estudos/students); ids do research-lab são ignorados aqui.
+    useEffect(() => {
+        const SALA_IDS = new Set(["meus-estudos", "community", "classes", "students"]);
+        const onSetSub = (e: any) => { const d = e?.detail; if (SALA_IDS.has(d)) setActiveTab(d); };
+        window.addEventListener("zaeon:set-subtab", onSetSub);
+        window.addEventListener("zaeon:set-tab", onSetSub);
+        return () => { window.removeEventListener("zaeon:set-subtab", onSetSub); window.removeEventListener("zaeon:set-tab", onSetSub); };
+    }, []);
 
     // ── Tab indicator measurement ────────────────────────────────────────────
     // We track each tab button's position to drive an animated underline
@@ -302,6 +335,7 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                             return (
                                 <button
                                     key={tab.id}
+                                    data-tour={`tab-${tab.id}`}
                                     ref={el => { tabRefs.current[i] = el; }}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`
@@ -362,6 +396,25 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                         </div>
                         {activeTab === "meus-estudos" ? null : activeTab === "community" ? (
                             <OmegaScholarWorkspace />
+                        ) : activeTab === "students" ? (
+                            <MeusAlunosPanel />
+                        ) : activeTab === "classes" && isTeacher ? (
+                            // Professor: a MESMA Sala de Aula (chat + livraria + relógio) e, ABAIXO,
+                            // o canvas vivo de criação de aula (Parte B1 + D) — não um form pobre.
+                            <div className="min-h-full">
+                                {ActiveComponent ? (
+                                    <Suspense fallback={<TabLoader />}><ActiveComponent /></Suspense>
+                                ) : <NoRoomFound />}
+                                <div className="border-t border-white/10 mt-2">
+                                    <div className="px-5 pt-4 pb-1">
+                                        <h3 className="text-sm font-black uppercase tracking-[0.16em] text-white/70">Criar aula</h3>
+                                        <p className="text-[12px] text-white/40">Monte a aula como um estudo: blocos, menu “/” e Studio. Toque no ＋ pra começar uma nova.</p>
+                                    </div>
+                                    <div className="h-[88vh]">
+                                        <MeusEstudosFeed mode="teach" />
+                                    </div>
+                                </div>
+                            </div>
                         ) : !ActiveComponent ? (
                             <NoRoomFound />
                         ) : (

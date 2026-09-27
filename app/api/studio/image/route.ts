@@ -60,6 +60,12 @@ export async function POST(req: Request) {
       title = `Imagem — ${ctx.title}`;
     }
   }
+  // Igual ao text-pipeline: pedido vindo da conversa chega com estudo vazio + tópico.
+  const topic = typeof body.topic === "string" ? body.topic.trim() : "";
+  if (!prompt && topic) {
+    prompt = await craftPromptFromStudy(`Tópico pedido na conversa: ${topic}`);
+    title = `Imagem — ${topic}`;
+  }
   if (!prompt) return NextResponse.json({ error: "Forneça um prompt ou um estudo com conteúdo." }, { status: 400 });
 
   const art = await prisma.studioArtifact.create({

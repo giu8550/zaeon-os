@@ -1,6 +1,11 @@
 # Caddy — proxy reverso + HTTPS automático (Let's Encrypt) da beta Zaeon.
-# Domínio e e-mail vêm do .env (BETA_DOMAIN / ACME_EMAIL). O reverse_proxy já
-# faz upgrade de WebSocket sozinho — o Socket.IO do server.js funciona sem config extra.
+# Domínio e e-mail vêm do ambiente (BETA_DOMAIN / ACME_EMAIL — o deploy.yml manda).
+# BETA_DOMAIN aceita VÁRIOS hostnames separados por vírgula: o endereço provisório
+# (sslip.io) e o definitivo (zaeon.com.br) convivem, cada um com seu certificado.
+# Se um deles ainda não resolve no DNS, o Caddy só falha o ACME DELE e segue servindo
+# os outros — por isso dá pra apontar o domínio novo antes de virar a chave.
+# O reverse_proxy já faz upgrade de WebSocket sozinho — o Socket.IO do server.js
+# funciona sem config extra.
 
 {
 	email {$ACME_EMAIL}
@@ -26,9 +31,18 @@
 # sslip.io resolve 75-119-140-97.sslip.io -> 75.119.140.97 sozinho (sem DNS nosso),
 # então o Caddy emite HTTPS Let's Encrypt válido. Fica NO GIT de propósito: assim
 # sobrevive a `git reset --hard` do deploy e a gente confere cada mudança em prod.
-# Remover quando beta.zaeon.space apontar pra cá (ou manter como staging interno).
+# Remover quando o domínio definitivo apontar pra cá (ou manter como staging interno).
 75-119-140-97.sslip.io {
 	encode zstd gzip
 	respond /healthz "ok" 200
 	reverse_proxy web:3000
+}
+
+# ── www → raiz ────────────────────────────────────────────────
+# O client OAuth do Google NÃO aceita o callback com www: quem entrasse pelo www
+# levaria redirect_uri_mismatch no login. Em vez de cadastrar um segundo callback,
+# o www nunca chega a ser endereço de app — redireciona 301 pra raiz antes de
+# qualquer rota.
+www.zaeon.com.br {
+	redir https://zaeon.com.br{uri} permanent
 }

@@ -10,9 +10,10 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
 
-        // userId recebido do frontend (geralmente enviamos session.user.email)
+        // O `userId` que o frontend ainda manda no corpo e IGNORADO de proposito
+        // (ver o bloco de seguranca abaixo). Nao entra no destructure pra nao virar
+        // variavel morta e dar a impressao de que ainda manda em algo.
         const { 
-            userId, 
             schedule, 
             stickyNote, 
             chatHistory, 

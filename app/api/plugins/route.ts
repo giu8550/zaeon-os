@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
         const {
             id, name, author, description, category,
-            tag, price, actionUrl, isLocked, unlockRequirement 
+            tag, imageUrl, price, actionUrl, isLocked, unlockRequirement
         } = body;
 
         // 1. Validação de Segurança (Campos Obrigatórios do Schema)
@@ -46,6 +46,7 @@ export async function POST(req: Request) {
             description: String(description),
             category: String(category),
             tag: tag ? String(tag) : null, // Opcional no schema
+            imageUrl: imageUrl ? String(imageUrl) : null, // capa do plugin (opcional)
             price: parseFloat(price) || 0, // Força a ser Float
             actionUrl: actionUrl ? String(actionUrl) : "#",
             isLocked: Boolean(isLocked), // Força a ser Boolean

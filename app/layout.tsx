@@ -49,20 +49,20 @@ const interTight = Inter_Tight({
     display: "swap",
 });
 
+
 /**
  * `viewportFit: "cover"` e o que faz a pagina ocupar a tela inteira em aparelho
  * com entalhe/ilha; sem ele o iOS deixa duas tarjas da cor de fundo em cima e
- * embaixo quando o app roda instalado. Quem paga o preco disso e o `env(safe-area-inset-*)`
- * aplicado na navbar e no body (globals.css) -- os dois andam juntos: pedir
- * `cover` sem tratar as bordas coloca a navbar embaixo do relogio.
+ * embaixo quando o app roda instalado. O preco disso sao os `env(safe-area-inset-*)`
+ * na navbar e no body (globals.css) -- os dois andam juntos: pedir `cover` sem
+ * tratar as bordas coloca a navbar embaixo do relogio.
  *
  * NAO existe `maximumScale`/`userScalable` aqui de proposito: bloquear o zoom
  * deixa o app inacessivel para quem enxerga mal, e o iOS ignora mesmo assim.
  *
  * `themeColor` e um valor so, escuro, e nao um par por `prefers-color-scheme`:
- * o app ignora o tema do sistema (defaultTheme dark, sem enableSystem), entao
- * um par pintaria a barra do navegador de branco para quem esta no claro do SO
- * com o app no escuro -- que e o descasamento pior.
+ * a Zaeon abre no escuro por padrao, entao um par pintaria a barra do navegador
+ * de branco para quem esta no claro do SO -- que e o descasamento pior.
  */
 export const viewport: Viewport = {
     width: "device-width",

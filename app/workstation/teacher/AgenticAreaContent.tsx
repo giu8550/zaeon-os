@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Bot, Cpu, Sparkles, MessageSquare, Zap, Dna, Send, Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import dynamic from "next/dynamic";
+import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 
 // ─── BioSim3D (dynamic — Three.js can't SSR) ─────────────────────────────────
 const BioSim3DModule = dynamic(
@@ -129,7 +130,7 @@ function AuraChat() {
           type="text"
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && send()}
+          onKeyDown={onEnterSubmit(send)}
           placeholder="Ex: Quais são as tendências recentes em neurociência computacional?"
           className="flex-1 bg-transparent text-xs outline-none px-3 text-slate-700 dark:text-white placeholder:text-slate-400"
         />
