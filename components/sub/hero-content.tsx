@@ -148,7 +148,7 @@ export default function HeroPage() {
             {/* Uma linha só, sem quebrar: tamanho FLUÍDO (clamp por vw) cresce com a tela
                 e encolhe no mobile em vez de quebrar a frase. whitespace-nowrap trava a
                 linha inteira (inclusive os espaços entre as palavras). */}
-            <h1 className="whitespace-nowrap text-[clamp(1.25rem,4.4vw,4rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] z-10 relative">
+            <h1 className="whitespace-nowrap text-[clamp(1.5rem,5.4vw,5.25rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
               <span aria-hidden="true">
                 <MolecularText text="Aqui ninguém" />

@@ -89,6 +89,14 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 if (phaseRef.current < 1) { phaseRef.current = 1; setPhase(1); }
             }
 
+            // BARRA sincronizada AO MESMO relógio do exit (time/TOTAL). Assim ela chega a
+            // 100% EXATAMENTE quando o intro começa a sair — nunca some antes do fim. Antes
+            // era CSS a partir da montagem: atrasava em relação ao clique e era cortada.
+            if (progressBarRef.current) {
+                progressBarRef.current.style.width =
+                    Math.min(100, (time / TIMELINE.TOTAL_DURATION) * 100) + "%";
+            }
+
             // ...mas a BARRA e uma funcao continua do tempo, nao uma escada por
             // estagio. Antes cada estagio tinha a sua propria rampa com o proprio
             // teto, entao a barra ficava PRESA em 1% durante todo o estagio 2,
@@ -236,7 +244,7 @@ export default function MacSplash({ show = true, onDone }: Props) {
                             >
                                 <div className={`flex items-center gap-2.5 transition-opacity duration-500 ${phase >= 1 ? 'opacity-100' : 'opacity-0'}`}>
                                     <div className="w-[200px] h-[3px] rounded-full bg-black/20 dark:bg-white/15 overflow-hidden">
-                                        <div className="h-full rounded-full bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.35)] dark:shadow-[0_0_8px_rgba(255,255,255,0.35)]" style={{ width: "0%", animation: `zaeonBootFill ${TIMELINE.TOTAL_DURATION}s linear forwards` }} />
+                                        <div ref={progressBarRef} className="h-full rounded-full bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.35)] dark:shadow-[0_0_8px_rgba(255,255,255,0.35)]" style={{ width: "0%", transition: "width 0.12s linear" }} />
                                     </div>
                                 </div>
                             </motion.div>
@@ -245,7 +253,7 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 </div>
             </div>
             <style jsx global>{`
-                @keyframes zaeonBootFill { from { width: 0%; } to { width: 100%; } }
+                /* barra agora é controlada por JS (largura = relógio do intro) */
             `}</style>
         </div>
     );
