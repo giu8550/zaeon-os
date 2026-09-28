@@ -189,7 +189,9 @@ export const Navbar = () => {
       }`}
     >
       {/* Navbar CHAPADA: barra full-width, hairline embaixo, sem pílula/borda redonda/sombra pesada. */}
-      <div className="pointer-events-auto w-full h-[64px] backdrop-blur-xl bg-background/80 border-b border-foreground/10 flex items-center">
+      {/* No CLARO ganha um tom azulado (sky) — antes era branco puro e ficava lavado.
+          No ESCURO segue o token de fundo navy de sempre. */}
+      <div className="pointer-events-auto w-full h-[64px] backdrop-blur-xl bg-sky-50/85 dark:bg-background/80 border-b border-sky-200/60 dark:border-foreground/10 flex items-center">
         <div className="w-full zaeon-borda flex items-center justify-between">
 
           <Link href="/" className="transition-opacity hover:opacity-80">
