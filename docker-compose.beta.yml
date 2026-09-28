@@ -44,6 +44,11 @@ services:
       VOICE_ENGINE_URL: http://voice-engine:8004   # proxy /api/ai/voice
       ABNT_SERVICE_URL: http://abnt-service:8001    # exportação ABNT
       PDF_LOADER_URL: http://pdf-loader:8005        # leitura estruturada de PDF
+      # Sala de Pesquisa em BACKGROUND: o web só ENFILEIRA (SCHOLAR_WORKER=0); quem roda
+      # o pipeline até o fim é o serviço `worker` abaixo. Assim, sair da sala não para a
+      # pesquisa — o worker continua e o cliente reengata pela sessão no banco.
+      SCHOLAR_BG: "1"
+      SCHOLAR_WORKER: "0"
     depends_on:
       redis: { condition: service_started }
       voice-engine: { condition: service_started }
@@ -61,6 +66,33 @@ services:
     deploy:
       resources:
         limits: { memory: 1536m }
+
+  # ── WORKER dedicado da Sala de Pesquisa (BullMQ) ──────────────────────────────
+  # Mesma imagem do web, mas SCHOLAR_WORKER=1: o instrumentation.ts sobe o consumidor
+  # da fila e roda o pipeline até o fim, independente de haver cliente na sala. Não é
+  # exposto (não recebe HTTP público). Se faltar RAM no VPS, dá pra desligar este serviço
+  # e setar SCHOLAR_WORKER=1 no próprio web (o worker roda no processo do web).
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zaeon_worker
+    env_file: [.env, .env.secrets]
+    environment:
+      GIT_SHA: ${GIT_SHA:-unknown}
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379/0
+      ABNT_SERVICE_URL: http://abnt-service:8001
+      PDF_LOADER_URL: http://pdf-loader:8005
+      SCHOLAR_BG: "1"
+      SCHOLAR_WORKER: "1"
+      SCHOLAR_WORKER_CONCURRENCY: "3"
+    depends_on:
+      redis: { condition: service_started }
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 1024m }
 
   # ── Voz neural (Kokoro, CPU-only). Gated por perfil (admin → aba "Voz"). ──
   voice-engine:

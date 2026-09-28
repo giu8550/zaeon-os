@@ -90,7 +90,10 @@ const nextConfig = {
         serverActions: {
             bodySizeLimit: '20mb',
         },
-        serverComponentsExternalPackages: ["canvas", "sharp"],
+        // Liga o instrumentation.ts (Next 14) — usado pra subir o worker de fundo
+        // da Sala de Pesquisa (BullMQ) dentro do runtime do servidor.
+        instrumentationHook: true,
+        serverComponentsExternalPackages: ["canvas", "sharp", "bullmq", "ioredis"],
         // Tree-shaking dos barrels pesados (framer-motion/recharts são usados em todo
         // lugar) → bundle inicial menor, telas abrindo mais rápido. lucide/heroicons já
         // têm o modularizeImports acima; incluí-los aqui também é seguro.
