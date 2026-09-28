@@ -10,9 +10,7 @@ import { UserIcon } from "@heroicons/react/24/outline";
 import MenuNavigation from "@/components/sub/MenuNavigation";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
-import InviteButton from "@/components/sub/InviteButton";
 import MolecularText from "@/components/ui/MolecularText";
-import { UserPlus } from "lucide-react";
 
 // Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
 // Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
@@ -269,22 +267,13 @@ export default function HeroPage() {
             animate={{ opacity: 1, y: -20, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.1 }}
-            className="w-full max-w-[760px] mx-auto z-20 mt-0 relative origin-center"
+            className="w-full max-w-[520px] self-start z-20 mt-0 relative origin-center text-left"
           >
-            <div className="flex items-center justify-center gap-4">
-              <div className="w-full max-w-[500px] shrink-0">
-                <MenuNavigation />
-              </div>
-              {/* Convite = card próprio à direita, centralizado na linha do menu */}
-              {status === "authenticated" && (
-                <div className="hidden lg:flex w-56 shrink-0 flex-col">
-                  <div className="rounded-[28px] p-4 backdrop-blur-2xl bg-white/40 dark:bg-cyan-950/10 border border-slate-200 dark:border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)]">
-                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-white/55 mb-1.5 flex items-center gap-1.5"><UserPlus size={13} /> Convide</p>
-                    <p className="text-[11px] text-slate-500 dark:text-white/50 mb-3 leading-relaxed">Traga um amigo pra Zaeon e cresçam juntos.</p>
-                    <InviteButton variant="menu" />
-                  </div>
-                </div>
-              )}
+            {/* Menu alinhado à ESQUERDA da coluna (antes ficava centralizado junto de um
+                card de "Convide" à direita, o que deixava o conjunto assimétrico). O
+                convite não sumiu: mora dentro de OPÇÕES do próprio menu. */}
+            <div className="w-full max-w-[500px]">
+              <MenuNavigation />
             </div>
           </motion.div>
         )}

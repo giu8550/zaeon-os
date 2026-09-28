@@ -253,7 +253,7 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
 function Cartao({ m }: { m: Mentor }) {
     const artefatos = (m.signatureArtifacts ?? []).slice(0, 3);
     return (
-        <article className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-slate-950/75 backdrop-blur-sm p-5 flex flex-col transition-all duration-300 hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
+        <article className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-slate-950/75 backdrop-blur-sm p-5 flex flex-col transition-all duration-300 shadow-[0_12px_32px_-16px_rgba(2,6,23,0.38)] dark:shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
             <div className="flex items-start justify-between">
                 <span
                     aria-hidden="true"
