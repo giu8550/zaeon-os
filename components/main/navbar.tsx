@@ -189,12 +189,13 @@ export const Navbar = () => {
       }`}
     >
       {/* Navbar CHAPADA: barra full-width, hairline embaixo, sem pílula/borda redonda/sombra pesada. */}
-      {/* CLARO: vidro AZUL glossy (gradiente + fio de luz no topo), no espírito do botão
-          "Iniciar" — antes era branco lavado. ESCURO: segue o token navy de sempre. */}
-      <div className="pointer-events-auto w-full h-[64px] backdrop-blur-xl flex items-center
-          bg-gradient-to-b from-sky-100/90 to-blue-200/80 dark:from-transparent dark:to-transparent dark:bg-background/80
-          border-b border-blue-300/60 dark:border-foreground/10
-          shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] dark:shadow-none">
+      {/* Apple liquid glass: translúcido, backdrop-blur + saturação, borda fina e um
+          fio de luz especular no topo. Vale nos dois modos (whitish no claro, esfumado
+          no escuro) — o material é o mesmo do 'Iniciar' e do menu principal. */}
+      <div className="pointer-events-auto w-full h-[64px] flex items-center backdrop-blur-2xl backdrop-saturate-[1.6]
+          bg-white/50 dark:bg-white/[0.06]
+          border-b border-white/60 dark:border-white/[0.12]
+          shadow-[inset_0_1px_0_0_rgba(255,255,255,0.9)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28)]">
         <div className="w-full zaeon-borda flex items-center justify-between">
 
           <Link href="/" className="transition-opacity hover:opacity-80">
