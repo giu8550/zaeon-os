@@ -24,6 +24,7 @@ import {
   PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2, GitBranch,
 } from "lucide-react";
 import CoworkComposer from "@/components/study/CoworkComposer";
+import ChatMarkdown from "@/components/study/ChatMarkdown";
 import AuraThinking from "@/components/study/AuraThinking";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
@@ -773,7 +774,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                           ? "bg-slate-100 text-slate-900 border border-slate-200/80 dark:bg-white/[0.09] dark:text-white/90 dark:border-white/10"
                           : "bg-white/80 dark:bg-white/[0.05] text-slate-800 dark:text-white/90 border border-slate-200/70 dark:border-white/10 backdrop-blur-xl"}`}>
                         {m.text
-                          ? <>{m.text}{m.streaming && <span aria-hidden className="z-caret" />}</>
+                          ? (isUser
+                              // Mensagem do usuário fica literal (ele digitou, não é markdown).
+                              ? <>{m.text}</>
+                              // Resposta da Aura: formata markdown (## títulos, **negrito**, *itálico*,
+                              // `código`, bullets) em vez de mostrar os asteriscos/hashes crus. Seguro
+                              // em streaming: pares não-fechados ficam como texto até fecharem.
+                              : <><ChatMarkdown text={m.text} />{m.streaming && <span aria-hidden className="z-caret" />}</>)
                           : (!isUser && <AuraThinking active fase={m.fase} phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                       </div>
                     </div>
