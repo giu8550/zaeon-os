@@ -221,8 +221,12 @@ export default function Encryption() {
                         atras da pagina inteira e passava por cima do card da
                         direita. Uma chapa escura com borda de 1px devolve o
                         diagrama para um fundo calmo sem desligar o fundo. */}
-                    {/* CLARO com tom azulado (sky) em vez de branco puro; ESCURO segue navy. */}
-                    <div className="mt-12 md:mt-16 rounded-2xl border border-sky-200/70 dark:border-white/10 bg-sky-50/70 dark:bg-[#070b11]/75 backdrop-blur-sm px-4 py-8 md:px-10 md:py-12">
+                    {/* CLARO: vidro AZUL glossy (gradiente + brilho no topo), estilo do botão
+                        "Iniciar", no lugar do branco lavado. ESCURO: segue o navy de sempre. */}
+                    <div className="mt-12 md:mt-16 rounded-2xl backdrop-blur-sm px-4 py-8 md:px-10 md:py-12
+                        bg-gradient-to-b from-sky-100/85 to-blue-200/70 dark:from-transparent dark:to-transparent dark:bg-[#070b11]/75
+                        border border-blue-300/60 dark:border-white/10
+                        shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] dark:shadow-none">
                         <ZaeonFlowDiagram />
                     </div>
                 </div>

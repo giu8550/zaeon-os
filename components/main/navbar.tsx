@@ -189,9 +189,12 @@ export const Navbar = () => {
       }`}
     >
       {/* Navbar CHAPADA: barra full-width, hairline embaixo, sem pílula/borda redonda/sombra pesada. */}
-      {/* No CLARO ganha um tom azulado (sky) — antes era branco puro e ficava lavado.
-          No ESCURO segue o token de fundo navy de sempre. */}
-      <div className="pointer-events-auto w-full h-[64px] backdrop-blur-xl bg-sky-50/85 dark:bg-background/80 border-b border-sky-200/60 dark:border-foreground/10 flex items-center">
+      {/* CLARO: vidro AZUL glossy (gradiente + fio de luz no topo), no espírito do botão
+          "Iniciar" — antes era branco lavado. ESCURO: segue o token navy de sempre. */}
+      <div className="pointer-events-auto w-full h-[64px] backdrop-blur-xl flex items-center
+          bg-gradient-to-b from-sky-100/90 to-blue-200/80 dark:from-transparent dark:to-transparent dark:bg-background/80
+          border-b border-blue-300/60 dark:border-foreground/10
+          shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] dark:shadow-none">
         <div className="w-full zaeon-borda flex items-center justify-between">
 
           <Link href="/" className="transition-opacity hover:opacity-80">

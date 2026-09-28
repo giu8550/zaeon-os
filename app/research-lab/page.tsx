@@ -52,8 +52,9 @@ const EscritorioRoom = dynamic(
 // ── Sidebar liquid-glass: estilo dos botões (mesma lógica das "pills") ──────────
 // Vidro translúcido + borda suave + tint no hover; ativo = vidro colorido + ring + glow.
 const NAV_BASE = "group flex items-center gap-3 p-2 rounded-2xl border backdrop-blur-md transition-all duration-300";
-// Sidebar é cinza-quase-preto → ícones ociosos esmaecidos (cinza claro), sem fundo.
-const NAV_IDLE = "bg-transparent border-transparent text-white/45 hover:text-white/90 hover:bg-white/[0.07] hover:border-white/10";
+// CLARO: sidebar vidro-azul → ícones ociosos em cinza-azulado escuro (legíveis).
+// ESCURO: sidebar cinza-quase-preto → ícones esmaecidos claros, sem fundo.
+const NAV_IDLE = "bg-transparent border-transparent text-slate-500 hover:text-slate-900 hover:bg-blue-500/10 hover:border-blue-300/50 dark:text-white/45 dark:hover:text-white/90 dark:hover:bg-white/[0.07] dark:hover:border-white/10";
 const NAV_ACTIVE: Record<string, string> = {
   purple: "bg-purple-500/15 dark:bg-purple-400/20 border-purple-400/50 text-purple-700 dark:text-purple-100 ring-1 ring-purple-400/40 shadow-[0_8px_24px_-8px_rgba(168,85,247,0.55)]",
   blue: "bg-blue-500/15 dark:bg-blue-400/20 border-blue-400/50 text-blue-700 dark:text-blue-100 ring-1 ring-blue-400/40 shadow-[0_8px_24px_-8px_rgba(59,130,246,0.55)]",
@@ -66,8 +67,9 @@ const NAV_ACTIVE: Record<string, string> = {
 // Selecionado: no ESCURO = mesma pill branca-glass das abas da Sala de Estudos;
 // no CLARO = charcoal acinzentado (tom do frame de pesquisa, não um preto chapado).
 // Selecionado = pílula BRANCA-glass sobre a sidebar escura (o branco é só do ativo).
+// CLARO: pill AZUL glossy (aba selecionada sobre o vidro-azul). ESCURO: pill branca-glass.
 const NAV_ACTIVE_PILL =
-  "bg-white/[0.16] text-white border-white/30 ring-1 ring-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_8px_18px_-8px_rgba(0,0,0,0.6)]";
+  "bg-blue-500/20 text-blue-900 border-blue-400/60 ring-1 ring-blue-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_8px_18px_-8px_rgba(37,99,235,0.5)] dark:bg-white/[0.16] dark:text-white dark:border-white/30 dark:ring-white/10 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_8px_18px_-8px_rgba(0,0,0,0.6)]";
 function navItem(active: boolean, accent: keyof typeof NAV_ACTIVE) {
   void accent; // accent mantido por compatibilidade; o ativo agora é sempre a pill preta
   return `${NAV_BASE} ${active ? NAV_ACTIVE_PILL : NAV_IDLE}`;
@@ -2359,7 +2361,10 @@ export default function HomeworkPage({
           onMouseEnter={() => setIsSidebarOpen(true)}
           onMouseLeave={() => setIsSidebarOpen(false)}
           animate={{ width: isSidebarOpen ? 180 : 54 }}
-          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)] bg-[rgba(22,22,34,0.55)] border-white/10 overflow-hidden transition-all duration-500 ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
+          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-all duration-500
+            bg-gradient-to-b from-sky-100/90 to-blue-200/80 border-blue-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]
+            dark:from-transparent dark:to-transparent dark:bg-[rgba(22,22,34,0.55)] dark:border-white/10 dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)]
+            ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
           <div className="flex flex-col gap-3 px-2.5">
             {/* Sala de Estudos — topo da sidebar */}
