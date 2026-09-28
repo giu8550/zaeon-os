@@ -16,6 +16,7 @@ import GlobalClickSound from "@/components/main/GlobalClickSound";
 import { Navbar } from "@/components/main/navbar";
 // 🔥 Chat global da Zaeon (IA + Colegas/Professores, troca de lado).
 import { LoungeChatWidget } from "@/components/sub/LoungeChatWidget";
+import { RegistrarSW } from "@/components/pwa/RegistrarSW";
 
 import "../src/i18n";
 import "./globals.css";
@@ -108,6 +109,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   em qualquer lugar da aplicação (acima de todos os providers).
                 */}
                 <GlobalClickSound />
+                {/* Service worker (public/sw.js): só registra em produção. */}
+                <RegistrarSW />
 
                 <ThemeProvider
                     attribute="class"
