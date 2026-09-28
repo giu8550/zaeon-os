@@ -145,7 +145,10 @@ export default function HeroPage() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="relative flex flex-col items-start justify-center"
         >
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.08] z-10 relative">
+            {/* Uma linha só, sem quebrar: tamanho FLUÍDO (clamp por vw) cresce com a tela
+                e encolhe no mobile em vez de quebrar a frase. whitespace-nowrap trava a
+                linha inteira (inclusive os espaços entre as palavras). */}
+            <h1 className="whitespace-nowrap text-[clamp(1.5rem,5.4vw,5.25rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
               <span aria-hidden="true">
                 <MolecularText text="Aqui ninguém" />
