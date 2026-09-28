@@ -76,4 +76,24 @@ do web — funciona, mas divide CPU/RAM com o site).
 - **Sala de Estudos (chat da Aura):** ainda é streaming no cliente (não sobrevive a sair).
   Migrar pro mesmo padrão (job + sessão + resume) é a fase 2.
 - **Multi-réplica:** já suportado (a fila serializa); é só subir mais containers `worker`.
+
+## Fase 2 — Studio (Sala de Estudos)
+
+Mapa do que sobrevive a "sair da sala":
+
+| Artefato | Antes | Agora |
+|---|---|---|
+| **Podcast / Vídeo** | já era background (`void runPodcastGeneration`) | igual — sobrevive (fire-and-forget no Node do VPS) |
+| **Mapa mental / Guia / FAQ / Flashcards** | inline (morria ao sair) | **background** (fire-and-forget) + cliente faz polling |
+| **Imagem** | inline | ainda inline (rápida; o render depende de `dataUrl`) — follow-up |
+| **Molécula** | síncrona/instantânea (PubChem) | inalterada (não precisa) |
+
+O padrão fire-and-forget funciona porque o `web`/`worker` é Node de processo longo (não
+serverless): uma promise não-aguardada continua após a resposta. Para robustez a
+restart (retry/durabilidade), o passo seguinte é rotear o Studio pela MESMA fila BullMQ
+da pesquisa — o `StudioArtifact.status` (queued/running/done) já está pronto pra isso.
+
+**Chat da Aura (harness):** continua streaming ao vivo (melhor pro caso comum de estar
+na sala). Torná-lo retomável exige persistir cada turno como sessão (como o scholar) —
+fase 3.
 ```

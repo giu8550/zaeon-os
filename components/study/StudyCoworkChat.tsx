@@ -464,10 +464,23 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         if (res.ok && data?.dataUrl) fire({ studioKind: "image", title: data.title || "Imagem", data: data.meta, dataUrl: data.dataUrl });
         else if (!silencioso) avisarFalha(data?.error);
       } else {
+        // text kinds (mindmap/guide/faq/flashcards): agora rodam em BACKGROUND no servidor
+        // (fire-and-forget) → o POST volta "queued" e a gente faz polling até "done", igual
+        // a podcast/vídeo. Assim, sair da sala não interrompe a geração. Cache hit já volta
+        // "done" com meta na hora.
         const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic, force: true }) });
         const data = await res.json().catch(() => null);
-        if (res.ok && data?.meta) fire({ studioKind: kind, title: data.title, data: data.meta });
-        else if (!silencioso) avisarFalha(data?.error);
+        if (!res.ok || !data?.id) { if (!silencioso) avisarFalha(data?.error); return; }
+        if (data.status === "done" && data.meta) { fire({ studioKind: kind, title: data.title, data: data.meta }); return; }
+        const started = Date.now();
+        while (Date.now() - started < 5 * 60_000) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const rr = await fetch(`/api/studio/${data.id}`);
+          const d = await rr.json().catch(() => null);
+          if (!d) continue;
+          if (d.status === "done") { fire({ studioKind: kind, title: d.title, data: d.meta }); return; }
+          if (d.status === "error") { if (!silencioso) avisarFalha(d?.error); return; }
+        }
       }
     } catch {
       if (!silencioso) avisarFalha();
