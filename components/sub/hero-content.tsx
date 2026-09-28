@@ -137,13 +137,13 @@ export default function HeroPage() {
           opacity: 1,
         }}
         transition={{ type: "spring", stiffness: 90, damping: 20 }}
-        className="flex flex-col items-center text-center max-w-4xl mx-auto z-10 w-full origin-center"
+        className="flex flex-col items-start text-left max-w-4xl self-start z-10 w-full origin-center"
       >
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="relative flex flex-col items-center justify-center"
+          className="relative flex flex-col items-start justify-center"
         >
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.08] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
@@ -193,7 +193,7 @@ export default function HeroPage() {
                 transition={{ duration: 0.4, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                  <p className="max-w-2xl mx-auto text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
+                  <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
                     Todas as IAs num lugar só — GPT, Claude, Gemini, Grok e mais — num
                     sistema onde você não só conversa, você{" "}
                     <span className="text-slate-800 dark:text-slate-200 font-normal">
@@ -214,7 +214,7 @@ export default function HeroPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, filter: "blur(10px)" }}
               transition={{ duration: 0.4, delay: 0.2 }}
-              className="mt-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center justify-center"
+              className="mt-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center justify-start"
             >
               {/* Mesmo material do "Iniciar", em vidro TINGIDO: vidro incolor aqui
                   derrubaria a hierarquia e este é o primário da página. */}
@@ -242,7 +242,7 @@ export default function HeroPage() {
 
         {/* Badges de confiança (padrão ChipFlow) */}
         {!showChatbox && (
-          <ul className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+          <ul className="mt-8 flex flex-wrap items-center justify-start gap-x-6 gap-y-3">
             {["Grátis para começar", "Sem cartão", "Todas as IAs num lugar só"].map((b) => (
               <li key={b} className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15">

@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 
 import HeroPage from "@/components/sub/hero-content";
 import Encryption from "@/components/main/encryption";
+import Faq from "@/components/main/Faq";
 import StudyRoomsPage from "@/app/study-rooms/page";
 import IntroOverlay from "@/src/components/main/intro-overlay";
 import { Footer } from "@/components/main/footer";
@@ -81,6 +82,7 @@ export default function Home() {
                                 <StudyRoomsPage />
                             </Suspense>
                         </div>
+                        <Faq />
                     </div>
 
                     <Footer />
