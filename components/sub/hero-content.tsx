@@ -120,7 +120,7 @@ export default function HeroPage() {
   }, [status]);
 
   return (
-    <main className="w-full flex flex-col items-center justify-center text-center relative zaeon-borda min-h-[86vh] pt-12 md:pt-16 pb-20 md:pb-28 overflow-hidden transition-colors duration-700 font-sans">
+    <main className="w-full flex flex-col items-center justify-center text-center relative zaeon-borda min-h-[86vh] pt-28 md:pt-40 pb-20 md:pb-28 overflow-hidden transition-colors duration-700 font-sans">
 
       {/* BACKGROUND LIMPO - Apenas o StarBackground visível */}
       <div className="absolute inset-0 z-0 pointer-events-none">
