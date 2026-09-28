@@ -148,7 +148,7 @@ export default function HeroPage() {
             {/* Uma linha só, sem quebrar: tamanho FLUÍDO (clamp por vw) cresce com a tela
                 e encolhe no mobile em vez de quebrar a frase. whitespace-nowrap trava a
                 linha inteira (inclusive os espaços entre as palavras). */}
-            <h1 className="whitespace-nowrap text-[clamp(1.5rem,5.4vw,5.25rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] z-10 relative">
+            <h1 className="whitespace-nowrap text-[clamp(1.25rem,4.4vw,4rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
               <span aria-hidden="true">
                 <MolecularText text="Aqui ninguém" />
@@ -270,7 +270,7 @@ export default function HeroPage() {
             animate={{ opacity: 1, y: -20, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.1 }}
-            className="w-full max-w-[520px] self-start z-20 mt-0 relative origin-center text-left"
+            className="w-full max-w-[520px] self-start z-20 mt-12 md:mt-16 relative origin-center text-left"
           >
             {/* Menu alinhado à ESQUERDA da coluna (antes ficava centralizado junto de um
                 card de "Convide" à direita, o que deixava o conjunto assimétrico). O
