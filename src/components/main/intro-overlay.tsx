@@ -51,36 +51,6 @@ export default function MacSplash({ show = true, onDone }: Props) {
         setMounted(true);
     }, []);
 
-    // Quem pediu menos movimento no sistema fica no poster, sem vídeo. Vale
-    // também como rede: no Modo de Baixo Consumo o iOS bloqueia autoplay de
-    // qualquer forma, e nesse caso o poster é o que a pessoa vê.
-    // Dois masters, não um: o material original é 4:5 em pé. O master retrato
-    // mantém o enquadramento com moldura; o master paisagem é corte real, o
-    // vídeo deitado preenchendo a tela inteira — em pé no meio do monitor vira
-    // um totem com borrão dos lados.
-    // O critério é PROPORÇÃO, não largura: um celular deitado é largo e
-    // precisa do master paisagem; uma janela estreita no desktop precisa do
-    // retrato. Largura sozinha erra os dois casos.
-    const [ehRetrato, setEhRetrato] = useState(false);
-    useEffect(() => {
-        const mq = window.matchMedia("(max-aspect-ratio: 1/1)");
-        const sync = () => setEhRetrato(mq.matches);
-        sync();
-        mq.addEventListener("change", sync);
-        return () => mq.removeEventListener("change", sync);
-    }, []);
-
-    const fundo = ehRetrato ? "mobile" : "desktop";
-
-    const [semMovimento, setSemMovimento] = useState(false);
-    useEffect(() => {
-        const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-        const sync = () => setSemMovimento(mq.matches);
-        sync();
-        mq.addEventListener("change", sync);
-        return () => mq.removeEventListener("change", sync);
-    }, []);
-
     // LOADING FUNCIONAL: enquanto a intro roda, pré-carrega de verdade o código das salas
     // (sobretudo a Sala de Pesquisa) → quando o usuário entra, já está pronto, sem espera.
     useEffect(() => {
@@ -208,14 +178,12 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 muted + playsInline não são opcionais — sem os dois o iOS recusa o
                 autoplay. A faixa já vem sem áudio do arquivo original. */}
             <div className="absolute inset-0 overflow-hidden bg-black" aria-hidden="true">
-                {/* Vídeo de fundo REMOVIDO — só o poster estático agora. Mais leve e
-                    sem decode de vídeo por cima da UI do intro (barra de progresso). */}
-                <img
-                    src={`/assets/intro-poster-${fundo}.jpg`}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover"
-                />
-                {/* Véu: garante contraste do "Iniciar" sobre QUALQUER frame do loop. */}
+                {/* Vídeo E poster REMOVIDOS. O poster era um frame exportado do vídeo
+                    antigo — sem o vídeo, ele ficava como "papel de parede" e parecia que
+                    o vídeo continuava ali. Agora é fundo preto com um brilho navy sutil
+                    no centro (tom da marca), sem imagem nenhuma. */}
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(30,58,95,0.35)_0%,rgba(0,0,0,0)_60%)]" />
+                {/* Véu: garante contraste do "Iniciar". */}
                 <div className="absolute inset-0 bg-black/45" />
                 {/* Vinheta: as bordas morrem no preto em vez de terminarem num corte. */}
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(0,0,0,0.78)_100%)]" />
