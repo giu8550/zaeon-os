@@ -21,7 +21,17 @@ export async function register() {
     return;
   }
 
-  const { Worker } = await import("bullmq");
+  // bullmq é opcional: import escondido do bundler (webpackIgnore) + try/catch, pra o boot
+  // NÃO quebrar quando o pacote não está instalado. Sem ele, o worker só não sobe.
+  let bull: any;
+  try {
+    const spec = "bull" + "mq";
+    bull = await import(/* webpackIgnore: true */ spec as any);
+  } catch {
+    console.warn("[worker] bullmq não instalado — worker não iniciado (rode `npm install`).");
+    return;
+  }
+  const { Worker } = bull;
   const { prisma } = await import("@/src/lib/prisma");
   const { runScholarPipeline } = await import("@/lib/scholar/pipeline");
 
