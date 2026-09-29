@@ -47,7 +47,9 @@ services:
       # Sala de Pesquisa em BACKGROUND: o web só ENFILEIRA (SCHOLAR_WORKER=0); quem roda
       # o pipeline até o fim é o serviço `worker` abaixo. Assim, sair da sala não para a
       # pesquisa — o worker continua e o cliente reengata pela sessão no banco.
-      SCHOLAR_BG: "1"
+      # BACKGROUND da Sala de Pesquisa: DESLIGADO por enquanto (modo inline, já testado).
+      # Pra ligar: mude SCHOLAR_BG p/ "1" AQUI e suba o worker com `--profile worker`.
+      SCHOLAR_BG: "0"
       SCHOLAR_WORKER: "0"
     depends_on:
       redis: { condition: service_started }
@@ -73,6 +75,10 @@ services:
   # exposto (não recebe HTTP público). Se faltar RAM no VPS, dá pra desligar este serviço
   # e setar SCHOLAR_WORKER=1 no próprio web (o worker roda no processo do web).
   worker:
+    # NÃO sobe por padrão (profile "worker"): o background está OFF até validarmos.
+    # Ligar depois: `docker compose -f docker-compose.beta.yml --profile worker up -d worker`
+    # + SCHOLAR_BG="1" no serviço web.
+    profiles: ["worker"]
     build:
       context: .
       dockerfile: Dockerfile
