@@ -29,6 +29,12 @@ import { motion } from "framer-motion";
 
 type Casa = { slug: string; nome: string };
 
+// Logos de fabricante que REALMENTE existem em public/assets/models/<slug>.svg.
+// Não desenhamos marca de terceiro à mão (press kit only), então quem não está aqui
+// aparece só com o nome — e a gente NÃO pede o arquivo (evita 404 no console).
+// Ao adicionar um .svg oficial na pasta, inclua o slug aqui.
+const COM_LOGO = new Set<string>(["anthropic"]);
+
 const CASAS: Casa[] = [
     { slug: "openai", nome: "OpenAI" },
     { slug: "anthropic", nome: "Anthropic" },
@@ -98,7 +104,7 @@ function Selo({ casa }: { casa: Casa }) {
 
     return (
         <span className="flex shrink-0 items-center gap-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/[0.04] backdrop-blur-sm px-4 py-3">
-            {falhou ? null : (
+            {falhou || !COM_LOGO.has(casa.slug) ? null : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                     src={`/assets/models/${casa.slug}.svg`}
