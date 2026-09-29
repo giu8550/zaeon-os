@@ -142,7 +142,13 @@ vira card com imagem emoldurada; LLM falho → card de erro amigável, nada queb
 **Flag:** `CADERNO_ENABLED` (on em dev, off em prod até validar).
 **Risco:** LLM gerar primitivas ruins → validador + fallback imagem; estética inconsistente →
 tudo passa pelo `compile()` do tema (o LLM não desenha, ele descreve).
-**FONTES:** _(cole aqui repos de generative/manuscript SVG, hachura, ink animation, caligrafia)_
+**FONTES:**
+- `Shannon-Labs/davinci-codex` — reconstruções reproduzíveis das invenções do Da Vinci:
+  referência de ESTÉTICA (traço/prancha) e do ethos empírico/reproduzível.
+- `blader/humanizer` — skill com 25 padrões anti-"cara de IA": usar pra VOZ do harness
+  (aluno na Sala de Estudos, doutor na Pesquisa). Vira persona/prompt do tema Caderno.
+- _(dono: cole repos de manuscript/generative SVG, hachura, ink animation, caligrafia)_
+- **Semente em dev:** `app/viz-lab/page.tsx` (prancha Caderno estática já rodando).
 
 ---
 
@@ -195,7 +201,12 @@ começa fechada e a área é ampla.
 
 **Flag:** `NEXT_PUBLIC_VIZ_LAB` (dev) + `CANVAS_CONVERSA` (desktop).
 **Risco:** perf/estética → começar simples (SVG), teto de nós visíveis, culling se precisar.
-**FONTES:** _(cole repos de Obsidian-graph/force-graph, generative ink, canvas/particles)_
+**FONTES:**
+- `bruin-data/dac` — dashboards **declarativos** (spec YAML/TSX → render) feitos p/ agentes,
+  com semantic layer. Lição: o padrão "**spec → viz revisável**" (não LLM cuspindo SVG cru);
+  inspiração de layout/widgets, não adotar o tool (é Go+React próprio).
+- _(dono: cole repos de Obsidian-graph/force-graph, generative ink, canvas/particles)_
+- **Semente em dev:** `app/viz-lab/page.tsx` (canvas da conversa estático já rodando).
 
 ---
 
