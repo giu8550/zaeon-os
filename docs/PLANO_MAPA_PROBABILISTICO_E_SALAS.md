@@ -54,98 +54,148 @@ interface MapaProbabilistico { id; ownerId; surface: "estudos"|"pesquisa"; scope
 (`lib/agent/trajectory.ts`, `buildHarnessDeps`), o Studio (`/api/studio/*`) e o handoff
 mobile já escrito (`docs/AGENTE_FASE3_CHAT_RETOMAVEL_E_MOBILE.md`).
 
+### 0.1 Tema "Caderno" — o tema de harness artístico da Zaeon (manuscrito Da Vinci moderno)
+**Nome oficial do tema: `Caderno`.** É um **tema de harness** da Zaeon (não só um CSS): rege
+como o agente ESCREVE e o que ele DESENHA. Deve ser um tema selecionável/identificável no
+código (ex.: `harnessTheme: "caderno"`), pra no futuro coexistir com outros temas.
+Isto NÃO é um SVG genérico. O output visual do chat tem **assinatura artística** — rápida,
+avançada e notoriamente bonita. Referência-mãe: os **cadernos/manuscritos de Da Vinci**.
+- **Traço:** desenho a tinta, hachura (sombreado por linhas), contornos rebuscados, estudo
+  anatômico/mecânico; sensação de "esboço de gênio", não clipart.
+- **Paleta:** tinta sépia/ferrogálica sobre papel envelhecido; acentos discretos da casa
+  (o cyan/azul) só onde faz sentido. Suporta claro/escuro.
+- **Tipografia/anotações:** marginalia manuscrita (fonte tipo caligrafia/itálico antigo)
+  como legendas dos desenhos; toques de "escrita espelhada" como detalhe, sem atrapalhar a
+  leitura. **Legibilidade atual acima de tudo.**
+- **Velocidade:** o efeito "artístico" não pode custar segundos. Preferir SVG + CSS/animação
+  de "tinta surgindo" (stroke-dashoffset) a rasterização pesada; imagem só no fallback.
+- **Regra:** rebuscado no ESTILO, limpo na LEITURA. Nunca sacrificar clareza pela estética.
+
+### 0.2 Base de layout — DECIDIR AGORA (pra não quebrar dimensionamento depois)
+- **Desktop:** a **aba de documentos nasce FECHADA** → a área de conversa/canvas é **ampla**
+  por padrão. O usuário abre os documentos quando quiser. Todo componente novo assume tela
+  larga como estado default.
+- **Canvas da conversa (estilo Obsidian):** o chat vai desenhando um **grafo da própria
+  conversa** (nós = mensagens/tópicos/artefatos; arestas = relação/ordem). **Sem formato de
+  cérebro ainda** — isso é PR2. Aqui é só o grafo da conversa + o estilo Da Vinci.
+- **Mobile:** **SEM canvas.** Só o essencial: os **desenhos rebuscados** (PR0) embutidos nas
+  respostas + a **escrita** manuscrita. Simples, uma coluna, foco em ler e gerar.
+- Consequência prática: separar desde já `CanvasConversa` (desktop-only) de `SketchArtístico`
+  (desktop + mobile). Nada de canvas no bundle mobile.
+
 ---
 
 ## PR 0 — Spike: "desenhar qualquer assunto" no harness (foco mobile)
 
-**Objetivo:** hoje o harness só gera **molécula** (química, via PubChem). Generalizar para
-um agente que **desenha na tela qualquer assunto** relacionado à pergunta; quando não
-souber desenhar, cai num **card com imagem** relacionada. É o experimento que prova que
-"arte + código" viram visual útil no chat. **Sem data engineering.**
+**Objetivo:** hoje o harness só gera **molécula** (química, via PubChem). Generalizar para um
+agente que produz uma **prancha "Caderno"** (estilo manuscrito Da Vinci) de **qualquer
+assunto** relacionado à pergunta — desenho a tinta + hachura + marginalia manuscrita; quando
+não der pra desenhar, cai num **card com imagem** relacionada, mas ainda emoldurado no tema
+Caderno. É o experimento que prova o **tema Caderno** e o pipeline "arte + código".
+**Sem data engineering.**
 
-**Por quê primeiro:** é pequeno, isolado, e valida a estética/o pipeline visual que as
+**Por quê primeiro:** é pequeno, isolado, e crava a **assinatura visual (Caderno)** que as
 PRs 1–5 vão reusar.
 
 **Escopo — ENTRA:**
-- Novo "studio kind" `sketch` (desenho vetorial genérico) no mesmo padrão do `molecule`.
-- Geração: LLM produz um **SVG semântico** (ou um JSON de primitivas → SVG) do assunto —
-  diagramas simples, esquemas, ícones conceituais. Nada de 3D.
-- Fallback: se o modelo não conseguir um SVG bom (heurística de validação), gera/anexa uma
-  **imagem** (reusa `/api/studio/image`) num **card** com legenda.
-- Render mobile-first: `StudioBlock` ganha um caso `sketch` (SVG responsivo, largura total).
+- Novo "studio kind" `caderno` (prancha manuscrita) no mesmo padrão do `molecule`.
+- Tema `Caderno` como módulo próprio: `lib/harness/caderno/` (tokens de cor/tinta/papel,
+  fontes de caligrafia, presets de hachura, animação de "tinta surgindo" via
+  stroke-dashoffset). Reutilizável por PR1 (canvas) e pelo texto do chat.
+- Geração: LLM produz **JSON de primitivas semânticas** (formas + rótulos + hachura) →
+  compilado pra **SVG Caderno** (não pedir SVG cru ao LLM: mais rápido, seguro e consistente).
+  Nada de 3D.
+- Fallback: sem prancha boa (validador), gera/anexa **imagem** (`/api/studio/image`) num card
+  com moldura e legenda manuscrita.
+- Render mobile-first: `StudioBlock` ganha o caso `caderno` (SVG responsivo, largura total).
+- **Rápido:** meta de < ~2s pro traço aparecer; animação por CSS, não rasterização pesada.
 
 **Escopo — NÃO ENTRA:** mapa/cérebro, memória, realtime, edição de TCC. É só "desenhar 1
 coisa".
 
 **Arquivos:**
-- `lib/studio/sketch.ts` — `gerarSketch(topic): {svg} | {precisaImagem:true, promptImagem}`.
-- `app/api/studio/sketch/route.ts` — espelha `molecule/route.ts` (fire-and-forget + status).
-- `components/studio/StudioBlock.tsx` — render do `sketch` + card de imagem fallback.
-- `components/study/StudyCoworkChat.tsx` — `runStudioAction("sketch", ...)` (poll já existe).
-- Prompt do harness (`lib/agent/*` / `lib/ai/personas`) — ensinar a Aura a chamar `sketch`
-  quando "desenhar/ilustrar/esquematizar" ajudar a resposta.
+- `lib/harness/caderno/` — o TEMA: `tokens.ts` (tinta/papel/cores), `fonts.ts` (caligrafia),
+  `hatching.ts` (presets de hachura), `compile.ts` (JSON de primitivas → SVG Caderno).
+- `lib/studio/caderno.ts` — `gerarCaderno(topic): {primitivas} | {precisaImagem, promptImagem}`.
+- `app/api/studio/caderno/route.ts` — espelha `molecule/route.ts` (fire-and-forget + status).
+- `components/studio/StudioBlock.tsx` — render do `caderno` (SVG animado) + card fallback.
+- `components/study/StudyCoworkChat.tsx` — `runStudioAction("caderno", ...)` (poll já existe).
+- Prompt do harness (`lib/agent/*` / `lib/ai/personas`) — ensinar a Aura a acionar `caderno`
+  quando "desenhar/ilustrar/esquematizar" ajudar; e a escrever no tom "Caderno".
 
 **Passos (curtos):**
-1. Definir o mini-DSL do SVG (lista de primitivas seguras: retângulo, círculo, seta,
-   rótulo, grupo, cor). Validador que rejeita SVG inseguro/quebrado.
-2. `gerarSketch()` chama o LLM (JSON estrito) → valida → devolve SVG ou pede imagem.
-3. Rota + kind no client + render no `StudioBlock`.
-4. Ensinar o harness a acionar (1 exemplo no prompt).
+1. Tema `Caderno`: tokens + fontes + hachura + `compile()` (JSON→SVG) com validador (rejeita
+   inseguro/`<script>`/quebrado).
+2. Definir o mini-DSL de primitivas SEGURAS (formas, seta, rótulo, hachura, grupo, cor).
+3. `gerarCaderno()` chama o LLM (JSON estrito) → valida → compila SVG ou pede imagem.
+4. Rota + kind no client + render animado no `StudioBlock` ("tinta surgindo").
+5. Ensinar o harness a acionar (1 exemplo no prompt).
 
-**Testes (vitest):** validador de SVG (aceita bom, rejeita ruído/`<script>`); `gerarSketch`
-com LLM mockado (caminho SVG e caminho fallback-imagem); contrato da rota (auth, status).
-Cobertura ≥80% nos arquivos novos.
+**Testes (vitest):** validador+`compile` (JSON bom→SVG; ruído/`<script>`→rejeita);
+`gerarCaderno` com LLM mockado (caminho prancha e caminho fallback-imagem); contrato da rota
+(auth, status). Cobertura ≥80% nos arquivos novos.
 
-**Critério de aceite:** no chat (desktop e mobile), pedir "desenhe o ciclo da água" mostra
-um SVG limpo; pedir algo não-desenhável mostra um card com imagem + legenda; nada quebra
-se o LLM falhar (card de erro amigável).
+**Critério de aceite:** no chat (desktop e mobile), pedir "desenhe o ciclo da água" mostra uma
+**prancha Caderno** (traço a tinta + legenda manuscrita) surgindo rápido; algo não-desenhável
+vira card com imagem emoldurada; LLM falho → card de erro amigável, nada quebra.
 
-**Flag:** `SKETCH_ENABLED` (default on em dev, off em prod até validar).
-**Risco:** LLM gerar SVG feio/inválido → mitigar com validador + fallback imagem.
-**FONTES:** _(cole aqui repos de "text-to-SVG", diagram-as-code, generative SVG)_
+**Flag:** `CADERNO_ENABLED` (on em dev, off em prod até validar).
+**Risco:** LLM gerar primitivas ruins → validador + fallback imagem; estética inconsistente →
+tudo passa pelo `compile()` do tema (o LLM não desenha, ele descreve).
+**FONTES:** _(cole aqui repos de generative/manuscript SVG, hachura, ink animation, caligrafia)_
 
 ---
 
-## PR 1 — Data-viz: arte + código (SÓ forma e beleza, zero data engineering)
+## PR 1 — Canvas da conversa (estilo Obsidian) no tema Caderno (SÓ forma e beleza)
 
-**Objetivo:** aprender e montar a **linguagem visual** do cérebro/mapa — o "como desenhar
-dados bonitos na tela". Entregar **componentes visuais reutilizáveis** com dados **fake/mock**.
+**Objetivo:** o chat vai desenhando um **canvas da própria conversa** — um grafo estilo
+**Obsidian** (nós = mensagens/tópicos/artefatos; arestas = ordem/relação), renderizado no
+**tema Caderno**. **Sem formato de cérebro** (isso é PR2). **Zero data engineering:** dados
+**mock** e foco em forma, beleza e o "output" visual do harness.
 
-**Por quê:** separar beleza de dados. Primeiro a forma fica linda e performática; só depois
-(PR2) ligamos dados/memória reais.
+**Por quê:** separar beleza de dados; e fixar a base de layout (desktop/mobile) antes de
+qualquer coisa real, pra não quebrar dimensionamento depois.
+
+**Base de layout (cravar aqui):**
+- **Desktop:** aba de documentos **fechada por padrão** → conversa/canvas **amplos**. O canvas
+  vive nessa área ampla (ou num painel lateral que o usuário abre).
+- **Mobile:** **sem canvas.** Só respostas (com as pranchas Caderno da PR0) + escrita. O
+  `CanvasConversa` é **desktop-only** e não entra no bundle mobile.
 
 **Escopo — ENTRA:**
-- `components/viz/BrainMap.tsx` — o cérebro como grafo/canvas: nós coloridos por região,
-  arestas, brilho/glow, animação de "preenchimento" (nó acende), pan/zoom, hover/tap.
-- Paleta e tokens visuais (`lib/viz/theme.ts`): cores por tipo/estado, efeitos (glow,
-  gradiente, blur), respeitando claro/escuro e o glossy-blue da casa.
-- Playground `app/viz-lab/page.tsx` (dev-only, atrás de flag) com dados MOCK pra iterar a
-  estética.
-- Escolha da tecnologia de render: **Canvas 2D** ou **SVG** (para grafos médios) e/ou
-  `three.js` (já disponível) só se o cérebro 3D valer a pena — decidir no PR e documentar.
+- `components/viz/CanvasConversa.tsx` — grafo da conversa (Obsidian-like) no tema Caderno:
+  nós "papel", arestas a tinta, hachura, pan/zoom, hover/tap. **Desktop-only.**
+- Reuso do tema `Caderno` da PR0 (`lib/harness/caderno/`) — mesma tinta/papel/fontes.
+- `lib/viz/layout.ts` — posicionamento (força dirigida) determinístico e testável.
+- Playground `app/viz-lab/page.tsx` (dev, atrás de flag) com uma conversa MOCK.
+- Decisão de render documentada: **Canvas 2D** (perf) vs **SVG** (fidelidade Caderno) — provável
+  SVG p/ poucos nós, Canvas se escalar.
 
-**Escopo — NÃO ENTRA:** ligação com harness, memória, dados reais, persistência. Tudo mock.
+**Escopo — NÃO ENTRA:** cérebro/regiões, harness, memória, dados reais, persistência, mobile
+canvas. Tudo mock e desktop.
 
-**Arquivos:** `components/viz/BrainMap.tsx`, `components/viz/nodes/*`, `lib/viz/theme.ts`,
-`lib/viz/layout.ts` (posicionamento dos nós — força/anatômico), `app/viz-lab/page.tsx`.
+**Arquivos:** `components/viz/CanvasConversa.tsx`, `lib/viz/layout.ts`, `app/viz-lab/page.tsx`,
+(reusa `lib/harness/caderno/*`). Base de layout: garantir aba de docs fechada por default no
+container de desktop.
 
 **Passos:**
-1. Definir o alvo visual (referência do dono) + escolher Canvas vs SVG vs 3D.
-2. Layout dos nós (força dirigida OU mapa anatômico fixo do cérebro).
-3. Estados/cores/efeitos (acender, pulsar, completar) — puramente visual.
-4. Interações: pan, zoom, tap/hover mostra rótulo; mobile-first (gesto de pinça).
-5. Playground com botões pra simular "completar X%".
+1. Escolher render (SVG vs Canvas) + alvo visual (referência do dono).
+2. `layout.ts` (força dirigida) determinístico.
+3. Nós/arestas no tema Caderno (tinta surgindo, papel, hachura).
+4. Interações desktop: pan, zoom, tap mostra a mensagem/rótulo.
+5. Playground com conversa mock + botão "adicionar nó" pra ver crescer.
 
-**Testes:** `lib/viz/layout.test.ts` (determinístico: mesmos nós → mesmas posições);
-`lib/viz/theme.test.ts` (mapeia tipo/estado→cor certo). UI: BrainMap renderiza N nós/arestas
-mock sem erro; snapshot leve. Perf: 200 nós a 60fps no desktop, degradar suave no mobile.
+**Testes:** `layout.test.ts` (mesmos nós → mesmas posições); tema Caderno (tipo→estilo certo);
+`CanvasConversa` renderiza N nós/arestas mock sem erro; **teste que garante canvas AUSENTE no
+caminho mobile**. Perf: ~150 nós fluido no desktop.
 
-**Critério de aceite:** abrir `/viz-lab`, ver um cérebro bonito com nós/ligações mock,
-completar % anima o preenchimento, funciona no toque. Nenhuma dependência de dados reais.
+**Critério de aceite:** em `/viz-lab` (desktop), ver o grafo da conversa mock crescendo no
+estilo Caderno, com pan/zoom; no mobile, o canvas não aparece (só o conteúdo). Aba de docs
+começa fechada e a área é ampla.
 
-**Flag:** `NEXT_PUBLIC_VIZ_LAB` (dev).
-**Risco:** performance com muitos nós → começar com Canvas + culling; teto de nós visíveis.
-**FONTES:** _(cole repos de generative art, força-dirigida, canvas/particles, shaders)_
+**Flag:** `NEXT_PUBLIC_VIZ_LAB` (dev) + `CANVAS_CONVERSA` (desktop).
+**Risco:** perf/estética → começar simples (SVG), teto de nós visíveis, culling se precisar.
+**FONTES:** _(cole repos de Obsidian-graph/force-graph, generative ink, canvas/particles)_
 
 ---
 
@@ -166,8 +216,9 @@ conversa preenche uma região; a completude é medida e usada nas decisões do a
   próximo passo (ex.: "faltam 2 comprovações e 1 experimento pra aplicar").
 - **Universalidade + role:** o gerador entende qualquer assunto (música incluída) e ajusta o
   objetivo pelo papel (student/teacher/researcher).
-- **UI:** o `BrainMap` (PR1) agora ao lado de cada estudo/pesquisa, com dados REAIS; tap num
-  nó abre as mensagens/artefatos guardados ali.
+- **UI:** o **formato-cérebro nasce aqui** (`BrainMap`), evoluindo o `CanvasConversa` da PR1
+  (mesmo tema Caderno) para regiões cerebrais com dados REAIS ao lado de cada estudo/pesquisa;
+  tap num nó abre as mensagens/artefatos guardados ali. Desktop-only (mobile é PR4).
 
 **Escopo — NÃO ENTRA:** edição de TCC cross-sala (PR3), mobile (PR4), realtime (PR5).
 
