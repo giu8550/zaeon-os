@@ -90,9 +90,11 @@ const nextConfig = {
         serverActions: {
             bodySizeLimit: '20mb',
         },
-        // Liga o instrumentation.ts (Next 14) — usado pra subir o worker de fundo
-        // da Sala de Pesquisa (BullMQ) dentro do runtime do servidor.
-        instrumentationHook: true,
+        // Liga o instrumentation.ts (Next 14) SÓ quando este processo é o worker
+        // (SCHOLAR_WORKER=1). No dev/web normal fica desligado → o instrumentation não é
+        // compilado e não arrasta Prisma/bullmq pro boot. O worker (container dedicado)
+        // sobe com SCHOLAR_WORKER=1 e aí o hook liga.
+        instrumentationHook: process.env.SCHOLAR_WORKER === "1",
         // @prisma/client + .prisma/client externos: o Next 14 tentava EMPACOTAR o Prisma
         // Client e puxava a variante wasm (erro "Can't resolve ./query_engine_bg.js"),
         // que estourou quando o instrumentation.ts passou a importar o Prisma no boot.
