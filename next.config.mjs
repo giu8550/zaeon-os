@@ -93,7 +93,11 @@ const nextConfig = {
         // Liga o instrumentation.ts (Next 14) — usado pra subir o worker de fundo
         // da Sala de Pesquisa (BullMQ) dentro do runtime do servidor.
         instrumentationHook: true,
-        serverComponentsExternalPackages: ["canvas", "sharp", "bullmq", "ioredis"],
+        // @prisma/client + .prisma/client externos: o Next 14 tentava EMPACOTAR o Prisma
+        // Client e puxava a variante wasm (erro "Can't resolve ./query_engine_bg.js"),
+        // que estourou quando o instrumentation.ts passou a importar o Prisma no boot.
+        // Marcá-los como externos = Next não empacota, usa o require de runtime (o correto).
+        serverComponentsExternalPackages: ["canvas", "sharp", "bullmq", "ioredis", "@prisma/client", ".prisma/client", "prisma"],
         // Tree-shaking dos barrels pesados (framer-motion/recharts são usados em todo
         // lugar) → bundle inicial menor, telas abrindo mais rápido. lucide/heroicons já
         // têm o modularizeImports acima; incluí-los aqui também é seguro.
