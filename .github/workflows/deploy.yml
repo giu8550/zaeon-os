@@ -52,6 +52,10 @@ on:
         description: "Rodar prisma db push (migra schema no Atlas)"
         type: boolean
         default: true
+      deploy_branch:
+        description: "Branch a implantar (default main). Ex.: aura/base-coworking-harness p/ testar sem passar pelo main."
+        type: string
+        default: "main"
 
 concurrency:
   group: deploy-vps
@@ -86,6 +90,8 @@ jobs:
           # opções (push usa defaults; dispatch respeita os inputs)
           WITH_VOICE: ${{ github.event.inputs.with_voice || vars.DEPLOY_WITH_VOICE || 'false' }}
           DB_PUSH: ${{ github.event.inputs.db_push || 'true' }}
+          # Branch a implantar (push→main; dispatch pode escolher outra, ex.: aura p/ testar).
+          DEPLOY_BRANCH: ${{ github.event.inputs.deploy_branch || 'main' }}
           # URL pública do app → vira NEXTAUTH_URL no compose (redirect do Google).
           APP_URL: ${{ vars.APP_URL || 'https://75-119-140-97.sslip.io' }}
           # Hostnames do Caddy. O Caddy exige vírgula + ESPAÇO entre site addresses:
@@ -108,7 +114,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 25m
-          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH,APP_URL,BETA_DOMAIN,ACME_EMAIL
+          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH,DEPLOY_BRANCH,APP_URL,BETA_DOMAIN,ACME_EMAIL
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -125,9 +131,9 @@ jobs:
               echo "  swap já existe."
             fi
 
-            echo "→ Atualizando código (main)…"
+            echo "→ Atualizando código (branch: ${DEPLOY_BRANCH})…"
             git fetch --all --prune
-            git reset --hard origin/main
+            git reset --hard "origin/${DEPLOY_BRANCH}"
             export GIT_SHA="$(git rev-parse --short HEAD)"
             echo "-> Commit no deploy: $GIT_SHA"
 
