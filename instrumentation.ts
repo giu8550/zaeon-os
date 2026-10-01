@@ -1,94 +1,27 @@
 /**
  * instrumentation.ts — roda UMA vez no boot do servidor Next (register()).
  *
- * Aqui a gente sobe o WORKER de fundo da Sala de Pesquisa (BullMQ) — mas SÓ quando
+ * Aqui a gente sobe os WORKERS de fundo (BullMQ) — Sala de Pesquisa (fila "scholar") e
+ * chat da Aura (fila "chat", Fase 3) — mais o reaper de jobs presos. SÓ quando
  * SCHOLAR_WORKER=1. Assim o mesmo build serve pra:
  *   - web (SCHOLAR_WORKER=0): só atende HTTP e ENFILEIRA jobs;
  *   - worker dedicado (SCHOLAR_WORKER=1): consome a fila e roda o pipeline até o fim,
  *     independente do cliente estar na sala ou não.
  *
  * Nada acontece sem REDIS_URL (isQueueEnabled=false) nem fora do runtime nodejs.
+ * O corpo mora em instrumentation-node.ts (ver lá por que).
  */
-import type { ScholarJobData } from "@/lib/queue/scholar";
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  // Worker dos turnos de agente do canal coworking (CANAL_QUEUE=1 + CANAL_WORKER=1 + REDIS_URL).
-  // Independente do SCHOLAR_WORKER; sem as envs, os turnos rodam inline no web (lib/canal/queue.ts).
+  // Worker dos turnos de agente do canal coworking (CANAL_WORKER=1 + CANAL_QUEUE=1 + REDIS_URL):
+  // independente do SCHOLAR_WORKER; sem as envs, os turnos rodam inline no web (lib/canal/queue.ts).
   if (process.env.CANAL_WORKER === "1") {
-    try {
-      const { iniciarWorkerCanal } = await import("@/lib/canal/queue");
-      if (!(await iniciarWorkerCanal())) console.warn("[canal-worker] CANAL_WORKER=1 mas fila desligada (CANAL_QUEUE=1 + REDIS_URL) — não iniciado.");
-    } catch (e) { console.warn("[canal-worker] não iniciado:", (e as Error)?.message); }
+    const { iniciarWorkerCanalOpcional } = await import("./instrumentation-node");
+    await iniciarWorkerCanalOpcional();
   }
-  if (process.env.SCHOLAR_WORKER !== "1") return;
-
-  const { getRedisConnection, isQueueEnabled, SCHOLAR_QUEUE } = await import("@/lib/queue/scholar");
-  if (!isQueueEnabled()) {
-    console.warn("[worker] SCHOLAR_WORKER=1 mas sem REDIS_URL — worker não iniciado.");
-    return;
+  if (process.env.SCHOLAR_WORKER === "1") {
+    const { iniciarWorkers } = await import("./instrumentation-node");
+    await iniciarWorkers();
   }
-
-  // bullmq é opcional: import escondido do bundler (webpackIgnore) + try/catch, pra o boot
-  // NÃO quebrar quando o pacote não está instalado. Sem ele, o worker só não sobe.
-  let bull: any;
-  try {
-    const spec = "bull" + "mq";
-    bull = await import(/* webpackIgnore: true */ spec as any);
-  } catch {
-    console.warn("[worker] bullmq não instalado — worker não iniciado (rode `npm install`).");
-    return;
-  }
-  // Tipo ESTRUTURAL local (só o que usamos do Worker): `bullmq` é opcional/lazy e pode não estar
-  // no node_modules de quem roda `tsc` — `typeof import("bullmq")` quebrava o portão de tipos
-  // (TS2307 + `any` implícito). Assim o tsc independe de o pacote estar instalado.
-  type JobLike = { id?: string; data: ScholarJobData };
-  type WorkerLike = { on(ev: "failed", fn: (job: JobLike | undefined, err: Error) => void): void; on(ev: "completed", fn: (job: JobLike) => void): void };
-  const { Worker } = bull as {
-    Worker: new (name: string, proc: (job: JobLike) => Promise<void>, opts: Record<string, unknown>) => WorkerLike;
-  };
-  const { prisma } = await import("@/src/lib/prisma");
-  const { runScholarPipeline } = await import("@/lib/scholar/pipeline");
-
-  const connection = getRedisConnection()!;
-  const concurrency = Number(process.env.SCHOLAR_WORKER_CONCURRENCY || 3);
-
-  // Persiste cada evento de progresso na própria sessão (fonte da verdade pro cliente
-  // reconectar). Poucos eventos por job → um write por evento é barato. `done`/`error`
-  // são tratados fora (o pipeline já grava o resultado final).
-  async function persistEvent(sessionId: string, ev: any) {
-    if (ev?.type === "done" || ev?.type === "error") return;
-    try {
-      const cur = await prisma.scholarSession.findUnique({ where: { id: sessionId }, select: { thread: true } });
-      const thread: any = (cur?.thread as any) ?? {};
-      const events = Array.isArray(thread.events) ? thread.events : [];
-      events.push(ev);
-      if (ev?.type === "answer") thread.answer = ev.text;
-      thread.events = events;
-      await prisma.scholarSession.update({ where: { id: sessionId }, data: { thread } });
-    } catch { /* progresso é best-effort; o resultado final é o que importa */ }
-  }
-
-  const worker = new Worker(
-    SCHOLAR_QUEUE,
-    async (job) => {
-      const { sessionId, prompt, room, isDeep } = job.data;
-      await prisma.scholarSession.update({ where: { id: sessionId }, data: { status: "running" } }).catch(() => {});
-      try {
-        await runScholarPipeline(sessionId, { prompt, room, isDeep }, (ev) => persistEvent(sessionId, ev));
-      } catch (err: any) {
-        console.error("[worker] scholar job falhou:", sessionId, err?.message);
-        await prisma.scholarSession.update({
-          where: { id: sessionId },
-          data: { status: "error", thread: { error: err?.message ?? "Erro inesperado" } as any },
-        }).catch(() => {});
-        throw err; // deixa o BullMQ registrar a falha (e retentar conforme attempts)
-      }
-    },
-    { connection: connection as any, concurrency },
-  );
-
-  worker.on("failed", (job, err) => console.error("[worker] job failed", job?.id, err?.message));
-  worker.on("completed", (job) => console.log("[worker] job done", job?.id));
-  console.log(`[worker] Scholar worker ATIVO (concurrency=${concurrency})`);
 }

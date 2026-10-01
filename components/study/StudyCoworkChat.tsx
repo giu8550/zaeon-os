@@ -44,6 +44,9 @@ import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structur
 import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
 import { typeStep, safeCut } from "@/lib/ui/typewriter";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
+import { esperarTurno } from "@/lib/chat/turnoRetomavel";
+import { pedirAura } from "@/lib/chat/auraClient";
+import { criarEstudo, gerarArtefato } from "@/lib/studio/studioClient";
 import type { SkillNodeState } from "@/lib/skilltree/types";
 import type { SkillTreeData } from "@/components/study/SkillTreePanel";
 import { TCC_CROSS_ON, tccApi } from "@/lib/tcc/client";
@@ -78,6 +81,10 @@ type Msg = {
   fase?: string;             // fase que o harness está narrando agora (só enquanto chega)
   streaming?: boolean;       // B2: resposta ainda chegando → cursor piscando
   fresh?: boolean;           // B2: resposta estruturada recém-chegada → datilografa o núcleo
+  // Fase 3 (CHAT_BG): turno rodando no worker. Persistido de propósito — é o que deixa sair
+  // da sala no meio e, ao voltar, reengatar no MESMO turno (polling de /turns/:id).
+  turnId?: string;
+  pendente?: boolean;
   at: number;
 };
 
@@ -233,7 +240,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   useEffect(() => {
     try {
       const slim = messages
-        .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text))
+        // vazia só sobrevive se for um turno pendente no worker (senão o reengate some no reload)
+        .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text && !(m.pendente && m.turnId)))
         .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m)) // artefato inline fica na sessão
         .map(({ streaming, fresh, ...m }) => m); // B2: flags de animação não persistem (reload não re-digita)
       const aba = abaAtivaRef.current;
@@ -445,73 +453,131 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
    * explícito continua reclamando alto: aí a pessoa está esperando.
    */
   const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false) => {
-    const H = { "Content-Type": "application/json" };
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
     // estudo NOVO criado pelo tópico. Nunca pega um estudo arbitrário da biblioteca
     // (senão "gere um podcast sobre X" sairia sobre o conteúdo errado).
     let spaceId = focusIds[0];
     if (!spaceId) {
-      try {
-        const r = await fetch("/api/study/spaces", { method: "POST", headers: H, body: JSON.stringify({ title: topic || "Estudo" }) });
-        if (r.ok) { const s = await r.json(); setSpaces((p) => [...p, s]); spaceId = s.id; }
-      } catch { /* ignore */ }
+      const s = await criarEstudo(topic || "Estudo");
+      if (s) { setSpaces((p) => [...p, s as any]); spaceId = s.id; }
     }
     if (!spaceId) return;
-    const fire = (detail: any) => window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...detail, attachMsgId } }));
-    try {
-      if (kind === "podcast" || kind === "video") {
-        const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId }) });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.id) return;
-        if (data.status === "done") { fire({ studioKind: kind, title: data.title, data: data.meta, artifactId: data.id }); return; }
-        const started = Date.now();
-        const maxMs = kind === "video" ? 12 * 60_000 : 10 * 60_000;
-        while (Date.now() - started < maxMs) {
-          await new Promise((r) => setTimeout(r, kind === "video" ? 3000 : 2500));
-          const rr = await fetch(`/api/studio/${data.id}`);
-          const d = await rr.json().catch(() => null);
-          if (!d) continue;
-          if (d.status === "done") { fire({ studioKind: kind, title: d.title, data: d.meta, artifactId: d.id }); return; }
-          if (d.status === "error") return;
-        }
-      } else if (kind === "molecule") {
-        // Não passa pelo pipeline de texto: a estrutura vem do PubChem, não de LLM.
-        const res = await fetch("/api/studio/molecule", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.meta?.sdf) fire({ studioKind: "molecule", title: data.title, data: data.meta, artifactId: data.id });
-        else if (!silencioso) avisarFalha(data?.error);
-      } else if (kind === "image") {
-        const res = await fetch("/api/studio/image", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.dataUrl) fire({ studioKind: "image", title: data.title || "Imagem", data: data.meta, dataUrl: data.dataUrl });
-        else if (!silencioso) avisarFalha(data?.error);
-      } else {
-        // text kinds (mindmap/guide/faq/flashcards): agora rodam em BACKGROUND no servidor
-        // (fire-and-forget) → o POST volta "queued" e a gente faz polling até "done", igual
-        // a podcast/vídeo. Assim, sair da sala não interrompe a geração. Cache hit já volta
-        // "done" com meta na hora.
-        const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic, force: true }) });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.id) { if (!silencioso) avisarFalha(data?.error); return; }
-        if (data.status === "done" && data.meta) { fire({ studioKind: kind, title: data.title, data: data.meta }); return; }
-        const started = Date.now();
-        while (Date.now() - started < 5 * 60_000) {
-          await new Promise((r) => setTimeout(r, 2000));
-          const rr = await fetch(`/api/studio/${data.id}`);
-          const d = await rr.json().catch(() => null);
-          if (!d) continue;
-          if (d.status === "done") { fire({ studioKind: kind, title: d.title, data: d.meta }); return; }
-          if (d.status === "error") { if (!silencioso) avisarFalha(d?.error); return; }
-        }
-      }
-    } catch {
-      if (!silencioso) avisarFalha();
+    // Rede (por tipo: podcast/vídeo, molécula, imagem, texto) em lib/studio/studioClient.ts —
+    // o MESMO núcleo do mobile. Aqui fica só o que é desta tela: o evento e o aviso.
+    const r = await gerarArtefato(kind, { spaceId, topic });
+    if (r.tipo === "pronto") {
+      window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId } }));
+    } else if (r.tipo === "erro" && !r.silencioso && !silencioso) {
+      avisarFalha(r.mensagem);
     }
-  }, [focusIds, spaces, avisarFalha]);
+  }, [focusIds, avisarFalha]);
 
   // ── envio pro chat da Aura ──────────────────────────────────────────────────
   // `override` = envio direto (clique numa opção/conceito da resposta do harness),
   // sem passar pelo campo de texto — B3 do backlog v2.
+  /**
+   * O FIM de um turno — estruturado, ação do Studio ou texto — aplicado na bolha `asstId`.
+   * Uma função só para o stream ao vivo E para o turno retomado do worker (Fase 3): se cada
+   * um tivesse a sua, a resposta retomada renderizaria diferente da ao vivo.
+   */
+  const aplicarFinal = useCallback((asstId: string, limpo: string, prompt: string, abaDoTurno: string | null = abaAtivaRef.current) => {
+    const patchAsst = (text: string) =>
+      setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, text } : m)));
+    const structured = parseStructuredStream(limpo);
+    const si = limpo.indexOf(STUDIO_SENTINEL);
+    if (structured) {
+      // HARNESS: resposta estruturada — converte a bolha placeholder em cartão rico.
+      // Payload malformado (stream cortado etc.) → degrada pra TEXTO, nunca pra vazio.
+      if (structured.kind === "answer") {
+        const a = structured.answer;
+        setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, kind: "structured", answer: a, text: a.nucleo, streaming: false, fresh: true, pendente: false } : m)));
+        // TCC cross-sala: o turno criou/editou o TCC desta conversa → guarda o id e abre a aba
+        // do TCC na hora (sem sair da sala) — o aluno vê o documento crescer. `abaDoTurno` é a
+        // conversa de ORIGEM do turno (no retomado, a aba atual).
+        if (TCC_CROSS_ON && a.tcc?.workId && abaDoTurno) {
+          const workId = a.tcc.workId;
+          setTccPorAba((prev) => ({ ...prev, [abaDoTurno]: workId }));
+          if (abaAtivaRef.current === abaDoTurno) setTccAberto(true);
+        }
+        // Artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
+        // O tópico é o `title` do ref, NÃO a pergunta inteira: "por que o café me
+        // deixa acordado" não resolve no PubChem; "cafeína" resolve.
+        for (const art of a.artifacts ?? []) {
+          if (art.studioKind && !art.studioKind.startsWith("research:")) {
+            // Pedido explícito falha em voz alta; artefato que a Aura trouxe de
+            // brinde falha calado — ninguém pediu, ninguém precisa saber.
+            void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId, !art.explicito);
+          }
+        }
+        // L1 grava o corpo, não a manchete: é esta transcrição que vira memória
+        // durável, e memória de manchete não serve pra nada depois.
+        appendTranscript("estudos", focusIds[0] ?? null, [
+          { role: "user", text: prompt },
+          { role: "assistant", text: textoParaHistorico({ kind: "structured", answer: a }) || a.nucleo },
+        ]);
+      } else {
+        patchAsst(structured.text);
+        appendTranscript("estudos", focusIds[0] ?? null, [
+          { role: "user", text: prompt },
+          { role: "assistant", text: structured.text },
+        ]);
+      }
+    } else if (si >= 0) {
+      // TOOL-LOOP (Fase 0): ação — não datilografa; encerra e trata.
+      let action: any = null;
+      try { action = JSON.parse(limpo.slice(si + STUDIO_SENTINEL.length)); } catch { /* ignore */ }
+      if (action?.kind) {
+        patchAsst(action.text || "Gerando o artefato…");
+        void runStudioAction(action.kind, action.topic || prompt);
+      } else {
+        patchAsst("Sem resposta agora.");
+      }
+    } else if (!limpo.trim()) {
+      patchAsst("Sem resposta agora.");
+    } else {
+      patchAsst(limpo);
+      // L1: grava o turno durável (fire-and-forget). scopeId = estudo focado, se houver.
+      appendTranscript("estudos", focusIds[0] ?? null, [
+        { role: "user", text: prompt },
+        { role: "assistant", text: limpo },
+      ]);
+    }
+    setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, pendente: false } : m)));
+  }, [runStudioAction, focusIds]);
+
+  // REENGATE (Fase 3): ao abrir a conversa, todo turno que ficou PENDENTE no worker — o aluno
+  // saiu da sala no meio — volta a ser acompanhado e, quando termina, entra na MESMA bolha
+  // pelo mesmo `aplicarFinal`. Uma vez por turno (o ref segura); para se trocar de conversa.
+  const retomando = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!abaAtiva) return;
+    const aba = abaAtiva;
+    let vivo = true;
+    const lista = msgsRef.current;
+    lista.forEach((m, i) => {
+      if (!m.pendente || !m.turnId || m.role !== "assistant" || retomando.current.has(m.turnId)) return;
+      const turnId = m.turnId;
+      retomando.current.add(turnId);
+      const prompt = [...lista.slice(0, i)].reverse().find((x) => x.role === "user")?.text ?? "";
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, streaming: true } : x)));
+      void esperarTurno(turnId, {
+        cancelado: () => !vivo || abaAtivaRef.current !== aba,
+        onParcial: (p) => {
+          const f = faseCorrente(separarProgresso(p).eventos);
+          if (f) setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, fase: f.rotulo } : x)));
+        },
+      }).then((res) => {
+        retomando.current.delete(turnId);
+        if (res.tipo === "cancelado") return; // volta a ser retomado na próxima abertura
+        const fim = (patch: Partial<Msg>) => setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, fase: undefined, streaming: false, ...patch } : x)));
+        if (res.tipo === "pronto") { aplicarFinal(m.id, separarProgresso(res.acumulado).limpo, prompt); fim({}); }
+        else if (res.tipo === "erro") fim({ text: res.mensagem, pendente: false });
+        else fim({ text: "Não consegui recuperar esta resposta. Tenta perguntar de novo.", pendente: false }); // sumiu / teto
+      });
+    });
+    return () => { vivo = false; };
+  }, [abaAtiva, aplicarFinal]);
+
   const send = useCallback(async (override?: string) => {
     const prompt = (typeof override === "string" ? override : input).trim();
     if (!prompt || sending) return;
@@ -540,6 +606,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
 
     const patchAsst = (text: string) =>
       setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, text } : m)));
+    let turnoVivo: string | null = null;
+    let pararDatilografia = () => {}; // o `finally` garante que o laço de rAF nunca fica girando
 
     const focusTitles = focusIds.map(spaceTitle);
     // MODO ACADÊMICO = FLEXÍVEL na Sala de Estudos (o rigor pleno é da Sala de Pesquisa).
@@ -561,147 +629,84 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       + flexClause;
 
     try {
-      const r = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          agent: "aura",
-          history,
-          systemContext,
-          stream: true,
-          agentContext: {
-            activeTab: "sala-de-estudos",
-            currentStudyId: focusIds[0],
-            focusedStudyIds: focusIds,
-            // posição do aluno na árvore de habilidades → o mentor sabe onde você está (harness)
-            skillTopic: skillNode?.topicSlug ?? tree?.topicSlug,
-            skillNodeId: skillNode?.nodeId,
-            // Cartolina = memória da conversa: o board é o da ABA (conversa) ativa, e o card
-            // lembra de qual resposta veio (tap no card → volta pra essa mensagem).
-            cartolinaScopeId: abaAtivaRef.current ?? undefined,
-            cartolinaMsgId: asstId,
-          },
-          mentor: activeMentor ?? undefined,   // slug do mentor ativo → Aura com a voz da área
-        }),
+      let target = "";       // parte VISÍVEL alvo (sem a sentinela)
+      let shown = 0;         // quantas letras já reveladas
+      let ended = false;
+      pararDatilografia = () => { ended = true; };
+      // Datilografia (B2): revela em ordem, por frame (rAF), com TETO de letras por
+      // frame — os chunks do stream viram digitação contínua, sem "despejar" blocos.
+      // ATENÇÃO: todo caminho de saída marca `ended`, senão este laço gira pra sempre.
+      const typed = new Promise<void>((resolve) => {
+        const tick = () => {
+          if (shown < target.length) {
+            shown = safeCut(target, shown + typeStep(target.length - shown));
+            patchAsst(target.slice(0, shown));
+          } else if (ended) {
+            resolve();
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
       });
 
-      if (!r.ok || !r.body) {
-        patchAsst("Não consegui responder agora. Tente de novo.");
-      } else {
-        const reader = r.body.getReader();
-        const dec = new TextDecoder();
-        let acc = "";          // texto cru recebido (protocolo + conteúdo)
-        let limpo = "";        // o mesmo, sem os eventos de progresso
-        let faseVista = "";    // última fase já pintada — evita setState a cada chunk
-        let target = "";       // parte VISÍVEL alvo (sem a sentinela)
-        let shown = 0;         // quantas letras já reveladas
-        let ended = false;
-
-        // Datilografia (B2): revela em ordem, por frame (rAF), com TETO de letras por
-        // frame — os chunks do stream viram digitação contínua, sem "despejar" blocos.
-        const typed = new Promise<void>((resolve) => {
-          const tick = () => {
-            if (shown < target.length) {
-              shown = safeCut(target, shown + typeStep(target.length - shown));
-              patchAsst(target.slice(0, shown));
-            } else if (ended) {
-              resolve();
-              return;
-            }
-            requestAnimationFrame(tick);
-          };
-          requestAnimationFrame(tick);
-        });
-
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          acc += dec.decode(value, { stream: true });
-          // O progresso sai do fio ANTES de qualquer outra conta: se ficasse no acumulado,
-          // a sentinela viraria texto datilografado na tela e contaminaria o fallback.
-          const { limpo: lp, eventos } = separarProgresso(acc);
-          limpo = lp;
-          const f = faseCorrente(eventos);
-          if (f && f.rotulo !== faseVista) {
-            faseVista = f.rotulo;
-            setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: f.rotulo } : m)));
-          }
+      // Rede (fetch → stream → espera do worker em modo BG) mora em lib/chat/auraClient.ts,
+      // o MESMO núcleo do chat mobile (useAuraChat). Aqui fica só o que é desta tela.
+      const res = await pedirAura({
+        prompt,
+        history,
+        systemContext,
+        agentContext: {
+          activeTab: "sala-de-estudos",
+          currentStudyId: focusIds[0],
+          focusedStudyIds: focusIds,
+          // posição do aluno na árvore de habilidades → o mentor sabe onde você está (harness)
+          skillTopic: skillNode?.topicSlug ?? tree?.topicSlug,
+          skillNodeId: skillNode?.nodeId,
+          // Cartolina = memória da conversa: o board é o da ABA (conversa) ativa, e o card
+          // lembra de qual resposta veio (tap no card → volta pra essa mensagem).
+          cartolinaScopeId: abaAtivaRef.current ?? undefined,
+          cartolinaMsgId: asstId,
+        },
+        mentor: activeMentor ?? undefined,   // slug do mentor ativo → Aura com a voz da área
+      }, {
+        // CHAT_BG: o turno roda no worker; o id fica na mensagem pra reengatar se o aluno sair.
+        // Este send() É o dono do turno enquanto estiver vivo: o reengate não pega o mesmo
+        // turno em paralelo (aplicaria o fim duas vezes — transcrição/artefato duplicados).
+        onTurnId: (turnId) => {
+          retomando.current.add(turnId);
+          turnoVivo = turnId;
+          setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, turnId, pendente: true } : m)));
+        },
+        onFase: (rotulo) => setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: rotulo } : m))),
+        onLimpo: (limpo) => {
           const cut = [limpo.indexOf(STUDIO_SENTINEL), limpo.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
           target = cut.length ? limpo.slice(0, Math.min(...cut)) : limpo;   // datilografa só o visível
-        }
+        },
+      });
 
-        const structured = parseStructuredStream(limpo);
-        const si = limpo.indexOf(STUDIO_SENTINEL);
-        if (structured) {
-          // HARNESS: resposta estruturada — converte a bolha placeholder em cartão rico.
-          // Payload malformado (stream cortado etc.) → degrada pra TEXTO, nunca pra vazio.
-          target = ""; ended = true;
-          if (structured.kind === "answer") {
-            const a = structured.answer;
-            setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, kind: "structured", answer: a, text: a.nucleo, streaming: false, fresh: true } : m)));
-            // TCC cross-sala: o turno criou/editou o TCC desta conversa → guarda o id e abre a aba
-            // do TCC na hora (sem sair da sala) — o aluno vê o documento crescer.
-            if (TCC_CROSS_ON && a.tcc?.workId && abaDoTurno) {
-              const workId = a.tcc.workId;
-              setTccPorAba((prev) => ({ ...prev, [abaDoTurno]: workId }));
-              if (abaAtivaRef.current === abaDoTurno) setTccAberto(true);
-            }
-            // Artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
-            // O tópico é o `title` do ref, NÃO a pergunta inteira: "por que o café me
-            // deixa acordado" não resolve no PubChem; "cafeína" resolve.
-            for (const art of a.artifacts ?? []) {
-              if (art.studioKind && !art.studioKind.startsWith("research:")) {
-                // Pedido explícito falha em voz alta; artefato que a Aura trouxe de
-                // brinde falha calado — ninguém pediu, ninguém precisa saber.
-                void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId, !art.explicito);
-              }
-            }
-            // L1 grava o corpo, não a manchete: é esta transcrição que vira memória
-            // durável, e memória de manchete não serve pra nada depois.
-            appendTranscript("estudos", focusIds[0] ?? null, [
-              { role: "user", text: prompt },
-              { role: "assistant", text: textoParaHistorico({ kind: "structured", answer: a }) || a.nucleo },
-            ]);
-          } else {
-            patchAsst(structured.text);
-            appendTranscript("estudos", focusIds[0] ?? null, [
-              { role: "user", text: prompt },
-              { role: "assistant", text: structured.text },
-            ]);
-          }
-        } else if (si >= 0) {
-          // TOOL-LOOP (Fase 0): ação — não datilografa; encerra e trata.
-          target = ""; ended = true;
-          let action: any = null;
-          try { action = JSON.parse(limpo.slice(si + STUDIO_SENTINEL.length)); } catch { /* ignore */ }
-          if (action?.kind) {
-            patchAsst(action.text || "Gerando o artefato…");
-            void runStudioAction(action.kind, action.topic || prompt);
-          } else {
-            patchAsst("Sem resposta agora.");
-          }
-        } else {
-          target = limpo; ended = true;
-          await typed;                       // deixa a digitação alcançar o fim
-          if (!limpo.trim()) patchAsst("Sem resposta agora.");
-          // L1: grava o turno durável (fire-and-forget). scopeId = estudo focado, se houver.
-          else appendTranscript("estudos", focusIds[0] ?? null, [
-            { role: "user", text: prompt },
-            { role: "assistant", text: limpo },
-          ]);
-        }
+      if (!res.ok) {
+        target = ""; ended = true;
+        patchAsst(res.motivo === "rede" ? "Falha de rede ao falar com a Aura." : "Não consegui responder agora. Tente de novo.");
+      } else {
+        const limpo = res.limpo;
+        // Ação/estrutura não datilografa; texto simples deixa a digitação alcançar o fim.
+        if (parseStructuredStream(limpo) || limpo.includes(STUDIO_SENTINEL)) { target = ""; ended = true; }
+        else { target = limpo; ended = true; await typed; }
+        aplicarFinal(asstId, limpo, prompt, abaDoTurno);
       }
     } catch {
       patchAsst("Falha de rede ao falar com a Aura.");
     } finally {
+      pararDatilografia();
+      if (turnoVivo) retomando.current.delete(turnoVivo);
       avisarEscritorio(activeMentor, "ocioso");
       setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined, ...(m.streaming ? { streaming: false } : null) } : m)));
       setSending(false);
       // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
       if (tree) setTreeRefresh((n) => n + 1);
     }
-  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso]);
+  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso, aplicarFinal]);
 
   // Clicar num nó da árvore: conversa scopada naquele nó (vai pro composer + chip de foco).
   const onNodeChat = useCallback((node: SkillNodeState, t: SkillTreeData) => {

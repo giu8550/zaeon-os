@@ -17,6 +17,7 @@ import { Navbar } from "@/components/main/navbar";
 // 🔥 Chat global da Zaeon (IA + Colegas/Professores, troca de lado).
 import { LoungeChatWidget } from "@/components/sub/LoungeChatWidget";
 import { RegistrarSW } from "@/components/pwa/RegistrarSW";
+import { BannerVersaoMobile } from "@/components/mobile/BannerVersaoMobile";
 
 import "../src/i18n";
 import "./globals.css";
@@ -121,6 +122,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                         <Web3Provider>
                             <Navbar />
                             {children}
+
+                            {/* Oferece /m nas salas completas, no celular (NEXT_PUBLIC_MOBILE_UI). */}
+                            <BannerVersaoMobile />
 
                             {/* 🔥 CHAT GLOBAL DA ZAEON (IA + Colegas/Professores) 🔥 */}
                             <LoungeChatWidget />

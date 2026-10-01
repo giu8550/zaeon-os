@@ -73,8 +73,8 @@ do web — funciona, mas divide CPU/RAM com o site).
 - **Reinício do worker no meio de um job:** BullMQ retenta (`attempts: 2`). Jobs presos
   em `running` por >10 min o cliente marca como erro; vale um "reaper" que rode
   `scholarSession.updateMany({ status: running, createdAt < now-15min } → error)` no boot.
-- **Sala de Estudos (chat da Aura):** ainda é streaming no cliente (não sobrevive a sair).
-  Migrar pro mesmo padrão (job + sessão + resume) é a fase 2.
+- **Sala de Estudos (chat da Aura):** ✅ feito na **Fase 3** (seção abaixo): `CHAT_BG=1` + fila
+  `chat` + `ChatTurn` + reengate no cliente.
 - **Multi-réplica:** já suportado (a fila serializa); é só subir mais containers `worker`.
 
 ## Fase 2 — Studio (Sala de Estudos)
@@ -97,3 +97,56 @@ da pesquisa — o `StudioArtifact.status` (queued/running/done) já está pronto
 na sala). Torná-lo retomável exige persistir cada turno como sessão (como o scholar) —
 fase 3.
 ```
+
+
+---
+## Fase 3 — chat da Aura retomável (PR 1: fundação, feita)
+
+O turno do harness foi extraído para `lib/agent/runChatTurn.ts` e roda em DOIS lugares (mesmo
+padrão do `lib/scholar/pipeline.ts`): inline no request (hoje; `turnId=null`, nada persiste) ou
+no worker da fila `chat` (persistindo em `ChatTurn`).
+
+| Peça | O quê |
+|---|---|
+| `prisma` `ChatTurn` | `status` queued→running→done/error, `answer` (HarnessOutput inteiro), `partial` (eventos @@PROGRESS@@) |
+| `lib/agent/chat-turn-store.ts` | toda leitura por id exige `userId` (anti-IDOR) |
+| `lib/agent/chat-turn-wire.ts` | HarnessOutput → texto de protocolo (route, worker e cliente usam o MESMO) |
+| `lib/queue/chat.ts` | fila `chat`; mesma conexão e mesmo carregador opcional do bullmq; `jobId = turnId`; `attempts: 1` |
+| `lib/queue/chat-worker.ts` | `processChatJob`: roda o turno, grava o parcial com throttle de 300ms (writes encadeados) |
+| `lib/queue/reaper.ts` | no boot do worker: ChatTurn/ScholarSession em queued/running com `updatedAt` > 15 min → `error` |
+| `instrumentation.ts` | `SCHOLAR_WORKER=1` sobe também o `Worker("chat")` (`CHAT_WORKER_CONCURRENCY`, default 4) |
+
+**Por que `attempts: 1`** (o scholar usa 2): turno que falhou já está como `error` no banco e o
+aluno já viu a mensagem; retentar reabriria o turno por baixo dele e gastaria modelo de novo. Worker
+que MORRE no meio não depende disso: o BullMQ devolve job "stalled" pra fila sozinho.
+
+Este PR **não muda nada em runtime**: o route continua inline (agora via `runChatTurn(null, …)`). O
+modo background (`CHAT_BG=1`), os endpoints `/api/ai/chat/turns` e o reengate no cliente são o PR 2.
+Antes de ligar: `npx prisma db push` (modelo novo `ChatTurn`).
+
+## Fase 3 — PR 2: modo background ligável (feito)
+
+```
+POST /api/ai/chat (aura+harness+stream+!file, CHAT_BG=1, com sessão)
+   ├─ cria ChatTurn(queued) + enfileira na fila "chat"  →  header X-Chat-Turn-Id
+   └─ abre um stream que ACOMPANHA o ChatTurn (chat-turn-tail: repassa o parcial novo a
+      cada 400ms; no done, o MESMO payload final de sempre) — quem fica na sala vê igual
+aluno sai da sala → o stream cai, o WORKER segue e grava answer no ChatTurn
+aluno volta → StudyCoworkChat acha a mensagem `pendente` com turnId (persistida no L0)
+   └─ polla GET /api/ai/chat/turns/:id (1,5s, teto 10 min) → aplica pelo mesmo `aplicarFinal`
+```
+
+- **Fallback idêntico a hoje:** `CHAT_BG` ausente/`0`, usuário anônimo, sem Redis, sem bullmq ou
+  enfileirar falhou → inline (`runChatTurn(null, …)`).
+- **Endpoints:** `GET /api/ai/chat/turns?surface=&scopeId=` (últimos 20, sem payload) e
+  `GET /api/ai/chat/turns/:id` (`{ status, partial, wire, erro }`). Só do dono (de outro = 404),
+  `guard()`. O erro sai **amigável** (`messageForError`); o cru fica só no banco.
+- **Dedupe:** enquanto o `send()` vivo é dono do turno, o reengate não pega o mesmo turno.
+
+**Ligar em prod:** `prisma db push` → worker de pé (`--profile worker`) → `CHAT_BG=1` no `web`.
+Nunca ligue `CHAT_BG` sem o worker rodando: os turnos ficariam `queued` até o reaper.
+
+## Fase 3 — PR 3/4
+- PR 3: núcleo de rede compartilhado (`lib/chat/auraClient.ts`, `lib/scholar/scholarClient.ts`) +
+  hooks `useAuraChat`/`useScholar`.
+- PR 4: app mobile `/m` (ver `docs/MOBILE.md`) consumindo os mesmos núcleos.
