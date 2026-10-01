@@ -97,7 +97,11 @@ function CardView({ c, onReveal, revealed }: { c: Card; onReveal: (id: string) =
   );
 }
 
-export default function LoungeCartolina({ embedded = false }: { embedded?: boolean }) {
+// Persistência real (Cartolina no banco) — atrás da flag; desligada = o protótipo de sempre.
+const PERSISTIR = process.env.NEXT_PUBLIC_CARTOLINA_MEMORIA === "1";
+const SALVAR_APOS_MS = 800;
+
+export default function LoungeCartolina({ embedded = false, surface = "lounge", scopeId }: { embedded?: boolean; surface?: "estudos" | "lounge"; scopeId?: string }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [cards, setCards] = useState<Card[]>(CARDS0);
@@ -105,12 +109,53 @@ export default function LoungeCartolina({ embedded = false }: { embedded?: boole
   const [view, setView] = useState({ x: 40, y: 20, scale: 1 });
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
+  const boardId = useRef<string | null>(null);
+  const somenteLeitura = useRef(false);
+  const sujos = useRef<Set<string>>(new Set());
+  const cardsRef = useRef<Card[]>(cards);
+  cardsRef.current = cards;
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Carrega a cartolina real da conversa (se já existe uma).
+  useEffect(() => {
+    if (!PERSISTIR) return;
+    let vivo = true;
+    const q = new URLSearchParams({ surface, ...(scopeId ? { scopeId } : {}) });
+    fetch(`/api/cartolina?${q}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!vivo || !d?.board) return;
+        boardId.current = d.board.id;
+        somenteLeitura.current = d.board.papel === "leitor";
+        if (Array.isArray(d.board.cards) && d.board.cards.length) setCards(d.board.cards);
+      })
+      .catch(() => { /* sem rede: segue com o que está na tela */ });
+    return () => { vivo = false; };
+  }, [surface, scopeId]);
+
+  // Salva só os cards que mudaram, com debounce (arrastar dispara muitos eventos).
+  const salvar = useCallback(() => {
+    if (!PERSISTIR || !boardId.current || somenteLeitura.current || !sujos.current.size) return;
+    const ids = [...sujos.current];
+    sujos.current.clear();
+    const upsert = cardsRef.current.filter((c) => ids.includes(c.id));
+    fetch(`/api/cartolina/${boardId.current}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ upsert }) })
+      .then((r) => { if (r.status === 403) somenteLeitura.current = true; else if (!r.ok) ids.forEach((i) => sujos.current.add(i)); })
+      .catch(() => ids.forEach((i) => sujos.current.add(i))); // falhou: tenta de novo no próximo salvar
+  }, []);
+  const agendarSalvar = useCallback((id: string) => {
+    if (!PERSISTIR) return;
+    sujos.current.add(id);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(salvar, SALVAR_APOS_MS);
+  }, [salvar]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); salvar(); }, [salvar]); // ao sair, grava o pendente
 
   const reveal = useCallback((id: string) => setRevealed((r) => ({ ...r, [id]: !r[id] })), []);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("zaeon-focus-mode", { detail: open }));
-    return () => window.dispatchEvent(new CustomEvent("zaeon-focus-mode", { detail: false }));
+    return () => { window.dispatchEvent(new CustomEvent("zaeon-focus-mode", { detail: false })); };
   }, [open]);
 
   // Aura gera a cartolina do tópico
@@ -119,12 +164,19 @@ export default function LoungeCartolina({ embedded = false }: { embedded?: boole
     if (!t || loading) return;
     setLoading(true);
     try {
-      const r = await fetch("/api/lounge/cartolina", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: t }) });
+      // Apertar "gerar" é pedido explícito → regenerar:true (senão a API devolveria o board existente).
+      const r = PERSISTIR
+        ? await fetch("/api/cartolina", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: t, surface, scopeId, regenerar: true }) })
+        : await fetch("/api/lounge/cartolina", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: t }) });
       const d = await r.json().catch(() => null);
-      if (r.ok && Array.isArray(d?.cards) && d.cards.length) { setCards(d.cards); setRevealed({}); setView({ x: 40, y: 20, scale: 1 }); }
+      const novos = PERSISTIR ? d?.board?.cards : d?.cards;
+      if (r.ok && Array.isArray(novos) && novos.length) {
+        if (PERSISTIR) { boardId.current = d.board.id; somenteLeitura.current = false; sujos.current.clear(); }
+        setCards(novos); setRevealed({}); setView({ x: 40, y: 20, scale: 1 });
+      }
     } catch { /* mantém os cards atuais */ }
     finally { setLoading(false); }
-  }, [topic, loading]);
+  }, [topic, loading, surface, scopeId]);
 
   const pull = useRef<{ y0: number } | null>(null);
   const onHandleDown = (e: React.PointerEvent) => { pull.current = { y0: e.clientY }; (e.target as HTMLElement).setPointerCapture(e.pointerId); };
@@ -143,7 +195,8 @@ export default function LoungeCartolina({ embedded = false }: { embedded?: boole
   const drag = useRef<{ id: string; x: number; y: number; cx: number; cy: number } | null>(null);
   const onCardDown = (e: React.PointerEvent, c: Card) => { if (isMobile) return; e.stopPropagation(); drag.current = { id: c.id, x: e.clientX, y: e.clientY, cx: c.x, cy: c.y }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
   const onCardMove = (e: React.PointerEvent) => { if (!drag.current) return; const dx = (e.clientX - drag.current.x) / view.scale; const dy = (e.clientY - drag.current.y) / view.scale; setCards((cs) => cs.map((c) => (c.id === drag.current!.id ? { ...c, x: drag.current!.cx + dx, y: drag.current!.cy + dy } : c))); };
-  const endAll = () => { pull.current = null; pan.current = null; drag.current = null; };
+  // Soltar um card arrastado = mudança a salvar (o drag.current ainda aponta pro card).
+  const endAll = () => { if (drag.current) agendarSalvar(drag.current.id); pull.current = null; pan.current = null; drag.current = null; };
 
   return (
     <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, overflow: "hidden", background: "#030712" }}>

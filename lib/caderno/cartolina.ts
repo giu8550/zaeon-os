@@ -19,6 +19,8 @@ export interface CartolinaCard {
   resposta?: string;   // só exercicio
   legenda?: string;    // prancha/vídeo
   x: number; y: number; w: number; rot?: number;
+  /** Memória por região: as mensagens do chat que geraram este card (tap → abre a conversa). */
+  msgIds?: string[];
 }
 
 /** O que a Aura devolve (antes do layout). */

@@ -74,3 +74,25 @@ O chat de IA dá **404 em DEV** (credencial/permissão Vertex local — os NOMES
 estão certos: `gemini-2.5-flash`/`gemini-2.5-pro`, projeto `zaeon-os`/`us-central1`). Em
 **prod** funciona. Teste a geração/memória em prod ou com credencial Vertex válida no
 `.env` local.
+
+---
+## Status — PR 1: persistência (feita)
+
+**Flags (todas off por padrão — merge não muda nada):**
+| Var | Onde | Efeito |
+|---|---|---|
+| `CARTOLINA_MEMORIA` | servidor | `1` liga `/api/cartolina*` (senão 404) |
+| `NEXT_PUBLIC_CARTOLINA_MEMORIA` | cliente (build) | `1` faz o `LoungeCartolina` carregar/salvar o board real |
+| `CARTOLINA_COWORK` | servidor | reservada p/ PR de compartilhar/comentar (ainda não usada) |
+
+**Banco:** `Cartolina`, `CartolinaMembro`, `CartolinaComentario` (os 3 já no schema; membro/comentário só serão usados no PR de coworking). Rodar `npx prisma db push` no Atlas antes de ligar a flag (o deploy faz com `db_push=true`).
+
+**Rotas:** `GET/POST /api/cartolina`, `GET/PATCH /api/cartolina/:id`. `userId` sempre da sessão; `guard()`; "sem acesso" = 404 (não vaza quais ids existem).
+
+**Decisões que não estavam no handoff:**
+- `PATCH` recebe **operações por card** (`{upsert, remove, titulo}`), não o array inteiro: dois colaboradores em cards diferentes não se apagam. Conflito no mesmo card = último a gravar vence, card inteiro.
+- Controle otimista com `rev` no documento: escrita só vale se `rev` bater; senão relê e reaplica (5 tentativas, depois 409).
+- Papel `dono` é derivado de `ownerId`, não gravado em `CartolinaMembro` (evita duplicata que poderia divergir).
+- `POST` devolve o board existente da conversa se já houver (evita duplicata e custo de modelo); a UI manda `regenerar:true` ao apertar "gerar".
+
+**Faltam:** chat→cartolina (`cardsFromStructured`) e cartolina→agente (bússola); `msgIds` já é aceito/validado no card. Compartilhar/convite/comentários. Globo R3F e prancha LLM→SVG.

@@ -450,6 +450,50 @@ model ScholarSession {
   @@index([userId])
 }
 
+// Cartolina (tema Caderno): o board visual de um estudo — E a memória do agente da Sala de
+// Estudos (docs/HANDOFF_CARTOLINA_MEMORIA.md). `cards` é CartolinaCard[] (x/y/w/rot persistem →
+// layout estável). `rev` é o contador do controle otimista: duas pessoas gravando juntas
+// não se atropelam (a escrita só vale se rev bater; senão relê e reaplica a operação).
+model Cartolina {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId   String   @db.ObjectId
+  surface   String   // "estudos" | "lounge"
+  scopeId   String?  // thread/sala — AMARRA a cartolina àquela conversa do chat
+  titulo    String   @default("Estudo")
+  cards     Json     // CartolinaCard[]
+  rev       Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId, surface, scopeId, updatedAt])
+}
+
+// Quem pode ver/editar a cartolina além do dono. O dono NÃO precisa de linha aqui
+// (ownerId já o identifica) — papel "dono" só aparece derivado, nunca gravado por convite.
+model CartolinaMembro {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  cartolinaId String   @db.ObjectId
+  userId      String   @db.ObjectId
+  papel       String   @default("editor") // "editor" | "leitor"
+  createdAt   DateTime @default(now())
+
+  @@unique([cartolinaId, userId])
+  @@index([userId])
+}
+
+// Comentário/resposta ancorado num card (thread via parentId).
+model CartolinaComentario {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  cartolinaId String   @db.ObjectId
+  cardId      String   // CartolinaCard.id alvo
+  userId      String   @db.ObjectId
+  texto       String
+  parentId    String?  @db.ObjectId
+  createdAt   DateTime @default(now())
+
+  @@index([cartolinaId, cardId, createdAt])
+}
+
 // "Minhas coisas" da Sala de Pesquisa: o TRABALHO real do usuário (título + texto do
 // editor). Diferente de ScholarSession (histórico de BUSCAS, criado a cada pesquisa) —
 // só ações de pesquisa/escrita na Sala de Pesquisa criam um ResearchWork.
