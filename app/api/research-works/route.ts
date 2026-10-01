@@ -53,8 +53,20 @@ export async function POST(req: Request) {
   const workType = typeof body.workType === "string" ? body.workType.slice(0, 40) : undefined;
 
   if (id) {
-    const owned = await prisma.researchWork.findFirst({ where: { id, userId }, select: { id: true } });
+    const owned = await prisma.researchWork.findFirst({ where: { id, userId }, select: { id: true, secoes: true } });
     if (!owned) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
+    // TCC cross-sala (tem seções): o autosave do editor manda o markdown INTEIRO — aqui ele vira
+    // operações POR SEÇÃO (origem "aluno"), com histórico. Sem isso, salvar a folha atropelaria em
+    // silêncio o que a Sala de Estudos escreveu noutra seção. Work comum segue o caminho de sempre.
+    if (Array.isArray(owned.secoes) && content !== undefined) {
+      const { aplicarConteudoManual } = await import("@/lib/tcc/store");
+      // tccBase = a versão que o editor tinha → merge de 3 vias por seção (não reverte a outra sala)
+      const base = typeof body.tccBase === "string" ? body.tccBase.slice(0, 200000) : undefined;
+      const r = await aplicarConteudoManual(id, userId, content, title, base);
+      if (!r.ok) return NextResponse.json({ error: r.reason === "conflict" ? "Edição simultânea — tente de novo" : "Não foi possível salvar" }, { status: r.reason === "conflict" ? 409 : 400 });
+      const work = await prisma.researchWork.findUnique({ where: { id } });
+      return NextResponse.json(work);
+    }
     const updateData = {
       ...(title !== undefined ? { title } : {}),
       ...(content !== undefined ? { content } : {}),

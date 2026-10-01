@@ -67,6 +67,8 @@ interface ResearchShellProps {
   citeMode?: "vercel" | "gemini";
   /** Espelhar o layout (canhoto): documentos à esquerda, folha à direita. */
   flipped?: boolean;
+  /** TCC cross-sala aberto na folha → o chat lapida ESTE documento (como sugestões). */
+  tccWorkId?: string | null;
 }
 
 export default function ResearchShell({
@@ -96,6 +98,7 @@ export default function ResearchShell({
   onCite,
   citeMode,
   flipped,
+  tccWorkId,
 }: ResearchShellProps) {
   const { containerRef, posRef } = useCursorPos();
   const { citations } = useSavedCitations();
@@ -223,7 +226,7 @@ export default function ResearchShell({
           {/* Chat (Escritor/Revisor) sobrepõe o trabalho quando ligado na pill — alterna responsivo. */}
           {chatOpen && (
             <div className="absolute inset-0 z-[55]">
-              <ResearchChat workType={workType} />
+              <ResearchChat workType={workType} tccWorkId={tccWorkId} />
             </div>
           )}
           {/* Research window (always mounted) */}

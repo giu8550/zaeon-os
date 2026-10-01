@@ -506,11 +506,38 @@ model ResearchWork {
   title     String?
   content   String?
   workType  String?
+  // ── TCC cross-sala (PR3, docs/HANDOFF_TCC_CROSS_SALA.md) — tudo opcional: work antigo segue igual.
+  scopeId   String?  // AMARRA ao estudo/cartolina (a conversa da Sala de Estudos que criou o TCC)
+  secoes    Json?    // [{ id, titulo, corpo }] — edição é POR SEÇÃO; `content` vira o espelho em markdown
+  rev       Int      @default(0) // controle otimista: duas edições simultâneas não se apagam
+  tccStatus String?  // "gerando" | "pronto" | "erro" (geração em background + poll)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([userId, scopeId])
   @@map("research_works")
+}
+
+// Histórico do TCC cross-sala: TODA operação numa seção grava uma linha (origem + antes/depois).
+// Última vence; o anterior fica aqui (desfazer = restaurar o `antes`). Pesquisa nasce "sugerida".
+model TccRevisao {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  workId    String   @db.ObjectId
+  secaoId   String
+  titulo    String?  // título da seção no momento (pra timeline e pra restaurar seção removida)
+  op        String   @default("substituir") // "substituir" | "inserir" | "anexar" | "remover" | "restaurar"
+  origem    String   // "estudos" | "pesquisa" | "aluno"
+  antes     String?  // corpo anterior (pra desfazer)
+  depois    String
+  status    String   @default("aplicada") // "aplicada" | "sugerida" | "rejeitada"
+  fontes    Json?    // Pesquisa: [{ abnt, url?, doi? }] — fonte VERIFICADA (scholar) de cada sugestão
+  nota      String?  // Pesquisa: por que a mudança (o rigor explica, não só troca)
+  autorId   String   @db.ObjectId
+  createdAt DateTime @default(now())
+
+  @@index([workId, secaoId, createdAt])
+  @@index([workId, status])
 }
 
 model PastResearchChat {
