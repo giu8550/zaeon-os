@@ -80,3 +80,7 @@ _PROD_B64_DELETE_AFTER.txt
 .env.secrets
 
 *.b64
+
+# worktrees de agentes (lixo de GBs quando órfãos)
+.claude/worktrees/
+.worktrees/

@@ -39,10 +39,14 @@ export async function register() {
     console.warn("[worker] bullmq não instalado — worker não iniciado (rode `npm install`).");
     return;
   }
-  // Só o TIPO vem de `typeof import("bullmq")` (apagado na compilação — o bundler não vê):
-  // o import real continua escondido acima. Sem isto `Worker` é `any` e o tsc recusa o
-  // `new Worker<ScholarJobData>(…)` (TS2347), que é o que deixava o portão de tipos vermelho.
-  const { Worker } = bull as { Worker: typeof import("bullmq").Worker };
+  // Tipo ESTRUTURAL local (só o que usamos do Worker): `bullmq` é opcional/lazy e pode não estar
+  // no node_modules de quem roda `tsc` — `typeof import("bullmq")` quebrava o portão de tipos
+  // (TS2307 + `any` implícito). Assim o tsc independe de o pacote estar instalado.
+  type JobLike = { id?: string; data: ScholarJobData };
+  type WorkerLike = { on(ev: "failed", fn: (job: JobLike | undefined, err: Error) => void): void; on(ev: "completed", fn: (job: JobLike) => void): void };
+  const { Worker } = bull as {
+    Worker: new (name: string, proc: (job: JobLike) => Promise<void>, opts: Record<string, unknown>) => WorkerLike;
+  };
   const { prisma } = await import("@/src/lib/prisma");
   const { runScholarPipeline } = await import("@/lib/scholar/pipeline");
 
@@ -65,7 +69,7 @@ export async function register() {
     } catch { /* progresso é best-effort; o resultado final é o que importa */ }
   }
 
-  const worker = new Worker<ScholarJobData>(
+  const worker = new Worker(
     SCHOLAR_QUEUE,
     async (job) => {
       const { sessionId, prompt, room, isDeep } = job.data;
