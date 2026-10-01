@@ -94,11 +94,9 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
         setPodeAvancar(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
     }, []);
 
-    /** Handler do evento `scroll`: so ele decide que houve rolagem da pessoa. */
+    /** Handler do evento `scroll`: mantém as setas em dia. */
     const aoRolar = useCallback(() => {
         sincronizarSetas();
-        // Rolagem que nao partiu do passo automatico veio da pessoa: da tempo a ela.
-        if (!programaticoRef.current) esperaAteRef.current = Date.now() + 8000;
     }, [sincronizarSetas]);
 
     useEffect(() => {
@@ -122,6 +120,7 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
     const andar = (direcao: 1 | -1) => {
         const el = trilhoRef.current;
         if (!el) return;
+        esperaAteRef.current = Date.now() + 5000; // seta clicada → deixa a pessoa olhar
         el.scrollBy({ left: passoAtual(el) * direcao, behavior: "smooth" });
     };
 
@@ -180,26 +179,24 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
         const el = trilhoRef.current;
         if (!el) return;
 
-        const id = window.setInterval(() => {
+        // Glide CONTÍNUO e suave. Antes pulava 1 cartão a cada 3,2s com snap-mandatory
+        // — daí a sensação abrupta/estalada. Agora avança poucos px por frame; a lista
+        // é DUPLICADA no render, então ao cruzar a 1ª metade voltamos o equivalente e o
+        // loop fica sem costura (invisível, pois a 2ª cópia está idêntica naquele ponto).
+        const VEL = 0.5; // px por frame (~30px/s a 60fps): presente, sem distrair
+        let raf = 0;
+        const passo = () => {
+            raf = requestAnimationFrame(passo);
             if (pausadoRef.current || document.hidden) return;
             if (Date.now() < esperaAteRef.current) return;
-
             const r = el.getBoundingClientRect();
-            const naTela = r.bottom > 0 && r.top < window.innerHeight;
-            if (!naTela) return;
-
-            const fim = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
-            programaticoRef.current = true;
-            el.scrollTo({
-                left: fim ? 0 : el.scrollLeft + passoAtual(el),
-                behavior: "smooth",
-            });
-            window.setTimeout(() => {
-                programaticoRef.current = false;
-            }, 900);
-        }, 3200);
-
-        return () => window.clearInterval(id);
+            if (!(r.bottom > 0 && r.top < window.innerHeight)) return;
+            el.scrollLeft += VEL;
+            const meia = el.scrollWidth / 2;
+            if (meia > 0 && el.scrollLeft >= meia) el.scrollLeft -= meia;
+        };
+        raf = requestAnimationFrame(passo);
+        return () => cancelAnimationFrame(raf);
     }, [semMovimento, mentores.length]);
 
     return (
@@ -233,16 +230,20 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
                     pausadoRef.current = false;
                     esperaAteRef.current = Date.now() + 8000;
                 }}
+                onWheel={() => {
+                    esperaAteRef.current = Date.now() + 5000;
+                }}
                 onFocusCapture={() => {
                     pausadoRef.current = true;
                 }}
                 onBlurCapture={() => {
                     pausadoRef.current = false;
                 }}
-                className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="flex gap-4 overflow-x-auto pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
-                {mentores.map((m) => (
-                    <Cartao key={m.slug} m={m} />
+                {/* Lista DUPLICADA: alimenta o loop sem costura do glide contínuo. */}
+                {[...mentores, ...mentores].map((m, i) => (
+                    <Cartao key={`${m.slug}-${i}`} m={m} />
                 ))}
             </div>
         </div>
@@ -252,7 +253,7 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
 function Cartao({ m }: { m: Mentor }) {
     const artefatos = (m.signatureArtifacts ?? []).slice(0, 3);
     return (
-        <article className="snap-start shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-slate-950/75 backdrop-blur-sm p-5 flex flex-col">
+        <article className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-slate-950/75 backdrop-blur-sm p-5 flex flex-col transition-all duration-300 shadow-[0_12px_32px_-16px_rgba(2,6,23,0.38)] dark:shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
             <div className="flex items-start justify-between">
                 <span
                     aria-hidden="true"

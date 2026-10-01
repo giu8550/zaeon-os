@@ -1,0 +1,21 @@
+--- a/app/api/health/route.ts	2026-08-05 16:01:56.051026241 -0300
++++ b/app/api/health/route.ts	2026-08-05 16:01:56.052026241 -0300
+@@ -2,6 +2,9 @@
+  * GET /api/health — liveness simples para o healthcheck do container/compose e
+  * para checagens externas (uptime). Não toca no banco de propósito: responde 200
+  * sempre que o processo Node está de pé. (Readiness de DB pode virar /api/ready.)
++ *
++ * `commit` = SHA do build (env GIT_SHA, injetado no deploy). Mata a dessincronia
++ * "o que está em prod?": `curl .../api/health` → qual commit está rodando.
+  */
+ import { NextResponse } from "next/server";
+ 
+@@ -12,6 +15,8 @@
+   return NextResponse.json({
+     status: "ok",
+     service: "zaeon-web",
++    commit: process.env.GIT_SHA ?? "unknown",
++    harness: process.env.AURA_HARNESS === "0" ? "off" : "on",
+     time: new Date().toISOString(),
+   });
+ }

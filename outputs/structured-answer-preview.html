@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zaeon · resposta estruturada (liquid glass)</title>
+<style>
+  :root { --font: 'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; font-family: var(--font);
+    background:
+      radial-gradient(120% 90% at 15% 0%, #0b1220 0%, #070a12 55%, #05070d 100%);
+    display: flex; align-items: center; justify-content: center; padding: 48px 20px; color: #e7ecf5;
+  }
+  .toggle { position: fixed; top: 16px; right: 16px; font-size: 12px; color: #7d8aa5; }
+  .wrap { position: relative; max-width: 680px; width: 100%; }
+
+  @keyframes zAurora { 0%,100% { opacity:.55; transform: translate3d(-4%,-3%,0) scale(1); } 50% { opacity:.85; transform: translate3d(4%,3%,0) scale(1.06); } }
+  @keyframes zUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
+  .up { animation: zUp .6s cubic-bezier(.22,.61,.36,1) both; }
+
+  .aurora {
+    position:absolute; inset:-28px; z-index:-1; border-radius:44px; filter: blur(52px); opacity:.75;
+    background:
+      radial-gradient(60% 60% at 20% 10%, rgba(37,99,235,.30), transparent 60%),
+      radial-gradient(60% 60% at 85% 90%, rgba(139,92,246,.26), transparent 60%),
+      radial-gradient(50% 50% at 60% 40%, rgba(6,182,212,.24), transparent 60%);
+    animation: zAurora 9s ease-in-out infinite;
+  }
+  .panel {
+    position:relative; border-radius:26px; overflow:hidden;
+    border:1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.055);
+    -webkit-backdrop-filter: blur(28px); backdrop-filter: blur(28px);
+    box-shadow: 0 24px 70px -30px rgba(37,99,235,.6);
+  }
+  .spec-line { position:absolute; left:0; right:0; top:0; height:1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent); }
+  .spec-sheen { position:absolute; inset:0 0 auto 0; height:42%; background: linear-gradient(to bottom, rgba(255,255,255,.07), transparent); pointer-events:none; }
+  .content { position:relative; padding: 22px 22px 20px; }
+
+  .lead { font-size:19px; line-height:1.62; color:#eef2fb; }
+  .dev { margin-top:14px; font-size:16px; line-height:1.72; color:#b8c2d6; }
+  .dev p { margin:0 0 10px; }
+  .bul { display:flex; gap:10px; margin:6px 0; }
+  .dot { margin-top:9px; width:6px; height:6px; border-radius:50%; background:rgba(34,211,238,.8); flex:none; }
+  strong { color:#fff; font-weight:600; }
+
+  .chips { margin-top:16px; display:flex; flex-wrap:wrap; gap:8px; }
+  .chip {
+    font-size:13px; color:#a5f0fb; padding:5px 12px; border-radius:999px; cursor:pointer;
+    background: rgba(6,182,212,.10); border:1px solid rgba(34,211,238,.28);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); transition: all .2s;
+  }
+  .chip:hover { background: rgba(6,182,212,.20); transform: translateY(-1px); }
+
+  .sources { margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,.1); }
+  .src-h { display:flex; align-items:center; gap:6px; font-size:12px; color:#7d8aa5; margin-bottom:8px; }
+  .src { display:flex; align-items:flex-start; gap:8px; margin:5px 0; font-size:13px; color:#aeb9cf; }
+  .num { margin-top:1px; width:18px; height:18px; border-radius:50%; background:rgba(148,163,184,.14); border:1px solid rgba(255,255,255,.12); font-size:11px; display:flex; align-items:center; justify-content:center; color:#8b97ad; flex:none; }
+
+  .next { margin-top:16px; display:flex; flex-direction:column; gap:8px; }
+  .sugg {
+    display:flex; align-items:center; gap:10px; text-align:left; cursor:pointer;
+    padding:11px 14px; border-radius:16px; color:#dfe6f2; font-size:14px;
+    background: rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.1);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); transition: all .2s;
+  }
+  .sugg:hover { background: rgba(255,255,255,.09); border-color: rgba(34,211,238,.45); }
+  .ico { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(6,182,212,.12); color:#67e8f9; font-size:15px; flex:none; }
+</style>
+</head>
+<body>
+  <div class="toggle">preview · liquid glass · Zaeon</div>
+  <div class="wrap">
+    <div class="aurora"></div>
+    <div class="panel">
+      <div class="spec-line"></div>
+      <div class="spec-sheen"></div>
+      <div class="content">
+        <div class="lead up" style="animation-delay:0ms">
+          A <strong>fotossíntese</strong> converte luz, água e CO₂ em glicose e oxigênio — é como a planta "come luz" e guarda energia química.
+        </div>
+        <div class="dev up" style="animation-delay:70ms">
+          <p>Acontece nos cloroplastos, em duas etapas encadeadas:</p>
+          <div class="bul"><span class="dot"></span><span>a <strong>fase clara</strong> capta luz e gera ATP + NADPH;</span></div>
+          <div class="bul"><span class="dot"></span><span>o <strong>ciclo de Calvin</strong> usa essa energia pra fixar o carbono em açúcar.</span></div>
+        </div>
+        <div class="chips up" style="animation-delay:140ms">
+          <span class="chip">clorofila</span><span class="chip">ATP</span><span class="chip">ciclo de Calvin</span><span class="chip">estômatos</span>
+        </div>
+        <div class="sources up" style="animation-delay:210ms">
+          <div class="src-h">❝ Fontes</div>
+          <div class="src"><span class="num">1</span><span>Campbell Biology, 12ª ed. · cap. 10</span></div>
+          <div class="src"><span class="num">2</span><span>Taiz &amp; Zeiger, Plant Physiology · 2015</span></div>
+        </div>
+        <div class="next up" style="animation-delay:280ms">
+          <button class="sugg"><span class="ico">↗</span> Gerar flashcards sobre a fase clara</button>
+          <button class="sugg"><span class="ico">↗</span> E como funciona a respiração celular?</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

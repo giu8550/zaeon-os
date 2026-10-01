@@ -17,6 +17,63 @@ import type { SavedSession } from './SessionManager';
 import type { Annotation } from './PDAOverlay';
 import AnatomyCanvas, { type AnatomyAsset } from './AnatomyCanvas';
 
+// ─── Anel de geração com estágios ────────────────────────────────────────────
+// Monta só enquanto isLoading (o ciclo de vida do componente controla o timer).
+// Dá sensação de progresso e reduz a ansiedade da espera de rede do PubChem/AI.
+const GEN_STAGES = [
+  'Interpretando o pedido…',
+  'Consultando o PubChem…',
+  'Baixando a estrutura 3D…',
+  'Montando os átomos…',
+  'Renderizando em voxels…',
+];
+function GeneratingRing({ colorClass }: { colorClass: string }) {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const id = setInterval(
+      () => setStep((s) => Math.min(s + 1, GEN_STAGES.length - 1)),
+      900,
+    );
+    return () => clearInterval(id);
+  }, []);
+  const pct = ((step + 1) / GEN_STAGES.length) * 100;
+  return (
+    <div className="flex flex-col items-center justify-center">
+      <div className="relative w-20 h-20">
+        <svg className="w-20 h-20 -rotate-90" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" className="text-white/10" />
+          <motion.circle
+            cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round"
+            className={colorClass}
+            strokeDasharray={264}
+            animate={{ strokeDashoffset: 264 - (264 * pct) / 100 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+          />
+        </svg>
+        <motion.div
+          className="absolute inset-0 flex items-center justify-center"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: 'linear' }}
+        >
+          <Dna size={24} className={colorClass} />
+        </motion.div>
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={step}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.25 }}
+          className="text-[10px] uppercase tracking-widest text-slate-300 font-bold mt-4"
+        >
+          {GEN_STAGES[step]}
+        </motion.span>
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── Dynamic imports (Three.js + complex components can't SSR) ───────────────
 const VoxelCanvas = dynamic(() => import('./VoxelCanvas'), {
   ssr: false,
@@ -523,12 +580,7 @@ export default function BioSim3DModule({ courseRoom = DEFAULT_ROOM }: BioSim3DMo
       <div className="relative w-full" style={{ height: isFullscreen ? '80vh' : '440px' }}>
         {isLoading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
-            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.4, repeat: Infinity, ease: 'linear' }}>
-              <Dna size={30} className={roomColor.text} />
-            </motion.div>
-            <span className="text-[9px] uppercase tracking-widest text-slate-400 font-bold mt-3">
-              {dataSource === null ? 'Classifying intent…' : 'Fetching real data…'}
-            </span>
+            <GeneratingRing colorClass={roomColor.text} />
           </div>
         )}
 

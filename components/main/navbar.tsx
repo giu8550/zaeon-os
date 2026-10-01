@@ -183,26 +183,35 @@ export const Navbar = () => {
   if (!mounted) return null;
 
   return (
-    <div 
-      className={`w-full h-[90px] fixed top-0 z-[100] pt-[env(safe-area-inset-top)] flex justify-center items-center pointer-events-none font-sans transition-all duration-700 ease-in-out ${
+    <div
+      className={`w-full fixed top-0 z-[100] pt-[env(safe-area-inset-top)] pointer-events-none font-sans transition-all duration-700 ease-in-out ${
         isFocusMode ? "-translate-y-full opacity-0" : "translate-y-0 opacity-100"
       }`}
     >
-      <div className="pointer-events-auto w-[96%] max-w-[1300px] h-[70px] rounded-[35px] backdrop-blur-xl bg-background/70 border border-foreground/10 shadow-2xl flex items-center justify-between px-8">
-        
-        <Link href="/" className="hover:scale-105 transition-transform">
-          <Image src={logoPng} alt="logo" width={220} height={100} priority className="h-10 w-auto invert dark:invert-0" />
-        </Link>
+      {/* Navbar CHAPADA: barra full-width, hairline embaixo, sem pílula/borda redonda/sombra pesada. */}
+      {/* Apple liquid glass: translúcido, backdrop-blur + saturação, borda fina e um
+          fio de luz especular no topo. Vale nos dois modos (whitish no claro, esfumado
+          no escuro) — o material é o mesmo do 'Iniciar' e do menu principal. */}
+      <div className="pointer-events-auto w-full h-[64px] flex items-center backdrop-blur-2xl backdrop-saturate-[1.6]
+          bg-white/50 dark:bg-white/[0.06]
+          border-b border-white/60 dark:border-white/[0.12]
+          shadow-[inset_0_1px_0_0_rgba(255,255,255,0.9)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28)]">
+        <div className="w-full zaeon-borda flex items-center justify-between">
 
-        <nav className="hidden lg:flex items-center gap-10">
-          <Link href="/about" className={getLinkClassName("/about")}>Sobre nós</Link>
-          <Link href="/research-lab" className={getLinkClassName("/research-lab")}>Laboratório</Link>
-          <Link href={`/plugin-store?from=${encodeURIComponent(pathname)}`} className={getLinkClassName("/plugin-store")}>Plugins</Link>
-          <Link href="/news" className={getLinkClassName("/news")}>Notícias</Link>
-        </nav>
+          <Link href="/" className="transition-opacity hover:opacity-80">
+            <Image src={logoPng} alt="logo" width={220} height={100} priority className="h-9 w-auto invert dark:invert-0" />
+          </Link>
 
-        <div className="flex items-center gap-6">
-          <ThemeToggle />
+          <nav className="hidden lg:flex items-center gap-10">
+            <Link href="/about" className={getLinkClassName("/about")}>Sobre nós</Link>
+            <Link href="/research-lab" className={getLinkClassName("/research-lab")}>Laboratório</Link>
+            <Link href="/plugin-store" className={getLinkClassName("/plugin-store")}>Plugins</Link>
+            <Link href="/news" className={getLinkClassName("/news")}>Notícias</Link>
+          </nav>
+
+          <div className="flex items-center gap-6">
+            <ThemeToggle />
+          </div>
         </div>
       </div>
     </div>
