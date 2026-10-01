@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import AgentAvatar from "@/components/agents/AgentAvatar";
+import { agentAvatars } from "@/lib/canal/flags";
 
 /**
  * Carrossel dos MENTORES reais — os mesmos 13 que vivem na sala de Plugins.
@@ -29,6 +31,8 @@ type Mentor = {
     signatureArtifacts?: string[];
     academicLevel?: string;
     guardrail?: string | null;
+    /** foto editável (AgentProfile) — vem de /api/agents/public; sem foto → emoji/inicial. */
+    avatarUrl?: string | null;
 };
 
 /** Os 13, na ordem do seed. So campos que a rota publica ja expoe. */
@@ -72,12 +76,21 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
 
     useEffect(() => {
         let vivo = true;
-        fetch("/api/mentors")
-            .then((r) => (r.ok ? r.json() : null))
-            .then((j) => {
-                if (!vivo || !Array.isArray(j) || j.length === 0) return;
-                setMentores(j);
-                setAoVivo(true);
+        // Avatares editáveis (AgentProfile) — só com NEXT_PUBLIC_AGENT_AVATARS=1; falha = sem foto.
+        type Foto = { avatarUrl: string | null; nome: string };
+        const avatares: Promise<Map<string, Foto>> = agentAvatars()
+            ? fetch("/api/agents/public")
+                .then((r) => (r.ok ? r.json() : null))
+                .then((j) => new Map<string, Foto>((j?.agentes ?? []).map((a: any): [string, Foto] => [String(a.agentKey), { avatarUrl: a.avatarUrl ?? null, nome: String(a.nome ?? "") }])))
+                .catch(() => new Map<string, Foto>())
+            : Promise.resolve(new Map<string, Foto>());
+        Promise.all([fetch("/api/mentors").then((r) => (r.ok ? r.json() : null)).catch(() => null), avatares])
+            .then(([j, av]) => {
+                if (!vivo) return;
+                const base: Mentor[] = Array.isArray(j) && j.length > 0 ? j : ELENCO;
+                const comFoto = base.map((m) => { const p = av.get(m.slug); return p ? { ...m, avatarUrl: p.avatarUrl, name: p.nome || m.name } : m; });
+                setMentores(comFoto);
+                if (Array.isArray(j) && j.length > 0) setAoVivo(true);
             })
             .catch(() => {
                 /* banco frio ou rota fora: o ELENCO ja esta na tela */
@@ -255,12 +268,16 @@ function Cartao({ m }: { m: Mentor }) {
     return (
         <article className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-slate-950/75 backdrop-blur-sm p-5 flex flex-col transition-all duration-300 shadow-[0_12px_32px_-16px_rgba(2,6,23,0.38)] dark:shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
             <div className="flex items-start justify-between">
-                <span
-                    aria-hidden="true"
-                    className="grid h-10 w-10 place-items-center rounded-xl border border-cyan-500/25 bg-cyan-500/10 text-lg text-cyan-600 dark:text-cyan-300"
-                >
-                    {m.emoji || "⟁"}
-                </span>
+                {m.avatarUrl ? (
+                    <AgentAvatar src={m.avatarUrl} nome={m.name} size={44} className="ring-2 ring-cyan-500/30" />
+                ) : (
+                    <span
+                        aria-hidden="true"
+                        className="grid h-10 w-10 place-items-center rounded-xl border border-cyan-500/25 bg-cyan-500/10 text-lg text-cyan-600 dark:text-cyan-300"
+                    >
+                        {m.emoji || "⟁"}
+                    </span>
+                )}
                 {m.guardrail ? (
                     <span
                         className="rounded-md border border-slate-200 dark:border-white/15 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500 dark:text-white/55"

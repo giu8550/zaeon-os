@@ -13,6 +13,14 @@ import type { ScholarJobData } from "@/lib/queue/scholar";
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // Worker dos turnos de agente do canal coworking (CANAL_QUEUE=1 + CANAL_WORKER=1 + REDIS_URL).
+  // Independente do SCHOLAR_WORKER; sem as envs, os turnos rodam inline no web (lib/canal/queue.ts).
+  if (process.env.CANAL_WORKER === "1") {
+    try {
+      const { iniciarWorkerCanal } = await import("@/lib/canal/queue");
+      if (!(await iniciarWorkerCanal())) console.warn("[canal-worker] CANAL_WORKER=1 mas fila desligada (CANAL_QUEUE=1 + REDIS_URL) — não iniciado.");
+    } catch (e) { console.warn("[canal-worker] não iniciado:", (e as Error)?.message); }
+  }
   if (process.env.SCHOLAR_WORKER !== "1") return;
 
   const { getRedisConnection, isQueueEnabled, SCHOLAR_QUEUE } = await import("@/lib/queue/scholar");

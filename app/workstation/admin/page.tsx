@@ -10,7 +10,8 @@ import {
     DocumentChartBarIcon,
     PuzzlePieceIcon,
     SpeakerWaveIcon,
-    UsersIcon
+    UsersIcon,
+    SparklesIcon
 } from "@heroicons/react/24/outline";
 
 
@@ -20,6 +21,8 @@ import ReportsModule from "./modules/ReportsModule";
 import PluginsModule from "./modules/PluginsModule";
 import VoiceAccessModule from "./modules/VoiceAccessModule";
 import InviteGroupsModule from "./modules/InviteGroupsModule";
+import AgentsModule from "./modules/AgentsModule";
+import { agentsAdmin } from "@/lib/canal/flags";
 
 // --- APPLE STYLE LOADER ---
 const AppleLoader = ({ status }: { status: string }) => (
@@ -58,7 +61,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, isOpen }: any) => (
 
 export default function AdminControlRoom() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments">("profiles");
+    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments" | "agents">("profiles");
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -118,6 +121,16 @@ export default function AdminControlRoom() {
                         onClick={() => setActiveTab('plugins')}
                         isOpen={isSidebarOpen}
                     />
+                    {/* Gateway de agentes (founder) — só aparece com NEXT_PUBLIC_AGENTS_ADMIN=1 */}
+                    {agentsAdmin() && (
+                        <SidebarItem
+                            icon={SparklesIcon}
+                            label="Agents"
+                            active={activeTab === 'agents'}
+                            onClick={() => setActiveTab('agents')}
+                            isOpen={isSidebarOpen}
+                        />
+                    )}
                     <SidebarItem
                         icon={DocumentChartBarIcon}
                         label="Reports"
@@ -160,6 +173,7 @@ export default function AdminControlRoom() {
                         {activeTab === 'invites' && <InviteGroupsModule glassPanel={glassPanel} />}
                         {activeTab === 'reports' && <ReportsModule glassPanel={glassPanel} />}
                         {activeTab === 'plugins' && <PluginsModule glassPanel={glassPanel} />}
+                        {activeTab === 'agents' && agentsAdmin() && <AgentsModule glassPanel={glassPanel} />}
 
                         {activeTab === 'payments' && (
                             <div className="flex-1 flex items-center justify-center opacity-30">

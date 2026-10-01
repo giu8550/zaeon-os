@@ -1,0 +1,172 @@
+"use client";
+
+/**
+ * AgentsModule — gateway de agentes (founder). Lista o roster (personas + mentores) com o
+ * AgentProfile sobreposto: avatar (upload → data URL → PATCH), nome, bio, ativo, ordem, e o
+ * USO (AgentUsage: total, nº de usuários, top usuários). Criar agente novo (persona ou mentor).
+ * Vidro claro === escuro. Rotas: GET/POST /api/admin/agents · PATCH/DELETE /api/admin/agents/:key.
+ */
+import { useCallback, useEffect, useState } from "react";
+import AgentAvatar from "@/components/agents/AgentAvatar";
+import { VIDRO_BOLHA, VIDRO_CHIP, VIDRO_POPOVER, TXT, TXT_2, TXT_MUDO } from "@/lib/canal/vidro";
+
+type Top = { userId: string; contagem: number; ultimoUso: string; nome: string | null; email: string | null };
+type Agente = {
+  agentKey: string; tipo: "persona" | "mentor"; nome: string; emoji: string; bio: string; curso?: string;
+  avatarUrl: string | null; ativo: boolean; ordem: number; custom: boolean;
+  uso: { total: number; usuarios: number; ultimoUso: string | null; top: Top[] };
+};
+const H = { "Content-Type": "application/json" };
+const inputCls = `min-h-[40px] px-3 rounded-xl text-[13px] bg-white/70 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-cyan-400/70`;
+
+export default function AgentsModule({ glassPanel }: { glassPanel: string }) {
+  const [agentes, setAgentes] = useState<Agente[]>([]);
+  const [estado, setEstado] = useState<"carregando" | "ok" | "off" | "403" | "erro">("carregando");
+  const [filtro, setFiltro] = useState("");
+  const [criando, setCriando] = useState(false);
+  const [novo, setNovo] = useState({ agentKey: "", tipo: "mentor", nome: "", bio: "", curso: "", personaText: "" });
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const carregar = useCallback(async () => {
+    try {
+      const r = await fetch("/api/admin/agents", { cache: "no-store" });
+      if (r.status === 404) { setEstado("off"); return; }
+      if (r.status === 403 || r.status === 401) { setEstado("403"); return; }
+      if (!r.ok) throw new Error(String(r.status));
+      setAgentes((await r.json()).agentes ?? []);
+      setEstado("ok");
+    } catch { setEstado("erro"); }
+  }, []);
+  useEffect(() => { void carregar(); }, [carregar]);
+
+  const patch = useCallback(async (key: string, body: Record<string, unknown>) => {
+    const r = await fetch(`/api/admin/agents/${key}`, { method: "PATCH", headers: H, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { setMsg(j?.error || `Falhou (${r.status})`); return false; }
+    setMsg(null);
+    await carregar();
+    return true;
+  }, [carregar]);
+
+  const trocarAvatar = useCallback((key: string, file: File | null) => {
+    if (!file) return;
+    if (file.size > 1_200_000) { setMsg("Foto até 1.2MB."); return; }
+    const fr = new FileReader();
+    fr.onload = () => { void patch(key, { avatarUrl: String(fr.result) }); };
+    fr.readAsDataURL(file);
+  }, [patch]);
+
+  const criar = async () => {
+    const r = await fetch("/api/admin/agents", { method: "POST", headers: H, body: JSON.stringify({ ...novo, agentKey: novo.agentKey.trim().toLowerCase() }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { setMsg(j?.error || `Falhou (${r.status})`); return; }
+    setMsg(null); setCriando(false);
+    setNovo({ agentKey: "", tipo: "mentor", nome: "", bio: "", curso: "", personaText: "" });
+    await carregar();
+  };
+
+  if (estado === "off") return <Aviso glassPanel={glassPanel} texto="Gateway de agentes desligado (NEXT_PUBLIC_AGENTS_ADMIN=1 liga)." />;
+  if (estado === "403") return <Aviso glassPanel={glassPanel} texto="Só o founder entra aqui." />;
+  if (estado === "erro") return <Aviso glassPanel={glassPanel} texto="Não consegui carregar os agentes." />;
+  if (estado === "carregando") return <Aviso glassPanel={glassPanel} texto="Carregando agentes…" />;
+
+  const q = filtro.trim().toLowerCase();
+  const lista = q ? agentes.filter((a) => `${a.agentKey} ${a.nome} ${a.curso ?? ""} ${a.tipo}`.toLowerCase().includes(q)) : agentes;
+  const totalUso = agentes.reduce((s, a) => s + a.uso.total, 0);
+
+  return (
+    <div className={`flex-1 min-h-0 flex flex-col rounded-[32px] p-5 sm:p-7 ${glassPanel}`}>
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <h2 className={`text-xl font-black tracking-tight ${TXT}`}>Agents</h2>
+        <span className={`text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>{agentes.length} agentes · {totalUso} usos</span>
+        <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="filtrar" aria-label="Filtrar agentes" className={`${inputCls} ml-auto w-[180px]`} />
+        <button type="button" onClick={() => setCriando((v) => !v)} className={`min-h-[40px] px-4 rounded-xl text-[12px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>{criando ? "fechar" : "+ agente"}</button>
+      </div>
+      {msg && <p role="alert" className="mb-3 text-[12px] text-rose-600 dark:text-rose-300">{msg}</p>}
+
+      {criando && (
+        <div className={`mb-5 p-4 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-2 ${VIDRO_POPOVER}`}>
+          <input value={novo.agentKey} onChange={(e) => setNovo({ ...novo, agentKey: e.target.value })} placeholder="chave (slug: odontologia)" className={inputCls} />
+          <select value={novo.tipo} onChange={(e) => setNovo({ ...novo, tipo: e.target.value })} className={inputCls} aria-label="Tipo">
+            <option value="mentor">mentor</option><option value="persona">persona</option>
+          </select>
+          <input value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} placeholder="nome de exibição" className={inputCls} />
+          <input value={novo.bio} onChange={(e) => setNovo({ ...novo, bio: e.target.value })} placeholder="bio / tagline" className={inputCls} />
+          {novo.tipo === "mentor" && (
+            <>
+              <input value={novo.curso} onChange={(e) => setNovo({ ...novo, curso: e.target.value })} placeholder="curso (Odontologia)" className={inputCls} />
+              <textarea value={novo.personaText} onChange={(e) => setNovo({ ...novo, personaText: e.target.value })} placeholder="personaText (≥ 40 caracteres) — como esse mentor pensa e ensina" rows={3} className={`${inputCls} md:col-span-2 py-2`} />
+            </>
+          )}
+          <div className="md:col-span-2 flex justify-end">
+            <button type="button" onClick={() => void criar()} className="min-h-[40px] px-5 rounded-xl text-[12px] font-black uppercase tracking-widest bg-cyan-500 text-slate-950 hover:scale-[1.02] active:scale-95 transition-transform">criar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pr-1">
+        {lista.map((a) => <Card key={a.agentKey} a={a} onPatch={patch} onAvatar={trocarAvatar} />)}
+      </div>
+    </div>
+  );
+}
+
+function Card({ a, onPatch, onAvatar }: { a: Agente; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean>; onAvatar: (k: string, f: File | null) => void }) {
+  const [nome, setNome] = useState(a.nome);
+  const [bio, setBio] = useState(a.bio);
+  const [ordem, setOrdem] = useState(String(a.ordem));
+  useEffect(() => { setNome(a.nome); setBio(a.bio); setOrdem(String(a.ordem)); }, [a.nome, a.bio, a.ordem]);
+  const sujo = nome !== a.nome || bio !== a.bio || Number(ordem) !== a.ordem;
+  return (
+    <div className={`p-4 rounded-[22px] flex flex-col gap-3 ${VIDRO_BOLHA} ${a.ativo ? "" : "opacity-60"}`}>
+      <div className="flex items-start gap-3">
+        <label className="relative cursor-pointer shrink-0" title="Trocar foto">
+          <AgentAvatar src={a.avatarUrl} nome={a.nome} size={56} emoji={a.emoji} />
+          <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => onAvatar(a.agentKey, e.target.files?.[0] ?? null)} aria-label={`Trocar foto de ${a.nome}`} />
+          <span className="absolute -bottom-1 -right-1 grid place-items-center w-6 h-6 rounded-full text-[11px] bg-cyan-500 text-slate-950 shadow">✎</span>
+        </label>
+        <div className="min-w-0 flex-1">
+          <input value={nome} onChange={(e) => setNome(e.target.value)} aria-label="Nome" className={`w-full ${inputCls} font-bold`} />
+          <p className={`mt-1 text-[10.5px] font-mono uppercase tracking-widest ${TXT_MUDO}`}>@{a.agentKey} · {a.tipo}{a.curso ? ` · ${a.curso}` : ""}{a.custom ? " · custom" : ""}</p>
+        </div>
+      </div>
+      <input value={bio} onChange={(e) => setBio(e.target.value)} placeholder="bio" aria-label="Bio" className={`${inputCls} text-[12px]`} />
+      <div className="flex items-center gap-2">
+        <label className={`flex items-center gap-2 text-[12px] font-bold ${TXT_2} min-h-[40px] cursor-pointer`}>
+          <input type="checkbox" checked={a.ativo} onChange={(e) => void onPatch(a.agentKey, { ativo: e.target.checked })} className="w-4 h-4 accent-cyan-500" /> ativo
+        </label>
+        <label className={`flex items-center gap-1.5 text-[12px] ${TXT_MUDO} ml-auto`}>ordem
+          <input value={ordem} onChange={(e) => setOrdem(e.target.value)} inputMode="numeric" aria-label="Ordem" className={`${inputCls} w-[64px] text-center`} />
+        </label>
+        {sujo && (
+          <button type="button" onClick={() => void onPatch(a.agentKey, { nome, bio, ordem: Number(ordem) || 0 })} className="min-h-[40px] px-3 rounded-xl text-[11px] font-black uppercase tracking-widest bg-cyan-500 text-slate-950">salvar</button>
+        )}
+        {a.avatarUrl && (
+          <button type="button" onClick={() => void onPatch(a.agentKey, { avatarUrl: null })} className={`min-h-[40px] px-2 rounded-xl text-[11px] ${TXT_MUDO} hover:text-rose-500 dark:hover:text-rose-300`} title="Remover foto">sem foto</button>
+        )}
+      </div>
+      {/* USO — o card founder */}
+      <div className="pt-3 border-t border-slate-200/70 dark:border-white/10">
+        <div className="flex items-baseline gap-3">
+          <span className={`text-2xl font-black tabular-nums ${TXT}`}>{a.uso.total}</span>
+          <span className={`text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>usos · {a.uso.usuarios} {a.uso.usuarios === 1 ? "usuário" : "usuários"}</span>
+          {a.uso.ultimoUso && <span className={`ml-auto text-[10.5px] ${TXT_MUDO}`}>{new Date(a.uso.ultimoUso).toLocaleDateString("pt-BR")}</span>}
+        </div>
+        {a.uso.top.length > 0 && (
+          <ul className="mt-2 flex flex-col gap-1">
+            {a.uso.top.map((t) => (
+              <li key={t.userId} className={`flex items-center justify-between gap-2 text-[12px] ${TXT_2}`}>
+                <span className="truncate">{t.nome || t.email || t.userId}</span>
+                <span className={`tabular-nums font-bold ${TXT}`}>{t.contagem}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Aviso({ glassPanel, texto }: { glassPanel: string; texto: string }) {
+  return <div className={`flex-1 grid place-items-center rounded-[32px] ${glassPanel}`}><p className={`text-[13px] ${TXT_MUDO}`}>{texto}</p></div>;
+}
