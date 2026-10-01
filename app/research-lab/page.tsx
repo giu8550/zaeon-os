@@ -139,6 +139,9 @@ import { applyCitationDrop } from "@/lib/citationInsert";
 import { insertImageMarker, sanitizeFigureTitle } from "@/lib/imageInsert";
 import { extractCitationBlock } from "@/lib/scholar/chatCitation";
 import ResearchShell from "./ResearchShell";
+import TccSugestoes from "@/components/tcc/TccSugestoes";
+import { EVT_TCC_MUDOU, TCC_CROSS_ON, tccApi, type Revisao } from "@/lib/tcc/client";
+import { mesmoConteudo } from "@/lib/tcc/secoes";
 import ResearchReadingView from "./ResearchReadingView";
 
 // --- COMPONENTS ---
@@ -811,6 +814,44 @@ export default function HomeworkPage({
   const [currentWorkId, setCurrentWorkId] = useState<string | null>(null);
   const currentWorkIdRef = useRef<string | null>(null);
   currentWorkIdRef.current = currentWorkId;
+  // TCC cross-sala: o trabalho aberto é o MESMO TCC que a Sala de Estudos escreve. Aqui a folha
+  // sincroniza com o servidor e o chat lapida com rigor — tudo que ele muda nasce como sugestão.
+  const [tccWorkId, setTccWorkId] = useState<string | null>(null);
+  const tccWorkIdRef = useRef<string | null>(null);
+  tccWorkIdRef.current = tccWorkId;
+  const [tccSugestoes, setTccSugestoes] = useState<Revisao[]>([]);
+  const [tccPodeEscrever, setTccPodeEscrever] = useState(false);
+  // BASE do merge de 3 vias: a versão do servidor da qual a folha deriva. Folha == base = sem
+  // edição pendente (dá pra puxar o que a outra sala escreveu sem atropelar ninguém).
+  const tccBaseRef = useRef<string | null>(null);
+  const docContentRef = useRef<string>("");
+  docContentRef.current = docContent;
+
+  // Poll do TCC aberto: sugestões novas da própria Pesquisa e o que a Sala de Estudos escreveu.
+  // Só troca a folha quando ela está LIMPA (== base) — nunca por cima de digitação pendente.
+  const sincronizarTcc = useCallback(async () => {
+    const id = tccWorkIdRef.current;
+    if (!id) return;
+    try {
+      const d = await tccApi.ler(id);
+      if (tccWorkIdRef.current !== id) return;
+      setTccSugestoes(d.sugestoes);
+      setTccPodeEscrever(d.tcc.papel === "dono" || d.tcc.papel === "editor");
+      const limpa = tccBaseRef.current === null || docContentRef.current === tccBaseRef.current;
+      if (limpa && !mesmoConteudo(d.tcc.content, docContentRef.current)) {
+        tccBaseRef.current = d.tcc.content;
+        setDocContent(d.tcc.content);
+      }
+    } catch { /* offline/sem acesso: a folha segue como está */ }
+  }, []);
+  useEffect(() => {
+    if (!tccWorkId) return;
+    void sincronizarTcc();
+    const t = setInterval(() => { if (!document.hidden) void sincronizarTcc(); }, 6000);
+    const onMudou = (e: any) => { if (e?.detail?.workId === tccWorkIdRef.current) void sincronizarTcc(); };
+    window.addEventListener(EVT_TCC_MUDOU, onMudou);
+    return () => { clearInterval(t); window.removeEventListener(EVT_TCC_MUDOU, onMudou); };
+  }, [tccWorkId, sincronizarTcc]);
   const loadWorks = useCallback(() => {
     fetch("/api/research-works")
       .then((r) => r.json())
@@ -1230,6 +1271,9 @@ export default function HomeworkPage({
   // Troca o tipo SEM converter: salva a sessão atual e abre a do novo tipo (ou template vazio).
   const switchWorkType = (next: WorkType) => {
     if (next === workType) return;
+    // O TCC cross-sala é um trabalho próprio: trocar de tipo SOLTA ele (o autosave não pode
+    // gravar o template de outro tipo por cima do TCC que a Sala de Estudos está escrevendo).
+    if (tccWorkIdRef.current) { soltarTcc(); setCurrentWorkId(null); }
     if (workType) docsRef.current[workType] = { content: docContent, title: docTitle };
     const saved = docsRef.current[next];
     if (saved) {
@@ -1261,8 +1305,11 @@ export default function HomeworkPage({
     return null;
   }, []);
 
+  const soltarTcc = () => { setTccWorkId(null); setTccSugestoes([]); tccBaseRef.current = null; };
+
   // "Minhas coisas": NOVO trabalho (cria work + folha limpa), ABRIR e EXCLUIR um trabalho.
   const handleNewWork = () => {
+    soltarTcc();
     setDocTitle("");
     setDocContent(templateFor(workType));
     setCurrentWorkId(null);
@@ -1273,6 +1320,10 @@ export default function HomeworkPage({
       const r = await fetch(`/api/research-works?id=${id}`);
       if (!r.ok) return;
       const w = await r.json();
+      const ehTcc = TCC_CROSS_ON && Array.isArray(w.secoes);
+      setTccWorkId(ehTcc ? id : null);
+      setTccSugestoes([]);
+      tccBaseRef.current = ehTcc ? (w.content || "") : null;
       setDocTitle(w.title || "");
       setDocContent(w.content || templateFor(workTypeRef.current ?? "TCC"));
       if (w.workType) setWorkType(w.workType);
@@ -1282,7 +1333,7 @@ export default function HomeworkPage({
   }, []);
   const handleDeleteWork = (id: string) => {
     fetch(`/api/research-works?id=${id}`, { method: "DELETE" })
-      .then(() => { setSessions((prev) => prev.filter((s) => s.id !== id)); if (currentWorkIdRef.current === id) setCurrentWorkId(null); })
+      .then(() => { setSessions((prev) => prev.filter((s) => s.id !== id)); if (currentWorkIdRef.current === id) { setCurrentWorkId(null); soltarTcc(); } })
       .catch(() => {});
   };
 
@@ -1292,10 +1343,25 @@ export default function HomeworkPage({
     const id = currentWorkId;
     if (!id) return;
     const t = setTimeout(() => {
-      const data = { id, title: docTitle, content: docContent, workType };
+      const ehTcc = tccWorkIdRef.current === id;
+      const data = { id, title: docTitle, content: docContent, workType, ...(ehTcc && tccBaseRef.current !== null ? { tccBase: tccBaseRef.current } : {}) };
+      const enviado = docContent;
       fetch("/api/research-works", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
         .then((r) => (r.ok ? r.json() : null))
-        .then((w) => { if (w) setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, title: (w.title && w.title.trim()) || "Pesquisa sem título" } : s))); })
+        .then((w) => {
+          if (!w) return;
+          setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, title: (w.title && w.title.trim()) || "Pesquisa sem título" } : s)));
+          if (ehTcc && tccWorkIdRef.current === id && typeof w.content === "string") {
+            // O servidor fez o merge por seção. Folha intocada desde o envio → mostra o resultado
+            // (com o que a outra sala escreveu); se o aluno seguiu digitando, a base vira o enviado.
+            if (docContentRef.current === enviado) {
+              if (!mesmoConteudo(w.content, enviado)) setDocContent(w.content);
+              tccBaseRef.current = mesmoConteudo(w.content, enviado) ? enviado : w.content;
+            } else {
+              tccBaseRef.current = enviado;
+            }
+          }
+        })
         .catch(() => {});
     }, 1000);
     return () => clearTimeout(t);
@@ -1369,6 +1435,13 @@ export default function HomeworkPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Deep-link ?work=<id> (aba TCC da Sala de Estudos → "lapidar na Sala de Pesquisa"): abre
+  // aquele trabalho na folha. O GET de research-works já filtra pelo dono (sem IDOR).
+  useEffect(() => {
+    const wid = new URLSearchParams(window.location.search).get("work");
+    if (wid && /^[a-f0-9]{24}$/i.test(wid)) void handleOpenWork(wid);
+  }, [handleOpenWork]);
+
   // Deep-link ?session=<id> (vindo do menu inicial → Pesquisas): abre a ABA PESQUISA e
   // carrega aquela pesquisa salva como DOCUMENTO (título + conteúdo) na folha de escrita.
   useEffect(() => {
@@ -1413,6 +1486,7 @@ export default function HomeworkPage({
       // O chat da Sala de Pesquisa manda o TIPO pedido (Artigo/Relatório/TCC) → gera nele.
       const reqWt = e?.detail?.workType;
       if (typeof t === "string" && t.trim()) {
+        soltarTcc();
         const wt: WorkType =
           (reqWt === "TCC" || reqWt === "Artigo" || reqWt === "Relatório")
             ? reqWt
@@ -2520,6 +2594,7 @@ export default function HomeworkPage({
                 onChange={(e) => handleFiles(e.target.files)}
               />
               <ResearchShell
+                tccWorkId={tccWorkId}
                 flipped={isChatLeft}
                 workType={workType}
                 onWorkType={switchWorkType}
@@ -2582,6 +2657,16 @@ export default function HomeworkPage({
                                 "linear-gradient(90deg,#8b5cf6,#22d3ee)",
                             }}
                           />
+                        </div>
+                      )}
+                      {/* TCC cross-sala: o mesmo documento da Sala de Estudos. O que o chat daqui
+                          propõe aparece como sugestão — o aluno decide, nada muda em silêncio. */}
+                      {tccWorkId && !reviewMode && (
+                        <div className="shrink-0 flex flex-col gap-2">
+                          <p className="text-[12px] text-slate-500 dark:text-white/50">
+                            TCC compartilhado com a Sala de Estudos · o que o chat daqui mudar entra como sugestão, com fonte verificada.
+                          </p>
+                          <TccSugestoes compacto workId={tccWorkId} sugestoes={tccSugestoes} podeDecidir={tccPodeEscrever} onDecidida={() => void sincronizarTcc()} />
                         </div>
                       )}
                       {!reviewMode && (
