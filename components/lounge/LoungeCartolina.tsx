@@ -273,6 +273,7 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
 
   // Globo 3D só com WebGL e sem pedido de menos movimento; senão fica o SVG (que já é o fallback).
   const [globo3d, setGlobo3d] = useState(false);
+  const [globoPronto, setGloboPronto] = useState(false); // canvas criado (chunk do three chegou)
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const sync = () => setGlobo3d(!mq.matches && temWebGL());
@@ -330,7 +331,10 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
 
   return (
     <div style={{ position: embedded ? "absolute" : "fixed", inset: 0, overflow: "hidden", background: "#030712" }}>
-      <style>{`
+      {/* dangerouslySetInnerHTML e não {`…`}: como filho de texto, o SSR do React escapa as
+          aspas do font-family (&#x27;) mas o navegador lê <style> cru — o texto diverge e a
+          hidratação quebra (React #425/#422). CSS constante, sem dado de usuário. */}
+      <style dangerouslySetInnerHTML={{ __html: `
         .cal { font-family: 'Snell Roundhand','Segoe Script','Brush Script MT',cursive; }
         .cad-card { position: relative; background: rgba(243,231,206,.96); border: 1px solid ${INK_SOFT}66; border-radius: 10px; padding: 16px 16px 14px; box-shadow: 0 22px 44px -22px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.6); }
         .cad-tag { position:absolute; top:-10px; left:14px; background:${ACCENT}; color:#fff; font-size:12px; padding:1px 10px; border-radius:999px; box-shadow:0 4px 10px -4px ${ACCENT}; }
@@ -343,13 +347,13 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
         @keyframes tinta { to { stroke-dashoffset: 0; } }
         @media (prefers-reduced-motion: reduce) { .prancha-svg .tinta { animation: none; stroke-dashoffset: 0; } .globe-grid, .marker { animation: none; } }
         .star { position:absolute; width:2px; height:2px; background:#fff; border-radius:50%; }
-      `}</style>
+      ` }} />
 
       {/* GLOBO + MARCADORES (sem texto) */}
       <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "radial-gradient(130% 100% at 50% 20%, #0b1b3a 0%, #030712 70%)" }}>
         {[...Array(44)].map((_, i) => <span key={i} className="star" style={{ left: `${(i * 97) % 100}%`, top: `${(i * 53) % 100}%`, opacity: 0.15 + ((i * 7) % 6) / 12 }} />)}
-        {globo3d && <div style={{ position: "absolute", left: "50%", top: "50%", width: "min(80vmin,700px)", height: "min(80vmin,700px)", transform: "translate(-50%,-50%)" }}><GloboFundo pausado={open} /></div>}
-        <svg viewBox="0 0 400 400" width="min(70vmin,620px)" height="min(70vmin,620px)" style={{ filter: "drop-shadow(0 0 60px rgba(14,116,144,.35))", ...(globo3d ? { visibility: "hidden" } : null) }}>
+        {globo3d && <div style={{ position: "absolute", left: "50%", top: "50%", width: "min(80vmin,700px)", height: "min(80vmin,700px)", transform: "translate(-50%,-50%)" }}><GloboFundo pausado={open} onPronto={() => setGloboPronto(true)} /></div>}
+        <svg viewBox="0 0 400 400" width="min(70vmin,620px)" height="min(70vmin,620px)" style={{ filter: "drop-shadow(0 0 60px rgba(14,116,144,.35))", ...(globo3d && globoPronto ? { visibility: "hidden" } : null) }}>
           <defs><radialGradient id="globo" cx="40%" cy="35%" r="75%"><stop offset="0%" stopColor="#164e63" /><stop offset="70%" stopColor="#0a2540" /><stop offset="100%" stopColor="#030712" /></radialGradient></defs>
           <circle cx="200" cy="200" r="150" fill="url(#globo)" stroke={ACCENT} strokeWidth="1" opacity="0.9" />
           <g className="globe-grid" stroke={ACCENT} strokeOpacity="0.35" fill="none" strokeWidth="0.7" opacity="0.5">

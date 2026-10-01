@@ -46,7 +46,7 @@ function Globo() {
   );
 }
 
-export default function GloboFundo({ pausado = false }: { pausado?: boolean }) {
+export default function GloboFundo({ pausado = false, onPronto }: { pausado?: boolean; onPronto?: () => void }) {
   return (
     <Canvas
       aria-hidden
@@ -55,6 +55,7 @@ export default function GloboFundo({ pausado = false }: { pausado?: boolean }) {
       camera={{ position: [0, 0, 2.6], fov: 45 }}
       gl={{ antialias: true, powerPreference: "low-power" }}
       style={{ position: "absolute", inset: 0 }}
+      onCreated={() => onPronto?.()} // só agora o SVG de placeholder pode sumir
     >
       <ambientLight intensity={0.7} />
       <pointLight position={[10, 10, 10]} intensity={2.5} />
