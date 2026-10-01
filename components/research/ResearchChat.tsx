@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
+import ChatMarkdown from "@/components/study/ChatMarkdown";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
@@ -241,7 +242,11 @@ export default function ResearchChat({
                       : "rounded-r-2xl rounded-bl-2xl bg-slate-50 text-slate-800 border-l-2 border-cyan-500/60 text-justify dark:bg-white/[0.03] dark:text-white/90 dark:border-cyan-400/50"
                   }`}
                 >
-                  {m.text ? m.text : (!isUser && <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
+                  {isUser
+                    ? m.text
+                    : (m.text
+                        ? <ChatMarkdown text={m.text} />
+                        : <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                 </div>
               </div>
             );
