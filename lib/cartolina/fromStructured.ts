@@ -7,7 +7,7 @@
  * card (ganha mais um msgId) em vez de um clone — a cartolina é memória, não histórico.
  */
 import type { StructuredAnswer } from "@/lib/agent/contracts";
-import type { CartolinaCard } from "@/lib/caderno/cartolina";
+import type { CartolinaCard } from "@/lib/caderno/cartolina-tipos";
 
 export const MAX_CARDS_POR_TURNO = 8;
 const COL_W = 330, GAP_X = 40, GAP_Y = 40, COLS = 3, X0 = 120, ALTURA_LINHA = 240;

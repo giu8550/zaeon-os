@@ -3,7 +3,7 @@
  * antes de tocar o banco: o board é compartilhado, então um card malformado de um
  * colaborador não pode quebrar a tela do outro (nem inflar o documento).
  */
-import { TIPOS, type CartolinaCard } from "@/lib/caderno/cartolina";
+import { TIPOS, type CartolinaCard } from "@/lib/caderno/cartolina-tipos";
 
 export const MAX_CARDS = 200;
 const MAX_TEXTO = 4000;
@@ -81,4 +81,19 @@ export function applyOps(atual: CartolinaCard[], ops: CartolinaOps): CartolinaCa
     if (!vistos.has(id) && !remover.has(id)) out.push(c);
   }
   return out.slice(0, MAX_CARDS);
+}
+
+/**
+ * Polling do coworking: chegou o estado do servidor. Vale o REMOTO, exceto os cards que este
+ * cliente ainda está mexendo (arrastando ou com gravação pendente) — esses ficam com o valor
+ * local, senão o card "pularia de volta" na mão de quem está arrastando a cada poll.
+ * Card local pendente que o remoto ainda não tem (acabou de nascer aqui) também fica.
+ */
+export function mesclarRemoto(local: CartolinaCard[], remoto: CartolinaCard[], pendentes: ReadonlySet<string>): CartolinaCard[] {
+  if (!pendentes.size) return remoto;
+  const loc = new Map(local.map((c) => [c.id, c]));
+  const out = remoto.map((c) => (pendentes.has(c.id) && loc.has(c.id) ? loc.get(c.id)! : c));
+  const noRemoto = new Set(remoto.map((c) => c.id));
+  for (const c of local) if (pendentes.has(c.id) && !noRemoto.has(c.id)) out.push(c);
+  return out;
 }
