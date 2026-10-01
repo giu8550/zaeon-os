@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2, GitBranch,
+  PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2, GitBranch, GraduationCap,
 } from "lucide-react";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
@@ -46,9 +46,15 @@ import { typeStep, safeCut } from "@/lib/ui/typewriter";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import type { SkillNodeState } from "@/lib/skilltree/types";
 import type { SkillTreeData } from "@/components/study/SkillTreePanel";
+import { TCC_CROSS_ON, tccApi } from "@/lib/tcc/client";
 
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
 // Árvore de habilidades GENERATIVA (React Flow) — opt-in, drawer ao lado da conversa.
+// A cartolina (memória visual da conversa) só carrega quando o aluno abre — e só com a flag.
+const LoungeCartolina = dynamic(() => import("@/components/lounge/LoungeCartolina"), { ssr: false });
+const CARTOLINA_ON = process.env.NEXT_PUBLIC_CARTOLINA_MEMORIA === "1";
+// TCC cross-sala: a aba do TCC da conversa (Estudos cria/edita · Pesquisa lapida). Só com a flag.
+const TccPanel = dynamic(() => import("@/components/tcc/TccPanel"), { ssr: false });
 const SkillTreePanel = dynamic(() => import("@/components/study/SkillTreePanel"), { ssr: false });
 
 const DT = "application/x-zaeon-item";
@@ -115,8 +121,24 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // aba tem histórico próprio, e a antiga vira a aba #1 na primeira carga (ver threads.ts).
   const [threads, setThreads] = useState<Thread[]>([]);
   const [abaAtiva, setAbaAtiva] = useState<string | null>(null);
+  const [cartolinaAberta, setCartolinaAberta] = useState(false);
+  // TCC da conversa: id do work por aba (scopeId) + se a aba do TCC está aberta por cima do chat.
+  const [tccPorAba, setTccPorAba] = useState<Record<string, string>>({});
+  const [tccAberto, setTccAberto] = useState(false);
   const abaAtivaRef = useRef<string | null>(null);
   abaAtivaRef.current = abaAtiva;
+  const tccDaAba = TCC_CROSS_ON && abaAtiva ? tccPorAba[abaAtiva] ?? null : null;
+  // Trocar de aba fecha o TCC aberto (ele é DAQUELA conversa) e descobre se a nova aba tem TCC.
+  useEffect(() => {
+    setTccAberto(false);
+    if (!TCC_CROSS_ON || !abaAtiva || tccPorAba[abaAtiva]) return;
+    let vivo = true;
+    tccApi.doEscopo(abaAtiva)
+      .then((d) => { if (vivo && d.tcc) setTccPorAba((p) => ({ ...p, [abaAtiva]: d.tcc!.id })); })
+      .catch(() => { /* sem TCC / flag off no servidor: o botão só não aparece */ });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abaAtiva]);
   // Espelho das abas pra ler o valor atual dentro de callbacks sem recriá-los.
   const threadsRef = useRef<Thread[]>([]);
   threadsRef.current = threads;
@@ -505,6 +527,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
 
     // mensagem da assistente entra vazia e vai sendo preenchida aos poucos (streaming)
     const asstId = uid();
+    const abaDoTurno = abaAtivaRef.current; // o TCC criado neste turno é DESTA conversa, mesmo se o aluno trocar de aba no meio
     setMessages((prev) => [
       ...prev,
       { id: uid(), role: "user", kind: "text", text: prompt, at: Date.now() },
@@ -554,6 +577,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             // posição do aluno na árvore de habilidades → o mentor sabe onde você está (harness)
             skillTopic: skillNode?.topicSlug ?? tree?.topicSlug,
             skillNodeId: skillNode?.nodeId,
+            // Cartolina = memória da conversa: o board é o da ABA (conversa) ativa, e o card
+            // lembra de qual resposta veio (tap no card → volta pra essa mensagem).
+            cartolinaScopeId: abaAtivaRef.current ?? undefined,
+            cartolinaMsgId: asstId,
           },
           mentor: activeMentor ?? undefined,   // slug do mentor ativo → Aura com a voz da área
         }),
@@ -613,6 +640,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           if (structured.kind === "answer") {
             const a = structured.answer;
             setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, kind: "structured", answer: a, text: a.nucleo, streaming: false, fresh: true } : m)));
+            // TCC cross-sala: o turno criou/editou o TCC desta conversa → guarda o id e abre a aba
+            // do TCC na hora (sem sair da sala) — o aluno vê o documento crescer.
+            if (TCC_CROSS_ON && a.tcc?.workId && abaDoTurno) {
+              const workId = a.tcc.workId;
+              setTccPorAba((prev) => ({ ...prev, [abaDoTurno]: workId }));
+              if (abaAtivaRef.current === abaDoTurno) setTccAberto(true);
+            }
             // Artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
             // O tópico é o `title` do ref, NÃO a pergunta inteira: "por que o café me
             // deixa acordado" não resolve no PubChem; "cafeína" resolve.
@@ -732,6 +766,52 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               onNodeChat={onNodeChat}
               onClose={() => setTreeOpen(false)}
             />
+          </div>
+        )}
+
+        {/* Cartolina da conversa: botão + board por cima do chat. Tap num card → volta à resposta. */}
+        {CARTOLINA_ON && abaAtiva && (
+          <button
+            type="button"
+            onClick={() => setCartolinaAberta(true)}
+            aria-label="Abrir a cartolina desta conversa"
+            title="Cartolina desta conversa"
+            className="absolute z-20 right-4 top-3 min-h-[44px] min-w-[44px] px-3 rounded-full flex items-center gap-1.5 text-sm
+              bg-white/90 dark:bg-white/10 border border-slate-200 dark:border-white/15 shadow-lg backdrop-blur-xl
+              text-slate-700 dark:text-white/85 hover:text-cyan-600 dark:hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500"
+          >
+            <FileText size={16} /> Cartolina
+          </button>
+        )}
+        {CARTOLINA_ON && cartolinaAberta && abaAtiva && (
+          <div className="absolute inset-0 z-40">
+            <LoungeCartolina
+              embedded surface="estudos" scopeId={abaAtiva} abrirDeInicio
+              onFechar={() => setCartolinaAberta(false)}
+              onAbrirConversa={(msgId) => { setCartolinaAberta(false); requestAnimationFrame(() => ancorar(msgId)); }}
+              onAbrirTcc={TCC_CROSS_ON ? (workId) => { setCartolinaAberta(false); setTccPorAba((p) => ({ ...p, [abaAtiva]: workId })); setTccAberto(true); } : undefined}
+            />
+          </div>
+        )}
+
+        {/* TCC da conversa: a ABA abre por cima do chat (a sala não muda). Só existe depois do
+            "crie um TCC sobre…" — ou de abrir o card dele na cartolina. */}
+        {tccDaAba && !tccAberto && (
+          <button
+            type="button"
+            onClick={() => setTccAberto(true)}
+            aria-label="Abrir o TCC desta conversa"
+            title="TCC desta conversa"
+            className={`absolute z-20 ${CARTOLINA_ON ? "right-36" : "right-4"} top-3 min-h-[44px] min-w-[44px] px-3 rounded-full flex items-center gap-1.5 text-sm
+              bg-white/90 dark:bg-white/10 border border-slate-200 dark:border-white/15 shadow-lg backdrop-blur-xl
+              text-slate-700 dark:text-white/85 hover:text-cyan-600 dark:hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500`}
+          >
+            <GraduationCap size={16} /> TCC
+          </button>
+        )}
+        {tccDaAba && tccAberto && (
+          <div className="absolute inset-y-0 right-0 z-40 w-full sm:w-[min(620px,100%)] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]">
+            <TccPanel workId={tccDaAba} onFechar={() => setTccAberto(false)} />
           </div>
         )}
 

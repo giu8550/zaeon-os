@@ -96,3 +96,21 @@ estão certos: `gemini-2.5-flash`/`gemini-2.5-pro`, projeto `zaeon-os`/`us-centr
 - `POST` devolve o board existente da conversa se já houver (evita duplicata e custo de modelo); a UI manda `regenerar:true` ao apertar "gerar".
 
 **Faltam:** chat→cartolina (`cardsFromStructured`) e cartolina→agente (bússola); `msgIds` já é aceito/validado no card. Compartilhar/convite/comentários. Globo R3F e prancha LLM→SVG.
+
+## Status — PR 2: memória chat ⇄ cartolina (feita)
+- **Chat → cartolina:** `cardsFromStructured(answer, existentes, msgId)` (`lib/cartolina/fromStructured.ts`) mapeia `conceitos`→nota, `evidencia`→nota "Evidência" (com a fonte na legenda), `proximos_passos`→pergunta, `work.sections`→nota, `artifacts`→prancha/vídeo. Ids **determinísticos pelo conteúdo**: o mesmo conceito em dois turnos é o mesmo card (acumula `msgIds`, não mexe na posição que o aluno arrumou). Até 8 cards por turno.
+- **Cartolina → agente (bússola):** `bussola(cards)` vira um bloco curto (≤1200 chars) no `systemContext` do harness, ao lado do `wakeUpContext`: já estudado / em aberto / material criado.
+- **Memória por região:** card com `msgIds` mostra "↩ ver na conversa"; o chat fecha a cartolina e ancora na resposta (`data-msg`).
+- **Onde:** botão "Cartolina" no chat da Sala de Estudos (só com `NEXT_PUBLIC_CARTOLINA_MEMORIA=1`), board = a ABA ativa (`scopeId` = id da conversa). O cliente manda `agentContext.cartolinaScopeId`/`cartolinaMsgId`.
+- **Sem fila de propósito:** o handoff pedia background pra escrita pesada, mas fixar o turno **não chama modelo** (só mapeia a resposta que já existe): é 1 leitura + 1 escrita, fire-and-forget, depois que a resposta já foi enviada. Pôr isso na fila seria latência e infra a mais sem ganho. A geração por tópico (`POST /api/cartolina`) é a parte pesada e segue síncrona como antes.
+- **Limitação:** `msgIds` são ids do cliente (localStorage); em outro aparelho o "ver na conversa" cai no fim da conversa.
+
+## Status — PR 3: coworking multiusuário (feita)
+Fluxo de aceite: A abre a cartolina → **compartilhar** (copia link de editor, válido 7 dias) → B abre `/estudo/<id>?convite=…` → sem sessão vai pro `/login` (e-mail sem senha ou Google) e volta → entra como editor → os dois veem os mesmos cards (polling 2s), movem/adicionam e comentam/respondem por card.
+
+- **Convite = token assinado** (HMAC com `NEXTAUTH_SECRET`, `{board, papel, expira, sal}`), sem tabela. `Cartolina.conviteSalt` entra na assinatura: `DELETE /share` troca o sal e **revoga todos os links** já enviados (quem entrou continua). Não reusei o `InviteCode` existente: ele é convite de CADASTRO (limite de usos por código), outra semântica.
+- **Entrar é idempotente e nunca rebaixa** (editor que abre link de leitor segue editor; dono abrindo o próprio link não vira membro).
+- **Comentários:** thread de um nível (resposta de resposta pendura na raiz); resposta só vale pro mesmo board+card; leitor lê, não comenta. Lista de membros sem e-mail.
+- **Polling** (`useCartolinaCowork`): board só re-renderiza quando `rev` muda; comentários com `?desde=`; pausa com aba escondida. `mesclarRemoto` mantém local o card que você está arrastando/com gravação pendente. Pusher (presença/cursores) fica como upgrade.
+- **Rotas:** `POST/DELETE /:id/share`, `POST /:id/join`, `GET/POST /:id/comentarios`, `GET/DELETE /:id/membros`. Exigem **`CARTOLINA_MEMORIA=1` E `CARTOLINA_COWORK=1`** (UI: `NEXT_PUBLIC_CARTOLINA_COWORK=1`).
+- **Testes de UI:** jsdom + Testing Library entraram (arquivos `.test.tsx` com `// @vitest-environment jsdom`); `npm run test:coverage` aplica o portão 80/70 aos arquivos novos.

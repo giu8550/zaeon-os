@@ -9,27 +9,9 @@
  * atada ao chat) é PR à parte — ver docs/HANDOFF_CARTOLINA_MEMORIA.md.
  */
 
-export type CardTipo = "titulo" | "nota" | "pergunta" | "exercicio" | "prancha" | "video";
-
-export interface CartolinaCard {
-  id: string;
-  tipo: CardTipo;
-  titulo?: string;
-  corpo?: string;
-  resposta?: string;   // só exercicio
-  legenda?: string;    // prancha/vídeo
-  x: number; y: number; w: number; rot?: number;
-  /** Memória por região: as mensagens do chat que geraram este card (tap → abre a conversa). */
-  msgIds?: string[];
-}
-
-/** O que a Aura devolve (antes do layout). */
-export interface AuraCartolina {
-  titulo: string;
-  itens: Array<{ tipo: CardTipo; titulo?: string; corpo?: string; resposta?: string; legenda?: string }>;
-}
-
-export const TIPOS: CardTipo[] = ["titulo", "nota", "pergunta", "exercicio", "prancha", "video"];
+export type { CardTipo, CartolinaCard, AuraCartolina } from "@/lib/caderno/cartolina-tipos";
+export { TIPOS } from "@/lib/caderno/cartolina-tipos";
+import { TIPOS, type AuraCartolina, type CartolinaCard } from "@/lib/caderno/cartolina-tipos";
 
 /**
  * Layout determinístico: distribui os cards numa grade suave com leve rotação "colado à
