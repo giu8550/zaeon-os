@@ -13,19 +13,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { geminiJson } from "@/lib/scholar/gemini";
+import { ESBOCO_SYS, esbocoUser, type DraftJson } from "@/lib/research/esboco";
 
 const TIMEOUT_MS = Number(process.env.SCHOLAR_GEMINI_TIMEOUT_MS || 30000);
-
-interface DraftJson {
-  titulo?: string;
-  resumo?: string;
-  palavrasChave?: string;
-  introducao?: string;
-  objetivos?: string;
-  justificativa?: string;
-  metodologia?: string;
-  referencias?: string;
-}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -36,28 +26,8 @@ export async function POST(req: Request) {
   if (!topic) return NextResponse.json({ error: "Tema ausente" }, { status: 400 });
   const refs: string[] = Array.isArray(body.references) ? body.references.filter((s: any) => typeof s === "string").slice(0, 12) : [];
 
-  const sys = [
-    "Você é um orientador acadêmico. Gere um ESBOÇO de pesquisa em PT-BR — básico e didático",
-    "(NÃO experimental), pra dar um norte ao aluno começar o trabalho dele.",
-    "NÃO escreva títulos de seção nem numeração — só o MIOLO de cada campo (o sistema já tem o esqueleto).",
-    "Responda APENAS um JSON com estas chaves (strings):",
-    "{",
-    '  "titulo": "título claro e específico",',
-    '  "resumo": "3-4 frases",',
-    '  "palavrasChave": "termo1; termo2; termo3",',
-    '  "introducao": "contexto + problema + pergunta de pesquisa (1-2 parágrafos)",',
-    '  "objetivos": "1 objetivo geral + 2-3 específicos, separados por quebra de linha",',
-    '  "justificativa": "aponte UMA lacuna/ângulo original (o pioneirismo) e por que importa",',
-    '  "metodologia": "abordagem simples: tipo de pesquisa, fontes, passos",',
-    '  "referencias": "as fornecidas, formato autor-data, uma por linha (ou vazio)"',
-    "}",
-    "Seja conciso e concreto. Não invente dados nem referências.",
-  ].join("\n");
-
-  const user = `Tema do estudo: ${topic}\n\nReferências disponíveis:\n${refs.length ? refs.map((r, i) => `${i + 1}. ${r}`).join("\n") : "(nenhuma fornecida)"}`;
-
   try {
-    const d = await geminiJson<DraftJson>(sys, user, { temperature: 0.4, timeoutMs: TIMEOUT_MS });
+    const d = await geminiJson<DraftJson>(ESBOCO_SYS, esbocoUser(topic, refs), { temperature: 0.4, timeoutMs: TIMEOUT_MS });
     const title = (d.titulo || topic).slice(0, 120);
     const fields = {
       resumo: d.resumo || "",

@@ -13,12 +13,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
+import ChatMarkdown from "@/components/study/ChatMarkdown";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
+import { TCC_CROSS_ON, avisarTccMudou, tccApi } from "@/lib/tcc/client";
 
 // `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
 type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string };
@@ -60,9 +62,16 @@ const QUICK: { label: string; tpl: string }[] = [
 
 export default function ResearchChat({
   workType,
+  tccWorkId,
 }: {
   workType?: string | null;
+  /** TCC cross-sala aberto na folha: o chat lapida ESTE documento — e tudo nasce como sugestão. */
+  tccWorkId?: string | null;
 }) {
+  // Com um TCC cross-sala aberto, o padrão é LAPIDAR (sugestões com fonte verificada); o aluno
+  // pode desligar pra só conversar sobre o tema.
+  const [lapidar, setLapidar] = useState(true);
+  const modoTcc = TCC_CROSS_ON && !!tccWorkId && lapidar;
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -140,6 +149,24 @@ export default function ResearchChat({
     setSending(true);
     const patch = (text: string) => setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, text } : m)));
 
+    // TCC cross-sala: o pedido vira SUGESTÕES no mesmo documento (busca fonte verificada →
+    // propõe por seção → o crítico derruba o que não tem fonte). Nada é aplicado aqui.
+    if (modoTcc && tccWorkId) {
+      setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: "Buscando fontes verificadas" } : m)));
+      try {
+        const d = await tccApi.revisar(tccWorkId, prompt);
+        patch(d.texto);
+        if (d.sugestoes.length) avisarTccMudou(tccWorkId);
+        appendTranscript("pesquisa", null, [{ role: "user", text: prompt }, { role: "assistant", text: d.texto }]);
+      } catch (e: any) {
+        patch(e?.status === 403 ? "Você só pode ler este TCC — sugestões ficam com quem edita." : (e?.body?.texto || "Não consegui revisar agora. Tente de novo."));
+      } finally {
+        setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined } : m)));
+        setSending(false);
+      }
+      return;
+    }
+
     try {
       const r = await fetch("/api/ai/chat", {
         method: "POST",
@@ -213,7 +240,7 @@ export default function ResearchChat({
       setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined } : m)));
       setSending(false);
     }
-  }, [input, sending, messages, wt, runResearchGenerate]);
+  }, [input, sending, messages, wt, runResearchGenerate, modoTcc, tccWorkId]);
 
   return (
     <div className="h-full flex flex-col bg-white/95 dark:bg-[#0a0f1c]/95 text-slate-900 dark:text-white">
@@ -241,7 +268,11 @@ export default function ResearchChat({
                       : "rounded-r-2xl rounded-bl-2xl bg-slate-50 text-slate-800 border-l-2 border-cyan-500/60 text-justify dark:bg-white/[0.03] dark:text-white/90 dark:border-cyan-400/50"
                   }`}
                 >
-                  {m.text ? m.text : (!isUser && <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
+                  {isUser
+                    ? m.text
+                    : (m.text
+                        ? <ChatMarkdown text={m.text} />
+                        : <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                 </div>
               </div>
             );
@@ -252,6 +283,18 @@ export default function ResearchChat({
       {/* Composer (mesmo do co-working); ⟁ abre atalhos acadêmicos */}
       <div className="px-4 sm:px-6 pb-4 pt-2">
         <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2">
+          {TCC_CROSS_ON && tccWorkId && (
+            <div className="flex items-center gap-2 pb-2">
+              <button
+                type="button" role="switch" aria-checked={lapidar} onClick={() => setLapidar((v) => !v)}
+                className={`min-h-[36px] px-3 rounded-full text-[12px] border transition-colors ${lapidar
+                  ? "bg-amber-500/15 border-amber-400/50 text-amber-800 dark:text-amber-200"
+                  : "bg-transparent border-slate-300 dark:border-white/15 text-slate-600 dark:text-white/60"}`}
+              >
+                {lapidar ? "Lapidando o TCC · sugestões com fonte" : "Só conversa (não mexe no TCC)"}
+              </button>
+            </div>
+          )}
           <CoworkComposer
             value={input}
             onChange={setInput}

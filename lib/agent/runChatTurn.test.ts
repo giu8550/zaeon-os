@@ -4,6 +4,7 @@ const h = vi.hoisted(() => ({
   deps: null as any, onStepOpts: null as any, traj: vi.fn(), resolve: vi.fn(),
   markRunning: vi.fn(), saveDone: vi.fn(), saveError: vi.fn(),
   wake: vi.fn(), write: vi.fn(), bussola: vi.fn(), fixar: vi.fn(),
+  tccCtx: vi.fn(), tccTurno: vi.fn(), uso: vi.fn(),
 }));
 vi.mock("@/lib/agent/aura-harness", () => ({
   buildHarnessDeps: (ctx: any, opts: any) => { h.onStepOpts = opts; h.deps = { ctx }; return h.deps; },
@@ -13,6 +14,9 @@ vi.mock("@/lib/agent/trajectory", () => ({ runTrajectoryTraced: h.traj }));
 vi.mock("@/lib/agent/memory-provider", () => ({ wakeUpContext: h.wake, writeTurnMemory: h.write }));
 vi.mock("@/lib/agent/chat-turn-store", () => ({ markRunning: h.markRunning, saveDone: h.saveDone, saveError: h.saveError }));
 vi.mock("@/lib/cartolina/memoria-turno", () => ({ bussolaParaTurno: h.bussola, fixarTurno: h.fixar }));
+vi.mock("@/lib/tcc/turno", () => ({ tccContextoParaTurno: h.tccCtx, tccDoTurno: h.tccTurno }));
+vi.mock("@/lib/canal/usage", () => ({ registrarUso: h.uso }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: {} }));
 
 import { runChatTurn } from "@/lib/agent/runChatTurn";
 import { PROGRESS_SENTINEL } from "@/lib/agent/progresso";
@@ -24,6 +28,7 @@ const params = (x: any = {}) => ({ prompt: "o que é luz?", surface: "sala-de-es
 beforeEach(() => {
   Object.values(h).forEach((f: any) => f?.mockReset?.());
   h.wake.mockResolvedValue("MEM"); h.bussola.mockResolvedValue("BUSSOLA");
+  h.tccCtx.mockResolvedValue(""); h.tccTurno.mockResolvedValue(null); h.uso.mockResolvedValue(true);
   for (const f of [h.markRunning, h.saveDone, h.saveError]) f.mockResolvedValue(undefined); // como o store real
   // a trajetória "narra" duas fases pelo onStep e devolve a resposta
   h.traj.mockImplementation(async () => {
@@ -85,6 +90,26 @@ describe("runChatTurn", () => {
     await runChatTurn(null, params({ agentContext: { cartolinaScopeId: "t1", cartolinaMsgId: "m1", currentStudyId: "s1" } }), () => {});
     expect(h.write.mock.calls[0][0]).toMatchObject({ userId: "u1", scopeId: "s1", answer });
     expect(h.fixar.mock.calls[0][0]).toMatchObject({ userId: "u1", scopeId: "t1", msgId: "m1", answer });
+  });
+  it("TCC: contexto entra depois da bússola; turno que criou TCC troca o work pelo aviso `tcc` e a cartolina não recebe as seções", async () => {
+    h.tccCtx.mockResolvedValue("TCC");
+    await runChatTurn(null, params(), () => {});
+    expect(h.onStepOpts.systemContext).toBe("SYS\n\nMEM\n\nBUSSOLA\n\nTCC");
+    expect(h.tccCtx).toHaveBeenCalledWith("u1", "t1");
+
+    const tcc = { workId: "w1", titulo: "TCC", criado: true, alteradas: 3 };
+    const comWork = { mode: "structured", answer: { nucleo: "n", work: { kind: "tcc", sections: [] } } };
+    h.resolve.mockReturnValue(comWork); h.tccTurno.mockResolvedValue(tcc);
+    const r: any = await runChatTurn(null, params(), () => {});
+    expect(r.answer).toEqual({ nucleo: "n", work: undefined, tcc });
+    expect(h.fixar.mock.calls.at(-1)![0].answer.work).toBeUndefined();
+  });
+  it("uso: registra o agente (mentor ou aura) pro dono; anônimo não registra", async () => {
+    await runChatTurn(null, params(), () => {});
+    await runChatTurn(null, params({ mentor: { slug: "farmacia", wing: { kind: "agente", label: "x" } } }), () => {});
+    await runChatTurn(null, params({ userId: null }), () => {});
+    await new Promise((r) => setTimeout(r, 0));
+    expect(h.uso.mock.calls.map((c) => [c[1], c[2]])).toEqual([["aura", "u1"], ["farmacia", "u1"]]);
   });
   it("canal de progresso quebrado não derruba o turno", async () => {
     const r = await runChatTurn(null, params(), () => { throw new Error("stream fechado"); });

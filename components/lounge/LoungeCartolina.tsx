@@ -70,8 +70,9 @@ function Prancha() {
   );
 }
 
-function CardView({ c, onReveal, revealed, onAbrirConversa, nComentarios, onComentarios, boardId, onDesenhar, desenhando }: {
+function CardView({ c, onReveal, revealed, onAbrirConversa, onAbrirTcc, nComentarios, onComentarios, boardId, onDesenhar, desenhando }: {
   c: Card; onReveal: (id: string) => void; revealed: boolean; onAbrirConversa?: (msgId: string) => void;
+  onAbrirTcc?: (workId: string) => void;
   nComentarios?: number; onComentarios?: (id: string) => void;
   boardId?: string | null; onDesenhar?: (id: string) => void; desenhando?: boolean;
 }) {
@@ -140,6 +141,18 @@ function CardView({ c, onReveal, revealed, onAbrirConversa, nComentarios, onCome
           ↩ ver na conversa
         </button>
       ) : null}
+      {/* Card do TCC cross-sala (id "tcc:<workId>"): abre a aba do TCC na Sala de Estudos. */}
+      {onAbrirTcc && c.id.startsWith("tcc:") ? (
+        <button
+          type="button" data-ui className="cal"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onAbrirTcc(c.id.slice(4))}
+          aria-label="Abrir o TCC desta conversa"
+          style={{ marginTop: 10, minHeight: 44, fontSize: 14, color: ACCENT, background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+        >
+          abrir o TCC →
+        </button>
+      ) : null}
       {onComentarios && (
         <button
           type="button" data-ui className="cal"
@@ -163,13 +176,15 @@ const COWORK = PERSISTIR && process.env.NEXT_PUBLIC_CARTOLINA_COWORK === "1";
 const CADERNO = PERSISTIR && process.env.NEXT_PUBLIC_CADERNO_ENABLED === "1";
 const SALVAR_APOS_MS = 800;
 
-export default function LoungeCartolina({ embedded = false, surface = "lounge", scopeId, boardId: boardIdProp, abrirDeInicio = false, onAbrirConversa, onFechar }: {
+export default function LoungeCartolina({ embedded = false, surface = "lounge", scopeId, boardId: boardIdProp, abrirDeInicio = false, onAbrirConversa, onAbrirTcc, onFechar }: {
   embedded?: boolean; surface?: "estudos" | "lounge"; scopeId?: string;
   /** Board específico (link compartilhado /estudo/:id) — ignora surface/scopeId. */
   boardId?: string;
   /** Sala de Estudos abre o board já aberto (o globo/aba puxável é do lounge). */
   abrirDeInicio?: boolean;
   onAbrirConversa?: (msgId: string) => void;
+  /** TCC cross-sala: o card "TCC — em construção" abre a aba do TCC. */
+  onAbrirTcc?: (workId: string) => void;
   onFechar?: () => void;
 }) {
   const isMobile = useIsMobile();
@@ -418,13 +433,13 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
           <div onPointerDown={onBoardDown} onWheel={onWheel} style={{ position: "absolute", inset: 0, top: 56, overflow: isMobile ? "auto" : "hidden", cursor: isMobile ? "auto" : "grab", backgroundImage: `radial-gradient(${INK_SOFT}22 1px, transparent 1px)`, backgroundSize: "26px 26px" }}>
             {isMobile ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 26, padding: "28px 18px 60px", maxWidth: 520, margin: "0 auto" }}>
-                {cards.map((c) => <div key={c.id}><CardView c={{ ...c, rot: 0, w: Math.min(c.w, 480) }} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} boardId={boardAtivo} onDesenhar={CADERNO && boardAtivo && papel !== "leitor" ? desenhar : undefined} desenhando={desenhando === c.id} /></div>)}
+                {cards.map((c) => <div key={c.id}><CardView c={{ ...c, rot: 0, w: Math.min(c.w, 480) }} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} onAbrirTcc={onAbrirTcc} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} boardId={boardAtivo} onDesenhar={CADERNO && boardAtivo && papel !== "leitor" ? desenhar : undefined} desenhando={desenhando === c.id} /></div>)}
               </div>
             ) : (
               <div style={{ position: "absolute", inset: 0, transform: `translate(${view.x}px,${view.y}px) scale(${view.scale})`, transformOrigin: "0 0" }}>
                 {cards.map((c) => (
                   <div key={c.id} data-card onPointerDown={(e) => onCardDown(e, c)} style={{ position: "absolute", left: c.x, top: c.y, cursor: "grab", touchAction: "none" }}>
-                    <CardView c={c} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} boardId={boardAtivo} onDesenhar={CADERNO && boardAtivo && papel !== "leitor" ? desenhar : undefined} desenhando={desenhando === c.id} />
+                    <CardView c={c} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} onAbrirTcc={onAbrirTcc} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} boardId={boardAtivo} onDesenhar={CADERNO && boardAtivo && papel !== "leitor" ? desenhar : undefined} desenhando={desenhando === c.id} />
                   </div>
                 ))}
               </div>

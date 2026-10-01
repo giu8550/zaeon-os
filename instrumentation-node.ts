@@ -8,6 +8,14 @@
 import type { ScholarJobData } from "@/lib/queue/scholar";
 import type { ChatJobData } from "@/lib/queue/chat";
 
+/** Worker do canal coworking. Nunca lança: falha aqui não pode derrubar o boot nem os outros workers. */
+export async function iniciarWorkerCanalOpcional() {
+  try {
+    const { iniciarWorkerCanal } = await import("@/lib/canal/queue");
+    if (!(await iniciarWorkerCanal())) console.warn("[canal-worker] CANAL_WORKER=1 mas fila desligada (CANAL_QUEUE=1 + REDIS_URL) — não iniciado.");
+  } catch (e) { console.warn("[canal-worker] não iniciado:", (e as Error)?.message); }
+}
+
 export async function iniciarWorkers() {
   const { getRedisConnection, isQueueEnabled, SCHOLAR_QUEUE } = await import("@/lib/queue/scholar");
   if (!isQueueEnabled()) {

@@ -79,6 +79,8 @@ export type StructuredAnswer = {
   work?: { kind: WorkKind; sections: { title: string; body: string }[] }; // criar_trabalho
   sources?: Source[];                               // pesquisar_fontes
   provenance?: ProvenanceRecord;                    // origem rastreável (open-science)
+  /** TCC cross-sala (TCC_CROSS): o turno criou/editou o TCC desta conversa → o cliente abre a aba. */
+  tcc?: { workId: string; titulo: string; criado: boolean; alteradas: number; gerando?: boolean };
 };
 
 // ─────────────────────────── IntentRegistry (§8.1/8.3) ───────────────────────────
