@@ -252,7 +252,11 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const abrirCartolina = () => {
     const id = det?.canal.cartolinaId;
     if (!id) return;
-    try { window.dispatchEvent(new CustomEvent("zaeon:cartolina:abrir", { detail: { id, canalId: ativoId } })); } catch { /* ignore */ }
+    // Seam: avisa quem renderiza a cartolina (LoungeCartolina na aba "lounge", PR #152) e leva pra lá.
+    try {
+      window.dispatchEvent(new CustomEvent("zaeon:cartolina:abrir", { detail: { id, canalId: ativoId } }));
+      window.dispatchEvent(new CustomEvent("zaeon:set-tab", { detail: "lounge" }));
+    } catch { /* ignore */ }
   };
 
   // ─── render ───

@@ -25,6 +25,11 @@ const TeacherLoungeContent = dynamic(
   () => import("@/app/workstation/teacher/LoungeContent"),
   { ssr: false },
 );
+// Cartolina Caderno (coworking) — renderiza na aba "lounge" (2a).
+const LoungeCartolina = dynamic(
+  () => import("@/components/lounge/LoungeCartolina"),
+  { ssr: false },
+);
 const ResearchesPage = dynamic(
   () => import("@/app/study-rooms/lounge/main-lounge/researches/page"),
   { ssr: false },
@@ -2814,8 +2819,10 @@ export default function HomeworkPage({
           )}
 
           {activeTab === "lounge" && (
-            <div className="w-full h-full overflow-y-auto custom-scrollbar">
-              {isTeacher ? <TeacherLoungeContent /> : <StudentLoungeContent />}
+            // 2a: a aba "lounge" agora é a CARTOLINA Caderno (coworking). O conteúdo antigo
+            // (StudentLoungeContent/TeacherLoungeContent) foi substituído pela cartolina.
+            <div className="relative w-full h-full">
+              <LoungeCartolina embedded />
             </div>
           )}
 

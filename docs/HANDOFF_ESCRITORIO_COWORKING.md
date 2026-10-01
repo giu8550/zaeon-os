@@ -59,9 +59,10 @@ Não-lidas por canal no seletor e zeram ao abrir/focar.
 
 ## Cartolina embutida (seam)
 `Canal.cartolinaId` + botão "▦ cartolina" quando preenchido → dispara
-`window` event `zaeon:cartolina:abrir { id, canalId }`. O componente `LoungeCartolina`/rotas
-`/api/cartolina/*` vivem na stack `feat/cartolina-*` (PRs #152–155, ainda fora do `main` neste
-branch) — quando ela entrar, basta ouvir o evento e abrir o board. O dono preenche o id no ⚙︎.
+`window` event `zaeon:cartolina:abrir { id, canalId }` + `zaeon:set-tab "lounge"` (onde a
+`LoungeCartolina` do PR #152, já no `main`, renderiza). Ligar o `id` ao board da `LoungeCartolina`
+(que hoje resolve por surface/scopeId) é o próximo passo quando a PR de cowork (#154) entrar.
+O dono preenche o id no ⚙︎.
 
 ## Verificado no navegador (dev, flags ligadas, login por e-mail de teste)
 - Aba "escritorio" abre o canal; 1º canal auto-criado ("Meu escritório"); presença via
