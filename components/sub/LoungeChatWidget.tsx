@@ -708,6 +708,8 @@ export const LoungeChatWidget = ({ defaultOpen = false }: LoungeChatWidgetProps)
         try { skipTour(); } catch { /* */ } // pula o tour (finishTour → onboard:stop)
     };
 
+    // /m (app mobile) tem chat próprio em tela cheia: o widget flutuante só atrapalharia.
+    if (pathname === "/m" || pathname?.startsWith("/m/")) return null;
     return (
         <>
         <AgentActionRunner side={widgetPosition} />

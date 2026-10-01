@@ -73,8 +73,8 @@ do web — funciona, mas divide CPU/RAM com o site).
 - **Reinício do worker no meio de um job:** BullMQ retenta (`attempts: 2`). Jobs presos
   em `running` por >10 min o cliente marca como erro; vale um "reaper" que rode
   `scholarSession.updateMany({ status: running, createdAt < now-15min } → error)` no boot.
-- **Sala de Estudos (chat da Aura):** ainda é streaming no cliente (não sobrevive a sair).
-  Migrar pro mesmo padrão (job + sessão + resume) é a fase 2.
+- **Sala de Estudos (chat da Aura):** ✅ feito na **Fase 3** (seção abaixo): `CHAT_BG=1` + fila
+  `chat` + `ChatTurn` + reengate no cliente.
 - **Multi-réplica:** já suportado (a fila serializa); é só subir mais containers `worker`.
 
 ## Fase 2 — Studio (Sala de Estudos)
@@ -145,3 +145,8 @@ aluno volta → StudyCoworkChat acha a mensagem `pendente` com turnId (persistid
 
 **Ligar em prod:** `prisma db push` → worker de pé (`--profile worker`) → `CHAT_BG=1` no `web`.
 Nunca ligue `CHAT_BG` sem o worker rodando: os turnos ficariam `queued` até o reaper.
+
+## Fase 3 — PR 3/4
+- PR 3: núcleo de rede compartilhado (`lib/chat/auraClient.ts`, `lib/scholar/scholarClient.ts`) +
+  hooks `useAuraChat`/`useScholar`.
+- PR 4: app mobile `/m` (ver `docs/MOBILE.md`) consumindo os mesmos núcleos.

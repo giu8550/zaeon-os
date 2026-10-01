@@ -46,6 +46,7 @@ import { typeStep, safeCut } from "@/lib/ui/typewriter";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import { esperarTurno } from "@/lib/chat/turnoRetomavel";
 import { pedirAura } from "@/lib/chat/auraClient";
+import { criarEstudo, gerarArtefato } from "@/lib/studio/studioClient";
 import type { SkillNodeState } from "@/lib/skilltree/types";
 import type { SkillTreeData } from "@/components/study/SkillTreePanel";
 
@@ -434,69 +435,24 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
    * explícito continua reclamando alto: aí a pessoa está esperando.
    */
   const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false) => {
-    const H = { "Content-Type": "application/json" };
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
     // estudo NOVO criado pelo tópico. Nunca pega um estudo arbitrário da biblioteca
     // (senão "gere um podcast sobre X" sairia sobre o conteúdo errado).
     let spaceId = focusIds[0];
     if (!spaceId) {
-      try {
-        const r = await fetch("/api/study/spaces", { method: "POST", headers: H, body: JSON.stringify({ title: topic || "Estudo" }) });
-        if (r.ok) { const s = await r.json(); setSpaces((p) => [...p, s]); spaceId = s.id; }
-      } catch { /* ignore */ }
+      const s = await criarEstudo(topic || "Estudo");
+      if (s) { setSpaces((p) => [...p, s as any]); spaceId = s.id; }
     }
     if (!spaceId) return;
-    const fire = (detail: any) => window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...detail, attachMsgId } }));
-    try {
-      if (kind === "podcast" || kind === "video") {
-        const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId }) });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.id) return;
-        if (data.status === "done") { fire({ studioKind: kind, title: data.title, data: data.meta, artifactId: data.id }); return; }
-        const started = Date.now();
-        const maxMs = kind === "video" ? 12 * 60_000 : 10 * 60_000;
-        while (Date.now() - started < maxMs) {
-          await new Promise((r) => setTimeout(r, kind === "video" ? 3000 : 2500));
-          const rr = await fetch(`/api/studio/${data.id}`);
-          const d = await rr.json().catch(() => null);
-          if (!d) continue;
-          if (d.status === "done") { fire({ studioKind: kind, title: d.title, data: d.meta, artifactId: d.id }); return; }
-          if (d.status === "error") return;
-        }
-      } else if (kind === "molecule") {
-        // Não passa pelo pipeline de texto: a estrutura vem do PubChem, não de LLM.
-        const res = await fetch("/api/studio/molecule", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.meta?.sdf) fire({ studioKind: "molecule", title: data.title, data: data.meta, artifactId: data.id });
-        else if (!silencioso) avisarFalha(data?.error);
-      } else if (kind === "image") {
-        const res = await fetch("/api/studio/image", { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.dataUrl) fire({ studioKind: "image", title: data.title || "Imagem", data: data.meta, dataUrl: data.dataUrl });
-        else if (!silencioso) avisarFalha(data?.error);
-      } else {
-        // text kinds (mindmap/guide/faq/flashcards): agora rodam em BACKGROUND no servidor
-        // (fire-and-forget) → o POST volta "queued" e a gente faz polling até "done", igual
-        // a podcast/vídeo. Assim, sair da sala não interrompe a geração. Cache hit já volta
-        // "done" com meta na hora.
-        const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic, force: true }) });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.id) { if (!silencioso) avisarFalha(data?.error); return; }
-        if (data.status === "done" && data.meta) { fire({ studioKind: kind, title: data.title, data: data.meta }); return; }
-        const started = Date.now();
-        while (Date.now() - started < 5 * 60_000) {
-          await new Promise((r) => setTimeout(r, 2000));
-          const rr = await fetch(`/api/studio/${data.id}`);
-          const d = await rr.json().catch(() => null);
-          if (!d) continue;
-          if (d.status === "done") { fire({ studioKind: kind, title: d.title, data: d.meta }); return; }
-          if (d.status === "error") { if (!silencioso) avisarFalha(d?.error); return; }
-        }
-      }
-    } catch {
-      if (!silencioso) avisarFalha();
+    // Rede (por tipo: podcast/vídeo, molécula, imagem, texto) em lib/studio/studioClient.ts —
+    // o MESMO núcleo do mobile. Aqui fica só o que é desta tela: o evento e o aviso.
+    const r = await gerarArtefato(kind, { spaceId, topic });
+    if (r.tipo === "pronto") {
+      window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId } }));
+    } else if (r.tipo === "erro" && !r.silencioso && !silencioso) {
+      avisarFalha(r.mensagem);
     }
-  }, [focusIds, spaces, avisarFalha]);
+  }, [focusIds, avisarFalha]);
 
   // ── envio pro chat da Aura ──────────────────────────────────────────────────
   // `override` = envio direto (clique numa opção/conceito da resposta do harness),
