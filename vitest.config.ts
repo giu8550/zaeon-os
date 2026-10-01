@@ -2,13 +2,24 @@ import { defineConfig } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
+  // tsconfig usa jsx:"preserve" (o Next compila); no teste quem compila é o esbuild.
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./"),
     },
   },
   test: {
-    include: ["lib/**/*.test.ts", "app/**/*.test.ts"],
+    // .test.tsx = testes de UI (jsdom, declarado por arquivo com `// @vitest-environment jsdom`).
+    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "lib/**/*.test.tsx", "app/**/*.test.tsx", "components/**/*.test.tsx"],
     environment: "node",
+    // Cobertura (npm run test:coverage) escopada ao que é NOVO — o legado sem teste não
+    // pode diluir nem bloquear o portão das unidades novas.
+    coverage: {
+      provider: "v8",
+      include: ["lib/cartolina/**/*.ts", "components/lounge/CartolinaComentarios.tsx", "components/lounge/useCartolinaCowork.ts"],
+      exclude: ["**/*.test.*"],
+      thresholds: { lines: 80, functions: 80, statements: 80, branches: 70 },
+    },
   },
 });

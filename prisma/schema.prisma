@@ -462,6 +462,9 @@ model Cartolina {
   titulo    String   @default("Estudo")
   cards     Json     // CartolinaCard[]
   rev       Int      @default(0)
+  // Entra na assinatura dos links de convite: trocar o sal REVOGA todos os links já
+  // enviados (sem tabela de tokens). null = nunca compartilhado.
+  conviteSalt String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

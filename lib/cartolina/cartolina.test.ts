@@ -193,3 +193,21 @@ describe("store · controle otimista (rev)", () => {
     expect(db.boards.get(b.id).titulo).toBe("Novo");
   });
 });
+
+import { mesclarRemoto } from "@/lib/cartolina/cards";
+describe("cards · mesclarRemoto (polling)", () => {
+  const L = [card("a", { x: 1 }), card("b", { x: 1 }), card("novo")] as any;
+  const R = [card("a", { x: 9 }), card("b", { x: 9 }), card("deB")] as any;
+  it("sem pendência, vale o servidor inteiro (inclusive cards que o outro criou/apagou)", () => {
+    expect(mesclarRemoto(L, R, new Set())).toBe(R);
+  });
+  it("card que eu estou arrastando não pula de volta", () => {
+    const r = mesclarRemoto(L, R, new Set(["a"]));
+    expect(r.find((c) => c.id === "a")!.x).toBe(1);
+    expect(r.find((c) => c.id === "b")!.x).toBe(9);
+    expect(r.map((c) => c.id)).toContain("deB");
+  });
+  it("card recém-criado aqui (ainda não gravado) não some no poll", () => {
+    expect(mesclarRemoto(L, R, new Set(["novo"])).map((c) => c.id)).toEqual(["a", "b", "deB", "novo"]);
+  });
+});

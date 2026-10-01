@@ -13,8 +13,11 @@
  * A camada de MEMÓRIA (persistir como memória do agente, atada ao chat) é PR à parte —
  * docs/HANDOFF_CARTOLINA_MEMORIA.md.
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { CartolinaCard } from "@/lib/caderno/cartolina";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CartolinaCard } from "@/lib/caderno/cartolina-tipos";
+import { mesclarRemoto } from "@/lib/cartolina/cards";
+import { useCartolinaCowork } from "@/components/lounge/useCartolinaCowork";
+import { CartolinaComentarios, Avatar } from "@/components/lounge/CartolinaComentarios";
 
 const INK = "#3a2f1e";
 const INK_SOFT = "#6b5a3e";
@@ -55,6 +58,10 @@ function Prancha() {
 }
 
 function CardView({ c, onReveal, revealed, onAbrirConversa, onAbrirTcc }: { c: Card; onReveal: (id: string) => void; revealed: boolean; onAbrirConversa?: (msgId: string) => void; onAbrirTcc?: (workId: string) => void }) {
+function CardView({ c, onReveal, revealed, onAbrirConversa, nComentarios, onComentarios }: {
+  c: Card; onReveal: (id: string) => void; revealed: boolean; onAbrirConversa?: (msgId: string) => void;
+  nComentarios?: number; onComentarios?: (id: string) => void;
+}) {
   const base: React.CSSProperties = { width: c.w, transform: `rotate(${c.rot ?? 0}deg)` };
   if (c.tipo === "titulo") {
     return (
@@ -117,16 +124,32 @@ function CardView({ c, onReveal, revealed, onAbrirConversa, onAbrirTcc }: { c: C
           abrir o TCC →
         </button>
       ) : null}
+      {onComentarios && (
+        <button
+          type="button" data-ui className="cal"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onComentarios(c.id)}
+          aria-label={`Comentários de "${c.titulo ?? "este card"}" (${nComentarios ?? 0})`}
+          style={{ position: "absolute", right: 8, bottom: 6, minWidth: 44, minHeight: 44, fontSize: 14, color: nComentarios ? ACCENT : INK_SOFT, background: "none", border: "none", cursor: "pointer" }}
+        >
+          💬{nComentarios ? ` ${nComentarios}` : ""}
+        </button>
+      )}
     </div>
   );
 }
 
 // Persistência real (Cartolina no banco) — atrás da flag; desligada = o protótipo de sempre.
 const PERSISTIR = process.env.NEXT_PUBLIC_CARTOLINA_MEMORIA === "1";
+// Coworking (compartilhar/comentar/polling): exige a persistência também.
+const COWORK = PERSISTIR && process.env.NEXT_PUBLIC_CARTOLINA_COWORK === "1";
 const SALVAR_APOS_MS = 800;
 
 export default function LoungeCartolina({ embedded = false, surface = "lounge", scopeId, abrirDeInicio = false, onAbrirConversa, onAbrirTcc, onFechar }: {
+export default function LoungeCartolina({ embedded = false, surface = "lounge", scopeId, boardId: boardIdProp, abrirDeInicio = false, onAbrirConversa, onFechar }: {
   embedded?: boolean; surface?: "estudos" | "lounge"; scopeId?: string;
+  /** Board específico (link compartilhado /estudo/:id) — ignora surface/scopeId. */
+  boardId?: string;
   /** Sala de Estudos abre o board já aberto (o globo/aba puxável é do lounge). */
   abrirDeInicio?: boolean;
   onAbrirConversa?: (msgId: string) => void;
@@ -148,8 +171,12 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
   const [view, setView] = useState({ x: 40, y: 20, scale: 1 });
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
-  const boardId = useRef<string | null>(null);
+  const boardId = useRef<string | null>(boardIdProp ?? null);
   const somenteLeitura = useRef(false);
+  const [boardAtivo, setBoardAtivo] = useState<string | null>(boardIdProp ?? null); // espelho p/ o polling
+  const [papel, setPapel] = useState<string | null>(null);
+  const [comentandoCard, setComentandoCard] = useState<string | null>(null);
+  const [linkCopiado, setLinkCopiado] = useState<string | null>(null);
   const sujos = useRef<Set<string>>(new Set());
   const cardsRef = useRef<Card[]>(cards);
   cardsRef.current = cards;
@@ -160,17 +187,43 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
     if (!PERSISTIR) return;
     let vivo = true;
     const q = new URLSearchParams({ surface, ...(scopeId ? { scopeId } : {}) });
-    fetch(`/api/cartolina?${q}`)
+    fetch(boardIdProp ? `/api/cartolina/${boardIdProp}` : `/api/cartolina?${q}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!vivo || !d?.board) return;
         boardId.current = d.board.id;
+        setBoardAtivo(d.board.id);
+        setPapel(d.board.papel);
         somenteLeitura.current = d.board.papel === "leitor";
-        if (Array.isArray(d.board.cards) && d.board.cards.length) setCards(d.board.cards);
+        if (Array.isArray(d.board.cards) && (d.board.cards.length || boardIdProp)) setCards(d.board.cards);
       })
       .catch(() => { /* sem rede: segue com o que está na tela */ });
     return () => { vivo = false; };
-  }, [surface, scopeId]);
+  }, [surface, scopeId, boardIdProp]);
+
+  // Coworking: o estado dos outros chega por polling; o que EU estou mexendo não pula de volta.
+  const cowork = useCartolinaCowork({
+    ativo: COWORK && open,
+    boardId: boardAtivo,
+    onBoard: (b) => {
+      const pend = new Set(sujos.current);
+      if (drag.current) pend.add(drag.current.id);
+      setCards((local) => mesclarRemoto(local, b.cards, pend));
+      setPapel(b.papel);
+      somenteLeitura.current = b.papel === "leitor";
+    },
+  });
+  const contagem = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const c of cowork.comentarios) m[c.cardId] = (m[c.cardId] ?? 0) + 1;
+    return m;
+  }, [cowork.comentarios]);
+  const compartilhar = useCallback(async (p: "editor" | "leitor") => {
+    const url = await cowork.compartilhar(p);
+    if (!url) return;
+    setLinkCopiado(url);
+    try { await navigator.clipboard.writeText(url); } catch { /* sem permissão de clipboard: o link fica visível pra copiar à mão */ }
+  }, [cowork]);
 
   // Salva só os cards que mudaram, com debounce (arrastar dispara muitos eventos).
   const salvar = useCallback(() => {
@@ -232,7 +285,7 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
   const onWheel = (e: React.WheelEvent) => { if (isMobile) return; const d = e.deltaY < 0 ? 1.1 : 1 / 1.1; setView((v) => ({ ...v, scale: Math.min(2, Math.max(0.4, v.scale * d)) })); };
 
   const drag = useRef<{ id: string; x: number; y: number; cx: number; cy: number } | null>(null);
-  const onCardDown = (e: React.PointerEvent, c: Card) => { if (isMobile) return; e.stopPropagation(); drag.current = { id: c.id, x: e.clientX, y: e.clientY, cx: c.x, cy: c.y }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
+  const onCardDown = (e: React.PointerEvent, c: Card) => { if (isMobile || somenteLeitura.current) return; e.stopPropagation(); drag.current = { id: c.id, x: e.clientX, y: e.clientY, cx: c.x, cy: c.y }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
   const onCardMove = (e: React.PointerEvent) => { if (!drag.current) return; const dx = (e.clientX - drag.current.x) / view.scale; const dy = (e.clientY - drag.current.y) / view.scale; setCards((cs) => cs.map((c) => (c.id === drag.current!.id ? { ...c, x: drag.current!.cx + dx, y: drag.current!.cy + dy } : c))); };
   // Soltar um card arrastado = mudança a salvar (o drag.current ainda aponta pro card).
   const endAll = () => { if (drag.current) agendarSalvar(drag.current.id); pull.current = null; pan.current = null; drag.current = null; };
@@ -292,9 +345,23 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
                 placeholder="ex.: harmonia musical, fotossíntese, cálculo de rota…"
                 style={{ flex: 1, background: "rgba(255,255,255,.7)", border: `1px solid ${INK_SOFT}55`, borderRadius: 10, padding: "8px 12px", color: INK, outline: "none", fontSize: 14 }}
               />
-              <button onClick={gerar} disabled={loading} style={{ background: ACCENT, color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", cursor: "pointer", fontSize: 13, fontWeight: 700, opacity: loading ? 0.6 : 1 }}>
+              <button onClick={gerar} disabled={loading || papel === "leitor"} style={{ background: ACCENT, color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", cursor: "pointer", fontSize: 13, fontWeight: 700, opacity: loading ? 0.6 : 1 }}>
                 {loading ? "gerando…" : "gerar com a Aura"}
               </button>
+              {COWORK && cowork.membros.length > 1 && (
+                <div aria-label={`${cowork.membros.length} pessoas nesta cartolina`} style={{ display: "flex" }}>
+                  {cowork.membros.slice(0, 4).map((m, i) => (
+                    <span key={m.userId} title={`${m.nome} (${m.papel})`} style={{ marginLeft: i ? -8 : 0, border: "2px solid #efe7d3", borderRadius: "50%" }}>
+                      <Avatar nome={m.nome} imagem={m.imagem} size={28} />
+                    </span>
+                  ))}
+                </div>
+              )}
+              {COWORK && boardAtivo && papel === "dono" && (
+                <button onClick={() => void compartilhar("editor")} title="Copiar link de convite (editor)" style={{ minHeight: 40, background: "none", border: `1px solid ${ACCENT}`, color: ACCENT, borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                  compartilhar
+                </button>
+              )}
               <button onClick={() => setOpen(false)} title="recolher" style={{ background: "none", border: "none", color: INK_SOFT, cursor: "pointer", fontSize: 18 }}>↓</button>
             </div>
           )}
@@ -305,17 +372,34 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
             {isMobile ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 26, padding: "28px 18px 60px", maxWidth: 520, margin: "0 auto" }}>
                 {cards.map((c) => <div key={c.id}><CardView c={{ ...c, rot: 0, w: Math.min(c.w, 480) }} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} onAbrirTcc={onAbrirTcc} /></div>)}
+                {cards.map((c) => <div key={c.id}><CardView c={{ ...c, rot: 0, w: Math.min(c.w, 480) }} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} /></div>)}
               </div>
             ) : (
               <div style={{ position: "absolute", inset: 0, transform: `translate(${view.x}px,${view.y}px) scale(${view.scale})`, transformOrigin: "0 0" }}>
                 {cards.map((c) => (
                   <div key={c.id} data-card onPointerDown={(e) => onCardDown(e, c)} style={{ position: "absolute", left: c.x, top: c.y, cursor: "grab", touchAction: "none" }}>
                     <CardView c={c} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} onAbrirTcc={onAbrirTcc} />
+                    <CardView c={c} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} />
                   </div>
                 ))}
               </div>
             )}
             {!isMobile && <div className="cal" style={{ position: "absolute", right: 16, bottom: 12, fontSize: 14, color: INK_SOFT, pointerEvents: "none" }}>arraste o fundo · roda = zoom · arraste os cards</div>}
+          </div>
+        )}
+        {open && COWORK && comentandoCard && (
+          <CartolinaComentarios
+            cardTitulo={cards.find((c) => c.id === comentandoCard)?.titulo ?? "Card"}
+            comentarios={cowork.comentarios.filter((c) => c.cardId === comentandoCard)}
+            podeComentar={papel === "dono" || papel === "editor"}
+            onEnviar={(texto, parentId) => cowork.comentar(comentandoCard, texto, parentId)}
+            onFechar={() => setComentandoCard(null)}
+          />
+        )}
+        {open && linkCopiado && (
+          <div data-ui role="status" style={{ position: "absolute", left: "50%", bottom: 20, transform: "translateX(-50%)", zIndex: 35, maxWidth: "calc(100% - 32px)", background: INK, color: "#fff", borderRadius: 12, padding: "10px 14px", fontSize: 13, display: "flex", gap: 10, alignItems: "center" }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Link copiado (válido por 7 dias): {linkCopiado}</span>
+            <button type="button" onClick={() => setLinkCopiado(null)} aria-label="Fechar aviso" style={{ minWidth: 44, minHeight: 32, background: "none", border: "none", color: "#fff", cursor: "pointer" }}>×</button>
           </div>
         )}
       </div>
