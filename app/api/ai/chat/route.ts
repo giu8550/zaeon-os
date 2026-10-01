@@ -346,6 +346,10 @@ export async function POST(req: Request) {
                         const out = resolveHarnessOutput(state, answer, surface, String(prompt || ""));
                         // L3 write (A7, fire-and-forget): deriva o turno em drawers verbatim. Nunca bloqueia.
                         if (userId) void mem.writeTurnMemory({ userId, surface: hctx.activeTab, scopeId: ac.currentStudyId ?? ac.currentResearchId ?? null, prompt: String(prompt || ""), answer, wing: activeMentor?.wing });
+                        // Uso do agente (card founder): +1 em (agentKey|mentor, userId). Fire-and-forget; nunca derruba o turno.
+                        if (userId) void Promise.all([import("@/lib/canal/usage"), import("@/src/lib/prisma")])
+                            .then(([m, { prisma }]) => m.registrarUso(prisma as any, activeMentor?.slug ?? agentKey, userId))
+                            .catch(() => null);
                         // Árvore: o mentor SOBE a maestria quando o aluno demonstra domínio do nó em foco
                         // (juiz Flash, fire-and-forget — nunca atrasa nem derruba a resposta).
                         if (userId && skillTopic && skillNodeId) {

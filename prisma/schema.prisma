@@ -923,3 +923,62 @@ model SkillProgress {                  // progresso POR usuário e nó
   @@index([userId, topicSlug])
   @@map("skill_progress")
 }
+
+// ─── Escritório coworking (canal humano+agente) + gateway de agentes (ver lib/canal/*, lib/agents/roster.ts) ───
+// AgentProfile = identidade EDITÁVEL de um agente (persona do roster OU mentor do catálogo).
+// O "cérebro" continua sendo lib/ai/personas.ts / MentorTemplate; aqui só mora nome/avatar/bio.
+model AgentProfile {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agentKey  String   @unique                 // = persona.id ("aura") OU mentor.slug ("medicina")
+  tipo      String                           // "persona" | "mentor"
+  nome      String                           // nome de exibição (default = do roster)
+  avatarUrl String?                          // foto editável (landing + chat); data URL ou https
+  bio       String?                          // tagline curta editável
+  ativo     Boolean  @default(true)
+  ordem     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("agent_profiles")
+}
+
+// Quem usa qual agente (card founder). Incremento idempotente por (agentKey,userId).
+model AgentUsage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agentKey  String
+  userId    String   @db.ObjectId
+  contagem  Int      @default(0)
+  ultimoUso DateTime @default(now())
+
+  @@unique([agentKey, userId])
+  @@index([agentKey, ultimoUso])
+  @@map("agent_usage")
+}
+
+// Canal = sala de coworking (projeto/turma). `acesso` é o author gate (quem o agente atende).
+model Canal {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId     String   @db.ObjectId
+  titulo      String
+  acesso      String   @default("turma")   // "privado" | "turma" | "aberto"
+  membros     String[] @default([])        // userIds (turma = via convite/adição do dono)
+  agentes     String[] @default([])        // agentKeys presentes no canal
+  cartolinaId String?  @db.ObjectId        // quadro compartilhado (PR da cartolina)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ownerId, updatedAt])
+  @@map("canais")
+}
+
+model CanalMensagem {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  canalId   String   @db.ObjectId
+  autorTipo String                           // "humano" | "agente"
+  autorId   String                           // userId OU agentKey
+  texto     String
+  mencoes   String[] @default([])            // agentKeys mencionados (@)
+  createdAt DateTime @default(now())
+
+  @@index([canalId, createdAt])
+  @@map("canal_mensagens")
+}
