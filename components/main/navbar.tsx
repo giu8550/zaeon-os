@@ -181,6 +181,8 @@ export const Navbar = () => {
   };
 
   if (!mounted) return null;
+  // /m é o app mobile: tem cabeçalho próprio (coluna única, sem navbar do site).
+  if (pathname === "/m" || pathname?.startsWith("/m/")) return null;
 
   return (
     <div
