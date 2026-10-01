@@ -13,6 +13,14 @@ import type { ScholarJobData } from "@/lib/queue/scholar";
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // Worker dos turnos de agente do canal coworking (CANAL_QUEUE=1 + CANAL_WORKER=1 + REDIS_URL).
+  // Independente do SCHOLAR_WORKER; sem as envs, os turnos rodam inline no web (lib/canal/queue.ts).
+  if (process.env.CANAL_WORKER === "1") {
+    try {
+      const { iniciarWorkerCanal } = await import("@/lib/canal/queue");
+      if (!(await iniciarWorkerCanal())) console.warn("[canal-worker] CANAL_WORKER=1 mas fila desligada (CANAL_QUEUE=1 + REDIS_URL) — não iniciado.");
+    } catch (e) { console.warn("[canal-worker] não iniciado:", (e as Error)?.message); }
+  }
   if (process.env.SCHOLAR_WORKER !== "1") return;
 
   const { getRedisConnection, isQueueEnabled, SCHOLAR_QUEUE } = await import("@/lib/queue/scholar");
@@ -31,10 +39,14 @@ export async function register() {
     console.warn("[worker] bullmq não instalado — worker não iniciado (rode `npm install`).");
     return;
   }
-  // Só o TIPO vem de `typeof import("bullmq")` (apagado na compilação — o bundler não vê):
-  // o import real continua escondido acima. Sem isto `Worker` é `any` e o tsc recusa o
-  // `new Worker<ScholarJobData>(…)` (TS2347), que é o que deixava o portão de tipos vermelho.
-  const { Worker } = bull as { Worker: typeof import("bullmq").Worker };
+  // Tipo ESTRUTURAL local (só o que usamos do Worker): `bullmq` é opcional/lazy e pode não estar
+  // no node_modules de quem roda `tsc` — `typeof import("bullmq")` quebrava o portão de tipos
+  // (TS2307 + `any` implícito). Assim o tsc independe de o pacote estar instalado.
+  type JobLike = { id?: string; data: ScholarJobData };
+  type WorkerLike = { on(ev: "failed", fn: (job: JobLike | undefined, err: Error) => void): void; on(ev: "completed", fn: (job: JobLike) => void): void };
+  const { Worker } = bull as {
+    Worker: new (name: string, proc: (job: JobLike) => Promise<void>, opts: Record<string, unknown>) => WorkerLike;
+  };
   const { prisma } = await import("@/src/lib/prisma");
   const { runScholarPipeline } = await import("@/lib/scholar/pipeline");
 
@@ -57,7 +69,7 @@ export async function register() {
     } catch { /* progresso é best-effort; o resultado final é o que importa */ }
   }
 
-  const worker = new Worker<ScholarJobData>(
+  const worker = new Worker(
     SCHOLAR_QUEUE,
     async (job) => {
       const { sessionId, prompt, room, isDeep } = job.data;

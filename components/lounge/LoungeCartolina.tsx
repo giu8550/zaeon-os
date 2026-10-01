@@ -57,9 +57,9 @@ function Prancha() {
   );
 }
 
-function CardView({ c, onReveal, revealed, onAbrirConversa, onAbrirTcc }: { c: Card; onReveal: (id: string) => void; revealed: boolean; onAbrirConversa?: (msgId: string) => void; onAbrirTcc?: (workId: string) => void }) {
-function CardView({ c, onReveal, revealed, onAbrirConversa, nComentarios, onComentarios }: {
+function CardView({ c, onReveal, revealed, onAbrirConversa, onAbrirTcc, nComentarios, onComentarios }: {
   c: Card; onReveal: (id: string) => void; revealed: boolean; onAbrirConversa?: (msgId: string) => void;
+  onAbrirTcc?: (workId: string) => void;
   nComentarios?: number; onComentarios?: (id: string) => void;
 }) {
   const base: React.CSSProperties = { width: c.w, transform: `rotate(${c.rot ?? 0}deg)` };
@@ -145,8 +145,7 @@ const PERSISTIR = process.env.NEXT_PUBLIC_CARTOLINA_MEMORIA === "1";
 const COWORK = PERSISTIR && process.env.NEXT_PUBLIC_CARTOLINA_COWORK === "1";
 const SALVAR_APOS_MS = 800;
 
-export default function LoungeCartolina({ embedded = false, surface = "lounge", scopeId, abrirDeInicio = false, onAbrirConversa, onAbrirTcc, onFechar }: {
-export default function LoungeCartolina({ embedded = false, surface = "lounge", scopeId, boardId: boardIdProp, abrirDeInicio = false, onAbrirConversa, onFechar }: {
+export default function LoungeCartolina({ embedded = false, surface = "lounge", scopeId, boardId: boardIdProp, abrirDeInicio = false, onAbrirConversa, onAbrirTcc, onFechar }: {
   embedded?: boolean; surface?: "estudos" | "lounge"; scopeId?: string;
   /** Board específico (link compartilhado /estudo/:id) — ignora surface/scopeId. */
   boardId?: string;
@@ -371,15 +370,13 @@ export default function LoungeCartolina({ embedded = false, surface = "lounge", 
           <div onPointerDown={onBoardDown} onWheel={onWheel} style={{ position: "absolute", inset: 0, top: 56, overflow: isMobile ? "auto" : "hidden", cursor: isMobile ? "auto" : "grab", backgroundImage: `radial-gradient(${INK_SOFT}22 1px, transparent 1px)`, backgroundSize: "26px 26px" }}>
             {isMobile ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 26, padding: "28px 18px 60px", maxWidth: 520, margin: "0 auto" }}>
-                {cards.map((c) => <div key={c.id}><CardView c={{ ...c, rot: 0, w: Math.min(c.w, 480) }} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} onAbrirTcc={onAbrirTcc} /></div>)}
-                {cards.map((c) => <div key={c.id}><CardView c={{ ...c, rot: 0, w: Math.min(c.w, 480) }} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} /></div>)}
+                {cards.map((c) => <div key={c.id}><CardView c={{ ...c, rot: 0, w: Math.min(c.w, 480) }} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} onAbrirTcc={onAbrirTcc} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} /></div>)}
               </div>
             ) : (
               <div style={{ position: "absolute", inset: 0, transform: `translate(${view.x}px,${view.y}px) scale(${view.scale})`, transformOrigin: "0 0" }}>
                 {cards.map((c) => (
                   <div key={c.id} data-card onPointerDown={(e) => onCardDown(e, c)} style={{ position: "absolute", left: c.x, top: c.y, cursor: "grab", touchAction: "none" }}>
-                    <CardView c={c} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} onAbrirTcc={onAbrirTcc} />
-                    <CardView c={c} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} />
+                    <CardView c={c} onReveal={reveal} revealed={!!revealed[c.id]} onAbrirConversa={onAbrirConversa} onAbrirTcc={onAbrirTcc} nComentarios={contagem[c.id]} onComentarios={COWORK && boardAtivo ? setComentandoCard : undefined} />
                   </div>
                 ))}
               </div>

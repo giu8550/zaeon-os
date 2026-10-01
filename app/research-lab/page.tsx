@@ -53,6 +53,12 @@ const EscritorioRoom = dynamic(
   () => import("@/components/office/EscritorioRoom"),
   { ssr: false },
 );
+// Escritório COWORKING (canal em tempo real, estilo Buzz; sem 3D). Entra no lugar do 3D quando
+// NEXT_PUBLIC_ESCRITORIO_COWORK=1 (lib/canal/flags). Client-only (Pusher/Notification API).
+const CoworkingCanal = dynamic(
+  () => import("@/components/office/CoworkingCanal"),
+  { ssr: false },
+);
 
 // ── Sidebar liquid-glass: estilo dos botões (mesma lógica das "pills") ──────────
 // Vidro translúcido + borda suave + tint no hover; ativo = vidro colorido + ring + glow.
@@ -127,6 +133,7 @@ import {
   AcademicCapIcon,
 } from "@heroicons/react/24/outline";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
+import { escritorioCowork } from "@/lib/canal/flags";
 
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
@@ -2363,6 +2370,11 @@ export default function HomeworkPage({
             ? "Espaço informal para conversa entre docentes"
             : "Espaço informal para conversa entre estudantes",
         };
+      case "escritorio":
+        return {
+          title: "Escritório",
+          subtitle: "Coworking com a turma e os agentes — @agente convoca",
+        };
       case "pevem":
         return {
           title: "Pevem News",
@@ -2901,13 +2913,18 @@ export default function HomeworkPage({
 
           {activeTab === "escritorio" && (
             <div className="w-full h-full">
-              <EscritorioRoom
-                aoAbrirChat={(slug) => {
-                  // Falar com um agente = ir pra Sala de Estudos JÁ com ele escolhido.
-                  window.dispatchEvent(new CustomEvent("zaeon:mentor", { detail: { slug } }));
-                  setActiveTab("sala-de-estudos");
-                }}
-              />
+              {escritorioCowork() ? (
+                // Coworking: "falar com agente" = prefixar @agente NO CANAL (nunca mais Sala de Estudos).
+                <CoworkingCanal />
+              ) : (
+                <EscritorioRoom
+                  aoAbrirChat={(slug) => {
+                    // (legado 3D) Falar com um agente = ir pra Sala de Estudos JÁ com ele escolhido.
+                    window.dispatchEvent(new CustomEvent("zaeon:mentor", { detail: { slug } }));
+                    setActiveTab("sala-de-estudos");
+                  }}
+                />
+              )}
             </div>
           )}
 

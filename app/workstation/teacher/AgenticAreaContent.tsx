@@ -71,13 +71,15 @@ function AuraChat() {
     setLoading(true);
 
     try {
-      const res  = await fetch("/api/chat/messages", {
+      // /api/chat/messages nunca existiu; o chat de IA é /api/ai/chat ({ prompt } → { text }).
+      const res  = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ prompt: text, agent: "aura" }),
       });
       const data = await res.json();
-      setMessages(m => [...m, { role: "ai", text: data.reply ?? "..." }]);
+      if (!res.ok) throw new Error(data?.error || String(res.status));
+      setMessages(m => [...m, { role: "ai", text: data.text ?? "..." }]);
     } catch {
       setMessages(m => [...m, { role: "ai", text: "Connection error. Please retry." }]);
     } finally {

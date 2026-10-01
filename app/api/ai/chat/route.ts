@@ -364,6 +364,10 @@ export async function POST(req: Request) {
                         // Seções que foram pro TCC não viram notas soltas na cartolina (o card do TCC já as representa).
                         if (userId) void cartolinaMod.fixarTurno({ userId, scopeId: ac.cartolinaScopeId, prompt: String(prompt || ""), answer: tcc ? { ...answer, work: undefined } : answer, msgId: ac.cartolinaMsgId });
                         if (userId) void mem.writeTurnMemory({ userId, surface: hctx.activeTab, scopeId: ac.currentStudyId ?? ac.currentResearchId ?? null, prompt: String(prompt || ""), answer, wing: activeMentor?.wing });
+                        // Uso do agente (card founder): +1 em (agentKey|mentor, userId). Fire-and-forget; nunca derruba o turno.
+                        if (userId) void Promise.all([import("@/lib/canal/usage"), import("@/src/lib/prisma")])
+                            .then(([m, { prisma }]) => m.registrarUso(prisma as any, activeMentor?.slug ?? agentKey, userId))
+                            .catch(() => null);
                         // Árvore: o mentor SOBE a maestria quando o aluno demonstra domínio do nó em foco
                         // (juiz Flash, fire-and-forget — nunca atrasa nem derruba a resposta).
                         if (userId && skillTopic && skillNodeId) {
