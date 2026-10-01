@@ -8,7 +8,7 @@
 import { prisma } from "@/src/lib/prisma";
 import { applyOps, readCards, sanitizeCard, MAX_CARDS, type CartolinaOps } from "@/lib/cartolina/cards";
 import { papelDe, podeEscrever, type Papel } from "@/lib/cartolina/access";
-import type { CartolinaCard } from "@/lib/caderno/cartolina";
+import type { CartolinaCard } from "@/lib/caderno/cartolina-tipos";
 
 export const CARTOLINA_SURFACES = ["estudos", "lounge"] as const;
 export type CartolinaSurface = (typeof CARTOLINA_SURFACES)[number];
