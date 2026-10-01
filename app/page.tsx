@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 
 import HeroPage from "@/components/sub/hero-content";
 import Encryption from "@/components/main/encryption";
+import Faq from "@/components/main/Faq";
 import StudyRoomsPage from "@/app/study-rooms/page";
 import IntroOverlay from "@/src/components/main/intro-overlay";
 import { Footer } from "@/components/main/footer";
@@ -73,7 +74,7 @@ export default function Home() {
                     {/* Navbar removida daqui, pois agora ela mora e persiste no layout.tsx */}
 
                     {/* CORREÇÃO DE LAYOUT: O pt-[110px] empurra a página pra baixo da Navbar */}
-                    <div className="flex flex-col gap-20 pt-[110px] w-full">
+                    <div className="flex flex-col pt-[110px] w-full">
                         <HeroPage />
                         <Encryption />
                         <div id="study-rooms" className="w-full">
@@ -81,9 +82,11 @@ export default function Home() {
                                 <StudyRoomsPage />
                             </Suspense>
                         </div>
+                        <Faq />
                     </div>
 
                     <Footer />
+
                 </motion.div>
             )}
         </main>

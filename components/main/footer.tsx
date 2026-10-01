@@ -1,60 +1,95 @@
 import Link from "next/link";
 
-import FOOTER_DATA from "@/constants";
+/**
+ * Footer clássico da Zaeon (inspirado no da ChipFlow): blurb da marca + colunas de
+ * links + linha final com o ano. Auto-contido (sem depender de @/constants) e no
+ * visual da casa. Links legais (Termos, Privacidade) e âncoras da própria landing.
+ */
 
-type FooterLink = {
-  icon?: React.ComponentType<any> | null;
-  name: string;
-  link: string;
-};
-type FooterColumn = {
-  title: string;
-  data: FooterLink[];
-};
+type FooterLink = { label: string; href: string; external?: boolean };
+type FooterCol = { title: string; links: FooterLink[] };
 
-const COLUMNS: FooterColumn[] = Array.isArray(FOOTER_DATA)
-  ? (FOOTER_DATA as unknown as FooterColumn[])
-  : [];
+const COLS: FooterCol[] = [
+  {
+    title: "Plataforma",
+    links: [
+      { label: "Salas de estudo", href: "/#study-rooms" },
+      { label: "Modelos de IA", href: "/#modelos" },
+      { label: "Laboratório", href: "/research-lab" },
+      { label: "Plugins", href: "/plugin-store" },
+    ],
+  },
+  {
+    title: "Recursos",
+    links: [
+      { label: "Como funciona", href: "/#modelos" },
+      { label: "Mentores", href: "/#modelos" },
+      { label: "Dúvidas (FAQ)", href: "/#faq" },
+      { label: "Notícias", href: "/news" },
+    ],
+  },
+  {
+    title: "Empresa",
+    links: [
+      { label: "Sobre nós", href: "/about" },
+      { label: "Contato", href: "mailto:contato@zaeon.com.br", external: true },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { label: "Termos de Uso", href: "/termos" },
+      { label: "Privacidade", href: "/privacidade" },
+    ],
+  },
+];
 
 export const Footer = () => {
+  const year = new Date().getFullYear();
   return (
-    <div className="w-full h-full bg-transparent text-gray-200 shadow-lg p-[15px]">
-      <div className="w-full flex flex-col items-center justify-center m-auto">
-        <div className="w-full h-full flex flex-row items-center justify-around flex-wrap">
-          {COLUMNS.length === 0 ? (
-            <div className="w-full text-center text-white/60 py-6">
-              {/* Fallback discreto quando não há dados de rodapé */}
-              <span>Zaeon - AI Agents for a New World</span>
+    <footer className="w-full border-t border-slate-200 dark:border-white/10 bg-white/40 dark:bg-black/30 backdrop-blur-xl text-slate-600 dark:text-gray-400">
+      <div className="zaeon-borda py-14">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-10">
+          {/* Coluna da marca */}
+          <div className="col-span-2 md:col-span-1">
+            <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white text-lg tracking-tight mb-3">
+              <span>Zaeon</span>
             </div>
-          ) : (
-            COLUMNS.map((column) => (
-              <div
-                key={column.title}
-                className="min-w-[200px] h-auto flex flex-col items-center justify-start"
-              >
-                <h3 className="font-bold text-[16px]">{column.title}</h3>
-                {Array.isArray(column.data) &&
-                  column.data.map(({ icon: Icon, name, link }) => (
+            <p className="text-sm text-slate-500 dark:text-gray-500 leading-relaxed max-w-[220px]">
+              Todas as IAs num lugar só, com uma camada científica por cima. Feito pra
+              quem estuda e pesquisa de verdade.
+            </p>
+          </div>
+
+          {/* Colunas de links */}
+          {COLS.map((col) => (
+            <div key={col.title}>
+              <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-gray-500 mb-4">
+                {col.title}
+              </h4>
+              <ul className="space-y-3">
+                {col.links.map((link) => (
+                  <li key={link.label}>
                     <Link
-                      key={`${column.title}-${name}`}
-                      href={link}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="flex flex-row items-center my-[15px]"
+                      href={link.href}
+                      {...(link.external ? { target: "_blank", rel: "noreferrer noopener" } : {})}
+                      className="text-sm text-slate-600 dark:text-gray-400 hover:text-cyan-600 dark:hover:text-cyan-300 transition-colors"
                     >
-                      {Icon ? <Icon /> : null}
-                      <span className="text-[15px] ml-[6px]">{name}</span>
+                      {link.label}
                     </Link>
-                  ))}
-              </div>
-            ))
-          )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
 
-        <div className="mb-[20px] text-[15px] text-center">
-          &copy; {new Date().getFullYear()}
+        {/* Linha final */}
+        <div className="border-t border-slate-200 dark:border-white/10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-400 dark:text-gray-600">
+          <span>&copy; {year} Zaeon. Todos os direitos reservados.</span>
+          <span className="text-[12px] uppercase tracking-widest">Todas as IAs · feito pra ciência</span>
         </div>
       </div>
-    </div>
+    </footer>
   );
 };

@@ -24,6 +24,7 @@ import {
   PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2, GitBranch,
 } from "lucide-react";
 import CoworkComposer from "@/components/study/CoworkComposer";
+import ChatMarkdown from "@/components/study/ChatMarkdown";
 import AuraThinking from "@/components/study/AuraThinking";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
@@ -247,17 +248,26 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     el.scrollTo({ top: Math.max(0, topo), behavior: "smooth" });
   }, []);
 
-  /** A última mensagem é uma página de revista recém-chegada? */
-  const paginaNova = useCallback((): string | undefined => {
-    const ultima = msgsRef.current[msgsRef.current.length - 1];
-    if (!ultima || ultima.role !== "assistant" || ultima.kind !== "structured") return undefined;
-    if (!ultima.fresh || ultima.streaming) return undefined;
-    return podeVirarRevista(ultima.answer, !!ultima.studioBlock) ? ultima.id : undefined;
-  }, []);
-
+  // Qual mensagem já foi ancorada no topo (pra ancorar UMA vez e não brigar com a
+  // leitura do aluno enquanto ela cresce).
+  const ancoradaRef = useRef<string | null>(null);
   useEffect(() => {
-    ancorar(paginaNova());
-  }, [messages, sending, ancorar, paginaNova]);
+    const ultima = msgsRef.current[msgsRef.current.length - 1];
+    // Resposta da Aura (texto OU revista): ancora no TOPO dela assim que aparece e NÃO
+    // fica perseguindo o fim enquanto o texto é escrito. Antes, durante o streaming
+    // `paginaNova()` devolvia undefined e `ancorar(undefined)` fazia
+    // `scrollTop = scrollHeight` a cada token — era isso que "jogava pro final" e não
+    // deixava acompanhar a abertura de um texto longo.
+    if (ultima && ultima.role === "assistant" && (ultima.kind === "structured" || ultima.kind === "text")) {
+      if (ancoradaRef.current !== ultima.id) {
+        ancoradaRef.current = ultima.id;
+        ancorar(ultima.id); // topo da resposta, uma vez
+      }
+      return; // enquanto a Aura escreve, o aluno controla a rolagem
+    }
+    // Chat curto / mensagem do usuário: só gruda no fim se ele já estava no fim.
+    if (atBottom) scrollToEnd();
+  }, [messages, sending, atBottom, ancorar, scrollToEnd]);
 
   const spaceTitle = useCallback(
     (id: string) => spaces.find((s) => s.id === id)?.title || "Estudo",
@@ -454,10 +464,23 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         if (res.ok && data?.dataUrl) fire({ studioKind: "image", title: data.title || "Imagem", data: data.meta, dataUrl: data.dataUrl });
         else if (!silencioso) avisarFalha(data?.error);
       } else {
+        // text kinds (mindmap/guide/faq/flashcards): agora rodam em BACKGROUND no servidor
+        // (fire-and-forget) → o POST volta "queued" e a gente faz polling até "done", igual
+        // a podcast/vídeo. Assim, sair da sala não interrompe a geração. Cache hit já volta
+        // "done" com meta na hora.
         const res = await fetch(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic, force: true }) });
         const data = await res.json().catch(() => null);
-        if (res.ok && data?.meta) fire({ studioKind: kind, title: data.title, data: data.meta });
-        else if (!silencioso) avisarFalha(data?.error);
+        if (!res.ok || !data?.id) { if (!silencioso) avisarFalha(data?.error); return; }
+        if (data.status === "done" && data.meta) { fire({ studioKind: kind, title: data.title, data: data.meta }); return; }
+        const started = Date.now();
+        while (Date.now() - started < 5 * 60_000) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const rr = await fetch(`/api/studio/${data.id}`);
+          const d = await rr.json().catch(() => null);
+          if (!d) continue;
+          if (d.status === "done") { fire({ studioKind: kind, title: d.title, data: d.meta }); return; }
+          if (d.status === "error") { if (!silencioso) avisarFalha(d?.error); return; }
+        }
       }
     } catch {
       if (!silencioso) avisarFalha();
@@ -764,7 +787,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                           ? "bg-slate-100 text-slate-900 border border-slate-200/80 dark:bg-white/[0.09] dark:text-white/90 dark:border-white/10"
                           : "bg-white/80 dark:bg-white/[0.05] text-slate-800 dark:text-white/90 border border-slate-200/70 dark:border-white/10 backdrop-blur-xl"}`}>
                         {m.text
-                          ? <>{m.text}{m.streaming && <span aria-hidden className="z-caret" />}</>
+                          ? (isUser
+                              // Mensagem do usuário fica literal (ele digitou, não é markdown).
+                              ? <>{m.text}</>
+                              // Resposta da Aura: formata markdown (## títulos, **negrito**, *itálico*,
+                              // `código`, bullets) em vez de mostrar os asteriscos/hashes crus. Seguro
+                              // em streaming: pares não-fechados ficam como texto até fecharem.
+                              : <><ChatMarkdown text={m.text} />{m.streaming && <span aria-hidden className="z-caret" />}</>)
                           : (!isUser && <AuraThinking active fase={m.fase} phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                       </div>
                     </div>

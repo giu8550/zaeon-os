@@ -204,9 +204,25 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
         ...(isTeacher ? [{ id: "students", label: "Meus Alunos", icon: GraduationCap }] : []),
     ], [tabs, isTeacher]);
 
-    // Padrão = a aba de pesquisa/estudos (onde a pesquisa acontece). "Meus Estudos"
-    // fica disponível, mas não rouba o lugar da pesquisa.
-    const [activeTab, setActiveTab] = useState(tabs[0]?.id ?? "community");
+    // Padrão = a aba "Aura" (chats/co-working). Só cai numa aba de estudo/pesquisa se
+    // o usuário SAIU da sala estando nela — restaurado da persistência no efeito abaixo.
+    const [activeTab, setActiveTab] = useState("meus-estudos");
+
+    // Persistência de aba por sala. Inicia no default estável "meus-estudos" (sem
+    // hydration mismatch), depois restaura a última aba usada; e salva a cada troca.
+    const tabRestored = useRef(false);
+    useEffect(() => {
+        if (!room) return;
+        try {
+            const saved = localStorage.getItem(`zaeon:lastTab:${room}`);
+            if (saved && allTabs.some((t) => t.id === saved)) setActiveTab(saved);
+        } catch { /* ignore */ }
+        tabRestored.current = true;
+    }, [room, allTabs]);
+    useEffect(() => {
+        if (!tabRestored.current || !room) return;
+        try { localStorage.setItem(`zaeon:lastTab:${room}`, activeTab); } catch { /* ignore */ }
+    }, [activeTab, room]);
 
     // Deep-link do menu inicial: ?space=<id> → abre direto em "Meus Estudos"
     // (o MeusEstudosFeed resolve qual estudo carregar pelo mesmo param). Sem isso,

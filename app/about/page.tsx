@@ -305,9 +305,9 @@ const MoleculeSection = () => {
                     Como funciona
                 </p>
                 <h2 className="text-3xl md:text-5xl font-black text-white tracking-tighter">
-                    Três funções simples.{" "}
+                    Três camadas.{" "}
                     <span className="text-cyan-400 drop-shadow-[0_0_20px_rgba(34,211,238,0.4)]">
-                        modo solo ou coletivo, você decide.
+                        Um ecossistema.
                     </span>
                 </h2>
             </motion.div>
@@ -473,8 +473,8 @@ export default function AboutUsPage() {
                 {/* Hero Title */}
                 <CyberTitle
                     startAnimations={true}
-                    secondaryText="ONDE O CONHECIMENTO"
-                    mainText="GANHA VIDA"
+                    secondaryText="TODAS AS IAS · FEITO PRA CIÊNCIA"
+                    mainText="ZAEON"
                     scrollText="Descubra mais"
                 />
 
@@ -482,15 +482,18 @@ export default function AboutUsPage() {
                 <TextBlock align="left" glowColor="cyan" direction="none" customBg="bg-black/80">
                     <h2 className="text-2xl md:text-4xl font-black text-white mb-6 tracking-tight uppercase flex items-center gap-4">
                         <span className="w-2 h-10 bg-gradient-to-b from-cyan-400 to-blue-600 rounded-full shadow-[0_0_20px_rgba(34,211,238,0.5)]" />
-                        Só existe uma saída do futuro distópico que te aguarda : Educação.
+                        Para qualquer profissão. Para qualquer rotina.
                     </h2>
                     <p className="font-medium text-white/95">
-                        A internet se perdeu no próprio algoritmo e só quer te entreter. A gente reescreveu ela pra te transformar. Aqui, conhecimento não é uma aba aberta — é um time de agentes trabalhando no seu futuro 24 horas por dia.
+                        A Zaeon reúne todas as IAs que você já conhece — GPT, Claude, Gemini, Grok e
+                        mais — num só lugar, dentro de um sistema interativo feito pra você não só
+                        conversar, mas <span className="text-white">produzir conhecimento</span> — seja
+                        você estudante, professor, pesquisador, empreendedor ou simplesmente curioso.
                     </p>
                     <p className="text-white/80">
-                        Cada agente tem voz, personalidade e habilidades definidas por quem o criou.{" "}
+                        Cada modelo com sua força, dentro de um só método científico.{" "}
                         <span className="text-cyan-400 font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.3)]">
-                            Não é uma ferramenta que você usa. É um organismo que cresce com você.
+                            Não confie em uma IA. Faça ciência com várias.
                         </span>
                     </p>
                 </TextBlock>
@@ -512,14 +515,17 @@ export default function AboutUsPage() {
 
                     <TextBlock align="right" glowColor="purple" direction="right" customBg="bg-indigo-950/80">
                         <h2 className="text-2xl md:text-4xl font-black text-white mb-6 tracking-tight uppercase flex items-center justify-end gap-4">
-                            Toda mente merece uma equipe.
+                            Seus projetos. Sua propriedade.
                             <span className="w-2 h-10 bg-gradient-to-b from-purple-400 to-indigo-600 rounded-full shadow-[0_0_20px_rgba(168,85,247,0.5)]" />
                         </h2>
                         <p className="text-xl md:text-3xl font-extralight italic text-white drop-shadow-md">
-                            Toda vida merece ser transformada.
+                            Crie. Colabore. Compartilhe no seu ritmo.
                         </p>
                         <p className="text-base text-white/70 mt-4 leading-relaxed">
-                            na Zaeon você não vence na vida sozinho. Você comanda agentes com voz, jeito e talento próprios, que aprendem o seu mundo e trabalham nele.
+                            Tudo que você desenvolve com seus agentes é protegido como propriedade
+                            intelectual privada. Você decide o que entra no mural da comunidade — seja
+                            um experimento bem-sucedido, uma ideia em desenvolvimento ou um negócio
+                            pronto para crescer.
                         </p>
                     </TextBlock>
                 </div>

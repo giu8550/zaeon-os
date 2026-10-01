@@ -98,6 +98,51 @@ export function OmegaScholarProvider({ room, onStart, children }:
         setState((s) => ({ ...s, status: "error", error: `Erro ${res.status}` }));
         return;
       }
+
+      // ── MODO BACKGROUND ──────────────────────────────────────────────────────
+      // Servidor respondeu JSON {sessionId} (202): o worker roda o pipeline no servidor
+      // ATÉ O FIM, mesmo se o usuário sair da sala. Aqui a gente só POLLA a sessão e
+      // renderiza thread.events como fases. Sair e voltar reengata pelo mesmo poll (o DB
+      // é a fonte da verdade).
+      const ctype = res.headers.get("content-type") || "";
+      if (res.status === 202 || ctype.includes("application/json")) {
+        const j = await res.json().catch(() => null);
+        const sessionId = j?.sessionId;
+        if (!sessionId) { setState((s) => ({ ...s, status: "error", error: "Falha ao iniciar a pesquisa." })); return; }
+        const started = Date.now();
+        let lastLen = -1;
+        while (true) {
+          if (ac.signal.aborted) return;
+          await new Promise((r) => setTimeout(r, 1500));
+          if (ac.signal.aborted) return;
+          let full: any = null;
+          try {
+            const sr = await fetch(`/api/ai/scholar/sessions?id=${sessionId}`, { signal: ac.signal });
+            full = sr.ok ? (await sr.json())?.session : null;
+          } catch (e: any) { if (e?.name === "AbortError") return; }
+          if (full) {
+            const events = Array.isArray(full?.thread?.events) ? full.thread.events : [];
+            if (events.length !== lastLen) {
+              lastLen = events.length;
+              const phases = events.filter((e: any) => e.type === "phase").map((e: any) => ({ phase: e.phase, message: e.message ?? e.phase }));
+              setState((s) => ({ ...s, phases: phases.length ? phases : s.phases, answer: full?.thread?.answer ?? s.answer }));
+            }
+            if (full.status === "done") {
+              try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ }
+              try { window.dispatchEvent(new CustomEvent("zaeon:research:done")); } catch { /* onboarding */ }
+              loadSession(full);
+              return;
+            }
+            if (full.status === "error") {
+              try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ }
+              setState((s) => ({ ...s, status: "error", error: full?.thread?.error ?? "Erro na pesquisa" }));
+              return;
+            }
+          }
+          if (Date.now() - started > 10 * 60_000) { setState((s) => ({ ...s, status: "error", error: "A pesquisa demorou demais." })); return; }
+        }
+      }
+
       if (!res.body) throw new Error("Sem stream");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -176,8 +221,11 @@ export function OmegaScholarProvider({ room, onStart, children }:
         const latest = list[0]; // mais recente (orderBy createdAt desc)
         const ageMs = Date.now() - new Date(latest.createdAt).getTime();
 
-        if (latest.status === "running") {
-          if (ageMs > 90_000) { try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ } return; } // morreu no servidor
+        // "queued" e "running" contam como em-curso: com o worker de fundo o job pode
+        // ficar um tempo na fila antes de rodar. Tetos ampliados (10 min) porque agora o
+        // trabalho REALMENTE continua no servidor — não morre ao sair da sala.
+        if (latest.status === "running" || latest.status === "queued") {
+          if (ageMs > 10 * 60_000) { try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ } return; } // velho demais
           setState((s) => ({ ...s, status: "running", query: latest.query, startedAt: run?.startedAt ?? new Date(latest.createdAt).getTime() }));
           const poll = async () => {
             if (cancelled) return;
@@ -185,16 +233,22 @@ export function OmegaScholarProvider({ room, onStart, children }:
               const sr = await fetch(`/api/ai/scholar/sessions?id=${latest.id}`);
               const sd = sr.ok ? await sr.json() : null;
               const full = sd?.session;
+              // progresso ao vivo: renderiza as fases já gravadas na sessão
+              const events = Array.isArray(full?.thread?.events) ? full.thread.events : [];
+              if (events.length && !cancelled) {
+                const phases = events.filter((e: any) => e.type === "phase").map((e: any) => ({ phase: e.phase, message: e.message ?? e.phase }));
+                setState((s) => ({ ...s, phases: phases.length ? phases : s.phases, answer: full?.thread?.answer ?? s.answer }));
+              }
               if (full?.status === "done") { try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ } if (!cancelled) loadSession(full); return; }
-              if (full?.status === "error" || (Date.now() - new Date(latest.createdAt).getTime()) > 120_000) {
+              if (full?.status === "error" || (Date.now() - new Date(latest.createdAt).getTime()) > 10 * 60_000) {
                 try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ }
-                if (!cancelled) setState((s) => ({ ...s, status: "error", error: "A pesquisa anterior foi interrompida. Tente de novo." }));
+                if (!cancelled) setState((s) => ({ ...s, status: "error", error: full?.thread?.error ?? "A pesquisa anterior foi interrompida. Tente de novo." }));
                 return;
               }
             } catch { /* tenta de novo */ }
-            if (!cancelled) setTimeout(poll, 4000);
+            if (!cancelled) setTimeout(poll, 3000);
           };
-          setTimeout(poll, 3000);
+          setTimeout(poll, 2000);
         } else if (latest.status === "done" && ageMs < 30 * 60_000) {
           // restaura a última pesquisa concluída recente (continuidade)
           const sr = await fetch(`/api/ai/scholar/sessions?id=${latest.id}`);

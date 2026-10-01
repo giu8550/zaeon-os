@@ -1,4 +1,5 @@
 import React from "react";
+import MolecularText from "@/components/ui/MolecularText";
 
 /**
  * Regras de alinhamento da landing.
@@ -57,11 +58,13 @@ export function TituloSecao({
         <h2
             className={`mt-4 max-w-[760px] text-[2rem] md:text-[3.125rem] font-semibold leading-[1.04] tracking-[-0.018em] text-slate-900 dark:text-white ${className}`}
         >
-            {forte}
+            {typeof forte === "string" ? <MolecularText text={forte} /> : forte}
             {fraco ? (
                 <>
                     <br />
-                    <span className="text-slate-500 dark:text-slate-400">{fraco}</span>
+                    <span className="text-slate-500 dark:text-slate-400">
+                        {typeof fraco === "string" ? <MolecularText text={fraco} delay={0.18} /> : fraco}
+                    </span>
                 </>
             ) : null}
         </h2>

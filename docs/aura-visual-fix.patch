@@ -1,0 +1,30 @@
+--- a/lib/agent/router.ts	2026-07-29 16:03:45.637008096 -0300
++++ b/lib/agent/router.ts	2026-07-29 16:03:45.668008096 -0300
+@@ -40,7 +40,7 @@
+   /(^|\s)(oi|ola|opa|eai|e ai|salve|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|beleza|blz|tudo bem|tchau)(\s|,|!|\?|$)/;
+ 
+ const WORK_NOUNS = ["artigo", "tcc", "monografia", "dissertacao", "tese", "redacao", "ensaio", "relatorio", "paper", "resenha", "trabalho academico"];
+-const STUDIO_NOUNS = ["mapa mental", "mindmap", "flashcard", "linha do tempo", "timeline", "podcast", "video", "quiz", "infografico", "slides", "apresentacao", "resumo visual", "guia de estudo", "guia de estudos"];
++const STUDIO_NOUNS = ["mapa mental", "mindmap", "flashcard", "linha do tempo", "timeline", "podcast", "video", "quiz", "infografico", "slides", "apresentacao", "resumo visual", "guia de estudo", "guia de estudos", "imagem", "figura", "ilustracao", "molecula", "estrutura molecular", "estrutura quimica", "diagrama", "esquema", "desenho", "grafico", "formula estrutural"];
+ const SOURCE_SIGNALS = ["fontes", "referencias", "bibliografia", "papers", "artigos sobre", "literatura sobre", "estado da arte", "cite fontes"];
+ const REVISE_SIGNALS = ["revise", "revisar", "revisao", "critique", "avalie meu", "avalie este", "avalie esse", "corrija", "corrigir", "de feedback", "melhore meu"];
+ const EXPLAIN_SIGNALS = ["explique", "explicar", "explica", "o que e", "o que sao", "como funciona", "por que", "porque", "defina", "definir", "qual a diferenca", "diferenca entre", "me ensine"];
+--- a/lib/agent/aura-harness.ts	2026-07-29 16:03:45.637008096 -0300
++++ b/lib/agent/aura-harness.ts	2026-07-29 16:03:45.668008096 -0300
+@@ -60,7 +60,7 @@
+   if (/podcast|áudio|audio/.test(t)) return "podcast";
+   if (/v[íi]deo/.test(t)) return "video";
+   if (/\bfaq\b|perguntas e respostas/.test(t)) return "faq";
+-  if (/imagem|figura|ilustra/.test(t)) return "image";
++  if (/imagem|figura|ilustra|mol[eé]cula|estrutura (molecular|qu[ií]mica)|diagrama|esquema|desenh|gr[aá]fico|f[oó]rmula/.test(t)) return "image";
+   return normalizeStudioKind(t); // default "guide"
+ }
+ 
+@@ -180,6 +180,7 @@
+         : "";
+       const sys = [
+         "Você é a Aura, parceira de estudo/pesquisa — calorosa, direta, PT-BR. Redija a resposta final.",
++        "NUNCA diga que você é uma IA incapaz de gerar imagem/representação visual — você TEM o Studio (imagem/diagrama/molécula). Se o pedido for visual e nenhuma tool o cobriu, afirme que dá pra gerar e sugira em proximos_passos, jamais negue capacidade.",
+         "Responda SOMENTE JSON válido.",
+         `Campos obrigatórios: ${req}. Preencha TODOS. Schema: {nucleo, desenvolvimento?, conceitos?[], evidencia?[{claim,source:{title,url?}}], proximos_passos?[], sources?[{title,url?}], work?{kind,sections:[{title,body}]}}.`,
+         academic + a5,

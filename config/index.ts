@@ -2,8 +2,16 @@ import type { Metadata } from "next";
 
 export const siteConfig: Metadata = {
   title: "Zaeon",
-  description: "The Study Operating System",
+  description: "Todas as IAs num só lugar — GPT, Claude, Gemini, Grok — dentro de um sistema interativo feito pra você produzir ciência.",
   keywords: [
+    "todas as ias",
+    "gpt",
+    "claude",
+    "gemini",
+    "grok",
+    "ciência",
+    "produção científica",
+    "multi-modelo",
     "reactjs",
     "nextjs",
     "vercel",

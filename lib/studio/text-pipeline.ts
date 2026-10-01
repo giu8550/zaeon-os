@@ -55,11 +55,28 @@ export async function runTextGeneration(kind: TextKind, req: Request): Promise<R
   const spec = TEXT_TRANSFORMS[kind];
   const { system, user } = spec.build(material);
 
+  // BACKGROUND (igual a podcast/vídeo): cria o artefato como "queued" e dispara a geração
+  // SOLTA (void) — no VPS (Node de processo longo) a promise continua mesmo que o usuário
+  // saia da sala. Retorna na hora; o cliente faz polling em /api/studio/[id]. Antes isto
+  // era awaited: sair da sala no meio abortava o handler e o artefato ficava preso.
   const art = await prisma.studioArtifact.create({
-    data: { ownerId: userId, sourceIds: ctx.sourceIds, kind, status: "running", title: spec.title(tituloBase) },
+    data: { ownerId: userId, sourceIds: ctx.sourceIds, kind, status: "queued", title: spec.title(tituloBase) },
   });
 
+  void generateTextArtifact(art.id, system, user, spec);
+
+  return NextResponse.json(art);
+}
+
+/** Geração detached de um artefato de texto — roda em background e persiste o resultado. */
+async function generateTextArtifact(
+  artId: string,
+  system: string,
+  user: string,
+  spec: (typeof TEXT_TRANSFORMS)[TextKind],
+): Promise<void> {
   try {
+    await prisma.studioArtifact.update({ where: { id: artId }, data: { status: "running" } }).catch(() => {});
     let parsed: unknown;
     try {
       parsed = spec.normalize(await geminiJson<any>(system, user));
@@ -69,16 +86,14 @@ export async function runTextGeneration(kind: TextKind, req: Request): Promise<R
         await geminiJson<any>(system, `${user}\n\nIMPORTANTE: responda APENAS com JSON válido no formato exato pedido.`),
       );
     }
-    const updated = await prisma.studioArtifact.update({
-      where: { id: art.id },
+    await prisma.studioArtifact.update({
+      where: { id: artId },
       data: { status: "done", mime: "application/json", meta: parsed as any },
     });
-    return NextResponse.json(updated);
   } catch (e: any) {
     await prisma.studioArtifact.update({
-      where: { id: art.id },
+      where: { id: artId },
       data: { status: "error", error: String(e?.message || e).slice(0, 500) },
-    });
-    return NextResponse.json({ error: "Falha ao gerar o artefato.", id: art.id }, { status: 502 });
+    }).catch(() => {});
   }
 }

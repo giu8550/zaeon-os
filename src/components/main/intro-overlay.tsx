@@ -51,36 +51,6 @@ export default function MacSplash({ show = true, onDone }: Props) {
         setMounted(true);
     }, []);
 
-    // Quem pediu menos movimento no sistema fica no poster, sem vídeo. Vale
-    // também como rede: no Modo de Baixo Consumo o iOS bloqueia autoplay de
-    // qualquer forma, e nesse caso o poster é o que a pessoa vê.
-    // Dois masters, não um: o material original é 4:5 em pé. O master retrato
-    // mantém o enquadramento com moldura; o master paisagem é corte real, o
-    // vídeo deitado preenchendo a tela inteira — em pé no meio do monitor vira
-    // um totem com borrão dos lados.
-    // O critério é PROPORÇÃO, não largura: um celular deitado é largo e
-    // precisa do master paisagem; uma janela estreita no desktop precisa do
-    // retrato. Largura sozinha erra os dois casos.
-    const [ehRetrato, setEhRetrato] = useState(false);
-    useEffect(() => {
-        const mq = window.matchMedia("(max-aspect-ratio: 1/1)");
-        const sync = () => setEhRetrato(mq.matches);
-        sync();
-        mq.addEventListener("change", sync);
-        return () => mq.removeEventListener("change", sync);
-    }, []);
-
-    const fundo = ehRetrato ? "mobile" : "desktop";
-
-    const [semMovimento, setSemMovimento] = useState(false);
-    useEffect(() => {
-        const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-        const sync = () => setSemMovimento(mq.matches);
-        sync();
-        mq.addEventListener("change", sync);
-        return () => mq.removeEventListener("change", sync);
-    }, []);
-
     // LOADING FUNCIONAL: enquanto a intro roda, pré-carrega de verdade o código das salas
     // (sobretudo a Sala de Pesquisa) → quando o usuário entra, já está pronto, sem espera.
     useEffect(() => {
@@ -140,7 +110,6 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 raf = requestAnimationFrame(loop);
             } else if (!exitingRef.current) {
                 exitingRef.current = true;
-                if (progressBarRef.current) progressBarRef.current.style.width = `100%`;
 
                 setTimeout(() => {
                     setOpacity(0);
@@ -209,30 +178,12 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 muted + playsInline não são opcionais — sem os dois o iOS recusa o
                 autoplay. A faixa já vem sem áudio do arquivo original. */}
             <div className="absolute inset-0 overflow-hidden bg-black" aria-hidden="true">
-                {semMovimento ? (
-                    <img
-                        src={`/assets/intro-poster-${fundo}.jpg`}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover"
-                    />
-                ) : (
-                    <video
-                        key={fundo}
-                        className="absolute inset-0 h-full w-full object-cover"
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
-                        preload="metadata"
-                        poster={`/assets/intro-poster-${fundo}.jpg`}
-                    >
-                        {/* Só mp4. O webm estava aqui pra economizar banda, mas depois
-                            do grão anti-banding o VP9 ficou MAIOR que o H.264 (ele
-                            codifica grão mal). Deixou de pagar a própria passagem. */}
-                        <source src={`/assets/intro-loop-${fundo}.mp4`} type="video/mp4" />
-                    </video>
-                )}
-                {/* Véu: garante contraste do "Iniciar" sobre QUALQUER frame do loop. */}
+                {/* Vídeo E poster REMOVIDOS. O poster era um frame exportado do vídeo
+                    antigo — sem o vídeo, ele ficava como "papel de parede" e parecia que
+                    o vídeo continuava ali. Agora é fundo preto com um brilho navy sutil
+                    no centro (tom da marca), sem imagem nenhuma. */}
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(30,58,95,0.35)_0%,rgba(0,0,0,0)_60%)]" />
+                {/* Véu: garante contraste do "Iniciar". */}
                 <div className="absolute inset-0 bg-black/45" />
                 {/* Vinheta: as bordas morrem no preto em vez de terminarem num corte. */}
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(0,0,0,0.78)_100%)]" />
@@ -261,7 +212,7 @@ export default function MacSplash({ show = true, onDone }: Props) {
                 )}
 
                 <div className="h-[64px] flex flex-col items-center justify-start mt-8 w-full">
-                    <AnimatePresence mode="wait">
+                    <AnimatePresence>
                         {!hasStarted ? (
                             <motion.div 
                                 key="start-info"
@@ -284,7 +235,7 @@ export default function MacSplash({ show = true, onDone }: Props) {
                             >
                                 <div className={`flex items-center gap-2.5 transition-opacity duration-500 ${phase >= 1 ? 'opacity-100' : 'opacity-0'}`}>
                                     <div className="w-[200px] h-[3px] rounded-full bg-black/20 dark:bg-white/15 overflow-hidden">
-                                        <div ref={progressBarRef} className="h-full rounded-full bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.35)] dark:shadow-[0_0_8px_rgba(255,255,255,0.35)]" style={{ width: "0%", transition: "none" }} />
+                                        <div ref={progressBarRef} className="h-full rounded-full bg-black dark:bg-white shadow-[0_0_8px_rgba(0,0,0,0.35)] dark:shadow-[0_0_8px_rgba(255,255,255,0.35)]" style={{ width: "0%", transition: "width 0.12s linear" }} />
                                     </div>
                                 </div>
                             </motion.div>
@@ -292,6 +243,9 @@ export default function MacSplash({ show = true, onDone }: Props) {
                     </AnimatePresence>
                 </div>
             </div>
+            <style jsx global>{`
+                /* barra agora é controlada por JS (largura = relógio do intro) */
+            `}</style>
         </div>
     );
 }

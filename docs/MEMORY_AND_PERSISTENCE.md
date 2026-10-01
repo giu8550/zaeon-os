@@ -205,6 +205,8 @@ De baixo pra cima (respeita a dependência L1→L3). Memória é standard → se
 - **PR-M1 · L1 transcript durável (ALICERCE)** — ✅ **feito local** (models + `transcript.ts` + endpoint + fiação nos 2 chats). Falta o executor rodar `prisma db push` (Mongo, sem migração) + testar em prod.
 - **PR-M2 · L2 wiring:** salas alimentam `AgentContext` (`setAgentContext`/`pushAgentAction`) de verdade. **(a fazer no harness)**
 - **PR-M3 · L3 memória nativa (standard):** `lib/agent/memory.ts` (`MemoryAPI`: `wakeUp/search/write` — contrato ✅ pronto) + model `MemoryDrawer` + Atlas Vector index + tool `memory_search` + embedding (gemini-embedding-001). Deriva do L1. **(a fazer no harness)**
+  - **Recall HÍBRIDO (lição do Hermes/agent-gateway):** combinar `$vectorSearch` (cosseno) **+ índice `$text` do Mongo** (full-text) e fundir os hits — melhora recall barato sem mudar o contrato. Vetor sozinho perde correspondência exata de termo; texto sozinho perde paráfrase.
+  - **Curadoria com "nudge" (opcional):** no `finalize`, além do `isMemorable()` heurístico, o modelo pode propor/rotular quais drawers guardar — o **storage segue verbatim** (decisão de custo intacta).
 
 > **Estado (2026-07-11):** L0+L1 construídos localmente = **a base a comitar como PR primeiro**.
 > Harness + tools + L2/L3 vêm POR CIMA dela.

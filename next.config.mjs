@@ -90,7 +90,16 @@ const nextConfig = {
         serverActions: {
             bodySizeLimit: '20mb',
         },
-        serverComponentsExternalPackages: ["canvas", "sharp"],
+        // Liga o instrumentation.ts (Next 14) SÓ quando este processo é o worker
+        // (SCHOLAR_WORKER=1). No dev/web normal fica desligado → o instrumentation não é
+        // compilado e não arrasta Prisma/bullmq pro boot. O worker (container dedicado)
+        // sobe com SCHOLAR_WORKER=1 e aí o hook liga.
+        instrumentationHook: process.env.SCHOLAR_WORKER === "1",
+        // @prisma/client + .prisma/client externos: o Next 14 tentava EMPACOTAR o Prisma
+        // Client e puxava a variante wasm (erro "Can't resolve ./query_engine_bg.js"),
+        // que estourou quando o instrumentation.ts passou a importar o Prisma no boot.
+        // Marcá-los como externos = Next não empacota, usa o require de runtime (o correto).
+        serverComponentsExternalPackages: ["canvas", "sharp", "bullmq", "ioredis", "@prisma/client", ".prisma/client", "prisma"],
         // Tree-shaking dos barrels pesados (framer-motion/recharts são usados em todo
         // lugar) → bundle inicial menor, telas abrindo mais rápido. lucide/heroicons já
         // têm o modularizeImports acima; incluí-los aqui também é seguro.

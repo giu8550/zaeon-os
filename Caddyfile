@@ -27,12 +27,22 @@
 	}
 }
 
+# ── Host de preview PERMANENTE via sslip.io ──────────────────────────────────
+# sslip.io resolve 75-119-140-97.sslip.io -> 75.119.140.97 sozinho (sem DNS nosso),
+# então o Caddy emite HTTPS Let's Encrypt válido. Fica NO GIT de propósito: assim
+# sobrevive a `git reset --hard` do deploy e a gente confere cada mudança em prod.
+# Remover quando o domínio definitivo apontar pra cá (ou manter como staging interno).
+75-119-140-97.sslip.io {
+	encode zstd gzip
+	respond /healthz "ok" 200
+	reverse_proxy web:3000
+}
+
 # ── www → raiz ────────────────────────────────────────────────
 # O client OAuth do Google NÃO aceita o callback com www: quem entrasse pelo www
 # levaria redirect_uri_mismatch no login. Em vez de cadastrar um segundo callback,
 # o www nunca chega a ser endereço de app — redireciona 301 pra raiz antes de
-# qualquer rota. Hostname fixo de propósito: se o www entrasse na lista do
-# {$BETA_DOMAIN}, ele passaria a SERVIR o app, que é exatamente o que não queremos.
+# qualquer rota.
 www.zaeon.com.br {
 	redir https://zaeon.com.br{uri} permanent
 }
