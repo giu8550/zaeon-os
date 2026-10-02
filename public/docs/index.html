@@ -14,16 +14,17 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"Segoe UI",system-ui,sans-serif}
   a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
-  .wrap{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+  .wrap{display:grid;grid-template-columns:280px minmax(0,1fr);min-height:100vh}
   aside{position:sticky;top:0;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:18px 14px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;padding:4px 8px 12px}
+  .back{display:inline-flex;align-items:center;gap:6px;margin:0 0 12px;padding:7px 12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:9px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .back:hover{border-color:var(--soft)}
   .brand .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#1e6fe0,#5aa2ff);box-shadow:0 2px 8px rgba(30,111,224,.4)}
   .search{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-size:13.5px;margin-bottom:10px}
   nav .grp{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--soft);margin:14px 8px 4px;font-weight:700}
   nav a{display:block;padding:6px 10px;border-radius:8px;color:var(--soft);font-size:14px}
   nav a:hover{background:var(--accent-weak);text-decoration:none;color:var(--ink)}
   nav a.active{background:var(--accent-weak);color:var(--accent);font-weight:600}
-  main{max-width:840px;margin:0 auto;padding:30px 40px 90px;width:100%}
+  main{box-sizing:border-box;max-width:840px;margin:0 auto;padding:30px 40px 90px;width:100%}
   .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
   .top .bc{font-size:12.5px;color:var(--soft)}
   .toggle{border:1px solid var(--line);background:var(--panel);color:var(--soft);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:12.5px}
@@ -48,7 +49,7 @@
 
 <div class="wrap">
   <aside id="side">
-    <div class="brand"><span class="logo"></span> Zaeon <span style="color:var(--soft);font-weight:500">Docs</span></div>
+    <button class="back" id="back" type="button">← Voltar</button>
     <input class="search" id="q" placeholder="Buscar na documentação…">
     <nav id="nav">
       <div class="grp">Introdução</div>
@@ -314,6 +315,19 @@ Persistência             ── sessões, memória, grafo de conhecimento, arte
     if (link) bc.textContent = link.textContent; }
   addEventListener("scroll", spy, { passive: true }); spy();
   links.forEach(a => a.onclick = () => document.getElementById("side").classList.remove("open"));
+  // Âncoras (#secao) sem empilhar histórico: senão o "Voltar" só desfaria cliques de seção.
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    const el = document.querySelector(a.getAttribute("href"));
+    if (!el) return;
+    e.preventDefault(); el.scrollIntoView({ block: "start", inline: "nearest" }); history.replaceState(null, "", a.getAttribute("href"));
+  });
+  // Voltar: dentro do app (iframe de /docs) volta a página anterior do site; sem histórico, vai pra home.
+  document.getElementById("back").onclick = () => {
+    const top = window.parent !== window ? window.parent : window;
+    if (top.history.length > 1) top.history.back(); else top.location.href = "/";
+  };
   document.getElementById("q").addEventListener("input", (e) => {
     const t = e.target.value.trim().toLowerCase();
     secs.forEach((s, i) => { const hit = !t || s.textContent.toLowerCase().includes(t); s.classList.toggle("hidden", !hit); links[i].classList.toggle("hidden", !hit); });
