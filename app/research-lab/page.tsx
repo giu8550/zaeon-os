@@ -714,6 +714,17 @@ export default function HomeworkPage({
     } catch { /* ignore */ }
     return "chat";
   });
+  // Sala unificada: a aba do trabalho só aparece quando EXISTE um trabalho (gerado pela IA,
+  // aberto da biblioteca, "novo trabalho" ou deep-link) — nasce como aba nova, igual a uma
+  // conversa nova. Persistida pra não sumir no reload.
+  const [workTabOn, setWorkTabOnRaw] = useState<boolean>(() => {
+    if (!UNIFIED) return true;
+    try { return typeof window !== "undefined" && localStorage.getItem("zaeon.lab.workTab") === "1"; } catch { return false; }
+  });
+  const setWorkTabOn = useCallback((on: boolean) => {
+    setWorkTabOnRaw(on);
+    try { on ? localStorage.setItem("zaeon.lab.workTab", "1") : localStorage.removeItem("zaeon.lab.workTab"); } catch { /* ignore */ }
+  }, []);
   // TODA troca de aba passa por aqui: valida e, na sala unificada, converte as abas antigas
   // (sala-de-estudos / pesquisas) em sub-abas — links, tour e eventos de voz não quebram.
   const setActiveTab = useCallback((t: LabTab | string) => {
@@ -727,8 +738,9 @@ export default function HomeworkPage({
   const showResearchDoc = useCallback(() => {
     setActiveTab("pesquisa");
     setSubTab("chat");
+    setWorkTabOn(true);
     try { window.dispatchEvent(new CustomEvent("zaeon:research:showdoc")); } catch { /* ignore */ }
-  }, [setActiveTab]);
+  }, [setActiveTab, setWorkTabOn]);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [muralSearchQuery, setMuralSearchQuery] = useState("");
@@ -1346,6 +1358,7 @@ export default function HomeworkPage({
     setDocContent(templateFor(workType));
     setCurrentWorkId(null);
     void createWork({ workType: workType ?? undefined });
+    if (UNIFIED) showResearchDoc(); // "novo trabalho" na biblioteca → abre a aba do trabalho
   };
   const handleOpenWork = useCallback(async (id: string) => {
     try {
@@ -1365,7 +1378,7 @@ export default function HomeworkPage({
   }, [showResearchDoc]);
   const handleDeleteWork = (id: string) => {
     fetch(`/api/research-works?id=${id}`, { method: "DELETE" })
-      .then(() => { setSessions((prev) => prev.filter((s) => s.id !== id)); if (currentWorkIdRef.current === id) { setCurrentWorkId(null); soltarTcc(); } })
+      .then(() => { setSessions((prev) => prev.filter((s) => s.id !== id)); if (currentWorkIdRef.current === id) { setCurrentWorkId(null); soltarTcc(); if (UNIFIED) setWorkTabOn(false); } })
       .catch(() => {});
   };
 
@@ -1521,6 +1534,7 @@ export default function HomeworkPage({
         setWorkType(wt);
         setActiveTab("pesquisa");
         setSubTab("chat"); // o documento gerado vive na sub-aba Chat (o shell fecha o chat sozinho)
+        setWorkTabOn(true); // a IA gerou → a aba "Meu TCC/Artigo…" nasce agora
         // Inicia um TRABALHO real em "Minhas coisas" (o autosave preenche o conteúdo).
         void createWork({ title: t.trim().slice(0, 120), workType: workTypeRef.current ?? "TCC" });
       }
@@ -2644,6 +2658,7 @@ export default function HomeworkPage({
                 onWorkType={UNIFIED ? undefined : switchWorkType}
                 defaultChatOpen={UNIFIED}
                 chatActive={activeTab === "pesquisa" && (!UNIFIED || subTab === "chat")}
+                showWorkTab={workTabOn}
                 onReadResearch={readResearch}
                 isReadingResearch={readingResearch}
                 onViewDoc={handleViewDoc}

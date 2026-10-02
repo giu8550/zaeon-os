@@ -73,6 +73,9 @@ interface ResearchShellProps {
   defaultChatOpen?: boolean;
   /** O chat está em cena (sala + sub-aba visíveis) — liga o autofoco do composer. */
   chatActive?: boolean;
+  /** Sala unificada: a aba do trabalho ("Meu TCC/Artigo…") só existe depois que a IA gera
+   *  um trabalho (ou um é aberto) — aí nasce como uma aba nova. Até lá, a sala é o chat. */
+  showWorkTab?: boolean;
 }
 
 export default function ResearchShell({
@@ -105,6 +108,7 @@ export default function ResearchShell({
   tccWorkId,
   defaultChatOpen = false,
   chatActive = true,
+  showWorkTab = true,
 }: ResearchShellProps) {
   const { containerRef, posRef } = useCursorPos();
   const { citations } = useSavedCitations();
@@ -112,6 +116,9 @@ export default function ResearchShell({
   const [showFolder, setShowFolder] = useState(false);
   const [fileDragOver, setFileDragOver] = useState(false);
   const [chatOpen, setChatOpen] = useState(defaultChatOpen);   // chat científico ↔ trabalho
+  // Sem aba de trabalho ainda, "o trabalho" não é um destino: na janela da pesquisa, o chat fica.
+  // (PDFs/documentos abertos continuam visíveis — eles têm aba própria.)
+  const chatVisible = chatOpen || (!showWorkTab && activeId === "research");
   const [docsCollapsed, setDocsCollapsed] = useState(false);  // retrair a barra de documentos
 
   // Gerou um trabalho pelo chat (zaeon:research:newdoc) → fecha o chat e mostra o documento.
@@ -229,14 +236,15 @@ export default function ResearchShell({
           onWorkType={onWorkType ? (t) => { setChatOpen(false); onWorkType(t); } : undefined}
           onReadResearch={onReadResearch}
           isReadingResearch={isReadingResearch}
-          chatOpen={chatOpen}
-          onToggleChat={() => setChatOpen((v) => !v)}
+          chatOpen={chatVisible}
+          onToggleChat={() => setChatOpen(!chatVisible)}
+          hideResearch={!showWorkTab}
         />
 
         {/* Sheet area — all windows mounted, inactive ones hidden via display:none */}
         <div ref={containerRef} className="flex-1 relative min-h-0 overflow-hidden">
           {/* Chat (Escritor/Revisor) sobrepõe o trabalho quando ligado na pill — alterna responsivo. */}
-          {chatOpen && (
+          {chatVisible && (
             <div className="absolute inset-0 z-[55]">
               <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive} />
             </div>
