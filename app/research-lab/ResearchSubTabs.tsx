@@ -66,3 +66,49 @@ export default function ResearchSubTabs({
     </div>
   );
 }
+
+/**
+ * Pills da sub-aba Pesquisas: "Pesquisas" (lista salva) e "Minhas pesquisas" (a pesquisa em
+ * folha — editor, Salvar, Publicar e a barra de documentos — como na antiga sala de pesquisa).
+ */
+export function PesquisasPills({
+  value,
+  onChange,
+}: {
+  value: "salvas" | "minhas";
+  onChange: (v: "salvas" | "minhas") => void;
+}) {
+  const items: { id: "salvas" | "minhas"; label: string }[] = [
+    { id: "salvas", label: "Pesquisas" },
+    { id: "minhas", label: "Minhas pesquisas" },
+  ];
+  return (
+    <div role="tablist" aria-label="Pesquisas" className="shrink-0 flex items-center gap-1.5 w-fit max-w-full overflow-x-auto no-scrollbar -mb-3">
+      {items.map((it) => {
+        const active = it.id === value;
+        return (
+          <button
+            key={it.id}
+            role="tab"
+            aria-selected={active}
+            data-tour={`pesq-${it.id}`}
+            onClick={() => onChange(it.id)}
+            className="shrink-0 h-8 px-3.5 rounded-full text-[11px] font-black uppercase tracking-wide whitespace-nowrap transition-all duration-150"
+            style={
+              active
+                ? {
+                    color: "#fff",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06))",
+                    border: "1px solid rgba(255,255,255,0.28)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.45), 0 8px 20px -8px rgba(139,92,246,0.85)",
+                  }
+                : { color: "#b8b8d0", background: "rgba(22,22,34,0.55)", border: "1px solid rgba(255,255,255,0.12)" }
+            }
+          >
+            {it.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

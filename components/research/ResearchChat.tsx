@@ -21,15 +21,20 @@ import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
 import { TCC_CROSS_ON, avisarTccMudou, tccApi } from "@/lib/tcc/client";
+import ThreadTabs from "@/components/study/ThreadTabs";
+import {
+  carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread, tocarThread,
+  carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
+  ESCOPO_PESQUISA, TITULO_PADRAO, type Thread,
+} from "@/lib/chat/threads";
 
 // `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
 type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string };
 
 // Deve bater com RESEARCH_SENTINEL de app/api/ai/chat/route.ts (a estruturada vem do structured-client).
 const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";
-// L0 (docs/MEMORY_AND_PERSISTENCE.md): antes a conversa da Sala de Pesquisa ZERAVA
-// (sem persistência + desmonta ao trocar de aba). Agora espelha o thread e o rascunho.
-const THREAD_KEY_R = "zaeon.research.thread.v1";
+// L0 (docs/MEMORY_AND_PERSISTENCE.md): a conversa da Sala de Pesquisa persiste por TEMA
+// (conversas/abas — lib/chat/threads, escopo da Pesquisa; a conversa única antiga vira a aba #1).
 const DRAFT_KEY_R = "zaeon.research.draft.v1";
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const isQuick = (t: string) => t.trim().split(/\s+/).filter(Boolean).length <= 8;
@@ -64,12 +69,15 @@ export default function ResearchChat({
   workType,
   tccWorkId,
   active = true,
+  comAbas = false,
 }: {
   workType?: string | null;
   /** TCC cross-sala aberto na folha: o chat lapida ESTE documento — e tudo nasce como sugestão. */
   tccWorkId?: string | null;
   /** Em cena (sala/sub-aba visível): o composer recebe o cursor sem precisar clicar. */
   active?: boolean;
+  /** Sala unificada: mostra as conversas (um tema por aba) + "Nova" no topo do chat. */
+  comAbas?: boolean;
 }) {
   // Com um TCC cross-sala aberto, o padrão é LAPIDAR (sugestões com fonte verificada); o aluno
   // pode desligar pra só conversar sobre o tema.
@@ -84,6 +92,11 @@ export default function ResearchChat({
   const wt = workType || "trabalho";
   const msgsRef = useRef<Msg[]>([]);
   msgsRef.current = messages;
+  // Conversas (temas): cada aba tem histórico próprio. Sem `comAbas` há uma só (igual a antes).
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [abaAtiva, setAbaAtiva] = useState<string | null>(null);
+  const threadsRef = useRef<Thread[]>([]);
+  const abaAtivaRef = useRef<string | null>(null);
 
   useEffect(() => {
     const el = listRef.current;
@@ -95,8 +108,14 @@ export default function ResearchChat({
     try { const d = localStorage.getItem(DRAFT_KEY_R); if (d) setInput(d); } catch { /* ignore */ }
     let hadLocal = false;
     try {
-      const raw = localStorage.getItem(THREAD_KEY_R);
-      if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) { setMessages(p); hadLocal = true; } }
+      const lista = carregarThreads(localStorage, ESCOPO_PESQUISA);
+      const ativa = threadAtiva(localStorage, lista, ESCOPO_PESQUISA);
+      setThreads(lista); threadsRef.current = lista;
+      setAbaAtiva(ativa); abaAtivaRef.current = ativa;
+      if (ativa) {
+        const guardadas = carregarMensagens<Msg>(localStorage, ativa, ESCOPO_PESQUISA);
+        if (guardadas.length) { setMessages(guardadas); hadLocal = true; }
+      }
     } catch { /* ignore */ }
     if (!hadLocal) {
       (async () => {
@@ -106,13 +125,55 @@ export default function ResearchChat({
     }
   }, []);
 
-  // Espelha thread (últimas 60) e rascunho no localStorage — não perde ao trocar de aba/reload.
+  // Espelha a conversa ATIVA (últimas 60) e o rascunho no localStorage — não perde ao trocar de aba/reload.
   useEffect(() => {
-    try { localStorage.setItem(THREAD_KEY_R, JSON.stringify(messages.filter((m) => m.text).slice(-60))); } catch { /* ignore */ }
+    const aba = abaAtivaRef.current;
+    if (aba) salvarMensagens(localStorage, aba, messages.filter((m) => m.text), ESCOPO_PESQUISA);
   }, [messages]);
   useEffect(() => {
     try { input ? localStorage.setItem(DRAFT_KEY_R, input) : localStorage.removeItem(DRAFT_KEY_R); } catch { /* ignore */ }
   }, [input]);
+
+  // Trocar/criar/fechar conversa — bloqueado enquanto responde (a resposta em curso pertence
+  // à conversa que a pediu; trocar no meio a perderia).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const focarComposer = () => requestAnimationFrame(() => rootRef.current?.querySelector("textarea")?.focus({ preventScroll: true }));
+  const trocarAba = (id: string) => {
+    if (sending || id === abaAtivaRef.current) return;
+    abaAtivaRef.current = id; setAbaAtiva(id);
+    marcarAtiva(localStorage, id, ESCOPO_PESQUISA);
+    setMessages(carregarMensagens<Msg>(localStorage, id, ESCOPO_PESQUISA));
+    focarComposer();
+    const t = tocarThread(threadsRef.current, id);
+    threadsRef.current = t; salvarThreads(localStorage, t, ESCOPO_PESQUISA); setThreads(t);
+  };
+  const novaAba = () => {
+    if (sending) return;
+    const { threads: lista, nova } = criarThread(threadsRef.current);
+    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+    abaAtivaRef.current = nova.id; setAbaAtiva(nova.id);
+    marcarAtiva(localStorage, nova.id, ESCOPO_PESQUISA);
+    setMessages([]);
+    focarComposer();
+  };
+  const fecharAba = (id: string) => {
+    if (sending) return;
+    const { threads: lista, proxima } = fecharThread(localStorage, threadsRef.current, id, ESCOPO_PESQUISA);
+    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+    if (id === abaAtivaRef.current) {
+      abaAtivaRef.current = proxima; setAbaAtiva(proxima);
+      marcarAtiva(localStorage, proxima, ESCOPO_PESQUISA);
+      setMessages(carregarMensagens<Msg>(localStorage, proxima, ESCOPO_PESQUISA));
+    }
+  };
+  // 1ª fala numa conversa sem nome → batiza pelo tema (como toda IA faz).
+  const nomearPeloTema = (texto: string) => {
+    const aba = abaAtivaRef.current;
+    const atual = threadsRef.current.find((t) => t.id === aba);
+    if (!aba || !atual || atual.titulo !== TITULO_PADRAO) return;
+    const lista = renomearThread(threadsRef.current, aba, tituloAPartirDe(texto));
+    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+  };
 
   // Gera o trabalho e o ENCAIXA no documento (reusa /api/ai/research-draft + o
   // evento zaeon:research:newdoc que o page.tsx escuta → buildDocFromDraft).
@@ -139,6 +200,7 @@ export default function ResearchChat({
     const prompt = (text ?? input).trim();
     if (!prompt || sending) return;
     setQuick(isQuick(prompt));
+    nomearPeloTema(prompt);
 
     const history = messages.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
@@ -248,7 +310,20 @@ export default function ResearchChat({
   }, [input, sending, messages, wt, runResearchGenerate, modoTcc, tccWorkId]);
 
   return (
-    <div className="h-full flex flex-col bg-white/95 dark:bg-[#0a0f1c]/95 text-slate-900 dark:text-white">
+    <div ref={rootRef} className="h-full flex flex-col bg-white/95 dark:bg-[#0a0f1c]/95 text-slate-900 dark:text-white">
+      {/* Temas da conversa (um por aba) + ＋ pra começar outro. Ficam sob a pill "Chat" da sala. */}
+      {comAbas && (
+        <div className="shrink-0 px-4 sm:px-6 pt-3">
+          <ThreadTabs
+            threads={threads}
+            ativa={abaAtiva}
+            aoTrocar={trocarAba}
+            aoCriar={novaAba}
+            aoFechar={fecharAba}
+            ocupada={sending ? abaAtiva : null}
+          />
+        </div>
+      )}
       {/* Conversa — bolhas com cara de manuscrito (serif, texto justificado).
           Sem cabeçalho/X: a alternância chat ↔ trabalho é feita pela pill ⟁ Chat. */}
       <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-6">

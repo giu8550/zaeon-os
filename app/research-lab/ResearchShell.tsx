@@ -73,9 +73,11 @@ interface ResearchShellProps {
   defaultChatOpen?: boolean;
   /** O chat está em cena (sala + sub-aba visíveis) — liga o autofoco do composer. */
   chatActive?: boolean;
-  /** Sala unificada: a aba do trabalho ("Meu TCC/Artigo…") só existe depois que a IA gera
-   *  um trabalho (ou um é aberto) — aí nasce como uma aba nova. Até lá, a sala é o chat. */
-  showWorkTab?: boolean;
+  /** Sala unificada: qual visão mostrar — "chat" (conversas por tema) ou "folha" (a pesquisa em
+   *  folha, com salvar/publicar). Controlada pela sub-aba da sala; sem pill de Chat aqui dentro. */
+  unifiedView?: "chat" | "folha";
+  /** Sala unificada: algo pediu a folha (tocar/abrir um documento) estando no chat. */
+  onNeedSheet?: () => void;
 }
 
 export default function ResearchShell({
@@ -108,7 +110,8 @@ export default function ResearchShell({
   tccWorkId,
   defaultChatOpen = false,
   chatActive = true,
-  showWorkTab = true,
+  unifiedView,
+  onNeedSheet,
 }: ResearchShellProps) {
   const { containerRef, posRef } = useCursorPos();
   const { citations } = useSavedCitations();
@@ -116,9 +119,8 @@ export default function ResearchShell({
   const [showFolder, setShowFolder] = useState(false);
   const [fileDragOver, setFileDragOver] = useState(false);
   const [chatOpen, setChatOpen] = useState(defaultChatOpen);   // chat científico ↔ trabalho
-  // Sem aba de trabalho ainda, "o trabalho" não é um destino: na janela da pesquisa, o chat fica.
-  // (PDFs/documentos abertos continuam visíveis — eles têm aba própria.)
-  const chatVisible = chatOpen || (!showWorkTab && activeId === "research");
+  // Sala unificada: a visão vem da sub-aba (chat × folha). Fora dela, a pill ⟁ Chat alterna.
+  const chatVisible = unifiedView ? unifiedView === "chat" : chatOpen;
   const [docsCollapsed, setDocsCollapsed] = useState(false);  // retrair a barra de documentos
 
   // Gerou um trabalho pelo chat (zaeon:research:newdoc) → fecha o chat e mostra o documento.
@@ -142,8 +144,13 @@ export default function ResearchShell({
   }, []);
   const mobile = vw > 0 && vw < 640;
 
+  // Unificada: tocar/abrir um documento estando no chat leva pra folha (onde o documento aparece).
+  const needSheet = unifiedView === "chat" ? onNeedSheet : undefined;
+  const viewDoc = useCallback((id: string) => { needSheet?.(); onViewDoc?.(id); }, [needSheet, onViewDoc]);
+
   const handlePlayFile = useCallback(
     (file: LibraryFile) => {
+      needSheet?.();
       addWindow({
         id: file.id,
         label: file.title.slice(0, 22),
@@ -153,7 +160,7 @@ export default function ResearchShell({
       onSelectWindow(file.id);
       onPlayFile(file);
     },
-    [addWindow, onSelectWindow, onPlayFile],
+    [addWindow, onSelectWindow, onPlayFile, needSheet],
   );
 
   return (
@@ -168,7 +175,7 @@ export default function ResearchShell({
               : `1fr ${docsCollapsed ? "48px" : "15rem"}`),
         gap: mobile ? 10 : 14,
         height: mobile ? "auto" : "100%",
-        minHeight: mobile ? "78vh" : 600,
+        minHeight: mobile ? "78vh" : unifiedView ? 0 : 600,
         maxHeight: "none",
         borderRadius: 22,
         background: "rgba(22,22,34,0.55)",
@@ -209,7 +216,7 @@ export default function ResearchShell({
           const id = e.dataTransfer.getData("text/zaeon-file");
           if (id && onViewDoc) {
             e.preventDefault();
-            onViewDoc(id);
+            viewDoc(id);
           }
           setFileDragOver(false);
         }}
@@ -224,7 +231,8 @@ export default function ResearchShell({
           </div>
         )}
 
-        <WindowSwitcher
+        {/* Chat da sala unificada: as conversas (temas) vivem dentro do próprio chat — sem 2ª pill. */}
+        {unifiedView !== "chat" && <WindowSwitcher
           windows={windows}
           activeId={activeId}
           // Selecionar uma janela OU um tipo (TCC/Artigo/Relatório) leva pro trabalho:
@@ -237,22 +245,21 @@ export default function ResearchShell({
           onReadResearch={onReadResearch}
           isReadingResearch={isReadingResearch}
           chatOpen={chatVisible}
-          onToggleChat={() => setChatOpen(!chatVisible)}
-          hideResearch={!showWorkTab}
-        />
+          onToggleChat={unifiedView ? undefined : () => setChatOpen((v) => !v)}
+        />}
 
         {/* Sheet area — all windows mounted, inactive ones hidden via display:none */}
         <div ref={containerRef} className="flex-1 relative min-h-0 overflow-hidden">
           {/* Chat (Escritor/Revisor) sobrepõe o trabalho quando ligado na pill — alterna responsivo. */}
           {chatVisible && (
             <div className="absolute inset-0 z-[55]">
-              <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive} />
+              <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive} comAbas={!!unifiedView} />
             </div>
           )}
           {/* Research window (always mounted) */}
           <div
             className="h-full overflow-y-auto"
-            style={{ display: activeId === "research" ? undefined : "none" }}
+            style={{ display: activeId === "research" && !chatVisible ? undefined : "none" }}
           >
             {researchWindowContent}
           </div>
@@ -264,7 +271,7 @@ export default function ResearchShell({
               <div
                 key={w.id}
                 className="h-full"
-                style={{ display: activeId === w.id ? undefined : "none" }}
+                style={{ display: activeId === w.id && !chatVisible ? undefined : "none" }}
               >
                 {pdfDocs?.[w.id] && (
                   <PdfViewer
@@ -283,7 +290,7 @@ export default function ResearchShell({
               <div
                 key={w.id}
                 className="h-full overflow-y-auto"
-                style={{ display: activeId === w.id ? undefined : "none" }}
+                style={{ display: activeId === w.id && !chatVisible ? undefined : "none" }}
               >
                 {relSummaries?.[w.id] ? (
                   <div className="h-full overflow-y-auto custom-scrollbar p-7 bg-white dark:bg-[#0f172a]">
@@ -347,7 +354,7 @@ export default function ResearchShell({
                 onNewWork={onNewWork}
                 onDeleteWork={onDeleteWork}
                 onRelate={onRelate}
-                onView={(f) => onViewDoc?.(f.id)}
+                onView={(f) => viewDoc(f.id)}
                 flipped={flipped}
               />
             </div>

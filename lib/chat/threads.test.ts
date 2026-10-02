@@ -3,6 +3,7 @@ import {
   carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread,
   tituloAPartirDe, chaveDaThread, carregarMensagens, salvarMensagens,
   threadAtiva, marcarAtiva, CHAVE_INDICE, CHAVE_LEGADA, MAX_ABAS, TITULO_PADRAO,
+  ESCOPO_PESQUISA, ESCOPO_COWORK,
   type Armazem,
 } from "./threads";
 
@@ -139,5 +140,36 @@ describe("armazenamento indisponível (aba anônima)", () => {
   });
   it("salvar não lança", () => {
     expect(() => salvarMensagens(armazemQuebrado, "x", [1, 2])).not.toThrow();
+  });
+});
+
+describe("escopo da Sala de Pesquisa", () => {
+  it("adota a conversa antiga da Pesquisa como aba #1, sem tocar nas chaves da Aura", () => {
+    const a = armazemFalso({
+      [ESCOPO_PESQUISA.legada]: JSON.stringify([{ id: "1", role: "user", text: "Fale de energia solar. Obrigado" }]),
+    });
+    const lista = carregarThreads(a, ESCOPO_PESQUISA);
+    expect(lista).toHaveLength(1);
+    expect(lista[0].titulo).toBe("Fale de energia solar");
+    expect(carregarMensagens(a, lista[0].id, ESCOPO_PESQUISA)).toHaveLength(1);
+    expect(a.dados[CHAVE_INDICE]).toBeUndefined();   // índice da Aura intacto
+  });
+
+  it("conversas da Pesquisa e da Aura não se misturam", () => {
+    const a = armazemFalso();
+    const pesq = carregarThreads(a, ESCOPO_PESQUISA);
+    const aura = carregarThreads(a, ESCOPO_COWORK);
+    salvarMensagens(a, pesq[0].id, [{ id: "p" }], ESCOPO_PESQUISA);
+    expect(carregarMensagens(a, aura[0].id)).toEqual([]);
+    marcarAtiva(a, pesq[0].id, ESCOPO_PESQUISA);
+    expect(threadAtiva(a, pesq, ESCOPO_PESQUISA)).toBe(pesq[0].id);
+  });
+
+  it("fechar apaga só o histórico do escopo certo", () => {
+    const a = armazemFalso();
+    const { threads, nova } = criarThread(carregarThreads(a, ESCOPO_PESQUISA));
+    salvarMensagens(a, nova.id, [{ id: "x" }], ESCOPO_PESQUISA);
+    fecharThread(a, threads, nova.id, ESCOPO_PESQUISA);
+    expect(a.dados[chaveDaThread(nova.id, ESCOPO_PESQUISA)]).toBeUndefined();
   });
 });
