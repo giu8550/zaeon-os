@@ -32,6 +32,7 @@ const COLS: FooterCol[] = [
     title: "Empresa",
     links: [
       { label: "Sobre nós", href: "/about" },
+      { label: "Documentação", href: "/docs" },
       { label: "Contato", href: "mailto:contato@zaeon.com.br", external: true },
     ],
   },

@@ -8,6 +8,9 @@ import { ArrowLeftIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { useTranslation } from "react-i18next";
 import MacSplash from "@/components/ui/MacSplash";
 import { PLAN_INFO } from "@/lib/plans";
+// Sem este import o i18n só inicializa se outra página (home) já o carregou: num acesso direto
+// ou F5 em /about o `isInitialized` ficava falso e a página parava no splash, em branco.
+import "@/src/i18n";
 
 // ─── SCRAMBLE TEXT HOOK ───────────────────────────────────────────────────────
 const CHAR_POOL = ["紀", "律", "知", "識", "未", "来", "革", "新", "卓", "越", "智", "慧", "能", "力"];
@@ -302,7 +305,7 @@ const MoleculeSection = () => {
                 className="text-center mb-20"
             >
                 <p className="text-[10px] font-black uppercase tracking-[0.5em] text-cyan-500/70 mb-4">
-                    Como funciona
+                    Na plataforma
                 </p>
                 <h2 className="text-3xl md:text-5xl font-black text-white tracking-tighter">
                     Três camadas.{" "}
@@ -414,9 +417,41 @@ const MoleculeSection = () => {
     );
 };
 
+// ─── COMO FUNCIONA (copy no bloco `about.architecture` do i18n) ──────────────
+const ComoFunciona = () => {
+    const { t } = useTranslation();
+    const steps = [1, 2, 3, 4, 5, 6, 7];
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+            className="w-full max-w-5xl rounded-[2.5rem] bg-black/70 backdrop-blur-xl border border-white/10 p-8 md:p-12 text-center shadow-2xl"
+        >
+            <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight uppercase">{t("about.architecture.title")}</h2>
+            <p className="mt-3 text-white/70 max-w-2xl mx-auto">{t("about.architecture.subtitle")}</p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-2 md:gap-3">
+                {steps.map((n, i) => (
+                    <div key={n} className="flex items-center gap-2 md:gap-3">
+                        <span className="px-3 py-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 text-[10px] md:text-xs font-black uppercase tracking-[0.18em] text-cyan-200">
+                            {t(`about.architecture.flow.step${n}`)}
+                        </span>
+                        {i < steps.length - 1 && <span className="text-cyan-400/60" aria-hidden>→</span>}
+                    </div>
+                ))}
+            </div>
+            <div className="mt-8 inline-block rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-4">
+                <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-400">{t("about.architecture.card_title")}</p>
+                <p className="mt-1 text-sm text-white/70">{t("about.architecture.card_desc")}</p>
+            </div>
+        </motion.div>
+    );
+};
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function AboutUsPage() {
-    const { i18n } = useTranslation();
+    const { t, ready } = useTranslation();
     const [mounted, setMounted] = useState(false);
     const containerRef = useRef(null);
     const missionRef = useRef(null);
@@ -435,7 +470,7 @@ export default function AboutUsPage() {
         setMounted(true);
     }, []);
 
-    if (!mounted || !i18n.isInitialized) return <MacSplash minDurationMs={1500} />;
+    if (!mounted || !ready) return <MacSplash minDurationMs={1500} />;
 
     return (
         <div
@@ -451,7 +486,7 @@ export default function AboutUsPage() {
                     <ArrowLeftIcon className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
                 </div>
                 <span className="text-[10px] uppercase tracking-[0.3em] font-black opacity-0 group-hover:opacity-100 transition-all">
-                    Voltar
+                    {t("about.back", "Voltar")}
                 </span>
             </button>
 
@@ -473,28 +508,25 @@ export default function AboutUsPage() {
                 {/* Hero Title */}
                 <CyberTitle
                     startAnimations={true}
-                    secondaryText="TODAS AS IAS · FEITO PRA CIÊNCIA"
+                    secondaryText={t("about.title_secondary", "Uma universidade operada por IA.")}
                     mainText="ZAEON"
-                    scrollText="Descubra mais"
+                    scrollText={t("about.scroll_down", "Descubra mais")}
                 />
 
-                {/* ── Card 1: Posicionamento ── */}
+                {/* ── Card 1: Gênese (copy no bloco `about` do i18n) ── */}
                 <TextBlock align="left" glowColor="cyan" direction="none" customBg="bg-black/80">
                     <h2 className="text-2xl md:text-4xl font-black text-white mb-6 tracking-tight uppercase flex items-center gap-4">
                         <span className="w-2 h-10 bg-gradient-to-b from-cyan-400 to-blue-600 rounded-full shadow-[0_0_20px_rgba(34,211,238,0.5)]" />
-                        Para qualquer profissão. Para qualquer rotina.
+                        {t("about.genesis.title")}
                     </h2>
                     <p className="font-medium text-white/95">
-                        A Zaeon reúne todas as IAs que você já conhece — GPT, Claude, Gemini, Grok e
-                        mais — num só lugar, dentro de um sistema interativo feito pra você não só
-                        conversar, mas <span className="text-white">produzir conhecimento</span> — seja
-                        você estudante, professor, pesquisador, empreendedor ou simplesmente curioso.
+                        {t("about.genesis.p1")}
                     </p>
                     <p className="text-white/80">
-                        Cada modelo com sua força, dentro de um só método científico.{" "}
                         <span className="text-cyan-400 font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.3)]">
-                            Não confie em uma IA. Faça ciência com várias.
+                            {t("about.genesis.p2")}
                         </span>
+                        {t("about.genesis.p2_highlight") ? <> {t("about.genesis.p2_highlight")}</> : null}
                     </p>
                 </TextBlock>
 
@@ -515,20 +547,20 @@ export default function AboutUsPage() {
 
                     <TextBlock align="right" glowColor="purple" direction="right" customBg="bg-indigo-950/80">
                         <h2 className="text-2xl md:text-4xl font-black text-white mb-6 tracking-tight uppercase flex items-center justify-end gap-4">
-                            Seus projetos. Sua propriedade.
+                            {t("about.mission.title")}
                             <span className="w-2 h-10 bg-gradient-to-b from-purple-400 to-indigo-600 rounded-full shadow-[0_0_20px_rgba(168,85,247,0.5)]" />
                         </h2>
                         <p className="text-xl md:text-3xl font-extralight italic text-white drop-shadow-md">
-                            Crie. Colabore. Compartilhe no seu ritmo.
+                            {t("about.title_main")}
                         </p>
                         <p className="text-base text-white/70 mt-4 leading-relaxed">
-                            Tudo que você desenvolve com seus agentes é protegido como propriedade
-                            intelectual privada. Você decide o que entra no mural da comunidade — seja
-                            um experimento bem-sucedido, uma ideia em desenvolvimento ou um negócio
-                            pronto para crescer.
+                            {t("about.mission.p1")}
                         </p>
                     </TextBlock>
                 </div>
+
+                {/* ── Como funciona: da pergunta à solução verificável ── */}
+                <ComoFunciona />
 
                 {/* ── Molécula ── */}
                 <MoleculeSection />
@@ -572,7 +604,7 @@ export default function AboutUsPage() {
                     className="text-center relative z-40 pb-[10vh]"
                 >
                     <h2 className="text-4xl md:text-7xl font-black text-white mb-12 tracking-tighter drop-shadow-2xl opacity-90">
-                        Quer ver a tecnologia na prática?
+                        {t("about.cta.tour_title")}
                     </h2>
                     <Link
                         href="/about/about-us"
@@ -580,7 +612,7 @@ export default function AboutUsPage() {
                     >
                         <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600/40 via-cyan-500/40 to-blue-600/40 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
                         <span className="relative z-10 group-hover:text-cyan-100 group-hover:drop-shadow-[0_0_10px_white] transition-all">
-                            Pronto para começar?
+                            {t("about.cta.button_go")}
                         </span>
                     </Link>
                 </motion.div>

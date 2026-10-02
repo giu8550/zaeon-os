@@ -7,7 +7,7 @@
     },
     "intro": {
         "line1": "ESTUDIAR, APRENDER = INVESTIGAR...",
-        "line2": "PUBLICAR = MONETIZAR"
+        "line2": "PUBLICAR = COMPARTIR"
     },
     "menu": {
         "new": "Nueva cuenta",
@@ -54,7 +54,7 @@
         "cancel": "Cancelar",
         "use_wallet": "Usar billetera",
         "use_id": "Usar identificación",
-        "wallet_label": "Cartera de manto",
+        "wallet_label": "Cartera",
         "wallet_placeholder": "0x...",
         "lbl_student": "Identificación de estudiante",
         "ph_student": "000...",
@@ -125,7 +125,7 @@
             "gen_protocol": "Protocolo iniciado a través de {{name}}",
             "content_gen": "Contenido generado.",
             "ipfs_success": "Éxito de IPFS: {{hash}}",
-            "blockchain_init": "Asegurando en el manto...",
+            "blockchain_init": "Registrando credencial...",
             "success": "¡Éxito!",
             "error": "Error."
         }
@@ -172,21 +172,6 @@
                 "title": "Cumplimiento",
                 "full": "Revisión de cuentas",
                 "desc": "Ética y Legal"
-            },
-            "blockchain": {
-                "title": "cadena de bloques",
-                "full": "Muy red",
-                "desc": "Registro inmutable"
-            },
-            "ip": {
-                "title": "IP",
-                "full": "Propiedad",
-                "desc": "Derechos de autor"
-            },
-            "token": {
-                "title": "Simbólico",
-                "full": "Tokenización",
-                "desc": "Activos digitales"
             }
         }
     },
@@ -243,36 +228,36 @@
     "about": {
         "back": "Atrás",
         "scroll_down": "desplácese hacia abajo para aprender todo",
-        "title_secondary": "La escuela del futuro.",
-        "title_main": "PASANDO AHORA.",
+        "title_secondary": "Una universidad operada por IA.",
+        "title_main": "Ciencia que se convierte en solución.",
         "genesis": {
-            "title": "La génesis del protocolo",
-            "p1": "Hoy en día, nuestra atención es robada por grandes corporaciones que solo buscan ganancias, captando la atención de millones mientras sus algoritmos erosionan la inteligencia humana.",
-            "p2": "Zaeon surge para cambiar esto: hemos venido a rescatar nuevamente la alegría de aprender: con profundidad, modernidad y diversión. Si bien la educación tradicional se detuvo en el tiempo, liberamos su verdadero potencial a través de poderosos agentes de IA. Aquí, humanos y máquinas trabajan por un mundo mejor",
-            "p2_highlight": "dentro de la Blockchain."
+            "title": "Investigación que no duerme",
+            "p1": "Zaeon es una institución de investigación dirigida por inteligencias artificiales. Agentes autónomos investigan, aprenden y construyen de forma continua: formulan preguntas, leen la literatura y hacen avanzar los descubrimientos sin parar.",
+            "p2": "Nuestro propósito es usar esa capacidad para afrontar los mayores problemas de la humanidad.",
+            "p2_highlight": ""
         },
         "mission": {
-            "title": "Nuestra Misión",
-            "p1": "Empoderar a la próxima generación de estudiantes, investigadores y profesores ofreciendo herramientas fáciles de usar para la vida diaria en educación de alto rendimiento.",
-            "p2": "Llevándolos a una plataforma completa de monetización para su resistencia académica."
+            "title": "Lo que hacemos",
+            "p1": "Producimos conocimiento, enseñamos a las personas y entregamos proyectos, con foco en curar enfermedades, regenerar el medio ambiente y reducir los riesgos para el planeta. Cada investigación va de la teoría a la solución, siempre validada por especialistas humanos.",
+            "p2": ""
         },
         "architecture": {
-            "title": "La arquitectura de Zaeon",
-            "subtitle": "Tecnología innovadora que impactará a millones de estudiantes en todo el mundo.",
-            "card_title": "MANTO RED MOTOR RWA",
-            "card_desc": "Monetice su investigación con la ayuda de agentes de IA. Patrimonio IP y rendimiento real.",
+            "title": "Cómo funciona",
+            "subtitle": "Agentes autónomos que llevan una pregunta científica hasta una solución verificable.",
+            "card_title": "DEL LABORATORIO AL MUNDO",
+            "card_desc": "Investigación rigurosa que se convierte en tecnología, medicina y bienes públicos: abierta y auditable.",
             "flow": {
-                "step1": "INVESTIGACIÓN",
-                "step2": "VALIDACIÓN",
-                "step3": "RED DE MANTO",
-                "step4": "MOTOR RWA",
-                "step5": "ACTIVO INTELECTUAL",
-                "step6": "MONETIZACIÓN DE LA INVESTIGACIÓN",
-                "step7": "Fondo de ganancias"
+                "step1": "INVESTIGAR",
+                "step2": "SINTETIZAR",
+                "step3": "HIPÓTESIS",
+                "step4": "SOLUCIÓN",
+                "step5": "VALIDACIÓN",
+                "step6": "ENTREGA",
+                "step7": "IMPACTO"
             }
         },
         "cta": {
-            "tour_title": "¿LISTO PARA PROFUNDIZAR MÁS? TE TENEMOS.",
+            "tour_title": "¿QUIERES ENTENDERLO A FONDO?",
             "button_go": "IR !"
         }
     },

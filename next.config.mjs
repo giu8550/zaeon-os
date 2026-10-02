@@ -123,6 +123,12 @@ const nextConfig = {
         ];
     },
 
+    // 5b. Documentação (GitBook estático em public/docs/index.html): /docs serve o index.
+    // (/docs/ cai aqui também — o Next normaliza a barra final antes dos rewrites.)
+    async rewrites() {
+        return [{ source: "/docs", destination: "/docs/index.html" }];
+    },
+
     // 6. Build e Qualidade
     eslint: {
         ignoreDuringBuilds: true,

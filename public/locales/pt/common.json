@@ -7,7 +7,7 @@
     },
     "intro": {
         "line1": "ESTUDE, APRENDA = PESQUISE...",
-        "line2": "PUBLIQUE = MONETIZE."
+        "line2": "PUBLIQUE = COMPARTILHE."
     },
     "menu": {
         "new": "Nova conta",
@@ -54,7 +54,7 @@
         "cancel": "Cancelar",
         "use_wallet": "Usar carteira",
         "use_id": "Usar ID",
-        "wallet_label": "Carteira Manto",
+        "wallet_label": "Carteira",
         "wallet_placeholder": "0x...",
         "lbl_student": "ID de estudante",
         "ph_student": "000...",
@@ -125,7 +125,7 @@
             "gen_protocol": "Protocolo iniciado por {{name}}",
             "content_gen": "Conteúdo gerado.",
             "ipfs_success": "Sucesso do IPFS: {{hash}}",
-            "blockchain_init": "Protegendo no Manto...",
+            "blockchain_init": "Registrando credencial...",
             "success": "Sucesso!",
             "error": "Erro."
         }
@@ -169,21 +169,6 @@
                 "title": "Conformidade",
                 "full": "Auditoria",
                 "desc": "Ética e Jurídico"
-            },
-            "blockchain": {
-                "title": "Blockchain",
-                "full": "Muito Rede",
-                "desc": "Registro Imutável"
-            },
-            "ip": {
-                "title": "PI",
-                "full": "Propriedade",
-                "desc": "Direitos autorais"
-            },
-            "token": {
-                "title": "Símbolo",
-                "full": "Tokenização",
-                "desc": "Ativos Digitais"
             }
         }
     },
@@ -242,36 +227,36 @@
     "about": {
         "back": "Voltar",
         "scroll_down": "role para baixo para entender",
-        "title_secondary": "O futuro é agêntico.",
-        "title_main": "O futuro é autônomo.",
+        "title_secondary": "Uma universidade operada por IA.",
+        "title_main": "Ciência que vira solução.",
         "genesis": {
-            "title": "A era dos agentes de IA",
-            "p1": "Agentes de IA são sistemas que não apenas respondem perguntas, mas também executam tarefas. Eles entendem um objetivo, dividem em etapas e agem para alcançar resultados — como um assistente digital que realmente trabalha por você.",
-            "p2": "Aqui na Zaeon, acreditamos que a tecnologia deve servir às pessoas.",
-            "p2_highlight": "dentro do Blockchain."
+            "title": "Pesquisa que não dorme",
+            "p1": "A Zaeon é uma instituição de pesquisa conduzida por inteligências artificiais. Agentes autônomos investigam, aprendem e constroem de forma contínua — formulam perguntas, leem a literatura e avançam descobertas sem parar.",
+            "p2": "Nosso propósito é usar essa capacidade para enfrentar os maiores problemas da humanidade.",
+            "p2_highlight": ""
         },
         "mission": {
-            "title": "O que fazemos?",
-            "p1": "Oferecemos Agentes de IA para o dia a dia das mentes mais produtivas da internet, com assistentes inteligentes que entendem a vida dos usuários, suas rotinas e necessidades.",
+            "title": "O que fazemos",
+            "p1": "Produzimos conhecimento, ensinamos pessoas e entregamos projetos — com foco em curar doenças, regenerar o meio ambiente e reduzir riscos ao planeta. Cada pesquisa caminha da teoria à solução, sempre validada por especialistas humanos.",
             "p2": ""
         },
         "architecture": {
-            "title": "A Arquitetura Zaeon",
-            "subtitle": "Tecnologia inovadora criada para impactar milhões de estudantes em todo o mundo.",
-            "card_title": "MOTOR RWA DA REDE MANTO",
-            "card_desc": "Monetize sua pesquisa com a ajuda de agentes de IA. Patrimônio IP e rendimento real.",
+            "title": "Como funciona",
+            "subtitle": "Agentes autônomos que levam uma pergunta científica até uma solução verificável.",
+            "card_title": "DO LABORATÓRIO AO MUNDO",
+            "card_desc": "Pesquisa rigorosa que vira tecnologia, medicina e bens públicos — aberta e auditável.",
             "flow": {
                 "step1": "PESQUISAR",
-                "step2": "VALIDAÇÃO",
-                "step3": "REDE MANTO",
-                "step4": "MOTOR RWA",
-                "step5": "ATIVO INTELECTUAL",
-                "step6": "MONETIZAÇÃO DE PESQUISA",
-                "step7": "PISCINA DE LUCRO"
+                "step2": "SINTETIZAR",
+                "step3": "HIPÓTESE",
+                "step4": "SOLUÇÃO",
+                "step5": "VALIDAÇÃO",
+                "step6": "ENTREGA",
+                "step7": "IMPACTO"
             }
         },
         "cta": {
-            "tour_title": "PRONTO PARA IR MAIS PROFUNDO?",
+            "tour_title": "QUER ENTENDER A FUNDO?",
             "button_go": "IR !"
         }
     },
