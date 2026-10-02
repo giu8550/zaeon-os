@@ -15,7 +15,6 @@
   body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"Segoe UI",system-ui,sans-serif}
   a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
   .wrap{display:grid;grid-template-columns:272px 1fr;min-height:100vh}
-  /* sidebar */
   aside{position:sticky;top:0;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:18px 14px}
   .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;padding:4px 8px 12px}
   .brand .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#1e6fe0,#5aa2ff);box-shadow:0 2px 8px rgba(30,111,224,.4)}
@@ -24,7 +23,6 @@
   nav a{display:block;padding:6px 10px;border-radius:8px;color:var(--soft);font-size:14px}
   nav a:hover{background:var(--accent-weak);text-decoration:none;color:var(--ink)}
   nav a.active{background:var(--accent-weak);color:var(--accent);font-weight:600}
-  /* content */
   main{max-width:820px;margin:0 auto;padding:30px 40px 90px;width:100%}
   .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
   .top .bc{font-size:12.5px;color:var(--soft)}
@@ -52,127 +50,130 @@
     <div class="brand"><span class="logo"></span> Zaeon <span style="color:var(--soft);font-weight:500">Docs</span></div>
     <input class="search" id="q" placeholder="Buscar na documentação…">
     <nav id="nav">
-      <div class="grp">Começar</div>
+      <div class="grp">Visão</div>
       <a href="#visao">O que é a Zaeon</a>
-      <a href="#primeiros">Primeiros passos</a>
-      <a href="#salas">As salas</a>
-      <div class="grp">Núcleo</div>
-      <a href="#cerebro">Cérebro & Mapa</a>
-      <a href="#validacao">Validação do professor</a>
-      <a href="#aura">AURA (gamificação)</a>
-      <a href="#mentores">Mentores</a>
-      <div class="grp">Criar</div>
-      <a href="#coworking">Coworking (Cartolina)</a>
-      <a href="#desenho">Desenho & 3D</a>
-      <a href="#escritorio">Escritório</a>
+      <a href="#missao">Missão</a>
+      <a href="#impacto">Áreas de impacto</a>
+      <div class="grp">Como funciona</div>
+      <a href="#agentes">Agentes autônomos 24/7</a>
+      <a href="#pesquisa">Da pesquisa à solução</a>
+      <a href="#aprender">Aprender na Zaeon</a>
+      <a href="#projetos">Entregar projetos</a>
+      <div class="grp">Confiança</div>
+      <a href="#credenciais">Credenciais verificáveis</a>
+      <a href="#abertura">Conhecimento aberto</a>
       <div class="grp">Mais</div>
+      <a href="#participar">Como participar</a>
       <a href="#faq">FAQ</a>
       <a href="#dev">Para desenvolvedores</a>
     </nav>
   </aside>
 
   <main>
-    <div class="top"><span class="bc" id="bc">Começar › O que é a Zaeon</span>
+    <div class="top"><span class="bc" id="bc">Visão › O que é a Zaeon</span>
       <span><button class="menu" id="menu">☰</button> <button class="toggle" id="toggle">☾ tema</button></span></div>
 
     <section id="visao">
       <h1>O que é a Zaeon</h1>
-      <p class="lead">Zaeon é um ambiente de estudo e pesquisa com IA que leva você do conceito à aplicação real, validada por um professor. Você conversa com a <b>Aura</b> (a IA anfitriã), e cada estudo vira um percurso visual — um cérebro — que mostra onde você está e o que falta pra concluir.</p>
+      <p class="lead">Zaeon é uma universidade onde inteligências artificiais <b>produzem conhecimento</b>, <b>ensinam pessoas</b> e <b>entregam projetos</b> — com foco em curar doenças, regenerar o meio ambiente e evitar a destruição do planeta.</p>
+      <p>Não é uma ferramenta de produtividade nem um chatbot. É uma instituição de pesquisa operada por agentes autônomos que trabalham sem parar para transformar perguntas científicas em soluções reais para a sociedade.</p>
       <div class="grid2">
-        <div class="card"><h3>Do conceito à prova</h3><p>Aprender, aplicar num experimento real e ter a aplicação <b>chancelada por um professor</b> — com credencial verificável.</p></div>
-        <div class="card"><h3>Universal</h3><p>Funciona pra qualquer assunto: biologia, química, matemática, engenharia, música, direito.</p></div>
+        <div class="card"><h3>Produz conhecimento</h3><p>Agentes conduzem pesquisa acadêmica rigorosa, com fontes verificadas e método.</p></div>
+        <div class="card"><h3>Ensina pessoas</h3><p>O mesmo conhecimento vira aprendizado guiado para estudantes de qualquer nível.</p></div>
+        <div class="card"><h3>Entrega projetos</h3><p>A pesquisa culmina em soluções tecnológicas, médicas e de bem público.</p></div>
       </div>
-      <span class="pill">Aura</span><span class="pill">Mapa Probabilístico</span><span class="pill">AURA</span><span class="pill">Coworking</span>
+      <span class="pill">Universidade de IAs</span><span class="pill">Pesquisa → solução</span><span class="pill">Bem público</span>
     </section>
 
-    <section id="primeiros">
-      <h2>Primeiros passos</h2>
-      <p>Entre com Google ou e-mail. Na primeira vez, sua conta já nasce com uma carteira (identidade) para guardar suas conquistas. Depois, abra a <b>Sala de Pesquisa</b> e comece a conversar — qualquer pergunta vira um estudo.</p>
-      <div class="callout">Dica: digite um tópico no chat (ex.: <i>"quero entender análise de solo"</i>). Quando a Aura perceber que virou um estudo, uma <b>bolinha azul</b> aparece ao lado da conversa.</div>
-    </section>
-
-    <section id="salas">
-      <h2>As salas</h2>
-      <p>A navegação principal tem cinco lugares:</p>
-      <table>
-        <tr><th>Sala</th><th>Para quê</th></tr>
-        <tr><td><b>Sala de Pesquisa</b></td><td>O coração: chat com a Aura + abas <i>Chat · Estudos · Pesquisas</i>. É onde você estuda e gera trabalhos.</td></tr>
-        <tr><td><b>Projetos</b></td><td>IDE agêntica — projetos de código e, em breve, de engenharia/3D.</td></tr>
-        <tr><td><b>Escritório</b></td><td>Coworking por canais com os agentes (estilo chat de equipe).</td></tr>
-        <tr><td><b>Lounge</b></td><td>Espaço de coworking visual com a cartolina.</td></tr>
-        <tr><td><b>Perfil</b></td><td>Sua AURA, habilidades validadas e credenciais.</td></tr>
-      </table>
-    </section>
-
-    <section id="cerebro">
-      <h2>Cérebro & Mapa Probabilístico</h2>
-      <p>Cada estudo tem um <b>cérebro</b>: um mapa de partículas azul onde cada região é uma parte do conhecimento. É a sua resposta visual para <b>"onde estou"</b> e <b>"onde preciso chegar"</b>.</p>
+    <section id="missao">
+      <h2>Missão</h2>
+      <p class="lead">Usar inteligência artificial para enfrentar os maiores problemas da humanidade.</p>
+      <p>A Zaeon direciona sua capacidade de pesquisa para três frentes:</p>
       <ul>
-        <li><b>Laranja</b> = ainda a conquistar · <b>azul claro</b> = aprendido · <b>azul forte/branco</b> = aplicado e validado.</li>
-        <li>O mapa nasce como um <b>percurso ordenado</b> (teoria → prática → validação), não uma nuvem solta.</li>
-        <li>A conversa que preenche cada região fica <b>guardada ali</b> — é a memória do estudo.</li>
+        <li><b>Curar doenças</b> — acelerar descobertas em saúde, da compreensão de mecanismos a propostas de tratamento.</li>
+        <li><b>Regenerar o meio ambiente</b> — pesquisa aplicada em restauração ecológica, energia e materiais sustentáveis.</li>
+        <li><b>Evitar a destruição do planeta</b> — antecipar riscos sistêmicos e propor caminhos para mitigá-los.</li>
       </ul>
-      <div class="callout">A bolinha azul ao lado de cada conversa mostra a completude do estudo; clicar abre o cérebro.</div>
+      <div class="callout">O critério de sucesso não é "gerar texto", e sim <b>produzir soluções úteis e verificáveis</b> para pessoas reais.</div>
     </section>
 
-    <section id="validacao">
-      <h2>Validação do professor</h2>
-      <p>O estudo só "fecha" quando a aplicação real (ex.: um laudo, um experimento) é <b>validada por um professor</b> vinculado a você. A aprovação gera um <b>atestado on-chain</b> (Solana) na sua carteira — uma prova portável de que você aprendeu e aplicou.</p>
-      <p>Professores e instituições são os validadores; ninguém valida o próprio trabalho.</p>
-    </section>
-
-    <section id="aura">
-      <h2>AURA — a gamificação do conhecimento</h2>
-      <p><b>AURA</b> é a moeda de reputação. Você ganha por <b>conquistas verificadas</b>, não por tempo de uso:</p>
-      <table>
-        <tr><th>Conquista</th><th>AURA</th></tr>
-        <tr><td>Aprender um tópico</td><td>pouco</td></tr>
-        <tr><td>Aplicar (experimento)</td><td>médio</td></tr>
-        <tr><td>Validado pelo professor (+ atestado)</td><td><b>alto</b></td></tr>
-        <tr><td>Cérebro 100% validado</td><td><b>bônus</b></td></tr>
-        <tr><td>Diploma/título comprovado por documento</td><td>por nível (técnico → doutorado)</td></tr>
-      </table>
-      <p>Tudo aparece no seu <b>perfil</b>: AURA total, nível, habilidades validadas e a parede de atestados.</p>
-    </section>
-
-    <section id="mentores">
-      <h2>Mentores</h2>
-      <p>Você pode <b>contratar mentores</b> — agentes especializados que entram no seu chat e no coworking. Alunos podem ter até 3 mentores; professores, até 10.</p>
-    </section>
-
-    <section id="coworking">
-      <h2>Coworking (Cartolina)</h2>
-      <p>A <b>cartolina</b> é um quadro infinito (desktop) onde a Aura organiza o estudo em cards. Você pode <b>compartilhar</b> um estudo e co-construir com outra pessoa: ambos adicionam cards, comentam e respondem, em tempo real.</p>
-    </section>
-
-    <section id="desenho">
-      <h2>Desenho & 3D</h2>
-      <p>A Aura ilustra o que explica, escolhendo a melhor técnica por assunto:</p>
+    <section id="impacto">
+      <h2>Áreas de impacto</h2>
       <div class="grid2">
-        <div class="card"><h3>Esquemas</h3><p>Diagramas, ciclos e processos no estilo "Caderno" (traço a tinta) e Mermaid.</p></div>
-        <div class="card"><h3>Orgânico com cor</h3><p>Células e estruturas biológicas desenhadas à mão, coloridas (rough.js).</p></div>
-        <div class="card"><h3>Química</h3><p>Moléculas reais via PubChem.</p></div>
-        <div class="card"><h3>Anatomia 3D</h3><p>Órgãos com geometria real de atlas aberto (BodyParts3D/Z-Anatomy), que você gira.</p></div>
+        <div class="card"><h3>Saúde & medicina</h3><p>Revisões científicas, hipóteses, modelagem de doenças e desenho de soluções clínicas.</p></div>
+        <div class="card"><h3>Meio ambiente</h3><p>Regeneração de ecossistemas, captura de carbono, agricultura e energia limpa.</p></div>
+        <div class="card"><h3>Ciência de base</h3><p>Biologia, química, física e matemática que sustentam as aplicações.</p></div>
+        <div class="card"><h3>Engenharia & bens públicos</h3><p>Da pesquisa ao protótipo: dispositivos, materiais e infraestrutura abertos.</p></div>
       </div>
-      <p>Quando nenhum desenho serve, a Aura mostra uma <b>imagem de referência real</b> (com crédito de licença). Nada fica sem resposta.</p>
     </section>
 
-    <section id="escritorio">
-      <h2>Escritório</h2>
-      <p>Um coworking por <b>canais</b> (estilo chat de equipe). Você convoca um agente com <code>@mention</code>; ele responde com voz e avatar próprios. Notificações avisam quando algo acontece fora da tela.</p>
+    <section id="agentes">
+      <h2>Agentes autônomos 24/7</h2>
+      <p>No centro da Zaeon estão <b>agentes de pesquisa autônomos</b> que operam continuamente. Eles formulam perguntas, buscam e leem a literatura, propõem hipóteses, projetam experimentos e redigem trabalhos — colaborando entre si como um corpo de pesquisadores que nunca para.</p>
+      <ul>
+        <li>Trabalham <b>sem interrupção</b>, avançando pesquisas enquanto você não está na tela.</li>
+        <li>Cada agente tem uma especialidade; juntos cobrem o caminho da teoria à aplicação.</li>
+        <li>Todo resultado é <b>rastreável</b>: fontes, decisões e etapas ficam registradas.</li>
+      </ul>
+    </section>
+
+    <section id="pesquisa">
+      <h2>Da pesquisa à solução</h2>
+      <p>A Zaeon não para na revisão bibliográfica. Cada linha de pesquisa segue um percurso até virar algo utilizável pela sociedade:</p>
+      <table>
+        <tr><th>Etapa</th><th>O que acontece</th></tr>
+        <tr><td>1 · Pergunta</td><td>Um problema real é formulado (uma doença, um ecossistema, um risco).</td></tr>
+        <tr><td>2 · Pesquisa</td><td>Agentes reúnem evidência verificada e constroem o estado da arte.</td></tr>
+        <tr><td>3 · Hipótese & método</td><td>Propõem caminhos e desenham como testá-los.</td></tr>
+        <tr><td>4 · Solução</td><td>O conhecimento vira protótipo, tratamento proposto, material ou política.</td></tr>
+        <tr><td>5 · Validação</td><td>Especialistas humanos revisam e chancelam antes de qualquer uso.</td></tr>
+      </table>
+    </section>
+
+    <section id="aprender">
+      <h2>Aprender na Zaeon</h2>
+      <p>O conhecimento produzido não fica trancado: ele vira <b>aprendizado guiado</b>. Estudantes de qualquer nível estudam ao lado dos agentes, acompanhando um percurso que vai dos fundamentos até a aplicação prática de um tema.</p>
+      <p>Cada estudo mostra, de forma visual, <b>onde você está</b> e <b>o que falta</b> para dominá-lo — do conceito à aplicação real.</p>
+    </section>
+
+    <section id="projetos">
+      <h2>Entregar projetos</h2>
+      <p>Pesquisa só importa quando chega ao mundo. A Zaeon transforma linhas de pesquisa em <b>entregáveis concretos</b>: documentos científicos, protótipos, modelos, dispositivos e propostas de bem público — pensados para serem usados, auditados e melhorados por quem precisa.</p>
+    </section>
+
+    <section id="credenciais">
+      <h2>Credenciais verificáveis</h2>
+      <p>Tudo que é aprendido ou entregue pode ser <b>comprovado</b>. Quando um especialista humano valida um resultado, é emitida uma <b>credencial verificável</b> — uma prova portável e à prova de adulteração de que aquele conhecimento foi aplicado e aprovado.</p>
+      <p>Isso vale tanto para estudantes (habilidades comprovadas) quanto para projetos (resultados chancelados).</p>
+    </section>
+
+    <section id="abertura">
+      <h2>Conhecimento aberto</h2>
+      <p>O propósito da Zaeon é servir a sociedade. Por isso o foco é em <b>soluções de bem público</b> e em dados e resultados abertos sempre que possível, com atribuição e licenças claras — para que a pesquisa possa ser verificada, reutilizada e ampliada por qualquer pessoa.</p>
+    </section>
+
+    <section id="participar">
+      <h2>Como participar</h2>
+      <div class="grid2">
+        <div class="card"><h3>Estudantes</h3><p>Aprendem com os agentes e comprovam habilidades com credenciais.</p></div>
+        <div class="card"><h3>Pesquisadores & professores</h3><p>Orientam, revisam e validam resultados; ampliam linhas de pesquisa.</p></div>
+        <div class="card"><h3>Instituições</h3><p>Trazem problemas reais e credenciam validações.</p></div>
+        <div class="card"><h3>Sociedade</h3><p>Beneficiária final: soluções em saúde, ambiente e bens públicos.</p></div>
+      </div>
     </section>
 
     <section id="faq">
       <h2>FAQ</h2>
-      <h3>Preciso pagar?</h3><p>Há planos; recursos essenciais de estudo e memória não são bloqueados por plano.</p>
-      <h3>Meus estudos ficam salvos?</h3><p>Sim — a cartolina e o cérebro persistem e são a memória do estudo.</p>
-      <h3>O que é o atestado on-chain?</h3><p>Uma credencial verificável (Solana) emitida quando um professor valida sua aplicação.</p>
+      <h3>A Zaeon substitui cientistas humanos?</h3><p>Não. Os agentes ampliam a pesquisa e aceleram o caminho até a solução; a <b>validação final é sempre humana</b>.</p>
+      <h3>Como sei que um resultado é confiável?</h3><p>Cada resultado traz suas fontes e passa por revisão de especialistas antes de qualquer uso, com credencial verificável.</p>
+      <h3>Qualquer pessoa pode estudar na Zaeon?</h3><p>Sim — o aprendizado guiado atende de iniciantes a pesquisadores.</p>
+      <h3>O conhecimento é aberto?</h3><p>O foco é bem público, com dados e resultados abertos sempre que possível, sob licenças claras.</p>
     </section>
 
     <section id="dev">
       <h2>Para desenvolvedores</h2>
-      <p>Zaeon é Next.js (App Router) + Prisma/MongoDB, IA via Vertex/Gemini, realtime com Pusher, e um harness agêntico próprio (a Aura). Deploy em Docker no VPS. <span class="pill">Next.js</span><span class="pill">Prisma</span><span class="pill">Vertex/Gemini</span><span class="pill">Three.js / R3F</span></p>
-      <div class="callout">Esta documentação é um ponto de partida. Seções novas podem ser adicionadas conforme os recursos evoluem.</div>
+      <p>A plataforma é construída sobre Next.js (App Router) e um sistema de agentes autônomos de pesquisa, com busca de literatura, memória persistente, realtime e visualização científica. <span class="pill">Agentes autônomos</span><span class="pill">Pesquisa acadêmica</span><span class="pill">Visualização científica</span></p>
+      <div class="callout">Esta documentação evolui junto com a plataforma. Novas seções serão adicionadas conforme as linhas de pesquisa e os projetos avançam.</div>
     </section>
   </main>
 </div>
@@ -182,7 +183,6 @@
   const saved = localStorage.getItem("zaeon-docs-theme"); if (saved) html.dataset.t = saved;
   document.getElementById("toggle").onclick = () => { html.dataset.t = html.dataset.t === "dark" ? "" : "dark"; localStorage.setItem("zaeon-docs-theme", html.dataset.t); };
   document.getElementById("menu").onclick = () => document.getElementById("side").classList.toggle("open");
-  // scrollspy
   const links = [...document.querySelectorAll("#nav a")];
   const secs = links.map(a => document.querySelector(a.getAttribute("href")));
   const bc = document.getElementById("bc");
@@ -192,7 +192,6 @@
     if (link) bc.textContent = link.textContent; }
   addEventListener("scroll", spy, { passive: true }); spy();
   links.forEach(a => a.onclick = () => document.getElementById("side").classList.remove("open"));
-  // busca: filtra seções
   document.getElementById("q").addEventListener("input", (e) => {
     const t = e.target.value.trim().toLowerCase();
     secs.forEach((s, i) => { const hit = !t || s.textContent.toLowerCase().includes(t); s.classList.toggle("hidden", !hit); links[i].classList.toggle("hidden", !hit); });
