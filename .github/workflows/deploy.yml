@@ -108,13 +108,19 @@ jobs:
           # E-mail do ACME (Let's Encrypt manda aviso de expiração pra cá). O default do
           # compose é um endereço em zaeon.space, domínio que EXPIROU — aviso indo pro vazio.
           ACME_EMAIL: ${{ vars.ACME_EMAIL || '' }}
+          # Flags de BUILD do escritório coworking (NEXT_PUBLIC_* entram no bundle: só valem no
+          # build). Vêm das Variables do repo (Settings → Variables); vazia = não exporta e o
+          # `.env` do VPS (ou o default 0 do compose) decide. Rollback = Variable "0" + redeploy.
+          NEXT_PUBLIC_ESCRITORIO_COWORK: ${{ vars.NEXT_PUBLIC_ESCRITORIO_COWORK || '' }}
+          NEXT_PUBLIC_AGENTS_ADMIN: ${{ vars.NEXT_PUBLIC_AGENTS_ADMIN || '' }}
+          NEXT_PUBLIC_AGENT_AVATARS: ${{ vars.NEXT_PUBLIC_AGENT_AVATARS || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 25m
-          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH,DEPLOY_BRANCH,APP_URL,BETA_DOMAIN,ACME_EMAIL
+          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,WITH_VOICE,DB_PUSH,DEPLOY_BRANCH,APP_URL,BETA_DOMAIN,ACME_EMAIL,NEXT_PUBLIC_ESCRITORIO_COWORK,NEXT_PUBLIC_AGENTS_ADMIN,NEXT_PUBLIC_AGENT_AVATARS
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -163,6 +169,12 @@ jobs:
             BETA_DOMAIN="$(printf '%s' "$BETA_DOMAIN" | sed 's/[[:space:]]*,[[:space:]]*/, /g')"
             export BETA_DOMAIN
             echo "→ Hostnames do Caddy: $BETA_DOMAIN"
+
+            # Flags do escritório: só exporta o que veio preenchido (string vazia no shell
+            # SOBRESCREVERIA o .env do compose e viraria o default 0).
+            for k in NEXT_PUBLIC_ESCRITORIO_COWORK NEXT_PUBLIC_AGENTS_ADMIN NEXT_PUBLIC_AGENT_AVATARS; do
+              if [ -n "${!k:-}" ]; then export "$k"; echo "→ flag de build $k=${!k}"; else unset "$k"; fi
+            done
 
             echo "→ Subindo containers (coexist: não toca outras stacks)…"
             $DC up -d --build $NODEPS $SERVICES
