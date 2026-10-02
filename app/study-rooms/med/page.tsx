@@ -10,7 +10,6 @@ import {
     Activity, BookOpen, ClipboardList, Stethoscope, 
     Users, Eye, EyeOff, UserCircle, Newspaper, HeartPulse, Cross
 } from 'lucide-react';
-import { LoungeChatWidget } from "@/components/sub/LoungeChatWidget";
 
 // --- 1. CONFIGURAÇÃO DE IMPORTS (MODULOS MEDLAB) ---
 const LoadingModule = () => (
@@ -331,9 +330,6 @@ export default function ZaeonMedLabRoom() {
                             )}
                         </AnimatePresence>
 
-                        <div className="relative z-50">
-                            <LoungeChatWidget />
-                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>

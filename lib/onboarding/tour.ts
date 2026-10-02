@@ -1,6 +1,7 @@
 "use client";
 
 import { prewarmSpeech } from "@/lib/voice/ttsController";
+import { unifiedResearchRoom } from "@/lib/research/unifiedRoom";
 
 /**
  * Tour guiado da Zaeon (onboarding). Roteiro DECLARATIVO: a Zaeon "puxa assunto" no
@@ -29,22 +30,10 @@ export type TourStep = {
 // Golden path NOVO: começa no MENU inicial (logado) → abre Estudos → pesquisa o
 // exemplo fixo "história do Brasil" → vira o chat de lado → percorre Referências/
 // Insights/Base → gera a pesquisa → Sala de Pesquisa (player do doc salvo + citações).
-export const TOUR_STEPS: TourStep[] = [
-  // — BEAT 1) APRESENTAR: foco só no chat; a Zaeon se apresenta e diz o que vem. Avança com
-  //   um "Vamos lá" leve (a fala não é cortada — o TTS enfileira; ver item 5).
-  { id: "apresentar", onMenu: true, target: '[data-tour="chat-widget"]', advanceEvent: "zaeon:onboard:answered",
-    hint: "📞 Atenda a ligação da Zaeon para começar o tutorial",
-    say: "Oi! Que alegria te ter aqui. 💜 Vou ficar do seu lado nos primeiros passos — em pouquinho você vai estar pesquisando, criando e dando vida às suas ideias. Vamos juntos, no seu ritmo?" },
-
-  // — BEAT 2) JOGAR PRO LADO (flip-right): ação OBRIGATÓRIA.
-  { id: "flip", onMenu: true, target: '[data-tour="chat-flip"]', advanceEvent: "zaeon:chat:flipped-right",
-    hint: "↔ Me jogue pro lado direito",
-    say: "Primeiro, **me joga pro lado direito** ali no **botãozinho de virar (↔)** do meu cabeçalho — fica bem melhor pra eu te mostrar as coisas." },
-
-  // — BEAT 3) MINIMIZAR: ação OBRIGATÓRIA. Depois disto o chat fica minimizado (não reabre).
-  { id: "chat-min", onMenu: true, target: '[data-tour="chat-min-btn"]', advanceEvent: "zaeon:chat:minimized",
-    hint: "➖ Me minimize no cantinho",
-    say: "Perfeito! Agora me **minimiza** no **traço (–)** do meu topo pra gente ter a tela toda. 😊" },
+const ALL_TOUR_STEPS: TourStep[] = [
+  // (Os beats APRESENTAR / JOGAR PRO LADO / MINIMIZAR saíram junto com o chat widget do canto
+  //  — sem o widget, os alvos não existem e o tour travaria no passo 1. A fala segue indo por
+  //  zaeon:onboard:say; o card do overlay mostra o `hint`.)
 
   // — 2) MENU inicial: por onde começar. Destaca Estudos. Avança quando abre a Sala de Estudos.
   { id: "menu-estudos", onMenu: true, advanceEvent: "zaeon:study:new", target: '[data-tour="menu-estudos"]',
@@ -130,6 +119,13 @@ export const TOUR_STEPS: TourStep[] = [
     hint: "🎓 TCC · Artigo · Relatório",
     say: "Por fim: aqui você troca entre **TCC, Artigo e Relatório** — cada um é uma sessão própria, salva e publica em ABNT. É isso! Estou aqui no chat sempre que precisar. Boa jornada! 🚀" },
 ];
+
+// Sala de Pesquisa unificada: não há seletor TCC/Artigo/Relatório (a IA infere o tipo) →
+// o passo "tipo" apontaria pra um alvo que não existe. As abas antigas (sala-de-estudos) viram
+// sub-abas pelo alias do research-lab, então o resto do roteiro segue igual.
+export const TOUR_STEPS: TourStep[] = unifiedResearchRoom()
+  ? ALL_TOUR_STEPS.filter((s) => s.id !== "tipo")
+  : ALL_TOUR_STEPS;
 
 // ── MINI-TOUR DO LOUNGE (separado, SILENCIOSO — sem voz/chat) ──────────────
 // Roda 1x ao entrar no Lounge (independente do tour principal). Só cards, guiado por ação.

@@ -12,10 +12,7 @@ import { ThemeProvider } from "./providers";
 import { Web3Provider } from "@/src/context/Web3Context";
 
 // --- COMPONENTES GLOBAIS ---
-import GlobalClickSound from "@/components/main/GlobalClickSound";
 import { Navbar } from "@/components/main/navbar";
-// 🔥 Chat global da Zaeon (IA + Colegas/Professores, troca de lado).
-import { LoungeChatWidget } from "@/components/sub/LoungeChatWidget";
 import { RegistrarSW } from "@/components/pwa/RegistrarSW";
 import { BannerVersaoMobile } from "@/components/mobile/BannerVersaoMobile";
 
@@ -106,10 +103,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                     "font-sans"
                 )}
             >
-                {/* Injetamos o som aqui para que ele escute os eventos de clique 
-                  em qualquer lugar da aplicação (acima de todos os providers).
-                */}
-                <GlobalClickSound />
                 {/* Service worker (public/sw.js): só registra em produção. */}
                 <RegistrarSW />
 
@@ -125,9 +118,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
                             {/* Oferece /m nas salas completas, no celular (NEXT_PUBLIC_MOBILE_UI). */}
                             <BannerVersaoMobile />
-
-                            {/* 🔥 CHAT GLOBAL DA ZAEON (IA + Colegas/Professores) 🔥 */}
-                            <LoungeChatWidget />
 
                         </Web3Provider>
                     </AuthProvider>

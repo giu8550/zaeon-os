@@ -89,7 +89,9 @@ export default function CoworkComposer({
   // pintada aos 60ms — quando não estava, o foco simplesmente não acontecia e ninguém
   // tentava de novo. O gancho espera o elemento ficar VISÍVEL em vez de apostar num
   // número. Ver lib/ui/autofoco.ts.
-  useAutoFoco(ref, active);
+  // `&& !busy`: ao TERMINAR a resposta (busy true→false) o gancho re-arma e devolve o cursor
+  // pra barra — o próximo prompt sai sem clicar. Não rouba de quem está escrevendo em outro campo.
+  useAutoFoco(ref, active && !busy);
 
   // Ditado por voz (áudio → texto). Guarda o texto que já existia ao começar a gravar
   // e vai concatenando a transcrição em cima dele.

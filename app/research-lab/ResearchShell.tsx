@@ -69,6 +69,10 @@ interface ResearchShellProps {
   flipped?: boolean;
   /** TCC cross-sala aberto na folha → o chat lapida ESTE documento (como sugestões). */
   tccWorkId?: string | null;
+  /** Sala unificada: o chat é a interação principal → nasce aberto (a pill ⟁ alterna pro trabalho). */
+  defaultChatOpen?: boolean;
+  /** O chat está em cena (sala + sub-aba visíveis) — liga o autofoco do composer. */
+  chatActive?: boolean;
 }
 
 export default function ResearchShell({
@@ -99,20 +103,27 @@ export default function ResearchShell({
   citeMode,
   flipped,
   tccWorkId,
+  defaultChatOpen = false,
+  chatActive = true,
 }: ResearchShellProps) {
   const { containerRef, posRef } = useCursorPos();
   const { citations } = useSavedCitations();
   const [openPopover, setOpenPopover] = useState<"citations" | "quiz" | null>(null);
   const [showFolder, setShowFolder] = useState(false);
   const [fileDragOver, setFileDragOver] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);   // chat científico ↔ trabalho
+  const [chatOpen, setChatOpen] = useState(defaultChatOpen);   // chat científico ↔ trabalho
   const [docsCollapsed, setDocsCollapsed] = useState(false);  // retrair a barra de documentos
 
   // Gerou um trabalho pelo chat (zaeon:research:newdoc) → fecha o chat e mostra o documento.
   useEffect(() => {
+    // Idem ao abrir um trabalho/pesquisa salva na folha (zaeon:research:showdoc, do page.tsx).
     const onNewDoc = () => setChatOpen(false);
     window.addEventListener("zaeon:research:newdoc", onNewDoc);
-    return () => window.removeEventListener("zaeon:research:newdoc", onNewDoc);
+    window.addEventListener("zaeon:research:showdoc", onNewDoc);
+    return () => {
+      window.removeEventListener("zaeon:research:newdoc", onNewDoc);
+      window.removeEventListener("zaeon:research:showdoc", onNewDoc);
+    };
   }, []);
   // Mobile (<640px): empilha em coluna única (conversa em cima, documentos abaixo).
   const [vw, setVw] = useState(0);
@@ -214,7 +225,8 @@ export default function ResearchShell({
           onSelect={(id) => { setChatOpen(false); onSelectWindow(id); }}
           onClose={removeWindow}
           workType={workType}
-          onWorkType={(t) => { setChatOpen(false); onWorkType?.(t); }}
+          // Sem onWorkType (sala unificada) → sem seletor de tipo: a IA infere pela intenção.
+          onWorkType={onWorkType ? (t) => { setChatOpen(false); onWorkType(t); } : undefined}
           onReadResearch={onReadResearch}
           isReadingResearch={isReadingResearch}
           chatOpen={chatOpen}
@@ -226,7 +238,7 @@ export default function ResearchShell({
           {/* Chat (Escritor/Revisor) sobrepõe o trabalho quando ligado na pill — alterna responsivo. */}
           {chatOpen && (
             <div className="absolute inset-0 z-[55]">
-              <ResearchChat workType={workType} tccWorkId={tccWorkId} />
+              <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive} />
             </div>
           )}
           {/* Research window (always mounted) */}
