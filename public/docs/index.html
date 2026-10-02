@@ -14,7 +14,7 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"Segoe UI",system-ui,sans-serif}
   a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
-  .wrap{display:grid;grid-template-columns:272px 1fr;min-height:100vh}
+  .wrap{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
   aside{position:sticky;top:0;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:18px 14px}
   .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;padding:4px 8px 12px}
   .brand .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#1e6fe0,#5aa2ff);box-shadow:0 2px 8px rgba(30,111,224,.4)}
@@ -23,25 +23,26 @@
   nav a{display:block;padding:6px 10px;border-radius:8px;color:var(--soft);font-size:14px}
   nav a:hover{background:var(--accent-weak);text-decoration:none;color:var(--ink)}
   nav a.active{background:var(--accent-weak);color:var(--accent);font-weight:600}
-  main{max-width:820px;margin:0 auto;padding:30px 40px 90px;width:100%}
+  main{max-width:840px;margin:0 auto;padding:30px 40px 90px;width:100%}
   .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
   .top .bc{font-size:12.5px;color:var(--soft)}
   .toggle{border:1px solid var(--line);background:var(--panel);color:var(--soft);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:12.5px}
-  h1{font-size:30px;margin:.2em 0 .5em;letter-spacing:-.5px}
-  h2{font-size:21px;margin:1.6em 0 .5em;padding-top:.4em;border-top:1px solid var(--line)}
+  h1{font-size:31px;margin:.2em 0 .5em;letter-spacing:-.5px}
+  h2{font-size:21px;margin:1.7em 0 .5em;padding-top:.5em;border-top:1px solid var(--line)}
   h3{font-size:16px;margin:1.2em 0 .3em}
   section{scroll-margin-top:20px}
-  p,li{color:var(--ink)} .lead{font-size:17px;color:var(--soft)}
+  p,li{color:var(--ink)} .lead{font-size:17.5px;color:var(--soft);line-height:1.6}
   code{background:var(--code);padding:.12em .4em;border-radius:5px;font-size:.88em;font-family:ui-monospace,monospace}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font-size:12.5px;line-height:1.5}
   .callout{border:1px solid var(--line);background:var(--accent-weak);border-left:3px solid var(--accent);border-radius:10px;padding:12px 14px;margin:14px 0;font-size:14px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
   .card{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
   .card h3{margin:.1em 0 .3em}
   .pill{display:inline-block;font-size:11px;color:var(--accent);background:var(--accent-weak);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin:2px 4px 2px 0}
   table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
-  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left} th{background:var(--accent-weak)}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top} th{background:var(--accent-weak)}
   .hidden{display:none!important}
-  @media(max-width:860px){.wrap{grid-template-columns:1fr} aside{position:fixed;z-index:20;width:272px;transform:translateX(-100%);transition:.25s} aside.open{transform:none} .menu{display:inline-block} main{padding:20px}}
+  @media(max-width:860px){.wrap{grid-template-columns:1fr} aside{position:fixed;z-index:20;width:280px;transform:translateX(-100%);transition:.25s} aside.open{transform:none} .menu{display:inline-block} main{padding:20px} .grid2{grid-template-columns:1fr}}
   .menu{display:none;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:6px 10px;cursor:pointer}
 </style>
 
@@ -50,130 +51,212 @@
     <div class="brand"><span class="logo"></span> Zaeon <span style="color:var(--soft);font-weight:500">Docs</span></div>
     <input class="search" id="q" placeholder="Buscar na documentação…">
     <nav id="nav">
-      <div class="grp">Visão</div>
+      <div class="grp">Introdução</div>
       <a href="#visao">O que é a Zaeon</a>
-      <a href="#missao">Missão</a>
-      <a href="#impacto">Áreas de impacto</a>
+      <a href="#porque">Por que existe</a>
+      <a href="#impacto">Onde atua</a>
       <div class="grp">Como funciona</div>
-      <a href="#agentes">Agentes autônomos 24/7</a>
-      <a href="#pesquisa">Da pesquisa à solução</a>
-      <a href="#aprender">Aprender na Zaeon</a>
-      <a href="#projetos">Entregar projetos</a>
-      <div class="grp">Confiança</div>
-      <a href="#credenciais">Credenciais verificáveis</a>
-      <a href="#abertura">Conhecimento aberto</a>
+      <a href="#agentes">Agentes autônomos</a>
+      <a href="#ciclo">Ciclo de pesquisa</a>
+      <a href="#aprender">Ensino</a>
+      <a href="#projetos">Entrega de projetos</a>
+      <div class="grp">Arquitetura</div>
+      <a href="#arq">Visão geral</a>
+      <a href="#sistema-agentes">Sistema de agentes</a>
+      <a href="#pipeline">Pipeline de pesquisa</a>
+      <a href="#memoria">Memória & grafo</a>
+      <a href="#verificacao">Verificação & credenciais</a>
+      <a href="#visualizacao">Visualização científica</a>
+      <a href="#stack">Stack & infraestrutura</a>
+      <a href="#seguranca">Segurança & governança</a>
       <div class="grp">Mais</div>
       <a href="#participar">Como participar</a>
       <a href="#faq">FAQ</a>
-      <a href="#dev">Para desenvolvedores</a>
+      <a href="#roadmap">Roadmap</a>
     </nav>
   </aside>
 
   <main>
-    <div class="top"><span class="bc" id="bc">Visão › O que é a Zaeon</span>
+    <div class="top"><span class="bc" id="bc">Introdução › O que é a Zaeon</span>
       <span><button class="menu" id="menu">☰</button> <button class="toggle" id="toggle">☾ tema</button></span></div>
 
     <section id="visao">
       <h1>O que é a Zaeon</h1>
-      <p class="lead">Zaeon é uma universidade onde inteligências artificiais <b>produzem conhecimento</b>, <b>ensinam pessoas</b> e <b>entregam projetos</b> — com foco em curar doenças, regenerar o meio ambiente e evitar a destruição do planeta.</p>
-      <p>Não é uma ferramenta de produtividade nem um chatbot. É uma instituição de pesquisa operada por agentes autônomos que trabalham sem parar para transformar perguntas científicas em soluções reais para a sociedade.</p>
+      <p class="lead">A Zaeon é uma instituição de pesquisa operada por inteligências artificiais. Pense numa universidade cujo corpo docente e cujos laboratórios são agentes de IA que investigam, aprendem e constroem — e cujo propósito não é publicar por publicar, mas resolver problemas que importam.</p>
+      <p>Diferente de um assistente que responde quando chamado, a Zaeon é um sistema que <b>trabalha por conta própria</b>: formula perguntas, lê a literatura, levanta hipóteses e avança investigações continuamente. O resultado desse trabalho segue dois destinos. Vira <b>ensino</b> — material que leva uma pessoa dos fundamentos à prática — e vira <b>entrega</b> — protótipos, documentos e soluções que podem ser usados fora da plataforma.</p>
       <div class="grid2">
-        <div class="card"><h3>Produz conhecimento</h3><p>Agentes conduzem pesquisa acadêmica rigorosa, com fontes verificadas e método.</p></div>
-        <div class="card"><h3>Ensina pessoas</h3><p>O mesmo conhecimento vira aprendizado guiado para estudantes de qualquer nível.</p></div>
-        <div class="card"><h3>Entrega projetos</h3><p>A pesquisa culmina em soluções tecnológicas, médicas e de bem público.</p></div>
+        <div class="card"><h3>Investiga</h3><p>Conduz pesquisa com método e fontes verificáveis, não opiniões soltas.</p></div>
+        <div class="card"><h3>Ensina</h3><p>Converte o que descobre em percursos de aprendizado para qualquer nível.</p></div>
+        <div class="card"><h3>Entrega</h3><p>Fecha o ciclo transformando conhecimento em soluções concretas.</p></div>
       </div>
-      <span class="pill">Universidade de IAs</span><span class="pill">Pesquisa → solução</span><span class="pill">Bem público</span>
+      <span class="pill">Pesquisa autônoma</span><span class="pill">Ensino</span><span class="pill">Soluções aplicadas</span>
     </section>
 
-    <section id="missao">
-      <h2>Missão</h2>
-      <p class="lead">Usar inteligência artificial para enfrentar os maiores problemas da humanidade.</p>
-      <p>A Zaeon direciona sua capacidade de pesquisa para três frentes:</p>
-      <ul>
-        <li><b>Curar doenças</b> — acelerar descobertas em saúde, da compreensão de mecanismos a propostas de tratamento.</li>
-        <li><b>Regenerar o meio ambiente</b> — pesquisa aplicada em restauração ecológica, energia e materiais sustentáveis.</li>
-        <li><b>Evitar a destruição do planeta</b> — antecipar riscos sistêmicos e propor caminhos para mitigá-los.</li>
-      </ul>
-      <div class="callout">O critério de sucesso não é "gerar texto", e sim <b>produzir soluções úteis e verificáveis</b> para pessoas reais.</div>
+    <section id="porque">
+      <h2>Por que existe</h2>
+      <p>Há mais ciência sendo produzida do que qualquer equipe humana consegue ler, conectar e aplicar. Boas ideias ficam presas em artigos que ninguém cruza; o caminho entre uma descoberta e um benefício real costuma levar anos. A Zaeon ataca esse gargalo: coloca agentes incansáveis para percorrer a literatura, encontrar pontes entre áreas e empurrar as descobertas até onde elas viram utilidade.</p>
+      <p>A direção desse esforço é deliberada. A capacidade de pesquisa é apontada para três objetivos de longo prazo: <b>enfrentar doenças</b>, <b>restaurar o meio ambiente</b> e <b>reduzir riscos existenciais ao planeta</b>. São metas amplas de propósito — o sucesso se mede por soluções úteis e verificáveis que chegam às pessoas, não por volume de texto gerado.</p>
     </section>
 
     <section id="impacto">
-      <h2>Áreas de impacto</h2>
+      <h2>Onde atua</h2>
       <div class="grid2">
-        <div class="card"><h3>Saúde & medicina</h3><p>Revisões científicas, hipóteses, modelagem de doenças e desenho de soluções clínicas.</p></div>
-        <div class="card"><h3>Meio ambiente</h3><p>Regeneração de ecossistemas, captura de carbono, agricultura e energia limpa.</p></div>
-        <div class="card"><h3>Ciência de base</h3><p>Biologia, química, física e matemática que sustentam as aplicações.</p></div>
-        <div class="card"><h3>Engenharia & bens públicos</h3><p>Da pesquisa ao protótipo: dispositivos, materiais e infraestrutura abertos.</p></div>
+        <div class="card"><h3>Saúde & medicina</h3><p>Síntese de evidência, hipóteses mecanísticas, modelagem de doenças e desenho de intervenções.</p></div>
+        <div class="card"><h3>Clima & meio ambiente</h3><p>Restauração de ecossistemas, energia, materiais e captura de carbono.</p></div>
+        <div class="card"><h3>Ciência fundamental</h3><p>Biologia, química, física e matemática que sustentam as aplicações.</p></div>
+        <div class="card"><h3>Engenharia & bens públicos</h3><p>Da teoria ao protótipo: dispositivos, materiais e infraestrutura abertos.</p></div>
       </div>
     </section>
 
     <section id="agentes">
-      <h2>Agentes autônomos 24/7</h2>
-      <p>No centro da Zaeon estão <b>agentes de pesquisa autônomos</b> que operam continuamente. Eles formulam perguntas, buscam e leem a literatura, propõem hipóteses, projetam experimentos e redigem trabalhos — colaborando entre si como um corpo de pesquisadores que nunca para.</p>
+      <h2>Agentes autônomos</h2>
+      <p>O trabalho é feito por um conjunto de agentes especializados que operam de forma contínua. Em vez de um único modelo tentando fazer tudo, cada agente tem um papel — planejar, buscar literatura, raciocinar, redigir, criticar — e eles se encadeiam como uma equipe de pesquisa. O ciclo roda em segundo plano: uma investigação iniciada hoje continua avançando mesmo quando ninguém está olhando a tela.</p>
       <ul>
-        <li>Trabalham <b>sem interrupção</b>, avançando pesquisas enquanto você não está na tela.</li>
-        <li>Cada agente tem uma especialidade; juntos cobrem o caminho da teoria à aplicação.</li>
-        <li>Todo resultado é <b>rastreável</b>: fontes, decisões e etapas ficam registradas.</li>
+        <li><b>Especialização</b>: agentes distintos para busca, síntese, crítica e geração de artefatos.</li>
+        <li><b>Continuidade</b>: filas e processos dedicados mantêm as pesquisas progredindo sem supervisão constante.</li>
+        <li><b>Rastreabilidade</b>: cada passo — fonte consultada, decisão tomada, trecho gerado — fica registrado.</li>
       </ul>
     </section>
 
-    <section id="pesquisa">
-      <h2>Da pesquisa à solução</h2>
-      <p>A Zaeon não para na revisão bibliográfica. Cada linha de pesquisa segue um percurso até virar algo utilizável pela sociedade:</p>
+    <section id="ciclo">
+      <h2>Ciclo de pesquisa</h2>
+      <p>Toda linha de investigação percorre um caminho repetível, do problema ao que pode ser usado:</p>
       <table>
         <tr><th>Etapa</th><th>O que acontece</th></tr>
-        <tr><td>1 · Pergunta</td><td>Um problema real é formulado (uma doença, um ecossistema, um risco).</td></tr>
-        <tr><td>2 · Pesquisa</td><td>Agentes reúnem evidência verificada e constroem o estado da arte.</td></tr>
-        <tr><td>3 · Hipótese & método</td><td>Propõem caminhos e desenham como testá-los.</td></tr>
-        <tr><td>4 · Solução</td><td>O conhecimento vira protótipo, tratamento proposto, material ou política.</td></tr>
-        <tr><td>5 · Validação</td><td>Especialistas humanos revisam e chancelam antes de qualquer uso.</td></tr>
+        <tr><td>1 · Enquadrar</td><td>Um problema real é delimitado em uma pergunta investigável.</td></tr>
+        <tr><td>2 · Levantar</td><td>Agentes reúnem e filtram evidência, construindo o estado da arte.</td></tr>
+        <tr><td>3 · Hipotetizar</td><td>Propõem explicações e desenham como testá-las.</td></tr>
+        <tr><td>4 · Materializar</td><td>O conhecimento vira artefato: documento, protótipo, modelo ou proposta.</td></tr>
+        <tr><td>5 · Verificar</td><td>Especialistas humanos revisam e chancelam antes de qualquer uso.</td></tr>
       </table>
     </section>
 
     <section id="aprender">
-      <h2>Aprender na Zaeon</h2>
-      <p>O conhecimento produzido não fica trancado: ele vira <b>aprendizado guiado</b>. Estudantes de qualquer nível estudam ao lado dos agentes, acompanhando um percurso que vai dos fundamentos até a aplicação prática de um tema.</p>
-      <p>Cada estudo mostra, de forma visual, <b>onde você está</b> e <b>o que falta</b> para dominá-lo — do conceito à aplicação real.</p>
+      <h2>Ensino</h2>
+      <p>O conhecimento produzido não fica restrito a quem o gerou. Ele é reempacotado como aprendizado guiado: um estudante acompanha um percurso que parte dos fundamentos e chega à aplicação prática de um tema, com a IA ajustando ritmo e profundidade. A cada ponto, fica claro o que já foi dominado e o que ainda falta.</p>
     </section>
 
     <section id="projetos">
-      <h2>Entregar projetos</h2>
-      <p>Pesquisa só importa quando chega ao mundo. A Zaeon transforma linhas de pesquisa em <b>entregáveis concretos</b>: documentos científicos, protótipos, modelos, dispositivos e propostas de bem público — pensados para serem usados, auditados e melhorados por quem precisa.</p>
+      <h2>Entrega de projetos</h2>
+      <p>Pesquisa só cumpre seu papel quando sai da prateleira. A Zaeon converte linhas de investigação em entregáveis verificáveis — da documentação científica a protótipos e modelos — pensados para serem auditados, reutilizados e aprimorados por quem precisa deles.</p>
     </section>
 
-    <section id="credenciais">
-      <h2>Credenciais verificáveis</h2>
-      <p>Tudo que é aprendido ou entregue pode ser <b>comprovado</b>. Quando um especialista humano valida um resultado, é emitida uma <b>credencial verificável</b> — uma prova portável e à prova de adulteração de que aquele conhecimento foi aplicado e aprovado.</p>
-      <p>Isso vale tanto para estudantes (habilidades comprovadas) quanto para projetos (resultados chancelados).</p>
+    <!-- ============ ARQUITETURA / TÉCNICO ============ -->
+    <section id="arq">
+      <h2>Arquitetura — visão geral</h2>
+      <p>No alto nível, a plataforma é organizada em camadas, da interface à infraestrutura:</p>
+      <pre>Interface (web)
+   │  salas de pesquisa, ensino e projetos
+Orquestração de agentes  ── harness: route → plan → gather → reason → draft → critique → finalize
+   │
+Recuperação & grounding  ── busca de literatura · deduplicação · verificação de fontes
+   │
+Raciocínio & síntese     ── modelos de linguagem + ferramentas
+   │
+Gate de verificação      ── revisão humana → credencial verificável
+   │
+Persistência             ── sessões, memória, grafo de conhecimento, artefatos</pre>
+      <p>Cada camada é isolável: a recuperação pode trocar de fonte, o modelo pode mudar, e a verificação permanece como etapa obrigatória antes de qualquer entrega.</p>
     </section>
 
-    <section id="abertura">
-      <h2>Conhecimento aberto</h2>
-      <p>O propósito da Zaeon é servir a sociedade. Por isso o foco é em <b>soluções de bem público</b> e em dados e resultados abertos sempre que possível, com atribuição e licenças claras — para que a pesquisa possa ser verificada, reutilizada e ampliada por qualquer pessoa.</p>
+    <section id="sistema-agentes">
+      <h2>Sistema de agentes</h2>
+      <p>Os agentes rodam sobre um <b>harness</b> — um laço de execução com fases explícitas (roteamento de intenção, planejamento, coleta, raciocínio, rascunho, crítica e finalização). Isso torna o comportamento auditável: dá para inspecionar por que um agente escolheu uma fonte ou descartou uma hipótese.</p>
+      <ul>
+        <li><b>Papéis</b>: um agente de busca científica, um de síntese, um crítico (rigor), geradores de artefatos.</li>
+        <li><b>Ferramentas</b>: busca de literatura, geração de documentos, visualização e cálculo — chamadas por function-calling.</li>
+        <li><b>Execução contínua</b>: tarefas pesadas vão para uma fila e um processo dedicado as conclui, de modo que sair da tela não interrompe a pesquisa.</li>
+        <li><b>Contratos</b>: intenções têm níveis de liberdade — conversa e explicação são livres; criar trabalho e revisar exigem rigor e crítica completa.</li>
+      </ul>
+    </section>
+
+    <section id="pipeline">
+      <h2>Pipeline de pesquisa</h2>
+      <p>Uma investigação acadêmica segue um fluxo próprio, persistido e retomável:</p>
+      <pre>planejar → buscar (fontes acadêmicas) → deduplicar → sintetizar → verificar fontes → redigir</pre>
+      <p>Cada execução vira uma <b>sessão</b> salva no banco: se o processo for interrompido, ele retoma de onde parou, e o usuário reencontra o progresso. As citações são amarradas ao texto, para que qualquer afirmação possa ser rastreada até a origem.</p>
+    </section>
+
+    <section id="memoria">
+      <h2>Memória & grafo de conhecimento</h2>
+      <p>Cada estudo e cada pesquisa persistem como memória estruturada. Em vez de um histórico linear, o conhecimento é organizado como um <b>grafo</b>: nós (conceitos, evidências, próximos passos) ligados por relações (pré-requisito, deriva-de, aplica-em). Esse grafo cumpre dois papéis — é a memória que o agente consulta para saber o que já foi feito, e é a estrutura visual que o estudante usa para se localizar.</p>
+      <div class="callout">A memória alimenta o agente (contexto do que já foi estudado) e orienta o próximo passo — funciona como uma bússola do que falta para concluir.</div>
+    </section>
+
+    <section id="verificacao">
+      <h2>Verificação & credenciais</h2>
+      <p>Nenhum resultado é tratado como verdade só porque foi gerado. A transição de "produzido" para "confiável" exige um <b>revisor humano</b> (pesquisador ou instituição). Ao aprovar, o sistema emite uma <b>credencial verificável</b> — um registro portável e à prova de adulteração da proveniência: o que foi feito, por quem foi validado e quando.</p>
+      <p>O mesmo mecanismo serve a dois casos: comprovar habilidades de um estudante e chancelar a entrega de um projeto. A idempotência garante que uma mesma conquista não seja contada duas vezes.</p>
+    </section>
+
+    <section id="visualizacao">
+      <h2>Visualização científica</h2>
+      <p>Explicar exige mostrar. A plataforma escolhe a técnica de visualização pelo tipo de assunto, em vez de forçar tudo num formato só:</p>
+      <table>
+        <tr><th>Assunto</th><th>Técnica</th></tr>
+        <tr><td>Processos, ciclos, relações</td><td>diagramas-como-código (geração validada antes de renderizar)</td></tr>
+        <tr><td>Química</td><td>estruturas moleculares reais a partir de base pública</td></tr>
+        <tr><td>Matemática & dados</td><td>gráficos de função e visualização de dados</td></tr>
+        <tr><td>Biologia / estruturas orgânicas</td><td>ilustração vetorial colorida, estilo esboço</td></tr>
+        <tr><td>Anatomia</td><td>geometria 3D real de atlas abertos, renderizada no navegador</td></tr>
+        <tr><td>Sem representação adequada</td><td>imagem de referência licenciada, sempre com crédito</td></tr>
+      </table>
+      <p>A regra é nunca entregar vazio: quando um desenho não serve, há sempre uma imagem creditada como rede de segurança.</p>
+    </section>
+
+    <section id="stack">
+      <h2>Stack & infraestrutura</h2>
+      <table>
+        <tr><th>Camada</th><th>Tecnologia</th></tr>
+        <tr><td>Aplicação web</td><td>Next.js (App Router), React, TypeScript</td></tr>
+        <tr><td>Dados</td><td>Prisma + MongoDB (Atlas)</td></tr>
+        <tr><td>Modelos de IA</td><td>Vertex / Gemini (abstraído por um roteador de modelos)</td></tr>
+        <tr><td>Trabalho em segundo plano</td><td>fila Redis + processo worker dedicado</td></tr>
+        <tr><td>Tempo real</td><td>canal de eventos para colaboração e notificações</td></tr>
+        <tr><td>Visualização 3D</td><td>three.js / React-Three-Fiber</td></tr>
+        <tr><td>Entrega</td><td>contêineres Docker em VPS, deploy automatizado por CI/CD</td></tr>
+      </table>
+      <p>A escolha do modelo é desacoplada do código: trocar de provedor é configuração, não reescrita. O trabalho pesado nunca roda no caminho da requisição web — vai para o worker.</p>
+    </section>
+
+    <section id="seguranca">
+      <h2>Segurança & governança</h2>
+      <ul>
+        <li><b>Acesso por sessão e papel</b>: toda operação deriva a identidade da sessão; permissões por papel (estudante, pesquisador, instituição).</li>
+        <li><b>Conteúdo externo é não-confiável</b>: texto de fontes e da web é tratado como dado, nunca como instrução privilegiada.</li>
+        <li><b>Licenças e atribuição</b>: todo ativo reutilizado carrega licença e crédito; o foco é conhecimento aberto.</li>
+        <li><b>Limites e isolamento</b>: rate-limiting, validação de entrada e separação entre dados de usuários.</li>
+        <li><b>Verificação humana no caminho crítico</b>: nada vira entrega sem revisão.</li>
+      </ul>
     </section>
 
     <section id="participar">
       <h2>Como participar</h2>
       <div class="grid2">
-        <div class="card"><h3>Estudantes</h3><p>Aprendem com os agentes e comprovam habilidades com credenciais.</p></div>
-        <div class="card"><h3>Pesquisadores & professores</h3><p>Orientam, revisam e validam resultados; ampliam linhas de pesquisa.</p></div>
+        <div class="card"><h3>Estudantes</h3><p>Aprendem com os agentes e comprovam habilidades com credenciais verificáveis.</p></div>
+        <div class="card"><h3>Pesquisadores & professores</h3><p>Orientam, revisam e chancelam resultados; abrem novas linhas.</p></div>
         <div class="card"><h3>Instituições</h3><p>Trazem problemas reais e credenciam validações.</p></div>
-        <div class="card"><h3>Sociedade</h3><p>Beneficiária final: soluções em saúde, ambiente e bens públicos.</p></div>
+        <div class="card"><h3>Sociedade</h3><p>Destinatária final das soluções em saúde, clima e bens públicos.</p></div>
       </div>
     </section>
 
     <section id="faq">
       <h2>FAQ</h2>
-      <h3>A Zaeon substitui cientistas humanos?</h3><p>Não. Os agentes ampliam a pesquisa e aceleram o caminho até a solução; a <b>validação final é sempre humana</b>.</p>
-      <h3>Como sei que um resultado é confiável?</h3><p>Cada resultado traz suas fontes e passa por revisão de especialistas antes de qualquer uso, com credencial verificável.</p>
-      <h3>Qualquer pessoa pode estudar na Zaeon?</h3><p>Sim — o aprendizado guiado atende de iniciantes a pesquisadores.</p>
-      <h3>O conhecimento é aberto?</h3><p>O foco é bem público, com dados e resultados abertos sempre que possível, sob licenças claras.</p>
+      <h3>A Zaeon dispensa cientistas humanos?</h3><p>Não. Ela amplia e acelera a pesquisa; a decisão final de validade é sempre humana.</p>
+      <h3>Como confiar num resultado?</h3><p>Cada resultado traz suas fontes e passa por revisão de especialistas antes de qualquer uso, com credencial de proveniência.</p>
+      <h3>O conhecimento é aberto?</h3><p>O propósito é bem público, com dados e resultados abertos sempre que possível, sob licenças claras.</p>
+      <h3>Dá para integrar com sistemas externos?</h3><p>Sim — a arquitetura em camadas e o roteamento de modelos foram feitos para conectar fontes e serviços.</p>
     </section>
 
-    <section id="dev">
-      <h2>Para desenvolvedores</h2>
-      <p>A plataforma é construída sobre Next.js (App Router) e um sistema de agentes autônomos de pesquisa, com busca de literatura, memória persistente, realtime e visualização científica. <span class="pill">Agentes autônomos</span><span class="pill">Pesquisa acadêmica</span><span class="pill">Visualização científica</span></p>
-      <div class="callout">Esta documentação evolui junto com a plataforma. Novas seções serão adicionadas conforme as linhas de pesquisa e os projetos avançam.</div>
+    <section id="roadmap">
+      <h2>Roadmap</h2>
+      <ul>
+        <li>Ampliar o corpo de agentes autônomos e as fontes acadêmicas cobertas.</li>
+        <li>Visualização 3D para anatomia, engenharia e robótica, com atlas e geração paramétrica.</li>
+        <li>Colaboração multiusuário em tempo real sobre o mesmo grafo de conhecimento.</li>
+        <li>Expansão das credenciais verificáveis e das trilhas de ensino.</li>
+      </ul>
+      <div class="callout">Esta documentação evolui junto com a plataforma; seções técnicas serão detalhadas conforme os módulos amadurecem.</div>
     </section>
   </main>
 </div>
