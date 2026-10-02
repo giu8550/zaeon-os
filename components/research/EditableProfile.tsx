@@ -1,4 +1,5 @@
 "use client";
+import AuraCard from "@/components/profile/AuraCard";
 
 /**
  * EditableProfile — visual clássico Zaeon: CÁPSULA (à esquerda) com DNA girando e a foto
@@ -236,6 +237,9 @@ export default function EditableProfile() {
             <p className="text-[10px] text-slate-400 dark:text-white/30 mt-4">Valores chegam conforme você usa a Zaeon.</p>
           </div>
         </div>
+
+        {/* AURA (economia de reputação) — só com NEXT_PUBLIC_AURA_ECONOMY=1; o cartão some sozinho se a rota der 404 */}
+        {process.env.NEXT_PUBLIC_AURA_ECONOMY === "1" && <AuraCard />}
 
         <datalist id="ep-courses">{ALL_COURSES.map((c) => <option key={c} value={c} />)}</datalist>
 

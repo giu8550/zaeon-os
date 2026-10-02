@@ -109,7 +109,16 @@ export async function masteryUpdate(userId: string, topicSlug: string, nodeId: s
     try {
       const total = await prisma.skillProgress.count({ where: { userId, status: "mastered" } });
       const u = await prisma.user.findUnique({ where: { id: userId }, select: { skills: true } });
-      await prisma.user.update({ where: { id: userId }, data: { skills: mirrorSkills(u?.skills, total) as any, xp: { increment: XP_PER_NODE } } });
+      const { auraEnabled } = await import("@/lib/aura/rules");
+      if (auraEnabled()) {
+        // AURA é a moeda ÚNICA: o rank F–SS continua espelhando domínio; o ganho vai pro ledger
+        // (idempotente por nó) em vez de `xp` solto. Ver lib/aura/ledger.ts.
+        await prisma.user.update({ where: { id: userId }, data: { skills: mirrorSkills(u?.skills, total) as any } });
+        const { grantNodeLearned } = await import("@/lib/aura/ledger");
+        void grantNodeLearned(prisma as any, userId, `${topicSlug}:${nodeId}`, `Nó dominado: ${node.title}`).catch(() => undefined);
+      } else {
+        await prisma.user.update({ where: { id: userId }, data: { skills: mirrorSkills(u?.skills, total) as any, xp: { increment: XP_PER_NODE } } });
+      }
     } catch { /* espelho nunca derruba o progresso */ }
     // gancho PR Solana (fire-and-forget)
     void issueCredential(userId, { type: "skill", topicSlug, nodeId, title: node.title }).catch(() => undefined);

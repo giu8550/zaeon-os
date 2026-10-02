@@ -9,10 +9,10 @@
  */
 
 export type SolanaNetwork = "devnet" | "mainnet";
-export type CredentialType = "skill" | "work" | "mentor-cert" | "course";
+export type CredentialType = "skill" | "work" | "mentor-cert" | "course" | "academic";
 export type CredentialStandard = "cnft" | "token2022-nt";
 
-export const CREDENTIAL_TYPES: readonly CredentialType[] = ["skill", "work", "mentor-cert", "course"];
+export const CREDENTIAL_TYPES: readonly CredentialType[] = ["skill", "work", "mentor-cert", "course", "academic"];
 
 export function solanaNetwork(): SolanaNetwork {
   const v = (process.env.SOLANA_NETWORK || "devnet").toLowerCase();
