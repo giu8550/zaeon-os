@@ -36,6 +36,14 @@ ARG NEXT_PUBLIC_PUSHER_KEY=""
 ARG NEXT_PUBLIC_PUSHER_CLUSTER=""
 ENV NEXT_PUBLIC_PUSHER_KEY=$NEXT_PUBLIC_PUSHER_KEY \
     NEXT_PUBLIC_PUSHER_CLUSTER=$NEXT_PUBLIC_PUSHER_CLUSTER
+# Escritório coworking (flags de BUILD — embutidas no bundle; sem isto a aba fica a antiga).
+# Vêm do .env do VPS via compose (build.args). Off por padrão → nada muda até ligar.
+ARG NEXT_PUBLIC_ESCRITORIO_COWORK=""
+ARG NEXT_PUBLIC_AGENTS_ADMIN=""
+ARG NEXT_PUBLIC_AGENT_AVATARS=""
+ENV NEXT_PUBLIC_ESCRITORIO_COWORK=$NEXT_PUBLIC_ESCRITORIO_COWORK \
+    NEXT_PUBLIC_AGENTS_ADMIN=$NEXT_PUBLIC_AGENTS_ADMIN \
+    NEXT_PUBLIC_AGENT_AVATARS=$NEXT_PUBLIC_AGENT_AVATARS
 # agora o prisma/schema.prisma já está na imagem → gera o client e builda.
 RUN npx --yes prisma generate && npm run build
 
