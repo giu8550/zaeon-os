@@ -65,6 +65,8 @@
       <a href="#sistema-agentes">Sistema de agentes</a>
       <a href="#pipeline">Pipeline de pesquisa</a>
       <a href="#memoria">Memória & grafo</a>
+      <a href="#fontes">Fontes & evidência</a>
+      <a href="#dados">Modelo de dados</a>
       <a href="#verificacao">Verificação & credenciais</a>
       <a href="#visualizacao">Visualização científica</a>
       <a href="#stack">Stack & infraestrutura</a>
@@ -179,8 +181,45 @@ Persistência             ── sessões, memória, grafo de conhecimento, arte
 
     <section id="memoria">
       <h2>Memória & grafo de conhecimento</h2>
-      <p>Cada estudo e cada pesquisa persistem como memória estruturada. Em vez de um histórico linear, o conhecimento é organizado como um <b>grafo</b>: nós (conceitos, evidências, próximos passos) ligados por relações (pré-requisito, deriva-de, aplica-em). Esse grafo cumpre dois papéis — é a memória que o agente consulta para saber o que já foi feito, e é a estrutura visual que o estudante usa para se localizar.</p>
-      <div class="callout">A memória alimenta o agente (contexto do que já foi estudado) e orienta o próximo passo — funciona como uma bússola do que falta para concluir.</div>
+      <p>A memória é o que separa um assistente que esquece de uma instituição que acumula. Na Zaeon ela é organizada em duas camadas que trabalham juntas:</p>
+      <h3>Camada de trabalho (curto prazo)</h3>
+      <p>O transcript da sessão em andamento — o que está sendo discutido agora. É rápida, volátil e serve para manter coerência dentro de uma mesma investigação ou aula.</p>
+      <h3>Camada persistente (longo prazo)</h3>
+      <p>Um <b>grafo de conhecimento</b> que sobrevive à sessão. Em vez de um histórico linear, o conhecimento vira nós — <i>conceito, evidência, experimento, comprovação, próximo passo</i> — ligados por relações tipadas (<i>pré-requisito</i>, <i>deriva-de</i>, <i>aplica-em</i>). Cada nó guarda as mensagens e artefatos que o preencheram, então é possível tocar num ponto do grafo e reabrir exatamente a conversa que o originou.</p>
+      <h3>Fluxo em dois sentidos</h3>
+      <ul>
+        <li><b>Diálogo → grafo</b>: a cada passo de raciocínio, o agente fixa/atualiza nós no grafo daquela investigação (em segundo plano, para não travar a interação).</li>
+        <li><b>Grafo → agente</b>: antes de agir, o agente recebe um resumo do grafo (o que já foi feito, o que falta). Essa leitura entra na decisão do próximo passo — funciona como uma bússola do estudo.</li>
+      </ul>
+      <h3>Recuperação</h3>
+      <p>A memória não é despejada inteira no contexto: o agente recupera apenas os nós relevantes para a tarefa atual (por relação e por relevância), mantendo o custo sob controle e a resposta focada.</p>
+      <div class="callout">O mesmo grafo serve ao agente (memória operável) e à pessoa (mapa visual de onde está e o que falta). Uma estrutura, dois usos.</div>
+    </section>
+
+    <section id="fontes">
+      <h2>Fontes, evidência & grounding</h2>
+      <p>Rigor começa na origem. Antes de afirmar, os agentes <b>ancoram</b> o que dizem em literatura e dados verificáveis:</p>
+      <ul>
+        <li><b>Busca científica</b>: consulta a fontes acadêmicas, reúne candidatos e <b>deduplica</b> resultados.</li>
+        <li><b>Síntese com citação</b>: cada afirmação relevante é amarrada à sua fonte; o texto carrega as referências, não as inventa.</li>
+        <li><b>Verificação</b>: um passo dedicado confere se as fontes sustentam o que foi escrito antes de seguir.</li>
+        <li><b>Conteúdo externo é dado, não ordem</b>: texto vindo da web/artigos é tratado como informação a avaliar, nunca como instrução a obedecer.</li>
+      </ul>
+      <p>Quando a evidência é fraca ou conflitante, isso é declarado — a ausência de certeza é informada em vez de mascarada.</p>
+    </section>
+
+    <section id="dados">
+      <h2>Modelo de dados</h2>
+      <p>As entidades centrais que persistem o trabalho:</p>
+      <table>
+        <tr><th>Entidade</th><th>Papel</th></tr>
+        <tr><td>Sessão de pesquisa</td><td>Uma execução do pipeline — estado, progresso e retomada.</td></tr>
+        <tr><td>Trabalho / documento</td><td>O artefato em construção (revisão, artigo, proposta), editável por seções com histórico.</td></tr>
+        <tr><td>Nó & aresta do grafo</td><td>A memória estruturada: unidades de conhecimento e suas relações.</td></tr>
+        <tr><td>Credencial</td><td>Prova verificável de uma conquista validada (proveniência).</td></tr>
+        <tr><td>Artefato de mídia</td><td>Visualizações e modelos gerados, com licença/crédito quando reutilizados.</td></tr>
+      </table>
+      <p>Consultas de caminho quente usam índices explícitos; edições de documento são por seção, com versões — a última aplicação vence, mas o histórico permite desfazer.</p>
     </section>
 
     <section id="verificacao">
