@@ -206,6 +206,7 @@ export const Navbar = () => {
 
           <nav className="hidden lg:flex items-center gap-10">
             <Link href="/about" className={getLinkClassName("/about")}>Sobre nós</Link>
+            <Link href="/docs" className={getLinkClassName("/docs")}>Documentação</Link>
             <Link href="/research-lab" className={getLinkClassName("/research-lab")}>Laboratório</Link>
             <Link href="/plugin-store" className={getLinkClassName("/plugin-store")}>Plugins</Link>
             <Link href="/news" className={getLinkClassName("/news")}>Notícias</Link>
