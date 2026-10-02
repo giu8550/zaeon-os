@@ -16,6 +16,8 @@ interface WindowSwitcherProps {
   /** Pill do chat (Escritor/Revisor) ao lado do seletor de tipo — alterna chat ↔ trabalho. */
   chatOpen?: boolean;
   onToggleChat?: () => void;
+  /** Esconde a aba do trabalho (sala unificada, antes da IA gerar/abrir um trabalho). */
+  hideResearch?: boolean;
 }
 
 // Ancorada na união: se alguém trocar um rótulo aqui sem trocar o WorkType (ou vice-versa),
@@ -34,6 +36,7 @@ export default function WindowSwitcher({
   isReadingResearch,
   chatOpen,
   onToggleChat,
+  hideResearch = false,
 }: WindowSwitcherProps) {
   return (
     <div
@@ -62,7 +65,7 @@ export default function WindowSwitcher({
         </button>
       )}
 
-      {windows.map((w) => {
+      {windows.filter((w) => !(hideResearch && w.id === "research")).map((w) => {
         const isActive = w.id === activeId;
         const isResearch = w.id === "research";
         return (
