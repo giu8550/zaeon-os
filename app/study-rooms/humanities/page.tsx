@@ -10,7 +10,6 @@ import {
     BookOpen, ClipboardList, Activity, Users, Eye, EyeOff, 
     UserCircle, Newspaper, Library, UploadCloud, Feather, Landmark, ScrollText, X
 } from 'lucide-react';
-import { LoungeChatWidget } from "@/components/sub/LoungeChatWidget";
 
 // --- 1. CONFIGURAÇÃO DE IMPORTS (MODULOS HUMANITIES) ---
 const LoadingModule = () => (
@@ -455,9 +454,6 @@ export default function ZaeonHumanitiesRoom() {
                             )}
                         </AnimatePresence>
 
-                        <div className="relative z-50">
-                            <LoungeChatWidget />
-                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>

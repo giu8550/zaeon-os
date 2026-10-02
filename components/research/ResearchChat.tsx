@@ -63,10 +63,13 @@ const QUICK: { label: string; tpl: string }[] = [
 export default function ResearchChat({
   workType,
   tccWorkId,
+  active = true,
 }: {
   workType?: string | null;
   /** TCC cross-sala aberto na folha: o chat lapida ESTE documento — e tudo nasce como sugestão. */
   tccWorkId?: string | null;
+  /** Em cena (sala/sub-aba visível): o composer recebe o cursor sem precisar clicar. */
+  active?: boolean;
 }) {
   // Com um TCC cross-sala aberto, o padrão é LAPIDAR (sugestões com fonte verificada); o aluno
   // pode desligar pra só conversar sobre o tema.
@@ -130,8 +133,10 @@ export default function ResearchChat({
     } catch { /* ignore — a Fase 1 mostra erro no trace */ }
   }, []);
 
-  const send = useCallback(async () => {
-    const prompt = input.trim();
+  // `text` presente = envio DIRETO (sugestão/conceito clicado na resposta) sem passar pelo
+  // input; ausente = o que está digitado no composer.
+  const send = useCallback(async (text?: string) => {
+    const prompt = (text ?? input).trim();
     if (!prompt || sending) return;
     setQuick(isQuick(prompt));
 
@@ -145,7 +150,7 @@ export default function ResearchChat({
       { id: uid(), role: "user", text: prompt },
       { id: asstId, role: "assistant", text: "" },
     ]);
-    setInput("");
+    if (text === undefined) setInput("");   // envio direto preserva o rascunho do composer
     setSending(true);
     const patch = (text: string) => setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, text } : m)));
 
@@ -254,7 +259,8 @@ export default function ResearchChat({
               return (
                 <div key={m.id} className="flex justify-start">
                   <div className="max-w-[88%] w-full">
-                    <StructuredAnswerView answer={m.answer} onConcept={(c) => setInput(`Explique: ${c}`)} onNext={(s) => setInput(s)} />
+                    {/* Clicar num conceito/próximo passo proposto pela IA já ENVIA (sem clicar no input nem Enter). */}
+                    <StructuredAnswerView answer={m.answer} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)} />
                   </div>
                 </div>
               );
@@ -298,11 +304,12 @@ export default function ResearchChat({
           <CoworkComposer
             value={input}
             onChange={setInput}
-            onSubmit={send}
+            onSubmit={() => void send()}
             onToggleStudio={() => setPaletteOpen((v) => !v)}
             studioOpen={paletteOpen}
             busy={sending}
             idle={messages.length === 0 && !sending}
+            active={active}
             placeholder=""
           >
             {paletteOpen && (

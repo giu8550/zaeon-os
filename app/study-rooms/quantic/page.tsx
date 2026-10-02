@@ -12,7 +12,6 @@ import {
     Users, Eye, EyeOff, UserCircle, Newspaper,
     VariableIcon, BeakerIcon, CalculatorIcon, ChartBarIcon, BoltIcon, Atom
 } from 'lucide-react';
-import { LoungeChatWidget } from "@/components/sub/LoungeChatWidget";
 
 // --- 1. CONFIGURAÇÃO DE IMPORTS (MODULOS QUANTIC) ---
 const LoadingModule = () => (
@@ -586,9 +585,6 @@ export default function ZaeonQuanticRoom() {
                             )}
                         </AnimatePresence>
 
-                        <div className="relative z-50">
-                            <LoungeChatWidget />
-                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>

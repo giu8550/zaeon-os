@@ -12,6 +12,7 @@ import {
     FlaskConical, Newspaper, User, Lock,
 } from "lucide-react";
 import { isSuperAdminEmail } from "@/lib/auth/roles";
+import { unifiedResearchRoom } from "@/lib/research/unifiedRoom";
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
 import OmegaScholarWorkspace from "./omega/OmegaScholarWorkspace";
 import StudyRoomSuggestionDock from "./omega/StudyRoomSuggestionDock";
@@ -183,7 +184,13 @@ const StudyCoworkChat = dynamic(() => import("@/components/study/StudyCoworkChat
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
 const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlunosPanel"), { ssr: false });
 
-export default function StudyRoomContent({ flushTop = false }: { flushTop?: boolean } = {}) {
+/**
+ * `unified` (Sala de Pesquisa unificada, sub-aba Estudos): só a BIBLIOTECA/feed de estudos —
+ * "Meus Estudos" (caderno + biblioteca) e "Buscar estudos" (Omega). O chat é o da Pesquisa,
+ * então o co-working "Aura" (StudyCoworkChat) não entra. Com a flag ligada, "Aulas" e
+ * "Meus Alunos" somem em qualquer lugar (inclusive na workstation).
+ */
+export default function StudyRoomContent({ flushTop = false, unified = false }: { flushTop?: boolean; unified?: boolean } = {}) {
     const { data: session } = useSession();
 
     const course = (session?.user as any)?.course as string | undefined;
@@ -198,11 +205,15 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
     // "Meus Estudos" (feed mini-Notion) é a aba padrão (main); "Meus Alunos" só pro professor (isTeacher).
     // ⚠️ MERGE base×main: a aba "Aura" (co-working / chat) do PR01 vinha primeiro — CONFERIR se ela
     // ainda entra na composição das abas abaixo (QA de runtime).
-    const allTabs = useMemo(() => [
+    const semAulas = unified || unifiedResearchRoom();
+    const allTabs = useMemo(() => unified ? [
+        { id: "meus-estudos", label: "Meus Estudos", icon: BookOpen },
+        { id: "community", label: "Buscar estudos", icon: Users },
+    ] : [
         { id: "meus-estudos", label: "Aura", icon: Triangle },
-        ...tabs,
-        ...(isTeacher ? [{ id: "students", label: "Meus Alunos", icon: GraduationCap }] : []),
-    ], [tabs, isTeacher]);
+        ...tabs.filter((t) => !(semAulas && t.id === "classes")),
+        ...(isTeacher && !semAulas ? [{ id: "students", label: "Meus Alunos", icon: GraduationCap }] : []),
+    ], [tabs, isTeacher, unified, semAulas]);
 
     // Padrão = a aba "Aura" (chats/co-working). Só cai numa aba de estudo/pesquisa se
     // o usuário SAIU da sala estando nela — restaurado da persistência no efeito abaixo.
@@ -307,7 +318,7 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
 
                             // A aba "Aura" (co-working) é a PILL DO AGENTE: ⟁ + nome ao lado,
                             // nome destacado. Vive aqui na barra, ao lado de "Aulas".
-                            if (tab.id === "meus-estudos") {
+                            if (tab.id === "meus-estudos" && !unified) {
                                 return (
                                     <button
                                         key={tab.id}
@@ -391,10 +402,15 @@ export default function StudyRoomContent({ flushTop = false }: { flushTop?: bool
                             → a conversa e qualquer geração NÃO resetam ao trocar de aba.
                             O editor completo de um estudo abre num modal a partir daqui.
                             A aba "Estudos" (community) permanece intocada. */}
-                        <div className={activeTab === "meus-estudos" ? "h-full" : "hidden"}>
-                            <StudyCoworkChat active={activeTab === "meus-estudos"} />
-                        </div>
-                        {activeTab === "meus-estudos" ? null : activeTab === "community" ? (
+                        {!unified && (
+                            <div className={activeTab === "meus-estudos" ? "h-full" : "hidden"}>
+                                <StudyCoworkChat active={activeTab === "meus-estudos"} />
+                            </div>
+                        )}
+                        {activeTab === "meus-estudos" ? (
+                            // Sala unificada: "Meus Estudos" = o feed/caderno + biblioteca (sem 2º chat).
+                            unified ? <div className="h-full"><MeusEstudosFeed /></div> : null
+                        ) : activeTab === "community" ? (
                             <OmegaScholarWorkspace />
                         ) : activeTab === "students" ? (
                             <MeusAlunosPanel />

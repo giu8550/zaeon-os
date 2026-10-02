@@ -11,7 +11,6 @@ import {
     Users, Eye, EyeOff, UserCircle, Newspaper
 } from 'lucide-react';
 // IMPORT DA NAVBAR REMOVIDO DAQUI
-import { LoungeChatWidget } from "@/components/sub/LoungeChatWidget";
 
 // --- 1. CONFIGURAÇÃO DE IMPORTS ---
 const LoadingModule = () => (
@@ -422,10 +421,6 @@ export default function ZaeonBiologyRoom() {
                             )}
                         </AnimatePresence>
                         
-                        {/* Wrapper do Chat */}
-                        <div className="relative z-50 text-violet-50 dark">
-                            <LoungeChatWidget defaultOpen={false} />
-                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>

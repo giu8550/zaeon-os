@@ -12,7 +12,6 @@ import {
     Users, Eye, EyeOff, UserCircle, Newspaper
 } from 'lucide-react';
 // IMPORT DA NAVBAR REMOVIDO DAQUI
-import { LoungeChatWidget } from "@/components/sub/LoungeChatWidget";
 
 // --- 1. CONFIGURAÇÃO DE IMPORTS (MODULOS CYBER) ---
 const LoadingModule = () => (
@@ -406,9 +405,6 @@ export default function ZaeonComputerScienceRoom() {
                             )}
                         </AnimatePresence>
 
-                        <div className="relative z-50">
-                            <LoungeChatWidget defaultOpen={false} />
-                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>

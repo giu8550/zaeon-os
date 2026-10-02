@@ -134,6 +134,12 @@ import {
 } from "@heroicons/react/24/outline";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
+import { unifiedResearchRoom, resolveLabTab, isSubTab, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
+import ResearchSubTabs from "./ResearchSubTabs";
+
+// Sala de Pesquisa UNIFICADA (Estudos + Pesquisa, sub-abas Chat · Estudos · Pesquisas).
+// NEXT_PUBLIC_* é embutida no build → constante de módulo. Off = layout atual intacto.
+const UNIFIED = unifiedResearchRoom();
 
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
@@ -678,32 +684,51 @@ export default function HomeworkPage({
   // Inicializa JÁ a partir do ?tab= da URL (deep-link do menu inicial), pra a aba certa
   // nascer no 1º render — sem depender de efeito (que tinha corrida e fazia "Estudos" cair
   // em "pesquisa", o default). SSR cai no default; o cliente corrige no mount.
-  const initialTab = (() => {
-    if (typeof window === "undefined") return "pesquisa";
+  const initialNav = ((): { tab: LabTab; subTab?: ResearchSubTab } => {
+    // 1ª vez de todas: Sala de Estudos (layout atual) / Sala de Pesquisa no Chat (unificada).
+    const fallback = UNIFIED ? { tab: "pesquisa" as const, subTab: "chat" as const } : { tab: "sala-de-estudos" as const };
+    if (typeof window === "undefined") return { tab: "pesquisa" };
     const params = new URLSearchParams(window.location.search);
-    const VALID = ["pesquisa", "sala-de-estudos", "pesquisas", "lounge", "pevem", "projetos", "escritorio", "news", "profile"];
-    const t = params.get("tab");
-    if (t && VALID.includes(t)) return t;                           // deep-link explícito de aba ganha
-    if (params.get("session") || params.get("worktype")) return "pesquisa"; // deep-links de pesquisa
-    if (params.get("onboard")) return "sala-de-estudos";            // tour começa nos Estudos
-    // PERSISTÊNCIA: volta pra ÚLTIMA sala visitada. 1ª vez de todas → Sala de Estudos (aba Estudos).
+    // ?sub=chat|estudos|pesquisas (só vale na sala unificada, dentro de "pesquisa")
+    const sub = params.get("sub");
+    const withSub = (r: { tab: LabTab; subTab?: ResearchSubTab }) =>
+      UNIFIED && r.tab === "pesquisa" && isSubTab(sub) ? { ...r, subTab: sub } : r;
+    const t = resolveLabTab(params.get("tab"), UNIFIED);
+    if (t) return withSub(t);                                        // deep-link explícito de aba ganha
+    if (params.get("session") || params.get("worktype")) return { tab: "pesquisa", subTab: "chat" }; // deep-links de pesquisa
+    if (params.get("onboard")) return resolveLabTab("sala-de-estudos", UNIFIED)!; // tour começa nos Estudos
+    // PERSISTÊNCIA: volta pra ÚLTIMA sala visitada.
     try {
-      const saved = localStorage.getItem("zaeon.lab.lastTab");
-      if (saved && VALID.includes(saved)) return saved;
+      const saved = resolveLabTab(localStorage.getItem("zaeon.lab.lastTab"), UNIFIED);
+      if (saved) return saved;
     } catch { /* ignore */ }
-    return "sala-de-estudos";
+    return fallback;
   })();
-  const [activeTab, setActiveTab] = useState<
-    | "pesquisa"
-    | "sala-de-estudos"
-    | "pesquisas"
-    | "lounge"
-    | "pevem"
-    | "projetos"
-    | "escritorio"
-    | "news"
-    | "profile"
-  >(initialTab as any);
+  const [activeTab, setActiveTabRaw] = useState<LabTab>(initialNav.tab);
+  // Sub-aba da Sala de Pesquisa unificada. Sem pedido explícito → a última usada → Chat.
+  const [subTab, setSubTab] = useState<ResearchSubTab>(() => {
+    if (initialNav.subTab) return initialNav.subTab;
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("zaeon.lab.lastSub") : null;
+      if (isSubTab(saved)) return saved;
+    } catch { /* ignore */ }
+    return "chat";
+  });
+  // TODA troca de aba passa por aqui: valida e, na sala unificada, converte as abas antigas
+  // (sala-de-estudos / pesquisas) em sub-abas — links, tour e eventos de voz não quebram.
+  const setActiveTab = useCallback((t: LabTab | string) => {
+    const r = resolveLabTab(t, UNIFIED);
+    if (!r) return;
+    setActiveTabRaw(r.tab);
+    if (r.subTab) setSubTab(r.subTab);
+  }, []);
+  // Abrir um trabalho/pesquisa na folha: Sala de Pesquisa, sub-aba Chat, documento à frente
+  // (o ResearchShell fecha o chat sobreposto ao ouvir zaeon:research:showdoc).
+  const showResearchDoc = useCallback(() => {
+    setActiveTab("pesquisa");
+    setSubTab("chat");
+    try { window.dispatchEvent(new CustomEvent("zaeon:research:showdoc")); } catch { /* ignore */ }
+  }, [setActiveTab]);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [muralSearchQuery, setMuralSearchQuery] = useState("");
@@ -1335,9 +1360,9 @@ export default function HomeworkPage({
       setDocContent(w.content || templateFor(workTypeRef.current ?? "TCC"));
       if (w.workType) setWorkType(w.workType);
       setCurrentWorkId(id);
-      setActiveTab("pesquisa");
+      showResearchDoc();
     } catch { /* */ }
-  }, []);
+  }, [showResearchDoc]);
   const handleDeleteWork = (id: string) => {
     fetch(`/api/research-works?id=${id}`, { method: "DELETE" })
       .then(() => { setSessions((prev) => prev.filter((s) => s.id !== id)); if (currentWorkIdRef.current === id) { setCurrentWorkId(null); soltarTcc(); } })
@@ -1402,26 +1427,14 @@ export default function HomeworkPage({
     }
   }, [status]);
 
-  // Handle ?tab= query param for deep linking
+  // Handle ?tab= query param for deep linking (validado + alias pela setActiveTab)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab");
-    if (
-      tabParam &&
-      [
-        "pesquisa",
-        "sala-de-estudos",
-        "pesquisas",
-        "lounge",
-        "pevem",
-        "projetos",
-        "escritorio",
-        "news",
-        "profile",
-      ].includes(tabParam)
-    ) {
-      setActiveTab(tabParam as any);
-    }
+    if (tabParam) setActiveTab(tabParam);
+    const subParam = params.get("sub");
+    if (UNIFIED && isSubTab(subParam)) setSubTab(subParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // PERSISTÊNCIA da sala: guarda a última aba visitada. Ao voltar ao laboratório
@@ -1429,6 +1442,10 @@ export default function HomeworkPage({
   useEffect(() => {
     try { localStorage.setItem("zaeon.lab.lastTab", activeTab); } catch { /* ignore */ }
   }, [activeTab]);
+  useEffect(() => {
+    if (!UNIFIED) return;
+    try { localStorage.setItem("zaeon.lab.lastSub", subTab); } catch { /* ignore */ }
+  }, [subTab]);
 
   // O tour de onboarding COMEÇA no menu inicial (passos "chat" e "menu-estudos", ambos
   // onMenu). Ao chegar aqui no lab (a pessoa abriu a Sala de Estudos), pula TODOS os
@@ -1454,7 +1471,7 @@ export default function HomeworkPage({
   useEffect(() => {
     const sid = new URLSearchParams(window.location.search).get("session");
     if (!sid) return;
-    setActiveTab("pesquisa");
+    showResearchDoc();
     fetch(`/api/ai/scholar/sessions?id=${sid}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -1470,15 +1487,11 @@ export default function HomeworkPage({
       .catch(() => {});
   }, []);
 
-  // Troca de sala em TEMPO REAL pela Zaeon (voz/chat): a widget dispara este evento
-  // mesmo já estando no research-lab — o deep-link só roda no mount, então sem isto
-  // a troca por voz não funcionaria estando na página. Ver lib/agent + LoungeChatWidget.
+  // Troca de sala em TEMPO REAL (tour/voz/agente): quem dispara zaeon:set-tab troca a aba
+  // mesmo já estando no research-lab — o deep-link só roda no mount. Na sala unificada,
+  // "sala-de-estudos"/"pesquisas" caem nas sub-abas (alias na setActiveTab).
   useEffect(() => {
-    const VALID = ["pesquisa", "sala-de-estudos", "pesquisas", "lounge", "pevem", "projetos", "escritorio", "news", "profile"];
-    const onSetTab = (e: any) => {
-      const tab = e?.detail;
-      if (typeof tab === "string" && VALID.includes(tab)) setActiveTab(tab as any);
-    };
+    const onSetTab = (e: any) => setActiveTab(e?.detail); // inválida é ignorada na setActiveTab
     window.addEventListener("zaeon:set-tab", onSetTab);
     return () => window.removeEventListener("zaeon:set-tab", onSetTab);
   }, []);
@@ -1507,6 +1520,7 @@ export default function HomeworkPage({
         }
         setWorkType(wt);
         setActiveTab("pesquisa");
+        setSubTab("chat"); // o documento gerado vive na sub-aba Chat (o shell fecha o chat sozinho)
         // Inicia um TRABALHO real em "Minhas coisas" (o autosave preenche o conteúdo).
         void createWork({ title: t.trim().slice(0, 120), workType: workTypeRef.current ?? "TCC" });
       }
@@ -1520,7 +1534,7 @@ export default function HomeworkPage({
   useEffect(() => {
     const wt = new URLSearchParams(window.location.search).get("worktype");
     if (wt !== "TCC" && wt !== "Artigo" && wt !== "Relatório") return;
-    setActiveTab("pesquisa");
+    showResearchDoc();
     const saved = docsRef.current[wt];
     if (saved) { setDocContent(saved.content); setDocTitle(saved.title); }
     else setDocContent(templateFor(wt as WorkType));
@@ -2400,6 +2414,22 @@ export default function HomeworkPage({
   };
   const tabMeta = getTabMeta();
 
+  // Botão do Lounge na sidebar — a posição muda com a sala unificada (Escritório acima dele).
+  const loungeNav = (
+    <button
+      data-tour="lounge"
+      onClick={() => setActiveTab("lounge")}
+      className={navItem(activeTab === "lounge", "violet")}
+    >
+      <Coffee className="w-5 h-5 shrink-0" />
+      {isSidebarOpen && (
+        <span className="text-[10px] font-black uppercase whitespace-nowrap">
+          Lounge
+        </span>
+      )}
+    </button>
+  );
+
   if (!mounted || status === "loading") {
     return (
       <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-[#030014]">
@@ -2458,7 +2488,8 @@ export default function HomeworkPage({
             ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
           <div className="flex flex-col gap-3 px-2.5">
-            {/* Sala de Estudos — topo da sidebar */}
+            {/* Sala de Estudos — topo da sidebar (some na sala unificada: vira sub-aba Estudos) */}
+            {!UNIFIED && (
             <button
               data-tour="estudos"
               onClick={() => setActiveTab("sala-de-estudos")}
@@ -2471,6 +2502,7 @@ export default function HomeworkPage({
                 </span>
               )}
             </button>
+            )}
 
             {/* Sala de Pesquisa (antiga "Pesquisa") */}
             <button
@@ -2499,19 +2531,7 @@ export default function HomeworkPage({
               )}
             </button>
 
-            {/* Lounge */}
-            <button
-              data-tour="lounge"
-              onClick={() => setActiveTab("lounge")}
-              className={navItem(activeTab === "lounge", "violet")}
-            >
-              <Coffee className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Lounge
-                </span>
-              )}
-            </button>
+            {!UNIFIED && loungeNav}
 
             {/* Escritório: os agentes da Zaeon como um lugar */}
             <button
@@ -2525,6 +2545,9 @@ export default function HomeworkPage({
                 </span>
               )}
             </button>
+
+            {/* Sala unificada: Escritório sobe acima do Lounge */}
+            {UNIFIED && loungeNav}
 
             <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
 
@@ -2594,9 +2617,16 @@ export default function HomeworkPage({
           </div>
         )}
 
+        {/* SALA UNIFICADA: abas horizontais Chat · Estudos · Pesquisas no topo da sala */}
+        {UNIFIED && activeTab === "pesquisa" && (
+          <ResearchSubTabs value={subTab} onChange={setSubTab} />
+        )}
+
         <div className="flex-1 flex gap-8 overflow-hidden h-full">
           {activeTab === "pesquisa" && (
-            <div className="flex-1 overflow-hidden">
+            // Na sala unificada o shell fica MONTADO nas outras sub-abas (só escondido):
+            // trocar pra Estudos/Pesquisas não derruba uma resposta do chat em andamento.
+            <div className={`flex-1 overflow-hidden ${UNIFIED && subTab !== "chat" ? "hidden" : ""}`}>
               <input
                 type="file"
                 ref={fileInputRef}
@@ -2609,7 +2639,11 @@ export default function HomeworkPage({
                 tccWorkId={tccWorkId}
                 flipped={isChatLeft}
                 workType={workType}
-                onWorkType={switchWorkType}
+                // Sala unificada: sem toggle TCC/Artigo/Relatório — a IA infere o tipo pela
+                // intenção no chat (research_generate). O workType segue interno.
+                onWorkType={UNIFIED ? undefined : switchWorkType}
+                defaultChatOpen={UNIFIED}
+                chatActive={activeTab === "pesquisa" && (!UNIFIED || subTab === "chat")}
                 onReadResearch={readResearch}
                 isReadingResearch={readingResearch}
                 onViewDoc={handleViewDoc}
@@ -2892,12 +2926,13 @@ export default function HomeworkPage({
           {/* Sempre montado (escondido fora da aba) — preserva a pesquisa do Omega
                         em andamento ao trocar de aba (não reseta o stream/estado). */}
           <div
-            className={`w-full h-full overflow-hidden ${activeTab === "sala-de-estudos" ? "" : "hidden"}`}
+            className={`w-full h-full overflow-hidden ${(UNIFIED ? activeTab === "pesquisa" && subTab === "estudos" : activeTab === "sala-de-estudos") ? "" : "hidden"}`}
           >
-            <StudyRoomContent flushTop />
+            {/* Sala unificada: só a biblioteca/feed de estudos — o chat é o da Pesquisa. */}
+            <StudyRoomContent flushTop unified={UNIFIED} />
           </div>
 
-          {activeTab === "pesquisas" && (
+          {(UNIFIED ? activeTab === "pesquisa" && subTab === "pesquisas" : activeTab === "pesquisas") && (
             <div className="w-full h-full overflow-y-auto custom-scrollbar">
               <ResearchesPage />
             </div>
@@ -2921,7 +2956,9 @@ export default function HomeworkPage({
                   aoAbrirChat={(slug) => {
                     // (legado 3D) Falar com um agente = ir pra Sala de Estudos JÁ com ele escolhido.
                     window.dispatchEvent(new CustomEvent("zaeon:mentor", { detail: { slug } }));
-                    setActiveTab("sala-de-estudos");
+                    // Sala unificada: o chat é o da Sala de Pesquisa (não há mais Sala de Estudos).
+                    if (UNIFIED) { setActiveTab("pesquisa"); setSubTab("chat"); }
+                    else setActiveTab("sala-de-estudos");
                   }}
                 />
               )}
