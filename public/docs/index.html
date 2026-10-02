@@ -1,0 +1,200 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zaeon · Documentação</title>
+<style>
+  :root{
+    --bg:#f6f8fd; --panel:#ffffff; --ink:#15243b; --soft:#5b6b86; --line:#dbe6f5;
+    --accent:#1e6fe0; --accent-weak:#e8f1ff; --code:#f0f4fb; --shadow:0 8px 30px rgba(30,70,140,.08);
+  }
+  html[data-t="dark"]{
+    --bg:#0b1120; --panel:#111a2e; --ink:#e7eefb; --soft:#9fb2d4; --line:#223354;
+    --accent:#5aa2ff; --accent-weak:#13233f; --code:#0e1830; --shadow:0 10px 36px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"Segoe UI",system-ui,sans-serif}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{display:grid;grid-template-columns:272px 1fr;min-height:100vh}
+  /* sidebar */
+  aside{position:sticky;top:0;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:18px 14px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;padding:4px 8px 12px}
+  .brand .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#1e6fe0,#5aa2ff);box-shadow:0 2px 8px rgba(30,111,224,.4)}
+  .search{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-size:13.5px;margin-bottom:10px}
+  nav .grp{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--soft);margin:14px 8px 4px;font-weight:700}
+  nav a{display:block;padding:6px 10px;border-radius:8px;color:var(--soft);font-size:14px}
+  nav a:hover{background:var(--accent-weak);text-decoration:none;color:var(--ink)}
+  nav a.active{background:var(--accent-weak);color:var(--accent);font-weight:600}
+  /* content */
+  main{max-width:820px;margin:0 auto;padding:30px 40px 90px;width:100%}
+  .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .top .bc{font-size:12.5px;color:var(--soft)}
+  .toggle{border:1px solid var(--line);background:var(--panel);color:var(--soft);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:12.5px}
+  h1{font-size:30px;margin:.2em 0 .5em;letter-spacing:-.5px}
+  h2{font-size:21px;margin:1.6em 0 .5em;padding-top:.4em;border-top:1px solid var(--line)}
+  h3{font-size:16px;margin:1.2em 0 .3em}
+  section{scroll-margin-top:20px}
+  p,li{color:var(--ink)} .lead{font-size:17px;color:var(--soft)}
+  code{background:var(--code);padding:.12em .4em;border-radius:5px;font-size:.88em;font-family:ui-monospace,monospace}
+  .callout{border:1px solid var(--line);background:var(--accent-weak);border-left:3px solid var(--accent);border-radius:10px;padding:12px 14px;margin:14px 0;font-size:14px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+  .card{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+  .card h3{margin:.1em 0 .3em}
+  .pill{display:inline-block;font-size:11px;color:var(--accent);background:var(--accent-weak);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin:2px 4px 2px 0}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left} th{background:var(--accent-weak)}
+  .hidden{display:none!important}
+  @media(max-width:860px){.wrap{grid-template-columns:1fr} aside{position:fixed;z-index:20;width:272px;transform:translateX(-100%);transition:.25s} aside.open{transform:none} .menu{display:inline-block} main{padding:20px}}
+  .menu{display:none;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:6px 10px;cursor:pointer}
+</style>
+
+<div class="wrap">
+  <aside id="side">
+    <div class="brand"><span class="logo"></span> Zaeon <span style="color:var(--soft);font-weight:500">Docs</span></div>
+    <input class="search" id="q" placeholder="Buscar na documentação…">
+    <nav id="nav">
+      <div class="grp">Começar</div>
+      <a href="#visao">O que é a Zaeon</a>
+      <a href="#primeiros">Primeiros passos</a>
+      <a href="#salas">As salas</a>
+      <div class="grp">Núcleo</div>
+      <a href="#cerebro">Cérebro & Mapa</a>
+      <a href="#validacao">Validação do professor</a>
+      <a href="#aura">AURA (gamificação)</a>
+      <a href="#mentores">Mentores</a>
+      <div class="grp">Criar</div>
+      <a href="#coworking">Coworking (Cartolina)</a>
+      <a href="#desenho">Desenho & 3D</a>
+      <a href="#escritorio">Escritório</a>
+      <div class="grp">Mais</div>
+      <a href="#faq">FAQ</a>
+      <a href="#dev">Para desenvolvedores</a>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="top"><span class="bc" id="bc">Começar › O que é a Zaeon</span>
+      <span><button class="menu" id="menu">☰</button> <button class="toggle" id="toggle">☾ tema</button></span></div>
+
+    <section id="visao">
+      <h1>O que é a Zaeon</h1>
+      <p class="lead">Zaeon é um ambiente de estudo e pesquisa com IA que leva você do conceito à aplicação real, validada por um professor. Você conversa com a <b>Aura</b> (a IA anfitriã), e cada estudo vira um percurso visual — um cérebro — que mostra onde você está e o que falta pra concluir.</p>
+      <div class="grid2">
+        <div class="card"><h3>Do conceito à prova</h3><p>Aprender, aplicar num experimento real e ter a aplicação <b>chancelada por um professor</b> — com credencial verificável.</p></div>
+        <div class="card"><h3>Universal</h3><p>Funciona pra qualquer assunto: biologia, química, matemática, engenharia, música, direito.</p></div>
+      </div>
+      <span class="pill">Aura</span><span class="pill">Mapa Probabilístico</span><span class="pill">AURA</span><span class="pill">Coworking</span>
+    </section>
+
+    <section id="primeiros">
+      <h2>Primeiros passos</h2>
+      <p>Entre com Google ou e-mail. Na primeira vez, sua conta já nasce com uma carteira (identidade) para guardar suas conquistas. Depois, abra a <b>Sala de Pesquisa</b> e comece a conversar — qualquer pergunta vira um estudo.</p>
+      <div class="callout">Dica: digite um tópico no chat (ex.: <i>"quero entender análise de solo"</i>). Quando a Aura perceber que virou um estudo, uma <b>bolinha azul</b> aparece ao lado da conversa.</div>
+    </section>
+
+    <section id="salas">
+      <h2>As salas</h2>
+      <p>A navegação principal tem cinco lugares:</p>
+      <table>
+        <tr><th>Sala</th><th>Para quê</th></tr>
+        <tr><td><b>Sala de Pesquisa</b></td><td>O coração: chat com a Aura + abas <i>Chat · Estudos · Pesquisas</i>. É onde você estuda e gera trabalhos.</td></tr>
+        <tr><td><b>Projetos</b></td><td>IDE agêntica — projetos de código e, em breve, de engenharia/3D.</td></tr>
+        <tr><td><b>Escritório</b></td><td>Coworking por canais com os agentes (estilo chat de equipe).</td></tr>
+        <tr><td><b>Lounge</b></td><td>Espaço de coworking visual com a cartolina.</td></tr>
+        <tr><td><b>Perfil</b></td><td>Sua AURA, habilidades validadas e credenciais.</td></tr>
+      </table>
+    </section>
+
+    <section id="cerebro">
+      <h2>Cérebro & Mapa Probabilístico</h2>
+      <p>Cada estudo tem um <b>cérebro</b>: um mapa de partículas azul onde cada região é uma parte do conhecimento. É a sua resposta visual para <b>"onde estou"</b> e <b>"onde preciso chegar"</b>.</p>
+      <ul>
+        <li><b>Laranja</b> = ainda a conquistar · <b>azul claro</b> = aprendido · <b>azul forte/branco</b> = aplicado e validado.</li>
+        <li>O mapa nasce como um <b>percurso ordenado</b> (teoria → prática → validação), não uma nuvem solta.</li>
+        <li>A conversa que preenche cada região fica <b>guardada ali</b> — é a memória do estudo.</li>
+      </ul>
+      <div class="callout">A bolinha azul ao lado de cada conversa mostra a completude do estudo; clicar abre o cérebro.</div>
+    </section>
+
+    <section id="validacao">
+      <h2>Validação do professor</h2>
+      <p>O estudo só "fecha" quando a aplicação real (ex.: um laudo, um experimento) é <b>validada por um professor</b> vinculado a você. A aprovação gera um <b>atestado on-chain</b> (Solana) na sua carteira — uma prova portável de que você aprendeu e aplicou.</p>
+      <p>Professores e instituições são os validadores; ninguém valida o próprio trabalho.</p>
+    </section>
+
+    <section id="aura">
+      <h2>AURA — a gamificação do conhecimento</h2>
+      <p><b>AURA</b> é a moeda de reputação. Você ganha por <b>conquistas verificadas</b>, não por tempo de uso:</p>
+      <table>
+        <tr><th>Conquista</th><th>AURA</th></tr>
+        <tr><td>Aprender um tópico</td><td>pouco</td></tr>
+        <tr><td>Aplicar (experimento)</td><td>médio</td></tr>
+        <tr><td>Validado pelo professor (+ atestado)</td><td><b>alto</b></td></tr>
+        <tr><td>Cérebro 100% validado</td><td><b>bônus</b></td></tr>
+        <tr><td>Diploma/título comprovado por documento</td><td>por nível (técnico → doutorado)</td></tr>
+      </table>
+      <p>Tudo aparece no seu <b>perfil</b>: AURA total, nível, habilidades validadas e a parede de atestados.</p>
+    </section>
+
+    <section id="mentores">
+      <h2>Mentores</h2>
+      <p>Você pode <b>contratar mentores</b> — agentes especializados que entram no seu chat e no coworking. Alunos podem ter até 3 mentores; professores, até 10.</p>
+    </section>
+
+    <section id="coworking">
+      <h2>Coworking (Cartolina)</h2>
+      <p>A <b>cartolina</b> é um quadro infinito (desktop) onde a Aura organiza o estudo em cards. Você pode <b>compartilhar</b> um estudo e co-construir com outra pessoa: ambos adicionam cards, comentam e respondem, em tempo real.</p>
+    </section>
+
+    <section id="desenho">
+      <h2>Desenho & 3D</h2>
+      <p>A Aura ilustra o que explica, escolhendo a melhor técnica por assunto:</p>
+      <div class="grid2">
+        <div class="card"><h3>Esquemas</h3><p>Diagramas, ciclos e processos no estilo "Caderno" (traço a tinta) e Mermaid.</p></div>
+        <div class="card"><h3>Orgânico com cor</h3><p>Células e estruturas biológicas desenhadas à mão, coloridas (rough.js).</p></div>
+        <div class="card"><h3>Química</h3><p>Moléculas reais via PubChem.</p></div>
+        <div class="card"><h3>Anatomia 3D</h3><p>Órgãos com geometria real de atlas aberto (BodyParts3D/Z-Anatomy), que você gira.</p></div>
+      </div>
+      <p>Quando nenhum desenho serve, a Aura mostra uma <b>imagem de referência real</b> (com crédito de licença). Nada fica sem resposta.</p>
+    </section>
+
+    <section id="escritorio">
+      <h2>Escritório</h2>
+      <p>Um coworking por <b>canais</b> (estilo chat de equipe). Você convoca um agente com <code>@mention</code>; ele responde com voz e avatar próprios. Notificações avisam quando algo acontece fora da tela.</p>
+    </section>
+
+    <section id="faq">
+      <h2>FAQ</h2>
+      <h3>Preciso pagar?</h3><p>Há planos; recursos essenciais de estudo e memória não são bloqueados por plano.</p>
+      <h3>Meus estudos ficam salvos?</h3><p>Sim — a cartolina e o cérebro persistem e são a memória do estudo.</p>
+      <h3>O que é o atestado on-chain?</h3><p>Uma credencial verificável (Solana) emitida quando um professor valida sua aplicação.</p>
+    </section>
+
+    <section id="dev">
+      <h2>Para desenvolvedores</h2>
+      <p>Zaeon é Next.js (App Router) + Prisma/MongoDB, IA via Vertex/Gemini, realtime com Pusher, e um harness agêntico próprio (a Aura). Deploy em Docker no VPS. <span class="pill">Next.js</span><span class="pill">Prisma</span><span class="pill">Vertex/Gemini</span><span class="pill">Three.js / R3F</span></p>
+      <div class="callout">Esta documentação é um ponto de partida. Seções novas podem ser adicionadas conforme os recursos evoluem.</div>
+    </section>
+  </main>
+</div>
+
+<script>
+  const html = document.documentElement;
+  const saved = localStorage.getItem("zaeon-docs-theme"); if (saved) html.dataset.t = saved;
+  document.getElementById("toggle").onclick = () => { html.dataset.t = html.dataset.t === "dark" ? "" : "dark"; localStorage.setItem("zaeon-docs-theme", html.dataset.t); };
+  document.getElementById("menu").onclick = () => document.getElementById("side").classList.toggle("open");
+  // scrollspy
+  const links = [...document.querySelectorAll("#nav a")];
+  const secs = links.map(a => document.querySelector(a.getAttribute("href")));
+  const bc = document.getElementById("bc");
+  function spy(){ let cur = secs[0]; for (const s of secs){ if (s && s.getBoundingClientRect().top < 120) cur = s; }
+    links.forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + cur.id));
+    const link = links.find(a => a.getAttribute("href") === "#" + cur.id);
+    if (link) bc.textContent = link.textContent; }
+  addEventListener("scroll", spy, { passive: true }); spy();
+  links.forEach(a => a.onclick = () => document.getElementById("side").classList.remove("open"));
+  // busca: filtra seções
+  document.getElementById("q").addEventListener("input", (e) => {
+    const t = e.target.value.trim().toLowerCase();
+    secs.forEach((s, i) => { const hit = !t || s.textContent.toLowerCase().includes(t); s.classList.toggle("hidden", !hit); links[i].classList.toggle("hidden", !hit); });
+  });
+</script>
