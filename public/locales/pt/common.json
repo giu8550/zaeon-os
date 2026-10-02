@@ -7,7 +7,7 @@
     },
     "intro": {
         "line1": "ESTUDE, APRENDA = PESQUISE...",
-        "line2": "PUBLIQUE = MONETIZE."
+        "line2": "PUBLIQUE = COMPARTILHE."
     },
     "menu": {
         "new": "Nova conta",
@@ -54,7 +54,7 @@
         "cancel": "Cancelar",
         "use_wallet": "Usar carteira",
         "use_id": "Usar ID",
-        "wallet_label": "Carteira Manto",
+        "wallet_label": "Carteira",
         "wallet_placeholder": "0x...",
         "lbl_student": "ID de estudante",
         "ph_student": "000...",
@@ -125,7 +125,7 @@
             "gen_protocol": "Protocolo iniciado por {{name}}",
             "content_gen": "Conteúdo gerado.",
             "ipfs_success": "Sucesso do IPFS: {{hash}}",
-            "blockchain_init": "Protegendo no Manto...",
+            "blockchain_init": "Registrando credencial...",
             "success": "Sucesso!",
             "error": "Erro."
         }
@@ -169,21 +169,6 @@
                 "title": "Conformidade",
                 "full": "Auditoria",
                 "desc": "Ética e Jurídico"
-            },
-            "blockchain": {
-                "title": "Blockchain",
-                "full": "Muito Rede",
-                "desc": "Registro Imutável"
-            },
-            "ip": {
-                "title": "PI",
-                "full": "Propriedade",
-                "desc": "Direitos autorais"
-            },
-            "token": {
-                "title": "Símbolo",
-                "full": "Tokenização",
-                "desc": "Ativos Digitais"
             }
         }
     },

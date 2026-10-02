@@ -7,7 +7,7 @@
   },
   "intro": {
     "line1": "STUDY, LEARN = RESEARCH...",
-    "line2": "PUBLISH = MONETIZE"
+    "line2": "PUBLISH = SHARE"
   },
   "menu": {
     "new": "New Account",
@@ -54,7 +54,7 @@
     "cancel": "Cancel",
     "use_wallet": "Use Wallet",
     "use_id": "Use ID",
-    "wallet_label": "Mantle Wallet",
+    "wallet_label": "Wallet",
     "wallet_placeholder": "0x...",
     "lbl_student": "Student ID",
     "ph_student": "000...",
@@ -125,7 +125,7 @@
       "gen_protocol": "Protocol initiated via {{name}}",
       "content_gen": "Content generated.",
       "ipfs_success": "IPFS Success: {{hash}}",
-      "blockchain_init": "Securing on Mantle...",
+      "blockchain_init": "Registering credential...",
       "success": "Success!",
       "error": "Error."
     }
@@ -168,22 +168,7 @@
       "compliance": {
         "title": "Compliance",
         "full": "Auditing",
-        "desc": "From Ethics to Legal Compliance for produce science on the blockchain? We got you covered through all processes."
-      },
-      "blockchain": {
-        "title": "Blockchain",
-        "full": "Very Network",
-        "desc": "Immutable Record, Transparent Data, Secure Storage, certified credentials, IP protection, Tokenization."
-      },
-      "ip": {
-        "title": "IP",
-        "full": "Property",
-        "desc": "Copyrights are owned by you and protected by the blockchain. Your work is yours."
-      },
-      "token": {
-        "title": "Token",
-        "full": "Tokenization",
-        "desc": "Tokenize your work and sell it on the blockchain, or use it to raise funds for your research, the negotiation is up to you."
+        "desc": "From Ethics to Legal Compliance for producing science responsibly? We got you covered through all processes."
       }
     }
   },
@@ -242,36 +227,36 @@
   "about": {
     "back": "Back",
     "scroll_down": "scroll down to learn everything",
-    "title_secondary": "The school of the future.",
-    "title_main": "HAPPENING NOW.",
+    "title_secondary": "A university run by AI.",
+    "title_main": "Science that becomes solutions.",
     "genesis": {
-      "title": "The Genesis of the Protocol",
-      "p1": "Today, our attention is stolen by large corporations seeking only profit, capturing the focus of millions while their algorithms erode human intelligence.",
-      "p2": "Zaeon emerges to change this: we've come to rescue the joy of learning again: with depth, modernity, and fun. While traditional education stopped in time, we unlock your true potential through powerful AI Agents. Here, humans and machines work for a better world ",
-      "p2_highlight": "within the Blockchain."
+      "title": "Research that never sleeps",
+      "p1": "Zaeon is a research institution run by artificial intelligences. Autonomous agents investigate, learn and build continuously — they ask questions, read the literature and advance discoveries around the clock.",
+      "p2": "Our purpose is to use this capability to tackle humanity's greatest problems.",
+      "p2_highlight": ""
     },
     "mission": {
-      "title": "Our Mission",
-      "p1": "To empower the next generation of students, researchers, and teachers by offering simple-to-use tools for the daily life on high performance education.",
-      "p2": "Leading them to a complete monetization platform for their academic endurance."
+      "title": "What we do",
+      "p1": "We produce knowledge, teach people and deliver projects — focused on curing diseases, regenerating the environment and reducing risks to the planet. Every piece of research moves from theory to solution, always validated by human experts.",
+      "p2": ""
     },
     "architecture": {
-      "title": "The Zaeon Architecture",
-      "subtitle": "Innovative technology set to impact millions of students worldwide.",
-      "card_title": "MANTLE NETWORK RWA ENGINE",
-      "card_desc": "Monetize your research with the help of AI Agents. IP Equity & Real Yield.",
+      "title": "How it works",
+      "subtitle": "Autonomous agents that take a scientific question all the way to a verifiable solution.",
+      "card_title": "FROM THE LAB TO THE WORLD",
+      "card_desc": "Rigorous research that becomes technology, medicine and public goods — open and auditable.",
       "flow": {
         "step1": "RESEARCH",
-        "step2": "VALIDATION",
-        "step3": "MANTLE NETWORK",
-        "step4": "RWA ENGINE",
-        "step5": "INTELLECTUAL ASSET",
-        "step6": "RESEARCH MONETIZATION",
-        "step7": "PROFIT POOL"
+        "step2": "SYNTHESIZE",
+        "step3": "HYPOTHESIS",
+        "step4": "SOLUTION",
+        "step5": "VALIDATION",
+        "step6": "DELIVERY",
+        "step7": "IMPACT"
       }
     },
     "cta": {
-      "tour_title": "READY TO GO DEEPER? WE GOT YOU.",
+      "tour_title": "WANT TO GO DEEPER?",
       "button_go": "GO !"
     }
   },

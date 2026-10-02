@@ -17,8 +17,6 @@ import {
 } from "@heroicons/react/24/solid";
 
 import {
-    BeakerIcon,
-    ChevronDownIcon,
     ServerStackIcon,
     LockClosedIcon,
     CpuChipIcon as CpuChipIconOutline,
@@ -29,119 +27,67 @@ import {
 import StarsCanvas from "@/components/main/star-background";
 
 // ============================================================================
-// DADOS DE PESQUISA
-// ============================================================================
-interface ResearchItem {
-    id: number;
-    title: string;
-    desc: string;
-}
-
-const TITLES: string[] = [
-    "Biossíntese de Grafeno via Bactéria E.Coli",
-    "Redes Neurais de Micélio: Processamento de Dados Orgânicos",
-    "Enzima Z-77: Degradação Acelerada de Polímero PET",
-    "Concreto Autocurável com Esporos Bacterianos",
-    "Fotossíntese Artificial para Captura de Carbono",
-    "Interface Neuro-Botânica: Comunicação Planta-Máquina",
-    "Biomineração de Terras Raras em Lixo Eletrônico",
-    "Pele Sintética Sensorial para Próteses Avançadas",
-    "Algoritmos Genéticos para Otimização de Proteínas",
-    "Armazenamento de Dados em DNA Sintético (Projeto Glass)",
-    "Bioluminescência Urbana: Substituição de Iluminação Pública",
-    "Filtração de Microplásticos via Membranas de Quitina",
-];
-
-const DESCRIPTIONS: string[] = [
-    "Pesquisa focada na utilização de cepas modificadas de Escherichia coli para sintetizar grafeno de alta qualidade a baixo custo de forma sustentável.",
-    "Estudo da condutividade elétrica e sinapses do micélio fúngico para projetar sistemas de bio-computação avançados e eficientes.",
-    "Engenharia de uma nova enzima catalisadora capaz de degradar plásticos do tipo PET em poucas horas, revolucionando a reciclagem global.",
-    "Desenvolvimento de concreto enriquecido com esporos biológicos que preenchem microfissuras automaticamente na presença de umidade.",
-    "Sistemas bio-miméticos projetados para recuperar CO2 atmosférico e convertê-lo em combustíveis limpos e oxigênio com alta eficiência.",
-    "Sensores avançados que traduzem impulsos elétricos e químicos de vegetais em sinais digitais legíveis para computadores.",
-    "Processo bio-sustentável que emprega micro-organismos específicos para recuperar e purificar metais valiosos de resíduos eletrônicos.",
-    "Polímero biocompatível equipado com receptores integrados para fornecer sensibilidade tátil e térmica de alta precisão em próteses.",
-    "Modelagem preditiva inspirada na evolução natural para projetar e simular novas estruturas proteicas e funcionais inovadoras.",
-    "Codificação de grandes volumes de informação binária em cadeias estáveis de nucleotídeos de DNA para armazenamento de longo prazo.",
-    "Manipulação de genes de organismos marinhos para criar plantas ornamentais luminosas adequadas para a via pública.",
-    "Filtros de base biológica projetados a partir de resíduos de crustáceos para capturar partículas microscópicas de plástico em águas fluviais."
-];
-
-const RESEARCH_DATA: ResearchItem[] = Array.from({ length: 35 }).map((_, i) => {
-    return {
-        id: i + 1,
-        title: TITLES[i % TITLES.length] + (i > 11 ? ` [Fase ${Math.floor(i / 5)}]` : ""),
-        desc: DESCRIPTIONS[i % DESCRIPTIONS.length]
-    };
-});
-
-// ============================================================================
-// DADOS DO MANIFESTO E BLOCKCHAIN 
+// DADOS DO MANIFESTO E DOS PILARES DE VERIFICAÇÃO
+// (espelha o posicionamento de /docs: universidade operada por IA, validada por humanos)
 // ============================================================================
 const MANIFESTO_PAGES = [
     {
-        title: "A CONVERGÊNCIA ACADÊMICA",
-        subtitle: "Introdução ao Ecossistema",
+        title: "UMA UNIVERSIDADE OPERADA POR IA",
+        subtitle: "Introdução",
         content: [
-            "O ecossistema Zaeon foi projetado para resolver o maior gargalo da ciência e da educação moderna: a sobrecarga administrativa de professores e a perda de propriedade intelectual de pesquisadores.",
-            "Para solucionar isso, nós dividimos a arquitetura do nosso sistema em dois pilares fundamentais que trabalham em perfeita simbiose.",
-            "O primeiro pilar é a nossa Camada de Agentes (Agentic Layer), impulsionada por Inteligência Artificial avançada. O segundo pilar é a nossa Camada Imutável, arquitetada sobre a tecnologia Blockchain.",
-            "Juntos, eles não apenas aceleram a produção científica, mas garantem que os verdadeiros criadores sejam reconhecidos e recompensados pelo seu trabalho."
+            "A Zaeon é uma instituição de pesquisa conduzida por inteligências artificiais: agentes autônomos que investigam, ensinam e constroem de forma contínua.",
+            "O propósito é usar essa capacidade para enfrentar os maiores problemas da humanidade — curar doenças, regenerar o meio ambiente e reduzir riscos ao planeta.",
+            "Cada pesquisa caminha da pergunta à solução, e nenhuma etapa é tratada como verdade só porque foi gerada: o que importa é o que pode ser verificado."
         ]
     },
     {
-        title: "A CAMADA DE AGENTES",
-        subtitle: "Inteligência Artificial Colaborativa",
+        title: "OS AGENTES",
+        subtitle: "Inteligência Artificial colaborativa",
         content: [
-            "Na Camada de Agentes, Inteligências Artificiais atuam como assistentes incansáveis para professores, pesquisadores e alunos.",
-            "Eles auxiliam os professores a criar instrumentos de avaliação, estruturar metodologias de pesquisa, revisar literaturas densas e gerar trabalhos acadêmicos de alto impacto com uma velocidade sem precedentes.",
-            "Esta não é uma tecnologia do futuro. É o agora. Com o auxílio do Google for Startups, nossos agentes estão atualmente monitorando e operando em dezenas de pesquisas científicas reais, em tempo real.",
-            "A IA assume o trabalho braçal e repetitivo, permitindo que a mente humana foque exclusivamente no que faz de melhor: a intuição, a ética e a descoberta criativa."
+            "Agentes especializados leem a literatura, cruzam fontes, formulam hipóteses e propõem soluções — e também ensinam, explicando o que fazem para estudantes e professores.",
+            "Eles assumem o trabalho repetitivo e de busca em escala, para que a mente humana foque no que faz de melhor: a intuição, a ética e a descoberta criativa.",
+            "Tudo o que produzem é rastreável: cada afirmação aponta para a fonte que a sustenta."
         ]
     },
     {
-        title: "A CAMADA IMUTÁVEL",
-        subtitle: "Blockchain e o Registro da Verdade",
+        title: "VALIDAÇÃO HUMANA",
+        subtitle: "Do produzido ao confiável",
         content: [
-            "Se a Inteligência Artificial cria e acelera, a Blockchain protege e eterniza.",
-            "A segunda camada do nosso sistema é dedicada a registrar esses trabalhos e organizar a vida acadêmica. Cada experimento, cada artigo e cada contribuição gerada com o auxílio da nossa IA é criptograficamente registrada em um livro-razão público e inalterável.",
-            "Isso transforma a propriedade intelectual em um Ativo do Mundo Real (RWA). Protege estudantes e pesquisadores contra o plágio, garante a rastreabilidade das descobertas e permite uma monetização direta da ciência.",
-            "Com a Zaeon, o trabalho acadêmico deixa de ser um arquivo esquecido em uma gaveta universitária para se tornar um ativo líquido, seguro e imortal na 'Internet Viva'."
+            "A transição de “produzido” para “confiável” exige um revisor humano — um pesquisador ou uma instituição.",
+            "Ao aprovar, o sistema emite uma credencial verificável: um registro portável e à prova de adulteração do que foi feito, por quem foi validado e quando.",
+            "O resultado é conhecimento aberto e auditável, que serve tanto para comprovar as habilidades de um estudante quanto para chancelar a entrega de um projeto."
         ]
     }
 ];
 
-const BLOCKCHAIN_DATA = [
+const VERIFICACAO_DATA = [
     {
         id: "v1",
-        title: "PILAR I: IDENTIDADE",
-        year: "2026",
+        title: "REVISÃO HUMANA",
+        status: "Hoje",
         isCurrent: true,
-        desc: "A identidade acadêmica é verificada via Controle de Acesso Baseado em Funções (RBAC). O algoritmo Keccak256 previne a manipulação de dados e prepara o sistema para o Hash de Modelos.",
-        code: "function isAuthorized(address _acc) external view returns (bool) { ... }"
+        desc: "Nada vira resultado confiável sem a aprovação de um pesquisador ou instituição. A IA propõe; as pessoas decidem."
     },
     {
         id: "v2",
-        title: "PILAR II: PORTAL X402",
-        year: "2027",
+        title: "EVIDÊNCIA RASTREÁVEL",
+        status: "Hoje",
         isCurrent: false,
-        desc: "O aperto de mão obrigatório. Nenhum evento econômico ou de registro acadêmico ocorre sem essa verificação de intenção criptográfica.",
-        formula: "E = f(Identidade) ∧ f(Intenção)"
+        desc: "Cada afirmação aponta para a fonte que a sustenta. Sem fonte verificada, a afirmação não entra."
     },
     {
         id: "v3",
-        title: "PILAR III: LIVRO-RAZÃO DE ATIVOS",
-        year: "2028",
+        title: "CREDENCIAIS VERIFICÁVEIS",
+        status: "Em expansão",
         isCurrent: false,
-        desc: "A pesquisa é tratada como um Ativo do Mundo Real (RWA) envelopado em ERC-721, utilizando Vetores de Impacto para quantificar o valor multidimensional do trabalho."
+        desc: "Ao validar, o sistema emite um registro portável e à prova de adulteração de proveniência: o que foi feito, quem validou e quando."
     },
     {
         id: "v4",
-        title: "PILAR IV: ECONOMIA",
-        year: "2029",
+        title: "CONHECIMENTO ABERTO",
+        status: "Princípio",
         isCurrent: false,
-        desc: "A Tesouraria Algorítmica garante a sobrevivência do protocolo. As recompensas para os pesquisadores encolhem ou se expandem com base nos pools globais de liquidez.",
-        formula: "R = 10,000 / (L_total * P)"
+        desc: "A pesquisa que vira tecnologia, medicina e bem público é aberta e auditável — pensada para circular, não para ficar trancada."
     }
 ];
 
@@ -218,8 +164,7 @@ const DimensionalCodex = ({ pages }: { pages: typeof MANIFESTO_PAGES }) => {
                                 <CpuChipIconSolid className="w-4 h-4 text-cyan-500" />
                             </div>
                             <div>
-                                <p className="text-[9px] font-black tracking-[0.2em] text-cyan-600 uppercase leading-none">Códice do Sistema</p>
-                                <p className={`text-[8px] font-mono mt-1 ${isCodexDark ? 'text-white/20' : 'text-slate-400'}`}>ID: 0x882...AF</p>
+                                <p className="text-[9px] font-black tracking-[0.2em] text-cyan-600 uppercase leading-none">Princípios do Sistema</p>
                             </div>
                         </div>
                         <button
@@ -284,35 +229,8 @@ const DimensionalCodex = ({ pages }: { pages: typeof MANIFESTO_PAGES }) => {
     );
 };
 
-function ResearchCard({ item }: { item: ResearchItem }) {
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            whileHover={{ y: -5, scale: 1.02 }}
-            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="p-5 rounded-2xl border bg-white/40 dark:bg-white/[0.03] border-slate-200 dark:border-white/5 hover:border-cyan-500/30 dark:hover:border-cyan-500/20 shadow-sm hover:shadow-[0_10px_35px_-10px_rgba(34,211,238,0.15)] transition-all duration-300 flex flex-col justify-start text-left"
-        >
-            <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 shrink-0">
-                    <BeakerIcon className="w-4 h-4" />
-                </div>
-                <h4 className="text-xs md:text-sm font-bold text-slate-800 dark:text-slate-200 uppercase leading-tight tracking-tight">
-                    {item.title}
-                </h4>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-white/50 leading-relaxed font-light">
-                {item.desc}
-            </p>
-        </motion.div>
-    );
-}
-
 // --- AGENT SECTION ---
 const AgentSection = () => {
-    const [showResearch, setShowResearch] = useState(false);
-
     return (
         <section className="relative min-h-screen w-full flex flex-col items-center justify-center p-6 md:p-12 overflow-hidden z-10 transition-colors duration-500">
             <div className="relative z-10 w-full max-w-6xl flex flex-col gap-8 md:gap-12 items-center text-center">
@@ -323,10 +241,10 @@ const AgentSection = () => {
                     viewport={{ once: true }}
                 >
                     <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-slate-800 via-cyan-600 to-cyan-500 dark:from-white dark:via-cyan-100 dark:to-cyan-500 mb-4 tracking-tighter">
-                        CAMADA DE AGENTES
+                        OS AGENTES
                     </h2>
                     <p className="text-sm md:text-base text-slate-600 dark:text-cyan-50/70 font-light leading-relaxed max-w-2xl mx-auto">
-                        Agentes de Inteligência Artificial otimizados para auxiliar professores na criação de instrumentos, fomentar inovação e acelerar a produção científica. Monitorando a progressão de dezenas de pesquisas reais acontecendo agora em tempo real.
+                        Agentes de IA que pesquisam, sintetizam e ensinam — conduzindo uma pergunta científica até uma solução verificável, sempre com validação humana.
                     </p>
 
                     {/* --- NOVO: ESPAÇO DA LOGO GOOGLE FOR STARTUPS --- */}
@@ -367,7 +285,7 @@ const AgentSection = () => {
                         whileInView={{ opacity: 1, scale: 1 }}
                         viewport={{ once: true }}
                         whileHover={{ boxShadow: "0 0 40px rgba(34, 211, 238, 0.15)" }}
-                        className={`flex-1 w-full max-w-4xl rounded-[2.5rem] bg-white/60 dark:bg-[#030014]/60 backdrop-blur-2xl border border-blue-200/50 dark:border-cyan-500/30 p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_0_30px_rgba(0,0,0,0.6)] flex flex-col transition-all duration-500 overflow-hidden ${showResearch ? 'h-[500px] md:h-[700px]' : 'h-auto'}`}
+                        className={`flex-1 w-full max-w-4xl rounded-[2.5rem] bg-white/60 dark:bg-[#030014]/60 backdrop-blur-2xl border border-blue-200/50 dark:border-cyan-500/30 p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_0_30px_rgba(0,0,0,0.6)] flex flex-col transition-all duration-500 overflow-hidden h-auto`}
                     >
                         <div className="w-full p-6 rounded-3xl bg-slate-900 dark:bg-[#0f172a] border border-white/10 shadow-xl overflow-hidden relative group shrink-0 text-left">
                             <div className="absolute top-0 right-0 p-4 opacity-10 dark:opacity-20">
@@ -378,45 +296,31 @@ const AgentSection = () => {
                                     <div className="flex items-center gap-3">
                                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                                         <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/90">
-                                            35 PROJETOS ATIVOS
+                                            PESQUISAS ATIVAS
                                         </h3>
                                     </div>
                                     <div className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20">
                                         <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-wider">
-                                            API Conectada
+                                            Em breve
                                         </span>
                                     </div>
                                 </div>
 
-                                <button
-                                    onClick={() => setShowResearch(!showResearch)}
-                                    className="w-full h-16 flex items-center justify-center border border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10 rounded-lg transition-colors cursor-pointer group"
-                                >
-                                    <div className="flex items-center gap-3 text-cyan-500 dark:text-cyan-400">
-                                        <ServerStackIcon className="w-4 h-4" />
-                                        <span className="font-mono text-[10px] md:text-xs font-bold uppercase tracking-wider">
-                                            {showResearch ? "Recolher Banco de Dados" : "Expandir Pesquisas Ativas"}
-                                        </span>
-                                        <ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${showResearch ? "rotate-180" : ""}`} />
-                                    </div>
-                                </button>
+                                <div className="w-full flex flex-col items-center justify-center gap-2 py-8 rounded-lg border border-dashed border-cyan-500/30 bg-cyan-500/5 text-center">
+                                    <ServerStackIcon className="w-5 h-5 text-cyan-500 dark:text-cyan-400" />
+                                    <p className="font-mono text-[10px] md:text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                                        Nenhuma pesquisa pública ainda
+                                    </p>
+                                    <p className="max-w-md text-[11px] leading-relaxed text-white/60">
+                                        As pesquisas validadas e publicadas pelos pesquisadores aparecem aqui — sem dados de exemplo.
+                                    </p>
+                                    <Link href="/docs" className="mt-1 text-[10px] font-black uppercase tracking-widest text-cyan-400 hover:text-cyan-300 underline underline-offset-4">
+                                        Ler a documentação
+                                    </Link>
+                                </div>
                             </div>
                         </div>
 
-                        <AnimatePresence>
-                            {showResearch && (
-                                <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: "100%" }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="flex-1 overflow-y-auto pr-2 custom-scrollbar grid grid-cols-1 md:grid-cols-2 gap-4 mt-6"
-                                >
-                                    {RESEARCH_DATA.map((item: ResearchItem) => (
-                                        <ResearchCard key={item.id} item={item} />
-                                    ))}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
                     </motion.div>
 
                     <motion.div
@@ -438,26 +342,26 @@ const AgentSection = () => {
     );
 };
 
-// --- SECTION: BLOCKCHAIN ---
-const BlockchainSection = () => {
+// --- SECTION: VERIFICAÇÃO ---
+const VerificacaoSection = () => {
     return (
         <section className="relative z-30 min-h-screen w-full flex flex-col items-center justify-center p-6 md:p-12 lg:p-32 overflow-hidden transition-colors duration-500">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
 
             <div className="mb-12 md:mb-20 text-center relative z-10">
                 <h4 className="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-400 mb-4 opacity-90">
-                    Códice do Sistema
+                    Princípios do Sistema
                 </h4>
                 <h2 className="text-3xl md:text-5xl lg:text-7xl font-black text-slate-900 dark:text-white tracking-tighter mb-4 transition-colors">
-                    VERDADE IMUTÁVEL
+                    VERDADE VERIFICÁVEL
                 </h2>
                 <div className="flex items-center justify-center gap-4 text-cyan-600 dark:text-cyan-500 font-mono text-[10px] uppercase tracking-[0.5em]">
-                    <CubeIcon className="w-4 h-4" /> Especificações do Protocolo <CubeIcon className="w-4 h-4" />
+                    <CubeIcon className="w-4 h-4" /> Como garantimos confiança <CubeIcon className="w-4 h-4" />
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-7xl relative z-10">
-                {BLOCKCHAIN_DATA.map((data, idx) => (
+                {VERIFICACAO_DATA.map((data, idx) => (
                     <motion.div
                         key={data.id}
                         initial={{ opacity: 0, y: 30 }}
@@ -472,6 +376,7 @@ const BlockchainSection = () => {
                             }
                         `}
                     >
+                        <span className="self-start mb-3 text-[9px] font-black uppercase tracking-[0.2em] text-cyan-600 dark:text-cyan-400">{data.status}</span>
                         <h3 className={`text-xl font-bold mb-4 tracking-tight transition-colors ${data.isCurrent ? 'text-slate-900 dark:text-cyan-50' : 'text-slate-800 dark:text-white'}`}>
                             {data.title}
                         </h3>
@@ -510,9 +415,9 @@ export default function TechnicalAboutPage() {
 
             <div className="relative z-30"><SectionSeparator /></div>
 
-            {/* SEÇÃO 3: BLOCKCHAIN */}
+            {/* SEÇÃO 3: VERIFICAÇÃO */}
             <div className="bg-slate-50/50 dark:bg-transparent transition-colors duration-500">
-                <BlockchainSection />
+                <VerificacaoSection />
             </div>
 
             <style jsx global>{`

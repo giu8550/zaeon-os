@@ -7,7 +7,7 @@
     },
     "intro": {
         "line1": "ÉTUDIER, APPRENDRE = RECHERCHER...",
-        "line2": "PUBLIER = MONÉTISER"
+        "line2": "PUBLIER = PARTAGER"
     },
     "menu": {
         "new": "Nouveau compte",
@@ -54,7 +54,7 @@
         "cancel": "Annuler",
         "use_wallet": "Utiliser le portefeuille",
         "use_id": "Utiliser l'identifiant",
-        "wallet_label": "Portefeuille manteau",
+        "wallet_label": "Portefeuille",
         "wallet_placeholder": "0x...",
         "lbl_student": "Carte d'étudiant",
         "ph_student": "000...",
@@ -125,7 +125,7 @@
             "gen_protocol": "Protocole initié via {{name}}",
             "content_gen": "Contenu généré.",
             "ipfs_success": "Succès IPFS : {{hash}}",
-            "blockchain_init": "Sécurisation sur le manteau...",
+            "blockchain_init": "Enregistrement du justificatif...",
             "success": "Succès!",
             "error": "Erreur."
         }
@@ -172,21 +172,6 @@
                 "title": "Conformité",
                 "full": "Audit",
                 "desc": "Éthique et juridique"
-            },
-            "blockchain": {
-                "title": "Chaîne de blocs",
-                "full": "Très réseau",
-                "desc": "Enregistrement immuable"
-            },
-            "ip": {
-                "title": "IP",
-                "full": "Propriété",
-                "desc": "Droits d'auteur"
-            },
-            "token": {
-                "title": "Jeton",
-                "full": "Tokenisation",
-                "desc": "Actifs numériques"
             }
         }
     },
@@ -243,36 +228,36 @@
     "about": {
         "back": "Dos",
         "scroll_down": "faites défiler vers le bas pour tout savoir",
-        "title_secondary": "L'école du futur.",
-        "title_main": "CELA SE PASSE MAINTENANT.",
+        "title_secondary": "Une université pilotée par l'IA.",
+        "title_main": "La science qui devient solution.",
         "genesis": {
-            "title": "La genèse du protocole",
-            "p1": "Aujourd’hui, notre attention est détournée par les grandes entreprises qui ne recherchent que le profit, capturant l’attention de millions de personnes tandis que leurs algorithmes érodent l’intelligence humaine.",
-            "p2": "Zaeon émerge pour changer cela : nous sommes venus sauver la joie d'apprendre à nouveau : avec profondeur, modernité et plaisir. Alors que l'éducation traditionnelle s'est arrêtée dans le temps, nous libérons votre véritable potentiel grâce à de puissants agents IA. Ici, humains et machines œuvrent pour un monde meilleur",
-            "p2_highlight": "au sein de la Blockchain."
+            "title": "Une recherche qui ne dort jamais",
+            "p1": "Zaeon est une institution de recherche conduite par des intelligences artificielles. Des agents autonomes enquêtent, apprennent et construisent en continu : ils formulent des questions, lisent la littérature et font avancer les découvertes sans relâche.",
+            "p2": "Notre but est d'utiliser cette capacité pour s'attaquer aux plus grands problèmes de l'humanité.",
+            "p2_highlight": ""
         },
         "mission": {
-            "title": "Notre mission",
-            "p1": "Autonomiser la prochaine génération d’étudiants, de chercheurs et d’enseignants en proposant des outils simples à utiliser pour la vie quotidienne dans le cadre d’une éducation de haut niveau.",
-            "p2": "Les conduisant à une plateforme complète de monétisation pour leur endurance académique."
+            "title": "Ce que nous faisons",
+            "p1": "Nous produisons des connaissances, nous formons des personnes et nous livrons des projets — avec pour priorité de guérir des maladies, de régénérer l'environnement et de réduire les risques pour la planète. Chaque recherche va de la théorie à la solution, toujours validée par des experts humains.",
+            "p2": ""
         },
         "architecture": {
-            "title": "L'architecture de Zaeon",
-            "subtitle": "Une technologie innovante qui aura un impact sur des millions d’étudiants dans le monde.",
-            "card_title": "MOTEUR RWA DE RÉSEAU DE MANTEAU",
-            "card_desc": "Monétisez vos recherches avec l'aide d'agents IA. Actions IP et rendement réel.",
+            "title": "Comment ça marche",
+            "subtitle": "Des agents autonomes qui mènent une question scientifique jusqu'à une solution vérifiable.",
+            "card_title": "DU LABORATOIRE AU MONDE",
+            "card_desc": "Une recherche rigoureuse qui devient technologie, médecine et biens publics — ouverte et vérifiable.",
             "flow": {
-                "step1": "RECHERCHE",
-                "step2": "VALIDATION",
-                "step3": "RÉSEAU DE MANTEAU",
-                "step4": "MOTEUR RWA",
-                "step5": "ACTIF INTELLECTUEL",
-                "step6": "MONÉTISATION DE LA RECHERCHE",
-                "step7": "PISCINE DE BÉNÉFICES"
+                "step1": "RECHERCHER",
+                "step2": "SYNTHÉTISER",
+                "step3": "HYPOTHÈSE",
+                "step4": "SOLUTION",
+                "step5": "VALIDATION",
+                "step6": "LIVRAISON",
+                "step7": "IMPACT"
             }
         },
         "cta": {
-            "tour_title": "PRÊT À ALLER PLUS PROFONDE ? NOUS VOUS AVONS COMPRIS.",
+            "tour_title": "ENVIE D'ALLER PLUS LOIN ?",
             "button_go": "ALLER !"
         }
     },

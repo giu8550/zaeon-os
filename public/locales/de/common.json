@@ -7,7 +7,7 @@
     },
     "intro": {
         "line1": "STUDIEREN, LERNEN = FORSCHEN...",
-        "line2": "VERÖFFENTLICHEN = MONETISIEREN"
+        "line2": "VERÖFFENTLICHEN = TEILEN"
     },
     "menu": {
         "new": "Neues Konto",
@@ -54,7 +54,7 @@
         "cancel": "Stornieren",
         "use_wallet": "Verwenden Sie Wallet",
         "use_id": "Ausweis verwenden",
-        "wallet_label": "Mantel-Geldbörse",
+        "wallet_label": "Wallet",
         "wallet_placeholder": "0x...",
         "lbl_student": "Studentenausweis",
         "ph_student": "000...",
@@ -125,7 +125,7 @@
             "gen_protocol": "Protokoll initiiert über {{name}}",
             "content_gen": "Inhalte generiert.",
             "ipfs_success": "IPFS-Erfolg: {{hash}}",
-            "blockchain_init": "Befestigung am Mantel...",
+            "blockchain_init": "Nachweis wird registriert...",
             "success": "Erfolg!",
             "error": "Fehler."
         }
@@ -172,21 +172,6 @@
                 "title": "Einhaltung",
                 "full": "Wirtschaftsprüfung",
                 "desc": "Ethik und Recht"
-            },
-            "blockchain": {
-                "title": "Blockchain",
-                "full": "Sehr Netzwerk",
-                "desc": "Unveränderlicher Rekord"
-            },
-            "ip": {
-                "title": "IP",
-                "full": "Eigentum",
-                "desc": "Urheberrechte"
-            },
-            "token": {
-                "title": "Token",
-                "full": "Tokenisierung",
-                "desc": "Digitale Vermögenswerte"
             }
         }
     },
@@ -243,36 +228,36 @@
     "about": {
         "back": "Zurück",
         "scroll_down": "Scrollen Sie nach unten, um alles zu erfahren",
-        "title_secondary": "Die Schule der Zukunft.",
-        "title_main": "JETZT PASSIERT.",
+        "title_secondary": "Eine KI-betriebene Universität.",
+        "title_main": "Wissenschaft, die zur Lösung wird.",
         "genesis": {
-            "title": "Die Entstehung des Protokolls",
-            "p1": "Heutzutage wird unsere Aufmerksamkeit von großen Konzernen gestohlen, die nur auf Profit aus sind und die Aufmerksamkeit von Millionen Menschen auf sich ziehen, während ihre Algorithmen die menschliche Intelligenz untergraben.",
-            "p2": "Zaeon möchte dies ändern: Wir sind gekommen, um die Freude am Lernen wieder zu retten: mit Tiefe, Modernität und Spaß. Während die traditionelle Bildung mit der Zeit stehen blieb, erschließen wir Ihr wahres Potenzial durch leistungsstarke KI-Agenten. Hier arbeiten Mensch und Maschine für eine bessere Welt",
-            "p2_highlight": "innerhalb der Blockchain."
+            "title": "Forschung, die nie schläft",
+            "p1": "Zaeon ist eine Forschungseinrichtung, die von künstlichen Intelligenzen betrieben wird. Autonome Agenten forschen, lernen und bauen kontinuierlich – sie stellen Fragen, lesen die Literatur und bringen Entdeckungen unablässig voran.",
+            "p2": "Unser Ziel ist es, diese Fähigkeit zu nutzen, um die größten Probleme der Menschheit anzugehen.",
+            "p2_highlight": ""
         },
         "mission": {
-            "title": "Unsere Mission",
-            "p1": "Die nächste Generation von Studierenden, Forschern und Lehrkräften durch die Bereitstellung benutzerfreundlicher Tools für den Alltag im Bereich der Hochleistungsbildung zu stärken.",
-            "p2": "Wir führen sie zu einer vollständigen Monetarisierungsplattform für ihre akademische Ausdauer."
+            "title": "Was wir tun",
+            "p1": "Wir erzeugen Wissen, bringen Menschen etwas bei und liefern Projekte – mit dem Schwerpunkt, Krankheiten zu heilen, die Umwelt zu regenerieren und Risiken für den Planeten zu verringern. Jede Forschung führt von der Theorie zur Lösung und wird stets von menschlichen Fachleuten validiert.",
+            "p2": ""
         },
         "architecture": {
-            "title": "Die Zaeon-Architektur",
-            "subtitle": "Innovative Technologie wird Millionen von Studenten weltweit beeinflussen.",
-            "card_title": "MANTLE NETWORK RWA ENGINE",
-            "card_desc": "Monetarisieren Sie Ihre Forschung mithilfe von KI-Agenten. IP-Eigenkapital und Realrendite.",
+            "title": "So funktioniert es",
+            "subtitle": "Autonome Agenten, die eine wissenschaftliche Frage bis zu einer überprüfbaren Lösung führen.",
+            "card_title": "VOM LABOR IN DIE WELT",
+            "card_desc": "Strenge Forschung, die zu Technologie, Medizin und öffentlichen Gütern wird – offen und nachprüfbar.",
             "flow": {
-                "step1": "FORSCHUNG",
-                "step2": "VALIDIERUNG",
-                "step3": "MANTEL-NETZWERK",
-                "step4": "RWA-MOTOR",
-                "step5": "GEISTIGES VERMÖGEN",
-                "step6": "MONETISIERUNG DER FORSCHUNG",
-                "step7": "GEWINNPOOL"
+                "step1": "ERFORSCHEN",
+                "step2": "SYNTHETISIEREN",
+                "step3": "HYPOTHESE",
+                "step4": "LÖSUNG",
+                "step5": "VALIDIERUNG",
+                "step6": "LIEFERUNG",
+                "step7": "WIRKUNG"
             }
         },
         "cta": {
-            "tour_title": "BEREIT, TIEFER ZU GEHEN? WIR HABEN DICH.",
+            "tour_title": "LUST, TIEFER EINZUSTEIGEN?",
             "button_go": "GEHEN !"
         }
     },
