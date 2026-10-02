@@ -135,7 +135,7 @@ import {
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
-import ResearchSubTabs from "./ResearchSubTabs";
+import ResearchSubTabs, { PesquisasPills } from "./ResearchSubTabs";
 
 // Sala de Pesquisa UNIFICADA (Estudos + Pesquisa, sub-abas Chat · Estudos · Pesquisas).
 // NEXT_PUBLIC_* é embutida no build → constante de módulo. Off = layout atual intacto.
@@ -695,7 +695,7 @@ export default function HomeworkPage({
       UNIFIED && r.tab === "pesquisa" && isSubTab(sub) ? { ...r, subTab: sub } : r;
     const t = resolveLabTab(params.get("tab"), UNIFIED);
     if (t) return withSub(t);                                        // deep-link explícito de aba ganha
-    if (params.get("session") || params.get("worktype")) return { tab: "pesquisa", subTab: "chat" }; // deep-links de pesquisa
+    if (params.get("session") || params.get("worktype")) return { tab: "pesquisa", subTab: UNIFIED ? "pesquisas" : "chat" }; // deep-links de pesquisa (folha)
     if (params.get("onboard")) return resolveLabTab("sala-de-estudos", UNIFIED)!; // tour começa nos Estudos
     // PERSISTÊNCIA: volta pra ÚLTIMA sala visitada.
     try {
@@ -714,17 +714,15 @@ export default function HomeworkPage({
     } catch { /* ignore */ }
     return "chat";
   });
-  // Sala unificada: a aba do trabalho só aparece quando EXISTE um trabalho (gerado pela IA,
-  // aberto da biblioteca, "novo trabalho" ou deep-link) — nasce como aba nova, igual a uma
-  // conversa nova. Persistida pra não sumir no reload.
-  const [workTabOn, setWorkTabOnRaw] = useState<boolean>(() => {
-    if (!UNIFIED) return true;
-    try { return typeof window !== "undefined" && localStorage.getItem("zaeon.lab.workTab") === "1"; } catch { return false; }
+  // Sub-visão da sub-aba Pesquisas: "salvas" = a lista de pesquisas; "minhas" = a pesquisa em
+  // FOLHA (editor + Salvar/Publicar + documentos), como na antiga sala de pesquisa.
+  const [pesqView, setPesqView] = useState<"salvas" | "minhas">(() => {
+    try {
+      const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      if (q && (q.get("session") || q.get("worktype") || q.get("work"))) return "minhas"; // deep-links abrem a folha
+    } catch { /* ignore */ }
+    return "salvas";
   });
-  const setWorkTabOn = useCallback((on: boolean) => {
-    setWorkTabOnRaw(on);
-    try { on ? localStorage.setItem("zaeon.lab.workTab", "1") : localStorage.removeItem("zaeon.lab.workTab"); } catch { /* ignore */ }
-  }, []);
   // TODA troca de aba passa por aqui: valida e, na sala unificada, converte as abas antigas
   // (sala-de-estudos / pesquisas) em sub-abas — links, tour e eventos de voz não quebram.
   const setActiveTab = useCallback((t: LabTab | string) => {
@@ -733,14 +731,13 @@ export default function HomeworkPage({
     setActiveTabRaw(r.tab);
     if (r.subTab) setSubTab(r.subTab);
   }, []);
-  // Abrir um trabalho/pesquisa na folha: Sala de Pesquisa, sub-aba Chat, documento à frente
-  // (o ResearchShell fecha o chat sobreposto ao ouvir zaeon:research:showdoc).
+  // Abrir um trabalho/pesquisa na folha: Sala de Pesquisa → Pesquisas → "Minhas pesquisas".
   const showResearchDoc = useCallback(() => {
     setActiveTab("pesquisa");
-    setSubTab("chat");
-    setWorkTabOn(true);
+    setSubTab("pesquisas");
+    setPesqView("minhas");
     try { window.dispatchEvent(new CustomEvent("zaeon:research:showdoc")); } catch { /* ignore */ }
-  }, [setActiveTab, setWorkTabOn]);
+  }, [setActiveTab]);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [muralSearchQuery, setMuralSearchQuery] = useState("");
@@ -1378,7 +1375,7 @@ export default function HomeworkPage({
   }, [showResearchDoc]);
   const handleDeleteWork = (id: string) => {
     fetch(`/api/research-works?id=${id}`, { method: "DELETE" })
-      .then(() => { setSessions((prev) => prev.filter((s) => s.id !== id)); if (currentWorkIdRef.current === id) { setCurrentWorkId(null); soltarTcc(); if (UNIFIED) setWorkTabOn(false); } })
+      .then(() => { setSessions((prev) => prev.filter((s) => s.id !== id)); if (currentWorkIdRef.current === id) { setCurrentWorkId(null); soltarTcc(); } })
       .catch(() => {});
   };
 
@@ -1533,8 +1530,8 @@ export default function HomeworkPage({
         }
         setWorkType(wt);
         setActiveTab("pesquisa");
-        setSubTab("chat"); // o documento gerado vive na sub-aba Chat (o shell fecha o chat sozinho)
-        setWorkTabOn(true); // a IA gerou → a aba "Meu TCC/Artigo…" nasce agora
+        setSubTab("pesquisas"); // o trabalho gerado aparece na folha: Pesquisas → Minhas pesquisas
+        setPesqView("minhas");
         // Inicia um TRABALHO real em "Minhas coisas" (o autosave preenche o conteúdo).
         void createWork({ title: t.trim().slice(0, 120), workType: workTypeRef.current ?? "TCC" });
       }
@@ -2635,12 +2632,17 @@ export default function HomeworkPage({
         {UNIFIED && activeTab === "pesquisa" && (
           <ResearchSubTabs value={subTab} onChange={setSubTab} />
         )}
+        {/* Pesquisas: pills "Pesquisas" (lista salva) · "Minhas pesquisas" (a folha, com Salvar/Publicar) */}
+        {UNIFIED && activeTab === "pesquisa" && subTab === "pesquisas" && (
+          <PesquisasPills value={pesqView} onChange={setPesqView} />
+        )}
 
-        <div className="flex-1 flex gap-8 overflow-hidden h-full">
+        {/* Unificada: min-h-0 (em vez de h-full) pra a sala caber ABAIXO das linhas de pills sem estourar. */}
+        <div className={`flex-1 flex gap-8 overflow-hidden ${UNIFIED ? "min-h-0" : "h-full"}`}>
           {activeTab === "pesquisa" && (
             // Na sala unificada o shell fica MONTADO nas outras sub-abas (só escondido):
             // trocar pra Estudos/Pesquisas não derruba uma resposta do chat em andamento.
-            <div className={`flex-1 overflow-hidden ${UNIFIED && subTab !== "chat" ? "hidden" : ""}`}>
+            <div className={`flex-1 overflow-hidden ${UNIFIED && !(subTab === "chat" || (subTab === "pesquisas" && pesqView === "minhas")) ? "hidden" : ""}`}>
               <input
                 type="file"
                 ref={fileInputRef}
@@ -2656,9 +2658,9 @@ export default function HomeworkPage({
                 // Sala unificada: sem toggle TCC/Artigo/Relatório — a IA infere o tipo pela
                 // intenção no chat (research_generate). O workType segue interno.
                 onWorkType={UNIFIED ? undefined : switchWorkType}
-                defaultChatOpen={UNIFIED}
+                unifiedView={UNIFIED ? (subTab === "chat" ? "chat" : "folha") : undefined}
+                onNeedSheet={() => { setSubTab("pesquisas"); setPesqView("minhas"); }}
                 chatActive={activeTab === "pesquisa" && (!UNIFIED || subTab === "chat")}
-                showWorkTab={workTabOn}
                 onReadResearch={readResearch}
                 isReadingResearch={readingResearch}
                 onViewDoc={handleViewDoc}
@@ -2947,7 +2949,7 @@ export default function HomeworkPage({
             <StudyRoomContent flushTop unified={UNIFIED} />
           </div>
 
-          {(UNIFIED ? activeTab === "pesquisa" && subTab === "pesquisas" : activeTab === "pesquisas") && (
+          {(UNIFIED ? activeTab === "pesquisa" && subTab === "pesquisas" && pesqView === "salvas" : activeTab === "pesquisas") && (
             <div className="w-full h-full overflow-y-auto custom-scrollbar">
               <ResearchesPage />
             </div>

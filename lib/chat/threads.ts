@@ -30,7 +30,21 @@ export const TITULO_PADRAO = "Nova conversa";
 /** Teto de abas: acima disso a barra vira um acordeão e ninguém acha nada. */
 export const MAX_ABAS = 12;
 
-export const chaveDaThread = (id: string) => `zaeon.cowork.thread.${id}`;
+/**
+ * Escopo = o conjunto de chaves de UMA sala. Estudos usa o COWORK (padrão, inalterado);
+ * a Sala de Pesquisa tem o seu, pra as conversas dela não se misturarem com as da Aura.
+ */
+export type Escopo = { indice: string; ativa: string; legada: string; prefixo: string };
+export const ESCOPO_COWORK: Escopo = {
+  indice: CHAVE_INDICE, ativa: CHAVE_ATIVA, legada: CHAVE_LEGADA, prefixo: "zaeon.cowork.thread.",
+};
+/** Sala de Pesquisa: a conversa única de antes (`zaeon.research.thread.v1`) vira a aba #1. */
+export const ESCOPO_PESQUISA: Escopo = {
+  indice: "zaeon.research.threads.v1", ativa: "zaeon.research.threadAtiva.v1",
+  legada: "zaeon.research.thread.v1", prefixo: "zaeon.research.thread.",
+};
+
+export const chaveDaThread = (id: string, e: Escopo = ESCOPO_COWORK) => `${e.prefixo}${id}`;
 
 /** Armazenamento injetável — o teste passa um mapa, o navegador passa o localStorage. */
 export type Armazem = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -77,11 +91,11 @@ export function tituloAPartirDe(texto: string, limite = 34): string {
  * Lê o índice de threads. Na primeira vez, adota a conversa legada como aba #1 —
  * migração silenciosa: o aluno abre e a conversa dele está lá, agora numa aba.
  */
-export function carregarThreads(a: Armazem): Thread[] {
-  const salvas = ler<Thread[]>(a, CHAVE_INDICE, []);
+export function carregarThreads(a: Armazem, e: Escopo = ESCOPO_COWORK): Thread[] {
+  const salvas = ler<Thread[]>(a, e.indice, []);
   if (Array.isArray(salvas) && salvas.length) return salvas.filter((t) => t && t.id);
 
-  const legado = ler<any[]>(a, CHAVE_LEGADA, []);
+  const legado = ler<any[]>(a, e.legada, []);
   const agora = Date.now();
   const primeira: Thread = {
     id: novoId(),
@@ -91,26 +105,26 @@ export function carregarThreads(a: Armazem): Thread[] {
   };
   if (Array.isArray(legado) && legado.length) {
     // Move o histórico pra chave da thread nova e batiza pela 1ª fala do aluno.
-    gravar(a, chaveDaThread(primeira.id), legado);
+    gravar(a, chaveDaThread(primeira.id, e), legado);
     const primeiraDoAluno = legado.find((m) => m?.role === "user" && typeof m?.text === "string");
     if (primeiraDoAluno) primeira.titulo = tituloAPartirDe(primeiraDoAluno.text);
   }
-  gravar(a, CHAVE_INDICE, [primeira]);
+  gravar(a, e.indice, [primeira]);
   return [primeira];
 }
 
-export function salvarThreads(a: Armazem, threads: readonly Thread[]): void {
-  gravar(a, CHAVE_INDICE, threads.slice(0, MAX_ABAS));
+export function salvarThreads(a: Armazem, threads: readonly Thread[], e: Escopo = ESCOPO_COWORK): void {
+  gravar(a, e.indice, threads.slice(0, MAX_ABAS));
 }
 
-export function threadAtiva(a: Armazem, threads: readonly Thread[]): string | null {
-  const salva = (() => { try { return a.getItem(CHAVE_ATIVA); } catch { return null; } })();
+export function threadAtiva(a: Armazem, threads: readonly Thread[], e: Escopo = ESCOPO_COWORK): string | null {
+  const salva = (() => { try { return a.getItem(e.ativa); } catch { return null; } })();
   if (salva && threads.some((t) => t.id === salva)) return salva;
   return threads[0]?.id ?? null;
 }
 
-export function marcarAtiva(a: Armazem, id: string): void {
-  try { a.setItem(CHAVE_ATIVA, id); } catch { /* ignore */ }
+export function marcarAtiva(a: Armazem, id: string, e: Escopo = ESCOPO_COWORK): void {
+  try { a.setItem(e.ativa, id); } catch { /* ignore */ }
 }
 
 export function criarThread(threads: readonly Thread[], titulo = TITULO_PADRAO): { threads: Thread[]; nova: Thread } {
@@ -130,8 +144,8 @@ export function renomearThread(threads: readonly Thread[], id: string, titulo: s
  * Fecha uma aba e apaga o histórico dela. Nunca deixa zero abas: fechar a última cria
  * uma vazia no lugar — uma sala de conversa sem conversa nenhuma é um beco sem saída.
  */
-export function fecharThread(a: Armazem, threads: readonly Thread[], id: string): { threads: Thread[]; proxima: string } {
-  try { a.removeItem(chaveDaThread(id)); } catch { /* ignore */ }
+export function fecharThread(a: Armazem, threads: readonly Thread[], id: string, e: Escopo = ESCOPO_COWORK): { threads: Thread[]; proxima: string } {
+  try { a.removeItem(chaveDaThread(id, e)); } catch { /* ignore */ }
   const restantes = threads.filter((t) => t.id !== id);
   if (!restantes.length) {
     const { threads: nova, nova: n } = criarThread([]);
@@ -147,10 +161,10 @@ export function tocarThread(threads: readonly Thread[], id: string): Thread[] {
   return threads.map((t) => (t.id === id ? { ...t, tocadaEm: Date.now() } : t));
 }
 
-export function carregarMensagens<T = any>(a: Armazem, id: string): T[] {
-  return ler<T[]>(a, chaveDaThread(id), []);
+export function carregarMensagens<T = any>(a: Armazem, id: string, e: Escopo = ESCOPO_COWORK): T[] {
+  return ler<T[]>(a, chaveDaThread(id, e), []);
 }
 
-export function salvarMensagens(a: Armazem, id: string, mensagens: readonly unknown[]): void {
-  gravar(a, chaveDaThread(id), mensagens.slice(-60));
+export function salvarMensagens(a: Armazem, id: string, mensagens: readonly unknown[], e: Escopo = ESCOPO_COWORK): void {
+  gravar(a, chaveDaThread(id, e), mensagens.slice(-60));
 }
