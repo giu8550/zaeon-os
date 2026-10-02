@@ -90,6 +90,7 @@ const TYPE_LABEL: Record<CredentialType, string> = {
   work: "Trabalho concluído",
   course: "Aula concluída",
   "mentor-cert": "Certificação de mentor",
+  academic: "Título acadêmico verificado",
 };
 
 function resolveDeps(d: Deps = {}) {

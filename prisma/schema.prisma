@@ -35,9 +35,11 @@ model User {
   phone               String?   
   
   // Gamification & Skill Tree
-  level           Int       @default(1)
+  level           Int       @default(1)   // derivado do saldo AURA (lib/aura/rules.ts) quando AURA_ECONOMY liga
   streak          Int       @default(0)
-  xp              Int       @default(0)
+  xp              Int       @default(0)   // DEPRECADO: migrado pro ledger (AuraEvent legacy_xp); não escrever mais
+  aura            Int       @default(0)   // cache do saldo AURA — a verdade é o ledger (AuraEvent), recomputável
+  verificadorHabilitado Boolean @default(false) // professor/instituição que pode chancelar credenciais acadêmicas
   skills          Json?     // <--- NOVO: O motor do RPG acadêmico (Ranks F-SS)
   
   // Projetos IDE (agentic) — per-user GitHub App installation
@@ -1077,4 +1079,47 @@ model CanalMensagem {
 
   @@index([canalId, createdAt])
   @@map("canal_mensagens")
+}
+
+// ─── AURA: a economia de reputação (ver lib/aura/*) ───────────────────────────────
+// Livro-razão append-only: cada conquista VERIFICADA vira um evento; o saldo é a soma
+// (cache em User.aura). Nunca escrito pelo cliente nem por "atividade" — só por transições
+// que já existem no banco (nós do mapa, credenciais). Reversão = evento negativo.
+model AuraEvent {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  source    String   // node_learned | node_applied | node_validated | brain_completed | credential_verified | edu_link | legacy_xp | reversal
+  refId     String   // nodeId / `${mapaId}:${noId}` / mapaId / credentialId / userId — a chave da conquista
+  amount    Int      // AURA concedida (negativa em reversal); regra em lib/aura/rules.ts
+  reason    String?  // legível ("Validação: Análise de Solo — Laudo")
+  createdAt DateTime @default(now())
+
+  @@unique([userId, source, refId])   // IDEMPOTENTE: a mesma conquista nunca paga 2×
+  @@index([userId, createdAt])
+  @@map("aura_events")
+}
+
+// Credencial ACADÊMICA comprovada por documento (diploma/título). Declarar sem provar = 0 AURA.
+// O documento é dado sensível: `docRef` só sai pela rota guardada (dono + verificador).
+model AcademicCredential {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String    @db.ObjectId
+  nivel        String    // tecnico | graduacao | especializacao | mestrado | doutorado | posdoc
+  area         String?   // ex.: "Agronomia"
+  instituicao  String?
+  docRef       String?   // conteúdo PRIVADO do documento (data URL) — NUNCA em rota pública
+  docHash      String?   // sha256 do documento (detecta o mesmo diploma em contas diferentes)
+  metodo       String    @default("declarado") // declarado | edu_email | doc_review | registry | onchain
+  status       String    @default("pendente")  // pendente | verificado | rejeitado
+  verifiedById String?   @db.ObjectId          // professor/instituição que chancelou
+  verifiedAt   DateTime?
+  credentialId String?   @db.ObjectId          // Credential Solana cunhada (parede de provas)
+  auraEventId  String?   @db.ObjectId          // AuraEvent gerado ao verificar
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId, status])
+  @@index([status, nivel])
+  @@index([docHash])
+  @@map("academic_credentials")
 }
