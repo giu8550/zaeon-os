@@ -70,9 +70,9 @@ export async function runChatTurn(
     const memBlock = userId
       ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: prompt, wingLabel: mentor?.wing.label }).catch(() => "")
       : "";
-    // Cartolina → agente (a "bússola"): o que já foi estudado nesta conversa e o que está em
-    // aberto. "" com CARTOLINA_MEMORIA off / sem board / sem conversa.
-    const cartolina = await import("@/lib/cartolina/memoria-turno");
+    // Memória do estudo → agente (a "bússola"): o que já foi estudado nesta conversa e o que está
+    // em aberto. Com MAP_HARNESS o grafo (cérebro) é a fonte; senão a cartolina. "" sem nada.
+    const cartolina = await import("@/lib/map/memoria-turno");
     const cartolinaBlock = await cartolina.bussolaParaTurno(userId, ac.cartolinaScopeId);
     // TCC cross-sala: se a conversa já tem TCC, a Aura sabe (e edita por seção). "" com TCC_CROSS
     // off / sem TCC. O scope é o mesmo da cartolina (a aba do chat).
@@ -105,8 +105,8 @@ export async function runChatTurn(
     // O texto das seções mora na ABA do TCC (e a Aura relê as seções pela bússola do TCC): a bolha
     // do chat leva só o núcleo + o aviso `tcc`, sem repetir o documento.
     if (tcc && out.mode === "structured") out.answer = { ...out.answer, work: undefined, tcc };
-    // Chat → cartolina: os cards do turno vão pro board da conversa (fire-and-forget). Seções que
-    // foram pro TCC não viram notas soltas (o card do TCC já as representa).
+    // Chat → memória: o turno entra no grafo do estudo (e a cartolina recebe a projeção) — ÚNICO
+    // ponto de escrita por turno. Fire-and-forget. Seções que foram pro TCC não viram notas soltas.
     if (userId) void cartolina.fixarTurno({ userId, scopeId: ac.cartolinaScopeId, prompt, answer: tcc ? { ...answer, work: undefined } : answer, msgId: ac.cartolinaMsgId });
     // L3 write (A7, fire-and-forget): deriva o turno em drawers verbatim. Nunca bloqueia.
     if (userId) {
