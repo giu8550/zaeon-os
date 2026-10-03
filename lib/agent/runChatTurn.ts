@@ -73,7 +73,7 @@ export async function runChatTurn(
     // Memória do estudo → agente (a "bússola"): o que já foi estudado nesta conversa e o que está
     // em aberto. Com MAP_HARNESS o grafo (cérebro) é a fonte; senão a cartolina. "" sem nada.
     const cartolina = await import("@/lib/map/memoria-turno");
-    const cartolinaBlock = await cartolina.bussolaParaTurno(userId, ac.cartolinaScopeId);
+    const cartolinaBlock = await cartolina.bussolaParaTurno(userId, ac.cartolinaScopeId, prompt);
     // TCC cross-sala: se a conversa já tem TCC, a Aura sabe (e edita por seção). "" com TCC_CROSS
     // off / sem TCC. O scope é o mesmo da cartolina (a aba do chat).
     const tccMod = await import("@/lib/tcc/turno");

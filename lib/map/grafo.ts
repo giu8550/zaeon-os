@@ -13,7 +13,7 @@
  */
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import type { CartolinaCard, CardTipo } from "@/lib/caderno/cartolina-tipos";
-import { ORDEM_ESTADO, isEstadoNo, type EstadoNo, type MapaAresta, type MapaNo, type TipoNo } from "@/lib/map/tipos";
+import { MAX_DRAWERS_POR_NO, MAX_DRAWER_CHARS, ORDEM_ESTADO, isEstadoNo, tipoVisualDe, type Drawer, type EstadoNo, type MapaAresta, type MapaNo, type TipoNo } from "@/lib/map/tipos";
 
 export const MAX_NOS_POR_TURNO = 8;
 export const MAX_NOS = 400;
@@ -44,11 +44,26 @@ const PESO: Record<TipoNo, number> = { conceito: 0.6, evidencia: 0.5, passo: 0.4
 
 export type NoRascunho = Omit<MapaNo, "msgIds"> & { msgIds?: string[] };
 
-/** Nós que a resposta gera. Sem resposta estruturada (só núcleo) → nenhum: o grafo não é histórico. */
-export function nosFromStructured(a: StructuredAnswer, msgId?: string): MapaNo[] {
+/** O trecho VERBATIM do turno que vai pra gaveta (pergunta + núcleo), sem LLM. */
+export function textoDaGaveta(prompt: string, a: Pick<StructuredAnswer, "nucleo">): string {
+  const p = (prompt || "").replace(/\s+/g, " ").trim(), n = (a.nucleo || "").replace(/\s+/g, " ").trim();
+  const t = (p ? `Aluno: ${p}\n` : "") + (n ? `Aura: ${n}` : "");
+  return t.length > MAX_DRAWER_CHARS ? t.slice(0, MAX_DRAWER_CHARS - 1) + "…" : t;
+}
+
+/**
+ * Nós que a resposta gera. Sem resposta estruturada (só núcleo) → nenhum: o grafo não é histórico.
+ * Com `verbatim` (pergunta + resposta do turno), cada nó nasce com UMA gaveta (memória verbatim-first,
+ * MemPalace) e o closet = seu corpo/label.
+ */
+export function nosFromStructured(a: StructuredAnswer, msgId?: string, verbatim?: { prompt: string; ts?: number }): MapaNo[] {
   const out: MapaNo[] = [];
+  const ts = verbatim?.ts ?? Date.now();
+  const gaveta: Drawer | null = verbatim ? { msgIds: msgId ? [msgId] : [], texto: textoDaGaveta(verbatim.prompt, a), ts } : null;
   const no = (tipo: TipoNo, chave: string, label: string, extra: Partial<MapaNo> = {}): MapaNo => ({
-    id: idDeNo(tipo, chave), label, tipo, estado: ESTADO_INICIAL[tipo], peso: PESO[tipo], msgIds: msgId ? [msgId] : [], ...extra,
+    id: idDeNo(tipo, chave), label, tipo, estado: ESTADO_INICIAL[tipo], peso: PESO[tipo], msgIds: msgId ? [msgId] : [],
+    ...(gaveta && gaveta.texto ? { drawers: [gaveta], tLast: ts } : {}),
+    ...extra,
   });
   for (const c of a.conceitos ?? []) {
     const t = (c ?? "").trim();
@@ -75,21 +90,41 @@ export function nosFromStructured(a: StructuredAnswer, msgId?: string): MapaNo[]
     out.push(no("artefato", kind + "|" + topic, corta(topic, 80), { legenda: kind }));
   }
   const vistos = new Set<string>();
-  return out.filter((n) => (vistos.has(n.id) ? false : (vistos.add(n.id), true))).slice(0, MAX_NOS_POR_TURNO);
+  return out
+    .filter((n) => (vistos.has(n.id) ? false : (vistos.add(n.id), true)))
+    .slice(0, MAX_NOS_POR_TURNO)
+    .map((n) => (n.drawers ? { ...n, closet: closetDe(n) } : n));
+}
+
+/** Closet (resumo curto, sem LLM): corpo quando há, senão o label — até 160 chars. */
+export function closetDe(n: Pick<MapaNo, "label" | "corpo" | "legenda">): string {
+  const base = (n.corpo || n.label || "").replace(/\s+/g, " ").trim();
+  const t = n.legenda && n.corpo ? `${base} (${n.legenda})` : base;
+  return t.length > 160 ? t.slice(0, 159) + "…" : t;
+}
+
+/** Funde gavetas: dedupe por msgId (ou texto), mais recentes no fim, teto por nó. */
+export function fundirGavetas(a: Drawer[] = [], b: Drawer[] = []): Drawer[] {
+  const vistos = new Set<string>();
+  const chave = (d: Drawer) => (d.msgIds.length ? "m:" + d.msgIds.join(",") : "t:" + d.texto.slice(0, 80));
+  const out: Drawer[] = [];
+  for (const d of [...a, ...b]) { const k = chave(d); if (!d.texto || vistos.has(k)) continue; vistos.add(k); out.push(d); }
+  return out.sort((x, y) => x.ts - y.ts).slice(-MAX_DRAWERS_POR_NO);
 }
 
 /** Relações DENTRO do turno. Conceitos do turno são a âncora; o resto se liga a eles (até 3). */
 export function arestasDoTurno(nos: MapaNo[]): MapaAresta[] {
   const conceitos = nos.filter((n) => n.tipo === "conceito").slice(0, 3);
   const out: MapaAresta[] = [];
-  for (let i = 1; i < conceitos.length; i++) out.push({ de: conceitos[i - 1]!.id, para: conceitos[i]!.id, relacao: "relacionado" });
+  const push = (de: string, para: string, relacao: MapaAresta["relacao"]) => out.push({ de, para, relacao, tipoVisual: tipoVisualDe(relacao), peso: 0.6 });
+  for (let i = 1; i < conceitos.length; i++) push(conceitos[i - 1]!.id, conceitos[i]!.id, "relacionado");
   for (const n of nos) {
     if (n.tipo === "conceito") continue;
     for (const c of conceitos) {
-      if (n.tipo === "evidencia") out.push({ de: n.id, para: c.id, relacao: "sustenta" });
-      else if (n.tipo === "passo") out.push({ de: c.id, para: n.id, relacao: "leva_a" });
-      else if (n.tipo === "secao") out.push({ de: n.id, para: c.id, relacao: "trata" });
-      else if (n.tipo === "artefato") out.push({ de: n.id, para: c.id, relacao: "ilustra" });
+      if (n.tipo === "evidencia") push(n.id, c.id, "sustenta");
+      else if (n.tipo === "passo") push(c.id, n.id, "leva_a");
+      else if (n.tipo === "secao") push(n.id, c.id, "trata");
+      else if (n.tipo === "artefato") push(n.id, c.id, "ilustra");
     }
   }
   return out;
@@ -117,11 +152,13 @@ export function fundirNoGrafo(
     const ja = porId.get(n.id);
     if (ja) {
       const i = nos.findIndex((x) => x.id === n.id);
+      const drawers = fundirGavetas(ja.drawers, n.drawers);
       const fundido: MapaNo = {
         ...ja,
         estado: avancaEstado(ja.estado, n.estado),
         msgIds: uniq([...ja.msgIds, ...n.msgIds]).slice(-MAX_MSG_IDS),
         corpo: ja.corpo ?? n.corpo, legenda: ja.legenda ?? n.legenda,
+        ...(drawers.length ? { drawers, closet: ja.closet ?? n.closet ?? closetDe(ja), tLast: Math.max(ja.tLast ?? 0, n.tLast ?? 0) || undefined } : {}),
       };
       if (ja.planejado && fundido.estado !== "a_conquistar") realizados.push(n.id);
       delete fundido.planejado;
@@ -141,7 +178,7 @@ export function fundirNoGrafo(
   for (const a of turno.arestas) {
     if (arestas.length >= MAX_ARESTAS) break;
     if (!ids.has(a.de) || !ids.has(a.para) || a.de === a.para || vistas.has(chave(a))) continue;
-    vistas.add(chave(a)); arestas.push(a);
+    vistas.add(chave(a)); arestas.push({ ...a, tipoVisual: a.tipoVisual ?? tipoVisualDe(a.relacao) });
   }
   return { nos, arestas, novos, tocados, realizados };
 }
@@ -252,6 +289,14 @@ export function readNos(json: unknown): MapaNo[] {
     if (typeof r.legenda === "string" && r.legenda.trim()) n.legenda = r.legenda.slice(0, 400);
     if (typeof r.regiao === "string" && r.regiao.trim()) n.regiao = r.regiao.slice(0, 80);
     if (r.planejado === true) n.planejado = true;
+    if (Array.isArray(r.drawers)) {
+      const ds = r.drawers.filter((d): d is Record<string, unknown> => !!d && typeof d === "object")
+        .map((d) => ({ msgIds: Array.isArray(d.msgIds) ? d.msgIds.filter((m): m is string => typeof m === "string" && ID_RE.test(m)).slice(0, 5) : [], texto: typeof d.texto === "string" ? d.texto.slice(0, MAX_DRAWER_CHARS) : "", ts: typeof d.ts === "number" && Number.isFinite(d.ts) ? d.ts : 0 }))
+        .filter((d) => d.texto).slice(-MAX_DRAWERS_POR_NO);
+      if (ds.length) n.drawers = ds;
+    }
+    if (typeof r.closet === "string" && r.closet.trim()) n.closet = r.closet.slice(0, 200);
+    if (typeof r.tLast === "number" && Number.isFinite(r.tLast)) n.tLast = r.tLast;
     out.push(n);
     if (out.length >= MAX_NOS) break;
   }
@@ -267,7 +312,9 @@ export function readArestas(json: unknown, nos?: MapaNo[]): MapaAresta[] {
     const r = raw as Record<string, unknown>;
     if (typeof r.de !== "string" || typeof r.para !== "string" || !RELACOES.has(String(r.relacao))) continue;
     if (ids && (!ids.has(r.de) || !ids.has(r.para))) continue;
-    out.push({ de: r.de, para: r.para, relacao: r.relacao as MapaAresta["relacao"] });
+    const a: MapaAresta = { de: r.de, para: r.para, relacao: r.relacao as MapaAresta["relacao"], tipoVisual: r.tipoVisual === "percurso" || r.tipoVisual === "memoria" ? r.tipoVisual : tipoVisualDe(r.relacao as MapaAresta["relacao"]) };
+    if (typeof r.peso === "number" && Number.isFinite(r.peso)) a.peso = Math.min(1, Math.max(0, r.peso));
+    out.push(a);
     if (out.length >= MAX_ARESTAS) break;
   }
   return out;
