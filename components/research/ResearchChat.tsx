@@ -21,6 +21,7 @@ import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
 import { TCC_CROSS_ON, avisarTccMudou, tccApi } from "@/lib/tcc/client";
+import { empurrarPontos, pontosDaResposta } from "@/lib/lounge3d/pontos";
 import ThreadTabs from "@/components/study/ThreadTabs";
 import BolinhaCerebro from "@/components/cerebro/BolinhaCerebro";
 import CerebroPanel from "@/components/cerebro/CerebroPanel";
@@ -295,6 +296,9 @@ export default function ResearchChat({
         setMessages((prev) => prev.map((m) => (m.id === asstId
           ? { ...m, text, answer: structured.kind === "answer" ? structured.answer : undefined }
           : m)));
+        // Ponte chat → Lounge 3D: os pontos-chave desta resposta ficam disponíveis pra "Puxar ponto do chat"
+        // (projeção opcional no canvas; a memória de verdade é o cérebro).
+        if (structured.kind === "answer" && abaAtivaRef.current) try { empurrarPontos(pontosDaResposta(abaAtivaRef.current, asstId, structured.answer)); } catch { /* ignore */ }
         appendTranscript("pesquisa", null, [
           { role: "user", text: prompt },
           { role: "assistant", text },
