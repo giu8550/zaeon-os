@@ -1116,6 +1116,29 @@ model MapaProbabilistico {
   @@map("mapas_probabilisticos")
 }
 
+// Validação HUMANA de um nó do cérebro (modoValidacao "humana", §5): o aluno aplica com evidência,
+// o professor/instituição vinculado aprova/rejeita. Aprovar → nó `validado` + AURA + atestado.
+model MapaValidacao {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  mapaId       String   @db.ObjectId
+  noId         String
+  alunoId      String   @db.ObjectId
+  validadorId  String   @db.ObjectId
+  role         String   // teacher | instituicao
+  evidencia    String?
+  status       String   @default("pendente") // pendente | aprovada | rejeitada
+  comentario   String?
+  credentialId String?  @db.ObjectId          // Credential Solana (atestado) cunhada ao aprovar
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([mapaId, noId, validadorId])
+  @@index([mapaId, noId, status])
+  @@index([validadorId, status, createdAt])
+  @@index([alunoId, status])
+  @@map("mapa_validacoes")
+}
+
 // Livro-razão append-only: cada conquista VERIFICADA vira um evento; o saldo é a soma
 // (cache em User.aura). Nunca escrito pelo cliente nem por "atividade" — só por transições
 // que já existem no banco (nós do mapa, credenciais). Reversão = evento negativo.

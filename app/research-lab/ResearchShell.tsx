@@ -251,9 +251,12 @@ export default function ResearchShell({
         {/* Sheet area — all windows mounted, inactive ones hidden via display:none */}
         <div ref={containerRef} className="flex-1 relative min-h-0 overflow-hidden">
           {/* Chat (Escritor/Revisor) sobrepõe o trabalho quando ligado na pill — alterna responsivo. */}
-          {chatVisible && (
-            <div className="absolute inset-0 z-[55]">
-              <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive} comAbas={!!unifiedView} />
+          {/* Sala unificada: o chat fica MONTADO (só escondido) ao ir pra folha — uma resposta em curso
+              não é derrubada, o rascunho não some e o composer não precisa remontar. Fora da sala
+              unificada mantém o comportamento antigo (monta/desmonta pela pill). */}
+          {(chatVisible || unifiedView) && (
+            <div className="absolute inset-0 z-[55]" style={unifiedView && !chatVisible ? { display: "none" } : undefined} aria-hidden={unifiedView ? !chatVisible : undefined}>
+              <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive && chatVisible} comAbas={!!unifiedView} />
             </div>
           )}
           {/* Research window (always mounted) */}

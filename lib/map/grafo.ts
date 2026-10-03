@@ -109,10 +109,10 @@ export function avancaEstado(atual: EstadoNo, novo: EstadoNo): EstadoNo {
 export function fundirNoGrafo(
   grafo: { nos: MapaNo[]; arestas: MapaAresta[] },
   turno: { nos: MapaNo[]; arestas: MapaAresta[] },
-): { nos: MapaNo[]; arestas: MapaAresta[]; novos: string[]; tocados: string[] } {
+): { nos: MapaNo[]; arestas: MapaAresta[]; novos: string[]; tocados: string[]; /** nós do plano que este turno realizou (planejado → aprendido) */ realizados: string[] } {
   const porId = new Map(grafo.nos.map((n) => [n.id, n]));
   const nos = [...grafo.nos];
-  const novos: string[] = [], tocados: string[] = [];
+  const novos: string[] = [], tocados: string[] = [], realizados: string[] = [];
   for (const n of turno.nos) {
     const ja = porId.get(n.id);
     if (ja) {
@@ -123,6 +123,7 @@ export function fundirNoGrafo(
         msgIds: uniq([...ja.msgIds, ...n.msgIds]).slice(-MAX_MSG_IDS),
         corpo: ja.corpo ?? n.corpo, legenda: ja.legenda ?? n.legenda,
       };
+      if (ja.planejado && fundido.estado !== "a_conquistar") realizados.push(n.id);
       delete fundido.planejado;
       nos[i] = fundido;
       tocados.push(n.id);
@@ -142,7 +143,7 @@ export function fundirNoGrafo(
     if (!ids.has(a.de) || !ids.has(a.para) || a.de === a.para || vistas.has(chave(a))) continue;
     vistas.add(chave(a)); arestas.push(a);
   }
-  return { nos, arestas, novos, tocados };
+  return { nos, arestas, novos, tocados, realizados };
 }
 
 /** Muda o estado de um nó (só pra frente, salvo `forcar` — usado pela rejeição da validação). */

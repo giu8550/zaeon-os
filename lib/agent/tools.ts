@@ -7,7 +7,8 @@
  * que já existe, e o artefato cai na conversa. Sem geração no servidor: mantém
  * o Studio client-orchestrated como já é (mesmo padrão do summon/plan).
  *
- * Próximas fases somam tools aqui (literature_search, memory_search, examiner…).
+ * `literature_search` é real (lib/agent/runtime.ts → lib/scholar/retrieve, bases gratuitas);
+ * memory_search e examiner seguem como stubs no runtime.
  */
 import type { FunctionDeclaration } from "@google-cloud/vertexai";
 
