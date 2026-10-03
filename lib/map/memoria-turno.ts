@@ -12,6 +12,7 @@ import { sanitizeScopeId } from "@/lib/cartolina/scope";
 import { cartolinaMemoriaOn, createBoard, findOwnBoard, patchBoard } from "@/lib/cartolina/store";
 import * as cartolinaBridge from "@/lib/cartolina/memoria-turno";
 import { arestasDoTurno, bussolaDoGrafo, cardsAlterados, fundirNoGrafo, nosFromStructured, projetarCards } from "@/lib/map/grafo";
+import { completudes, quantoFaltaConcluir } from "@/lib/map/backbone";
 import { createMapa, findOwnMapa, patchMapa, type MapSurface } from "@/lib/map/store";
 import { mapHarnessOn, type MapaView } from "@/lib/map/tipos";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
@@ -25,10 +26,18 @@ export async function bussolaParaTurno(userId: string | null, scopeId: unknown):
   if (!userId || !scope) return "";
   try {
     const mapa = await findOwnMapa(userId, SURFACE, scope);
-    if (mapa) return bussolaDoGrafo(mapa.nos, { objetivo: mapa.objetivo || undefined });
+    if (mapa) return bussolaAdaptativa(mapa);
     // Mapa ainda não existe (conversa anterior à flag): a cartolina antiga continua valendo como memória.
     return cartolinaBridge.bussolaParaTurno(userId, scopeId);
   } catch { return ""; }
+}
+
+/** Bússola ciente do arquétipo: o grafo + "o que falta" no vocabulário do tipo de tópico (§4, §6). */
+export function bussolaAdaptativa(mapa: MapaView): string {
+  const base = bussolaDoGrafo(mapa.nos, { objetivo: mapa.objetivo || undefined, maxChars: 1100 });
+  if (!base) return "";
+  return base + (mapa.backbone.length ? `
+Percurso: ${quantoFaltaConcluir(mapa)}` : "");
 }
 
 export type FixarInput = { userId: string | null; scopeId: unknown; prompt: string; answer: StructuredAnswer; msgId?: unknown };
@@ -51,7 +60,7 @@ export async function fixarTurno(input: FixarInput): Promise<FixarResultado> {
 
     // 1) GRAFO (canônico)
     let mapa: MapaView;
-    let novos: string[], tocados: string[];
+    let novos: string[], tocados: string[], realizados: string[] = [];
     const existente = await findOwnMapa(userId, SURFACE, scope);
     if (!existente) {
       const f = fundirNoGrafo({ nos: [], arestas: [] }, turno);
@@ -59,9 +68,19 @@ export async function fixarTurno(input: FixarInput): Promise<FixarResultado> {
       novos = f.novos; tocados = f.tocados;
     } else {
       let f = fundirNoGrafo(existente, turno);
-      const r = await patchMapa(existente.id, (atual) => { f = fundirNoGrafo(atual, turno); return { nos: f.nos, arestas: f.arestas }; });
+      const r = await patchMapa(existente.id, (atual) => {
+        f = fundirNoGrafo(atual, turno);
+        const c = completudes({ nos: f.nos, backbone: atual.backbone, modoValidacao: atual.modoValidacao });
+        return { nos: f.nos, arestas: f.arestas, completudeAprendizado: c.aprendizado, completudeConclusao: c.conclusao };
+      });
       if (!r.ok) { console.warn("[cerebro] fixarTurno: patch do mapa falhou:", r.reason); return null; }
-      mapa = r.mapa; novos = f.novos; tocados = f.tocados;
+      mapa = r.mapa; novos = f.novos; tocados = f.tocados; realizados = f.realizados;
+    }
+    // AURA de aprendizado (§8): só nós do PERCURSO que este turno realizou (planejado → aprendido),
+    // pesados pelo arquétipo; cap diário no ledger. Fire-and-forget.
+    if (realizados.length) {
+      void Promise.all([import("@/lib/map/validacao"), import("@/lib/map/validacao-server")])
+        .then(([v, s]) => v.pagarRealizados(s.depsReais(), mapa, realizados)).catch(() => {});
     }
 
     // 2) PROJEÇÃO na cartolina (só se a cartolina está ligada). Falha aqui não desfaz o grafo.
@@ -77,6 +96,10 @@ export async function fixarTurno(input: FixarInput): Promise<FixarResultado> {
       } catch (e: any) {
         console.warn("[cerebro] projeção na cartolina falhou:", e?.message ?? e);
       }
+    }
+    // 3) REAÇÃO AO VIVO (§3): o painel aberto acende o que mudou. Best-effort.
+    if (novos.length || tocados.length) {
+      void import("@/lib/map/realtime").then((r) => r.avisarTurno({ mapaId: mapa.id, novos, tocados, completudeAprendizado: mapa.completudeAprendizado, completudeConclusao: mapa.completudeConclusao })).catch(() => {});
     }
     return { mapaId: mapa.id, novos, tocados };
   } catch (e: any) {
