@@ -11,7 +11,7 @@ describe("normalizarBackbone", () => {
     expect(r.backbone).toHaveLength(3);
     expect(r.nos.every((n) => n.planejado && n.estado === "a_conquistar")).toBe(true);
     expect(r.nos[2]!.tipo).toBe("experimento");
-    expect(r.arestas).toEqual([{ de: r.backbone[0], para: r.backbone[1], relacao: "pre_requisito" }, { de: r.backbone[1], para: r.backbone[2], relacao: "pre_requisito" }]);
+    expect(r.arestas).toMatchObject([{ de: r.backbone[0], para: r.backbone[1], relacao: "pre_requisito", tipoVisual: "percurso" }, { de: r.backbone[1], para: r.backbone[2], relacao: "pre_requisito" }]);
     expect(backboneValido(r.backbone, r.nos, r.arestas)).toBe(true);
   });
   it("poucos passos / lixo → null", () => {

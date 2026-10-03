@@ -9,6 +9,7 @@
 | A #174 | Grafo canônico (`MapaProbabilistico`) + **fonte única de memória** por turno; cartolina = projeção (`card.id === nó.id`) | `MAP_HARNESS` | `lib/map/{tipos,grafo,store,memoria-turno}.ts` |
 | B #175 | Classificação por arquétipo (5 tipos) + backbone (percurso) + completudes + bússola adaptativa + `generateMap` | — | `lib/map/{arquetipo,backbone,generateMap}.ts` |
 | C #176 | Gatekeeper (bolinha azul) + chain worker (fila `cerebro`) + painel ao vivo (Pusher `private-cerebro-<mapaId>` + poll) na aba Chat da Sala de Pesquisa; mobile = lista | `ESTUDO_GATEKEEPER`, `NEXT_PUBLIC_MAP_HARNESS` (build-arg) | `lib/map/{gatekeeper,queue,realtime,bolinha}.ts`, `components/cerebro/*`, `app/api/map/{route,generate,pusher-auth}` |
+| E | **Memória viva** (§4 do handoff "cérebro ausente"): gavetas verbatim + closet + tLast por nó; arestas `percurso` (amarelo) × `memoria` (azul pulsante); consolidação associativa (A-MEM) + regiões/novas áreas; recuperação PPR × recência × importância na bússola (`recuperarMemoria`); ficha de gavetas no painel; painel com fade/Esc/clique-fora abaixo da barra de conversas; bolinha maior | — | `lib/map/memoria.ts`, `lib/map/grafo.ts` (drawers), `components/cerebro/*` |
 | D | Validação humana (`MapaValidacao`) + atestado Solana (só `humana`) + AURA pesada por arquétipo × validação + perfil (cérebros, fila de validação) | `AURA_ECONOMY` | `lib/map/{validacao,validacao-server}.ts`, `lib/aura/rules.ts` (`auraDoNo`), `app/api/map/{[id],validacoes,validacao/[vId]}` |
 
 **Ligar em prod (ordem):** `prisma db push` (aditivo; o deploy faz) → `MAP_HARNESS=1` → `ESTUDO_GATEKEEPER=1` →
@@ -41,8 +42,8 @@ Pesos finais em `lib/aura/rules.ts` (`pesoAura`, `auraDoNo`, `daAtestado`).
 ## 5. Percurso, validação & atestado
 Backbone = cadeia linear `pre_requisito` (normalizador puro em `lib/map/backbone.ts`); merge planejado × realizado em `fundirNoGrafo` (nó do plano que um turno realiza perde `planejado`; `realizados` paga `node_learned`). Duas barras: `completudes()`. Validação humana: `POST /api/map/:id/node/:noId/apply` (aluno, com evidência) → `MapaValidacao` pendente pro professor vinculado (`TeacherStudent`) → `POST /api/map/validacao/:vId` (aprova/rejeita; nunca o próprio, 403). Aprovar → `validado` + `node_validated` + `issueCredential` (type `skill`, `token2022-nt`) — mint falha não derruba. Backbone inteiro no gate → `brain_completed` 1×.
 
-## 6. Memória chat ⇄ grafo
-`runChatTurn` → `lib/map/memoria-turno.bussolaParaTurno` (grafo + "o que falta" no vocabulário do arquétipo) e `fixarTurno` (nós com `msgIds`, projeção, evento ao vivo, AURA dos realizados). Recuperação seletiva: nós mais pesados primeiro, teto de caracteres.
+## 6. Memória chat ⇄ grafo (MemPalace sobre o grafo)
+`runChatTurn` → `bussolaParaTurno(userId, scopeId, prompt)` (grafo + "o que falta" + **lembranças**: `recuperarMemoria` = PageRank personalizado semeado pela pergunta × recência (meia-vida 7d) × importância, k=4, só gavetas relevantes entram) e `fixarTurno` (cada nó tocado ganha uma **gaveta verbatim** `Aluno: … / Aura: …` + `closet` + `tLast`; consolidação associativa por sobreposição lexical; regiões por BFS a partir do percurso — nó sem alcance = "nova-area"). Sem LLM e sem embeddings (determinístico); semântica pode entrar depois como mais um sinal.
 
 ## 7. Fonte única — resolvido na PR-A
 `card.id === nó.id` por construção (mesmo hash de conteúdo). Projeção preserva o card existente inteiro (posição, texto editado, desenho). Nada é removido pela projeção. Edição de card pelo aluno NÃO volta pro grafo (decisão: o grafo é a memória do agente; o texto do card é do aluno).

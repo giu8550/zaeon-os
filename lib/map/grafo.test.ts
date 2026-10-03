@@ -65,7 +65,7 @@ describe("fundirNoGrafo", () => {
     expect(g2.nos[0]!.msgIds).toEqual(["m1", "m2"]);
     expect(g2.tocados).toEqual([t1[0]!.id]);
     expect(g2.novos).toEqual([t2[1]!.id]);
-    expect(g2.arestas).toEqual([{ de: t2[0]!.id, para: t2[1]!.id, relacao: "relacionado" }]);
+    expect(g2.arestas).toMatchObject([{ de: t2[0]!.id, para: t2[1]!.id, relacao: "relacionado", tipoVisual: "memoria" }]);
   });
   it("estado nunca regride: nó validado continua validado após turno que o cita", () => {
     const t = nosFromStructured(ans({ conceitos: ["A"] }) as any, "m1");
