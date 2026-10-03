@@ -14,6 +14,25 @@ export const AURA: Record<Exclude<AuraSource, "credential_verified" | "edu_link"
   brain_completed: 200, // TODO o backbone do cérebro validado (bônus)
 };
 
+/**
+ * PESOS por tipo de tópico × modo de validação (HANDOFF_CEREBRO_AURA §8): o mesmo "validado" vale
+ * mais onde há validação humana real e menos onde o gate é automático — impede farmar reputação
+ * alta em estudo exploratório. Multiplica o valor base de AURA[source]. Criativo é simbólico.
+ */
+export type ModoValidacaoAura = "humana" | "rubrica" | "quiz" | "peer" | "cobertura" | "nenhuma";
+export type TipoTopicoAura = "aplicavel" | "habilidade" | "conceitual" | "exploratorio" | "criativo";
+const PESO_MODO: Record<ModoValidacaoAura, number> = { humana: 1, rubrica: 0.6, peer: 0.5, quiz: 0.45, cobertura: 0.25, nenhuma: 0.15 };
+const PESO_TIPO: Record<TipoTopicoAura, number> = { aplicavel: 1, habilidade: 0.9, conceitual: 0.75, exploratorio: 0.5, criativo: 0.35 };
+export function pesoAura(tipo: TipoTopicoAura, modo: ModoValidacaoAura): number {
+  return Math.round(PESO_MODO[modo] * PESO_TIPO[tipo] * 100) / 100;
+}
+/** AURA de uma transição do cérebro, já pesada. Mínimo 1 (uma conquista nunca vale zero). */
+export function auraDoNo(source: "node_learned" | "node_applied" | "node_validated" | "brain_completed", tipo: TipoTopicoAura, modo: ModoValidacaoAura): number {
+  return Math.max(1, Math.round(AURA[source] * pesoAura(tipo, modo)));
+}
+/** Só a validação HUMANA dá atestado on-chain (§8). */
+export const daAtestado = (modo: ModoValidacaoAura): boolean => modo === "humana";
+
 /** Fontes de baixo rigor levam soft-cap diário (anti-grind de nós triviais). */
 export const SOFT_CAP_DIARIO: Partial<Record<AuraSource, number>> = { node_learned: 20 };
 export function dentroDoCapDiario(source: AuraSource, concedidosHoje: number): boolean {

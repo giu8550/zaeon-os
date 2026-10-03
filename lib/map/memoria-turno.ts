@@ -60,7 +60,7 @@ export async function fixarTurno(input: FixarInput): Promise<FixarResultado> {
 
     // 1) GRAFO (canônico)
     let mapa: MapaView;
-    let novos: string[], tocados: string[];
+    let novos: string[], tocados: string[], realizados: string[] = [];
     const existente = await findOwnMapa(userId, SURFACE, scope);
     if (!existente) {
       const f = fundirNoGrafo({ nos: [], arestas: [] }, turno);
@@ -74,7 +74,13 @@ export async function fixarTurno(input: FixarInput): Promise<FixarResultado> {
         return { nos: f.nos, arestas: f.arestas, completudeAprendizado: c.aprendizado, completudeConclusao: c.conclusao };
       });
       if (!r.ok) { console.warn("[cerebro] fixarTurno: patch do mapa falhou:", r.reason); return null; }
-      mapa = r.mapa; novos = f.novos; tocados = f.tocados;
+      mapa = r.mapa; novos = f.novos; tocados = f.tocados; realizados = f.realizados;
+    }
+    // AURA de aprendizado (§8): só nós do PERCURSO que este turno realizou (planejado → aprendido),
+    // pesados pelo arquétipo; cap diário no ledger. Fire-and-forget.
+    if (realizados.length) {
+      void Promise.all([import("@/lib/map/validacao"), import("@/lib/map/validacao-server")])
+        .then(([v, s]) => v.pagarRealizados(s.depsReais(), mapa, realizados)).catch(() => {});
     }
 
     // 2) PROJEÇÃO na cartolina (só se a cartolina está ligada). Falha aqui não desfaz o grafo.

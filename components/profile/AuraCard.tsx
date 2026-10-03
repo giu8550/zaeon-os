@@ -15,7 +15,11 @@ type Aura = {
   academicas: { id: string; nivel: string; area: string | null; instituicao: string | null; metodo: string; status: string; verifiedAt: string | null }[];
   parede: { id: string; type: string; title: string; assetId: string | null; network: string; issuedAt: string | null }[];
   recent: { id: string; source: string; amount: number; reason: string | null; at: string }[];
+  /** Cérebros do aluno (PR-D): título, arquétipo, completudes. */
+  cerebros?: { id: string; titulo: string; tipoTopico: string; modoValidacao: string; aprendizado: number; conclusao: number; passos: number; completo: boolean }[];
+  habilidadesValidadas?: { id: string; titulo: string; at: string }[];
 };
+type FilaCerebro = { id: string; noId: string; evidencia: string | null; createdAt: string; estudo: { titulo: string; tipoTopico: string; objetivo: string } | null; no: { label: string; estado: string } | null; aluno: { id: string; nome: string | null; email: string | null } | null }[];
 type Fila = { id: string; nivel: string; area: string | null; instituicao: string | null; temDoc: boolean; docDuplicado: boolean; aluno: { id: string; nome: string | null; email: string | null } }[];
 
 const H = { "Content-Type": "application/json" };
@@ -36,6 +40,7 @@ export default function AuraCard() {
   const [d, setD] = useState<Aura | null>(null);
   const [estado, setEstado] = useState<"carregando" | "ok" | "off" | "erro">("carregando");
   const [fila, setFila] = useState<Fila | null>(null);
+  const [filaCerebro, setFilaCerebro] = useState<FilaCerebro | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [envio, setEnvio] = useState({ nivel: "graduacao" as NivelAcademico, area: "", instituicao: "", doc: "", docNome: "" });
   const [enviando, setEnviando] = useState(false);
@@ -49,9 +54,20 @@ export default function AuraCard() {
       setD(await r.json()); setEstado("ok");
       const f = await fetch("/api/academic/fila?status=pendente", { cache: "no-store" });
       setFila(f.ok ? (await f.json()).fila : null);
+      // Fila de validação dos cérebros (MAP_HARNESS): 404 com a flag off → some.
+      const fc = await fetch("/api/map/validacoes?status=pendente", { cache: "no-store" }).catch(() => null);
+      setFilaCerebro(fc?.ok ? (await fc.json()).validacoes : null);
     } catch { setEstado("erro"); }
   }, []);
   useEffect(() => { void carregar(); }, [carregar]);
+
+  const decidirCerebro = async (vId: string, status: "aprovada" | "rejeitada") => {
+    const comentario = status === "rejeitada" ? (window.prompt("Motivo (opcional):") ?? "") : "";
+    const r = await fetch(`/api/map/validacao/${vId}`, { method: "POST", headers: H, body: JSON.stringify({ status, comentario }) });
+    const d = await r.json().catch(() => ({}));
+    setMsg(r.ok ? (status === "aprovada" ? `Validado${d.credentialId ? " · atestado a caminho" : ""}.` : "Rejeitado — o aluno volta a estudar o nó.") : d?.error || "Não deu.");
+    void carregar();
+  };
 
   const onDoc = (f?: File) => {
     if (!f) return;
@@ -181,6 +197,49 @@ export default function AuraCard() {
           )}
         </div>
       </div>
+
+      {/* cérebros do aluno (percurso + duas barras) */}
+      {d.cerebros && d.cerebros.length > 0 && (
+        <div className={`${card} p-5`}>
+          <div className={`${label} mb-3`}>Cérebros · {d.cerebros.length}</div>
+          <ul className="flex flex-col gap-2.5">
+            {d.cerebros.map((c) => (
+              <li key={c.id} className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[13px] font-semibold truncate ${txt}`}>🧠 {c.titulo}</span>
+                  <span className={`text-[11px] ${mudo}`}>· {c.tipoTopico} · {c.passos} passos</span>
+                  {c.completo && <span className="ml-auto px-2 py-0.5 rounded-full border border-emerald-400/60 text-[10px] font-bold text-emerald-700 dark:text-emerald-200">completo</span>}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="h-1.5 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden" title={`aprendizado ${Math.round(c.aprendizado * 100)}%`}><div className="h-full bg-cyan-500 dark:bg-cyan-300" style={{ width: `${Math.round(c.aprendizado * 100)}%` }} /></div>
+                  <div className="h-1.5 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden" title={`conclusão ${Math.round(c.conclusao * 100)}%`}><div className="h-full bg-amber-500 dark:bg-amber-300" style={{ width: `${Math.round(c.conclusao * 100)}%` }} /></div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* fila de validação dos cérebros (professor vinculado) */}
+      {filaCerebro && (
+        <div className={`${card} p-5`}>
+          <div className={`${label} mb-3`}>Validações de estudo · {filaCerebro.length}</div>
+          {filaCerebro.length === 0 && <p className={`text-[12px] ${mudo}`}>Nenhum nó aguardando sua chancela.</p>}
+          <ul className="flex flex-col gap-2">
+            {filaCerebro.map((v) => (
+              <li key={v.id} className="flex flex-wrap items-center gap-2">
+                <span className={`text-[13px] font-semibold ${txt}`}>{v.aluno?.nome || v.aluno?.email || v.aluno?.id}</span>
+                <span className={`text-[12px] ${txt2}`}>· {v.estudo?.titulo ?? "estudo"} → <b>{v.no?.label ?? v.noId}</b></span>
+                {v.evidencia && <span className={`basis-full text-[12px] ${txt2} whitespace-pre-wrap`}>Evidência: {v.evidencia.slice(0, 600)}</span>}
+                <span className="ml-auto flex gap-1.5">
+                  <button type="button" onClick={() => void decidirCerebro(v.id, "aprovada")} className="min-h-[36px] px-3 rounded-xl text-[11px] font-black bg-emerald-500 text-slate-950">aprovar</button>
+                  <button type="button" onClick={() => void decidirCerebro(v.id, "rejeitada")} className="min-h-[36px] px-3 rounded-xl text-[11px] font-black border border-rose-400/60 text-rose-700 dark:text-rose-200">rejeitar</button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* fila do verificador (professor/instituição) */}
       {fila && (
