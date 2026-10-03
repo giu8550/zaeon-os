@@ -152,10 +152,10 @@ const StarBackground: React.FC = () => {
                         targetY = p.dnaY;
                     }
 
-                    if (phase === 4) { // Overheat apenas no DNA
-                        const isFlash = Math.sin(time * 40 + i) > 0;
-                        scale = isFlash ? 3 : 0.4;
-                        alpha = isFlash ? 1 : 0.2;
+                    if (phase === 4) { // "Overheat": pulso SUAVE e lento — SEM estrobo (risco de epilepsia)
+                        const pulse = 0.5 + 0.5 * Math.sin(time * 1.6 + i * 0.05);
+                        scale = 0.9 + pulse * 0.6;   // ~0.9–1.5, variação gentil
+                        alpha = 0.55 + pulse * 0.25; // ~0.55–0.8, sem piscar
                     }
                 }
                 // DESINTEGRAÇÃO (1 e 5)
@@ -192,11 +192,25 @@ const StarBackground: React.FC = () => {
             animationId = requestAnimationFrame(draw);
         };
 
+        // Acessibilidade: se o usuário pede menos movimento, fundo ESTÁTICO (sem animação/flash)
+        const reduceMotion = typeof window !== "undefined"
+            && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        const drawStatic = () => {
+            ctx.fillStyle = isDark ? "#010816" : "#ffffff";
+            ctx.fillRect(0, 0, width, height);
+            particles.forEach((p) => {
+                ctx.globalAlpha = isDark ? 0.5 : 0.3;
+                ctx.fillStyle = p.color;
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        };
+
         applyDPR();
         initParticles();
-        draw();
+        if (reduceMotion) drawStatic(); else draw();
 
-        const onResize = () => { applyDPR(); initParticles(); };
+        const onResize = () => { applyDPR(); initParticles(); if (reduceMotion) drawStatic(); };
         window.addEventListener("resize", onResize);
         return () => { cancelAnimationFrame(animationId); window.removeEventListener("resize", onResize); };
     }, [theme, resolvedTheme, mounted]);
