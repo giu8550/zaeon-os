@@ -1,5 +1,5 @@
 # 🌌 Zaeon OS (载恩 / 제온)
-### The Research Operating System — AI × Science × Web3
+### The Autonomous University — AI Agents that think, plan and produce.
 
 ![Zaeon Banner](public/zaeon-logo.png)
 
