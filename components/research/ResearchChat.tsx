@@ -25,6 +25,7 @@ import ThreadTabs from "@/components/study/ThreadTabs";
 import BolinhaCerebro from "@/components/cerebro/BolinhaCerebro";
 import CerebroPanel from "@/components/cerebro/CerebroPanel";
 import { useCerebro } from "@/components/cerebro/useCerebro";
+import { AnimatePresence } from "framer-motion";
 import {
   carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread, tocarThread,
   carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
@@ -103,6 +104,13 @@ export default function ResearchChat({
   // Cérebro da conversa ativa (HANDOFF_CEREBRO_AURA §3): bolinha + painel, atrás de NEXT_PUBLIC_MAP_HARNESS.
   const [cerebroAberto, setCerebroAberto] = useState(false);
   const cerebro = useCerebro(comAbas ? abaAtiva : null, { aberto: cerebroAberto });
+  // Clicar FORA do chat fecha o cérebro (o painel para a propagação do próprio mousedown).
+  useEffect(() => {
+    if (!cerebroAberto) return;
+    const h = (e: MouseEvent) => { const root = rootRef.current; if (root && !root.contains(e.target as Node)) setCerebroAberto(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [cerebroAberto]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -348,17 +356,25 @@ export default function ResearchChat({
           )}
         </div>
       )}
-      {cerebro.ligado && cerebroAberto && (
-        <CerebroPanel
-          st={cerebro}
-          onFechar={() => setCerebroAberto(false)}
-          onAbrirMensagem={(msgId) => {
-            setCerebroAberto(false);
-            // tap no nó → rola até a mensagem que o originou
-            requestAnimationFrame(() => rootRef.current?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(msgId)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
-          }}
-        />
-      )}
+      {/* ÁREA do chat (mensagens + composer). O cérebro abre em OVERLAY `absolute inset-0 z-50` DENTRO
+          dela — cobre mensagens e composer de propósito (visão focada) e nunca nasce atrás/abaixo do
+          composer, que está em fluxo sem z-index. A barra de conversas (com a bolinha) fica de fora,
+          pra bolinha continuar visível e alternar. Mobile: mesmo overlay. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+      <AnimatePresence>
+        {cerebro.ligado && cerebroAberto && (
+          <CerebroPanel
+            key="cerebro"
+            st={cerebro}
+            onFechar={() => setCerebroAberto(false)}
+            onAbrirMensagem={(msgId) => {
+              setCerebroAberto(false);
+              // tap na gaveta → rola até a mensagem que a originou e devolve o foco ao composer
+              requestAnimationFrame(() => { rootRef.current?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(msgId)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }); focarComposer(); });
+            }}
+          />
+        )}
+      </AnimatePresence>
       {/* Conversa — bolhas com cara de manuscrito (serif, texto justificado).
           Sem cabeçalho/X: a alternância chat ↔ trabalho é feita pela pill ⟁ Chat. */}
       <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-6">
@@ -438,6 +454,7 @@ export default function ResearchChat({
             )}
           </CoworkComposer>
         </div>
+      </div>
       </div>
     </div>
   );

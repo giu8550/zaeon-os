@@ -70,7 +70,7 @@ describe("runChatTurn", () => {
   it("contexto: systemContext + memória L3 + bússola da cartolina, nessa ordem", async () => {
     await runChatTurn(null, params(), () => {});
     expect(h.onStepOpts.systemContext).toBe("SYS\n\nMEM\n\nBUSSOLA");
-    expect(h.bussola).toHaveBeenCalledWith("u1", "t1");
+    expect(h.bussola).toHaveBeenCalledWith("u1", "t1", expect.any(String)); // o prompt alimenta a recuperação de memória
     expect(h.onStepOpts.history).toEqual([{ role: "user", text: "oi" }]);
   });
   it("o dono do turno vem do PARÂMETRO (o worker não tem sessão) e chega no ctx do harness", async () => {

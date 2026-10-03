@@ -64,7 +64,7 @@ export function normalizarBackbone(raw: unknown, tipoTopico: TipoTopico, nosExis
     const ja = existentes.get(id);
     if (ja) nos.push(ja);
     else nos.push({ id, label: p.label, tipo: p.tipo!, estado: "a_conquistar", peso: p.tipo === ARQUETIPOS[tipoTopico].noConclusao ? 1 : 0.8, msgIds: [], planejado: true, ...(p.corpo ? { corpo: p.corpo } : {}) });
-    if (anterior) arestas.push({ de: anterior, para: id, relacao: "pre_requisito" });
+    if (anterior) arestas.push({ de: anterior, para: id, relacao: "pre_requisito", tipoVisual: "percurso", peso: 1 });
     backbone.push(id);
     anterior = id;
   }

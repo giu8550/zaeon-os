@@ -6,14 +6,16 @@
  * msgIds → `onAbrirMensagem` (reabre a conversa que a originou).
  */
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
-import { X, RefreshCw, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { X, RefreshCw, Sparkles, MessageSquare } from "lucide-react";
 import { ARQUETIPOS } from "@/lib/map/arquetipo";
 import { proximoDoBackbone } from "@/lib/map/backbone";
 import { ROTULO } from "@/lib/map/bolinha";
 import { useIsMobile } from "@/lib/ui/useIsMobile";
 import type { MapaNo } from "@/lib/map/tipos";
 import { regioesDoMapa, type RegiaoVisual } from "./CerebroCanvas";
+import { recencia } from "@/lib/map/memoria";
 import type { CerebroState } from "./useCerebro";
 
 const CerebroCanvas = dynamic(() => import("./CerebroCanvas"), { ssr: false, loading: () => <div className="h-full w-full bg-[#060a1a]" /> });
@@ -46,19 +48,30 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
     } catch (e: any) { setAviso(e?.message ?? "Não deu."); } finally { setAplicando(null); }
   };
   const proximo = useMemo(() => (mapa ? proximoDoBackbone({ nos: mapa.nos, backbone: mapa.backbone, modoValidacao: mapa.modoValidacao }) : null), [mapa]);
-  const regioes = useMemo(() => (mapa ? regioesDoMapa(mapa.nos, mapa.backbone, proximo?.id ?? null, ARQUETIPOS[mapa.tipoTopico].gateHumano, st.recentes) : []), [mapa, proximo, st.recentes]);
-  const aoRegiao = (r: RegiaoVisual) => { const no = mapa?.nos.find((n) => n.id === r.id); const m = no?.msgIds?.at(-1); if (no && m && onAbrirMensagem) onAbrirMensagem(m, no); };
+  const { regioes, sinapses } = useMemo(() => (mapa ? regioesDoMapa(mapa.nos, mapa.backbone, proximo?.id ?? null, ARQUETIPOS[mapa.tipoTopico].gateHumano, st.recentes, mapa.arestas) : { regioes: [], sinapses: [] }), [mapa, proximo, st.recentes]);
+  // Tocar um nó abre a FICHA: closet + gavetas verbatim (memória) + "abrir a conversa".
+  const [fichaId, setFichaId] = useState<string | null>(null);
+  const ficha = useMemo(() => (mapa && fichaId ? mapa.nos.find((n) => n.id === fichaId) ?? null : null), [mapa, fichaId]);
+  const membros = useMemo(() => (mapa && ficha ? mapa.nos.filter((n) => n.id !== ficha.id && n.regiao === ficha.id && (n.drawers?.length ?? 0) > 0) : []), [mapa, ficha]);
+  const aoRegiao = (r: RegiaoVisual) => setFichaId((cur) => (cur === r.id ? null : r.id));
+  // Esc fecha (o X, o clique fora e a bolinha são tratados por quem monta o painel).
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [fichaId, onFechar]);
   const gerar = onGerar ?? (() => void st.gerar());
 
   return (
-    <div className="absolute inset-0 z-[60] flex flex-col bg-[#060a1a] text-[#dbe8ff]" role="dialog" aria-label="Cérebro do estudo">
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}
+      className="absolute inset-0 z-50 flex flex-col bg-[#060a1a] text-[#dbe8ff]" role="dialog" aria-modal="true" aria-label="Cérebro do estudo"
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       {/* cabeçalho */}
       <div className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-2.5">
         <span className="text-lg" aria-hidden>🧠</span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-bold">{mapa?.titulo || st.tituloSugerido || "Cérebro do estudo"}</p>
           <p className="truncate text-[11px] text-[#9fb6e0]">
-            {mapa ? `${ARQUETIPOS[mapa.tipoTopico].rotulo} · ${mapa.objetivo || "objetivo a definir"}` : "arraste pra girar · laranja é o que falta, azul é o que você domina"}
+            {mapa ? `${ARQUETIPOS[mapa.tipoTopico].rotulo} · ${mapa.objetivo || "objetivo a definir"}` : "arraste pra girar"}
+            <span className="ml-2 text-[#ffd56b]">— amarelo: pra onde ir</span><span className="ml-2 text-[#49b6ff]">· azul: o que já vive aqui</span>
           </p>
         </div>
         {st.estado !== "gerando" && mapa && (
@@ -69,7 +82,36 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
 
       {/* corpo por estado */}
       <div className="relative min-h-0 flex-1">
-        {st.estado === "ativa" && mapa && (mobile ? <Lista regioes={regioes} nos={mapa.nos} aoRegiao={aoRegiao} /> : <CerebroCanvas regioes={regioes} onRegiao={onAbrirMensagem ? aoRegiao : undefined} />)}
+        {st.estado === "ativa" && mapa && (mobile ? <Lista regioes={regioes} nos={mapa.nos} aoRegiao={aoRegiao} /> : <CerebroCanvas regioes={regioes} sinapses={sinapses} onRegiao={aoRegiao} />)}
+        {/* FICHA do nó: closet + gavetas (verbatim) + abrir a conversa */}
+        {ficha && (
+          <motion.aside initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} className="absolute bottom-3 right-3 top-3 z-10 flex w-[min(360px,88vw)] flex-col rounded-2xl border border-[rgba(120,170,255,.25)] bg-[rgba(10,21,38,.92)] backdrop-blur">
+            <div className="flex items-start gap-2 border-b border-white/10 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-bold">{ficha.label}</p>
+                <p className="text-[11px] text-[#9fb6e0]">{ficha.estado.replace("_", " ")}{ficha.closet && ficha.closet !== ficha.label ? ` · ${ficha.closet}` : ""}</p>
+              </div>
+              <button onClick={() => setFichaId(null)} aria-label="Fechar ficha" className="rounded-lg border border-white/15 p-1 text-[#9fb6e0] hover:text-white"><X size={14} /></button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {(ficha.drawers?.length ?? 0) === 0 && membros.length === 0 && <p className="text-[12px] text-[#9fb6e0]">Ainda sem memória aqui — o que você conversar sobre isto vira gaveta.</p>}
+              {[ficha, ...membros].map((n) => (n.drawers?.length ? (
+                <div key={n.id} className="mb-3">
+                  {n.id !== ficha.id && <p className="mb-1 text-[11px] font-bold text-[#78beff]">◦ {n.label}</p>}
+                  {[...n.drawers].reverse().map((d, i) => (
+                    <div key={i} className="mb-2 rounded-xl border border-[rgba(73,182,255,.25)] bg-[rgba(73,182,255,.06)] p-2.5">
+                      <p className="whitespace-pre-wrap text-[12px] leading-snug text-[#dbe8ff]">{d.texto}</p>
+                      <div className="mt-1.5 flex items-center justify-between text-[10px] text-[#9fb6e0]">
+                        <span>{d.ts ? new Date(d.ts).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}{d.ts && recencia(d.ts, Date.now()) > 0.7 ? " · recente" : ""}</span>
+                        {d.msgIds[0] && onAbrirMensagem && <button onClick={() => onAbrirMensagem(d.msgIds[0]!, n)} className="inline-flex items-center gap-1 text-[#9fe0ff] hover:underline"><MessageSquare size={11} /> abrir a conversa</button>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null))}
+            </div>
+          </motion.aside>
+        )}
         {st.estado === "gerando" && <Centro><Sparkles className="animate-pulse text-cyan-300" /><p className="text-sm font-semibold">Gerando o cérebro…</p><p className="text-[12px] text-[#9fb6e0]">classificando o tema e traçando o percurso</p></Centro>}
         {(st.estado === "sugerida" || st.estado === "vazia" || st.estado === "oculta") && (
           <Centro>
@@ -100,7 +142,7 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -129,7 +171,7 @@ function Lista({ regioes, nos, aoRegiao }: { regioes: RegiaoVisual[]; nos: MapaN
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COR[r.estado], boxShadow: `0 0 8px ${COR[r.estado]}` }} aria-hidden />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-semibold">{i + 1}. {r.label}</span>
-                <span className="block text-[11px] text-[#9fb6e0]">{r.estado.replace("_", " ")}{r.gate ? " · chancela" : ""}{r.aqui ? " · você está aqui" : ""}</span>
+                <span className="block text-[11px] text-[#9fb6e0]">{r.estado.replace("_", " ")}{r.gavetas ? ` · ${r.gavetas} gaveta${r.gavetas > 1 ? "s" : ""}` : ""}{r.gate ? " · chancela" : ""}{r.aqui ? " · você está aqui" : ""}</span>
               </span>
             </button>
           </li>

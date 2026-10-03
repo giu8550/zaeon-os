@@ -6,9 +6,16 @@
  * aqui, azul = aprendido/aplicado, quase-branco = validado. Arraste pra girar.
  */
 import { useEffect, useMemo, useRef } from "react";
-import type { EstadoNo, MapaNo } from "@/lib/map/tipos";
+import type { EstadoNo, MapaAresta, MapaNo } from "@/lib/map/tipos";
 
-export type RegiaoVisual = { id: string; label: string; estado: EstadoNo; aqui?: boolean; gate?: boolean; recente?: boolean };
+export type RegiaoVisual = {
+  id: string; label: string; estado: EstadoNo; aqui?: boolean; gate?: boolean; recente?: boolean;
+  /** MEMÓRIA (§4.3): quantos nós com gaveta vivem nesta região (→ sinapses azuis ao redor) e quantas gavetas no total. */
+  memoria?: number; gavetas?: number;
+};
+/** Sinapse entre regiões = aresta de memória entre nós de regiões diferentes (azul pulsante). */
+export type Sinapse = { a: number; b: number; peso: number };
+const AMARELO = "#ffd56b", AZUL = "#49b6ff";
 
 type Cor = "natocado" | "progresso" | "aprendido" | "aplicado" | "validado";
 const SCOL: Record<Cor, string> = { natocado: "#e88a2e", progresso: "#ffbe54", aprendido: "#78beff", aplicado: "#aadcff", validado: "#e0f4ff" };
@@ -59,11 +66,12 @@ function glow(size: number, core: string): HTMLCanvasElement {
 }
 const hexRgba = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 
-export default function CerebroCanvas({ regioes, onRegiao }: { regioes: RegiaoVisual[]; onRegiao?: (r: RegiaoVisual) => void }) {
+export default function CerebroCanvas({ regioes, sinapses = [], onRegiao }: { regioes: RegiaoVisual[]; sinapses?: Sinapse[]; onRegiao?: (r: RegiaoVisual) => void }) {
   const cvRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const regioesRef = useRef(regioes); regioesRef.current = regioes;
+  const sinapsesRef = useRef(sinapses); sinapsesRef.current = sinapses;
   const nReg = Math.max(1, regioes.length);
   const nuvem = useMemo(() => (typeof window === "undefined" ? null : construirNuvem(nReg)), [nReg]);
 
@@ -113,15 +121,38 @@ export default function CerebroCanvas({ regioes, onRegiao }: { regioes: RegiaoVi
         if (lit) { const f = Math.sin(t * 0.45 + s.ph * 6) * 0.5 + 0.5, pt = project(bez(s.a, s.ctrl, s.b, f)); ctx.globalAlpha = 0.95; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(pt.sx, pt.sy, 1.7, 0, 7); ctx.fill(); }
       }
       const proj = anc.map((p) => project({ x: p[0], y: p[1], z: p[2] }));
-      ctx.globalAlpha = 0.85; ctx.lineWidth = 2; ctx.strokeStyle = "rgba(130,200,255,0.5)"; ctx.beginPath();
-      proj.slice(0, regs.length).forEach((q, i) => (i ? ctx.lineTo(q.sx, q.sy) : ctx.moveTo(q.sx, q.sy))); ctx.stroke();
+      // ── SINAPSES AZUIS (memória, §4.3): entre regiões ligadas por memória — curvas puxadas pro centro,
+      //    pulsando de leve (vivo); e, ao redor de cada região, um pontinho azul por nó com gaveta.
+      for (const s of sinapsesRef.current) {
+        const A = anc[s.a], B = anc[s.b]; if (!A || !B || s.a >= regs.length || s.b >= regs.length) continue;
+        const ctrl = { x: (A[0] + B[0]) * 0.25, y: (A[1] + B[1]) * 0.25, z: (A[2] + B[2]) * 0.25 };
+        const pulso = 0.55 + 0.45 * Math.sin(t * 0.6 + (s.a + 1) * (s.b + 1));
+        ctx.strokeStyle = AZUL; ctx.lineWidth = 1 + 1.2 * s.peso; ctx.globalAlpha = 0.18 + 0.32 * pulso; ctx.beginPath();
+        for (let k = 0; k <= 10; k++) { const pt = project(bez({ x: A[0], y: A[1], z: A[2] } as P, ctrl, { x: B[0], y: B[1], z: B[2] } as P, k / 10)); k ? ctx.lineTo(pt.sx, pt.sy) : ctx.moveTo(pt.sx, pt.sy); }
+        ctx.stroke();
+        const f = (t * 0.25 + s.a * 0.37) % 1, pt = project(bez({ x: A[0], y: A[1], z: A[2] } as P, ctrl, { x: B[0], y: B[1], z: B[2] } as P, f));
+        ctx.globalAlpha = 0.9; ctx.fillStyle = AZUL; ctx.beginPath(); ctx.arc(pt.sx, pt.sy, 2, 0, 7); ctx.fill();
+      }
+      regs.forEach((n, i) => {
+        const m = Math.min(n.memoria ?? 0, 14); if (!m) return; const A = anc[i]!;
+        for (let k = 0; k < m; k++) {
+          const ang = (k / m) * Math.PI * 2 + i, r = 0.16 + 0.05 * ((k * 7) % 3);
+          const pt = project({ x: A[0] + Math.cos(ang) * r, y: A[1] + Math.sin(ang * 1.3) * r * 0.6, z: A[2] + Math.sin(ang) * r });
+          const pulso = 0.5 + 0.5 * Math.sin(t * 0.9 + k * 1.7 + i);
+          ctx.globalAlpha = 0.35 + 0.5 * pulso; ctx.strokeStyle = AZUL; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(proj[i]!.sx, proj[i]!.sy); ctx.lineTo(pt.sx, pt.sy); ctx.stroke();
+          ctx.fillStyle = AZUL; ctx.beginPath(); ctx.arc(pt.sx, pt.sy, 1.6 + 1.2 * pulso, 0, 7); ctx.fill();
+        }
+      });
+      // ── PERCURSO AMARELO (pré-requisito: pra onde ir) ──
+      ctx.globalAlpha = 0.9; ctx.lineWidth = 2.2; ctx.strokeStyle = AMARELO; ctx.shadowColor = AMARELO; ctx.shadowBlur = 8; ctx.beginPath();
+      proj.slice(0, regs.length).forEach((q, i) => (i ? ctx.lineTo(q.sx, q.sy) : ctx.moveTo(q.sx, q.sy))); ctx.stroke(); ctx.shadowBlur = 0;
       regs.forEach((n, i) => {
         const q = proj[i]; if (!q) return; const col = SCOL[cores[i]!];
         const puls = cores[i] === "progresso" || cores[i] === "validado" || i === goal ? 1 + 0.28 * Math.sin(t + i) : 1;
         const sz = 16 + 8 * puls; ctx.globalAlpha = 0.98; ctx.drawImage(glowCache(col), q.sx - sz / 2, q.sy - sz / 2, sz, sz);
         const vis = q.z > -0.95, c = chips[i]; if (!c) return;
         c.el.style.opacity = vis ? "1" : "0.25"; c.el.style.color = col; c.el.style.left = q.sx + "px"; c.el.style.top = q.sy + "px";
-        c.el.innerHTML = `<span class="dot"></span>${escapeHtml(n.label)}${n.gate ? ' <small>chancela</small>' : ""}${i === goal ? ' <span class="goal">◀ próximo</span>' : ""}`;
+        c.el.innerHTML = `<span class="dot"></span>${escapeHtml(n.label)}${n.gavetas ? ` <small style="color:${AZUL}">${n.gavetas} gaveta${n.gavetas > 1 ? "s" : ""}</small>` : ""}${n.gate ? ' <small>chancela</small>' : ""}${i === goal ? ' <span class="goal">◀ próximo</span>' : ""}`;
         c.here.style.left = q.sx + "px"; c.here.style.top = q.sy + "px"; c.here.style.opacity = n.aqui && vis ? "1" : "0";
       });
       ctx.globalAlpha = 1;
@@ -156,9 +187,28 @@ export default function CerebroCanvas({ regioes, onRegiao }: { regioes: RegiaoVi
 
 function escapeHtml(s: string): string { return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!)); }
 
-/** Regiões visuais a partir do mapa: os nós do backbone (ou os mais pesados, sem backbone). */
-export function regioesDoMapa(nos: MapaNo[], backbone: string[], proximoId: string | null, gateHumano: boolean, recentes: string[] = []): RegiaoVisual[] {
+/**
+ * Regiões visuais a partir do mapa: os nós do backbone (ou os mais pesados, sem backbone), com a
+ * memória agregada por região (nós com gaveta cuja `regiao` é a da região) e as sinapses entre regiões.
+ */
+export function regioesDoMapa(nos: MapaNo[], backbone: string[], proximoId: string | null, gateHumano: boolean, recentes: string[] = [], arestas: MapaAresta[] = []): { regioes: RegiaoVisual[]; sinapses: Sinapse[] } {
   const porId = new Map(nos.map((n) => [n.id, n]));
   const base = backbone.length ? backbone.map((id) => porId.get(id)).filter((n): n is MapaNo => !!n) : [...nos].sort((a, b) => b.peso - a.peso).slice(0, 6);
-  return base.map((n, i) => ({ id: n.id, label: n.label, estado: n.estado, aqui: n.id === proximoId, gate: gateHumano && i === base.length - 1, recente: recentes.includes(n.id) }));
+  const idxRegiao = new Map(base.map((n, i) => [n.id, i]));
+  const regiaoDe = (n: MapaNo): number | undefined => idxRegiao.get(n.id) ?? (n.regiao ? idxRegiao.get(n.regiao) : undefined);
+  const memoria = base.map(() => ({ nos: 0, gavetas: 0 }));
+  for (const n of nos) { const g = n.drawers?.length ?? 0; if (!g) continue; const r = regiaoDe(n); if (r === undefined) continue; memoria[r]!.nos++; memoria[r]!.gavetas += g; }
+  const vistas = new Map<string, Sinapse>();
+  for (const a of arestas) {
+    if ((a.tipoVisual ?? (a.relacao === "pre_requisito" ? "percurso" : "memoria")) !== "memoria") continue;
+    const x = porId.get(a.de), y = porId.get(a.para); if (!x || !y) continue;
+    const ra = regiaoDe(x), rb = regiaoDe(y); if (ra === undefined || rb === undefined || ra === rb) continue;
+    const k = ra < rb ? `${ra}-${rb}` : `${rb}-${ra}`;
+    const s = vistas.get(k); const peso = a.peso ?? 0.5;
+    if (s) s.peso = Math.min(1, s.peso + peso * 0.3); else vistas.set(k, { a: Math.min(ra, rb), b: Math.max(ra, rb), peso: Math.min(1, peso) });
+  }
+  return {
+    regioes: base.map((n, i) => ({ id: n.id, label: n.label, estado: n.estado, aqui: n.id === proximoId, gate: gateHumano && i === base.length - 1, recente: recentes.includes(n.id), memoria: memoria[i]!.nos, gavetas: memoria[i]!.gavetas })),
+    sinapses: [...vistas.values()],
+  };
 }

@@ -36,10 +36,24 @@ export type MapaNo = {
   msgIds: string[];
   /** Nó planejado pelo backbone (ainda sem turno que o realize). */
   planejado?: boolean;
+  /** MEMÓRIA (MemPalace sobre o grafo): gavetas = transcrições VERBATIM dos turnos que tocaram o nó. */
+  drawers?: Drawer[];
+  /** Closet = resumo curto do que vive no nó (sem LLM: o próprio corpo/label consolidado). */
+  closet?: string;
+  /** Último toque (ms epoch) — memória temporal (Zep): recência pesa na recuperação. */
+  tLast?: number;
 };
 
+/** Uma gaveta: o trecho verbatim (pergunta + núcleo da resposta) e as mensagens de origem. */
+export type Drawer = { msgIds: string[]; texto: string; ts: number };
+export const MAX_DRAWERS_POR_NO = 12;
+export const MAX_DRAWER_CHARS = 1200;
+
 export type RelacaoAresta = "pre_requisito" | "sustenta" | "leva_a" | "trata" | "ilustra" | "relacionado";
-export type MapaAresta = { de: string; para: string; relacao: RelacaoAresta };
+/** Encode visual (§4.3): "percurso" = AMARELO (pré-requisito, pra onde ir); "memoria" = AZUL pulsante (o que já vive aqui). */
+export type TipoVisualAresta = "percurso" | "memoria";
+export type MapaAresta = { de: string; para: string; relacao: RelacaoAresta; tipoVisual?: TipoVisualAresta; peso?: number };
+export const tipoVisualDe = (relacao: RelacaoAresta): TipoVisualAresta => (relacao === "pre_requisito" ? "percurso" : "memoria");
 
 /** O que sai do banco pronto pro painel/harness (sem Json cru). */
 export type MapaView = {
