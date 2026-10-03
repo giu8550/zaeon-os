@@ -152,10 +152,10 @@ const StarBackground: React.FC = () => {
                         targetY = p.dnaY;
                     }
 
-                    if (phase === 4) { // Overheat apenas no DNA
-                        const isFlash = Math.sin(time * 40 + i) > 0;
-                        scale = isFlash ? 3 : 0.4;
-                        alpha = isFlash ? 1 : 0.2;
+                    if (phase === 4) { // "Overheat": pulso SUAVE e lento — SEM estrobo (risco de epilepsia)
+                        const pulse = 0.5 + 0.5 * Math.sin(time * 1.6 + i * 0.05);
+                        scale = 0.9 + pulse * 0.6;
+                        alpha = 0.55 + pulse * 0.25;
                     }
                 }
                 // DESINTEGRAÇÃO (1 e 5)
