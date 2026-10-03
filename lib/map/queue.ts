@@ -21,9 +21,16 @@ export const CEREBRO_JOB_OPTIONS = {
 /** jobId determinístico: a mesma conversa nunca tem dois jobs vivos. */
 export const cerebroJobId = (userId: string, scopeId: string) => `${userId}:${scopeId}`.replace(/[^\w:.-]/g, "_");
 
+/**
+ * Só enfileira quando há um WORKER de pé que consuma a fila "cerebro" (CEREBRO_BG=1, mesmo padrão do
+ * CHAT_BG/SCHOLAR_BG). Antes bastava ter REDIS_URL — que o web sempre tem — e o job ficava no Redis pra
+ * sempre quando o worker não subia (bolinha presa em "gerando"). Sem a flag: a rota roda inline.
+ */
+export const cerebroBgOn = (): boolean => process.env.CEREBRO_BG === "1";
+
 let _queue: any = null;
 async function getQueue(): Promise<any | null> {
-  if (!isQueueEnabled()) return null;
+  if (!cerebroBgOn() || !isQueueEnabled()) return null;
   if (_queue) return _queue;
   const bull = await loadBullmq();
   if (!bull) return null;
