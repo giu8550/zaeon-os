@@ -30,6 +30,11 @@ const LoungeCartolina = dynamic(
   () => import("@/components/lounge/LoungeCartolina"),
   { ssr: false },
 );
+// Lounge 3D (co-working com avatares) — atrás de NEXT_PUBLIC_LOUNGE_3D (build-arg). Client-only (three/Pusher).
+const LoungeSala3D = dynamic(
+  () => import("@/components/lounge/LoungeSala3D"),
+  { ssr: false },
+);
 const ResearchesPage = dynamic(
   () => import("@/app/study-rooms/lounge/main-lounge/researches/page"),
   { ssr: false },
@@ -135,6 +140,7 @@ import {
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
+import { lounge3dOn } from "@/lib/lounge3d/tipos";
 import ResearchSubTabs, { PesquisasPills } from "./ResearchSubTabs";
 
 // Sala de Pesquisa UNIFICADA (Estudos + Pesquisa, sub-abas Chat · Estudos · Pesquisas).
@@ -2959,7 +2965,7 @@ export default function HomeworkPage({
             // 2a: a aba "lounge" agora é a CARTOLINA Caderno (coworking). O conteúdo antigo
             // (StudentLoungeContent/TeacherLoungeContent) foi substituído pela cartolina.
             <div className="relative w-full h-full">
-              <LoungeCartolina embedded />
+              {lounge3dOn() ? <LoungeSala3D /> : <LoungeCartolina embedded />}
             </div>
           )}
 
