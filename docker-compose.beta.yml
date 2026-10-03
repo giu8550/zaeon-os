@@ -64,6 +64,7 @@ services:
       MAP_HARNESS: ${MAP_HARNESS:-0}
       ESTUDO_GATEKEEPER: ${ESTUDO_GATEKEEPER:-0}
       AURA_ECONOMY: ${AURA_ECONOMY:-0}
+      CEREBRO_BG: "0"       # "1" SÓ com o worker de pé (profile worker): o job do cérebro vai pra fila "cerebro". 0 = gera inline no web.
     depends_on:
       redis: { condition: service_started }
       voice-engine: { condition: service_started }

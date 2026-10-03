@@ -32,6 +32,13 @@ describe("fila do cérebro", () => {
     expect(cerebroJobId("u1", "t1")).toBe(cerebroJobId("u1", "t1"));
     expect(CEREBRO_JOB_OPTIONS.attempts).toBe(2);
   });
+  it("sem CEREBRO_BG não enfileira (mesmo com Redis): rota cai no inline em vez de perder o job", async () => {
+    const { enqueueGenerateMap, cerebroBgOn } = await import("@/lib/map/queue");
+    delete process.env.CEREBRO_BG; process.env.REDIS_URL = "redis://x";
+    expect(cerebroBgOn()).toBe(false);
+    expect(await enqueueGenerateMap({ userId: "u", surface: "estudos", scopeId: "t1", topico: "x" })).toBe(false);
+    process.env.CEREBRO_BG = "1"; expect(cerebroBgOn()).toBe(true); delete process.env.CEREBRO_BG;
+  });
   it("processCerebroJob: gera → liga a conversa → avisa; falha ao ligar não derruba", async () => {
     const generateMap = vi.fn(async (_i: any) => ({ mapa: { id: "m1", backbone: ["a", "b", "c"], tipoTopico: "conceitual" }, degraded: false }));
     const ligar = vi.fn(async () => { throw new Error("db"); });
