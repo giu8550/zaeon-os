@@ -6,7 +6,7 @@
  * msgIds → `onAbrirMensagem` (reabre a conversa que a originou).
  */
 import dynamic from "next/dynamic";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { X, RefreshCw, Sparkles } from "lucide-react";
 import { ARQUETIPOS } from "@/lib/map/arquetipo";
 import { proximoDoBackbone } from "@/lib/map/backbone";
@@ -21,13 +21,30 @@ const CerebroCanvas = dynamic(() => import("./CerebroCanvas"), { ssr: false, loa
 const COR: Record<string, string> = { a_conquistar: "#e88a2e", aprendido: "#78beff", aplicado: "#aadcff", validado: "#e0f4ff" };
 
 export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }: {
-  st: CerebroState & { gerar: (t?: string) => Promise<void> };
+  st: CerebroState & { gerar: (t?: string) => Promise<void>; refetch: (r?: string[]) => Promise<void> };
   onFechar: () => void;
   onGerar?: () => void;
   onAbrirMensagem?: (msgId: string, no: MapaNo) => void;
 }) {
   const mobile = useIsMobile();
   const mapa = st.mapa;
+  const [aplicando, setAplicando] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  // "Apliquei": o aluno marca o próximo nó do percurso como aplicado (com evidência). Modo humana →
+  // vai pra fila do professor; outros modos → o gate é automático.
+  const aplicar = async (no: MapaNo) => {
+    if (!mapa) return;
+    const evidencia = window.prompt(`Como você aplicou "${no.label}"? Descreva a evidência (dados, resultado, link):`) ?? null;
+    if (evidencia === null) return;
+    setAplicando(no.id); setAviso(null);
+    try {
+      const r = await fetch(`/api/map/${mapa.id}/node/${encodeURIComponent(no.id)}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ evidencia }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`);
+      setAviso(d.validacao ? "Enviado pra validação do seu professor." : "Aplicado! O percurso avançou.");
+      await st.refetch([no.id]);
+    } catch (e: any) { setAviso(e?.message ?? "Não deu."); } finally { setAplicando(null); }
+  };
   const proximo = useMemo(() => (mapa ? proximoDoBackbone({ nos: mapa.nos, backbone: mapa.backbone, modoValidacao: mapa.modoValidacao }) : null), [mapa]);
   const regioes = useMemo(() => (mapa ? regioesDoMapa(mapa.nos, mapa.backbone, proximo?.id ?? null, ARQUETIPOS[mapa.tipoTopico].gateHumano, st.recentes) : []), [mapa, proximo, st.recentes]);
   const aoRegiao = (r: RegiaoVisual) => { const no = mapa?.nos.find((n) => n.id === r.id); const m = no?.msgIds?.at(-1); if (no && m && onAbrirMensagem) onAbrirMensagem(m, no); };
@@ -60,6 +77,20 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
             <p className="max-w-sm text-[12px] text-[#9fb6e0]">{st.erro ? `Última tentativa falhou: ${st.erro}` : "O cérebro nasce quando você pede: a Aura classifica o tema, traça o percurso e, a cada resposta, acende o que você aprendeu."}</p>
             {st.estado !== "oculta" && <button onClick={gerar} className="mt-2 rounded-xl border border-cyan-300/40 bg-cyan-500/15 px-4 py-2 text-[13px] font-bold text-cyan-100 hover:bg-cyan-500/25">{st.erro ? "Tentar de novo" : ROTULO[st.estado]}</button>}
           </Centro>
+        )}
+        {/* ação do aluno: aplicar o próximo nó do percurso */}
+        {mapa && st.estado === "ativa" && proximo && (
+          <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
+            <button
+              onClick={() => void aplicar(proximo)}
+              disabled={aplicando === proximo.id || proximo.estado === "aplicado"}
+              className="rounded-xl border border-amber-300/50 bg-amber-500/15 px-3 py-1.5 text-[12px] font-bold text-amber-100 hover:bg-amber-500/25 disabled:opacity-50"
+              title={proximo.estado === "aplicado" ? "Aguardando validação" : `Marcar "${proximo.label}" como aplicado`}
+            >
+              {proximo.estado === "aplicado" ? "⏳ aguardando validação" : `✓ Apliquei: ${proximo.label}`}
+            </button>
+            {aviso && <span className="rounded-lg bg-black/50 px-2 py-1 text-[11px] text-[#cfe0ff]">{aviso}</span>}
+          </div>
         )}
         {/* barras (sempre que há mapa) */}
         {mapa && st.estado === "ativa" && !mobile && (
