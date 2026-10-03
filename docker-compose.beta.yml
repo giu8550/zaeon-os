@@ -33,6 +33,7 @@ services:
         NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM: ${NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM:-0}
         NEXT_PUBLIC_MAP_HARNESS: ${NEXT_PUBLIC_MAP_HARNESS:-0}
         NEXT_PUBLIC_LOUNGE_3D: ${NEXT_PUBLIC_LOUNGE_3D:-0}
+        NEXT_PUBLIC_AURA_ECONOMY: ${NEXT_PUBLIC_AURA_ECONOMY:-0}
     container_name: zaeon_web
     # .env = base (vive no VPS). .env.secrets = segredos de runtime escritos pelo
     # deploy a partir dos GitHub Actions secrets (ex.: GOOGLE_CREDENTIALS). O último vence.
@@ -58,6 +59,11 @@ services:
       SCHOLAR_BG: "0"
       CHAT_BG: "0"          # Fase 3: chat da Aura em background. Só ligue com o worker de pé.
       SCHOLAR_WORKER: "0"
+      # Flags de SERVIDOR (runtime) do cérebro/AURA: vêm das Variables do repo (deploy.yml exporta) ou do
+      # .env do VPS; default 0. Rollback = Variable "0" + redeploy (não precisa rebuild).
+      MAP_HARNESS: ${MAP_HARNESS:-0}
+      ESTUDO_GATEKEEPER: ${ESTUDO_GATEKEEPER:-0}
+      AURA_ECONOMY: ${AURA_ECONOMY:-0}
     depends_on:
       redis: { condition: service_started }
       voice-engine: { condition: service_started }
