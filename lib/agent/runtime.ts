@@ -4,8 +4,8 @@
  * ToolDef / ToolResult / runTool + o middleware permit() (DENY-BY-DEFAULT). Ponto ÚNICO de
  * gating: risco × plano (minPlan) × GPU-por-demanda × execMode. `runTool` NUNCA lança — tool
  * que estoura/nega/expira vira `{ok:false,error,code}`. Registra as tools da Fase 0 como ToolDef
- * (`studio_generate`, `research_generate`) + stubs (`memory_search` free, `literature_search`
- * python-F2, `examiner`). Tipos ricos: importe de contracts.ts; NÃO reinvente.
+ * (`studio_generate`, `research_generate`, `literature_search` real via lib/scholar) + stubs
+ * (`memory_search` free, `examiner`). Tipos ricos: importe de contracts.ts; NÃO reinvente.
  */
 import type { FunctionDeclaration } from "@google-cloud/vertexai";
 import type { AgentContext } from "@/lib/agent/context";
@@ -52,6 +52,8 @@ export interface ToolDef {
   minPlan: Plan;
   demandGpu?: boolean;
   schema: FunctionDeclaration; // o que o Gemini (function-calling) enxerga
+  /** Teto próprio (ms); sem ele vale o default do runtime. Busca em 4–5 bases precisa de mais que 20s. */
+  timeoutMs?: number;
   run(args: any, ctx: ToolContext): Promise<ToolResult>;
 }
 
@@ -106,7 +108,7 @@ export async function runTool(
       const ok = opts?.approve ? await opts.approve(def, args, ctx).catch(() => false) : false;
       if (!ok) return err("aprovação necessária", "needs_approval");
     }
-    const res = await withTimeout(def.run(args, ctx), TIMEOUT_MS[def.runtime] ?? 20_000);
+    const res = await withTimeout(def.run(args, ctx), def.timeoutMs ?? TIMEOUT_MS[def.runtime] ?? 20_000);
     if (!res || typeof res.ok !== "boolean") return err("resultado inválido da tool", "bad_tool_result");
     if (!res.provenance) res.provenance = {};
     return res;
@@ -212,15 +214,62 @@ export const memorySearchDef: ToolDef = {
   },
 };
 
-/** literature_search — STUB (F2: microserviço Python; roda no VPS/CI, não no mac). */
+/**
+ * literature_search — busca REAL de literatura acadêmica. Antes era um stub ("skill_offline") e a
+ * Aura respondia "a busca não pôde ser utilizada"; a busca já existia e é gratuita:
+ * lib/scholar/retrieve.ts agrega OpenAlex, Crossref, arXiv, PubMed (sem API key) + Semantic Scholar
+ * (key opcional) — é a mesma da Sala de Pesquisa (/api/ai/scholar). Roda em TS no Node; nada de Python.
+ * Cada paper vira um Finding com fonte (título/url/autores/ano) pro harness citar.
+ */
+export const LITERATURE_MAX = 10;
+export function papersToFindings(papers: Array<{ title: string; authors?: string[]; year?: number; url?: string; doi?: string; abstract?: string; sources?: string[]; citationCount?: number }>, max = LITERATURE_MAX): Finding[] {
+  return papers.slice(0, max).map((p) => {
+    const url = p.url || (p.doi ? `https://doi.org/${p.doi}` : undefined);
+    const resumo = (p.abstract || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    const n = p.sources?.length ?? 1;
+    return {
+      claim: `${p.title}${p.year ? ` (${p.year})` : ""}${resumo ? ` — ${resumo}${resumo.length >= 240 ? "…" : ""}` : ""}`,
+      source: { title: p.title, ...(url ? { url } : {}), ...(p.authors?.length ? { authors: p.authors.slice(0, 4).join(", ") } : {}), ...(p.year ? { year: p.year } : {}) },
+      // corroborado por ≥2 bases ou muito citado = alta; 1 base = média
+      confidence: n >= 2 || (p.citationCount ?? 0) >= 50 ? "alta" : "média",
+    };
+  });
+}
+
 export const literatureSearchDef: ToolDef = {
   name: "literature_search",
-  runtime: "python",
+  runtime: "ts",
   risk: "read",
   minPlan: "free",
-  schema: stubSchema("literature_search", "Busca literatura acadêmica (papers/fontes) — microserviço de skills (Fase 2)."),
-  async run() {
-    return { ok: false, error: "busca de literatura ainda não disponível", code: "skill_offline", provenance: {} };
+  timeoutMs: 45_000,
+  schema: {
+    name: "literature_search",
+    description: "Busca literatura acadêmica real (OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar) e devolve papers com título, ano, autores e link para citar.",
+    parameters: {
+      type: "OBJECT" as any,
+      properties: {
+        query: { type: "STRING" as any, description: "tema/pergunta de pesquisa (de preferência em inglês, como aparece nos papers)" },
+        domain: { type: "STRING" as any, description: "área (cs, med, bio, phys, eng…) — escolhe as bases prioritárias" },
+      },
+      required: ["query"],
+    },
+  },
+  async run(args) {
+    const query = String(args?.query ?? "").trim();
+    if (!query) return { ok: false, error: "consulta vazia", code: "bad_args", provenance: {} };
+    const domain = typeof args?.domain === "string" ? args.domain : undefined;
+    try {
+      const { retrievePapers } = await import("@/lib/scholar/retrieve");
+      const r = await retrievePapers(query, { domain, minResults: 6 });
+      if (!r.papers.length) return { ok: false, error: "nenhum paper encontrado para a consulta", code: "no_results", provenance: { toolsUsed: ["literature_search"], at: nowIso() } };
+      const findings = papersToFindings(r.papers);
+      return {
+        ok: true, findings,
+        provenance: { toolsUsed: ["literature_search"], at: nowIso(), sources: findings.map((f) => f.source!).filter(Boolean) },
+      };
+    } catch (e: any) {
+      return { ok: false, error: `busca de literatura falhou: ${e?.message ?? e}`, code: "skill_error", provenance: {} };
+    }
   },
 };
 
