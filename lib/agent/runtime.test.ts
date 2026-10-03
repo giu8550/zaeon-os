@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   permit,
   runTool,
@@ -95,6 +95,29 @@ describe("runtime · registry + tools Fase 0", () => {
     const r = await runToolByName("memory_search", { query: "x" }, ctx({ plan: "free" }));
     expect(r.ok).toBe(false);
     expect(r.code).toBe("memory_unavailable");
+  });
+  it("literature_search é REAL: chama retrievePapers e devolve findings com fonte; vazio → no_results; erro → skill_error", async () => {
+    const mod = await import("@/lib/scholar/retrieve");
+    const spy = vi.spyOn(mod, "retrievePapers").mockResolvedValue({
+      papers: [
+        { id: "1", title: "Privacy in high-performance blockchains", authors: ["A", "B", "C", "D", "E"], year: 2024, doi: "10.1/x", abstract: "We study…", openAccess: true, sources: ["openalex", "crossref"] },
+        { id: "2", title: "Zero-knowledge rollups", authors: [], openAccess: false, sources: ["arxiv"], url: "https://arxiv.org/abs/2" },
+      ] as any, perSource: [], reachedMin: false,
+    });
+    const r = await runToolByName("literature_search", { query: "privacidade em blockchain de alta performance", domain: "cs" }, ctx({ plan: "free" }));
+    expect(r.ok).toBe(true);
+    expect(spy).toHaveBeenCalledWith("privacidade em blockchain de alta performance", expect.objectContaining({ domain: "cs" }));
+    expect(r.findings).toHaveLength(2);
+    expect(r.findings![0]).toMatchObject({ confidence: "alta", source: { title: "Privacy in high-performance blockchains", url: "https://doi.org/10.1/x", year: 2024, authors: "A, B, C, D" } });
+    expect(r.findings![0]!.claim).toMatch(/\(2024\) — We study/);
+    expect(r.findings![1]).toMatchObject({ confidence: "média", source: { url: "https://arxiv.org/abs/2" } });
+    expect((r.provenance as any).sources).toHaveLength(2);
+    spy.mockResolvedValue({ papers: [], perSource: [], reachedMin: false });
+    expect((await runToolByName("literature_search", { query: "zzz" }, ctx())).code).toBe("no_results");
+    spy.mockRejectedValue(new Error("rede"));
+    expect((await runToolByName("literature_search", { query: "zzz" }, ctx())).code).toBe("skill_error");
+    expect((await runToolByName("literature_search", { query: "" }, ctx())).code).toBe("bad_args");
+    spy.mockRestore();
   });
   it("tool desconhecida → unknown_tool (deny-by-default)", async () => {
     const r = await runToolByName("does_not_exist", {}, ctx());
