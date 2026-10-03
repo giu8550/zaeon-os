@@ -717,6 +717,11 @@ model Conversation {
   agentId   String?       // qual agente do roster (aura | revisor | escritor)
   title     String?
   pinned    Boolean       @default(false)
+  // Cérebro (docs/HANDOFF_CEREBRO_AURA.md §2): o gatekeeper marca a conversa como estudável e
+  // sugere um título; `mapaId` aponta pro MapaProbabilistico quando o aluno materializa o cérebro.
+  estudavel      Boolean  @default(false)
+  tituloSugerido String?
+  mapaId         String?  @db.ObjectId
   messages  ChatMessage[]
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
@@ -1082,6 +1087,35 @@ model CanalMensagem {
 }
 
 // ─── AURA: a economia de reputação (ver lib/aura/*) ───────────────────────────────
+// ─────────────────────────── CÉREBRO · grafo de conhecimento por estudo ───────────────────────────
+// docs/HANDOFF_CEREBRO_AURA.md. Um estudo (scopeId) = UM grafo = o cérebro. É a FONTE ÚNICA de
+// memória do estudo: a cartolina, o visor e os artefatos são PROJEÇÕES dele (card.id === nó.id).
+// `nos`/`arestas` são Json (MapaNo[]/MapaAresta[], lib/map/tipos.ts); `rev` = controle otimista.
+model MapaProbabilistico {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId   String   @db.ObjectId
+  surface   String   // "estudos" | "pesquisa"
+  scopeId   String   // a conversa/estudo (mesmo scope da Cartolina e da Conversation)
+  titulo    String   @default("Estudo")
+  // Passo 0 do generateMap (§4): arquétipo + objetivo delimitado + como se conclui.
+  tipoTopico        String @default("exploratorio") // aplicavel|habilidade|conceitual|exploratorio|criativo
+  objetivo          String @default("")
+  modoValidacao     String @default("nenhuma")      // humana|rubrica|quiz|peer|cobertura|nenhuma
+  criterioCompletude String @default("")
+  nos       Json     // MapaNo[]
+  arestas   Json     // MapaAresta[]
+  backbone  String[] // ids de nós ordenados = o percurso (vazio até o chain worker gerar)
+  completudeAprendizado Float @default(0)
+  completudeConclusao   Float @default(0)
+  rev       Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerId, surface, scopeId])
+  @@index([ownerId, surface, updatedAt])
+  @@map("mapas_probabilisticos")
+}
+
 // Livro-razão append-only: cada conquista VERIFICADA vira um evento; o saldo é a soma
 // (cache em User.aura). Nunca escrito pelo cliente nem por "atividade" — só por transições
 // que já existem no banco (nós do mapa, credenciais). Reversão = evento negativo.
