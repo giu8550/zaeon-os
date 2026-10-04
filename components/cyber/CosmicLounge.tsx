@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { corDoUsuario } from "@/lib/lounge3d/tipos";
 import { temWebGL } from "@/lib/ui/globo";
-import { LAB_ROTA } from "@/lib/ui/loungeHub";
+import { LAB_ENTRADA } from "@/lib/ui/loungeHub";
 import { useResolverSala } from "@/components/lounge/useResolverSala";
 import { useSala3D } from "@/components/lounge/useSala3D";
 import CenaCyber from "./CenaCyber";
@@ -28,7 +28,7 @@ function SemWebGL() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[#03030a] px-6 text-center text-sm text-white/70">
       Este aparelho não suporta o cyberespaço 3D.
-      <button type="button" onClick={() => router.push(LAB_ROTA)} className="min-h-[44px] rounded-full bg-cyan-400 px-5 font-semibold text-slate-950">Ir para a Sala de Estudos</button>
+      <button type="button" onClick={() => router.push(LAB_ENTRADA)} className="min-h-[44px] rounded-full bg-cyan-400 px-5 font-semibold text-slate-950">Ir para a Sala de Estudos</button>
     </div>
   );
 }

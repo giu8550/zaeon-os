@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LAB_ROTA, MSG_ENTRAR_ESTUDO, ehMsgEntrarEstudo } from "@/lib/ui/loungeHub";
+import { LAB_ENTRADA, MSG_ENTRAR_ESTUDO, ehMsgEntrarEstudo } from "@/lib/ui/loungeHub";
 import type { MensagemChat, Presenca } from "@/lib/lounge3d/tipos";
 import { CyberEngine, type PessoaCyber } from "./engine";
 import Joystick from "./Joystick";
@@ -50,13 +50,18 @@ export default function CenaCyber(p: CenaCyberProps) {
 
   // callbacks sempre frescos sem recriar a engine
   const cb = useRef(p); cb.current = p;
-  // contrato: a intenção sai como postMessage({type:"zaeon:enter-study"}) (mesma origem) → router.push("/research-lab")
+  // contrato: a intenção sai como postMessage({type:"zaeon:enter-study"}) (mesma origem) → router.push("/research-lab?tab=pesquisa")
   const entrarEstudo = useCallback(() => { window.postMessage({ type: MSG_ENTRAR_ESTUDO }, window.location.origin); }, []);
   useEffect(() => {
-    let t: ReturnType<typeof setTimeout> | undefined;
-    const onMsg = (e: MessageEvent) => { if (ehMsgEntrarEstudo(e.data, e.origin, window.location.origin)) { setAbrindo(true); t = setTimeout(() => router.push(LAB_ROTA), 700); } };
+    const onMsg = (e: MessageEvent) => {
+      if (!ehMsgEntrarEstudo(e.data, e.origin, window.location.origin)) return;
+      // O cyberespaço é pesado (WebGL + GLB): ao ir estudar ele é DESMONTADO já — nada de ficar vivo no background.
+      engine.current?.dispose(); engine.current = null;
+      setAbrindo(true);
+      router.push(LAB_ENTRADA);   // primeira tela do laboratório = aba de Pesquisa
+    };
     window.addEventListener("message", onMsg);
-    return () => { window.removeEventListener("message", onMsg); if (t) clearTimeout(t); };
+    return () => window.removeEventListener("message", onMsg);
   }, [router]);
 
   useEffect(() => {
@@ -164,7 +169,15 @@ export default function CenaCyber(p: CenaCyberProps) {
         </>
       )}
 
-      {abrindo && <div role="status" className="absolute inset-0 z-40 flex items-center justify-center bg-[#04040c]/60 text-[15px] tracking-[0.12em] text-sky-100 backdrop-blur-sm">abrindo a Sala de Estudos…</div>}
+      {/* entrando nos estudos: SÓ uma barra de loading, nenhum texto */}
+      {abrindo && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#03030a]">
+          <div role="progressbar" aria-label="Carregando" className="h-1.5 w-[220px] overflow-hidden rounded-full bg-white/10">
+            <div className="h-full w-1/3 animate-[cyber-entrando_1.2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-cyan-200 to-sky-400" />
+          </div>
+          <style>{`@keyframes cyber-entrando{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}`}</style>
+        </div>
+      )}
       {!pronto && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[#03030a]">
           <div className="h-1.5 w-[220px] overflow-hidden rounded-full bg-white/10"><div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-cyan-200 to-sky-400" /></div>

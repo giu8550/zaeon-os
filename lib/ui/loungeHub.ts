@@ -4,6 +4,8 @@
  */
 export const LOUNGE_ROTA = "/lounge-cosmico";
 export const LAB_ROTA = "/research-lab";
+/** Ao entrar no laboratório pelo cyberespaço, a primeira tela é a aba de Pesquisa (o ?tab= explícito vence a última aba salva). */
+export const LAB_ENTRADA = "/research-lab?tab=pesquisa";
 /** Contrato de navegação cyberespaço → laboratório (botão Estudar / clique no monitor). */
 export const MSG_ENTRAR_ESTUDO = "zaeon:enter-study";
 export const ehMsgEntrarEstudo = (data: unknown, origin: string, esperada: string): boolean =>

@@ -1,6 +1,6 @@
 # Cyberespaço (ex-Lounge Cósmico) — estado e arquitetura
 
-Entrada da Zaeon em produção, **sem flag**. Espec visual original: handoff "Lounge Cósmico + Base de Estudo" (protótipo em `docs/prototypes/cosmic-map.html`, que segue como referência; `public/cosmic-map.html` é cópia de dev).
+Entrada da Zaeon em produção, **sem flag**. Espec visual original: handoff "Lounge Cósmico + Base de Estudo" (protótipo em `docs/prototypes/cosmic-map.html`, que segue como referência; (a cópia em `public/` foi removida: o cyberespaço é o componente `CosmicLounge`)).
 
 ## Rotas e telas
 - `/lounge-cosmico` — tela cheia imersiva (Navbar some: `lib/ui/loungeHub.ehRotaImersiva`). Só logado; pede o **nome de usuário** 1x (`POST /api/user/nome` → `User.name` + `onboardingComplete`, sem mudança de schema). Depois monta `<CosmicLounge modo="tela"/>`.

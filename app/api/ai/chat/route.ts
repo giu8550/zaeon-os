@@ -88,7 +88,6 @@ const ROOM_MAP: Record<string, { tab: string; label: string }> = {
     "zaeon-code": { tab: "projetos", label: "Projetos (Zaeon Code)" },
     "pesquisas-salvas": { tab: "pesquisas", label: "Pesquisas salvas" },
     "pesquisas": { tab: "pesquisas", label: "Pesquisas salvas" },
-    "lounge": { tab: "lounge", label: "Lounge" },
     "sala-de-aula": { tab: "pevem", label: "Sala de Aula" },
     "aulas": { tab: "pevem", label: "Sala de Aula" },
     "perfil": { tab: "profile", label: "Perfil" },

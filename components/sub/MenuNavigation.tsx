@@ -705,7 +705,7 @@ export default function MenuNavigation() {
                   {canUseProjects && renderModule("projetos", "Projetos", recentProjects, "Novo projeto", "/research-lab?tab=projetos")}
 
                   {/* LOUNGE — co-criar com amigos */}
-                  {renderModule("lounge", "Lounge", [], "Criar em conjunto", "/research-lab?tab=lounge")}
+                  {renderModule("lounge", "Cyberespaço", [], "Entrar no cyberespaço", LOUNGE_ROTA)}
 
                   {/* OPTIONS — concentra voz, idioma, convite, founder e logout */}
                   <li className="w-full" onClick={() => setIsOptionsOpen(true)}>
