@@ -178,7 +178,7 @@ export class CyberEngine {
     on("keydown", (e) => {
       if (this.digitando() || (!this.o.teclasSempre && !this.sobContainer)) return; const k = e.key.toLowerCase();
       if (k === "shift") { this.keys.shift = true; return; }
-      if (k === " " || k === "spacebar") { if (this.menu) this.espaco = true; else this.pular(); e.preventDefault(); return; }
+      if (k === " " || k === "spacebar") { if (!this.menu) { this.pular(); e.preventDefault(); } return; }   // na vista (landing) o ESPAÇO não faz nada e a página rola normal
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { this.keys[k] = true; e.preventDefault(); }
     });
     on("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "shift") { this.keys.shift = false; return; } if (k === " " || k === "spacebar") { this.espaco = false; return; } this.keys[k] = false; });

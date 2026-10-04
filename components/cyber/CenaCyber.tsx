@@ -24,29 +24,18 @@ export type CenaCyberProps = {
   onSessaoIniciada?: () => void;
 };
 
-const FRASES = ["O conhecimento que não dorme trabalha por você.", "Toda descoberta começa com uma pergunta.", "Aqui, estudar é explorar o cosmos.", "Pequenos passos diários viram galáxias.", "A mente curiosa nunca anoitece."];
-const OPCOES = [["estudar", "✦", "Estudar"], ["pesquisar", "🔭", "Pesquisar"], ["projetos", "🛠", "Projetos"], ["comunidade", "👥", "Comunidade"]] as const;
 
 export default function CenaCyber(p: CenaCyberProps) {
   const router = useRouter();
   const tela = p.modo === "tela";
   const cont = useRef<HTMLDivElement>(null), overlay = useRef<HTMLDivElement>(null);
-  const menuEl = useRef<HTMLDivElement>(null), holdEl = useRef<HTMLDivElement>(null), monLabel = useRef<HTMLDivElement>(null);
+  const monLabel = useRef<HTMLDivElement>(null);
   const engine = useRef<CyberEngine | null>(null);
   const [pronto, setPronto] = useState(false), [perto, setPerto] = useState(false), [menu, setMenu] = useState(!tela);
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
   const [correndo, setCorrendo] = useState(false), [txt, setTxt] = useState(""), [falha, setFalha] = useState(false);
   const touch = useMemo(() => typeof window !== "undefined" && (matchMedia("(pointer:coarse)").matches || "ontouchstart" in window), []);
   const low = useMemo(() => touch || (typeof window !== "undefined" && Math.min(innerWidth, innerHeight) < 520), [touch]);
-  const frase = useMemo(() => FRASES[Math.floor(Math.random() * FRASES.length)]!, []);
-  // a frase se forma como um header (typewriter, ~34ms por letra)
-  const [escrita, setEscrita] = useState(0);
-  useEffect(() => {
-    if (!menu) return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setEscrita(frase.length); return; }
-    const id = setInterval(() => setEscrita((n) => { if (n >= frase.length) { clearInterval(id); return n; } return n + 1; }), 34);
-    return () => clearInterval(id);
-  }, [menu, frase]);
 
   // callbacks sempre frescos sem recriar a engine
   const cb = useRef(p); cb.current = p;
@@ -68,7 +57,7 @@ export default function CenaCyber(p: CenaCyberProps) {
     if (!cont.current || !overlay.current) return;
     let cancelado = false, e: CyberEngine | null = null;
     CyberEngine.criar({
-      container: cont.current, overlay: overlay.current, els: { menu: menuEl.current, hold: holdEl.current, monLabel: monLabel.current },
+      container: cont.current, overlay: overlay.current, els: { menu: null, hold: null, monLabel: monLabel.current },
       eu: cb.current.eu, membros: cb.current.membros, menu: !tela, low, teclasSempre: tela,
       remotos: cb.current.remotos, enviarPos: (x) => cb.current.enviarPos?.(x),
       onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
@@ -109,24 +98,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* rótulo do monitor (hover) */}
       <div ref={monLabel} className="pointer-events-none absolute z-[22] hidden -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full bg-gradient-to-b from-cyan-100 to-sky-400 px-3 py-1.5 text-[12.5px] font-bold text-slate-950 shadow-[0_0_18px_rgba(90,200,255,.7)] data-[longe=true]:border data-[longe=true]:border-sky-300/35 data-[longe=true]:bg-slate-900/80 data-[longe=true]:from-transparent data-[longe=true]:to-transparent data-[longe=true]:text-sky-100 data-[longe=true]:shadow-none" />
 
-      {/* MENU de jogo: projetado no monitor; opção = play (ou segurar ESPAÇO) */}
-      {!tela && (
-        <>
-          {menu && <p className="pointer-events-none absolute inset-x-0 top-[11%] z-[6] px-6 text-center text-[clamp(16px,2.6vw,26px)] font-light text-white/90 [text-shadow:0_0_24px_rgba(120,170,255,.5)]">{frase.slice(0, escrita)}<span aria-hidden="true" className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[0.12em] animate-pulse bg-sky-200" /></p>}
-          <div ref={menuEl} className={`${menu ? "flex" : "hidden"} absolute z-[6] min-w-[190px] -translate-x-1/2 -translate-y-1/2 flex-col gap-1.5 rounded-2xl border border-sky-300/30 bg-[#0a0e22]/80 p-3 backdrop-blur`}>
-            <span className="px-1 text-[10px] tracking-[0.3em] text-sky-300/80">ZAEON</span>
-            {OPCOES.map(([go, ico, nome]) => (
-              <button key={go} type="button" onClick={() => engine.current?.iniciar(go)} className="flex min-h-[40px] items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-white/95 transition hover:bg-sky-300/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"><span aria-hidden="true">{ico}</span>{nome}</button>
-            ))}
-          </div>
-          {menu && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-[5%] z-[6] px-4 text-center text-[12px] text-sky-100/80">
-              {touch ? "toque numa opção para viajar pro cyberespaço" : <>pressione e segure <kbd className="rounded-md border border-sky-300/35 bg-sky-300/15 px-2 py-px font-mono text-[11px]">ESPAÇO</kbd> para viajar pro cyberespaço</>}
-              <div className="mx-auto mt-2 h-1.5 w-[min(260px,70vw)] overflow-hidden rounded-full bg-white/10"><div ref={holdEl} className="h-full w-0 rounded-full bg-gradient-to-r from-cyan-200 to-sky-400 shadow-[0_0_14px_rgba(90,200,255,.7)]" /></div>
-            </div>
-          )}
-        </>
-      )}
+      {/* janela da landing = só a VISTA do cyberespaço: sem menu, sem frases, sem tutorial */}
 
       {/* HUD de jogo (fora do menu) */}
       {!menu && (
