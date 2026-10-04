@@ -15,6 +15,8 @@ import Image from "next/image";
 import ZaeonLogo from "@/components/main/ZaeonLogo";
 import InviteButton from "@/components/sub/InviteButton";
 import VoicePicker from "@/components/settings/VoicePicker";
+import { TOUR_ATIVO } from "@/lib/onboarding/tour";
+import { LOUNGE_ROTA } from "@/lib/ui/loungeHub";
 
 type ModuleKey = "estudos" | "pesquisas" | "projetos" | "lounge";
 interface RecentItem { id: string; title: string; href: string }
@@ -83,7 +85,7 @@ export default function MenuNavigation() {
   const [showWelcome, setShowWelcome] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false); // escolha de voz retraída por padrão
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (status !== "authenticated" || !TOUR_ATIVO) return; // tour desligado → sem card de boas-vindas
     let alive = true;
     fetch("/api/onboard/tour").then((r) => (r.ok ? r.json() : null)).then((d) => { if (alive && d) setShowWelcome(!d.tourDone); }).catch(() => { /* offline */ });
     return () => { alive = false; };
@@ -321,7 +323,7 @@ export default function MenuNavigation() {
     localStorage.setItem('zaeon_onboarding', JSON.stringify(onboardingData));
 
     if (provider === 'google') {
-      await signIn('google', { callbackUrl: '/workstation' });
+      await signIn('google', { callbackUrl: LOUNGE_ROTA });
     } else if (provider === 'guest') {
       alert("Acesso Convidado a ser integrado.");
       setIsSubmitting(false);
@@ -411,7 +413,7 @@ export default function MenuNavigation() {
           </div>
 
           <button
-            onClick={() => signIn("google", { callbackUrl: "/workstation" })}
+            onClick={() => signIn("google", { callbackUrl: LOUNGE_ROTA })}
             className="w-full flex items-center justify-center gap-2.5 bg-black dark:bg-white text-white dark:text-black text-[13px] font-bold py-3.5 rounded-full hover:scale-[1.02] transition-transform shadow-md"
           >
             <Image src="https://authjs.dev/img/providers/google.svg" alt="G" width={16} height={16} /> Entrar com Google

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import logoPng from "@/app/zaeon-name.png";
 import ThemeToggle from "@/components/sub/ThemeToggle";
+import { ehRotaImersiva } from "@/lib/ui/loungeHub";
 import "../../src/i18n";
 
 const TRACKS = [
@@ -183,6 +184,8 @@ export const Navbar = () => {
   if (!mounted) return null;
   // /m é o app mobile: tem cabeçalho próprio (coluna única, sem navbar do site).
   if (pathname === "/m" || pathname?.startsWith("/m/")) return null;
+  // Lounge Cósmico é tela cheia imersiva: sem chrome global.
+  if (ehRotaImersiva(pathname)) return null;
 
   return (
     <div

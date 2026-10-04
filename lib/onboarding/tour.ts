@@ -184,8 +184,14 @@ export function stopTourReplay() {
   finishTour();
 }
 
+/**
+ * Tour/onboarding DESLIGADO por enquanto (novo formato: cyberespaço + nome de usuário em
+ * /lounge-cosmico). Religar = trocar para true; nada mais depende dele.
+ */
+export const TOUR_ATIVO = false;
+
 export function startTour(opts?: { replay?: boolean }) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !TOUR_ATIVO) return;
   if (opts?.replay) setTourReplay(true);
   activeSteps = TOUR_STEPS; silent = false;
   state = { active: true, index: 0 };
@@ -202,7 +208,7 @@ export function startTour(opts?: { replay?: boolean }) {
 
 /** Mini-tour do Lounge: silencioso, roda 1x (localStorage zaeon.tourLounge). */
 export function startLoungeTour() {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !TOUR_ATIVO) return;
   if (state.active) return; // não atropela um tour em andamento (ex.: o principal)
   try { if (localStorage.getItem("zaeon.tourLounge") === "1") return; } catch { /* */ }
   activeSteps = LOUNGE_TOUR_STEPS; silent = true;
