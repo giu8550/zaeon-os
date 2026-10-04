@@ -1,0 +1,23 @@
+/**
+ * lib/lounge3d/pose.ts — regras PURAS da difusão de pose do lounge (Pusher client events).
+ *  - só reenvia quando a pose MUDOU (parado não gasta a cota de 10 msg/s do Pusher);
+ *  - um heartbeat independente do requestAnimationFrame reenvia a última pose (aba em segundo plano, pacote perdido,
+ *    quem acabou de entrar).
+ */
+export type Pose = { x: number; z: number; facing: number; moving?: boolean; sit?: boolean };
+
+/** Heartbeat: reenvia a última pose mesmo com a aba em segundo plano (setInterval segue disparando). */
+export const HEARTBEAT_MS = 2000;
+/** Resposta ao `client-hello` com um atraso aleatório curto, pra quem já está na sala não responder em rajada. */
+export const HELLO_JITTER_MS = 300;
+
+const EPS_POS = 0.02, EPS_ANG = 0.02;
+
+/** A pose mudou o bastante pra valer um envio? (`null` = nunca enviei nada → muda) */
+export function poseMudou(antes: Pose | null, agora: Pose): boolean {
+  if (!antes) return true;
+  if (!!antes.moving !== !!agora.moving || !!antes.sit !== !!agora.sit) return true;
+  if (Math.hypot(agora.x - antes.x, agora.z - antes.z) > EPS_POS) return true;
+  let d = agora.facing - antes.facing; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  return Math.abs(d) > EPS_ANG;
+}

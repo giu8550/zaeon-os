@@ -42,3 +42,9 @@ export function localParaMundo(b: LayoutBase, lx: number, lz: number): { x: numb
   const c = Math.cos(b.rot), s = Math.sin(b.rot);
   return { x: b.x + lx * c + lz * s, z: b.z - lx * s + lz * c };
 }
+
+/** Pose canônica de alguém SENTADO na própria base (seed do avatar remoto antes da 1ª posição chegar). */
+export function poseNoAssento(b: LayoutBase): { x: number; z: number; facing: number } {
+  const s = localParaMundo(b, 0, -0.15);
+  return { x: s.x, z: s.z, facing: b.rot + Math.PI };
+}

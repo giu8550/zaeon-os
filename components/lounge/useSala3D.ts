@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type PusherClient from "pusher-js";
 import { sanitizarPresenca } from "@/lib/lounge3d/sala";
+import { HEARTBEAT_MS, HELLO_JITTER_MS, poseMudou, type Pose } from "@/lib/lounge3d/pose";
 import { classificarErroPusher, ehFalhaDeConexao, type EstadoRealtime, type MotivoErro } from "@/lib/lounge3d/realtimeEstado";
 import { EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca } from "@/lib/lounge3d/tipos";
 
@@ -16,7 +17,16 @@ export type Membro = { id: string; name: string; image: string | null; color: st
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
 export type EstadoSala = "carregando" | "ok" | "cheia" | "erro" | "off";
 
-export function useSala3D(salaId: string | null) {
+/**
+ * `poseInicial(id)`: onde mostrar alguém que está ONLINE mas ainda não mandou posição (ex.: sentado na própria base).
+ * Sem ela (Cartolina 3D), o avatar remoto só aparece com a 1ª posição recebida.
+ */
+export type OpcoesSala3D = { poseInicial?: (userId: string) => Pose | null };
+
+/** Evento de handshake: quem entra pede; quem já está responde reenviando a própria pose na hora. */
+const EV_HELLO = "client-hello";
+
+export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
   const [sala, setSala] = useState<Sala | null>(null);
   const [eu, setEu] = useState<Membro | null>(null);
   const [membros, setMembros] = useState<Membro[]>([]);
@@ -32,6 +42,12 @@ export function useSala3D(salaId: string | null) {
   const canalRef = useRef<any>(null);
   const clientEventsOk = useRef(true);
   const ultimoPos = useRef(0);
+  const poseInicialRef = useRef(opts.poseInicial); poseInicialRef.current = opts.poseInicial;
+  /** última pose conhecida (o engine atualiza a cada frame) e a última que de fato saiu pela rede */
+  const ultimaPose = useRef<Pose | null>(null);
+  const ultimaEnviada = useRef<Pose | null>(null);
+  /** emissor atual (ref p/ o efeito do Pusher e o heartbeat chamarem sem reinstalar) */
+  const emitirRef = useRef<(p: Pose, forcar: boolean) => void>(() => {});
 
   const carregar = useCallback(async () => {
     if (!salaId) return;
@@ -77,15 +93,28 @@ export function useSala3D(salaId: string | null) {
       });
       const ch: any = p.subscribe(canalSala(salaId));
       canalRef.current = ch;
-      const sync = () => { const lista: Membro[] = []; ch.members?.each((m: any) => lista.push({ id: String(m.id), name: m.info?.name ?? "Alguém", image: m.info?.image ?? null, color: m.info?.color ?? "#4aa3ff" })); setOnline(lista); };
-      ch.bind("pusher:subscription_succeeded", () => { setRealtime("pusher"); setMotivoRealtime(null); sync(); });
+      // SEED: todo membro online (≠ eu) ganha uma presença placeholder já — o avatar aparece antes do 1º client-pos
+      // (client-pos é efêmero: quem está parado ou entrou depois ficava invisível → "um vê, o outro não").
+      const seed = (m: any) => {
+        const id = String(m?.id ?? ""); if (!id || id === euId || mapaRemotos.has(id)) return;
+        const pose = poseInicialRef.current?.(id); if (!pose) return;
+        mapaRemotos.set(id, { userId: id, name: m.info?.name ?? "Alguém", color: m.info?.color ?? "#4aa3ff", x: pose.x, z: pose.z, facing: pose.facing, moving: false, sit: pose.sit ?? true, ts: Date.now() });
+      };
+      const sync = () => { const lista: Membro[] = []; ch.members?.each((m: any) => { lista.push({ id: String(m.id), name: m.info?.name ?? "Alguém", image: m.info?.image ?? null, color: m.info?.color ?? "#4aa3ff" }); seed(m); }); setOnline(lista); };
+      ch.bind("pusher:subscription_succeeded", () => {
+        setRealtime("pusher"); setMotivoRealtime(null); sync();
+        // handshake: "cheguei" → quem já está reenvia a pose na hora (ninguém depende de o outro andar)
+        try { ch.trigger(EV_HELLO, { id: euId }); } catch { /* client events off: o seed + heartbeat cobrem */ }
+        if (ultimaPose.current) emitirRef.current(ultimaPose.current, true);
+      });
+      ch.bind(EV_HELLO, () => { setTimeout(() => { if (vivo && ultimaPose.current) emitirRef.current(ultimaPose.current, true); }, Math.random() * HELLO_JITTER_MS); });
       ch.bind("pusher:subscription_error", (e: any) => {
         const motivo = classificarErroPusher(e);
         console.warn("[lounge] assinatura do canal falhou:", motivo, e);
         if (motivo === "cheia") { setEstado("cheia"); return; }
         setRealtime("erro"); setMotivoRealtime(motivo);
       });
-      ch.bind("pusher:member_added", sync);
+      ch.bind("pusher:member_added", (m: any) => { seed(m); sync(); });
       ch.bind("pusher:member_removed", (m: any) => { mapaRemotos.delete(String(m.id)); sync(); });
       const onPos = (raw: unknown) => { const pr = sanitizarPresenca(raw); if (pr && pr.userId !== euId) mapaRemotos.set(pr.userId, pr); };
       ch.bind(EV_POS_CLIENTE, onPos); ch.bind(EV_POS, onPos);
@@ -98,14 +127,16 @@ export function useSala3D(salaId: string | null) {
     return () => { vivo = false; try { pusherRef.current?.disconnect(); } catch { /* ignore */ } pusherRef.current = null; canalRef.current = null; setOnline([]); mapaRemotos.clear(); };
   }, [salaId, euId]);
 
-  /** Difunde a minha posição (throttle). client-pos → sem servidor; se não dá, POST a 4 Hz. */
-  const enviarPos = useCallback((p: Omit<Presenca, "userId" | "name" | "color">) => {
-    if (!salaId || !eu) return;
+  /** Emite a pose (throttle; `forcar` ignora o throttle — hello/heartbeat). client-pos → sem servidor; sem client events → POST a 4 Hz. */
+  const euRef = useRef(eu); euRef.current = eu;
+  const emitir = useCallback((p: Pose, forcar: boolean) => {
+    const me = euRef.current;
+    if (!salaId || !me) return;
     const agora = performance.now();
     const hz = clientEventsOk.current ? POS_HZ : POS_HZ_FALLBACK;
-    if (agora - ultimoPos.current < 1000 / hz) return;
-    ultimoPos.current = agora;
-    const payload: Presenca = { userId: eu.id, name: eu.name, color: eu.color, ...p, ts: Date.now() };
+    if (!forcar && agora - ultimoPos.current < 1000 / hz) return;
+    ultimoPos.current = agora; ultimaEnviada.current = p;
+    const payload: Presenca = { userId: me.id, name: me.name, color: me.color, ...p, ts: Date.now() };
     const ch = canalRef.current;
     if (clientEventsOk.current && ch?.subscribed) {
       const ok = ch.trigger(EV_POS_CLIENTE, payload);
@@ -113,7 +144,25 @@ export function useSala3D(salaId: string | null) {
       clientEventsOk.current = false; // app Pusher sem "client events": cai no servidor
     }
     void fetch(`/api/lounge3d/${salaId}/pos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }).catch(() => {});
-  }, [salaId, eu]);
+  }, [salaId]);
+  emitirRef.current = emitir;
+
+  /** O engine chama a cada frame: guarda a pose e só envia quando MUDOU (parado não gasta a cota do Pusher). */
+  const enviarPos = useCallback((p: Omit<Presenca, "userId" | "name" | "color">) => {
+    const pose: Pose = { x: p.x, z: p.z, facing: p.facing, moving: !!p.moving, sit: !!p.sit };
+    ultimaPose.current = pose;
+    if (poseMudou(ultimaEnviada.current, pose)) emitir(pose, false);
+  }, [emitir]);
+
+  // HEARTBEAT independente do requestAnimationFrame (que o navegador pausa em segundo plano): reenvia a última pose
+  // a cada 2 s e ao voltar pra aba — cura pacote perdido, aba oculta e quem acabou de entrar.
+  useEffect(() => {
+    if (!salaId) return;
+    const hb = setInterval(() => { if (ultimaPose.current) emitirRef.current(ultimaPose.current, true); }, HEARTBEAT_MS);
+    const vis = () => { if (!document.hidden && ultimaPose.current) emitirRef.current(ultimaPose.current, true); };
+    document.addEventListener("visibilitychange", vis);
+    return () => { clearInterval(hb); document.removeEventListener("visibilitychange", vis); };
+  }, [salaId]);
 
   const enviarChat = useCallback(async (texto: string) => {
     if (!salaId || !texto.trim()) return;

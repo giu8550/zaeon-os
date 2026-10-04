@@ -17,7 +17,7 @@ export const MAX_TEXTO_NOTA = 1200;
 export const MAX_TEXTO_CHAT = 400;
 export const MAX_NOME = 40;
 /** Difusão de posição (Hz) e tempo de interpolação dos remotos. */
-export const POS_HZ = 12;
+export const POS_HZ = 9;   // abaixo do teto do Pusher (10 client events/s por conexão); o lerp suaviza
 export const POS_HZ_FALLBACK = 4;
 
 export type Presenca = {
