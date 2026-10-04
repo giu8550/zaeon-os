@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LAB_ROTA } from "@/lib/ui/loungeHub";
+import { LAB_ROTA, MSG_ENTRAR_ESTUDO, ehMsgEntrarEstudo } from "@/lib/ui/loungeHub";
 import type { MensagemChat, Presenca } from "@/lib/lounge3d/tipos";
 import { CyberEngine, type PessoaCyber } from "./engine";
 import Joystick from "./Joystick";
@@ -39,24 +39,38 @@ export default function CenaCyber(p: CenaCyberProps) {
   const touch = useMemo(() => typeof window !== "undefined" && (matchMedia("(pointer:coarse)").matches || "ontouchstart" in window), []);
   const low = useMemo(() => touch || (typeof window !== "undefined" && Math.min(innerWidth, innerHeight) < 520), [touch]);
   const frase = useMemo(() => FRASES[Math.floor(Math.random() * FRASES.length)]!, []);
+  // a frase se forma como um header (typewriter, ~34ms por letra)
+  const [escrita, setEscrita] = useState(0);
+  useEffect(() => {
+    if (!menu) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setEscrita(frase.length); return; }
+    const id = setInterval(() => setEscrita((n) => { if (n >= frase.length) { clearInterval(id); return n; } return n + 1; }), 34);
+    return () => clearInterval(id);
+  }, [menu, frase]);
 
   // callbacks sempre frescos sem recriar a engine
   const cb = useRef(p); cb.current = p;
-  const entrarEstudo = useCallback(() => { setAbrindo(true); setTimeout(() => router.push(LAB_ROTA), 700); }, [router]);
+  // contrato: a intenção sai como postMessage({type:"zaeon:enter-study"}) (mesma origem) → router.push("/research-lab")
+  const entrarEstudo = useCallback(() => { window.postMessage({ type: MSG_ENTRAR_ESTUDO }, window.location.origin); }, []);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const onMsg = (e: MessageEvent) => { if (ehMsgEntrarEstudo(e.data, e.origin, window.location.origin)) { setAbrindo(true); t = setTimeout(() => router.push(LAB_ROTA), 700); } };
+    window.addEventListener("message", onMsg);
+    return () => { window.removeEventListener("message", onMsg); if (t) clearTimeout(t); };
+  }, [router]);
 
   useEffect(() => {
     if (!cont.current || !overlay.current) return;
-    try {
-      const e = new CyberEngine({
-        container: cont.current, overlay: overlay.current, els: { menu: menuEl.current, hold: holdEl.current, monLabel: monLabel.current },
-        eu: cb.current.eu, membros: cb.current.membros, menu: !tela, low, teclasSempre: tela,
-        remotos: cb.current.remotos, enviarPos: (x) => cb.current.enviarPos?.(x),
-        onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
-        onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true),
-      });
-      engine.current = e;
-      return () => { e.dispose(); engine.current = null; };
-    } catch { setFalha(true); }
+    let cancelado = false, e: CyberEngine | null = null;
+    CyberEngine.criar({
+      container: cont.current, overlay: overlay.current, els: { menu: menuEl.current, hold: holdEl.current, monLabel: monLabel.current },
+      eu: cb.current.eu, membros: cb.current.membros, menu: !tela, low, teclasSempre: tela,
+      remotos: cb.current.remotos, enviarPos: (x) => cb.current.enviarPos?.(x),
+      onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
+      onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true),
+    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
+      .catch(() => { if (!cancelado) setFalha(true); });
+    return () => { cancelado = true; e?.dispose(); engine.current = null; };
     // a engine é criada uma vez por montagem; mudanças vão por métodos
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -93,7 +107,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* MENU de jogo: projetado no monitor; opção = play (ou segurar ESPAÇO) */}
       {!tela && (
         <>
-          {menu && <p className="pointer-events-none absolute inset-x-0 top-[11%] z-[6] px-6 text-center text-[clamp(16px,2.6vw,26px)] font-light text-white/90 [text-shadow:0_0_24px_rgba(120,170,255,.5)]">{frase}</p>}
+          {menu && <p className="pointer-events-none absolute inset-x-0 top-[11%] z-[6] px-6 text-center text-[clamp(16px,2.6vw,26px)] font-light text-white/90 [text-shadow:0_0_24px_rgba(120,170,255,.5)]">{frase.slice(0, escrita)}<span aria-hidden="true" className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[0.12em] animate-pulse bg-sky-200" /></p>}
           <div ref={menuEl} className={`${menu ? "flex" : "hidden"} absolute z-[6] min-w-[190px] -translate-x-1/2 -translate-y-1/2 flex-col gap-1.5 rounded-2xl border border-sky-300/30 bg-[#0a0e22]/80 p-3 backdrop-blur`}>
             <span className="px-1 text-[10px] tracking-[0.3em] text-sky-300/80">ZAEON</span>
             {OPCOES.map(([go, ico, nome]) => (
@@ -153,7 +167,6 @@ export default function CenaCyber(p: CenaCyberProps) {
       {abrindo && <div role="status" className="absolute inset-0 z-40 flex items-center justify-center bg-[#04040c]/60 text-[15px] tracking-[0.12em] text-sky-100 backdrop-blur-sm">abrindo a Sala de Estudos…</div>}
       {!pronto && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[#03030a]">
-          <span className="text-base font-bold tracking-[0.28em] text-sky-100">ZAEON</span>
           <div className="h-1.5 w-[220px] overflow-hidden rounded-full bg-white/10"><div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-cyan-200 to-sky-400" /></div>
         </div>
       )}

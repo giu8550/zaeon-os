@@ -4,6 +4,10 @@
  */
 export const LOUNGE_ROTA = "/lounge-cosmico";
 export const LAB_ROTA = "/research-lab";
+/** Contrato de navegação cyberespaço → laboratório (botão Estudar / clique no monitor). */
+export const MSG_ENTRAR_ESTUDO = "zaeon:enter-study";
+export const ehMsgEntrarEstudo = (data: unknown, origin: string, esperada: string): boolean =>
+  origin === esperada && !!data && typeof data === "object" && (data as { type?: unknown }).type === MSG_ENTRAR_ESTUDO;
 
 /** Rota imersiva: sem navbar/rodapé globais (a cena ocupa a tela toda). */
 export const ehRotaImersiva = (path: string | null | undefined) =>
