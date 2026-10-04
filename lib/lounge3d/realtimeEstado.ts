@@ -8,10 +8,13 @@ export type MotivoErro = "sem-credenciais-servidor" | "sessao" | "cheia" | "clie
 
 /** Classifica o que o pusher-js entrega em `subscription_error` / `connection.error`. */
 export function classificarErroPusher(e: unknown): MotivoErro {
-  const x = e as { status?: number; error?: { status?: number; data?: { code?: number } }; data?: { code?: number }; type?: string } | null;
+  const x = e as { status?: number; error?: { status?: number; data?: { code?: number | null; message?: string } }; data?: { code?: number | null; message?: string }; type?: string } | null;
   const status = x?.status ?? x?.error?.status;
   const code = x?.data?.code ?? x?.error?.data?.code;
-  if (code === 4301) return "client-events";           // "Enable client events" desligado no painel do Pusher
+  const msg = String(x?.data?.message ?? x?.error?.data?.message ?? "");
+  // "Enable client events" desligado no painel. ATENÇÃO: o Pusher manda isso com `code: null` e só a mensagem
+  // ("To send client events, you must enable this feature…") — conferido contra o app de produção.
+  if (code === 4301 || /client events/i.test(msg)) return "client-events";
   if (status === 503) return "sem-credenciais-servidor"; // getPusher() nulo no servidor (APP_ID/SECRET ausentes no runtime)
   if (status === 401) return "sessao";
   if (status === 403) return "cheia";

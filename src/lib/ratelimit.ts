@@ -21,6 +21,8 @@ const LIMITS = {
   "ai-heavy": { tokens: 20, window: "60 s" as const },
   // rotas de IA leves/cache-friendly: 40 req / 60s
   "ai-light": { tokens: 40, window: "60 s" as const },
+  // tempo real do lounge (fallback de posição sem client events): 4 Hz + heartbeat ≈ 270/min → 360/min por usuário
+  "lounge-pos": { tokens: 360, window: "60 s" as const },
 } as const;
 
 type Bucket = keyof typeof LIMITS;
