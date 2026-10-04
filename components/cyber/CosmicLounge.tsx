@@ -12,6 +12,7 @@ import { useSession } from "next-auth/react";
 import { corDoUsuario } from "@/lib/lounge3d/tipos";
 import { temWebGL } from "@/lib/ui/globo";
 import { LAB_ENTRADA } from "@/lib/ui/loungeHub";
+import { avisoRealtime } from "@/lib/lounge3d/realtimeEstado";
 import { useResolverSala } from "@/components/lounge/useResolverSala";
 import { useSala3D } from "@/components/lounge/useSala3D";
 import CenaCyber from "./CenaCyber";
@@ -74,7 +75,7 @@ function Tela() {
     return <Carregando><span>Cyberespaço cheio (máximo 5).{" "}<button type="button" onClick={() => setSolo(true)} className="underline">Entrar sozinho</button></span></Carregando>;
   }
   if (!salaId || !euSala || sala.estado === "carregando") return <Carregando />;
-  const aviso = sala.realtime === "nenhum" ? "Tempo real indisponível — você não vê os outros agora." : null;
+  const aviso = avisoRealtime(sala.realtime, sala.motivoRealtime);
   return (
     <CenaCyber
       modo="tela" eu={euSala} membros={membros.length ? membros : [euSala]}

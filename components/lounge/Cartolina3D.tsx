@@ -231,7 +231,7 @@ export default function Cartolina3D({ salaId, onSair }: { salaId: string; onSair
       <div className="absolute left-3 top-3 flex items-center gap-3 rounded-2xl border border-[rgba(120,170,255,.22)] bg-[rgba(14,26,54,.6)] px-3 py-2 backdrop-blur">
         <div className="min-w-0">
           <p className="truncate text-[13px] font-bold">{sala.sala?.title ?? "Sala"}</p>
-          <p className="text-[10.5px] text-[#9fb6e0]">WASD ou clique no chão · arraste pra girar · roda = zoom{sala.realtime === "pusher" ? "" : " · sem tempo real"}</p>
+          <p className="text-[10.5px] text-[#9fb6e0]">WASD ou clique no chão · arraste pra girar · roda = zoom{sala.realtime === "pusher" ? "" : sala.realtime === "conectando" ? " · conectando…" : " · sem tempo real"}</p>
         </div>
         <div className="flex items-center" title={`${presenca.length}/5 na sala`}>
           {presenca.slice(0, 5).map((m) => (

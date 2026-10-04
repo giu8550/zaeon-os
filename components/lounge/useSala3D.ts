@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type PusherClient from "pusher-js";
 import { sanitizarPresenca } from "@/lib/lounge3d/sala";
+import { classificarErroPusher, ehFalhaDeConexao, type EstadoRealtime, type MotivoErro } from "@/lib/lounge3d/realtimeEstado";
 import { EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca } from "@/lib/lounge3d/tipos";
 
 export type Membro = { id: string; name: string; image: string | null; color: string };
@@ -22,7 +23,9 @@ export function useSala3D(salaId: string | null) {
   const [estado, setEstado] = useState<EstadoSala>("carregando");
   const [online, setOnline] = useState<Membro[]>([]);
   const [chat, setChat] = useState<MensagemChat[]>([]);
-  const [realtime, setRealtime] = useState<"pusher" | "nenhum">("nenhum");
+  /** conectando → pusher (ok) | erro (com `motivoRealtime`) | sem-chave (build sem NEXT_PUBLIC_PUSHER_*). Nunca "indisponível" só por estar conectando. */
+  const [realtime, setRealtime] = useState<EstadoRealtime>("conectando");
+  const [motivoRealtime, setMotivoRealtime] = useState<MotivoErro | null>(null);
   /** Presenças remotas (alvo da interpolação) — ref, não state: muda 12×/s. */
   const remotos = useRef<Map<string, Presenca>>(new Map());
   const pusherRef = useRef<PusherClient | null>(null);
@@ -43,33 +46,57 @@ export function useSala3D(salaId: string | null) {
   }, [salaId]);
   useEffect(() => { setSala(null); setChat([]); remotos.current.clear(); setEstado("carregando"); void carregar(); }, [carregar]);
 
-  // Pusher: presença + eventos
+  // Pusher: presença + eventos. Depende do ID (não do objeto `eu`, recriado a cada refetch → reconectava à toa).
+  const euId = eu?.id ?? null;
   useEffect(() => {
+    const mapaRemotos = remotos.current;
     const key = process.env.NEXT_PUBLIC_PUSHER_KEY, cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
-    if (!salaId || !key || !cluster || !eu) return;
+    if (!salaId || !euId) return;
+    // Diagnóstico (1x por montagem): o bundle recebeu a key? (NEXT_PUBLIC_* é inlinada no BUILD/start — reinicie após mexer no .env)
+    console.info(`[lounge] pusher: key ${key ? "presente" : "AUSENTE"} · cluster ${cluster || "AUSENTE"} · canal ${canalSala(salaId)}`);
+    if (!key || !cluster) { setRealtime("sem-chave"); return; }
+    setRealtime("conectando"); setMotivoRealtime(null);
     let vivo = true;
     (async () => {
       const Pusher = (await import("pusher-js")).default;
       if (!vivo) return;
       const p = new Pusher(key, { cluster, channelAuthorization: { endpoint: `/api/lounge3d/${salaId}/pusher-auth`, transport: "ajax" } });
-      pusherRef.current = p;
+      pusherRef.current = p; clientEventsOk.current = true;
+      // conexão: failed/unavailable = erro de verdade; o resto é transitório
+      p.connection.bind("state_change", (st: { current?: string }) => {
+        if (!vivo) return;
+        if (ehFalhaDeConexao(st?.current)) { setRealtime("erro"); setMotivoRealtime("conexao"); }
+        else if (st?.current === "connected") setRealtime((r) => (r === "erro" ? "conectando" : r));
+      });
+      // pusher:error 4301 = "Enable client events" desligado no painel: as posições seriam descartadas em silêncio → cai pro POST /pos
+      p.connection.bind("error", (err: unknown) => {
+        if (classificarErroPusher(err) === "client-events" && clientEventsOk.current) {
+          clientEventsOk.current = false;
+          console.warn("[lounge] Pusher sem 'client events' (4301): usando o fallback do servidor (4 Hz). Ligue 'Enable client events' em App Settings.");
+        }
+      });
       const ch: any = p.subscribe(canalSala(salaId));
       canalRef.current = ch;
       const sync = () => { const lista: Membro[] = []; ch.members?.each((m: any) => lista.push({ id: String(m.id), name: m.info?.name ?? "Alguém", image: m.info?.image ?? null, color: m.info?.color ?? "#4aa3ff" })); setOnline(lista); };
-      ch.bind("pusher:subscription_succeeded", () => { setRealtime("pusher"); sync(); });
-      ch.bind("pusher:subscription_error", (e: any) => { if (e?.status === 403 || e?.error?.status === 403) setEstado("cheia"); else setRealtime("nenhum"); });
+      ch.bind("pusher:subscription_succeeded", () => { setRealtime("pusher"); setMotivoRealtime(null); sync(); });
+      ch.bind("pusher:subscription_error", (e: any) => {
+        const motivo = classificarErroPusher(e);
+        console.warn("[lounge] assinatura do canal falhou:", motivo, e);
+        if (motivo === "cheia") { setEstado("cheia"); return; }
+        setRealtime("erro"); setMotivoRealtime(motivo);
+      });
       ch.bind("pusher:member_added", sync);
-      ch.bind("pusher:member_removed", (m: any) => { remotos.current.delete(String(m.id)); sync(); });
-      const onPos = (raw: unknown) => { const pr = sanitizarPresenca(raw); if (pr && pr.userId !== eu.id) remotos.current.set(pr.userId, pr); };
+      ch.bind("pusher:member_removed", (m: any) => { mapaRemotos.delete(String(m.id)); sync(); });
+      const onPos = (raw: unknown) => { const pr = sanitizarPresenca(raw); if (pr && pr.userId !== euId) mapaRemotos.set(pr.userId, pr); };
       ch.bind(EV_POS_CLIENTE, onPos); ch.bind(EV_POS, onPos);
       ch.bind(EV_CHAT, (m: MensagemChat) => setChat((c) => [...c.slice(-199), m]));
       ch.bind(EV_CONTEUDO, (d: { fromUserId: string; conteudo: ConteudoSala; title?: string }) => {
-        if (d.fromUserId === eu.id) return; // o autor já aplicou localmente
+        if (d.fromUserId === euId) return; // o autor já aplicou localmente
         setSala((s) => (s ? { ...s, conteudo: d.conteudo, title: d.title ?? s.title } : s));
       });
     })();
-    return () => { vivo = false; try { pusherRef.current?.disconnect(); } catch { /* ignore */ } pusherRef.current = null; canalRef.current = null; setOnline([]); };
-  }, [salaId, eu]);
+    return () => { vivo = false; try { pusherRef.current?.disconnect(); } catch { /* ignore */ } pusherRef.current = null; canalRef.current = null; setOnline([]); mapaRemotos.clear(); };
+  }, [salaId, euId]);
 
   /** Difunde a minha posição (throttle). client-pos → sem servidor; se não dá, POST a 4 Hz. */
   const enviarPos = useCallback((p: Omit<Presenca, "userId" | "name" | "color">) => {
@@ -103,5 +130,5 @@ export function useSala3D(salaId: string | null) {
     if (d?.conteudo) setSala((s) => (s ? { ...s, conteudo: d.conteudo, title: d.title ?? s.title } : s));
   }, [salaId]);
 
-  return { sala, eu, membros, online, chat, estado, realtime, remotos, enviarPos, enviarChat, patch, recarregar: carregar };
+  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, recarregar: carregar };
 }
