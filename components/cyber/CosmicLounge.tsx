@@ -37,7 +37,7 @@ const Carregando = ({ children }: { children?: React.ReactNode }) => <div classN
 
 function Janela({ onSessaoIniciada }: { onSessaoIniciada?: () => void }) {
   const { data } = useSession();
-  const eu = useMemo<PessoaCyber>(() => { const id = (data?.user as { id?: string } | undefined)?.id ?? "local"; return { id, name: data?.user?.name ?? "Você", color: "#45d6ff" }; }, [data]);
+  const eu = useMemo<PessoaCyber>(() => { const id = (data?.user as { id?: string } | undefined)?.id ?? "local"; return { id, name: data?.user?.name ?? "Visitante", color: "#45d6ff" }; }, [data]);
   const membros = useMemo(() => [eu], [eu]);
   return <CenaCyber modo="janela" eu={eu} membros={membros} onSessaoIniciada={onSessaoIniciada} />;
 }
@@ -48,7 +48,7 @@ function Tela() {
   const [solo, setSolo] = useState(false);
   const sala = useSala3D(salaId);
 
-  const euSolo = useMemo<PessoaCyber>(() => { const id = (data?.user as { id?: string } | undefined)?.id ?? "local"; return { id, name: data?.user?.name ?? "Você", color: id === "local" ? "#45d6ff" : corDoUsuario(id) }; }, [data]);
+  const euSolo = useMemo<PessoaCyber>(() => { const id = (data?.user as { id?: string } | undefined)?.id ?? "local"; return { id, name: data?.user?.name ?? "Visitante", color: id === "local" ? "#45d6ff" : corDoUsuario(id) }; }, [data]);
   // a ORDEM de `sala.members[]` (só cresce) define a base de cada pessoa — igual pra todo mundo
   const membros = useMemo<PessoaCyber[]>(() => {
     const porId = new Map(sala.membros.map((m) => [m.id, m] as const));

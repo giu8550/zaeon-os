@@ -134,7 +134,7 @@ export class CyberEngine {
   private novoAtor(p: PessoaCyber, x: number, z: number): Ator {
     const av = criarAvatarLuz(p.color, this.cena.starTex, this.o.low, this.gltf);
     av.group.position.set(x, 0, z); this.cena.scene.add(av.group);
-    const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.color + ";"; tag.textContent = p.id === this.o.eu.id ? "Você" : p.name; this.o.overlay.appendChild(tag);
+    const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.color + ";"; tag.textContent = p.id === this.o.eu.id ? "" : p.name; this.o.overlay.appendChild(tag);   // o próprio avatar não leva rótulo
     return { id: p.id, name: p.name, color: p.color, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag };
   }
   private removerAtor(a: Ator) { a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
@@ -342,9 +342,10 @@ export class CyberEngine {
     const { eu } = this;
     const atores = [eu, ...this.remotos.values()];
     for (const a of atores) {
+      if (a === eu) { a.tag.style.display = "none"; continue; }   // o próprio avatar não leva nome
       const s = this.proj(new THREE.Vector3(a.pos.x, 2.1 + a.sit * -0.3, a.pos.z));
       a.tag.style.left = s.x + "px"; a.tag.style.top = s.y + "px"; a.tag.style.display = this.menu || !s.vis ? "none" : "block";
-      if (a !== eu) { const perto = eu.pos.distanceTo(a.pos) < 3.0; a.tag.style.borderColor = perto ? "#fff" : ""; a.tag.textContent = (perto ? "💬 " : "") + a.name; }
+      { const perto = eu.pos.distanceTo(a.pos) < 3.0; a.tag.style.borderColor = perto ? "#fff" : ""; a.tag.textContent = (perto ? "💬 " : "") + a.name; }
     }
     for (const [id, tag] of this.tagsBase) {
       const l = this.layouts.get(id)!; const s = this.proj(new THREE.Vector3(l.x, 3.4, l.z));
