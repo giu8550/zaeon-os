@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { UserIcon } from "@heroicons/react/24/outline";
 
 // Componentes Internos
@@ -11,6 +12,8 @@ import MenuNavigation from "@/components/sub/MenuNavigation";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 import MolecularText from "@/components/ui/MolecularText";
+import LoungeJanela from "@/components/lounge/LoungeJanela";
+import { LOUNGE_ROTA, copyEntrada } from "@/lib/ui/loungeHub";
 
 // Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
 // Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
@@ -88,6 +91,7 @@ const FRASE_COMPLETA =
 export default function HeroPage() {
   const { t } = useTranslation();
   const { status } = useSession();
+  const router = useRouter();
 
   const [showChatbox, setShowChatbox] = useState(false);
   const [verboIndex, setVerboIndex] = useState(0);
@@ -112,12 +116,9 @@ export default function HeroPage() {
     return () => clearInterval(id);
   }, [semMovimento]);
 
-  // Redireciona diretamente para o chat caso já esteja logado
-  useEffect(() => {
-    if (status === "authenticated") {
-      setShowChatbox(true);
-    }
-  }, [status]);
+  // O logado vê a landing com o cyberespaço embutido (não abre mais o chatbox direto).
+  const logado = status === "authenticated";
+  const copy = copyEntrada(logado);
 
   return (
     <main className="w-full flex flex-col items-center justify-center text-center relative zaeon-borda min-h-[86vh] pt-28 md:pt-40 pb-20 md:pb-28 overflow-hidden transition-colors duration-700 font-sans">
@@ -222,13 +223,13 @@ export default function HeroPage() {
               {/* Mesmo material do "Iniciar", em vidro TINGIDO: vidro incolor aqui
                   derrubaria a hierarquia e este é o primário da página. */}
               <LiquidGlassButton
-                onClick={() => setShowChatbox(true)}
+                onClick={() => (logado ? router.push(LOUNGE_ROTA) : setShowChatbox(true))}
                 tom="destaque"
                 tamanho="md"
                 className="w-full sm:w-auto"
               >
                 <UserIcon className="w-4 h-4" />
-                Começar grátis
+                {copy.cta}
               </LiquidGlassButton>
               <a
                 href="#modelos"
@@ -244,9 +245,9 @@ export default function HeroPage() {
             "Equipados com", abaixo dos cards dos agentes (encryption.tsx). */}
 
         {/* Badges de confiança (padrão ChipFlow) */}
-        {!showChatbox && (
+        {!showChatbox && copy.badges.length > 0 && (
           <ul className="mt-8 flex flex-wrap items-center justify-start gap-x-6 gap-y-3">
-            {["Grátis para começar", "Sem cartão", "Todas as IAs num lugar só"].map((b) => (
+            {copy.badges.map((b) => (
               <li key={b} className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15">
                   <svg viewBox="0 0 20 20" className="h-3 w-3 text-emerald-500" fill="none" stroke="currentColor" strokeWidth={3} aria-hidden="true">
@@ -259,6 +260,9 @@ export default function HeroPage() {
           </ul>
         )}
       </motion.div>
+
+      {/* Logado: o cyberespaço embutido como janela (Maximizar, após iniciar → /lounge-cosmico). */}
+      {logado && !showChatbox && <LoungeJanela />}
 
       {/* ========================================= */}
       {/* CHATBOX (Aparece ao logar / clicar começar) */}
