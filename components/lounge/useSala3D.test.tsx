@@ -100,6 +100,14 @@ describe("useSala3D · multiplayer", () => {
     expect(fake.canal.enviados.filter((e: any) => e.ev === "client-pos").length).toBe(n0 + 1);
   });
 
+  it("client events desligado no formato REAL do Pusher (code null + mensagem) → cai pro POST /pos", async () => {
+    const h = await montar();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    act(() => { fake.conexao.handlers.error.forEach((f: Handler) => f({ type: "PusherError", data: { code: null, message: "To send client events, you must enable this feature in the Settings page of your dashboard." } })); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); h.result.current.enviarPos({ x: 7, z: 7, facing: 0, moving: true, sit: false }); });
+    expect((globalThis as any).fetch).toHaveBeenCalledWith(`/api/lounge3d/${SALA}/pos`, expect.objectContaining({ method: "POST" }));
+  });
+
   it("4301 (client events desligado) → cai pro POST /pos", async () => {
     const h = await montar();
     vi.spyOn(console, "warn").mockImplementation(() => {});

@@ -6,6 +6,9 @@ describe("classificarErroPusher", () => {
     expect(classificarErroPusher({ data: { code: 4301 } })).toBe("client-events");
     expect(classificarErroPusher({ error: { data: { code: 4301 } } })).toBe("client-events");
   });
+  it("o formato REAL do Pusher (code null + mensagem) também é client-events", () => {
+    expect(classificarErroPusher({ type: "PusherError", data: { code: null, message: "To send client events, you must enable this feature in the Settings page of your dashboard." } })).toBe("client-events");
+  });
   it("status do auth: 503 servidor sem Pusher · 401 sessão · 403 cheia · outros 4xx/5xx auth", () => {
     expect(classificarErroPusher({ status: 503 })).toBe("sem-credenciais-servidor");
     expect(classificarErroPusher({ error: { status: 401 } })).toBe("sessao");
