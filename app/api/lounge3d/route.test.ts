@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const m = vi.hoisted(() => ({ session: vi.fn(), userFind: vi.fn(), docFind: vi.fn(), docUpdate: vi.fn(), docCreate: vi.fn(), trigger: vi.fn(), get: vi.fn(), guard: vi.fn() }));
+const m = vi.hoisted(() => ({ session: vi.fn(), userFind: vi.fn(), docFind: vi.fn(), docUpdate: vi.fn(), docCreate: vi.fn(), trigger: vi.fn(), get: vi.fn(), guard: vi.fn(), pusher: vi.fn() }));
 vi.mock("next-auth", () => ({ getServerSession: m.session }));
 vi.mock("@/src/lib/auth", () => ({ authOptions: {} }));
 vi.mock("@/src/lib/ratelimit", () => ({ guard: m.guard }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { user: { findUnique: m.userFind, findMany: async () => [] }, collabDoc: { findUnique: m.docFind, update: m.docUpdate, create: m.docCreate, findMany: async () => [] } } }));
-vi.mock("@/lib/collab/realtime", () => ({ triggerSafe: m.trigger, getPusher: () => ({ get: m.get, authorizeChannel: (s: string, c: string, d: any) => ({ auth: `${s}:${c}`, channel_data: JSON.stringify(d) }) }) }));
+vi.mock("@/lib/collab/realtime", () => ({ triggerSafe: m.trigger, getPusher: () => m.pusher() }));
 
 import { PATCH, GET } from "./[id]/route";
 import { POST as CHAT } from "./[id]/chat/route";
@@ -19,6 +19,7 @@ describe("/api/lounge3d/[id]", () => {
   beforeEach(() => {
     Object.values(m).forEach((f) => f.mockReset());
     process.env.LOUNGE_3D = "1";
+    m.pusher.mockImplementation(() => ({ get: m.get, authorizeChannel: (s: string, c: string, d: any) => ({ auth: `${s}:${c}`, channel_data: JSON.stringify(d) }) }));
     m.guard.mockResolvedValue({ ok: true });
     m.session.mockResolvedValue({ user: { email: "a@b.c" } });
     m.userFind.mockResolvedValue({ id: ME, name: "Ana", image: null });
@@ -75,5 +76,12 @@ describe("/api/lounge3d/[id]", () => {
     m.get.mockResolvedValue({ ok: false, json: async () => ({}) }); // Pusher REST fora: não bloqueia a entrada
     const ok = await (await AUTH(form(`presence-lounge3d-${ID}`), { params: { id: ID } })).json();
     expect(JSON.parse(ok.channel_data)).toMatchObject({ user_id: ME, user_info: { name: "Ana" } });
+  });
+
+  it("pusher-auth: servidor sem credenciais do Pusher → 503 (o cliente mostra o motivo, não um 'indisponível' genérico)", async () => {
+    m.pusher.mockImplementation(() => null);
+    m.docFind.mockResolvedValue(doc());
+    const r = await AUTH(new Request("http://x/", { method: "POST", body: `socket_id=1.2&channel_name=presence-lounge3d-${ID}`, headers: { "Content-Type": "application/x-www-form-urlencoded" } }), { params: { id: ID } });
+    expect(r.status).toBe(503);
   });
 });

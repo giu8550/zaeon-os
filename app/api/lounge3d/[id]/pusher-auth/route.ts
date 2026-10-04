@@ -33,7 +33,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const salaId = salaIdDeCanal(channel);
   if (!salaId || salaId !== params.id) return NextResponse.json({ error: "canal inválido" }, { status: 400 });
   const s = await salaDoMembro(salaId, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const pusher = getPusher(); if (!pusher) return NextResponse.json({ error: "realtime desligado" }, { status: 503 });
+  const pusher = getPusher();
+  if (!pusher) {
+    // diagnóstico: só os NOMES das variáveis ausentes (nunca valores)
+    const faltam = ["PUSHER_APP_ID", "NEXT_PUBLIC_PUSHER_KEY", "PUSHER_SECRET", "NEXT_PUBLIC_PUSHER_CLUSTER"].filter((k) => !process.env[k]);
+    console.error(`[lounge3d] pusher-auth 503: getPusher() nulo no servidor — faltam no runtime: ${faltam.join(", ") || "(todas presentes?)"}`);
+    return NextResponse.json({ error: "realtime desligado" }, { status: 503 });
+  }
   const dentro = await ocupantes(pusher, channel);
   const adm = admitir(dentro, me.id);
   if (!adm.ok) return NextResponse.json({ error: "Sala cheia (máximo 5).", motivo: "cheia" }, { status: 403 });

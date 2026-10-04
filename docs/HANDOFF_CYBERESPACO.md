@@ -32,3 +32,16 @@ Entrada da Zaeon em produção, **sem flag**. Espec visual original: handoff "Lo
 - **Avatar = GLB humano rigado** (Idle/Walk/Run, `SkeletonUtils.clone`, escala 1.15, material holográfico emissivo por usuário + ~240 neurônios). Por padrão carrega o modelo de REFERÊNCIA de teste (`threejs.org/.../Soldier.glb`, runtime, terceiros). **Em produção hospede um GLB próprio** (ex.: `public/assets/avatar.glb`) e defina o build-arg `NEXT_PUBLIC_CYBER_AVATAR_GLB` (Dockerfile/compose/deploy.yml já têm a plumbagem; variável do GitHub com o mesmo nome). Se o GLB não carregar, o avatar fica só com luz/neurônios.
 - Contrato de navegação: Estudar/clique no monitor → `postMessage({type:"zaeon:enter-study"})` (mesma origem) → `router.push("/research-lab")`.
 - Dispositivo móvel real (gestos, FPS), navegador logado de ponta a ponta.
+
+## Tempo real (Pusher) — diagnóstico e checklist
+O aviso "Tempo real indisponível" **só aparece quando de fato falhou**, e diz o motivo (`lib/lounge3d/realtimeEstado.ts`). Enquanto conecta, não mostra nada. O console loga 1x: `[lounge] pusher: key presente|AUSENTE · cluster … · canal presence-lounge3d-<id>`.
+
+| Sintoma / motivo | Causa | Onde ligar |
+|---|---|---|
+| "chave do Pusher ausente neste build" | `NEXT_PUBLIC_PUSHER_KEY/CLUSTER` não entraram no build (são inlinadas no BUILD; em dev, reinicie `node server.js` após mexer no `.env`) | `.env` da VPS → build-args do compose |
+| "servidor sem as credenciais do Pusher" (auth 503) | `PUSHER_APP_ID`/`PUSHER_SECRET` ausentes no **runtime** do servidor (o log do servidor lista os NOMES que faltam) | `.env.secrets` da VPS |
+| "entre na sua conta novamente" (auth 401) | sessão expirada | — |
+| Conecta mas ninguém se mexe | **"Enable client events"** desligado em Pusher → App Settings (erro 4301). O cliente detecta e cai no fallback do servidor (`POST /pos`, 4 Hz) com um `console.warn` | painel do Pusher |
+| "Sem conexão com o tempo real" | WebSocket bloqueado (`failed`/`unavailable`) | rede/proxy |
+
+Ciclo de vida: `subscription_succeeded` → presença; a posição chega por `client-pos` (12 Hz; fallback `pos` via servidor); `member_removed` remove o personagem (a base fica); teto de 5 no auth.
