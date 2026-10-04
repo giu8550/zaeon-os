@@ -75,3 +75,28 @@ describe("clique", () => {
     expect(rotuloMonitor({ baseMinha: false, pertoDaBase: true, dono: "Ana" })).toBe("Base de Ana · privada");
   });
 });
+
+import { ARMADURAS_OUTROS, ARMADURA_EU, corDaArmadura } from "./cores";
+describe("cores da armadura", () => {
+  const ordem = ["a", "b", "c", "d"];
+  it("a minha é sempre azul, em qualquer posição", () => {
+    expect(corDaArmadura(ordem, "c", "c")).toBe(ARMADURA_EU);
+    expect(corDaArmadura(ordem, "a", "a")).toBe(ARMADURA_EU);
+  });
+  it("as dos outros são distintas entre si e nunca azul", () => {
+    const cores = ["a", "b", "d"].map((id) => corDaArmadura(ordem, id, "c"));
+    expect(new Set(cores).size).toBe(3);
+    expect(cores).not.toContain(ARMADURA_EU);
+    // matiz fora da faixa azul/ciano (190°–250°)
+    const matiz = (c: string) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (!d) return 0; const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };
+    for (const c of ARMADURAS_OUTROS) { const h = matiz(c); expect(h >= 190 && h <= 250).toBe(false); }
+  });
+  it("é a mesma pra todos os observadores (só muda quem sou eu)", () => {
+    // para o observador x, a cor de b depende da posição de b entre os OUTROS; dois observadores que não são b veem b com a mesma cor
+    // quando a posição relativa é a mesma
+    expect(corDaArmadura(["x", "b"], "b", "x")).toBe(ARMADURAS_OUTROS[0]);
+  });
+  it("id fora da ordem (recém-chegado) ganha a próxima cor livre", () => {
+    expect(corDaArmadura(ordem, "novo", "c")).toBe(ARMADURAS_OUTROS[3]);
+  });
+});

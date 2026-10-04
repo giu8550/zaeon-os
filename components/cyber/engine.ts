@@ -6,6 +6,7 @@
  * Rede = só o que o hook de sala entrega (remotos + enviarPos); aqui não há fetch/Pusher.
  */
 import * as THREE from "three";
+import { corDaArmadura } from "@/lib/cyber/cores";
 import { BASE_COLLIDER_R, BASE_INTERACT_R, basesDosMembros, localParaMundo, spawnDaBase, type LayoutBase } from "@/lib/cyber/bases";
 import { empurrarParaFora, type Colisor } from "@/lib/cyber/colisao";
 import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
@@ -116,11 +117,12 @@ export class CyberEngine {
       const existente = this.bases.get(id);
       if (existente) { if (existente.layout.x !== lay.x || existente.layout.z !== lay.z) existente.mover(lay); continue; }
       const p = this.pessoas.get(id)!;
-      const b = criarBase(lay, p.color, this.cena.starTex, this.o.low);
+      const b = criarBase(lay, this.corDe(id), this.cena.starTex, this.o.low);
       this.cena.scene.add(b.group); this.bases.set(id, b);
-      const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.color + ";opacity:.8;";
+      const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + this.corDe(id) + ";opacity:.8;";
       tag.textContent = id === this.o.eu.id ? "Sua base" : `Base de ${p.name}`; this.o.overlay.appendChild(tag); this.tagsBase.set(id, tag);
     }
+    for (const a of [this.eu, ...this.remotos.values()]) { if (!a) continue; const c = this.corDe(a.id); if (c !== a.color) { a.color = c; a.av.recolorir(c); a.tag.style.color = c; } }
     this.colisores = [...this.layouts.values()].map((l) => ({ x: l.x, z: l.z, r: BASE_COLLIDER_R }));
     if (!this.eu) {
       const sp = spawnDaBase(this.layouts.get(this.o.eu.id));
@@ -131,11 +133,15 @@ export class CyberEngine {
     }
   }
 
+  /** Armadura: a minha é azul; a dos outros vem da ordem canônica dos membros (lib/cyber/cores). */
+  private corDe(id: string) { return corDaArmadura(this.ordem, id, this.o.eu.id); }
+
   private novoAtor(p: PessoaCyber, x: number, z: number): Ator {
-    const av = criarAvatarLuz(p.color, this.cena.starTex, this.o.low, this.gltf);
+    const cor = this.corDe(p.id);
+    const av = criarAvatarLuz(cor, this.cena.starTex, this.o.low, this.gltf);
     av.group.position.set(x, 0, z); this.cena.scene.add(av.group);
-    const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.color + ";"; tag.textContent = p.id === this.o.eu.id ? "" : p.name; this.o.overlay.appendChild(tag);   // o próprio avatar não leva rótulo
-    return { id: p.id, name: p.name, color: p.color, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag };
+    const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + cor + ";"; tag.textContent = p.id === this.o.eu.id ? "" : p.name; this.o.overlay.appendChild(tag);   // o próprio avatar não leva rótulo
+    return { id: p.id, name: p.name, color: cor, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag };
   }
   private removerAtor(a: Ator) { a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 

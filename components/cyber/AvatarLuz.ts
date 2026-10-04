@@ -1,7 +1,7 @@
 /**
  * AvatarLuz (Avatar3D do cyberespaço) — o "ser de luz" (HANDOFF lounge cósmico §1): CORPO HUMANO real (GLB rigado
- * com animações Idle/Walk/Run) renderizado com material holográfico emissivo (cor por usuário) + neurônios
- * (point-swarm) ao redor. Componente ISOLADO: trocar o asset (Ready Player Me/Mixamo self-hostado) é só trocar a URL
+ * com animações Idle/Walk/Run). É um ser de LUZ (aura clara em volta, viseira luminosa, neurônios) com ARMADURA de
+ * uma cor (lib/cyber/cores: a sua é azul; as dos outros, outras cores — futuramente cosmético do perfil). Componente ISOLADO: trocar o asset (Ready Player Me/Mixamo self-hostado) é só trocar a URL
  * (`NEXT_PUBLIC_CYBER_AVATAR_GLB`), sem refatorar a cena. Vários avatares = `SkeletonUtils.clone` (um
  * AnimationMixer cada) — nunca `.clone()` cru.
  *
@@ -11,6 +11,7 @@
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as skClone } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { COR_LUZ } from "@/lib/cyber/cores";
 
 /** Modelo de referência de teste (three.js examples). Em produção, hospede um GLB humano próprio e aponte a env. */
 export const AVATAR_GLB_REFERENCIA = "https://threejs.org/examples/models/gltf/Soldier.glb";
@@ -33,25 +34,42 @@ export type AvatarLuzHandle = {
   animar(o: { andando: boolean; correndo?: boolean; sentado?: number; dt: number; t: number }): void;
   /** `facing` = atan2(dx, dz) do movimento (a conversão pro modelo é interna). */
   olharPara(facing: number): void;
+  /** Troca a cor da armadura (cosmético / ordem canônica chegou depois). */
+  recolorir(hex: string): void;
   dispose(): void;
 };
 
 const achar = (clips: THREE.AnimationClip[], re: RegExp) => clips.find((c) => re.test(c.name)) ?? clips[0];
 
-export function criarAvatarLuz(corHex: string, starTex: THREE.Texture, low: boolean, gltf: GLTF | null): AvatarLuzHandle {
-  const cor = new THREE.Color(corHex);
+export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low: boolean, gltf: GLTF | null): AvatarLuzHandle {
+  const armadura = new THREE.Color(armaduraHex), luz = new THREE.Color(COR_LUZ);
   const grupo = new THREE.Group();
   const corpo = new THREE.Group(); grupo.add(corpo);   // sentar: inclina/abaixa o corpo; o grupo guarda posição/yaw
   const meshes: THREE.Object3D[] = [];
-  let holo: THREE.MeshStandardMaterial | null = null;
+  const matArmadura = new THREE.MeshStandardMaterial({ color: armadura.clone().multiplyScalar(0.5), emissive: armadura, emissiveIntensity: 0.65, roughness: 0.4, metalness: 0.35 });
+  const matViseira = new THREE.MeshBasicMaterial({ color: luz });                       // a "luz" do rosto
+  // AURA: casca inflada (back-face, aditiva) em volta do corpo — o que faz dele um ser de luz
+  const matAura = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
+  matAura.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n transformed += normalize(normal) * 0.05;"); };
   let mixer: THREE.AnimationMixer | null = null;
   let idle: THREE.AnimationAction | null = null, walk: THREE.AnimationAction | null = null, run: THREE.AnimationAction | null = null;
 
   if (gltf) {
     const modelo = skClone(gltf.scene);
     modelo.scale.setScalar(1.15);
-    holo = new THREE.MeshStandardMaterial({ color: 0x07131c, emissive: cor, emissiveIntensity: 1.45, roughness: 0.45, metalness: 0, transparent: true, opacity: 0.86 });
-    modelo.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.material = holo!; m.frustumCulled = false; meshes.push(m); } });
+    const cascas: THREE.Mesh[] = [];
+    modelo.traverse((o) => {
+      const m = o as THREE.Mesh; if (!m.isMesh) return;
+      m.frustumCulled = false;
+      if (/visor/i.test(m.name)) { m.material = matViseira; return; }   // viseira = luz; o resto = armadura
+      m.material = matArmadura; meshes.push(m);
+      const sk = m as THREE.SkinnedMesh;
+      let casca: THREE.Mesh;
+      if (sk.isSkinnedMesh) { const c = new THREE.SkinnedMesh(m.geometry, matAura); c.bind(sk.skeleton, sk.bindMatrix); casca = c; }
+      else casca = new THREE.Mesh(m.geometry, matAura);
+      casca.frustumCulled = false; casca.renderOrder = 2; cascas.push(casca); casca.userData.pai = m.parent;
+    });
+    for (const c of cascas) (c.userData.pai as THREE.Object3D).add(c);
     corpo.add(modelo);
     if (gltf.animations.length) {
       mixer = new THREE.AnimationMixer(modelo);
@@ -65,7 +83,7 @@ export function criarAvatarLuz(corHex: string, starTex: THREE.Texture, low: bool
   const n = low ? 110 : 240, np = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { const y = 0.2 + Math.random() * 1.6, r = 0.3 + Math.random() * 0.5, a = Math.random() * 6.28; np[i * 3] = Math.cos(a) * r; np[i * 3 + 1] = y; np[i * 3 + 2] = Math.sin(a) * r; }
   const ng = new THREE.BufferGeometry(); ng.setAttribute("position", new THREE.BufferAttribute(np, 3));
-  const neu = new THREE.Points(ng, new THREE.PointsMaterial({ size: 0.12, map: starTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, color: cor }));
+  const neu = new THREE.Points(ng, new THREE.PointsMaterial({ size: 0.12, map: starTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, color: luz.clone().lerp(armadura, 0.3) }));
   grupo.add(neu);
 
   let alvo = 0, wWalk = 0, wRun = 0;
@@ -82,8 +100,9 @@ export function criarAvatarLuz(corHex: string, starTex: THREE.Texture, low: bool
       neu.rotation.y += dt * 0.5;
     },
     olharPara(f) { alvo = f + Math.PI; },
+    recolorir(hex) { armadura.set(hex); matArmadura.color.copy(armadura).multiplyScalar(0.5); matArmadura.emissive.copy(armadura); (neu.material as THREE.PointsMaterial).color.copy(luz).lerp(armadura, 0.3); },
     dispose() {
-      mixer?.stopAllAction(); holo?.dispose(); ng.dispose(); (neu.material as THREE.Material).dispose();
+      mixer?.stopAllAction(); matArmadura.dispose(); matViseira.dispose(); matAura.dispose(); ng.dispose(); (neu.material as THREE.Material).dispose();
       grupo.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry && !gltf) m.geometry.dispose(); });
       grupo.removeFromParent();
     },
