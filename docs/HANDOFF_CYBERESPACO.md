@@ -29,5 +29,6 @@ Entrada da Zaeon em produção, **sem flag**. Espec visual original: handoff "Lo
 ## Não verificado / pendências
 - Multiplayer **entre duas contas reais** com Pusher de verdade (testado com presenças simuladas).
 - Requer `NEXT_PUBLIC_PUSHER_KEY/CLUSTER` + `client events` ligado no app Pusher; sem isso cai no POST `/pos` a 4 Hz ou "sem tempo real".
-- Avatar é o humanoide procedural holográfico (sem GLB). Trocar = reimplementar `criarAvatarLuz` mantendo o contrato.
+- **Avatar = GLB humano rigado** (Idle/Walk/Run, `SkeletonUtils.clone`, escala 1.15, material holográfico emissivo por usuário + ~240 neurônios). Por padrão carrega o modelo de REFERÊNCIA de teste (`threejs.org/.../Soldier.glb`, runtime, terceiros). **Em produção hospede um GLB próprio** (ex.: `public/assets/avatar.glb`) e defina o build-arg `NEXT_PUBLIC_CYBER_AVATAR_GLB` (Dockerfile/compose/deploy.yml já têm a plumbagem; variável do GitHub com o mesmo nome). Se o GLB não carregar, o avatar fica só com luz/neurônios.
+- Contrato de navegação: Estudar/clique no monitor → `postMessage({type:"zaeon:enter-study"})` (mesma origem) → `router.push("/research-lab")`.
 - Dispositivo móvel real (gestos, FPS), navegador logado de ponta a ponta.

@@ -13,7 +13,8 @@ import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
 import { criarBase, type BaseEstudoHandle } from "./BaseEstudo";
-import { criarAvatarLuz, type AvatarLuzHandle } from "./AvatarLuz";
+import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle } from "./AvatarLuz";
 
 export type PessoaCyber = { id: string; name: string; color: string };
 export type CyberOpts = {
@@ -76,8 +77,16 @@ export class CyberEngine {
   private prontoDisparado = false;
   private cleanups: Array<() => void> = [];
 
-  constructor(opts: CyberOpts) {
-    this.o = opts; this.menu = opts.menu;
+  private gltf: GLTF | null;
+
+  /** Carrega o GLB humano (uma vez) e cria a engine. Se o modelo não carregar, os avatares ficam só com a luz/neurônios. */
+  static async criar(opts: CyberOpts): Promise<CyberEngine> {
+    const gltf = await carregarModeloAvatar().catch((e) => { console.warn("[cyber] avatar GLB não carregou:", e); return null; });
+    return new CyberEngine(opts, gltf);
+  }
+
+  private constructor(opts: CyberOpts, gltf: GLTF | null) {
+    this.o = opts; this.menu = opts.menu; this.gltf = gltf;
     const { container, low } = opts;
     this.w = Math.max(1, container.clientWidth); this.h = Math.max(1, container.clientHeight);
     this.R = new THREE.WebGLRenderer({ antialias: !low, powerPreference: "high-performance" });
@@ -123,7 +132,7 @@ export class CyberEngine {
   }
 
   private novoAtor(p: PessoaCyber, x: number, z: number): Ator {
-    const av = criarAvatarLuz(p.color, this.cena.starTex, this.o.low);
+    const av = criarAvatarLuz(p.color, this.cena.starTex, this.o.low, this.gltf);
     av.group.position.set(x, 0, z); this.cena.scene.add(av.group);
     const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.color + ";"; tag.textContent = p.id === this.o.eu.id ? "Você" : p.name; this.o.overlay.appendChild(tag);
     return { id: p.id, name: p.name, color: p.color, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag };
@@ -348,7 +357,7 @@ export class CyberEngine {
     // menu projetado no monitor (retrato: fixo, sempre tocável)
     const m = this.o.els.menu;
     if (m && this.menu) {
-      if (this.cam.aspect < 0.8) { m.style.display = "flex"; m.style.left = "50%"; m.style.top = "79%"; }
+      if (this.cam.aspect < 0.8) { m.style.display = "flex"; m.style.left = "50%"; m.style.top = "68%"; }
       else { const l = this.minhaBase; if (l) { const mw = localParaMundo(l, 0, -1.44); const p = this.proj(new THREE.Vector3(mw.x, 1.85, mw.z)); m.style.display = p.vis ? "flex" : "none"; if (p.vis) { m.style.left = p.x + "px"; m.style.top = p.y + "px"; } } }
     }
     // rótulo do monitor em hover
