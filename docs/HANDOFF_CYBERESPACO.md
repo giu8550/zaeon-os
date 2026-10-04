@@ -44,4 +44,9 @@ O aviso "Tempo real indisponível" **só aparece quando de fato falhou**, e diz 
 | Conecta mas ninguém se mexe | **"Enable client events"** desligado em Pusher → App Settings (erro 4301). O cliente detecta e cai no fallback do servidor (`POST /pos`, 4 Hz) com um `console.warn` | painel do Pusher |
 | "Sem conexão com o tempo real" | WebSocket bloqueado (`failed`/`unavailable`) | rede/proxy |
 
-Ciclo de vida: `subscription_succeeded` → presença; a posição chega por `client-pos` (12 Hz; fallback `pos` via servidor); `member_removed` remove o personagem (a base fica); teto de 5 no auth.
+Ciclo de vida:
+- `subscription_succeeded` / `member_added` → **seed**: todo membro online aparece na hora, sentado na própria base (`poseNoAssento`), antes de qualquer posição; e eu mando `client-hello` → quem já está reenvia a pose na hora (sem assimetria "um vê, o outro não").
+- Posição por `client-pos` a **9 Hz** (teto do Pusher = 10 client events/s por conexão), **só quando a pose muda**; fallback `pos` via servidor a 4 Hz.
+- **Heartbeat** de 2 s por `setInterval` (+ ao voltar pra aba) reenvia a última pose: o `requestAnimationFrame` pausa em segundo plano, então sem isso o avatar "congelava" pros outros.
+- `member_removed` remove o personagem (a base fica); teto de 5 no auth.
+- A **janela da landing** não tem rede (é só a vista): pra se ver, os dois precisam clicar em **Conectar** (tela cheia `/lounge-cosmico`) no **mesmo convite**.

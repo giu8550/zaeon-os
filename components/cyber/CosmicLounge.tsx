@@ -6,10 +6,11 @@
  *    base privada por pessoa. Se a sala não abrir (cheia/erro), dá pra entrar sozinho.
  * three.js é client-only e pesado: este módulo é importado com next/dynamic (ssr:false) pelos chamadores.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { corDoUsuario } from "@/lib/lounge3d/tipos";
+import { basesDosMembros, poseNoAssento } from "@/lib/cyber/bases";
 import { temWebGL } from "@/lib/ui/globo";
 import { LAB_ENTRADA } from "@/lib/ui/loungeHub";
 import { avisoRealtime } from "@/lib/lounge3d/realtimeEstado";
@@ -47,7 +48,14 @@ function Tela() {
   const { data } = useSession();
   const { salaId, erro, tentarDeNovo } = useResolverSala();
   const [solo, setSolo] = useState(false);
-  const sala = useSala3D(salaId);
+  // ordem canônica dos membros (define a base de cada um) — ref, pq o hook a consulta dentro dos eventos do Pusher
+  const ordemRef = useRef<string[]>([]);
+  const poseInicial = useCallback((id: string) => {
+    const lay = basesDosMembros(ordemRef.current).get(id);
+    return lay ? { ...poseNoAssento(lay), sit: true } : null;   // quem ainda não mandou posição aparece sentado na própria base
+  }, []);
+  const sala = useSala3D(salaId, { poseInicial });
+  ordemRef.current = sala.sala?.members ?? [];
 
   const euSolo = useMemo<PessoaCyber>(() => { const id = (data?.user as { id?: string } | undefined)?.id ?? "local"; return { id, name: data?.user?.name ?? "Visitante", color: id === "local" ? "#45d6ff" : corDoUsuario(id) }; }, [data]);
   // a ORDEM de `sala.members[]` (só cresce) define a base de cada pessoa — igual pra todo mundo
