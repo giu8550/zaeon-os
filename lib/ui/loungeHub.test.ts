@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copyEntrada, ehMsgEntrarEstudo, ehRotaImersiva } from "./loungeHub";
+import { LAB_ENTRADA, copyEntrada, ehMsgEntrarEstudo, ehRotaImersiva } from "./loungeHub";
 
 describe("loungeHub", () => {
   it("rota imersiva só no cyberespaço", () => {
@@ -15,6 +15,7 @@ describe("loungeHub", () => {
     expect(ehMsgEntrarEstudo({ type: "x" }, "https://a.com", "https://a.com")).toBe(false);
     expect(ehMsgEntrarEstudo("zaeon:enter-study", "https://a.com", "https://a.com")).toBe(false);
   });
+  it("entrar no laboratório cai direto na aba de pesquisa", () => { expect(LAB_ENTRADA).toBe("/research-lab?tab=pesquisa"); });
   it("copy por estado de login", () => {
     expect(copyEntrada(true).cta).toMatch(/cyberespaço/);
     expect(copyEntrada(false).badges.length).toBeGreaterThan(0);

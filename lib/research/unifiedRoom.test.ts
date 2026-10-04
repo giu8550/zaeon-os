@@ -11,7 +11,7 @@ describe("resolveLabTab", () => {
   it("flag off: devolve a aba como veio (layout atual)", () => {
     expect(resolveLabTab("sala-de-estudos", false)).toEqual({ tab: "sala-de-estudos" });
     expect(resolveLabTab("pesquisas", false)).toEqual({ tab: "pesquisas" });
-    expect(resolveLabTab("lounge", false)).toEqual({ tab: "lounge" });
+    expect(resolveLabTab("lounge", false)).toBeNull(); // o Lounge saiu do laboratório: vive no cyberespaço
   });
 
   it("flag on: abas antigas viram sub-abas da Sala de Pesquisa", () => {

@@ -10,29 +10,11 @@ import "@/src/i18n";
 
 // --- IMPORTS ---
 import { Navbar } from "@/components/main/navbar";
-import { Mic, MicOff, Coffee, Code2, Building2 } from "lucide-react";
+import { Mic, MicOff, Code2, Building2 } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const StudyRoomContent = dynamic(
   () => import("@/app/workstation/student/StudyRoomContent"),
-  { ssr: false },
-);
-const StudentLoungeContent = dynamic(
-  () => import("@/app/workstation/student/StudentLoungeContent"),
-  { ssr: false },
-);
-const TeacherLoungeContent = dynamic(
-  () => import("@/app/workstation/teacher/LoungeContent"),
-  { ssr: false },
-);
-// Cartolina Caderno (coworking) — renderiza na aba "lounge" (2a).
-const LoungeCartolina = dynamic(
-  () => import("@/components/lounge/LoungeCartolina"),
-  { ssr: false },
-);
-// Lounge 3D (co-working com avatares) — atrás de NEXT_PUBLIC_LOUNGE_3D (build-arg). Client-only (three/Pusher).
-const LoungeSala3D = dynamic(
-  () => import("@/components/lounge/LoungeSala3D"),
   { ssr: false },
 );
 const ResearchesPage = dynamic(
@@ -136,11 +118,13 @@ import {
   CloudArrowUpIcon,
   NewspaperIcon,
   AcademicCapIcon,
+  ArrowUturnLeftIcon,
 } from "@heroicons/react/24/outline";
+import { useRouter } from "next/navigation";
+import { LOUNGE_ROTA } from "@/lib/ui/loungeHub";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
-import { lounge3dOn } from "@/lib/lounge3d/tipos";
 import ResearchSubTabs, { PesquisasPills } from "./ResearchSubTabs";
 
 // Sala de Pesquisa UNIFICADA (Estudos + Pesquisa, sub-abas Chat · Estudos · Pesquisas).
@@ -753,6 +737,7 @@ export default function HomeworkPage({
   const [mounted, setMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isChatLeft, setIsChatLeft] = useState(false);
+  const router = useRouter();
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [activeSection, setActiveSection] = useState<
     "pdf" | "examiner" | "doc" | null
@@ -2394,13 +2379,6 @@ export default function HomeworkPage({
           title: "Pesquisas",
           subtitle: "Todas as pesquisas iniciadas via agente",
         };
-      case "lounge":
-        return {
-          title: "Lounge",
-          subtitle: isTeacher
-            ? "Espaço informal para conversa entre docentes"
-            : "Espaço informal para conversa entre estudantes",
-        };
       case "escritorio":
         return {
           title: "Escritório",
@@ -2430,22 +2408,6 @@ export default function HomeworkPage({
     }
   };
   const tabMeta = getTabMeta();
-
-  // Botão do Lounge na sidebar — a posição muda com a sala unificada (Escritório acima dele).
-  const loungeNav = (
-    <button
-      data-tour="lounge"
-      onClick={() => setActiveTab("lounge")}
-      className={navItem(activeTab === "lounge", "violet")}
-    >
-      <Coffee className="w-5 h-5 shrink-0" />
-      {isSidebarOpen && (
-        <span className="text-[10px] font-black uppercase whitespace-nowrap">
-          Lounge
-        </span>
-      )}
-    </button>
-  );
 
   if (!mounted || status === "loading") {
     return (
@@ -2548,8 +2510,6 @@ export default function HomeworkPage({
               )}
             </button>
 
-            {!UNIFIED && loungeNav}
-
             {/* Escritório: os agentes da Zaeon como um lugar */}
             <button
               onClick={() => setActiveTab("escritorio")}
@@ -2562,9 +2522,6 @@ export default function HomeworkPage({
                 </span>
               )}
             </button>
-
-            {/* Sala unificada: Escritório sobe acima do Lounge */}
-            {UNIFIED && loungeNav}
 
             <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
 
@@ -2612,6 +2569,19 @@ export default function HomeworkPage({
                 <span className="text-[10px] font-black uppercase">Foco</span>
               )}
             </button>
+            {/* Voltar: de volta ao cyberespaço (o lounge só é carregado enquanto se está nele). */}
+            <button
+              data-tour="voltar-cyberespaco"
+              onClick={() => router.push(LOUNGE_ROTA)}
+              aria-label="Voltar ao cyberespaço"
+              title="Voltar ao cyberespaço"
+              className="flex items-center gap-3 p-2 rounded-xl text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5 group"
+            >
+              <ArrowUturnLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
+              {isSidebarOpen && (
+                <span className="text-[10px] font-black uppercase">Voltar</span>
+              )}
+            </button>
           </div>
         </motion.nav>
       )}
@@ -2621,7 +2591,7 @@ export default function HomeworkPage({
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
-        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos", "lounge"].includes(activeTab) && (
+        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos"].includes(activeTab) && (
           <div className="flex items-end justify-between shrink-0">
             <div>
               <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
@@ -2958,14 +2928,6 @@ export default function HomeworkPage({
           {(UNIFIED ? activeTab === "pesquisa" && subTab === "pesquisas" && pesqView === "salvas" : activeTab === "pesquisas") && (
             <div className="w-full h-full overflow-y-auto custom-scrollbar">
               <ResearchesPage />
-            </div>
-          )}
-
-          {activeTab === "lounge" && (
-            // 2a: a aba "lounge" agora é a CARTOLINA Caderno (coworking). O conteúdo antigo
-            // (StudentLoungeContent/TeacherLoungeContent) foi substituído pela cartolina.
-            <div className="relative w-full h-full">
-              {lounge3dOn() ? <LoungeSala3D /> : <LoungeCartolina embedded />}
             </div>
           )}
 

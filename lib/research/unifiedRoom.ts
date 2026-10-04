@@ -19,7 +19,6 @@ export type LabTab =
   | "pesquisa"
   | "sala-de-estudos"
   | "pesquisas"
-  | "lounge"
   | "pevem"
   | "projetos"
   | "escritorio"
@@ -29,7 +28,7 @@ export type LabTab =
 export type ResearchSubTab = "chat" | "estudos" | "pesquisas";
 
 export const LAB_TABS: readonly LabTab[] = [
-  "pesquisa", "sala-de-estudos", "pesquisas", "lounge", "pevem", "projetos", "escritorio", "news", "profile",
+  "pesquisa", "sala-de-estudos", "pesquisas", "pevem", "projetos", "escritorio", "news", "profile",
 ];
 export const SUB_TABS: readonly ResearchSubTab[] = ["chat", "estudos", "pesquisas"];
 
