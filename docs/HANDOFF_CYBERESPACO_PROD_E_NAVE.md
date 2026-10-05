@@ -4,7 +4,7 @@
 **De:** a sessão que construiu o cyberespaço (PRs #186–#204).
 **Objetivo:**
 1. Colocar em produção o que está no PR **#204** (Zaeon andável, câmera livre, Cidade Zaeon no céu, portal no buraco negro, sala de computadores e nave).
-2. Implementar o plano da **Parte B**, que deixa **descer e subir com a nave (a "moto espacial")** de verdade. Hoje isso não funciona na prática.
+2. Implementar o plano da **Parte B**, que deixa **descer e subir com a nave (a "moto espacial")** de verdade, com **botões de movimento** (subir, descer, direção) que levam a nave a qualquer lugar do mapa. Hoje isso não funciona na prática.
 
 Leia também `docs/HANDOFF_CYBERESPACO.md`, que descreve a arquitetura, o tempo real e os marcos e é a referência viva. Este documento é o recorte de execução.
 
@@ -98,7 +98,7 @@ Logado, com **duas contas**: A é o fundador (`donmartinezcaiudoceu@gmail.com`, 
 | 6 | Clicar no buraco negro, ou pisar no anel dourado no chão embaixo dele | A entra na cidade (fade). B recebe "o portal não abre pra você". |
 | 7 | Na cidade, clicar numa estação de computador estando perto | Abre `/research-lab?tab=pesquisa` e o WebGL é desmontado. |
 | 8 | Portal de volta, ou "↩ Voltar à praça" | A volta para a praça. |
-| 9 | Nave: Embarcar → voar → pousar → sair | Veja a **Parte B**. Hoje só funciona com rota manual e paciência. |
+| 9 | Nave: Embarcar → voar → pousar → sair | Veja a **Parte B**. Hoje só funciona com rota manual e paciência; os botões de movimento (⬆ Subir, ⬇ Descer, direcional) resolvem. |
 | 10 | B no chão enquanto A voa | B vê a nave de A voando. |
 | 11 | Celular (aparelho real) | Joystick, CORRER e PULAR, SUBIR e DESCER em voo. O FPS precisa ser aceitável; meça. |
 
@@ -109,7 +109,7 @@ Logado, com **duas contas**: A é o fundador (`donmartinezcaiudoceu@gmail.com`, 
 
 ### A.7 Dívida técnica conhecida (não bloqueia)
 
-- A nave **pousada no chão não é sincronizada** para os outros; eles só a veem em voo. Veja B.6.
+- A nave **pousada no chão não é sincronizada** para os outros; eles só a veem em voo. Veja B.3.
 - `window.__cyber`: o engine se expõe só quando `NODE_ENV !== "production"`, para depuração e testes em dev. Pode ficar.
 - Ficou código de menu de monitor sem uso no `engine.ts` (`els.menu`, `els.hold`, `holdT`) desde que a landing virou "só a vista". Dá para limpar.
 - Componentes antigos do lounge sem uso: `LoungeCartolina`, `LoungeSala3D`, `Cartolina3D`, `CollabModule`.
@@ -130,51 +130,81 @@ Logado, com **duas contas**: A é o fundador (`donmartinezcaiudoceu@gmail.com`, 
 | FPS baixo | Fica muito mais lento: a 5 FPS, em 10 s reais sobe só 40 m | O engine limita `dt` a 0,05 s, e com frames escassos o tempo de jogo anda mais devagar que o real. |
 | Orientação | Não há altímetro, marcador de pouso nem aviso de "saia da borda" | — |
 
-### B.2 Solução em 6 frentes
+### B.2 Solução (pedido do dono: **botões de movimento da nave**)
 
-**B.2.1 Poço de voo (elevador) sob o hangar.** É a correção principal.
-- Abra um **poço vertical** atravessando a ilha embaixo do hangar, com raio de cerca de 4,5 m centrado no hangar (local `x 22, z 8`).
-- Dentro do poço, a ilha **não é sólida** para a nave. Assim, segurar DESCER no hangar leva direto ao chão, e segurar SUBIR embaixo do poço leva direto ao hangar.
-- A ilha tem pouco mais de 14 m de espessura ali: o fundo do cone, a 23,4 m do centro, fica em cerca de 176 m.
-- Lógica pura em `lib/cyber/ceu.ts`:
-  - acrescente `CIDADE.poco = { x: 22, z: 8, r: 4.5 }`;
-  - crie `noPoco(p)`;
-  - em `foraDaIlha`, retorne `p` sem mudança quando `noPoco(p)`;
-  - em `chaoDaNave`, quando estiver no poço e **descendo** abaixo do piso, o chão é o do mapa (0). Para isso, passe `vy`, ou um booleano `atravessando`, como argumento.
-- Visual em `Cidade.ts`: um tubo de cristal translúcido do piso até o fundo da ilha, com anéis de luz descendo devagar (sem estrobo), mais uma marcação circular no chão do mapa embaixo do poço para quem vem de baixo.
-- **Testes** em `lib/cyber/ceu.test.ts`: do hangar com DESCER chega a y = 0, pousado; do chão embaixo do poço com SUBIR passa do piso; fora do poço, embaixo da ilha, continua bloqueado.
+**Princípio:** os botões **movem a nave**. São controles de voo, não teleporte, e é com eles que a nave chega a **qualquer lugar do mapa**: chão, praça, bases, Zaeon, Cidade, e de volta. A pessoa pilota em 3D, subindo, descendo e andando para os lados. Pode pousar onde houver chão livre e sair da nave ali.
 
-**B.2.2 Voo independente de FPS.**
+O resto do plano existe para isso funcionar sem frustração:
+- voo independente de FPS e mais rápido;
+- regras de pouso que não "grudam" na cidade;
+- HUD que mostra onde a nave vai encostar;
+- atalhos opcionais.
+
+**B.2.1 Botões de movimento na tela (desktop e celular).** É a correção principal.
+- **Onde ficam** (`CenaCyber.tsx`, HUD de voo): visíveis **sempre que estiver pilotando**, no desktop também (hoje SUBIR e DESCER só aparecem no toque).
+  - **⬆ Subir** e **⬇ Descer**: segurar para mover na vertical, usando `comandoVoo({ subir })` e `comandoVoo({ descer })`, que já existem. Ficam à direita, grandes, com `pointerdown`/`pointerup`/`pointerleave` e captura de ponteiro, para não "grudar" quando o dedo escorrega.
+  - **Direção** (frente, trás e laterais) à esquerda:
+    - no celular, o joystick que já existe;
+    - no desktop, um **direcional de 4 botões** (setas) que alimenta o mesmo `wx`/`wz` de WASD, relativo à câmera, como hoje.
+  - **Pousar / Sair da nave:** "Pousar" desce sozinho até o chão logo abaixo (o que `chaoDaNave` disser). Depois de pousada, "Sair da nave".
+- **Teclado continua:** WASD e setas para direção; Espaço ou **E** para subir; Shift ou **Q** para descer. E e Q são novos, porque Shift também é "correr" a pé.
+- **Alcance:** a nave voa por **todo o mapa**. Confirme que `VOO.raioMapa` (320) cobre tudo onde há coisa para visitar, incluindo bases distantes e a Zaeon (−30, −48). Se o mapa andável a pé for maior, aumente. O teto é `VOO.yMax` (260), acima da Cidade (190).
+- **Pouso em qualquer lugar:** encostar no chão (y = 0) pousa ali, empurrado para fora de colisores sólidos (bases, Zaeon, ilha). Deixe também pousar:
+  - **na plataforma do topo da Zaeon**, só para o fundador, que já tem acesso ao topo: o chão vira `nav.pisoY` dentro de `bordaR`, igual à cidade;
+  - **na Cidade** (já existe).
+  - Ao sair da nave, o avatar fica exatamente onde a nave pousou, com a altura certa: chão, topo da Zaeon ou Cidade.
+- **Descer da Cidade com os botões:** hoje, segurar ⬇ Descer em cima da cidade pousa na cidade. Isso continua correto, porque é chão, mas a pessoa precisa saber que, para ir lá embaixo, **sai voando pela borda** (cerca de 17 m a partir do hangar) e desce. Isso é coberto por:
+  - **dica contextual** no HUD (B.2.6);
+  - **anel de borda** desenhado no ar ao redor da ilha enquanto pilota;
+  - ou o **poço** opcional (B.2.7), que permite descer direto pelo hangar.
+- **Subir para a Cidade com os botões:** embaixo da ilha, ⬆ Subir trava no fundo dela, que é sólida. O mesmo HUD avisa: "a ilha está em cima, saia pela lateral". Com o poço, sobe direto.
+- **Testes** (`lib/cyber/voo.test.ts` novo, puro, simulando entradas como se fossem os botões):
+  - hangar → andar para fora da borda → segurar Descer → **pousa em y = 0**;
+  - chão → sair de baixo da ilha → segurar Subir até acima de `pisoY` → ir até o hangar → Descer → **pousa na Cidade**;
+  - voar até a **praça**, até uma **base distante** e até a **Zaeon**, pousando em cada uma (fora dos colisores);
+  - fundador **pousa no topo da Zaeon**;
+  - tudo a **60 e a 10 FPS** (B.2.3).
+
+**B.2.2 Atalhos de rota (opcionais, por cima dos botões de movimento).**
+- Botões de um toque que **pilotam pela pessoa usando o mesmo movimento**: o piloto automático gera entradas de `wx`/`wz`/`subir`/`descer`, não teleporta. A nave voa visivelmente pelo caminho, e os outros a veem passar.
+  - Os destinos mínimos são **"⬇ Chão (praça)"** e **"⬆ Cidade (hangar)"**. Dá para acrescentar "Zaeon" e "Minha base".
+  - Função pura `rotaPara(destino, s): Waypoint[]` em `lib/cyber/voo.ts`. Se a nave estiver em cima ou embaixo da ilha, a rota primeiro sai pela borda (`bordaR + 8`), depois sobe ou desce e por fim vai até o destino e pousa.
+  - `seguirRota(s, rota, dt)` devolve as entradas do frame.
+  - **Qualquer toque nos botões de movimento cancela** o atalho, porque a pessoa sempre tem o controle. Durante o trajeto aparece "■ Parar".
+- **Testes:** cada atalho chega e pousa, nunca atravessa a ilha nem a Zaeon, e é cancelado por entrada manual.
+
+**B.2.3 Voo independente de FPS.**
 - No engine, passe o `dt` **real** para o voo (limitado a 0,25 s) e divida em **subpassos** de no máximo 1/60 s dentro de `passoVoo`, ou de um wrapper `passoVooSub`.
-- Não use o `dt` limitado a 0,05 que o resto do loop usa.
-- **Teste:** 10 s simulados a 5 FPS e a 60 FPS precisam dar a mesma altura, com tolerância pequena.
+- Não use o `dt` limitado a 0,05 que o resto do loop usa; hoje, a 5 FPS, em 10 s reais a nave sobe só 40 m.
+- **Teste:** 10 s simulados a 5 FPS e a 60 FPS dão a mesma altura, com tolerância pequena.
 
-**B.2.3 Velocidade e sensação de voo.**
+**B.2.4 Velocidade.**
 - Em `VOO`, suba a velocidade vertical para cerca de 34 m/s com aceleração (curva suave) e a horizontal para cerca de 30 m/s.
-- Meta: **até 7 s** do hangar até o chão, ou o caminho inverso, já contando o poço.
-- Mantenha o teto `yMax` acima de `pisoY + 40` (já existe um teste para isso).
+- Meta: **até 8 s** do hangar até o chão segurando os botões (incluindo sair pela borda), e o mesmo na volta. Atravessar o mapa inteiro (cerca de 600 m) deve levar no máximo 25 s; se for preciso, adicione um "turbo" ao segurar a direção por mais de 1 s.
+- Mantenha `yMax` acima de `pisoY + 40` (já existe um teste para isso).
 
-**B.2.4 Piloto automático: "⬇ Descer ao chão" e "⬆ Subir à Cidade".**
-- Em `lib/cyber/voo.ts`, de forma pura:
-  - `rotaPara(destino: "chao" | "cidade", s: EstadoVoo): Waypoint[]`;
-  - `seguirRota(s, rota, dt): { s, rota, chegou }`, um controlador proporcional com os limites de `VOO`.
-- **Descer ao chão:** ir até a boca do poço (se estiver na cidade), descer pelo poço e pousar no **heliporto** (B.2.5) ou logo abaixo do poço.
-- **Subir à Cidade:** ir até a coluna do poço e subir até o hangar, e pousar.
-- Qualquer entrada manual (WASD, SUBIR ou DESCER) **cancela** o piloto.
-- **UI** (`CenaCyber.tsx`): no HUD de voo, ao lado de "Sair da nave", mostre "⬇ Descer ao chão" quando estiver na cidade ou acima de 60 m, e "⬆ Subir à Cidade" quando estiver no chão ou abaixo da cidade. Os dois botões só aparecem pilotando.
-- **Testes:** as duas rotas chegam ao destino, pousadas e sem atravessar sólidos, a 60 e a 10 FPS.
-
-**B.2.5 Heliporto no chão (perto da praça).**
+**B.2.5 Heliporto no chão (perto da praça) — ponto de pouso de referência e destino do atalho "⬇ Chão".**
 - Um ponto de pouso fixo no chão, por exemplo por volta de (24, 24), a uns 34 m da origem. Escolha um ponto livre do anel de bases, da Zaeon e da escada.
-- **Registre como POI** em `lib/cyber/landmarks.ts` (preset novo `heliporto`, `acesso: "publico"`, sem nav), para que `basesDosMembros` pule automaticamente os slots que caírem nele. Hoje `baseLivreDosPOIs` já faz isso para POIs com `footprintR`.
+- **Registre como POI** em `lib/cyber/landmarks.ts` (preset novo `heliporto`, `acesso: "publico"`, sem nav), para que `basesDosMembros` pule automaticamente os slots que caírem nele (`baseLivreDosPOIs` já faz isso para POIs com `footprintR`).
 - Visual: disco com anel de luz e um "H" estilizado, sem logo.
-- O piloto automático "Descer ao chão" pode ter como destino o heliporto em vez de logo abaixo do poço. Escolha e documente; o heliporto é mais social, porque fica perto das pessoas.
+- Pousar perto da praça é o que permite "descer para interagir com os outros". Se o heliporto estiver ocupado por alguém em pé, pouse ao lado: empurre o ponto de pouso para fora dos colisores.
 
 **B.2.6 HUD de voo.**
 - **Altímetro** (`y` em metros) e uma indicação "sobre a Cidade" ou "sobre o chão".
 - **Marcador de pouso:** um anel ou sombra no chão sob a nave, na altura de `chaoDaNave`, para mostrar onde ela vai encostar.
-- **Dica contextual:** sobre a cidade e fora do poço, segurando DESCER, mostre "Desça pelo poço do hangar ↓". Embaixo da ilha, segurando SUBIR, mostre "Suba pelo poço do hangar ↑".
-- **Teclado:** mantenha Espaço para subir e Shift para descer, e adicione **E** para subir e **Q** para descer, porque Shift também é "correr" a pé e confunde. No celular já existem SUBIR e DESCER.
+- **Dica contextual:** sobre a cidade, segurando ⬇ Descer, mostre "Saia pela borda da ilha pra descer até o chão". Embaixo da ilha, segurando ⬆ Subir, mostre "A ilha está em cima — saia pela lateral pra subir".
+- **Anel de borda:** enquanto pilota perto da Cidade, desenhe um anel tênue (sem piscar) em `bordaR` na altura do piso, para mostrar por onde dá para descer e subir.
+- **Bússola ou indicadores** dos destinos principais (Praça, Zaeon, Cidade, Minha base) na borda da tela, para achar o caminho para qualquer lugar.
+
+**B.2.7 Opcional: poço de voo sob o hangar.** É complemento aos botões de movimento.
+- Um **poço vertical** atravessando a ilha embaixo do hangar (raio de cerca de 4,5 m, centro local `x 22, z 8`, onde a ilha tem cerca de 14 m de espessura). Dentro dele, a ilha não é sólida, então DESCER no hangar desce direto e SUBIR por baixo sobe direto.
+- Lógica em `lib/cyber/ceu.ts`:
+  - `CIDADE.poco = { x: 22, z: 8, r: 4.5 }` e `noPoco(p)`;
+  - `foraDaIlha` ignora pontos dentro do poço;
+  - em `chaoDaNave`, quem está no poço descendo abaixo do piso tem como chão o do mapa.
+- Visual: tubo de cristal com anéis de luz lentos e uma marcação no chão embaixo.
+- Se for feito, os atalhos (B.2.2) podem usar o poço, que é mais curto, em vez de contornar a borda.
+- **Só faça depois do B.2.1** e se o dono quiser.
 
 ### B.3 Nave pousada visível para todos (dívida da Parte A)
 
@@ -191,16 +221,22 @@ Logado, com **duas contas**: A é o fundador (`donmartinezcaiudoceu@gmail.com`, 
 
 ### B.5 Critérios de aceite da Parte B
 
-- [ ] Do **hangar**, segurar DESCER leva a nave **até o chão do mapa** pelo poço, em até 7 s a 60 FPS, e pousa.
-- [ ] Do **chão embaixo do poço**, segurar SUBIR leva **até o hangar** sem travar no fundo da ilha.
-- [ ] "⬇ Descer ao chão" e "⬆ Subir à Cidade" funcionam de qualquer posição e são canceláveis com entrada manual.
+- [ ] **Botões de movimento na tela** (⬆ Subir, ⬇ Descer, direcional no desktop, joystick no celular) aparecem sempre que se pilota, no **desktop e no celular**. Segurar move a nave; soltar faz ela parar e pairar. Teclado: WASD/setas, Espaço/E, Shift/Q.
+- [ ] Com os botões dá para ir a **qualquer lugar do mapa**:
+  - Cidade → chão (saindo pela borda) e chão → Cidade (saindo de baixo da ilha);
+  - praça, bases distantes e Zaeon.
+  - Pousa em cada lugar fora dos colisores. "Sair da nave" deixa o avatar ali, na altura certa.
+- [ ] O fundador pousa no **topo da Zaeon**.
+- [ ] Cidade → chão leva **no máximo 8 s** de voo a 60 FPS.
 - [ ] O voo é **independente de FPS**: mesma trajetória a 5 e a 60 FPS, com teste.
-- [ ] Há altímetro, marcador de pouso e dicas contextuais.
-- [ ] Ao pousar no heliporto ou no chão e escolher "Sair da nave", dá para andar e falar com os outros. Reembarcar funciona (o servidor valida).
+- [ ] Há altímetro, marcador de pouso, anel de borda, dicas contextuais e indicadores dos destinos.
+- [ ] (Opcional, B.2.2) Os atalhos "⬇ Chão" e "⬆ Cidade" voam visivelmente até o destino, pousam e são cancelados por qualquer botão de movimento.
+- [ ] Reembarcar funciona de onde a nave pousou (o servidor valida).
 - [ ] Para os outros, a nave em voo e a nave parada (B.3) aparecem, só para o fundador.
 - [ ] Sem estrobo; `reduced-motion` e `low` respeitados; `dispose()` sem vazamento.
-- [ ] Testes novos em `lib/cyber/ceu.test.ts` e `lib/cyber/voo` (ou `ceu.test.ts`), além de `lib/lounge3d/*`. A suíte inteira continua verde.
+- [ ] Testes novos (`lib/cyber/voo.test.ts`), além de `lib/cyber/*` e `lib/lounge3d/*`. A suíte inteira continua verde.
 - [ ] Verificado no navegador, com a aba visível, e num celular real.
+- [ ] (Opcional, B.2.7) Poço no hangar: Descer e Subir atravessam a ilha pelo poço, e fora dele a ilha continua sólida.
 
 ---
 
