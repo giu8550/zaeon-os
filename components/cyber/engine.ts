@@ -22,6 +22,9 @@ import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type LoopSom } from "./AudioCyber";
 import { pousoDoQG, rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
 import { criarCidade, type CidadeHandle } from "./Cidade";
+import { criarHoloRecado, type HoloRecadoHandle } from "./HoloRecado";
+import { HOLO_NA_BASE } from "@/lib/cyber/recado";
+import type { RecadoQG } from "@/lib/lounge3d/tipos";
 import { criarUniversidade, type UniversidadeHandle } from "./Universidade";
 import { naUniversidade, pilaresDaUniversidade, resolverUniversidade, resolverUniversidadeNoAr } from "@/lib/cyber/universidade";
 import { ESCALA_NAVE, criarNave, type NaveHandle } from "./Nave";
@@ -71,6 +74,8 @@ export type CyberOpts = {
   onVoo?: (h: { y: number }) => void;
   /** atalho de rota em andamento (piloto automático) ou null (chegou / cancelado) */
   onRota?: (destino: DestinoRota | null) => void;
+  /** o dono clicou na TV do lounge da Zaeon (perto dela) → abre a caixa do recado pro QG do Andrei */
+  onAbrirRecado?: () => void;
   onPerto?: (perto: boolean) => void;
   onFalarCom?: (nome: string | null) => void;
   onEntrarEstudo?: () => void;
@@ -118,6 +123,8 @@ export class CyberEngine {
   private alvoDepois: THREE.Vector2 | null = null;
   /** CIDADE ZAEON (céu) + a NAVE do dono */
   private cidade: CidadeHandle | null = null;
+  /** o holograma do recado do dono, ao lado da tela de trabalho da base do QG (do Andrei) */
+  private holo: HoloRecadoHandle | null = null; private recadoId: string | null | undefined = undefined;
   /** a Universidade (castelo no chão, ao norte da praça) */
   private univ: UniversidadeHandle | null = null;
   private nave: NaveHandle | null = null;
@@ -191,6 +198,7 @@ export class CyberEngine {
     if (opts.landmarks) {
       this.cidade = criarCidade({ low, starTex: this.cena.starTex });
       this.cena.scene.add(this.cidade.group);
+      if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
       this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); this.cena.scene.add(this.univ.group);
       this.nave = criarNave({ low, cor: "#2f7bff" }); this.cena.scene.add(this.nave.group);
       const marca = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.2, 40), new THREE.MeshBasicMaterial({ color: 0x7fe0ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -517,6 +525,15 @@ export class CyberEngine {
     }
     s.atualizar(dt);
   }
+  /** o recado ATUAL do dono pro QG: holograma ao lado da tela do Andrei + a TV do lounge; recado NOVO (depois de
+   *  carregar) acende o holograma e toca um ping lá */
+  setRecado(r: RecadoQG | null) {
+    const novo = this.recadoId !== undefined && !!r && r.id !== this.recadoId;
+    this.recadoId = r?.id ?? null;
+    this.holo?.mostrar(r, novo);
+    this.cidade?.mostrarRecadoNaTV(r?.texto ?? null);
+    if (novo && this.holo) this.som.tocar("neuron-chime", this.holo.group.position.clone().setY(this.holo.group.position.y + 2.2), { dist: DISTANCIA.padrao });
+  }
   /** releitura das preferências de som (o React chama ao mudar liga/desliga ou volume) */
   aplicarPrefsSom() { this.som.aplicarPrefs(); }
 
@@ -662,6 +679,11 @@ export class CyberEngine {
     // na CIDADE: computador perto = Sala de Estudos; senão anda no piso
     if (this.cidade && this.noCeu) {
       if (sob === this.o.eu.id && this.perto) { this.o.onEntrarEstudo?.(); return; }   // a minha base, na Zaeon
+      // a TV do LOUNGE: o dono escreve o recado pro QG do Andrei (perto dela)
+      if (this.cidade.tvLounge && this.ray.intersectObject(this.cidade.tvLounge, false).length) {
+        const tv = this.cidade.tvLounge.getWorldPosition(new THREE.Vector3());
+        if (Math.hypot(this.eu.pos.x - tv.x, this.eu.pos.z - tv.z) < 14) { this.o.onAbrirRecado?.(); return; }
+      }
       const hc = this.ray.intersectObject(this.cidade.computadores, false)[0];
       if (hc && computadorPerto(this.eu.pos, 3.2) >= 0) { this.o.onEntrarEstudo?.(); return; }
       const h = this.ray.intersectObjects(this.cidade.alvos, true)[0];
@@ -872,6 +894,11 @@ export class CyberEngine {
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
     if (this.cidade) this.cidade.atualizar(dt, t);
+    if (this.holo) {   // o holograma acompanha a base do QG (que flutua junto com o marco)
+      const lay = baseNoQG(), w = lay ? localParaMundo(lay, HOLO_NA_BASE.x, HOLO_NA_BASE.z) : null;
+      if (lay && w) { this.holo.group.position.set(w.x, this.yDoNivel("qg"), w.z); this.holo.group.rotation.y = lay.rot + HOLO_NA_BASE.giro; }
+      this.holo.atualizar(dt, t);
+    }
     this.univ?.atualizar(dt, t);
     if (this.nave) {
       const n = this.naveEst, curva = (n.yaw - this.yawAnt) / Math.max(dt, 1e-3); this.yawAnt = n.yaw;
@@ -1017,7 +1044,7 @@ export class CyberEngine {
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
     this.som.dispose();
-    this.cidade?.dispose(); this.univ?.dispose(); this.nave?.dispose();
+    this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); this.nave?.dispose();
     if (this.hudVoo) for (const m of [this.hudVoo.marca, this.hudVoo.borda]) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
     this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
   }

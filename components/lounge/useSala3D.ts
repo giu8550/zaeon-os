@@ -11,7 +11,7 @@ import type PusherClient from "pusher-js";
 import { sanitizarPresenca } from "@/lib/lounge3d/sala";
 import { HEARTBEAT_MS, HELLO_JITTER_MS, poseMudou, type Pose } from "@/lib/lounge3d/pose";
 import { classificarErroPusher, ehFalhaDeConexao, type EstadoRealtime, type MotivoErro } from "@/lib/lounge3d/realtimeEstado";
-import { EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca } from "@/lib/lounge3d/tipos";
+import { EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
 
 export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; qg?: boolean };
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
@@ -119,6 +119,8 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       const onPos = (raw: unknown) => { const pr = sanitizarPresenca(raw); if (pr && pr.userId !== euId) mapaRemotos.set(pr.userId, pr); };
       ch.bind(EV_POS_CLIENTE, onPos); ch.bind(EV_POS, onPos);
       ch.bind(EV_CHAT, (m: MensagemChat) => setChat((c) => [...c.slice(-199), m]));
+      // recado do dono pro QG (holograma ao lado da tela do Andrei): chega na hora e fica no conteúdo
+      ch.bind(EV_RECADO, (d: { recado: RecadoQG | null }) => setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, recadoQG: d.recado } } : s)));
       ch.bind(EV_CONTEUDO, (d: { fromUserId: string; conteudo: ConteudoSala; title?: string }) => {
         if (d.fromUserId === euId) return; // o autor já aplicou localmente
         setSala((s) => (s ? { ...s, conteudo: d.conteudo, title: d.title ?? s.title } : s));
@@ -179,5 +181,16 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     if (d?.conteudo) setSala((s) => (s ? { ...s, conteudo: d.conteudo, title: d.title ?? s.title } : s));
   }, [salaId]);
 
-  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, recarregar: carregar };
+  /** o DONO manda (ou apaga, `texto` null) o recado pro QG — o servidor confere a sessão; aplica aqui na hora */
+  const enviarRecado = useCallback(async (texto: string | null): Promise<{ ok: boolean; erro?: string }> => {
+    if (!salaId) return { ok: false, erro: "Sem sala." };
+    const r = await fetch(`/api/lounge3d/${salaId}/recado`, texto === null ? { method: "DELETE" } : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, erro: (d as { error?: string })?.error ?? "Não deu pra enviar." };
+    const recado = texto === null ? null : ((d as { recado?: RecadoQG }).recado ?? null);
+    setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, recadoQG: recado } } : s));
+    return { ok: true };
+  }, [salaId]);
+
+  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, recadoQG: sala?.conteudo.recadoQG ?? null, recarregar: carregar };
 }

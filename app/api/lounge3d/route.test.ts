@@ -12,6 +12,7 @@ import { POST as CHAT } from "./[id]/chat/route";
 import { POST as AUTH } from "./[id]/pusher-auth/route";
 import { POST as ACESSO } from "./[id]/acesso/route";
 import { POST as TOPO } from "./[id]/topo/route";
+import { POST as RECADO, DELETE as APAGAR_RECADO } from "./[id]/recado/route";
 
 const ID = "0123456789abcdef01234567", ME = "aaaaaaaaaaaaaaaaaaaaaaaa", OUTRO = "bbbbbbbbbbbbbbbbbbbbbbbb";
 const json = (b: unknown, method = "POST") => new Request("http://x/", { method, body: JSON.stringify(b), headers: { "Content-Type": "application/json" } });
@@ -98,5 +99,24 @@ describe("/api/lounge3d/[id]", () => {
     m.userFind.mockResolvedValue({ id: ME, name: "Ana", image: null, role: "super_admin" });
     for (const alvo of ["topo", "ceu", "nave"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(200);
     expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(200);
+  });
+
+  it("recado pro QG: só o FUNDADOR manda/apaga; autor da SESSÃO; persiste no conteúdo (sem perder as notas) e difunde", async () => {
+    m.docFind.mockResolvedValue(doc());
+    expect((await RECADO(json({ texto: "oi Andrei" }), { params: { id: ID } })).status).toBe(403);   // Ana não é dona
+    expect((await APAGAR_RECADO(new Request("http://x/", { method: "DELETE" }), { params: { id: ID } })).status).toBe(403);
+    expect(m.docUpdate).not.toHaveBeenCalled();
+    m.userFind.mockResolvedValue({ id: ME, name: "Ana", image: null, role: "super_admin" });
+    expect((await RECADO(json({ texto: "   " }), { params: { id: ID } })).status).toBe(400);
+    const d = await (await RECADO(json({ texto: "reunião às 10h\u0000", deId: OUTRO, deNome: "hacker" }), { params: { id: ID } })).json();
+    expect(d.recado).toMatchObject({ texto: "reunião às 10h", deId: ME, deNome: "Ana" });
+    const salvo = JSON.parse(m.docUpdate.mock.calls[0]![0].data.content);
+    expect(salvo.recadoQG.texto).toBe("reunião às 10h"); expect(salvo.notes[0].text).toBe("velha");   // as notas ficam
+    expect(m.trigger).toHaveBeenCalledWith(`presence-lounge3d-${ID}`, "recado-qg", { recado: expect.objectContaining({ deId: ME }) });
+    // apagar: some do conteúdo e avisa a sala
+    m.docFind.mockResolvedValue({ ...doc(), content: m.docUpdate.mock.calls[0]![0].data.content });
+    expect((await APAGAR_RECADO(new Request("http://x/", { method: "DELETE" }), { params: { id: ID } })).status).toBe(200);
+    expect(JSON.parse(m.docUpdate.mock.calls[1]![0].data.content).recadoQG).toBeUndefined();
+    expect(m.trigger).toHaveBeenLastCalledWith(`presence-lounge3d-${ID}`, "recado-qg", { recado: null });
   });
 });

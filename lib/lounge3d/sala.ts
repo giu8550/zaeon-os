@@ -4,8 +4,8 @@
  * chat→nota. Nada de three/DOM/rede aqui.
  */
 import {
-  LIMITE_SALA, MAX_ARTEFATOS, MAX_NOTAS, MAX_TEXTO_CHAT, MAX_TEXTO_NOTA,
-  type ArtefatoCanvas, type ConteudoSala, type NotaCanvas, type OpsSala, type Presenca,
+  LIMITE_SALA, MAX_ARTEFATOS, MAX_NOTAS, MAX_TEXTO_CHAT, MAX_TEXTO_NOTA, MAX_TEXTO_RECADO,
+  type ArtefatoCanvas, type ConteudoSala, type NotaCanvas, type OpsSala, type Presenca, type RecadoQG,
 } from "@/lib/lounge3d/tipos";
 
 const ID_RE = /^[\w:.-]{1,64}$/;
@@ -19,6 +19,18 @@ export function sanitizarTexto(v: unknown, max: number): string {
   return v.replace(CONTROLE, "").replace(/\s{3,}/g, "  ").trim().slice(0, max);
 }
 export const sanitizarChat = (v: unknown) => sanitizarTexto(v, MAX_TEXTO_CHAT);
+/** texto do recado pro QG (mesma higiene do chat; teto próprio) */
+export const sanitizarTextoRecado = (v: unknown) => sanitizarTexto(v, MAX_TEXTO_RECADO);
+/** um recado guardado no conteúdo da sala; lixo → null */
+export function sanitizarRecado(raw: unknown): RecadoQG | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const texto = sanitizarTextoRecado(r.texto);
+  if (!texto || typeof r.id !== "string" || !ID_RE.test(r.id) || typeof r.deId !== "string" || !/^[a-f0-9]{24}$/i.test(r.deId)) return null;
+  const ts = typeof r.ts === "number" && Number.isFinite(r.ts) ? r.ts : 0;
+  const deCor = typeof r.deCor === "string" && /^#[0-9a-f]{6}$/i.test(r.deCor) ? r.deCor : "#66e6ff";
+  return { id: r.id, texto, deId: r.deId, deNome: sanitizarTexto(r.deNome, 40) || "Zaeon", deCor, ts };
+}
 
 const num = (v: unknown, min: number, max: number): number | null =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null;
@@ -63,7 +75,8 @@ export function lerConteudo(json: unknown): ConteudoSala {
   if (typeof json === "string") { try { o = JSON.parse(json); } catch { o = null; } }
   const notes = Array.isArray(o?.notes) ? o.notes.map(sanitizarNota).filter((n: NotaCanvas | null): n is NotaCanvas => !!n).slice(0, MAX_NOTAS) : [];
   const artifacts = Array.isArray(o?.artifacts) ? o.artifacts.map(sanitizarArtefato).filter((a: ArtefatoCanvas | null): a is ArtefatoCanvas => !!a).slice(0, MAX_ARTEFATOS) : [];
-  return { notes, artifacts };
+  const recadoQG = sanitizarRecado(o?.recadoQG);
+  return recadoQG ? { notes, artifacts, recadoQG } : { notes, artifacts };
 }
 
 /**
@@ -81,7 +94,9 @@ export function aplicarOps(atual: ConteudoSala, ops: OpsSala): ConteudoSala {
   const artifacts: ArtefatoCanvas[] = [];
   for (const a of atual.artifacts) { if (remA.has(a.id)) continue; artifacts.push(upA.get(a.id) ?? a); upA.delete(a.id); }
   for (const a of upA.values()) if (!remA.has(a.id)) artifacts.push(a);
-  return { notes: notes.slice(-MAX_NOTAS), artifacts: artifacts.slice(-MAX_ARTEFATOS) };
+  const out: ConteudoSala = { notes: notes.slice(-MAX_NOTAS), artifacts: artifacts.slice(-MAX_ARTEFATOS) };
+  if (atual.recadoQG) out.recadoQG = atual.recadoQG;   // editar notas não apaga o recado do QG
+  return out;
 }
 
 /** Admissão: quem já está dentro sempre entra (reconexão); o 6º novo é recusado. */

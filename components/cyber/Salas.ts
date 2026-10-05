@@ -6,6 +6,7 @@
  */
 import * as THREE from "three";
 import { CIDADE, MOVEIS, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
+import { linhasDoRecado } from "@/lib/cyber/recado";
 
 const TEMA: Record<NomeSala, { piso: number; brilho: number; titulo: string; cor: string }> = {
   lounge: { piso: 0x170e2c, brilho: 0xb98cff, titulo: "LOUNGE", cor: "#e2d0ff" },
@@ -13,7 +14,14 @@ const TEMA: Record<NomeSala, { piso: number; brilho: number; titulo: string; cor
 const ALT = 4;   // altura da parede
 
 type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material };
-export type SalasHandle = { alvos: THREE.Object3D[]; atualizar(dt: number, t: number): void };
+export type SalasHandle = {
+  alvos: THREE.Object3D[];
+  /** a TELA da TV do lounge (clicável: o dono escreve o recado pro QG do Andrei) */
+  tv: THREE.Mesh | null;
+  /** mostra na TV o último recado enviado ao QG (null = some) */
+  mostrarRecado(texto: string | null): void;
+  atualizar(dt: number, t: number): void;
+};
 
 export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   const alvos: THREE.Object3D[] = [], anim: ((dt: number, t: number) => void)[] = [];
@@ -34,11 +42,16 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   }, true);
   const texTapete = tela(256, 192, (g, w, h) => { g.fillStyle = "#1d1236"; g.fillRect(0, 0, w, h); for (let k = 0; k < 6; k++) { g.strokeStyle = k % 2 ? "rgba(185,140,255,.55)" : "rgba(102,230,255,.35)"; g.lineWidth = 3; g.strokeRect(10 + k * 14, 10 + k * 12, w - 20 - k * 28, h - 20 - k * 24); } });
 
+  let tvTela: THREE.Mesh | null = null, recadoFaixa: THREE.Mesh | null = null;
+  const cRecado = document.createElement("canvas"); cRecado.width = 1024; cRecado.height = 220;
+  const texRecado = new THREE.CanvasTexture(cRecado); o.texturas.push(texRecado);
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
     tv(p, m) {
       caixa(p, m.larg, 0.5, m.prof, escuro, 0, 0.25, 0);
       caixa(p, m.larg, 3.5, 0.16, escuro, 0, 2.45, -0.12);
-      const s = new THREE.Mesh(new THREE.PlaneGeometry(m.larg - 0.3, 3.2), new THREE.MeshBasicMaterial({ map: texTV })); s.position.set(0, 2.45, -0.03); p.add(s);
+      const s = new THREE.Mesh(new THREE.PlaneGeometry(m.larg - 0.3, 3.2), new THREE.MeshBasicMaterial({ map: texTV })); s.position.set(0, 2.45, -0.03); p.add(s); tvTela = s;
+      // faixa do RECADO (não rola com as ondas): o último enviado ao QG, por cima da parte de baixo da tela
+      recadoFaixa = new THREE.Mesh(new THREE.PlaneGeometry(m.larg - 0.5, 1.15), new THREE.MeshBasicMaterial({ map: texRecado, transparent: true, depthWrite: false })); recadoFaixa.position.set(0, 1.5, -0.02); recadoFaixa.visible = false; p.add(recadoFaixa);
       const h = new THREE.Mesh(new THREE.PlaneGeometry(m.larg + 1.4, 4.4), basica(0x6a5aff, 0.16, true)); h.position.set(0, 2.45, -0.2); p.add(h);
       anim.push((dt) => { texTV.offset.x = (texTV.offset.x + dt * 0.04) % 1; });
     },
@@ -94,5 +107,18 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     // móveis
     for (const m of MOVEIS[nome]) { const p = new THREE.Group(); p.position.set(m.x, 0.16, m.z); p.rotation.y = m.rot; g.add(p); MOVEL[m.tipo]?.(p, m, tema); }
   }
-  return { alvos, atualizar(dt, t) { for (const f of anim) f(dt, t); } };
+  return {
+    alvos, tv: tvTela,
+    mostrarRecado(texto) {
+      if (!recadoFaixa) return;
+      recadoFaixa.visible = !!texto; if (!texto) return;
+      const g = cRecado.getContext("2d")!; g.clearRect(0, 0, cRecado.width, cRecado.height);
+      g.fillStyle = "rgba(6,10,30,.82)"; g.beginPath(); g.roundRect(4, 4, cRecado.width - 8, cRecado.height - 8, 28); g.fill(); g.strokeStyle = "#66e6ff"; g.lineWidth = 4; g.stroke();
+      g.fillStyle = "#66e6ff"; g.font = "700 34px system-ui,sans-serif"; g.textBaseline = "top"; g.fillText("✉ No QG do Andrei", 30, 22);
+      g.fillStyle = "#f2fbff"; g.font = "500 36px system-ui,sans-serif";
+      linhasDoRecado(texto, (x) => g.measureText(x).width, cRecado.width - 60, 3).slice(0, 3).forEach((l, i) => g.fillText(l, 30, 72 + i * 44));
+      texRecado.needsUpdate = true;
+    },
+    atualizar(dt, t) { for (const f of anim) f(dt, t); },
+  };
 }

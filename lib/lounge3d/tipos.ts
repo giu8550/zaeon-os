@@ -15,6 +15,8 @@ export const MAX_NOTAS = 200;
 export const MAX_ARTEFATOS = 50;
 export const MAX_TEXTO_NOTA = 1200;
 export const MAX_TEXTO_CHAT = 400;
+/** RECADO do dono (Zaeon) pro QG do Andrei: aparece num holograma ao lado da tela de trabalho dele */
+export const MAX_TEXTO_RECADO = 280;
 export const MAX_NOME = 40;
 /** Difusão de posição (Hz) e tempo de interpolação dos remotos. */
 export const POS_HZ = 9;   // abaixo do teto do Pusher (10 client events/s por conexão); o lerp suaviza
@@ -56,7 +58,9 @@ export type ArtefatoCanvas = {
   autorId?: string;
 };
 
-export type ConteudoSala = { notes: NotaCanvas[]; artifacts: ArtefatoCanvas[] };
+/** o recado ATUAL pro QG (um só; o novo substitui) — quem mandou vem da SESSÃO no servidor */
+export type RecadoQG = { id: string; texto: string; deId: string; deNome: string; deCor: string; ts: number };
+export type ConteudoSala = { notes: NotaCanvas[]; artifacts: ArtefatoCanvas[]; recadoQG?: RecadoQG | null };
 
 export type OpsSala = {
   upsertNotes?: unknown[]; removeNotes?: unknown[];
@@ -77,6 +81,8 @@ export const EV_POS_CLIENTE = "client-pos";
 export const EV_POS = "pos";
 export const EV_CHAT = "chat";
 export const EV_CONTEUDO = "conteudo";
+/** recado do dono pro QG (broadcast pelo servidor; persiste no conteúdo da sala) */
+export const EV_RECADO = "recado-qg";
 
 /** Cor de accent determinística pelo userId (até o perfil ter campo próprio). */
 export function corDoUsuario(userId: string): string {
