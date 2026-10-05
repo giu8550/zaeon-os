@@ -3,7 +3,6 @@
 import { useState, useEffect, useLayoutEffect, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "framer-motion";
-import dynamic from "next/dynamic";
 
 import HeroPage from "@/components/sub/hero-content";
 import Encryption from "@/components/main/encryption";
@@ -11,11 +10,6 @@ import Faq from "@/components/main/Faq";
 import StudyRoomsPage from "@/app/study-rooms/page";
 import IntroOverlay from "@/src/components/main/intro-overlay";
 import { Footer } from "@/components/main/footer";
-
-const ParticleSystem = dynamic(
-    () => import("@/components/main/ParticleSystem"),
-    { ssr: false }
-);
 
 export default function Home() {
     const { i18n } = useTranslation();
@@ -69,7 +63,9 @@ export default function Home() {
                     className="relative flex flex-col h-full z-10"
                     style={{ pointerEvents: startContent ? "auto" : "none" }}
                 >
-                    <ParticleSystem />
+                    {/* Fundo de partículas: UM só, o do hero (StarBackground). O antigo ParticleSystem
+                        era uma cópia da mesma animação rodando por baixo — dois/três canvases
+                        defasados piscavam juntos e pesavam em máquina fraca. */}
 
                     {/* Navbar removida daqui, pois agora ela mora e persiste no layout.tsx */}
 

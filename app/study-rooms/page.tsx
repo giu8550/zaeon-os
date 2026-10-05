@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useTranslation } from "react-i18next";
+import { usePathname } from "next/navigation";
 import {
     SparklesIcon,
     DocumentTextIcon,
@@ -188,6 +189,9 @@ export default function FeaturesPage() {
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
     const [mounted, setMounted] = useState(false);
+    // Embutida na landing ("/"): o fundo de partículas já vem do hero. Sem um segundo canvas
+    // e sem fundo opaco por cima dele (era o que deixava 2–3 animações piscando sobrepostas).
+    const embutida = usePathname() === "/";
 
     // 1. O SCROLL PURO DO MOUSE (Com a sensibilidade de 35% definida por você)
     const { scrollYProgress } = useScroll({
@@ -204,19 +208,21 @@ export default function FeaturesPage() {
 
     if (!mounted) {
         return (
-            <div className="w-full h-screen bg-slate-50 dark:bg-[#030508] flex items-center justify-center transition-colors duration-700">
-                <StarBackground />
+            <div className={`w-full h-screen flex items-center justify-center transition-colors duration-700 ${embutida ? "" : "bg-slate-50 dark:bg-[#030508]"}`}>
+                {!embutida && <StarBackground />}
             </div>
         );
     }
 
     return (
-        <div className="relative bg-slate-50 dark:bg-[#030508] transition-colors duration-700 font-sans overflow-hidden min-h-screen">
+        <div className={`relative transition-colors duration-700 font-sans overflow-hidden min-h-screen ${embutida ? "" : "bg-slate-50 dark:bg-[#030508]"}`}>
 
-            {/* Background Estrelado 100% Visível */}
-            <div className="fixed inset-0 z-0 opacity-40 dark:opacity-80 pointer-events-none">
-                <StarBackground />
-            </div>
+            {/* Background Estrelado 100% Visível (só na página própria; na landing é o do hero) */}
+            {!embutida && (
+                <div className="fixed inset-0 z-0 opacity-40 dark:opacity-80 pointer-events-none">
+                    <StarBackground />
+                </div>
+            )}
 
             {/* Cabeçalho Flutuante */}
             <div className="relative z-10 zaeon-borda pt-20 pb-12 flex flex-col items-start text-left">
