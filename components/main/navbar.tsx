@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import logoPng from "@/app/zaeon-name.png";
 import ThemeToggle from "@/components/sub/ThemeToggle";
 import { ehRotaImersiva } from "@/lib/ui/loungeHub";
+import { musica } from "@/lib/audio/musica";
 import "../../src/i18n";
 
 const TRACKS = [
@@ -16,11 +17,8 @@ const TRACKS = [
   "/assets/sounds/zaeon-theme-uplift.mp3"
 ];
 
-// --- SINGLETON GLOBAL ---
-let globalAudio: HTMLAudioElement | null = null;
-// Enquanto a intro toca a música (com fade próprio), o navbar NÃO deve dar o
-// pause()/currentTime=0 seco no isHome — senão corta a música no meio do fade.
-let introMusicActive = false;
+// --- A MÚSICA tem DONO ÚNICO: lib/audio/musica.ts (play/fade/parar). O navbar só pede e mostra. ---
+const audioEl = () => musica().elemento(TRACKS[0]) as unknown as HTMLAudioElement;
 let globalAudioCtx: AudioContext | null = null;
 let globalAnalyser: AnalyserNode | null = null;
 let globalSource: MediaElementAudioSourceNode | null = null;
@@ -63,7 +61,7 @@ export const Navbar = () => {
   };
 
   const initAudioEngine = useCallback(() => {
-    if (!globalAudio) return;
+    const globalAudio = audioEl();
     
     if (!globalAudioCtx) {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -90,47 +88,19 @@ export const Navbar = () => {
   useEffect(() => {
     setMounted(true);
     
-    if (typeof window !== "undefined" && !globalAudio) {
-      globalAudio = new Audio(TRACKS[0]);
-      globalAudio.crossOrigin = "anonymous";
-      globalAudio.volume = 0.4;
-      (window as any).zaeonAudio = globalAudio;
-    }
-
-    if (globalAudio && !globalAudio.paused && !isHome) {
-      setIsPlaying(true);
-      initAudioEngine();
-    }
+    const m = musica(); audioEl();   // garante o elemento (window.zaeonAudio)
+    setIsPlaying(m.estado !== "parado");
+    if (m.estado !== "parado" && !isHome) initAudioEngine();
   }, [isHome, initAudioEngine]);
 
+  // Na home, a faixa volta pro início — MAS só se a música estiver PARADA. Tocando ou em fade (a intro), nada
+  // de pause()/currentTime=0: era esse corte seco que fazia a música "parar do nada".
   useEffect(() => {
-    // Não corta enquanto a intro está tocando (ela tem fade próprio).
-    if (isHome && globalAudio && !introMusicActive) {
-      globalAudio.pause();
-      globalAudio.currentTime = 0;
-      globalAudio.src = TRACKS[0];
-      setCurrentTrackIndex(0);
-      setIsPlaying(false);
-    }
+    if (isHome && musica().rebobinarSeParado(TRACKS[0])) setCurrentTrackIndex(0);
   }, [pathname, isHome]);
 
-  // ESCUTA O COMANDO DE SYNC DO INTRO
-  useEffect(() => {
-    const handleMusicSync = () => {
-      introMusicActive = true; // intro assumiu a música → segura o pause do isHome
-      if (globalAudio) {
-        setIsPlaying(true);
-        initAudioEngine();
-      }
-    };
-    const handleMusicEnd = () => { introMusicActive = false; }; // fade terminou → volta ao normal
-    window.addEventListener("zaeon-music-sync", handleMusicSync);
-    window.addEventListener("zaeon-music-end", handleMusicEnd);
-    return () => {
-      window.removeEventListener("zaeon-music-sync", handleMusicSync);
-      window.removeEventListener("zaeon-music-end", handleMusicEnd);
-    };
-  }, [initAudioEngine]);
+  // o estado da música vem do dono único (a intro toca/fadeia por ele)
+  useEffect(() => musica().inscrever((e) => { setIsPlaying(e !== "parado"); if (e === "tocando") initAudioEngine(); }), [initAudioEngine]);
 
   // --- NOVO: ESCUTA O SINAL DE MODO FOCO DAS SALAS ---
   useEffect(() => {
@@ -146,34 +116,18 @@ export const Navbar = () => {
   }, []);
 
   const togglePlay = () => {
-    if (!globalAudio) return;
-    initAudioEngine();
-
-    if (isPlaying) { 
-      globalAudio.pause(); 
-      setIsPlaying(false); 
-    } else { 
-      globalAudio.play().then(() => setIsPlaying(true)); 
-    }
+    const m = musica(); m.destravar(); initAudioEngine();
+    if (m.estado !== "parado") void m.parar(800);   // pausa com fade, nunca seco
+    else void m.tocar(TRACKS[currentTrackIndex]);
   };
 
-  const handleNextTrack = () => {
-    if (!globalAudio) return;
-    const next = (currentTrackIndex + 1) % TRACKS.length;
-    setCurrentTrackIndex(next);
-    globalAudio.src = TRACKS[next];
-    globalAudio.play();
-    setIsPlaying(true);
+  const trocarFaixa = (i: number) => {
+    const m = musica(); m.destravar(); initAudioEngine();
+    setCurrentTrackIndex(i);
+    void m.tocar(TRACKS[i]);   // fade-out da atual → troca → fade-in
   };
-
-  const handlePrevTrack = () => {
-    if (!globalAudio) return;
-    const prev = (currentTrackIndex - 1 + TRACKS.length) % TRACKS.length;
-    setCurrentTrackIndex(prev);
-    globalAudio.src = TRACKS[prev];
-    globalAudio.play();
-    setIsPlaying(true);
-  };
+  const handleNextTrack = () => trocarFaixa((currentTrackIndex + 1) % TRACKS.length);
+  const handlePrevTrack = () => trocarFaixa((currentTrackIndex - 1 + TRACKS.length) % TRACKS.length);
 
   const getTrackName = () => TRACKS[currentTrackIndex].split('/').pop()?.replace('.mp3', '') || 'Track';
   const getLinkClassName = (path: string) => {
