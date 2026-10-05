@@ -120,6 +120,23 @@ Logado, com **duas contas**: A é o fundador (`donmartinezcaiudoceu@gmail.com`, 
 
 ## PARTE B — Plano: descer e subir com a nave ("moto espacial")
 
+> **Status (out. 2026):**
+>
+> **Feito:**
+> - Parte A em produção (#204, com `NEXT_PUBLIC_CYBER_LANDMARKS=1`).
+> - **B.2.1, B.2.3 e B.2.4** no #205: botões de movimento, voo independente de FPS, velocidade, pouso na Zaeon.
+> - **B.2.5 e B.2.6** no #206: heliporto e HUD de voo.
+> - **B.2.2 e B.3** no #207: atalhos de rota e nave parada visível para todos.
+> - Correção do rate limit do `/pos`, que estava dentro de um comentário.
+>
+> **Não feito, opcional:**
+> - **B.2.7**, o poço: só se o dono quiser.
+> - **B.4**, o visual de moto: precisa de confirmação do dono.
+>
+> **Pendente com o dono:**
+> - Ligar "Enable client events" no painel do Pusher (A.3.3).
+> - Testar num celular real.
+
 ### B.1 Diagnóstico (reproduzido por simulação do `passoVoo`)
 
 | Caso | Hoje | Por quê |

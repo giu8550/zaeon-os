@@ -15,6 +15,7 @@ import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } fro
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
 import { CIDADE, computadorPerto, mundo, noPortalEntrada, noPortalVolta, resolverCidade } from "@/lib/cyber/ceu";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
+import { rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
 import { ROTULO_SOBRE, destinosDeVoo, dicaDeVoo, distTexto, indicadorNaBorda, separarIndicadores, sobreOQue } from "@/lib/cyber/hudVoo";
 import { criarCidade, type CidadeHandle } from "./Cidade";
 import { criarNave, type NaveHandle } from "./Nave";
@@ -42,7 +43,7 @@ export type CyberOpts = {
   /** teclado sempre ouvido (tela cheia). Na janela da landing só com o mouse em cima (não rouba ESPAÇO/rolagem da página). */
   teclasSempre: boolean;
   remotos?: { current: Map<string, Presenca> };
-  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; voo?: { y: number; yaw: number } }) => void;
+  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number } }) => void;
   /** pontos de interesse (marcos megalíticos) — flag NEXT_PUBLIC_CYBER_LANDMARKS */
   landmarks?: boolean;
   /** clicou num marco estando perto → painel (nome, org, link) */
@@ -57,6 +58,8 @@ export type CyberOpts = {
   onEstadoQG?: (s: { noCeu: boolean; navePerto: boolean; pilotando: boolean; pousado: boolean }) => void;
   /** HUD de voo (pilotando): altímetro, sobre o quê, dica contextual — só quando muda (≤ 10×/s) */
   onVoo?: (h: { y: number; sobre: string; dica: string | null }) => void;
+  /** atalho de rota em andamento (piloto automático) ou null (chegou / cancelado) */
+  onRota?: (destino: DestinoRota | null) => void;
   onPerto?: (perto: boolean) => void;
   onFalarCom?: (nome: string | null) => void;
   onEntrarEstudo?: () => void;
@@ -66,7 +69,9 @@ export type CyberOpts = {
 
 type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
   /** remotos: no topo da Zaeon / na cidade / pilotando (só valem pra quem o servidor marcou fundador) */
-  topo?: boolean; ceu?: boolean; nave?: NaveHandle | null; naveYaw?: number };
+  topo?: boolean; ceu?: boolean; nave?: NaveHandle | null; naveYaw?: number;
+  /** a nave dele pousada FORA do hangar (ele já saiu dela): fica parada ali, à vista de todos */
+  naveP?: { x: number; y: number; z: number; yaw: number } | null };
 type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 
 const IND_CSS = "position:absolute;transform:translate(-50%,-50%);display:none;align-items:center;gap:4px;font:700 11px system-ui,sans-serif;padding:3px 9px;border-radius:999px;color:#d6f3ff;background:rgba(7,12,34,.72);border:1px solid rgba(120,210,255,.45);white-space:nowrap;pointer-events:none;";
@@ -98,7 +103,7 @@ export class CyberEngine {
   private naveEst: EstadoVoo = { ...mundo(CIDADE.hangar), y: CIDADE.pisoY, yaw: Math.PI, vx: 0, vy: 0, vz: 0 };
   private pilotando = false; private pousado = true; private voY = { subir: false, descer: false }; private yawAnt = 0;
   /** direcional na tela (desktop) e "Pousar" (desce sozinho até encostar; qualquer comando manual cancela) */
-  private botDir = { x: 0, z: 0 }; private autoPouso = false; private cmdVoo = { subir: false, descer: false };
+  private botDir = { x: 0, z: 0 }; private autoPouso = false; private rota: { destino: DestinoRota; pontos: Waypoint[] } | null = null; private cmdVoo = { subir: false, descer: false };
   /** HUD de voo em 3D/DOM: marcador de pouso, anel da borda da ilha, indicadores dos destinos */
   private hudVoo: { marca: THREE.Mesh; borda: THREE.Mesh; inds: Map<string, { el: HTMLDivElement; seta: HTMLSpanElement; txt: HTMLSpanElement }>; chave: string; t: number } | null = null;
   private portalArmado = true;   // o anel de entrada só dispara de novo depois de sair dele
@@ -276,6 +281,7 @@ export class CyberEngine {
   /** sai da nave (só pousado): no chão do mapa ou no piso da cidade, ao lado da nave */
   desembarcar() {
     if (!this.pilotando || !this.pousado) return;
+    this.pararRota();
     const n = this.naveEst, lado = { x: Math.cos(n.yaw) * 3.4, z: -Math.sin(n.yaw) * 3.4 };
     let q = { x: n.x + lado.x, z: n.z + lado.z };
     const z = this.zaeon(), mz = z ? marcoNav(z.poi) : null, dz = z ? Math.hypot(n.x - z.poi.x, n.z - z.poi.z) : Infinity;
@@ -303,8 +309,21 @@ export class CyberEngine {
   comandoVoo(c: { subir?: boolean; descer?: boolean }) { if (c.subir !== undefined) this.voY.subir = c.subir; if (c.descer !== undefined) this.voY.descer = c.descer; if (c.subir || c.descer) this.autoPouso = false; }
   /** botões de movimento na tela: direcional (x = direita, z = trás; relativo à câmera, como WASD) */
   direcaoVoo(x: number, z: number) { this.botDir.x = x; this.botDir.z = z; if (x || z) this.autoPouso = false; }
+  /** atalho: a nave voa sozinha (com as mesmas entradas dos botões) até pousar no destino; qualquer botão cancela */
+  irPara(destino: DestinoRota): boolean {
+    if (!this.pilotando) return false;
+    const z = this.zaeon(), cup = z ? this.pilaresZaeon(z)[1] : undefined;
+    const pontos = rotaPara(destino, this.naveEst, cup ? { x: cup.x, z: cup.z, topo: cup.topo } : undefined);
+    if (!pontos.length) return false;
+    this.rota = { destino, pontos }; this.autoPouso = false; this.o.onRota?.(destino); return true;
+  }
+  pararRota() { if (this.rota) { this.rota = null; this.o.onRota?.(null); } }
   /** "Pousar": desce sozinho até encostar no chão embaixo (mapa, cidade ou topo da Zaeon) */
   pousar() { if (this.pilotando && !this.pousado) this.autoPouso = true; }
+  /** a nave (de quem pilota) está pousada longe do hangar? → os outros veem ela parada lá (presença `naveParada`) */
+  private naveForaDoHangar() { if (!this.nave) return false; const n = this.naveEst, h = mundo(CIDADE.hangar); return Math.hypot(n.x - h.x, n.z - h.z) > 1 || n.y < CIDADE.pisoY - 0.5; }
+  /** (pra quem NÃO é o dono) o dono está com a nave fora do hangar → a do hangar some (só existe uma nave) */
+  private naveDoDonoFora() { if (this.ehFundador(this.o.eu.id)) return false; for (const a of this.remotos.values()) if (a.nave) return true; return false; }
   private navePerto() { const n = this.naveEst; return Math.hypot(this.eu.pos.x - n.x, this.eu.pos.z - n.z) < 7 && Math.abs(this.eu.alt - n.y) < 7; }
   /** sólidos de voo da Zaeon: corpo (até o alto das muralhas) e cúpula (topo do dono), acompanhando a flutuação */
   private pilaresZaeon(z: LandmarkHandle): Pilar[] { const mn = marcoNav(z.poi); return mn ? pilaresDoMarco({ x: mn.x, z: mn.z, chaoR: mn.nav.chaoR, altura: z.poi.altura + this.boia(z), escala: z.poi.escala ?? 1, cupula: !!z.topo }) : []; }
@@ -534,9 +553,15 @@ export class CyberEngine {
       ix += this.botDir.x; iz += this.botDir.z;
       const subir = this.voY.subir, descerManual = this.voY.descer || !!this.keys.shift;
       this.cmdVoo.subir = subir; this.cmdVoo.descer = descerManual;
-      if (ix || iz || subir || descerManual) this.autoPouso = false;
+      if (ix || iz || subir || descerManual) { this.autoPouso = false; this.pararRota(); }
       const dir = moverRelativoCamera(ix, iz, this.camAz);
-      const r = passoVooSub(this.naveEst, { wx: dir?.wx ?? 0, wz: dir?.wz ?? 0, subir, descer: descerManual || this.autoPouso }, dtReal, this.solidosDeVoo());
+      let cmd = { wx: dir?.wx ?? 0, wz: dir?.wz ?? 0, subir, descer: descerManual || this.autoPouso };
+      if (this.rota) {   // atalho: o piloto automático aperta os mesmos botões (direção em mundo)
+        const f = seguirRota(this.naveEst, this.rota.pontos, this.pousado);
+        this.rota.pontos = f.rota; cmd = f.cmd;
+        if (f.chegou) this.pararRota();
+      }
+      const r = passoVooSub(this.naveEst, cmd, dtReal, this.solidosDeVoo());
       this.naveEst = r.s; this.pousado = r.pousado; if (r.pousado) this.autoPouso = false;
       eu.pos.set(r.s.x, 0, r.s.z); eu.facing = r.s.yaw; eu.moving = false; this.sitT = 0;
     } else {
@@ -585,15 +610,16 @@ export class CyberEngine {
     if (perto !== this.perto) { this.perto = perto; this.o.onPerto?.(perto); }
 
     // rede: eu → difusão; remotos → atores
-    if (!this.menu) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.noCeu, ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : {}) });
+    if (!this.menu) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.noCeu, ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
 
     // avatares
     eu.av.group.position.set(eu.pos.x, this.jumpY + eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     eu.av.animar({ andando: eu.moving, correndo: !!(this.keys.shift || this.correr) && eu.moving, sentado: this.sitT, dt, t });
     for (const a of this.remotos.values()) {
-      a.av.group.visible = !a.nave; a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(a.facing); a.av.animar({ andando: a.moving, sentado: a.sit, dt, t });
-      if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = a.naveYaw ?? 0; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0 }); }
+      a.av.group.visible = !a.nave || !!a.naveP; a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(a.facing); a.av.animar({ andando: a.moving, sentado: a.sit, dt, t });
+      if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
+      else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = a.naveYaw ?? 0; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0 }); }
     }
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
@@ -603,6 +629,7 @@ export class CyberEngine {
       // pousada no hangar da cidade, acompanha a flutuação da ilha
       const yBase = !this.pilotando && n.y >= CIDADE.pisoY - 0.5 && this.cidade ? this.cidade.ilha.position.y : n.y;
       this.nave.group.position.set(n.x, yBase, n.z); this.nave.group.rotation.y = n.yaw;
+      this.nave.group.visible = this.pilotando || !this.naveDoDonoFora();
       this.nave.atualizar({ dt, t, voando: this.pilotando && !this.pousado, vel: Math.hypot(n.vx, n.vz) / VOO.vel, curva });
     }
     this.atualizarHudVoo(now);
@@ -646,9 +673,10 @@ export class CyberEngine {
         const fund = !!this.pessoas.get(id)?.fundador;
         a.topo = p.topo === true && this.ehFundador(id);
         a.ceu = fund && p.ceu === true;
-        const voando = fund && !!p.voo;
-        if (voando && !a.nave && this.cidade) { a.nave = criarNave({ low: this.o.low, cor: a.color }); this.cena.scene.add(a.nave.group); }
-        if (!voando && a.nave) { a.nave.dispose(); a.nave = null; }
+        const voando = fund && !!p.voo, parada = fund && !voando && p.naveParada ? p.naveParada : null;
+        if ((voando || parada) && !a.nave && this.cidade) { a.nave = criarNave({ low: this.o.low, cor: a.color }); this.cena.scene.add(a.nave.group); }
+        if (!voando && !parada && a.nave) { a.nave.dispose(); a.nave = null; }
+        a.naveP = parada;
         const altAlvo = voando ? p.voo!.y : a.topo ? this.alturaTopo() : a.ceu ? CIDADE.pisoY : this.alturaChao(a.pos);
         a.alt += (altAlvo - a.alt) * (Math.abs(altAlvo - a.alt) > 40 ? 1 : Math.min(1, dt * 6));   // portal = corte seco
         if (voando) a.naveYaw = p.voo!.yaw;
