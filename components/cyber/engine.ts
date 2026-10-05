@@ -15,9 +15,9 @@ import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } fro
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
 import { BURACO_NEGRO, CIDADE, computadorPerto, mundo, noPortalEntrada, noPortalVolta, resolverCidade } from "@/lib/cyber/ceu";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
-import { JET, chaoNoAr, passoVertical, resolverNoAr, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
+import { JET, chaoNoAr, impactoDoPouso, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { pularQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
-import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, intervaloNeuronio, somNaveInicial, type EstadoSomNave } from "@/lib/cyber/audio";
+import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, intervaloNeuronio, somNaveInicial, type Dist, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type LoopSom } from "./AudioCyber";
 import { pousoDoQG, rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
@@ -84,7 +84,9 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos:
   /** remotos: voando de mochila a jato (altura no mundo) e a velocidade vertical estimada */
   jet?: number; vyJet?: number;
   /** remotos: sons da nave dele (loops idle/voo) e passos */
-  somNave?: { idle: LoopSom; voo: LoopSom; voava: boolean; ev: EstadoSomNave; yAnt: number | null; vy: number } | null; passoT?: number; perto?: boolean };
+  somNave?: { idle: LoopSom; voo: LoopSom; voava: boolean; ev: EstadoSomNave; yAnt: number | null; vy: number } | null; passoT?: number; perto?: boolean;
+  /** remotos: o jato contínuo da mochila dele + a última velocidade vertical no ar (pro baque do pouso) */
+  somJet?: LoopSom[] | null; vyUlt?: number };
 type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 
 /** cor da mesa do QG quando o Andrei não está na sala */
@@ -144,7 +146,7 @@ export class CyberEngine {
   private sobreNave = false;
   // ── ÁUDIO (components/cyber/AudioCyber): loops presos aos objetos + one-shots nos eventos ──
   private som!: AudioCyberHandle;
-  private somLoops: { leito?: LoopSom; naveIdle?: LoopSom; naveVoo?: LoopSom } = {};
+  private somLoops: { leito?: LoopSom; naveIdle?: LoopSom; naveVoo?: LoopSom; jet?: LoopSom[] } = {};
   private somCristais = new Map<string, LoopSom>();
   private passoT = 0; private passoI = 0; private neuronioT = 9; private somNave = somNaveInicial(); private tVivo = 0; private somEntrada = false;
   private sitT = 0; private perto = false; private falandoCom: Ator | null = null;
@@ -249,7 +251,7 @@ export class CyberEngine {
     const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + cor + ";"; tag.textContent = p.id === this.o.eu.id ? "" : p.name; this.o.overlay.appendChild(tag);   // o próprio avatar não leva rótulo
     return { id: p.id, name: p.name, color: cor, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag, alt: 0 };
   }
-  private removerAtor(a: Ator) { this.soltarSomNave(a); a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
+  private removerAtor(a: Ator) { this.soltarSomNave(a); this.soltarSomJet(a); a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
   // ───────────── API pública (React → engine) ─────────────
   iniciar(go = "viajar") {
@@ -287,18 +289,18 @@ export class CyberEngine {
       const baixo = v.y - base < JET.alturaBases ? this.colisoresDoNivel("ceu") : [], naves = v.y < topo - 0.2 ? this.colisoresDeNaves(CIDADE.pisoY) : [];
       const q = empurrarParaFora(resolverCidade(eu.pos), [...baixo, ...naves]);
       eu.pos.x = q.x; eu.pos.z = q.z; this.jet.y = v.y; this.jet.vy = v.vy;
-      if (sobreODorso && yAnt >= topo - 0.05 && v.y <= topo && v.vy <= 0) { this.jet.noAr = false; this.sobreNave = true; this.somPouso(); return; }
-      if (v.y <= base && v.vy <= 0) { this.jet.noAr = false; this.yNav = CIDADE.pisoY; this.somPouso(); }
+      if (sobreODorso && yAnt >= topo - 0.05 && v.y <= topo && v.vy <= 0) { this.jet.noAr = false; this.sobreNave = true; this.somPouso(v.vy); return; }
+      if (v.y <= base && v.vy <= 0) { this.jet.noAr = false; this.yNav = CIDADE.pisoY; this.somPouso(v.vy); }
       return;
     }
     const qg = this.qgNoAr(), z = this.zaeon();
     const v = passoVertical(this.jet.y, this.jet.vy, this.jet.tecla, dt, tetoDoJet(qg));
     const q = resolverNoAr(prev, eu.pos, v.y, yAnt, qg, v.y < topo - 0.2 ? [...this.colisores, ...this.colisoresDeNaves(this.naveEst.y)] : this.colisores);
     eu.pos.x = q.x; eu.pos.z = q.z; this.jet.y = v.y; this.jet.vy = v.vy;
-    if (sobreODorso && yAnt >= topo - 0.05 && v.y <= topo && v.vy <= 0) { this.jet.noAr = false; this.sobreNave = true; this.somPouso(); return; }
+    if (sobreODorso && yAnt >= topo - 0.05 && v.y <= topo && v.vy <= 0) { this.jet.noAr = false; this.sobreNave = true; this.somPouso(v.vy); return; }
     const chao = chaoNoAr(q, qg), chaoVisto = chao > 0 && z ? chao + this.boia(z) : chao;
     if (v.y <= chaoVisto && v.vy <= 0) {
-      this.jet.noAr = false; this.somPouso();
+      this.jet.noAr = false; this.somPouso(v.vy);
       if (chao > 0.01 && z) { this.altoEm = z.poi.id; this.yNav = chao; } else { this.altoEm = null; this.yNav = 0; }
     }
   }
@@ -417,14 +419,27 @@ export class CyberEngine {
     this.somLoops.leito = s.loop("space-bed", null);
     const bn = new THREE.Object3D(); bn.position.set(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); this.cena.scene.add(bn);
     s.volumeLoop(s.loop("blackhole-hum", bn, { dist: DISTANCIA.grande }), 1);
+    this.somLoops.jet = this.loopsDoJato(this.eu.av.group, DISTANCIA.eu);   // contínuo enquanto se segura o ESPAÇO
     if (this.nave) { this.somLoops.naveIdle = s.loop("ship-idle", this.nave.group, { dist: DISTANCIA.grande }); this.somLoops.naveVoo = s.loop("ship-flight", this.nave.group, { dist: DISTANCIA.naveLocal }); }
     const destravar = () => { musica().destravar(); if (!this.menu) s.ativar(); };
     if (musica().destravado && !this.menu) s.ativar();
     // na fase de CAPTURA: o canvas/HUD param a propagação dos cliques, mas o gesto tem que destravar o áudio mesmo assim
     for (const ev of ["pointerdown", "keydown", "touchstart"] as const) { window.addEventListener(ev, destravar, { once: true, passive: true, capture: true }); this.cleanups.push(() => window.removeEventListener(ev, destravar, { capture: true })); }
   }
-  /** pousou (mochila): som do pouso no avatar */
-  private somPouso() { this.som.tocar("land", this.eu.av.group.position, { dist: DISTANCIA.eu }); }
+  /** pousou (mochila): o pouso + o BAQUE do corpo no chão, mais forte (e mais grave) quanto mais rápido caía */
+  private somPouso(vy: number) {
+    const f = impactoDoPouso(vy), em = this.eu.av.group.position;
+    this.som.tocar("land", em, { dist: DISTANCIA.eu, volume: 0.6 + 0.4 * f });
+    this.som.tocar("baque", em, { dist: DISTANCIA.eu, volume: 0.3 + 0.7 * f, taxa: 1.12 - 0.3 * f });
+  }
+  private soltarSomJet(a: Ator) { if (a.somJet) { for (const l of a.somJet) this.som.soltarLoop(l); a.somJet = null; } }
+  /** o jato da mochila em 2 camadas (ronco gravado + sopro sintetizado) presas a um objeto */
+  private loopsDoJato(obj: THREE.Object3D, dist: Dist): LoopSom[] { return [this.som.loop("jetpack", obj, { dist }), this.som.loop("jato-sopro", obj, { dist })]; }
+  /** volume/afinação do jato pelo empuxo; o sopro sobe mais que o ronco quando se segura (ataque rápido, solta suave) */
+  private ajustarJato(ls: LoopSom[], noAr: boolean, segurando: boolean, vy: number) {
+    const sj = somDoJato(noAr, segurando, vy), vel = sj.volume > 0.5 ? 14 : 4;
+    ls.forEach((l, i) => { this.som.volumeLoop(l, i === 0 ? sj.volume : sj.volume * (segurando ? 1 : 0.5), vel); this.som.taxaLoop(l, i === 0 ? sj.taxa : sj.taxa * 1.05); });
+  }
   private soltarSomNave(a: Ator) { if (!a.somNave) return; this.som.soltarLoop(a.somNave.idle); this.som.soltarLoop(a.somNave.voo); a.somNave = null; }
   /** por quadro: leito (cross-fade com a música da intro), nave (idle/voo/decolagem/pouso), cristais, neurônios, colegas */
   private atualizarSom(dt: number) {
@@ -437,6 +452,8 @@ export class CyberEngine {
       const b = this.layouts.get(id), mesmoPiso = b && (b.nivel ?? "chao") === this.nivelDe(this.o.eu.id);
       s.volumeLoop(l, mesmoPiso ? fatorCristais(Math.hypot(this.eu.pos.x - b.x, this.eu.pos.z - b.z)) : 0);
     }
+    // a MINHA mochila: jato contínuo (ataque rápido ao apertar, solta suave), mais agudo subindo
+    if (this.somLoops.jet) this.ajustarJato(this.somLoops.jet, this.jet.noAr, this.jet.tecla, this.jet.vy);
     // a MINHA nave: idle parada, voo em movimento; decolagem/pouso nas transições; pilotando quase não paneia
     if (this.nave && this.somLoops.naveIdle && this.somLoops.naveVoo) {
       const voando = this.pilotando && !this.pousado, vel = Math.hypot(this.naveEst.vx, this.naveEst.vz) / VOO.vel;
@@ -463,6 +480,14 @@ export class CyberEngine {
     for (const a of this.remotos.values()) {
       const d = a.pos.distanceTo(this.eu.pos);
       if (a.moving && a.jet === undefined && !a.nave && d < 15) { a.passoT = (a.passoT ?? 0) + dt; if (a.passoT >= cadenciaPasso(false)) { a.passoT = 0; s.tocar(PASSOS[Math.floor(Math.random() * 3)]!, a.av.group.position, { dist: DISTANCIA.perto }); } }
+      // mochila do colega: jato posicional (vem do lado certo); ao pousar, o baque dele
+      if (a.jet !== undefined) {
+        if (!a.somJet) a.somJet = this.loopsDoJato(a.av.group, DISTANCIA.padrao);
+        const vy = a.vyJet ?? 0; this.ajustarJato(a.somJet, true, vy > -3, vy); a.vyUlt = vy;
+      } else if (a.somJet) {
+        const f = impactoDoPouso(a.vyUlt ?? 0); s.tocar("baque", a.av.group.position, { dist: DISTANCIA.perto, volume: 0.3 + 0.7 * f, taxa: 1.12 - 0.3 * f });
+        this.soltarSomJet(a);
+      }
       const pertoAgora = d < 3;
       if (pertoAgora && !a.perto) s.tocar("near-ping", a.av.group.position, { dist: DISTANCIA.perto });
       a.perto = pertoAgora;

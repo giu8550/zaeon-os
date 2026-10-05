@@ -25,3 +25,15 @@ _Removidos: `fire.ogg`, `computer-hum.ogg`, `computer-typing.ogg` (base fica só
 
 ## Arquivos-fonte
 Os `.mp3` originais em `public/assets/sounds/` (leberch/freesound/spaceship) são **fontes de edição** — podem ser movidos pra fora do deploy (ex.: `/_sources/`) pra não irem ao bundle público.
+
+## Mochila a jato (jetpack)
+
+| arquivo | fonte | autor | licença | edição |
+|---|---|---|---|---|
+| `jetpack.wav` | "Rocket Engine" — https://opengameart.org/content/rocket-engine | theMinesAreShakin | **CC0 1.0** (domínio público) | estéreo 48 kHz → mono 22,05 kHz WAV (loop sem emenda, 6,1 s) |
+
+**Sintetizados no navegador (sem arquivo, CC0 — código próprio):** `jato-sopro` (o sopro/chiado do jato, por cima do ronco gravado) e `baque` (o corpo batendo no chão ao pousar) — `lib/cyber/audio.ts` (`sintetizarJetpack`, `sintetizarBaque`).
+
+## Animações (poses capturadas)
+
+`lib/cyber/poses-ual.json` — Jump_Start / Jump_Loop / Jump_Land da **Quaternius Universal Animation Library** (https://quaternius.itch.io/universal-animation-library), **CC0 1.0**. Convertidas offline em direções de membros por quadro (o GLB original não vai pro bundle).

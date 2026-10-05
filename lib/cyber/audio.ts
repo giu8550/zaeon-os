@@ -1,6 +1,7 @@
 /**
  * Cyberespaço — regras PURAS do áudio (o three fica em components/cyber/AudioCyber.ts):
- *  - os 21 sons e COMO tocam (posicional MONO preso a um objeto × 2D estéreo/UI);
+ *  - os 21 sons (arquivos) + 2 SINTETIZADOS no código (jato contínuo da mochila, baque do pouso) e COMO tocam
+ *    (posicional MONO preso a um objeto × 2D estéreo/UI);
  *  - preferências do usuário (`zaeon_sfx` liga/desliga, `zaeon_volume` mestre 0..1);
  *  - modelo de distância (some longe), teto de vozes simultâneas, cadência de passos;
  *  - o leito ambiente "abaixa" enquanto a música da intro toca (cross-fade quando ela fadeia).
@@ -10,13 +11,20 @@ export const PASTA_SONS = "/assets/sounds/cyber/";
 export type NomeSom =
   | "space-bed" | "blackhole-hum" | "crystals" | "ship-flight" | "ship-idle"
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
-  | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave";
+  | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
+  | "jetpack" | "jato-sopro" | "baque";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
 
 /** como cada som toca: `pos` = PositionalAudio (mono, no mundo); `2d` = THREE.Audio (leito/UI); `taxa` = playbackRate */
-export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: number; taxa?: number }> = {
+export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: number; taxa?: number; sintetico?: boolean; ext?: "wav" }> = {
+  // JATO da mochila (contínuo enquanto se segura o ESPAÇO) em 2 camadas: o ronco gravado ("Rocket Engine", CC0,
+  // OpenGameArt — WAV mono, loop sem emenda) + o sopro/chiado sintetizado por cima
+  jetpack: { modo: "pos", loop: true, volume: 0.55, ext: "wav" },
+  // SINTETIZADOS (sem arquivo): gerados no navegador por sintetizarJetpack / sintetizarBaque
+  "jato-sopro": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
+  baque: { modo: "pos", loop: false, volume: 0.95, sintetico: true },   // o corpo batendo no chão (força pela queda)
   "space-bed": { modo: "2d", loop: true, volume: 0.22, taxa: TAXA_432 },
   "blackhole-hum": { modo: "pos", loop: true, volume: 0.55 },
   crystals: { modo: "pos", loop: true, volume: 0.3 },
@@ -39,7 +47,48 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   join: { modo: "pos", loop: false, volume: 0.55 },
   leave: { modo: "pos", loop: false, volume: 0.5 },
 };
-export const urlDoSom = (n: NomeSom) => `${PASTA_SONS}${n}.ogg`;
+export const urlDoSom = (n: NomeSom) => `${PASTA_SONS}${n}.${SONS[n].ext ?? "ogg"}`;
+/** os sons que vêm de ARQUIVO (os sintetizados não) */
+export const SONS_ARQUIVO = (Object.keys(SONS) as NomeSom[]).filter((n) => !SONS[n].sintetico);
+
+/** PRNG determinístico (mulberry32) — a síntese sai igual sempre (e dá pra testar) */
+function prng(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const normalizar = (x: Float32Array, pico: number) => { let m = 0; for (const v of x) m = Math.max(m, Math.abs(v)); if (m > 0) for (let i = 0; i < x.length; i++) x[i] = (x[i]! / m) * pico; return x; };
+
+/**
+ * JATO da mochila (mono, loop de `seg` s): ronco grave (ruído marrom) + corpo (ruído passa-baixa ~550 Hz) + chiado fino
+ * (passa-alta) com um "crepitar" de combustão (tremolo ~23 Hz). A ponta é emendada no começo (crossfade de potência
+ * constante) → loop sem clique. O engine controla volume e afinação pelo empuxo (somDoJato).
+ */
+export function sintetizarJetpack(sr: number, seg = 3): Float32Array {
+  const n = Math.round(sr * seg), x = Math.round(sr * 0.3), raw = new Float32Array(n + x), r = prng(7);
+  let marrom = 0, lp1 = 0, lp2 = 0, hp = 0, wAnt = 0;
+  const a1 = 1 - Math.exp((-2 * Math.PI * 550) / sr), a2 = 1 - Math.exp((-2 * Math.PI * 900) / sr);
+  for (let i = 0; i < raw.length; i++) {
+    const w = r() * 2 - 1, t = i / sr;
+    marrom = 0.996 * marrom + 0.06 * w; lp1 += (w - lp1) * a1; lp2 += (lp1 - lp2) * a2; hp = 0.82 * (hp + w - wAnt); wAnt = w;
+    const crepita = 1 + 0.22 * Math.sin(2 * Math.PI * 23 * t + 0.6 * Math.sin(2 * Math.PI * 3.1 * t));
+    raw[i] = (marrom * 1.6 + lp2 * 2.2 + hp * 0.1) * crepita;
+  }
+  const out = raw.slice(0, n);
+  for (let i = 0; i < x; i++) { const u = i / x; out[i] = raw[i]! * Math.sqrt(u) + raw[n + i]! * Math.sqrt(1 - u); }
+  return normalizar(out, 0.8);
+}
+
+/** BAQUE do pouso (mono, ~0,5 s): batida grave com o tom caindo (110 → 38 Hz) + um estalo de terra abafado no início */
+export function sintetizarBaque(sr: number): Float32Array {
+  const n = Math.round(sr * 0.5), out = new Float32Array(n), r = prng(13), aLp = 1 - Math.exp((-2 * Math.PI * 700) / sr);
+  let fase = 0, lp = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, f = 38 + 72 * Math.exp(-t * 18); fase += (2 * Math.PI * f) / sr;
+    const env = (1 - Math.exp(-t * 900)) * Math.exp(-t * 9);
+    lp += (r() * 2 - 1 - lp) * aLp;
+    out[i] = Math.sin(fase) * env + lp * Math.exp(-t * 45) * 1.4;
+  }
+  for (let i = 0; i < 64; i++) out[n - 1 - i]! *= i / 64;   // fim sem clique
+  return normalizar(out, 0.92);
+}
+export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque };
 
 /** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo).
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
