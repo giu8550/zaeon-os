@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { DISTANCIA, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
+import { CRISTAIS_PERTO, DISTANCIA, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
 
 describe("áudio do cyberespaço", () => {
   it("os 21 sons existem em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
@@ -62,4 +62,17 @@ describe("áudio do cyberespaço", () => {
     for (let i = 0; i < 20; i++) { const vy = i % 4 < 2 ? -20 : 15; const r = eventosNave(e, { pousado: false, vy, altura: 50 }, dt); e = r.e; if (r.desceu) n++; }
     expect(n).toBeLessThanOrEqual(Math.ceil((20 * dt) / NAVE_DESCIDA.intervalo) + 1);
   });
+  it("leito em 432 Hz: a faixa (A=440) toca a 432/440 → −31,8 cents", () => {
+    expect(SONS["space-bed"].taxa).toBe(TAXA_432);
+    expect(1200 * Math.log2(TAXA_432)).toBeCloseTo(-31.8, 1);
+  });
+  it("cristais: só perto da base (somem de verdade longe); passos mais altos", () => {
+    expect(fatorCristais(0)).toBe(1); expect(fatorCristais(CRISTAIS_PERTO.cheio)).toBe(1);
+    expect(fatorCristais(CRISTAIS_PERTO.some)).toBe(0); expect(fatorCristais(40)).toBe(0);
+    expect(fatorCristais(8)).toBeGreaterThan(0); expect(fatorCristais(8)).toBeLessThan(1);
+    expect(DISTANCIA.cristais.modelo).toBe("linear");   // no "inverse" o max não corta
+    expect(SONS["step-1"].volume).toBeGreaterThanOrEqual(0.6);
+    expect(DISTANCIA.eu.ref).toBeGreaterThan(DISTANCIA.perto.ref);   // meus passos não somem com a câmera atrás
+  });
 });
+
