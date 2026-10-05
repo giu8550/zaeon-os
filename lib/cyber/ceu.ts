@@ -13,11 +13,11 @@ export const BURACO_NEGRO = { x: 0, y: 16, z: -110, r: 6 };
 
 export const CIDADE = {
   centro: { x: BURACO_NEGRO.x, z: BURACO_NEGRO.z },
-  pisoY: 215,           // piso da cidade: BEM acima do buraco negro (y=16) — flutuando nas alturas
-  bordaR: 40,           // borda da ilha principal
-  andavelR: 34,         // até onde se anda (as muralhas ficam em 37)
-  muralhaR: 37,
-  ilhaAltura: 58,       // a ilha (cone invertido) vai do piso até pisoY - ilhaAltura
+  pisoY: 230,           // piso da cidade: BEM acima do buraco negro (y=16) — flutuando nas alturas
+  bordaR: 56,           // borda da ilha principal
+  andavelR: 50,         // até onde se anda (as muralhas ficam em 53)
+  muralhaR: 53,
+  ilhaAltura: 72,       // a ilha (cone invertido) vai do piso até pisoY - ilhaAltura
   /** a AGULHA embaixo da ilha: a ponta afiada que desce do ápice (sólida pra nave) */
   agulha: { r: 6, altura: 32 },
   cidadela: { r: 18, pilares: 16, pilarColR: 1.3, altura: 16 },  // pilares + cúpula em 2 andares + pináculo
@@ -28,7 +28,15 @@ export const CIDADE = {
    *  `n` vagas no anel, a cada `vaoCada` uma fica livre (corredor de passagem pra mesa) */
   servidores: { n: 16, r: 7.5, vaoCada: 4, largura: 1.3, prof: 1, alt: 3.4, colR: 0.75 },
   mesaHolo: { r: 2.4 },
-  hangar: { x: 26, z: 9, r: 6 },                                 // plataforma da nave (local)
+  /** HANGAR grande (cabem naves maiores): plataforma + pilones de luz em volta (sem teto: a nave entra por cima) */
+  hangar: { x: 34, z: 12, r: 12, pilones: 8, pilonR: 0.6 },
+  /** SALAS em volta da cidadela: pavilhões redondos de vidro, com a PORTA virada pro centro da ilha */
+  salas: {
+    lounge: { x: 27, z: -27, r: 8.5 },
+    jogos: { x: -22, z: -31, r: 8.5 },
+  },
+  /** parede das salas: colisores ao longo do arco; `porta` = meia-abertura (rad) da porta */
+  salaParede: { colR: 0.6, passo: 1, porta: 0.34 },                                 // plataforma da nave (local)
   portalVolta: { x: -21, z: 10, r: 2.2 },                        // anel de volta pra praça (local)
   chegada: { x: -16, z: 14 },                                    // onde se aparece ao entrar (local)
   /** anel de entrada no CHÃO, embaixo do buraco negro (mundo) */
@@ -61,9 +69,18 @@ export function servidoresLocais(): { x: number; z: number; rot: number }[] {
   return out;
 }
 
-/** colisores da plataforma (mundo): pilares da cidadela, módulos da biblioteca (3 círculos ao longo de cada um), racks, mesa holográfica */
+/** colisores da plataforma (mundo): pilares da cidadela, módulos da biblioteca (3 círculos ao longo de cada um), racks,
+ *  mesa holográfica, paredes e móveis das salas, pilones do hangar. Constante → calculado uma vez (o passo usa todo quadro). */
+let colisoresCache: Colisor[] | null = null;
 export function colisoresDaCidade(): Colisor[] {
+  if (colisoresCache) return colisoresCache;
   const out: Colisor[] = [];
+  for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) {
+    const s = CIDADE.salas[nome];
+    for (const p of paredeDaSala(s)) out.push({ ...mundo(p), r: CIDADE.salaParede.colR });
+    for (const m of MOVEIS[nome]) for (const c of colisoresDoMovel(m)) out.push({ ...mundo(daSala(s, c.x, c.z)), r: c.r });
+  }
+  for (const p of pilonesDoHangar()) out.push({ ...mundo(p), r: CIDADE.hangar.pilonR });
   const { cidadela, biblioteca, mesaHolo, servidores } = CIDADE;
   for (const s of servidoresLocais()) out.push({ ...mundo(s), r: servidores.colR });
   for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
@@ -72,7 +89,66 @@ export function colisoresDaCidade(): Colisor[] {
     for (const k of [-1, 0, 1]) out.push({ ...mundo({ x: m.x + tx * k * (biblioteca.largura / 2 - biblioteca.colR), z: m.z + tz * k * (biblioteca.largura / 2 - biblioteca.colR) }), r: biblioteca.colR });
   }
   out.push({ ...mundo({ x: 0, z: 0 }), r: mesaHolo.r });
+  colisoresCache = out;
   return out;
+}
+
+export type NomeSala = keyof typeof CIDADE.salas;
+/** móvel de uma sala, no referencial da SALA (+z local = rumo à porta/centro da ilha); `rot` = giro do móvel (a frente
+ *  dele é o seu +z); `larg`×`prof` = pegada (vira colisores). `solido: false` = só visual (tapete). */
+export type Movel = { tipo: string; x: number; z: number; rot: number; larg: number; prof: number; solido?: boolean };
+export const MOVEIS: Record<NomeSala, Movel[]> = {
+  // LOUNGE: TV grande na parede do fundo, 2 caixas de som, sofá em U virado pra TV, mesinha e tapete
+  lounge: [
+    { tipo: "tv", x: 0, z: -7.1, rot: 0, larg: 6.4, prof: 0.6 },
+    { tipo: "caixaSom", x: -4.6, z: -5.6, rot: 0.55, larg: 0.95, prof: 0.95 },
+    { tipo: "caixaSom", x: 4.6, z: -5.6, rot: -0.55, larg: 0.95, prof: 0.95 },
+    { tipo: "sofa", x: 0, z: 0.9, rot: Math.PI, larg: 6, prof: 1.4 },
+    { tipo: "sofa", x: -3.8, z: -1.7, rot: Math.PI / 2, larg: 3, prof: 1.3 },
+    { tipo: "sofa", x: 3.8, z: -1.7, rot: -Math.PI / 2, larg: 3, prof: 1.3 },
+    { tipo: "mesinha", x: 0, z: -2.2, rot: 0, larg: 2.2, prof: 1.1 },
+    { tipo: "tapete", x: 0, z: -1.9, rot: 0, larg: 7, prof: 5, solido: false },
+  ],
+  // SALA DE JOGOS: 3 fliperamas no fundo, sinuca no meio, air hockey e xadrez holográfico na frente
+  jogos: [
+    { tipo: "fliperama", x: -3, z: -6.5, rot: 0, larg: 1.3, prof: 1.1 },
+    { tipo: "fliperama", x: 0, z: -6.9, rot: 0, larg: 1.3, prof: 1.1 },
+    { tipo: "fliperama", x: 3, z: -6.5, rot: 0, larg: 1.3, prof: 1.1 },
+    { tipo: "sinuca", x: 0, z: -1.6, rot: 0, larg: 4.2, prof: 2.3 },
+    { tipo: "airHockey", x: -4.6, z: 1.8, rot: Math.PI / 2, larg: 2.4, prof: 1.3 },
+    { tipo: "xadrez", x: 4.6, z: 1.8, rot: 0, larg: 1.2, prof: 1.2 },
+  ],
+};
+/** giro da sala: +z local aponta pro centro da ilha (onde fica a porta) */
+export const rotDaSala = (s: { x: number; z: number }) => Math.atan2(-s.x, -s.z);
+/** ponto no referencial da sala → local da ilha */
+export function daSala(s: { x: number; z: number }, lx: number, lz: number): { x: number; z: number } {
+  const r = rotDaSala(s), c = Math.cos(r), si = Math.sin(r);
+  return { x: s.x + lx * c + lz * si, z: s.z - lx * si + lz * c };
+}
+/** colisores (no referencial da sala) de um móvel: círculos ao longo da largura dele */
+export function colisoresDoMovel(m: Movel): { x: number; z: number; r: number }[] {
+  if (m.solido === false) return [];
+  const r = Math.max(m.prof / 2, 0.35) + 0.15, n = Math.max(1, Math.ceil(m.larg / (2 * r))), out: { x: number; z: number; r: number }[] = [];
+  const c = Math.cos(m.rot), s = Math.sin(m.rot);
+  for (let i = 0; i < n; i++) { const t = n === 1 ? 0 : -m.larg / 2 + r + ((m.larg - 2 * r) * i) / (n - 1); out.push({ x: m.x + t * c, z: m.z - t * s, r }); }
+  return out;
+}
+/** pontos (locais da ilha) da parede de uma sala — o arco inteiro menos a porta */
+export function paredeDaSala(s: { x: number; z: number; r: number }): { x: number; z: number }[] {
+  const { passo, porta } = CIDADE.salaParede, n = Math.ceil((2 * Math.PI * s.r) / passo), out: { x: number; z: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;   // ângulo no referencial da sala: a porta fica em +z local (a = π/2)
+    let d = a - Math.PI / 2; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+    if (Math.abs(d) < porta) continue;
+    out.push(daSala(s, Math.cos(a) * s.r, Math.sin(a) * s.r));
+  }
+  return out;
+}
+/** pilones (locais da ilha) em volta do hangar */
+export function pilonesDoHangar(): { x: number; z: number }[] {
+  const h = CIDADE.hangar, R = h.r + h.pilonR + 0.3;
+  return Array.from({ length: h.pilones }, (_, i) => { const a = (i / h.pilones) * Math.PI * 2 + Math.PI / h.pilones; return { x: h.x + Math.cos(a) * R, z: h.z + Math.sin(a) * R }; });
 }
 
 /** passo andando na cidade: colisores sólidos e não cai da borda */

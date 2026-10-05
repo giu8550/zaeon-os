@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, bibliotecaLocais, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, servidoresLocais } from "./ceu";
+import { BURACO_NEGRO, CIDADE, bibliotecaLocais, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, servidoresLocais, daSala, paredeDaSala, pilonesDoHangar, MOVEIS, type NomeSala } from "./ceu";
 import { VOO, passoVoo, type EstadoVoo } from "./voo";
 import { dentroDeAlgum } from "./colisao";
 import { POIS } from "./landmarks";
@@ -111,5 +111,44 @@ describe("voo da nave", () => {
     let s: EstadoVoo = { x: z.x + 30, y: 5, z: z.z, yaw: 0, vx: 0, vy: 0, vz: 0 };
     for (let i = 0; i < 400; i++) s = passoVoo(s, { wx: -1, wz: 0, subir: false, descer: false }, 1 / 60, [pilar]).s;
     expect(Math.hypot(s.x - z.x, s.z - z.z)).toBeGreaterThanOrEqual(z.nav!.bordaR - 1e-6);
+  });
+});
+
+describe("Zaeon ampliada: salas e hangar grande", () => {
+  const nomes = Object.keys(CIDADE.salas) as NomeSala[];
+  it("as salas cabem na ilha, fora da cidadela, do hangar, das bases e dos portais", () => {
+    for (const n of nomes) {
+      const s = CIDADE.salas[n], d = Math.hypot(s.x, s.z);
+      expect(d + s.r).toBeLessThan(CIDADE.andavelR);
+      expect(d - s.r).toBeGreaterThan(CIDADE.cidadela.r + 2);
+      expect(Math.hypot(s.x - CIDADE.hangar.x, s.z - CIDADE.hangar.z)).toBeGreaterThan(s.r + CIDADE.hangar.r + 2);
+      for (const l of [CIDADE.chegada, CIDADE.portalVolta, { x: 0, z: 24 }, { x: 0, z: -24 }, { x: -24, z: -6 }]) expect(Math.hypot(s.x - l.x, s.z - l.z)).toBeGreaterThan(s.r + 3);
+      for (const o of nomes) if (o !== n) expect(Math.hypot(s.x - CIDADE.salas[o].x, s.z - CIDADE.salas[o].z)).toBeGreaterThan(s.r * 2 + 2);
+    }
+  });
+  it("dá pra entrar: a porta (virada pro centro) e o miolo da sala ficam livres; a parede é sólida", () => {
+    const cs = colisoresDaCidade();
+    for (const n of nomes) {
+      const s = CIDADE.salas[n];
+      for (const lz of [s.r + 0.5, s.r, s.r - 1.5]) { const p = mundo(daSala(s, 0, lz)); expect(dentroDeAlgum(p, cs)).toBe(false); }
+      const porta = daSala(s, 0, s.r); expect(Math.hypot(porta.x, porta.z)).toBeLessThan(Math.hypot(s.x, s.z));   // a porta dá pro centro
+      expect(paredeDaSala(s).length).toBeGreaterThan(30);
+      const fundo = mundo(daSala(s, 0, -s.r)); expect(dentroDeAlgum(fundo, cs)).toBe(true);
+    }
+  });
+  it("móveis: lounge com sofá, TV e caixa de som; sala de jogos com fliperama e sinuca; tudo dentro da sala", () => {
+    const tipos = (n: NomeSala) => MOVEIS[n].map((m) => m.tipo);
+    expect(tipos("lounge")).toEqual(expect.arrayContaining(["sofa", "tv", "caixaSom"]));
+    expect(tipos("jogos")).toEqual(expect.arrayContaining(["fliperama", "sinuca"]));
+    for (const n of nomes) for (const m of MOVEIS[n]) for (const [a, b] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {   // os 4 cantos da pegada
+      const lx = (a * m.larg) / 2, lz = (b * m.prof) / 2, x = m.x + lx * Math.cos(m.rot) + lz * Math.sin(m.rot), z = m.z - lx * Math.sin(m.rot) + lz * Math.cos(m.rot);
+      expect(Math.hypot(x, z)).toBeLessThan(CIDADE.salas[n].r);
+    }
+  });
+  it("hangar grande: a nave (aro ~7,9 m) cabe folgada; pilones em volta, centro livre", () => {
+    expect(CIDADE.hangar.r).toBeGreaterThanOrEqual(11);
+    for (const p of pilonesDoHangar()) expect(Math.hypot(p.x - CIDADE.hangar.x, p.z - CIDADE.hangar.z)).toBeGreaterThan(CIDADE.hangar.r);
+    expect(Math.hypot(CIDADE.hangar.x, CIDADE.hangar.z) + CIDADE.hangar.r).toBeLessThan(CIDADE.andavelR);
+    expect(Math.hypot(CIDADE.hangar.x, CIDADE.hangar.z) - CIDADE.hangar.r).toBeGreaterThan(CIDADE.cidadela.r + 2);
   });
 });
