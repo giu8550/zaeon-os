@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { CRISTAIS_PERTO, DISTANCIA, emendarLoop, fasesDeContato, pisadasEntre, SINTESE, SONS_ARQUIVO, sintetizarBaque, sintetizarJetpack, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
+import { CRISTAIS_PERTO, DISTANCIA, emendarLoop, recortarCanal, recortePasso, fasesDeContato, pisadasEntre, SINTESE, SONS_ARQUIVO, sintetizarBaque, sintetizarJetpack, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
 
 describe("áudio do cyberespaço", () => {
   it("os 22 sons de arquivo existem (21 .ogg + o jato .wav) e os sintetizados têm gerador em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
@@ -110,3 +110,32 @@ describe("áudio do cyberespaço", () => {
   });
 });
 
+
+describe("recorte do passo (sincronia correndo)", () => {
+  const sr = 44100, ms = (x: number) => Math.round((x / 1000) * sr);
+  // respiro fraco até 60 ms, BATIDA principal aos 70 ms, e uma 2ª batida aos 260 ms (como o step-1)
+  const sinal = () => {
+    const d = new Float32Array(ms(347));
+    for (let i = 0; i < ms(60); i++) d[i] = 0.03 * Math.sin(i * 0.3);
+    for (let i = ms(66); i < ms(110); i++) d[i] = Math.sin(i * 0.5) * Math.exp(-(i - ms(70)) / ms(15));
+    for (let i = ms(258); i < ms(290); i++) d[i] = 0.7 * Math.sin(i * 0.5) * Math.exp(-(i - ms(260)) / ms(10));
+    return d;
+  };
+  it("começa logo antes do ataque da batida principal (sem o respiro) e acaba antes da 2ª batida", () => {
+    const r = recortePasso(sinal(), sr);
+    expect(r.ini).toBeGreaterThan(ms(58)); expect(r.ini).toBeLessThan(ms(70));
+    expect(r.ini + r.n).toBeLessThan(ms(258));
+  });
+  it("aplica sem estalo: entra e sai do zero", () => {
+    const d = sinal(), r = recortePasso(d, sr), o = recortarCanal(d, r, sr);
+    expect(o.length).toBe(r.n);
+    expect(Math.abs(o[0]!)).toBeLessThan(1e-6); expect(Math.abs(o[o.length - 1]!)).toBeLessThan(1e-3);
+  });
+  it("passo curtinho (menor que a janela) não estoura o buffer", () => {
+    const d = new Float32Array(ms(80)); d[ms(10)] = 1;
+    const r = recortePasso(d, sr); expect(r.ini + r.n).toBeLessThanOrEqual(d.length);
+  });
+  it("os 3 passos são recortados", () => {
+    for (const n of PASSOS) expect(SONS[n].recortar).toBe(true);
+  });
+});

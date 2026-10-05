@@ -9,7 +9,7 @@
  * Regras puras e a tabela dos sons em lib/cyber/audio.ts. dispose() para e desconecta tudo.
  */
 import * as THREE from "three";
-import { DISTANCIA, FADE_ENTRADA, SINTESE, SONS, SONS_ARQUIVO, emendarLoop, criarLimiteVozes, lerPrefs, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
+import { DISTANCIA, FADE_ENTRADA, SINTESE, SONS, SONS_ARQUIVO, emendarLoop, recortarCanal, recortePasso, criarLimiteVozes, lerPrefs, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
 export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom; vel?: number; taxa?: number; taxaAtual?: number };
 
 export type AudioCyberHandle = {
@@ -112,6 +112,11 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
           if (em) {   // vira loop sem emenda (a ponta entra em crossfade no começo)
             const x = Math.round(em * buf.sampleRate), novo = ctx.createBuffer(buf.numberOfChannels, buf.length - Math.max(1, Math.min(Math.floor(buf.length / 3), x)), buf.sampleRate);
             for (let c = 0; c < buf.numberOfChannels; c++) novo.getChannelData(c).set(emendarLoop(buf.getChannelData(c), x));
+            buf = novo;
+          }
+          if (SONS[n].recortar) {   // passo: só a batida principal, começando no ataque dela
+            const r = recortePasso(buf.getChannelData(0), buf.sampleRate), novo = ctx.createBuffer(buf.numberOfChannels, r.n, buf.sampleRate);
+            for (let c = 0; c < buf.numberOfChannels; c++) novo.getChannelData(c).set(recortarCanal(buf.getChannelData(c), r, buf.sampleRate));
             buf = novo;
           }
           buffers.set(n, buf); montarLoops();

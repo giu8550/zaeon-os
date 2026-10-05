@@ -163,6 +163,18 @@ export default function CenaCyber(p: CenaCyberProps) {
     window.addEventListener("keydown", baixo); window.addEventListener("keyup", cima); window.addEventListener("blur", solta);
     return () => { window.removeEventListener("keydown", baixo); window.removeEventListener("keyup", cima); window.removeEventListener("blur", solta); };
   }, [comVoz, falar]);
+  // OLHAR LIVRE (mouse travado): abriu um painel → solta o mouse pra clicar nele; Enter (fora de um campo) → solta e
+  // foca o chat (dá pra falar sem precisar do Esc antes)
+  const chatRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => { if (poiAberto || recadoAberto) engine.current?.soltarMouse(); }, [poiAberto, recadoAberto]);
+  useEffect(() => {
+    const enter = (e: KeyboardEvent) => {
+      const a = document.activeElement, campo = !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || (a as HTMLElement).isContentEditable);
+      if (e.key !== "Enter" || campo || !chatRef.current || !document.pointerLockElement) return;
+      e.preventDefault(); engine.current?.soltarMouse(); chatRef.current.focus();
+    };
+    window.addEventListener("keydown", enter); return () => window.removeEventListener("keydown", enter);
+  }, []);
   // o recado atual: holograma no QG + a TV do lounge (e um "ping" quando chega um novo)
   useEffect(() => { engine.current?.setRecado(p.recadoQG ?? null); }, [p.recadoQG, pronto]);
 
@@ -237,7 +249,7 @@ export default function CenaCyber(p: CenaCyberProps) {
               <div className="mb-1.5 flex max-h-[96px] flex-col gap-0.5 overflow-y-auto px-1 text-[12.5px] text-violet-100" aria-live="polite">
                 {(p.chat ?? []).slice(-8).map((m) => <div key={m.id}><b style={{ color: m.color }}>{m.name}:</b> {m.texto}</div>)}
               </div>
-              <input value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") enviar(); }} maxLength={400} placeholder="Falar…  (Enter)" aria-label="Falar na sala" className="w-full rounded-xl border border-violet-300/30 bg-[#0a081e]/70 px-3 py-2 text-[13px] text-white outline-none focus:border-cyan-300" />
+              <input ref={chatRef} value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") enviar(); }} maxLength={400} placeholder="Falar…  (Enter)" aria-label="Falar na sala" className="w-full rounded-xl border border-violet-300/30 bg-[#0a081e]/70 px-3 py-2 text-[13px] text-white outline-none focus:border-cyan-300" />
             </div>
           )}
 

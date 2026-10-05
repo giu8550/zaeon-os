@@ -109,6 +109,10 @@ type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 const COR_QG = "#ffd36b";
 /** cor dos frisos/chamas de cada moto do estacionamento */
 const CORES_MOTO = ["#45d6ff", "#ff6ad5", "#ffc46b", "#9affd0"];
+/** sensibilidade do olhar livre (rad por pixel do mouse) */
+const SENS_OLHAR = 0.0026;
+const MIRA_CSS = "position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:rgba(220,245,255,.9);box-shadow:0 0 0 1.5px rgba(10,20,40,.55),0 0 8px rgba(120,220,255,.7);pointer-events:none;z-index:5;";
+const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
 const TAG_CSS = "position:absolute;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
 
@@ -186,6 +190,9 @@ export class CyberEngine {
   private hoverBase: string | null = null; private sobContainer = false;
   private camAz = 0; private camPitch = 0.16; private camDist = 9; private camT = new THREE.Vector3(0, 1.2, 0);
   private ptrs = new Map<number, { x: number; y: number }>(); private drag: { x: number; y: number; az: number; pitch: number } | null = null; private moved = false; private pinch0 = 0; private dist0 = 9;
+  /** OLHAR LIVRE (tela cheia, mouse): o 1º clique trava o ponteiro (pointer lock) e daí mexer o mouse gira a câmera,
+   *  sem segurar botão; a MIRA no centro é o "cursor" (clicar = agir no que está nela). Esc solta. */
+  private olharLivre = false; private travando = false; private mira: HTMLDivElement | null = null; private dicaMira: HTMLDivElement | null = null;
   private prontoDisparado = false;
   private cleanups: Array<() => void> = [];
 
@@ -761,17 +768,41 @@ export class CyberEngine {
       if (k === "shift") { this.keys.shift = true; return; }
       if (k === " " || k === "spacebar") { if (this.pilotando || this.moto !== null) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.comandoJet(true); e.preventDefault(); } return; }
       if (k === "f" && this.pilotando && this.pousado) { this.desembarcar(); return; }
-      if (k === "f" && !this.menu) { if (this.moto !== null) this.desmontar(); else this.montar(); return; }   // moto: F monta (perto) / desce (pousada)   // na vista (landing) o ESPAÇO não faz nada e a página rola normal
+      if (k === "f" && !this.menu) { if (this.moto !== null) this.desmontar(); else this.montar(); return; }   // moto: F monta (perto) / desce (pousada)
       if ((k === "e" || k === "q") && (this.pilotando || this.moto !== null)) { this.voY[k === "e" ? "subir" : "descer"] = true; this.autoPouso = false; e.preventDefault(); return; }
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { this.keys[k] = true; e.preventDefault(); }
     });
     on("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "shift") { this.keys.shift = false; return; } if (k === " " || k === "spacebar") { this.espaco = false; this.voY.subir = false; this.comandoJet(false); return; } if (k === "e") this.voY.subir = false; if (k === "q") this.voY.descer = false; this.keys[k] = false; });
+    // olhar livre: trava/solta o ponteiro
+    const aoTravar = () => {
+      this.olharLivre = document.pointerLockElement === cv; this.drag = null; this.ptrs.clear();
+      if (this.mira) this.mira.style.display = this.olharLivre ? "block" : "none";
+      if (this.olharLivre && this.dicaMira) { this.dicaMira.remove(); this.dicaMira = null; }   // a dica só até a 1ª vez
+      if (this.olharLivre) { this.hoverBase = null; cv.style.cursor = ""; }
+    };
+    document.addEventListener("pointerlockchange", aoTravar); this.cleanups.push(() => document.removeEventListener("pointerlockchange", aoTravar));
+    if (this.podeOlharLivre(true)) {
+      const mira = document.createElement("div"); mira.style.cssText = MIRA_CSS; mira.style.display = "none"; this.o.overlay.appendChild(mira); this.mira = mira;
+      const dica = document.createElement("div"); dica.style.cssText = DICA_MIRA_CSS; dica.textContent = "Clique na cena: o mouse passa a mover a câmera · Esc solta"; this.o.overlay.appendChild(dica); this.dicaMira = dica;
+      this.cleanups.push(() => { mira.remove(); dica.remove(); if (document.pointerLockElement === cv) document.exitPointerLock(); });
+    }
     onC("pointerdown", (e) => {
+      if (this.olharLivre) { if (e.button === 0) this.drag = { x: 0, y: 0, az: this.camAz, pitch: this.camPitch }; this.moved = false; return; }   // clique na MIRA (age no pointerup)
+      if (e.pointerType === "mouse" && e.button === 0 && this.podeOlharLivre()) {   // 1º clique: trava o mouse (não é um clique de ação)
+        this.travando = true;
+        try { const pr = cv.requestPointerLock() as unknown as Promise<void> | undefined; pr?.catch?.(() => { this.travando = false; }); } catch { this.travando = false; }
+        return;
+      }
       this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.ptrs.size === 2) { const [a, b] = [...this.ptrs.values()]; this.pinch0 = Math.hypot(a!.x - b!.x, a!.y - b!.y); this.dist0 = this.camDist; }
       this.drag = { x: e.clientX, y: e.clientY, az: this.camAz, pitch: this.camPitch }; this.moved = false;
     });
     on("pointermove", (e) => {
+      if (this.olharLivre) {   // mexer o mouse = girar a câmera (direita gira pra direita; pra baixo olha pra baixo)
+        this.camAz -= e.movementX * SENS_OLHAR; this.camPitch = limitarPitch(this.camPitch + e.movementY * SENS_OLHAR * 0.85);
+        if (Math.abs(e.movementX) + Math.abs(e.movementY) > 0) { const r = cv.getBoundingClientRect(); this.passarMouse(r.left + r.width / 2, r.top + r.height / 2); }
+        return;
+      }
       if (this.ptrs.has(e.pointerId)) this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.ptrs.size === 2 && this.pinch0) { const [a, b] = [...this.ptrs.values()]; this.camDist = Math.min(24, Math.max(6, (this.dist0 * this.pinch0) / Math.max(20, Math.hypot(a!.x - b!.x, a!.y - b!.y)))); this.moved = true; return; }
       if (!this.drag) { if (e.target === cv) this.passarMouse(e.clientX, e.clientY); return; }
@@ -779,6 +810,8 @@ export class CyberEngine {
       this.camAz = this.drag.az - dx * 0.006; this.camPitch = limitarPitch(this.drag.pitch + dy * 0.005);   // arrastar pra baixo até o chão → olhar pro céu
     });
     on("pointerup", (e) => {
+      if (this.travando) { this.travando = false; return; }
+      if (this.olharLivre) { if (this.drag && e.button === 0) { const r = cv.getBoundingClientRect(); this.clicar(r.left + r.width / 2, r.top + r.height / 2, true); } this.drag = null; return; }
       const era = this.ptrs.size; this.ptrs.delete(e.pointerId); if (this.ptrs.size < 2) this.pinch0 = 0;
       if (this.drag && !this.moved && era === 1) this.clicar(e.clientX, e.clientY);
       if (!this.ptrs.size) this.drag = null;
@@ -788,6 +821,13 @@ export class CyberEngine {
     onC("pointerleave", () => { this.sobContainer = false; this.hoverBase = null; cv.style.cursor = ""; });
     onC("wheel", (e) => { if (this.menu) return; /* menu: a página continua rolando */ e.preventDefault(); this.camDist = Math.min(24, Math.max(6, this.camDist * (e.deltaY > 0 ? 1.1 : 0.9))); }, { passive: false });
   }
+
+  /** olhar livre só na tela cheia (fora do menu/landing), com mouse de verdade (no celular é arrastar/joystick) */
+  private podeOlharLivre(ignorarMenu = false) {
+    return (ignorarMenu || !this.menu) && this.o.teclasSempre && typeof document !== "undefined" && "exitPointerLock" in document && !!window.matchMedia?.("(pointer: fine)").matches;
+  }
+  /** solta o mouse (o React chama ao abrir um painel ou focar o chat) */
+  soltarMouse() { if (this.olharLivre && typeof document !== "undefined") document.exitPointerLock(); }
 
   private ndc(cx: number, cy: number) { const r = this.R.domElement.getBoundingClientRect(); return new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1); }
   /** qual monitor (de qual base) está sob o ponteiro, se houver */
@@ -804,7 +844,9 @@ export class CyberEngine {
     this.R.domElement.style.cursor = meu && this.perto ? "pointer" : "";
   }
 
-  private clicar(cx: number, cy: number) {
+  /** `mira`: clique com o mouse travado (olhar livre) — só INTERAGE (monitor, moto, TV, colega, portal, marco); andar
+   *  é no WASD (a mira passa por cima do personagem: "andar até onde ela aponta" levaria longe demais) */
+  private clicar(cx: number, cy: number, mira = false) {
     if (this.pilotando || this.moto !== null) return;   // em voo, arrastar gira a câmera; clique não faz nada
     this.motoAlvo = null;
     const sob = this.monitorSob(cx, cy);
@@ -831,7 +873,7 @@ export class CyberEngine {
       const hc = this.ray.intersectObject(this.cidade.computadores, false)[0];
       if (hc && computadorPerto(this.eu.pos, 3.2) >= 0) { this.o.onEntrarEstudo?.(); return; }
       const h = this.ray.intersectObjects(this.cidade.alvos, true)[0];
-      if (h) { const q = resolverCidade({ x: h.point.x, z: h.point.z }); this.alvo = new THREE.Vector2(q.x, q.z); this.alvoDepois = null; }
+      if (h && !mira) { const q = resolverCidade({ x: h.point.x, z: h.point.z }); this.alvo = new THREE.Vector2(q.x, q.z); this.alvoDepois = null; }
       return;
     }
     // o BURACO NEGRO é o portal (ou o anel embaixo dele)
@@ -842,7 +884,7 @@ export class CyberEngine {
     if (this.noTopo) {
       if (sob === this.o.eu.id) { this.o.onEntrarEstudo?.(); return; }
       const z = this.zaeon(); const hit = z?.topo ? this.ray.intersectObject(z.topo, true)[0] : undefined;
-      if (hit && z) { const e = this.eixoTopo()!; const dx = hit.point.x - e.x, dz = hit.point.z - e.z, d = Math.hypot(dx, dz), lim = 2.0 * this.escalaZaeon(), k = d > lim ? lim / d : 1; this.alvo = new THREE.Vector2(e.x + dx * k, e.z + dz * k); }
+      if (hit && z && !mira) { const e = this.eixoTopo()!; const dx = hit.point.x - e.x, dz = hit.point.z - e.z, d = Math.hypot(dx, dz), lim = 2.0 * this.escalaZaeon(), k = d > lim ? lim / d : 1; this.alvo = new THREE.Vector2(e.x + dx * k, e.z + dz * k); }
       return;
     }
     let marco: LandmarkHandle | null = null, hitMarco: THREE.Intersection | null = null;
@@ -850,11 +892,11 @@ export class CyberEngine {
     // no ALTO (escada/plataforma): clicar na estrutura = andar até o ponto (a navegação segura muralhas/borda)
     if (this.altoEm) {
       if (sob === this.o.eu.id && this.perto) { this.o.onEntrarEstudo?.(); return; }
-      if (hitMarco) { this.alvo = new THREE.Vector2(hitMarco.point.x, hitMarco.point.z); this.alvoDepois = null; this.falandoCom = null; }
+      if (hitMarco && !mira) { this.alvo = new THREE.Vector2(hitMarco.point.x, hitMarco.point.z); this.alvoDepois = null; this.falandoCom = null; }
       return;
     }
     // do chão, clicar nos DEGRAUS: primeiro o pé da escada, depois sobe até onde clicou
-    if (marco && hitMarco && marco.escada && hitMarco.object === marco.escada) {
+    if (marco && hitMarco && marco.escada && hitMarco.object === marco.escada && !mira) {
       const mn = marcoNav(marco.poi)!; const pe = deEscada(mn, mn.nav.bordaR + mn.nav.escada.comprimento * 0.98, 0);
       this.alvo = new THREE.Vector2(pe.x, pe.z); this.alvoDepois = new THREE.Vector2(hitMarco.point.x, hitMarco.point.z); this.falandoCom = null; return;
     }
@@ -870,7 +912,7 @@ export class CyberEngine {
       this.falandoCom = colega; this.alvo = null; this.o.onFalarCom?.(colega.name);
       colega.av.olharPara(Math.atan2(this.eu.pos.x - colega.pos.x, this.eu.pos.z - colega.pos.z)); return;
     }
-    const h = this.ray.intersectObject(this.cena.floor)[0];
+    const h = mira ? undefined : this.ray.intersectObject(this.cena.floor)[0];
     if (h) { const p = empurrarParaFora({ x: h.point.x, z: h.point.z }, this.colisores); this.alvo = new THREE.Vector2(p.x, p.z); this.alvoDepois = null; this.falandoCom = null; this.o.onFalarCom?.(null); }
   }
 
@@ -1189,6 +1231,7 @@ export class CyberEngine {
 
   private atualizarHud(now: number) {
     const { eu } = this;
+    if (this.dicaMira) this.dicaMira.style.display = this.menu ? "none" : "block";
     const atores = [eu, ...this.remotos.values()];
     for (const a of atores) {
       if (a === eu) { a.tag.style.display = "none"; continue; }   // o próprio avatar não leva nome

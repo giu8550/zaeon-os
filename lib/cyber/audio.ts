@@ -19,7 +19,7 @@ export const TAXA_432 = 432 / 440;
 
 /** como cada som toca: `pos` = PositionalAudio (mono, no mundo); `2d` = THREE.Audio (leito/UI); `taxa` = playbackRate */
 /** `emendar` = segundos de crossfade da ponta no começo (vira loop sem emenda ao carregar); `filtro` = passa-baixa (Hz) */
-export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: number; taxa?: number; sintetico?: boolean; ext?: "wav"; emendar?: number; filtro?: number }> = {
+export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: number; taxa?: number; sintetico?: boolean; ext?: "wav"; emendar?: number; filtro?: number; recortar?: boolean }> = {
   // JATO da mochila (contínuo enquanto se segura o ESPAÇO) em 2 camadas: o ronco gravado ("Rocket Engine", CC0,
   // OpenGameArt — WAV mono, loop sem emenda) + o sopro/chiado sintetizado por cima
   jetpack: { modo: "pos", loop: true, volume: 0.55, ext: "wav" },
@@ -34,10 +34,12 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "ship-takeoff": { modo: "pos", loop: true, volume: 0.85, emendar: 0.4 },   // SUBINDO: o motor empurrando — contínuo enquanto se segura o botão
   "ship-landing": { modo: "pos", loop: true, volume: 0.8, emendar: 0.4 },   // DESCENDO: o motor baixando — contínuo enquanto se segura o botão
   "ship-touchdown": { modo: "pos", loop: false, volume: 0.9 },   // no instante do POUSO: impacto grave + assentamento
-  // passos SUTIS: volume baixo + passa-baixa (tira o "estalo"); no compasso do pé de verdade (criarDetectorPasso)
-  "step-1": { modo: "pos", loop: false, volume: 0.3, filtro: 2300 },
-  "step-2": { modo: "pos", loop: false, volume: 0.3, filtro: 2300 },
-  "step-3": { modo: "pos", loop: false, volume: 0.3, filtro: 2300 },
+  // passos SUTIS: volume baixo + passa-baixa (tira o "estalo"); no compasso do pé de verdade (criarDetectorPasso).
+  // `recortar`: só a batida principal (os arquivos têm respiro antes e o step-1 tem uma 2ª batida aos ~260 ms, que
+  // correndo cai em cima da pisada seguinte e soa fora do compasso) — ver recortePasso
+  "step-1": { modo: "pos", loop: false, volume: 0.3, filtro: 2300, recortar: true },
+  "step-2": { modo: "pos", loop: false, volume: 0.3, filtro: 2300, recortar: true },
+  "step-3": { modo: "pos", loop: false, volume: 0.3, filtro: 2300, recortar: true },
   jump: { modo: "pos", loop: false, volume: 0.6 },
   land: { modo: "pos", loop: false, volume: 0.55 },
   "near-ping": { modo: "pos", loop: false, volume: 0.45 },
@@ -178,6 +180,30 @@ export function pisadasEntre(uAnt: number, u: number, fases: number[]): number {
   let n = 0;
   for (const f of fases) n += u >= uAnt ? (dentro(f, uAnt, u) ? 1 : 0) : (dentro(f, uAnt, 1) || dentro(f, -1e-9, u) ? 1 : 0);
   return n;
+}
+
+/**
+ * O recorte de um PASSO: a janela que começa logo antes da BATIDA PRINCIPAL (a de maior pico — volta do pico até o
+ * ataque dela, no máx. 40 ms) e dura `dur` s. Assim o som bate no instante em que o pé encosta (sem o respiro de
+ * ~50–70 ms dos arquivos) e acaba antes de uma eventual 2ª batida — correndo (~0,3 s entre pisadas) ela soaria
+ * como um passo fora do compasso. Devolve { ini, n } em amostras.
+ */
+export function recortePasso(d: Float32Array, sr: number, dur = 0.16): { ini: number; n: number } {
+  let pico = 0, ip = 0;
+  for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]!); if (v > pico) { pico = v; ip = i; } }
+  const w = Math.max(1, Math.round(sr * 0.002)), lim = Math.max(0, ip - Math.round(sr * 0.04));
+  const maxAbs = (a: number, b: number) => { let m = 0; for (let i = Math.max(0, a); i < b; i++) m = Math.max(m, Math.abs(d[i]!)); return m; };
+  let ini = ip;
+  while (ini - w >= lim && maxAbs(ini - w, ini) > pico * 0.15) ini -= w;
+  ini = Math.max(0, ini - Math.round(sr * 0.004));
+  return { ini, n: Math.max(1, Math.min(d.length - ini, Math.round(sr * dur))) };
+}
+/** aplica o recorte num canal: copia a janela, com 1 ms de entrada e uma cauda em fade (`cauda` s) pra não estalar */
+export function recortarCanal(d: Float32Array, r: { ini: number; n: number }, sr: number, cauda = 0.05): Float32Array {
+  const out = d.slice(r.ini, r.ini + r.n), ne = Math.min(out.length, Math.round(sr * 0.001)), nc = Math.min(out.length, Math.round(sr * cauda));
+  for (let i = 0; i < ne; i++) out[i]! *= i / ne;
+  for (let i = 0; i < nc; i++) out[out.length - 1 - i]! *= i / nc;
+  return out;
 }
 
 /** cadência dos passos (s) e o próximo arquivo (alterna os 3) — reserva quando o avatar não tem pés (sem o modelo) */
