@@ -50,3 +50,20 @@ Ciclo de vida:
 - **Heartbeat** de 2 s por `setInterval` (+ ao voltar pra aba) reenvia a última pose: o `requestAnimationFrame` pausa em segundo plano, então sem isso o avatar "congelava" pros outros.
 - `member_removed` remove o personagem (a base fica); teto de 5 no auth.
 - A **janela da landing** não tem rede (é só a vista): pra se ver, os dois precisam clicar em **Conectar** (tela cheia `/lounge-cosmico`) no **mesmo convite**.
+
+## Pontos de interesse (marcos megalíticos) — a Zaeon (QG)
+Spec: `docs/HANDOFF_CLAUDECODE_ZAEON_LANDMARK.md` + `docs/HANDOFF_CYBERESPACO_LANDMARKS.md`; visual canônico: `docs/prototypes/zaeon-landmark.html`.
+
+| Peça | Onde |
+|---|---|
+| Registro dirigido por dados (POIS, colisores, proximidade, flag) | `lib/cyber/landmarks.ts` |
+| Navegação com altura (chão → escada → plataforma; portão; muralhas/pilares sólidos) | `lib/cyber/nav.ts` |
+| Builder three (preset `zaeon` portado 1:1 do protótipo × escala; preset `generico`) | `components/cyber/Landmark.ts` |
+| Montagem (cena, colisão, rótulo por proximidade, clique, painel, topo do dono) | `components/cyber/engine.ts`, `CenaCyber.tsx` |
+| Ação privilegiada "subir ao topo" (valida fundador na SESSÃO) | `POST /api/lounge3d/[id]/topo` |
+
+- **Zaeon**: 1,6× o protótipo, piso a ~13 m; à esquerda-atrás da praça (−30, −48), fora do eixo do buraco negro. **Escadaria de cristal** virada pra praça; **portão** nas muralhas alinhado a ela. Sobe/desce andando (WASD/joystick) ou clicando nos degraus (vai até o pé e sobe). Não se anda por baixo da ilha nem se entra pelos lados da escada; na plataforma, muralhas e pilares da casa de cristal são sólidos e não se cai pela borda.
+- Sendo andável, a estrutura **não gira** (portão/escada alinhados); flutuação sutil (±0,15) que leva junto quem está em cima. Querubins, feixe e coroa seguem animados. Fogo: cintilar lento `sin(t*1.8)`, sem estrobo; `prefers-reduced-motion` → quase estático; `low` → menos partículas, vidro sem transmission.
+- **Base do dono no topo**: o fundador (`isSuperAdmin` da sessão, mandado no GET da sala como `fundador`) não tem base no anel; a base dele é a plataforma do topo. "Subir ao topo" no painel chama a API (403 pra quem não é fundador); "Descer" volta ao salão do QG. Os outros só desenham alguém no topo se o SERVIDOR marcou essa pessoa como fundador (client event forjado não sobe ninguém; no fallback `POST /pos` o servidor zera `topo`).
+- Flag **`NEXT_PUBLIC_CYBER_LANDMARKS`**: vazia = ligada em dev, desligada em produção; `"1"` liga em prod (build-arg já plumbado).
+- Salas com muitos membros: slots do anel de bases que cairiam na ilha ou na escada são pulados (`basesDosMembros`).

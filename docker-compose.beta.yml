@@ -34,6 +34,7 @@ services:
         NEXT_PUBLIC_MAP_HARNESS: ${NEXT_PUBLIC_MAP_HARNESS:-0}
         NEXT_PUBLIC_LOUNGE_3D: ${NEXT_PUBLIC_LOUNGE_3D:-0}
         NEXT_PUBLIC_CYBER_AVATAR_GLB: ${NEXT_PUBLIC_CYBER_AVATAR_GLB:-}
+        NEXT_PUBLIC_CYBER_LANDMARKS: ${NEXT_PUBLIC_CYBER_LANDMARKS:-}
         NEXT_PUBLIC_AURA_ECONOMY: ${NEXT_PUBLIC_AURA_ECONOMY:-0}
     container_name: zaeon_web
     # .env = base (vive no VPS). .env.secrets = segredos de runtime escritos pelo

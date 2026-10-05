@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LAB_ENTRADA, MSG_ENTRAR_ESTUDO, ehMsgEntrarEstudo } from "@/lib/ui/loungeHub";
 import type { MensagemChat, Presenca } from "@/lib/lounge3d/tipos";
+import { landmarksOn, type POI } from "@/lib/cyber/landmarks";
 import { CyberEngine, type PessoaCyber } from "./engine";
 import Joystick from "./Joystick";
 
@@ -22,6 +23,10 @@ export type CenaCyberProps = {
   /** aviso de rede ("tempo real indisponível", "sala cheia"…). */
   aviso?: string | null;
   onSessaoIniciada?: () => void;
+  /** dono da Zaeon (vem do SERVIDOR) — só pinta o botão; quem decide é `pedirTopo` */
+  souFundador?: boolean;
+  /** AÇÃO PRIVILEGIADA: pede ao servidor pra subir ao topo da Zaeon (POST /api/lounge3d/[id]/topo) */
+  pedirTopo?: () => Promise<{ ok: boolean; erro?: string }>;
 };
 
 
@@ -33,6 +38,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const engine = useRef<CyberEngine | null>(null);
   const [pronto, setPronto] = useState(false), [perto, setPerto] = useState(false), [menu, setMenu] = useState(!tela);
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
+  const [poiAberto, setPoiAberto] = useState<POI | null>(null), [noTopo, setNoTopo] = useState(false), [subindo, setSubindo] = useState(false), [erroTopo, setErroTopo] = useState<string | null>(null);
   const [correndo, setCorrendo] = useState(false), [txt, setTxt] = useState(""), [falha, setFalha] = useState(false);
   const touch = useMemo(() => typeof window !== "undefined" && (matchMedia("(pointer:coarse)").matches || "ontouchstart" in window), []);
   const low = useMemo(() => touch || (typeof window !== "undefined" && Math.min(innerWidth, innerHeight) < 520), [touch]);
@@ -62,6 +68,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       remotos: cb.current.remotos, enviarPos: (x) => cb.current.enviarPos?.(x),
       onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
       onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true),
+      landmarks: landmarksOn(), onLandmark: (poi) => { setErroTopo(null); setPoiAberto(poi); }, onTopo: (v) => { setNoTopo(v); if (v) setPoiAberto(null); },
     }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
@@ -142,6 +149,30 @@ export default function CenaCyber(p: CenaCyberProps) {
       )}
 
       {/* entrando nos estudos: SÓ uma barra de loading, nenhum texto */}
+      {/* painel do marco (proximidade + clique): nome, org, link; "Subir ao topo" só pro dono e validado no SERVIDOR */}
+      {poiAberto && !menu && (
+        <div role="dialog" aria-label={poiAberto.nome} className="absolute left-1/2 top-[110px] z-30 w-[min(92vw,340px)] -translate-x-1/2 rounded-2xl border border-sky-300/35 bg-[#070c22]/90 p-4 text-sm shadow-[0_0_40px_-10px_rgba(90,200,255,.6)] backdrop-blur">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1"><p className="text-base font-extrabold tracking-wide text-sky-100">{poiAberto.nome}</p><p className="mt-0.5 text-white/70">{poiAberto.org}</p></div>
+            <button type="button" aria-label="Fechar" onClick={() => setPoiAberto(null)} className="min-h-[36px] min-w-[36px] rounded-full border border-white/15 text-white/70 hover:text-white">×</button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {poiAberto.link && <button type="button" onClick={() => router.push(poiAberto.link!)} className="min-h-[40px] rounded-full border border-sky-300/40 bg-sky-400/15 px-4 font-semibold text-sky-100">Abrir</button>}
+            {poiAberto.acesso === "dono" && p.souFundador && p.pedirTopo && (
+              <button type="button" disabled={subindo} onClick={async () => {
+                setSubindo(true); setErroTopo(null);
+                try { const r = await p.pedirTopo!(); if (r.ok) engine.current?.subir(); else setErroTopo(r.erro ?? "Não foi possível subir."); }
+                catch { setErroTopo("Sem conexão."); } finally { setSubindo(false); }
+              }} className="min-h-[40px] rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-4 font-extrabold text-slate-950 disabled:opacity-60">{subindo ? "Subindo…" : "Subir ao topo"}</button>
+            )}
+          </div>
+          {erroTopo && <p role="alert" className="mt-2 text-rose-300">{erroTopo}</p>}
+        </div>
+      )}
+      {noTopo && !menu && (
+        <button type="button" onClick={() => engine.current?.descer()} className="absolute left-1/2 top-[110px] z-30 min-h-[44px] -translate-x-1/2 rounded-full border border-sky-300/40 bg-[#070c22]/85 px-5 text-sm font-semibold text-sky-100 backdrop-blur">↓ Descer da Zaeon</button>
+      )}
+
       {abrindo && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#03030a]">
           <div role="progressbar" aria-label="Carregando" className="h-1.5 w-[220px] overflow-hidden rounded-full bg-white/10">

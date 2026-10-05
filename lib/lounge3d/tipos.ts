@@ -28,6 +28,7 @@ export type Presenca = {
   facing: number;     // rad
   moving?: boolean;
   sit?: boolean;      // sentado na cadeira da própria base (cyberespaço)
+  topo?: boolean;     // no topo da Zaeon (só vale pra quem o SERVIDOR marcou como fundador)
   ts?: number;
 };
 
