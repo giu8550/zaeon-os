@@ -16,14 +16,25 @@
 {$BETA_DOMAIN} {
 	encode zstd gzip
 
-	# Health check direto no proxy (não precisa subir até o app).
-	respond /healthz "ok" 200
+	# Health check direto no proxy (não precisa subir até o app). Num `handle` próprio: com o `handle {}` de baixo
+	# (catch-all), um `respond` solto perderia a vez (na ordem do Caddy, handle vem antes de respond).
+	handle /healthz {
+		respond "ok" 200
+	}
 
-	reverse_proxy web:3000 {
-		# Repassa os headers reais pro Next/NextAuth atrás do proxy.
-		header_up X-Forwarded-Proto {scheme}
-		header_up X-Forwarded-Host {host}
-		header_up X-Real-IP {remote_host}
+	# Realtime do cyberespaço (Colyseus): matchmaking HTTP + WebSocket. handle_path tira o "/colyseus".
+	# Se o serviço não estiver de pé, só esta rota dá 502 (o resto do site segue normal).
+	handle_path /colyseus/* {
+		reverse_proxy colyseus:2567
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			# Repassa os headers reais pro Next/NextAuth atrás do proxy.
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+		}
 	}
 }
 
@@ -34,8 +45,15 @@
 # Remover quando o domínio definitivo apontar pra cá (ou manter como staging interno).
 75-119-140-97.sslip.io {
 	encode zstd gzip
-	respond /healthz "ok" 200
-	reverse_proxy web:3000
+	handle /healthz {
+		respond "ok" 200
+	}
+	handle_path /colyseus/* {
+		reverse_proxy colyseus:2567
+	}
+	handle {
+		reverse_proxy web:3000
+	}
 }
 
 # ── www → raiz ────────────────────────────────────────────────

@@ -52,6 +52,12 @@ jobs:
       - name: Prisma generate
         run: npx prisma generate
 
+      # Realtime do cyberespaço (Colyseus, server/colyseus): pacote à parte (imagem própria). As deps vêm ANTES do
+      # typecheck/vitest da raiz porque o teste de ponta a ponta (lib/lounge3d/salaColyseus.int.test.ts) sobe o
+      # servidor de verdade e conecta 2 clientes do site.
+      - name: Install deps (realtime Colyseus)
+        run: npm ci --prefix server/colyseus
+
       - name: Lint (não-bloqueante)
         run: npm run lint
         continue-on-error: true
@@ -66,6 +72,12 @@ jobs:
 
       - name: Tests (vitest)
         run: npm test
+
+      - name: Realtime Colyseus — typecheck + testes (sala, token, regras)
+        working-directory: server/colyseus
+        run: |
+          npx tsc -p tsconfig.json --noEmit
+          npm test
 
       # BLOQUEANTE, e de proposito. O abnt-service tinha 41 testes que NINGUEM rodava, e
       # por isso um formatter com 6 nomes indefinidos — um deles no caminho por onde passa

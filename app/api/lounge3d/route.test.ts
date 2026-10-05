@@ -13,6 +13,8 @@ import { POST as AUTH } from "./[id]/pusher-auth/route";
 import { POST as ACESSO } from "./[id]/acesso/route";
 import { POST as TOPO } from "./[id]/topo/route";
 import { POST as RECADO, DELETE as APAGAR_RECADO } from "./[id]/recado/route";
+import { POST as RT_TOKEN } from "./[id]/rt-token/route";
+import { verificarToken } from "@/server/colyseus/src/token";
 
 const ID = "0123456789abcdef01234567", ME = "aaaaaaaaaaaaaaaaaaaaaaaa", OUTRO = "bbbbbbbbbbbbbbbbbbbbbbbb";
 const json = (b: unknown, method = "POST") => new Request("http://x/", { method, body: JSON.stringify(b), headers: { "Content-Type": "application/json" } });
@@ -119,4 +121,24 @@ describe("/api/lounge3d/[id]", () => {
     expect(JSON.parse(m.docUpdate.mock.calls[1]![0].data.content).recadoQG).toBeUndefined();
     expect(m.trigger).toHaveBeenLastCalledWith(`presence-lounge3d-${ID}`, "recado-qg", { recado: null });
   });
+
+  it("rt-token (Colyseus): sessão + membro → token que o servidor do realtime aceita, com identidade da SESSÃO; sem segredo → 503", async () => {
+    const vazio = () => new Request("http://x/", { method: "POST", body: JSON.stringify({ userId: OUTRO, fundador: true }), headers: { "Content-Type": "application/json" } });
+    delete process.env.REALTIME_SECRET;
+    m.docFind.mockResolvedValue(doc());
+    expect((await RT_TOKEN(vazio(), { params: { id: ID } })).status).toBe(503);
+    process.env.REALTIME_SECRET = "seg-teste";
+    m.session.mockResolvedValue(null);
+    expect((await RT_TOKEN(vazio(), { params: { id: ID } })).status).toBe(401);
+    m.session.mockResolvedValue({ user: { email: "a@b.c" } });
+    m.docFind.mockResolvedValue(doc([OUTRO]));
+    expect((await RT_TOKEN(vazio(), { params: { id: ID } })).status).toBe(404);   // não-membro
+    m.docFind.mockResolvedValue(doc());
+    const d = await (await RT_TOKEN(vazio(), { params: { id: ID } })).json();
+    const p = verificarToken(d.token, "seg-teste")!;
+    expect(p).toMatchObject({ u: ME, n: "Ana", s: ID, f: false });   // o corpo pedindo fundador/outro userId é ignorado
+    expect(d.ice[0].urls[0]).toMatch(/^stun:/);
+    delete process.env.REALTIME_SECRET;
+  });
 });
+

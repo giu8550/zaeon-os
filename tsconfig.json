@@ -45,6 +45,7 @@
   ],
   "exclude": [
     "node_modules",
+    "server/colyseus",
     ".next",
     ".turbo",
     "dist",

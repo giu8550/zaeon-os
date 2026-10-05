@@ -33,6 +33,9 @@ export type AudioCyberHandle = {
   tocar(nome: NomeSom, em?: THREE.Vector3 | null, o?: { volume?: number; dist?: Dist; taxa?: number }): void;
   /** releitura das preferências (liga/desliga + volume mestre) */
   aplicarPrefs(): void;
+  /** VOZ ao vivo de alguém (WebRTC) presa ao avatar dele: posicional (perto = mais alto). Antes do gesto que
+   *  libera o áudio, fica na fila e liga sozinha depois. `remover()` desliga e solta. */
+  voz(obj: THREE.Object3D, stream: MediaStream): { remover(): void };
   /** fade dos loops (chamar a cada quadro) */
   atualizar(dt: number): void;
   dispose(): void;
@@ -52,6 +55,17 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
   const loops: { l: LoopSom; obj: THREE.Object3D | null; dist?: Dist; volBase: number }[] = [];
   const umaVez = new Set<{ a: THREE.Audio<GainNode | PannerNode>; holder: THREE.Object3D | null }>();
   const vozes = criarLimiteVozes(o.low ? 8 : 12);
+  const vozesAoVivo = new Set<{ obj: THREE.Object3D; stream: MediaStream; a: THREE.PositionalAudio | null; el: HTMLAudioElement | null }>();
+  /** liga a voz (quando já há listener): PositionalAudio na origem do stream + um <audio> MUDO — no Chrome, o
+   *  áudio remoto do WebRTC só "anda" pro Web Audio se também estiver tocando num elemento */
+  const ligarVoz = (v: { obj: THREE.Object3D; stream: MediaStream; a: THREE.PositionalAudio | null; el: HTMLAudioElement | null }) => {
+    if (!listener || v.a) return;
+    try {
+      const el = new Audio(); el.muted = true; el.srcObject = v.stream; void el.play().catch(() => {}); v.el = el;
+      const a = new THREE.PositionalAudio(listener); aplicarDist(a, DISTANCIA.voz); a.setMediaStreamSource(v.stream); a.setVolume(1.4);
+      v.obj.add(a); v.a = a;
+    } catch { /* sem áudio */ }
+  };
   const ler = () => lerPrefs((k) => (typeof localStorage !== "undefined" ? localStorage.getItem(k) : null));
   let prefs = ler();
 
@@ -84,6 +98,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       listener = new THREE.AudioListener(); o.camera.add(listener);
       const ctx = listener.context; if (ctx.state === "suspended") void ctx.resume().catch(() => {});
       api.aplicarPrefs();
+      for (const v of vozesAoVivo) ligarVoz(v);   // vozes que chegaram antes do gesto
       const loader = new THREE.AudioLoader();
       // os SINTETIZADOS saem na hora (sem rede): gerados no AudioContext do three
       for (const [n, gerar] of Object.entries(SINTESE) as [NomeSom, (sr: number) => Float32Array][]) {
@@ -131,6 +146,11 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       a.onEnded = () => { a.isPlaying = false; fim(); };
       try { a.play(); } catch { fim(); }
     },
+    voz(obj, stream) {
+      const v = { obj, stream, a: null as THREE.PositionalAudio | null, el: null as HTMLAudioElement | null };
+      vozesAoVivo.add(v); ligarVoz(v);
+      return { remover() { vozesAoVivo.delete(v); try { v.a?.disconnect(); } catch { /* já */ } v.a?.removeFromParent(); if (v.el) { v.el.srcObject = null; } } };
+    },
     aplicarPrefs() {
       prefs = ler();
       if (listener) listener.setMasterVolume(prefs.ligado ? prefs.volume : 0);
@@ -151,6 +171,8 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       for (const x of loops) { const a = x.l.audio; if (!a) continue; try { if (a.isPlaying) a.stop(); a.disconnect(); } catch { /* já */ } a.removeFromParent(); x.l.audio = null; }
       for (const it of umaVez) { try { if (it.a.isPlaying) it.a.stop(); it.a.disconnect(); } catch { /* já */ } it.a.removeFromParent(); it.holder?.removeFromParent(); }
       umaVez.clear(); loops.length = 0; buffers.clear();
+      for (const v of vozesAoVivo) { try { v.a?.disconnect(); } catch { /* já */ } v.a?.removeFromParent(); if (v.el) v.el.srcObject = null; }
+      vozesAoVivo.clear();
       if (listener) { listener.removeFromParent(); listener = null; }   // o AudioContext do three é global (fica pro próximo)
     },
   };
