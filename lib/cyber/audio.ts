@@ -1,6 +1,6 @@
 /**
  * Cyberespaço — regras PURAS do áudio (o three fica em components/cyber/AudioCyber.ts):
- *  - os 22 sons e COMO tocam (posicional MONO preso a um objeto × 2D estéreo/UI);
+ *  - os 20 sons e COMO tocam (posicional MONO preso a um objeto × 2D estéreo/UI);
  *  - preferências do usuário (`zaeon_sfx` liga/desliga, `zaeon_volume` mestre 0..1);
  *  - modelo de distância (some longe), teto de vozes simultâneas, cadência de passos;
  *  - o leito ambiente "abaixa" enquanto a música da intro toca (cross-fade quando ela fadeia).
@@ -8,8 +8,8 @@
 export const PASTA_SONS = "/assets/sounds/cyber/";
 
 export type NomeSom =
-  | "space-bed" | "blackhole-hum" | "crystals" | "fire" | "ship-flight" | "ship-idle"
-  | "ship-takeoff" | "ship-landing" | "step-1" | "step-2" | "step-3" | "jump" | "land" | "sit"
+  | "space-bed" | "blackhole-hum" | "crystals" | "ship-flight" | "ship-idle"
+  | "ship-takeoff" | "ship-landing" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "whoosh-hyperspace" | "study-confirm" | "chat-pop" | "join" | "leave";
 
 /** como cada som toca: `pos` = PositionalAudio (mono, no mundo); `2d` = THREE.Audio (leito/UI) */
@@ -17,7 +17,6 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "space-bed": { modo: "2d", loop: true, volume: 0.22 },
   "blackhole-hum": { modo: "pos", loop: true, volume: 0.55 },
   crystals: { modo: "pos", loop: true, volume: 0.35 },
-  fire: { modo: "pos", loop: true, volume: 0.45 },
   "ship-flight": { modo: "pos", loop: true, volume: 0.7 },
   "ship-idle": { modo: "pos", loop: true, volume: 0.35 },
   "ship-takeoff": { modo: "pos", loop: false, volume: 0.9 },
@@ -27,7 +26,6 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "step-3": { modo: "pos", loop: false, volume: 0.3 },
   jump: { modo: "pos", loop: false, volume: 0.6 },
   land: { modo: "pos", loop: false, volume: 0.55 },
-  sit: { modo: "pos", loop: false, volume: 0.45 },
   "near-ping": { modo: "pos", loop: false, volume: 0.45 },
   "neuron-chime": { modo: "pos", loop: false, volume: 0.35 },
   rise: { modo: "pos", loop: false, volume: 0.6 },
@@ -54,6 +52,9 @@ export function lerPrefs(get: (k: string) => string | null): { ligado: boolean; 
   try { ligado = get(PREF_SFX) !== "0"; const v = Number.parseFloat(get(PREF_VOLUME) ?? ""); if (Number.isFinite(v)) volume = Math.max(0, Math.min(1, v)); } catch { /* storage bloqueado */ }
   return { ligado, volume };
 }
+
+/** fade-in (s) dos loops ao entrar na cena 3D — o som do cyberespaço nunca entra seco */
+export const FADE_ENTRADA = 1.6;
 
 /** teto de vozes simultâneas de one-shots (os loops são fixos e contados à parte) */
 export function criarLimiteVozes(max = 12) {

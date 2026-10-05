@@ -146,7 +146,7 @@ export class CyberEngine {
   private som!: AudioCyberHandle;
   private somLoops: { leito?: LoopSom; naveIdle?: LoopSom; naveVoo?: LoopSom } = {};
   private somCristais = new Map<string, LoopSom>();
-  private passoT = 0; private passoI = 0; private neuronioT = 9; private sitAnt = 0; private pousadoAnt = true; private tVivo = 0; private whooshEntrada = false;
+  private passoT = 0; private passoI = 0; private neuronioT = 9; private pousadoAnt = true; private tVivo = 0; private whooshEntrada = false;
   private sitT = 0; private perto = false; private falandoCom: Ator | null = null;
   private hoverBase: string | null = null; private sobContainer = false;
   private camAz = 0; private camPitch = 0.16; private camDist = 9; private camT = new THREE.Vector3(0, 1.2, 0);
@@ -410,17 +410,17 @@ export class CyberEngine {
   /** (pra quem NÃO é o dono) o dono está com a nave fora do hangar → a do hangar some (só existe uma nave) */
   private naveDoDonoFora() { if (this.ehFundador(this.o.eu.id)) return false; for (const a of this.remotos.values()) if (a.nave) return true; return false; }
   // ───────────── áudio ─────────────
-  /** loops fixos do mundo + destrave: já (a intro destravou) ou no 1º gesto na cena (clique/toque/tecla) */
+  /** loops fixos do mundo + destrave. O gesto (o "Iniciar" da landing, ou o 1º clique/toque/tecla) só DESTRAVA: o som do
+   *  cyberespaço só liga ao ENTRAR de fato na cena 3D (fora do menu) — na landing/menu, nada do cyberespaço toca. */
   private montarSom() {
     const s = this.som;
     this.somLoops.leito = s.loop("space-bed", null);
     const bn = new THREE.Object3D(); bn.position.set(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); this.cena.scene.add(bn);
     s.volumeLoop(s.loop("blackhole-hum", bn, { dist: DISTANCIA.grande }), 1);
-    const qg = this.zaeon(); if (qg) s.volumeLoop(s.loop("fire", qg.group, { dist: DISTANCIA.padrao }), 1);
     if (this.nave) { this.somLoops.naveIdle = s.loop("ship-idle", this.nave.group, { dist: DISTANCIA.grande }); this.somLoops.naveVoo = s.loop("ship-flight", this.nave.group, { dist: DISTANCIA.naveLocal }); }
     for (const l of this.somCristais.values()) s.volumeLoop(l, 1);
-    const destravar = () => { s.ativar(); musica().destravar(); };
-    if (musica().destravado) s.ativar();
+    const destravar = () => { musica().destravar(); if (!this.menu) s.ativar(); };
+    if (musica().destravado && !this.menu) s.ativar();
     // na fase de CAPTURA: o canvas/HUD param a propagação dos cliques, mas o gesto tem que destravar o áudio mesmo assim
     for (const ev of ["pointerdown", "keydown", "touchstart"] as const) { window.addEventListener(ev, destravar, { once: true, passive: true, capture: true }); this.cleanups.push(() => window.removeEventListener(ev, destravar, { capture: true })); }
   }
@@ -738,8 +738,6 @@ export class CyberEngine {
       // sentar ao parar perto da PRÓPRIA base
       const querSentar = this.distBase(euId, eu.pos) < BASE_INTERACT_R && !andando && !this.alvo && !this.jet.noAr && !this.sobreNave;
       this.sitT += ((querSentar ? 1 : 0) - this.sitT) * Math.min(1, dt * 3);
-      if (this.sitAnt < 0.5 && this.sitT >= 0.5) this.som.tocar("sit", eu.av.group.position, { dist: DISTANCIA.perto });
-      this.sitAnt = this.sitT;
       // passos (alternando 3 arquivos) só andando no chão/piso
       if (andando && !this.jet.noAr) { this.passoT += dt; if (this.passoT >= cadenciaPasso(!!correndo)) { this.passoT = 0; this.passoI = (this.passoI + 1) % PASSOS.length; this.som.tocar(PASSOS[this.passoI]!, eu.av.group.position, { dist: DISTANCIA.perto }); } }
       else this.passoT = cadenciaPasso(!!correndo) * 0.6;
