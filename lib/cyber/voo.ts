@@ -19,7 +19,7 @@ export const VOO = { vel: 30, sobe: 38, inercia: 3, freio: 7, decolar: 1.5, yMax
 export const POUSO_TOL = 0.3;
 
 /** cilindros sólidos pra nave (ex.: a Zaeon): { x, z, r, topo }. Quem vem DE CIMA para no topo (pousa ali). */
-export type Pilar = Colisor & { topo: number };
+export type Pilar = Colisor & { topo: number; base?: number };
 
 /** o chão sob a nave: o mais alto entre o mapa/cidade e o topo dos pilares embaixo dela */
 export function chaoDoVoo(p: { x: number; y: number; z: number }, solidos: Pilar[] = []): number {
@@ -46,7 +46,7 @@ export function passoVoo(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar
   ({ x, y, z } = foraDaIlha({ x, y, z }));
   for (const p of solidos) {
     const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
-    if (d >= p.r || y >= p.topo) continue;
+    if (d >= p.r || y >= p.topo || (p.base !== undefined && y <= p.base)) continue;   // `base`: sólido só de base a topo (ilhota flutuante)
     if (s.y >= p.topo - POUSO_TOL) { y = p.topo; vy = Math.max(0, vy); continue; }   // em cima (tolera a flutuação do marco)
     const kk = d > 1e-4 ? p.r / d : 1; x = p.x + (d > 1e-4 ? dx * kk : p.r); z = p.z + (d > 1e-4 ? dz * kk : 0);
   }
