@@ -8,7 +8,7 @@
  *  - CIDADELA monumental (pilares + cúpula estelar + tambor + 2ª cúpula + pináculo) = BIBLIOTECA: anel de estantes com
  *    livros de luz e monitores verticais (clicar = estudar) rodeando a sala; dentro, 4 SALAS DE SERVIDORES (racks com
  *    LEDs e fluxo de dados subindo pra cúpula) em volta da mesa com um globo de luz no centro;
- *  - SALAS em pavilhões de vidro (LOUNGE com sofá/TV/caixas de som; SALA DE JOGOS) — components/cyber/Salas.ts;
+ *  - LOUNGE em pavilhão de vidro (sofá/TV/caixas de som) — components/cyber/Salas.ts;
  *  - HANGAR grande (cabem naves maiores) com pilones de luz; portal de volta (mini disco de acreção); farol no topo;
  *  - no CHÃO, embaixo do buraco negro: o anel de entrada (o portal).
  * Layout em lib/cyber/ceu.ts (o mesmo que a colisão usa). `low` reduz partículas/segmentos/ilhotas;
@@ -277,7 +277,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const halo = add(new THREE.Mesh(new THREE.TorusGeometry(hg.r + hg.pilonR + 0.3, 0.07, 6, 128), new THREE.MeshBasicMaterial({ color: 0x5fd0ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending })));
   halo.rotation.x = Math.PI / 2; halo.position.set(hg.x, AP, hg.z);
 
-  // ── SALAS (lounge, jogos) ──
+  // ── SALAS (lounge) ──
   const salas = criarSalas(ilha, { low, texturas, paredeMat: vidro({ color: 0x0a1830, emissive: 0x2a3a70, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.3, thickness: 1, transparent: true, opacity: 0.32, side: THREE.DoubleSide }, 0.3) });
   alvos.push(...salas.alvos);
 

@@ -3,7 +3,7 @@ import { POIS, marcoNav } from "./landmarks";
 import { colisoresDoAlto, deEscada } from "./nav";
 import { dentroDeAlgum } from "./colisao";
 import { pilaresDoMarco } from "./voo";
-import { JET, chaoNoAr, passoVertical, resolverNoAr, tetoDoJet, type QGNoAr } from "./jet";
+import { JET, chaoNoAr, passoHorizontalJet, passoVertical, resolverNoAr, tetoDoJet, type QGNoAr } from "./jet";
 
 const Z = POIS.find((p) => p.id === "zaeon")!;
 const mn = marcoNav(Z)!;
@@ -67,4 +67,13 @@ describe("mochila a jato", () => {
     const meio = deEscada(qg, qg.nav.bordaR + qg.nav.escada.comprimento / 2, 0);
     expect(chaoNoAr(meio, qg)).toBeCloseTo(qg.nav.pisoY / 2, 5);
   });
+  it("impulso no ar: W leva a toda (bem mais rápido que andar), com embalo; soltou, freia devagar; empurrando, plana", () => {
+    let v = { x: 0, z: 0 }; for (let i = 0; i < 120; i++) v = passoHorizontalJet(v, { x: 0, z: -JET.velFrente }, 1 / 60);
+    expect(-v.z).toBeGreaterThan(JET.velFrente * 0.85); expect(JET.velFrente).toBeGreaterThan(7.5 * 2);   // > 2× correr
+    const solto = passoHorizontalJet(v, null, 0.5); expect(-solto.z).toBeGreaterThan(-v.z * 0.5); expect(-solto.z).toBeLessThan(-v.z);   // embalo
+    let a = { y: 10, vy: 0 }, b = { y: 10, vy: 0 };
+    for (let i = 0; i < 60; i++) { a = passoVertical(a.y, a.vy, false, 1 / 60, 50); b = passoVertical(b.y, b.vy, false, 1 / 60, 50, true); }
+    expect(b.y).toBeGreaterThan(a.y);   // planando cai mais devagar
+  });
 });
+

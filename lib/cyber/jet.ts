@@ -17,7 +17,19 @@ export const JET = {
   quedaMax: 8,      // m/s — desce "planando", sem despencar
   folgaTeto: 0.8,   // o teto fica isso acima do alto das muralhas do QG
   alturaBases: 4.6, // abaixo disso as bases do chão (trono + telas) são sólidas
+  // IMPULSO no ar: W dispara os jatos PRA FRENTE (é assim que se atravessa o mapa de mochila)
+  velFrente: 16,    // m/s com W (frente) no ar
+  velLado: 8,       // m/s de lado/pra trás no ar
+  inerciaAr: 2.2,   // quão rápido chega na velocidade (embalo)
+  arrasto: 1.1,     // soltou: desacelera devagar (mantém um pouco do embalo)
+  planeio: 0.45,    // empurrando pra frente sem subir: a gravidade pesa menos (plana)
 };
+/** a velocidade horizontal no ar (m/s, mundo): vai até `alvo` com embalo; sem comando, o arrasto freia devagar */
+export function passoHorizontalJet(v: { x: number; z: number }, alvo: { x: number; z: number } | null, dt: number): { x: number; z: number } {
+  if (!alvo) { const k = Math.exp(-JET.arrasto * dt); return { x: v.x * k, z: v.z * k }; }
+  const k = Math.min(1, dt * JET.inerciaAr);
+  return { x: v.x + (alvo.x - v.x) * k, z: v.z + (alvo.z - v.z) * k };
+}
 
 /** força do impacto ao pousar: 0 = pousinho suave … 1 = caindo na velocidade máxima (quedaMax) */
 export const impactoDoPouso = (vy: number) => Math.max(0, Math.min(1, (-vy - 1.5) / (JET.quedaMax - 1.5)));
@@ -35,9 +47,9 @@ export type QGNoAr = MarcoNav & { topoMuralhas: number };
 export const tetoDoJet = (qg: QGNoAr | null) => (qg ? qg.topoMuralhas : 18.6) + JET.folgaTeto;
 
 /** um passo vertical: subindo acelera até `JET.sobe`; soltou, a gravidade puxa (até `quedaMax`); nunca passa do teto */
-export function passoVertical(y: number, vy: number, subindo: boolean, dt: number, teto: number): { y: number; vy: number } {
+export function passoVertical(y: number, vy: number, subindo: boolean, dt: number, teto: number, planando = false): { y: number; vy: number } {
   if (subindo) vy += (JET.sobe - vy) * Math.min(1, dt * JET.aceleracao);
-  else vy = Math.max(vy - JET.gravidade * dt, -JET.quedaMax);
+  else vy = Math.max(vy - JET.gravidade * (planando ? JET.planeio : 1) * dt, -JET.quedaMax * (planando ? 0.5 : 1));
   y += vy * dt;
   if (y > teto) { y = teto; vy = Math.min(vy, 0); }
   return { y, vy };
