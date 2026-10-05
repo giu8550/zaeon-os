@@ -1,19 +1,11 @@
 /**
- * POST /api/lounge3d/[id]/topo — "subir ao topo da Zaeon" (base do dono). AÇÃO PRIVILEGIADA: só o fundador
- * (isSuperAdmin pela sessão, nunca por flag do cliente) recebe 200; o resto 403. O cliente só faz a transição
- * depois deste OK, e os outros só desenham alguém no topo se o servidor marcou essa pessoa como fundador.
+ * POST /api/lounge3d/[id]/topo — mantida por compatibilidade: é o mesmo que `POST /acesso { alvo: "topo" }`.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-import { NextResponse } from "next/server";
-import { guard } from "@/src/lib/ratelimit";
-import { eu, exigirFlag, salaDoMembro } from "@/lib/lounge3d/server";
+import { POST as acesso } from "../acesso/route";
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const off = exigirFlag(); if (off) return off;
-  const rl = await guard(req, "lounge3d-topo"); if (!rl.ok) return rl.response;
-  const me = await eu(); if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const s = await salaDoMembro(params.id, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!me.fundador) return NextResponse.json({ error: "Só o dono da Zaeon sobe ao topo." }, { status: 403 });
-  return NextResponse.json({ ok: true });
+export async function POST(req: Request, ctx: { params: { id: string } }) {
+  const body = JSON.stringify({ alvo: "topo" });
+  return acesso(new Request(req.url, { method: "POST", headers: { ...Object.fromEntries(req.headers), "content-type": "application/json" }, body }), ctx);
 }

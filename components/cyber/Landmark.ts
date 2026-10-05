@@ -48,8 +48,8 @@ export function criarLandmark(poi: POI, opts: { low: boolean; starTex: THREE.Tex
   return poi.preset === "zaeon" ? zaeon(poi, opts, rotulo) : generico(poi, opts, rotulo);
 }
 
-/** Libera geometrias/materiais (e mapas) de uma árvore; texturas compartilhadas vêm em `extras`. */
-function liberar(raiz: THREE.Object3D, extras: THREE.Texture[] = []) {
+/** Libera geometrias/materiais de uma árvore + as texturas próprias do builder (`extras`); compartilhadas ficam. */
+export function liberar(raiz: THREE.Object3D, extras: THREE.Texture[] = []) {
   const mats = new Set<THREE.Material>(), geos = new Set<THREE.BufferGeometry>();
   raiz.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -58,7 +58,7 @@ function liberar(raiz: THREE.Object3D, extras: THREE.Texture[] = []) {
     if (mt) (Array.isArray(mt) ? mt : [mt]).forEach((x) => mats.add(x));
   });
   geos.forEach((g) => g.dispose());
-  mats.forEach((m) => { const mm = m as THREE.Material & { map?: THREE.Texture | null }; if (mm.map && !extras.includes(mm.map)) mm.map.dispose(); m.dispose(); });
+  mats.forEach((m) => m.dispose());   // texturas: só as que o builder CRIOU (extras); starTex é da cena
   extras.forEach((t) => t.dispose());
   raiz.removeFromParent();
 }

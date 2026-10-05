@@ -17,7 +17,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const me = await eu(); if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const s = await salaDoMembro(params.id, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const b = await req.json().catch(() => ({}));
-  const p = sanitizarPresenca({ ...b, userId: me.id, name: me.name, color: me.color, topo: me.fundador && b?.topo === true }); // identidade (e "topo") da SESSÃO
+  // identidade e regalias (topo/céu/nave) da SESSÃO: quem não é fundador nunca aparece no topo, no céu ou voando
+  const p = sanitizarPresenca({ ...b, userId: me.id, name: me.name, color: me.color, topo: me.fundador && b?.topo === true, ceu: me.fundador && b?.ceu === true, voo: me.fundador ? b?.voo : undefined });
   if (!p) return NextResponse.json({ error: "posição inválida" }, { status: 400 });
   await triggerSafe(canalSala(s.id), EV_POS, p);
   return NextResponse.json({ ok: true });

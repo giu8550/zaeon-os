@@ -73,10 +73,10 @@ function Tela() {
     void recarregar();
   }, [online, membros, recarregar]);
   const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true } : null), [sala.eu]);
-  // subir ao topo da Zaeon = ação privilegiada: quem decide é o servidor (sessão → fundador)
-  const pedirTopo = useCallback(async () => {
+  // ações privilegiadas do dono (topo da Zaeon, portal da Cidade, nave): quem decide é o servidor (sessão → fundador)
+  const pedirAcesso = useCallback(async (alvo: "topo" | "ceu" | "nave") => {
     if (!salaId) return { ok: false, erro: "Sem sala." };
-    const r = await fetch(`/api/lounge3d/${salaId}/topo`, { method: "POST" });
+    const r = await fetch(`/api/lounge3d/${salaId}/acesso`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ alvo }) });
     const d = await r.json().catch(() => ({}));
     return r.ok ? { ok: true } : { ok: false, erro: (d as { error?: string })?.error ?? "Não autorizado." };
   }, [salaId]);
@@ -96,7 +96,7 @@ function Tela() {
       modo="tela" eu={euSala} membros={membros.length ? membros : [euSala]}
       remotos={sala.remotos} enviarPos={sala.enviarPos} chat={sala.chat} enviarChat={sala.enviarChat}
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
-      souFundador={euSala.fundador === true} pedirTopo={pedirTopo}
+      souFundador={euSala.fundador === true} pedirAcesso={pedirAcesso}
     />
   );
 }

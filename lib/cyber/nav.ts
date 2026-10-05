@@ -13,7 +13,8 @@ import { empurrarParaFora, type Colisor } from "./colisao";
 /** Geometria andável de um marco (coordenadas de MUNDO já escaladas). */
 export type NavPOI = {
   pisoY: number;        // altura do piso da plataforma (topo da ilha)
-  bordaR: number;       // raio da borda da plataforma (fim da ilha)
+  bordaR: number;       // raio da borda da PLATAFORMA andável (o piso) — a escada encosta aqui, no portão
+  chaoR: number;        // raio SÓLIDO no chão (a base da ilha): não se anda por baixo
   muralhaR: number;     // raio do anel de muralhas
   muralhaN: number;     // quantos blocos de muralha
   muralhaColR: number;  // raio do colisor de cada bloco (sobrepostos → anel contínuo)
@@ -90,13 +91,15 @@ export function resolverPasso(m: MarcoNav, alto: boolean, prev: P2, prop: P2): P
     const e = escadaLocal(m, prop);
     // pisa na escada SÓ pelo pé (dentro do comprimento — nada de "meio passo" além do fim)
     if (Math.abs(e.lat) <= meia && e.t >= PE_DA_ESCADA && e.t <= 1) return { ...prop, y: alturaDaEscada(m, e.t), alto: true };
-    const q = empurrarParaFora(foraDoCorpoDaEscada(m, prop), [{ x: m.x, z: m.z, r: bordaR + 0.4 }]);
+    const q = empurrarParaFora(foraDoCorpoDaEscada(m, prop), [{ x: m.x, z: m.z, r: m.nav.chaoR }]);
     return { ...q, y: 0, alto: false };
   }
   const e = escadaLocal(m, prop);
   const dCentro = Math.hypot(prop.x - m.x, prop.z - m.z);
   const naPlataforma = dCentro <= bordaR && e.u < 0;
-  if (!naPlataforma) {
+  // faixa da escada (com margem): só aí o "alto fora da plataforma" é escada — no resto vale a borda da plataforma
+  const faixaDaEscada = e.u >= -1 && Math.abs(e.lat) <= meia + 1.5;
+  if (!naPlataforma && faixaDaEscada) {
     // no alto e fora da plataforma = na ESCADA: preso aos degraus (sem saltos); passou do pé → chão
     if (e.u >= escada.comprimento) return { ...prop, y: 0, alto: false };
     const lat = Math.max(-meia + 0.2, Math.min(meia - 0.2, e.lat));
@@ -108,7 +111,7 @@ export function resolverPasso(m: MarcoNav, alto: boolean, prev: P2, prop: P2): P
   let q = empurrarParaFora(prop, colisoresDoAlto(m));
   const eq = escadaLocal(m, q);
   const dx = q.x - m.x, dz = q.z - m.z, d = Math.hypot(dx, dz), max = bordaR - 0.3;
-  const naBoca = Math.abs(eq.lat) <= meia - 0.2;   // a boca da escada continua aberta
+  const naBoca = eq.along > 0 && Math.abs(eq.lat) <= meia - 0.2;   // só a boca DA ESCADA fica aberta (não o lado oposto)
   if (d > max && !naBoca) q = { x: m.x + (dx / d) * max, z: m.z + (dz / d) * max };
   void prev;
   return { ...q, y: pisoY, alto: true };

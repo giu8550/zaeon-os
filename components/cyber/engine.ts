@@ -13,6 +13,10 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
+import { CIDADE, computadorPerto, mundo, noPortalEntrada, noPortalVolta, resolverCidade } from "@/lib/cyber/ceu";
+import { VOO, passoVoo, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
+import { criarCidade, type CidadeHandle } from "./Cidade";
+import { criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
@@ -37,13 +41,19 @@ export type CyberOpts = {
   /** teclado sempre ouvido (tela cheia). Na janela da landing só com o mouse em cima (não rouba ESPAÇO/rolagem da página). */
   teclasSempre: boolean;
   remotos?: { current: Map<string, Presenca> };
-  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean }) => void;
+  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; voo?: { y: number; yaw: number } }) => void;
   /** pontos de interesse (marcos megalíticos) — flag NEXT_PUBLIC_CYBER_LANDMARKS */
   landmarks?: boolean;
   /** clicou num marco estando perto → painel (nome, org, link) */
   onLandmark?: (poi: POI) => void;
   /** entrou/saiu do topo da Zaeon (o React mostra o "Descer") */
   onTopo?: (noTopo: boolean) => void;
+  /** tocou o PORTAL (clicou no buraco negro ou pisou no anel embaixo dele) → o React pede acesso ao servidor */
+  onPortalCeu?: () => void;
+  /** clicou na nave estando perto → o React pede acesso ao servidor e chama `embarcar()` */
+  onEmbarcar?: () => void;
+  /** estado da nave/cidade pra UI (botões Embarcar / Sair / Voltar) */
+  onEstadoQG?: (s: { noCeu: boolean; navePerto: boolean; pilotando: boolean; pousado: boolean }) => void;
   onPerto?: (perto: boolean) => void;
   onFalarCom?: (nome: string | null) => void;
   onEntrarEstudo?: () => void;
@@ -51,7 +61,9 @@ export type CyberOpts = {
   onPronto?: () => void;
 };
 
-type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number };
+type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
+  /** remotos: no topo da Zaeon / na cidade / pilotando (só valem pra quem o servidor marcou fundador) */
+  topo?: boolean; ceu?: boolean; nave?: NaveHandle | null; naveYaw?: number };
 type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 
 const TAG_CSS = "position:absolute;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
@@ -76,6 +88,13 @@ export class CyberEngine {
   private altoEm: string | null = null; private yNav = 0;
   /** clique na escada vindo do chão: primeiro o pé, depois o ponto clicado */
   private alvoDepois: THREE.Vector2 | null = null;
+  /** CIDADE ZAEON (céu) + a NAVE do dono */
+  private cidade: CidadeHandle | null = null;
+  private nave: NaveHandle | null = null;
+  private naveEst: EstadoVoo = { ...mundo(CIDADE.hangar), y: CIDADE.pisoY, yaw: Math.PI, vx: 0, vy: 0, vz: 0 };
+  private pilotando = false; private pousado = true; private voY = { subir: false, descer: false }; private yawAnt = 0;
+  private portalArmado = true;   // o anel de entrada só dispara de novo depois de sair dele
+  private estadoQG = "";
   private eu!: Ator;
   private remotos = new Map<string, Ator>();
   private falas: Fala[] = [];
@@ -120,6 +139,11 @@ export class CyberEngine {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
       this.cena.scene.add(lm.group); opts.overlay.appendChild(lm.rotulo); this.lms.push(lm);
     }
+    if (opts.landmarks) {
+      this.cidade = criarCidade({ low, starTex: this.cena.starTex });
+      this.cena.scene.add(this.cidade.group); opts.overlay.appendChild(this.cidade.rotulo);
+      this.nave = criarNave({ low, cor: "#2f7bff" }); this.cena.scene.add(this.nave.group);
+    }
 
     this.setPessoas([...opts.membros]);
     this.ligarEntradas();
@@ -130,7 +154,7 @@ export class CyberEngine {
     if (process.env.NODE_ENV !== "production") (window as unknown as { __cyber?: CyberEngine }).__cyber = this;   // depuração em dev
   }
   /** estado pra depuração/testes em dev */
-  get debug() { return { x: this.eu.pos.x, z: this.eu.pos.z, alt: this.eu.alt, altoEm: this.altoEm, noTopo: this.noTopo }; }
+  get debug() { return { x: this.eu.pos.x, z: this.eu.pos.z, alt: this.eu.alt, altoEm: this.altoEm, noTopo: this.noTopo, pilotando: this.pilotando, pousado: this.pousado, nave: { ...this.naveEst } }; }
 
   /** Reconstrói bases/atores quando a lista de membros muda (alguém entrou na sala). */
   setPessoas(lista: PessoaCyber[]) {
@@ -173,7 +197,7 @@ export class CyberEngine {
     const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + cor + ";"; tag.textContent = p.id === this.o.eu.id ? "" : p.name; this.o.overlay.appendChild(tag);   // o próprio avatar não leva rótulo
     return { id: p.id, name: p.name, color: cor, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag, alt: 0 };
   }
-  private removerAtor(a: Ator) { a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
+  private removerAtor(a: Ator) { a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
   // ───────────── API pública (React → engine) ─────────────
   iniciar(go = "viajar") {
@@ -210,6 +234,49 @@ export class CyberEngine {
     else { const b = bordaDoPOI(z.poi, { x: 0, z: 0 }); this.eu.pos.set(b.x, 0, b.z); }
     this.o.onTopo?.(false);
   }
+
+  // ───────────── Cidade Zaeon (céu) e nave — chamar só DEPOIS do OK do servidor (ação privilegiada) ─────────────
+  get noCeu() { return this.altoEm === "ceu"; }
+  /** atravessa o portal: aparece na cidade, perto do portal de volta */
+  entrarNoCeu() {
+    if (!this.cidade || this.menu) return;
+    const c = mundo(CIDADE.chegada);
+    this.pilotando = false; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0; this.jumpY = 0; this.chao = true;
+    this.eu.pos.set(c.x, 0, c.z); this.eu.facing = Math.atan2(-CIDADE.chegada.x, -CIDADE.chegada.z);
+    this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; this.portalArmado = false;
+    this.camT.set(c.x, CIDADE.pisoY + 1.2, c.z);   // sem "voar" a câmera: corte seco (o React faz o fade)
+  }
+  /** portal de volta: reaparece na praça */
+  voltarDaCidade() {
+    const sp = spawnDaBase(this.layouts.get(this.o.eu.id));
+    this.pilotando = false; this.altoEm = null; this.yNav = 0; this.noTopo = false; this.alvo = null; this.alvoDepois = null;
+    this.eu.pos.set(sp.x, 0, sp.z); this.camT.set(sp.x, 1.2, sp.z); this.portalArmado = true;
+  }
+  /** embarca na nave (precisa estar perto dela) */
+  embarcar() {
+    if (!this.nave || this.pilotando || !this.navePerto()) return;
+    this.pilotando = true; this.pousado = true; this.altoEm = null; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0;
+    this.naveEst = { ...this.naveEst, vx: 0, vy: 0, vz: 0 };
+    this.eu.av.group.visible = false; this.eu.tag.style.display = "none";
+  }
+  /** sai da nave (só pousado): no chão do mapa ou no piso da cidade, ao lado da nave */
+  desembarcar() {
+    if (!this.pilotando || !this.pousado) return;
+    const n = this.naveEst, lado = { x: Math.cos(n.yaw) * 3.4, z: -Math.sin(n.yaw) * 3.4 };
+    let q = { x: n.x + lado.x, z: n.z + lado.z };
+    if (n.y >= CIDADE.pisoY - 0.5) { q = resolverCidade(q); this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; }
+    else {
+      this.altoEm = null; this.yNav = 0;
+      for (const { mn } of this.marcosNav()) q = resolverPasso(mn, false, q, q);
+      q = empurrarParaFora(q, this.colisores);
+    }
+    this.pilotando = false; this.eu.pos.set(q.x, 0, q.z); this.eu.av.group.visible = true;
+  }
+  /** botões SUBIR/DESCER (touch) */
+  comandoVoo(c: { subir?: boolean; descer?: boolean }) { if (c.subir !== undefined) this.voY.subir = c.subir; if (c.descer !== undefined) this.voY.descer = c.descer; }
+  private navePerto() { const n = this.naveEst; return Math.hypot(this.eu.pos.x - n.x, this.eu.pos.z - n.z) < 6 && Math.abs(this.eu.alt - n.y) < 3; }
+  /** sólidos pra nave: os marcos andáveis como cilindros */
+  private solidosDeVoo(): Pilar[] { return this.marcosNav().map(({ mn }) => ({ x: mn.x, z: mn.z, r: mn.nav.chaoR, topo: mn.nav.pisoY + 8 })); }
 
   // ───────────── marcos / dono ─────────────
   /** o marco com topo de acesso "dono" (Zaeon) */
@@ -276,10 +343,11 @@ export class CyberEngine {
     on("keydown", (e) => {
       if (this.digitando() || (!this.o.teclasSempre && !this.sobContainer)) return; const k = e.key.toLowerCase();
       if (k === "shift") { this.keys.shift = true; return; }
-      if (k === " " || k === "spacebar") { if (!this.menu) { this.pular(); e.preventDefault(); } return; }   // na vista (landing) o ESPAÇO não faz nada e a página rola normal
+      if (k === " " || k === "spacebar") { if (this.pilotando) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.pular(); e.preventDefault(); } return; }
+      if (k === "f" && this.pilotando && this.pousado) { this.desembarcar(); return; }   // na vista (landing) o ESPAÇO não faz nada e a página rola normal
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { this.keys[k] = true; e.preventDefault(); }
     });
-    on("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "shift") { this.keys.shift = false; return; } if (k === " " || k === "spacebar") { this.espaco = false; return; } this.keys[k] = false; });
+    on("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "shift") { this.keys.shift = false; return; } if (k === " " || k === "spacebar") { this.espaco = false; this.voY.subir = false; return; } this.keys[k] = false; });
     onC("pointerdown", (e) => {
       this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.ptrs.size === 2) { const [a, b] = [...this.ptrs.values()]; this.pinch0 = Math.hypot(a!.x - b!.x, a!.y - b!.y); this.dist0 = this.camDist; }
@@ -322,8 +390,21 @@ export class CyberEngine {
   }
 
   private clicar(cx: number, cy: number) {
+    if (this.pilotando) return;   // em voo, arrastar gira a câmera; clique não faz nada
     const sob = this.monitorSob(cx, cy);
     this.ray.setFromCamera(this.ndc(cx, cy), this.cam);
+    // a NAVE (estando perto) → embarcar (o React valida no servidor)
+    if (this.nave && this.ray.intersectObjects(this.nave.alvos, true).length && this.navePerto()) { this.o.onEmbarcar?.(); return; }
+    // na CIDADE: computador perto = Sala de Estudos; senão anda no piso
+    if (this.cidade && this.noCeu) {
+      const hc = this.ray.intersectObject(this.cidade.computadores, false)[0];
+      if (hc && computadorPerto(this.eu.pos, 3.2) >= 0) { this.o.onEntrarEstudo?.(); return; }
+      const h = this.ray.intersectObjects(this.cidade.alvos, true)[0];
+      if (h) { const q = resolverCidade({ x: h.point.x, z: h.point.z }); this.alvo = new THREE.Vector2(q.x, q.z); this.alvoDepois = null; }
+      return;
+    }
+    // o BURACO NEGRO é o portal (ou o anel embaixo dele)
+    if (this.cidade && (this.ray.intersectObjects(this.cena.buracoNegro, true).length || this.ray.intersectObject(this.cidade.portalChao, false).length)) { this.o.onPortalCeu?.(); return; }
     let colega: Ator | null = null;
     for (const a of this.remotos.values()) if (this.eu.pos.distanceTo(a.pos) < 3.0 && this.ray.intersectObjects(a.av.meshes, true).length) { colega = a; break; }
     // no topo: o chão é a plataforma (só anda nela); o monitor do topo continua valendo
@@ -380,7 +461,7 @@ export class CyberEngine {
     }
     this.camT.lerp(new THREE.Vector3(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), 0.12);
     const cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
-    let dist = this.camDist;
+    let dist = this.pilotando ? Math.max(this.camDist, 16) : this.camDist;
     // câmera em 3ª pessoa: perto de um marco (ilha flutuante, muralhas), se a estrutura fica ENTRE a câmera e o
     // personagem, a câmera se aproxima (senão a ilha cobre a tela)
     const marco = this.lms.find((l) => Math.hypot(this.eu.pos.x - l.poi.x, this.eu.pos.z - l.poi.z) < l.poi.interactR * 1.8);
@@ -410,6 +491,16 @@ export class CyberEngine {
       if (this.espaco) { this.holdT += dt; if (this.o.els.hold) this.o.els.hold.style.width = Math.min(100, (this.holdT / 1.2) * 100) + "%"; if (this.holdT >= 1.2) this.iniciar("viajar"); }
       else if (this.holdT > 0) { this.holdT = Math.max(0, this.holdT - dt * 2); if (this.o.els.hold) this.o.els.hold.style.width = (this.holdT / 1.2) * 100 + "%"; }
       const s = this.assento(); eu.pos.set(s.x, 0, s.z); eu.facing = this.rotAssento(); this.sitT = 1; eu.moving = false;
+    } else if (this.pilotando) {
+      // VOO: WASD/joystick relativo à câmera; Espaço/SUBIR sobe; Shift/DESCER desce; pousa ao encostar no chão
+      let ix = 0, iz = 0;
+      if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
+      if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
+      if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
+      const dir = moverRelativoCamera(ix, iz, this.camAz);
+      const r = passoVoo(this.naveEst, { wx: dir?.wx ?? 0, wz: dir?.wz ?? 0, subir: this.voY.subir, descer: this.voY.descer || !!this.keys.shift }, dt, this.solidosDeVoo());
+      this.naveEst = r.s; this.pousado = r.pousado;
+      eu.pos.set(r.s.x, 0, r.s.z); eu.facing = r.s.yaw; eu.moving = false; this.sitT = 0;
     } else {
       let ix = 0, iz = 0;
       if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
@@ -430,29 +521,58 @@ export class CyberEngine {
       this.sitT += ((querSentar ? 1 : 0) - this.sitT) * Math.min(1, dt * 3);
       if (this.sitT > 0.05) { const s = this.assento(); eu.pos.x += (s.x - eu.pos.x) * Math.min(1, dt * 3); eu.pos.z += (s.z - eu.pos.z) * Math.min(1, dt * 3); eu.facing = this.rotAssento(); }
       else if (this.noTopo) { const e = this.eixoTopo()!, lim = 2.0 * this.escalaZaeon(); const dx = eu.pos.x - e.x, dz = eu.pos.z - e.z, d = Math.hypot(dx, dz); if (d > lim) { eu.pos.x = e.x + (dx / d) * lim; eu.pos.z = e.z + (dz / d) * lim; } }   // não cai da plataforma
+      else if (this.noCeu) { const q = resolverCidade(eu.pos); eu.pos.x = q.x; eu.pos.z = q.z; this.yNav = CIDADE.pisoY; }
       else this.resolverChao(eu, prev);
       if (!this.chao) { this.jumpVy -= 20 * dt; this.jumpY += this.jumpVy * dt; if (this.jumpY <= 0) { this.jumpY = 0; this.jumpVy = 0; this.chao = true; } }
       eu.moving = andando;
     }
     eu.sit = this.sitT;
     const lmAlto = this.altoEm ? this.lms.find((l) => l.poi.id === this.altoEm) : undefined;
-    eu.alt = this.noTopo ? this.alturaTopo() : this.yNav + (lmAlto && marcoNav(lmAlto.poi) && this.yNav >= marcoNav(lmAlto.poi)!.nav.pisoY - 1e-6 ? this.boia(lmAlto) : 0);
+    eu.alt = this.pilotando ? this.naveEst.y
+      : this.noCeu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY)
+      : this.noTopo ? this.alturaTopo() : this.yNav + (lmAlto && marcoNav(lmAlto.poi) && this.yNav >= marcoNav(lmAlto.poi)!.nav.pisoY - 1e-6 ? this.boia(lmAlto) : 0);
+
+    // portais: anel no chão embaixo do buraco negro (entrada) e o da cidade (volta)
+    if (this.cidade && !this.pilotando && !this.menu) {
+      if (this.noCeu) { if (noPortalVolta(eu.pos)) this.voltarDaCidade(); }
+      else if (!this.altoEm && !this.noTopo) {
+        const dentro = noPortalEntrada(eu.pos);
+        if (dentro && this.portalArmado) { this.portalArmado = false; this.o.onPortalCeu?.(); }
+        if (!dentro) this.portalArmado = true;
+      }
+    }
 
     // estar perto da própria base = estado de estudo (luz/cristais/botão)
     const perto = this.distBase(euId, eu.pos) < BASE_INTERACT_R;
     if (perto !== this.perto) { this.perto = perto; this.o.onPerto?.(perto); }
 
     // rede: eu → difusão; remotos → atores
-    if (!this.menu) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo });
+    if (!this.menu) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.noCeu, ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
 
     // avatares
     eu.av.group.position.set(eu.pos.x, this.jumpY + eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     eu.av.animar({ andando: eu.moving, correndo: !!(this.keys.shift || this.correr) && eu.moving, sentado: this.sitT, dt, t });
-    for (const a of this.remotos.values()) { a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(a.facing); a.av.animar({ andando: a.moving, sentado: a.sit, dt, t }); }
+    for (const a of this.remotos.values()) {
+      a.av.group.visible = !a.nave; a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(a.facing); a.av.animar({ andando: a.moving, sentado: a.sit, dt, t });
+      if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = a.naveYaw ?? 0; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0 }); }
+    }
+
+    // cidade + a minha nave (parada onde pousou, ou comigo dentro)
+    if (this.cidade) this.cidade.atualizar(dt, t);
+    if (this.nave) {
+      const n = this.naveEst, curva = (n.yaw - this.yawAnt) / Math.max(dt, 1e-3); this.yawAnt = n.yaw;
+      // pousada no hangar da cidade, acompanha a flutuação da ilha
+      const yBase = !this.pilotando && n.y >= CIDADE.pisoY - 0.5 && this.cidade ? this.cidade.ilha.position.y : n.y;
+      this.nave.group.position.set(n.x, yBase, n.z); this.nave.group.rotation.y = n.yaw;
+      this.nave.atualizar({ dt, t, voando: this.pilotando && !this.pousado, vel: Math.hypot(n.vx, n.vz) / VOO.vel, curva });
+    }
+    const navePerto = !this.pilotando && !!this.nave && this.navePerto();
+    const est = `${this.noCeu}|${navePerto}|${this.pilotando}|${this.pousado}`;
+    if (est !== this.estadoQG) { this.estadoQG = est; this.o.onEstadoQG?.({ noCeu: this.noCeu, navePerto, pilotando: this.pilotando, pousado: this.pousado }); }
 
     // marcos: animação + a "estátua" do dono some quando o dono real está lá em cima
-    const donoNoTopo = this.noTopo || [...this.remotos.values()].some((a) => a.alt > 0);
+    const donoNoTopo = this.noTopo || [...this.remotos.values()].some((a) => a.topo);
     for (const lm of this.lms) { lm.atualizar(dt, t); if (lm.topo) lm.donoPresente(donoNoTopo); }
 
     // bases
@@ -483,7 +603,16 @@ export class CyberEngine {
         a.pos.x = r.x; a.pos.z = r.z; a.facing = r.facing; a.moving = r.moving || p.moving === true;
         a.sit += ((p.sit ? 1 : 0) - a.sit) * Math.min(1, dt * 3);
         // "no topo" só vale pra quem o SERVIDOR marcou como fundador (client event forjado não sobe ninguém)
-        a.alt = p.topo === true && this.ehFundador(id) ? this.alturaTopo() : this.alturaChao(a.pos);
+        // regalias (topo/céu/nave) só pra quem o SERVIDOR marcou como fundador
+        const fund = !!this.pessoas.get(id)?.fundador;
+        a.topo = p.topo === true && this.ehFundador(id);
+        a.ceu = fund && p.ceu === true;
+        const voando = fund && !!p.voo;
+        if (voando && !a.nave && this.cidade) { a.nave = criarNave({ low: this.o.low, cor: a.color }); this.cena.scene.add(a.nave.group); }
+        if (!voando && a.nave) { a.nave.dispose(); a.nave = null; }
+        const altAlvo = voando ? p.voo!.y : a.topo ? this.alturaTopo() : a.ceu ? CIDADE.pisoY : this.alturaChao(a.pos);
+        a.alt += (altAlvo - a.alt) * (Math.abs(altAlvo - a.alt) > 40 ? 1 : Math.min(1, dt * 6));   // portal = corte seco
+        if (voando) a.naveYaw = p.voo!.yaw;
         void t;
       }
       // saiu da sala: o personagem some; a BASE fica (bases vivem em this.bases)
@@ -517,6 +646,11 @@ export class CyberEngine {
       const s = this.proj(new THREE.Vector3(lm.poi.x, y, lm.poi.z));
       lm.rotulo.style.left = s.x + "px"; lm.rotulo.style.top = s.y + "px"; lm.rotulo.style.display = s.vis ? "block" : "none";
     }
+    if (this.cidade) {
+      const r = this.cidade.rotulo;
+      if (this.noCeu && !this.menu) { const s = this.proj(new THREE.Vector3(CIDADE.centro.x, this.cidade.ilha.position.y + 30, CIDADE.centro.z)); r.style.left = s.x + "px"; r.style.top = s.y + "px"; r.style.display = s.vis ? "block" : "none"; }
+      else r.style.display = "none";
+    }
     // menu projetado no monitor (retrato: fixo, sempre tocável)
     const m = this.o.els.menu;
     if (m && this.menu) {
@@ -546,6 +680,7 @@ export class CyberEngine {
     for (const a of [this.eu, ...this.remotos.values()]) if (a) this.removerAtor(a);
     for (const b of this.bases.values()) b.dispose(); for (const t of this.tagsBase.values()) t.remove();
     for (const lm of this.lms) lm.dispose();
+    this.cidade?.dispose(); this.nave?.dispose();
     this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
   }
 }

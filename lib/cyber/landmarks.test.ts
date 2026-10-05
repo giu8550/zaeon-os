@@ -189,4 +189,13 @@ describe("simulação quadro a quadro (WASD 'por nós mesmos'): subir e descer s
     expect(r.s.alto).toBe(false);
     expect(r.maiorPasso).toBeLessThan(0.2);
   });
+  it("correndo pela plataforma em 8 direções, batendo nas muralhas, nunca salta nem sai do alto", () => {
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const r = andar({ x: zaeon.x, z: zaeon.z + 0.5, alto: true, y: m.nav.pisoY }, Math.cos(a), Math.sin(a), 10, 7.5);
+      expect(r.maiorPasso).toBeLessThan(0.3);
+      // a não ser que tenha saído pela boca da escada, continua na plataforma
+      if (r.s.alto && escadaLocal(m, r.s).u < 0) expect(Math.hypot(r.s.x - zaeon.x, r.s.z - zaeon.z)).toBeLessThanOrEqual(m.nav.bordaR);
+    }
+  });
 });

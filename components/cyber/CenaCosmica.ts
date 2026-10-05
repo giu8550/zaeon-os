@@ -37,6 +37,8 @@ const NEB_FRAG = `
 export type CenaCosmicaHandle = {
   bgScene: THREE.Scene; bgCam: THREE.OrthographicCamera;
   scene: THREE.Scene; floor: THREE.Mesh; starTex: THREE.Texture;
+  /** o buraco negro (horizonte + disco) — é o PORTAL pra Cidade Zaeon (clique) */
+  buracoNegro: THREE.Object3D[];
   atualizar(o: { dt: number; t: number; cam: THREE.PerspectiveCamera; aspect: number }): void;
   dispose(): void;
 };
@@ -70,7 +72,7 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
 
   // buraco negro estilo filme
   const bh = new THREE.Group(); bh.position.set(0, 16, -110);
-  bh.add(new THREE.Mesh(new THREE.SphereGeometry(6, 48, 48), new THREE.MeshBasicMaterial({ color: 0x000000 })));
+  const horizonte = new THREE.Mesh(new THREE.SphereGeometry(6, 48, 48), new THREE.MeshBasicMaterial({ color: 0x000000 })); bh.add(horizonte);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex("rgba(255,200,130,0.55)", "rgba(180,90,30,0.18)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
   halo.scale.set(30, 30, 1); bh.add(halo);
   const dMat = (c: number, op: number) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -88,7 +90,7 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
 
   const bhNdc = new THREE.Vector3();
   return {
-    bgScene, bgCam, scene, floor, starTex,
+    bgScene, bgCam, scene, floor, starTex, buracoNegro: [horizonte, disk],
     atualizar({ dt, t, cam, aspect: asp }) {
       bhNdc.set(0, 17, -120).project(cam);
       for (const m of nebulas) { m.uniforms.uTime!.value += dt; m.uniforms.uAspect!.value = asp; (m.uniforms.uCenter!.value as THREE.Vector2).set(bhNdc.x, bhNdc.y); }

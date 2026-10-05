@@ -38,15 +38,16 @@ function zaeonPOI(): POI {
   const S = 1.6, x = -30, z = -48;
   const altura = 7 * S + 1.5;                       // ápice da ilha (cone 7×S) fica 1,5 acima do chão
   const pisoY = altura + 0.15 * S;                  // topo do piso interno
-  const bordaR = 9 * S;                             // borda da ilha
+  const bordaR = 6.4 * S;                           // borda do PISO (a ilha do protótipo é um cone com o ápice no piso)
+  const chaoR = 9 * S + 0.4;                        // base do cone (1,5 m acima do chão): sólida no chão
   const dir = Math.atan2(-z, -x);                   // a escada aponta pra praça (origem)
   return {
     id: "zaeon", nome: "Zaeon", org: "A universidade regida por IA.",
     preset: "zaeon", x, z, escala: S,
-    footprintR: bordaR + 0.4, interactR: bordaR + 6,
+    footprintR: chaoR, interactR: chaoR + 6,
     altura, topo: { y: 6.6 }, acesso: "dono", link: "/",
     nav: {
-      pisoY, bordaR,
+      pisoY, bordaR, chaoR,
       muralhaR: 6.3 * S, muralhaN: 16, muralhaColR: 2.0, portaoMeia: 0.4,
       pilares: { n: 6, r: 3.4 * S, colR: 0.26 * S + 0.35 },
       escada: { dir, largura: 4.2, comprimento: pisoY / 0.55 },

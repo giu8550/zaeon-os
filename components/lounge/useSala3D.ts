@@ -149,7 +149,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
 
   /** O engine chama a cada frame: guarda a pose e só envia quando MUDOU (parado não gasta a cota do Pusher). */
   const enviarPos = useCallback((p: Omit<Presenca, "userId" | "name" | "color">) => {
-    const pose: Pose = { x: p.x, z: p.z, facing: p.facing, moving: !!p.moving, sit: !!p.sit, topo: !!p.topo };
+    const pose: Pose = { x: p.x, z: p.z, facing: p.facing, moving: !!p.moving, sit: !!p.sit, topo: !!p.topo, ceu: !!p.ceu, ...(p.voo ? { voo: p.voo } : {}) };
     ultimaPose.current = pose;
     if (poseMudou(ultimaEnviada.current, pose)) emitir(pose, false);
   }, [emitir]);

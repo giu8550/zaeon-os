@@ -29,6 +29,8 @@ export type Presenca = {
   moving?: boolean;
   sit?: boolean;      // sentado na cadeira da própria base (cyberespaço)
   topo?: boolean;     // no topo da Zaeon (só vale pra quem o SERVIDOR marcou como fundador)
+  ceu?: boolean;      // na Cidade Zaeon (céu) — idem
+  voo?: { y: number; yaw: number };   // pilotando a nave (altura + rumo) — idem
   ts?: number;
 };
 

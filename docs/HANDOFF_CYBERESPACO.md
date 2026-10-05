@@ -67,3 +67,21 @@ Spec: `docs/HANDOFF_CLAUDECODE_ZAEON_LANDMARK.md` + `docs/HANDOFF_CYBERESPACO_LA
 - **Base do dono no topo**: o fundador (`isSuperAdmin` da sessão, mandado no GET da sala como `fundador`) não tem base no anel; a base dele é a plataforma do topo. "Subir ao topo" no painel chama a API (403 pra quem não é fundador); "Descer" volta ao salão do QG. Os outros só desenham alguém no topo se o SERVIDOR marcou essa pessoa como fundador (client event forjado não sobe ninguém; no fallback `POST /pos` o servidor zera `topo`).
 - Flag **`NEXT_PUBLIC_CYBER_LANDMARKS`**: vazia = ligada em dev, desligada em produção; `"1"` liga em prod (build-arg já plumbado).
 - Salas com muitos membros: slots do anel de bases que cairiam na ilha ou na escada são pulados (`basesDosMembros`).
+
+## Cidade Zaeon (QG do dono, no céu) + nave
+Conceito das cidades flutuantes (Avatar), no mesmo idioma da Zaeon do chão, **bem acima do buraco negro** (piso a 190 m; o fundo da ilha a ~156 m, ~140 m acima do horizonte).
+
+| Peça | Onde |
+|---|---|
+| Layout/colisão/portais (puro) | `lib/cyber/ceu.ts` |
+| Física de voo (puro) | `lib/cyber/voo.ts` |
+| Visual da cidade (ilha monumental invertida com estalactites e quedas de luz, ilhotas, muralhas + torres, fogo lento, **cidadela = sala de computadores**, mesa com globo de luz, hangar, portal de volta, anel de entrada no chão) | `components/cyber/Cidade.ts` |
+| Nave (casco, cockpit, asas, motores com propulsão, trem de pouso, inclinação) | `components/cyber/Nave.ts` |
+| Ações privilegiadas (topo / portal / nave) | `POST /api/lounge3d/[id]/acesso { alvo }` (`/topo` mantido como atalho) |
+
+- **Portal = buraco negro**: clicar nele (ou pisar no anel dourado no chão embaixo dele) → o servidor confirma que é o dono → fade → aparece na cidade. Sem animação de viagem. Portal de volta (anel na cidade) ou botão "↩ Voltar à praça".
+- **Sala de computadores**: estações holográficas em anel dentro da cúpula; clicar numa estação perto → Sala de Estudos (`/research-lab?tab=pesquisa`).
+- **Nave**: no hangar. Perto dela, "🚀 Embarcar" (servidor valida). Voo: WASD/joystick relativo à câmera, Espaço/SUBIR sobe, Shift/DESCER desce; a ilha e a Zaeon são sólidas; pousa ao encostar no chão do mapa ou no piso da cidade; "Sair da nave" (F) quando pousada — aí anda e fala com os outros; a nave fica onde pousou.
+- **Rede**: a presença leva `ceu` e `voo {y, yaw}`; quem está no chão vê a nave voando (e o dono na cidade). Só vale pra quem o servidor marcou como fundador; o fallback `/pos` zera esses campos pros outros.
+- Atrás da mesma flag `NEXT_PUBLIC_CYBER_LANDMARKS`.
+- Pendente: a nave parada (pousada no chão) não é sincronizada pros outros — eles a veem só enquanto voa.

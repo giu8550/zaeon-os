@@ -23,10 +23,10 @@ export type CenaCyberProps = {
   /** aviso de rede ("tempo real indisponível", "sala cheia"…). */
   aviso?: string | null;
   onSessaoIniciada?: () => void;
-  /** dono da Zaeon (vem do SERVIDOR) — só pinta o botão; quem decide é `pedirTopo` */
+  /** dono da Zaeon (vem do SERVIDOR) — só pinta os botões; quem decide é `pedirAcesso` */
   souFundador?: boolean;
   /** AÇÃO PRIVILEGIADA: pede ao servidor pra subir ao topo da Zaeon (POST /api/lounge3d/[id]/topo) */
-  pedirTopo?: () => Promise<{ ok: boolean; erro?: string }>;
+  pedirAcesso?: (alvo: "topo" | "ceu" | "nave") => Promise<{ ok: boolean; erro?: string }>;
 };
 
 
@@ -38,6 +38,16 @@ export default function CenaCyber(p: CenaCyberProps) {
   const engine = useRef<CyberEngine | null>(null);
   const [pronto, setPronto] = useState(false), [perto, setPerto] = useState(false), [menu, setMenu] = useState(!tela);
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
+  const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true }), [fade, setFade] = useState(false), [aviso2, setAviso2] = useState<string | null>(null);
+  const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
+  /** corte com fade (portal: sem animação de viagem) */
+  const comFade = useCallback((acao: () => void) => { setFade(true); setTimeout(() => { acao(); setTimeout(() => setFade(false), 260); }, 360); }, []);
+  /** ação privilegiada: pergunta ao SERVIDOR antes (cb sempre fresco via ref) */
+  const pedir = useCallback(async (alvo: "topo" | "ceu" | "nave", ok: () => void) => {
+    const fn = cb.current.pedirAcesso;
+    if (!cb.current.souFundador || !fn) { avisar(alvo === "ceu" ? "A Cidade Zaeon é o QG do dono — o portal não abre pra você." : alvo === "nave" ? "Só o dono pilota a nave." : "Só o dono sobe ao topo."); return; }
+    try { const r = await fn(alvo); if (r.ok) ok(); else avisar(r.erro ?? "Não autorizado."); } catch { avisar("Sem conexão."); }
+  }, [avisar]);
   const [poiAberto, setPoiAberto] = useState<POI | null>(null), [noTopo, setNoTopo] = useState(false), [subindo, setSubindo] = useState(false), [erroTopo, setErroTopo] = useState<string | null>(null);
   const [correndo, setCorrendo] = useState(false), [txt, setTxt] = useState(""), [falha, setFalha] = useState(false);
   const touch = useMemo(() => typeof window !== "undefined" && (matchMedia("(pointer:coarse)").matches || "ontouchstart" in window), []);
@@ -69,6 +79,9 @@ export default function CenaCyber(p: CenaCyberProps) {
       onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
       onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true),
       landmarks: landmarksOn(), onLandmark: (poi) => { setErroTopo(null); setPoiAberto(poi); }, onTopo: (v) => { setNoTopo(v); if (v) setPoiAberto(null); },
+      onPortalCeu: () => { void pedir("ceu", () => comFade(() => engine.current?.entrarNoCeu())); },
+      onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
+      onEstadoQG: setQg,
     }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
@@ -141,8 +154,15 @@ export default function CenaCyber(p: CenaCyberProps) {
           {touch && (
             <>
               <Joystick onMove={(x, y) => engine.current?.setJoystick(x, y)} />
+              {qg.pilotando ? (
+                <>
+                  <button type="button" aria-label="Descer" onPointerDown={(e) => { e.stopPropagation(); engine.current?.comandoVoo({ descer: true }); }} onPointerUp={() => engine.current?.comandoVoo({ descer: false })} onPointerCancel={() => engine.current?.comandoVoo({ descer: false })} className="absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 bg-sky-950/55 text-[12px] font-extrabold text-sky-50 backdrop-blur" style={{ right: "max(94px, calc(env(safe-area-inset-right) + 72px))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>DESCER</button>
+                  <button type="button" aria-label="Subir" onPointerDown={(e) => { e.stopPropagation(); engine.current?.comandoVoo({ subir: true }); }} onPointerUp={() => engine.current?.comandoVoo({ subir: false })} onPointerCancel={() => engine.current?.comandoVoo({ subir: false })} className="absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 bg-sky-950/55 text-[12px] font-extrabold text-sky-50 backdrop-blur" style={{ right: "max(22px, env(safe-area-inset-right))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>SUBIR</button>
+                </>
+              ) : (<>
               <button type="button" aria-label="Correr" aria-pressed={correndo} onPointerDown={(e) => { e.stopPropagation(); setCorrendo(engine.current?.alternarCorrer() ?? false); }} className={`absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 text-[12px] font-extrabold backdrop-blur ${correndo ? "bg-gradient-to-b from-cyan-200 to-sky-400 text-slate-950" : "bg-sky-950/55 text-sky-50"}`} style={{ right: "max(94px, calc(env(safe-area-inset-right) + 72px))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>CORRER</button>
               <button type="button" aria-label="Pular" onPointerDown={(e) => { e.stopPropagation(); engine.current?.pular(); }} className="absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 bg-sky-950/55 text-[12px] font-extrabold text-sky-50 backdrop-blur" style={{ right: "max(22px, env(safe-area-inset-right))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>PULAR</button>
+              </>)}
             </>
           )}
         </>
@@ -158,10 +178,10 @@ export default function CenaCyber(p: CenaCyberProps) {
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {poiAberto.link && <button type="button" onClick={() => router.push(poiAberto.link!)} className="min-h-[40px] rounded-full border border-sky-300/40 bg-sky-400/15 px-4 font-semibold text-sky-100">Abrir</button>}
-            {poiAberto.acesso === "dono" && p.souFundador && p.pedirTopo && (
+            {poiAberto.acesso === "dono" && p.souFundador && p.pedirAcesso && (
               <button type="button" disabled={subindo} onClick={async () => {
                 setSubindo(true); setErroTopo(null);
-                try { const r = await p.pedirTopo!(); if (r.ok) engine.current?.subir(); else setErroTopo(r.erro ?? "Não foi possível subir."); }
+                try { const r = await p.pedirAcesso!("topo"); if (r.ok) engine.current?.subir(); else setErroTopo(r.erro ?? "Não foi possível subir."); }
                 catch { setErroTopo("Sem conexão."); } finally { setSubindo(false); }
               }} className="min-h-[40px] rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-4 font-extrabold text-slate-950 disabled:opacity-60">{subindo ? "Subindo…" : "Subir ao topo"}</button>
             )}
@@ -169,6 +189,22 @@ export default function CenaCyber(p: CenaCyberProps) {
           {erroTopo && <p role="alert" className="mt-2 text-rose-300">{erroTopo}</p>}
         </div>
       )}
+      {/* QG: nave e cidade (as ações privilegiadas passam pelo servidor em `pedir`) */}
+      {!menu && qg.navePerto && !qg.pilotando && p.souFundador && (
+        <button type="button" onClick={() => void pedir("nave", () => engine.current?.embarcar())} className="absolute left-1/2 top-[164px] z-30 min-h-[44px] -translate-x-1/2 rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-sm font-extrabold text-slate-950 shadow-[0_0_24px_rgba(90,200,255,.6)]">🚀 Embarcar na nave</button>
+      )}
+      {!menu && qg.pilotando && (
+        <div className="absolute left-1/2 top-[110px] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
+          <p className="rounded-full border border-sky-300/30 bg-[#070c22]/80 px-4 py-1.5 text-center text-xs text-sky-100 backdrop-blur">{touch ? "joystick voa · SUBIR/DESCER" : "WASD voa · Espaço sobe · Shift desce"} · {qg.pousado ? "pousada" : "em voo"}</p>
+          {qg.pousado && <button type="button" onClick={() => engine.current?.desembarcar()} className="min-h-[44px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-5 text-sm font-semibold text-sky-100 backdrop-blur">Sair da nave{touch ? "" : " (F)"}</button>}
+        </div>
+      )}
+      {!menu && qg.noCeu && !qg.pilotando && (
+        <button type="button" onClick={() => comFade(() => engine.current?.voltarDaCidade())} className="absolute right-3 top-[64px] z-30 min-h-[44px] rounded-full border border-amber-200/40 bg-[#1a0f08]/80 px-4 text-xs font-semibold text-amber-100 backdrop-blur">↩ Voltar à praça</button>
+      )}
+      {aviso2 && <p role="status" className="absolute left-1/2 top-[164px] z-40 -translate-x-1/2 rounded-full bg-[#1a0f08]/90 px-4 py-2 text-xs text-amber-100">{aviso2}</p>}
+      <div aria-hidden="true" className={`pointer-events-none absolute inset-0 z-[45] bg-black transition-opacity duration-300 ${fade ? "opacity-100" : "opacity-0"}`} />
+
       {noTopo && !menu && (
         <button type="button" onClick={() => engine.current?.descer()} className="absolute left-1/2 top-[110px] z-30 min-h-[44px] -translate-x-1/2 rounded-full border border-sky-300/40 bg-[#070c22]/85 px-5 text-sm font-semibold text-sky-100 backdrop-blur">↓ Descer da Zaeon</button>
       )}
