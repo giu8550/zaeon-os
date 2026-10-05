@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, bibliotecaLocais, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, servidoresLocais, daSala, paredeDaSala, pilonesDoHangar, MOVEIS, type NomeSala } from "./ceu";
+import { BURACO_NEGRO, CIDADE, bibliotecaLocais, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, servidoresLocais, daSala, paredeDaSala, pilonesDoHangar, MOVEIS, type NomeSala } from "./ceu";
 import { VOO, passoVoo, type EstadoVoo } from "./voo";
 import { dentroDeAlgum } from "./colisao";
 import { POIS } from "./landmarks";
@@ -153,3 +153,28 @@ describe("Zaeon ampliada: salas e hangar grande", () => {
     expect(Math.hypot(CIDADE.hangar.x, CIDADE.hangar.z) - CIDADE.hangar.r).toBeGreaterThan(CIDADE.cidadela.r + 2);
   });
 });
+
+describe("céu livre: ilhotas com colisão e borda sem parede", () => {
+  it("7 ilhotas FIXAS (o mesmo layout pra todos), fora da ilha principal e sem se encostar", () => {
+    expect(ILHOTAS).toHaveLength(7);
+    for (const [k, il] of ILHOTAS.entries()) {
+      expect(Math.hypot(il.x, il.z) - il.r).toBeGreaterThan(CIDADE.bordaR + 10);
+      for (const o of ILHOTAS.slice(k + 1)) expect(Math.hypot(il.x - o.x, il.z - o.z)).toBeGreaterThan(il.r + o.r);
+    }
+    expect(alturaIlhota(0, 0)).toBe(alturaIlhota(0, 0));
+    expect(Math.abs(alturaIlhota(2, 3) - (CIDADE.pisoY + ILHOTAS[2]!.dy))).toBeLessThanOrEqual(1.2 + 1e-9);
+  });
+  it("topo de ilhota: dentro do raio é ela; fora, nenhuma", () => {
+    const il = ILHOTAS[3]!, w = mundo(il);
+    expect(ilhotaEm(w)).toBe(3);
+    expect(ilhotaEm({ x: w.x + il.r + 2, z: w.z })).toBe(-1);
+  });
+  it("a borda não tem mais parede invisível ao andar (passou dela = cai); clicar pra andar continua limitado", () => {
+    const longe = mundo({ x: CIDADE.bordaR + 5, z: 0 });
+    expect(resolverCidadeLivre(longe)).toEqual(longe);
+    expect(naIlhaPrincipal(longe)).toBe(false);
+    expect(naIlhaPrincipal(mundo({ x: 10, z: 0 }))).toBe(true);
+    const r = resolverCidade(longe); expect(Math.hypot(r.x - CIDADE.centro.x, r.z - CIDADE.centro.z)).toBeLessThanOrEqual(CIDADE.andavelR + 1e-6);
+  });
+});
+

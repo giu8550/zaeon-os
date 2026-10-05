@@ -169,4 +169,14 @@ describe("voo — independente de FPS", () => {
     const s = est(10, 20, 10), c = { wx: 1, wz: 0, subir: true, descer: false };
     expect(passoVooSub(s, c, 1 / 60)).toEqual(passoVoo(s, c, 1 / 60));
   });
+  it("pilar FLUTUANTE (ilhota): sólido só entre base e topo — por baixo passa, de lado desliza, de cima pousa", () => {
+    const il = { x: 0, z: 0, r: 5, topo: 100, base: 90 };
+    const por_baixo = passoVoo({ x: 0, y: 80, z: 0, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: 0, wz: 0, subir: false, descer: false }, 1 / 60, [il]);
+    expect(Math.hypot(por_baixo.s.x, por_baixo.s.z)).toBeLessThan(0.1);           // embaixo da ilhota: livre
+    const de_lado = passoVoo({ x: 1, y: 95, z: 0, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: 0, wz: 0, subir: false, descer: false }, 1 / 60, [il]);
+    expect(Math.hypot(de_lado.s.x, de_lado.s.z)).toBeCloseTo(5, 3);               // no corpo: empurrado pra fora
+    const de_cima = passoVoo({ x: 1, y: 100.1, z: 0, yaw: 0, vx: 0, vy: -5, vz: 0 }, { wx: 0, wz: 0, subir: false, descer: true }, 1 / 60, [il]);
+    expect(de_cima.s.y).toBeCloseTo(100, 6); expect(de_cima.pousado).toBe(true);   // pousa no topo
+  });
 });
+
