@@ -22,6 +22,8 @@ import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type LoopSom } from "./AudioCyber";
 import { pousoDoQG, rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
 import { criarCidade, type CidadeHandle } from "./Cidade";
+import { criarUniversidade, type UniversidadeHandle } from "./Universidade";
+import { naUniversidade, pilaresDaUniversidade, resolverUniversidade, resolverUniversidadeNoAr } from "@/lib/cyber/universidade";
 import { ESCALA_NAVE, criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
@@ -114,6 +116,8 @@ export class CyberEngine {
   private alvoDepois: THREE.Vector2 | null = null;
   /** CIDADE ZAEON (céu) + a NAVE do dono */
   private cidade: CidadeHandle | null = null;
+  /** a Universidade (castelo no chão, ao norte da praça) */
+  private univ: UniversidadeHandle | null = null;
   private nave: NaveHandle | null = null;
   private naveEst: EstadoVoo = { ...mundo(CIDADE.hangar), y: CIDADE.pisoY, yaw: Math.PI, vx: 0, vy: 0, vz: 0 };
   private pilotando = false; private pousado = true; private voY = { subir: false, descer: false }; private yawAnt = 0;
@@ -183,6 +187,7 @@ export class CyberEngine {
     if (opts.landmarks) {
       this.cidade = criarCidade({ low, starTex: this.cena.starTex });
       this.cena.scene.add(this.cidade.group);
+      this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); this.cena.scene.add(this.univ.group);
       this.nave = criarNave({ low, cor: "#2f7bff" }); this.cena.scene.add(this.nave.group);
       const marca = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.2, 40), new THREE.MeshBasicMaterial({ color: 0x7fe0ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
       marca.rotation.x = -Math.PI / 2; marca.visible = false; this.cena.scene.add(marca);
@@ -293,7 +298,11 @@ export class CyberEngine {
     }
     const qg = this.qgNoAr(), z = this.zaeon();
     const v = passoVertical(this.jet.y, this.jet.vy, this.jet.tecla, dt, tetoDoJet(qg));
-    const q = resolverNoAr(prev, eu.pos, v.y, yAnt, qg, v.y < topo - 0.2 ? [...this.colisores, ...this.colisoresDeNaves(this.naveEst.y)] : this.colisores);
+    let q: { x: number; z: number } = resolverNoAr(prev, eu.pos, v.y, yAnt, qg, v.y < topo - 0.2 ? [...this.colisores, ...this.colisoresDeNaves(this.naveEst.y)] : this.colisores);
+    if (this.univ) {   // universidade: paredes abaixo do alto delas; dentro de uma sala o teto segura; no telhado não se fica
+      const u = resolverUniversidadeNoAr(q, v.y, yAnt); q = u;
+      if (u.teto !== undefined && v.y > u.teto) { v.y = u.teto; v.vy = Math.min(0, v.vy); }
+    }
     eu.pos.x = q.x; eu.pos.z = q.z; this.jet.y = v.y; this.jet.vy = v.vy;
     if (sobreODorso && yAnt >= topo - 0.05 && v.y <= topo && v.vy <= 0) { this.jet.noAr = false; this.sobreNave = true; this.somPouso(); return; }
     const chao = chaoNoAr(q, qg), chaoVisto = chao > 0 && z ? chao + this.boia(z) : chao;
@@ -491,7 +500,7 @@ export class CyberEngine {
   /** sólidos de voo da Zaeon: corpo (até o alto das muralhas) e cúpula (topo do dono), acompanhando a flutuação */
   private pilaresZaeon(z: LandmarkHandle): Pilar[] { const mn = marcoNav(z.poi); return mn ? pilaresDoMarco({ x: mn.x, z: mn.z, chaoR: mn.nav.chaoR, altura: z.poi.altura + this.boia(z), escala: z.poi.escala ?? 1, cupula: !!z.topo }) : []; }
   /** sólidos pra nave: os marcos andáveis como cilindros (quem vem de cima pousa no topo) */
-  private solidosDeVoo(): Pilar[] { return this.marcosNav().flatMap(({ lm }) => this.pilaresZaeon(lm)); }
+  private solidosDeVoo(): Pilar[] { return [...this.marcosNav().flatMap(({ lm }) => this.pilaresZaeon(lm)), ...(this.univ ? pilaresDaUniversidade() : [])]; }
 
   // ───────────── marcos / dono ─────────────
   /** o marco com topo de acesso "dono" (Zaeon) */
@@ -547,7 +556,9 @@ export class CyberEngine {
       if (r.alto) { this.altoEm = lm.poi.id; this.yNav = r.y; eu.pos.x = r.x; eu.pos.z = r.z; return; }
       q = r;
     }
-    q = empurrarParaFora(q, [...this.colisores, ...this.colisoresDeNaves(0)]); eu.pos.x = q.x; eu.pos.z = q.z; this.yNav = 0;
+    q = empurrarParaFora(q, [...this.colisores, ...this.colisoresDeNaves(0)]);
+    if (this.univ) q = resolverUniversidade(q);   // muralhas, paredes das salas, móveis, torres e fontes
+    eu.pos.x = q.x; eu.pos.z = q.z; this.yNav = 0;
   }
 
   // ───────────── entradas ─────────────
@@ -688,6 +699,14 @@ export class CyberEngine {
       const h = this.rayCam.intersectObjects(marco.alvos, true)[0];
       if (h) dist = Math.max(2.2, h.distance - 0.6);
     }
+    // na universidade: muralhas, paredes, torres e telhados entre a câmera e o personagem → a câmera se aproxima
+    if (this.univ && naUniversidade(this.eu.pos) && !this.pilotando) {
+      const alvoOlho = new THREE.Vector3(this.camT.x, this.camT.y + 0.8, this.camT.z);
+      const dir = new THREE.Vector3(Math.sin(this.camAz) * cp, sp, Math.cos(this.camAz) * cp).normalize();
+      this.rayCam.set(alvoOlho, dir); this.rayCam.far = dist;
+      const h = this.rayCam.intersectObjects(this.univ.alvosCamera, false)[0];
+      if (h) dist = Math.max(2.2, h.distance - 0.6);
+    }
     // órbita livre: por cima olha pro personagem; arrastando pra baixo encosta no chão e o olhar sobe pro céu
     const c = poseDaCamera({ olho: { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z }, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
     this.cam.position.set(c.pos.x, c.pos.y, c.pos.z);
@@ -800,6 +819,7 @@ export class CyberEngine {
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
     if (this.cidade) this.cidade.atualizar(dt, t);
+    this.univ?.atualizar(dt, t);
     if (this.nave) {
       const n = this.naveEst, curva = (n.yaw - this.yawAnt) / Math.max(dt, 1e-3); this.yawAnt = n.yaw;
       // pousada no hangar da cidade, acompanha a flutuação da ilha
@@ -944,7 +964,7 @@ export class CyberEngine {
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
     this.som.dispose();
-    this.cidade?.dispose(); this.nave?.dispose();
+    this.cidade?.dispose(); this.univ?.dispose(); this.nave?.dispose();
     if (this.hudVoo) for (const m of [this.hudVoo.marca, this.hudVoo.borda]) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
     this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
   }
