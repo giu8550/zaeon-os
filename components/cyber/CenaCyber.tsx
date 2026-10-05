@@ -55,6 +55,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
   const [rota, setRota] = useState<"heliporto" | "qg" | "zaeon" | null>(null);
   const [voo, setVoo] = useState<{ y: number } | null>(null);
+  /** a AÇÃO de contexto (o que o F faz agora) — o chip "F · Estudar" etc.; no celular, tocar no chip faz a ação */
+  const [acao, setAcao] = useState<{ rotulo: string } | null>(null);
   const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true, moto: false, motoPerto: false }), [fade, setFade] = useState(false), [aviso2, setAviso2] = useState<string | null>(null);
   const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
   /** corte com fade (portal: sem animação de viagem) */
@@ -132,7 +134,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       landmarks: landmarksOn(), onLandmark: (poi) => { setErroTopo(null); setPoiAberto(poi); }, onTopo: (v) => { setNoTopo(v); if (v) setPoiAberto(null); },
       onPortalCeu: () => comFade(() => engine.current?.entrarNoCeu()),   // a Zaeon é aberta a todos (sem pedir acesso)
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
-      onEstadoQG: setQg,
+      onEstadoQG: setQg, onAcao: setAcao,
       onVoo: setVoo,
       onRota: setRota,
       remotosSuaves: transporteRealtime() === "colyseus",
@@ -239,7 +241,7 @@ export default function CenaCyber(p: CenaCyberProps) {
           )}
           {p.aviso && <p role="status" className="absolute left-1/2 top-[120px] z-20 -translate-x-1/2 rounded-full bg-amber-300/90 px-3 py-1 text-xs font-medium text-slate-900">{p.aviso}</p>}
 
-          {perto && (
+          {perto && menu && (   // na vista (landing/menu); fora dele o "Estudar" é a ação de contexto (F)
             <button type="button" onClick={entrarEstudo} className="absolute left-1/2 z-[21] min-h-[44px] -translate-x-1/2 animate-pulse rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-6 text-sm font-extrabold text-slate-950 shadow-[0_0_26px_rgba(90,200,255,.75)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" style={{ bottom: touch ? 168 : tela ? 150 : 28 }}>✦ Estudar</button>
           )}
 
@@ -286,20 +288,18 @@ export default function CenaCyber(p: CenaCyberProps) {
           {erroTopo && <p role="alert" className="mt-2 text-rose-300">{erroTopo}</p>}
         </div>
       )}
-      {/* QG: nave e cidade (as ações privilegiadas passam pelo servidor em `pedir`) */}
-      {!menu && qg.navePerto && !qg.pilotando && p.souFundador && (
-        <button type="button" onClick={() => void pedir("nave", () => engine.current?.embarcar())} className="absolute left-1/2 top-[164px] z-30 min-h-[44px] -translate-x-1/2 rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-sm font-extrabold text-slate-950 shadow-[0_0_24px_rgba(90,200,255,.6)]">🚀 Embarcar na nave</button>
+      {/* AÇÃO de contexto: sem mouse no cyberespaço — F faz (estudar, montar na moto, embarcar, descer, falar, recado…);
+          no celular, tocar no chip. Embarcar continua validado no servidor (onEmbarcar → pedir). */}
+      {!menu && acao && (
+        <button type="button" onClick={() => engine.current?.executarAcao()} className="absolute left-1/2 z-[22] flex min-h-[44px] -translate-x-1/2 items-center gap-2 rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 py-1.5 pl-1.5 pr-5 text-sm font-extrabold text-slate-950 shadow-[0_0_26px_rgba(90,200,255,.6)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" style={{ bottom: touch ? 168 : tela ? 150 : 28 }}>
+          {!touch && <kbd className="flex h-8 min-w-8 items-center justify-center rounded-full bg-slate-950/85 px-2 font-mono text-[13px] text-cyan-100">F</kbd>}
+          <span className={touch ? "pl-3.5" : ""}>{acao.rotulo}</span>
+        </button>
       )}
       {!menu && (qg.pilotando || qg.moto) && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} />}
-      {/* MOTO VOADORA (qualquer pessoa): montar perto de uma vaga; montado, altímetro e "Descer" (pousada) */}
-      {!menu && qg.motoPerto && !qg.moto && (
-        <button type="button" onClick={() => engine.current?.montar()} className="absolute left-1/2 top-[164px] z-30 min-h-[44px] -translate-x-1/2 rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-sm font-extrabold text-slate-950 shadow-[0_0_24px_rgba(90,200,255,.6)]">🏍 Montar na moto{touch ? "" : " (F)"}</button>
-      )}
-      {!menu && qg.moto && (
-        <div className="absolute left-1/2 top-[110px] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
-          {voo && !qg.pousado && <p className="rounded-full bg-[#070c22]/70 px-3 py-1 text-center text-xs font-bold tabular-nums text-sky-100 backdrop-blur">↕ {voo.y} m</p>}
-          {qg.pousado && <button type="button" onClick={() => engine.current?.desmontar()} className="min-h-[44px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-5 text-sm font-semibold text-sky-100 backdrop-blur">Descer da moto{touch ? "" : " (F)"}</button>}
-        </div>
+      {/* MOTO VOADORA: o altímetro (montar/descer é a ação de contexto, F) */}
+      {!menu && qg.moto && voo && !qg.pousado && (
+        <p className="absolute left-1/2 top-[110px] z-30 -translate-x-1/2 rounded-full bg-[#070c22]/70 px-3 py-1 text-center text-xs font-bold tabular-nums text-sky-100 backdrop-blur">↕ {voo.y} m</p>
       )}
       {!menu && qg.pilotando && (
         <div className="absolute left-1/2 top-[110px] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
@@ -314,7 +314,6 @@ export default function CenaCyber(p: CenaCyberProps) {
               ))}
             </div>
           )}
-          {qg.pousado && <button type="button" onClick={() => engine.current?.desembarcar()} className="min-h-[44px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-5 text-sm font-semibold text-sky-100 backdrop-blur">Sair da nave{touch ? "" : " (F)"}</button>}
         </div>
       )}
       {!menu && qg.noCeu && !qg.pilotando && (
