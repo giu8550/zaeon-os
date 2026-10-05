@@ -342,7 +342,7 @@ export class CyberEngine {
     if (this.noTopo) this.o.onTopo?.(false);
     this.pilotando = true; this.pousado = true; this.autoPouso = false; this.altoEm = null; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0; this.jet.noAr = false;
     this.naveEst = { ...this.naveEst, vx: 0, vy: 0, vz: 0 };
-    this.eu.av.group.visible = false; this.eu.tag.style.display = "none";
+    this.eu.tag.style.display = "none";   // o avatar fica visível: vai sentado DENTRO da cúpula (ver o loop)
   }
   /** sai da nave (só pousado): no chão do mapa ou no piso da cidade, ao lado da nave */
   desembarcar() {
@@ -390,7 +390,12 @@ export class CyberEngine {
   private naveForaDoHangar() { if (!this.nave) return false; const n = this.naveEst, h = mundo(CIDADE.hangar); return Math.hypot(n.x - h.x, n.z - h.z) > 1 || n.y < CIDADE.pisoY - 0.5; }
   /** (pra quem NÃO é o dono) o dono está com a nave fora do hangar → a do hangar some (só existe uma nave) */
   private naveDoDonoFora() { if (this.ehFundador(this.o.eu.id)) return false; for (const a of this.remotos.values()) if (a.nave) return true; return false; }
-  private navePerto() { const n = this.naveEst; return Math.hypot(this.eu.pos.x - n.x, this.eu.pos.z - n.z) < 7 && Math.abs(this.eu.alt - n.y) < 7; }
+  /** põe um avatar no assento do piloto (dentro da cúpula), flutuando de pernas cruzadas */
+  private noAssento(av: AvatarLuzHandle, nave: NaveHandle) {
+    nave.group.updateWorldMatrix(true, true); nave.assento.getWorldPosition(this.tmp);
+    av.group.position.set(this.tmp.x, this.tmp.y + 0.45, this.tmp.z);
+  }
+  private navePerto() { const n = this.naveEst; return Math.hypot(this.eu.pos.x - n.x, this.eu.pos.z - n.z) < 10 && Math.abs(this.eu.alt - n.y) < 7; }   // a nave é grande (~16 m)
   /** sólidos de voo da Zaeon: corpo (até o alto das muralhas) e cúpula (topo do dono), acompanhando a flutuação */
   private pilaresZaeon(z: LandmarkHandle): Pilar[] { const mn = marcoNav(z.poi); return mn ? pilaresDoMarco({ x: mn.x, z: mn.z, chaoR: mn.nav.chaoR, altura: z.poi.altura + this.boia(z), escala: z.poi.escala ?? 1, cupula: !!z.topo }) : []; }
   /** sólidos pra nave: os marcos andáveis como cilindros (quem vem de cima pousa no topo) */
@@ -580,7 +585,7 @@ export class CyberEngine {
     }
     this.camT.lerp(new THREE.Vector3(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), 0.12);
     const cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
-    let dist = this.pilotando ? Math.max(this.camDist, 16) : this.camDist;
+    let dist = this.pilotando ? Math.max(this.camDist, 26) : this.camDist;
     // câmera em 3ª pessoa: perto de um marco (ilha flutuante, muralhas), se a estrutura fica ENTRE a câmera e o
     // personagem, a câmera se aproxima (senão a ilha cobre a tela)
     const marco = this.lms.find((l) => Math.hypot(this.eu.pos.x - l.poi.x, this.eu.pos.z - l.poi.z) < l.poi.interactR * 1.8);
@@ -683,11 +688,12 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr, correndo: !!(this.keys.shift || this.correr) && eu.moving, sentado: this.menu ? 0 : this.sitT, meditando: this.menu ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, dt, t });
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr, correndo: !!(this.keys.shift || this.correr) && eu.moving, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu || this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, dt, t });
     for (const a of this.remotos.values()) {
-      a.av.group.visible = !a.nave || !!a.naveP; a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(a.facing); a.av.animar({ andando: a.moving && a.jet === undefined, sentado: a.sit, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dt, t });
+      const pilota = !!a.nave && !a.naveP;
+      a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(pilota ? a.naveYaw ?? a.facing : a.facing); a.av.animar({ andando: a.moving && a.jet === undefined && !pilota, sentado: pilota ? 0 : a.sit, meditando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dt, t });
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
-      else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = a.naveYaw ?? 0; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0 }); }
+      else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = a.naveYaw ?? 0; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0 }); this.noAssento(a.av, a.nave); }
     }
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
@@ -699,6 +705,7 @@ export class CyberEngine {
       this.nave.group.position.set(n.x, yBase, n.z); this.nave.group.rotation.y = n.yaw;
       this.nave.group.visible = this.pilotando || !this.naveDoDonoFora();
       this.nave.atualizar({ dt, t, voando: this.pilotando && !this.pousado, vel: Math.hypot(n.vx, n.vz) / VOO.vel, curva });
+      if (this.pilotando) this.noAssento(eu.av, this.nave);   // o piloto aparece dentro da cúpula
     }
     this.atualizarHudVoo(now);
     const navePerto = !this.pilotando && !!this.nave && this.navePerto();

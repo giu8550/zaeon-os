@@ -1,17 +1,18 @@
 /**
- * Cidade — a CIDADE ZAEON no céu (QG do dono), acima do buraco negro. Mesmo idioma da Zaeon do chão (cristal, gelo,
+ * Cidade — a ZAEON, a ilha no céu (a base do dono), acima do buraco negro. Mesmo idioma da Zaeon do chão (cristal, gelo,
  * granizo, fogo contido, querubins, contraste frio×quente), maior e mais rica, no conceito das cidades flutuantes:
  *  - ilha monumental de cristal (montanha INVERTIDA: larga em cima, ápice embaixo) com estalactites e quedas de luz;
  *  - ilhotas flutuantes em volta, com aglomerados de cristal;
  *  - muralhas de granizo + 4 torres com pontas luminosas; línguas de fogo na borda (cintilar lento, sem estrobo);
- *  - CIDADELA (cúpula estelar) = SALA DE COMPUTADORES: anel de estações holográficas + mesa com um globo de luz;
+ *  - CIDADELA (cúpula estelar) = BIBLIOTECA: anel de estantes com livros de luz e monitores verticais (clicar = estudar)
+ *    rodeando a sala, + mesa com um globo de luz no centro;
  *  - hangar da nave; portal de volta (mini disco de acreção); farol no topo;
  *  - no CHÃO, embaixo do buraco negro: o anel de entrada (o portal).
  * Layout em lib/cyber/ceu.ts (o mesmo que a colisão usa). `low` reduz partículas/segmentos/ilhotas;
  * `prefers-reduced-motion` deixa fogo/vórtices quase parados. dispose() completo.
  */
 import * as THREE from "three";
-import { CIDADE, computadoresLocais } from "@/lib/cyber/ceu";
+import { CIDADE, bibliotecaLocais } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 
@@ -22,7 +23,7 @@ export type CidadeHandle = {
   rotulo: HTMLDivElement;
   /** superfícies sólidas (raycast do clique/câmera) */
   alvos: THREE.Object3D[];
-  /** estações de computador (InstancedMesh; instanceId = índice em computadoresLocais) */
+  /** telas dos MONITORES da biblioteca (InstancedMesh; instanceId = índice em computadoresLocais) — clicar = estudar */
   computadores: THREE.InstancedMesh;
   /** alvos do portal de entrada (anel no chão) */
   portalChao: THREE.Object3D;
@@ -115,18 +116,57 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const feixe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 2.2, 60, 16, 1, true), farolMat)); feixe.position.y = 26 + 30;
   const farol = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glow("rgba(220,250,255,1)", "rgba(120,200,255,.4)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); farol.scale.set(9, 9, 1); farol.position.y = 27;
 
-  // estações de computador (mesas + telas holográficas viradas pro centro) e a mesa com o globo de luz
-  const locs = computadoresLocais();
-  const mesas = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1.8, 0.12, 0.9), new THREE.MeshStandardMaterial({ color: 0x16203c, roughness: 0.5, metalness: 0.3, emissive: 0x16264f, emissiveIntensity: 0.4 }), locs.length), ilha, true);
-  const telas = add(new THREE.InstancedMesh(new THREE.PlaneGeometry(1.6, 0.95), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.45, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }), locs.length));
-  { const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-    locs.forEach((c, i) => {
-      q.setFromAxisAngle(up, c.rot);
-      p.set(c.x, 0.95, c.z); mesas.setMatrixAt(i, m.compose(p, q, s));
-      const fx = Math.sin(c.rot), fz = Math.cos(c.rot);   // a tela fica do lado de fora da mesa, virada pro centro
-      p.set(c.x - fx * 0.35, 1.75, c.z - fz * 0.35); telas.setMatrixAt(i, m.compose(p, q, s));
+  // BIBLIOTECA rodeando a sala: estantes com livros de luz e, intercalados, MONITORES verticais (clicáveis = estudar)
+  const mods = bibliotecaLocais(), estantes = mods.filter((m) => m.tipo === "estante"), monitores = mods.filter((m) => m.tipo === "monitor");
+  const { largura } = CIDADE.biblioteca, ALT = 3.4;
+  const matMovel = new THREE.MeshStandardMaterial({ color: 0x16203c, roughness: 0.45, metalness: 0.35, emissive: 0x16264f, emissiveIntensity: 0.45 });
+  const mx = new THREE.Matrix4(), mq = new THREE.Quaternion(), ms = new THREE.Vector3(1, 1, 1), mp = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  /** ponto local (lx, ly, lz) de um módulo → posição na ilha */
+  const noModulo = (m: { x: number; z: number; rot: number }, lx: number, ly: number, lz: number) => { const c = Math.cos(m.rot), si = Math.sin(m.rot); return mp.set(m.x + lx * c + lz * si, ly, m.z - lx * si + lz * c); };
+  // estantes: fundo + laterais + prateleiras (instanciados)
+  const fundo = add(new THREE.InstancedMesh(new THREE.BoxGeometry(largura, ALT, 0.12), matMovel, estantes.length), ilha, true);
+  const lado = add(new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, ALT, 0.55), matMovel, estantes.length * 2), ilha, true);
+  const PRAT = [0.15, 0.95, 1.75, 2.55, 3.35];
+  const prat = add(new THREE.InstancedMesh(new THREE.BoxGeometry(largura - 0.1, 0.06, 0.5), matMovel, estantes.length * PRAT.length), ilha, true);
+  const LPP = low ? 8 : 13;   // livros por prateleira
+  const livros = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), estantes.length * (PRAT.length - 1) * LPP));
+  const CORES_LIVRO = [0x66e6ff, 0xb98cff, 0x9affd0, 0xffd36b, 0x7fb4ff, 0xff9ad5].map((h) => new THREE.Color(h).multiplyScalar(0.75));
+  { let iL = 0;
+    estantes.forEach((m, i) => {
+      mq.setFromAxisAngle(up, m.rot);
+      fundo.setMatrixAt(i, mx.compose(noModulo(m, 0, ALT / 2, -0.22), mq, ms));
+      lado.setMatrixAt(i * 2, mx.compose(noModulo(m, -largura / 2, ALT / 2, 0), mq, ms)); lado.setMatrixAt(i * 2 + 1, mx.compose(noModulo(m, largura / 2, ALT / 2, 0), mq, ms));
+      PRAT.forEach((y, k) => prat.setMatrixAt(i * PRAT.length + k, mx.compose(noModulo(m, 0, y, 0), mq, ms)));
+      for (let k = 0; k < PRAT.length - 1; k++) {
+        let x = -largura / 2 + 0.18;
+        for (let j = 0; j < LPP; j++) {
+          const w = 0.12 + Math.random() * 0.1, h = 0.48 + Math.random() * 0.22, inclina = j === LPP - 1 ? 0.25 : 0;
+          const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), inclina).premultiply(mq);
+          livros.setMatrixAt(iL, mx.compose(noModulo(m, x + w / 2, PRAT[k]! + 0.03 + h / 2, 0.02), q2, new THREE.Vector3(w, h, 0.34)));
+          livros.setColorAt(iL, CORES_LIVRO[(i * 7 + k * 3 + j) % CORES_LIVRO.length]!); iL++;
+          x += w + 0.015; if (x > largura / 2 - 0.3) break;
+        }
+      }
     });
-    mesas.instanceMatrix.needsUpdate = true; telas.instanceMatrix.needsUpdate = true; mesas.computeBoundingSphere(); telas.computeBoundingSphere(); }
+    livros.count = iL;
+    for (const im of [fundo, lado, prat, livros]) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
+    if (livros.instanceColor) livros.instanceColor.needsUpdate = true; }
+  // monitores verticais: moldura + tela com "página" de luz (a tela é o mesh clicável)
+  const pagina = (() => { const c = document.createElement("canvas"); c.width = 128; c.height = 256; const g = c.getContext("2d")!;
+    g.fillStyle = "#06223a"; g.fillRect(0, 0, 128, 256); g.fillStyle = "#66e6ff"; g.fillRect(10, 12, 108, 8);
+    g.fillStyle = "rgba(143,232,255,.75)"; for (let i = 0; i < 16; i++) g.fillRect(12, 34 + i * 13, 50 + ((i * 37) % 54), 5);
+    g.strokeStyle = "#9fe8ff"; g.lineWidth = 3; g.strokeRect(2, 2, 124, 252);
+    const t = new THREE.CanvasTexture(c); texturas.push(t); return t; })();
+  const molduraMon = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1.95, 3.1, 0.22), matMovel, monitores.length), ilha, true);
+  const telas = add(new THREE.InstancedMesh(new THREE.PlaneGeometry(1.65, 2.75), new THREE.MeshBasicMaterial({ map: pagina, transparent: true, opacity: 0.92, side: THREE.DoubleSide }), monitores.length), ilha, true);
+  const brilhoMon = add(new THREE.InstancedMesh(new THREE.PlaneGeometry(2.3, 3.4), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }), monitores.length));
+  monitores.forEach((m, i) => {
+    mq.setFromAxisAngle(up, m.rot);
+    molduraMon.setMatrixAt(i, mx.compose(noModulo(m, 0, 1.75, -0.1), mq, ms));
+    telas.setMatrixAt(i, mx.compose(noModulo(m, 0, 1.75, 0.02), mq, ms));
+    brilhoMon.setMatrixAt(i, mx.compose(noModulo(m, 0, 1.75, -0.13), mq, ms));
+  });
+  for (const im of [molduraMon, telas, brilhoMon]) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
   add(new THREE.Mesh(new THREE.CylinderGeometry(CIDADE.mesaHolo.r, CIDADE.mesaHolo.r * 1.1, 1, 24), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), ilha, true).position.y = 0.5;
   const NG = low ? 160 : 280, gp = new Float32Array(NG * 3);
   for (let i = 0; i < NG; i++) { const u = Math.random() * 2 - 1, th = Math.random() * 6.283, r = 1.6, s = Math.sqrt(1 - u * u); gp[i * 3] = s * Math.cos(th) * r; gp[i * 3 + 1] = 3 + u * r; gp[i * 3 + 2] = s * Math.sin(th) * r; }
@@ -183,7 +223,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {
-    group: raiz, ilha, rotulo, alvos, computadores: mesas, portalChao: peDisco,
+    group: raiz, ilha, rotulo, alvos, computadores: telas, portalChao: peDisco,
     atualizar(dt, t) {
       ilha.position.y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel;
       for (const f of fogos) { const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp; f.s.scale.set(3.4 * (0.9 + p * 0.25), 5 * (0.8 + p * 0.4), 1); (f.s.material as THREE.SpriteMaterial).opacity = 0.5 + 0.3 * p; }

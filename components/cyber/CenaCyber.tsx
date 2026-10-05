@@ -39,7 +39,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const engine = useRef<CyberEngine | null>(null);
   const [pronto, setPronto] = useState(false), [perto, setPerto] = useState(false), [menu, setMenu] = useState(!tela);
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
-  const [rota, setRota] = useState<"heliporto" | "qg" | null>(null);
+  const [rota, setRota] = useState<"heliporto" | "qg" | "zaeon" | null>(null);
   const [voo, setVoo] = useState<{ y: number } | null>(null);
   const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true }), [fade, setFade] = useState(false), [aviso2, setAviso2] = useState<string | null>(null);
   const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
@@ -200,7 +200,7 @@ export default function CenaCyber(p: CenaCyberProps) {
             <button type="button" onClick={() => engine.current?.pararRota()} className="min-h-[40px] rounded-full border border-amber-200/45 bg-[#1a0f08]/85 px-4 text-xs font-semibold text-amber-100 backdrop-blur">■ Parar</button>
           ) : qg.pousado && (
             <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Atalhos de voo">
-              {([["heliporto", "Heliporto"], ["qg", "QG do Andrei"]] as const).map(([d, rot]) => (
+              {([["heliporto", "Heliporto"], ["qg", "QG do Andrei"], ["zaeon", "Zaeon"]] as const).map(([d, rot]) => (
                 <button key={d} type="button" onClick={() => engine.current?.irPara(d)} className="min-h-[40px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-4 text-xs font-semibold text-sky-100 backdrop-blur">{rot}</button>
               ))}
             </div>

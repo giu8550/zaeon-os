@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade } from "./ceu";
+import { BURACO_NEGRO, CIDADE, bibliotecaLocais, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade } from "./ceu";
 import { VOO, passoVoo, type EstadoVoo } from "./voo";
 import { dentroDeAlgum } from "./colisao";
 import { POIS } from "./landmarks";
@@ -27,16 +27,30 @@ describe("cidade no céu", () => {
       expect(Math.hypot(l.x, l.z)).toBeLessThan(CIDADE.andavelR);
     }
   });
-  it("andar: computadores, pilares e mesa são sólidos; não cai da borda", () => {
+  it("andar: biblioteca (estantes e monitores), pilares e mesa são sólidos; não cai da borda", () => {
     const c0 = mundo(computadoresLocais()[0]!);
     const r = resolverCidade(c0);
-    expect(Math.hypot(r.x - c0.x, r.z - c0.z)).toBeGreaterThanOrEqual(CIDADE.computadores.colR - 1e-6);
+    expect(Math.hypot(r.x - c0.x, r.z - c0.z)).toBeGreaterThanOrEqual(CIDADE.biblioteca.colR - 1e-6);
     const fora = resolverCidade(mundo({ x: 80, z: 0 }));
     expect(Math.hypot(fora.x - CIDADE.centro.x, fora.z - CIDADE.centro.z)).toBeLessThanOrEqual(CIDADE.andavelR + 1e-6);
   });
-  it("estação de computador mais perto (pra clicar e estudar)", () => {
+  it("biblioteca rodeando a sala: estantes + monitores virados pro centro, com vãos de passagem", () => {
+    const mods = bibliotecaLocais();
+    expect(mods).toHaveLength(CIDADE.biblioteca.n);
+    expect(computadoresLocais().length).toBe(CIDADE.biblioteca.n / CIDADE.biblioteca.monitorCada);
+    for (const m of mods) {
+      expect(Math.hypot(m.x, m.z)).toBeCloseTo(CIDADE.biblioteca.r, 6);
+      expect(Math.hypot(m.x, m.z)).toBeLessThan(CIDADE.cidadela.r - 1);   // dentro da cidadela
+      const frente = { x: m.x + Math.sin(m.rot), z: m.z + Math.cos(m.rot) };
+      expect(Math.hypot(frente.x, frente.z)).toBeLessThan(Math.hypot(m.x, m.z));   // +z local → centro
+    }
+    // dá pra entrar: o vão entre dois módulos vizinhos fica livre
+    const a = ((0 + 1) / CIDADE.biblioteca.n) * Math.PI * 2, vao = mundo({ x: Math.cos(a) * CIDADE.biblioteca.r, z: Math.sin(a) * CIDADE.biblioteca.r });
+    expect(colisoresDaCidade().some((c) => Math.hypot(c.x - vao.x, c.z - vao.z) < c.r)).toBe(false);
+  });
+  it("monitor da biblioteca mais perto (pra clicar e estudar)", () => {
     const c3 = computadoresLocais()[3]!;
-    const perto = mundo({ x: c3.x * 1.25, z: c3.z * 1.25 });
+    const perto = mundo({ x: c3.x * 0.82, z: c3.z * 0.82 });
     expect(computadorPerto(perto)).toBe(3);
     expect(computadorPerto(mundo(CIDADE.chegada))).toBe(-1);
   });
