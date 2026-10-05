@@ -1,12 +1,12 @@
 /**
  * BaseEstudo — a estação de estudo do cyberespaço, no idioma "alienígena": um TRONO pro computador sobre a plataforma
  * circular — estrado em degraus, espaldar alto (com uma joia de cristal no topo) atrás da TELA principal lá no alto
- * (inclinada pra quem está sentado) e duas asas laterais com MONITORES VERTICAIS virados pro assento. As telas têm
- * cara de tecnologia: moldura fina, cantoneiras de luz, barra de status e medidores. À frente, um ASSENTO DE ENERGIA
- * flutuante e um painel de controle holográfico na altura das mãos. Quando o dono está sentado (`energia`), fluxos
+ * (inclinada pra quem está na frente) e duas asas laterais com MONITORES VERTICAIS virados pra dentro. As telas têm
+ * cara de tecnologia: moldura fina, cantoneiras de luz, barra de status e medidores. À frente, um painel de controle
+ * holográfico na altura das mãos — sem cadeira: o dono fica em pé, DIGITANDO. Quando o dono está na base (`energia`), fluxos
  * de luz saem do painel (as mãos) e sobem até as três telas — a "interação energética". Cristais flutuando e
  * neurônios subindo continuam. Uma por pessoa, FIXA em `layout` (ver lib/cyber/bases.ts). O monitor clicável é a
- * tela principal. Local: +z aponta pra fora (praça); o trono fica no −z, de frente pro assento (0, −0.15).
+ * tela principal. Local: +z aponta pra fora (praça); o trono fica no −z, de frente pro ponto do dono (0, −0.15).
  */
 import * as THREE from "three";
 import type { LayoutBase } from "@/lib/cyber/bases";
@@ -20,18 +20,18 @@ export type BaseEstudoHandle = {
   monitor: THREE.Mesh;
   /**
    * `ativa` = o dono (ou alguém) está perto → luz/cristais/linhas intensificam. `hover` = ponteiro no monitor.
-   * `energia` (0..1) = o dono SENTADO no assento → o fluxo de energia mãos → tela.
+   * `energia` (0..1) = o dono na base (digitando no painel) → o fluxo de energia mãos → telas.
    */
   atualizar(o: { dt: number; t: number; ativa: boolean; hover: boolean; perto: boolean; energia?: number }): void;
   dispose(): void;
 };
 
-/** a TELA (local): centro alto, de frente pro assento — o engine usa pra rótulos/menu */
+/** a TELA (local): centro alto, de frente pro dono — o engine usa pra rótulos/menu */
 export const TELA_BASE = { y: 2.75, z: -1.75, w: 2.4, h: 1.35 } as const;
 /** monitores verticais das asas laterais */
 const TELA_LATERAL = { w: 0.78, h: 1.35 } as const;
-/** o painel de controle (local), na altura das mãos de quem está sentado */
-const ANEL_CTRL = { y: 1.25, z: -0.75 } as const;
+/** o painel de controle (local), na altura das mãos de quem está em pé na base, digitando */
+const ANEL_CTRL = { y: 1.05, z: -0.72 } as const;
 
 const CRISTAIS = [0x66e6ff, 0xb98cff, 0x9affd0, 0xffd36b];
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -58,7 +58,7 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
   const peca = (geo: THREE.BufferGeometry, x: number, y: number, z: number, pai: THREE.Object3D = office) => { const m = arestas(new THREE.Mesh(geo, casco)); m.position.set(x, y, z); pai.add(m); return m; };
 
   // ── TRONO do computador: estrado em degraus, espaldar alto atrás da tela principal (com uma joia de cristal no
-  //    topo), braços que seguram a tela e duas ASAS laterais com monitores VERTICAIS virados pro assento ──
+  //    topo), braços que seguram a tela e duas ASAS laterais com monitores VERTICAIS virados pra dentro ──
   peca(new THREE.BoxGeometry(3.8, 0.22, 1.5), 0, 0.11, -1.95);
   peca(new THREE.BoxGeometry(3.0, 0.22, 1.1), 0, 0.33, -2.1);
   { const f = new THREE.Shape(); f.moveTo(-1.55, 0); f.lineTo(1.55, 0); f.lineTo(1.55, 3.0); f.lineTo(1.0, 3.75); f.lineTo(-1.0, 3.75); f.lineTo(-1.55, 3.0); f.closePath();
@@ -67,17 +67,9 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
   const joia = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: acc, emissiveIntensity: 1.1, roughness: 0.2, flatShading: true }));
   joia.scale.y = 1.6; joia.position.set(0, 4.05, -2.3); office.add(joia);
 
-  // assento de energia flutuante (sem cadeira): disco + borda de luz + encosto em lâmina
-  const assento = new THREE.Group(); assento.position.set(0, 0, -0.15); office.add(assento);
-  const disco = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.3, 0.07, seg), casco); disco.position.y = 0.48; assento.add(disco);
-  const bordaDisco = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.025, 6, seg), veio); bordaDisco.rotation.x = Math.PI / 2; bordaDisco.position.y = 0.5; assento.add(bordaDisco);
-  const encosto = peca(new THREE.BoxGeometry(0.7, 0.6, 0.06), 0, 0.88, 0.32, assento); encosto.rotation.x = -0.22;
-  const sustentacao = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, color: acc, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
-  sustentacao.scale.set(1.4, 1.4, 1); sustentacao.position.y = 0.2; assento.add(sustentacao);
-
   // painel de controle holográfico (onde as mãos "tocam"): placa inclinada com teclas de luz
   const painelMat = new THREE.MeshBasicMaterial({ color: acc, transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const painel = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.42), painelMat); painel.position.set(0, ANEL_CTRL.y, ANEL_CTRL.z); painel.rotation.x = -1.0; office.add(painel);
+  const painel = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.42), painelMat); painel.position.set(0, ANEL_CTRL.y, ANEL_CTRL.z); painel.rotation.x = -1.2; office.add(painel);
   painel.add(new THREE.LineSegments(new THREE.EdgesGeometry(painel.geometry), veioLinha));
   { const k: number[] = []; for (let i = 1; i < 6; i++) k.push(-0.45 + i * 0.15, -0.2, 0.002, -0.45 + i * 0.15, 0.2, 0.002); k.push(-0.45, 0, 0.002, 0.45, 0, 0.002);
     const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(k), 3)); painel.add(new THREE.LineSegments(g, veioLinha)); }
@@ -116,7 +108,7 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
   // TELA principal no alto, inclinada pra baixo (de frente pra quem está sentado)
   const tela = new THREE.Group(); tela.position.set(0, TELA_BASE.y, TELA_BASE.z); tela.rotation.x = 0.18; office.add(tela);
   const scr = criarTela(tela, TELA_BASE.w, TELA_BASE.h, 6, 5);
-  // asas laterais com monitores VERTICAIS, viradas pro assento
+  // asas laterais com monitores VERTICAIS, viradas pra dentro
   const lateraisPos: THREE.Vector3[] = [];
   for (const lado of [-1, 1]) {
     const asa = new THREE.Group(); asa.position.set(lado * 1.95, 0, -1.35); asa.rotation.y = -lado * 0.6; office.add(asa);
