@@ -46,8 +46,21 @@ describe("atalhos de rota (piloto automático com as entradas dos botões)", () 
       expect(r.trilha.some(dentroDaIlha)).toBe(false);
     });
   }
+  for (const fps of [60, 10]) {
+    it(`Zaeon: do heliporto (chão) até o hangar no céu, sem atravessar a ilha, a ${fps} FPS`, () => {
+      const r = voarAtalho("zaeon", est(HELIPORTO.x, 0, HELIPORTO.z), fps);
+      expect(r.chegou).toBe(true); expect(r.s.y).toBe(CIDADE.pisoY);
+      expect(Math.hypot(r.s.x - hangar.x, r.s.z - hangar.z)).toBeLessThan(CIDADE.hangar.r);
+      expect(r.trilha.some(dentroDaIlha)).toBe(false); expect(r.trilha.some(dentroDoQG)).toBe(false);
+    });
+    it(`Zaeon: do chão EMBAIXO da ilha até o hangar a ${fps} FPS`, () => {
+      const r = voarAtalho("zaeon", est(CIDADE.centro.x + 3, 0, CIDADE.centro.z + 2), fps);
+      expect(r.chegou).toBe(true); expect(r.s.y).toBe(CIDADE.pisoY);
+      expect(r.trilha.some(dentroDaIlha)).toBe(false);
+    });
+  }
   it("do meio do caminho (no ar, longe) as rotas também fecham", () => {
-    for (const d of ["heliporto", "qg"] as const) {
+    for (const d of ["heliporto", "qg", "zaeon"] as const) {
       const r = voarAtalho(d, est(-120, 90, 60), 30);
       expect(r.chegou).toBe(true); expect(r.pousado).toBe(true);
     }

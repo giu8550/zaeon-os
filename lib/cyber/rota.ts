@@ -1,14 +1,14 @@
 /**
- * Cyberespaço — ATALHOS de rota da nave ("Heliporto" e "QG do Andrei"). PURO. Não é teletransporte: o piloto
+ * Cyberespaço — ATALHOS de rota da nave ("Heliporto", "QG do Andrei" e "Zaeon"). PURO. Não é teletransporte: o piloto
  * automático gera as MESMAS entradas dos botões de movimento (direção, subir, descer), então a nave voa à vista de
  * todos pelo caminho. Qualquer botão de movimento cancela (no engine). A rota contorna a ilha da cidade (sai pela
  * borda, do lado do destino) e cruza o mapa numa altitude livre (acima do QG, abaixo do fundo da ilha da Zaeon).
  */
-import { CIDADE } from "./ceu";
+import { CIDADE, mundo } from "./ceu";
 import { HELIPORTO } from "./landmarks";
 import { VOO, type ComandoVoo, type EstadoVoo } from "./voo";
 
-export type DestinoRota = "heliporto" | "qg";
+export type DestinoRota = "heliporto" | "qg" | "zaeon";
 export type Waypoint = { x: number; y: number; z: number; pousar?: boolean };
 
 /** altitude de cruzeiro no chão: acima da cúpula do QG (~26 m), bem abaixo do fundo da ilha da Zaeon (~156 m) */
@@ -27,6 +27,7 @@ function saidaDaIlha(rumo: { x: number; z: number }, y: number): Waypoint {
 /** onde cada atalho pousa: no heliporto (chão) ou no ponto de pouso do QG (`qg`, sobre as muralhas do lado do portão) */
 export function alvoDoAtalho(destino: DestinoRota, qg?: { x: number; y: number; z: number }): Waypoint | null {
   if (destino === "heliporto") return { x: HELIPORTO.x, y: 0, z: HELIPORTO.z, pousar: true };
+  if (destino === "zaeon") { const h = mundo(CIDADE.hangar); return { x: h.x, y: CIDADE.pisoY, z: h.z, pousar: true }; }
   return qg ? { ...qg, pousar: true } : null;
 }
 
@@ -43,6 +44,21 @@ export function rotaPara(destino: DestinoRota, s: EstadoVoo, qg?: { x: number; y
   const altoCidade = CIDADE.pisoY + ACIMA_DA_CIDADE, naCidade = s.y >= CIDADE.pisoY - 0.5 && daCidade(s) <= CIDADE.bordaR + 2;
   const naColuna = daCidade(s) < CIDADE.bordaR + 2;
   let p = { x: s.x, y: s.y, z: s.z };
+  if (destino === "zaeon") {
+    // pro hangar da Zaeon (céu): embaixo da ilha, decola e sai pela lateral; sobe POR FORA; entra pela borda do lado do hangar
+    if (!naCidade) {
+      if (naColuna) {
+        const yv = Math.max(p.y, VOO.decolar + SOLTA_V + 2);
+        if (yv > p.y + 1) { rota.push({ x: p.x, y: yv, z: p.z }); p = { ...p, y: yv }; }
+        const sai = saidaDaIlha(alvo, yv); rota.push(sai); p = sai;
+      }
+      rota.push({ x: p.x, y: altoCidade, z: p.z });
+      rota.push(saidaDaIlha(alvo, altoCidade));
+    } else if (p.y < altoCidade - 1) rota.push({ x: p.x, y: altoCidade, z: p.z });
+    rota.push({ x: alvo.x, y: altoCidade, z: alvo.z });
+    rota.push(alvo);
+    return rota;
+  }
   // se estiver na Zaeon (ou embaixo da ilha), sai pela borda do lado do destino
   if (naCidade) {
     if (p.y < altoCidade - 1) { rota.push({ x: p.x, y: altoCidade, z: p.z }); p = { ...p, y: altoCidade }; }

@@ -4,7 +4,7 @@
  *  - um heartbeat independente do requestAnimationFrame reenvia a última pose (aba em segundo plano, pacote perdido,
  *    quem acabou de entrar).
  */
-export type Pose = { x: number; z: number; facing: number; moving?: boolean; sit?: boolean; topo?: boolean; ceu?: boolean; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number };
+export type Pose = { x: number; z: number; facing: number; moving?: boolean; sit?: boolean; topo?: boolean; ceu?: boolean; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number };
 
 /** Heartbeat: reenvia a última pose mesmo com a aba em segundo plano (setInterval segue disparando). */
 export const HEARTBEAT_MS = 2000;
@@ -18,6 +18,7 @@ export function poseMudou(antes: Pose | null, agora: Pose): boolean {
   if (!antes) return true;
   if (!!antes.moving !== !!agora.moving || !!antes.sit !== !!agora.sit || !!antes.topo !== !!agora.topo || !!antes.ceu !== !!agora.ceu || !!antes.voo !== !!agora.voo) return true;
   if (antes.voo && agora.voo && (Math.abs(antes.voo.y - agora.voo.y) > 0.05 || Math.abs(antes.voo.yaw - agora.voo.yaw) > EPS_ANG)) return true;
+  if ((antes.alt === undefined) !== (agora.alt === undefined) || (antes.alt !== undefined && agora.alt !== undefined && Math.abs(antes.alt - agora.alt) > 0.05)) return true;
   if ((antes.jet === undefined) !== (agora.jet === undefined) || (antes.jet !== undefined && agora.jet !== undefined && Math.abs(antes.jet - agora.jet) > 0.05)) return true;
   const na = antes.naveParada, nb = agora.naveParada;
   if (!!na !== !!nb || (na && nb && (Math.hypot(na.x - nb.x, na.y - nb.y, na.z - nb.z) > EPS_POS || Math.abs(na.yaw - nb.yaw) > EPS_ANG))) return true;

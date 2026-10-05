@@ -19,7 +19,9 @@ export const CIDADE = {
   muralhaR: 37,
   ilhaAltura: 34,       // a ilha (cone invertido) vai do piso até pisoY - ilhaAltura
   cidadela: { r: 14, pilares: 12, pilarColR: 1.1 },              // cúpula = SALA DE COMPUTADORES
-  computadores: { n: 16, r: 8, colR: 0.9 },                      // estações em anel, viradas pro centro
+  /** BIBLIOTECA em anel rodeando a sala (dentro da cidadela): estantes de livros de luz e, a cada `monitorCada`,
+   *  um MONITOR vertical (clicável = Sala de Estudos). Vãos entre os módulos deixam passar. */
+  biblioteca: { n: 16, r: 11.5, largura: 3.6, colR: 0.75, monitorCada: 4 },
   mesaHolo: { r: 2.4 },
   hangar: { x: 22, z: 8, r: 6 },                                 // plataforma da nave (local)
   portalVolta: { x: -21, z: 10, r: 2.2 },                        // anel de volta pra praça (local)
@@ -30,19 +32,28 @@ export const CIDADE = {
 
 export const mundo = (l: P2): P2 => ({ x: CIDADE.centro.x + l.x, z: CIDADE.centro.z + l.z });
 
-/** posições (locais) das estações de computador: anel virado pro centro, com uma abertura de passagem */
-export function computadoresLocais(): { x: number; z: number; rot: number }[] {
-  const { n, r } = CIDADE.computadores, out: { x: number; z: number; rot: number }[] = [];
-  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; out.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, rot: Math.atan2(-Math.cos(a), -Math.sin(a)) }); }
+export type ModuloBiblioteca = { x: number; z: number; rot: number; tipo: "estante" | "monitor" };
+/** módulos (locais) da biblioteca: anel virado pro centro; `rot` deixa o +z local apontando pro centro */
+export function bibliotecaLocais(): ModuloBiblioteca[] {
+  const { n, r, monitorCada } = CIDADE.biblioteca, out: ModuloBiblioteca[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = ((i + 0.5) / n) * Math.PI * 2;
+    out.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, rot: Math.atan2(-Math.cos(a), -Math.sin(a)), tipo: i % monitorCada === 1 ? "monitor" : "estante" });
+  }
   return out;
 }
+/** os MONITORES da biblioteca (clicáveis: Sala de Estudos) — o índice é o instanceId do mesh das telas */
+export const computadoresLocais = () => bibliotecaLocais().filter((m) => m.tipo === "monitor");
 
-/** colisores da plataforma (mundo): pilares da cidadela, estações, mesa holográfica */
+/** colisores da plataforma (mundo): pilares da cidadela, módulos da biblioteca (3 círculos ao longo de cada um), mesa holográfica */
 export function colisoresDaCidade(): Colisor[] {
   const out: Colisor[] = [];
-  const { cidadela, computadores, mesaHolo } = CIDADE;
+  const { cidadela, biblioteca, mesaHolo } = CIDADE;
   for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
-  for (const c of computadoresLocais()) out.push({ ...mundo(c), r: computadores.colR });
+  for (const m of bibliotecaLocais()) {
+    const tx = Math.cos(m.rot), tz = -Math.sin(m.rot);   // eixo "largura" do módulo (x local girado)
+    for (const k of [-1, 0, 1]) out.push({ ...mundo({ x: m.x + tx * k * (biblioteca.largura / 2 - biblioteca.colR), z: m.z + tz * k * (biblioteca.largura / 2 - biblioteca.colR) }), r: biblioteca.colR });
+  }
   out.push({ ...mundo({ x: 0, z: 0 }), r: mesaHolo.r });
   return out;
 }
@@ -60,7 +71,7 @@ export const dentroDe = (p: P2, alvo: { x: number; z: number; r: number }) => Ma
 export const noPortalEntrada = (p: P2) => dentroDe(p, CIDADE.portalEntrada);
 /** na cidade, pisou no portal de volta? */
 export const noPortalVolta = (p: P2) => dentroDe(p, { ...mundo(CIDADE.portalVolta), r: CIDADE.portalVolta.r });
-/** estação de computador mais próxima (índice) dentro de `alcance`, ou -1 */
+/** monitor da biblioteca mais próximo (índice em computadoresLocais) dentro de `alcance`, ou -1 */
 export function computadorPerto(p: P2, alcance = 2.6): number {
   let melhor = -1, md = alcance;
   computadoresLocais().forEach((c, i) => { const w = mundo(c), d = Math.hypot(p.x - w.x, p.z - w.z); if (d < md) { md = d; melhor = i; } });

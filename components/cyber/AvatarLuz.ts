@@ -33,11 +33,12 @@ export type AvatarLuzHandle = {
   /** Idle/Walk/Run em crossfade + neurônios + `sentado` (0..1) = na própria base: em pé no painel holográfico,
    *  DIGITANDO (braços baixos e pra frente, mãos batendo de leve) — a interação energética com as telas; aura pulsa.
    *  `meditando` (0..1) = descanso (vista de fora, antes de entrar): flutuando de pernas cruzadas, mãos nos joelhos.
+   *  `pilotando` (0..1) = sentado no assento da cabine da nave: coxas na horizontal, canelas pra baixo, mãos nos manches.
    *  `jato` (0..1) = mochila a jato acesa (voando): as chamas dos dois propulsores crescem.
    *  `ar` = no ar de mochila: PLANANDO (jatos acesos: corpo inclinado pra frente quando anda, braços abertos pra trás,
    *  pernas dobradas) ou em QUEDA LIVRE (caindo rápido: braços pra cima, joelhos dobrados); ao tocar o chão, um
    *  agachamento curto de POUSO. */
-  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; jato?: number; ar?: { vy: number; movendo: boolean } | null; dt: number; t: number }): void;
+  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean } | null; dt: number; t: number }): void;
   /** `facing` = atan2(dx, dz) do movimento (a conversão pro modelo é interna). */
   olharPara(facing: number): void;
   /** Troca a cor da armadura (cosmético / ordem canônica chegou depois). */
@@ -45,6 +46,8 @@ export type AvatarLuzHandle = {
   dispose(): void;
 };
 
+/** quanto o corpo desce pra sentar no assento da cabine (quadril de pé ≈ 1 m → sentado ≈ 0,55 m) */
+const SENTA_Y = 0.45;
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const achar = (clips: THREE.AnimationClip[], re: RegExp) => clips.find((c) => re.test(c.name)) ?? clips[0];
 
@@ -138,14 +141,26 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   const frente = new THREE.Vector3(), lateral = new THREE.Vector3(), cima = new THREE.Vector3(0, 1, 0), qG = new THREE.Quaternion();
   return {
     group: grupo, meshes,
-    animar({ andando, correndo, sentado = 0, meditando = 0, jato = 0, ar = null, dt, t }) {
+    animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, dt, t }) {
       const k = Math.min(1, dt * 8), corre = !!correndo && andando;
       wWalk += ((andando && !corre ? 1 : 0) - wWalk) * k; wRun += ((corre ? 1 : 0) - wRun) * k;
       if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk); run.setEffectiveWeight(wRun); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun)); mixer.update(dt); }
       let d = alvo - grupo.rotation.y; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
       grupo.rotation.y += d * 0.15;
       // na base: em pé, levemente inclinado pro painel; meditando: abaixa (pernas cruzadas) e flutua devagar
-      corpo.position.set(0, meditando * (-0.5 + (parado ? 0 : 0.06 * Math.sin(t * 1.1))), 0); corpo.rotation.x = -0.07 * sentado;
+      corpo.position.set(0, meditando * (-0.5 + (parado ? 0 : 0.06 * Math.sin(t * 1.1))) - SENTA_Y * pilotando, 0); corpo.rotation.x = -0.07 * sentado + 0.08 * pilotando;
+      if ((ossos.length || pernas.length) && pilotando > 0.02) {
+        grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
+        frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
+        for (const o of pernas) {
+          dirAlvo.copy(frente).multiplyScalar(1).addScaledVector(cima, -0.06).addScaledVector(lateral, 0.1 * o.lado).normalize(); apontar(o.coxa, o.canela, dirAlvo, pilotando);   // coxa: pra frente
+          dirAlvo.copy(cima).multiplyScalar(-1).addScaledVector(frente, 0.2).normalize(); apontar(o.canela, o.pe, dirAlvo, pilotando);   // canela: pra baixo
+        }
+        for (const o of ossos) {
+          dirAlvo.copy(cima).multiplyScalar(-0.8).addScaledVector(frente, 0.5).addScaledVector(lateral, 0.15 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, pilotando);
+          dirAlvo.copy(frente).multiplyScalar(0.92).addScaledVector(cima, -0.15).addScaledVector(lateral, 0.05 * o.lado).normalize(); apontar(o.ante, o.mao, dirAlvo, pilotando);   // mãos nos manches
+        }
+      }
       if ((ossos.length || pernas.length) && meditando > 0.02) {
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
         frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();   // lateral·lado = pra fora

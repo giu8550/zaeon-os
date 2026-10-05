@@ -131,7 +131,7 @@ export function sanitizarPresenca(raw: unknown): Presenca | null {
   if (typeof r.userId !== "string" || !/^[a-f0-9]{24}$/i.test(r.userId)) return null;
   const x = num(r.x, -COORD, COORD), z = num(r.z, -COORD, COORD), facing = num(r.facing, -10, 10);
   if (x === null || z === null || facing === null) return null;
-  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ...naveParadaDe(r.naveParada), ...(num(r.jet, 0, 300) !== null ? { jet: num(r.jet, 0, 300)! } : {}), ts: typeof r.ts === "number" ? r.ts : Date.now() };
+  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ...naveParadaDe(r.naveParada), ...(num(r.jet, 0, 300) !== null ? { jet: num(r.jet, 0, 300)! } : {}), ...(num(r.alt, 0, 300) !== null ? { alt: num(r.alt, 0, 300)! } : {}), ts: typeof r.ts === "number" ? r.ts : Date.now() };
 }
 
 /** Ponte chat → nota: um "ponto importante" da Sala de Pesquisa vira nota SUGERIDA perto do avatar. */
