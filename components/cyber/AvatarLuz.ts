@@ -119,7 +119,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       // interação energética (sentado): braços se estendem pra frente e pra cima, rumo à tela no alto
       if (ossos.length && sentado > 0.02) {
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
-        frente.set(0, 0, 1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
+        frente.set(0, 0, -1).applyQuaternion(qG);   // o grupo gira f+π (olharPara): a frente do modelo é o −z do grupo lateral.crossVectors(cima, frente).normalize();
         const respira = 0.04 * Math.sin(t * 1.6);
         for (const o of ossos) {
           dirAlvo.copy(frente).multiplyScalar(0.78).addScaledVector(cima, 0.55 + respira).addScaledVector(lateral, 0.22 * o.lado).normalize();
