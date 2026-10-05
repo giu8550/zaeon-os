@@ -11,10 +11,10 @@ import { BASE_COLLIDER_R, BASE_INTERACT_R, basesDosMembros, localParaMundo, spaw
 import { empurrarParaFora, type Colisor } from "@/lib/cyber/colisao";
 import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, poiPerto, type POI } from "@/lib/cyber/landmarks";
-import { alturaEm, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
+import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
 import { CIDADE, computadorPerto, mundo, noPortalEntrada, noPortalVolta, resolverCidade } from "@/lib/cyber/ceu";
-import { VOO, passoVoo, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
+import { VOO, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { criarCidade, type CidadeHandle } from "./Cidade";
 import { criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
@@ -93,6 +93,8 @@ export class CyberEngine {
   private nave: NaveHandle | null = null;
   private naveEst: EstadoVoo = { ...mundo(CIDADE.hangar), y: CIDADE.pisoY, yaw: Math.PI, vx: 0, vy: 0, vz: 0 };
   private pilotando = false; private pousado = true; private voY = { subir: false, descer: false }; private yawAnt = 0;
+  /** direcional na tela (desktop) e "Pousar" (desce sozinho até encostar; qualquer comando manual cancela) */
+  private botDir = { x: 0, z: 0 }; private autoPouso = false;
   private portalArmado = true;   // o anel de entrada só dispara de novo depois de sair dele
   private estadoQG = "";
   private eu!: Ator;
@@ -255,7 +257,8 @@ export class CyberEngine {
   /** embarca na nave (precisa estar perto dela) */
   embarcar() {
     if (!this.nave || this.pilotando || !this.navePerto()) return;
-    this.pilotando = true; this.pousado = true; this.altoEm = null; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0;
+    if (this.noTopo) this.o.onTopo?.(false);
+    this.pilotando = true; this.pousado = true; this.autoPouso = false; this.altoEm = null; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0;
     this.naveEst = { ...this.naveEst, vx: 0, vy: 0, vz: 0 };
     this.eu.av.group.visible = false; this.eu.tag.style.display = "none";
   }
@@ -264,7 +267,20 @@ export class CyberEngine {
     if (!this.pilotando || !this.pousado) return;
     const n = this.naveEst, lado = { x: Math.cos(n.yaw) * 3.4, z: -Math.sin(n.yaw) * 3.4 };
     let q = { x: n.x + lado.x, z: n.z + lado.z };
+    const z = this.zaeon(), mz = z ? marcoNav(z.poi) : null, dz = z ? Math.hypot(n.x - z.poi.x, n.z - z.poi.z) : Infinity;
+    const [corpoZ, cupulaZ] = z ? this.pilaresZaeon(z) : [];
     if (n.y >= CIDADE.pisoY - 0.5) { q = resolverCidade(q); this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; }
+    else if (z && cupulaZ && dz < cupulaZ.r && n.y >= cupulaZ.topo - 0.6) {
+      // pousou em cima da cúpula da Zaeon → sai no TOPO (a base do dono; a nave só é pilotada pelo fundador)
+      const e = this.eixoTopo()!; this.pilotando = false; this.altoEm = null; this.noTopo = true;
+      this.eu.pos.set(e.x, 0, e.z); this.eu.av.group.visible = true; this.o.onTopo?.(true); return;
+    }
+    else if (z && mz && corpoZ && dz < corpoZ.r && n.y >= corpoZ.topo - 0.6) {
+      // pousou sobre as muralhas → desce pro salão (dentro das muralhas, na direção da nave), fora dos sólidos
+      const a = Math.atan2(n.z - mz.z, n.x - mz.x), rr = Math.min(dz, mz.nav.muralhaR - 2.5);
+      q = empurrarParaFora({ x: mz.x + Math.cos(a) * rr, z: mz.z + Math.sin(a) * rr }, colisoresDoAlto(mz));
+      this.altoEm = z.poi.id; this.yNav = mz.nav.pisoY;
+    }
     else {
       this.altoEm = null; this.yNav = 0;
       for (const { mn } of this.marcosNav()) q = resolverPasso(mn, false, q, q);
@@ -272,11 +288,17 @@ export class CyberEngine {
     }
     this.pilotando = false; this.eu.pos.set(q.x, 0, q.z); this.eu.av.group.visible = true;
   }
-  /** botões SUBIR/DESCER (touch) */
-  comandoVoo(c: { subir?: boolean; descer?: boolean }) { if (c.subir !== undefined) this.voY.subir = c.subir; if (c.descer !== undefined) this.voY.descer = c.descer; }
-  private navePerto() { const n = this.naveEst; return Math.hypot(this.eu.pos.x - n.x, this.eu.pos.z - n.z) < 6 && Math.abs(this.eu.alt - n.y) < 3; }
-  /** sólidos pra nave: os marcos andáveis como cilindros */
-  private solidosDeVoo(): Pilar[] { return this.marcosNav().map(({ mn }) => ({ x: mn.x, z: mn.z, r: mn.nav.chaoR, topo: mn.nav.pisoY + 8 })); }
+  /** botões de movimento na tela: SUBIR/DESCER (segurar) */
+  comandoVoo(c: { subir?: boolean; descer?: boolean }) { if (c.subir !== undefined) this.voY.subir = c.subir; if (c.descer !== undefined) this.voY.descer = c.descer; if (c.subir || c.descer) this.autoPouso = false; }
+  /** botões de movimento na tela: direcional (x = direita, z = trás; relativo à câmera, como WASD) */
+  direcaoVoo(x: number, z: number) { this.botDir.x = x; this.botDir.z = z; if (x || z) this.autoPouso = false; }
+  /** "Pousar": desce sozinho até encostar no chão embaixo (mapa, cidade ou topo da Zaeon) */
+  pousar() { if (this.pilotando && !this.pousado) this.autoPouso = true; }
+  private navePerto() { const n = this.naveEst; return Math.hypot(this.eu.pos.x - n.x, this.eu.pos.z - n.z) < 7 && Math.abs(this.eu.alt - n.y) < 7; }
+  /** sólidos de voo da Zaeon: corpo (até o alto das muralhas) e cúpula (topo do dono), acompanhando a flutuação */
+  private pilaresZaeon(z: LandmarkHandle): Pilar[] { const mn = marcoNav(z.poi); return mn ? pilaresDoMarco({ x: mn.x, z: mn.z, chaoR: mn.nav.chaoR, altura: z.poi.altura + this.boia(z), escala: z.poi.escala ?? 1, cupula: !!z.topo }) : []; }
+  /** sólidos pra nave: os marcos andáveis como cilindros (quem vem de cima pousa no topo) */
+  private solidosDeVoo(): Pilar[] { return this.marcosNav().flatMap(({ lm }) => this.pilaresZaeon(lm)); }
 
   // ───────────── marcos / dono ─────────────
   /** o marco com topo de acesso "dono" (Zaeon) */
@@ -345,9 +367,10 @@ export class CyberEngine {
       if (k === "shift") { this.keys.shift = true; return; }
       if (k === " " || k === "spacebar") { if (this.pilotando) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.pular(); e.preventDefault(); } return; }
       if (k === "f" && this.pilotando && this.pousado) { this.desembarcar(); return; }   // na vista (landing) o ESPAÇO não faz nada e a página rola normal
+      if ((k === "e" || k === "q") && this.pilotando) { this.voY[k === "e" ? "subir" : "descer"] = true; this.autoPouso = false; e.preventDefault(); return; }
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { this.keys[k] = true; e.preventDefault(); }
     });
-    on("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "shift") { this.keys.shift = false; return; } if (k === " " || k === "spacebar") { this.espaco = false; this.voY.subir = false; return; } this.keys[k] = false; });
+    on("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "shift") { this.keys.shift = false; return; } if (k === " " || k === "spacebar") { this.espaco = false; this.voY.subir = false; return; } if (k === "e") this.voY.subir = false; if (k === "q") this.voY.descer = false; this.keys[k] = false; });
     onC("pointerdown", (e) => {
       this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.ptrs.size === 2) { const [a, b] = [...this.ptrs.values()]; this.pinch0 = Math.hypot(a!.x - b!.x, a!.y - b!.y); this.dist0 = this.camDist; }
@@ -482,7 +505,7 @@ export class CyberEngine {
   private loop(now: number) {
     if (!this.vivo) return;
     this.raf = requestAnimationFrame((t) => this.loop(t));
-    const dt = Math.min(0.05, this.clock.getDelta()), t = now * 0.001;
+    const dtReal = Math.min(VOO.dtMax, this.clock.getDelta()), dt = Math.min(0.05, dtReal), t = now * 0.001;   // o voo usa o dt REAL (independente de FPS)
     if (!this.visivel || document.hidden) return;
     const eu = this.eu, euId = this.o.eu.id;
 
@@ -492,14 +515,17 @@ export class CyberEngine {
       else if (this.holdT > 0) { this.holdT = Math.max(0, this.holdT - dt * 2); if (this.o.els.hold) this.o.els.hold.style.width = (this.holdT / 1.2) * 100 + "%"; }
       const s = this.assento(); eu.pos.set(s.x, 0, s.z); eu.facing = this.rotAssento(); this.sitT = 1; eu.moving = false;
     } else if (this.pilotando) {
-      // VOO: WASD/joystick relativo à câmera; Espaço/SUBIR sobe; Shift/DESCER desce; pousa ao encostar no chão
+      // VOO: WASD/joystick/direcional relativo à câmera; Espaço/E/SUBIR sobe; Shift/Q/DESCER desce; pousa ao encostar
       let ix = 0, iz = 0;
       if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
       if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
       if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
+      ix += this.botDir.x; iz += this.botDir.z;
+      const subir = this.voY.subir, descerManual = this.voY.descer || !!this.keys.shift;
+      if (ix || iz || subir || descerManual) this.autoPouso = false;
       const dir = moverRelativoCamera(ix, iz, this.camAz);
-      const r = passoVoo(this.naveEst, { wx: dir?.wx ?? 0, wz: dir?.wz ?? 0, subir: this.voY.subir, descer: this.voY.descer || !!this.keys.shift }, dt, this.solidosDeVoo());
-      this.naveEst = r.s; this.pousado = r.pousado;
+      const r = passoVooSub(this.naveEst, { wx: dir?.wx ?? 0, wz: dir?.wz ?? 0, subir, descer: descerManual || this.autoPouso }, dtReal, this.solidosDeVoo());
+      this.naveEst = r.s; this.pousado = r.pousado; if (r.pousado) this.autoPouso = false;
       eu.pos.set(r.s.x, 0, r.s.z); eu.facing = r.s.yaw; eu.moving = false; this.sitT = 0;
     } else {
       let ix = 0, iz = 0;
