@@ -36,6 +36,10 @@ services:
         NEXT_PUBLIC_CYBER_AVATAR_GLB: ${NEXT_PUBLIC_CYBER_AVATAR_GLB:-}
         NEXT_PUBLIC_CYBER_LANDMARKS: ${NEXT_PUBLIC_CYBER_LANDMARKS:-}
         NEXT_PUBLIC_AURA_ECONOMY: ${NEXT_PUBLIC_AURA_ECONOMY:-0}
+        # realtime do cyberespaço (docs/REALTIME_COLYSEUS_VOZ.md): pusher (padrão) | colyseus; voz on|off
+        NEXT_PUBLIC_REALTIME: ${NEXT_PUBLIC_REALTIME:-pusher}
+        NEXT_PUBLIC_VOZ: ${NEXT_PUBLIC_VOZ:-off}
+        NEXT_PUBLIC_COLYSEUS_URL: ${NEXT_PUBLIC_COLYSEUS_URL:-}
     container_name: zaeon_web
     # .env = base (vive no VPS). .env.secrets = segredos de runtime escritos pelo
     # deploy a partir dos GitHub Actions secrets (ex.: GOOGLE_CREDENTIALS). O último vence.
@@ -223,6 +227,29 @@ services:
     deploy:
       resources:
         limits: { memory: 384m }
+
+  # ── REALTIME do cyberespaço (Colyseus self-hosted): posição/presença + signaling da voz ──
+  #    docs/REALTIME_COLYSEUS_VOZ.md. Só rede interna; o público entra pelo Caddy em wss://<domínio>/colyseus.
+  #    REALTIME_SECRET (no .env do VPS) = o MESMO do web (o web assina o token de entrada, aqui só se confere).
+  #    Só é usado quando NEXT_PUBLIC_REALTIME=colyseus; com "pusher" (padrão) fica de pé sem ninguém conectar.
+  colyseus:
+    build: { context: ./server/colyseus, dockerfile: Dockerfile }
+    container_name: zaeon_colyseus
+    env_file: [.env]
+    environment:
+      PORT: "2567"
+      NODE_ENV: production
+    expose: ["2567"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2567/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits: { memory: 256m }
 
   caddy:
     image: caddy:2-alpine

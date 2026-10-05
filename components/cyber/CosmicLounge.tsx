@@ -73,6 +73,8 @@ function Tela() {
     void recarregar();
   }, [online, membros, recarregar]);
   const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true, qg: sala.eu.qg === true } : null), [sala.eu]);
+  // quem está online (pra voz abrir/fechar as conexões) — antes de qualquer return condicional (ordem dos hooks)
+  const onlineIds = useMemo(() => sala.online.map((m) => m.id), [sala.online]);
   // ações privilegiadas do dono (topo da Zaeon, portal da Cidade, nave): quem decide é o servidor (sessão → fundador)
   const pedirAcesso = useCallback(async (alvo: "topo" | "ceu" | "nave") => {
     if (!salaId) return { ok: false, erro: "Sem sala." };
@@ -98,6 +100,7 @@ function Tela() {
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
       souFundador={euSala.fundador === true} pedirAcesso={pedirAcesso}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
+      canalVoz={sala.canalVoz} onlineIds={onlineIds}
     />
   );
 }

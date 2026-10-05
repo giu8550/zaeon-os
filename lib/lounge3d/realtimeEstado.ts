@@ -2,7 +2,8 @@
  * lib/lounge3d/realtimeEstado.ts — estado e DIAGNÓSTICO do tempo real do lounge (Pusher), PURO e client-safe.
  * "Indisponível" só vale quando de fato falhou — nunca enquanto ainda está conectando — e sempre diz POR QUÊ.
  */
-export type EstadoRealtime = "conectando" | "pusher" | "erro" | "sem-chave";
+/** "pusher" | "colyseus" = conectado (o transporte em uso) */
+export type EstadoRealtime = "conectando" | "pusher" | "colyseus" | "erro" | "sem-chave";
 
 export type MotivoErro = "sem-credenciais-servidor" | "sessao" | "cheia" | "client-events" | "conexao" | "auth" | "desconhecido";
 
@@ -24,7 +25,7 @@ export function classificarErroPusher(e: unknown): MotivoErro {
 
 /** Texto pro usuário (curto) — `null` = não mostra nada. */
 export function avisoRealtime(estado: EstadoRealtime, motivo: MotivoErro | null): string | null {
-  if (estado === "pusher" || estado === "conectando") return null;
+  if (estado === "pusher" || estado === "colyseus" || estado === "conectando") return null;
   if (estado === "sem-chave") return "Tempo real indisponível (chave do Pusher ausente neste build).";
   switch (motivo) {
     case "sem-credenciais-servidor": return "Tempo real indisponível: o servidor está sem as credenciais do Pusher.";

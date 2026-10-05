@@ -76,6 +76,9 @@ export type CyberOpts = {
   onRota?: (destino: DestinoRota | null) => void;
   /** o dono clicou na TV do lounge da Zaeon (perto dela) → abre a caixa do recado pro QG do Andrei */
   onAbrirRecado?: () => void;
+  /** as poses remotas JÁ chegam suavizadas (netcode do Colyseus: interpolação + dead reckoning) → usa direto, sem
+   *  um 2º lerp (que só somaria atraso) */
+  remotosSuaves?: boolean;
   onPerto?: (perto: boolean) => void;
   onFalarCom?: (nome: string | null) => void;
   onEntrarEstudo?: () => void;
@@ -93,7 +96,9 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos:
   /** remotos: sons da nave dele (loops idle/voo) e passos */
   somNave?: { idle: LoopSom; voo: LoopSom; desce: LoopSom; sobe: LoopSom; voava: boolean; ev: EstadoSomNave; yAnt: number | null; vy: number } | null; passoT?: number; perto?: boolean;
   /** remotos: o jato contínuo da mochila dele + a última velocidade vertical no ar (pro baque do pouso) */
-  somJet?: LoopSom[] | null; vyUlt?: number };
+  somJet?: LoopSom[] | null; vyUlt?: number;
+  /** voz ao vivo (WebRTC) presa ao avatar; `falando` = segurando o push-to-talk agora */
+  vozH?: { remover(): void } | null; falando?: boolean };
 type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 
 /** cor da mesa do QG quando o Andrei não está na sala */
@@ -266,7 +271,7 @@ export class CyberEngine {
     const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + cor + ";"; tag.textContent = p.id === this.o.eu.id ? "" : p.name; this.o.overlay.appendChild(tag);   // o próprio avatar não leva rótulo
     return { id: p.id, name: p.name, color: cor, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag, alt: 0 };
   }
-  private removerAtor(a: Ator) { this.soltarSomNave(a); this.soltarSomJet(a); a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
+  private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
   // ───────────── API pública (React → engine) ─────────────
   iniciar(go = "viajar") {
@@ -524,6 +529,15 @@ export class CyberEngine {
       a.perto = pertoAgora;
     }
     s.atualizar(dt);
+  }
+  private vozPendente = new Map<string, MediaStream>();
+  /** a VOZ de alguém (WebRTC) chegou → sai pelo avatar dele (posicional); null = acabou. Se o avatar ainda não
+   *  existe (a voz chegou antes da 1ª pose), espera ele aparecer. */
+  vozDe(userId: string, stream: MediaStream | null) {
+    const a = this.remotos.get(userId);
+    if (!a) { if (stream) this.vozPendente.set(userId, stream); else this.vozPendente.delete(userId); return; }
+    a.vozH?.remover(); a.vozH = null;
+    if (stream) a.vozH = this.som.voz(a.av.group, stream);   // sem gesto ainda: a voz espera na fila do AudioCyber
   }
   /** o recado ATUAL do dono pro QG: holograma ao lado da tela do Andrei + a TV do lounge; recado NOVO (depois de
    *  carregar) acende o holograma e toca um ping lá */
@@ -948,8 +962,15 @@ export class CyberEngine {
           if (this.tVivo > 3) this.som.tocar("join", a.pos);   // quem já estava quando entrei não "chega"
           if (!this.pessoas.has(id)) this.setPessoas([...this.ordem.map((i) => this.pessoas.get(i)!), { id, name: p.name, color: p.color }]);
         }
-        const r = interpolar({ x: a.pos.x, z: a.pos.z, facing: a.facing }, { x: p.x, z: p.z, facing: p.facing }, dt);
-        a.pos.x = r.x; a.pos.z = r.z; a.facing = r.facing; a.moving = r.moving || p.moving === true;
+        if (this.o.remotosSuaves) {
+          const andou = Math.hypot(p.x - a.pos.x, p.z - a.pos.z) > 0.004;
+          a.pos.x = p.x; a.pos.z = p.z; a.facing = p.facing; a.moving = andou || p.moving === true;
+        } else {
+          const r = interpolar({ x: a.pos.x, z: a.pos.z, facing: a.facing }, { x: p.x, z: p.z, facing: p.facing }, dt);
+          a.pos.x = r.x; a.pos.z = r.z; a.facing = r.facing; a.moving = r.moving || p.moving === true;
+        }
+        a.falando = p.falando === true;   // voz (push-to-talk): 🎙 no rótulo
+        const pendente = this.vozPendente.get(id); if (pendente) { this.vozPendente.delete(id); this.vozDe(id, pendente); }
         a.sit += ((p.sit ? 1 : 0) - a.sit) * Math.min(1, dt * 3);
         // "no topo" só vale pra quem o SERVIDOR marcou como fundador (client event forjado não sobe ninguém)
         // regalias (topo/céu/nave) só pra quem o SERVIDOR marcou como fundador
@@ -1009,7 +1030,7 @@ export class CyberEngine {
       if (a === eu) { a.tag.style.display = "none"; continue; }   // o próprio avatar não leva nome
       const s = this.proj(new THREE.Vector3(a.pos.x, 2.1 + a.sit * -0.3 + a.alt, a.pos.z));
       a.tag.style.left = s.x + "px"; a.tag.style.top = s.y + "px"; a.tag.style.display = this.menu || !s.vis ? "none" : "block";
-      { const perto = eu.pos.distanceTo(a.pos) < 3.0; a.tag.style.borderColor = perto ? "#fff" : ""; a.tag.textContent = (perto ? "💬 " : "") + a.name; }
+      { const perto = eu.pos.distanceTo(a.pos) < 3.0; a.tag.style.borderColor = a.falando ? "#9affd0" : perto ? "#fff" : ""; a.tag.textContent = (a.falando ? "🎙 " : perto ? "💬 " : "") + a.name; }
     }
     for (let i = this.falas.length - 1; i >= 0; i--) {
       const f = this.falas[i]!; if (now > f.ate) { f.el.remove(); this.falas.splice(i, 1); continue; }

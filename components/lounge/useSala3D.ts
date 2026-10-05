@@ -4,6 +4,8 @@
  *   GET /api/lounge3d/[id] (conteúdo, membros) · Pusher presença `presence-lounge3d-<id>` (quem está;
  *   teto 5 no auth → "cheia") · posições por `client-pos` (12 Hz, sem servidor; fallback POST /pos a 4 Hz)
  *   · chat (POST → evento "chat") · conteúdo (PATCH → evento "conteudo").
+ *   Com NEXT_PUBLIC_REALTIME=colyseus, PRESENÇA e POSIÇÃO vão pelo Colyseus self-hosted (./salaColyseus: estado
+ *   sincronizado, interpolação + dead reckoning, sem custo por mensagem); chat/conteúdo/recado seguem no Pusher.
  * Presença/chat são efêmeros; só notas/artefatos persistem.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,6 +13,8 @@ import type PusherClient from "pusher-js";
 import { sanitizarPresenca } from "@/lib/lounge3d/sala";
 import { HEARTBEAT_MS, HELLO_JITTER_MS, poseMudou, type Pose } from "@/lib/lounge3d/pose";
 import { classificarErroPusher, ehFalhaDeConexao, type EstadoRealtime, type MotivoErro } from "@/lib/lounge3d/realtimeEstado";
+import { POSE_HZ_COLYSEUS, transporteRealtime } from "@/lib/lounge3d/realtime";
+import { conectarColyseus, type CanalVoz, type ConexaoColyseus } from "./salaColyseus";
 import { EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
 
 export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; qg?: boolean };
@@ -48,6 +52,10 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
   const ultimaEnviada = useRef<Pose | null>(null);
   /** emissor atual (ref p/ o efeito do Pusher e o heartbeat chamarem sem reinstalar) */
   const emitirRef = useRef<(p: Pose, forcar: boolean) => void>(() => {});
+  /** transporte de posição/presença (flag de build): "pusher" (padrão, rollback) | "colyseus" */
+  const modo = transporteRealtime();
+  const colyRef = useRef<ConexaoColyseus | null>(null);
+  const [canalVoz, setCanalVoz] = useState<CanalVoz | null>(null);
 
   const carregar = useCallback(async () => {
     if (!salaId) return;
@@ -100,8 +108,10 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
         const pose = poseInicialRef.current?.(id); if (!pose) return;
         mapaRemotos.set(id, { userId: id, name: m.info?.name ?? "Alguém", color: m.info?.color ?? "#4aa3ff", x: pose.x, z: pose.z, facing: pose.facing, moving: false, sit: pose.sit ?? true, ts: Date.now() });
       };
-      const sync = () => { const lista: Membro[] = []; ch.members?.each((m: any) => { lista.push({ id: String(m.id), name: m.info?.name ?? "Alguém", image: m.info?.image ?? null, color: m.info?.color ?? "#4aa3ff" }); seed(m); }); setOnline(lista); };
+      const colyseus = modo === "colyseus";   // presença/posição pelo Colyseus: o Pusher fica só com chat/conteúdo/recado
+      const sync = () => { if (colyseus) return; const lista: Membro[] = []; ch.members?.each((m: any) => { lista.push({ id: String(m.id), name: m.info?.name ?? "Alguém", image: m.info?.image ?? null, color: m.info?.color ?? "#4aa3ff" }); seed(m); }); setOnline(lista); };
       ch.bind("pusher:subscription_succeeded", () => {
+        if (colyseus) return;
         setRealtime("pusher"); setMotivoRealtime(null); sync();
         // handshake: "cheguei" → quem já está reenvia a pose na hora (ninguém depende de o outro andar)
         try { ch.trigger(EV_HELLO, { id: euId }); } catch { /* client events off: o seed + heartbeat cobrem */ }
@@ -109,15 +119,18 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       });
       ch.bind(EV_HELLO, () => { setTimeout(() => { if (vivo && ultimaPose.current) emitirRef.current(ultimaPose.current, true); }, Math.random() * HELLO_JITTER_MS); });
       ch.bind("pusher:subscription_error", (e: any) => {
+        if (colyseus) { console.warn("[lounge] pusher (chat/conteúdo) indisponível:", e); return; }
         const motivo = classificarErroPusher(e);
         console.warn("[lounge] assinatura do canal falhou:", motivo, e);
         if (motivo === "cheia") { setEstado("cheia"); return; }
         setRealtime("erro"); setMotivoRealtime(motivo);
       });
-      ch.bind("pusher:member_added", (m: any) => { seed(m); sync(); });
-      ch.bind("pusher:member_removed", (m: any) => { mapaRemotos.delete(String(m.id)); sync(); });
-      const onPos = (raw: unknown) => { const pr = sanitizarPresenca(raw); if (pr && pr.userId !== euId) mapaRemotos.set(pr.userId, pr); };
-      ch.bind(EV_POS_CLIENTE, onPos); ch.bind(EV_POS, onPos);
+      if (!colyseus) {
+        ch.bind("pusher:member_added", (m: any) => { seed(m); sync(); });
+        ch.bind("pusher:member_removed", (m: any) => { mapaRemotos.delete(String(m.id)); sync(); });
+        const onPos = (raw: unknown) => { const pr = sanitizarPresenca(raw); if (pr && pr.userId !== euId) mapaRemotos.set(pr.userId, pr); };
+        ch.bind(EV_POS_CLIENTE, onPos); ch.bind(EV_POS, onPos);
+      }
       ch.bind(EV_CHAT, (m: MensagemChat) => setChat((c) => [...c.slice(-199), m]));
       // recado do dono pro QG (holograma ao lado da tela do Andrei): chega na hora e fica no conteúdo
       ch.bind(EV_RECADO, (d: { recado: RecadoQG | null }) => setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, recadoQG: d.recado } } : s)));
@@ -126,8 +139,28 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
         setSala((s) => (s ? { ...s, conteudo: d.conteudo, title: d.title ?? s.title } : s));
       });
     })();
-    return () => { vivo = false; try { pusherRef.current?.disconnect(); } catch { /* ignore */ } pusherRef.current = null; canalRef.current = null; setOnline([]); mapaRemotos.clear(); };
-  }, [salaId, euId]);
+    return () => { vivo = false; try { pusherRef.current?.disconnect(); } catch { /* ignore */ } pusherRef.current = null; canalRef.current = null; if (modo !== "colyseus") { setOnline([]); mapaRemotos.clear(); } };
+  }, [salaId, euId, modo]);
+
+  // COLYSEUS: presença + posição (estado sincronizado, netcode) e o signaling da voz
+  useEffect(() => {
+    if (modo !== "colyseus" || !salaId || !euId) return;
+    const mapaRemotos = remotos.current;
+    setRealtime("conectando"); setMotivoRealtime(null);
+    const c = conectarColyseus({
+      salaId, euId, remotos: mapaRemotos,
+      poseInicial: (id) => poseInicialRef.current?.(id) ?? null,
+      onOnline: (lista) => setOnline(lista.map((m) => ({ id: m.id, name: m.name, image: null, color: m.color, fundador: m.fundador, qg: m.qg }))),
+      onEstado: (e) => {
+        if (e === "ok") { setRealtime("colyseus"); setMotivoRealtime(null); if (ultimaPose.current) emitirRef.current(ultimaPose.current, true); }
+        else if (e === "cheia") setEstado("cheia");
+        else if (e === "erro") { setRealtime("erro"); setMotivoRealtime("conexao"); }
+        else setRealtime((r) => (r === "erro" ? r : "conectando"));
+      },
+    });
+    colyRef.current = c; setCanalVoz(c.voz);
+    return () => { c.sair(); colyRef.current = null; setCanalVoz(null); setOnline([]); mapaRemotos.clear(); };
+  }, [salaId, euId, modo]);
 
   /** Emite a pose (throttle; `forcar` ignora o throttle — hello/heartbeat). client-pos → sem servidor; sem client events → POST a 4 Hz. */
   const euRef = useRef(eu); euRef.current = eu;
@@ -135,9 +168,10 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     const me = euRef.current;
     if (!salaId || !me) return;
     const agora = performance.now();
-    const hz = clientEventsOk.current ? POS_HZ : POS_HZ_FALLBACK;
+    const hz = modo === "colyseus" ? POSE_HZ_COLYSEUS : clientEventsOk.current ? POS_HZ : POS_HZ_FALLBACK;
     if (!forcar && agora - ultimoPos.current < 1000 / hz) return;
     ultimoPos.current = agora; ultimaEnviada.current = p;
+    if (modo === "colyseus") { colyRef.current?.enviar(p); return; }   // a identidade vem do token, não daqui
     const payload: Presenca = { userId: me.id, name: me.name, color: me.color, ...p, ts: Date.now() };
     const ch = canalRef.current;
     if (clientEventsOk.current && ch?.subscribed) {
@@ -146,7 +180,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       clientEventsOk.current = false; // app Pusher sem "client events": cai no servidor
     }
     void fetch(`/api/lounge3d/${salaId}/pos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }).catch(() => {});
-  }, [salaId]);
+  }, [salaId, modo]);
   emitirRef.current = emitir;
 
   /** O engine chama a cada frame: guarda a pose e só envia quando MUDOU (parado não gasta a cota do Pusher). */
@@ -192,5 +226,5 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     return { ok: true };
   }, [salaId]);
 
-  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, recadoQG: sala?.conteudo.recadoQG ?? null, recarregar: carregar };
+  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, canalVoz, recadoQG: sala?.conteudo.recadoQG ?? null, recarregar: carregar };
 }

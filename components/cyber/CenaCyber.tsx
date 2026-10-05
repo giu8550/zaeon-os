@@ -9,6 +9,10 @@ import { tocarUI } from "./AudioCyber";
 import { MAX_TEXTO_RECADO, type MensagemChat, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
 import { landmarksOn, type POI } from "@/lib/cyber/landmarks";
 import { CyberEngine, type PessoaCyber } from "./engine";
+import { criarVoz, type VozHandle } from "./Voz";
+import { transporteRealtime, vozLigada } from "@/lib/lounge3d/realtime";
+import { ehTeclaFalar } from "@/lib/cyber/voz";
+import type { CanalVoz } from "@/components/lounge/salaColyseus";
 import Joystick from "./Joystick";
 import ControlesVoo from "./ControlesVoo";
 
@@ -35,6 +39,9 @@ export type CenaCyberProps = {
   recadoQG?: RecadoQG | null;
   /** o DONO manda (texto) ou apaga (null) o recado — o servidor confere a sessão */
   enviarRecado?: (texto: string | null) => Promise<{ ok: boolean; erro?: string }>;
+  /** VOZ (push-to-talk, NEXT_PUBLIC_VOZ=on + colyseus): o signaling da room e quem está online (userIds) */
+  canalVoz?: CanalVoz | null;
+  onlineIds?: string[];
 };
 
 
@@ -64,6 +71,9 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [som, setSom] = useState(() => (typeof window === "undefined" ? { ligado: true, volume: 0.8 } : lerPrefs((k) => { try { return localStorage.getItem(k); } catch { return null; } })));
   const [painelSom, setPainelSom] = useState(false);
   // RECADO pro QG: a caixa abre ao clicar na TV do lounge da Zaeon (só o dono)
+  // VOZ: segurar G (ou o botão no celular) = falar
+  const voz = useRef<VozHandle | null>(null), [falandoEu, setFalandoEu] = useState(false);
+  const comVoz = tela && vozLigada() && !!p.canalVoz;
   const [recadoAberto, setRecadoAberto] = useState(false), [recadoTxt, setRecadoTxt] = useState(""), [recadoEnviando, setRecadoEnviando] = useState(false);
   const mudarSom = (n: { ligado: boolean; volume: number }) => {
     setSom(n);
@@ -125,6 +135,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onEstadoQG: setQg,
       onVoo: setVoo,
       onRota: setRota,
+      remotosSuaves: transporteRealtime() === "colyseus",
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon manda recados pro QG."); return; } setRecadoTxt(""); setRecadoAberto(true); },
     }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
       .catch(() => { if (!cancelado) setFalha(true); });
@@ -134,6 +145,24 @@ export default function CenaCyber(p: CenaCyberProps) {
   }, []);
 
   useEffect(() => { engine.current?.setPessoas(p.membros); }, [p.membros]);
+  // VOZ: a malha WebRTC vive enquanto houver o canal (Colyseus); o áudio de quem fala sai pelo avatar dele
+  useEffect(() => {
+    if (!comVoz || !p.canalVoz) return;
+    const v = criarVoz({ euId: p.eu.id, canal: p.canalVoz, aoAudio: (id, s) => engine.current?.vozDe(id, s), aoErro: avisar });
+    voz.current = v;
+    return () => { v.dispose(); voz.current = null; setFalandoEu(false); };
+  }, [comVoz, p.canalVoz, p.eu.id, avisar]);
+  useEffect(() => { voz.current?.pares(p.onlineIds ?? []); }, [p.onlineIds, comVoz]);
+  const falar = useCallback((on: boolean) => { if (!voz.current) return; setFalandoEu(on); void voz.current.segurar(on); }, []);
+  useEffect(() => {
+    if (!comVoz) return;
+    const digitando = () => { const a = document.activeElement; return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || (a as HTMLElement).isContentEditable); };
+    const baixo = (e: KeyboardEvent) => { if (ehTeclaFalar(e, digitando())) { e.preventDefault(); falar(true); } };
+    const cima = (e: KeyboardEvent) => { if (e.key === "g" || e.key === "G") falar(false); };
+    const solta = () => falar(false);
+    window.addEventListener("keydown", baixo); window.addEventListener("keyup", cima); window.addEventListener("blur", solta);
+    return () => { window.removeEventListener("keydown", baixo); window.removeEventListener("keyup", cima); window.removeEventListener("blur", solta); };
+  }, [comVoz, falar]);
   // o recado atual: holograma no QG + a TV do lounge (e um "ping" quando chega um novo)
   useEffect(() => { engine.current?.setRecado(p.recadoQG ?? null); }, [p.recadoQG, pronto]);
 
@@ -288,6 +317,11 @@ export default function CenaCyber(p: CenaCyberProps) {
             </div>
           </div>
         </div>
+      )}
+      {comVoz && falandoEu && <p role="status" className="pointer-events-none absolute left-1/2 top-[120px] z-40 -translate-x-1/2 rounded-full border border-emerald-300/40 bg-[#062018]/85 px-4 py-1.5 text-xs font-semibold text-emerald-200">🎙 Falando…</p>}
+      {comVoz && touch && !menu && (
+        <button type="button" aria-label="Segurar pra falar" onPointerDown={(e) => { e.preventDefault(); falar(true); }} onPointerUp={() => falar(false)} onPointerLeave={() => falar(false)} onPointerCancel={() => falar(false)}
+          className={`absolute bottom-[150px] right-4 z-30 min-h-[52px] select-none rounded-full border px-4 text-sm font-semibold backdrop-blur ${falandoEu ? "border-emerald-300 bg-emerald-400/30 text-emerald-50" : "border-white/20 bg-[#070c22]/80 text-sky-100"}`}>🎤 {falandoEu ? "Falando…" : "Segurar pra falar"}</button>
       )}
       {aviso2 && <p role="status" className="absolute left-1/2 top-[164px] z-40 -translate-x-1/2 rounded-full bg-[#1a0f08]/90 px-4 py-2 text-xs text-amber-100">{aviso2}</p>}
       <div aria-hidden="true" className={`pointer-events-none absolute inset-0 z-[45] bg-black transition-opacity duration-300 ${fade ? "opacity-100" : "opacity-0"}`} />

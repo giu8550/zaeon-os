@@ -36,6 +36,7 @@ export type Presenca = {
   naveParada?: { x: number; y: number; z: number; yaw: number };   // a nave pousada FORA do hangar (fora dela) — idem
   jet?: number;       // voando de mochila a jato: altura no mundo (qualquer pessoa; teto no cliente)
   alt?: number;       // em pé num lugar alto que o chão não explica (o dorso da nave): altura no mundo
+  falando?: boolean;  // voz (push-to-talk) ligada agora — indicador no avatar (transporte colyseus)
   ts?: number;
 };
 
