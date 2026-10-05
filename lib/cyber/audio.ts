@@ -12,19 +12,22 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave";
 
-/** como cada som toca: `pos` = PositionalAudio (mono, no mundo); `2d` = THREE.Audio (leito/UI) */
-export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: number }> = {
-  "space-bed": { modo: "2d", loop: true, volume: 0.22 },
+/** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
+export const TAXA_432 = 432 / 440;
+
+/** como cada som toca: `pos` = PositionalAudio (mono, no mundo); `2d` = THREE.Audio (leito/UI); `taxa` = playbackRate */
+export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: number; taxa?: number }> = {
+  "space-bed": { modo: "2d", loop: true, volume: 0.22, taxa: TAXA_432 },
   "blackhole-hum": { modo: "pos", loop: true, volume: 0.55 },
-  crystals: { modo: "pos", loop: true, volume: 0.35 },
+  crystals: { modo: "pos", loop: true, volume: 0.3 },
   "ship-flight": { modo: "pos", loop: true, volume: 0.7 },
   "ship-idle": { modo: "pos", loop: true, volume: 0.35 },
   "ship-takeoff": { modo: "pos", loop: false, volume: 0.9 },
   "ship-landing": { modo: "pos", loop: false, volume: 0.8 },     // ao DESCER: o motor baixando (sem impacto)
   "ship-touchdown": { modo: "pos", loop: false, volume: 0.9 },   // no instante do POUSO: impacto grave + assentamento
-  "step-1": { modo: "pos", loop: false, volume: 0.3 },
-  "step-2": { modo: "pos", loop: false, volume: 0.3 },
-  "step-3": { modo: "pos", loop: false, volume: 0.3 },
+  "step-1": { modo: "pos", loop: false, volume: 0.6 },
+  "step-2": { modo: "pos", loop: false, volume: 0.6 },
+  "step-3": { modo: "pos", loop: false, volume: 0.6 },
   jump: { modo: "pos", loop: false, volume: 0.6 },
   land: { modo: "pos", loop: false, volume: 0.55 },
   "near-ping": { modo: "pos", loop: false, volume: 0.45 },
@@ -38,13 +41,25 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
 };
 export const urlDoSom = (n: NomeSom) => `${PASTA_SONS}${n}.ogg`;
 
-/** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo). */
-export const DISTANCIA = {
+/** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo).
+ *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
+ *  quem precisa SUMIR de verdade usa `modelo: "linear"` (ganho chega a 0 no `max`). */
+export type Dist = { ref: number; max: number; rolloff: number; modelo?: "inverse" | "linear" };
+export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "grande" | "naveLocal", Dist> = {
   padrao: { ref: 6, max: 60, rolloff: 1.2 },
-  perto: { ref: 2.5, max: 22, rolloff: 1.4 },       // passos, pulo, sentar (coisas pequenas)
+  perto: { ref: 2.5, max: 22, rolloff: 1.4 },       // passos/pulo dos COLEGAS (coisas pequenas)
+  eu: { ref: 12, max: 60, rolloff: 1 },             // os MEUS passos/pulo: a câmera (o ouvinte) fica ~8–10 m atrás do avatar
+  cristais: { ref: 4, max: 26, rolloff: 1, modelo: "linear" },   // só perto: some de verdade longe
   grande: { ref: 14, max: 160, rolloff: 1 },        // buraco negro, nave dos outros
   naveLocal: { ref: 40, max: 400, rolloff: 0.25 },  // a nave em que EU estou: não vira de lado ao girar a câmera
-} as const;
+};
+
+/** cristais da base: só se ouvem com o AVATAR perto dela (cheio até 4 m, some aos 12 m) — o ouvinte é a câmera */
+export const CRISTAIS_PERTO = { cheio: 4, some: 12 };
+export function fatorCristais(d: number): number {
+  const k = (CRISTAIS_PERTO.some - d) / (CRISTAIS_PERTO.some - CRISTAIS_PERTO.cheio);
+  const u = Math.max(0, Math.min(1, k)); return u * u * (3 - 2 * u);
+}
 
 export const PREF_SFX = "zaeon_sfx", PREF_VOLUME = "zaeon_volume";
 /** preferências: som ligado por padrão ("0" desliga); volume mestre 0..1 (padrão 0,8) */

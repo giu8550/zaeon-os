@@ -9,9 +9,7 @@
  * Regras puras e a tabela dos sons em lib/cyber/audio.ts. dispose() para e desconecta tudo.
  */
 import * as THREE from "three";
-import { DISTANCIA, FADE_ENTRADA, SONS, criarLimiteVozes, lerPrefs, urlDoSom, type NomeSom } from "@/lib/cyber/audio";
-
-type Dist = { ref: number; max: number; rolloff: number };
+import { DISTANCIA, FADE_ENTRADA, SONS, criarLimiteVozes, lerPrefs, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
 export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom };
 
 export type AudioCyberHandle = {
@@ -55,13 +53,14 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
   const ler = () => lerPrefs((k) => (typeof localStorage !== "undefined" ? localStorage.getItem(k) : null));
   let prefs = ler();
 
-  const aplicarDist = (a: THREE.PositionalAudio, d: Dist) => { a.setRefDistance(d.ref); a.setMaxDistance(d.max); a.setRolloffFactor(d.rolloff); a.setDistanceModel("inverse"); };
+  const aplicarDist = (a: THREE.PositionalAudio, d: Dist) => { a.setRefDistance(d.ref); a.setMaxDistance(d.max); a.setRolloffFactor(d.rolloff); a.setDistanceModel(d.modelo ?? "inverse"); };
   const criarFonte = (nome: NomeSom, obj: THREE.Object3D | null, dist?: Dist): THREE.Audio<GainNode | PannerNode> | null => {
     const buf = buffers.get(nome); if (!buf || !listener) return null;
     const pos = SONS[nome].modo === "pos" && obj;
     const a: THREE.Audio<GainNode | PannerNode> = pos ? new THREE.PositionalAudio(listener) : new THREE.Audio(listener);
     if (pos) { aplicarDist(a as THREE.PositionalAudio, dist ?? DISTANCIA.padrao); obj!.add(a); }
     a.setBuffer(buf);
+    const taxa = SONS[nome].taxa; if (taxa) a.setPlaybackRate(taxa);   // ex.: o leito retocado pra 432 Hz
     return a;
   };
   /** cria (quando der) as fontes dos loops que estavam esperando os buffers */
