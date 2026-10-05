@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import SponsorsMarquee from "@/components/main/SponsorsMarquee";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
+import { musica } from "@/lib/audio/musica";
 
 const TIMELINE = {
     AUDIO_SRC: "/assets/sounds/boot-track.mp3",
@@ -127,44 +128,20 @@ export default function MacSplash({ show = true, onDone }: Props) {
     const handleInitiate = () => {
         if (hasStarted) return;
         startTimeRef.current = performance.now();
-        const audio = (window as any).zaeonAudio;
-
-        if (audio) {
-            // Loop durante a intro: a faixa não "acaba" no meio (corte seco). O fade
-            // abaixo é o ÚNICO responsável por parar — assim o final é sempre suave.
-            audio.loop = true;
-            audio.play().then(() => {
-                isAudioPlaying.current = true;
-                setHasStarted(true);
-                window.dispatchEvent(new CustomEvent("zaeon-music-sync"));
-                // Música inicial: toca ~60s no volume CHEIO e só então faz um fade-out LENTO
-                // (~10s, curva suave) e pausa. Antes ela fadeava desde o 1º segundo (15s) →
-                // parecia curta/cortada. Os timers sobrevivem ao fim do intro de propósito.
-                const startVol = typeof audio.volume === "number" ? audio.volume : 0.4;
-                const HOLD_MS = 33_000;
-                const FADE_MS = 10_000;
-                const steps = 60;
-                setTimeout(() => {
-                    let i = 0;
-                    const fade = setInterval(() => {
-                        i++;
-                        const k = 1 - i / steps;
-                        audio.volume = Math.max(0, startVol * k * k); // ease-out, sem degrau
-                        if (i >= steps) {
-                            clearInterval(fade);
-                            try { audio.pause(); audio.loop = false; } catch { /* ignore */ }
-                            isAudioPlaying.current = false;
-                            try { window.dispatchEvent(new CustomEvent("zaeon-music-end")); } catch { /* ignore */ }
-                        }
-                    }, FADE_MS / steps);
-                }, HOLD_MS);
-            }).catch((err: any) => {
-                console.warn("Bloqueio de áudio:", err);
-                setHasStarted(true);
-            });
-        } else {
+        // O "Iniciar" é o gesto que libera áudio no navegador: o DONO ÚNICO da música (lib/audio/musica) toca a faixa
+        // em loop durante a intro, segura ~33 s no volume cheio e então faz um fade-out LENTO (10 s) — nada de corte.
+        const m = musica();
+        m.destravar();
+        void m.tocar(TIMELINE.AUDIO_SRC, { loop: true }).then((ok) => {
+            isAudioPlaying.current = ok;
             setHasStarted(true);
-        }
+            if (!ok) return;
+            const HOLD_MS = 33_000, FADE_MS = 10_000;
+            setTimeout(() => {
+                // só fecha a faixa da INTRO (se a pessoa trocou de faixa no miniplayer, não mexe)
+                if (m.estado === "tocando" && m.elemento().src.endsWith(TIMELINE.AUDIO_SRC)) void m.parar(FADE_MS).then(() => { isAudioPlaying.current = false; });
+            }, HOLD_MS);
+        });
     };
 
     if (!visible) return null;

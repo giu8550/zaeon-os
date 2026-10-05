@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LAB_ENTRADA, MSG_ENTRAR_ESTUDO, ehMsgEntrarEstudo } from "@/lib/ui/loungeHub";
 import { detectarPerfil, precisaGirar, qualidadeDe } from "@/lib/cyber/dispositivo";
+import { PREF_SFX, PREF_VOLUME, lerPrefs } from "@/lib/cyber/audio";
+import { tocarUI } from "./AudioCyber";
 import type { MensagemChat, Presenca } from "@/lib/lounge3d/tipos";
 import { landmarksOn, type POI } from "@/lib/cyber/landmarks";
 import { CyberEngine, type PessoaCyber } from "./engine";
@@ -54,6 +56,14 @@ export default function CenaCyber(p: CenaCyberProps) {
   }, [avisar]);
   const [poiAberto, setPoiAberto] = useState<POI | null>(null), [noTopo, setNoTopo] = useState(false), [subindo, setSubindo] = useState(false), [erroTopo, setErroTopo] = useState<string | null>(null);
   const [correndo, setCorrendo] = useState(false), [txt, setTxt] = useState(""), [falha, setFalha] = useState(false);
+  // som: liga/desliga (`zaeon_sfx`) + volume mestre (`zaeon_volume`), lidos/gravados no localStorage
+  const [som, setSom] = useState(() => (typeof window === "undefined" ? { ligado: true, volume: 0.8 } : lerPrefs((k) => { try { return localStorage.getItem(k); } catch { return null; } })));
+  const [painelSom, setPainelSom] = useState(false);
+  const mudarSom = (n: { ligado: boolean; volume: number }) => {
+    setSom(n);
+    try { localStorage.setItem(PREF_SFX, n.ligado ? "1" : "0"); localStorage.setItem(PREF_VOLUME, String(n.volume)); } catch { /* storage bloqueado */ }
+    engine.current?.aplicarPrefsSom();
+  };
   const touch = useMemo(() => typeof window !== "undefined" && (matchMedia("(pointer:coarse)").matches || "ontouchstart" in window), []);
   // ONDE está rodando (celular × desktop, aparelho fraco) → capas de efeito só onde precisa (lib/cyber/dispositivo)
   const perfil = useMemo(() => typeof window === "undefined" ? { movel: false, leve: false, fraco: false } : detectarPerfil({
@@ -85,6 +95,7 @@ export default function CenaCyber(p: CenaCyberProps) {
     const onMsg = (e: MessageEvent) => {
       if (!ehMsgEntrarEstudo(e.data, e.origin, window.location.origin)) return;
       // O cyberespaço é pesado (WebGL + GLB): ao ir estudar ele é DESMONTADO já — nada de ficar vivo no background.
+      tocarUI("study-confirm");   // som de UI fora da cena (ela some já já)
       engine.current?.dispose(); engine.current = null;
       setAbrindo(true);
       router.push(LAB_ENTRADA);   // primeira tela do laboratório = aba de Pesquisa
@@ -155,6 +166,15 @@ export default function CenaCyber(p: CenaCyberProps) {
           )}
           {tela && (
             <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+              <div className="relative">
+                <button type="button" aria-label={som.ligado ? "Som (ligado)" : "Som (desligado)"} aria-expanded={painelSom} onClick={() => setPainelSom((v) => !v)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-white/15 bg-black/50 text-base text-white/85 backdrop-blur">{som.ligado && som.volume > 0 ? "🔊" : "🔇"}</button>
+                {painelSom && (
+                  <div className="absolute right-0 top-[52px] z-30 w-[200px] rounded-2xl border border-white/15 bg-[#070c22]/90 p-3 text-xs text-white/85 backdrop-blur">
+                    <label className="flex items-center justify-between gap-2"><span>Som</span><input type="checkbox" checked={som.ligado} onChange={(e) => mudarSom({ ...som, ligado: e.target.checked })} /></label>
+                    <label className="mt-2 block">Volume<input type="range" min={0} max={1} step={0.05} value={som.volume} onChange={(e) => mudarSom({ ...som, volume: Number(e.target.value) })} className="mt-1 w-full" aria-label="Volume" /></label>
+                  </div>
+                )}
+              </div>
               {typeof p.online === "number" && <span className="rounded-full border border-white/15 bg-black/50 px-3 py-2 text-xs text-white/80">{p.online}/5 online</span>}
               {p.tokenConvite && <button type="button" onClick={convidar} className="min-h-[44px] rounded-full border border-cyan-300/40 bg-cyan-400/15 px-4 text-xs font-semibold text-cyan-100 backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">{copiado ? "Link copiado ✓" : "Convidar"}</button>}
             </div>
