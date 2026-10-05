@@ -12,7 +12,8 @@ export type ComandoVoo = { wx: number; wz: number; subir: boolean; descer: boole
 
 /** vel/sobe em m/s; `dtMax` = maior quadro aceito (aba que voltou do fundo); `subpasso` = passo da física */
 /** `freio`: soltar a direção para a nave em poucos metros (paira ali) */
-export const VOO = { vel: 30, sobe: 34, inercia: 3, freio: 7, yMax: 260, raioMapa: 320, dtMax: 0.25, subpasso: 1 / 60 };
+/** `decolar`: no chão (ou a menos disso acima dele) a nave NÃO anda de lado — tem que subir primeiro */
+export const VOO = { vel: 30, sobe: 34, inercia: 3, freio: 7, decolar: 1.5, yMax: 260, raioMapa: 320, dtMax: 0.25, subpasso: 1 / 60 };
 
 /** folga de pouso: o topo dos marcos flutua (±0,15 m); parada a até isso acima do chão = pousada */
 export const POUSO_TOL = 0.3;
@@ -28,7 +29,9 @@ export function chaoDoVoo(p: { x: number; y: number; z: number }, solidos: Pilar
 }
 
 export function passoVoo(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar[] = []): { s: EstadoVoo; pousado: boolean; chaoY: number } {
-  const m = Math.hypot(c.wx, c.wz);
+  // pousada / rente ao chão: a direção não move a nave (só subir decola); ao descer pra pousar, para de andar
+  const rente = s.y - chaoDoVoo(s, solidos) < VOO.decolar;
+  const m = rente ? 0 : Math.hypot(c.wx, c.wz);
   const k = Math.min(1, dt * (m > 0 ? VOO.inercia : VOO.freio)), ky = Math.min(1, dt * (c.subir || c.descer ? VOO.inercia : VOO.freio));
   const tx = m > 0 ? (c.wx / m) * VOO.vel : 0, tz = m > 0 ? (c.wz / m) * VOO.vel : 0;
   const ty = (c.subir ? VOO.sobe : 0) - (c.descer ? VOO.sobe : 0);

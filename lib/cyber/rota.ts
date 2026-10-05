@@ -48,7 +48,10 @@ export function rotaPara(destino: DestinoRota, s: EstadoVoo, qg?: { x: number; y
     if (p.y < altoCidade - 1) { rota.push({ x: p.x, y: altoCidade, z: p.z }); p = { ...p, y: altoCidade }; }
     const sai = saidaDaIlha(alvo, altoCidade); rota.push(sai); p = sai;
   } else if (naColuna && p.y < CIDADE.pisoY) {
-    const sai = saidaDaIlha(alvo, Math.max(p.y, 3)); rota.push(sai); p = sai;
+    // embaixo da ilha: decola o bastante (no chão a nave não anda de lado) e sai pela lateral
+    const yv = Math.max(p.y, VOO.decolar + SOLTA_V + 2);
+    if (yv > p.y + 1) { rota.push({ x: p.x, y: yv, z: p.z }); p = { ...p, y: yv }; }
+    const sai = saidaDaIlha(alvo, yv); rota.push(sai); p = sai;
   }
   const cruz = Math.max(CRUZEIRO, alvo.y + 12);
   if (Math.abs(p.y - cruz) > 1) rota.push({ x: p.x, y: cruz, z: p.z });   // desce (ou sobe) até o cruzeiro, por fora da ilha

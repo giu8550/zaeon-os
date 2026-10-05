@@ -7,7 +7,7 @@
  */
 import * as THREE from "three";
 import { corDaArmadura } from "@/lib/cyber/cores";
-import { BASE_COLLIDER_R, BASE_INTERACT_R, basesDosMembros, localParaMundo, spawnDaBase, type LayoutBase, type NivelBase } from "@/lib/cyber/bases";
+import { BASE_COLLIDER_R, BASE_INTERACT_R, baseNoQG, basesDosMembros, localParaMundo, spawnDaBase, type LayoutBase, type NivelBase } from "@/lib/cyber/bases";
 import { empurrarParaFora, type Colisor } from "@/lib/cyber/colisao";
 import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, poiPerto, type POI } from "@/lib/cyber/landmarks";
@@ -76,6 +76,8 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos:
   naveP?: { x: number; y: number; z: number; yaw: number } | null };
 type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 
+/** cor da mesa do QG quando o Andrei não está na sala */
+const COR_QG = "#ffd36b";
 const TAG_CSS = "position:absolute;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
 
@@ -86,6 +88,8 @@ export class CyberEngine {
   private cena: CenaCosmicaHandle;
   private bases = new Map<string, BaseEstudoHandle>();
   private layouts = new Map<string, LayoutBase>();
+  /** a mesa + cristais do QG do Andrei: fazem PARTE do QG (centro do salão) mesmo quando ele não está nesta sala */
+  private baseQG: BaseEstudoHandle | null = null;
   private colisores: Colisor[] = [];
   private pessoas = new Map<string, PessoaCyber>();
   /** ids na ORDEM canônica dos membros (define a base de cada um). */
@@ -190,6 +194,10 @@ export class CyberEngine {
       b.group.position.y = this.yDoNivel(lay.nivel);
       this.cena.scene.add(b.group); this.bases.set(id, b);
     }
+    // o QG sempre tem a mesa e os cristais no centro do salão; se o Andrei está na sala, é a base dele (acima)
+    const lqg = this.zaeon() && ![...this.layouts.values()].some((l) => l.nivel === "qg") ? baseNoQG() : null;
+    if (lqg && !this.baseQG) { this.baseQG = criarBase(lqg, COR_QG, this.cena.starTex, this.o.low); this.baseQG.group.position.y = this.yDoNivel("qg"); this.cena.scene.add(this.baseQG.group); }
+    if (!lqg && this.baseQG) { this.baseQG.dispose(); this.baseQG = null; }
     for (const a of [this.eu, ...this.remotos.values()]) { if (!a) continue; const c = this.corDe(a.id); if (c !== a.color) { a.color = c; a.av.recolorir(c); a.tag.style.color = c; } }
     // colisão: bases do anel + marcos (a MESMA lista; empurrarParaFora faz o deslizar)
     this.colisores = [...this.layouts.values()].filter((l) => !l.nivel).map((l) => ({ x: l.x, z: l.z, r: BASE_COLLIDER_R }))
@@ -254,7 +262,11 @@ export class CyberEngine {
     return a.ceu ? "ceu" : a.topo ? "topo" : a.alt > 2 ? "qg" : "chao";
   }
   /** colisores das bases de um nível fora do chão */
-  private colisoresDoNivel(n: NivelBase) { return [...this.layouts.values()].filter((l) => l.nivel === n).map((l) => ({ x: l.x, z: l.z, r: BASE_COLLIDER_R })); }
+  private colisoresDoNivel(n: NivelBase) {
+    const ls = [...this.layouts.values()].filter((l) => l.nivel === n);
+    if (n === "qg" && this.baseQG) ls.push(this.baseQG.layout);
+    return ls.map((l) => ({ x: l.x, z: l.z, r: BASE_COLLIDER_R }));
+  }
 
   /** Subir ao topo da Zaeon. Só chamar DEPOIS do OK do servidor (POST /api/lounge3d/[id]/topo valida o fundador). */
   subir(): boolean {
@@ -667,6 +679,7 @@ export class CyberEngine {
       if (b.layout.nivel) b.group.position.y = this.yDoNivel(b.layout.nivel);
       b.atualizar({ dt, t, ativa: alguemPerto, hover: this.hoverBase === id, perto: id === euId && perto });
     }
+    if (this.baseQG) { this.baseQG.group.position.y = this.yDoNivel("qg"); this.baseQG.atualizar({ dt, t, ativa: false, hover: false, perto: false }); }
 
     this.atualizarCamera();
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
@@ -762,7 +775,7 @@ export class CyberEngine {
     this.vivo = false; cancelAnimationFrame(this.raf); this.ro.disconnect(); this.io?.disconnect();
     this.cleanups.forEach((f) => f());
     for (const a of [this.eu, ...this.remotos.values()]) if (a) this.removerAtor(a);
-    for (const b of this.bases.values()) b.dispose();
+    for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
     this.cidade?.dispose(); this.nave?.dispose();
     if (this.hudVoo) for (const m of [this.hudVoo.marca, this.hudVoo.borda]) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
