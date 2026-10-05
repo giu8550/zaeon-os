@@ -29,6 +29,10 @@ export function carregarModeloAvatar(url = avatarGlbUrl()): Promise<GLTF> {
   return p;
 }
 
+/** MONTADO numa moto voadora: o grupo do avatar vai no BANCO (o quadril encaixa ali) e mãos/pés são puxados por IK
+ *  pros pontos da moto (mundo): punhos do guidão e pedaleiras. E = esquerda do piloto. */
+export type Montado = { w: number; maoE: THREE.Vector3; maoD: THREE.Vector3; peE: THREE.Vector3; peD: THREE.Vector3 };
+
 export type AvatarLuzHandle = {
   group: THREE.Group;
   /** meshes do corpo (raycast do clique). */
@@ -41,7 +45,7 @@ export type AvatarLuzHandle = {
    *  `ar` = no ar de mochila: PLANANDO (jatos acesos: corpo inclinado pra frente quando anda, braços abertos pra trás,
    *  pernas dobradas) ou em QUEDA LIVRE (caindo rápido: braços pra cima, joelhos dobrados); ao tocar o chão, um
    *  agachamento curto de POUSO. */
-  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean } | null; dt: number; t: number }): void;
+  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean } | null; montado?: Montado | null; dt: number; t: number }): void;
   /** quantas PISADAS (pé encostando no chão na animação de andar/correr) desde a última chamada — o som do passo
    *  sai no compasso do pé; `null` = avatar sem pés (sem o modelo): o engine usa a cadência fixa */
   passosNovos(): number | null;
@@ -71,7 +75,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   // braços (rig mixamo do GLB): quando sentado, apontam pra tela — sem os ossos, só a aura pulsa
   const ossos: { braco: THREE.Bone; ante: THREE.Bone; mao: THREE.Object3D; lado: 1 | -1 }[] = [];
   const pernas: { coxa: THREE.Bone; canela: THREE.Bone; pe: THREE.Object3D; dedo: THREE.Object3D | null; lado: 1 | -1 }[] = [];
-  let lombar: THREE.Bone | null = null, pescoco: THREE.Object3D | null = null;   // o tronco das poses capturadas
+  let lombar: THREE.Bone | null = null, pescoco: THREE.Object3D | null = null, alturaQuadril = 1.0;   // o tronco das poses capturadas
   let espinha: THREE.Object3D | null = null;   // a mochila acompanha o tronco (anda, senta, medita)
   let idle: THREE.AnimationAction | null = null, walk: THREE.AnimationAction | null = null, run: THREE.AnimationAction | null = null;
 
@@ -101,6 +105,9 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     }
     espinha = modelo.getObjectByName("mixamorigSpine2") ?? null;
     lombar = (modelo.getObjectByName("mixamorigSpine") as THREE.Bone | undefined) ?? null; pescoco = modelo.getObjectByName("mixamorigNeck") ?? null;
+    // altura do QUADRIL em pé (na pose de repouso): montado, o corpo desce isso pra o quadril cair no banco
+    const quadril = modelo.getObjectByName("mixamorigHips");
+    if (quadril) { grupo.updateMatrixWorld(true); alturaQuadril = quadril.getWorldPosition(new THREE.Vector3()).y - grupo.position.y; }
     if (gltf.animations.length) {
       mixer = new THREE.AnimationMixer(modelo);
       const cl = gltf.animations;
@@ -163,9 +170,23 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     osso.updateWorldMatrix(false, true);
   };
   const frente = new THREE.Vector3(), lateral = new THREE.Vector3(), cima = new THREE.Vector3(0, 1, 0), cimaC = new THREE.Vector3(), qG = new THREE.Quaternion();
+  const polo = new THREE.Vector3(), pA = new THREE.Vector3(), pB = new THREE.Vector3(), pC = new THREE.Vector3(), eixo = new THREE.Vector3(), lado2 = new THREE.Vector3(), cot = new THREE.Vector3();
+  /** IK de 2 ossos (ombro→cotovelo→mão / quadril→joelho→pé): leva a ponta até `alvo` (mundo), dobrando pro lado do
+   *  `polo`; se não alcança, estica na direção do alvo. Usa o `apontar` (mistura com o peso `w`). */
+  const ik = (raiz: THREE.Object3D, meio: THREE.Object3D, ponta: THREE.Object3D, alvo: THREE.Vector3, poloDir: THREE.Vector3, w: number) => {
+    raiz.updateWorldMatrix(true, true);
+    raiz.getWorldPosition(pA); meio.getWorldPosition(pB); ponta.getWorldPosition(pC);
+    const l1 = pA.distanceTo(pB), l2 = pB.distanceTo(pC);
+    eixo.copy(alvo).sub(pA); const dist = Math.min(Math.max(eixo.length(), 1e-3), l1 + l2 - 1e-3); eixo.normalize();
+    const a = (l1 * l1 - l2 * l2 + dist * dist) / (2 * dist), h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+    lado2.copy(poloDir).addScaledVector(eixo, -poloDir.dot(eixo)); if (lado2.lengthSq() < 1e-8) lado2.set(0, -1, 0); lado2.normalize();
+    cot.copy(pA).addScaledVector(eixo, a).addScaledVector(lado2, h);   // onde o cotovelo/joelho tem que ficar
+    dirAlvo.copy(cot).sub(pA).normalize(); apontar(raiz, meio, dirAlvo, w);
+    meio.getWorldPosition(pB); dirAlvo.copy(alvo).sub(pB).normalize(); apontar(meio, ponta, dirAlvo, w);
+  };
   return {
     group: grupo, meshes,
-    animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, dt, t }) {
+    animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, montado = null, dt, t }) {
       const k = Math.min(1, dt * 8), corre = !!correndo && andando;
       wWalk += ((andando && !corre ? 1 : 0) - wWalk) * k; wRun += ((corre ? 1 : 0) - wRun) * k;
       if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk); run.setEffectiveWeight(wRun); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun)); mixer.update(dt); }
@@ -178,7 +199,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       let d = alvo - grupo.rotation.y; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
       grupo.rotation.y += d * 0.15;
       // na base: em pé, levemente inclinado pro painel; meditando: abaixa (pernas cruzadas) e flutua devagar
-      corpo.position.set(0, meditando * (-0.5 + (parado ? 0 : 0.06 * Math.sin(t * 1.1))) - SENTA_Y * pilotando, 0); corpo.rotation.x = -0.07 * sentado + 0.08 * pilotando;
+      corpo.position.set(0, meditando * (-0.5 + (parado ? 0 : 0.06 * Math.sin(t * 1.1))) - SENTA_Y * pilotando - (montado ? alturaQuadril * montado.w : 0), 0); corpo.rotation.x = -0.07 * sentado + 0.08 * pilotando;
       if ((ossos.length || pernas.length) && pilotando > 0.02) {
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
         frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
@@ -189,6 +210,20 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         for (const o of ossos) {
           dirAlvo.copy(cima).multiplyScalar(-0.8).addScaledVector(frente, 0.5).addScaledVector(lateral, 0.15 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, pilotando);
           dirAlvo.copy(frente).multiplyScalar(0.92).addScaledVector(cima, -0.15).addScaledVector(lateral, 0.05 * o.lado).normalize(); apontar(o.ante, o.mao, dirAlvo, pilotando);   // mãos nos manches
+        }
+      }
+      if (montado && montado.w > 0.02 && (ossos.length || pernas.length)) {
+        // MONTADO: tronco inclinado pra frente (moto esportiva) e mãos/pés no lugar por IK de 2 ossos
+        grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
+        frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
+        if (lombar && pescoco) { dirAlvo.copy(frente).multiplyScalar(0.62).addScaledVector(cima, 0.78).normalize(); apontar(lombar, pescoco, dirAlvo, montado.w); }
+        for (const o of pernas) {   // joelhos pra frente e um pouco pra fora (abraçando a moto)
+          polo.copy(frente).addScaledVector(lateral, 0.35 * o.lado).addScaledVector(cima, 0.2);
+          ik(o.coxa, o.canela, o.pe, o.lado > 0 ? montado.peE : montado.peD, polo, montado.w);
+        }
+        for (const o of ossos) {    // cotovelos pra fora e pra baixo
+          polo.copy(lateral).multiplyScalar(0.7 * o.lado).addScaledVector(cima, -0.5).addScaledVector(frente, -0.2);
+          ik(o.braco, o.ante, o.mao, o.lado > 0 ? montado.maoE : montado.maoD, polo, montado.w);
         }
       }
       if ((ossos.length || pernas.length) && meditando > 0.02) {

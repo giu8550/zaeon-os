@@ -55,7 +55,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
   const [rota, setRota] = useState<"heliporto" | "qg" | "zaeon" | null>(null);
   const [voo, setVoo] = useState<{ y: number } | null>(null);
-  const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true }), [fade, setFade] = useState(false), [aviso2, setAviso2] = useState<string | null>(null);
+  const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true, moto: false, motoPerto: false }), [fade, setFade] = useState(false), [aviso2, setAviso2] = useState<string | null>(null);
   const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
   /** corte com fade (portal: sem animação de viagem) */
   const comFade = useCallback((acao: () => void) => { setFade(true); setTimeout(() => { acao(); setTimeout(() => setFade(false), 260); }, 360); }, []);
@@ -130,7 +130,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
       onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true),
       landmarks: landmarksOn(), onLandmark: (poi) => { setErroTopo(null); setPoiAberto(poi); }, onTopo: (v) => { setNoTopo(v); if (v) setPoiAberto(null); },
-      onPortalCeu: () => { void pedir("ceu", () => comFade(() => engine.current?.entrarNoCeu())); },
+      onPortalCeu: () => comFade(() => engine.current?.entrarNoCeu()),   // a Zaeon é aberta a todos (sem pedir acesso)
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
       onEstadoQG: setQg,
       onVoo: setVoo,
@@ -231,7 +231,7 @@ export default function CenaCyber(p: CenaCyberProps) {
             <button type="button" onClick={entrarEstudo} className="absolute left-1/2 z-[21] min-h-[44px] -translate-x-1/2 animate-pulse rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-6 text-sm font-extrabold text-slate-950 shadow-[0_0_26px_rgba(90,200,255,.75)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" style={{ bottom: touch ? 168 : tela ? 150 : 28 }}>✦ Estudar</button>
           )}
 
-          {tela && !(touch && qg.pilotando) && (   // celular pilotando: o chat sai da frente dos atalhos/controles
+          {tela && !(touch && (qg.pilotando || qg.moto)) && (   // celular pilotando: o chat sai da frente dos atalhos/controles
             <div className="absolute z-20 w-[min(68vw,300px)] rounded-2xl border border-violet-300/25 bg-[#0a081e]/70 p-2.5 backdrop-blur" style={touch ? { left: 10, top: 64 } : { left: 16, bottom: 16 }}>
               <div className="h-4 px-1 text-[10.5px] text-cyan-200">{falandoCom ? `💬 falando com ${falandoCom}` : ""}</div>
               <div className="mb-1.5 flex max-h-[96px] flex-col gap-0.5 overflow-y-auto px-1 text-[12.5px] text-violet-100" aria-live="polite">
@@ -244,7 +244,7 @@ export default function CenaCyber(p: CenaCyberProps) {
           {touch && (
             <>
               <Joystick onMove={(x, y) => engine.current?.setJoystick(x, y)} />
-              {qg.pilotando ? null : (<>
+              {qg.pilotando || qg.moto ? null : (<>
               <button type="button" aria-label="Correr" aria-pressed={correndo} onPointerDown={(e) => { e.stopPropagation(); setCorrendo(engine.current?.alternarCorrer() ?? false); }} className={`absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 text-[12px] font-extrabold backdrop-blur ${correndo ? "bg-gradient-to-b from-cyan-200 to-sky-400 text-slate-950" : "bg-sky-950/55 text-sky-50"}`} style={{ right: "max(94px, calc(env(safe-area-inset-right) + 72px))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>CORRER</button>
               <button type="button" aria-label="Voar (segurar)" onPointerDown={(e) => { e.stopPropagation(); try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* sem captura */ } engine.current?.comandoJet(true); }} onPointerUp={() => engine.current?.comandoJet(false)} onPointerCancel={() => engine.current?.comandoJet(false)} onLostPointerCapture={() => engine.current?.comandoJet(false)} onContextMenu={(e) => e.preventDefault()} className="absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 bg-sky-950/55 text-[12px] font-extrabold text-sky-50 backdrop-blur" style={{ right: "max(22px, env(safe-area-inset-right))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>VOAR</button>
               </>)}
@@ -278,7 +278,17 @@ export default function CenaCyber(p: CenaCyberProps) {
       {!menu && qg.navePerto && !qg.pilotando && p.souFundador && (
         <button type="button" onClick={() => void pedir("nave", () => engine.current?.embarcar())} className="absolute left-1/2 top-[164px] z-30 min-h-[44px] -translate-x-1/2 rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-sm font-extrabold text-slate-950 shadow-[0_0_24px_rgba(90,200,255,.6)]">🚀 Embarcar na nave</button>
       )}
-      {!menu && qg.pilotando && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} />}
+      {!menu && (qg.pilotando || qg.moto) && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} />}
+      {/* MOTO VOADORA (qualquer pessoa): montar perto de uma vaga; montado, altímetro e "Descer" (pousada) */}
+      {!menu && qg.motoPerto && !qg.moto && (
+        <button type="button" onClick={() => engine.current?.montar()} className="absolute left-1/2 top-[164px] z-30 min-h-[44px] -translate-x-1/2 rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-sm font-extrabold text-slate-950 shadow-[0_0_24px_rgba(90,200,255,.6)]">🏍 Montar na moto{touch ? "" : " (F)"}</button>
+      )}
+      {!menu && qg.moto && (
+        <div className="absolute left-1/2 top-[110px] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
+          {voo && !qg.pousado && <p className="rounded-full bg-[#070c22]/70 px-3 py-1 text-center text-xs font-bold tabular-nums text-sky-100 backdrop-blur">↕ {voo.y} m</p>}
+          {qg.pousado && <button type="button" onClick={() => engine.current?.desmontar()} className="min-h-[44px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-5 text-sm font-semibold text-sky-100 backdrop-blur">Descer da moto{touch ? "" : " (F)"}</button>}
+        </div>
+      )}
       {!menu && qg.pilotando && (
         <div className="absolute left-1/2 top-[110px] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
           {voo && !qg.pousado && <p className="rounded-full bg-[#070c22]/70 px-3 py-1 text-center text-xs font-bold tabular-nums text-sky-100 backdrop-blur">↕ {voo.y} m</p>}

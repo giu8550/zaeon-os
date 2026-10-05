@@ -29,6 +29,12 @@ describe("pose", () => {
     expect(poseMudou({ ...p, naveParada: np }, { ...p, naveParada: { ...np, x: 30 } })).toBe(true);
     expect(poseMudou({ ...p, naveParada: np }, { ...p, naveParada: { ...np } })).toBe(false);
     expect(poseMudou(p, { ...p, ceu: true })).toBe(true);
+    // moto: montar/descer e mexer a altura/rumo reenviam
+    const mt = { s: 1, y: 3, yaw: 0 };
+    expect(poseMudou(p, { ...p, moto: mt })).toBe(true);
+    expect(poseMudou({ ...p, moto: mt }, p)).toBe(true);
+    expect(poseMudou({ ...p, moto: mt }, { ...p, moto: { ...mt, y: 8 } })).toBe(true);
+    expect(poseMudou({ ...p, moto: mt }, { ...p, moto: { ...mt } })).toBe(false);
   });
   it("giro pelo menor arco (±π não conta como mudança)", () => {
     expect(poseMudou({ ...p, facing: Math.PI - 0.001 }, { ...p, facing: -Math.PI + 0.001 })).toBe(false);

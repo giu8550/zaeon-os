@@ -23,6 +23,7 @@ export class Jogador extends Schema {
   declare falando: boolean;
   /** já mandou a 1ª pose de verdade? (antes disso o cliente mostra a pessoa sentada na própria base) */
   declare pronto: boolean;
+  /** moto voadora: vaga (−1 = a pé), altura e rumo */ declare motoS: number; declare motoY: number; declare motoYaw: number;
   constructor() {
     super();
     this.userId = ""; this.name = ""; this.color = "#4aa3ff"; this.fundador = false; this.qg = false;
@@ -31,6 +32,7 @@ export class Jogador extends Schema {
     this.voando = false; this.vooY = 0; this.vooYaw = 0;
     this.parada = false; this.npX = 0; this.npY = 0; this.npZ = 0; this.npYaw = 0;
     this.jet = -1; this.alt = -1; this.falando = false; this.pronto = false;
+    this.motoS = -1; this.motoY = 0; this.motoYaw = 0;
   }
   /** a pessoa do TOKEN (identidade e regalias vêm do servidor do app) */
   static de(p: PayloadToken) { const j = new Jogador(); j.userId = p.u; j.name = p.n; j.color = p.c; j.fundador = p.f; j.qg = p.q; return j; }
@@ -42,6 +44,7 @@ defineTypes(Jogador, {
   voando: "boolean", vooY: "float32", vooYaw: "float32",
   parada: "boolean", npX: "float32", npY: "float32", npZ: "float32", npYaw: "float32",
   jet: "float32", alt: "float32", falando: "boolean", pronto: "boolean",
+  motoS: "int8", motoY: "float32", motoYaw: "float32",
 });
 
 export class EstadoLounge extends Schema {
@@ -81,6 +84,7 @@ export class LoungeRoom extends Room<{ state: EstadoLounge }> {
       j.voando = !!p.voo; if (p.voo) { j.vooY = p.voo.y; j.vooYaw = p.voo.yaw; }
       j.parada = !!p.naveParada; if (p.naveParada) { j.npX = p.naveParada.x; j.npY = p.naveParada.y; j.npZ = p.naveParada.z; j.npYaw = p.naveParada.yaw; }
       j.jet = p.jet ?? -1; j.alt = p.alt ?? -1; j.pronto = true;
+      j.motoS = p.moto ? p.moto.s : -1; if (p.moto) { j.motoY = p.moto.y; j.motoYaw = p.moto.yaw; }
     });
     // "falando" (indicador no avatar) — a voz em si vai direto entre navegadores (WebRTC)
     this.onMessage("fala", (client, raw) => {

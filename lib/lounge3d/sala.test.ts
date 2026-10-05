@@ -118,6 +118,9 @@ describe("canal e cor", () => {
     expect(sanitizarPresenca({ ...base, voo: { y: 9999, yaw: 1 } })?.voo).toEqual({ y: 300, yaw: 1 });   // teto
     expect(sanitizarPresenca({ ...base, voo: { y: "alto" } })?.voo).toBeUndefined();
     expect(sanitizarPresenca({ ...base, voo: "x" })?.voo).toBeUndefined();
+    // moto voadora (qualquer um): vaga válida passa; lixo some
+    expect(sanitizarPresenca({ ...base, moto: { s: 5, y: 231, yaw: 0.5 } })?.moto).toEqual({ s: 5, y: 231, yaw: 0.5 });
+    expect(sanitizarPresenca({ ...base, moto: { s: 99, y: 1, yaw: 0 } })?.moto).toBeUndefined();
   });
 
   it("presença: jet (voando de mochila a jato) só número, com teto", () => {

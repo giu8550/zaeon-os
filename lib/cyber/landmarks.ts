@@ -8,9 +8,10 @@
  * sem permissão — checklist antes de publicar o marco de uma instituição real.
  */
 import type { NavPOI } from "./nav";
+import { ESTACIONAMENTO, LOTES } from "./motos";
 
 export type AcessoPOI = "publico" | "dono";
-export type PresetPOI = "zaeon" | "generico" | "heliporto";
+export type PresetPOI = "zaeon" | "generico" | "heliporto" | "estacionamento";
 export type POI = {
   id: string;            // slug estável
   nome: string;          // rótulo flutuante
@@ -73,7 +74,16 @@ function heliportoPOI(): POI {
   };
 }
 
-export const POIS: POI[] = [zaeonPOI(), heliportoPOI()];
+/** ESTACIONAMENTO das motos voadoras do CHÃO (lib/cyber/motos.ts; o da Zaeon é desenhado na ilha) — chão plano, as bases desviam; o desenho é do
+ *  components/cyber/Estacionamento.ts (não é um "marco" com painel: clicar numa moto = montar) */
+function estacionamentoPOI(): POI {
+  return {
+    id: "estacionamento", nome: "Estacionamento", org: "Motos voadoras — pra todo mundo.",
+    preset: "estacionamento", x: LOTES[0]!.x, z: LOTES[0]!.z,
+    footprintR: ESTACIONAMENTO.r, interactR: ESTACIONAMENTO.r + 3, solido: false, altura: 0, acesso: "publico",
+  };
+}
+export const POIS: POI[] = [zaeonPOI(), heliportoPOI(), estacionamentoPOI()];
 
 export const colisoresDosPOIs = (pois: POI[] = POIS) => pois.filter((p) => p.solido !== false).map((p) => ({ x: p.x, z: p.z, r: p.footprintR }));
 
