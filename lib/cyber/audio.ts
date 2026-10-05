@@ -26,7 +26,7 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   // SINTETIZADOS (sem arquivo): gerados no navegador por sintetizarJetpack / sintetizarBaque
   "jato-sopro": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
   baque: { modo: "pos", loop: false, volume: 0.95, sintetico: true },   // o corpo batendo no chão (força pela queda)
-  "space-bed": { modo: "2d", loop: true, volume: 0.22, taxa: TAXA_432 },
+  "space-bed": { modo: "2d", loop: true, volume: 0.09, taxa: TAXA_432 },   // AMBIENTE: bem baixo, por baixo de passos/efeitos (era 0,22)
   "blackhole-hum": { modo: "pos", loop: true, volume: 0.55 },
   crystals: { modo: "pos", loop: true, volume: 0.3 },
   "ship-flight": { modo: "pos", loop: true, volume: 0.7 },

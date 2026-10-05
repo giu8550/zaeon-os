@@ -65,6 +65,7 @@ describe("áudio do cyberespaço", () => {
   });
   it("leito em 432 Hz: a faixa (A=440) toca a 432/440 → −31,8 cents", () => {
     expect(SONS["space-bed"].taxa).toBe(TAXA_432);
+    expect(SONS["space-bed"].volume).toBeLessThanOrEqual(0.1);   // som de fundo = ambiente (baixo)
     expect(1200 * Math.log2(TAXA_432)).toBeCloseTo(-31.8, 1);
   });
   it("cristais: só perto da base (somem de verdade longe); passos mais altos", () => {
