@@ -119,6 +119,18 @@ describe("voo — botões de movimento levam a nave a qualquer lugar", () => {
     expect(r.pousado).toBe(false); expect(r.s.y).toBeGreaterThan(sol[0]!.topo + 2);
   });
 
+  it("pousada no chão a nave NÃO anda de lado: tem que subir primeiro (acima de VOO.decolar) pra se mover", () => {
+    const ini: Passo = { s: est(100, 0, 100), pousado: true, chaoY: 0 };
+    const parada = pilotar(ini, 60, [], () => ({ dir: { x: 1, z: 0 } }), 2).r;
+    expect(parada.s.x).toBe(100); expect(parada.s.z).toBe(100); expect(parada.pousado).toBe(true);
+    // na Zaeon (céu) e no topo do QG, idem
+    const naCidade = pilotar(noHangar, 60, solidosZ, () => ({ dir: { x: 1, z: 0 } }), 2).r;
+    expect(naCidade.s.x).toBeCloseTo(hangar.x, 9);
+    // subindo, passa a andar
+    const sobe = pilotar(ini, 60, [], (r) => (r.s.y < VOO.decolar + 1 ? { subir: true } : { dir: { x: 1, z: 0 } }), 2).r;
+    expect(sobe.s.x).toBeGreaterThan(110);
+  });
+
   it("de lado, a Zaeon é sólida até o alto das muralhas (desliza pra fora)", () => {
     const { r } = pilotar({ s: est(Z.x + 30, 5, Z.z), pousado: false, chaoY: 0 }, 60, solidosZ, () => ({ dir: { x: -1, z: 0 } }), 6);
     expect(Math.hypot(r.s.x - Z.x, r.s.z - Z.z)).toBeGreaterThanOrEqual(Z.nav!.chaoR - 1e-6);
