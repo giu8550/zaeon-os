@@ -4,8 +4,13 @@
  */
 export const LOUNGE_ROTA = "/lounge-cosmico";
 export const LAB_ROTA = "/research-lab";
-/** Ao entrar no laboratório pelo cyberespaço, a primeira tela é a aba de Pesquisa (o ?tab= explícito vence a última aba salva). */
-export const LAB_ENTRADA = "/research-lab?tab=pesquisa";
+/**
+ * Ao entrar no laboratório pelo cyberespaço ("Estudar"), a primeira tela é a aba de Pesquisa (o ?tab= explícito vence a
+ * última aba salva) e JÁ em MODO FOCO (`?foco=1`: sem navbar, sidebar cheia). Pela aba "Laboratório" da navbar entra normal.
+ */
+export const LAB_ENTRADA = "/research-lab?tab=pesquisa&foco=1";
+/** o laboratório deve abrir em modo foco? (`?foco=1` na URL) */
+export const pedeFoco = (search: string | URLSearchParams | null | undefined): boolean => new URLSearchParams(search ?? "").get("foco") === "1";
 /** Contrato de navegação cyberespaço → laboratório (botão Estudar / clique no monitor). */
 export const MSG_ENTRAR_ESTUDO = "zaeon:enter-study";
 export const ehMsgEntrarEstudo = (data: unknown, origin: string, esperada: string): boolean =>
