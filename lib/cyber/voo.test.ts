@@ -65,9 +65,14 @@ describe("voo — botões de movimento levam a nave a qualquer lugar", () => {
   }
 
   it("embaixo da ilha, segurar SUBIR trava no fundo dela (a dica do HUD manda sair pela lateral)", () => {
-    const ini: Passo = { s: est(CIDADE.centro.x, 0, CIDADE.centro.z + 5), pousado: true, chaoY: 0 };
+    const ini: Passo = { s: est(CIDADE.centro.x, 0, CIDADE.centro.z + 12), pousado: true, chaoY: 0 };
     const { r } = pilotar(ini, 60, [], () => ({ subir: true }), 12);
     expect(r.s.y).toBeCloseTo(CIDADE.pisoY - CIDADE.ilhaAltura, 5);
+  });
+  it("bem no meio, embaixo: trava na PONTA da agulha (não atravessa a ponta afiada)", () => {
+    const ini: Passo = { s: est(CIDADE.centro.x, 0, CIDADE.centro.z + 3), pousado: true, chaoY: 0 };
+    const { r } = pilotar(ini, 60, [], () => ({ subir: true }), 12);
+    expect(r.s.y).toBeCloseTo(CIDADE.pisoY - CIDADE.ilhaAltura - CIDADE.agulha.altura, 5);
   });
 
   it("voa da Cidade até a praça, uma base distante e a Zaeon (de lado) e pousa no chão em cada uma", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, bibliotecaLocais, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade } from "./ceu";
+import { BURACO_NEGRO, CIDADE, bibliotecaLocais, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, servidoresLocais } from "./ceu";
 import { VOO, passoVoo, type EstadoVoo } from "./voo";
 import { dentroDeAlgum } from "./colisao";
 import { POIS } from "./landmarks";
@@ -50,7 +50,7 @@ describe("cidade no céu", () => {
   });
   it("monitor da biblioteca mais perto (pra clicar e estudar)", () => {
     const c3 = computadoresLocais()[3]!;
-    const perto = mundo({ x: c3.x * 0.82, z: c3.z * 0.82 });
+    const k = (CIDADE.biblioteca.r - 2) / CIDADE.biblioteca.r, perto = mundo({ x: c3.x * k, z: c3.z * k });   // 2 m à frente
     expect(computadorPerto(perto)).toBe(3);
     expect(computadorPerto(mundo(CIDADE.chegada))).toBe(-1);
   });
@@ -61,6 +61,26 @@ describe("cidade no céu", () => {
     expect(foraDaIlha(embaixo).y).toBe(CIDADE.pisoY - CIDADE.ilhaAltura);
     expect(chaoDaNave({ ...mundo({ x: 0, z: 0 }), y: CIDADE.pisoY + 3 })).toBe(CIDADE.pisoY);
     expect(chaoDaNave({ x: 0, y: 10, z: 0 })).toBe(0);
+  });
+  it("a agulha embaixo do ápice: afiada, sólida e ainda bem acima do buraco negro", () => {
+    const fundo = CIDADE.pisoY - CIDADE.ilhaAltura - CIDADE.agulha.altura;
+    expect(fundo).toBeGreaterThan(BURACO_NEGRO.y + 90);
+    expect(CIDADE.agulha.r).toBeLessThan(CIDADE.bordaR / 4);
+    const dentro = { ...mundo({ x: 1, z: 0 }), y: fundo + 20 };
+    const q = foraDaIlha(dentro);
+    expect(Math.hypot(q.x - CIDADE.centro.x, q.z - CIDADE.centro.z)).toBeCloseTo(CIDADE.agulha.r, 6);   // desliza pra fora
+    expect(foraDaIlha({ ...mundo({ x: 1, z: 0 }), y: fundo + 0.5 }).y).toBe(fundo);                     // de baixo: para na ponta
+    expect(foraDaIlha({ ...mundo({ x: 10, z: 0 }), y: fundo + 20 })).toEqual({ ...mundo({ x: 10, z: 0 }), y: fundo + 20 });   // fora dela: livre
+  });
+  it("salas de servidores: 4 alas com corredores livres até a mesa, entre a mesa e a biblioteca", () => {
+    const rs = servidoresLocais(), { n, vaoCada, r, colR } = CIDADE.servidores;
+    expect(rs).toHaveLength(n - n / vaoCada);
+    expect(r - colR).toBeGreaterThan(CIDADE.mesaHolo.r + 2);
+    expect(r + colR).toBeLessThan(CIDADE.biblioteca.r - 2);
+    for (const s of rs) { const f = { x: s.x + Math.sin(s.rot), z: s.z + Math.cos(s.rot) }; expect(Math.hypot(f.x, f.z)).toBeLessThan(Math.hypot(s.x, s.z)); }
+    // os corredores (a cada `vaoCada`) ficam livres
+    const cs = colisoresDaCidade();
+    for (let i = 0; i < n; i += vaoCada) { const a = (i / n) * Math.PI * 2, v = mundo({ x: Math.cos(a) * r, z: Math.sin(a) * r }); expect(cs.some((c) => Math.hypot(c.x - v.x, c.z - v.z) < c.r + 0.4)).toBe(false); }
   });
 });
 

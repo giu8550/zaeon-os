@@ -60,15 +60,17 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
   scene.add(new THREE.HemisphereLight(0x5566aa, 0x0a0a16, 0.9));
   const key = new THREE.DirectionalLight(0x99bbff, 0.6); key.position.set(4, 9, 6); scene.add(key);
 
-  // estrelas redondas, densidade baixa
-  const SN = low ? 500 : 900, spv = new Float32Array(SN * 3);
-  for (let i = 0; i < SN; i++) {
-    const u = Math.random(), v = Math.random(), th = u * 6.283, ph = Math.acos(2 * v - 1), rr = 160 * Math.cbrt(Math.random());
-    spv[i * 3] = rr * Math.sin(ph) * Math.cos(th); spv[i * 3 + 1] = Math.abs(rr * Math.sin(ph) * Math.sin(th)) * 0.9 + 6; spv[i * 3 + 2] = rr * Math.cos(ph);
+  // estrelas redondas, densidade baixa — a nuvem fica em volta da ZAEON (a ilha no céu, sobre o buraco negro), não da praça
+  const SN = low ? 650 : 1200, spv = new Float32Array(SN * 3), CEN = { x: 0, y: 150, z: -110 }, CHAO_MIN = 10;
+  for (let i = 0; i < SN; ) {
+    const u = Math.random(), v = Math.random(), th = u * 6.283, ph = Math.acos(2 * v - 1), rr = 45 + 185 * Math.cbrt(Math.random());
+    const y = rr * Math.cos(ph);
+    if (CEN.y + y < CHAO_MIN) continue;   // nada de estrela enterrada no chão
+    spv[i * 3] = rr * Math.sin(ph) * Math.cos(th); spv[i * 3 + 1] = y; spv[i * 3 + 2] = rr * Math.sin(ph) * Math.sin(th); i++;
   }
   const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(spv, 3));
-  const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 0.9, map: starTex, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
-  stars.rotation.z = Math.PI / 4; scene.add(stars);
+  const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 1.15, map: starTex, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
+  stars.position.set(CEN.x, CEN.y, CEN.z); scene.add(stars);   // gira só em torno do eixo vertical da Zaeon (não vai parar no chão)
 
   // buraco negro estilo filme
   const bh = new THREE.Group(); bh.position.set(0, 16, -110);
@@ -94,7 +96,7 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
     atualizar({ dt, t, cam, aspect: asp }) {
       bhNdc.set(0, 17, -120).project(cam);
       for (const m of nebulas) { m.uniforms.uTime!.value += dt; m.uniforms.uAspect!.value = asp; (m.uniforms.uCenter!.value as THREE.Vector2).set(bhNdc.x, bhNdc.y); }
-      stars.rotation.x -= dt * 0.02; stars.rotation.y -= dt * 0.014;
+      stars.rotation.y -= dt * 0.014;
       photon.lookAt(cam.position); (halo.material as THREE.SpriteMaterial).opacity = 0.75 + 0.12 * Math.sin(t * 1.5);
     },
     dispose() {
