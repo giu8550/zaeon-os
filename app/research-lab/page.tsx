@@ -121,7 +121,7 @@ import {
   ArrowUturnLeftIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import { LOUNGE_ROTA } from "@/lib/ui/loungeHub";
+import { LOUNGE_ROTA, pedeFoco } from "@/lib/ui/loungeHub";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
@@ -1427,6 +1427,13 @@ export default function HomeworkPage({
       }
     }
   }, [status]);
+
+  // ?foco=1 (entrada pelo "Estudar" do cyberespaço): abre JÁ em modo foco — a navbar global ouve o evento e some
+  useEffect(() => {
+    if (!pedeFoco(window.location.search)) return;
+    setIsFocusMode(true);
+    window.dispatchEvent(new CustomEvent("zaeon-focus-mode", { detail: true }));
+  }, []);
 
   // Handle ?tab= query param for deep linking (validado + alias pela setActiveTab)
   useEffect(() => {
