@@ -6,7 +6,7 @@ import { LAB_ENTRADA, MSG_ENTRAR_ESTUDO, ehMsgEntrarEstudo } from "@/lib/ui/loun
 import { detectarPerfil, precisaGirar, qualidadeDe } from "@/lib/cyber/dispositivo";
 import { PREF_SFX, PREF_VOLUME, lerPrefs } from "@/lib/cyber/audio";
 import { tocarUI } from "./AudioCyber";
-import type { MensagemChat, Presenca } from "@/lib/lounge3d/tipos";
+import { MAX_TEXTO_RECADO, type MensagemChat, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
 import { landmarksOn, type POI } from "@/lib/cyber/landmarks";
 import { CyberEngine, type PessoaCyber } from "./engine";
 import Joystick from "./Joystick";
@@ -31,6 +31,10 @@ export type CenaCyberProps = {
   souFundador?: boolean;
   /** AÇÃO PRIVILEGIADA: pede ao servidor pra subir ao topo da Zaeon (POST /api/lounge3d/[id]/topo) */
   pedirAcesso?: (alvo: "topo" | "ceu" | "nave") => Promise<{ ok: boolean; erro?: string }>;
+  /** o recado ATUAL do dono pro QG do Andrei (holograma ao lado da tela dele; a TV do lounge mostra o último enviado) */
+  recadoQG?: RecadoQG | null;
+  /** o DONO manda (texto) ou apaga (null) o recado — o servidor confere a sessão */
+  enviarRecado?: (texto: string | null) => Promise<{ ok: boolean; erro?: string }>;
 };
 
 
@@ -59,6 +63,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   // som: liga/desliga (`zaeon_sfx`) + volume mestre (`zaeon_volume`), lidos/gravados no localStorage
   const [som, setSom] = useState(() => (typeof window === "undefined" ? { ligado: true, volume: 0.8 } : lerPrefs((k) => { try { return localStorage.getItem(k); } catch { return null; } })));
   const [painelSom, setPainelSom] = useState(false);
+  // RECADO pro QG: a caixa abre ao clicar na TV do lounge da Zaeon (só o dono)
+  const [recadoAberto, setRecadoAberto] = useState(false), [recadoTxt, setRecadoTxt] = useState(""), [recadoEnviando, setRecadoEnviando] = useState(false);
   const mudarSom = (n: { ligado: boolean; volume: number }) => {
     setSom(n);
     try { localStorage.setItem(PREF_SFX, n.ligado ? "1" : "0"); localStorage.setItem(PREF_VOLUME, String(n.volume)); } catch { /* storage bloqueado */ }
@@ -119,6 +125,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onEstadoQG: setQg,
       onVoo: setVoo,
       onRota: setRota,
+      onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon manda recados pro QG."); return; } setRecadoTxt(""); setRecadoAberto(true); },
     }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
@@ -127,6 +134,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   }, []);
 
   useEffect(() => { engine.current?.setPessoas(p.membros); }, [p.membros]);
+  // o recado atual: holograma no QG + a TV do lounge (e um "ping" quando chega um novo)
+  useEffect(() => { engine.current?.setRecado(p.recadoQG ?? null); }, [p.recadoQG, pronto]);
 
   // chat da sala → balões sobre os avatares
   const vistas = useRef(0);
@@ -140,6 +149,14 @@ export default function CenaCyber(p: CenaCyberProps) {
   if (falha) return <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[#03030a] px-6 text-center text-sm text-white/70">Não deu para iniciar o cyberespaço 3D neste aparelho.<button onClick={entrarEstudo} className="min-h-[44px] rounded-full bg-cyan-400 px-5 font-semibold text-slate-950">Ir para a Sala de Estudos</button></div>;
 
   const enviar = () => { const t = txt.trim(); if (!t) return; void p.enviarChat?.(t); setTxt(""); };
+  const mandarRecado = async (texto: string | null) => {
+    const fn = p.enviarRecado; if (!fn || recadoEnviando) return;
+    if (texto !== null && !texto.trim()) return;
+    setRecadoEnviando(true);
+    try { const r = await fn(texto === null ? null : texto.trim()); if (r.ok) { setRecadoAberto(false); avisar(texto === null ? "Recado apagado do QG." : "Recado enviado ao QG do Andrei ✦"); tocarUI("chat-pop"); } else avisar(r.erro ?? "Não deu pra enviar."); }
+    catch { avisar("Sem conexão."); }
+    finally { setRecadoEnviando(false); }
+  };
   const convidar = async () => {
     if (!p.tokenConvite) return;
     const url = `${location.origin}/lounge-cosmico?sala=${p.tokenConvite}`;
@@ -251,6 +268,26 @@ export default function CenaCyber(p: CenaCyberProps) {
       )}
       {!menu && qg.noCeu && !qg.pilotando && (
         <button type="button" onClick={() => comFade(() => engine.current?.voltarDaCidade())} className="absolute right-3 top-[64px] z-30 min-h-[44px] rounded-full border border-amber-200/40 bg-[#1a0f08]/80 px-4 text-xs font-semibold text-amber-100 backdrop-blur">↩ Voltar à praça</button>
+      )}
+      {recadoAberto && (
+        <div role="dialog" aria-modal="true" aria-label="Recado pro QG do Andrei" className="absolute inset-0 z-50 flex items-center justify-center bg-[#03030a]/60 px-4" onClick={() => setRecadoAberto(false)}>
+          <div className="w-full max-w-[420px] rounded-2xl border border-cyan-300/30 bg-[#070c22]/95 p-4 text-sky-100 shadow-[0_0_40px_rgba(102,230,255,.15)]" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm font-bold text-cyan-200">Recado pro QG do Andrei</p>
+            <p className="mt-1 text-xs text-sky-100/60">Aparece num holograma ao lado da tela onde ele trabalha. Fica lá até você mandar outro ou apagar.</p>
+            <textarea autoFocus value={recadoTxt} onChange={(e) => setRecadoTxt(e.target.value)} maxLength={MAX_TEXTO_RECADO} rows={4} placeholder="Escreva o recado…" aria-label="Texto do recado"
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void mandarRecado(recadoTxt); if (e.key === "Escape") setRecadoAberto(false); }}
+              className="mt-3 w-full resize-none rounded-xl border border-cyan-300/30 bg-[#0a081e]/80 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300" />
+            <div className="mt-1 text-right text-[11px] text-sky-100/50">{recadoTxt.length}/{MAX_TEXTO_RECADO}</div>
+            {p.recadoQG && <p className="mt-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-sky-100/70"><span className="text-sky-100/50">No QG agora: </span>{p.recadoQG.texto}</p>}
+            <div className="mt-3 flex items-center justify-between gap-2">
+              {p.recadoQG ? <button type="button" disabled={recadoEnviando} onClick={() => void mandarRecado(null)} className="min-h-[40px] rounded-full px-3 text-xs text-rose-200/80 hover:text-rose-200">Apagar o atual</button> : <span />}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setRecadoAberto(false)} className="min-h-[40px] rounded-full border border-white/15 px-4 text-xs text-sky-100/80">Fechar</button>
+                <button type="button" disabled={recadoEnviando || !recadoTxt.trim()} onClick={() => void mandarRecado(recadoTxt)} className="min-h-[40px] rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-xs font-extrabold text-slate-950 disabled:opacity-50">{recadoEnviando ? "Enviando…" : "Enviar ao QG"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
       {aviso2 && <p role="status" className="absolute left-1/2 top-[164px] z-40 -translate-x-1/2 rounded-full bg-[#1a0f08]/90 px-4 py-2 text-xs text-amber-100">{aviso2}</p>}
       <div aria-hidden="true" className={`pointer-events-none absolute inset-0 z-[45] bg-black transition-opacity duration-300 ${fade ? "opacity-100" : "opacity-0"}`} />

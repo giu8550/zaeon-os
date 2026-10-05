@@ -33,6 +33,10 @@ export type CidadeHandle = {
   portalChao: THREE.Object3D;
   atualizar(dt: number, t: number): void;
   dispose(): void;
+  /** a tela da TV do lounge (clicável: o dono escreve o recado pro QG do Andrei) */
+  tvLounge: THREE.Mesh | null;
+  /** mostra na TV o último recado enviado (null = some) */
+  mostrarRecadoNaTV(texto: string | null): void;
 };
 
 const COLD = 0xbfe8ff, ICE = 0x9fd0ff, FIRE = [0xffe3b0, 0xffb45a, 0xff7a2c];
@@ -325,7 +329,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {
-    group: raiz, ilha, rotulo, alvos, computadores: telas, portalChao: peDisco,
+    group: raiz, ilha, rotulo, alvos, computadores: telas, portalChao: peDisco, tvLounge: salas.tv, mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     atualizar(dt, t) {
       ilha.position.y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel;
       for (const f of fogos) { const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp; f.s.scale.set(3.4 * (0.9 + p * 0.25), 5 * (0.8 + p * 0.4), 1); (f.s.material as THREE.SpriteMaterial).opacity = 0.5 + 0.3 * p; }
