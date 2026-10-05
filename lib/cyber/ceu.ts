@@ -141,7 +141,33 @@ export function pilonesDoHangar(): { x: number; z: number }[] {
   return Array.from({ length: h.pilones }, (_, i) => { const a = (i / h.pilones) * Math.PI * 2 + Math.PI / h.pilones; return { x: h.x + Math.cos(a) * R, z: h.z + Math.sin(a) * R }; });
 }
 
-/** passo andando na cidade: colisores sólidos e não cai da borda */
+/**
+ * ILHOTAS em volta da Zaeon (locais, sem giro): plataformas flutuantes com COLISÃO própria — dá pra pousar no topo
+ * (e andar nele; passou da borda, cai), e o corpo (cone invertido) é sólido pra nave e pra quem voa de mochila.
+ * Layout FIXO (o mesmo pra todo mundo e pro render). `fase` = a flutuação de cada uma (sobe e desce ±1,2 m).
+ */
+export const ILHOTAS: { x: number; z: number; r: number; dy: number; fase: number }[] = Array.from({ length: 7 }, (_, k) => {
+  const a = (k / 7) * Math.PI * 2 + 0.4, dist = 80 + (k % 3) * 12;
+  return { x: Math.cos(a) * dist, z: Math.sin(a) * dist, r: 6 + (k % 4) * 2.5, dy: ((k % 3) - 1) * 12, fase: k * 1.7 };
+});
+export const BOIA_ILHOTA = 1.2;
+/** altura do TOPO da ilhota k no instante t (s) — `amp` = 1 normal, menor com "reduzir movimento" */
+export const alturaIlhota = (k: number, t: number, amp = 1) => CIDADE.pisoY + ILHOTAS[k]!.dy + Math.sin(t * 0.25 + ILHOTAS[k]!.fase) * BOIA_ILHOTA * amp;
+/** a ilhota cujo topo está sob `p` (mundo), ou -1 */
+export function ilhotaEm(p: P2, folga = 0): number {
+  for (let k = 0; k < ILHOTAS.length; k++) { const il = ILHOTAS[k]!, w = mundo(il); if (Math.hypot(p.x - w.x, p.z - w.z) < il.r - 0.3 + folga) return k; }
+  return -1;
+}
+/** o corpo da ilhota (sólido): cilindro aproximado do topo até `ALTURA_CORPO_ILHOTA × r` pra baixo (o cone afina) */
+export const ALTURA_CORPO_ILHOTA = 1.4;
+
+/** ainda em cima do PISO da ilha principal? Passou da borda = cai (não há mais parede invisível em volta) */
+export const naIlhaPrincipal = (p: P2) => Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= CIDADE.bordaR + 0.1;   // = onde o piso (e o corpo sólido) acaba
+
+/** andar na Zaeon SEM a parede invisível da borda: só os colisores (quem passa da borda, cai — o engine trata) */
+export const resolverCidadeLivre = (prop: P2): P2 => empurrarParaFora(prop, colisoresDaCidade());
+
+/** passo andando na cidade com LIMITE na borda (clicar no chão pra andar não te leva pra fora da ilha) */
 export function resolverCidade(prop: P2): P2 {
   let q = empurrarParaFora(prop, colisoresDaCidade());
   const c = CIDADE.centro, dx = q.x - c.x, dz = q.z - c.z, d = Math.hypot(dx, dz);

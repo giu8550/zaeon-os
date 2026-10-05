@@ -3,7 +3,7 @@ import { POIS, marcoNav } from "./landmarks";
 import { colisoresDoAlto, deEscada } from "./nav";
 import { dentroDeAlgum } from "./colisao";
 import { pilaresDoMarco } from "./voo";
-import { JET, chaoNoAr, passoHorizontalJet, passoVertical, resolverNoAr, tetoDoJet, type QGNoAr } from "./jet";
+import { JET, JET_CEU, chaoNoAr, passoHorizontalJet, passoVertical, resolverNoAr, tetoDoJet, type QGNoAr } from "./jet";
 
 const Z = POIS.find((p) => p.id === "zaeon")!;
 const mn = marcoNav(Z)!;
@@ -74,6 +74,12 @@ describe("mochila a jato", () => {
     let a = { y: 10, vy: 0 }, b = { y: 10, vy: 0 };
     for (let i = 0; i < 60; i++) { a = passoVertical(a.y, a.vy, false, 1 / 60, 50); b = passoVertical(b.y, b.vy, false, 1 / 60, 50, true); }
     expect(b.y).toBeGreaterThan(a.y);   // planando cai mais devagar
+  });
+  it("zona sem gravidade (céu): cai DEVAGAR — sair da borda da Zaeon é descer flutuando", () => {
+    let a = { y: 200, vy: 0 }, b = { y: 20, vy: 0 };
+    for (let i = 0; i < 180; i++) { a = passoVertical(a.y, a.vy, false, 1 / 60, 400); b = passoVertical(b.y, b.vy, false, 1 / 60, 400); }
+    expect(-a.vy).toBeLessThanOrEqual(JET_CEU.quedaMax + 1e-9);   // no céu: teto de queda baixo
+    expect(200 - a.y).toBeLessThan(20 - b.y);                       // em 3 s desce bem menos que perto do chão
   });
 });
 

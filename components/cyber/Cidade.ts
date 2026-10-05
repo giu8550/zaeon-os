@@ -15,7 +15,7 @@
  * `prefers-reduced-motion` deixa fogo/vórtices quase parados. dispose() completo.
  */
 import * as THREE from "three";
-import { CIDADE, bibliotecaLocais, pilonesDoHangar, servidoresLocais } from "@/lib/cyber/ceu";
+import { BOIA_ILHOTA, CIDADE, ILHOTAS, bibliotecaLocais, pilonesDoHangar, servidoresLocais } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
@@ -37,6 +37,8 @@ export type CidadeHandle = {
   tvLounge: THREE.Mesh | null;
   /** mostra na TV o último recado enviado (null = some) */
   mostrarRecadoNaTV(texto: string | null): void;
+  /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
+  alturaIlhota(k: number): number;
 };
 
 const COLD = 0xbfe8ff, ICE = 0x9fd0ff, FIRE = [0xffe3b0, 0xffb45a, 0xff7a2c];
@@ -301,18 +303,21 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const cGeo = new THREE.BufferGeometry(); cGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CN * 3), 3));
   const cPts = add(new THREE.Points(cGeo, new THREE.PointsMaterial({ size: 0.3, map: starTex, color: 0xeaf4ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); cPts.frustumCulled = false;
 
-  // ── ilhotas flutuantes em volta (montanhas invertidas + cristais), cada uma com sua flutuação ──
+  // ── ilhotas flutuantes em volta (montanhas invertidas + cristais na BORDA), cada uma com sua flutuação ──
+  //    Layout FIXO em lib/cyber/ceu.ts (ILHOTAS) — o mesmo da colisão: dá pra pousar no topo e andar nele.
+  //    Todas aparecem (também no celular): a colisão tem que ser a mesma pra todo mundo.
   const ilhotas: { g: THREE.Group; y0: number; ph: number }[] = [];
-  const NI = low ? 4 : 7;
   const cristalMat = new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x66e6ff, emissiveIntensity: 1.1, roughness: 0.2, flatShading: true, transparent: true, opacity: 0.9 });
-  for (let k = 0; k < NI; k++) {
-    const a = (k / NI) * Math.PI * 2 + 0.4, dist = 80 + (k % 3) * 12, rr = 6 + (k % 4) * 2.5, y0 = CIDADE.pisoY + ((k % 3) - 1) * 12;
-    const g = new THREE.Group(); g.position.set(CIDADE.centro.x + Math.cos(a) * dist, y0, CIDADE.centro.z + Math.sin(a) * dist); raiz.add(g);
-    const c = new THREE.Mesh(new THREE.ConeGeometry(rr, rr * 1.9, 8), rocha); c.rotation.x = Math.PI; c.position.y = -rr * 0.95; g.add(c);
-    const topo = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0x0a2440, emissive: COLD, emissiveIntensity: 0.3 })); g.add(topo);
-    for (let j = 0; j < 5; j++) { const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.4 + Math.random() * 0.6), cristalMat); cr.scale.y = 2 + Math.random() * 1.5; const aa = Math.random() * 6.283, d = Math.random() * rr * 0.7; cr.position.set(Math.cos(aa) * d, 1 + Math.random(), Math.sin(aa) * d); g.add(cr); }
-    ilhotas.push({ g, y0, ph: Math.random() * 6.283 });
-  }
+  ILHOTAS.forEach((il, k) => {
+    const rr = il.r, y0 = CIDADE.pisoY + il.dy;
+    const g = new THREE.Group(); g.position.set(CIDADE.centro.x + il.x, y0, CIDADE.centro.z + il.z); raiz.add(g);
+    const c = new THREE.Mesh(new THREE.ConeGeometry(rr, rr * 1.9, low ? 8 : 12), rocha); c.rotation.x = Math.PI; c.position.y = -rr * 0.95 - 0.4; g.add(c);
+    // piso: a face de CIMA fica exatamente na altura do grupo (= a altura da colisão)
+    const topo = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, 0.4, low ? 8 : 16), new THREE.MeshStandardMaterial({ color: 0x0a2440, emissive: COLD, emissiveIntensity: 0.3 })); topo.position.y = -0.2; g.add(topo);
+    const aro = new THREE.Mesh(new THREE.TorusGeometry(rr - 0.1, 0.06, 6, 48), new THREE.MeshBasicMaterial({ color: COLD, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending })); aro.rotation.x = Math.PI / 2; aro.position.y = 0.02; g.add(aro);
+    for (let j = 0; j < 5; j++) { const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.4 + ((j * 37 + k * 11) % 10) / 16), cristalMat); cr.scale.y = 2 + ((j * 13 + k) % 10) / 7; const aa = (j / 5) * 6.283 + k, d = rr * 0.86; cr.position.set(Math.cos(aa) * d, 1.1, Math.sin(aa) * d); g.add(cr); }
+    ilhotas.push({ g, y0, ph: il.fase });
+  });
 
   // ── PORTAL DE ENTRADA no chão, embaixo do buraco negro ──
   const pe = CIDADE.portalEntrada;
@@ -329,7 +334,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {
-    group: raiz, ilha, rotulo, alvos, computadores: telas, portalChao: peDisco, tvLounge: salas.tv, mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    group: raiz, ilha, rotulo, alvos, computadores: telas, portalChao: peDisco, tvLounge: salas.tv, alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     atualizar(dt, t) {
       ilha.position.y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel;
       for (const f of fogos) { const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp; f.s.scale.set(3.4 * (0.9 + p * 0.25), 5 * (0.8 + p * 0.4), 1); (f.s.material as THREE.SpriteMaterial).opacity = 0.5 + 0.3 * p; }
@@ -359,7 +364,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
       { const a = swGeo.attributes.position!.array as Float32Array;
         sw.forEach((s, i) => { s.y += dt * 1.6 * vel; s.a += dt * 0.6 * vel; if (s.y > 14) { s.y = 0; s.r = Math.random() * (pe.r - 0.8); } const r = s.r * (1 - s.y / 18); a[i * 3] = Math.cos(s.a) * r; a[i * 3 + 1] = s.y; a[i * 3 + 2] = Math.sin(s.a) * r; });
         swGeo.attributes.position!.needsUpdate = true; }
-      ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * 1.2 * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
+      ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * BOIA_ILHOTA * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
     },
     dispose() { rotulo.remove(); liberar(raiz, texturas); },
   };
