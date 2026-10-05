@@ -85,9 +85,9 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
   scene.add(bh);
 
   // chão limpo + grid
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), new THREE.MeshStandardMaterial({ color: 0x0e1730, roughness: 1 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0x0e1730, roughness: 1 }));
   floor.rotation.x = -Math.PI / 2; scene.add(floor);
-  const grid = new THREE.GridHelper(800, 160, 0x5a6cc0, 0x1b2550); grid.position.y = 0.02;
+  const grid = new THREE.GridHelper(1200, 240, 0x5a6cc0, 0x1b2550); grid.position.y = 0.02;
   (grid.material as THREE.Material).transparent = true; (grid.material as THREE.Material).opacity = 0.42; scene.add(grid);
 
   const bhNdc = new THREE.Vector3();
