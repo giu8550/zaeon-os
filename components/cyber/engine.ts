@@ -390,10 +390,10 @@ export class CyberEngine {
   private naveForaDoHangar() { if (!this.nave) return false; const n = this.naveEst, h = mundo(CIDADE.hangar); return Math.hypot(n.x - h.x, n.z - h.z) > 1 || n.y < CIDADE.pisoY - 0.5; }
   /** (pra quem NÃO é o dono) o dono está com a nave fora do hangar → a do hangar some (só existe uma nave) */
   private naveDoDonoFora() { if (this.ehFundador(this.o.eu.id)) return false; for (const a of this.remotos.values()) if (a.nave) return true; return false; }
-  /** põe um avatar no assento do piloto (dentro da cúpula), flutuando de pernas cruzadas */
+  /** põe um avatar SENTADO no assento do piloto, na cabine da nave */
   private noAssento(av: AvatarLuzHandle, nave: NaveHandle) {
     nave.group.updateWorldMatrix(true, true); nave.assento.getWorldPosition(this.tmp);
-    av.group.position.set(this.tmp.x, this.tmp.y + 0.45, this.tmp.z);
+    av.group.position.copy(this.tmp);
   }
   private navePerto() { const n = this.naveEst; return Math.hypot(this.eu.pos.x - n.x, this.eu.pos.z - n.z) < 10 && Math.abs(this.eu.alt - n.y) < 7; }   // a nave é grande (~16 m)
   /** sólidos de voo da Zaeon: corpo (até o alto das muralhas) e cúpula (topo do dono), acompanhando a flutuação */
@@ -688,10 +688,10 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr, correndo: !!(this.keys.shift || this.correr) && eu.moving, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu || this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, dt, t });
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr, correndo: !!(this.keys.shift || this.correr) && eu.moving, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, dt, t });
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP;
-      a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(pilota ? a.naveYaw ?? a.facing : a.facing); a.av.animar({ andando: a.moving && a.jet === undefined && !pilota, sentado: pilota ? 0 : a.sit, meditando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dt, t });
+      a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(pilota ? a.naveYaw ?? a.facing : a.facing); a.av.animar({ andando: a.moving && a.jet === undefined && !pilota, sentado: pilota ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dt, t });
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
       else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = a.naveYaw ?? 0; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0 }); this.noAssento(a.av, a.nave); }
     }

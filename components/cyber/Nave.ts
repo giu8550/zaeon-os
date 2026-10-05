@@ -1,7 +1,8 @@
 /**
  * Nave — o veículo do dono (fica no hangar da Zaeon): um DISCO VOADOR alienígena grande e imponente. Casco escuro
- * metálico com veios de luz e uma crista, espinhos de cristal em volta da aba, CÚPULA de vidro alta onde se vê o
- * PILOTO (o avatar real de quem pilota — o engine o põe no `assento`), o anel de luzes da borda girando (o "eixo
+ * metálico com veios de luz e uma crista, espinhos de cristal em volta da aba, uma CABINE rebaixada no dorso (assento de
+ * piloto, console com telas, manches) sob uma redoma baixa e larga — o PILOTO é o avatar real de quem pilota, sentado
+ * no `assento` (o engine o põe lá), o anel de luzes da borda girando (o "eixo
  * giratório") e um halo externo tracejado girando ao contrário, três orbes luminosos na barriga, pernas de pouso que
  * recolhem em voo. Voando: núcleo e veios acendem, rastro de plasma atrás (cresce com a velocidade) e, pairando,
  * feixe + pulsos de energia descendo. Tudo em ondas LENTAS, sem estrobo; `prefers-reduced-motion` aquieta.
@@ -24,8 +25,12 @@ export type NaveHandle = {
 
 /** escala do disco (o modelo é ~7,5 m de diâmetro em 1×) */
 export const ESCALA_NAVE = 2.1;
+/** fundo do poço da cabine (local, antes da escala) */
+const POCO_Y = 0.3;
 const ALIEN = new THREE.Color(0x8bffcf);   // verde-ciano "alienígena" das luzes
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+const escuroCab = () => new THREE.MeshStandardMaterial({ color: 0x10161d, roughness: 0.5, metalness: 0.7 });
 
 export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   const cor = new THREE.Color(opts.cor ?? "#2f7bff");
@@ -37,7 +42,8 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
 
   // casco: disco com barriga funda, aba fina e uma CRISTA no dorso
   const metal = new THREE.MeshStandardMaterial({ color: 0x8a98a8, roughness: 0.3, metalness: 0.45, emissive: 0x10302c, emissiveIntensity: 0.5 });
-  const perfil = [[0, -0.62], [1.1, -0.66], [2.4, -0.46], [3.5, -0.12], [3.78, 0.0], [3.6, 0.16], [2.9, 0.34], [2.55, 0.5], [2.3, 0.46], [1.75, 0.62], [0, 0.68]].map(([r, y]) => new THREE.Vector2(r!, y!));
+  // perfil do disco; no dorso, o POÇO da cabine (rebaixo até POCO_Y, onde fica o assento do piloto)
+  const perfil = [[0, -0.62], [1.1, -0.66], [2.4, -0.46], [3.5, -0.12], [3.78, 0.0], [3.6, 0.16], [2.9, 0.34], [2.55, 0.5], [2.3, 0.46], [1.75, 0.6], [1.32, 0.62], [1.2, POCO_Y + 0.02], [0, POCO_Y]].map(([r, y]) => new THREE.Vector2(r!, y!));
   const casco = new THREE.Mesh(new THREE.LatheGeometry(perfil, seg), metal); corpo.add(casco); alvos.push(casco);
   // veios de luz no dorso (anéis finos) + friso na aba
   const veioMat = aditivo(ALIEN, 0.5);
@@ -53,12 +59,31 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
     e.lookAt(Math.cos(a) * 9, -1.6, Math.sin(a) * 9); e.rotateX(Math.PI / 2); corpo.add(e);
   }
 
-  // CÚPULA alta de vidro com o piloto dentro (o avatar real vai no `assento`)
-  const cupula = new THREE.Mesh(new THREE.SphereGeometry(1.55, seg, 20, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xbff4ff, emissive: 0x1d5f6a, emissiveIntensity: 0.35, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
-  cupula.scale.y = 1.05; cupula.position.y = 0.62; corpo.add(cupula); alvos.push(cupula);
-  const aroCupula = new THREE.Mesh(new THREE.TorusGeometry(1.56, 0.05, 6, seg), aditivo(cor.clone().lerp(ALIEN, 0.5), 0.8)); aroCupula.rotation.x = Math.PI / 2; aroCupula.position.y = 0.64; corpo.add(aroCupula);
-  const assento = new THREE.Object3D(); assento.position.set(0, 0.66, 0); corpo.add(assento);
-  const luzInterna = new THREE.PointLight(ALIEN.getHex(), 0.8, 6); luzInterna.position.set(0, 1.6, 0); corpo.add(luzInterna);
+  // CABINE no poço (autorada em METROS: o grupo desfaz a escala da nave): assento de piloto com encosto e apoio de
+  // cabeça, braços, console curvo com telas na frente e dois manches — o avatar real senta no `assento`
+  const cabine = new THREE.Group(); cabine.scale.setScalar(1 / ESCALA_NAVE); cabine.position.y = POCO_Y; corpo.add(cabine);
+  const estofado = new THREE.MeshStandardMaterial({ color: 0x1b2430, roughness: 0.6, metalness: 0.3, emissive: 0x0d1a1a, emissiveIntensity: 0.4 });
+  const frisoCab = aditivo(ALIEN, 0.7);
+  const peca = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.x = rx; cabine.add(m); return m; };
+  const SZ = -0.25;   // o assento fica um pouco atrás do centro (a frente da nave é +z)
+  peca(new THREE.CylinderGeometry(0.16, 0.24, 0.32, 12), escuroCab(), 0, 0.16, SZ);                     // pedestal
+  peca(new THREE.BoxGeometry(0.56, 0.12, 0.54), estofado, 0, 0.38, SZ);                                 // assento
+  peca(new THREE.BoxGeometry(0.56, 0.8, 0.12), estofado, 0, 0.82, SZ - 0.3, -0.18);                     // encosto
+  peca(new THREE.BoxGeometry(0.3, 0.22, 0.1), estofado, 0, 1.33, SZ - 0.4, -0.18);                      // apoio de cabeça
+  for (const lado of [-1, 1]) { peca(new THREE.BoxGeometry(0.08, 0.08, 0.46), estofado, lado * 0.33, 0.6, SZ); peca(new THREE.BoxGeometry(0.02, 0.6, 0.02), frisoCab, lado * 0.29, 0.85, SZ - 0.36, -0.18); }
+  // console curvo na frente com três telas e dois manches
+  const painelCurvo = new THREE.MeshStandardMaterial({ color: 0x1b2430, roughness: 0.6, metalness: 0.3, emissive: 0x0d1a1a, emissiveIntensity: 0.4, side: THREE.DoubleSide });
+  peca(new THREE.CylinderGeometry(0.95, 0.95, 0.38, 24, 1, true, -0.75, 1.5), painelCurvo, 0, 0.6, SZ - 0.15);   // painel curvo (só a parede, em arco à frente)
+  const borda = peca(new THREE.TorusGeometry(0.95, 0.018, 4, 24, 1.5), frisoCab, 0, 0.79, SZ - 0.15, Math.PI / 2); borda.rotation.z = Math.PI / 2 - 0.75;   // filete de luz no topo do painel
+  const telaMat = new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+  for (const [x, ry] of [[-0.42, 0.5], [0, 0], [0.42, -0.5]] as const) { const tl = peca(new THREE.PlaneGeometry(0.34, 0.22), telaMat, x, 0.92, SZ + 0.72 - Math.abs(x) * 0.35, -0.55); tl.rotation.y = ry; }
+  for (const lado of [-1, 1]) { peca(new THREE.CylinderGeometry(0.02, 0.025, 0.2, 8), escuroCab(), lado * 0.22, 0.76, SZ + 0.42); peca(new THREE.SphereGeometry(0.04, 10, 8), frisoCab, lado * 0.22, 0.87, SZ + 0.42); }
+  const assento = new THREE.Object3D(); assento.position.set(0, POCO_Y, SZ / ESCALA_NAVE); corpo.add(assento);
+  // REDOMA baixa e larga (flat, moderna): vidro fumê com aro de luz
+  const cupula = new THREE.Mesh(new THREE.SphereGeometry(1.32, seg, 16, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x9fe8ff, emissive: 0x0f3a44, emissiveIntensity: 0.3, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide }));
+  cupula.scale.y = 0.42; cupula.position.y = 0.6; corpo.add(cupula); alvos.push(cupula);
+  const aroCupula = new THREE.Mesh(new THREE.TorusGeometry(1.33, 0.035, 6, seg), aditivo(cor.clone().lerp(ALIEN, 0.5), 0.85)); aroCupula.rotation.x = Math.PI / 2; aroCupula.position.y = 0.61; corpo.add(aroCupula);
+  const luzInterna = new THREE.PointLight(ALIEN.getHex(), 0.8, 6); luzInterna.position.set(0, 0.95, 0); corpo.add(luzInterna);
 
   // o "EIXO GIRATÓRIO": anel de luzes da borda (gira) + halo externo tracejado (gira ao contrário)
   const NL = opts.low ? 14 : 22, aro = new THREE.Group(); corpo.add(aro);
