@@ -7,7 +7,7 @@
 import { POIS, baseLivreDosPOIs, marcoNav, type POI } from "./landmarks";
 import { CIDADE, mundo } from "./ceu";
 
-export const BASE_COLLIDER_R = 1.5;   // raio sólido (plano XZ): plataforma + mesa
+export const BASE_COLLIDER_R = 2.0;   // raio sólido (plano XZ): a cabine (arcos ±1,95 m)
 export const BASE_INTERACT_R = 3.4;   // raio de ativação do estudo + clique no monitor
 export const BASE_PLATAFORMA_R = 3.4; // plataforma visível
 export const PRACA_R = 9;             // raio do anel de bases em torno da praça (origem)
