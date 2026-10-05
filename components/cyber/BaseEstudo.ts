@@ -58,7 +58,7 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
   }
 
   // neurônios subindo (corkscrew vivo, estilo cérebro) + núcleo do feixe
-  const upN = low ? 80 : 160, upPos = new Float32Array(upN * 3);
+  const upN = low ? 50 : 90, upPos = new Float32Array(upN * 3);
   const upData = Array.from({ length: upN }, () => ({ a: Math.random() * 6.283, r: 0.25 + Math.random() * 0.9, y: Math.random() * 15, sp: 1.3 + Math.random() * 1.9, dr: 0.5 + Math.random() * 0.7 }));
   const upGeo = new THREE.BufferGeometry(); upGeo.setAttribute("position", new THREE.BufferAttribute(upPos, 3));
   const upPts = new THREE.Points(upGeo, new THREE.PointsMaterial({ size: 0.34, map: starTex, transparent: true, opacity: 0.92, depthWrite: false, blending: THREE.AdditiveBlending, color: 0x8fe8ff }));

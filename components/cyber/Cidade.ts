@@ -40,9 +40,10 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const ilha = new THREE.Group(); ilha.position.set(CIDADE.centro.x, CIDADE.pisoY, CIDADE.centro.z); raiz.add(ilha);
   const alvos: THREE.Object3D[] = [];
   const add = <T extends THREE.Object3D>(o: T, pai: THREE.Object3D = ilha, alvo = false) => { pai.add(o); if (alvo) alvos.push(o); return o; };
+  // vidro SEMPRE transparente simples: o `transmission` do MeshPhysicalMaterial obriga o three a renderizar a cena
+  // inteira de novo num alvo extra a cada quadro — era o maior custo de FPS da cena
   const vidro = (p: THREE.MeshPhysicalMaterialParameters, op: number) =>
-    low ? new THREE.MeshStandardMaterial({ color: p.color, emissive: p.emissive, emissiveIntensity: p.emissiveIntensity, roughness: p.roughness, metalness: p.metalness, transparent: true, opacity: op, side: p.side ?? THREE.FrontSide })
-      : new THREE.MeshPhysicalMaterial(p);
+    new THREE.MeshStandardMaterial({ color: p.color, emissive: p.emissive, emissiveIntensity: p.emissiveIntensity, roughness: p.roughness, metalness: p.metalness, transparent: true, opacity: op, side: p.side ?? THREE.FrontSide });
   const texturas: THREE.Texture[] = [];
   const glow = (a: string, b: string) => { const t = glowTex(a, b); texturas.push(t); return t; };
   const R = CIDADE.bordaR, H = CIDADE.ilhaAltura;
@@ -65,7 +66,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   sob.scale.set(130, 130, 1); sob.position.y = -H - 4;
 
   // ── quedas de luz escorrendo pelas bordas ──
-  const NQ = low ? 6 : 10, PQ = low ? 24 : 40;
+  const NQ = low ? 4 : 6, PQ = low ? 16 : 24;
   const quedas = Array.from({ length: NQ * PQ }, (_, i) => ({ a: (Math.floor(i / PQ) / NQ) * Math.PI * 2 + 0.2, y: -Math.random() * 70, sp: 6 + Math.random() * 8, j: (Math.random() - 0.5) * 1.2 }));
   const qGeo = new THREE.BufferGeometry(); qGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(quedas.length * 3), 3));
   const qPts = add(new THREE.Points(qGeo, new THREE.PointsMaterial({ size: 0.5, map: starTex, color: 0x9fe8ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }))); qPts.frustumCulled = false;
@@ -92,7 +93,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
 
   // ── línguas de fogo na borda + anel de brasa (sem estrobo) ──
   const texFogo = glow("rgba(255,225,170,.95)", "rgba(255,120,40,.3)");
-  const NF = low ? 24 : 40, fogos = Array.from({ length: NF }, (_, i) => {
+  const NF = low ? 16 : 24, fogos = Array.from({ length: NF }, (_, i) => {
     const a = (i / NF) * Math.PI * 2, s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texFogo, color: FIRE[i % 3]!, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
     s.position.set(Math.cos(a) * (R - 0.8), 2.4, Math.sin(a) * (R - 0.8)); s.scale.set(3.4, 5, 1); return { s, ph: Math.random() * 6.283 };
   });
@@ -105,7 +106,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   { const m = new THREE.Matrix4(); for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; pil.setMatrixAt(i, m.makeTranslation(Math.cos(a) * cidadela.r, 6, Math.sin(a) * cidadela.r)); } pil.instanceMatrix.needsUpdate = true; pil.computeBoundingSphere(); }
   const cupula = add(new THREE.Mesh(new THREE.SphereGeometry(cidadela.r + 1, low ? 20 : 36, low ? 12 : 20, 0, Math.PI * 2, 0, Math.PI / 2), vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.4, thickness: 1, transparent: true, opacity: 0.45, side: THREE.DoubleSide }, 0.4)));
   cupula.position.y = 11;
-  { const N = low ? 80 : 160, pv = new Float32Array(N * 3); for (let i = 0; i < N; i++) { const a = Math.random() * 6.283, ph = Math.random() * Math.PI / 2, r = cidadela.r + 0.6; pv[i * 3] = Math.cos(a) * Math.cos(ph) * r; pv[i * 3 + 1] = 11 + Math.sin(ph) * r; pv[i * 3 + 2] = Math.sin(a) * Math.cos(ph) * r; }
+  { const N = low ? 40 : 80, pv = new Float32Array(N * 3); for (let i = 0; i < N; i++) { const a = Math.random() * 6.283, ph = Math.random() * Math.PI / 2, r = cidadela.r + 0.6; pv[i * 3] = Math.cos(a) * Math.cos(ph) * r; pv[i * 3 + 1] = 11 + Math.sin(ph) * r; pv[i * 3 + 2] = Math.sin(a) * Math.cos(ph) * r; }
     const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pv, 3)); add(new THREE.Points(g, new THREE.PointsMaterial({ size: 0.3, map: starTex, color: 0xbfe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); }
   { const lin: number[] = []; for (let k = 0; k < 14; k++) { let a = Math.random() * 6.283, ph = 0.2; let px = Math.cos(a) * Math.cos(ph) * cidadela.r, py = 11 + Math.sin(ph) * cidadela.r, pz = Math.sin(a) * Math.cos(ph) * cidadela.r;
       for (let s = 0; s < 5; s++) { a += (Math.random() - 0.5) * 0.5; ph = Math.min(1.4, ph + 0.25); const nx = Math.cos(a) * Math.cos(ph) * cidadela.r, ny = 11 + Math.sin(ph) * cidadela.r, nz = Math.sin(a) * Math.cos(ph) * cidadela.r; lin.push(px, py, pz, nx, ny, nz); px = nx; py = ny; pz = nz; } }
@@ -127,7 +128,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
     });
     mesas.instanceMatrix.needsUpdate = true; telas.instanceMatrix.needsUpdate = true; mesas.computeBoundingSphere(); telas.computeBoundingSphere(); }
   add(new THREE.Mesh(new THREE.CylinderGeometry(CIDADE.mesaHolo.r, CIDADE.mesaHolo.r * 1.1, 1, 24), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), ilha, true).position.y = 0.5;
-  const NG = low ? 260 : 520, gp = new Float32Array(NG * 3);
+  const NG = low ? 160 : 280, gp = new Float32Array(NG * 3);
   for (let i = 0; i < NG; i++) { const u = Math.random() * 2 - 1, th = Math.random() * 6.283, r = 1.6, s = Math.sqrt(1 - u * u); gp[i * 3] = s * Math.cos(th) * r; gp[i * 3 + 1] = 3 + u * r; gp[i * 3 + 2] = s * Math.sin(th) * r; }
   const gGeo = new THREE.BufferGeometry(); gGeo.setAttribute("position", new THREE.BufferAttribute(gp, 3));
   const globo = add(new THREE.Points(gGeo, new THREE.PointsMaterial({ size: 0.09, map: starTex, color: 0x8fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
@@ -150,7 +151,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   discoP.position.y = pv.r + 0.3; discoP.rotation.x = 0.35;
 
   // ── querubins orbitando a cidadela ──
-  const CN = low ? 90 : 200, cher = Array.from({ length: CN }, () => ({ a: Math.random() * 6.283, r: 16 + Math.random() * 16, y: 3 + Math.random() * 14, sp: 0.05 + Math.random() * 0.15 }));
+  const CN = low ? 40 : 90, cher = Array.from({ length: CN }, () => ({ a: Math.random() * 6.283, r: 16 + Math.random() * 16, y: 3 + Math.random() * 14, sp: 0.05 + Math.random() * 0.15 }));
   const cGeo = new THREE.BufferGeometry(); cGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CN * 3), 3));
   const cPts = add(new THREE.Points(cGeo, new THREE.PointsMaterial({ size: 0.3, map: starTex, color: 0xeaf4ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); cPts.frustumCulled = false;
 
@@ -174,11 +175,11 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   peAnel.rotation.x = -Math.PI / 2; portalChao.add(peAnel);
   const peDisco = new THREE.Mesh(new THREE.CircleGeometry(pe.r - 0.6, 64), new THREE.MeshBasicMaterial({ color: 0x05030a, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
   peDisco.rotation.x = -Math.PI / 2; peDisco.position.y = 0.01; portalChao.add(peDisco); alvos.push(peDisco);
-  const NS = low ? 90 : 180, sw = Array.from({ length: NS }, () => ({ a: Math.random() * 6.283, r: Math.random() * (pe.r - 0.8), y: Math.random() * 12 }));
+  const NS = low ? 50 : 90, sw = Array.from({ length: NS }, () => ({ a: Math.random() * 6.283, r: Math.random() * (pe.r - 0.8), y: Math.random() * 12 }));
   const swGeo = new THREE.BufferGeometry(); swGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NS * 3), 3));
   const swPts = new THREE.Points(swGeo, new THREE.PointsMaterial({ size: 0.35, map: starTex, color: 0xffd9a8, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); swPts.frustumCulled = false; portalChao.add(swPts);
 
-  const rotulo = document.createElement("div"); rotulo.style.cssText = ROTULO_CSS; rotulo.textContent = "Cidade Zaeon · QG";
+  const rotulo = document.createElement("div"); rotulo.style.cssText = ROTULO_CSS; rotulo.textContent = "Zaeon";
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {

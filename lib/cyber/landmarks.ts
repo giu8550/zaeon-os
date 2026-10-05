@@ -32,7 +32,7 @@ export type POI = {
 };
 
 /**
- * ZAEON — o QG. Parâmetros do protótipo (docs/prototypes/zaeon-landmark.html) × ESCALA: maior e mais alto que o
+ * QG DO ANDREI (antiga "Zaeon" do chão). Parâmetros do protótipo (docs/prototypes/zaeon-landmark.html) × ESCALA: maior e mais alto que o
  * protótipo, à esquerda-atrás da praça (longe do eixo do buraco negro, que fica no centro da tela), com a ESCADA
  * virada pra praça e o PORTÃO das muralhas alinhado a ela.
  */
@@ -44,10 +44,12 @@ function zaeonPOI(): POI {
   const chaoR = 9 * S + 0.4;                        // base do cone (1,5 m acima do chão): sólida no chão
   const dir = Math.atan2(-z, -x);                   // a escada aponta pra praça (origem)
   return {
-    id: "zaeon", nome: "Zaeon", org: "A universidade regida por IA.",
+    // o marco ANDÁVEL agora é o QG do Andrei Bacelar (a base dele fica no centro do salão). "Zaeon" passou a ser a
+    // ilha no céu (lib/cyber/ceu.ts), onde fica a base do dono. O id "zaeon" segue por compatibilidade (presença/testes).
+    id: "zaeon", nome: "QG do Andrei", org: "Base do Andrei Bacelar.",
     preset: "zaeon", x, z, escala: S,
     footprintR: chaoR, interactR: chaoR + 6,
-    altura, topo: { y: 6.6 }, acesso: "dono", link: "/",
+    altura, topo: { y: 6.6 }, acesso: "dono",
     nav: {
       pisoY, bordaR, chaoR,
       muralhaR: 6.3 * S, muralhaN: 16, muralhaColR: 2.0, portaoMeia: 0.4,

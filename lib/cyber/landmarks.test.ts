@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { POIS, baseLivreDosPOIs, bordaDoPOI, colisoresDosPOIs, landmarksOn, marcoNav, poiPerto, type POI } from "./landmarks";
-import { BASE_PLATAFORMA_R, basesDosMembros, posicaoDaBase, spawnDaBase } from "./bases";
+import { HELIPORTO, POIS, baseLivreDosPOIs, bordaDoPOI, colisoresDosPOIs, landmarksOn, marcoNav, poiPerto, type POI } from "./landmarks";
+import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, BASE_PLATAFORMA_R, baseNoCeu, baseNoQG, basesDosMembros, localParaMundo, posicaoDaBase, spawnDaBase } from "./bases";
+import { CIDADE, colisoresDaCidade, mundo, noPortalEntrada, noPortalVolta } from "./ceu";
 import { empurrarParaFora, dentroDeAlgum } from "./colisao";
 import { decidirClique } from "./clique";
 import { PE_DA_ESCADA, alturaEm, colisoresDoAlto, deEscada, escadaLocal, muralhaTemBloco, resolverPasso } from "./nav";
@@ -10,8 +11,9 @@ const m = marcoNav(zaeon)!;
 const BH = { x: 0, z: -110 };   // buraco negro (CenaCosmica)
 
 describe("registro de POIs", () => {
-  it("a Zaeon: maior/mais alta que o protótipo, andável, acesso do dono, link", () => {
-    expect(zaeon).toMatchObject({ nome: "Zaeon", preset: "zaeon", acesso: "dono", link: "/", topo: { y: 6.6 } });
+  it("o QG do Andrei (antiga Zaeon do chão): maior/mais alto que o protótipo, andável, topo do dono, sem link", () => {
+    expect(zaeon).toMatchObject({ nome: "QG do Andrei", preset: "zaeon", acesso: "dono", topo: { y: 6.6 } });
+    expect(zaeon.link).toBeUndefined();
     expect(zaeon.escala!).toBeGreaterThan(1);
     expect(zaeon.altura).toBeGreaterThan(7);
     expect(zaeon.nav!.pisoY).toBeGreaterThan(zaeon.altura);
@@ -197,5 +199,59 @@ describe("simulação quadro a quadro (WASD 'por nós mesmos'): subir e descer s
       // a não ser que tenha saído pela boca da escada, continua na plataforma
       if (r.s.alto && escadaLocal(m, r.s).u < 0) expect(Math.hypot(r.s.x - zaeon.x, r.s.z - zaeon.z)).toBeLessThanOrEqual(m.nav.bordaR);
     }
+  });
+});
+
+describe("heliporto (pouso perto da praça)", () => {
+  const heli = POIS.find((p) => p.id === "heliporto")!;
+  it("plano e andável (não colide), perto da praça e longe do QG, da escada e do portal", () => {
+    expect(colisoresDosPOIs().some((c) => c.x === HELIPORTO.x && c.z === HELIPORTO.z)).toBe(false);
+    const d = Math.hypot(HELIPORTO.x, HELIPORTO.z); expect(d).toBeGreaterThan(20); expect(d).toBeLessThan(45);
+    expect(baseLivreDosPOIs(HELIPORTO, HELIPORTO.r, POIS.filter((p) => p.id !== "heliporto"))).toBe(true);   // fora da Zaeon/escada
+    expect(noPortalEntrada(HELIPORTO)).toBe(false);
+    expect(poiPerto(HELIPORTO)?.id).toBe("heliporto");
+    expect(heli.acesso).toBe("publico");
+  });
+  it("o 1º anel (praça) fica livre e as bases das salas grandes desviam do heliporto", () => {
+    for (let i = 0; i < 5; i++) expect(baseLivreDosPOIs(posicaoDaBase(i), BASE_PLATAFORMA_R)).toBe(true);
+    const ids = Array.from({ length: 60 }, (_, i) => String(i).padStart(24, "0"));
+    for (const b of basesDosMembros(ids).values()) expect(Math.hypot(b.x - HELIPORTO.x, b.z - HELIPORTO.z)).toBeGreaterThan(HELIPORTO.r + BASE_PLATAFORMA_R);
+  });
+});
+
+describe("bases fora do chão: o dono na Zaeon (céu) e o Andrei no centro do QG", () => {
+  const ids = Array.from({ length: 8 }, (_, i) => String(i).padStart(24, "0"));
+  const dono = ids[3]!, andrei = ids[5]!;
+  const m2 = basesDosMembros(ids, POIS, { ceu: [dono], qg: andrei });
+  it("o dono fica na Zaeon, o Andrei no salão do QG; os outros no anel, sem buraco", () => {
+    expect(m2.get(dono)).toEqual(baseNoCeu(0)); expect(m2.get(dono)!.nivel).toBe("ceu");
+    expect(m2.get(andrei)).toEqual(baseNoQG()); expect(m2.get(andrei)!.nivel).toBe("qg");
+    const anel = ids.filter((id) => id !== dono && id !== andrei).map((id) => m2.get(id)!);
+    expect(anel.every((l) => !l.nivel)).toBe(true);
+    expect(anel[0]).toEqual(posicaoDaBase(0)); expect(anel[1]).toEqual(posicaoDaBase(1));   // os slots do anel não sobram
+  });
+  it("sem especiais = tudo no anel (marcos desligados)", () => {
+    expect([...basesDosMembros(ids).values()].every((l) => !l.nivel)).toBe(true);
+  });
+  it("a base da Zaeon: dentro da área andável, livre da cidadela, do hangar e dos portais; virada pro centro", () => {
+    const cs = colisoresDaCidade();
+    BASES_CEU_LOCAIS.forEach((l, i) => {
+      const b = baseNoCeu(i), w = mundo(l);
+      expect(Math.hypot(l.x, l.z) + BASE_PLATAFORMA_R).toBeLessThan(CIDADE.andavelR);
+      for (const c of cs) expect(Math.hypot(w.x - c.x, w.z - c.z)).toBeGreaterThan(c.r + BASE_COLLIDER_R);
+      expect(Math.hypot(l.x - CIDADE.hangar.x, l.z - CIDADE.hangar.z)).toBeGreaterThan(CIDADE.hangar.r + BASE_PLATAFORMA_R);
+      expect(noPortalVolta(w)).toBe(false); expect(noPortalVolta(spawnDaBase(b))).toBe(false);
+      const frente = localParaMundo(b, 0, 1);   // +z local aponta pro centro da ilha
+      expect(Math.hypot(frente.x - CIDADE.centro.x, frente.z - CIDADE.centro.z)).toBeLessThan(Math.hypot(w.x - CIDADE.centro.x, w.z - CIDADE.centro.z));
+    });
+  });
+  it("a base do QG: no centro do salão, entre os pilares, virada pro portão; o spawn fica no salão", () => {
+    const b = baseNoQG()!;
+    expect(b).toMatchObject({ x: zaeon.x, z: zaeon.z, nivel: "qg" });
+    expect(BASE_PLATAFORMA_R).toBeLessThan(m.nav.pilares.r - m.nav.pilares.colR);
+    const sp = spawnDaBase(b);
+    expect(alturaEm(m, sp)).toBe(m.nav.pisoY);   // nasce no piso do salão
+    expect(dentroDeAlgum(sp, colisoresDoAlto(m))).toBe(false);
+    const e = escadaLocal(m, localParaMundo(b, 0, 1)); expect(e.along).toBeGreaterThan(0);   // +z local → portão/escada
   });
 });

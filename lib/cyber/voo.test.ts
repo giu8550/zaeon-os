@@ -105,6 +105,20 @@ describe("voo — botões de movimento levam a nave a qualquer lugar", () => {
     expect(r3.s.y).toBe(0);
   });
 
+  it("pousada no alto de um marco que FLUTUA, continua pousada (e acompanha) enquanto ele sobe e desce", () => {
+    let r: Passo = { s: est(Z.x + 9, solidosZ[0]!.topo, Z.z), pousado: true, chaoY: solidosZ[0]!.topo };
+    for (let i = 0; i < 240; i++) {
+      const boia = Math.sin(i * 0.05) * 0.15;
+      const sol = pilaresDoMarco({ x: Z.x, z: Z.z, chaoR: Z.nav!.chaoR, altura: Z.altura + boia, escala: Z.escala ?? 1, cupula: true });
+      r = passoVooSub(r.s, { wx: 0, wz: 0, subir: false, descer: false }, 1 / 60, sol);
+      expect(r.pousado).toBe(true); expect(r.s.y).toBeCloseTo(sol[0]!.topo, 6);
+    }
+    // e decola normalmente
+    const sol = pilaresDoMarco({ x: Z.x, z: Z.z, chaoR: Z.nav!.chaoR, altura: Z.altura, escala: Z.escala ?? 1, cupula: true });
+    for (let i = 0; i < 30; i++) r = passoVooSub(r.s, { wx: 0, wz: 0, subir: true, descer: false }, 1 / 60, sol);
+    expect(r.pousado).toBe(false); expect(r.s.y).toBeGreaterThan(sol[0]!.topo + 2);
+  });
+
   it("de lado, a Zaeon é sólida até o alto das muralhas (desliza pra fora)", () => {
     const { r } = pilotar({ s: est(Z.x + 30, 5, Z.z), pousado: false, chaoY: 0 }, 60, solidosZ, () => ({ dir: { x: -1, z: 0 } }), 6);
     expect(Math.hypot(r.s.x - Z.x, r.s.z - Z.z)).toBeGreaterThanOrEqual(Z.nav!.chaoR - 1e-6);

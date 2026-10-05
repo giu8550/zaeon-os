@@ -61,7 +61,7 @@ function Tela() {
   // a ORDEM de `sala.members[]` (só cresce) define a base de cada pessoa — igual pra todo mundo
   const membros = useMemo<PessoaCyber[]>(() => {
     const porId = new Map(sala.membros.map((m) => [m.id, m] as const));
-    return (sala.sala?.members ?? []).flatMap((id) => { const m = porId.get(id); return m ? [{ id: m.id, name: m.name, color: m.color, fundador: m.fundador === true }] : []; });
+    return (sala.sala?.members ?? []).flatMap((id) => { const m = porId.get(id); return m ? [{ id: m.id, name: m.name, color: m.color, fundador: m.fundador === true, qg: m.qg === true }] : []; });
   }, [sala.membros, sala.sala?.members]);
   // alguém que entrou depois de eu carregar: rebusca a sala (ordem canônica + nome)
   const { online, recarregar } = sala;
@@ -72,7 +72,7 @@ function Tela() {
     faltam.forEach((o) => pedidos.current.add(o.id));   // 1 refetch por pessoa nova (sem loop se o servidor não a listar)
     void recarregar();
   }, [online, membros, recarregar]);
-  const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true } : null), [sala.eu]);
+  const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true, qg: sala.eu.qg === true } : null), [sala.eu]);
   // ações privilegiadas do dono (topo da Zaeon, portal da Cidade, nave): quem decide é o servidor (sessão → fundador)
   const pedirAcesso = useCallback(async (alvo: "topo" | "ceu" | "nave") => {
     if (!salaId) return { ok: false, erro: "Sem sala." };
