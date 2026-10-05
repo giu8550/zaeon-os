@@ -123,7 +123,8 @@ describe("Zaeon ampliada: salas e hangar grande", () => {
       expect(d - s.r).toBeGreaterThan(CIDADE.cidadela.r + 2);
       expect(Math.hypot(s.x - CIDADE.hangar.x, s.z - CIDADE.hangar.z)).toBeGreaterThan(s.r + CIDADE.hangar.r + 2);
       for (const l of [CIDADE.chegada, CIDADE.portalVolta, { x: 0, z: 24 }, { x: 0, z: -24 }, { x: -24, z: -6 }]) expect(Math.hypot(s.x - l.x, s.z - l.z)).toBeGreaterThan(s.r + 3);
-      for (const o of nomes) if (o !== n) expect(Math.hypot(s.x - CIDADE.salas[o].x, s.z - CIDADE.salas[o].z)).toBeGreaterThan(s.r * 2 + 2);
+      const todas = CIDADE.salas as Record<string, { x: number; z: number; r: number }>;
+      for (const o of Object.keys(todas)) if (o !== n) expect(Math.hypot(s.x - todas[o]!.x, s.z - todas[o]!.z)).toBeGreaterThan(s.r * 2 + 2);
     }
   });
   it("dá pra entrar: a porta (virada pro centro) e o miolo da sala ficam livres; a parede é sólida", () => {
@@ -136,10 +137,10 @@ describe("Zaeon ampliada: salas e hangar grande", () => {
       const fundo = mundo(daSala(s, 0, -s.r)); expect(dentroDeAlgum(fundo, cs)).toBe(true);
     }
   });
-  it("móveis: lounge com sofá, TV e caixa de som; sala de jogos com fliperama e sinuca; tudo dentro da sala", () => {
+  it("móveis: lounge com sofá, TV e caixa de som (a sala de jogos saiu); tudo dentro da sala", () => {
     const tipos = (n: NomeSala) => MOVEIS[n].map((m) => m.tipo);
     expect(tipos("lounge")).toEqual(expect.arrayContaining(["sofa", "tv", "caixaSom"]));
-    expect(tipos("jogos")).toEqual(expect.arrayContaining(["fliperama", "sinuca"]));
+    expect(Object.keys(CIDADE.salas)).toEqual(["lounge"]);
     for (const n of nomes) for (const m of MOVEIS[n]) for (const [a, b] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {   // os 4 cantos da pegada
       const lx = (a * m.larg) / 2, lz = (b * m.prof) / 2, x = m.x + lx * Math.cos(m.rot) + lz * Math.sin(m.rot), z = m.z - lx * Math.sin(m.rot) + lz * Math.cos(m.rot);
       expect(Math.hypot(x, z)).toBeLessThan(CIDADE.salas[n].r);

@@ -1,6 +1,6 @@
 /**
- * Salas — os pavilhões da Zaeon em volta da cidadela: LOUNGE (sofá em U, TV grande, 2 caixas de som, mesinha, tapete)
- * e SALA DE JOGOS (3 fliperamas, sinuca, air hockey, xadrez holográfico). Cada sala é um pavilhão redondo de vidro
+ * Salas — os pavilhões da Zaeon em volta da cidadela: o LOUNGE (sofá em U, TV grande, 2 caixas de som, mesinha,
+ * tapete). Cada sala é um pavilhão redondo de vidro
  * com a PORTA virada pro centro da ilha. Layout, móveis e colisores em lib/cyber/ceu.ts (CIDADE.salas, MOVEIS) — aqui
  * só o three. Telas/LEDs animam devagar (sem estrobo); `low` corta os detalhes miúdos.
  */
@@ -9,7 +9,6 @@ import { CIDADE, MOVEIS, rotDaSala, type Movel, type NomeSala } from "@/lib/cybe
 
 const TEMA: Record<NomeSala, { piso: number; brilho: number; titulo: string; cor: string }> = {
   lounge: { piso: 0x170e2c, brilho: 0xb98cff, titulo: "LOUNGE", cor: "#e2d0ff" },
-  jogos: { piso: 0x0b1828, brilho: 0xff6ad5, titulo: "SALA DE JOGOS", cor: "#ffd0f0" },
 };
 const ALT = 4;   // altura da parede
 
@@ -33,13 +32,6 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       for (let x = 0; x <= w; x += 4) { const y = h / 2 + Math.sin((x / w) * Math.PI * 4 + k) * (30 + k * 12) * Math.sin((x / w) * Math.PI * 2); x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
     g.globalAlpha = 1; g.fillStyle = "rgba(255,255,255,.9)"; g.font = "800 34px system-ui,sans-serif"; g.textAlign = "center"; g.fillText("ZAEON", w / 2, 50);
   }, true);
-  const texArcade = (seed: number) => tela(64, 64, (g) => {
-    g.fillStyle = "#05030f"; g.fillRect(0, 0, 64, 64); const cores = ["#ff6ad5", "#66e6ff", "#ffd36b", "#9affd0"];
-    for (let i = 0; i < 70; i++) { const v = (i * 37 + seed * 11) % 97; if (v > 40) continue; g.fillStyle = cores[(i + seed) % 4]!; g.fillRect((i * 13 + seed * 7) % 60, (i * 7 + seed * 5) % 52, 4, 4); }
-    g.fillStyle = "#ffffff"; g.fillRect(28, 56, 8, 4);
-  });
-  const texXadrez = tela(128, 128, (g) => { for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { g.fillStyle = (i + j) % 2 ? "#0a1a33" : "#3fb8ff"; g.fillRect(i * 16, j * 16, 16, 16); } });
-  const texHockey = tela(256, 128, (g, w, h) => { g.fillStyle = "#06233a"; g.fillRect(0, 0, w, h); g.strokeStyle = "#66e6ff"; g.lineWidth = 3; g.strokeRect(3, 3, w - 6, h - 6); g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.stroke(); g.beginPath(); g.arc(w / 2, h / 2, 26, 0, Math.PI * 2); g.stroke(); g.strokeStyle = "#ff6ad5"; for (const x of [0, w]) { g.beginPath(); g.arc(x, h / 2, 34, 0, Math.PI * 2); g.stroke(); } });
   const texTapete = tela(256, 192, (g, w, h) => { g.fillStyle = "#1d1236"; g.fillRect(0, 0, w, h); for (let k = 0; k < 6; k++) { g.strokeStyle = k % 2 ? "rgba(185,140,255,.55)" : "rgba(102,230,255,.35)"; g.lineWidth = 3; g.strokeRect(10 + k * 14, 10 + k * 12, w - 20 - k * 28, h - 20 - k * 24); } });
 
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
@@ -76,41 +68,6 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       tampo.renderOrder = 1;
     },
     tapete(p, m) { const t = new THREE.Mesh(new THREE.PlaneGeometry(m.larg, m.prof), new THREE.MeshBasicMaterial({ map: texTapete, transparent: true, opacity: 0.9 })); t.rotation.x = -Math.PI / 2; t.position.y = 0.18; p.add(t); },
-    fliperama(p, m) {
-      const corpo = new THREE.MeshStandardMaterial({ color: 0x1a0d33, roughness: 0.5, metalness: 0.3, emissive: 0x2a0d4a, emissiveIntensity: 0.5 });
-      caixa(p, m.larg, 2.05, m.prof, corpo, 0, 1.02, 0);
-      const tx = texArcade(Math.round(m.x * 3 + 7)); const s = new THREE.Mesh(new THREE.PlaneGeometry(m.larg - 0.3, 0.85), new THREE.MeshBasicMaterial({ map: tx, transparent: true }));
-      s.position.set(0, 1.5, m.prof / 2 + 0.01); s.rotation.x = -0.18; p.add(s);
-      const marq = new THREE.Mesh(new THREE.PlaneGeometry(m.larg - 0.1, 0.28), basica(0xff6ad5, 0.95)); marq.position.set(0, 1.92, m.prof / 2 + 0.01); p.add(marq);
-      const painel = caixa(p, m.larg, 0.1, 0.45, corpo, 0, 1.0, m.prof / 2 + 0.18); painel.rotation.x = 0.25;
-      if (!o.low) for (const [x, c] of [[-0.3, 0xff3a6a], [0.05, 0x66e6ff], [0.3, 0xffd36b]] as const) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), basica(c)); b.position.set(x, 1.07, m.prof / 2 + 0.2); p.add(b); }
-      const fase = m.x; anim.push((_, t) => { (s.material as THREE.MeshBasicMaterial).opacity = 0.85 + 0.15 * Math.sin(t * 1.3 + fase); (marq.material as THREE.MeshBasicMaterial).opacity = 0.8 + 0.2 * Math.sin(t * 0.8 + fase); });
-    },
-    sinuca(p, m) {
-      caixa(p, m.larg - 0.6, 0.72, m.prof - 0.6, escuro, 0, 0.38, 0);
-      caixa(p, m.larg, 0.14, m.prof, new THREE.MeshStandardMaterial({ color: 0x2a1a12, roughness: 0.6, metalness: 0.2 }), 0, 0.82, 0);
-      const pano = new THREE.Mesh(new THREE.PlaneGeometry(m.larg - 0.3, m.prof - 0.3), new THREE.MeshStandardMaterial({ color: 0x0b5a5a, emissive: 0x0b6a6a, emissiveIntensity: 0.5, roughness: 0.9 })); pano.rotation.x = -Math.PI / 2; pano.position.y = 0.9; p.add(pano);
-      if (!o.low) { const cores = [0xffffff, 0xffd36b, 0x3f7bff, 0xff3a3a, 0x9a5aff, 0xff8a3c, 0x2fd07a, 0x8a1a1a, 0x111111, 0xffd36b];
-        const bolas = new THREE.InstancedMesh(new THREE.SphereGeometry(0.075, 10, 8), new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.1 }), cores.length), mx = new THREE.Matrix4(), c = new THREE.Color();
-        cores.forEach((cor, i) => { const x = i === 0 ? -1.2 : 0.7 + Math.floor((i - 1) / 3) * 0.14, z = i === 0 ? 0 : (((i - 1) % 3) - 1) * 0.16; bolas.setMatrixAt(i, mx.makeTranslation(x, 0.975, z)); bolas.setColorAt(i, c.setHex(cor)); });
-        bolas.instanceMatrix.needsUpdate = true; if (bolas.instanceColor) bolas.instanceColor.needsUpdate = true; p.add(bolas); }
-      const luz = new THREE.Mesh(new THREE.PlaneGeometry(m.larg * 0.8, 0.3), basica(0x66e6ff, 0.6, true)); luz.position.y = 3.2; luz.rotation.x = Math.PI / 2; p.add(luz);
-    },
-    airHockey(p, m) {
-      caixa(p, m.larg, 0.8, m.prof, escuro, 0, 0.4, 0);
-      const topo = new THREE.Mesh(new THREE.PlaneGeometry(m.larg - 0.12, m.prof - 0.12), new THREE.MeshBasicMaterial({ map: texHockey })); topo.rotation.x = -Math.PI / 2; topo.position.y = 0.81; p.add(topo);
-      const disco = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 16), basica(0xffd36b)); disco.position.y = 0.83; p.add(disco);
-      for (const s of [-1, 1]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 16), basica(s < 0 ? 0xff6ad5 : 0x66e6ff)); b.position.set(s * (m.larg / 2 - 0.35), 0.86, 0); p.add(b); }
-      anim.push((_, t) => { disco.position.x = Math.sin(t * 1.1) * (m.larg / 2 - 0.5); disco.position.z = Math.sin(t * 1.7) * (m.prof / 2 - 0.25); });
-    },
-    xadrez(p, m) {
-      const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 0.9, 12), escuro); ped.position.y = 0.45; p.add(ped);
-      const tab = new THREE.Mesh(new THREE.PlaneGeometry(m.larg - 0.15, m.prof - 0.15), new THREE.MeshBasicMaterial({ map: texXadrez, transparent: true, opacity: 0.85 })); tab.rotation.x = -Math.PI / 2; tab.position.y = 0.95; p.add(tab);
-      const pecas: { m: THREE.Mesh; y: number; f: number }[] = [];
-      const N = o.low ? 4 : 8;
-      for (let i = 0; i < N; i++) { const pm = new THREE.Mesh(new THREE.OctahedronGeometry(0.07), basica(i < N / 2 ? 0x66e6ff : 0xff6ad5)); pm.scale.y = 1.8; const y = 1.06 + (i % 3) * 0.01; pm.position.set(((i % 4) - 1.5) * 0.14, y, (i < N / 2 ? -1 : 1) * 0.35); p.add(pm); pecas.push({ m: pm, y, f: i }); }
-      anim.push((dt, t) => { for (const q of pecas) { q.m.position.y = q.y + 0.03 * Math.sin(t * 1.4 + q.f); q.m.rotation.y += dt * 0.8; } });
-    },
   };
 
   for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) {

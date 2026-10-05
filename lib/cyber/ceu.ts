@@ -33,7 +33,6 @@ export const CIDADE = {
   /** SALAS em volta da cidadela: pavilhões redondos de vidro, com a PORTA virada pro centro da ilha */
   salas: {
     lounge: { x: 27, z: -27, r: 8.5 },
-    jogos: { x: -22, z: -31, r: 8.5 },
   },
   /** parede das salas: colisores ao longo do arco; `porta` = meia-abertura (rad) da porta */
   salaParede: { colR: 0.6, passo: 1, porta: 0.34 },                                 // plataforma da nave (local)
@@ -108,15 +107,6 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     { tipo: "sofa", x: 3.8, z: -1.7, rot: -Math.PI / 2, larg: 3, prof: 1.3 },
     { tipo: "mesinha", x: 0, z: -2.2, rot: 0, larg: 2.2, prof: 1.1 },
     { tipo: "tapete", x: 0, z: -1.9, rot: 0, larg: 7, prof: 5, solido: false },
-  ],
-  // SALA DE JOGOS: 3 fliperamas no fundo, sinuca no meio, air hockey e xadrez holográfico na frente
-  jogos: [
-    { tipo: "fliperama", x: -3, z: -6.5, rot: 0, larg: 1.3, prof: 1.1 },
-    { tipo: "fliperama", x: 0, z: -6.9, rot: 0, larg: 1.3, prof: 1.1 },
-    { tipo: "fliperama", x: 3, z: -6.5, rot: 0, larg: 1.3, prof: 1.1 },
-    { tipo: "sinuca", x: 0, z: -1.6, rot: 0, larg: 4.2, prof: 2.3 },
-    { tipo: "airHockey", x: -4.6, z: 1.8, rot: Math.PI / 2, larg: 2.4, prof: 1.3 },
-    { tipo: "xadrez", x: 4.6, z: 1.8, rot: 0, larg: 1.2, prof: 1.2 },
   ],
 };
 /** giro da sala: +z local aponta pro centro da ilha (onde fica a porta) */
