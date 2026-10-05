@@ -120,6 +120,14 @@ describe("canal e cor", () => {
     expect(sanitizarPresenca({ ...base, voo: "x" })?.voo).toBeUndefined();
   });
 
+  it("presença: jet (voando de mochila a jato) só número, com teto", () => {
+    const base = { userId: "a".repeat(24), name: "Ana", color: "#4aa3ff", x: 1, z: 2, facing: 0 };
+    expect(sanitizarPresenca({ ...base, jet: 12.5 })?.jet).toBe(12.5);
+    expect(sanitizarPresenca({ ...base, jet: 9999 })?.jet).toBe(300);
+    expect(sanitizarPresenca({ ...base, jet: "alto" })?.jet).toBeUndefined();
+    expect(sanitizarPresenca(base)?.jet).toBeUndefined();
+  });
+
   it("presença: naveParada (nave pousada fora do hangar) só com números válidos, com limites", () => {
     const base = { userId: "a".repeat(24), name: "Ana", color: "#4aa3ff", x: 1, z: 2, facing: 0 };
     expect(sanitizarPresenca({ ...base, naveParada: { x: 24, y: 0, z: 24, yaw: 1 } })?.naveParada).toEqual({ x: 24, y: 0, z: 24, yaw: 1 });

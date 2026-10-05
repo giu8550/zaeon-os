@@ -32,6 +32,7 @@ export type Presenca = {
   ceu?: boolean;      // na Cidade Zaeon (céu) — idem
   voo?: { y: number; yaw: number };   // pilotando a nave (altura + rumo) — idem
   naveParada?: { x: number; y: number; z: number; yaw: number };   // a nave pousada FORA do hangar (fora dela) — idem
+  jet?: number;       // voando de mochila a jato: altura no mundo (qualquer pessoa; teto no cliente)
   ts?: number;
 };
 
