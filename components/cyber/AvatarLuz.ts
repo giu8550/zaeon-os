@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { amostrarPose, duracaoClipe, envelopePouso, misturar, type Dir3, type Pose } from "@/lib/cyber/poses";
 import { impactoDoPouso } from "@/lib/cyber/jet";
+import { fasesDeContato, pisadasEntre } from "@/lib/cyber/audio";
 import { clone as skClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { COR_LUZ } from "@/lib/cyber/cores";
 
@@ -41,6 +42,9 @@ export type AvatarLuzHandle = {
    *  pernas dobradas) ou em QUEDA LIVRE (caindo rápido: braços pra cima, joelhos dobrados); ao tocar o chão, um
    *  agachamento curto de POUSO. */
   animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean } | null; dt: number; t: number }): void;
+  /** quantas PISADAS (pé encostando no chão na animação de andar/correr) desde a última chamada — o som do passo
+   *  sai no compasso do pé; `null` = avatar sem pés (sem o modelo): o engine usa a cadência fixa */
+  passosNovos(): number | null;
   /** `facing` = atan2(dx, dz) do movimento (a conversão pro modelo é interna). */
   olharPara(facing: number): void;
   /** Troca a cor da armadura (cosmético / ordem canônica chegou depois). */
@@ -132,8 +136,21 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   const neu = new THREE.Points(ng, new THREE.PointsMaterial({ size: 0.12, map: starTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, color: luz.clone().lerp(armadura, 0.3) }));
   grupo.add(neu);
 
-  let alvo = 0, wWalk = 0, wRun = 0;
+  let alvo = 0, wWalk = 0, wRun = 0, pisadas = 0, uAnt = 0, acaoAnt: THREE.AnimationAction | null = null;
   const vA = new THREE.Vector3(), vB = new THREE.Vector3(), dirAlvo = new THREE.Vector3(), qPai = new THREE.Quaternion(), qOsso = new THREE.Quaternion(), qDelta = new THREE.Quaternion();
+  /** as fases (0..1) do ciclo de andar/correr em que um pé encosta — medidas UMA vez da própria animação */
+  const fasesPe = (() => {
+    if (!mixer || !walk || !run || !idle || pernas.length < 2 || !gltf) return null;
+    const medir = (a: THREE.AnimationAction) => {
+      for (const x of [idle!, walk!, run!]) x.setEffectiveWeight(x === a ? 1 : 0);
+      const d = a.getClip().duration, N = 64, alt: number[][] = pernas.map(() => []);
+      for (let i = 0; i < N; i++) { mixer!.setTime(0); a.time = (d * i) / N; mixer!.update(0); grupo.updateMatrixWorld(true); const y0 = grupo.getWorldPosition(vA).y; pernas.forEach((o, k) => alt[k]!.push(o.pe.getWorldPosition(vB).y - y0)); }
+      return fasesDeContato(alt);
+    };
+    const r = { walk: medir(walk), run: medir(run) };
+    idle.setEffectiveWeight(1); walk.setEffectiveWeight(0); run.setEffectiveWeight(0); walk.time = run.time = idle.time = 0; mixer.update(0);
+    return r;
+  })();
   /** gira `osso` (em espaço de mundo) pra que o segmento osso→filho aponte pra `dir`, misturando com o pose da animação */
   const apontar = (osso: THREE.Object3D, filho: THREE.Object3D, dir: THREE.Vector3, w: number) => {
     osso.updateWorldMatrix(true, false); filho.updateWorldMatrix(false, false);
@@ -152,6 +169,12 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       const k = Math.min(1, dt * 8), corre = !!correndo && andando;
       wWalk += ((andando && !corre ? 1 : 0) - wWalk) * k; wRun += ((corre ? 1 : 0) - wRun) * k;
       if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk); run.setEffectiveWeight(wRun); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun)); mixer.update(dt); }
+      // PISADAS: o relógio da animação dominante (andar ou correr) cruzou a fase em que um pé encosta no chão
+      if (walk && run && fasesPe) {
+        const acao = wRun > wWalk ? run : walk, f = acao === run ? fasesPe.run : fasesPe.walk, u = (acao.time % acao.getClip().duration) / acao.getClip().duration;
+        if (acao === acaoAnt && wWalk + wRun > 0.5 && !ar && sentado < 0.1 && !pilotando) pisadas += pisadasEntre(uAnt, u, f);
+        acaoAnt = acao; uAnt = u;
+      }
       let d = alvo - grupo.rotation.y; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
       grupo.rotation.y += d * 0.15;
       // na base: em pé, levemente inclinado pro painel; meditando: abaixa (pernas cruzadas) e flutua devagar
@@ -267,6 +290,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       (neu.material as THREE.PointsMaterial).size = 0.1 + 0.05 * Math.sin(t * 2 + grupo.position.x);
       neu.rotation.y += dt * 0.5;
     },
+    passosNovos() { if (!pernas.length) return null; const n = pisadas; pisadas = 0; return n; },
     olharPara(f) { alvo = f + Math.PI; },
     recolorir(hex) { armadura.set(hex); matArmadura.color.copy(armadura).multiplyScalar(0.5); matArmadura.emissive.copy(armadura); matMochila.emissive.copy(armadura).multiplyScalar(0.3); (neu.material as THREE.PointsMaterial).color.copy(luz).lerp(armadura, 0.3); },
     dispose() {

@@ -18,7 +18,8 @@ export type NomeSom =
 export const TAXA_432 = 432 / 440;
 
 /** como cada som toca: `pos` = PositionalAudio (mono, no mundo); `2d` = THREE.Audio (leito/UI); `taxa` = playbackRate */
-export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: number; taxa?: number; sintetico?: boolean; ext?: "wav" }> = {
+/** `emendar` = segundos de crossfade da ponta no começo (vira loop sem emenda ao carregar); `filtro` = passa-baixa (Hz) */
+export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: number; taxa?: number; sintetico?: boolean; ext?: "wav"; emendar?: number; filtro?: number }> = {
   // JATO da mochila (contínuo enquanto se segura o ESPAÇO) em 2 camadas: o ronco gravado ("Rocket Engine", CC0,
   // OpenGameArt — WAV mono, loop sem emenda) + o sopro/chiado sintetizado por cima
   jetpack: { modo: "pos", loop: true, volume: 0.55, ext: "wav" },
@@ -31,11 +32,12 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "ship-flight": { modo: "pos", loop: true, volume: 0.7 },
   "ship-idle": { modo: "pos", loop: true, volume: 0.35 },
   "ship-takeoff": { modo: "pos", loop: false, volume: 0.9 },
-  "ship-landing": { modo: "pos", loop: false, volume: 0.8 },     // ao DESCER: o motor baixando (sem impacto)
+  "ship-landing": { modo: "pos", loop: true, volume: 0.8, emendar: 0.4 },   // DESCENDO: o motor baixando — contínuo enquanto se segura o botão
   "ship-touchdown": { modo: "pos", loop: false, volume: 0.9 },   // no instante do POUSO: impacto grave + assentamento
-  "step-1": { modo: "pos", loop: false, volume: 0.6 },
-  "step-2": { modo: "pos", loop: false, volume: 0.6 },
-  "step-3": { modo: "pos", loop: false, volume: 0.6 },
+  // passos SUTIS: volume baixo + passa-baixa (tira o "estalo"); no compasso do pé de verdade (criarDetectorPasso)
+  "step-1": { modo: "pos", loop: false, volume: 0.3, filtro: 2300 },
+  "step-2": { modo: "pos", loop: false, volume: 0.3, filtro: 2300 },
+  "step-3": { modo: "pos", loop: false, volume: 0.3, filtro: 2300 },
   jump: { modo: "pos", loop: false, volume: 0.6 },
   land: { modo: "pos", loop: false, volume: 0.55 },
   "near-ping": { modo: "pos", loop: false, volume: 0.45 },
@@ -145,7 +147,39 @@ export function criarLimiteVozes(max = 12) {
   return { get ativas() { return ativas; }, pegar() { if (ativas >= max) return false; ativas++; return true; }, soltar() { ativas = Math.max(0, ativas - 1); } };
 }
 
-/** cadência dos passos (s) e o próximo arquivo (alterna os 3) */
+/** loop SEM EMENDA a partir de um som que não foi feito pra repetir: a ponta (`x` amostras) entra em crossfade de
+ *  potência constante no começo — o resultado tem `n − x` amostras e o fim casa com o início */
+export function emendarLoop(d: Float32Array, x: number): Float32Array {
+  const n = d.length; x = Math.max(1, Math.min(Math.floor(n / 3), Math.floor(x)));
+  const out = d.slice(0, n - x);
+  for (let i = 0; i < x; i++) { const u = i / x; out[i] = d[i]! * Math.sqrt(u) + d[n - x + i]! * Math.sqrt(1 - u); }
+  return out;
+}
+
+/**
+ * PASSO no compasso da animação. `fasesDeContato`: dadas as alturas de cada pé amostradas ao longo de UM ciclo da
+ * animação (andar ou correr), as fases (0..1) em que cada pé ENCOSTA no chão (mínimo local perto do mínimo do ciclo).
+ * `pisadasEntre`: quantas dessas fases o relógio da animação cruzou entre dois quadros (com a volta do ciclo) — assim o
+ * passo soa exatamente quando o pé encosta, em QUALQUER fps (no celular a 20 fps também).
+ */
+export function fasesDeContato(alturasPorPe: number[][], folga = 0.03): number[] {
+  const fases: number[] = [];
+  for (const h of alturasPorPe) {
+    // o pé "plantado" = perto do mínimo; a PISADA é o instante em que ele chega lá (o começo de cada apoio, com a volta)
+    const n = h.length, min = Math.min(...h), apoio = h.map((v) => v < min + folga);
+    if (apoio.every(Boolean)) continue;
+    for (let i = 0; i < n; i++) if (apoio[i] && !apoio[(i - 1 + n) % n]) fases.push(i / n);
+  }
+  return fases.sort((x, y) => x - y);
+}
+export function pisadasEntre(uAnt: number, u: number, fases: number[]): number {
+  const dentro = (f: number, a: number, b: number) => f > a && f <= b;
+  let n = 0;
+  for (const f of fases) n += u >= uAnt ? (dentro(f, uAnt, u) ? 1 : 0) : (dentro(f, uAnt, 1) || dentro(f, -1e-9, u) ? 1 : 0);
+  return n;
+}
+
+/** cadência dos passos (s) e o próximo arquivo (alterna os 3) — reserva quando o avatar não tem pés (sem o modelo) */
 export const cadenciaPasso = (correndo: boolean) => (correndo ? 0.3 : 0.44);
 export const PASSOS: NomeSom[] = ["step-1", "step-2", "step-3"];
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { CRISTAIS_PERTO, DISTANCIA, SINTESE, SONS_ARQUIVO, sintetizarBaque, sintetizarJetpack, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
+import { CRISTAIS_PERTO, DISTANCIA, emendarLoop, fasesDeContato, pisadasEntre, SINTESE, SONS_ARQUIVO, sintetizarBaque, sintetizarJetpack, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
 
 describe("áudio do cyberespaço", () => {
   it("os 22 sons de arquivo existem (21 .ogg + o jato .wav) e os sintetizados têm gerador em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
@@ -72,7 +72,7 @@ describe("áudio do cyberespaço", () => {
     expect(fatorCristais(CRISTAIS_PERTO.some)).toBe(0); expect(fatorCristais(40)).toBe(0);
     expect(fatorCristais(8)).toBeGreaterThan(0); expect(fatorCristais(8)).toBeLessThan(1);
     expect(DISTANCIA.cristais.modelo).toBe("linear");   // no "inverse" o max não corta
-    expect(SONS["step-1"].volume).toBeGreaterThanOrEqual(0.6);
+    expect(SONS["step-1"].volume).toBeGreaterThan(0.2);
     expect(DISTANCIA.eu.ref).toBeGreaterThan(DISTANCIA.perto.ref);   // meus passos não somem com a câmera atrás
   });
   it("jato sintetizado: loop sem clique (a ponta casa com o começo), sem estourar", () => {
@@ -88,4 +88,25 @@ describe("áudio do cyberespaço", () => {
     let cruz = 0; for (let i = 1; i < x.length; i++) if ((x[i - 1]! < 0) !== (x[i]! < 0)) cruz++;
     expect(cruz / 0.5).toBeLessThan(400);   // grave (poucos cruzamentos por segundo)
   });
+  it("loop sem emenda: a ponta entra no começo e o fim casa com o início", () => {
+    const n = 4000, d = new Float32Array(n); for (let i = 0; i < n; i++) d[i] = Math.sin(i * 0.37) * (0.3 + 0.7 * i / n);   // não-periódico, sobe de nível
+    const x = 400, o = emendarLoop(d, x);
+    expect(o.length).toBe(n - x);
+    expect(Math.abs(o[o.length - 1]! - d[n - x - 1]!)).toBeLessThan(1e-6);   // o fim é o original…
+    expect(Math.abs(o[0]! - d[n - x]!)).toBeLessThan(1e-6);                 // …e o começo continua dele (sem salto)
+    expect(SONS["ship-landing"].loop).toBe(true); expect(SONS["ship-landing"].emendar).toBeGreaterThan(0);
+  });
+  it("passo no compasso do pé: as fases de contato saem da animação; o relógio cruzando a fase = 1 pisada (qualquer fps)", () => {
+    const N = 64, pe = (desl: number) => Array.from({ length: N }, (_, i) => 0.13 + 0.2 * Math.max(0, Math.sin(((i / N + desl) % 1) * Math.PI * 2)));
+    const fases = fasesDeContato([pe(0), pe(0.5)]);
+    expect(fases).toHaveLength(2);   // UMA pisada por pé por ciclo (o começo do apoio)
+    expect(fasesDeContato([pe(0).map((v, i) => v + (i % 2) * 0.004)])).toHaveLength(1);   // tremidinha no apoio não vira passo extra
+    const contar = (fps: number, seg: number, ciclo: number) => { let u = 0, n = 0; const dt = 1 / fps; for (let t = 0; t < seg; t += dt) { const nu = (u + dt / ciclo) % 1; n += pisadasEntre(u, nu, fases); u = nu; } return n; };
+    const a60 = contar(60, 10, 1.1), a12 = contar(12, 10, 1.1);
+    expect(a60).toBe(a12);                       // 60 fps e 12 fps: o MESMO número de passos
+    expect(Math.abs(a60 - (10 / 1.1) * 2)).toBeLessThanOrEqual(1);   // 2 passos por ciclo
+    expect(pisadasEntre(0.9, 0.1, [0.05, 0.95])).toBe(2);   // a volta do ciclo conta
+    expect(SONS["step-1"].volume).toBeLessThanOrEqual(0.35); expect(SONS["step-1"].filtro).toBeGreaterThan(0);
+  });
 });
+
