@@ -31,7 +31,7 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   crystals: { modo: "pos", loop: true, volume: 0.3 },
   "ship-flight": { modo: "pos", loop: true, volume: 0.7 },
   "ship-idle": { modo: "pos", loop: true, volume: 0.35 },
-  "ship-takeoff": { modo: "pos", loop: false, volume: 0.9 },
+  "ship-takeoff": { modo: "pos", loop: true, volume: 0.85, emendar: 0.4 },   // SUBINDO: o motor empurrando — contínuo enquanto se segura o botão
   "ship-landing": { modo: "pos", loop: true, volume: 0.8, emendar: 0.4 },   // DESCENDO: o motor baixando — contínuo enquanto se segura o botão
   "ship-touchdown": { modo: "pos", loop: false, volume: 0.9 },   // no instante do POUSO: impacto grave + assentamento
   // passos SUTIS: volume baixo + passa-baixa (tira o "estalo"); no compasso do pé de verdade (criarDetectorPasso)

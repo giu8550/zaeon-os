@@ -94,7 +94,7 @@ describe("áudio do cyberespaço", () => {
     expect(o.length).toBe(n - x);
     expect(Math.abs(o[o.length - 1]! - d[n - x - 1]!)).toBeLessThan(1e-6);   // o fim é o original…
     expect(Math.abs(o[0]! - d[n - x]!)).toBeLessThan(1e-6);                 // …e o começo continua dele (sem salto)
-    expect(SONS["ship-landing"].loop).toBe(true); expect(SONS["ship-landing"].emendar).toBeGreaterThan(0);
+    for (const n of ["ship-landing", "ship-takeoff"] as NomeSom[]) { expect(SONS[n].loop).toBe(true); expect(SONS[n].emendar).toBeGreaterThan(0); }   // subir e descer: contínuos
   });
   it("passo no compasso do pé: as fases de contato saem da animação; o relógio cruzando a fase = 1 pisada (qualquer fps)", () => {
     const N = 64, pe = (desl: number) => Array.from({ length: N }, (_, i) => 0.13 + 0.2 * Math.max(0, Math.sin(((i / N + desl) % 1) * Math.PI * 2)));
