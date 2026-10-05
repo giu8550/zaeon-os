@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { DISTANCIA, FADE_ENTRADA, PASSOS, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
+import { DISTANCIA, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
 
 describe("áudio do cyberespaço", () => {
-  it("os 20 sons existem em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
+  it("os 21 sons existem em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
     const arquivos = readdirSync(join(process.cwd(), "public/assets/sounds/cyber")).filter((f) => f.endsWith(".ogg")).map((f) => f.replace(".ogg", "")).sort();
     expect(Object.keys(SONS).sort()).toEqual(arquivos);
-    expect(arquivos).toHaveLength(20);
+    expect(arquivos).toHaveLength(21);
+    expect(Object.keys(SONS)).not.toContain("whoosh-hyperspace");   // trocado pelo cyber-enter
     expect(urlDoSom("ship-flight")).toBe("/assets/sounds/cyber/ship-flight.ogg");
   });
   it("sem fogo nem sentar: a base fica só com os cristais; entrar no cyberespaço não dispara 'sentar'", () => {
@@ -16,7 +17,7 @@ describe("áudio do cyberespaço", () => {
     expect(FADE_ENTRADA).toBeGreaterThan(0.5);
   });
   it("leito e UI são 2D; fontes do mundo e a nave são posicionais", () => {
-    const d2: NomeSom[] = ["space-bed", "whoosh-hyperspace", "study-confirm", "chat-pop"];
+    const d2: NomeSom[] = ["space-bed", "cyber-enter", "study-confirm", "chat-pop"];
     for (const [n, s] of Object.entries(SONS)) expect(s.modo).toBe(d2.includes(n as NomeSom) ? "2d" : "pos");
     for (const n of ["ship-flight", "ship-idle", "space-bed", "blackhole-hum", "crystals"] as NomeSom[]) expect(SONS[n].loop).toBe(true);
   });
@@ -42,5 +43,23 @@ describe("áudio do cyberespaço", () => {
   it("leito ambiente: abaixa com a música da intro tocando, sobe no fade (cross-fade)", () => {
     expect(fatorLeito("tocando")).toBeLessThan(fatorLeito("fade"));
     expect(fatorLeito("fade")).toBeLessThan(fatorLeito("parado"));
+  });
+  it("nave: SUBIR = decolagem; começar a DESCER = motor baixando (1×); tocar o chão = touchdown (1×)", () => {
+    const dt = 1 / 60; let e = somNaveInicial(true);
+    const passo = (pousado: boolean, vy: number, altura: number) => { const r = eventosNave(e, { pousado, vy, altura }, dt); e = r.e; return r; };
+    expect(passo(false, 10, 1).decolou).toBe(true);
+    for (let i = 0; i < 120; i++) expect(passo(false, 20, 10 + i).desceu).toBe(false);   // subindo: nada
+    const des = [] as boolean[]; for (let i = 0; i < 90; i++) des.push(passo(false, -30, 60 - i * 0.5).desceu);
+    expect(des.filter(Boolean)).toHaveLength(1);                                        // começou a descer: uma vez só
+    expect(passo(false, -6, 10).desceu).toBe(false);                                    // histerese: ainda descendo, sem repetir
+    expect(passo(true, 0, 0).pousou).toBe(true);
+    expect(passo(true, 0, 0).pousou).toBe(false);                                       // o impacto é 1× só
+    // pertinho do chão não dispara a "descida" (só o touchdown)
+    e = somNaveInicial(false); expect(passo(false, -20, NAVE_DESCIDA.alturaMin - 1).desceu).toBe(false);
+  });
+  it("nave: ajustar a altura sobe/desce/sobe não repete a descida antes do intervalo", () => {
+    const dt = 0.1; let e = somNaveInicial(false), n = 0;
+    for (let i = 0; i < 20; i++) { const vy = i % 4 < 2 ? -20 : 15; const r = eventosNave(e, { pousado: false, vy, altura: 50 }, dt); e = r.e; if (r.desceu) n++; }
+    expect(n).toBeLessThanOrEqual(Math.ceil((20 * dt) / NAVE_DESCIDA.intervalo) + 1);
   });
 });

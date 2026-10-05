@@ -17,7 +17,7 @@ import { BURACO_NEGRO, CIDADE, computadorPerto, mundo, noPortalEntrada, noPortal
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, chaoNoAr, passoVertical, resolverNoAr, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { pularQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
-import { DISTANCIA, PASSOS, cadenciaPasso, fatorLeito, intervaloNeuronio } from "@/lib/cyber/audio";
+import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorLeito, intervaloNeuronio, somNaveInicial, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type LoopSom } from "./AudioCyber";
 import { pousoDoQG, rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
@@ -84,7 +84,7 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos:
   /** remotos: voando de mochila a jato (altura no mundo) e a velocidade vertical estimada */
   jet?: number; vyJet?: number;
   /** remotos: sons da nave dele (loops idle/voo) e passos */
-  somNave?: { idle: LoopSom; voo: LoopSom; voava: boolean } | null; passoT?: number; perto?: boolean };
+  somNave?: { idle: LoopSom; voo: LoopSom; voava: boolean; ev: EstadoSomNave; yAnt: number | null; vy: number } | null; passoT?: number; perto?: boolean };
 type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 
 /** cor da mesa do QG quando o Andrei não está na sala */
@@ -146,7 +146,7 @@ export class CyberEngine {
   private som!: AudioCyberHandle;
   private somLoops: { leito?: LoopSom; naveIdle?: LoopSom; naveVoo?: LoopSom } = {};
   private somCristais = new Map<string, LoopSom>();
-  private passoT = 0; private passoI = 0; private neuronioT = 9; private pousadoAnt = true; private tVivo = 0; private whooshEntrada = false;
+  private passoT = 0; private passoI = 0; private neuronioT = 9; private somNave = somNaveInicial(); private tVivo = 0; private somEntrada = false;
   private sitT = 0; private perto = false; private falandoCom: Ator | null = null;
   private hoverBase: string | null = null; private sobContainer = false;
   private camAz = 0; private camPitch = 0.16; private camDist = 9; private camT = new THREE.Vector3(0, 1.2, 0);
@@ -364,7 +364,7 @@ export class CyberEngine {
     this.eu.pos.set(c.x, 0, c.z); this.eu.facing = Math.atan2(-CIDADE.chegada.x, -CIDADE.chegada.z);
     this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; this.portalArmado = false;
     this.camT.set(c.x, CIDADE.pisoY + 1.2, c.z);   // sem "voar" a câmera: corte seco (o React faz o fade)
-    this.som.tocar("whoosh-hyperspace");
+    this.som.tocar("rise", new THREE.Vector3(c.x, CIDADE.pisoY + 1, c.z), { dist: DISTANCIA.perto });   // subiu pra Zaeon
   }
   /** portal de volta: reaparece na praça */
   voltarDaCidade() {
@@ -431,7 +431,7 @@ export class CyberEngine {
   private atualizarSom(dt: number) {
     const s = this.som; this.tVivo += dt;
     // a entrada no cyberespaço (tela cheia, sem menu): o whoosh toca assim que o som estiver pronto
-    if (!this.whooshEntrada && !this.menu && s.temSom("whoosh-hyperspace")) { this.whooshEntrada = true; s.tocar("whoosh-hyperspace"); }
+    if (!this.somEntrada && !this.menu && s.temSom("cyber-enter")) { this.somEntrada = true; s.tocar("cyber-enter"); }
     if (this.somLoops.leito) s.volumeLoop(this.somLoops.leito, fatorLeito(musica().estado));
     for (const l of this.somCristais.values()) s.volumeLoop(l, 1);
     // a MINHA nave: idle parada, voo em movimento; decolagem/pouso nas transições; pilotando quase não paneia
@@ -440,9 +440,15 @@ export class CyberEngine {
       s.volumeLoop(this.somLoops.naveVoo, voando ? 0.35 + 0.65 * Math.min(1, vel) : 0);
       s.volumeLoop(this.somLoops.naveIdle, voando || !this.nave.group.visible ? 0 : 1);
       s.distanciaLoop(this.somLoops.naveIdle, this.pilotando ? DISTANCIA.naveLocal : DISTANCIA.grande);
-      if (this.pilotando && this.pousadoAnt && !this.pousado) s.tocar("ship-takeoff", this.nave.group.position, { dist: DISTANCIA.naveLocal });
-      if (this.pilotando && !this.pousadoAnt && this.pousado) s.tocar("ship-landing", this.nave.group.position, { dist: DISTANCIA.naveLocal });
-      this.pousadoAnt = this.pousado;
+      // subir = decolagem; começar a descer = motor baixando; tocar o chão = impacto (1×)
+      const n = this.naveEst, ev = eventosNave(this.somNave, { pousado: this.pousado, vy: n.vy, altura: n.y - chaoDoVoo(n, this.pilotando ? this.solidosDeVoo() : []) }, dt);
+      this.somNave = ev.e;
+      if (this.pilotando) {
+        const em = this.nave.group.position, d = { dist: DISTANCIA.naveLocal };
+        if (ev.decolou) s.tocar("ship-takeoff", em, d);
+        if (ev.desceu) s.tocar("ship-landing", em, d);
+        if (ev.pousou) s.tocar("ship-touchdown", em, d);
+      }
     }
     // neurônios subindo da minha base: um brilho de vez em quando (se estou por perto)
     this.neuronioT -= dt;
@@ -850,14 +856,20 @@ export class CyberEngine {
         const voando = fund && !!p.voo, parada = fund && !voando && p.naveParada ? p.naveParada : null;
         if ((voando || parada) && !a.nave && this.cidade) {
           a.nave = criarNave({ low: this.o.low, cor: a.color }); this.cena.scene.add(a.nave.group);
-          a.somNave = { idle: this.som.loop("ship-idle", a.nave.group, { dist: DISTANCIA.grande }), voo: this.som.loop("ship-flight", a.nave.group, { dist: DISTANCIA.grande }), voava: false };
+          a.somNave = { idle: this.som.loop("ship-idle", a.nave.group, { dist: DISTANCIA.grande }), voo: this.som.loop("ship-flight", a.nave.group, { dist: DISTANCIA.grande }), voava: voando, ev: somNaveInicial(!voando), yAnt: null, vy: 0 };   // já chega voando: sem decolagem fantasma
         }
         if (!voando && !parada && a.nave) { this.soltarSomNave(a); a.nave.dispose(); a.nave = null; }
         if (a.nave && a.somNave) {
           // a nave do OUTRO é posicional cheia: decolagem/pouso/voo vêm do lado certo e somem com a distância
-          if (voando && !a.somNave.voava) this.som.tocar("ship-takeoff", a.nave.group.position, { dist: DISTANCIA.grande });
-          if (!voando && a.somNave.voava) this.som.tocar("ship-landing", a.nave.group.position, { dist: DISTANCIA.grande });
-          a.somNave.voava = voando; this.som.volumeLoop(a.somNave.voo, voando ? 1 : 0); this.som.volumeLoop(a.somNave.idle, voando ? 0 : 1);
+          const sn = a.somNave, y = voando ? p.voo!.y : null;
+          if (y !== null && sn.yAnt !== null && dt > 0) sn.vy += ((y - sn.yAnt) / dt - sn.vy) * Math.min(1, dt * 4); else sn.vy = 0;
+          sn.yAnt = y;
+          const ev = eventosNave(sn.ev, { pousado: !voando, vy: sn.vy, altura: y === null ? 0 : y - chaoDoVoo({ x: p.x, y, z: p.z }) }, dt); sn.ev = ev.e;
+          const em = a.nave.group.position, d = { dist: DISTANCIA.grande };
+          if (ev.decolou) this.som.tocar("ship-takeoff", em, d);
+          if (ev.desceu) this.som.tocar("ship-landing", em, d);
+          if (ev.pousou) this.som.tocar("ship-touchdown", em, d);
+          sn.voava = voando; this.som.volumeLoop(a.somNave.voo, voando ? 1 : 0); this.som.volumeLoop(a.somNave.idle, voando ? 0 : 1);
         }
         a.naveP = parada;
         const jetAnt = a.jet; a.jet = !voando && typeof p.jet === "number" ? p.jet : undefined;
