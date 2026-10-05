@@ -1,6 +1,6 @@
 /**
  * Nave — o veículo do dono (fica no hangar da Zaeon): um DISCO VOADOR alienígena grande e imponente. Casco escuro
- * metálico com veios de luz e uma crista, espinhos de cristal em volta da aba, uma CABINE rebaixada no dorso (assento de
+ * metálico com veios de luz e uma crista (oval limpo, sem espinhos), RAIOS correndo pelos anéis de energia, uma CABINE rebaixada no dorso (assento de
  * piloto, console com telas, manches) sob uma redoma baixa e larga — o PILOTO é o avatar real de quem pilota, sentado
  * no `assento` (o engine o põe lá), o anel de luzes da borda girando (o "eixo
  * giratório") e um halo externo tracejado girando ao contrário, três orbes luminosos na barriga, pernas de pouso que
@@ -50,14 +50,6 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   for (const [r, y] of [[3.05, 0.3], [2.5, 0.53], [1.95, 0.6]] as const) { const v = new THREE.Mesh(new THREE.TorusGeometry(r, 0.022, 4, seg), veioMat); v.rotation.x = Math.PI / 2; v.position.y = y; corpo.add(v); }
   const friso = new THREE.Mesh(new THREE.TorusGeometry(3.68, 0.05, 6, seg), aditivo(ALIEN, 0.75)); friso.rotation.x = Math.PI / 2; friso.position.y = 0.05; corpo.add(friso);
 
-  // espinhos de cristal em volta da aba (apontando pra fora e um pouco pra baixo)
-  const cristal = new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: ALIEN, emissiveIntensity: 0.9, roughness: 0.2, flatShading: true });
-  const NE = opts.low ? 6 : 8;
-  for (let i = 0; i < NE; i++) {
-    const a = (i / NE) * Math.PI * 2 + Math.PI / NE, e = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.3, 5), cristal);
-    e.position.set(Math.cos(a) * 3.9, -0.08, Math.sin(a) * 3.9); e.rotation.set(0, 0, 0);
-    e.lookAt(Math.cos(a) * 9, -1.6, Math.sin(a) * 9); e.rotateX(Math.PI / 2); corpo.add(e);
-  }
 
   // CABINE no poço (autorada em METROS: o grupo desfaz a escala da nave): assento de piloto com encosto e apoio de
   // cabeça, braços, console curvo com telas na frente e dois manches — o avatar real senta no `assento`
@@ -122,6 +114,60 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   const rMat = new THREE.PointsMaterial({ size: 0.6, map: tex, color: ALIEN.clone().lerp(new THREE.Color(0xffffff), 0.35), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
   const rastro = new THREE.Points(rGeo, rMat); rastro.frustumCulled = false; corpo.add(rastro);
 
+  // RAIOS: eletricidade correndo pelos anéis de energia (borda, halo e barriga) e saltando entre a borda e o halo.
+  // Cada raio é uma polilinha serrilhada que DESLIZA pelo anel; o serrilhado muda continuamente (ruído suave), sem
+  // piscar — a intensidade sobe e desce em ondas lentas. Uma geometria (LineSegments) por grupo de raios.
+  const PR = opts.low ? 10 : 16;   // pontos por raio
+  type Raio = { r: number; y: number; span: number; vel: number; fase: number; amp: number; radial?: { r2: number } };
+  // cada raio = 2 fios serrilhados (linhas de 1 px no WebGL) + um BRILHO (sprites aditivos) em cada vértice → espessura/luz
+  const criarRaios = (raios: Raio[], cor: THREE.Color) => {
+    const FIOS = 2, pos = new Float32Array(raios.length * FIOS * (PR - 1) * 6), g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.LineBasicMaterial({ color: cor, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
+    const l = new THREE.LineSegments(g, mat); l.frustumCulled = false; corpo.add(l);
+    const bPos = new Float32Array(raios.length * PR * 3), bg = new THREE.BufferGeometry(); bg.setAttribute("position", new THREE.BufferAttribute(bPos, 3));
+    const bMat = new THREE.PointsMaterial({ map: tex, color: cor, size: 0.55, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+    const b = new THREE.Points(bg, bMat); b.frustumCulled = false; corpo.add(b);
+    return { raios, pos, g, mat, bPos, bg, bMat };
+  };
+  const nRaio = (n: number, base: Omit<Raio, "fase">) => Array.from({ length: n }, (_, i) => ({ ...base, fase: (i / n) * Math.PI * 2 + Math.random() * 0.4 }));
+  const branco = new THREE.Color(0xffffff);
+  const grupoRaios = [
+    criarRaios(nRaio(opts.low ? 3 : 5, { r: 3.6, y: -0.04, span: 0.85, vel: 0.9, amp: 0.17 }), ALIEN.clone().lerp(branco, 0.45)),        // pela borda (anel de luzes)
+    criarRaios(nRaio(opts.low ? 3 : 4, { r: 4.5, y: -0.1, span: 0.65, vel: -0.6, amp: 0.2 }), ALIEN.clone().lerp(branco, 0.25)),        // pelo halo
+    criarRaios(nRaio(opts.low ? 2 : 3, { r: 1.7, y: -0.56, span: 1.2, vel: 1.4, amp: 0.12 }), ALIEN.clone().lerp(branco, 0.6)),         // anel da barriga
+    criarRaios(nRaio(opts.low ? 2 : 4, { r: 3.62, y: -0.06, span: 0, vel: 0.25, amp: 0.22, radial: { r2: 4.45 } }), ALIEN.clone().lerp(branco, 0.7)),   // arcos borda ↔ halo
+  ];
+  /** ruído suave (soma de senos) — o serrilhado "anda" sem saltos */
+  const ruido = (x: number, t: number, s: number) => Math.sin(x * 7.3 + t * 5.1 + s) * 0.55 + Math.sin(x * 17.1 - t * 8.3 + s * 2.1) * 0.3 + Math.sin(x * 31.7 + t * 12.7 + s * 3.3) * 0.15;
+  const atualizarRaios = (t: number, voo: number) => {
+    for (const gr of grupoRaios) {
+      const onda = 0.75 + 0.25 * Math.sin(t * 1.7 + gr.raios[0]!.r);
+      gr.mat.opacity = (0.35 + 0.65 * voo) * onda; gr.bMat.opacity = (0.18 + 0.4 * voo) * onda;
+      let k = 0, kb = 0;
+      gr.raios.forEach((rz, bi) => {
+        const centro = rz.fase + (parado ? 0 : t * rz.vel);
+        for (let fio = 0; fio < 2; fio++) {
+          let px = 0, py = 0, pz = 0;
+          for (let i = 0; i < PR; i++) {
+            const u = i / (PR - 1), afina = Math.sin(Math.PI * u), sd = bi * 1.37 + rz.r + fio * 4.1, amp = rz.amp * (fio ? 0.6 : 1);
+            let x: number, y: number, z: number;
+            if (rz.radial) {   // arco radial: da borda até o halo, num ângulo que gira devagar
+              const rr = rz.r + (rz.radial.r2 - rz.r) * u, a = centro + ruido(u, t, sd) * 0.06 * afina;
+              x = Math.cos(a) * rr; z = Math.sin(a) * rr; y = rz.y + ruido(u + 0.5, t, sd + 1) * amp * afina;
+            } else {           // ao longo do anel: desliza e serrilha pra dentro/fora e pra cima/baixo
+              const a = centro + (u - 0.5) * rz.span, rr = rz.r + ruido(u, t, sd) * amp * afina;
+              x = Math.cos(a) * rr; z = Math.sin(a) * rr; y = rz.y + ruido(u + 0.37, t, sd + 2) * amp * 0.8 * afina;
+            }
+            if (i > 0) { gr.pos[k++] = px; gr.pos[k++] = py; gr.pos[k++] = pz; gr.pos[k++] = x; gr.pos[k++] = y; gr.pos[k++] = z; }
+            if (fio === 0) { gr.bPos[kb++] = x; gr.bPos[kb++] = y; gr.bPos[kb++] = z; }
+            px = x; py = y; pz = z;
+          }
+        }
+      });
+      gr.g.attributes.position!.needsUpdate = true; gr.bg.attributes.position!.needsUpdate = true;
+    }
+  };
+
   // pernas de pouso (recolhem em voo)
   const trem = new THREE.Group(); corpo.add(trem);
   const escuro = new THREE.MeshStandardMaterial({ color: 0x1a2328, roughness: 0.5, metalness: 0.7 });
@@ -146,6 +192,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
       aro.rotation.y = giro; halo.rotation.y = -giro * 0.6; orbes.rotation.y = -giro * 0.8;
       luzes.forEach((m, i) => { m.opacity = 0.45 + 0.45 * (0.5 + 0.5 * Math.sin(t * 1.5 - (i / luzes.length) * Math.PI * 2)) * (0.5 + 0.5 * voo); });
       haloMat.opacity = 0.12 + 0.35 * voo;
+      atualizarRaios(t, voo);
       veioMat.opacity = 0.35 + 0.4 * voo * (0.75 + 0.25 * Math.sin(t * 1.3));
       (nucleo.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.55 * voo;
       (brilho.material as THREE.SpriteMaterial).opacity = 0.12 + 0.35 * voo;
