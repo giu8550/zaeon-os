@@ -12,6 +12,7 @@ import { empurrarParaFora, type Colisor } from "@/lib/cyber/colisao";
 import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
+import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
@@ -289,7 +290,7 @@ export class CyberEngine {
       if (this.ptrs.size === 2 && this.pinch0) { const [a, b] = [...this.ptrs.values()]; this.camDist = Math.min(24, Math.max(6, (this.dist0 * this.pinch0) / Math.max(20, Math.hypot(a!.x - b!.x, a!.y - b!.y)))); this.moved = true; return; }
       if (!this.drag) { if (e.target === cv) this.passarMouse(e.clientX, e.clientY); return; }
       const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) this.moved = true;
-      this.camAz = this.drag.az - dx * 0.006; this.camPitch = Math.max(-0.05, Math.min(1.25, this.drag.pitch + dy * 0.005));
+      this.camAz = this.drag.az - dx * 0.006; this.camPitch = limitarPitch(this.drag.pitch + dy * 0.005);   // arrastar pra baixo até o chão → olhar pro céu
     });
     on("pointerup", (e) => {
       const era = this.ptrs.size; this.ptrs.delete(e.pointerId); if (this.ptrs.size < 2) this.pinch0 = 0;
@@ -390,8 +391,10 @@ export class CyberEngine {
       const h = this.rayCam.intersectObjects(marco.alvos, true)[0];
       if (h) dist = Math.max(2.2, h.distance - 0.6);
     }
-    this.cam.position.set(this.camT.x + Math.sin(this.camAz) * cp * dist, Math.max(0.6, this.camT.y + sp * dist + 0.8), this.camT.z + Math.cos(this.camAz) * cp * dist);
-    this.cam.lookAt(this.camT.x, this.camT.y + 0.8, this.camT.z);
+    // órbita livre: por cima olha pro personagem; arrastando pra baixo encosta no chão e o olhar sobe pro céu
+    const c = poseDaCamera({ olho: { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z }, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
+    this.cam.position.set(c.pos.x, c.pos.y, c.pos.z);
+    this.cam.lookAt(c.olhar.x, c.olhar.y, c.olhar.z);
   }
 
   // ───────────── loop ─────────────

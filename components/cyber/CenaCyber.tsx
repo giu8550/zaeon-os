@@ -111,7 +111,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {!menu && (
         <>
           {!(touch && tela) && <p className="pointer-events-none absolute left-1/2 top-[64px] z-20 max-w-[92vw] -translate-x-1/2 rounded-full border border-violet-300/20 bg-[#0e0c24]/55 px-3 py-1 text-center text-[11.5px] text-violet-200/90">
-            {touch ? "joystick p/ andar · toque no chão p/ ir · pinça p/ zoom" : "WASD/clique p/ andar · Shift correr · Espaço pular · perto de um colega p/ falar · na sua base p/ estudar"}
+            {touch ? "joystick p/ andar · arraste p/ olhar (até o céu) · pinça p/ zoom" : "WASD/clique p/ andar · Shift correr · Espaço pular · arraste p/ olhar (até o céu) · na sua base p/ estudar"}
           </p>}
           {tela && (
             <button type="button" onClick={() => router.push("/")} className="absolute left-3 top-3 z-20 min-h-[44px] rounded-full border border-white/20 bg-black/50 px-4 text-xs font-medium text-white backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">← Sair</button>
