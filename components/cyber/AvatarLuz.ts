@@ -30,7 +30,8 @@ export type AvatarLuzHandle = {
   group: THREE.Group;
   /** meshes do corpo (raycast do clique). */
   meshes: THREE.Object3D[];
-  /** Idle/Walk/Run em crossfade + neurônios + sentar (0..1). */
+  /** Idle/Walk/Run em crossfade + neurônios + sentar (0..1). Sentado na cabine = interação energética com a tela
+   *  (braços estendidos pra frente/cima, aura pulsando devagar). */
   animar(o: { andando: boolean; correndo?: boolean; sentado?: number; dt: number; t: number }): void;
   /** `facing` = atan2(dx, dz) do movimento (a conversão pro modelo é interna). */
   olharPara(facing: number): void;
@@ -52,6 +53,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   const matAura = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
   matAura.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n transformed += normalize(normal) * 0.05;"); };
   let mixer: THREE.AnimationMixer | null = null;
+  // braços (rig mixamo do GLB): quando sentado, apontam pra tela — sem os ossos, só a aura pulsa
+  const ossos: { braco: THREE.Bone; ante: THREE.Bone; mao: THREE.Object3D; lado: 1 | -1 }[] = [];
   let idle: THREE.AnimationAction | null = null, walk: THREE.AnimationAction | null = null, run: THREE.AnimationAction | null = null;
 
   if (gltf) {
@@ -71,6 +74,10 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     });
     for (const c of cascas) (c.userData.pai as THREE.Object3D).add(c);
     corpo.add(modelo);
+    for (const [lado, nome] of [[1, "Left"], [-1, "Right"]] as const) {
+      const braco = modelo.getObjectByName(`mixamorig${nome}Arm`) as THREE.Bone | undefined, ante = modelo.getObjectByName(`mixamorig${nome}ForeArm`) as THREE.Bone | undefined, mao = modelo.getObjectByName(`mixamorig${nome}Hand`);
+      if (braco && ante && mao) ossos.push({ braco, ante, mao, lado });
+    }
     if (gltf.animations.length) {
       mixer = new THREE.AnimationMixer(modelo);
       const cl = gltf.animations;
@@ -87,6 +94,19 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   grupo.add(neu);
 
   let alvo = 0, wWalk = 0, wRun = 0;
+  const vA = new THREE.Vector3(), vB = new THREE.Vector3(), dirAlvo = new THREE.Vector3(), qPai = new THREE.Quaternion(), qOsso = new THREE.Quaternion(), qDelta = new THREE.Quaternion();
+  /** gira `osso` (em espaço de mundo) pra que o segmento osso→filho aponte pra `dir`, misturando com o pose da animação */
+  const apontar = (osso: THREE.Object3D, filho: THREE.Object3D, dir: THREE.Vector3, w: number) => {
+    osso.updateWorldMatrix(true, false); filho.updateWorldMatrix(false, false);
+    osso.getWorldPosition(vA); filho.getWorldPosition(vB);
+    const atual = vB.sub(vA).normalize();
+    qDelta.setFromUnitVectors(atual, dir);
+    osso.getWorldQuaternion(qOsso); osso.parent!.getWorldQuaternion(qPai);
+    const alvoLocal = qPai.invert().multiply(qDelta.multiply(qOsso));
+    osso.quaternion.slerp(alvoLocal, w);
+    osso.updateWorldMatrix(false, true);
+  };
+  const frente = new THREE.Vector3(), lateral = new THREE.Vector3(), cima = new THREE.Vector3(0, 1, 0), qG = new THREE.Quaternion();
   return {
     group: grupo, meshes,
     animar({ andando, correndo, sentado = 0, dt, t }) {
@@ -96,6 +116,19 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       let d = alvo - grupo.rotation.y; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
       grupo.rotation.y += d * 0.15;
       corpo.position.y = sentado * 0.32; corpo.rotation.x = sentado * 0.34;   // sentar: ~0.32 abaixo, inclinação ~0.34
+      // interação energética (sentado): braços se estendem pra frente e pra cima, rumo à tela no alto
+      if (ossos.length && sentado > 0.02) {
+        grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
+        frente.set(0, 0, 1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
+        const respira = 0.04 * Math.sin(t * 1.6);
+        for (const o of ossos) {
+          dirAlvo.copy(frente).multiplyScalar(0.78).addScaledVector(cima, 0.55 + respira).addScaledVector(lateral, 0.22 * o.lado).normalize();
+          apontar(o.braco, o.ante, dirAlvo, sentado);
+          dirAlvo.copy(frente).multiplyScalar(0.7).addScaledVector(cima, 0.7 + respira).addScaledVector(lateral, 0.08 * o.lado).normalize();
+          apontar(o.ante, o.mao, dirAlvo, sentado);
+        }
+      }
+      matAura.opacity = 0.62 + sentado * 0.25 * (0.5 + 0.5 * Math.sin(t * 2));
       (neu.material as THREE.PointsMaterial).size = 0.1 + 0.05 * Math.sin(t * 2 + grupo.position.x);
       neu.rotation.y += dt * 0.5;
     },

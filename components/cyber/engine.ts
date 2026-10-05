@@ -22,7 +22,7 @@ import { criarLandmark, type LandmarkHandle } from "./Landmark";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
-import { criarBase, type BaseEstudoHandle } from "./BaseEstudo";
+import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle } from "./AvatarLuz";
 
@@ -665,7 +665,9 @@ export class CyberEngine {
     for (const [id, b] of this.bases) {
       const alguemPerto = id === euId ? perto : [...this.remotos.values()].some((a) => a.id === id && this.distBase(id, a.pos) < BASE_INTERACT_R);
       if (b.layout.nivel) b.group.position.y = this.yDoNivel(b.layout.nivel);
-      b.atualizar({ dt, t, ativa: alguemPerto, hover: this.hoverBase === id, perto: id === euId && perto });
+      // energia = o dono SENTADO na cabine (fluxo mãos → tela)
+      const energia = id === euId ? this.sitT : (this.remotos.get(id)?.sit ?? 0);
+      b.atualizar({ dt, t, ativa: alguemPerto, hover: this.hoverBase === id, perto: id === euId && perto, energia });
     }
 
     this.atualizarCamera();
@@ -740,14 +742,14 @@ export class CyberEngine {
     const m = this.o.els.menu;
     if (m && this.menu) {
       if (this.cam.aspect < 0.8) { m.style.display = "flex"; m.style.left = "50%"; m.style.top = "68%"; }
-      else { const l = this.minhaBase; if (l) { const mw = localParaMundo(l, 0, -1.44); const p = this.proj(new THREE.Vector3(mw.x, 1.85 + this.yDoNivel(l.nivel), mw.z)); m.style.display = p.vis ? "flex" : "none"; if (p.vis) { m.style.left = p.x + "px"; m.style.top = p.y + "px"; } } }
+      else { const l = this.minhaBase; if (l) { const mw = localParaMundo(l, 0, TELA_BASE.z); const p = this.proj(new THREE.Vector3(mw.x, TELA_BASE.y + this.yDoNivel(l.nivel), mw.z)); m.style.display = p.vis ? "flex" : "none"; if (p.vis) { m.style.left = p.x + "px"; m.style.top = p.y + "px"; } } }
     }
     // rótulo do monitor em hover
     const lab = this.o.els.monLabel;
     if (lab) {
       if (this.hoverBase && !this.menu) {
         const z = this.zaeon();
-        const l = this.layouts.get(this.hoverBase)!, mw = localParaMundo(l, 0, -1.44), mon = new THREE.Vector3(mw.x, 2.7 + this.yDoNivel(l.nivel), mw.z);
+        const l = this.layouts.get(this.hoverBase)!, mw = localParaMundo(l, 0, TELA_BASE.z), mon = new THREE.Vector3(mw.x, TELA_BASE.y + TELA_BASE.h / 2 + 0.25 + this.yDoNivel(l.nivel), mw.z);
         const p = this.proj(mon);
         const meu = this.hoverBase === this.o.eu.id;
         lab.textContent = rotuloMonitor({ baseMinha: meu, pertoDaBase: this.perto, dono: this.pessoas.get(this.hoverBase)?.name ?? "alguém" });
