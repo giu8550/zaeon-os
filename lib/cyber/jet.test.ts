@@ -29,7 +29,7 @@ describe("mochila a jato", () => {
     const r = voar({ x: 40, z: 40, y: 0 }, [{ seg: 8, subir: true }]);
     expect(r.y).toBeCloseTo(tetoDoJet(qg), 6);
     expect(tetoDoJet(qg)).toBeGreaterThan(qg.nav.pisoY + 3);   // dá pra sobrevoar o salão
-    expect(tetoDoJet(qg)).toBeLessThan(30);                     // mas não vai pro céu (a Zaeon fica a 190 m)
+    expect(tetoDoJet(qg)).toBeLessThan(30);                     // mas não vai pro céu (a Zaeon fica a 215 m)
   });
   it("soltou: cai planando (sem despencar) e pousa no chão", () => {
     const r = voar({ x: 40, z: 40, y: 0 }, [{ seg: 2, subir: true }, { seg: 6, subir: false }]);

@@ -13,17 +13,22 @@ export const BURACO_NEGRO = { x: 0, y: 16, z: -110, r: 6 };
 
 export const CIDADE = {
   centro: { x: BURACO_NEGRO.x, z: BURACO_NEGRO.z },
-  pisoY: 190,           // piso da cidade: BEM acima do buraco negro (y=16) — flutuando nas alturas
+  pisoY: 215,           // piso da cidade: BEM acima do buraco negro (y=16) — flutuando nas alturas
   bordaR: 40,           // borda da ilha principal
   andavelR: 34,         // até onde se anda (as muralhas ficam em 37)
   muralhaR: 37,
-  ilhaAltura: 34,       // a ilha (cone invertido) vai do piso até pisoY - ilhaAltura
-  cidadela: { r: 14, pilares: 12, pilarColR: 1.1 },              // cúpula = SALA DE COMPUTADORES
+  ilhaAltura: 58,       // a ilha (cone invertido) vai do piso até pisoY - ilhaAltura
+  /** a AGULHA embaixo da ilha: a ponta afiada que desce do ápice (sólida pra nave) */
+  agulha: { r: 6, altura: 32 },
+  cidadela: { r: 18, pilares: 16, pilarColR: 1.3, altura: 16 },  // pilares + cúpula em 2 andares + pináculo
   /** BIBLIOTECA em anel rodeando a sala (dentro da cidadela): estantes de livros de luz e, a cada `monitorCada`,
    *  um MONITOR vertical (clicável = Sala de Estudos). Vãos entre os módulos deixam passar. */
-  biblioteca: { n: 16, r: 11.5, largura: 3.6, colR: 0.75, monitorCada: 4 },
+  biblioteca: { n: 16, r: 15, largura: 3.6, colR: 0.75, monitorCada: 4 },
+  /** SALAS DE SERVIDORES: 4 alas em arco (racks virados pro centro) entre a mesa holográfica e a biblioteca;
+   *  `n` vagas no anel, a cada `vaoCada` uma fica livre (corredor de passagem pra mesa) */
+  servidores: { n: 16, r: 7.5, vaoCada: 4, largura: 1.3, prof: 1, alt: 3.4, colR: 0.75 },
   mesaHolo: { r: 2.4 },
-  hangar: { x: 22, z: 8, r: 6 },                                 // plataforma da nave (local)
+  hangar: { x: 26, z: 9, r: 6 },                                 // plataforma da nave (local)
   portalVolta: { x: -21, z: 10, r: 2.2 },                        // anel de volta pra praça (local)
   chegada: { x: -16, z: 14 },                                    // onde se aparece ao entrar (local)
   /** anel de entrada no CHÃO, embaixo do buraco negro (mundo) */
@@ -45,10 +50,22 @@ export function bibliotecaLocais(): ModuloBiblioteca[] {
 /** os MONITORES da biblioteca (clicáveis: Sala de Estudos) — o índice é o instanceId do mesh das telas */
 export const computadoresLocais = () => bibliotecaLocais().filter((m) => m.tipo === "monitor");
 
-/** colisores da plataforma (mundo): pilares da cidadela, módulos da biblioteca (3 círculos ao longo de cada um), mesa holográfica */
+/** racks (locais) das salas de servidores: anel com corredores; `rot` deixa o +z local (a frente) apontando pro centro */
+export function servidoresLocais(): { x: number; z: number; rot: number }[] {
+  const { n, r, vaoCada } = CIDADE.servidores, out: { x: number; z: number; rot: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    if (i % vaoCada === 0) continue;
+    const a = (i / n) * Math.PI * 2;
+    out.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, rot: Math.atan2(-Math.cos(a), -Math.sin(a)) });
+  }
+  return out;
+}
+
+/** colisores da plataforma (mundo): pilares da cidadela, módulos da biblioteca (3 círculos ao longo de cada um), racks, mesa holográfica */
 export function colisoresDaCidade(): Colisor[] {
   const out: Colisor[] = [];
-  const { cidadela, biblioteca, mesaHolo } = CIDADE;
+  const { cidadela, biblioteca, mesaHolo, servidores } = CIDADE;
+  for (const s of servidoresLocais()) out.push({ ...mundo(s), r: servidores.colR });
   for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
   for (const m of bibliotecaLocais()) {
     const tx = Math.cos(m.rot), tz = -Math.sin(m.rot);   // eixo "largura" do módulo (x local girado)
@@ -78,10 +95,17 @@ export function computadorPerto(p: P2, alcance = 2.6): number {
   return melhor;
 }
 
-/** volume sólido da ilha (pra NAVE): cilindro aproximado [pisoY - ilhaAltura, pisoY + 6] × bordaR */
+/** volume sólido da ilha (pra NAVE): cilindro aproximado [pisoY - ilhaAltura, pisoY] × bordaR + a AGULHA embaixo (cilindro fino) */
 export function foraDaIlha(p: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
   const c = CIDADE.centro, dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz);
   const base = CIDADE.pisoY - CIDADE.ilhaAltura, topo = CIDADE.pisoY;
+  // a agulha (ponta embaixo do ápice): vindo de baixo, para na ponta; de lado, desliza pra fora
+  const ag = CIDADE.agulha, fundo = base - ag.altura;
+  if (d < ag.r && p.y >= fundo && p.y < base) {
+    if (p.y - fundo < ag.r - d) return { ...p, y: fundo };
+    const k = d > 1e-4 ? ag.r / d : 1;
+    return { x: c.x + (d > 1e-4 ? dx * k : ag.r), y: p.y, z: c.z + (d > 1e-4 ? dz * k : 0) };
+  }
   if (d > CIDADE.bordaR || p.y < base || p.y > topo) return p;
   // dentro do volume: sai pelo lado mais perto (cima = pousa no piso; baixo; ou radialmente)
   const paraCima = topo - p.y, paraBaixo = p.y - base, paraFora = CIDADE.bordaR - d;

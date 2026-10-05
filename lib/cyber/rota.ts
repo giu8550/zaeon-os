@@ -11,7 +11,7 @@ import { VOO, type ComandoVoo, type EstadoVoo } from "./voo";
 export type DestinoRota = "heliporto" | "qg" | "zaeon";
 export type Waypoint = { x: number; y: number; z: number; pousar?: boolean };
 
-/** altitude de cruzeiro no chão: acima da cúpula do QG (~26 m), bem abaixo do fundo da ilha da Zaeon (~156 m) */
+/** altitude de cruzeiro no chão: acima da cúpula do QG (~26 m), bem abaixo da ponta da agulha da Zaeon (~125 m) */
 export const CRUZEIRO = 40;
 const FOLGA_BORDA = 8, ACIMA_DA_CIDADE = 8;
 
