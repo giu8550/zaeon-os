@@ -71,6 +71,8 @@ export type CyberOpts = {
   /** clicou na nave estando perto → o React pede acesso ao servidor e chama `embarcar()` */
   onEmbarcar?: () => void;
   /** estado da nave/cidade pra UI (botões Embarcar / Sair / Voltar) */
+  /** a AÇÃO de contexto mudou (o que o F faz agora: "Estudar", "Montar na moto"…) ou acabou (null) */
+  onAcao?: (a: { rotulo: string } | null) => void;
   onEstadoQG?: (s: { noCeu: boolean; navePerto: boolean; pilotando: boolean; pousado: boolean; moto: boolean; motoPerto: boolean }) => void;
   /** HUD de voo (pilotando): altímetro — só quando muda (≤ 10×/s) */
   onVoo?: (h: { y: number }) => void;
@@ -111,7 +113,6 @@ const COR_QG = "#ffd36b";
 const CORES_MOTO = ["#45d6ff", "#ff6ad5", "#ffc46b", "#9affd0"];
 /** sensibilidade do olhar livre (rad por pixel do mouse) */
 const SENS_OLHAR = 0.0026;
-const MIRA_CSS = "position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:rgba(220,245,255,.9);box-shadow:0 0 0 1.5px rgba(10,20,40,.55),0 0 8px rgba(120,220,255,.7);pointer-events:none;z-index:5;";
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
 const TAG_CSS = "position:absolute;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
@@ -191,8 +192,10 @@ export class CyberEngine {
   private camAz = 0; private camPitch = 0.16; private camDist = 9; private camT = new THREE.Vector3(0, 1.2, 0);
   private ptrs = new Map<number, { x: number; y: number }>(); private drag: { x: number; y: number; az: number; pitch: number } | null = null; private moved = false; private pinch0 = 0; private dist0 = 9;
   /** OLHAR LIVRE (tela cheia, mouse): o 1º clique trava o ponteiro (pointer lock) e daí mexer o mouse gira a câmera,
-   *  sem segurar botão; a MIRA no centro é o "cursor" (clicar = agir no que está nela). Esc solta. */
-  private olharLivre = false; private travando = false; private mira: HTMLDivElement | null = null; private dicaMira: HTMLDivElement | null = null;
+   *  sem segurar botão. Sem mira e sem clique de ação: as ações são pela tecla F (ver `acaoPerto`). Esc solta. */
+  private olharLivre = false; private travando = false; private dicaMira: HTMLDivElement | null = null;
+  /** a AÇÃO de contexto agora (o que o F faz) — o React mostra o chip "F · rótulo" */
+  private acaoChave = "";
   private prontoDisparado = false;
   private cleanups: Array<() => void> = [];
 
@@ -767,8 +770,7 @@ export class CyberEngine {
       if (this.digitando() || (!this.o.teclasSempre && !this.sobContainer)) return; const k = e.key.toLowerCase();
       if (k === "shift") { this.keys.shift = true; return; }
       if (k === " " || k === "spacebar") { if (this.pilotando || this.moto !== null) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.comandoJet(true); e.preventDefault(); } return; }
-      if (k === "f" && this.pilotando && this.pousado) { this.desembarcar(); return; }
-      if (k === "f" && !this.menu) { if (this.moto !== null) this.desmontar(); else this.montar(); return; }   // moto: F monta (perto) / desce (pousada)
+      if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }   // F = a ação de contexto (estudar, montar, embarcar, descer…)
       if ((k === "e" || k === "q") && (this.pilotando || this.moto !== null)) { this.voY[k === "e" ? "subir" : "descer"] = true; this.autoPouso = false; e.preventDefault(); return; }
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { this.keys[k] = true; e.preventDefault(); }
     });
@@ -776,18 +778,16 @@ export class CyberEngine {
     // olhar livre: trava/solta o ponteiro
     const aoTravar = () => {
       this.olharLivre = document.pointerLockElement === cv; this.drag = null; this.ptrs.clear();
-      if (this.mira) this.mira.style.display = this.olharLivre ? "block" : "none";
       if (this.olharLivre && this.dicaMira) { this.dicaMira.remove(); this.dicaMira = null; }   // a dica só até a 1ª vez
       if (this.olharLivre) { this.hoverBase = null; cv.style.cursor = ""; }
     };
     document.addEventListener("pointerlockchange", aoTravar); this.cleanups.push(() => document.removeEventListener("pointerlockchange", aoTravar));
     if (this.podeOlharLivre(true)) {
-      const mira = document.createElement("div"); mira.style.cssText = MIRA_CSS; mira.style.display = "none"; this.o.overlay.appendChild(mira); this.mira = mira;
       const dica = document.createElement("div"); dica.style.cssText = DICA_MIRA_CSS; dica.textContent = "Clique na cena: o mouse passa a mover a câmera · Esc solta"; this.o.overlay.appendChild(dica); this.dicaMira = dica;
-      this.cleanups.push(() => { mira.remove(); dica.remove(); if (document.pointerLockElement === cv) document.exitPointerLock(); });
+      this.cleanups.push(() => { dica.remove(); if (document.pointerLockElement === cv) document.exitPointerLock(); });
     }
     onC("pointerdown", (e) => {
-      if (this.olharLivre) { if (e.button === 0) this.drag = { x: 0, y: 0, az: this.camAz, pitch: this.camPitch }; this.moved = false; return; }   // clique na MIRA (age no pointerup)
+      if (this.olharLivre) return;   // mouse travado: clicar não faz nada (as ações são no F)
       if (e.pointerType === "mouse" && e.button === 0 && this.podeOlharLivre()) {   // 1º clique: trava o mouse (não é um clique de ação)
         this.travando = true;
         try { const pr = cv.requestPointerLock() as unknown as Promise<void> | undefined; pr?.catch?.(() => { this.travando = false; }); } catch { this.travando = false; }
@@ -800,7 +800,6 @@ export class CyberEngine {
     on("pointermove", (e) => {
       if (this.olharLivre) {   // mexer o mouse = girar a câmera (direita gira pra direita; pra baixo olha pra baixo)
         this.camAz -= e.movementX * SENS_OLHAR; this.camPitch = limitarPitch(this.camPitch + e.movementY * SENS_OLHAR * 0.85);
-        if (Math.abs(e.movementX) + Math.abs(e.movementY) > 0) { const r = cv.getBoundingClientRect(); this.passarMouse(r.left + r.width / 2, r.top + r.height / 2); }
         return;
       }
       if (this.ptrs.has(e.pointerId)) this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -811,7 +810,7 @@ export class CyberEngine {
     });
     on("pointerup", (e) => {
       if (this.travando) { this.travando = false; return; }
-      if (this.olharLivre) { if (this.drag && e.button === 0) { const r = cv.getBoundingClientRect(); this.clicar(r.left + r.width / 2, r.top + r.height / 2, true); } this.drag = null; return; }
+      if (this.olharLivre) return;
       const era = this.ptrs.size; this.ptrs.delete(e.pointerId); if (this.ptrs.size < 2) this.pinch0 = 0;
       if (this.drag && !this.moved && era === 1) this.clicar(e.clientX, e.clientY);
       if (!this.ptrs.size) this.drag = null;
@@ -826,6 +825,33 @@ export class CyberEngine {
   private podeOlharLivre(ignorarMenu = false) {
     return (ignorarMenu || !this.menu) && this.o.teclasSempre && typeof document !== "undefined" && "exitPointerLock" in document && !!window.matchMedia?.("(pointer: fine)").matches;
   }
+  /** a AÇÃO de contexto (tecla F / chip na tela), pela prioridade: sair do veículo pousado → estudar → montar na moto →
+   *  embarcar na nave (dono) → recado na TV do lounge (dono) → falar com quem está do lado → abrir o marco perto */
+  private acaoPerto(): { id: string; rotulo: string; fazer: () => void } | null {
+    if (this.menu) return null;
+    if (this.pilotando) return this.pousado ? { id: "sair-nave", rotulo: "Sair da nave", fazer: () => this.desembarcar() } : null;
+    if (this.moto !== null) return this.motoPousado ? { id: "descer-moto", rotulo: "Descer da moto", fazer: () => this.desmontar() } : null;
+    if (this.jet.noAr) return null;
+    const estudar = { id: "estudar", rotulo: "Estudar", fazer: () => this.o.onEntrarEstudo?.() };
+    if (this.perto || this.noTopo || (this.noCeu && computadorPerto(this.eu.pos, 3.2) >= 0)) return estudar;
+    const m = this.motoAoAlcance(); if (m >= 0) return { id: `moto-${m}`, rotulo: "Montar na moto", fazer: () => { this.montar(m); } };
+    if (this.nave && this.ehFundador(this.o.eu.id) && this.navePerto()) return { id: "embarcar", rotulo: "Embarcar na nave", fazer: () => this.o.onEmbarcar?.() };
+    if (this.noCeu && this.cidade?.tvLounge && this.ehFundador(this.o.eu.id)) {
+      const tv = this.cidade.tvLounge.getWorldPosition(this.tmp);
+      if (Math.hypot(this.eu.pos.x - tv.x, this.eu.pos.z - tv.z) < 7) return { id: "recado", rotulo: "Escrever recado pro QG", fazer: () => this.o.onAbrirRecado?.() };
+    }
+    let colega: Ator | null = null, dc = 3.0;
+    for (const a of this.remotos.values()) { const d = Math.hypot(a.pos.x - this.eu.pos.x, a.pos.z - this.eu.pos.z); if (d < dc && Math.abs(a.alt - this.eu.alt) < 2) { dc = d; colega = a; } }
+    if (colega) { const c = colega; return { id: `falar-${c.id}`, rotulo: `Falar com ${c.name}`, fazer: () => { this.falandoCom = c; this.alvo = null; this.o.onFalarCom?.(c.name); c.av.olharPara(Math.atan2(this.eu.pos.x - c.pos.x, this.eu.pos.z - c.pos.z)); } }; }
+    if (!this.altoEm && !this.noTopo) {
+      const poi = poiPerto(this.eu.pos, this.lms.map((l) => l.poi).filter((x) => !!x.link || x.acesso === "dono"));
+      if (poi) return { id: `marco-${poi.id}`, rotulo: poi.nome, fazer: () => { this.alvo = null; this.o.onLandmark?.(poi); } };
+    }
+    return null;
+  }
+  /** F (ou o chip na tela): faz a ação de contexto de agora */
+  executarAcao() { const a = this.acaoPerto(); if (a) a.fazer(); }
+
   /** solta o mouse (o React chama ao abrir um painel ou focar o chat) */
   soltarMouse() { if (this.olharLivre && typeof document !== "undefined") document.exitPointerLock(); }
 
@@ -844,9 +870,7 @@ export class CyberEngine {
     this.R.domElement.style.cursor = meu && this.perto ? "pointer" : "";
   }
 
-  /** `mira`: clique com o mouse travado (olhar livre) — só INTERAGE (monitor, moto, TV, colega, portal, marco); andar
-   *  é no WASD (a mira passa por cima do personagem: "andar até onde ela aponta" levaria longe demais) */
-  private clicar(cx: number, cy: number, mira = false) {
+  private clicar(cx: number, cy: number) {
     if (this.pilotando || this.moto !== null) return;   // em voo, arrastar gira a câmera; clique não faz nada
     this.motoAlvo = null;
     const sob = this.monitorSob(cx, cy);
@@ -873,7 +897,7 @@ export class CyberEngine {
       const hc = this.ray.intersectObject(this.cidade.computadores, false)[0];
       if (hc && computadorPerto(this.eu.pos, 3.2) >= 0) { this.o.onEntrarEstudo?.(); return; }
       const h = this.ray.intersectObjects(this.cidade.alvos, true)[0];
-      if (h && !mira) { const q = resolverCidade({ x: h.point.x, z: h.point.z }); this.alvo = new THREE.Vector2(q.x, q.z); this.alvoDepois = null; }
+      if (h) { const q = resolverCidade({ x: h.point.x, z: h.point.z }); this.alvo = new THREE.Vector2(q.x, q.z); this.alvoDepois = null; }
       return;
     }
     // o BURACO NEGRO é o portal (ou o anel embaixo dele)
@@ -884,7 +908,7 @@ export class CyberEngine {
     if (this.noTopo) {
       if (sob === this.o.eu.id) { this.o.onEntrarEstudo?.(); return; }
       const z = this.zaeon(); const hit = z?.topo ? this.ray.intersectObject(z.topo, true)[0] : undefined;
-      if (hit && z && !mira) { const e = this.eixoTopo()!; const dx = hit.point.x - e.x, dz = hit.point.z - e.z, d = Math.hypot(dx, dz), lim = 2.0 * this.escalaZaeon(), k = d > lim ? lim / d : 1; this.alvo = new THREE.Vector2(e.x + dx * k, e.z + dz * k); }
+      if (hit && z) { const e = this.eixoTopo()!; const dx = hit.point.x - e.x, dz = hit.point.z - e.z, d = Math.hypot(dx, dz), lim = 2.0 * this.escalaZaeon(), k = d > lim ? lim / d : 1; this.alvo = new THREE.Vector2(e.x + dx * k, e.z + dz * k); }
       return;
     }
     let marco: LandmarkHandle | null = null, hitMarco: THREE.Intersection | null = null;
@@ -892,11 +916,11 @@ export class CyberEngine {
     // no ALTO (escada/plataforma): clicar na estrutura = andar até o ponto (a navegação segura muralhas/borda)
     if (this.altoEm) {
       if (sob === this.o.eu.id && this.perto) { this.o.onEntrarEstudo?.(); return; }
-      if (hitMarco && !mira) { this.alvo = new THREE.Vector2(hitMarco.point.x, hitMarco.point.z); this.alvoDepois = null; this.falandoCom = null; }
+      if (hitMarco) { this.alvo = new THREE.Vector2(hitMarco.point.x, hitMarco.point.z); this.alvoDepois = null; this.falandoCom = null; }
       return;
     }
     // do chão, clicar nos DEGRAUS: primeiro o pé da escada, depois sobe até onde clicou
-    if (marco && hitMarco && marco.escada && hitMarco.object === marco.escada && !mira) {
+    if (marco && hitMarco && marco.escada && hitMarco.object === marco.escada) {
       const mn = marcoNav(marco.poi)!; const pe = deEscada(mn, mn.nav.bordaR + mn.nav.escada.comprimento * 0.98, 0);
       this.alvo = new THREE.Vector2(pe.x, pe.z); this.alvoDepois = new THREE.Vector2(hitMarco.point.x, hitMarco.point.z); this.falandoCom = null; return;
     }
@@ -912,7 +936,7 @@ export class CyberEngine {
       this.falandoCom = colega; this.alvo = null; this.o.onFalarCom?.(colega.name);
       colega.av.olharPara(Math.atan2(this.eu.pos.x - colega.pos.x, this.eu.pos.z - colega.pos.z)); return;
     }
-    const h = mira ? undefined : this.ray.intersectObject(this.cena.floor)[0];
+    const h = this.ray.intersectObject(this.cena.floor)[0];
     if (h) { const p = empurrarParaFora({ x: h.point.x, z: h.point.z }, this.colisores); this.alvo = new THREE.Vector2(p.x, p.z); this.alvoDepois = null; this.falandoCom = null; this.o.onFalarCom?.(null); }
   }
 
@@ -1132,6 +1156,8 @@ export class CyberEngine {
     const navePerto = !this.pilotando && !!this.nave && this.navePerto();
     const naMoto = this.moto !== null, motoPertoAgora = this.motoAoAlcance() >= 0, pousado = naMoto ? this.motoPousado : this.pousado;
     const est = `${this.noCeu}|${navePerto}|${this.pilotando}|${pousado}|${naMoto}|${motoPertoAgora}`;
+    const ac = this.acaoPerto(), ch = ac ? `${ac.id}|${ac.rotulo}` : "";
+    if (ch !== this.acaoChave) { this.acaoChave = ch; this.o.onAcao?.(ac ? { rotulo: ac.rotulo } : null); }
     if (est !== this.estadoQG) { this.estadoQG = est; this.o.onEstadoQG?.({ noCeu: this.noCeu, navePerto, pilotando: this.pilotando, pousado, moto: naMoto, motoPerto: motoPertoAgora }); }
 
     // marcos: animação + a "estátua" do dono some quando o dono real está lá em cima
