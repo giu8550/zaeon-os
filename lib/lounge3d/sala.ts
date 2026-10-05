@@ -116,6 +116,14 @@ function vooDe(v: unknown): { voo?: { y: number; yaw: number } } {
   return y === null || yaw === null ? {} : { voo: { y, yaw } };
 }
 
+/** nave pousada fora do hangar: posição no mapa (x/z no chão, y 0..300) e rumo; lixo → nada */
+function naveParadaDe(v: unknown): { naveParada?: { x: number; y: number; z: number; yaw: number } } {
+  if (!v || typeof v !== "object") return {};
+  const o = v as Record<string, unknown>;
+  const x = num(o.x, -COORD, COORD), y = num(o.y, 0, 300), z = num(o.z, -COORD, COORD), yaw = num(o.yaw, -10, 10);
+  return x === null || y === null || z === null || yaw === null ? {} : { naveParada: { x, y, z, yaw } };
+}
+
 /** Presença vinda da rede: só o que é número/strings curtas; lixo → null. */
 export function sanitizarPresenca(raw: unknown): Presenca | null {
   if (!raw || typeof raw !== "object") return null;
@@ -123,7 +131,7 @@ export function sanitizarPresenca(raw: unknown): Presenca | null {
   if (typeof r.userId !== "string" || !/^[a-f0-9]{24}$/i.test(r.userId)) return null;
   const x = num(r.x, -COORD, COORD), z = num(r.z, -COORD, COORD), facing = num(r.facing, -10, 10);
   if (x === null || z === null || facing === null) return null;
-  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ts: typeof r.ts === "number" ? r.ts : Date.now() };
+  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ...naveParadaDe(r.naveParada), ts: typeof r.ts === "number" ? r.ts : Date.now() };
 }
 
 /** Ponte chat → nota: um "ponto importante" da Sala de Pesquisa vira nota SUGERIDA perto do avatar. */

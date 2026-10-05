@@ -39,6 +39,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const engine = useRef<CyberEngine | null>(null);
   const [pronto, setPronto] = useState(false), [perto, setPerto] = useState(false), [menu, setMenu] = useState(!tela);
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
+  const [rota, setRota] = useState<"chao" | "cidade" | "zaeon" | null>(null);
   const [voo, setVoo] = useState<{ y: number; sobre: string; dica: string | null } | null>(null);
   const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true }), [fade, setFade] = useState(false), [aviso2, setAviso2] = useState<string | null>(null);
   const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
@@ -85,6 +86,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
       onEstadoQG: setQg,
       onVoo: setVoo,
+      onRota: setRota,
     }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
@@ -189,13 +191,27 @@ export default function CenaCyber(p: CenaCyberProps) {
       )}
       {/* QG: nave e cidade (as ações privilegiadas passam pelo servidor em `pedir`) */}
       {!menu && qg.navePerto && !qg.pilotando && p.souFundador && (
-        <button type="button" onClick={() => void pedir("nave", () => engine.current?.embarcar())} className="absolute left-1/2 top-[164px] z-30 min-h-[44px] -translate-x-1/2 rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-sm font-extrabold text-slate-950 shadow-[0_0_24px_rgba(90,200,255,.6)]">🚀 Embarcar na nave</button>
+        <div className="absolute left-1/2 top-[164px] z-30 flex -translate-x-1/2 flex-wrap justify-center gap-2">
+          <button type="button" onClick={() => void pedir("nave", () => engine.current?.embarcar())} className="min-h-[44px] rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-sm font-extrabold text-slate-950 shadow-[0_0_24px_rgba(90,200,255,.6)]">🚀 Embarcar na nave</button>
+          {/* atalho fora da nave: embarca e já sai voando pro destino (o servidor valida o embarque) */}
+          <button type="button" onClick={() => void pedir("nave", () => { engine.current?.embarcar(); engine.current?.irPara(qg.noCeu ? "chao" : "cidade"); })} className="min-h-[44px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-4 text-sm font-semibold text-sky-100 backdrop-blur">{qg.noCeu ? "⬇ Descer ao chão" : "⬆ Subir à Cidade"}</button>
+        </div>
       )}
       {!menu && qg.pilotando && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} />}
       {!menu && qg.pilotando && (
         <div className="absolute left-1/2 top-[110px] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
           <p className="rounded-full border border-sky-300/30 bg-[#070c22]/80 px-4 py-1.5 text-center text-xs text-sky-100 backdrop-blur">{voo && <span className="font-bold tabular-nums">↕ {voo.y} m · {voo.sobre} · </span>}{qg.pousado ? "pousada" : "em voo"} · {touch ? "joystick voa · ⬆ Subir / ⬇ Descer" : "setas ou WASD voam · E/Espaço sobe · Q/Shift desce"}</p>
           {voo?.dica && <p role="status" className="rounded-full border border-amber-200/40 bg-[#1a0f08]/85 px-4 py-1.5 text-center text-xs font-semibold text-amber-100 backdrop-blur">{voo.dica}</p>}
+          {/* atalhos: a nave voa sozinha (à vista de todos) até pousar; qualquer botão de movimento cancela */}
+          {rota ? (
+            <button type="button" onClick={() => engine.current?.pararRota()} className="min-h-[40px] rounded-full border border-amber-200/45 bg-[#1a0f08]/85 px-4 text-xs font-semibold text-amber-100 backdrop-blur">■ Parar · indo {rota === "chao" ? "ao heliporto" : rota === "cidade" ? "à Cidade" : "à Zaeon"}</button>
+          ) : (
+            <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Atalhos de voo">
+              {([["chao", "⬇ Chão"], ["cidade", "⬆ Cidade"], ["zaeon", "Zaeon"]] as const).map(([d, rot]) => (
+                <button key={d} type="button" onClick={() => engine.current?.irPara(d)} className="min-h-[40px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-4 text-xs font-semibold text-sky-100 backdrop-blur">{rot}</button>
+              ))}
+            </div>
+          )}
           {qg.pousado && <button type="button" onClick={() => engine.current?.desembarcar()} className="min-h-[44px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-5 text-sm font-semibold text-sky-100 backdrop-blur">Sair da nave{touch ? "" : " (F)"}</button>}
         </div>
       )}

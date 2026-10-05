@@ -31,6 +31,7 @@ export type Presenca = {
   topo?: boolean;     // no topo da Zaeon (só vale pra quem o SERVIDOR marcou como fundador)
   ceu?: boolean;      // na Cidade Zaeon (céu) — idem
   voo?: { y: number; yaw: number };   // pilotando a nave (altura + rumo) — idem
+  naveParada?: { x: number; y: number; z: number; yaw: number };   // a nave pousada FORA do hangar (fora dela) — idem
   ts?: number;
 };
 

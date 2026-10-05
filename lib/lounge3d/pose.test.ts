@@ -17,6 +17,12 @@ describe("pose", () => {
     expect(poseMudou({ ...p, voo: { y: 50, yaw: 0 } }, { ...p, voo: { y: 52, yaw: 0 } })).toBe(true);
     expect(poseMudou({ ...p, voo: { y: 50, yaw: 0 } }, { ...p, voo: { y: 50.01, yaw: 0 } })).toBe(false);
     expect(poseMudou(p, { ...p, voo: { y: 0, yaw: 0 } })).toBe(true);
+    // nave pousada fora do hangar: aparecer/sumir/mover reenvia; parada igual não gasta cota
+    const np = { x: 24, y: 0, z: 24, yaw: 0 };
+    expect(poseMudou(p, { ...p, naveParada: np })).toBe(true);
+    expect(poseMudou({ ...p, naveParada: np }, p)).toBe(true);
+    expect(poseMudou({ ...p, naveParada: np }, { ...p, naveParada: { ...np, x: 30 } })).toBe(true);
+    expect(poseMudou({ ...p, naveParada: np }, { ...p, naveParada: { ...np } })).toBe(false);
     expect(poseMudou(p, { ...p, ceu: true })).toBe(true);
   });
   it("giro pelo menor arco (±π não conta como mudança)", () => {
