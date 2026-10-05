@@ -45,7 +45,7 @@ const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia
 export function criarLandmark(poi: POI, opts: { low: boolean; starTex: THREE.Texture }): LandmarkHandle {
   const rotulo = document.createElement("div");
   rotulo.style.cssText = ROTULO_CSS; rotulo.textContent = poi.nome;
-  return poi.preset === "zaeon" ? zaeon(poi, opts, rotulo) : generico(poi, opts, rotulo);
+  return poi.preset === "zaeon" ? zaeon(poi, opts, rotulo) : poi.preset === "heliporto" ? heliporto(poi, opts, rotulo) : generico(poi, opts, rotulo);
 }
 
 /** Libera geometrias/materiais de uma árvore + as texturas próprias do builder (`extras`); compartilhadas ficam. */
@@ -213,6 +213,29 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
       void coldLight;
     },
     dispose() { rotulo.remove(); liberar(g, [texUnder, texFogo, texAura]); },
+  };
+}
+
+/**
+ * Heliporto: disco plano no chão (andável) com anel de luz e um "H" estilizado — pouso da nave perto da praça.
+ * O anel "respira" devagar (sem piscar); com prefers-reduced-motion fica parado.
+ */
+function heliporto(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, rotulo: HTMLDivElement): LandmarkHandle {
+  const g = new THREE.Group(); g.position.set(poi.x, 0, poi.z);
+  const r = poi.footprintR, seg = low ? 32 : 64, parado = reducedMotion();
+  const disco = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 0.15, 0.12, seg), new THREE.MeshStandardMaterial({ color: 0x0c1a33, emissive: 0x16305c, emissiveIntensity: 0.5, roughness: 0.7, metalness: 0.3 }));
+  disco.position.y = 0.06; g.add(disco);
+  const marca = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.85 });
+  for (const [w, d, x] of [[0.5, 3.4, -1], [0.5, 3.4, 1], [2.0, 0.5, 0]] as const) { const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), marca); b.position.set(x, 0.14, 0); g.add(b); }
+  const anelMat = new THREE.MeshBasicMaterial({ color: 0x5fd0ff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
+  const anel = new THREE.Mesh(new THREE.TorusGeometry(r - 0.4, 0.07, 8, seg), anelMat); anel.rotation.x = Math.PI / 2; anel.position.y = 0.15; g.add(anel);
+  const luzes: THREE.Mesh[] = [];
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2, l = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), marca); l.position.set(Math.cos(a) * (r - 0.4), 0.2, Math.sin(a) * (r - 0.4)); g.add(l); luzes.push(l); }
+  return {
+    poi, group: g, rotulo, alvos: [disco], topo: null, monitorTopo: null, escada: null,
+    donoPresente() { /* sem topo */ },
+    atualizar(_dt, t) { if (!parado) anelMat.opacity = 0.45 + 0.2 * Math.sin(t * 1.2); },
+    dispose() { rotulo.remove(); liberar(g); },
   };
 }
 
