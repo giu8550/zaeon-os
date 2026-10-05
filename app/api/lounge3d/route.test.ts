@@ -10,6 +10,8 @@ vi.mock("@/lib/collab/realtime", () => ({ triggerSafe: m.trigger, getPusher: () 
 import { PATCH, GET } from "./[id]/route";
 import { POST as CHAT } from "./[id]/chat/route";
 import { POST as AUTH } from "./[id]/pusher-auth/route";
+import { POST as ACESSO } from "./[id]/acesso/route";
+import { POST as TOPO } from "./[id]/topo/route";
 
 const ID = "0123456789abcdef01234567", ME = "aaaaaaaaaaaaaaaaaaaaaaaa", OUTRO = "bbbbbbbbbbbbbbbbbbbbbbbb";
 const json = (b: unknown, method = "POST") => new Request("http://x/", { method, body: JSON.stringify(b), headers: { "Content-Type": "application/json" } });
@@ -83,5 +85,18 @@ describe("/api/lounge3d/[id]", () => {
     m.docFind.mockResolvedValue(doc());
     const r = await AUTH(new Request("http://x/", { method: "POST", body: `socket_id=1.2&channel_name=presence-lounge3d-${ID}`, headers: { "Content-Type": "application/x-www-form-urlencoded" } }), { params: { id: ID } });
     expect(r.status).toBe(503);
+  });
+
+  it("acesso privilegiado (topo/céu/nave): só o FUNDADOR (pela sessão) recebe 200; alvo inválido 400", async () => {
+    const req = (alvo: string) => new Request("http://x/", { method: "POST", body: JSON.stringify({ alvo }), headers: { "Content-Type": "application/json" } });
+    m.docFind.mockResolvedValue(doc());
+    // Ana (a@b.c) não está na allowlist nem tem role → 403 em tudo
+    for (const alvo of ["topo", "ceu", "nave"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(403);
+    expect((await ACESSO(req("voar-pelado"), { params: { id: ID } })).status).toBe(400);
+    expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(403);
+    // fundador por role no banco → 200 (o cliente nunca decide)
+    m.userFind.mockResolvedValue({ id: ME, name: "Ana", image: null, role: "super_admin" });
+    for (const alvo of ["topo", "ceu", "nave"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(200);
+    expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(200);
   });
 });

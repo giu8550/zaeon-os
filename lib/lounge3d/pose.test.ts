@@ -13,6 +13,12 @@ describe("pose", () => {
     expect(poseMudou(p, { ...p, moving: true })).toBe(true);
     expect(poseMudou(p, { ...p, sit: true })).toBe(true);
   });
+  it("voando: altura/rumo da nave e entrar/sair da cidade contam como mudança", () => {
+    expect(poseMudou({ ...p, voo: { y: 50, yaw: 0 } }, { ...p, voo: { y: 52, yaw: 0 } })).toBe(true);
+    expect(poseMudou({ ...p, voo: { y: 50, yaw: 0 } }, { ...p, voo: { y: 50.01, yaw: 0 } })).toBe(false);
+    expect(poseMudou(p, { ...p, voo: { y: 0, yaw: 0 } })).toBe(true);
+    expect(poseMudou(p, { ...p, ceu: true })).toBe(true);
+  });
   it("giro pelo menor arco (±π não conta como mudança)", () => {
     expect(poseMudou({ ...p, facing: Math.PI - 0.001 }, { ...p, facing: -Math.PI + 0.001 })).toBe(false);
   });

@@ -4,6 +4,8 @@
  * (`members[]` do CollabDoc só cresce), então é a mesma pra todo mundo, em toda sessão, e a base
  * continua no mapa mesmo quando a pessoa sai. Bases ficam num anel em volta da praça: próximas, mas espaçadas.
  */
+import { POIS, baseLivreDosPOIs, type POI } from "./landmarks";
+
 export const BASE_COLLIDER_R = 1.5;   // raio sólido (plano XZ): plataforma + mesa
 export const BASE_INTERACT_R = 3.4;   // raio de ativação do estudo + clique no monitor
 export const BASE_PLATAFORMA_R = 3.4; // plataforma visível
@@ -25,10 +27,19 @@ export function posicaoDaBase(indice: number): LayoutBase {
   return { x, z, rot: Math.atan2(-x, -z) };
 }
 
-/** userId → layout, pela ordem dos membros (sem repetidos). */
-export function basesDosMembros(ids: string[]): Map<string, LayoutBase> {
+/**
+ * userId → layout, pela ordem dos membros (sem repetidos). Slots do anel que cairiam DENTRO de um ponto de
+ * interesse (ex.: a Zaeon em z=-34, a partir do 14º membro) são pulados — a ordem continua determinística.
+ */
+export function basesDosMembros(ids: string[], pois: POI[] = POIS): Map<string, LayoutBase> {
   const m = new Map<string, LayoutBase>();
-  for (const id of ids) if (!m.has(id)) m.set(id, posicaoDaBase(m.size));
+  let slot = 0;
+  for (const id of ids) {
+    if (m.has(id)) continue;
+    let lay = posicaoDaBase(slot++);
+    while (!baseLivreDosPOIs(lay, BASE_PLATAFORMA_R, pois)) lay = posicaoDaBase(slot++);
+    m.set(id, lay);
+  }
   return m;
 }
 

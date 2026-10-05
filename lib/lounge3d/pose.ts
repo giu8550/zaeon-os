@@ -4,7 +4,7 @@
  *  - um heartbeat independente do requestAnimationFrame reenvia a última pose (aba em segundo plano, pacote perdido,
  *    quem acabou de entrar).
  */
-export type Pose = { x: number; z: number; facing: number; moving?: boolean; sit?: boolean };
+export type Pose = { x: number; z: number; facing: number; moving?: boolean; sit?: boolean; topo?: boolean; ceu?: boolean; voo?: { y: number; yaw: number } };
 
 /** Heartbeat: reenvia a última pose mesmo com a aba em segundo plano (setInterval segue disparando). */
 export const HEARTBEAT_MS = 2000;
@@ -16,7 +16,8 @@ const EPS_POS = 0.02, EPS_ANG = 0.02;
 /** A pose mudou o bastante pra valer um envio? (`null` = nunca enviei nada → muda) */
 export function poseMudou(antes: Pose | null, agora: Pose): boolean {
   if (!antes) return true;
-  if (!!antes.moving !== !!agora.moving || !!antes.sit !== !!agora.sit) return true;
+  if (!!antes.moving !== !!agora.moving || !!antes.sit !== !!agora.sit || !!antes.topo !== !!agora.topo || !!antes.ceu !== !!agora.ceu || !!antes.voo !== !!agora.voo) return true;
+  if (antes.voo && agora.voo && (Math.abs(antes.voo.y - agora.voo.y) > 0.05 || Math.abs(antes.voo.yaw - agora.voo.yaw) > EPS_ANG)) return true;
   if (Math.hypot(agora.x - antes.x, agora.z - antes.z) > EPS_POS) return true;
   let d = agora.facing - antes.facing; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
   return Math.abs(d) > EPS_ANG;

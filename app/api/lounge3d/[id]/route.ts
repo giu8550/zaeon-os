@@ -12,14 +12,16 @@ import { triggerSafe } from "@/lib/collab/realtime";
 import { eu, exigirFlag, salaDoMembro, viewSala } from "@/lib/lounge3d/server";
 import { aplicarOps, lerConteudo, sanitizarTexto } from "@/lib/lounge3d/sala";
 import { EV_CONTEUDO, canalSala, corDoUsuario } from "@/lib/lounge3d/tipos";
+import { isSuperAdmin } from "@/lib/auth/roles";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const off = exigirFlag(); if (off) return off;
   const rl = await guard(req, "lounge3d-get"); if (!rl.ok) return rl.response;
   const me = await eu(); if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const s = await salaDoMembro(params.id, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const users = await prisma.user.findMany({ where: { id: { in: s.members } }, select: { id: true, name: true, image: true } });
-  return NextResponse.json({ sala: viewSala(s, me.id), membros: users.map((u) => ({ id: u.id, name: (u.name || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id) })), eu: me });
+  const users = await prisma.user.findMany({ where: { id: { in: s.members } }, select: { id: true, name: true, image: true, email: true, role: true } });
+  // `fundador` (dono da Zaeon) é decidido no servidor; e-mail/role NÃO saem daqui
+  return NextResponse.json({ sala: viewSala(s, me.id), membros: users.map((u) => ({ id: u.id, name: (u.name || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email: u.email, role: u.role }) })), eu: me });
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {

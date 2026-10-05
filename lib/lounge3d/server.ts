@@ -7,6 +7,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { lerConteudo } from "@/lib/lounge3d/sala";
+import { isSuperAdmin } from "@/lib/auth/roles";
 import { KIND_SALA, corDoUsuario, type ConteudoSala } from "@/lib/lounge3d/tipos";
 
 export const OID = /^[a-f0-9]{24}$/i;
@@ -20,13 +21,14 @@ export function exigirFlag(): NextResponse | null {
   return null;
 }
 
-export type Eu = { id: string; name: string; image: string | null; color: string };
+/** `fundador` = dono da Zaeon (isSuperAdmin: allowlist + User.role) — decidido AQUI, no servidor; o cliente só pinta. */
+export type Eu = { id: string; name: string; image: string | null; color: string; fundador: boolean };
 export async function eu(): Promise<Eu | null> {
   const s = await getServerSession(authOptions).catch(() => null);
   const email = s?.user?.email;
   if (!email) return null;
-  const u = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, image: true } });
-  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id) } : null;
+  const u = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, image: true, role: true } });
+  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email, role: u.role }) } : null;
 }
 
 export type SalaRow = { id: string; ownerId: string; title: string; kind: string; content: string; members: string[]; token: string; updatedAt: Date };

@@ -109,4 +109,14 @@ describe("canal e cor", () => {
     expect(sanitizarPresenca({ ...base, sit: "true" })?.sit).toBe(false);
     expect(sanitizarPresenca(base)?.sit).toBe(false);
   });
+
+  it("presença: ceu/voo (cidade e nave) só com valores válidos", () => {
+    const base = { userId: "a".repeat(24), name: "Ana", color: "#4aa3ff", x: 1, z: 2, facing: 0 };
+    expect(sanitizarPresenca({ ...base, ceu: true })?.ceu).toBe(true);
+    expect(sanitizarPresenca({ ...base, ceu: 1 })?.ceu).toBe(false);
+    expect(sanitizarPresenca({ ...base, voo: { y: 120, yaw: 1 } })?.voo).toEqual({ y: 120, yaw: 1 });
+    expect(sanitizarPresenca({ ...base, voo: { y: 9999, yaw: 1 } })?.voo).toEqual({ y: 300, yaw: 1 });   // teto
+    expect(sanitizarPresenca({ ...base, voo: { y: "alto" } })?.voo).toBeUndefined();
+    expect(sanitizarPresenca({ ...base, voo: "x" })?.voo).toBeUndefined();
+  });
 });
