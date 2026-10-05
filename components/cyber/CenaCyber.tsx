@@ -7,6 +7,7 @@ import type { MensagemChat, Presenca } from "@/lib/lounge3d/tipos";
 import { landmarksOn, type POI } from "@/lib/cyber/landmarks";
 import { CyberEngine, type PessoaCyber } from "./engine";
 import Joystick from "./Joystick";
+import ControlesVoo from "./ControlesVoo";
 
 export type CenaCyberProps = {
   /** "janela": prévia na landing (começa no menu, sem rede). "tela": cyberespaço inteiro (já em play, com a sala). */
@@ -154,12 +155,7 @@ export default function CenaCyber(p: CenaCyberProps) {
           {touch && (
             <>
               <Joystick onMove={(x, y) => engine.current?.setJoystick(x, y)} />
-              {qg.pilotando ? (
-                <>
-                  <button type="button" aria-label="Descer" onPointerDown={(e) => { e.stopPropagation(); engine.current?.comandoVoo({ descer: true }); }} onPointerUp={() => engine.current?.comandoVoo({ descer: false })} onPointerCancel={() => engine.current?.comandoVoo({ descer: false })} className="absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 bg-sky-950/55 text-[12px] font-extrabold text-sky-50 backdrop-blur" style={{ right: "max(94px, calc(env(safe-area-inset-right) + 72px))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>DESCER</button>
-                  <button type="button" aria-label="Subir" onPointerDown={(e) => { e.stopPropagation(); engine.current?.comandoVoo({ subir: true }); }} onPointerUp={() => engine.current?.comandoVoo({ subir: false })} onPointerCancel={() => engine.current?.comandoVoo({ subir: false })} className="absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 bg-sky-950/55 text-[12px] font-extrabold text-sky-50 backdrop-blur" style={{ right: "max(22px, env(safe-area-inset-right))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>SUBIR</button>
-                </>
-              ) : (<>
+              {qg.pilotando ? null : (<>
               <button type="button" aria-label="Correr" aria-pressed={correndo} onPointerDown={(e) => { e.stopPropagation(); setCorrendo(engine.current?.alternarCorrer() ?? false); }} className={`absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 text-[12px] font-extrabold backdrop-blur ${correndo ? "bg-gradient-to-b from-cyan-200 to-sky-400 text-slate-950" : "bg-sky-950/55 text-sky-50"}`} style={{ right: "max(94px, calc(env(safe-area-inset-right) + 72px))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>CORRER</button>
               <button type="button" aria-label="Pular" onPointerDown={(e) => { e.stopPropagation(); engine.current?.pular(); }} className="absolute z-[25] flex h-[62px] w-[62px] touch-none items-center justify-center rounded-full border border-sky-300/45 bg-sky-950/55 text-[12px] font-extrabold text-sky-50 backdrop-blur" style={{ right: "max(22px, env(safe-area-inset-right))", bottom: "max(30px, env(safe-area-inset-bottom))" }}>PULAR</button>
               </>)}
@@ -193,9 +189,10 @@ export default function CenaCyber(p: CenaCyberProps) {
       {!menu && qg.navePerto && !qg.pilotando && p.souFundador && (
         <button type="button" onClick={() => void pedir("nave", () => engine.current?.embarcar())} className="absolute left-1/2 top-[164px] z-30 min-h-[44px] -translate-x-1/2 rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-sm font-extrabold text-slate-950 shadow-[0_0_24px_rgba(90,200,255,.6)]">🚀 Embarcar na nave</button>
       )}
+      {!menu && qg.pilotando && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} />}
       {!menu && qg.pilotando && (
         <div className="absolute left-1/2 top-[110px] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
-          <p className="rounded-full border border-sky-300/30 bg-[#070c22]/80 px-4 py-1.5 text-center text-xs text-sky-100 backdrop-blur">{touch ? "joystick voa · SUBIR/DESCER" : "WASD voa · Espaço sobe · Shift desce"} · {qg.pousado ? "pousada" : "em voo"}</p>
+          <p className="rounded-full border border-sky-300/30 bg-[#070c22]/80 px-4 py-1.5 text-center text-xs text-sky-100 backdrop-blur">{touch ? "joystick voa · ⬆ Subir / ⬇ Descer" : "setas ou WASD voam · E/Espaço sobe · Q/Shift desce"} · {qg.pousado ? "pousada" : "em voo"}</p>
           {qg.pousado && <button type="button" onClick={() => engine.current?.desembarcar()} className="min-h-[44px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-5 text-sm font-semibold text-sky-100 backdrop-blur">Sair da nave{touch ? "" : " (F)"}</button>}
         </div>
       )}
