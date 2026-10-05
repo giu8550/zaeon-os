@@ -2,7 +2,7 @@
  * Landmark — builder three.js dos PONTOS DE INTERESSE do cyberespaço (registro em lib/cyber/landmarks.ts).
  * Preset "zaeon" = porte 1:1 de docs/prototypes/zaeon-landmark.html (visão de Enoque): ilha de cristal invertida
  * flutuando com brilho frio por baixo, piso frio, 16 muralhas de granizo, casa de cristal (6 pilares + cúpula
- * estelar), querubins orbitando, 18 línguas de fogo + anel de brasa (cintilar LENTO, sem estrobo), plataforma do
+ * estelar), querubins orbitando (sem as tochas/línguas de fogo nas muralhas — tiradas a pedido), plataforma do
  * topo com o computador e o avatar do dono (núcleo + aura + coroa) e o feixe de neurônios subindo.
  *
  * ANDÁVEL (lib/cyber/nav): escala do registro, PORTÃO nas muralhas alinhado à ESCADARIA de cristal que desce até a
@@ -10,7 +10,7 @@
  * querubins, feixe e coroa continuam se mexendo.
  *
  * Disciplina (igual BaseEstudo/CenaCosmica): blocos repetidos instanciados, `low` reduz partículas/segmentos e
- * troca o vidro com transmission por transparente simples, `prefers-reduced-motion` deixa o fogo quase estático,
+ * troca o vidro com transmission por transparente simples, `prefers-reduced-motion` deixa a flutuação mínima,
  * `dispose()` libera tudo (geometrias, materiais, texturas, rótulo do overlay).
  */
 import * as THREE from "three";
@@ -37,7 +37,7 @@ export type LandmarkHandle = {
   dispose(): void;
 };
 
-const COLD = 0xbfe8ff, ICE = 0x9fd0ff, FIRE = [0xffe3b0, 0xffb45a, 0xff7a2c];
+const COLD = 0xbfe8ff, ICE = 0x9fd0ff;
 const ROTULO_CSS = "position:absolute;transform:translate(-50%,-100%);font:800 13px system-ui,sans-serif;letter-spacing:.06em;padding:4px 12px;border-radius:999px;color:#bfe8ff;background:rgba(8,14,34,.7);border:1px solid rgba(150,220,255,.45);box-shadow:0 0 18px rgba(90,200,255,.35);white-space:nowrap;pointer-events:none;display:none;";
 
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -70,9 +70,8 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
   const alvos: THREE.Object3D[] = [];
   const add = <T extends THREE.Object3D>(o: T, pai: THREE.Object3D = g, alvo = false) => { pai.add(o); if (alvo) alvos.push(o); return o; };
 
-  // luzes do protótipo: fogo rasante quente + preenchimento frio (relativas ao group, que está em y=altura)
-  const fireLight = add(new THREE.PointLight(0xff8a3c, 1.4, 60)); fireLight.position.set(0, 2, 0);
-  const coldLight = low ? null : add(new THREE.PointLight(0x7fe9ff, 1.1, 40)); coldLight?.position.set(0, 6, 0);   // no `low`, só a quente
+  // luz: só o preenchimento frio (as tochas de fogo saíram — e a luz quente delas junto)
+  const coldLight = add(new THREE.PointLight(0x7fe9ff, 1.4, 50)); coldLight.position.set(0, 6, 0);
 
   // vidro SEMPRE transparente simples (sem o passe de transmissão do three, que re-renderiza a cena a cada quadro)
   const vidro = (p: THREE.MeshPhysicalMaterialParameters, fallbackOpacity: number) =>
@@ -116,19 +115,6 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
   const cherubGeo = new THREE.BufferGeometry(); cherubGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CN * 3), 3));
   const cherubPts = add(new THREE.Points(cherubGeo, new THREE.PointsMaterial({ size: 0.18, map: starTex, color: 0xeaf4ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); cherubPts.frustumCulled = false;
 
-  // --- línguas de fogo (sprites quentes lambendo as muralhas) — textura ÚNICA, material por chama (fase própria) ---
-  const texFogo = glowTex("rgba(255,225,170,.95)", "rgba(255,120,40,.3)");
-  const NF = 18, noPortao = (a: number) => { if (!m) return false; let d = a - m.nav.escada.dir; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return Math.abs(d) < m.nav.portaoMeia + 0.15; };
-  const fires = Array.from({ length: NF }, (_, i) => (i / NF) * Math.PI * 2).filter((a) => !noPortao(a)).map((a) => {
-    const r = 6.7;
-    const s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texFogo, color: FIRE[Math.round(a * 10) % 3]!, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
-    s.position.set(Math.cos(a) * r, 1.6, Math.sin(a) * r); s.scale.set(2.2, 3.2, 1);
-    return { s, ph: Math.random() * 6.283, bx: 2.2, by: 3.2 };
-  });
-  void FIRE;
-  const ember = add(new THREE.Mesh(new THREE.TorusGeometry(6.7, 0.12, 8, low ? 40 : 64), new THREE.MeshBasicMaterial({ color: 0xff7a2c, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending })));
-  ember.rotation.x = Math.PI / 2; ember.position.y = 0.4;
-
   // --- plataforma do TOPO (parentada → flutua junto; o fundador pode subir/pousar a nave na cúpula) ---
   const topo = add(new THREE.Group()); topo.position.y = poi.topo?.y ?? 6.6;
   add(new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.6, 0.25, low ? 20 : 32), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), topo, true);
@@ -171,8 +157,8 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
     return im;
   })();
 
-  // reduced-motion: fogo quase estático, flutuação mínima
-  const fogoAmp = rm ? 0.12 : 1, boiaAmp = rm ? 0.15 : 1;
+  // reduced-motion: flutuação mínima
+  const boiaAmp = rm ? 0.15 : 1;
 
   return {
     poi, group: g, rotulo, alvos, topo, monitorTopo: null, escada: degraus,
@@ -182,14 +168,6 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
       // andável: flutuação SUTIL e sem giro global (portão e escada ficam alinhados)
       g.position.y = poi.altura + Math.sin(t * 0.5) * (m ? 0.15 : 0.4) * boiaAmp;
       if (!m) g.rotation.y += dt * 0.03 * boiaAmp;
-      // fogo: cintilar LENTO e contínuo — nunca estrobo
-      for (const f of fires) {
-        const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp;
-        f.s.scale.set(f.bx * (0.9 + p * 0.25), f.by * (0.8 + p * 0.4), 1);
-        (f.s.material as THREE.SpriteMaterial).opacity = 0.55 + 0.3 * p;
-      }
-      fireLight.intensity = 1.2 + 0.3 * Math.sin(t * 1.6) * fogoAmp;
-      (ember.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.15 * Math.sin(t * 1.4) * fogoAmp;
       // querubins orbitando
       { const a = cherubGeo.attributes.position!.array as Float32Array;
         cherub.forEach((c, i) => { c.a += dt * c.sp * boiaAmp; a[i * 3] = Math.cos(c.a) * c.r; a[i * 3 + 1] = c.y + Math.sin(t * 0.6 + i) * 0.15; a[i * 3 + 2] = Math.sin(c.a) * c.r; });
@@ -198,9 +176,8 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
       { const a = beamGeo.attributes.position!.array as Float32Array;
         for (let i = 0; i < BN; i++) { const d = beam[i]!; d.y += d.sp * dt; if (d.y > topoY) { d.y = BY0; d.a = Math.random() * 6.283; } const rr = d.r * (0.4 + d.y * 0.09), ang = d.a + d.y * d.dr * 0.4; a[i * 3] = Math.cos(ang) * rr; a[i * 3 + 1] = d.y; a[i * 3 + 2] = Math.sin(ang) * rr; }
         beamGeo.attributes.position!.needsUpdate = true; }
-      void coldLight;
     },
-    dispose() { rotulo.remove(); liberar(g, [texUnder, texFogo]); },
+    dispose() { rotulo.remove(); liberar(g, [texUnder]); },
   };
 }
 
