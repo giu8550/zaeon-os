@@ -9,7 +9,7 @@
  * Regras puras e a tabela dos sons em lib/cyber/audio.ts. dispose() para e desconecta tudo.
  */
 import * as THREE from "three";
-import { DISTANCIA, FADE_ENTRADA, SINTESE, SONS, SONS_ARQUIVO, criarLimiteVozes, lerPrefs, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
+import { DISTANCIA, FADE_ENTRADA, SINTESE, SONS, SONS_ARQUIVO, emendarLoop, criarLimiteVozes, lerPrefs, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
 export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom; vel?: number; taxa?: number; taxaAtual?: number };
 
 export type AudioCyberHandle = {
@@ -63,6 +63,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
     if (pos) { aplicarDist(a as THREE.PositionalAudio, dist ?? DISTANCIA.padrao); obj!.add(a); }
     a.setBuffer(buf);
     const taxa = SONS[nome].taxa; if (taxa) a.setPlaybackRate(taxa);   // ex.: o leito retocado pra 432 Hz
+    const fc = SONS[nome].filtro; if (fc) { const f = listener.context.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = fc; f.Q.value = 0.5; a.setFilter(f); }   // ex.: passos mais macios
     return a;
   };
   /** cria (quando der) as fontes dos loops que estavam esperando os buffers */
@@ -90,7 +91,16 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       }
       montarLoops();
       SONS_ARQUIVO.forEach((n) => {
-        loader.load(urlDoSom(n), (buf) => { if (!vivo) return; buffers.set(n, buf); montarLoops(); }, undefined, () => { /* arquivo faltando: segue sem esse som */ });
+        loader.load(urlDoSom(n), (buf) => {
+          if (!vivo) return;
+          const em = SONS[n].emendar;
+          if (em) {   // vira loop sem emenda (a ponta entra em crossfade no começo)
+            const x = Math.round(em * buf.sampleRate), novo = ctx.createBuffer(buf.numberOfChannels, buf.length - Math.max(1, Math.min(Math.floor(buf.length / 3), x)), buf.sampleRate);
+            for (let c = 0; c < buf.numberOfChannels; c++) novo.getChannelData(c).set(emendarLoop(buf.getChannelData(c), x));
+            buf = novo;
+          }
+          buffers.set(n, buf); montarLoops();
+        }, undefined, () => { /* arquivo faltando: segue sem esse som */ });
       });
     },
     loop(nome, obj, op = {}) {
