@@ -1,6 +1,6 @@
 /**
  * Cyberespaço — regras PURAS do áudio (o three fica em components/cyber/AudioCyber.ts):
- *  - os 20 sons e COMO tocam (posicional MONO preso a um objeto × 2D estéreo/UI);
+ *  - os 21 sons e COMO tocam (posicional MONO preso a um objeto × 2D estéreo/UI);
  *  - preferências do usuário (`zaeon_sfx` liga/desliga, `zaeon_volume` mestre 0..1);
  *  - modelo de distância (some longe), teto de vozes simultâneas, cadência de passos;
  *  - o leito ambiente "abaixa" enquanto a música da intro toca (cross-fade quando ela fadeia).
@@ -9,8 +9,8 @@ export const PASTA_SONS = "/assets/sounds/cyber/";
 
 export type NomeSom =
   | "space-bed" | "blackhole-hum" | "crystals" | "ship-flight" | "ship-idle"
-  | "ship-takeoff" | "ship-landing" | "step-1" | "step-2" | "step-3" | "jump" | "land"
-  | "near-ping" | "neuron-chime" | "rise" | "whoosh-hyperspace" | "study-confirm" | "chat-pop" | "join" | "leave";
+  | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
+  | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave";
 
 /** como cada som toca: `pos` = PositionalAudio (mono, no mundo); `2d` = THREE.Audio (leito/UI) */
 export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: number }> = {
@@ -20,7 +20,8 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "ship-flight": { modo: "pos", loop: true, volume: 0.7 },
   "ship-idle": { modo: "pos", loop: true, volume: 0.35 },
   "ship-takeoff": { modo: "pos", loop: false, volume: 0.9 },
-  "ship-landing": { modo: "pos", loop: false, volume: 0.85 },
+  "ship-landing": { modo: "pos", loop: false, volume: 0.8 },     // ao DESCER: o motor baixando (sem impacto)
+  "ship-touchdown": { modo: "pos", loop: false, volume: 0.9 },   // no instante do POUSO: impacto grave + assentamento
   "step-1": { modo: "pos", loop: false, volume: 0.3 },
   "step-2": { modo: "pos", loop: false, volume: 0.3 },
   "step-3": { modo: "pos", loop: false, volume: 0.3 },
@@ -29,7 +30,7 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "near-ping": { modo: "pos", loop: false, volume: 0.45 },
   "neuron-chime": { modo: "pos", loop: false, volume: 0.35 },
   rise: { modo: "pos", loop: false, volume: 0.6 },
-  "whoosh-hyperspace": { modo: "2d", loop: false, volume: 0.6 },
+  "cyber-enter": { modo: "2d", loop: false, volume: 0.6 },       // entrada no cyberespaço (play): startup 432 + arpejo
   "study-confirm": { modo: "2d", loop: false, volume: 0.6 },
   "chat-pop": { modo: "2d", loop: false, volume: 0.45 },
   join: { modo: "pos", loop: false, volume: 0.55 },
@@ -55,6 +56,24 @@ export function lerPrefs(get: (k: string) => string | null): { ligado: boolean; 
 
 /** fade-in (s) dos loops ao entrar na cena 3D — o som do cyberespaço nunca entra seco */
 export const FADE_ENTRADA = 1.6;
+
+/** quando a nave "começa a descer": vy abaixo disso (m/s), a mais de `alturaMin` do chão; no máx. 1× a cada `intervalo` s */
+export const NAVE_DESCIDA = { vy: -8, alturaMin: 3, intervalo: 2.5 };
+export type EstadoSomNave = { pousado: boolean; descendo: boolean; esfria: number };
+export const somNaveInicial = (pousado = true): EstadoSomNave => ({ pousado, descendo: false, esfria: 0 });
+/**
+ * Os eventos de som da nave, por quadro: `decolou` (saiu do solo → ship-takeoff), `desceu` (começou a DESCER → ship-landing,
+ * o motor baixando) e `pousou` (tocou o chão, UMA vez → ship-touchdown). A descida tem histerese (só "sai" de descendo
+ * quando a queda cai pra menos da metade) e um intervalo mínimo, pra não repetir ao ajustar a altura.
+ */
+export function eventosNave(e: EstadoSomNave, agora: { pousado: boolean; vy: number; altura: number }, dt: number) {
+  const decolou = e.pousado && !agora.pousado, pousou = !e.pousado && agora.pousado;
+  const descendo = !agora.pousado && (e.descendo ? agora.vy < NAVE_DESCIDA.vy / 2 : agora.vy < NAVE_DESCIDA.vy && agora.altura > NAVE_DESCIDA.alturaMin);
+  let esfria = Math.max(0, e.esfria - dt);
+  const desceu = descendo && !e.descendo && esfria <= 0;
+  if (desceu) esfria = NAVE_DESCIDA.intervalo;
+  return { e: { pousado: agora.pousado, descendo, esfria }, decolou, desceu, pousou };
+}
 
 /** teto de vozes simultâneas de one-shots (os loops são fixos e contados à parte) */
 export function criarLimiteVozes(max = 12) {

@@ -10,7 +10,8 @@ Antes de publicar, confirmar os termos de cada fonte externa e preencher autor/U
 | `crystals.ogg` | `freesound_community-crystal-bowl-ab4-1-106673.mp3` | Freesound (id 106673) | **preencher** | recorte 3.0–6.5s + crossfade 1s (loop), mono |
 | `step-1/2/3.ogg` | `freesound_community-foot-steps-14426.mp3` | Freesound (id 14426) | **preencher** | 3 pisadas fatiadas, 24k→44.1k, mono, volume baixo |
 | `ship-takeoff.ogg` | `spaceship-whooshing-past-epic-stock-media-4-4-00-06.mp3` | Epic Stock Media | **preencher (licença comercial/stock)** | recorte + reforço grave, mono |
-| `ship-landing.ogg` | `spaceship-engine-landing-epic-stock-media-3-3-00-05.mp3` | Epic Stock Media | **preencher (licença comercial/stock)** | recorte + limpeza, mono |
+| `ship-landing.ogg` | `spaceship-engine-landing-epic-stock-media-3-3-00-05.mp3` | Epic Stock Media | **preencher (licença comercial/stock)** | só a descida (0.3–2.3s), fade suave, sem impacto, mono |
+| `ship-touchdown.ogg` | `spaceship-engine-landing-epic-stock-media-3-3-00-05.mp3` | Epic Stock Media (+ reforço grave synth) | **preencher** | toque real (2.0–3.3s) + thud 58/85Hz + ar hidráulico, mono |
 | `ship-flight.ogg` | idem landing (Epic Stock Media) | Epic Stock Media | **preencher** | trecho de motor, lowpass, loop, mono |
 | `ship-idle.ogg` | idem landing (Epic Stock Media) | Epic Stock Media | **preencher** | trecho de motor, lowpass forte, baixo, loop, mono |
 
@@ -18,9 +19,9 @@ Antes de publicar, confirmar os termos de cada fonte externa e preencher autor/U
 
 ## 2) Sintetizados no projeto — originais, CC0
 Gerados proceduralmente (numpy), sem fonte externa — uso livre:
-`blackhole-hum.ogg` · `neuron-chime.ogg` · `jump.ogg` · `land.ogg` · `whoosh-hyperspace.ogg` · `rise.ogg` · `chat-pop.ogg` · `join.ogg` · `leave.ogg` · `study-confirm.ogg` · `near-ping.ogg`
+`blackhole-hum.ogg` · `neuron-chime.ogg` · `jump.ogg` · `land.ogg` · `cyber-enter.ogg` (startup sofisticado da entrada) · `rise.ogg` · `chat-pop.ogg` · `join.ogg` · `leave.ogg` · `study-confirm.ogg` · `near-ping.ogg`
 
-_Removidos: `fire.ogg`, `computer-hum.ogg`, `computer-typing.ogg` (base fica só com `crystals`) e `sit.ogg` (disparava indevidamente ao entrar no ciberespaço)._
+_Removidos: `fire.ogg`, `computer-hum.ogg`, `computer-typing.ogg` (base fica só com `crystals`), `sit.ogg` (disparava indevidamente na entrada) e `whoosh-hyperspace.ogg` (som estranho na entrada, substituído por `cyber-enter.ogg`)._
 
 ## Arquivos-fonte
 Os `.mp3` originais em `public/assets/sounds/` (leberch/freesound/spaceship) são **fontes de edição** — podem ser movidos pra fora do deploy (ex.: `/_sources/`) pra não irem ao bundle público.
