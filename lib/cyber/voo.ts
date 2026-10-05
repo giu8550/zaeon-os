@@ -28,7 +28,8 @@ export function chaoDoVoo(p: { x: number; y: number; z: number }, solidos: Pilar
   return c;
 }
 
-export function passoVoo(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar[] = []): { s: EstadoVoo; pousado: boolean; chaoY: number } {
+/** `teto`: altura máxima (a nave vai até `VOO.yMax`; a moto voadora tem um teto bem mais baixo) */
+export function passoVoo(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax): { s: EstadoVoo; pousado: boolean; chaoY: number } {
   // pousada / rente ao chão: a direção não move a nave (só subir decola); ao descer pra pousar, para de andar
   const rente = s.y - chaoDoVoo(s, solidos) < VOO.decolar;
   const m = rente ? 0 : Math.hypot(c.wx, c.wz);
@@ -41,7 +42,7 @@ export function passoVoo(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar
   if (Math.hypot(vx, vz) > 0.5) { let d = Math.atan2(vx, vz) - yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; yaw += d * Math.min(1, dt * 4); }
   // limites do mapa
   const r = Math.hypot(x, z); if (r > VOO.raioMapa) { x *= VOO.raioMapa / r; z *= VOO.raioMapa / r; }
-  if (y > VOO.yMax) { y = VOO.yMax; vy = Math.min(vy, 0); }
+  if (y > teto) { y = teto; vy = Math.min(vy, 0); }
   // sólidos: ilha da cidade e marcos (cilindros). Vindo de cima → fica no topo; de lado → desliza pra fora.
   ({ x, y, z } = foraDaIlha({ x, y, z }));
   for (const p of solidos) {
@@ -58,10 +59,10 @@ export function passoVoo(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar
 }
 
 /** o mesmo passo, independente de FPS: usa o dt REAL (até `dtMax`) dividido em subpassos de no máximo `subpasso` */
-export function passoVooSub(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar[] = []): { s: EstadoVoo; pousado: boolean; chaoY: number } {
+export function passoVooSub(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax): { s: EstadoVoo; pousado: boolean; chaoY: number } {
   const total = Math.min(VOO.dtMax, Math.max(0, dt)), n = Math.max(1, Math.ceil(total / VOO.subpasso - 1e-9)), h = total / n;
   let r = { s, pousado: false, chaoY: 0 };
-  for (let i = 0; i < n; i++) r = passoVoo(r.s, c, h, solidos);
+  for (let i = 0; i < n; i++) r = passoVoo(r.s, c, h, solidos, teto);
   return r;
 }
 

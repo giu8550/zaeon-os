@@ -90,11 +90,12 @@ describe("/api/lounge3d/[id]", () => {
     expect(r.status).toBe(503);
   });
 
-  it("acesso privilegiado (topo/céu/nave): só o FUNDADOR (pela sessão) recebe 200; alvo inválido 400", async () => {
+  it("acesso privilegiado (topo/nave): só o FUNDADOR (pela sessão) recebe 200; a Zaeon (céu) é aberta; alvo inválido 400", async () => {
     const req = (alvo: string) => new Request("http://x/", { method: "POST", body: JSON.stringify({ alvo }), headers: { "Content-Type": "application/json" } });
     m.docFind.mockResolvedValue(doc());
-    // Ana (a@b.c) não está na allowlist nem tem role → 403 em tudo
-    for (const alvo of ["topo", "ceu", "nave"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(403);
+    // Ana (a@b.c) não está na allowlist nem tem role → 403 no topo e na nave; a Zaeon abre pra qualquer membro
+    for (const alvo of ["topo", "nave"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(403);
+    expect((await ACESSO(req("ceu"), { params: { id: ID } })).status).toBe(200);
     expect((await ACESSO(req("voar-pelado"), { params: { id: ID } })).status).toBe(400);
     expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(403);
     // fundador por role no banco → 200 (o cliente nunca decide)

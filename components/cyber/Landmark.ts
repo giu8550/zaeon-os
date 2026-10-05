@@ -15,6 +15,8 @@
  */
 import * as THREE from "three";
 import { marcoNav, type POI } from "@/lib/cyber/landmarks";
+import { LOTES } from "@/lib/cyber/motos";
+import { criarPisoEstacionamento } from "./Estacionamento";
 import { muralhaTemBloco } from "@/lib/cyber/nav";
 import { glowTex } from "./CenaCosmica";
 
@@ -45,7 +47,7 @@ const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia
 export function criarLandmark(poi: POI, opts: { low: boolean; starTex: THREE.Texture }): LandmarkHandle {
   const rotulo = document.createElement("div");
   rotulo.style.cssText = ROTULO_CSS; rotulo.textContent = poi.nome;
-  return poi.preset === "zaeon" ? zaeon(poi, opts, rotulo) : poi.preset === "heliporto" ? heliporto(poi, opts, rotulo) : generico(poi, opts, rotulo);
+  return poi.preset === "zaeon" ? zaeon(poi, opts, rotulo) : poi.preset === "heliporto" ? heliporto(poi, opts, rotulo) : poi.preset === "estacionamento" ? estacionamento(poi, opts, rotulo) : generico(poi, opts, rotulo);
 }
 
 /** Libera geometrias/materiais de uma árvore + as texturas próprias do builder (`extras`); compartilhadas ficam. */
@@ -201,6 +203,19 @@ function heliporto(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, 
     donoPresente() { /* sem topo */ },
     atualizar(_dt, t) { if (!parado) anelMat.opacity = 0.45 + 0.2 * Math.sin(t * 1.2); },
     dispose() { rotulo.remove(); liberar(g); },
+  };
+}
+
+/** ESTACIONAMENTO das motos voadoras (o do chão): o piso compartilhado (components/cyber/Estacionamento.ts). As MOTOS
+ *  são do engine — clicar numa = montar; o piso não é alvo de clique (clicar nele = andar até ali). */
+function estacionamento(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, rotulo: HTMLDivElement): LandmarkHandle {
+  const g = new THREE.Group(); g.position.set(poi.x, 0, poi.z); g.rotation.y = LOTES.find((l) => l.id === "chao")!.rot;
+  const piso = criarPisoEstacionamento({ low, parado: reducedMotion() }); g.add(piso.group);
+  return {
+    poi, group: g, rotulo, alvos: [], topo: null, monitorTopo: null, escada: null,
+    donoPresente() { /* sem topo */ },
+    atualizar(_dt, t) { piso.atualizar(t); },
+    dispose() { rotulo.remove(); piso.dispose(); },
   };
 }
 

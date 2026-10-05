@@ -19,6 +19,8 @@ import { BOIA_ILHOTA, CIDADE, ILHOTAS, bibliotecaLocais, pilonesDoHangar, servid
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
+import { criarPisoEstacionamento } from "./Estacionamento";
+import { LOTE_ZAEON_LOCAL } from "@/lib/cyber/motos";
 
 export type CidadeHandle = {
   group: THREE.Group;
@@ -287,6 +289,10 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const salas = criarSalas(ilha, { low, texturas, paredeMat: vidro({ color: 0x0a1830, emissive: 0x2a3a70, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.3, thickness: 1, transparent: true, opacity: 0.32, side: THREE.DoubleSide }, 0.3) });
   alvos.push(...salas.alvos);
 
+  // ── ESTACIONAMENTO de motos voadoras (aberto a todos; as motos são do engine) — o piso entra no clique de andar ──
+  const estac = criarPisoEstacionamento({ low, parado: rm });
+  estac.group.position.set(LOTE_ZAEON_LOCAL.x, 0, LOTE_ZAEON_LOCAL.z); estac.group.rotation.y = LOTE_ZAEON_LOCAL.rot; add(estac.group, ilha, true);
+
   // ── portal de volta (mini disco de acreção, gira devagar) ──
   const pv = CIDADE.portalVolta;
   const portal = add(new THREE.Group()); portal.position.set(pv.x, 0, pv.z);
@@ -343,6 +349,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
       pontas.forEach((p, i) => { (p.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.3 + 0.4 * Math.sin(t * 1.2 + i); p.rotation.y += dt * 0.4 * vel; });
       farol.material.opacity = 0.75 + 0.2 * Math.sin(t * 1.1);
       salas.atualizar(dt, t);
+      estac.atualizar(t);
       luzesPilon.forEach((l, i) => { const k = (t * 1.2 - i / luzesPilon.length) % 1; l.material.opacity = 0.45 + 0.55 * Math.max(0, 1 - Math.abs(k - 0.15) * 4) * vel + 0.2 * (1 - vel); });   // sequência guia (lenta)
       ledTex.offset.y = Math.floor(t * 1.5 * vel) / 16;   // os LEDs "andam" um U por vez (devagar, sem estrobo)
       ledMat.opacity = 0.8 + 0.15 * Math.sin(t * 0.7);

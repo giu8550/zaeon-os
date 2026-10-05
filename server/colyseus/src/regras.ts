@@ -1,7 +1,7 @@
 /**
  * Regras PURAS da sala do Colyseus (espelham o que o app já faz no POST /pos — lib/lounge3d/sala.ts):
  *  - a pose que chega do cliente é saneada (só números finitos, com teto; lixo → ignorada);
- *  - REGALIAS (topo da Zaeon, céu, nave voando/parada) só valem pra quem o TOKEN diz que é fundador;
+ *  - REGALIAS (topo do QG, nave voando/parada) só valem pra quem o TOKEN diz que é fundador — a ZAEON (céu) é aberta;
  *  - a voz (signaling WebRTC) só vai pra alguém que está NA MESMA sala, com teto de tamanho.
  */
 export const MAX_JOGADORES = 5;
@@ -16,8 +16,10 @@ export type Pose = {
   /** pilotando: altura + rumo (só fundador) */ voo: { y: number; yaw: number } | null;
   /** nave pousada fora do hangar (só fundador) */ naveParada: { x: number; y: number; z: number; yaw: number } | null;
   /** mochila a jato: altura no mundo (qualquer um) */ jet: number | null;
-  /** em pé num lugar alto (dorso da nave) */ alt: number | null;
+  /** em pé num lugar alto (dorso da nave, ilhota) */ alt: number | null;
+  /** montado numa moto voadora (qualquer pessoa): vaga 0..7, altura com teto, rumo */ moto: { s: number; y: number; yaw: number } | null;
 };
+const VAGAS_MOTO = 8, TETO_MOTO = 400;   // 2 estacionamentos × 4 (chão + Zaeon) — espelha lib/cyber/motos
 
 /** saneia a pose do cliente; `fundador` vem do TOKEN (servidor), nunca do cliente */
 export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
@@ -37,9 +39,15 @@ export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
   }
   return {
     x, z, facing, moving: r.moving === true, sit: r.sit === true,
-    topo: fundador && r.topo === true, ceu: fundador && r.ceu === true,
-    voo, naveParada, jet: num(r.jet, 0, 400), alt: num(r.alt, 0, 400),
+    topo: fundador && r.topo === true, ceu: r.ceu === true,
+    voo, naveParada, jet: num(r.jet, 0, 400), alt: num(r.alt, 0, 400), moto: motoDe(r.moto),
   };
+}
+function motoDe(v: unknown): Pose["moto"] {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>, y = num(o.y, 0, TETO_MOTO), yaw = num(o.yaw, -10, 10);
+  if (typeof o.s !== "number" || !Number.isInteger(o.s) || o.s < 0 || o.s >= VAGAS_MOTO || y === null || yaw === null) return null;
+  return { s: o.s, y, yaw };
 }
 
 /** mensagem de signaling WebRTC (offer/answer/ICE) — só repassa se o destino estiver na sala e couber no teto */

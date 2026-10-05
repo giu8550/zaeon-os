@@ -21,7 +21,7 @@ type JogadorRemoto = {
   userId: string; name: string; color: string; fundador: boolean; qg: boolean;
   x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean;
   voando: boolean; vooY: number; vooYaw: number; parada: boolean; npX: number; npY: number; npZ: number; npYaw: number;
-  jet: number; alt: number; falando: boolean; pronto: boolean;
+  jet: number; alt: number; falando: boolean; pronto: boolean; motoS: number; motoY: number; motoYaw: number;
 };
 export type CanalVoz = {
   /** manda offer/answer/ICE pra alguém da sala (por userId) */
@@ -35,7 +35,7 @@ export type CanalVoz = {
 export type ConexaoColyseus = { enviar(p: Pose): void; voz: CanalVoz; sair(): void };
 
 /** os campos de um jogador do estado (os do Schema são acessores — espalhar com {...j} não copia) */
-const CAMPOS: (keyof JogadorRemoto)[] = ["userId", "name", "color", "fundador", "qg", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto"];
+const CAMPOS: (keyof JogadorRemoto)[] = ["motoS", "motoY", "motoYaw", "userId", "name", "color", "fundador", "qg", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto"];
 const copiar = (j: JogadorRemoto): JogadorRemoto => { const o = {} as Record<string, unknown>; for (const k of CAMPOS) o[k] = j[k]; return o as JogadorRemoto; };
 
 export function conectarColyseus(o: {
@@ -67,6 +67,7 @@ export function conectarColyseus(o: {
         ...(j.voando ? { voo: { y: j.vooY, yaw: j.vooYaw } } : {}),
         ...(j.parada ? { naveParada: { x: j.npX, y: j.npY, z: j.npZ, yaw: j.npYaw } } : {}),
         ...(j.jet >= 0 ? { jet: j.jet } : {}), ...(j.alt >= 0 ? { alt: j.alt } : {}),
+        ...(j.motoS >= 0 ? { moto: { s: j.motoS, y: j.motoY, yaw: j.motoYaw } } : {}),
         ts: Date.now(),
       });
     }

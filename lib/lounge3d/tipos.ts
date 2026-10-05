@@ -37,6 +37,7 @@ export type Presenca = {
   jet?: number;       // voando de mochila a jato: altura no mundo (qualquer pessoa; teto no cliente)
   alt?: number;       // em pé num lugar alto que o chão não explica (o dorso da nave): altura no mundo
   falando?: boolean;  // voz (push-to-talk) ligada agora — indicador no avatar (transporte colyseus)
+  moto?: { s: number; y: number; yaw: number };   // montado numa MOTO voadora (vaga de origem, altura, rumo) — qualquer pessoa
   ts?: number;
 };
 
