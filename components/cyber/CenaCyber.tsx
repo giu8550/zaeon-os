@@ -39,6 +39,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const engine = useRef<CyberEngine | null>(null);
   const [pronto, setPronto] = useState(false), [perto, setPerto] = useState(false), [menu, setMenu] = useState(!tela);
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
+  const [voo, setVoo] = useState<{ y: number; sobre: string; dica: string | null } | null>(null);
   const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true }), [fade, setFade] = useState(false), [aviso2, setAviso2] = useState<string | null>(null);
   const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
   /** corte com fade (portal: sem animação de viagem) */
@@ -83,6 +84,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onPortalCeu: () => { void pedir("ceu", () => comFade(() => engine.current?.entrarNoCeu())); },
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
       onEstadoQG: setQg,
+      onVoo: setVoo,
     }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
@@ -192,7 +194,8 @@ export default function CenaCyber(p: CenaCyberProps) {
       {!menu && qg.pilotando && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} />}
       {!menu && qg.pilotando && (
         <div className="absolute left-1/2 top-[110px] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
-          <p className="rounded-full border border-sky-300/30 bg-[#070c22]/80 px-4 py-1.5 text-center text-xs text-sky-100 backdrop-blur">{touch ? "joystick voa · ⬆ Subir / ⬇ Descer" : "setas ou WASD voam · E/Espaço sobe · Q/Shift desce"} · {qg.pousado ? "pousada" : "em voo"}</p>
+          <p className="rounded-full border border-sky-300/30 bg-[#070c22]/80 px-4 py-1.5 text-center text-xs text-sky-100 backdrop-blur">{voo && <span className="font-bold tabular-nums">↕ {voo.y} m · {voo.sobre} · </span>}{qg.pousado ? "pousada" : "em voo"} · {touch ? "joystick voa · ⬆ Subir / ⬇ Descer" : "setas ou WASD voam · E/Espaço sobe · Q/Shift desce"}</p>
+          {voo?.dica && <p role="status" className="rounded-full border border-amber-200/40 bg-[#1a0f08]/85 px-4 py-1.5 text-center text-xs font-semibold text-amber-100 backdrop-blur">{voo.dica}</p>}
           {qg.pousado && <button type="button" onClick={() => engine.current?.desembarcar()} className="min-h-[44px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-5 text-sm font-semibold text-sky-100 backdrop-blur">Sair da nave{touch ? "" : " (F)"}</button>}
         </div>
       )}

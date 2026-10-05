@@ -10,14 +10,16 @@
 import type { NavPOI } from "./nav";
 
 export type AcessoPOI = "publico" | "dono";
-export type PresetPOI = "zaeon" | "generico";
+export type PresetPOI = "zaeon" | "generico" | "heliporto";
 export type POI = {
   id: string;            // slug estável
   nome: string;          // rótulo flutuante
   org: string;           // descrição curta do painel
   preset: PresetPOI;
   x: number; z: number;  // posição no plano (FORA do anel de bases)
-  footprintR: number;    // raio sólido (colisão no chão)
+  footprintR: number;    // raio sólido (colisão no chão) — e o chão que as bases não podem ocupar
+  /** `false` = chão plano andável (ex.: heliporto): ninguém colide, mas as bases continuam desviando */
+  solido?: boolean;
   interactR: number;     // raio que acende o rótulo + habilita o clique
   altura: number;        // quão alto flutua (base da estrutura acima do chão)
   topo?: { y: number };  // plataforma do topo (altura LOCAL ao group), onde pousa a base do dono
@@ -55,9 +57,23 @@ function zaeonPOI(): POI {
   };
 }
 
-export const POIS: POI[] = [zaeonPOI()];
+/**
+ * HELIPORTO — o pouso da nave perto da praça (é onde se desce pra interagir com os outros). Disco no chão, plano e
+ * andável; as bases desviam dele. Destino do atalho "⬇ Chão". Longe da Zaeon, da escada e do portal do buraco negro.
+ */
+export const HELIPORTO = { x: 24, z: 24, r: 5 };
+function heliportoPOI(): POI {
+  return {
+    id: "heliporto", nome: "Heliporto", org: "Pouso da nave, perto da praça.",
+    preset: "heliporto", x: HELIPORTO.x, z: HELIPORTO.z,
+    footprintR: HELIPORTO.r, interactR: HELIPORTO.r + 3, solido: false,
+    altura: 0, acesso: "publico",
+  };
+}
 
-export const colisoresDosPOIs = (pois: POI[] = POIS) => pois.map((p) => ({ x: p.x, z: p.z, r: p.footprintR }));
+export const POIS: POI[] = [zaeonPOI(), heliportoPOI()];
+
+export const colisoresDosPOIs = (pois: POI[] = POIS) => pois.filter((p) => p.solido !== false).map((p) => ({ x: p.x, z: p.z, r: p.footprintR }));
 
 /** Flag de render (BUILD): "1" liga, "0" desliga; sem valor → ligada em dev, desligada em produção. */
 export function landmarksOn(env: { flag?: string; nodeEnv?: string } = { flag: process.env.NEXT_PUBLIC_CYBER_LANDMARKS, nodeEnv: process.env.NODE_ENV }): boolean {

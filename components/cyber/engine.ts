@@ -14,7 +14,8 @@ import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, poiPerto, type POI } from
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
 import { CIDADE, computadorPerto, mundo, noPortalEntrada, noPortalVolta, resolverCidade } from "@/lib/cyber/ceu";
-import { VOO, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
+import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
+import { ROTULO_SOBRE, destinosDeVoo, dicaDeVoo, distTexto, indicadorNaBorda, separarIndicadores, sobreOQue } from "@/lib/cyber/hudVoo";
 import { criarCidade, type CidadeHandle } from "./Cidade";
 import { criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
@@ -54,6 +55,8 @@ export type CyberOpts = {
   onEmbarcar?: () => void;
   /** estado da nave/cidade pra UI (botões Embarcar / Sair / Voltar) */
   onEstadoQG?: (s: { noCeu: boolean; navePerto: boolean; pilotando: boolean; pousado: boolean }) => void;
+  /** HUD de voo (pilotando): altímetro, sobre o quê, dica contextual — só quando muda (≤ 10×/s) */
+  onVoo?: (h: { y: number; sobre: string; dica: string | null }) => void;
   onPerto?: (perto: boolean) => void;
   onFalarCom?: (nome: string | null) => void;
   onEntrarEstudo?: () => void;
@@ -66,6 +69,7 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos:
   topo?: boolean; ceu?: boolean; nave?: NaveHandle | null; naveYaw?: number };
 type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 
+const IND_CSS = "position:absolute;transform:translate(-50%,-50%);display:none;align-items:center;gap:4px;font:700 11px system-ui,sans-serif;padding:3px 9px;border-radius:999px;color:#d6f3ff;background:rgba(7,12,34,.72);border:1px solid rgba(120,210,255,.45);white-space:nowrap;pointer-events:none;";
 const TAG_CSS = "position:absolute;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
 
@@ -94,7 +98,9 @@ export class CyberEngine {
   private naveEst: EstadoVoo = { ...mundo(CIDADE.hangar), y: CIDADE.pisoY, yaw: Math.PI, vx: 0, vy: 0, vz: 0 };
   private pilotando = false; private pousado = true; private voY = { subir: false, descer: false }; private yawAnt = 0;
   /** direcional na tela (desktop) e "Pousar" (desce sozinho até encostar; qualquer comando manual cancela) */
-  private botDir = { x: 0, z: 0 }; private autoPouso = false;
+  private botDir = { x: 0, z: 0 }; private autoPouso = false; private cmdVoo = { subir: false, descer: false };
+  /** HUD de voo em 3D/DOM: marcador de pouso, anel da borda da ilha, indicadores dos destinos */
+  private hudVoo: { marca: THREE.Mesh; borda: THREE.Mesh; inds: Map<string, { el: HTMLDivElement; seta: HTMLSpanElement; txt: HTMLSpanElement }>; chave: string; t: number } | null = null;
   private portalArmado = true;   // o anel de entrada só dispara de novo depois de sair dele
   private estadoQG = "";
   private eu!: Ator;
@@ -145,6 +151,11 @@ export class CyberEngine {
       this.cidade = criarCidade({ low, starTex: this.cena.starTex });
       this.cena.scene.add(this.cidade.group); opts.overlay.appendChild(this.cidade.rotulo);
       this.nave = criarNave({ low, cor: "#2f7bff" }); this.cena.scene.add(this.nave.group);
+      const marca = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.2, 40), new THREE.MeshBasicMaterial({ color: 0x7fe0ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+      marca.rotation.x = -Math.PI / 2; marca.visible = false; this.cena.scene.add(marca);
+      const borda = new THREE.Mesh(new THREE.TorusGeometry(CIDADE.bordaR, 0.14, 6, low ? 64 : 128), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+      borda.rotation.x = Math.PI / 2; borda.position.set(CIDADE.centro.x, CIDADE.pisoY, CIDADE.centro.z); borda.visible = false; this.cena.scene.add(borda);
+      this.hudVoo = { marca, borda, inds: new Map(), chave: "", t: 0 };
     }
 
     this.setPessoas([...opts.membros]);
@@ -522,6 +533,7 @@ export class CyberEngine {
       if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
       ix += this.botDir.x; iz += this.botDir.z;
       const subir = this.voY.subir, descerManual = this.voY.descer || !!this.keys.shift;
+      this.cmdVoo.subir = subir; this.cmdVoo.descer = descerManual;
       if (ix || iz || subir || descerManual) this.autoPouso = false;
       const dir = moverRelativoCamera(ix, iz, this.camAz);
       const r = passoVooSub(this.naveEst, { wx: dir?.wx ?? 0, wz: dir?.wz ?? 0, subir, descer: descerManual || this.autoPouso }, dtReal, this.solidosDeVoo());
@@ -593,6 +605,7 @@ export class CyberEngine {
       this.nave.group.position.set(n.x, yBase, n.z); this.nave.group.rotation.y = n.yaw;
       this.nave.atualizar({ dt, t, voando: this.pilotando && !this.pousado, vel: Math.hypot(n.vx, n.vz) / VOO.vel, curva });
     }
+    this.atualizarHudVoo(now);
     const navePerto = !this.pilotando && !!this.nave && this.navePerto();
     const est = `${this.noCeu}|${navePerto}|${this.pilotando}|${this.pousado}`;
     if (est !== this.estadoQG) { this.estadoQG = est; this.o.onEstadoQG?.({ noCeu: this.noCeu, navePerto, pilotando: this.pilotando, pousado: this.pousado }); }
@@ -644,6 +657,47 @@ export class CyberEngine {
       // saiu da sala: o personagem some; a BASE fica (bases vivem em this.bases)
       for (const [id, a] of this.remotos) if (!src.has(id)) { this.removerAtor(a); this.remotos.delete(id); if (this.falandoCom === a) { this.falandoCom = null; this.o.onFalarCom?.(null); } }
     }
+  }
+
+  /** HUD de voo: marcador de pouso sob a nave, anel na borda da ilha, indicadores dos destinos, altímetro/dica pro React */
+  private atualizarHudVoo(now: number) {
+    const h = this.hudVoo; if (!h) return;
+    const voando = this.pilotando && !this.menu, n = this.naveEst, boiaCidade = this.cidade ? this.cidade.ilha.position.y - CIDADE.pisoY : 0;
+    const solidos = voando ? this.solidosDeVoo() : [];
+    h.marca.visible = voando && !this.pousado;
+    if (h.marca.visible) { const c = chaoDoVoo(n, solidos); h.marca.position.set(n.x, c + (c === CIDADE.pisoY ? boiaCidade : 0) + 0.1, n.z); }
+    h.borda.visible = voando && Math.hypot(n.x - CIDADE.centro.x, n.z - CIDADE.centro.z) < 220;
+    if (h.borda.visible) h.borda.position.y = CIDADE.pisoY + boiaCidade + 0.4;
+    // indicadores dos destinos (na tela: no alvo; fora: presos na borda, com seta)
+    const z = this.zaeon();
+    const dests = voando ? destinosDeVoo({ zaeon: z ? { x: z.poi.x, z: z.poi.z, y: this.alturaTopo() } : undefined, minhaBase: this.minhaBase }) : [];
+    const vistos = new Set<string>();
+    const pos = separarIndicadores(dests.flatMap((d) => {
+      const dist = Math.hypot(d.x - n.x, d.y - n.y, d.z - n.z);
+      if (dist < 25) return [];
+      const v = new THREE.Vector3(d.x, d.y + 3, d.z).project(this.cam);
+      return [{ d, dist, ...indicadorNaBorda({ x: v.x, y: v.y }, v.z > 1, this.w, this.h, 40, 250) }];   // embaixo: botões de movimento
+    }), this.h);
+    for (const { d, dist, ...p } of pos) {
+      let ind = h.inds.get(d.id);
+      if (!ind) {
+        const el = document.createElement("div"); el.style.cssText = IND_CSS;
+        const seta = document.createElement("span"); seta.textContent = "➜"; seta.style.cssText = "display:inline-block;color:#7fe0ff;";
+        const txt = document.createElement("span"); el.append(seta, txt); this.o.overlay.appendChild(el);
+        ind = { el, seta, txt }; h.inds.set(d.id, ind);
+      }
+      ind.el.style.left = p.x + "px"; ind.el.style.top = p.y + "px"; ind.el.style.display = "flex";
+      ind.seta.style.display = p.naBorda ? "inline-block" : "none"; ind.seta.style.transform = `rotate(${p.ang}rad)`;
+      ind.txt.textContent = `${d.nome} · ${distTexto(dist)}`;
+      vistos.add(d.id);
+    }
+    for (const [id, ind] of h.inds) if (!vistos.has(id)) ind.el.style.display = "none";
+    // altímetro + dica (React), só quando muda e no máx. 10×/s
+    if (!voando || now - h.t < 100) return;
+    const zs = z ? this.pilaresZaeon(z) : [];
+    const sobre = ROTULO_SOBRE[sobreOQue(n, zs)], dica = dicaDeVoo({ s: n, subir: this.cmdVoo.subir, descer: this.cmdVoo.descer || this.autoPouso, pousado: this.pousado, zaeon: zs });
+    const chave = `${Math.round(n.y)}|${sobre}|${dica}`;
+    if (chave !== h.chave) { h.chave = chave; h.t = now; this.o.onVoo?.({ y: Math.max(0, Math.round(n.y)), sobre, dica }); }
   }
 
   private atualizarHud(now: number) {
@@ -707,6 +761,7 @@ export class CyberEngine {
     for (const b of this.bases.values()) b.dispose(); for (const t of this.tagsBase.values()) t.remove();
     for (const lm of this.lms) lm.dispose();
     this.cidade?.dispose(); this.nave?.dispose();
+    if (this.hudVoo) { for (const m of [this.hudVoo.marca, this.hudVoo.borda]) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); } for (const i of this.hudVoo.inds.values()) i.el.remove(); }
     this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
   }
 }
