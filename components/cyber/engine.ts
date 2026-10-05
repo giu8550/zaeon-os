@@ -317,7 +317,7 @@ export class CyberEngine {
   /** o QG pra quem voa: marco andável + alto das muralhas (acompanha a flutuação) */
   private qgNoAr(): QGNoAr | null { const z = this.zaeon(), mn = z ? marcoNav(z.poi) : null; return z && mn ? { ...mn, topoMuralhas: this.pilaresZaeon(z)[0]!.topo } : null; }
   /** um quadro no ar: subir/cair, colisão por altura e pouso (chão, escada/salão do QG ou piso da Zaeon) */
-  /** saiu do chão sem querer (borda da Zaeon / de uma ilhota): começa a cair DAQUI, devagar (zona sem gravidade) */
+  /** saiu do chão sem querer (borda da Zaeon / de uma ilhota): começa a cair DAQUI (queda normal da mochila) */
   private cairDaqui(embalo = { x: 0, z: 0 }) {
     this.jet = { tecla: false, noAr: true, y: this.eu.alt, vy: 0 }; this.jetV = { ...embalo };   // sai andando pra frente, não despenca rente à parede
     this.altoEm = null; this.ilhota = null; this.sitT = 0; this.alvo = null; this.alvoDepois = null;
@@ -338,7 +338,7 @@ export class CyberEngine {
       const baixo = v.y - base < JET.alturaBases ? this.colisoresDoNivel("ceu") : [], naves = v.y < topo - 0.2 ? this.colisoresDeNaves(CIDADE.pisoY) : [];
       const q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...baixo, ...naves]);
       eu.pos.x = q.x; eu.pos.z = q.z; this.jet.y = v.y; this.jet.vy = v.vy;
-      if (!naIlhaPrincipal(q)) { this.altoEm = null; return; }   // voou pra fora da ilha: céu livre (cai devagar)
+      if (!naIlhaPrincipal(q)) { this.altoEm = null; return; }   // voou pra fora da ilha: céu livre (cai)
       if (sobreODorso && yAnt >= topo - 0.05 && v.y <= topo && v.vy <= 0) { this.jet.noAr = false; this.sobreNave = true; this.somPouso(v.vy); return; }
       if (v.y <= base && v.vy <= 0) { this.jet.noAr = false; this.yNav = CIDADE.pisoY; this.somPouso(v.vy); }
       return;
@@ -1016,7 +1016,7 @@ export class CyberEngine {
       else if (this.sitT > 0.05) { const s = this.assento(); eu.pos.x += (s.x - eu.pos.x) * Math.min(1, dt * 3); eu.pos.z += (s.z - eu.pos.z) * Math.min(1, dt * 3); eu.facing = this.rotAssento(); }
       else if (this.noTopo) { const e = this.eixoTopo()!, lim = 2.0 * this.escalaZaeon(); const dx = eu.pos.x - e.x, dz = eu.pos.z - e.z, d = Math.hypot(dx, dz); if (d > lim) { eu.pos.x = e.x + (dx / d) * lim; eu.pos.z = e.z + (dz / d) * lim; } }   // não cai da plataforma
       else if (this.noCeu) {
-        // sem parede invisível na borda: passou do piso da ilha → cai (devagar: zona sem gravidade do céu)
+        // sem parede invisível na borda: passou do piso da ilha → cai
         const q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos(true)]); eu.pos.x = q.x; eu.pos.z = q.z; this.yNav = CIDADE.pisoY;
         if (!naIlhaPrincipal(q)) this.cairDaqui({ x: (q.x - prev.x) / Math.max(dt, 1e-3), z: (q.z - prev.z) / Math.max(dt, 1e-3) });
       }
