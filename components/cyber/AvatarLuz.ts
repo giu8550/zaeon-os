@@ -30,8 +30,8 @@ export type AvatarLuzHandle = {
   group: THREE.Group;
   /** meshes do corpo (raycast do clique). */
   meshes: THREE.Object3D[];
-  /** Idle/Walk/Run em crossfade + neurônios + sentar (0..1). Sentado na cabine = interação energética com a tela
-   *  (braços estendidos pra frente/cima, aura pulsando devagar). */
+  /** Idle/Walk/Run em crossfade + neurônios + `sentado` (0..1) = na própria base: em pé no painel holográfico,
+   *  DIGITANDO (braços baixos e pra frente, mãos batendo de leve) — a interação energética com as telas; aura pulsa. */
   animar(o: { andando: boolean; correndo?: boolean; sentado?: number; dt: number; t: number }): void;
   /** `facing` = atan2(dx, dz) do movimento (a conversão pro modelo é interna). */
   olharPara(facing: number): void;
@@ -40,10 +40,11 @@ export type AvatarLuzHandle = {
   dispose(): void;
 };
 
+const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const achar = (clips: THREE.AnimationClip[], re: RegExp) => clips.find((c) => re.test(c.name)) ?? clips[0];
 
 export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low: boolean, gltf: GLTF | null): AvatarLuzHandle {
-  const armadura = new THREE.Color(armaduraHex), luz = new THREE.Color(COR_LUZ);
+  const armadura = new THREE.Color(armaduraHex), luz = new THREE.Color(COR_LUZ), parado = reducedMotion();
   const grupo = new THREE.Group();
   const corpo = new THREE.Group(); grupo.add(corpo);   // sentar: inclina/abaixa o corpo; o grupo guarda posição/yaw
   const meshes: THREE.Object3D[] = [];
@@ -115,16 +116,19 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk); run.setEffectiveWeight(wRun); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun)); mixer.update(dt); }
       let d = alvo - grupo.rotation.y; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
       grupo.rotation.y += d * 0.15;
-      corpo.position.y = sentado * 0.32; corpo.rotation.x = sentado * 0.34;   // sentar: ~0.32 abaixo, inclinação ~0.34
-      // interação energética (sentado): braços se estendem pra frente e pra cima, rumo à tela no alto
+      corpo.position.y = 0; corpo.rotation.x = -0.07 * sentado;   // na base: em pé, levemente inclinado pro painel
+      // interação energética (na base): DIGITANDO no painel — braços baixos e pra frente, mãos batendo alternado
       if (ossos.length && sentado > 0.02) {
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
-        frente.set(0, 0, 1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
-        const respira = 0.04 * Math.sin(t * 1.6);
+        frente.set(0, 0, -1).applyQuaternion(qG);   // o grupo gira f+π (olharPara): a frente do modelo é o −z do grupo
+        lateral.crossVectors(cima, frente).normalize();
         for (const o of ossos) {
-          dirAlvo.copy(frente).multiplyScalar(0.78).addScaledVector(cima, 0.55 + respira).addScaledVector(lateral, 0.22 * o.lado).normalize();
+          const tecla = parado ? 0 : 0.07 * Math.sin(t * 7 + (o.lado > 0 ? 0 : Math.PI)) + 0.03 * Math.sin(t * 11.3 + o.lado);
+          // braço: desce rente ao corpo, um pouco à frente
+          dirAlvo.copy(frente).multiplyScalar(0.55).addScaledVector(cima, -0.8).addScaledVector(lateral, 0.12 * o.lado).normalize();
           apontar(o.braco, o.ante, dirAlvo, sentado);
-          dirAlvo.copy(frente).multiplyScalar(0.7).addScaledVector(cima, 0.7 + respira).addScaledVector(lateral, 0.08 * o.lado).normalize();
+          // antebraço: pra frente, mãos sobre o painel
+          dirAlvo.copy(frente).multiplyScalar(0.95).addScaledVector(cima, -0.34 + tecla).addScaledVector(lateral, -0.1 * o.lado).normalize();
           apontar(o.ante, o.mao, dirAlvo, sentado);
         }
       }
