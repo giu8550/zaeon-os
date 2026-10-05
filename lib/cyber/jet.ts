@@ -31,9 +31,6 @@ export function passoHorizontalJet(v: { x: number; z: number }, alvo: { x: numbe
   return { x: v.x + (alvo.x - v.x) * k, z: v.z + (alvo.z - v.z) * k };
 }
 
-/** a ZONA SEM GRAVIDADE do céu (em volta da Zaeon e das ilhotas): acima de `altura`, cai devagar — dá pra
- *  sair andando da borda e descer flutuando (segurar o espaço paira; W plana pra frente) */
-export const JET_CEU = { altura: 40, gravidade: 2.4, quedaMax: 4.5 };
 
 /** força do impacto ao pousar: 0 = pousinho suave … 1 = caindo na velocidade máxima (quedaMax) */
 export const impactoDoPouso = (vy: number) => Math.max(0, Math.min(1, (-vy - 1.5) / (JET.quedaMax - 1.5)));
@@ -52,9 +49,8 @@ export const tetoDoJet = (qg: QGNoAr | null) => (qg ? qg.topoMuralhas : 18.6) + 
 
 /** um passo vertical: subindo acelera até `JET.sobe`; soltou, a gravidade puxa (até `quedaMax`); nunca passa do teto */
 export function passoVertical(y: number, vy: number, subindo: boolean, dt: number, teto: number, planando = false): { y: number; vy: number } {
-  const ceu = y > JET_CEU.altura, g = ceu ? JET_CEU.gravidade : JET.gravidade, max = ceu ? JET_CEU.quedaMax : JET.quedaMax;
   if (subindo) vy += (JET.sobe - vy) * Math.min(1, dt * JET.aceleracao);
-  else vy = Math.max(vy - g * (planando ? JET.planeio : 1) * dt, -max * (planando ? 0.5 : 1));
+  else vy = Math.max(vy - JET.gravidade * (planando ? JET.planeio : 1) * dt, -JET.quedaMax * (planando ? 0.5 : 1));
   y += vy * dt;
   if (y > teto) { y = teto; vy = Math.min(vy, 0); }
   return { y, vy };
