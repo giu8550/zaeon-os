@@ -3,9 +3,9 @@
  * metálico com veios de luz e uma crista (oval limpo, sem espinhos), RAIOS correndo pelos anéis de energia, uma CABINE rebaixada no dorso (assento de
  * piloto, console com telas, manches) sob uma redoma baixa e larga — o PILOTO é o avatar real de quem pilota, sentado
  * no `assento` (o engine o põe lá), o anel de luzes da borda girando (o "eixo
- * giratório") e um halo externo tracejado girando ao contrário, três orbes luminosos na barriga, pernas de pouso que
+ * giratório") e um halo externo tracejado girando ao contrário, três PROPULSORES na barriga, pernas de pouso que
  * recolhem em voo. Voando: núcleo e veios acendem, rastro de plasma atrás (cresce com a velocidade) e, pairando,
- * feixe + pulsos de energia descendo. Tudo em ondas LENTAS, sem estrobo; `prefers-reduced-motion` aquieta.
+ * chamas e jato dos propulsores. A redoma de vidro só aparece com alguém pilotando. Tudo em ondas LENTAS, sem estrobo; `prefers-reduced-motion` aquieta.
  * A origem do group é o ponto de apoio no chão; física do voo em lib/cyber/voo.ts.
  */
 import * as THREE from "three";
@@ -19,7 +19,8 @@ export type NaveHandle = {
   /** onde o piloto fica (dentro da cúpula) — o engine posiciona o avatar aqui enquanto pilota */
   assento: THREE.Object3D;
   /** `voando`: recolhe as pernas e acende tudo; `vel` (0..1) = rastro e giro; `curva` inclina */
-  atualizar(o: { dt: number; t: number; voando: boolean; vel: number; curva: number }): void;
+  /** `fechada` = alguém pilotando: a redoma de vidro aparece (sem piloto, a cabine fica aberta) */
+  atualizar(o: { dt: number; t: number; voando: boolean; vel: number; curva: number; fechada?: boolean }): void;
   dispose(): void;
 };
 
@@ -82,31 +83,39 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   const luzes: THREE.MeshBasicMaterial[] = [];
   for (let i = 0; i < NL; i++) {
     const a = (i / NL) * Math.PI * 2, mat = new THREE.MeshBasicMaterial({ color: ALIEN.clone().lerp(new THREE.Color(0xffffff), 0.2), transparent: true, opacity: 0.8 });
-    const l = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), mat); l.position.set(Math.cos(a) * 3.55, -0.04, Math.sin(a) * 3.55); aro.add(l); luzes.push(mat);
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), mat); l.position.set(Math.cos(a) * 3.55, -0.04, Math.sin(a) * 3.55); aro.add(l); luzes.push(mat);
   }
   const halo = new THREE.Group(); halo.position.y = -0.1; halo.rotation.x = 0.06; corpo.add(halo);
   const haloMat = aditivo(ALIEN, 0.35), NH = opts.low ? 12 : 18;
   for (let i = 0; i < NH; i++) { const arco = new THREE.Mesh(new THREE.TorusGeometry(4.5, 0.04, 4, 8, (Math.PI * 2) / NH * 0.6), haloMat); arco.rotation.set(Math.PI / 2, 0, (i / NH) * Math.PI * 2); halo.add(arco); }
 
-  // barriga: núcleo + três ORBES luminosos girando + anel
+  // barriga: núcleo + anel
   const tex = glowTex("rgba(200,255,230,1)", "rgba(90,255,190,.3)");
   const nucleo = new THREE.Mesh(new THREE.CircleGeometry(1.0, seg), aditivo(ALIEN, 0.6)); nucleo.material.side = THREE.DoubleSide;
   nucleo.rotation.x = Math.PI / 2; nucleo.position.y = -0.67; corpo.add(nucleo);
   const anelBaixo = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.07, 6, seg), aditivo(ALIEN, 0.55)); anelBaixo.rotation.x = Math.PI / 2; anelBaixo.position.y = -0.55; corpo.add(anelBaixo);
-  const orbes = new THREE.Group(); orbes.position.y = -0.6; corpo.add(orbes);
-  const orbeMat = new THREE.MeshBasicMaterial({ color: 0xd8fff0 });
-  const brilhosOrbe: THREE.SpriteMaterial[] = [];
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2, o = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 12), orbeMat); o.position.set(Math.cos(a) * 2.2, -0.1, Math.sin(a) * 2.2); orbes.add(o);
-    const g = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }); const sp = new THREE.Sprite(g); sp.scale.set(1.8, 1.8, 1); sp.position.copy(o.position); orbes.add(sp); brilhosOrbe.push(g);
+  // PROPULSORES de verdade na barriga: três bocais com núcleo incandescente, chama em dois cones (miolo quente + envelope)
+  // e um jato de partículas descendo; acendem em voo (sem piscar — a chama "respira" em ondas suaves)
+  const metalEscuro = new THREE.MeshStandardMaterial({ color: 0x141b22, roughness: 0.4, metalness: 0.8 });
+  const PROP = [0, 1, 2].map((i) => { const a = (i / 3) * Math.PI * 2 + Math.PI / 2; return { x: Math.cos(a) * 2.05, z: Math.sin(a) * 2.05 }; });
+  const PROP_Y = -0.62;
+  const chamas: { miolo: THREE.Mesh; envelope: THREE.Mesh; boca: THREE.MeshBasicMaterial; brilhoP: THREE.Sprite; fase: number }[] = [];
+  for (const [i, p] of PROP.entries()) {
+    const bocal = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.26, 20, 1, true), metalEscuro); bocal.position.set(p.x, PROP_Y - 0.08, p.z); corpo.add(bocal);
+    const aroBocal = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.035, 6, 20), metalEscuro); aroBocal.rotation.x = Math.PI / 2; aroBocal.position.set(p.x, PROP_Y - 0.21, p.z); corpo.add(aroBocal);
+    const boca = new THREE.MeshBasicMaterial({ color: 0xeafff6, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+    const disco = new THREE.Mesh(new THREE.CircleGeometry(0.32, 20), boca); disco.rotation.x = Math.PI / 2; disco.position.set(p.x, PROP_Y - 0.2, p.z); corpo.add(disco);
+    const miolo = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1, 16, 1, true), aditivo(0xffffff, 0.85)); miolo.rotation.x = Math.PI; corpo.add(miolo);
+    const envelope = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1, 20, 1, true), aditivo(ALIEN.clone().lerp(new THREE.Color(0x66ccff), 0.4), 0.5)); envelope.rotation.x = Math.PI; corpo.add(envelope);
+    for (const m of [miolo, envelope]) { (m.material as THREE.MeshBasicMaterial).side = THREE.DoubleSide; m.position.set(p.x, 0, p.z); m.visible = false; }
+    const brilhoP = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })); brilhoP.position.set(p.x, PROP_Y - 0.35, p.z); corpo.add(brilhoP);
+    chamas.push({ miolo, envelope, boca, brilhoP, fase: i * 2.1 });
   }
-  const brilho = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }));
-  brilho.scale.set(8, 8, 1); brilho.position.y = -1.0; corpo.add(brilho);
-
-  // pairando: feixe suave + pulsos de energia descendo (anéis que crescem e somem)
-  const feixeMat = aditivo(ALIEN, 0); feixeMat.side = THREE.DoubleSide;
-  const feixe = new THREE.Mesh(new THREE.ConeGeometry(2.0, 5, seg, 1, true), feixeMat); feixe.position.y = -3.1; feixe.visible = false; corpo.add(feixe);
-  const pulsos = [0, 0.5].map((fase) => { const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.05, 4, seg), aditivo(ALIEN, 0)); m.rotation.x = Math.PI / 2; corpo.add(m); return { m, fase }; });
+  // jato de partículas descendo dos bocais
+  const JN = opts.low ? 36 : 72, jPos = new Float32Array(JN * 3), jDados = Array.from({ length: JN }, (_, i) => ({ b: i % 3, u: Math.random(), a: Math.random() * 6.283, r: Math.random() }));
+  const jGeo = new THREE.BufferGeometry(); jGeo.setAttribute("position", new THREE.BufferAttribute(jPos, 3));
+  const jMat = new THREE.PointsMaterial({ size: 0.4, map: tex, color: 0xd8fff0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  const jato = new THREE.Points(jGeo, jMat); jato.frustumCulled = false; corpo.add(jato);
 
   // rastro de plasma atrás (−z local; a frente é +z), cresce com a velocidade
   const RN = opts.low ? 40 : 90, rPos = new Float32Array(RN * 3), rDados = Array.from({ length: RN }, () => ({ u: Math.random(), a: Math.random() * 6.283, r: Math.random() }));
@@ -181,7 +190,8 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   let inclina = 0, voo = 0, giro = 0;
   return {
     group: raiz, alvos, assento,
-    atualizar({ dt, t, voando, vel, curva }) {
+    atualizar({ dt, t, voando, vel, curva, fechada = voando }) {
+      cupula.visible = aroCupula.visible = fechada;
       voo += ((voando ? 1 : 0) - voo) * Math.min(1, dt * 3);
       trem.scale.y = Math.max(0.01, 1 - voo); trem.visible = voo < 0.95;
       corpo.position.y = 1.0 + voo * (parado ? 0 : Math.sin(t * 1.1) * 0.12);   // em solo apoia nas pernas; em voo, flutua
@@ -189,22 +199,33 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
       corpo.rotation.z = inclina;
       // eixo giratório: luzes da borda giram (mais rápido com velocidade) com onda de brilho LENTA; o halo gira ao contrário
       giro += dt * (parado ? 0.05 : 0.3 + 0.9 * Math.min(1, vel)) * (0.4 + 0.6 * voo);
-      aro.rotation.y = giro; halo.rotation.y = -giro * 0.6; orbes.rotation.y = -giro * 0.8;
+      aro.rotation.y = giro; halo.rotation.y = -giro * 0.6;
       luzes.forEach((m, i) => { m.opacity = 0.45 + 0.45 * (0.5 + 0.5 * Math.sin(t * 1.5 - (i / luzes.length) * Math.PI * 2)) * (0.5 + 0.5 * voo); });
       haloMat.opacity = 0.12 + 0.35 * voo;
       atualizarRaios(t, voo);
       veioMat.opacity = 0.35 + 0.4 * voo * (0.75 + 0.25 * Math.sin(t * 1.3));
       (nucleo.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.55 * voo;
-      (brilho.material as THREE.SpriteMaterial).opacity = 0.12 + 0.35 * voo;
-      brilhosOrbe.forEach((g, i) => { g.opacity = 0.3 + 0.4 * voo * (0.7 + 0.3 * Math.sin(t * 1.4 + i * 2)); });
-      luzInterna.intensity = 0.6 + 0.8 * voo;
-      // pairando devagar: feixe + pulsos descendo
-      const paira = voando && vel < 0.15 ? 1 : 0;
-      feixeMat.opacity += (paira * 0.1 - feixeMat.opacity) * Math.min(1, dt * 2); feixe.visible = feixeMat.opacity > 0.005;
-      for (const p of pulsos) {
-        const u = parado ? 0.5 : (t * 0.45 + p.fase) % 1, mat = p.m.material as THREE.MeshBasicMaterial;
-        p.m.scale.setScalar(1 + u * 2.4); p.m.position.y = -0.8 - u * 3.5; mat.opacity = paira * voo * 0.5 * (1 - u); p.m.visible = mat.opacity > 0.005;
+      // propulsores: chama cresce com o empuxo (pairar = sustentação; andar = mais forte), respirando devagar
+      const empuxo = voo * (0.65 + 0.35 * Math.min(1, vel));
+      for (const c of chamas) {
+        const resp = parado ? 1 : 0.9 + 0.1 * Math.sin(t * 6 + c.fase) + 0.05 * Math.sin(t * 13.7 + c.fase * 2);
+        const Lm = (0.5 + 1.1 * empuxo) * resp, Le = (0.9 + 2.1 * empuxo) * resp;
+        c.miolo.visible = c.envelope.visible = empuxo > 0.02;
+        c.miolo.scale.set(1, Lm, 1); c.miolo.position.y = PROP_Y - 0.2 - Lm / 2;
+        c.envelope.scale.set(1, Le, 1); c.envelope.position.y = PROP_Y - 0.2 - Le / 2;
+        (c.envelope.material as THREE.MeshBasicMaterial).opacity = 0.45 * empuxo; (c.miolo.material as THREE.MeshBasicMaterial).opacity = 0.85 * empuxo;
+        c.boca.opacity = 0.25 + 0.75 * empuxo; (c.brilhoP.material as THREE.SpriteMaterial).opacity = 0.7 * empuxo; c.brilhoP.scale.setScalar(1.2 + 1.4 * empuxo);
       }
+      jMat.opacity = 0.8 * empuxo; jato.visible = empuxo > 0.02;
+      if (jato.visible) {
+        for (let i = 0; i < JN; i++) {
+          const d = jDados[i]!, b = PROP[d.b]!; if (!parado) d.u = (d.u + dt * (1.6 + empuxo)) % 1;
+          const rr = 0.08 + d.r * 0.25 * (0.3 + d.u);
+          jPos[i * 3] = b.x + Math.cos(d.a) * rr; jPos[i * 3 + 1] = PROP_Y - 0.3 - d.u * (1.5 + 3 * empuxo); jPos[i * 3 + 2] = b.z + Math.sin(d.a) * rr;
+        }
+        jGeo.attributes.position!.needsUpdate = true;
+      }
+      luzInterna.intensity = 0.6 + 0.8 * voo;
       // rastro de plasma: partículas escorrendo pra trás, comprimento ∝ velocidade
       const L = 2 + 6 * Math.min(1, vel);
       rMat.opacity = 0.95 * voo * Math.min(1, vel * 2.5); rastro.visible = rMat.opacity > 0.01;

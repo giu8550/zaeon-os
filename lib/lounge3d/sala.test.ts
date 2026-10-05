@@ -126,6 +126,8 @@ describe("canal e cor", () => {
     expect(sanitizarPresenca({ ...base, jet: 9999 })?.jet).toBe(300);
     expect(sanitizarPresenca({ ...base, jet: "alto" })?.jet).toBeUndefined();
     expect(sanitizarPresenca(base)?.jet).toBeUndefined();
+    expect(sanitizarPresenca({ ...base, alt: 193.2 })?.alt).toBe(193.2);   // em pé no dorso da nave
+    expect(sanitizarPresenca({ ...base, alt: "x" })?.alt).toBeUndefined();
   });
 
   it("presença: naveParada (nave pousada fora do hangar) só com números válidos, com limites", () => {
