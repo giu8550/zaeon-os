@@ -10,6 +10,8 @@
  */
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { amostrarPose, duracaoClipe, envelopePouso, misturar, type Dir3, type Pose } from "@/lib/cyber/poses";
+import { impactoDoPouso } from "@/lib/cyber/jet";
 import { clone as skClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { COR_LUZ } from "@/lib/cyber/cores";
 
@@ -64,7 +66,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   let mixer: THREE.AnimationMixer | null = null;
   // braços (rig mixamo do GLB): quando sentado, apontam pra tela — sem os ossos, só a aura pulsa
   const ossos: { braco: THREE.Bone; ante: THREE.Bone; mao: THREE.Object3D; lado: 1 | -1 }[] = [];
-  const pernas: { coxa: THREE.Bone; canela: THREE.Bone; pe: THREE.Object3D; lado: 1 | -1 }[] = [];
+  const pernas: { coxa: THREE.Bone; canela: THREE.Bone; pe: THREE.Object3D; dedo: THREE.Object3D | null; lado: 1 | -1 }[] = [];
+  let lombar: THREE.Bone | null = null, pescoco: THREE.Object3D | null = null;   // o tronco das poses capturadas
   let espinha: THREE.Object3D | null = null;   // a mochila acompanha o tronco (anda, senta, medita)
   let idle: THREE.AnimationAction | null = null, walk: THREE.AnimationAction | null = null, run: THREE.AnimationAction | null = null;
 
@@ -90,9 +93,10 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       const braco = modelo.getObjectByName(`mixamorig${nome}Arm`) as THREE.Bone | undefined, ante = modelo.getObjectByName(`mixamorig${nome}ForeArm`) as THREE.Bone | undefined, mao = modelo.getObjectByName(`mixamorig${nome}Hand`);
       if (braco && ante && mao) ossos.push({ braco, ante, mao, lado });
       const coxa = modelo.getObjectByName(`mixamorig${nome}UpLeg`) as THREE.Bone | undefined, canela = modelo.getObjectByName(`mixamorig${nome}Leg`) as THREE.Bone | undefined, pe = modelo.getObjectByName(`mixamorig${nome}Foot`);
-      if (coxa && canela && pe) pernas.push({ coxa, canela, pe, lado });
+      if (coxa && canela && pe) pernas.push({ coxa, canela, pe, dedo: modelo.getObjectByName(`mixamorig${nome}ToeBase`) ?? null, lado });
     }
     espinha = modelo.getObjectByName("mixamorigSpine2") ?? null;
+    lombar = (modelo.getObjectByName("mixamorigSpine") as THREE.Bone | undefined) ?? null; pescoco = modelo.getObjectByName("mixamorigNeck") ?? null;
     if (gltf.animations.length) {
       mixer = new THREE.AnimationMixer(modelo);
       const cl = gltf.animations;
@@ -117,7 +121,9 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     const brilho = new THREE.Sprite(new THREE.SpriteMaterial({ map: texJato, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); brilho.position.set(lado * 0.12, BOCAL_Y - 0.06, 0.02); brilho.visible = false; mochila.add(brilho);
     jatos.push({ chama, brilho });
   }
-  let jatoS = 0, wPlana = 0, wQueda = 0, pouso = 0, inclinaVoo = 0, estavaNoAr = false;
+  let jatoS = 0, wAr = 0, wQueda = 0, wMov = 0, inclinaVoo = 0, estavaNoAr = false, tAr = 0, vyAr = 0, tPouso = -1, forcaPouso = 0;
+  const PERNA = 0.95;   // comprimento da perna do avatar (m) — escala a altura do quadril das poses capturadas
+  const DUR_POUSO = duracaoClipe("Jump_Land") * 0.8;
 
   // neurônios: ~240 em anel (raio 0.3–0.8, y 0.2–1.8), pulsando e girando devagar
   const n = low ? 80 : 150, np = new Float32Array(n * 3);
@@ -139,7 +145,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     osso.quaternion.slerp(alvoLocal, w);
     osso.updateWorldMatrix(false, true);
   };
-  const frente = new THREE.Vector3(), lateral = new THREE.Vector3(), cima = new THREE.Vector3(0, 1, 0), qG = new THREE.Quaternion();
+  const frente = new THREE.Vector3(), lateral = new THREE.Vector3(), cima = new THREE.Vector3(0, 1, 0), cimaC = new THREE.Vector3(), qG = new THREE.Quaternion();
   return {
     group: grupo, meshes,
     animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, dt, t }) {
@@ -178,52 +184,59 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           apontar(o.ante, o.mao, dirAlvo, meditando);
         }
       }
-      // ── VOO de mochila: planando / queda livre / pouso (misturados com o idle) ──
+      // ── VOO de mochila + POUSO com poses CAPTURADAS (Quaternius UAL, CC0): no ar = Jump_Loop; tocou o chão = Jump_Land
+      //    (força pela velocidade da queda). Pernas e tronco vêm da captura; os braços ficam junto do corpo (nada de "T") ──
       const kv = Math.min(1, dt * 5);
-      const caindo = !!ar && ar.vy < -3 && jato < 0.5;
-      wPlana += ((ar && !caindo ? 1 : 0) - wPlana) * kv; wQueda += ((caindo ? 1 : 0) - wQueda) * kv;
-      if (estavaNoAr && !ar) pouso = 1;   // tocou o chão
-      estavaNoAr = !!ar; pouso = Math.max(0, pouso - dt / 0.45);
-      const imp = pouso * pouso * (3 - 2 * pouso);   // suaviza o agachamento
-      // inclinação do voo: andando no ar deita pra frente (~43°, pose de quem voa); pairando, levemente; caindo, pra trás
-      inclinaVoo += ((ar ? (ar.movendo && !caindo ? -0.75 : caindo ? 0.12 : -0.15) : 0) - inclinaVoo) * Math.min(1, dt * 3);
-      const aVoo = inclinaVoo * Math.max(wPlana, wQueda), QUADRIL = 1.0;
-      corpo.rotation.x += aVoo - 0.22 * imp;
-      // gira em torno do QUADRIL (não dos pés): compensa o deslocamento do pivô
-      corpo.position.z += -QUADRIL * Math.sin(aVoo); corpo.position.y += QUADRIL * (1 - Math.cos(aVoo));
-      corpo.position.y += -0.32 * imp + (parado ? 0 : 0.05 * Math.sin(t * 2.3)) * wPlana;
-      if ((ossos.length || pernas.length) && (wPlana > 0.02 || wQueda > 0.02 || imp > 0.02)) {
-        grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
-        frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
-        const ondula = parado ? 0 : 0.05 * Math.sin(t * 2.3);
-        for (const o of ossos) {
-          if (wPlana > 0.02) {   // planando: braços abertos, pra trás ao longo do corpo (mais pra trás quanto mais deitado)
-            const tras = -0.35 + 0.6 * Math.min(0, inclinaVoo);
-            dirAlvo.copy(cima).multiplyScalar(-0.7 + ondula).addScaledVector(lateral, 0.5 * o.lado).addScaledVector(frente, tras).normalize(); apontar(o.braco, o.ante, dirAlvo, wPlana);
-            dirAlvo.copy(cima).multiplyScalar(-0.5).addScaledVector(lateral, 0.55 * o.lado).addScaledVector(frente, tras - 0.05).normalize(); apontar(o.ante, o.mao, dirAlvo, wPlana);
+      const caindo = !!ar && ar.vy < -3 && jato < 0.5, movendo = !!ar && ar.movendo && !caindo;
+      wAr += ((ar ? 1 : 0) - wAr) * kv; wQueda += ((caindo ? 1 : 0) - wQueda) * kv; wMov += ((movendo ? 1 : 0) - wMov) * Math.min(1, dt * 3);
+      if (ar) { tAr += dt; vyAr = ar.vy; } else tAr = 0;
+      if (estavaNoAr && !ar) { tPouso = 0; forcaPouso = impactoDoPouso(vyAr); }   // tocou o chão
+      estavaNoAr = !!ar;
+      if (tPouso >= 0) { tPouso += dt * (1.5 - 0.5 * forcaPouso); if (tPouso > DUR_POUSO) tPouso = -1; }   // pousinho = mais rápido
+      const wPouso = tPouso >= 0 && !ar ? envelopePouso(tPouso / DUR_POUSO) * (0.4 + 0.6 * forcaPouso) : 0;
+      // inclinação do voo: andando no ar deita pra frente (~43°); pairando, levemente; caindo, um pouco pra trás
+      inclinaVoo += ((ar ? (movendo ? -0.75 : caindo ? 0.1 : -0.12) : 0) - inclinaVoo) * Math.min(1, dt * 3);
+      const aVoo = inclinaVoo * wAr, QUADRIL = 1.0;
+      corpo.rotation.x += aVoo;
+      corpo.position.z += -QUADRIL * Math.sin(aVoo); corpo.position.y += QUADRIL * (1 - Math.cos(aVoo));   // gira no QUADRIL
+      const pAr: Pose | null = wAr > 0.02 ? amostrarPose("Jump_Loop", tAr * 0.8, true) : null;
+      const pPouso: Pose | null = wPouso > 0.02 ? amostrarPose("Jump_Land", tPouso, false) : null;
+      corpo.position.y += (pPouso ? pPouso.quadril * PERNA * wPouso / (0.4 + 0.6 * forcaPouso) * (0.5 + 0.5 * forcaPouso) : 0) + (parado ? 0 : 0.05 * Math.sin(t * 2.3)) * wAr * (1 - wQueda);
+      if ((ossos.length || pernas.length) && (pAr || pPouso)) {
+        // eixos do CORPO (já inclinado): as poses seguem a inclinação do voo
+        corpo.updateWorldMatrix(true, false); corpo.getWorldQuaternion(qG);
+        frente.set(0, 0, -1).applyQuaternion(qG); cimaC.set(0, 1, 0).applyQuaternion(qG); lateral.crossVectors(cimaC, frente).normalize();   // lateral = esquerda
+        const aplicar = (d: Dir3, osso: THREE.Object3D | null, filho: THREE.Object3D | null, w: number) => {
+          if (!osso || !filho || w <= 0.01) return;
+          dirAlvo.copy(frente).multiplyScalar(d[0]).addScaledVector(cimaC, d[1]).addScaledVector(lateral, d[2]).normalize(); apontar(osso, filho, dirAlvo, w);
+        };
+        const lado3 = (d: Dir3, lado: number): Dir3 => [d[0], d[1], d[2] * lado];
+        if (pAr) {
+          const ond = parado ? 0 : 0.07 * Math.sin(t * 3 + 1);
+          aplicar(misturar(pAr.tronco, [0.12, 0.99, 0], 0.4), lombar, pescoco, wAr * 0.7);
+          for (const o of pernas) {
+            const E = o.lado > 0, c = pAr[E ? "coxaE" : "coxaD"], k = pAr[E ? "canelaE" : "canelaD"], pe = pAr[E ? "peE" : "peD"];
+            // voando pra frente: as pernas vão juntas, "arrastando" atrás do corpo (com uma batidinha alternada)
+            const cMov: Dir3 = [-0.12 + ond * o.lado, -0.99, 0.05 * o.lado], kMov: Dir3 = [-0.4, -0.92, 0];
+            aplicar(misturar(lado3(misturar(c, [c[0], c[1], c[2] * 0.45], 0.6), 1), cMov, wMov), o.coxa, o.canela, wAr);
+            aplicar(misturar(k, kMov, wMov), o.canela, o.pe, wAr);
+            aplicar(misturar(pe, [0.3, -0.95, 0], wMov), o.pe, o.dedo, wAr * 0.8);
           }
-          if (wQueda > 0.02) {   // queda livre: braços pra cima e abertos
-            dirAlvo.copy(cima).multiplyScalar(0.65).addScaledVector(lateral, 0.7 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, wQueda);
-            dirAlvo.copy(cima).multiplyScalar(0.85).addScaledVector(lateral, 0.35 * o.lado).addScaledVector(frente, 0.1).normalize(); apontar(o.ante, o.mao, dirAlvo, wQueda);
-          }
-          if (imp > 0.02) {   // pouso: braços um pouco à frente pra equilibrar
-            dirAlvo.copy(cima).multiplyScalar(-0.6).addScaledVector(frente, 0.55).addScaledVector(lateral, 0.35 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, imp);
+          for (const o of ossos) {
+            const E = o.lado > 0, bC = pAr[E ? "bracoE" : "bracoD"], aC = pAr[E ? "anteE" : "anteD"];
+            // pairando: braços soltos junto do corpo, antebraço um pouco à frente; voando: ao longo do corpo, pra trás;
+            // caindo: abertos pra equilibrar (mas dobrados, não em "T"); 20% da captura dá a assimetria natural
+            const bPaira: Dir3 = [0.15, -0.92, 0.3 * o.lado], aPaira: Dir3 = [0.6, -0.7, 0.1 * o.lado];
+            const bVoa: Dir3 = [-0.3, -0.93, 0.2 * o.lado], aVoa: Dir3 = [-0.4, -0.9, 0.1 * o.lado];
+            const bCai: Dir3 = [0.2, 0.35, 0.75 * o.lado], aCai: Dir3 = [0.45, 0.65, 0.25 * o.lado];
+            const b = misturar(misturar(misturar(bPaira, bVoa, wMov), bCai, wQueda), bC, 0.2), a = misturar(misturar(misturar(aPaira, aVoa, wMov), aCai, wQueda), aC, 0.2);
+            aplicar(b, o.braco, o.ante, wAr); aplicar(a, o.ante, o.mao, wAr);
           }
         }
-        for (const o of pernas) {
-          if (wPlana > 0.02) {   // planando: pernas juntas, arrastando pra trás do corpo inclinado; joelhos levemente dobrados
-            const deita = Math.min(0, inclinaVoo);   // 0 pairando … −0,75 voando pra frente
-            dirAlvo.copy(cima).multiplyScalar(-0.95 - 0.2 * deita).addScaledVector(frente, 0.1 + 0.85 * deita).addScaledVector(lateral, 0.04 * o.lado).normalize(); apontar(o.coxa, o.canela, dirAlvo, wPlana);
-            dirAlvo.copy(cima).multiplyScalar(-0.8 - 0.1 * deita).addScaledVector(frente, -0.5 + 0.6 * deita).normalize(); apontar(o.canela, o.pe, dirAlvo, wPlana);
-          }
-          if (wQueda > 0.02) {   // queda: joelhos pra frente, prontos pra pousar
-            dirAlvo.copy(cima).multiplyScalar(-0.75).addScaledVector(frente, 0.55).addScaledVector(lateral, 0.12 * o.lado).normalize(); apontar(o.coxa, o.canela, dirAlvo, wQueda);
-            dirAlvo.copy(cima).multiplyScalar(-0.9).addScaledVector(frente, -0.35).normalize(); apontar(o.canela, o.pe, dirAlvo, wQueda);
-          }
-          if (imp > 0.02) {   // pouso: agacha (coxas pra frente, canelas verticais)
-            dirAlvo.copy(cima).multiplyScalar(-0.5).addScaledVector(frente, 0.85).addScaledVector(lateral, 0.15 * o.lado).normalize(); apontar(o.coxa, o.canela, dirAlvo, imp);
-            dirAlvo.copy(cima).multiplyScalar(-0.95).addScaledVector(frente, -0.25).normalize(); apontar(o.canela, o.pe, dirAlvo, imp);
-          }
+        if (pPouso) {   // IMPACTO: agacha (joelhos, tronco pra frente, quadril desce), braços pra equilibrar — tudo da captura
+          aplicar(pPouso.tronco, lombar, pescoco, wPouso * 0.8);
+          for (const o of pernas) { const E = o.lado > 0; aplicar(pPouso[E ? "coxaE" : "coxaD"], o.coxa, o.canela, wPouso); aplicar(pPouso[E ? "canelaE" : "canelaD"], o.canela, o.pe, wPouso); aplicar(pPouso[E ? "peE" : "peD"], o.pe, o.dedo, wPouso); }
+          for (const o of ossos) { const E = o.lado > 0; aplicar(pPouso[E ? "bracoE" : "bracoD"], o.braco, o.ante, wPouso); aplicar(pPouso[E ? "anteE" : "anteD"], o.ante, o.mao, wPouso); }
         }
       }
       // mochila presa às costas: segue o osso do tronco (em espaço do corpo), 0,22 m atrás

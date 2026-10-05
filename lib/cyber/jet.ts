@@ -19,6 +19,15 @@ export const JET = {
   alturaBases: 4.6, // abaixo disso as bases do chão (trono + telas) são sólidas
 };
 
+/** força do impacto ao pousar: 0 = pousinho suave … 1 = caindo na velocidade máxima (quedaMax) */
+export const impactoDoPouso = (vy: number) => Math.max(0, Math.min(1, (-vy - 1.5) / (JET.quedaMax - 1.5)));
+/** som CONTÍNUO da mochila: segurando = empuxo cheio (mais agudo subindo); solto no ar = chiado baixinho; no chão = mudo */
+export function somDoJato(noAr: boolean, segurando: boolean, vy: number): { volume: number; taxa: number } {
+  if (!noAr) return { volume: 0, taxa: 0.85 };
+  if (segurando) return { volume: 1, taxa: 0.94 + 0.14 * Math.max(0, Math.min(1, vy / JET.sobe)) };
+  return { volume: 0.16, taxa: 0.78 };
+}
+
 /** o QG como marco andável + a altura do alto das muralhas (mundo) */
 export type QGNoAr = MarcoNav & { topoMuralhas: number };
 

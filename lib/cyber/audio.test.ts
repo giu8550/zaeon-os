@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { CRISTAIS_PERTO, DISTANCIA, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
+import { CRISTAIS_PERTO, DISTANCIA, SINTESE, SONS_ARQUIVO, sintetizarBaque, sintetizarJetpack, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
 
 describe("áudio do cyberespaço", () => {
-  it("os 21 sons existem em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
-    const arquivos = readdirSync(join(process.cwd(), "public/assets/sounds/cyber")).filter((f) => f.endsWith(".ogg")).map((f) => f.replace(".ogg", "")).sort();
-    expect(Object.keys(SONS).sort()).toEqual(arquivos);
-    expect(arquivos).toHaveLength(21);
+  it("os 22 sons de arquivo existem (21 .ogg + o jato .wav) e os sintetizados têm gerador em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
+    const arquivos = readdirSync(join(process.cwd(), "public/assets/sounds/cyber")).filter((f) => /\.(ogg|wav)$/.test(f)).sort();
+    expect(SONS_ARQUIVO.map((n) => urlDoSom(n).split("/").pop()!).sort()).toEqual(arquivos);
+    expect(arquivos).toHaveLength(22);
+    for (const n of Object.keys(SONS) as NomeSom[]) if (SONS[n].sintetico) expect(SINTESE[n]).toBeTypeOf("function");
     expect(Object.keys(SONS)).not.toContain("whoosh-hyperspace");   // trocado pelo cyber-enter
     expect(urlDoSom("ship-flight")).toBe("/assets/sounds/cyber/ship-flight.ogg");
   });
@@ -74,5 +75,17 @@ describe("áudio do cyberespaço", () => {
     expect(SONS["step-1"].volume).toBeGreaterThanOrEqual(0.6);
     expect(DISTANCIA.eu.ref).toBeGreaterThan(DISTANCIA.perto.ref);   // meus passos não somem com a câmera atrás
   });
+  it("jato sintetizado: loop sem clique (a ponta casa com o começo), sem estourar", () => {
+    const sr = 22050, x = sintetizarJetpack(sr, 2);
+    expect(x.length).toBe(sr * 2);
+    let pico = 0, soma = 0; for (const v of x) { pico = Math.max(pico, Math.abs(v)); soma += v * v; }
+    expect(pico).toBeLessThanOrEqual(0.81); expect(Math.sqrt(soma / x.length)).toBeGreaterThan(0.05);
+    expect(Math.abs(x[x.length - 1]! - x[0]!)).toBeLessThan(0.15);   // emenda: o último encosta no primeiro
+  });
+  it("baque: curto, grave, começa e termina sem clique", () => {
+    const sr = 22050, x = sintetizarBaque(sr);
+    expect(x.length).toBe(Math.round(sr * 0.5)); expect(Math.abs(x[0]!)).toBeLessThan(0.1); expect(Math.abs(x[x.length - 1]!)).toBeLessThan(0.01);
+    let cruz = 0; for (let i = 1; i < x.length; i++) if ((x[i - 1]! < 0) !== (x[i]! < 0)) cruz++;
+    expect(cruz / 0.5).toBeLessThan(400);   // grave (poucos cruzamentos por segundo)
+  });
 });
-

@@ -9,8 +9,8 @@
  * Regras puras e a tabela dos sons em lib/cyber/audio.ts. dispose() para e desconecta tudo.
  */
 import * as THREE from "three";
-import { DISTANCIA, FADE_ENTRADA, SONS, criarLimiteVozes, lerPrefs, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
-export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom };
+import { DISTANCIA, FADE_ENTRADA, SINTESE, SONS, SONS_ARQUIVO, criarLimiteVozes, lerPrefs, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
+export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom; vel?: number; taxa?: number; taxaAtual?: number };
 
 export type AudioCyberHandle = {
   /** já tem gesto + listener (e os buffers estão carregando/carregados) */
@@ -23,12 +23,14 @@ export type AudioCyberHandle = {
   loop(nome: NomeSom, obj: THREE.Object3D | null, o?: { volume?: number; dist?: Dist }): LoopSom;
   /** desliga e solta um loop (o objeto dele saiu de cena: nave remota, base) */
   soltarLoop(l: LoopSom): void;
-  /** muda o alvo de volume de um loop (0..1 × o volume base do som); o fade é suave, a cada quadro */
-  volumeLoop(l: LoopSom, alvo: number): void;
+  /** muda o alvo de volume de um loop (0..1 × o volume base do som); o fade é suave, a cada quadro (`vel` = 1/s; padrão 2,5) */
+  volumeLoop(l: LoopSom, alvo: number, vel?: number): void;
+  /** afinação (playbackRate) de um loop, suave — ex.: o jato fica mais agudo subindo */
+  taxaLoop(l: LoopSom, taxa: number): void;
   /** ajusta a distância de um loop posicional (ex.: a nave em que eu estou) */
   distanciaLoop(l: LoopSom, d: Dist): void;
   /** one-shot: posicional num ponto do mundo (`em`) ou 2D (`em` ausente) */
-  tocar(nome: NomeSom, em?: THREE.Vector3 | null, o?: { volume?: number; dist?: Dist }): void;
+  tocar(nome: NomeSom, em?: THREE.Vector3 | null, o?: { volume?: number; dist?: Dist; taxa?: number }): void;
   /** releitura das preferências (liga/desliga + volume mestre) */
   aplicarPrefs(): void;
   /** fade dos loops (chamar a cada quadro) */
@@ -82,7 +84,12 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       const ctx = listener.context; if (ctx.state === "suspended") void ctx.resume().catch(() => {});
       api.aplicarPrefs();
       const loader = new THREE.AudioLoader();
-      (Object.keys(SONS) as NomeSom[]).forEach((n) => {
+      // os SINTETIZADOS saem na hora (sem rede): gerados no AudioContext do three
+      for (const [n, gerar] of Object.entries(SINTESE) as [NomeSom, (sr: number) => Float32Array][]) {
+        try { const d = gerar(ctx.sampleRate), b = ctx.createBuffer(1, d.length, ctx.sampleRate); b.getChannelData(0).set(d); buffers.set(n, b); } catch { /* sem esse som */ }
+      }
+      montarLoops();
+      SONS_ARQUIVO.forEach((n) => {
         loader.load(urlDoSom(n), (buf) => { if (!vivo) return; buffers.set(n, buf); montarLoops(); }, undefined, () => { /* arquivo faltando: segue sem esse som */ });
       });
     },
@@ -97,7 +104,8 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       const a = l.audio; if (a) { try { if (a.isPlaying) a.stop(); a.disconnect(); } catch { /* já */ } a.removeFromParent(); l.audio = null; }
       loops.splice(i, 1);
     },
-    volumeLoop(l, alvo) { l.alvo = Math.max(0, Math.min(1, alvo)); },
+    volumeLoop(l, alvo, vel) { l.alvo = Math.max(0, Math.min(1, alvo)); if (vel !== undefined) l.vel = vel; },
+    taxaLoop(l, taxa) { l.taxa = taxa; },
     distanciaLoop(l, d) { if (l.audio && (l.audio as THREE.PositionalAudio).panner) aplicarDist(l.audio as THREE.PositionalAudio, d); },
     tocar(nome, em, op = {}) {
       if (!listener || !prefs.ligado || !buffers.has(nome) || !vozes.pegar()) return;
@@ -106,6 +114,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       const a = criarFonte(nome, holder, op.dist ?? DISTANCIA.padrao);
       if (!a) { vozes.soltar(); holder?.removeFromParent(); return; }
       a.setVolume((op.volume ?? 1) * SONS[nome].volume);
+      if (op.taxa) a.setPlaybackRate(op.taxa * (SONS[nome].taxa ?? 1));
       const item = { a, holder };
       umaVez.add(item);
       const fim = () => { if (!umaVez.delete(item)) return; vozes.soltar(); try { a.disconnect(); } catch { /* já */ } a.removeFromParent(); holder?.removeFromParent(); };
@@ -122,8 +131,9 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       const k = Math.min(1, dt * 2.5);   // fades suaves (~0,4 s) — nada liga/desliga seco
       for (const x of loops) {
         const a = x.l.audio; if (!a) continue;
-        x.l.atual += (x.l.alvo - x.l.atual) * k;
+        x.l.atual += (x.l.alvo - x.l.atual) * (x.l.vel ? Math.min(1, dt * x.l.vel) : k);
         a.setVolume(x.l.atual * x.volBase * entrada);
+        if (x.l.taxa !== undefined) { const tA = x.l.taxaAtual ?? x.l.taxa; x.l.taxaAtual = tA + (x.l.taxa - tA) * Math.min(1, dt * 4); a.setPlaybackRate(x.l.taxaAtual); }
       }
     },
     dispose() {
