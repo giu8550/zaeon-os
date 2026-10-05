@@ -1,17 +1,17 @@
 /**
- * Cyberespaço — ATALHOS de rota da nave ("⬇ Chão", "⬆ Cidade", "Zaeon"). PURO. Não é teletransporte: o piloto
+ * Cyberespaço — ATALHOS de rota da nave ("Heliporto" e "QG do Andrei"). PURO. Não é teletransporte: o piloto
  * automático gera as MESMAS entradas dos botões de movimento (direção, subir, descer), então a nave voa à vista de
  * todos pelo caminho. Qualquer botão de movimento cancela (no engine). A rota contorna a ilha da cidade (sai pela
- * borda, do lado do destino) e cruza o mapa numa altitude livre (acima da Zaeon, abaixo do fundo da ilha).
+ * borda, do lado do destino) e cruza o mapa numa altitude livre (acima do QG, abaixo do fundo da ilha da Zaeon).
  */
-import { CIDADE, mundo } from "./ceu";
+import { CIDADE } from "./ceu";
 import { HELIPORTO } from "./landmarks";
 import { VOO, type ComandoVoo, type EstadoVoo } from "./voo";
 
-export type DestinoRota = "chao" | "cidade" | "zaeon";
+export type DestinoRota = "heliporto" | "qg";
 export type Waypoint = { x: number; y: number; z: number; pousar?: boolean };
 
-/** altitude de cruzeiro no chão: acima da cúpula da Zaeon (~26 m), bem abaixo do fundo da ilha (~156 m) */
+/** altitude de cruzeiro no chão: acima da cúpula do QG (~26 m), bem abaixo do fundo da ilha da Zaeon (~156 m) */
 export const CRUZEIRO = 40;
 const FOLGA_BORDA = 8, ACIMA_DA_CIDADE = 8;
 
@@ -24,34 +24,26 @@ function saidaDaIlha(rumo: { x: number; z: number }, y: number): Waypoint {
   return { x: c.x + dx * r, y, z: c.z + dz * r };
 }
 
-/** onde cada atalho pousa: heliporto (chão), hangar (Cidade) ou a cúpula da Zaeon (topo do dono) */
-export function alvoDoAtalho(destino: DestinoRota, zaeon?: { x: number; z: number; topo: number }): Waypoint | null {
-  if (destino === "chao") return { x: HELIPORTO.x, y: 0, z: HELIPORTO.z, pousar: true };
-  if (destino === "cidade") { const h = mundo(CIDADE.hangar); return { x: h.x, y: CIDADE.pisoY, z: h.z, pousar: true }; }
-  return zaeon ? { x: zaeon.x, y: zaeon.topo, z: zaeon.z, pousar: true } : null;
+/** onde cada atalho pousa: no heliporto (chão) ou no ponto de pouso do QG (`qg`, sobre as muralhas do lado do portão) */
+export function alvoDoAtalho(destino: DestinoRota, qg?: { x: number; y: number; z: number }): Waypoint | null {
+  if (destino === "heliporto") return { x: HELIPORTO.x, y: 0, z: HELIPORTO.z, pousar: true };
+  return qg ? { ...qg, pousar: true } : null;
+}
+
+/** ponto de pouso do QG: sobre as muralhas, do lado do portão (fora da cúpula) — sair da nave ali = salão do QG */
+export function pousoDoQG(m: { x: number; z: number; dir: number; muralhaR: number }, topoMuralhas: number): { x: number; y: number; z: number } {
+  const r = m.muralhaR - 1;
+  return { x: m.x + Math.cos(m.dir) * r, y: topoMuralhas, z: m.z + Math.sin(m.dir) * r };
 }
 
 /** a rota (waypoints) da posição atual até pousar no destino */
-export function rotaPara(destino: DestinoRota, s: EstadoVoo, zaeon?: { x: number; z: number; topo: number }): Waypoint[] {
-  const alvo = alvoDoAtalho(destino, zaeon); if (!alvo) return [];
+export function rotaPara(destino: DestinoRota, s: EstadoVoo, qg?: { x: number; y: number; z: number }): Waypoint[] {
+  const alvo = alvoDoAtalho(destino, qg); if (!alvo) return [];
   const rota: Waypoint[] = [];
   const altoCidade = CIDADE.pisoY + ACIMA_DA_CIDADE, naCidade = s.y >= CIDADE.pisoY - 0.5 && daCidade(s) <= CIDADE.bordaR + 2;
   const naColuna = daCidade(s) < CIDADE.bordaR + 2;
   let p = { x: s.x, y: s.y, z: s.z };
-  if (destino === "cidade") {
-    if (!naCidade) {
-      // embaixo da ilha: sai pela lateral (do lado do hangar) antes de subir
-      const sai = saidaDaIlha(alvo, Math.max(p.y, 3));
-      if (naColuna) { rota.push(sai); p = sai; }
-      rota.push({ x: p.x, y: altoCidade, z: p.z });                 // sobe por fora da ilha
-      const borda = saidaDaIlha(alvo, altoCidade);
-      rota.push(borda);                                              // chega pela borda do lado do hangar
-    } else if (p.y < altoCidade - 1) rota.push({ x: p.x, y: altoCidade, z: p.z });
-    rota.push({ x: alvo.x, y: altoCidade, z: alvo.z });
-    rota.push(alvo);
-    return rota;
-  }
-  // chão / Zaeon: se estiver na Cidade (ou embaixo dela), sai pela borda do lado do destino
+  // se estiver na Zaeon (ou embaixo da ilha), sai pela borda do lado do destino
   if (naCidade) {
     if (p.y < altoCidade - 1) { rota.push({ x: p.x, y: altoCidade, z: p.z }); p = { ...p, y: altoCidade }; }
     const sai = saidaDaIlha(alvo, altoCidade); rota.push(sai); p = sai;

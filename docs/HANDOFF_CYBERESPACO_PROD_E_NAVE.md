@@ -136,6 +136,16 @@ Logado, com **duas contas**: A é o fundador (`donmartinezcaiudoceu@gmail.com`, 
 > **Pendente com o dono:**
 > - Ligar "Enable client events" no painel do Pusher (A.3.3).
 > - Testar num celular real.
+>
+> **Renomeação (out. 2026, pedido do dono):**
+> - A ilha no céu (`CIDADE` em `lib/cyber/ceu.ts`) agora se chama **Zaeon**, e a base do dono fica lá: `nivel: "ceu"` em `lib/cyber/bases.ts`, e ele nasce lá.
+> - O marco andável do chão (id `"zaeon"`, mantido por compatibilidade) agora é o **QG do Andrei**. A base do Andrei Bacelar fica no centro do salão (`nivel: "qg"`), e ele nasce lá.
+>   - O servidor o reconhece por `CYBER_QG_EMAILS` ou, sem essa env, pelo nome exato (`lib/lounge3d/qg.ts`).
+> - Atalhos da nave: só **Heliporto** e **QG do Andrei**, e só com a nave pousada (no começo do voo).
+> - Interface limpa:
+>   - sem indicadores, rótulos de marcos ou de bases;
+>   - sem dicas nem tutorial;
+>   - o voo mostra só o altímetro.
 
 ### B.1 Diagnóstico (reproduzido por simulação do `passoVoo`)
 

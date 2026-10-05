@@ -34,7 +34,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   // faixa de acento
   const faixa = new THREE.Mesh(new THREE.TorusGeometry(0.96, 0.05, 8, seg), acento); faixa.position.z = 0.2; corpo.add(faixa);
   // cockpit de cristal
-  const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.62, seg, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: 0x9fe8ff, emissive: 0x2a6bd0, emissiveIntensity: 0.6, roughness: 0.05, metalness: 0, transmission: opts.low ? 0 : 0.7, transparent: true, opacity: 0.75 }));
+  const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.62, seg, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: 0x9fe8ff, emissive: 0x2a6bd0, emissiveIntensity: 0.6, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.75 }));
   cockpit.scale.set(1, 0.75, 1.9); cockpit.position.set(0, 0.55, 1.1); corpo.add(cockpit); alvos.push(cockpit);
   // asas enflechadas (extrusão de um trapézio) espelhadas
   const forma = new THREE.Shape(); forma.moveTo(0, 0.9); forma.lineTo(3.4, -0.9); forma.lineTo(3.4, -1.6); forma.lineTo(0, -1.4); forma.closePath();

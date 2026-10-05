@@ -74,10 +74,9 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
   const fireLight = add(new THREE.PointLight(0xff8a3c, 1.4, 60)); fireLight.position.set(0, 2, 0);
   const coldLight = add(new THREE.PointLight(0x7fe9ff, 1.1, 40)); coldLight.position.set(0, 6, 0);
 
-  // vidro: transmission no desktop; no `low` (celular) transparente simples (sem o passe de transmissão)
+  // vidro SEMPRE transparente simples (sem o passe de transmissão do three, que re-renderiza a cena a cada quadro)
   const vidro = (p: THREE.MeshPhysicalMaterialParameters, fallbackOpacity: number) =>
-    low ? new THREE.MeshStandardMaterial({ color: p.color, emissive: p.emissive, emissiveIntensity: p.emissiveIntensity, roughness: p.roughness, metalness: p.metalness, transparent: true, opacity: fallbackOpacity, side: p.side ?? THREE.FrontSide })
-      : new THREE.MeshPhysicalMaterial(p);
+    new THREE.MeshStandardMaterial({ color: p.color, emissive: p.emissive, emissiveIntensity: p.emissiveIntensity, roughness: p.roughness, metalness: p.metalness, transparent: true, opacity: fallbackOpacity, side: p.side ?? THREE.FrontSide });
 
   // --- ilha-base de cristal (octógono invertido) + brilho frio por baixo ---
   const island = add(new THREE.Mesh(new THREE.ConeGeometry(9, 7, 8, 1, false), vidro({ color: 0x0b1a30, emissive: 0x10325e, emissiveIntensity: 0.5, roughness: 0.35, metalness: 0.1, transmission: 0.25, thickness: 1, transparent: true, opacity: 0.96 }, 0.96)), g, true);
@@ -113,7 +112,7 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
     add(new THREE.Points(gg, new THREE.PointsMaterial({ size: 0.14, map: starTex, color: 0xbfe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), house); }
 
   // --- querubins: pontos de luz orbitando devagar ---
-  const CN = low ? 40 : 90, cherub = Array.from({ length: CN }, () => ({ a: Math.random() * 6.283, r: 3 + Math.random() * 3.5, y: 1.5 + Math.random() * 4, sp: 0.1 + Math.random() * 0.25 }));
+  const CN = low ? 24 : 50, cherub = Array.from({ length: CN }, () => ({ a: Math.random() * 6.283, r: 3 + Math.random() * 3.5, y: 1.5 + Math.random() * 4, sp: 0.1 + Math.random() * 0.25 }));
   const cherubGeo = new THREE.BufferGeometry(); cherubGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CN * 3), 3));
   const cherubPts = add(new THREE.Points(cherubGeo, new THREE.PointsMaterial({ size: 0.18, map: starTex, color: 0xeaf4ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); cherubPts.frustumCulled = false;
 
@@ -130,27 +129,17 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
   const ember = add(new THREE.Mesh(new THREE.TorusGeometry(6.7, 0.12, 8, low ? 40 : 64), new THREE.MeshBasicMaterial({ color: 0xff7a2c, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending })));
   ember.rotation.x = Math.PI / 2; ember.position.y = 0.4;
 
-  // --- plataforma do TOPO: a base do dono (parentada → flutua junto) ---
+  // --- plataforma do TOPO (parentada → flutua junto; o fundador pode subir/pousar a nave na cúpula) ---
   const topo = add(new THREE.Group()); topo.position.y = poi.topo?.y ?? 6.6;
   add(new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.6, 0.25, low ? 20 : 32), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), topo, true);
   const platRing = add(new THREE.Mesh(new THREE.TorusGeometry(2.5, 0.05, 8, 48), new THREE.MeshBasicMaterial({ color: 0x5fd0ff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending })), topo);
   platRing.rotation.x = Math.PI / 2; platRing.position.y = 0.13;
-  const scr = add(new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.9), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })), topo);
-  scr.position.set(0, 1.1, -0.7);
-  const scrEdge = add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1.5, 0.9)), new THREE.LineBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.9 })), topo);
-  scrEdge.position.copy(scr.position);
-  // avatar do dono (ser de luz com regalia: núcleo + aura + coroa) — "estátua" quando o dono real não está lá
-  const owner = add(new THREE.Group(), topo); owner.position.set(0, 0.9, 0.4);
-  add(new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.7, 6, 12), new THREE.MeshStandardMaterial({ color: 0x07131c, emissive: 0x45d6ff, emissiveIntensity: 1.5, roughness: 0.4, metalness: 0, transparent: true, opacity: 0.9 })), owner);
-  const texAura = glowTex("rgba(120,220,255,.7)", "rgba(60,140,255,.15)");
-  const aura = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texAura, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), owner);
-  aura.scale.set(2.4, 2.4, 1); aura.position.y = 0.4;
-  const crown = add(new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.04, 6, 16), new THREE.MeshBasicMaterial({ color: 0xfff0d6, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending })), owner);
-  crown.rotation.x = Math.PI / 2; crown.position.y = 0.95;
+  // (a base do dono saiu daqui: agora fica na Zaeon, a ilha no céu; a do Andrei fica no centro do salão)
 
   // --- feixe: neurônios subindo da casa até o topo ---
   const topoY = topo.position.y;
-  const BN = low ? 60 : 120, beam = Array.from({ length: BN }, () => ({ a: Math.random() * 6.283, r: 0.2 + Math.random() * 1.2, y: Math.random() * topoY, sp: 0.4 + Math.random() * 1.2, dr: Math.random() < 0.5 ? 1 : -1 }));
+  // o feixe nasce ACIMA da mesa do Andrei (centro do salão) e sobe até o topo
+  const BY0 = 2.2, BN = low ? 30 : 60, beam = Array.from({ length: BN }, () => ({ a: Math.random() * 6.283, r: 0.2 + Math.random() * 1.2, y: BY0 + Math.random() * (topoY - BY0), sp: 0.4 + Math.random() * 1.2, dr: Math.random() < 0.5 ? 1 : -1 }));
   const beamGeo = new THREE.BufferGeometry(); beamGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(BN * 3), 3));
   const beamPts = add(new THREE.Points(beamGeo, new THREE.PointsMaterial({ size: 0.12, map: starTex, color: 0x8fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); beamPts.frustumCulled = false;
 
@@ -186,8 +175,8 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
   const fogoAmp = rm ? 0.12 : 1, boiaAmp = rm ? 0.15 : 1;
 
   return {
-    poi, group: g, rotulo, alvos, topo, monitorTopo: scr, escada: degraus,
-    donoPresente(sim) { owner.visible = !sim; },
+    poi, group: g, rotulo, alvos, topo, monitorTopo: null, escada: degraus,
+    donoPresente() { /* sem estátua: a base do dono fica na Zaeon (céu) */ },
     atualizar(dt, t) {
       // flutuação lenta + giro lento
       // andável: flutuação SUTIL e sem giro global (portão e escada ficam alinhados)
@@ -207,12 +196,11 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
         cherubGeo.attributes.position!.needsUpdate = true; }
       // neurônios subindo no feixe do topo
       { const a = beamGeo.attributes.position!.array as Float32Array;
-        for (let i = 0; i < BN; i++) { const d = beam[i]!; d.y += d.sp * dt; if (d.y > topoY) { d.y = 0; d.a = Math.random() * 6.283; } const rr = d.r * (0.4 + d.y * 0.09), ang = d.a + d.y * d.dr * 0.4; a[i * 3] = Math.cos(ang) * rr; a[i * 3 + 1] = d.y; a[i * 3 + 2] = Math.sin(ang) * rr; }
+        for (let i = 0; i < BN; i++) { const d = beam[i]!; d.y += d.sp * dt; if (d.y > topoY) { d.y = BY0; d.a = Math.random() * 6.283; } const rr = d.r * (0.4 + d.y * 0.09), ang = d.a + d.y * d.dr * 0.4; a[i * 3] = Math.cos(ang) * rr; a[i * 3 + 1] = d.y; a[i * 3 + 2] = Math.sin(ang) * rr; }
         beamGeo.attributes.position!.needsUpdate = true; }
-      owner.rotation.y += dt * 0.5; crown.rotation.z += dt * 0.8;
       void coldLight;
     },
-    dispose() { rotulo.remove(); liberar(g, [texUnder, texFogo, texAura]); },
+    dispose() { rotulo.remove(); liberar(g, [texUnder, texFogo]); },
   };
 }
 

@@ -13,7 +13,7 @@ import { HEARTBEAT_MS, HELLO_JITTER_MS, poseMudou, type Pose } from "@/lib/loung
 import { classificarErroPusher, ehFalhaDeConexao, type EstadoRealtime, type MotivoErro } from "@/lib/lounge3d/realtimeEstado";
 import { EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca } from "@/lib/lounge3d/tipos";
 
-export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean };
+export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; qg?: boolean };
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
 export type EstadoSala = "carregando" | "ok" | "cheia" | "erro" | "off";
 
@@ -56,7 +56,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       if (r.status === 404) { setEstado("off"); return; }
       if (!r.ok) throw new Error(String(r.status));
       const d = await r.json();
-      setSala(d.sala); setMembros(d.membros ?? []); setEu({ id: d.eu.id, name: d.eu.name, image: d.eu.image ?? null, color: d.eu.color, fundador: d.eu.fundador === true });
+      setSala(d.sala); setMembros(d.membros ?? []); setEu({ id: d.eu.id, name: d.eu.name, image: d.eu.image ?? null, color: d.eu.color, fundador: d.eu.fundador === true, qg: d.eu.qg === true });
       setEstado((e) => (e === "cheia" ? e : "ok"));
     } catch { setEstado("erro"); }
   }, [salaId]);

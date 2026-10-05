@@ -61,7 +61,7 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
   const key = new THREE.DirectionalLight(0x99bbff, 0.6); key.position.set(4, 9, 6); scene.add(key);
 
   // estrelas redondas, densidade baixa
-  const SN = low ? 700 : 1500, spv = new Float32Array(SN * 3);
+  const SN = low ? 500 : 900, spv = new Float32Array(SN * 3);
   for (let i = 0; i < SN; i++) {
     const u = Math.random(), v = Math.random(), th = u * 6.283, ph = Math.acos(2 * v - 1), rr = 160 * Math.cbrt(Math.random());
     spv[i * 3] = rr * Math.sin(ph) * Math.cos(th); spv[i * 3 + 1] = Math.abs(rr * Math.sin(ph) * Math.sin(th)) * 0.9 + 6; spv[i * 3 + 2] = rr * Math.cos(ph);

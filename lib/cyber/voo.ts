@@ -14,6 +14,9 @@ export type ComandoVoo = { wx: number; wz: number; subir: boolean; descer: boole
 /** `freio`: soltar a direção para a nave em poucos metros (paira ali) */
 export const VOO = { vel: 30, sobe: 34, inercia: 3, freio: 7, yMax: 260, raioMapa: 320, dtMax: 0.25, subpasso: 1 / 60 };
 
+/** folga de pouso: o topo dos marcos flutua (±0,15 m); parada a até isso acima do chão = pousada */
+export const POUSO_TOL = 0.3;
+
 /** cilindros sólidos pra nave (ex.: a Zaeon): { x, z, r, topo }. Quem vem DE CIMA para no topo (pousa ali). */
 export type Pilar = Colisor & { topo: number };
 
@@ -41,12 +44,13 @@ export function passoVoo(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar
   for (const p of solidos) {
     const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
     if (d >= p.r || y >= p.topo) continue;
-    if (s.y >= p.topo - 1e-6) { y = p.topo; vy = Math.max(0, vy); continue; }
+    if (s.y >= p.topo - POUSO_TOL) { y = p.topo; vy = Math.max(0, vy); continue; }   // em cima (tolera a flutuação do marco)
     const kk = d > 1e-4 ? p.r / d : 1; x = p.x + (d > 1e-4 ? dx * kk : p.r); z = p.z + (d > 1e-4 ? dz * kk : 0);
   }
   const chaoY = chaoDoVoo({ x, y, z }, solidos);
   let pousado = false;
-  if (y <= chaoY) { y = chaoY; vy = Math.max(0, vy); pousado = true; }
+  // encostou (ou está a um fio, parada): pousa e acompanha o chão — o topo dos marcos sobe e desce devagar
+  if (y <= chaoY || (y <= chaoY + POUSO_TOL && vy <= 1e-6)) { y = chaoY; vy = Math.max(0, vy); pousado = true; }
   return { s: { x, y, z, yaw, vx, vy, vz }, pousado, chaoY };
 }
 
