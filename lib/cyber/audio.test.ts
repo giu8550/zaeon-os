@@ -1,19 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { DISTANCIA, PASSOS, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
+import { DISTANCIA, FADE_ENTRADA, PASSOS, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
 
 describe("áudio do cyberespaço", () => {
-  it("os 22 sons existem em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
+  it("os 20 sons existem em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
     const arquivos = readdirSync(join(process.cwd(), "public/assets/sounds/cyber")).filter((f) => f.endsWith(".ogg")).map((f) => f.replace(".ogg", "")).sort();
     expect(Object.keys(SONS).sort()).toEqual(arquivos);
-    expect(arquivos).toHaveLength(22);
+    expect(arquivos).toHaveLength(20);
     expect(urlDoSom("ship-flight")).toBe("/assets/sounds/cyber/ship-flight.ogg");
+  });
+  it("sem fogo nem sentar: a base fica só com os cristais; entrar no cyberespaço não dispara 'sentar'", () => {
+    expect(Object.keys(SONS)).not.toContain("fire");
+    expect(Object.keys(SONS)).not.toContain("sit");
+    expect(FADE_ENTRADA).toBeGreaterThan(0.5);
   });
   it("leito e UI são 2D; fontes do mundo e a nave são posicionais", () => {
     const d2: NomeSom[] = ["space-bed", "whoosh-hyperspace", "study-confirm", "chat-pop"];
     for (const [n, s] of Object.entries(SONS)) expect(s.modo).toBe(d2.includes(n as NomeSom) ? "2d" : "pos");
-    for (const n of ["ship-flight", "ship-idle", "space-bed", "blackhole-hum", "crystals", "fire"] as NomeSom[]) expect(SONS[n].loop).toBe(true);
+    for (const n of ["ship-flight", "ship-idle", "space-bed", "blackhole-hum", "crystals"] as NomeSom[]) expect(SONS[n].loop).toBe(true);
   });
   it("preferências: ligado por padrão, '0' desliga; volume mestre 0..1 (padrão 0,8)", () => {
     expect(lerPrefs(() => null)).toEqual({ ligado: true, volume: 0.8 });

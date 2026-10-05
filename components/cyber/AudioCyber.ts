@@ -1,15 +1,15 @@
 /**
  * AudioCyber — o áudio do cyberespaço em 3 camadas, com o áudio NATIVO do three:
  *  1. ESPACIAL: um THREE.AudioListener na câmera + THREE.PositionalAudio presos aos objetos (buraco negro, bases,
- *     fogo do QG, naves) — atenua com a distância e paneia sozinho quando se anda/orbita. Buffers MONO.
+ *     cristais das bases, naves) — atenua com a distância e paneia sozinho quando se anda/orbita. Buffers MONO.
  *  2. LEITO ambiente (THREE.Audio 2D, estéreo) bem baixinho — abaixa enquanto a música da intro toca.
  *  3. EVENTOS: one-shots posicionais num ponto do mundo (passos, pulo, chegada…) ou 2D (UI), com teto de vozes.
- * Nada toca antes de um GESTO (o "Iniciar" da intro, ou o primeiro clique/toque/tecla na cena): só então o
- * listener (e o AudioContext do three) é criado. Respeita `zaeon_sfx` (liga/desliga) e `zaeon_volume` (mestre).
+ * Nada toca antes de um GESTO, e o engine só chama ativar() ao ENTRAR na cena 3D (nunca na landing/menu): só então o
+ * listener (e o AudioContext do three) é criado, e os loops entram com fade-in (FADE_ENTRADA). Respeita `zaeon_sfx` (liga/desliga) e `zaeon_volume` (mestre).
  * Regras puras e a tabela dos sons em lib/cyber/audio.ts. dispose() para e desconecta tudo.
  */
 import * as THREE from "three";
-import { DISTANCIA, SONS, criarLimiteVozes, lerPrefs, urlDoSom, type NomeSom } from "@/lib/cyber/audio";
+import { DISTANCIA, FADE_ENTRADA, SONS, criarLimiteVozes, lerPrefs, urlDoSom, type NomeSom } from "@/lib/cyber/audio";
 
 type Dist = { ref: number; max: number; rolloff: number };
 export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom };
@@ -47,7 +47,7 @@ export function tocarUI(nome: NomeSom) {
 }
 
 export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; low: boolean }): AudioCyberHandle {
-  let listener: THREE.AudioListener | null = null, vivo = true;
+  let listener: THREE.AudioListener | null = null, vivo = true, entrada = 0;   // entrada: 0→1 no fade-in dos loops
   const buffers = new Map<NomeSom, AudioBuffer>();
   const loops: { l: LoopSom; obj: THREE.Object3D | null; dist?: Dist; volBase: number }[] = [];
   const umaVez = new Set<{ a: THREE.Audio<GainNode | PannerNode>; holder: THREE.Object3D | null }>();
@@ -119,11 +119,12 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
     },
     atualizar(dt) {
       if (!listener) return;
+      entrada = Math.min(1, entrada + dt / FADE_ENTRADA);
       const k = Math.min(1, dt * 2.5);   // fades suaves (~0,4 s) — nada liga/desliga seco
       for (const x of loops) {
         const a = x.l.audio; if (!a) continue;
         x.l.atual += (x.l.alvo - x.l.atual) * k;
-        a.setVolume(x.l.atual * x.volBase);
+        a.setVolume(x.l.atual * x.volBase * entrada);
       }
     },
     dispose() {
