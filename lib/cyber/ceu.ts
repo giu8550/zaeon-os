@@ -28,8 +28,6 @@ export const CIDADE = {
    *  `n` vagas no anel, a cada `vaoCada` uma fica livre (corredor de passagem pra mesa) */
   servidores: { n: 16, r: 7.5, vaoCada: 4, largura: 1.3, prof: 1, alt: 3.4, colR: 0.75 },
   mesaHolo: { r: 2.4 },
-  /** HANGAR grande (cabem naves maiores): plataforma + pilones de luz em volta (sem teto: a nave entra por cima) */
-  hangar: { x: 34, z: 12, r: 12, pilones: 8, pilonR: 0.6 },
   /** SALAS em volta da cidadela: pavilhões redondos de vidro, com a PORTA virada pro centro da ilha */
   salas: {
     lounge: { x: 27, z: -27, r: 8.5 },
@@ -69,7 +67,7 @@ export function servidoresLocais(): { x: number; z: number; rot: number }[] {
 }
 
 /** colisores da plataforma (mundo): pilares da cidadela, módulos da biblioteca (3 círculos ao longo de cada um), racks,
- *  mesa holográfica, paredes e móveis das salas, pilones do hangar. Constante → calculado uma vez (o passo usa todo quadro). */
+ *  mesa holográfica, paredes e móveis das salas. Constante → calculado uma vez (o passo usa todo quadro). */
 let colisoresCache: Colisor[] | null = null;
 export function colisoresDaCidade(): Colisor[] {
   if (colisoresCache) return colisoresCache;
@@ -79,7 +77,6 @@ export function colisoresDaCidade(): Colisor[] {
     for (const p of paredeDaSala(s)) out.push({ ...mundo(p), r: CIDADE.salaParede.colR });
     for (const m of MOVEIS[nome]) for (const c of colisoresDoMovel(m)) out.push({ ...mundo(daSala(s, c.x, c.z)), r: c.r });
   }
-  for (const p of pilonesDoHangar()) out.push({ ...mundo(p), r: CIDADE.hangar.pilonR });
   const { cidadela, biblioteca, mesaHolo, servidores } = CIDADE;
   for (const s of servidoresLocais()) out.push({ ...mundo(s), r: servidores.colR });
   for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
@@ -137,19 +134,16 @@ export function paredeDaSala(s: { x: number; z: number; r: number }): { x: numbe
   }
   return out;
 }
-/** pilones (locais da ilha) em volta do hangar */
-export function pilonesDoHangar(): { x: number; z: number }[] {
-  const h = CIDADE.hangar, R = h.r + h.pilonR + 0.3;
-  return Array.from({ length: h.pilones }, (_, i) => { const a = (i / h.pilones) * Math.PI * 2 + Math.PI / h.pilones; return { x: h.x + Math.cos(a) * R, z: h.z + Math.sin(a) * R }; });
-}
 
 /**
  * ILHOTAS em volta da Zaeon (locais, sem giro): plataformas flutuantes com COLISÃO própria — dá pra pousar no topo
  * (e andar nele; passou da borda, cai), e o corpo (cone invertido) é sólido pra nave e pra quem voa de mochila.
  * Layout FIXO (o mesmo pra todo mundo e pro render). `fase` = a flutuação de cada uma (sobe e desce ±1,2 m).
  */
+/** o lado da ilha onde a NAVE-QG do dono fica atracada (lib/cyber/naveQG): as ilhotas deixam esse setor livre */
+export const DOCA_ANGULO = 1.75, DOCA_MEIA_ABERTURA = 0.95;
 export const ILHOTAS: { x: number; z: number; r: number; dy: number; fase: number }[] = Array.from({ length: 7 }, (_, k) => {
-  const a = (k / 7) * Math.PI * 2 + 0.4, dist = 80 + (k % 3) * 12;
+  const a = DOCA_ANGULO + DOCA_MEIA_ABERTURA + (k / 6) * (Math.PI * 2 - 2 * DOCA_MEIA_ABERTURA), dist = 80 + (k % 3) * 12;
   return { x: Math.cos(a) * dist, z: Math.sin(a) * dist, r: 6 + (k % 4) * 2.5, dy: ((k % 3) - 1) * 12, fase: k * 1.7 };
 });
 export const BOIA_ILHOTA = 1.2;

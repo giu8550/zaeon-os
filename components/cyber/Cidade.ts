@@ -9,13 +9,13 @@
  *    livros de luz e monitores verticais (clicar = estudar) rodeando a sala; dentro, 4 SALAS DE SERVIDORES (racks com
  *    LEDs e fluxo de dados subindo pra cúpula) em volta da mesa com um globo de luz no centro;
  *  - LOUNGE em pavilhão de vidro (sofá/TV/caixas de som) — components/cyber/Salas.ts;
- *  - HANGAR grande (cabem naves maiores) com pilones de luz; portal de volta (mini disco de acreção); farol no topo;
+ *  - portal de volta (mini disco de acreção); farol no topo (a nave-QG fica atracada PAIRANDO ao lado, sem hangar);
  *  - no CHÃO, embaixo do buraco negro: o anel de entrada (o portal).
  * Layout em lib/cyber/ceu.ts (o mesmo que a colisão usa). `low` reduz partículas/segmentos/ilhotas;
  * `prefers-reduced-motion` deixa fogo/vórtices quase parados. dispose() completo.
  */
 import * as THREE from "three";
-import { BOIA_ILHOTA, CIDADE, ILHOTAS, bibliotecaLocais, pilonesDoHangar, servidoresLocais } from "@/lib/cyber/ceu";
+import { BOIA_ILHOTA, CIDADE, ILHOTAS, bibliotecaLocais, servidoresLocais } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
@@ -270,22 +270,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const gGeo = new THREE.BufferGeometry(); gGeo.setAttribute("position", new THREE.BufferAttribute(gp, 3));
   const globo = add(new THREE.Points(gGeo, new THREE.PointsMaterial({ size: 0.09, map: starTex, color: 0x8fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
 
-  // ── HANGAR grande: plataforma + anéis/setas de pouso + pilones de luz (sequência guia) + halo ligando os pilones ──
-  const hg = CIDADE.hangar;
-  add(new THREE.Mesh(new THREE.CylinderGeometry(hg.r, hg.r + 0.5, 0.3, 64), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.45, roughness: 0.4, metalness: 0.4 })), ilha, true).position.set(hg.x, 0.15, hg.z);
-  const anelMat = new THREE.MeshBasicMaterial({ color: 0x5fd0ff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
-  for (const [a, b] of [[hg.r - 0.6, hg.r - 0.3], [hg.r * 0.55 - 0.12, hg.r * 0.55 + 0.12], [1.2, 1.5]] as const) { const an = add(new THREE.Mesh(new THREE.RingGeometry(a, b, 96), anelMat)); an.rotation.x = -Math.PI / 2; an.position.set(hg.x, 0.32, hg.z); }
-  { const lin: number[] = []; for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2, r0 = hg.r * 0.62, r1 = hg.r * 0.86, w = 0.12;
-      lin.push(hg.x + Math.cos(a - w) * r1, 0.33, hg.z + Math.sin(a - w) * r1, hg.x + Math.cos(a) * r0, 0.33, hg.z + Math.sin(a) * r0, hg.x + Math.cos(a) * r0, 0.33, hg.z + Math.sin(a) * r0, hg.x + Math.cos(a + w) * r1, 0.33, hg.z + Math.sin(a + w) * r1); }
-    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(lin), 3)); add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.8 }))); }
-  const AP = 6.5, pilonMat = new THREE.MeshStandardMaterial({ color: 0x0c1a30, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.5 });
-  const texPilon = glow("rgba(255,230,170,1)", "rgba(255,180,90,.35)");
-  const luzesPilon = pilonesDoHangar().map((p) => {
-    add(new THREE.Mesh(new THREE.CylinderGeometry(hg.pilonR * 0.75, hg.pilonR * 1.2, AP, 8), pilonMat), ilha, true).position.set(p.x, AP / 2, p.z);
-    const l = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texPilon, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); l.scale.set(2.4, 2.4, 1); l.position.set(p.x, AP + 0.3, p.z); return l;
-  });
-  const halo = add(new THREE.Mesh(new THREE.TorusGeometry(hg.r + hg.pilonR + 0.3, 0.07, 6, 128), new THREE.MeshBasicMaterial({ color: 0x5fd0ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending })));
-  halo.rotation.x = Math.PI / 2; halo.position.set(hg.x, AP, hg.z);
+  // (sem hangar: a nave-QG do dono fica PAIRANDO atracada ao lado da ilha — lib/cyber/naveQG `poseDaDoca`)
 
   // ── SALAS (lounge) ──
   const salas = criarSalas(ilha, { low, texturas, paredeMat: vidro({ color: 0x0a1830, emissive: 0x2a3a70, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.3, thickness: 1, transparent: true, opacity: 0.32, side: THREE.DoubleSide }, 0.3) });
@@ -352,7 +337,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
       farol.material.opacity = 0.75 + 0.2 * Math.sin(t * 1.1);
       salas.atualizar(dt, t);
       estac.atualizar(t);
-      luzesPilon.forEach((l, i) => { const k = (t * 1.2 - i / luzesPilon.length) % 1; l.material.opacity = 0.45 + 0.55 * Math.max(0, 1 - Math.abs(k - 0.15) * 4) * vel + 0.2 * (1 - vel); });   // sequência guia (lenta)
       ledTex.offset.y = Math.floor(t * 1.5 * vel) / 16;   // os LEDs "andam" um U por vez (devagar, sem estrobo)
       ledMat.opacity = 0.8 + 0.15 * Math.sin(t * 0.7);
       globo.rotation.y += dt * 0.25 * vel;

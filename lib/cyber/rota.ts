@@ -4,7 +4,8 @@
  * todos pelo caminho. Qualquer botão de movimento cancela (no engine). A rota contorna a ilha da cidade (sai pela
  * borda, do lado do destino) e cruza o mapa numa altitude livre (acima do QG, abaixo do fundo da ilha da Zaeon).
  */
-import { CIDADE, mundo } from "./ceu";
+import { CIDADE } from "./ceu";
+import { poseDaDoca } from "./naveQG";
 import { HELIPORTO } from "./landmarks";
 import { VOO, type ComandoVoo, type EstadoVoo } from "./voo";
 
@@ -27,7 +28,7 @@ function saidaDaIlha(rumo: { x: number; z: number }, y: number): Waypoint {
 /** onde cada atalho pousa: no heliporto (chão) ou no ponto de pouso do QG (`qg`, sobre as muralhas do lado do portão) */
 export function alvoDoAtalho(destino: DestinoRota, qg?: { x: number; y: number; z: number }): Waypoint | null {
   if (destino === "heliporto") return { x: HELIPORTO.x, y: 0, z: HELIPORTO.z, pousar: true };
-  if (destino === "zaeon") { const h = mundo(CIDADE.hangar); return { x: h.x, y: CIDADE.pisoY, z: h.z, pousar: true }; }
+  if (destino === "zaeon") { const d = poseDaDoca(); return { x: d.x, y: d.y, z: d.z }; }   // atraca PAIRANDO na doca, ao lado da ilha (sem pousar)
   return qg ? { ...qg, pousar: true } : null;
 }
 
@@ -45,7 +46,7 @@ export function rotaPara(destino: DestinoRota, s: EstadoVoo, qg?: { x: number; y
   const naColuna = daCidade(s) < CIDADE.bordaR + 2;
   let p = { x: s.x, y: s.y, z: s.z };
   if (destino === "zaeon") {
-    // pro hangar da Zaeon (céu): embaixo da ilha, decola e sai pela lateral; sobe POR FORA; entra pela borda do lado do hangar
+    // pra doca da Zaeon (céu): embaixo da ilha, decola e sai pela lateral; sobe POR FORA; atraca ao lado da ilha, do lado da doca
     if (!naCidade) {
       if (naColuna) {
         const yv = Math.max(p.y, VOO.decolar + SOLTA_V + 2);

@@ -1,3 +1,4 @@
+import { NAVE_QG, paraLocal, poseDaDoca } from "./naveQG";
 import { describe, expect, it } from "vitest";
 import { HELIPORTO, POIS, baseLivreDosPOIs, bordaDoPOI, colisoresDosPOIs, landmarksOn, marcoNav, poiPerto, type POI } from "./landmarks";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, BASE_PLATAFORMA_R, baseNoCeu, baseNoQG, basesDosMembros, localParaMundo, posicaoDaBase, spawnDaBase } from "./bases";
@@ -233,13 +234,13 @@ describe("bases fora do chão: o dono na Zaeon (céu) e o Andrei no centro do QG
   it("sem especiais = tudo no anel (marcos desligados)", () => {
     expect([...basesDosMembros(ids).values()].every((l) => !l.nivel)).toBe(true);
   });
-  it("a base da Zaeon: dentro da área andável, livre da cidadela, do hangar e dos portais; virada pro centro", () => {
+  it("a base da Zaeon: dentro da área andável, livre da cidadela, da doca da nave e dos portais; virada pro centro", () => {
     const cs = colisoresDaCidade();
     BASES_CEU_LOCAIS.forEach((l, i) => {
       const b = baseNoCeu(i), w = mundo(l);
       expect(Math.hypot(l.x, l.z) + BASE_PLATAFORMA_R).toBeLessThan(CIDADE.andavelR);
       for (const c of cs) expect(Math.hypot(w.x - c.x, w.z - c.z)).toBeGreaterThan(c.r + BASE_COLLIDER_R);
-      expect(Math.hypot(l.x - CIDADE.hangar.x, l.z - CIDADE.hangar.z)).toBeGreaterThan(CIDADE.hangar.r + BASE_PLATAFORMA_R);
+      const doca = paraLocal(poseDaDoca(), w); expect(Math.hypot(doca.x, doca.z)).toBeGreaterThan(NAVE_QG.raio + BASE_PLATAFORMA_R);   // fora do casco da nave atracada
       expect(noPortalVolta(w)).toBe(false); expect(noPortalVolta(spawnDaBase(b))).toBe(false);
       const frente = localParaMundo(b, 0, 1);   // +z local aponta pro centro da ilha
       expect(Math.hypot(frente.x - CIDADE.centro.x, frente.z - CIDADE.centro.z)).toBeLessThan(Math.hypot(w.x - CIDADE.centro.x, w.z - CIDADE.centro.z));

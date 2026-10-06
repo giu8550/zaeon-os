@@ -46,6 +46,9 @@ export type CenaCyberProps = {
   somLounge?: SomLounge | null;
   offsetMusica?: number;
   musica?: (ApiMusica & { urlDe(arq: string): string }) | null;
+  /** a NAVE-QG: onde ela está estacionada (da sala) e como o dono guarda onde a estacionou */
+  naveQG?: { x: number; y: number; z: number; yaw: number } | null;
+  salvarNave?: (pose: { x: number; y: number; z: number; yaw: number }) => void;
   /** VOZ (push-to-talk, NEXT_PUBLIC_VOZ=on + colyseus): o signaling da room e quem está online (userIds) */
   canalVoz?: CanalVoz | null;
   onlineIds?: string[];
@@ -146,6 +149,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onVoo: setVoo,
       onRota: setRota,
       remotosSuaves: transporteRealtime() === "colyseus",
+      onNaveParada: (pose) => cb.current.salvarNave?.(pose),
       onAbrirSom: () => { if (!cb.current.souFundador || !cb.current.musica) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(true); },
       urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon manda recados pro QG."); return; } setRecadoTxt(""); setRecadoAberto(true); },
@@ -179,6 +183,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   // foca o chat (dá pra falar sem precisar do Esc antes)
   const chatRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => { if (poiAberto || recadoAberto || somAberto) engine.current?.soltarMouse(); }, [poiAberto, recadoAberto, somAberto]);
+  // a nave-QG estacionada (da sala): vale enquanto o dono não mexe nela nesta sessão
+  useEffect(() => { engine.current?.setNaveQG(p.naveQG ?? null); }, [p.naveQG, pronto]);
   // o toca-discos: o estado da sala vai pro player (a música sai das caixas do lounge, sincronizada)
   useEffect(() => { engine.current?.setSomLounge(p.somLounge ?? null, p.offsetMusica ?? 0); }, [p.somLounge, p.offsetMusica, pronto]);
   useEffect(() => {

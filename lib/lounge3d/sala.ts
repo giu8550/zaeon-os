@@ -78,8 +78,8 @@ export function lerConteudo(json: unknown): ConteudoSala {
   if (typeof json === "string") { try { o = JSON.parse(json); } catch { o = null; } }
   const notes = Array.isArray(o?.notes) ? o.notes.map(sanitizarNota).filter((n: NotaCanvas | null): n is NotaCanvas => !!n).slice(0, MAX_NOTAS) : [];
   const artifacts = Array.isArray(o?.artifacts) ? o.artifacts.map(sanitizarArtefato).filter((a: ArtefatoCanvas | null): a is ArtefatoCanvas => !!a).slice(0, MAX_ARTEFATOS) : [];
-  const recadoQG = sanitizarRecado(o?.recadoQG), somLounge = sanitizarSom(o?.somLounge);
-  return { notes, artifacts, ...(recadoQG ? { recadoQG } : {}), ...(somLounge && somLounge.faixas.length ? { somLounge } : {}) };
+  const recadoQG = sanitizarRecado(o?.recadoQG), somLounge = sanitizarSom(o?.somLounge), naveQG = naveParadaDe(o?.naveQG).naveParada;
+  return { notes, artifacts, ...(recadoQG ? { recadoQG } : {}), ...(somLounge && somLounge.faixas.length ? { somLounge } : {}), ...(naveQG ? { naveQG } : {}) };
 }
 
 /**
@@ -99,7 +99,8 @@ export function aplicarOps(atual: ConteudoSala, ops: OpsSala): ConteudoSala {
   for (const a of upA.values()) if (!remA.has(a.id)) artifacts.push(a);
   const out: ConteudoSala = { notes: notes.slice(-MAX_NOTAS), artifacts: artifacts.slice(-MAX_ARTEFATOS) };
   if (atual.recadoQG) out.recadoQG = atual.recadoQG;   // editar notas não apaga o recado do QG…
-  if (atual.somLounge) out.somLounge = atual.somLounge;   // …nem a playlist do lounge
+  if (atual.somLounge) out.somLounge = atual.somLounge;   // …nem a playlist do lounge…
+  if (atual.naveQG) out.naveQG = atual.naveQG;            // …nem onde a nave-QG está estacionada
   return out;
 }
 
@@ -139,7 +140,7 @@ function vooDe(v: unknown): { voo?: { y: number; yaw: number } } {
 function naveParadaDe(v: unknown): { naveParada?: { x: number; y: number; z: number; yaw: number } } {
   if (!v || typeof v !== "object") return {};
   const o = v as Record<string, unknown>;
-  const x = num(o.x, -COORD, COORD), y = num(o.y, 0, 300), z = num(o.z, -COORD, COORD), yaw = num(o.yaw, -10, 10);
+  const x = num(o.x, -COORD, COORD), y = num(o.y, 0, 400), z = num(o.z, -COORD, COORD), yaw = num(o.yaw, -10, 10);
   return x === null || y === null || z === null || yaw === null ? {} : { naveParada: { x, y, z, yaw } };
 }
 

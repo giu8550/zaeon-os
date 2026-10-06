@@ -63,7 +63,9 @@ export type ArtefatoCanvas = {
 
 /** o recado ATUAL pro QG (um só; o novo substitui) — quem mandou vem da SESSÃO no servidor */
 export type RecadoQG = { id: string; texto: string; deId: string; deNome: string; deCor: string; ts: number };
-export type ConteudoSala = { notes: NotaCanvas[]; artifacts: ArtefatoCanvas[]; recadoQG?: RecadoQG | null; somLounge?: SomLounge | null };
+export type ConteudoSala = { notes: NotaCanvas[]; artifacts: ArtefatoCanvas[]; recadoQG?: RecadoQG | null; somLounge?: SomLounge | null;
+  /** onde a NAVE-QG do dono ficou estacionada (todos a veem ali, mesmo com ele offline) */
+  naveQG?: { x: number; y: number; z: number; yaw: number } | null };
 
 export type OpsSala = {
   upsertNotes?: unknown[]; removeNotes?: unknown[];

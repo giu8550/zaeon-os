@@ -242,6 +242,13 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     };
   }, [salaId, aplicarMusica]);
 
+  /** o DONO estacionou a nave-QG: guarda onde ela ficou (todos a veem ali, mesmo com ele offline) */
+  const salvarNave = useCallback(async (pose: { x: number; y: number; z: number; yaw: number }) => {
+    if (!salaId) return;
+    setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, naveQG: pose } } : s));
+    await fetch(`/api/lounge3d/${salaId}/nave`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pose) }).catch(() => {});
+  }, [salaId]);
+
   /** o DONO manda (ou apaga, `texto` null) o recado pro QG — o servidor confere a sessão; aplica aqui na hora */
   const enviarRecado = useCallback(async (texto: string | null): Promise<{ ok: boolean; erro?: string }> => {
     if (!salaId) return { ok: false, erro: "Sem sala." };
@@ -253,5 +260,5 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     return { ok: true };
   }, [salaId]);
 
-  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, canalVoz, recadoQG: sala?.conteudo.recadoQG ?? null, somLounge: sala?.conteudo.somLounge ?? null, offsetMusica, musica, recarregar: carregar };
+  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, canalVoz, recadoQG: sala?.conteudo.recadoQG ?? null, somLounge: sala?.conteudo.somLounge ?? null, offsetMusica, musica, naveQG: sala?.conteudo.naveQG ?? null, salvarNave, recarregar: carregar };
 }

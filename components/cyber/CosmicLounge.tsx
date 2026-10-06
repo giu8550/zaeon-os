@@ -101,6 +101,7 @@ function Tela() {
       souFundador={euSala.fundador === true} pedirAcesso={pedirAcesso}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
+      naveQG={sala.naveQG} salvarNave={sala.salvarNave}
       canalVoz={sala.canalVoz} onlineIds={onlineIds}
     />
   );
