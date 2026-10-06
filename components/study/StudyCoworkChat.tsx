@@ -908,9 +908,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                       {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
                     </StructuredAnswerView>
                   );
-                  // MODO REVISTA: só em resposta longa ou com artefato (§10 do plano).
-                  // Resposta curta continua no balão — revista com 3 linhas é exagero.
-                  const revista = podeVirarRevista(m.answer, !!m.studioBlock);
+                  // Sala de ESTUDOS = chat simples, objetivo e 100% legível: a "revista" só entra
+                  // quando há ARTEFATO embutido (a Sala de Pesquisa é que tem o modo editorial).
+                  const revista = !!m.studioBlock && podeVirarRevista(m.answer, true);
                   return (
                     <div key={m.id} data-msg={m.id} className="flex justify-start">
                       <div className={revista ? "w-full" : "max-w-[85%] w-full"}>

@@ -18,6 +18,7 @@ import {
     XMarkIcon,
 } from "@heroicons/react/24/outline";
 import MentoresGrid from "@/components/mentors/MentoresGrid";
+import { projetosOn } from "@/lib/research/unifiedRoom";
 
 // --- INTERFACE ---
 interface Plugin {
@@ -181,7 +182,7 @@ export default function PluginStorePage() {
                 </div>
 
                 {/* ─── EM DESTAQUE: ZAEON CODE (banner) ─────────────────────────── */}
-                <ZaeonCodeHero access={access} onActivate={activateZaeonCode} />
+                {projetosOn() && <ZaeonCodeHero access={access} onActivate={activateZaeonCode} />}
 
                 {/* CATEGORIAS */}
                 <div>

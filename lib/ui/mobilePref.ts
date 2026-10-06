@@ -30,7 +30,23 @@ export function deveOferecerMobile(o: { flag: boolean; path: string | null | und
 /** Destino mobile equivalente à sala aberta. */
 export function destinoMobile(path: string | null | undefined, search = ""): string {
   if (!path) return "/m";
-  if (path.startsWith("/research-lab") && /tab=pesquisa\b/.test(search)) return "/m/pesquisa";
+  if (path.startsWith("/research-lab") && /tab=pesquisas?\b/.test(search)) return "/m/pesquisa";
   if (path.startsWith("/research-lab")) return "/m/estudos";
   return "/m";
+}
+
+/**
+ * Celular → /m POR PADRÃO (a menos que a pessoa tenha escolhido "full" — "versão completa").
+ * Só redireciona as ENTRADAS padrão das duas salas (sem deep-link): /research-lab sem tab, ou
+ * tab=sala-de-estudos|pesquisa|pesquisas. Qualquer outra aba (lounge, perfil, aulas…) ou parâmetro
+ * (?space=, ?sala= de convite, ?tour=) fica na versão completa — o /m não tem essas telas.
+ */
+export function deveRedirecionarMobile(o: { flag: boolean; path: string | null | undefined; search?: string; ehMobile: boolean; pref: PrefUI | null }): boolean {
+  if (!o.flag || !o.ehMobile || o.pref === "full") return false;
+  if (!o.path || !(o.path === "/research-lab" || o.path === "/research-lab/")) return false;
+  const q = new URLSearchParams(o.search ?? "");
+  const tab = q.get("tab");
+  if (tab && !["sala-de-estudos", "pesquisa", "pesquisas"].includes(tab)) return false;
+  for (const k of q.keys()) if (k !== "tab" && k !== "sub") return false;
+  return true;
 }

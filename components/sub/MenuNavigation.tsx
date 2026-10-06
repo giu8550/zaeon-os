@@ -17,6 +17,7 @@ import InviteButton from "@/components/sub/InviteButton";
 import VoicePicker from "@/components/settings/VoicePicker";
 import { TOUR_ATIVO } from "@/lib/onboarding/tour";
 import { LOUNGE_ROTA } from "@/lib/ui/loungeHub";
+import { projetosOn } from "@/lib/research/unifiedRoom";
 
 type ModuleKey = "estudos" | "pesquisas" | "projetos" | "lounge";
 interface RecentItem { id: string; title: string; href: string }
@@ -702,7 +703,7 @@ export default function MenuNavigation() {
                   {renderModule("pesquisas", "Pesquisas", researchDocs, "Nova pesquisa", "/research-lab?tab=pesquisa")}
 
                   {/* PROJETOS — só quem tem acesso ao Zaeon Code (poucos, por permissão) */}
-                  {canUseProjects && renderModule("projetos", "Projetos", recentProjects, "Novo projeto", "/research-lab?tab=projetos")}
+                  {projetosOn() && canUseProjects && renderModule("projetos", "Projetos", recentProjects, "Novo projeto", "/research-lab?tab=projetos")}
 
                   {/* LOUNGE — co-criar com amigos */}
                   {renderModule("lounge", "Cyberespaço", [], "Entrar no cyberespaço", LOUNGE_ROTA)}

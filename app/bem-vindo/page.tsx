@@ -8,6 +8,7 @@
  *  - Cards explicativos de cada função da Zaeon, com voz (SpeakButton).
  *  - Depois, empurra o usuário a clicar em "Pesquisa" → tour (?tour=true).
  */
+import { projetosOn } from "@/lib/research/unifiedRoom";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -57,7 +58,7 @@ export default function BemVindoPage() {
   const feats = [
     { icon: Search, title: "Pesquisa", desc: `Peça qualquer tema e a Zaeon busca fontes acadêmicas, resume e cita por você.` },
     { icon: GraduationCap, title: "Sala de Estudos", desc: `Seu caderno vivo: escreva, e peça à Zaeon pra montar o estudo bloco a bloco.` },
-    { icon: Code2, title: "Projetos", desc: `Crie e rode projetos com a IA agêntica, direto no navegador.` },
+    ...(projetosOn() ? [{ icon: Code2, title: "Projetos", desc: `Crie e rode projetos com a IA agêntica, direto no navegador.` }] : []),
     { icon: Mic, title: "Modo voz (sem as mãos)", desc: `Fale com a Zaeon: ela clica, escreve e navega por você. Onde há um campo, há voz.` },
     { icon: Users, title: "Convites", desc: `Chame até 3 colegas e compartilhem o Plano Plus em grupo.` },
   ];

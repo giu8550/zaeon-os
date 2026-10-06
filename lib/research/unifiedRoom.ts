@@ -5,10 +5,12 @@
  * É NEXT_PUBLIC_* porque o gate é no cliente (qual sidebar/aba renderiza) — e por isso
  * precisa ser BUILD-ARG no Dockerfile/compose (ver docs/RUNBOOK_PROD_ATIVAR_TCC_DESENHO.md).
  *
- * Ligada: a sidebar perde "Sala de Estudos"; a "Sala de Pesquisa" ganha sub-abas horizontais
- * Chat · Estudos · Pesquisas. As abas de topo antigas viram ALIAS (links/tour não quebram):
- *   sala-de-estudos → pesquisa + estudos
- *   pesquisas       → pesquisa + pesquisas
+ * DUAS SALAS, cada uma = chat + abas (reorganização do handoff UX-resposta):
+ *   Sala de Estudos  (tab "sala-de-estudos") = Chat · Meus Estudos · Estudos
+ *   Sala de Pesquisa (tab "pesquisa")        = Chat · Pesquisas  (+ "Minhas pesquisas", a folha)
+ * Alias que sobrou (link antigo não quebra): "pesquisas" → pesquisa + sub-aba pesquisas.
+ * ("sala-de-estudos" voltou a ser uma sala de topo; "estudos" deixou de ser sub-aba da Pesquisa.)
+ * A aba PROJETOS (Zaeon Code) fica escondida atrás de NEXT_PUBLIC_PROJETOS (off): o código não foi apagado.
  */
 const on = (v: string | undefined) => v === "1" || v === "true";
 
@@ -25,16 +27,18 @@ export type LabTab =
   | "news"
   | "profile";
 
-export type ResearchSubTab = "chat" | "estudos" | "pesquisas";
+export type ResearchSubTab = "chat" | "pesquisas";
+
+/** Aba Projetos (Zaeon Code): escondida até o dono reativar (NEXT_PUBLIC_PROJETOS=on|1|true). */
+export const projetosOn = (): boolean => ["on", "1", "true"].includes(String(process.env.NEXT_PUBLIC_PROJETOS ?? "").toLowerCase());
 
 export const LAB_TABS: readonly LabTab[] = [
   "pesquisa", "sala-de-estudos", "pesquisas", "pevem", "projetos", "escritorio", "news", "profile",
 ];
-export const SUB_TABS: readonly ResearchSubTab[] = ["chat", "estudos", "pesquisas"];
+export const SUB_TABS: readonly ResearchSubTab[] = ["chat", "pesquisas"];
 
 /** Abas antigas que, na sala unificada, viram sub-abas da Sala de Pesquisa. */
 const ALIAS: Partial<Record<LabTab, ResearchSubTab>> = {
-  "sala-de-estudos": "estudos",
   pesquisas: "pesquisas",
 };
 
@@ -47,9 +51,12 @@ const ALIAS: Partial<Record<LabTab, ResearchSubTab>> = {
 export function resolveLabTab(
   tab: unknown,
   unified: boolean,
+  projetos: boolean = projetosOn(),
 ): { tab: LabTab; subTab?: ResearchSubTab } | null {
   if (typeof tab !== "string" || !(LAB_TABS as readonly string[]).includes(tab)) return null;
   const t = tab as LabTab;
+  // Projetos escondido: links/atalhos antigos (?tab=projetos, voz, localStorage) caem na Sala de Pesquisa.
+  if (t === "projetos" && !projetos) return { tab: "pesquisa" };
   if (!unified) return { tab: t };
   const sub = ALIAS[t];
   return sub ? { tab: "pesquisa", subTab: sub } : { tab: t };
