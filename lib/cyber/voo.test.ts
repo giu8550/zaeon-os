@@ -27,7 +27,7 @@ const atravessouIlha = (tr: EstadoVoo[]) => tr.some((s) => daCidade(s) < CIDADE.
 
 const Z = POIS.find((p) => p.id === "zaeon")!;
 const solidosZ = pilaresDoMarco({ x: Z.x, z: Z.z, chaoR: Z.nav!.chaoR, altura: Z.altura, escala: Z.escala ?? 1, cupula: true });
-const hangar = mundo(CIDADE.hangar);
+const hangar = mundo({ x: 34, z: 12 });   // o pátio onde era o hangar (piso livre da ilha)
 const noHangar: Passo = { s: est(hangar.x, CIDADE.pisoY, hangar.z), pousado: true, chaoY: CIDADE.pisoY };
 
 /** Cidade → chão com os botões: sobe um pouco, sai pela borda (radial), segura DESCER até pousar */
@@ -48,7 +48,7 @@ describe("voo — botões de movimento levam a nave a qualquer lugar", () => {
       expect(t).toBeLessThanOrEqual(8);
       expect(atravessouIlha(trilha)).toBe(false);
     });
-    it(`chão embaixo da ilha → Cidade (sai pela lateral, sobe, vai ao hangar, pousa) a ${fps} FPS`, () => {
+    it(`chão embaixo da ilha → Cidade (sai pela lateral, sobe, vai ao pátio, pousa) a ${fps} FPS`, () => {
       const ini: Passo = { s: est(CIDADE.centro.x + 5, 0, CIDADE.centro.z), pousado: true, chaoY: 0 };
       let fase = 0;
       const { r, trilha } = pilotar(ini, fps, solidosZ, (r) => {
@@ -59,7 +59,7 @@ describe("voo — botões de movimento levam a nave a qualquer lugar", () => {
         return { descer: true };
       });
       expect(r.pousado).toBe(true); expect(r.s.y).toBe(CIDADE.pisoY);
-      expect(Math.hypot(r.s.x - hangar.x, r.s.z - hangar.z)).toBeLessThan(CIDADE.hangar.r);
+      expect(Math.hypot(r.s.x - hangar.x, r.s.z - hangar.z)).toBeLessThan(12);
       expect(atravessouIlha(trilha)).toBe(false);
     });
   }

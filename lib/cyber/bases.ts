@@ -23,7 +23,7 @@ const ANG0 = Math.atan2(-3, 6);
 export type NivelBase = "ceu" | "qg";
 export type LayoutBase = { x: number; z: number; rot: number; nivel?: NivelBase };
 
-/** bases do dono na Zaeon (céu): locais (relativos ao centro da ilha), viradas pro centro; livres da cidadela e do hangar */
+/** bases do dono na Zaeon (céu): locais (relativos ao centro da ilha), viradas pro centro; livres da cidadela e da doca da nave */
 export const BASES_CEU_LOCAIS: { x: number; z: number }[] = [{ x: 0, z: 24 }, { x: 0, z: -24 }, { x: -24, z: -6 }];
 
 /** `rot` tal que o +z local da base aponte de (x,z) para o alvo */
