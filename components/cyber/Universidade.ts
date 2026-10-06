@@ -1,6 +1,8 @@
 /**
- * Universidade — o castelo de cristal NO CHÃO (lugar de encontro dos alunos). Mesmo idioma da Zaeon: pedra de cristal
- * escura com frisos frios (ciano) + janelas quentes (âmbar) — contraste frio × quente:
+ * Universidade — o castelo de cristal FLUTUANDO num disco no céu (lugar de encontro dos alunos), versão futurista:
+ * vidro-metal escuro com frisos frios (ciano) + janelas quentes (âmbar); salas A CÉU ABERTO (sem telhado); torres com
+ * agulhas de energia e aros flutuando (no lugar dos telhados cônicos); por baixo, a base de cristal com os propulsores
+ * antigravidade e o ELEVADOR DE LUZ (anel no chão ↔ anel no disco):
  *  - muralha externa (12 torres, ameias, seteiras) e interna (mais alta, 4 torres grandes), portões com arco e grade
  *    de luz; telhados cônicos com pontas acesas;
  *  - eixo central (Glasgow): Átrio com o cristal + TORRE central (relógios, pináculo), Grande Salão (mesas compridas,
@@ -10,7 +12,9 @@
  */
 import * as THREE from "three";
 import { CRISTAL_ATRIO, FONTES, PATIOS, SALAS, TORRES, UNIVERSIDADE, paredesDaUniversidade, todosOsMoveis, type MovelU, type Sala } from "@/lib/cyber/universidade";
+import { PLATAFORMAS } from "@/lib/cyber/plataformas";
 import { glowTex } from "./CenaCosmica";
+import { criarElevadorDeLuz } from "./ElevadorDeLuz";
 import { liberar } from "./Landmark";
 import { criarNatureza } from "./Natureza";
 
@@ -28,7 +32,7 @@ const COR_SALA: Record<Sala["tipo"], number> = { atrio: 0x66e6ff, salao: 0xffc46
 
 export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): UniversidadeHandle {
   const { low, starTex } = o, U = UNIVERSIDADE;
-  const raiz = new THREE.Group(); raiz.position.set(U.centro.x, 0, U.centro.z);
+  const raiz = new THREE.Group(); raiz.position.set(U.centro.x, U.y, U.centro.z);   // flutuando: tudo é relativo ao piso do disco
   const alvosCamera: THREE.Object3D[] = [], texturas: THREE.Texture[] = [], anim: ((dt: number, t: number) => void)[] = [];
   const add = <T extends THREE.Object3D>(x: T, cam = false) => { raiz.add(x); if (cam) alvosCamera.push(x); return x; };
   const tela = (w: number, h: number, pintar: (g: CanvasRenderingContext2D, w: number, h: number) => void) => { const c = document.createElement("canvas"); c.width = w; c.height = h; pintar(c.getContext("2d")!, w, h); const t = new THREE.CanvasTexture(c); texturas.push(t); return t; };
@@ -51,8 +55,8 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   };
 
   // materiais
-  const pedra = new THREE.MeshStandardMaterial({ color: 0x1a2644, roughness: 0.75, metalness: 0.2, emissive: 0x0b1834, emissiveIntensity: 0.6 });
-  const pedraClara = new THREE.MeshStandardMaterial({ color: 0x23335a, roughness: 0.7, metalness: 0.2, emissive: 0x10224a, emissiveIntensity: 0.6 });
+  const pedra = new THREE.MeshStandardMaterial({ color: 0x141e38, roughness: 0.28, metalness: 0.75, emissive: 0x0b1a3c, emissiveIntensity: 0.65 });   // vidro-metal escuro
+  const pedraClara = new THREE.MeshStandardMaterial({ color: 0x1f2d55, roughness: 0.22, metalness: 0.7, emissive: 0x112a5a, emissiveIntensity: 0.6, transparent: true, opacity: 0.92 });
   const friso = new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
   const janelaMat = new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
   const telhadoMat = new THREE.MeshStandardMaterial({ color: 0x14204a, roughness: 0.35, metalness: 0.5, emissive: 0x1f3a7a, emissiveIntensity: 0.55, flatShading: true });
@@ -60,14 +64,35 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   const escuroMon = new THREE.MeshStandardMaterial({ color: 0x0a0f1c, roughness: 0.4, metalness: 0.6 });
   const madeira = new THREE.MeshStandardMaterial({ color: 0x3a2a24, roughness: 0.7, metalness: 0.1, emissive: 0x24140c, emissiveIntensity: 0.5 });
 
-  // ── CHÃO do campus: lajes de pedra + gramado de luz nos pátios + caminho do portão ──
-  const em = U.externa.meia;
-  const piso = add(new THREE.Mesh(new THREE.PlaneGeometry(em * 2 + 10, em * 2 + 10), new THREE.MeshStandardMaterial({ color: 0x141d36, roughness: 0.9, emissive: 0x0a1228, emissiveIntensity: 0.5 })));
+  // ── O DISCO flutuante: piso com grade de luz, aro aceso na borda, base de cristal por baixo com os propulsores
+  //    antigravidade e o ELEVADOR DE LUZ (anel no chão + coluna até o disco + anel de volta lá em cima) ──
+  const em = U.externa.meia, R = U.discoR, seg = low ? 64 : 128;
+  const grade = tela(512, 512, (g, w, h) => { g.fillStyle = "#0d1630"; g.fillRect(0, 0, w, h); g.strokeStyle = "rgba(102,230,255,.22)"; g.lineWidth = 2; for (let i = 0; i <= 8; i++) { g.beginPath(); g.moveTo(i * w / 8, 0); g.lineTo(i * w / 8, h); g.stroke(); g.beginPath(); g.moveTo(0, i * h / 8); g.lineTo(w, i * h / 8); g.stroke(); } });
+  grade.wrapS = grade.wrapT = THREE.RepeatWrapping; grade.repeat.set(R / 6, R / 6);
+  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(R, seg), new THREE.MeshStandardMaterial({ map: grade, color: 0xffffff, roughness: 0.55, metalness: 0.4, emissive: 0x0a1430, emissiveIntensity: 0.5 })));
   piso.rotation.x = -Math.PI / 2; piso.position.y = 0.03;
+  const casca = add(new THREE.Mesh(new THREE.CylinderGeometry(R, R - 1.5, U.espessura * 0.25, seg, 1, true), pedra)); casca.position.y = -U.espessura * 0.125;
+  const aroBorda = add(new THREE.Mesh(new THREE.TorusGeometry(R, 0.35, 6, seg), friso)); aroBorda.rotation.x = Math.PI / 2; aroBorda.position.y = 0.1;
+  const aroBaixo = add(new THREE.Mesh(new THREE.TorusGeometry(R - 1.2, 0.5, 6, seg), new THREE.MeshBasicMaterial({ color: 0xb98cff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }))); aroBaixo.rotation.x = Math.PI / 2; aroBaixo.position.y = -U.espessura * 0.25;
+  // base de cristal: cone invertido facetado (com veios de luz) + cones menores em volta
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0x0a1226, roughness: 0.3, metalness: 0.5, emissive: 0x1a2f6a, emissiveIntensity: 0.55, flatShading: true });
+  const cone = add(new THREE.Mesh(new THREE.ConeGeometry(R - 2, 90, low ? 10 : 18, 3), baseMat)); cone.rotation.x = Math.PI; cone.position.y = -U.espessura * 0.25 - 45;
+  for (let k = 0; k < (low ? 4 : 7); k++) { const a = (k / 7) * Math.PI * 2 + 0.4, c = add(new THREE.Mesh(new THREE.ConeGeometry(26 + (k % 3) * 8, 55 + (k % 2) * 20, 7), baseMat)); c.rotation.x = Math.PI; c.position.set(Math.cos(a) * R * 0.55, -U.espessura * 0.25 - 30, Math.sin(a) * R * 0.55); }
+  // propulsores antigravidade: anéis + brilho embaixo do disco, pulsando
+  const texAnti = glow("rgba(185,140,255,.95)", "rgba(102,230,255,.25)"), antis: THREE.Sprite[] = [];
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2, x = Math.cos(a) * R * 0.78, z = Math.sin(a) * R * 0.78;
+    const anel = add(new THREE.Mesh(new THREE.TorusGeometry(6, 0.6, 6, 32), friso)); anel.rotation.x = Math.PI / 2; anel.position.set(x, -U.espessura * 0.25 - 1, z);
+    const s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texAnti, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); s.position.set(x, -U.espessura * 0.25 - 4, z); s.scale.setScalar(22); antis.push(s);
+  }
+  anim.push((_, t) => antis.forEach((s, i) => { s.material.opacity = 0.55 + 0.35 * Math.sin(t * 1.6 + i); }));
+  // ELEVADOR DE LUZ: anel no chão (embaixo), coluna de luz até o disco e o anel de volta no disco
+  const elev = PLATAFORMAS.univ, lc = { x: elev.anelChao.x - U.centro.x, z: elev.anelChao.z - U.centro.z }, ld = { x: elev.anelDisco.x - U.centro.x, z: elev.anelDisco.z - U.centro.z };
+  anim.push(criarElevadorDeLuz(raiz, { chao: { ...lc, r: elev.anelChao.r, y: -U.y }, disco: { ...ld, r: elev.anelDisco.r }, low }));
   const grama = new THREE.MeshStandardMaterial({ color: 0x0c3a3a, roughness: 1, emissive: 0x0b4a44, emissiveIntensity: 0.55 });
   for (const p of PATIOS) { const g = add(new THREE.Mesh(new THREE.PlaneGeometry(p.x1 - p.x0 - 2, p.z1 - p.z0 - 2), grama)); g.rotation.x = -Math.PI / 2; g.position.set((p.x0 + p.x1) / 2, 0.05, (p.z0 + p.z1) / 2); }
-  const caminho = add(new THREE.Mesh(new THREE.PlaneGeometry(10, em + 12), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending, depthWrite: false })));
-  caminho.rotation.x = -Math.PI / 2; caminho.position.set(0, 0.06, -em / 2 - 6);
+  const caminho = add(new THREE.Mesh(new THREE.PlaneGeometry(10, em + 40), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false })));
+  caminho.rotation.x = -Math.PI / 2; caminho.position.set(0, 0.06, -em / 2 - 20);   // do elevador de luz até o portão
 
   // ── PAREDES (muralhas + salas) instanciadas, com friso de luz no alto ──
   const paredes = paredesDaUniversidade(), muralhas: number[][] = [], salasP: number[][] = [], frisos: number[][] = [];
@@ -95,19 +120,30 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   }
   caixas(janelas, janelaMat);
 
-  // ── TORRES: corpo + friso + telhado cônico + ponta acesa ──
+  // ── TORRES: corpo + friso + AGULHA de energia (no lugar do telhado cônico) + aros flutuando + ponta acesa ──
   const corpoT = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1.08, 1, low ? 10 : 16), pedra, TORRES.length);
-  const telhadoT = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, low ? 10 : 16), telhadoMat, TORRES.length);
+  const telhadoT = new THREE.InstancedMesh(new THREE.ConeGeometry(0.3, 1, low ? 6 : 8), pontaMat, TORRES.length);
+  const halos = new THREE.InstancedMesh(new THREE.TorusGeometry(1, 0.05, 4, 40), friso, TORRES.length * 2), haloInfo: { t: (typeof TORRES)[number]; k: number }[] = [];
   const aroT = new THREE.InstancedMesh(new THREE.TorusGeometry(1, 0.03, 4, 32), friso, TORRES.length);
   const texPonta = glow("rgba(220,250,255,1)", "rgba(110,200,255,.35)"), pontas: THREE.Sprite[] = [];
   TORRES.forEach((t, i) => {
     corpoT.setMatrixAt(i, mx.compose(mp.set(t.x, t.alt / 2, t.z), mq.identity(), ms.set(t.r, t.alt, t.r)));
     const hT = t.r * 2.3; telhadoT.setMatrixAt(i, mx.compose(mp.set(t.x, t.alt + hT / 2, t.z), mq.identity(), ms.set(t.r * 1.22, hT, t.r * 1.22)));
     aroT.setMatrixAt(i, mx.compose(mp.set(t.x, t.alt + 0.1, t.z), mq.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2), ms.set(t.r * 1.1, t.r * 1.1, t.r * 1.1)));
+    for (let k = 0; k < 2; k++) haloInfo.push({ t, k });
     const s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texPonta, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); s.position.set(t.x, t.alt + hT + 0.8, t.z); s.scale.setScalar(3 + t.r * 0.4); pontas.push(s);
   });
   for (const im of [corpoT, telhadoT, aroT]) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
-  add(corpoT, true); add(telhadoT, true); add(aroT);
+  add(corpoT, true); add(telhadoT, true); add(aroT); add(halos); halos.frustumCulled = false;
+  const eixoX = new THREE.Vector3(1, 0, 0), qHalo = new THREE.Quaternion(), qGiro = new THREE.Quaternion();
+  anim.push((_, t) => {   // os aros sobem e descem em volta da agulha, inclinados, girando
+    haloInfo.forEach(({ t: tw, k }, i) => {
+      const hT = tw.r * 2.3, y = tw.alt + hT * (0.35 + 0.3 * k) + Math.sin(t * 0.9 + i) * 0.6, s = tw.r * (1.25 - 0.35 * k);
+      qHalo.setFromAxisAngle(eixoX, Math.PI / 2 + 0.18 * Math.sin(t * 0.5 + i)); qGiro.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, t * (0.3 + 0.2 * k) + i);
+      halos.setMatrixAt(i, mx.compose(mp.set(tw.x, y, tw.z), qGiro.multiply(qHalo), ms.set(s, s, s)));
+    });
+    halos.instanceMatrix.needsUpdate = true;
+  });
 
   // ── PORTÕES: torreões dos dois lados + arco de luz + grade (portcullis) erguida ──
   const portoes = [{ z: -em, w: U.externa.portao, alt: U.externa.alt }, ...U.interna.portoes.map((p) => ({ x: p.x, z: -U.interna.meia, w: p.w, alt: U.interna.alt }))];
@@ -145,14 +181,7 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
     const cx = (s.x0 + s.x1) / 2, cz = (s.z0 + s.z1) / 2, lx = s.x1 - s.x0, lz = s.z1 - s.z0, cor = COR_SALA[s.tipo];
     // piso tingido
     const ch = add(new THREE.Mesh(new THREE.PlaneGeometry(lx - 0.8, lz - 0.8), new THREE.MeshStandardMaterial({ color: 0x101a33, roughness: 0.6, emissive: cor, emissiveIntensity: 0.06 }))); ch.rotation.x = -Math.PI / 2; ch.position.set(cx, 0.07, cz);
-    if (s.tipo !== "atrio") {
-      const ao = lx < lz;   // a cumeeira corre no lado comprido
-      const pr = new THREE.CylinderGeometry(1, 1, 1, 3); pr.rotateZ(Math.PI / 2); pr.rotateX(Math.PI / 2);   // prisma triangular deitado
-      const telhado = add(new THREE.Mesh(pr, telhadoMat), true);
-      const vao = ao ? lx : lz, alto = Math.min(9, vao * 0.45);
-      telhado.scale.set(ao ? lz : lx, alto * 1.33, vao * 0.6);
-      telhado.position.set(cx, s.alt + alto * 0.33, cz); if (!ao) telhado.rotation.y = Math.PI / 2;
-    }
+    // (sem telhado: as salas são a céu aberto — vê-se o céu e a Zaeon lá em cima)
     // placa com o nome da sala, sobre a porta principal (pra achar cada área)
     const p0 = s.portas[0]!, px = p0.lado === "s" || p0.lado === "n" ? p0.em : p0.lado === "o" ? s.x0 - 0.6 : s.x1 + 0.6, pz = p0.lado === "s" ? s.z0 - 0.6 : p0.lado === "n" ? s.z1 + 0.6 : p0.em;
     const corCss = "#" + new THREE.Color(cor).getHexString();

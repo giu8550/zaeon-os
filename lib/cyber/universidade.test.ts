@@ -8,7 +8,7 @@ import { VOO } from "./voo";
 const qg = POIS.find((p) => p.id === "zaeon")!;
 const dentroDeParede = (w: { x: number; z: number }) => { const l = localU(w); return paredesDaUniversidade().some((p) => { const dx = p.bx - p.ax, dz = p.bz - p.az, L2 = dx * dx + dz * dz, t = Math.max(0, Math.min(1, ((l.x - p.ax) * dx + (l.z - p.az) * dz) / L2)); return Math.hypot(l.x - (p.ax + dx * t), l.z - (p.az + dz * t)) < p.esp / 2; }); };
 
-describe("Universidade Zaeon (castelo no chão)", () => {
+describe("Universidade (castelo flutuando num disco no céu)", () => {
   it("é enorme: ~3× a área da Zaeon do céu, e cabe no mapa", () => {
     const lado = UNIVERSIDADE.externa.meia * 2;
     expect(lado * lado).toBeGreaterThan(2.9 * Math.PI * CIDADE.bordaR ** 2);
@@ -47,17 +47,22 @@ describe("Universidade Zaeon (castelo no chão)", () => {
     const f = FONTES[0]!, qf = resolverUniversidade(mundoU({ x: f.x + 0.5, z: f.z })); expect(Math.hypot(localU(qf).x - f.x, localU(qf).z - f.z)).toBeCloseTo(f.r, 5);
     expect(resolverUniversidade({ x: 0, z: 0 })).toEqual({ x: 0, z: 0 });   // longe: não mexe
   });
-  it("mochila: acima da muralha passa; dentro de uma sala o teto segura; no telhado não se fica", () => {
+  it("mochila (altura relativa ao disco): acima da muralha passa; as salas são a céu aberto (sobe e sai por cima)", () => {
     const sobreMuralha = mundoU({ x: 50, z: -UNIVERSIDADE.externa.meia });
-    expect(resolverUniversidadeNoAr(sobreMuralha, UNIVERSIDADE.externa.alt + 1, UNIVERSIDADE.externa.alt + 1)).toMatchObject(sobreMuralha);
+    expect(resolverUniversidadeNoAr(sobreMuralha, UNIVERSIDADE.externa.alt + 1)).toMatchObject(sobreMuralha);
     const salao = SALAS.find((s) => s.tipo === "salao")!, meio = mundoU({ x: 0, z: 0 });
-    expect(resolverUniversidadeNoAr(meio, 4, 3).teto).toBeCloseTo(salao.alt - 2.2, 6);
-    const r = resolverUniversidadeNoAr(meio, salao.alt + 0.2, salao.alt + 0.3);
-    expect(salaEm(localU(r))).toBeNull();   // escorregou pra fora do telhado
+    expect(resolverUniversidadeNoAr(meio, salao.alt + 3)).toEqual(meio);   // sem teto: em cima da sala, fica onde está
+    expect(salaEm(localU(resolverUniversidadeNoAr(meio, 4)))).not.toBeNull();
   });
-  it("a nave não atravessa as torres (e a torre central é a mais alta)", () => {
-    const ps = pilaresDaUniversidade(); expect(ps).toHaveLength(TORRES.length + 1);
-    expect(Math.max(...ps.map((p) => p.topo))).toBe(UNIVERSIDADE.torreCentral.alt + UNIVERSIDADE.torreCentral.pinaculo);
+  it("flutua um pouco abaixo da Zaeon; o disco cobre o castelo inteiro (cantos das muralhas)", () => {
+    expect(UNIVERSIDADE.y).toBeLessThan(CIDADE.pisoY); expect(UNIVERSIDADE.y).toBeGreaterThan(CIDADE.pisoY - 100);
+    expect(UNIVERSIDADE.discoR).toBeGreaterThan(Math.hypot(UNIVERSIDADE.externa.meia, UNIVERSIDADE.externa.meia) + 1);
+    for (const a of ARVORES) expect(Math.hypot(a.x, a.z)).toBeLessThan(UNIVERSIDADE.discoR - 2);   // a avenida cabe no disco
+  });
+  it("a nave/moto: o disco é sólido (pousa em cima), as torres também (e a torre central é a mais alta)", () => {
+    const ps = pilaresDaUniversidade(); expect(ps).toHaveLength(TORRES.length + 2);
+    const disco = ps[0]!; expect(disco.r).toBe(UNIVERSIDADE.discoR); expect(disco.topo).toBe(UNIVERSIDADE.y); expect(disco.base).toBeLessThan(UNIVERSIDADE.y);
+    expect(Math.max(...ps.map((p) => p.topo))).toBe(UNIVERSIDADE.y + UNIVERSIDADE.torreCentral.alt + UNIVERSIDADE.torreCentral.pinaculo);
   });
   it("móveis: dentro das salas, sem tampar as portas (sobra passagem de ≥ 1,2 m na frente de cada porta)", () => {
     for (const s of SALAS) {
