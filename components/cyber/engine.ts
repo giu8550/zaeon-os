@@ -17,7 +17,7 @@ import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CIDADE, ILHOTAS, computadorPerto, fo
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, chaoNoAr, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { pularQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
-import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, intervaloNeuronio, somNaveInicial, type Dist, type EstadoSomNave } from "@/lib/cyber/audio";
+import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type LoopSom } from "./AudioCyber";
 import { pousoDoQG, rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
@@ -98,7 +98,7 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos:
   /** remotos: voando de mochila a jato (altura no mundo) e a velocidade vertical estimada */
   jet?: number; vyJet?: number;
   /** remotos: sons da nave dele (loops idle/voo) e passos */
-  somNave?: { idle: LoopSom; voo: LoopSom; desce: LoopSom; sobe: LoopSom; voava: boolean; ev: EstadoSomNave; yAnt: number | null; vy: number } | null; passoT?: number; perto?: boolean;
+  somNave?: { idle: LoopSom; voo: LoopSom; g: EstadoGatilhoVoo; voava: boolean; ev: EstadoSomNave; yAnt: number | null; vy: number } | null; passoT?: number; perto?: boolean;
   /** remotos: o jato contínuo da mochila dele + a última velocidade vertical no ar (pro baque do pouso) */
   somJet?: LoopSom[] | null; vyUlt?: number;
   /** voz ao vivo (WebRTC) presa ao avatar; `falando` = segurando o push-to-talk agora */
@@ -184,7 +184,9 @@ export class CyberEngine {
   private sobreNave = false;
   // ── ÁUDIO (components/cyber/AudioCyber): loops presos aos objetos + one-shots nos eventos ──
   private som!: AudioCyberHandle;
-  private somLoops: { leito?: LoopSom; naveIdle?: LoopSom; naveVoo?: LoopSom; naveDesce?: LoopSom; naveSobe?: LoopSom; jet?: LoopSom[] } = {};
+  private somLoops: { leito?: LoopSom; naveIdle?: LoopSom; naveVoo?: LoopSom; jet?: LoopSom[] } = {};
+  /** subir/descer da MINHA nave: o som sai 1× no começo da ação (gatilhosVoo) */
+  private gatilhoNave = gatilhoVooInicial();
   private somCristais = new Map<string, LoopSom>();
   private passoT = 0; private passoI = 0; private neuronioT = 9; private somNave = somNaveInicial(); private tVivo = 0; private somEntrada = false;
   private sitT = 0; private perto = false; private falandoCom: Ator | null = null;
@@ -539,7 +541,7 @@ export class CyberEngine {
     const bn = new THREE.Object3D(); bn.position.set(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); this.cena.scene.add(bn);
     s.volumeLoop(s.loop("blackhole-hum", bn, { dist: DISTANCIA.grande }), 1);
     this.somLoops.jet = this.loopsDoJato(this.eu.av.group, DISTANCIA.eu);   // contínuo enquanto se segura o ESPAÇO
-    if (this.nave) { this.somLoops.naveIdle = s.loop("ship-idle", this.nave.group, { dist: DISTANCIA.grande }); this.somLoops.naveVoo = s.loop("ship-flight", this.nave.group, { dist: DISTANCIA.naveLocal }); this.somLoops.naveDesce = s.loop("ship-landing", this.nave.group, { dist: DISTANCIA.naveLocal }); this.somLoops.naveSobe = s.loop("ship-takeoff", this.nave.group, { dist: DISTANCIA.naveLocal }); }
+    if (this.nave) { this.somLoops.naveIdle = s.loop("ship-idle", this.nave.group, { dist: DISTANCIA.grande }); this.somLoops.naveVoo = s.loop("ship-flight", this.nave.group, { dist: DISTANCIA.naveLocal }); }
     const destravar = () => { musica().destravar(); if (!this.menu) s.ativar(); };
     if (musica().destravado && !this.menu) s.ativar();
     // na fase de CAPTURA: o canvas/HUD param a propagação dos cliques, mas o gesto tem que destravar o áudio mesmo assim
@@ -565,7 +567,7 @@ export class CyberEngine {
     const sj = somDoJato(noAr, segurando, vy), vel = sj.volume > 0.5 ? 14 : 4;
     ls.forEach((l, i) => { this.som.volumeLoop(l, i === 0 ? sj.volume : sj.volume * (segurando ? 1 : 0.5), vel); this.som.taxaLoop(l, i === 0 ? sj.taxa : sj.taxa * 1.05); });
   }
-  private soltarSomNave(a: Ator) { if (!a.somNave) return; this.som.soltarLoop(a.somNave.idle); this.som.soltarLoop(a.somNave.voo); this.som.soltarLoop(a.somNave.desce); this.som.soltarLoop(a.somNave.sobe); a.somNave = null; }
+  private soltarSomNave(a: Ator) { if (!a.somNave) return; this.som.soltarLoop(a.somNave.idle); this.som.soltarLoop(a.somNave.voo); a.somNave = null; }
   /** por quadro: leito (cross-fade com a música da intro), nave (idle/voo/decolagem/pouso), cristais, neurônios, colegas */
   private atualizarSom(dt: number) {
     const s = this.som; this.tVivo += dt;
@@ -585,10 +587,11 @@ export class CyberEngine {
       s.volumeLoop(this.somLoops.naveVoo, voando ? 0.35 + 0.65 * Math.min(1, vel) : 0);
       s.volumeLoop(this.somLoops.naveIdle, voando || !this.nave.group.visible ? 0 : 1);
       s.distanciaLoop(this.somLoops.naveIdle, this.pilotando ? DISTANCIA.naveLocal : DISTANCIA.grande);
-      // DESCENDO (botão/Shift seguro): o motor baixando, CONTÍNUO — dura exatamente o tempo do botão (ataque rápido, solta em ~0,15 s)
-      if (this.somLoops.naveDesce) { const desce = this.pilotando && !this.pousado && this.cmdVoo.descer; s.volumeLoop(this.somLoops.naveDesce, desce ? 1 : 0, desce ? 16 : 9); }
-      // SUBINDO (espaço/botão seguro): o motor empurrando, CONTÍNUO — do chão (decolagem) ao céu, enquanto segurar; no teto, some
-      if (this.somLoops.naveSobe) { const sobe = this.pilotando && this.cmdVoo.subir && this.naveEst.y < VOO.yMax - 0.3; s.volumeLoop(this.somLoops.naveSobe, sobe ? 1 : 0, sobe ? 16 : 9); }
+      // SUBIR/DESCER: o som sai UMA vez, no começo da ação (apertou), preso à nave; depois fica só o som de voo
+      const g = gatilhosVoo(this.gatilhoNave, { subindo: this.pilotando && this.cmdVoo.subir && this.naveEst.y < VOO.yMax - 0.3, descendo: this.pilotando && !this.pousado && this.cmdVoo.descer }, dt);
+      this.gatilhoNave = g.e;
+      if (g.sobe) s.tocar("ship-takeoff", null, { dist: DISTANCIA.naveLocal, seguir: this.nave.group });
+      if (g.desce) s.tocar("ship-landing", null, { dist: DISTANCIA.naveLocal, seguir: this.nave.group });
       // tocar o chão = impacto (1×)
       const n = this.naveEst, ev = eventosNave(this.somNave, { pousado: this.pousado, vy: n.vy, altura: n.y - chaoDoVoo(n, this.pilotando ? this.solidosDeVoo() : []) }, dt);
       this.somNave = ev.e;
@@ -1211,7 +1214,7 @@ export class CyberEngine {
         const voando = fund && !!p.voo, parada = fund && !voando && p.naveParada ? p.naveParada : null;
         if ((voando || parada) && !a.nave && this.cidade) {
           a.nave = criarNave({ low: this.o.low, cor: a.color }); this.cena.scene.add(a.nave.group);
-          a.somNave = { idle: this.som.loop("ship-idle", a.nave.group, { dist: DISTANCIA.grande }), voo: this.som.loop("ship-flight", a.nave.group, { dist: DISTANCIA.grande }), desce: this.som.loop("ship-landing", a.nave.group, { dist: DISTANCIA.grande }), sobe: this.som.loop("ship-takeoff", a.nave.group, { dist: DISTANCIA.grande }), voava: voando, ev: somNaveInicial(!voando), yAnt: null, vy: 0 };   // já chega voando: sem decolagem fantasma
+          a.somNave = { idle: this.som.loop("ship-idle", a.nave.group, { dist: DISTANCIA.grande }), voo: this.som.loop("ship-flight", a.nave.group, { dist: DISTANCIA.grande }), g: gatilhoVooInicial(), voava: voando, ev: somNaveInicial(!voando), yAnt: null, vy: 0 };   // já chega voando: sem decolagem fantasma
         }
         if (!voando && !parada && a.nave) { this.soltarSomNave(a); a.nave.dispose(); a.nave = null; }
         if (a.nave && a.somNave) {
@@ -1222,8 +1225,10 @@ export class CyberEngine {
           const ev = eventosNave(sn.ev, { pousado: !voando, vy: sn.vy, altura: y === null ? 0 : y - chaoDoVoo({ x: p.x, y, z: p.z }) }, dt); sn.ev = ev.e;
           const em = a.nave.group.position, d = { dist: DISTANCIA.grande };
           if (ev.pousou) this.som.tocar("ship-touchdown", em, d);
-          this.som.volumeLoop(sn.desce, voando && sn.vy < -6 ? 1 : 0, 8);   // o colega descendo: o motor baixando enquanto desce
-          this.som.volumeLoop(sn.sobe, voando && sn.vy > 6 ? 1 : 0, 8);     // …e subindo: o motor empurrando enquanto sobe
+          // o colega começou a subir/descer (pela velocidade vertical, com histerese): o som sai 1×, preso à nave dele
+          const g = gatilhosVoo(sn.g, { subindo: voando && sn.vy > (sn.g.subindo ? 3 : 6), descendo: voando && sn.vy < (sn.g.descendo ? -3 : -6) }, dt); sn.g = g.e;
+          if (g.sobe) this.som.tocar("ship-takeoff", null, { dist: DISTANCIA.grande, seguir: a.nave.group });
+          if (g.desce) this.som.tocar("ship-landing", null, { dist: DISTANCIA.grande, seguir: a.nave.group });
           sn.voava = voando; this.som.volumeLoop(a.somNave.voo, voando ? 1 : 0); this.som.volumeLoop(a.somNave.idle, voando ? 0 : 1);
         }
         a.naveP = parada;
