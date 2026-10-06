@@ -73,9 +73,12 @@ interface ResearchShellProps {
   defaultChatOpen?: boolean;
   /** O chat está em cena (sala + sub-aba visíveis) — liga o autofoco do composer. */
   chatActive?: boolean;
-  /** Sala unificada: qual visão mostrar — "chat" (conversas por tema) ou "folha" (a pesquisa em
-   *  folha, com salvar/publicar). Controlada pela sub-aba da sala; sem pill de Chat aqui dentro. */
-  unifiedView?: "chat" | "folha";
+  /** Sala unificada: qual visão mostrar — "chat" (conversas por tema), "folha" (a pesquisa em folha,
+   *  com salvar/publicar) ou "sala" (a SALA DE PESQUISA de verdade: a folha/o PDF E o chat lado a lado,
+   *  sem sub-abas — o aluno conversa sobre o documento aberto na mesma tela). */
+  unifiedView?: "chat" | "folha" | "sala";
+  /** PDFs soltos na sala (vindos do computador) → guardar, abrir no leitor e o chat ler. */
+  onDropFiles?: (files: File[]) => void;
   /** Sala unificada: algo pediu a folha (tocar/abrir um documento) estando no chat. */
   onNeedSheet?: () => void;
 }
@@ -112,6 +115,7 @@ export default function ResearchShell({
   chatActive = true,
   unifiedView,
   onNeedSheet,
+  onDropFiles,
 }: ResearchShellProps) {
   const { containerRef, posRef } = useCursorPos();
   const { citations } = useSavedCitations();
@@ -120,6 +124,7 @@ export default function ResearchShell({
   const [fileDragOver, setFileDragOver] = useState(false);
   const [chatOpen, setChatOpen] = useState(defaultChatOpen);   // chat científico ↔ trabalho
   // Sala unificada: a visão vem da sub-aba (chat × folha). Fora dela, a pill ⟁ Chat alterna.
+  const sala = unifiedView === "sala";   // folha + chat lado a lado: o chat tem coluna própria (não cobre o documento)
   const chatVisible = unifiedView ? unifiedView === "chat" : chatOpen;
   const [docsCollapsed, setDocsCollapsed] = useState(false);  // retrair a barra de documentos
 
@@ -143,6 +148,8 @@ export default function ResearchShell({
     return () => window.removeEventListener("resize", f);
   }, []);
   const mobile = vw > 0 && vw < 640;
+  // Sala (3 colunas) em tela média: recolhe a barra de documentos pra sobrar espaço pro documento e o chat.
+  useEffect(() => { if (sala && vw > 0 && vw < 1150) setDocsCollapsed(true); }, [sala, vw]);
 
   // Unificada: tocar/abrir um documento estando no chat leva pra folha (onde o documento aparece).
   const needSheet = unifiedView === "chat" ? onNeedSheet : undefined;
@@ -170,9 +177,13 @@ export default function ResearchShell({
         flexDirection: mobile ? "column" : undefined,
         gridTemplateColumns: mobile
           ? undefined
-          : (flipped
-              ? `${docsCollapsed ? "48px" : "15rem"} 1fr`
-              : `1fr ${docsCollapsed ? "48px" : "15rem"}`),
+          : sala
+            ? (flipped
+                ? `${docsCollapsed ? "48px" : "12rem"} minmax(360px, 1fr) minmax(0, 1fr)`
+                : `minmax(0, 1fr) minmax(360px, 1fr) ${docsCollapsed ? "48px" : "12rem"}`)
+            : (flipped
+                ? `${docsCollapsed ? "48px" : "15rem"} 1fr`
+                : `1fr ${docsCollapsed ? "48px" : "15rem"}`),
         gap: mobile ? 10 : 14,
         height: mobile ? "auto" : "100%",
         minHeight: mobile ? "78vh" : unifiedView ? 0 : 600,
@@ -192,7 +203,7 @@ export default function ResearchShell({
       <div
         className="relative flex flex-col min-h-0 overflow-hidden rounded-[18px] transition-all"
         style={{
-          order: flipped ? 2 : 0,
+          order: sala ? (mobile ? 1 : flipped ? 3 : 0) : flipped ? 2 : 0,
           minHeight: mobile ? "60vh" : undefined,
           flex: mobile ? "1 1 auto" : undefined,
           background: "rgba(255,255,255,0.045)",
@@ -203,7 +214,9 @@ export default function ResearchShell({
         }}
         // Arrastar um documento PRA folha → abre o PDF real (não confundir com citação: mime diferente).
         onDragOver={(e) => {
-          if (onViewDoc && e.dataTransfer.types.includes("text/zaeon-file")) {
+          const doc = onViewDoc && e.dataTransfer.types.includes("text/zaeon-file");
+          const doPc = onDropFiles && e.dataTransfer.types.includes("Files");   // PDF do computador
+          if (doc || doPc) {
             e.preventDefault();
             e.dataTransfer.dropEffect = "copy";
             setFileDragOver(true);
@@ -217,6 +230,10 @@ export default function ResearchShell({
           if (id && onViewDoc) {
             e.preventDefault();
             viewDoc(id);
+          } else if (onDropFiles && e.dataTransfer.files?.length) {
+            e.preventDefault();
+            const pdfs = Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+            if (pdfs.length) onDropFiles(pdfs);
           }
           setFileDragOver(false);
         }}
@@ -254,7 +271,7 @@ export default function ResearchShell({
           {/* Sala unificada: o chat fica MONTADO (só escondido) ao ir pra folha — uma resposta em curso
               não é derrubada, o rascunho não some e o composer não precisa remontar. Fora da sala
               unificada mantém o comportamento antigo (monta/desmonta pela pill). */}
-          {(chatVisible || unifiedView) && (
+          {!sala && (chatVisible || unifiedView) && (
             <div className="absolute inset-0 z-[55]" style={unifiedView && !chatVisible ? { display: "none" } : undefined} aria-hidden={unifiedView ? !chatVisible : undefined}>
               <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive && chatVisible} comAbas={!!unifiedView} />
             </div>
@@ -319,13 +336,37 @@ export default function ResearchShell({
 
       </div>
 
+      {/* ──────── CHAT (sala): coluna própria, ao lado do documento — conversa sobre o PDF aberto/enviado ──────── */}
+      {sala && (
+        <div
+          className="relative min-h-0 overflow-hidden rounded-[18px]"
+          style={{
+            order: mobile ? 0 : 2,
+            minHeight: mobile ? "70vh" : undefined,
+            height: mobile ? "70vh" : undefined,
+            border: "1px solid rgba(255,255,255,0.10)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
+          }}
+          // soltar um PDF em cima do chat = o mesmo que no documento
+          onDragOver={(e) => { if (onDropFiles && e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
+          onDrop={(e) => {
+            if (!onDropFiles || !e.dataTransfer.files?.length) return;
+            e.preventDefault();
+            const pdfs = Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+            if (pdfs.length) onDropFiles(pdfs);
+          }}
+        >
+          <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive} comAbas compacto />
+        </div>
+      )}
+
       {/* ──────── RIGHT PANEL — barra de documentos, RETRÁTIL (como a biblioteca da Sala de Estudos) ──────── */}
       <div
         className={mobile ? "" : "relative h-full min-h-0 overflow-hidden"}
         style={
           mobile
-            ? { maxHeight: "40vh", minHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column" }
-            : { order: flipped ? 1 : 2 }
+            ? { maxHeight: "40vh", minHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", order: 2 }
+            : { order: sala ? (flipped ? 1 : 3) : flipped ? 1 : 2 }
         }
       >
         {!mobile && docsCollapsed ? (
@@ -358,6 +399,7 @@ export default function ResearchShell({
                 onDeleteWork={onDeleteWork}
                 onRelate={onRelate}
                 onView={(f) => viewDoc(f.id)}
+                onDropFiles={onDropFiles}
                 flipped={flipped}
               />
             </div>

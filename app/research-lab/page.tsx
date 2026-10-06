@@ -125,7 +125,8 @@ import { LOUNGE_ROTA, pedeFoco } from "@/lib/ui/loungeHub";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, projetosOn, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
-import ResearchSubTabs, { PesquisasPills } from "./ResearchSubTabs";
+import { EVT_ANEXAR, EVT_ARQUIVOS } from "@/components/research/ResearchChat";
+import { blobParaDataUrl } from "@/lib/pdfStore";
 
 // Sala de Pesquisa UNIFICADA (Estudos + Pesquisa, sub-abas Chat · Estudos · Pesquisas).
 // NEXT_PUBLIC_* é embutida no build → constante de módulo. Off = layout atual intacto.
@@ -809,7 +810,7 @@ export default function HomeworkPage({
   const [internalDoc, setInternalDoc] = useState<{ title: string; content: string } | null>(null);
   // Cache do PDF no Vertex (token-saving): o chat usa o cacheName em vez de reenviar o PDF.
   const [pdfCache, setPdfCache] = useState<{ name: string; expireTime: string } | null>(null);
-  const { files: libraryFiles, save: saveLibraryFile } = useLibraryFiles();
+  const { files: libraryFiles, save: saveLibraryFile, saveFile: saveLibraryFileBytes } = useLibraryFiles();
   // Window store SUBIDO pra cá — pra o merge também abrir abas (não só o play).
   const {
     windows: wWindows,
@@ -1586,9 +1587,11 @@ export default function HomeworkPage({
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const pdfFiles = Array.from(files).filter(
-      (f) => f.type === "application/pdf",
+      (f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name),
     );
-    if (pdfFiles.length > 0) {
+    // Sala unificada: sem modal de prévia — guarda, abre no leitor e o chat já lê (o mesmo do arrastar/📎).
+    if (UNIFIED && pdfFiles.length > 0) void receberPdfs(pdfFiles);
+    else if (pdfFiles.length > 0) {
       setPendingUpload(pdfFiles[0]);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1797,12 +1800,65 @@ export default function HomeworkPage({
     void handlePlaySavedDoc(f);
   };
 
+  // ───────── SALA UNIFICADA: um caminho só pro PDF ─────────
+  // Enviar (＋ / 📎 do chat / arrastar do computador) → guarda na biblioteca (bytes no IndexedDB) → abre no leitor
+  // → ANEXA ao chat da sala (o mesmo em que o aluno conversa), que lê o PDF de verdade em cada pergunta.
+  const anexadoRef = useRef<string | null>(null);
+  const bytesDoPdf = async (f: LibraryFile): Promise<string | null> => {
+    try {
+      const r = await fetch(/^https?:\/\//i.test(f.pdfUrl) ? `/api/ai/scholar/pdf?url=${encodeURIComponent(f.pdfUrl)}` : f.pdfUrl);
+      if (!r.ok) return null;
+      return await blobParaDataUrl(await r.blob());
+    } catch { return null; }
+  };
+  const anexarAoChat = async (f: LibraryFile, perguntar?: string) => {
+    if (anexadoRef.current === f.id && !perguntar) return;
+    const dataUrl = await bytesDoPdf(f);
+    if (!dataUrl) { showToast("Não consegui ler esse PDF agora — tente enviar de novo."); return; }
+    anexadoRef.current = f.id;
+    window.dispatchEvent(new CustomEvent(EVT_ANEXAR, { detail: { id: f.id, nome: f.title, dataUrl, perguntar } }));
+  };
+  const abrirPdfNaSala = async (f: LibraryFile, perguntar?: string) => {
+    const winId = `pdf-${f.id}`;
+    setPdfDocs((prev) => ({ ...prev, [winId]: f }));
+    if (!wWindows.some((w) => w.id === winId)) wAddWindow({ id: winId, label: f.title.slice(0, 18), emoji: "📄", type: "pdfview" });
+    wSetActiveId(winId);
+    await anexarAoChat(f, perguntar);
+  };
+  const receberPdfs = async (files: File[]) => {
+    const pdfs = files.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    let primeiro: LibraryFile | null = null;
+    for (const [i, file] of pdfs.entries()) {
+      const lf = await saveLibraryFileBytes({ id: `pdf-${Date.now()}-${i}`, title: file.name.replace(/\.pdf$/i, ""), source: "upload", savedAt: Date.now() }, file);
+      if (!lf) { showToast(`Não consegui guardar "${file.name}" neste navegador.`); continue; }
+      primeiro ??= lf;
+    }
+    if (primeiro) { await abrirPdfNaSala(primeiro); showToast(`📎 ${primeiro.title} — pergunte o que quiser sobre ele no chat.`); }
+  };
+  // 📎 do composer do chat → os PDFs chegam aqui
+  useEffect(() => {
+    if (!UNIFIED) return;
+    const on = (e: Event) => { const files = (e as CustomEvent<{ files: File[] }>).detail?.files; if (files?.length) void receberPdfsRef.current(files); };
+    window.addEventListener(EVT_ARQUIVOS, on);
+    return () => window.removeEventListener(EVT_ARQUIVOS, on);
+  }, []);
+  const receberPdfsRef = useRef(receberPdfs);
+  receberPdfsRef.current = receberPdfs;
+  // Trocar de janela pra outro PDF aberto → o chat passa a ler ESSE.
+  useEffect(() => {
+    if (!UNIFIED) return;
+    const f = pdfDocs[wActiveId];
+    if (f) void anexarAoChat(f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wActiveId]);
+
   // Baixa um PDF salvo pelo proxy e devolve base64 (ou null se falhar — upload/blob/403/400).
   // Abrir o PDF REAL na folha (arrastar pra folha, ou o botão ＋ verde do ícone). Estava
   // sem fio em page.tsx (recurso perdido num refactor) → arrastar pra ver "não fazia nada".
   const handleViewDoc = async (fileId: string) => {
     const file = libraryFiles.find((f) => f.id === fileId);
     if (!file) { showToast("Documento não encontrado na biblioteca."); return; }
+    if (UNIFIED) { void abrirPdfNaSala(file); return; }   // abre no leitor E o chat passa a ler
     if (!file.pdfUrl) { showToast("Esse documento não tem PDF para visualizar."); return; }
     const winId = `pdf-${file.id}`;
     if (wWindows.some((w) => w.id === winId)) { wSetActiveId(winId); return; } // já aberto → só ativa
@@ -2614,21 +2670,15 @@ export default function HomeworkPage({
           </div>
         )}
 
-        {/* SALA UNIFICADA: abas horizontais Chat · Estudos · Pesquisas no topo da sala */}
-        {UNIFIED && activeTab === "pesquisa" && (
-          <ResearchSubTabs value={subTab} onChange={setSubTab} />
-        )}
-        {/* Pesquisas: pills "Pesquisas" (lista salva) · "Minhas pesquisas" (a folha, com Salvar/Publicar) */}
-        {UNIFIED && activeTab === "pesquisa" && subTab === "pesquisas" && (
-          <PesquisasPills value={pesqView} onChange={setPesqView} />
-        )}
+        {/* SALA UNIFICADA: sem sub-abas — a Sala de Pesquisa É a folha ("Minhas pesquisas": documento gerado /
+            leitura do PDF) com o chat ao lado, na mesma tela. */}
 
         {/* Unificada: min-h-0 (em vez de h-full) pra a sala caber ABAIXO das linhas de pills sem estourar. */}
         <div className={`flex-1 flex gap-8 overflow-hidden ${UNIFIED ? "min-h-0" : "h-full"}`}>
           {activeTab === "pesquisa" && (
             // Na sala unificada o shell fica MONTADO nas outras sub-abas (só escondido):
             // trocar pra Estudos/Pesquisas não derruba uma resposta do chat em andamento.
-            <div className={`flex-1 overflow-hidden ${UNIFIED && !(subTab === "chat" || (subTab === "pesquisas" && pesqView === "minhas")) ? "hidden" : ""}`}>
+            <div className="flex-1 overflow-hidden">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -2644,9 +2694,9 @@ export default function HomeworkPage({
                 // Sala unificada: sem toggle TCC/Artigo/Relatório — a IA infere o tipo pela
                 // intenção no chat (research_generate). O workType segue interno.
                 onWorkType={UNIFIED ? undefined : switchWorkType}
-                unifiedView={UNIFIED ? (subTab === "chat" ? "chat" : "folha") : undefined}
-                onNeedSheet={() => { setSubTab("pesquisas"); setPesqView("minhas"); }}
-                chatActive={activeTab === "pesquisa" && (!UNIFIED || subTab === "chat")}
+                unifiedView={UNIFIED ? "sala" : undefined}
+                onDropFiles={UNIFIED ? receberPdfs : undefined}
+                chatActive={activeTab === "pesquisa"}
                 onReadResearch={readResearch}
                 isReadingResearch={readingResearch}
                 onViewDoc={handleViewDoc}
@@ -2661,7 +2711,7 @@ export default function HomeworkPage({
                 relSummaries={relSummaries}
                 processingFileId={processingFileId}
                 processingStage={processingStage}
-                onPlayFile={handlePlaySavedDoc}
+                onPlayFile={UNIFIED ? (f) => void abrirPdfNaSala(f, "Resuma este documento: objetivo, método, principais resultados e conclusões (cite as páginas).") : handlePlaySavedDoc}
                 onAdd={() => fileInputRef.current?.click()}
                 sessions={sessions}
                 onNewWork={handleNewWork}
@@ -2935,7 +2985,7 @@ export default function HomeworkPage({
             <StudyRoomContent flushTop unified={UNIFIED} />
           </div>
 
-          {(UNIFIED ? activeTab === "pesquisa" && subTab === "pesquisas" && pesqView === "salvas" : activeTab === "pesquisas") && (
+          {!UNIFIED && activeTab === "pesquisas" && (
             <div className="w-full h-full overflow-y-auto custom-scrollbar">
               <ResearchesPage />
             </div>

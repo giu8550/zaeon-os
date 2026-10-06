@@ -35,7 +35,15 @@ import {
 } from "@/lib/chat/threads";
 
 // `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
-type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string };
+type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string; anexo?: string };
+
+/** O arquivo que a conversa está LENDO (PDF aberto/enviado na sala, ou uma imagem): vai junto em cada pergunta
+ *  enquanto estiver anexado — a IA (Gemini) lê o PDF de verdade, inclusive escaneado. */
+export type AnexoChat = { id: string; nome: string; dataUrl: string };
+/** A sala → o chat: "leia este arquivo" (e, opcional, já pergunte algo sobre ele). */
+export const EVT_ANEXAR = "zaeon:research:anexar";
+/** O chat → a sala: o aluno escolheu arquivo(s) no 📎 do composer (a sala guarda, abre no leitor e devolve o anexo). */
+export const EVT_ARQUIVOS = "zaeon:research:arquivos";
 
 // Deve bater com RESEARCH_SENTINEL de app/api/ai/chat/route.ts (a estruturada vem do structured-client).
 const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";
@@ -73,6 +81,7 @@ export default function ResearchChat({
   tccWorkId,
   active = true,
   comAbas = false,
+  compacto = false,
 }: {
   workType?: string | null;
   /** TCC cross-sala aberto na folha: o chat lapida ESTE documento — e tudo nasce como sugestão. */
@@ -81,7 +90,10 @@ export default function ResearchChat({
   active?: boolean;
   /** Sala unificada: mostra as conversas (um tema por aba) + "Nova" no topo do chat. */
   comAbas?: boolean;
+  /** Numa COLUNA ao lado do documento (sala): sem o recuo grande à esquerda e com letra menor. */
+  compacto?: boolean;
 }) {
+  const recuo = compacto ? "ml-0 mr-0" : "ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2";
   // Com um TCC cross-sala aberto, o padrão é LAPIDAR (sugestões com fonte verificada); o aluno
   // pode desligar pra só conversar sobre o tema.
   const [lapidar, setLapidar] = useState(true);
@@ -91,6 +103,9 @@ export default function ResearchChat({
   const [sending, setSending] = useState(false);
   const [quick, setQuick] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [anexo, setAnexo] = useState<AnexoChat | null>(null);
+  const anexoRef = useRef<AnexoChat | null>(null);
+  anexoRef.current = anexo;
   const listRef = useRef<HTMLDivElement>(null);
   const wt = workType || "trabalho";
   const msgsRef = useRef<Msg[]>([]);
@@ -151,6 +166,29 @@ export default function ResearchChat({
   // à conversa que a pediu; trocar no meio a perderia).
   const rootRef = useRef<HTMLDivElement>(null);
   const focarComposer = () => requestAnimationFrame(() => rootRef.current?.querySelector("textarea")?.focus({ preventScroll: true }));
+  const sendRef = useRef<(t?: string) => void>(() => {});
+  // A sala anexou um arquivo (PDF enviado/arrastado/aberto no leitor): a conversa passa a lê-lo.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<AnexoChat & { perguntar?: string }>).detail;
+      if (!d?.dataUrl) return;
+      setAnexo({ id: d.id, nome: d.nome, dataUrl: d.dataUrl }); anexoRef.current = { id: d.id, nome: d.nome, dataUrl: d.dataUrl };
+      if (d.perguntar) setTimeout(() => sendRef.current(d.perguntar), 0); else focarComposer();
+    };
+    window.addEventListener(EVT_ANEXAR, on);
+    return () => window.removeEventListener(EVT_ANEXAR, on);
+  }, []);
+  // 📎 do composer: PDFs vão pra sala (biblioteca + leitor, e voltam como anexo); imagem anexa direto.
+  const escolherArquivos = (files: File[]) => {
+    const pdfs = files.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (pdfs.length) window.dispatchEvent(new CustomEvent(EVT_ARQUIVOS, { detail: { files: pdfs } }));
+    const img = files.find((f) => f.type.startsWith("image/"));
+    if (img && !pdfs.length) {
+      const r = new FileReader();
+      r.onload = () => { if (typeof r.result === "string") { setAnexo({ id: `img-${Date.now()}`, nome: img.name, dataUrl: r.result }); focarComposer(); } };
+      r.readAsDataURL(img);
+    }
+  };
   const trocarAba = (id: string) => {
     if (sending || id === abaAtivaRef.current) return;
     abaAtivaRef.current = id; setAbaAtiva(id);
@@ -220,9 +258,10 @@ export default function ResearchChat({
       parts: [{ text: m.text }],
     }));
     const asstId = uid();
+    const lendo = anexoRef.current;
     setMessages((prev) => [
       ...prev,
-      { id: uid(), role: "user", text: prompt },
+      { id: uid(), role: "user", text: prompt, anexo: lendo?.nome },
       { id: asstId, role: "assistant", text: "" },
     ]);
     if (text === undefined) setInput("");   // envio direto preserva o rascunho do composer
@@ -231,7 +270,7 @@ export default function ResearchChat({
 
     // TCC cross-sala: o pedido vira SUGESTÕES no mesmo documento (busca fonte verificada →
     // propõe por seção → o crítico derruba o que não tem fonte). Nada é aplicado aqui.
-    if (modoTcc && tccWorkId) {
+    if (modoTcc && tccWorkId && !lendo) {
       setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: "Buscando fontes verificadas" } : m)));
       try {
         const d = await tccApi.revisar(tccWorkId, prompt);
@@ -252,7 +291,9 @@ export default function ResearchChat({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt, agent: "aura", surface: "pesquisa", history, systemContext: SYS(wt), stream: true,
+          prompt, agent: "aura", surface: "pesquisa", history, stream: true,
+          systemContext: SYS(wt) + (lendo ? ` O aluno anexou o arquivo "${lendo.nome}" (vai junto nesta mensagem): leia o CONTEÚDO dele e responda com base nele, citando a página/seção quando der.` : ""),
+          ...(lendo ? { fileData: lendo.dataUrl } : {}),
           // Memória por conversa: o grafo/cartolina é o da ABA ativa e o nó lembra de qual resposta veio.
           agentContext: { activeTab: "pesquisa", cartolinaScopeId: abaAtivaRef.current ?? undefined, cartolinaMsgId: asstId },
         }),
@@ -329,12 +370,13 @@ export default function ResearchChat({
       if (cerebro.ligado) setTimeout(() => void cerebro.refetch(), 1500); // o gatekeeper/fixar são fire-and-forget no servidor
     }
   }, [input, sending, messages, wt, runResearchGenerate, modoTcc, tccWorkId, cerebro]);
+  sendRef.current = (t?: string) => { void send(t); };
 
   return (
     <div ref={rootRef} className="relative h-full flex flex-col bg-white/95 dark:bg-[#0a0f1c]/95 text-slate-900 dark:text-white">
       {/* Temas da conversa (um por aba) + ＋ pra começar outro. Ficam sob a pill "Chat" da sala. */}
       {comAbas && (
-        <div className="shrink-0 px-4 sm:px-6 pt-3 flex items-start gap-2">
+        <div className={`shrink-0 ${compacto ? "px-3" : "px-4 sm:px-6"} pt-3 flex items-start gap-2`}>
           <div className="min-w-0 flex-1">
             <ThreadTabs
               threads={threads}
@@ -379,8 +421,8 @@ export default function ResearchChat({
       </AnimatePresence>
       {/* Conversa — bolhas com cara de manuscrito (serif, texto justificado).
           Sem cabeçalho/X: a alternância chat ↔ trabalho é feita pela pill ⟁ Chat. */}
-      <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-6">
-        <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2 py-5 flex flex-col gap-4">
+      <div ref={listRef} className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar ${compacto ? "px-3" : "px-4 sm:px-6"}`}>
+        <div className={`${recuo} py-5 flex flex-col gap-4`}>
           {messages.map((m) => {
             const isUser = m.role === "user";
             if (!isUser && m.answer) {
@@ -396,12 +438,15 @@ export default function ResearchChat({
             return (
               <div key={m.id} data-msg-id={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[88%] px-4 py-3 font-serif text-[22px] leading-[1.65] whitespace-pre-wrap ${
+                  className={`max-w-[88%] px-4 py-3 font-serif ${compacto ? "text-[17px]" : "text-[22px]"} leading-[1.65] whitespace-pre-wrap ${
                     isUser
                       ? "rounded-2xl bg-slate-100 text-slate-900 border border-slate-200 dark:bg-white/[0.08] dark:text-white/90 dark:border-white/10"
                       : "rounded-r-2xl rounded-bl-2xl bg-slate-50 text-slate-800 border-l-2 border-cyan-500/60 text-justify dark:bg-white/[0.03] dark:text-white/90 dark:border-cyan-400/50"
                   }`}
                 >
+                  {isUser && m.anexo && (
+                    <span className="block mb-1 font-sans text-[12px] font-semibold text-cyan-700 dark:text-cyan-300/90">📎 {m.anexo}</span>
+                  )}
                   {isUser
                     ? m.text
                     : (m.text
@@ -415,8 +460,8 @@ export default function ResearchChat({
       </div>
 
       {/* Composer (mesmo do co-working); ⟁ abre atalhos acadêmicos */}
-      <div className="px-4 sm:px-6 pb-4 pt-2">
-        <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2">
+      <div className={compacto ? "px-3 pb-3 pt-2" : "px-4 sm:px-6 pb-4 pt-2"}>
+        <div className={recuo}>
           {TCC_CROSS_ON && tccWorkId && (
             <div className="flex items-center gap-2 pb-2">
               <button
@@ -438,8 +483,18 @@ export default function ResearchChat({
             busy={sending}
             idle={messages.length === 0 && !sending}
             active={active}
-            placeholder=""
+            placeholder={anexo ? `Pergunte sobre ${anexo.nome}…` : ""}
+            onFiles={escolherArquivos}
           >
+            {anexo && (
+              <div className="flex items-center gap-2 px-1 pb-2">
+                <span className="inline-flex items-center gap-1.5 max-w-full min-h-[32px] pl-3 pr-1 rounded-full text-[12px] font-semibold bg-cyan-500/12 border border-cyan-400/40 text-cyan-800 dark:text-cyan-100" title="A conversa está lendo este arquivo">
+                  <span aria-hidden>📎</span>
+                  <span className="truncate max-w-[16rem]">{anexo.nome}</span>
+                  <button type="button" onClick={() => { setAnexo(null); focarComposer(); }} aria-label="Parar de ler este arquivo" className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-cyan-500/20">×</button>
+                </span>
+              </div>
+            )}
             {paletteOpen && (
               <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2">
                 {QUICK.map((q) => (

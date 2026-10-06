@@ -127,7 +127,9 @@ export default function CoworkComposer({
       `}</style>
       <div className="rounded-[25px] bg-white/85 dark:bg-white/[0.06] backdrop-blur-2xl border border-white/70 dark:border-white/10 px-2.5 py-2">
         {children}
-        <div className="flex items-end gap-2">
+        {/* flex-wrap + min-w no texto: numa coluna estreita os botões descem pra baixo — a caixa de texto NUNCA
+            some (com largura 0 ela nem recebe o foco, e o cursor não pisca) */}
+        <div className="flex flex-wrap items-end gap-2">
           {/* ⟁ — indicador de estado permanente + abre/fecha o Studio.
               busy → SOBE e some da barra (ele "subiu" pra virar o ícone do loading
               lá na conversa, no AuraThinking). idle → "respira". normal → giro calmo. */}
@@ -171,7 +173,7 @@ export default function CoworkComposer({
             onKeyDown={onKeyDown}
             rows={1}
             placeholder={placeholder}
-            className="flex-1 min-w-0 resize-none overflow-y-auto bg-transparent outline-none border-0
+            className="flex-1 min-w-[8rem] resize-none overflow-y-auto bg-transparent outline-none border-0
               font-tech text-[22px] leading-[1.55] py-2 text-slate-800 dark:text-white/90
               placeholder:text-slate-400 dark:placeholder:text-white/30 custom-scrollbar"
           />
