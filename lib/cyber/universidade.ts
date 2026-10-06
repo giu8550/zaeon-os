@@ -1,19 +1,23 @@
 /**
- * Cyberespaço — a UNIVERSIDADE ZAEON: um castelo de cristal NO CHÃO, o lugar de encontro dos alunos. PURO, sem three.
+ * Cyberespaço — a UNIVERSIDADE (UNILAB): um castelo de cristal FLUTUANDO num disco no céu (um pouco abaixo da Zaeon),
+ * o lugar de encontro dos alunos — chega-se pelo ELEVADOR DE LUZ (anel no chão embaixo dela; lib/cyber/plataformas).
+ * As salas são A CÉU ABERTO (sem telhado). PURO, sem three.
  * Referências: o castelo CONCÊNTRICO de Beaumaris (muralha externa com 12 torres, pátio externo, muralha interna mais
  * alta com 4 torres grandes) + as DUAS QUADRAS da Universidade de Glasgow (eixo central com o Grande Salão e a torre
  * com pináculo entre dois pátios/claustros). ~3× a área da Zaeon do céu (210 × 210 m), bem ao NORTE da praça — do lado
- * oposto ao QG do Andrei (sul).
+ * oposto ao QG do Andrei (sul). Tudo aqui (paredes, alturas, móveis) é RELATIVO ao piso do disco (`y`).
  *
  * Coordenadas: `centro` no mundo; tudo "local" é relativo a ele, SEM giro (−z = sul = rumo à praça, onde fica o portão).
  * Colisão: paredes são SEGMENTOS com espessura e altura (com vãos de porta); torres e fontes são círculos. Quem voa de
- * mochila acima de uma parede passa por cima; dentro de uma sala o teto segura; em cima do telhado não se fica (desliza
- * pra fora). As salas são amplas, com móveis (o three fica em components/cyber/Universidade.ts).
+ * mochila acima de uma parede passa por cima (as salas não têm teto). As salas são amplas, com móveis (o three fica em
+ * components/cyber/Universidade.ts).
  */
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 
 export const UNIVERSIDADE = {
   centro: { x: 0, z: 225 },
+  /** piso do disco flutuante (m): um pouco abaixo da Zaeon (230); `discoR` = raio andável (a borda é livre: cai) */
+  y: 170, discoR: 150, espessura: 8,
   externa: { meia: 105, alt: 12, esp: 2.6, portao: 14 },     // muralha externa (portão ao sul)
   interna: { meia: 80, alt: 18, esp: 3, portoes: [{ x: 0, w: 10 }, { x: -36, w: 8 }, { x: 36, w: 8 }] },   // portões ao sul
   torreCentral: { x: 0, z: -61.5, lado: 14, alt: 50, pinaculo: 22 },
@@ -64,7 +68,7 @@ function cortar(a: number, b: number, vaos: { c: number; w: number }[]): [number
   return partes.filter(([p0, p1]) => p1 - p0 > 0.05);
 }
 /** as 4 paredes de um retângulo, com vãos por lado */
-function paredesDoRetangulo(x0: number, x1: number, z0: number, z1: number, esp: number, alt: number, vaos: Partial<Record<Lado, { c: number; w: number }[]>>): Parede[] {
+export function paredesDoRetangulo(x0: number, x1: number, z0: number, z1: number, esp: number, alt: number, vaos: Partial<Record<Lado, { c: number; w: number }[]>>): Parede[] {
   const out: Parede[] = [];
   for (const [p0, p1] of cortar(x0, x1, vaos.s ?? [])) out.push({ ax: p0, az: z0, bx: p1, bz: z0, esp, alt });
   for (const [p0, p1] of cortar(x0, x1, vaos.n ?? [])) out.push({ ax: p0, az: z1, bx: p1, bz: z1, esp, alt });
@@ -192,31 +196,29 @@ export function resolverUniversidade(w: P2): P2 {
 }
 
 /**
- * Voando de mochila (mundo): paredes só barram abaixo do alto delas; dentro de uma sala o TETO segura (devolve `teto`);
- * em cima do telhado de uma sala não se fica — desliza pra fora pela borda mais perto (não se atravessa telhado).
+ * Voando de mochila (mundo; `y` RELATIVO ao piso do disco): paredes, torres, móveis e árvores só barram abaixo do alto
+ * deles — as salas são a céu aberto, dá pra subir e sair por cima.
  */
-export function resolverUniversidadeNoAr(w: P2, y: number, yAnt: number): P2 & { teto?: number } {
+export function resolverUniversidadeNoAr(w: P2, y: number): P2 {
   if (!naUniversidade(w)) return w;
   let l = localU(w);
-  const s = salaEm(l);
-  if (s && yAnt >= s.alt - 0.05 && y < s.alt + 0.5) {
-    // por cima do telhado → sai pela borda mais perto
-    const d = [l.x - s.x0, s.x1 - l.x, l.z - s.z0, s.z1 - l.z], k = d.indexOf(Math.min(...d));
-    l = k === 0 ? { x: s.x0 - 0.6, z: l.z } : k === 1 ? { x: s.x1 + 0.6, z: l.z } : k === 2 ? { x: l.x, z: s.z0 - 0.6 } : { x: l.x, z: s.z1 + 0.6 };
-  }
   l = empurrarDasParedes(l, paredesDaUniversidade(), 0.45, y);
   l = empurrarParaFora(l, TORRES.filter((t) => t.alt > y).map((t) => ({ x: t.x, z: t.z, r: t.r })));
   l = empurrarDosRetangulos(l, [...todosOsMoveis(), ...SEBES], 0.45, y);
   l = empurrarParaFora(l, ARVORES.filter((a) => a.h > y).map((a) => ({ x: a.x, z: a.z, r: a.tipo === "fruta" ? 1.6 : 2.2 })));
   if (y < 2.5) l = empurrarParaFora(l, [...FONTES, CRISTAL_ATRIO]);
-  const dentro = salaEm(l);
-  return { ...mundoU(l), ...(dentro && yAnt < dentro.alt ? { teto: dentro.alt - 2.2 } : {}) };
+  return mundoU(l);
 }
 
-/** os sólidos pra NAVE (cilindros com topo): torres + torre central (as muralhas não — a nave passa por cima) */
-export function pilaresDaUniversidade(): { x: number; z: number; r: number; topo: number }[] {
-  const tc = UNIVERSIDADE.torreCentral;
-  return [...TORRES.map((t) => ({ ...mundoU(t), r: t.r + 1, topo: t.alt + 6 })), { ...mundoU(tc), r: tc.lado * 0.75, topo: tc.alt + tc.pinaculo }];
+/** os sólidos pra NAVE/MOTO (cilindros com topo, no MUNDO): o DISCO (pousa em cima; por baixo/de lado não passa),
+ *  as torres e a torre central (as muralhas não — passa-se por cima) */
+export function pilaresDaUniversidade(): { x: number; z: number; r: number; topo: number; base?: number }[] {
+  const tc = UNIVERSIDADE.torreCentral, y = UNIVERSIDADE.y;
+  return [
+    { ...UNIVERSIDADE.centro, r: UNIVERSIDADE.discoR, topo: y, base: y - UNIVERSIDADE.espessura },
+    ...TORRES.map((t) => ({ ...mundoU(t), r: t.r + 1, topo: y + t.alt + 6, base: y })),
+    { ...mundoU(tc), r: tc.lado * 0.75, topo: y + tc.alt + tc.pinaculo, base: y },
+  ];
 }
 
 // ───────────── NATUREZA: árvores, sebes, canteiros e PLANTAÇÕES (layout; o three em components/cyber/Natureza.ts) ─────────────
@@ -247,7 +249,7 @@ export const ARVORES: Arvore[] = (() => {
   for (const p of PATIOS) for (let z = p.z0 + 10; z < p.z1 - 6; z += 13) for (const x of [p.x0 + 5, p.x1 - 5]) out.push({ x, z, h: 7 + r() * 3, tipo: "copa" });
   for (let x = -e + 8; x < e - 6; x += 7) for (let z = i + 7; z < e - 4; z += 6.5) if (longeDasTorres(x, z, 3) && Math.abs(x) > 6) out.push({ x: x + (r() - 0.5), z: z + (r() - 0.5), h: 3.6 + r() * 1.2, tipo: "fruta" });
   for (const sx of [-1, 1]) for (let k = 0; k < 5; k++) { const x = sx * (e - 12 - (k % 2) * 4), z = -e + 14 + k * 4.5; if (longeDasTorres(x, z, 3)) out.push({ x, z, h: 9 + r() * 4, tipo: "conifera" }); }
-  for (let z = -e - 60; z < -e - 6; z += 9) for (const x of [-11, 11]) out.push({ x, z, h: 8 + r() * 2, tipo: "copa" });   // avenida da praça até o portão
+  for (let z = -e - 38; z < -e - 6; z += 9) for (const x of [-11, 11]) out.push({ x, z, h: 8 + r() * 2, tipo: "copa" });   // avenida do elevador de luz até o portão (no disco)
   return out;
 })();
 
