@@ -20,6 +20,8 @@ import { pularQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
 import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type LoopSom } from "./AudioCyber";
+import { criarSomLounge, type SomLoungeHandle } from "./SomLounge";
+import type { SomLounge } from "@/lib/lounge3d/musica";
 import { pousoDoQG, rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
 import { criarCidade, type CidadeHandle } from "./Cidade";
 import { criarHoloRecado, type HoloRecadoHandle } from "./HoloRecado";
@@ -82,6 +84,10 @@ export type CyberOpts = {
   onRota?: (destino: DestinoRota | null) => void;
   /** o dono clicou na TV do lounge da Zaeon (perto dela) → abre a caixa do recado pro QG do Andrei */
   onAbrirRecado?: () => void;
+  /** o dono usou o TOCA-DISCOS do lounge (F perto dele) → abre o player de música */
+  onAbrirSom?: () => void;
+  /** URL de uma música da playlist do lounge (rota da sala); sem isto (modo solo/prévia) o lounge fica sem som */
+  urlMusica?: (arq: string) => string;
   /** as poses remotas JÁ chegam suavizadas (netcode do Colyseus: interpolação + dead reckoning) → usa direto, sem
    *  um 2º lerp (que só somaria atraso) */
   remotosSuaves?: boolean;
@@ -147,6 +153,8 @@ export class CyberEngine {
   private univ: UniversidadeHandle | null = null;
   /** a Solana House (Superteam Brasil) — disco flutuante com prédio de 3 andares + rooftop */
   private solana: SolanaHouseHandle | null = null;
+  /** o player do toca-discos do lounge (a música sai das caixas, sincronizada pra sala toda) */
+  private somLounge: SomLoungeHandle | null = null;
   /** em pé num LUGAR FLUTUANTE (universidade / Solana House) e em que andar (lib/cyber/plataformas) */
   private plat: { id: IdPlataforma; andar: number } | null = null;
   /** os anéis do elevador de luz só disparam de novo depois de sair deles */
@@ -254,6 +262,7 @@ export class CyberEngine {
     }
 
     this.som = criarAudioCyber({ camera: this.cam, cena: this.cena.scene, low });
+    if (this.cidade?.caixasLounge.length && opts.urlMusica) this.somLounge = criarSomLounge({ audio: this.som, caixas: this.cidade.caixasLounge, urlDe: opts.urlMusica });
     this.setPessoas([...opts.membros]);
     this.montarSom();
     this.ligarEntradas();
@@ -592,7 +601,10 @@ export class CyberEngine {
     const s = this.som; this.tVivo += dt;
     // a entrada no cyberespaço (tela cheia, sem menu): o whoosh toca assim que o som estiver pronto
     if (!this.somEntrada && !this.menu && s.temSom("cyber-enter")) { this.somEntrada = true; s.tocar("cyber-enter"); }
-    if (this.somLoops.leito) s.volumeLoop(this.somLoops.leito, fatorLeito(musica().estado));
+    // o leito do espaço abaixa quando a música do toca-discos está tocando e eu estou no lounge (não briga com ela)
+    const td = this.somLounge?.tocando && this.noCeu && this.cidade?.tocaDiscos ? this.cidade.tocaDiscos.getWorldPosition(this.tmp) : null;
+    const naMusica = !!td && Math.hypot(this.eu.pos.x - td.x, this.eu.pos.z - td.z) < 22;
+    if (this.somLoops.leito) s.volumeLoop(this.somLoops.leito, fatorLeito(musica().estado) * (naMusica ? 0.25 : 1));
     // cristais: só com o MEU avatar perto da base (no mesmo piso) — o ouvinte é a câmera, que fica longe do avatar
     for (const [id, l] of this.somCristais) {
       const b = this.layouts.get(id), mesmoPiso = b && (b.nivel ?? "chao") === this.nivelDe(this.o.eu.id);
@@ -665,6 +677,8 @@ export class CyberEngine {
     this.cidade?.mostrarRecadoNaTV(r?.texto ?? null);
     if (novo && this.holo) this.som.tocar("neuron-chime", this.holo.group.position.clone().setY(this.holo.group.position.y + 2.2), { dist: DISTANCIA.padrao });
   }
+  /** a playlist/estado do toca-discos do lounge (da sala) + a diferença de relógio servidor − cliente (ms) */
+  setSomLounge(som: SomLounge | null, offsetMs = 0) { this.somLounge?.aplicar(som, offsetMs); }
   /** releitura das preferências de som (o React chama ao mudar liga/desliga ou volume) */
   aplicarPrefsSom() { this.som.aplicarPrefs(); }
 
@@ -859,6 +873,10 @@ export class CyberEngine {
     if (this.perto || this.noTopo || (this.noCeu && computadorPerto(this.eu.pos, 3.2) >= 0)) return estudar;
     const m = this.motoAoAlcance(); if (m >= 0) return { id: `moto-${m}`, rotulo: "Montar na moto", fazer: () => { this.montar(m); } };
     if (this.nave && this.ehFundador(this.o.eu.id) && this.navePerto()) return { id: "embarcar", rotulo: "Embarcar na nave", fazer: () => this.o.onEmbarcar?.() };
+    if (this.noCeu && this.cidade?.tocaDiscos && this.ehFundador(this.o.eu.id)) {
+      const td = this.cidade.tocaDiscos.getWorldPosition(this.tmp);
+      if (Math.hypot(this.eu.pos.x - td.x, this.eu.pos.z - td.z) < 2.6) return { id: "som", rotulo: "Toca-discos", fazer: () => this.o.onAbrirSom?.() };
+    }
     if (this.noCeu && this.cidade?.tvLounge && this.ehFundador(this.o.eu.id)) {
       const tv = this.cidade.tvLounge.getWorldPosition(this.tmp);
       if (Math.hypot(this.eu.pos.x - tv.x, this.eu.pos.z - tv.z) < 7) return { id: "recado", rotulo: "Escrever recado pro QG", fazer: () => this.o.onAbrirRecado?.() };
@@ -1176,6 +1194,7 @@ export class CyberEngine {
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
     if (this.cidade) this.cidade.atualizar(dt, t);
+    if (this.somLounge) { this.somLounge.atualizar(dt); this.cidade?.somTocando(this.somLounge.tocando); }
     if (this.holo) {   // o holograma acompanha a base do QG (que flutua junto com o marco)
       const lay = baseNoQG(), w = lay ? localParaMundo(lay, HOLO_NA_BASE.x, HOLO_NA_BASE.z) : null;
       if (lay && w) { this.holo.group.position.set(w.x, this.yDoNivel("qg"), w.z); this.holo.group.rotation.y = lay.rot + HOLO_NA_BASE.giro; }
@@ -1339,7 +1358,7 @@ export class CyberEngine {
     for (const a of [this.eu, ...this.remotos.values()]) if (a) this.removerAtor(a);
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.som.dispose();
+    this.somLounge?.dispose(); this.som.dispose();
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of this.motos) m.h.dispose();
     if (this.hudVoo) for (const m of [this.hudVoo.marca, this.hudVoo.borda]) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
     this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
