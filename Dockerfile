@@ -88,6 +88,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 RUN useradd --create-home --uid 10001 zaeon
 # Copia o app já buildado + node_modules (inclui socket.io e o client Prisma gerado)
 COPY --from=builder /app ./
+# /app/.studio é o volume dos arquivos gravados pelo app (Studio, aulas, cartolina, músicas do lounge). O processo
+# roda como `zaeon`: a pasta tem que ser DELE — volume novo herda o dono daqui; o que já existe o deploy acerta
+# (chown no deploy.yml). Sem isso, toda gravação dava EACCES → 500.
+RUN mkdir -p /app/.studio && chown -R zaeon:zaeon /app/.studio
 USER zaeon
 
 EXPOSE 3000

@@ -44,6 +44,12 @@ describe("/api/lounge3d/[id]/musica (toca-discos do lounge)", () => {
     expect((conteudo.notes as unknown[]).length).toBe(1); expect((conteudo.somLounge as { faixas: unknown[] }).faixas).toHaveLength(1);
     expect(m.trigger).toHaveBeenCalledWith(`presence-lounge3d-${ID}`, "musica-lounge", expect.objectContaining({ agora: expect.any(Number) }));
   });
+  it("disco sem permissão (EACCES): responde com o motivo (507), não um 500 mudo, e não mexe na playlist", async () => {
+    m.escrever.mockRejectedValueOnce(Object.assign(new Error("EACCES: permission denied, mkdir '/app/.studio'"), { code: "EACCES" }));
+    const r = await POST(subir(), p);
+    expect(r.status).toBe(507); expect((await r.json()).error).toMatch(/permissão/);
+    expect(m.docUpdate).not.toHaveBeenCalled();
+  });
   it("recusa formato estranho e arquivo grande demais", async () => {
     expect((await POST(subir("virus.exe", "application/x-msdownload"), p)).status).toBe(415);
     expect((await POST(subir("grande.mp3", "audio/mpeg", 21 * 1024 * 1024), p)).status).toBe(413);
