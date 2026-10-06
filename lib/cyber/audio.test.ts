@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { CRISTAIS_PERTO, DISTANCIA, emendarLoop, recortarCanal, recortePasso, fasesDeContato, pisadasEntre, SINTESE, SONS_ARQUIVO, sintetizarBaque, sintetizarJetpack, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
+import { CRISTAIS_PERTO, DISTANCIA, GATILHO_VOO, gatilhoVooInicial, gatilhosVoo, emendarLoop, recortarCanal, recortePasso, fasesDeContato, pisadasEntre, SINTESE, SONS_ARQUIVO, sintetizarBaque, sintetizarJetpack, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
 
 describe("áudio do cyberespaço", () => {
   it("os 22 sons de arquivo existem (21 .ogg + o jato .wav) e os sintetizados têm gerador em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
@@ -95,7 +95,6 @@ describe("áudio do cyberespaço", () => {
     expect(o.length).toBe(n - x);
     expect(Math.abs(o[o.length - 1]! - d[n - x - 1]!)).toBeLessThan(1e-6);   // o fim é o original…
     expect(Math.abs(o[0]! - d[n - x]!)).toBeLessThan(1e-6);                 // …e o começo continua dele (sem salto)
-    for (const n of ["ship-landing", "ship-takeoff"] as NomeSom[]) { expect(SONS[n].loop).toBe(true); expect(SONS[n].emendar).toBeGreaterThan(0); }   // subir e descer: contínuos
   });
   it("passo no compasso do pé: as fases de contato saem da animação; o relógio cruzando a fase = 1 pisada (qualquer fps)", () => {
     const N = 64, pe = (desl: number) => Array.from({ length: N }, (_, i) => 0.13 + 0.2 * Math.max(0, Math.sin(((i / N + desl) % 1) * Math.PI * 2)));
@@ -138,5 +137,31 @@ describe("recorte do passo (sincronia correndo)", () => {
   });
   it("os 3 passos são recortados", () => {
     for (const n of PASSOS) expect(SONS[n].recortar).toBe(true);
+  });
+});
+
+describe("som de subir/descer da nave: 1× no começo da ação", () => {
+  const dt = 1 / 60;
+  it("segurar o botão toca UMA vez (não repete enquanto segura)", () => {
+    let e = gatilhoVooInicial(), n = 0;
+    for (let i = 0; i < 300; i++) { const r = gatilhosVoo(e, { subindo: true, descendo: false }, dt); e = r.e; if (r.sobe) n++; }
+    expect(n).toBe(1);
+  });
+  it("apertar/soltar rápido (ajuste de altura) não reinicia o som antes do intervalo; depois dele, toca de novo", () => {
+    let e = gatilhoVooInicial(), n = 0, t = 0;
+    const passo = (on: boolean) => { const r = gatilhosVoo(e, { subindo: false, descendo: on }, dt); e = r.e; t += dt; if (r.desce) n++; };
+    for (let k = 0; k < 4; k++) { for (let i = 0; i < 6; i++) passo(true); for (let i = 0; i < 6; i++) passo(false); }   // 4 toques em 0,8 s
+    expect(n).toBe(1);
+    while (t < GATILHO_VOO.esfria + 0.1) passo(false);
+    passo(true); expect(n).toBe(2);
+  });
+  it("subir e descer são independentes", () => {
+    let e = gatilhoVooInicial();
+    let r = gatilhosVoo(e, { subindo: true, descendo: false }, dt); e = r.e; expect(r.sobe).toBe(true);
+    r = gatilhosVoo(e, { subindo: false, descendo: true }, dt); expect(r.desce).toBe(true);
+  });
+  it("os arquivos de subir/descer são one-shot (nada de loop)", () => {
+    expect(SONS["ship-takeoff"].loop).toBe(false); expect(SONS["ship-landing"].loop).toBe(false);
+    expect(SONS["ship-takeoff"].emendar).toBeUndefined(); expect(SONS["ship-landing"].emendar).toBeUndefined();
   });
 });

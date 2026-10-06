@@ -31,8 +31,10 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   crystals: { modo: "pos", loop: true, volume: 0.3 },
   "ship-flight": { modo: "pos", loop: true, volume: 0.7 },
   "ship-idle": { modo: "pos", loop: true, volume: 0.35 },
-  "ship-takeoff": { modo: "pos", loop: true, volume: 0.85, emendar: 0.4 },   // SUBINDO: o motor empurrando — contínuo enquanto se segura o botão
-  "ship-landing": { modo: "pos", loop: true, volume: 0.8, emendar: 0.4 },   // DESCENDO: o motor baixando — contínuo enquanto se segura o botão
+  // SUBIR/DESCER: one-shot só no COMEÇO da ação (apertou) — depois fica o som normal de voo (ver gatilhosVoo). Como
+  // loops ligando/desligando a cada aperto eles repetiam e atropelavam o motor.
+  "ship-takeoff": { modo: "pos", loop: false, volume: 0.8 },
+  "ship-landing": { modo: "pos", loop: false, volume: 0.75 },
   "ship-touchdown": { modo: "pos", loop: false, volume: 0.9 },   // no instante do POUSO: impacto grave + assentamento
   // passos SUTIS: volume baixo + passa-baixa (tira o "estalo"); no compasso do pé de verdade (criarDetectorPasso).
   // `recortar`: só a batida principal (os arquivos têm respiro antes e o step-1 tem uma 2ª batida aos ~260 ms, que
@@ -142,6 +144,22 @@ export function eventosNave(e: EstadoSomNave, agora: { pousado: boolean; vy: num
   const desceu = descendo && !e.descendo && esfria <= 0;
   if (desceu) esfria = NAVE_DESCIDA.intervalo;
   return { e: { pousado: agora.pousado, descendo, esfria }, decolou, desceu, pousou };
+}
+
+/**
+ * Os sons de SUBIR e DESCER da nave tocam UMA vez, no começo da ação (a borda: não subia → sobe), nunca em loop.
+ * `esfria`: intervalo mínimo (s) entre dois disparos do mesmo som — apertar/soltar rápido (ajuste de altura) não
+ * reinicia o som em cima dele mesmo.
+ */
+export const GATILHO_VOO = { esfria: 1.4 };
+export type EstadoGatilhoVoo = { subindo: boolean; descendo: boolean; esfriaSobe: number; esfriaDesce: number };
+export const gatilhoVooInicial = (): EstadoGatilhoVoo => ({ subindo: false, descendo: false, esfriaSobe: 0, esfriaDesce: 0 });
+export function gatilhosVoo(e: EstadoGatilhoVoo, agora: { subindo: boolean; descendo: boolean }, dt: number) {
+  let esfriaSobe = Math.max(0, e.esfriaSobe - dt), esfriaDesce = Math.max(0, e.esfriaDesce - dt);
+  const sobe = agora.subindo && !e.subindo && esfriaSobe <= 0, desce = agora.descendo && !e.descendo && esfriaDesce <= 0;
+  if (sobe) esfriaSobe = GATILHO_VOO.esfria;
+  if (desce) esfriaDesce = GATILHO_VOO.esfria;
+  return { e: { subindo: agora.subindo, descendo: agora.descendo, esfriaSobe, esfriaDesce }, sobe, desce };
 }
 
 /** teto de vozes simultâneas de one-shots (os loops são fixos e contados à parte) */

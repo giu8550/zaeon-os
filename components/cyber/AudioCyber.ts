@@ -29,8 +29,9 @@ export type AudioCyberHandle = {
   taxaLoop(l: LoopSom, taxa: number): void;
   /** ajusta a distância de um loop posicional (ex.: a nave em que eu estou) */
   distanciaLoop(l: LoopSom, d: Dist): void;
-  /** one-shot: posicional num ponto do mundo (`em`) ou 2D (`em` ausente) */
-  tocar(nome: NomeSom, em?: THREE.Vector3 | null, o?: { volume?: number; dist?: Dist; taxa?: number }): void;
+  /** one-shot: posicional num ponto do mundo (`em`) ou 2D (`em` ausente); `seguir` = preso a um objeto que se move
+   *  (ex.: a nave subindo — o som vai junto, não fica pra trás) */
+  tocar(nome: NomeSom, em?: THREE.Vector3 | null, o?: { volume?: number; dist?: Dist; taxa?: number; seguir?: THREE.Object3D }): void;
   /** releitura das preferências (liga/desliga + volume mestre) */
   aplicarPrefs(): void;
   /** VOZ ao vivo de alguém (WebRTC) presa ao avatar dele: posicional (perto = mais alto). Antes do gesto que
@@ -140,7 +141,8 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
     tocar(nome, em, op = {}) {
       if (!listener || !prefs.ligado || !buffers.has(nome) || !vozes.pegar()) return;
       let holder: THREE.Object3D | null = null;
-      if (em && SONS[nome].modo === "pos") { holder = new THREE.Object3D(); holder.position.copy(em); o.cena.add(holder); }
+      if (op.seguir && SONS[nome].modo === "pos") { holder = new THREE.Object3D(); op.seguir.add(holder); }
+      else if (em && SONS[nome].modo === "pos") { holder = new THREE.Object3D(); holder.position.copy(em); o.cena.add(holder); }
       const a = criarFonte(nome, holder, op.dist ?? DISTANCIA.padrao);
       if (!a) { vozes.soltar(); holder?.removeFromParent(); return; }
       a.setVolume((op.volume ?? 1) * SONS[nome].volume);
