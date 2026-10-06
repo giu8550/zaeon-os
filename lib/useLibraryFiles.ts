@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { dataUrlParaBlob, guardarPdf, idDaUrlIdb, lerPdf, urlIdb } from "./pdfStore";
 
 // Arquivos salvos na biblioteca (aba "pesquisa"). Só arquivos (pdfUrl).
 // Espelha o padrão do useSavedCitations: localStorage + evento de sync.
@@ -46,18 +47,81 @@ function write(list: LibraryFile[]) {
   window.dispatchEvent(new CustomEvent(EVT));
 }
 
+// ── PDFs enviados pelo aluno: os BYTES moram no IndexedDB (lib/pdfStore), o localStorage guarda
+//    `pdfUrl: "idb:<id>"`. Na sessão, cada um vira um blob: URL (o que o leitor/chat usam). ──
+const urls = new Map<string, string>();     // id → blob: URL desta sessão
+const idPorUrl = new Map<string, string>(); // blob: URL → id (re-salvar da lixeira/renomear não perde o vínculo)
+function lembrar(id: string, blob: Blob): string {
+  const velho = urls.get(id); if (velho) return velho;
+  const u = URL.createObjectURL(blob); urls.set(id, u); idPorUrl.set(u, id); return u;
+}
+/** a lista como os componentes veem: `idb:` → blob: URL (os ainda não carregados ficam de fora um instante) */
+function resolver(list: LibraryFile[]): LibraryFile[] {
+  return list.flatMap((f) => { const id = idDaUrlIdb(f.pdfUrl); if (!id) return [f]; const u = urls.get(id); return u ? [{ ...f, pdfUrl: u }] : []; });
+}
+async function hidratar(list: LibraryFile[]): Promise<boolean> {
+  let mudou = false;
+  for (const f of list) {
+    const id = idDaUrlIdb(f.pdfUrl); if (!id || urls.has(id)) continue;
+    const b = await lerPdf(id); if (b) { lembrar(id, b); mudou = true; }
+  }
+  return mudou;
+}
+/** os data: URL antigos (que entupiam o localStorage) migram pro IndexedDB — uma vez por carga */
+let migrou = false;
+async function migrar(): Promise<void> {
+  if (migrou) return; migrou = true;
+  const list = read(); let mudou = false; const out: LibraryFile[] = [];
+  for (const f of list) {
+    if (f.pdfUrl.startsWith("data:")) { const b = dataUrlParaBlob(f.pdfUrl); if (b && (await guardarPdf(f.id, b))) { lembrar(f.id, b); out.push({ ...f, pdfUrl: urlIdb(f.id) }); mudou = true; continue; } }
+    out.push(f);
+  }
+  if (mudou) try { write(out); } catch { /* ignore */ }
+}
+/** o registro que vai pro localStorage: PDF local (data:/blob:) → bytes no IndexedDB + `idb:<id>` */
+async function paraGuardar(f: LibraryFile): Promise<LibraryFile> {
+  const u = f.pdfUrl;
+  if (u.startsWith("blob:")) {
+    const id = idPorUrl.get(u); if (id) return { ...f, pdfUrl: urlIdb(id) };
+    try { const b = await (await fetch(u)).blob(); if (await guardarPdf(f.id, b)) { lembrar(f.id, b); return { ...f, pdfUrl: urlIdb(f.id) }; } } catch { /* blob morto */ }
+    return f;
+  }
+  if (u.startsWith("data:")) { const b = dataUrlParaBlob(u); if (b && (await guardarPdf(f.id, b))) { lembrar(f.id, b); return { ...f, pdfUrl: urlIdb(f.id) }; } }
+  return f;
+}
+/** o registro DURÁVEL de um arquivo da lista (blob: da sessão → `idb:<id>`) — pra guardar em outro lugar (lixeira) */
+export function registroDuravel(f: LibraryFile): LibraryFile {
+  const id = idPorUrl.get(f.pdfUrl); return id ? { ...f, pdfUrl: urlIdb(id) } : f;
+}
+/** grava e devolve o arquivo JÁ resolvido (pdfUrl utilizável agora); null = não deu pra guardar */
+async function gravar(g: LibraryFile): Promise<LibraryFile | null> {
+  try { write(upsertLibraryFile(read(), g)); } catch { return null; }   // cota do localStorage (só metadados: raro)
+  const id = idDaUrlIdb(g.pdfUrl); return id ? { ...g, pdfUrl: urls.get(id) ?? g.pdfUrl } : g;
+}
+
 export function useLibraryFiles() {
   const [files, setFiles] = useState<LibraryFile[]>([]);
   useEffect(() => {
-    const sync = () => setFiles(read());
+    let vivo = true;
+    const sync = () => {
+      setFiles(resolver(read()));
+      void hidratar(read()).then((m) => { if (m && vivo) setFiles(resolver(read())); });
+    };
+    void migrar().then(sync);
     sync();
     window.addEventListener(EVT, sync);
     window.addEventListener("storage", sync);
-    return () => { window.removeEventListener(EVT, sync); window.removeEventListener("storage", sync); };
+    return () => { vivo = false; window.removeEventListener(EVT, sync); window.removeEventListener("storage", sync); };
   }, []);
-  const save = useCallback((f: LibraryFile) => { write(upsertLibraryFile(read(), f)); }, []);
+  /** salva um registro (PDF local em data:/blob: vai pro IndexedDB) → o arquivo resolvido, ou null */
+  const save = useCallback(async (f: LibraryFile) => gravar(await paraGuardar(f)), []);
+  /** salva um ARQUIVO enviado (sem passar por base64) → o arquivo resolvido, ou null se não coube */
+  const saveFile = useCallback(async (meta: Omit<LibraryFile, "pdfUrl">, blob: Blob): Promise<LibraryFile | null> => {
+    if (await guardarPdf(meta.id, blob)) { lembrar(meta.id, blob); return gravar({ ...meta, pdfUrl: urlIdb(meta.id) }); }
+    return null;
+  }, []);
   const rename = useCallback((id: string, title: string) => { write(renameLibraryFile(read(), id, title)); }, []);
-  const remove = useCallback((id: string) => { write(read().filter((x) => x.id !== id)); }, []);
+  const remove = useCallback((id: string) => { write(read().filter((x) => x.id !== id)); }, []);   // os bytes ficam (a lixeira restaura)
   const clear = useCallback(() => { write([]); }, []);
-  return { files, save, rename, remove, clear };
+  return { files, save, saveFile, rename, remove, clear };
 }

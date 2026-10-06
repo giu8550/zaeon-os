@@ -1,5 +1,5 @@
 "use client";
-import { useLibraryFiles, type LibraryFile } from "@/lib/useLibraryFiles";
+import { registroDuravel, useLibraryFiles, type LibraryFile } from "@/lib/useLibraryFiles";
 import DocIcon from "./DocIcon";
 import CitationsPanel from "./CitationsPanel";
 import DraggableDock from "./DraggableDock";
@@ -28,6 +28,8 @@ interface DocumentDesktopProps {
   onRelate?: (sourceId: string, targetId: string) => void;
   /** Abrir o PDF na folha (＋ verde / soltar na folha). */
   onView?: (file: LibraryFile) => void;
+  /** PDFs soltos no painel (do computador) → guardar, abrir no leitor e anexar ao chat */
+  onDropFiles?: (files: File[]) => void;
   /** Layout espelhado (canhoto) — o painel de documentos vai pra esquerda. */
   flipped?: boolean;
 }
@@ -48,6 +50,7 @@ export default function DocumentDesktop({
   onDeleteWork,
   onRelate,
   onView,
+  onDropFiles,
   flipped,
 }: DocumentDesktopProps) {
   const { files, save: saveLibraryFile, remove: removeLibraryFile } = useLibraryFiles();
@@ -55,27 +58,16 @@ export default function DocumentDesktop({
   const [showTrash, setShowTrash] = useState(false);
   const activeFile = processingFileId ? files.find((f) => f.id === processingFileId) : null;
 
-  const handleDelete = (f: LibraryFile) => { removeLibraryFile(f.id); trash(f); };
+  const handleDelete = (f: LibraryFile) => { removeLibraryFile(f.id); trash(registroDuravel(f)); };
   const handleRestore = (id: string) => { const it = restore(id); if (it) { const { deletedAt, ...rest } = it; saveLibraryFile(rest); } };
 
-  // A5: arrastar um PDF pra dentro do painel → salva (data: URL persiste) e abre no leitor.
+  // A5: arrastar um PDF pra dentro do painel → o mesmo caminho do ＋/📎: guarda, abre no leitor e o chat lê.
   const [dragOver, setDragOver] = useState(false);
   const handleDropPdf = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
     const pdfs = Array.from(e.dataTransfer.files || []).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
-    if (!pdfs.length) return;
-    pdfs.forEach((file, idx) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = String(reader.result || "");
-        if (!dataUrl.startsWith("data:")) return;
-        const lf: LibraryFile = { id: `pdf-${Date.now()}-${idx}`, title: file.name.replace(/\.pdf$/i, ""), pdfUrl: dataUrl, savedAt: Date.now() };
-        saveLibraryFile(lf);
-        if (idx === 0) onView?.(lf); // abre o 1º no leitor
-      };
-      reader.readAsDataURL(file);
-    });
+    if (pdfs.length) onDropFiles?.(pdfs);
   };
 
   // Honest two-stage progress: 25% while downloading PDF, 70% while AI analyses, 100% when done.

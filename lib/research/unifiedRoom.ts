@@ -7,7 +7,9 @@
  *
  * DUAS SALAS, cada uma = chat + abas (reorganização do handoff UX-resposta):
  *   Sala de Estudos  (tab "sala-de-estudos") = Chat · Meus Estudos · Estudos
- *   Sala de Pesquisa (tab "pesquisa")        = Chat · Pesquisas  (+ "Minhas pesquisas", a folha)
+ *   Sala de Pesquisa (tab "pesquisa")        = UMA tela só: a folha ("Minhas pesquisas" — documento gerado /
+ *                                             leitura do PDF) com o chat ao lado (sem sub-abas desde out/2026;
+ *                                             `?sub=` antigo é aceito e ignorado)
  * Alias que sobrou (link antigo não quebra): "pesquisas" → pesquisa + sub-aba pesquisas.
  * ("sala-de-estudos" voltou a ser uma sala de topo; "estudos" deixou de ser sub-aba da Pesquisa.)
  * A aba PROJETOS (Zaeon Code) fica escondida atrás de NEXT_PUBLIC_PROJETOS (off): o código não foi apagado.

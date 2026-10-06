@@ -85,7 +85,7 @@ export function useAutoFoco(
   useEffect(() => {
     if (!ativo || typeof window === "undefined") return;
     let quadro = 0;
-    const limite = performance.now() + prazoMs;
+    let limite = performance.now() + prazoMs;
 
     const tentar = () => {
       const el = ref.current;
@@ -107,7 +107,18 @@ export function useAutoFoco(
       }
     };
 
+    // Voltou pra aba/janela (ou a página demorou a pintar e o prazo passou): se NADA tem o foco, tenta de novo —
+    // o cursor volta a piscar na barra. Quem clicou/escreve em outro lugar não perde o foco (body = ninguém).
+    const aoVoltar = () => {
+      if (document.visibilityState !== "visible") return;
+      const a = document.activeElement;
+      if (a && a !== document.body) return;
+      cancelAnimationFrame(quadro); limite = performance.now() + prazoMs; quadro = requestAnimationFrame(tentar);
+    };
+
     quadro = requestAnimationFrame(tentar);
-    return () => cancelAnimationFrame(quadro);
+    window.addEventListener("focus", aoVoltar);
+    document.addEventListener("visibilitychange", aoVoltar);
+    return () => { cancelAnimationFrame(quadro); window.removeEventListener("focus", aoVoltar); document.removeEventListener("visibilitychange", aoVoltar); };
   }, [ref, ativo, prazoMs]);
 }

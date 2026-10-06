@@ -190,15 +190,23 @@ export async function POST(req: Request) {
             const m = /^data:([^;]+);base64,(.*)$/s.exec(fileData);
             if (m) { mime = m[1]; b64 = m[2]; }
 
-            // PDFs grandes estouram o limite inline do Gemini → extrai o TEXTO (pdfjs).
+            // PDF dentro do limite: vai INLINE e o Gemini lê nativamente (texto, tabelas, figuras, escaneado) — o
+            // caminho mais barato e completo. PDFs grandes estouram o limite inline → extrai o TEXTO: primeiro a
+            // leitura ESTRUTURADA do pdf-loader (opendataloader-pdf: ordem de leitura, títulos, tabelas em
+            // markdown); sem o serviço, o texto cru do pdf.js.
             const TOO_BIG = b64.length > 18_000_000; // ~13.5MB em base64
             if (mime === "application/pdf" && TOO_BIG) {
                 try {
-                    const { extractPdfParagraphs } = await import("@/lib/scholar/pdf");
+                    const { extractPdfParagraphs, extractPdfStructured } = await import("@/lib/scholar/pdf");
                     const bytes = Uint8Array.from(Buffer.from(b64, "base64"));
-                    const paras = await extractPdfParagraphs(bytes).catch(() => [] as any[]);
-                    const text = (paras as any[]).map((p) => p.text).join("\n\n").slice(0, 30000);
-                    if (text) parts.push({ text: `=== TEXTO EXTRAÍDO DO PDF (documento grande — texto puro, sem layout) ===\n${text}` });
+                    const est = await extractPdfStructured(bytes);
+                    const md = est?.markdown?.trim() || est?.paragraphs?.map((p) => p.text).join("\n\n") || "";
+                    if (md) parts.push({ text: `=== CONTEÚDO DO PDF (documento grande — leitura estruturada, em markdown) ===\n${md.slice(0, 120_000)}` });
+                    else {
+                        const paras = await extractPdfParagraphs(bytes).catch(() => [] as any[]);
+                        const text = (paras as any[]).map((p) => `[p.${p.page}] ${p.text}`).join("\n\n").slice(0, 120_000);
+                        if (text) parts.push({ text: `=== TEXTO EXTRAÍDO DO PDF (documento grande — texto puro, sem layout) ===\n${text}` });
+                    }
                 } catch { /* se a extração falhar, segue sem o PDF (responde com o que tiver) */ }
             } else {
                 // imagem (Gemini Vision) ou PDF dentro do limite → inline com o mime certo
