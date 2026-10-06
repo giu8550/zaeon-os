@@ -15,6 +15,8 @@ import { ehTeclaFalar } from "@/lib/cyber/voz";
 import type { CanalVoz } from "@/components/lounge/salaColyseus";
 import Joystick from "./Joystick";
 import ControlesVoo from "./ControlesVoo";
+import TocaDiscos, { type ApiMusica } from "./TocaDiscos";
+import type { SomLounge } from "@/lib/lounge3d/musica";
 
 export type CenaCyberProps = {
   /** "janela": prévia na landing (começa no menu, sem rede). "tela": cyberespaço inteiro (já em play, com a sala). */
@@ -39,6 +41,11 @@ export type CenaCyberProps = {
   recadoQG?: RecadoQG | null;
   /** o DONO manda (texto) ou apaga (null) o recado — o servidor confere a sessão */
   enviarRecado?: (texto: string | null) => Promise<{ ok: boolean; erro?: string }>;
+  /** o TOCA-DISCOS do lounge da Zaeon: a playlist/estado da sala, a diferença de relógio (servidor − cliente) e as
+   *  ações do dono (subir/controlar/tirar) + a URL de cada música */
+  somLounge?: SomLounge | null;
+  offsetMusica?: number;
+  musica?: (ApiMusica & { urlDe(arq: string): string }) | null;
   /** VOZ (push-to-talk, NEXT_PUBLIC_VOZ=on + colyseus): o signaling da room e quem está online (userIds) */
   canalVoz?: CanalVoz | null;
   onlineIds?: string[];
@@ -76,6 +83,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   // VOZ: segurar G (ou o botão no celular) = falar
   const voz = useRef<VozHandle | null>(null), [falandoEu, setFalandoEu] = useState(false);
   const comVoz = tela && vozLigada() && !!p.canalVoz;
+  const [somAberto, setSomAberto] = useState(false);
   const [recadoAberto, setRecadoAberto] = useState(false), [recadoTxt, setRecadoTxt] = useState(""), [recadoEnviando, setRecadoEnviando] = useState(false);
   const mudarSom = (n: { ligado: boolean; volume: number }) => {
     setSom(n);
@@ -138,6 +146,8 @@ export default function CenaCyber(p: CenaCyberProps) {
       onVoo: setVoo,
       onRota: setRota,
       remotosSuaves: transporteRealtime() === "colyseus",
+      onAbrirSom: () => { if (!cb.current.souFundador || !cb.current.musica) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(true); },
+      urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon manda recados pro QG."); return; } setRecadoTxt(""); setRecadoAberto(true); },
     }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
       .catch(() => { if (!cancelado) setFalha(true); });
@@ -168,7 +178,9 @@ export default function CenaCyber(p: CenaCyberProps) {
   // OLHAR LIVRE (mouse travado): abriu um painel → solta o mouse pra clicar nele; Enter (fora de um campo) → solta e
   // foca o chat (dá pra falar sem precisar do Esc antes)
   const chatRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => { if (poiAberto || recadoAberto) engine.current?.soltarMouse(); }, [poiAberto, recadoAberto]);
+  useEffect(() => { if (poiAberto || recadoAberto || somAberto) engine.current?.soltarMouse(); }, [poiAberto, recadoAberto, somAberto]);
+  // o toca-discos: o estado da sala vai pro player (a música sai das caixas do lounge, sincronizada)
+  useEffect(() => { engine.current?.setSomLounge(p.somLounge ?? null, p.offsetMusica ?? 0); }, [p.somLounge, p.offsetMusica, pronto]);
   useEffect(() => {
     const enter = (e: KeyboardEvent) => {
       const a = document.activeElement, campo = !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || (a as HTMLElement).isContentEditable);
@@ -319,6 +331,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {!menu && qg.noCeu && !qg.pilotando && (
         <button type="button" onClick={() => comFade(() => engine.current?.voltarDaCidade())} className="absolute right-3 top-[64px] z-30 min-h-[44px] rounded-full border border-amber-200/40 bg-[#1a0f08]/80 px-4 text-xs font-semibold text-amber-100 backdrop-blur">↩ Voltar à praça</button>
       )}
+      {somAberto && p.musica && <TocaDiscos som={p.somLounge ?? null} offsetMs={p.offsetMusica ?? 0} api={p.musica} onFechar={() => setSomAberto(false)} />}
       {recadoAberto && (
         <div role="dialog" aria-modal="true" aria-label="Recado pro QG do Andrei" className="absolute inset-0 z-50 flex items-center justify-center bg-[#03030a]/60 px-4" onClick={() => setRecadoAberto(false)}>
           <div className="w-full max-w-[420px] rounded-2xl border border-cyan-300/30 bg-[#070c22]/95 p-4 text-sky-100 shadow-[0_0_40px_rgba(102,230,255,.15)]" onClick={(e) => e.stopPropagation()}>

@@ -100,7 +100,7 @@ export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = {
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
  *  quem precisa SUMIR de verdade usa `modelo: "linear"` (ganho chega a 0 no `max`). */
 export type Dist = { ref: number; max: number; rolloff: number; modelo?: "inverse" | "linear" };
-export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal", Dist> = {
+export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica", Dist> = {
   padrao: { ref: 6, max: 60, rolloff: 1.2 },
   perto: { ref: 2.5, max: 22, rolloff: 1.4 },       // passos/pulo dos COLEGAS (coisas pequenas)
   eu: { ref: 12, max: 60, rolloff: 1 },             // os MEUS passos/pulo: a câmera (o ouvinte) fica ~8–10 m atrás do avatar
@@ -108,6 +108,7 @@ export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | 
   voz: { ref: 3, max: 28, rolloff: 1, modelo: "linear" },        // VOZ por proximidade: cheia de perto, some aos ~28 m
   grande: { ref: 14, max: 160, rolloff: 1 },        // buraco negro, nave dos outros
   naveLocal: { ref: 40, max: 400, rolloff: 0.25 },  // a nave em que EU estou: não vira de lado ao girar a câmera
+  musica: { ref: 9, max: 48, rolloff: 1, modelo: "linear" },     // as CAIXAS DE SOM do lounge: cheio dentro dele, some na ilha
 };
 
 /** cristais da base: só se ouvem com o AVATAR perto dela (cheio até 4 m, some aos 12 m) — o ouvinte é a câmera */

@@ -38,8 +38,9 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
   const me = await eu(); if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const s = await salaDoMembro(params.id, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!me.fundador) return NextResponse.json({ error: NEGADO }, { status: 403 });
-  const { notes, artifacts } = lerConteudo(s.content);
-  await prisma.collabDoc.update({ where: { id: s.id }, data: { content: JSON.stringify({ notes, artifacts }) } });
+  const { recadoQG: _apagado, ...resto } = lerConteudo(s.content);   // apaga SÓ o recado (notas e a playlist ficam)
+  void _apagado;
+  await prisma.collabDoc.update({ where: { id: s.id }, data: { content: JSON.stringify(resto) } });
   await triggerSafe(canalSala(s.id), EV_RECADO, { recado: null });
   return NextResponse.json({ ok: true });
 }

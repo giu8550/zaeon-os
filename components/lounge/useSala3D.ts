@@ -8,14 +8,15 @@
  *   sincronizado, interpolação + dead reckoning, sem custo por mensagem); chat/conteúdo/recado seguem no Pusher.
  * Presença/chat são efêmeros; só notas/artefatos persistem.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type PusherClient from "pusher-js";
 import { sanitizarPresenca } from "@/lib/lounge3d/sala";
 import { HEARTBEAT_MS, HELLO_JITTER_MS, poseMudou, type Pose } from "@/lib/lounge3d/pose";
 import { classificarErroPusher, ehFalhaDeConexao, type EstadoRealtime, type MotivoErro } from "@/lib/lounge3d/realtimeEstado";
 import { POSE_HZ_COLYSEUS, transporteRealtime } from "@/lib/lounge3d/realtime";
 import { conectarColyseus, type CanalVoz, type ConexaoColyseus } from "./salaColyseus";
-import { EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
+import { sanitizarSom, type AcaoSom } from "@/lib/lounge3d/musica";
+import { EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
 
 export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; qg?: boolean };
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
@@ -134,6 +135,8 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       ch.bind(EV_CHAT, (m: MensagemChat) => setChat((c) => [...c.slice(-199), m]));
       // recado do dono pro QG (holograma ao lado da tela do Andrei): chega na hora e fica no conteúdo
       ch.bind(EV_RECADO, (d: { recado: RecadoQG | null }) => setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, recadoQG: d.recado } } : s)));
+      // o toca-discos do lounge (playlist/controle do dono): o relógio do servidor vem junto (sincronia da música)
+      ch.bind(EV_MUSICA, (d: { som: unknown; agora?: number }) => aplicarMusicaRef.current(d));
       ch.bind(EV_CONTEUDO, (d: { fromUserId: string; conteudo: ConteudoSala; title?: string }) => {
         if (d.fromUserId === euId) return; // o autor já aplicou localmente
         setSala((s) => (s ? { ...s, conteudo: d.conteudo, title: d.title ?? s.title } : s));
@@ -215,6 +218,30 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     if (d?.conteudo) setSala((s) => (s ? { ...s, conteudo: d.conteudo, title: d.title ?? s.title } : s));
   }, [salaId]);
 
+  /** SOM DO LOUNGE: aplica um estado vindo do servidor (evento ou resposta) e acerta o relógio (servidor − cliente) */
+  const [offsetMusica, setOffsetMusica] = useState(0);
+  const aplicarMusica = useCallback((d: { som: unknown; agora?: number }) => {
+    if (typeof d.agora === "number" && Number.isFinite(d.agora)) setOffsetMusica(d.agora - Date.now());
+    const som = sanitizarSom(d.som);
+    setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, somLounge: som && som.faixas.length ? som : null } } : s));
+  }, []);
+  const aplicarMusicaRef = useRef(aplicarMusica); aplicarMusicaRef.current = aplicarMusica;
+  /** o DONO mexe no toca-discos: sobe uma música, controla (tocar/pausar/parar/próxima/anterior/ir) ou tira uma faixa */
+  const musica = useMemo(() => {
+    const resp = async (r: Response): Promise<{ ok: boolean; erro?: string }> => {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, erro: (d as { error?: string })?.error ?? "Não deu." };
+      aplicarMusica(d as { som: unknown; agora?: number }); return { ok: true };
+    };
+    const url = salaId ? `/api/lounge3d/${salaId}/musica` : "";
+    return {
+      async subir(file: File, dur: number, nome: string) { if (!url) return { ok: false, erro: "Sem sala." }; const f = new FormData(); f.append("file", file); f.append("dur", String(dur)); f.append("nome", nome); return resp(await fetch(url, { method: "POST", body: f })); },
+      async controlar(acao: AcaoSom, i?: number) { if (!url) return { ok: false, erro: "Sem sala." }; return resp(await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, i }) })); },
+      async remover(id: string) { if (!url) return { ok: false, erro: "Sem sala." }; return resp(await fetch(`${url}?faixa=${encodeURIComponent(id)}`, { method: "DELETE" })); },
+      urlDe: (arq: string) => `${url}/${arq}`,
+    };
+  }, [salaId, aplicarMusica]);
+
   /** o DONO manda (ou apaga, `texto` null) o recado pro QG — o servidor confere a sessão; aplica aqui na hora */
   const enviarRecado = useCallback(async (texto: string | null): Promise<{ ok: boolean; erro?: string }> => {
     if (!salaId) return { ok: false, erro: "Sem sala." };
@@ -226,5 +253,5 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     return { ok: true };
   }, [salaId]);
 
-  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, canalVoz, recadoQG: sala?.conteudo.recadoQG ?? null, recarregar: carregar };
+  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, canalVoz, recadoQG: sala?.conteudo.recadoQG ?? null, somLounge: sala?.conteudo.somLounge ?? null, offsetMusica, musica, recarregar: carregar };
 }

@@ -102,6 +102,8 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     { tipo: "tv", x: 0, z: -7.1, rot: 0, larg: 6.4, prof: 0.6 },
     { tipo: "caixaSom", x: -4.6, z: -5.6, rot: 0.55, larg: 0.95, prof: 0.95 },
     { tipo: "caixaSom", x: 4.6, z: -5.6, rot: -0.55, larg: 0.95, prof: 0.95 },
+    // o TOCA-DISCOS ao lado da caixa da esquerda, virado pro meio da sala: F aqui = o player de música do dono
+    { tipo: "tocaDiscos", x: -6.3, z: -3.9, rot: 1.02, larg: 1.2, prof: 0.7 },
     { tipo: "sofa", x: 0, z: 0.9, rot: Math.PI, larg: 6, prof: 1.4 },
     { tipo: "sofa", x: -3.8, z: -1.7, rot: Math.PI / 2, larg: 3, prof: 1.3 },
     { tipo: "sofa", x: 3.8, z: -1.7, rot: -Math.PI / 2, larg: 3, prof: 1.3 },

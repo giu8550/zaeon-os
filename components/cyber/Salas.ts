@@ -20,6 +20,10 @@ export type SalasHandle = {
   tv: THREE.Mesh | null;
   /** mostra na TV o último recado enviado ao QG (null = some) */
   mostrarRecado(texto: string | null): void;
+  /** as CAIXAS DE SOM do lounge (a música sai delas) e o TOCA-DISCOS (onde se abre o player) */
+  caixas: THREE.Object3D[]; tocaDiscos: THREE.Object3D | null;
+  /** tem música tocando? (as caixas pulsam e o disco gira) */
+  somTocando(on: boolean): void;
   atualizar(dt: number, t: number): void;
 };
 
@@ -42,7 +46,8 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   }, true);
   const texTapete = tela(256, 192, (g, w, h) => { g.fillStyle = "#1d1236"; g.fillRect(0, 0, w, h); for (let k = 0; k < 6; k++) { g.strokeStyle = k % 2 ? "rgba(185,140,255,.55)" : "rgba(102,230,255,.35)"; g.lineWidth = 3; g.strokeRect(10 + k * 14, 10 + k * 12, w - 20 - k * 28, h - 20 - k * 24); } });
 
-  let tvTela: THREE.Mesh | null = null, recadoFaixa: THREE.Mesh | null = null;
+  let tvTela: THREE.Mesh | null = null, recadoFaixa: THREE.Mesh | null = null, tocando = false, tocaDiscos: THREE.Object3D | null = null;
+  const caixasSom: THREE.Object3D[] = [];
   const cRecado = document.createElement("canvas"); cRecado.width = 1024; cRecado.height = 220;
   const texRecado = new THREE.CanvasTexture(cRecado); o.texturas.push(texRecado);
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
@@ -57,13 +62,27 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     },
     caixaSom(p, m) {
       caixa(p, m.larg, 2.3, m.prof, escuro, 0, 1.15, 0);
+      const boca = new THREE.Object3D(); boca.position.set(0, 1.2, m.prof / 2); p.add(boca); caixasSom.push(boca);   // de onde a música sai
       const aneis: THREE.Mesh[] = [];
       for (const [y, r] of [[0.75, 0.34], [1.65, 0.22]] as const) {
         const cone = new THREE.Mesh(new THREE.CircleGeometry(r, 24), new THREE.MeshStandardMaterial({ color: 0x05070d, roughness: 0.8 })); cone.position.set(0, y, m.prof / 2 + 0.01); p.add(cone);
         const anel = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.06, 32), basica(0xb98cff, 0.85, true)); anel.position.set(0, y, m.prof / 2 + 0.02); p.add(anel); aneis.push(anel);
       }
       caixa(p, m.larg * 0.8, 0.05, 0.05, basica(0x66e6ff, 0.9, true), 0, 2.2, m.prof / 2);
-      anim.push((_, t) => { const b = 1 + 0.07 * Math.max(0, Math.sin(t * 7.5)) * (0.6 + 0.4 * Math.sin(t * 0.9)); for (const a of aneis) a.scale.setScalar(b); });
+      anim.push((_, t) => { const b = 1 + (tocando ? 0.12 : 0.03) * Math.max(0, Math.sin(t * 7.5)) * (0.6 + 0.4 * Math.sin(t * 0.9)); for (const a of aneis) a.scale.setScalar(b); });
+    },
+    tocaDiscos(p, m) {
+      // móvel baixo + o prato girando com o disco, o braço da agulha e um friso que acende quando toca
+      caixa(p, m.larg, 0.85, m.prof, escuro, 0, 0.425, 0);
+      caixa(p, m.larg + 0.04, 0.06, m.prof + 0.04, new THREE.MeshStandardMaterial({ color: 0x1a1430, roughness: 0.3, metalness: 0.6 }), 0, 0.88, 0);
+      const texDisco = tela(256, 256, (g, w) => { g.fillStyle = "#06060a"; g.beginPath(); g.arc(w / 2, w / 2, w / 2, 0, Math.PI * 2); g.fill(); g.strokeStyle = "rgba(185,140,255,.25)"; for (let r = 30; r < w / 2; r += 5) { g.beginPath(); g.arc(w / 2, w / 2, r, 0, Math.PI * 2); g.stroke(); } g.fillStyle = "#b98cff"; g.beginPath(); g.arc(w / 2, w / 2, 26, 0, Math.PI * 2); g.fill(); g.fillStyle = "#66e6ff"; g.fillRect(w / 2 - 20, w / 2 - 3, 18, 6); });
+      const disco = new THREE.Mesh(new THREE.CircleGeometry(0.27, 40), new THREE.MeshStandardMaterial({ map: texDisco, roughness: 0.25, metalness: 0.4 })); disco.rotation.x = -Math.PI / 2; disco.position.set(-0.18, 0.925, 0); p.add(disco);
+      const braco = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.34), new THREE.MeshStandardMaterial({ color: 0xc8ccd8, roughness: 0.2, metalness: 0.9 })); braco.position.set(0.18, 0.95, 0.02); braco.rotation.y = 0.5; p.add(braco);
+      const friso = caixa(p, m.larg * 0.9, 0.04, 0.04, basica(0x66e6ff, 0.9, true), 0, 0.6, m.prof / 2 + 0.01);
+      // botões (⏮ ⏯ ⏭) acesos na frente do tampo
+      for (const [x, c] of [[0.2, 0x9affd0], [0.32, 0x66e6ff], [0.44, 0xb98cff]] as const) caixa(p, 0.07, 0.025, 0.07, basica(c, 0.9, true), x - 0.05, 0.93, 0.18);
+      tocaDiscos = p;
+      anim.push((dt, t) => { if (tocando) disco.rotation.z -= dt * 3.5; (friso.material as THREE.MeshBasicMaterial).opacity = tocando ? 0.6 + 0.35 * Math.sin(t * 4) : 0.35; });
     },
     sofa(p, m) {
       const vel = new THREE.MeshStandardMaterial({ color: 0x3b2470, roughness: 0.85, metalness: 0.05, emissive: 0x1a0f3a, emissiveIntensity: 0.4 });
@@ -108,7 +127,8 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     for (const m of MOVEIS[nome]) { const p = new THREE.Group(); p.position.set(m.x, 0.16, m.z); p.rotation.y = m.rot; g.add(p); MOVEL[m.tipo]?.(p, m, tema); }
   }
   return {
-    alvos, tv: tvTela,
+    alvos, tv: tvTela, caixas: caixasSom, tocaDiscos,
+    somTocando(on) { tocando = on; },
     mostrarRecado(texto) {
       if (!recadoFaixa) return;
       recadoFaixa.visible = !!texto; if (!texto) return;

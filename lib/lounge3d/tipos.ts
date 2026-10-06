@@ -3,6 +3,7 @@
  * CLIENT-SAFE (zero import de servidor). A memória NÃO vive aqui (é o cérebro); a sala é um canvas
  * colaborativo: notas editáveis, artefatos, avatares que andam, chat efêmero.
  */
+import type { SomLounge } from "./musica";
 
 /** Flag de BUILD (NEXT_PUBLIC_*): precisa ser build-arg no Dockerfile/compose, senão "some" em prod. */
 export const lounge3dOn = (): boolean => process.env.NEXT_PUBLIC_LOUNGE_3D === "1";
@@ -62,7 +63,7 @@ export type ArtefatoCanvas = {
 
 /** o recado ATUAL pro QG (um só; o novo substitui) — quem mandou vem da SESSÃO no servidor */
 export type RecadoQG = { id: string; texto: string; deId: string; deNome: string; deCor: string; ts: number };
-export type ConteudoSala = { notes: NotaCanvas[]; artifacts: ArtefatoCanvas[]; recadoQG?: RecadoQG | null };
+export type ConteudoSala = { notes: NotaCanvas[]; artifacts: ArtefatoCanvas[]; recadoQG?: RecadoQG | null; somLounge?: SomLounge | null };
 
 export type OpsSala = {
   upsertNotes?: unknown[]; removeNotes?: unknown[];
@@ -85,6 +86,8 @@ export const EV_CHAT = "chat";
 export const EV_CONTEUDO = "conteudo";
 /** recado do dono pro QG (broadcast pelo servidor; persiste no conteúdo da sala) */
 export const EV_RECADO = "recado-qg";
+/** o som do lounge da Zaeon mudou (playlist ou controle) — `agora` = relógio do servidor (acerta o dos clientes) */
+export const EV_MUSICA = "musica-lounge";
 
 /** Cor de accent determinística pelo userId (até o perfil ter campo próprio). */
 export function corDoUsuario(userId: string): string {

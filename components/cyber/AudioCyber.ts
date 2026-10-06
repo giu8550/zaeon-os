@@ -37,6 +37,9 @@ export type AudioCyberHandle = {
   /** VOZ ao vivo de alguém (WebRTC) presa ao avatar dele: posicional (perto = mais alto). Antes do gesto que
    *  libera o áudio, fica na fila e liga sozinha depois. `remover()` desliga e solta. */
   voz(obj: THREE.Object3D, stream: MediaStream): { remover(): void };
+  /** MÚSICA de um <audio> saindo POSICIONAL de várias caixas de som ao mesmo tempo (o toca-discos do lounge); antes
+   *  do gesto que libera o áudio, espera e liga sozinha. `remover()` desliga. */
+  musica(caixas: THREE.Object3D[], el: HTMLMediaElement, volume?: number): { remover(): void; pronta(): boolean };
   /** fade dos loops (chamar a cada quadro) */
   atualizar(dt: number): void;
   dispose(): void;
@@ -69,6 +72,19 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
   };
   const ler = () => lerPrefs((k) => (typeof localStorage !== "undefined" ? localStorage.getItem(k) : null));
   let prefs = ler();
+  type Musica = { caixas: THREE.Object3D[]; el: HTMLMediaElement; volume: number; src: MediaElementAudioSourceNode | null; as: THREE.PositionalAudio[] };
+  const musicas = new Set<Musica>();
+  /** um MediaElementSource só pode existir 1× por elemento: guarda e reaproveita */
+  const fontesDeElemento = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
+  const ligarMusica = (m: Musica) => {
+    if (!listener || m.src) return;
+    try {
+      const ctx = listener.context; let src = fontesDeElemento.get(m.el);
+      if (!src) { src = ctx.createMediaElementSource(m.el); fontesDeElemento.set(m.el, src); }
+      m.src = src;
+      for (const c of m.caixas) { const a = new THREE.PositionalAudio(listener); aplicarDist(a, DISTANCIA.musica); a.setNodeSource(src as unknown as AudioBufferSourceNode); a.setVolume(m.volume); c.add(a); m.as.push(a); }
+    } catch { /* sem áudio */ }
+  };
 
   const aplicarDist = (a: THREE.PositionalAudio, d: Dist) => { a.setRefDistance(d.ref); a.setMaxDistance(d.max); a.setRolloffFactor(d.rolloff); a.setDistanceModel(d.modelo ?? "inverse"); };
   const criarFonte = (nome: NomeSom, obj: THREE.Object3D | null, dist?: Dist): THREE.Audio<GainNode | PannerNode> | null => {
@@ -100,6 +116,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       const ctx = listener.context; if (ctx.state === "suspended") void ctx.resume().catch(() => {});
       api.aplicarPrefs();
       for (const v of vozesAoVivo) ligarVoz(v);   // vozes que chegaram antes do gesto
+      for (const m of musicas) ligarMusica(m);
       const loader = new THREE.AudioLoader();
       // os SINTETIZADOS saem na hora (sem rede): gerados no AudioContext do three
       for (const [n, gerar] of Object.entries(SINTESE) as [NomeSom, (sr: number) => Float32Array][]) {
@@ -158,6 +175,11 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       vozesAoVivo.add(v); ligarVoz(v);
       return { remover() { vozesAoVivo.delete(v); try { v.a?.disconnect(); } catch { /* já */ } v.a?.removeFromParent(); if (v.el) { v.el.srcObject = null; } } };
     },
+    musica(caixas, el, volume = 0.9) {
+      const m: Musica = { caixas, el, volume, src: null, as: [] };
+      musicas.add(m); ligarMusica(m);
+      return { pronta: () => !!m.src, remover() { musicas.delete(m); for (const a of m.as) { try { a.disconnect(); } catch { /* já */ } a.removeFromParent(); } m.as = []; try { m.src?.disconnect(); } catch { /* já */ } m.src = null; } };
+    },
     aplicarPrefs() {
       prefs = ler();
       if (listener) listener.setMasterVolume(prefs.ligado ? prefs.volume : 0);
@@ -180,6 +202,8 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       umaVez.clear(); loops.length = 0; buffers.clear();
       for (const v of vozesAoVivo) { try { v.a?.disconnect(); } catch { /* já */ } v.a?.removeFromParent(); if (v.el) v.el.srcObject = null; }
       vozesAoVivo.clear();
+      for (const m of musicas) { for (const a of m.as) { try { a.disconnect(); } catch { /* já */ } a.removeFromParent(); } try { m.src?.disconnect(); } catch { /* já */ } }
+      musicas.clear();
       if (listener) { listener.removeFromParent(); listener = null; }   // o AudioContext do three é global (fica pro próximo)
     },
   };

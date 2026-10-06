@@ -100,6 +100,7 @@ function Tela() {
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
       souFundador={euSala.fundador === true} pedirAcesso={pedirAcesso}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
+      somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
       canalVoz={sala.canalVoz} onlineIds={onlineIds}
     />
   );
