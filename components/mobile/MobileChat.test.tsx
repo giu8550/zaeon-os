@@ -100,7 +100,8 @@ describe("MobileChat · Pesquisa", () => {
       expect(screen.queryByRole("button", { name: "Mais ações" })).toBeNull(); // ações do Studio são da Sala de Estudos
       digitarEEnviar("CRISPR");
       await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
-      expect(await screen.findByText("Buscando no PubMed")).toBeTruthy();
+      // busca nas bases = ação externa real → "Analisando trabalhos…" (o resto seria só os 3 pontinhos)
+      expect((await screen.findAllByText("Analisando trabalhos…")).length).toBeGreaterThan(0);
       await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
       expect(await screen.findByText("CRISPR edita genes.")).toBeTruthy();
       expect(screen.getByRole("link", { name: "Doudna 2012" }).getAttribute("rel")).toBe("noreferrer");

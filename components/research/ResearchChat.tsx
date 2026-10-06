@@ -22,6 +22,7 @@ import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structur
 import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
 import { TCC_CROSS_ON, avisarTccMudou, tccApi } from "@/lib/tcc/client";
 import { empurrarPontos, pontosDaResposta } from "@/lib/lounge3d/pontos";
+import { DIRETRIZ_PESQUISA } from "@/lib/ai/salaPersona";
 import ThreadTabs from "@/components/study/ThreadTabs";
 import BolinhaCerebro from "@/components/cerebro/BolinhaCerebro";
 import CerebroPanel from "@/components/cerebro/CerebroPanel";
@@ -45,10 +46,7 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const isQuick = (t: string) => t.trim().split(/\s+/).filter(Boolean).length <= 8;
 
 // Sala de Pesquisa = MODO ACADÊMICO ESTRITO (única possibilidade, não é opção).
-const ACADEMIC_STRICT =
-  " MODO ACADÊMICO ESTRITO: aqui o rigor acadêmico é a ÚNICA possibilidade. Use apenas " +
-  "fontes acadêmicas confiáveis (papers, periódicos revisados); NUNCA invente citações. Se não " +
-  "houver base acadêmica sólida, diga isso e proponha caminhos — não preencha com achismo nem web casual.";
+const ACADEMIC_STRICT = " " + DIRETRIZ_PESQUISA;
 
 // Um assistente científico ÚNICO e completo: o PAPEL (escrever, revisar, pesquisar,
 // explicar, estruturar) sai do CONTEXTO da conversa — não de um botão.

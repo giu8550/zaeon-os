@@ -1,23 +1,30 @@
 "use client";
 /**
- * Nas salas completas, no celular: OFERECE a versão mobile (nunca força). "Continuar aqui"
+ * Nas salas completas, no celular: leva pra /m POR PADRÃO nas entradas das duas salas e OFERECE
+ * a versão mobile nas demais telas (nunca prende: dá pra voltar). "Continuar aqui"
  * grava a preferência `full` e o banner não volta. Atrás de NEXT_PUBLIC_MOBILE_UI.
  */
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useIsMobile } from "@/lib/ui/useIsMobile";
-import { cookiePref, deveOferecerMobile, destinoMobile, lerPref, mobileUiOn } from "@/lib/ui/mobilePref";
+import { cookiePref, deveOferecerMobile, deveRedirecionarMobile, destinoMobile, lerPref, mobileUiOn } from "@/lib/ui/mobilePref";
 
 export function BannerVersaoMobile() {
   const path = usePathname();
+  const router = useRouter();
   const ehMobile = useIsMobile();
   const [mostrar, setMostrar] = useState(false);
   const [destino, setDestino] = useState("/m");
   useEffect(() => {
     const pref = lerPref(document.cookie);
+    // padrão no celular = /m (entradas padrão das salas); "versão completa" grava `full` e para de redirecionar
+    if (deveRedirecionarMobile({ flag: mobileUiOn(), path, search: window.location.search, ehMobile, pref })) {
+      router.replace(destinoMobile(path, window.location.search));
+      return;
+    }
     setMostrar(deveOferecerMobile({ flag: mobileUiOn(), path, ehMobile, pref }));
     setDestino(destinoMobile(path, window.location.search));
-  }, [path, ehMobile]);
+  }, [path, ehMobile, router]);
   if (!mostrar) return null;
   return (
     <div role="region" aria-label="Versão para celular"

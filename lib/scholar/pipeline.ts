@@ -16,6 +16,7 @@ import { planQuery, synthesize } from "@/lib/scholar/synthesize";
 import { assembleResults } from "@/lib/scholar/assemble";
 import { buildReferencesBib } from "@/lib/scholar/bibtex";
 import { planTone } from "@/lib/scholar/prompt";
+import { responderSemFontes } from "@/lib/scholar/semFontes";
 import { mapLimit } from "@/lib/scholar/http";
 import type { ScholarEvent } from "@/lib/scholar/types";
 
@@ -86,9 +87,30 @@ export async function runScholarPipeline(
     message: `✓ ${unique.length} pesquisas encontradas · full-text aberto de ${ftCount}`,
   } as ScholarEvent);
 
+  const grounded = withText.filter((p) => p.retrievedText);
+
+  // SEM FONTES: as bases voltaram vazias → NÃO morre em "não encontrei". Web → conhecimento do modelo,
+  // sempre avisando (1 linha) que não é fonte acadêmica indexada.
+  if (!grounded.length) {
+    await emit({ type: "phase", phase: "searching", source: "web", count: 0, message: "🌐 Sem trabalhos nas bases — pesquisando na internet…" } as ScholarEvent);
+    const sf = await responderSemFontes(prompt);
+    await emit({ type: "answer", text: sf.answer } as ScholarEvent);
+    const cur = await prisma.scholarSession.findUnique({ where: { id: sessionId }, select: { thread: true } });
+    const prev = (cur?.thread as any)?.events ?? [];
+    const saved0 = await prisma.scholarSession.update({
+      where: { id: sessionId },
+      data: {
+        status: "done", domain: plan.domain || null, references: [] as any, results: [] as any, evidence: [] as any,
+        insights: { summary: "", trends: [], contradictions: [] } as any, gaps: { description: "", rqCards: [] } as any, files: [] as any,
+        thread: { events: prev, answer: sf.answer, semFontes: sf.origem } as any,
+      },
+    });
+    await emit({ type: "done", session: saved0 } as ScholarEvent);
+    return;
+  }
+
   // SYNTHESIZE
   await emit({ type: "phase", phase: "synthesizing", message: "🧠 Indo mais fundo e conferindo cada citação…" } as ScholarEvent);
-  const grounded = withText.filter((p) => p.retrievedText);
   const raw = await synthesize(prompt, grounded);
 
   // VERIFY + ASSEMBLE

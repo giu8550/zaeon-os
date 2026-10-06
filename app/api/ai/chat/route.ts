@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { projetosOn } from "@/lib/research/unifiedRoom";
 import { VertexAI } from '@google-cloud/vertexai';
 import type { FunctionDeclaration } from '@google-cloud/vertexai';
 import { GEMINI_MODEL_FLASH } from '@/lib/ai/model';
@@ -51,6 +52,8 @@ const lessonsTool: FunctionDeclaration = {
     }
 };
 
+const PROJETOS_ON = projetosOn();
+
 // --- SUMMON TOOL (a Zaeon convoca um agente especialista) ---
 const summonAgentTool: FunctionDeclaration = {
     name: "summon_agent",
@@ -58,7 +61,7 @@ const summonAgentTool: FunctionDeclaration = {
     parameters: {
         type: "OBJECT" as any,
         properties: {
-            skill: { type: "STRING" as any, description: "Uma de: 'study' (estudar), 'research' (pesquisar), 'write' (escrever), 'code' (programar)." },
+            skill: { type: "STRING" as any, description: PROJETOS_ON ? "Uma de: 'study' (estudar), 'research' (pesquisar), 'write' (escrever), 'code' (programar)." : "Uma de: 'study' (estudar), 'research' (pesquisar), 'write' (escrever)." },
             topic: { type: "STRING" as any, description: "O assunto/tema EXATO em linguagem natural (ex.: 'fotossíntese', 'redes neurais'). Obrigatório quando houver um assunto." }
         },
         required: ["skill", "topic"]
@@ -72,7 +75,7 @@ const openRoomTool: FunctionDeclaration = {
     parameters: {
         type: "OBJECT" as any,
         properties: {
-            room: { type: "STRING" as any, description: "Uma de: 'pesquisa', 'estudos', 'projetos', 'pesquisas-salvas', 'lounge', 'sala-de-aula', 'perfil'." },
+            room: { type: "STRING" as any, description: PROJETOS_ON ? "Uma de: 'estudos' (Sala de Estudos: chat, Meus Estudos, Estudos), 'pesquisa' (Sala de Pesquisa: chat, Pesquisas), 'projetos', 'pesquisas-salvas', 'lounge', 'sala-de-aula', 'perfil'." : "Uma de: 'estudos' (Sala de Estudos: chat, Meus Estudos, Estudos), 'pesquisa' (Sala de Pesquisa: chat, Pesquisas), 'pesquisas-salvas', 'lounge', 'sala-de-aula', 'perfil'." },
         },
         required: ["room"]
     }
@@ -83,9 +86,12 @@ const ROOM_MAP: Record<string, { tab: string; label: string }> = {
     "pesquisa": { tab: "pesquisa", label: "Pesquisa" },
     "estudos": { tab: "sala-de-estudos", label: "Sala de Estudos" },
     "sala-de-estudos": { tab: "sala-de-estudos", label: "Sala de Estudos" },
-    "projetos": { tab: "projetos", label: "Projetos (Zaeon Code)" },
-    "codigo": { tab: "projetos", label: "Projetos (Zaeon Code)" },
-    "zaeon-code": { tab: "projetos", label: "Projetos (Zaeon Code)" },
+    // Projetos / Zaeon Code: só existe com NEXT_PUBLIC_PROJETOS (senão nada aponta pra lá).
+    ...(PROJETOS_ON ? {
+        "projetos": { tab: "projetos", label: "Projetos (Zaeon Code)" },
+        "codigo": { tab: "projetos", label: "Projetos (Zaeon Code)" },
+        "zaeon-code": { tab: "projetos", label: "Projetos (Zaeon Code)" },
+    } : {}),
     "pesquisas-salvas": { tab: "pesquisas", label: "Pesquisas salvas" },
     "pesquisas": { tab: "pesquisas", label: "Pesquisas salvas" },
     "sala-de-aula": { tab: "pevem", label: "Sala de Aula" },
@@ -99,7 +105,7 @@ const SUMMON_MAP: Record<string, { agent: string; route: string; cta: string; ve
     study: { agent: "Nina · Sala de Estudos", route: "/research-lab?tab=sala-de-estudos", cta: "Abrir a Sala de Estudos", verb: "estudar" },
     research: { agent: "Aura · Pesquisa", route: "/research-lab?tab=pesquisa", cta: "Abrir a Pesquisa", verb: "pesquisar" },
     write: { agent: "Caio · Pesquisa", route: "/research-lab?tab=pesquisa", cta: "Escrever com o Caio", verb: "escrever" },
-    code: { agent: "Téo · Projetos", route: "/research-lab?tab=projetos", cta: "Abrir o Zaeon Code", verb: "programar" },
+    ...(PROJETOS_ON ? { code: { agent: "Téo · Projetos", route: "/research-lab?tab=projetos", cta: "Abrir o Zaeon Code", verb: "programar" } } : {}),
 };
 
 // Formata o world-state (AgentContext) em texto enxuto pro prompt. Puro (server-safe).

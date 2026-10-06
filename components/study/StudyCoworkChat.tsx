@@ -23,6 +23,7 @@ import dynamic from "next/dynamic";
 import {
   PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2, GitBranch, GraduationCap,
 } from "lucide-react";
+import { DIRETRIZ_ESTUDOS } from "@/lib/ai/salaPersona";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import AuraThinking from "@/components/study/AuraThinking";
@@ -611,12 +612,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
 
     const focusTitles = focusIds.map(spaceTitle);
     // MODO ACADÊMICO = FLEXÍVEL na Sala de Estudos (o rigor pleno é da Sala de Pesquisa).
-    const flexClause =
-      " MODO FLEXÍVEL: responda com conhecimento geral quando o tema não exigir academia " +
-      "(como uma LLM comum faria). Ao buscar/citar, amplie o escopo além do acadêmico — " +
-      "reportagens, artigos, web, enciclopédia valem. NUNCA recuse por falta de fonte acadêmica; " +
-      "se não houver paper, responda com o que há e sinalize a natureza da fonte. O rigor acadêmico " +
-      "pleno só é obrigatório quando o pedido for criar/revisar um trabalho.";
+    const flexClause = " " + DIRETRIZ_ESTUDOS;
     // AQUI MORAVA O CARDÁPIO. A linha sem foco terminava com "ofereça transformar o
     // assunto em artefatos do Studio (Guia, Mapa mental, Linha do tempo, Flashcards,
     // FAQ, Imagem, Podcast, Vídeo)" — em TODO turno. O modelo obedecia, e a conversa
@@ -912,9 +908,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                       {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
                     </StructuredAnswerView>
                   );
-                  // MODO REVISTA: só em resposta longa ou com artefato (§10 do plano).
-                  // Resposta curta continua no balão — revista com 3 linhas é exagero.
-                  const revista = podeVirarRevista(m.answer, !!m.studioBlock);
+                  // Sala de ESTUDOS = chat simples, objetivo e 100% legível: a "revista" só entra
+                  // quando há ARTEFATO embutido (a Sala de Pesquisa é que tem o modo editorial).
+                  const revista = !!m.studioBlock && podeVirarRevista(m.answer, true);
                   return (
                     <div key={m.id} data-msg={m.id} className="flex justify-start">
                       <div className={revista ? "w-full" : "max-w-[85%] w-full"}>

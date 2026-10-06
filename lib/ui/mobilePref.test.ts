@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lerPref, cookiePref, deveOferecerMobile, destinoMobile, ehSalaCompleta, ehRotaMobile } from "@/lib/ui/mobilePref";
+import { lerPref, cookiePref, deveOferecerMobile, deveRedirecionarMobile, destinoMobile, ehSalaCompleta, ehRotaMobile } from "@/lib/ui/mobilePref";
 
 describe("mobilePref", () => {
   it("cookie: lê, ignora valor estranho e outros cookies", () => {
@@ -29,5 +29,25 @@ describe("mobilePref", () => {
     expect(destinoMobile("/research-lab", "?tab=sala-de-estudos")).toBe("/m/estudos");
     expect(destinoMobile("/workstation/student")).toBe("/m");
     expect(destinoMobile(null)).toBe("/m");
+  });
+});
+
+describe("deveRedirecionarMobile", () => {
+  const base = { flag: true, path: "/research-lab", search: "", ehMobile: true, pref: null as "mobile" | "full" | null };
+  it("celular na entrada padrão das salas → /m", () => {
+    expect(deveRedirecionarMobile(base)).toBe(true);
+    expect(deveRedirecionarMobile({ ...base, search: "?tab=pesquisa" })).toBe(true);
+    expect(deveRedirecionarMobile({ ...base, search: "?tab=sala-de-estudos&sub=chat" })).toBe(true);
+    expect(deveRedirecionarMobile({ ...base, pref: "mobile" })).toBe(true);
+  });
+  it("respeita flag, desktop, 'full', outras abas, deep-links e outras rotas", () => {
+    expect(deveRedirecionarMobile({ ...base, flag: false })).toBe(false);
+    expect(deveRedirecionarMobile({ ...base, ehMobile: false })).toBe(false);
+    expect(deveRedirecionarMobile({ ...base, pref: "full" })).toBe(false);
+    expect(deveRedirecionarMobile({ ...base, search: "?tab=profile" })).toBe(false);
+    expect(deveRedirecionarMobile({ ...base, search: "?tab=sala-de-estudos&space=1" })).toBe(false);
+    expect(deveRedirecionarMobile({ ...base, search: "?sala=tok" })).toBe(false);
+    expect(deveRedirecionarMobile({ ...base, path: "/m/estudos" })).toBe(false);
+    expect(deveRedirecionarMobile({ ...base, path: "/" })).toBe(false);
   });
 });

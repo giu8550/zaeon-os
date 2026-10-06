@@ -109,10 +109,10 @@ export type IntentSpec = {
 export const INTENTS: Record<IntentId, IntentSpec> = {
   conversa:          { id: "conversa",          mode: "quick",      tools: [],                                                                            critic: "off",  required: ["nucleo"] },
   duvida_rapida:     { id: "duvida_rapida",     mode: "quick",      tools: ["memory_search"],                                                             critic: "off",  required: ["nucleo"] },
-  explicar_conceito: { id: "explicar_conceito", mode: "elaborated", tools: ["memory_search", "literature_search"],                                        critic: "leve", required: ["nucleo", "desenvolvimento", "conceitos", "proximos_passos"], reviseThreshold: 7, maxRevisions: 1 },
+  explicar_conceito: { id: "explicar_conceito", mode: "elaborated", tools: ["memory_search", "literature_search", "web_search"],                                        critic: "leve", required: ["nucleo", "desenvolvimento", "conceitos", "proximos_passos"], reviseThreshold: 7, maxRevisions: 1 },
   gerar_artefato:    { id: "gerar_artefato",    mode: "elaborated", tools: ["studio_generate"],                                                           critic: "leve", required: ["nucleo", "artifacts"], reviseThreshold: 7, maxRevisions: 1 },
-  criar_trabalho:    { id: "criar_trabalho",    mode: "research",   tools: ["literature_search", "memory_search", "studio_generate", "notebook_read"],    critic: "full", required: ["nucleo", "work", "evidencia", "proximos_passos"], reviseThreshold: 7, maxRevisions: 2, reflections: 2, ensemble: 2 },
-  pesquisar_fontes:  { id: "pesquisar_fontes",  mode: "elaborated", tools: ["literature_search"],                                                         critic: "leve", required: ["nucleo", "sources"], reviseThreshold: 6, maxRevisions: 1 },
+  criar_trabalho:    { id: "criar_trabalho",    mode: "research",   tools: ["literature_search", "web_search", "memory_search", "studio_generate", "notebook_read"],    critic: "full", required: ["nucleo", "work", "evidencia", "proximos_passos"], reviseThreshold: 7, maxRevisions: 2, reflections: 2, ensemble: 2 },
+  pesquisar_fontes:  { id: "pesquisar_fontes",  mode: "elaborated", tools: ["literature_search", "web_search"],                                                         critic: "leve", required: ["nucleo", "sources"], reviseThreshold: 6, maxRevisions: 1 },
   revisar:           { id: "revisar",           mode: "research",   tools: ["examiner", "memory_search"],                                                 critic: "full", required: ["nucleo", "evidencia"], reflections: 2 },
 };
 

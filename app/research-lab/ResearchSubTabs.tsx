@@ -1,6 +1,6 @@
 "use client";
 /**
- * ResearchSubTabs — barra horizontal da Sala de Pesquisa UNIFICADA: Chat · Estudos · Pesquisas.
+ * ResearchSubTabs — barra horizontal da Sala de Pesquisa: Chat · Pesquisas (Estudos tem sala própria).
  * Mesma roupagem do ResearchShell/WindowSwitcher (vidro escuro, pill ativa com brilho violeta),
  * pra parecer parte da sala e não um menu à parte. Só existe com NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM.
  */
@@ -8,7 +8,6 @@ import type { ResearchSubTab } from "@/lib/research/unifiedRoom";
 
 const TABS: { id: ResearchSubTab; label: string; icon: string }[] = [
   { id: "chat", label: "Chat", icon: "⟁" },
-  { id: "estudos", label: "Estudos", icon: "📚" },
   { id: "pesquisas", label: "Pesquisas", icon: "🗂" },
 ];
 
