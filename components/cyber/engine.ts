@@ -317,6 +317,7 @@ export class CyberEngine {
       if (this.menu) { const s = this.assento(); this.eu.pos.set(s.x, 0, s.z); this.eu.facing = this.rotAssento(); this.eu.sit = 1; this.sitT = 1; }
       else this.eu.facing = lay?.nivel ? this.rotAssento() + Math.PI : Math.atan2(-sp.x, -sp.z);
       this.camT.set(this.eu.pos.x, 1.2 + this.yDoNivel(lay?.nivel), this.eu.pos.z);
+      if (!this.menu) this.spawnNaNave();   // o dono nasce a bordo, na cabine de comando
     }
   }
 
@@ -338,6 +339,7 @@ export class CyberEngine {
     this.o.els.menu && (this.o.els.menu.style.display = "none"); if (this.o.els.hold) this.o.els.hold.style.width = "0%";
     this.som.ativar();   // o whoosh de entrada sai em atualizarSom, quando o buffer chegar
     this.R.domElement.style.touchAction = "none";
+    this.spawnNaNave();   // saiu da vista/menu: o dono já começa a bordo, na cabine
     this.o.onSessao?.(go);
   }
   setJoystick(x: number, y: number) { this.joy.x = x; this.joy.y = y; this.joy.on = Math.hypot(x, y) > 0.15; }
@@ -523,6 +525,19 @@ export class CyberEngine {
     this.pilotando = false; this.bordo = { ...NAVE_QG.emPe, nivel: 1 };   // de pé na cabine: a redoma abre
     this.eu.facing = n.yaw; this.eu.av.group.visible = true;
     if (this.ehFundador(this.o.eu.id)) this.o.onNaveParada?.({ x: n.x, y: n.y, z: n.z, yaw: n.yaw });
+  }
+  /** SPAWN do dono: dentro da nave-QG, de pé na CABINE DE COMANDO (redoma aberta), olhando pra proa — onde quer que
+   *  ela esteja estacionada (a posição é no referencial da nave). Os outros nascem como antes. */
+  private spawnNaNave(): boolean {
+    if (!this.nave || !this.ehFundador(this.o.eu.id)) return false;
+    const p = this.poseNave(); if (!p) return false;
+    this.altoEm = null; this.yNav = 0; this.noTopo = false; this.ilhota = null; this.plat = null; this.sobreNave = false;
+    this.jet.noAr = false; this.sitT = 0; this.eu.sit = 0; this.alvo = null; this.alvoDepois = null;
+    this.bordo = { ...NAVE_QG.emPe, nivel: 1 };
+    const w = paraMundo(p, this.bordo); this.eu.pos.set(w.x, 0, w.z); this.eu.facing = p.yaw;
+    this.camAz = p.yaw + Math.PI;   // a câmera atrás de mim, olhando pra proa
+    this.camT.set(w.x, alturaDoConves(p) + NAVE_QG.cabine + 1.2, w.z);
+    return true;
   }
   /** a nave-QG que está À VISTA (a minha cópia, ou a do dono quando ele está online com ela) e a pose dela */
   private poseNave(): (PoseNave & { h: NaveHandle }) | null {
