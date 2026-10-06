@@ -57,6 +57,10 @@ services:
       VOICE_ENGINE_URL: http://voice-engine:8004   # proxy /api/ai/voice
       ABNT_SERVICE_URL: http://abnt-service:8001    # exportação ABNT
       PDF_LOADER_URL: http://pdf-loader:8005        # leitura estruturada de PDF
+      # Busca NA INTERNET (tool web_search / fallback da pesquisa): SearXNG self-hosted abaixo. Se o
+      # container não estiver de pé, a chamada falha rápido e a IA responde pelo conhecimento do modelo.
+      # Tavily/Brave: TAVILY_API_KEY / BRAVE_API_KEY no .env (WEB_SEARCH_PROVIDER força qual usar).
+      SEARXNG_URL: http://searxng:8080
       # Sala de Pesquisa em BACKGROUND: o web só ENFILEIRA (SCHOLAR_WORKER=0); quem roda
       # o pipeline até o fim é o serviço `worker` abaixo. Assim, sair da sala não para a
       # pesquisa — o worker continua e o cliente reengata pela sessão no banco.
@@ -88,6 +92,21 @@ services:
     deploy:
       resources:
         limits: { memory: 1536m }
+
+  # ── SearXNG: busca web self-hosted (metabuscador, sem key, sem custo por query) ──
+  # Rede interna (expose, sem porta pública). Config em ./searxng/settings.yml (JSON habilitado).
+  searxng:
+    image: searxng/searxng:latest
+    container_name: zaeon_searxng
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-zaeon-searxng-interno-troque-no-env}
+      SEARXNG_BASE_URL: http://searxng:8080/
+    volumes: ["./searxng/settings.yml:/etc/searxng/settings.yml:ro"]
+    expose: ["8080"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 512m }
 
   # ── WORKER dedicado da Sala de Pesquisa (BullMQ) ──────────────────────────────
   # Mesma imagem do web, mas SCHOLAR_WORKER=1: o instrumentation.ts sobe o consumidor

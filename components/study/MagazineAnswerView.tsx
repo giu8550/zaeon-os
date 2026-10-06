@@ -26,7 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import MoleculeView from "@/components/studio/MoleculeView";
-import { agendarChegada, chegadaInstantanea, DURACAO_LETRA } from "@/lib/magazine/chegada";
+import { agendarChegada, chegadaInstantanea, DURACAO_CHEGADA, DURACAO_LETRA, RESPIRO_FINAL } from "@/lib/magazine/chegada";
 import { familiaDaVariavel, fonteCanvas, aplicarFonte, QUEDA_CORPO, QUEDA_DISPLAY } from "@/lib/magazine/fontes";
 import {
   medirDestaques, posicionarDestaques, FOLGA_DESTAQUE,
@@ -118,7 +118,9 @@ function lerCores(el: HTMLElement): Cores {
   // precisar de token novo. O resto tem par claro/escuro.
   const escuro = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   return {
-    tinta: s.color || (escuro ? "#E4ECEA" : "#18222D"),
+    // CONTRASTE CHEIO: a tinta NÃO vem mais da cor herdada (`s.color` podia trazer alfa de um ancestral
+    // `text-white/85` e deixar a 2ª resposta acinzentada). Sólida por tema.
+    tinta: escuro ? "#FFFFFF" : "#0F172A",
     suave: escuro ? "#8FA1AD" : "#5C6B78",
     ciano: escuro ? "#3FD3E6" : "#0B9FB3",
     marca: escuro ? "rgba(242,210,60,.26)" : "rgba(242,210,60,.55)",
@@ -400,6 +402,16 @@ export default function MagazineAnswerView({
     return () => clearTimeout(t);
   }, [palavrasDom, streaming, recemChegada, semMovimento]);
 
+  // WATCHDOG do cross-fade: o assentamento depende de um timer que o cleanup do efeito acima cancela a
+  // cada recálculo (largura/molécula). Se algum laço de re-medição o mantém vivo, `assentado` nunca vira
+  // true e o texto fica preso no canvas/meio-termo. Este timer é INDEPENDENTE (só depende de a página
+  // estar medida e de o stream ter acabado): passado o tempo máximo da materialização + folga, assenta.
+  useEffect(() => {
+    if (assentado || streaming || !palavrasDom.length) return;
+    const t = setTimeout(() => setAssentado(true), DURACAO_CHEGADA + DURACAO_LETRA + RESPIRO_FINAL + 2500);
+    return () => clearTimeout(t);
+  }, [assentado, streaming, palavrasDom.length]);
+
   // Avisa o pai UMA vez, quando a página está inteira e medida.
   const avisouRef = useRef(false);
   useEffect(() => {
@@ -445,7 +457,7 @@ export default function MagazineAnswerView({
             const e = semMovimento ? 1 : ease(clamp((agora - t) / DURACAO_LETRA, 0, 1));
             const f = g.enfase ? m.enfase : m.corpo;
             if (f !== fonteAtual) { aplicarFonte(ctx, f, QUEDA_CORPO); fonteAtual = f; }
-            ctx.globalAlpha = 0.25 + e * 0.75;
+            ctx.globalAlpha = 1; // nunca translúcido: a materialização é deslize + ciano→tinta, não fade
             ctx.fillStyle = e < 1 ? cores.ciano : cores.tinta;
             ctx.fillText(g.ch, g.x, g.y + (1 - e) * 9);
           }
@@ -524,7 +536,7 @@ export default function MagazineAnswerView({
         <div className={`flex gap-5 ${cabecaLadoALado ? "flex-row items-start" : "flex-col"}`}>
           {temLinhaFina && (
             <p
-              className="text-slate-800 dark:text-white/90 leading-snug flex-1 min-w-0"
+              className="text-slate-900 dark:text-white leading-snug flex-1 min-w-0"
               style={{ fontFamily: FAMILIA_DISPLAY, fontWeight: 300, fontSize: "clamp(19px,2.4vw,26px)", maxWidth: "34ch" }}
             >
               {answer.nucleo}
@@ -597,14 +609,14 @@ export default function MagazineAnswerView({
         <canvas
           ref={cv}
           aria-hidden="true"
-          className="block w-full transition-opacity duration-500"
+          className="block w-full"
           style={{ opacity: assentado ? 0 : 1, touchAction: "pan-y", pointerEvents: "none" }}
         />
 
         {/* Texto em DOM: invisível durante o stream (só pro leitor de tela), visível e
             selecionável quando assenta. Mesmas coordenadas do canvas. */}
         <div
-          className="absolute inset-0 transition-opacity duration-500"
+          className="absolute inset-0 text-slate-900 dark:text-white"
           style={{
             opacity: assentado ? 1 : 0,
             pointerEvents: assentado ? "auto" : "none",
@@ -641,21 +653,6 @@ export default function MagazineAnswerView({
         )}
       </div>
 
-      {/* fontes */}
-      {!!answer.evidencia?.length && (
-        <div className="text-[12px] text-slate-600 dark:text-white/60 leading-relaxed">
-          <p className="font-bold text-slate-700 dark:text-white/75 mb-1">Fontes</p>
-          <ol className="list-decimal list-inside space-y-0.5">
-            {answer.evidencia.map((e, i) => (
-              <li key={i}>
-                {e.claim}
-                {e.source?.title && <span className="text-slate-500 dark:text-white/45"> — {e.source.title}</span>}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
       {/* glossário acessível: o hover no canvas não pode ser o único caminho */}
       {!!conceitos.length && (
         <details className="text-[12px] text-slate-600 dark:text-white/60">
@@ -675,11 +672,26 @@ export default function MagazineAnswerView({
             <button
               key={p}
               onClick={() => onNext?.(p)}
-              className="px-3 py-1.5 rounded-full text-[11px] font-bold text-slate-700 dark:text-white/80 border border-slate-200 dark:border-white/10 hover:border-cyan-400/50 transition-colors"
+              className="px-3 py-1.5 rounded-full text-[11px] font-bold text-slate-800 dark:text-white border border-slate-200 dark:border-white/20 hover:border-cyan-400/50 transition-colors"
             >
               {p}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* fontes — SEMPRE o último elemento do card: resposta → botões → Fontes */}
+      {!!answer.evidencia?.length && (
+        <div className="text-[12px] text-slate-700 dark:text-white/80 leading-relaxed">
+          <p className="font-bold text-slate-700 dark:text-white/75 mb-1">Fontes</p>
+          <ol className="list-decimal list-inside space-y-0.5">
+            {answer.evidencia.map((e, i) => (
+              <li key={i}>
+                {e.claim}
+                {e.source?.title && <span className="text-slate-500 dark:text-white/45"> — {e.source.title}</span>}
+              </li>
+            ))}
+          </ol>
         </div>
       )}
     </div>

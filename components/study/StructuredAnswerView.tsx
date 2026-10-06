@@ -112,10 +112,10 @@ export default function StructuredAnswerView({
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 dark:via-white/40 to-transparent" />
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[26px] bg-gradient-to-b from-white/25 dark:from-white/[0.06] to-transparent" style={{ height: "42%" }} />
 
-        <div className="relative px-5 py-4 text-slate-700 dark:text-white/85 font-tech">
+        <div className="relative px-5 py-4 text-slate-900 dark:text-white font-tech">
           {/* núcleo */}
           {nucleo && (
-            <div className="z-up text-slate-800 dark:text-white/90" style={{ animationDelay: delay("nucleo") }}>
+            <div className="z-up text-slate-900 dark:text-white" style={{ animationDelay: delay("nucleo") }}>
               <Prose text={tw.visible} lead />
               {!tw.done && <span aria-hidden className="z-caret" />}
             </div>
@@ -123,7 +123,7 @@ export default function StructuredAnswerView({
 
           {/* desenvolvimento */}
           {rest && desenvolvimento && (
-            <div className="z-up mt-3.5 text-slate-600 dark:text-white/70" style={{ animationDelay: delay("dev") }}>
+            <div className="z-up mt-3.5 text-slate-900 dark:text-white" style={{ animationDelay: delay("dev") }}>
               <Prose text={desenvolvimento} />
             </div>
           )}
@@ -149,33 +149,6 @@ export default function StructuredAnswerView({
             <div className="z-up mt-4" style={{ animationDelay: delay("art") }}>{children}</div>
           )}
 
-          {/* evidência — rodapé de fontes com citações numeradas */}
-          {rest && evidencia?.length ? (
-            <div className="z-up mt-4 pt-3 border-t border-white/50 dark:border-white/10" style={{ animationDelay: delay("evid") }}>
-              <div className="flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-white/45 mb-2">
-                <Quote size={13} /> Fontes
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {evidencia.map((e, i) => {
-                  const label = sourceLabel(e.source);
-                  const inner = (
-                    <span className="inline-flex items-start gap-2">
-                      <span className="mt-[1px] shrink-0 w-[18px] h-[18px] rounded-full bg-slate-500/10 border border-white/40 dark:border-white/10 text-[11px] flex items-center justify-center tabular-nums text-slate-500 dark:text-white/50">{i + 1}</span>
-                      <span className="text-[13px] leading-[1.5] text-slate-600 dark:text-white/65">{label}</span>
-                    </span>
-                  );
-                  return (
-                    <div key={i}>
-                      {e.source.url
-                        ? <a href={e.source.url} target="_blank" rel="noreferrer" className="hover:opacity-80 transition-opacity">{inner}</a>
-                        : inner}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-
           {/* próximos passos — sugestões clicáveis (viram novo prompt) */}
           {rest && proximos_passos?.length ? (
             <div className="z-up mt-4 flex flex-col gap-1.5" style={{ animationDelay: delay("next") }}>
@@ -189,9 +162,36 @@ export default function StructuredAnswerView({
                   <span className="w-6 h-6 rounded-full flex items-center justify-center bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 group-hover:scale-105 transition-transform">
                     <ArrowUpRight size={14} />
                   </span>
-                  <span className="text-[14px] text-slate-700 dark:text-white/80">{s}</span>
+                  <span className="text-[14px] text-slate-900 dark:text-white">{s}</span>
                 </button>
               ))}
+            </div>
+          ) : null}
+
+          {/* evidência — SEMPRE o último elemento do card: resposta → botões → Fontes */}
+          {rest && evidencia?.length ? (
+            <div className="z-up mt-4 pt-3 border-t border-white/50 dark:border-white/10" style={{ animationDelay: delay("evid") }}>
+              <div className="flex items-center gap-1.5 text-[12px] text-slate-700 dark:text-white/70 mb-2">
+                <Quote size={13} /> Fontes
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {evidencia.map((e, i) => {
+                  const label = sourceLabel(e.source);
+                  const inner = (
+                    <span className="inline-flex items-start gap-2">
+                      <span className="mt-[1px] shrink-0 w-[18px] h-[18px] rounded-full bg-slate-500/10 border border-white/40 dark:border-white/10 text-[11px] flex items-center justify-center tabular-nums text-slate-500 dark:text-white/50">{i + 1}</span>
+                      <span className="text-[13px] leading-[1.5] text-slate-800 dark:text-white">{label}</span>
+                    </span>
+                  );
+                  return (
+                    <div key={i}>
+                      {e.source.url
+                        ? <a href={e.source.url} target="_blank" rel="noreferrer" className="hover:opacity-80 transition-opacity">{inner}</a>
+                        : inner}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
         </div>

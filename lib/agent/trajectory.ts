@@ -141,7 +141,7 @@ function toFindings(res: ToolResult): Finding[] {
 
 /** intenções que dependem de evidência (memória/literatura) — base do sinal "degradado" (A3). */
 function needsEvidence(st: TrajectoryState): boolean {
-  return st.mode !== "quick" && st.spec.tools.some((t) => t === "literature_search" || t === "memory_search");
+  return st.mode !== "quick" && st.spec.tools.some((t) => t === "literature_search" || t === "memory_search" || t === "web_search");
 }
 
 function collectSources(st: TrajectoryState): Source[] {

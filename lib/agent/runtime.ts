@@ -261,7 +261,13 @@ export const literatureSearchDef: ToolDef = {
     try {
       const { retrievePapers } = await import("@/lib/scholar/retrieve");
       const r = await retrievePapers(query, { domain, minResults: 6 });
-      if (!r.papers.length) return { ok: false, error: "nenhum paper encontrado para a consulta", code: "no_results", provenance: { toolsUsed: ["literature_search"], at: nowIso() } };
+      if (!r.papers.length) {
+        // Bases acadêmicas vazias NÃO é beco: tenta a internet (se houver provedor). Os achados vêm como
+        // fonte web — o draft deve dizer (1 linha) que não são fontes acadêmicas indexadas.
+        const w = await buscarNaWeb(query);
+        if (w.ok) return w;
+        return { ok: false, error: "nenhum paper encontrado para a consulta", code: "no_results", provenance: { toolsUsed: ["literature_search"], at: nowIso() } };
+      }
       const findings = papersToFindings(r.papers);
       return {
         ok: true, findings,
@@ -270,6 +276,34 @@ export const literatureSearchDef: ToolDef = {
     } catch (e: any) {
       return { ok: false, error: `busca de literatura falhou: ${e?.message ?? e}`, code: "skill_error", provenance: {} };
     }
+  },
+};
+
+/** Busca web → ToolResult (Findings com fonte web). Usada pelo `web_search` e como fallback do `literature_search`. */
+async function buscarNaWeb(query: string): Promise<ToolResult> {
+  const { webSearch } = await import("@/lib/search/web");
+  const w = await webSearch(query);
+  if (!w.ok) return { ok: false, error: w.error, code: w.code, provenance: { toolsUsed: ["web_search"], at: nowIso() } };
+  const findings: Finding[] = w.results.map((r) => ({ claim: `${r.title}${r.snippet ? ` — ${r.snippet}` : ""}`, source: { title: r.title, url: r.url }, confidence: "baixa" as const }));
+  return { ok: true, findings, provenance: { toolsUsed: ["web_search"], at: nowIso(), sources: findings.map((f) => f.source!) } };
+}
+
+/**
+ * web_search — busca na INTERNET geral (SearXNG self-hosted, ou Tavily/Brave). Pra temas que as bases
+ * acadêmicas não cobrem e perguntas atuais/gerais. Sem provedor configurado → `web_unavailable` (o
+ * harness contorna: responde pelo conhecimento do modelo — nunca beco).
+ */
+export const webSearchDef: ToolDef = {
+  name: "web_search",
+  runtime: "ts",
+  risk: "read",
+  minPlan: "free",
+  timeoutMs: 20_000,
+  schema: stubSchema("web_search", "Busca na internet (resultados web com título, trecho e link) — para temas fora das bases acadêmicas ou assuntos atuais/gerais."),
+  async run(args) {
+    const query = String(args?.query ?? "").trim();
+    if (!query) return { ok: false, error: "consulta vazia", code: "bad_args", provenance: {} };
+    return buscarNaWeb(query);
   },
 };
 
@@ -286,4 +320,4 @@ export const examinerDef: ToolDef = {
 };
 
 // Registra a Fase 0 + stubs no boot do módulo.
-[studioGenerateDef, researchGenerateDef, memorySearchDef, literatureSearchDef, examinerDef].forEach(registerTool);
+[studioGenerateDef, researchGenerateDef, memorySearchDef, literatureSearchDef, webSearchDef, examinerDef].forEach(registerTool);

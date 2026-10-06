@@ -1,0 +1,22 @@
+# SearXNG self-hosted — metabuscador usado pela tool `web_search` (lib/search/web.ts).
+# Só o web da Zaeon fala com ele (rede interna do compose; sem porta pública). JSON habilitado.
+use_default_settings: true
+
+server:
+  # Sobrescrito por SEARXNG_SECRET (compose). Valor aqui é só placeholder.
+  secret_key: "trocar-via-SEARXNG_SECRET"
+  # limiter off: o tráfego é interno e o limiter exigiria Redis dedicado.
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+search:
+  safe_search: 1
+  default_lang: "pt-BR"
+  formats:
+    - html
+    - json
+
+outgoing:
+  request_timeout: 4.0
+  max_request_timeout: 6.0

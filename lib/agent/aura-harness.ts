@@ -12,6 +12,7 @@
  * As chamadas de modelo são INJETÁVEIS (`opts.genJson`) → o adaptador é testável SEM rede.
  * Gemini é a IA única (§ guardrail). Flash por padrão; Pro só quando `deepThink` e fase pesada.
  */
+import { diretrizDaSala, salaDoModo } from "@/lib/ai/salaPersona";
 import { GEMINI_MODEL_FLASH, GEMINI_MODEL_PRO } from "@/lib/ai/model";
 import { classify } from "@/lib/agent/router";
 import { STUDIO_KINDS } from "@/lib/agent/tools";
@@ -69,7 +70,7 @@ export function pickStudioKind(objective: string): string {
   return normalizeStudioKind(t); // default "guide"
 }
 
-const isGatherTool = (t: string) => t === "memory_search" || t === "literature_search";
+const isGatherTool = (t: string) => t === "memory_search" || t === "literature_search" || t === "web_search";
 
 function evidenceBlock(st: TrajectoryState): string {
   if (!st.evidence.length) return "(nenhuma evidência reunida)";
@@ -268,9 +269,12 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
 
     async draft(st) {
       const req = st.spec.required.join(", ");
-      const academic = st.academicMode === "enforced"
-        ? "MODO ACADÊMICO: use SÓ fontes acadêmicas reais reunidas; se não houver evidência suficiente, diga isso e não fabrique."
-        : "ESCOPO FLEXÍVEL: conhecimento geral é ok; cite quando útil, sem exigir fonte acadêmica.";
+      // Persona POR SALA (lib/ai/salaPersona): Pesquisa = sempre fundamentada; Estudos = objetiva, sem fonte
+      // forçada. As duas: nunca beco "não encontrei" (fonte → web → conhecimento do modelo, 1 linha avisando).
+      const academic = diretrizDaSala(salaDoModo(st.academicMode)) +
+        (st.academicMode === "enforced"
+          ? " Preencha `evidencia` com as fontes reunidas (acadêmicas ou, na falta, da web) e NUNCA fabrique fonte que não está na evidência."
+          : "");
       const a5 = st.intent === "criar_trabalho"
         ? "\nBaseie CADA afirmação de `work`/`evidencia` na evidência reunida; se a evidência for insuficiente, produza um rascunho enxuto e sinalize a limitação em `nucleo`."
         : "";

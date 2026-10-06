@@ -125,3 +125,29 @@ describe("runtime · registry + tools Fase 0", () => {
     expect(r.code).toBe("unknown_tool");
   });
 });
+
+describe("runtime · web_search + fallback do literature_search", () => {
+  it("web_search sem provedor → web_unavailable (contorna, nunca lança); consulta vazia → bad_args", async () => {
+    const env = { ...process.env }; delete process.env.SEARXNG_URL; delete process.env.TAVILY_API_KEY; delete process.env.BRAVE_API_KEY;
+    expect((await runToolByName("web_search", { query: "x" }, ctx())).code).toBe("web_unavailable");
+    expect((await runToolByName("web_search", { query: "" }, ctx())).code).toBe("bad_args");
+    Object.assign(process.env, env);
+  });
+  it("web_search devolve Findings com fonte web (confiança baixa)", async () => {
+    const mod = await import("@/lib/search/web");
+    const spy = vi.spyOn(mod, "webSearch").mockResolvedValue({ ok: true, provider: "searxng", results: [{ title: "Solo", url: "https://solo.org", snippet: "ph ácido" }] });
+    const r = await runToolByName("web_search", { query: "ph do solo" }, ctx());
+    expect(r.ok).toBe(true); expect(r.findings![0]).toMatchObject({ confidence: "baixa", source: { title: "Solo", url: "https://solo.org" } });
+    spy.mockRestore();
+  });
+  it("literature_search com bases vazias cai na WEB (não vira beco); web também vazia → no_results", async () => {
+    const lit = await import("@/lib/scholar/retrieve"); const web = await import("@/lib/search/web");
+    const s1 = vi.spyOn(lit, "retrievePapers").mockResolvedValue({ papers: [], perSource: [], reachedMin: false });
+    const s2 = vi.spyOn(web, "webSearch").mockResolvedValue({ ok: true, provider: "tavily", results: [{ title: "W", url: "https://w.io", snippet: "s" }] });
+    const r = await runToolByName("literature_search", { query: "tema raro" }, ctx());
+    expect(r.ok).toBe(true); expect(r.findings![0]!.source!.url).toBe("https://w.io"); expect((r.provenance as any).toolsUsed).toEqual(["web_search"]);
+    s2.mockResolvedValue({ ok: false, code: "web_unavailable", error: "x" });
+    expect((await runToolByName("literature_search", { query: "tema raro" }, ctx())).code).toBe("no_results");
+    s1.mockRestore(); s2.mockRestore();
+  });
+});

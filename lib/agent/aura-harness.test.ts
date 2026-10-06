@@ -121,9 +121,9 @@ describe("aura-harness · plan", () => {
     const genJson = smartGen();
     const deps = buildHarnessDeps(ctx, { genJson });
     const steps = await deps.plan(stFor({ intent: "criar_trabalho", mode: "research", academicMode: "enforced", spec: INTENTS.criar_trabalho, objective: "artigo sobre X" }));
-    // gather tools de criar_trabalho = literature_search + memory_search; 2 sub-perguntas → 4 steps
-    expect(steps.length).toBe(4);
-    expect(steps.every((s) => s.tool === "literature_search" || s.tool === "memory_search")).toBe(true);
+    // gather tools de criar_trabalho = literature_search + web_search + memory_search; 2 sub-perguntas → 6 steps
+    expect(steps.length).toBe(6);
+    expect(steps.every((s) => s.tool === "literature_search" || s.tool === "memory_search" || s.tool === "web_search")).toBe(true);
   });
 });
 
