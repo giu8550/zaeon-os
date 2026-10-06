@@ -28,6 +28,8 @@ import BolinhaCerebro from "@/components/cerebro/BolinhaCerebro";
 import CerebroPanel from "@/components/cerebro/CerebroPanel";
 import { useCerebro } from "@/components/cerebro/useCerebro";
 import { AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
+import { AvisoSoltar, ChipAnexo, useAnexoChat } from "@/components/chat/useAnexoChat";
 import {
   carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread, tocarThread,
   carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
@@ -37,13 +39,8 @@ import {
 // `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
 type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string; anexo?: string };
 
-/** O arquivo que a conversa está LENDO (PDF aberto/enviado na sala, ou uma imagem): vai junto em cada pergunta
- *  enquanto estiver anexado — a IA (Gemini) lê o PDF de verdade, inclusive escaneado. */
-export type AnexoChat = { id: string; nome: string; dataUrl: string };
-/** A sala → o chat: "leia este arquivo" (e, opcional, já pergunte algo sobre ele). */
-export const EVT_ANEXAR = "zaeon:research:anexar";
-/** O chat → a sala: o aluno escolheu arquivo(s) no 📎 do composer (a sala guarda, abre no leitor e devolve o anexo). */
-export const EVT_ARQUIVOS = "zaeon:research:arquivos";
+/** A sala → o chat: abrir uma conversa nova (o ＋ da barra de abas da sala). */
+export const EVT_NOVA_CONVERSA = "zaeon:research:nova-conversa";
 
 // Deve bater com RESEARCH_SENTINEL de app/api/ai/chat/route.ts (a estruturada vem do structured-client).
 const RESEARCH_SENTINEL = "@@RESEARCH_ACTION@@";
@@ -82,6 +79,9 @@ export default function ResearchChat({
   active = true,
   comAbas = false,
   compacto = false,
+  barra,
+  emCena = true,
+  onAtivar,
 }: {
   workType?: string | null;
   /** TCC cross-sala aberto na folha: o chat lapida ESTE documento — e tudo nasce como sugestão. */
@@ -90,8 +90,14 @@ export default function ResearchChat({
   active?: boolean;
   /** Sala unificada: mostra as conversas (um tema por aba) + "Nova" no topo do chat. */
   comAbas?: boolean;
-  /** Numa COLUNA ao lado do documento (sala): sem o recuo grande à esquerda e com letra menor. */
+  /** Numa COLUNA estreita: sem o recuo grande à esquerda e com letra menor. */
   compacto?: boolean;
+  /** Sala com ABAS: as conversas vão pra barra de abas da sala (portal) — junto das abas de pesquisa e de PDF. */
+  barra?: HTMLElement | null;
+  /** A conversa está à mostra (a aba ativa da sala é uma conversa) — senão nenhuma aba de conversa fica acesa. */
+  emCena?: boolean;
+  /** Clicou numa aba de conversa → a sala mostra o chat. */
+  onAtivar?: () => void;
 }) {
   const recuo = compacto ? "ml-0 mr-0" : "ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2";
   // Com um TCC cross-sala aberto, o padrão é LAPIDAR (sugestões com fonte verificada); o aluno
@@ -103,9 +109,6 @@ export default function ResearchChat({
   const [sending, setSending] = useState(false);
   const [quick, setQuick] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [anexo, setAnexo] = useState<AnexoChat | null>(null);
-  const anexoRef = useRef<AnexoChat | null>(null);
-  anexoRef.current = anexo;
   const listRef = useRef<HTMLDivElement>(null);
   const wt = workType || "trabalho";
   const msgsRef = useRef<Msg[]>([]);
@@ -167,29 +170,13 @@ export default function ResearchChat({
   const rootRef = useRef<HTMLDivElement>(null);
   const focarComposer = () => requestAnimationFrame(() => rootRef.current?.querySelector("textarea")?.focus({ preventScroll: true }));
   const sendRef = useRef<(t?: string) => void>(() => {});
-  // A sala anexou um arquivo (PDF enviado/arrastado/aberto no leitor): a conversa passa a lê-lo.
-  useEffect(() => {
-    const on = (e: Event) => {
-      const d = (e as CustomEvent<AnexoChat & { perguntar?: string }>).detail;
-      if (!d?.dataUrl) return;
-      setAnexo({ id: d.id, nome: d.nome, dataUrl: d.dataUrl }); anexoRef.current = { id: d.id, nome: d.nome, dataUrl: d.dataUrl };
-      if (d.perguntar) setTimeout(() => sendRef.current(d.perguntar), 0); else focarComposer();
-    };
-    window.addEventListener(EVT_ANEXAR, on);
-    return () => window.removeEventListener(EVT_ANEXAR, on);
-  }, []);
-  // 📎 do composer: PDFs vão pra sala (biblioteca + leitor, e voltam como anexo); imagem anexa direto.
-  const escolherArquivos = (files: File[]) => {
-    const pdfs = files.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
-    if (pdfs.length) window.dispatchEvent(new CustomEvent(EVT_ARQUIVOS, { detail: { files: pdfs } }));
-    const img = files.find((f) => f.type.startsWith("image/"));
-    if (img && !pdfs.length) {
-      const r = new FileReader();
-      r.onload = () => { if (typeof r.result === "string") { setAnexo({ id: `img-${Date.now()}`, nome: img.name, dataUrl: r.result }); focarComposer(); } };
-      r.readAsDataURL(img);
-    }
-  };
+  // 📎 / soltar arquivo na conversa: a IA lê o PDF (não abre o leitor). ▶ da biblioteca também chega aqui.
+  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, soltar, arrastando } = useAnexoChat("pesquisa", {
+    focar: focarComposer,
+    perguntar: (t) => { onAtivar?.(); sendRef.current(t); },
+  });
   const trocarAba = (id: string) => {
+    onAtivar?.();
     if (sending || id === abaAtivaRef.current) return;
     abaAtivaRef.current = id; setAbaAtiva(id);
     marcarAtiva(localStorage, id, ESCOPO_PESQUISA);
@@ -199,7 +186,9 @@ export default function ResearchChat({
     threadsRef.current = t; salvarThreads(localStorage, t, ESCOPO_PESQUISA); setThreads(t);
   };
   const novaAba = () => {
+    onAtivar?.();
     if (sending) return;
+    if (anexoRef.current) tirarAnexo();   // conversa nova começa sem o arquivo da anterior
     const { threads: lista, nova } = criarThread(threadsRef.current);
     threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
     abaAtivaRef.current = nova.id; setAbaAtiva(nova.id);
@@ -207,6 +196,12 @@ export default function ResearchChat({
     setMessages([]);
     focarComposer();
   };
+  const novaAbaRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const on = () => novaAbaRef.current();
+    window.addEventListener(EVT_NOVA_CONVERSA, on);
+    return () => window.removeEventListener(EVT_NOVA_CONVERSA, on);
+  }, []);
   const fecharAba = (id: string) => {
     if (sending) return;
     const { threads: lista, proxima } = fecharThread(localStorage, threadsRef.current, id, ESCOPO_PESQUISA);
@@ -369,37 +364,48 @@ export default function ResearchChat({
       setSending(false);
       if (cerebro.ligado) setTimeout(() => void cerebro.refetch(), 1500); // o gatekeeper/fixar são fire-and-forget no servidor
     }
-  }, [input, sending, messages, wt, runResearchGenerate, modoTcc, tccWorkId, cerebro]);
+  }, [input, sending, messages, wt, runResearchGenerate, modoTcc, tccWorkId, cerebro, anexoRef, onAtivar]);
   sendRef.current = (t?: string) => { void send(t); };
+  novaAbaRef.current = novaAba;
 
   return (
-    <div ref={rootRef} className="relative h-full flex flex-col bg-white/95 dark:bg-[#0a0f1c]/95 text-slate-900 dark:text-white">
-      {/* Temas da conversa (um por aba) + ＋ pra começar outro. Ficam sob a pill "Chat" da sala. */}
-      {comAbas && (
-        <div className={`shrink-0 ${compacto ? "px-3" : "px-4 sm:px-6"} pt-3 flex items-start gap-2`}>
-          <div className="min-w-0 flex-1">
+    <div ref={rootRef} className="relative h-full flex flex-col bg-white/95 dark:bg-[#0a0f1c]/95 text-slate-900 dark:text-white" {...soltar}>
+      {arrastando && <AvisoSoltar />}
+      {/* Temas da conversa (um por aba). Com `barra`, as abas vão pra BARRA DA SALA (junto das abas de
+          pesquisa e de PDF, e o ＋ é o da sala); sem ela, ficam aqui em cima do chat, com o ＋ próprio. */}
+      {comAbas && (() => {
+        const abas = (
+          <>
             <ThreadTabs
               threads={threads}
-              ativa={abaAtiva}
+              ativa={emCena ? abaAtiva : null}
               aoTrocar={trocarAba}
               aoCriar={novaAba}
               aoFechar={fecharAba}
               ocupada={sending ? abaAtiva : null}
+              semCriar={!!barra}
             />
+            {cerebro.ligado && (
+              <BolinhaCerebro
+                estado={cerebro.estado}
+                completude={cerebro.mapa?.completudeAprendizado ?? 0}
+                aberto={cerebroAberto}
+                onClick={() => {
+                  onAtivar?.();
+                  if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
+                  else setCerebroAberto((v) => !v);
+                }}
+              />
+            )}
+          </>
+        );
+        if (barra) return createPortal(abas, barra);
+        return (
+          <div className={`shrink-0 ${compacto ? "px-3" : "px-4 sm:px-6"} pt-3 flex items-start gap-2`}>
+            <div className="min-w-0 flex-1 flex items-start gap-2">{abas}</div>
           </div>
-          {cerebro.ligado && (
-            <BolinhaCerebro
-              estado={cerebro.estado}
-              completude={cerebro.mapa?.completudeAprendizado ?? 0}
-              aberto={cerebroAberto}
-              onClick={() => {
-                if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
-                else setCerebroAberto((v) => !v);
-              }}
-            />
-          )}
-        </div>
-      )}
+        );
+      })()}
       {/* ÁREA do chat (mensagens + composer). O cérebro abre em OVERLAY `absolute inset-0 z-50` DENTRO
           dela — cobre mensagens e composer de propósito (visão focada) e nunca nasce atrás/abaixo do
           composer, que está em fluxo sem z-index. A barra de conversas (com a bolinha) fica de fora,
@@ -484,17 +490,9 @@ export default function ResearchChat({
             idle={messages.length === 0 && !sending}
             active={active}
             placeholder={anexo ? `Pergunte sobre ${anexo.nome}…` : ""}
-            onFiles={escolherArquivos}
+            onFiles={(f) => void anexarArquivos(f)}
           >
-            {anexo && (
-              <div className="flex items-center gap-2 px-1 pb-2">
-                <span className="inline-flex items-center gap-1.5 max-w-full min-h-[32px] pl-3 pr-1 rounded-full text-[12px] font-semibold bg-cyan-500/12 border border-cyan-400/40 text-cyan-800 dark:text-cyan-100" title="A conversa está lendo este arquivo">
-                  <span aria-hidden>📎</span>
-                  <span className="truncate max-w-[16rem]">{anexo.nome}</span>
-                  <button type="button" onClick={() => { setAnexo(null); focarComposer(); }} aria-label="Parar de ler este arquivo" className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-cyan-500/20">×</button>
-                </span>
-              </div>
-            )}
+            {anexo && <ChipAnexo anexo={anexo} onTirar={tirarAnexo} />}
             {paletteOpen && (
               <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2">
                 {QUICK.map((q) => (

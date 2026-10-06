@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  PanelRightClose, PanelRightOpen, FileText, Plus, Loader2, Sparkles, X, ChevronDown, Trash2, GitBranch, GraduationCap,
+  PanelRightClose, PanelRightOpen, FileText, X, ChevronDown, GitBranch, GraduationCap,
 } from "lucide-react";
 import { DIRETRIZ_ESTUDOS } from "@/lib/ai/salaPersona";
 import CoworkComposer from "@/components/study/CoworkComposer";
@@ -35,6 +35,10 @@ import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import MagazineAnswerView, { podeVirarRevista } from "@/components/study/MagazineAnswerView";
 import MagazineBoundary from "@/components/study/MagazineBoundary";
 import ThreadTabs from "@/components/study/ThreadTabs";
+import { AvisoSoltar, ChipAnexo, EVT_ANEXAR, pdfDaBiblioteca, useAnexoChat } from "@/components/chat/useAnexoChat";
+import DocumentDesktop from "@/app/research-lab/DocumentDesktop";
+import { useSavedCitations } from "@/lib/useSavedCitations";
+import type { LibraryFile } from "@/lib/useLibraryFiles";
 import {
   carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread, tocarThread,
   carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
@@ -158,6 +162,25 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [libOpen, setLibOpen] = useState(true);
   const [studioOpen, setStudioOpen] = useState(false);
   const [focusIds, setFocusIds] = useState<string[]>([]);
+  // ANEXAR (📎 / soltar arquivo / soltar um documento da biblioteca na conversa): a IA lê o PDF e responde
+  // sobre ele — o mesmo comportamento da Sala de Pesquisa (components/chat/useAnexoChat).
+  const colunaRef = useRef<HTMLDivElement>(null);
+  const sendRefA = useRef<(t: string) => void>(() => {});
+  const focarComposer = () => requestAnimationFrame(() => colunaRef.current?.querySelector("textarea")?.focus({ preventScroll: true }));
+  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, anexarDaBiblioteca, soltar, arrastando } = useAnexoChat("estudos", {
+    focar: focarComposer,
+    perguntar: (t) => sendRefA.current(t),
+    aceitaBiblioteca: true,
+  });
+  // A BIBLIOTECA (o mesmo painel da Sala de Pesquisa): citações / pasta / ▶ conversar sobre um PDF
+  const { citations: citacoesSalvas } = useSavedCitations();
+  const [libPopover, setLibPopover] = useState<"citations" | "quiz" | null>(null);
+  const [libPasta, setLibPasta] = useState(false);
+  const libInputRef = useRef<HTMLInputElement>(null);
+  const conversarSobre = useCallback(async (f: LibraryFile) => {
+    const dataUrl = await pdfDaBiblioteca(f);
+    if (dataUrl) window.dispatchEvent(new CustomEvent(EVT_ANEXAR, { detail: { sala: "estudos", id: f.id, nome: f.title, dataUrl, perguntar: "Resuma este documento: ideia central, pontos principais e o que vale estudar a partir dele." } }));
+  }, []);
   const [openStudyId, setOpenStudyId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
@@ -339,6 +362,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const onDropConversation = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    // arquivo do computador ou documento da biblioteca → a IA lê
+    e.stopPropagation();   // a coluna também escuta o drop (fora da lista) — não anexar duas vezes
+    if (e.dataTransfer.files?.length || e.dataTransfer.getData("text/zaeon-file")) { soltar.onDrop(e); return; }
     const id = e.dataTransfer.getData(DT);
     if (!id) return;
     addFocus(id);
@@ -618,7 +644,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     // FAQ, Imagem, Podcast, Vídeo)" — em TODO turno. O modelo obedecia, e a conversa
     // virava um vendedor simpático: resposta rasa + menu. Artefato agora é decisão do
     // código, a partir do assunto; o modelo só conversa.
-    const systemContext = (focusIds.length
+    const lendo = anexoRef.current;
+    const systemContext = (lendo ? `O aluno anexou o arquivo "${lendo.nome}" (vai junto nesta mensagem): leia o CONTEÚDO dele e responda com base nele. ` : "") + (focusIds.length
       ? `O usuário está no co-working da Sala de Estudos e FOCOU ${focusIds.length} estudo(s): ${focusTitles.join("; ")}. Concentre-se nesse(s) estudo(s) ao responder.`
       : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade, mantendo o fio do assunto entre as mensagens.`)
       + " Nunca ofereça recursos, ferramentas ou botões da plataforma, e nunca comente o que você 'pode gerar' — fale do tema."
@@ -665,6 +692,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           cartolinaMsgId: asstId,
         },
         mentor: activeMentor ?? undefined,   // slug do mentor ativo → Aura com a voz da área
+        ...(lendo ? { fileData: lendo.dataUrl } : {}),
       }, {
         // CHAT_BG: o turno roda no worker; o id fica na mensagem pra reengatar se o aluno sair.
         // Este send() É o dono do turno enquanto estiver vivo: o reengate não pega o mesmo
@@ -702,7 +730,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
       if (tree) setTreeRefresh((n) => n + 1);
     }
-  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso, aplicarFinal]);
+  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso, aplicarFinal, anexoRef]);
+  sendRefA.current = (t: string) => { void send(t); };
 
   // Clicar num nó da árvore: conversa scopada naquele nó (vai pro composer + chip de foco).
   const onNodeChat = useCallback((node: SkillNodeState, t: SkillTreeData) => {
@@ -754,7 +783,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         style={{ background: "linear-gradient(180deg,#0f172a,rgba(15,23,42,0.25) 50%,transparent)" }}
       />
       {/* ── COLUNA CENTRAL: conversa + composer ── */}
-      <div className="relative flex-1 min-w-0 flex flex-col">
+      <div ref={colunaRef} className="relative flex-1 min-w-0 flex flex-col" onDragOver={soltar.onDragOver} onDragLeave={soltar.onDragLeave} onDrop={(e) => { if (e.dataTransfer.files?.length || e.dataTransfer.getData("text/zaeon-file")) soltar.onDrop(e); }}>
+        {arrastando && <AvisoSoltar />}
 
         {/* ⟁ Árvore de habilidades — drawer opt-in por cima da conversa (não troca a tela) */}
         {treeOpen && (
@@ -975,7 +1005,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               busy={sending}
               idle={messages.length === 0 && !sending}
               active={active && !openStudyId}
+              onFiles={(f) => void anexarArquivos(f)}
+              placeholder={anexo ? `Pergunte sobre ${anexo.nome}…` : ""}
             >
+              {anexo && <ChipAnexo anexo={anexo} onTirar={tirarAnexo} />}
               {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
               <div className="flex items-center gap-2">
                 <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
@@ -998,61 +1031,34 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         </div>
       </div>
 
-      {/* ── BIBLIOTECA (direita, retrátil) — moldura degradê navy (par da sidebar) ── */}
+      {/* ── BIBLIOTECA (direita, retrátil) — o MESMO painel da Sala de Pesquisa (documentos, pasta com os
+          estudos, citações, lixeira). ▶ ou arrastar um documento pra conversa = a IA lê; ＋ = enviar PDF. ── */}
+      <input ref={libInputRef} type="file" accept="application/pdf" multiple className="hidden"
+        onChange={(e) => { const l = e.target.files; if (l?.length) void anexarArquivos(Array.from(l)); e.target.value = ""; }} />
       {libOpen ? (
-        <div className="relative lg:w-64 shrink-0 flex flex-col min-h-0 lg:m-3 lg:rounded-2xl border-t lg:border border-transparent dark:border-white/12 bg-slate-100/80 dark:bg-[#0a0f1c] overflow-hidden">
-          {/* borda em degradê preto/navy — só no modo claro (o escuro já está ok) */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 lg:rounded-2xl z-10 dark:hidden"
-            style={{
-              padding: "1.5px",
-              background: "linear-gradient(180deg,#0f172a,rgba(15,23,42,0.35) 45%,rgba(15,23,42,0.10))",
-              WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
-              WebkitMaskComposite: "xor",
-              maskComposite: "exclude" as any,
-            }}
+        <div className="relative lg:w-64 shrink-0 flex flex-col min-h-0 lg:m-3 max-h-[45vh] lg:max-h-none [&>*]:flex-1">
+          <DocumentDesktop
+            processingFileId={null}
+            onPlayFile={(f) => void conversarSobre(f)}
+            onAdd={() => libInputRef.current?.click()}
+            openPopover={libPopover}
+            onTogglePopover={setLibPopover}
+            citationCount={citacoesSalvas.length}
+            showFolder={libPasta}
+            onToggleFolder={() => setLibPasta((v) => !v)}
+            sessions={spaces.map((sp) => ({ id: sp.id, title: sp.title || "Estudo" }))}
+            onOpenSession={openStudy}
+            onNewWork={newStudy}
+            onDeleteWork={(id) => deleteStudy(id, spaces.find((sp) => sp.id === id)?.title)}
+            onView={(f) => void anexarDaBiblioteca(f.id)}
+            onDropFiles={(f) => void anexarArquivos(f)}
+            sessionDragMime={DT}
+            rotuloPasta="📁 Meus estudos"
           />
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03]">
-            <span className="text-[12px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50 font-tech">Biblioteca</span>
-            <span className="text-[11px] font-mono text-slate-400">{spaces.length}</span>
-            <button onClick={newStudy} className="ml-auto p-1 rounded-lg text-slate-400 hover:text-cyan-500" title="Novo estudo"><Plus size={15} /></button>
-            <button onClick={() => setLibOpen(false)} className="p-1 rounded-lg text-slate-400 hover:text-cyan-500" title="Recolher biblioteca"><PanelRightClose size={15} /></button>
-          </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 flex flex-col gap-2 min-h-[120px]">
-            <p className="px-1 pt-0.5 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/30 font-tech">Estudos</p>
-            {spaces.length === 0 ? (
-              <p className="text-[12.5px] text-slate-400 dark:text-white/30 p-2 leading-relaxed font-tech">Nenhum estudo ainda. Crie um no “+” ou peça um à Aura.</p>
-            ) : (
-              spaces.map((sp) => (
-                <div
-                  key={sp.id}
-                  draggable
-                  onDragStart={(e) => { e.dataTransfer.setData(DT, sp.id); e.dataTransfer.effectAllowed = "copy"; }}
-                  className={`group flex items-center gap-2 rounded-xl border p-2 cursor-grab active:cursor-grabbing transition-colors
-                    ${focusIds.includes(sp.id)
-                      ? "border-cyan-400/60 bg-cyan-500/5 dark:bg-cyan-500/10"
-                      : "bg-white border-slate-200 shadow-sm hover:border-cyan-400/50 dark:bg-white/[0.04] dark:border-white/10 dark:shadow-none"}`}
-                  title="Arraste pra conversa para focar — ou clique para abrir"
-                >
-                  <button onClick={() => openStudy(sp.id)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
-                    <FileText size={14} className="text-violet-500 dark:text-violet-300 shrink-0" />
-                    <span className="flex-1 min-w-0 text-[13px] font-medium text-slate-700 dark:text-white/90 truncate font-tech">{sp.title || "Estudo"}</span>
-                  </button>
-                  <button onClick={() => deleteStudy(sp.id, sp.title)}
-                    title="Apagar estudo"
-                    className="opacity-0 group-hover:opacity-100 shrink-0 text-slate-400 hover:text-rose-500">
-                    <Trash2 size={13} />
-                  </button>
-                  <button onClick={() => (focusIds.includes(sp.id) ? removeFocus(sp.id) : addFocus(sp.id))}
-                    title={focusIds.includes(sp.id) ? "Tirar do foco" : "Focar"}
-                    className="opacity-0 group-hover:opacity-100 shrink-0 text-slate-400 hover:text-cyan-500">
-                    <Sparkles size={13} />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
+          <button onClick={() => setLibOpen(false)} title="Recolher biblioteca"
+            className="absolute top-2 right-2 z-20 w-6 h-6 rounded-lg flex items-center justify-center text-white/40 hover:text-white/85 hover:bg-white/10 transition-colors">
+            <PanelRightClose size={13} />
+          </button>
         </div>
       ) : (
         <button onClick={() => setLibOpen(true)} title="Mostrar biblioteca"

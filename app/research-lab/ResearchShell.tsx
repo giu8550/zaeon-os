@@ -73,11 +73,10 @@ interface ResearchShellProps {
   defaultChatOpen?: boolean;
   /** O chat está em cena (sala + sub-aba visíveis) — liga o autofoco do composer. */
   chatActive?: boolean;
-  /** Sala unificada: qual visão mostrar — "chat" (conversas por tema), "folha" (a pesquisa em folha,
-   *  com salvar/publicar) ou "sala" (a SALA DE PESQUISA de verdade: a folha/o PDF E o chat lado a lado,
-   *  sem sub-abas — o aluno conversa sobre o documento aberto na mesma tela). */
-  unifiedView?: "chat" | "folha" | "sala";
-  /** PDFs soltos na sala (vindos do computador) → guardar, abrir no leitor e o chat ler. */
+  /** Sala unificada: qual visão mostrar — "chat", "folha" ou "abas" (a SALA DE PESQUISA: UMA barra de abas
+   *  com as conversas, a pesquisa ("Minha pesquisa") e o leitor de PDF; a aba ativa ocupa a sala inteira). */
+  unifiedView?: "chat" | "folha" | "abas";
+  /** PDFs do computador soltos na folha/leitor ou na barra de documentos → vão pra biblioteca. */
   onDropFiles?: (files: File[]) => void;
   /** Sala unificada: algo pediu a folha (tocar/abrir um documento) estando no chat. */
   onNeedSheet?: () => void;
@@ -124,14 +123,20 @@ export default function ResearchShell({
   const [fileDragOver, setFileDragOver] = useState(false);
   const [chatOpen, setChatOpen] = useState(defaultChatOpen);   // chat científico ↔ trabalho
   // Sala unificada: a visão vem da sub-aba (chat × folha). Fora dela, a pill ⟁ Chat alterna.
-  const sala = unifiedView === "sala";   // folha + chat lado a lado: o chat tem coluna própria (não cobre o documento)
-  const chatVisible = unifiedView ? unifiedView === "chat" : chatOpen;
+  // Sala com ABAS: `vista` = o que ocupa a sala — "chat" (a conversa da aba de conversa ativa) ou o id de uma
+  // janela (a pesquisa / um PDF no leitor). As abas de conversa chegam por portal na `barra`.
+  const abas = unifiedView === "abas";
+  const [vista, setVista] = useState<string>("chat");
+  const [barra, setBarra] = useState<HTMLDivElement | null>(null);
+  const [maisAberto, setMaisAberto] = useState(false);
+  const chatVisible = abas ? vista === "chat" : unifiedView ? unifiedView === "chat" : chatOpen;
+  const verJanela = useCallback((id: string) => { onSelectWindow(id); setVista(id); }, [onSelectWindow]);
   const [docsCollapsed, setDocsCollapsed] = useState(false);  // retrair a barra de documentos
 
   // Gerou um trabalho pelo chat (zaeon:research:newdoc) → fecha o chat e mostra o documento.
   useEffect(() => {
     // Idem ao abrir um trabalho/pesquisa salva na folha (zaeon:research:showdoc, do page.tsx).
-    const onNewDoc = () => setChatOpen(false);
+    const onNewDoc = () => { setChatOpen(false); setVista("research"); };
     window.addEventListener("zaeon:research:newdoc", onNewDoc);
     window.addEventListener("zaeon:research:showdoc", onNewDoc);
     return () => {
@@ -148,15 +153,15 @@ export default function ResearchShell({
     return () => window.removeEventListener("resize", f);
   }, []);
   const mobile = vw > 0 && vw < 640;
-  // Sala (3 colunas) em tela média: recolhe a barra de documentos pra sobrar espaço pro documento e o chat.
-  useEffect(() => { if (sala && vw > 0 && vw < 1150) setDocsCollapsed(true); }, [sala, vw]);
 
   // Unificada: tocar/abrir um documento estando no chat leva pra folha (onde o documento aparece).
   const needSheet = unifiedView === "chat" ? onNeedSheet : undefined;
-  const viewDoc = useCallback((id: string) => { needSheet?.(); onViewDoc?.(id); }, [needSheet, onViewDoc]);
+  // Abas: arrastar um documento da biblioteca pro leitor abre a aba do PDF (a page cria a janela `pdf-<id>`).
+  const viewDoc = useCallback((id: string) => { needSheet?.(); onViewDoc?.(id); if (abas) setVista(`pdf-${id}`); }, [needSheet, onViewDoc, abas]);
 
   const handlePlayFile = useCallback(
     (file: LibraryFile) => {
+      if (abas) { setVista("chat"); onPlayFile(file); return; }   // ▶ = conversar sobre o PDF (no chat), sem abrir janela
       needSheet?.();
       addWindow({
         id: file.id,
@@ -167,7 +172,7 @@ export default function ResearchShell({
       onSelectWindow(file.id);
       onPlayFile(file);
     },
-    [addWindow, onSelectWindow, onPlayFile, needSheet],
+    [addWindow, onSelectWindow, onPlayFile, needSheet, abas],
   );
 
   return (
@@ -177,11 +182,7 @@ export default function ResearchShell({
         flexDirection: mobile ? "column" : undefined,
         gridTemplateColumns: mobile
           ? undefined
-          : sala
-            ? (flipped
-                ? `${docsCollapsed ? "48px" : "12rem"} minmax(360px, 1fr) minmax(0, 1fr)`
-                : `minmax(0, 1fr) minmax(360px, 1fr) ${docsCollapsed ? "48px" : "12rem"}`)
-            : (flipped
+          : (flipped
                 ? `${docsCollapsed ? "48px" : "15rem"} 1fr`
                 : `1fr ${docsCollapsed ? "48px" : "15rem"}`),
         gap: mobile ? 10 : 14,
@@ -203,7 +204,7 @@ export default function ResearchShell({
       <div
         className="relative flex flex-col min-h-0 overflow-hidden rounded-[18px] transition-all"
         style={{
-          order: sala ? (mobile ? 1 : flipped ? 3 : 0) : flipped ? 2 : 0,
+          order: flipped ? 2 : 0,
           minHeight: mobile ? "60vh" : undefined,
           flex: mobile ? "1 1 auto" : undefined,
           background: "rgba(255,255,255,0.045)",
@@ -215,7 +216,7 @@ export default function ResearchShell({
         // Arrastar um documento PRA folha → abre o PDF real (não confundir com citação: mime diferente).
         onDragOver={(e) => {
           const doc = onViewDoc && e.dataTransfer.types.includes("text/zaeon-file");
-          const doPc = onDropFiles && e.dataTransfer.types.includes("Files");   // PDF do computador
+          const doPc = onDropFiles && e.dataTransfer.types.includes("Files") && !(abas && chatVisible);   // PDF do computador (no chat, quem recebe é o próprio chat)
           if (doc || doPc) {
             e.preventDefault();
             e.dataTransfer.dropEffect = "copy";
@@ -230,7 +231,7 @@ export default function ResearchShell({
           if (id && onViewDoc) {
             e.preventDefault();
             viewDoc(id);
-          } else if (onDropFiles && e.dataTransfer.files?.length) {
+          } else if (onDropFiles && e.dataTransfer.files?.length && !(abas && chatVisible)) {
             e.preventDefault();
             const pdfs = Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
             if (pdfs.length) onDropFiles(pdfs);
@@ -243,13 +244,84 @@ export default function ResearchShell({
           <div className="absolute inset-0 z-[60] flex items-center justify-center pointer-events-none" style={{ background: "rgba(16,185,129,0.10)", backdropFilter: "blur(2px)" }}>
             <div className="flex items-center gap-2 px-4 py-2 rounded-full" style={{ background: "rgba(6,78,59,0.92)", border: "1px solid rgba(34,197,94,0.7)", boxShadow: "0 10px 30px -10px rgba(34,197,94,0.8)" }}>
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[14px] leading-none" style={{ background: "rgba(34,197,94,0.95)" }}>+</span>
-              <span className="text-[11px] font-black uppercase tracking-wide text-emerald-100">Soltar para ver o documento</span>
+              <span className="text-[11px] font-black uppercase tracking-wide text-emerald-100">{abas && chatVisible ? "Soltar para a IA ler" : "Soltar para ver o documento"}</span>
             </div>
           </div>
         )}
 
+        {/* SALA COM ABAS: uma barra só — as conversas (portal do chat), a pesquisa e os PDFs abertos no leitor,
+            e um ＋ (nova conversa / nova pesquisa). A aba ativa ocupa a sala inteira. */}
+        {abas && (
+          <div className="relative shrink-0 flex items-center gap-1.5 px-3 py-2.5 overflow-x-auto no-scrollbar" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }} role="tablist" aria-label="Abas da sala">
+            <div ref={setBarra} className="flex items-center gap-1.5 shrink-0" />
+            {windows.filter((w) => w.type !== "document").map((w) => {
+              const atual = vista === w.id;
+              const rotulo = w.id === "research" ? (workType ? `Meu ${workType}` : "Minha pesquisa") : w.label;
+              return (
+                <div
+                  key={w.id}
+                  role="tab"
+                  aria-selected={atual}
+                  tabIndex={0}
+                  onClick={() => verJanela(w.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); verJanela(w.id); } }}
+                  title={rotulo}
+                  className={`group shrink-0 inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full border cursor-pointer transition-colors max-w-[190px] ${
+                    atual
+                      ? "bg-black dark:bg-white text-white dark:text-black border-transparent"
+                      : "text-slate-700 dark:text-white/70 border-slate-200 dark:border-white/10 hover:border-cyan-400/50"
+                  }`}
+                >
+                  {w.id === "research" && onReadResearch ? (
+                    <span
+                      role="button"
+                      aria-label={isReadingResearch ? "Parar leitura" : "Ouvir a pesquisa"}
+                      title={isReadingResearch ? "Parar a leitura" : "Ouvir a pesquisa em voz"}
+                      onClick={(e) => { e.stopPropagation(); onReadResearch(); }}
+                      className="text-[10px] leading-none"
+                    >{isReadingResearch ? "⏹" : "▶"}</span>
+                  ) : <span className="text-[11px] leading-none">{w.emoji}</span>}
+                  <span className="text-[11px] font-bold truncate">{rotulo}</span>
+                  {w.id !== "research" ? (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeWindow(w.id); if (vista === w.id) setVista("chat"); }}
+                      aria-label={`Fechar ${rotulo}`}
+                      className={`shrink-0 rounded-full px-1 text-[12px] leading-none transition-opacity ${atual ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover:opacity-70 hover:!opacity-100"}`}
+                    >×</button>
+                  ) : <span className="w-1" />}
+                </div>
+              );
+            })}
+            <button
+              onClick={() => setMaisAberto((v) => !v)}
+              title="Nova aba"
+              aria-label="Nova aba"
+              aria-expanded={maisAberto}
+              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-dashed border-slate-300 dark:border-white/15 text-slate-600 dark:text-white/60 hover:border-cyan-400/60 hover:text-cyan-600 dark:hover:text-cyan-300 transition-colors"
+            >
+              <span className="text-[13px] leading-none">＋</span>
+              <span className="text-[11px] font-bold">Nova</span>
+            </button>
+          </div>
+        )}
+        {abas && maisAberto && (
+          <div className="absolute z-[70] top-12 left-3 flex flex-col gap-1 p-1.5 rounded-2xl min-w-[200px]" style={{ background: "rgba(14,16,28,0.96)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 20px 50px -20px rgba(0,0,0,0.9)" }} onMouseLeave={() => setMaisAberto(false)}>
+            <button
+              onClick={() => { setMaisAberto(false); setVista("chat"); window.dispatchEvent(new CustomEvent("zaeon:research:nova-conversa")); }}
+              className="text-left px-3 py-2 rounded-xl text-[12px] font-bold text-white/85 hover:bg-white/10"
+            >⟁ Nova conversa</button>
+            {onNewWork && (
+              <button
+                onClick={() => { setMaisAberto(false); onNewWork(); verJanela("research"); }}
+                className="text-left px-3 py-2 rounded-xl text-[12px] font-bold text-white/85 hover:bg-white/10"
+              >📝 Nova pesquisa</button>
+            )}
+            <p className="px-3 pt-1 pb-1.5 text-[10px] text-white/40 leading-snug">Pra ler um PDF no leitor, arraste o documento da biblioteca pra cá.</p>
+          </div>
+        )}
+
         {/* Chat da sala unificada: as conversas (temas) vivem dentro do próprio chat — sem 2ª pill. */}
-        {unifiedView !== "chat" && <WindowSwitcher
+        {unifiedView !== "chat" && !abas && <WindowSwitcher
           windows={windows}
           activeId={activeId}
           // Selecionar uma janela OU um tipo (TCC/Artigo/Relatório) leva pro trabalho:
@@ -271,9 +343,17 @@ export default function ResearchShell({
           {/* Sala unificada: o chat fica MONTADO (só escondido) ao ir pra folha — uma resposta em curso
               não é derrubada, o rascunho não some e o composer não precisa remontar. Fora da sala
               unificada mantém o comportamento antigo (monta/desmonta pela pill). */}
-          {!sala && (chatVisible || unifiedView) && (
+          {(chatVisible || unifiedView) && (
             <div className="absolute inset-0 z-[55]" style={unifiedView && !chatVisible ? { display: "none" } : undefined} aria-hidden={unifiedView ? !chatVisible : undefined}>
-              <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive && chatVisible} comAbas={!!unifiedView} />
+              <ResearchChat
+                workType={workType}
+                tccWorkId={tccWorkId}
+                active={chatActive && chatVisible}
+                comAbas={!!unifiedView}
+                barra={abas ? barra : undefined}
+                emCena={chatVisible}
+                onAtivar={abas ? () => setVista("chat") : undefined}
+              />
             </div>
           )}
           {/* Research window (always mounted) */}
@@ -336,37 +416,13 @@ export default function ResearchShell({
 
       </div>
 
-      {/* ──────── CHAT (sala): coluna própria, ao lado do documento — conversa sobre o PDF aberto/enviado ──────── */}
-      {sala && (
-        <div
-          className="relative min-h-0 overflow-hidden rounded-[18px]"
-          style={{
-            order: mobile ? 0 : 2,
-            minHeight: mobile ? "70vh" : undefined,
-            height: mobile ? "70vh" : undefined,
-            border: "1px solid rgba(255,255,255,0.10)",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
-          }}
-          // soltar um PDF em cima do chat = o mesmo que no documento
-          onDragOver={(e) => { if (onDropFiles && e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
-          onDrop={(e) => {
-            if (!onDropFiles || !e.dataTransfer.files?.length) return;
-            e.preventDefault();
-            const pdfs = Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
-            if (pdfs.length) onDropFiles(pdfs);
-          }}
-        >
-          <ResearchChat workType={workType} tccWorkId={tccWorkId} active={chatActive} comAbas compacto />
-        </div>
-      )}
-
       {/* ──────── RIGHT PANEL — barra de documentos, RETRÁTIL (como a biblioteca da Sala de Estudos) ──────── */}
       <div
         className={mobile ? "" : "relative h-full min-h-0 overflow-hidden"}
         style={
           mobile
-            ? { maxHeight: "40vh", minHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", order: 2 }
-            : { order: sala ? (flipped ? 1 : 3) : flipped ? 1 : 2 }
+            ? { maxHeight: "40vh", minHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column" }
+            : { order: flipped ? 1 : 2 }
         }
       >
         {!mobile && docsCollapsed ? (

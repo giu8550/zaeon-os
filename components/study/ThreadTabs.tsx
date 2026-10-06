@@ -12,7 +12,7 @@ import { Plus, X } from "lucide-react";
 import type { Thread } from "@/lib/chat/threads";
 
 export default function ThreadTabs({
-  threads, ativa, aoTrocar, aoCriar, aoFechar, ocupada,
+  threads, ativa, aoTrocar, aoCriar, aoFechar, ocupada, semCriar = false,
 }: {
   threads: readonly Thread[];
   ativa: string | null;
@@ -21,9 +21,11 @@ export default function ThreadTabs({
   aoFechar: (id: string) => void;
   /** id da conversa que está respondendo agora — ganha o ponto pulsando. */
   ocupada?: string | null;
+  /** sem o "＋ Nova" (quem tem a barra oferece o próprio ＋) */
+  semCriar?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1" role="tablist" aria-label="Conversas">
+    <div className={`flex items-center gap-1.5 ${semCriar ? "" : "overflow-x-auto custom-scrollbar pb-1"}`} role="tablist" aria-label="Conversas">
       {threads.map((t) => {
         const atual = t.id === ativa;
         return (
@@ -58,7 +60,7 @@ export default function ThreadTabs({
         );
       })}
 
-      <button
+      {!semCriar && <button
         onClick={aoCriar}
         title="Nova conversa"
         aria-label="Nova conversa"
@@ -66,7 +68,7 @@ export default function ThreadTabs({
       >
         <Plus size={13} />
         <span className="text-[11px] font-bold">Nova</span>
-      </button>
+      </button>}
     </div>
   );
 }
