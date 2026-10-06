@@ -14,22 +14,24 @@ const COR_COMODO: Record<string, number> = { hall: 0x6fb6ff, reunioes: 0x5a8cff,
 
 export function criarInteriorNave(o: { low: boolean; cor: THREE.Color }): InteriorNaveHandle {
   const g = new THREE.Group(), anim: ((dt: number, t: number, voo: number) => void)[] = [];
+  /** materiais SEM PBR (Lambert: barato) — o convés não tem mais point light; o brilho vem do emissivo e dos frisos */
+  const lambert = ({ roughness: _r, metalness: _m, ...p }: THREE.MeshStandardMaterialParameters) => new THREE.MeshLambertMaterial(p as THREE.MeshLambertMaterialParameters);
   const add = <T extends THREE.Object3D>(x: T) => { g.add(x); return x; };
   const box = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => { const m = add(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)); m.position.set(x, y, z); return m; };
   const aditivo = (c: THREE.ColorRepresentation, op: number) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x2a3440, roughness: 0.35, metalness: 0.75, emissive: 0x0b1530, emissiveIntensity: 0.5 });
-  const escuro = new THREE.MeshStandardMaterial({ color: 0x10161d, roughness: 0.5, metalness: 0.7 });
-  const estofado = new THREE.MeshStandardMaterial({ color: 0x23324a, roughness: 0.8, emissive: 0x0e1626, emissiveIntensity: 0.4 });
-  const couro = new THREE.MeshStandardMaterial({ color: 0x6a4a2e, roughness: 0.6, emissive: 0x24140a, emissiveIntensity: 0.35 });
-  const branco = new THREE.MeshStandardMaterial({ color: 0xe8eef5, roughness: 0.25, metalness: 0.2, emissive: 0x2a3440, emissiveIntensity: 0.3 });
-  const vidro = new THREE.MeshStandardMaterial({ color: 0x9fe8ff, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide });
+  const metal = lambert({ color: 0x2a3440, roughness: 0.35, metalness: 0.75, emissive: 0x0b1530, emissiveIntensity: 0.5 });
+  const escuro = lambert({ color: 0x16203a, emissive: 0x0b1a3a, emissiveIntensity: 0.7 });
+  const estofado = lambert({ color: 0x23324a, roughness: 0.8, emissive: 0x0e1626, emissiveIntensity: 0.4 });
+  const couro = lambert({ color: 0x6a4a2e, roughness: 0.6, emissive: 0x24140a, emissiveIntensity: 0.35 });
+  const branco = lambert({ color: 0xe8eef5, roughness: 0.25, metalness: 0.2, emissive: 0x2a3440, emissiveIntensity: 0.3 });
+  const vidro = lambert({ color: 0x9fe8ff, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide });
   const tela = (cor: string, linhas = 6) => { const c = document.createElement("canvas"); c.width = 256; c.height = 160; const x = c.getContext("2d")!; const gr = x.createLinearGradient(0, 0, 256, 160); gr.addColorStop(0, "#04121c"); gr.addColorStop(1, "#0a2230"); x.fillStyle = gr; x.fillRect(0, 0, 256, 160); x.fillStyle = cor; x.fillRect(10, 10, 236, 10); x.globalAlpha = 0.75; for (let i = 0; i < linhas; i++) x.fillRect(14, 34 + i * 18, 40 + ((i * 53) % 150), 6); x.globalAlpha = 1; x.strokeStyle = cor; x.lineWidth = 3; x.strokeRect(170, 36, 70, 100); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
 
   // ── PISO do convés (disco) com veios de luz + o tingido de cada cômodo ──
-  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(NAVE_QG.interiorR + 1.2, o.low ? 40 : 72), new THREE.MeshStandardMaterial({ color: 0x1a222c, roughness: 0.55, metalness: 0.5, emissive: 0x0a1226, emissiveIntensity: 0.5 })));
+  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(NAVE_QG.interiorR + 1.2, o.low ? 40 : 72), lambert({ color: 0x1a222c, roughness: 0.55, metalness: 0.5, emissive: 0x0a1226, emissiveIntensity: 0.5 })));
   piso.rotation.x = -Math.PI / 2; piso.position.y = 0.01;
   for (const c of COMODOS) {
-    const p = add(new THREE.Mesh(new THREE.PlaneGeometry(c.x1 - c.x0 - 0.4, c.z1 - c.z0 - 0.4), new THREE.MeshStandardMaterial({ color: 0x141c26, roughness: 0.4, metalness: 0.4, emissive: COR_COMODO[c.id] ?? 0x66e6ff, emissiveIntensity: 0.07 })));
+    const p = add(new THREE.Mesh(new THREE.PlaneGeometry(c.x1 - c.x0 - 0.4, c.z1 - c.z0 - 0.4), lambert({ color: 0x141c26, roughness: 0.4, metalness: 0.4, emissive: COR_COMODO[c.id] ?? 0x66e6ff, emissiveIntensity: 0.07 })));
     p.rotation.x = -Math.PI / 2; p.position.set((c.x0 + c.x1) / 2, 0.02, (c.z0 + c.z1) / 2);
   }
   const fitaMat = aditivo(0x6fb6ff, 0.7);
@@ -52,14 +54,14 @@ export function criarInteriorNave(o: { low: boolean; cor: THREE.Color }): Interi
     if (mat) box(lx, m.alt, lz, mat, cx, m.alt / 2, cz);
     if (m.tipo === "sofa") { if (lz > lx) box(0.25, 0.5, lz, estofado, m.x0 + 0.12, m.alt + 0.25, cz); else box(lx, 0.5, 0.25, estofado, cx, m.alt + 0.25, m.z1 - 0.12); }   // encosto do lado da parede
     if (m.tipo === "chuveiro") { box(lx, m.alt, lz, vidro, cx, m.alt / 2, cz); const ch = add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.05, 16), branco)); ch.position.set(cx, m.alt - 0.15, cz); }
-    if (m.tipo === "pia") { const esp = add(new THREE.Mesh(new THREE.PlaneGeometry(lx - 0.4, 1.1), new THREE.MeshStandardMaterial({ color: 0xcfe9ff, roughness: 0.02, metalness: 1 }))); esp.position.set(cx, 1.7, m.z0 - 0.04); }
+    if (m.tipo === "pia") { const esp = add(new THREE.Mesh(new THREE.PlaneGeometry(lx - 0.4, 1.1), lambert({ color: 0xcfe9ff, roughness: 0.02, metalness: 1 }))); esp.position.set(cx, 1.7, m.z0 - 0.04); }
     if (m.tipo === "vaso") box(lx, 0.9, 0.25, branco, cx, 0.9, m.z0 + 0.12);
   }
   // ── a CABINE DE COMANDO, em cima (mezanino embaixo da redoma): piso com o vão da escada, guarda-corpos de vidro,
   //    o console curvo, a cadeira do piloto (`assento`), o TERMINAL DE ESTUDOS ──
   const cab = new THREE.Group(); cab.position.y = NAVE_QG.cabine; g.add(cab);
   const cbox = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); cab.add(m); return m; };
-  const C = CABINE, E = ESCADA, pisoCab = new THREE.MeshStandardMaterial({ color: 0x1c2632, roughness: 0.4, metalness: 0.6, emissive: 0x0a1430, emissiveIntensity: 0.6 });
+  const C = CABINE, E = ESCADA, pisoCab = lambert({ color: 0x1c2632, roughness: 0.4, metalness: 0.6, emissive: 0x0a1430, emissiveIntensity: 0.6 });
   // o piso: uma placa com o furo redondo da escada em caracol + o guarda-corpo redondo do vão (aberto na saída do topo)
   const forma = new THREE.Shape(); forma.moveTo(C.x0, -C.z0); forma.lineTo(C.x1, -C.z0); forma.lineTo(C.x1, -C.z1); forma.lineTo(C.x0, -C.z1); forma.closePath();
   const furo = new THREE.Path(); furo.absarc(E.cx, -E.cz, E.rOut, 0, Math.PI * 2, true); forma.holes.push(furo);
@@ -135,8 +137,6 @@ export function criarInteriorNave(o: { low: boolean; cor: THREE.Color }): Interi
   const montarRampa = () => { const inc = Math.atan2(queda, horiz), comp = Math.hypot(queda, horiz); pivo.rotation.x = -inc; pivo.scale.z = comp; fim.position.set(0, -queda + 0.58, -horiz); fim.visible = fimFechado; };
   montarRampa();
   anim.push((_, __, voo) => { rampa.visible = voo < 0.5; rampa.scale.z = Math.max(0.01, 1 - voo * 2); });
-  // luz do convés
-  if (!o.low) { const luz = new THREE.PointLight(0xcfe9ff, 1.4, NAVE_QG.interiorR * 2); luz.position.set(0, 4, 0); g.add(luz); }
 
   return { group: g, assento, atualizar(dt, t, voo) { for (const f of anim) f(dt, t, voo); },
     rampa(q, f) { if (Math.abs(q - queda) < 0.01 && f === fimFechado) return; queda = q; fimFechado = f; montarRampa(); } };

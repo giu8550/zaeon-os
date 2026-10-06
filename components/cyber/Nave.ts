@@ -3,7 +3,9 @@
  * com o leme e o terminal de estudos, sala de estar, servidores, banheiro, motor — components/cyber/InteriorNave.ts,
  * layout em lib/cyber/naveQG.ts). Mora PAIRANDO atracada ao lado da Zaeon (sem hangar) e para no ar onde o dono quiser.
  * O dorso é uma CÚPULA RETRÁTIL de 8 pétalas que se abre quando se está a bordo (`aBordo`) e fecha ao sair.
- * Casco escuro metálico com veios de luz, RAIOS correndo pelos anéis de energia, o anel de luzes da borda girando (o
+ * CAMUFLAGEM ALIENÍGENA em vez de metal: o casco é quase invisível — só a borda das curvas acende (fresnel) e uma
+ * ondulação lenta corre por ele; tudo SEM luz (shader próprio, sem PBR nem point lights: leve pra GPU). O convés
+ * por dentro só é desenhado comigo a bordo (`verDentro`) — de fora não se vê o interior. Veios de luz, RAIOS correndo pelos anéis de energia, o anel de luzes da borda girando (o
  * "eixo giratório") e um halo tracejado girando ao contrário, SEIS propulsores na barriga, pernas de pouso que recolhem
  * em voo, rastro de plasma atrás. Tudo em ondas LENTAS, sem estrobo; `prefers-reduced-motion` aquieta.
  * A origem do group é o ponto de apoio no chão; física do voo em lib/cyber/voo.ts.
@@ -24,6 +26,8 @@ export type NaveHandle = {
   aBordo(on: boolean): void;
   /** a REDOMA da cabine de comando abre (alguém de pé lá em cima, sem pilotar) / fecha */
   abrirCabine(on: boolean): void;
+  /** desenhar o convés por dentro (só comigo a bordo): de fora, a nave camuflada é só a silhueta — o interior não aparece */
+  verDentro(on: boolean): void;
   /** a rampa de trás: quanto ela desce (m) e se o fim tem guarda-corpo (pairando no ar) */
   rampa(queda: number, fimFechado: boolean): void;
   /** `voando`: recolhe as pernas e acende tudo; `vel` (0..1) = rastro e giro; `curva` inclina */
@@ -39,6 +43,25 @@ const BARRIGA = [[0, -0.97], [1.2, -0.93], [2.4, -0.7], [3.3, -0.34], [3.78, 0.0
 /** a CABINE DE COMANDO no centro: o raio do buraco no dorso (a redoma retrátil cobre) e a altura dela */
 const R_CAB = 1.32, Y_CAB = 0.86, H_CAB = 0.36;
 const DORSO = [[3.78, 0.0], [3.5, 0.24], [3.0, 0.47], [2.4, 0.68], [1.8, 0.81], [R_CAB, Y_CAB]];
+/** a CAMUFLAGEM: um vidro "que não está lá" — transparente no miolo, a BORDA das curvas acende (fresnel, mostra a
+ *  forma) e uma ondulação lenta escorre pela superfície. Sem luzes nem PBR: um punhado de contas por pixel.
+ *  `uOp` multiplica tudo (a bordo, na minha tela, o dorso some mais). `abs(dot)` → vale dos dois lados (pétalas). */
+function camuflagem(cor: THREE.Color, o: { base?: number; borda?: number; lados?: boolean } = {}): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { uCor: { value: cor.clone() }, uT: { value: 0 }, uOp: { value: 1 }, uBase: { value: o.base ?? 0.012 }, uBorda: { value: o.borda ?? 0.45 } },
+    vertexShader: `varying vec3 vN; varying vec3 vV; varying vec3 vP;
+      void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; vP = position; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uCor; uniform float uT; uniform float uOp; uniform float uBase; uniform float uBorda; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+      void main() {
+        float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+        float borda = pow(f, 4.5);   // só a silhueta e as curvas fortes acendem (o disco é chato: visto de lado, quase tudo é "borda")
+        float onda = 0.5 + 0.5 * sin(vP.y * 9.0 - uT * 1.1 + sin(vP.x * 2.3 + vP.z * 2.7 + uT * 0.4) * 1.6);
+        float a = (uBase + borda * uBorda + onda * onda * onda * 0.035) * uOp;
+        gl_FragColor = vec4(uCor * (0.3 + borda * 1.2 + onda * 0.2), a);
+      }`,
+    transparent: true, depthWrite: false, side: o.lados ? THREE.DoubleSide : THREE.FrontSide,
+  });
+}
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 
@@ -51,7 +74,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   const aditivo = (c: THREE.ColorRepresentation, o: number) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
 
   // casco: disco com barriga funda, aba fina e uma CRISTA no dorso
-  const metal = new THREE.MeshStandardMaterial({ color: 0xdfe8f5, roughness: 0.32, metalness: 0.6, emissive: 0x0b1a33, emissiveIntensity: 0.5 });
+  const metal = camuflagem(ALIEN);   // a barriga (o dorso tem a dele: some mais a bordo)
   // perfil do disco em 2 peças: a BARRIGA (até a aba) e o DORSO (cúpula baixa e lisa) — a bordo, o dorso some
   const v2 = (l: number[][]) => l.map(([r, y]) => new THREE.Vector2(r!, y!));
   const casco = new THREE.Mesh(new THREE.LatheGeometry(v2(BARRIGA), seg), metal); corpo.add(casco); alvos.push(casco);
@@ -60,12 +83,12 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   // o DORSO (fixo): a curva da nave antiga, mais OVAL (lente alienígena); no meio, o buraco da CABINE DE COMANDO, coberto
   // por uma REDOMA RETRÁTIL de 8 pétalas que abre (como uma íris) — só a cabine se abre
   const dorso = new THREE.Group(); corpo.add(dorso);
-  const metalDorso = metal.clone(); metalDorso.transparent = true;   // a bordo, na MINHA tela, o dorso fica translúcido (eu me vejo lá dentro)
+  const metalDorso = camuflagem(ALIEN);   // a bordo, na MINHA tela, o dorso some mais (eu me vejo lá dentro)
   const tampa = new THREE.Mesh(new THREE.LatheGeometry(v2(DORSO), seg), metalDorso); dorso.add(tampa); alvos.push(tampa);
   const veioMat = aditivo(ALIEN, 0.5);
   for (const [r, y] of [[3.25, 0.36], [2.55, 0.64], [1.85, 0.81]] as const) { const v = new THREE.Mesh(new THREE.TorusGeometry(r, 0.022, 4, seg), veioMat); v.rotation.x = Math.PI / 2; v.position.y = y; dorso.add(v); }
   const aroRedoma = new THREE.Mesh(new THREE.TorusGeometry(R_CAB, 0.05, 6, seg), aditivo(cor.clone().lerp(ALIEN, 0.5), 0.9)); aroRedoma.rotation.x = Math.PI / 2; aroRedoma.position.y = Y_CAB; dorso.add(aroRedoma);
-  const metalDomo = new THREE.MeshStandardMaterial({ color: 0x9fe8ff, emissive: 0x16306a, emissiveIntensity: 0.45, roughness: 0.05, metalness: 0.35, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false });   // a redoma: vidro fumê
+  const metalDomo = camuflagem(ALIEN.clone().lerp(new THREE.Color(0xffffff), 0.25), { base: 0.02, borda: 0.55, lados: true });   // a redoma: a mesma camuflagem, um tom mais clara
   const NP = 8, perfilDomo: THREE.Vector2[] = [];
   for (let k = 0; k <= 10; k++) { const u = k / 10, rr = R_CAB * (1 - u); perfilDomo.push(new THREE.Vector2(Math.max(0.001, rr), Y_CAB + H_CAB * Math.sqrt(Math.max(0, 1 - (rr / R_CAB) ** 2)))); }
   const petalas: { pivo: THREE.Group; eixo: THREE.Vector3 }[] = [];
@@ -85,12 +108,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   const interior = criarInteriorNave({ low: opts.low, cor });
   interior.group.scale.setScalar(1 / ESCALA_NAVE); interior.group.position.y = (NAVE_QG.deck - ESCALA_NAVE) / ESCALA_NAVE; corpo.add(interior.group);
   const assento = interior.assento;
-  const luzInterna = opts.low ? null : new THREE.PointLight(ALIEN.getHex(), 0.8, 2.2); if (luzInterna) { luzInterna.position.set(0, 0.95, 0); corpo.add(luzInterna); }
-  // placas de blindagem na aba
-  const blind = new THREE.MeshStandardMaterial({ color: 0x4a5664, roughness: 0.35, metalness: 0.7, emissive: 0x0a1428, emissiveIntensity: 0.4 });
-  const placas = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.09, 0.16), blind, 28);
-  for (let k = 0; k < 28; k++) { const a = (k / 28) * Math.PI * 2; placas.setMatrixAt(k, new THREE.Matrix4().compose(new THREE.Vector3(Math.sin(a) * 3.62, 0.02, Math.cos(a) * 3.62), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), a + Math.PI / 2), new THREE.Vector3(1, 1, 1))); }
-  placas.instanceMatrix.needsUpdate = true; corpo.add(placas);
+  interior.group.visible = false;   // de longe, só a silhueta camuflada (o engine liga de perto / a bordo)
 
   // o "EIXO GIRATÓRIO": anel de luzes da borda (gira) + halo externo tracejado (gira ao contrário)
   const NL = opts.low ? 14 : 22, aro = new THREE.Group(); corpo.add(aro);
@@ -110,7 +128,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   const anelBaixo = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.07, 6, seg), aditivo(ALIEN, 0.55)); anelBaixo.rotation.x = Math.PI / 2; anelBaixo.position.y = -0.88; corpo.add(anelBaixo);
   // PROPULSORES de verdade na barriga: três bocais com núcleo incandescente, chama em dois cones (miolo quente + envelope)
   // e um jato de partículas descendo; acendem em voo (sem piscar — a chama "respira" em ondas suaves)
-  const metalEscuro = new THREE.MeshStandardMaterial({ color: 0x141b22, roughness: 0.4, metalness: 0.8 });
+  const metalEscuro = camuflagem(ALIEN, { base: 0.02, borda: 0.5, lados: true });
   const PROP = [0, 1, 2, 3, 4, 5].map((i) => { const a = (i / 6) * Math.PI * 2 + Math.PI / 2 + Math.PI / 6; return { x: Math.cos(a) * 2.3, z: Math.sin(a) * 2.3 }; });   // 6 na barriga (entre as pernas)
   const PROP_Y = -0.74;
   const chamas: { miolo: THREE.Mesh; envelope: THREE.Mesh; boca: THREE.MeshBasicMaterial; brilhoP: THREE.Sprite; fase: number }[] = [];
@@ -193,13 +211,14 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
 
   // pernas de pouso (recolhem em voo)
   const trem = new THREE.Group(); corpo.add(trem);
-  const escuro = new THREE.MeshStandardMaterial({ color: 0x141b2c, roughness: 0.5, metalness: 0.7 });
+  const escuro = camuflagem(ALIEN, { base: 0.02, borda: 0.5 });
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2 + Math.PI / 2, x = Math.cos(a) * 1.9, z = Math.sin(a) * 1.9;
     const p = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.75, 8), escuro); p.position.set(x, -0.62, z); p.rotation.set(Math.sin(a) * 0.25, 0, -Math.cos(a) * 0.25); trem.add(p);
     const pe = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.28, 0.06, 12), escuro); pe.position.set(x * 1.08, -0.98, z * 1.08); trem.add(pe);
   }
 
+  const camos = [metal, metalDorso, metalDomo, metalEscuro, escuro];
   raiz.scale.setScalar(ESCALA_NAVE);
   let inclina = 0, voo = 0, giro = 0;
   return {
@@ -207,12 +226,14 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
     aBordo(on) { aBordoLocal = on; },
     abrirCabine(on) { abrirLocal = on; },
     rampa(q, f) { interior.rampa(q, f); },
+    verDentro(on) { interior.group.visible = on; },
     atualizar({ dt, t, voando, vel, curva }) {
       // a redoma da cabine abre comigo de pé lá em cima (largei o leme) e fecha quando desço ou assumo o leme (voa
       // fechada — é de vidro fumê, o piloto aparece); o dorso fica translúcido SÓ na minha tela, a bordo
       const alvoAbertura = abrirLocal ? 1 : 0;
       fantasma += ((aBordoLocal ? 1 : 0) - fantasma) * Math.min(1, dt * 3);
-      metalDorso.opacity = 1 - 0.85 * fantasma; metalDorso.depthWrite = fantasma < 0.5;
+      metalDorso.uniforms.uOp!.value = 1 - 0.75 * fantasma;
+      for (const m of camos) m.uniforms.uT!.value = parado ? 0 : t;
       interior.atualizar(dt, t, voo);
       // a cúpula retrátil: as pétalas giram na aba (pra fora e pra baixo), suave, ~1 s
       abertura += (alvoAbertura - abertura) * Math.min(1, dt * (parado ? 8 : 2.6));
@@ -227,7 +248,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
       aro.rotation.y = giro; halo.rotation.y = -giro * 0.6;
       luzes.forEach((m, i) => { m.opacity = 0.45 + 0.45 * (0.5 + 0.5 * Math.sin(t * 1.5 - (i / luzes.length) * Math.PI * 2)) * (0.5 + 0.5 * voo); });
       haloMat.opacity = 0.12 + 0.35 * voo;
-      atualizarRaios(t, voo);
+      const comRaios = voo > 0.05; for (const gr of grupoRaios) { gr.mat.visible = gr.bMat.visible = comRaios; } if (comRaios) atualizarRaios(t, voo);   // parada (camuflada): sem raios
       veioMat.opacity = 0.35 + 0.4 * voo * (0.75 + 0.25 * Math.sin(t * 1.3));
       (nucleo.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.55 * voo;
       // propulsores: chama cresce com o empuxo (pairar = sustentação; andar = mais forte), respirando devagar
@@ -239,7 +260,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
         c.miolo.scale.set(1, Lm, 1); c.miolo.position.y = PROP_Y - 0.2 - Lm / 2;
         c.envelope.scale.set(1, Le, 1); c.envelope.position.y = PROP_Y - 0.2 - Le / 2;
         (c.envelope.material as THREE.MeshBasicMaterial).opacity = 0.45 * empuxo; (c.miolo.material as THREE.MeshBasicMaterial).opacity = 0.85 * empuxo;
-        c.boca.opacity = 0.25 + 0.75 * empuxo; (c.brilhoP.material as THREE.SpriteMaterial).opacity = 0.7 * empuxo; c.brilhoP.scale.setScalar(1.2 + 1.4 * empuxo);
+        c.boca.opacity = 0.06 + 0.9 * empuxo; (c.brilhoP.material as THREE.SpriteMaterial).opacity = 0.7 * empuxo; c.brilhoP.scale.setScalar(1.2 + 1.4 * empuxo);
       }
       jMat.opacity = 0.8 * empuxo; jato.visible = empuxo > 0.02;
       if (jato.visible) {
@@ -250,7 +271,6 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
         }
         jGeo.attributes.position!.needsUpdate = true;
       }
-      if (luzInterna) luzInterna.intensity = 0.6 + 0.8 * voo;
       // rastro de plasma: partículas escorrendo pra trás, comprimento ∝ velocidade
       const L = 2 + 6 * Math.min(1, vel);
       rMat.opacity = 0.95 * voo * Math.min(1, vel * 2.5); rastro.visible = rMat.opacity > 0.01;

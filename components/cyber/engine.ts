@@ -1329,7 +1329,10 @@ export class CyberEngine {
     { const pn = this.bordo ? this.poseNave() : null, abre = redomaAberta(this.bordo, this.pilotando);
       const chama = this.redomaChamando() ? this.poseNave() : null;   // voltando de mochila: abre pra eu entrar
       for (const h of [this.nave, ...[...this.remotos.values()].map((a) => a.nave)]) { if (!h) continue; const minha = !!pn && pn.h === h; h.aBordo(minha); h.abrirCabine((minha && abre) || (!!chama && chama.h === h)); }
-      const pv = this.poseNave(); if (pv) { const ra = rampaDaNave(pv); pv.h.rampa(ra.queda, ra.desce === null); } }   // a rampa acompanha onde a nave está
+      const pv = this.poseNave(); if (pv) { const ra = rampaDaNave(pv); pv.h.rampa(ra.queda, ra.desce === null); }   // a rampa acompanha onde a nave está
+      // camuflada: o convés por dentro só é desenhado com EU a bordo — de fora (mesmo de perto) só a silhueta; a GPU agradece
+      const dentro = !!pv && (!!this.bordo || this.pilotando);
+      for (const h of [this.nave, ...[...this.remotos.values()].map((a) => a.nave)]) if (h) h.verDentro(dentro && !!pv && pv.h === h); }
     this.atualizarHudVoo(now);
     this.atualizarSom(dt);
     const navePerto = !this.pilotando && !!this.nave && this.navePerto();
