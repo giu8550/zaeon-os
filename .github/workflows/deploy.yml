@@ -196,6 +196,10 @@ jobs:
             $DC up -d --build $NODEPS $SERVICES
             # web é runtime-only p/ a credencial → recria pra recarregar .env.secrets
             $DC up -d --force-recreate --no-deps web
+            # o volume dos arquivos gravados pelo app (/app/.studio) nasceu como root, mas o app roda como `zaeon`:
+            # acerta o dono a cada deploy (idempotente) — sem isso, salvar música/podcast/imagem dava 500 (EACCES)
+            $DC exec -T -u root web sh -c 'mkdir -p /app/.studio && chown -R zaeon:zaeon /app/.studio' \
+              && echo "  ✓ /app/.studio gravável pelo app" || echo "::warning::não deu pra acertar o dono de /app/.studio"
 
             if [ "$DB_PUSH" = "true" ]; then
               echo "→ prisma db push (schema no Atlas; dados intactos)…"

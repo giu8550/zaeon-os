@@ -54,7 +54,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const atual = lerConteudo(p.s.content).somLounge ?? somVazio();
   if (atual.faixas.length >= MAX_FAIXAS) return NextResponse.json({ error: `A playlist já tem ${MAX_FAIXAS} músicas.` }, { status: 409 });
   const hex = crypto.randomBytes(10).toString("hex"), id = `lm_${hex}`;
-  await writeStudioFile(id, ext, Buffer.from(await file.arrayBuffer()));
+  try { await writeStudioFile(id, ext, Buffer.from(await file.arrayBuffer())); }
+  catch (e) {   // disco sem permissão/cheio: diz o motivo (no log e pro dono) em vez de um 500 mudo
+    const codigo = (e as { code?: string })?.code ?? "?";
+    console.error("[lounge3d/musica] não gravou o arquivo:", codigo, e);
+    return NextResponse.json({ error: codigo === "EACCES" || codigo === "EPERM" ? "O servidor está sem permissão pra guardar músicas (o deploy acerta isso)." : codigo === "ENOSPC" ? "O disco do servidor está cheio." : "Não deu pra guardar a música no servidor." }, { status: 507 });
+  }
   const durRaw = Number(form.get("dur")), nome = String(form.get("nome") ?? "") || nomeDoArquivo((file as File).name ?? "");
   const faixa = { id: hex.slice(0, 16), nome: nomeDoArquivo(nome), arq: `${id}.${ext}`, dur: Number.isFinite(durRaw) && durRaw > 0 ? Math.min(4 * 3600, durRaw) : 0, deId: p.me.id };
   return salvar(p.s.id, p.s.content, adicionarFaixa(atual, faixa, Date.now()));
