@@ -43,7 +43,12 @@ export const SALAS: Sala[] = [
 
 /** os dois pátios (claustros) abertos, com uma fonte de cristal no meio */
 export const PATIOS = [{ x0: -57, x1: -16, z0: -80, z1: 63 }, { x0: 16, x1: 57, z0: -80, z1: 63 }] as const;
-export const FONTES = PATIOS.map((p) => ({ x: (p.x0 + p.x1) / 2, z: (p.z0 + p.z1) / 2 - 8, r: 3.2 }));
+/** fontes: uma no meio de cada pátio + quatro no pátio EXTERNO (o anel entre as muralhas, livre desde que a natureza
+ *  saiu) — a leste e a oeste, longe das torres e dos portões */
+export const FONTES = [
+  ...PATIOS.map((p) => ({ x: (p.x0 + p.x1) / 2, z: (p.z0 + p.z1) / 2 - 8, r: 3.2 })),
+  ...[-1, 1].flatMap((sx) => [-1, 1].map((sz) => ({ x: sx * 92.5, z: sz * 55, r: 3.2 }))),
+];
 
 export type Torre = { x: number; z: number; r: number; alt: number };
 /** torres: 4 de canto + 8 em "D" na externa; 4 grandes nos cantos da interna */
