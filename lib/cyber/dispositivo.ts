@@ -36,12 +36,21 @@ export type Qualidade = {
   fpsMax: number;
 };
 export function qualidadeDe(p: PerfilDispositivo): Qualidade {
-  if (!p.leve) return { leve: false, pixelRatioMax: 1.5, antialias: true, fpsMax: 0 };
+  if (!p.leve) return { leve: false, pixelRatioMax: 1.5, antialias: true, fpsMax: 60 };   // tela de 120/144 Hz não desenha o dobro
   return { leve: true, pixelRatioMax: p.movel ? 1 : 1.25, antialias: false, fpsMax: p.fraco ? 30 : p.movel ? 45 : 0 };
 }
 
 /** celular em pé → pede pra girar (a cena pausa até ficar na horizontal) */
 export const precisaGirar = (p: PerfilDispositivo, largura: number, altura: number) => p.movel && altura > largura;
 
-/** o quadro deve ser pulado pra respeitar o limite de fps? (`agora`/`ultimo` em ms) */
-export const pularQuadro = (fpsMax: number, agora: number, ultimo: number) => fpsMax > 0 && agora - ultimo < 1000 / fpsMax - 1;
+/**
+ * limitador com COMPASSO (`agora`/`ultimo` em ms): pula o quadro se ainda não deu o intervalo; quando desenha, o novo
+ * `ultimo` anda em múltiplos do intervalo (fica no compasso) — `ultimo = agora` fazia 45 fps num monitor de 60 Hz virar 30.
+ */
+export function proximoQuadro(fpsMax: number, agora: number, ultimo: number): { pular: boolean; ultimo: number } {
+  if (fpsMax <= 0) return { pular: false, ultimo: agora };
+  const intervalo = 1000 / fpsMax, passou = agora - ultimo;
+  if (passou < intervalo - 1) return { pular: true, ultimo };
+  if (passou > intervalo * 3) return { pular: false, ultimo: agora };   // parado muito tempo: recomeça o compasso
+  return { pular: false, ultimo: ultimo + Math.max(1, Math.floor((passou + 1) / intervalo)) * intervalo };
+}
