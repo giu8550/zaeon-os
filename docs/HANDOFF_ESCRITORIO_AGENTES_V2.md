@@ -7,7 +7,7 @@
 > São **28 PRs distintas**, todas conectadas por **12 contratos canônicos** (§4). Um PR só pode
 > entrar se os contratos que ele consome já existem.
 >
-> Prompts de execução por fatia (co-autorados pelo Fable): `docs/EXECUTOR_PROMPT_FATIA1_FUNDACAO.md` · `docs/EXECUTOR_PROMPT_FATIA2_SALA.md` · `docs/EXECUTOR_PROMPT_FATIA3_TRABALHO.md`.
+> Prompts de execução por fatia (co-autorados pelo Fable): `docs/EXECUTOR_PROMPT_FATIA1_FUNDACAO.md` · `docs/EXECUTOR_PROMPT_FATIA2_SALA.md` · `docs/EXECUTOR_PROMPT_FATIA3_TRABALHO.md` · `docs/EXECUTOR_PROMPT_FATIA4_ENTRE_ELES.md`.
 
 ---
 
@@ -770,6 +770,7 @@ um `awaiting_input` fica esperando · tokens de prompt antes/depois do S8 · fal
 
 1. **PI do comitê** — default adotado: **Zion** (orquestrador global, FAB ⟁), com a Aura como
    relatora. Alternativa: Aura como PI.
+   > *Nota do Fable (2026-10-07): não existe agente `zion` no roster (`lib/ai/personas.ts`); o prompt da Fatia 4 adota `zaeon` (anfitriã/orquestradora) como PI default até o Martinez decidir.*
 2. **Régua de utilidade** — default adotado: os três campos obrigatórios (`problema`, `quemUsa`,
    `porQueAgora`) e o reviewer reprovando dossiê que não os amarre.
 3. **Envio externo entra agora?** Decide se G7 entra na fila ou fica parqueado. Enquanto não houver
