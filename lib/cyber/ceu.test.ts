@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, type NomeSala } from "./ceu";
+import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, type NomeSala } from "./ceu";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, baseNoCeu, spawnDaBase } from "./bases";
 import { vagas } from "./motos";
 import { NAVE_QG, paraMundo, poseDaDoca } from "./naveQG";
@@ -169,7 +169,8 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
   });
   it("móveis: telão, palco alto, mesa do DJ, a TRELIÇA com as caixas SUSPENSAS, subs, pista e sofás; tudo dentro", () => {
     const tipos = MOVEIS.lounge.map((m) => m.tipo);
-    expect(tipos).toEqual(expect.arrayContaining(["sofa", "tv", "caixaSom", "palco", "mesaDJ", "sub", "pista", "trelica"]));
+    expect(tipos).toEqual(expect.arrayContaining(["sofa", "tv", "caixaSom", "torreSom", "palco", "mesaDJ", "sub", "pista", "trelica"]));
+    expect(MOVEIS.lounge.filter((m) => m.tipo === "torreSom").every((m) => m.solido !== false)).toBe(true);   // as do chão são sólidas
     expect(MOVEIS.lounge.filter((m) => m.tipo === "caixaSom").every((m) => m.solido === false)).toBe(true);   // suspensas: o chão é livre
     for (const m of MOVEIS.lounge) for (const [a, b] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
       const lx = (a! * m.larg) / 2, lz = (b! * m.prof) / 2, x = m.x + lx * Math.cos(m.rot) + lz * Math.sin(m.rot), z = m.z - lx * Math.sin(m.rot) + lz * Math.cos(m.rot);
@@ -197,6 +198,19 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
     const pc = pontoDaCabineDJ(), w = W(PALCO.cabine.x, PALCO.cabine.z); expect(pc.x).toBeCloseTo(w.x); expect(pc.z).toBeCloseTo(w.z);
     expect(alturaNaCidade(pc)).toBe(H + PALCO.h);
     expect(MESA_DJ.z - MESA_DJ.prof / 2 - PALCO.cabine.z).toBeLessThanOrEqual(0.5);
+  });
+  it("PISTA de dança: quem para no retângulo de LED dança (virado pro palco); fora dela, não", () => {
+    const W = (lx: number, lz: number) => mundo(daSala(L, lx, lz)), pista = MOVEIS.lounge.find((m) => m.tipo === "pista")!;
+    expect(naPistaDeDanca(W(pista.x, pista.z))).toBe(true);
+    expect(naPistaDeDanca(W(pista.x + pista.larg / 2 - 0.5, pista.z - pista.prof / 2 + 0.5))).toBe(true);
+    expect(naPistaDeDanca(W(0, PALCO.z))).toBe(false);          // no palco, não
+    expect(naPistaDeDanca(W(pista.larg, pista.z))).toBe(false);
+    expect(naPistaDeDanca(mundo({ x: 30, z: 0 }))).toBe(false); // na plataforma central, não
+    expect(naCabineDJ(W(pista.x, pista.z))).toBe(false);
+    // virado pro palco: o rumo aponta do meio da pista pro palco
+    const de = W(pista.x, pista.z), para = W(0, PALCO.z), r = Math.atan2(para.x - de.x, para.z - de.z);
+    let d = r - rumoDaPista(); while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+    expect(Math.abs(d)).toBeLessThan(1e-6);
   });
   it("não há mais hangar (nem pilones) na ilha", () => {
     expect("hangar" in CIDADE).toBe(false);

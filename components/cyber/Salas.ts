@@ -258,6 +258,23 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const luzMat = luz.material as THREE.MeshBasicMaterial;
       anim.push(() => { luzMat.opacity = 0.35 + 0.65 * batida(); mira.position.z = 0.02 * batida(); });
     },
+    // TORRE DE SOM gigante no chão (a de antes, maior: 10 m): subs embaixo, 4 médios, corneta em cima; LEDs nas quinas
+    // e um feixe no topo — a música sai das caixas SUSPENSAS; estas dão o peso visual do palco
+    torreSom(p, m) {
+      const W = m.larg, D = m.prof, H = 10, k = H / 7.5, fz = D / 2;
+      caixa(p, W, H, D, escuro, 0, H / 2, 0);
+      for (const y of [2.5 * k, 5.6 * k]) caixa(p, W + 0.06, 0.1, D + 0.06, gelo, 0, y, 0);   // divisórias dos módulos
+      for (const x of [-W / 4, W / 4]) altoFalante(p, x, 1.25 * k, fz, 0.62 * k * (W / 3.6) * 1.1, 0xb98cff);   // SUBS
+      for (const [x, y] of [[-W / 4, 3.3 * k], [W / 4, 3.3 * k], [-W / 4, 4.8 * k], [W / 4, 4.8 * k]] as const) altoFalante(p, x, y, fz, 0.42 * k, 0x66e6ff);
+      const corneta = new THREE.Mesh(new THREE.CylinderGeometry(0.75 * k, 0.25 * k, 0.5 * k, 4, 1, true), coneMat); corneta.rotation.x = Math.PI / 2; corneta.rotation.y = Math.PI / 4; corneta.scale.set(1.6, 1, 0.6); corneta.position.set(0, 6.55 * k, fz - 0.24 * k); p.add(corneta);
+      for (const x of [-W / 2 + 0.45, W / 2 - 0.45]) altoFalante(p, x, 6.55 * k, fz, 0.16 * k, 0xff5fd2);
+      const quinas: THREE.Mesh[] = [];
+      for (const sx of [-1, 1]) quinas.push(caixa(p, 0.08, H - 0.2, 0.08, basica(0xb98cff, 0.9, true), sx * (W / 2 + 0.03), H / 2, fz + 0.03));
+      caixa(p, W, 0.08, 0.08, basica(0x66e6ff, 0.9, true), 0, H + 0.03, fz);
+      anim.push(() => { for (const q of quinas) (q.material as THREE.MeshBasicMaterial).opacity = 0.4 + 0.6 * batida(); });
+      const topo = new THREE.Mesh(new THREE.OctahedronGeometry(0.8), cristalMat); topo.scale.y = 1.8; topo.position.set(0, H + 1.5, 0); p.add(topo);
+      feixe(p, 0, H + 0.05, fz - 0.3, { len: 30, abre: 1.8, rumo: 0, incl: 1.05, fase: m.x * 0.3, cor: 0xff5fd2, varre: 0.4 });
+    },
     // TRELIÇA: torre de metal alta (4 montantes + travessas em X), no topo a VIGA até a outra torre e um BRAÇO que avança
     // pra frente (de onde pende a caixa suspensa); LED nos montantes e um feixe no alto
     trelica(p, m) {

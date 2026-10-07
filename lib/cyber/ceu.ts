@@ -142,7 +142,8 @@ export const TRELICA = { x: 17, z: -19, alt: 26, viga: 24 } as const;
 export const CAIXAS_SUSPENSAS = [{ x: -14, z: -11 }, { x: 14, z: -11 }] as const;
 export const MOVEIS: Record<NomeSala, Movel[]> = {
   // LOUNGE = CLUBE a céu aberto na plataforma própria: telão no fundo, palco de cristal alto com a mesa do DJ, a
-  // treliça com as caixas suspensas (as torres dela são sólidas), subs no chão, pista de LED e sofás nas laterais
+  // treliça com as caixas suspensas (as torres dela são sólidas), as TORRES de som gigantes e os subs no chão, pista de
+  // LED e sofás nas laterais
   lounge: [
     { tipo: "tv", x: 0, z: -33, rot: 0, larg: 22, prof: 1 },
     { tipo: "palco", x: 0, z: PALCO.z, rot: 0, larg: 0, prof: 0, solido: false, y: 0 },   // colisão própria (bordaDoPalco)
@@ -151,6 +152,8 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     { tipo: "trelica", x: TRELICA.x, z: TRELICA.z, rot: 0, larg: 2.4, prof: 2.4 },
     { tipo: "caixaSom", x: CAIXAS_SUSPENSAS[0].x, z: CAIXAS_SUSPENSAS[0].z, rot: 0.3, larg: 3.2, prof: 2.2, solido: false },   // suspensa: não ocupa o chão
     { tipo: "caixaSom", x: CAIXAS_SUSPENSAS[1].x, z: CAIXAS_SUSPENSAS[1].z, rot: -0.3, larg: 3.2, prof: 2.2, solido: false },
+    { tipo: "torreSom", x: -22, z: -10, rot: 0.45, larg: 3.6, prof: 2.6 },   // as TORRES de som gigantes no chão (10 m), como antes — além das suspensas
+    { tipo: "torreSom", x: 22, z: -10, rot: -0.45, larg: 3.6, prof: 2.6 },
     { tipo: "sub", x: -13, z: -4, rot: 0.3, larg: 3, prof: 2 },
     { tipo: "sub", x: 13, z: -4, rot: -0.3, larg: 3, prof: 2 },
     { tipo: "sofa", x: -29, z: 12, rot: Math.PI / 2, larg: 7, prof: 1.6 },
@@ -196,6 +199,14 @@ export function naCabineDJ(p: P2): boolean {
 }
 /** o ponto (mundo) onde o DJ fica — quem para na cabine é puxado devagar pra cá (as mãos caem na controladora) */
 export const pontoDaCabineDJ = (): P2 => mundo(daSala(CIDADE.salas.lounge, PALCO.cabine.x, PALCO.cabine.z));
+/** está na PISTA de dança do lounge (o retângulo de LED)? `p` no mundo — quem para ali dança */
+export function naPistaDeDanca(p: P2): boolean {
+  const pista = MOVEIS.lounge.find((m) => m.tipo === "pista"); if (!pista) return false;
+  const q = naSala(CIDADE.salas.lounge, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z);
+  return Math.abs(q.x - pista.x) <= pista.larg / 2 && Math.abs(q.z - pista.z) <= pista.prof / 2;
+}
+/** pra onde quem dança olha: pro palco (o −z da sala) */
+export const rumoDaPista = () => rotDaSala(CIDADE.salas.lounge) + Math.PI;
 /** pra onde o DJ olha (facing = atan2(dx, dz) do mundo): o +z da sala, rumo à pista */
 export const rumoDoDJ = () => rotDaSala(CIDADE.salas.lounge);
 /** giro da sala: +z local aponta pro centro da ilha (onde fica a porta) */
