@@ -8,19 +8,21 @@
  * mudada difere), então a troca não treme.
  *   vivo     → respira (escala sutil) + pisca em ritmo humano + boca anima ao falar
  *   pensando → quadro "think" + balanço leve · feliz → "happy" · erro → "confused" + tremidinha
+ *   ouvindo  → o usuário está digitando: inclina pro composer e acena de leve com a cabeça
  *   hover    → "smile" + olha um pouco pro cursor (paralaxe)
+ *   boca     → modo voz: o nível do áudio escolhe o quadro da boca (no lugar das sílabas)
  *   reduzido → só o quadro do estado, sem nenhum movimento
  */
 import { useEffect, useMemo, useState } from "react";
 import {
-  ESTADOS_SPRITE, duracaoSilaba, proximaPiscada, quadroDoSinal, quadrosDeFala,
+  ESTADOS_SPRITE, duracaoSilaba, proximaPiscada, quadroDaBoca, quadroDoSinal, quadrosDeFala,
   type AvatarManifest, type EstadoSprite, type SinalAvatar,
 } from "@/lib/avatars/estados";
 
 const PISCADA_MS = 110;
 
 export default function SpriteAvatar({
-  manifest, sinal, hover, vivo, reduzido, pequeno, olhar,
+  manifest, sinal, hover, vivo, reduzido, pequeno, olhar, boca = null,
 }: {
   manifest: AvatarManifest;
   sinal: SinalAvatar;
@@ -32,13 +34,15 @@ export default function SpriteAvatar({
   pequeno: boolean;
   /** deslocamento do olhar (-1..1) — paralaxe do hover */
   olhar?: { x: number; y: number } | null;
+  /** modo voz: nível do áudio 0..1 (null = boca por sílabas) */
+  boca?: number | null;
 }) {
   const urls = pequeno ? manifest.pequeno : manifest.estados;
   const tem = useMemo(() => (e: EstadoSprite) => !!urls[e], [urls]);
   const repouso = quadroDoSinal(sinal, hover, tem);
 
   const [piscando, setPiscando] = useState(false);
-  const [boca, setBoca] = useState<EstadoSprite | null>(null);
+  const [quadroBoca, setBoca] = useState<EstadoSprite | null>(null);
   const animar = vivo && !reduzido;
 
   // PISCAR — só sobre o quadro neutro (piscar por cima de "think"/"happy" trocaria a expressão)
@@ -64,7 +68,7 @@ export default function SpriteAvatar({
 
   // FALAR — boca irregular (sílabas de 90–170ms, pausas de vez em quando)
   useEffect(() => {
-    if (sinal !== "falando" || !animar) { setBoca(null); return; }
+    if (sinal !== "falando" || !animar || boca !== null) { setBoca(null); return; }
     const ciclo = quadrosDeFala(tem);
     if (ciclo.length < 2) { setBoca(null); return; }
     let i = 0;
@@ -77,12 +81,13 @@ export default function SpriteAvatar({
     };
     t = setTimeout(passo, duracaoSilaba());
     return () => clearTimeout(t);
-  }, [sinal, animar, tem]);
+  }, [sinal, animar, tem, boca]);
 
-  const atual: EstadoSprite = boca ?? (piscando ? "blink" : repouso);
+  const bocaVoz = boca !== null && !reduzido ? quadroDaBoca(boca, tem) : null;
+  const atual: EstadoSprite = bocaVoz ?? quadroBoca ?? (piscando ? "blink" : repouso);
 
   // Classes de movimento do conjunto (keyframes abaixo, desligados em reduced-motion)
-  const mov = reduzido ? "" : sinal === "pensando" ? "zav-pensa" : sinal === "erro" ? "zav-treme" : animar ? "zav-respira" : "";
+  const mov = reduzido ? "" : sinal === "pensando" ? "zav-pensa" : sinal === "erro" ? "zav-treme" : sinal === "ouvindo" ? "zav-ouve" : animar ? "zav-respira" : "";
   const desloc = !reduzido && olhar ? `translate(${(olhar.x * 3).toFixed(2)}%, ${(olhar.y * 2).toFixed(2)}%)` : undefined;
   return (
     <span aria-hidden className={`zav-quadros absolute inset-0 ${mov}`}>
@@ -108,9 +113,11 @@ export default function SpriteAvatar({
 const ESTILO = `
 @keyframes zavRespira { 0%,100% { transform: scale(1) translateY(0); } 50% { transform: scale(1.018) translateY(-0.8%); } }
 @keyframes zavPensa { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(2deg) translateY(-1%); } }
+@keyframes zavOuve { 0%,30%,100% { transform: scale(1.035) translateY(1.5%) rotate(0); } 10% { transform: scale(1.035) translateY(3%) rotate(1deg); } 20% { transform: scale(1.035) translateY(1.5%) rotate(0); } }
 @keyframes zavTreme { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-3%); } 40% { transform: translateX(3%); } 60% { transform: translateX(-2%); } 80% { transform: translateX(1%); } }
 .zav-respira { animation: zavRespira 4.2s ease-in-out infinite; transform-origin: 50% 85%; }
 .zav-pensa { animation: zavPensa 2.6s ease-in-out infinite; transform-origin: 50% 90%; }
 .zav-treme { animation: zavTreme .5s ease-in-out 1; }
-@media (prefers-reduced-motion: reduce) { .zav-respira, .zav-pensa, .zav-treme { animation: none; } }
+.zav-ouve { animation: zavOuve 3.2s ease-in-out infinite; transform-origin: 50% 90%; }
+@media (prefers-reduced-motion: reduce) { .zav-respira, .zav-pensa, .zav-treme, .zav-ouve { animation: none; } }
 `;

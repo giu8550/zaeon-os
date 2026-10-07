@@ -1,22 +1,32 @@
 "use client";
 
 /**
- * AgentePilula — o agente "ao lado da resposta": avatar vivo pequeno + nome, reagindo ao turno
- * (pensando → falando enquanto o stream chega → sorri ao concluir). Vai SÓ na resposta mais
- * recente (1 avatar vivo no chat). Sem avatar vivo pro agente → não renderiza nada (o chat fica
- * exatamente como era).
+ * AgentePilula — o rosto do agente AO LADO de cada resposta (sem nome: quem responde é ela).
+ * Só a resposta mais recente (`ultima`) fica VIVA e reage ao turno (pensa → fala no stream →
+ * sorri ao concluir; ouve quando o usuário digita a próxima) e compartilha o layoutId com as
+ * boas-vindas (na 1ª mensagem o rosto grande "viaja" até aqui). As antigas ficam no quadro
+ * estático. Posicionado pelo chamador (coluna à esquerda da bolha). Sem avatar vivo → nada.
  */
+import { motion } from "framer-motion";
 import AgentAvatar from "@/components/agents/AgentAvatar";
 import { useManifesto } from "./hooks";
+import { layoutIdRosto } from "./BoasVindasAgente";
 import type { SinalAvatar } from "@/lib/avatars/estados";
 
-export default function AgentePilula({ agentId, nome, estado, className = "" }: { agentId: string; nome: string; estado: SinalAvatar; className?: string }) {
+/** Largura reservada pra coluna do rosto (classe Tailwind do recuo das respostas). */
+export const RECUO_ROSTO = "relative pl-12";
+
+export default function AgentePilula({ agentId, nome, estado, ultima = true, className = "" }: { agentId: string; nome: string; estado: SinalAvatar; ultima?: boolean; className?: string }) {
   const manifest = useManifesto(agentId);
   if (!manifest) return null;
+  const rosto = (
+    <AgentAvatar agentId={agentId} manifest={manifest} nome={nome} size={36} estado={ultima ? estado : "idle"} vivo={ultima} destaque={ultima}
+      className="ring-2 ring-white/80 dark:ring-white/10 shadow-[0_8px_20px_-10px_rgba(124,58,237,0.7)]" />
+  );
+  if (!ultima) return <span className={`inline-flex rounded-full ${className}`}>{rosto}</span>;
   return (
-    <span className={`inline-flex items-center gap-2 mb-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full bg-white/60 dark:bg-white/[0.05] border border-white/70 dark:border-white/10 ${className}`}>
-      <AgentAvatar agentId={agentId} manifest={manifest} nome={nome} size={30} estado={estado} destaque />
-      <span className="font-tech text-[12.5px] font-medium tracking-[0.02em] text-slate-700 dark:text-white/80">{nome}</span>
-    </span>
+    <motion.span layoutId={layoutIdRosto(agentId)} className={`inline-flex rounded-full ${className}`} transition={{ type: "spring", stiffness: 140, damping: 22 }}>
+      {rosto}
+    </motion.span>
   );
 }

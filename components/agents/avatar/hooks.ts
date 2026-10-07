@@ -4,9 +4,10 @@
  * Hooks do avatar vivo: manifestos (1 fetch por página), ambiente (reduced-motion / celular),
  * vaga no orçamento de vida, visibilidade (lazy-load) e o "sorriso rápido ao concluir".
  */
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { normalizarManifest, type AvatarManifest, type SinalAvatar } from "@/lib/avatars/estados";
 import { criarOrcamento } from "@/lib/avatars/vida";
+import { assinarPresenca, definirPresenca, lerPresenca, type Presenca } from "@/lib/avatars/presenca";
 
 // ─── manifestos ─────────────────────────────────────────────────────────────
 
@@ -133,4 +134,25 @@ export function useSinalComSorriso(sinal: SinalAvatar): SinalAvatar {
     setSorrindo(false);
   }, [sinal]);
   return sorrindo ? "feliz" : sinal;
+}
+
+// ─── presença (o rosto espelha o chat) ──────────────────────────────────────
+
+const SEM_PRESENCA: Presenca = { sinal: "idle", boca: null };
+
+/** Estado compartilhado do agente (lib/avatars/presenca.ts). Sem id → idle. */
+export function usePresenca(agentId: string | null | undefined): Presenca {
+  const id = agentId ?? "";
+  const assinar = useCallback((f: () => void) => (id ? assinarPresenca(id, f) : () => {}), [id]);
+  const ler = useCallback(() => (id ? lerPresenca(id) : SEM_PRESENCA), [id]);
+  return useSyncExternalStore(assinar, ler, () => SEM_PRESENCA);
+}
+
+/**
+ * O chat publica o que está fazendo; todos os rostos do agente seguem. Ao desmontar (saiu da
+ * sala) volta pro idle — rosto nenhum fica "falando" sozinho.
+ */
+export function usePublicarPresenca(agentId: string, sinal: SinalAvatar): void {
+  useEffect(() => { definirPresenca(agentId, { sinal }); }, [agentId, sinal]);
+  useEffect(() => () => definirPresenca(agentId, { sinal: "idle", boca: null }), [agentId]);
 }

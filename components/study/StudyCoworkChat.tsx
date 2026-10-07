@@ -27,7 +27,10 @@ import { DIRETRIZ_ESTUDOS } from "@/lib/ai/salaPersona";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import AuraThinking from "@/components/study/AuraThinking";
-import AgentePilula from "@/components/agents/avatar/AgentePilula";
+import AgentePilula, { RECUO_ROSTO } from "@/components/agents/avatar/AgentePilula";
+import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
+import { useManifesto, usePublicarPresenca } from "@/components/agents/avatar/hooks";
+import { sinalDoChat } from "@/lib/avatars/presenca";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
 import MentorPill from "@/components/study/MentorPill";
@@ -839,6 +842,17 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "assistant") return messages[i].id;
     return null;
   })();
+  // O ROSTO É O CHAT: o que a conversa está fazendo vira o sinal de todos os rostos da Aura
+  // (boas-vindas, pílula da resposta, bolinha da aba) — ouvindo enquanto digita, pensando, falando.
+  const ultimaMsg = messages.find((m) => m.id === ultimaResposta);
+  const temTexto = !!(ultimaMsg?.text || ultimaMsg?.answer);
+  const sinalAura = sinalDoChat({
+    pensando: !!ultimaMsg && !temTexto && (sending || !!ultimaMsg.pendente || !!ultimaMsg.streaming),
+    falando: !!ultimaMsg && temTexto && (!!ultimaMsg.streaming || !!ultimaMsg.pendente || (sending && !ultimaMsg.answer)),
+    digitando: !sending && input.trim().length > 0,
+  });
+  usePublicarPresenca("aura", sinalAura);
+  const recuo = useManifesto("aura") ? RECUO_ROSTO : "";
   /** Mini-ações de uma resposta da Aura (copiar/regenerar/👍👎/sub-tema). */
   const acoesDa = (m: Msg, i: number) => {
     if (m.role !== "assistant" || m.streaming || m.pendente || (sending && m.id === ultimaResposta)) return null;
@@ -1017,11 +1031,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2 py-4 flex flex-col gap-4">
             {/* B2: cursor piscando da resposta em streaming */}
             <style>{`@keyframes zCaret { 0%,45% { opacity:1 } 50%,100% { opacity:0 } } .z-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-0.15em; background:currentColor; opacity:.7; animation: zCaret 1s steps(1) infinite; } @media (prefers-reduced-motion: reduce) { .z-caret { animation: none; } }`}</style>
-            {messages.length === 0 ? <DicaSubTema threads={threads} ativa={abaAtiva} /> : (
+            {messages.length === 0 ? <><BoasVindasAgente agentId="aura" nome="Aura" sinal={sinalAura} /><DicaSubTema threads={threads} ativa={abaAtiva} /></> : (
               messages.map((m, i) => {
-                // avatar vivo da Aura só na resposta mais recente: pensa → fala no stream → sorri ao concluir
-                const pilula = m.role === "assistant" && m.id === ultimaResposta && (m.kind === "text" || m.kind === "structured")
-                  ? <AgentePilula agentId="aura" nome="Aura" estado={!m.text && !m.answer ? "pensando" : m.streaming || m.pendente || (sending && !m.answer) ? "falando" : "idle"} />
+                // rosto da Aura AO LADO de cada resposta; só a mais recente vive (pensa → fala → sorri)
+                const pilula = m.role === "assistant" && (m.kind === "text" || m.kind === "structured")
+                  ? <AgentePilula agentId="aura" nome="Aura" estado={sinalAura} ultima={m.id === ultimaResposta} className="absolute left-0 top-0" />
                   : null;
                 if (m.kind === "text") {
                   const isUser = m.role === "user";
@@ -1033,7 +1047,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                     );
                   }
                   return (
-                    <div key={m.id} data-msg={m.id} className={`group/msg flex flex-col ${isUser ? "items-end" : "items-start"}`}>
+                    <div key={m.id} data-msg={m.id} className={`group/msg flex flex-col ${isUser ? "items-end" : `items-start ${recuo}`}`}>
                       {pilula}
                       <div style={{ fontSize: fonteChat(22) }} className={`max-w-[85%] rounded-2xl px-4 py-2.5 font-tech leading-[1.65] whitespace-pre-wrap
                         ${isUser
@@ -1101,9 +1115,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                   // quando há ARTEFATO embutido (a Sala de Pesquisa é que tem o modo editorial).
                   const revista = !!m.studioBlock && podeVirarRevista(m.answer, true);
                   return (
-                    <div key={m.id} data-msg={m.id} className="group/msg flex justify-start">
+                    <div key={m.id} data-msg={m.id} className={`group/msg flex justify-start ${recuo}`}>
+                      {pilula}
                       <div className={revista ? "w-full" : "max-w-[85%] w-full"}>
-                        {pilula}
                         {revista ? (
                           <>
                           <MagazineBoundary fallback={padrao}>

@@ -13,7 +13,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
-import AgentePilula from "@/components/agents/avatar/AgentePilula";
+import AgentePilula, { RECUO_ROSTO } from "@/components/agents/avatar/AgentePilula";
+import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
+import { useManifesto, usePublicarPresenca } from "@/components/agents/avatar/hooks";
+import { sinalDoChat } from "@/lib/avatars/presenca";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
@@ -498,6 +501,16 @@ export default function ResearchChat({
     for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "assistant") return messages[i].id;
     return null;
   })();
+  // O ROSTO É O CHAT: o que a conversa está fazendo vira o sinal de todos os rostos da Aura
+  // (boas-vindas, pílula da resposta, bolinha da aba) — ouvindo enquanto digita, pensando, falando.
+  const ultimaMsg = messages.find((m) => m.id === ultimaResposta);
+  const sinalAura = sinalDoChat({
+    pensando: sending && !!ultimaMsg && !ultimaMsg.text && !ultimaMsg.answer,
+    falando: sending && !!ultimaMsg && !!(ultimaMsg.text || ultimaMsg.answer),
+    digitando: !sending && input.trim().length > 0,
+  });
+  usePublicarPresenca("aura", sinalAura);
+  const recuoRosto = useManifesto("aura") ? RECUO_ROSTO : "";
   /** Índice da pergunta que originou a resposta `i` (pra regenerar). */
   const perguntaDe = (i: number) => {
     for (let j = i - 1; j >= 0; j--) if (messages[j].role === "user") return j;
@@ -551,13 +564,14 @@ export default function ResearchChat({
           de mini-ações (copiar/regenerar/👍👎/sub-tema; na pergunta: copiar/editar) — no hover no desktop. */}
       <div ref={listRef} className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar ${compacto ? "px-3" : "px-4 sm:px-6"}`}>
         <div className={`${recuo} py-5 flex flex-col gap-4`}>
+          {messages.length === 0 && <BoasVindasAgente agentId="aura" nome="Aura" sinal={sinalAura} />}
           {messages.length === 0 && comAbas && <DicaSubTema threads={threads} ativa={abaAtiva} />}
           {messages.map((m, i) => {
             const isUser = m.role === "user";
             const emCurso = sending && m.id === ultimaResposta;
-            // avatar vivo da Aura só na resposta mais recente: pensa → fala no stream → sorri ao concluir
-            const pilula = !isUser && m.id === ultimaResposta
-              ? <AgentePilula agentId="aura" nome="Aura" estado={!m.text && !m.answer ? "pensando" : emCurso ? "falando" : "idle"} />
+            // rosto da Aura AO LADO de cada resposta; só a mais recente vive (pensa → fala → sorri)
+            const pilula = !isUser
+              ? <AgentePilula agentId="aura" nome="Aura" estado={sinalAura} ultima={m.id === ultimaResposta} className="absolute left-0 top-0" />
               : null;
             const acoesResposta = !isUser && !emCurso && m.text ? (
               <AcoesResposta
@@ -570,9 +584,9 @@ export default function ResearchChat({
             ) : null;
             if (!isUser && m.answer) {
               return (
-                <div key={m.id} data-msg-id={m.id} className="group/msg flex justify-start">
+                <div key={m.id} data-msg-id={m.id} className={`group/msg flex justify-start ${recuoRosto}`}>
+                  {pilula}
                   <div className="max-w-[88%] w-full">
-                    {pilula}
                     {/* Clicar num conceito/próximo passo proposto pela IA já ENVIA (sem clicar no input nem Enter). */}
                     <StructuredAnswerView answer={m.answer} acoes={acoesResposta} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)}>
                       {m.blocos?.length || m.desenhando ? (
@@ -594,7 +608,7 @@ export default function ResearchChat({
               );
             }
             return (
-              <div key={m.id} data-msg-id={m.id} className={`group/msg flex flex-col ${isUser ? "items-end" : "items-start"}`}>
+              <div key={m.id} data-msg-id={m.id} className={`group/msg flex flex-col ${isUser ? "items-end" : `items-start ${recuoRosto}`}`}>
                 {pilula}
                 <div
                   className={`max-w-[88%] px-4 py-3 font-serif leading-[1.65] whitespace-pre-wrap ${

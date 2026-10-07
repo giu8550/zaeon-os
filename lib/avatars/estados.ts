@@ -17,8 +17,11 @@ export type EstadoSprite = (typeof ESTADOS_SPRITE)[number];
 /** Sem esses dois não há "vida" (respira + pisca); o resto é bônus e cai no idle. */
 export const ESTADOS_OBRIGATORIOS: readonly EstadoSprite[] = ["idle", "blink"];
 
-/** O que o app sabe do agente. `hover` não é sinal: é interação local do card. */
-export type SinalAvatar = "idle" | "falando" | "pensando" | "feliz" | "erro";
+/**
+ * O que o app sabe do agente. `ouvindo` = o usuário está digitando pra ele (olha pro composer).
+ * `hover` não é sinal: é interação local do card.
+ */
+export type SinalAvatar = "idle" | "ouvindo" | "falando" | "pensando" | "feliz" | "erro";
 
 export type MotorAvatar = "sprite" | "live2d";
 
@@ -70,7 +73,7 @@ export function normalizarManifest(raw: unknown): AvatarManifest | null {
   const expressoes: Partial<Record<SinalAvatar | "hover", string>> = {};
   if (l2d.expressoes && typeof l2d.expressoes === "object") {
     for (const [k, v] of Object.entries(l2d.expressoes as Record<string, unknown>)) {
-      if (["idle", "falando", "pensando", "feliz", "erro", "hover"].includes(k) && typeof v === "string" && v.length < 80) expressoes[k as SinalAvatar | "hover"] = v;
+      if (["idle", "ouvindo", "falando", "pensando", "feliz", "erro", "hover"].includes(k) && typeof v === "string" && v.length < 80) expressoes[k as SinalAvatar | "hover"] = v;
     }
   }
   return {
@@ -96,6 +99,7 @@ export function quadroDoSinal(
     case "feliz": return primeiro("happy", "smile");
     case "erro": return primeiro("confused");
     case "falando": return "idle"; // a boca anima por cima (quadrosDeFala)
+    case "ouvindo": return "idle"; // atenta: o olhar desce pro composer (motor), sem mudar a cara
     default: return hover ? primeiro("smile") : "idle";
   }
 }
@@ -114,6 +118,13 @@ export function proximaPiscada(rand: () => number = Math.random): { esperaMs: nu
 /** Quanto dura um quadro de boca: 90–170 ms (fala irregular parece fala; metrônomo parece robô). */
 export function duracaoSilaba(rand: () => number = Math.random): number {
   return Math.round(90 + rand() * 80);
+}
+
+/** Modo voz: nível do áudio (0..1) → quadro da boca. */
+export function quadroDaBoca(nivel: number, tem: (e: EstadoSprite) => boolean): EstadoSprite {
+  if (nivel >= 0.45 && tem("talk")) return "talk";
+  if (nivel >= 0.15) return tem("talk_half") ? "talk_half" : tem("talk") ? "talk" : "idle";
+  return "idle";
 }
 
 /** Miniatura acima disso fica borrada → usa o quadro cheio. */

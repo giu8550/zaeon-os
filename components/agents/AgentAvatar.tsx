@@ -19,7 +19,7 @@ import { inicial } from "@/lib/agents/roster";
 import { LIMIAR_PEQUENO_PX, type AvatarManifest, type SinalAvatar } from "@/lib/avatars/estados";
 import { PRIORIDADE } from "@/lib/avatars/vida";
 import SpriteAvatar from "./avatar/SpriteAvatar";
-import { useAmbienteAvatar, useManifesto, useNaTela, useSinalComSorriso, useVaga } from "./avatar/hooks";
+import { useAmbienteAvatar, useManifesto, useNaTela, usePresenca, useSinalComSorriso, useVaga } from "./avatar/hooks";
 import { motorAvatar } from "./avatar/motor";
 
 const Live2DAvatar = dynamic(() => import("./avatar/Live2DAvatar"), { ssr: false });
@@ -42,6 +42,13 @@ type Props = {
   vivo?: boolean;
   /** Prévia do estúdio: manifesto em mãos (data URLs), sem buscar. */
   manifest?: AvatarManifest | null;
+  /**
+   * Espelhar o CHAT (lib/avatars/presenca.ts): o estado vem do que a conversa publica — todos os
+   * rostos do agente fazem a mesma coisa ao mesmo tempo. Sobrepõe `estado`/`boca`.
+   */
+  presenca?: boolean;
+  /** Modo voz: nível do áudio 0..1 → boca segue a voz. */
+  boca?: number | null;
 };
 
 export default function AgentAvatar(p: Props) {
@@ -66,7 +73,10 @@ function Foto({ src, nome, size = 32, className = "", emoji }: Props) {
   );
 }
 
-function AvatarVivo({ nome, size = 32, className = "", estado = "idle", hover: hoverExterno, destaque, vivo: podeViver = true, manifest }: Props & { manifest: AvatarManifest }) {
+function AvatarVivo({ nome, size = 32, className = "", estado: estadoProp = "idle", hover: hoverExterno, destaque, vivo: podeViver = true, manifest, presenca: espelhar, boca: bocaProp = null }: Props & { manifest: AvatarManifest }) {
+  const presenca = usePresenca(espelhar ? manifest.agentId : null);
+  const estado = espelhar ? presenca.sinal : estadoProp;
+  const boca = espelhar ? presenca.boca : bocaProp;
   const ref = useRef<HTMLSpanElement>(null);
   const naTela = useNaTela(ref);
   const { reduzido, lite } = useAmbienteAvatar();
@@ -111,7 +121,7 @@ function AvatarVivo({ nome, size = 32, className = "", estado = "idle", hover: h
       ) : usarLive2D ? (
         <Live2DAvatar manifest={manifest} sinal={sinal} hover={hover} vivo={vivo} reduzido={reduzido} tamanho={size} onFalha={() => setLive2dFalhou(true)} />
       ) : (
-        <SpriteAvatar manifest={manifest} sinal={sinal} hover={hover} vivo={vivo} reduzido={reduzido} pequeno={pequeno} olhar={hover ? olhar : null} />
+        <SpriteAvatar manifest={manifest} sinal={sinal} hover={hover} vivo={vivo} reduzido={reduzido} pequeno={pequeno} olhar={hover ? olhar : null} boca={boca} />
       )}
     </span>
   );
