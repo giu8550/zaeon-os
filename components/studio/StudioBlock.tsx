@@ -11,6 +11,8 @@ import {
   GuideView, FaqView, FlashcardsView, MindmapView, TimelineView, PodcastView, ImageView, VideoView,
 } from "@/components/studio/StudioArtifactViews";
 import MoleculeView from "@/components/studio/MoleculeView";
+import DiagramView from "@/components/studio/DiagramView";
+import AulaView from "@/components/aula-interativa/AulaView";
 import { artifactToText } from "@/lib/studio/artifact-text";
 import type { TextKind } from "@/lib/studio/transformations";
 import useTTS from "@/lib/voice/useTTS";
@@ -33,6 +35,8 @@ const KIND_META: Record<string, { emoji: string; label: string }> = {
   image: { emoji: "🖼️", label: "Imagem" },
   video: { emoji: "🎬", label: "Vídeo" },
   molecule: { emoji: "⚛️", label: "Molécula" },
+  diagram: { emoji: "🧭", label: "Diagrama interativo" },
+  aula: { emoji: "🎓", label: "Aula interativa" },
 };
 
 const TEXT_KINDS = new Set(["guide", "faq", "flashcards", "mindmap", "timeline"]);
@@ -49,6 +53,8 @@ function renderView(b: StudioBlockData) {
     case "video": return <VideoView url={fileUrl} />;
     case "image": return <ImageView dataUrl={b.dataUrl || ""} prompt={b.data?.prompt} />;
     case "molecule": return b.data?.sdf ? <MoleculeView data={b.data} /> : <div className="text-[12px] text-slate-400">Estrutura indisponível.</div>;
+    case "diagram": return b.artifactId ? <DiagramView artifactId={b.artifactId} titulo={b.title} /> : <div className="text-[12px] text-slate-400">Diagrama indisponível.</div>;
+    case "aula": return b.artifactId ? <AulaView artifactId={b.artifactId} dados={b.data} /> : <div className="text-[12px] text-slate-400">Aula indisponível.</div>;
     default: return <div className="text-[12px] text-slate-400">Conteúdo indisponível.</div>;
   }
 }
@@ -91,7 +97,7 @@ export default function StudioBlock({
 
   const download = () => {
     const k = block.studioKind;
-    if (k === "podcast" || k === "video") {
+    if (k === "podcast" || k === "video" || k === "diagram") {   // diagrama = .html standalone (abre offline)
       if (block.artifactId) window.open(`/api/studio/${block.artifactId}/file?download=1`, "_blank");
       return;
     }
@@ -155,9 +161,11 @@ export default function StudioBlock({
               {saved ? <Check size={14} /> : <Save size={14} />}
             </button>
           )}
-          <button onClick={download} title="Baixar" className="p-1.5 rounded-full text-slate-400 dark:text-white/50 hover:bg-slate-500/10 hover:text-cyan-500">
-            <Download size={14} />
-          </button>
+          {block.studioKind !== "aula" && (   // a aula é roteiro + áudios no servidor: não é um arquivo só
+            <button onClick={download} title="Baixar" className="p-1.5 rounded-full text-slate-400 dark:text-white/50 hover:bg-slate-500/10 hover:text-cyan-500">
+              <Download size={14} />
+            </button>
+          )}
           {onRemove && (
             <button onClick={onRemove} title="Remover do caderno" className="p-1.5 rounded-full text-slate-400 dark:text-white/50 hover:bg-slate-500/10 hover:text-rose-400">
               <Trash2 size={14} />

@@ -7,6 +7,7 @@
  * → cai na heurística determinística (nunca derruba o laço). Tipos: importe de contracts.ts.
  */
 import type { AgentContext } from "@/lib/agent/context";
+import { pedeAula } from "@/lib/agent/aprender";
 import {
   INTENTS,
   INTENT_IDS,
@@ -40,10 +41,10 @@ const GREETING_RE =
   /(^|\s)(oi|ola|opa|eai|e ai|salve|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|beleza|blz|tudo bem|tchau)(\s|,|!|\?|$)/;
 
 const WORK_NOUNS = ["artigo", "tcc", "monografia", "dissertacao", "tese", "redacao", "ensaio", "relatorio", "paper", "resenha", "trabalho academico"];
-const STUDIO_NOUNS = ["mapa mental", "mindmap", "flashcard", "linha do tempo", "timeline", "podcast", "video", "quiz", "infografico", "slides", "apresentacao", "resumo visual", "guia de estudo", "guia de estudos", "imagem", "figura", "ilustracao", "molecula", "estrutura molecular", "estrutura quimica", "diagrama", "esquema", "desenho", "grafico", "formula estrutural"];
+const STUDIO_NOUNS = ["mapa mental", "mindmap", "mapa conceitual", "mapa de estudo", "fluxograma", "flashcard", "linha do tempo", "timeline", "podcast", "video", "quiz", "infografico", "slides", "apresentacao", "resumo visual", "guia de estudo", "guia de estudos", "imagem", "figura", "ilustracao", "molecula", "estrutura molecular", "estrutura quimica", "diagrama", "esquema", "desenho", "grafico", "formula estrutural"];
 const SOURCE_SIGNALS = ["fontes", "referencias", "bibliografia", "papers", "artigos sobre", "literatura sobre", "estado da arte", "cite fontes"];
 const REVISE_SIGNALS = ["revise", "revisar", "revisao", "critique", "avalie meu", "avalie este", "avalie esse", "corrija", "corrigir", "de feedback", "melhore meu"];
-const EXPLAIN_SIGNALS = ["explique", "explicar", "explica", "o que e", "o que sao", "como funciona", "por que", "porque", "defina", "definir", "qual a diferenca", "diferenca entre", "me ensine"];
+const EXPLAIN_SIGNALS = ["explique", "explicar", "explica", "o que e", "o que sao", "como funciona", "por que", "porque", "defina", "definir", "qual a diferenca", "diferenca entre", "me ensine", "me ensina", "quero aprender", "quero entender", "entender melhor", "aprender sobre", "engenharia reversa"];
 const DEEP_SIGNALS = /(a fundo|aprofund|detalhad|minucios|exaustiv|bem completo|passo a passo)/;
 
 const has = (t: string, arr: string[]) => arr.some((k) => t.includes(k));
@@ -97,6 +98,8 @@ export function classifyHeuristic(objective: string, ctx: AgentContext): RouterR
     kind,
   });
 
+  // 0) AULA interativa (Papermorph) — "me dá uma aula sobre X": é artefato, não trabalho escrito
+  if (pedeAula(t)) return decide("gerar_artefato");
   // 1) trabalho acadêmico completo — "escreva um artigo sobre X"
   if (genVerb && has(t, WORK_NOUNS)) return decide("criar_trabalho", workKindFrom(t) ?? "artigo");
   // 2) artefato de estudo — "crie um mapa mental sobre X"
@@ -124,8 +127,8 @@ const SYSTEM = [
   `intenções válidas: ${INTENT_IDS.join(" | ")}.`,
   "- conversa: saudação / small talk, sem tarefa.",
   "- duvida_rapida: pergunta objetiva e curta.",
-  "- explicar_conceito: pedir explicação / entendimento de um tema.",
-  "- gerar_artefato: pedir artefato de estudo (mapa mental, flashcards, resumo, timeline, podcast, vídeo, quiz).",
+  "- explicar_conceito: pedir explicação / entendimento de um tema — inclui 'quero aprender/entender X', 'como funciona X' e 'faz engenharia reversa de X'.",
+  "- gerar_artefato: pedir artefato de estudo (mapa mental, diagrama, esquema, fluxograma, flashcards, resumo, timeline, podcast, vídeo, quiz) — e também pedir uma AULA ('me dá uma aula sobre X', 'explica a fundo'),",
   "- criar_trabalho: pedir trabalho acadêmico completo (artigo, TCC, monografia, relatório, redação).",
   "- pesquisar_fontes: pedir fontes / referências / bibliografia / papers.",
   "- revisar: pedir revisão / crítica / correção de algo do usuário.",
@@ -149,7 +152,8 @@ export async function classify(objective: string, ctx: AgentContext): Promise<Ro
       { temperature: 0, timeoutMs: 8000 },
     );
     const cand = out?.intent;
-    const intent: IntentId = isIntentId(cand) ? cand : fallback.intent;
+    // Pedido explícito de aula manda mais que o palpite do modelo (que às vezes lê "aula" como trabalho escrito).
+    const intent: IntentId = pedeAula(norm(text)) ? "gerar_artefato" : isIntentId(cand) ? cand : fallback.intent;
     const nt = norm(text);
     const kind =
       intent === "criar_trabalho"
