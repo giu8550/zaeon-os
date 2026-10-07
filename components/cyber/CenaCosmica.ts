@@ -40,6 +40,10 @@ export type CenaCosmicaHandle = {
   /** o buraco negro (horizonte + disco) — é o PORTAL pra Cidade Zaeon (clique) */
   buracoNegro: THREE.Object3D[];
   atualizar(o: { dt: number; t: number; cam: THREE.PerspectiveCamera; aspect: number }): void;
+  /** desenha o FUNDO (nebulosa) numa textura de resolução reduzida (`escala` do tamanho da tela: 0,5 = 4× menos
+   *  pixels — a nebulosa é borrada, ninguém vê a diferença) e estica na tela; `escala` ≤ 0,25 atualiza 1 quadro sim,
+   *  1 não. Antes: dois passes de tela cheia com ~29 chamadas de ruído por pixel, na resolução toda. */
+  desenharFundo(R: THREE.WebGLRenderer, escala: number): void;
   dispose(): void;
 };
 
@@ -91,8 +95,25 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
   (grid.material as THREE.Material).transparent = true; (grid.material as THREE.Material).opacity = 0.42; scene.add(grid);
 
   const bhNdc = new THREE.Vector3();
+  // o fundo em resolução reduzida: render target + um quadrado que estica ele na tela
+  let rt: THREE.WebGLRenderTarget | null = null, quadro = 0;
+  // o quadrado que estica é um shader CRU (copia o valor como está): o shader da nebulosa também escreve cru na tela,
+  // sem conversão de cor — um MeshBasic aqui codificaria pra sRGB de novo (fica lavado)
+  const tam = new THREE.Vector2(), matEstica = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, uniforms: { mapa: { value: null } },
+    vertexShader: NEB_VERT, fragmentShader: "uniform sampler2D mapa; varying vec2 vUv; void main(){ gl_FragColor = texture2D(mapa, vUv); }" });
+  const cenaEstica = new THREE.Scene(); cenaEstica.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), matEstica));
   return {
     bgScene, bgCam, scene, floor, starTex, buracoNegro: [horizonte, disk],
+    desenharFundo(R, escala) {
+      R.getDrawingBufferSize(tam);
+      const w = Math.max(1, Math.round(tam.x * escala)), h = Math.max(1, Math.round(tam.y * escala));
+      if (!rt || rt.width !== w || rt.height !== h) {
+        rt?.dispose(); rt = new THREE.WebGLRenderTarget(w, h, { depthBuffer: false, stencilBuffer: false });
+        matEstica.uniforms.mapa!.value = rt.texture; quadro = 0;   // (textura linear: guarda o valor cru, sem conversão)
+      }
+      if (escala > 0.25 || quadro++ % 2 === 0) { const ant = R.getRenderTarget(); R.setRenderTarget(rt); R.clear(); R.render(bgScene, bgCam); R.setRenderTarget(ant); }
+      R.render(cenaEstica, bgCam);
+    },
     atualizar({ dt, t, cam, aspect: asp }) {
       bhNdc.set(0, 17, -120).project(cam);
       for (const m of nebulas) { m.uniforms.uTime!.value += dt; m.uniforms.uAspect!.value = asp; (m.uniforms.uCenter!.value as THREE.Vector2).set(bhNdc.x, bhNdc.y); }
@@ -105,7 +126,7 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
         const mt = (m as { material?: THREE.Material | THREE.Material[] }).material;
         if (mt) (Array.isArray(mt) ? mt : [mt]).forEach((x) => x.dispose());
       });
-      starTex.dispose();
+      starTex.dispose(); rt?.dispose(); matEstica.dispose();
     },
   };
 }

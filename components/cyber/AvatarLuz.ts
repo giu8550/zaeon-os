@@ -22,6 +22,8 @@ export const AVATAR_GLB_REFERENCIA = "https://threejs.org/examples/models/gltf/S
 export const avatarGlbUrl = (): string => process.env.NEXT_PUBLIC_CYBER_AVATAR_GLB || AVATAR_GLB_REFERENCIA;
 
 let cache: { url: string; p: Promise<GLTF> } | null = null;
+/** as fases do pé de cada GLB (medir custa 2×64 passos de animação — antes era refeito pra cada pessoa que entrava) */
+const fasesPorModelo = new WeakMap<GLTF, { walk: number[]; run: number[] } | null>();
 /** Carrega o GLB uma vez (todos os avatares clonam dele). */
 export function carregarModeloAvatar(url = avatarGlbUrl()): Promise<GLTF> {
   if (cache?.url === url) return cache.p;
@@ -57,6 +59,8 @@ export type AvatarLuzHandle = {
   olharPara(facing: number): void;
   /** Troca a cor da armadura (cosmético / ordem canônica chegou depois). */
   recolorir(hex: string): void;
+  /** liga/desliga a AURA (a 2ª malha com skinning — a qualidade adaptativa tira quando a máquina sofre) */
+  aura(on: boolean): void;
   dispose(): void;
 };
 
@@ -76,6 +80,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   const matAura = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
   matAura.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n transformed += normalize(normal) * 0.05;"); };
   let mixer: THREE.AnimationMixer | null = null;
+  const aurasMalha: THREE.Mesh[] = [];
   // braços (rig mixamo do GLB): quando sentado, apontam pra tela — sem os ossos, só a aura pulsa
   const ossos: { braco: THREE.Bone; ante: THREE.Bone; mao: THREE.Object3D; lado: 1 | -1 }[] = [];
   const pernas: { coxa: THREE.Bone; canela: THREE.Bone; pe: THREE.Object3D; dedo: THREE.Object3D | null; lado: 1 | -1 }[] = [];
@@ -100,6 +105,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       casca.frustumCulled = false; casca.renderOrder = 2; cascas.push(casca); casca.userData.pai = m.parent;
     });
     for (const c of cascas) (c.userData.pai as THREE.Object3D).add(c);
+    aurasMalha.push(...cascas);
     corpo.add(modelo);
     for (const [lado, nome] of [[1, "Left"], [-1, "Right"]] as const) {
       const braco = modelo.getObjectByName(`mixamorig${nome}Arm`) as THREE.Bone | undefined, ante = modelo.getObjectByName(`mixamorig${nome}ForeArm`) as THREE.Bone | undefined, mao = modelo.getObjectByName(`mixamorig${nome}Hand`);
@@ -164,7 +170,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   let alvo = 0, wWalk = 0, wRun = 0, pisadas = 0, uAnt = 0, acaoAnt: THREE.AnimationAction | null = null;
   const vA = new THREE.Vector3(), vB = new THREE.Vector3(), dirAlvo = new THREE.Vector3(), qPai = new THREE.Quaternion(), qOsso = new THREE.Quaternion(), qDelta = new THREE.Quaternion();
   /** as fases (0..1) do ciclo de andar/correr em que um pé encosta — medidas UMA vez da própria animação */
-  const fasesPe = (() => {
+  const fasesPe = gltf && fasesPorModelo.has(gltf) ? fasesPorModelo.get(gltf)! : (() => {
     if (!mixer || !walk || !run || !idle || pernas.length < 2 || !gltf) return null;
     const medir = (a: THREE.AnimationAction) => {
       for (const x of [idle!, walk!, run!]) x.setEffectiveWeight(x === a ? 1 : 0);
@@ -174,6 +180,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     };
     const r = { walk: medir(walk), run: medir(run) };
     idle.setEffectiveWeight(1); walk.setEffectiveWeight(0); run.setEffectiveWeight(0); walk.time = run.time = idle.time = 0; mixer.update(0);
+    fasesPorModelo.set(gltf, r);
     return r;
   })();
   /** gira `osso` (em espaço de mundo) pra que o segmento osso→filho aponte pra `dir`, misturando com o pose da animação */
@@ -390,6 +397,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     },
     passosNovos() { if (!pernas.length) return null; const n = pisadas; pisadas = 0; return n; },
     olharPara(f) { alvo = f + Math.PI; },
+    aura(on) { for (const c of aurasMalha) c.visible = on; },
     recolorir(hex) { armadura.set(hex); matArmadura.color.copy(armadura).multiplyScalar(0.5); matArmadura.emissive.copy(armadura); matMochila.emissive.copy(armadura).multiplyScalar(0.3); matFone.emissive.copy(armadura).multiplyScalar(0.5); (neu.material as THREE.PointsMaterial).color.copy(luz).lerp(armadura, 0.3); },
     dispose() {
       mixer?.stopAllAction(); matArmadura.dispose(); matViseira.dispose(); matAura.dispose(); ng.dispose(); (neu.material as THREE.Material).dispose();
