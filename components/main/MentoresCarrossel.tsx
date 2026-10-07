@@ -259,77 +259,80 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
                 {/* Lista DUPLICADA: alimenta o loop sem costura do glide contínuo. */}
                 {/* `dark`: os cards dos agentes são VIDRO PRETO nos dois temas (contraste melhor no claro) */}
                 {[...mentores, ...mentores].map((m, i) => (
-                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cartao m={m} /></div>
+                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cartao m={m} indice={i % mentores.length} /></div>
                 ))}
             </div>
         </div>
     );
 }
 
-function Cartao({ m }: { m: Mentor }) {
+/**
+ * CRACHÁ do mentor (landing = só vitrine, nada de contratar aqui): pendurado por uma fita com
+ * presilha, foto grande (o avatar vivo — pisca e sorri no hover do crachá inteiro), nome, curso, o
+ * que entrega e um rodapé de identificação. Sem avatar aprovado → a foto vira a inicial no degradê.
+ */
+function Cartao({ m, indice }: { m: Mentor; indice: number }) {
     const artefatos = (m.signatureArtifacts ?? []).slice(0, 3);
     const [hover, setHover] = useState(false);
+    const id = `ZA-${String((m as { order?: number }).order ?? indice + 1).padStart(3, "0")}`;
     return (
-        <article onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)} className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-black/80 backdrop-blur-xl p-5 flex flex-col transition-all duration-300 shadow-[0_12px_32px_-16px_rgba(2,6,23,0.38)] dark:shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
-            <div className="flex items-start justify-between">
-                {/* avatar vivo do mentor (estúdio) → foto → o tile de emoji de sempre */}
-                <AgentAvatar
-                    src={m.avatarUrl}
-                    nome={m.name}
-                    size={52}
-                    agentId={m.slug}
-                    hover={hover}
-                    className="ring-2 ring-cyan-500/30"
-                    fallback={
-                        <span
-                            aria-hidden="true"
-                            className="grid h-10 w-10 place-items-center rounded-xl border border-cyan-500/25 bg-cyan-500/10 text-lg text-cyan-600 dark:text-cyan-300"
-                        >
-                            {m.emoji || "⟁"}
-                        </span>
-                    }
-                />
-                {m.guardrail ? (
-                    <span
-                        className="rounded-md border border-slate-200 dark:border-white/15 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-800 dark:text-white/90"
-                        title={m.guardrail}
-                    >
-                        educacional
-                    </span>
-                ) : null}
-            </div>
-
-            <h3 className="mt-4 text-2xl font-semibold tracking-tight leading-none text-slate-900 dark:text-white">
-                {m.name}
-            </h3>
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300/90">
-                {m.course}
-            </p>
-
-            {m.tagline ? (
-                <p className="mt-4 text-[13.5px] leading-relaxed text-slate-800 dark:text-white/90 line-clamp-3">
-                    {m.tagline}
-                </p>
-            ) : null}
-
-            {artefatos.length > 0 ? (
-                <div className="mt-auto pt-5">
-                    <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300/90">
-                        entrega
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                        {artefatos.map((a) => (
-                            <span
-                                key={a}
-                                className="rounded-md bg-slate-100 dark:bg-white/[0.07] px-2 py-1 text-[11px] text-slate-800 dark:text-white/90"
-                            >
-                                {a}
-                            </span>
-                        ))}
+        <div className="shrink-0 w-[250px] sm:w-[262px] pt-7" onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}>
+            {/* balanço de crachá pendurado: gira em torno da fita */}
+            <div className="relative origin-top transition-transform duration-500 ease-out motion-reduce:transition-none" style={{ transform: hover ? "rotate(-1.6deg) translateY(2px)" : undefined }}>
+                {/* fita + presilha */}
+                <span aria-hidden className="absolute left-1/2 -translate-x-1/2 -top-7 h-8 w-5 rounded-t-sm bg-gradient-to-b from-cyan-400/0 via-cyan-500/70 to-cyan-500" />
+                <span aria-hidden className="absolute left-1/2 -translate-x-1/2 -top-1.5 h-4 w-9 rounded-md bg-gradient-to-b from-slate-200 to-slate-400 shadow-[0_2px_6px_rgba(0,0,0,0.5)] border border-white/60" />
+                <article className="relative rounded-[22px] border border-white/10 bg-black/80 backdrop-blur-xl px-5 pt-6 pb-4 flex flex-col items-center text-center shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] transition-[border-color,box-shadow] duration-300 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
+                    {/* furo do crachá */}
+                    <span aria-hidden className="absolute top-2.5 left-1/2 -translate-x-1/2 h-1.5 w-10 rounded-full bg-white/10 shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]" />
+                    <div className="w-full flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.22em]">
+                        <span className="text-white/70">Zaeon</span>
+                        <span className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0.5 text-cyan-300">mentor</span>
                     </div>
-                </div>
-            ) : null}
-        </article>
+
+                    {/* FOTO */}
+                    <div className="mt-4 rounded-[18px] p-[3px] bg-gradient-to-b from-cyan-400/50 to-cyan-500/10">
+                        <AgentAvatar
+                            src={m.avatarUrl}
+                            nome={m.name}
+                            size={140}
+                            agentId={m.slug}
+                            hover={hover}
+                            className="!rounded-[15px] !border-0"
+                            fallback={
+                                <span aria-hidden className="grid h-[140px] w-[140px] place-items-center rounded-[15px] bg-gradient-to-br from-cyan-500/25 to-blue-600/20 text-5xl font-semibold text-cyan-200">
+                                    {m.emoji && m.emoji !== "⟁" ? m.emoji : m.name.slice(0, 1)}
+                                </span>
+                            }
+                        />
+                    </div>
+
+                    <h3 className="mt-4 text-[22px] font-semibold tracking-tight leading-none text-white">{m.name}</h3>
+                    <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-cyan-300/90">{m.course}</p>
+                    {m.tagline ? <p className="mt-3 text-[12.5px] leading-snug text-white/80 line-clamp-2 min-h-[2.5em]">{m.tagline}</p> : null}
+
+                    {artefatos.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap justify-center gap-1">
+                            {artefatos.map((a) => (
+                                <span key={a} className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[10.5px] text-white/85">{a}</span>
+                            ))}
+                        </div>
+                    ) : null}
+
+                    {/* rodapé de identificação */}
+                    <div className="mt-4 pt-3 w-full border-t border-dashed border-white/15 flex items-end justify-between gap-3">
+                        <span className="flex flex-col items-start">
+                            <span className="font-mono text-[8.5px] uppercase tracking-[0.2em] text-white/45">id</span>
+                            <span className="font-mono text-[11px] text-white/85">{id}</span>
+                        </span>
+                        <span aria-hidden className="h-6 flex-1 max-w-[96px] opacity-70" style={{ background: "repeating-linear-gradient(90deg,rgba(255,255,255,.85) 0 2px,transparent 2px 4px,rgba(255,255,255,.85) 4px 5px,transparent 5px 8px,rgba(255,255,255,.85) 8px 11px,transparent 11px 12px)" }} />
+                        {m.guardrail ? (
+                            <span className="font-mono text-[8.5px] uppercase tracking-[0.18em] text-white/60 border border-white/15 rounded px-1 py-0.5" title={m.guardrail}>edu</span>
+                        ) : null}
+                    </div>
+                </article>
+            </div>
+        </div>
     );
 }
 
