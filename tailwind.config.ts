@@ -13,6 +13,7 @@ const config: Config = {
         sans: ["var(--font-space)", "sans-serif"],
         mono: ["var(--font-code)", "monospace"],
         tech: ["var(--font-tech)", "var(--font-space)", "sans-serif"],
+        display: ["var(--font-display)", "var(--font-space)", "sans-serif"],
       },
       colors: {
         background: "var(--background)",

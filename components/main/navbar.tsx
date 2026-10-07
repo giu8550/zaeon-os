@@ -135,6 +135,17 @@ export const Navbar = () => {
     return `transition-all uppercase tracking-[0.2em] text-[10px] font-black ${active ? "text-cyan-500 scale-110" : "text-foreground/50 hover:text-cyan-400"}`;
   };
 
+  // Já na landing: rola até a seção (o roteador troca a URL sem disparar `hashchange`, e o salto nativo não acontece).
+  // Em outra página, o Link navega pra "/#id" e a home rola até lá (app/page.tsx).
+  const irPraSecao = (id: string) => (e: React.MouseEvent) => {
+    if (pathname !== "/") return;
+    const el = document.getElementById(id); if (!el) return;
+    e.preventDefault();
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState(null, "", `/#${id}`);
+  };
+  const ancora = "transition-all uppercase tracking-[0.2em] text-[10px] font-black text-foreground/50 hover:text-cyan-400";
+
   if (!mounted) return null;
   // /m é o app mobile: tem cabeçalho próprio (coluna única, sem navbar do site).
   if (pathname === "/m" || pathname?.startsWith("/m/")) return null;
@@ -161,7 +172,11 @@ export const Navbar = () => {
             <Image src={logoPng} alt="logo" width={220} height={100} priority className="h-9 w-auto invert dark:invert-0" />
           </Link>
 
-          <nav className="hidden lg:flex items-center gap-10">
+          <nav className="hidden lg:flex items-center gap-7">
+            {/* as seções da landing (sem rótulo nelas: a navbar é o índice) */}
+            <Link href="/#como-funciona" className={ancora} onClick={irPraSecao("como-funciona")}>Como funciona</Link>
+            <Link href="/#mentores" className={ancora} onClick={irPraSecao("mentores")}>Mentores</Link>
+            <Link href="/#cyberespaco" className={ancora} onClick={irPraSecao("cyberespaco")}>Cyberespaço</Link>
             <Link href="/about" className={getLinkClassName("/about")}>Sobre nós</Link>
             <Link href="/docs" className={getLinkClassName("/docs")}>Documentação</Link>
             {/* acesso direto ao laboratório, pra quem não quiser usar o cyberespaço */}

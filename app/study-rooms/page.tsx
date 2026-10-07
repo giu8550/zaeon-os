@@ -14,6 +14,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import StarBackground from "@/components/main/star-background";
+import MolecularText from "@/components/ui/MolecularText";
 
 const FEATURES = [
     {
@@ -144,7 +145,7 @@ const FeatureCard = ({ feature, scrollProgress, index, total }: any) => {
                                 className="absolute inset-0 border border-cyan-400 bg-cyan-50 dark:bg-cyan-900/40 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.6)]"
                             />
                             {/* Ícone */}
-                            <feature.icon className="absolute w-6 h-6 text-slate-500 dark:text-slate-500" />
+                            <feature.icon className="absolute w-6 h-6 text-slate-700 dark:text-white/80" />
                             <motion.div style={{ opacity: isEnergized }} className="absolute">
                                 <feature.icon className="w-6 h-6 text-cyan-500 dark:text-cyan-400" />
                             </motion.div>
@@ -152,7 +153,7 @@ const FeatureCard = ({ feature, scrollProgress, index, total }: any) => {
 
                         <div className="relative flex-1">
                             {/* Título Inativo */}
-                            <h3 className="text-lg font-black uppercase tracking-wider text-slate-600 dark:text-slate-500 leading-tight">
+                            <h3 className="text-lg font-black uppercase tracking-wider text-slate-800 dark:text-white/85 leading-tight">
                                 {feature.name}
                             </h3>
                             {/* Título Energizado: Letras destacadas e brancas brilhantes */}
@@ -167,7 +168,7 @@ const FeatureCard = ({ feature, scrollProgress, index, total }: any) => {
 
                     <div className="relative mt-2">
                         {/* Descrição Inativa */}
-                        <p className="text-[14px] font-medium text-slate-500 dark:text-slate-500 leading-relaxed">
+                        <p className="text-[14px] font-medium text-slate-800 dark:text-white/85 leading-relaxed">
                             {feature.description}
                         </p>
                         {/* Descrição Energizada: Ciano super claro com contraste */}
@@ -227,10 +228,10 @@ export default function FeaturesPage() {
             {/* Cabeçalho Flutuante */}
             <div className="relative z-10 zaeon-borda pt-20 pb-12 flex flex-col items-start text-left">
                 <h1 className="text-4xl md:text-5xl lg:text-[4rem] font-light tracking-tighter max-w-4xl leading-[1.1] text-slate-900 dark:text-white drop-shadow-md">
-                    Crie a sua própria <br className="hidden md:block" />
-                    {/* Highlight Ciano Puro */}
-                    <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-cyan-600 dark:from-cyan-300 dark:to-cyan-500">
-                        estação de trabalho.
+                    <MolecularText text="Crie a sua própria" /> <br className="hidden md:block" />
+                    {/* Highlight Ciano (sólido: o degradê recortado no texto quebra com as letras animadas) */}
+                    <span className="font-extrabold text-cyan-500 dark:text-cyan-300 [text-shadow:0_0_22px_rgba(34,211,238,0.35)]">
+                        <MolecularText text="estação de trabalho." delay={0.25} />
                     </span>
                 </h1>
             </div>

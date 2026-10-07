@@ -59,7 +59,7 @@ function Item({ item }: { item: QA }) {
       </button>
       <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
         <div className="overflow-hidden">
-          <p className="px-5 pb-5 pt-0 text-sm leading-relaxed text-slate-600 dark:text-white/60">
+          <p className="px-5 pb-5 pt-0 text-sm leading-relaxed text-slate-800 dark:text-white/90">
             {item.a}
           </p>
         </div>

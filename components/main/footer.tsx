@@ -13,7 +13,7 @@ const COLS: FooterCol[] = [
   {
     title: "Plataforma",
     links: [
-      { label: "Salas de estudo", href: "/#study-rooms" },
+      { label: "Cyberespaço", href: "/#cyberespaco" },
       { label: "Modelos de IA", href: "/#modelos" },
       { label: "Laboratório", href: "/research-lab" },
       { label: "Plugins", href: "/plugin-store" },
@@ -88,7 +88,7 @@ export const Footer = () => {
         {/* Linha final */}
         <div className="border-t border-slate-200 dark:border-white/10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-400 dark:text-gray-600">
           <span>&copy; {year} Zaeon. Todos os direitos reservados.</span>
-          <span className="text-[12px] uppercase tracking-widest">Todas as IAs · feito pra ciência</span>
+          <span className="text-[12px] uppercase tracking-widest">Onde humanos e superinteligências se encontram para criar uma nova era</span>
         </div>
       </div>
     </footer>

@@ -24,5 +24,5 @@ export type CopyEntrada = { cta: string; badges: string[] };
 /** Copy do CTA primário e dos badges, por estado de login. */
 export function copyEntrada(logado: boolean): CopyEntrada {
   if (logado) return { cta: "✦ Entrar no cyberespaço", badges: [] };
-  return { cta: "Criar conta · entrar no cyberespaço", badges: ["Entre no universo", "Sem cartão", "Todas as IAs num lugar só"] };
+  return { cta: "Criar conta · entrar no cyberespaço", badges: ["1 mês grátis", "Sem cartão", "Sem limites", "Tecnologia de ponta"] };
 }

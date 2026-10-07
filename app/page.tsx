@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, Suspense } from "react";
+import { useState, useEffect, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "framer-motion";
 
 import HeroPage from "@/components/sub/hero-content";
 import Encryption from "@/components/main/encryption";
 import Faq from "@/components/main/Faq";
-import StudyRoomsPage from "@/app/study-rooms/page";
+import CyberespacoExplica from "@/components/main/CyberespacoExplica";
 import IntroOverlay from "@/src/components/main/intro-overlay";
 import { Footer } from "@/components/main/footer";
 
@@ -37,6 +37,26 @@ export default function Home() {
 
     useIsomorphicLayoutEffect(() => {
         window.history.scrollRestoration = "manual";
+    }, []);
+
+    // NAVBAR → SEÇÃO: chegando com âncora (/#como-funciona, /#mentores, /#cyberespaco) pula a intro e rola até a
+    // seção assim que ela existir (as seções montam com atraso). Vale também pra trocar de âncora já na página.
+    useEffect(() => {
+        const irPraAncora = () => {
+            const id = decodeURIComponent(window.location.hash.slice(1));
+            if (!id) return;
+            setShowIntro(false); setStartContent(true);
+            const ate = Date.now() + 4000;
+            const tentar = () => {
+                const el = document.getElementById(id);
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                else if (Date.now() < ate) setTimeout(tentar, 120);
+            };
+            setTimeout(tentar, 150);
+        };
+        irPraAncora();
+        window.addEventListener("hashchange", irPraAncora);
+        return () => window.removeEventListener("hashchange", irPraAncora);
     }, []);
 
     const handleIntroComplete = () => {
@@ -73,10 +93,10 @@ export default function Home() {
                     <div className="flex flex-col pt-[110px] w-full">
                         <HeroPage />
                         <Encryption />
+                        {/* No lugar da antiga "Crie a sua própria estação de trabalho": o que é e como funciona o
+                            CYBERESPAÇO (com a vista ao vivo + Conectar) — destino do "Ir pro cyberespaço" do hero. */}
                         <div id="study-rooms" className="w-full">
-                            <Suspense fallback={null}>
-                                <StudyRoomsPage />
-                            </Suspense>
+                            <CyberespacoExplica />
                         </div>
                         <Faq />
                     </div>

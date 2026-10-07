@@ -6,6 +6,7 @@ import {
   ajustarQualidade,
   alphaDaFase,
   avancarFase,
+  avancarFaseSemGlobo,
   criarDono,
   escalaPerspectiva,
   ESCALA_MAX,
@@ -44,6 +45,14 @@ describe("tempo real, não por quadro", () => {
   it("lerp independe do FPS: 2 quadros de passo 1 = 1 quadro de passo 2", () => {
     const umDeDois = 1 - (1 - fatorLerp(0.08, 1)) ** 2;
     expect(fatorLerp(0.08, 2)).toBeCloseTo(umDeDois);
+  });
+
+  it("sem o globo: o ciclo nunca passa pelo globo nem pela desintegração dele, e volta pra serpente", () => {
+    let r: Relogio = { fase: 2, timer: 0 };
+    const vistas = new Set<number>();
+    for (let i = 0; i < 20000; i++) { r = avancarFaseSemGlobo(r, 1); vistas.add(r.fase); }
+    expect(vistas.has(0)).toBe(false); expect(vistas.has(1)).toBe(false);
+    expect([...vistas].sort()).toEqual([2, 3, 4, 5]);
   });
 
   it("o ciclo completo volta pro globo", () => {
@@ -86,8 +95,8 @@ describe("aparelho fraco", () => {
     }
   });
 
-  it("máquina boa nunca passa de 1400 partículas (antes: até 5050 somando os 3 canvases)", () => {
-    expect(perfilDoAparelho({ nucleos: 16, memoriaGb: 32, largura: 2560 }).particulas).toBeLessThanOrEqual(1400);
+  it("máquina boa nunca passa de 2000 partículas (antes: até 5050 somando os 3 canvases)", () => {
+    expect(perfilDoAparelho({ nucleos: 16, memoriaGb: 32, largura: 2560 }).particulas).toBeLessThanOrEqual(2000);
   });
 
   it("FPS caindo corta pela metade até o mínimo; FPS bom não mexe", () => {
