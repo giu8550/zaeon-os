@@ -45,6 +45,25 @@ de sempre (compatível com todos os usos antigos).
 celular/toque/economia de dados; lá o card parado fica estático e só reage a sinal ativo),
 `prefers-reduced-motion` = quadro do estado sem nenhum movimento.
 
+## O avatar É o chat
+
+- **Presença** (`lib/avatars/presenca.ts`): o chat publica o que está fazendo; todos os rostos da
+  Aura seguem juntos (aba, boas-vindas, rosto ao lado da resposta). Sinais: `ouvindo` (o usuário
+  digita: inclina e acena), `pensando`, `falando`, sorriso automático ao concluir.
+- **Boas-vindas sem texto**: o chat vazio mostra só a Aura grande. Ela **se apresenta falando** com
+  a voz real (Aoede) — `voz.saudacoes` no manifesto, clipes em `public/avatars/aura/voz/` gerados por
+  `node --env-file=.env scripts/avatars/gerar-saudacao.mjs aura`. Toca sozinha 1× por sessão quando
+  o navegador permite áudio (usuário já interagiu); tocar no rosto repete. A boca segue o volume do
+  áudio (`components/agents/avatar/falar.ts`, Web Audio).
+- **Rosto ao lado de cada resposta** (sem nome); só o mais recente vive. Na 1ª mensagem o rosto
+  grande viaja (layoutId) até a resposta.
+- **Aba do chat** ("Chat"/"Aura" na sala de estudos, "Conversa" na pesquisa): a bolinha é o rosto,
+  espelha o chat de qualquer aba e mostra um anel "respondeu" se ela terminou com o chat fechado.
+- **Landing**: cartão "Aura ao vivo" no hero (desktop) + rosto no botão "Iniciar chat".
+- **Modo voz (próximo)**: o mesmo `falarClipe`/`boca` serve pro TTS das respostas — publicar o nível
+  do áudio em `definirPresenca(agentId, { sinal: "falando", boca })`.
+- Prova sem login: `/dev/avatares/chat` (dev).
+
 ## Criar avatares
 
 **Etapa A — no Claude Code (dev):** `node server.js` → `http://localhost:3000/dev/avatares`, aberto

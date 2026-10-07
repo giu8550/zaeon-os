@@ -40,6 +40,8 @@ export type AvatarManifest = {
    * `expressoes` mapeia sinal/hover → nome da expressão do rig. Sem isto o motor live2d cai no sprite.
    */
   live2d?: { model: string; expressoes?: Partial<Record<SinalAvatar | "hover", string>> };
+  /** Voz própria do agente: saudações faladas (clipes estáticos, scripts/avatars/gerar-saudacao.mjs). */
+  voz?: { saudacoes: string[] };
 };
 
 export const isEstadoSprite = (v: unknown): v is EstadoSprite =>
@@ -84,6 +86,11 @@ export function normalizarManifest(raw: unknown): AvatarManifest | null {
     pequeno,
     cor: typeof r.cor === "string" && /^#[0-9a-f]{6}$/i.test(r.cor) ? r.cor : undefined,
     live2d: urlOk(l2d.model) ? { model: l2d.model, ...(Object.keys(expressoes).length ? { expressoes } : {}) } : undefined,
+    voz: (() => {
+      const lista = (r.voz as { saudacoes?: unknown } | undefined)?.saudacoes;
+      const ok = Array.isArray(lista) ? lista.filter(urlOk).slice(0, 12) : [];
+      return ok.length ? { saudacoes: ok } : undefined;
+    })(),
   };
 }
 

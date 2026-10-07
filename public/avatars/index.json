@@ -18,7 +18,14 @@
         "smile": "/avatars/aura/smile.sm.webp?v=muxyfh91",
         "talk_half": "/avatars/aura/talk_half.sm.webp?v=muxyfh91"
       },
-      "cor": "#6d28d9"
+      "cor": "#6d28d9",
+      "voz": {
+        "saudacoes": [
+          "/avatars/aura/voz/saudacao-01.wav",
+          "/avatars/aura/voz/saudacao-02.wav",
+          "/avatars/aura/voz/saudacao-03.wav"
+        ]
+      }
     }
   }
 }

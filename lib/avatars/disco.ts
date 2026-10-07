@@ -39,7 +39,8 @@ export function salvarNoDisco(agentId: string, set: SetParaSalvar, substituir = 
   if (!ID_RE.test(agentId)) throw new Error("agentId inválido");
   const dir = path.join(RAIZ_AVATARES(), agentId);
   fs.mkdirSync(dir, { recursive: true });
-  const anterior = substituir ? null : lerManifestDisco(agentId);
+  const existente = lerManifestDisco(agentId);
+  const anterior = substituir ? null : existente;
   if (substituir) {
     for (const f of fs.readdirSync(dir)) if (/\.webp$/.test(f) && f !== "base.webp") fs.unlinkSync(path.join(dir, f));
   }
@@ -51,7 +52,8 @@ export function salvarNoDisco(agentId: string, set: SetParaSalvar, substituir = 
     fs.writeFileSync(path.join(dir, `${estado}.sm.webp`), q.pequeno);
     estados.add(estado);
   }
-  const m: AvatarManifest = { agentId, versao, motor: "sprite", estados: {}, pequeno: {}, cor: set.cor ?? anterior?.cor };
+  // a voz (saudações) não é do estúdio de imagem — sobrevive a qualquer regravação dos quadros
+  const m: AvatarManifest = { agentId, versao, motor: "sprite", estados: {}, pequeno: {}, cor: set.cor ?? anterior?.cor, ...(existente?.voz ? { voz: existente.voz } : {}) };
   for (const e of estados) {
     m.estados[e] = `/avatars/${agentId}/${e}.webp?v=${versao}`;
     m.pequeno[e] = `/avatars/${agentId}/${e}.sm.webp?v=${versao}`;
