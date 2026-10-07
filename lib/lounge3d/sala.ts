@@ -10,9 +10,14 @@ import {
 } from "@/lib/lounge3d/tipos";
 
 import { motoDe } from "@/lib/cyber/motos";
+import { VOO } from "@/lib/cyber/voo";
 
 const ID_RE = /^[\w:.-]{1,64}$/;
-const COORD = 400; // metade do chão (plano 400×400 centrado)
+const COORD = 400; // metade do chão (plano 400×400 centrado) — notas/artefatos do canvas
+/** presença no MAPA do cyberespaço: o mapa inteiro (a Zaeon mega fica em z −560, até −812) e qualquer altura que se
+ *  alcança (teto do voo + o dorso da nave / a mochila acima do lounge). Com os 400 m antigos, quem estava na Zaeon
+ *  aparecia pros outros puxado pra z −400 e as motos/nave lá em cima, 50 m ABAIXO do piso. */
+export const MAPA = { coord: VOO.raioMapa + 40, alt: VOO.yMax + 80 } as const;
 
 // Controle, zero-width e separadores de linha Unicode (U+2028/2029 — num literal de regex quebram o parser).
 const CONTROLE = new RegExp("[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f\\u200b-\\u200f\\u2028\\u2029]", "g");
@@ -128,19 +133,19 @@ export function interpolar(cur: { x: number; z: number; facing: number }, alvo: 
   return { x, z, facing, moving: Math.hypot(alvo.x - cur.x, alvo.z - cur.z) > 0.02 };
 }
 
-/** voo da nave na presença: só números finitos, com teto (altura 0..300, rumo ±10 rad); lixo → nada */
+/** voo da nave na presença: só números finitos, com teto (altura 0..MAPA.alt, rumo ±10 rad); lixo → nada */
 function vooDe(v: unknown): { voo?: { y: number; yaw: number } } {
   if (!v || typeof v !== "object") return {};
   const o = v as Record<string, unknown>;
-  const y = num(o.y, 0, 300), yaw = num(o.yaw, -10, 10);
+  const y = num(o.y, 0, MAPA.alt), yaw = num(o.yaw, -10, 10);
   return y === null || yaw === null ? {} : { voo: { y, yaw } };
 }
 
-/** nave pousada fora do hangar: posição no mapa (x/z no chão, y 0..300) e rumo; lixo → nada */
+/** nave pousada fora do hangar: posição no mapa (x/z no mapa, y 0..MAPA.alt) e rumo; lixo → nada */
 function naveParadaDe(v: unknown): { naveParada?: { x: number; y: number; z: number; yaw: number } } {
   if (!v || typeof v !== "object") return {};
   const o = v as Record<string, unknown>;
-  const x = num(o.x, -COORD, COORD), y = num(o.y, 0, 400), z = num(o.z, -COORD, COORD), yaw = num(o.yaw, -10, 10);
+  const x = num(o.x, -MAPA.coord, MAPA.coord), y = num(o.y, 0, MAPA.alt), z = num(o.z, -MAPA.coord, MAPA.coord), yaw = num(o.yaw, -10, 10);
   return x === null || y === null || z === null || yaw === null ? {} : { naveParada: { x, y, z, yaw } };
 }
 
@@ -149,9 +154,9 @@ export function sanitizarPresenca(raw: unknown): Presenca | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   if (typeof r.userId !== "string" || !/^[a-f0-9]{24}$/i.test(r.userId)) return null;
-  const x = num(r.x, -COORD, COORD), z = num(r.z, -COORD, COORD), facing = num(r.facing, -10, 10);
+  const x = num(r.x, -MAPA.coord, MAPA.coord), z = num(r.z, -MAPA.coord, MAPA.coord), facing = num(r.facing, -10, 10);
   if (x === null || z === null || facing === null) return null;
-  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ...naveParadaDe(r.naveParada), ...(num(r.jet, 0, 300) !== null ? { jet: num(r.jet, 0, 300)! } : {}), ...(num(r.alt, 0, 300) !== null ? { alt: num(r.alt, 0, 300)! } : {}), ...motoDe(r.moto), ts: typeof r.ts === "number" ? r.ts : Date.now() };
+  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ...naveParadaDe(r.naveParada), ...(num(r.jet, 0, MAPA.alt) !== null ? { jet: num(r.jet, 0, MAPA.alt)! } : {}), ...(num(r.alt, 0, MAPA.alt) !== null ? { alt: num(r.alt, 0, MAPA.alt)! } : {}), ...motoDe(r.moto), ts: typeof r.ts === "number" ? r.ts : Date.now() };
 }
 
 /** Ponte chat → nota: um "ponto importante" da Sala de Pesquisa vira nota SUGERIDA perto do avatar. */

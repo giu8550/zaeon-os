@@ -7,7 +7,7 @@
  * Layout e colisão em lib/cyber/solana.ts (as mesmas medidas).
  */
 import * as THREE from "three";
-import { ANDARES_SOLANA, GARAGEM, ROOFTOP, SOLANA, moveisDoAndar, paredesDoAndar, type MovelS } from "@/lib/cyber/solana";
+import { ESCALA_SOLANA, ANDARES_SOLANA, GARAGEM, ROOFTOP, SOLANA, moveisDoAndar, paredesDoAndar, type MovelS } from "@/lib/cyber/solana";
 import { PLATAFORMAS } from "@/lib/cyber/plataformas";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
@@ -136,11 +136,11 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   if (telasPc.length) { const im = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.84, 0.48), new THREE.MeshBasicMaterial({ map: telaPc }), telasPc.length); telasPc.forEach((t, i) => im.setMatrixAt(i, mx.compose(mp.set(t.x, t.y, t.z), mq.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, Math.PI), ms.set(1, 1, 1)))); im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); add(im); }
   const logoClaro = comLogo(512, 512, "#bbfb64");
   // lobby: o painel do LOGO na parede do fundo (por dentro, virado pra porta)
-  const painelLobby = add(new THREE.Mesh(new THREE.PlaneGeometry(4.6, 3), new THREE.MeshBasicMaterial({ map: comLogo(768, 500, "#bbfb64") }))); painelLobby.position.set(-2, 2.1, P.z1 - 0.3); painelLobby.rotation.y = Math.PI;
+  const painelLobby = add(new THREE.Mesh(new THREE.PlaneGeometry(4.6, 3), new THREE.MeshBasicMaterial({ map: comLogo(768, 500, "#bbfb64") }))); painelLobby.position.set(-2 * ESCALA_SOLANA, 2.1, P.z1 - 0.3); painelLobby.rotation.y = Math.PI;
   // hacker house: o telão
-  const telao = add(new THREE.Mesh(new THREE.PlaneGeometry(8, 3.4), new THREE.MeshBasicMaterial({ map: comLogo(1024, 436, "#120a2a") }))); telao.position.set(-4, ANDARES_SOLANA[1] + 2.3, P.z1 - 0.3); telao.rotation.y = Math.PI;
+  const telao = add(new THREE.Mesh(new THREE.PlaneGeometry(8, 3.4), new THREE.MeshBasicMaterial({ map: comLogo(1024, 436, "#120a2a") }))); telao.position.set(-4 * ESCALA_SOLANA, ANDARES_SOLANA[1] + 2.3, P.z1 - 0.3); telao.rotation.y = Math.PI;
   // apartamento: TV + travesseiros nas camas
-  const tv = add(new THREE.Mesh(new THREE.PlaneGeometry(4, 2.3), new THREE.MeshBasicMaterial({ map: telaPc }))); tv.position.set(-7.2, ANDARES_SOLANA[2] + 2, -1.6); tv.rotation.y = 0;
+  const tv = add(new THREE.Mesh(new THREE.PlaneGeometry(4, 2.3), new THREE.MeshBasicMaterial({ map: telaPc }))); tv.position.set(-7.2 * ESCALA_SOLANA, ANDARES_SOLANA[2] + 2, P.z0 + 0.4); tv.rotation.y = 0;
   const travesseiros: number[][] = [];
   for (const mv of moveisDoAndar(2).filter((x) => x.tipo === "cama")) travesseiros.push([(mv.x0 + mv.x1) / 2, ANDARES_SOLANA[2] + mv.alt + 0.1, mv.z1 - 0.5, mv.x1 - mv.x0 - 0.6, 0.2, 0.6]);
   caixas(travesseiros, new THREE.MeshStandardMaterial({ color: 0x9945ff, roughness: 0.9, emissive: 0x2a1060, emissiveIntensity: 0.4 }));
@@ -159,7 +159,7 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   for (let x = bar.x0 + 0.6; x < bar.x1; x += 1.2) banquetas.push([x, H + 0.4, bar.z0 - 0.6, 0.45, 0.8, 0.45]);
   caixas(banquetas, escuro);
   // guarda-sóis COLORIDOS (as cores da Solana + ciano e rosa), com a ponta acesa
-  for (const [x, cor] of [[-8.8, ROXO], [-5.4, VERDE], [-2, 0x22d3ee]] as const) {
+  for (const [x0, cor] of [[-8.8, ROXO], [-5.4, VERDE], [-2, 0x22d3ee]] as const) { const x = x0 * ESCALA_SOLANA;
     const haste = add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6), escuro)); haste.position.set(x, H + 1.3, 0.3);
     const lona = add(new THREE.Mesh(new THREE.ConeGeometry(1.6, 0.6, 12), new THREE.MeshStandardMaterial({ color: cor, roughness: 0.8, emissive: cor, emissiveIntensity: 0.35 }))); lona.position.set(x, H + 2.7, 0.3);
     const ponta = add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }))); ponta.position.set(x, H + 3.05, 0.3);
@@ -168,7 +168,7 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   for (let k = 0; k < 6; k++) { const b = add(new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.08, 0.05), new THREE.MeshBasicMaterial({ color: k % 2 ? ROXO : VERDE }))); b.position.set(dj.x0 + 0.4 + k * 0.45, H + dj.alt - 0.25, dj.z0 - 0.03); luzesDj.push(b); }
   anim.push((_, t) => luzesDj.forEach((b, i) => { b.visible = Math.sin(t * 6 + i * 1.3) > -0.2; }));
   // o PAINEL do logo: moldura no fundo do rooftop, virado pro sul (pra quem chega pelo elevador de luz)
-  const painel = new THREE.Group(); painel.position.set(-3, H, P.z1 - 0.2); add(painel);
+  const painel = new THREE.Group(); painel.position.set(-3 * ESCALA_SOLANA, H, P.z1 - 0.2); add(painel);
   for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.25, 7.6, 0.25), escuro); p.position.set(sx * 3.4, 3.8, 0); painel.add(p); }
   const placa = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 6.4), new THREE.MeshBasicMaterial({ map: logoClaro, side: THREE.DoubleSide })); placa.position.set(0, 4.3, 0); placa.rotation.y = Math.PI; painel.add(placa);
   const moldura = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.14, 0.1), faixaMat); moldura.position.set(0, 1.05, 0); painel.add(moldura);
@@ -218,7 +218,7 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const r = add(new THREE.Mesh(roda, escuro)); r.rotation.z = Math.PI / 2; r.position.set(ccx + sx * (car.x1 - car.x0 - 0.5) / 2, yG + 0.38, ccz + sz * (car.z1 - car.z0) * 0.32); }
     for (const sx of [-0.6, 0.6]) { const f = add(new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.16), new THREE.MeshBasicMaterial({ color: 0xe8fbff }))); f.position.set(ccx + sx, yG + 0.75, car.z0 - 0.01); f.rotation.y = Math.PI; }
     // telão com o logo na parede norte e o letreiro neon "BUIDL" na parede sul
-    const telaoG = add(new THREE.Mesh(new THREE.PlaneGeometry(9, 3.2), new THREE.MeshBasicMaterial({ map: comLogo(1024, 364, "#120a2a") }))); telaoG.position.set(-6, yG + 2.3, G.z1 - 0.08); telaoG.rotation.y = Math.PI;
+    const telaoG = add(new THREE.Mesh(new THREE.PlaneGeometry(9, 3.2), new THREE.MeshBasicMaterial({ map: comLogo(1024, 364, "#120a2a") }))); telaoG.position.set(-6 * ESCALA_SOLANA, yG + 2.3, G.z1 - 0.08); telaoG.rotation.y = Math.PI;
     const letreiro = tela(512, 160, (g, w, h) => { g.clearRect(0, 0, w, h); g.font = "900 104px system-ui,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.shadowColor = "#14f195"; g.shadowBlur = 24; g.fillStyle = "#b8ffe0"; g.fillText("BUIDL", w / 2, h / 2 + 4); });
     const neon = add(new THREE.Mesh(new THREE.PlaneGeometry(6, 1.9), new THREE.MeshBasicMaterial({ map: letreiro, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }))); neon.position.set(0, yG + 2.6, G.z0 + 0.08);
   }

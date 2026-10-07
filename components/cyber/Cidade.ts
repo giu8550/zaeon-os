@@ -115,9 +115,17 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
 
   // ── piso: disco frio + anéis concêntricos + raios (a "rosa dos ventos" da cidade) ──
   add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, low ? 64 : 128), new THREE.MeshStandardMaterial({ color: 0x0a2440, emissive: COLD, emissiveIntensity: 0.35, roughness: 0.55, metalness: 0.25 })), ilha, true).position.y = -0.3;
-  for (const r of [0.21, 0.39, 0.54, 0.71, 0.86].map((f) => f * R)) { const anel = add(new THREE.Mesh(new THREE.RingGeometry(r - 0.08, r + 0.08, 96), new THREE.MeshBasicMaterial({ color: COLD, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }))); anel.rotation.x = -Math.PI / 2; anel.position.y = 0.02; }
-  { const lin: number[] = []; for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; lin.push(Math.cos(a) * 0.36 * R, 0.03, Math.sin(a) * 0.36 * R, Math.cos(a) * 0.86 * R, 0.03, Math.sin(a) * 0.86 * R); }
-    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(lin), 3)); add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: COLD, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending }))); }
+  // as LINHAS do piso: um padrão REGULAR na escala de gente (antes: 5 anéis com espaços desiguais e 16 raios de 126 m
+  // — na Zaeon mega aquilo ficava torto e enorme): anéis finos a cada 18 m da capela até a borda (um mais aceso a cada 3)
+  // e 48 raios, também a cada 3 um mais forte
+  { const r0 = CIDADE.cidadela.r + 12, passo = 18, aneis: number[] = [], fortes: number[] = [];
+    for (let r = r0, k = 0; r < R - 4; r += passo, k++) (k % 3 === 0 ? fortes : aneis).push(r);
+    const anelGeo = (lista: number[]) => { const pts: number[] = [], N = low ? 96 : 192; for (const r of lista) for (let i = 0; i < N; i++) { const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2; pts.push(Math.cos(a0) * r, 0.03, Math.sin(a0) * r, Math.cos(a1) * r, 0.03, Math.sin(a1) * r); } const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts), 3)); return g; };
+    add(new THREE.LineSegments(anelGeo(aneis), new THREE.LineBasicMaterial({ color: COLD, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending })));
+    add(new THREE.LineSegments(anelGeo(fortes), new THREE.LineBasicMaterial({ color: COLD, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending })));
+    const raios: number[] = [], raiosF: number[] = [], NR = 48;
+    for (let i = 0; i < NR; i++) { const a = (i / NR) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a); (i % 3 === 0 ? raiosF : raios).push(c * r0, 0.03, s * r0, c * (R - 4), 0.03, s * (R - 4)); }
+    for (const [l, op] of [[raios, 0.1], [raiosF, 0.22]] as const) { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(l), 3)); add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: COLD, transparent: true, opacity: op, blending: THREE.AdditiveBlending }))); } }
 
   // ── muralhas de granizo (instanciadas) + 4 torres ──
   const NW = Math.round((low ? 44 : 64) * CIDADE.muralhaR / 53), mur = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), vidro({ color: 0xcfe9ff, emissive: ICE, emissiveIntensity: 0.25, roughness: 0.1, metalness: 0, transmission: 0.9, thickness: 0.8, transparent: true, opacity: 0.6, side: THREE.DoubleSide }, 0.45), NW), ilha, true);

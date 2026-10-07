@@ -106,6 +106,7 @@ export function colisoresDaCidade(): Colisor[] {
     for (const m of MOVEIS[nome]) for (const c of colisoresDoMovel(m)) out.push({ ...mundo(daSala(s, c.x, c.z)), r: c.r });
   }
   for (const c of bordaDoPalco()) out.push({ ...mundo(daSala(CIDADE.salas.lounge, c.x, c.z)), r: PALCO.colR });
+  for (const c of bordaDaTorre()) out.push({ ...mundo(daSala(CIDADE.salas.lounge, c.x, c.z)), r: TORRE_DJ.colR });
   const { cidadela, mesaHolo } = CIDADE, e = ESCADA_LOUNGE;
   for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
   out.push({ ...mundo({ x: 0, z: 0 }), r: mesaHolo.r });
@@ -133,10 +134,15 @@ export const PALCO = {
   escada: { meia: 2.5, len: 6 },
   /** colisores da borda: passo e raio */
   passo: 0.6, colR: 0.5,   // (0,6: os colisores se sobrepõem bem — num quadro lento o passo não atravessa a borda)
-  /** a cabine do DJ (atrás da mesa): centro, raio; quem está nela olha pra pista (+z da sala) */
-  cabine: { x: 0, z: -16.25, r: 0.95 },   // encosta na mesa (o colisor dela vai até −15,95): as mãos alcançam a controladora
+  /** a cabine do DJ (atrás da mesa, lá em cima na TORRE): centro, raio; quem está nela olha pra pista (+z da sala) */
+  cabine: { x: 0, z: -17.35, r: 0.95 },   // encosta na mesa (o colisor dela vai até −17,05): as mãos alcançam a controladora
 } as const;
-export const MESA_DJ = { x: 0, z: -15.3, larg: 4.2, prof: 1, topo: 1.05 } as const;
+/** a TORRE DO DJ: a MEGA ESTRUTURA de cristal que sobe do palco até a cabine, lá no alto (na altura da bola de
+ *  espelhos). O círculo dela é sólido pra quem está no palco e é o guarda-corpo de quem está lá em cima; sobe-se pelo
+ *  ELEVADOR DE LUZ atrás dela (pisou no anel do palco, sobe surfando; no anel lá de cima, desce). */
+export const TORRE_DJ = { z: -18, r: 4.5, topo: 12, colR: 0.5, passo: 0.6,
+  elevador: { r: 1, sobe: -23.9, chegaEmCima: -20.4, desce: -21.6, rDesce: 0.7, chegaEmbaixo: -25.3, dur: 3.6 } } as const;
+export const MESA_DJ = { x: 0, z: -16.4, larg: 4.2, prof: 1, topo: 1.05 } as const;
 /** a ESTRUTURA DE METAL alta (treliça) de onde pendem as caixas: 2 torres + viga; as caixas SUSPENSAS (line arrays) */
 export const TRELICA = { x: 17, z: -19, alt: 26, viga: 24 } as const;
 export const CAIXAS_SUSPENSAS = [{ x: -14, z: -11 }, { x: 14, z: -11 }] as const;
@@ -161,7 +167,8 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
   lounge: [
     { tipo: "tv", x: 0, z: -33, rot: 0, larg: 22, prof: 1 },
     { tipo: "palco", x: 0, z: PALCO.z, rot: 0, larg: 0, prof: 0, solido: false, y: 0 },   // colisão própria (bordaDoPalco)
-    { tipo: "mesaDJ", x: MESA_DJ.x, z: MESA_DJ.z, rot: 0, larg: MESA_DJ.larg, prof: MESA_DJ.prof, y: PALCO.h },
+    { tipo: "torreDJ", x: 0, z: TORRE_DJ.z, rot: 0, larg: 0, prof: 0, solido: false, y: PALCO.h },   // colisão própria (bordaDaTorre)
+    { tipo: "mesaDJ", x: MESA_DJ.x, z: MESA_DJ.z, rot: 0, larg: MESA_DJ.larg, prof: MESA_DJ.prof, y: TORRE_DJ.topo },
     { tipo: "trelica", x: -TRELICA.x, z: TRELICA.z, rot: 0, larg: 2.4, prof: 2.4 },
     { tipo: "trelica", x: TRELICA.x, z: TRELICA.z, rot: 0, larg: 2.4, prof: 2.4 },
     { tipo: "caixaSom", x: CAIXAS_SUSPENSAS[0].x, z: CAIXAS_SUSPENSAS[0].z, rot: 0.3, larg: 3.2, prof: 2.2, solido: false },   // suspensa: não ocupa o chão
@@ -191,6 +198,12 @@ export function bordaDoPalco(): { x: number; z: number }[] {
   for (let k = 0.3; k < escada.len; k += passo) for (const sx of [-1, 1]) out.push({ x: sx * (escada.meia + 0.25), z: z + r + k - 0.3 });
   return out;
 }
+/** pontos (referencial da sala) do círculo da TORRE do DJ: parede pra quem está no palco, guarda-corpo lá em cima */
+export function bordaDaTorre(): { x: number; z: number }[] {
+  const { r, z, passo } = TORRE_DJ, n = Math.ceil((2 * Math.PI * r) / passo), out: { x: number; z: number }[] = [];
+  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; out.push({ x: Math.cos(a) * r, z: z + Math.sin(a) * r }); }
+  return out;
+}
 /** ponto (local da ilha) → referencial da sala (o inverso de `daSala`) */
 export function naSala(s: { x: number; z: number }, x: number, z: number): { x: number; z: number } {
   const r = rotDaSala(s), c = Math.cos(r), si = Math.sin(r), dx = x - s.x, dz = z - s.z;
@@ -202,6 +215,7 @@ export function alturaNaCidade(p: P2): number {
   const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z };
   if (noDiscoDoLounge(l)) {
     const s = CIDADE.salas.lounge, q = naSala(s, l.x, l.z), { r, z, h, escada } = PALCO;
+    if (Math.hypot(q.x, q.z - TORRE_DJ.z) <= TORRE_DJ.r) return ALTURA_LOUNGE + TORRE_DJ.topo;   // lá em cima, na cabine da torre
     if (Math.hypot(q.x, q.z - z) <= r) return ALTURA_LOUNGE + h;
     const z0 = z + r - 0.3;
     if (Math.abs(q.x) <= escada.meia && q.z >= z0 && q.z <= z0 + escada.len) return ALTURA_LOUNGE + h * (1 - (q.z - z0) / escada.len);
@@ -245,6 +259,27 @@ export function uDaViagem(sentido: "sobe" | "desce", k: number): number {
 }
 /** o rumo (facing do mundo) de quem é levado */
 export const rumoDaViagem = (sentido: "sobe" | "desce") => { const d = ESCADA_LOUNGE.dir; return Math.atan2(d.x, d.z) + (sentido === "sobe" ? 0 : Math.PI); };
+/** o ELEVADOR DE LUZ da torre do DJ: "sobe" no anel do palco (atrás da torre), "desce" no anel lá de cima; null fora */
+export function bocaDoElevador(p: P2): "sobe" | "desce" | null {
+  const q = naSala(CIDADE.salas.lounge, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z), e = TORRE_DJ.elevador;
+  if (Math.hypot(q.x, q.z - e.sobe) < e.r) return "sobe";
+  if (Math.hypot(q.x, q.z - e.desce) < e.rDesce) return "desce";
+  return null;
+}
+/** a VIAGEM (escada de energia ou elevador da torre) no progresso `k` (0..1): onde está (mundo), a altura acima do piso
+ *  central e pra onde olha. O elevador sobe reto no anel e então desliza pra dentro da cabine (e o contrário, descendo) */
+export function posDaViagem(tipo: "escada" | "elevador", sentido: "sobe" | "desce", k: number): { p: P2; y: number; rumo: number } {
+  if (tipo === "escada") { const p = pontoDaEscada(uDaViagem(sentido, k)); return { p, y: alturaNaCidade(p), rumo: rumoDaViagem(sentido) }; }
+  const L = CIDADE.salas.lounge, e = TORRE_DJ.elevador, c = Math.max(0, Math.min(1, k)), s = (x: number) => x * x * (3 - 2 * x);
+  const embaixo = ALTURA_LOUNGE + PALCO.h, emCima = ALTURA_LOUNGE + TORRE_DJ.topo, sala = (z: number) => mundo(daSala(L, 0, z));
+  if (sentido === "sobe") {
+    if (c < 0.7) return { p: sala(e.sobe), y: embaixo + (emCima + 0.4 - embaixo) * s(c / 0.7), rumo: rumoDoDJ() };
+    const u = s((c - 0.7) / 0.3); return { p: sala(e.sobe + (e.chegaEmCima - e.sobe) * u), y: emCima + 0.4 * (1 - u), rumo: rumoDoDJ() };
+  }
+  if (c < 0.3) { const u = s(c / 0.3); return { p: sala(e.desce + (e.sobe - e.desce) * u), y: emCima + 0.4 * u, rumo: rumoDoDJ() + Math.PI }; }
+  if (c < 0.85) return { p: sala(e.sobe), y: emCima + 0.4 - (emCima + 0.4 - embaixo) * s((c - 0.3) / 0.55), rumo: rumoDoDJ() + Math.PI };
+  const u = s((c - 0.85) / 0.15); return { p: sala(e.sobe + (e.chegaEmbaixo - e.sobe) * u), y: embaixo, rumo: rumoDoDJ() + Math.PI };
+}
 /** pra onde o DJ olha (facing = atan2(dx, dz) do mundo): o +z da sala, rumo à pista */
 export const rumoDoDJ = () => rotDaSala(CIDADE.salas.lounge);
 /** giro da sala: +z local aponta pro centro da ilha (onde fica a porta) */
@@ -324,6 +359,11 @@ export function pisoNoAr(p: P2, yRel: number): number | null {
   return Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= CIDADE.bordaR + 0.1 ? 0 : null;
 }
 
+/** o PISO de onde se voa de mochila aqui (yRel = a altura atual acima do piso central): o teto da mochila e as paredes
+ *  baixas contam a partir DELE — no lounge (88 m acima da central) o teto antigo, medido da central, puxava quem pulava
+ *  pra baixo do piso do lounge e ele caía da plataforma */
+export const pisoDeVoo = (p: P2, yRel: number) => pisoNoAr(p, yRel) ?? 0;
+
 /** andar na Zaeon SEM a parede invisível da borda: só os colisores (quem passa da borda, cai — o engine trata) */
 export const resolverCidadeLivre = (prop: P2): P2 => empurrarParaFora(prop, colisoresDaCidade());
 
@@ -360,8 +400,22 @@ export function foraDaIlha(p: { x: number; y: number; z: number }): { x: number;
   return { x: c.x + (d > 1e-4 ? dx * k : CIDADE.bordaR), y: p.y, z: c.z + (d > 1e-4 ? dz * k : 0) };
 }
 
-/** o chão sob a nave: piso da cidade se está sobre ela (e acima do piso), senão o chão do mapa */
+/** o chão sob a nave/moto: piso da cidade se está sobre ela (e acima do piso) — a ESCADA, o LOUNGE, o palco e a cabine
+ *  do DJ também (quem desce de moto ali pousa ali, não atravessa até a plataforma central) —, senão o chão do mapa */
 export function chaoDaNave(p: { x: number; y: number; z: number }): number {
-  const c = CIDADE.centro;
+  const c = CIDADE.centro, h = alturaNaCidade(p);
+  if (h > 0 && p.y >= CIDADE.pisoY + h - 0.5) return CIDADE.pisoY + h;
   return Math.hypot(p.x - c.x, p.z - c.z) <= CIDADE.andavelR && p.y >= CIDADE.pisoY - 0.5 ? CIDADE.pisoY : 0;
+}
+/** os SÓLIDOS de voo da Zaeon além da ilha (cilindros `{x,z,r,topo,base}` no mundo — o mesmo formato dos `Pilar` do
+ *  voo): a CAPELA (de moto não se entra nela; de cima, pousa no telhado do tambor), a LAJE do lounge (de lado não se
+ *  atravessa; por baixo passa) e a TORRE do DJ. Sem eles a moto atravessava tudo isso voando. */
+export function solidosDaCidade(): { x: number; z: number; r: number; topo: number; base: number }[] {
+  const c = CIDADE.centro, s = CIDADE.salas.lounge, L = CIDADE.pisoY + ALTURA_LOUNGE;
+  const lounge = { x: c.x + s.x, z: c.z + s.z }, torre = mundo(daSala(s, 0, TORRE_DJ.z));
+  return [
+    { x: c.x, z: c.z, r: CAPELA.r + 1, topo: CIDADE.pisoY + inicioDaPonta(), base: CIDADE.pisoY - 1 },
+    { ...lounge, r: s.r, topo: L, base: L - 2.5 },
+    { x: torre.x, z: torre.z, r: TORRE_DJ.r, topo: L + TORRE_DJ.topo, base: L - 0.1 },
+  ];
 }

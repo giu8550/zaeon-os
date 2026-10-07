@@ -75,8 +75,12 @@ export function criarInteriorNave(o: { low: boolean; cor: THREE.Color }): Interi
   }
   for (const mv of MOVEIS_CABINE) if (mv.tipo !== "leme") cbox(mv.x1 - mv.x0, mv.alt, mv.z1 - mv.z0, escuro, (mv.x0 + mv.x1) / 2, mv.alt / 2, (mv.z0 + mv.z1) / 2);
   const telaProa = tela("#66e6ff"), telaTerm = tela("#9affd0", 8), telaServ = tela("#b98cff");
-  const proa = MOVEIS_CABINE.find((m) => m.tipo === "console")!, pcx = (proa.x0 + proa.x1) / 2;
-  for (const [x, ry] of [[-2.2, 0.35], [0, 0], [2.2, -0.35]] as const) { const t = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.1), new THREE.MeshBasicMaterial({ map: telaProa })); t.position.set(pcx + x, 1.85, proa.z0 + 0.2); t.rotation.set(-0.35, Math.PI + ry, 0); cab.add(t); }
+  // a cabine olha pra FRENTE da nave (o −z da planta, o lado da rampa): as telas da proa e a cadeira do piloto são
+  // montadas como sempre foram (olhando pro +z) dentro de um grupo de MEIA VOLTA — `orig` desfaz o giro dos dados
+  const girado = new THREE.Group(); girado.rotation.y = Math.PI; cab.add(girado);
+  const orig = (m: MovelNave): MovelNave => ({ ...m, x0: -m.x1, x1: -m.x0, z0: -m.z1, z1: -m.z0 });
+  const proa = orig(MOVEIS_CABINE.find((m) => m.tipo === "console")!), pcx = (proa.x0 + proa.x1) / 2;
+  for (const [x, ry] of [[-2.2, 0.35], [0, 0], [2.2, -0.35]] as const) { const t = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.1), new THREE.MeshBasicMaterial({ map: telaProa })); t.position.set(pcx + x, 1.85, proa.z0 + 0.2); t.rotation.set(-0.35, Math.PI + ry, 0); girado.add(t); }
   /** uma tela sobre um console, virada pro meio da cabine (onde se fica pra usar) */
   const virarPraCabine = (t: THREE.Mesh, m: MovelNave) => { const cx = (m.x0 + m.x1) / 2, cz = (m.z0 + m.z1) / 2, d = Math.hypot(cx, cz) || 1; t.position.set(cx - (cx / d) * 0.3, m.alt + 0.6, cz - (cz / d) * 0.3); t.rotation.set(0, Math.atan2(-cx, -cz), 0); t.rotateX(-0.3); cab.add(t); };
   // o MEU DESKTOP (a estação de estudos — F abre o laboratório): mesa, monitor grande + dois laterais e a cadeira
@@ -92,12 +96,13 @@ export function criarInteriorNave(o: { low: boolean; cor: THREE.Color }): Interi
   anim.push((_, t) => { auraTerm.opacity = 0.15 + 0.12 * Math.sin(t * 2); });
   const sb = MOVEIS_CABINE.filter((m) => m.tipo === "console")[1]!, tSb = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.9), new THREE.MeshBasicMaterial({ map: telaServ })); virarPraCabine(tSb, sb);
   // a CADEIRA DO PILOTO (o leme): pedestal, assento, encosto alto, braços com manches — o avatar senta no `assento`
-  const L = NAVE_QG.leme;
-  cbox(0.5, 0.45, 0.5, escuro, L.x, 0.22, L.z);
-  cbox(0.75, 0.14, 0.7, estofado, L.x, 0.5, L.z);
-  const enc = cbox(0.75, 1.1, 0.14, estofado, L.x, 1.05, L.z - 0.35); enc.rotation.x = -0.15;
-  for (const sd of [-1, 1]) { cbox(0.1, 0.1, 0.6, estofado, L.x + sd * 0.42, 0.75, L.z); cbox(0.06, 0.28, 0.06, escuro, L.x + sd * 0.42, 0.95, L.z + 0.25); }
-  const assento = new THREE.Object3D(); assento.position.set(L.x, 0, L.z); cab.add(assento);
+  const L = { x: -NAVE_QG.leme.x, z: -NAVE_QG.leme.z };   // (no grupo de meia volta)
+  const gbox = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); girado.add(m); return m; };
+  gbox(0.5, 0.45, 0.5, escuro, L.x, 0.22, L.z);
+  gbox(0.75, 0.14, 0.7, estofado, L.x, 0.5, L.z);
+  const enc = gbox(0.75, 1.1, 0.14, estofado, L.x, 1.05, L.z - 0.35); enc.rotation.x = -0.15;
+  for (const sd of [-1, 1]) { gbox(0.1, 0.1, 0.6, estofado, L.x + sd * 0.42, 0.75, L.z); gbox(0.06, 0.28, 0.06, escuro, L.x + sd * 0.42, 0.95, L.z + 0.25); }
+  const assento = new THREE.Object3D(); assento.position.set(L.x, 0, L.z); girado.add(assento);
   // a ESCADA EM CARACOL (do hall até a cabine): coluna central, degraus girando e o corrimão de luz em espiral
   const H = NAVE_QG.cabine, nDeg = 64, larg = E.rOut - E.rIn;
   const coluna = add(new THREE.Mesh(new THREE.CylinderGeometry(E.rIn, E.rIn, H + 1.2, 16), metal)); coluna.position.set(E.cx, (H + 1.2) / 2, E.cz);

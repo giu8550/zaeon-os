@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, type NomeSala } from "./ceu";
+import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, type NomeSala } from "./ceu";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, baseNoCeu, spawnDaBase } from "./bases";
 import { vagas } from "./motos";
 import { NAVE_QG, paraMundo, poseDaDoca } from "./naveQG";
 import { VOO, passoVoo, type EstadoVoo } from "./voo";
+import { passoVertical, tetoDoJet } from "./jet";
 import { dentroDeAlgum } from "./colisao";
 import { POIS } from "./landmarks";
 
@@ -160,6 +161,18 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
     // clicar pra andar não te prende na borda central quando você está na escada ou no lounge
     const noLounge = mundo({ x: L.x, z: L.z + 5 }); expect(resolverCidade(noLounge)).toEqual(noLounge);
   });
+  it("BUG do pulo no lounge: com o teto contado do piso de onde se voa, quem pula lá em cima NÃO cai da plataforma", () => {
+    const meio = mundo({ x: L.x, z: L.z + 10 }), H = ALTURA_LOUNGE, tetoRel = (y: number) => pisoDeVoo(meio, y) + tetoDoJet(null);
+    let y = H, vy = 0;
+    for (let i = 0; i < 6 * 60; i++) {   // segura o pulo 2 s e solta
+      const v = passoVertical(y, vy, i < 120, 1 / 60, tetoRel(y)); y = v.y; vy = v.vy;
+      expect(pisoNoAr(meio, y)).not.toBeNull();     // nunca fica "sem chão" (antes: o teto da central o puxava pra baixo do lounge)
+      if (y <= H && vy <= 0) break;
+    }
+    expect(y).toBeLessThanOrEqual(H + 1e-6); expect(pisoNoAr(meio, H)).toBe(H);   // pousa de volta no lounge
+    expect(tetoRel(H)).toBeLessThan(H + 25);   // e a mochila continua curtinha (não dá pra subir da central até o lounge)
+    expect(pisoDeVoo(mundo({ x: 30, z: 0 }), 5) + tetoDoJet(null)).toBeLessThan(H);
+  });
   it("o clube: entrada (virada pra escada) livre, guarda-corpo sólido em volta", () => {
     const cs = colisoresDaCidade();
     for (const lz of [L.r + 0.5, L.r, L.r - 1.5]) expect(dentroDeAlgum(mundo(daSala(L, 0, lz)), cs)).toBe(false);
@@ -178,26 +191,44 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
     }
     expect(PALCO.h).toBeGreaterThan(2);
   });
-  it("FESTA: palco alto com borda sólida, sobe-se pela escadinha e a cabine do DJ fica livre atrás da mesa", () => {
-    const cs = colisoresDaCidade(), W = (lx: number, lz: number) => mundo(daSala(L, lx, lz)), H = ALTURA_LOUNGE;
+  it("FESTA: palco alto com borda sólida (sobe-se pela escadinha); a TORRE do DJ no meio é sólida e a cabine fica lá em cima", () => {
+    const cs = colisoresDaCidade(), W = (lx: number, lz: number) => mundo(daSala(L, lx, lz)), H = ALTURA_LOUNGE, T = TORRE_DJ;
     const ida = daSala(L, 1.3, -4.2), volta = naSala(L, ida.x, ida.z); expect(volta.x).toBeCloseTo(1.3); expect(volta.z).toBeCloseTo(-4.2);
     expect(alturaNaCidade(W(0, 20))).toBe(H);
     const z0 = PALCO.z + PALCO.r - 0.3;
     expect(alturaNaCidade(W(0, z0 + PALCO.escada.len + 0.1))).toBe(H);
     expect(alturaNaCidade(W(0, z0 + PALCO.escada.len / 2))).toBeCloseTo(H + PALCO.h / 2);
-    expect(alturaNaCidade(W(4, PALCO.z))).toBe(H + PALCO.h);
-    for (const [lx, lz] of [[0, z0 + PALCO.escada.len - 0.2], [0, z0 + 0.4], [0, PALCO.z + 5], [5, PALCO.z + 1], [5, PALCO.z - 1], [2, PALCO.cabine.z]] as const) expect(dentroDeAlgum(W(lx, lz), cs)).toBe(false);
-    expect(dentroDeAlgum(W(PALCO.cabine.x, PALCO.cabine.z), cs)).toBe(false);
+    expect(alturaNaCidade(W(7, PALCO.z))).toBe(H + PALCO.h);                   // no palco, em volta da torre
+    expect(alturaNaCidade(W(0, T.z))).toBe(H + T.topo);                        // na cabine lá em cima
+    expect(T.topo).toBeGreaterThan(10);                                         // a altura da bola de espelhos (~13 m)
+    // do pé da escadinha, contornando a torre pelo palco, até o anel do elevador (atrás da torre): livre
+    for (const [lx, lz] of [[0, z0 + PALCO.escada.len - 0.2], [0, z0 + 0.4], [6.5, PALCO.z + 3], [7, PALCO.z - 2], [5, T.elevador.sobe + 0.5], [0, T.elevador.sobe]] as const) expect(dentroDeAlgum(W(lx, lz), cs)).toBe(false);
+    // a borda do palco e o círculo da torre são sólidos (do palco não se entra na torre)
     expect(dentroDeAlgum(W(PALCO.r, PALCO.z), cs)).toBe(true);
-    expect(dentroDeAlgum(W(-PALCO.r * 0.7, PALCO.z + PALCO.r * 0.71), cs)).toBe(true);
+    expect(dentroDeAlgum(W(0, T.z + T.r), cs)).toBe(true); expect(dentroDeAlgum(W(T.r, T.z), cs)).toBe(true);
+    // lá em cima: a cabine (atrás da mesa) e a chegada do elevador livres; a mesa sólida; o DJ olha pra pista
+    expect(dentroDeAlgum(W(PALCO.cabine.x, PALCO.cabine.z), cs)).toBe(false);
+    expect(dentroDeAlgum(W(0, T.elevador.chegaEmCima), cs)).toBe(false);
     expect(dentroDeAlgum(W(MESA_DJ.x, MESA_DJ.z), cs)).toBe(true);
-    expect(naCabineDJ(W(PALCO.cabine.x, PALCO.cabine.z))).toBe(true);
-    expect(naCabineDJ(W(0, 2))).toBe(false);
+    expect(naCabineDJ(W(PALCO.cabine.x, PALCO.cabine.z))).toBe(true); expect(naCabineDJ(W(0, 2))).toBe(false);
     expect(PALCO.cabine.z).toBeLessThan(MESA_DJ.z - MESA_DJ.prof / 2);
+    expect(Math.hypot(0, PALCO.cabine.z - T.z)).toBeLessThan(T.r - T.colR);
     expect(rumoDoDJ()).toBeCloseTo(rotDaSala(L));
-    const pc = pontoDaCabineDJ(), w = W(PALCO.cabine.x, PALCO.cabine.z); expect(pc.x).toBeCloseTo(w.x); expect(pc.z).toBeCloseTo(w.z);
-    expect(alturaNaCidade(pc)).toBe(H + PALCO.h);
+    const pc = pontoDaCabineDJ(); expect(alturaNaCidade(pc)).toBe(H + T.topo);
     expect(MESA_DJ.z - MESA_DJ.prof / 2 - PALCO.cabine.z).toBeLessThanOrEqual(0.5);
+  });
+  it("o ELEVADOR DE LUZ da torre: o anel do palco sobe até a cabine; o de cima desce; a viagem acaba fora dos anéis, no piso certo", () => {
+    const W = (lx: number, lz: number) => mundo(daSala(L, lx, lz)), H = ALTURA_LOUNGE, T = TORRE_DJ, e = T.elevador, cs = colisoresDaCidade();
+    expect(bocaDoElevador(W(0, e.sobe))).toBe("sobe"); expect(bocaDoElevador(W(0, e.desce))).toBe("desce");
+    expect(bocaDoElevador(W(0, 0))).toBeNull(); expect(bocaDoElevador(W(0, e.chegaEmCima))).toBeNull(); expect(bocaDoElevador(W(0, e.chegaEmbaixo))).toBeNull();
+    const fimSobe = posDaViagem("elevador", "sobe", 1), fimDesce = posDaViagem("elevador", "desce", 1);
+    expect(fimSobe.y).toBeCloseTo(H + T.topo, 6); expect(alturaNaCidade(fimSobe.p)).toBe(H + T.topo); expect(bocaDoElevador(fimSobe.p)).toBeNull(); expect(dentroDeAlgum(fimSobe.p, cs)).toBe(false);
+    expect(fimDesce.y).toBeCloseTo(H + PALCO.h, 6); expect(alturaNaCidade(fimDesce.p)).toBe(H + PALCO.h); expect(bocaDoElevador(fimDesce.p)).toBeNull(); expect(dentroDeAlgum(fimDesce.p, cs)).toBe(false);
+    // sobe sem descer no meio e começa onde está o anel
+    let y = -1; for (let k = 0; k <= 1; k += 0.02) { const q = posDaViagem("elevador", "sobe", k); expect(q.y).toBeGreaterThanOrEqual(y - 0.41); y = Math.max(y, q.y); }
+    expect(posDaViagem("elevador", "sobe", 0).y).toBeCloseTo(H + PALCO.h, 6);
+    // a escada continua igual (o mesmo caminho de antes)
+    expect(posDaViagem("escada", "sobe", 1).y).toBe(ALTURA_LOUNGE);
   });
   it("a ESCADA DE ENERGIA leva sozinha: boca de baixo sobe, de cima desce; a viagem acaba fora das bocas, no piso certo", () => {
     const e = ESCADA_LOUNGE;
@@ -305,3 +336,30 @@ describe("céu livre: ilhotas com colisão e borda sem parede", () => {
   });
 });
 
+
+describe("MOTO na Zaeon mega (voo com os sólidos da cidade)", () => {
+  const L = CIDADE.salas.lounge, centroLounge = mundo({ x: L.x, z: L.z }), pisoLounge = CIDADE.pisoY + ALTURA_LOUNGE;
+  const voar = (s: EstadoVoo, c: Parameters<typeof passoVoo>[1], seg: number) => { for (let i = 0; i < seg * 60; i++) s = passoVoo(s, c, 1 / 60, solidosDaCidade()).s; return s; };
+  it("descendo sobre o lounge, POUSA no piso do lounge (antes atravessava até a plataforma central)", () => {
+    const p = { x: centroLounge.x + 15, z: centroLounge.z };
+    expect(chaoDaNave({ ...p, y: pisoLounge + 20 })).toBeCloseTo(pisoLounge, 5);
+    expect(chaoDaNave({ ...p, y: pisoLounge - 10 })).toBe(0);   // por baixo da laje: o chão é lá embaixo
+    const s = voar({ ...p, y: pisoLounge + 20, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: 0, wz: 0, subir: false, descer: true }, 3);
+    expect(s.y).toBeCloseTo(pisoLounge, 3);
+  });
+  it("na cabine do DJ (topo da torre) também se pousa", () => {
+    const t = mundo(daSala(L, 0, TORRE_DJ.z));
+    expect(chaoDaNave({ ...t, y: pisoLounge + TORRE_DJ.topo + 5 })).toBeCloseTo(pisoLounge + TORRE_DJ.topo, 5);
+  });
+  it("voando de lado não se entra na CAPELA nem se atravessa a torre do DJ", () => {
+    const s = voar({ x: CIDADE.centro.x + 120, y: CIDADE.pisoY + 8, z: CIDADE.centro.z, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: -1, wz: 0, subir: false, descer: false }, 6);
+    expect(Math.hypot(s.x - CIDADE.centro.x, s.z - CIDADE.centro.z)).toBeGreaterThanOrEqual(CIDADE.cidadela.r);
+    const t = mundo(daSala(L, 0, TORRE_DJ.z)), lx = t.x - centroLounge.x, lz = t.z - centroLounge.z, n = Math.hypot(lx, lz);
+    const ini = { x: t.x - (lx / n) * 25, z: t.z - (lz / n) * 25 };   // do centro do lounge, rumo à torre, a 3 m do piso
+    const s2 = voar({ ...ini, y: pisoLounge + 3, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: lx / n, wz: lz / n, subir: false, descer: false }, 3);
+    expect(Math.hypot(s2.x - t.x, s2.z - t.z)).toBeGreaterThanOrEqual(TORRE_DJ.r - 1e-6);
+  });
+  it("as vagas de moto da Zaeon ficam fora dos sólidos (dá pra decolar)", () => {
+    for (const v of vagas().filter((q) => q.ceu)) for (const s of solidosDaCidade()) expect(Math.hypot(v.x - s.x, v.z - s.z)).toBeGreaterThan(s.r + 2);
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IDS_PLATAFORMAS, PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, anelDoChao, decolaDaPlataforma, elevadorAqui, noAnelDoDisco, noArNaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma } from "./plataformas";
-import { ANDARES_SOLANA, NOMES_ANDARES, ROOFTOP, SOLANA, moveisDoAndar, mundoS, paredesDoAndar, resolverNoAndar } from "./solana";
+import { ANDARES_SOLANA, NOMES_ANDARES, ROOFTOP, SOLANA, moveisDoAndar, mundoS, paredesDoAndar, resolverNoAndar, ESCALA_SOLANA } from "./solana";
 import { CIDADE, BURACO_NEGRO } from "./ceu";
 import { HELIPORTO, POIS } from "./landmarks";
 import { LOTES } from "./motos";
@@ -19,7 +19,7 @@ describe("lugares flutuantes (Universidade e Solana House)", () => {
       expect(Math.hypot(P.centro.x, P.centro.z) + P.r).toBeLessThan(VOO.raioMapa + 60);
     }
     expect(dist(PLATAFORMAS.univ.centro, PLATAFORMAS.solana.centro)).toBeGreaterThan(PLATAFORMAS.univ.r + PLATAFORMAS.solana.r + 20);
-    expect(PLATAFORMAS.solana.y).toBeLessThan(PLATAFORMAS.univ.y);
+    expect(PLATAFORMAS.solana.y).toBeGreaterThan(PLATAFORMAS.univ.y);   // a Solana cresceu e subiu: mais alta que a UNILAB
   });
   it("os anéis do elevador de luz no chão não caem em cima de bases, marcos, heliporto, estacionamento nem do portal", () => {
     for (const id of IDS_PLATAFORMAS) {
@@ -82,8 +82,8 @@ describe("Solana House (3 andares + rooftop)", () => {
   it("em cada andar dá pra ir da entrada (porta / sacada) até o elevador sem móvel no caminho", () => {
     const livre = (andar: number, x: number, z: number) => !moveisDoAndar(andar).some((m) => m.solido !== false && x > m.x0 - 0.45 && x < m.x1 + 0.45 && z > m.z0 - 0.45 && z < m.z1 + 0.45);
     for (let andar = 0; andar < ANDARES_SOLANA.length; andar++) {
-      // corredor: pelo lado leste (x = 10.6), da frente até o elevador
-      for (let z = P.z0 + 0.6; z <= S.elevador.z; z += 0.25) expect(livre(andar, 10.6, z)).toBe(true);
+      // corredor: pelo lado leste (a planta escalada), da frente até o elevador
+      for (let z = P.z0 + 0.6; z <= S.elevador.z; z += 0.25) expect(livre(andar, 10.6 * ESCALA_SOLANA, z)).toBe(true);
       expect(livre(andar, S.elevador.x, S.elevador.z)).toBe(true);
     }
     // a porta do térreo está aberta (sem parede no meio dela)
@@ -116,6 +116,6 @@ describe("Solana House (3 andares + rooftop)", () => {
     expect(decolaDaPlataforma("solana", 0, mundoS({ x: 0, z: -15 }))).toBe(true);
     const encostado = noArNaPlataforma("solana", mundoS({ x: 0, z: 3 }), 6, 6);   // voando a 6 m "dentro" da parede → empurrado pra fora
     expect(encostado.z - S.centro.z < P.z0 || encostado.x - S.centro.x < P.x0 || encostado.x - S.centro.x > P.x1 || encostado.z - S.centro.z > P.z1).toBe(true);
-    const descendoNoTeto = noArNaPlataforma("solana", mundoS({ x: 0, z: 3 }), 13.4, 13.6); expect(descendoNoTeto).toEqual(mundoS({ x: 0, z: 3 }));
+    const topo = ANDARES_SOLANA[ROOFTOP], descendoNoTeto = noArNaPlataforma("solana", mundoS({ x: 0, z: 3 }), topo + 0.2, topo + 0.4); expect(descendoNoTeto).toEqual(mundoS({ x: 0, z: 3 }));
   });
 });

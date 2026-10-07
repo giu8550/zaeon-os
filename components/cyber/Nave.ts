@@ -1,5 +1,5 @@
 /**
- * Nave — a NAVE-QG do dono: o disco voador alienígena com ~68 m de diâmetro e um CONVÉS por dentro (ponte de comando
+ * Nave — a NAVE-QG do dono: o disco voador alienígena com ~48 m de diâmetro (achatado: mais oval) e um CONVÉS por dentro (ponte de comando
  * com o leme e o terminal de estudos, sala de estar, servidores, banheiro, motor — components/cyber/InteriorNave.ts,
  * layout em lib/cyber/naveQG.ts). Mora PAIRANDO atracada ao lado da Zaeon (sem hangar) e para no ar onde o dono quiser.
  * O dorso é uma CÚPULA RETRÁTIL de 8 pétalas que se abre quando se está a bordo (`aBordo`) e fecha ao sair.
@@ -12,7 +12,7 @@
  */
 import * as THREE from "three";
 import { glowTex } from "./CenaCosmica";
-import { ESCALA_NAVE_QG, NAVE_QG } from "@/lib/cyber/naveQG";
+import { ESCALA_NAVE_QG, ESCALA_NAVE_QG_V, NAVE_QG } from "@/lib/cyber/naveQG";
 import { criarInteriorNave } from "./InteriorNave";
 import { liberar } from "./Landmark";
 import { camuflagem } from "./camuflagem";
@@ -38,6 +38,8 @@ export type NaveHandle = {
 
 /** escala do disco (o modelo é ~7,5 m de diâmetro em 1×): a nave-QG é 3× a antiga (2,1) */
 export const ESCALA_NAVE = ESCALA_NAVE_QG;
+/** a escala da ALTURA (menor que a da largura: o disco achatado, mais oval) */
+export const ESCALA_NAVE_V = ESCALA_NAVE_QG_V;
 const ALIEN = new THREE.Color(0x6fb6ff);   // azul das luzes (LEDs) — a paleta da primeira nave
 /** o perfil (unidades do modelo; a aba em r 3,78, y 0): a barriga funda e o dorso OVAL da nave antiga, mais cheios */
 const BARRIGA = [[0, -0.97], [1.2, -0.93], [2.4, -0.7], [3.3, -0.34], [3.78, 0.0]];
@@ -88,7 +90,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
 
   // o CONVÉS (em metros: o grupo desfaz a escala) no nível do piso interno — a cadeira do piloto é o `assento`
   const interior = criarInteriorNave({ low: opts.low, cor });
-  interior.group.scale.setScalar(1 / ESCALA_NAVE); interior.group.position.y = (NAVE_QG.deck - ESCALA_NAVE) / ESCALA_NAVE; corpo.add(interior.group);
+  interior.group.scale.set(1 / ESCALA_NAVE, 1 / ESCALA_NAVE_V, 1 / ESCALA_NAVE); interior.group.position.y = (NAVE_QG.deck - ESCALA_NAVE_V) / ESCALA_NAVE_V; corpo.add(interior.group);   // o convés em METROS
   const assento = interior.assento;
   interior.group.visible = false;   // de longe, só a silhueta camuflada (o engine liga de perto / a bordo)
 
@@ -131,7 +133,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   const jMat = new THREE.PointsMaterial({ size: 0.4, map: tex, color: 0xd8ecff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
   const jato = new THREE.Points(jGeo, jMat); jato.frustumCulled = false; corpo.add(jato);
 
-  // rastro de plasma atrás (−z local; a frente é +z), cresce com a velocidade
+  // rastro de plasma atrás (+z local: a frente da nave é o −z, o lado da rampa — lib/cyber/naveQG GIRO_PLANTA), cresce com a velocidade
   const RN = opts.low ? 40 : 90, rPos = new Float32Array(RN * 3), rDados = Array.from({ length: RN }, () => ({ u: Math.random(), a: Math.random() * 6.283, r: Math.random() }));
   const rGeo = new THREE.BufferGeometry(); rGeo.setAttribute("position", new THREE.BufferAttribute(rPos, 3));
   const rMat = new THREE.PointsMaterial({ size: 0.6, map: tex, color: ALIEN.clone().lerp(new THREE.Color(0xffffff), 0.35), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -200,7 +202,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
     const pe = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.28, 0.06, 12), escuro); pe.position.set(x * 1.08, -0.98, z * 1.08); trem.add(pe);
   }
 
-  raiz.scale.setScalar(ESCALA_NAVE);
+  raiz.scale.set(ESCALA_NAVE, ESCALA_NAVE_V, ESCALA_NAVE);   // achatada: mais larga que alta
   let inclina = 0, voo = 0, giro = 0;
   return {
     group: raiz, alvos, assento,
@@ -222,7 +224,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
       trem.scale.y = Math.max(0.01, 1 - voo); trem.visible = voo < 0.95;
       corpo.position.y = 1.0 + voo * (parado ? 0 : Math.sin(t * 1.1) * 0.012);   // em solo apoia nas pernas; em voo, flutua (de leve: tem gente andando lá dentro)
       inclina += (Math.max(-0.08, Math.min(0.08, -curva * 0.2)) * voo - inclina) * Math.min(1, dt * 4);   // um QG não deita nas curvas
-      corpo.rotation.z = inclina;
+      corpo.rotation.z = -inclina;   // (a frente é o −z: a inclinação vira de lado)
       // eixo giratório: luzes da borda giram (mais rápido com velocidade) com onda de brilho LENTA; o halo gira ao contrário
       giro += dt * (parado ? 0.05 : 0.3 + 0.9 * Math.min(1, vel)) * (0.4 + 0.6 * voo);
       aro.rotation.y = giro; halo.rotation.y = -giro * 0.6;
@@ -259,7 +261,7 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
         for (let i = 0; i < RN; i++) {
           const d = rDados[i]!; if (!parado) d.u = (d.u + dt * (0.6 + vel)) % 1;
           const rr = (0.25 + d.r * 0.9) * (1 - d.u * 0.7), a = d.a + t * 2;
-          rPos[i * 3] = Math.cos(a) * rr; rPos[i * 3 + 1] = -0.2 + Math.sin(a) * rr * 0.35; rPos[i * 3 + 2] = -3.4 - d.u * L;
+          rPos[i * 3] = Math.cos(a) * rr; rPos[i * 3 + 1] = -0.2 + Math.sin(a) * rr * 0.35; rPos[i * 3 + 2] = 3.4 + d.u * L;
         }
         rGeo.attributes.position!.needsUpdate = true;
       }
