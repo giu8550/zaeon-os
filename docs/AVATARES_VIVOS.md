@@ -60,8 +60,11 @@ celular/toque/economia de dados; lá o card parado fica estático e só reage a 
 - **Aba do chat** ("Chat"/"Aura" na sala de estudos, "Conversa" na pesquisa): a bolinha é o rosto,
   espelha o chat de qualquer aba e mostra um anel "respondeu" se ela terminou com o chat fechado.
 - **Landing**: cartão "Aura ao vivo" no hero (desktop) + rosto no botão "Iniciar chat".
-- **Modo voz (próximo)**: o mesmo `falarClipe`/`boca` serve pro TTS das respostas — publicar o nível
-  do áudio em `definirPresenca(agentId, { sinal: "falando", boca })`.
+- **Modo voz**: toda voz do app (ttsController — "🔊 Ouvir resposta" nas mini-ações, leitura da
+  pesquisa/PDF/bloco do Studio) é medida (`lib/voice/nivelVoz.ts`: `captureStream` + Analyser, sem
+  desviar o som) e quantizada nos 3 quadros de boca; `usePublicarPresenca` vê a voz tocando e o rosto
+  da conversa (resposta, boas-vindas, bolinha da aba) fala com ela. Sem `captureStream` (Safari) →
+  fala com a boca sorteada. A saudação usa a mesma medição.
 - Prova sem login: `/dev/avatares/chat` (dev).
 
 ## Criar avatares
