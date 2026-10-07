@@ -314,7 +314,7 @@ export default function CenaCyber(p: CenaCyberProps) {
           <span className={touch ? "pl-3.5" : ""}>{acao.rotulo}</span>
         </button>
       )}
-      {!menu && (qg.pilotando || qg.moto) && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} />}
+      {!menu && (qg.pilotando || qg.moto) && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} moto={qg.moto} />}
       {/* MOTO VOADORA: o altímetro (montar/descer é a ação de contexto, F) */}
       {!menu && qg.moto && voo && !qg.pousado && (
         <p className="absolute left-1/2 top-[110px] z-30 -translate-x-1/2 rounded-full bg-[#070c22]/70 px-3 py-1 text-center text-xs font-bold tabular-nums text-sky-100 backdrop-blur">↕ {voo.y} m</p>

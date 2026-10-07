@@ -15,7 +15,9 @@ export type MotoHandle = {
   pontos: { maoE: THREE.Object3D; maoD: THREE.Object3D; peE: THREE.Object3D; peD: THREE.Object3D };
   /** o que dá pra clicar (montar) */
   alvos: THREE.Object3D[];
-  atualizar(o: { dt: number; t: number; voando: boolean; vel: number; curva: number; vy?: number }): void;
+  /** `inclina` (rad, a da pilotagem — lib/cyber/motoFisica) manda na rolagem; sem ela, sai do giro (`curva`, motos dos
+   *  outros). `boost` (0..1) estica as chamas principais */
+  atualizar(o: { dt: number; t: number; voando: boolean; vel: number; curva: number; vy?: number; inclina?: number; boost?: number }): void;
   dispose(): void;
 };
 
@@ -91,15 +93,16 @@ export function criarMoto(o: { cor: string; low: boolean }): MotoHandle {
   let rola = 0, nariz2 = 0;
   return {
     group: g, assento, pontos, alvos,
-    atualizar({ dt, t, voando, vel, curva, vy = 0 }) {
+    atualizar({ dt, t, voando, vel, curva, vy = 0, inclina, boost = 0 }) {
       const k = Math.min(1, dt * 4);
-      rola += (-curva * 0.55 * (voando ? 1 : 0) - rola) * k;
+      if (inclina !== undefined) rola = inclina;   // a pilotagem já suaviza
+      else rola += (Math.max(-0.5, Math.min(0.5, -curva * 0.55)) * (voando ? 1 : 0) - rola) * k;
       nariz2 += ((voando ? Math.max(-0.25, Math.min(0.25, -vy * 0.02)) - vel * 0.08 : 0) - nariz2) * k;
       corpo.rotation.set(nariz2, 0, rola);
       corpo.position.y = ESCALA_MOTO * ( voando ? Math.sin(t * 3.1) * 0.03 : 0.05 + Math.sin(t * 1.7) * 0.04);   // parada: flutua de leve
       // chamas: principais crescem com a velocidade; as de sustentação, com o voo (pairar também empurra)
       props.forEach((p, i) => {
-        const forca = p.tipo === "principal" ? (voando ? 0.25 + 0.75 * Math.min(1, vel) : 0.05)
+        const forca = p.tipo === "principal" ? (voando ? 0.25 + 0.75 * Math.min(1, vel) + 1.1 * boost : 0.05)
           : p.tipo === "sustenta" ? (voando ? 0.7 + 0.3 * Math.min(1, Math.abs(vy) / 10) : 0.12)
           : (voando ? 0.12 + 0.9 * Math.max(0, -curva * p.lado) : 0.04);   // manobra: o lado de fora da curva empurra
         const tremor = 0.88 + 0.12 * Math.sin(t * 31 + i * 1.7) + 0.06 * Math.sin(t * 57 + i);

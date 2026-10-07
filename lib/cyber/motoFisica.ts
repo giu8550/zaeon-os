@@ -1,0 +1,102 @@
+/**
+ * Cyberespaço — PILOTAGEM da moto voadora (PURO). Não é mais o voo da nave (direção relativa à câmera): é moto.
+ *  - W/S = acelera / freia (e dá ré devagar); solto, ela PLANA perdendo velocidade aos poucos (é hover, não pneu);
+ *  - A/D = esterça. A curva é SUTIL e depende da velocidade: devagar ela gira no próprio eixo, rápido ela abre a curva
+ *    (o giro máximo cai com a velocidade — como o "MaxSteeringAngle = k / velocidade" dos arcades);
+ *  - INCLINA na curva com o ângulo de moto de verdade: tan θ = v·ω / g (v = velocidade, ω = giro em rad/s);
+ *  - ADERÊNCIA: a velocidade de lado some aos poucos (a traseira escorrega um pouco na curva; no boost, mais);
+ *  - BOOST: tanque que esvazia em `boost.dura` s e recarga sozinho; só pega com a moto andando e no ar;
+ *  - subir/descer e o pouso são os do voo (lib/cyber/voo: `resolverVoo`), com os mesmos sólidos e teto.
+ * Rumo (`yaw`): frente = (sen yaw, cos yaw), igual à nave e ao grupo da moto. Esquerda do piloto = (cos yaw, −sen yaw).
+ */
+import { VOO, chaoDoVoo, resolverVoo, type EstadoVoo, type Pilar } from "./voo";
+
+export const PILOTAGEM = {
+  /** velocidade de cruzeiro e com boost (m/s): 34 ≈ 120 km/h, 62 ≈ 220 km/h */
+  vel: 34, velBoost: 62, re: 7,
+  /** aceleração, aceleração no boost e freio (m/s²); `plana` = quanto perde por segundo solta (fração) */
+  acel: 15, acelBoost: 34, freio: 30, plana: 0.45,
+  /** giro (rad/s): parada/devagar, na velocidade de cruzeiro e no boost; `resposta` = quão rápido o guidão chega lá */
+  giroBaixo: 1.5, giroAlto: 0.38, giroBoost: 0.27, resposta: 4.5,
+  /** aderência lateral (1/s): quanto da velocidade de lado some por segundo */
+  aderencia: 5, aderenciaBoost: 2.6,
+  /** inclinação máxima (rad, ~36°) e quão rápido ela chega */
+  inclinaMax: 0.63, inclinaResposta: 6,
+  /** boost: tanque cheio dura `dura` s; recarga em `recarga` s; precisa de `minimo` pra (re)começar */
+  boost: { dura: 3.2, recarga: 5, minimo: 0.2, velMin: 6 },
+  /** o "g" da inclinação: com o g de verdade (9,8) toda curva já deitava no máximo; com um g de jogo maior a moto
+   *  deita POUCO devagar e MUITO rápido/no boost (cruzeiro com o guidão todo ≈ 30°, boost ≈ 36°) */
+  g: 22,
+} as const;
+
+/** o estado da moto = o do voo + o guidão (−1..1, suavizado), a inclinação (rad; < 0 = deita pra ESQUERDA, a
+ *  convenção do `rotation.z` do corpo da moto), o tanque de boost (0..1) e se o boost está aceso */
+export type EstadoMoto = EstadoVoo & { guidao: number; inclina: number; tanque: number; boost: boolean };
+/** acel: −1..1 (W = 1, S = −1); giro: −1..1 (D = 1 = pra DIREITA) */
+export type ComandoMoto = { acel: number; giro: number; subir: boolean; descer: boolean; boost: boolean };
+
+export const motoParada = (x: number, y: number, z: number, yaw: number): EstadoMoto => ({ x, y, z, yaw, vx: 0, vy: 0, vz: 0, guidao: 0, inclina: 0, tanque: 1, boost: false });
+
+const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+
+/** um passo da moto (dt pequeno; use `passoMotoSub` no loop) */
+export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax): { s: EstadoMoto; pousado: boolean; chaoY: number } {
+  const P = PILOTAGEM, acel = clamp(c.acel, -1, 1), giroCmd = clamp(c.giro, -1, 1);
+  // rente ao chão a moto não anda (tem que decolar, igual à nave) — mas o guidão gira ela no lugar pra mirar
+  const rente = s.y - chaoDoVoo(s, solidos) < VOO.decolar;
+  const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw), lx = Math.cos(s.yaw), lz = -Math.sin(s.yaw);
+  let frente = s.vx * fx + s.vz * fz, lado = s.vx * lx + s.vz * lz;
+  // BOOST: só com a moto andando pra frente, no ar e com tanque; esvazia aceso, recarrega apagado
+  const boost = !rente && c.boost && acel >= 0 && frente > P.boost.velMin && (s.boost ? s.tanque > 0 : s.tanque >= P.boost.minimo);
+  const tanque = clamp(s.tanque + (boost ? -dt / P.boost.dura : dt / P.boost.recarga), 0, 1);
+  // GUIDÃO: chega no comando aos poucos (nada de virar seco)
+  const guidao = s.guidao + (giroCmd - s.guidao) * Math.min(1, dt * P.resposta);
+  const v01 = clamp(Math.abs(frente) / P.vel, 0, 1);
+  const taxa = (boost ? P.giroBoost : P.giroBaixo + (P.giroAlto - P.giroBaixo) * v01) * (rente ? 0.6 : 1);
+  const omega = -guidao * taxa;   // D (giro > 0) vira pra direita = rumo DIMINUI
+  const yaw = s.yaw + omega * dt;
+  // ACELERADOR: W leva à velocidade (de cruzeiro ou de boost); S freia e, parada, dá ré devagar; solta = plana
+  const max = boost ? P.velBoost : P.vel;
+  if (rente) frente *= Math.exp(-dt * 6);
+  else if (acel > 0) {
+    if (frente < max * acel) frente = Math.min(max * acel, frente + (boost ? P.acelBoost : P.acel) * acel * dt);
+    else frente += (max * acel - frente) * Math.min(1, dt * 1.2);   // acima (o boost acabou): volta pro cruzeiro suave
+  } else if (acel < 0) {
+    frente = frente > 0 ? Math.max(0, frente + P.freio * acel * dt) : Math.max(-P.re, frente + P.acel * acel * 0.5 * dt);
+  } else frente *= Math.exp(-dt * P.plana);
+  if (rente) lado *= Math.exp(-dt * 6);
+  // o MOMENTO fica (a velocidade no mundo não gira junto com o guidão): no rumo novo, parte dela vira velocidade de
+  // LADO — é o escorregão. A ADERÊNCIA come esse lado aos poucos e devolve a maior parte pra frente (curvar não
+  // derruba a velocidade toda, como um pneu que segura)
+  const wx = fx * frente + lx * lado, wz = fz * frente + lz * lado;
+  const nfx = Math.sin(yaw), nfz = Math.cos(yaw), nlx = Math.cos(yaw), nlz = -Math.sin(yaw);
+  let frente2 = wx * nfx + wz * nfz, lado2 = wx * nlx + wz * nlz;
+  // a velocidade NÃO cresce na curva: o que sai do lado volta pra frente só até a velocidade que já tinha, menos um
+  // tico de atrito (o "esfregão" da curva)
+  const veloc = Math.hypot(frente2, lado2), sobra = lado2 * Math.exp(-dt * (boost ? P.aderenciaBoost : P.aderencia));
+  const esfrega = 1 - 0.6 * Math.abs(lado2 - sobra) / Math.max(1, veloc);
+  frente2 = Math.sign(frente2 || 1) * Math.sqrt(Math.max(0, veloc * veloc - sobra * sobra)) * esfrega; lado2 = sobra;
+  const vx = nfx * frente2 + nlx * lado2, vz = nfz * frente2 + nlz * lado2;
+  // vertical: o mesmo do voo
+  const ty = (c.subir ? VOO.sobe : 0) - (c.descer ? VOO.sobe : 0);
+  const vy = s.vy + (ty - s.vy) * Math.min(1, dt * (c.subir || c.descer ? VOO.inercia : VOO.freio));
+  // INCLINAÇÃO de moto: tan θ = v·ω / g (g de jogo — ver PILOTAGEM.g) (deita pro lado de DENTRO da curva); no chão, reta
+  const alvo = rente ? 0 : clamp(-Math.atan((frente2 * omega) / P.g), -P.inclinaMax, P.inclinaMax);
+  const inclina = s.inclina + (alvo - s.inclina) * Math.min(1, dt * P.inclinaResposta);
+  const r = resolverVoo(s.y, { x: s.x + vx * dt, y: s.y + vy * dt, z: s.z + vz * dt, yaw, vx, vy, vz }, solidos, teto);
+  return { s: { ...r.s, guidao, inclina, tanque, boost }, pousado: r.pousado, chaoY: r.chaoY };
+}
+
+/** o mesmo passo, independente de FPS (subpassos de no máximo `VOO.subpasso`) */
+export function passoMotoSub(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax): { s: EstadoMoto; pousado: boolean; chaoY: number } {
+  const total = Math.min(VOO.dtMax, Math.max(0, dt)), n = Math.max(1, Math.ceil(total / VOO.subpasso - 1e-9)), h = total / n;
+  let r = { s, pousado: false, chaoY: 0 };
+  for (let i = 0; i < n; i++) r = passoMoto(r.s, c, h, solidos, teto);
+  return r;
+}
+
+/** o quanto de "velocidade" a TELA deve sentir (0..1, e passa de 1 no boost): FOV, blur radial e linhas de velocidade */
+export function sensacaoDeVelocidade(s: EstadoMoto): number {
+  const v = Math.hypot(s.vx, s.vz);
+  return clamp((v - 8) / (PILOTAGEM.vel - 8), 0, 1) * 0.6 + clamp((v - PILOTAGEM.vel) / (PILOTAGEM.velBoost - PILOTAGEM.vel), 0, 1) * 0.4 + (s.boost ? 0.15 : 0);
+}
