@@ -1,0 +1,35 @@
+# infra/litellm.config.yaml — gateway interno de LLM (PR-G1, Fatia 1).
+# Escopo RÍGIDO: só a camada autônoma (turno do canal) passa aqui, e só com GATEWAY_URL setado.
+# UM provedor: Vertex Gemini, mesma credencial do app (GOOGLE_CREDENTIALS). O pool grátis
+# (Cloudflare/Groq/…) é PR-G3 (Fatia 7) e NÃO entra neste arquivo antes disso.
+# Sem GATEWAY_MASTER_KEY o LiteLLM não sobe — auth obrigatória por construção.
+model_list:
+  - model_name: zaeon-flash
+    litellm_params:
+      model: vertex_ai/gemini-2.5-flash
+      vertex_project: os.environ/GOOGLE_PROJECT_ID
+      vertex_location: os.environ/GOOGLE_LOCATION
+      vertex_credentials: os.environ/GOOGLE_CREDENTIALS
+  - model_name: zaeon-pro
+    litellm_params:
+      model: vertex_ai/gemini-2.5-pro
+      vertex_project: os.environ/GOOGLE_PROJECT_ID
+      vertex_location: os.environ/GOOGLE_LOCATION
+      vertex_credentials: os.environ/GOOGLE_CREDENTIALS
+
+general_settings:
+  master_key: os.environ/GATEWAY_MASTER_KEY
+  database_url: os.environ/LITELLM_DATABASE_URL
+  # virtual keys por agente (PR-G2) nascem via /key/generate com budget diário; nada aqui.
+
+litellm_settings:
+  drop_params: true
+  num_retries: 1
+  request_timeout: 45
+  # nunca logar prompt/resposta em terceiros: sem callbacks externos.
+  success_callback: []
+  failure_callback: []
+
+router_settings:
+  redis_host: redis
+  redis_port: 6379

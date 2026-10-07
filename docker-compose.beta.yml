@@ -77,6 +77,9 @@ services:
       ESTUDO_GATEKEEPER: ${ESTUDO_GATEKEEPER:-0}
       AURA_ECONOMY: ${AURA_ECONOMY:-0}
       CEREBRO_BG: "0"       # "1" SÓ com o worker de pé (profile worker): o job do cérebro vai pra fila "cerebro". 0 = gera inline no web.
+      # Gateway de LLM (PR-G1): vazio = Vertex direto (byte a byte como hoje). "http://litellm:4000" só com
+      # `--profile gateway` de pé. Só o turno do canal opta; pesquisa/estudos/mentores seguem no Vertex.
+      GATEWAY_URL: ${GATEWAY_URL:-}
     depends_on:
       redis: { condition: service_started }
       voice-engine: { condition: service_started }
@@ -239,6 +242,50 @@ services:
       resources:
         limits: { memory: 768m }
 
+  # ── GATEWAY de LLM (LiteLLM, PR-G1) — perfil "gateway": NÃO sobe no deploy enxuto por acidente ──
+  #    Interno (expose, sem ports): só o web fala http://litellm:4000. UI /ui só por ssh -L.
+  #    Redis = este serviço redis (TCP; LiteLLM não fala Upstash REST). Config versionada em infra/.
+  #    Segredos (GATEWAY_MASTER_KEY, LITELLM_DATABASE_URL, LITELLM_SALT_KEY, POSTGRES) vêm do .env/.env.secrets do VPS.
+  #    Ligar: docker compose -f docker-compose.beta.yml --profile gateway up -d litellm
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: zaeon_litellm
+    profiles: ["gateway"]
+    env_file: [.env, .env.secrets]
+    environment:
+      LITELLM_LOG: "ERROR"
+      LITELLM_MODE: "PRODUCTION"
+    command: ["--config", "/app/litellm.config.yaml", "--port", "4000"]
+    volumes: ["./infra/litellm.config.yaml:/app/litellm.config.yaml:ro"]
+    expose: ["4000"]
+    depends_on:
+      litellm-db: { condition: service_started }
+      redis: { condition: service_started }
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health/liveliness || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits: { memory: 768m }
+
+  litellm-db:
+    image: postgres:16-alpine
+    container_name: zaeon_litellm_db
+    profiles: ["gateway"]
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_PG_PASSWORD:?defina LITELLM_PG_PASSWORD no .env}
+    volumes: ["litellm_pg:/var/lib/postgresql/data"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 256m }
+
   redis:
     image: redis:7-alpine
     container_name: zaeon_redis
@@ -297,3 +344,4 @@ volumes:
   caddy_config:
   hf_cache:        # pesos do Kokoro (HuggingFace) — evita re-download a cada restart
   studio_data:     # artefatos do Studio (podcast/imagem) gerados em /app/.studio
+  litellm_pg:      # Postgres do gateway LiteLLM (virtual keys, budgets) — perfil gateway

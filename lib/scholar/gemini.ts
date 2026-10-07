@@ -8,7 +8,7 @@ import { VertexAI } from "@google-cloud/vertexai";
 const HEAVY_MODEL = process.env.SCHOLAR_GEMINI_MODEL || "gemini-2.5-flash";
 const CHAT_MODEL = process.env.SCHOLAR_GEMINI_CHAT_MODEL || "gemini-2.5-flash";
 
-function makeVertex() {
+export function makeVertex() {
   const credentials = (() => { const __v = vertexCredentials(); return { project_id: __v.project, client_email: __v.client_email, private_key: __v.private_key }; })(); // robust parse
   return new VertexAI({
     project: credentials.project_id || process.env.GOOGLE_PROJECT_ID,
@@ -49,7 +49,7 @@ export function extractText(result: any): string {
 // modelo lento) trava a pesquisa inteira (ex.: planning preso em ~13%). Com timeout, quem
 // chama (planQuery) cai no fallback e a pesquisa SEGUE.
 const GEMINI_TIMEOUT_MS = Number(process.env.SCHOLAR_GEMINI_TIMEOUT_MS || 30000);
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)),
