@@ -606,6 +606,7 @@ Implementa a hierarquia da §3.7 + token bucket por canal no Redis + não falar 
 resto, custo dentro do orçamento.
 
 **PR-G7 · Envio externo (só quando o Martinez liberar)**
+> **Substituído** (2026-10-07) pelos PRs W1–W5 de `docs/HANDOFF_AGENTE_MENSAGEIRO_V3.md` (chip gerenciado pela ChipFlow, bridge Redis, governança, outbox, e-mail).
 O agente **não chama a API de envio** — escreve na fila. Serviço separado valida opt-in, janela de
 24h, categoria de template, cap por destinatário (1/dia, 3/semana) e orçamento diário.
 **Dry-run por padrão**, promoção gradual por tipo. Fila de aprovação com diff do que vai sair.
