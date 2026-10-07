@@ -141,7 +141,7 @@ export default function EstudioAvatar({
     try {
       const j = deFoto
         ? await post({ acao: "base-de-imagem", imagem: await paraDataUrl(fotoAtual!) })
-        : await post({ acao: "base", personagem, cor });
+        : await post({ acao: "base", personagem, cor, agentId });
       setBase(j.base);
       setPeca("idle", { status: "pronto", grande: j.grande, pequeno: j.pequeno });
       anotar("base: pronta ✓ — aprove o idle e siga");
@@ -151,7 +151,7 @@ export default function EstudioAvatar({
       anotar(`base: falhou — ${(err as Error).message}`);
       return null;
     }
-  }, [anotar, cor, fotoAtual, personagem, post, setPeca]);
+  }, [agentId, anotar, cor, fotoAtual, personagem, post, setPeca]);
 
   /** Gerar tudo: base (se não houver) e cada estado ainda não aprovado, 2 por vez, aparecendo um a um. */
   const gerarTudo = useCallback(async (novaBase: boolean, deFoto = false) => {

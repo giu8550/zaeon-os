@@ -19,12 +19,12 @@ const ENQUADRAMENTO =
 const SEGURO = "Single adult character, modest clothing. No text, no watermark, no signature, no frame, no border.";
 
 /**
- * Com IMAGEM DE REFERÊNCIA (um avatar já aprovado): trava o ESTILO — personagem novo, mesmo traço,
- * mesma sombra, mesmo olho anime, mesmo enquadramento e tipo de fundo. Sem isso o modelo derivava
- * pro semi-realista em descrições "adultas" (homem de 30 e poucos, barba…).
+ * Com GRADE DE REFERÊNCIA (4 avatares JÁ APROVADOS, personagens diferentes): trava o ESTILO anime da
+ * casa sem copiar ninguém — o modelo vê vários rostos, então aprende o traço e não um personagem.
+ * Todo avatar é ÚNICO (decisão do dono): rosto, cabelo, olhos e roupa próprios.
  */
 export const PREFIXO_REFERENCIA =
-  "The attached image is a STYLE REFERENCE ONLY. Create a completely NEW and DIFFERENT character drawn in EXACTLY the same anime art style as the reference: same line art weight, same cel shading, same large anime eye style, same simplified nose and mouth, same hair rendering, same bust framing with the face at the same size and position, and the same kind of plain smooth gradient background. Do NOT copy the reference character's face, hair, clothes or colors — only the art style.";
+  "The attached image is a 2x2 grid of FOUR DIFFERENT characters, shown ONLY as an ART-STYLE reference. Draw ONE single new character (one portrait, NOT a grid) that is completely UNIQUE: its own face shape, its own hairstyle and hair color, its own eye shape and eye color, its own outfit — it must NOT resemble or copy any of the four characters in the grid. Match ONLY the art style of the grid: the same line art weight, the same cel shading, the same anime eye rendering, the same bust framing with the face at the same size and position, and the same kind of plain smooth gradient background.";
 
 /** Prompt da BASE. `personagem` vem do look (persona da casa) ou da descrição do admin. */
 export function promptBase(personagem: string, cor: readonly [string, string]): string {
