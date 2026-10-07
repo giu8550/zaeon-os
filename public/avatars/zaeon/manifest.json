@@ -1,0 +1,33 @@
+{
+  "agentId": "zaeon",
+  "versao": "muy3dkxb",
+  "motor": "sprite",
+  "estados": {
+    "idle": "/avatars/zaeon/idle.webp?v=muy3dkxb",
+    "blink": "/avatars/zaeon/blink.webp?v=muy3dkxb",
+    "talk": "/avatars/zaeon/talk.webp?v=muy3dkxb",
+    "talk_half": "/avatars/zaeon/talk_half.webp?v=muy3dkxb",
+    "smile": "/avatars/zaeon/smile.webp?v=muy3dkxb",
+    "happy": "/avatars/zaeon/happy.webp?v=muy3dkxb",
+    "think": "/avatars/zaeon/think.webp?v=muy3dkxb",
+    "confused": "/avatars/zaeon/confused.webp?v=muy3dkxb"
+  },
+  "pequeno": {
+    "idle": "/avatars/zaeon/idle.sm.webp?v=muy3dkxb",
+    "blink": "/avatars/zaeon/blink.sm.webp?v=muy3dkxb",
+    "talk": "/avatars/zaeon/talk.sm.webp?v=muy3dkxb",
+    "talk_half": "/avatars/zaeon/talk_half.sm.webp?v=muy3dkxb",
+    "smile": "/avatars/zaeon/smile.sm.webp?v=muy3dkxb",
+    "happy": "/avatars/zaeon/happy.sm.webp?v=muy3dkxb",
+    "think": "/avatars/zaeon/think.sm.webp?v=muy3dkxb",
+    "confused": "/avatars/zaeon/confused.sm.webp?v=muy3dkxb"
+  },
+  "cor": "#2563eb",
+  "voz": {
+    "saudacoes": [
+      "/avatars/zaeon/voz/saudacao-01.wav",
+      "/avatars/zaeon/voz/saudacao-02.wav",
+      "/avatars/zaeon/voz/saudacao-03.wav"
+    ]
+  }
+}

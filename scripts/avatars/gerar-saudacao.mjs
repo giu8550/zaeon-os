@@ -6,20 +6,60 @@
  * áudio (lib/avatars/falar.ts). Mesmo jeito de scripts/generate-voice-fillers.mjs.
  *
  *   node --env-file=.env scripts/avatars/gerar-saudacao.mjs aura
+ *   node --env-file=.env scripts/avatars/gerar-saudacao.mjs --todos
  */
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { GoogleAuth } from "google-auth-library";
 
+// Voz de cada agente casa com o avatar (gênero + jeito). persona.voice em lib/ai/personas.ts é só
+// metadado (o app fala na voz que o usuário escolhe) — aqui é a voz PRÓPRIA do personagem.
 const SAUDACOES = {
-  aura: {
-    voz: "Aoede",
-    frases: [
-      "Oi! Eu sou a Aura. Pode falar comigo, tô aqui pra te ajudar.",
-      "Oi, que bom te ver! Me conta: o que a gente vai estudar hoje?",
-      "E aí! Manda a tua dúvida que a gente resolve junto.",
-    ],
-  },
+  aura: { voz: "Aoede", frases: [
+    "Oi! Eu sou a Aura. Pode falar comigo, tô aqui pra te ajudar.",
+    "Oi, que bom te ver! Me conta: o que a gente vai estudar hoje?",
+    "E aí! Manda a tua dúvida que a gente resolve junto.",
+  ] },
+  zaeon: { voz: "Sulafat", frases: [
+    "Oi, que bom que você chegou! Eu sou a Zaeon, e vou te levar pro lugar certo.",
+    "Que bom te ver por aqui! Me conta o que você precisa hoje.",
+    "Oi! Pode falar comigo, que eu chamo quem pode te ajudar.",
+  ] },
+  nina: { voz: "Leda", frases: [
+    "Oi! Eu sou a Nina. Bora estudar juntos hoje?",
+    "E aí! O que a gente vai aprender agora?",
+    "Oi, que bom que você veio! Abre o caderno que eu te ajudo.",
+  ] },
+  caio: { voz: "Charon", frases: [
+    "Olá! Eu sou o Caio. Vamos escrever esse trabalho juntos?",
+    "Oi! Me mostra o que você já tem, que a gente organiza o texto.",
+    "E aí! Pronto pra tirar esse TCC do papel?",
+  ] },
+  teo: { voz: "Puck", frases: [
+    "Fala! Eu sou o Téo. Bora codar?",
+    "E aí! Me diz o que você quer construir hoje.",
+    "Oi! Abre o projeto que eu te ajudo a fazer rodar.",
+  ] },
+  zenita: { voz: "Kore", frases: [
+    "Oi! Eu sou a Zenita. Vamos organizar a tua agenda?",
+    "Oi! Me fala as tuas aulas, que eu anoto tudo.",
+    "Oi! Bora deixar a semana em ordem?",
+  ] },
+  core_active: { voz: "Achird", frases: [
+    "Oi! Eu sou o Davi. Me conta os teus compromissos, que eu cuido da agenda.",
+    "E aí! Tem aula, prova ou entrega essa semana?",
+    "Oi! Pode falar, que eu monto a tua agenda pra você.",
+  ] },
+  scholar: { voz: "Iapetus", frases: [
+    "Olá. Eu sou o Scholar. Me passe o texto, e eu cuido das citações na ABNT.",
+    "Olá! Vamos acertar essas referências?",
+    "Olá. Qual obra você quer citar hoje?",
+  ] },
+  examiner: { voz: "Erinome", frases: [
+    "Oi! Eu sou a Examiner. Preparado pra um desafio?",
+    "E aí! Vamos testar o que você aprendeu?",
+    "Oi! Uma pergunta por vez, e sem colar, hein?",
+  ] },
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -42,7 +82,11 @@ function pcmToWav(pcm, rate) {
 }
 
 async function main() {
-  const id = process.argv[2];
+  const ids = process.argv[2] === "--todos" ? Object.keys(SAUDACOES) : process.argv.slice(2);
+  for (const id of ids) await gerar(id);
+}
+
+async function gerar(id) {
   const cfg = SAUDACOES[id];
   if (!cfg) { console.error(`sem saudação pra "${id}" (edite SAUDACOES)`); process.exit(1); }
   const { project, client_email, private_key, location } = creds();
@@ -72,7 +116,7 @@ async function main() {
       const wav = /wav/i.test(inline.mimeType || "") ? Buffer.from(inline.data, "base64") : pcmToWav(Buffer.from(inline.data, "base64"), rate);
       await writeFile(path.join(dir, `saudacao-${n}.wav`), wav);
       urls.push(`/avatars/${id}/voz/saudacao-${n}.wav`);
-      console.log(`✓ ${n} (${(wav.length / 1024).toFixed(0)}kb) "${cfg.frases[i]}"`);
+      console.log(`✓ ${id} ${n} (${(wav.length / 1024).toFixed(0)}kb) "${cfg.frases[i]}"`);
       ok = true;
     }
   }
@@ -81,7 +125,7 @@ async function main() {
   const m = JSON.parse(await readFile(mPath, "utf8"));
   m.voz = { saudacoes: urls };
   await writeFile(mPath, JSON.stringify(m, null, 2) + "\n");
-  console.log(`manifest: ${urls.length} saudações`);
+  console.log(`manifest ${id}: ${urls.length} saudações (${cfg.voz})`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
