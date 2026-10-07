@@ -14,7 +14,7 @@
 > que o comitê publica (S9), a aprovação por `👍` (S3) e a consulta fechada (S6). Nasce a parte
 > `EV_AGENTE_ESTADO` de **C2**; consome **C1** (A4), **C3** (S1), **C12** (S7), **C4** (A5) e
 > **C5** (A1, opcional). **Não comece sem as Fatias 2 e 3 mergeadas.**
-> **Toda âncora `arquivo:linha` abaixo foi verificada em `origin/main` = `11d0732` (2026-10-07).**
+> **Toda âncora `arquivo:linha` abaixo foi verificada em `origin/main` = `c4adb88` (2026-10-07).**
 
 ---
 
@@ -274,4 +274,4 @@ Branch `escritorio/fatia4-a6-reuniao`. Flag `CANAL_REUNIAO`; `REUNIAO_RODADAS_MA
 
 ## 6. Economia de execução (pedido do Martinez — leve a sério)
 
-Agrupe edições por arquivo; não abra exploração (a §2 tem TODAS as âncoras, verificadas em `11d0732`; a §3.A tem o molde inteiro); não re-explique contratos — a §3 é o texto final; pare em cada gate e reporte em 1 linha; gate vermelho 2 vezes → **PARE e pergunte ao Martinez**. A6 em dois PRs se passar de ~8 arquivos. Se `runReuniao` começar a escolher quem fala, você saiu do molde — volte à ordem fixa. Se o comitê precisar de uma terceira mensagem no fio "pra ficar claro", é a thread que está errada, não a lei. O valor está em cada gate verde, não em volume de código.
+Agrupe edições por arquivo; não abra exploração (a §2 tem TODAS as âncoras, verificadas em `c4adb88`; a §3.A tem o molde inteiro); não re-explique contratos — a §3 é o texto final; pare em cada gate e reporte em 1 linha; gate vermelho 2 vezes → **PARE e pergunte ao Martinez**. A6 em dois PRs se passar de ~8 arquivos. Se `runReuniao` começar a escolher quem fala, você saiu do molde — volte à ordem fixa. Se o comitê precisar de uma terceira mensagem no fio "pra ficar claro", é a thread que está errada, não a lei. O valor está em cada gate verde, não em volume de código.
