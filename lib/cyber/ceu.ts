@@ -13,14 +13,15 @@ export const BURACO_NEGRO = { x: 0, y: 16, z: -110, r: 6 };
 
 export const CIDADE = {
   centro: { x: BURACO_NEGRO.x, z: BURACO_NEGRO.z },
-  pisoY: 230,           // piso da cidade: BEM acima do buraco negro (y=16) — flutuando nas alturas
-  bordaR: 56,           // borda da ilha principal
-  andavelR: 50,         // até onde se anda (as muralhas ficam em 53)
-  muralhaR: 53,
-  ilhaAltura: 72,       // a ilha (cone invertido) vai do piso até pisoY - ilhaAltura
+  // (cyberespaço v2: a Zaeon cresceu ×1,5 e subiu — mapa com mais espaço)
+  pisoY: 290,           // piso da cidade: BEM acima do buraco negro (y=16) — flutuando nas alturas
+  bordaR: 84,           // borda da ilha principal
+  andavelR: 76,         // até onde se anda (as muralhas ficam em 80)
+  muralhaR: 80,
+  ilhaAltura: 100,      // a ilha (cone invertido) vai do piso até pisoY - ilhaAltura
   /** a AGULHA embaixo da ilha: a ponta afiada que desce do ápice (sólida pra nave) */
-  agulha: { r: 6, altura: 32 },
-  cidadela: { r: 18, pilares: 16, pilarColR: 1.3, altura: 16 },  // pilares + cúpula em 2 andares + pináculo
+  agulha: { r: 8, altura: 44 },
+  cidadela: { r: 18, pilares: 16, pilarColR: 1.3, altura: 24 },  // pilares + cúpula em 2 andares + pináculo
   /** BIBLIOTECA em anel rodeando a sala (dentro da cidadela): estantes de livros de luz e, a cada `monitorCada`,
    *  um MONITOR vertical (clicável = Sala de Estudos). Vãos entre os módulos deixam passar. */
   biblioteca: { n: 16, r: 15, largura: 3.6, colR: 0.75, monitorCada: 4 },
@@ -30,12 +31,12 @@ export const CIDADE = {
   mesaHolo: { r: 2.4 },
   /** SALAS em volta da cidadela: pavilhões redondos de vidro, com a PORTA virada pro centro da ilha */
   salas: {
-    lounge: { x: 27, z: -27, r: 8.5 },
+    lounge: { x: 40, z: -40, r: 8.5 },
   },
   /** parede das salas: colisores ao longo do arco; `porta` = meia-abertura (rad) da porta */
   salaParede: { colR: 0.6, passo: 1, porta: 0.34 },                                 // plataforma da nave (local)
-  portalVolta: { x: -21, z: 10, r: 2.2 },                        // anel de volta pra praça (local)
-  chegada: { x: -16, z: 14 },                                    // onde se aparece ao entrar (local)
+  portalVolta: { x: -32, z: 15, r: 2.2 },                        // anel de volta pra praça (local)
+  chegada: { x: -25, z: 21 },                                    // onde se aparece ao entrar (local)
   /** anel de entrada no CHÃO, embaixo do buraco negro (mundo) */
   portalEntrada: { x: BURACO_NEGRO.x, z: BURACO_NEGRO.z, r: 9 },
 } as const;
@@ -143,7 +144,7 @@ export function paredeDaSala(s: { x: number; z: number; r: number }): { x: numbe
 /** o lado da ilha onde a NAVE-QG do dono fica atracada (lib/cyber/naveQG): as ilhotas deixam esse setor livre */
 export const DOCA_ANGULO = 1.75, DOCA_MEIA_ABERTURA = 0.95;
 export const ILHOTAS: { x: number; z: number; r: number; dy: number; fase: number }[] = Array.from({ length: 7 }, (_, k) => {
-  const a = DOCA_ANGULO + DOCA_MEIA_ABERTURA + (k / 6) * (Math.PI * 2 - 2 * DOCA_MEIA_ABERTURA), dist = 80 + (k % 3) * 12;
+  const a = DOCA_ANGULO + DOCA_MEIA_ABERTURA + (k / 6) * (Math.PI * 2 - 2 * DOCA_MEIA_ABERTURA), dist = CIDADE.bordaR + 26 + (k % 3) * 14;
   return { x: Math.cos(a) * dist, z: Math.sin(a) * dist, r: 6 + (k % 4) * 2.5, dy: ((k % 3) - 1) * 12, fase: k * 1.7 };
 });
 export const BOIA_ILHOTA = 1.2;

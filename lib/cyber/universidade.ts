@@ -15,9 +15,9 @@
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 
 export const UNIVERSIDADE = {
-  centro: { x: 0, z: 225 },
+  centro: { x: 0, z: 330 },
   /** piso do disco flutuante (m): um pouco abaixo da Zaeon (230); `discoR` = raio andável (a borda é livre: cai) */
-  y: 170, discoR: 150, espessura: 8,
+  y: 230, discoR: 150, espessura: 8,
   externa: { meia: 105, alt: 12, esp: 2.6, portao: 14 },     // muralha externa (portão ao sul)
   interna: { meia: 80, alt: 18, esp: 3, portoes: [{ x: 0, w: 10 }, { x: -36, w: 8 }, { x: 36, w: 8 }] },   // portões ao sul
   torreCentral: { x: 0, z: -61.5, lado: 14, alt: 50, pinaculo: 22 },

@@ -13,9 +13,9 @@ import type { P2 } from "./colisao";
 import { empurrarDasParedes, empurrarDosRetangulos, paredesDoRetangulo, type Parede } from "./universidade";
 
 export const SOLANA = {
-  centro: { x: 200, z: -60 },
-  /** piso do disco (m) — abaixo da Universidade (170) e da Zaeon (230) */
-  y: 120,
+  centro: { x: 280, z: -90 },
+  /** piso do disco (m) — abaixo da Universidade (230) e da Zaeon (290) */
+  y: 160,
   /** raio do disco andável (a borda é livre: passou, cai) e a espessura dele (sólido pra nave/moto) */
   r: 30, espessura: 6,
   predio: { x0: -12, x1: 12, z0: -2, z1: 14 },

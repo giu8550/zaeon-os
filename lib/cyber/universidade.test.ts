@@ -9,9 +9,9 @@ const qg = POIS.find((p) => p.id === "zaeon")!;
 const dentroDeParede = (w: { x: number; z: number }) => { const l = localU(w); return paredesDaUniversidade().some((p) => { const dx = p.bx - p.ax, dz = p.bz - p.az, L2 = dx * dx + dz * dz, t = Math.max(0, Math.min(1, ((l.x - p.ax) * dx + (l.z - p.az) * dz) / L2)); return Math.hypot(l.x - (p.ax + dx * t), l.z - (p.az + dz * t)) < p.esp / 2; }); };
 
 describe("Universidade (castelo flutuando num disco no céu)", () => {
-  it("é enorme: ~3× a área da Zaeon do céu, e cabe no mapa", () => {
+  it("é enorme: maior que a Zaeon do céu (que cresceu ×1,5 no cyberespaço v2), e cabe no mapa", () => {
     const lado = UNIVERSIDADE.externa.meia * 2;
-    expect(lado * lado).toBeGreaterThan(2.9 * Math.PI * CIDADE.bordaR ** 2);
+    expect(lado * lado).toBeGreaterThan(1.2 * Math.PI * CIDADE.bordaR ** 2);
     const { x, z } = UNIVERSIDADE.centro, m = UNIVERSIDADE.externa.meia;
     expect(Math.hypot(Math.abs(x) + m, Math.abs(z) + m)).toBeLessThan(VOO.raioMapa + 160);   // o canto mais longe
   });

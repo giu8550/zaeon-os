@@ -248,7 +248,7 @@ export class CyberEngine {
     this.R.autoClear = false; this.R.outputColorSpace = THREE.SRGBColorSpace;
     const cv = this.R.domElement; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:" + (opts.menu ? "pan-y" : "none");
     container.appendChild(cv);
-    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.1, 900);
+    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.1, 1300);   // mapa maior (cyberespaço v2)
     this.cena = criarCenaCosmica(low, this.w / this.h);
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
@@ -583,6 +583,8 @@ export class CyberEngine {
   /** onde a nave-QG ficou estacionada (vem da sala): vale enquanto o dono não mexe nela nesta sessão */
   setNaveQG(pose: PoseNave | null) {
     if (!pose || this.pilotando || this.naveMexida) return;
+    // pose salva na DOCA ANTIGA (a Zaeon era a 230 m; cresceu e subiu pra 290): ignora → fica na doca nova
+    if (Math.abs(pose.y + NAVE_QG.deck - 230) < 1.5) return;
     this.naveEst = { ...this.naveEst, ...pose, vx: 0, vy: 0, vz: 0 };
   }
   /** botões de movimento na tela: SUBIR/DESCER (segurar) */

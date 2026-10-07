@@ -13,7 +13,7 @@ export type ComandoVoo = { wx: number; wz: number; subir: boolean; descer: boole
 /** vel/sobe em m/s; `dtMax` = maior quadro aceito (aba que voltou do fundo); `subpasso` = passo da física */
 /** `freio`: soltar a direção para a nave em poucos metros (paira ali) */
 /** `decolar`: no chão (ou a menos disso acima dele) a nave NÃO anda de lado — tem que subir primeiro */
-export const VOO = { vel: 30, sobe: 38, inercia: 3, freio: 7, decolar: 1.5, yMax: 330, raioMapa: 420, dtMax: 0.25, subpasso: 1 / 60 };
+export const VOO = { vel: 30, sobe: 38, inercia: 3, freio: 7, decolar: 1.5, yMax: 420, raioMapa: 540, dtMax: 0.25, subpasso: 1 / 60 };
 
 /** folga de pouso: o topo dos marcos flutua (±0,15 m); parada a até isso acima do chão = pousada */
 export const POUSO_TOL = 0.3;
