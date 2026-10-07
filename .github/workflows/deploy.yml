@@ -223,6 +223,26 @@ jobs:
               exit 1
             fi
 
+            # O Caddyfile entra MONTADO (./Caddyfile:ro) e o `up -d` NÃO recria o caddy quando só o conteúdo
+            # do arquivo muda — ele seguia com a config antiga em memória. Foi assim que a rota /colyseus
+            # (realtime do cyberespaço, 2026-10-05) nunca entrou no ar: /colyseus/* caía no Next (404).
+            # `caddy reload` aplica a config nova sem derrubar conexões; se falhar (config inválida), o
+            # Caddy MANTÉM a anterior e o deploy só avisa. Último recurso: reinício do container.
+            echo "→ Recarregando a config do Caddy…"
+            if $DC exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
+              echo "  ✓ Caddyfile aplicado"
+            else
+              echo "::warning::caddy reload falhou — reiniciando o container do caddy"
+              $DC restart caddy || echo "::warning::não deu pra reiniciar o caddy"
+            fi
+
+            # Realtime: o Colyseus responde por dentro da rede E pela rota pública do Caddy? (só avisa)
+            if $DC exec -T caddy wget -qO- http://colyseus:2567/health >/dev/null 2>&1; then
+              echo "  ✓ colyseus de pé (rede interna)"
+            else
+              echo "::warning::colyseus não respondeu em colyseus:2567/health — veja: $DC logs --tail=40 colyseus"
+            fi
+
             echo "→ Limpando imagens órfãs…"
             docker image prune -f
             echo "✓ Deploy concluído — Zaeon no ar."
