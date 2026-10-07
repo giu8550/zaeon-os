@@ -6,7 +6,10 @@
  *  - podcast/vídeo: POST → polla /api/studio/:id (2,5s / 3s; teto 10 / 12 min); falha CALADA
  *  - molécula: síncrono (PubChem), precisa de meta.sdf
  *  - imagem: síncrono (Imagen), precisa de dataUrl
- *  - texto (mindmap/guide/faq/flashcards/timeline): fire-and-forget → polla 2s até 5 min
+ *  - texto (guide/faq/flashcards/timeline): fire-and-forget → polla 2s até 5 min
+ *  - diagrama interativo (archify): fire-and-forget → polla 2,5s até 4 min; .html via artifactId
+ *  - mapa mental: AGORA é o diagrama (formato "mapa"); o mindmap estático antigo só entra de
+ *    reserva se o diagrama falhar.
  */
 export type BlocoStudio = { studioKind: string; title?: string; data?: any; artifactId?: string; dataUrl?: string };
 
@@ -40,20 +43,23 @@ export async function criarEstudo(titulo: string, d: Deps = {}): Promise<{ id: s
 
 async function json(r: Response): Promise<any> { return r.json().catch(() => null); }
 
-export async function gerarArtefato(kind: string, o: { spaceId: string; topic: string } & Deps): Promise<ResultadoStudio> {
+/** `contexto` = a explicação que o aluno acabou de ler (o diagrama reflete ela); `sala` ajusta o rigor. */
+export type OpcoesStudio = { spaceId?: string; topic: string; contexto?: string; sala?: "estudos" | "pesquisa" };
+
+export async function gerarArtefato(kind: string, o: OpcoesStudio & Deps): Promise<ResultadoStudio> {
   const f = o.fetch ?? fetch;
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const agora = o.agora ?? (() => Date.now());
   const { spaceId, topic } = o;
 
-  const acompanhar = async (id: string, intervalo: number, teto: number, silencioso: boolean, comArtifactId: boolean): Promise<ResultadoStudio> => {
+  const acompanhar = async (id: string, intervalo: number, teto: number, silencioso: boolean, comArtifactId: boolean, kindFinal = kind): Promise<ResultadoStudio> => {
     const inicio = agora();
     while (agora() - inicio < teto) {
       await sleep(intervalo);
       if (o.cancelado?.()) return { tipo: "cancelado" };
       const d = await f(`/api/studio/${id}`).then(json).catch(() => null);
       if (!d) continue;
-      if (d.status === "done") return { tipo: "pronto", bloco: { studioKind: kind, title: d.title, data: d.meta, ...(comArtifactId ? { artifactId: d.id } : {}) } };
+      if (d.status === "done") return { tipo: "pronto", bloco: { studioKind: kindFinal, title: d.title, data: semIR(d.meta), ...(comArtifactId ? { artifactId: d.id } : {}) } };
       if (d.status === "error") return { tipo: "erro", mensagem: d?.error, silencioso };
     }
     // teto: o desktop sempre parou CALADO aqui (todas as categorias) — preservado
@@ -61,8 +67,13 @@ export async function gerarArtefato(kind: string, o: { spaceId: string; topic: s
   };
 
   try {
+    if (kind === "diagram" || kind === "mindmap") {
+      const r = await gerarDiagramaCliente(f, o, kind === "mindmap" ? "mapa" : "auto", acompanhar);
+      if (r.tipo !== "erro" || kind !== "mindmap") return r;
+      // reserva: o mapa mental estático de antes (texto), se o diagrama não saiu
+    }
     if (kind === "podcast" || kind === "video") {
-      const res = await f(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId }) });
+      const res = await f(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
       const data = await json(res);
       if (!res.ok || !data?.id) return { tipo: "erro", silencioso: true };
       if (data.status === "done") return { tipo: "pronto", bloco: { studioKind: kind, title: data.title, data: data.meta, artifactId: data.id } };
@@ -93,4 +104,28 @@ export async function gerarArtefato(kind: string, o: { spaceId: string; topic: s
   } catch {
     return { tipo: "erro" };
   }
+}
+
+/** O IR completo fica no servidor (meta.ir); o bloco da conversa só precisa do tipo e do assunto. */
+function semIR(meta: any): any {
+  if (!meta || typeof meta !== "object" || !("ir" in meta)) return meta;
+  const { ir: _ir, ...resto } = meta;
+  return resto;
+}
+
+async function gerarDiagramaCliente(
+  f: typeof fetch,
+  o: OpcoesStudio,
+  formato: "auto" | "mapa",
+  acompanhar: (id: string, intervalo: number, teto: number, silencioso: boolean, comArtifactId: boolean, kindFinal?: string) => Promise<ResultadoStudio>,
+): Promise<ResultadoStudio> {
+  const res = await f("/api/studio/diagram", {
+    method: "POST",
+    headers: H,
+    body: JSON.stringify({ spaceId: o.spaceId || undefined, topic: o.topic, contexto: o.contexto, sala: o.sala, formato }),
+  });
+  const data = await json(res);
+  if (!res.ok || !data?.id) return { tipo: "erro", mensagem: data?.error };
+  if (data.status === "done") return { tipo: "pronto", bloco: { studioKind: "diagram", title: data.title, data: semIR(data.meta), artifactId: data.id } };
+  return acompanhar(data.id, 2500, 4 * 60_000, false, true, "diagram");
 }

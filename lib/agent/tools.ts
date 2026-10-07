@@ -23,10 +23,13 @@ export type StudioKind =
   // caía no fallback e o artefato se chamava "artefato: cafeína" em vez de
   // "molécula: cafeína". Sete erros do tsc apontavam pra isto, escondidos pelo
   // ignoreBuildErrors.
-  | "image" | "podcast" | "video" | "molecule";
+  | "image" | "podcast" | "video" | "molecule"
+  // diagrama INTERATIVO (archify — lib/studio/diagram.ts): "como funciona X", esquema, fluxograma.
+  // O "mapa mental" continua `mindmap` no pedido, mas o cliente o desenha com o archify também.
+  | "diagram";
 
 export const STUDIO_KINDS: StudioKind[] = [
-  "guide", "mindmap", "timeline", "flashcards", "faq", "image", "podcast", "video", "molecule",
+  "guide", "mindmap", "timeline", "flashcards", "faq", "image", "podcast", "video", "molecule", "diagram",
 ];
 
 // Rótulo humano (PT-BR) por kind — usado na confirmação e no provenance.
@@ -40,6 +43,7 @@ export const STUDIO_LABEL: Record<StudioKind, string> = {
   podcast: "podcast",
   video: "vídeo",
   molecule: "molécula",
+  diagram: "diagrama interativo",
 };
 
 // Aceita sinônimos/PT que o modelo possa devolver → normaliza pro kind canônico.
@@ -54,6 +58,8 @@ const ALIASES: Record<string, StudioKind> = {
   video: "video", "vídeo": "video",
   molecula: "molecule", "molécula": "molecule", molecule: "molecule",
   "estrutura molecular": "molecule", "estrutura 3d": "molecule", "modelo 3d": "molecule",
+  diagrama: "diagram", diagram: "diagram", esquema: "diagram", fluxograma: "diagram",
+  "mapa conceitual": "mindmap", "mapa de estudo": "mindmap", "mapa de estudos": "mindmap",
 };
 
 export function normalizeStudioKind(raw: string): StudioKind {

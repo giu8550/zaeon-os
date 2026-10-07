@@ -28,6 +28,9 @@ import DicaSubTema from "@/components/chat/DicaSubTema";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
 import { fonteChat } from "@/lib/ui/chatFontScale";
+import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
+import { criarEstudo, gerarArtefato } from "@/lib/studio/studioClient";
+import Desenhando from "@/components/chat/Desenhando";
 import BolinhaCerebro from "@/components/cerebro/BolinhaCerebro";
 import CerebroPanel from "@/components/cerebro/CerebroPanel";
 import { useCerebro } from "@/components/cerebro/useCerebro";
@@ -41,7 +44,18 @@ import {
 } from "@/lib/chat/threads";
 
 // `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
-type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string; anexo?: string };
+// `blocos` = artefatos inline da resposta (diagrama interativo, molécula…); `desenhando` = o diagrama está saindo.
+type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string; anexo?: string; blocos?: StudioBlockData[]; desenhando?: boolean };
+
+/** Kinds que o servidor gera SEM um estudo de origem (o resto do Studio precisa de um). */
+const SEM_ESTUDO = new Set(["diagram", "mindmap", "molecule"]);
+
+/** O que vai pro localStorage: o diagrama é só um id (o HTML mora no servidor); o resto fica na sessão. */
+const enxugar = (m: Msg): Msg => {
+  if (!m.blocos && !m.desenhando) return m;
+  const leves = (m.blocos ?? []).filter((b) => b.studioKind === "diagram" && b.artifactId);
+  return { ...m, blocos: leves.length ? leves : undefined, desenhando: undefined };
+};
 
 /** A sala → o chat: abrir uma conversa nova (o ＋ da sala). */
 export const EVT_NOVA_CONVERSA = "zaeon:research:nova-conversa";
@@ -167,7 +181,7 @@ export default function ResearchChat({
   // Espelha a conversa ATIVA (últimas 60) e o rascunho no localStorage — não perde ao trocar de aba/reload.
   useEffect(() => {
     const aba = abaAtivaRef.current;
-    if (aba) salvarMensagens(localStorage, aba, messages.filter((m) => m.text), ESCOPO_PESQUISA);
+    if (aba) salvarMensagens(localStorage, aba, messages.filter((m) => m.text).map(enxugar), ESCOPO_PESQUISA);
   }, [messages]);
   useEffect(() => {
     try { input ? localStorage.setItem(DRAFT_KEY_R, input) : localStorage.removeItem(DRAFT_KEY_R); } catch { /* ignore */ }
@@ -295,6 +309,34 @@ export default function ResearchChat({
     } catch { /* ignore — a Fase 1 mostra erro no trace */ }
   }, []);
 
+  // ARTEFATOS INLINE (o seam do harness: StructuredAnswer.artifacts[] → viewers do Studio). Antes a Sala
+  // de Pesquisa os ignorava; agora cada um é gerado e entra NA MESMA bolha, com o rigor da sala.
+  const materializarArtefatos = useCallback(async (msgId: string, a: StructuredAnswer, prompt: string) => {
+    const patchMsg = (f: (m: Msg) => Msg) => setMessages((prev) => prev.map((m) => (m.id === msgId ? f(m) : m)));
+    for (const art of a.artifacts ?? []) {
+      const kind = art.studioKind;
+      if (!kind || kind.startsWith("research:")) continue;
+      const topic = art.title?.trim() || prompt;
+      const desenho = kind === "diagram" || kind === "mindmap";
+      const contexto = desenho ? [a.nucleo, a.desenvolvimento].filter(Boolean).join("\n\n") : undefined;
+      let spaceId: string | undefined;
+      if (!SEM_ESTUDO.has(kind)) {
+        const s = await criarEstudo(topic);
+        if (!s) continue;
+        spaceId = s.id;
+      }
+      if (desenho) patchMsg((m) => ({ ...m, desenhando: true }));
+      void gerarArtefato(kind, { spaceId, topic, contexto, sala: "pesquisa" }).then((r) => {
+        patchMsg((m) => {
+          const fim = desenho ? { ...m, desenhando: false } : m;
+          if (r.tipo !== "pronto") return fim;
+          const b: StudioBlockData = { studioKind: r.bloco.studioKind, title: r.bloco.title || "", data: r.bloco.data ?? null, artifactId: r.bloco.artifactId, dataUrl: r.bloco.dataUrl };
+          return { ...fim, blocos: [...(fim.blocos ?? []).filter((x) => x.studioKind !== b.studioKind), b] };
+        });
+      });
+    }
+  }, []);
+
   // `text` presente = envio DIRETO (sugestão/conceito clicado na resposta) sem passar pelo
   // input; ausente = o que está digitado no composer.
   const send = useCallback(async (text?: string) => {
@@ -389,6 +431,7 @@ export default function ResearchChat({
         // Ponte chat → Lounge 3D: os pontos-chave desta resposta ficam disponíveis pra "Puxar ponto do chat"
         // (projeção opcional no canvas; a memória de verdade é o cérebro).
         if (structured.kind === "answer" && abaAtivaRef.current) try { empurrarPontos(pontosDaResposta(abaAtivaRef.current, asstId, structured.answer)); } catch { /* ignore */ }
+        if (structured.kind === "answer" && structured.answer.artifacts?.length) void materializarArtefatos(asstId, structured.answer, prompt);
         appendTranscript("pesquisa", null, [
           { role: "user", text: prompt },
           { role: "assistant", text },
@@ -420,7 +463,7 @@ export default function ResearchChat({
       setSending(false);
       if (cerebro.ligado) setTimeout(() => void cerebro.refetch(), 1500); // o gatekeeper/fixar são fire-and-forget no servidor
     }
-  }, [input, sending, wt, runResearchGenerate, modoTcc, tccWorkId, cerebro, anexoRef, onAtivar]);
+  }, [input, sending, wt, runResearchGenerate, materializarArtefatos, modoTcc, tccWorkId, cerebro, anexoRef, onAtivar]);
   sendRef.current = (t?: string) => { void send(t); };
   novaAbaRef.current = novaAba;
 
@@ -513,7 +556,14 @@ export default function ResearchChat({
                 <div key={m.id} data-msg-id={m.id} className="group/msg flex justify-start">
                   <div className="max-w-[88%] w-full">
                     {/* Clicar num conceito/próximo passo proposto pela IA já ENVIA (sem clicar no input nem Enter). */}
-                    <StructuredAnswerView answer={m.answer} acoes={acoesResposta} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)} />
+                    <StructuredAnswerView answer={m.answer} acoes={acoesResposta} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)}>
+                      {m.blocos?.length || m.desenhando ? (
+                        <>
+                          {m.blocos?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
+                          {m.desenhando && <Desenhando />}
+                        </>
+                      ) : null}
+                    </StructuredAnswerView>
                   </div>
                 </div>
               );

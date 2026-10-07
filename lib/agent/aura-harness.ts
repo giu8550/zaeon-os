@@ -24,6 +24,7 @@ import type { AgentStep } from "@/lib/agent/actions";
 import type { HarnessDeps, TrajectoryState, Step } from "@/lib/agent/trajectory";
 import { normalizeStudioKind } from "@/lib/agent/tools";
 import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
+import { artefatoDeAprender, pedeEngenhariaReversa, DIRETRIZ_ENGENHARIA_REVERSA } from "@/lib/agent/aprender";
 
 type GenJson = <T>(system: string, user: string, opts?: { temperature?: number; model?: string; timeoutMs?: number }) => Promise<T>;
 
@@ -56,7 +57,8 @@ const defaultGenJson: GenJson = async (system, user, opts) => {
 /** infere o kind do Studio a partir do pedido (gerar_artefato). */
 export function pickStudioKind(objective: string): string {
   const t = (objective || "").toLowerCase();
-  if (/mapa mental|mindmap/.test(t)) return "mindmap";
+  // Mapa mental/de estudo/conceitual → `mindmap` (o cliente desenha com o archify, interativo).
+  if (/mapa mental|mindmap|mapa (de estudos?|conceitual)/.test(t)) return "mindmap";
   if (/flashcard|cart[õo]es/.test(t)) return "flashcards";
   if (/linha do tempo|timeline|cronologia/.test(t)) return "timeline";
   if (/podcast|áudio|audio/.test(t)) return "podcast";
@@ -66,7 +68,10 @@ export function pickStudioKind(objective: string): string {
   // de quando o viewer 3D não existia. Agora existe (PubChem + 3Dmol), e uma estrutura
   // química desenhada por modelo de imagem é bonita e errada.
   if (/mol[eé]cula|estrutura (molecular|qu[ií]mica)|f[oó]rmula estrutural/.test(t)) return "molecule";
-  if (/imagem|figura|ilustra|diagrama|esquema|desenh|gr[aá]fico|f[oó]rmula/.test(t)) return "image";
+  // Diagrama/esquema/fluxograma ANTES de imagem: "como funciona" é estrutura (archify, interativo
+  // e fiel), não ilustração de modelo de imagem. Gráfico numérico não é diagrama — fica em imagem.
+  if (/diagrama|esquema|fluxograma|como funciona/.test(t)) return "diagram";
+  if (/imagem|figura|ilustra|desenh|gr[aá]fico|f[oó]rmula/.test(t)) return "image";
   return normalizeStudioKind(t); // default "guide"
 }
 
@@ -275,9 +280,9 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         (st.academicMode === "enforced"
           ? " Preencha `evidencia` com as fontes reunidas (acadêmicas ou, na falta, da web) e NUNCA fabrique fonte que não está na evidência."
           : "");
-      const a5 = st.intent === "criar_trabalho"
+      const a5 = (st.intent === "criar_trabalho"
         ? "\nBaseie CADA afirmação de `work`/`evidencia` na evidência reunida; se a evidência for insuficiente, produza um rascunho enxuto e sinalize a limitação em `nucleo`."
-        : "";
+        : "") + (pedeEngenhariaReversa(st.objective) ? `\n${DIRETRIZ_ENGENHARIA_REVERSA}` : "");
       const sys = [
         "Você é a Aura, parceira de estudo/pesquisa — calorosa, direta, PT-BR. Redija a resposta final.",
         // O Studio é MOBÍLIA, não assunto. Esta linha antes dizia ao modelo "você TEM o
@@ -398,8 +403,12 @@ export function resolveHarnessOutput(
   const comExplicito = studioArt && state.intent === "gerar_artefato"
     ? arts.map((a) => (a === studioArt ? { ...a, explicito: true } : a))
     : arts;
+  // APRENDER INTERATIVO (lib/agent/aprender): pergunta de quem quer aprender/entender → um diagrama
+  // interativo do assunto viaja junto (archify). Não é pedido explícito: se falhar, falha calado.
+  const doAprender = artefatoDeAprender(state.intent, objective, { artifacts: comExplicito });
+  const todos = doAprender ? [...comExplicito, doAprender] : comExplicito;
   return {
     mode: "structured",
-    answer: comExplicito.length ? { ...answer, artifacts: comExplicito } : answer,
+    answer: todos.length ? { ...answer, artifacts: todos } : answer,
   };
 }

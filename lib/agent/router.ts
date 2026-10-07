@@ -40,10 +40,10 @@ const GREETING_RE =
   /(^|\s)(oi|ola|opa|eai|e ai|salve|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|beleza|blz|tudo bem|tchau)(\s|,|!|\?|$)/;
 
 const WORK_NOUNS = ["artigo", "tcc", "monografia", "dissertacao", "tese", "redacao", "ensaio", "relatorio", "paper", "resenha", "trabalho academico"];
-const STUDIO_NOUNS = ["mapa mental", "mindmap", "flashcard", "linha do tempo", "timeline", "podcast", "video", "quiz", "infografico", "slides", "apresentacao", "resumo visual", "guia de estudo", "guia de estudos", "imagem", "figura", "ilustracao", "molecula", "estrutura molecular", "estrutura quimica", "diagrama", "esquema", "desenho", "grafico", "formula estrutural"];
+const STUDIO_NOUNS = ["mapa mental", "mindmap", "mapa conceitual", "mapa de estudo", "fluxograma", "flashcard", "linha do tempo", "timeline", "podcast", "video", "quiz", "infografico", "slides", "apresentacao", "resumo visual", "guia de estudo", "guia de estudos", "imagem", "figura", "ilustracao", "molecula", "estrutura molecular", "estrutura quimica", "diagrama", "esquema", "desenho", "grafico", "formula estrutural"];
 const SOURCE_SIGNALS = ["fontes", "referencias", "bibliografia", "papers", "artigos sobre", "literatura sobre", "estado da arte", "cite fontes"];
 const REVISE_SIGNALS = ["revise", "revisar", "revisao", "critique", "avalie meu", "avalie este", "avalie esse", "corrija", "corrigir", "de feedback", "melhore meu"];
-const EXPLAIN_SIGNALS = ["explique", "explicar", "explica", "o que e", "o que sao", "como funciona", "por que", "porque", "defina", "definir", "qual a diferenca", "diferenca entre", "me ensine"];
+const EXPLAIN_SIGNALS = ["explique", "explicar", "explica", "o que e", "o que sao", "como funciona", "por que", "porque", "defina", "definir", "qual a diferenca", "diferenca entre", "me ensine", "me ensina", "quero aprender", "quero entender", "entender melhor", "aprender sobre", "engenharia reversa"];
 const DEEP_SIGNALS = /(a fundo|aprofund|detalhad|minucios|exaustiv|bem completo|passo a passo)/;
 
 const has = (t: string, arr: string[]) => arr.some((k) => t.includes(k));
@@ -124,8 +124,8 @@ const SYSTEM = [
   `intenções válidas: ${INTENT_IDS.join(" | ")}.`,
   "- conversa: saudação / small talk, sem tarefa.",
   "- duvida_rapida: pergunta objetiva e curta.",
-  "- explicar_conceito: pedir explicação / entendimento de um tema.",
-  "- gerar_artefato: pedir artefato de estudo (mapa mental, flashcards, resumo, timeline, podcast, vídeo, quiz).",
+  "- explicar_conceito: pedir explicação / entendimento de um tema — inclui 'quero aprender/entender X', 'como funciona X' e 'faz engenharia reversa de X'.",
+  "- gerar_artefato: pedir artefato de estudo (mapa mental, diagrama, esquema, fluxograma, flashcards, resumo, timeline, podcast, vídeo, quiz).",
   "- criar_trabalho: pedir trabalho acadêmico completo (artigo, TCC, monografia, relatório, redação).",
   "- pesquisar_fontes: pedir fontes / referências / bibliografia / papers.",
   "- revisar: pedir revisão / crítica / correção de algo do usuário.",
