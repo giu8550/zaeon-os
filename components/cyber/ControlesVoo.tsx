@@ -23,7 +23,24 @@ function Segurar(p: { rotulo: string; aria: string; on: (v: boolean) => void; cl
   );
 }
 
-export default function ControlesVoo({ engine, touch, pousado }: { engine: React.MutableRefObject<CyberEngine | null>; touch: boolean; pousado: boolean }) {
+/** MOTO: ⚡ BOOST (segurar; Shift no teclado) com o tanque — a barra lê o engine a cada quadro (sem re-render) */
+function Boost({ engine, style }: { engine: React.MutableRefObject<CyberEngine | null>; style: React.CSSProperties }) {
+  const barra = useRef<HTMLDivElement>(null), caixa = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let id = 0;
+    const f = () => { const b = engine.current?.tanqueMoto; if (b && barra.current && caixa.current) { barra.current.style.width = `${Math.round(b.tanque * 100)}%`; caixa.current.dataset.aceso = b.aceso ? "1" : "0"; } id = requestAnimationFrame(f); };
+    id = requestAnimationFrame(f);
+    return () => { cancelAnimationFrame(id); engine.current?.boostMoto(false); };
+  }, [engine]);
+  return (
+    <div ref={caixa} className="group absolute z-[25] flex flex-col items-center gap-1" style={style}>
+      <Segurar aria="Boost (segurar; Shift no teclado)" rotulo="⚡ Boost" on={(v) => engine.current?.boostMoto(v)} className="h-[62px] w-[78px] text-[13px] group-data-[aceso=1]:bg-amber-300/45 group-data-[aceso=1]:border-amber-200" />
+      <div className="h-[5px] w-[70px] overflow-hidden rounded-full bg-white/15"><div ref={barra} className="h-full rounded-full bg-gradient-to-r from-amber-300 to-fuchsia-400" style={{ width: "100%" }} /></div>
+    </div>
+  );
+}
+
+export default function ControlesVoo({ engine, touch, pousado, moto = false }: { engine: React.MutableRefObject<CyberEngine | null>; touch: boolean; pousado: boolean; moto?: boolean }) {
   const dir = useRef({ x: 0, z: 0 });
   // janela estreita: o direcional sobe pra cima dos botões verticais (não cobre o chat, que fica embaixo à esquerda)
   const [estreita, setEstreita] = useState(false);
@@ -46,17 +63,20 @@ export default function ControlesVoo({ engine, touch, pousado }: { engine: React
         <button type="button" onClick={() => engine.current?.pousar()} className={`${BTN} absolute z-[25] h-[44px] px-4 text-[12px]`}
           style={{ right: "max(22px, env(safe-area-inset-right))", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 144px)" }}>Pousar</button>
       )}
-      {/* direção: no desktop um direcional de 4 setas (relativo à câmera, como WASD); no celular é o joystick */}
+      {/* ⚡ ao lado do Subir (celular / janela estreita, onde o direcional não fica ali) ou à esquerda do direcional */}
+      {moto && <Boost engine={engine} style={touch || estreita ? { right: "calc(max(22px, env(safe-area-inset-right)) + 88px)", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 72px)" } : { ...base, right: "calc(max(22px, env(safe-area-inset-right)) + 254px)" }} />}
+      {/* direção: no desktop um direcional de 4 setas (relativo à câmera, como WASD; na moto, ▲▼ acelera/freia e ◀▶
+          esterça); no celular é o joystick */}
       {!touch && (
-        <div role="group" aria-label="Direção da nave" className="absolute z-[25] grid grid-cols-3 grid-rows-3 gap-1" style={estreita ? { right: "max(14px, env(safe-area-inset-right))", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 196px)" } : { ...base, right: "calc(max(22px, env(safe-area-inset-right)) + 92px)" }}>
+        <div role="group" aria-label={moto ? "Acelerador e guidão da moto" : "Direção da nave"} className="absolute z-[25] grid grid-cols-3 grid-rows-3 gap-1" style={estreita ? { right: "max(14px, env(safe-area-inset-right))", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 196px)" } : { ...base, right: "calc(max(22px, env(safe-area-inset-right)) + 92px)" }}>
           <span />
-          <Segurar aria="Frente" rotulo="▲" on={eixo("z", -1)} className="h-[46px] w-[46px] text-[15px]" />
+          <Segurar aria={moto ? "Acelerar" : "Frente"} rotulo="▲" on={eixo("z", -1)} className="h-[46px] w-[46px] text-[15px]" />
           <span />
           <Segurar aria="Esquerda" rotulo="◀" on={eixo("x", -1)} className="h-[46px] w-[46px] text-[15px]" />
           <span />
           <Segurar aria="Direita" rotulo="▶" on={eixo("x", 1)} className="h-[46px] w-[46px] text-[15px]" />
           <span />
-          <Segurar aria="Trás" rotulo="▼" on={eixo("z", 1)} className="h-[46px] w-[46px] text-[15px]" />
+          <Segurar aria={moto ? "Frear" : "Trás"} rotulo="▼" on={eixo("z", 1)} className="h-[46px] w-[46px] text-[15px]" />
           <span />
         </div>
       )}
