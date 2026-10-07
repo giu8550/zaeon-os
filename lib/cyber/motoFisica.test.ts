@@ -3,7 +3,7 @@ import { PILOTAGEM, motoParada, passoMotoSub, sensacaoDeVelocidade, type Comando
 
 const NADA: ComandoMoto = { acel: 0, giro: 0, subir: false, descer: false, boost: false };
 /** no ar (longe do chão e de tudo), parada, rumo +z */
-const noAr = (): EstadoMoto => motoParada(300, 120, 300, 0);
+const noAr = (): EstadoMoto => motoParada(300, 20, 300, 0);
 const pilotar = (s: EstadoMoto, c: Partial<ComandoMoto>, seg: number) => { for (let i = 0; i < seg * 30; i++) s = passoMotoSub(s, { ...NADA, ...c }, 1 / 30).s; return s; };
 const vel = (s: EstadoMoto) => Math.hypot(s.vx, s.vz);
 
@@ -73,7 +73,23 @@ describe("pilotagem da moto (dirigibilidade)", () => {
     const sobe = pilotar(chao, { subir: true }, 1); expect(sobe.y).toBeGreaterThan(5);
   });
   it("o rumo NÃO depende de pra onde a câmera olha (W é sempre a frente da moto)", () => {
-    const s = pilotar(motoParada(300, 120, 300, Math.PI / 2), { acel: 1 }, 3);
+    const s = pilotar(motoParada(300, 20, 300, Math.PI / 2), { acel: 1 }, 3);
     expect(s.x - 300).toBeGreaterThan(30); expect(Math.abs(s.z - 300)).toBeLessThan(1e-6);
+  });
+  it("ALTURA: sobe no máximo alturaMax acima do chão de baixo — segurando SUBIR, para lá", () => {
+    const s = pilotar(motoParada(300, 0, 300, 0), { subir: true }, 8);
+    expect(s.y).toBeLessThanOrEqual(PILOTAGEM.alturaMax + 1e-6); expect(s.y).toBeGreaterThan(PILOTAGEM.alturaMax - 1.5);
+  });
+  it("sobe devagar e DESCE mais devagar que sobe (nada de despencar)", () => {
+    const sobe = pilotar(motoParada(300, 0, 300, 0), { subir: true }, 1), desce = pilotar(motoParada(300, 25, 300, 0), { descer: true }, 1);
+    expect(sobe.y).toBeLessThan(15); expect(sobe.y).toBeGreaterThan(5);
+    expect(25 - desce.y).toBeLessThan(sobe.y); expect(25 - desce.y).toBeGreaterThan(2);
+    expect(pilotar(motoParada(300, 25, 300, 0), { descer: true }, 1.5).vy).toBeGreaterThanOrEqual(-PILOTAGEM.desce - 1e-6);
+  });
+  it("passou da borda (chão sumiu lá embaixo): não sobe e desce PLANANDO até ficar abaixo do teto", () => {
+    let s = motoParada(300, 450, 300, 0);   // 450 m acima do chão do mapa (como quem sai da borda da Zaeon)
+    s = pilotar(s, { subir: true }, 2); expect(s.y).toBeLessThan(450);
+    expect(s.vy).toBeLessThan(-PILOTAGEM.planaMin + 1e-6); expect(s.vy).toBeGreaterThanOrEqual(-PILOTAGEM.planaMax - 1e-6);
+    s = pilotar(s, {}, 60); expect(s.y).toBeLessThanOrEqual(PILOTAGEM.alturaMax + 1.5);
   });
 });

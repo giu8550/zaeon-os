@@ -6,7 +6,10 @@
  *  - INCLINA na curva com o ângulo de moto de verdade: tan θ = v·ω / g (v = velocidade, ω = giro em rad/s);
  *  - ADERÊNCIA: a velocidade de lado some aos poucos (a traseira escorrega um pouco na curva; no boost, mais);
  *  - BOOST: tanque que esvazia em `boost.dura` s e recarga sozinho; só pega com a moto andando e no ar;
- *  - subir/descer e o pouso são os do voo (lib/cyber/voo: `resolverVoo`), com os mesmos sólidos e teto.
+ *  - ALTURA: moto não é nave — sobe no máximo `alturaMax` m acima do CHÃO QUE ESTÁ EMBAIXO (o do mapa, o piso da Zaeon,
+ *    o do lounge…), sobe devagar e DESCE mais devagar ainda; passou da borda de algo alto (o chão sumiu lá embaixo),
+ *    não sobe mais e desce PLANANDO até voltar pra baixo do teto;
+ *  - o pouso e os sólidos são os do voo (lib/cyber/voo: `resolverVoo`).
  * Rumo (`yaw`): frente = (sen yaw, cos yaw), igual à nave e ao grupo da moto. Esquerda do piloto = (cos yaw, −sen yaw).
  */
 import { VOO, chaoDoVoo, resolverVoo, type EstadoVoo, type Pilar } from "./voo";
@@ -27,6 +30,9 @@ export const PILOTAGEM = {
   /** o "g" da inclinação: com o g de verdade (9,8) toda curva já deitava no máximo; com um g de jogo maior a moto
    *  deita POUCO devagar e MUITO rápido/no boost (cruzeiro com o guidão todo ≈ 30°, boost ≈ 36°) */
   g: 22,
+  /** ALTURA: teto acima do chão de baixo (m); subida e descida (m/s) e quão rápido chega nelas; a descida forçada
+   *  (acima do teto, ex.: saiu da borda da Zaeon) vai de `planaMin` a `planaMax` m/s conforme o quanto sobra */
+  alturaMax: 30, sobe: 15, desce: 8, inerciaV: 2.4, planaMin: 6, planaMax: 22,
 } as const;
 
 /** o estado da moto = o do voo + o guidão (−1..1, suavizado), a inclinação (rad; < 0 = deita pra ESQUERDA, a
@@ -43,7 +49,7 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax): { s: EstadoMoto; pousado: boolean; chaoY: number } {
   const P = PILOTAGEM, acel = clamp(c.acel, -1, 1), giroCmd = clamp(c.giro, -1, 1);
   // rente ao chão a moto não anda (tem que decolar, igual à nave) — mas o guidão gira ela no lugar pra mirar
-  const rente = s.y - chaoDoVoo(s, solidos) < VOO.decolar;
+  const chao = chaoDoVoo(s, solidos), rente = s.y - chao < VOO.decolar, tetoAqui = chao + P.alturaMax;
   const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw), lx = Math.cos(s.yaw), lz = -Math.sin(s.yaw);
   let frente = s.vx * fx + s.vz * fz, lado = s.vx * lx + s.vz * lz;
   // BOOST: só com a moto andando pra frente, no ar e com tanque; esvazia aceso, recarrega apagado
@@ -77,9 +83,14 @@ export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pi
   const esfrega = 1 - 0.6 * Math.abs(lado2 - sobra) / Math.max(1, veloc);
   frente2 = Math.sign(frente2 || 1) * Math.sqrt(Math.max(0, veloc * veloc - sobra * sobra)) * esfrega; lado2 = sobra;
   const vx = nfx * frente2 + nlx * lado2, vz = nfz * frente2 + nlz * lado2;
-  // vertical: o mesmo do voo
-  const ty = (c.subir ? VOO.sobe : 0) - (c.descer ? VOO.sobe : 0);
-  const vy = s.vy + (ty - s.vy) * Math.min(1, dt * (c.subir || c.descer ? VOO.inercia : VOO.freio));
+  // vertical: sobe devagar, desce mais devagar ainda; no teto (alturaMax acima do chão de baixo) não sobe mais;
+  // acima dele (o chão "sumiu": passou da borda da Zaeon, do lounge) desce planando
+  let ty = (c.subir ? P.sobe : 0) - (c.descer ? P.desce : 0);
+  if (ty > 0 && s.y >= tetoAqui - 0.5) ty = 0;
+  const acima = s.y - tetoAqui;
+  if (acima > 1) ty = Math.min(ty, -Math.min(P.planaMax, P.planaMin + acima * 0.05));
+  let vy = s.vy + (ty - s.vy) * Math.min(1, dt * P.inerciaV);
+  if (vy > 0 && s.y + vy * dt > tetoAqui) vy = Math.max(0, (tetoAqui - s.y) / dt) * 0.5;   // encosta no teto macio
   // INCLINAÇÃO de moto: tan θ = v·ω / g (g de jogo — ver PILOTAGEM.g) (deita pro lado de DENTRO da curva); no chão, reta
   const alvo = rente ? 0 : clamp(-Math.atan((frente2 * omega) / P.g), -P.inclinaMax, P.inclinaMax);
   const inclina = s.inclina + (alvo - s.inclina) * Math.min(1, dt * P.inclinaResposta);

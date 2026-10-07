@@ -6,13 +6,16 @@
  *  - modelo de distância (some longe), teto de vozes simultâneas, cadência de passos;
  *  - o leito ambiente "abaixa" enquanto a música da intro toca (cross-fade quando ela fadeia).
  */
+import { SINTESE_MOTO, type NomeSomMoto } from "./somMoto";
+
 export const PASTA_SONS = "/assets/sounds/cyber/";
 
 export type NomeSom =
   | "space-bed" | "blackhole-hum" | "crystals" | "ship-flight" | "ship-idle"
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
-  | "jetpack" | "jato-sopro" | "baque";
+  | "jetpack" | "jato-sopro" | "baque"
+  | NomeSomMoto;
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -26,6 +29,18 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   // SINTETIZADOS (sem arquivo): gerados no navegador por sintetizarJetpack / sintetizarBaque
   "jato-sopro": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
   baque: { modo: "pos", loop: false, volume: 0.95, sintetico: true },   // o corpo batendo no chão (força pela queda)
+  // MOTO por estágio (lib/cyber/somMoto, sintetizados): loops de motor/lenta/vento/turbina + os one-shots
+  "moto-motor": { modo: "pos", loop: true, volume: 0.55, sintetico: true },
+  "moto-lenta": { modo: "pos", loop: true, volume: 0.5, sintetico: true },
+  "moto-vento": { modo: "pos", loop: true, volume: 0.35, sintetico: true },
+  "moto-turbina": { modo: "pos", loop: true, volume: 0.6, sintetico: true },
+  "moto-partida": { modo: "pos", loop: false, volume: 0.75, sintetico: true },
+  "moto-desliga": { modo: "pos", loop: false, volume: 0.6, sintetico: true },
+  "moto-boost": { modo: "pos", loop: false, volume: 0.85, sintetico: true },
+  "moto-freio": { modo: "pos", loop: false, volume: 0.45, sintetico: true },
+  "moto-decola": { modo: "pos", loop: false, volume: 0.55, sintetico: true },
+  "moto-pouso": { modo: "pos", loop: false, volume: 0.8, sintetico: true },
+  "moto-seta": { modo: "2d", loop: false, volume: 0.22, sintetico: true },   // o pisca é só pra quem pilota (no painel)
   "space-bed": { modo: "2d", loop: true, volume: 0.09, taxa: TAXA_432 },   // AMBIENTE: bem baixo, por baixo de passos/efeitos (era 0,22)
   "blackhole-hum": { modo: "pos", loop: true, volume: 0.55 },
   crystals: { modo: "pos", loop: true, volume: 0.3 },
@@ -94,7 +109,7 @@ export function sintetizarBaque(sr: number): Float32Array {
   for (let i = 0; i < 64; i++) out[n - 1 - i]! *= i / 64;   // fim sem clique
   return normalizar(out, 0.92);
 }
-export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque };
+export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO };
 
 /** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo).
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);

@@ -39,7 +39,8 @@ import { atualizarCamuflagem, camuflarGrupo, pararCamuflagem } from "./camuflage
 import { criarMoto, type MotoHandle } from "./Moto";
 import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
 import { MOTO, motoPerto, vagas } from "@/lib/cyber/motos";
-import { motoParada, passoMotoSub, sensacaoDeVelocidade, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
+import { PILOTAGEM, motoParada, passoMotoSub, sensacaoDeVelocidade, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
+import { LOOPS_MOTO, eventosDaMoto, mixDaMoto, setaAcesa, somMotoParada, type EstadoSomMoto } from "@/lib/cyber/somMoto";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
@@ -238,12 +239,13 @@ export class CyberEngine {
   private ilhota: number | null = null;
   /** MOTOS VOADORAS: uma por vaga do estacionamento (lib/cyber/motos). Montado = `moto` (a vaga); a moto anda com
    *  o mesmo voo da nave (passoVooSub), com teto baixo. Descer devolve a moto pra vaga. */
-  private motos: { h: MotoHandle; idle: LoopSom | null; voo: LoopSom | null; yawAnt: number; yAnt: number | null; vy: number }[] = [];
+  /** `loops` = os 4 loops do motor (lib/cyber/somMoto) enquanto alguém está montado; `som` = o estágio no quadro anterior */
+  private motos: { h: MotoHandle; loops: Record<(typeof LOOPS_MOTO)[number], LoopSom> | null; som: EstadoSomMoto; yawAnt: number; yAnt: number | null; vy: number }[] = [];
   private moto: number | null = null; private motoEst: EstadoMoto = motoParada(0, 0, 0, 0); private motoPousado = true;
   /** cliquei numa moto longe: anda até ela e monta ao chegar */
   private motoAlvo: number | null = null;
   /** botão ⚡ da moto apertado; a câmera volta pra trás da moto a partir de `camSegueEm` (mexeu o mouse = espera) */
-  private boostBotao = false; private camSegueEm = 0;
+  private boostBotao = false; private camSegueEm = 0; private acelMoto = 0;
   /** a sensação de velocidade na tela (suavizada): FOV, blur radial, linhas de velocidade, tremida do boost */
   private velTela = 0; private fovBase = 0; private fxVel: VelocidadeTela | null = null;
   /** a capela, a laje do lounge e a torre do DJ: sólidos pra quem VOA (moto/nave) — fixos, calculados uma vez */
@@ -315,10 +317,10 @@ export class CyberEngine {
       pararCamuflagem(typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
       this.nave = criarNave({ low, cor: "#2f7bff" }); loteNave(this.nave); this.cena.scene.add(this.nave.group);
       vagas().forEach((v, i) => {
-        const h = criarMoto({ cor: CORES_MOTO[i % CORES_MOTO.length]!, low }); h.group.position.set(v.x, 0, v.z); h.group.rotation.y = v.yaw;
-        fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5 }), manter: comDescendentes(h.alvos) });
+        const h = criarMoto({ cor: CORES_MOTO[i % CORES_MOTO.length]!, low, estilo: i % 3 }); h.group.position.set(v.x, 0, v.z); h.group.rotation.y = v.yaw;
+        fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5, boost: k % 3 === 0 ? 1 : 0, seta: (k % 3) - 1 }), manter: comDescendentes(h.alvos) });
         for (let k = 0; k < 6; k++) h.atualizar({ dt: 1, t: 0, voando: false, vel: 0, curva: 0 });   // parada de novo
-        this.cena.scene.add(h.group); this.motos.push({ h, idle: null, voo: null, yawAnt: v.yaw, yAnt: null, vy: 0 });
+        this.cena.scene.add(h.group); this.motos.push({ h, loops: null, som: somMotoParada, yawAnt: v.yaw, yAnt: null, vy: 0 });
       });
       const marca = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.2, 40), new THREE.MeshBasicMaterial({ color: 0x7fe0ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
       marca.rotation.x = -Math.PI / 2; marca.visible = false; this.cena.scene.add(marca);
@@ -683,7 +685,6 @@ export class CyberEngine {
     this.altoEm = null; this.yNav = 0;   // montado, o nível é o da moto
     this.motoPousado = true; this.autoPouso = false;
     this.sitT = 0; this.alvo = null; this.alvoDepois = null; this.falandoCom = null; this.jetV = { x: 0, z: 0 };
-    this.som.tocar("ship-touchdown", this.motos[s]!.h.group.position, { dist: DISTANCIA.eu, volume: 0.35, taxa: 1.5 });
     return true;
   }
   /** a altura de uma vaga: chão, ou o piso da Zaeon (que flutua) */
@@ -831,17 +832,25 @@ export class CyberEngine {
     this.motos.forEach((m, i) => {
       const quem = ocup.get(i), g = m.h.group;
       let voando = false, vel = 0;
-      let inclina: number | undefined, boost = 0;
-      if (quem === this.eu) { const e = this.motoEst; g.position.set(e.x, e.y, e.z); g.rotation.y = e.yaw; voando = !this.motoPousado; vel = Math.hypot(e.vx, e.vz) / VOO.vel; inclina = e.inclina; boost = e.boost ? 1 : 0; }
+      let inclina: number | undefined, boost = 0, guidao = 0;
+      if (quem === this.eu) { const e = this.motoEst; g.position.set(e.x, e.y, e.z); g.rotation.y = e.yaw; voando = !this.motoPousado; vel = Math.hypot(e.vx, e.vz) / VOO.vel; inclina = e.inclina; boost = e.boost ? 1 : 0; guidao = e.guidao; }
       else if (quem?.moto) { g.position.set(quem.pos.x, quem.alt, quem.pos.z); g.rotation.y = quem.moto.yaw; voando = quem.moving || quem.alt > chaoDoVoo({ x: quem.pos.x, y: quem.alt, z: quem.pos.z }, this.solidosCidade) + 0.5; vel = quem.moving ? 1 : 0; }   // (pousada na Zaeon, a 450 m, não é "voando")
       else { const v = vs[i]!; g.position.set(v.x, this.yDaVaga(v), v.z); g.rotation.y = v.yaw; }
       let d = g.rotation.y - m.yawAnt; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; m.yawAnt = g.rotation.y;
       const y = g.position.y; m.vy = m.yAnt === null || dt <= 0 ? 0 : m.vy + ((y - m.yAnt) / dt - m.vy) * Math.min(1, dt * 4); m.yAnt = y;
-      m.h.atualizar({ dt, t, voando, vel, curva: d / Math.max(dt, 1e-3), vy: m.vy, inclina, boost });
-      // som: o motor (mais agudo que o da nave) só em quem está montado; o meu quase não paneia
-      if (quem && !m.idle) { m.idle = this.som.loop("ship-idle", g, { dist: quem === this.eu ? DISTANCIA.naveLocal : DISTANCIA.padrao }); m.voo = this.som.loop("ship-flight", g, { dist: quem === this.eu ? DISTANCIA.naveLocal : DISTANCIA.padrao }); this.som.taxaLoop(m.idle, 1.7); this.som.taxaLoop(m.voo, 1.45); }
-      if (!quem && m.idle) { this.som.soltarLoop(m.idle); if (m.voo) this.som.soltarLoop(m.voo); m.idle = null; m.voo = null; }
-      if (m.idle && m.voo) { this.som.volumeLoop(m.idle, voando ? 0 : 0.45); this.som.volumeLoop(m.voo, voando ? (0.3 + 0.5 * Math.min(1, vel)) : 0); this.som.taxaLoop(m.voo, 1.3 + 0.35 * Math.min(1.8, vel) + 0.25 * boost); }   // o motor sobe de tom com a velocidade (e mais no boost)
+      const curva = d / Math.max(dt, 1e-3);
+      if (quem && quem !== this.eu) guidao = Math.max(-1, Math.min(1, -curva * 2.5));   // dos outros: o guidão sai do giro (direita = rumo diminui)
+      const seta = quem && voando ? setaAcesa(guidao, t) : 0;
+      m.h.atualizar({ dt, t, voando, vel, curva, vy: m.vy, inclina, boost, seta });
+      // SOM por estágio (lib/cyber/somMoto): loops do motor/lenta/vento/turbina + one-shots (partida, decola, boost,
+      // freio, pisca, pouso, desliga). A minha moto quase não paneia; o pisca só eu ouço (é do painel)
+      const minha = quem === this.eu, dist = minha ? DISTANCIA.naveLocal : DISTANCIA.padrao;
+      const est: EstadoSomMoto = quem ? { montada: true, voando, vel: minha ? Math.hypot(this.motoEst.vx, this.motoEst.vz) / PILOTAGEM.vel : quem.moving ? 0.8 : 0, acel: minha ? this.acelMoto : 0, boost: boost > 0, seta } : somMotoParada;
+      for (const ev of eventosDaMoto(m.som, est)) if (ev !== "moto-seta" || minha) this.som.tocar(ev, ev === "moto-seta" ? null : g.position, { dist, seguir: g, taxa: ev === "moto-seta" && est.seta === 0 ? 0.8 : 1 });
+      m.som = est;
+      if (quem && !m.loops) m.loops = Object.fromEntries(LOOPS_MOTO.map((n) => [n, this.som.loop(n, g, { dist })])) as Record<(typeof LOOPS_MOTO)[number], LoopSom>;
+      if (!quem && m.loops) { for (const l of Object.values(m.loops)) this.som.soltarLoop(l); m.loops = null; }
+      if (m.loops) { const mix = mixDaMoto(est); for (const n of LOOPS_MOTO) { this.som.volumeLoop(m.loops[n], mix[n].vol, n === "moto-turbina" ? 6 : undefined); this.som.taxaLoop(m.loops[n], mix[n].taxa); } }
     });
     return ocup;
   }
@@ -1273,10 +1282,8 @@ export class CyberEngine {
       const s = this.assento(); eu.pos.set(s.x, 0, s.z); eu.facing = this.rotAssento(); this.sitT = 1; eu.moving = false;
     } else if (this.moto !== null) {
       // MOTO: pilotagem de moto (lib/cyber/motoFisica) — W/S acelera/freia, A/D esterça, Shift/⚡ boost
-      const c = this.comandoDeMoto();
-      const ant = this.motoEst.boost;
+      const c = this.comandoDeMoto(); this.acelMoto = c.acel;
       const r = passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
-      if (r.s.boost && !ant) this.som.tocar("ship-touchdown", this.motos[this.moto]!.h.group.position, { dist: DISTANCIA.eu, volume: 0.3, taxa: 2.2 });   // o "tranco" do boost
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
       eu.pos.set(r.s.x, 0, r.s.z); eu.facing = r.s.yaw; eu.moving = Math.hypot(r.s.vx, r.s.vz) > 1; this.sitT = 0;   // "andando" = a moto em movimento (o netcode extrapola)
     } else if (this.pilotando) {

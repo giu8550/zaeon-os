@@ -75,7 +75,10 @@ export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t
       const g = k.obj.geometry; if (!g.boundingSphere) g.computeBoundingSphere();
       esf.copy(g.boundingSphere!).applyMatrix4(k.rel); c.copy(esf.center);
       const pequeno = esf.radius < PEQUENO, mat = k.obj.material as THREE.Material;
-      const chave = `${k.quadro.id}|${mat.uuid}|${Math.floor(c.x / CELULA)},${Math.floor(c.y / CELULA)},${Math.floor(c.z / CELULA)}|${pequeno ? 1 : 0}|${k.obj.renderOrder}|${k.obj.frustumCulled ? 1 : 0}`;
+      // células CENTRADAS na origem do quadro (meia célula de deslocamento): com a fronteira em 0, tudo que é simétrico
+      // (esquerda/direita, frente/trás de uma moto) caía em células diferentes e nunca juntava
+      const cel = (v: number) => Math.floor(v / CELULA + 0.5);
+      const chave = `${k.quadro.id}|${mat.uuid}|${cel(c.x)},${cel(c.y)},${cel(c.z)}|${pequeno ? 1 : 0}|${k.obj.renderOrder}|${k.obj.frustumCulled ? 1 : 0}`;
       let gr = grupos.get(chave); if (!gr) { gr = { quadro: k.quadro, mat, pequeno, l: [] }; grupos.set(chave, gr); }
       gr.l.push(k);
     }
