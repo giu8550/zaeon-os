@@ -89,7 +89,7 @@ function AvatarVivo({ nome, size = 32, className = "", estado: estadoProp = "idl
   // prioridade de vida: reagindo > hover/selecionado > parado na tela (no celular, parado não pede)
   const ativo = sinal !== "idle";
   const prioridade = !podeViver || !naTela || reduzido ? PRIORIDADE.nenhuma
-    : ativo ? PRIORIDADE.ativo
+    : ativo ? (destaque ? PRIORIDADE.protagonista : PRIORIDADE.ativo)
     : hover || destaque ? PRIORIDADE.interacao
     : lite ? PRIORIDADE.nenhuma : PRIORIDADE.ambiente;
   const vivo = useVaga(prioridade, lite);

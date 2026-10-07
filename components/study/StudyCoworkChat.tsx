@@ -29,7 +29,7 @@ import ChatMarkdown from "@/components/study/ChatMarkdown";
 import AuraThinking from "@/components/study/AuraThinking";
 import AgentePilula, { RECUO_ROSTO } from "@/components/agents/avatar/AgentePilula";
 import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
-import { useManifesto, usePublicarPresenca } from "@/components/agents/avatar/hooks";
+import { useFalaAoChegar, useManifesto, usePublicarPresenca } from "@/components/agents/avatar/hooks";
 import { sinalDoChat } from "@/lib/avatars/presenca";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
@@ -846,11 +846,15 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // (boas-vindas, pílula da resposta, bolinha da aba) — ouvindo enquanto digita, pensando, falando.
   const ultimaMsg = messages.find((m) => m.id === ultimaResposta);
   const temTexto = !!(ultimaMsg?.text || ultimaMsg?.answer);
-  const sinalAura = sinalDoChat({
+  // resposta estruturada chega inteira e é DATILOGRAFADA: enquanto o núcleo digita, ela fala
+  const [digitandoResposta, setDigitandoResposta] = useState<string | null>(null);
+  const sinalTurno = sinalDoChat({
     pensando: !!ultimaMsg && !temTexto && (sending || !!ultimaMsg.pendente || !!ultimaMsg.streaming),
-    falando: !!ultimaMsg && temTexto && (!!ultimaMsg.streaming || !!ultimaMsg.pendente || (sending && !ultimaMsg.answer)),
+    falando: !!ultimaMsg && temTexto && (!!ultimaMsg.streaming || !!ultimaMsg.pendente || (sending && !ultimaMsg.answer) || digitandoResposta === ultimaMsg.id),
     digitando: !sending && input.trim().length > 0,
   });
+  // e se mesmo assim pulou direto de "pensando" pro fim, ela fala a resposta por um tempo do tamanho dela
+  const sinalAura = useFalaAoChegar(sinalTurno, ultimaMsg?.answer?.nucleo || ultimaMsg?.text || "");
   usePublicarPresenca("aura", sinalAura);
   const recuo = useManifesto("aura") ? RECUO_ROSTO : "";
   /** Mini-ações de uma resposta da Aura (copiar/regenerar/👍👎/sub-tema). */
@@ -1098,6 +1102,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                     <StructuredAnswerView
                       answer={m.answer}
                       typing={!!m.fresh}
+                      onDigitando={m.id === ultimaResposta ? (on) => setDigitandoResposta((cur) => (on ? m.id : cur === m.id ? null : cur)) : undefined}
                       acoes={acoesDa(m, i)}
                       onConcept={(c) => void send(`Me explica melhor: ${c}`)}
                       onNext={(s) => void send(s)}

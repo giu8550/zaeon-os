@@ -51,3 +51,31 @@ describe("useSinalComSorriso", () => {
     expect(result.current).toBe("idle");
   });
 });
+
+describe("AgentAvatar · falando (o caso do celular: 1 vaga, bolinha da aba presente)", () => {
+  const comBoca: AvatarManifest = {
+    ...manifest,
+    estados: { ...manifest.estados, talk: "/a/talk.webp", talk_half: "/a/talk_half.webp" },
+    pequeno: { ...manifest.pequeno, talk: "/a/talk.sm.webp", talk_half: "/a/talk_half.sm.webp" },
+  };
+  it("a resposta mais recente abre a boca enquanto fala, mesmo com a bolinha da aba pedindo vaga", async () => {
+    vi.useFakeTimers();
+    // tela estreita → modo lite → só 1 vivo por vez
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("max-width"), addEventListener() {}, removeEventListener() {} }));
+    const { container } = render(
+      <>
+        <AgentAvatar manifest={comBoca} nome="Aura" size={24} estado="falando" vivo={false} />
+        <AgentAvatar manifest={comBoca} nome="Aura" size={36} estado="falando" destaque />
+      </>,
+    );
+    const [aba, resposta] = [...container.querySelectorAll("span[role=img]")] as HTMLElement[];
+    const vistos = new Set<string>();
+    for (let k = 0; k < 40; k++) {
+      act(() => { vi.advanceTimersByTime(60); });
+      vistos.add(visivel(resposta) ?? "");
+    }
+    expect([...vistos].some((s) => s.includes("talk"))).toBe(true); // a boca abriu
+    expect(visivel(aba)).toBe("/a/idle.sm.webp");                    // a bolinha não gastou a vaga
+    vi.unstubAllGlobals();
+  });
+});

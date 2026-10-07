@@ -87,12 +87,15 @@ export default function SpriteAvatar({
   const atual: EstadoSprite = bocaVoz ?? quadroBoca ?? (piscando ? "blink" : repouso);
 
   // Classes de movimento do conjunto (keyframes abaixo, desligados em reduced-motion)
-  const mov = reduzido ? "" : sinal === "pensando" ? "zav-pensa" : sinal === "erro" ? "zav-treme" : sinal === "ouvindo" ? "zav-ouve" : animar ? "zav-respira" : "";
+  // falando: a cabeça acompanha as sílabas (boca aberta = sobe um tico) — lê como fala até em 30 px
+  const bocaAberta = (bocaVoz ?? quadroBoca ?? "idle") !== "idle";
+  const mov = reduzido ? "" : sinal === "pensando" ? "zav-pensa" : sinal === "erro" ? "zav-treme" : sinal === "ouvindo" ? "zav-ouve" : sinal === "falando" && animar ? "" : animar ? "zav-respira" : "";
+  const fala = !reduzido && sinal === "falando" && animar ? `translateY(${bocaAberta ? -2.6 : 0}%) scale(${bocaAberta ? 1.018 : 1})` : undefined;
   const desloc = !reduzido && olhar ? `translate(${(olhar.x * 3).toFixed(2)}%, ${(olhar.y * 2).toFixed(2)}%)` : undefined;
   return (
     <span aria-hidden className={`zav-quadros absolute inset-0 ${mov}`}>
       <style>{ESTILO}</style>
-      <span className="absolute inset-0 transition-transform duration-300 ease-out" style={{ transform: desloc }}>
+      <span className={`absolute inset-0 transition-transform ease-out ${fala ? "duration-[90ms]" : "duration-300"}`} style={{ transform: [desloc, fala].filter(Boolean).join(" ") || undefined, transformOrigin: "50% 90%" }}>
         {ESTADOS_SPRITE.filter(tem).map((e) => (
           // eslint-disable-next-line @next/next/no-img-element
           <img

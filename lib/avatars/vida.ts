@@ -14,6 +14,8 @@ export const PRIORIDADE = {
   interacao: 2,
   /** o agente está pensando/falando/reagindo — nunca fica sem vida enquanto houver vaga */
   ativo: 3,
+  /** o rosto DA CONVERSA reagindo (boas-vindas / resposta mais recente): ganha de qualquer outro */
+  protagonista: 4,
 } as const;
 
 export type Orcamento = {

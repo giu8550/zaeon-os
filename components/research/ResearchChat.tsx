@@ -15,7 +15,7 @@ import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
 import AgentePilula, { RECUO_ROSTO } from "@/components/agents/avatar/AgentePilula";
 import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
-import { useManifesto, usePublicarPresenca } from "@/components/agents/avatar/hooks";
+import { useFalaAoChegar, useManifesto, usePublicarPresenca } from "@/components/agents/avatar/hooks";
 import { sinalDoChat } from "@/lib/avatars/presenca";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import { researchWorkType } from "@/lib/agent/tools";
@@ -504,11 +504,13 @@ export default function ResearchChat({
   // O ROSTO É O CHAT: o que a conversa está fazendo vira o sinal de todos os rostos da Aura
   // (boas-vindas, pílula da resposta, bolinha da aba) — ouvindo enquanto digita, pensando, falando.
   const ultimaMsg = messages.find((m) => m.id === ultimaResposta);
-  const sinalAura = sinalDoChat({
+  const sinalTurno = sinalDoChat({
     pensando: sending && !!ultimaMsg && !ultimaMsg.text && !ultimaMsg.answer,
     falando: sending && !!ultimaMsg && !!(ultimaMsg.text || ultimaMsg.answer),
     digitando: !sending && input.trim().length > 0,
   });
+  // resposta que chega inteira (sem stream) também vem com ela FALANDO, pelo tamanho do texto
+  const sinalAura = useFalaAoChegar(sinalTurno, ultimaMsg?.answer?.nucleo || ultimaMsg?.text || "");
   usePublicarPresenca("aura", sinalAura);
   const recuoRosto = useManifesto("aura") ? RECUO_ROSTO : "";
   /** Índice da pergunta que originou a resposta `i` (pra regenerar). */

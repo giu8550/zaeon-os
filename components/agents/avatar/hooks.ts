@@ -156,3 +156,32 @@ export function usePublicarPresenca(agentId: string, sinal: SinalAvatar): void {
   useEffect(() => { definirPresenca(agentId, { sinal }); }, [agentId, sinal]);
   useEffect(() => () => definirPresenca(agentId, { sinal: "idle", boca: null }), [agentId]);
 }
+
+// ─── fala ao chegar a resposta ──────────────────────────────────────────────
+
+/** Quanto ela "fala" uma resposta que chegou inteira: ~110 ms por palavra, entre 1,4 s e 6 s. */
+export const duracaoFala = (texto: string) => Math.min(6000, Math.max(1400, (texto.trim().split(/\s+/).filter(Boolean).length || 1) * 110));
+
+/**
+ * A resposta tem que vir COM ela falando. Se o turno pulou direto de "pensando" pro fim (resposta
+ * estruturada que chega inteira, sem stream), devolve "falando" por `duracaoFala(texto)` — e só
+ * depois o idle (que dispara o sorriso). Erro ou nova pergunta interrompem.
+ */
+export function useFalaAoChegar(sinal: SinalAvatar, textoResposta: string): SinalAvatar {
+  const anterior = useRef<SinalAvatar>(sinal);
+  const texto = useRef(textoResposta);
+  texto.current = textoResposta;
+  const [falandoAte, setFalandoAte] = useState(0);
+  useEffect(() => {
+    const antes = anterior.current;
+    anterior.current = sinal;
+    if (antes === "pensando" && (sinal === "idle" || sinal === "ouvindo")) {
+      const ms = duracaoFala(texto.current);
+      setFalandoAte(Date.now() + ms);
+      const t = setTimeout(() => setFalandoAte(0), ms);
+      return () => clearTimeout(t);
+    }
+    if (sinal === "pensando" || sinal === "erro" || sinal === "falando") setFalandoAte(0);
+  }, [sinal]);
+  return falandoAte > 0 && (sinal === "idle" || sinal === "ouvindo") ? "falando" : sinal;
+}

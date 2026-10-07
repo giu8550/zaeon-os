@@ -14,6 +14,12 @@ describe("avatares · orçamento de vida", () => {
     expect(o.vivos().sort()).toEqual(["a", "c"]);
     expect(vivo.b).toBe(false);
   });
+  it("no celular (1 vaga) o rosto da conversa ganha da bolinha da aba", () => {
+    const o = criarOrcamento(1);
+    o.pedir("aba", PRIORIDADE.ativo, () => {});
+    o.pedir("resposta", PRIORIDADE.protagonista, () => {});
+    expect(o.vivos()).toEqual(["resposta"]);
+  });
   it("soltar libera a vaga; prioridade 0 não pede; setMax reduz (celular = 1)", () => {
     const o = criarOrcamento(2);
     const n = () => {};

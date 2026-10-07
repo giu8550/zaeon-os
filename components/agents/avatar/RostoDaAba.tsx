@@ -24,7 +24,8 @@ export default function RostoDaAba({ agentId, nome, ativa, size = 24, children }
   if (!manifest) return <>{children}</>;
   return (
     <span className="relative inline-flex shrink-0" title={naoVisto ? `${nome} respondeu` : nome}>
-      <AgentAvatar agentId={agentId} manifest={manifest} nome={nome} size={size} presenca destaque={ativa} />
+      {/* com o chat aberto, quem anima é o rosto da conversa; a bolinha só troca de quadro (sem gastar vaga) */}
+      <AgentAvatar agentId={agentId} manifest={manifest} nome={nome} size={size} presenca vivo={!ativa} />
       {naoVisto && (
         <>
           <span aria-hidden className="absolute inset-0 rounded-full ring-2 ring-cyan-400 animate-ping motion-reduce:animate-none" />

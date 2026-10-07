@@ -5,7 +5,7 @@ import CoworkComposer from "@/components/study/CoworkComposer";
 import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
 import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
 import AgentePilula from "@/components/agents/avatar/AgentePilula";
-import { usePublicarPresenca } from "@/components/agents/avatar/hooks";
+import { useFalaAoChegar, usePublicarPresenca } from "@/components/agents/avatar/hooks";
 import { sinalDoChat } from "@/lib/avatars/presenca";
 
 type Msg = { id: string; role: "user" | "assistant"; text: string };
@@ -24,13 +24,17 @@ export default function ChatPresencaDev() {
   const n = useRef(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  // como o chat de verdade: a conversa acompanha a última mensagem
+  const fim = useRef<HTMLDivElement>(null);
+  useEffect(() => { fim.current?.scrollIntoView({ block: "end" }); }, [msgs]);
 
   const ultima = [...msgs].reverse().find((m) => m.role === "assistant");
-  const sinal = sinalDoChat({
+  const sinalTurno = sinalDoChat({
     pensando: sending && !!ultima && !ultima.text,
     falando: sending && !!ultima && !!ultima.text,
     digitando: !sending && input.trim().length > 0,
   });
+  const sinal = useFalaAoChegar(sinalTurno, ultima?.text || "");
   usePublicarPresenca("aura", sinal);
 
   const enviar = () => {
@@ -82,6 +86,7 @@ export default function ChatPresencaDev() {
                 </div>
               </div>
             ))}
+            <div ref={fim} />
           </div>
           <div className="pb-5">
             <CoworkComposer value={input} onChange={setInput} onSubmit={enviar} onToggleStudio={() => {}} busy={sending} idle={msgs.length === 0} active placeholder="Fale com a Aura…" />
