@@ -11,7 +11,7 @@ agenda do dia, revisão espaçada, prazos, progresso na árvore e credenciais �
 o aluno escreve. "PARE" desliga; "VOLTAR" religa.
 
 ```
-Zaeon (Next) ──HTTP──► sender (Evolution | disparos/ChipFlow) ──► WhatsApp do aluno
+Zaeon (Next) ──► sender (bridge Redis da ChipFlow | Evolution | disparos legado) ──► WhatsApp do aluno
    ▲  cérebro = lib/whatsapp/brain.ts (harness + mentor + memória L3)     │ inbound
    └──── /api/whatsapp/webhook ◄── agent-bridge (/webhook/wa) ◄── Evolution webhook
 ```
@@ -42,7 +42,8 @@ no app (Atlas).
 | `WHATSAPP_PLATFORM_PHONE` | número da plataforma (E.164). Sem ele o card mostra "não configurado". 🔒 |
 | `WHATSAPP_WEBHOOK_SECRET` | segredo do inbound (`x-whatsapp-secret` ou `?token=`). Sem ele o webhook responde 503. |
 | `WHATSAPP_INTERNAL_TOKEN` | token das rotas internas e do tick do scheduler. |
-| `WHATSAPP_PROVIDER` | `evolution` \| `disparos` \| `log` (default: inferido de `EVOLUTION_URL`/`DISPAROS_URL`, senão `log`). |
+| `WHATSAPP_PROVIDER` | `bridge` \| `evolution` \| `disparos` \| `log` (default: inferido de `EVOLUTION_URL` → URL do bridge → `DISPAROS_URL`, senão `log`). |
+| `CHIPFLOW_BRIDGE_REDIS_URL` 🔒, `BRIDGE_REDIS_URL`, `NUM_SHARDS`, `BRIDGE_INSTANCE_ID`, `BRIDGE_TIMEOUT_MS` | provider `bridge`: chip da ChipFlow via Redis Streams (`wa:cmd`/`wa:evt`). O chip de cada agente vem do `AgentChannel` (`PUT /api/admin/agents/:key/canal`); `BRIDGE_INSTANCE_ID` é o fallback. Nunca cai no `REDIS_URL`. Ver `docs/HANDOFF_AGENTE_MENSAGEIRO_V3.md`. |
 | `EVOLUTION_URL`, `EVOLUTION_INSTANCE`, `EVOLUTION_API_KEY` | instância única da plataforma. 🔒 |
 | `DISPAROS_URL`, `DISPAROS_API_KEY`, `DISPAROS_SEND_PATH` | sender via repo de disparos (ChipFlow). ⚠️ seam: confirmar path/corpo. |
 | `WHATSAPP_OPEN_TO_ALL` | `1` abre pra todos (default: só Plus — `whatsappEnabled` de `lib/plans.ts`). |
