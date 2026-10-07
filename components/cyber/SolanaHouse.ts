@@ -199,12 +199,16 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
       caixas(l, lm); listras.push(...l);
     }
     // LEDs dos servidores (piscam devagar)
-    const leds: THREE.MeshBasicMaterial[] = [];
-    for (const r of moveisDoAndar(GARAGEM).filter((x) => x.tipo === "rack")) for (let z = r.z0 + 0.4; z < r.z1 - 0.3; z += 0.7) for (const y of [0.5, 1.1, 1.7, 2.2]) {
-      const mt = new THREE.MeshBasicMaterial({ color: (z * 3 + y) % 2 > 1 ? VERDE : ROXO, transparent: true }); leds.push(mt);
-      const l = add(new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.05), mt)); l.position.set(r.x1 + 0.01, yG + y, z); l.rotation.y = Math.PI / 2;
+    // num InstancedMesh só (1 draw; antes 1 mesh + 1 material por LED): o pisca vira o brilho da cor de cada instância
+    const posLed: { x: number; y: number; z: number; cor: THREE.Color }[] = [];
+    for (const r of moveisDoAndar(GARAGEM).filter((x) => x.tipo === "rack")) for (let z = r.z0 + 0.4; z < r.z1 - 0.3; z += 0.7) for (const y of [0.5, 1.1, 1.7, 2.2]) posLed.push({ x: r.x1 + 0.01, y: yG + y, z, cor: new THREE.Color((z * 3 + y) % 2 > 1 ? VERDE : ROXO) });
+    if (posLed.length) {
+      const leds = add(new THREE.InstancedMesh(new THREE.PlaneGeometry(0.12, 0.05), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), posLed.length));
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion().setFromAxisAngle(THREE.Object3D.DEFAULT_UP, Math.PI / 2), um = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), c = new THREE.Color();
+      posLed.forEach((l, i) => { leds.setMatrixAt(i, m4.compose(p.set(l.x, l.y, l.z), q, um)); leds.setColorAt(i, l.cor); });
+      leds.computeBoundingSphere();
+      anim.push((_, t) => { posLed.forEach((l, i) => leds.setColorAt(i, c.copy(l.cor).multiplyScalar(0.35 + 0.6 * (0.5 + 0.5 * Math.sin(t * (0.9 + (i % 5) * 0.3) + i))))); leds.instanceColor!.needsUpdate = true; });
     }
-    anim.push((_, t) => leds.forEach((mt, i) => { mt.opacity = 0.35 + 0.6 * (0.5 + 0.5 * Math.sin(t * (0.9 + (i % 5) * 0.3) + i)); }));
     // o CARRO (low-poly): carroceria + cabine de vidro + rodas + faróis
     const car = moveisDoAndar(GARAGEM).find((x) => x.tipo === "carro")!, ccx = (car.x0 + car.x1) / 2, ccz = (car.z0 + car.z1) / 2;
     const lataria = new THREE.MeshStandardMaterial({ color: ROXO, roughness: 0.3, metalness: 0.6, emissive: 0x2a1060, emissiveIntensity: 0.4 });

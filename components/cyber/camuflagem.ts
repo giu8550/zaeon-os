@@ -119,7 +119,11 @@ function tomDe(mat: THREE.MeshStandardMaterial): THREE.Color {
  * shader (cache por material). Some PointLight/SpotLight (com tudo sem luz, elas só custam). `pular` preserva peças.
  */
 export function camuflarGrupo(raiz: THREE.Object3D, o: { pular?: (m: THREE.Object3D) => boolean } = {}): void {
-  const cache = new Map<THREE.Material, THREE.Material>();
+  // cache pela ASSINATURA (cor, emissivo, transparência, lado), não pelo objeto: os builders criam um material novo
+  // por peça e iguais viravam shaders separados (e cada um quebrava o lote). Seguro: o `solidoLeve` copia os valores
+  // na conversão — mexer depois no material original já não fazia efeito.
+  const cache = new Map<string, THREE.Material>();
+  const hex = (c: THREE.Color) => c.getHexString();
   const luzes: THREE.Light[] = [];
   raiz.traverse((obj) => {
     if ((obj as THREE.PointLight).isPointLight || (obj as THREE.SpotLight).isSpotLight) { luzes.push(obj as THREE.Light); return; }
@@ -129,18 +133,17 @@ export function camuflarGrupo(raiz: THREE.Object3D, o: { pular?: (m: THREE.Objec
       const st = mat as THREE.MeshStandardMaterial;
       if (!st.isMeshStandardMaterial) return mat;   // Basic/Sprite/Points/Line/Shader: já são leves
       if (st.map) {   // texturizado (tela, logo, água, deck): mantém a imagem, sem luz
-        let b = cache.get(mat);
-        if (!b) { b = new THREE.MeshBasicMaterial({ map: st.map, color: st.color, transparent: st.transparent, opacity: st.opacity, side: st.side, depthWrite: st.depthWrite }); cache.set(mat, b); }
+        const k = `m|${st.map.uuid}|${hex(st.color)}|${st.transparent}|${st.opacity.toFixed(3)}|${st.side}|${st.depthWrite}`;
+        let b = cache.get(k);
+        if (!b) { b = new THREE.MeshBasicMaterial({ map: st.map, color: st.color, transparent: st.transparent, opacity: st.opacity, side: st.side, depthWrite: st.depthWrite }); cache.set(k, b); }
         return b;
       }
       // MEIO-TERMO: tudo continua sólido (vidro continua vidro, com a mesma transparência), sem PBR nem luzes
-      let c = cache.get(mat);
-      if (!c) {
-        const emi = st.emissive ? st.emissive.clone().multiplyScalar(st.emissiveIntensity ?? 1) : new THREE.Color(0);
-        const alpha = st.transparent ? Math.max(0.18, st.opacity) : 1;
-        c = solidoLeve({ cor: st.color.clone(), emissivo: emi, rim: tomDe(st), alpha, side: st.side });   // o lado da face vale (ex.: casca vista por dentro)
-        cache.set(mat, c);
-      }
+      const emi = st.emissive ? st.emissive.clone().multiplyScalar(st.emissiveIntensity ?? 1) : new THREE.Color(0);
+      const alpha = st.transparent ? Math.max(0.18, st.opacity) : 1, rim = tomDe(st);
+      const k = `s|${hex(st.color)}|${hex(emi)}|${hex(rim)}|${alpha.toFixed(3)}|${st.side}`;
+      let c = cache.get(k);
+      if (!c) { c = solidoLeve({ cor: st.color.clone(), emissivo: emi, rim, alpha, side: st.side }); cache.set(k, c); }   // o lado da face vale (ex.: casca vista por dentro)
       return c;
     };
     m.material = Array.isArray(m.material) ? m.material.map(troca) : troca(m.material);

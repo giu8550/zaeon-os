@@ -94,11 +94,11 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
 
   // o "EIXO GIRATÓRIO": anel de luzes da borda (gira) + halo externo tracejado (gira ao contrário)
   const NL = opts.low ? 14 : 22, aro = new THREE.Group(); corpo.add(aro);
-  const luzes: THREE.MeshBasicMaterial[] = [];
-  for (let i = 0; i < NL; i++) {
-    const a = (i / NL) * Math.PI * 2, mat = new THREE.MeshBasicMaterial({ color: ALIEN.clone().lerp(new THREE.Color(0xffffff), 0.2), transparent: true, opacity: 0.8 });
-    const l = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), mat); l.position.set(Math.cos(a) * 3.55, -0.04, Math.sin(a) * 3.55); aro.add(l); luzes.push(mat);
-  }
+  // as luzes num InstancedMesh só (1 draw): a onda de brilho vira a COR de cada instância (antes: 1 material por luz)
+  const corLuz = ALIEN.clone().lerp(new THREE.Color(0xffffff), 0.2), corI = new THREE.Color();
+  const luzes = new THREE.InstancedMesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }), NL);
+  { const m4 = new THREE.Matrix4(); for (let i = 0; i < NL; i++) { const a = (i / NL) * Math.PI * 2; luzes.setMatrixAt(i, m4.makeTranslation(Math.cos(a) * 3.55, -0.04, Math.sin(a) * 3.55)); luzes.setColorAt(i, corLuz); } }
+  luzes.computeBoundingSphere(); aro.add(luzes);
   const halo = new THREE.Group(); halo.position.y = -0.1; halo.rotation.x = 0.06; corpo.add(halo);
   const haloMat = aditivo(ALIEN, 0.35), NH = opts.low ? 12 : 18;
   for (let i = 0; i < NH; i++) { const arco = new THREE.Mesh(new THREE.TorusGeometry(4.5, 0.04, 4, 8, (Math.PI * 2) / NH * 0.6), haloMat); arco.rotation.set(Math.PI / 2, 0, (i / NH) * Math.PI * 2); halo.add(arco); }
@@ -226,7 +226,8 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
       // eixo giratório: luzes da borda giram (mais rápido com velocidade) com onda de brilho LENTA; o halo gira ao contrário
       giro += dt * (parado ? 0.05 : 0.3 + 0.9 * Math.min(1, vel)) * (0.4 + 0.6 * voo);
       aro.rotation.y = giro; halo.rotation.y = -giro * 0.6;
-      luzes.forEach((m, i) => { m.opacity = 0.45 + 0.45 * (0.5 + 0.5 * Math.sin(t * 1.5 - (i / luzes.length) * Math.PI * 2)) * (0.5 + 0.5 * voo); });
+      for (let i = 0; i < NL; i++) luzes.setColorAt(i, corI.copy(corLuz).multiplyScalar(0.5 + 0.5 * (0.5 + 0.5 * Math.sin(t * 1.5 - (i / NL) * Math.PI * 2)) * (0.5 + 0.5 * voo)));
+      luzes.instanceColor!.needsUpdate = true;
       haloMat.opacity = 0.12 + 0.35 * voo;
       const comRaios = voo > 0.05; for (const gr of grupoRaios) { gr.mat.visible = gr.bMat.visible = comRaios; } if (comRaios) atualizarRaios(t, voo);   // parada (camuflada): sem raios
       veioMat.opacity = 0.35 + 0.4 * voo * (0.75 + 0.25 * Math.sin(t * 1.3));

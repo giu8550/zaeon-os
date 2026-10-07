@@ -41,6 +41,7 @@ import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
 import { atualizarRegiao, criarRegiao, soltarRegiao, type RegiaoCena } from "./regioesCena";
+import { fundirEstaticos } from "./lotes";
 import type { Regiao } from "@/lib/cyber/regioes";
 import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -129,6 +130,16 @@ const COR_QG = "#ffd36b";
 const CORES_MOTO = ["#45d6ff", "#ff6ad5", "#ffc46b", "#9affd0"];
 /** sensibilidade do olhar livre (rad por pixel do mouse) */
 const SENS_OLHAR = 0.0026;
+/** o que não pode virar lote (components/cyber/lotes): os alvos de clique/câmera e TUDO dentro deles (o raycast é recursivo) */
+/** lotes da nave: simula a redoma abrindo, alguém a bordo, a rampa, o convés por dentro e o voo (o engine devolve o
+ *  estado certo no quadro seguinte: chama aBordo/abrirCabine/rampa/verDentro todo quadro) */
+const loteNave = (h: NaveHandle) => {
+  fundirEstaticos(h.group, { passo: (k, t) => { h.abrirCabine(k % 2 === 0); h.aBordo(k % 3 === 0); h.rampa((k % 4) / 3, k % 2 === 0); h.verDentro(k % 5 < 2); h.atualizar({ dt: 1 / 30, t, voando: k % 4 < 2, vel: (k % 3) / 2, curva: Math.sin(t), fechada: k % 2 === 1 }); }, manter: comDescendentes([...h.alvos, h.assento]) });
+  h.abrirCabine(false); h.aBordo(false); h.verDentro(false);
+  for (let i = 0; i < 6; i++) h.atualizar({ dt: 1, t: 0, voando: false, vel: 0, curva: 0 });   // volta ao repouso (pernas, raios, redoma)
+};
+const comDescendentes = (objs: (THREE.Object3D | null | undefined)[]) => { const out: THREE.Object3D[] = []; for (const o of objs) o?.traverse((n) => { out.push(n); }); return out; };
+
 /** as áreas das 3 grandes regiões (a caixa automática pegaria o anel do elevador / o portal lá no chão) */
 const cil = (c: { x: number; z: number }, r: number, y: number, abaixo: number, acima: number) => () => ({ x: c.x, z: c.z, r, y0: y - abaixo, y1: y + acima });
 const AREA_ZAEON = cil(CIDADE.centro, CIDADE.bordaR + 70, CIDADE.pisoY, CIDADE.ilhaAltura + 10, 90);   // + o anel de ilhotas em volta
@@ -264,19 +275,27 @@ export class CyberEngine {
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
       camuflarGrupo(lm.group);   // holograma: sem PBR nem luzes (components/cyber/camuflagem)
+      fundirEstaticos(lm.group, { passo: (k, t) => { lm.donoPresente(k % 2 === 0); lm.atualizar(1 / 30, t); }, manter: comDescendentes([...lm.alvos, lm.topo, lm.monitorTopo, lm.escada]) });
       this.cena.scene.add(lm.group); this.lms.push(lm);   // sem rótulo na tela (interface limpa); o nome sai no painel do clique
     }
     if (opts.landmarks) {
       this.cidade = criarCidade({ low, starTex: this.cena.starTex });
       camuflarGrupo(this.cidade.group);
+      { const c = this.cidade;   // lotes: simula com e sem música (o palco, as caixas e a pista pulsam com o grave)
+        fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalChao, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
+        c.somTocando(false); for (let i = 0; i < 6; i++) c.atualizar(1, 0); }
       this.cena.scene.add(this.cidade.group);
       if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
       this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); camuflarGrupo(this.univ.group); this.cena.scene.add(this.univ.group);
+      { const u = this.univ; fundirEstaticos(u.group, { passo: (_, t) => u.atualizar(1 / 30, t), manter: comDescendentes(u.alvosCamera) }); }
       this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); camuflarGrupo(this.solana.group); this.cena.scene.add(this.solana.group);
+      { const so = this.solana; fundirEstaticos(so.group, { passo: (_, t) => so.atualizar(1 / 30, t) }); }
       pararCamuflagem(typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
-      this.nave = criarNave({ low, cor: "#2f7bff" }); this.cena.scene.add(this.nave.group);
+      this.nave = criarNave({ low, cor: "#2f7bff" }); loteNave(this.nave); this.cena.scene.add(this.nave.group);
       vagas().forEach((v, i) => {
         const h = criarMoto({ cor: CORES_MOTO[i % CORES_MOTO.length]!, low }); h.group.position.set(v.x, 0, v.z); h.group.rotation.y = v.yaw;
+        fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5 }), manter: comDescendentes(h.alvos) });
+        for (let k = 0; k < 6; k++) h.atualizar({ dt: 1, t: 0, voando: false, vel: 0, curva: 0 });   // parada de novo
         this.cena.scene.add(h.group); this.motos.push({ h, idle: null, voo: null, yawAnt: v.yaw, yAnt: null, vy: 0 });
       });
       const marca = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.2, 40), new THREE.MeshBasicMaterial({ color: 0x7fe0ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -312,14 +331,14 @@ export class CyberEngine {
     for (const [id, lay] of this.layouts) {
       const existente = this.bases.get(id);
       if (existente) { if (existente.layout.x !== lay.x || existente.layout.z !== lay.z || existente.layout.nivel !== lay.nivel) existente.mover(lay); continue; }
-      const b = criarBase(lay, this.corDe(id), this.cena.starTex, this.o.low);
+      const b = criarBase(lay, this.corDe(id), this.cena.starTex, this.o.low); this.loteBase(b);
       b.group.position.y = this.yDoNivel(lay.nivel);
       this.cena.scene.add(b.group); this.bases.set(id, b);
       if (this.som && (!this.o.low || id === this.o.eu.id)) this.somCristais.set(id, this.som.loop("crystals", b.group, { dist: DISTANCIA.cristais }));
     }
     // o QG sempre tem a mesa e os cristais no centro do salão; se o Andrei está na sala, é a base dele (acima)
     const lqg = this.zaeon() && ![...this.layouts.values()].some((l) => l.nivel === "qg") ? baseNoQG() : null;
-    if (lqg && !this.baseQG) { this.baseQG = criarBase(lqg, COR_QG, this.cena.starTex, this.o.low); this.baseQG.group.position.y = this.yDoNivel("qg"); this.cena.scene.add(this.baseQG.group); }
+    if (lqg && !this.baseQG) { this.baseQG = criarBase(lqg, COR_QG, this.cena.starTex, this.o.low); this.loteBase(this.baseQG); this.baseQG.group.position.y = this.yDoNivel("qg"); this.cena.scene.add(this.baseQG.group); }
     if (!lqg && this.baseQG) { this.soltar(this.baseQG.group); this.baseQG.dispose(); this.baseQG = null; }
     for (const a of [this.eu, ...this.remotos.values()]) { if (!a) continue; const c = this.corDe(a.id); if (c !== a.color) { a.color = c; a.av.recolorir(c); a.tag.style.color = c; } }
     // colisão: bases do anel + marcos (a MESMA lista; empurrarParaFora faz o deslizar)
@@ -1106,6 +1125,11 @@ export class CyberEngine {
     if (!r) { r = criarRegiao(nome, raiz, { area }); this.regioes.set(raiz, r); }
     return atualizarRegiao(r, this.cam.position);
   }
+  /** lotes da base: simula perto/longe, hover e energia (a tela, os cristais e as linhas reagem) */
+  private loteBase(b: BaseEstudoHandle) {
+    fundirEstaticos(b.group, { passo: (k, t) => b.atualizar({ dt: 1 / 30, t, ativa: k % 2 === 0, hover: k % 3 === 0, perto: k % 4 < 2, energia: (k % 5) / 4 }), manter: comDescendentes([b.monitor]) });
+    for (let k = 0; k < 6; k++) b.atualizar({ dt: 1, t: 0, ativa: false, hover: false, perto: false, energia: 0 });   // volta ao repouso
+  }
   private soltar(raiz: THREE.Object3D) { const r = this.regioes.get(raiz); if (r) { soltarRegiao(r); this.regioes.delete(raiz); } }
 
   private atualizarCamera() {
@@ -1432,7 +1456,7 @@ export class CyberEngine {
         a.ceu = p.ceu === true;   // a Zaeon é aberta a todos (o topo e a nave continuam do dono)
         const voando = fund && !!p.voo, parada = fund && !voando && p.naveParada ? p.naveParada : null;
         if ((voando || parada) && !a.nave && this.cidade) {
-          a.nave = criarNave({ low: this.o.low, cor: a.color }); this.cena.scene.add(a.nave.group);
+          a.nave = criarNave({ low: this.o.low, cor: a.color }); loteNave(a.nave); this.cena.scene.add(a.nave.group);
           a.somNave = { idle: this.som.loop("ship-idle", a.nave.group, { dist: DISTANCIA.grande }), voo: this.som.loop("ship-flight", a.nave.group, { dist: DISTANCIA.grande }), g: gatilhoVooInicial(), voava: voando, ev: somNaveInicial(!voando), yAnt: null, vy: 0 };   // já chega voando: sem decolagem fantasma
         }
         if (!voando && !parada && a.nave) { this.soltarSomNave(a); a.nave.dispose(); a.nave = null; }

@@ -227,11 +227,19 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   // estantes: caixas com LOMBADAS de livros (textura repetida pelo comprimento)
   const lombadas = tela(256, 256, (g) => { g.fillStyle = "#1a1020"; g.fillRect(0, 0, 256, 256); const cs = ["#66e6ff", "#b98cff", "#9affd0", "#ffd36b", "#7fb4ff", "#ff9ad5", "#ffb45a"];
     for (let r = 0; r < 4; r++) { let x = 0; while (x < 256) { const w = 6 + ((x * 7 + r * 13) % 9); g.fillStyle = cs[(x + r * 3) % cs.length]!; g.globalAlpha = 0.75; g.fillRect(x, r * 64 + 8, w - 1, 52); x += w; } g.globalAlpha = 1; g.fillStyle = "#3a2a24"; g.fillRect(0, r * 64 + 60, 256, 4); } });
-  lombadas.wrapS = THREE.RepeatWrapping;
+  lombadas.wrapS = lombadas.wrapT = THREE.RepeatWrapping;
+  // uma textura e UM material pras lombadas de todas: a repetição vai na UV de cada face (antes: 1 textura clonada +
+  // 6 materiais por estante = 6 draws cada); corpo e faces viram lotes (components/cyber/lotes)
+  const matLombada = new THREE.MeshBasicMaterial({ map: lombadas });
   for (const m of moveis.filter((m) => m.tipo === "estante")) {
-    const t = lombadas.clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, Math.round((m.x1 - m.x0) / 2.5)), 2); t.wrapT = THREE.RepeatWrapping; texturas.push(t);
-    const e = add(new THREE.Mesh(new THREE.BoxGeometry(m.x1 - m.x0, m.alt, m.z1 - m.z0), [madeira, madeira, madeira, madeira, new THREE.MeshBasicMaterial({ map: t }), new THREE.MeshBasicMaterial({ map: t })]));
-    e.position.set((m.x0 + m.x1) / 2, m.alt / 2, (m.z0 + m.z1) / 2);
+    const lx = m.x1 - m.x0, lz = m.z1 - m.z0, cx = (m.x0 + m.x1) / 2, cz = (m.z0 + m.z1) / 2, emX = lx >= lz, L = emX ? lx : lz, P = emX ? lz : lx, rep = Math.max(1, Math.round(L / 2.5));
+    add(new THREE.Mesh(new THREE.BoxGeometry(lx, m.alt, lz), madeira)).position.set(cx, m.alt / 2, cz);
+    for (const lado of [-1, 1]) {   // as lombadas nas DUAS faces compridas (a estante corre em x ou em z)
+      const g = new THREE.PlaneGeometry(L, m.alt), uv = g.attributes.uv!;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * rep, uv.getY(i) * 2);
+      const f = add(new THREE.Mesh(g, matLombada)), d = lado * (P / 2 + 0.005);
+      f.position.set(cx + (emX ? 0 : d), m.alt / 2, cz + (emX ? d : 0)); f.rotation.y = emX ? (lado < 0 ? Math.PI : 0) : lado * Math.PI / 2;
+    }
   }
   // telas: o telão do auditório e os hologramas das bancadas do laboratório
   const aud = SALAS.find((s) => s.tipo === "auditorio")!;
