@@ -36,6 +36,7 @@ import MagazineAnswerView, { podeVirarRevista } from "@/components/study/Magazin
 import MagazineBoundary from "@/components/study/MagazineBoundary";
 import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import DicaSubTema from "@/components/chat/DicaSubTema";
+import Desenhando from "@/components/chat/Desenhando";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
 import { fonteChat } from "@/lib/ui/chatFontScale";
@@ -86,6 +87,8 @@ type Msg = {
   studyId?: string;
   studyTitle?: string;
   studioBlock?: StudioBlockData;   // em "structured" = artefato embutido na MESMA bolha
+  blocosExtra?: StudioBlockData[]; // 2º artefato da mesma resposta (ex.: molécula + diagrama interativo)
+  desenhando?: boolean;            // o diagrama interativo desta resposta está saindo (~20 s)
   answer?: StructuredAnswer;
   fase?: string;             // fase que o harness está narrando agora (só enquanto chega)
   streaming?: boolean;       // B2: resposta ainda chegando → cursor piscando
@@ -96,6 +99,17 @@ type Msg = {
   pendente?: boolean;
   at: number;
 };
+
+/**
+ * O que de um artefato inline vai pro localStorage: o diagrama é só um id (o HTML mora no servidor)
+ * e sobrevive ao reload; os outros (mapa, podcast, molécula com SDF…) são pesados e ficam na sessão.
+ */
+function enxugarArtefatos(m: Msg): Msg {
+  if (m.kind !== "structured" || (!m.studioBlock && !m.blocosExtra && !m.desenhando)) return m;
+  const leve = (b?: StudioBlockData) => (b && b.studioKind === "diagram" && b.artifactId ? b : undefined);
+  const extras = (m.blocosExtra ?? []).map(leve).filter(Boolean) as StudioBlockData[];
+  return { ...m, studioBlock: leve(m.studioBlock), blocosExtra: extras.length ? extras : undefined, desenhando: undefined };
+}
 
 /** Pílula de documento no topo do chat (TCC, cartolina). */
 const DOC_PILL =
@@ -277,7 +291,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       const slim = messages
         // vazia só sobrevive se for um turno pendente no worker (senão o reengate some no reload)
         .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text && !(m.pendente && m.turnId)))
-        .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m)) // artefato inline fica na sessão
+        .map(enxugarArtefatos) // artefato pesado fica na sessão; o diagrama (só um id) persiste
         .map(({ streaming, fresh, ...m }) => m); // B2: flags de animação não persistem (reload não re-digita)
       const aba = abaAtivaRef.current;
       if (aba) salvarMensagens(localStorage, aba, slim);
@@ -349,8 +363,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         artifactId: d.artifactId, dataUrl: d.dataUrl,
       };
       if (d.attachMsgId) {
-        // artefato INLINE (harness): anexa à bolha estruturada existente, sem msg nova.
-        setMessages((prev) => prev.map((m) => (m.id === d.attachMsgId ? { ...m, studioBlock: block } : m)));
+        // artefato INLINE (harness): anexa à bolha estruturada existente, sem msg nova. Se ela já tem
+        // um artefato (molécula), o segundo (diagrama) entra ao lado em vez de substituir.
+        setMessages((prev) => prev.map((m) => {
+          if (m.id !== d.attachMsgId) return m;
+          if (!m.studioBlock || m.studioBlock.studioKind === block.studioKind) return { ...m, studioBlock: block };
+          return { ...m, blocosExtra: [...(m.blocosExtra ?? []).filter((b) => b.studioKind !== block.studioKind), block] };
+        }));
       } else {
         // palette manual / texto livre: comportamento de sempre (msg nova).
         setMessages((prev) => [...prev, { id: uid(), role: "assistant", kind: "studio", studioBlock: block, at: Date.now() }]);
@@ -393,7 +412,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     if (!aba) return;
     const slim = messages
       .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text))
-      .map((m) => (m.kind === "structured" && m.studioBlock ? { ...m, studioBlock: undefined } : m))
+      .map(enxugarArtefatos)
       .map(({ streaming, fresh, ...m }) => m);
     salvarMensagens(localStorage, aba, slim);
   }, [messages]);
@@ -530,7 +549,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
    * explicação). Se falhar, cala — ninguém pediu, então avisar seria ruído. Pedido
    * explícito continua reclamando alto: aí a pessoa está esperando.
    */
-  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false) => {
+  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false, contexto?: string) => {
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
     // estudo NOVO criado pelo tópico. Nunca pega um estudo arbitrário da biblioteca
     // (senão "gere um podcast sobre X" sairia sobre o conteúdo errado).
@@ -540,9 +559,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       if (s) { setSpaces((p) => [...p, s as any]); spaceId = s.id; }
     }
     if (!spaceId) return;
+    const desenho = !!attachMsgId && (kind === "diagram" || kind === "mindmap");
+    const marcar = (v: boolean) => setMessages((prev) => prev.map((m) => (m.id === attachMsgId ? { ...m, desenhando: v } : m)));
+    if (desenho) marcar(true);
     // Rede (por tipo: podcast/vídeo, molécula, imagem, texto) em lib/studio/studioClient.ts —
     // o MESMO núcleo do mobile. Aqui fica só o que é desta tela: o evento e o aviso.
-    const r = await gerarArtefato(kind, { spaceId, topic });
+    const r = await gerarArtefato(kind, { spaceId, topic, contexto, sala: "estudos" });
+    if (desenho) marcar(false);
     if (r.tipo === "pronto") {
       window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId } }));
     } else if (r.tipo === "erro" && !r.silencioso && !silencioso) {
@@ -584,7 +607,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           if (art.studioKind && !art.studioKind.startsWith("research:")) {
             // Pedido explícito falha em voz alta; artefato que a Aura trouxe de
             // brinde falha calado — ninguém pediu, ninguém precisa saber.
-            void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId, !art.explicito);
+            // Diagrama/mapa recebem a explicação que o aluno acabou de ler (o desenho reflete ELA).
+            const ctx = art.studioKind === "diagram" || art.studioKind === "mindmap" ? textoParaHistorico({ kind: "structured", answer: a }) : undefined;
+            void runStudioAction(art.studioKind, art.title?.trim() || prompt, asstId, !art.explicito, ctx);
           }
         }
         // L1 grava o corpo, não a manchete: é esta transcrição que vira memória
@@ -1035,7 +1060,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                       onConcept={(c) => void send(`Me explica melhor: ${c}`)}
                       onNext={(s) => void send(s)}
                     >
-                      {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
+                      {m.studioBlock || m.blocosExtra?.length || m.desenhando ? (
+                        <>
+                          {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
+                          {m.blocosExtra?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
+                          {m.desenhando ? <Desenhando /> : null}
+                        </>
+                      ) : null}
                     </StructuredAnswerView>
                   );
                   // Sala de ESTUDOS = chat simples, objetivo e 100% legível: a "revista" só entra
@@ -1057,6 +1088,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                               agente="Aura"
                             />
                           </MagazineBoundary>
+                          {m.blocosExtra?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
                           {acoesDa(m, i)}
                           </>
                         ) : padrao}

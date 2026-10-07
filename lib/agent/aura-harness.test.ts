@@ -254,7 +254,14 @@ describe("pickStudioKind · molécula não é imagem", () => {
 
   it("imagem continua sendo imagem", () => {
     expect(pickStudioKind("faz uma ilustração da fotossíntese")).toBe("image");
-    expect(pickStudioKind("gera um diagrama do ciclo de Krebs")).toBe("image");
+    expect(pickStudioKind("desenha uma figura de uma célula")).toBe("image");
+  });
+
+  it("diagrama/esquema/fluxograma agora é o diagrama INTERATIVO (archify), não imagem", () => {
+    expect(pickStudioKind("gera um diagrama do ciclo de Krebs")).toBe("diagram");
+    expect(pickStudioKind("faz um esquema de como funciona o DNS")).toBe("diagram");
+    expect(pickStudioKind("monta um fluxograma da mitose")).toBe("diagram");
+    expect(pickStudioKind("faz um mapa de estudo de genética")).toBe("mindmap"); // o cliente desenha com o archify
   });
 
   it("os outros artefatos não mudaram", () => {
