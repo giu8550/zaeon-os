@@ -16,7 +16,7 @@ import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
 import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CIDADE, alturaNaCidade, naCabineDJ, pontoDaCabineDJ, rumoDoDJ, ILHOTAS, computadorPerto, foraDaIlha, ilhotaEm, mundo, naIlhaPrincipal, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre } from "@/lib/cyber/ceu";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, chaoNoAr, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
-import { pularQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
+import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
 import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type LoopSom } from "./AudioCyber";
@@ -28,7 +28,7 @@ import { criarHoloRecado, type HoloRecadoHandle } from "./HoloRecado";
 import { HOLO_NA_BASE } from "@/lib/cyber/recado";
 import type { RecadoQG } from "@/lib/lounge3d/tipos";
 import { criarUniversidade, type UniversidadeHandle } from "./Universidade";
-import { naUniversidade } from "@/lib/cyber/universidade";
+import { naUniversidade, UNIVERSIDADE } from "@/lib/cyber/universidade";
 import { PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, anelDoChao, decolaDaPlataforma, elevadorAqui, noAnelDoDisco, noArNaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma, tetoNaPlataforma, type IdPlataforma } from "@/lib/cyber/plataformas";
 import { criarSolanaHouse, type SolanaHouseHandle } from "./SolanaHouse";
 import { NAVE_QG, RAIO_REDOMA, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, RAMPA, naPontaDaRampa, naRampaLaFora, paraLocal, paraMundo, pertoDaEntrada, poseDaDoca, pousoNaNave, rampaDaNave, redomaAberta, type Bordo, type PoseNave } from "@/lib/cyber/naveQG";
@@ -40,6 +40,8 @@ import { MOTO, motoPerto, vagas } from "@/lib/cyber/motos";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
+import { atualizarRegiao, criarRegiao, soltarRegiao, type RegiaoCena } from "./regioesCena";
+import type { Regiao } from "@/lib/cyber/regioes";
 import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
@@ -127,6 +129,11 @@ const COR_QG = "#ffd36b";
 const CORES_MOTO = ["#45d6ff", "#ff6ad5", "#ffc46b", "#9affd0"];
 /** sensibilidade do olhar livre (rad por pixel do mouse) */
 const SENS_OLHAR = 0.0026;
+/** as áreas das 3 grandes regiões (a caixa automática pegaria o anel do elevador / o portal lá no chão) */
+const cil = (c: { x: number; z: number }, r: number, y: number, abaixo: number, acima: number) => () => ({ x: c.x, z: c.z, r, y0: y - abaixo, y1: y + acima });
+const AREA_ZAEON = cil(CIDADE.centro, CIDADE.bordaR + 70, CIDADE.pisoY, CIDADE.ilhaAltura + 10, 90);   // + o anel de ilhotas em volta
+const AREA_UNILAB = cil(UNIVERSIDADE.centro, UNIVERSIDADE.discoR, UNIVERSIDADE.y, 100, 80);
+const AREA_SOLANA = cil(PLATAFORMAS.solana.centro, PLATAFORMAS.solana.r + 10, PLATAFORMAS.solana.y, 40, 40);
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
 const TAG_CSS = "position:absolute;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
@@ -146,6 +153,8 @@ export class CyberEngine {
   private ordem: string[] = [];
   /** marcos megalíticos (Zaeon…) e o estado "no topo da Zaeon" do dono */
   private lms: LandmarkHandle[] = [];
+  /** REGIÕES por distância (components/cyber/regioesCena): de longe some o detalhe e a animação para */
+  private regioes = new Map<THREE.Object3D, RegiaoCena>();
   private noTopo = false;
   /** em qual marco andável estou no ALTO (escada/plataforma), e a altura do chão sob mim */
   private altoEm: string | null = null; private yNav = 0;
@@ -311,7 +320,7 @@ export class CyberEngine {
     // o QG sempre tem a mesa e os cristais no centro do salão; se o Andrei está na sala, é a base dele (acima)
     const lqg = this.zaeon() && ![...this.layouts.values()].some((l) => l.nivel === "qg") ? baseNoQG() : null;
     if (lqg && !this.baseQG) { this.baseQG = criarBase(lqg, COR_QG, this.cena.starTex, this.o.low); this.baseQG.group.position.y = this.yDoNivel("qg"); this.cena.scene.add(this.baseQG.group); }
-    if (!lqg && this.baseQG) { this.baseQG.dispose(); this.baseQG = null; }
+    if (!lqg && this.baseQG) { this.soltar(this.baseQG.group); this.baseQG.dispose(); this.baseQG = null; }
     for (const a of [this.eu, ...this.remotos.values()]) { if (!a) continue; const c = this.corDe(a.id); if (c !== a.color) { a.color = c; a.av.recolorir(c); a.tag.style.color = c; } }
     // colisão: bases do anel + marcos (a MESMA lista; empurrarParaFora faz o deslizar)
     this.colisores = [...this.layouts.values()].filter((l) => !l.nivel).map((l) => ({ x: l.x, z: l.z, r: BASE_COLLIDER_R }))
@@ -1090,6 +1099,15 @@ export class CyberEngine {
 
   private proj(v: THREE.Vector3) { const p = v.clone().project(this.cam); return { x: (p.x * 0.5 + 0.5) * this.w, y: (-p.y * 0.5 + 0.5) * this.h, vis: p.z < 1 }; }
 
+  /** a região dessa raiz deve ANIMAR neste quadro? Cria a região na 1ª vez; de longe esconde o detalhe e, bem longe,
+   *  a região inteira (pela posição da câmera do quadro anterior — a diferença de um quadro não se vê) */
+  private regiaoPerto(raiz: THREE.Object3D, nome: string, area?: () => Regiao): boolean {
+    let r = this.regioes.get(raiz);
+    if (!r) { r = criarRegiao(nome, raiz, { area }); this.regioes.set(raiz, r); }
+    return atualizarRegiao(r, this.cam.position);
+  }
+  private soltar(raiz: THREE.Object3D) { const r = this.regioes.get(raiz); if (r) { soltarRegiao(r); this.regioes.delete(raiz); } }
+
   private atualizarCamera() {
     const l = this.minhaBase;
     if (this.menu && l) {
@@ -1145,8 +1163,11 @@ export class CyberEngine {
   private loop(now: number) {
     if (!this.vivo) return;
     this.raf = requestAnimationFrame((t) => this.loop(t));
-    if (this.pausado || pularQuadro(this.fpsMax, now, this.ultimoQuadro)) return;   // o relógio segue: o dt do próximo quadro cobre o pulo
-    this.ultimoQuadro = now;
+    // limite de fps no COMPASSO (o relógio segue: o dt do próximo quadro cobre o pulo); na janela da landing (menu,
+    // vista de fora) basta 30 fps
+    const q = proximoQuadro(this.menu ? (this.fpsMax > 0 ? Math.min(this.fpsMax, 30) : 30) : this.fpsMax, now, this.ultimoQuadro);
+    if (this.pausado || q.pular) return;
+    this.ultimoQuadro = q.ultimo;
     const dtReal = Math.min(VOO.dtMax, this.clock.getDelta()), dt = Math.min(0.05, dtReal), t = now * 0.001;   // o voo usa o dt REAL (independente de FPS)
     if (!this.visivel || document.hidden) return;
     atualizarCamuflagem(t);   // o relógio único de todos os hologramas do mapa
@@ -1326,14 +1347,15 @@ export class CyberEngine {
     }
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
-    if (this.cidade) this.cidade.atualizar(dt, t);
+    if (this.cidade && this.regiaoPerto(this.cidade.group, "zaeon", AREA_ZAEON)) this.cidade.atualizar(dt, t);
     if (this.somLounge) { this.somLounge.atualizar(dt); this.cidade?.somTocando(this.somLounge.tocando, this.somLounge.nivel); }
     if (this.holo) {   // o holograma acompanha a base do QG (que flutua junto com o marco)
       const lay = baseNoQG(), w = lay ? localParaMundo(lay, HOLO_NA_BASE.x, HOLO_NA_BASE.z) : null;
       if (lay && w) { this.holo.group.position.set(w.x, this.yDoNivel("qg"), w.z); this.holo.group.rotation.y = lay.rot + HOLO_NA_BASE.giro; }
       this.holo.atualizar(dt, t);
     }
-    this.univ?.atualizar(dt, t); this.solana?.atualizar(dt, t);
+    if (this.univ && this.regiaoPerto(this.univ.group, "unilab", AREA_UNILAB)) this.univ.atualizar(dt, t);
+    if (this.solana && this.regiaoPerto(this.solana.group, "solana", AREA_SOLANA)) this.solana.atualizar(dt, t);
     if (this.nave) {
       const n = this.naveEst, curva = (n.yaw - this.yawAnt) / Math.max(dt, 1e-3); this.yawAnt = n.yaw;
       this.nave.group.position.set(n.x, n.y, n.z); this.nave.group.rotation.y = n.yaw;   // estacionária: fica exatamente onde parou
@@ -1360,7 +1382,7 @@ export class CyberEngine {
 
     // marcos: animação + a "estátua" do dono some quando o dono real está lá em cima
     const donoNoTopo = this.noTopo || [...this.remotos.values()].some((a) => a.topo);
-    for (const lm of this.lms) { lm.atualizar(dt, t); if (lm.topo) lm.donoPresente(donoNoTopo); }
+    for (const lm of this.lms) { if (this.regiaoPerto(lm.group, lm.poi.id)) lm.atualizar(dt, t); if (lm.topo) lm.donoPresente(donoNoTopo); }
 
     // bases
     for (const [id, b] of this.bases) {
@@ -1368,9 +1390,11 @@ export class CyberEngine {
       if (b.layout.nivel) b.group.position.y = this.yDoNivel(b.layout.nivel);
       // energia = o dono SENTADO na cabine (fluxo mãos → tela)
       const energia = id === euId ? this.sitT : (this.remotos.get(id)?.sit ?? 0);
-      b.atualizar({ dt, t, ativa: alguemPerto, hover: this.hoverBase === id, perto: id === euId && perto, energia });
+      if (this.regiaoPerto(b.group, "base")) b.atualizar({ dt, t, ativa: alguemPerto, hover: this.hoverBase === id, perto: id === euId && perto, energia });
     }
-    if (this.baseQG) { this.baseQG.group.position.y = this.yDoNivel("qg"); this.baseQG.atualizar({ dt, t, ativa: false, hover: false, perto: false }); }
+    if (this.baseQG) { this.baseQG.group.position.y = this.yDoNivel("qg"); if (this.regiaoPerto(this.baseQG.group, "base-qg")) this.baseQG.atualizar({ dt, t, ativa: false, hover: false, perto: false }); }
+    // motos: de longe some a moto inteira (ninguém vê 2 m de moto a 1 km); a montada está sempre perto da câmera
+    for (const m of this.motos) this.regiaoPerto(m.h.group, "moto");
 
     this.atualizarCamera();
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
