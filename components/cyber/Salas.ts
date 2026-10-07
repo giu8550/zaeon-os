@@ -194,9 +194,12 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       caixa(p, m.larg + 0.12, 0.06, m.prof + 0.12, gelo, 0, T - 0.03, 0);
       // frente: equalizador (barras que dançam com o grave) sobre um painel de gelo
       caixa(p, m.larg - 0.1, T - 0.2, 0.04, gelo, 0, (T - 0.06) / 2, m.prof / 2 + 0.01);
-      const nB = o.low ? 10 : 18, barras: THREE.Mesh[] = [];
-      for (let i = 0; i < nB; i++) { const b = caixa(p, (m.larg - 0.5) / nB - 0.04, 1, 0.02, basica(FESTA[i % FESTA.length]!, 0.9, true), -((m.larg - 0.5) / 2) + ((i + 0.5) * (m.larg - 0.5)) / nB, 0.15, m.prof / 2 + 0.04); b.geometry.translate(0, 0.5, 0); b.position.y = 0.12; barras.push(b); }
-      anim.push((_, t) => { barras.forEach((b, i) => { const v = 0.06 + (T - 0.4) * (0.15 + 0.85 * batida()) * (0.35 + 0.65 * Math.abs(Math.sin(t * (2.3 + (i % 5) * 0.7) + i * 1.9))); b.scale.y = v; }); });
+      // (num InstancedMesh só: 1 draw — antes 1 mesh + 1 material por barra)
+      const nB = o.low ? 10 : 18, wB = (m.larg - 0.5) / nB - 0.04, gB = new THREE.BoxGeometry(wB, 1, 0.02); gB.translate(0, 0.5, 0);
+      const barras = new THREE.InstancedMesh(gB, basica(0xffffff, 0.9, true), nB), mB = new THREE.Matrix4(), xB = (i: number) => -((m.larg - 0.5) / 2) + ((i + 0.5) * (m.larg - 0.5)) / nB;
+      for (let i = 0; i < nB; i++) { barras.setMatrixAt(i, mB.makeTranslation(xB(i), 0.12, m.prof / 2 + 0.04)); barras.setColorAt(i, new THREE.Color(FESTA[i % FESTA.length]!)); }
+      barras.computeBoundingSphere(); barras.frustumCulled = false; p.add(barras);   // (a esfera muda com a altura das barras)
+      anim.push((_, t) => { for (let i = 0; i < nB; i++) { const v = 0.06 + (T - 0.4) * (0.15 + 0.85 * batida()) * (0.35 + 0.65 * Math.abs(Math.sin(t * (2.3 + (i % 5) * 0.7) + i * 1.9))); barras.setMatrixAt(i, mB.makeScale(1, v, 1).setPosition(xB(i), 0.12, m.prof / 2 + 0.04)); } barras.instanceMatrix.needsUpdate = true; });
       // os 2 PICKUPS
       const pratos: THREE.Mesh[] = [];
       for (const sx of [-1, 1]) {
@@ -217,14 +220,17 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const faders: THREE.Mesh[] = [];
       for (let c = 0; c < 4; c++) { caixa(p, 0.012, 0.004, 0.18, basica(0x2a3550), -0.27 + c * 0.18, T + 0.106, 0.08); faders.push(caixa(p, 0.05, 0.03, 0.03, basica(FESTA[c]!, 0.95, true), -0.27 + c * 0.18, T + 0.12, 0.08)); }
       const cross = caixa(p, 0.07, 0.03, 0.035, basica(0xffffff, 0.9, true), 0, T + 0.12, 0.25);
-      const vu: THREE.Mesh[] = [];
-      for (let l = 0; l < 8; l++) for (const sx of [-1, 1]) vu.push(caixa(p, 0.025, 0.01, 0.022, basica(l > 6 ? 0xff5f6b : l > 4 ? 0xffd36b : 0x6bff9a, 0.95, true), sx * 0.36, T + 0.108, 0.24 - l * 0.035));
+      // VU (InstancedMesh: o segmento apagado vai a escala 0)
+      const vu = new THREE.InstancedMesh(new THREE.BoxGeometry(0.025, 0.01, 0.022), basica(0xffffff, 0.95, true), 16), mV = new THREE.Matrix4(), posVU: [number, number][] = [];
+      for (let l = 0; l < 8; l++) for (const sx of [-1, 1]) { const i = posVU.length; posVU.push([sx * 0.36, 0.24 - l * 0.035]); vu.setMatrixAt(i, mV.makeTranslation(sx * 0.36, T + 0.108, 0.24 - l * 0.035)); vu.setColorAt(i, new THREE.Color(l > 6 ? 0xff5f6b : l > 4 ? 0xffd36b : 0x6bff9a)); }
+      vu.computeBoundingSphere(); p.add(vu); let vuAnt = -1;
       tocaDiscos = p;
       anim.push((dt, t) => {
         if (tocando) for (const d of pratos) d.rotation.z -= dt * 3.5;
         const b = batida(); faders.forEach((f, i) => { f.position.z = 0.08 + 0.06 * Math.sin(t * 0.5 + i * 1.7) * ativo; });
         cross.position.x = 0.2 * Math.sin(t * 0.8) * ativo;
-        vu.forEach((v, i) => { v.visible = Math.floor(i / 2) < Math.round(b * 8 + (pulso * 2 * ativo)); });
+        const nv = Math.round(b * 8 + (pulso * 2 * ativo));
+        if (nv !== vuAnt) { vuAnt = nv; posVU.forEach(([x, z], i) => vu.setMatrixAt(i, Math.floor(i / 2) < nv ? mV.makeTranslation(x, T + 0.108, z) : mV.makeScale(0, 0, 0))); vu.instanceMatrix.needsUpdate = true; }
       });
     },
     // TORRE DE SOM gigante: subs embaixo, 4 médios, corneta em cima; LEDs nas quinas e um feixe no topo

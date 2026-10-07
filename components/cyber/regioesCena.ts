@@ -44,13 +44,23 @@ function tamanho(o: THREE.Object3D): number {
   return r * s;
 }
 
+/** o centro da peça no mundo (o da geometria: um lote fica na origem do quadro, mas as peças estão espalhadas) */
+function centro(o: THREE.Object3D, w: THREE.Vector3): THREE.Vector3 {
+  const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+  if (!g) return o.getWorldPosition(w);
+  if (!g.boundingSphere) g.computeBoundingSphere();
+  return w.copy(g.boundingSphere!.center).applyMatrix4(o.matrixWorld);
+}
 /** as peças pequenas (detalhe) de uma raiz dentro da `area`: não desce dentro de uma peça já escolhida */
 export function separarDetalhe(raiz: THREE.Object3D, limiar = 4, area?: Regiao): THREE.Object3D[] {
   raiz.updateMatrixWorld(true);
   const out: THREE.Object3D[] = [], w = new THREE.Vector3();
   const visitar = (o: THREE.Object3D) => {
     for (const f of o.children) {
-      if (tamanho(f) < limiar) { if (!area || distanciaDaRegiao(f.getWorldPosition(w), area) < 1) out.push(f); continue; }
+      if (f.userData.detalhe || tamanho(f) < limiar) {   // (ou um lote de peças pequenas: components/cyber/lotes)
+        if (!area || distanciaDaRegiao(centro(f, w), area) < 1) out.push(f);
+        continue;
+      }
       visitar(f);
     }
   };
