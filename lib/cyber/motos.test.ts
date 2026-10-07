@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { FABRICA, LOTES, MOTO, TOTAL_VAGAS, baseDoRobo, esvaziou, fabricaNova, largadasValidas, motoDe, motoLargadaDe, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, tamanhoDoLote, vagas } from "./motos";
+import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, TOTAL_VAGAS, lookDaVaga, baseDoRobo, esvaziou, fabricaNova, largadasValidas, motoDe, motoLargadaDe, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, tamanhoDoLote, vagas } from "./motos";
 import { CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal, noPortalVolta } from "./ceu";
 import { BASES_CEU_LOCAIS } from "./bases";
 import { HELIPORTO, POIS } from "./landmarks";
+import { VOO } from "./voo";
 
 const ID_A = "a".repeat(24), ID_B = "b".repeat(24);
 
@@ -76,23 +77,49 @@ describe("montar", () => {
 });
 
 describe("a FÁBRICA (o robô que repõe as motos)", () => {
-  it("vaga esvaziou → o robô vai até ela, fabrica em FABRICA.fabrica s e ela fica pronta; uma de cada vez, em ordem", () => {
-    const f = fabricaNova(); esvaziou(f, 4); esvaziou(f, 6); esvaziou(f, 4);
-    expect(f.fila).toEqual([4, 6]);
-    expect(passoFabrica(f, 0.1, false)).toBeNull(); expect(f.tarefa).toMatchObject({ s: 4, fase: "ida" });
+  it("NÃO sai na hora: espera a vaga ficar livre por FABRICA.espera s seguidos (quem levou a moto vai embora primeiro)", () => {
+    const f = fabricaNova(); esvaziou(f, 4); esvaziou(f, 4);
+    expect(f.fila.map((x) => x.s)).toEqual([4]);
+    let ocupada = true; const livre = () => !ocupada;
+    for (let i = 0; i < 100; i++) passoFabrica(f, 0.1, false, livre);   // 10 s com o piloto em cima: nada
+    expect(f.tarefa).toBeNull();
+    ocupada = false; passoFabrica(f, FABRICA.espera - 0.5, false, livre); expect(f.tarefa).toBeNull();
+    ocupada = true; passoFabrica(f, 0.1, false, livre); ocupada = false;   // voltou alguém: o relógio zera
+    passoFabrica(f, FABRICA.espera - 0.5, false, livre); expect(f.tarefa).toBeNull();
+    passoFabrica(f, 1, false, livre); expect(f.tarefa).toMatchObject({ s: 4, fase: "ida" });
+  });
+  it("vai até a vaga, fabrica em FABRICA.fabrica s e ela fica pronta; uma de cada vez", () => {
+    const f = fabricaNova(); esvaziou(f, 4); esvaziou(f, 6);
+    passoFabrica(f, FABRICA.espera + 0.1, false); expect(f.tarefa).toMatchObject({ s: 4, fase: "ida" });
     expect(progressoDaVaga(f, 4)).toBe(0); expect(progressoDaVaga(f, 6)).toBe(0); expect(progressoDaVaga(f, 5)).toBe(1);
     expect(passoFabrica(f, 5, false)).toBeNull();   // ainda voando (só fabrica ao CHEGAR)
     passoFabrica(f, 0.1, true); expect(f.tarefa).toMatchObject({ s: 4, fase: "fabrica" });
     passoFabrica(f, FABRICA.fabrica / 2, true); expect(progressoDaVaga(f, 4)).toBeCloseTo(0.5, 1);
     expect(passoFabrica(f, FABRICA.fabrica, true)).toBe(4);
     expect(progressoDaVaga(f, 4)).toBe(1);
-    passoFabrica(f, 0.1, false); expect(f.tarefa).toMatchObject({ s: 6, fase: "ida" });
+    passoFabrica(f, 0.1, false); expect(f.tarefa).toMatchObject({ s: 6, fase: "ida" });   // a 6 já esperou o bastante
   });
-  it("o robô voa até o alvo (sem passar dele) e para em cima", () => {
+  it("o robô voa até o alvo (sem passar dele) e para em cima — devagar (vel ≤ 7 m/s)", () => {
     let p = { x: 0, y: 3, z: 0 }; const alvo = { x: 20, y: 3, z: 0 };
     for (let i = 0; i < 30; i++) p = moverRobo(p, alvo, 1 / 30);
-    expect(p.x).toBeGreaterThan(5); expect(p.x).toBeLessThan(20);
+    expect(p.x).toBeGreaterThan(3); expect(p.x).toBeLessThanOrEqual(7.01);
     for (let i = 0; i < 300; i++) p = moverRobo(p, alvo, 1 / 30);
     expect(Math.hypot(p.x - alvo.x, p.z - alvo.z)).toBeLessThan(0.01);
+  });
+});
+
+describe("look das motos (cor + carenagem)", () => {
+  it("cores DIFERENTES em cada vaga de um estacionamento (e vizinhas nunca iguais); carenagens variando", () => {
+    for (const l of [0, 1]) {
+      const ids = vagas().map((v, i) => ({ v, i })).filter((x) => x.v.lote === l).map((x) => x.i);
+      const cores = ids.map((i) => lookDaVaga(i).cor);
+      expect(new Set(cores).size).toBe(cores.length);
+      expect(new Set(ids.map((i) => lookDaVaga(i).estilo)).size).toBeGreaterThan(1);
+    }
+    expect(lookDaVaga(3)).toEqual(lookDaVaga(3));   // o mesmo pra todo mundo
+  });
+  it("a plataforma de lançamento: a moto parada fica em cima dela e, montada, sai acima do 'rente ao chão' (anda na hora)", () => {
+    expect(PLATAFORMA_MOTO.altura).toBeGreaterThan(0.5);
+    expect(ALTURA_LANCAMENTO).toBeGreaterThan(VOO.decolar);
   });
 });

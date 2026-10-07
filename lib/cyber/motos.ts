@@ -43,6 +43,20 @@ export const MOTO = {
   alcance: 3.2,
 } as const;
 
+/** a PLATAFORMA de lançamento de cada vaga: a moto parada fica em cima dela (m acima do piso do lote); ao montar, a moto
+ *  já sai PAIRANDO em `ALTURA_LANCAMENTO` (acima do "rente ao chão" do voo, que trava andar de lado) — sai andando na hora */
+export const PLATAFORMA_MOTO = { altura: 1.1, r: 1.7 } as const;
+export const ALTURA_LANCAMENTO = 2;
+/** o LOOK de cada vaga — cor e carenagem — embaralhado (não repete em sequência; 16 cores bem diferentes), o mesmo pra
+ *  todo mundo (é da vaga: a moto que você leva continua com a cara dela) */
+const PALETA_MOTO = ["#45d6ff", "#ff6ad5", "#ffc46b", "#9affd0", "#ff5a5a", "#a98bff", "#5aff8a", "#ff9a3c", "#3c8bff", "#f2ff5a", "#ff3c9e", "#5afff2", "#c46bff", "#ffd1a3", "#7dd3ff", "#b6ff3c"];
+export function lookDaVaga(s: number): { cor: string; estilo: number } {
+  const h = (n: number) => { let x = (n + 1) * 2654435761; x = (x ^ (x >>> 13)) >>> 0; return x; };
+  // a cor: uma permutação fixa das 16 (sem duas vizinhas iguais); a carenagem: sorteada pela vaga
+  const ordem = [5, 12, 0, 9, 3, 14, 7, 1, 10, 4, 15, 8, 2, 13, 6, 11];
+  return { cor: PALETA_MOTO[ordem[s % ordem.length]!]!, estilo: h(s) % 3 };
+}
+
 export type Vaga = { x: number; z: number; yaw: number; ceu: boolean; lote: number };
 /** posição (mundo) e rumo de cada vaga — filas lado a lado, viradas pro centro; a fila 0 é a da FRENTE, as outras atrás
  *  dela. Índice = lote a lote, fila a fila. Constante: calculada uma vez e congelada. */
@@ -110,27 +124,33 @@ export function motoParaMontar(p: { x: number; z: number }, alt: number, prontas
 }
 
 /**
- * A FÁBRICA de cada estacionamento: um robô que repõe as motos. Vaga esvaziou (alguém levou a moto) → entra na FILA;
- * o robô voa até a próxima (`ida` termina quando ele CHEGA — quem move é `moverRobo`), fabrica por `FABRICA.fabrica` s
- * (a moto vai se formando) e segue pra próxima ou volta pra base.
+ * A FÁBRICA de cada estacionamento: um robô que repõe as motos. Vaga esvaziou (alguém levou a moto) → entra na FILA,
+ * mas o robô NÃO sai na hora: espera a vaga ficar LIVRE (quem levou a moto já foi embora com ela) por `espera` s
+ * seguidos. Aí voa até ela (`ida` termina quando ele CHEGA — quem move é `moverRobo`), fabrica por `fabrica` s (a moto
+ * vai se formando, com luz) e segue pra próxima ou volta pra base.
  */
-export const FABRICA = { fabrica: 3.2, vel: 11, altura: 3.2 } as const;
-export type Fabrica = { fila: number[]; tarefa: { s: number; fase: "ida" | "fabrica"; t: number } | null };
+export const FABRICA = { espera: 3, fabrica: 5, vel: 6, altura: 3.4 } as const;
+export type Fabrica = { fila: { s: number; livre: number }[]; tarefa: { s: number; fase: "ida" | "fabrica"; t: number } | null };
 export const fabricaNova = (): Fabrica => ({ fila: [], tarefa: null });
-/** a vaga `s` esvaziou: entra na fila (uma vez) */
-export function esvaziou(f: Fabrica, s: number) { if (f.tarefa?.s !== s && !f.fila.includes(s)) f.fila.push(s); }
-/** um passo da fábrica; `chegou` = o robô está em cima da vaga da tarefa. Devolve a vaga que ficou PRONTA (ou null) */
-export function passoFabrica(f: Fabrica, dt: number, chegou: boolean): number | null {
-  if (!f.tarefa) { const s = f.fila.shift(); if (s === undefined) return null; f.tarefa = { s, fase: "ida", t: 0 }; }
+/** a vaga `s` esvaziou: entra na fila (uma vez), com o relógio de "livre" zerado */
+export function esvaziou(f: Fabrica, s: number) { if (f.tarefa?.s !== s && !f.fila.some((x) => x.s === s)) f.fila.push({ s, livre: 0 }); }
+/** um passo da fábrica. `livre(s)` = ninguém em cima da vaga agora; `chegou` = o robô está em cima da vaga da tarefa.
+ *  Devolve a vaga que ficou PRONTA (ou null) */
+export function passoFabrica(f: Fabrica, dt: number, chegou: boolean, livre: (s: number) => boolean = () => true): number | null {
+  for (const x of f.fila) x.livre = livre(x.s) ? x.livre + dt : 0;   // o relógio só corre com a vaga livre
+  if (!f.tarefa) {
+    const i = f.fila.findIndex((x) => x.livre >= FABRICA.espera); if (i < 0) return null;
+    f.tarefa = { s: f.fila.splice(i, 1)[0]!.s, fase: "ida", t: 0 };
+  }
   const tr = f.tarefa; tr.t += dt;
-  if (tr.fase === "ida") { if (chegou) { tr.fase = "fabrica"; tr.t = 0; } return null; }
+  if (tr.fase === "ida") { if (chegou && livre(tr.s)) { tr.fase = "fabrica"; tr.t = 0; } return null; }
   if (tr.t >= FABRICA.fabrica) { f.tarefa = null; return tr.s; }
   return null;
 }
 /** quanto da moto da vaga `s` já está formada (0..1): pronta = 1; na fila / o robô indo = 0; fabricando = o progresso */
 export function progressoDaVaga(f: Fabrica, s: number): number {
   if (f.tarefa?.s === s) return f.tarefa.fase === "fabrica" ? Math.min(1, f.tarefa.t / FABRICA.fabrica) : 0;
-  return f.fila.includes(s) ? 0 : 1;
+  return f.fila.some((x) => x.s === s) ? 0 : 1;
 }
 /** move o robô na direção do alvo (velocidade `FABRICA.vel`, freando perto) */
 export function moverRobo(p: { x: number; y: number; z: number }, alvo: { x: number; y: number; z: number }, dt: number): { x: number; y: number; z: number } {

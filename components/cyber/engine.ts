@@ -38,7 +38,7 @@ import { criarLandmark, type LandmarkHandle } from "./Landmark";
 import { atualizarCamuflagem, camuflarGrupo, pararCamuflagem } from "./camuflagem";
 import { criarMoto, type MotoHandle } from "./Moto";
 import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
-import { FABRICA, LOTES, MOTO, baseDoRobo, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
+import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
 import { PILOTAGEM, motoParada, passoMotoSub, sensacaoDeVelocidade, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
 import { LOOPS_MOTO, eventosDaMoto, mixDaMoto, setaAcesa, somMotoParada, type EstadoSomMoto } from "@/lib/cyber/somMoto";
@@ -139,9 +139,7 @@ type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 
 /** cor da mesa do QG quando o Andrei não está na sala */
 const COR_QG = "#ffd36b";
-/** cor dos frisos/chamas de cada moto do estacionamento */
-const CORES_MOTO = ["#45d6ff", "#ff6ad5", "#ffc46b", "#9affd0"];
-/** a moto de um piloto (montada ou estacionada): o modelo animado, o look (cor|carenagem, pro pool), a vaga de origem,
+/** a moto de um piloto (montada ou estacionada): o modelo animado, o look (a vaga: cor + carenagem, pro pool), a vaga de origem,
  *  os loops do motor e o estágio do som no quadro anterior, e o rumo/altura anteriores (curva e subida) */
 type InstMoto = { h: MotoHandle; g: THREE.Group; /** o de fora: o pool liga/desliga ESTE (o corte por distância mexe no `g`) */ casca: THREE.Group; look: string; s: number; loops: Record<(typeof LOOPS_MOTO)[number], LoopSom> | null; som: EstadoSomMoto; yawAnt: number; yAnt: number | null; vy: number };
 /** sensibilidade do olhar livre (rad por pixel do mouse) */
@@ -249,7 +247,8 @@ export class CyberEngine {
    *  criada sob demanda e reaproveitada por look (`poolMotos`). `loops`/`som` = o som por estágio (lib/cyber/somMoto). */
   /** `g` = a posição na vaga (o corte por distância mexe nele); `moto` = a moto em si (some/se forma com o robô) */
   private vagaMotos: { g: THREE.Group; moto: THREE.Object3D; alvos: THREE.Object3D[] }[] = [];
-  private fabricas: { lote: Lote; f: Fabrica; robo: RoboMotosHandle; pos: { x: number; y: number; z: number }; rumo: number }[] = [];
+  /** `efeitoEm` = a vaga onde está a luz da fabricação (fica lá até o clarão acabar) */
+  private fabricas: { lote: Lote; f: Fabrica; robo: RoboMotosHandle; pos: { x: number; y: number; z: number }; rumo: number; efeitoEm: number | null }[] = [];
   private instMotos = new Map<string, InstMoto>();
   private poolMotos = new Map<string, InstMoto[]>();
   /** remotos: o que cada um montava no quadro anterior ("vaga|de") — montou de uma VAGA → ela esvaziou */
@@ -335,7 +334,7 @@ export class CyberEngine {
       this.nave = criarNave({ low, cor: "#2f7bff" }); loteNave(this.nave); this.cena.scene.add(this.nave.group);
       // as motos das VAGAS: paradas pra sempre → um lote estático cada (o robô repõe; quem monta leva uma instância)
       vagas().forEach((v, i) => {
-        const h = criarMoto({ cor: CORES_MOTO[i % CORES_MOTO.length]!, low, estilo: i % 3 });
+        const h = criarMoto({ ...lookDaVaga(i), low });
         for (let k = 0; k < 6; k++) h.atualizar({ dt: 1, t: 0, voando: false, vel: 0, curva: 0 });
         fundirEstaticos(h.group, { manter: comDescendentes(h.alvos) });
         const g = new THREE.Group(); g.add(h.group); g.position.set(v.x, this.yDaVaga(v), v.z); g.rotation.y = v.yaw;
@@ -344,8 +343,8 @@ export class CyberEngine {
       // o ROBÔ de cada estacionamento, pousado na plataforma dele
       for (const l of LOTES) {
         const robo = criarRoboMotos({ low }), b = baseDoRobo(l), y = this.yDoLote(l) + 1.6;
-        robo.group.position.set(b.x, y, b.z); this.cena.scene.add(robo.group);
-        this.fabricas.push({ lote: l, f: fabricaNova(), robo, pos: { x: b.x, y, z: b.z }, rumo: l.rot });
+        robo.group.position.set(b.x, y, b.z); this.cena.scene.add(robo.group, robo.efeito);
+        this.fabricas.push({ lote: l, f: fabricaNova(), robo, pos: { x: b.x, y, z: b.z }, rumo: l.rot, efeitoEm: null });
       }
       const marca = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.2, 40), new THREE.MeshBasicMaterial({ color: 0x7fe0ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
       marca.rotation.x = -Math.PI / 2; marca.visible = false; this.cena.scene.add(marca);
@@ -716,21 +715,24 @@ export class CyberEngine {
   montar(alvo: AlvoMoto | null = this.motoAoAlcance()): boolean {
     if (!alvo || !this.podeMontar()) return false;
     let p: { x: number; y: number; z: number; yaw: number } | null = null;
-    if (alvo.tipo === "vaga") { const v = vagas()[alvo.s]; if (v && this.vagaPronta(alvo.s)) p = { x: v.x, y: this.yDaVaga(v), z: v.z, yaw: v.yaw }; }
+    let lancar = false;
+    if (alvo.tipo === "vaga") { const v = vagas()[alvo.s]; if (v && this.vagaPronta(alvo.s)) { p = { x: v.x, y: this.yDaVaga(v), z: v.z, yaw: v.yaw }; lancar = true; } }
     else p = this.largadasAgora().find((l) => l.dono === alvo.dono)?.m ?? null;
     if (!p || Math.abs(p.y - this.eu.alt) > 2.5 || Math.hypot(this.eu.pos.x - p.x, this.eu.pos.z - p.z) > MOTO.alcance) return false;
     if (alvo.tipo === "vaga") { this.tomarVaga(alvo.s); this.motoDe = undefined; }
     else { this.motoDe = alvo.dono; if (alvo.dono === this.o.eu.id) { this.motoLargada = null; this.renomearInst("eu:p", "eu:r"); } }   // a minha estacionada: a mesma moto (sem trocar)
-    this.motoAlvo = null; this.moto = alvo.s; this.motoEst = motoParada(p.x, p.y, p.z, p.yaw); this.camAz = p.yaw + Math.PI; this.camSegueEm = 0;
+    // da VAGA: a moto já sai da plataforma PAIRANDO na altura de lançamento (acima do "rente ao chão": anda na hora)
+    const y0 = lancar ? p.y - PLATAFORMA_MOTO.altura + ALTURA_LANCAMENTO : p.y;
+    this.motoAlvo = null; this.moto = alvo.s; this.motoEst = motoParada(p.x, y0, p.z, p.yaw); this.camAz = p.yaw + Math.PI; this.camSegueEm = 0;
     this.altoEm = null; this.yNav = 0;   // montado, o nível é o da moto
-    this.motoPousado = true; this.autoPouso = false;
+    this.motoPousado = !lancar; this.autoPouso = false;
     this.sitT = 0; this.alvo = null; this.alvoDepois = null; this.falandoCom = null; this.jetV = { x: 0, z: 0 };
     return true;
   }
   /** a altura de um lote (o da Zaeon flutua com a ilha) */
   private yDoLote(l: Lote) { return l.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : 0; }
-  /** a altura de uma vaga: chão, ou o piso da Zaeon (que flutua) */
-  private yDaVaga(v: { ceu: boolean }) { return v.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : 0; }
+  /** a altura da moto PARADA numa vaga: em cima da plataforma de lançamento (no chão, ou no piso da Zaeon, que flutua) */
+  private yDaVaga(v: { ceu: boolean }) { return (v.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : 0) + PLATAFORMA_MOTO.altura; }
   /** DESCE da moto (pousada): fica ao lado dela e a moto FICA ALI estacionada (é um veículo — é minha até eu estacionar
    *  outra ou sair); os outros veem pela minha presença. No piso da Zaeon → anda na ilha; noutro alto → cai dali */
   desmontar() {
@@ -872,9 +874,9 @@ export class CyberEngine {
 
   /** uma INSTÂNCIA animada (a moto de um piloto) do look da vaga `s`: do pool, ou nova */
   private pegarInst(s: number): InstMoto {
-    const look = `${s % CORES_MOTO.length}|${s % 3}`, livre = this.poolMotos.get(look)?.pop();
+    const look = String(s), livre = this.poolMotos.get(look)?.pop();   // o look é da vaga (cor + carenagem)
     if (livre) { livre.s = s; livre.casca.visible = true; livre.som = somMotoParada; livre.yAnt = null; return livre; }
-    const h = criarMoto({ cor: CORES_MOTO[s % CORES_MOTO.length]!, low: this.o.low, estilo: s % 3 });
+    const h = criarMoto({ ...lookDaVaga(s), low: this.o.low });
     fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5, boost: k % 3 === 0 ? 1 : 0, seta: (k % 3) - 1 }), manter: comDescendentes(h.alvos) });
     const casca = new THREE.Group(); casca.add(h.group); this.cena.scene.add(casca);
     return { h, g: h.group, casca, look, s, loops: null, som: somMotoParada, yawAnt: 0, yAnt: null, vy: 0 };
@@ -906,13 +908,17 @@ export class CyberEngine {
     const vs = vagas();
     for (const fb of this.fabricas) {
       const tr = fb.f.tarefa, base = baseDoRobo(fb.lote), yl = this.yDoLote(fb.lote);
-      const alvo = tr ? { x: vs[tr.s]!.x, y: yl + FABRICA.altura, z: vs[tr.s]!.z } : { x: base.x, y: yl + 1.6, z: base.z };
+      const alvo = tr ? { x: vs[tr.s]!.x, y: this.yDaVaga(vs[tr.s]!) + FABRICA.altura, z: vs[tr.s]!.z } : { x: base.x, y: yl + 1.6, z: base.z };
       const ant = fb.pos; fb.pos = moverRobo(fb.pos, alvo, dt);
       const dx = fb.pos.x - ant.x, dz = fb.pos.z - ant.z; if (Math.hypot(dx, dz) > 0.02) fb.rumo = Math.atan2(dx, dz);
       const chegou = Math.hypot(fb.pos.x - alvo.x, fb.pos.y - alvo.y, fb.pos.z - alvo.z) < 0.25;
-      // só fabrica com a vaga LIVRE (quem acabou de pegar a moto ainda está em cima dela: o robô paira e espera)
-      passoFabrica(fb.f, dt, !!tr && chegou && (tr.fase === "fabrica" || this.vagaLivre(tr.s)));
+      // o robô só sai depois que quem levou a moto FOI EMBORA (a vaga livre por FABRICA.espera s) e só fabrica com ela livre
+      const pronta = passoFabrica(fb.f, dt, !!tr && chegou, (s) => this.vagaLivre(s));
       fb.robo.group.position.set(fb.pos.x, fb.pos.y, fb.pos.z);
+      // a luz da fabricação fica na vaga em que ele trabalha; pronta → clarão (a luz acaba ali mesmo)
+      if (fb.f.tarefa?.fase === "fabrica") fb.efeitoEm = fb.f.tarefa.s;
+      if (pronta !== null) fb.robo.clarao();
+      if (fb.efeitoEm !== null) { const v = vs[fb.efeitoEm]!; fb.robo.efeito.position.set(v.x, this.yDaVaga(v), v.z); }
       const fab = fb.f.tarefa?.fase === "fabrica" ? progressoDaVaga(fb.f, fb.f.tarefa.s) : null;
       if (this.regiaoPerto(fb.robo.group, "robo-motos")) fb.robo.atualizar({ dt, t, progresso: fab, rumo: fab !== null ? vs[fb.f.tarefa!.s]!.yaw : fb.rumo });
     }
@@ -975,7 +981,7 @@ export class CyberEngine {
   /** as motos PARADAS na vaga são sólidas pra quem anda (círculo do tamanho do corpo) */
   private colisoresDeMotos(): Colisor[] {
     const out: Colisor[] = [], vs = vagas();
-    vs.forEach((v, i) => { if (Math.abs(this.yDaVaga(v) - this.eu.alt) < 2.5 && this.vagaPronta(i)) out.push({ x: v.x, z: v.z, r: 1.1 }); });
+    vs.forEach((v, i) => { if (Math.abs(this.yDaVaga(v) - this.eu.alt) < 2.5) out.push({ x: v.x, z: v.z, r: PLATAFORMA_MOTO.r }); });   // a plataforma (com ou sem moto)
     for (const { m } of this.largadasAgora()) if (Math.abs(m.y - this.eu.alt) < 2.5) out.push({ x: m.x, z: m.z, r: 1.1 });   // as paradas no MEU nível
     return out;
   }
