@@ -12,6 +12,7 @@ import { writeFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { GoogleAuth } from "google-auth-library";
 
+// A Zaeon NÃO diz o próprio nome (decisão do dono — a pronúncia da marca fica de fora da voz).
 // Voz de cada agente casa com o avatar (gênero + jeito). persona.voice em lib/ai/personas.ts é só
 // metadado (o app fala na voz que o usuário escolhe) — aqui é a voz PRÓPRIA do personagem.
 const SAUDACOES = {
@@ -21,7 +22,7 @@ const SAUDACOES = {
     "E aí! Manda a tua dúvida que a gente resolve junto.",
   ] },
   zaeon: { voz: "Sulafat", frases: [
-    "Oi, que bom que você chegou! Eu sou a Zaeon, e vou te levar pro lugar certo.",
+    "Oi, que bom que você chegou! Me conta o que você quer fazer, que eu te levo pro lugar certo.",
     "Que bom te ver por aqui! Me conta o que você precisa hoje.",
     "Oi! Pode falar comigo, que eu chamo quem pode te ajudar.",
   ] },
