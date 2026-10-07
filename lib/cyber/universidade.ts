@@ -28,7 +28,8 @@ export type Porta = { lado: Lado; em: number; w: number };   // `em` = coordenad
 export type TipoSala = "atrio" | "salao" | "biblioteca" | "auditorio" | "estudo" | "laboratorio" | "cafe" | "atelie";
 export type Sala = { id: string; nome: string; tipo: TipoSala; x0: number; x1: number; z0: number; z1: number; alt: number; portas: Porta[] };
 
-/** as salas (amplas) dentro da muralha interna */
+/** as salas (amplas): PAVILHÕES abertos (sem parede) dentro do anel das 4 torres grandes; `portas` = por onde o
+ *  layout dos móveis deixa passagem */
 export const SALAS: Sala[] = [
   { id: "atrio", nome: "Átrio da Torre", tipo: "atrio", x0: -16, x1: 16, z0: -79, z1: -44, alt: 14, portas: [{ lado: "s", em: 0, w: 10 }, { lado: "o", em: -61.5, w: 6 }, { lado: "l", em: -61.5, w: 6 }, { lado: "n", em: 0, w: 8 }] },
   { id: "salao", nome: "Grande Salão", tipo: "salao", x0: -16, x1: 16, z0: -40, z1: 36, alt: 16, portas: [{ lado: "s", em: 0, w: 8 }, { lado: "n", em: 0, w: 6 }, { lado: "o", em: 0, w: 6 }, { lado: "l", em: 0, w: 6 }] },
@@ -81,18 +82,17 @@ export function paredesDoRetangulo(x0: number, x1: number, z0: number, z1: numbe
   for (const [p0, p1] of cortar(z0, z1, vaos.l ?? [])) out.push({ ax: x1, az: p0, bx: x1, bz: p1, esp, alt });
   return out;
 }
-const vaosDaSala = (s: Sala) => { const v: Partial<Record<Lado, { c: number; w: number }[]>> = {}; for (const p of s.portas) (v[p.lado] ??= []).push({ c: p.em, w: p.w }); return v; };
 
-/** todas as paredes (locais): muralhas (com portões) + salas (com portas). Constante → calculado uma vez. */
+/**
+ * todas as paredes (locais): SÓ a muralha externa (com o portão). A muralha interna e as paredes das salas saíram
+ * (eram parede dobrada em cima de parede — lixo visual): as salas viram PAVILHÕES abertos, marcados pelo piso aceso
+ * com contorno de luz; as 4 torres grandes da interna ficam. Constante → calculado uma vez.
+ */
 let paredesCache: Parede[] | null = null;
 export function paredesDaUniversidade(): Parede[] {
   if (paredesCache) return paredesCache;
-  const { externa: e, interna: i } = UNIVERSIDADE;
-  paredesCache = [
-    ...paredesDoRetangulo(-e.meia, e.meia, -e.meia, e.meia, e.esp, e.alt, { s: [{ c: 0, w: e.portao }] }),
-    ...paredesDoRetangulo(-i.meia, i.meia, -i.meia, i.meia, i.esp, i.alt, { s: i.portoes.map((p) => ({ c: p.x, w: p.w })) }),
-    ...SALAS.flatMap((s) => paredesDoRetangulo(s.x0, s.x1, s.z0, s.z1, 0.8, s.alt, vaosDaSala(s))),
-  ];
+  const e = UNIVERSIDADE.externa;
+  paredesCache = paredesDoRetangulo(-e.meia, e.meia, -e.meia, e.meia, e.esp, e.alt, { s: [{ c: 0, w: e.portao }] });
   return paredesCache;
 }
 
@@ -118,10 +118,11 @@ export function empurrarDasParedes(p: P2, paredes: Parede[], raio = 0.45, y = 0)
   return { x, z };
 }
 
-/** o cristal no meio do átrio (debaixo da torre central) */
-export const CRISTAL_ATRIO = { x: 0, z: UNIVERSIDADE.torreCentral.z, r: 2.4 };
-/** os sólidos redondos (locais): torres, fontes dos pátios e o cristal do átrio */
-export const solidosRedondos = (): Colisor[] => [...TORRES.map((t) => ({ x: t.x, z: t.z, r: t.r })), ...FONTES, CRISTAL_ATRIO];
+/** a TORRE DE APARTAMENTOS do átrio: agora nasce do chão (antes flutuava em cima das paredes do átrio, que saíram)
+ *  — a planta dela é sólida pra quem anda (`TORRE_CENTRAL_PE`, raio que cobre os volumes escalonados) */
+export const TORRE_CENTRAL_PE = { x: UNIVERSIDADE.torreCentral.x, z: UNIVERSIDADE.torreCentral.z, r: UNIVERSIDADE.torreCentral.lado * 0.62 };
+/** os sólidos redondos (locais): torres, fontes e o pé da torre central */
+export const solidosRedondos = (): Colisor[] => [...TORRES.map((t) => ({ x: t.x, z: t.z, r: t.r })), ...FONTES, TORRE_CENTRAL_PE];
 
 /** móvel (local): retângulo no chão com altura — o three desenha pelo `tipo`; a colisão usa o retângulo */
 export type MovelU = {
@@ -211,7 +212,8 @@ export function resolverUniversidadeNoAr(w: P2, y: number): P2 {
   l = empurrarParaFora(l, TORRES.filter((t) => t.alt > y).map((t) => ({ x: t.x, z: t.z, r: t.r })));
   l = empurrarDosRetangulos(l, [...todosOsMoveis(), ...SEBES], 0.45, y);
   l = empurrarParaFora(l, ARVORES.filter((a) => a.h > y).map((a) => ({ x: a.x, z: a.z, r: a.tipo === "fruta" ? 1.6 : 2.2 })));
-  if (y < 2.5) l = empurrarParaFora(l, [...FONTES, CRISTAL_ATRIO]);
+  if (y < 2.5) l = empurrarParaFora(l, FONTES);
+  if (y < UNIVERSIDADE.torreCentral.alt) l = empurrarParaFora(l, [TORRE_CENTRAL_PE]);
   return mundoU(l);
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ARVORES, CAMPOS, FONTES, PATIOS, SALAS, SEBES, moveisDaSala, TORRES, UNIVERSIDADE, localU, mundoU, naUniversidade, paredesDaUniversidade, pilaresDaUniversidade, resolverUniversidade, resolverUniversidadeNoAr, salaEm } from "./universidade";
+import { ARVORES, CAMPOS, TORRE_CENTRAL_PE, FONTES, PATIOS, SALAS, SEBES, moveisDaSala, TORRES, UNIVERSIDADE, localU, mundoU, naUniversidade, paredesDaUniversidade, pilaresDaUniversidade, resolverUniversidade, resolverUniversidadeNoAr, salaEm } from "./universidade";
 import { CIDADE, BURACO_NEGRO } from "./ceu";
 import { POIS } from "./landmarks";
 import { posicaoDaBase } from "./bases";
@@ -86,6 +86,15 @@ describe("Universidade (castelo flutuando num disco no céu)", () => {
     expect(CAMPOS).toHaveLength(0); expect(ARVORES).toHaveLength(0); expect(SEBES).toHaveLength(0);
     // dá pra entrar nos pátios pelos vãos das sebes (meio do lado sul)
     for (const p of PATIOS) expect(resolverUniversidade(mundoU({ x: (p.x0 + p.x1) / 2, z: p.z0 + 3 }))).toEqual(mundoU({ x: (p.x0 + p.x1) / 2, z: p.z0 + 3 }));
+  });
+  it("limpa: só a muralha externa tem parede (salas são pavilhões abertos) e a torre de apartamentos é sólida no chão", () => {
+    const e = UNIVERSIDADE.externa.meia;
+    for (const p of paredesDaUniversidade()) expect(Math.max(Math.abs(p.ax), Math.abs(p.az), Math.abs(p.bx), Math.abs(p.bz))).toBe(e);
+    const salao = SALAS.find((s) => s.tipo === "salao")!, pelaLateral = mundoU({ x: salao.x0, z: 20 });
+    expect(dentroDeParede(pelaLateral)).toBe(false);   // entra no salão por qualquer lado
+    const pe = mundoU({ x: TORRE_CENTRAL_PE.x + 0.3, z: TORRE_CENTRAL_PE.z }), q = localU(resolverUniversidade(pe));
+    expect(Math.hypot(q.x - TORRE_CENTRAL_PE.x, q.z - TORRE_CENTRAL_PE.z)).toBeCloseTo(TORRE_CENTRAL_PE.r, 5);
+    expect(localU(resolverUniversidadeNoAr(pe, UNIVERSIDADE.torreCentral.alt + 2))).toEqual(localU(pe));   // por cima passa
   });
 });
 
