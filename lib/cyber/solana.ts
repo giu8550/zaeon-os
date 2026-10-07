@@ -1,5 +1,5 @@
 /**
- * Cyberespaço — a SOLANA HOUSE (PURO, sem three): o QG da Superteam Brasil, um prédio de apartamento futurista de 3
+ * Cyberespaço — a SOLANA HOUSE (PURO, sem three): o QG da Superteam Brasil, um prédio de apartamento futurista (1,5× a planta original) de 3
  * andares + ROOFTOP, num disco flutuando no céu (abaixo da Universidade e da Zaeon). Térreo = lobby/coworking; 2º andar
  * = hacker house (mesas compridas, telão); 3º = o apartamento (sala, cozinha, quartos); rooftop = piscina de borda
  * infinita, bar e lounge; e embaixo do disco a GARAGEM dos devs (ampla, bancadas com computadores, servidores, lounge e
@@ -12,26 +12,30 @@
 import type { P2 } from "./colisao";
 import { empurrarDasParedes, empurrarDosRetangulos, paredesDoRetangulo, type Parede } from "./universidade";
 
+/** a Solana cresceu: a PLANTA (prédio, disco, garagem e onde ficam os móveis) é 1,5× a original; os móveis ficam do
+ *  tamanho de gente (só o lugar deles escala) e o pé-direito subiu de 4,4 pra 5,4 m — e ela flutua bem mais alto */
+export const ESCALA_SOLANA = 1.5;
+const F = ESCALA_SOLANA;
 export const SOLANA = {
-  centro: { x: 280, z: -90 },
-  /** piso do disco (m) — abaixo da Universidade (230) e da Zaeon (290) */
-  y: 160,
+  centro: { x: 640, z: -90 },   // bem longe da Zaeon mega (raio 252 + o anel de ilhotas ≈ 340 m do centro dela)
+  /** piso do disco (m) — mais ALTO que a Universidade (230), abaixo da Zaeon (450) */
+  y: 330,
   /** raio do disco andável (a borda é livre: passou, cai) e a espessura dele (sólido pra nave/moto) */
-  r: 30, espessura: 6,
-  predio: { x0: -12, x1: 12, z0: -2, z1: 14 },
+  r: 30 * F, espessura: 6,
+  predio: { x0: -12 * F, x1: 12 * F, z0: -2 * F, z1: 14 * F },
   /** sacadas de vidro na frente do 2º e 3º andar (mesma largura do prédio) */
-  sacada: { z0: -5.5 },
-  porta: { c: 0, w: 3.2 },          // porta de vidro do térreo (sul)
-  aberturaSacada: { c: 0, w: 12 },  // a fachada sul dos andares de cima abre pra sacada
-  elevador: { x: 9.6, z: 11.6, r: 1.3 },
-  piscina: { x0: -10.5, x1: 1.5, z0: 2.5, z1: 12 },
-  paredeAlt: 4.1, guardaCorpo: 1.1,
+  sacada: { z0: -5.5 * F },
+  porta: { c: 0, w: 3.2 * 1.25 },       // porta de vidro do térreo (sul)
+  aberturaSacada: { c: 0, w: 12 * F },  // a fachada sul dos andares de cima abre pra sacada
+  elevador: { x: 9.6 * F, z: 11.6 * F, r: 1.3 },
+  piscina: { x0: -10.5 * F, x1: 1.5 * F, z0: 2.5 * F, z1: 12 * F },
+  paredeAlt: 5.1, guardaCorpo: 1.1,
   /** a GARAGEM subterrânea (dentro do disco, embaixo do térreo): bem mais larga que o prédio */
-  garagem: { x0: -20, x1: 20, z0: -14, z1: 18, alt: 4.4 },
+  garagem: { x0: -20 * F, x1: 20 * F, z0: -14 * F, z1: 18 * F, alt: 4.4 },
 } as const;
 /** altura (relativa ao disco) do piso de cada andar: térreo, 2º, 3º, rooftop e — por último, pra ordem do elevador
  *  ficar Térreo → 2º → 3º → Rooftop → Garagem → Térreo — a GARAGEM, embaixo do disco */
-export const ANDARES_SOLANA = [0, 4.4, 8.8, 13.2, -6.4] as const;   // garagem: teto (−2) abaixo da tampa do cone do disco (−1,6)
+export const ANDARES_SOLANA = [0, 5.4, 10.8, 16.2, -6.4] as const;   // garagem: teto (−2) abaixo da tampa do cone do disco (−1,6)
 export const NOMES_ANDARES = ["Térreo", "2º andar", "3º andar", "Rooftop", "Garagem"] as const;
 export const ROOFTOP = 3;
 export const GARAGEM = 4;
@@ -67,7 +71,11 @@ export function paredesDoAndar(andar: number): Parede[] {
 }
 
 export type MovelS = { tipo: "balcao" | "sofa" | "mesa" | "pufe" | "cama" | "ilha" | "piscina" | "bar" | "espreguicadeira" | "planta" | "dj" | "rack" | "carro"; x0: number; x1: number; z0: number; z1: number; alt: number; solido?: boolean };
-const m = (tipo: MovelS["tipo"], x0: number, x1: number, z0: number, z1: number, alt: number, solido = true): MovelS => ({ tipo, x0, x1, z0, z1, alt, solido });
+/** um móvel: o CENTRO escala com a planta (F), o tamanho não (é de gente) */
+const m = (tipo: MovelS["tipo"], x0: number, x1: number, z0: number, z1: number, alt: number, solido = true): MovelS => {
+  const cx = ((x0 + x1) / 2) * F, cz = ((z0 + z1) / 2) * F, hx = (x1 - x0) / 2, hz = (z1 - z0) / 2;
+  return { tipo, x0: cx - hx, x1: cx + hx, z0: cz - hz, z1: cz + hz, alt, solido };
+};
 /** os móveis de cada andar (deixam livres a porta/abertura, o elevador e um corredor até ele) */
 export function moveisDoAndar(andar: number): MovelS[] {
   if (andar === 0) return [   // LOBBY + coworking: recepção, sofás, mesas com computador
@@ -91,7 +99,8 @@ export function moveisDoAndar(andar: number): MovelS[] {
     m("cama", -11.4, -7.6, 9.6, 13.6, 0.6), m("cama", -6.4, -2.6, 9.6, 13.6, 0.6),
   ];
   return [   // ROOFTOP: piscina de borda infinita, bar, espreguiçadeiras, lounge, cabine do DJ
-    m("piscina", S.piscina.x0, S.piscina.x1, S.piscina.z0, S.piscina.z1, 0.5), m("bar", 4, 9, 2.4, 3.6, 1.1),
+    { tipo: "piscina", x0: S.piscina.x0, x1: S.piscina.x1, z0: S.piscina.z0, z1: S.piscina.z1, alt: 0.5, solido: true },   // (já na planta escalada)
+    m("bar", 4, 9, 2.4, 3.6, 1.1),
     m("espreguicadeira", -10, -7.6, -0.8, 1.4, 0.45, false), m("espreguicadeira", -6.6, -4.2, -0.8, 1.4, 0.45, false), m("espreguicadeira", -3.2, -0.8, -0.8, 1.4, 0.45, false),
     m("sofa", 4, 7.6, 7.6, 8.6, 0.8), m("dj", 3, 6, 12.2, 13.4, 1.1),
   ];

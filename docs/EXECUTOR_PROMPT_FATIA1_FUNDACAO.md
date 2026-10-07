@@ -72,11 +72,14 @@ export type GerarReq = {
   json?: boolean; model?: string; temperature?: number; timeoutMs?: number;
   rota?: Rota; ctx: LedgerCtx;
 };
-export type Usage = { prompt: number; completion: number; cached: number; total: number };
+export type Usage = { prompt: number; completion: number; cached: number; total: number; reportado: boolean }; // reportado:false = provedor cego (zeros, NUNCA inventados)
 export type GerarRes = { texto: string; usage: Usage; modelo: string; provedor: "vertex" | "litellm"; finishReason?: string };
 export function gerar(req: GerarReq): Promise<GerarRes>;
 export function gerarJson<T>(req: GerarReq): Promise<T>;   // = gerar({...json:true}) + parse com os mesmos erros diagnósticos do geminiJson atual
-export function classificarErroLlm(e: unknown): "rate_limit" | "auth" | "billing" | "teto" | "timeout" | "outro"; // PURO
+export type ClasseErroLlm = "auth" | "credito" | "rate_limit" | "cota_esgotada" | "teto" | "modelo_inexistente" | "timeout" | "provedor_fora" | "pool_esgotado" | "resposta_nao_json" | "outro";
+export function classificarErroLlm(e: unknown): ClasseErroLlm;   // PURO — IMPORTADO de lib/llm/usage.ts (já especificado e testado, 31 testes: ver docs/VERIFICACAO_CHAVES_GATEWAY.md §4), não reimplementar
+export function reenfileiravel(c: ClasseErroLlm): boolean;  // transitório → a fila tenta de novo (rate_limit, timeout, provedor_fora, pool_esgotado)
+export function declaravel(c: ClasseErroLlm): boolean;      // o agente DECLARA ao humano (teto, cota_esgotada — lei 5); auth/credito são problema NOSSO, nunca recado pro aluno
 ```
 
 ```prisma
@@ -117,7 +120,7 @@ model TokenLedger {
 ### C6 · Virtual key por agente
 
 ```ts
-// lib/llm/chaves.ts (PURO + env)
+// lib/llm/chaves.ts (PURO + env) — re-exporta de lib/llm/usage.ts (chaveDoAgente/nomeEnvDaChave já existem lá com teste); não duplicar
 export function nomeEnvDaChave(agentKey: string): string;      // "eng-computacao" → "GATEWAY_KEY_ENG_COMPUTACAO"
 export function chaveDoAgente(agentKey: string, env = process.env): string | null; // GATEWAY_KEY_<AGENT> ?? GATEWAY_KEY_DEFAULT ?? null
 export function gatewayLigado(env = process.env): boolean;      // !!GATEWAY_URL
@@ -130,11 +133,11 @@ Key = emitida pelo LiteLLM (`/key/generate`) com `key_alias = agent:<agentKey>:<
 Branch `escritorio/fatia1-g1-gateway`.
 1. **Compose** (`docker-compose.beta.yml`): serviços `litellm` (`ghcr.io/berriai/litellm:main-stable`, `expose: ["4000"]`, `env_file: [.env, .env.secrets]`, `command: ["--config","/app/litellm.config.yaml","--port","4000"]`, volume do config, `depends_on: [litellm-db, redis]`, `mem_limit` via env no padrão `MEM_*` do arquivo) e `litellm-db` (`postgres:16-alpine`, volume nomeado `litellm_pg`, senha de env). **Redis = o serviço `redis` do compose (`redis://redis:6379`)**, não o Upstash REST (LiteLLM precisa de Redis TCP; ver "decisões assumidas"). Ambos **sem `ports`** — só a rede interna; o `web` fala `http://litellm:4000`. **Perfil opcional** `profiles: ["gateway"]` para o deploy enxuto (`SERVICES="redis caddy web"` do `deploy.yml`) não subir o gateway por acidente.
 2. **`infra/litellm.config.yaml`** (novo, versionado): `model_list` com **um** alvo — `zaeon-flash` → `vertex_ai/${GEMINI_MODEL_FLASH}` (credencial via `GOOGLE_CREDENTIALS` já existente em `.env.secrets`; `vertex_project`/`vertex_location` de env) — e `zaeon-pro` → `vertex_ai/${GEMINI_MODEL_PRO}`. `general_settings: { master_key: os.environ/GATEWAY_MASTER_KEY, database_url: os.environ/LITELLM_DATABASE_URL }`; `litellm_settings: { drop_params: true, num_retries: 1, request_timeout: 45 }`; `router_settings: { redis_host: redis, redis_port: 6379 }`. **Nenhum outro provedor.** Auth obrigatória (sem `master_key` o LiteLLM não sobe).
-3. **`lib/llm/envelope.ts`** (C5, assinatura da §3): transporte `vertex` = exatamente o que `geminiJson`/`geminiText` fazem hoje (reuse `makeVertex`/`getGeminiModel`/`extractText`/`withTimeout` de `lib/scholar/gemini.ts` — exporte o que faltar); transporte `gateway` = `fetch(`${GATEWAY_URL}/v1/chat/completions`)` com `Authorization: Bearer ${chaveDoAgente(ctx.agentKey) ?? GATEWAY_MASTER_KEY}` e `response_format: {type:"json_object"}` quando `json`. **Nesta PR o ledger ainda não existe:** `registrarTokens` é um no-op exportado de `lib/llm/ledger.ts` que o PASSO 2 preenche (assim o envelope nasce completo e testável). `lib/llm/chaves.ts` entra aqui (C6 nasce no PASSO 3, mas o nome da env é decidido agora).
+3. **`lib/llm/envelope.ts`** (C5, assinatura da §3): **normalização de `usage` e classificação de erro vêm de `lib/llm/usage.ts`** (`usageDoVertex`, `usageDoOpenAI`, `classificarErroLlm`, `reenfileiravel`, `declaravel`, `lerRateLimit` — se o arquivo ainda não estiver no repo, ele é o PRIMEIRO arquivo deste PR, com os 31 testes de `usage.test.ts` conforme `docs/VERIFICACAO_CHAVES_GATEWAY.md` §4); transporte `vertex` = exatamente o que `geminiJson`/`geminiText` fazem hoje (reuse `makeVertex`/`getGeminiModel`/`extractText`/`withTimeout` de `lib/scholar/gemini.ts` — exporte o que faltar); transporte `gateway` = `fetch(`${GATEWAY_URL}/v1/chat/completions`)` com `Authorization: Bearer ${chaveDoAgente(ctx.agentKey) ?? GATEWAY_MASTER_KEY}` e `response_format: {type:"json_object"}` quando `json`. **Nesta PR o ledger ainda não existe:** `registrarTokens` é um no-op exportado de `lib/llm/ledger.ts` que o PASSO 2 preenche (assim o envelope nasce completo e testável). `lib/llm/chaves.ts` entra aqui (C6 nasce no PASSO 3, mas o nome da env é decidido agora).
 4. **`lib/llm/saude.ts`**: `estadoGateway()` → `"off"` (sem `GATEWAY_URL`) · `"on"` (GET `${GATEWAY_URL}/health/liveliness` 200, cache 60s em memória) · `"degraded"` (configurado e falhando). **`app/api/health/route.ts`** ganha `gateway` e `provedor` (`"vertex-direct"` | `"litellm"`), sem tocar nos campos atuais.
 5. **`.env.example`**: `GATEWAY_URL=""`, `GATEWAY_MASTER_KEY=""` (🔒), `LITELLM_DATABASE_URL=""` (🔒), `LITELLM_SALT_KEY=""` (🔒), `GATEWAY_KEY_DEFAULT=""` (🔒), `TOKEN_LEDGER=""` (`"0"` desliga), `AGENT_TETO_ENFORCE=""` (`"1"` = o teto por agente passa a desativar o trabalho autônomo; vazio = só avisa — PASSO 4). **`docs/FONTES_BASE.md`**: linha LiteLLM (MIT, "ADOTAR — gateway/virtual keys").
 6. **Testes** (`lib/llm/envelope.test.ts`, `lib/llm/chaves.test.ts`, `lib/llm/saude.test.ts`; `fetch`/Vertex mockados): `rota:"gateway"` sem `GATEWAY_URL` → vertex; gateway 503 → vertex com `provedor:"vertex"`; usage normalizado nos dois formatos (incl. `cached`); `classificarErroLlm` cobre 429/401/402/budget/timeout; `nomeEnvDaChave("eng-computacao")`.
-**Gate G1 (binário):** `GATEWAY_URL` vazio → `tsc`+`vitest` verdes e **zero** diff de comportamento (nenhum call site mudou ainda); `GATEWAY_URL` apontado para o container e `docker compose --profile gateway up litellm` → `/api/health` devolve `gateway:"on"`; parar o container → `gateway:"degraded"` e `gerar({rota:"gateway"})` responde pelo Vertex. **Reporte:** `PASSO 1: verde/vermelho + saída do /api/health nos 3 estados`.
+**Gate G1 (binário):** `node scripts/provar-chaves.mjs --gateway http://litellm:4000/v1 --key <master>` → `APTO` nas 4 provas (autentica · responde · tool · usage); `GATEWAY_URL` vazio → `tsc`+`vitest` verdes e **zero** diff de comportamento (nenhum call site mudou ainda); `GATEWAY_URL` apontado para o container e `docker compose --profile gateway up litellm` → `/api/health` devolve `gateway:"on"`; parar o container → `gateway:"degraded"` e `gerar({rota:"gateway"})` responde pelo Vertex. **Reporte:** `PASSO 1: verde/vermelho + saída do /api/health nos 3 estados`.
 
 ### PASSO 2 — PR-A1 · Telemetria real de tokens (nasce C5 por inteiro)
 Branch `escritorio/fatia1-a1-token-ledger`.

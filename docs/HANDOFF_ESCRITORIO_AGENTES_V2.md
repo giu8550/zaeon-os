@@ -777,7 +777,7 @@ um `awaiting_input` fica esperando · tokens de prompt antes/depois do S8 · fal
    `porQueAgora`) e o reviewer reprovando dossiê que não os amarre.
 3. **Envio externo entra agora?** Decide se G7 entra na fila ou fica parqueado. Enquanto não houver
    decisão, `ENVIO_EXTERNO=dry-run` e o agente só manda mensagem interna.
-4. **Gateway: LiteLLM (+ container Postgres) ou Bifrost (Apache-2.0, Go, sem Postgres)?** Ambos
+4. **Gateway: LiteLLM (+ container Postgres) ou Bifrost (Apache-2.0, Go, sem Postgres)?** *(Nota do Fable, 2026-10-07: o mecanismo do OmniRoute foi lido no código — sem `STORAGE_ENCRYPTION_KEY` as chaves ficam em **texto puro** com só um `warn`; 401/403/429 **não** abrem o breaker; não há endpoint de lease nem evento de rotação de key. Detalhes e correções em `docs/VERIFICACAO_CHAVES_GATEWAY.md`. O orçamento tem de vir do nosso `TokenLedger`, não de perguntar cota ao provedor.)* Ambos
    entregam virtual key por agente com budget. OmniRoute fica como **upstream** atrás do escolhido —
    e, se for usado direto, exige `STORAGE_ENCRYPTION_KEY` setado, `INITIAL_PASSWORD` trocado, nunca
    exposto sem auth, e os 13 provedores marcados "avoid" desligados.

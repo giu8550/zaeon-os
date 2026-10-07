@@ -14,14 +14,14 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronRight, CornerDownRight, GitBranchPlus, PanelLeftClose, PanelLeftOpen, Pencil, Search, SquarePen, Trash2,
+  ChevronRight, CornerDownRight, GitBranchPlus, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Search, SquarePen, Trash2,
 } from "lucide-react";
 import { arvoreDeThreads, type Thread } from "@/lib/chat/threads";
 
 const chaveRecolhida = (sala: string) => `zaeon.chat.sidebar.${sala}.recolhida`;
 
 export default function ConversasSidebar({
-  sala, threads, ativa, ocupada, aoTrocar, aoCriar, aoFechar, aoRenomear, aoCriarSub, className = "",
+  sala, threads, ativa, ocupada, aoTrocar, aoCriar, aoFechar, aoRenomear, aoCriarSub, className = "", embutida = false, rotuloNova = "Nova conversa",
 }: {
   /** "estudos" | "pesquisa" — cada sala lembra se a barra está recolhida. */
   sala: string;
@@ -37,6 +37,13 @@ export default function ConversasSidebar({
   /** Sub-tema sob esta conversa. Sem isto, sem o botão. */
   aoCriarSub?: (paiId: string) => void;
   className?: string;
+  /**
+   * Dentro da SIDEBAR PRINCIPAL do app (components/chat/ConversasSlot): ocupa a largura dela, sem
+   * coluna/borda própria e sem recolher — quem recolhe é a sidebar.
+   */
+  embutida?: boolean;
+  /** "Nova conversa" (Estudos) · "Nova pesquisa" (Pesquisa) */
+  rotuloNova?: string;
 }) {
   const [recolhida, setRecolhida] = useState(false);
   useEffect(() => {
@@ -73,7 +80,7 @@ export default function ConversasSidebar({
       .filter((n) => casa(n.thread) || n.filhas.length);
   }, [arvore, termo]);
 
-  if (recolhida) {
+  if (recolhida && !embutida) {
     return (
       <nav aria-label="Conversas" className={`shrink-0 w-11 flex flex-col items-center gap-1 py-2 border-r border-slate-200 dark:border-white/10 ${className}`}>
         <button type="button" onClick={alternar} className={BTN_ICONE} aria-label="Mostrar conversas" title="Mostrar conversas">
@@ -167,20 +174,26 @@ export default function ConversasSidebar({
   };
 
   return (
-    <nav aria-label="Conversas" className={`shrink-0 w-[248px] max-w-[70vw] flex flex-col min-h-0 border-r border-slate-200 dark:border-white/10 ${className}`}>
-      <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1">
-        <span className="flex-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Conversas</span>
-        <button type="button" onClick={alternar} className={BTN_ICONE} aria-label="Recolher conversas" title="Recolher conversas">
-          <PanelLeftClose size={15} />
-        </button>
-      </div>
-      <div className="px-2 pb-1.5">
+    <nav aria-label="Conversas" className={`${embutida ? "flex-1 w-full" : "shrink-0 w-[248px] max-w-[70vw] border-r border-slate-200 dark:border-white/10"} flex flex-col min-h-0 ${className}`}>
+      {!embutida && (
+        <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1">
+          <span className="flex-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Conversas</span>
+          <button type="button" onClick={alternar} className={BTN_ICONE} aria-label="Recolher conversas" title="Recolher conversas">
+            <PanelLeftClose size={15} />
+          </button>
+        </div>
+      )}
+      <div className={`${embutida ? "px-0" : "px-2"} pb-1.5`}>
         <button
           type="button"
           onClick={aoCriar}
-          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-semibold text-slate-800 dark:text-white/90 border border-slate-200 dark:border-white/10 hover:border-cyan-400/60 hover:text-cyan-700 dark:hover:text-cyan-200 transition-colors"
+          title={rotuloNova}
+          aria-label={rotuloNova}
+          className={`w-full flex items-center gap-2 rounded-lg font-semibold transition-colors ${embutida
+            ? "px-2 py-1.5 text-[12px] text-slate-700 dark:text-white/75 hover:bg-slate-900/[0.05] dark:hover:bg-white/[0.06]"
+            : "px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/90 border border-slate-200 dark:border-white/10 hover:border-cyan-400/60 hover:text-cyan-700 dark:hover:text-cyan-200"}`}
         >
-          <SquarePen size={14} /> Nova conversa
+          {embutida ? <><Plus size={14} /> Nova</> : <><SquarePen size={14} /> {rotuloNova}</>}
         </button>
       </div>
       {threads.length > 4 && (
@@ -198,7 +211,7 @@ export default function ConversasSidebar({
           </label>
         </div>
       )}
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-2 pb-2 flex flex-col gap-0.5">
+      <div className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar ${embutida ? "px-0" : "px-2"} pb-2 flex flex-col gap-0.5`}>
         {nos.length === 0 && (
           <p className="px-2 py-3 text-[12px] text-slate-500 dark:text-white/45">{termo ? "Nada com esse nome." : "Nenhuma conversa ainda."}</p>
         )}

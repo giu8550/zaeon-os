@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { isSuperAdminEmail } from "@/lib/auth/roles";
 import { unifiedResearchRoom } from "@/lib/research/unifiedRoom";
+import { EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA } from "@/lib/chat/conversasNav";
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
 import OmegaScholarWorkspace from "./omega/OmegaScholarWorkspace";
 import StudyRoomSuggestionDock from "./omega/StudyRoomSuggestionDock";
@@ -206,16 +207,14 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
     // "Meus Estudos" (feed mini-Notion) é a aba padrão (main); "Meus Alunos" só pro professor (isTeacher).
     // ⚠️ MERGE base×main: a aba "Aura" (co-working / chat) do PR01 vinha primeiro — CONFERIR se ela
     // ainda entra na composição das abas abaixo (QA de runtime).
-    const semAulas = unified || unifiedResearchRoom();
-    const allTabs = useMemo(() => unified ? [
-        { id: "meus-estudos", label: "Chat", icon: Triangle },
+    // A sala É o chat (as conversas ficam na sidebar principal, embaixo de "Sala de Estudos"). As
+    // abas do topo são só os dois lugares de ESTUDO: "Meus Estudos" (o caderno/feed) e "Estudos"
+    // (a busca). Sem aba "Chat"/"Aura", sem Aulas/Meus Alunos aqui. `meus-estudos` segue sendo o id
+    // interno da CONVERSA (é o que fica ativo quando nenhuma das duas abas está).
+    const allTabs = useMemo(() => [
         { id: "feed", label: "Meus Estudos", icon: BookOpen },
         { id: "community", label: "Estudos", icon: Users },
-    ] : [
-        { id: "meus-estudos", label: "Aura", icon: Triangle },
-        ...tabs.filter((t) => !(semAulas && t.id === "classes")),
-        ...(isTeacher && !semAulas ? [{ id: "students", label: "Meus Alunos", icon: GraduationCap }] : []),
-    ], [tabs, isTeacher, unified, semAulas]);
+    ], []);
 
     // Padrão = a aba "Aura" (chats/co-working). Só cai numa aba de estudo/pesquisa se
     // o usuário SAIU da sala estando nela — restaurado da persistência no efeito abaixo.
@@ -228,7 +227,7 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
         if (!room) return;
         try {
             const saved = localStorage.getItem(`zaeon:lastTab:${room}`);
-            if (saved && allTabs.some((t) => t.id === saved)) setActiveTab(saved);
+            if (saved && (saved === "meus-estudos" || allTabs.some((t) => t.id === saved))) setActiveTab(saved);
         } catch { /* ignore */ }
         tabRestored.current = true;
     }, [room, allTabs]);
@@ -243,7 +242,7 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
     useEffect(() => {
         try {
             if (new URLSearchParams(window.location.search).get("space")) {
-                setActiveTab(unified ? "feed" : "meus-estudos");
+                setActiveTab("feed");
             }
         } catch { /* ignore */ }
     }, []);
@@ -252,13 +251,21 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
     // Aceita set-subtab (legado) E set-tab (tour) — só para os ids de aba DESTA sala
     // (community/classes/meus-estudos/students); ids do research-lab são ignorados aqui.
     useEffect(() => {
-        const SALA_IDS = new Set(["meus-estudos", "feed", "community", "classes", "students"]);
-        // No unificado, "meus-estudos" é o Chat; o tour/legado que pede "Meus Estudos" quer o feed.
-        const onSetSub = (e: any) => { const d = e?.detail; if (SALA_IDS.has(d)) setActiveTab(unified && d === "meus-estudos" ? "feed" : d); };
+        const SALA_IDS = new Set(["meus-estudos", "feed", "community"]);
+        // "meus-estudos" é a conversa; o tour/legado que pede "Meus Estudos" quer o feed.
+        const onSetSub = (e: any) => { const d = e?.detail; if (SALA_IDS.has(d)) setActiveTab(d === "meus-estudos" ? "feed" : d); };
+        // Conversa escolhida na sidebar principal (ou "Nova conversa") → a sala volta pra conversa.
+        const paraChat = () => setActiveTab("meus-estudos");
+        const onPedido = (e: Event) => { if ((e as CustomEvent).detail?.sala === "estudos") paraChat(); };
         window.addEventListener("zaeon:set-subtab", onSetSub);
         window.addEventListener("zaeon:set-tab", onSetSub);
-        return () => { window.removeEventListener("zaeon:set-subtab", onSetSub); window.removeEventListener("zaeon:set-tab", onSetSub); };
-    }, [unified]);
+        window.addEventListener(EVT_ESTUDOS_CHAT, paraChat);
+        window.addEventListener(EVT_PEDIDO_CONVERSA, onPedido);
+        return () => {
+            window.removeEventListener("zaeon:set-subtab", onSetSub); window.removeEventListener("zaeon:set-tab", onSetSub);
+            window.removeEventListener(EVT_ESTUDOS_CHAT, paraChat); window.removeEventListener(EVT_PEDIDO_CONVERSA, onPedido);
+        };
+    }, []);
 
     // ── Tab indicator measurement ────────────────────────────────────────────
     // We track each tab button's position to drive an animated underline
@@ -272,6 +279,7 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
         const idx     = allTabs.findIndex(t => t.id === activeTab);
         const el      = tabRefs.current[idx];
         const header  = tabHeaderRef.current;
+        if (idx < 0) { setReady(false); return; }   // na conversa: nenhuma aba acesa
         if (!el || !header) return;
 
         const elRect     = el.getBoundingClientRect();

@@ -1,17 +1,15 @@
 /**
- * Universidade — o castelo de cristal FLUTUANDO num disco no céu (lugar de encontro dos alunos), versão futurista:
- * vidro-metal escuro com frisos frios (ciano) + janelas quentes (âmbar); salas A CÉU ABERTO (sem telhado); torres com
- * agulhas de energia e aros flutuando (no lugar dos telhados cônicos); por baixo, a base de cristal com os propulsores
- * antigravidade e o ELEVADOR DE LUZ (anel no chão ↔ anel no disco):
- *  - muralha externa (12 torres, ameias, seteiras) e interna (mais alta, 4 torres grandes), portões com arco e grade
- *    de luz; telhados cônicos com pontas acesas;
- *  - eixo central (Glasgow): Átrio com o cristal + TORRE central (relógios, pináculo), Grande Salão (mesas compridas,
- *    lanternas flutuando), Biblioteca (estantes com lombadas); alas: Auditório, Laboratório, Salas de Estudo, Café, Ateliê;
- *  - dois PÁTIOS com gramado de luz, árvores de cristal e uma fonte no meio.
+ * Universidade — o campus FLUTUANDO num disco no céu (lugar de encontro dos alunos), versão futurista e LIMPA:
+ * vidro-metal escuro com frisos frios (ciano); por baixo, a base de cristal com os propulsores antigravidade e o
+ * ELEVADOR DE LUZ (anel no chão ↔ anel no disco):
+ *  - UMA muralha (a externa, lisa, 12 torres com agulha de energia) e o portão com arco de luz; as 4 torres grandes;
+ *  - as salas são PAVILHÕES abertos (sem parede nem telhado): piso tingido com contorno de luz + placa + móveis;
+ *  - eixo central: a torre de apartamentos (do chão), Grande Salão (mesas compridas), Biblioteca (estantes com
+ *    lombadas); alas: Auditório, Laboratório, Salas de Estudo, Café, Ateliê; pátios com gramado e fontes.
  * Layout, paredes, móveis e colisão em lib/cyber/universidade.ts. Quase tudo instanciado; `low` corta os detalhes.
  */
 import * as THREE from "three";
-import { CRISTAL_ATRIO, FONTES, PATIOS, SALAS, TORRES, UNIVERSIDADE, paredesDaUniversidade, todosOsMoveis, type MovelU, type Sala } from "@/lib/cyber/universidade";
+import { FONTES, PATIOS, SALAS, TORRES, UNIVERSIDADE, paredesDaUniversidade, todosOsMoveis, type MovelU, type Sala } from "@/lib/cyber/universidade";
 import { PLATAFORMAS } from "@/lib/cyber/plataformas";
 import { glowTex } from "./CenaCosmica";
 import { criarElevadorDeLuz } from "./ElevadorDeLuz";
@@ -30,7 +28,7 @@ const LOGO_UNILAB = "/assets/cyber/logo-unilab.png";
 const COR_SALA: Record<Sala["tipo"], number> = { atrio: 0x66e6ff, salao: 0xffc46b, biblioteca: 0xb98cff, auditorio: 0xff8ad8, estudo: 0x7fe0ff, laboratorio: 0x9affd0, cafe: 0xffa36b, atelie: 0xff6ad5 };
 
 export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): UniversidadeHandle {
-  const { low, starTex } = o, U = UNIVERSIDADE;
+  const { low } = o, U = UNIVERSIDADE;
   const raiz = new THREE.Group(); raiz.position.set(U.centro.x, U.y, U.centro.z);   // flutuando: tudo é relativo ao piso do disco
   const alvosCamera: THREE.Object3D[] = [], texturas: THREE.Texture[] = [], anim: ((dt: number, t: number) => void)[] = [];
   const add = <T extends THREE.Object3D>(x: T, cam = false) => { raiz.add(x); if (cam) alvosCamera.push(x); return x; };
@@ -76,7 +74,9 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   // base de cristal: cone invertido facetado (com veios de luz) + cones menores em volta
   const baseMat = new THREE.MeshStandardMaterial({ color: 0x0a1226, roughness: 0.3, metalness: 0.5, emissive: 0x1a2f6a, emissiveIntensity: 0.55, flatShading: true });
   const cone = add(new THREE.Mesh(new THREE.ConeGeometry(R - 2, 90, low ? 10 : 18, 3), baseMat)); cone.rotation.x = Math.PI; cone.position.y = -U.espessura * 0.25 - 45;
-  for (let k = 0; k < (low ? 4 : 7); k++) { const a = (k / 7) * Math.PI * 2 + 0.4, c = add(new THREE.Mesh(new THREE.ConeGeometry(26 + (k % 3) * 8, 55 + (k % 2) * 20, 7), baseMat)); c.rotation.x = Math.PI; c.position.set(Math.cos(a) * R * 0.55, -U.espessura * 0.25 - 30, Math.sin(a) * R * 0.55); }
+  // (a base larga fica rente ao fundo do disco: antes o centro a −30 m com 75 m de altura furava o piso e aparecia como
+  //  placas escuras de 7 lados em cima do campus)
+  for (let k = 0; k < (low ? 4 : 7); k++) { const a = (k / 7) * Math.PI * 2 + 0.4, h = 55 + (k % 2) * 20, c = add(new THREE.Mesh(new THREE.ConeGeometry(26 + (k % 3) * 8, h, 7), baseMat)); c.rotation.x = Math.PI; c.position.set(Math.cos(a) * R * 0.55, -U.espessura * 0.25 - h / 2 - 0.5, Math.sin(a) * R * 0.55); }
   // propulsores antigravidade: anéis + brilho embaixo do disco, pulsando
   const texAnti = glow("rgba(185,140,255,.95)", "rgba(102,230,255,.25)"), antis: THREE.Sprite[] = [];
   for (let k = 0; k < 8; k++) {
@@ -93,64 +93,40 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   const caminho = add(new THREE.Mesh(new THREE.PlaneGeometry(10, em + 40), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false })));
   caminho.rotation.x = -Math.PI / 2; caminho.position.set(0, 0.06, -em / 2 - 20);   // do elevador de luz até o portão
 
-  // ── PAREDES (muralhas + salas) instanciadas, com friso de luz no alto ──
-  const paredes = paredesDaUniversidade(), muralhas: number[][] = [], salasP: number[][] = [], frisos: number[][] = [];
-  for (const w of paredes) {
+  // ── MURALHA EXTERNA (a única parede que sobrou), lisa, com friso de luz no alto. A muralha interna, as paredes das
+  //    salas e as janelas em fita saíram: era parede dobrada em cima de parede e faixa de luz vazando nas pontas ──
+  const muralhas: number[][] = [], frisos: number[][] = [];
+  for (const w of paredesDaUniversidade()) {
     const L = Math.hypot(w.bx - w.ax, w.bz - w.az), giro = -Math.atan2(w.bz - w.az, w.bx - w.ax), cx = (w.ax + w.bx) / 2, cz = (w.az + w.bz) / 2;
-    (w.esp > 2 ? muralhas : salasP).push([cx, w.alt / 2, cz, L + (w.esp > 2 ? w.esp : 0.8), w.alt, w.esp, giro]);
-    frisos.push([cx, w.alt + 0.05, cz, L, 0.12, w.esp + 0.1, giro]);
+    muralhas.push([cx, w.alt / 2, cz, L, w.alt, w.esp, giro]);
+    frisos.push([cx, w.alt + 0.06, cz, L, 0.12, w.esp + 0.1, giro]);
   }
-  caixas(muralhas, pedra, true); caixas(salasP, pedraClara, true); caixas(frisos, friso);
-  // (sem ameias nem seteiras: muralha LISA, só a faixa de luz no alto — campus futurista, não castelo)
-  // janelas EM FITA nas salas (os dois lados da parede): uma faixa horizontal contínua por parede — moderna e com
-  // bem menos peças que as janelas góticas de antes
-  const janelas: number[][] = [];
-  for (const w of paredes) {
-    if (w.esp >= 2) continue;
-    const L = Math.hypot(w.bx - w.ax, w.bz - w.az); if (L < 3) continue;
-    const giro = -Math.atan2(w.bz - w.az, w.bx - w.ax), ux = (w.bx - w.ax) / L, uz = (w.bz - w.az) / L, mxp = (w.ax + w.bx) / 2, mzp = (w.az + w.bz) / 2;
-    for (const lado of [-1, 1]) janelas.push([mxp - uz * lado * 0.42, w.alt * 0.58, mzp + ux * lado * 0.42, L - 1.6, Math.min(1.6, w.alt * 0.16), 0.04, giro]);
-  }
-  caixas(janelas, janelaMat);
+  caixas(muralhas, pedra, true); caixas(frisos, friso);
 
   // ── TORRES: corpo + friso + AGULHA de energia (no lugar do telhado cônico) + aros flutuando + ponta acesa ──
   const corpoT = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1.08, 1, low ? 10 : 16), pedra, TORRES.length);
   const telhadoT = new THREE.InstancedMesh(new THREE.ConeGeometry(0.3, 1, low ? 6 : 8), pontaMat, TORRES.length);
-  const halos = new THREE.InstancedMesh(new THREE.TorusGeometry(1, 0.05, 4, 40), friso, TORRES.length * 2), haloInfo: { t: (typeof TORRES)[number]; k: number }[] = [];
   const aroT = new THREE.InstancedMesh(new THREE.TorusGeometry(1, 0.03, 4, 32), friso, TORRES.length);
   const texPonta = glow("rgba(220,250,255,1)", "rgba(110,200,255,.35)"), pontas: THREE.Sprite[] = [];
   TORRES.forEach((t, i) => {
     corpoT.setMatrixAt(i, mx.compose(mp.set(t.x, t.alt / 2, t.z), mq.identity(), ms.set(t.r, t.alt, t.r)));
     const hT = t.r * 2.3; telhadoT.setMatrixAt(i, mx.compose(mp.set(t.x, t.alt + hT / 2, t.z), mq.identity(), ms.set(t.r * 1.22, hT, t.r * 1.22)));
     aroT.setMatrixAt(i, mx.compose(mp.set(t.x, t.alt + 0.1, t.z), mq.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2), ms.set(t.r * 1.1, t.r * 1.1, t.r * 1.1)));
-    for (let k = 0; k < 2; k++) haloInfo.push({ t, k });
     const s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texPonta, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); s.position.set(t.x, t.alt + hT + 0.8, t.z); s.scale.setScalar(3 + t.r * 0.4); pontas.push(s);
   });
   for (const im of [corpoT, telhadoT, aroT]) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
-  add(corpoT, true); add(telhadoT, true); add(aroT); add(halos); halos.frustumCulled = false;
-  const eixoX = new THREE.Vector3(1, 0, 0), qHalo = new THREE.Quaternion(), qGiro = new THREE.Quaternion();
-  anim.push((_, t) => {   // os aros sobem e descem em volta da agulha, inclinados, girando
-    haloInfo.forEach(({ t: tw, k }, i) => {
-      const hT = tw.r * 2.3, y = tw.alt + hT * (0.35 + 0.3 * k) + Math.sin(t * 0.9 + i) * 0.6, s = tw.r * (1.25 - 0.35 * k);
-      qHalo.setFromAxisAngle(eixoX, Math.PI / 2 + 0.18 * Math.sin(t * 0.5 + i)); qGiro.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, t * (0.3 + 0.2 * k) + i);
-      halos.setMatrixAt(i, mx.compose(mp.set(tw.x, y, tw.z), qGiro.multiply(qHalo), ms.set(s, s, s)));
-    });
-    halos.instanceMatrix.needsUpdate = true;
-  });
+  add(corpoT, true); add(telhadoT, true); add(aroT);   // (os aros soltos girando em volta das agulhas saíram)
 
-  // ── PORTÕES: pilares dos dois lados + arco de luz (sem a grade medieval) ──
-  const portoes = [{ z: -em, w: U.externa.portao, alt: U.externa.alt }, ...U.interna.portoes.map((p) => ({ x: p.x, z: -U.interna.meia, w: p.w, alt: U.interna.alt }))];
-  const torreoes: number[][] = [];
-  for (const p of portoes) {
-    const x = "x" in p ? p.x : 0;
-    for (const s of [-1, 1]) torreoes.push([x + s * (p.w / 2 + 1.6), p.alt / 2 + 1.5, p.z, 3.2, p.alt + 3, 4.2]);
-    const arco = add(new THREE.Mesh(new THREE.TorusGeometry(p.w / 2, 0.25, 6, 32, Math.PI), friso)); arco.position.set(x, p.alt * 0.55, p.z - 2.15);
+  // ── PORTÃO (só o da muralha externa): pilares dos dois lados + arco de luz ──
+  {
+    const w = U.externa.portao, alt = U.externa.alt;
+    caixas([-1, 1].map((s) => [s * (w / 2 + 1.6), alt / 2 + 1.5, -em, 3.2, alt + 3, 4.2]), pedra, true);
+    const arco = add(new THREE.Mesh(new THREE.TorusGeometry(w / 2, 0.25, 6, 32, Math.PI), friso)); arco.position.set(0, alt * 0.55, -em - 2.15);
   }
-  caixas(torreoes, pedra, true);
 
-  // ── TORRE DE APARTAMENTOS sobre o átrio (no lugar da torre do relógio): três volumes escalonados, sacadas a cada
+  // ── TORRE DE APARTAMENTOS no átrio (no lugar da torre do relógio): três volumes escalonados, sacadas a cada
   //    andar, janelas acesas em grade (luz quente e fria) e um mastro com farol — mesma altura total (sólido pra voo) ──
-  const tc = U.torreCentral, atrio = SALAS.find((s) => s.tipo === "atrio")!, y0 = atrio.alt;
+  const tc = U.torreCentral, y0 = 0;   // nasce do chão (as paredes do átrio, que a seguravam, saíram)
   const texPontaC = glow("rgba(220,250,255,1)", "rgba(110,200,255,.35)");
   const blocoMat = new THREE.MeshStandardMaterial({ color: 0x27304e, roughness: 0.4, metalness: 0.3, emissive: 0x111a36, emissiveIntensity: 0.5 });
   const lajeMat = new THREE.MeshStandardMaterial({ color: 0xc9d2ea, roughness: 0.5, metalness: 0.1, emissive: 0x1d2440, emissiveIntensity: 0.4 });
@@ -180,35 +156,39 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   const mastro = add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.5, tc.pinaculo, 8), pontaMat), true); mastro.position.set(tc.x - 2.2, tc.alt + tc.pinaculo / 2, tc.z + 1.4);
   const topoPin = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texPontaC, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); topoPin.position.set(tc.x - 2.2, tc.alt + tc.pinaculo, tc.z + 1.4); topoPin.scale.setScalar(8);
 
-  // ── SALAS: telhado (duas águas nas grandes, plano nas pequenas) + placa com o nome + interior ──
+  // ── SALAS = PAVILHÕES abertos (sem parede nem telhado): piso tingido + CONTORNO de luz na cor da sala + placa ──
+  const contornos: number[][] = [], corContorno: number[] = [];
   for (const s of SALAS) {
     const cx = (s.x0 + s.x1) / 2, cz = (s.z0 + s.z1) / 2, lx = s.x1 - s.x0, lz = s.z1 - s.z0, cor = COR_SALA[s.tipo];
-    // piso tingido
-    const ch = add(new THREE.Mesh(new THREE.PlaneGeometry(lx - 0.8, lz - 0.8), new THREE.MeshStandardMaterial({ color: 0x101a33, roughness: 0.6, emissive: cor, emissiveIntensity: 0.06 }))); ch.rotation.x = -Math.PI / 2; ch.position.set(cx, 0.07, cz);
-    // (sem telhado: as salas são a céu aberto — vê-se o céu e a Zaeon lá em cima)
-    // placa com o nome da sala, sobre a porta principal (pra achar cada área)
+    const ch = add(new THREE.Mesh(new THREE.PlaneGeometry(lx, lz), new THREE.MeshStandardMaterial({ color: 0x101a33, roughness: 0.6, emissive: cor, emissiveIntensity: 0.06 }))); ch.rotation.x = -Math.PI / 2; ch.position.set(cx, 0.07, cz);
+    for (const c of [[cx, s.z0, lx, 0.22], [cx, s.z1, lx, 0.22], [s.x0, cz, 0.22, lz], [s.x1, cz, 0.22, lz]]) { contornos.push([c[0]!, 0.1, c[1]!, c[2]!, 0.04, c[3]!]); corContorno.push(cor); }
+    // placa com o nome da sala, na entrada principal (pra achar cada área)
     const p0 = s.portas[0]!, px = p0.lado === "s" || p0.lado === "n" ? p0.em : p0.lado === "o" ? s.x0 - 0.6 : s.x1 + 0.6, pz = p0.lado === "s" ? s.z0 - 0.6 : p0.lado === "n" ? s.z1 + 0.6 : p0.em;
     const corCss = "#" + new THREE.Color(cor).getHexString();
     const placa = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: tela(512, 112, (g, w, h) => { g.fillStyle = "rgba(10,8,24,.75)"; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 50); g.fill(); g.strokeStyle = corCss; g.lineWidth = 4; g.stroke(); g.fillStyle = corCss; g.font = "800 46px system-ui,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(s.nome.toUpperCase(), w / 2, h / 2 + 2); }), transparent: true, depthWrite: false })));
-    placa.scale.set(7.5, 1.65, 1); placa.position.set(px, Math.min(s.alt - 1.2, 6.2), pz);
+    placa.scale.set(7.5, 1.65, 1); placa.position.set(px, 3.4, pz);
   }
+  caixas(contornos, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }), false, corContorno);
   // placa grande do campus sobre o portão externo: o LOGO da UNILAB (sem "campus virtual")
   const nomeCampus = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: comLogo(1024, 320, (g, w, h, logo) => {
     g.fillStyle = "rgba(8,10,28,.82)"; g.beginPath(); g.roundRect(6, 6, w - 12, h - 12, 60); g.fill(); g.strokeStyle = "#66e6ff"; g.lineWidth = 6; g.stroke();
     if (logo) logoEm(g, logo, w / 2, h / 2, w - 100, h - 70);
   }), transparent: true, depthWrite: false })));
   nomeCampus.scale.set(30, 9.4, 1); nomeCampus.position.set(0, U.externa.alt + 11, -em - 2);
-  // estandartes com o logo: nos torreões do portão interno principal (virados pro sul) e no fundo do palco do Grande Salão
+  // estandartes com o logo: nos pilares do portão (virados pro sul) e no painel do palco do Grande Salão
   const texEstandarte = comLogo(256, 512, (g, w, h, logo) => {
     g.fillStyle = "#0b1834"; g.fillRect(0, 0, w, h); g.fillStyle = "#66e6ff"; g.fillRect(0, 0, w, 10); g.fillRect(0, h - 10, w, 10);
     g.beginPath(); g.moveTo(0, h - 10); g.lineTo(w / 2, h - 70); g.lineTo(w, h - 10); g.fillStyle = "#050a18"; g.fill();
     if (logo) logoEm(g, logo, w / 2, h * 0.42, w - 40, h * 0.5);
   });
   const matEst = new THREE.MeshBasicMaterial({ map: texEstandarte, side: THREE.DoubleSide });
-  for (const sx of [-1, 1]) { const e = add(new THREE.Mesh(new THREE.PlaneGeometry(3.4, 6.8), matEst)); e.position.set(sx * (U.interna.portoes[0].w / 2 + 1.6), U.interna.alt - 4, -U.interna.meia - 2.15); e.rotation.y = Math.PI; }
+  for (const sx of [-1, 1]) { const e = add(new THREE.Mesh(new THREE.PlaneGeometry(3.2, 6.4), matEst)); e.position.set(sx * (U.externa.portao / 2 + 1.6), U.externa.alt - 2.5, -em - 2.2); e.rotation.y = Math.PI; }   // nos pilares do portão
   const sal = SALAS.find((s) => s.tipo === "salao")!;
   const fundoPalco = add(new THREE.Mesh(new THREE.PlaneGeometry(12, 5.2), new THREE.MeshBasicMaterial({ map: comLogo(1024, 444, (g, w, h, logo) => { g.fillStyle = "#08102a"; g.fillRect(0, 0, w, h); g.strokeStyle = "#ffc46b"; g.lineWidth = 8; g.strokeRect(8, 8, w - 16, h - 16); if (logo) logoEm(g, logo, w / 2, h / 2, w - 140, h - 120); }) })));
-  fundoPalco.position.set(0, 6.2, sal.z1 - 0.5); fundoPalco.rotation.y = Math.PI;
+  // os painéis ficam EM PÉ no fundo do palco (que é sólido), com um caixilho atrás — sem parede, nada solto no ar
+  const palcoSal = todosOsMoveis().find((m) => m.tipo === "palco" && m.z0 > sal.z0 && m.z1 < sal.z1)!;
+  fundoPalco.position.set(0, palcoSal.alt + 3.1, palcoSal.z1 - 0.35); fundoPalco.rotation.y = Math.PI;
+  const caixilhos: number[][] = [[0, palcoSal.alt + 3, palcoSal.z1 - 0.2, 12.6, 6, 0.25]];
 
   // ── MÓVEIS (do layout: mesas, bancos, estantes, fileiras, bancadas, balcão…) ──
   const moveis = todosOsMoveis(), porTipo = new Map<MovelU["tipo"], number[][]>();
@@ -247,63 +227,45 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   // estantes: caixas com LOMBADAS de livros (textura repetida pelo comprimento)
   const lombadas = tela(256, 256, (g) => { g.fillStyle = "#1a1020"; g.fillRect(0, 0, 256, 256); const cs = ["#66e6ff", "#b98cff", "#9affd0", "#ffd36b", "#7fb4ff", "#ff9ad5", "#ffb45a"];
     for (let r = 0; r < 4; r++) { let x = 0; while (x < 256) { const w = 6 + ((x * 7 + r * 13) % 9); g.fillStyle = cs[(x + r * 3) % cs.length]!; g.globalAlpha = 0.75; g.fillRect(x, r * 64 + 8, w - 1, 52); x += w; } g.globalAlpha = 1; g.fillStyle = "#3a2a24"; g.fillRect(0, r * 64 + 60, 256, 4); } });
-  lombadas.wrapS = THREE.RepeatWrapping;
+  lombadas.wrapS = lombadas.wrapT = THREE.RepeatWrapping;
+  // uma textura e UM material pras lombadas de todas: a repetição vai na UV de cada face (antes: 1 textura clonada +
+  // 6 materiais por estante = 6 draws cada); corpo e faces viram lotes (components/cyber/lotes)
+  const matLombada = new THREE.MeshBasicMaterial({ map: lombadas });
   for (const m of moveis.filter((m) => m.tipo === "estante")) {
-    const t = lombadas.clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, Math.round((m.x1 - m.x0) / 2.5)), 2); t.wrapT = THREE.RepeatWrapping; texturas.push(t);
-    const e = add(new THREE.Mesh(new THREE.BoxGeometry(m.x1 - m.x0, m.alt, m.z1 - m.z0), [madeira, madeira, madeira, madeira, new THREE.MeshBasicMaterial({ map: t }), new THREE.MeshBasicMaterial({ map: t })]));
-    e.position.set((m.x0 + m.x1) / 2, m.alt / 2, (m.z0 + m.z1) / 2);
+    const lx = m.x1 - m.x0, lz = m.z1 - m.z0, cx = (m.x0 + m.x1) / 2, cz = (m.z0 + m.z1) / 2, emX = lx >= lz, L = emX ? lx : lz, P = emX ? lz : lx, rep = Math.max(1, Math.round(L / 2.5));
+    add(new THREE.Mesh(new THREE.BoxGeometry(lx, m.alt, lz), madeira)).position.set(cx, m.alt / 2, cz);
+    for (const lado of [-1, 1]) {   // as lombadas nas DUAS faces compridas (a estante corre em x ou em z)
+      const g = new THREE.PlaneGeometry(L, m.alt), uv = g.attributes.uv!;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * rep, uv.getY(i) * 2);
+      const f = add(new THREE.Mesh(g, matLombada)), d = lado * (P / 2 + 0.005);
+      f.position.set(cx + (emX ? 0 : d), m.alt / 2, cz + (emX ? d : 0)); f.rotation.y = emX ? (lado < 0 ? Math.PI : 0) : lado * Math.PI / 2;
+    }
   }
   // telas: o telão do auditório e os hologramas das bancadas do laboratório
   const aud = SALAS.find((s) => s.tipo === "auditorio")!;
   const telao = add(new THREE.Mesh(new THREE.PlaneGeometry(16, 7), new THREE.MeshBasicMaterial({ map: comLogo(1024, 448, (g, w, h, logo) => { const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, "#1a0b3a"); gr.addColorStop(1, "#0b2a55"); g.fillStyle = gr; g.fillRect(0, 0, w, h); if (logo) logoEm(g, logo, w / 2, h / 2, w - 200, h - 160); }) })));
-  telao.position.set((aud.x0 + aud.x1) / 2, 6, aud.z1 - 0.5); telao.rotation.y = Math.PI;
+  const palcoAud = moveis.find((m) => m.tipo === "palco" && m.x0 > aud.x0 && m.x1 < aud.x1)!;
+  telao.position.set((palcoAud.x0 + palcoAud.x1) / 2, palcoAud.alt + 4, palcoAud.z1 - 0.35); telao.rotation.y = Math.PI;
+  caixilhos.push([telao.position.x, palcoAud.alt + 3.9, palcoAud.z1 - 0.2, 16.6, 7.8, 0.25]);
+  caixas(caixilhos, pedra);
   const holos: number[][] = []; for (const m of moveis.filter((m) => m.tipo === "bancada")) for (let x = m.x0 + 2; x < m.x1 - 1; x += 4) holos.push([x, 1.9, (m.z0 + m.z1) / 2, 1.4, 1, 0.03]);
   const holoMat = new THREE.MeshBasicMaterial({ color: 0x9affd0, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
   caixas(holos, holoMat);
-  // GRANDE SALÃO: lanternas flutuando (sobem e descem devagar)
-  const salao = SALAS.find((s) => s.tipo === "salao")!, NL = low ? 60 : 160;
-  const lant = Array.from({ length: NL }, () => ({ x: salao.x0 + 2 + Math.random() * (salao.x1 - salao.x0 - 4), y: 8 + Math.random() * 5, z: salao.z0 + 3 + Math.random() * (salao.z1 - salao.z0 - 6), f: Math.random() * 6.28 }));
-  const lGeo = new THREE.BufferGeometry(); lGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NL * 3), 3));
-  const lPts = add(new THREE.Points(lGeo, new THREE.PointsMaterial({ size: 0.55, map: starTex, color: 0xffd38a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); lPts.frustumCulled = false;
-  anim.push((_, t) => { const a = lGeo.attributes.position!.array as Float32Array; lant.forEach((l, i) => { a[i * 3] = l.x; a[i * 3 + 1] = l.y + Math.sin(t * 0.6 + l.f) * 0.35; a[i * 3 + 2] = l.z; }); lGeo.attributes.position!.needsUpdate = true; });
-  // estandartes nas paredes do salão (cores das casas/cursos)
-  const estand: number[][] = [], estCores: number[] = [], CASAS = [0x66e6ff, 0xb98cff, 0xffc46b, 0x9affd0];
-  for (let z = salao.z0 + 8, k = 0; z < salao.z1 - 6; z += 10, k++) for (const x of [salao.x0 + 0.5, salao.x1 - 0.5]) { estand.push([x, 9, z, 0.05, 5, 2]); estCores.push(CASAS[k % 4]!); }
-  caixas(estand, new THREE.MeshBasicMaterial({ color: 0xffffff }), false, estCores);
 
-  // ── ÁTRIO: o cristal grande no meio, girando devagar ──
-  const cristalMat = new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x66e6ff, emissiveIntensity: 1.2, roughness: 0.2, flatShading: true, transparent: true, opacity: 0.9 });
-  const cristal = add(new THREE.Mesh(new THREE.OctahedronGeometry(CRISTAL_ATRIO.r), cristalMat)); cristal.scale.y = 2.4; cristal.position.set(CRISTAL_ATRIO.x, 5.5, CRISTAL_ATRIO.z);
-  const pedestal = add(new THREE.Mesh(new THREE.CylinderGeometry(CRISTAL_ATRIO.r, CRISTAL_ATRIO.r * 1.2, 1, 12), pedraClara)); pedestal.position.set(CRISTAL_ATRIO.x, 0.5, CRISTAL_ATRIO.z);
-  anim.push((dt, t) => { cristal.rotation.y += dt * 0.3; cristal.position.y = 5.5 + Math.sin(t * 0.8) * 0.3; });
-
-  // ── FONTES modernas (pátios + pátio externo): bacia com aro de luz, coluna de água iluminada e um anel flutuando ──
+  // ── FONTES modernas (pátios + pátio externo): bacia com aro de luz e coluna de água iluminada ──
   const aguaMat = new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
-  const jatos: THREE.Mesh[] = [], aneisF: THREE.Mesh[] = [];
+  const jatos: THREE.Mesh[] = [];
   for (const f of FONTES) {
     const borda = add(new THREE.Mesh(new THREE.CylinderGeometry(f.r, f.r + 0.4, 0.6, 32), pedraClara)); borda.position.set(f.x, 0.3, f.z);
     const aro = add(new THREE.Mesh(new THREE.TorusGeometry(f.r + 0.15, 0.08, 6, 48), friso)); aro.rotation.x = Math.PI / 2; aro.position.set(f.x, 0.62, f.z);
     const agua = add(new THREE.Mesh(new THREE.CircleGeometry(f.r - 0.2, 32), aguaMat)); agua.rotation.x = -Math.PI / 2; agua.position.set(f.x, 0.55, f.z);
     const jato = add(new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.7, 6, 16, 1, true), aguaMat)); jato.position.set(f.x, 3.5, f.z); jatos.push(jato);
-    const anel = add(new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.06, 6, 40), friso)); anel.position.set(f.x, 7.2, f.z); aneisF.push(anel);
   }
-  anim.push((_, t) => {
-    jatos.forEach((j, i) => { j.scale.y = 0.9 + 0.12 * Math.sin(t * 2.2 + i); });
-    aneisF.forEach((a, i) => { a.rotation.x = Math.PI / 2 + 0.25 * Math.sin(t * 0.7 + i); a.rotation.y = t * 0.4 + i; a.position.y = 7.2 + Math.sin(t * 0.9 + i) * 0.4; });
-  });
+  anim.push((_, t) => jatos.forEach((j, i) => { j.scale.y = 0.9 + 0.12 * Math.sin(t * 2.2 + i); }));
 
-  // ── ESTRUTURAS ALIENÍGENAS no pátio externo (amplo, vazio desde que a natureza saiu): MONÓLITOS de cristal e ANÉIS
-  //    gigantes flutuando acima da cabeça (sem colisão: não atrapalham o caminho) ──
-  const monoMat = new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x7a5cff, emissiveIntensity: 1.1, roughness: 0.2, flatShading: true, transparent: true, opacity: 0.9 });
-  const monolitos: THREE.Mesh[] = [];
-  for (const [x, z] of [[-92.5, -10], [92.5, -10], [-50, 92.5], [50, 92.5], [-60, -92.5], [60, -92.5]] as const) {
-    const m = add(new THREE.Mesh(new THREE.OctahedronGeometry(2.2), monoMat)); m.scale.set(0.7, 2.6, 0.7); m.position.set(x, 9, z); monolitos.push(m);
-    const anel = add(new THREE.Mesh(new THREE.TorusGeometry(9, 0.18, 6, 72), friso)); anel.position.set(x, 14, z); anel.rotation.x = Math.PI / 2 - 0.3; monolitos.push(anel);
-  }
-  anim.push((dt, t) => monolitos.forEach((m, i) => { if (i % 2 === 0) { m.rotation.y += dt * 0.35; m.position.y = 9 + Math.sin(t * 0.6 + i) * 0.8; } else m.rotation.z = t * 0.12 + i; }));
-
-  // (a NATUREZA — árvores, pomar, sebes e plantações — saiu: ~250 mil triângulos, quase metade da cena. O campus é
-  //  holograma agora: fontes e estruturas modernas.)
+  // (saíram: a NATUREZA, a muralha interna, as paredes e janelas das salas, os aros soltos das torres, as lanternas e
+  //  estandartes do salão, o cristal do átrio, os anéis das fontes e os monólitos/anéis do pátio externo — tudo que
+  //  ficava no ar sem colisão ou dobrava parede em cima de parede)
 
   return {
     group: raiz, alvosCamera,

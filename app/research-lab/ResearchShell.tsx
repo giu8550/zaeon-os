@@ -8,6 +8,9 @@ import { useSavedCitations } from "@/lib/useSavedCitations";
 import type { LibraryFile } from "@/lib/useLibraryFiles";
 import WindowSwitcher from "./WindowSwitcher";
 import ResearchChat from "@/components/research/ResearchChat";
+import { useConversasSlot } from "@/components/chat/ConversasSlot";
+import DocumentoArtefato from "@/components/studio/DocumentoArtefato";
+import { EVT_ABRIR_DOC, ROTULO_DOC, type DocArtefato } from "@/lib/chat/documentos";
 import DocumentDesktop from "./DocumentDesktop";
 import PdfViewer from "./PdfViewer";
 import type { SavedCitation } from "@/lib/useSavedCitations";
@@ -130,10 +133,27 @@ export default function ResearchShell({
   const abas = unifiedView === "abas";
   const [vista, setVista] = useState<string>("chat");
   const [lateral, setLateral] = useState<HTMLDivElement | null>(null);
+  // Com a sidebar principal do app (components/chat/ConversasSlot), as conversas vão pra lá — sem 2ª coluna.
+  const slotSidebar = useConversasSlot("pesquisa");
   const [maisAberto, setMaisAberto] = useState(false);
   const chatVisible = abas ? vista === "chat" : unifiedView ? unifiedView === "chat" : chatOpen;
   const verJanela = useCallback((id: string) => { onSelectWindow(id); setVista(id); }, [onSelectWindow]);
   const [docsCollapsed, setDocsCollapsed] = useState(false);  // retrair a barra de documentos
+
+  // Diagrama/aula pedidos no chat abrem como DOCUMENTO numa aba do topo (lib/chat/documentos).
+  useEffect(() => {
+    if (!abas) return;
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<DocArtefato>).detail;
+      if (!d || d.sala !== "pesquisa") return;
+      const id = `art-${d.artifactId}`;
+      const r = ROTULO_DOC[d.studioKind] ?? { emoji: "⟁", nome: "Documento" };
+      addWindow({ id, label: (d.titulo || r.nome).slice(0, 28), emoji: r.emoji, type: "artefato", artefato: { studioKind: d.studioKind, artifactId: d.artifactId, titulo: d.titulo, data: d.data } });
+      if (d.focar) verJanela(id);
+    };
+    window.addEventListener(EVT_ABRIR_DOC, on);
+    return () => window.removeEventListener(EVT_ABRIR_DOC, on);
+  }, [abas, addWindow, verJanela]);
 
   // Gerou um trabalho pelo chat (zaeon:research:newdoc) → fecha o chat e mostra o documento.
   useEffect(() => {
@@ -252,7 +272,7 @@ export default function ResearchShell({
         )}
 
         {/* ESQUERDA = CONVERSAS: a barra lateral do chat chega aqui por portal (fica à mostra com um documento aberto). */}
-        {abas && <div ref={setLateral} className="shrink-0 h-full min-h-0 flex text-slate-900 dark:text-white" />}
+        {abas && slotSidebar === undefined && <div ref={setLateral} className="shrink-0 h-full min-h-0 flex text-slate-900 dark:text-white" />}
         <div className="relative flex-1 min-w-0 min-h-0 flex flex-col">
         {/* TOPO = DOCUMENTOS: a conversa em cena, a pesquisa ("Minha pesquisa") e os PDFs abertos no leitor, e o ＋
             (nova pesquisa). A aba ativa ocupa a sala; a conversa mostrada é a que está acesa na barra da esquerda. */}
@@ -399,6 +419,15 @@ export default function ResearchShell({
                     onCite={(c) => onCite?.(c)}
                   />
                 )}
+              </div>
+            ))}
+
+          {/* Artefatos-documento (diagrama interativo, aula) — a aba ocupa a sala inteira */}
+          {windows
+            .filter((w) => w.type === "artefato" && w.artefato)
+            .map((w) => (
+              <div key={w.id} className="h-full" style={{ display: activeId === w.id && !chatVisible ? undefined : "none" }}>
+                <DocumentoArtefato doc={w.artefato!} />
               </div>
             ))}
 

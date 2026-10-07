@@ -33,7 +33,7 @@ describe("atalhos de rota (piloto automático com as entradas dos botões)", () 
       expect(r.chegou).toBe(true); expect(r.pousado).toBe(true); expect(r.s.y).toBe(0);
       expect(Math.hypot(r.s.x - HELIPORTO.x, r.s.z - HELIPORTO.z)).toBeLessThan(HELIPORTO.r);
       expect(r.trilha.some(dentroDaIlha)).toBe(false); expect(r.trilha.some(dentroDoQG)).toBe(false);
-      expect(r.t).toBeLessThan(25);
+      expect(r.t).toBeLessThan(36);   // (a Zaeon mega fica a 450 m e longe da praça)
     });
     it(`QG do Andrei: da Zaeon (céu) até sobre as muralhas, do lado do portão, a ${fps} FPS`, () => {
       const r = voarAtalho("qg", est(hangar.x, CIDADE.pisoY, hangar.z), fps);

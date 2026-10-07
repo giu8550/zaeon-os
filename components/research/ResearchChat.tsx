@@ -28,6 +28,8 @@ import { TCC_CROSS_ON, avisarTccMudou, tccApi } from "@/lib/tcc/client";
 import { empurrarPontos, pontosDaResposta } from "@/lib/lounge3d/pontos";
 import { DIRETRIZ_PESQUISA } from "@/lib/ai/salaPersona";
 import ConversasSidebar from "@/components/chat/ConversasSidebar";
+import { useConversasSlot } from "@/components/chat/ConversasSlot";
+import { consumirPedido, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
 import DicaSubTema from "@/components/chat/DicaSubTema";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
@@ -35,6 +37,8 @@ import { fonteChat } from "@/lib/ui/chatFontScale";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import { criarEstudo, gerarArtefato } from "@/lib/studio/studioClient";
 import Desenhando from "@/components/chat/Desenhando";
+import CartaoArtefato from "@/components/chat/CartaoArtefato";
+import { abrirDocumento, KINDS_EM_ABA } from "@/lib/chat/documentos";
 import { assuntoDe, pedeAula } from "@/lib/agent/aprender";
 import BolinhaCerebro from "@/components/cerebro/BolinhaCerebro";
 import CerebroPanel from "@/components/cerebro/CerebroPanel";
@@ -231,6 +235,21 @@ export default function ResearchChat({
     focarComposer();
   };
   const novaAbaRef = useRef<() => void>(() => {});
+  const trocarAbaRef = useRef<(id: string) => void>(() => {});
+  // Pedido da SIDEBAR principal (clicou numa conversa/"Nova pesquisa" estando noutra sala):
+  // atende o bilhete ao montar (as conversas já carregadas) e os eventos dali pra frente.
+  useEffect(() => {
+    if (!threads.length) return;
+    const atender = (p: PedidoConversa | null) => {
+      if (!p || p.sala !== "pesquisa") return;
+      if (p.nova) novaAbaRef.current();
+      else if (p.id && threadsRef.current.some((t) => t.id === p.id)) trocarAbaRef.current(p.id);
+    };
+    atender(consumirPedido("pesquisa"));
+    const on = (e: Event) => { atender((e as CustomEvent<PedidoConversa>).detail); consumirPedido("pesquisa"); };
+    window.addEventListener(EVT_PEDIDO_CONVERSA, on);
+    return () => window.removeEventListener(EVT_PEDIDO_CONVERSA, on);
+  }, [threads.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const on = () => novaAbaRef.current();
     window.addEventListener(EVT_NOVA_CONVERSA, on);
@@ -340,6 +359,10 @@ export default function ResearchChat({
       }
       if (desenho) patchMsg((m) => ({ ...m, desenhando: AVISO[kind] }));
       void gerarArtefato(kind, { spaceId, topic, contexto, sala: "pesquisa", ...(kind === "aula" && pdf ? { pdf } : {}) }).then((r) => {
+        // Documento (diagrama/aula): abre a aba em "Documentos"; pedido explícito já mostra ela.
+        if (r.tipo === "pronto" && KINDS_EM_ABA.has(r.bloco.studioKind) && r.bloco.artifactId) {
+          abrirDocumento({ sala: "pesquisa", studioKind: r.bloco.studioKind, artifactId: r.bloco.artifactId, titulo: r.bloco.title || topic, data: r.bloco.data, focar: !!art.explicito || !!pdf });
+        }
         patchMsg((m) => {
           const fim = desenho ? { ...m, desenhando: undefined } : m;
           if (r.tipo !== "pronto") return fim;
@@ -482,8 +505,13 @@ export default function ResearchChat({
   }, [input, sending, wt, runResearchGenerate, materializarArtefatos, modoTcc, tccWorkId, cerebro, anexoRef, onAtivar]);
   sendRef.current = (t?: string) => { void send(t); };
   novaAbaRef.current = novaAba;
+  trocarAbaRef.current = trocarAba;
 
-  const barraConversas = comAbas ? (
+  // As conversas moram na SIDEBAR PRINCIPAL do app (slot por portal); sem ela, na coluna `lateral`
+  // da sala; sem nenhuma das duas, ao lado do chat.
+  const slotSidebar = useConversasSlot("pesquisa");
+  const destinoConversas = slotSidebar ?? lateral ?? null;
+  const barraConversas = comAbas && slotSidebar !== null ? (
     <ConversasSidebar
       sala="pesquisa"
       threads={threads}
@@ -494,7 +522,9 @@ export default function ResearchChat({
       aoFechar={fecharAba}
       aoRenomear={renomearAba}
       aoCriarSub={(id) => novaSub(id)}
-      className={lateral ? "h-full" : ""}
+      className={!slotSidebar && lateral ? "h-full" : ""}
+      embutida={!!slotSidebar}
+      rotuloNova="Nova pesquisa"
     />
   ) : null;
   const ultimaResposta = (() => {
@@ -524,7 +554,7 @@ export default function ResearchChat({
       {arrastando && <AvisoSoltar />}
       {/* ESQUERDA = CONVERSAS. Com `lateral`, a barra vai pra coluna esquerda da SALA (fica à mostra com um
           documento aberto no topo); sem ela, fica aqui, à esquerda do chat. */}
-      {barraConversas && (lateral ? createPortal(barraConversas, lateral) : barraConversas)}
+      {barraConversas && (destinoConversas ? createPortal(barraConversas, destinoConversas) : barraConversas)}
       <div className="relative flex-1 min-w-0 flex flex-col">
       {/* Topo do chat: bolinha do cérebro (à esquerda) e o A−/A+ do texto (à direita). */}
       <div className={`shrink-0 ${compacto ? "px-3" : "px-4 sm:px-6"} pt-2 flex items-center gap-2 min-h-[36px]`}>
@@ -593,7 +623,7 @@ export default function ResearchChat({
                     <StructuredAnswerView answer={m.answer} acoes={acoesResposta} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)}>
                       {m.blocos?.length || m.desenhando ? (
                         <>
-                          {m.blocos?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
+                          {m.blocos?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}
                           {m.desenhando && <Desenhando texto={m.desenhando} />}
                         </>
                       ) : null}
@@ -631,7 +661,7 @@ export default function ResearchChat({
                 </div>
                 {!isUser && (m.blocos?.length || m.desenhando) ? (
                   <div className="w-full max-w-[88%]">
-                    {m.blocos?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
+                    {m.blocos?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}
                     {m.desenhando && <Desenhando texto={m.desenhando} />}
                   </div>
                 ) : null}
@@ -693,4 +723,12 @@ export default function ResearchChat({
       </div>
     </div>
   );
+}
+
+/** Diagrama/aula são DOCUMENTOS (abrem numa aba): no chat, só o cartão. O resto do Studio fica inline. */
+function BlocoOuCartao({ b }: { b: StudioBlockData }) {
+  if (KINDS_EM_ABA.has(b.studioKind) && b.artifactId) {
+    return <CartaoArtefato doc={{ sala: "pesquisa", studioKind: b.studioKind, artifactId: b.artifactId, titulo: b.title, data: b.data }} />;
+  }
+  return <StudioBlock block={b} collapsed={false} />;
 }

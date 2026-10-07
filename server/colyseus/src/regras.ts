@@ -5,7 +5,10 @@
  *  - a voz (signaling WebRTC) só vai pra alguém que está NA MESMA sala, com teto de tamanho.
  */
 export const MAX_JOGADORES = 5;
-const COORD = 600;   // metade do chão (1200 m) — a universidade fica a ~330 m da praça
+/** o mapa inteiro (VOO.raioMapa 960 + folga) e a altura máxima (VOO.yMax 720 + dorso da nave/mochila) — espelha MAPA
+ *  de lib/lounge3d/sala. A Zaeon mega fica em z −560 (até −812) com piso a 450 m: com 600/400 quem estava lá
+ *  aparecia pros outros puxado pro lado e as motos/nave 50 m ABAIXO do piso. */
+const COORD = 1000, ALT = 800;
 
 const num = (v: unknown, min: number, max: number): number | null =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null;
@@ -19,7 +22,7 @@ export type Pose = {
   /** em pé num lugar alto (dorso da nave, ilhota) */ alt: number | null;
   /** montado numa moto voadora (qualquer pessoa): vaga 0..7, altura com teto, rumo */ moto: { s: number; y: number; yaw: number } | null;
 };
-const VAGAS_MOTO = 8, TETO_MOTO = 400;   // 2 estacionamentos × 4 (chão + Zaeon) — espelha lib/cyber/motos
+const VAGAS_MOTO = 8, TETO_MOTO = ALT;   // 2 estacionamentos × 4 (chão + Zaeon) — espelha lib/cyber/motos
 
 /** saneia a pose do cliente; `fundador` vem do TOKEN (servidor), nunca do cliente */
 export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
@@ -29,18 +32,18 @@ export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
   if (x === null || z === null || facing === null) return null;
   let voo: Pose["voo"] = null, naveParada: Pose["naveParada"] = null;
   if (fundador && r.voo && typeof r.voo === "object") {
-    const v = r.voo as Record<string, unknown>, y = num(v.y, 0, 400), yaw = num(v.yaw, -10, 10);
+    const v = r.voo as Record<string, unknown>, y = num(v.y, 0, ALT), yaw = num(v.yaw, -10, 10);
     if (y !== null && yaw !== null) voo = { y, yaw };
   }
   if (fundador && r.naveParada && typeof r.naveParada === "object") {
     const v = r.naveParada as Record<string, unknown>;
-    const nx = num(v.x, -COORD, COORD), ny = num(v.y, 0, 400), nz = num(v.z, -COORD, COORD), yaw = num(v.yaw, -10, 10);
+    const nx = num(v.x, -COORD, COORD), ny = num(v.y, 0, ALT), nz = num(v.z, -COORD, COORD), yaw = num(v.yaw, -10, 10);
     if (nx !== null && ny !== null && nz !== null && yaw !== null) naveParada = { x: nx, y: ny, z: nz, yaw };
   }
   return {
     x, z, facing, moving: r.moving === true, sit: r.sit === true,
     topo: fundador && r.topo === true, ceu: r.ceu === true,
-    voo, naveParada, jet: num(r.jet, 0, 400), alt: num(r.alt, 0, 400), moto: motoDe(r.moto),
+    voo, naveParada, jet: num(r.jet, 0, ALT), alt: num(r.alt, 0, ALT), moto: motoDe(r.moto),
   };
 }
 function motoDe(v: unknown): Pose["moto"] {

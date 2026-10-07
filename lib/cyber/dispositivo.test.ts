@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectarPerfil, precisaGirar, pularQuadro, qualidadeDe } from "./dispositivo";
+import { detectarPerfil, precisaGirar, proximoQuadro, qualidadeDe } from "./dispositivo";
 
 const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36";
@@ -21,8 +21,8 @@ describe("onde o cyberespaço está rodando", () => {
 });
 
 describe("qualidade por perfil", () => {
-  it("desktop: cheia; celular: pixel ratio 1, sem antialias, 45 fps; aparelho fraco: 30 fps", () => {
-    expect(qualidadeDe({ movel: false, leve: false, fraco: false })).toEqual({ leve: false, pixelRatioMax: 1.5, antialias: true, fpsMax: 0 });
+  it("desktop: cheia (até 60 fps); celular: pixel ratio 1, sem antialias, 45 fps; aparelho fraco: 30 fps", () => {
+    expect(qualidadeDe({ movel: false, leve: false, fraco: false })).toEqual({ leve: false, pixelRatioMax: 1.5, antialias: true, fpsMax: 60 });   // tela de 120/144 Hz não desenha o dobro
     expect(qualidadeDe({ movel: true, leve: true, fraco: false })).toEqual({ leve: true, pixelRatioMax: 1, antialias: false, fpsMax: 45 });
     expect(qualidadeDe({ movel: true, leve: true, fraco: true }).fpsMax).toBe(30);
   });
@@ -33,8 +33,15 @@ describe("qualidade por perfil", () => {
     expect(precisaGirar({ movel: false, leve: false, fraco: false }, 600, 900)).toBe(false);
   });
   it("limite de fps pula os quadros cedo demais", () => {
-    expect(pularQuadro(30, 1000, 990)).toBe(true);
-    expect(pularQuadro(30, 1000, 960)).toBe(false);
-    expect(pularQuadro(0, 1000, 999)).toBe(false);
+    expect(proximoQuadro(30, 1000, 990).pular).toBe(true);
+    expect(proximoQuadro(30, 1000, 960).pular).toBe(false);
+    expect(proximoQuadro(0, 1000, 999).pular).toBe(false);
+  });
+  it("limitador com compasso: 45 fps num monitor de 60 Hz dá 45 (não cai pra 30), 30 dá 30, e 0 não limita", () => {
+    const rodar = (fps: number, hz: number, seg = 2) => { let ult = -1e9, n = 0; for (let i = 0; i < hz * seg; i++) { const r = proximoQuadro(fps, (i * 1000) / hz, ult); if (!r.pular) { n++; ult = r.ultimo; } } return n / seg; };
+    expect(rodar(45, 60)).toBeCloseTo(45, -0.5);
+    expect(rodar(30, 60)).toBeCloseTo(30, -0.5);
+    expect(rodar(60, 144)).toBeLessThanOrEqual(61); expect(rodar(60, 144)).toBeGreaterThan(55);
+    expect(rodar(0, 120)).toBe(120);
   });
 });

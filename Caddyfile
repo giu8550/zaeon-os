@@ -38,23 +38,10 @@
 	}
 }
 
-# ── Host de preview PERMANENTE via sslip.io ──────────────────────────────────
-# sslip.io resolve 75-119-140-97.sslip.io -> 75.119.140.97 sozinho (sem DNS nosso),
-# então o Caddy emite HTTPS Let's Encrypt válido. Fica NO GIT de propósito: assim
-# sobrevive a `git reset --hard` do deploy e a gente confere cada mudança em prod.
-# Remover quando o domínio definitivo apontar pra cá (ou manter como staging interno).
-75-119-140-97.sslip.io {
-	encode zstd gzip
-	handle /healthz {
-		respond "ok" 200
-	}
-	handle_path /colyseus/* {
-		reverse_proxy colyseus:2567
-	}
-	handle {
-		reverse_proxy web:3000
-	}
-}
+# ── Host de preview via sslip.io ──────────────────────────────────────────────
+# 75-119-140-97.sslip.io entra pela Variable BETA_DOMAIN (bloco de cima). NÃO declarar um bloco
+# próprio aqui: o mesmo host em dois blocos é "ambiguous site definition" e o Caddy NÃO SOBE —
+# foi o que derrubou o site em 2026-10-07 quando o Caddyfile do repo finalmente foi carregado.
 
 # ── www → raiz ────────────────────────────────────────────────
 # O client OAuth do Google NÃO aceita o callback com www: quem entrasse pelo www

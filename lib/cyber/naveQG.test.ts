@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ESCALA_NAVE_QG, CABINE, COMODOS, RAIO_REDOMA, RAMPA, alturaDaRampa, naPontaDaRampa, naRampaLaFora, pousoNaNave, rampaDaNave, ESCADA, TOTAL_ESCADA, pontoDaEscada, MOVEIS_CABINE, MOVEIS_NAVE, NAVE_QG, REATOR, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, comodoEm, docaLivre, paraLocal, paraMundo, pertoDaEntrada, pontoDoTerminal, poseDaDoca, redomaAberta, type Bordo } from "./naveQG";
+import { noCorredorDaRampa, ESCALA_NAVE_QG, CABINE, COMODOS, RAIO_REDOMA, RAMPA, alturaDaRampa, naPontaDaRampa, naRampaLaFora, pousoNaNave, rampaDaNave, ESCADA, TOTAL_ESCADA, pontoDaEscada, MOVEIS_CABINE, MOVEIS_NAVE, NAVE_QG, REATOR, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, comodoEm, docaLivre, paraLocal, paraMundo, pertoDaEntrada, pontoDoTerminal, poseDaDoca, redomaAberta, type Bordo, ESCALA_NAVE_QG_V } from "./naveQG";
 import { CIDADE, mundo, naIlhaPrincipal } from "./ceu";
 
 /** anda em linha reta de `de` até `ate` (passos de 0,25 m), como o engine faz a cada quadro */
@@ -14,8 +14,9 @@ function andar(de: Bordo, ate: { x: number; z: number }, passos = 400): Bordo {
 const centro = (c: { x0: number; x1: number; z0: number; z1: number }) => ({ x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2 });
 
 describe("nave-QG: tamanho e planta", () => {
-  it("~68 m de diâmetro; o convés e a cabine cabem dentro do casco", () => {
-    expect(NAVE_QG.raio * 2).toBeGreaterThan(66); expect(NAVE_QG.raio * 2).toBeLessThan(70);
+  it("~48 m de diâmetro (30% menor que a de 68 m) e ACHATADA; o convés e a cabine cabem dentro do casco", () => {
+    expect(NAVE_QG.raio * 2).toBeLessThanOrEqual(68 * 0.7 + 0.1); expect(NAVE_QG.raio * 2).toBeGreaterThan(44);
+    expect(ESCALA_NAVE_QG_V / ESCALA_NAVE_QG).toBeLessThan(0.85);   // mais larga que alta (antes as duas eram iguais)
     for (const c of [...COMODOS, CABINE]) for (const [x, z] of [[c.x0, c.z0], [c.x1, c.z0], [c.x0, c.z1], [c.x1, c.z1]]) expect(Math.hypot(x!, z!)).toBeLessThan(NAVE_QG.cascoNoConves - 2);
   });
   it("a casa tem os cômodos pedidos (estar, banheiro, servidores, motor) + reuniões, hall e corredor, sem se sobrepor", () => {
@@ -23,7 +24,7 @@ describe("nave-QG: tamanho e planta", () => {
     for (const a of COMODOS) for (const b of COMODOS) if (a !== b) expect(a.x1 <= b.x0 + 1e-9 || b.x1 <= a.x0 + 1e-9 || a.z1 <= b.z0 + 1e-9 || b.z1 <= a.z0 + 1e-9).toBe(true);
   });
   it("cômodos com espaço pra andar: cada um tem uma área livre de móveis grande", () => {
-    for (const c of COMODOS) expect((c.x1 - c.x0) * (c.z1 - c.z0)).toBeGreaterThan(c.id === "corredor" ? 40 : 90);
+    for (const c of COMODOS) expect((c.x1 - c.x0) * (c.z1 - c.z0)).toBeGreaterThan(c.id === "corredor" ? 30 : 50);   // (a planta original, da escala 6,3)
     for (const m of MOVEIS_NAVE) expect(comodoEm(centro(m))).not.toBeNull();   // todo móvel dentro de um cômodo
     expect(comodoEm(REATOR)?.id).toBe("motor");
   });
@@ -58,8 +59,8 @@ describe("nave-QG: andar a bordo (casa embaixo, cabine em cima)", () => {
     { let x = b; for (let k = 0; k < 600 && x.nivel === 0; k++) { if (!meio && (x.esc ?? 0) > TOTAL_ESCADA / 2) meio = x; const alvo = pontoDaEscada((x.esc ?? 0) + 0.5); x = andarNaNave({ x: x.x + (alvo.x - x.x) * 0.35, z: x.z + (alvo.z - x.z) * 0.35 }, x); } b = x; }
     expect(b.nivel).toBe(1); expect(alturaNoBordo(b)).toBe(NAVE_QG.cabine);
     expect(alturaNoBordo(meio!)).toBeGreaterThan(0.4 * NAVE_QG.cabine); expect(alturaNoBordo(meio!)).toBeLessThan(0.6 * NAVE_QG.cabine);
-    // lá em cima: a cabine fica na altura da redoma (bem acima da casa)
-    expect(NAVE_QG.cabine).toBeGreaterThan(8);
+    // lá em cima: a cabine fica na altura da redoma, acima das paredes da casa
+    expect(NAVE_QG.cabine).toBeGreaterThan(NAVE_QG.pe + 0.3);
     // desce: volta pro vão pelo topo e gira ao contrário
     b = andar(b, pontoDaEscada(TOTAL_ESCADA));
     expect(b.esc).toBeDefined();
@@ -118,7 +119,7 @@ describe("nave-QG: a rampa e a volta de mochila (ninguém fica preso fora)", () 
     expect(alturaDaRampa(RAMPA.zCasco + 1)).toBeCloseTo(0, 9);   // o túnel é plano
   });
   it("de mochila: pelo vão da REDOMA aberta cai-se no piso da CABINE (com ela fechada, não)", () => {
-    const c = NAVE_QG.cabine, l = { x: 6, z: -9 };
+    const c = NAVE_QG.cabine, l = { x: 4.2, z: -6.3 };   // (dentro do vão da redoma da nave de 48 m)
     expect(Math.hypot(l.x, l.z)).toBeLessThan(RAIO_REDOMA);
     const b = pousoNaNave(l, c + 0.3, c - 0.1, true)!;
     expect(b.nivel).toBe(1); expect(b.x).toBeLessThan(CABINE.x1); expect(b.z).toBeGreaterThan(CABINE.z0);
@@ -148,5 +149,22 @@ describe("nave-QG: a doca (sem hangar)", () => {
     expect(naIlhaPrincipal(saida)).toBe(true);
     expect(Math.hypot(d.x - mundo({ x: 0, z: 0 }).x, d.z - mundo({ x: 0, z: 0 }).z)).toBeGreaterThan(CIDADE.bordaR);   // o centro da nave fica fora da ilha
     expect(docaLivre()).toBe(true);
+  });
+  it("a RAMPA desce pela FRENTE (o lado pra onde o piloto olha) e, pousada no chão, dá pra voltar andando por ela", () => {
+    const p = { x: 100, y: 0, z: -40, yaw: 0.7 }, rumo = { x: Math.sin(p.yaw), z: Math.cos(p.yaw) };
+    const fim = paraMundo(p, NAVE_QG.saida), leme = paraMundo(p, NAVE_QG.leme);
+    expect((fim.x - p.x) * rumo.x + (fim.z - p.z) * rumo.z).toBeGreaterThan(NAVE_QG.raio * 0.8);   // o fim da rampa: na frente
+    expect((leme.x - p.x) * rumo.x + (leme.z - p.z) * rumo.z).toBeGreaterThan(0);                   // o leme também fica pra frente
+    expect(rampaDaNave(p).desce).toBe("chao");
+    // o corredor fica aberto do casco até o fim da rampa e um pouco além (o colisor do casco não tampa a rampa)
+    const casco = paraMundo(p, { x: 0, z: RAMPA.zCasco - 0.5 }); expect(noCorredorDaRampa(p, casco)).toBe(true);
+    for (let d = 0; d <= 2.5; d += 0.5) { const w = { x: fim.x + rumo.x * d, z: fim.z + rumo.z * d }; expect(noCorredorDaRampa(p, w)).toBe(true); }
+    expect(noCorredorDaRampa(p, paraMundo(p, { x: 8, z: -20 }))).toBe(false);   // fora do corredor, o casco é sólido
+    const volta = paraLocal(p, paraMundo(p, { x: 1.2, z: -7 })); expect(volta.x).toBeCloseTo(1.2, 9); expect(volta.z).toBeCloseTo(-7, 9);
+  });
+  it("na DOCA a nave fica de frente pra Zaeon: a rampa desce na borda da ilha", () => {
+    const d = poseDaDoca(), fim = paraMundo(d, NAVE_QG.saida), c = CIDADE.centro;
+    expect(Math.hypot(fim.x - c.x, fim.z - c.z)).toBeLessThan(Math.hypot(d.x - c.x, d.z - c.z));
+    expect(rampaDaNave(d).desce).toBe("ilha");
   });
 });

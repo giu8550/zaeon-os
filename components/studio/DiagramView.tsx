@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { Maximize2, Minimize2, ExternalLink } from "lucide-react";
 
-export default function DiagramView({ artifactId, titulo }: { artifactId: string; titulo?: string }) {
+export default function DiagramView({ artifactId, titulo, cheio = false }: { artifactId: string; titulo?: string; /** ocupa a aba inteira (documento) */ cheio?: boolean }) {
   const [alto, setAlto] = useState(false);
   const [html, setHtml] = useState<string | null>(null);
   const [erro, setErro] = useState(false);
@@ -30,13 +30,13 @@ export default function DiagramView({ artifactId, titulo }: { artifactId: string
     return () => { vivo = false; };
   }, [url]);
 
-  const altura = alto ? "h-[78vh]" : "h-[440px]";
+  const altura = cheio ? "h-full" : alto ? "h-[78vh]" : "h-[440px]";
   if (erro) return <div className="text-[12px] text-slate-500 dark:text-white/50 px-1 py-3">Não consegui abrir o diagrama agora.</div>;
   if (html === null) {
     return <div className={`w-full ${altura} rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/[0.04] animate-pulse`} aria-label="Carregando o diagrama" />;
   }
   return (
-    <div className="relative">
+    <div className={`relative ${cheio ? "h-full" : ""}`}>
       <iframe
         srcDoc={html}
         title={titulo ? `Diagrama: ${titulo}` : "Diagrama interativo"}
@@ -45,7 +45,7 @@ export default function DiagramView({ artifactId, titulo }: { artifactId: string
         className={`w-full rounded-xl border border-slate-200 dark:border-white/10 bg-[#020617] transition-[height] ${altura}`}
       />
       <div className="absolute top-2 left-2 flex gap-1">
-        <button
+        {!cheio && <button
           type="button"
           onClick={() => setAlto((v) => !v)}
           aria-label={alto ? "Diminuir o diagrama" : "Aumentar o diagrama"}
@@ -53,7 +53,7 @@ export default function DiagramView({ artifactId, titulo }: { artifactId: string
           className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/55 text-white/80 hover:text-white hover:bg-black/75"
         >
           {alto ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-        </button>
+        </button>}
         <a
           href={url}
           target="_blank"
