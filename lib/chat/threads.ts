@@ -19,6 +19,13 @@ export type Thread = {
   criadaEm: number;
   /** Última vez que a pessoa mexeu nela — ordena as abas. */
   tocadaEm: number;
+  /**
+   * Sub-conversa (sub-tema do mesmo nicho): id da conversa-mãe. UM nível só — mãe → filhas,
+   * nunca neta (criarSubThread sobe pra mãe se pedirem filha de uma filha).
+   */
+  parentId?: string;
+  /** Contexto herdado da mãe (título + o fim da última resposta) — vai junto no 1º envio da filha. */
+  contexto?: string;
 };
 
 export const CHAVE_INDICE = "zaeon.cowork.threads.v1";
@@ -27,8 +34,11 @@ export const CHAVE_ATIVA = "zaeon.cowork.threadAtiva.v1";
 export const CHAVE_LEGADA = "zaeon.cowork.thread.v1";
 
 export const TITULO_PADRAO = "Nova conversa";
-/** Teto de abas: acima disso a barra vira um acordeão e ninguém acha nada. */
-export const MAX_ABAS = 12;
+/**
+ * Teto de conversas guardadas. Era 12 quando eram abas horizontais (acima disso a barra virava
+ * acordeão); na barra lateral vertical, com busca, cabem bem mais — as mais antigas saem do fim.
+ */
+export const MAX_ABAS = 40;
 
 /**
  * Escopo = o conjunto de chaves de UMA sala. Estudos usa o COWORK (padrão, inalterado);
@@ -134,6 +144,40 @@ export function criarThread(threads: readonly Thread[], titulo = TITULO_PADRAO):
   return { threads: [nova, ...threads].slice(0, MAX_ABAS), nova };
 }
 
+/**
+ * Sub-conversa: nasce LOGO ABAIXO da mãe (na lista e no acordeão), herdando o contexto do nicho.
+ * Pedir filha de uma filha vira irmã (mesma mãe) — a árvore tem um nível só.
+ */
+export function criarSubThread(
+  threads: readonly Thread[], paiId: string, titulo = TITULO_PADRAO, contexto?: string,
+): { threads: Thread[]; nova: Thread } {
+  const pai = threads.find((t) => t.id === paiId);
+  if (!pai) return criarThread(threads, titulo);
+  const maeId = pai.parentId && threads.some((t) => t.id === pai.parentId) ? pai.parentId : pai.id;
+  const agora = Date.now();
+  const nova: Thread = { id: novoId(), titulo, criadaEm: agora, tocadaEm: agora, parentId: maeId };
+  if (contexto) nova.contexto = contexto.slice(0, 2000);
+  const lista = [...threads];
+  const idx = lista.findIndex((t) => t.id === maeId);
+  lista.splice(idx + 1, 0, nova);
+  return { threads: lista.slice(0, MAX_ABAS), nova };
+}
+
+export type NoConversa = { thread: Thread; filhas: Thread[] };
+
+/**
+ * A lista plana vira a árvore da barra lateral: mães na ordem em que estão, cada uma com as
+ * filhas embaixo. Filha cuja mãe sumiu (teto, migração) não some — vira mãe.
+ */
+export function arvoreDeThreads(threads: readonly Thread[]): NoConversa[] {
+  const ids = new Set(threads.map((t) => t.id));
+  const raiz = (t: Thread) => !t.parentId || !ids.has(t.parentId) || t.parentId === t.id;
+  const nos: NoConversa[] = threads.filter(raiz).map((thread) => ({ thread, filhas: [] }));
+  const porId = new Map(nos.map((n) => [n.thread.id, n]));
+  for (const t of threads) if (!raiz(t)) porId.get(t.parentId!)?.filhas.push(t);
+  return nos;
+}
+
 export function renomearThread(threads: readonly Thread[], id: string, titulo: string): Thread[] {
   const limpo = (titulo || "").trim();
   if (!limpo) return [...threads];
@@ -141,18 +185,22 @@ export function renomearThread(threads: readonly Thread[], id: string, titulo: s
 }
 
 /**
- * Fecha uma aba e apaga o histórico dela. Nunca deixa zero abas: fechar a última cria
- * uma vazia no lugar — uma sala de conversa sem conversa nenhuma é um beco sem saída.
+ * Fecha uma aba e apaga o histórico dela — e o das sub-conversas dela (sub-tema sem a mãe
+ * não faz sentido). Nunca deixa zero abas: fechar a última cria uma vazia no lugar — uma
+ * sala de conversa sem conversa nenhuma é um beco sem saída.
  */
 export function fecharThread(a: Armazem, threads: readonly Thread[], id: string, e: Escopo = ESCOPO_COWORK): { threads: Thread[]; proxima: string } {
-  try { a.removeItem(chaveDaThread(id, e)); } catch { /* ignore */ }
-  const restantes = threads.filter((t) => t.id !== id);
+  const sai = new Set([id, ...threads.filter((t) => t.parentId === id).map((t) => t.id)]);
+  for (const s of sai) try { a.removeItem(chaveDaThread(s, e)); } catch { /* ignore */ }
+  const restantes = threads.filter((t) => !sai.has(t.id));
   if (!restantes.length) {
     const { threads: nova, nova: n } = criarThread([]);
     return { threads: nova, proxima: n.id };
   }
+  // A vizinha de quem saiu: a próxima que sobrou depois dela (ou a última, se ela era o fim).
   const idx = threads.findIndex((t) => t.id === id);
-  const proxima = restantes[Math.min(idx, restantes.length - 1)].id;
+  const depois = threads.slice(idx + 1).find((t) => !sai.has(t.id));
+  const proxima = (depois ?? restantes[restantes.length - 1]).id;
   return { threads: restantes, proxima };
 }
 

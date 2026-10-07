@@ -34,13 +34,17 @@ import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlo
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import MagazineAnswerView, { podeVirarRevista } from "@/components/study/MagazineAnswerView";
 import MagazineBoundary from "@/components/study/MagazineBoundary";
-import ThreadTabs from "@/components/study/ThreadTabs";
+import ConversasSidebar from "@/components/chat/ConversasSidebar";
+import DicaSubTema from "@/components/chat/DicaSubTema";
+import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
+import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
+import { fonteChat } from "@/lib/ui/chatFontScale";
 import { AvisoSoltar, ChipAnexo, EVT_ANEXAR, pdfDaBiblioteca, useAnexoChat } from "@/components/chat/useAnexoChat";
 import DocumentDesktop from "@/app/research-lab/DocumentDesktop";
 import { useSavedCitations } from "@/lib/useSavedCitations";
 import type { LibraryFile } from "@/lib/useLibraryFiles";
 import {
-  carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread, tocarThread,
+  carregarThreads, salvarThreads, criarThread, criarSubThread, fecharThread, renomearThread, tocarThread,
   carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
   TITULO_PADRAO, type Thread,
 } from "@/lib/chat/threads";
@@ -92,6 +96,10 @@ type Msg = {
   pendente?: boolean;
   at: number;
 };
+
+/** Pílula de documento no topo do chat (TCC, cartolina). */
+const DOC_PILL =
+  "min-h-[36px] px-3 rounded-full inline-flex items-center gap-1.5 text-[13px] font-semibold bg-white/90 dark:bg-white/10 border border-slate-200 dark:border-white/15 text-slate-700 dark:text-white/85 hover:text-cyan-600 dark:hover:text-cyan-300 hover:border-cyan-400/50 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500";
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
@@ -160,6 +168,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [libOpen, setLibOpen] = useState(true);
+  // Editar a própria pergunta e reenviar (estilo ChatGPT) + o A−/A+ do texto.
+  const [editando, setEditando] = useState<string | null>(null);
+  const zoom = useChatFontScale();
   const [studioOpen, setStudioOpen] = useState(false);
   const [focusIds, setFocusIds] = useState<string[]>([]);
   // ANEXAR (📎 / soltar arquivo / soltar um documento da biblioteca na conversa): a IA lê o PDF e responde
@@ -427,13 +438,53 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     }
   }, []);
 
+  const renomearAba = useCallback((id: string, titulo: string) => {
+    const lista = renomearThread(threadsRef.current, id, titulo);
+    threadsRef.current = lista;
+    salvarThreads(localStorage, lista);
+    setThreads(lista);
+  }, []);
+
+  // Sub-tema do mesmo nicho: sub-conversa ligada à mãe, herdando o contexto (vai junto em cada envio).
+  // Começa vazia, com "Aprofunde: " no composer — a 1ª pergunta batiza a sub-conversa.
+  const novaSub = useCallback((paiId: string, contexto?: string) => {
+    if (sending) return;
+    guardarAtual();
+    let ctx = contexto;
+    if (ctx === undefined) {
+      const msgsPai = paiId === abaAtivaRef.current ? msgsRef.current : carregarMensagens<Msg>(localStorage, paiId);
+      const ultima = [...msgsPai].reverse().find((m) => m.role === "assistant" && textoParaHistorico(m));
+      ctx = ultima ? textoParaHistorico(ultima).slice(-1500) : undefined;
+    }
+    const { threads: lista, nova } = criarSubThread(threadsRef.current, paiId, TITULO_PADRAO, ctx);
+    salvarThreads(localStorage, lista);
+    threadsRef.current = lista;
+    abaAtivaRef.current = nova.id;
+    setThreads(lista);
+    setAbaAtiva(nova.id);
+    marcarAtiva(localStorage, nova.id);
+    setMessages([]);
+    setEditando(null);
+    setInput((v) => (v.trim() ? v : "Aprofunde: "));
+    focarComposer();
+  }, [sending, guardarAtual]);
+
+  // Numa sub-conversa, a Aura sabe de qual nicho ela saiu (título da mãe + o trecho herdado).
+  const contextoDaSub = () => {
+    const atual = threadsRef.current.find((t) => t.id === abaAtivaRef.current);
+    if (!atual?.parentId) return "";
+    const mae = threadsRef.current.find((t) => t.id === atual.parentId);
+    return ` Esta conversa é um SUB-TEMA da conversa "${mae?.titulo ?? "anterior"}" (mesmo nicho): aprofunde o recorte pedido sem perder o fio dela.` +
+      (atual.contexto ? ` Contexto herdado da conversa-mãe: \"${atual.contexto}\".` : "");
+  };
+
   /** A aba ganha nome da primeira coisa que a pessoa perguntou. */
   const batizarSePreciso = useCallback((texto: string) => {
     const aba = abaAtivaRef.current;
     if (!aba) return;
     const atual = threadsRef.current.find((t) => t.id === aba);
     if (!atual || atual.titulo !== TITULO_PADRAO) return;
-    const lista = renomearThread(threadsRef.current, aba, tituloAPartirDe(texto));
+    const lista = renomearThread(threadsRef.current, aba, tituloAPartirDe(texto.replace(/^aprofunde:\s*/i, "")));
     threadsRef.current = lista;
     salvarThreads(localStorage, lista);
     setThreads(lista);
@@ -626,7 +677,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       { id: uid(), role: "user", kind: "text", text: prompt, at: Date.now() },
       { id: asstId, role: "assistant", kind: "text", text: "", streaming: true, at: Date.now() },
     ]);
-    setInput("");
+    if (typeof override !== "string") setInput("");   // envio direto (sugestão/editar/regenerar) preserva o rascunho
     batizarSePreciso(prompt);
     avisarEscritorio(activeMentor, "trabalhando");
     setSending(true);
@@ -649,7 +700,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       ? `O usuário está no co-working da Sala de Estudos e FOCOU ${focusIds.length} estudo(s): ${focusTitles.join("; ")}. Concentre-se nesse(s) estudo(s) ao responder.`
       : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade, mantendo o fio do assunto entre as mensagens.`)
       + " Nunca ofereça recursos, ferramentas ou botões da plataforma, e nunca comente o que você 'pode gerar' — fale do tema."
-      + flexClause;
+      + flexClause
+      + contextoDaSub();
 
     try {
       let target = "";       // parte VISÍVEL alvo (sem a sentinela)
@@ -733,6 +785,37 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso, aplicarFinal, anexoRef]);
   sendRefA.current = (t: string) => { void send(t); };
 
+  /** Refaz a conversa a partir da pergunta `idx` (editar/regenerar): corta dali pra baixo e reenvia. */
+  const reenviar = (idx: number, texto: string) => {
+    if (sending) return;
+    const corte = msgsRef.current.slice(0, idx);
+    msgsRef.current = corte;   // o send lê o histórico daqui, já cortado
+    setMessages(corte);
+    setEditando(null);
+    void send(texto);
+  };
+  const ultimaResposta = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "assistant") return messages[i].id;
+    return null;
+  })();
+  /** Mini-ações de uma resposta da Aura (copiar/regenerar/👍👎/sub-tema). */
+  const acoesDa = (m: Msg, i: number) => {
+    if (m.role !== "assistant" || m.streaming || m.pendente || (sending && m.id === ultimaResposta)) return null;
+    const texto = textoParaHistorico(m);
+    if (!texto) return null;
+    let pergunta = -1;
+    for (let j = i - 1; j >= 0; j--) if (messages[j].role === "user") { pergunta = j; break; }
+    return (
+      <AcoesResposta
+        msgId={m.id}
+        texto={texto}
+        ocupado={sending}
+        onRegenerar={m.id === ultimaResposta && pergunta >= 0 ? () => reenviar(pergunta, messages[pergunta].text ?? "") : undefined}
+        onAprofundar={abaAtiva ? () => novaSub(abaAtiva, texto.slice(-1500)) : undefined}
+      />
+    );
+  };
+
   // Clicar num nó da árvore: conversa scopada naquele nó (vai pro composer + chip de foco).
   const onNodeChat = useCallback((node: SkillNodeState, t: SkillTreeData) => {
     setSkillNode({ topicSlug: t.topicSlug, nodeId: node.id, title: node.title });
@@ -775,12 +858,25 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   ), [focusIds, spaceTitle, removeFocus, skillNode]);
 
   return (
-    <div className="relative h-full flex lg:flex-row flex-col">
+    <div className="relative h-full flex lg:flex-row flex-col" style={zoom.style}>
       {/* Borda-degradê navy na aresta esquerda (par visual com a sidebar da esquerda) — só no claro. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-y-0 left-0 w-[1.5px] z-10 dark:hidden"
         style={{ background: "linear-gradient(180deg,#0f172a,rgba(15,23,42,0.25) 50%,transparent)" }}
+      />
+      {/* ESQUERDA = CONVERSAS (estilo ChatGPT/Claude): a lista vertical desta sala, com sub-temas. */}
+      <div className="relative flex-1 min-w-0 min-h-0 flex">
+      <ConversasSidebar
+        sala="estudos"
+        threads={threads}
+        ativa={abaAtiva}
+        ocupada={sending ? abaAtiva : null}
+        aoTrocar={trocarAba}
+        aoCriar={novaAba}
+        aoFechar={fecharAba}
+        aoRenomear={renomearAba}
+        aoCriarSub={(id) => novaSub(id)}
       />
       {/* ── COLUNA CENTRAL: conversa + composer ── */}
       <div ref={colunaRef} className="relative flex-1 min-w-0 flex flex-col" onDragOver={soltar.onDragOver} onDragLeave={soltar.onDragLeave} onDrop={(e) => { if (e.dataTransfer.files?.length || e.dataTransfer.getData("text/zaeon-file")) soltar.onDrop(e); }}>
@@ -800,20 +896,6 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           </div>
         )}
 
-        {/* Cartolina da conversa: botão + board por cima do chat. Tap num card → volta à resposta. */}
-        {CARTOLINA_ON && abaAtiva && (
-          <button
-            type="button"
-            onClick={() => setCartolinaAberta(true)}
-            aria-label="Abrir a cartolina desta conversa"
-            title="Cartolina desta conversa"
-            className="absolute z-20 right-4 top-3 min-h-[44px] min-w-[44px] px-3 rounded-full flex items-center gap-1.5 text-sm
-              bg-white/90 dark:bg-white/10 border border-slate-200 dark:border-white/15 shadow-lg backdrop-blur-xl
-              text-slate-700 dark:text-white/85 hover:text-cyan-600 dark:hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500"
-          >
-            <FileText size={16} /> Cartolina
-          </button>
-        )}
         {CARTOLINA_ON && cartolinaAberta && abaAtiva && (
           <div className="absolute inset-0 z-40">
             <LoungeCartolina
@@ -825,21 +907,6 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           </div>
         )}
 
-        {/* TCC da conversa: a ABA abre por cima do chat (a sala não muda). Só existe depois do
-            "crie um TCC sobre…" — ou de abrir o card dele na cartolina. */}
-        {tccDaAba && !tccAberto && (
-          <button
-            type="button"
-            onClick={() => setTccAberto(true)}
-            aria-label="Abrir o TCC desta conversa"
-            title="TCC desta conversa"
-            className={`absolute z-20 ${CARTOLINA_ON ? "right-36" : "right-4"} top-3 min-h-[44px] min-w-[44px] px-3 rounded-full flex items-center gap-1.5 text-sm
-              bg-white/90 dark:bg-white/10 border border-slate-200 dark:border-white/15 shadow-lg backdrop-blur-xl
-              text-slate-700 dark:text-white/85 hover:text-cyan-600 dark:hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500`}
-          >
-            <GraduationCap size={16} /> TCC
-          </button>
-        )}
         {tccDaAba && tccAberto && (
           <div className="absolute inset-y-0 right-0 z-40 w-full sm:w-[min(620px,100%)] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]">
             <TccPanel workId={tccDaAba} onFechar={() => setTccAberto(false)} />
@@ -862,17 +929,39 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           </button>
         )}
 
-        {/* Abas de conversa. Ficam ACIMA da conversa e dentro da sala: abrir conversa
-            nova nunca mexe na posição das salas (Estudos, Aulas, Pesquisa). */}
-        <div className="px-3 pt-2">
-          <ThreadTabs
-            threads={threads}
-            ativa={abaAtiva}
-            aoTrocar={trocarAba}
-            aoCriar={novaAba}
-            aoFechar={fecharAba}
-            ocupada={sending ? abaAtiva : null}
-          />
+        {/* TOPO = DOCUMENTOS desta conversa (TCC, cartolina) + o A−/A+ do texto. As conversas ficam na
+            barra da esquerda: trocar de conversa lá não abre/fecha documento aqui, e vice-versa. */}
+        <div className="shrink-0 px-3 pt-2 flex items-center gap-2 min-h-[44px]">
+          {((CARTOLINA_ON && abaAtiva) || (tccDaAba && !tccAberto)) && (
+            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Documentos</span>
+          )}
+          {/* TCC da conversa: abre por cima do chat (a sala não muda). Só existe depois do
+              "crie um TCC sobre…" — ou de abrir o card dele na cartolina. */}
+          {tccDaAba && !tccAberto && (
+            <button
+              type="button"
+              onClick={() => setTccAberto(true)}
+              aria-label="Abrir o TCC desta conversa"
+              title="TCC desta conversa"
+              className={DOC_PILL}
+            >
+              <GraduationCap size={14} /> TCC
+            </button>
+          )}
+          {/* Cartolina da conversa: o board abre por cima do chat. Tap num card → volta à resposta. */}
+          {CARTOLINA_ON && abaAtiva && (
+            <button
+              type="button"
+              onClick={() => setCartolinaAberta(true)}
+              aria-label="Abrir a cartolina desta conversa"
+              title="Cartolina desta conversa"
+              className={DOC_PILL}
+            >
+              <FileText size={14} /> Cartolina
+            </button>
+          )}
+          <div className="flex-1" />
+          <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
         </div>
 
         {/* conversa (drop target de foco) */}
@@ -887,13 +976,20 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2 py-4 flex flex-col gap-4">
             {/* B2: cursor piscando da resposta em streaming */}
             <style>{`@keyframes zCaret { 0%,45% { opacity:1 } 50%,100% { opacity:0 } } .z-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-0.15em; background:currentColor; opacity:.7; animation: zCaret 1s steps(1) infinite; } @media (prefers-reduced-motion: reduce) { .z-caret { animation: none; } }`}</style>
-            {messages.length === 0 ? null : (
-              messages.map((m) => {
+            {messages.length === 0 ? <DicaSubTema threads={threads} ativa={abaAtiva} /> : (
+              messages.map((m, i) => {
                 if (m.kind === "text") {
                   const isUser = m.role === "user";
+                  if (isUser && editando === m.id) {
+                    return (
+                      <div key={m.id} className="flex justify-end">
+                        <EdicaoPergunta inicial={m.text ?? ""} onCancelar={() => setEditando(null)} onEnviar={(t) => reenviar(i, t)} />
+                      </div>
+                    );
+                  }
                   return (
-                    <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 font-tech text-[22px] leading-[1.65] whitespace-pre-wrap
+                    <div key={m.id} data-msg={m.id} className={`group/msg flex flex-col ${isUser ? "items-end" : "items-start"}`}>
+                      <div style={{ fontSize: fonteChat(22) }} className={`max-w-[85%] rounded-2xl px-4 py-2.5 font-tech leading-[1.65] whitespace-pre-wrap
                         ${isUser
                           ? "bg-slate-100 text-slate-900 border border-slate-200/80 dark:bg-white/[0.09] dark:text-white/90 dark:border-white/10"
                           : "bg-white/80 dark:bg-white/[0.05] text-slate-800 dark:text-white/90 border border-slate-200/70 dark:border-white/10 backdrop-blur-xl"}`}>
@@ -907,6 +1003,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                               : <><ChatMarkdown text={m.text} />{m.streaming && <span aria-hidden className="z-caret" />}</>)
                           : (!isUser && <AuraThinking active fase={m.fase} phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                       </div>
+                      {isUser
+                        ? (m.text ? <AcoesPergunta texto={m.text} ocupado={sending} onEditar={() => setEditando(m.id)} /> : null)
+                        : acoesDa(m, i)}
                     </div>
                   );
                 }
@@ -932,6 +1031,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                     <StructuredAnswerView
                       answer={m.answer}
                       typing={!!m.fresh}
+                      acoes={acoesDa(m, i)}
                       onConcept={(c) => void send(`Me explica melhor: ${c}`)}
                       onNext={(s) => void send(s)}
                     >
@@ -942,9 +1042,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                   // quando há ARTEFATO embutido (a Sala de Pesquisa é que tem o modo editorial).
                   const revista = !!m.studioBlock && podeVirarRevista(m.answer, true);
                   return (
-                    <div key={m.id} data-msg={m.id} className="flex justify-start">
+                    <div key={m.id} data-msg={m.id} className="group/msg flex justify-start">
                       <div className={revista ? "w-full" : "max-w-[85%] w-full"}>
                         {revista ? (
+                          <>
                           <MagazineBoundary fallback={padrao}>
                             <MagazineAnswerView
                               answer={m.answer}
@@ -956,6 +1057,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                               agente="Aura"
                             />
                           </MagazineBoundary>
+                          {acoesDa(m, i)}
+                          </>
                         ) : padrao}
                       </div>
                     </div>
@@ -1029,6 +1132,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             </CoworkComposer>
           </div>
         </div>
+      </div>
+
       </div>
 
       {/* ── BIBLIOTECA (direita, retrátil) — o MESMO painel da Sala de Pesquisa (documentos, pasta com os

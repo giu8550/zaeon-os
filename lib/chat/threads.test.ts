@@ -3,7 +3,7 @@ import {
   carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread,
   tituloAPartirDe, chaveDaThread, carregarMensagens, salvarMensagens,
   threadAtiva, marcarAtiva, CHAVE_INDICE, CHAVE_LEGADA, MAX_ABAS, TITULO_PADRAO,
-  ESCOPO_PESQUISA, ESCOPO_COWORK,
+  ESCOPO_PESQUISA, ESCOPO_COWORK, criarSubThread, arvoreDeThreads,
   type Armazem,
 } from "./threads";
 
@@ -171,5 +171,50 @@ describe("escopo da Sala de Pesquisa", () => {
     salvarMensagens(a, nova.id, [{ id: "x" }], ESCOPO_PESQUISA);
     fecharThread(a, threads, nova.id, ESCOPO_PESQUISA);
     expect(a.dados[chaveDaThread(nova.id, ESCOPO_PESQUISA)]).toBeUndefined();
+  });
+});
+
+describe("sub-conversas (sub-temas do mesmo nicho)", () => {
+  it("nasce logo abaixo da mãe, ligada a ela, com o contexto herdado", () => {
+    let threads = criarThread(criarThread([], "Mãe").threads, "Outra").threads; // [Outra, Mãe]
+    const mae = threads[1];
+    const { threads: t2, nova } = criarSubThread(threads, mae.id, TITULO_PADRAO, "contexto do nicho");
+    expect(nova.parentId).toBe(mae.id);
+    expect(nova.contexto).toBe("contexto do nicho");
+    expect(t2.map((t) => t.id)).toEqual([threads[0].id, mae.id, nova.id]);
+  });
+
+  it("um nível só: filha de filha vira irmã (mesma mãe)", () => {
+    const { threads, nova: mae } = criarThread([], "Mãe");
+    const { threads: t2, nova: filha } = criarSubThread(threads, mae.id);
+    const { nova: neta } = criarSubThread(t2, filha.id);
+    expect(neta.parentId).toBe(mae.id);
+  });
+
+  it("árvore: mães em ordem, filhas embaixo; órfã vira mãe", () => {
+    const { threads, nova: mae } = criarThread([], "Mãe");
+    const { threads: t2, nova: filha } = criarSubThread(threads, mae.id);
+    const orfa = { ...filha, id: "orfa", parentId: "sumiu" };
+    const arv = arvoreDeThreads([...t2, orfa]);
+    expect(arv.map((n) => n.thread.id)).toEqual([mae.id, "orfa"]);
+    expect(arv[0].filhas.map((f) => f.id)).toEqual([filha.id]);
+  });
+
+  it("fechar a mãe leva as filhas (e o histórico delas)", () => {
+    const a = armazemFalso();
+    const { threads, nova: mae } = criarThread(criarThread([], "Fica").threads, "Mãe");
+    const { threads: t2, nova: filha } = criarSubThread(threads, mae.id);
+    salvarMensagens(a, filha.id, [{ id: "x" }]);
+    const { threads: t3, proxima } = fecharThread(a, t2, mae.id);
+    expect(t3.map((t) => t.titulo)).toEqual(["Fica"]);
+    expect(proxima).toBe(t3[0].id);
+    expect(a.dados[chaveDaThread(filha.id)]).toBeUndefined();
+  });
+
+  it("fechar só a filha mantém a mãe", () => {
+    const a = armazemFalso();
+    const { threads, nova: mae } = criarThread([], "Mãe");
+    const { threads: t2, nova: filha } = criarSubThread(threads, mae.id);
+    expect(fecharThread(a, t2, filha.id).threads.map((t) => t.id)).toEqual([mae.id]);
   });
 });

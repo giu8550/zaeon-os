@@ -23,7 +23,11 @@ import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
 import { TCC_CROSS_ON, avisarTccMudou, tccApi } from "@/lib/tcc/client";
 import { empurrarPontos, pontosDaResposta } from "@/lib/lounge3d/pontos";
 import { DIRETRIZ_PESQUISA } from "@/lib/ai/salaPersona";
-import ThreadTabs from "@/components/study/ThreadTabs";
+import ConversasSidebar from "@/components/chat/ConversasSidebar";
+import DicaSubTema from "@/components/chat/DicaSubTema";
+import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
+import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
+import { fonteChat } from "@/lib/ui/chatFontScale";
 import BolinhaCerebro from "@/components/cerebro/BolinhaCerebro";
 import CerebroPanel from "@/components/cerebro/CerebroPanel";
 import { useCerebro } from "@/components/cerebro/useCerebro";
@@ -31,7 +35,7 @@ import { AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { AvisoSoltar, ChipAnexo, useAnexoChat } from "@/components/chat/useAnexoChat";
 import {
-  carregarThreads, salvarThreads, criarThread, fecharThread, renomearThread, tocarThread,
+  carregarThreads, salvarThreads, criarThread, criarSubThread, fecharThread, renomearThread, tocarThread,
   carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
   ESCOPO_PESQUISA, TITULO_PADRAO, type Thread,
 } from "@/lib/chat/threads";
@@ -39,7 +43,7 @@ import {
 // `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
 type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string; anexo?: string };
 
-/** A sala → o chat: abrir uma conversa nova (o ＋ da barra de abas da sala). */
+/** A sala → o chat: abrir uma conversa nova (o ＋ da sala). */
 export const EVT_NOVA_CONVERSA = "zaeon:research:nova-conversa";
 
 // Deve bater com RESEARCH_SENTINEL de app/api/ai/chat/route.ts (a estruturada vem do structured-client).
@@ -79,7 +83,7 @@ export default function ResearchChat({
   active = true,
   comAbas = false,
   compacto = false,
-  barra,
+  lateral,
   emCena = true,
   onAtivar,
 }: {
@@ -88,15 +92,16 @@ export default function ResearchChat({
   tccWorkId?: string | null;
   /** Em cena (sala/sub-aba visível): o composer recebe o cursor sem precisar clicar. */
   active?: boolean;
-  /** Sala unificada: mostra as conversas (um tema por aba) + "Nova" no topo do chat. */
+  /** Sala unificada: mostra as conversas (um tema cada, com sub-temas) na barra lateral esquerda. */
   comAbas?: boolean;
   /** Numa COLUNA estreita: sem o recuo grande à esquerda e com letra menor. */
   compacto?: boolean;
-  /** Sala com ABAS: as conversas vão pra barra de abas da sala (portal) — junto das abas de pesquisa e de PDF. */
-  barra?: HTMLElement | null;
-  /** A conversa está à mostra (a aba ativa da sala é uma conversa) — senão nenhuma aba de conversa fica acesa. */
+  /** Sala com ABAS: a barra de conversas vai pra coluna ESQUERDA da sala (portal) — fica à mostra
+   *  mesmo com um documento aberto no topo; sem isto, ela fica à esquerda dentro do próprio chat. */
+  lateral?: HTMLElement | null;
+  /** A conversa está à mostra (e não um documento) — senão nenhuma conversa fica acesa na barra. */
   emCena?: boolean;
-  /** Clicou numa aba de conversa → a sala mostra o chat. */
+  /** Clicou numa conversa → a sala mostra o chat (o documento aberto no topo continua o mesmo). */
   onAtivar?: () => void;
 }) {
   const recuo = compacto ? "ml-0 mr-0" : "ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2";
@@ -109,6 +114,9 @@ export default function ResearchChat({
   const [sending, setSending] = useState(false);
   const [quick, setQuick] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Editar a própria pergunta e reenviar (estilo ChatGPT): id da mensagem em edição.
+  const [editando, setEditando] = useState<string | null>(null);
+  const zoom = useChatFontScale();
   const listRef = useRef<HTMLDivElement>(null);
   const wt = workType || "trabalho";
   const msgsRef = useRef<Msg[]>([]);
@@ -212,13 +220,60 @@ export default function ResearchChat({
       setMessages(carregarMensagens<Msg>(localStorage, proxima, ESCOPO_PESQUISA));
     }
   };
+  const renomearAba = (id: string, titulo: string) => {
+    const lista = renomearThread(threadsRef.current, id, titulo);
+    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+  };
+  // Sub-tema do mesmo nicho: sub-conversa ligada à mãe, herdando o contexto (vai junto em cada envio).
+  // Começa vazia, com "Aprofunde: " no composer — a 1ª pergunta batiza a sub-conversa.
+  const novaSub = (paiId: string, contexto?: string) => {
+    onAtivar?.();
+    if (sending) return;
+    if (anexoRef.current) tirarAnexo();
+    const pai = threadsRef.current.find((t) => t.id === paiId);
+    let ctx = contexto;
+    if (ctx === undefined && pai) {
+      // Pelo "＋ sub-tema" da barra: o contexto é o fim da última resposta da mãe.
+      const msgsPai = paiId === abaAtivaRef.current ? msgsRef.current : carregarMensagens<Msg>(localStorage, paiId, ESCOPO_PESQUISA);
+      ctx = [...msgsPai].reverse().find((m) => m.role === "assistant" && m.text)?.text.slice(-1500);
+    }
+    const { threads: lista, nova } = criarSubThread(threadsRef.current, paiId, TITULO_PADRAO, ctx);
+    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+    abaAtivaRef.current = nova.id; setAbaAtiva(nova.id);
+    marcarAtiva(localStorage, nova.id, ESCOPO_PESQUISA);
+    setMessages([]); setEditando(null);
+    setInput((v) => v.trim() ? v : "Aprofunde: ");
+    focarComposer();
+  };
+  /** "Aprofundar num sub-tema" a partir de UMA resposta: o contexto é ela. */
+  const aprofundar = (m: Msg) => {
+    const aba = abaAtivaRef.current;
+    if (aba) novaSub(aba, m.text.slice(-1500));
+  };
+  /** Refaz a conversa a partir da pergunta `idx` (editar/regenerar): corta dali pra baixo e reenvia. */
+  const reenviar = (idx: number, texto: string) => {
+    if (sending) return;
+    const corte = msgsRef.current.slice(0, idx);
+    msgsRef.current = corte;   // o send lê o histórico daqui, já cortado
+    setMessages(corte);
+    setEditando(null);
+    sendRef.current(texto);
+  };
   // 1ª fala numa conversa sem nome → batiza pelo tema (como toda IA faz).
   const nomearPeloTema = (texto: string) => {
     const aba = abaAtivaRef.current;
     const atual = threadsRef.current.find((t) => t.id === aba);
     if (!aba || !atual || atual.titulo !== TITULO_PADRAO) return;
-    const lista = renomearThread(threadsRef.current, aba, tituloAPartirDe(texto));
+    const lista = renomearThread(threadsRef.current, aba, tituloAPartirDe(texto.replace(/^aprofunde:\s*/i, "")));
     threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+  };
+  // Numa sub-conversa, o modelo sabe de qual nicho ela saiu (título da mãe + o trecho herdado).
+  const contextoDaSub = () => {
+    const atual = threadsRef.current.find((t) => t.id === abaAtivaRef.current);
+    if (!atual?.parentId) return "";
+    const mae = threadsRef.current.find((t) => t.id === atual.parentId);
+    return ` Esta conversa é um SUB-TEMA da conversa "${mae?.titulo ?? "anterior"}" (mesmo nicho): aprofunde o recorte pedido sem perder o fio dela.` +
+      (atual.contexto ? ` Contexto herdado da conversa-mãe: """${atual.contexto}""".` : "");
   };
 
   // Gera o trabalho e o ENCAIXA no documento (reusa /api/ai/research-draft + o
@@ -248,7 +303,8 @@ export default function ResearchChat({
     setQuick(isQuick(prompt));
     nomearPeloTema(prompt);
 
-    const history = messages.map((m) => ({
+    // msgsRef (e não `messages`): editar/regenerar cortam o histórico no mesmo tique do envio.
+    const history = msgsRef.current.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.text }],
     }));
@@ -287,7 +343,7 @@ export default function ResearchChat({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt, agent: "aura", surface: "pesquisa", history, stream: true,
-          systemContext: SYS(wt) + (lendo ? ` O aluno anexou o arquivo "${lendo.nome}" (vai junto nesta mensagem): leia o CONTEÚDO dele e responda com base nele, citando a página/seção quando der.` : ""),
+          systemContext: SYS(wt) + contextoDaSub() + (lendo ? ` O aluno anexou o arquivo "${lendo.nome}" (vai junto nesta mensagem): leia o CONTEÚDO dele e responda com base nele, citando a página/seção quando der.` : ""),
           ...(lendo ? { fileData: lendo.dataUrl } : {}),
           // Memória por conversa: o grafo/cartolina é o da ABA ativa e o nó lembra de qual resposta veio.
           agentContext: { activeTab: "pesquisa", cartolinaScopeId: abaAtivaRef.current ?? undefined, cartolinaMsgId: asstId },
@@ -364,51 +420,61 @@ export default function ResearchChat({
       setSending(false);
       if (cerebro.ligado) setTimeout(() => void cerebro.refetch(), 1500); // o gatekeeper/fixar são fire-and-forget no servidor
     }
-  }, [input, sending, messages, wt, runResearchGenerate, modoTcc, tccWorkId, cerebro, anexoRef, onAtivar]);
+  }, [input, sending, wt, runResearchGenerate, modoTcc, tccWorkId, cerebro, anexoRef, onAtivar]);
   sendRef.current = (t?: string) => { void send(t); };
   novaAbaRef.current = novaAba;
 
+  const barraConversas = comAbas ? (
+    <ConversasSidebar
+      sala="pesquisa"
+      threads={threads}
+      ativa={emCena ? abaAtiva : null}
+      ocupada={sending ? abaAtiva : null}
+      aoTrocar={trocarAba}
+      aoCriar={novaAba}
+      aoFechar={fecharAba}
+      aoRenomear={renomearAba}
+      aoCriarSub={(id) => novaSub(id)}
+      className={lateral ? "h-full" : ""}
+    />
+  ) : null;
+  const ultimaResposta = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "assistant") return messages[i].id;
+    return null;
+  })();
+  /** Índice da pergunta que originou a resposta `i` (pra regenerar). */
+  const perguntaDe = (i: number) => {
+    for (let j = i - 1; j >= 0; j--) if (messages[j].role === "user") return j;
+    return -1;
+  };
+
   return (
-    <div ref={rootRef} className="relative h-full flex flex-col bg-white/95 dark:bg-[#0a0f1c]/95 text-slate-900 dark:text-white" {...soltar}>
+    <div ref={rootRef} className="relative h-full flex bg-white/95 dark:bg-[#0a0f1c]/95 text-slate-900 dark:text-white" style={zoom.style} {...soltar}>
       {arrastando && <AvisoSoltar />}
-      {/* Temas da conversa (um por aba). Com `barra`, as abas vão pra BARRA DA SALA (junto das abas de
-          pesquisa e de PDF, e o ＋ é o da sala); sem ela, ficam aqui em cima do chat, com o ＋ próprio. */}
-      {comAbas && (() => {
-        const abas = (
-          <>
-            <ThreadTabs
-              threads={threads}
-              ativa={emCena ? abaAtiva : null}
-              aoTrocar={trocarAba}
-              aoCriar={novaAba}
-              aoFechar={fecharAba}
-              ocupada={sending ? abaAtiva : null}
-              semCriar={!!barra}
-            />
-            {cerebro.ligado && (
-              <BolinhaCerebro
-                estado={cerebro.estado}
-                completude={cerebro.mapa?.completudeAprendizado ?? 0}
-                aberto={cerebroAberto}
-                onClick={() => {
-                  onAtivar?.();
-                  if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
-                  else setCerebroAberto((v) => !v);
-                }}
-              />
-            )}
-          </>
-        );
-        if (barra) return createPortal(abas, barra);
-        return (
-          <div className={`shrink-0 ${compacto ? "px-3" : "px-4 sm:px-6"} pt-3 flex items-start gap-2`}>
-            <div className="min-w-0 flex-1 flex items-start gap-2">{abas}</div>
-          </div>
-        );
-      })()}
+      {/* ESQUERDA = CONVERSAS. Com `lateral`, a barra vai pra coluna esquerda da SALA (fica à mostra com um
+          documento aberto no topo); sem ela, fica aqui, à esquerda do chat. */}
+      {barraConversas && (lateral ? createPortal(barraConversas, lateral) : barraConversas)}
+      <div className="relative flex-1 min-w-0 flex flex-col">
+      {/* Topo do chat: bolinha do cérebro (à esquerda) e o A−/A+ do texto (à direita). */}
+      <div className={`shrink-0 ${compacto ? "px-3" : "px-4 sm:px-6"} pt-2 flex items-center gap-2 min-h-[36px]`}>
+        {comAbas && cerebro.ligado && (
+          <BolinhaCerebro
+            estado={cerebro.estado}
+            completude={cerebro.mapa?.completudeAprendizado ?? 0}
+            aberto={cerebroAberto}
+            onClick={() => {
+              onAtivar?.();
+              if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
+              else setCerebroAberto((v) => !v);
+            }}
+          />
+        )}
+        <div className="flex-1" />
+        <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
+      </div>
       {/* ÁREA do chat (mensagens + composer). O cérebro abre em OVERLAY `absolute inset-0 z-50` DENTRO
           dela — cobre mensagens e composer de propósito (visão focada) e nunca nasce atrás/abaixo do
-          composer, que está em fluxo sem z-index. A barra de conversas (com a bolinha) fica de fora,
+          composer, que está em fluxo sem z-index. O topo (com a bolinha) fica de fora,
           pra bolinha continuar visível e alternar. Mobile: mesmo overlay. */}
       <div className="relative flex-1 min-h-0 flex flex-col">
       <AnimatePresence>
@@ -425,30 +491,49 @@ export default function ResearchChat({
           />
         )}
       </AnimatePresence>
-      {/* Conversa — bolhas com cara de manuscrito (serif, texto justificado).
-          Sem cabeçalho/X: a alternância chat ↔ trabalho é feita pela pill ⟁ Chat. */}
+      {/* Conversa — bolhas com cara de manuscrito (serif, texto justificado). Cada mensagem tem a linha
+          de mini-ações (copiar/regenerar/👍👎/sub-tema; na pergunta: copiar/editar) — no hover no desktop. */}
       <div ref={listRef} className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar ${compacto ? "px-3" : "px-4 sm:px-6"}`}>
         <div className={`${recuo} py-5 flex flex-col gap-4`}>
-          {messages.map((m) => {
+          {messages.length === 0 && comAbas && <DicaSubTema threads={threads} ativa={abaAtiva} />}
+          {messages.map((m, i) => {
             const isUser = m.role === "user";
+            const emCurso = sending && m.id === ultimaResposta;
+            const acoesResposta = !isUser && !emCurso && m.text ? (
+              <AcoesResposta
+                msgId={m.id}
+                texto={m.answer ? [m.answer.nucleo, m.answer.desenvolvimento].filter(Boolean).join("\n\n") : m.text}
+                ocupado={sending}
+                onRegenerar={m.id === ultimaResposta && perguntaDe(i) >= 0 ? () => { const j = perguntaDe(i); reenviar(j, messages[j].text); } : undefined}
+                onAprofundar={comAbas ? () => aprofundar(m) : undefined}
+              />
+            ) : null;
             if (!isUser && m.answer) {
               return (
-                <div key={m.id} data-msg-id={m.id} className="flex justify-start">
+                <div key={m.id} data-msg-id={m.id} className="group/msg flex justify-start">
                   <div className="max-w-[88%] w-full">
                     {/* Clicar num conceito/próximo passo proposto pela IA já ENVIA (sem clicar no input nem Enter). */}
-                    <StructuredAnswerView answer={m.answer} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)} />
+                    <StructuredAnswerView answer={m.answer} acoes={acoesResposta} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)} />
                   </div>
                 </div>
               );
             }
+            if (isUser && editando === m.id) {
+              return (
+                <div key={m.id} data-msg-id={m.id} className="flex justify-end">
+                  <EdicaoPergunta inicial={m.text} onCancelar={() => setEditando(null)} onEnviar={(t) => reenviar(i, t)} />
+                </div>
+              );
+            }
             return (
-              <div key={m.id} data-msg-id={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+              <div key={m.id} data-msg-id={m.id} className={`group/msg flex flex-col ${isUser ? "items-end" : "items-start"}`}>
                 <div
-                  className={`max-w-[88%] px-4 py-3 font-serif ${compacto ? "text-[17px]" : "text-[22px]"} leading-[1.65] whitespace-pre-wrap ${
+                  className={`max-w-[88%] px-4 py-3 font-serif leading-[1.65] whitespace-pre-wrap ${
                     isUser
                       ? "rounded-2xl bg-slate-100 text-slate-900 border border-slate-200 dark:bg-white/[0.08] dark:text-white/90 dark:border-white/10"
                       : "rounded-r-2xl rounded-bl-2xl bg-slate-50 text-slate-800 border-l-2 border-cyan-500/60 text-justify dark:bg-white/[0.03] dark:text-white/90 dark:border-cyan-400/50"
                   }`}
+                  style={{ fontSize: fonteChat(compacto ? 17 : 22) }}
                 >
                   {isUser && m.anexo && (
                     <span className="block mb-1 font-sans text-[12px] font-semibold text-cyan-700 dark:text-cyan-300/90">📎 {m.anexo}</span>
@@ -459,6 +544,9 @@ export default function ResearchChat({
                         ? <ChatMarkdown text={m.text} />
                         : <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                 </div>
+                {isUser
+                  ? <AcoesPergunta texto={m.text} ocupado={sending} onEditar={() => setEditando(m.id)} />
+                  : acoesResposta}
               </div>
             );
           })}
@@ -509,6 +597,7 @@ export default function ResearchChat({
             )}
           </CoworkComposer>
         </div>
+      </div>
       </div>
       </div>
     </div>
