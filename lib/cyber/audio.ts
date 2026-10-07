@@ -108,7 +108,7 @@ export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | 
   voz: { ref: 3, max: 28, rolloff: 1, modelo: "linear" },        // VOZ por proximidade: cheia de perto, some aos ~28 m
   grande: { ref: 14, max: 160, rolloff: 1 },        // buraco negro, nave dos outros
   naveLocal: { ref: 40, max: 400, rolloff: 0.25 },  // a nave em que EU estou: não vira de lado ao girar a câmera
-  musica: { ref: 9, max: 48, rolloff: 1, modelo: "linear" },     // as CAIXAS DE SOM do lounge: cheio dentro dele, some na ilha
+  musica: { ref: 18, max: 110, rolloff: 1, modelo: "linear" },   // as TORRES DE SOM do clube (lounge): cheio na sala toda, ecoa pela ilha e some longe
 };
 
 /** cristais da base: só se ouvem com o AVATAR perto dela (cheio até 4 m, some aos 12 m) — o ouvinte é a câmera */
