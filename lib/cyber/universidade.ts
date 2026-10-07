@@ -15,9 +15,9 @@
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 
 export const UNIVERSIDADE = {
-  centro: { x: 0, z: 225 },
+  centro: { x: 0, z: 330 },
   /** piso do disco flutuante (m): um pouco abaixo da Zaeon (230); `discoR` = raio andável (a borda é livre: cai) */
-  y: 170, discoR: 150, espessura: 8,
+  y: 230, discoR: 150, espessura: 8,
   externa: { meia: 105, alt: 12, esp: 2.6, portao: 14 },     // muralha externa (portão ao sul)
   interna: { meia: 80, alt: 18, esp: 3, portoes: [{ x: 0, w: 10 }, { x: -36, w: 8 }, { x: 36, w: 8 }] },   // portões ao sul
   torreCentral: { x: 0, z: -61.5, lado: 14, alt: 50, pinaculo: 22 },
@@ -43,7 +43,12 @@ export const SALAS: Sala[] = [
 
 /** os dois pátios (claustros) abertos, com uma fonte de cristal no meio */
 export const PATIOS = [{ x0: -57, x1: -16, z0: -80, z1: 63 }, { x0: 16, x1: 57, z0: -80, z1: 63 }] as const;
-export const FONTES = PATIOS.map((p) => ({ x: (p.x0 + p.x1) / 2, z: (p.z0 + p.z1) / 2 - 8, r: 3.2 }));
+/** fontes: uma no meio de cada pátio + quatro no pátio EXTERNO (o anel entre as muralhas, livre desde que a natureza
+ *  saiu) — a leste e a oeste, longe das torres e dos portões */
+export const FONTES = [
+  ...PATIOS.map((p) => ({ x: (p.x0 + p.x1) / 2, z: (p.z0 + p.z1) / 2 - 8, r: 3.2 })),
+  ...[-1, 1].flatMap((sx) => [-1, 1].map((sz) => ({ x: sx * 92.5, z: sz * 55, r: 3.2 }))),
+];
 
 export type Torre = { x: number; z: number; r: number; alt: number };
 /** torres: 4 de canto + 8 em "D" na externa; 4 grandes nos cantos da interna */
@@ -221,48 +226,18 @@ export function pilaresDaUniversidade(): { x: number; z: number; r: number; topo
   ];
 }
 
-// ───────────── NATUREZA: árvores, sebes, canteiros e PLANTAÇÕES (layout; o three em components/cyber/Natureza.ts) ─────────────
+// ───────────── NATUREZA (removida: o campus é holograma — tipos mantidos, listas vazias) ─────────────
 export type Arvore = { x: number; z: number; h: number; tipo: "copa" | "fruta" | "conifera" };
 export type Campo = { tipo: "trigo" | "milho" | "horta" | "girassol" | "flores" | "gramado"; x0: number; x1: number; z0: number; z1: number };
 /** PRNG determinístico (o mesmo campus pra todo mundo) */
 function prngU(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const longeDasTorres = (x: number, z: number, folga: number) => TORRES.every((t) => Math.hypot(x - t.x, z - t.z) > t.r + folga);
 
-/** os campos do pátio EXTERNO (entre as muralhas): trigo e milho a oeste, horta e girassóis a leste, pomar ao norte, jardins ao sul */
-export const CAMPOS: Campo[] = (() => {
-  const e = UNIVERSIDADE.externa.meia - UNIVERSIDADE.externa.esp, i = UNIVERSIDADE.interna.meia + UNIVERSIDADE.interna.esp, m = 2.5;
-  return [
-    { tipo: "trigo", x0: -e + m, x1: -i - m, z0: -i, z1: -6 },
-    { tipo: "milho", x0: -e + m, x1: -i - m, z0: 6, z1: i },
-    { tipo: "horta", x0: i + m, x1: e - m, z0: -i, z1: -6 },
-    { tipo: "girassol", x0: i + m, x1: e - m, z0: 6, z1: i },
-    { tipo: "flores", x0: -60, x1: -12, z0: -e + m, z1: -i - m },
-    { tipo: "flores", x0: 12, x1: 60, z0: -e + m, z1: -i - m },
-    // gramados dos pátios internos (com canteiros de flores nas bordas)
-    ...PATIOS.map((p) => ({ tipo: "gramado" as const, x0: p.x0 + 1.5, x1: p.x1 - 1.5, z0: p.z0 + 1.5, z1: p.z1 - 1.5 })),
-  ];
-})();
-
-/** as árvores: alamedas nos pátios internos, o POMAR ao norte, coníferas nos cantos e a avenida até o portão */
-export const ARVORES: Arvore[] = (() => {
-  const r = prngU(42), out: Arvore[] = [], e = UNIVERSIDADE.externa.meia, i = UNIVERSIDADE.interna.meia;
-  for (const p of PATIOS) for (let z = p.z0 + 10; z < p.z1 - 6; z += 13) for (const x of [p.x0 + 5, p.x1 - 5]) out.push({ x, z, h: 7 + r() * 3, tipo: "copa" });
-  for (let x = -e + 8; x < e - 6; x += 7) for (let z = i + 7; z < e - 4; z += 6.5) if (longeDasTorres(x, z, 3) && Math.abs(x) > 6) out.push({ x: x + (r() - 0.5), z: z + (r() - 0.5), h: 3.6 + r() * 1.2, tipo: "fruta" });
-  for (const sx of [-1, 1]) for (let k = 0; k < 5; k++) { const x = sx * (e - 12 - (k % 2) * 4), z = -e + 14 + k * 4.5; if (longeDasTorres(x, z, 3)) out.push({ x, z, h: 9 + r() * 4, tipo: "conifera" }); }
-  for (let z = -e - 38; z < -e - 6; z += 9) for (const x of [-11, 11]) out.push({ x, z, h: 8 + r() * 2, tipo: "copa" });   // avenida do elevador de luz até o portão (no disco)
-  return out;
-})();
-
-/** sebes (sólidas, baixas) contornando os gramados dos pátios — com aberturas nos caminhos (meio de cada lado) */
-export const SEBES: { x0: number; x1: number; z0: number; z1: number; alt: number }[] = (() => {
-  const out: { x0: number; x1: number; z0: number; z1: number; alt: number }[] = [], a = 1.1, t = 0.9;
-  for (const p of PATIOS) {
-    const x0 = p.x0 + 2.5, x1 = p.x1 - 2.5, z0 = p.z0 + 2.5, z1 = p.z1 - 2.5, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, g = 3;
-    out.push({ x0, x1: cx - g, z0, z1: z0 + t, alt: a }, { x0: cx + g, x1, z0, z1: z0 + t, alt: a }, { x0, x1: cx - g, z0: z1 - t, z1, alt: a }, { x0: cx + g, x1, z0: z1 - t, z1, alt: a });
-    out.push({ x0, x1: x0 + t, z0, z1: cz - g, alt: a }, { x0, x1: x0 + t, z0: cz + g, z1, alt: a }, { x0: x1 - t, x1, z0, z1: cz - g, alt: a }, { x0: x1 - t, x1, z0: cz + g, z1, alt: a });
-  }
-  return out;
-})();
+// A NATUREZA SAIU do campus (landing v3 do cyberespaço: holograma, sem árvores — só fontes e estruturas modernas).
+// As listas ficam vazias (os tipos e as funções de colisão continuam: quem consome não precisa mudar).
+export const CAMPOS: Campo[] = [];
+export const ARVORES: Arvore[] = [];
+export const SEBES: { x0: number; x1: number; z0: number; z1: number; alt: number }[] = [];
 /** colisores da natureza (locais): troncos das árvores */
 export const troncos = (): Colisor[] => ARVORES.map((a) => ({ x: a.x, z: a.z, r: a.tipo === "fruta" ? 0.45 : 0.6 }));
 let troncosC: Colisor[] | null = null;

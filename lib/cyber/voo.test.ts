@@ -42,10 +42,10 @@ function descerDaCidade(fps: number) {
 
 describe("voo — botões de movimento levam a nave a qualquer lugar", () => {
   for (const fps of [60, 10]) {
-    it(`Cidade → chão saindo pela borda (≤ 8 s) a ${fps} FPS, sem atravessar a ilha`, () => {
+    it(`Cidade → chão saindo pela borda (≤ 11 s — a Zaeon subiu pra 290 m e ficou mais larga) a ${fps} FPS, sem atravessar a ilha`, () => {
       const { r, t, trilha } = descerDaCidade(fps);
       expect(r.pousado).toBe(true); expect(r.s.y).toBe(0);
-      expect(t).toBeLessThanOrEqual(8);
+      expect(t).toBeLessThanOrEqual(11);
       expect(atravessouIlha(trilha)).toBe(false);
     });
     it(`chão embaixo da ilha → Cidade (sai pela lateral, sobe, vai ao pátio, pousa) a ${fps} FPS`, () => {

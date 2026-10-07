@@ -9,9 +9,9 @@ const qg = POIS.find((p) => p.id === "zaeon")!;
 const dentroDeParede = (w: { x: number; z: number }) => { const l = localU(w); return paredesDaUniversidade().some((p) => { const dx = p.bx - p.ax, dz = p.bz - p.az, L2 = dx * dx + dz * dz, t = Math.max(0, Math.min(1, ((l.x - p.ax) * dx + (l.z - p.az) * dz) / L2)); return Math.hypot(l.x - (p.ax + dx * t), l.z - (p.az + dz * t)) < p.esp / 2; }); };
 
 describe("Universidade (castelo flutuando num disco no céu)", () => {
-  it("é enorme: ~3× a área da Zaeon do céu, e cabe no mapa", () => {
+  it("é enorme: maior que a Zaeon do céu (que cresceu ×1,5 no cyberespaço v2), e cabe no mapa", () => {
     const lado = UNIVERSIDADE.externa.meia * 2;
-    expect(lado * lado).toBeGreaterThan(2.9 * Math.PI * CIDADE.bordaR ** 2);
+    expect(lado * lado).toBeGreaterThan(1.2 * Math.PI * CIDADE.bordaR ** 2);
     const { x, z } = UNIVERSIDADE.centro, m = UNIVERSIDADE.externa.meia;
     expect(Math.hypot(Math.abs(x) + m, Math.abs(z) + m)).toBeLessThan(VOO.raioMapa + 160);   // o canto mais longe
   });
@@ -82,12 +82,8 @@ describe("Universidade (castelo flutuando num disco no céu)", () => {
       expect(ms.filter((m) => m.tipo === "cadeira").length).toBeGreaterThan(20);
     }
   });
-  it("natureza: plantações no pátio externo (trigo, milho, horta, girassol), árvores fora das paredes e das salas", () => {
-    expect(CAMPOS.map((c) => c.tipo)).toEqual(expect.arrayContaining(["trigo", "milho", "horta", "girassol", "flores", "gramado"]));
-    const i = UNIVERSIDADE.interna.meia, e = UNIVERSIDADE.externa.meia;
-    for (const c of CAMPOS.filter((c) => c.tipo !== "gramado")) expect(Math.min(Math.abs(c.x0), Math.abs(c.x1), Math.abs(c.z0), Math.abs(c.z1)) >= i || Math.max(Math.abs(c.z0), Math.abs(c.z1)) > i).toBe(true);
-    for (const a of ARVORES) { expect(salaEm(a)).toBeNull(); expect(dentroDeParede(mundoU(a))).toBe(false); expect(Math.max(Math.abs(a.x), Math.abs(a.z)) < e - 1 || a.z < -e).toBe(true); }
-    expect(ARVORES.length).toBeGreaterThan(60); expect(SEBES.length).toBe(16);
+  it("sem natureza (holograma): nenhuma árvore, sebe ou plantação — e os pátios continuam livres pra andar", () => {
+    expect(CAMPOS).toHaveLength(0); expect(ARVORES).toHaveLength(0); expect(SEBES).toHaveLength(0);
     // dá pra entrar nos pátios pelos vãos das sebes (meio do lado sul)
     for (const p of PATIOS) expect(resolverUniversidade(mundoU({ x: (p.x0 + p.x1) / 2, z: p.z0 + 3 }))).toEqual(mundoU({ x: (p.x0 + p.x1) / 2, z: p.z0 + 3 }));
   });

@@ -34,6 +34,7 @@ import { criarSolanaHouse, type SolanaHouseHandle } from "./SolanaHouse";
 import { NAVE_QG, RAIO_REDOMA, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, RAMPA, naPontaDaRampa, naRampaLaFora, paraLocal, paraMundo, pertoDaEntrada, poseDaDoca, pousoNaNave, rampaDaNave, redomaAberta, type Bordo, type PoseNave } from "@/lib/cyber/naveQG";
 import { ESCALA_NAVE, criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
+import { atualizarCamuflagem, camuflarGrupo, pararCamuflagem } from "./camuflagem";
 import { criarMoto, type MotoHandle } from "./Moto";
 import { MOTO, motoPerto, vagas } from "@/lib/cyber/motos";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
@@ -247,18 +248,21 @@ export class CyberEngine {
     this.R.autoClear = false; this.R.outputColorSpace = THREE.SRGBColorSpace;
     const cv = this.R.domElement; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:" + (opts.menu ? "pan-y" : "none");
     container.appendChild(cv);
-    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.1, 900);
+    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.1, 1300);   // mapa maior (cyberespaço v2)
     this.cena = criarCenaCosmica(low, this.w / this.h);
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
+      camuflarGrupo(lm.group);   // holograma: sem PBR nem luzes (components/cyber/camuflagem)
       this.cena.scene.add(lm.group); this.lms.push(lm);   // sem rótulo na tela (interface limpa); o nome sai no painel do clique
     }
     if (opts.landmarks) {
       this.cidade = criarCidade({ low, starTex: this.cena.starTex });
+      camuflarGrupo(this.cidade.group);
       this.cena.scene.add(this.cidade.group);
       if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
-      this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); this.cena.scene.add(this.univ.group);
-      this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); this.cena.scene.add(this.solana.group);
+      this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); camuflarGrupo(this.univ.group); this.cena.scene.add(this.univ.group);
+      this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); camuflarGrupo(this.solana.group); this.cena.scene.add(this.solana.group);
+      pararCamuflagem(typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
       this.nave = criarNave({ low, cor: "#2f7bff" }); this.cena.scene.add(this.nave.group);
       vagas().forEach((v, i) => {
         const h = criarMoto({ cor: CORES_MOTO[i % CORES_MOTO.length]!, low }); h.group.position.set(v.x, 0, v.z); h.group.rotation.y = v.yaw;
@@ -579,6 +583,8 @@ export class CyberEngine {
   /** onde a nave-QG ficou estacionada (vem da sala): vale enquanto o dono não mexe nela nesta sessão */
   setNaveQG(pose: PoseNave | null) {
     if (!pose || this.pilotando || this.naveMexida) return;
+    // pose salva na DOCA ANTIGA (a Zaeon era a 230 m; cresceu e subiu pra 290): ignora → fica na doca nova
+    if (Math.abs(pose.y + NAVE_QG.deck - 230) < 1.5) return;
     this.naveEst = { ...this.naveEst, ...pose, vx: 0, vy: 0, vz: 0 };
   }
   /** botões de movimento na tela: SUBIR/DESCER (segurar) */
@@ -1140,6 +1146,7 @@ export class CyberEngine {
     this.ultimoQuadro = now;
     const dtReal = Math.min(VOO.dtMax, this.clock.getDelta()), dt = Math.min(0.05, dtReal), t = now * 0.001;   // o voo usa o dt REAL (independente de FPS)
     if (!this.visivel || document.hidden) return;
+    atualizarCamuflagem(t);   // o relógio único de todos os hologramas do mapa
     const eu = this.eu, euId = this.o.eu.id;
 
     // MENU: segurar ESPAÇO p/ viajar; personagem fica sentado contemplando

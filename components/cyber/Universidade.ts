@@ -16,7 +16,6 @@ import { PLATAFORMAS } from "@/lib/cyber/plataformas";
 import { glowTex } from "./CenaCosmica";
 import { criarElevadorDeLuz } from "./ElevadorDeLuz";
 import { liberar } from "./Landmark";
-import { criarNatureza } from "./Natureza";
 
 export type UniversidadeHandle = {
   group: THREE.Group;
@@ -102,21 +101,15 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
     frisos.push([cx, w.alt + 0.05, cz, L, 0.12, w.esp + 0.1, giro]);
   }
   caixas(muralhas, pedra, true); caixas(salasP, pedraClara, true); caixas(frisos, friso);
-  // ameias (merlões) e seteiras nas muralhas
-  const ameias: number[][] = [], seteiras: number[][] = [];
-  for (const w of paredes) {
-    if (w.esp < 2) continue;
-    const L = Math.hypot(w.bx - w.ax, w.bz - w.az), giro = -Math.atan2(w.bz - w.az, w.bx - w.ax), ux = (w.bx - w.ax) / L, uz = (w.bz - w.az) / L;
-    for (let d = 1.2; d < L - 0.8; d += low ? 4.8 : 3.2) ameias.push([w.ax + ux * d, w.alt + 0.9, w.az + uz * d, 1.6, 1.8, w.esp + 0.2, giro]);
-    for (let d = 4; d < L - 2; d += low ? 16 : 9) for (const lado of [-1, 1]) seteiras.push([w.ax + ux * d - uz * lado * (w.esp / 2 + 0.02), w.alt * 0.62, w.az + uz * d + ux * lado * (w.esp / 2 + 0.02), 0.35, 2.2, 0.05, giro]);
-  }
-  caixas(ameias, pedra); caixas(seteiras, friso);
-  // janelas quentes nas salas (os dois lados da parede) — altas e estreitas, góticas
+  // (sem ameias nem seteiras: muralha LISA, só a faixa de luz no alto — campus futurista, não castelo)
+  // janelas EM FITA nas salas (os dois lados da parede): uma faixa horizontal contínua por parede — moderna e com
+  // bem menos peças que as janelas góticas de antes
   const janelas: number[][] = [];
   for (const w of paredes) {
     if (w.esp >= 2) continue;
-    const L = Math.hypot(w.bx - w.ax, w.bz - w.az), giro = -Math.atan2(w.bz - w.az, w.bx - w.ax), ux = (w.bx - w.ax) / L, uz = (w.bz - w.az) / L;
-    for (let d = 3; d < L - 2; d += low ? 9 : 5.5) for (const lado of [-1, 1]) janelas.push([w.ax + ux * d - uz * lado * 0.42, w.alt * 0.55, w.az + uz * d + ux * lado * 0.42, 1.1, w.alt * 0.42, 0.04, giro]);
+    const L = Math.hypot(w.bx - w.ax, w.bz - w.az); if (L < 3) continue;
+    const giro = -Math.atan2(w.bz - w.az, w.bx - w.ax), ux = (w.bx - w.ax) / L, uz = (w.bz - w.az) / L, mxp = (w.ax + w.bx) / 2, mzp = (w.az + w.bz) / 2;
+    for (const lado of [-1, 1]) janelas.push([mxp - uz * lado * 0.42, w.alt * 0.58, mzp + ux * lado * 0.42, L - 1.6, Math.min(1.6, w.alt * 0.16), 0.04, giro]);
   }
   caixas(janelas, janelaMat);
 
@@ -145,36 +138,47 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
     halos.instanceMatrix.needsUpdate = true;
   });
 
-  // ── PORTÕES: torreões dos dois lados + arco de luz + grade (portcullis) erguida ──
+  // ── PORTÕES: pilares dos dois lados + arco de luz (sem a grade medieval) ──
   const portoes = [{ z: -em, w: U.externa.portao, alt: U.externa.alt }, ...U.interna.portoes.map((p) => ({ x: p.x, z: -U.interna.meia, w: p.w, alt: U.interna.alt }))];
   const torreoes: number[][] = [];
   for (const p of portoes) {
     const x = "x" in p ? p.x : 0;
     for (const s of [-1, 1]) torreoes.push([x + s * (p.w / 2 + 1.6), p.alt / 2 + 1.5, p.z, 3.2, p.alt + 3, 4.2]);
     const arco = add(new THREE.Mesh(new THREE.TorusGeometry(p.w / 2, 0.25, 6, 32, Math.PI), friso)); arco.position.set(x, p.alt * 0.55, p.z - 2.15);
-    const grade: number[] = []; for (let gx = -p.w / 2 + 0.6; gx < p.w / 2; gx += 1.2) grade.push(x + gx, p.alt * 0.55 + 0.4, p.z, x + gx, p.alt * 0.9, p.z);
-    for (let gy = p.alt * 0.6; gy < p.alt * 0.9; gy += 1) grade.push(x - p.w / 2, gy, p.z, x + p.w / 2, gy, p.z);
-    const gg = new THREE.BufferGeometry(); gg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(grade), 3)); add(new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.7 })));
   }
   caixas(torreoes, pedra, true);
 
-  // ── TORRE CENTRAL sobre o átrio: corpo + relógios + campanário + pináculo + farol ──
+  // ── TORRE DE APARTAMENTOS sobre o átrio (no lugar da torre do relógio): três volumes escalonados, sacadas a cada
+  //    andar, janelas acesas em grade (luz quente e fria) e um mastro com farol — mesma altura total (sólido pra voo) ──
   const tc = U.torreCentral, atrio = SALAS.find((s) => s.tipo === "atrio")!, y0 = atrio.alt;
-  const torreC = add(new THREE.Mesh(new THREE.BoxGeometry(tc.lado, tc.alt - y0, tc.lado), pedraClara), true); torreC.position.set(tc.x, y0 + (tc.alt - y0) / 2, tc.z);
-  caixas([[tc.x, tc.alt + 0.1, tc.z, tc.lado + 0.4, 0.2, tc.lado + 0.4]], friso);
-  const relogioTex = tela(256, 256, (g, w, h) => { g.fillStyle = "#06142e"; g.beginPath(); g.arc(w / 2, h / 2, 120, 0, Math.PI * 2); g.fill(); g.strokeStyle = "#66e6ff"; g.lineWidth = 8; g.stroke(); g.fillStyle = "#9fe8ff"; for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; g.fillRect(w / 2 + Math.cos(a) * 96 - 5, h / 2 + Math.sin(a) * 96 - 5, 10, 10); } });
-  const ponteiros: THREE.Group[] = [];
-  for (let k = 0; k < 4; k++) {
-    const a = (k / 4) * Math.PI * 2, n = new THREE.Vector3(Math.sin(a), 0, Math.cos(a)), g = new THREE.Group();
-    g.position.set(tc.x + n.x * (tc.lado / 2 + 0.05), tc.alt - 9, tc.z + n.z * (tc.lado / 2 + 0.05)); g.rotation.y = a; add(g);
-    g.add(new THREE.Mesh(new THREE.CircleGeometry(4.4, 40), new THREE.MeshBasicMaterial({ map: relogioTex, transparent: true })));
-    const h1 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.2, 0.05), friso); h1.geometry.translate(0, 1.4, 0.06); const h2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.2, 0.05), janelaMat); h2.geometry.translate(0, 0.9, 0.08);
-    const pg = new THREE.Group(); pg.add(h1, h2); g.add(pg); ponteiros.push(pg);
+  const texPontaC = glow("rgba(220,250,255,1)", "rgba(110,200,255,.35)");
+  const blocoMat = new THREE.MeshStandardMaterial({ color: 0x27304e, roughness: 0.4, metalness: 0.3, emissive: 0x111a36, emissiveIntensity: 0.5 });
+  const lajeMat = new THREE.MeshStandardMaterial({ color: 0xc9d2ea, roughness: 0.5, metalness: 0.1, emissive: 0x1d2440, emissiveIntensity: 0.4 });
+  const volumes = [   // [dx, dz, largura, profundidade, base, topo] — escalonados, como prédios residenciais modernos
+    [-2.2, 1.4, tc.lado * 0.62, tc.lado * 0.72, y0, tc.alt],
+    [2.6, -1.8, tc.lado * 0.55, tc.lado * 0.6, y0, tc.alt - 9],
+    [0.4, 2.8, tc.lado * 0.8, tc.lado * 0.45, y0, tc.alt - 17],
+  ] as const;
+  const blocos: number[][] = [], sacadas: number[][] = [], janQ: number[][] = [], janF: number[][] = [];
+  let sr = 11; const rnd = () => { sr = (sr * 16807) % 2147483647; return (sr - 1) / 2147483646; };
+  for (const [dx, dz, w, d, b0, b1] of volumes) {
+    const cx = tc.x + dx, cz = tc.z + dz;
+    blocos.push([cx, (b0 + b1) / 2, cz, w, b1 - b0, d]);
+    for (let y = b0 + 3.2; y < b1 - 0.5; y += 3.2) {
+      sacadas.push([cx, y, cz, w + 0.9, 0.22, d + 0.9]);   // a laje-sacada contorna o andar
+      for (const [nx, nz, L] of [[0, -1, w], [0, 1, w], [-1, 0, d], [1, 0, d]] as const) {
+        for (let k = -L / 2 + 1.1; k < L / 2 - 0.6; k += 1.6) {
+          const x = cx + (nz !== 0 ? k : nx * (w / 2 + 0.02)), z = cz + (nx !== 0 ? k : nz * (d / 2 + 0.02));
+          if (rnd() < 0.3) continue;   // nem toda janela acesa
+          (rnd() < 0.55 ? janQ : janF).push([x, y + 1.5, z, nz !== 0 ? 1.1 : 0.04, 1.6, nx !== 0 ? 1.1 : 0.04]);
+        }
+      }
+    }
   }
-  const campanario = add(new THREE.Mesh(new THREE.CylinderGeometry(tc.lado * 0.36, tc.lado * 0.42, 6, 8, 1, true), new THREE.MeshStandardMaterial({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.6, transparent: true, opacity: 0.55, side: THREE.DoubleSide }))); campanario.position.set(tc.x, tc.alt + 3, tc.z);
-  const pinaculo = add(new THREE.Mesh(new THREE.ConeGeometry(tc.lado * 0.45, tc.pinaculo, 8), telhadoMat), true); pinaculo.position.set(tc.x, tc.alt + 6 + tc.pinaculo / 2 - 3, tc.z);
-  const topoPin = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texPonta, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); topoPin.position.set(tc.x, tc.alt + 4 + tc.pinaculo, tc.z); topoPin.scale.setScalar(8);
-  for (const s of [-1, 1]) for (const r of [-1, 1]) { const p = add(new THREE.Mesh(new THREE.ConeGeometry(1, 7, 6), telhadoMat)); p.position.set(tc.x + s * tc.lado / 2, tc.alt + 3.5, tc.z + r * tc.lado / 2); }   // pináculos dos cantos
+  caixas(blocos, blocoMat, true); caixas(sacadas, lajeMat);
+  caixas(janQ, janelaMat); caixas(janF, new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const mastro = add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.5, tc.pinaculo, 8), pontaMat), true); mastro.position.set(tc.x - 2.2, tc.alt + tc.pinaculo / 2, tc.z + 1.4);
+  const topoPin = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texPontaC, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); topoPin.position.set(tc.x - 2.2, tc.alt + tc.pinaculo, tc.z + 1.4); topoPin.scale.setScalar(8);
 
   // ── SALAS: telhado (duas águas nas grandes, plano nas pequenas) + placa com o nome + interior ──
   for (const s of SALAS) {
@@ -273,28 +277,39 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   const pedestal = add(new THREE.Mesh(new THREE.CylinderGeometry(CRISTAL_ATRIO.r, CRISTAL_ATRIO.r * 1.2, 1, 12), pedraClara)); pedestal.position.set(CRISTAL_ATRIO.x, 0.5, CRISTAL_ATRIO.z);
   anim.push((dt, t) => { cristal.rotation.y += dt * 0.3; cristal.position.y = 5.5 + Math.sin(t * 0.8) * 0.3; });
 
-  // ── PÁTIOS: fonte de cristal + árvores de cristal ──
+  // ── FONTES modernas (pátios + pátio externo): bacia com aro de luz, coluna de água iluminada e um anel flutuando ──
   const aguaMat = new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
-  const jatos: THREE.Mesh[] = [];
+  const jatos: THREE.Mesh[] = [], aneisF: THREE.Mesh[] = [];
   for (const f of FONTES) {
-    const borda = add(new THREE.Mesh(new THREE.CylinderGeometry(f.r, f.r + 0.3, 0.8, 24), pedraClara)); borda.position.set(f.x, 0.4, f.z);
-    const agua = add(new THREE.Mesh(new THREE.CircleGeometry(f.r - 0.3, 24), aguaMat)); agua.rotation.x = -Math.PI / 2; agua.position.set(f.x, 0.75, f.z);
-    const jato = add(new THREE.Mesh(new THREE.ConeGeometry(0.5, 4, 12, 1, true), aguaMat)); jato.position.set(f.x, 2.7, f.z); jatos.push(jato);
+    const borda = add(new THREE.Mesh(new THREE.CylinderGeometry(f.r, f.r + 0.4, 0.6, 32), pedraClara)); borda.position.set(f.x, 0.3, f.z);
+    const aro = add(new THREE.Mesh(new THREE.TorusGeometry(f.r + 0.15, 0.08, 6, 48), friso)); aro.rotation.x = Math.PI / 2; aro.position.set(f.x, 0.62, f.z);
+    const agua = add(new THREE.Mesh(new THREE.CircleGeometry(f.r - 0.2, 32), aguaMat)); agua.rotation.x = -Math.PI / 2; agua.position.set(f.x, 0.55, f.z);
+    const jato = add(new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.7, 6, 16, 1, true), aguaMat)); jato.position.set(f.x, 3.5, f.z); jatos.push(jato);
+    const anel = add(new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.06, 6, 40), friso)); anel.position.set(f.x, 7.2, f.z); aneisF.push(anel);
   }
-  anim.push((_, t) => { for (const j of jatos) j.scale.y = 0.9 + 0.1 * Math.sin(t * 2.2); });
+  anim.push((_, t) => {
+    jatos.forEach((j, i) => { j.scale.y = 0.9 + 0.12 * Math.sin(t * 2.2 + i); });
+    aneisF.forEach((a, i) => { a.rotation.x = Math.PI / 2 + 0.25 * Math.sin(t * 0.7 + i); a.rotation.y = t * 0.4 + i; a.position.y = 7.2 + Math.sin(t * 0.9 + i) * 0.4; });
+  });
 
-  // ── NATUREZA: árvores de verdade, sebes, canteiros, gramado, plantações (trigo, milho, horta, girassóis, pomar) ──
-  const natureza = criarNatureza(raiz, { low, starTex, texturas });
+  // ── ESTRUTURAS ALIENÍGENAS no pátio externo (amplo, vazio desde que a natureza saiu): MONÓLITOS de cristal e ANÉIS
+  //    gigantes flutuando acima da cabeça (sem colisão: não atrapalham o caminho) ──
+  const monoMat = new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x7a5cff, emissiveIntensity: 1.1, roughness: 0.2, flatShading: true, transparent: true, opacity: 0.9 });
+  const monolitos: THREE.Mesh[] = [];
+  for (const [x, z] of [[-92.5, -10], [92.5, -10], [-50, 92.5], [50, 92.5], [-60, -92.5], [60, -92.5]] as const) {
+    const m = add(new THREE.Mesh(new THREE.OctahedronGeometry(2.2), monoMat)); m.scale.set(0.7, 2.6, 0.7); m.position.set(x, 9, z); monolitos.push(m);
+    const anel = add(new THREE.Mesh(new THREE.TorusGeometry(9, 0.18, 6, 72), friso)); anel.position.set(x, 14, z); anel.rotation.x = Math.PI / 2 - 0.3; monolitos.push(anel);
+  }
+  anim.push((dt, t) => monolitos.forEach((m, i) => { if (i % 2 === 0) { m.rotation.y += dt * 0.35; m.position.y = 9 + Math.sin(t * 0.6 + i) * 0.8; } else m.rotation.z = t * 0.12 + i; }));
+
+  // (a NATUREZA — árvores, pomar, sebes e plantações — saiu: ~250 mil triângulos, quase metade da cena. O campus é
+  //  holograma agora: fontes e estruturas modernas.)
 
   return {
     group: raiz, alvosCamera,
     atualizar(dt, t) {
       for (const f of anim) f(dt, t);
-      natureza.atualizar(dt, t);
       pontas.forEach((p, i) => { p.material.opacity = 0.7 + 0.3 * Math.sin(t * 1.1 + i); });
-      // relógios: a hora "de verdade" (local)
-      const d = new Date(), h = (d.getHours() % 12) + d.getMinutes() / 60, m = d.getMinutes() + d.getSeconds() / 60;
-      for (const g of ponteiros) { g.children[0]!.rotation.z = -(m / 60) * Math.PI * 2; g.children[1]!.rotation.z = -(h / 12) * Math.PI * 2; }
     },
     dispose() { liberar(raiz, texturas); },
   };

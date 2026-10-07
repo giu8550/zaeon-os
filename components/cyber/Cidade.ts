@@ -113,18 +113,18 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
 
   // ── piso: disco frio + anéis concêntricos + raios (a "rosa dos ventos" da cidade) ──
   add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, low ? 32 : 64), new THREE.MeshStandardMaterial({ color: 0x0a2440, emissive: COLD, emissiveIntensity: 0.35, roughness: 0.55, metalness: 0.25 })), ilha, true).position.y = -0.3;
-  for (const r of [12, 22, 30, 40, 48]) { const anel = add(new THREE.Mesh(new THREE.RingGeometry(r - 0.08, r + 0.08, 96), new THREE.MeshBasicMaterial({ color: COLD, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }))); anel.rotation.x = -Math.PI / 2; anel.position.y = 0.02; }
-  { const lin: number[] = []; for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; lin.push(Math.cos(a) * 20, 0.03, Math.sin(a) * 20, Math.cos(a) * 48, 0.03, Math.sin(a) * 48); }
+  for (const r of [0.21, 0.39, 0.54, 0.71, 0.86].map((f) => f * R)) { const anel = add(new THREE.Mesh(new THREE.RingGeometry(r - 0.08, r + 0.08, 96), new THREE.MeshBasicMaterial({ color: COLD, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }))); anel.rotation.x = -Math.PI / 2; anel.position.y = 0.02; }
+  { const lin: number[] = []; for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; lin.push(Math.cos(a) * 0.36 * R, 0.03, Math.sin(a) * 0.36 * R, Math.cos(a) * 0.86 * R, 0.03, Math.sin(a) * 0.86 * R); }
     const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(lin), 3)); add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: COLD, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending }))); }
 
   // ── muralhas de granizo (instanciadas) + 4 torres ──
-  const NW = low ? 44 : 64, mur = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), vidro({ color: 0xcfe9ff, emissive: ICE, emissiveIntensity: 0.25, roughness: 0.1, metalness: 0, transmission: 0.9, thickness: 0.8, transparent: true, opacity: 0.6, side: THREE.DoubleSide }, 0.45), NW), ilha, true);
+  const NW = Math.round((low ? 44 : 64) * CIDADE.muralhaR / 53), mur = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), vidro({ color: 0xcfe9ff, emissive: ICE, emissiveIntensity: 0.25, roughness: 0.1, metalness: 0, transmission: 0.9, thickness: 0.8, transparent: true, opacity: 0.6, side: THREE.DoubleSide }, 0.45), NW), ilha, true);
   { const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     for (let i = 0; i < NW; i++) { const a = (i / NW) * Math.PI * 2, h = 4.5 + (i % 3) * 1.8; p.set(Math.cos(a) * CIDADE.muralhaR, h / 2, Math.sin(a) * CIDADE.muralhaR); q.setFromAxisAngle(up, -a); s.set(4, h, 1.3); mur.setMatrixAt(i, m.compose(p, q, s)); }
     mur.instanceMatrix.needsUpdate = true; mur.computeBoundingSphere(); }
   const torreMat = vidro({ color: 0xdff0ff, emissive: ICE, emissiveIntensity: 0.4, roughness: 0.08, metalness: 0, transmission: 0.85, thickness: 0.8, transparent: true, opacity: 0.75 }, 0.7);
   const pontas: THREE.Mesh[] = [];
-  const NT = 8, ATR = 22;   // 8 torres na muralha (mais imponente)
+  const NT = 10, ATR = 32;   // 10 torres na muralha, mais altas (a Zaeon cresceu)
   for (let k = 0; k < NT; k++) {
     const a = Math.PI / NT + (k / NT) * Math.PI * 2, x = Math.cos(a) * CIDADE.muralhaR, z = Math.sin(a) * CIDADE.muralhaR;
     const torre = add(new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.4, ATR, 8), torreMat), ilha, true); torre.position.set(x, ATR / 2, z);
