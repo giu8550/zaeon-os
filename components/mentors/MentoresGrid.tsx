@@ -99,7 +99,7 @@ export default function MentoresGrid({ search = "" }: { search?: string }) {
   if (loading) {
     return (
       <div className="py-16 text-center">
-        <div className="inline-block w-8 h-8 border-4 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mb-4" />
+        <div className="inline-block w-8 h-8 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mb-4" />
         <p className={`text-[10px] font-black uppercase tracking-[0.5em] ${TXT_MUDO}`}>Chamando os mentores…</p>
       </div>
     );
@@ -112,7 +112,7 @@ export default function MentoresGrid({ search = "" }: { search?: string }) {
     <div>
       <div className="flex flex-wrap items-baseline gap-3 mb-5 pl-1">
         <h2 className={`text-2xl font-black tracking-tighter ${TXT}`}>Mentores</h2>
-        <span className="text-[10px] font-bold uppercase tracking-[0.35em] text-violet-600 dark:text-violet-300">contrate · use no chat e no escritório</span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.35em] text-cyan-700 dark:text-cyan-300">contrate · use no chat e no escritório</span>
         <span
           className={`ml-auto px-3 py-1 rounded-full text-[11px] font-black tabular-nums border ${noTeto ? "border-amber-400/60 text-amber-700 dark:text-amber-300 bg-amber-400/10" : "border-slate-200 dark:border-white/15 text-slate-700 dark:text-white/80 bg-white/60 dark:bg-white/[0.05]"}`}
           aria-live="polite"
@@ -127,27 +127,30 @@ export default function MentoresGrid({ search = "" }: { search?: string }) {
           const st: PlugState = isPlugged ? "plugged" : (m.id ? state[m.id] ?? "idle" : "idle");
           const bloqueado = !isPlugged && noTeto;
           return (
+            // MESMAS CORES dos cards da landing (MentoresCarrossel): vidro PRETO nos dois temas
+            // (`dark` força as variantes escuras), borda fina, acentos ciano e brilho ciano no hover.
             <motion.div
               key={m.slug}
               layout
               whileHover={{ y: -6 }}
-              className="relative p-[1.5px] overflow-hidden rounded-[22px]"
-              style={{ background: "linear-gradient(135deg,rgba(139,92,246,0.9),rgba(34,211,238,0.9))" }}
+              className="dark relative rounded-2xl"
             >
-              <div className={`relative h-full p-6 flex flex-col rounded-[21px] ${VIDRO_BOLHA} bg-white/85 dark:bg-[#0b1020]/80`}>
-                {/* brilho especular */}
-                <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/90 dark:via-white/60 to-transparent" />
+              <div className="relative h-full p-6 flex flex-col rounded-2xl border border-white/10 bg-black/80 backdrop-blur-xl transition-all duration-300 shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
                 <div className="flex items-start justify-between mb-5">
-                  {m.avatarUrl ? (
-                    <AgentAvatar src={m.avatarUrl} nome={m.name} size={56} emoji={m.emoji} agentId={m.slug} className="ring-2 ring-violet-400/40 dark:ring-cyan-400/40" />
-                  ) : (
-                    <div
-                      className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl text-violet-700 dark:text-cyan-100"
-                      style={{ background: "linear-gradient(135deg,rgba(139,92,246,0.25),rgba(34,211,238,0.25))", filter: "drop-shadow(0 0 6px rgba(34,211,238,0.45))" }}
-                    >
-                      {m.emoji || "⟁"}
-                    </div>
-                  )}
+                  {/* avatar vivo do mentor (estúdio) → foto → o tile de emoji */}
+                  <AgentAvatar
+                    src={m.avatarUrl}
+                    nome={m.name}
+                    size={60}
+                    emoji={m.emoji}
+                    agentId={m.slug}
+                    className="ring-2 ring-cyan-500/30"
+                    fallback={
+                      <div className="w-14 h-14 rounded-xl grid place-items-center text-2xl border border-cyan-500/25 bg-cyan-500/10 text-cyan-300">
+                        {m.emoji || "⟁"}
+                      </div>
+                    }
+                  />
                   {m.guardrail && (
                     <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border border-slate-200 dark:border-white/15 bg-white/60 dark:bg-white/10 ${TXT_MUDO}`} title={m.guardrail}>
                       educacional
@@ -182,8 +185,7 @@ export default function MentoresGrid({ search = "" }: { search?: string }) {
                           ? "bg-rose-500/15 border-rose-500/50 text-rose-700 dark:bg-rose-400/15 dark:border-rose-300/50 dark:text-rose-100"
                           : bloqueado
                             ? "bg-slate-200/60 border-slate-300 text-slate-500 dark:bg-white/[0.06] dark:border-white/15 dark:text-white/40"
-                            : "border-transparent text-white dark:text-white shadow-[0_10px_30px_-12px_rgba(139,92,246,0.7)]"}`}
-                    style={st === "idle" && !bloqueado && m.id ? { background: "linear-gradient(135deg,#8b5cf6,#22d3ee)" } : undefined}
+                            : "border-transparent bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-[0_10px_30px_-12px_rgba(34,211,238,0.7)]"}`}
                   >
                     {st === "plugging" ? "Contratando…" : st === "plugged" ? "Contratado ✓" : st === "teto" ? "Teto atingido" : st === "error" ? "Falhou — tente de novo" : bloqueado ? `${limite.limit}/${limite.limit} — solte um` : "Contratar mentor"}
                   </button>

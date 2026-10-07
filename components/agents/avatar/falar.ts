@@ -13,6 +13,16 @@ let ctx: AudioContext | null = null;
 
 export type Fala = { parar: () => void; fim: Promise<void> };
 
+/**
+ * Volume → abertura da boca, RELATIVO ao pico recente da própria voz (cada voz/clipe tem um
+ * volume): vogal forte ≈ 1, entre sílabas ≈ 0 (a boca fecha). Escala fixa saturava (boca sempre
+ * aberta) em voz alta e não abria em voz baixa.
+ */
+export function nivelDaBoca(rms: number, pico: number): number {
+  const rel = rms / Math.max(pico, 0.05);
+  return Math.max(0, Math.min(1, (rel - 0.3) / 0.55));
+}
+
 /** Toca `url`; `aoNivel` recebe o nível da boca (~60x/s) e null no fim. Rejeita se o navegador bloquear o autoplay. */
 export function falarClipe(url: string, aoNivel: (nivel: number | null) => void): Fala {
   atual?.parar();
@@ -45,12 +55,13 @@ export function falarClipe(url: string, aoNivel: (nivel: number | null) => void)
     fonte.connect(analisador);
     analisador.connect(ctx.destination);
     const buf = new Uint8Array(analisador.fftSize);
+    let pico = 0.05;
     const medir = () => {
       analisador.getByteTimeDomainData(buf);
       let soma = 0;
       for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; soma += v * v; }
-      // RMS da fala fica ~0.02–0.25 → curva pra 0..1 (boca abre de verdade nas vogais)
-      aoNivel(Math.min(1, Math.sqrt(soma / buf.length) * 5));
+      aoNivel(nivelDaBoca(Math.sqrt(soma / buf.length), pico));
+      pico = Math.max(Math.sqrt(soma / buf.length), pico * 0.996, 0.05);
       raf = requestAnimationFrame(medir);
     };
     void ctx.resume().then(() => { raf = requestAnimationFrame(medir); });

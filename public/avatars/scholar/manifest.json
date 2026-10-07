@@ -1,0 +1,33 @@
+{
+  "agentId": "scholar",
+  "versao": "muy3f44u",
+  "motor": "sprite",
+  "estados": {
+    "idle": "/avatars/scholar/idle.webp?v=muy3f44u",
+    "blink": "/avatars/scholar/blink.webp?v=muy3f44u",
+    "talk": "/avatars/scholar/talk.webp?v=muy3f44u",
+    "talk_half": "/avatars/scholar/talk_half.webp?v=muy3f44u",
+    "smile": "/avatars/scholar/smile.webp?v=muy3f44u",
+    "happy": "/avatars/scholar/happy.webp?v=muy3f44u",
+    "think": "/avatars/scholar/think.webp?v=muy3f44u",
+    "confused": "/avatars/scholar/confused.webp?v=muy3f44u"
+  },
+  "pequeno": {
+    "idle": "/avatars/scholar/idle.sm.webp?v=muy3f44u",
+    "blink": "/avatars/scholar/blink.sm.webp?v=muy3f44u",
+    "talk": "/avatars/scholar/talk.sm.webp?v=muy3f44u",
+    "talk_half": "/avatars/scholar/talk_half.sm.webp?v=muy3f44u",
+    "smile": "/avatars/scholar/smile.sm.webp?v=muy3f44u",
+    "happy": "/avatars/scholar/happy.sm.webp?v=muy3f44u",
+    "think": "/avatars/scholar/think.sm.webp?v=muy3f44u",
+    "confused": "/avatars/scholar/confused.sm.webp?v=muy3f44u"
+  },
+  "cor": "#334155",
+  "voz": {
+    "saudacoes": [
+      "/avatars/scholar/voz/saudacao-01.wav",
+      "/avatars/scholar/voz/saudacao-02.wav",
+      "/avatars/scholar/voz/saudacao-03.wav"
+    ]
+  }
+}

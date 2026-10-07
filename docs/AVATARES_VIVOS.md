@@ -96,6 +96,14 @@ produção) — o próximo passo é o artista entregar os rigs próprios.
 - **O dono confirmou (07/out/2026) que a Zaeon tem as permissões necessárias.** Por isso o Live2D é
   o motor padrão quando houver modelo próprio.
 
+## Editar depois (admin)
+
+Admin → Agents → **✨ avatar vivo** no card: o estúdio abre com o set atual (aprovado). Dá pra rerolar
+um estado só (mesma base), ajustar o prompt dele, gerar um personagem novo (↻ no idle) ou partir da
+foto atual; **salvar** grava no banco e passa a valer no lugar do set do git ("apagar avatar vivo"
+volta pro do git). A voz (saudações) e o Live2D do set do git são preservados (lib/avatars/mesclar.ts).
+Saudações ainda se editam só pelo script (`scripts/avatars/gerar-saudacao.mjs`).
+
 ## Créditos (libs)
 
 - Motor de sprites: código próprio (sem dependência).
@@ -108,9 +116,9 @@ produção) — o próximo passo é o artista entregar os rigs próprios.
 
 ## Pendências
 
-- [ ] Dono: aprovar no estúdio os sets das personas (Aura já tem idle/blink/talk½/smile/think
-      aprovados; faltam talk/happy/confused) e criar Zaeon, Nina, Caio, Téo, Zenita, Davi, Scholar,
-      Examiner — com o dono vendo, como pede o handoff.
+- [x] Sets das 9 personas criados no estúdio e aprovados pelo dono (8 quadros cada) + saudações
+      faladas na voz de cada um (Aura Aoede, Zaeon Sulafat, Nina Leda, Caio Charon, Téo Puck, Zenita
+      Kore, Davi Achird, Scholar Iapetus, Examiner Erinome), conferidas por transcrição.
 - [ ] Dono: `prisma db push` (cria a coleção/índice `agent_avatar_quadros`) antes de usar a Etapa B.
 - [ ] Modelos Live2D próprios por agente (artista/rig) → `live2d.model` no manifesto.
 - [ ] Futuro: cabeçalho da sala com o agente ativo; VRM 3D pro avatar grande no ciberespaço.

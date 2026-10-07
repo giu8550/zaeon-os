@@ -32,6 +32,270 @@
           "/avatars/aura/voz/saudacao-03.wav"
         ]
       }
+    },
+    "caio": {
+      "agentId": "caio",
+      "versao": "muy3gg8d",
+      "motor": "sprite",
+      "estados": {
+        "idle": "/avatars/caio/idle.webp?v=muy3gg8d",
+        "blink": "/avatars/caio/blink.webp?v=muy3gg8d",
+        "talk": "/avatars/caio/talk.webp?v=muy3gg8d",
+        "talk_half": "/avatars/caio/talk_half.webp?v=muy3gg8d",
+        "smile": "/avatars/caio/smile.webp?v=muy3gg8d",
+        "happy": "/avatars/caio/happy.webp?v=muy3gg8d",
+        "think": "/avatars/caio/think.webp?v=muy3gg8d",
+        "confused": "/avatars/caio/confused.webp?v=muy3gg8d"
+      },
+      "pequeno": {
+        "idle": "/avatars/caio/idle.sm.webp?v=muy3gg8d",
+        "blink": "/avatars/caio/blink.sm.webp?v=muy3gg8d",
+        "talk": "/avatars/caio/talk.sm.webp?v=muy3gg8d",
+        "talk_half": "/avatars/caio/talk_half.sm.webp?v=muy3gg8d",
+        "smile": "/avatars/caio/smile.sm.webp?v=muy3gg8d",
+        "happy": "/avatars/caio/happy.sm.webp?v=muy3gg8d",
+        "think": "/avatars/caio/think.sm.webp?v=muy3gg8d",
+        "confused": "/avatars/caio/confused.sm.webp?v=muy3gg8d"
+      },
+      "cor": "#1d4ed8",
+      "voz": {
+        "saudacoes": [
+          "/avatars/caio/voz/saudacao-01.wav",
+          "/avatars/caio/voz/saudacao-02.wav",
+          "/avatars/caio/voz/saudacao-03.wav"
+        ]
+      }
+    },
+    "core_active": {
+      "agentId": "core_active",
+      "versao": "muy3g906",
+      "motor": "sprite",
+      "estados": {
+        "idle": "/avatars/core_active/idle.webp?v=muy3g906",
+        "blink": "/avatars/core_active/blink.webp?v=muy3g906",
+        "talk": "/avatars/core_active/talk.webp?v=muy3g906",
+        "talk_half": "/avatars/core_active/talk_half.webp?v=muy3g906",
+        "smile": "/avatars/core_active/smile.webp?v=muy3g906",
+        "happy": "/avatars/core_active/happy.webp?v=muy3g906",
+        "think": "/avatars/core_active/think.webp?v=muy3g906",
+        "confused": "/avatars/core_active/confused.webp?v=muy3g906"
+      },
+      "pequeno": {
+        "idle": "/avatars/core_active/idle.sm.webp?v=muy3g906",
+        "blink": "/avatars/core_active/blink.sm.webp?v=muy3g906",
+        "talk": "/avatars/core_active/talk.sm.webp?v=muy3g906",
+        "talk_half": "/avatars/core_active/talk_half.sm.webp?v=muy3g906",
+        "smile": "/avatars/core_active/smile.sm.webp?v=muy3g906",
+        "happy": "/avatars/core_active/happy.sm.webp?v=muy3g906",
+        "think": "/avatars/core_active/think.sm.webp?v=muy3g906",
+        "confused": "/avatars/core_active/confused.sm.webp?v=muy3g906"
+      },
+      "cor": "#c2410c",
+      "voz": {
+        "saudacoes": [
+          "/avatars/core_active/voz/saudacao-01.wav",
+          "/avatars/core_active/voz/saudacao-02.wav",
+          "/avatars/core_active/voz/saudacao-03.wav"
+        ]
+      }
+    },
+    "examiner": {
+      "agentId": "examiner",
+      "versao": "muy3glgo",
+      "motor": "sprite",
+      "estados": {
+        "idle": "/avatars/examiner/idle.webp?v=muy3glgo",
+        "blink": "/avatars/examiner/blink.webp?v=muy3glgo",
+        "talk": "/avatars/examiner/talk.webp?v=muy3glgo",
+        "talk_half": "/avatars/examiner/talk_half.webp?v=muy3glgo",
+        "smile": "/avatars/examiner/smile.webp?v=muy3glgo",
+        "happy": "/avatars/examiner/happy.webp?v=muy3glgo",
+        "think": "/avatars/examiner/think.webp?v=muy3glgo",
+        "confused": "/avatars/examiner/confused.webp?v=muy3glgo"
+      },
+      "pequeno": {
+        "idle": "/avatars/examiner/idle.sm.webp?v=muy3glgo",
+        "blink": "/avatars/examiner/blink.sm.webp?v=muy3glgo",
+        "talk": "/avatars/examiner/talk.sm.webp?v=muy3glgo",
+        "talk_half": "/avatars/examiner/talk_half.sm.webp?v=muy3glgo",
+        "smile": "/avatars/examiner/smile.sm.webp?v=muy3glgo",
+        "happy": "/avatars/examiner/happy.sm.webp?v=muy3glgo",
+        "think": "/avatars/examiner/think.sm.webp?v=muy3glgo",
+        "confused": "/avatars/examiner/confused.sm.webp?v=muy3glgo"
+      },
+      "cor": "#b91c1c",
+      "voz": {
+        "saudacoes": [
+          "/avatars/examiner/voz/saudacao-01.wav",
+          "/avatars/examiner/voz/saudacao-02.wav",
+          "/avatars/examiner/voz/saudacao-03.wav"
+        ]
+      }
+    },
+    "nina": {
+      "agentId": "nina",
+      "versao": "muy3giic",
+      "motor": "sprite",
+      "estados": {
+        "idle": "/avatars/nina/idle.webp?v=muy3giic",
+        "blink": "/avatars/nina/blink.webp?v=muy3giic",
+        "talk": "/avatars/nina/talk.webp?v=muy3giic",
+        "talk_half": "/avatars/nina/talk_half.webp?v=muy3giic",
+        "smile": "/avatars/nina/smile.webp?v=muy3giic",
+        "happy": "/avatars/nina/happy.webp?v=muy3giic",
+        "think": "/avatars/nina/think.webp?v=muy3giic",
+        "confused": "/avatars/nina/confused.webp?v=muy3giic"
+      },
+      "pequeno": {
+        "idle": "/avatars/nina/idle.sm.webp?v=muy3giic",
+        "blink": "/avatars/nina/blink.sm.webp?v=muy3giic",
+        "talk": "/avatars/nina/talk.sm.webp?v=muy3giic",
+        "talk_half": "/avatars/nina/talk_half.sm.webp?v=muy3giic",
+        "smile": "/avatars/nina/smile.sm.webp?v=muy3giic",
+        "happy": "/avatars/nina/happy.sm.webp?v=muy3giic",
+        "think": "/avatars/nina/think.sm.webp?v=muy3giic",
+        "confused": "/avatars/nina/confused.sm.webp?v=muy3giic"
+      },
+      "cor": "#db2777",
+      "voz": {
+        "saudacoes": [
+          "/avatars/nina/voz/saudacao-01.wav",
+          "/avatars/nina/voz/saudacao-02.wav",
+          "/avatars/nina/voz/saudacao-03.wav"
+        ]
+      }
+    },
+    "scholar": {
+      "agentId": "scholar",
+      "versao": "muy3f44u",
+      "motor": "sprite",
+      "estados": {
+        "idle": "/avatars/scholar/idle.webp?v=muy3f44u",
+        "blink": "/avatars/scholar/blink.webp?v=muy3f44u",
+        "talk": "/avatars/scholar/talk.webp?v=muy3f44u",
+        "talk_half": "/avatars/scholar/talk_half.webp?v=muy3f44u",
+        "smile": "/avatars/scholar/smile.webp?v=muy3f44u",
+        "happy": "/avatars/scholar/happy.webp?v=muy3f44u",
+        "think": "/avatars/scholar/think.webp?v=muy3f44u",
+        "confused": "/avatars/scholar/confused.webp?v=muy3f44u"
+      },
+      "pequeno": {
+        "idle": "/avatars/scholar/idle.sm.webp?v=muy3f44u",
+        "blink": "/avatars/scholar/blink.sm.webp?v=muy3f44u",
+        "talk": "/avatars/scholar/talk.sm.webp?v=muy3f44u",
+        "talk_half": "/avatars/scholar/talk_half.sm.webp?v=muy3f44u",
+        "smile": "/avatars/scholar/smile.sm.webp?v=muy3f44u",
+        "happy": "/avatars/scholar/happy.sm.webp?v=muy3f44u",
+        "think": "/avatars/scholar/think.sm.webp?v=muy3f44u",
+        "confused": "/avatars/scholar/confused.sm.webp?v=muy3f44u"
+      },
+      "cor": "#334155",
+      "voz": {
+        "saudacoes": [
+          "/avatars/scholar/voz/saudacao-01.wav",
+          "/avatars/scholar/voz/saudacao-02.wav",
+          "/avatars/scholar/voz/saudacao-03.wav"
+        ]
+      }
+    },
+    "teo": {
+      "agentId": "teo",
+      "versao": "muy3gdir",
+      "motor": "sprite",
+      "estados": {
+        "idle": "/avatars/teo/idle.webp?v=muy3gdir",
+        "blink": "/avatars/teo/blink.webp?v=muy3gdir",
+        "talk": "/avatars/teo/talk.webp?v=muy3gdir",
+        "talk_half": "/avatars/teo/talk_half.webp?v=muy3gdir",
+        "smile": "/avatars/teo/smile.webp?v=muy3gdir",
+        "happy": "/avatars/teo/happy.webp?v=muy3gdir",
+        "think": "/avatars/teo/think.webp?v=muy3gdir",
+        "confused": "/avatars/teo/confused.webp?v=muy3gdir"
+      },
+      "pequeno": {
+        "idle": "/avatars/teo/idle.sm.webp?v=muy3gdir",
+        "blink": "/avatars/teo/blink.sm.webp?v=muy3gdir",
+        "talk": "/avatars/teo/talk.sm.webp?v=muy3gdir",
+        "talk_half": "/avatars/teo/talk_half.sm.webp?v=muy3gdir",
+        "smile": "/avatars/teo/smile.sm.webp?v=muy3gdir",
+        "happy": "/avatars/teo/happy.sm.webp?v=muy3gdir",
+        "think": "/avatars/teo/think.sm.webp?v=muy3gdir",
+        "confused": "/avatars/teo/confused.sm.webp?v=muy3gdir"
+      },
+      "cor": "#047857",
+      "voz": {
+        "saudacoes": [
+          "/avatars/teo/voz/saudacao-01.wav",
+          "/avatars/teo/voz/saudacao-02.wav",
+          "/avatars/teo/voz/saudacao-03.wav"
+        ]
+      }
+    },
+    "zaeon": {
+      "agentId": "zaeon",
+      "versao": "muy3dkxb",
+      "motor": "sprite",
+      "estados": {
+        "idle": "/avatars/zaeon/idle.webp?v=muy3dkxb",
+        "blink": "/avatars/zaeon/blink.webp?v=muy3dkxb",
+        "talk": "/avatars/zaeon/talk.webp?v=muy3dkxb",
+        "talk_half": "/avatars/zaeon/talk_half.webp?v=muy3dkxb",
+        "smile": "/avatars/zaeon/smile.webp?v=muy3dkxb",
+        "happy": "/avatars/zaeon/happy.webp?v=muy3dkxb",
+        "think": "/avatars/zaeon/think.webp?v=muy3dkxb",
+        "confused": "/avatars/zaeon/confused.webp?v=muy3dkxb"
+      },
+      "pequeno": {
+        "idle": "/avatars/zaeon/idle.sm.webp?v=muy3dkxb",
+        "blink": "/avatars/zaeon/blink.sm.webp?v=muy3dkxb",
+        "talk": "/avatars/zaeon/talk.sm.webp?v=muy3dkxb",
+        "talk_half": "/avatars/zaeon/talk_half.sm.webp?v=muy3dkxb",
+        "smile": "/avatars/zaeon/smile.sm.webp?v=muy3dkxb",
+        "happy": "/avatars/zaeon/happy.sm.webp?v=muy3dkxb",
+        "think": "/avatars/zaeon/think.sm.webp?v=muy3dkxb",
+        "confused": "/avatars/zaeon/confused.sm.webp?v=muy3dkxb"
+      },
+      "cor": "#2563eb",
+      "voz": {
+        "saudacoes": [
+          "/avatars/zaeon/voz/saudacao-01.wav",
+          "/avatars/zaeon/voz/saudacao-02.wav",
+          "/avatars/zaeon/voz/saudacao-03.wav"
+        ]
+      }
+    },
+    "zenita": {
+      "agentId": "zenita",
+      "versao": "muy3gbq2",
+      "motor": "sprite",
+      "estados": {
+        "idle": "/avatars/zenita/idle.webp?v=muy3gbq2",
+        "blink": "/avatars/zenita/blink.webp?v=muy3gbq2",
+        "talk": "/avatars/zenita/talk.webp?v=muy3gbq2",
+        "talk_half": "/avatars/zenita/talk_half.webp?v=muy3gbq2",
+        "smile": "/avatars/zenita/smile.webp?v=muy3gbq2",
+        "happy": "/avatars/zenita/happy.webp?v=muy3gbq2",
+        "think": "/avatars/zenita/think.webp?v=muy3gbq2",
+        "confused": "/avatars/zenita/confused.webp?v=muy3gbq2"
+      },
+      "pequeno": {
+        "idle": "/avatars/zenita/idle.sm.webp?v=muy3gbq2",
+        "blink": "/avatars/zenita/blink.sm.webp?v=muy3gbq2",
+        "talk": "/avatars/zenita/talk.sm.webp?v=muy3gbq2",
+        "talk_half": "/avatars/zenita/talk_half.sm.webp?v=muy3gbq2",
+        "smile": "/avatars/zenita/smile.sm.webp?v=muy3gbq2",
+        "happy": "/avatars/zenita/happy.sm.webp?v=muy3gbq2",
+        "think": "/avatars/zenita/think.sm.webp?v=muy3gbq2",
+        "confused": "/avatars/zenita/confused.sm.webp?v=muy3gbq2"
+      },
+      "cor": "#d97706",
+      "voz": {
+        "saudacoes": [
+          "/avatars/zenita/voz/saudacao-01.wav",
+          "/avatars/zenita/voz/saudacao-02.wav",
+          "/avatars/zenita/voz/saudacao-03.wav"
+        ]
+      }
     }
   }
 }

@@ -30,3 +30,14 @@ describe("avatares · presença (o rosto espelha o chat)", () => {
     expect(quadroDaBoca(0.8, (e) => e !== "talk")).toBe("talk_half");
   });
 });
+
+describe("avatares · boca pela voz (escala adaptativa)", () => {
+  it("relativa ao pico: vogal forte abre, entre sílabas fecha, independe do volume do clipe", async () => {
+    const { nivelDaBoca } = await import("@/components/agents/avatar/falar");
+    expect(nivelDaBoca(0.30, 0.30)).toBe(1);        // pico da voz alta
+    expect(nivelDaBoca(0.06, 0.30)).toBe(0);        // vale entre sílabas → fecha
+    expect(nivelDaBoca(0.08, 0.08)).toBe(1);        // voz baixa também abre no pico dela
+    expect(nivelDaBoca(0.18, 0.30)).toBeGreaterThan(0.4);
+    expect(nivelDaBoca(0.18, 0.30)).toBeLessThan(0.8);
+  });
+});

@@ -18,6 +18,7 @@ import AgentAvatar from "@/components/agents/AgentAvatar";
 import { ESTADOS_SPRITE, type AvatarManifest, type EstadoSprite, type SinalAvatar } from "@/lib/avatars/estados";
 import { ORDEM_GERACAO, promptBase } from "@/lib/avatars/prompts";
 import { VIDRO_BOLHA, VIDRO_CHIP, TXT, TXT_2, TXT_MUDO } from "@/lib/canal/vidro";
+import { falarClipe, type Fala } from "./falar";
 
 type Status = "vazio" | "gerando" | "pronto" | "aprovado" | "falhou";
 type Peca = { status: Status; grande?: string; pequeno?: string; erro?: string; ajuste: string; ajustando: boolean };
@@ -74,6 +75,18 @@ export default function EstudioAvatar({
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [sinal, setSinal] = useState<SinalAvatar>("idle");
   const simRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // voz própria do agente (saudações já geradas): ouvir com a boca sincronizada na prévia
+  const saudacoes = existente?.voz?.saudacoes ?? [];
+  const [boca, setBoca] = useState<number | null>(null);
+  const falaRef = useRef<Fala | null>(null);
+  const idxSaudacao = useRef(0);
+  const ouvirSaudacao = () => {
+    if (boca !== null) { falaRef.current?.parar(); return; }
+    const url = saudacoes[idxSaudacao.current++ % saudacoes.length];
+    falaRef.current = falarClipe(url, setBoca);
+    falaRef.current.fim.catch(() => setBoca(null));
+  };
+  useEffect(() => () => falaRef.current?.parar(), []);
 
   const anotar = useCallback((t: string) => setLog((l) => [`${new Date().toLocaleTimeString("pt-BR")} · ${t}`, ...l].slice(0, 40)), []);
   const setPeca = useCallback((e: EstadoSprite, p: Partial<Peca>) => setPecas((ps) => ({ ...ps, [e]: { ...ps[e], ...p } })), []);
@@ -128,7 +141,7 @@ export default function EstudioAvatar({
     try {
       const j = deFoto
         ? await post({ acao: "base-de-imagem", imagem: await paraDataUrl(fotoAtual!) })
-        : await post({ acao: "base", personagem, cor });
+        : await post({ acao: "base", personagem, cor, agentId });
       setBase(j.base);
       setPeca("idle", { status: "pronto", grande: j.grande, pequeno: j.pequeno });
       anotar("base: pronta ✓ — aprove o idle e siga");
@@ -138,7 +151,7 @@ export default function EstudioAvatar({
       anotar(`base: falhou — ${(err as Error).message}`);
       return null;
     }
-  }, [anotar, cor, fotoAtual, personagem, post, setPeca]);
+  }, [agentId, anotar, cor, fotoAtual, personagem, post, setPeca]);
 
   /** Gerar tudo: base (se não houver) e cada estado ainda não aprovado, 2 por vez, aparecendo um a um. */
   const gerarTudo = useCallback(async (novaBase: boolean, deFoto = false) => {
@@ -289,7 +302,7 @@ export default function EstudioAvatar({
         <div className={`p-5 rounded-[22px] flex flex-col items-center gap-4 ${VIDRO_BOLHA}`}>
           <p className={`self-start text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>Ao vivo — passe o mouse, simule uma conversa</p>
           {previa ? (
-            <AgentAvatar manifest={previa} nome={nome} size={220} estado={sinal} destaque className="shadow-xl" />
+            <AgentAvatar manifest={previa} nome={nome} size={220} estado={boca !== null ? "falando" : sinal} boca={boca} destaque className="shadow-xl" />
           ) : (
             <div className={`w-[220px] h-[220px] rounded-full grid place-items-center text-center text-[12px] px-6 border-2 border-dashed border-slate-300 dark:border-white/15 ${TXT_MUDO}`}>
               {pecas.idle.status === "gerando" ? "desenhando o personagem…" : "o avatar aparece aqui assim que a base ficar pronta"}
@@ -300,6 +313,11 @@ export default function EstudioAvatar({
               <button key={s} type="button" onClick={() => { simRef.current.forEach(clearTimeout); setSinal(s); }} aria-pressed={sinal === s} className={`${btn} ${sinal === s ? "!bg-cyan-500 !text-slate-950" : ""}`}>{s}</button>
             ))}
             <button type="button" onClick={simular} className={btn} title="pensando → falando → sorri ao concluir">▶ simular resposta</button>
+            {saudacoes.length > 0 && previa && (
+              <button type="button" onClick={ouvirSaudacao} aria-pressed={boca !== null} className={`${btn} ${boca !== null ? "!bg-violet-500 !text-white" : ""}`} title={`${saudacoes.length} saudações na voz dele(a) — cada clique toca a próxima`}>
+                {boca !== null ? "■ parar" : "🔊 ouvir saudação"}
+              </button>
+            )}
           </div>
           {previa && (
             <div className="flex items-end gap-4 pt-2 border-t border-slate-200/70 dark:border-white/10 w-full justify-center">

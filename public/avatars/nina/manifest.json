@@ -1,0 +1,33 @@
+{
+  "agentId": "nina",
+  "versao": "muy3giic",
+  "motor": "sprite",
+  "estados": {
+    "idle": "/avatars/nina/idle.webp?v=muy3giic",
+    "blink": "/avatars/nina/blink.webp?v=muy3giic",
+    "talk": "/avatars/nina/talk.webp?v=muy3giic",
+    "talk_half": "/avatars/nina/talk_half.webp?v=muy3giic",
+    "smile": "/avatars/nina/smile.webp?v=muy3giic",
+    "happy": "/avatars/nina/happy.webp?v=muy3giic",
+    "think": "/avatars/nina/think.webp?v=muy3giic",
+    "confused": "/avatars/nina/confused.webp?v=muy3giic"
+  },
+  "pequeno": {
+    "idle": "/avatars/nina/idle.sm.webp?v=muy3giic",
+    "blink": "/avatars/nina/blink.sm.webp?v=muy3giic",
+    "talk": "/avatars/nina/talk.sm.webp?v=muy3giic",
+    "talk_half": "/avatars/nina/talk_half.sm.webp?v=muy3giic",
+    "smile": "/avatars/nina/smile.sm.webp?v=muy3giic",
+    "happy": "/avatars/nina/happy.sm.webp?v=muy3giic",
+    "think": "/avatars/nina/think.sm.webp?v=muy3giic",
+    "confused": "/avatars/nina/confused.sm.webp?v=muy3giic"
+  },
+  "cor": "#db2777",
+  "voz": {
+    "saudacoes": [
+      "/avatars/nina/voz/saudacao-01.wav",
+      "/avatars/nina/voz/saudacao-02.wav",
+      "/avatars/nina/voz/saudacao-03.wav"
+    ]
+  }
+}

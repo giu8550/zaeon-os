@@ -1,0 +1,33 @@
+{
+  "agentId": "teo",
+  "versao": "muy3gdir",
+  "motor": "sprite",
+  "estados": {
+    "idle": "/avatars/teo/idle.webp?v=muy3gdir",
+    "blink": "/avatars/teo/blink.webp?v=muy3gdir",
+    "talk": "/avatars/teo/talk.webp?v=muy3gdir",
+    "talk_half": "/avatars/teo/talk_half.webp?v=muy3gdir",
+    "smile": "/avatars/teo/smile.webp?v=muy3gdir",
+    "happy": "/avatars/teo/happy.webp?v=muy3gdir",
+    "think": "/avatars/teo/think.webp?v=muy3gdir",
+    "confused": "/avatars/teo/confused.webp?v=muy3gdir"
+  },
+  "pequeno": {
+    "idle": "/avatars/teo/idle.sm.webp?v=muy3gdir",
+    "blink": "/avatars/teo/blink.sm.webp?v=muy3gdir",
+    "talk": "/avatars/teo/talk.sm.webp?v=muy3gdir",
+    "talk_half": "/avatars/teo/talk_half.sm.webp?v=muy3gdir",
+    "smile": "/avatars/teo/smile.sm.webp?v=muy3gdir",
+    "happy": "/avatars/teo/happy.sm.webp?v=muy3gdir",
+    "think": "/avatars/teo/think.sm.webp?v=muy3gdir",
+    "confused": "/avatars/teo/confused.sm.webp?v=muy3gdir"
+  },
+  "cor": "#047857",
+  "voz": {
+    "saudacoes": [
+      "/avatars/teo/voz/saudacao-01.wav",
+      "/avatars/teo/voz/saudacao-02.wav",
+      "/avatars/teo/voz/saudacao-03.wav"
+    ]
+  }
+}

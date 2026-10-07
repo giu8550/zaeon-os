@@ -9,6 +9,8 @@
  *   { acao: "estado", base, estado, ajuste? }     → uma expressão (reroll = repetir)
  * Salvar: `validarSalvar` (aqui) → disco (dev, lib/avatars/disco.ts) ou banco (admin).
  */
+import fs from "node:fs";
+import path from "node:path";
 import { isEstadoSprite, type EstadoSprite } from "./estados";
 import { gerarBase, gerarQuadro, idleDaBase, normalizarBase, type QuadroGerado } from "./pipeline";
 
@@ -30,6 +32,27 @@ export function lerCor(v: unknown): [string, string] | undefined {
 
 const LIMITE = { base: 900_000, entrada: 4_000_000, grande: 400_000, pequeno: 100_000 } as const;
 
+/**
+ * ÂNCORA DE ESTILO sem cópia: grade 2x2 com 4 avatares JÁ APROVADOS (sorteados, nunca o próprio
+ * agente) → o modelo pega o estilo da casa de vários rostos ao mesmo tempo e desenha um personagem
+ * ÚNICO. Menos de 4 aprovados no disco → sem referência (só o prompt).
+ */
+export async function referenciaDeEstilo(excetoId?: string): Promise<Buffer | null> {
+  const raiz = path.join(process.cwd(), "public", "avatars");
+  let ids: string[] = [];
+  try {
+    ids = fs.readdirSync(raiz).filter((id) => id !== excetoId && fs.existsSync(path.join(raiz, id, "idle.webp")));
+  } catch { return null; }
+  if (ids.length < 4) return null;
+  const escolhidos = ids.sort(() => Math.random() - 0.5).slice(0, 4);
+  const { default: sharp } = await import("sharp");
+  const tiles = await Promise.all(escolhidos.map((id) => sharp(path.join(raiz, id, "idle.webp")).resize(512, 512).png().toBuffer()));
+  return sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#ffffff" } })
+    .composite(tiles.map((t, i) => ({ input: t, left: (i % 2) * 512, top: Math.floor(i / 2) * 512 })))
+    .webp({ quality: 88 })
+    .toBuffer();
+}
+
 const quadroJson = (q: QuadroGerado) => ({ grande: dataUrl(q.grande), pequeno: dataUrl(q.pequeno) });
 
 export type RespostaEstudio = { status: number; json: Record<string, unknown> };
@@ -38,7 +61,9 @@ export async function atenderEstudio(body: unknown): Promise<RespostaEstudio> {
   const b = (body ?? {}) as Record<string, unknown>;
   try {
     if (b.acao === "base") {
-      const { base, idle } = await gerarBase(String(b.personagem ?? ""), lerCor(b.cor));
+      const personagem = String(b.personagem ?? "");
+      const excetoId = typeof b.agentId === "string" ? b.agentId : undefined;
+      const { base, idle } = await gerarBase(personagem, lerCor(b.cor), 2, await referenciaDeEstilo(excetoId));
       return { status: 200, json: { base: dataUrl(base), estado: "idle", ...quadroJson(idle) } };
     }
     if (b.acao === "base-de-imagem") {
