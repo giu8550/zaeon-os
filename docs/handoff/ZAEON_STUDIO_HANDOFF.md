@@ -48,7 +48,7 @@ O agente **não consegue** rodar o app, o Vertex nem o ffmpeg localmente. Então
 - `types.ts`, `wav.ts` (PCM L16→WAV + `concatWav`, testado), `storage.ts` (`.studio/<id>.<ext>`; sanitiza id).
 - `transformations.ts` (prompts + normalizadores de guia/faq/flashcards/mindmap/timeline — testado), `content.ts` (`loadStudyContext` por sourceIds/spaceId, membership), `text-pipeline.ts` (cria artifact→geminiJson→normaliza→salva; cache por sourceIds+kind; 1 retry).
 - `podcast.ts` (outline/transcript portados do open-notebook + normalizadores + chunking — testado), `podcast-pipeline.ts` (roteiro Gemini → **voz turno-a-turno em paralelo (lotes de 5)** via `synthGeminiTTS` → `concatWav`; fire-and-forget), `podcast-tts.ts` (multi-speaker — **NÃO usado** pelo pipeline; modelo provavelmente não suporta).
-- `imagen.ts` (`generateImage` Vertex `:predict`; env `IMAGEN_MODEL`) + `imagen-request.ts` (puro, testado).
+- `imagen.ts` (`generateImage` → Gemini image via `lib/ai/gemini-image.ts`, rotação de região no 429; `IMAGEN_MODEL=imagen-*` opcional usa o `:predict` e cai pro Gemini se falhar) + `imagen-request.ts` (puro, testado).
 - `video.ts` (roteiro + args do **ffmpeg**, puro testado) + `video-pipeline.ts` (Imagen slides + narração + ffmpeg → mp4; fire-and-forget).
 - `gemini-tts-request.ts` (builders multi/single, puro testado), `mindmap-layout.ts` (SVG, testado), `artifact-text.ts` (artefato→texto, testado).
 
@@ -92,7 +92,7 @@ Já SET: `GOOGLE_CREDENTIALS`/`GOOGLE_*`, `GEMINI_MODEL`. **Relevantes do Studio
 GEMINI_TTS_MODEL=gemini-2.5-flash-tts     # já é o default no código
 ZAEON_TTS_VOICE_F=Leda                     # voz feminina (narração + host A do podcast)
 ZAEON_TTS_VOICE_M=Charon                    # host B do podcast
-IMAGEN_MODEL=imagen-4.0-generate-001        # CONFIRMAR id no Model Garden do projeto
+# IMAGEN_MODEL=                            # opcional; vazio = Gemini image (Imagen dá 404 no projeto, out/2026)
 # opcionais: STUDIO_DIR (default /app/.studio), FFMPEG_PATH
 # futuros: VEO_MODEL, LYRIA_MODEL
 ```
@@ -107,7 +107,7 @@ Sem TTS/Imagen válido, a voz cai no Piper e imagem/vídeo retornam erro tratado
 ## 9. Como testar (dono, no deploy)
 
 - **Studio texto** (guia/faq/flashcards/mapa/timeline): abrir estudo → dock ⟁ → clicar → encaixa no caderno.
-- **Podcast**: ~1–2 min, 2 vozes (Marina/Leda ↔ Téo/Charon). **Vídeo/Imagem**: dependem do `IMAGEN_MODEL`.
+- **Podcast**: ~1–2 min, 2 vozes (Marina/Leda ↔ Téo/Charon). **Vídeo/Imagem**: Gemini image (`GEMINI_IMAGE_MODEL`, default gemini-2.5-flash-image).
 - **Editor**: digitar `#`/`##` (título), Enter (novo bloco), arrastar pela alça (reordenar), `/` (menu — após #64).
 - **Convite**: parceiro aceita → vira colega no chat (dois lados) + foto no Lounge + msg da Zaeon.
 - **Onboarding (como usuário novo)**: acesse **`/research-lab?onboard=replay`** → tour reaparece a cada visita até "✓ Ok, não repetir".

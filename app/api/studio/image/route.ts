@@ -1,5 +1,5 @@
 /**
- * /api/studio/image — gera uma imagem didática (Imagen) a partir de:
+ * /api/studio/image — gera uma imagem didática (Gemini image; Imagen só via override) a partir de:
  *   - um `prompt` direto (chat: "gere uma imagem de…"), ou
  *   - um estudo (`spaceId`/`sourceIds`) → a Zaeon cria o prompt a partir do conteúdo.
  *
@@ -12,7 +12,7 @@ import { guard } from "@/src/lib/ratelimit";
 import { geminiJson } from "@/lib/scholar/gemini";
 import { studioUid } from "@/lib/studio/auth";
 import { loadStudyContext } from "@/lib/studio/content";
-import { generateImage, imagenAvailable } from "@/lib/studio/imagen";
+import { generateImageResult, imagenAvailable } from "@/lib/studio/imagen";
 import { writeStudioFile } from "@/lib/studio/storage";
 
 export const runtime = "nodejs";
@@ -73,8 +73,9 @@ export async function POST(req: Request) {
   });
 
   try {
-    const img = await generateImage(prompt, aspectRatio ? { aspectRatio } : undefined);
-    if (!img) throw new Error("Imagen não retornou imagem (confirme IMAGEN_MODEL no projeto/região).");
+    const r = await generateImageResult(prompt, aspectRatio ? { aspectRatio } : undefined);
+    if ("error" in r) throw new Error(`Não consegui gerar a imagem: ${r.error}`);
+    const img = r.image;
 
     const ext = /jpe?g/i.test(img.mimeType) ? "jpg" : "png";
     await writeStudioFile(art.id, ext, Buffer.from(img.data, "base64"));

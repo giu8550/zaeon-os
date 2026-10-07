@@ -1,34 +1,85 @@
 /**
- * Imagen (Vertex `:predict`) — geração de imagem didática, no crédito GenAI do Google.
+ * Imagem didática do Studio (chat, estudo, prancha da cartolina, cenas do vídeo).
  *
- * Auth reusa o service account do Vertex (igual ao resto da IA). Modelo via env
- * IMAGEN_MODEL (default imagen-4.0-generate-001 — CONFIRMAR o id no Model Garden do
- * projeto). Sem credencial → retorna null (a rota reporta erro tratado).
+ * Padrão: Gemini image (lib/ai/gemini-image.ts, `:generateContent` com rotação de região
+ * no 429). O Imagen (Vertex `:predict`) virou override opcional: no projeto atual todos os
+ * ids `imagen-*` respondem 404 (out/2026). Ver resolveImageRoute pro papel do IMAGEN_MODEL.
+ * Se o override Imagen falhar, cai pro Gemini image. Sem credencial → indisponível.
  */
 import { GoogleAuth } from "google-auth-library";
 import { vertexCredentials } from "@/lib/ai/vertex-credentials";
-import { buildImagenBody, parseImagenResponse, type ImagenOptions } from "@/lib/studio/imagen-request";
-
-const IMAGEN_MODEL = process.env.IMAGEN_MODEL || "imagen-4.0-generate-001";
+import { gerarImagemGemini, geminiImageDisponivel, geminiImageModelo } from "@/lib/ai/gemini-image";
+import {
+  buildImagenBody,
+  parseImagenResponse,
+  resolveImageRoute,
+  type ImageRoute,
+  type ImagenOptions,
+} from "@/lib/studio/imagen-request";
 
 export interface GeneratedImage {
   data: string; // base64
   mimeType: string; // image/png
 }
 
-/** Há credencial Google → o caminho Imagen está disponível. */
-export function imagenAvailable(): boolean {
-  const c = vertexCredentials();
-  return !!(c.project && c.client_email && c.private_key);
+/** Qual caminho (Gemini/Imagen) e modelo a geração vai usar agora. */
+export function imageRoute(): ImageRoute {
+  return resolveImageRoute(process.env.IMAGEN_MODEL, geminiImageModelo());
 }
 
+/** Há credencial Google → a geração de imagem está disponível. */
+export function imagenAvailable(): boolean {
+  return geminiImageDisponivel();
+}
+
+/** Igual a generateImage, mas devolve o motivo da falha (cota, recusa, timeout…). */
+export async function generateImageResult(
+  prompt: string,
+  opts?: ImagenOptions,
+  timeoutMs = 60_000,
+): Promise<{ image: GeneratedImage } | { error: string }> {
+  const clean = (prompt || "").trim().slice(0, 1500);
+  if (!clean) return { error: "prompt vazio" };
+  if (!imagenAvailable()) return { error: "credencial Google ausente" };
+
+  const route = imageRoute();
+  if (route.provider === "imagen") {
+    const img = await generateImagenPredict(route.model, clean, opts, timeoutMs);
+    if (img) return { image: img };
+    console.warn(`[imagen] ${route.model} falhou — caindo pro Gemini image`);
+  }
+  try {
+    const image = await gerarImagemGemini(clean, {
+      model: route.provider === "gemini" ? route.model : geminiImageModelo(),
+      aspectRatio: opts?.aspectRatio,
+      timeoutMs,
+      esperaMaxMs: 20_000,
+    });
+    return { image };
+  } catch (e) {
+    const error = String((e as Error)?.message || e).slice(0, 300);
+    console.warn("[gemini-image] erro:", error);
+    return { error };
+  }
+}
+
+/** Gera 1 imagem; null em qualquer falha (o motivo vai pro log). */
 export async function generateImage(
   prompt: string,
   opts?: ImagenOptions,
   timeoutMs = 60_000,
 ): Promise<GeneratedImage | null> {
-  const clean = (prompt || "").trim();
-  if (!clean) return null;
+  const r = await generateImageResult(prompt, opts, timeoutMs);
+  return "image" in r ? r.image : null;
+}
+
+/** Caminho legado: Imagen via Vertex `:predict` (só com IMAGEN_MODEL=imagen-*). */
+async function generateImagenPredict(
+  model: string,
+  prompt: string,
+  opts: ImagenOptions | undefined,
+  timeoutMs: number,
+): Promise<GeneratedImage | null> {
   const { project, client_email, private_key, location } = vertexCredentials();
   if (!project || !client_email || !private_key) return null;
 
@@ -44,12 +95,12 @@ export async function generateImage(
 
     const url =
       `https://${location}-aiplatform.googleapis.com/v1/projects/${project}` +
-      `/locations/${location}/publishers/google/models/${IMAGEN_MODEL}:predict`;
+      `/locations/${location}/publishers/google/models/${model}:predict`;
 
     const res = await fetch(url, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildImagenBody(clean.slice(0, 1500), opts)),
+      body: JSON.stringify(buildImagenBody(prompt, opts)),
       signal: controller.signal,
     });
     if (!res.ok) {

@@ -1,10 +1,10 @@
 /**
  * Geração do Vídeo Overview (IMPURA) — Nível A: roteiro (Gemini) → 1 imagem por
- * cena (Imagen) + narração (Gemini-TTS) → monta um slideshow .mp4 com ffmpeg.
+ * cena (Gemini image) + narração (Gemini-TTS) → monta um slideshow .mp4 com ffmpeg.
  *
  * Fire-and-forget (servidor de longa duração, server.js): a rota cria o artefato
  * (queued) e o cliente faz polling em /api/studio/[id]. Requer ffmpeg no container
- * (ver Dockerfile). Sem Imagen/TTS habilitados, marca erro tratado.
+ * (ver Dockerfile). Sem imagem/TTS habilitados, marca erro tratado.
  */
 import { spawn } from "child_process";
 import fs from "fs/promises";
@@ -50,7 +50,7 @@ export async function runVideoGeneration(artId: string, content: string, options
 
     await fs.mkdir(tmp, { recursive: true });
 
-    // Uma cena = imagem (Imagen) + narração (Gemini-TTS) → clipe mp4.
+    // Uma cena = imagem (Gemini image) + narração (Gemini-TTS) → clipe mp4.
     const clips: string[] = [];
     for (let i = 0; i < script.length; i++) {
       const sec = script[i];
@@ -65,7 +65,7 @@ export async function runVideoGeneration(artId: string, content: string, options
       await runFfmpeg(sectionClipArgs({ image: imgPath, audio: audPath, out: clipPath }));
       clips.push(clipPath);
     }
-    if (!clips.length) throw new Error("Nenhuma cena pôde ser gerada (Imagen e Gemini-TTS habilitados no projeto?).");
+    if (!clips.length) throw new Error("Nenhuma cena pôde ser gerada (Gemini image e Gemini-TTS habilitados no projeto?).");
 
     let finalBuf: Buffer;
     if (clips.length === 1) {
