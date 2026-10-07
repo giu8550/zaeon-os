@@ -54,7 +54,7 @@
 | Progresso (rótulos PT já existem) | `lib/agent/progresso.ts` (`Progresso :18`, `serializarProgresso :39`, `faseCorrente :106`) · `lib/agent/trajectory.ts` `PHASE_LABEL` · polling retomável `lib/chat/turnoRetomavel.ts` (`POLL_TURNO_MS = 1500 :11`, `esperarTurno :41`) · rotas-molde `app/api/ai/chat/turns/route.ts` + `[id]/route.ts` (+ `turns-routes.test.ts`) |
 | Realtime | `lib/canal/wire.ts` (`EV_MENSAGEM`, `EV_DIGITANDO`, `MensagemWire` c/ `parentId`), `lib/canal/realtime.ts` `publicarPusher` · cliente `components/office/CoworkingCanal.tsx` (`subscribe :116`, `bind(EV_MENSAGEM) :117`, `bind(EV_DIGITANDO) :118`, `aoChegar :145`, `digitando`) |
 | Artefato de entrega | `prisma` `model ResearchWork :527-544` (`secoes Json?`, `rev`, `workType`, `scopeId`) · `lib/tcc/secoes.ts` (`Secao :13`, `OPS :15`, `OpSecao :24`) · `model StudioArtifact :689-703` |
-| Mentores (data_access_level) | `prisma` `model MentorTemplate :801-818` (`guardrail :816`) · `lib/agent/mentors.ts` `MENTOR_SEED` (5 de saúde com `guardrail`) · `lib/agent/mentors-server.ts` `resolveMentor` |
+| Mentores (data_access_level) | `prisma` `model MentorTemplate :801-818` (`guardrail :813`) · `lib/agent/mentors.ts` `MENTOR_SEED` (5 de saúde com `guardrail`) · `lib/agent/mentors-server.ts` `resolveMentor` |
 | MCP (fontes futuras) | `lib/agent/mcp.ts` — `registerMcpConnector :195`, `mcpToolToToolDef`, `riskFromAnnotations :56` · `model Connector :777` |
 | Ledger (Fatia 1, opcional) | `lib/llm/envelope.ts` `LedgerCtx.taskId` — só se existir |
 
