@@ -69,3 +69,33 @@ export function motoDe(v: unknown): { moto?: { s: number; y: number; yaw: number
   const yaw = typeof o.yaw === "number" && Number.isFinite(o.yaw) ? Math.min(10, Math.max(-10, o.yaw)) : null;
   return s === null || y === null || yaw === null ? {} : { moto: { s, y, yaw } };
 }
+
+/** ESTACIONADA: a moto fica ONDE a pessoa desceu (não volta pra vaga). Quem estacionou anuncia na presença dele
+ *  (`motoLargada`) — como a nave do dono (`naveParada`). Sai da sala (ou monta noutra) → a moto volta pra vaga. */
+export type MotoLargada = { s: number; x: number; y: number; z: number; yaw: number };
+const LIMITE_MAPA = VOO.raioMapa + 40;
+/** a moto largada na presença: vaga inteira válida, posição dentro do mapa, altura com teto; lixo → nada */
+export function motoLargadaDe(v: unknown): { motoLargada?: MotoLargada } {
+  if (!v || typeof v !== "object") return {};
+  const o = v as Record<string, unknown>, n = (k: string, a: number, b: number) => (typeof o[k] === "number" && Number.isFinite(o[k]) ? Math.min(b, Math.max(a, o[k] as number)) : null);
+  const s = typeof o.s === "number" && Number.isInteger(o.s) && o.s >= 0 && o.s < TOTAL_VAGAS ? o.s : null;
+  const x = n("x", -LIMITE_MAPA, LIMITE_MAPA), y = n("y", 0, MOTO.teto), z = n("z", -LIMITE_MAPA, LIMITE_MAPA), yaw = n("yaw", -10, 10);
+  return s === null || x === null || y === null || z === null || yaw === null ? {} : { motoLargada: { s, x, y, z, yaw } };
+}
+
+/** onde cada moto PARADA está: estacionada por alguém (`largadas`, a primeira que reclamar a vaga) ou na vaga. As
+ *  montadas (`ocupadas`) não entram (quem pilota manda a pose dela). `yVaga` = a altura de uma vaga (a Zaeon flutua). */
+export function posesParadas(largadas: Iterable<MotoLargada>, ocupadas: Set<number>, yVaga: (v: Vaga) => number): ({ x: number; y: number; z: number; yaw: number; naVaga: boolean } | null)[] {
+  const vs = vagas(), out: ({ x: number; y: number; z: number; yaw: number; naVaga: boolean } | null)[] = vs.map((v) => ({ x: v.x, y: yVaga(v), z: v.z, yaw: v.yaw, naVaga: true }));
+  const dono = new Set<number>();
+  for (const l of largadas) if (!dono.has(l.s) && l.s >= 0 && l.s < vs.length) { dono.add(l.s); out[l.s] = { x: l.x, y: l.y, z: l.z, yaw: l.yaw, naVaga: false }; }
+  for (const s of ocupadas) if (s >= 0 && s < out.length) out[s] = null;
+  return out;
+}
+
+/** a moto PARADA mais perto de `p` ao alcance, no MESMO nível (altura dos pés `alt` ± 2,5 m), ou −1 */
+export function motoParadaPerto(p: { x: number; z: number }, alt: number, poses: readonly ({ x: number; y: number; z: number } | null)[]): number {
+  let melhor = -1, md: number = MOTO.alcance;
+  poses.forEach((q, i) => { if (!q || Math.abs(q.y - alt) > 2.5) return; const d = Math.hypot(p.x - q.x, p.z - q.z); if (d < md) { md = d; melhor = i; } });
+  return melhor;
+}

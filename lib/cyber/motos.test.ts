@@ -68,3 +68,27 @@ describe("voo com teto", () => {
     expect(s.y).toBeCloseTo(VOO.yMax, 5);
   });
 });
+
+describe("moto ESTACIONADA (fica onde a pessoa desceu)", () => {
+  it("a largada vale na presença só com números válidos; lixo → nada", async () => {
+    const { motoLargadaDe } = await import("./motos");
+    expect(motoLargadaDe({ s: 2, x: 10, y: 450, z: -700, yaw: 1 })).toEqual({ motoLargada: { s: 2, x: 10, y: 450, z: -700, yaw: 1 } });
+    expect(motoLargadaDe({ s: 99, x: 0, y: 0, z: 0, yaw: 0 })).toEqual({});
+    expect(motoLargadaDe({ s: 1, x: "a", y: 0, z: 0, yaw: 0 })).toEqual({});
+    expect(motoLargadaDe(null)).toEqual({});
+  });
+  it("parada: na vaga, ou onde foi largada; a montada some da lista (quem pilota manda a pose)", async () => {
+    const { posesParadas, vagas } = await import("./motos");
+    const p = posesParadas([{ s: 1, x: 5, y: 0, z: 6, yaw: 0.5 }, { s: 1, x: 99, y: 0, z: 99, yaw: 0 }], new Set([3]), () => 0);
+    expect(p[0]).toMatchObject({ x: vagas()[0]!.x, z: vagas()[0]!.z, naVaga: true });
+    expect(p[1]).toMatchObject({ x: 5, z: 6, yaw: 0.5, naVaga: false });   // a 1ª que reclamou a vaga
+    expect(p[3]).toBeNull();
+  });
+  it("montar: a parada mais perto ao alcance e no MESMO nível (no chão não pega a da Zaeon)", async () => {
+    const { motoParadaPerto } = await import("./motos");
+    const poses = [{ x: 0, y: 0, z: 0 }, { x: 1, y: 450, z: 0 }, null, { x: 2, y: 0, z: 0 }];
+    expect(motoParadaPerto({ x: 1.9, z: 0 }, 0, poses)).toBe(3);
+    expect(motoParadaPerto({ x: 1, z: 0 }, 450, poses)).toBe(1);
+    expect(motoParadaPerto({ x: 50, z: 0 }, 0, poses)).toBe(-1);
+  });
+});
