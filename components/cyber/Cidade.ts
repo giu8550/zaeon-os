@@ -38,7 +38,7 @@ export type CidadeHandle = {
   /** a tela da TV do lounge (clicável: o dono escreve o recado pro QG do Andrei) */
   tvLounge: THREE.Mesh | null;
   /** o som do lounge: as caixas (de onde a música sai), o toca-discos (onde se abre o player) e o "está tocando" */
-  caixasLounge: THREE.Object3D[]; tocaDiscos: THREE.Object3D | null; somTocando(on: boolean): void;
+  caixasLounge: THREE.Object3D[]; tocaDiscos: THREE.Object3D | null; somTocando(on: boolean, nivel?: number): void;
   /** mostra na TV o último recado enviado (null = some) */
   mostrarRecadoNaTV(texto: string | null): void;
   /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
@@ -327,7 +327,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {
-    group: raiz, ilha, rotulo, alvos, computadores: telas, portalChao: peDisco, tvLounge: salas.tv, caixasLounge: salas.caixas, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean) => salas.somTocando(on), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    group: raiz, ilha, rotulo, alvos, computadores: telas, portalChao: peDisco, tvLounge: salas.tv, caixasLounge: salas.caixas, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     atualizar(dt, t) {
       ilha.position.y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel;
       for (const f of fogos) { const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp; f.s.scale.set(3.4 * (0.9 + p * 0.25), 5 * (0.8 + p * 0.4), 1); (f.s.material as THREE.SpriteMaterial).opacity = 0.5 + 0.3 * p; }

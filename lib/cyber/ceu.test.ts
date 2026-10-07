@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, bibliotecaLocais, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, servidoresLocais, daSala, paredeDaSala, MOVEIS, type NomeSala } from "./ceu";
+import { BURACO_NEGRO, CIDADE, bibliotecaLocais, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, servidoresLocais, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, rotDaSala, type NomeSala } from "./ceu";
 import { VOO, passoVoo, type EstadoVoo } from "./voo";
 import { dentroDeAlgum } from "./colisao";
 import { POIS } from "./landmarks";
@@ -139,14 +139,41 @@ describe("Zaeon ampliada: salas (sem hangar — a nave-QG atraca pairando ao lad
       const fundo = mundo(daSala(s, 0, -s.r)); expect(dentroDeAlgum(fundo, cs)).toBe(true);
     }
   });
-  it("móveis: lounge com sofá, TV e caixa de som (a sala de jogos saiu); tudo dentro da sala", () => {
+  it("móveis: o lounge virou clube (telão, palco, mesa do DJ, torres de som, subs, pista, sofás); tudo dentro da sala", () => {
     const tipos = (n: NomeSala) => MOVEIS[n].map((m) => m.tipo);
-    expect(tipos("lounge")).toEqual(expect.arrayContaining(["sofa", "tv", "caixaSom"]));
+    expect(tipos("lounge")).toEqual(expect.arrayContaining(["sofa", "tv", "caixaSom", "palco", "mesaDJ", "sub", "pista"]));
     expect(Object.keys(CIDADE.salas)).toEqual(["lounge"]);
     for (const n of nomes) for (const m of MOVEIS[n]) for (const [a, b] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {   // os 4 cantos da pegada
       const lx = (a * m.larg) / 2, lz = (b * m.prof) / 2, x = m.x + lx * Math.cos(m.rot) + lz * Math.sin(m.rot), z = m.z - lx * Math.sin(m.rot) + lz * Math.cos(m.rot);
       expect(Math.hypot(x, z)).toBeLessThan(CIDADE.salas[n].r);
     }
+  });
+  it("FESTA: palco de cristal com borda sólida, sobe-se pela escada e a cabine do DJ fica livre atrás da mesa", () => {
+    const s = CIDADE.salas.lounge, cs = colisoresDaCidade(), W = (lx: number, lz: number) => mundo(daSala(s, lx, lz));
+    // ida e volta sala ↔ ilha
+    const ida = daSala(s, 1.3, -4.2), volta = naSala(s, ida.x, ida.z); expect(volta.x).toBeCloseTo(1.3); expect(volta.z).toBeCloseTo(-4.2);
+    // alturas: chão, pé da escada, meio da escada, palco
+    expect(alturaNaCidade(W(0, 4))).toBe(0);
+    const z0 = PALCO.z + PALCO.r - 0.3;
+    expect(alturaNaCidade(W(0, z0 + PALCO.escada.len + 0.1))).toBe(0);
+    expect(alturaNaCidade(W(0, z0 + PALCO.escada.len / 2))).toBeCloseTo(PALCO.h / 2);
+    expect(alturaNaCidade(W(2, PALCO.z))).toBe(PALCO.h);
+    // o caminho pela escada até a cabine é livre (centro da escada, palco ao lado da mesa, cabine)
+    for (const [lx, lz] of [[0, z0 + PALCO.escada.len - 0.2], [0, z0 + 0.4], [0, PALCO.z + 3.2], [3, PALCO.z + 0.6], [3, PALCO.z - 0.6], [1.5, PALCO.cabine.z]] as const) expect(dentroDeAlgum(W(lx, lz), cs)).toBe(false);
+    expect(dentroDeAlgum(W(PALCO.cabine.x, PALCO.cabine.z), cs)).toBe(false);
+    // a borda do palco é sólida (de lado não se sobe) e a mesa do DJ também
+    expect(dentroDeAlgum(W(PALCO.r, PALCO.z), cs)).toBe(true);
+    expect(dentroDeAlgum(W(-PALCO.r * 0.7, PALCO.z + PALCO.r * 0.71), cs)).toBe(true);
+    expect(dentroDeAlgum(W(MESA_DJ.x, MESA_DJ.z), cs)).toBe(true);
+    // a cabine: atrás da mesa, em cima do palco; o DJ olha pra pista (+z da sala)
+    expect(naCabineDJ(W(PALCO.cabine.x, PALCO.cabine.z))).toBe(true);
+    expect(naCabineDJ(W(0, 2))).toBe(false);
+    expect(PALCO.cabine.z).toBeLessThan(MESA_DJ.z - MESA_DJ.prof / 2);
+    expect(rumoDoDJ()).toBeCloseTo(rotDaSala(s));
+    const pc = pontoDaCabineDJ(), w = W(PALCO.cabine.x, PALCO.cabine.z); expect(pc.x).toBeCloseTo(w.x); expect(pc.z).toBeCloseTo(w.z);
+    expect(alturaNaCidade(pc)).toBe(PALCO.h);
+    // da cabine até a borda de trás da mesa cabe o alcance do braço (≤ 0,5 m)
+    expect(MESA_DJ.z - MESA_DJ.prof / 2 - PALCO.cabine.z).toBeLessThanOrEqual(0.5);
   });
   it("não há mais hangar (nem pilones) na ilha", () => {
     expect("hangar" in CIDADE).toBe(false);

@@ -15,6 +15,8 @@ export type SomLoungeHandle = {
   atualizar(dt: number): void;
   /** tem música saindo agora? (as caixas pulsam, o disco gira) */
   readonly tocando: boolean;
+  /** a batida agora (energia dos graves, 0..1; 0 se parado) — as luzes do palco pulsam com ela */
+  readonly nivel: number;
   dispose(): void;
 };
 
@@ -44,6 +46,7 @@ export function criarSomLounge(o: { audio: AudioCyberHandle; caixas: THREE.Objec
     aplicar(s, off) { som = s && s.faixas.length ? s : null; offset = off; acc = 1; sincronizar(); },
     atualizar(dt) { acc += dt; if (acc >= 0.4) { acc = 0; sincronizar(); } },
     get tocando() { return !el.paused && !!som?.estado.tocando; },
+    get nivel() { return !el.paused && som?.estado.tocando ? saida.nivel() : 0; },
     dispose() { vivo = false; el.pause(); el.removeAttribute("src"); el.load(); saida.remover(); },
   };
 }
