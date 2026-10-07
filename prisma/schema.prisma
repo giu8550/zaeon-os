@@ -1044,6 +1044,25 @@ model AgentProfile {
   @@map("agent_profiles")
 }
 
+// Avatar vivo gerado no ADMIN (Etapa B): um quadro por (agente, estado, tamanho). Os sets da
+// Etapa A ficam em public/avatars (build); este sobrepõe. tamanho: "g" (512) | "p" (160) |
+// "base" (1024, só estado "base" — pra rerolar expressões depois sem trocar o personagem).
+model AgentAvatarQuadro {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agentKey  String
+  estado    String
+  tamanho   String
+  mime      String   @default("image/webp")
+  dados     Bytes
+  versao    String
+  cor       String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([agentKey, estado, tamanho])
+  @@index([agentKey])
+  @@map("agent_avatar_quadros")
+}
+
 // Quem usa qual agente (card founder). Incremento idempotente por (agentKey,userId).
 model AgentUsage {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId

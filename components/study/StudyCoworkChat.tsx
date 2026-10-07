@@ -27,6 +27,7 @@ import { DIRETRIZ_ESTUDOS } from "@/lib/ai/salaPersona";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import AuraThinking from "@/components/study/AuraThinking";
+import AgentePilula from "@/components/agents/avatar/AgentePilula";
 import StudyArtifactCard from "@/components/study/StudyArtifactCard";
 import StudioPalette from "@/components/study/StudioPalette";
 import MentorPill from "@/components/study/MentorPill";
@@ -1018,6 +1019,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             <style>{`@keyframes zCaret { 0%,45% { opacity:1 } 50%,100% { opacity:0 } } .z-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-0.15em; background:currentColor; opacity:.7; animation: zCaret 1s steps(1) infinite; } @media (prefers-reduced-motion: reduce) { .z-caret { animation: none; } }`}</style>
             {messages.length === 0 ? <DicaSubTema threads={threads} ativa={abaAtiva} /> : (
               messages.map((m, i) => {
+                // avatar vivo da Aura só na resposta mais recente: pensa → fala no stream → sorri ao concluir
+                const pilula = m.role === "assistant" && m.id === ultimaResposta && (m.kind === "text" || m.kind === "structured")
+                  ? <AgentePilula agentId="aura" nome="Aura" estado={!m.text && !m.answer ? "pensando" : m.streaming || m.pendente || (sending && !m.answer) ? "falando" : "idle"} />
+                  : null;
                 if (m.kind === "text") {
                   const isUser = m.role === "user";
                   if (isUser && editando === m.id) {
@@ -1029,6 +1034,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                   }
                   return (
                     <div key={m.id} data-msg={m.id} className={`group/msg flex flex-col ${isUser ? "items-end" : "items-start"}`}>
+                      {pilula}
                       <div style={{ fontSize: fonteChat(22) }} className={`max-w-[85%] rounded-2xl px-4 py-2.5 font-tech leading-[1.65] whitespace-pre-wrap
                         ${isUser
                           ? "bg-slate-100 text-slate-900 border border-slate-200/80 dark:bg-white/[0.09] dark:text-white/90 dark:border-white/10"
@@ -1097,6 +1103,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                   return (
                     <div key={m.id} data-msg={m.id} className="group/msg flex justify-start">
                       <div className={revista ? "w-full" : "max-w-[85%] w-full"}>
+                        {pilula}
                         {revista ? (
                           <>
                           <MagazineBoundary fallback={padrao}>

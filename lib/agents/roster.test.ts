@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// índice de avatares vivos fixo no teste (o real cresce conforme o estúdio salva agentes)
+vi.mock("@/public/avatars/index.json", () => ({ default: { agentes: { aura: { estados: { idle: "/avatars/aura/idle.webp?v=t" } } } } }));
 import { rosterBase, rosterComMentores, mergeProfiles, inicial, isAgentKey, publicView } from "./roster";
 import { PERSONAS } from "@/lib/ai/personas";
 import { MENTOR_SEED } from "@/lib/agent/mentors";
@@ -11,9 +14,9 @@ describe("roster · base", () => {
     expect(r.find((a) => a.agentKey === "aura")?.tipo).toBe("persona");
     expect(r.find((a) => a.agentKey === "medicina")?.tipo).toBe("mentor");
   });
-  it("personas da casa têm foto padrão; agentes silenciosos não são conversacionais", () => {
+  it("personas da casa têm foto padrão (idle do avatar vivo quando existe); silenciosos não conversam", () => {
     const r = rosterBase();
-    expect(r.find((a) => a.agentKey === "aura")?.avatarPadrao).toBe("/agents/aura.png");
+    expect(r.find((a) => a.agentKey === "aura")?.avatarPadrao).toBe("/avatars/aura/idle.webp?v=t");
     expect(r.find((a) => a.agentKey === "zaeon")?.avatarPadrao).toBe("/agents/bento.png");
     expect(r.find((a) => a.agentKey === "abnt_structurer")?.conversacional).toBe(false);
     expect(r.find((a) => a.agentKey === "medicina")?.avatarPadrao).toBeNull();

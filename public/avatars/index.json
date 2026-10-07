@@ -1,0 +1,24 @@
+{
+  "agentes": {
+    "aura": {
+      "agentId": "aura",
+      "versao": "muxyfh91",
+      "motor": "sprite",
+      "estados": {
+        "idle": "/avatars/aura/idle.webp?v=muxyfh91",
+        "blink": "/avatars/aura/blink.webp?v=muxyfh91",
+        "think": "/avatars/aura/think.webp?v=muxyfh91",
+        "smile": "/avatars/aura/smile.webp?v=muxyfh91",
+        "talk_half": "/avatars/aura/talk_half.webp?v=muxyfh91"
+      },
+      "pequeno": {
+        "idle": "/avatars/aura/idle.sm.webp?v=muxyfh91",
+        "blink": "/avatars/aura/blink.sm.webp?v=muxyfh91",
+        "think": "/avatars/aura/think.sm.webp?v=muxyfh91",
+        "smile": "/avatars/aura/smile.sm.webp?v=muxyfh91",
+        "talk_half": "/avatars/aura/talk_half.sm.webp?v=muxyfh91"
+      },
+      "cor": "#6d28d9"
+    }
+  }
+}

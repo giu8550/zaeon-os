@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
+import AgentePilula from "@/components/agents/avatar/AgentePilula";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
@@ -554,6 +555,10 @@ export default function ResearchChat({
           {messages.map((m, i) => {
             const isUser = m.role === "user";
             const emCurso = sending && m.id === ultimaResposta;
+            // avatar vivo da Aura só na resposta mais recente: pensa → fala no stream → sorri ao concluir
+            const pilula = !isUser && m.id === ultimaResposta
+              ? <AgentePilula agentId="aura" nome="Aura" estado={!m.text && !m.answer ? "pensando" : emCurso ? "falando" : "idle"} />
+              : null;
             const acoesResposta = !isUser && !emCurso && m.text ? (
               <AcoesResposta
                 msgId={m.id}
@@ -567,6 +572,7 @@ export default function ResearchChat({
               return (
                 <div key={m.id} data-msg-id={m.id} className="group/msg flex justify-start">
                   <div className="max-w-[88%] w-full">
+                    {pilula}
                     {/* Clicar num conceito/próximo passo proposto pela IA já ENVIA (sem clicar no input nem Enter). */}
                     <StructuredAnswerView answer={m.answer} acoes={acoesResposta} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)}>
                       {m.blocos?.length || m.desenhando ? (
@@ -589,6 +595,7 @@ export default function ResearchChat({
             }
             return (
               <div key={m.id} data-msg-id={m.id} className={`group/msg flex flex-col ${isUser ? "items-end" : "items-start"}`}>
+                {pilula}
                 <div
                   className={`max-w-[88%] px-4 py-3 font-serif leading-[1.65] whitespace-pre-wrap ${
                     isUser

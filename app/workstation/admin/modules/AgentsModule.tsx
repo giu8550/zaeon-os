@@ -5,9 +5,15 @@
  * AgentProfile sobreposto: avatar (upload → data URL → PATCH), nome, bio, ativo, ordem, e o
  * USO (AgentUsage: total, nº de usuários, top usuários). Criar agente novo (persona ou mentor).
  * Vidro claro === escuro. Rotas: GET/POST /api/admin/agents · PATCH/DELETE /api/admin/agents/:key.
+ * "✨ avatar vivo" abre o ESTÚDIO (Etapa B): o founder descreve a persona, vê cada estado sendo
+ * gerado ao lado com o avatar já animando, aprova/rerola um a um e salva (banco). Rota:
+ * POST/DELETE /api/admin/agents/:key/avatar.
  */
 import { useCallback, useEffect, useState } from "react";
 import AgentAvatar from "@/components/agents/AgentAvatar";
+import EstudioAvatar from "@/components/agents/avatar/EstudioAvatar";
+import { invalidarManifestos, useManifesto } from "@/components/agents/avatar/hooks";
+import { AVATAR_LOOKS } from "@/lib/avatars/looks";
 import { VIDRO_BOLHA, VIDRO_CHIP, VIDRO_POPOVER, TXT, TXT_2, TXT_MUDO } from "@/lib/canal/vidro";
 
 type Top = { userId: string; contagem: number; ultimoUso: string; nome: string | null; email: string | null };
@@ -26,6 +32,8 @@ export default function AgentsModule({ glassPanel }: { glassPanel: string }) {
   const [criando, setCriando] = useState(false);
   const [novo, setNovo] = useState({ agentKey: "", tipo: "mentor", nome: "", bio: "", curso: "", personaText: "" });
   const [msg, setMsg] = useState<string | null>(null);
+  const [estudio, setEstudio] = useState<Agente | null>(null);
+  const [rev, setRev] = useState(0);
 
   const carregar = useCallback(async () => {
     try {
@@ -105,23 +113,71 @@ export default function AgentsModule({ glassPanel }: { glassPanel: string }) {
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pr-1">
-        {lista.map((a) => <Card key={a.agentKey} a={a} onPatch={patch} onAvatar={trocarAvatar} />)}
+        {lista.map((a) => <Card key={`${a.agentKey}-${rev}`} a={a} onPatch={patch} onAvatar={trocarAvatar} onEstudio={() => setEstudio(a)} />)}
+      </div>
+      {estudio && <EstudioModal a={estudio} onFechar={() => setEstudio(null)} onMudou={() => { invalidarManifestos(); setRev((r) => r + 1); }} />}
+    </div>
+  );
+}
+
+/** O estúdio em tela cheia por cima do admin (tela dividida: formulário | prévia ao vivo). */
+function EstudioModal({ a, onFechar, onMudou }: { a: Agente; onFechar: () => void; onMudou: () => void }) {
+  const manifest = useManifesto(a.agentKey);
+  const look = AVATAR_LOOKS[a.agentKey];
+  const doBanco = !!manifest?.estados.idle?.startsWith("/api/");
+  const baseUrl = manifest ? (doBanco ? `/api/agents/avatars/${a.agentKey}/base.webp` : `/avatars/${a.agentKey}/base.webp`) : null;
+  const [apagando, setApagando] = useState(false);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onFechar]);
+  const apagar = async () => {
+    if (!window.confirm(`Apagar o avatar vivo de ${a.nome}? (volta pra foto${look ? " / avatar da casa" : ""})`)) return;
+    setApagando(true);
+    await fetch(`/api/admin/agents/${a.agentKey}/avatar`, { method: "DELETE" }).catch(() => null);
+    setApagando(false);
+    onMudou();
+    onFechar();
+  };
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`Avatar vivo de ${a.nome}`} className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-3 sm:p-6">
+      <div className={`mx-auto max-w-[1280px] rounded-[28px] p-4 sm:p-6 ${VIDRO_POPOVER}`}>
+        <EstudioAvatar
+          key={manifest?.versao ?? "novo"}
+          endpoint={`/api/admin/agents/${a.agentKey}/avatar`}
+          agentId={a.agentKey}
+          nome={a.nome}
+          personagemInicial={look?.personagem ?? `${a.nome}${a.curso ? `, mentor(a) de ${a.curso}` : ""}: ${a.bio}`}
+          corInicial={look?.cor}
+          existente={manifest}
+          baseUrlExistente={baseUrl}
+          fotoAtual={a.avatarUrl}
+          onSalvo={onMudou}
+          onFechar={onFechar}
+        />
+        {doBanco && (
+          <div className="mt-4 flex justify-end">
+            <button type="button" disabled={apagando} onClick={() => void apagar()} className={`min-h-[40px] px-3 rounded-xl text-[11px] ${TXT_MUDO} hover:text-rose-500 dark:hover:text-rose-300`}>apagar avatar vivo</button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Card({ a, onPatch, onAvatar }: { a: Agente; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean>; onAvatar: (k: string, f: File | null) => void }) {
+function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean>; onAvatar: (k: string, f: File | null) => void; onEstudio: () => void }) {
+  const [hover, setHover] = useState(false);
   const [nome, setNome] = useState(a.nome);
   const [bio, setBio] = useState(a.bio);
   const [ordem, setOrdem] = useState(String(a.ordem));
   useEffect(() => { setNome(a.nome); setBio(a.bio); setOrdem(String(a.ordem)); }, [a.nome, a.bio, a.ordem]);
   const sujo = nome !== a.nome || bio !== a.bio || Number(ordem) !== a.ordem;
   return (
-    <div className={`p-4 rounded-[22px] flex flex-col gap-3 ${VIDRO_BOLHA} ${a.ativo ? "" : "opacity-60"}`}>
+    <div className={`p-4 rounded-[22px] flex flex-col gap-3 ${VIDRO_BOLHA} ${a.ativo ? "" : "opacity-60"}`} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}>
       <div className="flex items-start gap-3">
         <label className="relative cursor-pointer shrink-0" title="Trocar foto">
-          <AgentAvatar src={a.avatarUrl} nome={a.nome} size={56} emoji={a.emoji} />
+          <AgentAvatar src={a.avatarUrl} nome={a.nome} size={56} emoji={a.emoji} agentId={a.agentKey} hover={hover} />
           <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => onAvatar(a.agentKey, e.target.files?.[0] ?? null)} aria-label={`Trocar foto de ${a.nome}`} />
           <span className="absolute -bottom-1 -right-1 grid place-items-center w-6 h-6 rounded-full text-[11px] bg-cyan-500 text-slate-950 shadow">✎</span>
         </label>
@@ -129,6 +185,7 @@ function Card({ a, onPatch, onAvatar }: { a: Agente; onPatch: (k: string, b: Rec
           <input value={nome} onChange={(e) => setNome(e.target.value)} aria-label="Nome" className={`w-full ${inputCls} font-bold`} />
           <p className={`mt-1 text-[10.5px] font-mono uppercase tracking-widest ${TXT_MUDO}`}>@{a.agentKey} · {a.tipo}{a.curso ? ` · ${a.curso}` : ""}{a.custom ? " · custom" : ""}</p>
         </div>
+        <button type="button" onClick={onEstudio} title="Criar / revisar o avatar vivo (estúdio)" className={`shrink-0 min-h-[40px] px-3 rounded-xl text-[11px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>✨ avatar vivo</button>
       </div>
       <input value={bio} onChange={(e) => setBio(e.target.value)} placeholder="bio" aria-label="Bio" className={`${inputCls} text-[12px]`} />
       <div className="flex items-center gap-2">
