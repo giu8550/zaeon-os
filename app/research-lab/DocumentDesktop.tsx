@@ -32,6 +32,10 @@ interface DocumentDesktopProps {
   onDropFiles?: (files: File[]) => void;
   /** Layout espelhado (canhoto) — o painel de documentos vai pra esquerda. */
   flipped?: boolean;
+  /** Itens da pasta arrastáveis (mime do dataTransfer = este; valor = o id) — ex.: estudo → foco na conversa. */
+  sessionDragMime?: string;
+  /** Nome da pasta (padrão "📁 Minhas coisas"). */
+  rotuloPasta?: string;
 }
 
 export default function DocumentDesktop({
@@ -52,6 +56,8 @@ export default function DocumentDesktop({
   onView,
   onDropFiles,
   flipped,
+  sessionDragMime,
+  rotuloPasta = "📁 Minhas coisas",
 }: DocumentDesktopProps) {
   const { files, save: saveLibraryFile, remove: removeLibraryFile } = useLibraryFiles();
   const { items: trashItems, trash, restore, purge } = useTrash();
@@ -117,7 +123,7 @@ export default function DocumentDesktop({
         className="text-[9px] font-black uppercase tracking-[0.16em] mb-2.5 flex items-center gap-1.5 shrink-0"
         style={{ color: "#9595b4" }}
       >
-        {openPopover === "citations" ? "🔖 Citações salvas" : showTrash ? "🗑️ Lixeira" : showFolder ? "📁 Minhas coisas" : "🗂️ Documentos"}
+        {openPopover === "citations" ? "🔖 Citações salvas" : showTrash ? "🗑️ Lixeira" : showFolder ? rotuloPasta : "🗂️ Documentos"}
       </h3>
 
       {/* Content: citações / lixeira / pastas / grid de docs */}
@@ -156,7 +162,9 @@ export default function DocumentDesktop({
             {sessions.map((s) => (
               <div
                 key={s.id}
-                className="group relative rounded-[10px] hover:bg-white/[0.08] transition-colors"
+                draggable={!!sessionDragMime}
+                onDragStart={sessionDragMime ? (e) => { e.dataTransfer.setData(sessionDragMime, s.id); e.dataTransfer.effectAllowed = "copy"; } : undefined}
+                className={`group relative rounded-[10px] hover:bg-white/[0.08] transition-colors ${sessionDragMime ? "cursor-grab active:cursor-grabbing" : ""}`}
                 style={{ border: "1px solid rgba(255,255,255,0.08)" }}
               >
                 <button onClick={() => onOpenSession(s.id)} className="text-left w-full px-3 py-2 text-[10.5px] text-white/80">
