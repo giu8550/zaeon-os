@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import AgentAvatar from "@/components/agents/AgentAvatar";
+import Cracha, { useHolofote, type DadosCracha } from "@/components/agents/Cracha";
+import { intercalar, nativosVitrine, type AgenteVitrine } from "@/lib/agents/nativos";
 import { agentAvatars } from "@/lib/canal/flags";
 
 /**
@@ -54,8 +55,13 @@ const ELENCO: Mentor[] = [
 
 export default function MentoresCarrossel({ className = "", semRotulo = false }: { className?: string; /** sem a linha "13 mentores · ao vivo…" */ semRotulo?: boolean }) {
     const [mentores, setMentores] = useState<Mentor[]>(ELENCO);
+    /** Os NATIVOS da casa (Aura, Nina, Caio…) misturados aos mentores plugáveis na vitrine. */
+    const [nativos, setNativos] = useState<AgenteVitrine[]>(() => nativosVitrine());
+    const vitrine: AgenteVitrine[] = intercalar<AgenteVitrine>(nativos, mentores.map((m) => ({ ...m, tipo: "mentor" as const })));
     const [aoVivo, setAoVivo] = useState(false);
     const trilhoRef = useRef<HTMLDivElement>(null);
+    // HOLOFOTE: um crachá visível por vez fica "em cena" (pula, dá um oi, sorri, faz caras)
+    const cena = useHolofote(trilhoRef, vitrine.length * 2);
     const [podeVoltar, setPodeVoltar] = useState(false);
     const [podeAvancar, setPodeAvancar] = useState(true);
     const [semMovimento, setSemMovimento] = useState(false);
@@ -90,6 +96,8 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
                 const base: Mentor[] = Array.isArray(j) && j.length > 0 ? j : ELENCO;
                 const comFoto = base.map((m) => { const p = av.get(m.slug); return p ? { ...m, avatarUrl: p.avatarUrl, name: p.nome || m.name } : m; });
                 setMentores(comFoto);
+                // nativos: o nome editado no admin (AgentProfile) vale aqui também
+                setNativos(nativosVitrine().map((n) => { const p = av.get(n.slug); return p?.nome ? { ...n, name: p.nome } : n; }));
                 if (Array.isArray(j) && j.length > 0) setAoVivo(true);
             })
             .catch(() => {
@@ -217,7 +225,7 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
             <div className="mb-6 flex items-end justify-between gap-6">
                 {semRotulo ? <span /> : (
                 <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-slate-500 dark:text-slate-500">
-                    {mentores.length} mentores
+                    {nativos.length} nativos · {mentores.length} mentores
                     {aoVivo ? " · ao vivo da sala de plugins" : ""}
                 </p>
                 )}
@@ -258,82 +266,29 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
             >
                 {/* Lista DUPLICADA: alimenta o loop sem costura do glide contínuo. */}
                 {/* `dark`: os cards dos agentes são VIDRO PRETO nos dois temas (contraste melhor no claro) */}
-                {[...mentores, ...mentores].map((m, i) => (
-                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cartao m={m} indice={i % mentores.length} /></div>
+                {[...vitrine, ...vitrine].map((m, i) => (
+                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cracha d={dadosCracha(m, i % vitrine.length)} emCena={i === cena} /></div>
                 ))}
             </div>
         </div>
     );
 }
 
-/**
- * CRACHÁ do mentor (landing = só vitrine, nada de contratar aqui): pendurado por uma fita com
- * presilha, foto grande (o avatar vivo — pisca e sorri no hover do crachá inteiro), nome, curso, o
- * que entrega e um rodapé de identificação. Sem avatar aprovado → a foto vira a inicial no degradê.
- */
-function Cartao({ m, indice }: { m: Mentor; indice: number }) {
-    const artefatos = (m.signatureArtifacts ?? []).slice(0, 3);
-    const [hover, setHover] = useState(false);
-    const id = `ZA-${String((m as { order?: number }).order ?? indice + 1).padStart(3, "0")}`;
-    return (
-        <div className="shrink-0 w-[250px] sm:w-[262px] pt-7" onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}>
-            {/* balanço de crachá pendurado: gira em torno da fita */}
-            <div className="relative origin-top transition-transform duration-500 ease-out motion-reduce:transition-none" style={{ transform: hover ? "rotate(-1.6deg) translateY(2px)" : undefined }}>
-                {/* fita + presilha */}
-                <span aria-hidden className="absolute left-1/2 -translate-x-1/2 -top-7 h-8 w-5 rounded-t-sm bg-gradient-to-b from-cyan-400/0 via-cyan-500/70 to-cyan-500" />
-                <span aria-hidden className="absolute left-1/2 -translate-x-1/2 -top-1.5 h-4 w-9 rounded-md bg-gradient-to-b from-slate-200 to-slate-400 shadow-[0_2px_6px_rgba(0,0,0,0.5)] border border-white/60" />
-                <article className="relative rounded-[22px] border border-white/10 bg-black/80 backdrop-blur-xl px-5 pt-6 pb-4 flex flex-col items-center text-center shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] transition-[border-color,box-shadow] duration-300 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
-                    {/* furo do crachá */}
-                    <span aria-hidden className="absolute top-2.5 left-1/2 -translate-x-1/2 h-1.5 w-10 rounded-full bg-white/10 shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]" />
-                    <div className="w-full flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.22em]">
-                        <span className="text-white/70">Zaeon</span>
-                        <span className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0.5 text-cyan-300">mentor</span>
-                    </div>
-
-                    {/* FOTO */}
-                    <div className="mt-4 rounded-[18px] p-[3px] bg-gradient-to-b from-cyan-400/50 to-cyan-500/10">
-                        <AgentAvatar
-                            src={m.avatarUrl}
-                            nome={m.name}
-                            size={140}
-                            agentId={m.slug}
-                            hover={hover}
-                            className="!rounded-[15px] !border-0"
-                            fallback={
-                                <span aria-hidden className="grid h-[140px] w-[140px] place-items-center rounded-[15px] bg-gradient-to-br from-cyan-500/25 to-blue-600/20 text-5xl font-semibold text-cyan-200">
-                                    {m.emoji && m.emoji !== "⟁" ? m.emoji : m.name.slice(0, 1)}
-                                </span>
-                            }
-                        />
-                    </div>
-
-                    <h3 className="mt-4 text-[22px] font-semibold tracking-tight leading-none text-white">{m.name}</h3>
-                    <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-cyan-300/90">{m.course}</p>
-                    {m.tagline ? <p className="mt-3 text-[12.5px] leading-snug text-white/80 line-clamp-2 min-h-[2.5em]">{m.tagline}</p> : null}
-
-                    {artefatos.length > 0 ? (
-                        <div className="mt-3 flex flex-wrap justify-center gap-1">
-                            {artefatos.map((a) => (
-                                <span key={a} className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[10.5px] text-white/85">{a}</span>
-                            ))}
-                        </div>
-                    ) : null}
-
-                    {/* rodapé de identificação */}
-                    <div className="mt-4 pt-3 w-full border-t border-dashed border-white/15 flex items-end justify-between gap-3">
-                        <span className="flex flex-col items-start">
-                            <span className="font-mono text-[8.5px] uppercase tracking-[0.2em] text-white/45">id</span>
-                            <span className="font-mono text-[11px] text-white/85">{id}</span>
-                        </span>
-                        <span aria-hidden className="h-6 flex-1 max-w-[96px] opacity-70" style={{ background: "repeating-linear-gradient(90deg,rgba(255,255,255,.85) 0 2px,transparent 2px 4px,rgba(255,255,255,.85) 4px 5px,transparent 5px 8px,rgba(255,255,255,.85) 8px 11px,transparent 11px 12px)" }} />
-                        {m.guardrail ? (
-                            <span className="font-mono text-[8.5px] uppercase tracking-[0.18em] text-white/60 border border-white/15 rounded px-1 py-0.5" title={m.guardrail}>edu</span>
-                        ) : null}
-                    </div>
-                </article>
-            </div>
-        </div>
-    );
+/** Agente da vitrine → dados do crachá. ID: nativos ZA-N01…, mentores ZA-001… */
+function dadosCracha(m: AgenteVitrine, indice: number): DadosCracha {
+    const n = m.order ?? indice + 1;
+    return {
+        agentId: m.slug,
+        nome: m.name,
+        curso: m.course,
+        tagline: m.tagline,
+        artefatos: m.signatureArtifacts,
+        emoji: m.emoji,
+        foto: m.avatarUrl,
+        id: m.tipo === "nativo" ? `ZA-N${String(n).padStart(2, "0")}` : `ZA-${String(n).padStart(3, "0")}`,
+        rotulo: m.tipo,
+        educacional: !!m.guardrail,
+    };
 }
 
 function Seta({
