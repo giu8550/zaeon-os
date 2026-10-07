@@ -181,7 +181,9 @@ Detectar intenção "gere/crie uma imagem de…" → Imagen 4 → imagem no bal�
 Já SET: `GOOGLE_CREDENTIALS`/`GOOGLE_PROJECT_ID`/`GOOGLE_CLIENT_EMAIL`/`GOOGLE_PRIVATE_KEY`/`GOOGLE_LOCATION`, `GEMINI_MODEL`. **Adicionar:**
 ```
 GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts
-IMAGEN_MODEL=<id do Imagen 4 no projeto, ex.: imagen-4.0-generate-001>
+# Imagem: Gemini image por padrão (Imagen dá 404 no projeto, out/2026). Tudo opcional:
+# GEMINI_IMAGE_MODEL=gemini-2.5-flash-image  GEMINI_IMAGE_LOCATIONS=global,us-central1,…
+# IMAGEN_MODEL=imagen-…  (override; se falhar cai pro Gemini image)
 VEO_MODEL=<id do Veo 3 no projeto>
 LYRIA_MODEL=<id do Lyria, se usar>
 ZAEON_TTS_VOICE_F=<nome da voz feminina pt-BR do Gemini-TTS>

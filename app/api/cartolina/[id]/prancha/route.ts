@@ -1,7 +1,7 @@
 /**
  * POST /api/cartolina/:id/prancha { cardId } → { card }
  * A Aura desenha a prancha do card (legenda/título = o assunto). Desenho bom → primitivas no
- * card. Não desenhável / desenho ruim → imagem (Imagen) guardada como StudioArtifact e ligada
+ * card. Não desenhável / desenho ruim → imagem (Gemini image) guardada como StudioArtifact e ligada
  * ao card. Atrás de CARTOLINA_MEMORIA + CADERNO_ENABLED. Só quem ESCREVE no board.
  */
 import { NextResponse } from "next/server";
@@ -40,7 +40,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
     try {
       const img = await generateImage(r.promptImagem);
-      if (!img) throw new Error("Imagen não retornou imagem");
+      if (!img) throw new Error("A geração de imagem não retornou imagem");
       const ext = /jpe?g/i.test(img.mimeType) ? "jpg" : "png";
       const { writeStudioFile } = await import("@/lib/studio/storage");
       await writeStudioFile(art.id, ext, Buffer.from(img.data, "base64"));
