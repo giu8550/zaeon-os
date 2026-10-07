@@ -14,7 +14,7 @@
  * celular), o resto fica no quadro estático; prefers-reduced-motion = sem movimento.
  */
 import dynamic from "next/dynamic";
-import { useRef, useState, type PointerEvent } from "react";
+import { useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { inicial } from "@/lib/agents/roster";
 import { LIMIAR_PEQUENO_PX, type AvatarManifest, type SinalAvatar } from "@/lib/avatars/estados";
 import { PRIORIDADE } from "@/lib/avatars/vida";
@@ -49,12 +49,14 @@ type Props = {
   presenca?: boolean;
   /** Modo voz: nível do áudio 0..1 → boca segue a voz. */
   boca?: number | null;
+  /** Sem avatar vivo E sem foto: mostra isto (ex.: o tile de emoji do card) no lugar da inicial. */
+  fallback?: ReactNode;
 };
 
 export default function AgentAvatar(p: Props) {
   const doServidor = useManifesto(p.manifest ? null : p.agentId);
   const manifest = p.manifest ?? doServidor;
-  if (!manifest) return <Foto {...p} />;
+  if (!manifest) return !p.src && p.fallback ? <>{p.fallback}</> : <Foto {...p} />;
   return <AvatarVivo {...p} manifest={manifest} />;
 }
 

@@ -268,19 +268,27 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
 
 function Cartao({ m }: { m: Mentor }) {
     const artefatos = (m.signatureArtifacts ?? []).slice(0, 3);
+    const [hover, setHover] = useState(false);
     return (
-        <article className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-black/80 backdrop-blur-xl p-5 flex flex-col transition-all duration-300 shadow-[0_12px_32px_-16px_rgba(2,6,23,0.38)] dark:shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
+        <article onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)} className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-black/80 backdrop-blur-xl p-5 flex flex-col transition-all duration-300 shadow-[0_12px_32px_-16px_rgba(2,6,23,0.38)] dark:shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
             <div className="flex items-start justify-between">
-                {m.avatarUrl ? (
-                    <AgentAvatar src={m.avatarUrl} nome={m.name} size={44} agentId={m.slug} className="ring-2 ring-cyan-500/30" />
-                ) : (
-                    <span
-                        aria-hidden="true"
-                        className="grid h-10 w-10 place-items-center rounded-xl border border-cyan-500/25 bg-cyan-500/10 text-lg text-cyan-600 dark:text-cyan-300"
-                    >
-                        {m.emoji || "⟁"}
-                    </span>
-                )}
+                {/* avatar vivo do mentor (estúdio) → foto → o tile de emoji de sempre */}
+                <AgentAvatar
+                    src={m.avatarUrl}
+                    nome={m.name}
+                    size={52}
+                    agentId={m.slug}
+                    hover={hover}
+                    className="ring-2 ring-cyan-500/30"
+                    fallback={
+                        <span
+                            aria-hidden="true"
+                            className="grid h-10 w-10 place-items-center rounded-xl border border-cyan-500/25 bg-cyan-500/10 text-lg text-cyan-600 dark:text-cyan-300"
+                        >
+                            {m.emoji || "⟁"}
+                        </span>
+                    }
+                />
                 {m.guardrail ? (
                     <span
                         className="rounded-md border border-slate-200 dark:border-white/15 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-800 dark:text-white/90"

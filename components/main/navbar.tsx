@@ -182,7 +182,8 @@ export const Navbar = () => {
             <Link href="/docs" className={getLinkClassName("/docs")}>Documentação</Link>
             {/* acesso direto ao laboratório, pra quem não quiser usar o cyberespaço */}
             <Link href="/research-lab" className={getLinkClassName("/research-lab")}>Laboratório</Link>
-            <Link href="/plugin-store" className={getLinkClassName("/plugin-store")}>Plugins</Link>
+            {/* "Assistentes" = a antiga Loja de Plugins (o /plugin-store continua no ar pros links antigos) */}
+            <Link href="/assistentes" className={getLinkClassName(pathname.startsWith("/plugin-store") ? "/plugin-store" : "/assistentes")}>Assistentes</Link>
             <Link href="/news" className={getLinkClassName("/news")}>Notícias</Link>
           </nav>
 

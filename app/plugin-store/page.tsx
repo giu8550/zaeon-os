@@ -114,10 +114,12 @@ export default function PluginStorePage() {
         "pointer-events-auto w-full max-w-7xl h-16 rounded-full backdrop-blur-2xl transition-all duration-500 " +
         "bg-white/90 border border-slate-300 shadow-xl dark:bg-black/40 dark:border-white/10 dark:shadow-2xl";
 
+    // MESMAS CORES dos cards da landing (MentoresCarrossel): vidro PRETO nos dois temas, borda fina,
+    // acentos ciano e brilho ciano no hover. O `dark` no card força as variantes escuras.
     const cardStyle =
-        "group relative p-6 rounded-[32px] backdrop-blur-2xl transition-all duration-500 flex flex-col h-full overflow-hidden border " +
-        "bg-white/80 border-slate-300 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:bg-cyan-950/10 dark:border-white/10 dark:shadow-2xl " +
-        "hover:border-cyan-500/50 dark:hover:border-cyan-400/40";
+        "dark group relative p-6 rounded-2xl backdrop-blur-xl transition-all duration-300 flex flex-col h-full overflow-hidden border " +
+        "bg-black/80 border-white/10 text-white shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] " +
+        "hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]";
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-[#030014] text-slate-950 dark:text-white transition-colors duration-500 font-sans">
@@ -135,7 +137,7 @@ export default function PluginStorePage() {
                                         const from = new URLSearchParams(window.location.search).get("from");
                                         const last = sessionStorage.getItem("zaeon.lastRoom");
                                         const cand = from || last || "";
-                                        if (cand && !cand.startsWith("/plugin-store")) dest = cand;
+                                        if (cand && !cand.startsWith("/plugin-store") && !cand.startsWith("/assistentes")) dest = cand;
                                     } catch { /* */ }
                                     router.push(dest);
                                 }}
@@ -144,7 +146,7 @@ export default function PluginStorePage() {
                                 <ArrowLeftIcon className="w-5 h-5" />
                             </button>
                             <div className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-400 dark:text-cyan-900/80">
-                                Zaeon <span className="text-cyan-600 dark:text-cyan-500">Plugins</span>
+                                Zaeon <span className="text-cyan-600 dark:text-cyan-500">Assistentes</span>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -167,14 +169,14 @@ export default function PluginStorePage() {
                 {/* TÍTULO E BUSCA */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-8">
                     <div className="space-y-1 text-center md:text-left">
-                        <h1 className="text-6xl font-black tracking-tighter text-slate-950 dark:text-white leading-none">Loja de Plugins</h1>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.4em] text-cyan-600 dark:text-cyan-400 pl-1">Turbine sua estação de trabalho</p>
+                        <h1 className="text-6xl font-black tracking-tighter text-slate-950 dark:text-white leading-none">Assistentes</h1>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.4em] text-cyan-600 dark:text-cyan-400 pl-1">Um especialista pra cada área do seu curso</p>
                     </div>
                     <div className="relative w-full max-w-md">
                         <MagnifyingGlassIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                         <input
                             type="text"
-                            placeholder="Buscar plugins..."
+                            placeholder="Buscar assistentes..."
                             className="w-full pl-14 pr-6 py-4 rounded-[22px] bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 outline-none focus:ring-2 ring-cyan-500 transition-all text-sm shadow-inner dark:shadow-none"
                             onChange={(e) => setSearch(e.target.value)}
                         />
@@ -216,7 +218,7 @@ export default function PluginStorePage() {
                         </div>
                     ) : filteredPlugins.length === 0 ? (
                         <div className="col-span-full py-24 text-center text-[11px] font-bold uppercase tracking-[0.3em] text-slate-400 dark:text-white/30">
-                            Nenhum módulo encontrado
+                            Nenhum assistente encontrado
                         </div>
                     ) : (
                         filteredPlugins.map((plugin) => <PluginCard key={plugin.id} plugin={plugin} cardStyle={cardStyle} />)
@@ -369,15 +371,15 @@ function PluginCard({ plugin, cardStyle }: { plugin: Plugin; cardStyle: string }
 
             {/* CAPA: imagem do plugin (se houver). Cai pro ícone da categoria quando vazio. */}
             {plugin.imageUrl && (
-                <div className="-mx-6 -mt-6 mb-6 h-36 overflow-hidden rounded-t-[32px] relative">
+                <div className="-mx-6 -mt-6 mb-6 h-36 overflow-hidden rounded-t-2xl relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={plugin.imageUrl} alt={plugin.name} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-white/80 dark:from-[#030014]/80 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
                 </div>
             )}
 
             <div className="flex justify-between items-start mb-8">
-                <div className="p-4 rounded-2xl bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border border-cyan-500/20 shadow-inner">
+                <div className="p-4 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border border-cyan-500/25">
                     {getIcon()}
                 </div>
                 {plugin.tag && (
@@ -389,8 +391,8 @@ function PluginCard({ plugin, cardStyle }: { plugin: Plugin; cardStyle: string }
 
             <div className="space-y-3 flex-1">
                 <h3 className="text-2xl font-black tracking-tighter text-slate-950 dark:text-white leading-tight">{plugin.name}</h3>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-cyan-800 uppercase tracking-widest">Por: {plugin.author}</p>
-                <p className={`text-sm text-slate-600 dark:text-slate-400 leading-relaxed mt-4 line-clamp-3 ${plugin.isLocked ? "blur-sm" : ""}`}>
+                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300/90">Por: {plugin.author}</p>
+                <p className={`text-[13.5px] text-slate-800 dark:text-white/90 leading-relaxed mt-4 line-clamp-3 ${plugin.isLocked ? "blur-sm" : ""}`}>
                     {plugin.description}
                 </p>
             </div>
