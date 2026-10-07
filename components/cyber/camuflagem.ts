@@ -1,6 +1,7 @@
 /**
- * camuflagem — o "macete" da nave-QG aplicado no MAPA INTEIRO: nada de superfície realista (PBR, luzes), e sim
- * holograma. Futurista e leve:
+ * camuflagem — o "macete" da nave-QG no MAPA INTEIRO, no MEIO-TERMO: as coisas continuam SÓLIDAS (paredes,
+ * servidores, móveis), mas sem PBR nem luzes — uma luz "de mentira" fixa no shader + uma borda que acende (o toque
+ * da camuflagem). O holograma puro (`camuflagem`) fica pra nave. Peças disponíveis:
  *  - VOLUMES (paredes, torres, colunas, telhados, rocha): CAMUFLAGEM — miolo quase transparente, a BORDA das curvas
  *    acende (fresnel, mostra a forma) e uma ondulação lenta escorre. Sem luz: um punhado de contas por pixel.
  *  - PISOS grandes: GRADE HOLOGRÁFICA — fundo escuro translúcido + linhas de luz calculadas no próprio shader
@@ -53,6 +54,42 @@ export function camuflagem(cor: THREE.ColorRepresentation, o: { base?: number; b
   });
 }
 
+/** o MEIO-TERMO: sólido (ou vidro, com `alpha` < 1), cor do material + emissivo, uma luz fixa de cima ("sol" falso,
+ *  sem PointLight) e uma borda que acende na cor `rim` — sem PBR, sem sombras: barato e ainda com volume. */
+export function solidoLeve(o: { cor: THREE.Color; emissivo: THREE.Color; rim: THREE.Color; alpha?: number; lados?: boolean; rimForca?: number }): THREE.ShaderMaterial {
+  const alpha = o.alpha ?? 1;
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uCor: { value: o.cor.clone() }, uEmi: { value: o.emissivo.clone() }, uRim: { value: o.rim.clone() },
+      uAlpha: { value: alpha }, uRimF: { value: o.rimForca ?? 0.55 }, uT: TEMPO_CAMUFLAGEM,
+    },
+    vertexShader: `varying vec3 vN; varying vec3 vV; varying vec3 vW; varying vec3 vNW;
+      void main() {
+        vec4 p = vec4(position, 1.0); vec3 n = normal;
+        #ifdef USE_INSTANCING
+          p = instanceMatrix * p; n = mat3(instanceMatrix) * n;
+        #endif
+        vec4 w = modelMatrix * p; vW = w.xyz;
+        vNW = normalize(mat3(modelMatrix) * n);
+        vec4 mv = viewMatrix * w; vV = -mv.xyz; vN = normalize(mat3(viewMatrix) * vNW);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `uniform vec3 uCor; uniform vec3 uEmi; uniform vec3 uRim; uniform float uAlpha; uniform float uRimF; uniform float uT;
+      varying vec3 vN; varying vec3 vV; varying vec3 vW; varying vec3 vNW;
+      void main() {
+        vec3 n = normalize(vNW);
+        float sol = max(dot(n, normalize(vec3(0.35, 0.85, 0.4))), 0.0);   // a luz "de mentira", de cima
+        float ceu = 0.5 + 0.5 * n.y;                                         // hemisfério: topo mais claro
+        vec3 c = uCor * (0.32 + 0.38 * ceu + 0.55 * sol) + uEmi;
+        float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+        float borda = pow(f, 3.0) * (0.85 + 0.15 * sin(uT * 1.3 + vW.y * 0.5));
+        c += uRim * borda * uRimF;
+        gl_FragColor = vec4(c, clamp(uAlpha + borda * 0.35 * (1.0 - uAlpha), 0.0, 1.0));
+      }`,
+    transparent: alpha < 1, depthWrite: alpha >= 1, side: o.lados ? THREE.DoubleSide : THREE.FrontSide,
+  });
+}
+
 /** o shader dos PISOS: escuro translúcido + grade de luz (passo em metros, no mundo) que respira devagar */
 export function pisoHolografico(cor: THREE.ColorRepresentation, o: { passo?: number; fundo?: number } = {}): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -70,15 +107,6 @@ export function pisoHolografico(cor: THREE.ColorRepresentation, o: { passo?: num
   });
 }
 
-const ehPiso = (m: THREE.Mesh): boolean => {
-  const g = m.geometry as THREE.BufferGeometry & { parameters?: Record<string, number> }, p = g.parameters ?? {};
-  const deitado = Math.abs(Math.abs(m.rotation.x) - Math.PI / 2) < 0.05;
-  if (g.type === "CircleGeometry") return deitado && (p.radius ?? 0) >= 6;
-  if (g.type === "PlaneGeometry") return deitado && Math.min(p.width ?? 0, p.height ?? 0) >= 6;
-  if (g.type === "CylinderGeometry") return (p.height ?? 99) <= 1 && Math.max(p.radiusTop ?? 0, p.radiusBottom ?? 0) >= 6 && !p.openEnded;
-  return false;
-};
-
 /** a cor de um material "real" (o emissivo, se tiver, é a cor que ele quer mostrar) — clareada pra virar luz */
 function tomDe(mat: THREE.MeshStandardMaterial): THREE.Color {
   const e = mat.emissive && (mat.emissive.r + mat.emissive.g + mat.emissive.b) > 0.02 ? mat.emissive.clone() : mat.color.clone();
@@ -87,11 +115,11 @@ function tomDe(mat: THREE.MeshStandardMaterial): THREE.Color {
 }
 
 /**
- * Percorre um ambiente JÁ MONTADO e troca o que é "superfície realista" por holograma. Materiais repetidos viram UM
+ * Percorre um ambiente JÁ MONTADO e troca o PBR pelo MEIO-TERMO (`solidoLeve`): continua sólido, sem luz de verdade. Materiais repetidos viram UM
  * shader (cache por material). Some PointLight/SpotLight (com tudo sem luz, elas só custam). `pular` preserva peças.
  */
 export function camuflarGrupo(raiz: THREE.Object3D, o: { pular?: (m: THREE.Object3D) => boolean } = {}): void {
-  const cache = new Map<THREE.Material, THREE.Material>(), cachePiso = new Map<THREE.Material, THREE.Material>();
+  const cache = new Map<THREE.Material, THREE.Material>();
   const luzes: THREE.Light[] = [];
   raiz.traverse((obj) => {
     if ((obj as THREE.PointLight).isPointLight || (obj as THREE.SpotLight).isSpotLight) { luzes.push(obj as THREE.Light); return; }
@@ -105,13 +133,14 @@ export function camuflarGrupo(raiz: THREE.Object3D, o: { pular?: (m: THREE.Objec
         if (!b) { b = new THREE.MeshBasicMaterial({ map: st.map, color: st.color, transparent: st.transparent, opacity: st.opacity, side: st.side, depthWrite: st.depthWrite }); cache.set(mat, b); }
         return b;
       }
-      if (ehPiso(m)) {
-        let p = cachePiso.get(mat);
-        if (!p) { p = pisoHolografico(tomDe(st)); cachePiso.set(mat, p); }
-        return p;
-      }
+      // MEIO-TERMO: tudo continua sólido (vidro continua vidro, com a mesma transparência), sem PBR nem luzes
       let c = cache.get(mat);
-      if (!c) { c = camuflagem(tomDe(st), { lados: st.side === THREE.DoubleSide || st.transparent }); cache.set(mat, c); }
+      if (!c) {
+        const emi = st.emissive ? st.emissive.clone().multiplyScalar(st.emissiveIntensity ?? 1) : new THREE.Color(0);
+        const alpha = st.transparent ? Math.max(0.18, st.opacity) : 1;
+        c = solidoLeve({ cor: st.color.clone(), emissivo: emi, rim: tomDe(st), alpha, lados: st.side === THREE.DoubleSide });
+        cache.set(mat, c);
+      }
       return c;
     };
     m.material = Array.isArray(m.material) ? m.material.map(troca) : troca(m.material);
