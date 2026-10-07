@@ -1051,6 +1051,41 @@ model AgentProfile {
   @@map("agent_profiles")
 }
 
+/// Canal de saída de um agente (WhatsApp hoje; e-mail no PR-W5). O chip é da ChipFlow:
+/// `chipflowId` = WarmerInstance.id (define o shard do bridge). Referência externa, não chave.
+/// Spec: docs/HANDOFF_AGENTE_MENSAGEIRO_V3.md §3 PR-W1.
+model AgentChannel {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  agentKey            String                          // → AgentProfile.agentKey / roster
+  tipo                String                          // "whatsapp" | "email"
+  origem              String    @default("chipflow")  // "chipflow" | "proprio" | "log"
+  chipflowId          Int?                            // WarmerInstance.id na ChipFlow
+  chipflowToken       String?                         // 🔒 evo_token (não usado no bridge; guardado pro diretório/HTTP)
+  tokenAtualizadoEm   DateTime?
+  numero              String?                         // E.164 informativo — a ChipFlow é dona do número
+  ownerEmail          String?
+  pool                String?                         // "operator" | "owner"
+  tierReportado       String?
+  mensagensReportadas Int?
+  apiVersion          String?
+  proxyInfo           Json?
+  estado              String    @default("nao_vinculado") // nao_vinculado | vinculado | pausado_na_origem | restrito | erro
+  limiteDia           Int       @default(20)          // teto local (tier critical); governança real no PR-W3
+  enviadosHoje        Int       @default(0)
+  diaContagem         String?                         // YYYY-MM-DD (BRT) a que enviadosHoje se refere
+  ultimoEnvioEm       DateTime?
+  ultimoErro          String?
+  sincronizadoEm      DateTime?
+  email               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([agentKey, tipo])
+  @@index([estado])
+  @@index([chipflowId])
+  @@map("agent_channels")
+}
+
 // Avatar vivo gerado no ADMIN (Etapa B): um quadro por (agente, estado, tamanho). Os sets da
 // Etapa A ficam em public/avatars (build); este sobrepõe. tamanho: "g" (512) | "p" (160) |
 // "base" (1024, só estado "base" — pra rerolar expressões depois sem trocar o personagem).
