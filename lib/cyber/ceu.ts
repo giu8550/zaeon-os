@@ -107,7 +107,7 @@ export const PALCO = {
   /** colisores da borda: passo e raio */
   passo: 0.9, colR: 0.5,
   /** a cabine do DJ (atrás da mesa): centro, raio; quem está nela olha pra pista (+z da sala) */
-  cabine: { x: 0, z: -9.6, r: 0.95 },
+  cabine: { x: 0, z: -9.35, r: 0.95 },   // o centro encosta na mesa (colisor dela vai até −9,05): as mãos alcançam a controladora
 } as const;
 export const MESA_DJ = { x: 0, z: -8.4, larg: 3.4, prof: 1, topo: 1.05 } as const;
 export const MOVEIS: Record<NomeSala, Movel[]> = {
@@ -156,6 +156,8 @@ export function naCabineDJ(p: P2): boolean {
   const s = CIDADE.salas.lounge, l = naSala(s, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z);
   return Math.hypot(l.x - PALCO.cabine.x, l.z - PALCO.cabine.z) <= PALCO.cabine.r;
 }
+/** o ponto (mundo) onde o DJ fica — quem para na cabine é puxado devagar pra cá (as mãos caem na controladora) */
+export const pontoDaCabineDJ = (): P2 => mundo(daSala(CIDADE.salas.lounge, PALCO.cabine.x, PALCO.cabine.z));
 /** pra onde o DJ olha (facing = atan2(dx, dz) do mundo): o +z da sala, rumo à pista */
 export const rumoDoDJ = () => rotDaSala(CIDADE.salas.lounge);
 /** giro da sala: +z local aponta pro centro da ilha (onde fica a porta) */
