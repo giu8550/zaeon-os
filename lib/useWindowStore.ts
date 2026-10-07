@@ -6,8 +6,10 @@ export interface WindowEntry {
   id: string;
   label: string;
   emoji: string;
-  /** "document" = chat com a Aura; "pdfview" = o PDF real, selecionável. */
-  type: "research" | "document" | "pdfview";
+  /** "document" = chat com a Aura; "pdfview" = o PDF real, selecionável; "artefato" = diagrama/aula (lib/chat/documentos). */
+  type: "research" | "document" | "pdfview" | "artefato";
+  /** só em "artefato": qual artefato do Studio a aba mostra */
+  artefato?: { studioKind: string; artifactId: string; titulo: string; data?: any };
 }
 
 const RESEARCH_WINDOW: WindowEntry = {

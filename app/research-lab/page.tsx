@@ -10,7 +10,13 @@ import "@/src/i18n";
 
 // --- IMPORTS ---
 import { Navbar } from "@/components/main/navbar";
-import { Mic, MicOff, Code2, Building2 } from "lucide-react";
+import { Mic, MicOff, Code2, Building2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ConversasSlotContext } from "@/components/chat/ConversasSlot";
+import ConversasDaSala from "@/components/chat/ConversasDaSala";
+
+// Ramo da árvore sob o nome da sala na sidebar: o da sala aberta cresce e rola; o da outra é curto.
+const RAMO_ATIVO = "-mt-1.5 ml-4 pl-2 border-l border-slate-300 dark:border-white/10 flex-1 min-h-0 flex flex-col text-slate-900 dark:text-white";
+const RAMO = "-mt-1.5 ml-4 pl-2 border-l border-slate-300 dark:border-white/10 max-h-[30vh] overflow-y-auto custom-scrollbar";
 import dynamic from "next/dynamic";
 
 const StudyRoomContent = dynamic(
@@ -738,6 +744,21 @@ export default function HomeworkPage({
   // --- CORE STATES ---
   const [mounted, setMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Sidebar FIXADA aberta (estilo ChatGPT): navegação + as conversas da sala, numa coluna só.
+  // Lembrada no aparelho; tela estreita começa recolhida (o hover ainda abre por cima).
+  const [sidebarFixada, setSidebarFixada] = useState(false);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("zaeon.sidebar.fixada");
+      setSidebarFixada(v !== null ? v === "1" : window.innerWidth >= 1280);
+    } catch { /* ignore */ }
+  }, []);
+  const alternarFixada = () => setSidebarFixada((v) => {
+    try { localStorage.setItem("zaeon.sidebar.fixada", v ? "0" : "1"); } catch { /* ignore */ }
+    return !v;
+  });
+  // Onde o chat da sala ativa desenha a lista de conversas (portal) — components/chat/ConversasSlot.
+  const [slotConversas, setSlotConversas] = useState<HTMLDivElement | null>(null);
   const [isChatLeft, setIsChatLeft] = useState(false);
   const router = useRouter();
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -2448,7 +2469,14 @@ export default function HomeworkPage({
     );
   }
 
+  const salaComChat = activeTab === "sala-de-estudos" || activeTab === "pesquisa";
+  const sidebarAberta = isSidebarOpen || sidebarFixada;
+  // fixada = ocupa espaço (o conteúdo anda); só no hover = abre POR CIMA (o conteúdo fica parado)
+  const larguraFixa = sidebarFixada ? (salaComChat ? 264 : 180) : 54;
+  const recuoSidebar: React.CSSProperties = isEmbedded ? {} : { [isChatLeft ? "paddingRight" : "paddingLeft"]: larguraFixa + 26, transition: "padding 0.4s" };
+
   return (
+    <ConversasSlotContext.Provider value={isEmbedded ? null : { el: slotConversas, sala: activeTab === "pesquisa" ? "pesquisa" : activeTab === "sala-de-estudos" ? "estudos" : null }}>
     <div
       className={`relative transition-all duration-500 overflow-hidden flex font-sans w-full bg-slate-100 dark:bg-[#030014]
             ${isEmbedded ? "h-full" : "h-screen"}
@@ -2486,45 +2514,67 @@ export default function HomeworkPage({
         </AnimatePresence>
       )}
 
-      {/* SIDEBAR ULTRA-FINA — oculta quando embutido (workstation provê a navegação) */}
+      {/* SIDEBAR — fina (ícones) ou FIXADA aberta com as conversas da sala ativa (estilo ChatGPT).
+          Oculta quando embutido (workstation provê a navegação). */}
       {!isEmbedded && (
         <motion.nav
           onMouseEnter={() => setIsSidebarOpen(true)}
           onMouseLeave={() => setIsSidebarOpen(false)}
-          animate={{ width: isSidebarOpen ? 180 : 54 }}
+          animate={{ width: sidebarAberta ? (salaComChat ? 264 : 180) : 54 }}
           className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-all duration-500
             bg-gradient-to-b from-sky-100/90 to-blue-200/80 border-blue-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]
             dark:from-transparent dark:to-transparent dark:bg-[rgba(22,22,34,0.55)] dark:border-white/10 dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)]
             ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
-          <div className="flex flex-col gap-3 px-2.5">
-            {/* Sala de Estudos — chat + Meus Estudos + Estudos */}
+          <div className="flex-1 min-h-0 flex flex-col gap-3 px-2.5">
+            {/* fixar/recolher a sidebar (fixada = as conversas ficam sempre à vista) */}
+            {sidebarAberta && (
+              <button
+                type="button"
+                onClick={alternarFixada}
+                aria-label={sidebarFixada ? "Recolher a barra lateral" : "Fixar a barra lateral aberta"}
+                title={sidebarFixada ? "Recolher a barra lateral" : "Fixar aberta"}
+                className="self-end -mt-3 -mb-1 w-7 h-7 rounded-lg flex items-center justify-center text-slate-600 dark:text-white/60 hover:bg-slate-100 dark:hover:bg-white/10"
+              >
+                {sidebarFixada ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+              </button>
+            )}
+            {/* Cada SALA é um nó com as SUAS conversas embaixo (estilo ChatGPT): a sala aberta mostra a lista
+                completa (o chat dela desenha aqui por portal — components/chat/ConversasSlot); a outra, as
+                recentes (clicar entra na sala e abre a conversa — lib/chat/conversasNav). */}
+            {/* Sala de Estudos */}
             <button
               data-tour="estudos"
               onClick={() => setActiveTab("sala-de-estudos")}
               className={navItem(activeTab === "sala-de-estudos", "blue")}
             >
               <DocumentTextIcon className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
+              {sidebarAberta && (
                 <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Sala de Estudos
                 </span>
               )}
             </button>
+            {sidebarAberta && (activeTab === "sala-de-estudos"
+              ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
+              : <div className={RAMO}><ConversasDaSala sala="estudos" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>)}
 
-            {/* Sala de Pesquisa (antiga "Pesquisa") */}
+            {/* Sala de Pesquisa */}
             <button
               data-tour="pesquisa"
               onClick={() => setActiveTab("pesquisa")}
               className={navItem(activeTab === "pesquisa", "purple")}
             >
               <AcademicCapIcon className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
+              {sidebarAberta && (
                 <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Sala de Pesquisa
                 </span>
               )}
             </button>
+            {sidebarAberta && UNIFIED && (activeTab === "pesquisa"
+              ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
+              : <div className={RAMO}><ConversasDaSala sala="pesquisa" onEntrar={() => setActiveTab("pesquisa")} /></div>)}
 
             {/* Projetos — Zaeon Code (IDE agêntica; auto-protegida por plano/curso). ESCONDIDA até
                 NEXT_PUBLIC_PROJETOS=on (vira feature depois; o código segue aqui). */}
@@ -2534,7 +2584,7 @@ export default function HomeworkPage({
               className={navItem(activeTab === "projetos", "cyan")}
             >
               <Code2 className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
+              {sidebarAberta && (
                 <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Projetos
                 </span>
@@ -2548,7 +2598,7 @@ export default function HomeworkPage({
               className={navItem(activeTab === "escritorio", "cyan")}
             >
               <Building2 className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
+              {sidebarAberta && (
                 <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Escritório
                 </span>
@@ -2564,7 +2614,7 @@ export default function HomeworkPage({
               className={navItem(activeTab === "profile", "violet")}
             >
               <UserCircleIcon className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && (
+              {sidebarAberta && (
                 <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Perfil
                 </span>
@@ -2573,7 +2623,7 @@ export default function HomeworkPage({
           </div>
 
           {/* EXTRAS — layout + foco; pb-16 deixa o cantinho inferior livre pro FAB da Zaeon encaixar */}
-          <div className="mt-auto px-2.5 pt-3 pb-16 flex flex-col gap-3">
+          <div className="px-2.5 pt-3 pb-16 flex flex-col gap-3">
             <div className="h-[1px] bg-slate-300 dark:bg-white/10" />
             <button
               data-tour="layout-toggle"
@@ -2581,7 +2631,7 @@ export default function HomeworkPage({
               className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group"
             >
               <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-              {isSidebarOpen && (
+              {sidebarAberta && (
                 <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Layout
                 </span>
@@ -2597,7 +2647,7 @@ export default function HomeworkPage({
               ) : (
                 <PowerIcon className="w-5 h-5" />
               )}
-              {isSidebarOpen && (
+              {sidebarAberta && (
                 <span className="text-[10px] font-black uppercase">Foco</span>
               )}
             </button>
@@ -2610,7 +2660,7 @@ export default function HomeworkPage({
               className="flex items-center gap-3 p-2 rounded-xl text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5 group"
             >
               <ArrowUturnLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-              {isSidebarOpen && (
+              {sidebarAberta && (
                 <span className="text-[10px] font-black uppercase">Voltar</span>
               )}
             </button>
@@ -2619,7 +2669,8 @@ export default function HomeworkPage({
       )}
 
       <main
-        className={`flex-1 flex flex-col ${!isEmbedded ? (isChatLeft ? "pr-[80px]" : "pl-[80px]") : ""} h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : "p-6"} gap-6`}
+        style={recuoSidebar}
+        className={`flex-1 flex flex-col h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : "p-6"} gap-6`}
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
@@ -3568,5 +3619,6 @@ export default function HomeworkPage({
       {/* Tour guiado da Zaeon (golden path) agora é GLOBAL (montado no layout),
           pra começar no menu inicial e continuar aqui. (Tour antigo removido.) */}
     </div>
+    </ConversasSlotContext.Provider>
   );
 }

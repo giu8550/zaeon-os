@@ -14,7 +14,7 @@ import type { Aula, Beat, TempoBeat } from "@/lib/aula-interativa/contrato";
 
 type Dados = { aula: Aula; tempos: Record<string, TempoBeat> };
 
-export default function AulaView({ artifactId, dados: inicial }: { artifactId: string; dados?: Partial<Dados> | null }) {
+export default function AulaView({ artifactId, dados: inicial, grande = false }: { artifactId: string; dados?: Partial<Dados> | null; /** já é a página (aba de documento): sem botão de tela cheia */ grande?: boolean }) {
   const [dados, setDados] = useState<Dados | null>(inicial?.aula && inicial?.tempos ? (inicial as Dados) : null);
   const [erro, setErro] = useState(false);
   const [cheia, setCheia] = useState(false);
@@ -42,7 +42,7 @@ export default function AulaView({ artifactId, dados: inicial }: { artifactId: s
   const audioDe = (b: Beat) => (dados.tempos[b.id]?.audio ? `/api/studio/${artifactId}/aula/${encodeURIComponent(b.id)}` : null);
   return (
     <>
-      {!cheia && <AulaPlayer aula={dados.aula} tempos={dados.tempos} audioDe={audioDe} onTelaCheia={() => setCheia(true)} />}
+      {!cheia && <AulaPlayer aula={dados.aula} tempos={dados.tempos} audioDe={audioDe} onTelaCheia={grande ? undefined : () => setCheia(true)} grande={grande} />}
       {cheia && createPortal(
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-8" role="dialog" aria-modal="true" aria-label={`Aula: ${dados.aula.titulo}`}>
           <div className="relative w-full max-w-[min(1400px,calc((100vh-9rem)*16/9))]">

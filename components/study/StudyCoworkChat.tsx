@@ -35,8 +35,16 @@ import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import MagazineAnswerView, { podeVirarRevista } from "@/components/study/MagazineAnswerView";
 import MagazineBoundary from "@/components/study/MagazineBoundary";
 import ConversasSidebar from "@/components/chat/ConversasSidebar";
+import { useConversasSlot } from "@/components/chat/ConversasSlot";
+import { consumirPedido, EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
+
+const irProChat = () => window.dispatchEvent(new Event(EVT_ESTUDOS_CHAT));
+import { createPortal } from "react-dom";
 import DicaSubTema from "@/components/chat/DicaSubTema";
 import Desenhando from "@/components/chat/Desenhando";
+import CartaoArtefato from "@/components/chat/CartaoArtefato";
+import DocumentoArtefato from "@/components/studio/DocumentoArtefato";
+import { abrirDocumento, EVT_ABRIR_DOC, KINDS_EM_ABA, ROTULO_DOC, type DocArtefato } from "@/lib/chat/documentos";
 import { assuntoDe, pedeAula } from "@/lib/agent/aprender";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
@@ -195,6 +203,21 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // Editar a própria pergunta e reenviar (estilo ChatGPT) + o A−/A+ do texto.
   const [editando, setEditando] = useState<string | null>(null);
   const zoom = useChatFontScale();
+  const slotSidebar = useConversasSlot("estudos");
+  // DOCUMENTOS em aba (diagrama interativo, aula — lib/chat/documentos): abertos aqui; `docAtivo`
+  // = o que ocupa a sala agora (null = a conversa).
+  const [docs, setDocs] = useState<DocArtefato[]>([]);
+  const [docAtivo, setDocAtivo] = useState<string | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<DocArtefato>).detail;
+      if (!d || d.sala !== "estudos") return;
+      setDocs((xs) => (xs.some((x) => x.artifactId === d.artifactId) ? xs : [...xs, d]));
+      if (d.focar) setDocAtivo(d.artifactId);
+    };
+    window.addEventListener(EVT_ABRIR_DOC, on);
+    return () => window.removeEventListener(EVT_ABRIR_DOC, on);
+  }, []);
   const [studioOpen, setStudioOpen] = useState(false);
   const [focusIds, setFocusIds] = useState<string[]>([]);
   // ANEXAR (📎 / soltar arquivo / soltar um documento da biblioteca na conversa): a IA lê o PDF e responde
@@ -467,6 +490,23 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     }
   }, []);
 
+  // Pedido da SIDEBAR principal (conversa/"Nova conversa" clicada estando noutra sala ou sub-aba):
+  // atende o bilhete ao montar (com as conversas carregadas) e os eventos dali pra frente.
+  const trocarRef = useRef(trocarAba); trocarRef.current = trocarAba;
+  const novaRef = useRef(novaAba); novaRef.current = novaAba;
+  useEffect(() => {
+    if (!threads.length) return;
+    const atender = (p: PedidoConversa | null) => {
+      if (!p || p.sala !== "estudos") return;
+      if (p.nova) novaRef.current();
+      else if (p.id && threadsRef.current.some((t) => t.id === p.id)) trocarRef.current(p.id);
+    };
+    atender(consumirPedido("estudos"));
+    const on = (e: Event) => { atender((e as CustomEvent<PedidoConversa>).detail); consumirPedido("estudos"); };
+    window.addEventListener(EVT_PEDIDO_CONVERSA, on);
+    return () => window.removeEventListener(EVT_PEDIDO_CONVERSA, on);
+  }, [threads.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const renomearAba = useCallback((id: string, titulo: string) => {
     const lista = renomearThread(threadsRef.current, id, titulo);
     threadsRef.current = lista;
@@ -580,6 +620,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     if (aviso) marcar(undefined);
     if (r.tipo === "pronto") {
       window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId } }));
+      // Documento (diagrama/aula): abre a aba em "Documentos"; pedido explícito já mostra ela.
+      if (KINDS_EM_ABA.has(r.bloco.studioKind) && r.bloco.artifactId) {
+        abrirDocumento({ sala: "estudos", studioKind: r.bloco.studioKind, artifactId: r.bloco.artifactId, titulo: r.bloco.title || topic, data: r.bloco.data, focar: !silencioso });
+      }
     } else if (r.tipo === "erro" && !r.silencioso && !silencioso) {
       avisarFalha(r.mensagem);
     }
@@ -907,17 +951,25 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       />
       {/* ESQUERDA = CONVERSAS (estilo ChatGPT/Claude): a lista vertical desta sala, com sub-temas. */}
       <div className="relative flex-1 min-w-0 min-h-0 flex">
-      <ConversasSidebar
-        sala="estudos"
-        threads={threads}
-        ativa={abaAtiva}
-        ocupada={sending ? abaAtiva : null}
-        aoTrocar={trocarAba}
-        aoCriar={novaAba}
-        aoFechar={fecharAba}
-        aoRenomear={renomearAba}
-        aoCriarSub={(id) => novaSub(id)}
-      />
+      {/* As conversas moram na SIDEBAR PRINCIPAL do app (portal no slot); sem ela, aqui ao lado. */}
+      {(() => {
+        const lista = (
+          <ConversasSidebar
+            sala="estudos"
+            threads={threads}
+            ativa={abaAtiva}
+            ocupada={sending ? abaAtiva : null}
+            aoTrocar={(id) => { irProChat(); trocarAba(id); }}
+            aoCriar={() => { irProChat(); novaAba(); }}
+            aoFechar={fecharAba}
+            aoRenomear={renomearAba}
+            aoCriarSub={(id) => novaSub(id)}
+            embutida={!!slotSidebar}
+          />
+        );
+        if (slotSidebar === null) return null;           // a sidebar é de outra sala agora
+        return slotSidebar ? createPortal(lista, slotSidebar) : lista;
+      })()}
       {/* ── COLUNA CENTRAL: conversa + composer ── */}
       <div ref={colunaRef} className="relative flex-1 min-w-0 flex flex-col" onDragOver={soltar.onDragOver} onDragLeave={soltar.onDragLeave} onDrop={(e) => { if (e.dataTransfer.files?.length || e.dataTransfer.getData("text/zaeon-file")) soltar.onDrop(e); }}>
         {arrastando && <AvisoSoltar />}
@@ -972,9 +1024,28 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         {/* TOPO = DOCUMENTOS desta conversa (TCC, cartolina) + o A−/A+ do texto. As conversas ficam na
             barra da esquerda: trocar de conversa lá não abre/fecha documento aqui, e vice-versa. */}
         <div className="shrink-0 px-3 pt-2 flex items-center gap-2 min-h-[44px]">
-          {((CARTOLINA_ON && abaAtiva) || (tccDaAba && !tccAberto)) && (
+          {((CARTOLINA_ON && abaAtiva) || (tccDaAba && !tccAberto) || docs.length > 0) && (
             <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Documentos</span>
           )}
+          {docs.length > 0 && (
+            <button type="button" onClick={() => setDocAtivo(null)} aria-pressed={!docAtivo}
+              className={`${DOC_PILL} ${!docAtivo ? "!bg-slate-900 !text-white dark:!bg-white dark:!text-slate-900 !border-transparent" : ""}`}>
+              ⟁ Conversa
+            </button>
+          )}
+          {docs.map((d) => {
+            const r = ROTULO_DOC[d.studioKind] ?? { emoji: "⟁", nome: "Documento" };
+            const atual = docAtivo === d.artifactId;
+            return (
+              <span key={d.artifactId} className={`${DOC_PILL} !pr-1 ${atual ? "!bg-slate-900 !text-white dark:!bg-white dark:!text-slate-900 !border-transparent" : ""}`}>
+                <button type="button" onClick={() => setDocAtivo(d.artifactId)} aria-pressed={atual} title={d.titulo} className="inline-flex items-center gap-1.5 max-w-[180px]">
+                  <span aria-hidden>{r.emoji}</span><span className="truncate">{d.titulo || r.nome}</span>
+                </button>
+                <button type="button" aria-label={`Fechar ${d.titulo || r.nome}`} onClick={() => { setDocs((xs) => xs.filter((x) => x.artifactId !== d.artifactId)); if (atual) setDocAtivo(null); }}
+                  className="w-6 h-6 rounded-full flex items-center justify-center opacity-70 hover:opacity-100"><X size={12} /></button>
+              </span>
+            );
+          })}
           {/* TCC da conversa: abre por cima do chat (a sala não muda). Só existe depois do
               "crie um TCC sobre…" — ou de abrir o card dele na cartolina. */}
           {tccDaAba && !tccAberto && (
@@ -1003,6 +1074,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           <div className="flex-1" />
           <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
         </div>
+
+        {/* O documento aberto ocupa a sala (abaixo da linha de Documentos); a conversa fica montada embaixo. */}
+        {docs.map((d) => (
+          <div key={d.artifactId} className="absolute inset-x-0 bottom-0 top-[52px] z-30 bg-white dark:bg-[#070b14]" style={{ display: docAtivo === d.artifactId ? undefined : "none" }}>
+            <DocumentoArtefato doc={d} />
+          </div>
+        ))}
 
         {/* conversa (drop target de foco) */}
         <div
@@ -1048,8 +1126,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                         : acoesDa(m, i)}
                       {!isUser && (m.studioBlock || m.desenhando) ? (
                         <div className="w-full max-w-[85%]">
-                          {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
-                          {m.blocosExtra?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
+                          {m.studioBlock ? <BlocoOuCartao b={m.studioBlock} /> : null}
+                          {m.blocosExtra?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}
                           {m.desenhando ? <Desenhando texto={m.desenhando} /> : null}
                         </div>
                       ) : null}
@@ -1084,8 +1162,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                     >
                       {m.studioBlock || m.blocosExtra?.length || m.desenhando ? (
                         <>
-                          {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
-                          {m.blocosExtra?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
+                          {m.studioBlock ? <BlocoOuCartao b={m.studioBlock} /> : null}
+                          {m.blocosExtra?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}
                           {m.desenhando ? <Desenhando texto={m.desenhando} /> : null}
                         </>
                       ) : null}
@@ -1093,7 +1171,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                   );
                   // Sala de ESTUDOS = chat simples, objetivo e 100% legível: a "revista" só entra
                   // quando há ARTEFATO embutido (a Sala de Pesquisa é que tem o modo editorial).
-                  const revista = !!m.studioBlock && podeVirarRevista(m.answer, true);
+                  const revista = !!m.studioBlock && !KINDS_EM_ABA.has(m.studioBlock.studioKind) && podeVirarRevista(m.answer, true);
                   return (
                     <div key={m.id} data-msg={m.id} className="group/msg flex justify-start">
                       <div className={revista ? "w-full" : "max-w-[85%] w-full"}>
@@ -1110,7 +1188,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                               agente="Aura"
                             />
                           </MagazineBoundary>
-                          {m.blocosExtra?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
+                          {m.blocosExtra?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}
                           {acoesDa(m, i)}
                           </>
                         ) : padrao}
@@ -1122,7 +1200,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                   return (
                     <div key={m.id} className="flex justify-start">
                       <div className="max-w-[85%] w-full">
-                        <StudioBlock block={m.studioBlock} collapsed={false} />
+                        <BlocoOuCartao b={m.studioBlock} />
                       </div>
                     </div>
                   );
@@ -1262,4 +1340,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       )}
     </div>
   );
+}
+
+/** Diagrama/aula são DOCUMENTOS (abrem numa aba): no chat, só o cartão. O resto do Studio fica inline. */
+function BlocoOuCartao({ b }: { b: StudioBlockData }) {
+  if (KINDS_EM_ABA.has(b.studioKind) && b.artifactId) {
+    return <CartaoArtefato doc={{ sala: "estudos", studioKind: b.studioKind, artifactId: b.artifactId, titulo: b.title, data: b.data }} />;
+  }
+  return <StudioBlock block={b} collapsed={false} />;
 }
