@@ -9,6 +9,8 @@
  *   { acao: "estado", base, estado, ajuste? }     → uma expressão (reroll = repetir)
  * Salvar: `validarSalvar` (aqui) → disco (dev, lib/avatars/disco.ts) ou banco (admin).
  */
+import fs from "node:fs";
+import path from "node:path";
 import { isEstadoSprite, type EstadoSprite } from "./estados";
 import { gerarBase, gerarQuadro, idleDaBase, normalizarBase, type QuadroGerado } from "./pipeline";
 
@@ -30,6 +32,17 @@ export function lerCor(v: unknown): [string, string] | undefined {
 
 const LIMITE = { base: 900_000, entrada: 4_000_000, grande: 400_000, pequeno: 100_000 } as const;
 
+/**
+ * ÂNCORA DE ESTILO: todo personagem novo nasce desenhado em cima de um avatar JÁ APROVADO (o estilo
+ * anime da casa). Homem → Caio; mulher → Aura (casa melhor proporção/cabelo). Sem o arquivo → sem
+ * referência (só o prompt).
+ */
+export function referenciaDeEstilo(personagem: string): Buffer | null {
+  const mulher = /\b(woman|girl|she|her|female|mulher|moça)\b/i.test(personagem);
+  const id = mulher ? "aura" : "caio";
+  try { return fs.readFileSync(path.join(process.cwd(), "public", "avatars", id, "base.webp")); } catch { return null; }
+}
+
 const quadroJson = (q: QuadroGerado) => ({ grande: dataUrl(q.grande), pequeno: dataUrl(q.pequeno) });
 
 export type RespostaEstudio = { status: number; json: Record<string, unknown> };
@@ -38,7 +51,8 @@ export async function atenderEstudio(body: unknown): Promise<RespostaEstudio> {
   const b = (body ?? {}) as Record<string, unknown>;
   try {
     if (b.acao === "base") {
-      const { base, idle } = await gerarBase(String(b.personagem ?? ""), lerCor(b.cor));
+      const personagem = String(b.personagem ?? "");
+      const { base, idle } = await gerarBase(personagem, lerCor(b.cor), 2, referenciaDeEstilo(personagem));
       return { status: 200, json: { base: dataUrl(base), estado: "idle", ...quadroJson(idle) } };
     }
     if (b.acao === "base-de-imagem") {

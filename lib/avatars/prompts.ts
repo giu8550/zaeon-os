@@ -11,12 +11,20 @@
 import type { EstadoSprite } from "./estados";
 
 const ESTILO =
-  "Anime character portrait in a polished modern anime key-visual style: clean confident line art, soft cel shading with gentle gradients, luminous expressive eyes with catchlights, subtle blush, glossy hair highlights. High quality VTuber-style avatar.";
+  "Japanese ANIME character portrait (2D anime illustration, like a modern anime TV series or gacha game character art) in a polished anime key-visual style: clean confident line art, soft cel shading with gentle gradients, large luminous expressive anime eyes with catchlights, small simplified anime nose and mouth, smooth skin shading, subtle blush, glossy anime hair highlights. High quality VTuber-style avatar. NOT realistic, NOT semi-realistic, NOT 3D render, NOT western cartoon.";
 
 const ENQUADRAMENTO =
   "Framing: close-up bust portrait, head and upper shoulders only. The face is large and centered, filling roughly the middle half of the image; the top of the hair is just inside the top edge. Facing the viewer directly, looking straight at the viewer, both eyes open and clearly visible, mouth closed, relaxed neutral expression. Symmetrical front view.";
 
 const SEGURO = "Single adult character, modest clothing. No text, no watermark, no signature, no frame, no border.";
+
+/**
+ * Com IMAGEM DE REFERÊNCIA (um avatar já aprovado): trava o ESTILO — personagem novo, mesmo traço,
+ * mesma sombra, mesmo olho anime, mesmo enquadramento e tipo de fundo. Sem isso o modelo derivava
+ * pro semi-realista em descrições "adultas" (homem de 30 e poucos, barba…).
+ */
+export const PREFIXO_REFERENCIA =
+  "The attached image is a STYLE REFERENCE ONLY. Create a completely NEW and DIFFERENT character drawn in EXACTLY the same anime art style as the reference: same line art weight, same cel shading, same large anime eye style, same simplified nose and mouth, same hair rendering, same bust framing with the face at the same size and position, and the same kind of plain smooth gradient background. Do NOT copy the reference character's face, hair, clothes or colors — only the art style.";
 
 /** Prompt da BASE. `personagem` vem do look (persona da casa) ou da descrição do admin. */
 export function promptBase(personagem: string, cor: readonly [string, string]): string {
