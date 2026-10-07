@@ -1,5 +1,6 @@
 "use client";
 
+import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
 import {
     useState, useRef, useLayoutEffect, useEffect, useMemo, Suspense,
 } from "react";
@@ -344,10 +345,13 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
                                             }
                                         `}
                                     >
-                                        <span
-                                            className="w-6 h-6 shrink-0 flex items-center justify-center text-[15px] leading-none text-cyan-600 dark:text-cyan-300"
-                                            style={{ filter: "drop-shadow(0 0 5px rgba(34,211,238,0.55))" }}
-                                        >⟁</span>
+                                        {/* a bolinha da aba É a Aura — espelha o chat de qualquer aba (pensa/fala/sorri) */}
+                                        <RostoDaAba agentId="aura" nome="Aura" ativa={isActive} size={24}>
+                                            <span
+                                                className="w-6 h-6 shrink-0 flex items-center justify-center text-[15px] leading-none text-cyan-600 dark:text-cyan-300"
+                                                style={{ filter: "drop-shadow(0 0 5px rgba(34,211,238,0.55))" }}
+                                            >⟁</span>
+                                        </RostoDaAba>
                                         <span className="text-[13px] font-bold tracking-[0.02em]">{tab.label}</span>
                                     </button>
                                 );

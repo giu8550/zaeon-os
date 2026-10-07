@@ -1,0 +1,32 @@
+"use client";
+
+/**
+ * AgentePilula — o rosto do agente AO LADO de cada resposta (sem nome: quem responde é ela).
+ * Só a resposta mais recente (`ultima`) fica VIVA e reage ao turno (pensa → fala no stream →
+ * sorri ao concluir; ouve quando o usuário digita a próxima) e compartilha o layoutId com as
+ * boas-vindas (na 1ª mensagem o rosto grande "viaja" até aqui). As antigas ficam no quadro
+ * estático. Posicionado pelo chamador (coluna à esquerda da bolha). Sem avatar vivo → nada.
+ */
+import { motion } from "framer-motion";
+import AgentAvatar from "@/components/agents/AgentAvatar";
+import { useManifesto } from "./hooks";
+import { layoutIdRosto } from "./BoasVindasAgente";
+import type { SinalAvatar } from "@/lib/avatars/estados";
+
+/** Largura reservada pra coluna do rosto (classe Tailwind do recuo das respostas). */
+export const RECUO_ROSTO = "relative pl-12";
+
+export default function AgentePilula({ agentId, nome, estado, ultima = true, className = "" }: { agentId: string; nome: string; estado: SinalAvatar; ultima?: boolean; className?: string }) {
+  const manifest = useManifesto(agentId);
+  if (!manifest) return null;
+  const rosto = (
+    <AgentAvatar agentId={agentId} manifest={manifest} nome={nome} size={36} estado={ultima ? estado : "idle"} vivo={ultima} destaque={ultima}
+      className="ring-2 ring-white/80 dark:ring-white/10 shadow-[0_8px_20px_-10px_rgba(124,58,237,0.7)]" />
+  );
+  if (!ultima) return <span className={`inline-flex rounded-full ${className}`}>{rosto}</span>;
+  return (
+    <motion.span layoutId={layoutIdRosto(agentId)} className={`inline-flex rounded-full ${className}`} transition={{ type: "spring", stiffness: 140, damping: 22 }}>
+      {rosto}
+    </motion.span>
+  );
+}

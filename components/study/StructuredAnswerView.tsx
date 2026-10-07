@@ -15,7 +15,7 @@
  * Sem dependência de markdown: um formatador inline leve (negrito + bullets) mantém
  * o texto bonito sem lib. `onConcept`/`onNext` viram novos prompts (como o Claude).
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTypewriter } from "@/lib/ui/useTypewriter";
 import { fonteChat } from "@/lib/ui/chatFontScale";
 import { ArrowUpRight, Quote } from "lucide-react";
@@ -64,12 +64,15 @@ export default function StructuredAnswerView({
   onConcept,
   onNext,
   typing = false,
+  onDigitando,
   acoes,
   children,
 }: {
   answer: StructuredAnswer;
   /** B2: datilografa o núcleo e só depois revela as demais seções. */
   typing?: boolean;
+  /** Avisa quando o núcleo começa/termina de ser datilografado (o avatar fala junto). */
+  onDigitando?: (ativo: boolean) => void;
   onConcept?: (c: string) => void;
   onNext?: (step: string) => void;
   children?: React.ReactNode;   // slot p/ artefatos (StudioBlock) embutidos
@@ -90,6 +93,13 @@ export default function StructuredAnswerView({
   const delay = (name: string) => `${secs.indexOf(name) * 70}ms`;
   const tw = useTypewriter(nucleo || "", typing);
   const rest = tw.done; // o resto entra (com o fade-up escalonado) quando o núcleo termina
+  const avisar = useRef(onDigitando);
+  avisar.current = onDigitando;
+  useEffect(() => {
+    if (!typing) return;
+    avisar.current?.(!tw.done);
+  }, [typing, tw.done]);
+  useEffect(() => () => avisar.current?.(false), []);
 
   return (
     <div className="relative max-w-[680px]">

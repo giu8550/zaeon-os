@@ -11,6 +11,7 @@
  */
 import { PERSONAS } from "@/lib/ai/personas";
 import { MENTOR_SEED } from "@/lib/agent/mentors";
+import indiceAvatares from "@/public/avatars/index.json";
 
 export type AgentTipo = "persona" | "mentor";
 
@@ -53,6 +54,17 @@ const AVATAR_PADRAO: Record<string, string> = {
   zaeon: "/agents/bento.png", // "bento" virou "zaeon" (anfitriã) — a foto ficou com o nome antigo
 };
 
+/**
+ * Foto padrão: o quadro `idle` do avatar vivo (public/avatars, Etapa A) quando existe — assim até
+ * quem mostra só uma <img> estática ganha o rosto anime; senão o placeholder antigo.
+ */
+const IDLE_VIVO: Record<string, string> = Object.fromEntries(
+  Object.entries((indiceAvatares as { agentes?: Record<string, { estados?: { idle?: string } }> }).agentes ?? {})
+    .filter(([, m]) => typeof m?.estados?.idle === "string")
+    .map(([k, m]) => [k, m.estados!.idle!]),
+);
+export const avatarPadraoDe = (agentKey: string): string | null => IDLE_VIVO[agentKey] ?? AVATAR_PADRAO[agentKey] ?? null;
+
 const primeiraFrase = (t: string): string => (t || "").trim().split(/(?<=\.)\s/)[0]?.slice(0, 160) ?? "";
 
 /** Roster base (personas + mentores do seed), na ordem: personas primeiro, mentores pelo `order`. */
@@ -63,7 +75,7 @@ export function rosterBase(): AgentBase[] {
     nome: p.name,
     emoji: "⟁",
     bio: p.oneLiner,
-    avatarPadrao: AVATAR_PADRAO[p.id] ?? null,
+    avatarPadrao: avatarPadraoDe(p.id),
     conversacional: !p.noPreamble,
     ordem: i,
   }));

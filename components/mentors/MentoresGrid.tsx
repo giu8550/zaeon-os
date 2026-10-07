@@ -139,7 +139,7 @@ export default function MentoresGrid({ search = "" }: { search?: string }) {
                 <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/90 dark:via-white/60 to-transparent" />
                 <div className="flex items-start justify-between mb-5">
                   {m.avatarUrl ? (
-                    <AgentAvatar src={m.avatarUrl} nome={m.name} size={56} emoji={m.emoji} className="ring-2 ring-violet-400/40 dark:ring-cyan-400/40" />
+                    <AgentAvatar src={m.avatarUrl} nome={m.name} size={56} emoji={m.emoji} agentId={m.slug} className="ring-2 ring-violet-400/40 dark:ring-cyan-400/40" />
                   ) : (
                     <div
                       className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl text-violet-700 dark:text-cyan-100"

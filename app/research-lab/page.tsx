@@ -154,6 +154,11 @@ import TccSugestoes from "@/components/tcc/TccSugestoes";
 import { EVT_TCC_MUDOU, TCC_CROSS_ON, tccApi, type Revisao } from "@/lib/tcc/client";
 import { mesmoConteudo } from "@/lib/tcc/secoes";
 import ResearchReadingView from "./ResearchReadingView";
+import AgentAvatar from "@/components/agents/AgentAvatar";
+import { avatarPadraoDe } from "@/lib/agents/roster";
+
+/** Rosto da Aura nas bolhas: o idle do avatar vivo quando existe (public/avatars), senão o placeholder. */
+const AURA_IMG = avatarPadraoDe("aura") ?? "/agents/aura.png";
 
 // --- COMPONENTS ---
 import ResearchCardPDF from "@/components/ui/ResearchCardPDF";
@@ -2912,7 +2917,7 @@ export default function HomeworkPage({
                               role={msg.role}
                               text={msg.text}
                               agentName="Aura"
-                              agentImg="/agents/aura.png"
+                              agentImg={AURA_IMG}
                               userImg={session?.user?.image}
                             />
                           );
@@ -2926,7 +2931,7 @@ export default function HomeworkPage({
                               role={msg.role}
                               text={parsed.clean || msg.text}
                               agentName="Aura"
-                              agentImg="/agents/aura.png"
+                              agentImg={AURA_IMG}
                               userImg={session?.user?.image}
                             />
                             {parsed.citation && (
@@ -2956,10 +2961,13 @@ export default function HomeworkPage({
                       {/* ESTADO DE ESPERA RICO — mostra o que a Aura está fazendo + três pontinhos. */}
                       {isPdfTyping && (
                         <div className="flex items-center gap-3 px-1 py-2">
-                          <img
-                            src="/agents/aura.png"
-                            alt="Aura"
-                            className="w-7 h-7 rounded-full shrink-0 ring-2 ring-cyan-400/40"
+                          <AgentAvatar
+                            agentId="aura"
+                            src={AURA_IMG}
+                            nome="Aura"
+                            size={28}
+                            estado="pensando"
+                            className="ring-2 ring-cyan-400/40"
                           />
                           <div className="flex flex-col gap-1.5">
                             <span className="text-[12px] font-bold text-cyan-700 dark:text-cyan-300">

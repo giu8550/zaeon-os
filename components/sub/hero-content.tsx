@@ -14,6 +14,16 @@ import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 import MolecularText from "@/components/ui/MolecularText";
 import { copyEntrada } from "@/lib/ui/loungeHub";
+import AuraAoVivo from "@/components/main/AuraAoVivo";
+import AgentAvatar from "@/components/agents/AgentAvatar";
+import { useManifesto } from "@/components/agents/avatar/hooks";
+
+/** Ícone do "Iniciar chat": o rosto da Aura (o chat é ela); sem avatar vivo → o balão de sempre. */
+function RostoDoChat() {
+  const manifest = useManifesto("aura");
+  if (!manifest) return <ChatBubbleLeftRightIcon className="w-4 h-4" />;
+  return <AgentAvatar agentId="aura" manifest={manifest} nome="Aura" size={24} className="-my-1 -ml-1" />;
+}
 
 // Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
 // Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
@@ -169,7 +179,7 @@ export default function HeroPage() {
                 tamanho="md"
                 className="w-full sm:w-auto"
               >
-                <ChatBubbleLeftRightIcon className="w-4 h-4" />
+                <RostoDoChat />
                 Iniciar chat
               </LiquidGlassButton>
               <span className="text-xs uppercase tracking-[0.2em] text-slate-700 dark:text-white/80">ou</span>
@@ -203,6 +213,16 @@ export default function HeroPage() {
           </ul>
         )}
       </motion.div>
+
+      {/* A AURA AO VIVO (desktop): o chat tem rosto — ela responde perguntas de verdade ali do lado do
+          título, e o cartão inteiro é o "Iniciar chat". No celular o rosto vai no botão do CTA. */}
+      <AnimatePresence>
+        {!showChatbox && (
+          <div className="hidden lg:flex absolute z-10 w-[360px] xl:w-[380px] right-[3%] xl:right-[6%] top-1/2 -translate-y-[18%]">
+            <AuraAoVivo onAbrir={() => (logado ? router.push(CHAT_ROTA) : setShowChatbox(true))} />
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* O cyberespaço embutido mora agora em "Crie a sua própria estação de trabalho" (app/study-rooms). */}
 

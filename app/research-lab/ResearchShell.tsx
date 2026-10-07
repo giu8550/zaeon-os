@@ -1,4 +1,5 @@
 "use client";
+import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
 import { useCallback, useState, useEffect } from "react";
 import type { WindowEntry } from "@/lib/useWindowStore";
 import RichText from "@/components/research/RichText";
@@ -291,7 +292,9 @@ export default function ResearchShell({
                   : "text-slate-700 dark:text-white/70 border-slate-200 dark:border-white/10 hover:border-cyan-400/50"
               }`}
             >
-              <span className="text-[11px] leading-none">⟁</span>
+              <RostoDaAba agentId="aura" nome="Aura" ativa={vista === "chat"} size={20}>
+                <span className="text-[11px] leading-none">⟁</span>
+              </RostoDaAba>
               <span className="text-[11px] font-bold">Conversa</span>
             </div>
             {windows.filter((w) => w.type !== "document").map((w) => {

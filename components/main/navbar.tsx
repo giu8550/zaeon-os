@@ -151,6 +151,8 @@ export const Navbar = () => {
   if (pathname === "/m" || pathname?.startsWith("/m/")) return null;
   // Lounge Cósmico é tela cheia imersiva: sem chrome global.
   if (ehRotaImersiva(pathname)) return null;
+  // ferramentas internas de dev (ex.: estúdio de avatar /dev/avatares) — tela cheia, sem o menu do site
+  if (pathname?.startsWith("/dev/")) return null;
 
   return (
     <div

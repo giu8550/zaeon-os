@@ -351,7 +351,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
             const a = agentes.find((x) => x.agentKey === k);
             return (
               <div key={`dig-${k}`} className="flex items-end gap-2">
-                <AgentAvatar src={a?.avatarUrl} nome={a?.nome ?? k} size={30} emoji={a?.emoji} />
+                <AgentAvatar src={a?.avatarUrl} nome={a?.nome ?? k} size={30} emoji={a?.emoji} agentId={k} estado="falando" />
                 <div className={`px-3.5 py-2.5 rounded-2xl rounded-bl-md ${VIDRO_BOLHA} ${TXT_MUDO} text-[13px]`}>
                   <span className="font-semibold">{a?.nome ?? k}</span> está escrevendo<span className="animate-pulse">…</span>
                 </div>
@@ -368,7 +368,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               {sugestoes.map((a, i) => (
                 <button key={a.agentKey} type="button" role="option" aria-selected={i === sugIdx} onMouseDown={(e) => { e.preventDefault(); completar(a); }}
                   className={`w-full ${TOQUE} flex items-center gap-2.5 px-3 rounded-xl text-left ${i === sugIdx ? `bg-blue-500/15 dark:bg-blue-400/15 ${TXT}` : `${TXT_2} hover:bg-slate-500/10 dark:hover:bg-white/10`}`}>
-                  <AgentAvatar src={a.avatarUrl} nome={a.nome} size={26} emoji={a.emoji} />
+                  <AgentAvatar src={a.avatarUrl} nome={a.nome} size={26} emoji={a.emoji} agentId={a.agentKey} vivo={false} />
                   <span className="flex flex-col min-w-0"><span className="text-[13px] font-semibold truncate">{a.nome}</span><span className={`text-[11px] truncate ${TXT_MUDO}`}>@{a.agentKey}{a.curso ? ` · ${a.curso}` : ""}</span></span>
                 </button>
               ))}
@@ -380,7 +380,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               {[...presentes, ...outros].map((a) => (
                 <button key={a.agentKey} type="button" onClick={() => prefixarAgente(a.agentKey)} title={`@${a.agentKey}${a.curso ? ` · ${a.curso}` : ""}`}
                   className={`shrink-0 min-h-[36px] pl-1 pr-2.5 rounded-full flex items-center gap-1.5 text-[12px] font-semibold ${VIDRO_CHIP} ${canal.agentes.includes(a.agentKey) ? TXT : TXT_MUDO}`}>
-                  <AgentAvatar src={a.avatarUrl} nome={a.nome} size={26} emoji={a.emoji} className={digitando.includes(a.agentKey) ? "ring-2 ring-cyan-400/80" : ""} />
+                  <AgentAvatar src={a.avatarUrl} nome={a.nome} size={26} emoji={a.emoji} agentId={a.agentKey} estado={digitando.includes(a.agentKey) ? "falando" : "idle"} className={digitando.includes(a.agentKey) ? "ring-2 ring-cyan-400/80" : ""} />
                   {a.nome}
                 </button>
               ))}
