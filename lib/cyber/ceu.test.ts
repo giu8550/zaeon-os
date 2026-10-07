@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, type NomeSala } from "./ceu";
+import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, type NomeSala } from "./ceu";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, baseNoCeu, spawnDaBase } from "./bases";
 import { vagas } from "./motos";
 import { NAVE_QG, paraMundo, poseDaDoca } from "./naveQG";
 import { VOO, passoVoo, type EstadoVoo } from "./voo";
+import { passoVertical, tetoDoJet } from "./jet";
 import { dentroDeAlgum } from "./colisao";
 import { POIS } from "./landmarks";
 
@@ -159,6 +160,18 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
     expect(pisoNoAr(mundo({ x: 30, z: 0 }), 5)).toBe(0);
     // clicar pra andar não te prende na borda central quando você está na escada ou no lounge
     const noLounge = mundo({ x: L.x, z: L.z + 5 }); expect(resolverCidade(noLounge)).toEqual(noLounge);
+  });
+  it("BUG do pulo no lounge: com o teto contado do piso de onde se voa, quem pula lá em cima NÃO cai da plataforma", () => {
+    const meio = mundo({ x: L.x, z: L.z + 10 }), H = ALTURA_LOUNGE, tetoRel = (y: number) => pisoDeVoo(meio, y) + tetoDoJet(null);
+    let y = H, vy = 0;
+    for (let i = 0; i < 6 * 60; i++) {   // segura o pulo 2 s e solta
+      const v = passoVertical(y, vy, i < 120, 1 / 60, tetoRel(y)); y = v.y; vy = v.vy;
+      expect(pisoNoAr(meio, y)).not.toBeNull();     // nunca fica "sem chão" (antes: o teto da central o puxava pra baixo do lounge)
+      if (y <= H && vy <= 0) break;
+    }
+    expect(y).toBeLessThanOrEqual(H + 1e-6); expect(pisoNoAr(meio, H)).toBe(H);   // pousa de volta no lounge
+    expect(tetoRel(H)).toBeLessThan(H + 25);   // e a mochila continua curtinha (não dá pra subir da central até o lounge)
+    expect(pisoDeVoo(mundo({ x: 30, z: 0 }), 5) + tetoDoJet(null)).toBeLessThan(H);
   });
   it("o clube: entrada (virada pra escada) livre, guarda-corpo sólido em volta", () => {
     const cs = colisoresDaCidade();

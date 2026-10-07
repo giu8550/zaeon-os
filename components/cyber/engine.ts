@@ -13,7 +13,7 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
-import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CIDADE, alturaNaCidade, naCabineDJ, naPistaDeDanca, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDaEscada, naEscadaDoLounge, pontoDaEscada, rumoDaViagem, uDaViagem, VIAGEM_ESCADA, ILHOTAS, computadorPerto, foraDaIlha, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre } from "@/lib/cyber/ceu";
+import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CIDADE, alturaNaCidade, naCabineDJ, naPistaDeDanca, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDaEscada, naEscadaDoLounge, pontoDaEscada, rumoDaViagem, uDaViagem, VIAGEM_ESCADA, ILHOTAS, computadorPerto, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre } from "@/lib/cyber/ceu";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, chaoNoAr, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
@@ -32,8 +32,8 @@ import { criarUniversidade, type UniversidadeHandle } from "./Universidade";
 import { naUniversidade, UNIVERSIDADE } from "@/lib/cyber/universidade";
 import { PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, anelDoChao, decolaDaPlataforma, elevadorAqui, noAnelDoDisco, noArNaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma, tetoNaPlataforma, type IdPlataforma } from "@/lib/cyber/plataformas";
 import { criarSolanaHouse, type SolanaHouseHandle } from "./SolanaHouse";
-import { NAVE_QG, RAIO_REDOMA, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, RAMPA, naPontaDaRampa, naRampaLaFora, paraLocal, paraMundo, pertoDaEntrada, poseDaDoca, pousoNaNave, rampaDaNave, redomaAberta, type Bordo, type PoseNave } from "@/lib/cyber/naveQG";
-import { ESCALA_NAVE, criarNave, type NaveHandle } from "./Nave";
+import { DECK_ANTIGO, GIRO_PLANTA, noCorredorDaRampa, NAVE_QG, RAIO_REDOMA, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, RAMPA, naPontaDaRampa, naRampaLaFora, paraLocal, paraMundo, pertoDaEntrada, poseDaDoca, pousoNaNave, rampaDaNave, redomaAberta, type Bordo, type PoseNave } from "@/lib/cyber/naveQG";
+import { ESCALA_NAVE, ESCALA_NAVE_V, criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
 import { atualizarCamuflagem, camuflarGrupo, pararCamuflagem } from "./camuflagem";
 import { criarMoto, type MotoHandle } from "./Moto";
@@ -432,8 +432,10 @@ export class CyberEngine {
     const sobreODorso = naveParadaAqui && dNave < CyberEngine.TOPO_NAVE_R && !(dNave < RAIO_REDOMA && this.redomaChamando());   // o vão da redoma aberta não é piso
     if (this.noCeu) {
       const base = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
-      const v = passoVertical(this.jet.y, this.jet.vy, this.jet.tecla, dt, base + tetoDoJet(null), this.impulsoFrente);
-      const baixo = v.y - base < JET.alturaBases ? this.colisoresDoNivel("ceu") : [], naves = v.y < topo - 0.2 ? this.colisoresDeNaves(CIDADE.pisoY) : [];
+      // teto e paredes baixas contados do PISO de onde se voa (no lounge, 88 m acima da central: antes caía de lá)
+      const pisoAqui = base + pisoDeVoo(eu.pos, yAnt - base);
+      const v = passoVertical(this.jet.y, this.jet.vy, this.jet.tecla, dt, pisoAqui + tetoDoJet(null), this.impulsoFrente);
+      const baixo = v.y - pisoAqui < JET.alturaBases ? this.colisoresDoNivel("ceu") : [], naves = v.y < topo - 0.2 ? this.colisoresDeNaves(CIDADE.pisoY) : [];
       const q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...baixo, ...naves]);
       eu.pos.x = q.x; eu.pos.z = q.z; this.jet.y = v.y; this.jet.vy = v.vy;
       const piso = pisoNoAr(q, v.y - base);   // a escada e o lounge só são piso pra quem vem de CIMA deles
@@ -461,7 +463,7 @@ export class CyberEngine {
     // (o teto vira a altura atual: segurar o espaço PAIRA, não sobe)
     const tetoBase = tetoDoJet(qg), teto0 = yAnt > tetoBase ? Math.max(tetoBase, yAnt) : tetoBase;
     const pnPerto = this.pilotando ? null : this.poseNave(), pertoDaNave = !!pnPerto && Math.hypot(eu.pos.x - pnPerto.x, eu.pos.z - pnPerto.z) < NAVE_QG.raio + 20;
-    const teto = this.saindoPelaRedoma || pertoDaNave ? Math.max(teto0, (pnPerto ? pnPerto.y + 2.2 * ESCALA_NAVE : this.topoNave()) + 12) : teto0;   // perto da nave (ou saindo pela redoma): dá pra subir acima do dorso — e voltar pra ela
+    const teto = this.saindoPelaRedoma || pertoDaNave ? Math.max(teto0, (pnPerto ? pnPerto.y + 2.2 * ESCALA_NAVE_V : this.topoNave()) + 12) : teto0;   // perto da nave (ou saindo pela redoma): dá pra subir acima do dorso — e voltar pra ela
     const v = passoVertical(this.jet.y, this.jet.vy, this.jet.tecla, dt, teto, this.impulsoFrente);
     if (this.cidade && v.y > 40) {   // lá em cima: a ilha da Zaeon e as ilhotas são pousos (e corpos sólidos)
       const topoIlha = this.cidade.ilha.position.y;
@@ -631,8 +633,12 @@ export class CyberEngine {
   /** onde a nave-QG ficou estacionada (vem da sala): vale enquanto o dono não mexe nela nesta sessão */
   setNaveQG(pose: PoseNave | null) {
     if (!pose || this.pilotando || this.naveMexida) return;
-    // pose salva na DOCA ANTIGA (a Zaeon era a 230 m; cresceu e subiu pra 290): ignora → fica na doca nova
-    if (Math.abs(pose.y + NAVE_QG.deck - 230) < 1.5) return;
+    // pose salva numa DOCA ANTIGA (a Zaeon já foi a 230 e a 290 m; a nave já teve o convés a 7 m): ignora → doca nova
+    for (const d of [NAVE_QG.deck, DECK_ANTIGO]) for (const h of [230, 290]) if (Math.abs(pose.y + d - h) < 1.5) return;
+    // atracada na Zaeon de hoje mas com o convés da nave antiga (maior): acerta a altura pro convés novo
+    if (Math.abs(pose.y + DECK_ANTIGO - CIDADE.pisoY) < 1.5) pose = { ...pose, y: CIDADE.pisoY - NAVE_QG.deck };
+    // na doca (de qualquer jeito que tenha sido salva): a doca de hoje — de frente pra Zaeon, a rampa na borda
+    { const d = poseDaDoca(); if (Math.hypot(pose.x - d.x, pose.z - d.z) < 20 && Math.abs(pose.y - d.y) < 10) pose = d; }
     this.naveEst = { ...this.naveEst, ...pose, vx: 0, vy: 0, vz: 0 };
   }
   /** botões de movimento na tela: SUBIR/DESCER (segurar) */
@@ -844,7 +850,7 @@ export class CyberEngine {
     return vagas().flatMap((v, i) => ocup.has(i) || v.ceu !== ceu ? [] : [{ x: v.x, z: v.z, r: 1.1 }]);
   }
   /** altura do dorso da nave (onde se fica em pé) e o raio andável lá em cima */
-  private topoNave(): number { return this.naveEst.y + 2.2 * ESCALA_NAVE; }
+  private topoNave(): number { return this.naveEst.y + 2.2 * ESCALA_NAVE_V; }
   private static readonly TOPO_NAVE_R = 2.2 * ESCALA_NAVE;
   /** o quanto a câmera se afasta (roda do mouse / pinça) — a nave-QG tem 68 m */
   private static readonly CAM_MAX = 70;
@@ -853,9 +859,12 @@ export class CyberEngine {
     const R = 3.75 * ESCALA_NAVE, out: Colisor[] = [];
     if (this.saindoPelaRedoma) return [];   // saindo pela redoma: o próprio casco não empurra
     { const p = this.poseNave(); if (p && this.redomaChamando() && Math.hypot(this.eu.pos.x - p.x, this.eu.pos.z - p.z) < RAIO_REDOMA) return []; }   // entrando pelo vão da redoma
-    const noCorpo = (y: number) => alt > y - 1 && alt < y + 2.2 * ESCALA_NAVE;   // o casco vai do chão até o dorso
-    if (this.nave && !this.pilotando && this.nave.group.visible && noCorpo(this.naveEst.y)) out.push({ x: this.naveEst.x, z: this.naveEst.z, r: R });
-    for (const a of this.remotos.values()) if (a.nave && a.naveP && noCorpo(a.naveP.y)) out.push({ x: a.naveP.x, z: a.naveP.z, r: R });
+    const noCorpo = (y: number) => alt > y - 1 && alt < y + 2.2 * ESCALA_NAVE_V;   // o casco vai do chão até o dorso
+    // o CORREDOR DA RAMPA (atrás da nave) fica aberto: o fim da rampa fica DENTRO do raio do casco — com o círculo
+    // inteiro, ninguém chegava andando nela (pousada no chão, a nave ficava sem entrada)
+    const naRampaDe = (p: PoseNave) => noCorredorDaRampa(p, this.eu.pos);
+    if (this.nave && !this.pilotando && this.nave.group.visible && noCorpo(this.naveEst.y) && !naRampaDe(this.naveEst)) out.push({ x: this.naveEst.x, z: this.naveEst.z, r: R });
+    for (const a of this.remotos.values()) if (a.nave && a.naveP && noCorpo(a.naveP.y) && !naRampaDe(a.naveP)) out.push({ x: a.naveP.x, z: a.naveP.z, r: R });
     return out;
   }
   /** põe um avatar SENTADO no assento do piloto, na cabine da nave */
@@ -875,7 +884,7 @@ export class CyberEngine {
   /** sólidos pra nave: os marcos andáveis como cilindros (quem vem de cima pousa no topo) */
   private solidosDeVoo(): Pilar[] { return [...this.marcosNav().flatMap(({ lm }) => this.pilaresZaeon(lm)), ...(this.univ ? pilaresDasPlataformas() : []), ...this.pilaresDasIlhotas(), ...this.pilaresDaNaveQG()]; }
   /** a nave-QG parada é sólida pra quem voa (moto, a nave dos outros): pousa-se no dorso dela */
-  private pilaresDaNaveQG(): Pilar[] { if (this.pilotando) return []; const p = this.poseNave(); return p ? [{ x: p.x, z: p.z, r: NAVE_QG.raio, topo: p.y + 2.2 * ESCALA_NAVE, base: p.y + 0.5 }] : []; }
+  private pilaresDaNaveQG(): Pilar[] { if (this.pilotando) return []; const p = this.poseNave(); return p ? [{ x: p.x, z: p.z, r: NAVE_QG.raio, topo: p.y + 2.2 * ESCALA_NAVE_V, base: p.y + 0.5 }] : []; }
 
   // ───────────── marcos / dono ─────────────
   /** o marco com topo de acesso "dono" (Zaeon) */
@@ -1422,8 +1431,8 @@ export class CyberEngine {
       const cada = dCam < 25 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 0;
       a.acum = (a.acum ?? 0) + dt;
       if (a.acum >= cada) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
-      if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
-      else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = a.naveYaw ?? 0; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0, fechada: true }); this.noAssento(a.av, a.nave); }
+      if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
+      else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = (a.naveYaw ?? 0) + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0, fechada: true }); this.noAssento(a.av, a.nave); }
     }
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
@@ -1438,7 +1447,7 @@ export class CyberEngine {
     if (this.solana && this.regiaoPerto(this.solana.group, "solana", AREA_SOLANA)) this.solana.atualizar(dt, t);
     if (this.nave) {
       const n = this.naveEst, curva = (n.yaw - this.yawAnt) / Math.max(dt, 1e-3); this.yawAnt = n.yaw;
-      this.nave.group.position.set(n.x, n.y, n.z); this.nave.group.rotation.y = n.yaw;   // estacionária: fica exatamente onde parou
+      this.nave.group.position.set(n.x, n.y, n.z); this.nave.group.rotation.y = n.yaw + GIRO_PLANTA;   // estacionária: fica exatamente onde parou (a frente, com a rampa, no rumo)
       this.nave.group.visible = this.pilotando || !this.naveDoDonoFora();
       this.nave.atualizar({ dt, t, voando: this.pilotando && !this.pousado, vel: Math.hypot(n.vx, n.vz) / VOO.vel, curva, fechada: this.pilotando });
       if (this.pilotando) this.noAssento(eu.av, this.nave);   // o piloto aparece na cadeira, na cabine do centro

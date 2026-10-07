@@ -19,22 +19,27 @@ import { CIDADE, DOCA_ANGULO, ILHOTAS, mundo, naIlhaPrincipal } from "./ceu";
 export { DOCA_ANGULO };
 import { empurrarDasParedes, empurrarDosRetangulos, paredesDoRetangulo, type Parede } from "./universidade";
 
-/** o modelo do disco tem ~7,56 m de diâmetro em 1× (components/cyber/Nave.ts); a nave-QG tem ~68 m */
-export const ESCALA_NAVE_QG = 9.0;
+/** o modelo do disco tem ~7,56 m de diâmetro em 1× (components/cyber/Nave.ts). A nave-QG: ~48 m de diâmetro (30% menor
+ *  que a de 68 m) e ACHATADA — a escala da ALTURA (`_V`) é menor que a da largura: um disco mais oval */
+export const ESCALA_NAVE_QG = 6.3;
+export const ESCALA_NAVE_QG_V = 4.9;
+/** o convés antigo (a nave de 68 m, escala 9): poses salvas com ele são reconhecidas na doca */
+export const DECK_ANTIGO = (1 - 0.222) * 9;
 /** a planta do convés foi desenhada pra escala 6,3 — `K` estica os CÔMODOS e as posições (os móveis ficam do
  *  tamanho de gente: só o lugar deles escala) */
 const K = ESCALA_NAVE_QG / 6.3;
 const P = (x: number, z: number) => ({ x: x * K, z: z * K });
 export const NAVE_QG = {
   /** raio do casco (a aba), a altura do convés acima da origem e o raio do casco na altura do convés (a porta) */
-  raio: 3.78 * ESCALA_NAVE_QG, deck: (1 - 0.222) * ESCALA_NAVE_QG, cascoNoConves: 3.17 * ESCALA_NAVE_QG,
+  raio: 3.78 * ESCALA_NAVE_QG, deck: (1 - 0.222) * ESCALA_NAVE_QG_V, cascoNoConves: 3.17 * ESCALA_NAVE_QG,
   /** raio útil do convés (dentro do casco) e a altura das paredes internas */
   interiorR: 15.5 * K, pe: 4.2,
   /** a altura do piso da CABINE DE COMANDO acima do convés: lá em cima, ~1 m abaixo do aro da redoma retrátil — os
    *  controles ficam na altura dela (o aro da redoma está a (1 + 0,86) × escala da origem) */
-  cabine: (1 + 0.86) * ESCALA_NAVE_QG - (1 - 0.222) * ESCALA_NAVE_QG - 1.0,
-  leme: { x: 1.5, z: 2.6 },    // a cadeira do piloto, lá em cima (o avatar senta aqui)
-  emPe: { x: 1.5, z: 0.8 },    // onde se fica de pé ao largar o leme (atrás da cadeira)
+  cabine: (1 + 0.86) * ESCALA_NAVE_QG_V - (1 - 0.222) * ESCALA_NAVE_QG_V - 0.6,   // (nave achatada: 0,6 abaixo do aro, ainda acima das paredes da casa)
+  // (a cabine olha pra FRENTE da nave = o −z da planta, o lado da porta/rampa — ver `GIRO_PLANTA`)
+  leme: { x: -1.5, z: -2.6 },  // a cadeira do piloto, lá em cima (o avatar senta aqui)
+  emPe: { x: -1.5, z: -0.8 },  // onde se fica de pé ao largar o leme (atrás da cadeira)
   portaDentro: P(0, -13.6),    // o pé da porta, por dentro
   saida: P(0, -27.5),          // lá fora, no fim da rampa (atrás da nave)
   alcance: 2.4,                // perto o bastante pra usar algo (F)
@@ -105,12 +110,12 @@ export function pontoDaEscada(esc: number, r = (ESCADA.rIn + ESCADA.rOut) / 2): 
 export const TOTAL_ESCADA = ESC_TOTAL;
 /** os móveis da cabine (alturas acima do piso dela): o console curvo na frente do leme, a cadeira, o DESKTOP de
  *  estudos (a mesa com os monitores — F abre o laboratório), do lado OPOSTO ao leme, e um console lateral */
-export const MOVEIS_CABINE: MovelNave[] = [
+export const MOVEIS_CABINE: MovelNave[] = ([
   { tipo: "console", x0: -1.0, x1: 4.0, z0: 4.4, z1: 5.1, alt: 1.1 },
   { tipo: "leme", x0: 1.05, x1: 1.95, z0: 2.2, z1: 3.05, alt: 1.2, solido: false },
   { tipo: "terminal", x0: -0.6, x1: 3.6, z0: -5.9, z1: -5.0, alt: 0.78 },   // o MEU DESKTOP (onde se abre o laboratório): no fundo, do lado oposto ao leme
   { tipo: "console", x0: 5.4, x1: 6.2, z0: 1.4, z1: 3.0, alt: 1.15 },
-];
+] as MovelNave[]).map((m) => ({ ...m, x0: -m.x1, x1: -m.x0, z0: -m.z1, z1: -m.z0 }));   // meia volta: olhando pra frente da nave (o lado da rampa)
 /** o guarda-corpo da cabine (as bordas do mezanino) e o do vão da escada (aberto só no topo dela) */
 let paredesCabCache: Parede[] | null = null;
 export function paredesDaCabine(): Parede[] {
@@ -224,10 +229,13 @@ export function acaoNaNave(b: Bordo, dono: boolean): "pilotar" | "estudar" | "sa
 export const redomaAberta = (b: Bordo | null, pilotando: boolean) => !pilotando && !!b && b.nivel === 1;
 
 // ───────────── a nave no mundo ─────────────
+/** `yaw` = o RUMO da nave (pra onde ela voa). A planta (casa, porta, rampa) fica de MEIA VOLTA em relação a ele: a
+ *  porta e a RAMPA (o −z da planta) ficam na FRENTE — pousada, desce-se de frente, pro lado que o piloto olha */
 export type PoseNave = { x: number; y: number; z: number; yaw: number };
-/** local → mundo (plano) e mundo → local, pela pose da nave */
-export function paraMundo(p: PoseNave, l: P2): P2 { const c = Math.cos(p.yaw), s = Math.sin(p.yaw); return { x: p.x + l.x * c + l.z * s, z: p.z - l.x * s + l.z * c }; }
-export function paraLocal(p: PoseNave, w: P2): P2 { const dx = w.x - p.x, dz = w.z - p.z, c = Math.cos(p.yaw), s = Math.sin(p.yaw); return { x: dx * c - dz * s, z: dx * s + dz * c }; }
+export const GIRO_PLANTA = Math.PI;
+/** local (planta) → mundo (plano) e mundo → local, pela pose da nave */
+export function paraMundo(p: PoseNave, l: P2): P2 { const a = p.yaw + GIRO_PLANTA, c = Math.cos(a), s = Math.sin(a); return { x: p.x + l.x * c + l.z * s, z: p.z - l.x * s + l.z * c }; }
+export function paraLocal(p: PoseNave, w: P2): P2 { const dx = w.x - p.x, dz = w.z - p.z, a = p.yaw + GIRO_PLANTA, c = Math.cos(a), s = Math.sin(a); return { x: dx * c - dz * s, z: dx * s + dz * c }; }
 /** a altura do convés no mundo */
 export const alturaDoConves = (p: PoseNave) => p.y + N.deck;
 /** perto da SAÍDA (lá fora, atrás da nave) e mais ou menos na altura do convés → dá pra entrar */
@@ -236,12 +244,18 @@ export function pertoDaEntrada(p: PoseNave, w: P2, alt: number): boolean {
   return (perto(w, fimRampa, N.alcanceEntrada) || perto(w, naPorta, N.alcanceEntrada)) && Math.abs(alt - alturaDoConves(p)) < 9;
 }
 
+/** no CORREDOR DA RAMPA (lá fora, na frente da nave)? O colisor do casco deixa esse corredor aberto: o fim da rampa
+ *  fica DENTRO do raio do casco — com o círculo inteiro ninguém chegava andando nela (a nave pousada ficava sem entrada) */
+export function noCorredorDaRampa(p: PoseNave, w: P2): boolean {
+  const l = paraLocal(p, w); return Math.abs(l.x) < RAMPA.meia + 0.8 && l.z < 0 && l.z > RAMPA.z0 - 3;
+}
+
 /** a DOCA: a nave pairando ao lado da ilha da Zaeon (no lugar do antigo hangar), a proa pra fora e a porta (popa)
  *  na borda da ilha — da borda, F entra. Entre as ilhotas (não encosta em nenhuma). */
 export function poseDaDoca(): PoseNave {
   const dir = { x: Math.cos(DOCA_ANGULO), z: Math.sin(DOCA_ANGULO) }, d = CIDADE.andavelR - 1 - N.saida.z;   // a saída fica logo antes da borda andável
   const c = mundo({ x: dir.x * d, z: dir.z * d });
-  return { x: c.x, y: CIDADE.pisoY - N.deck, z: c.z, yaw: Math.atan2(dir.x, dir.z) };
+  return { x: c.x, y: CIDADE.pisoY - N.deck, z: c.z, yaw: Math.atan2(-dir.x, -dir.z) };   // de FRENTE pra Zaeon: a rampa (na frente) desce na borda
 }
 /** sanidade: o casco da nave na doca não encosta em nenhuma ilhota */
 export const docaLivre = () => { const p = poseDaDoca(); return ILHOTAS.every((il) => Math.hypot(mundo(il).x - p.x, mundo(il).z - p.z) > N.raio + il.r + 2); };

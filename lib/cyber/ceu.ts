@@ -324,6 +324,11 @@ export function pisoNoAr(p: P2, yRel: number): number | null {
   return Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= CIDADE.bordaR + 0.1 ? 0 : null;
 }
 
+/** o PISO de onde se voa de mochila aqui (yRel = a altura atual acima do piso central): o teto da mochila e as paredes
+ *  baixas contam a partir DELE — no lounge (88 m acima da central) o teto antigo, medido da central, puxava quem pulava
+ *  pra baixo do piso do lounge e ele caía da plataforma */
+export const pisoDeVoo = (p: P2, yRel: number) => pisoNoAr(p, yRel) ?? 0;
+
 /** andar na Zaeon SEM a parede invisível da borda: só os colisores (quem passa da borda, cai — o engine trata) */
 export const resolverCidadeLivre = (prop: P2): P2 => empurrarParaFora(prop, colisoresDaCidade());
 
