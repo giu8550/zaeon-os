@@ -21,7 +21,7 @@ import { arvoreDeThreads, type Thread } from "@/lib/chat/threads";
 const chaveRecolhida = (sala: string) => `zaeon.chat.sidebar.${sala}.recolhida`;
 
 export default function ConversasSidebar({
-  sala, threads, ativa, ocupada, aoTrocar, aoCriar, aoFechar, aoRenomear, aoCriarSub, className = "",
+  sala, threads, ativa, ocupada, aoTrocar, aoCriar, aoFechar, aoRenomear, aoCriarSub, className = "", embutida = false,
 }: {
   /** "estudos" | "pesquisa" — cada sala lembra se a barra está recolhida. */
   sala: string;
@@ -37,6 +37,11 @@ export default function ConversasSidebar({
   /** Sub-tema sob esta conversa. Sem isto, sem o botão. */
   aoCriarSub?: (paiId: string) => void;
   className?: string;
+  /**
+   * Dentro da SIDEBAR PRINCIPAL do app (components/chat/ConversasSlot): ocupa a largura dela, sem
+   * coluna/borda própria e sem recolher — quem recolhe é a sidebar.
+   */
+  embutida?: boolean;
 }) {
   const [recolhida, setRecolhida] = useState(false);
   useEffect(() => {
@@ -73,7 +78,7 @@ export default function ConversasSidebar({
       .filter((n) => casa(n.thread) || n.filhas.length);
   }, [arvore, termo]);
 
-  if (recolhida) {
+  if (recolhida && !embutida) {
     return (
       <nav aria-label="Conversas" className={`shrink-0 w-11 flex flex-col items-center gap-1 py-2 border-r border-slate-200 dark:border-white/10 ${className}`}>
         <button type="button" onClick={alternar} className={BTN_ICONE} aria-label="Mostrar conversas" title="Mostrar conversas">
@@ -167,14 +172,16 @@ export default function ConversasSidebar({
   };
 
   return (
-    <nav aria-label="Conversas" className={`shrink-0 w-[248px] max-w-[70vw] flex flex-col min-h-0 border-r border-slate-200 dark:border-white/10 ${className}`}>
-      <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1">
+    <nav aria-label="Conversas" className={`${embutida ? "flex-1 w-full" : "shrink-0 w-[248px] max-w-[70vw] border-r border-slate-200 dark:border-white/10"} flex flex-col min-h-0 ${className}`}>
+      <div className={`flex items-center gap-1 ${embutida ? "px-1 pt-1" : "px-2.5 pt-2.5"} pb-1`}>
         <span className="flex-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Conversas</span>
-        <button type="button" onClick={alternar} className={BTN_ICONE} aria-label="Recolher conversas" title="Recolher conversas">
-          <PanelLeftClose size={15} />
-        </button>
+        {!embutida && (
+          <button type="button" onClick={alternar} className={BTN_ICONE} aria-label="Recolher conversas" title="Recolher conversas">
+            <PanelLeftClose size={15} />
+          </button>
+        )}
       </div>
-      <div className="px-2 pb-1.5">
+      <div className={`${embutida ? "px-0" : "px-2"} pb-1.5`}>
         <button
           type="button"
           onClick={aoCriar}
@@ -198,7 +205,7 @@ export default function ConversasSidebar({
           </label>
         </div>
       )}
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-2 pb-2 flex flex-col gap-0.5">
+      <div className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar ${embutida ? "px-0" : "px-2"} pb-2 flex flex-col gap-0.5`}>
         {nos.length === 0 && (
           <p className="px-2 py-3 text-[12px] text-slate-500 dark:text-white/45">{termo ? "Nada com esse nome." : "Nenhuma conversa ainda."}</p>
         )}
