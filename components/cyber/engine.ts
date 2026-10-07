@@ -30,6 +30,8 @@ import { HOLO_NA_BASE } from "@/lib/cyber/recado";
 import type { RecadoQG } from "@/lib/lounge3d/tipos";
 import { criarUniversidade, type UniversidadeHandle } from "./Universidade";
 import { naUniversidade, UNIVERSIDADE } from "@/lib/cyber/universidade";
+import { CAMPI, IDS_CAMPI, type IdCampus } from "@/lib/cyber/campi";
+import { criarCampus, type CampusHandle } from "./Campus";
 import { PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, anelDoChao, decolaDaPlataforma, elevadorAqui, noAnelDoDisco, noArNaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma, tetoNaPlataforma, type IdPlataforma } from "@/lib/cyber/plataformas";
 import { criarSolanaHouse, type SolanaHouseHandle } from "./SolanaHouse";
 import { DECK_ANTIGO, GIRO_PLANTA, noCorredorDaRampa, NAVE_QG, RAIO_REDOMA, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, RAMPA, naPontaDaRampa, naRampaLaFora, paraLocal, paraMundo, pertoDaEntrada, poseDaDoca, pousoNaNave, rampaDaNave, redomaAberta, type Bordo, type PoseNave } from "@/lib/cyber/naveQG";
@@ -196,6 +198,8 @@ export class CyberEngine {
   private holo: HoloRecadoHandle | null = null; private recadoId: string | null | undefined = undefined;
   /** a Universidade (castelo no chão, ao norte da praça) */
   private univ: UniversidadeHandle | null = null;
+  /** os OUTROS CAMPI flutuantes (UFC, Unifor, UECE — lib/cyber/campi) */
+  private campi: { id: IdCampus; h: CampusHandle; area: () => Regiao }[] = [];
   /** a Solana House (Superteam Brasil) — disco flutuante com prédio de 3 andares + rooftop */
   private solana: SolanaHouseHandle | null = null;
   /** o player do toca-discos do lounge (a música sai das caixas, sincronizada pra sala toda) */
@@ -310,7 +314,7 @@ export class CyberEngine {
     this.R.autoClear = false; this.R.outputColorSpace = THREE.SRGBColorSpace;
     const cv = this.R.domElement; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:" + (opts.menu ? "pan-y" : "none");
     container.appendChild(cv);
-    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.15, 2600);   // mapa maior (Zaeon mega: a UNILAB e a Solana bem longe)
+    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.15, 3600);   // mapa de raio 1500 (os campi na borda: de um lado se vê o outro)
     this.cena = criarCenaCosmica(low, this.w / this.h);
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
@@ -328,6 +332,11 @@ export class CyberEngine {
       if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
       this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); camuflarGrupo(this.univ.group); this.cena.scene.add(this.univ.group);
       { const u = this.univ; fundirEstaticos(u.group, { passo: (_, t) => u.atualizar(1 / 30, t), manter: comDescendentes(u.alvosCamera) }); }
+      for (const id of IDS_CAMPI) {   // os outros campi: prédios instanciados (o lote só junta a fundação/placas)
+        const C = CAMPI[id], h = criarCampus(id, { low }); this.cena.scene.add(h.group);
+        fundirEstaticos(h.group, { passo: (_, t) => h.atualizar(1 / 30, t), manter: comDescendentes(h.alvosCamera) });
+        this.campi.push({ id, h, area: cil(C.centro, C.r, C.y, Math.min(220, C.r * 0.6) + 20, 110) });
+      }
       this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); camuflarGrupo(this.solana.group); this.cena.scene.add(this.solana.group);
       { const so = this.solana; fundirEstaticos(so.group, { passo: (_, t) => so.atualizar(1 / 30, t) }); }
       pararCamuflagem(typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
@@ -1343,6 +1352,15 @@ export class CyberEngine {
       const h = this.rayCam.intersectObjects(marco.alvos, true)[0];
       if (h) dist = Math.max(2.2, h.distance - 0.6);
     }
+    // num campus: um prédio entre a câmera e o personagem → a câmera se aproxima
+    const campusAqui = this.plat ? this.campi.find((c) => c.id === this.plat!.id) : undefined;
+    if (campusAqui) {
+      const alvoOlho = this.vCamA.set(this.camT.x, this.camT.y + 0.8, this.camT.z);
+      const dir = this.vCamB.set(Math.sin(this.camAz) * cp, sp, Math.cos(this.camAz) * cp).normalize();
+      this.rayCam.set(alvoOlho, dir); this.rayCam.far = dist;
+      const h = this.rayCam.intersectObjects(campusAqui.h.alvosCamera, false)[0];
+      if (h) dist = Math.max(2.2, h.distance - 0.6);
+    }
     // na universidade: muralhas, paredes, torres e telhados entre a câmera e o personagem → a câmera se aproxima
     if (this.univ && this.plat?.id === "univ" && naUniversidade(this.eu.pos)) {
       const alvoOlho = this.vCamA.set(this.camT.x, this.camT.y + 0.8, this.camT.z);
@@ -1609,6 +1627,7 @@ export class CyberEngine {
       this.holo.atualizar(dt, t);
     }
     if (this.univ && this.regiaoPerto(this.univ.group, "unilab", AREA_UNILAB)) this.univ.atualizar(dt, t);
+    for (const c of this.campi) if (this.regiaoPerto(c.h.group, `campus-${c.id}`, c.area)) c.h.atualizar(dt, t);
     if (this.solana && this.regiaoPerto(this.solana.group, "solana", AREA_SOLANA)) this.solana.atualizar(dt, t);
     if (this.nave) {
       const n = this.naveEst, curva = (n.yaw - this.yawAnt) / Math.max(dt, 1e-3); this.yawAnt = n.yaw;
@@ -1790,7 +1809,7 @@ export class CyberEngine {
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
     this.somLounge?.dispose(); this.som.dispose();
-    this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
+    this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }
     for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.casca.removeFromParent();
     for (const f of this.fabricas) f.robo.dispose();

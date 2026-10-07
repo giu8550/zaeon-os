@@ -5,10 +5,10 @@
  *  - a voz (signaling WebRTC) só vai pra alguém que está NA MESMA sala, com teto de tamanho.
  */
 export const MAX_JOGADORES = 5;
-/** o mapa inteiro (VOO.raioMapa 960 + folga) e a altura máxima (VOO.yMax 720 + dorso da nave/mochila) — espelha MAPA
+/** o mapa inteiro (VOO.raioMapa 1500 + folga — os campi UFC/Unifor/UECE ficam na borda) e a altura máxima (VOO.yMax 720 + dorso da nave/mochila) — espelha MAPA
  *  de lib/lounge3d/sala. A Zaeon mega fica em z −560 (até −812) com piso a 450 m: com 600/400 quem estava lá
  *  aparecia pros outros puxado pro lado e as motos/nave 50 m ABAIXO do piso. */
-const COORD = 1000, ALT = 800;
+const COORD = 1540, ALT = 800;
 
 const num = (v: unknown, min: number, max: number): number | null =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null;
