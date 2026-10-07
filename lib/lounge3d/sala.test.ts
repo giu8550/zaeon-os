@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizarTexto, sanitizarNota, sanitizarArtefato, lerConteudo, aplicarOps, admitir, moverRelativoCamera, interpolar, sanitizarPresenca, notaDoPonto } from "@/lib/lounge3d/sala";
+import { sanitizarTexto, sanitizarNota, sanitizarArtefato, lerConteudo, aplicarOps, admitir, moverRelativoCamera, interpolar, sanitizarPresenca, notaDoPonto, MAPA } from "@/lib/lounge3d/sala";
 import { lerPontos, empurrarPontos, removerPonto, pontosDaResposta, MAX_PONTOS } from "@/lib/lounge3d/pontos";
 import { LIMITE_SALA, MAX_NOTAS, MAX_TEXTO_CHAT, corDoUsuario, salaIdDeCanal, canalSala } from "@/lib/lounge3d/tipos";
 
@@ -115,7 +115,7 @@ describe("canal e cor", () => {
     expect(sanitizarPresenca({ ...base, ceu: true })?.ceu).toBe(true);
     expect(sanitizarPresenca({ ...base, ceu: 1 })?.ceu).toBe(false);
     expect(sanitizarPresenca({ ...base, voo: { y: 120, yaw: 1 } })?.voo).toEqual({ y: 120, yaw: 1 });
-    expect(sanitizarPresenca({ ...base, voo: { y: 9999, yaw: 1 } })?.voo).toEqual({ y: 300, yaw: 1 });   // teto
+    expect(sanitizarPresenca({ ...base, voo: { y: 9999, yaw: 1 } })?.voo).toEqual({ y: MAPA.alt, yaw: 1 });   // teto
     expect(sanitizarPresenca({ ...base, voo: { y: "alto" } })?.voo).toBeUndefined();
     expect(sanitizarPresenca({ ...base, voo: "x" })?.voo).toBeUndefined();
     // moto voadora (qualquer um): vaga válida passa; lixo some
@@ -126,7 +126,7 @@ describe("canal e cor", () => {
   it("presença: jet (voando de mochila a jato) só número, com teto", () => {
     const base = { userId: "a".repeat(24), name: "Ana", color: "#4aa3ff", x: 1, z: 2, facing: 0 };
     expect(sanitizarPresenca({ ...base, jet: 12.5 })?.jet).toBe(12.5);
-    expect(sanitizarPresenca({ ...base, jet: 9999 })?.jet).toBe(300);
+    expect(sanitizarPresenca({ ...base, jet: 9999 })?.jet).toBe(MAPA.alt);
     expect(sanitizarPresenca({ ...base, jet: "alto" })?.jet).toBeUndefined();
     expect(sanitizarPresenca(base)?.jet).toBeUndefined();
     expect(sanitizarPresenca({ ...base, alt: 193.2 })?.alt).toBe(193.2);   // em pé no dorso da nave
@@ -136,7 +136,10 @@ describe("canal e cor", () => {
   it("presença: naveParada (nave pousada fora do hangar) só com números válidos, com limites", () => {
     const base = { userId: "a".repeat(24), name: "Ana", color: "#4aa3ff", x: 1, z: 2, facing: 0 };
     expect(sanitizarPresenca({ ...base, naveParada: { x: 24, y: 0, z: 24, yaw: 1 } })?.naveParada).toEqual({ x: 24, y: 0, z: 24, yaw: 1 });
-    expect(sanitizarPresenca({ ...base, naveParada: { x: 9999, y: 9999, z: -9999, yaw: 0 } })?.naveParada).toEqual({ x: 400, y: 400, z: -400, yaw: 0 });
+    expect(sanitizarPresenca({ ...base, naveParada: { x: 9999, y: 9999, z: -9999, yaw: 0 } })?.naveParada).toEqual({ x: MAPA.coord, y: MAPA.alt, z: -MAPA.coord, yaw: 0 });
+    // a nave na doca da Zaeon mega (z ≈ −300…−800, y ≈ 450): não pode ser puxada pro mapa antigo
+    expect(sanitizarPresenca({ ...base, naveParada: { x: 40, y: 452.5, z: -790, yaw: 1 } })?.naveParada).toEqual({ x: 40, y: 452.5, z: -790, yaw: 1 });
+    expect(sanitizarPresenca({ ...base, x: -394, z: -790, alt: 550, moto: { s: 4, y: 452, yaw: 0 } })).toMatchObject({ x: -394, z: -790, alt: 550, moto: { s: 4, y: 452 } });
     expect(sanitizarPresenca({ ...base, naveParada: { x: 1, y: 0, z: "a", yaw: 0 } })?.naveParada).toBeUndefined();
     expect(sanitizarPresenca({ ...base, naveParada: true })?.naveParada).toBeUndefined();
   });

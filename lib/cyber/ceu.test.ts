@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, type NomeSala } from "./ceu";
+import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, type NomeSala } from "./ceu";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, baseNoCeu, spawnDaBase } from "./bases";
 import { vagas } from "./motos";
 import { NAVE_QG, paraMundo, poseDaDoca } from "./naveQG";
@@ -336,3 +336,30 @@ describe("céu livre: ilhotas com colisão e borda sem parede", () => {
   });
 });
 
+
+describe("MOTO na Zaeon mega (voo com os sólidos da cidade)", () => {
+  const L = CIDADE.salas.lounge, centroLounge = mundo({ x: L.x, z: L.z }), pisoLounge = CIDADE.pisoY + ALTURA_LOUNGE;
+  const voar = (s: EstadoVoo, c: Parameters<typeof passoVoo>[1], seg: number) => { for (let i = 0; i < seg * 60; i++) s = passoVoo(s, c, 1 / 60, solidosDaCidade()).s; return s; };
+  it("descendo sobre o lounge, POUSA no piso do lounge (antes atravessava até a plataforma central)", () => {
+    const p = { x: centroLounge.x + 15, z: centroLounge.z };
+    expect(chaoDaNave({ ...p, y: pisoLounge + 20 })).toBeCloseTo(pisoLounge, 5);
+    expect(chaoDaNave({ ...p, y: pisoLounge - 10 })).toBe(0);   // por baixo da laje: o chão é lá embaixo
+    const s = voar({ ...p, y: pisoLounge + 20, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: 0, wz: 0, subir: false, descer: true }, 3);
+    expect(s.y).toBeCloseTo(pisoLounge, 3);
+  });
+  it("na cabine do DJ (topo da torre) também se pousa", () => {
+    const t = mundo(daSala(L, 0, TORRE_DJ.z));
+    expect(chaoDaNave({ ...t, y: pisoLounge + TORRE_DJ.topo + 5 })).toBeCloseTo(pisoLounge + TORRE_DJ.topo, 5);
+  });
+  it("voando de lado não se entra na CAPELA nem se atravessa a torre do DJ", () => {
+    const s = voar({ x: CIDADE.centro.x + 120, y: CIDADE.pisoY + 8, z: CIDADE.centro.z, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: -1, wz: 0, subir: false, descer: false }, 6);
+    expect(Math.hypot(s.x - CIDADE.centro.x, s.z - CIDADE.centro.z)).toBeGreaterThanOrEqual(CIDADE.cidadela.r);
+    const t = mundo(daSala(L, 0, TORRE_DJ.z)), lx = t.x - centroLounge.x, lz = t.z - centroLounge.z, n = Math.hypot(lx, lz);
+    const ini = { x: t.x - (lx / n) * 25, z: t.z - (lz / n) * 25 };   // do centro do lounge, rumo à torre, a 3 m do piso
+    const s2 = voar({ ...ini, y: pisoLounge + 3, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: lx / n, wz: lz / n, subir: false, descer: false }, 3);
+    expect(Math.hypot(s2.x - t.x, s2.z - t.z)).toBeGreaterThanOrEqual(TORRE_DJ.r - 1e-6);
+  });
+  it("as vagas de moto da Zaeon ficam fora dos sólidos (dá pra decolar)", () => {
+    for (const v of vagas().filter((q) => q.ceu)) for (const s of solidosDaCidade()) expect(Math.hypot(v.x - s.x, v.z - s.z)).toBeGreaterThan(s.r + 2);
+  });
+});

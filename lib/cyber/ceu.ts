@@ -400,8 +400,22 @@ export function foraDaIlha(p: { x: number; y: number; z: number }): { x: number;
   return { x: c.x + (d > 1e-4 ? dx * k : CIDADE.bordaR), y: p.y, z: c.z + (d > 1e-4 ? dz * k : 0) };
 }
 
-/** o chão sob a nave: piso da cidade se está sobre ela (e acima do piso), senão o chão do mapa */
+/** o chão sob a nave/moto: piso da cidade se está sobre ela (e acima do piso) — a ESCADA, o LOUNGE, o palco e a cabine
+ *  do DJ também (quem desce de moto ali pousa ali, não atravessa até a plataforma central) —, senão o chão do mapa */
 export function chaoDaNave(p: { x: number; y: number; z: number }): number {
-  const c = CIDADE.centro;
+  const c = CIDADE.centro, h = alturaNaCidade(p);
+  if (h > 0 && p.y >= CIDADE.pisoY + h - 0.5) return CIDADE.pisoY + h;
   return Math.hypot(p.x - c.x, p.z - c.z) <= CIDADE.andavelR && p.y >= CIDADE.pisoY - 0.5 ? CIDADE.pisoY : 0;
+}
+/** os SÓLIDOS de voo da Zaeon além da ilha (cilindros `{x,z,r,topo,base}` no mundo — o mesmo formato dos `Pilar` do
+ *  voo): a CAPELA (de moto não se entra nela; de cima, pousa no telhado do tambor), a LAJE do lounge (de lado não se
+ *  atravessa; por baixo passa) e a TORRE do DJ. Sem eles a moto atravessava tudo isso voando. */
+export function solidosDaCidade(): { x: number; z: number; r: number; topo: number; base: number }[] {
+  const c = CIDADE.centro, s = CIDADE.salas.lounge, L = CIDADE.pisoY + ALTURA_LOUNGE;
+  const lounge = { x: c.x + s.x, z: c.z + s.z }, torre = mundo(daSala(s, 0, TORRE_DJ.z));
+  return [
+    { x: c.x, z: c.z, r: CAPELA.r + 1, topo: CIDADE.pisoY + inicioDaPonta(), base: CIDADE.pisoY - 1 },
+    { ...lounge, r: s.r, topo: L, base: L - 2.5 },
+    { x: torre.x, z: torre.z, r: TORRE_DJ.r, topo: L + TORRE_DJ.topo, base: L - 0.1 },
+  ];
 }
