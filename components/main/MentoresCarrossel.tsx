@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import AgentAvatar from "@/components/agents/AgentAvatar";
+import Cracha, { useHolofote, type DadosCracha } from "@/components/agents/Cracha";
+import { intercalar, montarVitrine, nativosVitrine, type AgenteVitrine, type PerfilPublico } from "@/lib/agents/nativos";
 import { agentAvatars } from "@/lib/canal/flags";
 
 /**
@@ -54,8 +55,16 @@ const ELENCO: Mentor[] = [
 
 export default function MentoresCarrossel({ className = "", semRotulo = false }: { className?: string; /** sem a linha "13 mentores · ao vivo…" */ semRotulo?: boolean }) {
     const [mentores, setMentores] = useState<Mentor[]>(ELENCO);
+    /** Perfis públicos (Modo CEO): crachá editado, quem está ativo, ordem. */
+    const [perfis, setPerfis] = useState<PerfilPublico[]>([]);
+    // Os NATIVOS da casa (Aura, Nina, Caio…) misturados aos mentores plugáveis na vitrine.
+    const grupos = montarVitrine(nativosVitrine(), mentores.map((m) => ({ ...m, tipo: "mentor" as const })), perfis);
+    const nativos = grupos.nativos;
+    const vitrine: AgenteVitrine[] = intercalar<AgenteVitrine>(grupos.nativos, grupos.mentores);
     const [aoVivo, setAoVivo] = useState(false);
     const trilhoRef = useRef<HTMLDivElement>(null);
+    // HOLOFOTE: um crachá visível por vez fica "em cena" (pula, dá um oi, sorri, faz caras)
+    const cena = useHolofote(trilhoRef, vitrine.length * 2);
     const [podeVoltar, setPodeVoltar] = useState(false);
     const [podeAvancar, setPodeAvancar] = useState(true);
     const [semMovimento, setSemMovimento] = useState(false);
@@ -76,20 +85,15 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
 
     useEffect(() => {
         let vivo = true;
-        // Avatares editáveis (AgentProfile) — só com NEXT_PUBLIC_AGENT_AVATARS=1; falha = sem foto.
-        type Foto = { avatarUrl: string | null; nome: string };
-        const avatares: Promise<Map<string, Foto>> = agentAvatars()
-            ? fetch("/api/agents/public")
-                .then((r) => (r.ok ? r.json() : null))
-                .then((j) => new Map<string, Foto>((j?.agentes ?? []).map((a: any): [string, Foto] => [String(a.agentKey), { avatarUrl: a.avatarUrl ?? null, nome: String(a.nome ?? "") }])))
-                .catch(() => new Map<string, Foto>())
-            : Promise.resolve(new Map<string, Foto>());
-        Promise.all([fetch("/api/mentors").then((r) => (r.ok ? r.json() : null)).catch(() => null), avatares])
-            .then(([j, av]) => {
+        // Perfis (AgentProfile: crachá, ativo, ordem, foto) — só com NEXT_PUBLIC_AGENT_AVATARS=1; falha = padrão.
+        const perfisP: Promise<PerfilPublico[]> = agentAvatars()
+            ? fetch("/api/agents/public").then((r) => (r.ok ? r.json() : null)).then((j) => (Array.isArray(j?.agentes) ? j.agentes : [])).catch(() => [])
+            : Promise.resolve([]);
+        Promise.all([fetch("/api/mentors").then((r) => (r.ok ? r.json() : null)).catch(() => null), perfisP])
+            .then(([j, ps]) => {
                 if (!vivo) return;
-                const base: Mentor[] = Array.isArray(j) && j.length > 0 ? j : ELENCO;
-                const comFoto = base.map((m) => { const p = av.get(m.slug); return p ? { ...m, avatarUrl: p.avatarUrl, name: p.nome || m.name } : m; });
-                setMentores(comFoto);
+                setMentores(Array.isArray(j) && j.length > 0 ? j : ELENCO);
+                setPerfis(ps);
                 if (Array.isArray(j) && j.length > 0) setAoVivo(true);
             })
             .catch(() => {
@@ -217,7 +221,7 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
             <div className="mb-6 flex items-end justify-between gap-6">
                 {semRotulo ? <span /> : (
                 <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-slate-500 dark:text-slate-500">
-                    {mentores.length} mentores
+                    {nativos.length} nativos · {mentores.length} mentores
                     {aoVivo ? " · ao vivo da sala de plugins" : ""}
                 </p>
                 )}
@@ -258,79 +262,30 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
             >
                 {/* Lista DUPLICADA: alimenta o loop sem costura do glide contínuo. */}
                 {/* `dark`: os cards dos agentes são VIDRO PRETO nos dois temas (contraste melhor no claro) */}
-                {[...mentores, ...mentores].map((m, i) => (
-                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cartao m={m} /></div>
+                {[...vitrine, ...vitrine].map((m, i) => (
+                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cracha d={dadosCracha(m, i % vitrine.length)} emCena={i === cena} /></div>
                 ))}
             </div>
         </div>
     );
 }
 
-function Cartao({ m }: { m: Mentor }) {
-    const artefatos = (m.signatureArtifacts ?? []).slice(0, 3);
-    const [hover, setHover] = useState(false);
-    return (
-        <article onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)} className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-black/80 backdrop-blur-xl p-5 flex flex-col transition-all duration-300 shadow-[0_12px_32px_-16px_rgba(2,6,23,0.38)] dark:shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
-            <div className="flex items-start justify-between">
-                {/* avatar vivo do mentor (estúdio) → foto → o tile de emoji de sempre */}
-                <AgentAvatar
-                    src={m.avatarUrl}
-                    nome={m.name}
-                    size={52}
-                    agentId={m.slug}
-                    hover={hover}
-                    className="ring-2 ring-cyan-500/30"
-                    fallback={
-                        <span
-                            aria-hidden="true"
-                            className="grid h-10 w-10 place-items-center rounded-xl border border-cyan-500/25 bg-cyan-500/10 text-lg text-cyan-600 dark:text-cyan-300"
-                        >
-                            {m.emoji || "⟁"}
-                        </span>
-                    }
-                />
-                {m.guardrail ? (
-                    <span
-                        className="rounded-md border border-slate-200 dark:border-white/15 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-800 dark:text-white/90"
-                        title={m.guardrail}
-                    >
-                        educacional
-                    </span>
-                ) : null}
-            </div>
-
-            <h3 className="mt-4 text-2xl font-semibold tracking-tight leading-none text-slate-900 dark:text-white">
-                {m.name}
-            </h3>
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300/90">
-                {m.course}
-            </p>
-
-            {m.tagline ? (
-                <p className="mt-4 text-[13.5px] leading-relaxed text-slate-800 dark:text-white/90 line-clamp-3">
-                    {m.tagline}
-                </p>
-            ) : null}
-
-            {artefatos.length > 0 ? (
-                <div className="mt-auto pt-5">
-                    <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300/90">
-                        entrega
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                        {artefatos.map((a) => (
-                            <span
-                                key={a}
-                                className="rounded-md bg-slate-100 dark:bg-white/[0.07] px-2 py-1 text-[11px] text-slate-800 dark:text-white/90"
-                            >
-                                {a}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            ) : null}
-        </article>
-    );
+/** Agente da vitrine → dados do crachá. ID: nativos ZA-N01…, mentores ZA-001… */
+function dadosCracha(m: AgenteVitrine, indice: number): DadosCracha {
+    const n = m.order ?? indice + 1;
+    return {
+        agentId: m.slug,
+        nome: m.name,
+        curso: m.course,
+        tagline: m.tagline,
+        artefatos: m.signatureArtifacts,
+        emoji: m.emoji,
+        foto: m.avatarUrl,
+        id: m.tipo === "nativo" ? `ZA-N${String(n).padStart(2, "0")}` : `ZA-${String(n).padStart(3, "0")}`,
+        rotulo: m.tipo,
+        educacional: !!m.guardrail,
+        redes: m.redes,
+    };
 }
 
 function Seta({

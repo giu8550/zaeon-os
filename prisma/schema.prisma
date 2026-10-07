@@ -1039,6 +1039,13 @@ model AgentProfile {
   bio       String?                          // tagline curta editável
   ativo     Boolean  @default(true)
   ordem     Int      @default(0)
+  // CRACHÁ (landing + Assistentes), editável no Modo CEO → Agents
+  area      String?                          // rótulo do crachá ("Pesquisa", "Medicina")
+  entrega   String[] @default([])            // chips "o que entrega" (máx. 4)
+  emoji     String?                          // fallback da foto
+  whatsapp  String?                          // +5511999999999 (vira wa.me)
+  instagram String?                          // handle, sem @
+  facebook  String?                          // slug da página
   updatedAt DateTime @updatedAt
 
   @@map("agent_profiles")

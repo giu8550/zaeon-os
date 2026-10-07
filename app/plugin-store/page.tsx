@@ -109,6 +109,7 @@ export default function PluginStorePage() {
             p.name.toLowerCase().includes(search.toLowerCase()),
     );
     const showMentores = category === "Todos" || category === "Mentores";
+    const showNativos = category === "Todos" || category === "Agentes";
 
     const headerContainer =
         "pointer-events-auto w-full max-w-7xl h-16 rounded-full backdrop-blur-2xl transition-all duration-500 " +
@@ -206,8 +207,9 @@ export default function PluginStorePage() {
                     </div>
                 </div>
 
-                {/* ─── MENTORES (camada agêntica): plugue no chat ─────────────────── */}
-                {showMentores && <MentoresGrid search={search} />}
+                {/* ─── ASSISTENTES (camada agêntica): nativos + mentores plugáveis ─────────────────── */}
+                {/* nativos (já inclusos) + mentores (plugáveis), em crachás vivos */}
+                {(showMentores || showNativos) && <MentoresGrid search={search} nativos={showNativos} mentores={showMentores} />}
 
                 {/* GRID DE PLUGINS (some na categoria Mentores — lá só entram os mentores) */}
                 {category !== "Mentores" && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20">

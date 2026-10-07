@@ -20,6 +20,8 @@ export default function EstudioDev() {
   const ids = Object.keys(AVATAR_LOOKS);
   const [id, setId] = useState(ids[0]);
   const [mapa, setMapa] = useState<Record<string, AvatarManifest>>({});
+  // a fila só pode rodar DEPOIS de saber quem já tem avatar aprovado (senão regera os aprovados)
+  const [carregado, setCarregado] = useState(false);
   const [rev, setRev] = useState<Record<string, number>>({});
   const [gatilhos, setGatilhos] = useState<Record<string, number>>({});
   const [status, setStatus] = useState<Record<string, Status>>({});
@@ -28,7 +30,7 @@ export default function EstudioDev() {
   const setFila = (f: string[]) => { filaRef.current = f; setFilaState(f); };
   const emCurso = useRef(new Set<string>());
 
-  useEffect(() => { void carregarManifestos().then(setMapa); }, []);
+  useEffect(() => { void carregarManifestos().then((m) => { setMapa(m); setCarregado(true); }); }, []);
   const recarregar = useCallback((k: string) => {
     invalidarManifestos();
     void carregarManifestos().then(setMapa);
@@ -37,6 +39,7 @@ export default function EstudioDev() {
 
   const disparar = (k: string) => { emCurso.current.add(k); setGatilhos((g) => ({ ...g, [k]: (g[k] ?? 0) + 1 })); };
   const gerarTodos = () => {
+    if (!carregado) return;
     const faltam = ids.filter((k) => !mapa[k] && !(status[k]?.prontos || status[k]?.rodando));
     setFila(faltam.slice(SIMULTANEOS));
     faltam.slice(0, SIMULTANEOS).forEach(disparar);
@@ -63,9 +66,9 @@ export default function EstudioDev() {
       <header className="flex flex-wrap items-center gap-3 mb-5">
         <h1 className={`text-xl font-black tracking-tight ${TXT}`}>Estúdio de avatar vivo</h1>
         <span className={`text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>Etapa A · dev · salva em public/avatars</span>
-        <button type="button" onClick={gerarTodos} disabled={rodandoAlgum}
+        <button type="button" onClick={gerarTodos} disabled={rodandoAlgum || !carregado}
           className="ml-auto min-h-[40px] px-4 rounded-xl text-[12px] font-black uppercase tracking-widest bg-cyan-500 text-slate-950 disabled:opacity-40">
-          {rodandoAlgum ? `gerando… (${fila.length} na fila)` : "gerar todos que faltam"}
+          {!carregado ? "carregando aprovados…" : rodandoAlgum ? `gerando… (${fila.length} na fila)` : "gerar todos que faltam"}
         </button>
       </header>
       <nav className="flex gap-2 overflow-x-auto pb-3 mb-4" aria-label="Agentes">

@@ -96,6 +96,26 @@ produção) — o próximo passo é o artista entregar os rigs próprios.
 - **O dono confirmou (07/out/2026) que a Zaeon tem as permissões necessárias.** Por isso o Live2D é
   o motor padrão quando houver modelo próprio.
 
+## Crachás (landing + Assistentes)
+
+- **Landing** (`MentoresCarrossel`): vitrine — nativos (selo "nativo", ID ZA-N01…) e mentores
+  (selo "mentor", ZA-001…) misturados no carrossel, em crachás pendurados com a foto = avatar vivo.
+  **Holofote**: a cada ~5 s um crachá visível entra em cena — pula, dá um "oi" (fala), sorri de
+  alegria e faz caras (sorriso/alegria/pensando). Hover = alegria + sorriso. Sem botão.
+- **Assistentes** (`/assistentes`; `/plugin-store` segue no ar): os mesmos crachás em dois grupos —
+  **Nativos** com "✓ já incluso" e **Mentores** plugáveis ("Contratar mentor", teto 3, soltar).
+  Categorias: Agentes = nativos, Mentores = mentores, Todos = ambos.
+- Componente único: `components/agents/Cracha.tsx` (+ `useHolofote`).
+
+## Modo CEO → Agents (só contas founder; engrenagem da navbar → "Modo CEO")
+
+Cada card de agente tem **✨ avatar vivo** (estúdio) e **🪪 crachá**: área, linha, o que entrega
+(até 4), emoji, **WhatsApp**, **Instagram**, **Facebook** — com a prévia do crachá ao vivo. Vazio =
+padrão do agente. Desativar tira da vitrine; a ordem vale. **+ agente** (mentor) entra sozinho na
+landing e nos Assistentes. Dados em `AgentProfile` (área, entrega[], emoji, whatsapp, instagram,
+facebook) → `GET /api/agents/public` (cache 60 s) → `montarVitrine` (lib/agents/nativos.ts).
+Redes só aparecem no crachá quando preenchidas (wa.me / instagram.com / facebook.com).
+
 ## Editar depois (admin)
 
 Admin → Agents → **✨ avatar vivo** no card: o estúdio abre com o set atual (aprovado). Dá pra rerolar
