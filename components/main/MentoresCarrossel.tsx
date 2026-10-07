@@ -52,7 +52,7 @@ const ELENCO: Mentor[] = [
     { slug: "farmacia", course: "Farmácia", name: "Kekulé", tagline: "Da molécula ao efeito, passo a passo.", signatureArtifacts: ["molécula 3D", "via metabólica"], guardrail: "Educacional" },
 ];
 
-export default function MentoresCarrossel({ className = "" }: { className?: string }) {
+export default function MentoresCarrossel({ className = "", semRotulo = false }: { className?: string; /** sem a linha "13 mentores · ao vivo…" */ semRotulo?: boolean }) {
     const [mentores, setMentores] = useState<Mentor[]>(ELENCO);
     const [aoVivo, setAoVivo] = useState(false);
     const trilhoRef = useRef<HTMLDivElement>(null);
@@ -215,10 +215,12 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
     return (
         <div className={className}>
             <div className="mb-6 flex items-end justify-between gap-6">
+                {semRotulo ? <span /> : (
                 <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-slate-500 dark:text-slate-500">
                     {mentores.length} mentores
                     {aoVivo ? " · ao vivo da sala de plugins" : ""}
                 </p>
+                )}
 
                 {/* As setas sao conveniencia de desktop. No celular o dedo ja faz isso,
                     e um par de botoes so rouba largura de tela. */}
@@ -255,8 +257,9 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
                 className="flex gap-4 overflow-x-auto pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
                 {/* Lista DUPLICADA: alimenta o loop sem costura do glide contínuo. */}
+                {/* `dark`: os cards dos agentes são VIDRO PRETO nos dois temas (contraste melhor no claro) */}
                 {[...mentores, ...mentores].map((m, i) => (
-                    <Cartao key={`${m.slug}-${i}`} m={m} />
+                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cartao m={m} /></div>
                 ))}
             </div>
         </div>
@@ -266,7 +269,7 @@ export default function MentoresCarrossel({ className = "" }: { className?: stri
 function Cartao({ m }: { m: Mentor }) {
     const artefatos = (m.signatureArtifacts ?? []).slice(0, 3);
     return (
-        <article className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-slate-950/75 backdrop-blur-sm p-5 flex flex-col transition-all duration-300 shadow-[0_12px_32px_-16px_rgba(2,6,23,0.38)] dark:shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
+        <article className="group shrink-0 w-[260px] sm:w-[290px] rounded-2xl border border-slate-200 dark:border-white/10 bg-white/85 dark:bg-black/80 backdrop-blur-xl p-5 flex flex-col transition-all duration-300 shadow-[0_12px_32px_-16px_rgba(2,6,23,0.38)] dark:shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]">
             <div className="flex items-start justify-between">
                 {m.avatarUrl ? (
                     <AgentAvatar src={m.avatarUrl} nome={m.name} size={44} className="ring-2 ring-cyan-500/30" />
@@ -280,7 +283,7 @@ function Cartao({ m }: { m: Mentor }) {
                 )}
                 {m.guardrail ? (
                     <span
-                        className="rounded-md border border-slate-200 dark:border-white/15 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500 dark:text-white/55"
+                        className="rounded-md border border-slate-200 dark:border-white/15 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-800 dark:text-white/90"
                         title={m.guardrail}
                     >
                         educacional
@@ -296,21 +299,21 @@ function Cartao({ m }: { m: Mentor }) {
             </p>
 
             {m.tagline ? (
-                <p className="mt-4 text-[13.5px] leading-relaxed text-slate-600 dark:text-white/70 line-clamp-3">
+                <p className="mt-4 text-[13.5px] leading-relaxed text-slate-800 dark:text-white/90 line-clamp-3">
                     {m.tagline}
                 </p>
             ) : null}
 
             {artefatos.length > 0 ? (
                 <div className="mt-auto pt-5">
-                    <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-slate-400 dark:text-white/35">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300/90">
                         entrega
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                         {artefatos.map((a) => (
                             <span
                                 key={a}
-                                className="rounded-md bg-slate-100 dark:bg-white/[0.07] px-2 py-1 text-[11px] text-slate-600 dark:text-white/65"
+                                className="rounded-md bg-slate-100 dark:bg-white/[0.07] px-2 py-1 text-[11px] text-slate-800 dark:text-white/90"
                             >
                                 {a}
                             </span>

@@ -1,19 +1,19 @@
 "use client";
 
+import TextoRevelado from "@/components/ui/TextoRevelado";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { UserIcon } from "@heroicons/react/24/outline";
+import { ChatBubbleLeftRightIcon } from "@heroicons/react/24/outline";
 
 // Componentes Internos
 import MenuNavigation from "@/components/sub/MenuNavigation";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 import MolecularText from "@/components/ui/MolecularText";
-import LoungeJanela from "@/components/lounge/LoungeJanela";
-import { LOUNGE_ROTA, copyEntrada } from "@/lib/ui/loungeHub";
+import { copyEntrada } from "@/lib/ui/loungeHub";
 
 // Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
 // Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
@@ -71,22 +71,10 @@ function LogoModelo({ slug, name, org }: { slug: string; name: string; org?: str
   );
 }
 
-// Variante B do H1 — "Ninguém ___ sozinho.". O verbo gira, o remate fica parado.
-// Ordem: do concreto (o que a pessoa faz hoje) pro abstrato (onde ela quer chegar).
-const VERBOS = [
-  "trabalha",
-  "estuda",
-  "pesquisa",
-  "escreve",
-  "publica",
-  "evolui",
-  "cresce",
-  "prospera",
-];
-// Frase inteira, estável, para leitor de tela: um H1 não pode depender de qual
-// verbo estava na tela no instante da leitura.
-const FRASE_COMPLETA =
-  "Aqui ninguém trabalha, estuda, pesquisa, escreve, publica, evolui, cresce ou prospera sozinho.";
+// H1 (v3): o resultado, em três verbos — curto (< 44 caracteres), como pedem os heróis que convertem.
+const FRASE_COMPLETA = "Aprenda, Construa e Entregue.";
+/** pra onde "Iniciar chat" leva quem já está logado: o chat da Aura (Sala de Estudos) */
+const CHAT_ROTA = "/research-lab?tab=sala-de-estudos";
 
 export default function HeroPage() {
   const { t } = useTranslation();
@@ -94,34 +82,14 @@ export default function HeroPage() {
   const router = useRouter();
 
   const [showChatbox, setShowChatbox] = useState(false);
-  const [verboIndex, setVerboIndex] = useState(0);
-  const [semMovimento, setSemMovimento] = useState(false);
 
-  // Quem pediu menos movimento no sistema não recebe carrossel: fica no primeiro
-  // verbo, parado. Vale pra acessibilidade e pra bateria.
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => setSemMovimento(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  useEffect(() => {
-    if (semMovimento) return;
-    const id = setInterval(
-      () => setVerboIndex((i) => (i + 1) % VERBOS.length),
-      2600
-    );
-    return () => clearInterval(id);
-  }, [semMovimento]);
-
-  // O logado vê a landing com o cyberespaço embutido (não abre mais o chatbox direto).
   const logado = status === "authenticated";
+  // "Ir pro cyberespaço" desce até a seção que explica o que é (no fim da página).
+  const irProCyberespaco = () => document.getElementById("cyberespaco")?.scrollIntoView({ behavior: "smooth", block: "start" });
   const copy = copyEntrada(logado);
 
   return (
-    <main className="w-full flex flex-col items-center justify-center text-center relative zaeon-borda min-h-[86vh] pt-28 md:pt-40 pb-20 md:pb-28 overflow-hidden transition-colors duration-700 font-sans">
+    <main className="w-full flex flex-col items-center justify-center text-center relative zaeon-borda min-h-[calc(100svh-110px)] pt-10 md:pt-14 pb-16 md:pb-20 overflow-hidden transition-colors duration-700 font-display">
 
       {/* BACKGROUND LIMPO - Apenas o StarBackground visível */}
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -149,42 +117,17 @@ export default function HeroPage() {
             {/* Uma linha só, sem quebrar: tamanho FLUÍDO (clamp por vw) cresce com a tela
                 e encolhe no mobile em vez de quebrar a frase. whitespace-nowrap trava a
                 linha inteira (inclusive os espaços entre as palavras). */}
-            <h1 className="whitespace-nowrap text-[clamp(1.5rem,5.4vw,5.25rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] z-10 relative">
+            <h1 className="text-[clamp(2.25rem,6.2vw,5.75rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.05] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
               <span aria-hidden="true">
-                <MolecularText text="Aqui ninguém" />
-                {/* Slot em grid: TODOS os verbos ocupam a MESMA célula, então a largura
-                    do slot é a do verbo mais longo e o "sozinho." nunca pula quando o
-                    verbo troca. Sem número mágico, sem medir fonte.
-                    `justify-items-center` centraliza a palavra dentro do slot: sem isso
-                    um verbo curto encosta à esquerda e abre um buraco só de um lado,
-                    que é o que dava o aspecto torto. A margem em `em` afasta de AMBAS
-                    as palavras, então a folga vira espaçamento deliberado em vez de
-                    sobra de layout — e escala junto com o tamanho da fonte. */}
-                <span className="relative inline-grid justify-items-center align-baseline mx-[0.4em]">
-                  {VERBOS.map((v) => (
-                    <span
-                      key={v}
-                      className="col-start-1 row-start-1 invisible font-semibold"
-                    >
-                      {v}
-                    </span>
-                  ))}
-                  <AnimatePresence mode="wait">
-                    <motion.span
-                      key={VERBOS[verboIndex]}
-                      initial={{ opacity: 0, filter: "blur(8px)", y: 8 }}
-                      animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-                      exit={{ opacity: 0, filter: "blur(8px)", y: -8 }}
-                      transition={{ duration: 0.45, ease: "easeInOut" }}
-                      className="cyber-glitch col-start-1 row-start-1 font-semibold text-cyan-600 dark:text-cyan-400"
-                      data-text={VERBOS[verboIndex]}
-                    >
-                      {VERBOS[verboIndex]}
-                    </motion.span>
-                  </AnimatePresence>
+                <MolecularText text="Aprenda," />{" "}
+                <MolecularText text="Construa" delay={0.15} />{" "}
+                <span className="whitespace-nowrap">
+                  <MolecularText text="e" delay={0.3} />{" "}
+                  <span className="text-cyan-600 dark:text-cyan-400">
+                    <MolecularText text="Entregue." delay={0.4} />
+                  </span>
                 </span>
-                <MolecularText text="sozinho." delay={0.25} />
               </span>
             </h1>
 
@@ -197,13 +140,11 @@ export default function HeroPage() {
                 transition={{ duration: 0.4, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                  <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-600 dark:text-slate-400 font-light leading-relaxed">
-                    Todas as IAs num lugar só — GPT, Claude, Gemini, Grok e mais — num
-                    sistema onde você não só conversa, você{" "}
-                    <span className="text-slate-800 dark:text-slate-200 font-normal">
-                      produz conhecimento
-                    </span>
-                    .
+                  {/* sub-header: UM texto só — a chamada do limite (levemente destacada) e o fecho "nunca mais fique na mão" */}
+                  <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-900 dark:text-white font-light leading-relaxed">
+                    <TextoRevelado texto="Todas as IAs num lugar só — ChatGPT, Claude, Gemini, Grok, DeepSeek e muito mais." delay={0.3} />{" "}
+                    <TextoRevelado className="font-normal text-cyan-700 dark:text-cyan-200" texto="Acabou o limite de uma? Passa pra outra." delay={0.65} />{" "}
+                    <TextoRevelado texto="Nunca mais fique na mão." delay={0.9} />
                   </p>
               </motion.div>
             )}
@@ -218,25 +159,27 @@ export default function HeroPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, filter: "blur(10px)" }}
               transition={{ duration: 0.4, delay: 0.2 }}
-              className="mt-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center justify-start"
+              className="mt-9 flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto items-center justify-start"
             >
               {/* Mesmo material do "Iniciar", em vidro TINGIDO: vidro incolor aqui
                   derrubaria a hierarquia e este é o primário da página. */}
               <LiquidGlassButton
-                onClick={() => (logado ? router.push(LOUNGE_ROTA) : setShowChatbox(true))}
+                onClick={() => (logado ? router.push(CHAT_ROTA) : setShowChatbox(true))}
                 tom="destaque"
                 tamanho="md"
                 className="w-full sm:w-auto"
               >
-                <UserIcon className="w-4 h-4" />
-                {copy.cta}
+                <ChatBubbleLeftRightIcon className="w-4 h-4" />
+                Iniciar chat
               </LiquidGlassButton>
-              <a
-                href="#modelos"
-                className="group relative flex items-center justify-center gap-3 px-10 py-4 rounded-full border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 font-medium uppercase tracking-[0.18em] text-[11px] transition-all hover:border-cyan-400 hover:scale-105 bg-transparent"
+              <span className="text-xs uppercase tracking-[0.2em] text-slate-700 dark:text-white/80">ou</span>
+              <button
+                type="button"
+                onClick={irProCyberespaco}
+                className="group relative flex items-center justify-center gap-2 px-8 py-4 rounded-full border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 font-medium uppercase tracking-[0.18em] text-[11px] transition-all hover:border-cyan-400 hover:scale-105 bg-transparent w-full sm:w-auto"
               >
-                Ver os modelos
-              </a>
+                ✦ Ir pro cyberespaço
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -248,7 +191,7 @@ export default function HeroPage() {
         {!showChatbox && copy.badges.length > 0 && (
           <ul className="mt-8 flex flex-wrap items-center justify-start gap-x-6 gap-y-3">
             {copy.badges.map((b) => (
-              <li key={b} className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+              <li key={b} className="flex items-center gap-2 text-sm text-slate-800 dark:text-white/90">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15">
                   <svg viewBox="0 0 20 20" className="h-3 w-3 text-emerald-500" fill="none" stroke="currentColor" strokeWidth={3} aria-hidden="true">
                     <path d="M4 10l4 4 8-9" strokeLinecap="round" strokeLinejoin="round" />
@@ -261,8 +204,7 @@ export default function HeroPage() {
         )}
       </motion.div>
 
-      {/* Logado: o cyberespaço embutido como janela (Maximizar, após iniciar → /lounge-cosmico). */}
-      {logado && !showChatbox && <LoungeJanela />}
+      {/* O cyberespaço embutido mora agora em "Crie a sua própria estação de trabalho" (app/study-rooms). */}
 
       {/* ========================================= */}
       {/* CHATBOX (Aparece ao logar / clicar começar) */}

@@ -40,7 +40,7 @@ export default function MolecularText({
                   className="inline-block will-change-[transform,filter,opacity]"
                   initial={{ opacity: 0, filter: "blur(8px)", y: 6 }}
                   whileInView={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-                  viewport={{ once: true, amount: 0.35 }}
+                  viewport={{ once: false, amount: 0.35 }}   // entra E sai: anima descendo e subindo a página
                   transition={{ duration: 0.5, ease: "easeOut", delay: d }}
                 >
                   {c}

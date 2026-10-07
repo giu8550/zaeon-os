@@ -62,7 +62,7 @@ export function TituloSecao({
             {fraco ? (
                 <>
                     <br />
-                    <span className="text-slate-500 dark:text-slate-400">
+                    <span className="font-light text-slate-800 dark:text-white">
                         {typeof fraco === "string" ? <MolecularText text={fraco} delay={0.18} /> : fraco}
                     </span>
                 </>

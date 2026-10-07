@@ -43,6 +43,13 @@ export function avancarFase(r: Relogio, passo: number): Relogio {
   return { fase, timer };
 }
 
+/** O ciclo SEM o globo (landing v3): serpente → DNA → DNA aquecido → desintegração → serpente… A fase 2
+ *  acende em rampa a partir do zero da desintegração, então pular o globo não cria flash. */
+export function avancarFaseSemGlobo(r: Relogio, passo: number): Relogio {
+  const n = avancarFase(r, passo);
+  return n.fase === 0 || n.fase === 1 ? { fase: 2, timer: 0 } : n;
+}
+
 /** Quadros pra as partículas reaparecerem depois de uma desintegração (evita o "flash" de volta). */
 export const FADE_ENTRADA = 45;
 const ALPHA_BASE = 0.8;
@@ -72,8 +79,8 @@ export function perfilDoAparelho(sinais: { nucleos?: number; memoriaGb?: number;
   const memoria = sinais.memoriaGb ?? 4;
   const fraco = nucleos <= 4 || memoria <= 4 || sinais.largura < 768;
   if (fraco) return { particulas: 600, intervaloMinMs: 1000 / 30, dprMax: 1 };
-  if (nucleos <= 8) return { particulas: 1000, intervaloMinMs: 0, dprMax: 1.5 };
-  return { particulas: 1400, intervaloMinMs: 0, dprMax: 1.5 };
+  if (nucleos <= 8) return { particulas: 1500, intervaloMinMs: 0, dprMax: 1.5 };
+  return { particulas: 2000, intervaloMinMs: 0, dprMax: 1.5 };
 }
 
 /**

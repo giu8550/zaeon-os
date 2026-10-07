@@ -34,6 +34,10 @@ export default function MenuNavigation() {
   const { data: session, status } = useSession();
 
   const [index, setIndex] = useState(0);
+  // login por E-MAIL (sem senha, o mesmo da /login: conta nova nasce no 1º envio; fundador/admin só pelo Google)
+  const [emailLogin, setEmailLogin] = useState("");
+  const [entrandoEmail, setEntrandoEmail] = useState(false);
+  const [erroEmail, setErroEmail] = useState<string | null>(null);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [workTitle, setWorkTitle] = useState<string | null>(null);
   const [isLoadingResearch, setIsLoadingResearch] = useState(false);
@@ -395,22 +399,29 @@ export default function MenuNavigation() {
   };
 
   // ── DESLOGADO: painel de LOGIN (onboard em linguagem natural foi desativado) ──
-  // Login só "passa" se a pessoa já tem conta OU preencheu um convite (gate no signIn do NextAuth).
+  // Só os dois caminhos: Google ou e-mail (o gate de convite saiu do signIn — src/lib/auth.ts).
   if (status !== "authenticated") {
+    const entrarPorEmail = async (ev: React.FormEvent) => {
+      ev.preventDefault();
+      const alvo = emailLogin.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alvo)) { setErroEmail("Confere o e-mail."); return; }
+      setErroEmail(null); setEntrandoEmail(true);
+      const r = await signIn("credentials", { email: alvo, redirect: false });
+      if (r?.ok && !r.error) { router.push(LOUNGE_ROTA); return; }
+      setEntrandoEmail(false);
+      setErroEmail("Não consegui entrar com esse e-mail. Se for conta de fundador, entre pelo Google.");
+    };
+    // card de login: VIDRO PRETO nos dois temas (`dark` força o estilo escuro dentro; o fundo preto é explícito
+    // porque o vidro escuro de antes era branco 6% — sobre a página clara ficava claro)
     return (
-      <div className={panelClass}>
+      <div className="dark">
+      <div className={`${panelClass} !bg-black/80`}>
         <nav className="p-6 flex flex-col h-full justify-center gap-5">
           <div className="flex flex-col items-center text-center gap-3">
             {/* Ícone da Zaeon EM CIMA do título, maior e com leve glow */}
             <span className="inline-flex" style={{ filter: "drop-shadow(0 0 12px rgba(34,211,238,0.45))" }}>
               <ZaeonLogo aiState="idle" className="w-16 h-16" />
             </span>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-white">Bem-vindo à Zaeon</h2>
-              <p className="text-[13px] text-slate-700 dark:text-white/80 mt-1 leading-relaxed">
-                Entre para acessar seus estudos, pesquisas e agentes.
-              </p>
-            </div>
           </div>
 
           <button
@@ -426,19 +437,31 @@ export default function MenuNavigation() {
             <span className="flex-1 h-px bg-slate-200 dark:bg-white/10" />
           </div>
 
-          <div className="text-center">
-            <p className="text-[12px] text-slate-700 dark:text-white/75 mb-2">Novo por aqui? É preciso um convite.</p>
+          <form onSubmit={entrarPorEmail} className="flex flex-col gap-2.5">
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="seu@email.com"
+              value={emailLogin}
+              onChange={(e) => setEmailLogin(e.target.value)}
+              aria-label="E-mail"
+              className="w-full rounded-full px-5 py-3 text-[13px] text-slate-900 dark:text-white bg-white/60 dark:bg-white/[0.06] border border-slate-200 dark:border-white/[0.14] outline-none focus:border-cyan-400/70 placeholder:text-slate-500 dark:placeholder:text-white/40"
+            />
             <button
-              onClick={() => router.push("/convite")}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold transition-all duration-300 backdrop-blur-xl backdrop-saturate-150 bg-white/50 dark:bg-white/[0.07] border border-white/70 dark:border-white/[0.14] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28)] text-slate-800 dark:text-white hover:bg-white/75 dark:hover:bg-white/[0.13] hover:border-cyan-400/60 dark:hover:border-cyan-300/40 hover:scale-[1.02] active:scale-[0.98]"
+              type="submit"
+              disabled={entrandoEmail}
+              className="w-full flex items-center justify-center gap-2 rounded-full py-3.5 text-[13px] font-bold transition-all duration-300 backdrop-blur-xl backdrop-saturate-150 bg-white/50 dark:bg-white/[0.07] border border-white/70 dark:border-white/[0.14] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28)] text-slate-800 dark:text-white hover:border-cyan-400/60 dark:hover:border-cyan-300/40 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
             >
-              <ShieldCheck size={15} /> Tenho um convite
+              {entrandoEmail ? "Entrando…" : "Entrar com e-mail"}
             </button>
-          </div>
+            {erroEmail && <p className="text-center text-[12px] text-rose-600 dark:text-rose-300">{erroEmail}</p>}
+          </form>
         </nav>
         <div className="px-8 pb-4 text-[10px] text-slate-500 dark:text-white/45 tracking-[0.3em] font-medium mt-auto">
           {t("footer.version", "ZAEON OS v1.0.0")}
         </div>
+      </div>
       </div>
     );
   }

@@ -64,7 +64,7 @@ export default function EquipadosCom({ className = "" }: { className?: string })
 
     return (
         <div className={className}>
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-slate-500 dark:text-slate-500">
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-slate-800 dark:text-white/90">
                 Equipados com
             </p>
 

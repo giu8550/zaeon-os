@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Space_Grotesk, JetBrains_Mono, Outfit, Inter_Tight } from "next/font/google";
+import { Space_Grotesk, JetBrains_Mono, Outfit, Inter_Tight, Sora } from "next/font/google";
 
 import { siteConfig } from "@/config";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,13 @@ const interTight = Inter_Tight({
     display: "swap",
 });
 
+// Fonte de DISPLAY da landing (hero e títulos de seção): geométrica, moderna, "tecnológica".
+const sora = Sora({
+    subsets: ["latin"],
+    variable: "--font-display",
+    weight: ["300", "400", "500", "600", "700", "800"],
+    display: "swap",
+});
 
 /**
  * `viewportFit: "cover"` e o que faz a pagina ocupar a tela inteira em aparelho
@@ -100,6 +107,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                     jetbrainsMono.variable,
                     outfit.variable,
                     interTight.variable,
+                    sora.variable,
                     "font-sans"
                 )}
             >
