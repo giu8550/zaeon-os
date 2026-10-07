@@ -2557,7 +2557,7 @@ export default function HomeworkPage({
             </button>
             {sidebarAberta && (activeTab === "sala-de-estudos"
               ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
-              : <div className={RAMO}><ConversasDaSala sala="estudos" rotuloNova="Nova conversa" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>)}
+              : <div className={RAMO}><ConversasDaSala sala="estudos" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>)}
 
             {/* Sala de Pesquisa */}
             <button
@@ -2574,7 +2574,7 @@ export default function HomeworkPage({
             </button>
             {sidebarAberta && UNIFIED && (activeTab === "pesquisa"
               ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
-              : <div className={RAMO}><ConversasDaSala sala="pesquisa" rotuloNova="Nova pesquisa" onEntrar={() => setActiveTab("pesquisa")} /></div>)}
+              : <div className={RAMO}><ConversasDaSala sala="pesquisa" onEntrar={() => setActiveTab("pesquisa")} /></div>)}
 
             {/* Projetos — Zaeon Code (IDE agêntica; auto-protegida por plano/curso). ESCONDIDA até
                 NEXT_PUBLIC_PROJETOS=on (vira feature depois; o código segue aqui). */}

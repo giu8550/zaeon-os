@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronRight, CornerDownRight, GitBranchPlus, PanelLeftClose, PanelLeftOpen, Pencil, Search, SquarePen, Trash2,
+  ChevronRight, CornerDownRight, GitBranchPlus, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Search, SquarePen, Trash2,
 } from "lucide-react";
 import { arvoreDeThreads, type Thread } from "@/lib/chat/threads";
 
@@ -187,11 +187,13 @@ export default function ConversasSidebar({
         <button
           type="button"
           onClick={aoCriar}
+          title={rotuloNova}
+          aria-label={rotuloNova}
           className={`w-full flex items-center gap-2 rounded-lg font-semibold transition-colors ${embutida
             ? "px-2 py-1.5 text-[12px] text-slate-700 dark:text-white/75 hover:bg-slate-900/[0.05] dark:hover:bg-white/[0.06]"
             : "px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/90 border border-slate-200 dark:border-white/10 hover:border-cyan-400/60 hover:text-cyan-700 dark:hover:text-cyan-200"}`}
         >
-          <SquarePen size={14} /> {rotuloNova}
+          {embutida ? <><Plus size={14} /> Nova</> : <><SquarePen size={14} /> {rotuloNova}</>}
         </button>
       </div>
       {threads.length > 4 && (
