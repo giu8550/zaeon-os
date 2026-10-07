@@ -4,13 +4,12 @@
 > + as ferramentas de verificação. Complementa o `PR-G3` do handoff
 > (`docs/HANDOFF_ESCRITORIO_AGENTES_V2.md`) e os prompts das Fatias 1 e 7.
 >
-> **Estado no repo (Fable, 2026-10-07, main `d0cc34e`):** este documento chegou pronto; os dois
-> entregáveis que ele descreve — `scripts/provar-chaves.mjs` e `lib/llm/usage.ts` +
-> `lib/llm/usage.test.ts` ("31 testes passando") — **ainda não estão no repositório** (nem em
-> main, nem em branch remota). Até entrarem, a §3 e a §4 valem como **especificação executável**:
-> o executor da Fatia 1 (`docs/EXECUTOR_PROMPT_FATIA1_FUNDACAO.md`, PASSO 1.3) cria `usage.ts`
-> como primeiro arquivo do PR-G1 e o envelope importa daí. `docs/GATEWAY_AUTONOMO.md`, citado
-> abaixo, também não existe no repo.
+> **Estado no repo (Fable, 2026-10-07):** `lib/llm/usage.ts` + `lib/llm/usage.test.ts` (**41 testes**) e
+> `scripts/provar-chaves.mjs` foram escritos a partir desta especificação e estão no repo. Provado ao
+> vivo: `node scripts/provar-chaves.mjs groq` → `APTO` nas 4 provas com `openai/gpt-oss-20b`
+> (o `llama-3.3-70b-versatile` não existe mais na conta; no 404 o script lista os modelos que a
+> chave enxerga). Os headers do Groq confirmaram o 8K TPM (`x-ratelimit-remaining-tokens=7864`).
+> `docs/GATEWAY_AUTONOMO.md`, citado abaixo, não existe no repo.
 
 ## 1. O mecanismo de chave do OmniRoute, lido no código
 
