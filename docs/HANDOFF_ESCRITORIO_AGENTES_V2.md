@@ -7,7 +7,7 @@
 > São **28 PRs distintas**, todas conectadas por **12 contratos canônicos** (§4). Um PR só pode
 > entrar se os contratos que ele consome já existem.
 >
-> Prompts de execução por fatia (co-autorados pelo Fable): `docs/EXECUTOR_PROMPT_FATIA1_FUNDACAO.md` · `docs/EXECUTOR_PROMPT_FATIA2_SALA.md` · `docs/EXECUTOR_PROMPT_FATIA3_TRABALHO.md` · `docs/EXECUTOR_PROMPT_FATIA4_ENTRE_ELES.md` · `docs/EXECUTOR_PROMPT_FATIA5_MEMORIA.md` · `docs/EXECUTOR_PROMPT_FATIA6_AUTONOMIA.md` · `docs/EXECUTOR_PROMPT_FATIA7_ESTEIRA_LEVE.md`.
+> Prompts de execução por fatia (co-autorados pelo Fable): `docs/EXECUTOR_PROMPT_FATIA1_FUNDACAO.md` · `docs/EXECUTOR_PROMPT_FATIA2_SALA.md` · `docs/EXECUTOR_PROMPT_FATIA3_TRABALHO.md` · `docs/EXECUTOR_PROMPT_FATIA4_ENTRE_ELES.md` · `docs/EXECUTOR_PROMPT_FATIA5_MEMORIA.md` · `docs/EXECUTOR_PROMPT_FATIA6_AUTONOMIA.md` · `docs/EXECUTOR_PROMPT_FATIA7_ESTEIRA_LEVE.md` · `docs/EXECUTOR_PROMPT_FATIA8_PROATIVIDADE.md`.
 
 ---
 
