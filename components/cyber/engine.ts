@@ -13,7 +13,7 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
-import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CIDADE, alturaNaCidade, naCabineDJ, pontoDaCabineDJ, rumoDoDJ, ILHOTAS, computadorPerto, foraDaIlha, ilhotaEm, mundo, naIlhaPrincipal, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre } from "@/lib/cyber/ceu";
+import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CIDADE, alturaNaCidade, naCabineDJ, naPistaDeDanca, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDaEscada, naEscadaDoLounge, pontoDaEscada, rumoDaViagem, uDaViagem, VIAGEM_ESCADA, ILHOTAS, computadorPerto, foraDaIlha, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre } from "@/lib/cyber/ceu";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, chaoNoAr, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
@@ -109,6 +109,10 @@ export type CyberOpts = {
 type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
   /** na cabine do DJ do lounge (0..1, suavizado): fone na cabeça, mãos na controladora */
   dj?: number;
+  /** parado na pista do lounge (0..1, suavizado): dançando */
+  danca?: number;
+  /** sendo levado pela ESCADA DE ENERGIA (0..1, suavizado): surfando na prancha de luz */
+  surf?: number;
   /** remotos: tempo acumulado desde a última animação (de longe/fora da tela anima menos vezes por segundo) */
   acum?: number;
   /** remotos: no topo da Zaeon / pilotando (só valem pra quem o servidor marcou fundador) / na cidade (qualquer um) */
@@ -145,7 +149,7 @@ const comDescendentes = (objs: (THREE.Object3D | null | undefined)[]) => { const
 
 /** as áreas das 3 grandes regiões (a caixa automática pegaria o anel do elevador / o portal lá no chão) */
 const cil = (c: { x: number; z: number }, r: number, y: number, abaixo: number, acima: number) => () => ({ x: c.x, z: c.z, r, y0: y - abaixo, y1: y + acima });
-const AREA_ZAEON = cil(CIDADE.centro, CIDADE.bordaR + 70, CIDADE.pisoY, CIDADE.ilhaAltura + 10, 90);   // + o anel de ilhotas em volta
+const AREA_ZAEON = cil(CIDADE.centro, Math.max(CIDADE.bordaR + 90, -CIDADE.salas.lounge.x + CIDADE.salas.lounge.r + 10), CIDADE.pisoY, CIDADE.ilhaAltura + CIDADE.agulha.altura + 10, 220);   // + ilhotas, a escada e o lounge
 const AREA_UNILAB = cil(UNIVERSIDADE.centro, UNIVERSIDADE.discoR, UNIVERSIDADE.y, 100, 80);
 const AREA_SOLANA = cil(PLATAFORMAS.solana.centro, PLATAFORMAS.solana.r + 10, PLATAFORMAS.solana.y, 40, 40);
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
@@ -169,6 +173,8 @@ export class CyberEngine {
   private lms: LandmarkHandle[] = [];
   /** REGIÕES por distância (components/cyber/regioesCena): de longe some o detalhe e a animação para */
   private regioes = new Map<THREE.Object3D, RegiaoCena>();
+  /** a viagem na ESCADA DE ENERGIA do lounge (lib/cyber/ceu `bocaDaEscada`): sobe ou desce sozinha, surfando */
+  private viagem: { sentido: "sobe" | "desce"; t: number } | null = null;
   /** QUALIDADE ADAPTATIVA (lib/cyber/qualidadeAdaptativa): o pixel ratio do perfil é o teto; a escada multiplica */
   private qa!: QualidadeAdaptativa; private prBase = 1; private ultimoDesenho = 0;
   private frustum = new THREE.Frustum(); private mProj = new THREE.Matrix4(); private esfAtor = new THREE.Sphere();
@@ -278,7 +284,7 @@ export class CyberEngine {
     this.R.autoClear = false; this.R.outputColorSpace = THREE.SRGBColorSpace;
     const cv = this.R.domElement; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:" + (opts.menu ? "pan-y" : "none");
     container.appendChild(cv);
-    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.1, 1300);   // mapa maior (cyberespaço v2)
+    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.15, 2600);   // mapa maior (Zaeon mega: a UNILAB e a Solana bem longe)
     this.cena = criarCenaCosmica(low, this.w / this.h);
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
@@ -391,7 +397,7 @@ export class CyberEngine {
   /** ESPAÇO / botão VOAR (segurar): decola e sobe; soltar cai planando até pousar */
   comandoJet(on: boolean) {
     this.jet.tecla = on;
-    if (!on || this.jet.noAr || this.menu || this.pilotando || this.moto !== null || this.noTopo) return;
+    if (!on || this.jet.noAr || this.menu || this.pilotando || this.moto !== null || this.noTopo || this.viagem) return;
     if (this.bordo) {   // a bordo: da CABINE (redoma aberta) sai-se voando por cima; da RAMPA, lá fora, pula-se; dentro de casa não
       const pelaRedoma = redomaAberta(this.bordo, this.pilotando);
       if (!pelaRedoma && !naRampaLaFora(this.bordo)) return;
@@ -430,9 +436,10 @@ export class CyberEngine {
       const baixo = v.y - base < JET.alturaBases ? this.colisoresDoNivel("ceu") : [], naves = v.y < topo - 0.2 ? this.colisoresDeNaves(CIDADE.pisoY) : [];
       const q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...baixo, ...naves]);
       eu.pos.x = q.x; eu.pos.z = q.z; this.jet.y = v.y; this.jet.vy = v.vy;
-      if (!naIlhaPrincipal(q)) { this.altoEm = null; return; }   // voou pra fora da ilha: céu livre (cai)
+      const piso = pisoNoAr(q, v.y - base);   // a escada e o lounge só são piso pra quem vem de CIMA deles
+      if (piso === null) { this.altoEm = null; return; }   // voou pra fora da Zaeon: céu livre (cai)
       if (sobreODorso && yAnt >= topo - 0.05 && v.y <= topo && v.vy <= 0) { this.jet.noAr = false; this.sobreNave = true; this.somPouso(v.vy); return; }
-      const chao = base + alturaNaCidade(q);   // o PALCO do lounge é piso também (pousa em cima dele)
+      const chao = base + piso;
       if (v.y <= chao && v.vy <= 0) { this.jet.y = chao; this.jet.noAr = false; this.yNav = CIDADE.pisoY; this.somPouso(v.vy); }
       return;
     }
@@ -544,6 +551,7 @@ export class CyberEngine {
   /** atravessa o portal: aparece na cidade, perto do portal de volta */
   entrarNoCeu() {
     if (!this.cidade || this.menu) return;
+    this.viagem = null;
     const c = mundo(CIDADE.chegada);
     this.pilotando = false; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0; this.jet.noAr = false; this.sobreNave = false; this.ilhota = null; this.plat = null; this.bordo = null;
     this.eu.pos.set(c.x, 0, c.z); this.eu.facing = Math.atan2(-CIDADE.chegada.x, -CIDADE.chegada.z);
@@ -553,6 +561,7 @@ export class CyberEngine {
   }
   /** portal de volta: reaparece na praça */
   voltarDaCidade() {
+    this.viagem = null;
     const lay = this.layouts.get(this.o.eu.id), sp = lay && !lay.nivel ? spawnDaBase(lay) : { x: 0, z: 4 };   // base lá em cima → praça
     this.pilotando = false; this.altoEm = null; this.yNav = 0; this.noTopo = false; this.alvo = null; this.alvoDepois = null;
     this.jet.noAr = false; this.ilhota = null; this.plat = null; this.bordo = null; this.sobreNave = false;   // teleporte: acabou qualquer queda/ilhota
@@ -1008,7 +1017,7 @@ export class CyberEngine {
     const el = this.plat ? elevadorAqui(this.plat.id, this.plat.andar, this.eu.pos) : null;
     if (el && this.plat) { const pl = this.plat; return { id: `elevador-${pl.andar}`, rotulo: el.rotulo, fazer: () => { pl.andar = el.proximo; this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.eu }); } }; }
     const estudar = { id: "estudar", rotulo: "Estudar", fazer: () => this.o.onEntrarEstudo?.() };
-    if (this.perto || this.noTopo || (this.noCeu && computadorPerto(this.eu.pos, 3.2) >= 0)) return estudar;
+    if (this.perto || this.noTopo || (this.noCeu && computadorPerto(this.eu.pos, 4) >= 0)) return estudar;
     const m = this.motoAoAlcance(); if (m >= 0) return { id: `moto-${m}`, rotulo: "Montar na moto", fazer: () => { this.montar(m); } };
     if (this.nave && this.navePerto()) return { id: "entrar-nave", rotulo: "Entrar na nave", fazer: () => this.entrarNaNave() };
     if (this.noCeu && this.cidade?.tocaDiscos && this.ehFundador(this.o.eu.id)) {
@@ -1068,13 +1077,14 @@ export class CyberEngine {
     // na CIDADE: computador perto = Sala de Estudos; senão anda no piso
     if (this.cidade && this.noCeu) {
       if (sob === this.o.eu.id && this.perto) { this.o.onEntrarEstudo?.(); return; }   // a minha base, na Zaeon
+      // os DESKTOPS da capela (Sala de Estudos / biblioteca)
+      const hc = this.ray.intersectObject(this.cidade.computadores, false)[0];
+      if (hc && computadorPerto(this.eu.pos, 4) >= 0) { this.o.onEntrarEstudo?.(); return; }
       // a TV do LOUNGE: o dono escreve o recado pro QG do Andrei (perto dela)
       if (this.cidade.tvLounge && this.ray.intersectObject(this.cidade.tvLounge, false).length) {
         const tv = this.cidade.tvLounge.getWorldPosition(new THREE.Vector3());
         if (Math.hypot(this.eu.pos.x - tv.x, this.eu.pos.z - tv.z) < 14) { this.o.onAbrirRecado?.(); return; }
       }
-      const hc = this.ray.intersectObject(this.cidade.computadores, false)[0];
-      if (hc && computadorPerto(this.eu.pos, 3.2) >= 0) { this.o.onEntrarEstudo?.(); return; }
       const h = this.ray.intersectObjects(this.cidade.alvos, true)[0];
       if (h) { const q = resolverCidade({ x: h.point.x, z: h.point.z }); this.alvo = new THREE.Vector2(q.x, q.z); this.alvoDepois = null; }
       return;
@@ -1306,10 +1316,18 @@ export class CyberEngine {
       }
       else if (this.sitT > 0.05) { const s = this.assento(); eu.pos.x += (s.x - eu.pos.x) * Math.min(1, dt * 3); eu.pos.z += (s.z - eu.pos.z) * Math.min(1, dt * 3); eu.facing = this.rotAssento(); }
       else if (this.noTopo) { const e = this.eixoTopo()!, lim = 2.0 * this.escalaZaeon(); const dx = eu.pos.x - e.x, dz = eu.pos.z - e.z, d = Math.hypot(dx, dz); if (d > lim) { eu.pos.x = e.x + (dx / d) * lim; eu.pos.z = e.z + (dz / d) * lim; } }   // não cai da plataforma
+      else if (this.noCeu && this.viagem) {
+        // a ESCADA DE ENERGIA leva: a posição segue o fluxo (as teclas não mexem), sem passo nem pulo
+        const v = this.viagem; v.t += dt; const k = Math.min(1, v.t / VIAGEM_ESCADA.dur), p = pontoDaEscada(uDaViagem(v.sentido, k));
+        eu.pos.x = p.x; eu.pos.z = p.z; eu.facing = rumoDaViagem(v.sentido); andando = false; this.alvo = null; this.alvoDepois = null;
+        if (k >= 1) { this.viagem = null; this.som.tocar("near-ping", eu.av.group.position, { dist: DISTANCIA.perto }); }
+      }
       else if (this.noCeu) {
         // sem parede invisível na borda: passou do piso da ilha → cai
         const q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos(true)]); eu.pos.x = q.x; eu.pos.z = q.z; this.yNav = CIDADE.pisoY;
         if (!naIlhaPrincipal(q)) this.cairDaqui({ x: (q.x - prev.x) / Math.max(dt, 1e-3), z: (q.z - prev.z) / Math.max(dt, 1e-3) });
+        // pisou na boca da escada de energia: ela te leva (pra cima, da central; pra baixo, do lounge)
+        else { const boca = bocaDaEscada(q); if (boca && !this.jet.noAr) { this.viagem = { sentido: boca, t: 0 }; this.alvo = null; this.alvoDepois = null; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); } }
       }
       else if (this.plat) {   // num LUGAR FLUTUANTE: anda com as colisões do andar; passou da borda do disco → cai
         const r = andarNaPlataforma(this.plat.id, this.plat.andar, eu.pos); eu.pos.x = r.x; eu.pos.z = r.z;
@@ -1334,6 +1352,11 @@ export class CyberEngine {
     const souDJ = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !this.sobreNave && !this.bordo && naCabineDJ(eu.pos);
     eu.dj = (eu.dj ?? 0) + ((souDJ ? 1 : 0) - (eu.dj ?? 0)) * Math.min(1, dt * 4);
     if (souDJ) { const c = pontoDaCabineDJ(), k = Math.min(1, dt * 4); eu.pos.x += (c.x - eu.pos.x) * k; eu.pos.z += (c.z - eu.pos.z) * k; eu.facing = rumoDoDJ(); }
+    eu.surf = (eu.surf ?? 0) + ((this.viagem ? 1 : 0) - (eu.surf ?? 0)) * Math.min(1, dt * 5);
+    // DANÇA: parado na PISTA do lounge → dança virado pro palco
+    const danco = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !souDJ && naPistaDeDanca(eu.pos);
+    eu.danca = (eu.danca ?? 0) + ((danco ? 1 : 0) - (eu.danca ?? 0)) * Math.min(1, dt * 3);
+    if (danco) eu.facing = rumoDaPista();
     const lmAlto = this.altoEm ? this.lms.find((l) => l.poi.id === this.altoEm) : undefined;
     const pnAlt = this.bordo ? this.poseNave() : null;
     eu.alt = pnAlt && this.bordo ? alturaDoConves(pnAlt) + alturaNoBordo(this.bordo, rampaDaNave(pnAlt).queda)
@@ -1381,11 +1404,15 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: !!(this.keys.shift || this.correr) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, montado: this.moto !== null ? this.naMoto(eu.av, this.moto) : null, dj: eu.dj ?? 0, dt, t });
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: !!(this.keys.shift || this.correr) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, montado: this.moto !== null ? this.naMoto(eu.av, this.moto) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, dt, t });
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto && ocupadas.get(a.moto.s) === a ? a.moto.s : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
       a.dj = (a.dj ?? 0) + ((ehDJ ? 1 : 0) - (a.dj ?? 0)) * Math.min(1, dt * 4);
+      const dancando = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && !ehDJ && naPistaDeDanca(a.pos);
+      a.danca = (a.danca ?? 0) + ((dancando ? 1 : 0) - (a.danca ?? 0)) * Math.min(1, dt * 3);
+      const surfando = !!a.ceu && a.jet === undefined && naEscadaDoLounge(a.pos);   // na escada só se está sendo levado
+      a.surf = (a.surf ?? 0) + ((surfando ? 1 : 0) - (a.surf ?? 0)) * Math.min(1, dt * 5);
       a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(pilota ? a.naveYaw ?? a.facing : a.facing);
       // de longe / fora da tela o avatar anima menos vezes por segundo (o mixer + IK de cada um custa); fora da tela
       // nem desenha (a malha com skinning não tem esfera confiável: frustumCulled=false) — perto continua animando
@@ -1394,7 +1421,7 @@ export class CyberEngine {
       a.av.group.visible = naTela;
       const cada = dCam < 25 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 0;
       a.acum = (a.acum ?? 0) + dt;
-      if (a.acum >= cada) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
+      if (a.acum >= cada) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
       else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = a.naveYaw ?? 0; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0, fechada: true }); this.noAssento(a.av, a.nave); }
     }
@@ -1529,7 +1556,7 @@ export class CyberEngine {
     const solidos = voando ? this.solidosDeVoo() : [];
     h.marca.visible = voando && !(naMoto ? this.motoPousado : this.pousado);
     if (h.marca.visible) { const c = chaoDoVoo(n, solidos); h.marca.position.set(n.x, c + (c === CIDADE.pisoY ? boiaCidade : 0) + 0.1, n.z); }
-    h.borda.visible = voando && !naMoto && Math.hypot(n.x - CIDADE.centro.x, n.z - CIDADE.centro.z) < 220;
+    h.borda.visible = voando && !naMoto && Math.hypot(n.x - CIDADE.centro.x, n.z - CIDADE.centro.z) < CIDADE.bordaR + 60;
     if (h.borda.visible) h.borda.position.y = CIDADE.pisoY + boiaCidade + 0.4;
     // altímetro (React), só quando muda e no máx. 10×/s
     if (!voando || now - h.t < 100) return;

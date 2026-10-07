@@ -65,9 +65,9 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
   const key = new THREE.DirectionalLight(0x99bbff, 0.6); key.position.set(4, 9, 6); scene.add(key);
 
   // estrelas redondas, densidade baixa — a nuvem fica em volta da ZAEON (a ilha no céu, sobre o buraco negro), não da praça
-  const SN = low ? 650 : 1200, spv = new Float32Array(SN * 3), CEN = { x: 0, y: 150, z: -110 }, CHAO_MIN = 10;
+  const SN = low ? 650 : 1200, spv = new Float32Array(SN * 3), CEN = { x: 0, y: 260, z: -110 }, CHAO_MIN = 10;   // (o mapa cresceu: a Zaeon a 450 m, a UNILAB e a Solana bem longe)
   for (let i = 0; i < SN; ) {
-    const u = Math.random(), v = Math.random(), th = u * 6.283, ph = Math.acos(2 * v - 1), rr = 45 + 185 * Math.cbrt(Math.random());
+    const u = Math.random(), v = Math.random(), th = u * 6.283, ph = Math.acos(2 * v - 1), rr = 70 + 520 * Math.cbrt(Math.random());
     const y = rr * Math.cos(ph);
     if (CEN.y + y < CHAO_MIN) continue;   // nada de estrela enterrada no chão
     spv[i * 3] = rr * Math.sin(ph) * Math.cos(th); spv[i * 3 + 1] = y; spv[i * 3 + 2] = rr * Math.sin(ph) * Math.sin(th); i++;
@@ -89,9 +89,9 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
   scene.add(bh);
 
   // chão limpo + grid
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0x0e1730, roughness: 1 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(2600, 2600), new THREE.MeshStandardMaterial({ color: 0x0e1730, roughness: 1 }));
   floor.rotation.x = -Math.PI / 2; scene.add(floor);
-  const grid = new THREE.GridHelper(1200, 240, 0x5a6cc0, 0x1b2550); grid.position.y = 0.02;
+  const grid = new THREE.GridHelper(2600, 520, 0x5a6cc0, 0x1b2550); grid.position.y = 0.02;
   (grid.material as THREE.Material).transparent = true; (grid.material as THREE.Material).opacity = 0.42; scene.add(grid);
 
   const bhNdc = new THREE.Vector3();

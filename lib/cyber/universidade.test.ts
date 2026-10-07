@@ -9,9 +9,10 @@ const qg = POIS.find((p) => p.id === "zaeon")!;
 const dentroDeParede = (w: { x: number; z: number }) => { const l = localU(w); return paredesDaUniversidade().some((p) => { const dx = p.bx - p.ax, dz = p.bz - p.az, L2 = dx * dx + dz * dz, t = Math.max(0, Math.min(1, ((l.x - p.ax) * dx + (l.z - p.az) * dz) / L2)); return Math.hypot(l.x - (p.ax + dx * t), l.z - (p.az + dz * t)) < p.esp / 2; }); };
 
 describe("Universidade (castelo flutuando num disco no céu)", () => {
-  it("é enorme: maior que a Zaeon do céu (que cresceu ×1,5 no cyberespaço v2), e cabe no mapa", () => {
+  it("é enorme (só a Zaeon mega é maior) e cabe no mapa; bem longe da Zaeon", () => {
     const lado = UNIVERSIDADE.externa.meia * 2;
-    expect(lado * lado).toBeGreaterThan(1.2 * Math.PI * CIDADE.bordaR ** 2);
+    expect(lado).toBeGreaterThan(200); expect(Math.PI * CIDADE.bordaR ** 2).toBeGreaterThan(lado * lado);
+    expect(Math.hypot(UNIVERSIDADE.centro.x - CIDADE.centro.x, UNIVERSIDADE.centro.z - CIDADE.centro.z) - UNIVERSIDADE.discoR - CIDADE.bordaR).toBeGreaterThan(250);
     const { x, z } = UNIVERSIDADE.centro, m = UNIVERSIDADE.externa.meia;
     expect(Math.hypot(Math.abs(x) + m, Math.abs(z) + m)).toBeLessThan(VOO.raioMapa + 160);   // o canto mais longe
   });
@@ -54,8 +55,8 @@ describe("Universidade (castelo flutuando num disco no céu)", () => {
     expect(resolverUniversidadeNoAr(meio, salao.alt + 3)).toEqual(meio);   // sem teto: em cima da sala, fica onde está
     expect(salaEm(localU(resolverUniversidadeNoAr(meio, 4)))).not.toBeNull();
   });
-  it("flutua um pouco abaixo da Zaeon; o disco cobre o castelo inteiro (cantos das muralhas)", () => {
-    expect(UNIVERSIDADE.y).toBeLessThan(CIDADE.pisoY); expect(UNIVERSIDADE.y).toBeGreaterThan(CIDADE.pisoY - 100);
+  it("flutua bem abaixo da Zaeon; o disco cobre o castelo inteiro (cantos das muralhas)", () => {
+    expect(UNIVERSIDADE.y).toBeLessThan(CIDADE.pisoY - 150); expect(UNIVERSIDADE.y).toBeGreaterThan(100);
     expect(UNIVERSIDADE.discoR).toBeGreaterThan(Math.hypot(UNIVERSIDADE.externa.meia, UNIVERSIDADE.externa.meia) + 1);
     for (const a of ARVORES) expect(Math.hypot(a.x, a.z)).toBeLessThan(UNIVERSIDADE.discoR - 2);   // a avenida cabe no disco
   });

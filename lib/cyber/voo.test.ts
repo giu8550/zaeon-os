@@ -42,10 +42,10 @@ function descerDaCidade(fps: number) {
 
 describe("voo — botões de movimento levam a nave a qualquer lugar", () => {
   for (const fps of [60, 10]) {
-    it(`Cidade → chão saindo pela borda (≤ 11 s — a Zaeon subiu pra 290 m e ficou mais larga) a ${fps} FPS, sem atravessar a ilha`, () => {
+    it(`Cidade → chão saindo pela borda (≤ 22 s — a Zaeon mega: 450 m de altura e 3× mais larga) a ${fps} FPS, sem atravessar a ilha`, () => {
       const { r, t, trilha } = descerDaCidade(fps);
       expect(r.pousado).toBe(true); expect(r.s.y).toBe(0);
-      expect(t).toBeLessThanOrEqual(11);
+      expect(t).toBeLessThanOrEqual(22);
       expect(atravessouIlha(trilha)).toBe(false);
     });
     it(`chão embaixo da ilha → Cidade (sai pela lateral, sobe, vai ao pátio, pousa) a ${fps} FPS`, () => {
@@ -65,8 +65,8 @@ describe("voo — botões de movimento levam a nave a qualquer lugar", () => {
   }
 
   it("embaixo da ilha, segurar SUBIR trava no fundo dela (a dica do HUD manda sair pela lateral)", () => {
-    const ini: Passo = { s: est(CIDADE.centro.x, 0, CIDADE.centro.z + 12), pousado: true, chaoY: 0 };
-    const { r } = pilotar(ini, 60, [], () => ({ subir: true }), 12);
+    const ini: Passo = { s: est(CIDADE.centro.x, 0, CIDADE.centro.z + CIDADE.agulha.r + 14), pousado: true, chaoY: 0 };   // fora da agulha
+    const { r } = pilotar(ini, 60, [], () => ({ subir: true }), 16);
     expect(r.s.y).toBeCloseTo(CIDADE.pisoY - CIDADE.ilhaAltura, 5);
   });
   it("bem no meio, embaixo: trava na PONTA da agulha (não atravessa a ponta afiada)", () => {

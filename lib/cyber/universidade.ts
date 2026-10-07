@@ -15,7 +15,7 @@
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 
 export const UNIVERSIDADE = {
-  centro: { x: 0, z: 330 },
+  centro: { x: 0, z: 680 },   // (Zaeon mega: bem mais longe dela — o mapa cresceu)
   /** piso do disco flutuante (m): um pouco abaixo da Zaeon (230); `discoR` = raio andável (a borda é livre: cai) */
   y: 230, discoR: 150, espessura: 8,
   externa: { meia: 105, alt: 12, esp: 2.6, portao: 14 },     // muralha externa (portão ao sul)

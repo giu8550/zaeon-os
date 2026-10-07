@@ -14,7 +14,7 @@ export type Lote = { id: "chao" | "zaeon"; x: number; z: number; rot: number; ce
 export const ESTACIONAMENTO = { n: 4, espacamento: 3.4, r: 10 } as const;
 /** a frente das vagas aponta pro centro (a praça, no chão; o centro da ilha, na Zaeon) */
 const lote = (id: Lote["id"], x: number, z: number, cx: number, cz: number, ceu: boolean): Lote => ({ id, x, z, rot: Math.atan2(cx - x, cz - z), ceu });
-const ZAEON_LOCAL = { x: -30, z: -30 };   // entre as torres da muralha, longe da doca da nave, do lounge, do portal e das bases
+const ZAEON_LOCAL = { x: -75, z: -75 };   // (Zaeon mega ×2,5) longe da capela, da doca da nave, da escada do lounge, do portal e das bases
 export const LOTES: Lote[] = [
   lote("chao", -50, 22, 0, 0, false),
   lote("zaeon", mundo(ZAEON_LOCAL).x, mundo(ZAEON_LOCAL).z, CIDADE.centro.x, CIDADE.centro.z, true),
