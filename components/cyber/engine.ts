@@ -34,6 +34,7 @@ import { criarSolanaHouse, type SolanaHouseHandle } from "./SolanaHouse";
 import { NAVE_QG, RAIO_REDOMA, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, RAMPA, naPontaDaRampa, naRampaLaFora, paraLocal, paraMundo, pertoDaEntrada, poseDaDoca, pousoNaNave, rampaDaNave, redomaAberta, type Bordo, type PoseNave } from "@/lib/cyber/naveQG";
 import { ESCALA_NAVE, criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
+import { atualizarCamuflagem, camuflarGrupo, pararCamuflagem } from "./camuflagem";
 import { criarMoto, type MotoHandle } from "./Moto";
 import { MOTO, motoPerto, vagas } from "@/lib/cyber/motos";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
@@ -251,14 +252,17 @@ export class CyberEngine {
     this.cena = criarCenaCosmica(low, this.w / this.h);
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
+      camuflarGrupo(lm.group);   // holograma: sem PBR nem luzes (components/cyber/camuflagem)
       this.cena.scene.add(lm.group); this.lms.push(lm);   // sem rótulo na tela (interface limpa); o nome sai no painel do clique
     }
     if (opts.landmarks) {
       this.cidade = criarCidade({ low, starTex: this.cena.starTex });
+      camuflarGrupo(this.cidade.group);
       this.cena.scene.add(this.cidade.group);
       if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
-      this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); this.cena.scene.add(this.univ.group);
-      this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); this.cena.scene.add(this.solana.group);
+      this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); camuflarGrupo(this.univ.group); this.cena.scene.add(this.univ.group);
+      this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); camuflarGrupo(this.solana.group); this.cena.scene.add(this.solana.group);
+      pararCamuflagem(typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
       this.nave = criarNave({ low, cor: "#2f7bff" }); this.cena.scene.add(this.nave.group);
       vagas().forEach((v, i) => {
         const h = criarMoto({ cor: CORES_MOTO[i % CORES_MOTO.length]!, low }); h.group.position.set(v.x, 0, v.z); h.group.rotation.y = v.yaw;
@@ -1140,6 +1144,7 @@ export class CyberEngine {
     this.ultimoQuadro = now;
     const dtReal = Math.min(VOO.dtMax, this.clock.getDelta()), dt = Math.min(0.05, dtReal), t = now * 0.001;   // o voo usa o dt REAL (independente de FPS)
     if (!this.visivel || document.hidden) return;
+    atualizarCamuflagem(t);   // o relógio único de todos os hologramas do mapa
     const eu = this.eu, euId = this.o.eu.id;
 
     // MENU: segurar ESPAÇO p/ viajar; personagem fica sentado contemplando

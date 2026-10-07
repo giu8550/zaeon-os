@@ -15,6 +15,7 @@ import { glowTex } from "./CenaCosmica";
 import { ESCALA_NAVE_QG, NAVE_QG } from "@/lib/cyber/naveQG";
 import { criarInteriorNave } from "./InteriorNave";
 import { liberar } from "./Landmark";
+import { camuflagem } from "./camuflagem";
 
 export type NaveHandle = {
   group: THREE.Group;
@@ -43,25 +44,6 @@ const BARRIGA = [[0, -0.97], [1.2, -0.93], [2.4, -0.7], [3.3, -0.34], [3.78, 0.0
 /** a CABINE DE COMANDO no centro: o raio do buraco no dorso (a redoma retrátil cobre) e a altura dela */
 const R_CAB = 1.32, Y_CAB = 0.86, H_CAB = 0.36;
 const DORSO = [[3.78, 0.0], [3.5, 0.24], [3.0, 0.47], [2.4, 0.68], [1.8, 0.81], [R_CAB, Y_CAB]];
-/** a CAMUFLAGEM: um vidro "que não está lá" — transparente no miolo, a BORDA das curvas acende (fresnel, mostra a
- *  forma) e uma ondulação lenta escorre pela superfície. Sem luzes nem PBR: um punhado de contas por pixel.
- *  `uOp` multiplica tudo (a bordo, na minha tela, o dorso some mais). `abs(dot)` → vale dos dois lados (pétalas). */
-function camuflagem(cor: THREE.Color, o: { base?: number; borda?: number; lados?: boolean } = {}): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: { uCor: { value: cor.clone() }, uT: { value: 0 }, uOp: { value: 1 }, uBase: { value: o.base ?? 0.012 }, uBorda: { value: o.borda ?? 0.45 } },
-    vertexShader: `varying vec3 vN; varying vec3 vV; varying vec3 vP;
-      void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; vP = position; gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `uniform vec3 uCor; uniform float uT; uniform float uOp; uniform float uBase; uniform float uBorda; varying vec3 vN; varying vec3 vV; varying vec3 vP;
-      void main() {
-        float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
-        float borda = pow(f, 4.5);   // só a silhueta e as curvas fortes acendem (o disco é chato: visto de lado, quase tudo é "borda")
-        float onda = 0.5 + 0.5 * sin(vP.y * 9.0 - uT * 1.1 + sin(vP.x * 2.3 + vP.z * 2.7 + uT * 0.4) * 1.6);
-        float a = (uBase + borda * uBorda + onda * onda * onda * 0.035) * uOp;
-        gl_FragColor = vec4(uCor * (0.3 + borda * 1.2 + onda * 0.2), a);
-      }`,
-    transparent: true, depthWrite: false, side: o.lados ? THREE.DoubleSide : THREE.FrontSide,
-  });
-}
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 
@@ -218,7 +200,6 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
     const pe = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.28, 0.06, 12), escuro); pe.position.set(x * 1.08, -0.98, z * 1.08); trem.add(pe);
   }
 
-  const camos = [metal, metalDorso, metalDomo, metalEscuro, escuro];
   raiz.scale.setScalar(ESCALA_NAVE);
   let inclina = 0, voo = 0, giro = 0;
   return {
@@ -233,7 +214,6 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
       const alvoAbertura = abrirLocal ? 1 : 0;
       fantasma += ((aBordoLocal ? 1 : 0) - fantasma) * Math.min(1, dt * 3);
       metalDorso.uniforms.uOp!.value = 1 - 0.75 * fantasma;
-      for (const m of camos) m.uniforms.uT!.value = parado ? 0 : t;
       interior.atualizar(dt, t, voo);
       // a cúpula retrátil: as pétalas giram na aba (pra fora e pra baixo), suave, ~1 s
       abertura += (alvoAbertura - abertura) * Math.min(1, dt * (parado ? 8 : 2.6));

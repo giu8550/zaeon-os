@@ -82,12 +82,8 @@ describe("Universidade (castelo flutuando num disco no céu)", () => {
       expect(ms.filter((m) => m.tipo === "cadeira").length).toBeGreaterThan(20);
     }
   });
-  it("natureza: plantações no pátio externo (trigo, milho, horta, girassol), árvores fora das paredes e das salas", () => {
-    expect(CAMPOS.map((c) => c.tipo)).toEqual(expect.arrayContaining(["trigo", "milho", "horta", "girassol", "flores", "gramado"]));
-    const i = UNIVERSIDADE.interna.meia, e = UNIVERSIDADE.externa.meia;
-    for (const c of CAMPOS.filter((c) => c.tipo !== "gramado")) expect(Math.min(Math.abs(c.x0), Math.abs(c.x1), Math.abs(c.z0), Math.abs(c.z1)) >= i || Math.max(Math.abs(c.z0), Math.abs(c.z1)) > i).toBe(true);
-    for (const a of ARVORES) { expect(salaEm(a)).toBeNull(); expect(dentroDeParede(mundoU(a))).toBe(false); expect(Math.max(Math.abs(a.x), Math.abs(a.z)) < e - 1 || a.z < -e).toBe(true); }
-    expect(ARVORES.length).toBeGreaterThan(60); expect(SEBES.length).toBe(16);
+  it("sem natureza (holograma): nenhuma árvore, sebe ou plantação — e os pátios continuam livres pra andar", () => {
+    expect(CAMPOS).toHaveLength(0); expect(ARVORES).toHaveLength(0); expect(SEBES).toHaveLength(0);
     // dá pra entrar nos pátios pelos vãos das sebes (meio do lado sul)
     for (const p of PATIOS) expect(resolverUniversidade(mundoU({ x: (p.x0 + p.x1) / 2, z: p.z0 + 3 }))).toEqual(mundoU({ x: (p.x0 + p.x1) / 2, z: p.z0 + 3 }));
   });

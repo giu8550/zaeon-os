@@ -16,7 +16,6 @@ import { PLATAFORMAS } from "@/lib/cyber/plataformas";
 import { glowTex } from "./CenaCosmica";
 import { criarElevadorDeLuz } from "./ElevadorDeLuz";
 import { liberar } from "./Landmark";
-import { criarNatureza } from "./Natureza";
 
 export type UniversidadeHandle = {
   group: THREE.Group;
@@ -283,14 +282,13 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   }
   anim.push((_, t) => { for (const j of jatos) j.scale.y = 0.9 + 0.1 * Math.sin(t * 2.2); });
 
-  // ── NATUREZA: árvores de verdade, sebes, canteiros, gramado, plantações (trigo, milho, horta, girassóis, pomar) ──
-  const natureza = criarNatureza(raiz, { low, starTex, texturas });
+  // (a NATUREZA — árvores, pomar, sebes e plantações — saiu: ~250 mil triângulos, quase metade da cena. O campus é
+  //  holograma agora: fontes e estruturas modernas.)
 
   return {
     group: raiz, alvosCamera,
     atualizar(dt, t) {
       for (const f of anim) f(dt, t);
-      natureza.atualizar(dt, t);
       pontas.forEach((p, i) => { p.material.opacity = 0.7 + 0.3 * Math.sin(t * 1.1 + i); });
       // relógios: a hora "de verdade" (local)
       const d = new Date(), h = (d.getHours() % 12) + d.getMinutes() / 60, m = d.getMinutes() + d.getSeconds() / 60;
