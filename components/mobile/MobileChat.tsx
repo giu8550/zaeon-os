@@ -21,6 +21,7 @@ import { MobileComposer } from "@/components/mobile/MobileComposer";
 import { MobileActionsSheet, ACOES_MOBILE } from "@/components/mobile/MobileActionsSheet";
 import { MobileHistory, type ConversaLocal } from "@/components/mobile/MobileHistory";
 import { ALVO, FOCO, VIDRO } from "@/components/mobile/estilo";
+import { AcoesResposta } from "@/components/chat/MensagemAcoes";
 
 // O viewer do Studio (3Dmol, áudio, TTS) só baixa quando há artefato pronto pra mostrar.
 const StudioBlock = dynamic(() => import("@/components/studio/StudioBlock"), { ssr: false, loading: () => <div className="h-24 animate-pulse rounded-2xl bg-slate-200/60 dark:bg-white/5" /> });
@@ -133,6 +134,10 @@ export default function MobileChat({ surface }: { surface: Surface }) {
                     {m.answer
                       ? <StructuredAnswerView answer={m.answer} onConcept={(c) => void aura.enviar(`Me explica ${c}`)} onNext={(s) => void aura.enviar(s)} />
                       : m.text ? <ChatMarkdown text={m.text} /> : m.chegando ? null : <p className="text-slate-500">…</p>}
+                    {/* rodapé da bolha: copiar · 👍/👎 (no toque ficam sempre visíveis) */}
+                    {!m.chegando && !m.erro && (
+                      <AcoesResposta msgId={m.id} texto={m.answer ? [m.answer.nucleo, m.answer.desenvolvimento].filter(Boolean).join("\n\n") : m.text ?? ""} />
+                    )}
                   </div>
                 )}
               </li>

@@ -17,6 +17,7 @@
  */
 import { useMemo } from "react";
 import { useTypewriter } from "@/lib/ui/useTypewriter";
+import { fonteChat } from "@/lib/ui/chatFontScale";
 import { ArrowUpRight, Quote } from "lucide-react";
 import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
 
@@ -37,7 +38,8 @@ function fmtInline(s: string): React.ReactNode[] {
 function Prose({ text, lead }: { text: string; lead?: boolean }) {
   const lines = text.split(/\n+/).filter((l) => l.trim());
   return (
-    <div className={lead ? "text-[19px] leading-[1.62]" : "text-[16px] leading-[1.72]"}>
+    // Tamanho obedece o A−/A+ do chat (--chat-font-scale; sem a var, fica 100%).
+    <div className={lead ? "leading-[1.62]" : "leading-[1.72]"} style={{ fontSize: fonteChat(lead ? 19 : 16) }}>
       {lines.map((l, i) => {
         const bullet = /^[-*•]\s+/.test(l);
         return bullet ? (
@@ -62,6 +64,7 @@ export default function StructuredAnswerView({
   onConcept,
   onNext,
   typing = false,
+  acoes,
   children,
 }: {
   answer: StructuredAnswer;
@@ -70,6 +73,8 @@ export default function StructuredAnswerView({
   onConcept?: (c: string) => void;
   onNext?: (step: string) => void;
   children?: React.ReactNode;   // slot p/ artefatos (StudioBlock) embutidos
+  /** Mini-ações (copiar/regenerar/👍👎) — entram logo depois do conteúdo, antes dos botões e das Fontes. */
+  acoes?: React.ReactNode;
 }) {
   const { nucleo, desenvolvimento, conceitos, evidencia, proximos_passos } = answer;
   // fade-up escalonado por seção
@@ -148,6 +153,9 @@ export default function StructuredAnswerView({
           {rest && children && (
             <div className="z-up mt-4" style={{ animationDelay: delay("art") }}>{children}</div>
           )}
+
+          {/* mini-ações da mensagem (ordem: conteúdo → ações → botões do harness → Fontes) */}
+          {rest && acoes}
 
           {/* próximos passos — sugestões clicáveis (viram novo prompt) */}
           {rest && proximos_passos?.length ? (

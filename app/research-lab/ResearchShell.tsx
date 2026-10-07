@@ -123,11 +123,12 @@ export default function ResearchShell({
   const [fileDragOver, setFileDragOver] = useState(false);
   const [chatOpen, setChatOpen] = useState(defaultChatOpen);   // chat científico ↔ trabalho
   // Sala unificada: a visão vem da sub-aba (chat × folha). Fora dela, a pill ⟁ Chat alterna.
-  // Sala com ABAS: `vista` = o que ocupa a sala — "chat" (a conversa da aba de conversa ativa) ou o id de uma
-  // janela (a pesquisa / um PDF no leitor). As abas de conversa chegam por portal na `barra`.
+  // Sala com ABAS: `vista` = o que ocupa a sala — "chat" (a conversa ativa) ou o id de uma janela (a pesquisa /
+  // um PDF no leitor). Dois eixos que não se misturam: CONVERSAS na coluna da ESQUERDA (o chat as põe lá por
+  // portal, na `lateral`) e DOCUMENTOS nas abas do TOPO. Trocar de conversa não troca o documento, e vice-versa.
   const abas = unifiedView === "abas";
   const [vista, setVista] = useState<string>("chat");
-  const [barra, setBarra] = useState<HTMLDivElement | null>(null);
+  const [lateral, setLateral] = useState<HTMLDivElement | null>(null);
   const [maisAberto, setMaisAberto] = useState(false);
   const chatVisible = abas ? vista === "chat" : unifiedView ? unifiedView === "chat" : chatOpen;
   const verJanela = useCallback((id: string) => { onSelectWindow(id); setVista(id); }, [onSelectWindow]);
@@ -202,7 +203,7 @@ export default function ResearchShell({
     >
       {/* ──────── LEFT PANEL (70%) ──────── */}
       <div
-        className="relative flex flex-col min-h-0 overflow-hidden rounded-[18px] transition-all"
+        className="relative flex flex-row min-h-0 overflow-hidden rounded-[18px] transition-all"
         style={{
           order: flipped ? 2 : 0,
           minHeight: mobile ? "60vh" : undefined,
@@ -249,11 +250,30 @@ export default function ResearchShell({
           </div>
         )}
 
-        {/* SALA COM ABAS: uma barra só — as conversas (portal do chat), a pesquisa e os PDFs abertos no leitor,
-            e um ＋ (nova conversa / nova pesquisa). A aba ativa ocupa a sala inteira. */}
+        {/* ESQUERDA = CONVERSAS: a barra lateral do chat chega aqui por portal (fica à mostra com um documento aberto). */}
+        {abas && <div ref={setLateral} className="shrink-0 h-full min-h-0 flex text-slate-900 dark:text-white" />}
+        <div className="relative flex-1 min-w-0 min-h-0 flex flex-col">
+        {/* TOPO = DOCUMENTOS: a conversa em cena, a pesquisa ("Minha pesquisa") e os PDFs abertos no leitor, e o ＋
+            (nova pesquisa). A aba ativa ocupa a sala; a conversa mostrada é a que está acesa na barra da esquerda. */}
         {abas && (
-          <div className="relative shrink-0 flex items-center gap-1.5 px-3 py-2.5 overflow-x-auto no-scrollbar" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }} role="tablist" aria-label="Abas da sala">
-            <div ref={setBarra} className="flex items-center gap-1.5 shrink-0" />
+          <div className="relative shrink-0 flex items-center gap-1.5 px-3 py-2.5 overflow-x-auto no-scrollbar" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }} role="tablist" aria-label="Documentos">
+            <span className="shrink-0 pr-1 text-[9px] font-black uppercase tracking-[0.16em] text-white/45">Documentos</span>
+            <div
+              role="tab"
+              aria-selected={vista === "chat"}
+              tabIndex={0}
+              onClick={() => setVista("chat")}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setVista("chat"); } }}
+              title="Voltar pra conversa"
+              className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
+                vista === "chat"
+                  ? "bg-black dark:bg-white text-white dark:text-black border-transparent"
+                  : "text-slate-700 dark:text-white/70 border-slate-200 dark:border-white/10 hover:border-cyan-400/50"
+              }`}
+            >
+              <span className="text-[11px] leading-none">⟁</span>
+              <span className="text-[11px] font-bold">Conversa</span>
+            </div>
             {windows.filter((w) => w.type !== "document").map((w) => {
               const atual = vista === w.id;
               const rotulo = w.id === "research" ? (workType ? `Meu ${workType}` : "Minha pesquisa") : w.label;
@@ -294,8 +314,8 @@ export default function ResearchShell({
             })}
             <button
               onClick={() => setMaisAberto((v) => !v)}
-              title="Nova aba"
-              aria-label="Nova aba"
+              title="Novo documento"
+              aria-label="Novo documento"
               aria-expanded={maisAberto}
               className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-dashed border-slate-300 dark:border-white/15 text-slate-600 dark:text-white/60 hover:border-cyan-400/60 hover:text-cyan-600 dark:hover:text-cyan-300 transition-colors"
             >
@@ -306,17 +326,13 @@ export default function ResearchShell({
         )}
         {abas && maisAberto && (
           <div className="absolute z-[70] top-12 left-3 flex flex-col gap-1 p-1.5 rounded-2xl min-w-[200px]" style={{ background: "rgba(14,16,28,0.96)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 20px 50px -20px rgba(0,0,0,0.9)" }} onMouseLeave={() => setMaisAberto(false)}>
-            <button
-              onClick={() => { setMaisAberto(false); setVista("chat"); window.dispatchEvent(new CustomEvent("zaeon:research:nova-conversa")); }}
-              className="text-left px-3 py-2 rounded-xl text-[12px] font-bold text-white/85 hover:bg-white/10"
-            >⟁ Nova conversa</button>
             {onNewWork && (
               <button
                 onClick={() => { setMaisAberto(false); onNewWork(); verJanela("research"); }}
                 className="text-left px-3 py-2 rounded-xl text-[12px] font-bold text-white/85 hover:bg-white/10"
               >📝 Nova pesquisa</button>
             )}
-            <p className="px-3 pt-1 pb-1.5 text-[10px] text-white/40 leading-snug">Pra ler um PDF no leitor, arraste o documento da biblioteca pra cá.</p>
+            <p className="px-3 pt-1 pb-1.5 text-[10px] text-white/40 leading-snug">Pra ler um PDF no leitor, arraste o documento da biblioteca pra cá. Conversa nova: na barra da esquerda.</p>
           </div>
         )}
 
@@ -350,7 +366,7 @@ export default function ResearchShell({
                 tccWorkId={tccWorkId}
                 active={chatActive && chatVisible}
                 comAbas={!!unifiedView}
-                barra={abas ? barra : undefined}
+                lateral={abas ? lateral : undefined}
                 emCena={chatVisible}
                 onAtivar={abas ? () => setVista("chat") : undefined}
               />
@@ -412,6 +428,7 @@ export default function ResearchShell({
               </div>
             ))}
 
+        </div>
         </div>
 
       </div>
