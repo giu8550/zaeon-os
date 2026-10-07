@@ -92,10 +92,9 @@ describe("parseEvent / isTerminal / terminalToResult", () => {
 });
 
 describe("idemKeyPadrao", () => {
-  it("determinística pro mesmo destino+texto, diferente se muda o texto", () => {
-    const a = idemKeyPadrao(42, "5511999999999@s.whatsapp.net", "oi");
-    expect(a).toBe(idemKeyPadrao(42, "5511999999999@s.whatsapp.net", "oi"));
-    expect(a).toMatch(/^zaeon:send_text:42:[0-9a-f]{16}$/);
-    expect(a).not.toBe(idemKeyPadrao(42, "5511999999999@s.whatsapp.net", "oi!"));
+  it("é por comando: mesma instância + mesmo command_id → igual; command_id diferente → diferente", () => {
+    expect(idemKeyPadrao(42, "c-1")).toBe("zaeon:send_text:42:c-1");
+    expect(idemKeyPadrao(42, "c-1")).toBe(idemKeyPadrao(42, "c-1"));
+    expect(idemKeyPadrao(42, "c-2")).not.toBe(idemKeyPadrao(42, "c-1"));
   });
 });

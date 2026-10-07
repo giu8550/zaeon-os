@@ -82,12 +82,17 @@ Pendência do dono: `npx prisma db push` no Atlas depois do merge.
   `error_detail || error_class || status`).
 - `resolveBridgeRedisUrl(env)` → string | null.
 - `numShards(env)` → `max(1, int(NUM_SHARDS))`, default 1.
-- `idemKeyPadrao(instanceId, jid, text)` → `zaeon:send_text:{id}:{sha1(jid|text).slice(0,16)}`
-  (determinística pro mesmo texto ao mesmo destino; o chamador pode passar a dele).
+- `idemKeyPadrao(instanceId, commandId)` → `zaeon:send_text:{id}:{command_id}` — **por comando**
+  (ruling da revisão final, 2026-10-07: a versão por conteúdo `sha1(jid|text)` engoliria repetições
+  legítimas, ex.: aluno que erra o código duas vezes ficaria sem a 2ª resposta; a redelivery do
+  mesmo comando continua deduplicada pela chave do próprio comando). Dedupe de nível aplicação
+  é do chamador (outbox do PR-W4).
 
 ### 3. `lib/chipflow/bridge.ts` (IO, ioredis)
 
-- Conexão **própria** por URL (cache em módulo), `maxRetriesPerRequest: 2`, `lazyConnect`.
+- Conexão **própria** por URL (cache em módulo da *promessa* de conexão — chamadas simultâneas
+  compartilham um cliente; connect falhando desconecta e esquece a entrada), `maxRetriesPerRequest: 2`,
+  `lazyConnect`. O `XREAD BLOCK` roda numa conexão **duplicada** por chamada, fechada no fim.
   Não reusa `getRedisConnection()` do BullMQ (outro Redis).
 - `sendTextViaBridge({ instanceId, phone, text, idemKey?, timeoutMs?, env? })`:
   1. `lastId = XREVRANGE evt + - COUNT 1` → id ou `"0-0"` (falha → `"0-0"`);
@@ -105,9 +110,9 @@ Pendência do dono: `npx prisma db push` no Atlas depois do merge.
 - `resolverCanalEnvio(agentKey, env)` → `{ fonte:"canal", canalId, chipflowId } |
   { fonte:"env", chipflowId } | null`: canal `tipo="whatsapp"` com `estado="vinculado"` e
   `chipflowId` → usa; senão `BRIDGE_INSTANCE_ID` da env; senão null.
-- `registrarEnvio(canalId, r: BridgeResult, hojeBRT)` — `ok` → `ultimoEnvioEm=now`, `ultimoErro=null`,
-  `enviadosHoje` (+1, zera se `diaContagem !== hoje`), `diaContagem=hoje`; falha → `ultimoErro`.
-  Best-effort (try/catch, log).
+- `registrarEnvio(canalId, r, now)` — `ok` → `updateMany({ id, diaContagem: hoje }, { enviadosHoje:
+  { increment: 1 }, ultimoEnvioEm, ultimoErro: null })` (atômico); `count 0` (dia novo) → `update`
+  zerando pra 1 com `diaContagem=hoje`; falha → `ultimoErro`. Best-effort (try/catch, log).
 - `hojeBRT(now)` puro em `bridge-request.ts` (reusa `localParts` de `lib/whatsapp/policy.ts`).
 
 ### 5. `lib/whatsapp/sender.ts`
@@ -118,7 +123,8 @@ Pendência do dono: `npx prisma db push` no Atlas depois do merge.
   inferência: evolution → bridge → disparos → log).
 - `buildSendRequest("bridge", …)` → `null` (não é HTTP).
 - `sendWhatsAppText(phone, text, env?, opts?: { agentKey?: string; idemKey?: string })`:
-  - `bridge`: `resolverCanalEnvio(opts.agentKey ?? "aura")`; null → `{ ok:false, provider,
+  - `bridge`: `bridgeConfigurado(env)` falso → `provider_misconfigured` **antes** de tocar o Prisma
+    (erro de servidor não vira `ultimoErro` do canal); `resolverCanalEnvio(opts.agentKey ?? "aura")`; null → `{ ok:false, provider,
     error:"provider_misconfigured" }` + log; senão `sendTextViaBridge` → `SendResult` com
     `status` numérico ausente e `error` do bridge; `registrarEnvio` se veio do canal.
   - Demais providers: inalterados.

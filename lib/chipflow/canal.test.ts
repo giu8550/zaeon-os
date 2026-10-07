@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const m = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn() }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { agentChannel: { findUnique: m.findUnique, update: m.update } } }));
+const m = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { agentChannel: { findUnique: m.findUnique, update: m.update, updateMany: m.updateMany } } }));
 
 import { instanceIdDaEnv, registrarEnvio, resolverCanalEnvio } from "./canal";
 
-beforeEach(() => { m.findUnique.mockReset(); m.update.mockReset(); m.update.mockResolvedValue({}); });
+beforeEach(() => { m.findUnique.mockReset(); m.update.mockReset(); m.updateMany.mockReset(); m.update.mockResolvedValue({}); m.updateMany.mockResolvedValue({ count: 1 }); });
 
 describe("instanceIdDaEnv", () => {
   it("inteiro positivo; lixo/zero/negativo/decimal → null", () => {
@@ -37,26 +37,30 @@ describe("resolverCanalEnvio", () => {
 
 describe("registrarEnvio", () => {
   const now = new Date("2026-10-07T15:00:00-03:00");
-  it("ok em dia novo → zera e conta 1, grava diaContagem e ultimoEnvioEm, limpa ultimoErro", async () => {
-    m.findUnique.mockResolvedValue({ id: "c1", enviadosHoje: 17, diaContagem: "2026-10-06" });
+  it("ok no mesmo dia → incremento ATÔMICO (updateMany com where diaContagem=hoje), sem ler antes", async () => {
+    await registrarEnvio("c1", { ok: true }, now);
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { id: "c1", diaContagem: "2026-10-07" },
+      data: { enviadosHoje: { increment: 1 }, ultimoEnvioEm: now, ultimoErro: null },
+    });
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+  it("ok em dia novo (updateMany não casou) → zera pra 1 com o dia de hoje", async () => {
+    m.updateMany.mockResolvedValue({ count: 0 });
     await registrarEnvio("c1", { ok: true }, now);
     expect(m.update).toHaveBeenCalledWith({
       where: { id: "c1" },
       data: { enviadosHoje: 1, diaContagem: "2026-10-07", ultimoEnvioEm: now, ultimoErro: null },
     });
   });
-  it("ok no mesmo dia → incrementa", async () => {
-    m.findUnique.mockResolvedValue({ id: "c1", enviadosHoje: 3, diaContagem: "2026-10-07" });
-    await registrarEnvio("c1", { ok: true }, now);
-    expect(m.update.mock.calls[0][0].data.enviadosHoje).toBe(4);
-  });
   it("falha → só ultimoErro (truncado em 300), sem contar", async () => {
-    m.findUnique.mockResolvedValue({ id: "c1", enviadosHoje: 3, diaContagem: "2026-10-07" });
     await registrarEnvio("c1", { ok: false, error: "x".repeat(400) }, now);
     expect(m.update).toHaveBeenCalledWith({ where: { id: "c1" }, data: { ultimoErro: "x".repeat(300) } });
+    expect(m.updateMany).not.toHaveBeenCalled();
   });
   it("Prisma lançando → engole (best-effort)", async () => {
-    m.findUnique.mockRejectedValue(new Error("down"));
+    m.updateMany.mockRejectedValue(new Error("down"));
     await expect(registrarEnvio("c1", { ok: true }, now)).resolves.toBeUndefined();
   });
 });

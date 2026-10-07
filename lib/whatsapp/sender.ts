@@ -58,10 +58,15 @@ export function buildSendRequest(provider: Provider, env: SenderEnv, phone: stri
 export type SendResult = { ok: boolean; provider: Provider; status?: number; error?: string; commandId?: string };
 
 async function sendViaBridge(phone: string, text: string, env: SenderEnv, opts: SendOpts): Promise<SendResult> {
-  const [{ resolverCanalEnvio, registrarEnvio }, { sendTextViaBridge }] = await Promise.all([
+  const [{ resolverCanalEnvio, registrarEnvio }, { sendTextViaBridge, bridgeConfigurado }] = await Promise.all([
     import("@/lib/chipflow/canal"),
     import("@/lib/chipflow/bridge"),
   ]);
+  // Sem URL do bridge é erro de configuração do servidor — não vira "erro do canal" no banco.
+  if (!bridgeConfigurado(env)) {
+    console.log(`[whatsapp:bridge] sem CHIPFLOW_BRIDGE_REDIS_URL/BRIDGE_REDIS_URL → ${phone}: ${text.slice(0, 200)}`);
+    return { ok: false, provider: "bridge", error: "provider_misconfigured" };
+  }
   const destino = await resolverCanalEnvio(opts.agentKey ?? "aura", env);
   if (!destino) {
     console.log(`[whatsapp:bridge] sem canal/BRIDGE_INSTANCE_ID pra ${opts.agentKey ?? "aura"} → ${phone}: ${text.slice(0, 200)}`);

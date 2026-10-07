@@ -1,13 +1,38 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// ioredis falso só pro caminho de conexão real (redisPara): conta construções/desconexões.
+const io = vi.hoisted(() => ({ ctor: 0, disconnects: 0, connectFails: 0 }));
+vi.mock("ioredis", () => ({
+  default: class FakeIORedis {
+    constructor(public url: string, public opts: unknown) { io.ctor++; }
+    on() { return this; }
+    async connect() { if (io.connectFails > 0) { io.connectFails--; throw new Error("ECONNREFUSED"); } }
+    disconnect() { io.disconnects++; }
+    duplicate() { return this; }
+    async xrevrange() { return []; }
+    async xadd() { return "1-0"; }
+    async xread() { return null; }
+  },
+}));
+
 import { sendTextViaBridge, bridgeConfigurado, type BridgeRedis } from "./bridge";
 
 const ENV = { CHIPFLOW_BRIDGE_REDIS_URL: "redis://fake", NUM_SHARDS: "1" };
 
-/** Redis falso: registra chamadas; `eventos` é a fila que o xread devolve, uma entry por chamada. */
-function fakeRedis(opts: { tail?: string | null; eventos?: (cmdId: string) => Array<[string, string[]]>; xrevrangeThrows?: boolean; xaddThrows?: boolean } = {}) {
-  const calls: { xrevrange: any[][]; xadd: any[][]; xread: any[][] } = { xrevrange: [], xadd: [], xread: [] };
+type Calls = { xrevrange: any[][]; xadd: any[][]; xread: any[][]; disconnect: number };
+/** Redis falso: registra chamadas; `eventos` é a fila que o xread devolve, uma entry por chamada.
+ *  `comDuplicate` → `duplicate()` devolve uma 2ª conexão (própria pro XREAD BLOCK) com `disconnect`. */
+function fakeRedis(opts: { tail?: string | null; eventos?: (cmdId: string) => Array<[string, string[]]>; xrevrangeThrows?: boolean; xaddThrows?: boolean; comDuplicate?: boolean } = {}) {
+  const calls: Calls = { xrevrange: [], xadd: [], xread: [], disconnect: 0 };
+  const dup: Calls = { xrevrange: [], xadd: [], xread: [], disconnect: 0 };
   let publicado: string | null = null;
   let fila: Array<[string, string[]]> | null = null;
+  const xreadDe = (c: Calls) => async (...a: (string | number)[]) => {
+    c.xread.push(a);
+    if (!fila || !fila.length) return null;
+    const entry = fila.shift()!;
+    return [["wa:evt:0", [entry]]] as [string, [string, string[]][]][];
+  };
   const r: BridgeRedis = {
     async xrevrange(...a) { calls.xrevrange.push(a); if (opts.xrevrangeThrows) throw new Error("boom"); return opts.tail === null ? [] : [[opts.tail ?? "1700-0", ["v", "{}"]]]; },
     async xadd(...a) {
@@ -17,14 +42,12 @@ function fakeRedis(opts: { tail?: string | null; eventos?: (cmdId: string) => Ar
       fila = opts.eventos ? opts.eventos(publicado) : [];
       return "1700-1";
     },
-    async xread(...a) {
-      calls.xread.push(a);
-      if (!fila || !fila.length) return null;
-      const entry = fila.shift()!;
-      return [["wa:evt:0", [entry]]];
-    },
+    xread: xreadDe(calls),
   };
-  return { r, calls, get publicado() { return publicado; } };
+  if (opts.comDuplicate) {
+    r.duplicate = () => ({ ...r, xread: xreadDe(dup), disconnect: () => { dup.disconnect++; } });
+  }
+  return { r, calls, dup, get publicado() { return publicado; } };
 }
 const evt = (cmdId: string, over: Record<string, unknown> = {}) => ["v", JSON.stringify({ event_id: "e", command_id: cmdId, instance_id: 42, status: "sent", ...over })];
 
@@ -92,12 +115,54 @@ describe("sendTextViaBridge", () => {
     const r = await sendTextViaBridge({ instanceId: 42, phone: "+5511999999999", text: "oi", env: { REDIS_URL: "redis://x" } });
     expect(r).toMatchObject({ ok: false, status: "error", error: "bridge não configurado" });
   });
-  it("idemKey do chamador vai no envelope; sem ela usa a padrão determinística", async () => {
+  it("idemKey do chamador vai no envelope; sem ela usa uma por comando (repetição legítima não é engolida)", async () => {
     const f = fakeRedis({ eventos: (id) => [["1-0", evt(id)]] });
     await sendTextViaBridge({ instanceId: 42, phone: "+5511999999999", text: "oi", idemKey: "reply:c1:m1", env: ENV, redis: f.r });
     expect(f.calls.xadd[0][f.calls.xadd[0].indexOf("idempotency_key") + 1]).toBe("reply:c1:m1");
     const g = fakeRedis({ eventos: (id) => [["1-0", evt(id)]] });
     await sendTextViaBridge({ instanceId: 42, phone: "+5511999999999", text: "oi", env: ENV, redis: g.r });
-    expect(g.calls.xadd[0][g.calls.xadd[0].indexOf("idempotency_key") + 1]).toMatch(/^zaeon:send_text:42:[0-9a-f]{16}$/);
+    expect(g.calls.xadd[0][g.calls.xadd[0].indexOf("idempotency_key") + 1]).toBe(`zaeon:send_text:42:${g.publicado}`);
+    const h = fakeRedis({ eventos: (id) => [["1-0", evt(id)]] });
+    await sendTextViaBridge({ instanceId: 42, phone: "+5511999999999", text: "oi", env: ENV, redis: h.r });
+    expect(h.calls.xadd[0][h.calls.xadd[0].indexOf("idempotency_key") + 1]).not.toBe(g.calls.xadd[0][g.calls.xadd[0].indexOf("idempotency_key") + 1]);
+  });
+  it("XREAD BLOCK roda numa conexão duplicada (não trava a compartilhada) e a fecha no fim", async () => {
+    const f = fakeRedis({ comDuplicate: true, eventos: (id) => [["1-0", evt("outro")], ["1-1", evt(id)]] });
+    const r = await sendTextViaBridge({ instanceId: 42, phone: "+5511999999999", text: "oi", env: ENV, redis: f.r });
+    expect(r.ok).toBe(true);
+    expect(f.calls.xread.length).toBe(0);
+    expect(f.dup.xread.length).toBe(2);
+    expect(f.dup.disconnect).toBe(1);
+    // XADD e XREVRANGE continuam na conexão compartilhada
+    expect(f.calls.xadd.length).toBe(1);
+    expect(f.calls.xrevrange.length).toBe(1);
+  });
+  it("timeout também fecha a conexão duplicada", async () => {
+    const f = fakeRedis({ comDuplicate: true, eventos: () => [] });
+    await sendTextViaBridge({ instanceId: 42, phone: "+5511999999999", text: "oi", env: ENV, redis: f.r, timeoutMs: 30 });
+    expect(f.dup.disconnect).toBe(1);
+  });
+});
+
+describe("conexão real (redisPara) — ciclo de vida", () => {
+  it("connect falhando → desconecta o cliente (sem zumbi reconectando) e devolve error; a próxima chamada tenta de novo", async () => {
+    const env = { CHIPFLOW_BRIDGE_REDIS_URL: "redis://cai-na-primeira", NUM_SHARDS: "1" };
+    io.connectFails = 1;
+    const antes = { ctor: io.ctor, disc: io.disconnects };
+    const r1 = await sendTextViaBridge({ instanceId: 7, phone: "+5511999999999", text: "oi", env, timeoutMs: 20 });
+    expect(r1).toMatchObject({ ok: false, status: "error", error: "ECONNREFUSED" });
+    expect(io.disconnects).toBe(antes.disc + 1);
+    const r2 = await sendTextViaBridge({ instanceId: 7, phone: "+5511999999999", text: "oi", env, timeoutMs: 20 });
+    expect(r2.status).toBe("timeout"); // conectou desta vez (o fake não devolve eventos)
+    expect(io.ctor).toBe(antes.ctor + 2);
+  });
+  it("duas chamadas simultâneas na 1ª conexão compartilham UM cliente", async () => {
+    const env = { CHIPFLOW_BRIDGE_REDIS_URL: "redis://concorrente", NUM_SHARDS: "1" };
+    const antes = io.ctor;
+    await Promise.all([
+      sendTextViaBridge({ instanceId: 1, phone: "+5511999999999", text: "a", env, timeoutMs: 20 }),
+      sendTextViaBridge({ instanceId: 2, phone: "+5511999999999", text: "b", env, timeoutMs: 20 }),
+    ]);
+    expect(io.ctor).toBe(antes + 1);
   });
 });

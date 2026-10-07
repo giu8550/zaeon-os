@@ -47,13 +47,19 @@ export async function registrarEnvio(canalId: string, r: { ok: boolean; error?: 
       await prisma.agentChannel.update({ where: { id: canalId }, data: { ultimoErro: (r.error ?? "falha").slice(0, 300) } });
       return;
     }
-    const atual = await prisma.agentChannel.findUnique({ where: { id: canalId } });
     const hoje = localParts(now).dateKey;
-    const base = atual?.diaContagem === hoje ? atual.enviadosHoje ?? 0 : 0;
-    await prisma.agentChannel.update({
-      where: { id: canalId },
-      data: { enviadosHoje: base + 1, diaContagem: hoje, ultimoEnvioEm: now, ultimoErro: null },
+    // Incremento ATÔMICO condicionado ao dia: dois envios simultâneos não se perdem (o PR-W3
+    // vai confiar nesse número pro teto do chip). Só na virada do dia cai no reset.
+    const { count } = await prisma.agentChannel.updateMany({
+      where: { id: canalId, diaContagem: hoje },
+      data: { enviadosHoje: { increment: 1 }, ultimoEnvioEm: now, ultimoErro: null },
     });
+    if (!count) {
+      await prisma.agentChannel.update({
+        where: { id: canalId },
+        data: { enviadosHoje: 1, diaContagem: hoje, ultimoEnvioEm: now, ultimoErro: null },
+      });
+    }
   } catch (e) {
     console.warn("[chipflow:canal] registro falhou:", (e as Error)?.message ?? e);
   }

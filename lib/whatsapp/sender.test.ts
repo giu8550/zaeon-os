@@ -46,6 +46,14 @@ describe("whatsapp · sender bridge (chip da ChipFlow)", () => {
     expect(resolveProvider({ EVOLUTION_URL: "x", CHIPFLOW_BRIDGE_REDIS_URL: "redis://cf" })).toBe("evolution");
     expect(resolveProvider({ REDIS_URL: "redis://x" })).toBe("log");
   });
+  it("WHATSAPP_PROVIDER=bridge sem URL de bridge (só REDIS_URL) → provider_misconfigured ANTES de tocar o canal/Prisma", async () => {
+    mb.resolver.mockResolvedValue({ fonte: "canal", canalId: "c1", chipflowId: 42 });
+    const r = await sendWhatsAppText("+5511999999999", "oi", { WHATSAPP_PROVIDER: "bridge", REDIS_URL: "redis://x" }, { agentKey: "medicina" });
+    expect(r).toEqual({ ok: false, provider: "bridge", error: "provider_misconfigured" });
+    expect(mb.resolver).not.toHaveBeenCalled();
+    expect(mb.send).not.toHaveBeenCalled();
+    expect(mb.registrar).not.toHaveBeenCalled();
+  });
   it("buildSendRequest('bridge') é null — não é HTTP", () => {
     expect(buildSendRequest("bridge", BR, "+5511999999999", "oi")).toBeNull();
   });

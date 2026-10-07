@@ -6,9 +6,13 @@
  * terminal do MESMO command_id (sent/failed/timeout/ignored_duplicate). Eventos de outros
  * comandos e status intermediários (accepted/running) são ignorados.
  *
- * Conexão PRÓPRIA (não a do BullMQ): o Redis do bridge é o da ChipFlow. Nunca lança — devolve
- * { ok:false, status:"error"|"timeout" } e o chamador decide. Montadores puros em bridge-request.ts.
+ * Conexão PRÓPRIA (não a do BullMQ): o Redis do bridge é o da ChipFlow. O XREAD BLOCK roda
+ * numa conexão DUPLICADA por chamada — comando bloqueante segura a conexão no servidor, e na
+ * compartilhada ele serializaria todos os envios concorrentes (caveat documentado do ioredis).
+ * Nunca lança — devolve { ok:false, status:"error"|"timeout" } e o chamador decide.
+ * Montadores puros em bridge-request.ts.
  */
+import { randomUUID } from "crypto";
 import {
   buildCommand, commandStream, eventStream, fieldsToObject, idemKeyPadrao, isTerminal, numShards,
   parseEvent, resolveBridgeRedisUrl, sendTextPayload, terminalToResult, xaddFields,
@@ -19,6 +23,8 @@ export type BridgeRedis = {
   xrevrange(...args: (string | number)[]): Promise<[string, string[]][]>;
   xadd(...args: (string | number)[]): Promise<string | null>;
   xread(...args: (string | number)[]): Promise<[string, [string, string[]][]][] | null>;
+  /** Conexão nova pro XREAD BLOCK (ioredis tem; o fake dos testes pode não ter). */
+  duplicate?(): BridgeRedis & { disconnect(): void };
 };
 
 export type BridgeResult = { ok: boolean; status: string; error?: string; commandId: string; event?: BridgeEvent };
@@ -29,16 +35,30 @@ export function bridgeConfigurado(env: Env = process.env): boolean {
   return resolveBridgeRedisUrl(env) !== null;
 }
 
-const conexoes = new Map<string, BridgeRedis>();
-async function redisPara(url: string): Promise<BridgeRedis> {
+/**
+ * Cache por URL da PROMESSA de conexão: duas chamadas simultâneas na 1ª vez compartilham um
+ * cliente. Se o connect falha, desconecta (senão o ioredis fica reconectando pra sempre em
+ * background — um zumbi por tentativa, batendo no Redis da ChipFlow) e esquece a entrada.
+ */
+const conexoes = new Map<string, Promise<BridgeRedis>>();
+function redisPara(url: string): Promise<BridgeRedis> {
   const existente = conexoes.get(url);
   if (existente) return existente;
-  const { default: IORedis } = await import("ioredis");
-  const r = new IORedis(url, { maxRetriesPerRequest: 2, lazyConnect: true, enableOfflineQueue: false });
-  r.on("error", (e: Error) => console.warn("[bridge] redis:", e.message));
-  await r.connect();
-  conexoes.set(url, r as unknown as BridgeRedis);
-  return r as unknown as BridgeRedis;
+  const p = (async () => {
+    const { default: IORedis } = await import("ioredis");
+    const r = new IORedis(url, { maxRetriesPerRequest: 2, lazyConnect: true, enableOfflineQueue: false });
+    r.on("error", (e: Error) => console.warn("[bridge] redis:", e.message));
+    try {
+      await r.connect();
+    } catch (e) {
+      r.disconnect();
+      throw e;
+    }
+    return r as unknown as BridgeRedis;
+  })();
+  conexoes.set(url, p);
+  p.catch(() => conexoes.delete(url));
+  return p;
 }
 
 function timeoutMsDe(env: Env, pedido?: number): number {
@@ -58,17 +78,18 @@ export async function sendTextViaBridge(input: {
 }): Promise<BridgeResult> {
   const env = input.env ?? process.env;
   const n = numShards(env);
-  const payload = sendTextPayload(input.phone, input.text);
+  const commandId = randomUUID();
   const cmd = buildCommand({
     instanceId: input.instanceId,
     operation: "send_text",
-    payload,
-    idempotencyKey: input.idemKey || idemKeyPadrao(input.instanceId, payload.jid, input.text),
+    payload: sendTextPayload(input.phone, input.text),
+    idempotencyKey: input.idemKey || idemKeyPadrao(input.instanceId, commandId),
+    commandId,
   });
-  const commandId = cmd.command_id;
   const evtStream = eventStream(input.instanceId, n);
   const timeoutMs = timeoutMsDe(env, input.timeoutMs);
 
+  let esperador: (BridgeRedis & { disconnect?(): void }) | null = null;
   try {
     let r = input.redis;
     if (!r) {
@@ -86,10 +107,11 @@ export async function sendTextViaBridge(input: {
 
     await r.xadd(commandStream(input.instanceId, n), "*", ...xaddFields(cmd));
 
+    esperador = r.duplicate ? r.duplicate() : r;
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const block = Math.min(500, Math.max(1, deadline - Date.now()));
-      const resp = await r.xread("COUNT", 50, "BLOCK", block, "STREAMS", evtStream, lastId);
+      const resp = await esperador.xread("COUNT", 50, "BLOCK", block, "STREAMS", evtStream, lastId);
       if (!resp) continue;
       for (const [, entries] of resp) {
         for (const [entryId, flat] of entries) {
@@ -103,5 +125,10 @@ export async function sendTextViaBridge(input: {
     return { ok: false, status: "timeout", error: "sem evento terminal no prazo", commandId };
   } catch (e) {
     return { ok: false, status: "error", error: String((e as Error)?.message ?? e), commandId };
+  } finally {
+    // só fecha a duplicada; a compartilhada (ou a injetada) fica viva
+    if (esperador && esperador !== input.redis && esperador.disconnect) {
+      try { esperador.disconnect(); } catch { /* já fechada */ }
+    }
   }
 }

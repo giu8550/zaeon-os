@@ -6,7 +6,7 @@
  * (ver docs/HANDOFF_AGENTE_MENSAGEIRO_V3.md, adendo): o adapter lê SÓ o campo `v` (JSON do
  * Command); os campos indexados existem por paridade (inspeção via redis-cli).
  */
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import { jidNumber } from "@/lib/whatsapp/phone";
 
 export type Env = Record<string, string | undefined>;
@@ -126,8 +126,12 @@ export function terminalToResult(evt: BridgeEvent): { ok: boolean; status: strin
   return { ok: false, status, error: evt.error_detail || evt.error_class || status || "bridge_error" };
 }
 
-/** Chave de idempotência determinística (o adapter dedupa a redelivery do MESMO comando). */
-export function idemKeyPadrao(instanceId: number, jid: string, text: string): string {
-  const h = createHash("sha1").update(`${jid}|${text}`).digest("hex").slice(0, 16);
-  return `zaeon:send_text:${instanceId}:${h}`;
+/**
+ * Chave de idempotência padrão: POR COMANDO. O adapter dedupa a redelivery do mesmo comando
+ * (Redis at-least-once) — e isso a chave por comando já cobre. Uma chave por conteúdo
+ * (jid|texto) engoliria repetições legítimas (aluno que erra o código duas vezes ficaria sem
+ * a 2ª resposta). Quem quer dedupe de nível aplicação (outbox do PR-W4) passa a sua.
+ */
+export function idemKeyPadrao(instanceId: number, commandId: string): string {
+  return `zaeon:send_text:${instanceId}:${commandId}`;
 }
