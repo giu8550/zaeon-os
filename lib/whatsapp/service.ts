@@ -101,8 +101,8 @@ export async function setQuietHours(userId: string, q: unknown): Promise<void> {
 export type InboundAction = "connected" | "invalid_code" | "stopped" | "resumed" | "replied" | "unknown_phone" | "plan_required";
 export type InboundResult = { action: InboundAction; userId?: string; reply?: string; sent?: boolean };
 
-async function reply(userId: string, phone: string, kind: string, text: string): Promise<boolean> {
-  const r = await sendWhatsAppText(phone, text);
+async function reply(userId: string, phone: string, kind: string, text: string, agentKey = "aura"): Promise<boolean> {
+  const r = await sendWhatsAppText(phone, text, process.env, { agentKey, idemKey: `reply:${userId}:${kind}:${Date.now()}` });
   await log(userId, "out", kind, text);
   await prisma.whatsAppLink.updateMany({ where: { userId }, data: { lastMsgAt: new Date() } });
   if (!r.ok) console.warn("[whatsapp] envio falhou:", r);
@@ -132,7 +132,7 @@ export async function handleInbound(msg: InboundMsg, now: Date = new Date()): Pr
     await log(link.userId, "in", "connect", msg.text);
     const [mentor, u] = await Promise.all([mentorOf(link.userId), prisma.user.findUnique({ where: { id: link.userId }, select: { name: true } })]);
     const text = await inMentorVoice({ kind: "welcome", facts: "O aluno acabou de conectar o WhatsApp.", mentorContext: mentor?.context, mentorName: mentor?.name, studentName: u?.name });
-    const sent = await reply(link.userId, msg.phone, "welcome", text);
+    const sent = await reply(link.userId, msg.phone, "welcome", text, mentor?.slug ?? "aura");
     return { action: "connected", userId: link.userId, reply: text, sent };
   }
 
@@ -166,12 +166,12 @@ export async function handleInbound(msg: InboundMsg, now: Date = new Date()): Pr
   }
   const { answerOnWhatsApp } = await import("./brain");
   const out = await answerOnWhatsApp({ userId, text: intent.text });
-  const sent = await reply(userId, msg.phone, "chat", out.text);
+  const sent = await reply(userId, msg.phone, "chat", out.text, out.mentor ?? "aura");
   return { action: "replied", userId, reply: out.text, sent };
 }
 
 // ───────────────────────────── 3. outbound (disparos) ─────────────────────────────
-export type NotifyInput = { userId: string; kind: string; text: string; dedupeKey?: string | null; ignoreQuiet?: boolean; now?: Date };
+export type NotifyInput = { userId: string; kind: string; text: string; dedupeKey?: string | null; ignoreQuiet?: boolean; now?: Date; agentKey?: string };
 export type NotifyReason = Exclude<CanSend, { ok: true }>["reason"] | "duplicate" | "no_link" | "send_failed" | "plan_required";
 export type NotifyResult = { sent: true; reason?: undefined } | { sent: false; reason: NotifyReason };
 
@@ -187,7 +187,10 @@ export async function notifyWhatsApp(input: NotifyInput): Promise<NotifyResult> 
     const dup = await prisma.whatsAppMessage.findFirst({ where: { userId: input.userId, dedupeKey: input.dedupeKey }, select: { id: true } });
     if (dup) return { sent: false, reason: "duplicate" };
   }
-  const r = await sendWhatsAppText(link.phone!, input.text);
+  const r = await sendWhatsAppText(link.phone!, input.text, process.env, {
+    agentKey: input.agentKey ?? "aura",
+    idemKey: input.dedupeKey ? `notify:${input.userId}:${input.dedupeKey}` : undefined,
+  });
   if (!r.ok) { console.warn("[whatsapp] disparo falhou:", r); return { sent: false, reason: "send_failed" }; }
   await log(input.userId, "out", input.kind, input.text, input.dedupeKey);
   await prisma.whatsAppLink.update({ where: { id: link.id }, data: { lastMsgAt: now } });
@@ -206,7 +209,7 @@ export async function notifyInVoice(userId: string, kind: string, facts: string,
   }
   const [mentor, u] = await Promise.all([mentorOf(userId), prisma.user.findUnique({ where: { id: userId }, select: { name: true } })]);
   const text = await inMentorVoice({ kind, facts, mentorContext: mentor?.context, mentorName: mentor?.name, studentName: u?.name });
-  return notifyWhatsApp({ userId, kind, text, dedupeKey, ignoreQuiet });
+  return notifyWhatsApp({ userId, kind, text, dedupeKey, ignoreQuiet, agentKey: mentor?.slug ?? "aura" });
 }
 
 /** Gancho: credencial verificável conquistada (Solana). Chame quando o mint confirmar. */
