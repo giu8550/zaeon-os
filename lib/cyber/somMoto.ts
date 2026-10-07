@@ -4,7 +4,8 @@
  *
  * Os estágios e o que soa:
  *  - PARTIDA (montou): o motor de arranque gira (zumbido subindo), a ignição estoura e o motor dá uma acelerada;
- *  - LENTA (parada/pairando devagar): ronco grave pulsado ("potato" da hover bike);
+ *  - LENTA (parada/pairando devagar): o MESMO motor, em rotação baixa (uma camada à parte, pulsada, soava como um
+ *    "som extra estranho" por cima do motor — saiu);
  *  - DECOLA (saiu do chão): sopro subindo dos propulsores de baixo;
  *  - ACELERAÇÃO/CRUZEIRO: o MOTOR (harmônicos) sobe de tom com a velocidade e com o acelerador, + o VENTO;
  *  - BOOST: estouro de ignição + a TURBINA (ronco + assobio agudo) enquanto dura;
@@ -40,18 +41,6 @@ export function sintetizarMotorMoto(sr: number): Float32Array {
     out[i] = harmonicos(fase, 12) * explosao + 0.35 * Math.sin(fase * 0.5) + lp * 0.18;
   }
   return normalizar(out, 0.8);
-}
-
-/** LENTA (loop de 2 s): ronco grave a 32 Hz com o "potato" (pulso irregular a 4 e 6 Hz — múltiplos inteiros de 0,5 Hz)
- *  e o zumbido de flutuação a 120 Hz */
-export function sintetizarLentaMoto(sr: number): Float32Array {
-  const n = sr * 2, out = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const t = i / sr, fase = 2 * Math.PI * 32 * t;
-    const pulso = Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * 4 * t), 3) * 0.7 + Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * 6 * t + 0.8), 4) * 0.5;
-    out[i] = (Math.sin(fase) + 0.5 * Math.sin(fase * 2) + 0.25 * Math.sin(fase * 3)) * (0.35 + pulso) + 0.18 * Math.sin(2 * Math.PI * 120 * t) * (0.8 + 0.2 * Math.sin(2 * Math.PI * 0.5 * t));
-  }
-  return normalizar(out, 0.85);
 }
 
 /** VENTO (loop de 3 s): ruído passa-baixa ondulando (rajadas) */
@@ -168,13 +157,13 @@ export function sintetizarSetaMoto(sr: number): Float32Array {
 }
 
 export const SINTESE_MOTO = {
-  "moto-motor": sintetizarMotorMoto, "moto-lenta": sintetizarLentaMoto, "moto-vento": sintetizarVentoMoto, "moto-turbina": sintetizarTurbinaMoto,
+  "moto-motor": sintetizarMotorMoto, "moto-vento": sintetizarVentoMoto, "moto-turbina": sintetizarTurbinaMoto,
   "moto-partida": sintetizarPartidaMoto, "moto-desliga": sintetizarDesligaMoto, "moto-boost": sintetizarBoostMoto, "moto-freio": sintetizarFreioMoto,
   "moto-decola": sintetizarDecolaMoto, "moto-pouso": sintetizarPousoMoto, "moto-seta": sintetizarSetaMoto,
 } as const;
 export type NomeSomMoto = keyof typeof SINTESE_MOTO;
 /** os LOOPS da moto (o resto é one-shot) */
-export const LOOPS_MOTO = ["moto-lenta", "moto-motor", "moto-vento", "moto-turbina"] as const satisfies readonly NomeSomMoto[];
+export const LOOPS_MOTO = ["moto-motor", "moto-vento", "moto-turbina"] as const satisfies readonly NomeSomMoto[];
 
 /** o que a moto está fazendo agora, do ponto de vista do som */
 export type EstadoSomMoto = {
@@ -189,12 +178,12 @@ export const somMotoParada: EstadoSomMoto = { montada: false, voando: false, vel
 
 /** volume (0..1) e afinação de cada loop no estado `e` */
 export function mixDaMoto(e: EstadoSomMoto): Record<(typeof LOOPS_MOTO)[number], { vol: number; taxa: number }> {
-  if (!e.montada) return { "moto-lenta": { vol: 0, taxa: 1 }, "moto-motor": { vol: 0, taxa: 0.7 }, "moto-vento": { vol: 0, taxa: 1 }, "moto-turbina": { vol: 0, taxa: 1 } };
+  if (!e.montada) return { "moto-motor": { vol: 0, taxa: 0.6 }, "moto-vento": { vol: 0, taxa: 1 }, "moto-turbina": { vol: 0, taxa: 1 } };
   const v = Math.max(0, Math.min(1.8, e.vel)), v1 = Math.min(1, v), acel = Math.max(0, e.acel);
   return {
-    "moto-lenta": { vol: e.voando ? 0.55 * (1 - v1) : 0.9, taxa: 1 + 0.15 * v1 },
-    // o motor: no chão só um fio; no ar sobe com a velocidade; o acelerador "puxa" a rotação antes da velocidade chegar
-    "moto-motor": { vol: e.voando ? 0.3 + 0.55 * v1 : 0.12, taxa: 0.7 + 0.75 * v1 + 0.22 * acel * (1 - v1 * 0.5) + (e.boost ? 0.3 : 0) + 0.15 * Math.max(0, v - 1) },
+    // o motor: no chão em marcha LENTA (rotação baixa); no ar sobe com a velocidade; o acelerador "puxa" a rotação
+    // antes da velocidade chegar
+    "moto-motor": { vol: e.voando ? 0.4 + 0.5 * v1 : 0.42, taxa: (e.voando ? 0.68 : 0.55) + 0.75 * v1 + 0.22 * acel * (1 - v1 * 0.5) + (e.boost ? 0.3 : 0) + 0.15 * Math.max(0, v - 1) },
     "moto-vento": { vol: e.voando ? Math.pow(v1, 1.6) * 0.8 + (e.boost ? 0.25 : 0) : 0, taxa: 0.8 + 0.45 * Math.min(1.5, v) },
     "moto-turbina": { vol: e.boost ? 1 : 0, taxa: 1 + 0.15 * Math.min(1.5, v) },
   };

@@ -29,9 +29,8 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   // SINTETIZADOS (sem arquivo): gerados no navegador por sintetizarJetpack / sintetizarBaque
   "jato-sopro": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
   baque: { modo: "pos", loop: false, volume: 0.95, sintetico: true },   // o corpo batendo no chão (força pela queda)
-  // MOTO por estágio (lib/cyber/somMoto, sintetizados): loops de motor/lenta/vento/turbina + os one-shots
+  // MOTO por estágio (lib/cyber/somMoto, sintetizados): loops de motor (que faz a lenta)/vento/turbina + os one-shots
   "moto-motor": { modo: "pos", loop: true, volume: 0.55, sintetico: true },
-  "moto-lenta": { modo: "pos", loop: true, volume: 0.5, sintetico: true },
   "moto-vento": { modo: "pos", loop: true, volume: 0.35, sintetico: true },
   "moto-turbina": { modo: "pos", loop: true, volume: 0.6, sintetico: true },
   "moto-partida": { modo: "pos", loop: false, volume: 0.75, sintetico: true },

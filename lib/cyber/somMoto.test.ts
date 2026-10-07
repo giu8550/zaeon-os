@@ -34,9 +34,10 @@ describe("sons da moto (sintetizados)", () => {
 
 describe("estágios da moto (mix e eventos)", () => {
   const no = (o: Partial<EstadoSomMoto>): EstadoSomMoto => ({ ...somMotoParada, montada: true, ...o });
-  it("parada no chão = LENTA; no ar o MOTOR sobe de tom com a velocidade; vento só rápido; turbina só no boost", () => {
+  it("parada no chão = o motor em LENTA; no ar o MOTOR sobe de tom com a velocidade; vento só rápido; turbina só no boost", () => {
     const chao = mixDaMoto(no({})), devagar = mixDaMoto(no({ voando: true, vel: 0.1 })), rapido = mixDaMoto(no({ voando: true, vel: 1 })), boost = mixDaMoto(no({ voando: true, vel: 1.6, boost: true }));
-    expect(chao["moto-lenta"].vol).toBeGreaterThan(chao["moto-motor"].vol);
+    expect(chao["moto-motor"].vol).toBeGreaterThan(0.3); expect(chao["moto-motor"].taxa).toBeLessThan(devagar["moto-motor"].taxa);   // a lenta é o motor em rotação baixa
+    expect(Object.keys(chao)).toEqual(["moto-motor", "moto-vento", "moto-turbina"]);   // nada de camada extra por cima do motor
     expect(rapido["moto-motor"].taxa).toBeGreaterThan(devagar["moto-motor"].taxa + 0.5);
     expect(boost["moto-motor"].taxa).toBeGreaterThan(rapido["moto-motor"].taxa);
     expect(devagar["moto-vento"].vol).toBeLessThan(0.05); expect(rapido["moto-vento"].vol).toBeGreaterThan(0.6);

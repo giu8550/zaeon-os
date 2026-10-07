@@ -842,7 +842,7 @@ export class CyberEngine {
       if (quem && quem !== this.eu) guidao = Math.max(-1, Math.min(1, -curva * 2.5));   // dos outros: o guidão sai do giro (direita = rumo diminui)
       const seta = quem && voando ? setaAcesa(guidao, t) : 0;
       m.h.atualizar({ dt, t, voando, vel, curva, vy: m.vy, inclina, boost, seta });
-      // SOM por estágio (lib/cyber/somMoto): loops do motor/lenta/vento/turbina + one-shots (partida, decola, boost,
+      // SOM por estágio (lib/cyber/somMoto): loops do motor (que faz a lenta)/vento/turbina + one-shots (partida, decola, boost,
       // freio, pisca, pouso, desliga). A minha moto quase não paneia; o pisca só eu ouço (é do painel)
       const minha = quem === this.eu, dist = minha ? DISTANCIA.naveLocal : DISTANCIA.padrao;
       const est: EstadoSomMoto = quem ? { montada: true, voando, vel: minha ? Math.hypot(this.motoEst.vx, this.motoEst.vz) / PILOTAGEM.vel : quem.moving ? 0.8 : 0, acel: minha ? this.acelMoto : 0, boost: boost > 0, seta } : somMotoParada;
@@ -1534,11 +1534,11 @@ export class CyberEngine {
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
     this.atualizarHud(now);
     const desenhar = () => { this.R.clear(); this.cena.desenharFundo(this.R, this.qa.atual.nebulosa); this.R.clearDepth(); this.R.render(this.cena.scene, this.cam); };
-    // moto rápida: blur radial + linhas de velocidade (components/cyber/VelocidadeTela); nos degraus baixos da
-    // qualidade adaptativa (sem aura) fica só o FOV — a passada extra custa uma tela inteira
-    if (this.velTela > 0.03 && this.qa.atual.aura && !this.o.low) {
+    // moto rápida (components/cyber/VelocidadeTela): as LINHAS de velocidade estilo anime + vinheta ligam SEMPRE (são
+    // baratas); o BLUR radial só quando a qualidade deixa (fora do modo low e dos degraus baixos — é uma tela inteira a mais)
+    if (this.velTela > 0.03) {
       this.fxVel ??= criarVelocidadeTela({ amostrasMsaa: this.R.getContext().getContextAttributes()?.antialias ? 4 : 0 });
-      this.fxVel.render(this.R, this.velTela, t, desenhar);
+      this.fxVel.render(this.R, this.velTela, t, desenhar, this.qa.atual.aura && !this.o.low);
     } else desenhar();
     // o frustum deste quadro (os avatares remotos do próximo quadro usam pra saber se estão na tela)
     this.mProj.multiplyMatrices(this.cam.projectionMatrix, this.cam.matrixWorldInverse); this.frustum.setFromProjectionMatrix(this.mProj);

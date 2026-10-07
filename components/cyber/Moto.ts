@@ -148,7 +148,13 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
     const miolo = new THREE.Mesh(new THREE.ConeGeometry(r * 0.5, 0.55, seg, 1, true), nucleoMat); miolo.position.y = 0.275; chama.add(miolo);
     props.push({ chama, tam, tipo: dir === "tras" ? "principal" : dir === "baixo" ? "sustenta" : "manobra", lado: Math.sign(x) });
   };
-  for (const s of [-1, 1]) propulsor(s * 0.16, 0.86, -1.58, 0.12, "tras", 1.3);   // os 2 principais, na traseira
+  // TRASEIRA: os propulsores SAEM da rabeta (antes ficavam enterrados no corpo das carenagens novas): uma nacele escura
+  // presa ao rabo, o PRINCIPAL grande no meio e dois menores dos lados
+  const yRabo = estilo === "raio" ? 0.95 : estilo === "tubarao" ? 0.84 : 0.86, zRabo = -1.62;
+  const nacele = peca(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.42, seg), escuro), 0, yRabo, zRabo - 0.08); nacele.rotation.x = Math.PI / 2; nacele.scale.set(1.55, 1, 1);
+  peca(new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.014, 4, seg * 2), brilho), 0, yRabo, zRabo + 0.1).scale.set(1.55, 1, 1);
+  propulsor(0, yRabo, zRabo - 0.3, 0.15, "tras", 1.5);
+  for (const s of [-1, 1]) propulsor(s * 0.22, yRabo - 0.02, zRabo - 0.26, 0.09, "tras", 1.1);
   for (const z of [0.95, -0.9]) {   // pods de flutuação (frente/trás) com os de sustentação embaixo
     const carc = peca(new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.33, 0.12, o.low ? 12 : 24), escuro), 0, 0.5, z); carc.scale.set(1, 1, 1.25); alvos.push(carc);
     peca(new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.012, 4, seg * 2), brilho), 0, 0.53, z).rotation.x = Math.PI / 2;
