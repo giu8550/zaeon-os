@@ -121,7 +121,7 @@ export function colisoresDaCidade(): Colisor[] {
 export type NomeSala = keyof typeof CIDADE.salas;
 /** móvel de uma sala, no referencial da SALA (+z local = rumo à porta/centro da ilha); `rot` = giro do móvel (a frente
  *  dele é o seu +z); `larg`×`prof` = pegada (vira colisores). `solido: false` = só visual (tapete). */
-export type Movel = { tipo: string; x: number; z: number; rot: number; larg: number; prof: number; solido?: boolean; /** elevação (m) — ex.: em cima do palco */ y?: number };
+export type Movel = { tipo: string; x: number; z: number; rot: number; larg: number; prof: number; solido?: boolean; /** elevação (m) — ex.: em cima do palco */ y?: number; /** cor de destaque (zonas do lounge) */ cor?: number };
 /**
  * PALCO do lounge (a FESTA): plataforma de CRISTAL DE GELO no fundo da sala (referencial da sala), com ESCADA na
  * frente (+z, rumo à pista) — a borda é sólida (só se sobe pela escada), e em cima fica a MESA DO DJ (2 pickups +
@@ -140,6 +140,20 @@ export const MESA_DJ = { x: 0, z: -15.3, larg: 4.2, prof: 1, topo: 1.05 } as con
 /** a ESTRUTURA DE METAL alta (treliça) de onde pendem as caixas: 2 torres + viga; as caixas SUSPENSAS (line arrays) */
 export const TRELICA = { x: 17, z: -19, alt: 26, viga: 24 } as const;
 export const CAIXAS_SUSPENSAS = [{ x: -14, z: -11 }, { x: 14, z: -11 }] as const;
+/** uma ZONA de lounge (referencial da sala): tapete aceso + o miolo (mesinha baixa com narguilé, fogueira holográfica
+ *  ou só a mesinha) + os assentos em volta virados pra ele, com a boca aberta pra `abre` (ângulo: sen/cos = x/z) */
+export function zonaLounge(cx: number, cz: number, abre: number, cor: number, tipo: "narguile" | "fogueira" | "mesinha"): Movel[] {
+  const out: Movel[] = [{ tipo: "tapete", x: cx, z: cz, rot: abre, larg: 9, prof: 9, solido: false, cor }];
+  if (tipo === "fogueira") out.push({ tipo: "fogueira", x: cx, z: cz, rot: 0, larg: 1.8, prof: 1.8, cor });
+  else out.push({ tipo: "mesaBaixa", x: cx, z: cz, rot: 0, larg: 1.6, prof: 1.6, cor });
+  if (tipo === "narguile") out.push({ tipo: "narguile", x: cx, z: cz, rot: abre, larg: 0.5, prof: 0.5, solido: false, y: 0.16 + 0.45, cor });
+  if (tipo === "fogueira") {   // puffs em roda (menos na boca)
+    for (let i = 0; i < 6; i++) { const a = abre + Math.PI / 3.5 + (i / 5) * (Math.PI * 2 - Math.PI / 1.75); out.push({ tipo: "puff", x: cx + Math.sin(a) * 2.9, z: cz + Math.cos(a) * 2.9, rot: a + Math.PI, larg: 1, prof: 1, cor }); }
+  } else for (const da of [Math.PI, Math.PI / 2, -Math.PI / 2]) {   // sofás em "U": o do fundo e os dois dos lados
+    const a = abre + da; out.push({ tipo: "sofa", x: cx + Math.sin(a) * 3, z: cz + Math.cos(a) * 3, rot: a + Math.PI, larg: 3.4, prof: 1.2, cor });
+  }
+  return out;
+}
 export const MOVEIS: Record<NomeSala, Movel[]> = {
   // LOUNGE = CLUBE a céu aberto na plataforma própria: telão no fundo, palco de cristal alto com a mesa do DJ, a
   // treliça com as caixas suspensas (as torres dela são sólidas), as TORRES de som gigantes e os subs no chão, pista de
@@ -156,9 +170,13 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     { tipo: "torreSom", x: 22, z: -10, rot: -0.45, larg: 3.6, prof: 2.6 },
     { tipo: "sub", x: -13, z: -4, rot: 0.3, larg: 3, prof: 2 },
     { tipo: "sub", x: 13, z: -4, rot: -0.3, larg: 3, prof: 2 },
-    { tipo: "sofa", x: -29, z: 12, rot: Math.PI / 2, larg: 7, prof: 1.6 },
-    { tipo: "sofa", x: 29, z: 12, rot: -Math.PI / 2, larg: 7, prof: 1.6 },
     { tipo: "pista", x: 0, z: 9, rot: 0, larg: 26, prof: 18, solido: false },
+    // as ZONAS de lounge (pra não ser só pista): 2 rodas de sofá com NARGUILÉ nas laterais, puffs em volta de uma
+    // FOGUEIRA holográfica e um cantinho com mesinha perto da entrada — todas abertas pro lado da pista/do caminho
+    ...zonaLounge(-27, 7, Math.PI / 2, 0xb98cff, "narguile"),
+    ...zonaLounge(27, 7, -Math.PI / 2, 0x66e6ff, "narguile"),
+    ...zonaLounge(-17, 27, Math.PI / 2, 0xff9a5c, "fogueira"),
+    ...zonaLounge(17, 27, -Math.PI / 2, 0xff5fd2, "mesinha"),
   ],
 };
 /** pontos (referencial da sala) da BORDA do palco — o círculo todo menos a boca da escada */
@@ -207,6 +225,26 @@ export function naPistaDeDanca(p: P2): boolean {
 }
 /** pra onde quem dança olha: pro palco (o −z da sala) */
 export const rumoDaPista = () => rotDaSala(CIDADE.salas.lounge) + Math.PI;
+/** A ESCADA DE ENERGIA leva sozinha: pisou na BOCA de baixo (vindo da central) sobe; na de cima (vindo do lounge),
+ *  desce. A viagem dura `dur` s e termina FORA das bocas (não dispara de novo sem querer). */
+export const VIAGEM_ESCADA = { dur: 6.5, boca: 2, alemDoTopo: 2.5, antesDoPe: 3 } as const;
+export const naEscadaDoLounge = (p: P2) => dentroDaEscada({ x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z });
+export function bocaDaEscada(p: P2): "sobe" | "desce" | null {
+  const q = naEscadaLocal({ x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z }), e = ESCADA_LOUNGE, B = VIAGEM_ESCADA.boca;
+  if (Math.abs(q.lat) > e.meia + 0.3) return null;
+  if (q.u >= -0.2 && q.u < B) return "sobe";
+  if (q.u > e.len - B && q.u <= e.len + 0.5) return "desce";
+  return null;
+}
+/** o ponto (mundo) no meio da escada a `u` m do pé (u < 0: antes do pé, na central; u > len: já no lounge) */
+export const pontoDaEscada = (u: number): P2 => { const e = ESCADA_LOUNGE; return mundo({ x: e.dir.x * (e.ini + u), z: e.dir.z * (e.ini + u) }); };
+/** onde a viagem está (u) com o progresso `k` (0..1): sai devagar, corre no meio, chega devagar */
+export function uDaViagem(sentido: "sobe" | "desce", k: number): number {
+  const c = Math.max(0, Math.min(1, k)), s = c * c * (3 - 2 * c), e = ESCADA_LOUNGE, V = VIAGEM_ESCADA;
+  return sentido === "sobe" ? s * (e.len + V.alemDoTopo) : e.len - s * (e.len + V.antesDoPe);
+}
+/** o rumo (facing do mundo) de quem é levado */
+export const rumoDaViagem = (sentido: "sobe" | "desce") => { const d = ESCADA_LOUNGE.dir; return Math.atan2(d.x, d.z) + (sentido === "sobe" ? 0 : Math.PI); };
 /** pra onde o DJ olha (facing = atan2(dx, dz) do mundo): o +z da sala, rumo à pista */
 export const rumoDoDJ = () => rotDaSala(CIDADE.salas.lounge);
 /** giro da sala: +z local aponta pro centro da ilha (onde fica a porta) */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, type NomeSala } from "./ceu";
+import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, type NomeSala } from "./ceu";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, baseNoCeu, spawnDaBase } from "./bases";
 import { vagas } from "./motos";
 import { NAVE_QG, paraMundo, poseDaDoca } from "./naveQG";
@@ -198,6 +198,40 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
     const pc = pontoDaCabineDJ(), w = W(PALCO.cabine.x, PALCO.cabine.z); expect(pc.x).toBeCloseTo(w.x); expect(pc.z).toBeCloseTo(w.z);
     expect(alturaNaCidade(pc)).toBe(H + PALCO.h);
     expect(MESA_DJ.z - MESA_DJ.prof / 2 - PALCO.cabine.z).toBeLessThanOrEqual(0.5);
+  });
+  it("a ESCADA DE ENERGIA leva sozinha: boca de baixo sobe, de cima desce; a viagem acaba fora das bocas, no piso certo", () => {
+    const e = ESCADA_LOUNGE;
+    expect(bocaDaEscada(naEscada(0.5))).toBe("sobe");
+    expect(bocaDaEscada(naEscada(e.len - 0.5))).toBe("desce");
+    expect(bocaDaEscada(naEscada(e.len / 2))).toBeNull();
+    expect(bocaDaEscada(naEscada(0.5, e.meia + 3))).toBeNull();
+    expect(bocaDaEscada(mundo({ x: 30, z: 0 }))).toBeNull();
+    expect(uDaViagem("sobe", 0)).toBe(0); expect(uDaViagem("desce", 0)).toBeCloseTo(e.len, 9);
+    const topo = pontoDaEscada(uDaViagem("sobe", 1)), pe = pontoDaEscada(uDaViagem("desce", 1));
+    expect(bocaDaEscada(topo)).toBeNull(); expect(alturaNaCidade(topo)).toBe(ALTURA_LOUNGE); expect(naIlhaPrincipal(topo)).toBe(true);
+    expect(bocaDaEscada(pe)).toBeNull(); expect(alturaNaCidade(pe)).toBe(0); expect(naIlhaPrincipal(pe)).toBe(true);
+    expect(dentroDeAlgum(topo, colisoresDaCidade())).toBe(false); expect(dentroDeAlgum(pe, colisoresDaCidade())).toBe(false);
+    // sobe sem pular: a altura só cresce e o caminho fica no corredor
+    let h = -1; for (let k = 0; k <= 1; k += 0.01) { const q = pontoDaEscada(uDaViagem("sobe", k)); const hh = alturaNaCidade(q); expect(hh).toBeGreaterThanOrEqual(h - 1e-9); h = hh; }
+    expect(naEscadaDoLounge(naEscada(e.len / 2))).toBe(true);
+    // virado pra onde vai
+    const a = pontoDaEscada(10), b = pontoDaEscada(20); expect(rumoDaViagem("sobe")).toBeCloseTo(Math.atan2(b.x - a.x, b.z - a.z), 6);
+    expect(VIAGEM_ESCADA.dur).toBeGreaterThan(3);
+  });
+  it("ZONAS de lounge: narguilé, fogueira e mesinha com assentos virados pro miolo; o caminho da entrada até a pista e o palco fica livre", () => {
+    const cs = colisoresDaCidade(), W = (lx: number, lz: number) => mundo(daSala(L, lx, lz));
+    const tipos = MOVEIS.lounge.map((m) => m.tipo);
+    for (const t of ["narguile", "fogueira", "puff", "mesaBaixa", "tapete"]) expect(tipos).toContain(t);
+    expect(tipos.filter((t) => t === "narguile")).toHaveLength(2);
+    expect(MOVEIS.lounge.filter((m) => m.tipo === "tapete" || m.tipo === "narguile").every((m) => m.solido === false)).toBe(true);
+    // assentos virados pro miolo da zona (a frente do sofá/puff = +z local dele)
+    for (const m of MOVEIS.lounge.filter((x) => x.tipo === "sofa" || x.tipo === "puff")) {
+      const miolo = MOVEIS.lounge.filter((x) => x.tipo === "mesaBaixa" || x.tipo === "fogueira").sort((p1, p2) => Math.hypot(p1.x - m.x, p1.z - m.z) - Math.hypot(p2.x - m.x, p2.z - m.z))[0]!;
+      const frente = { x: m.x + Math.sin(m.rot), z: m.z + Math.cos(m.rot) };
+      expect(Math.hypot(frente.x - miolo.x, frente.z - miolo.z)).toBeLessThan(Math.hypot(m.x - miolo.x, m.z - miolo.z));
+    }
+    // o corredor da entrada (porta, +z) até a pista e da pista até a escadinha do palco: livre
+    for (let lz = L.r - 1; lz > PALCO.z + PALCO.r + PALCO.escada.len; lz -= 0.5) for (const lx of [-2, 0, 2]) expect(dentroDeAlgum(W(lx, lz), cs)).toBe(false);
   });
   it("PISTA de dança: quem para no retângulo de LED dança (virado pro palco); fora dela, não", () => {
     const W = (lx: number, lz: number) => mundo(daSala(L, lx, lz)), pista = MOVEIS.lounge.find((m) => m.tipo === "pista")!;

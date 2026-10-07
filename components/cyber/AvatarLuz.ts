@@ -53,8 +53,10 @@ export type AvatarLuzHandle = {
    *  compasso (joelhos dobram, cabeça acena). Numa sequência de ~16 s ele também LEVANTA OS BRAÇOS pro alto, faz a
    *  POSE DE MAL (uma mão na concha, a outra apontando pra pista, queixo pra cima) e dá SOCOS NO AR no tempo.
    *  `danca` (0..1) = parado na PISTA do lounge: DANÇA (joelhos no compasso, quadril balançando e uma sequência de
-   *  passos: braços alternando pro alto, as duas mãos pro alto acenando, balanço com os cotovelos e pulinho). */
-  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean } | null; montado?: Montado | null; dj?: number; danca?: number; dt: number; t: number }): void;
+   *  passos: braços alternando pro alto, as duas mãos pro alto acenando, balanço com os cotovelos e pulinho).
+   *  `surf` (0..1) = sendo levado pela ESCADA DE ENERGIA: em pé numa PRANCHA DE LUZ (rastro de faíscas atrás), de lado,
+   *  joelhos dobrados, braços abertos se equilibrando — e no meio da viagem dá um 360 com os braços pro alto. */
+  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean } | null; montado?: Montado | null; dj?: number; danca?: number; surf?: number; dt: number; t: number }): void;
   /** quantas PISADAS (pé encostando no chão na animação de andar/correr) desde a última chamada — o som do passo
    *  sai no compasso do pé; `null` = avatar sem pés (sem o modelo): o engine usa a cadência fixa */
   passosNovos(): number | null;
@@ -156,7 +158,21 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     const concha = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.05, 0.055, 16), matFone); concha.rotation.z = Math.PI / 2; concha.position.set(sx * FONE_R, -0.015, 0); fone.add(concha);
     const led = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.011, 4, 20), matLedFone); led.rotation.y = Math.PI / 2; led.position.set(sx * (FONE_R + 0.029), -0.015, 0); fone.add(led);
   }
-  let tDj = 0;
+  let tDj = 0, tSurf = 0;
+  const vViaja = new THREE.Vector3(), vFrenteC = new THREE.Vector3();
+  // a PRANCHA DE LUZ da escada de energia (no referencial do grupo: a frente da viagem é o −z) + o rastro de faíscas
+  const prancha = new THREE.Group(); prancha.visible = false; grupo.add(prancha);
+  const matPrancha = new THREE.MeshStandardMaterial({ color: 0x1a2440, roughness: 0.3, metalness: 0.6, emissive: armadura.clone().multiplyScalar(0.4), emissiveIntensity: 0.9 });
+  const matLuzPrancha = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+  prancha.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 1.5), matPrancha));
+  for (const z of [-0.75, 0.75]) { const ponta = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.07, 16, 1, false, 0, Math.PI), matPrancha); ponta.position.z = z; ponta.rotation.y = z < 0 ? Math.PI / 2 : -Math.PI / 2; prancha.add(ponta); }
+  const fitaPrancha = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 1.9), matLuzPrancha); fitaPrancha.position.y = 0.045; prancha.add(fitaPrancha);
+  const brilhoPrancha = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.4), new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  brilhoPrancha.rotation.x = -Math.PI / 2; brilhoPrancha.position.y = -0.06; prancha.add(brilhoPrancha);
+  const NR = low ? 24 : 56, rastro = Array.from({ length: NR }, () => ({ f: Math.random(), x: (Math.random() - 0.5) * 0.5, y: Math.random() * 0.25 })), rPos = new Float32Array(NR * 3);
+  const rGeo = new THREE.BufferGeometry(); rGeo.setAttribute("position", new THREE.BufferAttribute(rPos, 3));
+  const faiscas = new THREE.Points(rGeo, new THREE.PointsMaterial({ size: 0.14, map: starTex, color: luz.clone().lerp(armadura, 0.4), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  faiscas.visible = false; faiscas.frustumCulled = false; grupo.add(faiscas);
   const faseDanca = Math.random() * 8;   // cada um dança no seu tempo (a pista não fica sincronizada que nem robô)
   /** janela suave [a, b] (s) num ciclo — sobe/desce em 0,4 s */
   const janela = (c: number, a: number, b: number) => suave((c - a) / 0.4) * (1 - suave((c - (b - 0.4)) / 0.4));
@@ -219,7 +235,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   };
   return {
     group: grupo, meshes,
-    animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, montado = null, dj = 0, danca = 0, dt, t }) {
+    animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, montado = null, dj = 0, danca = 0, surf = 0, dt, t }) {
       const k = Math.min(1, dt * 8), corre = !!correndo && andando;
       wWalk += ((andando && !corre ? 1 : 0) - wWalk) * k; wRun += ((corre ? 1 : 0) - wRun) * k;
       if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk); run.setEffectiveWeight(wRun); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun)); mixer.update(dt); }
@@ -395,6 +411,36 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         // corpo: nos braços pro alto pula mais; na pose de mal, joga o peso pra trás e vira um pouco de lado
         corpo.rotation.y += dj * 0.22 * wMal;
         if (lombar && (wAlto > 0.01 || wMal > 0.01)) { dirAlvo.copy(cima).addScaledVector(frente, -0.12 * wMal - 0.05 * wAlto).normalize(); apontar(lombar, pescoco, dirAlvo, Math.max(wAlto, wMal) * dj); }
+      } else if (surf > 0.02 && (ossos.length || pernas.length)) {
+        // ── SURFANDO na escada de energia: de lado na prancha, joelhos dobrados, braços se equilibrando; um 360 no meio ──
+        tSurf += dt;
+        grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
+        const mov = parado ? 0 : 1, ciclo = tSurf % 6.5, giro = mov * Math.PI * 2 * suave((ciclo - 2.6) / 1.2), festa = mov * janela(ciclo, 2.5, 4.1);
+        const bob = mov * (0.05 * Math.sin(t * 3.1) + 0.03 * Math.sin(t * 5.3));
+        // o eixo da viagem (girado pela manobra) e a frente do corpo (de lado pra ela)
+        const viaja = vViaja.set(0, 0, -1).applyQuaternion(qG).applyAxisAngle(cima, giro), frenteC = vFrenteC.copy(viaja).applyAxisAngle(cima, Math.PI / 2);   // (vA/vB são do `apontar`)
+        prancha.visible = true; prancha.scale.setScalar(Math.min(1, surf * 1.5)); prancha.position.set(0, 0.28 + bob, 0); prancha.rotation.y = giro;
+        corpo.rotation.y = surf * (Math.PI / 2 + giro); corpo.position.y += surf * (0.28 - 0.2 + bob);
+        corpo.updateWorldMatrix(true, true);
+        grupo.getWorldPosition(pGr);
+        pernas.forEach((o) => {   // o pé de trás é o esquerdo (de lado, a esquerda do corpo fica pra trás da viagem)
+          alvoM.copy(pGr).addScaledVector(cima, 0.33 + bob).addScaledVector(viaja, (o.lado > 0 ? -0.4 : 0.4));
+          polo.copy(frenteC).addScaledVector(viaja, 0.2 * -o.lado); ik(o.coxa, o.canela, o.pe, alvoM, polo, surf);
+        });
+        if (lombar && pescoco) { dirAlvo.copy(cima).addScaledVector(frenteC, 0.18).addScaledVector(viaja, 0.06 * Math.sin(t * 2.2) * mov).normalize(); apontar(lombar, pescoco, dirAlvo, surf); }
+        if (pescoco && cabeca) { dirAlvo.copy(cima).addScaledVector(viaja, 0.45).addScaledVector(frenteC, 0.1).normalize(); apontar(pescoco, cabeca, dirAlvo, surf); }
+        for (const o of ossos) {
+          const praFrente = o.lado > 0 ? -1 : 1, onda = mov * 0.15 * Math.sin(t * 2.6 + (o.lado > 0 ? 0 : 1.7));
+          // equilíbrio: um braço aberto pra frente da viagem, o outro pra trás, subindo e descendo devagar
+          dirAlvo.copy(viaja).multiplyScalar(0.85 * praFrente).addScaledVector(cima, 0.15 + onda).addScaledVector(frenteC, 0.15).normalize(); apontar(o.braco, o.ante, dirAlvo, surf * (1 - festa));
+          dirAlvo.copy(viaja).multiplyScalar(0.8 * praFrente).addScaledVector(cima, 0.3 + onda).normalize(); apontar(o.ante, o.mao, dirAlvo, surf * (1 - festa));
+          // a manobra: braços pro alto ("uhul!")
+          dirAlvo.copy(cima).addScaledVector(viaja, 0.3 * praFrente).normalize(); apontar(o.braco, o.ante, dirAlvo, surf * festa); apontar(o.ante, o.mao, dirAlvo, surf * festa);
+        }
+        // o rastro: faíscas saindo de trás da prancha
+        faiscas.visible = true;
+        rastro.forEach((r, i) => { r.f = (r.f + dt * (1.2 + (i % 5) * 0.15)) % 1; rPos[i * 3] = r.x * (1 + r.f); rPos[i * 3 + 1] = 0.25 + r.y + r.f * 0.5 + bob; rPos[i * 3 + 2] = 0.8 + r.f * 3.2; });
+        rGeo.attributes.position!.needsUpdate = true; (faiscas.material as THREE.PointsMaterial).opacity = 0.9 * surf;
       } else if (danca > 0.02 && (ossos.length || pernas.length)) {
         // ── DANÇANDO na pista: joelhos no compasso (pés plantados), quadril balançando e uma sequência de passos ──
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
@@ -426,6 +472,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           dirAlvo.copy(cima).multiplyScalar(-0.5).addScaledVector(frente, 0.7).normalize(); apontar(o.ante, o.mao, dirAlvo, danca * wPulo * mov);
         }
       } else { corpo.rotation.y = 0; corpo.rotation.z = 0; }
+      if (surf <= 0.02) { prancha.visible = false; faiscas.visible = false; tSurf = 0; }
       // mochila presa às costas: segue o osso do tronco (em espaço do corpo), 0,22 m atrás
       if (espinha) { corpo.updateWorldMatrix(true, false); espinha.updateWorldMatrix(true, false); espinha.getWorldPosition(vA); corpo.worldToLocal(vA); mochila.position.set(vA.x, vA.y - 0.08, vA.z + 0.22); }
       // propulsores: chama + brilho crescem com o jato (suave; sem piscar)
@@ -462,6 +509,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       mixer?.stopAllAction(); matArmadura.dispose(); matViseira.dispose(); matAura.dispose(); ng.dispose(); (neu.material as THREE.Material).dispose();
       mochila.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); const mt = (m as { material?: THREE.Material }).material; if (mt && mt !== matArmadura) mt.dispose(); }); texJato.dispose();
       fone.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); }); matFone.dispose(); matLedFone.dispose();
+      prancha.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); if (m.material && m.material !== matPrancha && m.material !== matLuzPrancha) (m.material as THREE.Material).dispose(); }); matPrancha.dispose(); matLuzPrancha.dispose();
+      rGeo.dispose(); (faiscas.material as THREE.Material).dispose();
       grupo.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry && !gltf) m.geometry.dispose(); });
       grupo.removeFromParent();
     },

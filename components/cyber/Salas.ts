@@ -19,7 +19,7 @@ const TEMA: Record<NomeSala, { piso: number; brilho: number; titulo: string; cor
 const FESTA = [0x66e6ff, 0xb98cff, 0xff5fd2, 0x6bff9a, 0x4d7bff];
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material };
+type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material; /** a textura de ponto de luz (fumaça, faíscas) */ estrela?: THREE.Texture };
 export type SalasHandle = {
   alvos: THREE.Object3D[];
   /** a TELA do telão do lounge (clicável: o dono escreve o recado pro QG do Andrei) */
@@ -314,7 +314,59 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       for (const s of [-1, 1]) caixa(p, 0.32, 0.72, m.prof, vel, s * (m.larg / 2 - 0.16), 0.6, 0);
       const n = Math.max(1, Math.round((m.larg - 0.64) / 1.5)), w = (m.larg - 0.64) / n;
       if (!o.low) for (let i = 0; i < n; i++) { caixa(p, w - 0.06, 0.18, m.prof - 0.4, alm, -m.larg / 2 + 0.32 + w * (i + 0.5), 0.56, 0.1); caixa(p, w - 0.1, 0.55, 0.16, alm, -m.larg / 2 + 0.32 + w * (i + 0.5), 0.95, -m.prof / 2 + 0.38); }
-      caixa(p, m.larg - 0.2, 0.04, 0.04, basica(0xb98cff, 0.8, true), 0, 0.05, m.prof / 2 - 0.05);   // luz de chão
+      caixa(p, m.larg - 0.2, 0.04, 0.04, basica(m.cor ?? 0xb98cff, 0.8, true), 0, 0.05, m.prof / 2 - 0.05);   // luz de chão
+    },
+    // ── ZONAS DE LOUNGE (lib/cyber/ceu `zonaLounge`) ──
+    // TAPETE redondo escuro com um aro de luz na cor da zona (marca o "cantinho")
+    tapete(p, m) {
+      const r = Math.min(m.larg, m.prof) / 2;
+      const t = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshStandardMaterial({ color: 0x150c28, roughness: 0.95, emissive: m.cor ?? 0xb98cff, emissiveIntensity: 0.08 })); t.rotation.x = -Math.PI / 2; t.position.y = 0.012; p.add(t);
+      const aro = new THREE.Mesh(new THREE.RingGeometry(r - 0.22, r - 0.1, 64), basica(m.cor ?? 0xb98cff, 0.7, true)); aro.rotation.x = -Math.PI / 2; aro.position.y = 0.02; p.add(aro);
+      anim.push((_, t2) => { (aro.material as THREE.MeshBasicMaterial).opacity = 0.45 + 0.25 * Math.sin(t2 * 0.8 + m.x) + 0.3 * batida(); });
+    },
+    // MESINHA baixa redonda: tampo de vidro com friso e 3 copos acesos
+    mesaBaixa(p, m) {
+      const r = m.larg / 2;
+      const pe = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.35, r * 0.5, 0.42, 16), escuro); pe.position.y = 0.21; p.add(pe);
+      const tampo = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.05, 32), gelo); tampo.position.y = 0.45; p.add(tampo);
+      const friso = new THREE.Mesh(new THREE.TorusGeometry(r, 0.025, 6, 48), basica(m.cor ?? 0x66e6ff, 0.9, true)); friso.rotation.x = Math.PI / 2; friso.position.y = 0.45; p.add(friso);
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + 0.4, c = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.16, 10), basica([0x9affd0, 0xff9ad5, 0xffd36b][i]!, 0.85, true)); c.position.set(Math.cos(a) * r * 0.62, 0.55, Math.sin(a) * r * 0.62); p.add(c); }
+    },
+    // NARGUILÉ: base de vidro colorida, haste, prato, fornilho com a BRASA acesa, mangueira e a FUMAÇA subindo devagar
+    narguile(p, m) {
+      const cor = m.cor ?? 0xb98cff;
+      const vaso = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })); vaso.scale.y = 1.15; vaso.position.y = 0.19; p.add(vaso);
+      const haste = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.55, 8), metal); haste.position.y = 0.6; p.add(haste);
+      const prato = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.015, 16), metal); prato.position.y = 0.78; p.add(prato);
+      const forn = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.04, 0.09, 12), escuro); forn.position.y = 0.86; p.add(forn);
+      const brasa = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 6), basica(0xff7a2c, 0.95, true)); brasa.position.y = 0.92; p.add(brasa);
+      // a mangueira: uma curva que desce até perto do chão e volta (Tube)
+      const curva = new THREE.CatmullRomCurve3([new THREE.Vector3(0.03, 0.5, 0), new THREE.Vector3(0.35, 0.3, 0.1), new THREE.Vector3(0.55, 0.05, 0.35), new THREE.Vector3(0.9, 0.1, 0.65), new THREE.Vector3(1.1, 0.35, 0.8)]);
+      const mangueira = new THREE.Mesh(new THREE.TubeGeometry(curva, 24, 0.018, 6, false), new THREE.MeshStandardMaterial({ color: 0x2a1840, roughness: 0.6, emissive: cor, emissiveIntensity: 0.25 })); p.add(mangueira);
+      // fumaça: partículas subindo, abrindo e sumindo
+      const NF = o.low ? 14 : 30, fum = Array.from({ length: NF }, (_, i) => ({ f: i / NF, a: Math.random() * 6.28, r: 0.05 + Math.random() * 0.12 }));
+      const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NF * 3), 3));
+      const fumaca = new THREE.Points(fg, new THREE.PointsMaterial({ size: 0.45, map: o.estrela ?? null, color: 0xd8dcff, transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending })); fumaca.frustumCulled = false; p.add(fumaca);
+      anim.push((dt, t) => {
+        (brasa.material as THREE.MeshBasicMaterial).opacity = 0.7 + 0.3 * Math.sin(t * 2.1 + m.x);
+        const a = fg.attributes.position!.array as Float32Array;
+        fum.forEach((f, i) => { f.f = (f.f + dt * 0.18) % 1; f.a += dt * 0.6; const r = f.r + f.f * 0.5; a[i * 3] = Math.cos(f.a) * r; a[i * 3 + 1] = 0.95 + f.f * 2.2; a[i * 3 + 2] = Math.sin(f.a) * r; });
+        fg.attributes.position!.needsUpdate = true;
+      });
+    },
+    // FOGUEIRA holográfica: anel de pedra escura com brasa e chamas de luz (cones aditivos) que respiram
+    fogueira(p, m) {
+      const r = m.larg / 2, cor = m.cor ?? 0xff9a5c;
+      const anel = new THREE.Mesh(new THREE.TorusGeometry(r, 0.18, 8, 24), escuro); anel.rotation.x = Math.PI / 2; anel.position.y = 0.16; p.add(anel);
+      const brasas = new THREE.Mesh(new THREE.CircleGeometry(r - 0.1, 24), basica(0xff7a2c, 0.75, true)); brasas.rotation.x = -Math.PI / 2; brasas.position.y = 0.12; p.add(brasas);
+      const chamas: THREE.Mesh[] = [];
+      for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2, c = new THREE.Mesh(new THREE.ConeGeometry(0.22 + (i % 2) * 0.08, 1, 10, 1, true), basica(i % 2 ? cor : 0xffe3b0, 0.55, true)); c.position.set(Math.cos(a) * 0.22, 0.6, Math.sin(a) * 0.22); p.add(c); chamas.push(c); }
+      anim.push((_, t) => chamas.forEach((c, i) => { const k = 0.85 + 0.25 * Math.sin(t * (3.1 + i * 0.7) + i) + 0.2 * batida(); c.scale.set(1, k, 1); c.position.y = 0.12 + k / 2; c.rotation.y = t * 0.6 + i; }));
+    },
+    // PUFF: almofadão redondo, macio (esfera achatada) com o friso aceso
+    puff(p, m) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 10), new THREE.MeshStandardMaterial({ color: 0x3b2470, roughness: 0.9, emissive: m.cor ?? 0x1a0f3a, emissiveIntensity: 0.18 })); puff.scale.set(1, 0.55, 1); puff.position.y = 0.28; p.add(puff);
+      const f = new THREE.Mesh(new THREE.TorusGeometry(0.47, 0.02, 6, 32), basica(m.cor ?? 0xb98cff, 0.75, true)); f.rotation.x = Math.PI / 2; f.position.y = 0.12; p.add(f);
     },
     // PISTA de LED: ladrilhos de 1 m com cores da festa, uma onda saindo do centro a cada batida; o CRISTAL-ESPELHO gira em cima
     pista(p, m) {
