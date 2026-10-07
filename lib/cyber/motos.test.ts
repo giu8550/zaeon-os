@@ -61,10 +61,10 @@ describe("motos voadoras — estacionamentos (chão + Zaeon)", () => {
 
 describe("voo com teto", () => {
   it("passoVooSub respeita o teto passado (e o padrão é o da nave)", () => {
-    let s: EstadoVoo = { x: 0, y: 0, z: 0, yaw: 0, vx: 0, vy: 0, vz: 0 };
+    let s: EstadoVoo = { x: -500, y: 0, z: 300, yaw: 0, vx: 0, vy: 0, vz: 0 };   // fora da sombra da Zaeon mega (ela cobre a praça lá no alto)
     for (let i = 0; i < 400; i++) s = passoVooSub(s, { wx: 0, wz: 0, subir: true, descer: false }, 0.05, [], 20).s;
     expect(s.y).toBeCloseTo(20, 5);
-    for (let i = 0; i < 400; i++) s = passoVooSub(s, { wx: 0, wz: 0, subir: true, descer: false }, 0.05).s;
+    for (let i = 0; i < 800; i++) s = passoVooSub(s, { wx: 0, wz: 0, subir: true, descer: false }, 0.05).s;
     expect(s.y).toBeCloseTo(VOO.yMax, 5);
   });
 });

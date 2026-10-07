@@ -9,7 +9,7 @@
  */
 export type Regiao = { x: number; z: number; r: number; y0: number; y1: number };
 export type EstadoRegiao = { visivel: boolean; detalhe: boolean; anima: boolean };
-export const DIST_REGIAO = { detalhe: 110, anima: 170, visivel: 1150, folga: 15 } as const;
+export const DIST_REGIAO = { detalhe: 110, anima: 170, visivel: 2300, folga: 15 } as const;   // (o mapa cresceu: de longe a silhueta continua)
 
 /** distância (m) de um ponto até o cilindro da região (0 dentro) */
 export function distanciaDaRegiao(p: { x: number; y: number; z: number }, g: Regiao): number {

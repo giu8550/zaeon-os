@@ -13,7 +13,7 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
-import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CIDADE, alturaNaCidade, naCabineDJ, pontoDaCabineDJ, rumoDoDJ, ILHOTAS, computadorPerto, foraDaIlha, ilhotaEm, mundo, naIlhaPrincipal, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre } from "@/lib/cyber/ceu";
+import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CIDADE, alturaNaCidade, naCabineDJ, pontoDaCabineDJ, rumoDoDJ, ILHOTAS, computadorPerto, foraDaIlha, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, noPortalEntrada, noPortalVolta, resolverCidade, resolverCidadeLivre } from "@/lib/cyber/ceu";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, chaoNoAr, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
@@ -145,7 +145,7 @@ const comDescendentes = (objs: (THREE.Object3D | null | undefined)[]) => { const
 
 /** as áreas das 3 grandes regiões (a caixa automática pegaria o anel do elevador / o portal lá no chão) */
 const cil = (c: { x: number; z: number }, r: number, y: number, abaixo: number, acima: number) => () => ({ x: c.x, z: c.z, r, y0: y - abaixo, y1: y + acima });
-const AREA_ZAEON = cil(CIDADE.centro, CIDADE.bordaR + 70, CIDADE.pisoY, CIDADE.ilhaAltura + 10, 90);   // + o anel de ilhotas em volta
+const AREA_ZAEON = cil(CIDADE.centro, Math.max(CIDADE.bordaR + 90, -CIDADE.salas.lounge.x + CIDADE.salas.lounge.r + 10), CIDADE.pisoY, CIDADE.ilhaAltura + CIDADE.agulha.altura + 10, 220);   // + ilhotas, a escada e o lounge
 const AREA_UNILAB = cil(UNIVERSIDADE.centro, UNIVERSIDADE.discoR, UNIVERSIDADE.y, 100, 80);
 const AREA_SOLANA = cil(PLATAFORMAS.solana.centro, PLATAFORMAS.solana.r + 10, PLATAFORMAS.solana.y, 40, 40);
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
@@ -278,7 +278,7 @@ export class CyberEngine {
     this.R.autoClear = false; this.R.outputColorSpace = THREE.SRGBColorSpace;
     const cv = this.R.domElement; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:" + (opts.menu ? "pan-y" : "none");
     container.appendChild(cv);
-    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.1, 1300);   // mapa maior (cyberespaço v2)
+    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.15, 2600);   // mapa maior (Zaeon mega: a UNILAB e a Solana bem longe)
     this.cena = criarCenaCosmica(low, this.w / this.h);
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
@@ -430,9 +430,10 @@ export class CyberEngine {
       const baixo = v.y - base < JET.alturaBases ? this.colisoresDoNivel("ceu") : [], naves = v.y < topo - 0.2 ? this.colisoresDeNaves(CIDADE.pisoY) : [];
       const q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...baixo, ...naves]);
       eu.pos.x = q.x; eu.pos.z = q.z; this.jet.y = v.y; this.jet.vy = v.vy;
-      if (!naIlhaPrincipal(q)) { this.altoEm = null; return; }   // voou pra fora da ilha: céu livre (cai)
+      const piso = pisoNoAr(q, v.y - base);   // a escada e o lounge só são piso pra quem vem de CIMA deles
+      if (piso === null) { this.altoEm = null; return; }   // voou pra fora da Zaeon: céu livre (cai)
       if (sobreODorso && yAnt >= topo - 0.05 && v.y <= topo && v.vy <= 0) { this.jet.noAr = false; this.sobreNave = true; this.somPouso(v.vy); return; }
-      const chao = base + alturaNaCidade(q);   // o PALCO do lounge é piso também (pousa em cima dele)
+      const chao = base + piso;
       if (v.y <= chao && v.vy <= 0) { this.jet.y = chao; this.jet.noAr = false; this.yNav = CIDADE.pisoY; this.somPouso(v.vy); }
       return;
     }
@@ -1008,7 +1009,7 @@ export class CyberEngine {
     const el = this.plat ? elevadorAqui(this.plat.id, this.plat.andar, this.eu.pos) : null;
     if (el && this.plat) { const pl = this.plat; return { id: `elevador-${pl.andar}`, rotulo: el.rotulo, fazer: () => { pl.andar = el.proximo; this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.eu }); } }; }
     const estudar = { id: "estudar", rotulo: "Estudar", fazer: () => this.o.onEntrarEstudo?.() };
-    if (this.perto || this.noTopo || (this.noCeu && computadorPerto(this.eu.pos, 3.2) >= 0)) return estudar;
+    if (this.perto || this.noTopo || (this.noCeu && computadorPerto(this.eu.pos, 4) >= 0)) return estudar;
     const m = this.motoAoAlcance(); if (m >= 0) return { id: `moto-${m}`, rotulo: "Montar na moto", fazer: () => { this.montar(m); } };
     if (this.nave && this.navePerto()) return { id: "entrar-nave", rotulo: "Entrar na nave", fazer: () => this.entrarNaNave() };
     if (this.noCeu && this.cidade?.tocaDiscos && this.ehFundador(this.o.eu.id)) {
@@ -1068,13 +1069,14 @@ export class CyberEngine {
     // na CIDADE: computador perto = Sala de Estudos; senão anda no piso
     if (this.cidade && this.noCeu) {
       if (sob === this.o.eu.id && this.perto) { this.o.onEntrarEstudo?.(); return; }   // a minha base, na Zaeon
+      // os DESKTOPS da capela (Sala de Estudos / biblioteca)
+      const hc = this.ray.intersectObject(this.cidade.computadores, false)[0];
+      if (hc && computadorPerto(this.eu.pos, 4) >= 0) { this.o.onEntrarEstudo?.(); return; }
       // a TV do LOUNGE: o dono escreve o recado pro QG do Andrei (perto dela)
       if (this.cidade.tvLounge && this.ray.intersectObject(this.cidade.tvLounge, false).length) {
         const tv = this.cidade.tvLounge.getWorldPosition(new THREE.Vector3());
         if (Math.hypot(this.eu.pos.x - tv.x, this.eu.pos.z - tv.z) < 14) { this.o.onAbrirRecado?.(); return; }
       }
-      const hc = this.ray.intersectObject(this.cidade.computadores, false)[0];
-      if (hc && computadorPerto(this.eu.pos, 3.2) >= 0) { this.o.onEntrarEstudo?.(); return; }
       const h = this.ray.intersectObjects(this.cidade.alvos, true)[0];
       if (h) { const q = resolverCidade({ x: h.point.x, z: h.point.z }); this.alvo = new THREE.Vector2(q.x, q.z); this.alvoDepois = null; }
       return;
@@ -1529,7 +1531,7 @@ export class CyberEngine {
     const solidos = voando ? this.solidosDeVoo() : [];
     h.marca.visible = voando && !(naMoto ? this.motoPousado : this.pousado);
     if (h.marca.visible) { const c = chaoDoVoo(n, solidos); h.marca.position.set(n.x, c + (c === CIDADE.pisoY ? boiaCidade : 0) + 0.1, n.z); }
-    h.borda.visible = voando && !naMoto && Math.hypot(n.x - CIDADE.centro.x, n.z - CIDADE.centro.z) < 220;
+    h.borda.visible = voando && !naMoto && Math.hypot(n.x - CIDADE.centro.x, n.z - CIDADE.centro.z) < CIDADE.bordaR + 60;
     if (h.borda.visible) h.borda.position.y = CIDADE.pisoY + boiaCidade + 0.4;
     // altímetro (React), só quando muda e no máx. 10×/s
     if (!voando || now - h.t < 100) return;
