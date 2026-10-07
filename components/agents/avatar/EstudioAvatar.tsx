@@ -44,7 +44,7 @@ const btnPrim = "min-h-[40px] px-4 rounded-xl text-[12px] font-black uppercase t
 
 export default function EstudioAvatar({
   endpoint, agentId, nome, personagemInicial = "", corInicial = ["#67e8f9", "#2563eb"],
-  existente = null, baseUrlExistente = null, fotoAtual = null, extraSalvar = {}, onSalvo, onFechar,
+  existente = null, baseUrlExistente = null, fotoAtual = null, extraSalvar = {}, onSalvo, onFechar, gatilho = 0, onStatus,
 }: {
   endpoint: string;
   agentId: string;
@@ -59,6 +59,10 @@ export default function EstudioAvatar({
   extraSalvar?: Record<string, unknown>;
   onSalvo?: () => void;
   onFechar?: () => void;
+  /** Fila externa (gerar vários agentes): cada incremento gera o que falta, sem clicar. */
+  gatilho?: number;
+  /** Progresso pra quem coordena a fila / mostra nas abas. */
+  onStatus?: (s: { rodando: boolean; prontos: number; aprovados: number; falhas: number }) => void;
 }) {
   const [personagem, setPersonagem] = useState(personagemInicial);
   const [cor, setCor] = useState<[string, string]>([corInicial[0], corInicial[1]]);
@@ -159,6 +163,20 @@ export default function EstudioAvatar({
   }, [garantirBase, gerarEstado, gerarTudo, pecas]);
 
   const aprovados = useMemo(() => ESTADOS_SPRITE.filter((e) => pecas[e].status === "aprovado"), [pecas]);
+
+  // fila externa: gatilho novo → gera o que falta (base nova se ainda não há)
+  const ultimoGatilho = useRef(gatilho);
+  useEffect(() => {
+    if (gatilho === ultimoGatilho.current) return;
+    ultimoGatilho.current = gatilho;
+    if (!rodando && personagem.trim().length >= 20) void gerarTudo(!pecas.idle.grande);
+  }, [gatilho, rodando, personagem, gerarTudo, pecas.idle.grande]);
+  const statusRef = useRef(onStatus);
+  statusRef.current = onStatus;
+  useEffect(() => {
+    const v = Object.values(pecas);
+    statusRef.current?.({ rodando, prontos: v.filter((p) => p.status === "pronto").length, aprovados: v.filter((p) => p.status === "aprovado").length, falhas: v.filter((p) => p.status === "falhou").length });
+  }, [pecas, rodando]);
   const podeSalvar = !!pecas.idle.grande && pecas.idle.status === "aprovado" && pecas.blink.status === "aprovado" && !rodando;
 
   const salvar = useCallback(async () => {
