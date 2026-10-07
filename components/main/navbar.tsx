@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import logoPng from "@/app/zaeon-name.png";
 import ThemeToggle from "@/components/sub/ThemeToggle";
+import ConfigMenu from "@/components/sub/ConfigMenu";
 import { ehRotaImersiva } from "@/lib/ui/loungeHub";
 import { musica } from "@/lib/audio/musica";
 import "../../src/i18n";
@@ -177,8 +178,6 @@ export const Navbar = () => {
           <nav className="hidden lg:flex items-center gap-7">
             {/* as seções da landing (sem rótulo nelas: a navbar é o índice) */}
             <Link href="/#como-funciona" className={ancora} onClick={irPraSecao("como-funciona")}>Como funciona</Link>
-            <Link href="/#mentores" className={ancora} onClick={irPraSecao("mentores")}>Mentores</Link>
-            <Link href="/#cyberespaco" className={ancora} onClick={irPraSecao("cyberespaco")}>Cyberespaço</Link>
             <Link href="/about" className={getLinkClassName("/about")}>Sobre nós</Link>
             <Link href="/docs" className={getLinkClassName("/docs")}>Documentação</Link>
             {/* acesso direto ao laboratório, pra quem não quiser usar o cyberespaço */}
@@ -187,8 +186,10 @@ export const Navbar = () => {
             <Link href="/news" className={getLinkClassName("/news")}>Notícias</Link>
           </nav>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-1.5">
             <ThemeToggle />
+            {/* engrenagem: voz, idioma, convite, Modo CEO (founder), sair — as opções do menu principal */}
+            <ConfigMenu />
           </div>
         </div>
       </div>
