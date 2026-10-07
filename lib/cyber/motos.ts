@@ -36,8 +36,13 @@ export const MOTO = {
 } as const;
 
 export type Vaga = { x: number; z: number; yaw: number; ceu: boolean };
-/** posição (mundo) e rumo de cada vaga — enfileiradas de lado, viradas pro centro; índice = lote × n + i */
-export function vagas(): Vaga[] {
+/** posição (mundo) e rumo de cada vaga — enfileiradas de lado, viradas pro centro; índice = lote × n + i. Constante:
+ *  calculada uma vez (o engine pergunta várias vezes por quadro) e congelada (ninguém mexe sem querer). */
+let vagasCache: readonly Readonly<Vaga>[] | null = null;
+export function vagas(): readonly Readonly<Vaga>[] {
+  return (vagasCache ??= Object.freeze(calcularVagas().map((v) => Object.freeze(v))));
+}
+function calcularVagas(): Vaga[] {
   const e = ESTACIONAMENTO;
   return LOTES.flatMap((l) => {
     const c = Math.cos(l.rot), s = Math.sin(l.rot);

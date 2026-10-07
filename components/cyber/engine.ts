@@ -17,6 +17,7 @@ import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CIDADE, alturaNaCidade, naCabineDJ, 
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, chaoNoAr, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
+import { QualidadeAdaptativa } from "@/lib/cyber/qualidadeAdaptativa";
 import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type LoopSom } from "./AudioCyber";
@@ -108,6 +109,8 @@ export type CyberOpts = {
 type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
   /** na cabine do DJ do lounge (0..1, suavizado): fone na cabeça, mãos na controladora */
   dj?: number;
+  /** remotos: tempo acumulado desde a última animação (de longe/fora da tela anima menos vezes por segundo) */
+  acum?: number;
   /** remotos: no topo da Zaeon / pilotando (só valem pra quem o servidor marcou fundador) / na cidade (qualquer um) */
   topo?: boolean; ceu?: boolean; nave?: NaveHandle | null; naveYaw?: number;
   /** a nave-QG dele estacionada (ele não está pilotando): fica parada ali, à vista de todos */
@@ -146,8 +149,8 @@ const AREA_ZAEON = cil(CIDADE.centro, CIDADE.bordaR + 70, CIDADE.pisoY, CIDADE.i
 const AREA_UNILAB = cil(UNIVERSIDADE.centro, UNIVERSIDADE.discoR, UNIVERSIDADE.y, 100, 80);
 const AREA_SOLANA = cil(PLATAFORMAS.solana.centro, PLATAFORMAS.solana.r + 10, PLATAFORMAS.solana.y, 40, 40);
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
-const TAG_CSS = "position:absolute;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
-const FALA_CSS = "position:absolute;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
+const TAG_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
+const FALA_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
 
 export class CyberEngine {
   private o: CyberOpts;
@@ -166,6 +169,9 @@ export class CyberEngine {
   private lms: LandmarkHandle[] = [];
   /** REGIÕES por distância (components/cyber/regioesCena): de longe some o detalhe e a animação para */
   private regioes = new Map<THREE.Object3D, RegiaoCena>();
+  /** QUALIDADE ADAPTATIVA (lib/cyber/qualidadeAdaptativa): o pixel ratio do perfil é o teto; a escada multiplica */
+  private qa!: QualidadeAdaptativa; private prBase = 1; private ultimoDesenho = 0;
+  private frustum = new THREE.Frustum(); private mProj = new THREE.Matrix4(); private esfAtor = new THREE.Sphere();
   private noTopo = false;
   /** em qual marco andável estou no ALTO (escada/plataforma), e a altura do chão sob mim */
   private altoEm: string | null = null; private yNav = 0;
@@ -264,9 +270,11 @@ export class CyberEngine {
     this.w = Math.max(1, container.clientWidth); this.h = Math.max(1, container.clientHeight);
     const q = opts.qualidade;
     this.R = new THREE.WebGLRenderer({ antialias: q ? q.antialias : !low, powerPreference: "high-performance" });
-    this.R.setPixelRatio(Math.min(q ? q.pixelRatioMax : low ? 1.25 : 1.5, window.devicePixelRatio || 1));   // tela retina a 2× custava ~78% mais pixels
+    this.prBase = Math.min(q ? q.pixelRatioMax : low ? 1.25 : 1.5, window.devicePixelRatio || 1);   // tela retina a 2× custava ~78% mais pixels
+    this.R.setPixelRatio(this.prBase);
     this.R.setSize(this.w, this.h, false);
     this.fpsMax = q?.fpsMax ?? 0;
+    this.qa = new QualidadeAdaptativa(this.fpsMax);
     this.R.autoClear = false; this.R.outputColorSpace = THREE.SRGBColorSpace;
     const cv = this.R.domElement; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:" + (opts.menu ? "pan-y" : "none");
     container.appendChild(cv);
@@ -360,7 +368,7 @@ export class CyberEngine {
 
   private novoAtor(p: PessoaCyber, x: number, z: number): Ator {
     const cor = this.corDe(p.id);
-    const av = criarAvatarLuz(cor, this.cena.starTex, this.o.low, this.gltf);
+    const av = criarAvatarLuz(cor, this.cena.starTex, this.o.low, this.gltf); av.aura(this.qa.atual.aura);
     av.group.position.set(x, 0, z); this.cena.scene.add(av.group);
     const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + cor + ";"; tag.textContent = p.id === this.o.eu.id ? "" : p.name; this.o.overlay.appendChild(tag);   // o próprio avatar não leva rótulo
     return { id: p.id, name: p.name, color: cor, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag, alt: 0 };
@@ -1116,7 +1124,13 @@ export class CyberEngine {
     this.R.setSize(this.w, this.h, false); this.cam.aspect = this.w / this.h; this.cam.updateProjectionMatrix();
   }
 
-  private proj(v: THREE.Vector3) { const p = v.clone().project(this.cam); return { x: (p.x * 0.5 + 0.5) * this.w, y: (-p.y * 0.5 + 0.5) * this.h, vis: p.z < 1 }; }
+  private vProj = new THREE.Vector3(); private vHud = new THREE.Vector3(); private vCamA = new THREE.Vector3(); private vCamB = new THREE.Vector3();
+  private proj(v: THREE.Vector3) { const p = this.vProj.copy(v).project(this.cam); return { x: (p.x * 0.5 + 0.5) * this.w, y: (-p.y * 0.5 + 0.5) * this.h, vis: p.z < 1 }; }
+  /** põe um rótulo do HUD no ponto (x,y) da tela por TRANSFORM (só compõe: não refaz o layout) e só escreve o que mudou */
+  private noHud(el: HTMLElement, x: number, y: number, vis: boolean) {
+    const d = vis ? "block" : "none"; if (el.style.display !== d) el.style.display = d;
+    if (vis) el.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px) translate(-50%,-100%)`;
+  }
 
   /** a região dessa raiz deve ANIMAR neste quadro? Cria a região na 1ª vez; de longe esconde o detalhe e, bem longe,
    *  a região inteira (pela posição da câmera do quadro anterior — a diferença de um quadro não se vê) */
@@ -1130,6 +1144,13 @@ export class CyberEngine {
     fundirEstaticos(b.group, { passo: (k, t) => b.atualizar({ dt: 1 / 30, t, ativa: k % 2 === 0, hover: k % 3 === 0, perto: k % 4 < 2, energia: (k % 5) / 4 }), manter: comDescendentes([b.monitor]) });
     for (let k = 0; k < 6; k++) b.atualizar({ dt: 1, t: 0, ativa: false, hover: false, perto: false, energia: 0 });   // volta ao repouso
   }
+  /** aplica o degrau da qualidade adaptativa: resolução (o pixel ratio do perfil × o degrau) e a aura dos avatares
+   *  (a nebulosa lê o degrau direto no desenho) — nada recompila */
+  private aplicarQualidade() {
+    const d = this.qa.atual;
+    this.R.setPixelRatio(this.prBase * d.dpr);
+    for (const a of [this.eu, ...this.remotos.values()]) a?.av.aura(d.aura);
+  }
   private soltar(raiz: THREE.Object3D) { const r = this.regioes.get(raiz); if (r) { soltarRegiao(r); this.regioes.delete(raiz); } }
 
   private atualizarCamera() {
@@ -1138,27 +1159,27 @@ export class CyberEngine {
       const pm = Math.min(2.4, Math.max(1, 0.9 / this.cam.aspect));   // retrato: afasta p/ caber a base
       const rel = localParaMundo(l, -2.6 * pm, 4.8 * pm);
       const yb = this.yDoNivel(l.nivel);
-      this.cam.position.lerp(new THREE.Vector3(rel.x, yb + 2.5 + 0.9 * (pm - 1), rel.z), 0.06);
-      this.camT.lerp(new THREE.Vector3(l.x, yb + (pm > 1 ? 0.1 : 1.4), l.z), 0.06); this.cam.lookAt(this.camT);
+      this.cam.position.lerp(this.vCamA.set(rel.x, yb + 2.5 + 0.9 * (pm - 1), rel.z), 0.06);
+      this.camT.lerp(this.vCamA.set(l.x, yb + (pm > 1 ? 0.1 : 1.4), l.z), 0.06); this.cam.lookAt(this.camT);
       return;
     }
-    this.camT.lerp(new THREE.Vector3(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), 0.12);
+    this.camT.lerp(this.vCamA.set(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), 0.12);
     const cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
     let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null ? Math.max(this.camDist, 9) : this.camDist;
     // câmera em 3ª pessoa: perto de um marco (ilha flutuante, muralhas), se a estrutura fica ENTRE a câmera e o
     // personagem, a câmera se aproxima (senão a ilha cobre a tela)
     const marco = this.lms.find((l) => Math.hypot(this.eu.pos.x - l.poi.x, this.eu.pos.z - l.poi.z) < l.poi.interactR * 1.8);
     if (marco && !this.noTopo) {
-      const alvoOlho = new THREE.Vector3(this.camT.x, this.camT.y + 0.8, this.camT.z);
-      const dir = new THREE.Vector3(Math.sin(this.camAz) * cp, sp, Math.cos(this.camAz) * cp).normalize();
+      const alvoOlho = this.vCamA.set(this.camT.x, this.camT.y + 0.8, this.camT.z);
+      const dir = this.vCamB.set(Math.sin(this.camAz) * cp, sp, Math.cos(this.camAz) * cp).normalize();
       this.rayCam.set(alvoOlho, dir); this.rayCam.far = dist;
       const h = this.rayCam.intersectObjects(marco.alvos, true)[0];
       if (h) dist = Math.max(2.2, h.distance - 0.6);
     }
     // na universidade: muralhas, paredes, torres e telhados entre a câmera e o personagem → a câmera se aproxima
     if (this.univ && this.plat?.id === "univ" && naUniversidade(this.eu.pos)) {
-      const alvoOlho = new THREE.Vector3(this.camT.x, this.camT.y + 0.8, this.camT.z);
-      const dir = new THREE.Vector3(Math.sin(this.camAz) * cp, sp, Math.cos(this.camAz) * cp).normalize();
+      const alvoOlho = this.vCamA.set(this.camT.x, this.camT.y + 0.8, this.camT.z);
+      const dir = this.vCamB.set(Math.sin(this.camAz) * cp, sp, Math.cos(this.camAz) * cp).normalize();
       this.rayCam.set(alvoOlho, dir); this.rayCam.far = dist;
       const h = this.rayCam.intersectObjects(this.univ.alvosCamera, false)[0];
       if (h) dist = Math.max(2.2, h.distance - 0.6);
@@ -1365,7 +1386,15 @@ export class CyberEngine {
       const pilota = !!a.nave && !a.naveP, monta = a.moto && ocupadas.get(a.moto.s) === a ? a.moto.s : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
       a.dj = (a.dj ?? 0) + ((ehDJ ? 1 : 0) - (a.dj ?? 0)) * Math.min(1, dt * 4);
-      a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(pilota ? a.naveYaw ?? a.facing : a.facing); a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, dt, t });
+      a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(pilota ? a.naveYaw ?? a.facing : a.facing);
+      // de longe / fora da tela o avatar anima menos vezes por segundo (o mixer + IK de cada um custa); fora da tela
+      // nem desenha (a malha com skinning não tem esfera confiável: frustumCulled=false) — perto continua animando
+      // mesmo atrás de mim (o passo dele soa)
+      const dCam = this.cam.position.distanceTo(a.av.group.position), naTela = this.frustum.intersectsSphere(this.esfAtor.set(a.av.group.position, 2.2)) || dCam < 4;
+      a.av.group.visible = naTela;
+      const cada = dCam < 25 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 0;
+      a.acum = (a.acum ?? 0) + dt;
+      if (a.acum >= cada) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
       else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = a.naveYaw ?? 0; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0, fechada: true }); this.noAssento(a.av, a.nave); }
     }
@@ -1423,7 +1452,12 @@ export class CyberEngine {
     this.atualizarCamera();
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
     this.atualizarHud(now);
-    this.R.clear(); this.R.render(this.cena.bgScene, this.cena.bgCam); this.R.clearDepth(); this.R.render(this.cena.scene, this.cam);
+    this.R.clear(); this.cena.desenharFundo(this.R, this.qa.atual.nebulosa); this.R.clearDepth(); this.R.render(this.cena.scene, this.cam);
+    // o frustum deste quadro (os avatares remotos do próximo quadro usam pra saber se estão na tela)
+    this.mProj.multiplyMatrices(this.cam.projectionMatrix, this.cam.matrixWorldInverse); this.frustum.setFromProjectionMatrix(this.mProj);
+    // qualidade adaptativa: só mede jogando (o menu/landing roda a 30 e confundiria a medida)
+    if (!this.menu && this.ultimoDesenho > 0 && this.qa.registrar(now - this.ultimoDesenho) !== null) this.aplicarQualidade();
+    this.ultimoDesenho = now;
     if (!this.prontoDisparado) { this.prontoDisparado = true; this.o.onPronto?.(); }
   }
 
@@ -1509,13 +1543,14 @@ export class CyberEngine {
     const atores = [eu, ...this.remotos.values()];
     for (const a of atores) {
       if (a === eu) { a.tag.style.display = "none"; continue; }   // o próprio avatar não leva nome
-      const s = this.proj(new THREE.Vector3(a.pos.x, 2.1 + a.sit * -0.3 + a.alt, a.pos.z));
-      a.tag.style.left = s.x + "px"; a.tag.style.top = s.y + "px"; a.tag.style.display = this.menu || !s.vis ? "none" : "block";
-      { const perto = eu.pos.distanceTo(a.pos) < 3.0; a.tag.style.borderColor = a.falando ? "#9affd0" : perto ? "#fff" : ""; a.tag.textContent = (a.falando ? "🎙 " : perto ? "💬 " : "") + a.name; }
+      const s = this.proj(this.vHud.set(a.pos.x, 2.1 + a.sit * -0.3 + a.alt, a.pos.z));
+      this.noHud(a.tag, s.x, s.y, !this.menu && s.vis);
+      { const perto = eu.pos.distanceTo(a.pos) < 3.0, borda = a.falando ? "#9affd0" : perto ? "#fff" : "", txt = (a.falando ? "🎙 " : perto ? "💬 " : "") + a.name;
+        if (a.tag.style.borderColor !== borda) a.tag.style.borderColor = borda; if (a.tag.textContent !== txt) a.tag.textContent = txt; }
     }
     for (let i = this.falas.length - 1; i >= 0; i--) {
       const f = this.falas[i]!; if (now > f.ate) { f.el.remove(); this.falas.splice(i, 1); continue; }
-      const p = this.proj(new THREE.Vector3(f.ator.pos.x, 2.4 + f.ator.alt, f.ator.pos.z)); f.el.style.left = p.x + "px"; f.el.style.top = p.y + "px"; f.el.style.display = p.vis ? "block" : "none";
+      const p = this.proj(this.vHud.set(f.ator.pos.x, 2.4 + f.ator.alt, f.ator.pos.z)); this.noHud(f.el, p.x, p.y, p.vis);
     }
     // menu projetado no monitor (retrato: fixo, sempre tocável)
     const m = this.o.els.menu;
