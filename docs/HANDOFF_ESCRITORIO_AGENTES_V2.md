@@ -7,7 +7,7 @@
 > São **28 PRs distintas**, todas conectadas por **12 contratos canônicos** (§4). Um PR só pode
 > entrar se os contratos que ele consome já existem.
 >
-> Prompts de execução por fatia (co-autorados pelo Fable): `docs/EXECUTOR_PROMPT_FATIA1_FUNDACAO.md` · `docs/EXECUTOR_PROMPT_FATIA2_SALA.md`.
+> Prompts de execução por fatia (co-autorados pelo Fable): `docs/EXECUTOR_PROMPT_FATIA1_FUNDACAO.md` · `docs/EXECUTOR_PROMPT_FATIA2_SALA.md` · `docs/EXECUTOR_PROMPT_FATIA3_TRABALHO.md`.
 
 ---
 
@@ -73,6 +73,8 @@ scheduler** (grep por `cron|node-cron|repeat:|every:` → só animação e polli
 **qualquer proatividade** (grep por `proativ|autonom|setInterval` em `lib/canal`, `app/api/canal`,
 `components/office` → zero) · `AgentTask` · `ResearchProgram` · `ZxivPaper` · gateway/OmniRoute
 (grep `omniroute` em todo o repo → zero; só "Omniscient" em `app/workstation/page.tsx:472`).
+
+> **Correção de estado (Fable, 2026-10-07, main `b2af5db`):** `literature_search` **já é real** (`lib/agent/runtime.ts:239`, sobre `lib/scholar/retrieve.ts` — OpenAlex/Crossref/arXiv/PubMed/S2 — com fallback web via SearXNG). Só `examiner` segue stub. O PR-A5 foi reescopado em `docs/EXECUTOR_PROMPT_FATIA3_TRABALHO.md`.
 
 ### Dois stubs que explicam a reclamação original
 
