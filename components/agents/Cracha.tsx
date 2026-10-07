@@ -13,7 +13,9 @@
  * prefers-reduced-motion: sem pulo/balanço/expressões automáticas (o hover ainda troca a cara).
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Facebook, Instagram, MessageCircle } from "lucide-react";
 import AgentAvatar from "@/components/agents/AgentAvatar";
+import { linkFacebook, linkInstagram, linkWhatsapp, temRedes, type Redes } from "@/lib/agents/vitrine";
 import { useAmbienteAvatar } from "@/components/agents/avatar/hooks";
 import type { SinalAvatar } from "@/lib/avatars/estados";
 
@@ -29,6 +31,8 @@ export type DadosCracha = {
   id: string;
   rotulo?: string;
   educacional?: boolean;
+  /** WhatsApp / Instagram / Facebook do agente (Modo CEO) — só aparece o que estiver preenchido. */
+  redes?: Redes | null;
 };
 
 /** Sequência do holofote: "oi" falado → alegria; depois expressões soltas. */
@@ -124,6 +128,14 @@ export default function Cracha({ d, emCena = false, acao, tamanhoFoto = 140 }: {
               </div>
             ) : null}
 
+            {temRedes(d.redes) ? (
+              <div className="mt-3 flex items-center justify-center gap-1.5">
+                {d.redes?.whatsapp ? <RedeLink href={linkWhatsapp(d.redes.whatsapp)} rotulo={`WhatsApp de ${d.nome}`}><MessageCircle size={14} /></RedeLink> : null}
+                {d.redes?.instagram ? <RedeLink href={linkInstagram(d.redes.instagram)} rotulo={`Instagram de ${d.nome}`}><Instagram size={14} /></RedeLink> : null}
+                {d.redes?.facebook ? <RedeLink href={linkFacebook(d.redes.facebook)} rotulo={`Facebook de ${d.nome}`}><Facebook size={14} /></RedeLink> : null}
+              </div>
+            ) : null}
+
             {acao ? <div className="mt-4 w-full">{acao}</div> : null}
 
             <div className="mt-4 pt-3 w-full border-t border-dashed border-white/15 flex items-end justify-between gap-3">
@@ -138,6 +150,15 @@ export default function Cracha({ d, emCena = false, acao, tamanhoFoto = 140 }: {
         </div>
       </div>
     </div>
+  );
+}
+
+function RedeLink({ href, rotulo, children }: { href: string; rotulo: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" aria-label={rotulo} title={rotulo}
+      className="grid place-items-center h-8 w-8 rounded-full border border-white/15 bg-white/[0.06] text-white/80 hover:text-cyan-300 hover:border-cyan-400/50 transition-colors">
+      {children}
+    </a>
   );
 }
 
@@ -158,7 +179,8 @@ export function useHolofote(trilho: React.RefObject<HTMLElement | null>, total: 
       const visiveis: number[] = [];
       [...el.children].forEach((c, i) => {
         const r = c.getBoundingClientRect();
-        if (r.left >= caixa.left - 10 && r.right <= caixa.right + 10) visiveis.push(i);
+        // inteiro dentro do trilho/grade na horizontal e na tela na vertical
+        if (r.left >= caixa.left - 10 && r.right <= caixa.right + 10 && r.top >= -20 && r.bottom <= window.innerHeight + 20) visiveis.push(i);
       });
       if (!visiveis.length) return;
       setCena((atual) => {

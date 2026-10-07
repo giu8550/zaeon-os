@@ -36,9 +36,29 @@ export type AgentProfileLike = {
   bio?: string | null;
   ativo?: boolean | null;
   ordem?: number | null;
+  // crachá (Modo CEO)
+  area?: string | null;
+  entrega?: string[] | null;
+  emoji?: string | null;
+  whatsapp?: string | null;
+  instagram?: string | null;
+  facebook?: string | null;
 };
 
-export type AgentView = AgentBase & {
+/** Campos do CRACHÁ (landing + Assistentes), editáveis no Modo CEO. Vazio = o padrão do roster. */
+export type CrachaView = {
+  area: string | null;
+  entrega: string[];
+  redes: { whatsapp: string | null; instagram: string | null; facebook: string | null };
+};
+
+const crachaDe = (p?: AgentProfileLike): CrachaView => ({
+  area: p?.area?.trim() || null,
+  entrega: Array.isArray(p?.entrega) ? p!.entrega!.filter(Boolean) : [],
+  redes: { whatsapp: p?.whatsapp || null, instagram: p?.instagram || null, facebook: p?.facebook || null },
+});
+
+export type AgentView = AgentBase & CrachaView & {
   avatarUrl: string | null; // profile.avatarUrl ?? avatarPadrao
   ativo: boolean;
   /** true quando o agente nasceu no admin (só existe como AgentProfile, sem roster). */
@@ -133,6 +153,8 @@ export function mergeProfiles(base: AgentBase[], profiles: AgentProfileLike[]): 
       avatarUrl: p?.avatarUrl?.trim() || a.avatarPadrao,
       ativo: p?.ativo ?? true,
       custom: false,
+      emoji: p?.emoji?.trim() || a.emoji,
+      ...crachaDe(p),
     };
   });
   for (const p of profiles) {
@@ -141,7 +163,6 @@ export function mergeProfiles(base: AgentBase[], profiles: AgentProfileLike[]): 
       agentKey: p.agentKey,
       tipo: p.tipo === "mentor" ? "mentor" : "persona",
       nome: p.nome?.trim() || p.agentKey,
-      emoji: "⟁",
       bio: p.bio?.trim() || "",
       avatarPadrao: null,
       conversacional: true,
@@ -149,6 +170,8 @@ export function mergeProfiles(base: AgentBase[], profiles: AgentProfileLike[]): 
       avatarUrl: p.avatarUrl?.trim() || null,
       ativo: p.ativo ?? true,
       custom: true,
+      ...crachaDe(p),
+      emoji: p.emoji?.trim() || "⟁",
     });
   }
   return out.sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, "pt-BR"));
@@ -166,5 +189,9 @@ export const isAgentKey = (v: unknown): v is string => typeof v === "string" && 
 
 /** Chave pública de um agente pra URL/visor: só o que o roster expõe (nunca o prompt). */
 export function publicView(a: AgentView) {
-  return { agentKey: a.agentKey, tipo: a.tipo, nome: a.nome, emoji: a.emoji, bio: a.bio, curso: a.curso ?? null, avatarUrl: a.avatarUrl, ativo: a.ativo };
+  return {
+    agentKey: a.agentKey, tipo: a.tipo, nome: a.nome, emoji: a.emoji, bio: a.bio, curso: a.curso ?? null, avatarUrl: a.avatarUrl, ativo: a.ativo,
+    // crachá: o que o Modo CEO editou (vazio → a vitrine usa o padrão do agente)
+    area: a.area, entrega: a.entrega, redes: a.redes, ordem: a.ordem,
+  };
 }

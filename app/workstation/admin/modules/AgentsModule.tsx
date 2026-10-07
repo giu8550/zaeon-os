@@ -8,18 +8,24 @@
  * "✨ avatar vivo" abre o ESTÚDIO (Etapa B): o founder descreve a persona, vê cada estado sendo
  * gerado ao lado com o avatar já animando, aprova/rerola um a um e salva (banco). Rota:
  * POST/DELETE /api/admin/agents/:key/avatar.
+ * "🪪 crachá" edita o que aparece no CRACHÁ da landing e da sala de Assistentes (área, linha, o que
+ * entrega, emoji, WhatsApp, Instagram, Facebook) com a prévia do crachá ao vivo. Desativar o agente
+ * tira ele da vitrine. "+ agente" (mentor) entra sozinho na landing e nos Assistentes.
  */
 import { useCallback, useEffect, useState } from "react";
 import AgentAvatar from "@/components/agents/AgentAvatar";
 import EstudioAvatar from "@/components/agents/avatar/EstudioAvatar";
 import { invalidarManifestos, useManifesto } from "@/components/agents/avatar/hooks";
 import { AVATAR_LOOKS } from "@/lib/avatars/looks";
+import Cracha from "@/components/agents/Cracha";
+import { nativosVitrine } from "@/lib/agents/nativos";
 import { VIDRO_BOLHA, VIDRO_CHIP, VIDRO_POPOVER, TXT, TXT_2, TXT_MUDO } from "@/lib/canal/vidro";
 
 type Top = { userId: string; contagem: number; ultimoUso: string; nome: string | null; email: string | null };
 type Agente = {
   agentKey: string; tipo: "persona" | "mentor"; nome: string; emoji: string; bio: string; curso?: string;
   avatarUrl: string | null; ativo: boolean; ordem: number; custom: boolean;
+  area: string | null; entrega: string[]; redes: { whatsapp: string | null; instagram: string | null; facebook: string | null };
   uso: { total: number; usuarios: number; ultimoUso: string | null; top: Top[] };
 };
 const H = { "Content-Type": "application/json" };
@@ -168,6 +174,7 @@ function EstudioModal({ a, onFechar, onMudou }: { a: Agente; onFechar: () => voi
 
 function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean>; onAvatar: (k: string, f: File | null) => void; onEstudio: () => void }) {
   const [hover, setHover] = useState(false);
+  const [editandoCracha, setEditandoCracha] = useState(false);
   const [nome, setNome] = useState(a.nome);
   const [bio, setBio] = useState(a.bio);
   const [ordem, setOrdem] = useState(String(a.ordem));
@@ -185,7 +192,10 @@ function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: str
           <input value={nome} onChange={(e) => setNome(e.target.value)} aria-label="Nome" className={`w-full ${inputCls} font-bold`} />
           <p className={`mt-1 text-[10.5px] font-mono uppercase tracking-widest ${TXT_MUDO}`}>@{a.agentKey} · {a.tipo}{a.curso ? ` · ${a.curso}` : ""}{a.custom ? " · custom" : ""}</p>
         </div>
-        <button type="button" onClick={onEstudio} title="Criar / revisar o avatar vivo (estúdio)" className={`shrink-0 min-h-[40px] px-3 rounded-xl text-[11px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>✨ avatar vivo</button>
+        <div className="shrink-0 flex flex-col gap-1.5">
+          <button type="button" onClick={onEstudio} title="Criar / revisar o avatar vivo (estúdio)" className={`min-h-[36px] px-3 rounded-xl text-[11px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>✨ avatar vivo</button>
+          <button type="button" onClick={() => setEditandoCracha((v) => !v)} aria-expanded={editandoCracha} title="O que aparece no crachá da landing e dos Assistentes" className={`min-h-[36px] px-3 rounded-xl text-[11px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>🪪 crachá</button>
+        </div>
       </div>
       <input value={bio} onChange={(e) => setBio(e.target.value)} placeholder="bio" aria-label="Bio" className={`${inputCls} text-[12px]`} />
       <div className="flex items-center gap-2">
@@ -202,6 +212,7 @@ function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: str
           <button type="button" onClick={() => void onPatch(a.agentKey, { avatarUrl: null })} className={`min-h-[40px] px-2 rounded-xl text-[11px] ${TXT_MUDO} hover:text-rose-500 dark:hover:text-rose-300`} title="Remover foto">sem foto</button>
         )}
       </div>
+      {editandoCracha && <EditorCracha a={a} onPatch={onPatch} />}
       {/* USO — o card founder */}
       <div className="pt-3 border-t border-slate-200/70 dark:border-white/10">
         <div className="flex items-baseline gap-3">
@@ -226,4 +237,68 @@ function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: str
 
 function Aviso({ glassPanel, texto }: { glassPanel: string; texto: string }) {
   return <div className={`flex-1 grid place-items-center rounded-[32px] ${glassPanel}`}><p className={`text-[13px] ${TXT_MUDO}`}>{texto}</p></div>;
+}
+
+/** Padrão de vitrine do agente (o que o crachá mostra quando o campo do Modo CEO está vazio). */
+function padraoVitrine(a: Agente): { area: string; entrega: string[] } {
+  const n = nativosVitrine().find((x) => x.slug === a.agentKey);
+  return { area: n?.course ?? a.curso ?? "", entrega: n?.signatureArtifacts ?? [] };
+}
+
+/**
+ * Editor do CRACHÁ (Modo CEO): campos à esquerda, o crachá de verdade à direita mudando enquanto
+ * digita. Vazio = usa o padrão do agente. Salva em PATCH /api/admin/agents/:key.
+ */
+function EditorCracha({ a, onPatch }: { a: Agente; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean> }) {
+  const padrao = padraoVitrine(a);
+  const [f, setF] = useState({
+    area: a.area ?? "", bio: a.bio ?? "", entrega: a.entrega.join(", "), emoji: a.emoji && a.emoji !== "⟁" ? a.emoji : "",
+    whatsapp: a.redes.whatsapp ?? "", instagram: a.redes.instagram ? `@${a.redes.instagram}` : "", facebook: a.redes.facebook ?? "",
+  });
+  const [salvando, setSalvando] = useState(false);
+  const [ok, setOk] = useState(false);
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => { setOk(false); setF({ ...f, [k]: e.target.value }); };
+  const entregaPrevia = f.entrega.split(",").map((x) => x.trim()).filter(Boolean);
+  const salvar = async () => {
+    setSalvando(true);
+    const deu = await onPatch(a.agentKey, { area: f.area, bio: f.bio, entrega: f.entrega, emoji: f.emoji, whatsapp: f.whatsapp, instagram: f.instagram, facebook: f.facebook });
+    setSalvando(false);
+    setOk(deu);
+  };
+  const campo = (rotulo: string, k: keyof typeof f, ph: string) => (
+    <label className="flex flex-col gap-1">
+      <span className={`text-[10px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>{rotulo}</span>
+      <input value={f[k]} onChange={set(k)} placeholder={ph} className={inputCls} />
+    </label>
+  );
+  return (
+    <div className={`p-3 rounded-2xl flex flex-col gap-3 ${VIDRO_POPOVER}`}>
+      <p className={`text-[11px] ${TXT_MUDO}`}>O que aparece no <b>crachá</b> da landing e dos Assistentes. Vazio = o padrão do agente.</p>
+      <div className="grid grid-cols-1 gap-2">
+        {campo("Área", "area", padrao.area || "ex.: Pesquisa, Medicina")}
+        {campo("Linha (frase curta)", "bio", "o que ele faz, em uma frase")}
+        {campo("Entrega (até 4, por vírgula)", "entrega", padrao.entrega.join(", ") || "resumos, quiz, ABNT")}
+        {campo("Emoji (sem foto)", "emoji", "🧬")}
+        {campo("WhatsApp", "whatsapp", "11 99999-8888")}
+        {campo("Instagram", "instagram", "@perfil")}
+        {campo("Facebook", "facebook", "pagina")}
+      </div>
+      <div className="dark flex justify-center rounded-2xl bg-slate-950/90 py-2">
+        <Cracha
+          d={{
+            agentId: a.agentKey, nome: a.nome, curso: f.area || padrao.area, tagline: f.bio, emoji: f.emoji || a.emoji,
+            artefatos: entregaPrevia.length ? entregaPrevia : padrao.entrega, foto: a.avatarUrl, id: a.tipo === "mentor" ? "ZA-000" : "ZA-N00",
+            rotulo: a.tipo === "mentor" ? "mentor" : "nativo",
+            redes: { whatsapp: f.whatsapp || null, instagram: f.instagram.replace(/^@/, "") || null, facebook: f.facebook || null },
+          }}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        {ok && <span className="text-[12px] text-emerald-600 dark:text-emerald-300">salvo ✓</span>}
+        <button type="button" disabled={salvando} onClick={() => void salvar()} className="ml-auto min-h-[40px] px-4 rounded-xl text-[11px] font-black uppercase tracking-widest bg-cyan-500 text-slate-950 disabled:opacity-50">
+          {salvando ? "salvando…" : "salvar crachá"}
+        </button>
+      </div>
+    </div>
+  );
 }

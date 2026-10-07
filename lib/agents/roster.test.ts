@@ -62,7 +62,19 @@ describe("roster · mergeProfiles", () => {
   });
   it("publicView nunca expõe prompt", () => {
     const v = mergeProfiles(rosterBase(), [])[0]!;
-    expect(Object.keys(publicView(v)).sort()).toEqual(["agentKey", "ativo", "avatarUrl", "bio", "curso", "emoji", "nome", "tipo"]);
+    // campos do crachá (Modo CEO) entram; prompt/persona nunca
+    expect(Object.keys(publicView(v)).sort()).toEqual(["agentKey", "area", "ativo", "avatarUrl", "bio", "curso", "emoji", "entrega", "nome", "ordem", "redes", "tipo"]);
+    expect(JSON.stringify(publicView(v))).not.toMatch(/systemPrompt|personaText/);
+  });
+  it("crachá editado no Modo CEO sobrepõe o roster (área, entrega, emoji, redes)", () => {
+    const v = mergeProfiles(rosterBase(), [{ agentKey: "aura", area: "Pesquisa+", entrega: ["a", "b"], emoji: "🔬", whatsapp: "+5511999998888", instagram: "aura", facebook: null }]).find((a) => a.agentKey === "aura")!;
+    expect(v.area).toBe("Pesquisa+");
+    expect(v.entrega).toEqual(["a", "b"]);
+    expect(v.emoji).toBe("🔬");
+    expect(v.redes).toEqual({ whatsapp: "+5511999998888", instagram: "aura", facebook: null });
+    const sem = mergeProfiles(rosterBase(), []).find((a) => a.agentKey === "nina")!;
+    expect(sem.area).toBeNull();
+    expect(sem.entrega).toEqual([]);
   });
 });
 

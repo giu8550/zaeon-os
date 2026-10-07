@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Cracha, { useHolofote, type DadosCracha } from "@/components/agents/Cracha";
-import { intercalar, nativosVitrine, type AgenteVitrine } from "@/lib/agents/nativos";
+import { intercalar, montarVitrine, nativosVitrine, type AgenteVitrine, type PerfilPublico } from "@/lib/agents/nativos";
 import { agentAvatars } from "@/lib/canal/flags";
 
 /**
@@ -55,9 +55,12 @@ const ELENCO: Mentor[] = [
 
 export default function MentoresCarrossel({ className = "", semRotulo = false }: { className?: string; /** sem a linha "13 mentores · ao vivo…" */ semRotulo?: boolean }) {
     const [mentores, setMentores] = useState<Mentor[]>(ELENCO);
-    /** Os NATIVOS da casa (Aura, Nina, Caio…) misturados aos mentores plugáveis na vitrine. */
-    const [nativos, setNativos] = useState<AgenteVitrine[]>(() => nativosVitrine());
-    const vitrine: AgenteVitrine[] = intercalar<AgenteVitrine>(nativos, mentores.map((m) => ({ ...m, tipo: "mentor" as const })));
+    /** Perfis públicos (Modo CEO): crachá editado, quem está ativo, ordem. */
+    const [perfis, setPerfis] = useState<PerfilPublico[]>([]);
+    // Os NATIVOS da casa (Aura, Nina, Caio…) misturados aos mentores plugáveis na vitrine.
+    const grupos = montarVitrine(nativosVitrine(), mentores.map((m) => ({ ...m, tipo: "mentor" as const })), perfis);
+    const nativos = grupos.nativos;
+    const vitrine: AgenteVitrine[] = intercalar<AgenteVitrine>(grupos.nativos, grupos.mentores);
     const [aoVivo, setAoVivo] = useState(false);
     const trilhoRef = useRef<HTMLDivElement>(null);
     // HOLOFOTE: um crachá visível por vez fica "em cena" (pula, dá um oi, sorri, faz caras)
@@ -82,22 +85,15 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
 
     useEffect(() => {
         let vivo = true;
-        // Avatares editáveis (AgentProfile) — só com NEXT_PUBLIC_AGENT_AVATARS=1; falha = sem foto.
-        type Foto = { avatarUrl: string | null; nome: string };
-        const avatares: Promise<Map<string, Foto>> = agentAvatars()
-            ? fetch("/api/agents/public")
-                .then((r) => (r.ok ? r.json() : null))
-                .then((j) => new Map<string, Foto>((j?.agentes ?? []).map((a: any): [string, Foto] => [String(a.agentKey), { avatarUrl: a.avatarUrl ?? null, nome: String(a.nome ?? "") }])))
-                .catch(() => new Map<string, Foto>())
-            : Promise.resolve(new Map<string, Foto>());
-        Promise.all([fetch("/api/mentors").then((r) => (r.ok ? r.json() : null)).catch(() => null), avatares])
-            .then(([j, av]) => {
+        // Perfis (AgentProfile: crachá, ativo, ordem, foto) — só com NEXT_PUBLIC_AGENT_AVATARS=1; falha = padrão.
+        const perfisP: Promise<PerfilPublico[]> = agentAvatars()
+            ? fetch("/api/agents/public").then((r) => (r.ok ? r.json() : null)).then((j) => (Array.isArray(j?.agentes) ? j.agentes : [])).catch(() => [])
+            : Promise.resolve([]);
+        Promise.all([fetch("/api/mentors").then((r) => (r.ok ? r.json() : null)).catch(() => null), perfisP])
+            .then(([j, ps]) => {
                 if (!vivo) return;
-                const base: Mentor[] = Array.isArray(j) && j.length > 0 ? j : ELENCO;
-                const comFoto = base.map((m) => { const p = av.get(m.slug); return p ? { ...m, avatarUrl: p.avatarUrl, name: p.nome || m.name } : m; });
-                setMentores(comFoto);
-                // nativos: o nome editado no admin (AgentProfile) vale aqui também
-                setNativos(nativosVitrine().map((n) => { const p = av.get(n.slug); return p?.nome ? { ...n, name: p.nome } : n; }));
+                setMentores(Array.isArray(j) && j.length > 0 ? j : ELENCO);
+                setPerfis(ps);
                 if (Array.isArray(j) && j.length > 0) setAoVivo(true);
             })
             .catch(() => {
@@ -288,6 +284,7 @@ function dadosCracha(m: AgenteVitrine, indice: number): DadosCracha {
         id: m.tipo === "nativo" ? `ZA-N${String(n).padStart(2, "0")}` : `ZA-${String(n).padStart(3, "0")}`,
         rotulo: m.tipo,
         educacional: !!m.guardrail,
+        redes: m.redes,
     };
 }
 
