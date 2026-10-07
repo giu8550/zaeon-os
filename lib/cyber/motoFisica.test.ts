@@ -81,10 +81,12 @@ describe("pilotagem da moto (dirigibilidade)", () => {
     expect(s.y).toBeLessThanOrEqual(PILOTAGEM.alturaMax + 1e-6); expect(s.y).toBeGreaterThan(PILOTAGEM.alturaMax - 1.5);
   });
   it("sobe devagar e DESCE mais devagar que sobe (nada de despencar)", () => {
-    const sobe = pilotar(motoParada(300, 0, 300, 0), { subir: true }, 1), desce = pilotar(motoParada(300, 25, 300, 0), { descer: true }, 1);
-    expect(sobe.y).toBeLessThan(15); expect(sobe.y).toBeGreaterThan(5);
-    expect(25 - desce.y).toBeLessThan(sobe.y); expect(25 - desce.y).toBeGreaterThan(2);
-    expect(pilotar(motoParada(300, 25, 300, 0), { descer: true }, 1.5).vy).toBeGreaterThanOrEqual(-PILOTAGEM.desce - 1e-6);
+    // (dentro do teto: começa a 7,5 m, que é abaixo dos 8 m — acima dele a descida é a "planando")
+    const sobe = pilotar(motoParada(300, 0, 300, 0), { subir: true }, 0.6), desce = pilotar(motoParada(300, 7.5, 300, 0), { descer: true }, 0.6);
+    expect(sobe.y).toBeGreaterThan(2); expect(sobe.y).toBeLessThan(PILOTAGEM.alturaMax);
+    expect(7.5 - desce.y).toBeLessThan(sobe.y); expect(7.5 - desce.y).toBeGreaterThan(1);
+    expect(pilotar(motoParada(300, 7.5, 300, 0), { descer: true }, 0.9).vy).toBeGreaterThanOrEqual(-PILOTAGEM.desce - 1e-6);
+    expect(PILOTAGEM.alturaMax).toBeLessThanOrEqual(10);   // moto voa BAIXO
   });
   it("passou da borda (chão sumiu lá embaixo): não sobe e desce PLANANDO até ficar abaixo do teto", () => {
     let s = motoParada(300, 450, 300, 0);   // 450 m acima do chão do mapa (como quem sai da borda da Zaeon)

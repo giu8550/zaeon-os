@@ -20,10 +20,10 @@ export type Pose = {
   /** nave pousada fora do hangar (só fundador) */ naveParada: { x: number; y: number; z: number; yaw: number } | null;
   /** mochila a jato: altura no mundo (qualquer um) */ jet: number | null;
   /** em pé num lugar alto (dorso da nave, ilhota) */ alt: number | null;
-  /** montado numa moto voadora (qualquer pessoa): vaga 0..7, altura com teto, rumo */ moto: { s: number; y: number; yaw: number } | null;
+  /** montado numa moto voadora (qualquer pessoa): vaga 0..7, altura com teto, rumo */ moto: { s: number; y: number; yaw: number; de?: string } | null;
   /** a moto que ESTACIONOU (fica onde desceu): vaga, posição no mapa, rumo */ motoLargada: { s: number; x: number; y: number; z: number; yaw: number } | null;
 };
-const VAGAS_MOTO = 8, TETO_MOTO = ALT;   // 2 estacionamentos × 4 (chão + Zaeon) — espelha lib/cyber/motos
+const VAGAS_MOTO = 16, TETO_MOTO = ALT;   // chão (4) + Zaeon (12) — espelha TOTAL_VAGAS de lib/cyber/motos
 
 /** saneia a pose do cliente; `fundador` vem do TOKEN (servidor), nunca do cliente */
 export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
@@ -51,7 +51,7 @@ function motoDe(v: unknown): Pose["moto"] {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>, y = num(o.y, 0, TETO_MOTO), yaw = num(o.yaw, -10, 10);
   if (typeof o.s !== "number" || !Number.isInteger(o.s) || o.s < 0 || o.s >= VAGAS_MOTO || y === null || yaw === null) return null;
-  return { s: o.s, y, yaw };
+  return { s: o.s, y, yaw, ...(typeof o.de === "string" && /^[a-f0-9]{24}$/i.test(o.de) ? { de: o.de } : {}) };   // de quem era a estacionada que pegou
 }
 
 function motoLargadaDe(v: unknown): Pose["motoLargada"] {
