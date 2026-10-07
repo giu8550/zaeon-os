@@ -37,6 +37,7 @@ import MagazineBoundary from "@/components/study/MagazineBoundary";
 import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import DicaSubTema from "@/components/chat/DicaSubTema";
 import Desenhando from "@/components/chat/Desenhando";
+import { assuntoDe, pedeAula } from "@/lib/agent/aprender";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
 import { fonteChat } from "@/lib/ui/chatFontScale";
@@ -88,7 +89,7 @@ type Msg = {
   studyTitle?: string;
   studioBlock?: StudioBlockData;   // em "structured" = artefato embutido na MESMA bolha
   blocosExtra?: StudioBlockData[]; // 2º artefato da mesma resposta (ex.: molécula + diagrama interativo)
-  desenhando?: boolean;            // o diagrama interativo desta resposta está saindo (~20 s)
+  desenhando?: string;             // aviso enquanto um artefato demorado sai (diagrama ~20 s, aula 1–3 min)
   answer?: StructuredAnswer;
   fase?: string;             // fase que o harness está narrando agora (só enquanto chega)
   streaming?: boolean;       // B2: resposta ainda chegando → cursor piscando
@@ -100,13 +101,22 @@ type Msg = {
   at: number;
 };
 
+/** Kinds que nascem do assunto/conversa, sem um estudo de origem (não criam estudo vazio). */
+const SEM_ESTUDO = new Set(["diagram", "mindmap", "molecule", "aula"]);
+const AVISO_ARTEFATO: Record<string, string> = {
+  diagram: "Desenhando o diagrama interativo…",
+  mindmap: "Desenhando o mapa…",
+  aula: "Preparando a aula interativa — plano, roteiro e narração (1 a 3 min)…",
+};
+
 /**
  * O que de um artefato inline vai pro localStorage: o diagrama é só um id (o HTML mora no servidor)
  * e sobrevive ao reload; os outros (mapa, podcast, molécula com SDF…) são pesados e ficam na sessão.
  */
 function enxugarArtefatos(m: Msg): Msg {
-  if (m.kind !== "structured" || (!m.studioBlock && !m.blocosExtra && !m.desenhando)) return m;
-  const leve = (b?: StudioBlockData) => (b && b.studioKind === "diagram" && b.artifactId ? b : undefined);
+  if (m.role !== "assistant" || (!m.studioBlock && !m.blocosExtra && !m.desenhando)) return m;
+  // diagrama e aula são só um id (o conteúdo mora no servidor) — sobrevivem ao reload, sem o `data`
+  const leve = (b?: StudioBlockData) => (b && (b.studioKind === "diagram" || b.studioKind === "aula") && b.artifactId ? { ...b, data: null } : undefined);
   const extras = (m.blocosExtra ?? []).map(leve).filter(Boolean) as StudioBlockData[];
   return { ...m, studioBlock: leve(m.studioBlock), blocosExtra: extras.length ? extras : undefined, desenhando: undefined };
 }
@@ -549,23 +559,25 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
    * explicação). Se falhar, cala — ninguém pediu, então avisar seria ruído. Pedido
    * explícito continua reclamando alto: aí a pessoa está esperando.
    */
-  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false, contexto?: string) => {
+  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false, contexto?: string, pdf?: { dataUrl: string; nome?: string }) => {
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
     // estudo NOVO criado pelo tópico. Nunca pega um estudo arbitrário da biblioteca
-    // (senão "gere um podcast sobre X" sairia sobre o conteúdo errado).
-    let spaceId = focusIds[0];
-    if (!spaceId) {
+    // (senão "gere um podcast sobre X" sairia sobre o conteúdo errado). Diagrama, mapa,
+    // molécula e aula nascem do assunto e da conversa — não criam estudo vazio em "Meus estudos".
+    let spaceId: string | undefined = focusIds[0];
+    if (!spaceId && !SEM_ESTUDO.has(kind)) {
       const s = await criarEstudo(topic || "Estudo");
       if (s) { setSpaces((p) => [...p, s as any]); spaceId = s.id; }
+      if (!spaceId) return;
     }
-    if (!spaceId) return;
-    const desenho = !!attachMsgId && (kind === "diagram" || kind === "mindmap");
-    const marcar = (v: boolean) => setMessages((prev) => prev.map((m) => (m.id === attachMsgId ? { ...m, desenhando: v } : m)));
-    if (desenho) marcar(true);
+    if (kind === "aula") topic = assuntoDe(topic.replace(/^aula interativa:\s*/i, ""));
+    const aviso = attachMsgId ? AVISO_ARTEFATO[kind] : undefined;
+    const marcar = (v?: string) => setMessages((prev) => prev.map((m) => (m.id === attachMsgId ? { ...m, desenhando: v } : m)));
+    if (aviso) marcar(aviso);
     // Rede (por tipo: podcast/vídeo, molécula, imagem, texto) em lib/studio/studioClient.ts —
     // o MESMO núcleo do mobile. Aqui fica só o que é desta tela: o evento e o aviso.
-    const r = await gerarArtefato(kind, { spaceId, topic, contexto, sala: "estudos" });
-    if (desenho) marcar(false);
+    const r = await gerarArtefato(kind, { spaceId, topic, contexto, sala: "estudos", ...(pdf ? { pdf } : {}) });
+    if (aviso) marcar(undefined);
     if (r.tipo === "pronto") {
       window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId } }));
     } else if (r.tipo === "erro" && !r.silencioso && !silencioso) {
@@ -721,6 +733,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     // virava um vendedor simpático: resposta rasa + menu. Artefato agora é decisão do
     // código, a partir do assunto; o modelo só conversa.
     const lendo = anexoRef.current;
+    // AULA a partir do PDF anexado: com arquivo o turno vai pelo caminho multimodal (fora do harness),
+    // então o pedido de aula é atendido aqui — o PDF segue junto pra virar a aula.
+    if (lendo && pedeAula(prompt)) void runStudioAction("aula", lendo.nome, asstId, false, undefined, { dataUrl: lendo.dataUrl, nome: lendo.nome });
     const systemContext = (lendo ? `O aluno anexou o arquivo "${lendo.nome}" (vai junto nesta mensagem): leia o CONTEÚDO dele e responda com base nele. ` : "") + (focusIds.length
       ? `O usuário está no co-working da Sala de Estudos e FOCOU ${focusIds.length} estudo(s): ${focusTitles.join("; ")}. Concentre-se nesse(s) estudo(s) ao responder.`
       : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade, mantendo o fio do assunto entre as mensagens.`)
@@ -1031,6 +1046,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                       {isUser
                         ? (m.text ? <AcoesPergunta texto={m.text} ocupado={sending} onEditar={() => setEditando(m.id)} /> : null)
                         : acoesDa(m, i)}
+                      {!isUser && (m.studioBlock || m.desenhando) ? (
+                        <div className="w-full max-w-[85%]">
+                          {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
+                          {m.blocosExtra?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
+                          {m.desenhando ? <Desenhando texto={m.desenhando} /> : null}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 }
@@ -1064,7 +1086,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                         <>
                           {m.studioBlock ? <StudioBlock block={m.studioBlock} collapsed={false} /> : null}
                           {m.blocosExtra?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
-                          {m.desenhando ? <Desenhando /> : null}
+                          {m.desenhando ? <Desenhando texto={m.desenhando} /> : null}
                         </>
                       ) : null}
                     </StructuredAnswerView>

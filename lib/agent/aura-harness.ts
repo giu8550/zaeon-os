@@ -24,7 +24,7 @@ import type { AgentStep } from "@/lib/agent/actions";
 import type { HarnessDeps, TrajectoryState, Step } from "@/lib/agent/trajectory";
 import { normalizeStudioKind } from "@/lib/agent/tools";
 import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
-import { artefatoDeAprender, pedeEngenhariaReversa, DIRETRIZ_ENGENHARIA_REVERSA } from "@/lib/agent/aprender";
+import { artefatoDeAprender, pedeAula, pedeEngenhariaReversa, DIRETRIZ_ENGENHARIA_REVERSA } from "@/lib/agent/aprender";
 
 type GenJson = <T>(system: string, user: string, opts?: { temperature?: number; model?: string; timeoutMs?: number }) => Promise<T>;
 
@@ -62,7 +62,9 @@ export function pickStudioKind(objective: string): string {
   if (/flashcard|cart[õo]es/.test(t)) return "flashcards";
   if (/linha do tempo|timeline|cronologia/.test(t)) return "timeline";
   if (/podcast|áudio|audio/.test(t)) return "podcast";
-  if (/v[íi]deo/.test(t)) return "video";
+  // AULA interativa (Papermorph): pedido de aula — e também o de VÍDEO explicativo, que ela
+  // substitui (o slideshow do video-pipeline depende do Imagen e nunca saiu pelo chat).
+  if (pedeAula(t) || /v[íi]deo/.test(t)) return "aula";
   if (/\bfaq\b|perguntas e respostas/.test(t)) return "faq";
   // Molécula ANTES de imagem: esta linha já capturava "molécula" e devolvia "image",
   // de quando o viewer 3D não existia. Agora existe (PubChem + 3Dmol), e uma estrutura

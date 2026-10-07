@@ -26,12 +26,20 @@ const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").t
 export const APRENDER_RE =
   /\b(como funciona[m]?|como (?:e que|acontece|ocorre|se forma|se faz)|quero (?:aprender|entender|conhecer|saber como)|me (?:explica|explique|ensina|ensine)|explica(?:r)? (?:como|o que|por que)|o que (?:e|sao)|entender melhor|aprender sobre|qual (?:o|e o) (?:mecanismo|processo)|passo a passo)\b/;
 
+/**
+ * Pedido de AULA (o Papermorph): "me dá uma aula sobre X", "quero uma aula", "explica a fundo",
+ * "aula completa". Só com a palavra/intenção explícita — explicação comum ganha o diagrama.
+ */
+export const AULA_RE =
+  /\b(?:me (?:da|de|faz|faca|prepara|monta) uma aula|(?:quero|preciso de|gera|gere|cria|crie|faz|faca|monta|monte|prepara) (?:uma )?aula|uma aula (?:sobre|de|do|da)|aula (?:completa|interativa|sobre)|explica(?:r|e)? (?:isso |isto |tudo )?a fundo|aprofunda(?:r)? (?:bem )?(?:esse|este|o) (?:tema|assunto))\b/;
+
 /** Engenharia reversa (o REA). Aqui só o modo LEVE — sem análise de binário. */
 export const ENGENHARIA_REVERSA_RE =
   /\b(engenharia reversa|reverse[- ]engineer\w*|desmonta(?:r)? (?:como|esse|essa|isso)|como (?:isso|esse|essa) (?:\w+ )?funciona por dentro|recriar (?:isso|esse|essa)|como (?:eu )?(?:faco|faria|fazer) (?:igual|um igual|algo igual))\b/;
 
 export const pedeAprender = (objetivo: string) => APRENDER_RE.test(norm(objetivo));
 export const pedeEngenhariaReversa = (objetivo: string) => ENGENHARIA_REVERSA_RE.test(norm(objetivo));
+export const pedeAula = (objetivo: string) => AULA_RE.test(norm(objetivo));
 
 /**
  * Diretriz do modo leve de engenharia reversa (captura a intenção do REA — "entenda e reproduza" —
@@ -53,6 +61,7 @@ export function assuntoDe(objetivo: string): string {
     .replace(/^(?:por favor[,\s]+)?(?:voc[êe] )?(?:pode(?:ria)? )?(?:me )?(?:explica(?:r)?|explique|ensina(?:r)?|ensine|mostra(?:r)?|conta(?:r)?)\s+(?:pra mim\s+)?/i, "")
     .replace(/^(?:eu )?quero (?:aprender|entender|conhecer|saber)\s+(?:melhor\s+)?(?:sobre\s+)?/i, "")
     .replace(/^faz(?:er)? (?:uma )?engenharia reversa (?:de|do|da)\s+/i, "")
+    .replace(/^(?:me )?(?:d[áa]|de|faz|fa[çc]a|prepara|monta|gera|cria|quero|preciso de)?\s*(?:uma )?aula(?: interativa| completa)?\s+(?:sobre|de|do|da)\s+/i, "")
     .replace(/[?!.]+$/, "")
     .trim();
   return (limpo || t).slice(0, 200);

@@ -31,6 +31,7 @@ import { fonteChat } from "@/lib/ui/chatFontScale";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import { criarEstudo, gerarArtefato } from "@/lib/studio/studioClient";
 import Desenhando from "@/components/chat/Desenhando";
+import { assuntoDe, pedeAula } from "@/lib/agent/aprender";
 import BolinhaCerebro from "@/components/cerebro/BolinhaCerebro";
 import CerebroPanel from "@/components/cerebro/CerebroPanel";
 import { useCerebro } from "@/components/cerebro/useCerebro";
@@ -44,16 +45,23 @@ import {
 } from "@/lib/chat/threads";
 
 // `answer` presente = resposta estruturada do harness (render rico); `text` = nucleo (histórico).
-// `blocos` = artefatos inline da resposta (diagrama interativo, molécula…); `desenhando` = o diagrama está saindo.
-type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string; anexo?: string; blocos?: StudioBlockData[]; desenhando?: boolean };
+// `blocos` = artefatos inline da resposta (diagrama, aula, molécula…); `desenhando` = aviso enquanto um demorado sai.
+type Msg = { id: string; role: "user" | "assistant"; text: string; answer?: StructuredAnswer; fase?: string; anexo?: string; blocos?: StudioBlockData[]; desenhando?: string };
 
 /** Kinds que o servidor gera SEM um estudo de origem (o resto do Studio precisa de um). */
-const SEM_ESTUDO = new Set(["diagram", "mindmap", "molecule"]);
+const SEM_ESTUDO = new Set(["diagram", "mindmap", "molecule", "aula"]);
+/** Artefatos que são só um id (o conteúdo mora no servidor): sobrevivem ao reload. */
+const LEVES = new Set(["diagram", "aula"]);
+const AVISO: Record<string, string> = {
+  diagram: "Desenhando o diagrama interativo…",
+  mindmap: "Desenhando o mapa…",
+  aula: "Preparando a aula interativa — plano, roteiro e narração (1 a 3 min)…",
+};
 
-/** O que vai pro localStorage: o diagrama é só um id (o HTML mora no servidor); o resto fica na sessão. */
+/** O que vai pro localStorage: diagrama/aula são só um id; o resto fica na sessão. */
 const enxugar = (m: Msg): Msg => {
   if (!m.blocos && !m.desenhando) return m;
-  const leves = (m.blocos ?? []).filter((b) => b.studioKind === "diagram" && b.artifactId);
+  const leves = (m.blocos ?? []).filter((b) => LEVES.has(b.studioKind) && b.artifactId).map((b) => ({ ...b, data: null }));
   return { ...m, blocos: leves.length ? leves : undefined, desenhando: undefined };
 };
 
@@ -311,24 +319,25 @@ export default function ResearchChat({
 
   // ARTEFATOS INLINE (o seam do harness: StructuredAnswer.artifacts[] → viewers do Studio). Antes a Sala
   // de Pesquisa os ignorava; agora cada um é gerado e entra NA MESMA bolha, com o rigor da sala.
-  const materializarArtefatos = useCallback(async (msgId: string, a: StructuredAnswer, prompt: string) => {
+  const materializarArtefatos = useCallback(async (msgId: string, a: StructuredAnswer, prompt: string, pdf?: { dataUrl: string; nome?: string }) => {
     const patchMsg = (f: (m: Msg) => Msg) => setMessages((prev) => prev.map((m) => (m.id === msgId ? f(m) : m)));
     for (const art of a.artifacts ?? []) {
       const kind = art.studioKind;
       if (!kind || kind.startsWith("research:")) continue;
-      const topic = art.title?.trim() || prompt;
-      const desenho = kind === "diagram" || kind === "mindmap";
-      const contexto = desenho ? [a.nucleo, a.desenvolvimento].filter(Boolean).join("\n\n") : undefined;
+      // "aula interativa: me dá uma aula sobre X" (rótulo da tool) → "X"
+      const topic = kind === "aula" ? assuntoDe((art.title || prompt).replace(/^aula interativa:\s*/i, "")) : art.title?.trim() || prompt;
+      const desenho = kind in AVISO;
+      const contexto = desenho && (a.nucleo || a.desenvolvimento) ? [a.nucleo, a.desenvolvimento].filter(Boolean).join("\n\n") : undefined;
       let spaceId: string | undefined;
       if (!SEM_ESTUDO.has(kind)) {
         const s = await criarEstudo(topic);
         if (!s) continue;
         spaceId = s.id;
       }
-      if (desenho) patchMsg((m) => ({ ...m, desenhando: true }));
-      void gerarArtefato(kind, { spaceId, topic, contexto, sala: "pesquisa" }).then((r) => {
+      if (desenho) patchMsg((m) => ({ ...m, desenhando: AVISO[kind] }));
+      void gerarArtefato(kind, { spaceId, topic, contexto, sala: "pesquisa", ...(kind === "aula" && pdf ? { pdf } : {}) }).then((r) => {
         patchMsg((m) => {
-          const fim = desenho ? { ...m, desenhando: false } : m;
+          const fim = desenho ? { ...m, desenhando: undefined } : m;
           if (r.tipo !== "pronto") return fim;
           const b: StudioBlockData = { studioKind: r.bloco.studioKind, title: r.bloco.title || "", data: r.bloco.data ?? null, artifactId: r.bloco.artifactId, dataUrl: r.bloco.dataUrl };
           return { ...fim, blocos: [...(fim.blocos ?? []).filter((x) => x.studioKind !== b.studioKind), b] };
@@ -359,6 +368,9 @@ export default function ResearchChat({
     ]);
     if (text === undefined) setInput("");   // envio direto preserva o rascunho do composer
     setSending(true);
+    // AULA a partir do PDF anexado: com arquivo, o turno vai pelo caminho multimodal (fora do harness),
+    // então o pedido de aula é atendido aqui — o PDF segue junto pra virar a aula.
+    if (lendo && pedeAula(prompt)) void materializarArtefatos(asstId, { nucleo: "", artifacts: [{ studioKind: "aula", title: lendo.nome }] }, prompt, { dataUrl: lendo.dataUrl, nome: lendo.nome });
     const patch = (text: string) => setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, text } : m)));
 
     // TCC cross-sala: o pedido vira SUGESTÕES no mesmo documento (busca fonte verificada →
@@ -560,7 +572,7 @@ export default function ResearchChat({
                       {m.blocos?.length || m.desenhando ? (
                         <>
                           {m.blocos?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
-                          {m.desenhando && <Desenhando />}
+                          {m.desenhando && <Desenhando texto={m.desenhando} />}
                         </>
                       ) : null}
                     </StructuredAnswerView>
@@ -594,6 +606,12 @@ export default function ResearchChat({
                         ? <ChatMarkdown text={m.text} />
                         : <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                 </div>
+                {!isUser && (m.blocos?.length || m.desenhando) ? (
+                  <div className="w-full max-w-[88%]">
+                    {m.blocos?.map((b) => <StudioBlock key={b.studioKind} block={b} collapsed={false} />)}
+                    {m.desenhando && <Desenhando texto={m.desenhando} />}
+                  </div>
+                ) : null}
                 {isUser
                   ? <AcoesPergunta texto={m.text} ocupado={sending} onEditar={() => setEditando(m.id)} />
                   : acoesResposta}

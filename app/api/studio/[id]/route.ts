@@ -27,6 +27,12 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const art = await prisma.studioArtifact.findUnique({ where: { id: params.id } });
   if (!art || art.ownerId !== userId) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   if (art.storageRef) await deleteStudioFile(art.id, art.storageRef);
+  // aula: um áudio por beat (.studio/<id>-<beat>.<ext>)
+  if (art.kind === "aula") {
+    for (const [beat, t] of Object.entries<any>((art.meta as any)?.tempos ?? {})) {
+      if (t?.audio) await deleteStudioFile(`${art.id}-${beat}`, t.audio);
+    }
+  }
   await prisma.studioArtifact.delete({ where: { id: art.id } });
   return NextResponse.json({ ok: true });
 }

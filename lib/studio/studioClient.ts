@@ -43,8 +43,11 @@ export async function criarEstudo(titulo: string, d: Deps = {}): Promise<{ id: s
 
 async function json(r: Response): Promise<any> { return r.json().catch(() => null); }
 
-/** `contexto` = a explicação que o aluno acabou de ler (o diagrama reflete ela); `sala` ajusta o rigor. */
-export type OpcoesStudio = { spaceId?: string; topic: string; contexto?: string; sala?: "estudos" | "pesquisa" };
+/**
+ * `contexto` = a explicação que o aluno acabou de ler (o diagrama reflete ela); `sala` ajusta o rigor;
+ * `pdf` = o PDF anexado na conversa (a AULA pode nascer dele).
+ */
+export type OpcoesStudio = { spaceId?: string; topic: string; contexto?: string; sala?: "estudos" | "pesquisa"; pdf?: { dataUrl: string; nome?: string } };
 
 export async function gerarArtefato(kind: string, o: OpcoesStudio & Deps): Promise<ResultadoStudio> {
   const f = o.fetch ?? fetch;
@@ -71,6 +74,18 @@ export async function gerarArtefato(kind: string, o: OpcoesStudio & Deps): Promi
       const r = await gerarDiagramaCliente(f, o, kind === "mindmap" ? "mapa" : "auto", acompanhar);
       if (r.tipo !== "erro" || kind !== "mindmap") return r;
       // reserva: o mapa mental estático de antes (texto), se o diagrama não saiu
+    }
+    if (kind === "aula") {
+      // AULA interativa (lib/aula): plano → roteiro → narração por beat, em background (~1–3 min)
+      const res = await f("/api/studio/aula", {
+        method: "POST",
+        headers: H,
+        body: JSON.stringify({ spaceId: o.spaceId || undefined, topic, contexto: o.contexto, sala: o.sala, ...(o.pdf ? { pdf: o.pdf.dataUrl, pdfNome: o.pdf.nome } : {}) }),
+      });
+      const data = await json(res);
+      if (!res.ok || !data?.id) return { tipo: "erro", mensagem: data?.error };
+      if (data.status === "done") return { tipo: "pronto", bloco: { studioKind: "aula", title: data.title, data: data.meta, artifactId: data.id } };
+      return acompanhar(data.id, 3000, 8 * 60_000, false, true, "aula");
     }
     if (kind === "podcast" || kind === "video") {
       const res = await f(`/api/studio/${kind}`, { method: "POST", headers: H, body: JSON.stringify({ spaceId, topic }) });
