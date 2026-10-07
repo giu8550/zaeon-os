@@ -7,7 +7,7 @@
  * Layout e colisão em lib/cyber/solana.ts (as mesmas medidas).
  */
 import * as THREE from "three";
-import { ANDARES_SOLANA, ROOFTOP, SOLANA, moveisDoAndar, paredesDoAndar, type MovelS } from "@/lib/cyber/solana";
+import { ANDARES_SOLANA, GARAGEM, ROOFTOP, SOLANA, moveisDoAndar, paredesDoAndar, type MovelS } from "@/lib/cyber/solana";
 import { PLATAFORMAS } from "@/lib/cyber/plataformas";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
@@ -78,6 +78,7 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   const lx = P.x1 - P.x0, lz = P.z1 - P.z0, cx = (P.x0 + P.x1) / 2, cz = (P.z0 + P.z1) / 2;
   const lajes: number[][] = [], faixas: number[][] = [];
   for (const y of ANDARES_SOLANA) {
+    if (y < 0) continue;   // a garagem tem a casca própria (abaixo)
     if (y > 0) lajes.push([cx, y - 0.2, cz, lx + 0.6, 0.4, lz + 0.6]);
     else lajes.push([cx, 0.08, cz, lx, 0.16, lz]);
     if (y > 0) { faixas.push([cx, y - 0.2, P.z0 - 0.31, lx + 0.6, 0.12, 0.04], [cx, y - 0.2, P.z1 + 0.31, lx + 0.6, 0.12, 0.04], [P.x0 - 0.31, y - 0.2, cz, 0.04, 0.12, lz + 0.6], [P.x1 + 0.31, y - 0.2, cz, 0.04, 0.12, lz + 0.6]); }
@@ -90,6 +91,7 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   // paredes de vidro (as mesmas das colisões) + caixilhos verticais; parede do fundo do térreo opaca (o painel do logo)
   const vidros: number[][] = [], montantes: number[][] = [];
   ANDARES_SOLANA.forEach((y0, andar) => {
+    if (andar === GARAGEM) return;   // a garagem não é de vidro: é a casca vista por dentro (abaixo)
     for (const w of paredesDoAndar(andar)) {
       const L = Math.hypot(w.bx - w.ax, w.bz - w.az), giro = -Math.atan2(w.bz - w.az, w.bx - w.ax), wx = (w.ax + w.bx) / 2, wz = (w.az + w.bz) / 2;
       vidros.push([wx, y0 + w.alt / 2, wz, L, w.alt, Math.min(w.esp, 0.12), giro]);
@@ -104,8 +106,9 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
     const a = add(new THREE.Mesh(new THREE.BoxGeometry(0.14, H + 1.2, 0.14), faixaMat)); a.position.set(x, (H + 1.2) / 2, z); a.rotation.z = 0;
   }
   // o tubo do ELEVADOR (vidro, aceso por dentro) — do térreo ao rooftop
-  const tubo = add(new THREE.Mesh(new THREE.CylinderGeometry(S.elevador.r, S.elevador.r, H + 2.6, 24, 1, true), new THREE.MeshBasicMaterial({ color: VERDE, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
-  tubo.position.set(S.elevador.x, (H + 2.6) / 2, S.elevador.z);
+  const yG = ANDARES_SOLANA[GARAGEM], altTubo = H + 2.6 - yG;   // da garagem ao rooftop
+  const tubo = add(new THREE.Mesh(new THREE.CylinderGeometry(S.elevador.r, S.elevador.r, altTubo, 24, 1, true), new THREE.MeshBasicMaterial({ color: VERDE, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
+  tubo.position.set(S.elevador.x, yG + altTubo / 2, S.elevador.z);
   const tampa = add(new THREE.Mesh(new THREE.CylinderGeometry(S.elevador.r + 0.2, S.elevador.r + 0.2, 0.2, 24), escuro)); tampa.position.set(S.elevador.x, H + 2.7, S.elevador.z);
   const pisoElev: THREE.Mesh[] = [];
   ANDARES_SOLANA.forEach((y0) => { const d = add(new THREE.Mesh(new THREE.CircleGeometry(S.elevador.r, 24), new THREE.MeshBasicMaterial({ color: VERDE, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }))); d.rotation.x = -Math.PI / 2; d.position.set(S.elevador.x, y0 + 0.05, S.elevador.z); pisoElev.push(d); });
@@ -113,25 +116,19 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
 
   // ── INTERIORES: os móveis de cada andar (os mesmos retângulos da colisão) com acabamento por tipo ──
   const porMat = new Map<THREE.Material, number[][]>();
-  const matDe: Record<MovelS["tipo"], THREE.Material> = { balcao: laje, sofa: estofado, mesa: madeira, pufe: new THREE.MeshStandardMaterial({ color: 0x9945ff, roughness: 0.9, emissive: 0x2a1060, emissiveIntensity: 0.4 }), cama: estofado, ilha: laje, piscina: concreto, bar: madeira, espreguicadeira: estofado, planta: madeira, dj: escuro };
+  const rackMat = new THREE.MeshStandardMaterial({ color: 0x0b0d16, roughness: 0.35, metalness: 0.6, emissive: 0x14103a, emissiveIntensity: 0.6 });
+  const matDe: Record<MovelS["tipo"], THREE.Material> = { balcao: laje, sofa: estofado, mesa: madeira, pufe: new THREE.MeshStandardMaterial({ color: 0x9945ff, roughness: 0.9, emissive: 0x2a1060, emissiveIntensity: 0.4 }), cama: estofado, ilha: laje, piscina: concreto, bar: madeira, espreguicadeira: estofado, planta: madeira, dj: escuro, rack: rackMat, carro: escuro };
   ANDARES_SOLANA.forEach((y0, andar) => {
     for (const mv of moveisDoAndar(andar)) {
-      if (mv.tipo === "piscina" || mv.tipo === "planta") continue;
+      if (mv.tipo === "piscina" || mv.tipo === "planta" || mv.tipo === "carro") continue;   // o carro tem modelo próprio
       const l = porMat.get(matDe[mv.tipo]) ?? []; l.push([(mv.x0 + mv.x1) / 2, y0 + mv.alt / 2, (mv.z0 + mv.z1) / 2, mv.x1 - mv.x0, mv.alt, mv.z1 - mv.z0]); porMat.set(matDe[mv.tipo], l);
     }
   });
   for (const [mat, l] of porMat) caixas(l, mat);
-  // plantas (vaso + folhagem) no lobby e no terraço do disco
-  const verdeFolha = new THREE.MeshStandardMaterial({ color: 0x1f7a4a, roughness: 0.9, emissive: 0x0a3a20, emissiveIntensity: 0.5, flatShading: true });
-  const plantas: [number, number, number][] = [[-11, -1, 0], [11.2, 13.45, 0], ...[-24, -16, 16, 24].map((x) => [x, -10, 0] as [number, number, number]), [-20, 14, 0], [20, 14, 0]];
-  for (const [x, z, y0] of plantas) {
-    const vaso = add(new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.35, 0.7, 10), escuro)); vaso.position.set(x, y0 + 0.35, z);
-    const folha = add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.9, 0), verdeFolha)); folha.position.set(x, y0 + 1.4, z); folha.scale.set(1, 1.4, 1);
-  }
   // telas: computadores nas mesas (térreo e 2º), telão da hacker house (com o logo), TV do apartamento
   const telaPc = tela(128, 80, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, "#1a0b3a"); gr.addColorStop(1, "#0b2a2a"); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = "#14f195"; for (let i = 0; i < 6; i++) g.fillRect(8, 10 + i * 10, 30 + ((i * 37) % 70), 4); g.fillStyle = "#9945ff"; g.fillRect(w - 36, 12, 26, 52); });
   const monitores: number[][] = [], telasPc: { x: number; y: number; z: number }[] = [];
-  for (const andar of [0, 1]) for (const mv of moveisDoAndar(andar).filter((x) => x.tipo === "mesa")) for (let x = mv.x0 + 1; x < mv.x1 - 0.6; x += 2) {
+  for (const andar of [0, 1, GARAGEM]) for (const mv of moveisDoAndar(andar).filter((x) => x.tipo === "mesa")) for (let x = mv.x0 + 1; x < mv.x1 - 0.6; x += 2) {
     const y0 = ANDARES_SOLANA[andar]!, z = (mv.z0 + mv.z1) / 2;
     monitores.push([x, y0 + mv.alt + 0.3, z, 0.9, 0.55, 0.05]); telasPc.push({ x, y: y0 + mv.alt + 0.3, z: z - 0.03 });
   }
@@ -161,9 +158,11 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   const bar = moveisDoAndar(ROOFTOP).find((x) => x.tipo === "bar")!, banquetas: number[][] = [];
   for (let x = bar.x0 + 0.6; x < bar.x1; x += 1.2) banquetas.push([x, H + 0.4, bar.z0 - 0.6, 0.45, 0.8, 0.45]);
   caixas(banquetas, escuro);
-  for (const x of [-8.8, -2]) {
+  // guarda-sóis COLORIDOS (as cores da Solana + ciano e rosa), com a ponta acesa
+  for (const [x, cor] of [[-8.8, ROXO], [-5.4, VERDE], [-2, 0x22d3ee]] as const) {
     const haste = add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6), escuro)); haste.position.set(x, H + 1.3, 0.3);
-    const lona = add(new THREE.Mesh(new THREE.ConeGeometry(1.6, 0.6, 12), new THREE.MeshStandardMaterial({ color: 0xf5f0ff, roughness: 0.8, emissive: 0x30284a, emissiveIntensity: 0.3 }))); lona.position.set(x, H + 2.7, 0.3);
+    const lona = add(new THREE.Mesh(new THREE.ConeGeometry(1.6, 0.6, 12), new THREE.MeshStandardMaterial({ color: cor, roughness: 0.8, emissive: cor, emissiveIntensity: 0.35 }))); lona.position.set(x, H + 2.7, 0.3);
+    const ponta = add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }))); ponta.position.set(x, H + 3.05, 0.3);
   }
   const dj = moveisDoAndar(ROOFTOP).find((x) => x.tipo === "dj")!, luzesDj: THREE.Mesh[] = [];
   for (let k = 0; k < 6; k++) { const b = add(new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.08, 0.05), new THREE.MeshBasicMaterial({ color: k % 2 ? ROXO : VERDE }))); b.position.set(dj.x0 + 0.4 + k * 0.45, H + dj.alt - 0.25, dj.z0 - 0.03); luzesDj.push(b); }
@@ -178,6 +177,47 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   const placaPorta = add(new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshBasicMaterial({ map: logoClaro }))); placaPorta.position.set(0, 3.55, P.z0 - 0.08); placaPorta.rotation.y = Math.PI;
   // as faixas de luz "respiram"
   anim.push((_, t) => { faixaMat.opacity = 0.8 + 0.15 * Math.sin(t * 1.2); });
+
+  // ── GARAGEM DOS DEVS (embaixo do disco): casca vista POR DENTRO (BackSide: de fora não aparece e a câmera em 3ª
+  //    pessoa enxerga através da parede), piso polido, barras de luz no teto, faixas roxo/verde nas paredes, servidores
+  //    com LEDs, bancadas com computadores (acima), lounge, um carro e o telão + letreiro "BUIDL" ──
+  {
+    const G = S.garagem, gw = G.x1 - G.x0, gd = G.z1 - G.z0, gcx = (G.x0 + G.x1) / 2, gcz = (G.z0 + G.z1) / 2;
+    const casca = add(new THREE.Mesh(new THREE.BoxGeometry(gw, G.alt, gd), new THREE.MeshStandardMaterial({ color: 0x4a5070, roughness: 0.6, metalness: 0.2, emissive: 0x1c2040, emissiveIntensity: 0.7, side: THREE.BackSide })));
+    casca.position.set(gcx, yG + G.alt / 2, gcz);
+    const piso = add(new THREE.Mesh(new THREE.PlaneGeometry(gw - 0.1, gd - 0.1), new THREE.MeshStandardMaterial({ color: 0x3c4260, roughness: 0.3, metalness: 0.3, emissive: 0x161a34, emissiveIntensity: 0.6 })));
+    piso.rotation.x = -Math.PI / 2; piso.position.set(gcx, yG + 0.02, gcz);
+    const vaga = new THREE.MeshBasicMaterial({ color: 0xf5f0ff, transparent: true, opacity: 0.55 });   // faixas da vaga do carro
+    for (const x of [12.4, 18]) { const f = add(new THREE.Mesh(new THREE.PlaneGeometry(0.12, 5.4), vaga)); f.rotation.x = -Math.PI / 2; f.position.set(x, yG + 0.03, 15.2); }
+    const barras: number[][] = [];
+    for (let x = G.x0 + 4; x < G.x1 - 2; x += 6) for (const z of [-8, 2, 12]) barras.push([x, yG + G.alt - 0.06, z, 3.2, 0.06, 0.18]);
+    caixas(barras, new THREE.MeshBasicMaterial({ color: 0xe8f6ff }));
+    const listras: number[][] = [];
+    for (const [cor, y] of [[ROXO, 1.1], [VERDE, 1.35]] as const) {
+      const lm = new THREE.MeshBasicMaterial({ color: cor });
+      const l = [[gcx, yG + y, G.z0 + 0.03, gw - 0.2, 0.08, 0.02], [gcx, yG + y, G.z1 - 0.03, gw - 0.2, 0.08, 0.02], [G.x0 + 0.03, yG + y, gcz, 0.02, 0.08, gd - 0.2], [G.x1 - 0.03, yG + y, gcz, 0.02, 0.08, gd - 0.2]];
+      caixas(l, lm); listras.push(...l);
+    }
+    // LEDs dos servidores (piscam devagar)
+    const leds: THREE.MeshBasicMaterial[] = [];
+    for (const r of moveisDoAndar(GARAGEM).filter((x) => x.tipo === "rack")) for (let z = r.z0 + 0.4; z < r.z1 - 0.3; z += 0.7) for (const y of [0.5, 1.1, 1.7, 2.2]) {
+      const mt = new THREE.MeshBasicMaterial({ color: (z * 3 + y) % 2 > 1 ? VERDE : ROXO, transparent: true }); leds.push(mt);
+      const l = add(new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.05), mt)); l.position.set(r.x1 + 0.01, yG + y, z); l.rotation.y = Math.PI / 2;
+    }
+    anim.push((_, t) => leds.forEach((mt, i) => { mt.opacity = 0.35 + 0.6 * (0.5 + 0.5 * Math.sin(t * (0.9 + (i % 5) * 0.3) + i)); }));
+    // o CARRO (low-poly): carroceria + cabine de vidro + rodas + faróis
+    const car = moveisDoAndar(GARAGEM).find((x) => x.tipo === "carro")!, ccx = (car.x0 + car.x1) / 2, ccz = (car.z0 + car.z1) / 2;
+    const lataria = new THREE.MeshStandardMaterial({ color: ROXO, roughness: 0.3, metalness: 0.6, emissive: 0x2a1060, emissiveIntensity: 0.4 });
+    const corpoC = add(new THREE.Mesh(new THREE.BoxGeometry(car.x1 - car.x0 - 0.6, 0.7, car.z1 - car.z0), lataria)); corpoC.position.set(ccx, yG + 0.65, ccz);
+    const cabine = add(new THREE.Mesh(new THREE.BoxGeometry(car.x1 - car.x0 - 1.2, 0.55, (car.z1 - car.z0) * 0.5), new THREE.MeshStandardMaterial({ color: 0x0b0c14, roughness: 0.1, metalness: 0.6, transparent: true, opacity: 0.8 }))); cabine.position.set(ccx, yG + 1.25, ccz - 0.2);
+    const roda = new THREE.CylinderGeometry(0.38, 0.38, 0.3, 14);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const r = add(new THREE.Mesh(roda, escuro)); r.rotation.z = Math.PI / 2; r.position.set(ccx + sx * (car.x1 - car.x0 - 0.5) / 2, yG + 0.38, ccz + sz * (car.z1 - car.z0) * 0.32); }
+    for (const sx of [-0.6, 0.6]) { const f = add(new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.16), new THREE.MeshBasicMaterial({ color: 0xe8fbff }))); f.position.set(ccx + sx, yG + 0.75, car.z0 - 0.01); f.rotation.y = Math.PI; }
+    // telão com o logo na parede norte e o letreiro neon "BUIDL" na parede sul
+    const telaoG = add(new THREE.Mesh(new THREE.PlaneGeometry(9, 3.2), new THREE.MeshBasicMaterial({ map: comLogo(1024, 364, "#120a2a") }))); telaoG.position.set(-6, yG + 2.3, G.z1 - 0.08); telaoG.rotation.y = Math.PI;
+    const letreiro = tela(512, 160, (g, w, h) => { g.clearRect(0, 0, w, h); g.font = "900 104px system-ui,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.shadowColor = "#14f195"; g.shadowBlur = 24; g.fillStyle = "#b8ffe0"; g.fillText("BUIDL", w / 2, h / 2 + 4); });
+    const neon = add(new THREE.Mesh(new THREE.PlaneGeometry(6, 1.9), new THREE.MeshBasicMaterial({ map: letreiro, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }))); neon.position.set(0, yG + 2.6, G.z0 + 0.08);
+  }
 
   const luz = new THREE.PointLight(0xb98cff, low ? 1.2 : 1.8, 70); luz.position.set(0, H + 8, 4); add(luz);
 

@@ -56,7 +56,7 @@ export function camuflagem(cor: THREE.ColorRepresentation, o: { base?: number; b
 
 /** o MEIO-TERMO: sólido (ou vidro, com `alpha` < 1), cor do material + emissivo, uma luz fixa de cima ("sol" falso,
  *  sem PointLight) e uma borda que acende na cor `rim` — sem PBR, sem sombras: barato e ainda com volume. */
-export function solidoLeve(o: { cor: THREE.Color; emissivo: THREE.Color; rim: THREE.Color; alpha?: number; lados?: boolean; rimForca?: number }): THREE.ShaderMaterial {
+export function solidoLeve(o: { cor: THREE.Color; emissivo: THREE.Color; rim: THREE.Color; alpha?: number; side?: THREE.Side; rimForca?: number }): THREE.ShaderMaterial {
   const alpha = o.alpha ?? 1;
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -77,7 +77,7 @@ export function solidoLeve(o: { cor: THREE.Color; emissivo: THREE.Color; rim: TH
     fragmentShader: `uniform vec3 uCor; uniform vec3 uEmi; uniform vec3 uRim; uniform float uAlpha; uniform float uRimF; uniform float uT;
       varying vec3 vN; varying vec3 vV; varying vec3 vW; varying vec3 vNW;
       void main() {
-        vec3 n = normalize(vNW);
+        vec3 n = normalize(vNW) * (gl_FrontFacing ? 1.0 : -1.0);   // face vista por dentro (BackSide) → a normal vira
         float sol = max(dot(n, normalize(vec3(0.35, 0.85, 0.4))), 0.0);   // a luz "de mentira", de cima
         float ceu = 0.5 + 0.5 * n.y;                                         // hemisfério: topo mais claro
         vec3 c = uCor * (0.32 + 0.38 * ceu + 0.55 * sol) + uEmi;
@@ -86,7 +86,7 @@ export function solidoLeve(o: { cor: THREE.Color; emissivo: THREE.Color; rim: TH
         c += uRim * borda * uRimF;
         gl_FragColor = vec4(c, clamp(uAlpha + borda * 0.35 * (1.0 - uAlpha), 0.0, 1.0));
       }`,
-    transparent: alpha < 1, depthWrite: alpha >= 1, side: o.lados ? THREE.DoubleSide : THREE.FrontSide,
+    transparent: alpha < 1, depthWrite: alpha >= 1, side: o.side ?? THREE.FrontSide,
   });
 }
 
@@ -138,7 +138,7 @@ export function camuflarGrupo(raiz: THREE.Object3D, o: { pular?: (m: THREE.Objec
       if (!c) {
         const emi = st.emissive ? st.emissive.clone().multiplyScalar(st.emissiveIntensity ?? 1) : new THREE.Color(0);
         const alpha = st.transparent ? Math.max(0.18, st.opacity) : 1;
-        c = solidoLeve({ cor: st.color.clone(), emissivo: emi, rim: tomDe(st), alpha, lados: st.side === THREE.DoubleSide });
+        c = solidoLeve({ cor: st.color.clone(), emissivo: emi, rim: tomDe(st), alpha, side: st.side });   // o lado da face vale (ex.: casca vista por dentro)
         cache.set(mat, c);
       }
       return c;
