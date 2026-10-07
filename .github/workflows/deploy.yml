@@ -223,17 +223,26 @@ jobs:
               exit 1
             fi
 
-            # O Caddyfile entra MONTADO (./Caddyfile:ro) e o `up -d` NÃO recria o caddy quando só o conteúdo
-            # do arquivo muda — ele seguia com a config antiga em memória. Foi assim que a rota /colyseus
-            # (realtime do cyberespaço, 2026-10-05) nunca entrou no ar: /colyseus/* caía no Next (404).
-            # `caddy reload` aplica a config nova sem derrubar conexões; se falhar (config inválida), o
-            # Caddy MANTÉM a anterior e o deploy só avisa. Último recurso: reinício do container.
-            echo "→ Recarregando a config do Caddy…"
-            if $DC exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
-              echo "  ✓ Caddyfile aplicado"
+            # O Caddyfile entra MONTADO como ARQUIVO (./Caddyfile:/etc/caddy/Caddyfile:ro). Duas armadilhas:
+            #  1) `up -d` não recria o caddy quando só o conteúdo muda, e o Caddy só lê a config na partida;
+            #  2) o `git reset --hard` acima troca o arquivo por um NOVO (outro inode) — e o bind mount de
+            #     arquivo fica preso ao inode ANTIGO: o container segue vendo a versão velha, então nem um
+            #     `caddy reload` resolve (foi o que aconteceu na #266: reload "ok", /colyseus ainda 404).
+            # Então: se o que o container enxerga difere do repo, RECRIA o caddy (remonta o arquivo; os
+            # certificados ficam no volume caddy_data). Igual → só um reload (barato, sem queda).
+            echo "→ Config do Caddy…"
+            HOST_SHA="$(sha256sum Caddyfile | cut -d' ' -f1)"
+            CONT_SHA="$($DC exec -T caddy sha256sum /etc/caddy/Caddyfile 2>/dev/null | cut -d' ' -f1 || true)"
+            if [ "$HOST_SHA" != "$CONT_SHA" ]; then
+              echo "  Caddyfile do container está velho (${CONT_SHA:0:12} ≠ ${HOST_SHA:0:12}) → recriando o caddy"
+              $DC up -d --force-recreate --no-deps caddy
+              sleep 3
+              CONT_SHA="$($DC exec -T caddy sha256sum /etc/caddy/Caddyfile 2>/dev/null | cut -d' ' -f1 || true)"
+              [ "$HOST_SHA" = "$CONT_SHA" ] && echo "  ✓ Caddyfile novo no ar" || echo "::warning::o caddy ainda não vê o Caddyfile do repo"
+            elif $DC exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
+              echo "  ✓ Caddyfile já atualizado (reload)"
             else
-              echo "::warning::caddy reload falhou — reiniciando o container do caddy"
-              $DC restart caddy || echo "::warning::não deu pra reiniciar o caddy"
+              echo "::warning::caddy reload falhou"
             fi
 
             # Realtime: o Colyseus responde por dentro da rede E pela rota pública do Caddy? (só avisa)
