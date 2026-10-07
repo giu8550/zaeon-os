@@ -7,7 +7,7 @@
 > São **28 PRs distintas**, todas conectadas por **12 contratos canônicos** (§4). Um PR só pode
 > entrar se os contratos que ele consome já existem.
 >
-> Prompts de execução por fatia (co-autorados pelo Fable): `docs/EXECUTOR_PROMPT_FATIA1_FUNDACAO.md` · `docs/EXECUTOR_PROMPT_FATIA2_SALA.md` · `docs/EXECUTOR_PROMPT_FATIA3_TRABALHO.md` · `docs/EXECUTOR_PROMPT_FATIA4_ENTRE_ELES.md`.
+> Prompts de execução por fatia (co-autorados pelo Fable): `docs/EXECUTOR_PROMPT_FATIA1_FUNDACAO.md` · `docs/EXECUTOR_PROMPT_FATIA2_SALA.md` · `docs/EXECUTOR_PROMPT_FATIA3_TRABALHO.md` · `docs/EXECUTOR_PROMPT_FATIA4_ENTRE_ELES.md` · `docs/EXECUTOR_PROMPT_FATIA5_MEMORIA.md`.
 
 ---
 
@@ -75,6 +75,8 @@ scheduler** (grep por `cron|node-cron|repeat:|every:` → só animação e polli
 (grep `omniroute` em todo o repo → zero; só "Omniscient" em `app/workstation/page.tsx:472`).
 
 > **Correção de estado (Fable, 2026-10-07, main `b2af5db`):** `literature_search` **já é real** (`lib/agent/runtime.ts:239`, sobre `lib/scholar/retrieve.ts` — OpenAlex/Crossref/arXiv/PubMed/S2 — com fallback web via SearXNG). Só `examiner` segue stub. O PR-A5 foi reescopado em `docs/EXECUTOR_PROMPT_FATIA3_TRABALHO.md`.
+
+> **Correção de estado 2 (Fable, 2026-10-07):** a memória L3 (`lib/agent/memory.ts`) **não está ligada**: `configureMemory()` não tem chamador e não existe função de embedding no repo (`@google-cloud/vertexai` é só geração). `memory_search`/`wakeUp` são no-op em produção. A Fatia 5 abre com um PR-M0 que liga a L3 (embedding via Vertex `:predict`) e extrai a máquina de busca numa fábrica reusada por canal e Zxiv — ver `docs/EXECUTOR_PROMPT_FATIA5_MEMORIA.md`.
 
 ### Dois stubs que explicam a reclamação original
 
