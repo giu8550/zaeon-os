@@ -11,8 +11,9 @@
  * Ordem na resposta: conteúdo → ESTAS ações → botões do harness → Fontes.
  */
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, GitBranchPlus, Pencil, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, Copy, GitBranchPlus, Pencil, RotateCcw, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
 import { EVT_FEEDBACK, lerVotos, votar, type Voto } from "@/lib/chat/feedback";
+import { useTTS } from "@/lib/voice/useTTS";
 
 const VISIBILIDADE =
   "transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/msg:opacity-100 focus-within:!opacity-100";
@@ -63,6 +64,29 @@ function BotaoCopiar({ texto }: { texto: string }) {
   );
 }
 
+/**
+ * Ouvir a resposta na voz do app (ttsController — um áudio só no app inteiro). O rosto do agente
+ * fala junto, com a boca seguindo o volume (usePublicarPresenca). Clicar de novo = parar.
+ */
+function BotaoOuvir({ texto }: { texto: string }) {
+  const tts = useTTS();
+  const [meu, setMeu] = useState(false);
+  const ativo = meu && (tts.speaking || tts.loading);
+  useEffect(() => { if (!tts.speaking && !tts.loading) setMeu(false); }, [tts.speaking, tts.loading]);
+  return (
+    <button
+      type="button"
+      className={`${BTN} ${ativo ? "!text-cyan-600 dark:!text-cyan-300" : ""}`}
+      onClick={() => { if (ativo) { tts.stop(); setMeu(false); } else { setMeu(true); void tts.speak(texto); } }}
+      aria-pressed={ativo}
+      aria-label={ativo ? "Parar de ouvir" : "Ouvir resposta"}
+      title={ativo ? "Parar de ouvir" : "Ouvir resposta"}
+    >
+      {ativo ? <Square size={13} /> : <Volume2 size={14} />}
+    </button>
+  );
+}
+
 export function AcoesResposta({ msgId, texto, onRegenerar, onAprofundar, ocupado = false, className = "" }: {
   msgId: string;
   /** O que vai pro clipboard (texto puro da resposta). */
@@ -86,6 +110,7 @@ export function AcoesResposta({ msgId, texto, onRegenerar, onAprofundar, ocupado
   return (
     <div className={`flex items-center gap-0.5 mt-1.5 ${VISIBILIDADE} ${className}`} role="toolbar" aria-label="Ações da resposta">
       <BotaoCopiar texto={texto} />
+      <BotaoOuvir texto={texto} />
       {onRegenerar && (
         <button type="button" className={BTN} onClick={onRegenerar} disabled={ocupado} aria-label="Regenerar resposta" title="Regenerar resposta">
           <RotateCcw size={14} />

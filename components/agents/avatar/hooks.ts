@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { normalizarManifest, type AvatarManifest, type SinalAvatar } from "@/lib/avatars/estados";
 import { criarOrcamento } from "@/lib/avatars/vida";
 import { assinarPresenca, definirPresenca, lerPresenca, type Presenca } from "@/lib/avatars/presenca";
+import { getNivel, getTTSState, subscribe as assinarTTS, subscribeNivel } from "@/lib/voice/ttsController";
 
 // ─── manifestos ─────────────────────────────────────────────────────────────
 
@@ -149,12 +150,32 @@ export function usePresenca(agentId: string | null | undefined): Presenca {
 }
 
 /**
- * O chat publica o que está fazendo; todos os rostos do agente seguem. Ao desmontar (saiu da
- * sala) volta pro idle — rosto nenhum fica "falando" sozinho.
+ * MODO VOZ: a voz do app (ttsController — ler resposta, pesquisa, PDF, bloco do Studio) está
+ * tocando? `falando` = áudio saindo (não conta a síntese carregando); `boca` = volume medido
+ * (null = sem medida → boca sorteada).
  */
-export function usePublicarPresenca(agentId: string, sinal: SinalAvatar): void {
-  useEffect(() => { definirPresenca(agentId, { sinal }); }, [agentId, sinal]);
+export function useVozDoApp(): { falando: boolean; boca: number | null } {
+  const tts = useSyncExternalStore(
+    useCallback((f: () => void) => assinarTTS(() => f()), []),
+    getTTSState,
+    () => ({ speaking: false, loading: false, text: null }),
+  );
+  const boca = useSyncExternalStore(subscribeNivel, getNivel, () => null);
+  return { falando: tts.speaking && !tts.loading, boca };
+}
+
+/**
+ * O chat publica o que está fazendo; todos os rostos do agente seguem. Se a VOZ do app estiver
+ * tocando, o agente está falando com essa voz (a boca segue o volume). Devolve o estado EFETIVO
+ * do rosto ({ sinal, boca }) pra quem desenha a conversa. Ao desmontar (saiu da sala) volta pro
+ * idle — rosto nenhum fica "falando" sozinho.
+ */
+export function usePublicarPresenca(agentId: string, sinal: SinalAvatar): { sinal: SinalAvatar; boca: number | null } {
+  const voz = useVozDoApp();
+  const efetivo = voz.falando ? { sinal: "falando" as SinalAvatar, boca: voz.boca } : { sinal, boca: null };
+  useEffect(() => { definirPresenca(agentId, efetivo); }, [agentId, efetivo.sinal, efetivo.boca]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => definirPresenca(agentId, { sinal: "idle", boca: null }), [agentId]);
+  return efetivo;
 }
 
 // ─── fala ao chegar a resposta ──────────────────────────────────────────────

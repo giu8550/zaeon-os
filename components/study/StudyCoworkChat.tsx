@@ -899,7 +899,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   });
   // e se mesmo assim pulou direto de "pensando" pro fim, ela fala a resposta por um tempo do tamanho dela
   const sinalAura = useFalaAoChegar(sinalTurno, ultimaMsg?.answer?.nucleo || ultimaMsg?.text || "");
-  usePublicarPresenca("aura", sinalAura);
+  // modo voz: com a voz do app tocando ("ouvir resposta", leitura), o rosto fala com ela
+  const rosto = usePublicarPresenca("aura", sinalAura);
   const recuo = useManifesto("aura") ? RECUO_ROSTO : "";
   /** Mini-ações de uma resposta da Aura (copiar/regenerar/👍👎/sub-tema). */
   const acoesDa = (m: Msg, i: number) => {
@@ -1113,11 +1114,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2 py-4 flex flex-col gap-4">
             {/* B2: cursor piscando da resposta em streaming */}
             <style>{`@keyframes zCaret { 0%,45% { opacity:1 } 50%,100% { opacity:0 } } .z-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-0.15em; background:currentColor; opacity:.7; animation: zCaret 1s steps(1) infinite; } @media (prefers-reduced-motion: reduce) { .z-caret { animation: none; } }`}</style>
-            {messages.length === 0 ? <><BoasVindasAgente agentId="aura" nome="Aura" sinal={sinalAura} /><DicaSubTema threads={threads} ativa={abaAtiva} /></> : (
+            {messages.length === 0 ? <><BoasVindasAgente agentId="aura" nome="Aura" sinal={rosto.sinal} boca={rosto.boca} /><DicaSubTema threads={threads} ativa={abaAtiva} /></> : (
               messages.map((m, i) => {
                 // rosto da Aura AO LADO de cada resposta; só a mais recente vive (pensa → fala → sorri)
                 const pilula = m.role === "assistant" && (m.kind === "text" || m.kind === "structured")
-                  ? <AgentePilula agentId="aura" nome="Aura" estado={sinalAura} ultima={m.id === ultimaResposta} className="absolute left-0 top-0" />
+                  ? <AgentePilula agentId="aura" nome="Aura" estado={rosto.sinal} boca={rosto.boca} ultima={m.id === ultimaResposta} className="absolute left-0 top-0" />
                   : null;
                 if (m.kind === "text") {
                   const isUser = m.role === "user";
