@@ -5,10 +5,10 @@
  *  - a voz (signaling WebRTC) só vai pra alguém que está NA MESMA sala, com teto de tamanho.
  */
 export const MAX_JOGADORES = 5;
-/** o mapa inteiro (VOO.raioMapa 960 + folga) e a altura máxima (VOO.yMax 720 + dorso da nave/mochila) — espelha MAPA
+/** o mapa inteiro (VOO.raioMapa 1500 + folga — os campi UFC/Unifor/UECE ficam na borda) e a altura máxima (VOO.yMax 720 + dorso da nave/mochila) — espelha MAPA
  *  de lib/lounge3d/sala. A Zaeon mega fica em z −560 (até −812) com piso a 450 m: com 600/400 quem estava lá
  *  aparecia pros outros puxado pro lado e as motos/nave 50 m ABAIXO do piso. */
-const COORD = 1000, ALT = 800;
+const COORD = 1540, ALT = 800;
 
 const num = (v: unknown, min: number, max: number): number | null =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null;
@@ -20,9 +20,10 @@ export type Pose = {
   /** nave pousada fora do hangar (só fundador) */ naveParada: { x: number; y: number; z: number; yaw: number } | null;
   /** mochila a jato: altura no mundo (qualquer um) */ jet: number | null;
   /** em pé num lugar alto (dorso da nave, ilhota) */ alt: number | null;
-  /** montado numa moto voadora (qualquer pessoa): vaga 0..7, altura com teto, rumo */ moto: { s: number; y: number; yaw: number } | null;
+  /** montado numa moto voadora (qualquer pessoa): vaga 0..7, altura com teto, rumo */ moto: { s: number; y: number; yaw: number; de?: string } | null;
+  /** a moto que ESTACIONOU (fica onde desceu): vaga, posição no mapa, rumo */ motoLargada: { s: number; x: number; y: number; z: number; yaw: number } | null;
 };
-const VAGAS_MOTO = 8, TETO_MOTO = ALT;   // 2 estacionamentos × 4 (chão + Zaeon) — espelha lib/cyber/motos
+const VAGAS_MOTO = 16, TETO_MOTO = ALT;   // chão (4) + Zaeon (12) — espelha TOTAL_VAGAS de lib/cyber/motos
 
 /** saneia a pose do cliente; `fundador` vem do TOKEN (servidor), nunca do cliente */
 export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
@@ -43,14 +44,21 @@ export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
   return {
     x, z, facing, moving: r.moving === true, sit: r.sit === true,
     topo: fundador && r.topo === true, ceu: r.ceu === true,
-    voo, naveParada, jet: num(r.jet, 0, ALT), alt: num(r.alt, 0, ALT), moto: motoDe(r.moto),
+    voo, naveParada, jet: num(r.jet, 0, ALT), alt: num(r.alt, 0, ALT), moto: motoDe(r.moto), motoLargada: motoLargadaDe(r.motoLargada),
   };
 }
 function motoDe(v: unknown): Pose["moto"] {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>, y = num(o.y, 0, TETO_MOTO), yaw = num(o.yaw, -10, 10);
   if (typeof o.s !== "number" || !Number.isInteger(o.s) || o.s < 0 || o.s >= VAGAS_MOTO || y === null || yaw === null) return null;
-  return { s: o.s, y, yaw };
+  return { s: o.s, y, yaw, ...(typeof o.de === "string" && /^[a-f0-9]{24}$/i.test(o.de) ? { de: o.de } : {}) };   // de quem era a estacionada que pegou
+}
+
+function motoLargadaDe(v: unknown): Pose["motoLargada"] {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>, x = num(o.x, -COORD, COORD), y = num(o.y, 0, ALT), z = num(o.z, -COORD, COORD), yaw = num(o.yaw, -10, 10);
+  if (typeof o.s !== "number" || !Number.isInteger(o.s) || o.s < 0 || o.s >= VAGAS_MOTO || x === null || y === null || z === null || yaw === null) return null;
+  return { s: o.s, x, y, z, yaw };
 }
 
 /** mensagem de signaling WebRTC (offer/answer/ICE) — só repassa se o destino estiver na sala e couber no teto */

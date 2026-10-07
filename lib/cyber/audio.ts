@@ -39,7 +39,6 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "moto-freio": { modo: "pos", loop: false, volume: 0.45, sintetico: true },
   "moto-decola": { modo: "pos", loop: false, volume: 0.55, sintetico: true },
   "moto-pouso": { modo: "pos", loop: false, volume: 0.8, sintetico: true },
-  "moto-seta": { modo: "2d", loop: false, volume: 0.22, sintetico: true },   // o pisca é só pra quem pilota (no painel)
   "space-bed": { modo: "2d", loop: true, volume: 0.09, taxa: TAXA_432 },   // AMBIENTE: bem baixo, por baixo de passos/efeitos (era 0,22)
   "blackhole-hum": { modo: "pos", loop: true, volume: 0.55 },
   crystals: { modo: "pos", loop: true, volume: 0.3 },

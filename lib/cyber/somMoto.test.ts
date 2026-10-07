@@ -18,15 +18,21 @@ describe("sons da moto (sintetizados)", () => {
     }
     for (const l of LOOPS_MOTO) expect(SONS[l].loop).toBe(true);
   });
-  it("os LOOPS emendam sem clique (o fim continua no começo)", () => {
+  it("os LOOPS emendam sem clique: o salto do fim pro começo é do tamanho de um passo TÍPICO (não um estalo)", () => {
     for (const l of LOOPS_MOTO) {
       const x = SINTESE_MOTO[l](sr);
-      let passoMax = 0; for (let i = 1; i < x.length; i++) passoMax = Math.max(passoMax, Math.abs(x[i]! - x[i - 1]!));
-      expect(Math.abs(x[0]! - x[x.length - 1]!), l).toBeLessThan(Math.max(0.05, passoMax * 1.5));
+      let soma = 0; for (let i = 1; i < x.length; i++) soma += Math.abs(x[i]! - x[i - 1]!);
+      // a CURVATURA na emenda (2ª diferença: último → 1º → 2º) tem que ser do tamanho das do meio do sinal: um estalo é
+      // um salto que quebra a continuidade; a subida íngreme natural do dente de serra, não
+      const n = x.length, curv = (i: number, j: number, k: number) => Math.abs(x[k]! - 2 * x[j]! + x[i]!);
+      let maxMeio = 0; for (let i = 1; i < n - 1; i++) maxMeio = Math.max(maxMeio, curv(i - 1, i, i + 1));
+      expect(curv(n - 1, 0, 1), l).toBeLessThan(maxMeio * 1.05 + 1e-6);
+      expect(curv(n - 2, n - 1, 0), l).toBeLessThan(maxMeio * 1.05 + 1e-6);
+      expect(soma).toBeGreaterThan(0);
     }
   });
   it("one-shots terminam em silêncio (sem estalo no fim)", () => {
-    for (const n of ["moto-partida", "moto-desliga", "moto-boost", "moto-freio", "moto-decola", "moto-pouso", "moto-seta"] as const) {
+    for (const n of ["moto-partida", "moto-desliga", "moto-boost", "moto-freio", "moto-decola", "moto-pouso"] as const) {
       const x = SINTESE_MOTO[n](sr); expect(Math.abs(x[x.length - 1]!), n).toBeLessThan(0.01);
     }
   });
@@ -50,7 +56,7 @@ describe("estágios da moto (mix e eventos)", () => {
     const seq: EstadoSomMoto[] = [somMotoParada, no({}), no({ voando: true }), no({ voando: true, vel: 1, acel: 1 }), no({ voando: true, vel: 1.3, acel: 1, boost: true }), no({ voando: true, vel: 0.9, acel: -1 }), no({ voando: false }), somMotoParada];
     const ev = seq.slice(1).flatMap((b, i) => eventosDaMoto(seq[i]!, b));
     expect(ev).toEqual(["moto-partida", "moto-decola", "moto-boost", "moto-freio", "moto-pouso", "moto-desliga"]);
-    expect(eventosDaMoto(no({ voando: true, seta: 0 }), no({ voando: true, seta: 1 }))).toEqual(["moto-seta"]);
+    expect(eventosDaMoto(no({ voando: true, seta: 0 }), no({ voando: true, seta: 1 }))).toEqual([]);   // o pisca não faz barulho (era o "tik tik")
     expect(eventosDaMoto(no({ voando: true, vel: 0.1 }), no({ voando: true, vel: 0.1, acel: -1 }))).toEqual([]);   // freada devagar: sem chiado
   });
   it("pisca: só com o guidão virado, pro lado certo, piscando a 1,5 Hz", () => {

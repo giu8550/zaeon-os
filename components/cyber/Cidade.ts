@@ -20,7 +20,7 @@ import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
 import { criarPisoEstacionamento } from "./Estacionamento";
-import { LOTE_ZAEON_LOCAL } from "@/lib/cyber/motos";
+import { LOTES, LOTE_ZAEON_LOCAL } from "@/lib/cyber/motos";
 
 export type CidadeHandle = {
   group: THREE.Group;
@@ -281,7 +281,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   alvos.push(...salas.alvos);
 
   // ── ESTACIONAMENTO de motos voadoras (aberto a todos; as motos são do engine) — o piso entra no clique de andar ──
-  const estac = criarPisoEstacionamento({ low, parado: rm });
+  const estac = criarPisoEstacionamento({ low, parado: rm, lote: LOTES.find((l) => l.id === "zaeon")! });
   estac.group.position.set(LOTE_ZAEON_LOCAL.x, 0, LOTE_ZAEON_LOCAL.z); estac.group.rotation.y = LOTE_ZAEON_LOCAL.rot; add(estac.group, ilha, true);
 
   // ── portal de volta (mini disco de acreção, gira devagar) ──

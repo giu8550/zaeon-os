@@ -10,7 +10,7 @@
  *  - ACELERAÇÃO/CRUZEIRO: o MOTOR (harmônicos) sobe de tom com a velocidade e com o acelerador, + o VENTO;
  *  - BOOST: estouro de ignição + a TURBINA (ronco + assobio agudo) enquanto dura;
  *  - FREIO (freada forte): chiado de ar;
- *  - SETA (curva): clique-claque no compasso do pisca;
+ *  - SETA (curva): só a luz pisca — SEM som (o clique a cada piscada virava um "tik tik tik" na curva);
  *  - POUSO (encostou no chão): baque + assentamento;
  *  - DESLIGA (desceu da moto): o motor cai de tom e apaga com um sopro.
  * `mixDaMoto` diz o volume/afinação de cada loop; `eventosDaMoto` diz quais one-shots disparar (comparando estados).
@@ -32,15 +32,19 @@ const harmonicos = (fase: number, n = 10) => { let v = 0; for (let k = 1; k <= n
 
 /** MOTOR (loop de 1 s, 80 Hz = 80 ciclos exatos: emenda perfeita). A afinação (playbackRate) é a rotação. */
 export function sintetizarMotorMoto(sr: number): Float32Array {
-  const n = sr, out = new Float32Array(n), r = prng(31), a = passaBaixa(1800, sr);
+  // a parte TONAL (harmônicos de 80 Hz e o compasso a 20/40 Hz) emenda sozinha (ciclos inteiros em 1 s); o CHIADO de
+  // fundo não — sem fechar o loop ele dava um estalo a cada volta, e com a rotação alta (playbackRate ~2) virava o
+  // "tik tik tik" de quando se anda rápido. Agora o chiado é gerado além do fim e entra em crossfade no começo.
+  const n = sr, x = Math.round(sr * 0.25), tom = new Float32Array(n), ruido = new Float32Array(n + x), r = prng(31), a = passaBaixa(1800, sr);
   let lp = 0;
+  for (let i = 0; i < n + x; i++) { lp += (r() * 2 - 1 - lp) * a; ruido[i] = lp * 0.18; }
+  const chiado = fecharLoop(ruido, n);
   for (let i = 0; i < n; i++) {
     const t = i / sr, fase = 2 * Math.PI * 80 * t;
     const explosao = 0.75 + 0.25 * Math.sin(2 * Math.PI * 20 * t) + 0.08 * Math.sin(2 * Math.PI * 40 * t + 1);   // o compasso dos "cilindros"
-    lp += (r() * 2 - 1 - lp) * a;
-    out[i] = harmonicos(fase, 12) * explosao + 0.35 * Math.sin(fase * 0.5) + lp * 0.18;
+    tom[i] = harmonicos(fase, 12) * explosao + 0.35 * Math.sin(fase * 0.5) + chiado[i]!;
   }
-  return normalizar(out, 0.8);
+  return normalizar(tom, 0.8);
 }
 
 /** VENTO (loop de 3 s): ruído passa-baixa ondulando (rajadas) */
@@ -149,17 +153,10 @@ export function sintetizarPousoMoto(sr: number): Float32Array {
   return normalizar(fimSemClique(out), 0.9);
 }
 
-/** SETA (~45 ms): o clique do pisca (uma batidinha seca, com corpo) */
-export function sintetizarSetaMoto(sr: number): Float32Array {
-  const n = Math.round(sr * 0.045), out = new Float32Array(n), r = prng(97);
-  for (let i = 0; i < n; i++) { const t = i / sr; out[i] = (Math.sin(2 * Math.PI * 1900 * t) * 0.6 + Math.sin(2 * Math.PI * 520 * t) + (r() * 2 - 1) * 0.4) * Math.exp(-t * 160); }
-  return normalizar(fimSemClique(out, 32), 0.8);
-}
-
 export const SINTESE_MOTO = {
   "moto-motor": sintetizarMotorMoto, "moto-vento": sintetizarVentoMoto, "moto-turbina": sintetizarTurbinaMoto,
   "moto-partida": sintetizarPartidaMoto, "moto-desliga": sintetizarDesligaMoto, "moto-boost": sintetizarBoostMoto, "moto-freio": sintetizarFreioMoto,
-  "moto-decola": sintetizarDecolaMoto, "moto-pouso": sintetizarPousoMoto, "moto-seta": sintetizarSetaMoto,
+  "moto-decola": sintetizarDecolaMoto, "moto-pouso": sintetizarPousoMoto,
 } as const;
 export type NomeSomMoto = keyof typeof SINTESE_MOTO;
 /** os LOOPS da moto (o resto é one-shot) */
@@ -199,7 +196,6 @@ export function eventosDaMoto(a: EstadoSomMoto, b: EstadoSomMoto): NomeSomMoto[]
   if (a.voando && !b.voando) ev.push("moto-pouso");
   if (!a.boost && b.boost) ev.push("moto-boost");
   if (b.voando && a.acel >= 0 && b.acel < 0 && b.vel > 0.35) ev.push("moto-freio");
-  if (a.seta !== b.seta) ev.push("moto-seta");   // acendeu ou apagou: tic… tac
   return ev;
 }
 

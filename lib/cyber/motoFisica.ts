@@ -30,9 +30,9 @@ export const PILOTAGEM = {
   /** o "g" da inclinação: com o g de verdade (9,8) toda curva já deitava no máximo; com um g de jogo maior a moto
    *  deita POUCO devagar e MUITO rápido/no boost (cruzeiro com o guidão todo ≈ 30°, boost ≈ 36°) */
   g: 22,
-  /** ALTURA: teto acima do chão de baixo (m); subida e descida (m/s) e quão rápido chega nelas; a descida forçada
+  /** ALTURA: teto acima do chão de baixo (m) — moto voa BAIXO (o dono pediu: "não deve voar muito acima do chão"); subida e descida (m/s) e quão rápido chega nelas; a descida forçada
    *  (acima do teto, ex.: saiu da borda da Zaeon) vai de `planaMin` a `planaMax` m/s conforme o quanto sobra */
-  alturaMax: 30, sobe: 15, desce: 8, inerciaV: 2.4, planaMin: 6, planaMax: 22,
+  alturaMax: 8, sobe: 10, desce: 6, inerciaV: 2.4, planaMin: 6, planaMax: 22,
 } as const;
 
 /** o estado da moto = o do voo + o guidão (−1..1, suavizado), a inclinação (rad; < 0 = deita pra ESQUERDA, a
