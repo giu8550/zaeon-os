@@ -12,6 +12,11 @@ import "@/src/i18n";
 import { Navbar } from "@/components/main/navbar";
 import { Mic, MicOff, Code2, Building2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { ConversasSlotContext } from "@/components/chat/ConversasSlot";
+import ConversasDaSala from "@/components/chat/ConversasDaSala";
+
+// Ramo da árvore sob o nome da sala na sidebar: o da sala aberta cresce e rola; o da outra é curto.
+const RAMO_ATIVO = "-mt-1.5 ml-4 pl-2 border-l border-slate-300 dark:border-white/10 flex-1 min-h-0 flex flex-col text-slate-900 dark:text-white";
+const RAMO = "-mt-1.5 ml-4 pl-2 border-l border-slate-300 dark:border-white/10 max-h-[30vh] overflow-y-auto custom-scrollbar";
 import dynamic from "next/dynamic";
 
 const StudyRoomContent = dynamic(
@@ -2521,7 +2526,7 @@ export default function HomeworkPage({
             dark:from-transparent dark:to-transparent dark:bg-[rgba(22,22,34,0.55)] dark:border-white/10 dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)]
             ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
-          <div className="flex flex-col gap-3 px-2.5">
+          <div className="flex-1 min-h-0 flex flex-col gap-3 px-2.5">
             {/* fixar/recolher a sidebar (fixada = as conversas ficam sempre à vista) */}
             {sidebarAberta && (
               <button
@@ -2534,7 +2539,10 @@ export default function HomeworkPage({
                 {sidebarFixada ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
               </button>
             )}
-            {/* Sala de Estudos — chat + Meus Estudos + Estudos */}
+            {/* Cada SALA é um nó com as SUAS conversas embaixo (estilo ChatGPT): a sala aberta mostra a lista
+                completa (o chat dela desenha aqui por portal — components/chat/ConversasSlot); a outra, as
+                recentes (clicar entra na sala e abre a conversa — lib/chat/conversasNav). */}
+            {/* Sala de Estudos */}
             <button
               data-tour="estudos"
               onClick={() => setActiveTab("sala-de-estudos")}
@@ -2547,8 +2555,11 @@ export default function HomeworkPage({
                 </span>
               )}
             </button>
+            {sidebarAberta && (activeTab === "sala-de-estudos"
+              ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
+              : <div className={RAMO}><ConversasDaSala sala="estudos" rotuloNova="Nova conversa" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>)}
 
-            {/* Sala de Pesquisa (antiga "Pesquisa") */}
+            {/* Sala de Pesquisa */}
             <button
               data-tour="pesquisa"
               onClick={() => setActiveTab("pesquisa")}
@@ -2561,6 +2572,9 @@ export default function HomeworkPage({
                 </span>
               )}
             </button>
+            {sidebarAberta && UNIFIED && (activeTab === "pesquisa"
+              ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
+              : <div className={RAMO}><ConversasDaSala sala="pesquisa" rotuloNova="Nova pesquisa" onEntrar={() => setActiveTab("pesquisa")} /></div>)}
 
             {/* Projetos — Zaeon Code (IDE agêntica; auto-protegida por plano/curso). ESCONDIDA até
                 NEXT_PUBLIC_PROJETOS=on (vira feature depois; o código segue aqui). */}
@@ -2608,16 +2622,8 @@ export default function HomeworkPage({
             </button>
           </div>
 
-          {/* CONVERSAS da sala ativa — o chat (Estudos/Pesquisa) desenha a lista aqui por portal. */}
-          {salaComChat && (
-            <div
-              ref={setSlotConversas}
-              className={sidebarAberta ? "mt-3 mx-2.5 pt-3 flex-1 min-h-0 flex flex-col border-t border-slate-300 dark:border-white/10 text-slate-900 dark:text-white" : "hidden"}
-            />
-          )}
-
           {/* EXTRAS — layout + foco; pb-16 deixa o cantinho inferior livre pro FAB da Zaeon encaixar */}
-          <div className={`${salaComChat ? "" : "mt-auto"} px-2.5 pt-3 pb-16 flex flex-col gap-3`}>
+          <div className="px-2.5 pt-3 pb-16 flex flex-col gap-3">
             <div className="h-[1px] bg-slate-300 dark:bg-white/10" />
             <button
               data-tour="layout-toggle"

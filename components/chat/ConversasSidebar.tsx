@@ -21,7 +21,7 @@ import { arvoreDeThreads, type Thread } from "@/lib/chat/threads";
 const chaveRecolhida = (sala: string) => `zaeon.chat.sidebar.${sala}.recolhida`;
 
 export default function ConversasSidebar({
-  sala, threads, ativa, ocupada, aoTrocar, aoCriar, aoFechar, aoRenomear, aoCriarSub, className = "", embutida = false,
+  sala, threads, ativa, ocupada, aoTrocar, aoCriar, aoFechar, aoRenomear, aoCriarSub, className = "", embutida = false, rotuloNova = "Nova conversa",
 }: {
   /** "estudos" | "pesquisa" — cada sala lembra se a barra está recolhida. */
   sala: string;
@@ -42,6 +42,8 @@ export default function ConversasSidebar({
    * coluna/borda própria e sem recolher — quem recolhe é a sidebar.
    */
   embutida?: boolean;
+  /** "Nova conversa" (Estudos) · "Nova pesquisa" (Pesquisa) */
+  rotuloNova?: string;
 }) {
   const [recolhida, setRecolhida] = useState(false);
   useEffect(() => {
@@ -173,21 +175,23 @@ export default function ConversasSidebar({
 
   return (
     <nav aria-label="Conversas" className={`${embutida ? "flex-1 w-full" : "shrink-0 w-[248px] max-w-[70vw] border-r border-slate-200 dark:border-white/10"} flex flex-col min-h-0 ${className}`}>
-      <div className={`flex items-center gap-1 ${embutida ? "px-1 pt-1" : "px-2.5 pt-2.5"} pb-1`}>
-        <span className="flex-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Conversas</span>
-        {!embutida && (
+      {!embutida && (
+        <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1">
+          <span className="flex-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Conversas</span>
           <button type="button" onClick={alternar} className={BTN_ICONE} aria-label="Recolher conversas" title="Recolher conversas">
             <PanelLeftClose size={15} />
           </button>
-        )}
-      </div>
+        </div>
+      )}
       <div className={`${embutida ? "px-0" : "px-2"} pb-1.5`}>
         <button
           type="button"
           onClick={aoCriar}
-          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-semibold text-slate-800 dark:text-white/90 border border-slate-200 dark:border-white/10 hover:border-cyan-400/60 hover:text-cyan-700 dark:hover:text-cyan-200 transition-colors"
+          className={`w-full flex items-center gap-2 rounded-lg font-semibold transition-colors ${embutida
+            ? "px-2 py-1.5 text-[12px] text-slate-700 dark:text-white/75 hover:bg-slate-900/[0.05] dark:hover:bg-white/[0.06]"
+            : "px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/90 border border-slate-200 dark:border-white/10 hover:border-cyan-400/60 hover:text-cyan-700 dark:hover:text-cyan-200"}`}
         >
-          <SquarePen size={14} /> Nova conversa
+          <SquarePen size={14} /> {rotuloNova}
         </button>
       </div>
       {threads.length > 4 && (

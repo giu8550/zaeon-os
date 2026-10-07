@@ -25,6 +25,7 @@ import { empurrarPontos, pontosDaResposta } from "@/lib/lounge3d/pontos";
 import { DIRETRIZ_PESQUISA } from "@/lib/ai/salaPersona";
 import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import { useConversasSlot } from "@/components/chat/ConversasSlot";
+import { consumirPedido, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
 import DicaSubTema from "@/components/chat/DicaSubTema";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
@@ -230,6 +231,21 @@ export default function ResearchChat({
     focarComposer();
   };
   const novaAbaRef = useRef<() => void>(() => {});
+  const trocarAbaRef = useRef<(id: string) => void>(() => {});
+  // Pedido da SIDEBAR principal (clicou numa conversa/"Nova pesquisa" estando noutra sala):
+  // atende o bilhete ao montar (as conversas já carregadas) e os eventos dali pra frente.
+  useEffect(() => {
+    if (!threads.length) return;
+    const atender = (p: PedidoConversa | null) => {
+      if (!p || p.sala !== "pesquisa") return;
+      if (p.nova) novaAbaRef.current();
+      else if (p.id && threadsRef.current.some((t) => t.id === p.id)) trocarAbaRef.current(p.id);
+    };
+    atender(consumirPedido("pesquisa"));
+    const on = (e: Event) => { atender((e as CustomEvent<PedidoConversa>).detail); consumirPedido("pesquisa"); };
+    window.addEventListener(EVT_PEDIDO_CONVERSA, on);
+    return () => window.removeEventListener(EVT_PEDIDO_CONVERSA, on);
+  }, [threads.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const on = () => novaAbaRef.current();
     window.addEventListener(EVT_NOVA_CONVERSA, on);
@@ -485,6 +501,7 @@ export default function ResearchChat({
   }, [input, sending, wt, runResearchGenerate, materializarArtefatos, modoTcc, tccWorkId, cerebro, anexoRef, onAtivar]);
   sendRef.current = (t?: string) => { void send(t); };
   novaAbaRef.current = novaAba;
+  trocarAbaRef.current = trocarAba;
 
   // As conversas moram na SIDEBAR PRINCIPAL do app (slot por portal); sem ela, na coluna `lateral`
   // da sala; sem nenhuma das duas, ao lado do chat.
@@ -503,6 +520,7 @@ export default function ResearchChat({
       aoCriarSub={(id) => novaSub(id)}
       className={!slotSidebar && lateral ? "h-full" : ""}
       embutida={!!slotSidebar}
+      rotuloNova="Nova pesquisa"
     />
   ) : null;
   const ultimaResposta = (() => {

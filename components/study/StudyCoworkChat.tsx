@@ -36,6 +36,9 @@ import MagazineAnswerView, { podeVirarRevista } from "@/components/study/Magazin
 import MagazineBoundary from "@/components/study/MagazineBoundary";
 import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import { useConversasSlot } from "@/components/chat/ConversasSlot";
+import { consumirPedido, EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
+
+const irProChat = () => window.dispatchEvent(new Event(EVT_ESTUDOS_CHAT));
 import { createPortal } from "react-dom";
 import DicaSubTema from "@/components/chat/DicaSubTema";
 import Desenhando from "@/components/chat/Desenhando";
@@ -486,6 +489,23 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       setMessages(carregarMensagens<Msg>(localStorage, proxima));
     }
   }, []);
+
+  // Pedido da SIDEBAR principal (conversa/"Nova conversa" clicada estando noutra sala ou sub-aba):
+  // atende o bilhete ao montar (com as conversas carregadas) e os eventos dali pra frente.
+  const trocarRef = useRef(trocarAba); trocarRef.current = trocarAba;
+  const novaRef = useRef(novaAba); novaRef.current = novaAba;
+  useEffect(() => {
+    if (!threads.length) return;
+    const atender = (p: PedidoConversa | null) => {
+      if (!p || p.sala !== "estudos") return;
+      if (p.nova) novaRef.current();
+      else if (p.id && threadsRef.current.some((t) => t.id === p.id)) trocarRef.current(p.id);
+    };
+    atender(consumirPedido("estudos"));
+    const on = (e: Event) => { atender((e as CustomEvent<PedidoConversa>).detail); consumirPedido("estudos"); };
+    window.addEventListener(EVT_PEDIDO_CONVERSA, on);
+    return () => window.removeEventListener(EVT_PEDIDO_CONVERSA, on);
+  }, [threads.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renomearAba = useCallback((id: string, titulo: string) => {
     const lista = renomearThread(threadsRef.current, id, titulo);
@@ -939,8 +959,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             threads={threads}
             ativa={abaAtiva}
             ocupada={sending ? abaAtiva : null}
-            aoTrocar={trocarAba}
-            aoCriar={novaAba}
+            aoTrocar={(id) => { irProChat(); trocarAba(id); }}
+            aoCriar={() => { irProChat(); novaAba(); }}
             aoFechar={fecharAba}
             aoRenomear={renomearAba}
             aoCriarSub={(id) => novaSub(id)}
