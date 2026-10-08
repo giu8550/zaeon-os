@@ -50,6 +50,7 @@ const MUDANCA: Record<Exclude<EstadoSprite, "idle">, string> = {
   happy: "Change ONLY the facial expression: an overjoyed anime smile — both eyes closed into happy upward-curved arcs (^ ^), a wide open happy smile, light blush on the cheeks.",
   think: "Change ONLY the facial expression: thinking — eyes open and glancing up and to one side, eyebrows slightly raised, mouth a small closed pout pushed to one side. The head does not move.",
   confused: "Change ONLY the facial expression: confused and a little worried — eyebrows knit and tilted, eyes open, a small wavy uneven closed mouth, and a single small classic anime sweat drop on the side of the forehead.",
+  angry: "Change ONLY the facial expression: genuinely ANGRY and stern — eyebrows sharply furrowed and slanted down toward the center, eyes open and narrowed in a cold glare looking straight ahead, a firm tight frown, a small classic anime anger vein mark on the forehead. No tears, no blush.",
 };
 
 /** `ajuste` = o "ajustar prompt" do estúdio (ex.: "sorriso mais discreto"), somado à mudança. */
@@ -58,5 +59,6 @@ export function promptEdicao(estado: Exclude<EstadoSprite, "idle">, ajuste?: str
   return `Edit this exact image. ${MUDANCA[estado]}${extra ? ` Extra direction for this expression: ${extra}.` : ""} ${MANTER}`;
 }
 
-/** Ordem de geração: o essencial primeiro (se a cota acabar no meio, o card já vive). */
+/** Ordem de geração: o essencial primeiro (se a cota acabar no meio, o card já vive). `angry` fica de fora: é opcional
+ *  (gerado sob demanda: `npx tsx scripts/avatars/gerar.ts zaeon --estados angry`). */
 export const ORDEM_GERACAO: readonly Exclude<EstadoSprite, "idle">[] = ["blink", "talk", "smile", "happy", "think", "talk_half", "confused"];

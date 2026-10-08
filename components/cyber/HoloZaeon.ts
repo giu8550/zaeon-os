@@ -20,20 +20,24 @@ export type HoloZaeonHandle = {
   /** mexe a boca por `seg` segundos */
   falar(seg: number): void;
   sorrir(seg: number): void;
+  /** a cara de PENSANDO (esperando a IA responder) */
+  pensar(on: boolean): void;
+  /** BRAVA (a pessoa desrespeitou): a cara fechada, o holograma fica vermelho, treme e falha */
+  brava(): void;
   /** o ponto (local da ilha) logo acima da cabeça — onde o balão de fala fica */
   ancora(): THREE.Vector3;
   atualizar(dt: number, t: number, cam: THREE.Vector3): void;
   dispose(): void;
 };
 
-const ESTADOS = ["idle", "talk", "talk_half", "blink", "smile"] as const;
+const ESTADOS = ["idle", "talk", "talk_half", "blink", "smile", "think", "angry"] as const;
 type Estado = (typeof ESTADOS)[number];
 const TAM = 13, SUBIR = 2.6, DESCER = 1.8;
 const Y_FIM = GLOBO_CAPELA.y + GLOBO_CAPELA.r * 0.5 + TAM / 2;   // a parte de baixo do busto ainda dentro do globo
 
 const VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const FRAG = `
-  uniform sampler2D uMap; uniform float uT, uRevela, uAlpha, uGlitch, uTem;
+  uniform sampler2D uMap; uniform float uT, uRevela, uAlpha, uGlitch, uTem, uIra;
   varying vec2 vUv;
   float h(float n){ return fract(sin(n * 12.9898) * 43758.5453); }
   void main(){
@@ -50,6 +54,7 @@ const FRAG = `
     float scan = 0.8 + 0.2 * sin(uv.y * 420.0 - uT * 8.0);
     float pisca = 0.93 + 0.07 * sin(uT * 23.0) * sin(uT * 7.3);
     vec3 cor = mix(c, vec3(0.42, 0.95, 1.0) * (0.3 + lum * 1.1), 0.4) * scan * pisca;
+    cor = mix(cor, vec3(1.0, 0.18, 0.12) * (0.35 + lum * 1.2), uIra * 0.75);   // brava: o holograma fica vermelho
     cor += vec3(0.55, 1.0, 1.0) * linha * 1.6 + vec3(0.3, 0.9, 1.0) * faixa * 0.4;
     float a = (1.0 - fundo * 0.93) * masc * vis * (0.72 + 0.28 * scan) + linha * masc;
     gl_FragColor = vec4(cor, clamp(a, 0.0, 1.0) * uAlpha);
@@ -60,7 +65,7 @@ export function criarHoloZaeon(pai: THREE.Object3D, o: { low: boolean }): HoloZa
   const g = new THREE.Group(); g.visible = false; pai.add(g);
   const rosto = new THREE.Group(); g.add(rosto);
   const texs: Partial<Record<Estado, THREE.Texture>> = {}, loader = new THREE.TextureLoader();
-  const uni = { uMap: { value: null as THREE.Texture | null }, uT: { value: 0 }, uRevela: { value: 0 }, uAlpha: { value: 1 }, uGlitch: { value: 0 }, uTem: { value: 0 } };
+  const uni = { uMap: { value: null as THREE.Texture | null }, uT: { value: 0 }, uRevela: { value: 0 }, uAlpha: { value: 1 }, uGlitch: { value: 0 }, uTem: { value: 0 }, uIra: { value: 0 } };
   for (const e of ESTADOS) loader.load(`/avatars/zaeon/${e}.webp`, (tx) => { tx.colorSpace = THREE.SRGBColorSpace; texs[e] = tx; if (e === "idle" && !uni.uMap.value) { uni.uMap.value = tx; uni.uTem.value = 1; } });
   const mat = new THREE.ShaderMaterial({ uniforms: uni, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const plano = new THREE.Mesh(new THREE.PlaneGeometry(TAM, TAM), mat); rosto.add(plano);
@@ -77,7 +82,7 @@ export function criarHoloZaeon(pai: THREE.Object3D, o: { low: boolean }): HoloZa
   const pmat = new THREE.PointsMaterial({ map: tGlow, color: 0xaef6ff, size: 0.28, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
   const pts = new THREE.Points(pg, pmat); pts.frustumCulled = false; g.add(pts);
 
-  let fase: FaseHolo = "oculto", k = 0, falaAte = 0, sorriAte = 0, piscaEm = 3, troca = 0, agora = 0, estado: Estado = "idle";
+  let fase: FaseHolo = "oculto", k = 0, falaAte = 0, sorriAte = 0, piscaEm = 3, troca = 0, agora = 0, estado: Estado = "idle", pensando = false, ira = 0;
   const usar = (e: Estado) => { const tx = texs[e] ?? texs.idle; if (tx && uni.uMap.value !== tx) uni.uMap.value = tx; estado = e; };
   const s3 = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
   const anc = new THREE.Vector3(), wpos = new THREE.Vector3();
@@ -88,6 +93,8 @@ export function criarHoloZaeon(pai: THREE.Object3D, o: { low: boolean }): HoloZa
     sumir() { if (fase === "oculto" || fase === "descendo") return; fase = "descendo"; k = 0; },
     falar(seg) { falaAte = agora + seg; },
     sorrir(seg) { sorriAte = agora + seg; },
+    pensar(on) { pensando = on; },
+    brava() { ira = 1; falaAte = 0; sorriAte = 0; pensando = false; },
     ancora() { return anc.set(0, rosto.position.y + TAM * 0.36, 0); },
     atualizar(dt, t, cam) {
       agora = t; uni.uT.value = t;
@@ -100,10 +107,13 @@ export function criarHoloZaeon(pai: THREE.Object3D, o: { low: boolean }): HoloZa
       rosto.scale.setScalar(0.25 + 0.75 * sobe);
       const wp = g.getWorldPosition(wpos); rosto.rotation.y = Math.atan2(cam.x - wp.x, cam.z - wp.z);
       uni.uRevela.value = revela; uni.uAlpha.value = alfa;
-      uni.uGlitch.value = Math.sin(t * 0.7) > 0.93 || fase !== "visivel" ? 1 : 0;   // um glitch de vez em quando (e ao aparecer/sumir)
+      uni.uGlitch.value = Math.sin(t * 0.7) > 0.93 || fase !== "visivel" || ira > 0 ? 1 : 0;   // um glitch de vez em quando (e ao aparecer/sumir; brava, o tempo todo)
+      uni.uIra.value = ira; if (ira > 0) { rosto.position.x = (Math.random() - 0.5) * 0.35; rosto.position.z = (Math.random() - 0.5) * 0.2; }   // brava: treme
       // a boca: falando alterna talk/talk_half/idle; parada pisca; às vezes sorri
       troca -= dt;
-      if (t < falaAte) { if (troca <= 0) { troca = 0.08 + Math.random() * 0.08; const r = Math.random(); usar(r < 0.45 ? "talk" : r < 0.8 ? "talk_half" : "idle"); } }
+      if (ira > 0) usar("angry");   // BRAVA (public/avatars/zaeon/angry.webp)
+      else if (pensando) usar("think");
+      else if (t < falaAte) { if (troca <= 0) { troca = 0.08 + Math.random() * 0.08; const r = Math.random(); usar(r < 0.45 ? "talk" : r < 0.8 ? "talk_half" : "idle"); } }
       else if (t < sorriAte) usar("smile");
       else { piscaEm -= dt; if (piscaEm <= 0) { usar("blink"); if (piscaEm < -0.13) piscaEm = 2.5 + Math.random() * 3; } else if (estado !== "idle") usar("idle"); }
       // o feixe, o aro e as partículas

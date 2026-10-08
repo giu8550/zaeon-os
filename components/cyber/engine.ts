@@ -39,7 +39,8 @@ import { DROID } from "@/lib/cyber/agentes";
 import { NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
 import { criarDroid, type DroidHandle } from "./Droid";
 import { criarHoloZaeon, type HoloZaeonHandle } from "./HoloZaeon";
-import { ABERTURA, PERGUNTAS, fechamento, limparResposta, reacao, type PerfilZaeon, type PerguntaZaeon } from "@/lib/cyber/conversaZaeon";
+import { ABERTURA, FALA_EXPULSAO, PERGUNTAS, fallbackZaeon, fechamento, limparResposta, nomeDe, perguntaDoRoteiro, faltando, reacaoFixa, situacaoDe, type FalaConversa, type PedidoZaeon, type PerfilZaeon, type PerguntaZaeon, type TurnoZaeon } from "@/lib/cyber/conversaZaeon";
+import { moderar } from "@/lib/cyber/moderacao";
 import { criarPraca, type PracaHandle } from "./Praca";
 import { criarBercario, type BercarioHandle } from "./Bercario";
 import { criarSolanaHouse, type SolanaHouseHandle } from "./SolanaHouse";
@@ -109,6 +110,11 @@ export type CyberOpts = {
   onPergunta?: (p: (PerguntaZaeon & { n: number; total: number }) | null) => void;
   /** a conversa com a Zaeon acabou: o perfil (o React salva no servidor — User.cyberPerfil) */
   onPerfil?: (p: PerfilZaeon) => void;
+  /** um turno GERATIVO da conversa com a Zaeon (o React chama o servidor: app/api/lounge3d/[id]/zaeon); sem isto, o
+   *  roteiro local (lib/cyber/conversaZaeon `fallbackZaeon`) */
+  conversarZaeon?: (p: PedidoZaeon) => Promise<TurnoZaeon>;
+  /** a pessoa desrespeitou a Zaeon: o Droid EXPULSOU ela do cyberespaço (o React tira ela daqui) */
+  onExpulso?: () => void;
   /** um AGENTE falou (o Droid, no tutorial): o balão sai em cima dele e o React põe a fala no chat (só local) */
   onFalaAgente?: (f: { id: string; nome: string; cor: string; texto: string }) => void;
   /** clicou na nave estando perto → o React pede acesso ao servidor e chama `embarcar()` */
@@ -220,7 +226,12 @@ export class CyberEngine {
   private farol: THREE.Mesh | null = null;
   /** o rosto da Zaeon em holograma (sai do globo da capela no tutorial) e a CONVERSA com ela (as perguntas) */
   private holoZaeon: HoloZaeonHandle | null = null;
-  private conversa: { etapa: "abrindo" | "perguntando" | "esperando" | "reagindo" | "fechando" | "feita"; t: number; linha: number; i: number; perfil: PerfilZaeon } | null = null;
+  /** a CONVERSA: a etapa, o relógio, as perguntas fixas (`i`), o perfil, as falas, a parte gerativa (`ia`: a pergunta
+   *  pendente, as trocas e as fugas de assunto seguidas) e um número de série (resposta atrasada de outra conversa não vale) */
+  private conversa: { etapa: "abrindo" | "perguntando" | "esperando" | "pensando" | "reagindo" | "fechando" | "feita" | "brava"; t: number; linha: number; i: number; perfil: PerfilZaeon; historico: FalaConversa[]; ia: boolean; proxima: { fala: string; opcoes: string[] } | null; turno: number; foraSeguidas: number; serie: number } | null = null;
+  private serieConversa = 0;
+  /** EXPULSANDO (abuso): o relógio da cena — o Droid vem pra frente, fala e a pessoa é tirada daqui */
+  private expulsando: { t: number; falou: boolean } | null = null;
   private falaZaeon = { pos: new THREE.Vector3(), alt: 0 };
   /** dentro do TÚNEL de um buraco negro (escolhendo o destino): parado até o React responder */
   private tunel: TunelAberto | null = null;
@@ -763,7 +774,7 @@ export class CyberEngine {
   /** começa a conversa: o rosto sobe do globo; a câmera vira pro globo, de baixo, olhando pra cima */
   private abrirConversa() {
     if (!this.holoZaeon || this.conversa) return;
-    this.conversa = { etapa: "abrindo", t: 0, linha: 0, i: 0, perfil: {} };
+    this.conversa = { etapa: "abrindo", t: 0, linha: 0, i: 0, perfil: {}, historico: [], ia: false, proxima: null, turno: 0, foraSeguidas: 0, serie: ++this.serieConversa };
     this.holoZaeon.aparecer(); this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.perto });
     const d = this.droid; if (d) this.falas = this.falas.filter((f) => { if (f.ator === d.fala) { f.el.remove(); return false; } return true; });   // o Droid se cala: a vez é dela
     const c = CIDADE.centro; this.camAz = Math.atan2(this.eu.pos.x - c.x, this.eu.pos.z - c.z); this.camPitch = -0.36; this.camDist = 9; this.camSegueEm = 0;
@@ -773,15 +784,66 @@ export class CyberEngine {
     this.conversa = null; this.holoZaeon?.sumir();
     this.falas = this.falas.filter((f) => { if (f.ator === this.falaZaeon) { f.el.remove(); return false; } return true; });
   }
-  /** a resposta da pessoa (o painel do React): a Zaeon reage e segue pra próxima pergunta */
+  /** a resposta da pessoa (o painel do React ou o chat): as 2 perguntas FIXAS (nome, situação) são resolvidas aqui; o
+   *  resto vai pra IA (`conversarZaeon`) — ou pro roteiro local. Abuso óbvio já expulsa aqui, sem esperar a rede */
   responderZaeon(texto: string): boolean {
     const cv = this.conversa; if (!cv || cv.etapa !== "esperando") return false;
-    const r = limparResposta(texto), p = PERGUNTAS[cv.i]; if (!r || !p) return false;
-    cv.perfil[p.id] = r; this.o.onPergunta?.(null);
-    this.zaeonFala(reacao(p.id, r, cv.perfil), false); this.holoZaeon?.sorrir(2.4);
-    cv.etapa = "reagindo"; cv.t = 0; return true;
+    const r = limparResposta(texto); if (!r) return false;
+    this.o.onPergunta?.(null); cv.historico.push({ quem: "eu", texto: r });
+    if (moderar(r).abuso) { this.expulsar(); return true; }
+    if (!cv.ia) {
+      const p = PERGUNTAS[cv.i]!;
+      if (p.id === "nome") {
+        const n = nomeDe(r); if (!n) { this.perguntarDeNovo("Não peguei… como você quer que eu te chame?"); return true; }
+        cv.perfil.nome = n; this.zaeonFala(reacaoFixa("nome", r, cv.perfil), false); cv.historico.push({ quem: "zaeon", texto: reacaoFixa("nome", r, cv.perfil) });
+      } else {
+        cv.perfil.situacao = situacaoDe(r) ?? r;   // texto livre que não deu pra classificar: vai como a pessoa disse (a IA entende)
+        const re = reacaoFixa("situacao", r, cv.perfil); this.zaeonFala(re, false); cv.historico.push({ quem: "zaeon", texto: re });
+        const q = perguntaDoRoteiro(faltando(cv.perfil)[0] ?? "objetivo", cv.perfil); cv.ia = true; cv.proxima = q;
+      }
+      this.holoZaeon?.sorrir(2.4); cv.etapa = "reagindo"; cv.t = 0; return true;
+    }
+    // a parte GERATIVA: a Zaeon pensa (a cara de pensando) enquanto o servidor responde
+    cv.etapa = "pensando"; cv.t = 0; this.holoZaeon?.pensar(true);
+    const pedido: PedidoZaeon = { perfil: { ...cv.perfil }, historico: cv.historico.slice(-12), resposta: r, turno: cv.turno, foraSeguidas: cv.foraSeguidas }, serie = cv.serie;
+    const local = () => fallbackZaeon(pedido);
+    const espera = this.o.conversarZaeon ? Promise.race([this.o.conversarZaeon(pedido), new Promise<TurnoZaeon>((ok) => setTimeout(() => ok(local()), 12000))]).catch(local) : Promise.resolve(local());
+    void espera.then((t) => { if (this.conversa && this.conversa.serie === serie && this.conversa.etapa === "pensando") this.aplicarTurno(t); });
+    return true;
+  }
+  private perguntarDeNovo(fala: string) {
+    const cv = this.conversa; if (!cv) return;
+    const p = cv.ia ? { id: "ia", fala, tipo: "texto" as const, outro: true, opcoes: cv.proxima?.opcoes ?? [] } : { ...PERGUNTAS[cv.i]!, fala };
+    this.zaeonFala(fala, true); cv.historico.push({ quem: "zaeon", texto: fala });
+    this.o.onPergunta?.({ ...p, n: Math.min(cv.i + 1 + cv.turno, 6), total: 6 }); this.soltarMouse(); cv.etapa = "esperando";
+  }
+  /** o turno da IA (ou da reserva): abuso → expulsão; fora do assunto → ela pergunta de novo; ok → reage e segue/fecha */
+  private aplicarTurno(t: TurnoZaeon) {
+    const cv = this.conversa; if (!cv) return;
+    this.holoZaeon?.pensar(false);
+    if (t.classe === "abuso") { this.expulsar(); return; }
+    cv.perfil = { ...cv.perfil, ...t.perfil };
+    if (t.classe === "fora") cv.foraSeguidas++; else { cv.foraSeguidas = 0; cv.turno++; }
+    if (t.concluido) { this.zaeonFala(t.fala || "Perfeito!", false); cv.historico.push({ quem: "zaeon", texto: t.fala }); this.holoZaeon?.sorrir(2.6); cv.etapa = "fechando"; cv.linha = 0; cv.t = -1.5; this.o.onPerfil?.({ ...cv.perfil }); return; }
+    cv.proxima = { fala: t.fala, opcoes: t.opcoes };
+    if (t.classe === "ok") this.holoZaeon?.sorrir(1.6);
+    this.perguntarDeNovo(t.fala);
+  }
+  /** ABUSO: a Zaeon fica BRAVA; o Droid (em fúria) vem pra frente da pessoa e a expulsa do cyberespaço */
+  private expulsar() {
+    const cv = this.conversa; if (cv) { cv.etapa = "brava"; cv.t = 0; }
+    this.o.onPergunta?.(null); this.holoZaeon?.pensar(false); this.holoZaeon?.brava();
+    this.falas = this.falas.filter((f) => { if (f.ator === this.falaZaeon) { f.el.remove(); return false; } return true; });
+    this.droid?.h.furia(true); this.expulsando = { t: 0, falou: false };
+    this.guia = null;   // acabou o tutorial (sem avisar o "fim": não conta como visto — da próxima vez nasce no tubo de novo)
+    this.som.tocar("baque", this.eu.av.group.position, { dist: DISTANCIA.perto, volume: 1, taxa: 0.6 });
   }
   private atualizarConversa(dt: number) {
+    if (this.expulsando) {
+      const x = this.expulsando; x.t += dt;
+      if (!x.falou && x.t >= 1.6) { x.falou = true; const d = this.droid; if (d) { this.balao(d.fala, FALA_EXPULSAO, "#ff5a4a", Infinity); this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: "#ff5a4a", texto: FALA_EXPULSAO }); } }
+      if (x.t >= 7) { this.expulsando = null; this.o.onExpulso?.(); }
+    }
     const cv = this.conversa, h = this.holoZaeon; if (!cv || !h) return;
     if (h.fase() === "oculto" && cv.etapa !== "feita") { this.conversa = null; return; }
     const a = h.ancora(), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
@@ -789,19 +851,16 @@ export class CyberEngine {
     cv.t += dt;
     if (cv.etapa === "abrindo") {
       if (h.fase() !== "visivel") return;
-      if (cv.linha < ABERTURA.length && cv.t >= (cv.linha === 0 ? 0.3 : 3.4)) { this.zaeonFala(ABERTURA[cv.linha]!, false); cv.linha++; cv.t = 0; }
+      if (cv.linha < ABERTURA.length && cv.t >= (cv.linha === 0 ? 0.3 : 3.4)) { this.zaeonFala(ABERTURA[cv.linha]!, false); cv.historico.push({ quem: "zaeon", texto: ABERTURA[cv.linha]! }); cv.linha++; cv.t = 0; }
       else if (cv.linha >= ABERTURA.length && cv.t >= 3.2) { cv.etapa = "perguntando"; cv.t = 0; }
     } else if (cv.etapa === "perguntando") {
-      const p = PERGUNTAS[cv.i]!; this.zaeonFala(p.fala, true);
-      this.o.onPergunta?.({ ...p, n: cv.i + 1, total: PERGUNTAS.length }); this.soltarMouse();
-      cv.etapa = "esperando"; cv.t = 0;
-    } else if (cv.etapa === "reagindo" && cv.t >= 2.8) {
-      cv.i++; cv.t = 0;
-      if (cv.i < PERGUNTAS.length) cv.etapa = "perguntando";
-      else { cv.etapa = "fechando"; cv.linha = 0; this.o.onPerfil?.({ ...cv.perfil }); }
+      const p = PERGUNTAS[cv.i]!; this.perguntarDeNovo(p.fala);
+    } else if (cv.etapa === "reagindo" && cv.t >= 2.6) {
+      if (!cv.ia) { cv.i++; cv.etapa = "perguntando"; cv.t = 0; }
+      else this.perguntarDeNovo(cv.proxima!.fala);
     } else if (cv.etapa === "fechando") {
       const fim = fechamento(cv.perfil);
-      if (cv.linha < fim.length && cv.t >= (cv.linha === 0 ? 0.2 : 3.6)) { this.zaeonFala(fim[cv.linha]!, false); cv.linha++; cv.t = 0; }
+      if (cv.linha < fim.length && cv.t >= 3.4) { this.zaeonFala(fim[cv.linha]!, false); cv.linha++; cv.t = 0; }
       else if (cv.linha >= fim.length && cv.t >= 3.4) { h.sumir(); cv.etapa = "feita"; }
     }
   }
@@ -848,16 +907,16 @@ export class CyberEngine {
   private atualizarAgentes(dt: number, t: number) {
     const d = this.droid; if (!d) return;
     const eu = this.eu, fase = d.h.fase(), passo = this.guia ? ROTEIRO[this.guia.passo] : undefined;
-    const quer = !!this.guia && !this.nascendo && !this.menu && passo?.cond.tipo !== "nascer";
+    const quer = (!!this.guia && !this.nascendo && !this.menu && passo?.cond.tipo !== "nascer") || !!this.expulsando;
     // pra onde ele vai: do lado da pessoa — ou, num passo "vem comigo até…", ELE VAI: voa rumo ao alvo e, se a pessoa
     // ficar pra trás, para e espera por ela (virado pra ela)
-    const a = passo?.alvo, altAlvo = eu.alt + 2.3;
-    const lidera = !!a && this.naZaeon && !this.tunel;   // "vem comigo até…": ele VAI até lá e espera lá
+    const a = passo?.alvo, altAlvo = eu.alt + (this.expulsando ? 5 : 2.3);   // expulsando: no meio da tela, encarando
+    const lidera = !!a && this.naZaeon && !this.tunel && !this.expulsando;   // "vem comigo até…": ele VAI até lá e espera lá
     // NA FRENTE da pessoa, no campo de visão (a câmera olha por cima do ombro): ~5 m à frente, um pouco de lado pra não
     // tapar o personagem — é ali que ele nasce do portal, de frente pros nossos olhos
     const vx0 = -Math.sin(this.camAz), vz0 = -Math.cos(this.camAz);
-    const deLado = passo?.cond.tipo === "conversa";   // com a Zaeon falando, ele sai da frente (fica do lado)
-    const alvo = deLado ? { x: eu.pos.x + vx0 * 1.5 - vz0 * 4.2, z: eu.pos.z + vz0 * 1.5 + vx0 * 4.2 } : { x: eu.pos.x + vx0 * 5.2 - vz0 * 1.2, z: eu.pos.z + vz0 * 5.2 + vx0 * 1.2 };
+    const deLado = passo?.cond.tipo === "conversa" && !this.expulsando;   // com a Zaeon falando, ele sai da frente (fica do lado)
+    const alvo = this.expulsando ? { x: eu.pos.x + vx0 * 6, z: eu.pos.z + vz0 * 6 } : deLado ? { x: eu.pos.x + vx0 * 1.5 - vz0 * 4.2, z: eu.pos.z + vz0 * 1.5 + vx0 * 4.2 } : { x: eu.pos.x + vx0 * 5.2 - vz0 * 1.2, z: eu.pos.z + vz0 * 5.2 + vx0 * 1.2 };
     if (quer && fase === "oculto") { d.pos.set(alvo.x, 0, alvo.z); d.alt = altAlvo; d.h.aparecer(); this.som.tocar(this.som.temSom("cyber-enter") ? "cyber-enter" : "rise", d.h.group.position, { dist: DISTANCIA.perto }); this.som.tocar("rise", d.h.group.position, { dist: DISTANCIA.perto }); }
     else if (!quer && (fase === "visivel" || fase === "entrando") && !this.guia) d.h.sumir();
     else if (fase === "visivel") {
@@ -1474,7 +1533,7 @@ export class CyberEngine {
       return null;
     }
     if (this.moto !== null) return this.desceDaMotoAqui() ? { id: "descer-moto", rotulo: "Descer da moto", fazer: () => this.desmontar() } : null;
-    if (this.jet.noAr || this.nascendo || this.tunel) return null;
+    if (this.jet.noAr || this.nascendo || this.tunel || this.expulsando) return null;
     const el = this.plat ? elevadorAqui(this.plat.id, this.plat.andar, this.eu.pos) : null;
     if (el && this.plat) { const pl = this.plat; return { id: `elevador-${pl.andar}`, rotulo: el.rotulo, fazer: () => { pl.andar = el.proximo; this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.eu }); } }; }
     const estudar = { id: "estudar", rotulo: "Estudar", fazer: () => this.o.onEntrarEstudo?.() };

@@ -16,6 +16,7 @@ import { LAB_ENTRADA } from "@/lib/ui/loungeHub";
 import { avisoRealtime } from "@/lib/lounge3d/realtimeEstado";
 import { useResolverSala } from "@/components/lounge/useResolverSala";
 import { useSala3D } from "@/components/lounge/useSala3D";
+import type { PedidoZaeon, TurnoZaeon } from "@/lib/cyber/conversaZaeon";
 import CenaCyber from "./CenaCyber";
 import type { PessoaCyber } from "./engine";
 
@@ -85,6 +86,13 @@ function Tela() {
 
   // a 1ª entrada no cyberespaço (nasceu no tubo de ensaio): o servidor marca — da próxima vez nasce na base
   const marcarNascimento = useCallback(() => { if (salaId) void fetch(`/api/lounge3d/${salaId}/nasceu`, { method: "POST" }).catch(() => {}); }, [salaId]);
+  // um turno GERATIVO da conversa com a Zaeon (o harness do laboratório, no servidor); erro → o engine usa o roteiro local
+  const conversarZaeon = useCallback(async (pedido: PedidoZaeon): Promise<TurnoZaeon> => {
+    if (!salaId) throw new Error("sem sala");
+    const r = await fetch(`/api/lounge3d/${salaId}/zaeon`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pedido) });
+    if (!r.ok) throw new Error(`zaeon ${r.status}`);
+    return (await r.json()) as TurnoZaeon;
+  }, [salaId]);
   // o que a pessoa contou pra Zaeon na capela: o servidor guarda (User.cyberPerfil)
   const salvarPerfil = useCallback((perfil: Record<string, string>) => { if (salaId) void fetch(`/api/lounge3d/${salaId}/perfil`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ perfil }) }).catch(() => {}); }, [salaId]);
 
@@ -104,7 +112,7 @@ function Tela() {
       remotos={sala.remotos} enviarPos={sala.enviarPos} chat={sala.chat} enviarChat={sala.enviarChat}
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
       souFundador={euSala.fundador === true} pedirAcesso={pedirAcesso}
-      novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil}
+      novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
       naveQG={sala.naveQG} salvarNave={sala.salvarNave}
