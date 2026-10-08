@@ -1,6 +1,7 @@
 /**
  * /api/profile — perfil editável pelo próprio usuário.
- *   GET   → dados do usuário + o perfil de QUEM o convidou (referredBy).
+ *   GET   → dados do usuário + o perfil de QUEM o convidou (referredBy) + `fundador` (o dono da Zaeon — a MESMA regra
+ *           do cyberespaço, lib/lounge3d/server `eu()`: isSuperAdmin pela sessão; só o booleano sai daqui).
  *   PATCH → atualiza nome e curso. MUDAR DE CURSO exige re-verificação:
  *           volta kycStatus="pending" + eduVerified=false (e guarda o novo comprovante).
  */
@@ -11,6 +12,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
+import { isSuperAdmin } from "@/lib/auth/roles";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -18,7 +20,7 @@ export async function GET() {
 
   const u = await prisma.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, name: true, course: true, image: true, kycStatus: true, eduVerified: true, plan: true, academicLevel: true, referredBy: true },
+    select: { id: true, name: true, course: true, image: true, kycStatus: true, eduVerified: true, plan: true, academicLevel: true, referredBy: true, role: true },
   });
   if (!u) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -42,6 +44,7 @@ export async function GET() {
     plan: u.plan || "free",
     academicLevel: u.academicLevel || "Graduação",
     inviter,
+    fundador: isSuperAdmin({ email: session.user.email, role: u.role }),
   });
 }
 
