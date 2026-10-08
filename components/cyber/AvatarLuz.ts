@@ -77,8 +77,9 @@ export type AvatarLuzHandle = {
   aura(on: boolean): void;
   /** troca o corpo pelo de um VRM (components/cyber/AvatarVrm) — o esqueleto do GLB continua animando por baixo */
   usarVrm(vrm: VRM): void;
-  /** ASAS NEGRAS no lugar da mochila a jato (components/cyber/AsasAnjo) — o voo é o mesmo */
-  usarAsas(): void;
+  /** ASAS NEGRAS no lugar da mochila a jato (components/cyber/AsasAnjo) — o voo é o mesmo. `escala` < 1 encolhe
+   *  (a vitrine do Perfil: abertas, elas têm ~3 m de envergadura) */
+  usarAsas(o?: { escala?: number }): void;
   /** o que as asas fizeram desde a última chamada (o engine toca os sons); null = sem asas */
   eventosAsas(): { bateu: number; abriu: boolean; fechou: boolean; modo: ModoAsas } | null;
   dispose(): void;
@@ -89,12 +90,13 @@ const SENTA_Y = 0.45;
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const achar = (clips: THREE.AnimationClip[], re: RegExp) => clips.find((c) => re.test(c.name)) ?? clips[0];
 
-export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low: boolean, gltf: GLTF | null): AvatarLuzHandle {
+/** `o.anime` força o estilo (a vitrine do Perfil é sempre DESENHADA, independente da flag do cyberespaço) */
+export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low: boolean, gltf: GLTF | null, o: { anime?: boolean } = {}): AvatarLuzHandle {
   const armadura = new THREE.Color(armaduraHex), luz = new THREE.Color(COR_LUZ), parado = reducedMotion();
   const grupo = new THREE.Group();
   const corpo = new THREE.Group(); grupo.add(corpo);   // sentar: inclina/abaixa o corpo; o grupo guarda posição/yaw
   const meshes: THREE.Object3D[] = [];
-  const anime = desenhado();
+  const anime = o.anime ?? desenhado();
   const matArmadura: THREE.MeshStandardMaterial | THREE.MeshToonMaterial = anime ? materialToon(armadura, luz) : new THREE.MeshStandardMaterial({ color: armadura.clone().multiplyScalar(0.5), emissive: armadura, emissiveIntensity: 0.65, roughness: 0.4, metalness: 0.35 });
   const matTinta = anime ? materialTinta() : null;   // o contorno de tinta do desenho
   const matViseira = new THREE.MeshBasicMaterial({ color: luz });                       // a "luz" do rosto
@@ -538,9 +540,9 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     passosNovos() { if (!pernas.length) return null; const n = pisadas; pisadas = 0; return n; },
     olharPara(f) { alvo = f + Math.PI; },
     aura(on) { for (const c of aurasMalha) c.visible = on && !espelho; },
-    usarAsas() {
+    usarAsas(op) {
       if (asas) return;
-      asas = criarAsas(); corpo.add(asas.group); mochila.visible = false;
+      asas = criarAsas(); asas.group.scale.setScalar(op?.escala ?? 1); corpo.add(asas.group); mochila.visible = false;
     },
     eventosAsas() {
       if (!asas) return null;
