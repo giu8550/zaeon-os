@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, ESCADAS, bocaDeEscada, chaoDaNave, colisoresDaCidade, foraDaIlha, mundo, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, naTorreDJ, foraDaTorreDJ, CAMPO_DJ, BN_NA_SALA, TRELICA, type NomeSala } from "./ceu";
+import { BURACO_NEGRO, CIDADE, ESCADAS, FIO, alturaDoFio, bocaDeEscada, chaoDaNave, colisoresDaCidade, foraDaIlha, mundo, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, naTorreDJ, foraDaTorreDJ, CAMPO_DJ, BN_NA_SALA, TRELICA, type NomeSala } from "./ceu";
 import { NOS, noDoAnel } from "./buracos";
 import { PRACA } from "./praca";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, baseNoCeu, spawnDaBase } from "./bases";
@@ -115,59 +115,58 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
     expect(ALTURA_LOUNGE).toBe(Math.round(inicioDaPonta()));
     expect(ALTURA_LOUNGE).toBeGreaterThan(50);
     expect(Math.abs(Math.atan2(L.z, L.x) - LOUNGE_ANGULO)).toBeLessThan(1e-6);
-    expect(Object.keys(CIDADE.salas)).toEqual(["lounge", "convivencia", "biblioteca", "jardim"]);
+    expect(Object.keys(CIDADE.salas)).toEqual(["lounge", "garagem", "biblioteca", "jardim"]);
   });
   it("as 4 SALAS: mesma altura e distância, em leque a cada 60°, longe da doca da nave, cada uma com a SUA escada", () => {
     const nomes = Object.keys(CIDADE.salas) as NomeSala[], d0 = Math.hypot(L.x, L.z);
     for (const n of nomes) {
       const s = CIDADE.salas[n], e = ESCADAS[n], a = Math.atan2(s.z, s.x);
-      expect(s.y).toBe(ALTURA_LOUNGE); expect(Math.hypot(s.x, s.z)).toBeCloseTo(d0, 6);
+      expect(s.y).toBe(ALTURA_LOUNGE); expect(Math.hypot(s.x, s.z) - s.r).toBeCloseTo(d0 - L.r, 6);   // a porta de todas à mesma distância (a garagem é maior)
       let dd = Math.abs(a - DOCA_ANGULO); dd = Math.min(dd, 2 * Math.PI - dd); expect(dd).toBeGreaterThan(DOCA_MEIA_ABERTURA + 0.3);
       expect(e.len).toBeCloseTo(ESCADA_LOUNGE.len, 6);
       const topo = pontoDaEscada(e.len, n), sala = mundo(s); expect(Math.hypot(topo.x - sala.x, topo.z - sala.z)).toBeCloseTo(s.r - 1.5, 4);   // a escada chega na porta
-      expect(alturaNaCidade(pontoDaEscada(e.len / 2, n))).toBeCloseTo(ALTURA_LOUNGE / 2, 1);
+      expect(alturaNaCidade(pontoDaEscada(e.len / 2, n))).toBe(0);   // o corredor do FIO não é piso (vai-se pendurado)
+      expect(naIlhaPrincipal(pontoDaEscada(e.len / 2, n))).toBe(false);
+      const meio = posDaViagem("escada", "sobe", 0.5, n); expect(meio.y).toBeGreaterThan(ALTURA_LOUNGE * 0.3); expect(meio.y).toBeLessThan(ALTURA_LOUNGE * 0.7);   // pendurado no fio, a meio caminho
+      expect(alturaDoFio(e, 0)).toBeCloseTo(FIO.alturaFio, 6); expect(alturaDoFio(e, e.len)).toBeCloseTo(ALTURA_LOUNGE + FIO.alturaFio, 6);
       expect(alturaNaCidade(sala)).toBe(ALTURA_LOUNGE);
       expect(bocaDeEscada(pontoDaEscada(0.5, n))).toEqual({ sala: n, sentido: "sobe" });
       expect(posDaViagem("escada", "sobe", 1, n).y).toBeCloseTo(ALTURA_LOUNGE, 6);
     }
     for (let i = 0; i < nomes.length; i++) for (let j = i + 1; j < nomes.length; j++) { const a = CIDADE.salas[nomes[i]!], b = CIDADE.salas[nomes[j]!]; expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(a.r + b.r + 20); }
-    expect(MOVEIS.convivencia.some((m) => m.tipo === "pista" || m.tipo === "palco" || m.tipo === "torreDJ" || m.tipo === "trelica")).toBe(false);   // nada de festa
-    for (const n of nomes.filter((x) => x !== "lounge")) { expect(MOVEIS[n].filter((m) => m.tipo === "caixaMinimal").length).toBeGreaterThanOrEqual(4); expect(MOVEIS[n].some((m) => m.tipo === "pufe")).toBe(true); expect(MOVEIS[n].some((m) => m.tipo === "sofa")).toBe(true); }
+    for (const n of ["garagem", "biblioteca", "jardim"] as const) expect(MOVEIS[n].some((m) => m.tipo === "pista" || m.tipo === "palco" || m.tipo === "torreDJ" || m.tipo === "trelica")).toBe(false);   // nada de festa
+    expect(CIDADE.salas.garagem.r).toBeGreaterThan(CIDADE.salas.lounge.r + 15);   // a ALA DOS VEÍCULOS é maior
+    expect(FIO.max).toBe(4);
+    for (const n of ["biblioteca", "jardim"] as const) { expect(MOVEIS[n].filter((m) => m.tipo === "caixaMinimal").length).toBeGreaterThanOrEqual(4); expect(MOVEIS[n].some((m) => m.tipo === "pufe")).toBe(true); expect(MOVEIS[n].some((m) => m.tipo === "sofa")).toBe(true); }
   });
-  it("a ESCADA: rampa do piso central (0) até o lounge (ALTURA_LOUNGE), com inclinação de escada de verdade", () => {
+  it("o FIO DE ENERGIA: do poste na borda da central até a porta da sala, com inclinação de escada e uma barriga leve", () => {
     const e = ESCADA_LOUNGE;
-    expect(e.ini).toBeLessThan(CIDADE.andavelR);                     // o pé fica no piso andável
-    expect(alturaNaCidade(naEscada(0.01))).toBeCloseTo(0, 1);
-    expect(alturaNaCidade(naEscada(e.len / 2))).toBeCloseTo(ALTURA_LOUNGE / 2, 5);
-    expect(alturaNaCidade(naEscada(e.len - 0.01))).toBeCloseTo(ALTURA_LOUNGE, 1);
+    expect(e.ini).toBeLessThan(CIDADE.andavelR);                     // a boca fica no piso andável
     expect(ALTURA_LOUNGE / e.len).toBeGreaterThan(0.5); expect(ALTURA_LOUNGE / e.len).toBeLessThan(0.8);
+    expect(alturaDoFio(e, e.len / 2)).toBeCloseTo(ALTURA_LOUNGE / 2 + FIO.alturaFio - FIO.flecha, 6);   // a barriga no meio
     expect(naEscadaLocal({ x: e.dir.x * (e.ini + 7), z: 2 }).u).toBeCloseTo(7, 6);
-    // o topo da escada encosta na porta do lounge (o +z da sala)
     const porta = mundo(daSala(L, 0, L.r - 0.5)); expect(alturaNaCidade(porta)).toBe(ALTURA_LOUNGE);
   });
-  it("corrimão: dos dois lados, do pé ao topo — só se entra pelo pé (ninguém sobe pela lateral nem passa por baixo)", () => {
-    const cs = colisoresDaCidade(), e = ESCADA_LOUNGE;
-    for (const u of [0.5, 10, e.len / 2, e.len - 1]) {
-      expect(dentroDeAlgum(naEscada(u, 0), cs)).toBe(false);                    // o meio é livre
-      for (const sl of [-1, 1]) expect(dentroDeAlgum(naEscada(u, sl * (e.meia + e.colR)), cs)).toBe(true);   // o corrimão é sólido
+  it("o fio PUXA: pisou na boca, vai pendurado (os pés sempre abaixo do cabo) até a sala; e de volta", () => {
+    const e = ESCADA_LOUNGE;
+    expect(bocaDaEscada(naEscada(0.5))).toBe("sobe"); expect(bocaDaEscada(naEscada(e.len - 0.5))).toBe("desce");
+    let yAnt = -1;
+    for (let k = 0; k <= 1.0001; k += 0.02) {
+      const v = posDaViagem("escada", "sobe", k), u = naEscadaLocal({ x: v.p.x - CIDADE.centro.x, z: v.p.z - CIDADE.centro.z }).u;
+      expect(v.y).toBeGreaterThanOrEqual(yAnt - 0.05); yAnt = v.y;   // só sobe (a barriga é leve)
+      if (u > 0 && u < e.len) expect(alturaDoFio(e, u) - v.y).toBeGreaterThan(2.2);   // o cabo passa por cima da cabeça (na alça)
     }
-    // andando escada acima (sempre pra −x, com a colisão), chega no lounge e a altura só sobe
-    let p = naEscada(-2), hAnt = -1;
-    for (let k = 0; k < 2400; k++) { p = resolverCidadeLivre({ x: p.x - 0.12, z: p.z + (k % 2 ? 0.08 : -0.08) }); const h = alturaNaCidade(p); expect(h).toBeGreaterThanOrEqual(hAnt - 1e-9); hAnt = h; }
-    expect(hAnt).toBeGreaterThanOrEqual(ALTURA_LOUNGE);
-    expect(naIlhaPrincipal(p)).toBe(true);
+    expect(posDaViagem("escada", "sobe", 0).y).toBeCloseTo(0, 6); expect(posDaViagem("escada", "sobe", 1).y).toBeCloseTo(ALTURA_LOUNGE, 6);
+    expect(posDaViagem("escada", "desce", 1).y).toBeCloseTo(0, 6);
   });
-  it("cair: do lado da escada (fora da central) não há piso; a escada e o lounge são piso; por baixo deles, quem voa passa", () => {
-    const e = ESCADA_LOUNGE, meio = e.len * 0.7, aoLado = naEscada(meio, e.meia + 6);
-    expect(naIlhaPrincipal(aoLado)).toBe(false);
-    expect(naIlhaPrincipal(naEscada(meio))).toBe(true);
+  it("sem corrimão nem piso no corredor: passou da borda ali, cai (só se atravessa pendurado no fio); a sala é piso", () => {
+    const cs = colisoresDaCidade(), e = ESCADA_LOUNGE, meio = e.len * 0.7;
+    for (const u of [10, e.len / 2]) for (const sl of [-1, 1]) expect(dentroDeAlgum(naEscada(u, sl * (e.meia + e.colR)), cs)).toBe(false);
+    expect(naIlhaPrincipal(naEscada(meio))).toBe(false); expect(alturaNaCidade(naEscada(meio))).toBe(0);
+    expect(pisoNoAr(naEscada(meio), 40)).toBeNull();            // voando por cima do fio: não há piso, cai
     expect(naIlhaPrincipal(mundo({ x: L.x + 10, z: L.z }))).toBe(true);
-    const h = alturaNaCidade(naEscada(meio));
-    expect(pisoNoAr(naEscada(meio), h + 3)).toBeCloseTo(h, 6);    // vindo de cima: pousa na escada
-    expect(pisoNoAr(naEscada(meio), h - 10)).toBeNull();          // por baixo (fora da central): não há piso, cai
-    expect(pisoNoAr(naEscada(3), 0.5)).toBe(0);                   // por baixo do pé (ainda na central): o piso central
+    expect(pisoNoAr(naEscada(3), 0.5)).toBe(0);                 // a boca (ainda na central): o piso central
     expect(pisoNoAr(mundo({ x: 30, z: 0 }), 5)).toBe(0);
-    // clicar pra andar não te prende na borda central quando você está na escada ou no lounge
     const noLounge = mundo({ x: L.x, z: L.z + 5 }); expect(resolverCidade(noLounge)).toEqual(noLounge);
   });
   it("BUG do pulo no lounge: com o teto contado do piso de onde se voa, quem pula lá em cima NÃO cai da plataforma", () => {
@@ -295,7 +294,7 @@ describe("todo ponto de NASCIMENTO / reaparecer na Zaeon continua valendo (chão
     expect(alturaNaCidade(w)).toBe(0);   // no piso da central (não na escada nem no lounge)
     expect(Math.hypot(w.x - CIDADE.centro.x, w.z - CIDADE.centro.z) + folga).toBeLessThan(CIDADE.andavelR);
     expect(cs.some((c) => Math.hypot(w.x - c.x, w.z - c.z) < c.r + folga)).toBe(false);
-    expect(Math.abs(naEscadaLocal({ x: w.x - CIDADE.centro.x, z: w.z - CIDADE.centro.z }).lat) > ESCADA_LOUNGE.meia + 4 || naEscadaLocal({ x: w.x - CIDADE.centro.x, z: w.z - CIDADE.centro.z }).u < -4).toBe(true);
+    for (const e of Object.values(ESCADAS)) { const q = naEscadaLocal({ x: w.x - CIDADE.centro.x, z: w.z - CIDADE.centro.z }, e); expect(Math.abs(q.lat) > e.meia + 4 || q.u < -4).toBe(true); }   // longe das bocas dos fios
   };
   it("a chegada (pelo túnel), o anel do buraco negro e um pátio", () => {
     for (const l of [CIDADE.chegada, PATIO]) firme(mundo(l), 1);
@@ -315,8 +314,7 @@ describe("todo ponto de NASCIMENTO / reaparecer na Zaeon continua valendo (chão
       firme(spawnDaBase(baseNoCeu(i)));
     });
   });
-  it("as vagas das motos na Zaeon e o fim da rampa da nave atracada", () => {
-    for (const v of vagas().filter((x) => x.ceu)) firme(v, 1.2);
+  it("o fim da rampa da nave atracada (as motos foram pra GARAGEM)", () => {
     firme(paraMundo(poseDaDoca(), NAVE_QG.saida));
   });
 });
@@ -372,7 +370,11 @@ describe("MOTO na Zaeon mega (voo com os sólidos da cidade)", () => {
     const s2 = voar({ ...ini, y: pisoLounge + 3, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: lx / n, wz: lz / n, subir: false, descer: false }, 3);
     expect(Math.hypot(s2.x - t.x, s2.z - t.z)).toBeGreaterThanOrEqual(TORRE_DJ.r - 1e-6);
   });
-  it("as vagas de moto da Zaeon ficam fora dos sólidos (dá pra decolar)", () => {
-    for (const v of vagas().filter((q) => q.ceu)) for (const s of solidosDaCidade()) expect(Math.hypot(v.x - s.x, v.z - s.z)).toBeGreaterThan(s.r + 2);
+  it("as vagas de moto da GARAGEM ficam em cima da laje dela e longe dos outros sólidos (dá pra decolar)", () => {
+    const g = mundo(CIDADE.salas.garagem);
+    for (const v of vagas().filter((q) => q.ceu)) for (const s of solidosDaCidade()) {
+      if (Math.hypot(s.x - g.x, s.z - g.z) < 1e-6) { expect(Math.hypot(v.x - s.x, v.z - s.z)).toBeLessThan(s.r - 4); expect(v.alt).toBeGreaterThan(s.topo - CIDADE.pisoY - 0.01); }
+      else expect(Math.hypot(v.x - s.x, v.z - s.z)).toBeGreaterThan(s.r + 2);
+    }
   });
 });

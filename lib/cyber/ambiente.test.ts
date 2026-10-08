@@ -4,7 +4,7 @@ import { SINTESE, SONS } from "./audio";
 
 describe("a música ambiente dos espaços de convivência", () => {
   const SR = 8000;
-  for (const sala of ["convivencia", "biblioteca", "jardim"] as SalaAmbiente[]) it(`${sala}: loop sem emenda, determinística, com som e sem estourar`, () => {
+  for (const sala of ["biblioteca", "jardim"] as SalaAmbiente[]) it(`${sala}: loop sem emenda, determinística, com som e sem estourar`, () => {
     const a = sintetizarAmbiente(sala, SR);
     expect(a.length).toBe(SR * DUR_AMBIENTE);
     expect(sintetizarAmbiente(sala, SR)).toEqual(a);

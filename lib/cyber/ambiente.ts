@@ -3,11 +3,10 @@
  * minimalista, SINTETIZADA no navegador (sem arquivo) e tocada em loop pelas caixas de som discretas dela
  * (components/cyber/Salas `caixaMinimal`). Afinação 432 Hz, como o resto do cyberespaço. O loop é SEM EMENDA: as
  * frequências caem em múltiplos de 1/DUR (ciclos inteiros no loop) e o que tem ruído é cruzado no fim → começo.
- *  - CONVIVÊNCIA: acordes quentes (maj7/m7) num piano elétrico suave com tremolo lento;
  *  - BIBLIOTECA: um pad alto e calmo + sininhos esparsos (pentatônica) + uma chuvinha bem baixa lá fora;
  *  - JARDIM: quintas abertas no ar + água correndo e gotas.
  */
-export type SalaAmbiente = "convivencia" | "biblioteca" | "jardim";
+export type SalaAmbiente = "biblioteca" | "jardim";
 /** duração do loop (s) */
 export const DUR_AMBIENTE = 16;
 
@@ -63,10 +62,7 @@ function normalizar(out: Float32Array, pico: number) {
 /** a trilha ambiente da sala (mono, `sr` Hz, DUR_AMBIENTE s) */
 export function sintetizarAmbiente(sala: SalaAmbiente, sr: number): Float32Array {
   const out = new Float32Array(Math.round(sr * DUR_AMBIENTE));
-  if (sala === "convivencia") {
-    // Ré maj7 → Si m7 → Sol maj7 → Lá 6sus (calor de sala de estar), região média-grave
-    pad(out, sr, [[-7, -3, 0, 4], [-10, -7, -3, 0], [-14, -10, -7, -3], [-12, -7, -5, -3]], { ganho: 0.18, tremolo: 0.25, brilho: 0.18 });
-  } else if (sala === "biblioteca") {
+  if (sala === "biblioteca") {
     pad(out, sr, [[0, 7, 12], [-2, 5, 10], [3, 7, 15], [-4, 3, 8]], { ganho: 0.1, brilho: 0.35 });
     const r = prng(7), penta = [12, 14, 17, 19, 21, 24];
     for (let k = 0; k < 6; k++) sino(out, sr, k * (DUR_AMBIENTE / 6) + r() * 1.2, penta[Math.floor(r() * penta.length)]!, 0.22);

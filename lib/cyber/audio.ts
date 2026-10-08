@@ -10,6 +10,7 @@ import { SINTESE_MOTO, type NomeSomMoto } from "./somMoto";
 import { SINTESE_ASAS, type NomeSomAsas } from "./asas";
 import { sintetizarBatida, sintetizarRaio } from "./coracao";
 import { sintetizarAmbiente } from "./ambiente";
+import { sintetizarPuxaFio, sintetizarZumbidoFio } from "./somFio";
 
 export const PASTA_SONS = "/assets/sounds/cyber/";
 
@@ -18,7 +19,7 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
   | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien"
-  | NomeSomMoto | NomeSomAsas | "coracao" | "raio" | "ambiente-convivencia" | "ambiente-biblioteca" | "ambiente-jardim";
+  | NomeSomMoto | NomeSomAsas | "coracao" | "raio" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -54,8 +55,10 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   coracao: { modo: "pos", loop: false, volume: 0.55, sintetico: true },
   raio: { modo: "pos", loop: false, volume: 0.8, sintetico: true },
   // a MÚSICA AMBIENTE dos espaços de convivência (lib/cyber/ambiente, sintetizada): sai das caixas de som de cada sala
-  "ambiente-convivencia": { modo: "pos", loop: true, volume: 0.42, sintetico: true },
   "ambiente-biblioteca": { modo: "pos", loop: true, volume: 0.36, sintetico: true },
+  // os FIOS DE ENERGIA (lib/cyber/somFio, sintetizados): o zumbido do cabo nos postes e o assobio de quem é puxado
+  "fio-zumbido": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
+  "fio-puxa": { modo: "pos", loop: true, volume: 0.6, sintetico: true },
   "ambiente-jardim": { modo: "pos", loop: true, volume: 0.4, sintetico: true },
   "asa-abrir": { modo: "pos", loop: false, volume: 0.6, sintetico: true },
   "asa-fechar": { modo: "pos", loop: false, volume: 0.5, sintetico: true },
@@ -128,13 +131,14 @@ export function sintetizarBaque(sr: number): Float32Array {
   return normalizar(out, 0.92);
 }
 export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_ASAS, coracao: sintetizarBatida, raio: sintetizarRaio,
-  "ambiente-convivencia": (sr) => sintetizarAmbiente("convivencia", sr), "ambiente-biblioteca": (sr) => sintetizarAmbiente("biblioteca", sr), "ambiente-jardim": (sr) => sintetizarAmbiente("jardim", sr) };
+  "ambiente-biblioteca": (sr) => sintetizarAmbiente("biblioteca", sr), "ambiente-jardim": (sr) => sintetizarAmbiente("jardim", sr),
+  "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio };
 
 /** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo).
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
  *  quem precisa SUMIR de verdade usa `modelo: "linear"` (ganho chega a 0 no `max`). */
 export type Dist = { ref: number; max: number; rolloff: number; modelo?: "inverse" | "linear" };
-export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica" | "holograma" | "coracao" | "raio" | "ambiente", Dist> = {
+export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica" | "holograma" | "coracao" | "raio" | "ambiente" | "fio", Dist> = {
   padrao: { ref: 6, max: 60, rolloff: 1.2 },
   perto: { ref: 2.5, max: 22, rolloff: 1.4 },       // passos/pulo dos COLEGAS (coisas pequenas)
   eu: { ref: 12, max: 60, rolloff: 1 },             // os MEUS passos/pulo: a câmera (o ouvinte) fica ~8–10 m atrás do avatar
@@ -146,7 +150,8 @@ export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | 
   holograma: { ref: 14, max: 120, rolloff: 0.7 },  // a VOZ DA ZAEON saindo do rosto de ~13 m: cheia em volta do globo (a pessoa fica a ~9 m), ainda se ouve da borda da capela
   coracao: { ref: 10, max: 70, rolloff: 1, modelo: "linear" },     // a batida do coração: sentida no pátio da capela, some longe
   raio: { ref: 60, max: 900, rolloff: 0.6 },
-  ambiente: { ref: 12, max: 58, rolloff: 1, modelo: "linear" },   // a música das salas: cheia na sala toda (4 caixas), some fora dela                         // o raio no topo da capela: ouve-se da cidade toda (e de longe)
+  ambiente: { ref: 12, max: 58, rolloff: 1, modelo: "linear" },
+  fio: { ref: 4, max: 32, rolloff: 1, modelo: "linear" },          // o zumbido do fio e o assobio de quem vai nele: só perto   // a música das salas: cheia na sala toda (4 caixas), some fora dela                         // o raio no topo da capela: ouve-se da cidade toda (e de longe)
 };
 
 /** cristais da base: só se ouvem com o AVATAR perto dela (cheio até 4 m, some aos 12 m) — o ouvinte é a câmera */

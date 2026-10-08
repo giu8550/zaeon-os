@@ -17,12 +17,12 @@
  * `prefers-reduced-motion` deixa fogo/vórtices quase parados. dispose() completo.
  */
 import * as THREE from "three";
-import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
 import { criarPisoEstacionamento } from "./Estacionamento";
-import { LOTES, LOTE_ZAEON_LOCAL } from "@/lib/cyber/motos";
+import { LOTES } from "@/lib/cyber/motos";
 import { NOS } from "@/lib/cyber/buracos";
 import { criarBuracoPortal } from "./BuracoPortal";
 import { criarCoracao } from "./CoracaoZaeon";
@@ -203,56 +203,45 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const aroGlobo = add(new THREE.Mesh(new THREE.TorusGeometry(RG * 1.35, 0.12, 6, 96), new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })));
   aroGlobo.position.y = YG; aroGlobo.rotation.x = Math.PI / 2 - 0.35;
 
-  // ── a ESCADA DE ENERGIA do lounge: uma faixa de luz FLUINDO (setas correndo pra cima) da borda oeste até a porta da
-  //    plataforma do lounge, partículas subindo pelo corredor, corrimão de vidro com friso aceso. Ela LEVA quem pisa na
-  //    boca (lib/cyber/ceu `bocaDaEscada`) — o avatar vai surfando numa prancha de luz ──
-  //    (uma por SALA: cada escada é montada no referencial do lounge — correndo pro −x — e girada pro rumo da sala)
-  const COR_SALA: Record<NomeSala, number> = { lounge: 0xb98cff, convivencia: 0xffb46b, biblioteca: 0x7fb8ff, jardim: 0x7dffb0 };
+  // ── os FIOS DE ENERGIA (um por SALA — no lugar das antigas escadas com corrimão): um cabo aceso da borda da central
+  //    até a porta da sala, com pulsos de luz correndo pra cima, um halo, faíscas e um POSTE de luz em cada ponta; no
+  //    chão, a BOCA (o disco aceso) onde se pisa pra ser puxado (lib/cyber/ceu `FIO`, `alturaDoFio`, `bocaDeEscada`).
+  //    Cada fio é montado correndo pro −x local e girado pro rumo da sala ──
+  const COR_SALA: Record<NomeSala, number> = { lounge: 0xb98cff, garagem: 0xffb46b, biblioteca: 0x7fb8ff, jardim: 0x7dffb0 };
   let fluxoMat: THREE.ShaderMaterial | null = null;
-  const fluxoPts: { geo: THREE.BufferGeometry; d: { u: number; lat: number; y: number; v: number }[]; len: number; ini: number }[] = [];
-  for (const nomeEsc of Object.keys(ESCADAS) as NomeSala[]) { const EE = ESCADAS[nomeEsc], E2 = { ...EE, dir: { x: -1, z: 0 } }, H2 = ALTURA_LOUNGE, larg = E2.meia * 2;
-    const gEsc = add(new THREE.Group()); gEsc.rotation.y = Math.PI - CIDADE.salas[nomeEsc].ang;   // −x local → o rumo da sala
-    const x0 = E2.dir.x * E2.ini, x1 = E2.dir.x * E2.fim, g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([x0, 0.05, -E2.meia, x1, H2 + 0.05, -E2.meia, x1, H2 + 0.05, E2.meia, x0, 0.05, E2.meia]), 3));
-    g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]), 2)); g.setIndex([0, 1, 2, 0, 2, 3]); g.computeVertexNormals();
+  const fluxoPts: { geo: THREE.BufferGeometry; d: { u: number; lat: number; y: number; v: number }[]; esc: (typeof ESCADAS)[NomeSala] }[] = [];
+  const matPoste = new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.35, metalness: 0.8, emissive: 0x0a1a36, emissiveIntensity: 0.6 });
+  for (const nomeEsc of Object.keys(ESCADAS) as NomeSala[]) {
+    const EE = ESCADAS[nomeEsc], gEsc = add(new THREE.Group()); gEsc.rotation.y = Math.PI - CIDADE.salas[nomeEsc].ang;   // −x local → o rumo da sala
+    const em = (u: number, dy = 0) => new THREE.Vector3(-(EE.ini + u), alturaDoFio(EE, u) + dy, 0);
+    const curva = new THREE.CatmullRomCurve3(Array.from({ length: 13 }, (_, k) => em((k / 12) * EE.len)));
     fluxoMat ??= new THREE.ShaderMaterial({
-      uniforms: { uT: { value: 0 }, uLen: { value: E2.len / larg } },
+      uniforms: { uT: { value: 0 } },
       vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-      fragmentShader: `uniform float uT; uniform float uLen; varying vec2 vUv;
+      fragmentShader: `uniform float uT; varying vec2 vUv;
         void main(){
-          float x = vUv.x * uLen * 3.0, y = vUv.y - 0.5;
-          float seta = fract(x - abs(y) * 1.6 - uT * 1.4);            // setas em "V" correndo pro lounge
-          float faixa = smoothstep(0.0, 0.08, seta) * smoothstep(0.32, 0.12, seta);
-          float borda = smoothstep(0.38, 0.5, abs(y));                 // as bordas acesas
-          float pulso = 0.6 + 0.4 * sin(vUv.x * 40.0 - uT * 6.0);
-          vec3 c = mix(vec3(0.25, 0.85, 1.0), vec3(0.72, 0.55, 1.0), vUv.x);
-          float a = 0.16 + 0.55 * faixa + 0.6 * borda * pulso;
-          gl_FragColor = vec4(c * a * 1.4, a);
+          float p = fract(vUv.x * 9.0 - uT * 0.9);                       // os PULSOS correndo pra sala
+          float pulso = smoothstep(0.0, 0.05, p) * smoothstep(0.35, 0.08, p);
+          vec3 c = mix(vec3(0.3, 0.85, 1.0), vec3(0.75, 0.6, 1.0), vUv.x);
+          gl_FragColor = vec4(c * (0.55 + 1.6 * pulso), 1.0);
         }`,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     });
-    const fluxo = add(new THREE.Mesh(g, fluxoMat), gEsc); fluxo.renderOrder = 2;
-    // a "pele" de baixo (sólida, pra faixa ter corpo visto de lado/de baixo) e o chão escuro do corredor
-    const pele = new THREE.BufferGeometry(); pele.setAttribute("position", new THREE.BufferAttribute(new Float32Array([x0, -0.25, -E2.meia, x1, H2 - 0.25, -E2.meia, x1, H2 - 0.25, E2.meia, x0, -0.25, E2.meia]), 3)); pele.setIndex([0, 2, 1, 0, 3, 2]); pele.computeVertexNormals();
-    add(new THREE.Mesh(pele, new THREE.MeshBasicMaterial({ color: 0x10306a, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })), gEsc);
-    // partículas subindo pelo corredor
-    const NFP = low ? 70 : 160, d = Array.from({ length: NFP }, () => ({ u: Math.random() * E2.len, lat: (Math.random() - 0.5) * larg * 0.9, y: Math.random() * 1.6, v: 6 + Math.random() * 8 }));
-    const pg = new THREE.BufferGeometry(); pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NFP * 3), 3));
-    const pts = add(new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.5, map: starTex, color: 0x9fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc); pts.frustumCulled = false;
-    fluxoPts.push({ geo: pg, d, len: E2.len, ini: E2.ini });
-    // corrimão de vidro (um paralelogramo de cada lado, acompanhando a inclinação) + friso aceso no alto + viga embaixo
-    const vidroCorr = vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.3, side: THREE.DoubleSide }, 0.3);
-    const friso: number[] = [];
-    for (const sl of [-1, 1]) {
-      const z = sl * (E2.meia + 0.25), x0 = E2.dir.x * E2.ini, x1 = E2.dir.x * E2.fim, g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([x0, 0, z, x1, H2, z, x1, H2 + 1.3, z, x0, 0, z, x1, H2 + 1.3, z, x0, 1.3, z]), 3)); g.computeVertexNormals();
-      add(new THREE.Mesh(g, vidroCorr), gEsc);
-      friso.push(x0, 1.3, z, x1, H2 + 1.3, z);
+    add(new THREE.Mesh(new THREE.TubeGeometry(curva, low ? 60 : 140, 0.09, 8, false), fluxoMat), gEsc);   // o cabo
+    add(new THREE.Mesh(new THREE.TubeGeometry(curva, low ? 40 : 90, 0.42, 8, false), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeEsc], transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc);   // o halo
+    // os POSTES das pontas (o cabo nasce no topo deles) e a BOCA acesa no chão
+    for (const [u, base] of [[0, 0], [EE.len, ALTURA_LOUNGE]] as const) {
+      const h = alturaDoFio(EE, u) - base + 0.5, poste = add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, h, 10), matPoste), gEsc); poste.position.set(-(EE.ini + u), base + h / 2, 1.4);
+      const braco = add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.4), matPoste), gEsc); braco.position.set(-(EE.ini + u), alturaDoFio(EE, u), 0.7);
+      const anel = add(new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.05, 6, 24), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeEsc], transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc);
+      anel.position.copy(em(u)); anel.rotation.y = Math.PI / 2;
     }
-    const gf = new THREE.BufferGeometry(); gf.setAttribute("position", new THREE.BufferAttribute(new Float32Array(friso), 3));
-    add(new THREE.LineSegments(gf, new THREE.LineBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending })), gEsc);
-    const incl = Math.atan2(H2, E2.len), viga = add(new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(E2.len, H2), 0.6, 1.4), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc);
-    viga.position.set(E2.dir.x * (E2.ini + E2.len / 2), H2 / 2 - 0.9, 0); viga.rotation.z = E2.dir.x * incl;   // sobe pro lado do lounge (−x)
+    const boca = add(new THREE.Mesh(new THREE.CircleGeometry(EE.meia * 0.55, 40), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeEsc], transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc);
+    boca.rotation.x = -Math.PI / 2; boca.position.set(-(EE.ini + 1), 0.05, 0);
+    // faíscas correndo pelo cabo
+    const NFP = low ? 30 : 70, d = Array.from({ length: NFP }, () => ({ u: Math.random() * EE.len, lat: (Math.random() - 0.5) * 0.5, y: (Math.random() - 0.5) * 0.5, v: 8 + Math.random() * 10 }));
+    const pg = new THREE.BufferGeometry(); pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NFP * 3), 3));
+    const pts = add(new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.45, map: starTex, color: 0x9fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc); pts.frustumCulled = false;
+    fluxoPts.push({ geo: pg, d, esc: EE });
   }
   // ── a PLATAFORMA DO LOUNGE (só a base; o clube em cima é o Salas): disco de gelo com aro de luz + montanha invertida
   //    de cristal por baixo (como as ilhotas) e o brilho antigravidade ──
@@ -270,9 +259,12 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const salas = criarSalas(ilha, { low, texturas, estrela: starTex, paredeMat: vidro({ color: 0x0a1830, emissive: 0x2a3a70, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.3, thickness: 1, transparent: true, opacity: 0.32, side: THREE.DoubleSide }, 0.3) });
   alvos.push(...salas.alvos);
 
-  // ── ESTACIONAMENTO de motos voadoras (aberto a todos; as motos são do engine) — o piso entra no clique de andar ──
-  const estac = criarPisoEstacionamento({ low, parado: rm, lote: LOTES.find((l) => l.id === "zaeon")! });
-  estac.group.position.set(LOTE_ZAEON_LOCAL.x, 0, LOTE_ZAEON_LOCAL.z); estac.group.rotation.y = LOTE_ZAEON_LOCAL.rot; add(estac.group, ilha, true);
+  // ── os ESTACIONAMENTOS da GARAGEM (a ala dos veículos — as motos e os robôs são do engine): o piso dos lotes, lá em
+  //    cima na plataforma da garagem (flutuando junto com a ilha); entra no clique de andar ──
+  const estacs = LOTES.filter((l) => l.id === "garagem").map((l) => {
+    const e = criarPisoEstacionamento({ low, parado: rm, lote: l });
+    e.group.position.set(l.x - CIDADE.centro.x, l.alt, l.z - CIDADE.centro.z); e.group.rotation.y = l.rot; add(e.group, ilha, true); return e;
+  });
 
   // ── o BURACO NEGRO da cidade: o nó central da rede de túneis (pisou no anel = escolhe o destino) ──
   const pt = CIDADE.portalTunel, bnc = criarBuracoPortal(ilha, { x: pt.x, y: 0, z: pt.z, anelR: pt.r, h: NOS.zaeon.bh.h, r: NOS.zaeon.bh.r, low, starTex });
@@ -324,7 +316,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       pontas.forEach((p, i) => { (p.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.3 + 0.4 * Math.sin(t * 1.2 + i); p.rotation.y += dt * 0.4 * vel; });
       farol.material.opacity = 0.75 + 0.2 * Math.sin(t * 1.1);
       salas.atualizar(dt, t);
-      estac.atualizar(t);
+      for (const e of estacs) e.atualizar(t);
       globo.rotation.y += dt * 0.25 * vel; aroGlobo.rotation.z += dt * 0.2 * vel;
       // o CORAÇÃO bate: o globo incha de luz, a mesa e o aro acendem; o pulso corre nas veias; o raio sai do topo
       { const ev = coracao.atualizar(dt, t), b = coracao.batida();
@@ -335,8 +327,8 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         if (ev.tum && opts.aoBater) opts.aoBater(globoMundo.set(0, GLOBO_CAPELA.y, 0).applyMatrix4(ilha.matrixWorld)); }
       // a escada de energia: as setas correm, as partículas sobem pelo corredor
       if (fluxoMat) fluxoMat.uniforms.uT!.value = t * vel;
-      for (const fp of fluxoPts) { const H2 = ALTURA_LOUNGE, a = fp.geo.attributes.position!.array as Float32Array;   // (no referencial da escada: corre pro −x)
-        fp.d.forEach((p, i) => { p.u = (p.u + p.v * dt * vel) % fp.len; a[i * 3] = -(fp.ini + p.u); a[i * 3 + 1] = H2 * (p.u / fp.len) + 0.2 + p.y; a[i * 3 + 2] = p.lat; });
+      for (const fp of fluxoPts) { const a = fp.geo.attributes.position!.array as Float32Array, E = fp.esc;   // (no referencial do fio: corre pro −x)
+        fp.d.forEach((p, i) => { p.u = (p.u + p.v * dt * vel) % E.len; a[i * 3] = -(E.ini + p.u); a[i * 3 + 1] = alturaDoFio(E, p.u) + p.y; a[i * 3 + 2] = p.lat; });
         fp.geo.attributes.position!.needsUpdate = true; }
       bnc.atualizar(dt * vel, t);
       // quedas de luz

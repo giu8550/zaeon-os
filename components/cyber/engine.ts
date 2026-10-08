@@ -13,7 +13,7 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
-import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, salaEm, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PALCO as PALCO_LOUNGE, naSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
+import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PALCO as PALCO_LOUNGE, naSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
@@ -174,8 +174,10 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** 
   dj?: number;
   /** parado na pista do lounge (0..1, suavizado): dançando */
   danca?: number;
-  /** sendo levado pela ESCADA DE ENERGIA (0..1, suavizado): surfando na prancha de luz */
+  /** sendo levado pelo ELEVADOR DE LUZ da torre do DJ (0..1, suavizado): surfando na prancha de luz */
   surf?: number;
+  /** sendo PUXADO por um FIO DE ENERGIA até uma sala (0..1, suavizado): pendurado na alça; e o assobio dele (remotos) */
+  puxa?: number; somFio?: LoopSom | null;
   /** DESCANSO no lounge (0..1, suavizados): sentado no sofá/puff, deitado no sofá, o tablet na mão; a altura do assento */
   sofa?: number; deita?: number; tab?: number; assentoY?: number; relaxa?: number;
   /** remotos: a pose de descanso que chegou pela rede (lib/cyber/descanso `codificarDescanso`) */
@@ -377,7 +379,9 @@ export class CyberEngine {
   private sobreNave = false;
   // ── ÁUDIO (components/cyber/AudioCyber): loops presos aos objetos + one-shots nos eventos ──
   private som!: AudioCyberHandle;
-  private somLoops: { leito?: LoopSom; naveIdle?: LoopSom; naveVoo?: LoopSom; jet?: LoopSom[] } = {};
+  private somLoops: { leito?: LoopSom; naveIdle?: LoopSom; naveVoo?: LoopSom; jet?: LoopSom[]; fio?: LoopSom } = {};
+  /** quando avisei por último que o fio está cheio (s, relógio da cena) */
+  private avisoFioCheio = -99;
   /** subir/descer da MINHA nave: o som sai 1× no começo da ação (gatilhosVoo) */
   private gatilhoNave = gatilhoVooInicial();
   private somCristais = new Map<string, LoopSom>();
@@ -549,6 +553,17 @@ export class CyberEngine {
   private ultDescanso = "";
   /** onde estão as OUTRAS pessoas na Zaeon (pra não sentar no colo de ninguém) */
   private outrosNaZaeon(): { x: number; z: number }[] { return [...this.remotos.values()].filter((a) => a.ceu).map((a) => ({ x: a.pos.x, z: a.pos.z })); }
+  /** quantas OUTRAS pessoas o fio de energia da sala `sala` está puxando agora (quem está no corredor dele, fora das
+   *  bocas — o corredor não é piso: quem está lá está pendurado no fio) */
+  private noFio(sala: NomeSala): number {
+    const e = ESCADAS[sala]; let n = 0;
+    for (const a of this.remotos.values()) {
+      if (!a.ceu) continue;
+      const q = naEscadaLocal({ x: a.pos.x - CIDADE.centro.x, z: a.pos.z - CIDADE.centro.z }, e);
+      if (Math.abs(q.lat) <= e.meia + 0.5 && q.u > 1 && q.u < e.len - 1) n++;
+    }
+    return n;
+  }
   /** dá pra sentar/usar o tablet agora? (a pé, parado no piso da Zaeon, fora de veículo/viagem/tutorial) */
   private aPeLivre(): boolean { return !this.menu && this.noCeu && !this.jet.noAr && this.moto === null && !this.pilotando && !this.bordo && !this.viagem && !this.nascendo && !this.tunel && !this.sobreNave; }
   /** a tecla J: em pé → sentado → deitado (sofá) → em pé */
@@ -676,7 +691,7 @@ export class CyberEngine {
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, agora = Date.now() / 1000, some = this.instancia;   // no tutorial (instância só da pessoa), ninguém mais aparece
     for (const p of this.personagens) { p.h.mostrar(!some); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position); }
   }
-  private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
+  private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } if (a.somFio) { this.som.soltarLoop(a.somFio); a.somFio = null; } a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
   // ───────────── API pública (React → engine) ─────────────
   iniciar(go = "viajar") {
@@ -1389,9 +1404,9 @@ export class CyberEngine {
     return true;
   }
   /** a altura de um lote (o da Zaeon flutua com a ilha) */
-  private yDoLote(l: Lote) { return l.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : 0; }
+  private yDoLote(l: Lote) { return l.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + l.alt : 0; }   // (a garagem: lá em cima, na plataforma)
   /** a altura da moto PARADA numa vaga: em cima da plataforma de lançamento (no chão, ou no piso da Zaeon, que flutua) */
-  private yDaVaga(v: { ceu: boolean }) { return (v.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : 0) + PLATAFORMA_MOTO.altura; }
+  private yDaVaga(v: { ceu: boolean; alt?: number }) { return (v.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + (v.alt ?? 0) : 0) + PLATAFORMA_MOTO.altura; }
   /** DESCE da moto (pousada): fica ao lado dela e a moto FICA ALI estacionada (é um veículo — é minha até eu estacionar
    *  outra ou sair); os outros veem pela minha presença. No piso da Zaeon → anda na ilha; noutro alto → cai dali */
   /** dá pra descer da moto aqui? Pousada num piso de verdade — na altura da praça, só EM CIMA dela (fora é o vazio) */
@@ -1420,8 +1435,14 @@ export class CyberEngine {
     const bn = new THREE.Object3D(); bn.position.set(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); this.cena.scene.add(bn);
     s.volumeLoop(s.loop("blackhole-hum", bn, { dist: DISTANCIA.grande }), 1);
     this.somLoops.jet = this.loopsDoJato(this.eu.av.group, DISTANCIA.eu);   // contínuo enquanto se segura o ESPAÇO
+    // os FIOS DE ENERGIA: o zumbido nos postes das duas pontas de cada fio (presos à ilha, que flutua) e o MEU assobio
+    if (this.cidade) for (const e of Object.values(ESCADAS)) for (const u of [0, e.len]) {
+      const o = new THREE.Object3D(); o.position.set(e.dir.x * (e.ini + u), alturaDoFio(e, u), e.dir.z * (e.ini + u)); this.cidade.ilha.add(o);
+      s.volumeLoop(s.loop("fio-zumbido", o, { dist: DISTANCIA.fio }), 1);
+    }
+    this.somLoops.fio = s.loop("fio-puxa", this.eu.av.group, { dist: DISTANCIA.eu });
     // a MÚSICA AMBIENTE dos espaços de convivência: sai das caixas de som discretas de cada sala (lib/cyber/ambiente)
-    for (const c of this.cidade?.caixasAmbiente ?? []) if (c.sala !== "lounge") s.volumeLoop(s.loop(`ambiente-${c.sala}`, c.obj, { dist: DISTANCIA.ambiente, volume: 0.5 }), 1);
+    for (const c of this.cidade?.caixasAmbiente ?? []) if (c.sala === "biblioteca" || c.sala === "jardim") s.volumeLoop(s.loop(`ambiente-${c.sala}`, c.obj, { dist: DISTANCIA.ambiente, volume: 0.5 }), 1);
     if (this.nave) { this.somLoops.naveIdle = s.loop("ship-idle", this.nave.group, { dist: DISTANCIA.grande }); this.somLoops.naveVoo = s.loop("ship-flight", this.nave.group, { dist: DISTANCIA.naveLocal }); }
     const destravar = () => { musica().destravar(); if (!this.menu) s.ativar(); };
     if (musica().destravado && !this.menu) s.ativar();
@@ -1468,6 +1489,10 @@ export class CyberEngine {
     const td = this.somLounge?.tocando && this.noCeu && this.cidade?.tocaDiscos ? this.cidade.tocaDiscos.getWorldPosition(this.tmp) : null;
     const naMusica = !!td && Math.hypot(this.eu.pos.x - td.x, this.eu.pos.z - td.z) < 22;
     if (this.somLoops.leito) s.volumeLoop(this.somLoops.leito, fatorLeito(musica().estado) * (naMusica ? 0.25 : 1));
+    if (this.somLoops.fio) {   // sendo puxado: o assobio sobe de tom com a velocidade (sai devagar, corre no meio, chega devagar)
+      const v = this.viagem, k = v?.tipo === "escada" ? Math.min(1, v.t / VIAGEM_ESCADA.dur) : 0;
+      s.volumeLoop(this.somLoops.fio, v?.tipo === "escada" ? 0.5 + 0.5 * 4 * k * (1 - k) : 0, 4); s.taxaLoop(this.somLoops.fio, 0.85 + 0.5 * 4 * k * (1 - k));
+    }
     // cristais: só com o MEU avatar perto da base (no mesmo piso) — o ouvinte é a câmera, que fica longe do avatar
     for (const [id, l] of this.somCristais) {
       const b = this.layouts.get(id), mesmoPiso = b && (b.nivel ?? "chao") === this.nivelDe(this.o.eu.id);
@@ -1512,6 +1537,8 @@ export class CyberEngine {
         else { a.passoT = (a.passoT ?? 0) + dt; if (a.passoT >= cadenciaPasso(false)) { a.passoT = 0; this.tocarPasso(a, DISTANCIA.perto); } }
       }
       // mochila do colega: jato posicional (vem do lado certo); ao pousar, o baque dele. Com ASAS: batida + vento
+      if ((a.puxa ?? 0) > 0.3 && d < 40) { if (!a.somFio) a.somFio = s.loop("fio-puxa", a.av.group, { dist: DISTANCIA.fio }); s.volumeLoop(a.somFio, 1, 4); }   // o colega sendo puxado
+      else if (a.somFio) s.volumeLoop(a.somFio, 0, 4);
       const asasA = a.av.eventosAsas();
       if (asasA && d < 60) this.somDasAsas(a, asasA, DISTANCIA.padrao, a.moving ? 8 : 0);
       else if (asasA) { if (a.somAsas) s.volumeLoop(a.somAsas, 0); }
@@ -2237,7 +2264,12 @@ export class CyberEngine {
         // pisou na boca da escada de energia: ela te leva (pra cima, da central; pra baixo, do lounge)
         // (ou no anel do ELEVADOR DE LUZ da torre do DJ: só desce, da cabine até o palco)
         else {
-          const be = bocaDoElevador(q), bs = be ? null : bocaDeEscada(q), boca = be ?? bs?.sentido ?? null;
+          const be = bocaDoElevador(q), bs = be ? null : bocaDeEscada(q);
+          let boca = be ?? bs?.sentido ?? null;
+          if (bs && boca && this.noFio(bs.sala) >= FIO.max) {   // o FIO já está puxando o máximo de gente: espera
+            boca = null;
+            if (t - this.avisoFioCheio > 4) { this.avisoFioCheio = t; this.o.onAviso?.(`Este fio de energia já está puxando ${FIO.max} pessoas — espere um instante.`); }
+          }
           if (boca && !this.jet.noAr) { this.viagem = { tipo: be ? "elevador" : "escada", sentido: boca, t: 0, sala: bs?.sala }; this.alvo = null; this.alvoDepois = null; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); }
         }
       }
@@ -2280,7 +2312,8 @@ export class CyberEngine {
     const souDJ = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !this.sobreNave && !this.bordo && naCabineDJ(eu.pos);
     eu.dj = (eu.dj ?? 0) + ((souDJ ? 1 : 0) - (eu.dj ?? 0)) * Math.min(1, dt * 4);
     if (souDJ) { const c = pontoDaCabineDJ(), k = Math.min(1, dt * 4); eu.pos.x += (c.x - eu.pos.x) * k; eu.pos.z += (c.z - eu.pos.z) * k; eu.facing = rumoDoDJ(); }
-    eu.surf = (eu.surf ?? 0) + ((this.viagem ? 1 : 0) - (eu.surf ?? 0)) * Math.min(1, dt * 5);
+    eu.surf = (eu.surf ?? 0) + ((this.viagem?.tipo === "elevador" ? 1 : 0) - (eu.surf ?? 0)) * Math.min(1, dt * 5);
+    eu.puxa = (eu.puxa ?? 0) + ((this.viagem?.tipo === "escada" ? 1 : 0) - (eu.puxa ?? 0)) * Math.min(1, dt * 5);
     // DANÇA: parado na PISTA do lounge → dança virado pro palco
     const danco = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !souDJ && naPistaDeDanca(eu.pos);
     eu.danca = (eu.danca ?? 0) + ((danco ? 1 : 0) - (eu.danca ?? 0)) * Math.min(1, dt * 3);
@@ -2334,7 +2367,7 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: !!(this.keys.shift || this.correr) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0 }, tablet: eu.tab ?? 0, dt, t });
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: !!(this.keys.shift || this.correr) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0 }, tablet: eu.tab ?? 0, dt, t });
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
@@ -2347,8 +2380,9 @@ export class CyberEngine {
         if (dd.modo) { const lg = lugarEm(a.pos); a.assentoY = lg?.alturaAssento ?? 0.7; a.relaxa = lg?.relaxa ? 1 : 0; } }
       // na escada só se está sendo levado; no elevador da torre, quem está no ar dentro da coluna de luz
       const qs = naSala(CIDADE.salas.lounge, a.pos.x - CIDADE.centro.x, a.pos.z - CIDADE.centro.z), naColuna = Math.hypot(qs.x, qs.z - TORRE_DJ.elevador.sobe) < 1.6 && a.alt > CIDADE.pisoY + ALTURA_LOUNGE + PALCO_LOUNGE.h + 0.6;
-      const surfando = !!a.ceu && a.jet === undefined && (naEscadaDoLounge(a.pos) || naColuna);
+      const surfando = !!a.ceu && a.jet === undefined && naColuna, puxado = !!a.ceu && a.jet === undefined && monta === null && naEscadaDoLounge(a.pos);
       a.surf = (a.surf ?? 0) + ((surfando ? 1 : 0) - (a.surf ?? 0)) * Math.min(1, dt * 5);
+      a.puxa = (a.puxa ?? 0) + ((puxado ? 1 : 0) - (a.puxa ?? 0)) * Math.min(1, dt * 5);
       a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(pilota ? a.naveYaw ?? a.facing : a.facing);
       // de longe / fora da tela o avatar anima menos vezes por segundo (o mixer + IK de cada um custa); fora da tela
       // nem desenha (a malha com skinning não tem esfera confiável: frustumCulled=false) — perto continua animando
@@ -2357,7 +2391,7 @@ export class CyberEngine {
       a.av.group.visible = naTela;
       const cada = dCam < 25 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 0;
       a.acum = (a.acum ?? 0) + dt;
-      if (a.acum >= cada) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
+      if (a.acum >= cada) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
       else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = (a.naveYaw ?? 0) + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0, fechada: true }); this.noAssento(a.av, a.nave); }
     }
