@@ -2139,7 +2139,7 @@ export class CyberEngine {
     // tremor: no boost, mais acima da barreira do som e um SOCO na hora em que ela quebra
     if (this.ondaT >= 0) { this.ondaT += dt; if (this.ondaT > 1.2 || this.moto === null) this.ondaT = -1; }
     if (this.moto !== null && this.motoEst.boost) {
-      const sup = supersonico(Math.hypot(this.motoEst.vx, this.motoEst.vz)), soco = this.ondaT >= 0 ? 0.35 * Math.exp(-this.ondaT * 5) : 0;
+      const sup = supersonico(Math.hypot(this.motoEst.vx, this.motoEst.vz), true), soco = this.ondaT >= 0 ? 0.35 * Math.exp(-this.ondaT * 5) : 0;
       const a = 0.045 * this.velTela * (1 + sup) + soco, t = performance.now() * 0.001;
       this.cam.position.x += Math.sin(t * 47) * a; this.cam.position.y += Math.sin(t * 61 + 1) * a;
     }
@@ -2184,9 +2184,9 @@ export class CyberEngine {
     } else if (this.moto !== null) {
       // MOTO: pilotagem de moto (lib/cyber/motoFisica) — W/S acelera/freia, A/D esterça, Shift/⚡ boost
       const c = this.comandoDeMoto(); this.acelMoto = c.acel;
-      const vAntes = Math.hypot(this.motoEst.vx, this.motoEst.vz);
+      const boostAntes = this.motoEst.boost;
       const r = passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
-      if (!r.pousado && rompeuBarreira(vAntes, Math.hypot(r.s.vx, r.s.vz))) this.ondaT = 0;   // quebrou a barreira do som
+      if (!r.pousado && rompeuBarreira(boostAntes, r.s.boost, Math.hypot(r.s.vx, r.s.vz))) this.ondaT = 0;   // acendeu o boost rápido: quebrou a barreira do som
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
       eu.pos.set(r.s.x, 0, r.s.z); eu.facing = r.s.yaw; eu.moving = Math.hypot(r.s.vx, r.s.vz) > 1; this.sitT = 0;   // "andando" = a moto em movimento (o netcode extrapola)
     } else if (this.pilotando) {

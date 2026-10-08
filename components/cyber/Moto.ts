@@ -12,9 +12,10 @@
  * esquentar e mais pra esfriar): fria, curta e na cor da moto; esquentando, cresce e passa pelo laranja, pelo branco e
  * chega no PLASMA azulado (com os "diamantes de choque" correndo). Junto: os BOCAIS ficam incandescentes, um HALO acende
  * na saída, o miolo do motor clareia, e atrás sai um RASTRO de energia (fita no mundo) e FAÍSCAS.
- * BARREIRA DO SOM (lib/cyber/motoFisica `BARREIRA_SOM`, 450 km/h, só no boost): acima dela um CONE DE VAPOR envolve a
- * moto (a nuvem de Prandtl-Glauert: borda branca, anéis correndo pra trás); no instante em que rompe, o cone dá um
- * clarão e uma ONDA DE CHOQUE (anel + casca) se abre no mundo, onde a moto estava, e fica pra trás.
+ * BARREIRA DO SOM (lib/cyber/motoFisica `rompeuBarreira`: ACENDER o boost acima dos 300 km/h): no instante em que
+ * rompe, um CONE DE VAPOR dá um clarão em volta da moto e uma ONDA DE CHOQUE (anel + casca) se abre no mundo, onde a moto
+ * estava, e fica pra trás; enquanto o boost durar, o cone fica (a nuvem de Prandtl-Glauert: borda branca, anéis correndo
+ * pra trás), mais forte quanto mais perto dos 1000 km/h.
  * SETAS âmbar nos 4 cantos: piscam do lado da curva (o engine manda qual lado está aceso).
  * Frente = +z local (o mesmo rumo do voo). Voando: INCLINA nas curvas e aponta o nariz com a subida/descida; parada,
  * flutua de leve. `assento` = onde o avatar senta (montado).
@@ -187,7 +188,7 @@ const RABO = { raio: { y: 1.26, z: -1.66 }, tubarao: { y: 1.1, z: -1.64 }, gota:
 /** os PODS de sustentação (onde ficariam as rodas): centro (z, y) e o tamanho (meia-largura, meia-altura, comprimento) */
 const PODS = [{ z: 1.1, y: 0.52, w: 0.13, h: 0.12, c: 0.36 }, { z: -1.08, y: 0.55, w: 0.16, h: 0.13, c: 0.42 }] as const;
 /** quanto tempo a propulsão leva pra esquentar e esfriar (1/s) e a velocidade (m/s) em que fica fria / no máximo */
-const CALOR = { sobe: 0.7, desce: 0.35, frio: 12, quente: 80, boost: 0.25 } as const;
+const CALOR = { sobe: 0.7, desce: 0.35, frio: 15, quente: 140, boost: 0.25 } as const;
 
 export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): MotoHandle {
   const g = new THREE.Group(), corpo = new THREE.Group(); g.add(corpo);
@@ -394,7 +395,7 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
     return { grupo, fita, pf, onda: { g: og, anel, casca, t: -1 }, pontos: [] as { p: THREE.Vector3; t: number }[], faiscas: Array.from({ length: NF }, () => ({ p: new THREE.Vector3(), v: new THREE.Vector3(), vida: 0, max: 1 })) };
   };
   const vS = new THREE.Vector3(), vUp = new THREE.Vector3(), vLado = new THREE.Vector3(), vFr = new THREE.Vector3(), corT = new THREE.Color(), q4 = new THREE.Quaternion();
-  let calor = 0, faiscaAcum = 0, faiscaProx = 0, velAnt = 0, flash = 0, supSuave = 0;
+  let calor = 0, faiscaAcum = 0, faiscaProx = 0, boostAnt = false, flash = 0, supSuave = 0;
 
   let rola = 0, nariz2 = 0, boostSuave = 0;
   return {
@@ -427,8 +428,8 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
       nucleoMotor.color.copy(acento).lerp(corT.set(1, 1, 1), q * 0.7);
 
       // BARREIRA DO SOM: o cone de vapor acima dela; ao romper, clarão no cone + a onda de choque no mundo
-      const rompeu = voando && rompeuBarreira(velAnt, vel); velAnt = voando ? vel : 0;
-      supSuave += ((voando ? supersonico(vel) : 0) - supSuave) * Math.min(1, dt * 5);
+      const aceso = boost > 0.5, rompeu = voando && rompeuBarreira(boostAnt, aceso, vel); boostAnt = aceso;
+      supSuave += ((voando ? supersonico(vel, aceso) : 0) - supSuave) * Math.min(1, dt * 5);
       if (rompeu) flash = 1; else flash = Math.max(0, flash - dt * 2.2);
       const aVapor = supSuave > 0.001 ? 0.25 + 0.45 * supSuave : 0;
       vapor.visible = aVapor + flash > 0.01;
