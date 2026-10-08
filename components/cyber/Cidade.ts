@@ -17,7 +17,7 @@
  * `prefers-reduced-motion` deixa fogo/vórtices quase parados. dispose() completo.
  */
 import * as THREE from "three";
-import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADA_LOUNGE, ILHOTAS, TORRES_MURALHA, anguloDaTorre, computadoresLocais, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADA_LOUNGE, ILHOTAS, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
@@ -38,8 +38,6 @@ export type CidadeHandle = {
   rotulo: HTMLDivElement;
   /** superfícies sólidas (raycast do clique/câmera) */
   alvos: THREE.Object3D[];
-  /** telas dos DESKTOPS da capela (InstancedMesh; instanceId = índice em computadoresLocais) — clicar = estudar */
-  computadores: THREE.InstancedMesh;
   /** o anel do BURACO NEGRO da cidade (o nó central da rede de túneis) — clicar = entrar */
   portalTunel: THREE.Object3D;
   atualizar(dt: number, t: number): void;
@@ -203,27 +201,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const aroGlobo = add(new THREE.Mesh(new THREE.TorusGeometry(RG * 1.35, 0.12, 6, 96), new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })));
   aroGlobo.position.y = YG; aroGlobo.rotation.x = Math.PI / 2 - 0.35;
 
-  // os DESKTOPS (monitores verticais com a "página" de luz; a tela é o mesh clicável) em anel, virados pro globo
-  const pagina = (() => { const c = document.createElement("canvas"); c.width = 128; c.height = 256; const g = c.getContext("2d")!;
-    g.fillStyle = "#06223a"; g.fillRect(0, 0, 128, 256); g.fillStyle = "#66e6ff"; g.fillRect(10, 12, 108, 8);
-    g.fillStyle = "rgba(143,232,255,.75)"; for (let i = 0; i < 16; i++) g.fillRect(12, 34 + i * 13, 50 + ((i * 37) % 54), 5);
-    g.strokeStyle = "#9fe8ff"; g.lineWidth = 3; g.strokeRect(2, 2, 124, 252);
-    const t = new THREE.CanvasTexture(c); texturas.push(t); return t; })();
-  const mons = computadoresLocais(), LM = CIDADE.monitores.largura, HM = LM * 1.6, YM = HM / 2 + 0.6;
-  const matMon = new THREE.MeshStandardMaterial({ color: 0x16203c, roughness: 0.45, metalness: 0.35, emissive: 0x16264f, emissiveIntensity: 0.45 });
-  const molduraMon = add(new THREE.InstancedMesh(new THREE.BoxGeometry(LM, HM, 0.3), matMon, mons.length), ilha, true);
-  const peMon = add(new THREE.InstancedMesh(new THREE.BoxGeometry(LM * 0.5, 0.6, 1.4), matMon, mons.length), ilha, true);
-  const telas = add(new THREE.InstancedMesh(new THREE.PlaneGeometry(LM * 0.85, HM * 0.88), new THREE.MeshBasicMaterial({ map: pagina, transparent: true, opacity: 0.92, side: THREE.DoubleSide }), mons.length), ilha, true);
-  const brilhoMon = add(new THREE.InstancedMesh(new THREE.PlaneGeometry(LM * 1.2, HM * 1.1), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }), mons.length));
-  { const mx = new THREE.Matrix4(), mq = new THREE.Quaternion(), um = new THREE.Vector3(1, 1, 1), mp = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-    const em = (m: { x: number; z: number; rot: number }, ly: number, lz: number) => mp.set(m.x + lz * Math.sin(m.rot), ly, m.z + lz * Math.cos(m.rot));
-    mons.forEach((m, i) => {
-      mq.setFromAxisAngle(up, m.rot);
-      molduraMon.setMatrixAt(i, mx.compose(em(m, YM, -0.15), mq, um)); peMon.setMatrixAt(i, mx.compose(em(m, 0.3, -0.15), mq, um));
-      telas.setMatrixAt(i, mx.compose(em(m, YM, 0.02), mq, um)); brilhoMon.setMatrixAt(i, mx.compose(em(m, YM, -0.32), mq, um));
-    });
-    for (const im of [molduraMon, peMon, telas, brilhoMon]) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); } }
-
   // ── a ESCADA DE ENERGIA do lounge: uma faixa de luz FLUINDO (setas correndo pra cima) da borda oeste até a porta da
   //    plataforma do lounge, partículas subindo pelo corredor, corrimão de vidro com friso aceso. Ela LEVA quem pisa na
   //    boca (lib/cyber/ceu `bocaDaEscada`) — o avatar vai surfando numa prancha de luz ──
@@ -332,7 +309,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {
-    group: raiz, ilha, rotulo, alvos, computadores: telas, portalTunel: bnc.alvo, tvLounge: salas.tv, caixasLounge: salas.caixas, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, caixasLounge: salas.caixas, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     atualizar(dt, t) {
       ilha.position.y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel;
       for (const f of fogos) { const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp; f.s.scale.set(3.4 * (0.9 + p * 0.25), 5 * (0.8 + p * 0.4), 1); (f.s.material as THREE.SpriteMaterial).opacity = 0.5 + 0.3 * p; }

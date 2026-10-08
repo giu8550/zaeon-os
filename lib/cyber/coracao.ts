@@ -79,10 +79,10 @@ export const ANGULO_DE_OURO = Math.PI * (3 - Math.sqrt(5));
  *  DISPUTAM os pontos, então não se cruzam — só se encontram nas bifurcações. O calibre sai da LEI DE MURRAY de baixo
  *  pra cima (r_pai³ = Σ r_filhos³, das pontas finas até o tronco). Os 8 troncos que sobem a capela começam retos até
  *  o pé do pilar (e dali brotam galhos como os outros). */
-function colonizar(o: { low: boolean; R0: number; LIM: number; raizes: { ang: number; ate?: number }[]; semente: number }) {
-  const r = prng(o.semente), N = o.low ? 650 : 1500, DI = 24, DK = 5.2, D = 2.6, MAXIT = o.low ? 170 : 240;
-  // os pontos-guia: espiral de ouro (densidade uniforme no anel R0+5 … LIM), com um tremor leve pra não ficar cristalino
-  const r0 = o.R0 + 5, ax: number[] = [], az: number[] = [], vivo: boolean[] = [];
+function colonizar(o: { low: boolean; R0: number; LIM: number; raizes: { ang: number; ate?: number }[]; semente: number; /** dentro deste raio NÃO brota galho (só os troncos retos) */ livreAte?: number }) {
+  const r = prng(o.semente), N = o.low ? 650 : 1500, DI = 24, DK = 5.2, D = 2.6, MAXIT = o.low ? 170 : 240, LIVRE = o.livreAte ?? 0;
+  // os pontos-guia: espiral de ouro (densidade uniforme no anel R0+5 … LIM — ou de fora da área livre), com um tremor leve pra não ficar cristalino
+  const r0 = Math.max(o.R0, LIVRE) + 5, ax: number[] = [], az: number[] = [], vivo: boolean[] = [];
   for (let i = 0; i < N; i++) { const rr = Math.sqrt(r0 * r0 + ((i + 0.5) / N) * (o.LIM * o.LIM - r0 * r0)), th = i * ANGULO_DE_OURO; ax.push(Math.cos(th) * rr + (r() - 0.5) * 2.4); az.push(Math.sin(th) * rr + (r() - 0.5) * 2.4); vivo.push(true); }
   // os nós (x, z, pai); grade espacial pra achar o mais próximo rápido
   const nx: number[] = [], nz: number[] = [], pai: number[] = [], grade = new Map<number, number[]>(), CEL = DI;
@@ -114,7 +114,7 @@ function colonizar(o: { low: boolean; R0: number; LIM: number; raizes: { ang: nu
       let dx = s.x / Math.hypot(s.x, s.z) + 0.35 * (tx / tl), dz = s.z / Math.hypot(s.x, s.z) + 0.35 * (tz / tl); const l = Math.hypot(dx, dz);
       if (l < 1e-3) continue; dx /= l; dz /= l;
       const x = nx[k]! + dx * D, z = nz[k]! + dz * D;
-      if (Math.hypot(x, z) > o.LIM) continue;
+      if (Math.hypot(x, z) > o.LIM || Math.hypot(x, z) < LIVRE - 0.5) continue;   // (dentro da capela: só os troncos)
       if (maisPerto(x, z).d < D * 0.45) continue;   // já tem veia ali (não empilha)
       novoNo(x, z, k);
     }
@@ -158,8 +158,9 @@ function colonizar(o: { low: boolean; R0: number; LIM: number; raizes: { ang: nu
   return { nx: ox, nz: oz, pai: op };
 }
 
-/** as veias da cidade: a árvore do PISO (colonização + Murray) — 16 raízes saindo do coração, 8 delas retas até os
- *  pilares que SOBEM a capela — + as 8 NERVURAS que descem a capela (pilar → cúpula → tambor → 2ª cúpula → ponta) + o
+/** as veias da cidade: a árvore do PISO (colonização + Murray) — DENTRO da capela só 8 troncos RETOS, do globo (onde
+ *  o holograma nasce) até os pilares que SOBEM a capela (o pátio fica limpo); os galhos brotam do pé dos pilares pra
+ *  fora — + as 8 NERVURAS que descem a capela (pilar → cúpula → tambor → 2ª cúpula → ponta) + o
  *  EIXO central (ponta → globo). Cada ponto guarda o atraso do pulso (o azul que se propaga pelas veias) */
 const cacheVeias = new Map<string, { veias: Veia[]; distTopo: number }>();
 /** (determinístico → calculado UMA vez por página: sair e voltar pro cyberespaço não refaz os ~0,2 s de crescimento) */
@@ -176,8 +177,8 @@ function gerarVeiasSemCache(o: { semente?: number; low?: boolean }): { veias: Ve
   const ponto = (v: Veia, x: number, y: number, z: number, nx: number, ny: number, nz: number, w: number, d: number, atraso: number) => { v.p.push(x, y, z); v.n.push(nx, ny, nz); v.w.push(w); v.d.push(d); v.a.push(atraso); };
   const sobem = Array.from({ length: 8 }, (_, i) => Math.round((i * CAPELA.pilares) / 8) % CAPELA.pilares);
   const angSobe = (i: number) => (sobem[i]! / CAPELA.pilares) * Math.PI * 2 + 0.035, PE = CAPELA.r + 2.2;
-  const raizes = Array.from({ length: 16 }, (_, k) => k % 2 === 0 ? { ang: angSobe(k >> 1), ate: PE } : { ang: angSobe(k >> 1) + Math.PI / 8 });
-  const { nx, nz, pai } = colonizar({ low: !!o.low, R0, LIM, raizes, semente: o.semente ?? 2026 });
+  const raizes = Array.from({ length: 8 }, (_, k) => ({ ang: angSobe(k), ate: PE }));
+  const { nx, nz, pai } = colonizar({ low: !!o.low, R0, LIM, raizes, semente: o.semente ?? 2026, livreAte: PE });
   const n = nx.length, filhos: number[][] = Array.from({ length: n }, () => []);
   for (let k = 0; k < n; k++) if (pai[k]! >= 0) filhos[pai[k]!]!.push(k);
   // MURRAY de baixo pra cima (os nós nascem depois do pai: a ordem inversa é pós-ordem) + a distância pelo caminho
@@ -225,6 +226,11 @@ function gerarVeiasSemCache(o: { semente?: number; low?: boolean }): { veias: Ve
   }
   return { veias, distTopo };
 }
+
+/** o SOM do coração (a batida e o raio) só se ouve no CENTRO da capela, em volta do globo de onde o holograma nasce —
+ *  no resto da cidade o pulso é só luz (som pulsando o tempo todo cansa). `local` = relativo ao centro da ilha */
+export const R_SOM_CORACAO = 20;
+export const ouveOCoracao = (local: { x: number; z: number }) => Math.hypot(local.x, local.z) <= R_SOM_CORACAO;
 
 /** o raio CAI neste quadro? (começo de um ciclo) */
 export const disparaRaio = (tAnt: number, t: number) => Math.floor(t / CORACAO.ciclo) > Math.floor(tAnt / CORACAO.ciclo);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, computadorPerto, computadoresLocais, foraDaIlha, mundo, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, naTorreDJ, foraDaTorreDJ, CAMPO_DJ, BN_NA_SALA, TRELICA, type NomeSala } from "./ceu";
+import { BURACO_NEGRO, CIDADE, chaoDaNave, colisoresDaCidade, foraDaIlha, mundo, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, naTorreDJ, foraDaTorreDJ, CAMPO_DJ, BN_NA_SALA, TRELICA, type NomeSala } from "./ceu";
 import { NOS, noDoAnel } from "./buracos";
 import { PRACA } from "./praca";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, baseNoCeu, spawnDaBase } from "./bases";
@@ -44,31 +44,15 @@ describe("cidade no céu", () => {
       expect(Math.hypot(l.x, l.z)).toBeLessThan(CIDADE.andavelR);
     }
   });
-  it("andar: desktops, pilares da capela e a mesa do globo são sólidos; não cai da borda", () => {
-    const c0 = mundo(computadoresLocais()[0]!);
-    const r = resolverCidade(c0);
-    expect(Math.hypot(r.x - c0.x, r.z - c0.z)).toBeGreaterThanOrEqual(CIDADE.monitores.colR - 1e-6);
+  it("andar: pilares da capela e a mesa do globo são sólidos; não cai da borda", () => {
+    const pilar = mundo({ x: CIDADE.cidadela.r, z: 0 }), r = resolverCidade(pilar);
+    expect(Math.hypot(r.x - pilar.x, r.z - pilar.z)).toBeGreaterThanOrEqual(CIDADE.cidadela.pilarColR - 1e-6);
     const fora = resolverCidade(mundo({ x: CIDADE.bordaR - 4, z: 40 }));
     expect(Math.hypot(fora.x - CIDADE.centro.x, fora.z - CIDADE.centro.z)).toBeLessThanOrEqual(CIDADE.andavelR + 1e-6);
   });
-  it("a capela: só o globo no meio e os DESKTOPS em volta dele (virados pro centro), com passagem entre eles", () => {
-    const ms = computadoresLocais();
-    expect(ms).toHaveLength(CIDADE.monitores.n);
-    for (const m of ms) {
-      expect(Math.hypot(m.x, m.z)).toBeCloseTo(CIDADE.monitores.r, 6);
-      expect(Math.hypot(m.x, m.z) - CIDADE.monitores.colR).toBeGreaterThan(CIDADE.mesaHolo.r + 2);   // entre o globo e os pilares
-      expect(Math.hypot(m.x, m.z) + CIDADE.monitores.colR).toBeLessThan(CIDADE.cidadela.r - 2);
-      const frente = { x: m.x + Math.sin(m.rot), z: m.z + Math.cos(m.rot) };
-      expect(Math.hypot(frente.x, frente.z)).toBeLessThan(Math.hypot(m.x, m.z));   // +z local (a tela) → centro
-    }
-    const a = (1 / CIDADE.monitores.n) * Math.PI * 2, vao = mundo({ x: Math.cos(a) * CIDADE.monitores.r, z: Math.sin(a) * CIDADE.monitores.r });
-    expect(dentroDeAlgum(vao, colisoresDaCidade())).toBe(false);
-  });
-  it("desktop mais perto (pra clicar e estudar)", () => {
-    const c3 = computadoresLocais()[3]!;
-    const k = (CIDADE.monitores.r - 2.4) / CIDADE.monitores.r, perto = mundo({ x: c3.x * k, z: c3.z * k });   // na frente da tela
-    expect(computadorPerto(perto)).toBe(3);
-    expect(computadorPerto(mundo(CIDADE.chegada))).toBe(-1);
+  it("a capela: sem os desktops de estudo — entre o globo e as estações dos agentes o pátio é livre", () => {
+    const cs = colisoresDaCidade();
+    for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2 + 0.2; for (const r of [12, 18, 24]) expect(dentroDeAlgum(mundo({ x: Math.cos(a) * r, z: Math.sin(a) * r }), cs)).toBe(false); }
   });
   it("a ilha é sólida pra nave (pousa em cima; não atravessa por baixo nem pelo lado)", () => {
     const meio = { ...mundo({ x: 5, z: 0 }), y: CIDADE.pisoY - 2 };
