@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { executarTurno, montarHistorico, montarObjetivo, blocoCanal, type MsgRow, type TurnoPrisma } from "./agent-turn";
 import { montarAliases } from "./mention";
 import { EV_DIGITANDO, EV_MENSAGEM } from "./realtime";
@@ -122,6 +122,37 @@ describe("agent-turn · executarTurno", () => {
     const efemera = eventos.find(([ev, p]) => ev === EV_MENSAGEM && p?.efemera)![1];
     expect(efemera.texto).toMatch(/limite diário de uso acabou/);
     expect(efemera.autorId).toBe("medicina");
+  });
+
+  describe("PR-A3 · teto por agente (ler ≠ agir)", () => {
+    const comTeto = () => {
+      const f = fakePrisma(canal, [msg({ autorId: A, texto: "@medicina e aí?", mencoes: ["medicina"] })]);
+      (f.prisma as any).agentProfile.findUnique = async () => ({ tetoTokensDia: 100 });
+      (f.prisma as any).tokenLedger = { aggregate: async () => ({ _sum: { totalTokens: 100 } }) };
+      return f;
+    };
+    const prevFlag = process.env.AGENT_TETO_ENFORCE;
+    afterEach(() => { if (prevFlag === undefined) delete process.env.AGENT_TETO_ENFORCE; else process.env.AGENT_TETO_ENFORCE = prevFlag; });
+
+    it("flag off + autônomo + fora → responde normal (só avisa no admin)", async () => {
+      delete process.env.AGENT_TETO_ENFORCE;
+      const { prisma, criadas } = comTeto(); const gerar = vi.fn(async () => "resposta");
+      const r = await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A, origem: "autonomo" }, { prisma, gerar, publicar: async () => {} });
+      expect(r.ok).toBe(true); expect(gerar).toHaveBeenCalledTimes(1); expect(criadas).toHaveLength(1);
+    });
+    it("flag on + autônomo + fora → motivo teto, gerar NÃO chamado, efêmera do catálogo", async () => {
+      process.env.AGENT_TETO_ENFORCE = "1";
+      const { prisma, criadas } = comTeto(); const gerar = vi.fn(async () => "resposta"); const eventos: any[] = [];
+      const r = await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A, origem: "autonomo" }, { prisma, gerar, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(r).toEqual({ ok: false, motivo: "teto" }); expect(gerar).not.toHaveBeenCalled(); expect(criadas).toHaveLength(0);
+      expect(eventos.find(([ev, p]) => ev === EV_MENSAGEM && p?.efemera)![1].texto).toMatch(/limite diário/);
+    });
+    it("flag on + HUMANO + fora → responde normal (turno pedido por humano nunca é barrado)", async () => {
+      process.env.AGENT_TETO_ENFORCE = "1";
+      const { prisma, criadas } = comTeto(); const gerar = vi.fn(async () => "resposta");
+      const r = await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A }, { prisma, gerar, publicar: async () => {} });
+      expect(r.ok).toBe(true); expect(gerar).toHaveBeenCalledTimes(1); expect(criadas).toHaveLength(1);
+    });
   });
 
   it("mentor do seed responde com seu nome (Osler) mesmo sem profile", async () => {

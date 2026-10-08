@@ -19,3 +19,13 @@ Nota: o que já chamava `geminiJson`/`geminiText` **saiu** desta lista automatic
 
 ### Banco
 `npx prisma generate` rodado; **`prisma db push` não rodado localmente** (o deploy roda `db_push`; Mongo só cria a coleção/índices no primeiro insert/push).
+
+## PASSO 3 · PR-G2 (virtual keys) — PR #285
+`scripts/gateway-keys.mjs` (idempotente por `key_alias`, budget USD/dia, TTL, `--revoke`), teto da key → `agent_budget_exhausted` (lei 5) no turno do canal. **Achados do gate local, já corrigidos no compose:** LiteLLM subia antes do Postgres e ficava `db: disconnected` (sem DB não há virtual key) → `depends_on: service_healthy` + `DATABASE_URL` explícito; `LITELLM_PG_PASSWORD` com `:?` quebrava a interpolação do compose **mesmo sem o perfil** → `:-`.
+**Não verificado:** a imagem `ghcr.io/berriai/litellm:main-stable` (2026-10-07) devolve `401 No module named 'litellm.proxy.guardrails.guardrail_helpers'` em `/key/generate` — regressão da imagem; **pinar uma tag `main-vX.Y.Z-stable`** no VPS ao ligar. O teste local também esgotou o disco do Mac (Docker.raw 11 GB); containers/imagens de teste removidos.
+
+## PASSO 4 · PR-A3 (admin: gasto por agente) — esta PR
+- `GET /api/admin/agents/tokens?range&groupBy` (founder; `medindoDesde`, `hoje`, `tetos`, `truncado`); `AgentProfile.tetoTokensDia` + `PATCH`; `lib/llm/teto.ts` (`foraPorTeto`, dia **local**); `scripts/conferir-tokens.mjs` (soma crua × rota, diferença 0).
+- `AgentsModule`: bloco USO **fundido** com in/out/cached/total/custo est./tokens-por-turno, seletor 7d/30d/tudo, ordenação por qualquer coluna, barras CSS 14d, cabeçalho "medindo desde …" / frase do vazio, "—" para agente sem linha, campo teto/dia + aviso "estouraria o teto hoje (usado/teto)". Leitura ligada por default (decisão do Martinez).
+- Freio: `TurnoInput.origem` (`"humano"` default · `"autonomo"`); `AGENT_TETO_ENFORCE=1` barra **só** o autônomo (3 testes: off+autônomo responde · on+autônomo `motivo:"teto"` sem `gerar` · on+humano responde). Nesta fatia ninguém dispara `"autonomo"`: nasce testado e dormente.
+**Não verificado ao vivo:** painel com números reais (sem Mongo/Vertex válidos nesta máquina); `conferir-tokens.mjs` roda no VPS após o merge.
