@@ -162,7 +162,7 @@ export type CyberOpts = {
    *  sumiu — o React abre/fecha a janela; `engine.fecharTablet()` guarda o tablet */
   onTablet?: (aberto: boolean) => void;
   /** perto de um sofá/puff do lounge (mostra a dica "J sentar") / dentro do lounge (o botão do tablet) */
-  onDescanso?: (d: { pertoDeLugar: boolean; noLounge: boolean; modo: ModoDescanso | null }) => void;
+  onDescanso?: (d: { pertoDeLugar: boolean; noLounge: boolean; modo: ModoDescanso | null; podeDeitar: boolean }) => void;
   onSessao?: (go: string) => void;
   onPronto?: () => void;
   /** o carregamento: em que etapa está e quanto da barra já foi (lib/cyber/carregamento) */
@@ -2274,8 +2274,8 @@ export class CyberEngine {
       // a dica da J / o botão do tablet: só avisa o React quando muda
       const noLounge = this.noCeu && salaEm({ x: eu.pos.x - CIDADE.centro.x, z: eu.pos.z - CIDADE.centro.z }) !== null && eu.alt > (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE - 1;   // em qualquer uma das salas
       const pertoDeLugar = noLounge && (!!this.descanso || lugarPerto(eu.pos, this.outrosNaZaeon()) !== null);
-      const chave = `${noLounge}|${pertoDeLugar}|${m}`;
-      if (chave !== this.ultDescanso) { this.ultDescanso = chave; this.o.onDescanso?.({ pertoDeLugar, noLounge, modo: m }); } }
+      const podeDeitar = !!d?.lugar.deita, chave = `${noLounge}|${pertoDeLugar}|${m}|${podeDeitar}`;
+      if (chave !== this.ultDescanso) { this.ultDescanso = chave; this.o.onDescanso?.({ pertoDeLugar, noLounge, modo: m, podeDeitar }); } }
     // DJ: parado na cabine do lounge (a pé) → é puxado pro lugar atrás da mesa e olha pra pista; o avatar põe o fone
     const souDJ = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !this.sobreNave && !this.bordo && naCabineDJ(eu.pos);
     eu.dj = (eu.dj ?? 0) + ((souDJ ? 1 : 0) - (eu.dj ?? 0)) * Math.min(1, dt * 4);

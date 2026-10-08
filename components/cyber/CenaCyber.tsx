@@ -87,7 +87,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [rota, setRota] = useState<"heliporto" | "zaeon" | null>(null);
   // o MODO ESTUDO no tablet (TabletLab) e o DESCANSO no lounge (J): o que o engine avisa
   const [tabletAberto, setTabletAberto] = useState(false);
-  const [descanso, setDescanso] = useState<{ pertoDeLugar: boolean; noLounge: boolean; modo: "sentado" | "deitado" | null }>({ pertoDeLugar: false, noLounge: false, modo: null });
+  const [descanso, setDescanso] = useState<{ pertoDeLugar: boolean; noLounge: boolean; modo: "sentado" | "deitado" | null; podeDeitar: boolean }>({ pertoDeLugar: false, noLounge: false, modo: null, podeDeitar: false });
   /** o TÚNEL de um buraco negro aberto (escolhendo o destino / atravessando o par do dono) */
   const [tunel, setTunel] = useState<ModoTunel | null>(null);
   /** o tutorial do Droid (o passo atual) e as falas dele no chat (SÓ locais: o Droid é de cada um, nada vai pela rede) */
@@ -328,7 +328,7 @@ export default function CenaCyber(p: CenaCyberProps) {
             <div className="absolute left-1/2 z-[21] flex -translate-x-1/2 items-center gap-2" style={{ bottom: touch ? 168 : 28 }}>
               {(descanso.pertoDeLugar || descanso.modo) && (
                 <button type="button" onClick={() => engine.current?.alternarDescanso()} className="min-h-[40px] rounded-full border border-violet-300/35 bg-[#0a081e]/75 px-4 text-xs font-semibold text-violet-100 backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">
-                  {!touch && <kbd className="mr-1.5 rounded border border-white/25 px-1.5 text-[10px]">J</kbd>}{descanso.modo === null ? "Sentar" : descanso.modo === "sentado" ? "Deitar / levantar" : "Levantar"}
+                  {!touch && <kbd className="mr-1.5 rounded border border-white/25 px-1.5 text-[10px]">J</kbd>}{descanso.modo === null ? "Sentar" : descanso.modo === "sentado" && descanso.podeDeitar ? "Deitar / levantar" : "Levantar"}
                 </button>
               )}
               <button type="button" onClick={() => engine.current?.alternarTablet()} className="min-h-[40px] rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-4 text-xs font-extrabold text-slate-950 shadow-[0_0_20px_rgba(90,200,255,.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
