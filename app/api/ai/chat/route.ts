@@ -147,6 +147,10 @@ export async function POST(req: Request) {
             activeMentor = await resolveMentor(mentor || mentorId, uid).catch(() => null);
             if (activeMentor) systemContext = [activeMentor.context, rawSystemContext].filter(Boolean).join("\n\n");
         }
+        // C5: contexto do TokenLedger para as 2 chamadas diretas ao Vertex deste arquivo (chat legado).
+        const { surfaceLedger } = await import("@/lib/llm/ledger");
+        const ledgerUserId: string | null = await import("@/lib/agent/transcript").then((m) => m.resolveUserId()).catch(() => null);
+        const ledgerCtx = { agentKey: activeMentor?.slug ?? String(agentKey || "aura"), mentorSlug: activeMentor?.slug ?? null, userId: ledgerUserId, surface: surfaceLedger(surface ?? "estudos") };
 
         // Histórico da conversa (memória entre turnos). Ver lib/ai/history.ts.
         const chatHistory = sanitizeHistory(history);
@@ -411,6 +415,7 @@ export async function POST(req: Request) {
                 systemInstruction: { role: 'system', parts: [{ text: finalSystemInstruction }] },
                 history: chatHistory,
             });
+            const tIni = Date.now();
             const streamResult = await chatS.sendMessageStream(parts);
             const encoder = new TextEncoder();
             const rs = new ReadableStream<Uint8Array>({
@@ -425,6 +430,8 @@ export async function POST(req: Request) {
                             }
                         }
                     } catch { /* encerra o que tiver */ }
+                    // C5: mede o turno legado (1 linha; usageMetadata vem na resposta agregada do stream).
+                    streamResult.response.then((final) => import("@/lib/llm/medir").then(({ medirVertex }) => medirVertex(final, ledgerCtx, { model: GEMINI_MODEL_FLASH, ms: Date.now() - tIni }))).catch(() => undefined);
                     // TOOL-LOOP (Fase 0): studio_generate → AÇÃO pro cliente executar.
                     if (call?.name === "studio_generate") {
                         const a: any = call.args || {};
@@ -462,8 +469,10 @@ export async function POST(req: Request) {
             history: chatHistory, // 🔥 memória entre turnos (antes era ignorada → IA "esquecia" tudo)
         });
 
+        const tIni = Date.now();
         const result = await chat.sendMessage(parts);
         const response = result.response;
+        void import("@/lib/llm/medir").then(({ medirVertex }) => medirVertex(result, ledgerCtx, { model: GEMINI_MODEL_FLASH, ms: Date.now() - tIni })).catch(() => undefined);
 
         const functionCall = response.candidates?.[0]?.content?.parts?.[0]?.functionCall;
         if (functionCall) {

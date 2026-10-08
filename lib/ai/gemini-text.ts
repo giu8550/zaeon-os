@@ -4,10 +4,13 @@
  * Ponto único para chamadas de texto "leves" do app. Padroniza o Gemini Flash
  * como a ÚNICA IA (substitui usos diretos de Groq/OpenAI). Troca de modelo = env
  * GEMINI_MODEL/GEMINI_MODEL_FLASH (ver lib/ai/model.ts).
+ *
+ * Desde a Fatia 1 (PR-A1) é um wrapper FINO do envelope (lib/llm/envelope.ts, C5): mesma assinatura,
+ * mesmos defaults (temperatura 0.5, timeout 45s, histórico + prompt), e cada chamada grava usage no
+ * TokenLedger (best-effort). `ctx` é opcional — default {agentKey:"sistema", surface:"outro"}.
  */
-import { VertexAI } from "@google-cloud/vertexai";
 import { GEMINI_MODEL_FLASH } from "./model";
-import { vertexCredentials } from "./vertex-credentials";
+import type { LedgerCtx } from "@/lib/llm/ledger";
 
 export async function geminiText(opts: {
   prompt: string;
@@ -20,33 +23,17 @@ export async function geminiText(opts: {
   timeoutMs?: number;
   /** Força saída em JSON puro (responseMimeType). Use em rotas que parseiam JSON. */
   json?: boolean;
+  /** Contexto do TokenLedger (C5). */
+  ctx?: LedgerCtx;
 }): Promise<string> {
-  const { project, client_email, private_key, location } = vertexCredentials();
-  const vertexAI = new VertexAI({
-    project,
-    location,
-    googleAuthOptions: { credentials: { client_email, private_key } },
+  const { gerar } = await import("@/lib/llm/envelope");
+  const messages = (opts.history ?? [])
+    .map((h) => ({ role: (h.role === "model" ? "model" : "user") as "user" | "model", text: (h.parts ?? []).map((p) => p?.text ?? "").join("") }))
+    .filter((m) => m.text);
+  const r = await gerar({
+    system: opts.system, messages, user: opts.prompt, json: !!opts.json, rota: "vertex",
+    model: opts.model || GEMINI_MODEL_FLASH, temperature: opts.temperature ?? 0.5, timeoutMs: opts.timeoutMs ?? 45_000,
+    ctx: opts.ctx ?? { agentKey: "sistema", surface: "outro" },
   });
-  const model = vertexAI.getGenerativeModel({
-    model: opts.model || GEMINI_MODEL_FLASH,
-    generationConfig: {
-      temperature: opts.temperature ?? 0.5,
-      ...(opts.json ? { responseMimeType: "application/json" } : {}),
-    },
-  });
-  const chat = model.startChat({
-    ...(opts.system ? { systemInstruction: { role: "system", parts: [{ text: opts.system }] } } : {}),
-    ...(opts.history && opts.history.length ? { history: opts.history } : {}),
-  });
-  // Corre contra um timeout: se o Vertex travar (modelo/credencial/região), falha rápido
-  // com erro claro em vez de pendurar até o gateway cortar (504).
-  const timeoutMs = opts.timeoutMs ?? 45_000;
-  const call = chat.sendMessage([{ text: opts.prompt }]);
-  const result: any = await Promise.race([
-    call,
-    new Promise((_, reject) => setTimeout(() => reject(new Error("gemini_timeout")), timeoutMs)),
-  ]);
-  return (
-    result.response.candidates?.[0]?.content?.parts?.map((p: any) => p.text).filter(Boolean).join("") ?? ""
-  );
+  return r.texto;
 }

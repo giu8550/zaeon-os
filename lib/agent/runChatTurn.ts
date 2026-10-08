@@ -15,6 +15,7 @@
  * a resposta pela metade.
  */
 import { buildHarnessDeps, resolveHarnessOutput, type HarnessOutput } from "@/lib/agent/aura-harness";
+import { surfaceLedger } from "@/lib/llm/ledger";
 import { runTrajectoryTraced } from "@/lib/agent/trajectory";
 import * as mem from "@/lib/agent/memory-provider";
 import { serializarProgresso } from "@/lib/agent/progresso";
@@ -87,6 +88,8 @@ export async function runChatTurn(
     const deps = buildHarnessDeps(hctx, {
       systemContext: [params.systemContext, memBlock, cartolinaBlock, tccBlock, skillBlock].filter(Boolean).join("\n\n") || undefined,
       history: params.history,
+      // C5: cada chamada do turno grava no TokenLedger com quem/onde (mentor em agentKey E mentorSlug, como o registrarUso).
+      ledger: { agentKey: mentor?.slug ?? "aura", mentorSlug: mentor?.slug ?? null, userId: userId ?? null, surface: surfaceLedger(surface ?? hctx.activeTab), scopeId: typeof ac.cartolinaScopeId === "string" ? ac.cartolinaScopeId : null },
       // O CANAL DE PROGRESSO: cada fase do trajectory (plan → reason → draft…) vira um
       // evento. Uma falha do canal nunca derruba a resposta.
       onStep(step) {

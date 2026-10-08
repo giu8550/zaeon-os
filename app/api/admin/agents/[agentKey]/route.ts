@@ -50,6 +50,12 @@ export async function PATCH(req: Request, { params }: { params: { agentKey: stri
     data[campo] = v;
   }
   if (typeof b?.ativo === "boolean") data.ativo = b.ativo;
+  // PR-A3: teto diário de tokens — inteiro ≥ 0 ou null (sem teto). Ler ≠ agir: só AGENT_TETO_ENFORCE=1 freia.
+  if (b?.tetoTokensDia !== undefined) {
+    if (b.tetoTokensDia === null) data.tetoTokensDia = null;
+    else if (Number.isInteger(b.tetoTokensDia) && b.tetoTokensDia >= 0) data.tetoTokensDia = b.tetoTokensDia;
+    else return NextResponse.json({ error: "tetoTokensDia: inteiro ≥ 0 ou null." }, { status: 400 });
+  }
   if (Number.isFinite(b?.ordem)) data.ordem = Math.trunc(Number(b.ordem));
   if (!Object.keys(data).length) return NextResponse.json({ error: "Nada pra alterar." }, { status: 400 });
 

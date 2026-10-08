@@ -70,9 +70,7 @@ const vertexReal: TransporteVertex = async (req, modelo) => {
     },
     ...(req.system ? { systemInstruction: { role: "system", parts: [{ text: req.system }] } } : {}),
   });
-  const contents = req.messages?.length
-    ? req.messages.map((m) => ({ role: m.role, parts: [{ text: m.text }] }))
-    : [{ role: "user", parts: [{ text: req.user ?? "" }] }];
+  const contents = contentsDe(req).map((m) => ({ role: m.role, parts: [{ text: m.text }] }));
   const result: any = await withTimeout(model.generateContent({ contents }), req.timeoutMs ?? DEFAULT_TIMEOUT_MS, "Gemini");
   return {
     texto: extractText(result),
@@ -85,8 +83,7 @@ const vertexReal: TransporteVertex = async (req, modelo) => {
 async function viaGateway(req: GerarReq, modelo: string, url: string, key: string, f: typeof fetch): Promise<RespostaBruta> {
   const messages: { role: string; content: string }[] = [];
   if (req.system) messages.push({ role: "system", content: req.system });
-  if (req.messages?.length) for (const m of req.messages) messages.push({ role: m.role === "model" ? "assistant" : "user", content: m.text });
-  else messages.push({ role: "user", content: req.user ?? "" });
+  for (const m of contentsDe(req)) messages.push({ role: m.role === "model" ? "assistant" : "user", content: m.text });
   const r = await f(`${url.replace(/\/+$/, "")}/v1/chat/completions`, {
     method: "POST", cache: "no-store", // o fetch do Next tem data cache; LLM nunca é cacheável
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -107,6 +104,14 @@ async function viaGateway(req: GerarReq, modelo: string, url: string, key: strin
     finishReason: body?.choices?.[0]?.finish_reason,
     modelo: typeof body?.model === "string" && body.model ? body.model : modelo,
   };
+}
+
+/** histórico (messages) + pergunta (user) — os dois podem vir juntos (geminiText com history). */
+function contentsDe(req: GerarReq): Mensagem[] {
+  const out: Mensagem[] = [...(req.messages ?? [])];
+  if (req.user != null && req.user !== "") out.push({ role: "user", text: req.user });
+  if (!out.length) out.push({ role: "user", text: "" });
+  return out;
 }
 
 /** Gateway caiu de um jeito que o Vertex direto resolve? (teto/cota/auth-de-agente NÃO: são declaráveis/nossos.) */
@@ -159,13 +164,17 @@ export async function gerar(req: GerarReq, deps: Deps = {}): Promise<GerarRes> {
   }
 }
 
+/** = gerar({json:true}) + parse, devolvendo TAMBÉM a resposta bruta (usage) — para quem reconcilia orçamento. */
+export async function gerarJsonRes<T>(req: GerarReq, deps: Deps = {}): Promise<{ valor: T; res: GerarRes }> {
+  const res = await gerar({ ...req, json: true }, deps);
+  const cleaned = res.texto.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+  if (!cleaned) throw new ErroLlm("outro", res.provedor, new Error(`Gemini retornou resposta vazia (finishReason=${res.finishReason ?? "?"})`));
+  try { return { valor: JSON.parse(cleaned) as T, res }; }
+  catch { throw new ErroLlm("resposta_nao_json", res.provedor, new Error(`Gemini retornou JSON inválido (finishReason=${res.finishReason ?? "?"}): ${cleaned.slice(0, 160)}`)); }
+}
 /** = gerar({json:true}) + parse. Mesmos erros diagnósticos do geminiJson legado (nunca "{}" silencioso). */
 export async function gerarJson<T>(req: GerarReq, deps: Deps = {}): Promise<T> {
-  const r = await gerar({ ...req, json: true }, deps);
-  const cleaned = r.texto.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
-  if (!cleaned) throw new ErroLlm("outro", r.provedor, new Error(`Gemini retornou resposta vazia (finishReason=${r.finishReason ?? "?"})`));
-  try { return JSON.parse(cleaned) as T; }
-  catch { throw new ErroLlm("resposta_nao_json", r.provedor, new Error(`Gemini retornou JSON inválido (finishReason=${r.finishReason ?? "?"}): ${cleaned.slice(0, 160)}`)); }
+  return (await gerarJsonRes<T>(req, deps)).valor;
 }
 
 export { classificarErroLlm } from "@/lib/llm/usage";
