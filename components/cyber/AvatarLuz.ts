@@ -16,6 +16,15 @@ import { fasesDeContato, pisadasEntre } from "@/lib/cyber/audio";
 import { clone as skClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { COR_LUZ } from "@/lib/cyber/cores";
 import { MESA_DJ, PALCO } from "@/lib/cyber/ceu";
+import { AURA_NO_DESENHO, TINTA, estiloDe } from "@/lib/cyber/estiloAvatar";
+import { corDesenho, materialTinta, materialToon, materialToonSimples } from "./AvatarAnime";
+import type { VRM } from "@pixiv/three-vrm";
+import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./AvatarVrm";
+import { criarAsas, type AsasHandle } from "./AsasAnjo";
+import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
+
+/** o corpo DESENHADO (estilo anime — experimento, lib/cyber/estiloAvatar)? */
+const desenhado = () => typeof window !== "undefined" && estiloDe(process.env.NEXT_PUBLIC_CYBER_AVATAR_ESTILO, window.location.search) === "anime";
 
 /** Modelo de referência de teste (three.js examples). Em produção, hospede um GLB humano próprio e aponte a env. */
 export const AVATAR_GLB_REFERENCIA = "https://threejs.org/examples/models/gltf/Soldier.glb";
@@ -66,6 +75,12 @@ export type AvatarLuzHandle = {
   recolorir(hex: string): void;
   /** liga/desliga a AURA (a 2ª malha com skinning — a qualidade adaptativa tira quando a máquina sofre) */
   aura(on: boolean): void;
+  /** troca o corpo pelo de um VRM (components/cyber/AvatarVrm) — o esqueleto do GLB continua animando por baixo */
+  usarVrm(vrm: VRM): void;
+  /** ASAS NEGRAS no lugar da mochila a jato (components/cyber/AsasAnjo) — o voo é o mesmo */
+  usarAsas(): void;
+  /** o que as asas fizeram desde a última chamada (o engine toca os sons); null = sem asas */
+  eventosAsas(): { bateu: number; abriu: boolean; fechou: boolean; modo: ModoAsas } | null;
   dispose(): void;
 };
 
@@ -79,12 +94,15 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   const grupo = new THREE.Group();
   const corpo = new THREE.Group(); grupo.add(corpo);   // sentar: inclina/abaixa o corpo; o grupo guarda posição/yaw
   const meshes: THREE.Object3D[] = [];
-  const matArmadura = new THREE.MeshStandardMaterial({ color: armadura.clone().multiplyScalar(0.5), emissive: armadura, emissiveIntensity: 0.65, roughness: 0.4, metalness: 0.35 });
+  const anime = desenhado();
+  const matArmadura: THREE.MeshStandardMaterial | THREE.MeshToonMaterial = anime ? materialToon(armadura, luz) : new THREE.MeshStandardMaterial({ color: armadura.clone().multiplyScalar(0.5), emissive: armadura, emissiveIntensity: 0.65, roughness: 0.4, metalness: 0.35 });
+  const matTinta = anime ? materialTinta() : null;   // o contorno de tinta do desenho
   const matViseira = new THREE.MeshBasicMaterial({ color: luz });                       // a "luz" do rosto
   // AURA: casca inflada (back-face, aditiva) em volta do corpo — o que faz dele um ser de luz
   const matAura = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
   matAura.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n transformed += normalize(normal) * 0.05;"); };
-  let mixer: THREE.AnimationMixer | null = null;
+  let mixer: THREE.AnimationMixer | null = null, modeloMx: THREE.Object3D | null = null, repouso: Repouso | null = null, espelho: EspelhoVrm | null = null;
+  let asas: AsasHandle | null = null, estAsas = ASAS_INICIO, evAsas = { bateu: 0, abriu: false, fechou: false, modo: "chao" as ModoAsas };
   const aurasMalha: THREE.Mesh[] = [];
   // braços (rig mixamo do GLB): quando sentado, apontam pra tela — sem os ossos, só a aura pulsa
   const ossos: { braco: THREE.Bone; ante: THREE.Bone; mao: THREE.Object3D; lado: 1 | -1 }[] = [];
@@ -102,16 +120,23 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       m.frustumCulled = false;
       if (/visor/i.test(m.name)) { m.material = matViseira; return; }   // viseira = luz; o resto = armadura
       m.material = matArmadura; meshes.push(m);
-      if (low) return;   // celular: sem a casca de aura (é uma 2ª malha com skinning por avatar); a armadura já é emissiva
       const sk = m as THREE.SkinnedMesh;
+      if (matTinta) {   // anime: o CONTORNO vale até no celular (sem ele não é desenho)
+        matTinta.espessar(m.geometry);
+        let t: THREE.Mesh;
+        if (sk.isSkinnedMesh) { const c = new THREE.SkinnedMesh(m.geometry, matTinta); c.bind(sk.skeleton, sk.bindMatrix); t = c; }
+        else t = new THREE.Mesh(m.geometry, matTinta);
+        t.frustumCulled = false; t.raycast = () => {}; t.userData.pai = m.parent; cascas.push(t);
+      }
+      if (low) return;   // celular: sem a casca de aura (é uma 2ª malha com skinning por avatar); a armadura já é emissiva
       let casca: THREE.Mesh;
       if (sk.isSkinnedMesh) { const c = new THREE.SkinnedMesh(m.geometry, matAura); c.bind(sk.skeleton, sk.bindMatrix); casca = c; }
       else casca = new THREE.Mesh(m.geometry, matAura);
       casca.frustumCulled = false; casca.renderOrder = 2; cascas.push(casca); casca.userData.pai = m.parent;
     });
     for (const c of cascas) (c.userData.pai as THREE.Object3D).add(c);
-    aurasMalha.push(...cascas);
-    corpo.add(modelo);
+    aurasMalha.push(...cascas.filter((c) => c.material === matAura));
+    corpo.add(modelo); modeloMx = modelo; repouso = medirRepouso(modelo, corpo);   // a pose T (pra um corpo VRM espelhar depois)
     for (const [lado, nome] of [[1, "Left"], [-1, "Right"]] as const) {
       const braco = modelo.getObjectByName(`mixamorig${nome}Arm`) as THREE.Bone | undefined, ante = modelo.getObjectByName(`mixamorig${nome}ForeArm`) as THREE.Bone | undefined, mao = modelo.getObjectByName(`mixamorig${nome}Hand`);
       if (braco && ante && mao) ossos.push({ braco, ante, mao, lado });
@@ -133,8 +158,9 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
 
   // MOCHILA A JATO nas costas (+z do grupo: a frente do modelo é o −z) com dois propulsores apontando pra baixo
   const mochila = new THREE.Group(); mochila.position.set(0, 1.22, 0.24); corpo.add(mochila);
-  const matMochila = new THREE.MeshStandardMaterial({ color: 0x1a2440, roughness: 0.35, metalness: 0.55, emissive: armadura.clone().multiplyScalar(0.3), emissiveIntensity: 0.7 });
+  const matMochila = anime ? materialToonSimples(0x2a3a66, armadura.clone().multiplyScalar(0.2)) : new THREE.MeshStandardMaterial({ color: 0x1a2440, roughness: 0.35, metalness: 0.55, emissive: armadura.clone().multiplyScalar(0.3), emissiveIntensity: 0.7 });
   const caixa = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.17), matMochila); mochila.add(caixa);
+  if (anime) { const traco = new THREE.Mesh(caixa.geometry, new THREE.MeshBasicMaterial({ color: TINTA.cor, side: THREE.BackSide })); traco.scale.set(1.07, 1.05, 1.14); mochila.add(traco); }   // o contorno da mochila (caixa: casca escalada)
   const frisoMochila = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.42, 0.01), new THREE.MeshBasicMaterial({ color: luz })); frisoMochila.position.z = 0.09; mochila.add(frisoMochila);
   const texJato = new THREE.CanvasTexture((() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d")!; const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.35, "rgba(150,230,255,.8)"); gr.addColorStop(1, "rgba(60,140,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c; })());
   const jatos: { chama: THREE.Mesh; brilho: THREE.Sprite }[] = [];
@@ -150,7 +176,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   // FONE DE OUVIDO do DJ: arco + 2 conchas com aro de luz; só aparece na cabine (sai do pescoço e sobe pra cabeça).
   //  Eixos locais: x = de uma orelha à outra, y = pra cima (o arco passa por cima da cabeça)
   const fone = new THREE.Group(); fone.visible = false; grupo.add(fone);
-  const matFone = new THREE.MeshStandardMaterial({ color: 0x1a1f2e, roughness: 0.3, metalness: 0.5, emissive: armadura.clone().multiplyScalar(0.5), emissiveIntensity: 0.9 });
+  const matFone = anime ? materialToonSimples(0x262d44, armadura.clone().multiplyScalar(0.35)) : new THREE.MeshStandardMaterial({ color: 0x1a1f2e, roughness: 0.3, metalness: 0.5, emissive: armadura.clone().multiplyScalar(0.5), emissiveIntensity: 0.9 });
   const matLedFone = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
   const FONE_R = 0.12;
   fone.add(new THREE.Mesh(new THREE.TorusGeometry(FONE_R, 0.014, 6, 24, Math.PI), matFone));
@@ -474,7 +500,14 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       } else { corpo.rotation.y = 0; corpo.rotation.z = 0; }
       if (surf <= 0.02) { prancha.visible = false; faiscas.visible = false; tSurf = 0; }
       // mochila presa às costas: segue o osso do tronco (em espaço do corpo), 0,22 m atrás
-      if (espinha) { corpo.updateWorldMatrix(true, false); espinha.updateWorldMatrix(true, false); espinha.getWorldPosition(vA); corpo.worldToLocal(vA); mochila.position.set(vA.x, vA.y - 0.08, vA.z + 0.22); }
+      if (espinha) { corpo.updateWorldMatrix(true, false); espinha.updateWorldMatrix(true, false); espinha.getWorldPosition(vA); corpo.worldToLocal(vA); mochila.position.set(vA.x, vA.y - 0.08, vA.z + 0.22); asas?.group.position.set(vA.x, vA.y + 0.04, vA.z + 0.13); }
+      // ASAS (no lugar da mochila): subindo batem; planando ondulam; no chão recolhem (lib/cyber/asas)
+      if (asas) {
+        const empuxo = ar && (jato >= 0.95 || ar.vy > 1.5) ? 1 : jato;   // (remotos: a subida vem pelo vy)
+        const s = passoAsas(estAsas, { noAr: !!ar, empuxo, vy: ar?.vy ?? 0, movendo: !!ar?.movendo }, dt);
+        estAsas = s.e; evAsas.bateu += +s.bateu; evAsas.abriu ||= s.abriu; evAsas.fechou ||= s.fechou; evAsas.modo = s.modo;
+        asas.atualizar(s, t);
+      }
       // propulsores: chama + brilho crescem com o jato (suave; sem piscar)
       jatoS += (jato - jatoS) * Math.min(1, dt * 6);
       for (const j of jatos) {
@@ -497,16 +530,37 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           apontar(o.ante, o.mao, dirAlvo, sentado);
         }
       }
-      matAura.opacity = 0.62 + Math.max(sentado, meditando, dj) * 0.25 * (0.5 + 0.5 * Math.sin(dj > Math.max(sentado, meditando) ? t * BPM_RAD : t * (meditando > sentado ? 0.9 : 2)));
+      matAura.opacity = (0.62 + Math.max(sentado, meditando, dj) * 0.25 * (0.5 + 0.5 * Math.sin(dj > Math.max(sentado, meditando) ? t * BPM_RAD : t * (meditando > sentado ? 0.9 : 2)))) * (anime ? AURA_NO_DESENHO : 1);
       (neu.material as THREE.PointsMaterial).size = 0.1 + 0.05 * Math.sin(t * 2 + grupo.position.x);
       neu.rotation.y += dt * 0.5;
+      espelho?.atualizar(dt, t);   // corpo VRM: copia a pose final (depois de todas as poses acima)
     },
     passosNovos() { if (!pernas.length) return null; const n = pisadas; pisadas = 0; return n; },
     olharPara(f) { alvo = f + Math.PI; },
-    aura(on) { for (const c of aurasMalha) c.visible = on; },
-    recolorir(hex) { armadura.set(hex); matArmadura.color.copy(armadura).multiplyScalar(0.5); matArmadura.emissive.copy(armadura); matMochila.emissive.copy(armadura).multiplyScalar(0.3); matFone.emissive.copy(armadura).multiplyScalar(0.5); (neu.material as THREE.PointsMaterial).color.copy(luz).lerp(armadura, 0.3); },
+    aura(on) { for (const c of aurasMalha) c.visible = on && !espelho; },
+    usarAsas() {
+      if (asas) return;
+      asas = criarAsas(); corpo.add(asas.group); mochila.visible = false;
+    },
+    eventosAsas() {
+      if (!asas) return null;
+      const e = { ...evAsas }; evAsas.bateu = 0; evAsas.abriu = false; evAsas.fechou = false;
+      return e;
+    },
+    usarVrm(vrm) {
+      if (!modeloMx || !repouso || espelho) return;
+      // o soldado (e as cascas dele: aura, tinta) somem — o esqueleto continua animando, e continua no clique
+      modeloMx.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
+      espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso);
+    },
+    recolorir(hex) {
+      armadura.set(hex);
+      if (anime) { corDesenho(armadura, matArmadura.color); matArmadura.emissive.copy(armadura).multiplyScalar(0.22); matMochila.emissive.copy(armadura).multiplyScalar(0.2); matFone.emissive.copy(armadura).multiplyScalar(0.35); }
+      else { matArmadura.color.copy(armadura).multiplyScalar(0.5); matArmadura.emissive.copy(armadura); matMochila.emissive.copy(armadura).multiplyScalar(0.3); matFone.emissive.copy(armadura).multiplyScalar(0.5); }
+      (neu.material as THREE.PointsMaterial).color.copy(luz).lerp(armadura, 0.3);
+    },
     dispose() {
-      mixer?.stopAllAction(); matArmadura.dispose(); matViseira.dispose(); matAura.dispose(); ng.dispose(); (neu.material as THREE.Material).dispose();
+      mixer?.stopAllAction(); matArmadura.dispose(); matViseira.dispose(); matAura.dispose(); matTinta?.dispose(); espelho?.dispose(); asas?.dispose(); ng.dispose(); (neu.material as THREE.Material).dispose();
       mochila.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); const mt = (m as { material?: THREE.Material }).material; if (mt && mt !== matArmadura) mt.dispose(); }); texJato.dispose();
       fone.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); }); matFone.dispose(); matLedFone.dispose();
       prancha.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); if (m.material && m.material !== matPrancha && m.material !== matLuzPrancha) (m.material as THREE.Material).dispose(); }); matPrancha.dispose(); matLuzPrancha.dispose();

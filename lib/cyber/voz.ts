@@ -4,8 +4,9 @@
 /** "perfect negotiation": na colisão de ofertas, o lado EDUCADO cede. Determinístico e oposto nos dois lados. */
 export const educado = (euId: string, outroId: string) => euId > outroId;
 
-/** a tecla do push-to-talk (G), ignorando quando se está DIGITANDO (chat, recado) e a repetição do teclado */
-export function ehTeclaFalar(e: { key: string; repeat?: boolean; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }, digitando: boolean): boolean {
+/** a tecla do push-to-talk (G; V pra quem tem uma habilidade no G — lib/cyber/habilidades teclaDoRadio), ignorando
+ *  quando se está DIGITANDO (chat, recado) e a repetição do teclado */
+export function ehTeclaFalar(e: { key: string; repeat?: boolean; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }, digitando: boolean, tecla = "g"): boolean {
   if (digitando || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return false;
-  return e.key === "g" || e.key === "G";
+  return e.key.toLowerCase() === tecla;
 }
