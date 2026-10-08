@@ -57,6 +57,12 @@ export const CIDADE = {
 /** o lounge flutua na altura do início da ponta da capela; a escada sobe com inclinação de escada de verdade (~33°),
  *  então a distância da plataforma dele sai da altura */
 export const INCLINACAO_ESCADA = 0.65;
+/** as TORRES da muralha (as grandes, de cristal com a ponta acesa): `n` em volta, na `muralhaR`, a 1ª em π/n. Entre
+ *  elas, no lugar dos antigos blocos de granizo, ficam os TUBOS DE ENSAIO onde quem chega nasce (lib/cyber/onboarding) */
+export const TORRES_MURALHA = { n: 16, alt: 48, rBase: 3.8 } as const;
+export const anguloDaTorre = (k: number) => Math.PI / TORRES_MURALHA.n + (k / TORRES_MURALHA.n) * Math.PI * 2;
+/** o vão da muralha onde a ESCADA do lounge sai (a oeste; local da ilha) — a muralha, as torres e o fogo abrem ali */
+export const naAberturaDaEscada = (x: number, z: number) => x < 0 && Math.abs(z) < ESCADA_LOUNGE.meia + 5;
 CIDADE.salas.lounge.y = Math.round(inicioDaPonta());
 CIDADE.salas.lounge.x = -(CIDADE.andavelR - 8 + CIDADE.salas.lounge.y / INCLINACAO_ESCADA + CIDADE.salas.lounge.r - 1.5);
 export const ALTURA_LOUNGE = CIDADE.salas.lounge.y;

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const m = vi.hoisted(() => ({ session: vi.fn(), userFind: vi.fn(), docFind: vi.fn(), docUpdate: vi.fn(), docCreate: vi.fn(), trigger: vi.fn(), get: vi.fn(), guard: vi.fn(), pusher: vi.fn() }));
+const m = vi.hoisted(() => ({ session: vi.fn(), userFind: vi.fn(), userUpdate: vi.fn(), docFind: vi.fn(), docUpdate: vi.fn(), docCreate: vi.fn(), trigger: vi.fn(), get: vi.fn(), guard: vi.fn(), pusher: vi.fn() }));
 vi.mock("next-auth", () => ({ getServerSession: m.session }));
 vi.mock("@/src/lib/auth", () => ({ authOptions: {} }));
 vi.mock("@/src/lib/ratelimit", () => ({ guard: m.guard }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { user: { findUnique: m.userFind, findMany: async () => [] }, collabDoc: { findUnique: m.docFind, update: m.docUpdate, create: m.docCreate, findMany: async () => [] } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { user: { findUnique: m.userFind, update: m.userUpdate, findMany: async () => [] }, collabDoc: { findUnique: m.docFind, update: m.docUpdate, create: m.docCreate, findMany: async () => [] } } }));
 vi.mock("@/lib/collab/realtime", () => ({ triggerSafe: m.trigger, getPusher: () => m.pusher() }));
 
 import { PATCH, GET } from "./[id]/route";
@@ -14,6 +14,7 @@ import { POST as ACESSO } from "./[id]/acesso/route";
 import { POST as TOPO } from "./[id]/topo/route";
 import { POST as RECADO, DELETE as APAGAR_RECADO } from "./[id]/recado/route";
 import { POST as RT_TOKEN } from "./[id]/rt-token/route";
+import { POST as NASCEU } from "./[id]/nasceu/route";
 import { verificarToken } from "@/server/colyseus/src/token";
 
 const ID = "0123456789abcdef01234567", ME = "aaaaaaaaaaaaaaaaaaaaaaaa", OUTRO = "bbbbbbbbbbbbbbbbbbbbbbbb";
@@ -94,14 +95,27 @@ describe("/api/lounge3d/[id]", () => {
     const req = (alvo: string) => new Request("http://x/", { method: "POST", body: JSON.stringify({ alvo }), headers: { "Content-Type": "application/json" } });
     m.docFind.mockResolvedValue(doc());
     // Ana (a@b.c) não está na allowlist nem tem role → 403 no topo e na nave; a Zaeon abre pra qualquer membro
-    for (const alvo of ["topo", "nave"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(403);
+    for (const alvo of ["topo", "nave", "dj"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(403);
     expect((await ACESSO(req("ceu"), { params: { id: ID } })).status).toBe(200);
     expect((await ACESSO(req("voar-pelado"), { params: { id: ID } })).status).toBe(400);
     expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(403);
     // fundador por role no banco → 200 (o cliente nunca decide)
     m.userFind.mockResolvedValue({ id: ME, name: "Ana", image: null, role: "super_admin" });
-    for (const alvo of ["topo", "ceu", "nave"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(200);
+    for (const alvo of ["topo", "ceu", "nave", "dj"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(200);
     expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(200);
+  });
+
+  it("1ª entrada no cyberespaço: GET diz `novo` (nunca entrou → nasce no tubo); POST /nasceu marca 1× (idempotente); não-membro → 404", async () => {
+    m.docFind.mockResolvedValue(doc());
+    expect((await (await GET(new Request("http://x/"), { params: { id: ID } })).json()).eu.novo).toBe(true);
+    const r = await NASCEU(new Request("http://x/", { method: "POST" }), { params: { id: ID } });
+    expect(r.status).toBe(200); expect(m.userUpdate).toHaveBeenCalledWith({ where: { id: ME }, data: { cyberNasceuEm: expect.any(Date) } });
+    m.userUpdate.mockReset(); m.userFind.mockResolvedValue({ id: ME, name: "Ana", image: null, cyberNasceuEm: new Date() });
+    expect((await (await GET(new Request("http://x/"), { params: { id: ID } })).json()).eu.novo).toBe(false);
+    expect((await (await NASCEU(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).json()).jaTinha).toBe(true);
+    expect(m.userUpdate).not.toHaveBeenCalled();
+    m.docFind.mockResolvedValue(doc([OUTRO]));
+    expect((await NASCEU(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(404);
   });
 
   it("recado pro QG: só o FUNDADOR manda/apaga; autor da SESSÃO; persiste no conteúdo (sem perder as notas) e difunde", async () => {

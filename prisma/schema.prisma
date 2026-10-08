@@ -30,6 +30,7 @@ model User {
   city                String?
   onboardingComplete  Boolean   @default(false)
   tourDone            Boolean   @default(false)   // tour guiado da Zaeon (onboarding) — visível no dashboard
+  cyberNasceuEm       DateTime? // 1ª entrada no CYBERESPAÇO: vazio = nunca entrou → nasce num tubo de ensaio (lib/cyber/onboarding)
   torsoImage          String?
   role                String?
   phone               String?   

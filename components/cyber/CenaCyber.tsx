@@ -37,6 +37,10 @@ export type CenaCyberProps = {
   /** aviso de rede ("tempo real indisponível", "sala cheia"…). */
   aviso?: string | null;
   onSessaoIniciada?: () => void;
+  /** NUNCA entrou no cyberespaço (vem do SERVIDOR: User.cyberNasceuEm) → nasce num tubo de ensaio; sem isto (prévia,
+   *  modo solo) vale o localStorage. `marcarNascimento` avisa o servidor que nasceu. */
+  novoNoCyber?: boolean;
+  marcarNascimento?: () => void;
   /** dono da Zaeon (vem do SERVIDOR) — só pinta os botões; quem decide é `pedirAcesso` */
   souFundador?: boolean;
   /** AÇÃO PRIVILEGIADA: pede ao servidor (POST /api/lounge3d/[id]/acesso): o topo da Recepção, a nave, o buraco negro do DJ */
@@ -72,10 +76,13 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [tunel, setTunel] = useState<ModoTunel | null>(null);
   /** o tour da anfitriã (o passo atual) e a conversa com ela (F perto dela) */
   const [guia, setGuia] = useState<EstadoGuia | null>(null), [conversa, setConversa] = useState<{ nome: string; cor: string } | null>(null);
-  /** NASCE no tubo de ensaio? 1ª vez no hiperespaço novo (localStorage) ou forçado com ?nascer=1 — decidido 1× */
+  /** NASCE no tubo de ensaio? Quem nunca entrou no cyberespaço (o servidor diz; sem sala, o localStorage) ou forçado com
+   *  ?nascer=1 — decidido 1× */
   const nascer = useMemo(() => {
     if (!tela || typeof window === "undefined") return false;
-    let visto = false; try { visto = localStorage.getItem(CHAVE_ONBOARDING) === "1"; } catch { /* storage bloqueado */ }
+    let visto = false;
+    if (p.novoNoCyber !== undefined) visto = !p.novoNoCyber;
+    else try { visto = localStorage.getItem(CHAVE_ONBOARDING) === "1"; } catch { /* storage bloqueado */ }
     return deveNascerNoTubo({ visto, forcar: new URLSearchParams(location.search).get("nascer") === "1", fundador: !!p.souFundador });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -171,7 +178,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onAbrirSom: () => { if (!cb.current.souFundador || !cb.current.musica) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(true); },
       urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon escreve no mural."); return; } setRecadoTxt(""); setRecadoAberto(true); },
-    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
+    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); if (nascer) cb.current.marcarNascimento?.(); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
     // a engine é criada uma vez por montagem; mudanças vão por métodos

@@ -4,7 +4,8 @@
  *  - ilha monumental de cristal (montanha INVERTIDA: larga em cima, ápice embaixo) com estalactites, quedas de luz,
  *    andares de servidores iluminados no casco e uma AGULHA afiada descendo do ápice (só rocha: sem luz na ponta);
  *  - ilhotas flutuantes em volta, com aglomerados de cristal;
- *  - muralhas de granizo + 4 torres com pontas luminosas; línguas de fogo na borda (cintilar lento, sem estrobo);
+ *  - 16 torres de cristal com pontas luminosas na borda (entre elas, os TUBOS DE ENSAIO do berçário — Bercario); línguas
+ *    de fogo na borda (cintilar lento, sem estrobo);
  *  - a ZAEON MEGA (2,5× mais larga): CAPELA monumental (pilares + cúpula estelar + tambor + 2ª cúpula + pináculo)
  *    vazia por dentro — só o GLOBO de luz no centro (os livros e os servidores saíram);
  *  - a ESCADA DE ENERGIA (faixa de luz fluindo, corrimão de vidro; leva quem pisa nela) da borda oeste até a PLATAFORMA DO
@@ -16,7 +17,7 @@
  * `prefers-reduced-motion` deixa fogo/vórtices quase parados. dispose() completo.
  */
 import * as THREE from "three";
-import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, ESCADA_LOUNGE, ILHOTAS, computadoresLocais } from "@/lib/cyber/ceu";
+import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, ESCADA_LOUNGE, ILHOTAS, TORRES_MURALHA, anguloDaTorre, computadoresLocais, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
@@ -69,8 +70,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   // luzes: preenchimento frio no interior + fogo rasante quente
   const fria = add(new THREE.PointLight(0x7fe9ff, 2.2, 480)); fria.position.set(0, 55, 0);
   const quente = low ? null : add(new THREE.PointLight(0xff8a3c, 1.6, 280)); quente?.position.set(0, 15, 0);
-  /** o setor da escada do lounge (a oeste): a muralha, as torres e o fogo da borda abrem ali */
-  const naAberturaDaEscada = (x: number, z: number) => x < 0 && Math.abs(z) < ESCADA_LOUNGE.meia + 5;   // no `low`, só a fria
 
   // ── ilha monumental (montanha invertida) + camada de rocha + estalactites ──
   const rocha = vidro({ color: 0x0b1a30, emissive: 0x10325e, emissiveIntensity: 0.55, roughness: 0.35, metalness: 0.1, transmission: 0.2, thickness: 2, transparent: true, opacity: 0.97 }, 0.97);
@@ -130,18 +129,14 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
     for (let i = 0; i < NR; i++) { const a = (i / NR) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a); (i % 3 === 0 ? raiosF : raios).push(c * r0, 0.03, s * r0, c * (R - 4), 0.03, s * (R - 4)); }
     for (const [l, op] of [[raios, 0.1], [raiosF, 0.22]] as const) { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(l), 3)); add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: COLD, transparent: true, opacity: op, blending: THREE.AdditiveBlending }))); } }
 
-  // ── muralhas de granizo (instanciadas) + 4 torres ──
-  const NW = Math.round((low ? 44 : 64) * CIDADE.muralhaR / 53), mur = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), vidro({ color: 0xcfe9ff, emissive: ICE, emissiveIntensity: 0.25, roughness: 0.1, metalness: 0, transmission: 0.9, thickness: 0.8, transparent: true, opacity: 0.6, side: THREE.DoubleSide }, 0.45), NW), ilha, true);
-  { const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-    let n = 0;
-    for (let i = 0; i < NW; i++) { const a = (i / NW) * Math.PI * 2, h = 6.5 + (i % 3) * 2.6; p.set(Math.cos(a) * CIDADE.muralhaR, h / 2, Math.sin(a) * CIDADE.muralhaR); if (naAberturaDaEscada(p.x, p.z)) continue; q.setFromAxisAngle(up, -a); s.set(4, h, 1.6); mur.setMatrixAt(n++, m.compose(p, q, s)); }
-    mur.count = n; mur.instanceMatrix.needsUpdate = true; mur.computeBoundingSphere(); }
+  // ── as TORRES da muralha (cristal com a ponta acesa). Os blocos de granizo entre elas saíram: no lugar deles ficam os
+  //    TUBOS DE ENSAIO onde quem chega nasce (components/cyber/Bercario, do engine) ──
   const torreMat = vidro({ color: 0xdff0ff, emissive: ICE, emissiveIntensity: 0.4, roughness: 0.08, metalness: 0, transmission: 0.85, thickness: 0.8, transparent: true, opacity: 0.75 }, 0.7);
   const pontas: THREE.Mesh[] = [];
-  const NT = 16, ATR = 48;   // 16 torres na muralha (a Zaeon mega)
+  const NT = TORRES_MURALHA.n, ATR = TORRES_MURALHA.alt;   // 16 torres na muralha (a Zaeon mega)
   for (let k = 0; k < NT; k++) {
-    const a = Math.PI / NT + (k / NT) * Math.PI * 2, x = Math.cos(a) * CIDADE.muralhaR, z = Math.sin(a) * CIDADE.muralhaR;
-    const torre = add(new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.8, ATR, 8), torreMat), ilha, true); torre.position.set(x, ATR / 2, z);
+    const a = anguloDaTorre(k), x = Math.cos(a) * CIDADE.muralhaR, z = Math.sin(a) * CIDADE.muralhaR;
+    const torre = add(new THREE.Mesh(new THREE.CylinderGeometry(2.6, TORRES_MURALHA.rBase, ATR, 8), torreMat), ilha, true); torre.position.set(x, ATR / 2, z);
     const ponta = add(new THREE.Mesh(new THREE.OctahedronGeometry(2.6), new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x9fe8ff, emissiveIntensity: 1.6, roughness: 0.2, flatShading: true })));
     ponta.scale.y = 1.8; ponta.position.set(x, ATR + 3.9, z); pontas.push(ponta);
   }

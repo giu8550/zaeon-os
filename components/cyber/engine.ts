@@ -701,10 +701,13 @@ export class CyberEngine {
     const lay = baseNoQG(); if (!lay) { const d = AGENTES[0]!.lar; return { x: d.x, z: d.z, y: CIDADE.pisoY, rumo: 0 }; }
     const s = localParaMundo(lay, 0, -0.15); return { ...s, y: this.yDoNivel("qg"), rumo: lay.rot + Math.PI };
   }
-  /** os tubos são sólidos pra quem anda no piso da Zaeon (menos o de quem está nascendo/saindo) */
+  /** os tubos (na linha da muralha) são sólidos pra quem anda no piso da Zaeon — só os perto (são centenas) e menos o de
+   *  quem está nascendo/saindo */
   private colisoresDosTubos(): Colisor[] {
     if (!this.bercario) return [];
-    return TUBOS.flatMap((tb, i) => (i === this.saindoDoTubo || i === this.nascendo?.tubo ? [] : [{ x: tb.x, z: tb.z, r: 1.4 }]));
+    const p = this.eu.pos, out: Colisor[] = [];
+    TUBOS.forEach((tb, i) => { if (i !== this.saindoDoTubo && i !== this.nascendo?.tubo && Math.abs(tb.x - p.x) < 6 && Math.abs(tb.z - p.z) < 6) out.push({ x: tb.x, z: tb.z, r: 1.4 }); });
+    return out;
   }
   private emitirGuia() {
     if (!this.guia) { this.o.onGuia?.(null); return; }

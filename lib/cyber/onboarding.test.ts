@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BERCARIO_LOCAL, NASCIMENTO, ROTEIRO, TUBO, TUBOS, avancarGuia, deveNascerNoTubo, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
+import { ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, avancarGuia, deveNascerNoTubo, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
+import { CIDADE as C2, DOCA_ANGULO, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "./ceu";
+import { LAR_LOCAL } from "./landmarks";
 import { AGENTES, ZAEON_ANFITRIA, noPisoDaZaeon, posDoGuia } from "./agentes";
 import { CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal } from "./ceu";
 import { POIS, marcoNav } from "./landmarks";
@@ -17,23 +19,32 @@ describe("quem chega NASCE num tubo de ensaio", () => {
     expect(deveNascerNoTubo({ visto: false, forcar: false, fundador: true })).toBe(false);
     expect(deveNascerNoTubo({ visto: true, forcar: true, fundador: true })).toBe(true);
   });
-  it("o berçário: 6 tubos no piso da Zaeon, ao lado da Recepção (fora da ilha e da escada dela), sem encostar uns nos outros", () => {
-    expect(TUBOS).toHaveLength(6);
+  it("os tubos ficam em VOLTA da Zaeon, na linha da muralha (no lugar dos blocos), entre as torres de cristal — sem encostar nelas nem uns nos outros", () => {
+    expect(TUBOS.length).toBeGreaterThan(250);
+    const loc = (t: { x: number; z: number }) => ({ x: t.x - C2.centro.x, z: t.z - C2.centro.z });
     for (const [i, t] of TUBOS.entries()) {
-      expect(naIlhaPrincipal(t)).toBe(true);
-      expect(dentroDeAlgum(t, colisoresDaCidade())).toBe(false);
-      expect(Math.hypot(t.x - recepcao.x, t.z - recepcao.z)).toBeGreaterThan(recepcao.nav.chaoR + TUBO.r + 2);
-      expect(alturaEm(recepcao, t)).toBe(0);   // fora da escada
-      for (const o of TUBOS.slice(i + 1)) expect(Math.hypot(t.x - o.x, t.z - o.z)).toBeGreaterThan(2 * TUBO.r + 0.5);
-      // sai-se pra frente, rumo ao meio do berçário, num piso livre
-      const c = mundo(BERCARIO_LOCAL), fora = { x: t.x + Math.sin(t.rumo) * 2.6, z: t.z + Math.cos(t.rumo) * 2.6 };
-      expect(Math.hypot(fora.x - c.x, fora.z - c.z)).toBeLessThan(Math.hypot(t.x - c.x, t.z - c.z));
-      for (const o of TUBOS) expect(Math.hypot(fora.x - o.x, fora.z - o.z)).toBeGreaterThan(1.4);
+      const l = loc(t);
+      expect(Math.hypot(l.x, l.z)).toBeCloseTo(ANEL_TUBOS.r, 6);
+      expect(naIlhaPrincipal(t)).toBe(true); expect(dentroDeAlgum(t, colisoresDaCidade())).toBe(false);
+      for (let k = 0; k < TORRES_MURALHA.n; k++) { const a = anguloDaTorre(k); expect(Math.hypot(l.x - Math.cos(a) * C2.muralhaR, l.z - Math.sin(a) * C2.muralhaR)).toBeGreaterThan(TORRES_MURALHA.rBase + TUBO.r + 1); }
+      const prox = TUBOS[i + 1]; if (prox) expect(Math.hypot(prox.x - t.x, prox.z - t.z)).toBeGreaterThan(2 * TUBO.r + 0.9);
+      expect(naAberturaDaEscada(l.x, l.z)).toBe(false);   // o vão da escada do lounge fica livre
+      expect(Math.abs(Math.atan2(Math.sin(t.ang - DOCA_ANGULO), Math.cos(t.ang - DOCA_ANGULO)))).toBeGreaterThan(ANEL_TUBOS.docaMeia - 1e-9);   // e a doca da nave
+      // sai-se pra DENTRO da ilha, num piso firme
+      const fora = { x: t.x + Math.sin(t.rumo) * 2.6, z: t.z + Math.cos(t.rumo) * 2.6 };
+      expect(Math.hypot(loc(fora).x, loc(fora).z)).toBeLessThan(ANEL_TUBOS.r - 2);
     }
-    expect(Math.hypot(mundo(BERCARIO_LOCAL).x - NOS.zaeon.anel.x, mundo(BERCARIO_LOCAL).z - NOS.zaeon.anel.z)).toBeGreaterThan(60);
+  });
+  it("o novato nasce num tubo PERTO da Recepção (o tour começa lá), longe da ilha dela", () => {
+    expect(TUBOS_DO_NOVATO.length).toBeGreaterThanOrEqual(8);
+    const lar = mundo(LAR_LOCAL);
+    for (const i of TUBOS_DO_NOVATO) {
+      const t = TUBOS[i]!; expect(Math.hypot(t.x - lar.x, t.z - lar.z)).toBeLessThan(80);
+      expect(Math.hypot(t.x - recepcao.x, t.z - recepcao.z)).toBeGreaterThan(recepcao.nav.chaoR + TUBO.r + 2); expect(alturaEm(recepcao, t)).toBe(0);
+    }
   });
   it("cada pessoa tem o SEU tubo (o mesmo sempre)", () => {
-    for (const id of ["a".repeat(24), "b".repeat(24), "64f0c0ffee0000000000abcd"]) { const i = tuboDe(id); expect(i).toBe(tuboDe(id)); expect(i).toBeGreaterThanOrEqual(0); expect(i).toBeLessThan(TUBOS.length); }
+    for (const id of ["a".repeat(24), "b".repeat(24), "64f0c0ffee0000000000abcd"]) { const i = tuboDe(id); expect(i).toBe(tuboDe(id)); expect(TUBOS_DO_NOVATO).toContain(i); }
   });
   it("o vidro: o líquido escoa, DEPOIS o vidro sobe; a pessoa sai com tudo aberto", () => {
     expect(estadoDoTubo(0)).toEqual({ liquido: 1, vidro: 0 });

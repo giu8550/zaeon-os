@@ -1,9 +1,10 @@
 /**
- * Bercario — os TUBOS DE ENSAIO onde quem chega ao hiperespaço nasce (lib/cyber/onboarding), ao lado da Recepção no
- * piso da Cidade Zaeon. Cada tubo: pedestal com aro aceso, vidro, tampa, o LÍQUIDO luminoso com bolhas e um ser de luz
- * "se formando" lá dentro. No nascimento (`nascer(i)`), o líquido escoa, o vidro sobe pra dentro da tampa e a pessoa
- * sai; depois de um tempo o tubo fecha e enche de novo. Filho do grupo da ilha (coordenadas LOCAIS da Zaeon).
- * Leve: materiais compartilhados entre os 6 tubos, bolhas numa nuvem só.
+ * Bercario — os TUBOS DE ENSAIO em volta da Cidade Zaeon (lib/cyber/onboarding `TUBOS`): na linha da muralha, entre
+ * as torres de cristal, no lugar dos antigos blocos de granizo. Cada tubo: pedestal com aro aceso, vidro, tampa e o
+ * LÍQUIDO luminoso com um ser de luz "se formando" lá dentro. São centenas — tudo INSTANCIADO (um punhado de draw
+ * calls pro anel inteiro). No nascimento (`nascer(i)`), o tubo i sai do lote e um tubo ANIMADO toma o lugar dele: o
+ * líquido escoa (com bolhas), o vidro sobe pra dentro da tampa e a pessoa sai; depois o tubo fecha, enche de novo e
+ * volta pro lote. Filho do grupo da ilha (coordenadas LOCAIS da Zaeon).
  */
 import * as THREE from "three";
 import { CIDADE } from "@/lib/cyber/ceu";
@@ -14,6 +15,7 @@ export type BercarioHandle = { group: THREE.Group; nascer(i: number): void; atua
 
 /** quanto tempo o tubo fica aberto depois de alguém sair, e quanto leva pra encher de novo (s) */
 const ABERTO = 7, ENCHE = 3;
+const P = 0.35, H = TUBO.alt, R = TUBO.r;
 
 export function criarBercario(pai: THREE.Object3D, o: { low: boolean }): BercarioHandle {
   const g = new THREE.Group(); pai.add(g);
@@ -22,58 +24,78 @@ export function criarBercario(pai: THREE.Object3D, o: { low: boolean }): Bercari
   const liqMat = new THREE.MeshBasicMaterial({ color: 0x5fffd0, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false });
   const aroMat = new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
   const texSer = glowTex("rgba(255,255,255,1)", "rgba(120,255,220,0.45)");
-  const P = 0.35, H = TUBO.alt, R = TUBO.r;
-  const tubos = TUBOS.map((tb) => {
-    const t = new THREE.Group(); t.position.set(tb.x - CIDADE.centro.x, 0, tb.z - CIDADE.centro.z); g.add(t);
-    const ped = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.3, R + 0.45, P, 28), pedMat); ped.position.y = P / 2; t.add(ped);
-    const aro = new THREE.Mesh(new THREE.TorusGeometry(R + 0.3, 0.05, 6, 40), aroMat); aro.rotation.x = Math.PI / 2; aro.position.y = P + 0.01; t.add(aro);
-    const vidro = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 28, 1, true), vidroMat); vidro.position.y = P + H / 2; t.add(vidro);
-    const tampa = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.25, R + 0.1, 0.5, 28), pedMat); tampa.position.y = P + H + 0.25; t.add(tampa);
-    const aroT = new THREE.Mesh(new THREE.TorusGeometry(R + 0.12, 0.04, 6, 40), aroMat); aroT.rotation.x = Math.PI / 2; aroT.position.y = P + H - 0.02; t.add(aroT);
-    // o líquido: um cilindro que encolhe de cima pra baixo (escala y a partir do fundo)
-    const lg = new THREE.CylinderGeometry(R * 0.93, R * 0.93, H, 24, 1); lg.translate(0, H / 2, 0);
-    const liq = new THREE.Mesh(lg, liqMat); liq.position.y = P; t.add(liq);
-    // o ser de luz se formando lá dentro (some quando é a vez de alguém nascer ali)
-    const ser = new THREE.Sprite(new THREE.SpriteMaterial({ map: texSer, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.6 })); ser.scale.set(0.9, 1.6, 1); ser.position.y = P + H * 0.5; t.add(ser);
-    return { g: t, vidro, liq, ser, t0: -1, pendente: false };
-  });
-  // as bolhas: uma nuvem só pros 6 tubos
-  const NB = o.low ? 6 : 14, N = NB * tubos.length, pos = new Float32Array(N * 3), bol = Array.from({ length: N }, () => ({ u: Math.random(), a: Math.random() * Math.PI * 2, r: Math.random() * R * 0.75, v: 0.15 + Math.random() * 0.25 }));
-  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const bolhas = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xbffff0, size: 0.09, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
-  bolhas.frustumCulled = false; g.add(bolhas);
+  const seg = o.low ? 14 : 22;
+  const geos = {
+    ped: new THREE.CylinderGeometry(R + 0.3, R + 0.45, P, seg).translate(0, P / 2, 0),
+    aro: new THREE.TorusGeometry(R + 0.3, 0.05, 5, seg * 2).rotateX(Math.PI / 2).translate(0, P + 0.01, 0),
+    vidro: new THREE.CylinderGeometry(R, R, H, seg, 1, true).translate(0, P + H / 2, 0),
+    tampa: new THREE.CylinderGeometry(R + 0.25, R + 0.1, 0.5, seg).translate(0, P + H + 0.25, 0),
+    aroT: new THREE.TorusGeometry(R + 0.12, 0.04, 5, seg * 2).rotateX(Math.PI / 2).translate(0, P + H - 0.02, 0),
+    liq: new THREE.CylinderGeometry(R * 0.93, R * 0.93, H, seg).translate(0, P + H / 2, 0),
+  };
+  const N = TUBOS.length, mx = new THREE.Matrix4(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  const local = TUBOS.map((t) => ({ x: t.x - CIDADE.centro.x, z: t.z - CIDADE.centro.z }));
+  const lote = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
+    const im = new THREE.InstancedMesh(geo, mat, N);
+    local.forEach((l, i) => im.setMatrixAt(i, mx.makeTranslation(l.x, 0, l.z)));
+    im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); g.add(im); return im;
+  };
+  lote(geos.ped, pedMat); lote(geos.aro, aroMat); lote(geos.tampa, pedMat); lote(geos.aroT, aroMat);
+  const vidro = lote(geos.vidro, vidroMat), liq = lote(geos.liq, liqMat);
+  // os seres de luz se formando (um ponto por tubo)
+  const sp = new Float32Array(N * 3); local.forEach((l, i) => { sp[i * 3] = l.x; sp[i * 3 + 1] = P + H * 0.5; sp[i * 3 + 2] = l.z; });
+  const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
+  const serMat = new THREE.PointsMaterial({ map: texSer, color: 0xbffff0, size: 1.5, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
+  g.add(new THREE.Points(sg, serMat));
+
+  // o tubo ANIMADO (o de quem está nascendo): vidro + líquido + bolhas próprios
+  const ativo = new THREE.Group(); ativo.visible = false; g.add(ativo);
+  const vidroA = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, seg, 1, true), vidroMat); ativo.add(vidroA);
+  const lgA = new THREE.CylinderGeometry(R * 0.93, R * 0.93, H, seg); lgA.translate(0, H / 2, 0);
+  const liqA = new THREE.Mesh(lgA, liqMat); liqA.position.y = P; ativo.add(liqA);
+  const NB = o.low ? 10 : 22, bp = new Float32Array(NB * 3), bol = Array.from({ length: NB }, () => ({ u: Math.random(), a: Math.random() * Math.PI * 2, r: Math.random() * R * 0.75, v: 0.15 + Math.random() * 0.25 }));
+  const bg = new THREE.BufferGeometry(); bg.setAttribute("position", new THREE.BufferAttribute(bp, 3));
+  const bolhaMat = new THREE.PointsMaterial({ color: 0xbffff0, size: 0.09, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+  const bolhas = new THREE.Points(bg, bolhaMat); bolhas.frustumCulled = false; ativo.add(bolhas);
+
+  let atual = -1, t0 = -1, pendente = -1;
+  const noLote = (i: number, m: THREE.Matrix4) => { vidro.setMatrixAt(i, m); liq.setMatrixAt(i, m); vidro.instanceMatrix.needsUpdate = true; liq.instanceMatrix.needsUpdate = true; };
+  const devolver = (i: number) => {   // o tubo volta pro lote
+    if (i < 0) return; const l = local[i]!;
+    noLote(i, mx.makeTranslation(l.x, 0, l.z)); sp[i * 3 + 1] = P + H * 0.5; sg.attributes.position!.needsUpdate = true;
+  };
   return {
     group: g,
-    nascer(i) { const tb = tubos[i]; if (tb) tb.pendente = true; },   // começa no próximo quadro (no relógio da cena)
+    nascer(i) { if (i >= 0 && i < N) pendente = i; },   // começa no próximo quadro (no relógio da cena)
     atualizar(dt, t) {
-      tubos.forEach((tb, k) => {
-        if (tb.pendente) { tb.pendente = false; tb.t0 = t; }
-        let liquido = 1, vidro = 0;
-        if (tb.t0 >= 0) {
-          const s = t - tb.t0, e = estadoDoTubo(s), fecha = NASCIMENTO.sai + ABERTO;
-          if (s < fecha) { liquido = e.liquido; vidro = e.vidro; }
-          else if (s < fecha + 1.2) { liquido = 0; vidro = 1 - (s - fecha) / 1.2; }
-          else if (s < fecha + 1.2 + ENCHE) { liquido = (s - fecha - 1.2) / ENCHE; vidro = 0; }
-          else tb.t0 = -1;
+      if (pendente >= 0) {
+        devolver(atual); atual = pendente; pendente = -1; t0 = t;
+        noLote(atual, zero); sp[atual * 3 + 1] = -999; sg.attributes.position!.needsUpdate = true;   // o ser de luz desse tubo é a própria pessoa
+        ativo.position.set(local[atual]!.x, 0, local[atual]!.z); ativo.visible = true;
+      }
+      if (atual >= 0) {
+        const s = t - t0, fecha = NASCIMENTO.sai + ABERTO;
+        let liquido = 0, vid = 1;
+        if (s < fecha) { const e = estadoDoTubo(s); liquido = e.liquido; vid = e.vidro; }
+        else if (s < fecha + 1.2) vid = 1 - (s - fecha) / 1.2;
+        else if (s < fecha + 1.2 + ENCHE) { liquido = (s - fecha - 1.2) / ENCHE; vid = 0; }
+        else { devolver(atual); atual = -1; ativo.visible = false; }
+        if (atual >= 0) {
+          liqA.scale.y = Math.max(0.001, liquido); liqA.visible = liquido > 0.01;
+          vidroA.position.y = P + H / 2 + vid * (H - 0.1); vidroA.scale.y = 1 - vid * 0.92;   // sobe pra dentro da tampa
+          for (let j = 0; j < NB; j++) {
+            const b = bol[j]!; b.u += dt * b.v; if (b.u > 1) b.u = 0;
+            bp[j * 3] = Math.cos(b.a + b.u * 3) * b.r; bp[j * 3 + 1] = liquido > 0.02 ? P + b.u * H * liquido : -999; bp[j * 3 + 2] = Math.sin(b.a + b.u * 3) * b.r;
+          }
+          bg.attributes.position!.needsUpdate = true;
         }
-        tb.liq.scale.y = Math.max(0.001, liquido); tb.liq.visible = liquido > 0.01;
-        tb.vidro.position.y = P + H / 2 + vidro * (H - 0.1); tb.vidro.scale.y = 1 - vidro * 0.92;   // sobe pra dentro da tampa
-        tb.ser.visible = tb.t0 < 0;   // nascendo alguém ali: o ser de luz é a própria pessoa
-        (tb.ser.material as THREE.SpriteMaterial).opacity = 0.45 + 0.2 * Math.sin(t * 1.3 + k);
-        tb.ser.position.y = P + H * 0.5 + Math.sin(t * 0.8 + k) * 0.12;
-        // bolhas deste tubo (só onde tem líquido)
-        for (let j = 0; j < NB; j++) {
-          const i = k * NB + j, b = bol[i]!; b.u += dt * b.v; if (b.u > 1) b.u = 0;
-          const y = P + b.u * H * liquido;
-          pos[i * 3] = tb.g.position.x + Math.cos(b.a + b.u * 3) * b.r; pos[i * 3 + 1] = liquido > 0.02 ? y : -999; pos[i * 3 + 2] = tb.g.position.z + Math.sin(b.a + b.u * 3) * b.r;
-        }
-      });
-      geo.attributes.position!.needsUpdate = true;
-      aroMat.opacity = 0.7 + 0.2 * Math.sin(t * 2);
+      }
+      aroMat.opacity = 0.7 + 0.2 * Math.sin(t * 2); serMat.opacity = 0.5 + 0.15 * Math.sin(t * 1.3); liqMat.opacity = 0.28 + 0.06 * Math.sin(t * 0.9);
     },
     dispose() {
-      g.traverse((x) => { const m = x as THREE.Mesh; m.geometry?.dispose(); });
-      for (const m of [pedMat, vidroMat, liqMat, aroMat, bolhas.material as THREE.Material, ...tubos.map((tb) => tb.ser.material)]) m.dispose();
+      for (const x of Object.values(geos)) x.dispose();
+      for (const x of [sg, bg, lgA, vidroA.geometry]) x.dispose();
+      for (const m of [pedMat, vidroMat, liqMat, aroMat, serMat, bolhaMat]) m.dispose();
       texSer.dispose(); g.removeFromParent();
     },
   };

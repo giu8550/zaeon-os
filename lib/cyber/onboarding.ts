@@ -1,22 +1,24 @@
 /**
  * Cyberespaço — o NASCIMENTO e o TOUR de quem chega (PURO, sem three).
  *
- * Todo mundo que entra no hiperespaço pela 1ª vez NASCE num TUBO DE ENSAIO do berçário, ao lado da Recepção (o lar da
- * Zaeon, a anfitriã — lib/cyber/agentes), no piso da Cidade Zaeon: o líquido escoa, o vidro sobe e a pessoa sai. A
+ * Quem NUNCA entrou no cyberespaço (o servidor sabe: User.cyberNasceuEm) NASCE num TUBO DE ENSAIO — os tubos ficam em
+ * volta da Cidade Zaeon, na linha da muralha, entre as torres de cristal; o do novato é um dos perto da Recepção (o lar
+ * da Zaeon, a anfitriã — lib/cyber/agentes): o líquido escoa, o vidro sobe e a pessoa sai. A
  * Zaeon vem buscar e GUIA, andando do lado: a casa dela → a capela (os desktops da Sala de Estudos) → as motos → o
  * buraco negro (o metrô pros outros lugares). Cada passo termina quando a pessoa chega no alvo (ou toca "Próximo").
  * Hoje o roteiro é fixo; no overhaul a fala vem do cérebro dela.
  */
 import type { P2 } from "./colisao";
-import { CIDADE, computadoresLocais, mundo } from "./ceu";
+import { CIDADE, DOCA_ANGULO, anguloDaTorre, computadoresLocais, mundo, naAberturaDaEscada, TORRES_MURALHA } from "./ceu";
 import { LAR_LOCAL, POIS, marcoNav } from "./landmarks";
 import { LOTES } from "./motos";
 import { NOS } from "./buracos";
 import { deEscada } from "./nav";
 
-/** a chave do "já nasci" (localStorage) — v1 = o hiperespaço sem chão */
+/** a chave do "já nasci" (localStorage) — só a reserva quando o servidor não diz (prévia/sem sala) */
 export const CHAVE_ONBOARDING = "zaeon:cyber:onboarding:v1";
-/** nasce no tubo? Quem nunca viu o hiperespaço novo; o dono nasce na nave dele (a não ser forçado: `?nascer=1`) */
+/** nasce no tubo? Quem nunca entrou no cyberespaço (`visto` = o servidor já marcou o nascimento); o dono nasce na nave
+ *  dele (a não ser forçado: `?nascer=1`) */
 export function deveNascerNoTubo(o: { visto: boolean; forcar: boolean; fundador: boolean }): boolean {
   if (o.forcar) return true;
   return !o.visto && !o.fundador;
@@ -29,21 +31,38 @@ export function peDaRecepcao(): P2 {
   return deEscada(mn, mn.nav.bordaR + mn.nav.escada.comprimento + 2.5, 0);
 }
 
-/** o BERÇÁRIO: 6 tubos em arco ao lado da Recepção, virados pro meio do arco (de onde se sai) */
-export const BERCARIO_LOCAL = { x: 162, z: 66, r: 7.5 };
+/**
+ * O BERÇÁRIO: os TUBOS DE ENSAIO em volta da Zaeon, na linha da muralha — no lugar dos antigos blocos de granizo, em
+ * arcos entre as torres grandes de cristal (lib/cyber/ceu `TORRES_MURALHA`). Livres: o vão da escada do lounge e o
+ * setor da doca da nave-QG. Cada tubo é virado pro centro da ilha (sai-se pra dentro).
+ */
 export const TUBO = { r: 0.95, alt: 2.7 } as const;
-export type Tubo = { x: number; z: number; rumo: number };
+export const ANEL_TUBOS = { r: CIDADE.muralhaR, passo: 3.6, folgaTorre: 7, docaMeia: 0.13 } as const;
+export type Tubo = { x: number; z: number; rumo: number; ang: number };
+const difAng = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 export const TUBOS: Tubo[] = (() => {
-  const c = mundo(BERCARIO_LOCAL), pe = peDaRecepcao(), a0 = Math.atan2(pe.z - c.z, pe.x - c.x) + Math.PI;   // o arco fica do lado oposto ao pé da escada
-  return Array.from({ length: 6 }, (_, i) => {
-    const a = a0 + (i - 2.5) * 0.42, x = c.x + Math.cos(a) * BERCARIO_LOCAL.r, z = c.z + Math.sin(a) * BERCARIO_LOCAL.r;
-    return { x, z, rumo: Math.atan2(c.x - x, c.z - z) };
-  });
+  const out: Tubo[] = [], R = ANEL_TUBOS.r, n = TORRES_MURALHA.n;
+  for (let k = 0; k < n; k++) {
+    const a0 = anguloDaTorre(k) + ANEL_TUBOS.folgaTorre / R, a1 = anguloDaTorre(k + 1) - ANEL_TUBOS.folgaTorre / R;
+    const q = Math.floor(((a1 - a0) * R) / ANEL_TUBOS.passo);
+    for (let i = 0; i <= q; i++) {
+      const ang = a0 + ((a1 - a0) * i) / q, lx = Math.cos(ang) * R, lz = Math.sin(ang) * R;
+      if (naAberturaDaEscada(lx, lz) || difAng(ang, DOCA_ANGULO) < ANEL_TUBOS.docaMeia) continue;
+      const w = mundo({ x: lx, z: lz });
+      out.push({ x: w.x, z: w.z, rumo: Math.atan2(-lx, -lz), ang });
+    }
+  }
+  return out;
 })();
-/** qual tubo é o de quem nasce (pelo id: sempre o mesmo pra mesma pessoa) */
+/** os tubos onde os NOVATOS nascem: os mais perto da Recepção (o tour começa lá) */
+export const TUBOS_DO_NOVATO: number[] = (() => {
+  const a = Math.atan2(LAR_LOCAL.z, LAR_LOCAL.x);
+  return TUBOS.map((t, i) => ({ i, d: difAng(t.ang, a) })).sort((p, q) => p.d - q.d).slice(0, 12).map((x) => x.i).sort((p, q) => p - q);
+})();
+/** qual tubo é o de quem nasce (pelo id: sempre o mesmo pra mesma pessoa), entre os perto da Recepção */
 export function tuboDe(id: string): number {
   let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % TUBOS.length;
+  return TUBOS_DO_NOVATO[h % TUBOS_DO_NOVATO.length]!;
 }
 /** a cena do nascimento (s): o líquido escoa até `escoa`, o vidro sobe até `abre`, a pessoa sai em `sai` */
 export const NASCIMENTO = { escoa: 2.2, abre: 3.3, sai: 3.9 } as const;
