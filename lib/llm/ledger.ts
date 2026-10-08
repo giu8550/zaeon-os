@@ -4,7 +4,7 @@
  * TOKEN_LEDGER="0" desliga. `userId` só entra se for ObjectId válido (senão null).
  */
 import type { Usage, ClasseErroLlm } from "@/lib/llm/usage";
-import { custoEstimadoUsd } from "@/lib/ai/preco";
+import { custoDoAlvoUsd } from "@/lib/ai/preco";
 
 export type Surface = "estudos" | "pesquisa" | "canal" | "programa" | "aula" | "projetos" | "whatsapp" | "admin" | "chore" | "embedding" | "outro";
 const SURFACES: readonly Surface[] = ["estudos", "pesquisa", "canal", "programa", "aula", "projetos", "whatsapp", "admin", "chore", "embedding", "outro"];
@@ -58,7 +58,7 @@ export function linhaParaPrisma(l: LinhaLedger) {
     model: l.model, provedor: l.provedor, rota: l.rota, alvo: l.alvo ?? null,
     promptTokens: l.usage.promptTokens, completionTokens: l.usage.completionTokens, cachedTokens: l.usage.cachedTokens, totalTokens: l.usage.totalTokens,
     reportado: l.usage.reportado, jsonValido: l.jsonValido ?? null,
-    estimatedCostUsd: l.ok ? custoEstimadoUsd(l.model, l.usage) : 0,
+    estimatedCostUsd: l.ok ? custoDoAlvoUsd(l.model, l.usage, l.alvo) : 0,
     ok: l.ok, erro: l.erro ?? null, ms: Math.max(0, Math.round(l.ms)),
   };
 }

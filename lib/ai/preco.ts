@@ -18,13 +18,24 @@ export const USD_POR_MILHAO: Record<string, Preco> = {
   // Gemini 3.x (quando o projeto habilitar) — valores provisórios = 2.5 equivalentes.
   "gemini-3.5-flash":      { prompt: 0.30, completion: 2.50, cached: 0.03 },
   "gemini-3.1-pro":        { prompt: 1.25, completion: 10.00, cached: 0.125 },
+  // Pool grátis (Fatia 7) — free tier: custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts).
+  // O MESMO "gemini-2.5-flash-lite" no Vertex custa: por isso o ledger zera pelo ALVO (custoDoAlvoUsd), não pelo nome.
+  "zaeon-pool-lite":                { prompt: 0, completion: 0, cached: 0 }, // free tier — custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts)
+  "zaeon-pool-cf":                  { prompt: 0, completion: 0, cached: 0 }, // free tier — custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts)
+  "zaeon-pool-groq":                { prompt: 0, completion: 0, cached: 0 }, // free tier — custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts)
+  "zaeon-pool-glm":                 { prompt: 0, completion: 0, cached: 0 }, // free tier — custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts)
+  "@cf/meta/llama-3.1-8b-instruct": { prompt: 0, completion: 0, cached: 0 }, // free tier — custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts)
+  "openai/gpt-oss-20b":             { prompt: 0, completion: 0, cached: 0 }, // free tier — custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts)
+  "glm-4.7-flash":                  { prompt: 0, completion: 0, cached: 0 }, // free tier — custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts)
 };
 
 /** Modelo desconhecido → preço do flash (conservador) e marca para o admin saber. */
 export const PRECO_DESCONHECIDO: Preco = USD_POR_MILHAO["gemini-2.5-flash"];
 
 export function precoDe(model: string): { preco: Preco; conhecido: boolean } {
-  const k = Object.keys(USD_POR_MILHAO).find((m) => model === m || model.startsWith(m + "-") || model.endsWith("/" + m));
+  // Exato primeiro; senão a chave MAIS LONGA que casa (senão "gemini-2.5-flash-lite" casava "gemini-2.5-flash-" e saía 3× mais caro).
+  const casa = (m: string) => model === m || model.startsWith(m + "-") || model.endsWith("/" + m);
+  const k = Object.keys(USD_POR_MILHAO).filter(casa).sort((x, y) => (model === y ? 1 : 0) - (model === x ? 1 : 0) || y.length - x.length)[0];
   return k ? { preco: USD_POR_MILHAO[k], conhecido: true } : { preco: PRECO_DESCONHECIDO, conhecido: false };
 }
 
@@ -33,4 +44,9 @@ export function custoEstimadoUsd(model: string, u: Pick<Usage, "promptTokens" | 
   const { preco } = precoDe(model);
   const usd = (u.promptTokens * preco.prompt + u.completionTokens * preco.completion + u.cachedTokens * preco.cached) / 1_000_000;
   return Math.round(usd * 1e8) / 1e8;
+}
+
+/** Custo pelo ALVO que serviu: alvo do pool grátis = 0 (free tier); vertex/null = tabela por modelo. */
+export function custoDoAlvoUsd(model: string, u: Pick<Usage, "promptTokens" | "completionTokens" | "cachedTokens">, alvo?: string | null): number {
+  return alvo && alvo !== "vertex" ? 0 : custoEstimadoUsd(model, u);
 }

@@ -26,6 +26,12 @@ describe("registrarTokens (best-effort)", () => {
     const d = linhaParaPrisma({ ...linha, userId: "nao-e-objectid", ok: false, erro: "rate_limit" });
     expect(d.userId).toBeNull(); expect(d.estimatedCostUsd).toBe(0); expect(d.erro).toBe("rate_limit");
   });
+  it("alvo do pool grátis zera o custo e grava alvo/jsonValido (Fatia 7)", () => {
+    const pago = linhaParaPrisma({ ...linha, ok: true, model: "gemini-2.5-flash-lite", usage: { promptTokens: 1000, completionTokens: 1000, cachedTokens: 0, totalTokens: 2000, reportado: true } });
+    const gratis = linhaParaPrisma({ ...linha, ok: true, model: "gemini-2.5-flash-lite", alvo: "gemini-free", jsonValido: true, usage: { promptTokens: 1000, completionTokens: 1000, cachedTokens: 0, totalTokens: 2000, reportado: true } });
+    expect(pago.estimatedCostUsd).toBeGreaterThan(0);
+    expect(gratis.estimatedCostUsd).toBe(0); expect(gratis.alvo).toBe("gemini-free"); expect(gratis.jsonValido).toBe(true);
+  });
   it("surfaceLedger normaliza", () => {
     expect(surfaceLedger("sala-de-estudos")).toBe("estudos"); expect(surfaceLedger("pesquisa")).toBe("pesquisa"); expect(surfaceLedger(null)).toBe("outro"); expect(surfaceLedger("canal")).toBe("canal");
   });

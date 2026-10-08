@@ -14,9 +14,10 @@
 import { usageDoVertex, usageDoOpenAI, classificarErroLlm, chaveDoAgente, gatewayLigado, type Usage, type ClasseErroLlm, USAGE_VAZIO } from "@/lib/llm/usage";
 import { registrarTokens, type LedgerCtx } from "@/lib/llm/ledger";
 import { GEMINI_MODEL_FLASH } from "@/lib/ai/model";
+import { alvoDe, ehModeloPool, type Alvo } from "@/lib/llm/pool";
 
 export type Rota = "vertex" | "gateway";
-export type { LedgerCtx };
+export type { LedgerCtx, Alvo };
 export type Mensagem = { role: "user" | "model"; text: string };
 export type GerarReq = {
   system?: string;
@@ -38,6 +39,10 @@ export type GerarRes = {
   rota: Rota;
   finishReason?: string;
   ms: number;
+  /** Provedor UPSTREAM que serviu (Fatia 7): "vertex" na rota vertex; no gateway, pelo header x-litellm-model-id / model do corpo. */
+  alvo?: Alvo;
+  /** Só em json:true — o texto parseia como JSON (métrica §9.1). */
+  jsonValido?: boolean;
 };
 
 /** Erro de LLM já classificado (relançado pelo envelope). `classe` decide quem trata (fila × agente × admin). */
@@ -52,7 +57,7 @@ export class ErroLlm extends Error {
 }
 
 // ───────────────────────────── transportes (injetáveis p/ teste) ─────────────────────────────
-export type RespostaBruta = { texto: string; usage: Usage; finishReason?: string; modelo: string };
+export type RespostaBruta = { texto: string; usage: Usage; finishReason?: string; modelo: string; modelId?: string | null };
 export type TransporteVertex = (req: GerarReq, modelo: string) => Promise<RespostaBruta>;
 export type Deps = { vertex?: TransporteVertex; fetchImpl?: typeof fetch; env?: Record<string, string | undefined>; registrar?: typeof registrarTokens; agora?: () => number };
 
@@ -103,7 +108,15 @@ async function viaGateway(req: GerarReq, modelo: string, url: string, key: strin
     usage: usageDoOpenAI(body?.usage),
     finishReason: body?.choices?.[0]?.finish_reason,
     modelo: typeof body?.model === "string" && body.model ? body.model : modelo,
+    modelId: r.headers.get("x-litellm-model-id"),
   };
+}
+
+/** O texto de uma resposta json:true parseia? (cercas ```json toleradas, como no gerarJson). */
+export function textoJsonValido(texto: string): boolean {
+  const t = String(texto ?? "").replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+  if (!t) return false;
+  try { JSON.parse(t); return true; } catch { return false; }
 }
 
 /** histórico (messages) + pergunta (user) — os dois podem vir juntos (geminiText com history). */
@@ -137,29 +150,43 @@ export async function gerar(req: GerarReq, deps: Deps = {}): Promise<GerarRes> {
     }
   }
 
-  const gravar = (provedor: "vertex" | "litellm", r: Rota, usage: Usage, ok: boolean, erro: ClasseErroLlm | null, m: string) =>
-    void registrar({ ...req.ctx, model: m, provedor, rota: r, usage, ms: agora() - ini, ok, erro, alvo: "vertex", jsonValido: null }).catch(() => undefined);
+  const jsonValido = (texto: string) => (req.json ? textoJsonValido(texto) : undefined);
+  const gravar = (provedor: "vertex" | "litellm", r: Rota, usage: Usage, ok: boolean, erro: ClasseErroLlm | null, m: string, alvo: Alvo, jv?: boolean) =>
+    void registrar({ ...req.ctx, model: m, provedor, rota: r, usage, ms: agora() - ini, ok, erro, alvo, jsonValido: jv ?? null }).catch(() => undefined);
+
+  // Pool grátis (Fatia 7) NUNCA cai no Vertex (§5.10): sem gateway/key, ou gateway com erro, relança.
+  // Se caísse, "grátis" viraria crédito do negócio sem ninguém ver.
+  const pool = ehModeloPool(modelo);
+  if (pool && rota !== "gateway") {
+    const e = new Error("pool grátis exige o gateway (GATEWAY_URL + key) — nunca cai no Vertex");
+    gravar("litellm", "gateway", USAGE_VAZIO, false, "provedor_fora", modelo, alvoDe(modelo));
+    throw new ErroLlm("provedor_fora", "litellm", e);
+  }
 
   if (rota === "gateway") {
     try {
       const r = await viaGateway(req, modelo, env.GATEWAY_URL!.trim(), key!, deps.fetchImpl ?? fetch);
-      gravar("litellm", "gateway", r.usage, true, null, r.modelo);
-      return { ...r, provedor: "litellm", rota: "gateway", ms: agora() - ini };
+      const alvo = alvoDe(r.modelo, r.modelId), jv = jsonValido(r.texto);
+      gravar("litellm", "gateway", r.usage, true, null, r.modelo, alvo, jv);
+      const { modelId: _id, ...resto } = r;
+      return { ...resto, provedor: "litellm", rota: "gateway", ms: agora() - ini, alvo, ...(jv === undefined ? {} : { jsonValido: jv }) };
     } catch (e) {
       const classe = (e as any)?.naoJson ? "resposta_nao_json" : classificarErroLlm(e);
-      gravar("litellm", "gateway", USAGE_VAZIO, false, classe, modelo);
-      if (!caiParaVertex(classe)) throw new ErroLlm(classe, "litellm", e);
+      gravar("litellm", "gateway", USAGE_VAZIO, false, classe, modelo, alvoDe(modelo));
+      if (pool || !caiParaVertex(classe)) throw new ErroLlm(classe, "litellm", e);
       console.warn(`[llm] gateway ${classe} — caindo para o Vertex direto (${req.ctx.agentKey})`);
     }
   }
 
   try {
     const r = await (deps.vertex ?? vertexReal)(req, modelo);
-    gravar("vertex", rota, r.usage, true, null, r.modelo);
-    return { ...r, provedor: "vertex", rota, ms: agora() - ini };
+    const jv = jsonValido(r.texto);
+    gravar("vertex", rota, r.usage, true, null, r.modelo, "vertex", jv);
+    const { modelId: _id, ...resto } = r;
+    return { ...resto, provedor: "vertex", rota, ms: agora() - ini, alvo: "vertex", ...(jv === undefined ? {} : { jsonValido: jv }) };
   } catch (e) {
     const classe = classificarErroLlm(e);
-    gravar("vertex", rota, USAGE_VAZIO, false, classe, modelo);
+    gravar("vertex", rota, USAGE_VAZIO, false, classe, modelo, "vertex");
     throw new ErroLlm(classe, "vertex", e);
   }
 }
