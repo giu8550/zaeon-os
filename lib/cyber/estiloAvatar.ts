@@ -29,11 +29,12 @@ export const CORPO_DO_FUNDADOR = { url: "/avatars/fundador/fundador.vrm", tintas
 export const usaCorpoDoFundador = (fundador: boolean | undefined, busca: string) => !!fundador && new URLSearchParams(busca).get("founder") !== "0";
 
 /** os ACESSÓRIOS feitos em código (presos aos ossos do VRM — components/cyber/AcessoriosVrm): o VRoid não tem esses */
-export type AcessorioVrm = "foneNoPescoco" | "presilhaLapis" | "oculosRedondos" | "presilhaEstrela";
-export type CorpoVrm = { url: string; tintas: Readonly<Record<string, string>>; acessorios?: readonly AcessorioVrm[]; /** a pose parada (lib/cyber/posesVrm) */ pose?: "feminina" };
+export type AcessorioVrm = "foneNoPescoco" | "presilhaLapis" | "oculosRedondos" | "presilhaEstrela" | "oculosRetangulares" | "golaCircuito";
+export type CorpoVrm = { url: string; tintas: Readonly<Record<string, string>>; acessorios?: readonly AcessorioVrm[]; /** a pose parada (lib/cyber/posesVrm) */ pose?: "feminina" | "masculina" };
 /** os corpos VRM dos PERSONAGENS (os agentes que vivem na cidadela Zaeon), feitos no VRoid Studio (~/Documents/<id>.vroid)
  *  a partir do card (public/avatars/<id>): a roupa branca do VRoid é tingida aqui */
 export const CORPOS_VRM: Readonly<Record<string, CorpoVrm>> = {
   nina: { url: "/avatars/nina/nina.vrm", tintas: { Tops: "#f6b9d1" }, acessorios: ["foneNoPescoco", "presilhaLapis"], pose: "feminina" },
+  teo: { url: "/avatars/teo/teo.vrm", tintas: { Tops: "#3b3f46", Bottoms: "#4d72b8" }, acessorios: ["oculosRetangulares", "golaCircuito"], pose: "masculina" },
   aura: { url: "/avatars/aura/aura.vrm", tintas: { Tops: "#b9a0f2", Bottoms: "#38407a" }, acessorios: ["oculosRedondos", "presilhaEstrela"], pose: "feminina" },
 };

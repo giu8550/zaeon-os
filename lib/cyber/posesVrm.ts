@@ -38,7 +38,26 @@ export const POSE_FEMININA: PoseVrm = {
   respira: { amp: 0.018, hz: 0.25 },
 };
 
-export const POSES_VRM = { feminina: POSE_FEMININA } as const;
+/** em pé, MASCULINA e à vontade: o peso numa perna, os pés um pouco afastados, os braços soltos com os cotovelos
+ *  levemente dobrados, o tronco relaxado e a cabeça um pouco de lado */
+export const POSE_MASCULINA: PoseVrm = {
+  ossos: {
+    hips: [0, -0.06, -0.04],
+    spine: [-0.03, 0.03, 0.03],
+    chest: [-0.02, 0.02, 0.02],
+    head: [0.02, -0.1, -0.05],
+    leftUpperArm: [0, -0.12, -1.22],
+    rightUpperArm: [0, 0.12, 1.22],
+    leftLowerArm: [0, -0.3, 0],
+    rightLowerArm: [0, 0.3, 0],
+    leftUpperLeg: [0, 0, 0.06],
+    rightUpperLeg: [-0.08, 0, -0.08],
+    rightLowerLeg: [0.16, 0, 0],
+  },
+  respira: { amp: 0.014, hz: 0.22 },
+};
+
+export const POSES_VRM = { feminina: POSE_FEMININA, masculina: POSE_MASCULINA } as const;
 export type NomePoseVrm = keyof typeof POSES_VRM;
 
 /** o ângulo do peito com a respiração no tempo `t` (s) */

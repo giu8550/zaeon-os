@@ -30,7 +30,7 @@ describe("a vida própria dos personagens (agenda)", () => {
   });
   it("todo lugar fica em chão livre e tem rota a pé a partir de uma estação (ida e volta)", () => {
     for (let i = 0; i < LUGARES.length; i++) {
-      for (const perfil of [SEMENTE, AURA]) expect(livre(posNoLugar(i, perfil)), `${perfil.id} ${LUGARES[i]!.id}`).toBe(true);
+      for (const perfil of Object.values(PERFIS_VIDA)) expect(livre(posNoLugar(i, perfil)), `${perfil.id} ${LUGARES[i]!.id}`).toBe(true);
       if (i === 0) continue;
       const ida = rotaEntre(0, i, SEMENTE), volta = rotaEntre(i, 0, AURA);
       expect(ida.length, LUGARES[i]!.id).toBeGreaterThanOrEqual(2); expect(volta.length).toBeGreaterThanOrEqual(2);
@@ -66,12 +66,17 @@ describe("a vida própria dos personagens (agenda)", () => {
 
 describe("dois personagens na mesma cidadela", () => {
   it("cada um tem as suas estações, os seus cantos da pista e a sua vaga — nunca o mesmo ponto", () => {
-    const n = PERFIS_VIDA.nina!, a = PERFIS_VIDA.aura!;
-    for (let i = 0; i < LUGARES.length; i++) {
-      if (permitido(i, n) && permitido(i, a)) { const p = posNoLugar(i, n), q = posNoLugar(i, a); expect(Math.hypot(p.x - q.x, p.z - q.z), LUGARES[i]!.id).toBeGreaterThan(2); }
+    const todos = Object.values(PERFIS_VIDA);
+    for (const n of todos) for (const a of todos) {
+      if (n === a) continue;
+      for (let i = 0; i < LUGARES.length; i++) {
+        if (permitido(i, n) && permitido(i, a)) { const p = posNoLugar(i, n), q = posNoLugar(i, a); expect(Math.hypot(p.x - q.x, p.z - q.z), `${n.id}×${a.id} ${LUGARES[i]!.id}`).toBeGreaterThan(2); }
+      }
+      expect(n.estacoes.some((d) => a.estacoes.includes(d))).toBe(false);
+      expect(n.pistas.some((d) => a.pistas.includes(d))).toBe(false);
+      expect(Math.hypot(n.vaga.x - a.vaga.x, n.vaga.z - a.vaga.z)).toBeGreaterThan(5);
     }
-    expect(n.estacoes.some((d) => a.estacoes.includes(d))).toBe(false);
-    expect(Math.hypot(n.vaga.x - a.vaga.x, n.vaga.z - a.vaga.z)).toBeGreaterThan(5);
+    for (const p of todos) for (let i = 0; i < LUGARES.length; i++) if (permitido(i, p)) expect(livre(posNoLugar(i, p)), `${p.id} ${LUGARES[i]!.id}`).toBe(true);
   });
   it("as agendas são diferentes (sementes diferentes) e nenhum dos dois para colado no outro", () => {
     let iguais = 0, colados = 0;
