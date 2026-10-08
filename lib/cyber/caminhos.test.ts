@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { comprimento, linhaLivre, livre, pontoNaRota, rotaAPe } from "./caminhos";
-import { CIDADE, colisoresDaCidade, computadoresLocais } from "./ceu";
+import { CIDADE, colisoresDaCidade, estacoesLocais } from "./ceu";
 
 const c = CIDADE.centro;
 const local = (p: { x: number; z: number }) => ({ x: p.x - c.x, z: p.z - c.z });
@@ -24,8 +24,8 @@ describe("caminhos a pé na Zaeon", () => {
     expect(livre({ x: 120, z: -10 })).toBe(true);
     expect(livre({ x: 400, z: 0 })).toBe(false);                 // fora da ilha
   });
-  it("de um desktop da capela até o lounge (subindo a escada) sem atravessar nada", () => {
-    const d = computadoresLocais()[2]!, a = Math.atan2(d.z, d.x), de = { x: Math.cos(a) * 19.4, z: Math.sin(a) * 19.4 };
+  it("de uma estação dos agentes até o lounge (subindo a escada) sem atravessar nada", () => {
+    const e = estacoesLocais()[3]!, de = { x: e.x + Math.sin(e.rot) * 1.25, z: e.z + Math.cos(e.rot) * 1.25 };
     const r = rotaAPe(de, { x: -385, z: 0 })!;
     expect(r).not.toBeNull();
     expect(r[0]).toEqual(de); expect(r[r.length - 1]).toEqual({ x: -385, z: 0 });

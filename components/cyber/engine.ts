@@ -70,6 +70,7 @@ import { gerarVeias, ouveOCoracao } from "@/lib/cyber/coracao";
 import { URL_TERRA } from "./DistritoTerra";
 import { carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
 import { criarPersonagemVivo, type PersonagemVivoHandle } from "./PersonagemVivo";
+import { PERFIS_VIDA } from "@/lib/cyber/vidaPersonagem";
 import { CORPOS_VRM } from "@/lib/cyber/estiloAvatar";
 import { variacaoBatida, ventoDasAsas } from "@/lib/cyber/asas";
 import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, type IdHabilidade } from "@/lib/cyber/habilidades";
@@ -605,7 +606,8 @@ export class CyberEngine {
     if (!this.vivo || !this.cidade || !this.gltf || this.personagens.length) return;
     for (const p of PERSONAGENS_DA_CIDADELA) {
       const corpo = CORPOS_VRM[p.id]; if (!corpo) continue;
-      const h = criarPersonagemVivo({ ...p, corpo, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene });
+      const perfil = PERFIS_VIDA[p.id]; if (!perfil) continue;
+      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene });
       const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = p.nome; this.o.overlay.appendChild(tag);
       this.personagens.push({ h, tag });
     }
@@ -2478,8 +2480,11 @@ function base64ParaBuffer(b64: string): ArrayBuffer | null {
   try { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; } catch { return null; }
 }
 
-/** os personagens que vivem na cidadela (id = a chave de CORPOS_VRM; `semente` = a agenda dele) */
-const PERSONAGENS_DA_CIDADELA = [{ id: "nina", nome: "Nina", cor: "#f472b6", semente: 11 }] as const;
+/** os personagens que vivem na cidadela (id = a chave de CORPOS_VRM e de PERFIS_VIDA — a agenda dele) */
+const PERSONAGENS_DA_CIDADELA = [
+  { id: "nina", nome: "Nina", cor: "#f472b6", corMoto: "#ff7ab8" },
+  { id: "aura", nome: "Aura", cor: "#a78bfa", corMoto: "#9b7bff" },
+] as const;
 /** ligados por padrão; `?personagens=0` (ou NEXT_PUBLIC_CYBER_PERSONAGENS=0) desliga */
 function personagensLigados(): boolean {
   if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("personagens") === "0") return false;
