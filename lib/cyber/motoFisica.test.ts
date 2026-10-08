@@ -12,14 +12,14 @@ describe("pilotagem da moto (dirigibilidade)", () => {
   it("W acelera PRA FRENTE do rumo até a velocidade de cruzeiro (não teleporta: leva uns segundos)", () => {
     const s1 = pilotar(noAr(), { acel: 1 }, 1);
     expect(vel(s1)).toBeGreaterThan(8); expect(vel(s1)).toBeLessThan(PILOTAGEM.vel);
-    const s = pilotar(noAr(), { acel: 1 }, 7);
-    expect(vel(s)).toBeCloseTo(PILOTAGEM.vel, 0);
+    const s = pilotar(noAr(), { acel: 1 }, 9);
+    expect(vel(s)).toBeCloseTo(PILOTAGEM.vel, 0); expect(vel(s) * 3.6).toBeGreaterThan(299);   // chega nos 300 km/h
     expect(vel(pilotar(noAr(), { acel: 1 }, 2.5))).toBeLessThan(PILOTAGEM.vel * 0.8);   // curva de potência: não chega em 2,5 s
     expect(s.z - 300).toBeGreaterThan(80); expect(Math.abs(s.x - 300)).toBeLessThan(1e-6);
   });
   it("solta, PLANA perdendo velocidade aos poucos; S freia forte", () => {
-    const rapido = pilotar(noAr(), { acel: 1 }, 5);
-    const plana = pilotar(rapido, {}, 1), freia = pilotar(rapido, { acel: -1 }, 1);
+    const rapido = pilotar(noAr(), { acel: 1 }, 9);
+    const plana = pilotar(rapido, {}, 1), freia = pilotar(rapido, { acel: -1 }, 1.6);   // de 300 a 0 em ~1,5 s (depois ela dá ré)
     expect(vel(plana)).toBeGreaterThan(PILOTAGEM.vel * 0.55); expect(vel(plana)).toBeLessThan(PILOTAGEM.vel);
     expect(vel(freia)).toBeLessThan(5);
   });
@@ -30,7 +30,7 @@ describe("pilotagem da moto (dirigibilidade)", () => {
     expect(Math.abs(rapido)).toBeLessThan(Math.abs(devagar) * 0.5);
     const curva = pilotar({ ...noAr(), vz: PILOTAGEM.vel }, { acel: 1, giro: 1 }, 3);
     expect(vel(curva)).toBeLessThanOrEqual(PILOTAGEM.vel + 0.01);   // curvar NÃO acelera (antes ganhava energia)
-    expect(vel(curva)).toBeGreaterThan(PILOTAGEM.vel * 0.85);        // e nem trava: perde só um pouco
+    expect(vel(curva)).toBeGreaterThan(PILOTAGEM.vel * 0.8);         // e nem trava: perde só um pouco
     const s = pilotar({ ...noAr(), vz: 30 }, { acel: 1, giro: 1 }, 0.8);
     expect(s.x).toBeLessThan(300);   // rumo +z, direita do piloto = −x
   });
@@ -57,9 +57,9 @@ describe("pilotagem da moto (dirigibilidade)", () => {
     expect(Math.abs(ladoDepois)).toBeLessThan(Math.abs(lado) * 0.2);
   });
   it("BOOST passa do cruzeiro, esvazia o tanque, apaga sozinho e recarrega", () => {
-    let s = pilotar(noAr(), { acel: 1 }, 4);
+    let s = pilotar(noAr(), { acel: 1 }, 9);
     s = pilotar(s, { acel: 1, boost: true }, 2);
-    expect(s.boost).toBe(true); expect(vel(s)).toBeGreaterThan(PILOTAGEM.vel + 15); expect(s.tanque).toBeLessThan(0.5);
+    expect(s.boost).toBe(true); expect(vel(s)).toBeGreaterThan(PILOTAGEM.vel + 10); expect(s.tanque).toBeLessThan(0.5);
     s = pilotar(s, { acel: 1, boost: true }, 2);
     expect(s.boost).toBe(false); expect(s.tanque).toBeLessThan(PILOTAGEM.boost.minimo);   // acabou: apaga
     s = pilotar(s, { acel: 1 }, 4);

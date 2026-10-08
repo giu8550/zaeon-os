@@ -1,15 +1,17 @@
 /**
  * Moto — a MOTO VOADORA de corrida (hover bike). Uma moto de verdade, não um bloco: CASCO esculpido em seções (afina no
- * bico e na rabeta, tanque alto, cintura fina embaixo do banco), dois AROS DE ENERGIA no lugar das rodas (pneu escuro,
- * faixa de luz e um disco de energia que GIRA com a velocidade), garfo dianteiro inclinado, balança traseira, o REATOR
- * brilhando entre as pernas, semi-guidão baixo e pedaleiras recuadas (o piloto vai DEITADO na moto, em posição de
- * corrida). Três carenagens (uma por vaga, `estilo`) no mesmo esqueleto — o avatar encaixa igual em qualquer uma:
+ * bico e na rabeta, tanque alto, cintura fina embaixo do banco), garfo dianteiro inclinado, balança traseira, o MOTOR
+ * exposto entre as pernas, semi-guidão baixo e pedaleiras recuadas (o piloto vai DEITADO na moto, em posição de
+ * corrida). SEM RODAS: dois PODS de sustentação (cápsulas com propulsores pra baixo) onde ficariam as rodas, presos
+ * pelo garfo e pela balança. Três carenagens (uma por vaga, `estilo`) no mesmo esqueleto — o avatar encaixa igual em qualquer uma:
  *  - 0 RAIO (esportiva): bico afiado, tanque alto, rabeta pontuda subindo, aletas no nariz;
  *  - 1 TUBARÃO (robusta): casco largo e quadrado, tomadas de ar no nariz, barbatana dorsal, guelras de luz;
  *  - 2 GOTA (arredondada): casco em gota contínua, calotas nos aros, anéis de luz na cintura.
  * Pintura na cor da vaga (clara, metálica), detalhes escuros, frisos de luz, farol de LED e lanterna.
- * PROPULSORES com CHAMA de verdade (shader): núcleo branco-amarelo no bocal, corpo na cor da moto, ponta alaranjada,
- * tremulando com ruído; no BOOST esticam, puxam pro azul-branco e mostram os "diamantes de choque".
+ * PROPULSORES com CHAMA de verdade (shader) que ESQUENTA com a velocidade (`calor`, com inércia — leva ~1,5 s pra
+ * esquentar e mais pra esfriar): fria, curta e na cor da moto; esquentando, cresce e passa pelo laranja, pelo branco e
+ * chega no PLASMA azulado (com os "diamantes de choque" correndo). Junto: os BOCAIS ficam incandescentes, um HALO acende
+ * na saída, o miolo do motor clareia, e atrás sai um RASTRO de energia (fita no mundo) e FAÍSCAS.
  * SETAS âmbar nos 4 cantos: piscam do lado da curva (o engine manda qual lado está aceso).
  * Frente = +z local (o mesmo rumo do voo). Voando: INCLINA nas curvas e aponta o nariz com a subida/descida; parada,
  * flutua de leve. `assento` = onde o avatar senta (montado).
@@ -25,46 +27,63 @@ export type MotoHandle = {
   pontos: { maoE: THREE.Object3D; maoD: THREE.Object3D; peE: THREE.Object3D; peD: THREE.Object3D };
   /** o que dá pra clicar (montar) */
   alvos: THREE.Object3D[];
-  /** `inclina` (rad, a da pilotagem — lib/cyber/motoFisica) manda na rolagem; sem ela, sai do giro (`curva`, motos dos
-   *  outros). `boost` (0..1) estica as chamas; `seta` = o pisca ACESO agora (−1 esquerda, 1 direita, 0 apagado) */
+  /** `vel` = velocidade em m/s (esquenta a propulsão); `inclina` (rad, a da pilotagem — lib/cyber/motoFisica) manda na
+   *  rolagem; sem ela, sai do giro (`curva`, motos dos outros). `boost` (0..1) estica as chamas; `seta` = o pisca ACESO
+   *  agora (−1 esquerda, 1 direita, 0 apagado) */
   atualizar(o: { dt: number; t: number; voando: boolean; vel: number; curva: number; vy?: number; inclina?: number; boost?: number; seta?: number }): void;
   dispose(): void;
 };
 
 export const ESTILOS_MOTO = ["raio", "tubarao", "gota"] as const;
 
-/** a CHAMA (aditiva, sem textura): `nucleo` = o miolo branco curto; uT/uBoost compartilhados pela moto toda */
-function materialChama(cor: THREE.Color, nucleo: boolean, u: { uT: { value: number }; uBoost: { value: number } }) {
+/** a TEMPERATURA da propulsão (0 fria .. 1 incandescente): a cor da moto → laranja → branco-amarelo → plasma azulado.
+ *  A mesma rampa no shader (GLSL) e no JS (bocais, halo, rastro) */
+const RAMPA_GLSL = `
+  vec3 temperatura(float h, vec3 cor) {
+    vec3 b = vec3(1.0, 0.42, 0.1), c = vec3(1.0, 0.82, 0.45), d = vec3(0.5, 0.72, 1.0);
+    return h < 0.35 ? mix(cor, b, h / 0.35) : h < 0.7 ? mix(b, c, (h - 0.35) / 0.35) : mix(c, d, clamp((h - 0.7) / 0.3, 0.0, 1.0));
+  }`;
+const LARANJA = new THREE.Color(1, 0.42, 0.1), AMARELO = new THREE.Color(1, 0.82, 0.45), PLASMA = new THREE.Color(0.5, 0.72, 1);
+function temperatura(h: number, cor: THREE.Color, out: THREE.Color): THREE.Color {
+  return h < 0.35 ? out.copy(cor).lerp(LARANJA, h / 0.35) : h < 0.7 ? out.copy(LARANJA).lerp(AMARELO, (h - 0.35) / 0.35) : out.copy(AMARELO).lerp(PLASMA, Math.min(1, (h - 0.7) / 0.3));
+}
+
+type UniChama = { uT: { value: number }; uBoost: { value: number }; uCalor: { value: number } };
+/** a CHAMA (aditiva, sem textura): `camada` 0 = o corpo, 1 = o miolo branco curto, 2 = a AURA larga e colorida em volta
+ *  do jato principal (o volume do calor); uT/uBoost/uCalor compartilhados pela moto toda */
+function materialChama(cor: THREE.Color, camada: 0 | 1 | 2, u: UniChama) {
   return new THREE.ShaderMaterial({
-    uniforms: { uT: u.uT, uBoost: u.uBoost, uCor: { value: cor }, uNucleo: { value: nucleo ? 1 : 0 } },
+    uniforms: { uT: u.uT, uBoost: u.uBoost, uCalor: u.uCalor, uCor: { value: cor }, uNucleo: { value: camada } },
     vertexShader: `
-      uniform float uT; varying vec2 vUv; varying float vFrente;
+      uniform float uT, uCalor; varying vec2 vUv; varying float vFrente;
       void main() {
         vUv = uv; vec3 p = position;
-        // tremula: a chama "respira" de lado, mais na ponta
-        float tremor = 1.0 + 0.14 * sin(uT * 41.0 + p.y * 13.0) * uv.y + 0.06 * sin(uT * 67.0 + p.y * 29.0);
+        // tremula: a chama "respira" de lado, mais na ponta — e mais nervosa quente
+        float tremor = 1.0 + (0.1 + 0.12 * uCalor) * sin(uT * (35.0 + 30.0 * uCalor) + p.y * 13.0) * uv.y + 0.06 * sin(uT * 67.0 + p.y * 29.0);
         p.xz *= tremor;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         vFrente = pow(abs(dot(normalize(normalMatrix * normal), normalize(-mv.xyz))), 1.4);   // borda some macia
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
-      uniform float uT, uBoost, uNucleo; uniform vec3 uCor; varying vec2 vUv; varying float vFrente;
+      uniform float uT, uBoost, uNucleo, uCalor; uniform vec3 uCor; varying vec2 vUv; varying float vFrente;
+      ${RAMPA_GLSL}
       float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float ruido(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
       void main() {
         float y = vUv.y;   // 0 = bocal, 1 = ponta
-        float n = ruido(vec2(vUv.x * 7.0, y * 5.0 - uT * 11.0)) * 0.6 + ruido(vec2(vUv.x * 15.0, y * 11.0 - uT * 19.0)) * 0.4;
-        float corpo = pow(1.0 - y, 1.6) * (0.55 + 0.75 * n) * vFrente;
-        vec3 cor = mix(uCor, vec3(0.65, 0.85, 1.0), uBoost * 0.6);
-        vec3 quente = mix(vec3(1.0, 0.98, 0.88), vec3(1.0, 0.78, 0.35), smoothstep(0.0, 0.3, y));
-        vec3 c = mix(quente, cor, smoothstep(0.12, 0.55, y));
-        c = mix(c, vec3(1.0, 0.42, 0.12), smoothstep(0.55, 1.0, y) * 0.55 * (1.0 - uBoost));   // ponta alaranjada
-        if (uNucleo > 0.5) { c = mix(vec3(1.0), vec3(0.8, 0.93, 1.0), y); corpo *= 1.4 * (1.0 - smoothstep(0.0, 0.55, y)); }
-        // boost: DIAMANTES DE CHOQUE (anéis brilhantes correndo pela chama)
-        corpo += uBoost * smoothstep(0.82, 1.0, sin(y * 26.0 - uT * 34.0)) * (1.0 - y) * 0.9 * vFrente;
-        corpo *= mix(0.62, 0.42, uBoost);   // aditiva e em camadas: sem isso, satura em branco
+        float q = clamp(uCalor + 0.3 * uBoost, 0.0, 1.0), vel = 8.0 + 16.0 * q;
+        float n = ruido(vec2(vUv.x * 7.0, y * 5.0 - uT * vel)) * 0.6 + ruido(vec2(vUv.x * 15.0, y * 11.0 - uT * vel * 1.7)) * 0.4;
+        float corpo = pow(1.0 - y, 1.6 - 0.6 * q) * (0.55 + 0.75 * n) * vFrente;
+        // a COR é a temperatura: mais quente perto do bocal, esfriando pra ponta
+        vec3 c = temperatura(clamp(q * (1.0 - 0.5 * y) + 0.12 * (1.0 - y), 0.0, 1.0), uCor);
+        if (uNucleo > 1.5) { c = temperatura(q * 0.75, uCor) * 1.2; corpo = pow(1.0 - y, 2.2) * (0.6 + 0.4 * n) * pow(vFrente, 2.0) * q * 0.55; gl_FragColor = vec4(c * corpo, corpo); return; }   // a AURA
+        if (uNucleo > 0.5) { c = mix(vec3(1.0), temperatura(min(1.0, q + 0.35), uCor), y); corpo *= (0.25 + 1.3 * q) * (1.0 - smoothstep(0.0, 0.55, y)); }
+        // quente (e no boost): DIAMANTES DE CHOQUE (anéis brilhantes correndo pela chama)
+        float choque = max(uBoost, smoothstep(0.72, 1.0, uCalor));
+        corpo += choque * smoothstep(0.82, 1.0, sin(y * 26.0 - uT * 34.0)) * (1.0 - y) * 0.9 * vFrente;
+        corpo *= (0.16 + 0.8 * q) * mix(1.0, 0.85, uBoost);   // esquenta = acende; aditiva e em camadas: sem o teto, satura em branco
         gl_FragColor = vec4(c * corpo, corpo);
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
@@ -104,16 +123,14 @@ function casco(secoes: Secao[], low: boolean): THREE.BufferGeometry {
   g.computeVertexNormals(); return g;
 }
 
-/** o desenho do DISCO de energia dos aros (um só pra todas as motos): miolo claro, 3 pás curvas e a borda apagando */
-let texDisco: THREE.CanvasTexture | null = null;
-function discoDeEnergia(): THREE.CanvasTexture | null {
-  if (texDisco || typeof document === "undefined") return texDisco;
-  const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d"); if (!x) return null;
-  const g = x.createRadialGradient(64, 64, 4, 64, 64, 62); g.addColorStop(0, "rgba(255,255,255,0.95)"); g.addColorStop(0.25, "rgba(255,255,255,0.35)"); g.addColorStop(0.8, "rgba(255,255,255,0.12)"); g.addColorStop(1, "rgba(255,255,255,0)");
-  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
-  x.strokeStyle = "rgba(255,255,255,0.8)"; x.lineWidth = 5; x.lineCap = "round";
-  for (let k = 0; k < 3; k++) { const a = (k * 2 * Math.PI) / 3; x.beginPath(); x.moveTo(64 + 10 * Math.cos(a), 64 + 10 * Math.sin(a)); x.quadraticCurveTo(64 + 40 * Math.cos(a + 0.5), 64 + 40 * Math.sin(a + 0.5), 64 + 56 * Math.cos(a + 1.1), 64 + 56 * Math.sin(a + 1.1)); x.stroke(); }
-  texDisco = new THREE.CanvasTexture(c); texDisco.colorSpace = THREE.SRGBColorSpace; return texDisco;
+/** o HALO (mancha radial) da saída dos propulsores e das faíscas (um só pra todas as motos) */
+let texHalo: THREE.CanvasTexture | null = null;
+function haloDeCalor(): THREE.CanvasTexture | null {
+  if (texHalo || typeof document === "undefined") return texHalo;
+  const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d"); if (!x) return null;
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.25, "rgba(255,255,255,0.55)"); g.addColorStop(0.6, "rgba(255,255,255,0.12)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  texHalo = new THREE.CanvasTexture(c); texHalo.colorSpace = THREE.SRGBColorSpace; return texHalo;
 }
 
 /** as SEÇÕES de cada carenagem (z = frente; o banco fica por cima de z −0,1..−0,9, com o topo do casco ali ≤ 1,04) */
@@ -139,8 +156,10 @@ const CASCOS: Record<(typeof ESTILOS_MOTO)[number], Secao[]> = {
 };
 /** o RABO (onde sai o propulsor principal) de cada carenagem */
 const RABO = { raio: { y: 1.26, z: -1.66 }, tubarao: { y: 1.1, z: -1.64 }, gota: { y: 1.05, z: -1.62 } } as const;
-/** os AROS: centro (z), raio; o cubo fica a `r + 0,08` do chão */
-const AROS = [{ z: 1.12, r: 0.42 }, { z: -1.1, r: 0.46 }] as const;
+/** os PODS de sustentação (onde ficariam as rodas): centro (z, y) e o tamanho (meia-largura, meia-altura, comprimento) */
+const PODS = [{ z: 1.1, y: 0.52, w: 0.13, h: 0.12, c: 0.36 }, { z: -1.08, y: 0.55, w: 0.16, h: 0.13, c: 0.42 }] as const;
+/** quanto tempo a propulsão leva pra esquentar e esfriar (1/s) e a velocidade (m/s) em que fica fria / no máximo */
+const CALOR = { sobe: 0.7, desce: 0.35, frio: 12, quente: 80, boost: 0.25 } as const;
 
 export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): MotoHandle {
   const g = new THREE.Group(), corpo = new THREE.Group(); g.add(corpo);
@@ -214,39 +233,32 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   peca(new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.12), escuro), 0, 1.16, 0.7);
   const painel = peca(new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.06), brilho), 0, 1.2, 0.62); painel.rotation.x = -1.0;
 
-  // ───────────── AROS DE ENERGIA (as "rodas") + garfo, balança, reator ─────────────
-  const tex = discoDeEnergia();
-  const energia = new THREE.MeshBasicMaterial({ color: acento, map: tex, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const discos: THREE.Mesh[] = [];
-  for (const [k, a] of AROS.entries()) {
-    const roda = peca(new THREE.Group(), 0, a.r + 0.08, a.z); roda.rotation.y = Math.PI / 2;   // o plano do aro = yz
-    const pneu = new THREE.Mesh(new THREE.TorusGeometry(a.r, 0.075, o.low ? 6 : 10, o.low ? 24 : 44), escuro); roda.add(pneu); alvos.push(pneu);
-    for (const lado of [-1, 1]) { const f = new THREE.Mesh(new THREE.TorusGeometry(a.r - 0.035, 0.016, 4, o.low ? 24 : 48), brilho); f.position.z = lado * 0.055; roda.add(f); }
-    const disco = new THREE.Mesh(new THREE.CircleGeometry(a.r - 0.07, o.low ? 20 : 36), energia); roda.add(disco); discos.push(disco);
-    disco.userData.semLote = true;   // gira: fica fora do lote estático
-    const cubo = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.22, seg), cromado); cubo.rotation.x = Math.PI / 2; roda.add(cubo);
-    if (estilo === "gota") { for (const lado of [-1, 1]) { const calota = new THREE.Mesh(new THREE.CircleGeometry(a.r * 0.5, seg * 2), pintura); calota.position.z = lado * 0.06; calota.rotation.y = lado > 0 ? 0 : Math.PI; roda.add(calota); } }
-    // para-lama: um arco por cima (o dianteiro cobre em cima/na frente; o traseiro, em cima/atrás)
-    const arco = new THREE.Mesh(new THREE.TorusGeometry(a.r + 0.07, 0.045, 6, 24, Math.PI * 0.5), estilo === "gota" ? pintura : escuro);
-    arco.rotation.z = k === 0 ? Math.PI * 0.42 : Math.PI * 0.12; roda.add(arco);
+  // ───────────── PODS de sustentação (sem rodas) + garfo, balança, quadro ─────────────
+  for (const [k, d] of PODS.entries()) {
+    const pod = peca(new THREE.Mesh(casco([
+      { z: d.z + d.c, w: 0.015, yt: d.y + 0.015, yb: d.y - 0.015 }, { z: d.z + d.c * 0.6, w: d.w * 0.85, yt: d.y + d.h * 0.85, yb: d.y - d.h * 0.8 },
+      { z: d.z, w: d.w, yt: d.y + d.h, yb: d.y - d.h }, { z: d.z - d.c * 0.6, w: d.w * 0.8, yt: d.y + d.h * 0.8, yb: d.y - d.h * 0.85 },
+      { z: d.z - d.c, w: 0.02, yt: d.y + 0.02, yb: d.y - 0.02 },
+    ], o.low), k === 0 ? pintura : escuro), 0, 0, 0); alvos.push(pod);
+    const cinta = peca(new THREE.Mesh(new THREE.TorusGeometry(1, 0.014, 4, seg * 3), brilho), 0, d.y, d.z); cinta.scale.set(d.w + 0.004, d.h + 0.004, 1);   // a cinta de luz
   }
-  const yF = AROS[0].r + 0.08, yT = AROS[1].r + 0.08;
   for (const s of [-1, 1]) {
-    barra([s * 0.12, 1.12, 0.7], [s * 0.12, yF, AROS[0].z], 0.032, cromado);   // GARFO inclinado
-    barra([s * 0.13, 0.66, 0.0], [s * 0.13, yT, AROS[1].z], 0.04, escuro);    // BALANÇA (do motor até o cubo traseiro)
+    barra([s * 0.12, 1.12, 0.7], [s * 0.1, PODS[0].y + 0.06, PODS[0].z - 0.05], 0.032, cromado);   // GARFO inclinado até o pod da frente
+    barra([s * 0.13, 0.66, 0.0], [s * 0.12, PODS[1].y + 0.04, PODS[1].z + 0.12], 0.04, escuro);    // BALANÇA (do motor até o pod de trás)
     barra([s * 0.09, 1.08, 0.66], [s * 0.1, 0.72, 0.36], 0.03, escuro);        // QUADRO: da caixa de direção até o motor
   }
   // o MOTOR EXPOSTO (sem carenagem embaixo): o cárter com o miolo de energia aceso, dois CILINDROS em V com aletas e os
   // ESCAPAMENTOS cromados descendo por baixo do banco até a rabeta
   const ym = 0.66, zm = 0.22;
+  const nucleoMotor = new THREE.MeshBasicMaterial({ color: acento.clone() });   // o miolo: clareia com o calor
   const carter = peca(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.26, seg * 2), escuro), 0, ym, zm); carter.rotation.z = Math.PI / 2;
-  for (const s of [-1, 1]) { const tampa = peca(new THREE.Mesh(new THREE.CircleGeometry(0.115, seg * 2), brilho), s * 0.132, ym, zm); tampa.rotation.y = s * Math.PI / 2; }   // o miolo aceso dos dois lados
+  for (const s of [-1, 1]) { const tampa = peca(new THREE.Mesh(new THREE.CircleGeometry(0.115, seg * 2), nucleoMotor), s * 0.132, ym, zm); tampa.rotation.y = s * Math.PI / 2; }   // o miolo aceso dos dois lados
   for (const [ang, comp] of [[0.5, 0.34], [-0.45, 0.32]] as const) {   // V: um pra frente, um pra trás
     const cil = new THREE.Group(); cil.position.set(0, ym, zm); cil.rotation.x = ang; corpo.add(cil);
     const bloco = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, comp, seg), cromado); bloco.position.y = comp / 2 + 0.08; cil.add(bloco);
     for (let k = 0; k < 5; k++) { const aleta = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.014, seg), escuro); aleta.position.y = 0.14 + k * 0.05; cil.add(aleta); }
     const cabeca = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.06, 0.14), escuro); cabeca.position.y = comp + 0.1; cil.add(cabeca);
-    const vela = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), brilho); vela.position.y = comp + 0.14; cil.add(vela);
+    const vela = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), nucleoMotor); vela.position.y = comp + 0.14; cil.add(vela);
   }
   const yR = rabo.y - 0.12, zR = rabo.z - 0.06;
   for (const s of [-1, 1]) peca(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
@@ -262,8 +274,9 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   }
 
   // ───────────── PROPULSORES com CHAMA ─────────────
-  const u = { uT: { value: 0 }, uBoost: { value: 0 } };
-  const chamaMat = materialChama(acento, false, u), nucleoMat = materialChama(acento, true, u);
+  const u: UniChama = { uT: { value: 0 }, uBoost: { value: 0 }, uCalor: { value: 0 } };
+  const bocalQuente = new THREE.MeshStandardMaterial({ color: 0x9aa4ba, roughness: 0.2, metalness: 0.9, emissive: 0x000000, emissiveIntensity: 1 });   // os bocais principais: incandescem
+  const chamaMat = materialChama(acento, 0, u), nucleoMat = materialChama(acento, 1, u), auraMat = materialChama(acento, 2, u);
   const garganta = new THREE.MeshBasicMaterial({ color: acento.clone().lerp(new THREE.Color(0xffffff), 0.5) });
   type Prop = { chama: THREE.Group; tam: number; tipo: "principal" | "sustenta" | "manobra"; lado: number };
   const props: Prop[] = [];
@@ -272,13 +285,14 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
     const g2 = new THREE.Group(); g2.position.set(x, y, z); corpo.add(g2);
     // o +y local do grupo aponta pra saída
     if (dir === "tras") g2.rotation.x = -Math.PI / 2; else if (dir === "baixo") g2.rotation.x = Math.PI; else g2.rotation.z = x > 0 ? -Math.PI / 2 : Math.PI / 2;
-    const bocal = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.78, r, r * 1.5, seg, 1, true), cromado); bocal.position.y = r * 0.25; g2.add(bocal);
+    const bocal = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.78, r, r * 1.5, seg, 1, true), dir === "tras" ? bocalQuente : cromado); bocal.position.y = r * 0.25; g2.add(bocal);
     const aro = new THREE.Mesh(new THREE.TorusGeometry(r * 0.94, r * 0.13, 6, seg + 4), escuro); aro.rotation.x = Math.PI / 2; aro.position.y = r * 1.0; g2.add(aro);
     const fundo = new THREE.Mesh(new THREE.CircleGeometry(r * 0.76, seg), garganta); fundo.rotation.x = -Math.PI / 2; fundo.position.y = r * 0.55; g2.add(fundo);
     // a chama: cone com a BASE no bocal e a ponta pra fora (comprimento 1 → escala `tam × força`)
     const chama = new THREE.Group(); chama.position.y = r * 0.95; g2.add(chama);
     const fora = new THREE.Mesh(new THREE.ConeGeometry(r * 0.95, 1, seg, 1, true), chamaMat); fora.position.y = 0.5; chama.add(fora);
     const nucleo = new THREE.Mesh(new THREE.ConeGeometry(r * 0.5, 0.55, seg, 1, true), nucleoMat); nucleo.position.y = 0.275; chama.add(nucleo);
+    if (dir === "tras" && tam > 1.2) { const aura = new THREE.Mesh(new THREE.ConeGeometry(r * 2.4, 0.8, seg, 1, true), auraMat); aura.position.y = 0.4; chama.add(aura); }   // só no principal
     props.push({ chama, tam, tipo: dir === "tras" ? "principal" : dir === "baixo" ? "sustenta" : "manobra", lado: Math.sign(x) });
   };
   // TRASEIRA: a nacele presa ao rabo, o PRINCIPAL no meio e dois menores dos lados (embaixo da rabeta)
@@ -286,8 +300,13 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   peca(new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.012, 4, seg * 2), brilho), 0, rabo.y - 0.04, rabo.z + 0.12).scale.set(1.4, 1, 1);
   propulsor(0, rabo.y - 0.04, rabo.z - 0.2, 0.12, "tras", 1.5);
   for (const s of [-1, 1]) propulsor(s * 0.2, yR, zR, 0.07, "tras", 1.1);
-  // de SUSTENTAÇÃO embaixo do reator e da balança
-  for (const [x, z] of [[0.08, 0.62], [-0.08, 0.62], [0.08, -0.62], [-0.08, -0.62]] as const) propulsor(x, 0.62, z, 0.055, "baixo", 0.5);
+  // de SUSTENTAÇÃO: dois embaixo de cada pod (lado a lado — as chamas não entram no lote: cada uma custa 2 draw calls)
+  for (const d of PODS) for (const x of [-0.065, 0.065]) propulsor(x, d.y - d.h + 0.03, d.z, 0.055, "baixo", 0.5);
+  // o HALO de calor na saída do principal (acende e cresce com o calor) e o ponto de onde saem o rastro e as faíscas
+  const tH = haloDeCalor();
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: tH, color: acento.clone(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  halo.userData.semLote = true; peca(halo, 0, rabo.y - 0.04, rabo.z - 0.3);
+  const saida = new THREE.Object3D(); peca(saida, 0, rabo.y - 0.04, rabo.z - 0.32);
   for (const s of [-1, 1]) {   // de MANOBRA nas laterais do nariz: acendem na curva, do lado de fora
     const zM = 1.36, xM = larguraEm(zM) + 0.01;
     peca(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.14), escuro), s * (xM - 0.01), 0.95, zM);
@@ -298,7 +317,7 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   // lente âmbar apagada (fica) + a luz acesa e o halo (ligam no pisca) — frente e trás, dos dois lados
   const lente = new THREE.MeshStandardMaterial({ color: 0x3a2610, roughness: 0.25, metalness: 0.4, emissive: 0x1a0d00, emissiveIntensity: 1 });
   const luz = new THREE.MeshBasicMaterial({ color: 0xffb22e });
-  const halo = new THREE.MeshBasicMaterial({ color: 0xff9a1a, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
+  const haloSeta = new THREE.MeshBasicMaterial({ color: 0xff9a1a, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
   // o aceso de cada LADO num grupo só (frente + trás piscam juntos): liga/desliga o grupo — e o lote junta as peças dele
   const setas: Record<number, THREE.Group> = { 1: new THREE.Group(), [-1]: new THREE.Group() };   // −1 = esquerda do piloto = +x
   for (const gS of Object.values(setas)) { gS.visible = false; corpo.add(gS); }
@@ -306,7 +325,7 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
     const x = s * (larguraEm(z) + 0.01), gS = setas[s > 0 ? -1 : 1]!;
     peca(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.1), lente), x, y, z);   // embutida (só a pontinha aparece)
     peca(new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.034, 0.105), luz), x, y, z, gS);
-    peca(new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 6), halo), x + s * 0.02, y, z, gS);
+    peca(new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 6), haloSeta), x + s * 0.02, y, z, gS);
   }
 
   // ancoragem do PILOTO (frente da moto = +z; a esquerda de quem pilota = +x): quadril no banco, mãos nos punhos,
@@ -316,33 +335,102 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   // posição de CORRIDA: mãos baixas e à frente (semi-guidão), pés recuados (pedaleiras atrás do reator)
   const pontos = { maoE: ancora(0.38, 1.14, 0.6), maoD: ancora(-0.38, 1.14, 0.6), peE: ancora(0.3, 0.68, -0.22), peD: ancora(-0.3, 0.68, -0.22) };
 
-  let rola = 0, nariz2 = 0, boostSuave = 0, giroAro = 0, brilhoAro = 0.35;
+  // ───────────── RASTRO de energia + FAÍSCAS (no MUNDO: ficam pra trás enquanto a moto anda) ─────────────
+  const N = o.low ? 16 : 36, NF = o.low ? 12 : 28, RASTRO_SEG = 0.3, RASTRO_M = 8;   // o rastro dura ~0,3 s (por TEMPO, não por quadro) e no máximo 8 m
+  let mundo: { grupo: THREE.Group; fita: THREE.Mesh; pf: THREE.Points; pontos: { p: THREE.Vector3; t: number }[]; faiscas: { p: THREE.Vector3; v: THREE.Vector3; vida: number; max: number }[] } | null = null;
+  const criarMundo = (raiz: THREE.Object3D) => {
+    const grupo = new THREE.Group(); grupo.userData.semLote = true; raiz.add(grupo);
+    // a fita: duas tiras cruzadas (em pé e deitada) — 4 vértices por ponto, cor (já com o "alfa") por vértice
+    const gF = new THREE.BufferGeometry(), idx: number[] = [];
+    gF.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 4 * 3), 3)); gF.setAttribute("color", new THREE.BufferAttribute(new Float32Array(N * 4 * 3), 3));
+    for (let i = 0; i < N - 1; i++) for (const f of [0, 2]) { const a = i * 4 + f, b = a + 1, c = a + 4, d = b + 4; idx.push(a, c, b, b, c, d); }
+    gF.setIndex(idx);
+    const fita = new THREE.Mesh(gF, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    fita.frustumCulled = false; grupo.add(fita);
+    const gP = new THREE.BufferGeometry();
+    gP.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NF * 3), 3)); gP.setAttribute("color", new THREE.BufferAttribute(new Float32Array(NF * 3), 3));
+    const pf = new THREE.Points(gP, new THREE.PointsMaterial({ size: 0.22, map: tH, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true }));
+    pf.frustumCulled = false; grupo.add(pf);
+    return { grupo, fita, pf, pontos: [] as { p: THREE.Vector3; t: number }[], faiscas: Array.from({ length: NF }, () => ({ p: new THREE.Vector3(), v: new THREE.Vector3(), vida: 0, max: 1 })) };
+  };
+  const vS = new THREE.Vector3(), vUp = new THREE.Vector3(), vLado = new THREE.Vector3(), vFr = new THREE.Vector3(), corT = new THREE.Color(), q4 = new THREE.Quaternion();
+  let calor = 0, faiscaAcum = 0, faiscaProx = 0;
+
+  let rola = 0, nariz2 = 0, boostSuave = 0;
   return {
     group: g, assento, pontos, alvos,
     atualizar({ dt, t, voando, vel, curva, vy = 0, inclina, boost = 0, seta = 0 }) {
-      const k = Math.min(1, dt * 4);
+      const k = Math.min(1, dt * 4), v30 = Math.min(1.8, vel / 30);
       if (inclina !== undefined) rola = inclina;   // a pilotagem já suaviza
       else rola += (Math.max(-0.5, Math.min(0.5, -curva * 0.55)) * (voando ? 1 : 0) - rola) * k;
-      nariz2 += ((voando ? Math.max(-0.25, Math.min(0.25, -vy * 0.02)) - Math.min(1.8, vel) * 0.07 : 0) - nariz2) * k;
+      nariz2 += ((voando ? Math.max(-0.25, Math.min(0.25, -vy * 0.02)) - v30 * 0.05 : 0) - nariz2) * k;
       corpo.rotation.set(nariz2, 0, rola);
       corpo.position.y = ESCALA_MOTO * (voando ? Math.sin(t * 3.1) * 0.03 : 0.05 + Math.sin(t * 1.7) * 0.04);   // parada: flutua de leve
       boostSuave += (boost - boostSuave) * Math.min(1, dt * 6);
-      u.uT.value = t; u.uBoost.value = boostSuave;
-      // chamas: principais crescem com a velocidade (e MUITO no boost); as de sustentação, com o voo; as de manobra, na curva
+      // o CALOR: segue a velocidade com inércia (esquenta mais rápido do que esfria)
+      const alvoCalor = voando ? Math.min(1, Math.max(0, (vel - CALOR.frio) / (CALOR.quente - CALOR.frio))) + CALOR.boost * boostSuave : 0;
+      calor += (alvoCalor - calor) * Math.min(1, dt * (alvoCalor > calor ? CALOR.sobe : CALOR.desce) * 2.2);
+      const q = Math.min(1, calor);
+      u.uT.value = t; u.uBoost.value = boostSuave; u.uCalor.value = q;
+      // chamas: principais crescem com o CALOR (e MUITO no boost); as de sustentação, com o voo; as de manobra, na curva
       props.forEach((p, i) => {
-        const forca = p.tipo === "principal" ? (voando ? 0.3 + 0.7 * Math.min(1, vel) + 0.75 * boostSuave : 0.06)
-          : p.tipo === "sustenta" ? (voando ? 0.65 + 0.35 * Math.min(1, Math.abs(vy) / 8) : 0.14)
+        const forca = p.tipo === "principal" ? (voando ? 0.3 + 1.7 * q + 0.7 * boostSuave : 0.06)
+          : p.tipo === "sustenta" ? (voando ? 0.6 + 0.35 * Math.min(1, Math.abs(vy) / 8) + 0.2 * q : 0.14)
           : (voando ? 0.1 + 0.9 * Math.max(0, -curva * p.lado) : 0.03);
-        const tremor = 0.9 + 0.1 * Math.sin(t * 31 + i * 1.7) + 0.05 * Math.sin(t * 57 + i);
-        p.chama.scale.set(1 + 0.25 * boostSuave * (p.tipo === "principal" ? 1 : 0), Math.max(0.02, p.tam * forca * tremor), 1 + 0.25 * boostSuave * (p.tipo === "principal" ? 1 : 0));
+        const tremor = 0.9 + 0.1 * Math.sin(t * 31 + i * 1.7) + 0.05 * Math.sin(t * 57 + i), largo = p.tipo === "principal" ? 0.7 + 0.4 * q + 0.2 * boostSuave : 1;
+        p.chama.scale.set(largo, Math.max(0.02, p.tam * forca * tremor), largo);
       });
       setas[-1]!.visible = seta === -1; setas[1]!.visible = seta === 1;
-      // os AROS: o disco de energia gira com a velocidade e acende no voo
-      if (voando || giroAro !== 0) { giroAro = (giroAro - dt * (2 + 14 * Math.min(1.8, vel))) % (Math.PI * 2); for (const d of discos) d.rotation.z = giroAro; }
-      const alvoAro = voando ? 0.7 + 0.3 * boostSuave : 0.35; if (Math.abs(alvoAro - brilhoAro) > 0.005) { brilhoAro += (alvoAro - brilhoAro) * k; energia.opacity = brilhoAro; }
+      // o resto que acende com o calor: bocais incandescentes, halo da saída, miolo do motor, emissores dos pods
+      temperatura(q, acento, corT); bocalQuente.emissive.copy(corT).multiplyScalar(q * q * 1.4);
+      halo.material.color.copy(corT); halo.material.opacity = voando ? 0.05 + 0.7 * q * q : 0; halo.scale.setScalar(0.2 + 1.6 * q + 0.5 * boostSuave);
+      nucleoMotor.color.copy(acento).lerp(corT.set(1, 1, 1), q * 0.7);
+
+      // RASTRO + FAÍSCAS: só com calor (parada, nem cria)
+      if (!mundo && q < 0.12) return;
+      let raiz: THREE.Object3D = g, vis = true; for (let p: THREE.Object3D | null = g; p; p = p.parent) { if (!p.visible) vis = false; raiz = p; }
+      if (raiz === g) return;   // ainda fora da cena
+      mundo ??= criarMundo(raiz);
+      if (mundo.grupo.parent !== raiz) raiz.add(mundo.grupo);
+      mundo.grupo.visible = vis;
+      g.updateWorldMatrix(true, true); saida.getWorldPosition(vS); corpo.getWorldQuaternion(q4);
+      vUp.set(0, 1, 0).applyQuaternion(q4); vLado.set(1, 0, 0).applyQuaternion(q4); vFr.set(0, 0, 1).applyQuaternion(q4);
+      const pts = mundo.pontos;
+      if (pts.length && pts[0]!.p.distanceTo(vS) > 40) pts.length = 0;   // teletransporte (pool, montou noutra moto): recomeça
+      const novo = pts.length >= N ? pts.pop()! : { p: new THREE.Vector3(), t: 0 }; novo.p.copy(vS); novo.t = t; pts.unshift(novo);
+      // só os últimos ~0,3 s e no máximo `RASTRO_M` de comprimento: a câmera da moto fica ~11 m atrás — mais longo, a fita
+      // passava por baixo dela e virava uma faixa enorme na tela
+      while (pts.length > 2 && (t - pts[pts.length - 1]!.t > RASTRO_SEG || pts[pts.length - 1]!.p.distanceTo(vS) > RASTRO_M)) pts.pop();
+      const pos = mundo.fita.geometry.attributes.position as THREE.BufferAttribute, cor = mundo.fita.geometry.attributes.color as THREE.BufferAttribute;
+      const larg = (0.025 + 0.1 * q + 0.06 * boostSuave) * (voando ? 1 : 0), ult = pts.length - 1;
+      for (let i = 0; i < N; i++) {
+        const p = pts[Math.min(i, ult)]!.p, f = ult > 0 ? 1 - Math.min(i, ult) / ult : 0, w = larg * (0.3 + 0.7 * f), luz = q * q * f * f * 0.55;
+        temperatura(Math.min(1, q * (0.5 + 0.6 * f)), acento, corT).multiplyScalar(luz);
+        pos.setXYZ(i * 4, p.x + vUp.x * w, p.y + vUp.y * w, p.z + vUp.z * w); pos.setXYZ(i * 4 + 1, p.x - vUp.x * w, p.y - vUp.y * w, p.z - vUp.z * w);
+        pos.setXYZ(i * 4 + 2, p.x + vLado.x * w, p.y + vLado.y * w, p.z + vLado.z * w); pos.setXYZ(i * 4 + 3, p.x - vLado.x * w, p.y - vLado.y * w, p.z - vLado.z * w);
+        for (let j = 0; j < 4; j++) cor.setXYZ(i * 4 + j, corT.r, corT.g, corT.b);
+      }
+      pos.needsUpdate = true; cor.needsUpdate = true;
+      // faíscas: saem do bocal pra trás, espalhando, e apagam (mais e mais rápidas quanto mais quente)
+      faiscaAcum += voando && q > 0.3 ? dt * (10 + 60 * q + 40 * boostSuave) : 0;
+      while (faiscaAcum >= 1) {
+        faiscaAcum -= 1; const fz = mundo.faiscas[faiscaProx]!; faiscaProx = (faiscaProx + 1) % NF;
+        const r1 = Math.sin(t * 913 + faiscaProx * 7.1), r2 = Math.sin(t * 517 + faiscaProx * 3.3);
+        fz.p.copy(vS); fz.max = fz.vida = 0.25 + 0.3 * Math.abs(r1);
+        fz.v.copy(vFr).multiplyScalar(-(4 + 10 * q)).addScaledVector(vLado, r1 * 2.5).addScaledVector(vUp, r2 * 2.5);
+      }
+      const pp = mundo.pf.geometry.attributes.position as THREE.BufferAttribute, pc = mundo.pf.geometry.attributes.color as THREE.BufferAttribute;
+      for (let i = 0; i < NF; i++) {
+        const fz = mundo.faiscas[i]!; if (fz.vida > 0) { fz.vida -= dt; fz.p.addScaledVector(fz.v, dt); fz.v.multiplyScalar(1 - dt * 2); }
+        const a = Math.max(0, fz.vida / fz.max); temperatura(Math.min(1, q + 0.2 * a), acento, corT).multiplyScalar(a);
+        pp.setXYZ(i, fz.p.x, fz.p.y, fz.p.z); pc.setXYZ(i, corT.r, corT.g, corT.b);
+      }
+      pp.needsUpdate = true; pc.needsUpdate = true;
     },
     dispose() {
-      g.traverse((x) => { const m = x as THREE.Mesh; m.geometry?.dispose(); const mt = m.material as THREE.Material | undefined; mt?.dispose?.(); });   // (a textura do disco é compartilhada: fica)
+      g.traverse((x) => { if ((x as THREE.Sprite).isSprite) { (x as THREE.Sprite).material.dispose(); return; }   // (a geometria do sprite é a compartilhada do three)
+        const m = x as THREE.Mesh; m.geometry?.dispose(); const mt = m.material as THREE.Material | undefined; mt?.dispose?.(); });   // (a textura do halo é compartilhada: fica)
+      if (mundo) { mundo.fita.geometry.dispose(); (mundo.fita.material as THREE.Material).dispose(); mundo.pf.geometry.dispose(); (mundo.pf.material as THREE.Material).dispose(); mundo.grupo.removeFromParent(); mundo = null; }
       g.removeFromParent();
     },
   };

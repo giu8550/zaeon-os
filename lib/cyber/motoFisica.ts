@@ -32,24 +32,24 @@ export function tetoDaMoto(p: { x: number; z: number }, chao: number): number {
 }
 
 export const PILOTAGEM = {
-  /** velocidade de cruzeiro e com boost (m/s): 34 ≈ 120 km/h, 62 ≈ 220 km/h */
-  vel: 34, velBoost: 62, re: 7,
+  /** velocidade máxima no acelerador e com boost (m/s): 83,4 ≈ 300 km/h, 100 = 360 km/h */
+  vel: 83.4, velBoost: 100, re: 9,
   /** aceleração (na saída), no boost e freio (m/s²); a curva de potência (`queda`, `expoente`, com `piso` = o mínimo
    *  perto da máxima); `plana` = quanto perde por segundo solta (fração) */
-  acel: 10, acelBoost: 26, queda: 0.9, expoente: 2.2, piso: 0.12, freio: 30, plana: 0.45,
+  acel: 21, acelBoost: 40, queda: 0.9, expoente: 2.2, piso: 0.12, freio: 55, plana: 0.4,
   /** giro (rad/s): parada/devagar, na velocidade de cruzeiro e no boost; `resposta` = quão rápido o guidão chega lá */
-  giroBaixo: 1.6, giroAlto: 0.5, giroBoost: 0.36, resposta: 6,
+  giroBaixo: 1.7, giroAlto: 0.6, giroBoost: 0.46, resposta: 6,
   /** aderência lateral (1/s): quanto da velocidade de lado some por segundo */
   aderencia: 5, aderenciaBoost: 2.6,
   /** quanto do escorregão a curva COME de velocidade (o resto volta pra frente): baixo = curva fechada sem perder o embalo */
   esfrega: 0.22,
   /** inclinação máxima (rad, ~36°) e quão rápido ela chega */
-  inclinaMax: 0.63, inclinaResposta: 6,
+  inclinaMax: 0.7, inclinaResposta: 6,
   /** boost: tanque cheio dura `dura` s; recarga em `recarga` s; precisa de `minimo` pra (re)começar */
   boost: { dura: 3.2, recarga: 5, minimo: 0.2, velMin: 6 },
   /** o "g" da inclinação: com o g de verdade (9,8) toda curva já deitava no máximo; com um g de jogo maior a moto
    *  deita POUCO devagar e MUITO rápido/no boost (cruzeiro com o guidão todo ≈ 30°, boost ≈ 36°) */
-  g: 28,
+  g: 75,
   /** ALTURA: teto acima do chão de baixo (m) — moto voa BAIXO (o dono pediu: "não deve voar muito acima do chão"); subida e descida (m/s) e quão rápido chega nelas; a descida forçada
    *  (acima do teto, ex.: saiu da borda da Zaeon) vai de `planaMin` a `planaMax` m/s conforme o quanto sobra */
   alturaMax: 8, sobe: 10, desce: 6, inerciaV: 2.4, planaMin: 6, planaMax: 22,
@@ -128,8 +128,12 @@ export function passoMotoSub(s: EstadoMoto, c: ComandoMoto, dt: number, solidos:
   return r;
 }
 
-/** o quanto de "velocidade" a TELA deve sentir (0..1, e passa de 1 no boost): FOV, blur radial e linhas de velocidade */
+/** a partir de que velocidade (m/s) a TELA sente: 150 km/h */
+export const VEL_SENTE = 150 / 3.6;
+/** o quanto de "velocidade" a TELA deve sentir (0..1, e passa de 1 no boost): FOV, blur radial e linhas de velocidade.
+ *  ZERO abaixo de 150 km/h; a partir daí já entra com as linhas (0,2) e cresce até 300 km/h; o boost soma */
 export function sensacaoDeVelocidade(s: EstadoMoto): number {
   const v = Math.hypot(s.vx, s.vz);
-  return clamp((v - 8) / (PILOTAGEM.vel - 8), 0, 1) * 0.6 + clamp((v - PILOTAGEM.vel) / (PILOTAGEM.velBoost - PILOTAGEM.vel), 0, 1) * 0.4 + (s.boost ? 0.15 : 0);
+  if (v < VEL_SENTE) return 0;
+  return 0.2 + 0.65 * clamp((v - VEL_SENTE) / (PILOTAGEM.vel - VEL_SENTE), 0, 1) + clamp((v - PILOTAGEM.vel) / (PILOTAGEM.velBoost - PILOTAGEM.vel), 0, 1) * 0.25 + (s.boost ? 0.1 : 0);
 }

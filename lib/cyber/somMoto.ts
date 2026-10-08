@@ -221,7 +221,7 @@ export const somMotoParada: EstadoSomMoto = { montada: false, voando: false, vel
  *  A rotação na marcha é vel / topo — na troca ela cai pra topo(n)/topo(n+1): queda grande nas primeiras, pequena nas
  *  últimas, como numa moto de verdade */
 export const CAMBIO = {
-  topo: [0.2, 0.4, 0.62, 0.86, 1.18, 2.05],
+  topo: [0.18, 0.36, 0.56, 0.8, 1.16, 1.4],
   /** marcha lenta (parada / no chão), a rotação onde sobe a marcha e a fração do topo da anterior onde reduz */
   lenta: 0.14, troca: 0.96, reduz: 0.7,
   /** quanto o acelerador puxa a rotação (carga) e quão rápido ela segue o alvo (1/s); `corte` = duração da troca (s) */
