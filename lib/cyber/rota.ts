@@ -1,18 +1,18 @@
 /**
- * Cyberespaço — ATALHOS de rota da nave ("Heliporto", "QG do Andrei" e "Zaeon"). PURO. Não é teletransporte: o piloto
+ * Cyberespaço — ATALHOS de rota da nave ("Heliporto", na praça, e "Zaeon"). PURO. Não é teletransporte: o piloto
  * automático gera as MESMAS entradas dos botões de movimento (direção, subir, descer), então a nave voa à vista de
  * todos pelo caminho. Qualquer botão de movimento cancela (no engine). A rota contorna a ilha da cidade (sai pela
- * borda, do lado do destino) e cruza o mapa numa altitude livre (acima do QG, abaixo do fundo da ilha da Zaeon).
+ * borda, do lado do destino) e cruza o mapa numa altitude livre (abaixo do fundo da ilha da Zaeon).
  */
 import { CIDADE } from "./ceu";
 import { poseDaDoca } from "./naveQG";
 import { HELIPORTO } from "./landmarks";
 import { VOO, type ComandoVoo, type EstadoVoo } from "./voo";
 
-export type DestinoRota = "heliporto" | "qg" | "zaeon";
+export type DestinoRota = "heliporto" | "zaeon";
 export type Waypoint = { x: number; y: number; z: number; pousar?: boolean };
 
-/** altitude de cruzeiro no chão: acima da cúpula do QG (~26 m), bem abaixo da ponta da agulha da Zaeon (~125 m) */
+/** altitude de cruzeiro perto da praça: acima das bases e do heliporto, bem abaixo da ponta da agulha da Zaeon */
 export const CRUZEIRO = 40;
 const FOLGA_BORDA = 8, ACIMA_DA_CIDADE = 8;
 
@@ -25,22 +25,15 @@ function saidaDaIlha(rumo: { x: number; z: number }, y: number): Waypoint {
   return { x: c.x + dx * r, y, z: c.z + dz * r };
 }
 
-/** onde cada atalho pousa: no heliporto (chão) ou no ponto de pouso do QG (`qg`, sobre as muralhas do lado do portão) */
-export function alvoDoAtalho(destino: DestinoRota, qg?: { x: number; y: number; z: number }): Waypoint | null {
+/** onde cada atalho pousa: no heliporto (na ilha da praça) ou atracada na doca da Zaeon */
+export function alvoDoAtalho(destino: DestinoRota): Waypoint {
   if (destino === "heliporto") return { x: HELIPORTO.x, y: 0, z: HELIPORTO.z, pousar: true };
-  if (destino === "zaeon") { const d = poseDaDoca(); return { x: d.x, y: d.y, z: d.z }; }   // atraca PAIRANDO na doca, ao lado da ilha (sem pousar)
-  return qg ? { ...qg, pousar: true } : null;
-}
-
-/** ponto de pouso do QG: sobre as muralhas, do lado do portão (fora da cúpula) — sair da nave ali = salão do QG */
-export function pousoDoQG(m: { x: number; z: number; dir: number; muralhaR: number }, topoMuralhas: number): { x: number; y: number; z: number } {
-  const r = m.muralhaR - 1;
-  return { x: m.x + Math.cos(m.dir) * r, y: topoMuralhas, z: m.z + Math.sin(m.dir) * r };
+  const d = poseDaDoca(); return { x: d.x, y: d.y, z: d.z };   // atraca PAIRANDO na doca, ao lado da ilha (sem pousar)
 }
 
 /** a rota (waypoints) da posição atual até pousar no destino */
-export function rotaPara(destino: DestinoRota, s: EstadoVoo, qg?: { x: number; y: number; z: number }): Waypoint[] {
-  const alvo = alvoDoAtalho(destino, qg); if (!alvo) return [];
+export function rotaPara(destino: DestinoRota, s: EstadoVoo): Waypoint[] {
+  const alvo = alvoDoAtalho(destino);
   const rota: Waypoint[] = [];
   const altoCidade = CIDADE.pisoY + ACIMA_DA_CIDADE, naCidade = s.y >= CIDADE.pisoY - 0.5 && daCidade(s) <= CIDADE.bordaR + 2;
   const naColuna = daCidade(s) < CIDADE.bordaR + 2;

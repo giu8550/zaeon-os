@@ -1,7 +1,7 @@
 /**
  * Universidade — o campus FLUTUANDO num disco no céu (lugar de encontro dos alunos), versão futurista e LIMPA:
- * vidro-metal escuro com frisos frios (ciano); por baixo, a base de cristal com os propulsores antigravidade e o
- * ELEVADOR DE LUZ (anel no chão ↔ anel no disco):
+ * vidro-metal escuro com frisos frios (ciano); por baixo, a base de cristal com os propulsores antigravidade; no
+ * disco, o BURACO NEGRO da rede de túneis (lib/cyber/buracos):
  *  - UMA muralha (a externa, lisa, 12 torres com agulha de energia) e o portão com arco de luz; as 4 torres grandes;
  *  - as salas são PAVILHÕES abertos (sem parede nem telhado): piso tingido com contorno de luz + placa + móveis;
  *  - eixo central: a torre de apartamentos (do chão), Grande Salão (mesas compridas), Biblioteca (estantes com
@@ -12,7 +12,8 @@ import * as THREE from "three";
 import { FONTES, PATIOS, SALAS, TORRES, UNIVERSIDADE, paredesDaUniversidade, todosOsMoveis, type MovelU, type Sala } from "@/lib/cyber/universidade";
 import { PLATAFORMAS } from "@/lib/cyber/plataformas";
 import { glowTex } from "./CenaCosmica";
-import { criarElevadorDeLuz } from "./ElevadorDeLuz";
+import { criarBuracoPortal } from "./BuracoPortal";
+import { NOS } from "@/lib/cyber/buracos";
 import { liberar } from "./Landmark";
 
 export type UniversidadeHandle = {
@@ -62,7 +63,7 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
   const madeira = new THREE.MeshStandardMaterial({ color: 0x3a2a24, roughness: 0.7, metalness: 0.1, emissive: 0x24140c, emissiveIntensity: 0.5 });
 
   // ── O DISCO flutuante: piso com grade de luz, aro aceso na borda, base de cristal por baixo com os propulsores
-  //    antigravidade e o ELEVADOR DE LUZ (anel no chão + coluna até o disco + anel de volta lá em cima) ──
+  //    antigravidade e o BURACO NEGRO da rede de túneis (no disco, perto do portão) ──
   const em = U.externa.meia, R = U.discoR, seg = low ? 64 : 128;
   const grade = tela(512, 512, (g, w, h) => { g.fillStyle = "#0d1630"; g.fillRect(0, 0, w, h); g.strokeStyle = "rgba(102,230,255,.22)"; g.lineWidth = 2; for (let i = 0; i <= 8; i++) { g.beginPath(); g.moveTo(i * w / 8, 0); g.lineTo(i * w / 8, h); g.stroke(); g.beginPath(); g.moveTo(0, i * h / 8); g.lineTo(w, i * h / 8); g.stroke(); } });
   grade.wrapS = grade.wrapT = THREE.RepeatWrapping; grade.repeat.set(R / 6, R / 6);
@@ -85,9 +86,9 @@ export function criarUniversidade(o: { low: boolean; starTex: THREE.Texture }): 
     const s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texAnti, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); s.position.set(x, -U.espessura * 0.25 - 4, z); s.scale.setScalar(22); antis.push(s);
   }
   anim.push((_, t) => antis.forEach((s, i) => { s.material.opacity = 0.55 + 0.35 * Math.sin(t * 1.6 + i); }));
-  // ELEVADOR DE LUZ: anel no chão (embaixo), coluna de luz até o disco e o anel de volta no disco
-  const elev = PLATAFORMAS.univ, lc = { x: elev.anelChao.x - U.centro.x, z: elev.anelChao.z - U.centro.z }, ld = { x: elev.anelDisco.x - U.centro.x, z: elev.anelDisco.z - U.centro.z };
-  anim.push(criarElevadorDeLuz(raiz, { chao: { ...lc, r: elev.anelChao.r, y: -U.y }, disco: { ...ld, r: elev.anelDisco.r }, low }));
+  // o BURACO NEGRO (o nó da rede de túneis: entrou, escolhe o destino)
+  const elev = PLATAFORMAS.univ, bp = criarBuracoPortal(raiz, { x: elev.portal.x - U.centro.x, y: 0, z: elev.portal.z - U.centro.z, anelR: elev.portal.r, h: NOS.univ.bh.h, r: NOS.univ.bh.r, low, cor: 0x66e6ff, starTex: o.starTex });
+  texturas.push(...bp.texturas); anim.push(bp.atualizar);
   const grama = new THREE.MeshStandardMaterial({ color: 0x0c3a3a, roughness: 1, emissive: 0x0b4a44, emissiveIntensity: 0.55 });
   for (const p of PATIOS) { const g = add(new THREE.Mesh(new THREE.PlaneGeometry(p.x1 - p.x0 - 2, p.z1 - p.z0 - 2), grama)); g.rotation.x = -Math.PI / 2; g.position.set((p.x0 + p.x1) / 2, 0.05, (p.z0 + p.z1) / 2); }
   const caminho = add(new THREE.Mesh(new THREE.PlaneGeometry(10, em + 40), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false })));

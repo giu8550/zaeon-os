@@ -1,15 +1,14 @@
 /**
- * Cyberespaço — a CIDADE ZAEON no céu (QG do dono), acima do buraco negro. PURO, sem three.
- * Conceito das cidades flutuantes (estilo Avatar): uma ilha monumental + ilhotas em volta. Não há caminho físico
- * até lá: o BURACO NEGRO é o PORTAL (clicar nele ou pisar no anel embaixo dele) e um portal de volta na cidade leva
- * de novo à praça. Entrar é AÇÃO PRIVILEGIADA (validada no servidor): o QG é do dono.
+ * Cyberespaço — a CIDADE ZAEON no céu, o coração do hiperespaço (aberta a todos). PURO, sem three.
+ * Conceito das cidades flutuantes (estilo Avatar): uma ilha monumental + ilhotas em volta. Não há chão embaixo (o
+ * hiperespaço é só vazio + áreas flutuantes, lib/cyber/praca): chega-se pelo BURACO NEGRO da cidade — o "metrô" que
+ * liga a Zaeon às universidades, à Solana House e à praça (lib/cyber/buracos) — ou voando.
+ * O buraco negro GRANDE (o do filme) agora fica no LOUNGE, em cima do palco, perto da cabine do DJ: é o par do buraco
+ * negro de dentro da nave do dono — e a ÚNICA entrada da cabine (só o dono atravessa).
  *
  * Coordenadas: `centro` no plano (x,z) do mundo; tudo que é "local" é relativo ao centro (sem giro).
  */
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
-
-/** buraco negro (CenaCosmica): centro e raio do horizonte */
-export const BURACO_NEGRO = { x: 0, y: 16, z: -110, r: 6 };
 
 /** a ZAEON MEGA (out. 2026): a cidadela virou uma MEGA PLATAFORMA — 3× mais larga que antes, bem mais ALTA (450 m) e
  *  longe da UNILAB e da Solana (o mapa cresceu junto). A capela (expandida) fica só com o GLOBO no centro; o LOUNGE saiu
@@ -51,10 +50,9 @@ export const CIDADE = {
   },
   /** parede das salas: colisores ao longo do arco; `porta` = meia-abertura (rad) da porta */
   salaParede: { colR: 0.6, passo: 1, porta: 0.34 },
-  portalVolta: { x: -32 * E, z: 15 * E, r: 2.2 * 1.4 },          // anel de volta pra praça (local)
-  chegada: { x: -25 * E, z: 21 * E },                            // onde se aparece ao entrar (local)
-  /** anel de entrada no CHÃO, embaixo do buraco negro (mundo) */
-  portalEntrada: { x: BURACO_NEGRO.x, z: BURACO_NEGRO.z, r: 9 },
+  /** o BURACO NEGRO da cidade (o nó central da rede — lib/cyber/buracos): o anel no piso (local) */
+  portalTunel: { x: -32 * E, z: 15 * E, r: 3.2 },
+  chegada: { x: -25 * E, z: 21 * E },                            // onde se aparece ao chegar pelo túnel (local)
 };
 /** o lounge flutua na altura do início da ponta da capela; a escada sobe com inclinação de escada de verdade (~33°),
  *  então a distância da plataforma dele sai da altura */
@@ -259,12 +257,24 @@ export function uDaViagem(sentido: "sobe" | "desce", k: number): number {
 }
 /** o rumo (facing do mundo) de quem é levado */
 export const rumoDaViagem = (sentido: "sobe" | "desce") => { const d = ESCADA_LOUNGE.dir; return Math.atan2(d.x, d.z) + (sentido === "sobe" ? 0 : Math.PI); };
-/** o ELEVADOR DE LUZ da torre do DJ: "sobe" no anel do palco (atrás da torre), "desce" no anel lá de cima; null fora */
+/** o ELEVADOR DE LUZ da torre do DJ: só DESCE (o anel lá de cima). Subir pra cabine, só pelo buraco negro do dono
+ *  (lib/cyber/buracos) — o anel do palco saiu */
 export function bocaDoElevador(p: P2): "sobe" | "desce" | null {
   const q = naSala(CIDADE.salas.lounge, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z), e = TORRE_DJ.elevador;
-  if (Math.hypot(q.x, q.z - e.sobe) < e.r) return "sobe";
   if (Math.hypot(q.x, q.z - e.desce) < e.rDesce) return "desce";
   return null;
+}
+/** dentro do círculo da TORRE do DJ (mundo, com folga)? — quem não é o dono não pousa lá em cima */
+export function naTorreDJ(p: P2, folga = 0): boolean {
+  const q = naSala(CIDADE.salas.lounge, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z);
+  return Math.hypot(q.x, q.z - TORRE_DJ.z) <= TORRE_DJ.r + folga;
+}
+/** empurra pra fora do círculo da torre (mundo) — o "campo de força" da cabine pra quem não é o dono */
+export function foraDaTorreDJ(p: P2, folga = 0.6): P2 {
+  const s = CIDADE.salas.lounge, q = naSala(s, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z), dx = q.x, dz = q.z - TORRE_DJ.z, d = Math.hypot(dx, dz), R = TORRE_DJ.r + folga;
+  if (d >= R) return p;
+  const k = d > 1e-4 ? R / d : 1, l = daSala(s, d > 1e-4 ? dx * k : R, TORRE_DJ.z + (d > 1e-4 ? dz * k : 0));
+  return mundo(l);
 }
 /** a VIAGEM (escada de energia ou elevador da torre) no progresso `k` (0..1): onde está (mundo), a altura acima do piso
  *  central e pra onde olha. O elevador sobe reto no anel e então desliza pra dentro da cabine (e o contrário, descendo) */
@@ -376,10 +386,6 @@ export function resolverCidade(prop: P2): P2 {
 }
 
 export const dentroDe = (p: P2, alvo: { x: number; z: number; r: number }) => Math.hypot(p.x - alvo.x, p.z - alvo.z) <= alvo.r;
-/** pisou no anel de entrada (chão, embaixo do buraco negro)? */
-export const noPortalEntrada = (p: P2) => dentroDe(p, CIDADE.portalEntrada);
-/** na cidade, pisou no portal de volta? */
-export const noPortalVolta = (p: P2) => dentroDe(p, { ...mundo(CIDADE.portalVolta), r: CIDADE.portalVolta.r });
 /** volume sólido da ilha (pra NAVE): cilindro aproximado [pisoY - ilhaAltura, pisoY] × bordaR + a AGULHA embaixo (cilindro fino) */
 export function foraDaIlha(p: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
   const c = CIDADE.centro, dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz);
@@ -409,13 +415,28 @@ export function chaoDaNave(p: { x: number; y: number; z: number }): number {
 }
 /** os SÓLIDOS de voo da Zaeon além da ilha (cilindros `{x,z,r,topo,base}` no mundo — o mesmo formato dos `Pilar` do
  *  voo): a CAPELA (de moto não se entra nela; de cima, pousa no telhado do tambor), a LAJE do lounge (de lado não se
- *  atravessa; por baixo passa) e a TORRE do DJ. Sem eles a moto atravessava tudo isso voando. */
-export function solidosDaCidade(): { x: number; z: number; r: number; topo: number; base: number }[] {
+ *  atravessa; por baixo passa) e a TORRE do DJ. Sem eles a moto atravessava tudo isso voando. `dono` = quem pode
+ *  pousar na cabine do DJ; pra todo o resto a torre é um CAMPO DE FORÇA bem mais alto que a cabine (não se pousa nela) */
+export function solidosDaCidade(dono = true): { x: number; z: number; r: number; topo: number; base: number }[] {
   const c = CIDADE.centro, s = CIDADE.salas.lounge, L = CIDADE.pisoY + ALTURA_LOUNGE;
   const lounge = { x: c.x + s.x, z: c.z + s.z }, torre = mundo(daSala(s, 0, TORRE_DJ.z));
   return [
     { x: c.x, z: c.z, r: CAPELA.r + 1, topo: CIDADE.pisoY + inicioDaPonta(), base: CIDADE.pisoY - 1 },
     { ...lounge, r: s.r, topo: L, base: L - 2.5 },
-    { x: torre.x, z: torre.z, r: TORRE_DJ.r, topo: L + TORRE_DJ.topo, base: L - 0.1 },
+    { x: torre.x, z: torre.z, r: TORRE_DJ.r, topo: L + TORRE_DJ.topo + (dono ? 0 : CAMPO_DJ), base: L - 0.1 },
   ];
 }
+/** quanto o campo de força da cabine do DJ sobe acima dela (quem não é o dono não pousa lá) */
+export const CAMPO_DJ = 40;
+
+/**
+ * O BURACO NEGRO GRANDE (o do filme, que ficava no chão perto da praça): agora paira em cima do palco do LOUNGE, acima
+ * da treliça, perto da cabine do DJ. É o PAR do buraco negro de dentro da nave do dono (lib/cyber/buracos) — e o anel
+ * na cabine (lá em cima da torre) é a boca dele. Centro (mundo) e raio do horizonte.
+ */
+/** o buraco negro grande no referencial da SALA do lounge: `z` (atrás do palco) e a altura `y` acima do piso do lounge */
+export const BN_NA_SALA = { z: -27, y: 33 } as const;
+export const BURACO_NEGRO = (() => {
+  const s = CIDADE.salas.lounge, w = mundo(daSala(s, 0, BN_NA_SALA.z));
+  return { x: w.x, y: CIDADE.pisoY + ALTURA_LOUNGE + BN_NA_SALA.y, z: w.z, r: 6 };
+})();

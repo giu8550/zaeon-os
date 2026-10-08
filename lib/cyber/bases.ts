@@ -6,6 +6,7 @@
  */
 import { POIS, baseLivreDosPOIs, marcoNav, type POI } from "./landmarks";
 import { CIDADE, mundo } from "./ceu";
+import { PORTAL_PRACA } from "./praca";
 
 export const BASE_COLLIDER_R = 2.4;   // raio sólido (plano XZ): o trono do computador (asas até ±2,4 m)
 export const BASE_INTERACT_R = 3.4;   // raio de ativação do estudo + clique no monitor
@@ -17,8 +18,9 @@ const ESPACO_ENTRE_ANEIS = 9;
 const ANG0 = Math.atan2(-3, 6);
 
 /**
- * `nivel`: bases fora do chão — "ceu" = na ZAEON (a ilha no céu; base do dono/fundador) e "qg" = no salão do QG do
- * Andrei Bacelar (o marco andável). Sem `nivel` = no anel do chão em volta da praça.
+ * `nivel`: bases fora da praça — "ceu" = na ZAEON (a ilha no céu; base do dono/fundador) e "qg" = no salão da
+ * RECEPÇÃO (o marco andável no piso da Zaeon: a mesa da Zaeon, a anfitriã — lib/cyber/agentes). Sem `nivel` = no anel
+ * em volta do centro da PRAÇA (a ilha flutuante das bases, lib/cyber/praca).
  */
 export type NivelBase = "ceu" | "qg";
 export type LayoutBase = { x: number; z: number; rot: number; nivel?: NivelBase };
@@ -34,7 +36,7 @@ export function baseNoCeu(i: number): LayoutBase {
   const l = BASES_CEU_LOCAIS[Math.min(i, BASES_CEU_LOCAIS.length - 1)]!, w = mundo(l);
   return { ...w, rot: virarPara(w, CIDADE.centro), nivel: "ceu" };
 }
-/** a base do QG: no CENTRO do salão do marco andável, virada pro portão (escada) */
+/** a MESA da Recepção: no CENTRO do salão do marco andável, virada pro portão (escada) — é a mesa da anfitriã */
 export function baseNoQG(pois: POI[] = POIS): LayoutBase | null {
   const poi = pois.find((p) => p.nav && p.acesso === "dono"), mn = poi ? marcoNav(poi) : null;
   if (!mn) return null;
@@ -56,23 +58,22 @@ export function posicaoDaBase(indice: number): LayoutBase {
  * userId → layout, pela ordem dos membros (sem repetidos). Slots do anel que cairiam DENTRO de um ponto de
  * interesse (ex.: a Zaeon em z=-34, a partir do 14º membro) são pulados — a ordem continua determinística.
  */
-export function basesDosMembros(ids: string[], pois: POI[] = POIS, especiais: { ceu?: string[]; qg?: string | null } = {}): Map<string, LayoutBase> {
+export function basesDosMembros(ids: string[], pois: POI[] = POIS, especiais: { ceu?: string[] } = {}): Map<string, LayoutBase> {
   const m = new Map<string, LayoutBase>();
-  // especiais: fundadores na Zaeon (céu) e o dono do QG no centro do salão — fora do anel
+  // especiais: os fundadores na Zaeon (céu) — fora do anel. (O salão da Recepção não é mais base de ninguém: a
+  // titularidade do Andrei saiu, a base dele é uma base comum no anel da praça.)
   (especiais.ceu ?? []).forEach((id, i) => { if (ids.includes(id) && !m.has(id)) m.set(id, baseNoCeu(i)); });
-  const qg = especiais.qg ? baseNoQG(pois) : null;
-  if (qg && especiais.qg && ids.includes(especiais.qg) && !m.has(especiais.qg)) m.set(especiais.qg, qg);
   let slot = 0;
   for (const id of ids) {
     if (m.has(id)) continue;
     let lay = posicaoDaBase(slot++);
-    while (!baseLivreDosPOIs(lay, BASE_PLATAFORMA_R, pois)) lay = posicaoDaBase(slot++);
+    while (!baseLivreDosPOIs(lay, BASE_PLATAFORMA_R, pois) || Math.hypot(lay.x - PORTAL_PRACA.x, lay.z - PORTAL_PRACA.z) < PORTAL_PRACA.r + BASE_PLATAFORMA_R + 3) lay = posicaoDaBase(slot++);   // nem em cima do buraco negro da praça
     m.set(id, lay);
   }
   return m;
 }
 
-/** Onde a pessoa nasce no cyberespaço: no caminho entre a praça e a própria base; fora do chão, na frente da base. */
+/** Onde a pessoa nasce no cyberespaço: no caminho entre o centro da praça e a própria base; fora dela, na frente da base. */
 export function spawnDaBase(b: LayoutBase | undefined): { x: number; z: number } {
   if (b?.nivel) return localParaMundo(b, 0, 2.6);
   return b ? { x: b.x * 0.45, z: b.z * 0.45 } : { x: 0, z: 0 };

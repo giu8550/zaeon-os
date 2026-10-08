@@ -9,7 +9,8 @@
  * Luzes/feixes/LEDs são Basic/Shader (o `camuflarGrupo` não mexe neles); corpos sólidos são Standard (viram `solidoLeve`).
  */
 import * as THREE from "three";
-import { CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
+import { BN_NA_SALA, CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
+import { BOCA_DJ } from "@/lib/cyber/buracos";
 import { linhasDoRecado } from "@/lib/cyber/recado";
 
 const TEMA: Record<NomeSala, { piso: number; brilho: number; titulo: string; cor: string; alt: number; aberto: boolean }> = {
@@ -237,7 +238,8 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     },
     // A TORRE DO DJ (a MEGA ESTRUTURA): do palco sobe uma coluna hexagonal de cristal com o núcleo aceso, cristais
     // gigantes inclinados em volta e anéis de LED que sobem no compasso; lá no alto, a CABINE (piso de gelo, guarda-corpo
-    // de vidro, feixes); atrás, o ELEVADOR DE LUZ (coluna com anéis subindo + a passarela até a cabine)
+    // de vidro, feixes); atrás, o ELEVADOR DE LUZ que só DESCE (coluna com anéis descendo + a passarela até a cabine) e a
+    // BOCA do buraco negro grande (o anel na cabine + o fio de luz até o buraco, lá em cima do palco) — a única entrada
     torreDJ(p) {
       const T = TORRE_DJ, A = T.topo - PALCO.h, k = T.r / 4.5, e = T.elevador;   // (o grupo já está no topo do palco)
       const nucleoMat = basica(0x66e6ff, 0.35, true);
@@ -260,20 +262,29 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const corrimao = new THREE.Mesh(new THREE.TorusGeometry(T.r + 0.1, 0.05, 6, 64), basica(0xb98cff, 0.9, true)); corrimao.rotation.x = Math.PI / 2; corrimao.position.y = A + 1.1; p.add(corrimao);
       // feixes no guarda-corpo da frente, pra pista
       for (const [i, a] of [-0.9, -0.3, 0.3, 0.9].entries()) feixe(p, Math.sin(a) * (T.r - 0.2), A + 1.15, Math.cos(a) * (T.r - 0.2), { len: 40, abre: 2.4, rumo: 0, incl: 1.2, fase: i * 1.7, cor: FESTA[(i + 1) % FESTA.length]!, varre: 0.6 });
-      // o ELEVADOR DE LUZ: anel no palco, coluna de luz até a cabine com anéis subindo, passarela até o guarda-corpo e o
-      // anel de descer lá em cima (posições no referencial da sala − o centro da torre)
+      // o ELEVADOR DE LUZ (só desce): coluna de luz da cabine até o palco com anéis descendo, a passarela do guarda-corpo
+      // e o anel de descer lá em cima (posições no referencial da sala − o centro da torre). Subir, só pelo buraco negro.
       const zS = e.sobe - T.z, zD = e.desce - T.z;
-      const anelBaixo = new THREE.Mesh(new THREE.RingGeometry(e.r - 0.15, e.r, 40), basica(0x9affd0, 0.9, true)); anelBaixo.rotation.x = -Math.PI / 2; anelBaixo.position.set(0, 0.03, zS); p.add(anelBaixo);
       const feixeElev = new THREE.Mesh(new THREE.CylinderGeometry(e.r * 0.9, e.r, A + 0.6, 24, 1, true), basica(0x9affd0, 0.16, true)); feixeElev.position.set(0, (A + 0.6) / 2, zS); p.add(feixeElev);
       const subindo: THREE.Mesh[] = [];
       for (let i = 0; i < 4; i++) { const r2 = new THREE.Mesh(new THREE.TorusGeometry(e.r * 0.95, 0.04, 6, 32), basica(0x9affd0, 0.8, true)); r2.rotation.x = Math.PI / 2; r2.position.set(0, (i / 4) * A, zS); p.add(r2); subindo.push(r2); }
       const passarela = new THREE.Mesh(new THREE.PlaneGeometry(1.6, Math.abs(zS) - T.r + 0.4), basica(0x9affd0, 0.25, true)); passarela.rotation.x = -Math.PI / 2; passarela.position.set(0, A + 0.02, (zS + -T.r) / 2); p.add(passarela);
       const anelCima = new THREE.Mesh(new THREE.RingGeometry(e.rDesce - 0.12, e.rDesce, 32), basica(0x9affd0, 0.9, true)); anelCima.rotation.x = -Math.PI / 2; anelCima.position.set(0, A + 0.03, zD); p.add(anelCima);
+      // a BOCA do buraco negro grande, na cabine: aro quente + poço escuro + um aro girando; e o FIO de luz subindo até
+      // o buraco (que paira em cima do palco, BN_NA_SALA) — pisou (o dono) = atravessa pra nave
+      const bx = BOCA_DJ.x, bz = BOCA_DJ.z - T.z;
+      const bocaAro = new THREE.Mesh(new THREE.TorusGeometry(BOCA_DJ.r, 0.06, 6, 40), basica(0xffb45a, 0.9, true)); bocaAro.rotation.x = Math.PI / 2; bocaAro.position.set(bx, A + 0.05, bz); p.add(bocaAro);
+      const bocaPoco = new THREE.Mesh(new THREE.CircleGeometry(BOCA_DJ.r - 0.05, 32), new THREE.MeshBasicMaterial({ color: 0x05030a, transparent: true, opacity: 0.9 })); bocaPoco.rotation.x = -Math.PI / 2; bocaPoco.position.set(bx, A + 0.03, bz); p.add(bocaPoco);
+      const bocaGiro = new THREE.Mesh(new THREE.RingGeometry(BOCA_DJ.r * 0.5, BOCA_DJ.r * 0.6, 32, 1, 0, Math.PI * 1.5), basica(0xff7a2c, 0.8, true)); bocaGiro.rotation.x = -Math.PI / 2; bocaGiro.position.set(bx, A + 0.04, bz); p.add(bocaGiro);
+      const fioDe = new THREE.Vector3(bx, A + 0.1, bz), fioD = new THREE.Vector3(0, BN_NA_SALA.y - PALCO.h - 5, BN_NA_SALA.z - T.z).sub(fioDe), fioL = fioD.length();
+      const fioG = new THREE.CylinderGeometry(0.9, BOCA_DJ.r * 0.7, fioL, 16, 1, true); fioG.translate(0, fioL / 2, 0);
+      const fio = new THREE.Mesh(fioG, basica(0xffb45a, 0.2, true)); fio.position.copy(fioDe); fio.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), fioD.normalize()); p.add(fio);
       anim.push((dt, t) => {
         const b = batida(); nucleoMat.opacity = 0.22 + 0.45 * b + 0.2 * pulso * ativo;
         aneis.forEach((an, i) => { (an.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.7 * Math.max(0, Math.sin(t * 3 - i * 0.9)) * (0.4 + 0.6 * b); });
-        subindo.forEach((r2) => { r2.position.y = (r2.position.y + dt * 3) % A; (r2.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - r2.position.y / A); });
-        (anelBaixo.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.3 * Math.sin(t * 2.5); (anelCima.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.3 * Math.sin(t * 2.5 + 1);
+        subindo.forEach((r2) => { r2.position.y = (r2.position.y - dt * 3 + A) % A; (r2.material as THREE.MeshBasicMaterial).opacity = 0.8 * (r2.position.y / A); });   // descendo
+        (anelCima.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.3 * Math.sin(t * 2.5 + 1);
+        (bocaAro.material as THREE.MeshBasicMaterial).opacity = 0.65 + 0.3 * Math.sin(t * 3); bocaGiro.rotation.z -= dt * 2; (fio.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.1 * Math.sin(t * 1.7);
       });
     },
     // CAIXA SUSPENSA: um LINE ARRAY pendurado no braço da treliça (cabos de aço até lá em cima) — 8 gabinetes curvando

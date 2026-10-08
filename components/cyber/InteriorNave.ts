@@ -3,17 +3,20 @@
  * computador e motor — em cima, a CABINE DE COMANDO (console curvo com telas, a cadeira do piloto = `assento`, o
  * MEU DESKTOP e um console lateral); embaixo, os cômodos vazios (paredes com friso de luz), a SALA DO MOTOR (o reator
  * pulsando + o painel dele), a escada em caracol e o túnel até a porta de trás, com a RAMPA (a inclinação acompanha
- * onde a nave está: passarela na doca, até o chão pousada, guarda-corpo no fim pairando).
+ * onde a nave está: passarela na doca, até o chão pousada, guarda-corpo no fim pairando). Na SALA DE REUNIÕES, o
+ * BURACO NEGRO do dono — o par do buraco grande do lounge (lib/cyber/buracos): a única entrada da cabine do DJ.
  */
 import * as THREE from "three";
+import { BURACO_NAVE } from "@/lib/cyber/buracos";
+import { criarBuracoPortal } from "./BuracoPortal";
 import { CABINE, COMODOS, ESCADA, MOVEIS_CABINE, MOVEIS_NAVE, NAVE_QG, REATOR, TOTAL_ESCADA, paredesDaCabine, paredesDaNave, pontoDaEscada, type MovelNave } from "@/lib/cyber/naveQG";
 
-export type InteriorNaveHandle = { group: THREE.Group; assento: THREE.Object3D; atualizar(dt: number, t: number, voo: number): void; rampa(queda: number, fimFechado: boolean): void };
+export type InteriorNaveHandle = { group: THREE.Group; assento: THREE.Object3D; /** texturas próprias (o dono da árvore libera) */ texturas: THREE.Texture[]; atualizar(dt: number, t: number, voo: number): void; rampa(queda: number, fimFechado: boolean): void };
 
 const COR_COMODO: Record<string, number> = { hall: 0x6fb6ff, reunioes: 0x5a8cff, corredor: 0x6fb6ff, estar: 0x7fa8ff, servidores: 0x5a8cff, banheiro: 0x9fd0ff, motor: 0xff7a4a };   // tudo azulado (o motor, o laranja do reator)
 
 export function criarInteriorNave(o: { low: boolean; cor: THREE.Color }): InteriorNaveHandle {
-  const g = new THREE.Group(), anim: ((dt: number, t: number, voo: number) => void)[] = [];
+  const g = new THREE.Group(), anim: ((dt: number, t: number, voo: number) => void)[] = [], texturasNave: THREE.Texture[] = [];
   /** materiais SEM PBR (Lambert: barato) — o convés não tem mais point light; o brilho vem do emissivo e dos frisos */
   const lambert = ({ roughness: _r, metalness: _m, ...p }: THREE.MeshStandardMaterialParameters) => new THREE.MeshLambertMaterial(p as THREE.MeshLambertMaterialParameters);
   const add = <T extends THREE.Object3D>(x: T) => { g.add(x); return x; };
@@ -143,6 +146,10 @@ export function criarInteriorNave(o: { low: boolean; cor: THREE.Color }): Interi
   montarRampa();
   anim.push((_, __, voo) => { rampa.visible = voo < 0.5; rampa.scale.z = Math.max(0.01, 1 - voo * 2); });
 
-  return { group: g, assento, atualizar(dt, t, voo) { for (const f of anim) f(dt, t, voo); },
+  // ── o BURACO NEGRO do dono, no meio da sala de reuniões (pisou no anel = atravessa pra cabine do DJ) ──
+  { const bn = criarBuracoPortal(g, { x: BURACO_NAVE.x, y: 0.02, z: BURACO_NAVE.z, anelR: BURACO_NAVE.r, h: BURACO_NAVE.h, r: BURACO_NAVE.rBh, low: o.low });
+    anim.push((dt, t) => bn.atualizar(dt, t)); texturasNave.push(...bn.texturas); }
+
+  return { group: g, assento, texturas: texturasNave, atualizar(dt, t, voo) { for (const f of anim) f(dt, t, voo); },
     rampa(q, f) { if (Math.abs(q - queda) < 0.01 && f === fimFechado) return; queda = q; fimFechado = f; montarRampa(); } };
 }

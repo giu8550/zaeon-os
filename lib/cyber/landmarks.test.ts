@@ -1,37 +1,42 @@
 import { NAVE_QG, paraLocal, poseDaDoca } from "./naveQG";
 import { describe, expect, it } from "vitest";
-import { HELIPORTO, POIS, baseLivreDosPOIs, bordaDoPOI, colisoresDosPOIs, landmarksOn, marcoNav, poiPerto, type POI } from "./landmarks";
+import { HELIPORTO, LAR_LOCAL, POIS, baseLivreDosPOIs, bordaDoPOI, colisoresDosPOIs, landmarksOn, marcoNav, poiPerto, type POI } from "./landmarks";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, BASE_PLATAFORMA_R, baseNoCeu, baseNoQG, basesDosMembros, localParaMundo, posicaoDaBase, spawnDaBase } from "./bases";
-import { CIDADE, colisoresDaCidade, mundo, noPortalEntrada, noPortalVolta } from "./ceu";
+import { CAPELA, CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal } from "./ceu";
+import { NOS, PORTAL_PRACA, noDoAnel } from "./buracos";
+import { LOTES, tamanhoDoLote } from "./motos";
+import { PRACA, naPraca } from "./praca";
 import { empurrarParaFora, dentroDeAlgum } from "./colisao";
 import { decidirClique } from "./clique";
 import { PE_DA_ESCADA, alturaEm, colisoresDoAlto, deEscada, escadaLocal, muralhaTemBloco, resolverPasso } from "./nav";
 
 const zaeon = POIS.find((p) => p.id === "zaeon")!;
 const m = marcoNav(zaeon)!;
-const BH = { x: 0, z: -110 };   // buraco negro (CenaCosmica)
-
 describe("registro de POIs", () => {
-  it("o QG do Andrei (antiga Zaeon do chão): maior/mais alto que o protótipo, andável, topo do dono, sem link", () => {
-    expect(zaeon).toMatchObject({ nome: "QG do Andrei", preset: "zaeon", acesso: "dono", topo: { y: 6.6 } });
+  it("a RECEPÇÃO (a antiga base do Andrei): maior/mais alta que o protótipo, andável, topo do dono, sem link — e sem dono no nome", () => {
+    expect(zaeon).toMatchObject({ nome: "Recepção", preset: "zaeon", acesso: "dono", topo: { y: 6.6 }, base: CIDADE.pisoY });
+    expect(zaeon.nome).not.toMatch(/Andrei/); expect(zaeon.org).not.toMatch(/Andrei/);
     expect(zaeon.link).toBeUndefined();
     expect(zaeon.escala!).toBeGreaterThan(1);
     expect(zaeon.altura).toBeGreaterThan(7);
     expect(zaeon.nav!.pisoY).toBeGreaterThan(zaeon.altura);
     expect(zaeon.interactR).toBeGreaterThan(zaeon.footprintR);
   });
-  it("afastada do eixo do buraco negro (não fica atrás dele na tela) e da praça", () => {
-    const angZ = Math.atan2(zaeon.x, -zaeon.z), angBH = Math.atan2(BH.x, -BH.z);
-    expect(Math.abs(angZ - angBH)).toBeGreaterThan(0.4);
-    expect(Math.hypot(zaeon.x, zaeon.z)).toBeGreaterThan(zaeon.footprintR + 20);
+  it("subiu pro piso da CIDADE ZAEON (não há mais chão): dentro da área andável, longe da capela, do estacionamento, das bases do dono e do buraco negro da cidade", () => {
+    const w = mundo(LAR_LOCAL); expect(zaeon).toMatchObject({ x: w.x, z: w.z });
+    expect(Math.hypot(LAR_LOCAL.x, LAR_LOCAL.z) + zaeon.footprintR).toBeLessThan(CIDADE.andavelR);
+    expect(Math.hypot(LAR_LOCAL.x, LAR_LOCAL.z) - zaeon.footprintR).toBeGreaterThan(CAPELA.r + 10);
+    const lote = LOTES.find((l) => l.id === "zaeon")!; expect(Math.hypot(lote.x - w.x, lote.z - w.z)).toBeGreaterThan(tamanhoDoLote(lote).r + zaeon.footprintR + 10);
+    for (const b of BASES_CEU_LOCAIS) expect(Math.hypot(mundo(b).x - w.x, mundo(b).z - w.z)).toBeGreaterThan(zaeon.footprintR + BASE_PLATAFORMA_R + 10);
+    expect(Math.hypot(NOS.zaeon.anel.x - w.x, NOS.zaeon.anel.z - w.z)).toBeGreaterThan(60);
   });
-  it("ids únicos; um colisor por POI no raio sólido", () => {
+  it("ids únicos; os colisores da PRAÇA não incluem a Recepção (ela tem a colisão dela no piso da Zaeon)", () => {
     expect(new Set(POIS.map((p) => p.id)).size).toBe(POIS.length);
-    expect(colisoresDosPOIs()).toEqual([{ x: zaeon.x, z: zaeon.z, r: zaeon.footprintR }]);
+    expect(colisoresDosPOIs()).toEqual([]);   // heliporto e estacionamento são pisos planos
   });
   it("escala por dados: um 2º POI genérico é só mais uma entrada", () => {
     const outro: POI = { id: "teste", nome: "Teste", org: "x", preset: "generico", x: 40, z: 10, footprintR: 4, interactR: 7, altura: 3, acesso: "publico" };
-    expect(colisoresDosPOIs([...POIS, outro])).toHaveLength(2);
+    expect(colisoresDosPOIs([...POIS, outro])).toHaveLength(1);
     expect(poiPerto({ x: 41, z: 10 }, [...POIS, outro])?.id).toBe("teste");
     expect(marcoNav(outro)).toBeNull();
   });
@@ -48,9 +53,11 @@ describe("proximidade e aproximação", () => {
     expect(dentroDeAlgum(b, colisoresDosPOIs())).toBe(false);
     expect(poiPerto(b)?.id).toBe("zaeon");
   });
-  it("colisor do chão empurra pra borda (desliza)", () => {
-    const p = empurrarParaFora({ x: zaeon.x + 1, z: zaeon.z + 3 }, colisoresDosPOIs());
-    expect(Math.hypot(p.x - zaeon.x, p.z - zaeon.z)).toBeCloseTo(zaeon.footprintR, 6);
+  it("a ilha da Recepção é sólida no piso (empurra pra borda, desliza)", () => {
+    const longe = { x: zaeon.x - 40 * Math.cos(m.nav.escada.dir + 1.5), z: zaeon.z - 40 * Math.sin(m.nav.escada.dir + 1.5) };
+    const p = resolverPasso(m, false, longe, { x: zaeon.x + 1, z: zaeon.z + 3 });
+    expect(p.alto).toBe(false); expect(Math.hypot(p.x - zaeon.x, p.z - zaeon.z)).toBeGreaterThanOrEqual(m.nav.chaoR - 1e-6);
+    expect(empurrarParaFora({ x: 1, z: 1 }, [{ x: 0, z: 0, r: 3 }])).not.toEqual({ x: 1, z: 1 });
   });
 });
 
@@ -62,10 +69,12 @@ describe("POIs × bases (sem brigar com o anel, a escada nem o spawn)", () => {
     const ids = Array.from({ length: 40 }, (_, i) => `u${i}`);
     for (const b of basesDosMembros(ids).values()) expect(baseLivreDosPOIs(b, BASE_PLATAFORMA_R, POIS, 0)).toBe(true);
   });
-  it("o pé da escada fica no chão da praça, virado pra ela", () => {
+  it("o pé da escada fica no piso da Zaeon, virado pro centro da ilha, fora dos colisores da cidade", () => {
     const pe = deEscada(m, m.nav.bordaR + m.nav.escada.comprimento, 0);
-    expect(Math.hypot(pe.x, pe.z)).toBeLessThan(Math.hypot(zaeon.x, zaeon.z));
+    expect(Math.hypot(pe.x - CIDADE.centro.x, pe.z - CIDADE.centro.z)).toBeLessThan(Math.hypot(zaeon.x - CIDADE.centro.x, zaeon.z - CIDADE.centro.z));
     expect(alturaEm(m, pe)).toBeCloseTo(0, 6);
+    expect(naIlhaPrincipal(pe)).toBe(true);
+    expect(dentroDeAlgum(pe, colisoresDaCidade())).toBe(false);
   });
 });
 
@@ -203,15 +212,25 @@ describe("simulação quadro a quadro (WASD 'por nós mesmos'): subir e descer s
   });
 });
 
-describe("heliporto (pouso perto da praça)", () => {
+describe("a PRAÇA é uma ilha (sem chão): heliporto, estacionamento, buraco negro e bases cabem nela", () => {
   const heli = POIS.find((p) => p.id === "heliporto")!;
-  it("plano e andável (não colide), perto da praça e longe do QG, da escada e do portal", () => {
+  it("heliporto: plano e andável (não colide), dentro da ilha, longe do estacionamento e do buraco negro da praça", () => {
     expect(colisoresDosPOIs().some((c) => c.x === HELIPORTO.x && c.z === HELIPORTO.z)).toBe(false);
-    const d = Math.hypot(HELIPORTO.x, HELIPORTO.z); expect(d).toBeGreaterThan(20); expect(d).toBeLessThan(45);
-    expect(baseLivreDosPOIs(HELIPORTO, HELIPORTO.r, POIS.filter((p) => p.id !== "heliporto"))).toBe(true);   // fora da Zaeon/escada
-    expect(noPortalEntrada(HELIPORTO)).toBe(false);
+    const d = Math.hypot(HELIPORTO.x, HELIPORTO.z); expect(d).toBeGreaterThan(20); expect(d + HELIPORTO.r).toBeLessThan(PRACA.r - 4);
+    expect(baseLivreDosPOIs(HELIPORTO, HELIPORTO.r, POIS.filter((p) => p.id !== "heliporto"))).toBe(true);
+    expect(Math.hypot(HELIPORTO.x - PORTAL_PRACA.x, HELIPORTO.z - PORTAL_PRACA.z)).toBeGreaterThan(HELIPORTO.r + PORTAL_PRACA.r + 10);
     expect(poiPerto(HELIPORTO)?.id).toBe("heliporto");
     expect(heli.acesso).toBe("publico");
+  });
+  it("o estacionamento pequeno e o buraco negro ficam dentro da ilha; as bases de uma sala grande também (e longe do anel)", () => {
+    const l = LOTES.find((x) => x.id === "chao")!; expect(Math.hypot(l.x, l.z) + tamanhoDoLote(l).r).toBeLessThan(PRACA.r);
+    expect(naPraca(PORTAL_PRACA, -PORTAL_PRACA.r - 3)).toBe(true);
+    const ids = Array.from({ length: 20 }, (_, i) => String(i).padStart(24, "0"));
+    for (const b of basesDosMembros(ids).values()) {
+      expect(naPraca(b, -BASE_PLATAFORMA_R - 1)).toBe(true);
+      expect(Math.hypot(b.x - PORTAL_PRACA.x, b.z - PORTAL_PRACA.z)).toBeGreaterThan(PORTAL_PRACA.r + BASE_PLATAFORMA_R + 1);
+      expect(naPraca(spawnDaBase(b))).toBe(true);
+    }
   });
   it("o 1º anel (praça) fica livre e as bases das salas grandes desviam do heliporto", () => {
     for (let i = 0; i < 5; i++) expect(baseLivreDosPOIs(posicaoDaBase(i), BASE_PLATAFORMA_R)).toBe(true);
@@ -220,15 +239,15 @@ describe("heliporto (pouso perto da praça)", () => {
   });
 });
 
-describe("bases fora do chão: o dono na Zaeon (céu) e o Andrei no centro do QG", () => {
+describe("bases: o dono na Zaeon (céu); todo o resto (o Andrei inclusive: sem titularidade) no anel da praça", () => {
   const ids = Array.from({ length: 8 }, (_, i) => String(i).padStart(24, "0"));
-  const dono = ids[3]!, andrei = ids[5]!;
-  const m2 = basesDosMembros(ids, POIS, { ceu: [dono], qg: andrei });
-  it("o dono fica na Zaeon, o Andrei no salão do QG; os outros no anel, sem buraco", () => {
+  const dono = ids[3]!;
+  const m2 = basesDosMembros(ids, POIS, { ceu: [dono] });
+  it("o dono fica na Zaeon; os outros no anel, sem buraco — ninguém mais tem base no salão da Recepção", () => {
     expect(m2.get(dono)).toEqual(baseNoCeu(0)); expect(m2.get(dono)!.nivel).toBe("ceu");
-    expect(m2.get(andrei)).toEqual(baseNoQG()); expect(m2.get(andrei)!.nivel).toBe("qg");
-    const anel = ids.filter((id) => id !== dono && id !== andrei).map((id) => m2.get(id)!);
+    const anel = ids.filter((id) => id !== dono).map((id) => m2.get(id)!);
     expect(anel.every((l) => !l.nivel)).toBe(true);
+    expect([...m2.values()].some((l) => l.nivel === "qg")).toBe(false);
     expect(anel[0]).toEqual(posicaoDaBase(0)); expect(anel[1]).toEqual(posicaoDaBase(1));   // os slots do anel não sobram
   });
   it("sem especiais = tudo no anel (marcos desligados)", () => {
@@ -241,12 +260,12 @@ describe("bases fora do chão: o dono na Zaeon (céu) e o Andrei no centro do QG
       expect(Math.hypot(l.x, l.z) + BASE_PLATAFORMA_R).toBeLessThan(CIDADE.andavelR);
       for (const c of cs) expect(Math.hypot(w.x - c.x, w.z - c.z)).toBeGreaterThan(c.r + BASE_COLLIDER_R);
       const doca = paraLocal(poseDaDoca(), w); expect(Math.hypot(doca.x, doca.z)).toBeGreaterThan(NAVE_QG.raio + BASE_PLATAFORMA_R);   // fora do casco da nave atracada
-      expect(noPortalVolta(w)).toBe(false); expect(noPortalVolta(spawnDaBase(b))).toBe(false);
+      expect(Math.hypot(w.x - NOS.zaeon.anel.x, w.z - NOS.zaeon.anel.z)).toBeGreaterThan(NOS.zaeon.anel.r + BASE_PLATAFORMA_R + 2); expect(noDoAnel(spawnDaBase(b), CIDADE.pisoY)).toBeNull();
       const frente = localParaMundo(b, 0, 1);   // +z local aponta pro centro da ilha
       expect(Math.hypot(frente.x - CIDADE.centro.x, frente.z - CIDADE.centro.z)).toBeLessThan(Math.hypot(w.x - CIDADE.centro.x, w.z - CIDADE.centro.z));
     });
   });
-  it("a base do QG: no centro do salão, entre os pilares, virada pro portão; o spawn fica no salão", () => {
+  it("a MESA da Recepção (a da anfitriã): no centro do salão, entre os pilares, virada pro portão", () => {
     const b = baseNoQG()!;
     expect(b).toMatchObject({ x: zaeon.x, z: zaeon.z, nivel: "qg" });
     expect(BASE_PLATAFORMA_R).toBeLessThan(m.nav.pilares.r - m.nav.pilares.colR);
@@ -254,5 +273,11 @@ describe("bases fora do chão: o dono na Zaeon (céu) e o Andrei no centro do QG
     expect(alturaEm(m, sp)).toBe(m.nav.pisoY);   // nasce no piso do salão
     expect(dentroDeAlgum(sp, colisoresDoAlto(m))).toBe(false);
     const e = escadaLocal(m, localParaMundo(b, 0, 1)); expect(e.along).toBeGreaterThan(0);   // +z local → portão/escada
+  });
+});
+
+describe("a Recepção fica na PONTA da Zaeon (não no miolo)", () => {
+  it("perto da borda andável: o salão inteiro fica a mais de 70% do raio", () => {
+    expect(Math.hypot(LAR_LOCAL.x, LAR_LOCAL.z) - zaeon.footprintR).toBeGreaterThan(CIDADE.andavelR * 0.7);
   });
 });

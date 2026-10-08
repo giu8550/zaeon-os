@@ -9,6 +9,7 @@
  */
 import type { NavPOI } from "./nav";
 import { LOTES, tamanhoDoLote } from "./motos";
+import { CIDADE, mundo } from "./ceu";
 
 export type AcessoPOI = "publico" | "dono";
 export type PresetPOI = "zaeon" | "generico" | "heliporto" | "estacionamento";
@@ -18,6 +19,8 @@ export type POI = {
   org: string;           // descrição curta do painel
   preset: PresetPOI;
   x: number; z: number;  // posição no plano (FORA do anel de bases)
+  /** a altura (mundo) do PISO em que o marco se apoia: sem isto, a praça (y = 0); a Recepção fica no piso da Zaeon */
+  base?: number;
   footprintR: number;    // raio sólido (colisão no chão) — e o chão que as bases não podem ocupar
   /** `false` = chão plano andável (ex.: heliporto): ninguém colide, mas as bases continuam desviando */
   solido?: boolean;
@@ -32,23 +35,30 @@ export type POI = {
   nav?: NavPOI;
 };
 
+/** onde fica a RECEPÇÃO no piso da Zaeon (local da ilha): na PONTA leste, perto da borda (o miolo da ilha fica livre),
+ *  longe da capela, do estacionamento, das bases do dono, da doca da nave e do buraco negro da cidade — a escada desce
+ *  virada pro centro da ilha */
+export const LAR_LOCAL = { x: 192, z: 34 };
+
 /**
- * QG DO ANDREI (antiga "Zaeon" do chão). Parâmetros do protótipo (docs/prototypes/zaeon-landmark.html) × ESCALA: maior e mais alto que o
- * protótipo, à esquerda-atrás da praça (longe do eixo do buraco negro, que fica no centro da tela), com a ESCADA
- * virada pra praça e o PORTÃO das muralhas alinhado a ela.
+ * A RECEPÇÃO — a antiga base do Andrei ("QG do Andrei", o marco andável que ficava no chão perto da praça): saiu do
+ * chão (que não existe mais) e subiu pro piso da CIDADE ZAEON. Virou o LAR DA ZAEON, a anfitriã — a agente de
+ * onboarding (lib/cyber/agentes): a mesa dela fica no centro do salão e quem nasce no hiperespaço sai de um tubo de
+ * ensaio ao lado (lib/cyber/onboarding). Ninguém mais é "dono" dela (o topo continua sendo do fundador).
+ * Parâmetros do protótipo (docs/prototypes/zaeon-landmark.html) × ESCALA, com a ESCADA virada pro centro da ilha e o
+ * PORTÃO das muralhas alinhado a ela. Tudo é relativo à `base` (o piso da Zaeon).
  */
 function zaeonPOI(): POI {
-  const S = 1.6, x = -30, z = -48;
-  const altura = 7 * S + 1.5;                       // ápice da ilha (cone 7×S) fica 1,5 acima do chão
+  const S = 1.6, { x, z } = mundo(LAR_LOCAL);
+  const altura = 7 * S + 1.5;                       // ápice da ilha (cone 7×S) fica 1,5 acima do piso
   const pisoY = altura + 0.15 * S;                  // topo do piso interno
   const bordaR = 6.4 * S;                           // borda do PISO (a ilha do protótipo é um cone com o ápice no piso)
-  const chaoR = 9 * S + 0.4;                        // base do cone (1,5 m acima do chão): sólida no chão
-  const dir = Math.atan2(-z, -x);                   // a escada aponta pra praça (origem)
+  const chaoR = 9 * S + 0.4;                        // base do cone (1,5 m acima do piso): sólida no piso
+  const dir = Math.atan2(-LAR_LOCAL.z, -LAR_LOCAL.x);   // a escada aponta pro centro da ilha
   return {
-    // o marco ANDÁVEL agora é o QG do Andrei Bacelar (a base dele fica no centro do salão). "Zaeon" passou a ser a
-    // ilha no céu (lib/cyber/ceu.ts), onde fica a base do dono. O id "zaeon" segue por compatibilidade (presença/testes).
-    id: "zaeon", nome: "QG do Andrei", org: "Base do Andrei Bacelar.",
-    preset: "zaeon", x, z, escala: S,
+    // o id "zaeon" segue por compatibilidade (o preset visual, presença e testes)
+    id: "zaeon", nome: "Recepção", org: "O lar da Zaeon, a anfitriã do hiperespaço.",
+    preset: "zaeon", x, z, base: CIDADE.pisoY, escala: S,
     footprintR: chaoR, interactR: chaoR + 6,
     altura, topo: { y: 6.6 }, acesso: "dono",
     nav: {
@@ -61,8 +71,8 @@ function zaeonPOI(): POI {
 }
 
 /**
- * HELIPORTO — o pouso da nave perto da praça (é onde se desce pra interagir com os outros). Disco no chão, plano e
- * andável; as bases desviam dele. Destino do atalho "⬇ Chão". Longe da Zaeon, da escada e do portal do buraco negro.
+ * HELIPORTO — o pouso da nave na PRAÇA (a ilha flutuante das bases, lib/cyber/praca). Disco plano e andável; as bases
+ * desviam dele. Destino do atalho "Heliporto".
  */
 export const HELIPORTO = { x: 24, z: 24, r: 5 };
 function heliportoPOI(): POI {
@@ -74,7 +84,7 @@ function heliportoPOI(): POI {
   };
 }
 
-/** ESTACIONAMENTO das motos voadoras do CHÃO (lib/cyber/motos.ts; o da Zaeon é desenhado na ilha) — chão plano, as bases desviam; o desenho é do
+/** ESTACIONAMENTO das motos voadoras da PRAÇA (lib/cyber/motos.ts; o da Zaeon é desenhado na ilha) — piso plano, as bases desviam; o desenho é do
  *  components/cyber/Estacionamento.ts (não é um "marco" com painel: clicar numa moto = montar) */
 function estacionamentoPOI(): POI {
   return {
@@ -85,7 +95,9 @@ function estacionamentoPOI(): POI {
 }
 export const POIS: POI[] = [zaeonPOI(), heliportoPOI(), estacionamentoPOI()];
 
-export const colisoresDosPOIs = (pois: POI[] = POIS) => pois.filter((p) => p.solido !== false).map((p) => ({ x: p.x, z: p.z, r: p.footprintR }));
+/** os marcos apoiados na PRAÇA (os da Zaeon têm `base`) */
+export const naPracaPOI = (p: POI) => p.base === undefined;
+export const colisoresDosPOIs = (pois: POI[] = POIS) => pois.filter((p) => p.solido !== false && naPracaPOI(p)).map((p) => ({ x: p.x, z: p.z, r: p.footprintR }));
 
 /** Flag de render (BUILD): "1" liga, "0" desliga; sem valor → ligada em dev, desligada em produção. */
 export function landmarksOn(env: { flag?: string; nodeEnv?: string } = { flag: process.env.NEXT_PUBLIC_CYBER_LANDMARKS, nodeEnv: process.env.NODE_ENV }): boolean {
@@ -110,7 +122,7 @@ export function bordaDoPOI(poi: POI, de: { x: number; z: number }, folga = 1.5):
 
 /** Uma base (centro + raio da plataforma) não pode encostar em nenhum POI. */
 export function baseLivreDosPOIs(b: { x: number; z: number }, raioBase: number, pois: POI[] = POIS, folga = 2): boolean {
-  return pois.every((p) => {
+  return pois.filter(naPracaPOI).every((p) => {
     if (Math.hypot(b.x - p.x, b.z - p.z) <= p.footprintR + raioBase + folga) return false;
     if (!p.nav) return true;
     // a escada também ocupa chão: a base não pode encostar nela

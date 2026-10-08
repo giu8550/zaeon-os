@@ -1,7 +1,7 @@
 /**
  * POST /api/lounge3d/[id]/rt-token → { token, url, ice } pra entrar na room do COLYSEUS (realtime do cyberespaço).
  * Quem decide é a SESSÃO (NextAuth): membro da sala → token HMAC curto (2 min, só serve pra ENTRAR) com userId,
- * nome, cor e regalias (fundador/QG) decididas aqui; o Colyseus só confere a assinatura (REALTIME_SECRET).
+ * nome, cor e regalias (fundador) decididas aqui; o Colyseus só confere a assinatura (REALTIME_SECRET).
  * `ice` = STUN + TURN com credencial temporária (coturn), se configurado. Sem REALTIME_SECRET → 503.
  */
 export const runtime = "nodejs";
@@ -19,6 +19,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const s = await salaDoMembro(params.id, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const segredo = process.env.REALTIME_SECRET;
   if (!segredo) return NextResponse.json({ error: "Realtime (Colyseus) não configurado no servidor." }, { status: 503 });
-  const token = assinarToken({ u: me.id, n: me.name, c: me.color, f: me.fundador, q: me.qg, s: s.id, exp: Date.now() + VALIDADE_TOKEN_MS }, segredo);
+  const token = assinarToken({ u: me.id, n: me.name, c: me.color, f: me.fundador, q: false,   // `q` (o antigo dono do QG) fica false: o Colyseus em produção ainda lê o campo
+    s: s.id, exp: Date.now() + VALIDADE_TOKEN_MS }, segredo);
   return NextResponse.json({ token, ice: servidoresIce(me.id) });
 }

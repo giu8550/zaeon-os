@@ -18,7 +18,7 @@ import type { ServidorIce } from "@/lib/lounge3d/ice";
 
 export type EstadoColyseus = "conectando" | "ok" | "erro" | "cheia";
 type JogadorRemoto = {
-  userId: string; name: string; color: string; fundador: boolean; qg: boolean;
+  userId: string; name: string; color: string; fundador: boolean;
   x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean;
   voando: boolean; vooY: number; vooYaw: number; parada: boolean; npX: number; npY: number; npZ: number; npYaw: number;
   jet: number; alt: number; falando: boolean; pronto: boolean; motoS: number; motoY: number; motoYaw: number; motoDe: string; mlS: number; mlX: number; mlY: number; mlZ: number; mlYaw: number;
@@ -35,13 +35,13 @@ export type CanalVoz = {
 export type ConexaoColyseus = { enviar(p: Pose): void; voz: CanalVoz; sair(): void };
 
 /** os campos de um jogador do estado (os do Schema são acessores — espalhar com {...j} não copia) */
-const CAMPOS: (keyof JogadorRemoto)[] = ["motoS", "motoY", "motoYaw", "motoDe", "mlS", "mlX", "mlY", "mlZ", "mlYaw", "userId", "name", "color", "fundador", "qg", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto"];
+const CAMPOS: (keyof JogadorRemoto)[] = ["motoS", "motoY", "motoYaw", "motoDe", "mlS", "mlX", "mlY", "mlZ", "mlYaw", "userId", "name", "color", "fundador", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto"];
 const copiar = (j: JogadorRemoto): JogadorRemoto => { const o = {} as Record<string, unknown>; for (const k of CAMPOS) o[k] = j[k]; return o as JogadorRemoto; };
 
 export function conectarColyseus(o: {
   salaId: string; euId: string;
   remotos: Map<string, Presenca>;
-  onOnline: (lista: { id: string; name: string; color: string; fundador: boolean; qg: boolean }[]) => void;
+  onOnline: (lista: { id: string; name: string; color: string; fundador: boolean }[]) => void;
   onEstado: (e: EstadoColyseus) => void;
   /** onde mostrar quem entrou mas ainda não mandou a 1ª pose (ex.: sentado na própria base) */
   poseInicial?: (userId: string) => { x: number; z: number; facing: number; sit?: boolean } | null;
@@ -92,9 +92,9 @@ export function conectarColyseus(o: {
       o.onEstado("ok");
       rm.onStateChange((estado: unknown) => {
         const players = (estado as { players?: Map<string, JogadorRemoto> }).players; if (!players) return;
-        const agora = performance.now(), vistos = new Set<string>(), lista: { id: string; name: string; color: string; fundador: boolean; qg: boolean }[] = [];
+        const agora = performance.now(), vistos = new Set<string>(), lista: { id: string; name: string; color: string; fundador: boolean }[] = [];
         players.forEach((j, id) => {
-          lista.push({ id, name: j.name, color: j.color, fundador: j.fundador, qg: j.qg });
+          lista.push({ id, name: j.name, color: j.color, fundador: j.fundador });
           if (id === o.euId) return;
           vistos.add(id);
           const ant = ultimo.get(id);

@@ -9,6 +9,8 @@ export const MAX_JOGADORES = 5;
  *  de lib/lounge3d/sala. A Zaeon mega fica em z −560 (até −812) com piso a 450 m: com 600/400 quem estava lá
  *  aparecia pros outros puxado pro lado e as motos/nave 50 m ABAIXO do piso. */
 const COORD = 1540, ALT = 800;
+/** a mochila pode estar CAINDO no vazio (o hiperespaço não tem chão): até um pouco abaixo de onde se renasce — espelha lib/cyber/praca QUEDA_VAZIO */
+const QUEDA = -80;
 
 const num = (v: unknown, min: number, max: number): number | null =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null;
@@ -44,7 +46,7 @@ export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
   return {
     x, z, facing, moving: r.moving === true, sit: r.sit === true,
     topo: fundador && r.topo === true, ceu: r.ceu === true,
-    voo, naveParada, jet: num(r.jet, 0, ALT), alt: num(r.alt, 0, ALT), moto: motoDe(r.moto), motoLargada: motoLargadaDe(r.motoLargada),
+    voo, naveParada, jet: num(r.jet, QUEDA, ALT), alt: num(r.alt, 0, ALT), moto: motoDe(r.moto), motoLargada: motoLargadaDe(r.motoLargada),
   };
 }
 function motoDe(v: unknown): Pose["moto"] {
