@@ -10,13 +10,37 @@ import "@/src/i18n";
 
 // --- IMPORTS ---
 import { Navbar } from "@/components/main/navbar";
-import { Mic, MicOff, Code2, Building2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Mic, MicOff, Code2, Building2 } from "lucide-react";
 import { ConversasSlotContext } from "@/components/chat/ConversasSlot";
 import ConversasDaSala from "@/components/chat/ConversasDaSala";
 
 // Ramo da árvore sob o nome da sala na sidebar: o da sala aberta cresce e rola; o da outra é curto.
-const RAMO_ATIVO = "-mt-1.5 ml-4 pl-2 border-l border-slate-300 dark:border-white/10 flex-1 min-h-0 flex flex-col text-slate-900 dark:text-white";
-const RAMO = "-mt-1.5 ml-4 pl-2 border-l border-slate-300 dark:border-white/10 max-h-[30vh] overflow-y-auto custom-scrollbar";
+// Larguras da sidebar: fechada = trilho de ícones; aberta = o conteúdo inteiro (que tem largura fixa).
+const SIDEBAR_FECHADA = 54;
+const SIDEBAR_ABERTA = 264;
+// Ramo da árvore sob o nome da sala: espaçamentos FIXOS e independentes da largura da sidebar.
+// O da sala aberta (lista completa) rola dentro do próprio teto; o da outra sala é curto.
+const RAMO_ATIVO = "ml-4 pl-2 border-l border-slate-300 dark:border-white/10 max-h-[min(46vh,420px)] flex flex-col text-slate-900 dark:text-white";
+const RAMO = "ml-4 pl-2 border-l border-slate-300 dark:border-white/10 max-h-[26vh] overflow-y-auto custom-scrollbar";
+
+/**
+ * Um ramo de conversas que abre/fecha na VERTICAL (altura + fade), sempre montado (o chat da sala
+ * mantém o portal), e inerte quando fechado (nem clique nem Tab chegam nele).
+ */
+function Ramo({ aberto, children }: { aberto: boolean; children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={false}
+      animate={{ height: aberto ? "auto" : 0, opacity: aberto ? 1 : 0, marginTop: aberto ? -6 : -12 }}
+      transition={{ type: "tween", duration: 0.24, ease: [0.22, 0.61, 0.36, 1] }}
+      className="overflow-hidden shrink-0"
+      {...(aberto ? {} : { inert: "" as any })}
+      aria-hidden={!aberto}
+    >
+      {children}
+    </motion.div>
+  );
+}
 import dynamic from "next/dynamic";
 
 const StudyRoomContent = dynamic(
@@ -749,19 +773,30 @@ export default function HomeworkPage({
   // --- CORE STATES ---
   const [mounted, setMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  // Sidebar FIXADA aberta (estilo ChatGPT): navegação + as conversas da sala, numa coluna só.
-  // Lembrada no aparelho; tela estreita começa recolhida (o hover ainda abre por cima).
-  const [sidebarFixada, setSidebarFixada] = useState(false);
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem("zaeon.sidebar.fixada");
-      setSidebarFixada(v !== null ? v === "1" : window.innerWidth >= 1280);
-    } catch { /* ignore */ }
-  }, []);
-  const alternarFixada = () => setSidebarFixada((v) => {
-    try { localStorage.setItem("zaeon.sidebar.fixada", v ? "0" : "1"); } catch { /* ignore */ }
-    return !v;
-  });
+  // Sidebar AUTOMÁTICA (sem botão): o mouse parado nela por 1,3 s abre e ela FICA aberta; só recolhe
+  // depois de 1,3 s com o mouse fora (e nunca no meio de uma edição — renomear conversa). Passar
+  // o mouse de raspão não abre nem fecha nada.
+  const navRef = useRef<HTMLElement>(null);
+  const timerSidebar = useRef<ReturnType<typeof setTimeout>>();
+  const DWELL_SIDEBAR_MS = 1300;
+  const entrouSidebar = () => {
+    clearTimeout(timerSidebar.current);
+    if (!isSidebarOpen) timerSidebar.current = setTimeout(() => setIsSidebarOpen(true), DWELL_SIDEBAR_MS);
+  };
+  const saiuSidebar = () => {
+    clearTimeout(timerSidebar.current);
+    if (!isSidebarOpen) return;
+    const tentarFechar = () => {
+      const foco = document.activeElement;
+      if (foco && navRef.current?.contains(foco) && /^(INPUT|TEXTAREA)$/.test(foco.tagName)) {
+        timerSidebar.current = setTimeout(tentarFechar, DWELL_SIDEBAR_MS);   // editando: espera
+        return;
+      }
+      setIsSidebarOpen(false);
+    };
+    timerSidebar.current = setTimeout(tentarFechar, DWELL_SIDEBAR_MS);
+  };
+  useEffect(() => () => clearTimeout(timerSidebar.current), []);
   // Onde o chat da sala ativa desenha a lista de conversas (portal) — components/chat/ConversasSlot.
   const [slotConversas, setSlotConversas] = useState<HTMLDivElement | null>(null);
   const [isChatLeft, setIsChatLeft] = useState(false);
@@ -2475,10 +2510,9 @@ export default function HomeworkPage({
   }
 
   const salaComChat = activeTab === "sala-de-estudos" || activeTab === "pesquisa";
-  const sidebarAberta = isSidebarOpen || sidebarFixada;
-  // fixada = ocupa espaço (o conteúdo anda); só no hover = abre POR CIMA (o conteúdo fica parado)
-  const larguraFixa = sidebarFixada ? (salaComChat ? 264 : 180) : 54;
-  const recuoSidebar: React.CSSProperties = isEmbedded ? {} : { [isChatLeft ? "paddingRight" : "paddingLeft"]: larguraFixa + 26, transition: "padding 0.4s" };
+  const sidebarAberta = isSidebarOpen;
+  // Aberta, a sidebar passa POR CIMA do conteúdo — a página nunca se reorganiza por causa dela.
+  const recuoSidebar: React.CSSProperties = isEmbedded ? {} : { [isChatLeft ? "paddingRight" : "paddingLeft"]: SIDEBAR_FECHADA + 26 };
 
   return (
     <ConversasSlotContext.Provider value={isEmbedded ? null : { el: slotConversas, sala: activeTab === "pesquisa" ? "pesquisa" : activeTab === "sala-de-estudos" ? "estudos" : null }}>
@@ -2523,27 +2557,21 @@ export default function HomeworkPage({
           Oculta quando embutido (workstation provê a navegação). */}
       {!isEmbedded && (
         <motion.nav
-          onMouseEnter={() => setIsSidebarOpen(true)}
-          onMouseLeave={() => setIsSidebarOpen(false)}
-          animate={{ width: sidebarAberta ? (salaComChat ? 264 : 180) : 54 }}
-          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] flex flex-col py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-all duration-500
+          ref={navRef}
+          onMouseEnter={entrouSidebar}
+          onMouseLeave={saiuSidebar}
+          initial={false}
+          animate={{ width: sidebarAberta ? SIDEBAR_ABERTA : SIDEBAR_FECHADA }}
+          transition={{ type: "tween", duration: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
+          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-colors
             bg-gradient-to-b from-sky-100/90 to-blue-200/80 border-blue-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]
             dark:from-transparent dark:to-transparent dark:bg-[rgba(22,22,34,0.55)] dark:border-white/10 dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)]
             ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
-          <div className="flex-1 min-h-0 flex flex-col gap-3 px-2.5">
-            {/* fixar/recolher a sidebar (fixada = as conversas ficam sempre à vista) */}
-            {sidebarAberta && (
-              <button
-                type="button"
-                onClick={alternarFixada}
-                aria-label={sidebarFixada ? "Recolher a barra lateral" : "Fixar a barra lateral aberta"}
-                title={sidebarFixada ? "Recolher a barra lateral" : "Fixar aberta"}
-                className="self-end -mt-3 -mb-1 w-7 h-7 rounded-lg flex items-center justify-center text-slate-600 dark:text-white/60 hover:bg-slate-100 dark:hover:bg-white/10"
-              >
-                {sidebarFixada ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-              </button>
-            )}
+          {/* Conteúdo com LARGURA FIXA: a sidebar só recorta (54 ↔ 264 px) — nada se reorganiza no meio
+              da animação. Rótulos e listas ficam montados o tempo todo. */}
+          <div className="h-full flex flex-col" style={{ width: SIDEBAR_ABERTA - 2 }}>
+          <div className="flex-1 min-h-0 flex flex-col gap-3 px-2.5 overflow-y-auto overflow-x-hidden no-scrollbar">
             {/* Cada SALA é um nó com as SUAS conversas embaixo (estilo ChatGPT): a sala aberta mostra a lista
                 completa (o chat dela desenha aqui por portal — components/chat/ConversasSlot); a outra, as
                 recentes (clicar entra na sala e abre a conversa — lib/chat/conversasNav). */}
@@ -2554,15 +2582,15 @@ export default function HomeworkPage({
               className={navItem(activeTab === "sala-de-estudos", "blue")}
             >
               <DocumentTextIcon className="w-5 h-5 shrink-0" />
-              {sidebarAberta && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+              <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Sala de Estudos
                 </span>
-              )}
             </button>
-            {sidebarAberta && (activeTab === "sala-de-estudos"
-              ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
-              : <div className={RAMO}><ConversasDaSala sala="estudos" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>)}
+            <Ramo aberto={sidebarAberta}>
+              {activeTab === "sala-de-estudos"
+                ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
+                : <div className={RAMO}><ConversasDaSala sala="estudos" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>}
+            </Ramo>
 
             {/* Sala de Pesquisa */}
             <button
@@ -2571,15 +2599,17 @@ export default function HomeworkPage({
               className={navItem(activeTab === "pesquisa", "purple")}
             >
               <AcademicCapIcon className="w-5 h-5 shrink-0" />
-              {sidebarAberta && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+              <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Sala de Pesquisa
                 </span>
-              )}
             </button>
-            {sidebarAberta && UNIFIED && (activeTab === "pesquisa"
-              ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
-              : <div className={RAMO}><ConversasDaSala sala="pesquisa" onEntrar={() => setActiveTab("pesquisa")} /></div>)}
+            {UNIFIED && (
+              <Ramo aberto={sidebarAberta}>
+                {activeTab === "pesquisa"
+                  ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
+                  : <div className={RAMO}><ConversasDaSala sala="pesquisa" onEntrar={() => setActiveTab("pesquisa")} /></div>}
+              </Ramo>
+            )}
 
             {/* Projetos — Zaeon Code (IDE agêntica; auto-protegida por plano/curso). ESCONDIDA até
                 NEXT_PUBLIC_PROJETOS=on (vira feature depois; o código segue aqui). */}
@@ -2589,11 +2619,9 @@ export default function HomeworkPage({
               className={navItem(activeTab === "projetos", "cyan")}
             >
               <Code2 className="w-5 h-5 shrink-0" />
-              {sidebarAberta && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+              <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Projetos
                 </span>
-              )}
             </button>
             )}
 
@@ -2603,11 +2631,9 @@ export default function HomeworkPage({
               className={navItem(activeTab === "escritorio", "cyan")}
             >
               <Building2 className="w-5 h-5 shrink-0" />
-              {sidebarAberta && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+              <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Escritório
                 </span>
-              )}
             </button>
 
             <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
@@ -2619,11 +2645,9 @@ export default function HomeworkPage({
               className={navItem(activeTab === "profile", "violet")}
             >
               <UserCircleIcon className="w-5 h-5 shrink-0" />
-              {sidebarAberta && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+              <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Perfil
                 </span>
-              )}
             </button>
           </div>
 
@@ -2636,11 +2660,9 @@ export default function HomeworkPage({
               className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group"
             >
               <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-              {sidebarAberta && (
-                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+              <span className="text-[10px] font-black uppercase whitespace-nowrap">
                   Layout
                 </span>
-              )}
             </button>
             <button
               data-tour="focus-mode"
@@ -2652,9 +2674,7 @@ export default function HomeworkPage({
               ) : (
                 <PowerIcon className="w-5 h-5" />
               )}
-              {sidebarAberta && (
-                <span className="text-[10px] font-black uppercase">Foco</span>
-              )}
+              <span className="text-[10px] font-black uppercase">Foco</span>
             </button>
             {/* Voltar: de volta ao cyberespaço (o lounge só é carregado enquanto se está nele). */}
             <button
@@ -2665,10 +2685,9 @@ export default function HomeworkPage({
               className="flex items-center gap-3 p-2 rounded-xl text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5 group"
             >
               <ArrowUturnLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-              {sidebarAberta && (
-                <span className="text-[10px] font-black uppercase">Voltar</span>
-              )}
+              <span className="text-[10px] font-black uppercase">Voltar</span>
             </button>
+          </div>
           </div>
         </motion.nav>
       )}
