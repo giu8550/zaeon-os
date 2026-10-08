@@ -24,6 +24,7 @@ export type Pose = {
   /** em pé num lugar alto (dorso da nave, ilhota) */ alt: number | null;
   /** montado numa moto voadora (qualquer pessoa): vaga 0..7, altura com teto, rumo */ moto: { s: number; y: number; yaw: number; de?: string } | null;
   /** a moto que ESTACIONOU (fica onde desceu): vaga, posição no mapa, rumo */ motoLargada: { s: number; x: number; y: number; z: number; yaw: number } | null;
+  /** DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (espelha lib/cyber/descanso) */ desc: number;
 };
 const VAGAS_MOTO = 32, TETO_MOTO = ALT;   // chão (4) + Zaeon (12) + 4 mirantes da Zaeon (16) — espelha TOTAL_VAGAS de lib/cyber/motos
 
@@ -47,6 +48,7 @@ export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
     x, z, facing, moving: r.moving === true, sit: r.sit === true,
     topo: fundador && r.topo === true, ceu: r.ceu === true,
     voo, naveParada, jet: num(r.jet, QUEDA, ALT), alt: num(r.alt, 0, ALT), moto: motoDe(r.moto), motoLargada: motoLargadaDe(r.motoLargada),
+    desc: typeof r.desc === "number" && Number.isInteger(r.desc) && r.desc >= 0 && r.desc <= 5 ? r.desc : 0,
   };
 }
 function motoDe(v: unknown): Pose["moto"] {

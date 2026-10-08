@@ -40,6 +40,7 @@ export type Presenca = {
   falando?: boolean;  // voz (push-to-talk) ligada agora — indicador no avatar (transporte colyseus)
   moto?: { s: number; y: number; yaw: number; de?: string };   // montado numa MOTO voadora (vaga de origem, altura, rumo; `de` = de quem era a estacionada que pegou) — qualquer pessoa
   motoLargada?: { s: number; x: number; y: number; z: number; yaw: number };   // a moto que ESTACIONOU (fica lá, não volta pra vaga)
+  desc?: number;      // DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (lib/cyber/descanso)
   ts?: number;
 };
 

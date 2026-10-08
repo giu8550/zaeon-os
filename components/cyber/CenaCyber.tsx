@@ -1,6 +1,7 @@
 "use client";
 
 import TelaCarregando from "./TelaCarregando";
+import TabletLab from "./TabletLab";
 import type { Carregando } from "@/lib/cyber/carregamento";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -84,6 +85,9 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [carga, setCarga] = useState<Carregando | null>(null), [loading, setLoading] = useState<"on" | "saindo" | "off">("on");
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
   const [rota, setRota] = useState<"heliporto" | "zaeon" | null>(null);
+  // o MODO ESTUDO no tablet (TabletLab) e o DESCANSO no lounge (J): o que o engine avisa
+  const [tabletAberto, setTabletAberto] = useState(false);
+  const [descanso, setDescanso] = useState<{ pertoDeLugar: boolean; noLounge: boolean; modo: "sentado" | "deitado" | null; podeDeitar: boolean }>({ pertoDeLugar: false, noLounge: false, modo: null, podeDeitar: false });
   /** o TÚNEL de um buraco negro aberto (escolhendo o destino / atravessando o par do dono) */
   const [tunel, setTunel] = useState<ModoTunel | null>(null);
   /** o tutorial do Droid (o passo atual) e as falas dele no chat (SÓ locais: o Droid é de cada um, nada vai pela rede) */
@@ -185,6 +189,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       eu: cb.current.eu, membros: cb.current.membros, menu: !tela, low, qualidade, teclasSempre: tela,
       remotos: cb.current.remotos, enviarPos: (x) => cb.current.enviarPos?.(x),
       onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
+      onTablet: (on) => { setTabletAberto(on); if (on) { engine.current?.soltarMouse(); tocarUI("study-confirm"); } }, onDescanso: setDescanso,
       onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true), onCarregando: setCarga,
       landmarks: landmarksOn(), onLandmark: (poi) => { setErroTopo(null); setPoiAberto(poi); }, onTopo: (v) => { setNoTopo(v); if (v) setPoiAberto(null); },
       // os BURACOS NEGROS: o da rede abre o túnel com os destinos (aberto a todos); o par do dono pede acesso antes
@@ -288,6 +293,8 @@ export default function CenaCyber(p: CenaCyberProps) {
     <div className="relative h-full w-full select-none overflow-hidden bg-[#03030a] text-[#e7ecff]">
       <div ref={cont} className="absolute inset-0" />
       <div ref={overlay} className="pointer-events-none absolute inset-0 overflow-hidden" />
+      {/* o laboratório no TABLET, por cima da cena (o cyberespaço segue vivo atrás) */}
+      <TabletLab aberto={tabletAberto} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
 
       {/* rótulo do monitor (hover) */}
       <div ref={monLabel} className="pointer-events-none absolute z-[22] hidden -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full bg-gradient-to-b from-cyan-100 to-sky-400 px-3 py-1.5 text-[12.5px] font-bold text-slate-950 shadow-[0_0_18px_rgba(90,200,255,.7)] data-[longe=true]:border data-[longe=true]:border-sky-300/35 data-[longe=true]:bg-slate-900/80 data-[longe=true]:from-transparent data-[longe=true]:to-transparent data-[longe=true]:text-sky-100 data-[longe=true]:shadow-none" />
@@ -314,6 +321,19 @@ export default function CenaCyber(p: CenaCyberProps) {
               </div>
               {typeof p.online === "number" && !instancia && <span className="rounded-full border border-white/15 bg-black/50 px-3 py-2 text-xs text-white/80">{p.online}/5 online</span>}
               {p.tokenConvite && <button type="button" onClick={convidar} className="min-h-[44px] rounded-full border border-cyan-300/40 bg-cyan-400/15 px-4 text-xs font-semibold text-cyan-100 backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">{copiado ? "Link copiado ✓" : "Convidar"}</button>}
+            </div>
+          )}
+          {/* LOUNGE: sentar/deitar (J) e o modo estudo no TABLET (T) — o laboratório abre por cima e o avatar fica aqui */}
+          {tela && descanso.noLounge && !tabletAberto && (
+            <div className="absolute left-1/2 z-[21] flex -translate-x-1/2 items-center gap-2" style={{ bottom: touch ? 168 : 28 }}>
+              {(descanso.pertoDeLugar || descanso.modo) && (
+                <button type="button" onClick={() => engine.current?.alternarDescanso()} className="min-h-[40px] rounded-full border border-violet-300/35 bg-[#0a081e]/75 px-4 text-xs font-semibold text-violet-100 backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">
+                  {!touch && <kbd className="mr-1.5 rounded border border-white/25 px-1.5 text-[10px]">J</kbd>}{descanso.modo === null ? "Sentar" : descanso.modo === "sentado" && descanso.podeDeitar ? "Deitar / levantar" : "Levantar"}
+                </button>
+              )}
+              <button type="button" onClick={() => engine.current?.alternarTablet()} className="min-h-[40px] rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-4 text-xs font-extrabold text-slate-950 shadow-[0_0_20px_rgba(90,200,255,.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+                {!touch && <kbd className="mr-1.5 rounded border border-slate-900/30 px-1.5 text-[10px]">T</kbd>}📱 Estudar no tablet
+              </button>
             </div>
           )}
           {p.aviso && <p role="status" className="absolute left-1/2 top-[120px] z-20 -translate-x-1/2 rounded-full bg-amber-300/90 px-3 py-1 text-xs font-medium text-slate-900">{p.aviso}</p>}
