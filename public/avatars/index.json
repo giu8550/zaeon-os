@@ -233,27 +233,29 @@
     },
     "zaeon": {
       "agentId": "zaeon",
-      "versao": "muy3dkxb",
+      "versao": "muz3qxjp",
       "motor": "sprite",
       "estados": {
-        "idle": "/avatars/zaeon/idle.webp?v=muy3dkxb",
-        "blink": "/avatars/zaeon/blink.webp?v=muy3dkxb",
-        "talk": "/avatars/zaeon/talk.webp?v=muy3dkxb",
-        "talk_half": "/avatars/zaeon/talk_half.webp?v=muy3dkxb",
-        "smile": "/avatars/zaeon/smile.webp?v=muy3dkxb",
-        "happy": "/avatars/zaeon/happy.webp?v=muy3dkxb",
-        "think": "/avatars/zaeon/think.webp?v=muy3dkxb",
-        "confused": "/avatars/zaeon/confused.webp?v=muy3dkxb"
+        "idle": "/avatars/zaeon/idle.webp?v=muz3qxjp",
+        "blink": "/avatars/zaeon/blink.webp?v=muz3qxjp",
+        "talk": "/avatars/zaeon/talk.webp?v=muz3qxjp",
+        "talk_half": "/avatars/zaeon/talk_half.webp?v=muz3qxjp",
+        "smile": "/avatars/zaeon/smile.webp?v=muz3qxjp",
+        "happy": "/avatars/zaeon/happy.webp?v=muz3qxjp",
+        "think": "/avatars/zaeon/think.webp?v=muz3qxjp",
+        "confused": "/avatars/zaeon/confused.webp?v=muz3qxjp",
+        "angry": "/avatars/zaeon/angry.webp?v=muz3qxjp"
       },
       "pequeno": {
-        "idle": "/avatars/zaeon/idle.sm.webp?v=muy3dkxb",
-        "blink": "/avatars/zaeon/blink.sm.webp?v=muy3dkxb",
-        "talk": "/avatars/zaeon/talk.sm.webp?v=muy3dkxb",
-        "talk_half": "/avatars/zaeon/talk_half.sm.webp?v=muy3dkxb",
-        "smile": "/avatars/zaeon/smile.sm.webp?v=muy3dkxb",
-        "happy": "/avatars/zaeon/happy.sm.webp?v=muy3dkxb",
-        "think": "/avatars/zaeon/think.sm.webp?v=muy3dkxb",
-        "confused": "/avatars/zaeon/confused.sm.webp?v=muy3dkxb"
+        "idle": "/avatars/zaeon/idle.sm.webp?v=muz3qxjp",
+        "blink": "/avatars/zaeon/blink.sm.webp?v=muz3qxjp",
+        "talk": "/avatars/zaeon/talk.sm.webp?v=muz3qxjp",
+        "talk_half": "/avatars/zaeon/talk_half.sm.webp?v=muz3qxjp",
+        "smile": "/avatars/zaeon/smile.sm.webp?v=muz3qxjp",
+        "happy": "/avatars/zaeon/happy.sm.webp?v=muz3qxjp",
+        "think": "/avatars/zaeon/think.sm.webp?v=muz3qxjp",
+        "confused": "/avatars/zaeon/confused.sm.webp?v=muz3qxjp",
+        "angry": "/avatars/zaeon/angry.sm.webp?v=muz3qxjp"
       },
       "cor": "#2563eb",
       "voz": {

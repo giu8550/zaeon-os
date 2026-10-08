@@ -12,6 +12,8 @@ import { CyberEngine, type EstadoGuia, type PessoaCyber } from "./engine";
 import { NOS, type IdNo } from "@/lib/cyber/buracos";
 import { CHAVE_ONBOARDING, deveNascerNoTubo } from "@/lib/cyber/onboarding";
 import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
+import RespostaZaeon from "./RespostaZaeon";
+import type { PedidoZaeon, PerfilZaeon, PerguntaZaeon, TurnoZaeon } from "@/lib/cyber/conversaZaeon";
 import { criarVoz, type VozHandle } from "./Voz";
 import { transporteRealtime, vozLigada } from "@/lib/lounge3d/realtime";
 import { ehTeclaFalar } from "@/lib/cyber/voz";
@@ -40,6 +42,10 @@ export type CenaCyberProps = {
    *  modo solo) vale o localStorage. `marcarNascimento` avisa o servidor que nasceu. */
   novoNoCyber?: boolean;
   marcarNascimento?: () => void;
+  /** o que a pessoa contou pra Zaeon na capela (o servidor guarda em User.cyberPerfil — a memória dos agentes) */
+  salvarPerfil?: (p: PerfilZaeon) => void;
+  /** um turno GERATIVO da conversa com a Zaeon (o servidor: app/api/lounge3d/[id]/zaeon); sem isto, o roteiro local */
+  conversarZaeon?: (p: PedidoZaeon) => Promise<TurnoZaeon>;
   /** dono da Zaeon (vem do SERVIDOR) — só pinta os botões; quem decide é `pedirAcesso` */
   souFundador?: boolean;
   /** AÇÃO PRIVILEGIADA: pede ao servidor (POST /api/lounge3d/[id]/acesso): o topo da Recepção, a nave, o buraco negro do DJ */
@@ -75,6 +81,17 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [tunel, setTunel] = useState<ModoTunel | null>(null);
   /** o tutorial do Droid (o passo atual) e as falas dele no chat (SÓ locais: o Droid é de cada um, nada vai pela rede) */
   const [guia, setGuia] = useState<EstadoGuia | null>(null), [falasDroid, setFalasDroid] = useState<MensagemChat[]>([]);
+  /** a pergunta da Zaeon esperando resposta (o painel) */
+  const [pergunta, setPergunta] = useState<(PerguntaZaeon & { n: number; total: number }) | null>(null);
+  /** EXPULSO pelo Droid (desrespeitou a Zaeon): a tela vermelha e a saída */
+  const [expulso, setExpulso] = useState(false);
+  /** na INSTÂNCIA do tutorial (a Zaeon só dela, até o 1º portal): o chat da sala e quem está online ficam escondidos */
+  const [instancia, setInstancia] = useState(false);
+  /** a resposta pra Zaeon (do painel ou do chat): vai pra ela — e aparece no MEU chat (não vai pra sala) */
+  const responderZaeon = (r: string) => {
+    if (!engine.current?.responderZaeon(r)) return;
+    setFalasDroid((xs) => [...xs.slice(-20), { id: `eu-${Date.now()}`, userId: cb.current.eu.id, name: cb.current.eu.name, color: cb.current.eu.color, texto: r, ts: Date.now() }]);
+  };
   /** NASCE no tubo de ensaio? Quem nunca entrou no cyberespaço (o servidor diz; sem sala, o localStorage) ou forçado com
    *  ?nascer=1 — decidido 1× */
   const nascer = useMemo(() => {
@@ -104,7 +121,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   // RECADO pro QG: a caixa abre ao clicar na TV do lounge da Zaeon (só o dono)
   // VOZ: segurar G (ou o botão no celular) = falar
   const voz = useRef<VozHandle | null>(null), [falandoEu, setFalandoEu] = useState(false);
-  const comVoz = tela && vozLigada() && !!p.canalVoz;
+  const comVoz = tela && vozLigada() && !!p.canalVoz && !instancia;   // no tutorial (a Zaeon só dele) não fala nem ouve ninguém
   const [somAberto, setSomAberto] = useState(false);
   const [recadoAberto, setRecadoAberto] = useState(false), [recadoTxt, setRecadoTxt] = useState(""), [recadoEnviando, setRecadoEnviando] = useState(false);
   const mudarSom = (n: { ligado: boolean; volume: number }) => {
@@ -166,7 +183,14 @@ export default function CenaCyber(p: CenaCyberProps) {
       onTunel: (t) => { engine.current?.soltarMouse(); setTunel({ tipo: "escolher", origem: t.origem, nomeOrigem: NOS[t.origem].nome, destinos: t.destinos }); },
       onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
       onAviso: avisar,
-      nascer, onGuia: (g) => { setGuia(g); if (!g) { try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },
+      nascer, onGuia: (g) => { setGuia(g); if (!g) { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },   // o tutorial acabou (ou foi pulado): da próxima vez nasce na base
+      onInstancia: setInstancia,
+      conversarZaeon: cb.current.conversarZaeon ? (pd) => cb.current.conversarZaeon!(pd) : undefined,
+      onExpulso: () => {
+        setExpulso(true); setPergunta(null); setGuia(null); engine.current?.soltarMouse();
+        setTimeout(() => { engine.current?.dispose(); engine.current = null; router.push("/"); }, 3200);
+      },
+      onPergunta: setPergunta, onPerfil: (perfil) => cb.current.salvarPerfil?.(perfil),
       onFalaAgente: (f) => setFalasDroid((xs) => [...xs.slice(-20), { id: `agente-${Date.now()}-${xs.length}`, userId: `agente:${f.id}`, name: f.nome, color: f.cor, texto: f.texto, ts: Date.now() }]),
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
       onEstadoQG: setQg, onAcao: setAcao,
@@ -177,7 +201,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onAbrirSom: () => { if (!cb.current.souFundador || !cb.current.musica) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(true); },
       urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon escreve no mural."); return; } setRecadoTxt(""); setRecadoAberto(true); },
-    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); if (nascer) cb.current.marcarNascimento?.(); })
+    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
     // a engine é criada uma vez por montagem; mudanças vão por métodos
@@ -233,7 +257,8 @@ export default function CenaCyber(p: CenaCyberProps) {
 
   if (falha) return <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[#03030a] px-6 text-center text-sm text-white/70">Não deu para iniciar o cyberespaço 3D neste aparelho.<button onClick={entrarEstudo} className="min-h-[44px] rounded-full bg-cyan-400 px-5 font-semibold text-slate-950">Ir para a Sala de Estudos</button></div>;
 
-  const enviar = () => { const t = txt.trim(); if (!t) return; void p.enviarChat?.(t); setTxt(""); };
+  // com a Zaeon esperando resposta, o chat RESPONDE A ELA (não vai pra sala)
+  const enviar = () => { const t = txt.trim(); if (!t) return; if (pergunta) responderZaeon(t); else void p.enviarChat?.(t); setTxt(""); };
   const mandarRecado = async (texto: string | null) => {
     const fn = p.enviarRecado; if (!fn || recadoEnviando) return;
     if (texto !== null && !texto.trim()) return;
@@ -277,7 +302,7 @@ export default function CenaCyber(p: CenaCyberProps) {
                   </div>
                 )}
               </div>
-              {typeof p.online === "number" && <span className="rounded-full border border-white/15 bg-black/50 px-3 py-2 text-xs text-white/80">{p.online}/5 online</span>}
+              {typeof p.online === "number" && !instancia && <span className="rounded-full border border-white/15 bg-black/50 px-3 py-2 text-xs text-white/80">{p.online}/5 online</span>}
               {p.tokenConvite && <button type="button" onClick={convidar} className="min-h-[44px] rounded-full border border-cyan-300/40 bg-cyan-400/15 px-4 text-xs font-semibold text-cyan-100 backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">{copiado ? "Link copiado ✓" : "Convidar"}</button>}
             </div>
           )}
@@ -291,9 +316,9 @@ export default function CenaCyber(p: CenaCyberProps) {
             <div className="absolute z-20 w-[min(68vw,300px)] rounded-2xl border border-violet-300/25 bg-[#0a081e]/70 p-2.5 backdrop-blur" style={touch ? { left: 10, top: 64 } : { left: 16, bottom: 16 }}>
               <div className="h-4 px-1 text-[10.5px] text-cyan-200">{falandoCom ? `💬 falando com ${falandoCom}` : ""}</div>
               <div className="mb-1.5 flex max-h-[96px] flex-col gap-0.5 overflow-y-auto px-1 text-[12.5px] text-violet-100" aria-live="polite">
-                {[...(p.chat ?? []), ...falasDroid].sort((a, b) => a.ts - b.ts).slice(-8).map((m) => <div key={m.id}><b style={{ color: m.color }}>{m.name}{m.userId.startsWith("agente:") ? " ✦" : ""}:</b> {m.texto}</div>)}
+                {[...(instancia ? [] : p.chat ?? []), ...falasDroid].sort((a, b) => a.ts - b.ts).slice(-8).map((m) => <div key={m.id}><b style={{ color: m.color }}>{m.name}{m.userId.startsWith("agente:") ? " ✦" : ""}:</b> {m.texto}</div>)}
               </div>
-              <input ref={chatRef} value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") enviar(); }} maxLength={400} placeholder="Falar…  (Enter)" aria-label="Falar na sala" className="w-full rounded-xl border border-violet-300/30 bg-[#0a081e]/70 px-3 py-2 text-[13px] text-white outline-none focus:border-cyan-300" />
+              <input ref={chatRef} value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") enviar(); }} maxLength={400} placeholder={pergunta ? "Responder à Zaeon…  (Enter)" : "Falar…  (Enter)"} aria-label="Falar na sala" className="w-full rounded-xl border border-violet-300/30 bg-[#0a081e]/70 px-3 py-2 text-[13px] text-white outline-none focus:border-cyan-300" />
             </div>
           )}
 
@@ -364,6 +389,13 @@ export default function CenaCyber(p: CenaCyberProps) {
           <span style={{ color: guia.cor }} className="font-bold">✦ {guia.agente}</span>
           <span className="tabular-nums text-amber-50/60">{guia.passo}/{guia.total - 1} · {guia.titulo}</span>
           <button type="button" onClick={() => engine.current?.guiaPular()} className="min-h-[28px] rounded-full border border-white/15 px-3 text-amber-50/75 hover:text-white">Pular</button>
+        </div>
+      )}
+      {!menu && pergunta && <RespostaZaeon pergunta={pergunta} touch={touch} onResponder={responderZaeon} />}
+      {expulso && (
+        <div role="alert" className="absolute inset-0 z-[70] flex flex-col items-center justify-center gap-3 bg-[#2a0404]/85 px-8 text-center text-red-50 backdrop-blur-sm">
+          <p className="text-2xl font-extrabold tracking-wide">Você foi expulso do cyberespaço.</p>
+          <p className="max-w-[420px] text-sm text-red-100/75">O Droid não tolera desrespeito. Você foi desconectado e vai voltar pro início. Volte quando estiver pronto pra conversar com educação.</p>
         </div>
       )}
       {tunel && (

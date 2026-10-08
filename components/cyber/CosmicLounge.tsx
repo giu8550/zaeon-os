@@ -16,6 +16,7 @@ import { LAB_ENTRADA } from "@/lib/ui/loungeHub";
 import { avisoRealtime } from "@/lib/lounge3d/realtimeEstado";
 import { useResolverSala } from "@/components/lounge/useResolverSala";
 import { useSala3D } from "@/components/lounge/useSala3D";
+import type { PedidoZaeon, TurnoZaeon } from "@/lib/cyber/conversaZaeon";
 import CenaCyber from "./CenaCyber";
 import type { PessoaCyber } from "./engine";
 
@@ -73,8 +74,9 @@ function Tela() {
     void recarregar();
   }, [online, membros, recarregar]);
   const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true } : null), [sala.eu]);
-  // quem está online (pra voz abrir/fechar as conexões) — antes de qualquer return condicional (ordem dos hooks)
-  const onlineIds = useMemo(() => sala.online.map((m) => m.id), [sala.online]);
+  // quem está online (pra voz abrir/fechar as conexões) — antes de qualquer return condicional (ordem dos hooks). O novato
+  // no tutorial (a Zaeon só dele, ainda sem a 1ª pose) fica FORA da voz até cruzar o 1º portal
+  const onlineIds = useMemo(() => sala.online.filter((m) => m.pronto !== false).map((m) => m.id), [sala.online]);
   // ações privilegiadas do dono (topo, nave): quem decide é o servidor (sessão → fundador). A Zaeon é aberta a todos.
   const pedirAcesso = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj") => {
     if (!salaId) return { ok: false, erro: "Sem sala." };
@@ -85,6 +87,15 @@ function Tela() {
 
   // a 1ª entrada no cyberespaço (nasceu no tubo de ensaio): o servidor marca — da próxima vez nasce na base
   const marcarNascimento = useCallback(() => { if (salaId) void fetch(`/api/lounge3d/${salaId}/nasceu`, { method: "POST" }).catch(() => {}); }, [salaId]);
+  // um turno GERATIVO da conversa com a Zaeon (o harness do laboratório, no servidor); erro → o engine usa o roteiro local
+  const conversarZaeon = useCallback(async (pedido: PedidoZaeon): Promise<TurnoZaeon> => {
+    if (!salaId) throw new Error("sem sala");
+    const r = await fetch(`/api/lounge3d/${salaId}/zaeon`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pedido) });
+    if (!r.ok) throw new Error(`zaeon ${r.status}`);
+    return (await r.json()) as TurnoZaeon;
+  }, [salaId]);
+  // o que a pessoa contou pra Zaeon na capela: o servidor guarda (User.cyberPerfil)
+  const salvarPerfil = useCallback((perfil: Record<string, string>) => { if (salaId) void fetch(`/api/lounge3d/${salaId}/perfil`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ perfil }) }).catch(() => {}); }, [salaId]);
 
   if (solo) return <CenaCyber modo="tela" eu={euSolo} membros={[euSolo]} aviso="Modo solo — você não aparece para os outros." />;
   if (erro === "login") return <Carregando>Entre na sua conta para entrar no cyberespaço.</Carregando>;
@@ -102,7 +113,7 @@ function Tela() {
       remotos={sala.remotos} enviarPos={sala.enviarPos} chat={sala.chat} enviarChat={sala.enviarChat}
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
       souFundador={euSala.fundador === true} pedirAcesso={pedirAcesso}
-      novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento}
+      novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
       naveQG={sala.naveQG} salvarNave={sala.salvarNave}

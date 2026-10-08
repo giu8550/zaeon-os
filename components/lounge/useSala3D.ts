@@ -18,7 +18,7 @@ import { conectarColyseus, type CanalVoz, type ConexaoColyseus } from "./salaCol
 import { sanitizarSom, type AcaoSom } from "@/lib/lounge3d/musica";
 import { EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
 
-export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean };
+export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean; /** (Colyseus) já mandou a 1ª pose — o novato no tutorial não: nem aparece nem entra na voz */ pronto?: boolean };
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
 export type EstadoSala = "carregando" | "ok" | "cheia" | "erro" | "off";
 
@@ -106,6 +106,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       // (client-pos é efêmero: quem está parado ou entrou depois ficava invisível → "um vê, o outro não").
       const seed = (m: any) => {
         const id = String(m?.id ?? ""); if (!id || id === euId || mapaRemotos.has(id)) return;
+        if (m?.info?.novo) return;   // o NOVATO está no tutorial (a Zaeon só dele): a base dele fica vazia até ele aparecer de verdade
         const pose = poseInicialRef.current?.(id); if (!pose) return;
         mapaRemotos.set(id, { userId: id, name: m.info?.name ?? "Alguém", color: m.info?.color ?? "#4aa3ff", x: pose.x, z: pose.z, facing: pose.facing, moving: false, sit: pose.sit ?? true, ts: Date.now() });
       };
@@ -153,7 +154,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     const c = conectarColyseus({
       salaId, euId, remotos: mapaRemotos,
       poseInicial: (id) => poseInicialRef.current?.(id) ?? null,
-      onOnline: (lista) => setOnline(lista.map((m) => ({ id: m.id, name: m.name, image: null, color: m.color, fundador: m.fundador }))),
+      onOnline: (lista) => setOnline(lista.map((m) => ({ id: m.id, name: m.name, image: null, color: m.color, fundador: m.fundador, pronto: m.pronto }))),
       onEstado: (e) => {
         if (e === "ok") { setRealtime("colyseus"); setMotivoRealtime(null); if (ultimaPose.current) emitirRef.current(ultimaPose.current, true); }
         else if (e === "cheia") setEstado("cheia");

@@ -41,7 +41,7 @@ const copiar = (j: JogadorRemoto): JogadorRemoto => { const o = {} as Record<str
 export function conectarColyseus(o: {
   salaId: string; euId: string;
   remotos: Map<string, Presenca>;
-  onOnline: (lista: { id: string; name: string; color: string; fundador: boolean }[]) => void;
+  onOnline: (lista: { id: string; name: string; color: string; fundador: boolean; pronto: boolean }[]) => void;
   onEstado: (e: EstadoColyseus) => void;
   /** onde mostrar quem entrou mas ainda não mandou a 1ª pose (ex.: sentado na própria base) */
   poseInicial?: (userId: string) => { x: number; z: number; facing: number; sit?: boolean } | null;
@@ -92,18 +92,17 @@ export function conectarColyseus(o: {
       o.onEstado("ok");
       rm.onStateChange((estado: unknown) => {
         const players = (estado as { players?: Map<string, JogadorRemoto> }).players; if (!players) return;
-        const agora = performance.now(), vistos = new Set<string>(), lista: { id: string; name: string; color: string; fundador: boolean }[] = [];
+        const agora = performance.now(), vistos = new Set<string>(), lista: { id: string; name: string; color: string; fundador: boolean; pronto: boolean }[] = [];
         players.forEach((j, id) => {
-          lista.push({ id, name: j.name, color: j.color, fundador: j.fundador });
+          lista.push({ id, name: j.name, color: j.color, fundador: j.fundador, pronto: j.pronto === true });
           if (id === o.euId) return;
           vistos.add(id);
           const ant = ultimo.get(id);
           ultimo.set(id, copiar(j));
-          if (!j.pronto) {   // ainda sem a 1ª pose: sentado na própria base (não na origem do mapa)
-            const ini = o.poseInicial?.(id);
-            if (ini && !trilhas.has(id)) { const t0 = new Trilha(); t0.empurrar({ t: agora, x: ini.x, z: ini.z, facing: ini.facing }); trilhas.set(id, t0); }
-            return;
-          }
+          // ainda sem a 1ª pose: NÃO aparece (nem sentado na base). Quem entra normal manda a pose em instantes; o novato no
+          // tutorial (a instância da Zaeon dele — components/cyber/engine) só manda depois de cruzar o 1º portal, e a base
+          // dele fica vazia até lá
+          if (!j.pronto) { trilhas.delete(id); o.remotos.delete(id); return; }
           let t = trilhas.get(id); if (!t) { t = new Trilha(); trilhas.set(id, t); }
           if (!ant || ant.x !== j.x || ant.z !== j.z || ant.facing !== j.facing || ant.moving !== j.moving || t.vazia) t.empurrar({ t: agora, x: j.x, z: j.z, facing: j.facing, moving: j.moving });
         });

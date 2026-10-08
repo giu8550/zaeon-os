@@ -85,6 +85,9 @@ const noDiscoDoLounge = (l: P2, folga = 0) => { const L = CIDADE.salas.lounge; r
 
 export const mundo = (l: P2): P2 => ({ x: CIDADE.centro.x + l.x, z: CIDADE.centro.z + l.z });
 
+/** o GLOBO de luz no centro da capela (local da ilha): raio e altura do centro acima do piso — é de dentro dele que o
+ *  holograma da Zaeon sai (components/cyber/HoloZaeon) */
+export const GLOBO_CAPELA = (() => { const r = CIDADE.mesaHolo.r * 0.75; return { r, y: 2.2 + r + 1.5 }; })();
 /** os DESKTOPS (locais) da capela; `rot` deixa o +z local (a tela) virado pro centro — o índice é o instanceId das telas */
 export function computadoresLocais(): { x: number; z: number; rot: number }[] {
   const { n, r } = CIDADE.monitores, out: { x: number; z: number; rot: number }[] = [];

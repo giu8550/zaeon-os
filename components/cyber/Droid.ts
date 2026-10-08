@@ -15,6 +15,8 @@ export type DroidHandle = {
   fase(): FaseDroid;
   aparecer(): void;
   sumir(): void;
+  /** em FÚRIA (vai expulsar alguém): a luz do centro e os olhos ficam vermelhos, as rodas giram rápido */
+  furia(on: boolean): void;
   /** `rumo` = pra onde o "rosto" (a roda de fora) se vira devagar (atan2 dx,dz do mundo) */
   atualizar(dt: number, t: number, rumo: number): void;
   dispose(): void;
@@ -33,6 +35,7 @@ export function criarDroid(o: { low: boolean }): DroidHandle {
   const ouro = M(new THREE.MeshStandardMaterial({ color: 0xffc46b, roughness: 0.25, metalness: 0.9, emissive: 0x7a4a10, emissiveIntensity: 0.7 }));
   const olhoMat = M(new THREE.MeshStandardMaterial({ color: 0xfff1d6, roughness: 0.2, metalness: 0.1, emissive: 0xffe2b0, emissiveIntensity: 0.9 }));
   const irisMat = M(new THREE.MeshBasicMaterial({ color: 0xffb02e }));
+  let raiva = 0;
   const pupilaMat = M(new THREE.MeshBasicMaterial({ color: 0x2a0a02 }));
   const mx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), fora = new THREE.Vector3();
   /** uma RODA: faixa + 2 frisos de ouro + dentes (pra fora e pra dentro) + olhos (olhando pra fora) */
@@ -113,6 +116,12 @@ export function criarDroid(o: { low: boolean }): DroidHandle {
     fase: () => fase,
     aparecer() { if (fase === "visivel" || fase === "entrando") return; fase = "entrando"; k = 0; g.visible = true; },
     sumir() { if (fase === "oculto" || fase === "saindo") return; fase = "saindo"; k = 0; },
+    furia(on) {
+      raiva = on ? 1 : 0;
+      irisMat.color.set(on ? 0xff1a0a : 0xffb02e); (nucleo.material as THREE.MeshBasicMaterial).color.set(on ? 0xff4a36 : 0xfff6e0);
+      (halo.material as THREE.SpriteMaterial).color.set(on ? 0xff3a2a : 0xffffff); (brilho.material as THREE.SpriteMaterial).color.set(on ? 0xff6a50 : 0xffffff);
+      faixa.emissive.set(on ? 0xc01806 : 0x5a0f04);
+    },
     atualizar(dt, t, rumo) {
       // a linha do tempo (k: 0..1). NASCENDO: a coluna de luz desce, o portal abre, a onda de choque, o CLARÃO, o Droid se
       // forma girando no meio da explosão de fagulhas, o portal fecha. INDO EMBORA: abre, as fagulhas são sugadas, ele
@@ -135,7 +144,7 @@ export function criarDroid(o: { low: boolean }): DroidHandle {
       portal.rotation.y = rumo;   // o portal de frente pra quem olha (o Droid se vira pra pessoa)
       corpo.scale.setScalar(Math.max(0.001, escala)); corpo.visible = escala > 0.01;
       // planando, respirando; as rodas girando cada uma no seu eixo (mais rápido ao se formar)
-      const giro = fase === "visivel" ? 1 : 4.5;
+      const giro = (fase === "visivel" ? 1 : 4.5) * (1 + raiva * 2.5);
       corpo.position.y = Math.sin(t * 1.1) * 0.09; corpo.rotation.z = Math.sin(t * 0.6) * 0.08;
       let d = rumo - rumoAtual; d = Math.atan2(Math.sin(d), Math.cos(d)); rumoAtual += d * Math.min(1, dt * 2.5); corpo.rotation.y = rumoAtual;
       // a roda de FORA também tomba (gira no próprio plano E em volta de um eixo inclinado) — senão parecia parada
