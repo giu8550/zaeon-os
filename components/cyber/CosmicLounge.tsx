@@ -94,6 +94,14 @@ function Tela() {
     if (!r.ok) throw new Error(`zaeon ${r.status}`);
     return (await r.json()) as TurnoZaeon;
   }, [salaId]);
+  // a VOZ da Zaeon no holograma (Leda — a do laboratório, pelo caminho do cyberespaço); erro → ela fala só no balão
+  const vozZaeon = useCallback(async (texto: string): Promise<string | null> => {
+    if (!salaId) return null;
+    const r = await fetch(`/api/lounge3d/${salaId}/zaeon/voz`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto }) });
+    if (!r.ok) return null;
+    const d = (await r.json().catch(() => null)) as { audio_base64?: string } | null;
+    return d?.audio_base64 || null;
+  }, [salaId]);
   // o que a pessoa contou pra Zaeon na capela: o servidor guarda (User.cyberPerfil)
   const salvarPerfil = useCallback((perfil: Record<string, string>) => { if (salaId) void fetch(`/api/lounge3d/${salaId}/perfil`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ perfil }) }).catch(() => {}); }, [salaId]);
 
@@ -113,7 +121,7 @@ function Tela() {
       remotos={sala.remotos} enviarPos={sala.enviarPos} chat={sala.chat} enviarChat={sala.enviarChat}
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
       souFundador={euSala.fundador === true} pedirAcesso={pedirAcesso}
-      novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon}
+      novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon} vozZaeon={vozZaeon}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
       naveQG={sala.naveQG} salvarNave={sala.salvarNave}

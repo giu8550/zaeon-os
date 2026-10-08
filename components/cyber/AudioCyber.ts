@@ -9,12 +9,15 @@
  * Regras puras e a tabela dos sons em lib/cyber/audio.ts. dispose() para e desconecta tudo.
  */
 import * as THREE from "three";
-import { DISTANCIA, FADE_ENTRADA, SINTESE, SONS, SONS_ARQUIVO, emendarLoop, recortarCanal, recortePasso, criarLimiteVozes, lerPrefs, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
+import { DISTANCIA, FADE_ENTRADA, HOLO_VOZ, SINTESE, SONS, SONS_ARQUIVO, emendarLoop, recortarCanal, recortePasso, criarLimiteVozes, lerPrefs, respostaImpulso, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
+import { nivelDaBoca } from "@/lib/voice/nivelVoz";
 export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom; vel?: number; taxa?: number; taxaAtual?: number };
 
 export type AudioCyberHandle = {
   /** já tem gesto + listener (e os buffers estão carregando/carregados) */
   readonly ativo: boolean;
+  /** ativo E com o som ligado nas preferências (`zaeon_sfx`) */
+  readonly ligado: boolean;
   /** o buffer desse som já chegou (dá pra tocar agora)? */
   temSom(nome: NomeSom): boolean;
   /** chamar no 1º gesto (ou já, se a intro destravou) */
@@ -40,10 +43,18 @@ export type AudioCyberHandle = {
   /** MÚSICA de um <audio> saindo POSICIONAL de várias caixas de som ao mesmo tempo (o toca-discos do lounge); antes
    *  do gesto que libera o áudio, espera e liga sozinha. `remover()` desliga. */
   musica(caixas: THREE.Object3D[], el: HTMLMediaElement, volume?: number): { remover(): void; pronta(): boolean; /** energia dos GRAVES agora (0..1) — as luzes e as caixas pulsam com ela */ nivel(): number };
+  /** decodifica um áudio (WAV/MP3…) no contexto do three — null sem gesto ainda (sem listener) ou se não decodificar */
+  decodificar(dados: ArrayBuffer): Promise<AudioBuffer | null>;
+  /** a FALA DE HOLOGRAMA (a voz da Zaeon): `buf` toca posicional preso a `obj`, com passa-alta → reverb por convolução
+   *  (wet/dry) → chorus leve (lib/cyber/audio HOLO_VOZ). `nivel()` = o volume da voz agora (0..1, pra boca); null =
+   *  sem áudio (sem gesto ou som desligado nas preferências) */
+  falaHolograma(buf: AudioBuffer, obj: THREE.Object3D, o?: { dist?: Dist; volume?: number }): FalaHolograma | null;
   /** fade dos loops (chamar a cada quadro) */
   atualizar(dt: number): void;
   dispose(): void;
 };
+
+export type FalaHolograma = { readonly duracao: number; nivel(): number; acabou(): boolean; parar(): void };
 
 /** som de UI 2D fora da cena (ex.: "Estudar" — a cena é desmontada logo em seguida); respeita as preferências */
 export function tocarUI(nome: NomeSom) {
@@ -88,6 +99,16 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
     } catch { /* sem áudio */ }
   };
 
+  /** as falas de holograma tocando (dispose para todas) + a resposta ao impulso do reverb (uma por contexto) */
+  const falasHolo = new Set<{ parar(): void }>();
+  let irHolo: AudioBuffer | null = null;
+  const respostaHolo = (ctx: AudioContext) => {
+    if (irHolo && irHolo.sampleRate === ctx.sampleRate) return irHolo;
+    const n = Math.round(ctx.sampleRate * HOLO_VOZ.reverbSeg), b = ctx.createBuffer(2, n, ctx.sampleRate);
+    b.getChannelData(0).set(respostaImpulso(ctx.sampleRate, HOLO_VOZ.reverbSeg, 11)); b.getChannelData(1).set(respostaImpulso(ctx.sampleRate, HOLO_VOZ.reverbSeg, 23));
+    return (irHolo = b);
+  };
+
   const aplicarDist = (a: THREE.PositionalAudio, d: Dist) => { a.setRefDistance(d.ref); a.setMaxDistance(d.max); a.setRolloffFactor(d.rolloff); a.setDistanceModel(d.modelo ?? "inverse"); };
   const criarFonte = (nome: NomeSom, obj: THREE.Object3D | null, dist?: Dist): THREE.Audio<GainNode | PannerNode> | null => {
     const buf = buffers.get(nome); if (!buf || !listener) return null;
@@ -111,6 +132,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
 
   const api: AudioCyberHandle = {
     get ativo() { return !!listener; },
+    get ligado() { return !!listener && prefs.ligado; },
     temSom(nome) { return !!listener && buffers.has(nome); },
     ativar() {
       if (listener || !vivo) return;
@@ -190,6 +212,64 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
         remover() { musicas.delete(m); for (const a of m.as) { try { a.disconnect(); } catch { /* já */ } a.removeFromParent(); } m.as = []; try { m.src?.disconnect(); } catch { /* já */ } m.src = null; try { m.an?.disconnect(); } catch { /* já */ } m.an = null; },
       };
     },
+    async decodificar(dados) {
+      if (!listener) return null;
+      try { return await listener.context.decodeAudioData(dados.slice(0)); } catch { return null; }   // decodeAudioData "consome" o buffer: vai uma cópia
+    },
+    falaHolograma(buf, obj, op = {}) {
+      if (!listener || !prefs.ligado || !vivo) return null;
+      const ctx = listener.context, nos: AudioNode[] = [];
+      const no = <N extends AudioNode>(n: N) => { nos.push(n); return n; };
+      const ganho = (v: number) => { const g = no(ctx.createGain()); g.gain.value = v; return g; };
+      try {
+        const src = no(ctx.createBufferSource()); src.buffer = buf;
+        // passa-alta: tira o grave "de corpo" (a voz fica projetada)
+        const pa = no(ctx.createBiquadFilter()); pa.type = "highpass"; pa.frequency.value = HOLO_VOZ.passaAlta; pa.Q.value = 0.7;
+        // REVERB: seco + molhado (a convolução com a resposta ao impulso gerada no código)
+        const conv = no(ctx.createConvolver()); conv.buffer = respostaHolo(ctx);
+        const seco = ganho(1 - HOLO_VOZ.molhado), molhado = ganho(HOLO_VOZ.molhado), soma = ganho(1);
+        src.connect(pa); pa.connect(seco).connect(soma); pa.connect(conv).connect(molhado).connect(soma);
+        // CHORUS leve: um atraso de ~8 ms balançando devagar, misturado baixinho por cima
+        const saida = ganho(1), atraso = no(ctx.createDelay(0.05)), coro = ganho(HOLO_VOZ.chorusMix), prof = ganho(HOLO_VOZ.chorusProfMs / 1000);
+        atraso.delayTime.value = HOLO_VOZ.chorusMs / 1000;
+        const lfo = no(ctx.createOscillator()); lfo.frequency.value = HOLO_VOZ.chorusHz; lfo.connect(prof).connect(atraso.delayTime);
+        soma.connect(saida); soma.connect(atraso).connect(coro).connect(saida);
+        // o "ouvido" da boca: a voz SECA (antes do efeito — o reverb não deixa a boca aberta), sem ir pros alto-falantes
+        const an = no(ctx.createAnalyser()); an.fftSize = 512; src.connect(an);
+        const amostras = new Uint8Array(an.fftSize);
+        // sai posicional, presa ao rosto do holograma
+        const a = new THREE.PositionalAudio(listener); aplicarDist(a, op.dist ?? DISTANCIA.holograma);
+        a.setNodeSource(saida as unknown as AudioBufferSourceNode); a.setVolume((op.volume ?? 1) * HOLO_VOZ.volume); obj.add(a);
+        let tocando = true, solto = false, pico = 0.05, timer: ReturnType<typeof setTimeout> | null = null;
+        const soltar = () => {
+          if (solto) return; solto = true; tocando = false; if (timer) clearTimeout(timer); falasHolo.delete(h);
+          try { src.stop(); } catch { /* já parou */ } try { lfo.stop(); } catch { /* já */ }
+          try { a.disconnect(); } catch { /* já */ } for (const n of nos) { try { n.disconnect(); } catch { /* já */ } }
+          a.removeFromParent();
+        };
+        const h = {
+          duracao: buf.duration,
+          nivel() {
+            if (!tocando) return 0;
+            an.getByteTimeDomainData(amostras); let s2 = 0;
+            for (let i = 0; i < amostras.length; i++) { const v = (amostras[i]! - 128) / 128; s2 += v * v; }
+            const rms = Math.sqrt(s2 / amostras.length), n = nivelDaBoca(rms, pico); pico = Math.max(rms, pico * 0.996, 0.05);
+            return n;
+          },
+          acabou: () => !tocando,
+          parar: soltar,
+        };
+        // acabou a voz: a cauda do reverb ainda soa um pouco; depois solta tudo
+        src.onended = () => { tocando = false; if (!solto) timer = setTimeout(soltar, (HOLO_VOZ.reverbSeg + 0.2) * 1000); };
+        falasHolo.add(h);
+        if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+        lfo.start(); src.start();
+        return h;
+      } catch {
+        for (const n of nos) { try { n.disconnect(); } catch { /* já */ } }
+        return null;
+      }
+    },
     aplicarPrefs() {
       prefs = ler();
       if (listener) listener.setMasterVolume(prefs.ligado ? prefs.volume : 0);
@@ -214,6 +294,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       vozesAoVivo.clear();
       for (const m of musicas) { for (const a of m.as) { try { a.disconnect(); } catch { /* já */ } a.removeFromParent(); } try { m.src?.disconnect(); } catch { /* já */ } }
       musicas.clear();
+      for (const f of [...falasHolo]) f.parar();
       if (listener) { listener.removeFromParent(); listener = null; }   // o AudioContext do three é global (fica pro próximo)
     },
   };

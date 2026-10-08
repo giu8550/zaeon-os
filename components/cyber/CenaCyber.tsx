@@ -46,6 +46,8 @@ export type CenaCyberProps = {
   salvarPerfil?: (p: PerfilZaeon) => void;
   /** um turno GERATIVO da conversa com a Zaeon (o servidor: app/api/lounge3d/[id]/zaeon); sem isto, o roteiro local */
   conversarZaeon?: (p: PedidoZaeon) => Promise<TurnoZaeon>;
+  /** a VOZ da Zaeon (o servidor: app/api/lounge3d/[id]/zaeon/voz) → WAV em base64 ou null; sem isto, ela fala só no balão */
+  vozZaeon?: (texto: string) => Promise<string | null>;
   /** dono da Zaeon (vem do SERVIDOR) — só pinta os botões; quem decide é `pedirAcesso` */
   souFundador?: boolean;
   /** AÇÃO PRIVILEGIADA: pede ao servidor (POST /api/lounge3d/[id]/acesso): o topo da Recepção, a nave, o buraco negro do DJ */
@@ -186,6 +188,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       nascer, onGuia: (g) => { setGuia(g); if (!g) { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },   // o tutorial acabou (ou foi pulado): da próxima vez nasce na base
       onInstancia: setInstancia,
       conversarZaeon: cb.current.conversarZaeon ? (pd) => cb.current.conversarZaeon!(pd) : undefined,
+      vozZaeon: cb.current.vozZaeon ? (t) => cb.current.vozZaeon!(t) : undefined,
       onExpulso: () => {
         setExpulso(true); setPergunta(null); setGuia(null); engine.current?.soltarMouse();
         setTimeout(() => { engine.current?.dispose(); engine.current = null; router.push("/"); }, 3200);

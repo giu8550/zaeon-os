@@ -119,7 +119,7 @@ export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = {
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
  *  quem precisa SUMIR de verdade usa `modelo: "linear"` (ganho chega a 0 no `max`). */
 export type Dist = { ref: number; max: number; rolloff: number; modelo?: "inverse" | "linear" };
-export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica", Dist> = {
+export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica" | "holograma", Dist> = {
   padrao: { ref: 6, max: 60, rolloff: 1.2 },
   perto: { ref: 2.5, max: 22, rolloff: 1.4 },       // passos/pulo dos COLEGAS (coisas pequenas)
   eu: { ref: 12, max: 60, rolloff: 1 },             // os MEUS passos/pulo: a câmera (o ouvinte) fica ~8–10 m atrás do avatar
@@ -128,6 +128,7 @@ export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | 
   grande: { ref: 14, max: 160, rolloff: 1 },        // buraco negro, nave dos outros
   naveLocal: { ref: 40, max: 400, rolloff: 0.25 },  // a nave em que EU estou: não vira de lado ao girar a câmera
   musica: { ref: 18, max: 110, rolloff: 1, modelo: "linear" },   // as TORRES DE SOM do clube (lounge): cheio na sala toda, ecoa pela ilha e some longe
+  holograma: { ref: 14, max: 120, rolloff: 0.7 },  // a VOZ DA ZAEON saindo do rosto de ~13 m: cheia em volta do globo (a pessoa fica a ~9 m), ainda se ouve da borda da capela
 };
 
 /** cristais da base: só se ouvem com o AVATAR perto dela (cheio até 4 m, some aos 12 m) — o ouvinte é a câmera */
@@ -253,3 +254,48 @@ export const fatorLeito = (musica: "parado" | "tocando" | "fade") => (musica ===
 
 /** próximo intervalo (s) do brilho dos neurônios na base — esporádico */
 export const intervaloNeuronio = (aleatorio: number) => 7 + aleatorio * 9;
+
+/**
+ * A VOZ DA ZAEON no holograma (components/cyber/AudioCyber `falaHolograma`): a fala (Gemini-TTS, voz Leda) passa por
+ * um passa-alta (tira o grave "de gente" — fica um pouco "projetada"), um REVERB curto por convolução (wet/dry) e um
+ * CHORUS bem leve (um atraso de ~8 ms modulado: o "brilho" trêmulo de holograma). INTELIGÍVEL PRIMEIRO: o efeito é
+ * tempero — o sinal seco continua dominante e o reverb é curto, pra não embolar as palavras.
+ */
+export const HOLO_VOZ = {
+  passaAlta: 180,     // Hz
+  reverbSeg: 1.2,     // a cauda do reverb (−60 dB)
+  preAtraso: 0.012,   // s: o "espaço" antes das reflexões
+  molhado: 0.35,      // quanto do reverb entra (o seco fica com 1 − molhado)
+  chorusMs: 8,        // o atraso base do chorus
+  chorusProfMs: 1.6,  // quanto ele oscila (±)
+  chorusHz: 0.55,     // a velocidade da oscilação
+  chorusMix: 0.22,    // quanto do chorus entra
+  volume: 1.6,
+} as const;
+
+/** um gerador pseudoaleatório com SEMENTE (mulberry32): a mesma semente → o mesmo ruído (testável, sem Math.random) */
+export function aleatorioComSemente(semente: number): () => number {
+  let a = semente >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** a RESPOSTA AO IMPULSO do reverb do holograma (PURA): um pré-atraso em silêncio e depois ruído branco com
+ *  decaimento EXPONENCIAL que chega a −60 dB em `seg` (o RT60), com um ataque de 4 ms (sem estalo). Pico normalizado
+ *  em 1. Uma semente por canal (L ≠ R) deixa o reverb largo. */
+export function respostaImpulso(sr: number, seg: number = HOLO_VOZ.reverbSeg, semente = 1, preAtraso: number = HOLO_VOZ.preAtraso): Float32Array {
+  const n = Math.max(1, Math.round(sr * seg)), ini = Math.min(n - 1, Math.round(sr * preAtraso)), ataque = Math.max(1, Math.round(sr * 0.004));
+  const out = new Float32Array(n), rnd = aleatorioComSemente(semente), k = Math.log(1000) / seg;   // e^(−k·seg) = 1/1000 = −60 dB
+  let pico = 0;
+  for (let i = ini; i < n; i++) {
+    const t = (i - ini) / sr, env = Math.exp(-k * t) * Math.min(1, (i - ini) / ataque);
+    const v = (rnd() * 2 - 1) * env; out[i] = v; pico = Math.max(pico, Math.abs(v));
+  }
+  if (pico > 0) for (let i = ini; i < n; i++) out[i]! /= pico;
+  return out;
+}
