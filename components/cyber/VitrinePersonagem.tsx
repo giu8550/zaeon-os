@@ -98,12 +98,12 @@ export default function VitrinePersonagem({ fundador, cor, className = "" }: { f
       a.olharPara(0);   // de frente pra câmera (o modelo encara −Z; olharPara gira pra facing + π)
       pivo.add(a.group); av = a;
       if (fundador) {
-        a.usarAsas({ escala: QUADRO.fundador.escalaAsas });
+        a.usarAsas({ escala: QUADRO.fundador.escalaAsas }); a.esperarCorpo(true);   // o corpo padrão não aparece antes do próprio
         carregarVrm(CORPO_DO_FUNDADOR.url).then((vrm) => {
           if (!vivo || av !== a) { VRMUtils.deepDispose(vrm.scene); return; }
           tingirVrm(vrm, CORPO_DO_FUNDADOR.tintas); a.usarVrm(vrm); corpoVrm = vrm;
           setEstado("pronto");
-        }).catch((e) => { console.warn("[vitrine] corpo do founder (VRM) não carregou:", e); if (vivo) setEstado("pronto"); });
+        }).catch((e) => { console.warn("[vitrine] corpo do founder (VRM) não carregou:", e); a.esperarCorpo(false); if (vivo) setEstado("pronto"); });
       } else setEstado("pronto");
       tocar();
     }).catch((e) => { console.warn("[vitrine] o corpo não carregou:", e); if (vivo) setEstado("erro"); });

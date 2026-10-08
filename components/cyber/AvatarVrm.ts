@@ -11,12 +11,27 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
 import { MIXAMO_PRO_VRM, ORDEM_VRM, paiExistente } from "@/lib/cyber/vrmMapa";
+import { contornarMateriais, trocarJsonDoGlb } from "@/lib/cyber/vrmContorno";
 
-/** carrega e prepara um VRM (uma instância por chamada — VRM não se clona com segurança) */
+/** os BYTES do VRM, baixados uma vez por URL (o founder tem 16 MB): começar cedo (`precarregarVrm`) faz o corpo
+ *  próprio já estar pronto quando o avatar nasce — sem aparecer o corpo padrão antes */
+const bytes = new Map<string, Promise<ArrayBuffer>>();
+export function precarregarVrm(url: string): Promise<ArrayBuffer> {
+  let p = bytes.get(url);
+  if (!p) {
+    p = fetch(url).then((r) => { if (!r.ok) throw new Error(`VRM ${r.status}: ${url}`); return r.arrayBuffer(); });
+    bytes.set(url, p); p.catch(() => { if (bytes.get(url) === p) bytes.delete(url); });
+  }
+  return p;
+}
+
+/** carrega e prepara um VRM (uma instância por chamada — VRM não se clona com segurança), com o TRAÇO DE ANIME
+ *  (lib/cyber/vrmContorno: o contorno MToon ligado/engrossado no arquivo antes da carga) */
 export async function carregarVrm(url: string): Promise<VRM> {
   const loader = new GLTFLoader();
   loader.register((p) => new VRMLoaderPlugin(p));
-  const gltf = await loader.loadAsync(url);
+  const dados = trocarJsonDoGlb(await precarregarVrm(url), (j) => contornarMateriais(j as never));   // (cópia: os bytes do cache ficam intactos)
+  const gltf = await loader.parseAsync(dados, url.slice(0, url.lastIndexOf("/") + 1));
   const vrm = gltf.userData.vrm as VRM | undefined;
   if (!vrm) throw new Error(`não é um VRM: ${url}`);
   VRMUtils.removeUnnecessaryVertices(gltf.scene);
@@ -34,8 +49,8 @@ function realcar(vrm: VRM) {
   vrm.scene.traverse((o) => {
     const m = o as THREE.Mesh; if (!m.isMesh) return;
     for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
-      const mt = mat as THREE.Material & { map?: THREE.Texture | null; emissive?: THREE.Color; emissiveMap?: THREE.Texture | null };
-      if (!mt.emissive || !mt.map) continue;
+      const mt = mat as THREE.Material & { map?: THREE.Texture | null; emissive?: THREE.Color; emissiveMap?: THREE.Texture | null; isOutline?: boolean };
+      if (!mt.emissive || !mt.map || mt.isOutline) continue;   // o traço (contorno) fica tinta chapada
       mt.emissiveMap = mt.map; mt.emissive.setScalar(REALCE); mt.needsUpdate = true;
     }
   });
@@ -47,6 +62,7 @@ export function tingirVrm(vrm: VRM, tintas: Readonly<Record<string, string>>) {
   vrm.scene.traverse((o) => {
     const m = o as THREE.Mesh; if (!m.isMesh) return;
     for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+      if ((mat as { isOutline?: boolean }).isOutline) continue;   // o traço não se tinge
       const chave = Object.keys(tintas).find((k) => mat.name.includes(`_${k}_`)); if (!chave) continue;
       const c = new THREE.Color(tintas[chave]!), mt = mat as THREE.Material & { color?: THREE.Color; shadeColorFactor?: THREE.Color };
       mt.color?.copy(c); mt.shadeColorFactor?.copy(c).multiplyScalar(0.55);
