@@ -785,7 +785,7 @@ export class CyberEngine {
     // pra onde ele vai: do lado da pessoa — ou, num passo "vem comigo até…", ELE VAI: voa rumo ao alvo e, se a pessoa
     // ficar pra trás, para e espera por ela (virado pra ela)
     const a = passo?.alvo, altAlvo = eu.alt + 2.3;
-    const lidera = !!a && this.naZaeon && !this.tunel && Math.hypot(a.x - eu.pos.x, a.z - eu.pos.z) > a.r + 4;
+    const lidera = !!a && this.naZaeon && !this.tunel;   // "vem comigo até…": ele VAI até lá e espera lá
     // NA FRENTE da pessoa, no campo de visão (a câmera olha por cima do ombro): ~5 m à frente, um pouco de lado pra não
     // tapar o personagem — é ali que ele nasce do portal, de frente pros nossos olhos
     const vx0 = -Math.sin(this.camAz), vz0 = -Math.cos(this.camAz);
@@ -794,13 +794,15 @@ export class CyberEngine {
     else if (!quer && (fase === "visivel" || fase === "entrando") && !this.guia) d.h.sumir();
     else if (fase === "visivel") {
       const longe = Math.hypot(d.pos.x - eu.pos.x, d.pos.z - eu.pos.z);
-      if (longe > 60 || Math.abs(altAlvo - d.alt) > 30) d.h.sumir();   // ficou pra trás (teleporte, túnel, queda): some e reaparece do lado
-      else if (lidera && a) {
+      if (lidera && a) {
+        // ele VAI: voa direto pro alvo (um pouco mais rápido que quem anda — dá pra ver ele indo e seguir) e, chegando,
+        // fica PAIRANDO lá em cima do alvo, esperando a pessoa chegar
         const vx = a.x - d.pos.x, vz = a.z - d.pos.z, dd = Math.hypot(vx, vz);
-        if (longe < 14 && dd > 1.5) { const k = Math.min(dd, (longe < 9 ? 6.5 : 3.5) * dt); d.pos.x += (vx / dd) * k; d.pos.z += (vz / dd) * k; }   // anda na frente (mais devagar se a pessoa se afasta)
-        else if (longe > 22) { const wx = eu.pos.x - d.pos.x, wz = eu.pos.z - d.pos.z; d.pos.x += (wx / longe) * 8 * dt; d.pos.z += (wz / longe) * 8 * dt; }   // ela se perdeu: volta um pouco
-        d.alt += (altAlvo - d.alt) * Math.min(1, dt * 3);
-      } else {
+        if (dd > 0.6) { const v = Math.min(9, 2 + dd * 0.6), k = Math.min(dd, v * dt); d.pos.x += (vx / dd) * k; d.pos.z += (vz / dd) * k; }
+        const yAlvo = (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + 3.2;
+        d.alt += (yAlvo - d.alt) * Math.min(1, dt * 2);
+      } else if (longe > 60 || Math.abs(altAlvo - d.alt) > 30) d.h.sumir();   // ficou pra trás (teleporte, túnel, queda): some e reaparece do lado
+      else {
         const dx = alvo.x - d.pos.x, dz = alvo.z - d.pos.z, dist = Math.hypot(dx, dz);
         const v = Math.min(80, 1.2 + dist * 2.4), k = Math.min(dist, v * dt); if (dist > 1e-3) { d.pos.x += (dx / dist) * k; d.pos.z += (dz / dist) * k; }
         d.alt += (altAlvo - d.alt) * Math.min(1, dt * 3);
