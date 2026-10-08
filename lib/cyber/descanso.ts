@@ -37,7 +37,7 @@ export type Lugar = {
 
 /** alturas (m, acima de onde o pé pisa no lounge): o topo da almofada do sofá e do puff (components/cyber/Salas — os
  *  móveis ficam num tablado de 0,16 m) */
-export const ALTURA_SOFA = 0.78, ALTURA_PUFF = 0.7, ALTURA_PUFE = 0.5;
+export const ALTURA_SOFA = 0.78, ALTURA_PUFF = 0.7, ALTURA_PUFE = 0.74;   // o pufe: em CIMA do saco (antes afundava dentro dele)
 /** até onde a J alcança um lugar (m) e a distância que já conta como "alguém está aqui" */
 export const ALCANCE_DESCANSO = 2.6, OCUPADO_R = 0.45;
 /** os assentos no referencial do SOFÁ (x ao longo da largura, z pra frente) */
@@ -64,7 +64,7 @@ export function lugaresDoLounge(): Lugar[] {
         frentes: ASSENTOS_SOFA.map((x) => em(m, x, m.prof / 2 + 0.6)),
       });
       else if (m.tipo === "puff") out.push({ id, tipo: "puff", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_PUFF, relaxa: false, assentos: [em(m, 0, 0)], deita: null, saida: em(m, 0, 1.1), frentes: [em(m, 0, 1.0)] });
-      else if (m.tipo === "pufe") out.push({ id, tipo: "pufe", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_PUFE, relaxa: true, assentos: [em(m, 0, 0.05)], deita: null, saida: em(m, 0, 1.3), frentes: [em(m, 0, 1.2)] });
+      else if (m.tipo === "pufe") out.push({ id, tipo: "pufe", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_PUFE, relaxa: true, assentos: [em(m, 0, 0.18)], deita: null, saida: em(m, 0, 1.3), frentes: [em(m, 0, 1.2)] });   // o quadril um pouco à frente: as costas deitam NO encosto, não dentro dele
     });
   }
   cache = out; return out;
