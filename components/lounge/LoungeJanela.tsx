@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BoltIcon } from "@heroicons/react/24/outline";
+import { musica } from "@/lib/audio/musica";
 import { LOUNGE_ROTA } from "@/lib/ui/loungeHub";
 const CosmicLounge = dynamic(() => import("@/components/cyber/CosmicLounge"), { ssr: false, loading: () => <div className="h-full w-full bg-[#03030a]" /> });
 
@@ -32,7 +33,7 @@ export default function LoungeJanela({ className = "" }: { className?: string })
       <div className="absolute inset-0">{perto ? <CosmicLounge modo="janela" /> : <div className="h-full w-full bg-[#03030a]" />}</div>
       <button
         type="button"
-        onClick={() => router.push(LOUNGE_ROTA)}
+        onClick={() => { musica().destravar(); router.push(LOUNGE_ROTA); }}   // o "Conectar" é o gesto que LIBERA o som (o cyberespaço já entra com áudio)
         className="absolute right-3 top-3 z-40 flex min-h-[44px] items-center gap-2 rounded-full border border-white/20 bg-black/55 px-4 text-xs font-medium uppercase tracking-[0.16em] text-white backdrop-blur transition hover:border-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
       >
         <BoltIcon className="h-4 w-4" aria-hidden="true" />

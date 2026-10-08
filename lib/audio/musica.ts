@@ -4,7 +4,8 @@
  * Antes, um único <audio> tinha dois donos que brigavam (a intro dava play/fade e o navbar dava `pause()` +
  * `currentTime=0` ao ver a home) — o play da intro é assíncrono, e nessa janela o navbar cortava a faixa SECO no
  * meio. Agora todo mundo CHAMA este controlador:
- *  - `destravar()` no gesto do "Iniciar" (e em qualquer gesto depois): libera áudio no navegador;
+ *  - `destravar()` no gesto do "Conectar" ao cyberespaço (e em qualquer gesto lá dentro): libera áudio no navegador
+ *    (a entrada do site não tem mais música nem botão);
  *  - `tocar(src?, {loop})` → fade-in; `fadeTo(vol, ms)`; `parar(ms)` → fade até 0 e SÓ então pausa;
  *  - `estado`: "parado" | "tocando" | "fade" — o navbar só reseta a faixa se estiver "parado".
  * Nada para seco: toda parada passa por um fade. Quem quiser (o leito do cyberespaço) ouve `inscrever()`.

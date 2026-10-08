@@ -1323,7 +1323,7 @@ export class CyberEngine {
   /** (pra quem NÃO é o dono) o dono está online com a nave → a minha cópia some (só existe uma nave) */
   private naveDoDonoFora() { if (this.ehFundador(this.o.eu.id)) return false; for (const a of this.remotos.values()) if (a.nave) return true; return false; }
   // ───────────── áudio ─────────────
-  /** loops fixos do mundo + destrave. O gesto (o "Iniciar" da landing, ou o 1º clique/toque/tecla) só DESTRAVA: o som do
+  /** loops fixos do mundo + destrave. O gesto (o "Conectar" ao cyberespaço, ou o 1º clique/toque/tecla) só DESTRAVA: o som do
    *  cyberespaço só liga ao ENTRAR de fato na cena 3D (fora do menu) — na landing/menu, nada do cyberespaço toca. */
   private montarSom() {
     const s = this.som;
