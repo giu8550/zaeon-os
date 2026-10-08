@@ -129,11 +129,13 @@ describe("câmbio (o tom do motor NÃO vai direto pro teto)", () => {
     let r = { ...cambioNeutro(), marcha: 5, rpm: 0.9 }; for (let i = 0; i < 180; i++) r = passoCambio(r, { voando: true, vel: 0.15, acel: -1, boost: false }, 1 / 60);
     expect(r.marcha).toBeLessThanOrEqual(1);
   });
-  it("BOOST: o motor dá lugar ao CARBURADOR ESTALANDO (o motor quase some)", () => {
-    const m = (boost: boolean) => mixDaMoto({ ...somMotoParada, montada: true, voando: true, vel: 1.2, acel: 1, boost, rpm: 0.95 });
-    expect(m(false)["moto-pipoco"].vol).toBe(0);
-    expect(m(true)["moto-pipoco"].vol).toBe(1);
-    expect(m(true)["moto-motor-alto"].vol).toBeLessThan(m(false)["moto-motor-alto"].vol * 0.2);
+  it("BOOST: o giro ESTOURA (bem acima do corte) em menos de 0,4 s — o tom do grito sobe violento; o carburador não entra", () => {
+    let c = { ...cambioNeutro(), marcha: 5, rpm: 0.95 }; const ini = freqDoMotor(c.rpm);
+    for (let i = 0; i < 24; i++) c = passoCambio(c, { voando: true, vel: 1.05, acel: 1, boost: true }, 1 / 60);
+    expect(c.rpm).toBeGreaterThan(1.25); expect(freqDoMotor(c.rpm) / ini).toBeGreaterThan(1.7);
+    const m = mixDaMoto({ ...somMotoParada, montada: true, voando: true, vel: 1.5, acel: 1, boost: true, rpm: c.rpm });
+    expect(m["moto-motor-alto"].taxa).toBeGreaterThan(0.85); expect(m["moto-motor-alto"].vol).toBeGreaterThan(0.5);
+    expect(m["moto-pipoco"].vol).toBe(0);
   });
   it("PERDENDO VELOCIDADE (soltou ou freando, rápido) o carburador pipoca por cima do motor; devagar ou acelerando, não", () => {
     const m = (vel: number, acel: number) => mixDaMoto({ ...somMotoParada, montada: true, voando: true, vel, acel, rpm: 0.8 });

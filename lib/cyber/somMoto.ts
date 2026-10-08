@@ -10,9 +10,9 @@
  *  - ACELERAÇÃO/CRUZEIRO: o MOTOR (gravações reais de superbike — `FAIXAS_MOTOR`) passa as MARCHAS
  *    (`passoCambio`: 6 no acelerador + a do boost): a rotação sobe dentro da marcha e CAI na troca (com um corte curtinho
  *    e um "tec" de engate); o tom vai da lenta grossa ao GRITO no corte; + o VENTO;
- *  - PERDENDO VELOCIDADE (soltou o acelerador ou freando, andando rápido) e no BOOST: o CARBURADOR ESTALANDO (loop real);
- *  - BOOST: um TIRO de escape + rajada (`moto-boost`, gravado), o motor dá lugar ao CARBURADOR ESTALANDO e a TURBINA
- *    (ronco + assobio agudo) enquanto dura;
+ *  - PERDENDO VELOCIDADE (soltou o acelerador ou freando, andando rápido): o CARBURADOR ESTALANDO (loop real);
+ *  - BOOST: o GRITO da superbike varrendo do grave ao agudo (one-shot gravado `moto-boost`), o motor ESTOURANDO o giro
+ *    e a TURBINA (ronco + assobio agudo) enquanto dura;
  *  - BARREIRA DO SOM (acender o boost acima dos 300 km/h): o ESTRONDO sônico (o "crack-crack" duplo da onda N + o
  *    trovão rolando) e, enquanto o boost durar, o SUPERSÔNICO (o ar rasgando) crescendo até os 1000 km/h;
  *  - FREIO (freada forte): chiado de ar;
@@ -46,9 +46,10 @@ const harmonicos = (fase: number, n = 10) => { let v = 0; for (let k = 1; k <= n
  * Os dois foram preparados AGRESSIVOS (grave reforçado + saturação). `mixDaMoto` toca os dois afinados na frequência do
  * motor (`freqDoMotor`: ~30 Hz na lenta → ~150 Hz no corte — GRAVE: o grito gravado toca encorpado, abaixo do tom
  * original) e cruza da lenta pro grito entre 60 e 110 Hz.
- * O CARBURADOR ESTALANDO (`moto-pipoco`: estouros reais de anti-lag, de moto e de rali, em rajadas irregulares) toca
- * NO LUGAR do motor durante o BOOST (o motor quase some) e por cima dele quando a moto está PERDENDO VELOCIDADE (soltou o
- * acelerador ou freando, andando rápido); a ignição do boost é um TIRO grande seguido de uma rajada (`moto-boost`).
+ * No BOOST o motor ESTOURA o giro (`CAMBIO.boostRpm`: bem acima do corte, subindo violento) e o one-shot `moto-boost`
+ * (o grito real varrendo do grave ao agudo em 0,7 s, saturado) marca a ignição.
+ * O CARBURADOR ESTALANDO (`moto-pipoco`: estouros reais de anti-lag e de moto, em rajadas irregulares) toca por cima do
+ * motor quando a moto está PERDENDO VELOCIDADE (soltou o acelerador ou freando, andando rápido).
  */
 /** o tom (Hz de disparo) em que cada loop foi gravado/travado */
 export const FAIXAS_MOTOR = { "moto-motor": 30, "moto-motor-alto": 300 } as const;
@@ -226,6 +227,9 @@ export const CAMBIO = {
   lenta: 0.14, troca: 0.96, reduz: 0.7,
   /** quanto o acelerador puxa a rotação (carga) e quão rápido ela segue o alvo (1/s); `corte` = duração da troca (s) */
   carga: 0.07, segue: 9, corte: 0.12,
+  /** BOOST: o giro ESTOURA acima do corte — vai pra `boostRpm[0]` na hora (seguindo `boostSegue`× mais rápido) e sobe até
+   *  `boostRpm[1]` com a velocidade */
+  boostRpm: [1.4, 1.55], boostSegue: 2.5,
 } as const;
 export type Cambio = { marcha: number; rpm: number; corte: number };
 export const cambioNeutro = (): Cambio => ({ marcha: 0, rpm: CAMBIO.lenta, corte: 0 });
@@ -240,9 +244,11 @@ export function passoCambio(c: Cambio, e: { voando: boolean; vel: number; acel: 
     if (marcha < ultima && v / C.topo[marcha]! >= C.troca && carga > 0) { marcha++; corte = 1; }
     else if (marcha > ultima || (marcha > 0 && v < C.topo[marcha - 1]! * C.reduz)) marcha--;
   }
+  const estoura = e.voando && e.boost;
   const alvo = !e.voando ? C.lenta + 0.22 * carga
+    : estoura ? C.boostRpm[0] + (C.boostRpm[1] - C.boostRpm[0]) * Math.min(1, Math.max(0, v - 1) / 0.8)
     : Math.min(1.02, Math.max(C.lenta, v / C.topo[marcha]!) + C.carga * carga - (carga > 0 ? 0 : 0.04));
-  const rpm = c.rpm + (alvo - c.rpm) * Math.min(1, dt * C.segue * (corte > 0 ? 2 : 1));
+  const rpm = c.rpm + (alvo - c.rpm) * Math.min(1, dt * C.segue * (estoura ? C.boostSegue : corte > 0 ? 2 : 1));
   return { marcha, rpm, corte };
 }
 
@@ -257,14 +263,14 @@ export function mixDaMoto(e: EstadoSomMoto): Record<(typeof LOOPS_MOTO)[number],
   const f = freqDoMotor(rpm), corte = 1 - 0.5 * (e.corte ?? 0), carga = 0.6 + 0.4 * acel;
   // da LENTA pro GRITO, em oitavas; os dois afinados em `f`
   const u = Math.min(1, Math.max(0, Math.log2(f / CRUZA[0]) / Math.log2(CRUZA[1] / CRUZA[0]))), x = u * u * (3 - 2 * u);
-  // o CARBURADOR: no boost ele É o som (o motor quase some); perdendo velocidade rápido (soltou/freando), pipoca por cima
+  // o CARBURADOR: perdendo velocidade rápido (soltou/freando), pipoca por cima do motor
   const desacel = e.voando && !e.boost && e.acel <= 0 ? Math.min(1, Math.max(0, (v - 0.12) / 0.4)) * (e.acel < 0 ? 1 : 0.8) : 0;
-  const motor = e.boost && e.voando ? 0.15 : 1 - 0.35 * desacel;
+  const motor = 1 - 0.35 * desacel;
   const forca = (0.55 + 0.45 * rpm) * carga * corte * motor;   // mais alto em cima e no acelerador; a troca corta um instante
   return {
     "moto-motor": { vol: (1 - x) * forca, taxa: Math.max(0.8, Math.min(3.2, f / FAIXAS_MOTOR["moto-motor"])) },
-    "moto-motor-alto": { vol: x * forca, taxa: Math.max(0.3, Math.min(2.2, f / FAIXAS_MOTOR["moto-motor-alto"])) },
-    "moto-pipoco": { vol: e.boost && e.voando ? 1 : 0.85 * desacel, taxa: e.boost ? 1.08 + 0.15 * sup : 0.85 + 0.3 * Math.min(1, rpm) },
+    "moto-motor-alto": { vol: x * forca * (e.boost ? 1.15 : 1), taxa: Math.max(0.3, Math.min(2.2, f / FAIXAS_MOTOR["moto-motor-alto"])) },
+    "moto-pipoco": { vol: 0.85 * desacel, taxa: 0.85 + 0.3 * Math.min(1, rpm) },
     "moto-vento": { vol: e.voando ? Math.pow(v1, 1.6) * 0.8 + (e.boost ? 0.25 : 0) : 0, taxa: 0.8 + 0.45 * Math.min(1.5, v) },
     "moto-turbina": { vol: e.boost ? 1 - 0.35 * sup : 0, taxa: 1 + 0.15 * Math.min(2, v) },
     // supersônico (boost aceso acima dos 300 km/h): o ar rasgando, crescendo e subindo de tom até os 1000 km/h
