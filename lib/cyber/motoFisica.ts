@@ -1,6 +1,8 @@
 /**
  * Cyberespaço — PILOTAGEM da moto voadora (PURO). Não é mais o voo da nave (direção relativa à câmera): é moto.
  *  - W/S = acelera / freia (e dá ré devagar); solto, ela PLANA perdendo velocidade aos poucos (é hover, não pneu);
+ *    a aceleração tem CURVA DE POTÊNCIA: quase cheia até a metade e caindo perto da máxima (1 − 0,9·u^2,2, com um
+ *    piso) — leva uns 5 s até o cruzeiro, não 2 (o motor tem tempo de passar as marchas: lib/cyber/somMoto `passoCambio`);
  *  - A/D = esterça. A curva é SUTIL e depende da velocidade: devagar ela gira no próprio eixo, rápido ela abre a curva
  *    (o giro máximo cai com a velocidade — como o "MaxSteeringAngle = k / velocidade" dos arcades);
  *  - INCLINA na curva com o ângulo de moto de verdade: tan θ = v·ω / g (v = velocidade, ω = giro em rad/s);
@@ -32,19 +34,22 @@ export function tetoDaMoto(p: { x: number; z: number }, chao: number): number {
 export const PILOTAGEM = {
   /** velocidade de cruzeiro e com boost (m/s): 34 ≈ 120 km/h, 62 ≈ 220 km/h */
   vel: 34, velBoost: 62, re: 7,
-  /** aceleração, aceleração no boost e freio (m/s²); `plana` = quanto perde por segundo solta (fração) */
-  acel: 15, acelBoost: 34, freio: 30, plana: 0.45,
+  /** aceleração (na saída), no boost e freio (m/s²); a curva de potência (`queda`, `expoente`, com `piso` = o mínimo
+   *  perto da máxima); `plana` = quanto perde por segundo solta (fração) */
+  acel: 10, acelBoost: 26, queda: 0.9, expoente: 2.2, piso: 0.12, freio: 30, plana: 0.45,
   /** giro (rad/s): parada/devagar, na velocidade de cruzeiro e no boost; `resposta` = quão rápido o guidão chega lá */
-  giroBaixo: 1.5, giroAlto: 0.38, giroBoost: 0.27, resposta: 4.5,
+  giroBaixo: 1.6, giroAlto: 0.5, giroBoost: 0.36, resposta: 6,
   /** aderência lateral (1/s): quanto da velocidade de lado some por segundo */
   aderencia: 5, aderenciaBoost: 2.6,
+  /** quanto do escorregão a curva COME de velocidade (o resto volta pra frente): baixo = curva fechada sem perder o embalo */
+  esfrega: 0.22,
   /** inclinação máxima (rad, ~36°) e quão rápido ela chega */
   inclinaMax: 0.63, inclinaResposta: 6,
   /** boost: tanque cheio dura `dura` s; recarga em `recarga` s; precisa de `minimo` pra (re)começar */
   boost: { dura: 3.2, recarga: 5, minimo: 0.2, velMin: 6 },
   /** o "g" da inclinação: com o g de verdade (9,8) toda curva já deitava no máximo; com um g de jogo maior a moto
    *  deita POUCO devagar e MUITO rápido/no boost (cruzeiro com o guidão todo ≈ 30°, boost ≈ 36°) */
-  g: 22,
+  g: 28,
   /** ALTURA: teto acima do chão de baixo (m) — moto voa BAIXO (o dono pediu: "não deve voar muito acima do chão"); subida e descida (m/s) e quão rápido chega nelas; a descida forçada
    *  (acima do teto, ex.: saiu da borda da Zaeon) vai de `planaMin` a `planaMax` m/s conforme o quanto sobra */
   alturaMax: 8, sobe: 10, desce: 6, inerciaV: 2.4, planaMin: 6, planaMax: 22,
@@ -80,7 +85,9 @@ export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pi
   const max = boost ? P.velBoost : P.vel;
   if (rente) frente *= Math.exp(-dt * 6);
   else if (acel > 0) {
-    if (frente < max * acel) frente = Math.min(max * acel, frente + (boost ? P.acelBoost : P.acel) * acel * dt);
+    // curva de potência: quase cheia embaixo, caindo perto da máxima (com um piso, pra chegar nela)
+    const pot = Math.max(P.piso, 1 - P.queda * (Math.max(0, frente) / max) ** P.expoente);
+    if (frente < max * acel) frente = Math.min(max * acel, frente + (boost ? P.acelBoost : P.acel) * acel * pot * dt);
     else frente += (max * acel - frente) * Math.min(1, dt * 1.2);   // acima (o boost acabou): volta pro cruzeiro suave
   } else if (acel < 0) {
     frente = frente > 0 ? Math.max(0, frente + P.freio * acel * dt) : Math.max(-P.re, frente + P.acel * acel * 0.5 * dt);
@@ -95,7 +102,7 @@ export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pi
   // a velocidade NÃO cresce na curva: o que sai do lado volta pra frente só até a velocidade que já tinha, menos um
   // tico de atrito (o "esfregão" da curva)
   const veloc = Math.hypot(frente2, lado2), sobra = lado2 * Math.exp(-dt * (boost ? P.aderenciaBoost : P.aderencia));
-  const esfrega = 1 - 0.6 * Math.abs(lado2 - sobra) / Math.max(1, veloc);
+  const esfrega = 1 - P.esfrega * Math.abs(lado2 - sobra) / Math.max(1, veloc);
   frente2 = Math.sign(frente2 || 1) * Math.sqrt(Math.max(0, veloc * veloc - sobra * sobra)) * esfrega; lado2 = sobra;
   const vx = nfx * frente2 + nlx * lado2, vz = nfz * frente2 + nlz * lado2;
   // vertical: sobe devagar, desce mais devagar ainda; no teto (alturaMax acima do chão de baixo) não sobe mais;

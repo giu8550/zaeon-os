@@ -11,9 +11,10 @@ const vel = (s: EstadoMoto) => Math.hypot(s.vx, s.vz);
 describe("pilotagem da moto (dirigibilidade)", () => {
   it("W acelera PRA FRENTE do rumo até a velocidade de cruzeiro (não teleporta: leva uns segundos)", () => {
     const s1 = pilotar(noAr(), { acel: 1 }, 1);
-    expect(vel(s1)).toBeGreaterThan(10); expect(vel(s1)).toBeLessThan(PILOTAGEM.vel);
-    const s = pilotar(noAr(), { acel: 1 }, 5);
+    expect(vel(s1)).toBeGreaterThan(8); expect(vel(s1)).toBeLessThan(PILOTAGEM.vel);
+    const s = pilotar(noAr(), { acel: 1 }, 7);
     expect(vel(s)).toBeCloseTo(PILOTAGEM.vel, 0);
+    expect(vel(pilotar(noAr(), { acel: 1 }, 2.5))).toBeLessThan(PILOTAGEM.vel * 0.8);   // curva de potência: não chega em 2,5 s
     expect(s.z - 300).toBeGreaterThan(80); expect(Math.abs(s.x - 300)).toBeLessThan(1e-6);
   });
   it("solta, PLANA perdendo velocidade aos poucos; S freia forte", () => {
@@ -44,7 +45,7 @@ describe("pilotagem da moto (dirigibilidade)", () => {
     expect(dir.inclina).toBeLessThan(PILOTAGEM.inclinaMax - 0.03);   // no cruzeiro não satura: sobra inclinação pro boost
     const devagar = pilotar({ ...noAr(), vz: 6 }, { acel: 6 / PILOTAGEM.vel, giro: 1 }, 2);
     expect(devagar.inclina).toBeLessThan(dir.inclina * 0.8);       // devagar deita menos
-    const omega = PILOTAGEM.giroAlto, esperado = Math.min(PILOTAGEM.inclinaMax, Math.atan((vel(dir) * omega) / PILOTAGEM.g));
+    const omega = PILOTAGEM.giroBaixo + (PILOTAGEM.giroAlto - PILOTAGEM.giroBaixo) * Math.min(1, vel(dir) / PILOTAGEM.vel), esperado = Math.min(PILOTAGEM.inclinaMax, Math.atan((vel(dir) * omega) / PILOTAGEM.g));
     expect(dir.inclina).toBeCloseTo(esperado, 1);
     expect(Math.abs(pilotar(dir, { acel: 1 }, 2).inclina)).toBeLessThan(0.05);
   });

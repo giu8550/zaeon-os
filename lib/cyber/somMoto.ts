@@ -7,7 +7,10 @@
  *  - LENTA (parada/pairando devagar): o MESMO motor, em rotação baixa (uma camada à parte, pulsada, soava como um
  *    "som extra estranho" por cima do motor — saiu);
  *  - DECOLA (saiu do chão): sopro subindo dos propulsores de baixo;
- *  - ACELERAÇÃO/CRUZEIRO: o MOTOR (harmônicos) sobe de tom com a velocidade e com o acelerador, + o VENTO;
+ *  - ACELERAÇÃO/CRUZEIRO: o MOTOR passa as MARCHAS (`passoCambio`, um câmbio virtual de 6): a rotação sobe dentro da
+ *    marcha e CAI na troca (com um corte curtinho e um "tec" de engate) — antes o tom ia direto pro teto em ~2 s. Duas
+ *    camadas cruzadas pela rotação: o GRAVE (corpo) e o AGUDO (rasgado, com a carga do acelerador); + o VENTO;
+ *  - ALIVIOU (soltou o acelerador em rotação alta): estalos do escape (pipoco);
  *  - BOOST: estouro de ignição + a TURBINA (ronco + assobio agudo) enquanto dura;
  *  - FREIO (freada forte): chiado de ar;
  *  - SETA (curva): só a luz pisca — SEM som (o clique a cada piscada virava um "tik tik tik" na curva);
@@ -45,6 +48,45 @@ export function sintetizarMotorMoto(sr: number): Float32Array {
     tom[i] = harmonicos(fase, 12) * explosao + 0.35 * Math.sin(fase * 0.5) + chiado[i]!;
   }
   return normalizar(tom, 0.8);
+}
+
+/** MOTOR AGUDO (loop de 1 s, 80 Hz como o grave — a mesma afinação): a camada de rotação ALTA — mais harmônicos,
+ *  saturado (tanh: o "rasgado"), o compasso mais marcado e um sopro de admissão. Entra por cima do grave com a rotação */
+export function sintetizarMotorAltoMoto(sr: number): Float32Array {
+  const n = sr, x = Math.round(sr * 0.25), tom = new Float32Array(n), ruido = new Float32Array(n + x), r = prng(37), a = passaBaixa(4200, sr);
+  let lp = 0, ant = 0;
+  for (let i = 0; i < n + x; i++) { const w = r() * 2 - 1; lp += (w - lp) * a; ruido[i] = (lp - ant) * 0.9; ant = lp; }   // ~passa-banda: o sopro
+  const sopro = fecharLoop(ruido, n);
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, fase = 2 * Math.PI * 80 * t;
+    const compasso = 0.65 + 0.35 * Math.max(0, Math.sin(2 * Math.PI * 40 * t)) ** 0.6;
+    tom[i] = Math.tanh(harmonicos(fase, 24) * compasso * 2.2) + 0.25 * Math.sin(fase * 2 + 0.7) + sopro[i]! * 0.35;
+  }
+  return normalizar(tom, 0.8);
+}
+
+/** TROCA DE MARCHA (~0,16 s): o "tec" seco do engate + um sopro curtinho de alívio */
+export function sintetizarTrocaMoto(sr: number): Float32Array {
+  const n = Math.round(sr * 0.16), out = new Float32Array(n), r = prng(97), a = passaBaixa(2500, sr);
+  let lp = 0, fase = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr; lp += (r() * 2 - 1 - lp) * a; fase += (2 * Math.PI * (180 - 400 * t)) / sr;
+    out[i] = Math.sin(fase) * Math.exp(-t * 60) * 0.9 + lp * Math.exp(-t * 28) * 0.8;
+  }
+  return normalizar(fimSemClique(out, 128), 0.75);
+}
+
+/** ESTALOS do escape (~0,7 s): 4–6 pipocos em intervalos irregulares, cada um um estalo grave com rabinho */
+export function sintetizarEstaloMoto(sr: number): Float32Array {
+  const n = Math.round(sr * 0.7), out = new Float32Array(n), r = prng(101), a = passaBaixa(1600, sr);
+  const tiros: number[] = []; for (let t = 0.02; t < 0.58; t += 0.05 + r() * 0.12) tiros.push(t);
+  let lp = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr; lp += (r() * 2 - 1 - lp) * a; let v = 0;
+    tiros.forEach((t0, k) => { const u = t - t0; if (u >= 0 && u < 0.08) v += (lp * 2 + Math.sin(2 * Math.PI * 70 * u)) * Math.exp(-u * 70) * (1 - k * 0.12); });
+    out[i] = v;
+  }
+  return normalizar(fimSemClique(out, 256), 0.85);
 }
 
 /** VENTO (loop de 3 s): ruído passa-baixa ondulando (rajadas) */
@@ -154,13 +196,13 @@ export function sintetizarPousoMoto(sr: number): Float32Array {
 }
 
 export const SINTESE_MOTO = {
-  "moto-motor": sintetizarMotorMoto, "moto-vento": sintetizarVentoMoto, "moto-turbina": sintetizarTurbinaMoto,
+  "moto-motor": sintetizarMotorMoto, "moto-motor-alto": sintetizarMotorAltoMoto, "moto-troca": sintetizarTrocaMoto, "moto-estalo": sintetizarEstaloMoto, "moto-vento": sintetizarVentoMoto, "moto-turbina": sintetizarTurbinaMoto,
   "moto-partida": sintetizarPartidaMoto, "moto-desliga": sintetizarDesligaMoto, "moto-boost": sintetizarBoostMoto, "moto-freio": sintetizarFreioMoto,
   "moto-decola": sintetizarDecolaMoto, "moto-pouso": sintetizarPousoMoto,
 } as const;
 export type NomeSomMoto = keyof typeof SINTESE_MOTO;
 /** os LOOPS da moto (o resto é one-shot) */
-export const LOOPS_MOTO = ["moto-motor", "moto-vento", "moto-turbina"] as const satisfies readonly NomeSomMoto[];
+export const LOOPS_MOTO = ["moto-motor", "moto-motor-alto", "moto-vento", "moto-turbina"] as const satisfies readonly NomeSomMoto[];
 
 /** o que a moto está fazendo agora, do ponto de vista do som */
 export type EstadoSomMoto = {
@@ -170,17 +212,52 @@ export type EstadoSomMoto = {
   /** acelerador −1..1 (só conhecido na MINHA moto; nas dos outros, 0) */ acel: number;
   boost: boolean;
   /** pisca aceso agora: −1 esquerda, 1 direita, 0 apagado */ seta: number;
+  /** o CÂMBIO (`passoCambio`): rotação 0..1, marcha (0 = 1ª) e o corte da troca (0..1, 1 = acabou de trocar) */
+  rpm?: number; marcha?: number; corte?: number;
 };
 export const somMotoParada: EstadoSomMoto = { montada: false, voando: false, vel: 0, acel: 0, boost: false, seta: 0 };
 
+/** o CÂMBIO virtual: em que fração da velocidade de cruzeiro cada marcha chega no TOPO da rotação (a 6ª só no boost).
+ *  A rotação na marcha é vel / topo — na troca ela cai pra topo(n)/topo(n+1): queda grande nas primeiras, pequena nas
+ *  últimas, como numa moto de verdade */
+export const CAMBIO = {
+  topo: [0.2, 0.4, 0.62, 0.86, 1.18, 2.05],
+  /** marcha lenta (parada / no chão), a rotação onde sobe a marcha e a fração do topo da anterior onde reduz */
+  lenta: 0.14, troca: 0.96, reduz: 0.7,
+  /** quanto o acelerador puxa a rotação (carga) e quão rápido ela segue o alvo (1/s); `corte` = duração da troca (s) */
+  carga: 0.07, segue: 9, corte: 0.12,
+} as const;
+export type Cambio = { marcha: number; rpm: number; corte: number };
+export const cambioNeutro = (): Cambio => ({ marcha: 0, rpm: CAMBIO.lenta, corte: 0 });
+
+/** um passo do câmbio: sobe/reduz a marcha pela velocidade, e a rotação segue (rápido) a da marcha + a carga */
+export function passoCambio(c: Cambio, e: { voando: boolean; vel: number; acel: number; boost: boolean }, dt: number): Cambio {
+  const C = CAMBIO, v = Math.max(0, e.vel), carga = Math.max(0, e.acel);
+  let { marcha } = c, corte = Math.max(0, c.corte - dt / C.corte);
+  if (!e.voando) marcha = 0;
+  else {
+    const ultima = e.boost || v > C.topo[4]! * 0.96 ? 5 : 4;   // a 5ª é LONGA (o cruzeiro fica em ~85% do giro, não no corte); a 6ª é do boost
+    if (marcha < ultima && v / C.topo[marcha]! >= C.troca && carga > 0) { marcha++; corte = 1; }
+    else if (marcha > ultima || (marcha > 0 && v < C.topo[marcha - 1]! * C.reduz)) marcha--;
+  }
+  const alvo = !e.voando ? C.lenta + 0.22 * carga
+    : Math.min(1.02, Math.max(C.lenta, v / C.topo[marcha]!) + C.carga * carga - (carga > 0 ? 0 : 0.04));
+  const rpm = c.rpm + (alvo - c.rpm) * Math.min(1, dt * C.segue * (corte > 0 ? 2 : 1));
+  return { marcha, rpm, corte };
+}
+
 /** volume (0..1) e afinação de cada loop no estado `e` */
 export function mixDaMoto(e: EstadoSomMoto): Record<(typeof LOOPS_MOTO)[number], { vol: number; taxa: number }> {
-  if (!e.montada) return { "moto-motor": { vol: 0, taxa: 0.6 }, "moto-vento": { vol: 0, taxa: 1 }, "moto-turbina": { vol: 0, taxa: 1 } };
+  if (!e.montada) return { "moto-motor": { vol: 0, taxa: 0.6 }, "moto-motor-alto": { vol: 0, taxa: 0.6 }, "moto-vento": { vol: 0, taxa: 1 }, "moto-turbina": { vol: 0, taxa: 1 } };
   const v = Math.max(0, Math.min(1.8, e.vel)), v1 = Math.min(1, v), acel = Math.max(0, e.acel);
+  // sem câmbio (quem chama não passou rpm): a rotação sai da velocidade, como antes
+  const rpm = e.rpm ?? (e.voando ? Math.min(1, 0.2 + 0.6 * v1 + 0.15 * acel) : CAMBIO.lenta + 0.2 * acel);
+  const taxa = 0.52 + 1.1 * rpm + (e.boost ? 0.08 : 0), corte = 1 - 0.45 * (e.corte ?? 0), carga = 0.55 + 0.45 * acel;
   return {
-    // o motor: no chão em marcha LENTA (rotação baixa); no ar sobe com a velocidade; o acelerador "puxa" a rotação
-    // antes da velocidade chegar
-    "moto-motor": { vol: e.voando ? 0.4 + 0.5 * v1 : 0.42, taxa: (e.voando ? 0.68 : 0.55) + 0.75 * v1 + 0.22 * acel * (1 - v1 * 0.5) + (e.boost ? 0.3 : 0) + 0.15 * Math.max(0, v - 1) },
+    // o motor = o GRAVE (corpo, domina embaixo) + o AGUDO (rasgado: entra com a rotação e com a CARGA do acelerador);
+    // a afinação dos dois é a rotação (o câmbio: sobe na marcha, cai na troca); na troca, um corte curto de volume
+    "moto-motor": { vol: (e.voando ? 0.5 + 0.25 * v1 : 0.45) * (1 - 0.45 * rpm) * corte, taxa },
+    "moto-motor-alto": { vol: Math.pow(Math.max(0, rpm - 0.15) / 0.85, 1.3) * 0.75 * carga * corte, taxa },
     "moto-vento": { vol: e.voando ? Math.pow(v1, 1.6) * 0.8 + (e.boost ? 0.25 : 0) : 0, taxa: 0.8 + 0.45 * Math.min(1.5, v) },
     "moto-turbina": { vol: e.boost ? 1 : 0, taxa: 1 + 0.15 * Math.min(1.5, v) },
   };
@@ -196,6 +273,8 @@ export function eventosDaMoto(a: EstadoSomMoto, b: EstadoSomMoto): NomeSomMoto[]
   if (a.voando && !b.voando) ev.push("moto-pouso");
   if (!a.boost && b.boost) ev.push("moto-boost");
   if (b.voando && a.acel >= 0 && b.acel < 0 && b.vel > 0.35) ev.push("moto-freio");
+  if (b.voando && (b.marcha ?? 0) > (a.marcha ?? 0)) ev.push("moto-troca");
+  if (b.voando && a.acel > 0.5 && b.acel === 0 && (a.rpm ?? 0) > 0.6) ev.push("moto-estalo");   // aliviou em rotação alta: pipoco
   return ev;
 }
 
