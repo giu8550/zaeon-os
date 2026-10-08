@@ -1,8 +1,9 @@
 /**
  * Cyberespaço — a VIDA PRÓPRIA dos personagens na cidadela Zaeon (PURO, sem three nem rede). É o "harness" de
- * comportamento: sem conversa (ainda), só o personagem vivendo como gente — trabalha num desktop da capela
+ * comportamento: sem conversa (ainda), só o personagem vivendo como gente — trabalha numa estação dos agentes da capela
  * (interagindo com a tela, como os jogadores na base), e depois sai: passeia pela praça, anda de moto em volta da
- * ilha, dança no lounge, fica olhando um telão, sobe num mirante e medita… e volta a trabalhar.
+ * ilha, dança no lounge, fica olhando um telão, sobe num mirante e medita… e volta a trabalhar. O trabalho é nas
+ * ESTAÇÕES DOS AGENTES (o anel de terminais em volta do pátio da capela — components/cyber/EstacoesAgentes).
  *
  * A AGENDA é uma função do RELÓGIO (segundos desde uma época fixa) e de uma semente: todo cliente calcula a mesma
  * agenda e vê o personagem no mesmo lugar, fazendo a mesma coisa — sem servidor, sem rede (como os droids
@@ -11,7 +12,7 @@
  * Coordenadas LOCAIS da ilha; a altura é acima do piso da ilha.
  */
 import { aleatorioComSemente } from "./audio";
-import { CIDADE, alturaNaCidade, computadoresLocais, mundo, rumoDaPista } from "./ceu";
+import { CIDADE, ESTACOES, alturaNaCidade, estacoesLocais, mundo, rumoDaPista } from "./ceu";
 import { MIRANTES, TELOES } from "./terra";
 import { POIS, marcoNav } from "./landmarks";
 import { alturaEm, deEscada } from "./nav";
@@ -44,13 +45,30 @@ function peDoMirante(i: number): P2 {
   const mn = marcoDoMirante(i)!, w = deEscada(mn, mn.nav.bordaR + mn.nav.escada.comprimento + 2.5, 0);
   return { x: w.x - CIDADE.centro.x, z: w.z - CIDADE.centro.z };
 }
-/** a moto dela: estacionada AO LADO do lote da Zaeon (local) */
+/** a moto da Nina: estacionada AO LADO do lote da Zaeon (local) */
 export const VAGA_DA_NINA: P2 & { rumo: number } = { x: -60, z: -92, rumo: Math.atan2(60, 92) };
+
+/** o PERFIL de vida de cada personagem: a semente da agenda, as estações e os cantos da pista DELE (dois personagens
+ *  nunca disputam o mesmo ponto), a vaga da moto e um deslocamento de lado (m) nos lugares que todos usam (telão,
+ *  praça, mirante) — se coincidirem, ficam lado a lado em vez de um dentro do outro */
+export type PerfilVida = { id: string; semente: number; lado: number; estacoes: readonly number[]; pistas: readonly number[]; vaga: P2 & { rumo: number } };
+export const PERFIS_VIDA: Readonly<Record<string, PerfilVida>> = {
+  nina: { id: "nina", semente: 11, lado: -1.3, estacoes: [1, 3, 5, 7], pistas: [0, 1], vaga: VAGA_DA_NINA },
+  aura: { id: "aura", semente: 23, lado: 1.3, estacoes: [0, 2, 4, 6], pistas: [2, 3], vaga: { x: -50, z: -100, rumo: Math.atan2(50, 100) } },
+};
+
+/** onde o operador fica numa estação (no referencial dela: +z = rumo ao coração; o console fica em z −0,95) */
+export const OPERADOR_Z = 1.25;
+/** o estrado das estações (m acima do piso) */
+export const ALTURA_ESTRADO = 0.24;
 
 /** os LUGARES da cidadela */
 export const LUGARES: readonly Lugar[] = [
-  // os 8 desktops da capela: em pé do lado do globo, virada pra tela
-  ...computadoresLocais().map((c, i) => { const a = Math.atan2(c.z, c.x); return { id: `desktop-${i}`, atividade: "trabalhar" as const, pos: { x: Math.cos(a) * 19.4, z: Math.sin(a) * 19.4 }, rumo: Math.atan2(Math.cos(a), Math.sin(a)) }; }),
+  // as 8 ESTAÇÕES DOS AGENTES: o operador em pé no estrado, na frente do console, virado pras telas
+  ...estacoesLocais().map((e, i) => {
+    const s = Math.sin(e.rot), c = Math.cos(e.rot), lz = OPERADOR_Z;
+    return { id: `estacao-${i}`, atividade: "trabalhar" as const, pos: { x: e.x + lz * s, z: e.z + lz * c }, rumo: e.rot + Math.PI };
+  }),
   // a pista do lounge (lá em cima)
   ...[[-387, -4], [-383, 3], [-389, 5], [-381, -6]].map(([x, z], i) => ({ id: `pista-${i}`, atividade: "dancar" as const, pos: { x: x!, z: z! }, rumo: rumoDaPista() })),
   // de frente pros telões dos mirantes 1–3 (o 0 é a Recepção, a casa da Zaeon)
@@ -59,15 +77,30 @@ export const LUGARES: readonly Lugar[] = [
   ...[1, 2, 3].map((i) => { const p = peDoMirante(i), m = MIRANTES[i]!; return { id: `mirante-${i}`, atividade: "meditar" as const, pos: p, rumo: Math.atan2(m.x - p.x, m.z - p.z), mirante: i }; }),
   // passeios pela praça
   ...[[110, 20], [60, -140], [-150, 40], [20, 160], [-60, -180], [170, -60], [-120, -60], [140, 90]].map(([x, z], i) => ({ id: `praca-${i}`, atividade: "passear" as const, pos: { x: x!, z: z! }, rumo: Math.atan2(-x!, -z!) })),
-  // a moto
+  // a moto (a posição de verdade é a VAGA de cada um — `posNoLugar`)
   { id: "moto", atividade: "moto", pos: { x: VAGA_DA_NINA.x, z: VAGA_DA_NINA.z }, rumo: VAGA_DA_NINA.rumo },
 ];
+
+/** o lugar é deste personagem? (as estações e os cantos da pista são divididos) */
+export function permitido(i: number, perfil: PerfilVida): boolean {
+  const id = LUGARES[i]!.id, m = /^(estacao|pista)-(\d+)$/.exec(id);
+  if (!m) return true;
+  return (m[1] === "estacao" ? perfil.estacoes : perfil.pistas).includes(Number(m[2]));
+}
+/** onde ESTE personagem fica no lugar: a moto na vaga dele; nos lugares de todos (telão, praça, pé do mirante),
+ *  deslocado de lado; estação e pista, no ponto exato (já são só dele) */
+export function posNoLugar(i: number, perfil: PerfilVida): P2 {
+  const l = LUGARES[i]!;
+  if (l.atividade === "moto") return { x: perfil.vaga.x, z: perfil.vaga.z };
+  if (l.atividade === "trabalhar" || l.atividade === "dancar") return l.pos;
+  return { x: l.pos.x + Math.cos(l.rumo) * perfil.lado, z: l.pos.z - Math.sin(l.rumo) * perfil.lado };   // a direita de quem olha pro rumo
+}
 
 export type Bloco = { n: number; ini: number; atividade: Atividade; lugar: number; de: number; viagem: number; fim: number };
 
 /** sorteia o próximo bloco a partir do anterior (determinístico pela semente e pelo número do bloco) */
-export function proximoBloco(ant: Bloco, semente: number): Bloco {
-  const n = ant.n + 1, r = aleatorioComSemente((semente * 7919 + n * 104729) >>> 0);
+export function proximoBloco(ant: Bloco, perfil: PerfilVida): Bloco {
+  const n = ant.n + 1, r = aleatorioComSemente((perfil.semente * 7919 + n * 104729) >>> 0);
   const semTrabalhar = ant.atividade !== "trabalhar" && ant.n > 0 && r() < 0.55;   // volta pro trabalho com frequência
   let atividade: Atividade = "trabalhar";
   if (!semTrabalhar) {
@@ -76,9 +109,9 @@ export function proximoBloco(ant: Bloco, semente: number): Bloco {
     atividade = opcoes.find((a) => (x -= ATIVIDADES[a].peso) < 0) ?? opcoes[0]!;
   }
   if (atividade === ant.atividade) atividade = "passear";
-  const candidatos = LUGARES.map((l, i) => ({ l, i })).filter(({ l, i }) => l.atividade === atividade && i !== ant.lugar);
+  const candidatos = LUGARES.map((l, i) => ({ l, i })).filter(({ l, i }) => l.atividade === atividade && i !== ant.lugar && permitido(i, perfil));
   const lugar = candidatos[Math.floor(r() * candidatos.length)]!.i;
-  const a = LUGARES[ant.lugar]!.pos, b = LUGARES[lugar]!.pos;
+  const a = posNoLugar(ant.lugar, perfil), b = posNoLugar(lugar, perfil);
   const viagem = Math.max(6, (Math.hypot(b.x - a.x, b.z - a.z) * 1.15) / VEL_A_PE);
   const [fmin, fmax] = ATIVIDADES[atividade].fica, fica = fmin + r() * (fmax - fmin);
   const ini = ant.fim;
@@ -86,9 +119,10 @@ export function proximoBloco(ant: Bloco, semente: number): Bloco {
 }
 
 /** o bloco em que o relógio `t` (s, UTC) cai — anda a partir da época (ou de um bloco já conhecido, `cache`) */
-export function blocoEm(t: number, semente: number, cache?: Bloco | null): Bloco {
-  let b: Bloco = cache && cache.ini <= t ? cache : { n: 0, ini: EPOCA - 1, atividade: "trabalhar", lugar: semente % 8, de: semente % 8, viagem: 0, fim: EPOCA };
-  while (b.fim <= t) b = proximoBloco(b, semente);
+export function blocoEm(t: number, perfil: PerfilVida, cache?: Bloco | null): Bloco {
+  const d0 = perfil.estacoes[0] ?? 0;
+  let b: Bloco = cache && cache.ini <= t ? cache : { n: 0, ini: EPOCA - 1, atividade: "trabalhar", lugar: d0, de: d0, viagem: 0, fim: EPOCA };
+  while (b.fim <= t) b = proximoBloco(b, perfil);
   return b;
 }
 
@@ -102,20 +136,21 @@ export type Estado = {
 };
 
 const rotas = new Map<string, P2[]>();
-/** a rota a pé entre dois lugares (cacheada) */
-export function rotaEntre(de: number, para: number): P2[] {
-  const k = `${de}>${para}`; let r = rotas.get(k);
-  if (!r) { const a = LUGARES[de]!.pos, b = LUGARES[para]!.pos; r = rotaAPe(a, b) ?? [a, b]; rotas.set(k, r); }
+/** a rota a pé entre dois lugares, pra este personagem (cacheada) */
+export function rotaEntre(de: number, para: number, perfil: PerfilVida): P2[] {
+  const k = `${perfil.id}:${de}>${para}`; let r = rotas.get(k);
+  if (!r) { const a = posNoLugar(de, perfil), b = posNoLugar(para, perfil); r = rotaAPe(a, b) ?? [a, b]; rotas.set(k, r); }
   return r;
 }
 
-/** a altura do chão (acima do piso da ilha) num ponto local — o lounge e a escada inclusos */
-const alturaLocal = (p: P2) => alturaNaCidade(mundo(p));
+/** a altura do chão (acima do piso da ilha) num ponto local — o lounge, a escada e o estrado das estações inclusos */
+const ESTACOES_L = estacoesLocais();
+const alturaLocal = (p: P2) => alturaNaCidade(mundo(p)) + (ESTACOES_L.some((e) => Math.hypot(p.x - e.x, p.z - e.z) <= ESTACOES.platR) ? ALTURA_ESTRADO : 0);
 
 /** o VOO de moto (y acima do piso): sobe, sai pela borda, dá a volta na ilha por fora, volta e pousa na vaga */
 export const VOO_DA_MOTO = { sobe: 6, sai: 9, raio: 275, altura: 55 } as const;
-export function motoEm(k: number, dur: number): NonNullable<Estado["moto"]> {
-  const V = VOO_DA_MOTO, v0 = VAGA_DA_NINA, a0 = Math.atan2(v0.z, v0.x), borda = { x: Math.cos(a0) * V.raio, z: Math.sin(a0) * V.raio };
+export function motoEm(k: number, dur: number, vaga: P2 & { rumo: number } = VAGA_DA_NINA): NonNullable<Estado["moto"]> {
+  const V = VOO_DA_MOTO, v0 = vaga, a0 = Math.atan2(v0.z, v0.x), borda = { x: Math.cos(a0) * V.raio, z: Math.sin(a0) * V.raio };
   const volta = Math.max(10, dur - 2 * (V.sobe + V.sai)), s3 = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
   if (k < V.sobe) { const u = s3(k / V.sobe); return { x: v0.x, y: u * V.altura, z: v0.z, rumo: v0.rumo, voando: u > 0.05, vel: 4, curva: 0 }; }
   if (k < V.sobe + V.sai) { const u = s3((k - V.sobe) / V.sai); return { x: v0.x + (borda.x - v0.x) * u, y: V.altura, z: v0.z + (borda.z - v0.z) * u, rumo: Math.atan2(borda.x - v0.x, borda.z - v0.z), voando: true, vel: 22, curva: 0 }; }
@@ -128,37 +163,40 @@ export function motoEm(k: number, dur: number): NonNullable<Estado["moto"]> {
 
 /** subir/descer a escada da pirâmide do mirante e meditar no centro do salão */
 export const MEDITA = { sobe: 9 } as const;
-function noMirante(i: number, k: number, dur: number): { pos: P2; y: number; rumo: number; andando: boolean; meditando: number } {
-  const mn = marcoDoMirante(i)!, pe = mn.nav.bordaR + mn.nav.escada.comprimento + 2.5;
-  const fora = mn.nav.escada.dir + Math.PI;   // de costas pra escada: olhando a vista
-  const em = (along: number) => { const w = deEscada(mn, along, 0); return { local: { x: w.x - CIDADE.centro.x, z: w.z - CIDADE.centro.z }, y: alturaEm(mn, w) }; };
+function noMirante(i: number, k: number, dur: number, pe: P2, lado: number): { pos: P2; y: number; rumo: number; andando: boolean; meditando: number } {
+  const mn = marcoDoMirante(i)!, c = CIDADE.centro;
+  const local = (w: P2) => ({ x: w.x - c.x, z: w.z - c.z });
+  // o caminho: o pé da escada (onde ela chegou andando) → o topo da escada → o lugar dela no salão (lado a lado)
+  const topo = local(deEscada(mn, mn.nav.bordaR - 0.3, 0)), senta = local(deEscada(mn, 0, lado * 1.6));
+  const d1 = Math.hypot(topo.x - pe.x, topo.z - pe.z), d2 = Math.hypot(senta.x - topo.x, senta.z - topo.z), L = d1 + d2;
+  const ponto = (s: number): P2 => s <= d1 ? { x: pe.x + (topo.x - pe.x) * (s / d1), z: pe.z + (topo.z - pe.z) * (s / d1) } : { x: topo.x + (senta.x - topo.x) * ((s - d1) / d2), z: topo.z + (senta.z - topo.z) * ((s - d1) / d2) };
+  const alt = (p: P2) => alturaEm(mn, { x: p.x + c.x, z: p.z + c.z });
+  const fora = mn.nav.escada.dir + Math.PI, olhaFora = Math.atan2(Math.cos(fora), Math.sin(fora));   // de costas pra escada: olhando a vista
   const sobe = Math.min(MEDITA.sobe, dur / 3);
-  const rumoSobe = Math.atan2(Math.cos(fora), Math.sin(fora));
-  if (k < sobe) { const p = em(pe * (1 - k / sobe)); return { pos: p.local, y: p.y, rumo: rumoSobe, andando: true, meditando: 0 }; }
-  if (k > dur - sobe) { const p = em(pe * ((k - (dur - sobe)) / sobe)); return { pos: p.local, y: p.y, rumo: rumoSobe + Math.PI, andando: true, meditando: 0 }; }
-  const c = em(0);
-  return { pos: c.local, y: c.y, rumo: rumoSobe, andando: false, meditando: 1 };
+  if (k < sobe) { const p = ponto((L * k) / sobe); return { pos: p, y: alt(p), rumo: olhaFora, andando: true, meditando: 0 }; }
+  if (k > dur - sobe) { const p = ponto(L * (1 - (k - (dur - sobe)) / sobe)); return { pos: p, y: alt(p), rumo: olhaFora + Math.PI, andando: true, meditando: 0 }; }
+  return { pos: senta, y: alt(senta), rumo: olhaFora, andando: false, meditando: 1 };
 }
 
 /** o ESTADO no relógio `t` */
-export function estadoEm(t: number, semente: number, cache?: Bloco | null): Estado & { bloco: Bloco } {
-  const b = blocoEm(t, semente, cache), lugar = LUGARES[b.lugar]!, k = t - b.ini;
+export function estadoEm(t: number, perfil: PerfilVida, cache?: Bloco | null): Estado & { bloco: Bloco } {
+  const b = blocoEm(t, perfil, cache), lugar = LUGARES[b.lugar]!, k = t - b.ini, aqui = posNoLugar(b.lugar, perfil);
   const base = { atividade: b.atividade, lugar: lugar.id, bloco: b, sentado: 0, danca: 0, meditando: 0, moto: null };
   if (k < b.viagem) {   // andando até lá
-    const r = rotaEntre(b.de, b.lugar), L = comprimento(r), p = pontoNaRota(r, (L * k) / b.viagem);
+    const r = rotaEntre(b.de, b.lugar, perfil), L = comprimento(r), p = pontoNaRota(r, (L * k) / b.viagem);
     return { ...base, fase: "andando", pos: { x: p.x, z: p.z }, y: alturaLocal(p), rumo: p.rumo, andando: true };
   }
   const kf = k - b.viagem, fica = b.fim - b.ini - b.viagem;
   if (b.atividade === "moto") {
-    const m = motoEm(kf, fica);
+    const m = motoEm(kf, fica, perfil.vaga);
     return { ...base, fase: "ficando", pos: { x: m.x, z: m.z }, y: m.y, rumo: m.rumo, andando: false, moto: m };
   }
   if (b.atividade === "meditar" && lugar.mirante !== undefined) {
-    const m = noMirante(lugar.mirante, kf, fica);
+    const m = noMirante(lugar.mirante, kf, fica, aqui, perfil.lado);
     return { ...base, fase: "ficando", pos: m.pos, y: m.y, rumo: m.rumo, andando: m.andando, meditando: m.meditando };
   }
   return {
-    ...base, fase: "ficando", pos: lugar.pos, y: alturaLocal(lugar.pos), rumo: lugar.rumo, andando: false,
+    ...base, fase: "ficando", pos: aqui, y: alturaLocal(aqui), rumo: lugar.rumo, andando: false,
     sentado: b.atividade === "trabalhar" ? 1 : 0, danca: b.atividade === "dancar" ? 1 : 0,
   };
 }

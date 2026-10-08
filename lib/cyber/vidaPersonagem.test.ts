@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ATIVIDADES, EPOCA, LUGARES, blocoEm, estadoEm, motoEm, proximoBloco, rotaEntre, VOO_DA_MOTO, type Bloco } from "./vidaPersonagem";
+import { ATIVIDADES, EPOCA, LUGARES, PERFIS_VIDA, blocoEm, estadoEm, motoEm, permitido, posNoLugar, proximoBloco, rotaEntre, VOO_DA_MOTO, type Bloco } from "./vidaPersonagem";
 import { livre, comprimento } from "./caminhos";
 import { CIDADE } from "./ceu";
 
-const SEMENTE = 7;
+const SEMENTE = PERFIS_VIDA.nina!, AURA = PERFIS_VIDA.aura!;
 const dia = (d: number, h = 0) => EPOCA + d * 86400 + h * 3600;
 
 describe("a vida própria dos personagens (agenda)", () => {
@@ -28,11 +28,11 @@ describe("a vida própria dos personagens (agenda)", () => {
     expect(vistas.filter((a) => a === "trabalhar").length).toBeGreaterThan(80);
     expect(maxSem).toBeLessThan(8);
   });
-  it("todo lugar fica em chão livre e tem rota a pé a partir de um desktop (ida e volta)", () => {
+  it("todo lugar fica em chão livre e tem rota a pé a partir de uma estação (ida e volta)", () => {
     for (let i = 0; i < LUGARES.length; i++) {
-      expect(livre(LUGARES[i]!.pos), LUGARES[i]!.id).toBe(true);
+      for (const perfil of [SEMENTE, AURA]) expect(livre(posNoLugar(i, perfil)), `${perfil.id} ${LUGARES[i]!.id}`).toBe(true);
       if (i === 0) continue;
-      const ida = rotaEntre(0, i), volta = rotaEntre(i, 0);
+      const ida = rotaEntre(0, i, SEMENTE), volta = rotaEntre(i, 0, AURA);
       expect(ida.length, LUGARES[i]!.id).toBeGreaterThanOrEqual(2); expect(volta.length).toBeGreaterThanOrEqual(2);
       expect(comprimento(ida)).toBeLessThan(900);
     }
@@ -46,7 +46,7 @@ describe("a vida própria dos personagens (agenda)", () => {
       if (b.atividade === "trabalhar") expect(la.sentado).toBe(1);
       if (b.atividade === "dancar") { expect(la.danca).toBe(1); expect(la.y).toBeGreaterThan(80); }   // no lounge, lá em cima
       if (b.atividade === "moto") expect(la.moto).not.toBeNull();
-      if (b.atividade !== "moto" && b.atividade !== "meditar") expect(la.pos).toEqual(LUGARES[b.lugar]!.pos);
+      if (b.atividade !== "moto" && b.atividade !== "meditar") expect(la.pos).toEqual(posNoLugar(b.lugar, SEMENTE));
       b = proximoBloco(b, SEMENTE);
     }
   });
@@ -61,5 +61,25 @@ describe("a vida própria dos personagens (agenda)", () => {
     expect(Math.hypot(meio.x, meio.z)).toBeGreaterThan(CIDADE.bordaR);
     expect(meio.y).toBeGreaterThan(45); expect(meio.voando).toBe(true);
     expect(VOO_DA_MOTO.raio).toBeGreaterThan(CIDADE.bordaR);
+  });
+});
+
+describe("dois personagens na mesma cidadela", () => {
+  it("cada um tem as suas estações, os seus cantos da pista e a sua vaga — nunca o mesmo ponto", () => {
+    const n = PERFIS_VIDA.nina!, a = PERFIS_VIDA.aura!;
+    for (let i = 0; i < LUGARES.length; i++) {
+      if (permitido(i, n) && permitido(i, a)) { const p = posNoLugar(i, n), q = posNoLugar(i, a); expect(Math.hypot(p.x - q.x, p.z - q.z), LUGARES[i]!.id).toBeGreaterThan(2); }
+    }
+    expect(n.estacoes.some((d) => a.estacoes.includes(d))).toBe(false);
+    expect(Math.hypot(n.vaga.x - a.vaga.x, n.vaga.z - a.vaga.z)).toBeGreaterThan(5);
+  });
+  it("as agendas são diferentes (sementes diferentes) e nenhum dos dois para colado no outro", () => {
+    let iguais = 0, colados = 0;
+    for (let t = EPOCA + 86400 * 4; t < EPOCA + 86400 * 4 + 4 * 3600; t += 37) {
+      const x = estadoEm(t, PERFIS_VIDA.nina!), y = estadoEm(t, PERFIS_VIDA.aura!);
+      if (x.lugar === y.lugar) iguais++;
+      if (x.fase === "ficando" && y.fase === "ficando" && Math.hypot(x.pos.x - y.pos.x, x.pos.z - y.pos.z) < 1.5 && Math.abs(x.y - y.y) < 1) colados++;
+    }
+    expect(iguais).toBeLessThan(120); expect(colados).toBe(0);
   });
 });
