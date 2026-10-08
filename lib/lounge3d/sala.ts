@@ -17,7 +17,7 @@ const COORD = 400; // metade do chão (plano 400×400 centrado) — notas/artefa
 /** presença no MAPA do cyberespaço: o mapa inteiro (a Zaeon mega fica em z −560, até −812) e qualquer altura que se
  *  alcança (teto do voo + o dorso da nave / a mochila acima do lounge). Com os 400 m antigos, quem estava na Zaeon
  *  aparecia pros outros puxado pra z −400 e as motos/nave lá em cima, 50 m ABAIXO do piso. */
-export const MAPA = { coord: VOO.raioMapa + 40, alt: VOO.yMax + 80 } as const;
+export const MAPA = { coord: VOO.raioMapa + 40, alt: VOO.yMax + 80, /** caindo no vazio (sem chão): a mochila desce até renascer — abaixo de lib/cyber/praca QUEDA_VAZIO */ queda: -80 } as const;
 
 // Controle, zero-width e separadores de linha Unicode (U+2028/2029 — num literal de regex quebram o parser).
 const CONTROLE = new RegExp("[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f\\u200b-\\u200f\\u2028\\u2029]", "g");
@@ -156,7 +156,7 @@ export function sanitizarPresenca(raw: unknown): Presenca | null {
   if (typeof r.userId !== "string" || !/^[a-f0-9]{24}$/i.test(r.userId)) return null;
   const x = num(r.x, -MAPA.coord, MAPA.coord), z = num(r.z, -MAPA.coord, MAPA.coord), facing = num(r.facing, -10, 10);
   if (x === null || z === null || facing === null) return null;
-  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ...naveParadaDe(r.naveParada), ...(num(r.jet, 0, MAPA.alt) !== null ? { jet: num(r.jet, 0, MAPA.alt)! } : {}), ...(num(r.alt, 0, MAPA.alt) !== null ? { alt: num(r.alt, 0, MAPA.alt)! } : {}), ...motoDe(r.moto), ...motoLargadaDe(r.motoLargada), ts: typeof r.ts === "number" ? r.ts : Date.now() };
+  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ...naveParadaDe(r.naveParada), ...(num(r.jet, MAPA.queda, MAPA.alt) !== null ? { jet: num(r.jet, MAPA.queda, MAPA.alt)! } : {}), ...(num(r.alt, 0, MAPA.alt) !== null ? { alt: num(r.alt, 0, MAPA.alt)! } : {}), ...motoDe(r.moto), ...motoLargadaDe(r.motoLargada), ts: typeof r.ts === "number" ? r.ts : Date.now() };
 }
 
 /** Ponte chat → nota: um "ponto importante" da Sala de Pesquisa vira nota SUGERIDA perto do avatar. */

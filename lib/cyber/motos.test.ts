@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, TOTAL_VAGAS, lookDaVaga, baseDoRobo, esvaziou, fabricaNova, largadasValidas, motoDe, motoLargadaDe, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, tamanhoDoLote, vagas } from "./motos";
-import { CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal, noPortalVolta } from "./ceu";
+import { CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal } from "./ceu";
+import { NOS } from "./buracos";
+import { PRACA } from "./praca";
 import { BASES_CEU_LOCAIS } from "./bases";
 import { HELIPORTO, POIS } from "./landmarks";
 import { VOO } from "./voo";
@@ -28,13 +30,14 @@ describe("motos voadoras — estacionamentos (chão + Zaeon)", () => {
     for (const v of [...vagas().filter((x) => x.ceu), base]) {
       expect(naIlhaPrincipal(v)).toBe(true);
       expect(Math.hypot(v.x - CIDADE.centro.x, v.z - CIDADE.centro.z)).toBeLessThan(CIDADE.andavelR - 3);
-      expect(noPortalVolta(v)).toBe(false);
+      expect(Math.hypot(v.x - NOS.zaeon.anel.x, v.z - NOS.zaeon.anel.z)).toBeGreaterThan(NOS.zaeon.anel.r + 8);   // longe do buraco negro da cidade
       for (const b of BASES_CEU_LOCAIS) { const w = mundo(b); expect(Math.hypot(v.x - w.x, v.z - w.z)).toBeGreaterThan(8); }
       for (const c of colisoresDaCidade()) expect(Math.hypot(v.x - c.x, v.z - c.z)).toBeGreaterThan(c.r + 2);
     }
   });
-  it("o lote do chão não encosta no heliporto nem em marcos sólidos", () => {
+  it("o lote da praça cabe na ilha (sem chão!) e não encosta no heliporto nem em marcos sólidos", () => {
     const l = LOTES[0]!, r = tamanhoDoLote(l).r;
+    expect(Math.hypot(l.x - PRACA.x, l.z - PRACA.z) + r).toBeLessThan(PRACA.r - 2);
     expect(Math.hypot(l.x - HELIPORTO.x, l.z - HELIPORTO.z)).toBeGreaterThan(HELIPORTO.r + r);
     for (const p of POIS.filter((x) => x.solido !== false && x.preset !== "estacionamento")) expect(Math.hypot(l.x - p.x, l.z - p.z)).toBeGreaterThan(p.footprintR + r);
   });

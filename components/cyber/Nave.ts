@@ -266,6 +266,6 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
         rGeo.attributes.position!.needsUpdate = true;
       }
     },
-    dispose() { liberar(raiz, [tex]); },
+    dispose() { liberar(raiz, [tex, ...interior.texturas]); },
   };
 }

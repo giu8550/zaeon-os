@@ -4,7 +4,7 @@ import { UNIVERSIDADE } from "./universidade";
 import { SOLANA } from "./solana";
 import { CIDADE } from "./ceu";
 import { VOO } from "./voo";
-import { PLATAFORMAS, anelDoChao, andarNaPlataforma, pilaresDasPlataformas } from "./plataformas";
+import { PLATAFORMAS, andarNaPlataforma, noPortalDaPlataforma, pilaresDasPlataformas } from "./plataformas";
 
 const area = (r: number) => Math.PI * r * r;
 const dist = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -41,15 +41,16 @@ describe("os outros CAMPI (UFC, Unifor, UECE)", () => {
       for (const p of l.predios) expect(Math.hypot(p.x, p.z) + Math.hypot(p.lx, p.lz) / 2).toBeLessThan(r - 2);
     }
   });
-  it("a ENTRADA: o anel do chão leva ao disco, e a chegada/volta não caem dentro de prédio nem fora do disco", () => {
+  it("a ENTRADA: o buraco negro e a chegada (do túnel) não caem dentro de prédio nem fora do disco; ficam do lado da praça", () => {
     for (const id of IDS_CAMPI) {
       const P = PLATAFORMAS[id];
-      expect(anelDoChao(P.anelChao)).toBe(id);
       const ch = localC(id, P.chegada); expect(empurrarNoCampus(id, ch)).toEqual(ch);
+      const po = localC(id, P.portal); expect(empurrarNoCampus(id, po)).toEqual(po);
+      expect(noPortalDaPlataforma(id, P.chegada)).toBe(false);
       expect(Math.hypot(ch.x, ch.z)).toBeLessThan(CAMPI[id].r - 5);
       expect(andarNaPlataforma(id, 0, P.chegada).fora).toBe(false);
       // a entrada aponta pra praça
-      expect(Math.hypot(P.anelChao.x, P.anelChao.z)).toBeLessThan(Math.hypot(CAMPI[id].centro.x, CAMPI[id].centro.z));
+      expect(Math.hypot(P.portal.x, P.portal.z)).toBeLessThan(Math.hypot(CAMPI[id].centro.x, CAMPI[id].centro.z));
     }
   });
   it("colisão: andando, não se entra num prédio (nem nos GIRADOS da Unifor); passou da borda do disco = cai", () => {

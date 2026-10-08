@@ -3,7 +3,7 @@
  * no céu. Vidro escuro com caixilhos finos, lajes com FAIXAS DE LUZ no degradê da Solana (roxo → verde), sacadas de
  * vidro, o tubo do ELEVADOR aceso no canto. Dentro: lobby/coworking (térreo), hacker house (2º), apartamento (3º).
  * Em cima: piscina de borda infinita, bar, espreguiçadeiras, lounge, cabine de DJ e o LOGO da Superteam Brasil num
- * painel grande virado pra chegada. Por baixo, a base com os propulsores antigravidade e o elevador de luz.
+ * painel grande virado pra chegada. Por baixo, a base com os propulsores antigravidade; no disco, o buraco negro da rede de túneis.
  * Layout e colisão em lib/cyber/solana.ts (as mesmas medidas).
  */
 import * as THREE from "three";
@@ -11,7 +11,8 @@ import { ESCALA_SOLANA, ANDARES_SOLANA, GARAGEM, ROOFTOP, SOLANA, moveisDoAndar,
 import { PLATAFORMAS } from "@/lib/cyber/plataformas";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
-import { criarElevadorDeLuz } from "./ElevadorDeLuz";
+import { criarBuracoPortal } from "./BuracoPortal";
+import { NOS } from "@/lib/cyber/buracos";
 
 export type SolanaHouseHandle = { group: THREE.Group; atualizar(dt: number, t: number): void; dispose(): void };
 
@@ -68,9 +69,9 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   const antis: THREE.Sprite[] = [];
   for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2, s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texAnti, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); s.position.set(Math.cos(a) * S.r * 0.7, -3.5, Math.sin(a) * S.r * 0.7); s.scale.setScalar(10); antis.push(s); }
   anim.push((_, t) => antis.forEach((s, i) => { s.material.opacity = 0.5 + 0.4 * Math.sin(t * 1.7 + i); }));
-  // ELEVADOR DE LUZ (chão ↔ disco)
-  const el = PLATAFORMAS.solana;
-  anim.push(criarElevadorDeLuz(raiz, { chao: { x: el.anelChao.x - S.centro.x, z: el.anelChao.z - S.centro.z, r: el.anelChao.r, y: -S.y }, disco: { x: el.anelDisco.x - S.centro.x, z: el.anelDisco.z - S.centro.z, r: el.anelDisco.r }, low, cor: VERDE }));
+  // o BURACO NEGRO (o nó da rede de túneis: entrou, escolhe o destino)
+  const el = PLATAFORMAS.solana, bp = criarBuracoPortal(raiz, { x: el.portal.x - S.centro.x, y: 0, z: el.portal.z - S.centro.z, anelR: el.portal.r, h: NOS.solana.bh.h, r: NOS.solana.bh.r, low, cor: VERDE, starTex: o.starTex });
+  texturas.push(...bp.texturas); anim.push(bp.atualizar);
   // caminho de luz do anel até a porta
   const caminho = add(new THREE.Mesh(new THREE.PlaneGeometry(20, 1.6), faixaMat)); caminho.rotation.set(-Math.PI / 2, 0, Math.PI / 2); caminho.position.set(0, 0.04, -12.3);   // o comprido corre em z (do anel à porta), o degradê junto
 
@@ -167,7 +168,7 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   const dj = moveisDoAndar(ROOFTOP).find((x) => x.tipo === "dj")!, luzesDj: THREE.Mesh[] = [];
   for (let k = 0; k < 6; k++) { const b = add(new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.08, 0.05), new THREE.MeshBasicMaterial({ color: k % 2 ? ROXO : VERDE }))); b.position.set(dj.x0 + 0.4 + k * 0.45, H + dj.alt - 0.25, dj.z0 - 0.03); luzesDj.push(b); }
   anim.push((_, t) => luzesDj.forEach((b, i) => { b.visible = Math.sin(t * 6 + i * 1.3) > -0.2; }));
-  // o PAINEL do logo: moldura no fundo do rooftop, virado pro sul (pra quem chega pelo elevador de luz)
+  // o PAINEL do logo: moldura no fundo do rooftop, virado pro sul (pra quem chega pelo buraco negro)
   const painel = new THREE.Group(); painel.position.set(-3 * ESCALA_SOLANA, H, P.z1 - 0.2); add(painel);
   for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.25, 7.6, 0.25), escuro); p.position.set(sx * 3.4, 3.8, 0); painel.add(p); }
   const placa = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 6.4), new THREE.MeshBasicMaterial({ map: logoClaro, side: THREE.DoubleSide })); placa.position.set(0, 4.3, 0); placa.rotation.y = Math.PI; painel.add(placa);

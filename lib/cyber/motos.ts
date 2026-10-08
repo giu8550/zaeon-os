@@ -1,5 +1,5 @@
 /**
- * Cyberespaço — MOTOS VOADORAS (PURO). Dois ESTACIONAMENTOS: um no chão, perto da praça (1 fila de 4), e o grande da
+ * Cyberespaço — MOTOS VOADORAS (PURO). Dois ESTACIONAMENTOS: um na ilha da praça (1 fila de 4), e o grande da
  * ZAEON (2 filas de 6 = 12), com as vagas bem espaçadas. As motos são pra QUALQUER pessoa (a nave é do dono).
  *
  * O modelo:
@@ -22,7 +22,7 @@ const lote = (id: Lote["id"], x: number, z: number, cx: number, cz: number, ceu:
   ({ id, x, z, rot: Math.atan2(cx - x, cz - z), ceu, filas, porFila, espacamento: 4.6, entreFilas: 8 });
 const ZAEON_LOCAL = { x: -75, z: -75 };   // (Zaeon mega) longe da capela, da doca da nave, da escada do lounge, do portal e das bases
 export const LOTES: Lote[] = [
-  lote("chao", -50, 22, 0, 0, false, 1, 4),
+  lote("chao", -34, 16, 0, 0, false, 1, 4),   // na ilha da PRAÇA (lib/cyber/praca): cabe dentro da borda
   lote("zaeon", mundo(ZAEON_LOCAL).x, mundo(ZAEON_LOCAL).z, CIDADE.centro.x, CIDADE.centro.z, true, 2, 6),
 ];
 /** o lote da Zaeon no referencial da ilha (o piso desenhado dentro dela, flutuando junto) */

@@ -1,6 +1,7 @@
 /**
- * POST /api/lounge3d/[id]/acesso { alvo: "topo" | "ceu" | "nave" } — AÇÕES PRIVILEGIADAS do dono no cyberespaço:
- * subir ao topo do QG e pilotar a nave. Só o fundador (isSuperAdmin pela SESSÃO, nunca por flag do cliente) recebe
+ * POST /api/lounge3d/[id]/acesso { alvo: "topo" | "ceu" | "nave" | "dj" } — AÇÕES PRIVILEGIADAS do dono no cyberespaço:
+ * subir ao topo da Recepção, pilotar a nave e atravessar o PAR de buracos negros nave ↔ cabine do DJ (a única entrada
+ * da cabine). Só o fundador (isSuperAdmin pela SESSÃO, nunca por flag do cliente) recebe
  * 200; o resto 403. O cliente só age depois do OK. A ZAEON (portal do buraco negro → "ceu") é ABERTA a qualquer membro.
  */
 export const runtime = "nodejs";
@@ -9,10 +10,11 @@ import { NextResponse } from "next/server";
 import { guard } from "@/src/lib/ratelimit";
 import { eu, exigirFlag, salaDoMembro } from "@/lib/lounge3d/server";
 
-const ALVOS = new Set(["topo", "ceu", "nave"]);
+const ALVOS = new Set(["topo", "ceu", "nave", "dj"]);
 const NEGADO: Record<string, string> = {
   topo: "Só o dono da Zaeon sobe ao topo.",
   nave: "Só o dono pilota a nave.",
+  dj: "Só o dono atravessa este buraco negro.",
 };
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {

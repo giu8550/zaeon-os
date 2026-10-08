@@ -18,7 +18,7 @@ import { conectarColyseus, type CanalVoz, type ConexaoColyseus } from "./salaCol
 import { sanitizarSom, type AcaoSom } from "@/lib/lounge3d/musica";
 import { EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
 
-export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; qg?: boolean };
+export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean };
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
 export type EstadoSala = "carregando" | "ok" | "cheia" | "erro" | "off";
 
@@ -65,7 +65,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       if (r.status === 404) { setEstado("off"); return; }
       if (!r.ok) throw new Error(String(r.status));
       const d = await r.json();
-      setSala(d.sala); setMembros(d.membros ?? []); setEu({ id: d.eu.id, name: d.eu.name, image: d.eu.image ?? null, color: d.eu.color, fundador: d.eu.fundador === true, qg: d.eu.qg === true });
+      setSala(d.sala); setMembros(d.membros ?? []); setEu({ id: d.eu.id, name: d.eu.name, image: d.eu.image ?? null, color: d.eu.color, fundador: d.eu.fundador === true, novo: d.eu.novo === true });
       setEstado((e) => (e === "cheia" ? e : "ok"));
     } catch { setEstado("erro"); }
   }, [salaId]);
@@ -153,7 +153,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     const c = conectarColyseus({
       salaId, euId, remotos: mapaRemotos,
       poseInicial: (id) => poseInicialRef.current?.(id) ?? null,
-      onOnline: (lista) => setOnline(lista.map((m) => ({ id: m.id, name: m.name, image: null, color: m.color, fundador: m.fundador, qg: m.qg }))),
+      onOnline: (lista) => setOnline(lista.map((m) => ({ id: m.id, name: m.name, image: null, color: m.color, fundador: m.fundador }))),
       onEstado: (e) => {
         if (e === "ok") { setRealtime("colyseus"); setMotivoRealtime(null); if (ultimaPose.current) emitirRef.current(ultimaPose.current, true); }
         else if (e === "cheia") setEstado("cheia");

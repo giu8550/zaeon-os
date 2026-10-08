@@ -61,7 +61,7 @@ function Tela() {
   // a ORDEM de `sala.members[]` (só cresce) define a base de cada pessoa — igual pra todo mundo
   const membros = useMemo<PessoaCyber[]>(() => {
     const porId = new Map(sala.membros.map((m) => [m.id, m] as const));
-    return (sala.sala?.members ?? []).flatMap((id) => { const m = porId.get(id); return m ? [{ id: m.id, name: m.name, color: m.color, fundador: m.fundador === true, qg: m.qg === true }] : []; });
+    return (sala.sala?.members ?? []).flatMap((id) => { const m = porId.get(id); return m ? [{ id: m.id, name: m.name, color: m.color, fundador: m.fundador === true }] : []; });
   }, [sala.membros, sala.sala?.members]);
   // alguém que entrou depois de eu carregar: rebusca a sala (ordem canônica + nome)
   const { online, recarregar } = sala;
@@ -72,16 +72,19 @@ function Tela() {
     faltam.forEach((o) => pedidos.current.add(o.id));   // 1 refetch por pessoa nova (sem loop se o servidor não a listar)
     void recarregar();
   }, [online, membros, recarregar]);
-  const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true, qg: sala.eu.qg === true } : null), [sala.eu]);
+  const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true } : null), [sala.eu]);
   // quem está online (pra voz abrir/fechar as conexões) — antes de qualquer return condicional (ordem dos hooks)
   const onlineIds = useMemo(() => sala.online.map((m) => m.id), [sala.online]);
   // ações privilegiadas do dono (topo, nave): quem decide é o servidor (sessão → fundador). A Zaeon é aberta a todos.
-  const pedirAcesso = useCallback(async (alvo: "topo" | "ceu" | "nave") => {
+  const pedirAcesso = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj") => {
     if (!salaId) return { ok: false, erro: "Sem sala." };
     const r = await fetch(`/api/lounge3d/${salaId}/acesso`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ alvo }) });
     const d = await r.json().catch(() => ({}));
     return r.ok ? { ok: true } : { ok: false, erro: (d as { error?: string })?.error ?? "Não autorizado." };
   }, [salaId]);
+
+  // a 1ª entrada no cyberespaço (nasceu no tubo de ensaio): o servidor marca — da próxima vez nasce na base
+  const marcarNascimento = useCallback(() => { if (salaId) void fetch(`/api/lounge3d/${salaId}/nasceu`, { method: "POST" }).catch(() => {}); }, [salaId]);
 
   if (solo) return <CenaCyber modo="tela" eu={euSolo} membros={[euSolo]} aviso="Modo solo — você não aparece para os outros." />;
   if (erro === "login") return <Carregando>Entre na sua conta para entrar no cyberespaço.</Carregando>;
@@ -99,6 +102,7 @@ function Tela() {
       remotos={sala.remotos} enviarPos={sala.enviarPos} chat={sala.chat} enviarChat={sala.enviarChat}
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
       souFundador={euSala.fundador === true} pedirAcesso={pedirAcesso}
+      novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
       naveQG={sala.naveQG} salvarNave={sala.salvarNave}

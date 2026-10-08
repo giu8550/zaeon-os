@@ -8,7 +8,11 @@ import { PREF_SFX, PREF_VOLUME, lerPrefs } from "@/lib/cyber/audio";
 import { tocarUI } from "./AudioCyber";
 import { MAX_TEXTO_RECADO, type MensagemChat, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
 import { landmarksOn, type POI } from "@/lib/cyber/landmarks";
-import { CyberEngine, type PessoaCyber } from "./engine";
+import { CyberEngine, type EstadoGuia, type PessoaCyber } from "./engine";
+import { NOS, type IdNo } from "@/lib/cyber/buracos";
+import { CHAVE_ONBOARDING, deveNascerNoTubo } from "@/lib/cyber/onboarding";
+import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
+import GuiaOnboarding from "./GuiaOnboarding";
 import { criarVoz, type VozHandle } from "./Voz";
 import { transporteRealtime, vozLigada } from "@/lib/lounge3d/realtime";
 import { ehTeclaFalar } from "@/lib/cyber/voz";
@@ -33,11 +37,15 @@ export type CenaCyberProps = {
   /** aviso de rede ("tempo real indisponível", "sala cheia"…). */
   aviso?: string | null;
   onSessaoIniciada?: () => void;
+  /** NUNCA entrou no cyberespaço (vem do SERVIDOR: User.cyberNasceuEm) → nasce num tubo de ensaio; sem isto (prévia,
+   *  modo solo) vale o localStorage. `marcarNascimento` avisa o servidor que nasceu. */
+  novoNoCyber?: boolean;
+  marcarNascimento?: () => void;
   /** dono da Zaeon (vem do SERVIDOR) — só pinta os botões; quem decide é `pedirAcesso` */
   souFundador?: boolean;
-  /** AÇÃO PRIVILEGIADA: pede ao servidor pra subir ao topo da Zaeon (POST /api/lounge3d/[id]/topo) */
-  pedirAcesso?: (alvo: "topo" | "ceu" | "nave") => Promise<{ ok: boolean; erro?: string }>;
-  /** o recado ATUAL do dono pro QG do Andrei (holograma ao lado da tela dele; a TV do lounge mostra o último enviado) */
+  /** AÇÃO PRIVILEGIADA: pede ao servidor (POST /api/lounge3d/[id]/acesso): o topo da Recepção, a nave, o buraco negro do DJ */
+  pedirAcesso?: (alvo: "topo" | "ceu" | "nave" | "dj") => Promise<{ ok: boolean; erro?: string }>;
+  /** o recado ATUAL do dono pro mural da Recepção (holograma ao lado da mesa; a TV do lounge mostra o último enviado) */
   recadoQG?: RecadoQG | null;
   /** o DONO manda (texto) ou apaga (null) o recado — o servidor confere a sessão */
   enviarRecado?: (texto: string | null) => Promise<{ ok: boolean; erro?: string }>;
@@ -63,18 +71,30 @@ export default function CenaCyber(p: CenaCyberProps) {
   const engine = useRef<CyberEngine | null>(null);
   const [pronto, setPronto] = useState(false), [perto, setPerto] = useState(false), [menu, setMenu] = useState(!tela);
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
-  const [rota, setRota] = useState<"heliporto" | "qg" | "zaeon" | null>(null);
+  const [rota, setRota] = useState<"heliporto" | "zaeon" | null>(null);
+  /** o TÚNEL de um buraco negro aberto (escolhendo o destino / atravessando o par do dono) */
+  const [tunel, setTunel] = useState<ModoTunel | null>(null);
+  /** o tour da anfitriã (o passo atual) e a conversa com ela (F perto dela) */
+  const [guia, setGuia] = useState<EstadoGuia | null>(null), [conversa, setConversa] = useState<{ nome: string; cor: string } | null>(null);
+  /** NASCE no tubo de ensaio? Quem nunca entrou no cyberespaço (o servidor diz; sem sala, o localStorage) ou forçado com
+   *  ?nascer=1 — decidido 1× */
+  const nascer = useMemo(() => {
+    if (!tela || typeof window === "undefined") return false;
+    let visto = false;
+    if (p.novoNoCyber !== undefined) visto = !p.novoNoCyber;
+    else try { visto = localStorage.getItem(CHAVE_ONBOARDING) === "1"; } catch { /* storage bloqueado */ }
+    return deveNascerNoTubo({ visto, forcar: new URLSearchParams(location.search).get("nascer") === "1", fundador: !!p.souFundador });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [voo, setVoo] = useState<{ y: number } | null>(null);
   /** a AÇÃO de contexto (o que o F faz agora) — o chip "F · Estudar" etc.; no celular, tocar no chip faz a ação */
   const [acao, setAcao] = useState<{ rotulo: string } | null>(null);
-  const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true, moto: false, motoPerto: false }), [fade, setFade] = useState(false), [aviso2, setAviso2] = useState<string | null>(null);
+  const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true, moto: false, motoPerto: false }), [aviso2, setAviso2] = useState<string | null>(null);
   const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
-  /** corte com fade (portal: sem animação de viagem) */
-  const comFade = useCallback((acao: () => void) => { setFade(true); setTimeout(() => { acao(); setTimeout(() => setFade(false), 260); }, 360); }, []);
   /** ação privilegiada: pergunta ao SERVIDOR antes (cb sempre fresco via ref) */
-  const pedir = useCallback(async (alvo: "topo" | "ceu" | "nave", ok: () => void) => {
+  const pedir = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj", ok: () => void) => {
     const fn = cb.current.pedirAcesso;
-    if (!cb.current.souFundador || !fn) { avisar(alvo === "ceu" ? "A Zaeon é a base do dono — o portal não abre pra você." : alvo === "nave" ? "Só o dono pilota a nave." : "Só o dono sobe ao topo."); return; }
+    if (!cb.current.souFundador || !fn) { avisar(alvo === "dj" ? "Só o dono atravessa este buraco negro." : alvo === "nave" ? "Só o dono pilota a nave." : "Só o dono sobe ao topo."); return; }
     try { const r = await fn(alvo); if (r.ok) ok(); else avisar(r.erro ?? "Não autorizado."); } catch { avisar("Sem conexão."); }
   }, [avisar]);
   const [poiAberto, setPoiAberto] = useState<POI | null>(null), [noTopo, setNoTopo] = useState(false), [subindo, setSubindo] = useState(false), [erroTopo, setErroTopo] = useState<string | null>(null);
@@ -143,7 +163,12 @@ export default function CenaCyber(p: CenaCyberProps) {
       onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
       onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true),
       landmarks: landmarksOn(), onLandmark: (poi) => { setErroTopo(null); setPoiAberto(poi); }, onTopo: (v) => { setNoTopo(v); if (v) setPoiAberto(null); },
-      onPortalCeu: () => comFade(() => engine.current?.entrarNoCeu()),   // a Zaeon é aberta a todos (sem pedir acesso)
+      // os BURACOS NEGROS: o da rede abre o túnel com os destinos (aberto a todos); o par do dono pede acesso antes
+      onTunel: (t) => { engine.current?.soltarMouse(); setTunel({ tipo: "escolher", origem: t.origem, nomeOrigem: NOS[t.origem].nome, destinos: t.destinos }); },
+      onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
+      onAviso: avisar,
+      nascer, onGuia: (g) => { setGuia(g); if (!g) { try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },
+      onFalarAgente: (a) => { engine.current?.soltarMouse(); setConversa({ nome: a.nome, cor: a.cor }); },
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
       onEstadoQG: setQg, onAcao: setAcao,
       onVoo: setVoo,
@@ -152,8 +177,8 @@ export default function CenaCyber(p: CenaCyberProps) {
       onNaveParada: (pose) => cb.current.salvarNave?.(pose),
       onAbrirSom: () => { if (!cb.current.souFundador || !cb.current.musica) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(true); },
       urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
-      onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon manda recados pro QG."); return; } setRecadoTxt(""); setRecadoAberto(true); },
-    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
+      onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon escreve no mural."); return; } setRecadoTxt(""); setRecadoAberto(true); },
+    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); if (nascer) cb.current.marcarNascimento?.(); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
     // a engine é criada uma vez por montagem; mudanças vão por métodos
@@ -214,7 +239,7 @@ export default function CenaCyber(p: CenaCyberProps) {
     const fn = p.enviarRecado; if (!fn || recadoEnviando) return;
     if (texto !== null && !texto.trim()) return;
     setRecadoEnviando(true);
-    try { const r = await fn(texto === null ? null : texto.trim()); if (r.ok) { setRecadoAberto(false); avisar(texto === null ? "Recado apagado do QG." : "Recado enviado ao QG do Andrei ✦"); tocarUI("chat-pop"); } else avisar(r.erro ?? "Não deu pra enviar."); }
+    try { const r = await fn(texto === null ? null : texto.trim()); if (r.ok) { setRecadoAberto(false); avisar(texto === null ? "Recado apagado do mural." : "Recado no mural da Recepção ✦"); tocarUI("chat-pop"); } else avisar(r.erro ?? "Não deu pra enviar."); }
     catch { avisar("Sem conexão."); }
     finally { setRecadoEnviando(false); }
   };
@@ -327,32 +352,43 @@ export default function CenaCyber(p: CenaCyberProps) {
             <button type="button" onClick={() => engine.current?.pararRota()} className="min-h-[40px] rounded-full border border-amber-200/45 bg-[#1a0f08]/85 px-4 text-xs font-semibold text-amber-100 backdrop-blur">■ Parar</button>
           ) : qg.pousado && (
             <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Atalhos de voo">
-              {([["heliporto", "Heliporto"], ["qg", "QG do Andrei"], ["zaeon", "Zaeon"]] as const).map(([d, rot]) => (
+              {([["heliporto", "Heliporto"], ["zaeon", "Zaeon"]] as const).map(([d, rot]) => (
                 <button key={d} type="button" onClick={() => engine.current?.irPara(d)} className="min-h-[40px] rounded-full border border-sky-300/40 bg-[#070c22]/85 px-4 text-xs font-semibold text-sky-100 backdrop-blur">{rot}</button>
               ))}
             </div>
           )}
         </div>
       )}
-      {!menu && qg.noCeu && !qg.pilotando && (
-        <button type="button" onClick={() => comFade(() => engine.current?.voltarDaCidade())} className="absolute right-3 top-[64px] z-30 min-h-[44px] rounded-full border border-amber-200/40 bg-[#1a0f08]/80 px-4 text-xs font-semibold text-amber-100 backdrop-blur">↩ Voltar à praça</button>
+      {/* o TOUR da anfitriã (quem acabou de nascer) — ou a conversa com ela (F perto dela) */}
+      {!menu && guia && (
+        <GuiaOnboarding touch={touch} cartao={{ agente: guia.agente, cor: guia.cor, titulo: guia.titulo, fala: guia.fala, passo: guia.passo, total: guia.total }}
+          acoes={guia.id === "nascer" ? [] : guia.id === "fim" ? [{ rotulo: "Concluir", principal: true, fazer: () => engine.current?.guiaPular() }] : [{ rotulo: "Pular tour", fazer: () => engine.current?.guiaPular() }, { rotulo: "Próximo", principal: true, fazer: () => engine.current?.guiaProximo() }]} />
+      )}
+      {!menu && !guia && conversa && (
+        <GuiaOnboarding touch={touch} cartao={{ agente: conversa.nome, cor: conversa.cor, titulo: "Oi! 👋", fala: "Quer que eu te mostre o hiperespaço de novo? Ou explore à vontade: o buraco negro da cidade leva pra todos os lugares — as universidades, a Solana House e a praça das bases." }}
+          acoes={[{ rotulo: "Fechar", fazer: () => setConversa(null) }, { rotulo: "Refazer o tour", principal: true, fazer: () => { setConversa(null); engine.current?.guiaRefazer(); } }]} />
+      )}
+      {tunel && (
+        <TunelBuracoNegro modo={tunel} onCoberto={(c) => engine.current?.pausar(c)}
+          onEscolher={(id) => { if (tunel.tipo === "escolher") engine.current?.viajarPeloTunel(id as IdNo | null); else engine.current?.atravessarBuracoDono(tunel.para); }}
+          onFim={() => setTunel(null)} />
       )}
       {somAberto && p.musica && <TocaDiscos som={p.somLounge ?? null} offsetMs={p.offsetMusica ?? 0} api={p.musica} onFechar={() => setSomAberto(false)} />}
       {recadoAberto && (
-        <div role="dialog" aria-modal="true" aria-label="Recado pro QG do Andrei" className="absolute inset-0 z-50 flex items-center justify-center bg-[#03030a]/60 px-4" onClick={() => setRecadoAberto(false)}>
+        <div role="dialog" aria-modal="true" aria-label="Recado pro mural da Recepção" className="absolute inset-0 z-50 flex items-center justify-center bg-[#03030a]/60 px-4" onClick={() => setRecadoAberto(false)}>
           <div className="w-full max-w-[420px] rounded-2xl border border-cyan-300/30 bg-[#070c22]/95 p-4 text-sky-100 shadow-[0_0_40px_rgba(102,230,255,.15)]" onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm font-bold text-cyan-200">Recado pro QG do Andrei</p>
-            <p className="mt-1 text-xs text-sky-100/60">Aparece num holograma ao lado da tela onde ele trabalha. Fica lá até você mandar outro ou apagar.</p>
+            <p className="text-sm font-bold text-cyan-200">Recado pro mural da Recepção</p>
+            <p className="mt-1 text-xs text-sky-100/60">Aparece num holograma ao lado da mesa da Zaeon, na Recepção (e na TV do lounge). Fica lá até você mandar outro ou apagar.</p>
             <textarea autoFocus value={recadoTxt} onChange={(e) => setRecadoTxt(e.target.value)} maxLength={MAX_TEXTO_RECADO} rows={4} placeholder="Escreva o recado…" aria-label="Texto do recado"
               onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void mandarRecado(recadoTxt); if (e.key === "Escape") setRecadoAberto(false); }}
               className="mt-3 w-full resize-none rounded-xl border border-cyan-300/30 bg-[#0a081e]/80 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300" />
             <div className="mt-1 text-right text-[11px] text-sky-100/50">{recadoTxt.length}/{MAX_TEXTO_RECADO}</div>
-            {p.recadoQG && <p className="mt-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-sky-100/70"><span className="text-sky-100/50">No QG agora: </span>{p.recadoQG.texto}</p>}
+            {p.recadoQG && <p className="mt-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-sky-100/70"><span className="text-sky-100/50">No mural agora: </span>{p.recadoQG.texto}</p>}
             <div className="mt-3 flex items-center justify-between gap-2">
               {p.recadoQG ? <button type="button" disabled={recadoEnviando} onClick={() => void mandarRecado(null)} className="min-h-[40px] rounded-full px-3 text-xs text-rose-200/80 hover:text-rose-200">Apagar o atual</button> : <span />}
               <div className="flex gap-2">
                 <button type="button" onClick={() => setRecadoAberto(false)} className="min-h-[40px] rounded-full border border-white/15 px-4 text-xs text-sky-100/80">Fechar</button>
-                <button type="button" disabled={recadoEnviando || !recadoTxt.trim()} onClick={() => void mandarRecado(recadoTxt)} className="min-h-[40px] rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-xs font-extrabold text-slate-950 disabled:opacity-50">{recadoEnviando ? "Enviando…" : "Enviar ao QG"}</button>
+                <button type="button" disabled={recadoEnviando || !recadoTxt.trim()} onClick={() => void mandarRecado(recadoTxt)} className="min-h-[40px] rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-5 text-xs font-extrabold text-slate-950 disabled:opacity-50">{recadoEnviando ? "Enviando…" : "Enviar"}</button>
               </div>
             </div>
           </div>
@@ -364,7 +400,6 @@ export default function CenaCyber(p: CenaCyberProps) {
           className={`absolute bottom-[150px] right-4 z-30 min-h-[52px] select-none rounded-full border px-4 text-sm font-semibold backdrop-blur ${falandoEu ? "border-emerald-300 bg-emerald-400/30 text-emerald-50" : "border-white/20 bg-[#070c22]/80 text-sky-100"}`}>🎤 {falandoEu ? "Falando…" : "Segurar pra falar"}</button>
       )}
       {aviso2 && <p role="status" className="absolute left-1/2 top-[164px] z-40 -translate-x-1/2 rounded-full bg-[#1a0f08]/90 px-4 py-2 text-xs text-amber-100">{aviso2}</p>}
-      <div aria-hidden="true" className={`pointer-events-none absolute inset-0 z-[45] bg-black transition-opacity duration-300 ${fade ? "opacity-100" : "opacity-0"}`} />
       {/* celular em pé: o cyberespaço roda na horizontal (a cena fica pausada até girar) */}
       {girar && (
         <div role="dialog" aria-label="Gire o celular" className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-5 bg-[#03030a]/95 px-8 text-center text-sky-100">
