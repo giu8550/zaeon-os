@@ -43,5 +43,5 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const dentro = await ocupantes(pusher, channel);
   const adm = admitir(dentro, me.id);
   if (!adm.ok) return NextResponse.json({ error: "Sala cheia (máximo 5).", motivo: "cheia" }, { status: 403 });
-  return NextResponse.json(pusher.authorizeChannel(socketId, channel, { user_id: me.id, user_info: { name: me.name, color: me.color, image: me.image } }));
+  return NextResponse.json(pusher.authorizeChannel(socketId, channel, { user_id: me.id, user_info: { name: me.name, color: me.color, image: me.image, ...(me.novo ? { novo: true } : {}) } }));   // novo = no tutorial (a instância dele): ninguém o semeia na base
 }

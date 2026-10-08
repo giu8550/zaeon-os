@@ -85,6 +85,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [pergunta, setPergunta] = useState<(PerguntaZaeon & { n: number; total: number }) | null>(null);
   /** EXPULSO pelo Droid (desrespeitou a Zaeon): a tela vermelha e a saída */
   const [expulso, setExpulso] = useState(false);
+  /** na INSTÂNCIA do tutorial (a Zaeon só dela, até o 1º portal): o chat da sala e quem está online ficam escondidos */
+  const [instancia, setInstancia] = useState(false);
   /** a resposta pra Zaeon (do painel ou do chat): vai pra ela — e aparece no MEU chat (não vai pra sala) */
   const responderZaeon = (r: string) => {
     if (!engine.current?.responderZaeon(r)) return;
@@ -182,6 +184,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
       onAviso: avisar,
       nascer, onGuia: (g) => { setGuia(g); if (!g) { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },   // o tutorial acabou (ou foi pulado): da próxima vez nasce na base
+      onInstancia: setInstancia,
       conversarZaeon: cb.current.conversarZaeon ? (pd) => cb.current.conversarZaeon!(pd) : undefined,
       onExpulso: () => {
         setExpulso(true); setPergunta(null); setGuia(null); engine.current?.soltarMouse();
@@ -299,7 +302,7 @@ export default function CenaCyber(p: CenaCyberProps) {
                   </div>
                 )}
               </div>
-              {typeof p.online === "number" && <span className="rounded-full border border-white/15 bg-black/50 px-3 py-2 text-xs text-white/80">{p.online}/5 online</span>}
+              {typeof p.online === "number" && !instancia && <span className="rounded-full border border-white/15 bg-black/50 px-3 py-2 text-xs text-white/80">{p.online}/5 online</span>}
               {p.tokenConvite && <button type="button" onClick={convidar} className="min-h-[44px] rounded-full border border-cyan-300/40 bg-cyan-400/15 px-4 text-xs font-semibold text-cyan-100 backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">{copiado ? "Link copiado ✓" : "Convidar"}</button>}
             </div>
           )}
@@ -313,7 +316,7 @@ export default function CenaCyber(p: CenaCyberProps) {
             <div className="absolute z-20 w-[min(68vw,300px)] rounded-2xl border border-violet-300/25 bg-[#0a081e]/70 p-2.5 backdrop-blur" style={touch ? { left: 10, top: 64 } : { left: 16, bottom: 16 }}>
               <div className="h-4 px-1 text-[10.5px] text-cyan-200">{falandoCom ? `💬 falando com ${falandoCom}` : ""}</div>
               <div className="mb-1.5 flex max-h-[96px] flex-col gap-0.5 overflow-y-auto px-1 text-[12.5px] text-violet-100" aria-live="polite">
-                {[...(p.chat ?? []), ...falasDroid].sort((a, b) => a.ts - b.ts).slice(-8).map((m) => <div key={m.id}><b style={{ color: m.color }}>{m.name}{m.userId.startsWith("agente:") ? " ✦" : ""}:</b> {m.texto}</div>)}
+                {[...(instancia ? [] : p.chat ?? []), ...falasDroid].sort((a, b) => a.ts - b.ts).slice(-8).map((m) => <div key={m.id}><b style={{ color: m.color }}>{m.name}{m.userId.startsWith("agente:") ? " ✦" : ""}:</b> {m.texto}</div>)}
               </div>
               <input ref={chatRef} value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") enviar(); }} maxLength={400} placeholder={pergunta ? "Responder à Zaeon…  (Enter)" : "Falar…  (Enter)"} aria-label="Falar na sala" className="w-full rounded-xl border border-violet-300/30 bg-[#0a081e]/70 px-3 py-2 text-[13px] text-white outline-none focus:border-cyan-300" />
             </div>
@@ -392,7 +395,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {expulso && (
         <div role="alert" className="absolute inset-0 z-[70] flex flex-col items-center justify-center gap-3 bg-[#2a0404]/85 px-8 text-center text-red-50 backdrop-blur-sm">
           <p className="text-2xl font-extrabold tracking-wide">Você foi expulso do cyberespaço.</p>
-          <p className="max-w-[420px] text-sm text-red-100/75">O Droid não tolera desrespeito. Volte quando estiver pronto pra conversar com educação.</p>
+          <p className="max-w-[420px] text-sm text-red-100/75">O Droid não tolera desrespeito. Você foi desconectado e vai voltar pro início. Volte quando estiver pronto pra conversar com educação.</p>
         </div>
       )}
       {tunel && (

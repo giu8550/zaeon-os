@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, cumpriu, deveNascerNoTubo, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
+import { ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, PASSO_FIM_DA_INSTANCIA, cumpriu, deveNascerNoTubo, passoDe, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
 import { CIDADE as C2, DOCA_ANGULO, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "./ceu";
 import { LAR_LOCAL } from "./landmarks";
 import { AGENTES, DROID, noPisoDaZaeon, posDoGuia } from "./agentes";
@@ -55,11 +55,17 @@ describe("quem chega NASCE num tubo de ensaio", () => {
 });
 
 describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada instrução)", () => {
-  const nada: CtxGuia = { nascendo: false, andou: 0, noAr: 0, pertoDesktop: false, conversaFeita: false, naMoto: false, motoAndou: 0, tunel: false };
-  it("começa no tubo e acaba no 'tudo seu'; cada passo tem fala curta (cabe no balão) e uma AÇÃO; os alvos ficam na Zaeon", () => {
-    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "voar", "capela", "zaeon", "moto", "pilotar", "descer", "buraco", "fim"]);
-    for (const p of ROTEIRO.slice(1)) { expect(p.falas.length).toBeGreaterThan(0); for (const f of p.falas) expect(f.length).toBeLessThanOrEqual(160); }
+  const nada: CtxGuia = { nascendo: false, andou: 0, noAr: 0, chegou: false, conversaFeita: false, naMoto: false, motoAndou: 0, cruzouPortal: false, naPraca: false, pertoDaBase: false };
+  it("tubo → andar → voar → o CENTRO da capela (a Zaeon, não os desktops) → conversa → motos → portais (LIVRE) → a Praça (a sua máquina de estudos) → fim", () => {
+    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "voar", "capela", "zaeon", "moto", "pilotar", "descer", "portal", "explorar", "base", "fim"]);
+    for (const p of ROTEIRO.slice(1)) for (const f of p.falas) expect(f.length).toBeLessThanOrEqual(170);
     for (const p of ROTEIRO) if (p.alvo) expect(naIlhaPrincipal(p.alvo)).toBe(true);
+    expect(ROTEIRO.find((p) => p.id === "capela")!.falas.join(" ")).not.toMatch(/desktop|estud/i);   // a capela agora é pra ver a Zaeon
+    expect(ROTEIRO.find((p) => p.id === "base")!.falas.join(" ")).toMatch(/máquina de estudos/);
+    expect(ROTEIRO.find((p) => p.id === "explorar")!.livre).toBe(true);
+    expect(passoDe(PASSO_FIM_DA_INSTANCIA)).toBe(passoDe("portal") + 1);
+    const c = mundo(CENTRO_DA_CAPELA_LOCAL); expect(dentroDeAlgum(c, colisoresDaCidade())).toBe(false);
+    expect(Math.hypot(CENTRO_DA_CAPELA_LOCAL.x, CENTRO_DA_CAPELA_LOCAL.z)).toBeLessThan(CIDADE.monitores.r - 3);   // entre o globo e os desktops
     const pe = peDaRecepcao(); expect(alturaEm(recepcao, pe)).toBe(0); expect(dentroDeAlgum(pe, colisoresDaCidade())).toBe(false);
   });
   it("sem a pessoa fazer nada, nenhum passo anda (o Droid espera)", () => {
@@ -70,14 +76,15 @@ describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada inst
     expect(cumpriu(c("nascer"), { ...nada, nascendo: true })).toBe(false); expect(cumpriu(c("nascer"), nada)).toBe(true);
     expect(cumpriu(c("andar"), { ...nada, andou: 2 })).toBe(false); expect(cumpriu(c("andar"), { ...nada, andou: 7 })).toBe(true);
     expect(cumpriu(c("voar"), { ...nada, andou: 99, noAr: 1 })).toBe(false); expect(cumpriu(c("voar"), { ...nada, noAr: 5 })).toBe(true);
-    expect(cumpriu(c("capela"), { ...nada, andou: 99 })).toBe(false); expect(cumpriu(c("capela"), { ...nada, pertoDesktop: true })).toBe(true);
-    expect(cumpriu(c("zaeon"), { ...nada, pertoDesktop: true, andou: 99 })).toBe(false); expect(cumpriu(c("zaeon"), { ...nada, conversaFeita: true })).toBe(true);   // só depois de conversar com a Zaeon
-    expect(cumpriu(c("moto"), { ...nada, pertoDesktop: true })).toBe(false); expect(cumpriu(c("moto"), { ...nada, naMoto: true })).toBe(true);
+    expect(cumpriu(c("capela"), { ...nada, andou: 99 })).toBe(false); expect(cumpriu(c("capela"), { ...nada, chegou: true })).toBe(true);
+    expect(cumpriu(c("zaeon"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("zaeon"), { ...nada, conversaFeita: true })).toBe(true);
+    expect(cumpriu(c("moto"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("moto"), { ...nada, naMoto: true })).toBe(true);
     expect(cumpriu(c("pilotar"), { ...nada, naMoto: true, motoAndou: 20 })).toBe(false); expect(cumpriu(c("pilotar"), { ...nada, naMoto: true, motoAndou: 61 })).toBe(true);
-    expect(cumpriu(c("pilotar"), { ...nada, naMoto: false, motoAndou: 12 })).toBe(true);   // desceu depois de rodar um pouco: segue
     expect(cumpriu(c("descer"), { ...nada, naMoto: true })).toBe(false); expect(cumpriu(c("descer"), nada)).toBe(true);
-    expect(cumpriu(c("buraco"), { ...nada, andou: 999 })).toBe(false); expect(cumpriu(c("buraco"), { ...nada, tunel: true })).toBe(true);
-    expect(cumpriu(c("fim"), { ...nada, tunel: true, andou: 99 })).toBe(false);   // o fim acaba sozinho (despedida + portal)
+    expect(cumpriu(c("portal"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("portal"), { ...nada, cruzouPortal: true })).toBe(true);
+    expect(cumpriu(c("explorar"), { ...nada, cruzouPortal: true })).toBe(false); expect(cumpriu(c("explorar"), { ...nada, naPraca: true })).toBe(true);
+    expect(cumpriu(c("base"), { ...nada, naPraca: true })).toBe(false); expect(cumpriu(c("base"), { ...nada, pertoDaBase: true })).toBe(true);
+    expect(cumpriu(c("fim"), { ...nada, pertoDaBase: true, naPraca: true })).toBe(false);
   });
 });
 

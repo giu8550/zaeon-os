@@ -106,6 +106,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       // (client-pos é efêmero: quem está parado ou entrou depois ficava invisível → "um vê, o outro não").
       const seed = (m: any) => {
         const id = String(m?.id ?? ""); if (!id || id === euId || mapaRemotos.has(id)) return;
+        if (m?.info?.novo) return;   // o NOVATO está no tutorial (a Zaeon só dele): a base dele fica vazia até ele aparecer de verdade
         const pose = poseInicialRef.current?.(id); if (!pose) return;
         mapaRemotos.set(id, { userId: id, name: m.info?.name ?? "Alguém", color: m.info?.color ?? "#4aa3ff", x: pose.x, z: pose.z, facing: pose.facing, moving: false, sit: pose.sit ?? true, ts: Date.now() });
       };
