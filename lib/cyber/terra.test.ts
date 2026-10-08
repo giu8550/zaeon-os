@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GLOBOS, GRUPOS_DROIDS, LOTES_MIRANTE, MIRANTES, MOTORES, PONTOS_TERRA, R_MIRANTE, SUPERTREES, TELOES, colisoresDoDistritoTerra, noMapa, noMirante, poseDoLider, poseDosMenores, reacaoDoMotor } from "./terra";
+import { CABOS, GLOBOS, GRUPOS_DROIDS, LOTES_MIRANTE, MIRANTES, MOTORES, PONTOS_TERRA, R_MIRANTE, SUPERTREES, TELOES, TOTENS, colisoresDoDistritoTerra, noMapa, noMirante, poseDoLider, poseDosMenores, reacaoDoMotor } from "./terra";
 import { CAPELA, CIDADE, ESCADA_LOUNGE, mundo } from "./ceu";
 import { LAR_LOCAL, POIS } from "./landmarks";
 import { BASES_CEU_LOCAIS } from "./bases";
@@ -31,31 +31,29 @@ describe("os MIRANTES DA TERRA nas 4 quinas (a antiga base do Andrei + 3 cópias
     for (const m of MIRANTES) expect(!(m.x < 0 && Math.abs(m.z) < ESCADA_LOUNGE.meia + 30)).toBe(true);
     expect(R_MIRANTE + PIRAMIDE_R).toBeLessThan(CIDADE.andavelR);
   });
-  it("em volta: telão À FRENTE (virado pro centro), globo sobre a escada, árvores dos lados e atrás, motos ao lado", () => {
-    MIRANTES.forEach((m, i) => {
-      const t = TELOES[i]!, rT = Math.hypot(t.x, t.z), g = GLOBOS[i]!;
-      expect(rT).toBeLessThan(R_MIRANTE - 40);   // à frente (mais perto do centro que a pirâmide)
-      expect(Math.sin(t.rot) * -t.x + Math.cos(t.rot) * -t.z).toBeGreaterThan(0.99 * rT);   // a tela olha pro centro
-      expect(Math.hypot(g.x, g.z)).toBeLessThan(R_MIRANTE); expect(g.y - g.r).toBeGreaterThan(t.y + t.alt / 2 - 6);   // o globo aparece por cima do telão
-    });
-    // nada na ESCADA da pirâmide (de u = 10 a 36 m rumo ao centro, ±4 m de lado), nem no telão
-    for (const m of MIRANTES) for (let u = 10; u <= 36; u += 2) {
-      const p = noMirante(m, u, 0);
-      for (const s of SUPERTREES) expect(d(p, s)).toBeGreaterThan(6);
-      for (const e of MOTORES) expect(d(p, e)).toBeGreaterThan(6);
+  it("NADA na frente da pirâmide: a escada e a vista do centro ficam livres (corredor de 22 m de largura até o centro)", () => {
+    const coisas = [...TELOES.map((t) => ({ ...t, r: t.larg / 2 })), ...GLOBOS, ...MOTORES, ...SUPERTREES.map((s) => ({ ...s, r: s.copa })), ...TOTENS.map((t) => ({ ...t, r: 1.5 })), ...LOTES_MIRANTE.map((l) => ({ ...l, r: 12 }))];
+    for (const m of MIRANTES) for (let u = 8; u <= 150; u += 3) for (const c of coisas) {
+      const p = noMirante(m, u, 0), q = noMirante(m, u, 11), q2 = noMirante(m, u, -11);
+      for (const x of [p, q, q2]) expect(d(x, c), `mirante ${m.id}, u=${u}`).toBeGreaterThan(c.r * 0.999);
     }
-    for (const s of SUPERTREES) { expect(s.alt).toBeGreaterThanOrEqual(25); expect(s.alt).toBeLessThanOrEqual(50); expect(Math.hypot(s.x, s.z)).toBeLessThan(CIDADE.andavelR - 3); }
-    for (const s of SUPERTREES) for (const m of MIRANTES) expect(d(s, m)).toBeGreaterThan(PIRAMIDE_R + 3);
-    const lotes = LOTES.filter((l) => l.id === "mirante");
-    expect(lotes).toHaveLength(4);
-    LOTES_MIRANTE.forEach((l, i) => {
-      const r = tamanhoDoLote(lotes[i]!).r;
-      for (const s of SUPERTREES) expect(d(l, s), `lote ${i} × árvore`).toBeGreaterThan(r + 3);
-      for (const e of MOTORES) expect(d(l, e)).toBeGreaterThan(r + 4);
-      for (const o of OCUPADO) expect(d(l, o), `lote ${i} × ${o.nome}`).toBeGreaterThan(r + o.r);
-      expect(Math.hypot(l.x, l.z) + r).toBeLessThan(CIDADE.andavelR - 3);
+  });
+  it("a ESTAÇÃO fica de lado: telão (virado pro centro) com o globo ao lado, motores atrás e cabos ligando; totens; motos do outro lado", () => {
+    MIRANTES.forEach((m, i) => {
+      const t = TELOES[i]!, g = GLOBOS[i]!, rT = Math.hypot(t.x, t.z);
+      expect(Math.sin(t.rot) * -t.x + Math.cos(t.rot) * -t.z).toBeGreaterThan(0.99 * rT);   // olha pro centro
+      expect(d(t, m)).toBeGreaterThan(45);                                                      // longe da pirâmide (de lado)
+      expect(d(g, t)).toBeLessThan(t.larg);                                                     // o globo ao lado do telão
+      for (const mo of MOTORES.slice(i * 2, i * 2 + 2)) expect(d(mo, t)).toBeLessThan(20);
+      expect(Math.sign(LOTES_MIRANTE[i]!.x - m.x) !== Math.sign(t.x - m.x) || Math.sign(LOTES_MIRANTE[i]!.z - m.z) !== Math.sign(t.z - m.z)).toBe(true);   // motos do outro lado
     });
+    expect(CABOS).toHaveLength(MOTORES.length * 2);
+    const tudo = [...TELOES.map((t) => ({ ...t, r: t.larg / 2 })), ...GLOBOS, ...TOTENS.map((t) => ({ ...t, r: 1.5 })), ...LOTES_MIRANTE.map((l) => ({ ...l, r: 12 })), ...MOTORES];
+    for (const c of tudo) { expect(Math.hypot(c.x, c.z) + c.r).toBeLessThan(CIDADE.andavelR - 2); for (const o of OCUPADO) expect(d(c, o)).toBeGreaterThan(c.r + o.r); }
+    for (const c of tudo) for (const m of MIRANTES) expect(d(c, m)).toBeGreaterThan(PIRAMIDE_R + c.r);
+    for (const s of SUPERTREES) { expect(s.alt).toBeGreaterThanOrEqual(25); expect(s.alt).toBeLessThanOrEqual(50); for (const c of tudo) expect(d(s, c)).toBeGreaterThan(c.r + 2.5); }
     expect(colisoresDoDistritoTerra(mundo).length).toBeGreaterThan(SUPERTREES.length + MOTORES.length);
+    expect(PONTOS_TERRA.filter((p) => p.tipo === "problema").length).toBeGreaterThanOrEqual(6);   // o foco: os PROBLEMAS da Terra
   });
   it("os motores acordam com gente perto (e dormem longe)", () => {
     expect(reacaoDoMotor(40)).toBe(0); expect(reacaoDoMotor(6)).toBe(1); expect(reacaoDoMotor(16)).toBeCloseTo(0.5, 5);
@@ -63,12 +61,15 @@ describe("os MIRANTES DA TERRA nas 4 quinas (a antiga base do Andrei + 3 cópias
 });
 
 describe("os droids observadores", () => {
-  it("1 grupo por mirante (1 líder + 2 menores); o movimento sai só do relógio e fica no ar, longe da capela", () => {
+  it("1 grupo por estação: o líder BAIXO na frente do telão, lendo a tela; os 2 menores orbitando o globo — pelo relógio", () => {
     expect(GRUPOS_DROIDS).toHaveLength(MIRANTES.length);
     for (const g of GRUPOS_DROIDS) for (let t = 0; t < 300; t += 7) {
       const l = poseDoLider(g, t); expect(poseDoLider(g, t)).toEqual(l);
-      expect(l.y).toBeGreaterThan(25); expect(Math.hypot(l.x, l.z)).toBeLessThan(CIDADE.andavelR + 10); expect(Math.hypot(l.x, l.z)).toBeGreaterThan(CAPELA.r + 30);
-      const m = poseDosMenores(l, t, g.fase); expect(m).toHaveLength(2); for (const p of m) expect(d(p, l)).toBeLessThan(12);
+      expect(l.y).toBeGreaterThan(4); expect(l.y).toBeLessThan(9);   // baixo
+      const T = g.tela, frente = Math.sin(T.rot) * (l.x - T.x) + Math.cos(T.rot) * (l.z - T.z);
+      expect(frente).toBeGreaterThan(5); expect(frente).toBeLessThan(11);   // na FRENTE da tela, perto
+      expect(d(l.alvo, T)).toBeLessThan(T.larg / 2);                         // lendo um ponto da tela
+      for (const m of poseDosMenores(g, t)) expect(d(m, g.globo)).toBeLessThan(g.globo.r + 5);
     }
   });
   it("os pontos da Terra caem no mapa", () => {

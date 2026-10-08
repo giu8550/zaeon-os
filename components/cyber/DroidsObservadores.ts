@@ -2,8 +2,8 @@
  * DroidsObservadores — os droids que observam a Terra (layout/rotas puros em lib/cyber/terra). Cada grupo: um LÍDER
  * piramidal — moldura triangular de bronze gravada com runas, núcleo HEXAGONAL de luz azul, três placas-escudo com
  * símbolos, cristais azuis (no alto, na cauda e dois laterais), LEDs com espinhos — que controla 2 MENORES de três asas
- * triangulares (painel escuro com "raios" azuis) em volta de um cristal. De tempos em tempos o líder para e LÊ a Terra:
- * um feixe de varredura desce dele.
+ * triangulares (painel escuro com "raios" azuis) em volta de um cristal. Eles ANALISAM a Terra na estação de cada
+ * mirante: o líder voa baixo na frente do TELÃO, varrendo os dados com um feixe; os menores escaneiam o GLOBO.
  *
  * Comuns e visíveis pra todos: a pose sai do RELÓGIO de parede (`Date.now`) — todo mundo vê os droids no mesmo lugar.
  * Leve: cada TIPO de peça é UM InstancedMesh pra todos os droids (≈ 14 chamadas de desenho no total).
@@ -13,7 +13,9 @@ import { GRUPOS_DROIDS, poseDoLider, poseDosMenores } from "@/lib/cyber/terra";
 
 export type ObservadoresHandle = { group: THREE.Group; atualizar(dt: number): void; dispose(): void };
 
-const BRONZE = 0xe6cfa4;   // dourado-claro (o da referência), não laranja
+const BRONZE = 0xe6cfa4;
+/** o líder trabalha BAIXO, na frente do telão: menor que um droid "de céu" (não tampa a tela) */
+const ESCALA_LIDER = 0.55;   // dourado-claro (o da referência), não laranja
 /** o relógio de parede (s) — o mesmo pra todos os jogadores (ignora a pequena diferença entre relógios) */
 const relogio = () => (Date.now() % 1e9) / 1000;
 
@@ -79,8 +81,17 @@ export function criarObservadores(o: { low: boolean }): ObservadoresHandle {
   ];
   const instanciar = (partes: Parte[], n: number) => partes.map((p) => { g(p.geo); const im = new THREE.InstancedMesh(p.geo, p.mat, n * p.locais.length); im.frustumCulled = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(im); return { ...p, im }; });
   const lideres = instanciar(partesLider, NL), menores = instanciar(partesMenor, NM);
-  // o FEIXE de leitura (um cone que desce do núcleo do líder), um por líder
-  const feixes = Array.from({ length: NL }, () => { const f = new THREE.Mesh(g(new THREE.ConeGeometry(7, 22, 24, 1, true)), feixeMat.clone()); g(f.material as THREE.Material); f.visible = false; group.add(f); return f; });
+  // o FEIXE de leitura: um leque de luz do núcleo do líder até o ponto da TELA que ele lê (cone com a ponta no
+  // droid, o eixo +y do cone apontado pro alvo); os menores: um feixe fino cada até o globo
+  const coneLeque = g(new THREE.ConeGeometry(1, 1, 24, 1, true)); coneLeque.translate(0, -0.5, 0); coneLeque.rotateX(Math.PI);   // ponta na origem, abre pra +y
+  const feixes = Array.from({ length: NL }, () => { const f = new THREE.Mesh(coneLeque, feixeMat.clone()); g(f.material as THREE.Material); f.visible = false; group.add(f); return f; });
+  const feixesMen = Array.from({ length: NM }, () => { const f = new THREE.Mesh(coneLeque, feixeMat.clone()); g(f.material as THREE.Material); group.add(f); return f; });
+  const cima = new THREE.Vector3(0, 1, 0), dirF = new THREE.Vector3();
+  /** aponta o feixe `f` de `de` até `ate`, com a boca de raio `r` */
+  const mirar = (f: THREE.Mesh, de: { x: number; y: number; z: number }, ate: { x: number; y: number; z: number }, r: number) => {
+    dirF.set(ate.x - de.x, ate.y - de.y, ate.z - de.z); const len = dirF.length(); dirF.normalize();
+    f.position.set(de.x, de.y, de.z); f.quaternion.setFromUnitVectors(cima, dirF); f.scale.set(r, len, r);
+  };
   // brilho do núcleo (sprite) por líder
   const brilho = g(canvasTex(64, 64, (c) => { const gr = c.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(220,245,255,1)"); gr.addColorStop(0.35, "rgba(120,200,255,.6)"); gr.addColorStop(1, "rgba(40,120,255,0)"); c.fillStyle = gr; c.fillRect(0, 0, 64, 64); }));
   const halos = Array.from({ length: NL }, () => { const s = new THREE.Sprite(g(new THREE.SpriteMaterial({ map: brilho, color: 0x8fd0ff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }))); s.scale.setScalar(5); group.add(s); return s; });
@@ -93,15 +104,18 @@ export function criarObservadores(o: { low: boolean }): ObservadoresHandle {
       const t = relogio(); void dt;
       GRUPOS_DROIDS.forEach((gr, i) => {
         const l = poseDoLider(gr, t);
-        // o líder: em pé, de frente pro rumo, balançando de leve; lendo = inclina pra baixo (olha a Terra)
-        e.set(-0.15 - 0.35 * l.lendo + Math.sin(t * 0.7 + i) * 0.05, l.rumo, Math.sin(t * 0.5 + i) * 0.08, "YXZ"); q.setFromEuler(e);
-        base.compose(p.set(l.x, l.y, l.z), q, um); pousar(lideres, i, base);
+        // o líder: BAIXO, na frente do telão, de frente pra ele (as costas pra quem chega), inclinado olhando o ponto
+        // que lê; menor que os do céu (não tampa a tela)
+        e.set(Math.atan2(l.alvo.y - l.y, 9) * 0.5 + Math.sin(t * 0.7 + i) * 0.04, l.rumo, Math.sin(t * 0.5 + i) * 0.06, "YXZ"); q.setFromEuler(e);
+        base.compose(p.set(l.x, l.y, l.z), q, um.set(ESCALA_LIDER, ESCALA_LIDER, ESCALA_LIDER)); um.set(1, 1, 1); pousar(lideres, i, base);
         nucleoMat.color.setHSL(0.56, 1, 0.7 + 0.15 * Math.sin(t * 2.2));
-        const f = feixes[i]!; f.visible = l.lendo > 0.02; if (f.visible) { f.position.set(l.x, l.y - 11 - 1.2, l.z); f.rotation.y = t; (f.material as THREE.MeshBasicMaterial).opacity = 0.22 * l.lendo; f.scale.set(0.6 + 0.6 * l.lendo, 1, 0.6 + 0.6 * l.lendo); }
-        halos[i]!.position.set(l.x, l.y - 0.3, l.z); halos[i]!.material.opacity = 0.55 + 0.35 * l.lendo;
-        // os 2 menores, em formação, girando devagar no próprio eixo
-        poseDosMenores(l, t, gr.fase).forEach((m, k) => {
-          e.set(-0.1, l.rumo, t * 0.8 + k * 1.3, "YXZ"); q.setFromEuler(e); base.compose(p.set(m.x, m.y, m.z), q, um); pousar(menores, i * 2 + k, base);
+        const f = feixes[i]!; f.visible = true; mirar(f, { x: l.x, y: l.y - 0.2, z: l.z }, l.alvo, 1.2 + 2.2 * l.lendo); (f.material as THREE.MeshBasicMaterial).opacity = 0.1 + 0.2 * l.lendo;
+        halos[i]!.position.set(l.x, l.y - 0.2, l.z); halos[i]!.material.opacity = 0.55 + 0.35 * l.lendo;
+        // os 2 menores: escaneando o GLOBO (de frente pra ele, girando devagar), um feixe fino cada
+        poseDosMenores(gr, t).forEach((m, k) => {
+          e.set(0, m.rumo, t * 0.8 + k * 1.3, "YXZ"); q.setFromEuler(e); base.compose(p.set(m.x, m.y, m.z), q, um); pousar(menores, i * 2 + k, base);
+          const fm = feixesMen[i * 2 + k]!; mirar(fm, m, { x: gr.globo.x, y: gr.globo.y + Math.sin(t * 1.3 + k) * gr.globo.r * 0.5, z: gr.globo.z }, 0.7);
+          (fm.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.1 * Math.sin(t * 3 + k);
         });
       });
       for (const pt of [...lideres, ...menores]) pt.im.instanceMatrix.needsUpdate = true;

@@ -13,7 +13,7 @@
  */
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { GLOBOS, LOTES_MIRANTE, MOTORES, PONTOS_TERRA, SUPERTREES, TELOES, noMapa, reacaoDoMotor } from "@/lib/cyber/terra";
+import { CABOS, GLOBOS, LOTES_MIRANTE, MOTORES, PONTOS_TERRA, SUPERTREES, TELOES, TOTENS, noMapa, reacaoDoMotor } from "@/lib/cyber/terra";
 import { LOTES, type Lote } from "@/lib/cyber/motos";
 import { criarPisoEstacionamento } from "./Estacionamento";
 
@@ -28,7 +28,15 @@ export type DistritoHandle = {
 };
 
 const URL_TERRA = "/assets/cyber/terra-blue-marble.jpg";
-const COR_TIPO = { regeneracao: "#5aff8a", desenvolvimento: "#45d6ff", evento: "#ffb45a" } as const;
+const COR_TIPO = { problema: "#ff4a5a", regeneracao: "#5aff8a", desenvolvimento: "#45d6ff", evento: "#ffb45a" } as const;
+const TIPO_IDX = { problema: 0, regeneracao: 1, desenvolvimento: 2, evento: 3 } as const;
+/** os TOTENS: o tema, a cor e o problema que ele lembra */
+const TEMA = {
+  clima: { nome: "CLIMA", cor: "#ff8a4a", linhas: ["aquecimento global", "derretimento do gelo", "eventos extremos"] },
+  florestas: { nome: "FLORESTAS", cor: "#5aff8a", linhas: ["desmatamento", "queimadas", "perda de espécies"] },
+  oceanos: { nome: "OCEANOS", cor: "#45d6ff", linhas: ["corais branqueando", "lixo plástico", "acidificação"] },
+  agua: { nome: "ÁGUA", cor: "#9fb8ff", linhas: ["secas", "rios e lagos secando", "desertificação"] },
+} as const;
 
 /** a supertree (local da árvore): tronco, treliça, galhos, copa e aro — geometrias pra fundir */
 function supertree(alt: number, copa: number, low: boolean) {
@@ -66,18 +74,22 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
 
   // ── a TERRA: textura compartilhada (telões + globo) ─────────────────────────────────────────────────────────────
   const texTerra = guarda(new THREE.TextureLoader().load(URL_TERRA)); texTerra.colorSpace = THREE.SRGBColorSpace;
-  const pontosU = PONTOS_TERRA.map((p) => { const m = noMapa(p.lat, p.lon); return new THREE.Vector3(m.u, m.v, p.tipo === "regeneracao" ? 0 : p.tipo === "desenvolvimento" ? 1 : 2); });
+  const pontosU = PONTOS_TERRA.map((p) => { const m = noMapa(p.lat, p.lon); return new THREE.Vector3(m.u, m.v, TIPO_IDX[p.tipo]); });
   const uT = { value: 0 };
   // ── TELÕES: o mapa (shader: tom holográfico + grade + pontos pulsando + varredura) + painel (canvas) ──
   const painel = (() => {
     const c = document.createElement("canvas"); c.width = 640; c.height = 1024; const g = c.getContext("2d")!;
     g.fillStyle = "#04101c"; g.fillRect(0, 0, 640, 1024); g.strokeStyle = "#45d6ff"; g.lineWidth = 3; g.strokeRect(6, 6, 628, 1012);
-    g.fillStyle = "#9fe8ff"; g.font = "bold 46px system-ui, sans-serif"; g.fillText("OBSERVATÓRIO", 34, 84); g.fillText("DA TERRA", 34, 136);
-    g.fillStyle = "rgba(159,232,255,.55)"; g.font = "26px system-ui, sans-serif"; g.fillText("pontos de regeneração e desenvolvimento", 34, 182);
-    let y = 250;
-    for (const p of PONTOS_TERRA) { g.fillStyle = COR_TIPO[p.tipo]; g.beginPath(); g.arc(46, y - 9, 9, 0, Math.PI * 2); g.fill(); g.fillStyle = "#e6f6ff"; g.font = "25px system-ui, sans-serif"; g.fillText(p.nome, 68, y); y += 56; }
-    g.fillStyle = "#ffb45a"; g.font = "bold 30px system-ui, sans-serif"; g.fillText("● AO VIVO", 34, 760);
-    g.fillStyle = "rgba(230,246,255,.6)"; g.font = "24px system-ui, sans-serif"; g.fillText("eventos do mundo real", 34, 800); g.fillText("(terremotos, incêndios, tempestades)", 34, 834); g.fillText("— conectando às fontes públicas —", 34, 880);
+    g.fillStyle = "#e6f6ff"; g.font = "bold 46px system-ui, sans-serif"; g.fillText("ESTADO", 34, 80); g.fillText("DA TERRA", 34, 132);
+    let y = 196;
+    const sec = (titulo: string, cor: string, tipos: string[]) => {
+      g.fillStyle = cor; g.font = "bold 27px system-ui, sans-serif"; g.fillText(titulo, 34, y); y += 42;
+      for (const p of PONTOS_TERRA.filter((q) => tipos.includes(q.tipo))) { g.fillStyle = COR_TIPO[p.tipo]; g.beginPath(); g.arc(46, y - 8, 8, 0, Math.PI * 2); g.fill(); g.fillStyle = "#e6f6ff"; g.font = "22px system-ui, sans-serif"; g.fillText(p.nome, 66, y); y += 40; }
+      y += 16;
+    };
+    sec("● PROBLEMAS", "#ff6a76", ["problema"]); sec("● O QUE ESTÁ SENDO FEITO", "#7dffa6", ["regeneracao", "desenvolvimento"]);
+    g.fillStyle = "#ffb45a"; g.font = "bold 26px system-ui, sans-serif"; g.fillText("● AO VIVO", 34, 940);
+    g.fillStyle = "rgba(230,246,255,.6)"; g.font = "20px system-ui, sans-serif"; g.fillText("eventos reais: terremotos, incêndios, tempestades", 34, 972); g.fillText("— conectando às fontes públicas —", 34, 998);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return guarda(t);
   })();
   const matMapa = guarda(new THREE.ShaderMaterial({
@@ -93,8 +105,9 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
         for (int i = 0; i < ${pontosU.length}; i++) {
           vec3 p = uP[i]; vec2 d = (vUv - p.xy) * vec2(2.0, 1.0); float r = length(d);
           float onda = fract(uT * 0.5 + float(i) * 0.13); float anel = exp(-pow((r - onda * 0.06) * 160.0, 2.0)) * (1.0 - onda);
-          vec3 c = p.z < 0.5 ? vec3(0.35, 1.0, 0.55) : (p.z < 1.5 ? vec3(0.27, 0.84, 1.0) : vec3(1.0, 0.7, 0.35));
-          cor += c * (exp(-r * r * 9000.0) * 1.6 + anel);
+          vec3 c = p.z < 0.5 ? vec3(1.0, 0.25, 0.3) : (p.z < 1.5 ? vec3(0.35, 1.0, 0.55) : (p.z < 2.5 ? vec3(0.27, 0.84, 1.0) : vec3(1.0, 0.7, 0.35)));
+          float forte = p.z < 0.5 ? 1.5 : 1.0;   // os PROBLEMAS pulsam mais forte
+          cor += c * (exp(-r * r * 9000.0) * 1.6 + anel) * forte;
         }
         float cl = 0.92 + 0.08 * sin(vUv.y * 900.0); gl_FragColor = vec4(cor * cl, 1.0);
       }`,
@@ -102,17 +115,41 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
   const matPainel = guarda(new THREE.MeshBasicMaterial({ map: painel }));
   const matMoldura = guarda(new THREE.MeshStandardMaterial({ color: 0x141c2e, roughness: 0.3, metalness: 0.85, emissive: 0x0a1630, emissiveIntensity: 0.6 }));
   const matAura = guarda(new THREE.MeshBasicMaterial({ color: 0x45d6ff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  // o DESTAQUE do telão: palco elevado com bordas de luz, colunas de luz dos lados, aro de neon na moldura, holofote no
+  // chão na frente e o letreiro flutuante
+  const matPalco = guarda(new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.35, metalness: 0.7, emissive: 0x0a1a36, emissiveIntensity: 0.7 }));
+  const matNeon = guarda(new THREE.MeshBasicMaterial({ color: 0x7fe8ff }));
+  const matColuna = guarda(new THREE.MeshBasicMaterial({ color: 0x45d6ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  const matHolofote = guarda(new THREE.MeshBasicMaterial({ color: 0x45d6ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const letreiro = (() => { const c = document.createElement("canvas"); c.width = 1024; c.height = 160; const g = c.getContext("2d")!; g.font = "900 92px system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.shadowColor = "#45d6ff"; g.shadowBlur = 26; g.fillStyle = "#e9fbff"; g.fillText("ESTADO DA TERRA", 512, 84); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return guarda(t); })();
+  const matLetreiro = guarda(new THREE.MeshBasicMaterial({ map: letreiro, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  const auras: THREE.MeshBasicMaterial[] = [matAura, matColuna, matHolofote];
   for (const t of TELOES) {
     const g = new THREE.Group(); g.position.set(t.x, 0, t.z); g.rotation.y = t.rot; group.add(g);
-    const W = t.larg, H = t.alt, wMapa = W * 0.74, wPain = W - wMapa;
-    const mold = new THREE.Mesh(guarda(new THREE.BoxGeometry(W + 1.2, H + 1.2, 0.9)), matMoldura); mold.position.set(0, t.y, -0.5); g.add(mold);
+    const W = t.larg, H = t.alt, wMapa = W * 0.72, wPain = W - wMapa;
+    // o palco: 2 degraus com fio de luz na borda
+    for (const [w, d, h, y] of [[W + 10, 12, 0.6, 0.3], [W + 5, 8, 0.6, 0.9]] as const) {
+      const pl = new THREE.Mesh(guarda(new THREE.BoxGeometry(w, h, d)), matPalco); pl.position.set(0, y, 0.5); g.add(pl);
+      const fio = new THREE.Mesh(guarda(new THREE.BoxGeometry(w + 0.1, 0.08, 0.08)), matNeon); fio.position.set(0, y + h / 2, 0.5 + d / 2); g.add(fio);
+    }
+    const mold = new THREE.Mesh(guarda(new THREE.BoxGeometry(W + 1.4, H + 1.4, 1.0)), matMoldura); mold.position.set(0, t.y, -0.55); g.add(mold);
+    // o aro de NEON em volta da tela
+    for (const [w, h, x, y] of [[W + 1.6, 0.25, 0, t.y + H / 2 + 0.75], [W + 1.6, 0.25, 0, t.y - H / 2 - 0.75], [0.25, H + 1.6, -W / 2 - 0.75, t.y], [0.25, H + 1.6, W / 2 + 0.75, t.y]] as const) {
+      const n = new THREE.Mesh(guarda(new THREE.BoxGeometry(w, h, 0.3)), matNeon); n.position.set(x, y, 0.05); g.add(n);
+    }
     const mapa = new THREE.Mesh(guarda(new THREE.PlaneGeometry(wMapa, H)), matMapa); mapa.position.set(-W / 2 + wMapa / 2, t.y, 0.0); g.add(mapa);
     const pain = new THREE.Mesh(guarda(new THREE.PlaneGeometry(wPain, H)), matPainel); pain.position.set(W / 2 - wPain / 2, t.y, 0.0); g.add(pain);
-    const aura = new THREE.Mesh(guarda(new THREE.PlaneGeometry(W + 4, H + 4)), matAura); aura.position.set(0, t.y, -1.1); g.add(aura);
-    for (const s of [-1, 1]) { const pe = new THREE.Mesh(guarda(new THREE.BoxGeometry(1.4, t.y - H / 2, 1.4)), matMoldura); pe.position.set((s * W) / 2.4, (t.y - H / 2) / 2, -0.5); g.add(pe); }
+    const aura = new THREE.Mesh(guarda(new THREE.PlaneGeometry(W + 7, H + 7)), matAura); aura.position.set(0, t.y, -1.2); g.add(aura);
+    for (const s of [-1, 1]) {
+      const pe = new THREE.Mesh(guarda(new THREE.BoxGeometry(1.6, t.y - H / 2 - 1.2, 1.6)), matMoldura); pe.position.set((s * W) / 2.6, 1.2 + (t.y - H / 2 - 1.2) / 2, -0.5); g.add(pe);
+      const col = new THREE.Mesh(guarda(new THREE.CylinderGeometry(0.9, 1.3, t.y + H / 2 + 6, 16, 1, true)), matColuna); col.position.set(s * (W / 2 + 3.4), (t.y + H / 2 + 6) / 2, 0.5); g.add(col);
+      const base = new THREE.Mesh(guarda(new THREE.CylinderGeometry(1.4, 1.6, 1.2, 16)), matPalco); base.position.set(s * (W / 2 + 3.4), 0.6, 0.5); g.add(base);
+    }
+    const holofote = new THREE.Mesh(guarda(new THREE.CircleGeometry(W * 0.62, 48)), matHolofote); holofote.rotation.x = -Math.PI / 2; holofote.scale.set(1, 0.42, 1); holofote.position.set(0, 0.06, 10); g.add(holofote);
+    const tit = new THREE.Mesh(guarda(new THREE.PlaneGeometry(W * 0.8, W * 0.125)), matLetreiro); tit.position.set(0, t.y + H / 2 + 3.4, 0.2); g.add(tit);
   }
 
-  // ── os GLOBOS da Terra (holográficos), um por mirante, flutuando sobre a escada, com um feixe de luz do chão ──
+  // ── os GLOBOS da Terra (holográficos), ao lado de cada telão, num pedestal com anel — alimentados pelos cabos ──
   const matGlobo = guarda(new THREE.ShaderMaterial({
     uniforms: { uMapa: { value: texTerra }, uT },
     vertexShader: /* glsl */ `varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main() { vUv = uv; vN = normalize(normalMatrix * normal); vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
@@ -133,9 +170,44 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
       const fi = (90 - p.lat) * Math.PI / 180, te = (p.lon + 180) * Math.PI / 180, r = 1.02;
       const pino = new THREE.Mesh(geoPino, matPinos[p.tipo]!); pino.position.set(-r * Math.sin(fi) * Math.cos(te), r * Math.cos(fi), r * Math.sin(fi) * Math.sin(te)); globo.add(pino);
     }
-    const alt = G.y - G.r - 1, feixe = new THREE.Mesh(guarda(new THREE.CylinderGeometry(2.2, 3.6, alt, 20, 1, true)), matFeixe); feixe.position.set(G.x, alt / 2, G.z); group.add(feixe);
+    const alt = G.y - G.r - 1, feixe = new THREE.Mesh(guarda(new THREE.CylinderGeometry(1.6, 2.6, alt, 20, 1, true)), matFeixe); feixe.position.set(G.x, alt / 2, G.z); group.add(feixe);
+    const ped = new THREE.Mesh(guarda(new THREE.CylinderGeometry(3.4, 4.2, 1.4, 24)), matPalco); ped.position.set(G.x, 0.7, G.z); group.add(ped);
+    const anelP = new THREE.Mesh(guarda(new THREE.TorusGeometry(G.r * 1.25, 0.12, 6, 64)), matNeon); anelP.rotation.x = Math.PI / 2 - 0.3; anelP.position.set(G.x, G.y, G.z); group.add(anelP);
     return globo;
   });
+
+  // ── os CABOS ALIMENTADORES: dos motores até o globo e o telão, no chão, com a energia correndo por dentro ──
+  const matCabo = guarda(new THREE.ShaderMaterial({
+    uniforms: { uT },
+    vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */ `uniform float uT; varying vec2 vUv;
+      void main() { float pulso = pow(max(0.0, sin((vUv.x * 14.0 - uT * 3.0) * 3.14159)), 6.0);
+        vec3 cor = mix(vec3(0.05, 0.12, 0.22), vec3(0.45, 0.9, 1.0), 0.25 + 0.75 * pulso);
+        gl_FragColor = vec4(cor, 1.0); }`,
+  }));
+  {
+    const tubos = CABOS.map(({ de, para }) => {
+      const a = new THREE.Vector3(de.x, 0.35, de.z), b = new THREE.Vector3(para.x, 0.35, para.z), m = a.clone().lerp(b, 0.5);
+      const lateral = new THREE.Vector3(-(b.z - a.z), 0, b.x - a.x).normalize().multiplyScalar(a.distanceTo(b) * 0.12); m.add(lateral);
+      return new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, m, b), 24, 0.32, 6, false);
+    });
+    group.add(new THREE.Mesh(guarda(mergeGeometries(tubos)!), matCabo)); for (const t of tubos) t.dispose();
+  }
+  // ── os TOTENS dos temas (clima, florestas, oceanos, água): placas de luz com os problemas de cada um ──
+  const texTotem = Object.fromEntries(Object.entries(TEMA).map(([k, T]) => [k, guarda((() => {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 512; const g = c.getContext("2d")!;
+    g.fillStyle = "#04101c"; g.fillRect(0, 0, 256, 512); g.strokeStyle = T.cor; g.lineWidth = 6; g.strokeRect(6, 6, 244, 500);
+    g.fillStyle = T.cor; g.font = "900 40px system-ui, sans-serif"; g.textAlign = "center"; g.fillText(T.nome, 128, 70);
+    g.beginPath(); g.arc(128, 170, 52, 0, Math.PI * 2); g.lineWidth = 8; g.stroke();
+    g.font = "bold 22px system-ui, sans-serif"; g.fillStyle = "#e6f6ff"; T.linhas.forEach((l, i) => g.fillText(l, 128, 290 + i * 46));
+    g.fillStyle = "rgba(255,106,118,.85)"; g.font = "bold 20px system-ui, sans-serif"; g.fillText("PROBLEMA DA TERRA", 128, 470);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })())]));
+  for (const tt of TOTENS) {
+    const g = new THREE.Group(); g.position.set(tt.x, 0, tt.z); g.rotation.y = tt.rot; group.add(g);
+    const corpo = new THREE.Mesh(guarda(new THREE.BoxGeometry(2.6, 5.4, 0.5)), matMoldura); corpo.position.y = 3.6; g.add(corpo);
+    const face = new THREE.Mesh(guarda(new THREE.PlaneGeometry(2.3, 4.6)), guarda(new THREE.MeshBasicMaterial({ map: texTotem[tt.tema]! }))); face.position.set(0, 3.6, 0.26); g.add(face);
+    const base = new THREE.Mesh(guarda(new THREE.CylinderGeometry(1.5, 1.7, 0.9, 16)), matPalco); base.position.y = 0.45; g.add(base);
+  }
 
   // ── MOTORES DE ENERGIA: núcleo de plasma + 3 anéis-giroscópio — acordam com gente perto ──
   const motores = MOTORES.map((m, i) => {
@@ -180,6 +252,7 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
       uT.value = t;
       for (const e of pisos) e.atualizar(t);
       for (const g of globos) g.rotation.y += dt * 0.08;
+      { const p = 0.5 + 0.5 * Math.sin(t * 1.6); matAura.opacity = 0.16 + 0.12 * p; matColuna.opacity = 0.28 + 0.2 * p; matHolofote.opacity = 0.16 + 0.12 * p; void auras; }
       // motores: o mais perto acorda o motor (gira mais rápido, o núcleo e os anéis acendem)
       for (const m of motores) {
         let d = Infinity; for (const p of perto) d = Math.min(d, Math.hypot(p.x - m.m.x, p.z - m.m.z));

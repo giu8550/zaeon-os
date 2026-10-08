@@ -561,7 +561,7 @@ export class CyberEngine {
     if (this.sobreNave) { this.sobreNave = false; this.jet = { tecla: true, noAr: true, y: this.eu.alt, vy: 0 }; this.sitT = 0; this.alvo = null; this.alvoDepois = null; this.som.tocar("jump", this.eu.av.group.position, { dist: DISTANCIA.eu }); return; }
     // decola da praça, do piso do salão da Recepção ou da Zaeon (céu) — da escada não. Do salão da Recepção (que fica
     // no piso da Zaeon) o voo é o da Zaeon
-    if (this.altoEm && !this.noCeu) { const z = this.zaeon(), mn = z ? marcoNav(z.poi) : null; if (!mn || this.yNav < mn.nav.pisoY - 0.01) return; this.altoEm = z && z.poi.base !== undefined ? "ceu" : null; this.yNav = this.altoEm ? CIDADE.pisoY : 0; }
+    if (this.altoEm && !this.noCeu) { const z = this.lms.find((l) => l.poi.id === this.altoEm) ?? this.zaeon(), mn = z ? marcoNav(z.poi) : null; if (!mn || this.yNav < mn.nav.pisoY - 0.01) return; this.altoEm = z && z.poi.base !== undefined ? "ceu" : null; this.yNav = this.altoEm ? CIDADE.pisoY : 0; }
     if (this.plat && !decolaDaPlataforma(this.plat.id, this.plat.andar, this.eu.pos)) return;   // dentro de casa (Solana House) não
     this.jet = { tecla: true, noAr: true, y: this.eu.alt, vy: 0 }; this.sitT = 0; this.alvo = null; this.alvoDepois = null; this.jetV = { x: 0, z: 0 }; this.ilhota = null; this.plat = null; this.bordo = null;
     this.som.tocar("jump", this.eu.av.group.position, { dist: DISTANCIA.eu });
@@ -571,6 +571,10 @@ export class CyberEngine {
   private qgNoAr(): QGNoAr | null { const z = this.zaeon(), mn = z && naPracaPOI(z.poi) ? marcoNav(z.poi) : null; return z && mn ? { ...mn, topoMuralhas: this.pilaresZaeon(z)[0]!.topo } : null; }
   /** a RECEPÇÃO (o marco andável no piso da Zaeon) */
   private recepcao(): { lm: LandmarkHandle; mn: MarcoNav } | null { const z = this.zaeon(), mn = z && z.poi.base !== undefined ? marcoNav(z.poi) : null; return z && mn ? { lm: z, mn } : null; }
+  /** TODOS os marcos andáveis no piso da Zaeon: a Recepção e os 3 Mirantes da Terra (as pirâmides das quinas) */
+  private marcosDaZaeon(): { lm: LandmarkHandle; mn: MarcoNav }[] { return this.marcosNav().filter(({ lm }) => lm.poi.base !== undefined); }
+  /** a altura (mundo) do piso do salão de um marco da Zaeon, com a flutuação */
+  private pisoDoMarco(m: { lm: LandmarkHandle; mn: MarcoNav }) { return (m.lm.poi.base ?? 0) + m.mn.nav.pisoY + this.boia(m.lm); }
   /** um quadro no ar: subir/cair, colisão por altura e pouso (chão, escada/salão do QG ou piso da Zaeon) */
   /** saiu do chão sem querer (borda da Zaeon / de uma ilhota): começa a cair DAQUI (queda normal da mochila) */
   private cairDaqui(embalo = { x: 0, z: 0 }) {
@@ -597,10 +601,9 @@ export class CyberEngine {
       let q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...baixo, ...naves]);
       // a CABINE DO DJ é do dono: pra todo o resto a torre é um campo de força (não se pousa lá em cima de mochila)
       if (!this.ehFundador(this.o.eu.id) && v.y < base + ALTURA_LOUNGE + TORRE_DJ.topo + CAMPO_DJ && naTorreDJ(q, 0.6)) q = foraDaTorreDJ(q);
-      // a RECEPÇÃO: pousa no salão (vindo de cima); por baixo do salão a ilha dela é sólida
-      const rc = this.recepcao();
-      if (rc) {
-        const pisoM = this.yDoNivel("qg"), dx = q.x - rc.mn.x, dz = q.z - rc.mn.z, d = Math.hypot(dx, dz);
+      // a RECEPÇÃO e os MIRANTES: pousa no salão (vindo de cima); por baixo do salão a ilha da pirâmide é sólida
+      for (const rc of this.marcosDaZaeon()) {
+        const pisoM = this.pisoDoMarco(rc), dx = q.x - rc.mn.x, dz = q.z - rc.mn.z, d = Math.hypot(dx, dz);
         if (d <= rc.mn.nav.bordaR - 0.3 && yAnt >= pisoM - 0.05 && v.y <= pisoM && v.vy <= 0) {
           eu.pos.x = q.x; eu.pos.z = q.z; this.jet.y = pisoM; this.jet.noAr = false; this.altoEm = rc.lm.poi.id; this.yNav = rc.mn.nav.pisoY; this.somPouso(v.vy); return;
         }
@@ -722,7 +725,7 @@ export class CyberEngine {
   // ───────────── Cidade Zaeon (céu), a REDE DE BURACOS NEGROS e a nave ─────────────
   get noCeu() { return this.altoEm === "ceu"; }
   /** em pé na Zaeon: no piso dela ou no salão/escada da Recepção (que fica no piso dela) */
-  private get naZaeon() { return this.noCeu || (!!this.altoEm && !!this.recepcao() && this.altoEm === this.recepcao()!.lm.poi.id); }
+  private get naZaeon() { return this.noCeu || (!!this.altoEm && this.marcosDaZaeon().some((m) => m.lm.poi.id === this.altoEm)); }
   /** teleporte (corte seco — o React faz o túnel/fade): aparece no ponto `p` (mundo) do nó `id`, a pé, sem nada */
   private irParaNo(id: IdNo, p: { x: number; z: number; rumo: number } = NOS[id].chegada) {
     this.viagem = null; this.tunel = null;
@@ -2062,9 +2065,8 @@ export class CyberEngine {
         if (k >= 1) { this.viagem = null; this.som.tocar("near-ping", eu.av.group.position, { dist: DISTANCIA.perto }); }
       }
       else if (this.noCeu) {
-        // a RECEPÇÃO fica no piso da Zaeon: do pé da escada sobe-se pro salão; a ilha dela (o cone) é sólida
-        const rc = this.recepcao();
-        if (rc) { const r = resolverPasso(rc.mn, false, prev, eu.pos); eu.pos.x = r.x; eu.pos.z = r.z; if (r.alto) { this.altoEm = rc.lm.poi.id; this.yNav = r.y; } }
+        // a RECEPÇÃO e os MIRANTES ficam no piso da Zaeon: do pé da escada sobe-se pro salão; a ilha (o cone) é sólida
+        for (const rc of this.marcosDaZaeon()) { const r = resolverPasso(rc.mn, false, prev, eu.pos); eu.pos.x = r.x; eu.pos.z = r.z; if (r.alto) { this.altoEm = rc.lm.poi.id; this.yNav = r.y; break; } }
         // sem parede invisível na borda: passou do piso da ilha → cai
         const q = this.noCeu ? empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos(), ...this.colisoresDosTubos()]) : { x: eu.pos.x, z: eu.pos.z }; eu.pos.x = q.x; eu.pos.z = q.z; if (this.noCeu) this.yNav = CIDADE.pisoY;
         if (!this.noCeu) { /* subiu pro pé da escada da Recepção: o resto é dela (resolverChao) */ }
