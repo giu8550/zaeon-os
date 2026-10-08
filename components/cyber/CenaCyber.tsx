@@ -10,7 +10,7 @@ import { MAX_TEXTO_RECADO, type MensagemChat, type Presenca, type RecadoQG } fro
 import { landmarksOn, type POI } from "@/lib/cyber/landmarks";
 import { CyberEngine, type EstadoGuia, type PessoaCyber } from "./engine";
 import { NOS, type IdNo } from "@/lib/cyber/buracos";
-import { CHAVE_ONBOARDING, deveNascerNoTubo } from "@/lib/cyber/onboarding";
+import { CHAVE_ONBOARDING, deveNascerNoTubo, tutorialLigado } from "@/lib/cyber/onboarding";
 import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
 import RespostaZaeon from "./RespostaZaeon";
 import type { PedidoZaeon, PerfilZaeon, PerguntaZaeon, TurnoZaeon } from "@/lib/cyber/conversaZaeon";
@@ -95,13 +95,14 @@ export default function CenaCyber(p: CenaCyberProps) {
     setFalasDroid((xs) => [...xs.slice(-20), { id: `eu-${Date.now()}`, userId: cb.current.eu.id, name: cb.current.eu.name, color: cb.current.eu.color, texto: r, ts: Date.now() }]);
   };
   /** NASCE no tubo de ensaio? Quem nunca entrou no cyberespaço (o servidor diz; sem sala, o localStorage) ou forçado com
-   *  ?nascer=1 — decidido 1× */
+   *  ?nascer=1 ou com o MODO TUTORIAL ligado nas Configurações — decidido 1× (ao entrar) */
   const nascer = useMemo(() => {
     if (!tela || typeof window === "undefined") return false;
     let visto = false;
     if (p.novoNoCyber !== undefined) visto = !p.novoNoCyber;
     else try { visto = localStorage.getItem(CHAVE_ONBOARDING) === "1"; } catch { /* storage bloqueado */ }
-    return deveNascerNoTubo({ visto, forcar: new URLSearchParams(location.search).get("nascer") === "1", fundador: !!p.souFundador });
+    const forcar = new URLSearchParams(location.search).get("nascer") === "1" || tutorialLigado((k) => localStorage.getItem(k));
+    return deveNascerNoTubo({ visto, forcar, fundador: !!p.souFundador });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [voo, setVoo] = useState<{ y: number } | null>(null);
