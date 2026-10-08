@@ -308,7 +308,7 @@ export function respostaImpulso(sr: number, seg: number = HOLO_VOZ.reverbSeg, se
  * A VOZ DO DROID (components/cyber/AudioCyber `vozDroid`): ele não fala palavras — é um som "espiritual", distante,
  * de outra dimensão. Água correndo (como uma cachoeira) passa por dois filtros de FORMANTE largos que só DERIVAM
  * devagar (ondas, não sílabas — o dono pediu pouca modulação), um tom alienígena desafinado por baixo, e tudo vai
- * pra um DELAY com muitas repetições e um REVERB bem longo, quase todo molhado (soa de outro mundo, longe). Na
+ * pra um DELAY discreto e um REVERB longo, mais molhado que seco (soa de outro mundo, longe). Na
  * FÚRIA (a expulsão), mais grave.
  */
 export const VOZ_DROID = {
@@ -320,8 +320,8 @@ export const VOZ_DROID = {
   f1: [320, 760], f2: [1100, 2200], q: 2.2,
   /** o tom alienígena: afinação e quanto entra */
   alien: { taxa: [0.82, 1.18], ganho: 0.55 },
-  delay: { seg: 0.42, retorno: 0.62, mix: 0.6, corte: 2200 },
-  reverb: { seg: 6.5, preAtraso: 0.08, molhado: 0.82 },
+  delay: { seg: 0.42, retorno: 0.38, mix: 0.32, corte: 2200 },   // eco discreto (o dono pediu menos)
+  reverb: { seg: 5, preAtraso: 0.08, molhado: 0.72 },
   /** a fúria (expulsão): mais grave (afinação × 0,62), formantes mais baixos, mais volume */
   furia: { taxa: 0.62, formantes: 0.7, ganho: 1.35 },
   volume: 2.2,

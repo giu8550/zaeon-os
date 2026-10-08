@@ -124,12 +124,13 @@ describe("a voz do Droid (sem palavras)", () => {
     const furia = silabasDroid(2.4, 9, { formantes: VOZ_DROID.furia.formantes });
     expect(furia[0]!.f1).toBeCloseTo(s[0]!.f1 * VOZ_DROID.furia.formantes);
   });
-  it("soa longe e sem picotar: quase todo molhado, reverb bem longo, muitos ecos que ainda assim somem; ondas lentas", () => {
-    expect(VOZ_DROID.reverb.molhado).toBeGreaterThan(0.75);
+  it("soa longe e sem picotar: mais molhado que seco, reverb longo, eco discreto que some; ondas lentas", () => {
+    expect(VOZ_DROID.reverb.molhado).toBeGreaterThan(0.6);
     expect(VOZ_DROID.reverb.seg).toBeGreaterThanOrEqual(5);
     expect(VOZ_DROID.silaba.min).toBeGreaterThanOrEqual(0.4);   // pouca modulação (o dono pediu)
     expect(VOZ_DROID.reverb.seg).toBeGreaterThan(HOLO_VOZ.reverbSeg);
-    expect(VOZ_DROID.delay.retorno).toBeLessThan(0.7);   // o eco decai (sem realimentar pra sempre)
+    expect(VOZ_DROID.delay.retorno).toBeLessThan(0.5);   // eco discreto: decai rápido
+    expect(VOZ_DROID.delay.mix).toBeLessThan(0.5);
     expect(SONS["droid-agua"].modo).toBe("pos"); expect(SONS["droid-alien"].modo).toBe("pos");
     expect(SONS["droid-agua"].ext).toBe("wav");
   });
