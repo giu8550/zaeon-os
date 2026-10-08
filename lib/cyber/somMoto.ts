@@ -11,7 +11,8 @@
  *    (`passoCambio`: 6 no acelerador + a do boost): a rotação sobe dentro da marcha e CAI na troca (com um corte curtinho
  *    e um "tec" de engate); o tom vai da lenta grossa ao GRITO no corte; + o VENTO;
  *  - ALIVIOU (soltou o acelerador em rotação alta): estalos do escape (pipoco);
- *  - BOOST: estouro de ignição + a TURBINA (ronco + assobio agudo) enquanto dura;
+ *  - BOOST: o GRITO da superbike varrendo do grave ao agudo (one-shot gravado `moto-boost`), o motor ESTOURANDO o giro
+ *    e a TURBINA (ronco + assobio agudo) enquanto dura;
  *  - BARREIRA DO SOM (acender o boost acima dos 300 km/h): o ESTRONDO sônico (o "crack-crack" duplo da onda N + o
  *    trovão rolando) e, enquanto o boost durar, o SUPERSÔNICO (o ar rasgando) crescendo até os 1000 km/h;
  *  - FREIO (freada forte): chiado de ar;
@@ -42,17 +43,19 @@ const harmonicos = (fase: number, n = 10) => { let v = 0; for (let k = 1; k <= n
  * travado e um reverb leve embutido (o "espacial"):
  *  - `moto-motor` = a MARCHA LENTA (~30 Hz de disparo);
  *  - `moto-motor-alto` = o GRITO de uma superbike 1000 cc numa pista, travado em 300 Hz.
- * `mixDaMoto` toca os dois afinados na frequência do motor (`freqDoMotor`: ~30 Hz na lenta → ~470 Hz no corte) e cruza
- * da lenta pro grito entre 45 e 110 Hz.
+ * `mixDaMoto` toca os dois afinados na frequência do motor (`freqDoMotor`: ~30 Hz na lenta → ~180 Hz no corte — GRAVE: o
+ * grito gravado toca encorpado, abaixo do tom original) e cruza da lenta pro grito entre 60 e 120 Hz. No BOOST o motor
+ * ESTOURA o giro (`CAMBIO.boostRpm`: bem acima do corte, subindo violento) e o one-shot `moto-boost` (o mesmo grito
+ * varrendo do grave ao agudo em 0,7 s, saturado) marca a ignição.
  */
 /** o tom (Hz de disparo) em que cada loop foi gravado/travado */
 export const FAIXAS_MOTOR = { "moto-motor": 30, "moto-motor-alto": 300 } as const;
 /** onde a lenta vira o grito (Hz, crossfade em oitavas) */
-const CRUZA = [45, 110] as const;
+const CRUZA = [60, 120] as const;
 
-/** a FREQUÊNCIA do motor (Hz de disparo) na rotação `rpm` (lenta → 30 Hz; 1 → 470 Hz, o grito no corte) — exponencial:
- *  cada pedaço do conta-giros sobe o mesmo tanto de TOM */
-export function freqDoMotor(rpm: number): number { return 30 * Math.pow(470 / 30, Math.max(0, (rpm - CAMBIO.lenta) / (1 - CAMBIO.lenta))); }
+/** a FREQUÊNCIA do motor (Hz de disparo) na rotação `rpm` (lenta → 30 Hz; 1 → 180 Hz, o corte; acima de 1 só no boost,
+ *  o giro estourado) — exponencial: cada pedaço do conta-giros sobe o mesmo tanto de TOM */
+export function freqDoMotor(rpm: number): number { return 30 * Math.pow(180 / 30, Math.max(0, (rpm - CAMBIO.lenta) / (1 - CAMBIO.lenta))); }
 
 /** TROCA DE MARCHA (~0,16 s): o "tec" seco do engate + um sopro curtinho de alívio */
 export function sintetizarTrocaMoto(sr: number): Float32Array {
@@ -167,21 +170,6 @@ export function sintetizarDesligaMoto(sr: number): Float32Array {
   return normalizar(fimSemClique(out, 512), 0.85);
 }
 
-/** BOOST (~1,1 s): baque de ignição + sopro com o filtro abrindo (300 → 3500 Hz) */
-export function sintetizarBoostMoto(sr: number): Float32Array {
-  const n = Math.round(sr * 1.1), out = new Float32Array(n), r = prng(71);
-  let lo = 0, band = 0, fb = 0;
-  for (let i = 0; i < n; i++) {
-    const t = i / sr, w = r() * 2 - 1;
-    // filtro de estado variável (Chamberlin): passa-banda varrendo pra cima
-    const fc = 300 + 3200 * (1 - Math.exp(-t * 3)), f = 2 * Math.sin((Math.PI * fc) / sr), q = 0.6;
-    lo += f * band; const hi = w - lo - q * band; band += f * hi;
-    fb += (2 * Math.PI * (42 + 60 * Math.exp(-t * 14))) / sr;
-    out[i] = band * 1.4 * Math.min(1, t * 25) * Math.exp(-t * 2.2) + Math.sin(fb) * Math.exp(-t * 10) * 0.9;
-  }
-  return normalizar(fimSemClique(out, 512), 0.9);
-}
-
 /** FREIO (~0,6 s): chiado de ar (ruído passa-alta) com ataque rápido */
 export function sintetizarFreioMoto(sr: number): Float32Array {
   const n = Math.round(sr * 0.6), out = new Float32Array(n), r = prng(79);
@@ -219,11 +207,11 @@ export function sintetizarPousoMoto(sr: number): Float32Array {
 
 export const SINTESE_MOTO = {
   "moto-troca": sintetizarTrocaMoto, "moto-estalo": sintetizarEstaloMoto, "moto-estrondo": sintetizarEstrondoMoto, "moto-supersonico": sintetizarSupersonicoMoto, "moto-vento": sintetizarVentoMoto, "moto-turbina": sintetizarTurbinaMoto,
-  "moto-partida": sintetizarPartidaMoto, "moto-desliga": sintetizarDesligaMoto, "moto-boost": sintetizarBoostMoto, "moto-freio": sintetizarFreioMoto,
+  "moto-partida": sintetizarPartidaMoto, "moto-desliga": sintetizarDesligaMoto, "moto-freio": sintetizarFreioMoto,
   "moto-decola": sintetizarDecolaMoto, "moto-pouso": sintetizarPousoMoto,
 } as const;
 /** os sons da moto: os sintetizados + o MOTOR (gravações reais, em arquivo) */
-export type NomeSomMoto = keyof typeof SINTESE_MOTO | keyof typeof FAIXAS_MOTOR;
+export type NomeSomMoto = keyof typeof SINTESE_MOTO | keyof typeof FAIXAS_MOTOR | "moto-boost";
 /** os LOOPS da moto (o resto é one-shot) */
 export const LOOPS_MOTO = ["moto-motor", "moto-motor-alto", "moto-vento", "moto-turbina", "moto-supersonico"] as const satisfies readonly NomeSomMoto[];
 
@@ -249,6 +237,9 @@ export const CAMBIO = {
   lenta: 0.14, troca: 0.96, reduz: 0.7,
   /** quanto o acelerador puxa a rotação (carga) e quão rápido ela segue o alvo (1/s); `corte` = duração da troca (s) */
   carga: 0.07, segue: 9, corte: 0.12,
+  /** BOOST: o giro ESTOURA acima do corte — vai pra `boostRpm[0]` na hora (seguindo `boostSegue`× mais rápido) e sobe até
+   *  `boostRpm[1]` com a velocidade */
+  boostRpm: [1.32, 1.46], boostSegue: 2.5,
 } as const;
 export type Cambio = { marcha: number; rpm: number; corte: number };
 export const cambioNeutro = (): Cambio => ({ marcha: 0, rpm: CAMBIO.lenta, corte: 0 });
@@ -263,9 +254,11 @@ export function passoCambio(c: Cambio, e: { voando: boolean; vel: number; acel: 
     if (marcha < ultima && v / C.topo[marcha]! >= C.troca && carga > 0) { marcha++; corte = 1; }
     else if (marcha > ultima || (marcha > 0 && v < C.topo[marcha - 1]! * C.reduz)) marcha--;
   }
+  const estoura = e.voando && e.boost;
   const alvo = !e.voando ? C.lenta + 0.22 * carga
+    : estoura ? C.boostRpm[0] + (C.boostRpm[1] - C.boostRpm[0]) * Math.min(1, Math.max(0, v - 1) / 0.8)
     : Math.min(1.02, Math.max(C.lenta, v / C.topo[marcha]!) + C.carga * carga - (carga > 0 ? 0 : 0.04));
-  const rpm = c.rpm + (alvo - c.rpm) * Math.min(1, dt * C.segue * (corte > 0 ? 2 : 1));
+  const rpm = c.rpm + (alvo - c.rpm) * Math.min(1, dt * C.segue * (estoura ? C.boostSegue : corte > 0 ? 2 : 1));
   return { marcha, rpm, corte };
 }
 
@@ -283,7 +276,7 @@ export function mixDaMoto(e: EstadoSomMoto): Record<(typeof LOOPS_MOTO)[number],
   const forca = (0.55 + 0.45 * rpm) * carga * corte;   // mais alto em cima e no acelerador; a troca corta um instante
   return {
     "moto-motor": { vol: (1 - x) * forca, taxa: Math.max(0.8, Math.min(3.2, f / FAIXAS_MOTOR["moto-motor"])) },
-    "moto-motor-alto": { vol: x * forca, taxa: Math.max(0.3, Math.min(1.7, f / FAIXAS_MOTOR["moto-motor-alto"])) },
+    "moto-motor-alto": { vol: x * forca * (e.boost ? 1.15 : 1), taxa: Math.max(0.3, Math.min(2.2, f / FAIXAS_MOTOR["moto-motor-alto"])) },
     "moto-vento": { vol: e.voando ? Math.pow(v1, 1.6) * 0.8 + (e.boost ? 0.25 : 0) : 0, taxa: 0.8 + 0.45 * Math.min(1.5, v) },
     "moto-turbina": { vol: e.boost ? 1 - 0.35 * sup : 0, taxa: 1 + 0.15 * Math.min(2, v) },
     // supersônico (boost aceso acima dos 300 km/h): o ar rasgando, crescendo e subindo de tom até os 1000 km/h

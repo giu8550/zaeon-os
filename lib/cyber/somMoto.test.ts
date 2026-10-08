@@ -49,7 +49,7 @@ describe("sons da moto (sintetizados)", () => {
     }
   });
   it("one-shots terminam em silêncio (sem estalo no fim)", () => {
-    for (const n of ["moto-partida", "moto-desliga", "moto-boost", "moto-freio", "moto-decola", "moto-pouso", "moto-troca", "moto-estalo", "moto-estrondo"] as const) {
+    for (const n of ["moto-partida", "moto-desliga", "moto-freio", "moto-decola", "moto-pouso", "moto-troca", "moto-estalo", "moto-estrondo"] as const) {
       const x = SINTESE_MOTO[n](sr); expect(Math.abs(x[x.length - 1]!), n).toBeLessThan(0.01);
     }
   });
@@ -84,15 +84,15 @@ describe("estágios da moto (mix e eventos)", () => {
 });
 
 describe("motor (gravações reais): faixas e frequência", () => {
-  it("a frequência vai da lenta (~30 Hz) ao GRITO (~470 Hz), subindo o mesmo TOM por pedaço do conta-giros", () => {
-    expect(freqDoMotor(CAMBIO.lenta)).toBeCloseTo(30, 3); expect(freqDoMotor(1)).toBeCloseTo(470, 3);
+  it("a frequência vai da lenta (~30 Hz) ao corte (~180 Hz, grave), subindo o mesmo TOM por pedaço do conta-giros", () => {
+    expect(freqDoMotor(CAMBIO.lenta)).toBeCloseTo(30, 3); expect(freqDoMotor(1)).toBeCloseTo(180, 3);   // GRAVE: o corte em 180 Hz
     expect(freqDoMotor(0.57) / freqDoMotor(CAMBIO.lenta)).toBeCloseTo(freqDoMotor(1) / freqDoMotor(0.57), 3);
   });
   it("embaixo toca a LENTA, da puxada pra cima o GRITO — cada um afinado na frequência do motor", () => {
     const m = (rpm: number, acel = 1) => mixDaMoto({ ...somMotoParada, montada: true, voando: true, vel: 0.5, acel, rpm });
     expect(m(CAMBIO.lenta)["moto-motor"].vol).toBeGreaterThan(0.3); expect(m(CAMBIO.lenta)["moto-motor-alto"].vol).toBe(0);
-    for (const rpm of [0.6, 0.8, 1]) { expect(m(rpm)["moto-motor"].vol).toBe(0); expect(m(rpm)["moto-motor-alto"].taxa * 300).toBeCloseTo(freqDoMotor(rpm), 0); }
-    expect(m(1)["moto-motor-alto"].taxa).toBeLessThanOrEqual(1.7);   // o grito gravado não estica demais
+    for (const rpm of [0.85, 0.95, 1]) { expect(m(rpm)["moto-motor"].vol).toBe(0); expect(m(rpm)["moto-motor-alto"].taxa * 300).toBeCloseTo(freqDoMotor(rpm), 0); }
+    expect(m(1)["moto-motor-alto"].taxa).toBeLessThan(0.7);   // grave: o grito gravado toca ABAIXO do tom original
     expect(m(0.95, 0)["moto-motor-alto"].vol).toBeLessThan(m(0.95, 1)["moto-motor-alto"].vol);   // aliviar = menos grito
   });
 });
@@ -128,6 +128,13 @@ describe("câmbio (o tom do motor NÃO vai direto pro teto)", () => {
     expect(c.rpm).toBeCloseTo(CAMBIO.lenta, 2); expect(c.marcha).toBe(0);
     let r = { ...cambioNeutro(), marcha: 5, rpm: 0.9 }; for (let i = 0; i < 180; i++) r = passoCambio(r, { voando: true, vel: 0.15, acel: -1, boost: false }, 1 / 60);
     expect(r.marcha).toBeLessThanOrEqual(1);
+  });
+  it("BOOST: o giro ESTOURA (bem acima do corte) em menos de 0,4 s — o tom do grito sobe violento", () => {
+    let c = { ...cambioNeutro(), marcha: 5, rpm: 0.95 }; const ini = freqDoMotor(c.rpm);
+    for (let i = 0; i < 24; i++) c = passoCambio(c, { voando: true, vel: 1.05, acel: 1, boost: true }, 1 / 60);
+    expect(c.rpm).toBeGreaterThan(1.2); expect(freqDoMotor(c.rpm) / ini).toBeGreaterThan(1.7);
+    const m = mixDaMoto({ ...somMotoParada, montada: true, voando: true, vel: 1.5, acel: 1, boost: true, rpm: c.rpm });
+    expect(m["moto-motor-alto"].taxa).toBeGreaterThan(1);   // acima do tom gravado: o grito
   });
   it("eventos: subir de marcha dá o 'tec' da troca; aliviar em giro alto dá os estalos", () => {
     const no = (o: Partial<EstadoSomMoto>): EstadoSomMoto => ({ ...somMotoParada, montada: true, voando: true, ...o });

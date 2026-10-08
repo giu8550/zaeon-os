@@ -48,7 +48,7 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "moto-turbina": { modo: "pos", loop: true, volume: 0.6, sintetico: true },
   "moto-partida": { modo: "pos", loop: false, volume: 0.75, sintetico: true },
   "moto-desliga": { modo: "pos", loop: false, volume: 0.6, sintetico: true },
-  "moto-boost": { modo: "pos", loop: false, volume: 0.85, sintetico: true },
+  "moto-boost": { modo: "pos", loop: false, volume: 0.95, ext: "wav" },   // o grito varrendo (gravação real tratada — CREDITS.md)
   "moto-freio": { modo: "pos", loop: false, volume: 0.45, sintetico: true },
   "moto-decola": { modo: "pos", loop: false, volume: 0.55, sintetico: true },
   "moto-pouso": { modo: "pos", loop: false, volume: 0.8, sintetico: true },
