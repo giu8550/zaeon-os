@@ -5,7 +5,8 @@
  *    quem acabou de entrar).
  */
 export type Pose = { x: number; z: number; facing: number; moving?: boolean; sit?: boolean; topo?: boolean; ceu?: boolean; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number;
-  /** montado numa MOTO voadora: vaga de origem + altura + rumo (qualquer pessoa) */ moto?: { s: number; y: number; yaw: number } };
+  /** montado numa MOTO voadora: vaga de origem + altura + rumo (qualquer pessoa) */ moto?: { s: number; y: number; yaw: number; de?: string };
+  /** a moto que ESTACIONOU (fica onde desceu) */ motoLargada?: { s: number; x: number; y: number; z: number; yaw: number } };
 
 /** Heartbeat: reenvia a última pose mesmo com a aba em segundo plano (setInterval segue disparando). */
 export const HEARTBEAT_MS = 2000;
@@ -22,7 +23,9 @@ export function poseMudou(antes: Pose | null, agora: Pose): boolean {
   if ((antes.alt === undefined) !== (agora.alt === undefined) || (antes.alt !== undefined && agora.alt !== undefined && Math.abs(antes.alt - agora.alt) > 0.05)) return true;
   if ((antes.jet === undefined) !== (agora.jet === undefined) || (antes.jet !== undefined && agora.jet !== undefined && Math.abs(antes.jet - agora.jet) > 0.05)) return true;
   const ma = antes.moto, mb = agora.moto;
-  if (!!ma !== !!mb || (ma && mb && (ma.s !== mb.s || Math.abs(ma.y - mb.y) > 0.05 || Math.abs(ma.yaw - mb.yaw) > EPS_ANG))) return true;
+  if (!!ma !== !!mb || (ma && mb && (ma.s !== mb.s || ma.de !== mb.de || Math.abs(ma.y - mb.y) > 0.05 || Math.abs(ma.yaw - mb.yaw) > EPS_ANG))) return true;
+  const la = antes.motoLargada, lb = agora.motoLargada;
+  if (!!la !== !!lb || (la && lb && (la.s !== lb.s || Math.hypot(la.x - lb.x, la.y - lb.y, la.z - lb.z) > EPS_POS || Math.abs(la.yaw - lb.yaw) > EPS_ANG))) return true;
   const na = antes.naveParada, nb = agora.naveParada;
   if (!!na !== !!nb || (na && nb && (Math.hypot(na.x - nb.x, na.y - nb.y, na.z - nb.z) > EPS_POS || Math.abs(na.yaw - nb.yaw) > EPS_ANG))) return true;
   if (Math.hypot(agora.x - antes.x, agora.z - antes.z) > EPS_POS) return true;

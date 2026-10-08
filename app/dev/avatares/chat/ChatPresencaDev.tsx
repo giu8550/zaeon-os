@@ -7,6 +7,7 @@ import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
 import AgentePilula from "@/components/agents/avatar/AgentePilula";
 import { useFalaAoChegar, usePublicarPresenca } from "@/components/agents/avatar/hooks";
 import { sinalDoChat } from "@/lib/avatars/presenca";
+import { AcoesResposta } from "@/components/chat/MensagemAcoes";
 
 type Msg = { id: string; role: "user" | "assistant"; text: string };
 
@@ -35,7 +36,7 @@ export default function ChatPresencaDev() {
     digitando: !sending && input.trim().length > 0,
   });
   const sinal = useFalaAoChegar(sinalTurno, ultima?.text || "");
-  usePublicarPresenca("aura", sinal);
+  const rosto = usePublicarPresenca("aura", sinal);
 
   const enviar = () => {
     const texto = input.trim();
@@ -75,15 +76,17 @@ export default function ChatPresencaDev() {
       ) : (
         <section className="flex-1 min-h-0 flex flex-col w-full max-w-3xl mx-auto px-4">
           <div className="flex-1 overflow-y-auto py-6 flex flex-col gap-4">
-            {msgs.length === 0 && <BoasVindasAgente agentId="aura" nome="Aura" sinal={sinal} />}
+            {msgs.length === 0 && <BoasVindasAgente agentId="aura" nome="Aura" sinal={rosto.sinal} boca={rosto.boca} />}
             {msgs.map((m) => m.role === "user" ? (
               <p key={m.id} className="self-end max-w-[80%] px-4 py-2.5 rounded-2xl bg-slate-100 border border-slate-200 text-slate-900 dark:bg-white/[0.09] dark:border-white/10 dark:text-white/90 font-tech text-[16px]">{m.text}</p>
             ) : (
               <div key={m.id} className="self-start max-w-[85%] flex flex-col items-start relative pl-12">
-                <AgentePilula agentId="aura" nome="Aura" estado={sinal} ultima={m.id === ultima?.id} className="absolute left-0 top-0" />
+                <AgentePilula agentId="aura" nome="Aura" estado={rosto.sinal} boca={rosto.boca} ultima={m.id === ultima?.id} className="absolute left-0 top-0" />
                 <div className="px-4 py-2.5 rounded-2xl bg-white/80 dark:bg-white/[0.05] border border-slate-200/70 dark:border-white/10 text-slate-800 dark:text-white/90 font-tech text-[16px] leading-relaxed">
                   {m.text || <span className="inline-flex gap-1 py-1">{[0, 1, 2].map((k) => <span key={k} className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: `${k * 140}ms` }} />)}</span>}
                 </div>
+                {/* as mini-ações de verdade (com "ouvir resposta" → a boca segue a voz) */}
+                {m.text && !(sending && m.id === ultima?.id) && <AcoesResposta msgId={m.id} texto={m.text} className="!opacity-100" />}
               </div>
             ))}
             <div ref={fim} />

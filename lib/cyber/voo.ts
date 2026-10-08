@@ -13,7 +13,7 @@ export type ComandoVoo = { wx: number; wz: number; subir: boolean; descer: boole
 /** vel/sobe em m/s; `dtMax` = maior quadro aceito (aba que voltou do fundo); `subpasso` = passo da física */
 /** `freio`: soltar a direção para a nave em poucos metros (paira ali) */
 /** `decolar`: no chão (ou a menos disso acima dele) a nave NÃO anda de lado — tem que subir primeiro */
-export const VOO = { vel: 30, sobe: 38, inercia: 3, freio: 7, decolar: 1.5, yMax: 720, raioMapa: 960, dtMax: 0.25, subpasso: 1 / 60 };
+export const VOO = { vel: 30, sobe: 38, inercia: 3, freio: 7, decolar: 1.5, yMax: 720, raioMapa: 1500, dtMax: 0.25, subpasso: 1 / 60 };
 
 /** folga de pouso: o topo dos marcos flutua (±0,15 m); parada a até isso acima do chão = pousada */
 export const POUSO_TOL = 0.3;
@@ -40,22 +40,28 @@ export function passoVoo(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar
   vx += (tx - vx) * k; vz += (tz - vz) * k; vy += (ty - vy) * ky;
   x += vx * dt; y += vy * dt; z += vz * dt;
   if (Math.hypot(vx, vz) > 0.5) { let d = Math.atan2(vx, vz) - yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; yaw += d * Math.min(1, dt * 4); }
-  // limites do mapa
+  return resolverVoo(s.y, { x, y, z, yaw, vx, vy, vz }, solidos, teto);
+}
+
+/** depois de mover: limites do mapa, teto, sólidos (ilha da cidade e marcos — vindo de cima fica no topo, de lado
+ *  desliza pra fora) e o POUSO. `yAntes` = a altura no começo do passo (pra saber se veio de cima). Serve a qualquer
+ *  veículo que voa (a nave aqui, a moto em lib/cyber/motoFisica). */
+export function resolverVoo(yAntes: number, s: EstadoVoo, solidos: Pilar[] = [], teto: number = VOO.yMax): { s: EstadoVoo; pousado: boolean; chaoY: number } {
+  let { x, y, z, vy } = s;
   const r = Math.hypot(x, z); if (r > VOO.raioMapa) { x *= VOO.raioMapa / r; z *= VOO.raioMapa / r; }
   if (y > teto) { y = teto; vy = Math.min(vy, 0); }
-  // sólidos: ilha da cidade e marcos (cilindros). Vindo de cima → fica no topo; de lado → desliza pra fora.
   ({ x, y, z } = foraDaIlha({ x, y, z }));
   for (const p of solidos) {
     const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
     if (d >= p.r || y >= p.topo || (p.base !== undefined && y <= p.base)) continue;   // `base`: sólido só de base a topo (ilhota flutuante)
-    if (s.y >= p.topo - POUSO_TOL) { y = p.topo; vy = Math.max(0, vy); continue; }   // em cima (tolera a flutuação do marco)
+    if (yAntes >= p.topo - POUSO_TOL) { y = p.topo; vy = Math.max(0, vy); continue; }   // em cima (tolera a flutuação do marco)
     const kk = d > 1e-4 ? p.r / d : 1; x = p.x + (d > 1e-4 ? dx * kk : p.r); z = p.z + (d > 1e-4 ? dz * kk : 0);
   }
   const chaoY = chaoDoVoo({ x, y, z }, solidos);
   let pousado = false;
   // encostou (ou está a um fio, parada): pousa e acompanha o chão — o topo dos marcos sobe e desce devagar
   if (y <= chaoY || (y <= chaoY + POUSO_TOL && vy <= 1e-6)) { y = chaoY; vy = Math.max(0, vy); pousado = true; }
-  return { s: { x, y, z, yaw, vx, vy, vz }, pousado, chaoY };
+  return { s: { ...s, x, y, z, vy }, pousado, chaoY };
 }
 
 /** o mesmo passo, independente de FPS: usa o dt REAL (até `dtMax`) dividido em subpassos de no máximo `subpasso` */

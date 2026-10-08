@@ -85,7 +85,17 @@
 
 ---
 
-## 11. Gateway / chave única (Escritório v2, Fatia 1)
+## 11. Agente mensageiro — chip da ChipFlow via bridge Redis
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| `zenith-warmer` `app/bridge/{producer,shard}.py` + `whatsapp-adapter` `internal/bridge/contracts.go` | interno (Martinez) | envelope do Command/Event, `shard = id % NUM_SHARDS`, XADD com `v` JSON | ADOTAR (portado em `lib/chipflow/bridge-request.ts`) |
+| `axtral-store` (FlowShot) `backend/core/bridge.py` | interno | modelo por-chamada: last_id ANTES do XADD + XREAD BLOCK até o terminal | REFERÊNCIA (`lib/chipflow/bridge.ts`) — **não** copiar o `payload.state` da presença (o adapter lê `presence`) nem o fallback pro `REDIS_URL` |
+| `zenith-warmer` `app/api/routers/admin.py` (`chip-directory`) | interno | diretório read-only de chips elegíveis | DADOS (PR-W2) |
+
+Os números de aquecimento (tiers, teto por maturidade, piso de 60 s, 463) entram nos PRs W3/W4 —
+com o motivo registrado: custaram **73 chips em 25/08/2026** (`app/services/warm_speed.py`).
+
+## 12. Gateway / chave única (Escritório v2, Fatia 1)
 | Repo | Licença | O que usamos | Status |
 |---|---|---|---|
 | `BerriAI/litellm` (proxy) | MIT (core) | gateway OpenAI-compatible interno, virtual keys por agente com budget/TTL/allowlist, fallback | ADOTAR — gateway/virtual keys |

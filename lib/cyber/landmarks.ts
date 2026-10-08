@@ -8,7 +8,7 @@
  * sem permissão — checklist antes de publicar o marco de uma instituição real.
  */
 import type { NavPOI } from "./nav";
-import { ESTACIONAMENTO, LOTES } from "./motos";
+import { LOTES, tamanhoDoLote } from "./motos";
 
 export type AcessoPOI = "publico" | "dono";
 export type PresetPOI = "zaeon" | "generico" | "heliporto" | "estacionamento";
@@ -80,7 +80,7 @@ function estacionamentoPOI(): POI {
   return {
     id: "estacionamento", nome: "Estacionamento", org: "Motos voadoras — pra todo mundo.",
     preset: "estacionamento", x: LOTES[0]!.x, z: LOTES[0]!.z,
-    footprintR: ESTACIONAMENTO.r, interactR: ESTACIONAMENTO.r + 3, solido: false, altura: 0, acesso: "publico",
+    footprintR: tamanhoDoLote(LOTES[0]!).r, interactR: tamanhoDoLote(LOTES[0]!).r + 3, solido: false, altura: 0, acesso: "publico",
   };
 }
 export const POIS: POI[] = [zaeonPOI(), heliportoPOI(), estacionamentoPOI()];

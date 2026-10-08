@@ -30,6 +30,8 @@ import { HOLO_NA_BASE } from "@/lib/cyber/recado";
 import type { RecadoQG } from "@/lib/lounge3d/tipos";
 import { criarUniversidade, type UniversidadeHandle } from "./Universidade";
 import { naUniversidade, UNIVERSIDADE } from "@/lib/cyber/universidade";
+import { CAMPI, IDS_CAMPI, type IdCampus } from "@/lib/cyber/campi";
+import { criarCampus, type CampusHandle } from "./Campus";
 import { PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, anelDoChao, decolaDaPlataforma, elevadorAqui, noAnelDoDisco, noArNaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma, tetoNaPlataforma, type IdPlataforma } from "@/lib/cyber/plataformas";
 import { criarSolanaHouse, type SolanaHouseHandle } from "./SolanaHouse";
 import { DECK_ANTIGO, GIRO_PLANTA, noCorredorDaRampa, NAVE_QG, RAIO_REDOMA, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, RAMPA, naPontaDaRampa, naRampaLaFora, paraLocal, paraMundo, pertoDaEntrada, poseDaDoca, pousoNaNave, rampaDaNave, redomaAberta, type Bordo, type PoseNave } from "@/lib/cyber/naveQG";
@@ -37,7 +39,11 @@ import { ESCALA_NAVE, ESCALA_NAVE_V, criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
 import { atualizarCamuflagem, camuflarGrupo, pararCamuflagem } from "./camuflagem";
 import { criarMoto, type MotoHandle } from "./Moto";
-import { MOTO, motoPerto, vagas } from "@/lib/cyber/motos";
+import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
+import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
+import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
+import { PILOTAGEM, motoParada, passoMotoSub, sensacaoDeVelocidade, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
+import { LOOPS_MOTO, eventosDaMoto, mixDaMoto, setaAcesa, somMotoParada, type EstadoSomMoto } from "@/lib/cyber/somMoto";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
@@ -69,7 +75,7 @@ export type CyberOpts = {
   /** teclado sempre ouvido (tela cheia). Na janela da landing só com o mouse em cima (não rouba ESPAÇO/rolagem da página). */
   teclasSempre: boolean;
   remotos?: { current: Map<string, Presenca> };
-  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: { s: number; y: number; yaw: number } }) => void;
+  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada }) => void;
   /** pontos de interesse (marcos megalíticos) — flag NEXT_PUBLIC_CYBER_LANDMARKS */
   landmarks?: boolean;
   /** clicou num marco estando perto → painel (nome, org, link) */
@@ -128,13 +134,16 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos:
   /** voz ao vivo (WebRTC) presa ao avatar; `falando` = segurando o push-to-talk agora */
   vozH?: { remover(): void } | null; falando?: boolean;
   /** remotos: montado numa moto voadora (vaga, altura, rumo) */
-  moto?: { s: number; y: number; yaw: number } | null };
+  moto?: MotoMontada | null;
+  /** remotos: a moto que ele ESTACIONOU (fica lá até ele montar noutra ou sair) */
+  motoLargada?: MotoLargada | null };
 type Fala = { el: HTMLDivElement; ator: Ator; ate: number };
 
 /** cor da mesa do QG quando o Andrei não está na sala */
 const COR_QG = "#ffd36b";
-/** cor dos frisos/chamas de cada moto do estacionamento */
-const CORES_MOTO = ["#45d6ff", "#ff6ad5", "#ffc46b", "#9affd0"];
+/** a moto de um piloto (montada ou estacionada): o modelo animado, o look (a vaga: cor + carenagem, pro pool), a vaga de origem,
+ *  os loops do motor e o estágio do som no quadro anterior, e o rumo/altura anteriores (curva e subida) */
+type InstMoto = { h: MotoHandle; g: THREE.Group; /** o de fora: o pool liga/desliga ESTE (o corte por distância mexe no `g`) */ casca: THREE.Group; look: string; s: number; loops: Record<(typeof LOOPS_MOTO)[number], LoopSom> | null; som: EstadoSomMoto; yawAnt: number; yAnt: number | null; vy: number };
 /** sensibilidade do olhar livre (rad por pixel do mouse) */
 const SENS_OLHAR = 0.0026;
 /** o que não pode virar lote (components/cyber/lotes): os alvos de clique/câmera e TUDO dentro deles (o raycast é recursivo) */
@@ -189,6 +198,8 @@ export class CyberEngine {
   private holo: HoloRecadoHandle | null = null; private recadoId: string | null | undefined = undefined;
   /** a Universidade (castelo no chão, ao norte da praça) */
   private univ: UniversidadeHandle | null = null;
+  /** os OUTROS CAMPI flutuantes (UFC, Unifor, UECE — lib/cyber/campi) */
+  private campi: { id: IdCampus; h: CampusHandle; area: () => Regiao }[] = [];
   /** a Solana House (Superteam Brasil) — disco flutuante com prédio de 3 andares + rooftop */
   private solana: SolanaHouseHandle | null = null;
   /** o player do toca-discos do lounge (a música sai das caixas, sincronizada pra sala toda) */
@@ -234,12 +245,29 @@ export class CyberEngine {
   private jetV = { x: 0, z: 0 }; private impulsoFrente = false;
   /** em pé numa ILHOTA (índice em ILHOTAS) — a altura vem da flutuação dela; passou da borda, cai */
   private ilhota: number | null = null;
-  /** MOTOS VOADORAS: uma por vaga do estacionamento (lib/cyber/motos). Montado = `moto` (a vaga); a moto anda com
-   *  o mesmo voo da nave (passoVooSub), com teto baixo. Descer devolve a moto pra vaga. */
-  private motos: { h: MotoHandle; idle: LoopSom | null; voo: LoopSom | null; yawAnt: number; yAnt: number | null; vy: number }[] = [];
-  private moto: number | null = null; private motoEst: EstadoVoo = { x: 0, y: 0, z: 0, yaw: 0, vx: 0, vy: 0, vz: 0 }; private motoPousado = true;
+  /** MOTOS VOADORAS (lib/cyber/motos): as das VAGAS são decoração ESTÁTICA (um lote por moto: barata) e sempre
+   *  prontas — quem monta LEVA a moto e o ROBÔ de cada estacionamento fabrica outra na vaga (`fabricas`). A moto de cada
+   *  piloto é uma INSTÂNCIA animada (`instMotos`, chave "<dono>:r" montada / "<dono>:p" estacionada; dono "eu" = eu),
+   *  criada sob demanda e reaproveitada por look (`poolMotos`). `loops`/`som` = o som por estágio (lib/cyber/somMoto). */
+  /** `g` = a posição na vaga (o corte por distância mexe nele); `moto` = a moto em si (some/se forma com o robô) */
+  private vagaMotos: { g: THREE.Group; moto: THREE.Object3D; alvos: THREE.Object3D[] }[] = [];
+  /** `efeitoEm` = a vaga onde está a luz da fabricação (fica lá até o clarão acabar) */
+  private fabricas: { lote: Lote; f: Fabrica; robo: RoboMotosHandle; pos: { x: number; y: number; z: number }; rumo: number; efeitoEm: number | null }[] = [];
+  private instMotos = new Map<string, InstMoto>();
+  private poolMotos = new Map<string, InstMoto[]>();
+  /** remotos: o que cada um montava no quadro anterior ("vaga|de") — montou de uma VAGA → ela esvaziou */
+  private motoVista = new Map<string, string>();
+  /** montado: a vaga de ORIGEM da moto (o look) e `motoDe` = de quem era a estacionada que peguei (eu mesmo, inclusive) */
+  private motoDe: string | undefined = undefined;
+  private moto: number | null = null; private motoEst: EstadoMoto = motoParada(0, 0, 0, 0); private motoPousado = true;
   /** cliquei numa moto longe: anda até ela e monta ao chegar */
-  private motoAlvo: number | null = null;
+  private motoAlvo: AlvoMoto | null = null;
+  /** a moto que EU estacionei: fica onde desci (não volta pra vaga) — os outros veem pela minha presença */
+  private motoLargada: MotoLargada | null = null;
+  /** botão ⚡ da moto apertado; a câmera volta pra trás da moto a partir de `camSegueEm` (mexeu o mouse = espera) */
+  private boostBotao = false; private camSegueEm = 0; private acelMoto = 0;
+  /** a sensação de velocidade na tela (suavizada): FOV, blur radial, linhas de velocidade, tremida do boost */
+  private velTela = 0; private fovBase = 0; private fxVel: VelocidadeTela | null = null;
   /** a capela, a laje do lounge e a torre do DJ: sólidos pra quem VOA (moto/nave) — fixos, calculados uma vez */
   private readonly solidosCidade: Pilar[] = solidosDaCidade();
   private montadoTmp = { maoE: new THREE.Vector3(), maoD: new THREE.Vector3(), peE: new THREE.Vector3(), peD: new THREE.Vector3() };
@@ -286,7 +314,7 @@ export class CyberEngine {
     this.R.autoClear = false; this.R.outputColorSpace = THREE.SRGBColorSpace;
     const cv = this.R.domElement; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:" + (opts.menu ? "pan-y" : "none");
     container.appendChild(cv);
-    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.15, 2600);   // mapa maior (Zaeon mega: a UNILAB e a Solana bem longe)
+    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.15, 3600);   // mapa de raio 1500 (os campi na borda: de um lado se vê o outro)
     this.cena = criarCenaCosmica(low, this.w / this.h);
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
@@ -304,16 +332,29 @@ export class CyberEngine {
       if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
       this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); camuflarGrupo(this.univ.group); this.cena.scene.add(this.univ.group);
       { const u = this.univ; fundirEstaticos(u.group, { passo: (_, t) => u.atualizar(1 / 30, t), manter: comDescendentes(u.alvosCamera) }); }
+      for (const id of IDS_CAMPI) {   // os outros campi: prédios instanciados (o lote só junta a fundação/placas)
+        const C = CAMPI[id], h = criarCampus(id, { low }); this.cena.scene.add(h.group);
+        fundirEstaticos(h.group, { passo: (_, t) => h.atualizar(1 / 30, t), manter: comDescendentes(h.alvosCamera) });
+        this.campi.push({ id, h, area: cil(C.centro, C.r, C.y, Math.min(220, C.r * 0.6) + 20, 110) });
+      }
       this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); camuflarGrupo(this.solana.group); this.cena.scene.add(this.solana.group);
       { const so = this.solana; fundirEstaticos(so.group, { passo: (_, t) => so.atualizar(1 / 30, t) }); }
       pararCamuflagem(typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
       this.nave = criarNave({ low, cor: "#2f7bff" }); loteNave(this.nave); this.cena.scene.add(this.nave.group);
+      // as motos das VAGAS: paradas pra sempre → um lote estático cada (o robô repõe; quem monta leva uma instância)
       vagas().forEach((v, i) => {
-        const h = criarMoto({ cor: CORES_MOTO[i % CORES_MOTO.length]!, low }); h.group.position.set(v.x, 0, v.z); h.group.rotation.y = v.yaw;
-        fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5 }), manter: comDescendentes(h.alvos) });
-        for (let k = 0; k < 6; k++) h.atualizar({ dt: 1, t: 0, voando: false, vel: 0, curva: 0 });   // parada de novo
-        this.cena.scene.add(h.group); this.motos.push({ h, idle: null, voo: null, yawAnt: v.yaw, yAnt: null, vy: 0 });
+        const h = criarMoto({ ...lookDaVaga(i), low });
+        for (let k = 0; k < 6; k++) h.atualizar({ dt: 1, t: 0, voando: false, vel: 0, curva: 0 });
+        fundirEstaticos(h.group, { manter: comDescendentes(h.alvos) });
+        const g = new THREE.Group(); g.add(h.group); g.position.set(v.x, this.yDaVaga(v), v.z); g.rotation.y = v.yaw;
+        this.cena.scene.add(g); this.vagaMotos.push({ g, moto: h.group, alvos: h.alvos });
       });
+      // o ROBÔ de cada estacionamento, pousado na plataforma dele
+      for (const l of LOTES) {
+        const robo = criarRoboMotos({ low }), b = baseDoRobo(l), y = this.yDoLote(l) + 1.6;
+        robo.group.position.set(b.x, y, b.z); this.cena.scene.add(robo.group, robo.efeito);
+        this.fabricas.push({ lote: l, f: fabricaNova(), robo, pos: { x: b.x, y, z: b.z }, rumo: l.rot, efeitoEm: null });
+      }
       const marca = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.2, 40), new THREE.MeshBasicMaterial({ color: 0x7fe0ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
       marca.rotation.x = -Math.PI / 2; marca.visible = false; this.cena.scene.add(marca);
       const borda = new THREE.Mesh(new THREE.TorusGeometry(CIDADE.bordaR, 0.14, 6, low ? 64 : 128), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -658,36 +699,57 @@ export class CyberEngine {
   pararRota() { if (this.rota) { this.rota = null; this.o.onRota?.(null); } }
   /** "Pousar": desce sozinho até encostar no chão embaixo (mapa, cidade ou topo da Zaeon) */
   pousar() { if ((this.pilotando && !this.pousado) || (this.moto !== null && !this.motoPousado)) this.autoPouso = true; }
-  /** as vagas com alguém montado AGORA (eu e os remotos) → quem */
-  private vagasOcupadas(): Map<number, Ator> {
-    const m = new Map<number, Ator>();
-    if (this.moto !== null) m.set(this.moto, this.eu);
-    for (const a of this.remotos.values()) if (a.moto && !m.has(a.moto.s)) m.set(a.moto.s, a);
-    return m;
+  /** as motos estacionadas que valem (as minhas e as dos outros; some a que alguém pegou) */
+  private largadasAgora() {
+    const euId = this.o.eu.id;
+    return largadasValidas([{ id: euId, moto: this.moto !== null ? { s: this.moto, y: 0, yaw: 0, de: this.motoDe } : null, motoLargada: this.motoLargada }, ...[...this.remotos.values()].map((a) => ({ id: a.id, moto: a.moto, motoLargada: a.motoLargada }))]);
   }
-  /** a vaga livre ao alcance (pra montar) — só no chão do mapa, a pé */
-  private motoAoAlcance(): number { return this.podeMontar() ? motoPerto(this.eu.pos, new Set(this.vagasOcupadas().keys()), this.noCeu) : -1; }
+  /** a vaga `i` tem moto pronta (o robô não está fabricando nela)? */
+  private vagaPronta(i: number) { const v = vagas()[i]; return !!v && progressoDaVaga(this.fabricas[v.lote]!.f, i) >= 1; }
+  /** o que dá pra montar perto (vaga pronta ou estacionada), no mesmo nível dos meus pés — a pé */
+  private motoAoAlcance(): AlvoMoto | null { return this.podeMontar() ? motoParaMontar(this.eu.pos, this.eu.alt, (i) => this.vagaPronta(i), (v) => this.yDaVaga(v), this.largadasAgora()) : null; }
   /** a pé, no chão do mapa ou no piso da Zaeon (os dois estacionamentos) */
-  private podeMontar() { return !this.menu && !this.pilotando && this.moto === null && !this.jet.noAr && (!this.altoEm || this.noCeu) && !this.noTopo && !this.sobreNave && this.ilhota === null && this.plat === null && this.bordo === null && this.motos.length > 0; }
-  /** MONTA na moto da vaga `s` (qualquer pessoa; tem que estar perto e a vaga livre) */
-  montar(s = this.motoAoAlcance()): boolean {
-    const v = vagas()[s];
-    if (!v || !this.podeMontar() || v.ceu !== this.noCeu || this.vagasOcupadas().has(s) || Math.hypot(this.eu.pos.x - v.x, this.eu.pos.z - v.z) > MOTO.alcance) return false;
-    this.motoAlvo = null; this.moto = s; this.motoEst = { x: v.x, y: this.yDaVaga(v), z: v.z, yaw: v.yaw, vx: 0, vy: 0, vz: 0 };
+  private podeMontar() { return !this.menu && !this.pilotando && this.moto === null && !this.jet.noAr && (!this.altoEm || this.noCeu) && !this.noTopo && !this.sobreNave && this.ilhota === null && this.plat === null && this.bordo === null && this.vagaMotos.length > 0; }
+  /** ninguém (eu, os outros, motos estacionadas) em cima da vaga `s` — o robô espera liberar pra fabricar */
+  private vagaLivre(s: number) {
+    const v = vagas()[s]; if (!v) return false;
+    const y = this.yDaVaga(v), perto = (p: { x: number; z: number }, alt: number) => Math.hypot(p.x - v.x, p.z - v.z) < 2.6 && Math.abs(alt - y) < 4;
+    if (perto(this.moto !== null ? this.motoEst : this.eu.pos, this.moto !== null ? this.motoEst.y : this.eu.alt)) return false;
+    for (const a of this.remotos.values()) if (perto(a.pos, a.alt)) return false;
+    return !this.largadasAgora().some(({ m }) => perto(m, m.y));
+  }
+  /** a VAGA `s` esvaziou (alguém levou a moto): o robô do lote dela vem fabricar outra */
+  private tomarVaga(s: number) { const v = vagas()[s]; if (v && this.vagaPronta(s)) esvaziou(this.fabricas[v.lote]!.f, s); }
+  /** MONTA: numa VAGA (leva a moto — o robô repõe) ou numa ESTACIONADA (a minha ou a de outra pessoa: `de` avisa o dono) */
+  montar(alvo: AlvoMoto | null = this.motoAoAlcance()): boolean {
+    if (!alvo || !this.podeMontar()) return false;
+    let p: { x: number; y: number; z: number; yaw: number } | null = null;
+    let lancar = false;
+    if (alvo.tipo === "vaga") { const v = vagas()[alvo.s]; if (v && this.vagaPronta(alvo.s)) { p = { x: v.x, y: this.yDaVaga(v), z: v.z, yaw: v.yaw }; lancar = true; } }
+    else p = this.largadasAgora().find((l) => l.dono === alvo.dono)?.m ?? null;
+    if (!p || Math.abs(p.y - this.eu.alt) > 2.5 || Math.hypot(this.eu.pos.x - p.x, this.eu.pos.z - p.z) > MOTO.alcance) return false;
+    if (alvo.tipo === "vaga") { this.tomarVaga(alvo.s); this.motoDe = undefined; }
+    else { this.motoDe = alvo.dono; if (alvo.dono === this.o.eu.id) { this.motoLargada = null; this.renomearInst("eu:p", "eu:r"); } }   // a minha estacionada: a mesma moto (sem trocar)
+    // da VAGA: a moto já sai da plataforma PAIRANDO na altura de lançamento (acima do "rente ao chão": anda na hora)
+    const y0 = lancar ? p.y - PLATAFORMA_MOTO.altura + ALTURA_LANCAMENTO : p.y;
+    this.motoAlvo = null; this.moto = alvo.s; this.motoEst = motoParada(p.x, y0, p.z, p.yaw); this.camAz = p.yaw + Math.PI; this.camSegueEm = 0;
     this.altoEm = null; this.yNav = 0;   // montado, o nível é o da moto
-    this.motoPousado = true; this.autoPouso = false;
+    this.motoPousado = !lancar; this.autoPouso = false;
     this.sitT = 0; this.alvo = null; this.alvoDepois = null; this.falandoCom = null; this.jetV = { x: 0, z: 0 };
-    this.som.tocar("ship-touchdown", this.motos[s]!.h.group.position, { dist: DISTANCIA.eu, volume: 0.35, taxa: 1.5 });
     return true;
   }
-  /** a altura de uma vaga: chão, ou o piso da Zaeon (que flutua) */
-  private yDaVaga(v: { ceu: boolean }) { return v.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : 0; }
-  /** DESCE da moto (pousada): fica ao lado dela; a moto volta pra vaga. No piso da Zaeon → anda na ilha; pousada noutro
-   *  alto (telhado/muralha) → cai dali */
+  /** a altura de um lote (o da Zaeon flutua com a ilha) */
+  private yDoLote(l: Lote) { return l.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : 0; }
+  /** a altura da moto PARADA numa vaga: em cima da plataforma de lançamento (no chão, ou no piso da Zaeon, que flutua) */
+  private yDaVaga(v: { ceu: boolean }) { return (v.ceu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : 0) + PLATAFORMA_MOTO.altura; }
+  /** DESCE da moto (pousada): fica ao lado dela e a moto FICA ALI estacionada (é um veículo — é minha até eu estacionar
+   *  outra ou sair); os outros veem pela minha presença. No piso da Zaeon → anda na ilha; noutro alto → cai dali */
   desmontar() {
     if (this.moto === null || !this.motoPousado) return;
     const m = this.motoEst, lx = Math.cos(m.yaw), lz = -Math.sin(m.yaw);   // a esquerda de quem pilota
-    this.moto = null; this.autoPouso = false; this.voY.subir = false; this.voY.descer = false;
+    this.motoLargada = { s: this.moto, x: m.x, y: m.y, z: m.z, yaw: m.yaw };
+    this.soltarInst("eu:p"); this.renomearInst("eu:r", "eu:p");   // a MESMA moto fica ali (a estacionada antiga some)
+    this.moto = null; this.motoDe = undefined; this.autoPouso = false; this.voY.subir = false; this.voY.descer = false;
     this.eu.pos.set(m.x + lx * 1.6, 0, m.z + lz * 1.6); this.eu.facing = m.yaw;
     // pousada em qualquer piso da Zaeon (plataforma central, escada, lounge, palco, cabine do DJ) → anda ali
     if (naIlhaPrincipal(this.eu.pos) && Math.abs(m.y - (CIDADE.pisoY + alturaNaCidade(this.eu.pos))) < 1.5) { this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; this.portalArmado = false; }
@@ -819,39 +881,118 @@ export class CyberEngine {
   /** releitura das preferências de som (o React chama ao mudar liga/desliga ou volume) */
   aplicarPrefsSom() { this.som.aplicarPrefs(); }
 
-  /** cada moto: na vaga (parada, flutuando), comigo (o meu voo) ou com um remoto (a pose dele). Devolve quem monta qual. */
-  private atualizarMotos(dt: number, t: number): Map<number, Ator> {
-    const ocup = this.vagasOcupadas(), vs = vagas();
-    this.motos.forEach((m, i) => {
-      const quem = ocup.get(i), g = m.h.group;
-      let voando = false, vel = 0;
-      if (quem === this.eu) { const e = this.motoEst; g.position.set(e.x, e.y, e.z); g.rotation.y = e.yaw; voando = !this.motoPousado; vel = Math.hypot(e.vx, e.vz) / VOO.vel; }
+  /** uma INSTÂNCIA animada (a moto de um piloto) do look da vaga `s`: do pool, ou nova */
+  private pegarInst(s: number): InstMoto {
+    const look = String(s), livre = this.poolMotos.get(look)?.pop();   // o look é da vaga (cor + carenagem)
+    if (livre) { livre.s = s; livre.casca.visible = true; livre.som = somMotoParada; livre.yAnt = null; return livre; }
+    const h = criarMoto({ ...lookDaVaga(s), low: this.o.low });
+    fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5, boost: k % 3 === 0 ? 1 : 0, seta: (k % 3) - 1 }), manter: comDescendentes(h.alvos) });
+    const casca = new THREE.Group(); casca.add(h.group); this.cena.scene.add(casca);
+    return { h, g: h.group, casca, look, s, loops: null, som: somMotoParada, yawAnt: 0, yAnt: null, vy: 0 };
+  }
+  /** devolve a instância da chave pro pool (som desligado, escondida) */
+  private soltarInst(chave: string) {
+    const m = this.instMotos.get(chave); if (!m) return;
+    this.instMotos.delete(chave);
+    if (m.loops) { for (const l of Object.values(m.loops)) this.som.soltarLoop(l); m.loops = null; }
+    if (m.som.montada) this.som.tocar("moto-desliga", m.g.position, { dist: DISTANCIA.padrao });
+    m.casca.visible = false; const p = this.poolMotos.get(m.look) ?? []; p.push(m); this.poolMotos.set(m.look, p);
+  }
+  private renomearInst(de: string, para: string) { const m = this.instMotos.get(de); if (!m) return; this.instMotos.delete(de); this.instMotos.set(para, m); }
+
+  /** as MOTOS a cada quadro: quem pegou moto de uma vaga (ela esvazia), os ROBÔS fabricando, as motos das vagas (se
+   *  formando), e as INSTÂNCIAS (a minha e as dos outros: montadas e estacionadas). Devolve quem monta qual. */
+  private atualizarMotos(dt: number, t: number): Map<Ator, MotoHandle> {
+    const euId = this.o.eu.id;
+    // 1) alguém (remoto) montou de uma VAGA → ela esvaziou (montar numa estacionada traz `de`)
+    for (const a of this.remotos.values()) {
+      const k = a.moto ? `${a.moto.s}|${a.moto.de ?? ""}` : "", antes = this.motoVista.get(a.id) ?? "";
+      if (k && k !== antes && !a.moto!.de) this.tomarVaga(a.moto!.s);
+      this.motoVista.set(a.id, k);
+    }
+    for (const id of this.motoVista.keys()) if (!this.remotos.has(id)) this.motoVista.delete(id);
+    // alguém pegou a moto que eu tinha estacionado: ela é dele agora
+    if (this.motoLargada && [...this.remotos.values()].some((a) => a.moto?.de === euId)) { this.motoLargada = null; this.soltarInst("eu:p"); }
+    // 2) os ROBÔS: voam até a próxima vaga vazia, fabricam, voltam pra base
+    const vs = vagas();
+    for (const fb of this.fabricas) {
+      const tr = fb.f.tarefa, base = baseDoRobo(fb.lote), yl = this.yDoLote(fb.lote);
+      const alvo = tr ? { x: vs[tr.s]!.x, y: this.yDaVaga(vs[tr.s]!) + FABRICA.altura, z: vs[tr.s]!.z } : { x: base.x, y: yl + 1.6, z: base.z };
+      const ant = fb.pos; fb.pos = moverRobo(fb.pos, alvo, dt);
+      const dx = fb.pos.x - ant.x, dz = fb.pos.z - ant.z; if (Math.hypot(dx, dz) > 0.02) fb.rumo = Math.atan2(dx, dz);
+      const chegou = Math.hypot(fb.pos.x - alvo.x, fb.pos.y - alvo.y, fb.pos.z - alvo.z) < 0.25;
+      // o robô só sai depois que quem levou a moto FOI EMBORA (a vaga livre por FABRICA.espera s) e só fabrica com ela livre
+      const pronta = passoFabrica(fb.f, dt, !!tr && chegou, (s) => this.vagaLivre(s));
+      fb.robo.group.position.set(fb.pos.x, fb.pos.y, fb.pos.z);
+      // a luz da fabricação fica na vaga em que ele trabalha; pronta → clarão (a luz acaba ali mesmo)
+      if (fb.f.tarefa?.fase === "fabrica") fb.efeitoEm = fb.f.tarefa.s;
+      if (pronta !== null) fb.robo.clarao();
+      if (fb.efeitoEm !== null) { const v = vs[fb.efeitoEm]!; fb.robo.efeito.position.set(v.x, this.yDaVaga(v), v.z); }
+      const fab = fb.f.tarefa?.fase === "fabrica" ? progressoDaVaga(fb.f, fb.f.tarefa.s) : null;
+      if (this.regiaoPerto(fb.robo.group, "robo-motos")) fb.robo.atualizar({ dt, t, progresso: fab, rumo: fab !== null ? vs[fb.f.tarefa!.s]!.yaw : fb.rumo });
+    }
+    // 3) as motos das VAGAS: na vaga (a Zaeon flutua); vazia some; sendo fabricada vai SE FORMANDO de baixo pra cima
+    this.vagaMotos.forEach((m, i) => {
+      const v = vs[i]!, k = progressoDaVaga(this.fabricas[v.lote]!.f, i);
+      m.moto.visible = k > 0.001; m.g.position.set(v.x, this.yDaVaga(v), v.z);
+      const e = k >= 1 ? 1 : 0.02 + 0.98 * (1 - Math.pow(1 - k, 3)); m.moto.scale.set(1, e, 1);
+    });
+    // 4) as INSTÂNCIAS que devem existir agora (montadas e estacionadas)
+    type Quer = { s: number; quem: Ator | null; pose?: { x: number; y: number; z: number; yaw: number } };
+    const quer = new Map<string, Quer>();
+    if (this.moto !== null) quer.set("eu:r", { s: this.moto, quem: this.eu });
+    for (const a of this.remotos.values()) if (a.moto) quer.set(`${a.id}:r`, { s: a.moto.s, quem: a });
+    for (const { dono, m } of this.largadasAgora()) quer.set(`${dono === euId ? "eu" : dono}:p`, { s: m.s, quem: null, pose: m });
+    // a mesma moto troca de papel (montada ↔ estacionada) sem sumir: reaproveita a do outro papel, mesma vaga de origem
+    for (const [k, q] of quer) {
+      if (this.instMotos.has(k) && this.instMotos.get(k)!.s === q.s) continue;
+      const irma = k.endsWith(":r") ? k.slice(0, -2) + ":p" : k.slice(0, -2) + ":r", im = this.instMotos.get(irma);
+      if (im && im.s === q.s && !quer.has(irma)) { this.soltarInst(k); this.renomearInst(irma, k); }
+      else if (this.instMotos.has(k)) this.soltarInst(k);
+    }
+    for (const k of [...this.instMotos.keys()]) if (!quer.has(k)) this.soltarInst(k);
+    const montadas = new Map<Ator, MotoHandle>();
+    for (const [k, q] of quer) {
+      let m = this.instMotos.get(k); if (!m) { m = this.pegarInst(q.s); this.instMotos.set(k, m); }
+      const quem = q.quem, g = m.g;
+      let voando = false, vel = 0, inclina: number | undefined, boost = 0, guidao = 0;
+      if (quem === this.eu) { const e = this.motoEst; g.position.set(e.x, e.y, e.z); g.rotation.y = e.yaw; voando = !this.motoPousado; vel = Math.hypot(e.vx, e.vz) / VOO.vel; inclina = e.inclina; boost = e.boost ? 1 : 0; guidao = e.guidao; }
       else if (quem?.moto) { g.position.set(quem.pos.x, quem.alt, quem.pos.z); g.rotation.y = quem.moto.yaw; voando = quem.moving || quem.alt > chaoDoVoo({ x: quem.pos.x, y: quem.alt, z: quem.pos.z }, this.solidosCidade) + 0.5; vel = quem.moving ? 1 : 0; }   // (pousada na Zaeon, a 450 m, não é "voando")
-      else { const v = vs[i]!; g.position.set(v.x, this.yDaVaga(v), v.z); g.rotation.y = v.yaw; }
+      else if (q.pose) { g.position.set(q.pose.x, q.pose.y, q.pose.z); g.rotation.y = q.pose.yaw; }
+      if (quem) montadas.set(quem, m.h);
       let d = g.rotation.y - m.yawAnt; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; m.yawAnt = g.rotation.y;
       const y = g.position.y; m.vy = m.yAnt === null || dt <= 0 ? 0 : m.vy + ((y - m.yAnt) / dt - m.vy) * Math.min(1, dt * 4); m.yAnt = y;
-      m.h.atualizar({ dt, t, voando, vel, curva: d / Math.max(dt, 1e-3), vy: m.vy });
-      // som: o motor (mais agudo que o da nave) só em quem está montado; o meu quase não paneia
-      if (quem && !m.idle) { m.idle = this.som.loop("ship-idle", g, { dist: quem === this.eu ? DISTANCIA.naveLocal : DISTANCIA.padrao }); m.voo = this.som.loop("ship-flight", g, { dist: quem === this.eu ? DISTANCIA.naveLocal : DISTANCIA.padrao }); this.som.taxaLoop(m.idle, 1.7); this.som.taxaLoop(m.voo, 1.45); }
-      if (!quem && m.idle) { this.som.soltarLoop(m.idle); if (m.voo) this.som.soltarLoop(m.voo); m.idle = null; m.voo = null; }
-      if (m.idle && m.voo) { this.som.volumeLoop(m.idle, voando ? 0 : 0.45); this.som.volumeLoop(m.voo, voando ? (0.3 + 0.5 * Math.min(1, vel)) : 0); }
-    });
-    return ocup;
+      const curva = d / Math.max(dt, 1e-3);
+      if (quem && quem !== this.eu) guidao = Math.max(-1, Math.min(1, -curva * 2.5));   // dos outros: o guidão sai do giro (direita = rumo diminui)
+      const seta = quem && voando ? setaAcesa(guidao, t) : 0;
+      m.h.atualizar({ dt, t, voando, vel, curva, vy: m.vy, inclina, boost, seta });
+      // SOM por estágio (lib/cyber/somMoto): loops do motor (que faz a lenta)/vento/turbina + one-shots (partida, decola, boost,
+      // freio, pouso, desliga — o pisca é só luz). A minha moto quase não paneia
+      const minha = quem === this.eu, dist = minha ? DISTANCIA.naveLocal : DISTANCIA.padrao;
+      const est: EstadoSomMoto = quem ? { montada: true, voando, vel: minha ? Math.hypot(this.motoEst.vx, this.motoEst.vz) / PILOTAGEM.vel : quem.moving ? 0.8 : 0, acel: minha ? this.acelMoto : 0, boost: boost > 0, seta } : somMotoParada;
+      for (const ev of eventosDaMoto(m.som, est)) this.som.tocar(ev, g.position, { dist, seguir: g });
+      m.som = est;
+      if (quem && !m.loops) m.loops = Object.fromEntries(LOOPS_MOTO.map((n) => [n, this.som.loop(n, g, { dist })])) as Record<(typeof LOOPS_MOTO)[number], LoopSom>;
+      if (!quem && m.loops) { for (const l of Object.values(m.loops)) this.som.soltarLoop(l); m.loops = null; }
+      if (m.loops) { const mix = mixDaMoto(est); for (const n of LOOPS_MOTO) { this.som.volumeLoop(m.loops[n], mix[n].vol, n === "moto-turbina" ? 6 : undefined); this.som.taxaLoop(m.loops[n], mix[n].taxa); } }
+    }
+    return montadas;
   }
-  /** encaixa um avatar na moto `s`: quadril no banco, mãos nos punhos, pés nas pedaleiras (IK do AvatarLuz) */
-  private naMoto(av: AvatarLuzHandle, s: number): Montado | null {
-    const m = this.motos[s]; if (!m) return null;
-    m.h.group.updateWorldMatrix(true, true);
-    m.h.assento.getWorldPosition(av.group.position); av.olharPara(m.h.group.rotation.y);
-    const v = this.montadoTmp, p = m.h.pontos;
+  /** encaixa um avatar na moto: quadril no banco, mãos nos punhos, pés nas pedaleiras (IK do AvatarLuz) */
+  private naMoto(av: AvatarLuzHandle, h: MotoHandle | undefined): Montado | null {
+    if (!h) return null;
+    h.group.updateWorldMatrix(true, true);
+    h.assento.getWorldPosition(av.group.position); av.olharPara(h.group.rotation.y);
+    const v = this.montadoTmp, p = h.pontos;
     p.maoE.getWorldPosition(v.maoE); p.maoD.getWorldPosition(v.maoD); p.peE.getWorldPosition(v.peE); p.peD.getWorldPosition(v.peD);
     return { w: 1, ...v };
   }
   /** as motos PARADAS na vaga são sólidas pra quem anda (círculo do tamanho do corpo) */
-  private colisoresDeMotos(ceu = false): Colisor[] {
-    if (!this.motos.length) return [];
-    const ocup = this.vagasOcupadas();
-    return vagas().flatMap((v, i) => ocup.has(i) || v.ceu !== ceu ? [] : [{ x: v.x, z: v.z, r: 1.1 }]);
+  private colisoresDeMotos(): Colisor[] {
+    const out: Colisor[] = [], vs = vagas();
+    vs.forEach((v, i) => { if (Math.abs(this.yDaVaga(v) - this.eu.alt) < 2.5) out.push({ x: v.x, z: v.z, r: PLATAFORMA_MOTO.r }); });   // a plataforma (com ou sem moto)
+    for (const { m } of this.largadasAgora()) if (Math.abs(m.y - this.eu.alt) < 2.5) out.push({ x: m.x, z: m.z, r: 1.1 });   // as paradas no MEU nível
+    return out;
   }
   /** altura do dorso da nave (onde se fica em pé) e o raio andável lá em cima */
   private topoNave(): number { return this.naveEst.y + 2.2 * ESCALA_NAVE_V; }
@@ -959,6 +1100,7 @@ export class CyberEngine {
       if (k === "shift") { this.keys.shift = true; return; }
       if (k === " " || k === "spacebar") { if (this.pilotando || this.moto !== null) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.comandoJet(true); e.preventDefault(); } return; }
       if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }   // F = a ação de contexto (estudar, montar, embarcar, descer…)
+      if (k === "p" && (this.pilotando || this.moto !== null)) { this.pousar(); e.preventDefault(); return; }   // P = pousar (no desktop não há o botão)
       if ((k === "e" || k === "q") && (this.pilotando || this.moto !== null)) { this.voY[k === "e" ? "subir" : "descer"] = true; this.autoPouso = false; e.preventDefault(); return; }
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { this.keys[k] = true; e.preventDefault(); }
     });
@@ -987,14 +1129,14 @@ export class CyberEngine {
     });
     on("pointermove", (e) => {
       if (this.olharLivre) {   // mexer o mouse = girar a câmera (direita gira pra direita; pra baixo olha pra baixo)
-        this.camAz -= e.movementX * SENS_OLHAR; this.camPitch = limitarPitch(this.camPitch + e.movementY * SENS_OLHAR * 0.85);
+        this.camSegueEm = performance.now() + 1500; this.camAz -= e.movementX * SENS_OLHAR; this.camPitch = limitarPitch(this.camPitch + e.movementY * SENS_OLHAR * 0.85);
         return;
       }
       if (this.ptrs.has(e.pointerId)) this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.ptrs.size === 2 && this.pinch0) { const [a, b] = [...this.ptrs.values()]; this.camDist = Math.min(CyberEngine.CAM_MAX, Math.max(6, (this.dist0 * this.pinch0) / Math.max(20, Math.hypot(a!.x - b!.x, a!.y - b!.y)))); this.moved = true; return; }
       if (!this.drag) { if (e.target === cv) this.passarMouse(e.clientX, e.clientY); return; }
       const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) this.moved = true;
-      this.camAz = this.drag.az - dx * 0.006; this.camPitch = limitarPitch(this.drag.pitch + dy * 0.005);   // arrastar pra baixo até o chão → olhar pro céu
+      this.camSegueEm = performance.now() + 1500; this.camAz = this.drag.az - dx * 0.006; this.camPitch = limitarPitch(this.drag.pitch + dy * 0.005);   // arrastar pra baixo até o chão → olhar pro céu
     });
     on("pointerup", (e) => {
       if (this.travando) { this.travando = false; return; }
@@ -1031,7 +1173,7 @@ export class CyberEngine {
     if (el && this.plat) { const pl = this.plat; return { id: `elevador-${pl.andar}`, rotulo: el.rotulo, fazer: () => { pl.andar = el.proximo; this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.eu }); } }; }
     const estudar = { id: "estudar", rotulo: "Estudar", fazer: () => this.o.onEntrarEstudo?.() };
     if (this.perto || this.noTopo || (this.noCeu && computadorPerto(this.eu.pos, 4) >= 0)) return estudar;
-    const m = this.motoAoAlcance(); if (m >= 0) return { id: `moto-${m}`, rotulo: "Montar na moto", fazer: () => { this.montar(m); } };
+    const m = this.motoAoAlcance(); if (m) return { id: m.tipo === "vaga" ? `moto-${m.s}` : `moto-${m.dono}`, rotulo: "Montar na moto", fazer: () => { this.montar(m); } };
     if (this.nave && this.navePerto()) return { id: "entrar-nave", rotulo: "Entrar na nave", fazer: () => this.entrarNaNave() };
     if (this.noCeu && this.cidade?.tocaDiscos && this.ehFundador(this.o.eu.id)) {
       const td = this.cidade.tocaDiscos.getWorldPosition(this.tmp);
@@ -1077,11 +1219,14 @@ export class CyberEngine {
     const sob = this.monitorSob(cx, cy);
     this.ray.setFromCamera(this.ndc(cx, cy), this.cam);
     // uma MOTO parada: perto = monta; longe = anda até a vaga
-    if (this.motos.length && (!this.altoEm || this.noCeu) && !this.noTopo) {
-      const ocup = this.vagasOcupadas();
-      const vs = vagas(), i = this.motos.findIndex((m, k) => !ocup.has(k) && vs[k]!.ceu === this.noCeu && this.ray.intersectObjects(m.h.alvos, true).length > 0);
-      if (i >= 0) {
-        if (!this.montar(i)) { const v = vagas()[i]!, lx = Math.cos(v.yaw), lz = -Math.sin(v.yaw); this.alvo = new THREE.Vector2(v.x + lx * 1.4, v.z + lz * 1.4); this.alvoDepois = null; this.falandoCom = null; this.motoAlvo = i; }
+    if (this.vagaMotos.length && (!this.altoEm || this.noCeu) && !this.noTopo) {
+      // as candidatas: as motos prontas das vagas e as estacionadas, no MEU nível
+      const cands: { alvo: AlvoMoto; alvos: THREE.Object3D[]; p: { x: number; y: number; z: number; yaw: number } }[] = [];
+      vagas().forEach((v, i) => { if (this.vagaPronta(i)) cands.push({ alvo: { tipo: "vaga", s: i }, alvos: this.vagaMotos[i]!.alvos, p: { x: v.x, y: this.yDaVaga(v), z: v.z, yaw: v.yaw } }); });
+      for (const { dono, m } of this.largadasAgora()) { const im = this.instMotos.get(`${dono === this.o.eu.id ? "eu" : dono}:p`); if (im) cands.push({ alvo: { tipo: "largada", dono, s: m.s }, alvos: im.h.alvos, p: m }); }
+      const c = cands.find((x) => Math.abs(x.p.y - this.eu.alt) < 2.5 && this.ray.intersectObjects(x.alvos, true).length > 0);
+      if (c) {
+        if (!this.montar(c.alvo)) { const lx = Math.cos(c.p.yaw), lz = -Math.sin(c.p.yaw); this.alvo = new THREE.Vector2(c.p.x + lx * 1.4, c.p.z + lz * 1.4); this.alvoDepois = null; this.falandoCom = null; this.motoAlvo = c.alvo; }
         return;
       }
     }
@@ -1176,7 +1321,7 @@ export class CyberEngine {
   }
   private soltar(raiz: THREE.Object3D) { const r = this.regioes.get(raiz); if (r) { soltarRegiao(r); this.regioes.delete(raiz); } }
 
-  private atualizarCamera() {
+  private atualizarCamera(dt = 1 / 60) {
     const l = this.minhaBase;
     if (this.menu && l) {
       const pm = Math.min(2.4, Math.max(1, 0.9 / this.cam.aspect));   // retrato: afasta p/ caber a base
@@ -1186,9 +1331,17 @@ export class CyberEngine {
       this.camT.lerp(this.vCamA.set(l.x, yb + (pm > 1 ? 0.1 : 1.4), l.z), 0.06); this.cam.lookAt(this.camT);
       return;
     }
-    this.camT.lerp(this.vCamA.set(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), 0.12);
+    // de moto o alvo segue por TEMPO (não por quadro): a 60 m/s, 0,12/quadro deixava a câmera ~17 m pra trás; assim
+    // fica ~v/12 (≈ 5 m no boost) — a moto "puxa" um pouco à frente, que dá a sensação de arrancada
+    this.camT.lerp(this.vCamA.set(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), this.moto !== null ? 1 - Math.exp(-dt * 12) : 0.12);
     const cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
-    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null ? Math.max(this.camDist, 9) : this.camDist;
+    // MOTO: câmera de perseguição — volta sozinha pra TRÁS da moto (com atraso: a curva aparece na tela), a não ser
+    // que a pessoa tenha mexido o mouse/arrastado há pouco; afasta um pouco com a velocidade
+    if (this.moto !== null && performance.now() > this.camSegueEm) {
+      let d = this.motoEst.yaw + Math.PI - this.camAz; d = Math.atan2(Math.sin(d), Math.cos(d));
+      this.camAz += d * (1 - Math.exp(-dt * 2.6));
+    }
+    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camDist;
     // câmera em 3ª pessoa: perto de um marco (ilha flutuante, muralhas), se a estrutura fica ENTRE a câmera e o
     // personagem, a câmera se aproxima (senão a ilha cobre a tela)
     const marco = this.lms.find((l) => Math.hypot(this.eu.pos.x - l.poi.x, this.eu.pos.z - l.poi.z) < l.poi.interactR * 1.8);
@@ -1197,6 +1350,15 @@ export class CyberEngine {
       const dir = this.vCamB.set(Math.sin(this.camAz) * cp, sp, Math.cos(this.camAz) * cp).normalize();
       this.rayCam.set(alvoOlho, dir); this.rayCam.far = dist;
       const h = this.rayCam.intersectObjects(marco.alvos, true)[0];
+      if (h) dist = Math.max(2.2, h.distance - 0.6);
+    }
+    // num campus: um prédio entre a câmera e o personagem → a câmera se aproxima
+    const campusAqui = this.plat ? this.campi.find((c) => c.id === this.plat!.id) : undefined;
+    if (campusAqui) {
+      const alvoOlho = this.vCamA.set(this.camT.x, this.camT.y + 0.8, this.camT.z);
+      const dir = this.vCamB.set(Math.sin(this.camAz) * cp, sp, Math.cos(this.camAz) * cp).normalize();
+      this.rayCam.set(alvoOlho, dir); this.rayCam.far = dist;
+      const h = this.rayCam.intersectObjects(campusAqui.h.alvosCamera, false)[0];
       if (h) dist = Math.max(2.2, h.distance - 0.6);
     }
     // na universidade: muralhas, paredes, torres e telhados entre a câmera e o personagem → a câmera se aproxima
@@ -1211,21 +1373,31 @@ export class CyberEngine {
     const c = poseDaCamera({ olho: { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z }, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
     this.cam.position.set(c.pos.x, c.pos.y, c.pos.z);
     this.cam.lookAt(c.olhar.x, c.olhar.y, c.olhar.z);
+    // SENSAÇÃO DE VELOCIDADE (moto): o FOV abre com a velocidade (+12°, ~+14° no boost) e, no boost, a câmera treme de leve
+    const alvoVel = this.moto !== null && !this.motoPousado ? sensacaoDeVelocidade(this.motoEst) : 0;
+    this.velTela += (alvoVel - this.velTela) * (1 - Math.exp(-dt * (alvoVel > this.velTela ? 3 : 1.8)));
+    if (!this.fovBase) this.fovBase = this.cam.fov;
+    const fov = this.fovBase + 12 * Math.min(1.15, this.velTela);
+    if (Math.abs(fov - this.cam.fov) > 0.02) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
+    if (this.moto !== null && this.motoEst.boost) { const a = 0.045 * this.velTela, t = performance.now() * 0.001; this.cam.position.x += Math.sin(t * 47) * a; this.cam.position.y += Math.sin(t * 61 + 1) * a; }
   }
 
-  /** as entradas de voo (WASD/joystick/direcional relativo à câmera; Espaço/E/SUBIR; Shift/Q/DESCER; Pousar) → comando */
-  private comandoDeVoo() {
-    let ix = 0, iz = 0;
-    if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
-    if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
-    if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
-    ix += this.botDir.x; iz += this.botDir.z;
-    const subir = this.voY.subir, descer = this.voY.descer || !!this.keys.shift;
-    this.cmdVoo.subir = subir; this.cmdVoo.descer = descer;
-    if (ix || iz || subir || descer) this.autoPouso = false;
-    const dir = moverRelativoCamera(ix, iz, this.camAz);
-    return { wx: dir?.wx ?? 0, wz: dir?.wz ?? 0, subir, descer: descer || this.autoPouso };
+  /** as entradas da MOTO: W/S (ou joystick pra frente/trás, ▲▼) = acelerador/freio; A/D (joystick de lado, ◀▶) = guidão;
+   *  Espaço/E/SUBIR sobe; Q/DESCER desce; Shift ou ⚡ = boost. Não é relativo à câmera: W é sempre a frente da moto */
+  private comandoDeMoto(): ComandoMoto {
+    let acel = 0, giro = 0;
+    if (this.keys.w || this.keys.arrowup) acel += 1; if (this.keys.s || this.keys.arrowdown) acel -= 1;
+    if (this.keys.a || this.keys.arrowleft) giro -= 1; if (this.keys.d || this.keys.arrowright) giro += 1;
+    if (this.joy.on) { acel -= this.joy.y; giro += this.joy.x; }
+    acel -= this.botDir.z; giro += this.botDir.x;
+    const subir = this.voY.subir, descer = this.voY.descer, boost = !!this.keys.shift || this.boostBotao;
+    if (acel || subir || descer) this.autoPouso = false;
+    return { acel: Math.max(-1, Math.min(1, acel)), giro: Math.max(-1, Math.min(1, giro)), subir, descer: descer || this.autoPouso, boost };
   }
+  /** botão ⚡ (segurar) da moto */
+  boostMoto(v: boolean) { this.boostBotao = v; }
+  /** o tanque de boost (0..1) e se está aceso — o HUD lê */
+  get tanqueMoto() { return this.moto === null ? null : { tanque: this.motoEst.tanque, aceso: this.motoEst.boost }; }
 
   // ───────────── loop ─────────────
   private loop(now: number) {
@@ -1247,9 +1419,9 @@ export class CyberEngine {
       else if (this.holdT > 0) { this.holdT = Math.max(0, this.holdT - dt * 2); if (this.o.els.hold) this.o.els.hold.style.width = (this.holdT / 1.2) * 100 + "%"; }
       const s = this.assento(); eu.pos.set(s.x, 0, s.z); eu.facing = this.rotAssento(); this.sitT = 1; eu.moving = false;
     } else if (this.moto !== null) {
-      // MOTO: o mesmo voo da nave (mesmas entradas), teto baixo, sem atalhos de rota
-      const c = this.comandoDeVoo();
-      const r = passoVooSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
+      // MOTO: pilotagem de moto (lib/cyber/motoFisica) — W/S acelera/freia, A/D esterça, Shift/⚡ boost
+      const c = this.comandoDeMoto(); this.acelMoto = c.acel;
+      const r = passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
       eu.pos.set(r.s.x, 0, r.s.z); eu.facing = r.s.yaw; eu.moving = Math.hypot(r.s.vx, r.s.vz) > 1; this.sitT = 0;   // "andando" = a moto em movimento (o netcode extrapola)
     } else if (this.pilotando) {
@@ -1337,7 +1509,7 @@ export class CyberEngine {
       }
       else if (this.noCeu) {
         // sem parede invisível na borda: passou do piso da ilha → cai
-        const q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos(true)]); eu.pos.x = q.x; eu.pos.z = q.z; this.yNav = CIDADE.pisoY;
+        const q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos()]); eu.pos.x = q.x; eu.pos.z = q.z; this.yNav = CIDADE.pisoY;
         if (!naIlhaPrincipal(q)) this.cairDaqui({ x: (q.x - prev.x) / Math.max(dt, 1e-3), z: (q.z - prev.z) / Math.max(dt, 1e-3) });
         // pisou na boca da escada de energia: ela te leva (pra cima, da central; pra baixo, do lounge)
         // (ou no anel do ELEVADOR DE LUZ da torre do DJ: sobe do palco até a cabine lá em cima / desce)
@@ -1414,7 +1586,7 @@ export class CyberEngine {
     if (perto !== this.perto) { this.perto = perto; this.o.onPerto?.(perto); if (perto) this.som.tocar("near-ping", eu.av.group.position, { dist: DISTANCIA.perto }); }
 
     // rede: eu → difusão; remotos → atores
-    if (!this.menu) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.noCeu, ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw } } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
+    if (!this.menu) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.noCeu, ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
 
     // motos (antes dos avatares: quem está montado encaixa no banco/guidão/pedaleiras da moto já posicionada)
@@ -1422,9 +1594,9 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: !!(this.keys.shift || this.correr) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, montado: this.moto !== null ? this.naMoto(eu.av, this.moto) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, dt, t });
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: !!(this.keys.shift || this.correr) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, dt, t });
     for (const a of this.remotos.values()) {
-      const pilota = !!a.nave && !a.naveP, monta = a.moto && ocupadas.get(a.moto.s) === a ? a.moto.s : null;
+      const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
       a.dj = (a.dj ?? 0) + ((ehDJ ? 1 : 0) - (a.dj ?? 0)) * Math.min(1, dt * 4);
       const dancando = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && !ehDJ && naPistaDeDanca(a.pos);
@@ -1455,6 +1627,7 @@ export class CyberEngine {
       this.holo.atualizar(dt, t);
     }
     if (this.univ && this.regiaoPerto(this.univ.group, "unilab", AREA_UNILAB)) this.univ.atualizar(dt, t);
+    for (const c of this.campi) if (this.regiaoPerto(c.h.group, `campus-${c.id}`, c.area)) c.h.atualizar(dt, t);
     if (this.solana && this.regiaoPerto(this.solana.group, "solana", AREA_SOLANA)) this.solana.atualizar(dt, t);
     if (this.nave) {
       const n = this.naveEst, curva = (n.yaw - this.yawAnt) / Math.max(dt, 1e-3); this.yawAnt = n.yaw;
@@ -1474,7 +1647,7 @@ export class CyberEngine {
     this.atualizarHudVoo(now);
     this.atualizarSom(dt);
     const navePerto = !this.pilotando && !!this.nave && this.navePerto();
-    const naMoto = this.moto !== null, motoPertoAgora = this.motoAoAlcance() >= 0, pousado = naMoto ? this.motoPousado : this.pousado;
+    const naMoto = this.moto !== null, motoPertoAgora = !!this.motoAoAlcance(), pousado = naMoto ? this.motoPousado : this.pousado;
     const est = `${this.noCeu}|${navePerto}|${this.pilotando}|${pousado}|${naMoto}|${motoPertoAgora}`;
     const ac = this.acaoPerto(), ch = ac ? `${ac.id}|${ac.rotulo}` : "";
     if (ch !== this.acaoChave) { this.acaoChave = ch; this.o.onAcao?.(ac ? { rotulo: ac.rotulo } : null); }
@@ -1494,12 +1667,19 @@ export class CyberEngine {
     }
     if (this.baseQG) { this.baseQG.group.position.y = this.yDoNivel("qg"); if (this.regiaoPerto(this.baseQG.group, "base-qg")) this.baseQG.atualizar({ dt, t, ativa: false, hover: false, perto: false }); }
     // motos: de longe some a moto inteira (ninguém vê 2 m de moto a 1 km); a montada está sempre perto da câmera
-    for (const m of this.motos) this.regiaoPerto(m.h.group, "moto");
+    for (const m of this.vagaMotos) this.regiaoPerto(m.g, "moto");
+    for (const m of this.instMotos.values()) this.regiaoPerto(m.g, "moto");
 
-    this.atualizarCamera();
+    this.atualizarCamera(dt);
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
     this.atualizarHud(now);
-    this.R.clear(); this.cena.desenharFundo(this.R, this.qa.atual.nebulosa); this.R.clearDepth(); this.R.render(this.cena.scene, this.cam);
+    const desenhar = () => { this.R.clear(); this.cena.desenharFundo(this.R, this.qa.atual.nebulosa); this.R.clearDepth(); this.R.render(this.cena.scene, this.cam); };
+    // moto rápida (components/cyber/VelocidadeTela): as LINHAS de velocidade estilo anime + vinheta ligam SEMPRE (são
+    // baratas); o BLUR radial só quando a qualidade deixa (fora do modo low e dos degraus baixos — é uma tela inteira a mais)
+    if (this.velTela > 0.03) {
+      this.fxVel ??= criarVelocidadeTela({ amostrasMsaa: this.R.getContext().getContextAttributes()?.antialias ? 4 : 0 });
+      this.fxVel.render(this.R, this.velTela, t, desenhar, this.qa.atual.aura && !this.o.low);
+    } else desenhar();
     // o frustum deste quadro (os avatares remotos do próximo quadro usam pra saber se estão na tela)
     this.mProj.multiplyMatrices(this.cam.projectionMatrix, this.cam.matrixWorldInverse); this.frustum.setFromProjectionMatrix(this.mProj);
     // qualidade adaptativa: só mede jogando (o menu/landing roda a 30 e confundiria a medida)
@@ -1557,6 +1737,7 @@ export class CyberEngine {
         }
         a.naveP = parada;
         a.moto = !voando && p.moto ? p.moto : null;   // moto: qualquer pessoa (sem regalia)
+        a.motoLargada = p.motoLargada ?? null;
         const jetAnt = a.jet; a.jet = !voando && !a.moto && typeof p.jet === "number" ? p.jet : undefined;
         if (a.jet !== undefined && jetAnt !== undefined && dt > 0) a.vyJet = (a.vyJet ?? 0) + (((a.jet - jetAnt) / dt) - (a.vyJet ?? 0)) * Math.min(1, dt * 4); else a.vyJet = 0;
         const altAlvo = voando ? p.voo!.y : a.moto ? a.moto.y : a.jet !== undefined ? a.jet : typeof p.alt === "number" ? p.alt : a.topo ? this.alturaTopo() : a.ceu ? CIDADE.pisoY + alturaNaCidade(a.pos) : this.alturaChao(a.pos);
@@ -1574,7 +1755,7 @@ export class CyberEngine {
     const h = this.hudVoo; if (!h) return;
     const naMoto = this.moto !== null, voando = (this.pilotando || naMoto) && !this.menu, n = naMoto ? this.motoEst : this.naveEst, boiaCidade = this.cidade ? this.cidade.ilha.position.y - CIDADE.pisoY : 0;
     const solidos = voando ? this.solidosDeVoo() : [];
-    h.marca.visible = voando && !(naMoto ? this.motoPousado : this.pousado);
+    h.marca.visible = voando && !naMoto && !this.pousado;   // o marcador de pouso no chão é só da nave (na moto, o dono pediu sem)
     if (h.marca.visible) { const c = chaoDoVoo(n, solidos); h.marca.position.set(n.x, c + (c === CIDADE.pisoY ? boiaCidade : 0) + 0.1, n.z); }
     h.borda.visible = voando && !naMoto && Math.hypot(n.x - CIDADE.centro.x, n.z - CIDADE.centro.z) < CIDADE.bordaR + 60;
     if (h.borda.visible) h.borda.position.y = CIDADE.pisoY + boiaCidade + 0.4;
@@ -1628,8 +1809,11 @@ export class CyberEngine {
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
     this.somLounge?.dispose(); this.som.dispose();
-    this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of this.motos) m.h.dispose();
+    this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
+    for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }
+    for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.casca.removeFromParent();
+    for (const f of this.fabricas) f.robo.dispose();
     if (this.hudVoo) for (const m of [this.hudVoo.marca, this.hudVoo.borda]) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
-    this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
+    this.fxVel?.dispose(); this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
   }
 }

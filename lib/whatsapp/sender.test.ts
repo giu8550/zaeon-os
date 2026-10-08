@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { buildSendRequest, resolveProvider } from "./sender";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { buildSendRequest, resolveProvider, sendWhatsAppText } from "./sender";
+
+const mb = vi.hoisted(() => ({ send: vi.fn(), resolver: vi.fn(), registrar: vi.fn() }));
+vi.mock("@/lib/chipflow/bridge", async (o) => ({ ...(await o<any>()), sendTextViaBridge: mb.send }));
+vi.mock("@/lib/chipflow/canal", () => ({ resolverCanalEnvio: mb.resolver, registrarEnvio: mb.registrar }));
 
 describe("whatsapp · sender (provider-agnóstico)", () => {
   it("evolution: POST /message/sendText/{instance} com apikey", () => {
@@ -28,5 +32,52 @@ describe("whatsapp · sender (provider-agnóstico)", () => {
     expect(resolveProvider({ EVOLUTION_URL: "x" })).toBe("evolution");
     expect(resolveProvider({ DISPAROS_URL: "x" })).toBe("disparos");
     expect(resolveProvider({})).toBe("log");
+  });
+});
+
+describe("whatsapp · sender bridge (chip da ChipFlow)", () => {
+  const BR = { WHATSAPP_PROVIDER: "bridge", CHIPFLOW_BRIDGE_REDIS_URL: "redis://cf" };
+  beforeEach(() => { mb.send.mockReset(); mb.resolver.mockReset(); mb.registrar.mockReset(); mb.registrar.mockResolvedValue(undefined); });
+
+  it("resolveProvider: explícito, ou inferido pela URL do bridge; evolution ganha; REDIS_URL não infere", () => {
+    expect(resolveProvider({ WHATSAPP_PROVIDER: "bridge" })).toBe("bridge");
+    expect(resolveProvider({ CHIPFLOW_BRIDGE_REDIS_URL: "redis://cf" })).toBe("bridge");
+    expect(resolveProvider({ BRIDGE_REDIS_URL: "redis://b" })).toBe("bridge");
+    expect(resolveProvider({ EVOLUTION_URL: "x", CHIPFLOW_BRIDGE_REDIS_URL: "redis://cf" })).toBe("evolution");
+    expect(resolveProvider({ REDIS_URL: "redis://x" })).toBe("log");
+  });
+  it("WHATSAPP_PROVIDER=bridge sem URL de bridge (só REDIS_URL) → provider_misconfigured ANTES de tocar o canal/Prisma", async () => {
+    mb.resolver.mockResolvedValue({ fonte: "canal", canalId: "c1", chipflowId: 42 });
+    const r = await sendWhatsAppText("+5511999999999", "oi", { WHATSAPP_PROVIDER: "bridge", REDIS_URL: "redis://x" }, { agentKey: "medicina" });
+    expect(r).toEqual({ ok: false, provider: "bridge", error: "provider_misconfigured" });
+    expect(mb.resolver).not.toHaveBeenCalled();
+    expect(mb.send).not.toHaveBeenCalled();
+    expect(mb.registrar).not.toHaveBeenCalled();
+  });
+  it("buildSendRequest('bridge') é null — não é HTTP", () => {
+    expect(buildSendRequest("bridge", BR, "+5511999999999", "oi")).toBeNull();
+  });
+  it("sem canal e sem BRIDGE_INSTANCE_ID → provider_misconfigured, nada publicado", async () => {
+    mb.resolver.mockResolvedValue(null);
+    const r = await sendWhatsAppText("+5511999999999", "oi", BR, { agentKey: "medicina" });
+    expect(r).toEqual({ ok: false, provider: "bridge", error: "provider_misconfigured" });
+    expect(mb.send).not.toHaveBeenCalled();
+  });
+  it("canal vinculado → publica com o chipflowId do canal, repassa idemKey, registra o envio", async () => {
+    mb.resolver.mockResolvedValue({ fonte: "canal", canalId: "c1", chipflowId: 42 });
+    mb.send.mockResolvedValue({ ok: true, status: "sent", commandId: "cmd-1" });
+    const r = await sendWhatsAppText("+5511999999999", "oi", BR, { agentKey: "medicina", idemKey: "reply:c1:m1" });
+    expect(r).toEqual({ ok: true, provider: "bridge", commandId: "cmd-1" });
+    expect(mb.resolver).toHaveBeenCalledWith("medicina", BR);
+    expect(mb.send).toHaveBeenCalledWith(expect.objectContaining({ instanceId: 42, phone: "+5511999999999", text: "oi", idemKey: "reply:c1:m1", env: BR }));
+    expect(mb.registrar).toHaveBeenCalledWith("c1", expect.objectContaining({ ok: true }));
+  });
+  it("agentKey default 'aura'; fonte env não registra no canal; falha vira ok:false com o erro do bridge", async () => {
+    mb.resolver.mockResolvedValue({ fonte: "env", chipflowId: 9 });
+    mb.send.mockResolvedValue({ ok: false, status: "failed", error: "server returned error 463", commandId: "cmd-2" });
+    const r = await sendWhatsAppText("+5511999999999", "oi", BR);
+    expect(mb.resolver).toHaveBeenCalledWith("aura", BR);
+    expect(r).toEqual({ ok: false, provider: "bridge", error: "server returned error 463", commandId: "cmd-2" });
+    expect(mb.registrar).not.toHaveBeenCalled();
   });
 });

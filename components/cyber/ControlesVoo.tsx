@@ -1,10 +1,11 @@
 "use client";
 /**
- * Botões de MOVIMENTO da nave (desktop e celular): ⬆ Subir / ⬇ Descer (segurar), direcional de 4 setas no desktop
- * (no celular é o joystick), e "Pousar" (desce sozinho até encostar). São controles de voo — é com eles que a nave
+ * Botões de MOVIMENTO da nave/moto — só no CELULAR (toque): ⬆ Subir / ⬇ Descer (segurar), ⚡ Boost (moto) e "Pousar"
+ * (desce sozinho até encostar); a direção é o joystick. No DESKTOP o teclado faz tudo: no lugar dos botões fica só uma
+ * DICA das teclas (e o tanque do boost, na moto). São controles de voo — é com eles que a nave
  * vai a qualquer lugar do mapa. Segurar usa captura de ponteiro, então o botão não "gruda" se o dedo escorregar.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { CyberEngine } from "./engine";
 
 const BTN = "flex touch-none select-none items-center justify-center rounded-full border border-sky-300/45 bg-sky-950/60 font-extrabold text-sky-50 backdrop-blur active:bg-sky-400/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white";
@@ -23,17 +24,54 @@ function Segurar(p: { rotulo: string; aria: string; on: (v: boolean) => void; cl
   );
 }
 
-export default function ControlesVoo({ engine, touch, pousado }: { engine: React.MutableRefObject<CyberEngine | null>; touch: boolean; pousado: boolean }) {
-  const dir = useRef({ x: 0, z: 0 });
-  // janela estreita: o direcional sobe pra cima dos botões verticais (não cobre o chat, que fica embaixo à esquerda)
-  const [estreita, setEstreita] = useState(false);
-  useEffect(() => { const mq = matchMedia("(max-width: 720px)"); const f = () => setEstreita(mq.matches); f(); mq.addEventListener("change", f); return () => mq.removeEventListener("change", f); }, []);
-  const eixo = (k: "x" | "z", v: number) => (on: boolean) => {
-    if (on) dir.current[k] = v; else if (dir.current[k] === v) dir.current[k] = 0;
-    engine.current?.direcaoVoo(dir.current.x, dir.current.z);
-  };
-  // ao sair do voo, solta tudo
-  useEffect(() => () => { engine.current?.comandoVoo({ subir: false, descer: false }); engine.current?.direcaoVoo(0, 0); }, [engine]);
+/** MOTO: ⚡ BOOST (segurar; Shift no teclado) com o tanque — a barra lê o engine a cada quadro (sem re-render) */
+function Boost({ engine, style }: { engine: React.MutableRefObject<CyberEngine | null>; style: React.CSSProperties }) {
+  const barra = useRef<HTMLDivElement>(null), caixa = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let id = 0;
+    const f = () => { const b = engine.current?.tanqueMoto; if (b && barra.current && caixa.current) { barra.current.style.width = `${Math.round(b.tanque * 100)}%`; caixa.current.dataset.aceso = b.aceso ? "1" : "0"; } id = requestAnimationFrame(f); };
+    id = requestAnimationFrame(f);
+    return () => { cancelAnimationFrame(id); engine.current?.boostMoto(false); };
+  }, [engine]);
+  return (
+    <div ref={caixa} className="group absolute z-[25] flex flex-col items-center gap-1" style={style}>
+      <Segurar aria="Boost (segurar; Shift no teclado)" rotulo="⚡ Boost" on={(v) => engine.current?.boostMoto(v)} className="h-[62px] w-[78px] text-[13px] group-data-[aceso=1]:bg-amber-300/45 group-data-[aceso=1]:border-amber-200" />
+      <div className="h-[5px] w-[70px] overflow-hidden rounded-full bg-white/15"><div ref={barra} className="h-full rounded-full bg-gradient-to-r from-amber-300 to-fuchsia-400" style={{ width: "100%" }} /></div>
+    </div>
+  );
+}
+
+/** DESKTOP: a dica das teclas (sem botões) + o tanque do boost na moto */
+function DicaTeclado({ engine, moto }: { engine: React.MutableRefObject<CyberEngine | null>; moto: boolean }) {
+  const barra = useRef<HTMLDivElement>(null), caixa = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!moto) return;
+    let id = 0;
+    const f = () => { const b = engine.current?.tanqueMoto; if (b && barra.current && caixa.current) { barra.current.style.width = `${Math.round(b.tanque * 100)}%`; caixa.current.dataset.aceso = b.aceso ? "1" : "0"; } id = requestAnimationFrame(f); };
+    id = requestAnimationFrame(f);
+    return () => cancelAnimationFrame(id);
+  }, [engine, moto]);
+  const tecla = "rounded border border-white/25 bg-white/10 px-1.5 py-px font-mono text-[10px] text-white";
+  const itens: [string, string][] = moto
+    ? [["W S", "acelera · freia"], ["A D", "vira"], ["Shift", "boost"], ["Espaço Q", "sobe · desce"], ["P", "pousa"], ["F", "desce da moto"]]
+    : [["W A S D", "voa"], ["Espaço Q", "sobe · desce"], ["P", "pousa"], ["F", "sai"]];
+  return (
+    <div ref={caixa} aria-label="Teclas do veículo" className="group pointer-events-none absolute z-[25] flex flex-col items-end gap-1.5 rounded-xl border border-sky-300/20 bg-[#070b1c]/60 px-3 py-2 text-[11px] text-sky-50/85 backdrop-blur" style={{ right: "max(16px, env(safe-area-inset-right))", bottom: "max(16px, env(safe-area-inset-bottom))" }}>
+      {itens.map(([k, o]) => <div key={k} className="flex items-center gap-2"><span>{o}</span><span className="flex gap-1">{k.split(" ").map((x) => <kbd key={x} className={tecla}>{x}</kbd>)}</span></div>)}
+      {moto && <div className="mt-0.5 flex items-center gap-2"><span className="group-data-[aceso=1]:text-amber-200">⚡</span><div className="h-[5px] w-[80px] overflow-hidden rounded-full bg-white/15"><div ref={barra} className="h-full rounded-full bg-gradient-to-r from-amber-300 to-fuchsia-400" style={{ width: "100%" }} /></div></div>}
+    </div>
+  );
+}
+
+export default function ControlesVoo({ engine, touch, pousado, moto = false }: { engine: React.MutableRefObject<CyberEngine | null>; touch: boolean; pousado: boolean; moto?: boolean }) {
+  // ao sair do voo, solta tudo (vale pro desktop também: o botão do boost/joystick pode ter ficado "apertado")
+  useEffect(() => () => { engine.current?.comandoVoo({ subir: false, descer: false }); engine.current?.direcaoVoo(0, 0); engine.current?.boostMoto(false); }, [engine]);
+  if (!touch) return <DicaTeclado engine={engine} moto={moto} />;
+  return <BotoesToque engine={engine} pousado={pousado} moto={moto} />;
+}
+
+/** CELULAR: os botões (subir/descer, boost, pousar) — a direção é o joystick */
+function BotoesToque({ engine, pousado, moto }: { engine: React.MutableRefObject<CyberEngine | null>; pousado: boolean; moto: boolean }) {
   const base = { bottom: "max(30px, env(safe-area-inset-bottom))" } as const;
   return (
     <>
@@ -46,20 +84,8 @@ export default function ControlesVoo({ engine, touch, pousado }: { engine: React
         <button type="button" onClick={() => engine.current?.pousar()} className={`${BTN} absolute z-[25] h-[44px] px-4 text-[12px]`}
           style={{ right: "max(22px, env(safe-area-inset-right))", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 144px)" }}>Pousar</button>
       )}
-      {/* direção: no desktop um direcional de 4 setas (relativo à câmera, como WASD); no celular é o joystick */}
-      {!touch && (
-        <div role="group" aria-label="Direção da nave" className="absolute z-[25] grid grid-cols-3 grid-rows-3 gap-1" style={estreita ? { right: "max(14px, env(safe-area-inset-right))", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 196px)" } : { ...base, right: "calc(max(22px, env(safe-area-inset-right)) + 92px)" }}>
-          <span />
-          <Segurar aria="Frente" rotulo="▲" on={eixo("z", -1)} className="h-[46px] w-[46px] text-[15px]" />
-          <span />
-          <Segurar aria="Esquerda" rotulo="◀" on={eixo("x", -1)} className="h-[46px] w-[46px] text-[15px]" />
-          <span />
-          <Segurar aria="Direita" rotulo="▶" on={eixo("x", 1)} className="h-[46px] w-[46px] text-[15px]" />
-          <span />
-          <Segurar aria="Trás" rotulo="▼" on={eixo("z", 1)} className="h-[46px] w-[46px] text-[15px]" />
-          <span />
-        </div>
-      )}
+      {/* ⚡ ao lado do Subir */}
+      {moto && <Boost engine={engine} style={{ right: "calc(max(22px, env(safe-area-inset-right)) + 88px)", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 72px)" }} />}
     </>
   );
 }

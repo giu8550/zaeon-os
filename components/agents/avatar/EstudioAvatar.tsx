@@ -77,14 +77,15 @@ export default function EstudioAvatar({
   const simRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // voz própria do agente (saudações já geradas): ouvir com a boca sincronizada na prévia
   const saudacoes = existente?.voz?.saudacoes ?? [];
+  const [ouvindoSaudacao, setOuvindoSaudacao] = useState(false);
   const [boca, setBoca] = useState<number | null>(null);
   const falaRef = useRef<Fala | null>(null);
   const idxSaudacao = useRef(0);
   const ouvirSaudacao = () => {
-    if (boca !== null) { falaRef.current?.parar(); return; }
+    if (ouvindoSaudacao) { falaRef.current?.parar(); return; }
     const url = saudacoes[idxSaudacao.current++ % saudacoes.length];
-    falaRef.current = falarClipe(url, setBoca);
-    falaRef.current.fim.catch(() => setBoca(null));
+    falaRef.current = falarClipe(url, (falando, n) => { setOuvindoSaudacao(falando); setBoca(n); });
+    falaRef.current.fim.catch(() => { setOuvindoSaudacao(false); setBoca(null); });
   };
   useEffect(() => () => falaRef.current?.parar(), []);
 
@@ -302,7 +303,7 @@ export default function EstudioAvatar({
         <div className={`p-5 rounded-[22px] flex flex-col items-center gap-4 ${VIDRO_BOLHA}`}>
           <p className={`self-start text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>Ao vivo — passe o mouse, simule uma conversa</p>
           {previa ? (
-            <AgentAvatar manifest={previa} nome={nome} size={220} estado={boca !== null ? "falando" : sinal} boca={boca} destaque className="shadow-xl" />
+            <AgentAvatar manifest={previa} nome={nome} size={220} estado={ouvindoSaudacao ? "falando" : sinal} boca={boca} destaque className="shadow-xl" />
           ) : (
             <div className={`w-[220px] h-[220px] rounded-full grid place-items-center text-center text-[12px] px-6 border-2 border-dashed border-slate-300 dark:border-white/15 ${TXT_MUDO}`}>
               {pecas.idle.status === "gerando" ? "desenhando o personagem…" : "o avatar aparece aqui assim que a base ficar pronta"}
@@ -314,8 +315,8 @@ export default function EstudioAvatar({
             ))}
             <button type="button" onClick={simular} className={btn} title="pensando → falando → sorri ao concluir">▶ simular resposta</button>
             {saudacoes.length > 0 && previa && (
-              <button type="button" onClick={ouvirSaudacao} aria-pressed={boca !== null} className={`${btn} ${boca !== null ? "!bg-violet-500 !text-white" : ""}`} title={`${saudacoes.length} saudações na voz dele(a) — cada clique toca a próxima`}>
-                {boca !== null ? "■ parar" : "🔊 ouvir saudação"}
+              <button type="button" onClick={ouvirSaudacao} aria-pressed={ouvindoSaudacao} className={`${btn} ${ouvindoSaudacao ? "!bg-violet-500 !text-white" : ""}`} title={`${saudacoes.length} saudações na voz dele(a) — cada clique toca a próxima`}>
+                {ouvindoSaudacao ? "■ parar" : "🔊 ouvir saudação"}
               </button>
             )}
           </div>

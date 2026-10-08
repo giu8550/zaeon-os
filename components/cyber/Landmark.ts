@@ -209,8 +209,9 @@ function heliporto(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, 
 /** ESTACIONAMENTO das motos voadoras (o do chão): o piso compartilhado (components/cyber/Estacionamento.ts). As MOTOS
  *  são do engine — clicar numa = montar; o piso não é alvo de clique (clicar nele = andar até ali). */
 function estacionamento(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, rotulo: HTMLDivElement): LandmarkHandle {
-  const g = new THREE.Group(); g.position.set(poi.x, 0, poi.z); g.rotation.y = LOTES.find((l) => l.id === "chao")!.rot;
-  const piso = criarPisoEstacionamento({ low, parado: reducedMotion() }); g.add(piso.group);
+  const lote = LOTES.find((l) => l.id === "chao")!;
+  const g = new THREE.Group(); g.position.set(poi.x, 0, poi.z); g.rotation.y = lote.rot;
+  const piso = criarPisoEstacionamento({ low, parado: reducedMotion(), lote }); g.add(piso.group);
   return {
     poi, group: g, rotulo, alvos: [], topo: null, monitorTopo: null, escada: null,
     donoPresente() { /* sem topo */ },

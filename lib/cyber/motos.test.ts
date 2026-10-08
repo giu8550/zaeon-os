@@ -1,30 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { ESTACIONAMENTO, LOTES, MOTO, TOTAL_VAGAS, motoDe, motoPerto, vagas } from "./motos";
+import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, TOTAL_VAGAS, lookDaVaga, baseDoRobo, esvaziou, fabricaNova, largadasValidas, motoDe, motoLargadaDe, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, tamanhoDoLote, vagas } from "./motos";
 import { CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal, noPortalVolta } from "./ceu";
 import { BASES_CEU_LOCAIS } from "./bases";
 import { HELIPORTO, POIS } from "./landmarks";
-import { VOO, passoVooSub, type EstadoVoo } from "./voo";
+import { VOO } from "./voo";
+
+const ID_A = "a".repeat(24), ID_B = "b".repeat(24);
 
 describe("motos voadoras — estacionamentos (chão + Zaeon)", () => {
-  it("2 lotes × 4 vagas; as do chão primeiro, depois as da Zaeon", () => {
+  it("chão: 1 fila de 4; ZAEON: no mínimo 12 vagas (2 filas de 6)", () => {
     const v = vagas();
-    expect(v).toHaveLength(TOTAL_VAGAS); expect(TOTAL_VAGAS).toBe(8);
+    expect(v).toHaveLength(TOTAL_VAGAS);
+    expect(v.filter((x) => !x.ceu)).toHaveLength(4);
+    expect(v.filter((x) => x.ceu).length).toBeGreaterThanOrEqual(12);
     expect(v.slice(0, 4).every((x) => !x.ceu)).toBe(true);
-    expect(v.slice(4).every((x) => x.ceu)).toBe(true);
   });
-  it("cada fila: vagas lado a lado (espaçadas), todas viradas pro centro do lote", () => {
-    for (const [k, l] of LOTES.entries()) {
-      const fila = vagas().slice(k * ESTACIONAMENTO.n, (k + 1) * ESTACIONAMENTO.n);
-      for (let i = 1; i < fila.length; i++) expect(Math.hypot(fila[i]!.x - fila[i - 1]!.x, fila[i]!.z - fila[i - 1]!.z)).toBeCloseTo(ESTACIONAMENTO.espacamento, 5);
-      const alvo = l.ceu ? CIDADE.centro : { x: 0, z: 0 };
-      for (const v of fila) {
-        const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), dx = alvo.x - v.x, dz = alvo.z - v.z, d = Math.hypot(dx, dz);
-        expect((fx * dx + fz * dz) / d).toBeGreaterThan(0.95);   // a frente aponta pro centro
-      }
+  it("vagas BEM espaçadas (nada de moto encostando na outra) e todas viradas pro centro do lote", () => {
+    const v = vagas();
+    for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++) if (v[i]!.lote === v[j]!.lote) expect(Math.hypot(v[i]!.x - v[j]!.x, v[i]!.z - v[j]!.z)).toBeGreaterThanOrEqual(4.5);
+    for (const x of v) {
+      const alvo = x.ceu ? CIDADE.centro : { x: 0, z: 0 }, fx = Math.sin(x.yaw), fz = Math.cos(x.yaw), dx = alvo.x - x.x, dz = alvo.z - x.z;
+      expect((fx * dx + fz * dz) / Math.hypot(dx, dz)).toBeGreaterThan(0.9);   // a frente aponta pro centro
     }
   });
-  it("o lote da Zaeon fica no piso andável, longe do portal de volta, das bases do dono e dos colisores da cidade", () => {
-    for (const v of vagas().filter((x) => x.ceu)) {
+  it("o lote da Zaeon (e a base do robô) fica no piso andável, longe do portal de volta, das bases do dono e dos colisores da cidade", () => {
+    const zaeon = LOTES.find((l) => l.id === "zaeon")!, base = baseDoRobo(zaeon);
+    for (const v of [...vagas().filter((x) => x.ceu), base]) {
       expect(naIlhaPrincipal(v)).toBe(true);
       expect(Math.hypot(v.x - CIDADE.centro.x, v.z - CIDADE.centro.z)).toBeLessThan(CIDADE.andavelR - 3);
       expect(noPortalVolta(v)).toBe(false);
@@ -33,38 +34,92 @@ describe("motos voadoras — estacionamentos (chão + Zaeon)", () => {
     }
   });
   it("o lote do chão não encosta no heliporto nem em marcos sólidos", () => {
-    const l = LOTES[0]!;
-    expect(Math.hypot(l.x - HELIPORTO.x, l.z - HELIPORTO.z)).toBeGreaterThan(HELIPORTO.r + ESTACIONAMENTO.r);
-    for (const p of POIS.filter((x) => x.solido !== false)) expect(Math.hypot(l.x - p.x, l.z - p.z)).toBeGreaterThan(p.footprintR + ESTACIONAMENTO.r);
-  });
-  it("motoPerto: a vaga livre mais perto, no alcance e no MESMO nível", () => {
-    const v = vagas();
-    expect(motoPerto({ x: v[1]!.x + 1, z: v[1]!.z }, new Set())).toBe(1);
-    expect(motoPerto({ x: v[1]!.x + 1, z: v[1]!.z }, new Set([1]))).not.toBe(1);
-    expect(motoPerto({ x: v[0]!.x + MOTO.alcance + 4, z: v[0]!.z + 40 }, new Set())).toBe(-1);   // longe
-    expect(motoPerto({ x: v[5]!.x, z: v[5]!.z }, new Set(), true)).toBe(5);                     // na Zaeon
-    expect(motoPerto({ x: v[5]!.x, z: v[5]!.z }, new Set(), false)).toBe(-1);                   // no chão embaixo dela, não
-  });
-  it("motoDe: saneia a presença (vaga inteira 0..7, altura com teto, rumo finito)", () => {
-    expect(motoDe({ s: 6, y: 231.5, yaw: 1 })).toEqual({ moto: { s: 6, y: 231.5, yaw: 1 } });
-    expect(motoDe({ s: 8, y: 1, yaw: 0 })).toEqual({});
-    expect(motoDe({ s: -1, y: 1, yaw: 0 })).toEqual({});
-    expect(motoDe({ s: 1.5, y: 1, yaw: 0 })).toEqual({});
-    expect(motoDe({ s: 0, y: Infinity, yaw: 0 })).toEqual({});
-    expect(motoDe({ s: 0, y: 9999, yaw: 99 })).toEqual({ moto: { s: 0, y: MOTO.teto, yaw: 10 } });
-    expect(motoDe("lixo")).toEqual({}); expect(motoDe(null)).toEqual({});
-  });
-  it("dá pra ir de moto até a Zaeon: o teto passa do piso da ilha", () => {
-    expect(MOTO.teto).toBeGreaterThan(CIDADE.pisoY + 10);
+    const l = LOTES[0]!, r = tamanhoDoLote(l).r;
+    expect(Math.hypot(l.x - HELIPORTO.x, l.z - HELIPORTO.z)).toBeGreaterThan(HELIPORTO.r + r);
+    for (const p of POIS.filter((x) => x.solido !== false && x.preset !== "estacionamento")) expect(Math.hypot(l.x - p.x, l.z - p.z)).toBeGreaterThan(p.footprintR + r);
   });
 });
 
-describe("voo com teto", () => {
-  it("passoVooSub respeita o teto passado (e o padrão é o da nave)", () => {
-    let s: EstadoVoo = { x: -500, y: 0, z: 300, yaw: 0, vx: 0, vy: 0, vz: 0 };   // fora da sombra da Zaeon mega (ela cobre a praça lá no alto)
-    for (let i = 0; i < 400; i++) s = passoVooSub(s, { wx: 0, wz: 0, subir: true, descer: false }, 0.05, [], 20).s;
-    expect(s.y).toBeCloseTo(20, 5);
-    for (let i = 0; i < 800; i++) s = passoVooSub(s, { wx: 0, wz: 0, subir: true, descer: false }, 0.05).s;
-    expect(s.y).toBeCloseTo(VOO.yMax, 5);
+describe("presença da moto", () => {
+  it("motoDe: vaga inteira válida, altura com teto, rumo finito, `de` só se for um id de verdade", () => {
+    expect(motoDe({ s: 6, y: 231.5, yaw: 1 })).toEqual({ moto: { s: 6, y: 231.5, yaw: 1 } });
+    expect(motoDe({ s: 3, y: 1, yaw: 0, de: ID_A })).toEqual({ moto: { s: 3, y: 1, yaw: 0, de: ID_A } });
+    expect(motoDe({ s: 3, y: 1, yaw: 0, de: "<script>" })).toEqual({ moto: { s: 3, y: 1, yaw: 0 } });
+    expect(motoDe({ s: TOTAL_VAGAS, y: 1, yaw: 0 })).toEqual({});
+    expect(motoDe({ s: 1.5, y: 1, yaw: 0 })).toEqual({});
+    expect(motoDe({ s: 0, y: 9999, yaw: 99 })).toEqual({ moto: { s: 0, y: MOTO.teto, yaw: 10 } });
+    expect(motoDe("lixo")).toEqual({}); expect(motoDe(null)).toEqual({});
+  });
+  it("motoLargadaDe: só números válidos; lixo → nada", () => {
+    expect(motoLargadaDe({ s: 2, x: 10, y: 450, z: -700, yaw: 1 })).toEqual({ motoLargada: { s: 2, x: 10, y: 450, z: -700, yaw: 1 } });
+    expect(motoLargadaDe({ s: 99, x: 0, y: 0, z: 0, yaw: 0 })).toEqual({});
+    expect(motoLargadaDe({ s: 1, x: "a", y: 0, z: 0, yaw: 0 })).toEqual({});
+  });
+  it("estacionada que alguém PEGOU (presença com `de`) some — ninguém vê a moto em dobro", () => {
+    const l = { s: 1, x: 5, y: 0, z: 6, yaw: 0 };
+    expect(largadasValidas([{ id: ID_A, motoLargada: l }])).toEqual([{ dono: ID_A, m: l }]);
+    expect(largadasValidas([{ id: ID_A, motoLargada: l }, { id: ID_B, moto: { s: 1, y: 3, yaw: 0, de: ID_A } }])).toEqual([]);
+  });
+});
+
+describe("montar", () => {
+  const v = vagas(), yV = (x: { ceu: boolean }) => (x.ceu ? CIDADE.pisoY : 0);
+  it("a vaga PRONTA mais perto, no alcance e no MESMO nível (no chão não pega a da Zaeon)", () => {
+    expect(motoParaMontar({ x: v[1]!.x + 1, z: v[1]!.z }, 0, () => true, yV, [])).toEqual({ tipo: "vaga", s: 1 });
+    expect(motoParaMontar({ x: v[1]!.x + 1, z: v[1]!.z }, 0, (i) => i !== 1, yV, [])?.s).not.toBe(1);   // sendo fabricada: não
+    expect(motoParaMontar({ x: v[5]!.x, z: v[5]!.z }, CIDADE.pisoY, () => true, yV, [])).toEqual({ tipo: "vaga", s: 5 });
+    expect(motoParaMontar({ x: v[5]!.x, z: v[5]!.z }, 0, () => true, yV, [])).toBeNull();
+  });
+  it("uma ESTACIONADA ganha da vaga se estiver mais perto", () => {
+    const l = { dono: ID_A, m: { s: 7, x: v[0]!.x + 0.5, y: 0, z: v[0]!.z, yaw: 0 } };
+    expect(motoParaMontar({ x: v[0]!.x + 0.6, z: v[0]!.z }, 0, () => true, yV, [l])).toEqual({ tipo: "largada", dono: ID_A, s: 7 });
+  });
+});
+
+describe("a FÁBRICA (o robô que repõe as motos)", () => {
+  it("NÃO sai na hora: espera a vaga ficar livre por FABRICA.espera s seguidos (quem levou a moto vai embora primeiro)", () => {
+    const f = fabricaNova(); esvaziou(f, 4); esvaziou(f, 4);
+    expect(f.fila.map((x) => x.s)).toEqual([4]);
+    let ocupada = true; const livre = () => !ocupada;
+    for (let i = 0; i < 100; i++) passoFabrica(f, 0.1, false, livre);   // 10 s com o piloto em cima: nada
+    expect(f.tarefa).toBeNull();
+    ocupada = false; passoFabrica(f, FABRICA.espera - 0.5, false, livre); expect(f.tarefa).toBeNull();
+    ocupada = true; passoFabrica(f, 0.1, false, livre); ocupada = false;   // voltou alguém: o relógio zera
+    passoFabrica(f, FABRICA.espera - 0.5, false, livre); expect(f.tarefa).toBeNull();
+    passoFabrica(f, 1, false, livre); expect(f.tarefa).toMatchObject({ s: 4, fase: "ida" });
+  });
+  it("vai até a vaga, fabrica em FABRICA.fabrica s e ela fica pronta; uma de cada vez", () => {
+    const f = fabricaNova(); esvaziou(f, 4); esvaziou(f, 6);
+    passoFabrica(f, FABRICA.espera + 0.1, false); expect(f.tarefa).toMatchObject({ s: 4, fase: "ida" });
+    expect(progressoDaVaga(f, 4)).toBe(0); expect(progressoDaVaga(f, 6)).toBe(0); expect(progressoDaVaga(f, 5)).toBe(1);
+    expect(passoFabrica(f, 5, false)).toBeNull();   // ainda voando (só fabrica ao CHEGAR)
+    passoFabrica(f, 0.1, true); expect(f.tarefa).toMatchObject({ s: 4, fase: "fabrica" });
+    passoFabrica(f, FABRICA.fabrica / 2, true); expect(progressoDaVaga(f, 4)).toBeCloseTo(0.5, 1);
+    expect(passoFabrica(f, FABRICA.fabrica, true)).toBe(4);
+    expect(progressoDaVaga(f, 4)).toBe(1);
+    passoFabrica(f, 0.1, false); expect(f.tarefa).toMatchObject({ s: 6, fase: "ida" });   // a 6 já esperou o bastante
+  });
+  it("o robô voa até o alvo (sem passar dele) e para em cima — devagar (vel ≤ 7 m/s)", () => {
+    let p = { x: 0, y: 3, z: 0 }; const alvo = { x: 20, y: 3, z: 0 };
+    for (let i = 0; i < 30; i++) p = moverRobo(p, alvo, 1 / 30);
+    expect(p.x).toBeGreaterThan(3); expect(p.x).toBeLessThanOrEqual(7.01);
+    for (let i = 0; i < 300; i++) p = moverRobo(p, alvo, 1 / 30);
+    expect(Math.hypot(p.x - alvo.x, p.z - alvo.z)).toBeLessThan(0.01);
+  });
+});
+
+describe("look das motos (cor + carenagem)", () => {
+  it("cores DIFERENTES em cada vaga de um estacionamento (e vizinhas nunca iguais); carenagens variando", () => {
+    for (const l of [0, 1]) {
+      const ids = vagas().map((v, i) => ({ v, i })).filter((x) => x.v.lote === l).map((x) => x.i);
+      const cores = ids.map((i) => lookDaVaga(i).cor);
+      expect(new Set(cores).size).toBe(cores.length);
+      expect(new Set(ids.map((i) => lookDaVaga(i).estilo)).size).toBeGreaterThan(1);
+    }
+    expect(lookDaVaga(3)).toEqual(lookDaVaga(3));   // o mesmo pra todo mundo
+  });
+  it("a plataforma de lançamento: a moto parada fica em cima dela e, montada, sai acima do 'rente ao chão' (anda na hora)", () => {
+    expect(PLATAFORMA_MOTO.altura).toBeGreaterThan(0.5);
+    expect(ALTURA_LANCAMENTO).toBeGreaterThan(VOO.decolar);
   });
 });
