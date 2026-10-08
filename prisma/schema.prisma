@@ -1326,3 +1326,21 @@ model ChoreCursor {
 
   @@map("chore_cursors")
 }
+
+// --- FROTA DE IAs DO CYBERESPAÇO (lib/cyber/frota) ---
+/// o texto de um episódio de conversa entre IAs (gerado na 1ª vez que alguém vê — o mesmo pra todos)
+model FrotaConversa {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  epId      String   @unique
+  /// as falas na ordem (null = fala em MODO CLOAK, que só aparece como "...")
+  falas     Json
+  criadoEm  DateTime @default(now())
+  @@map("frota_conversas")
+}
+/// a "impressão" (normalizada) de toda fala de IA que um usuário pôde ver — a regra de ouro: nada se repete
+model FrotaFala {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  impressao  String   @unique
+  criadoEm   DateTime @default(now())
+  @@map("frota_falas")
+}
