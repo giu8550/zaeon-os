@@ -7,7 +7,10 @@
  *  - "oculosRedondos": os óculos de aro fino dourado, redondos (Aura);
  *  - "presilhaEstrela": a presilha de ESTRELA prateada na franja (Aura);
  *  - "oculosRetangulares": os óculos de armação preta retangular (Téo);
- *  - "golaCircuito": o friso de CIRCUITO verde que brilha na borda do capuz (Téo).
+ *  - "golaCircuito": o friso de CIRCUITO verde que brilha na borda do capuz (Téo);
+ *  - "gravataCarmesim": a gravata vermelha no decote do blazer (Examiner);
+ *  - "distintivoPrata": o distintivo prateado em forma de escudo no peito, do lado esquerdo dela (Examiner);
+ *  - "mechaCarmesim": a mecha vermelha na franja, do lado direito dela (Examiner) — o VRoid não pinta mecha por mecha.
  * As medidas são em metros, no espaço dos ossos do VRM (VRM 1.0: em repouso, eixos alinhados ao mundo, +Z = frente).
  */
 import * as THREE from "three";
@@ -105,15 +108,83 @@ function golaCircuito(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THR
   return g;
 }
 
+const CARMESIM = 0xc41e3a;
+/** a gravata (no osso do pescoço): o nó logo abaixo da gola e a lâmina descendo pelo decote, inclinada pra acompanhar
+ *  o peito */
+function gravata(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  const no = desenhada(new THREE.CylinderGeometry(0.014, 0.01, 0.022, 4), CARMESIM, mats, geos); no.rotation.y = Math.PI / 4; g.add(no);
+  // a lâmina: um trapézio fino que alarga pra baixo e termina em ponta
+  const sh = new THREE.Shape(); sh.moveTo(-0.009, 0); sh.lineTo(0.009, 0); sh.lineTo(0.017, -0.1); sh.lineTo(0, -0.118); sh.lineTo(-0.017, -0.1); sh.closePath();
+  const lamina = desenhada(new THREE.ExtrudeGeometry(sh, { depth: 0.005, bevelEnabled: false }), CARMESIM, mats, geos);
+  lamina.position.set(0, -0.01, 0.004); lamina.rotation.x = -0.68; g.add(lamina);
+  g.position.set(0, -0.005, 0.085);
+  return g;
+}
+
+/** o distintivo (no osso do peito superior): um escudo prateado pequeno, do lado esquerdo dela */
+function distintivo(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const sh = new THREE.Shape(); sh.moveTo(-0.017, 0.018); sh.lineTo(0.017, 0.018); sh.lineTo(0.017, -0.002); sh.quadraticCurveTo(0.014, -0.016, 0, -0.024); sh.quadraticCurveTo(-0.014, -0.016, -0.017, -0.002); sh.closePath();
+  const g = desenhada(new THREE.ExtrudeGeometry(sh, { depth: 0.004, bevelEnabled: false }), 0xd9dee8, mats, geos);
+  g.scale.setScalar(0.8); g.position.set(0.085, 0.03, 0.12); g.rotation.y = 0.25;
+  return g;
+}
+
+/** a MECHA carmesim: pinta mechas DE VERDADE do cabelo do VRM (não é peça por cima). O cabelo do VRoid é uma malha só,
+ *  feita de mechas soltas (cada uma é um pedaço conexo da malha): escolhe as da frente, do lado direito dela, que descem
+ *  da risca até o queixo (medidas na pose de repouso, a partir do osso da cabeça), e passa os triângulos delas pra um
+ *  material próprio — o mesmo MToon do cabelo, em carmesim liso */
+const MECHA = { x: [-0.072, -0.05], zMin: 0.06, alturaMin: 0.18 } as const;
+function pintarMecha(vrm: VRM, cor: THREE.ColorRepresentation): (() => void) | null {
+  let malha: THREE.SkinnedMesh | null = null;
+  vrm.scene.traverse((o) => { const m = o as THREE.SkinnedMesh; if (!malha && m.isSkinnedMesh && (Array.isArray(m.material) ? m.material : [m.material]).some((x) => /_Hair_00_HAIR/.test(x.name) && !/HairBack/.test(x.name))) malha = m; });
+  const hm = malha as THREE.SkinnedMesh | null, cabeca = vrm.humanoid.getRawBoneNode("head");
+  if (!hm || !cabeca || !hm.geometry.index || !Array.isArray(hm.material)) return null;
+  const g = hm.geometry, pos = g.attributes.position as THREE.BufferAttribute, idx = g.index!, n = pos.count;
+  const bi = hm.skeleton.bones.indexOf(cabeca as THREE.Bone); if (bi < 0) return null;
+  const pc = new THREE.Vector3().setFromMatrixPosition(hm.skeleton.boneInverses[bi]!.clone().invert());
+  // as mechas = os pedaços conexos da malha (union-find pelos triângulos)
+  const pai = new Int32Array(n).map((_, i) => i);
+  const raiz = (i: number): number => { while (pai[i] !== i) { pai[i] = pai[pai[i]!]!; i = pai[i]!; } return i; };
+  for (let t = 0; t < idx.count; t += 3) { const a = raiz(idx.getX(t)); pai[raiz(idx.getX(t + 1))] = a; pai[raiz(idx.getX(t + 2))] = a; }
+  const v = new THREE.Vector3(), soma = new Map<number, { n: number; x: number; z: number; y0: number; y1: number }>();
+  for (let i = 0; i < n; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(hm.bindMatrix).sub(pc);
+    const r = raiz(i), c = soma.get(r) ?? { n: 0, x: 0, z: 0, y0: 9, y1: -9 };
+    c.n++; c.x += v.x; c.z += v.z; c.y0 = Math.min(c.y0, v.y); c.y1 = Math.max(c.y1, v.y); soma.set(r, c);
+  }
+  const escolhidas = new Set([...soma].filter(([, c]) => { const x = c.x / c.n; return x >= MECHA.x[0] && x <= MECHA.x[1] && c.z / c.n >= MECHA.zMin && c.y1 - c.y0 >= MECHA.alturaMin; }).map(([r]) => r));
+  if (!escolhidas.size) return null;
+  // os triângulos das mechas escolhidas vão pro fim do índice, num grupo com o material carmesim
+  const resto: number[] = [], delas: number[] = [];
+  for (let t = 0; t < idx.count; t += 3) (escolhidas.has(raiz(idx.getX(t))) ? delas : resto).push(idx.getX(t), idx.getX(t + 1), idx.getX(t + 2));
+  const original = { index: idx, groups: g.groups.map((x) => ({ ...x })), material: hm.material };
+  const mats = hm.material, principal = mats.findIndex((m) => !(m as { isOutline?: boolean }).isOutline), traco = mats.findIndex((m) => (m as { isOutline?: boolean }).isOutline);
+  const pintada = mats[principal]!.clone() as THREE.Material & { color?: THREE.Color; shadeColorFactor?: THREE.Color; map?: THREE.Texture | null; shadeMultiplyTexture?: THREE.Texture | null };
+  const c = new THREE.Color(cor); pintada.map = null; pintada.shadeMultiplyTexture = null; pintada.color?.copy(c); pintada.shadeColorFactor?.copy(c).multiplyScalar(0.55); pintada.needsUpdate = true;
+  const Arr = (idx.array as Uint16Array | Uint32Array).constructor as Uint16ArrayConstructor | Uint32ArrayConstructor;
+  g.setIndex(new THREE.BufferAttribute(new Arr([...resto, ...delas]), 1));
+  g.clearGroups(); g.addGroup(0, resto.length, principal); g.addGroup(resto.length, delas.length, mats.length);
+  if (traco >= 0) g.addGroup(0, resto.length + delas.length, traco);
+  hm.material = [...mats, pintada];
+  return () => {
+    g.setIndex(original.index); g.clearGroups(); for (const x of original.groups) g.addGroup(x.start, x.count, x.materialIndex);
+    hm.material = original.material; pintada.dispose();
+  };
+}
+
 /** veste os acessórios no VRM (cada um no seu osso); `dispose()` tira e solta tudo */
 export function vestirAcessorios(vrm: VRM, lista: readonly AcessorioVrm[]): AcessoriosHandle {
-  const mats: THREE.Material[] = [], geos: THREE.BufferGeometry[] = [], postos: THREE.Object3D[] = [];
+  const mats: THREE.Material[] = [], geos: THREE.BufferGeometry[] = [], postos: THREE.Object3D[] = [], desfazer: (() => void)[] = [];
   const osso = (n: VRMHumanBoneName) => vrm.humanoid.getRawBoneNode(n);
   for (const a of lista) {
-    const pai = a === "foneNoPescoco" || a === "golaCircuito" ? osso("neck") ?? osso("upperChest") : osso("head");
+    if (a === "mechaCarmesim") { const d = pintarMecha(vrm, CARMESIM); if (d) desfazer.push(d); continue; }
+    const pai = a === "foneNoPescoco" || a === "golaCircuito" || a === "gravataCarmesim" ? osso("neck") ?? osso("upperChest")
+      : a === "distintivoPrata" ? osso("upperChest") ?? osso("chest") : osso("head");
     if (!pai) continue;
     const obj = a === "foneNoPescoco" ? fone(mats, geos) : a === "oculosRedondos" ? oculos(mats, geos) : a === "presilhaEstrela" ? estrela(mats, geos)
-      : a === "oculosRetangulares" ? oculosRet(mats, geos) : a === "golaCircuito" ? golaCircuito(mats, geos) : presilha(mats, geos);
+      : a === "oculosRetangulares" ? oculosRet(mats, geos) : a === "golaCircuito" ? golaCircuito(mats, geos)
+      : a === "gravataCarmesim" ? gravata(mats, geos) : a === "distintivoPrata" ? distintivo(mats, geos) : presilha(mats, geos);
     pai.add(obj); postos.push(obj);
     // os ÓCULOS vão onde os olhos estão (os ossos dos olhos do VRM, no referencial da cabeça) — cada rosto tem a sua
     // proporção
@@ -131,6 +202,7 @@ export function vestirAcessorios(vrm: VRM, lista: readonly AcessorioVrm[]): Aces
   return {
     dispose() {
       for (const o of postos) o.removeFromParent();
+      for (const d of desfazer) d();
       for (const m of mats) m.dispose();
       for (const g of geos) g.dispose();
     },

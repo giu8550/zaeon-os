@@ -53,9 +53,10 @@ export const VAGA_DA_NINA: P2 & { rumo: number } = { x: -60, z: -92, rumo: Math.
  *  praça, mirante) — se coincidirem, ficam lado a lado em vez de um dentro do outro */
 export type PerfilVida = { id: string; semente: number; lado: number; estacoes: readonly number[]; pistas: readonly number[]; vaga: P2 & { rumo: number } };
 export const PERFIS_VIDA: Readonly<Record<string, PerfilVida>> = {
-  nina: { id: "nina", semente: 11, lado: -2.2, estacoes: [1, 4, 7], pistas: [0], vaga: VAGA_DA_NINA },
-  aura: { id: "aura", semente: 23, lado: 2.2, estacoes: [0, 3, 6], pistas: [2], vaga: { x: -50, z: -100, rumo: Math.atan2(50, 100) } },
-  teo: { id: "teo", semente: 37, lado: 0, estacoes: [2, 5], pistas: [1, 3], vaga: { x: -40, z: -108, rumo: Math.atan2(40, 108) } },
+  nina: { id: "nina", semente: 11, lado: -2.2, estacoes: [1, 4], pistas: [0], vaga: VAGA_DA_NINA },
+  aura: { id: "aura", semente: 23, lado: 2.2, estacoes: [0, 6], pistas: [2], vaga: { x: -50, z: -100, rumo: Math.atan2(50, 100) } },
+  teo: { id: "teo", semente: 37, lado: 0, estacoes: [2, 5], pistas: [1], vaga: { x: -40, z: -108, rumo: Math.atan2(40, 108) } },
+  examiner: { id: "examiner", semente: 53, lado: 4.4, estacoes: [3, 7], pistas: [3], vaga: { x: -30, z: -116, rumo: Math.atan2(30, 116) } },
 };
 
 /** onde o operador fica numa estação (no referencial dela: +z = rumo ao coração; o console fica em z −0,95) */

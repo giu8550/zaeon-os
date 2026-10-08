@@ -55,6 +55,13 @@ describe("a vida própria dos personagens (agenda)", () => {
     const fica = b.fim - b.ini - b.viagem, e = estadoEm(b.ini + b.viagem + fica / 2, SEMENTE, b);
     expect(e.meditando).toBe(1); expect(e.y).toBeGreaterThan(10);
   });
+  it("todos meditam no alto da pirâmide (cada um no seu lugar do salão, sem cair pela borda)", () => {
+    for (const perfil of Object.values(PERFIS_VIDA)) {
+      let b = blocoEm(dia(2), perfil); while (b.atividade !== "meditar") b = proximoBloco(b, perfil);
+      const fica = b.fim - b.ini - b.viagem, e = estadoEm(b.ini + b.viagem + fica / 2, perfil, b);
+      expect(e.meditando, perfil.id).toBe(1); expect(e.y, perfil.id).toBeGreaterThan(10);
+    }
+  });
   it("a moto sobe, dá a volta por FORA da ilha bem acima das árvores e volta pra vaga", () => {
     const dur = 85, ini = motoEm(0, dur), fim = motoEm(dur, dur), meio = motoEm(dur / 2, dur);
     expect(ini.y).toBeCloseTo(0); expect(fim.y).toBeCloseTo(0); expect(fim.x).toBeCloseTo(ini.x); expect(fim.z).toBeCloseTo(ini.z);
@@ -78,13 +85,16 @@ describe("dois personagens na mesma cidadela", () => {
     }
     for (const p of todos) for (let i = 0; i < LUGARES.length; i++) if (permitido(i, p)) expect(livre(posNoLugar(i, p)), `${p.id} ${LUGARES[i]!.id}`).toBe(true);
   });
-  it("as agendas são diferentes (sementes diferentes) e nenhum dos dois para colado no outro", () => {
-    let iguais = 0, colados = 0;
-    for (let t = EPOCA + 86400 * 4; t < EPOCA + 86400 * 4 + 4 * 3600; t += 37) {
-      const x = estadoEm(t, PERFIS_VIDA.nina!), y = estadoEm(t, PERFIS_VIDA.aura!);
-      if (x.lugar === y.lugar) iguais++;
-      if (x.fase === "ficando" && y.fase === "ficando" && Math.hypot(x.pos.x - y.pos.x, x.pos.z - y.pos.z) < 1.5 && Math.abs(x.y - y.y) < 1) colados++;
+  it("as agendas são diferentes (sementes diferentes) e ninguém para colado em ninguém (todos os pares)", () => {
+    const todos = Object.values(PERFIS_VIDA);
+    for (let i = 0; i < todos.length; i++) for (let j = i + 1; j < todos.length; j++) {
+      const P = todos[i]!, Q = todos[j]!; let iguais = 0, colados = 0;
+      for (let t = EPOCA + 86400 * 4; t < EPOCA + 86400 * 4 + 4 * 3600; t += 37) {
+        const x = estadoEm(t, P), y = estadoEm(t, Q);
+        if (x.lugar === y.lugar) iguais++;
+        if (x.fase === "ficando" && y.fase === "ficando" && Math.hypot(x.pos.x - y.pos.x, x.pos.z - y.pos.z) < 1.5 && Math.abs(x.y - y.y) < 1) colados++;
+      }
+      expect(iguais, `${P.id}×${Q.id}`).toBeLessThan(120); expect(colados, `${P.id}×${Q.id}`).toBe(0);
     }
-    expect(iguais).toBeLessThan(120); expect(colados).toBe(0);
   });
 });
