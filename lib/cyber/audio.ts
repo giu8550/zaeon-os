@@ -8,6 +8,7 @@
  */
 import { SINTESE_MOTO, type NomeSomMoto } from "./somMoto";
 import { SINTESE_ASAS, type NomeSomAsas } from "./asas";
+import { sintetizarBatida, sintetizarRaio } from "./coracao";
 
 export const PASTA_SONS = "/assets/sounds/cyber/";
 
@@ -16,7 +17,7 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
   | "jetpack" | "jato-sopro" | "baque"
-  | NomeSomMoto | NomeSomAsas;
+  | NomeSomMoto | NomeSomAsas | "coracao" | "raio";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -44,6 +45,9 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   // dave.des no Freesound; 1 batida recortada, macia, com passa-baixa); o vento, abrir e fechar são sintetizados
   "asa-bater": { modo: "pos", loop: false, volume: 0.42, ext: "wav", filtro: 3800 },
   "asa-vento": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
+  // o CORAÇÃO da Zaeon (lib/cyber/coracao, sintetizados): a batida (perto do globo) e o RAIO no topo da capela
+  coracao: { modo: "pos", loop: false, volume: 0.55, sintetico: true },
+  raio: { modo: "pos", loop: false, volume: 0.8, sintetico: true },
   "asa-abrir": { modo: "pos", loop: false, volume: 0.6, sintetico: true },
   "asa-fechar": { modo: "pos", loop: false, volume: 0.5, sintetico: true },
   "space-bed": { modo: "2d", loop: true, volume: 0.09, taxa: TAXA_432 },   // AMBIENTE: bem baixo, por baixo de passos/efeitos (era 0,22)
@@ -114,13 +118,13 @@ export function sintetizarBaque(sr: number): Float32Array {
   for (let i = 0; i < 64; i++) out[n - 1 - i]! *= i / 64;   // fim sem clique
   return normalizar(out, 0.92);
 }
-export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_ASAS };
+export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_ASAS, coracao: sintetizarBatida, raio: sintetizarRaio };
 
 /** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo).
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
  *  quem precisa SUMIR de verdade usa `modelo: "linear"` (ganho chega a 0 no `max`). */
 export type Dist = { ref: number; max: number; rolloff: number; modelo?: "inverse" | "linear" };
-export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica", Dist> = {
+export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica" | "coracao" | "raio", Dist> = {
   padrao: { ref: 6, max: 60, rolloff: 1.2 },
   perto: { ref: 2.5, max: 22, rolloff: 1.4 },       // passos/pulo dos COLEGAS (coisas pequenas)
   eu: { ref: 12, max: 60, rolloff: 1 },             // os MEUS passos/pulo: a câmera (o ouvinte) fica ~8–10 m atrás do avatar
@@ -128,7 +132,9 @@ export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | 
   voz: { ref: 3, max: 28, rolloff: 1, modelo: "linear" },        // VOZ por proximidade: cheia de perto, some aos ~28 m
   grande: { ref: 14, max: 160, rolloff: 1 },        // buraco negro, nave dos outros
   naveLocal: { ref: 40, max: 400, rolloff: 0.25 },  // a nave em que EU estou: não vira de lado ao girar a câmera
-  musica: { ref: 18, max: 110, rolloff: 1, modelo: "linear" },   // as TORRES DE SOM do clube (lounge): cheio na sala toda, ecoa pela ilha e some longe
+  musica: { ref: 18, max: 110, rolloff: 1, modelo: "linear" },
+  coracao: { ref: 10, max: 70, rolloff: 1, modelo: "linear" },     // a batida do coração: sentida no pátio da capela, some longe
+  raio: { ref: 60, max: 900, rolloff: 0.6 },                         // o raio no topo da capela: ouve-se da cidade toda (e de longe)   // as TORRES DE SOM do clube (lounge): cheio na sala toda, ecoa pela ilha e some longe
 };
 
 /** cristais da base: só se ouvem com o AVATAR perto dela (cheio até 4 m, some aos 12 m) — o ouvinte é a câmera */

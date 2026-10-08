@@ -31,8 +31,8 @@ describe("regras da pose", () => {
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, topo: true, voo: { y: 50, yaw: 1 } }, true)!.voo).toEqual({ y: 50, yaw: 1 });
     // moto: qualquer um; vaga inteira 0..7 (chão + Zaeon), altura com teto; lixo → nada
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 6, y: 231, yaw: 1 } }, false)!.moto).toEqual({ s: 6, y: 231, yaw: 1 });
-    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 16, y: 1, yaw: 0 } }, false)!.moto).toBeNull();   // 16 vagas (4 no chão + 12 na Zaeon)
-    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 15, y: 1, yaw: 0, de: "c".repeat(24) } }, false)!.moto).toEqual({ s: 15, y: 1, yaw: 0, de: "c".repeat(24) });
+    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 32, y: 1, yaw: 0 } }, false)!.moto).toBeNull();   // 32 vagas (4 no chão + 12 na Zaeon + 16 nos autódromos)
+    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 31, y: 1, yaw: 0, de: "c".repeat(24) } }, false)!.moto).toEqual({ s: 31, y: 1, yaw: 0, de: "c".repeat(24) });
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 15, y: 1, yaw: 0, de: "x" } }, false)!.moto).toEqual({ s: 15, y: 1, yaw: 0 });
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 1.5, y: 1, yaw: 0 } }, false)!.moto).toBeNull();
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 0, y: 9999, yaw: 0 } }, false)!.moto!.y).toBe(800);

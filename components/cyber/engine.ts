@@ -396,7 +396,9 @@ export class CyberEngine {
       this.cena.scene.add(lm.group); this.lms.push(lm);   // sem rótulo na tela (interface limpa); o nome sai no painel do clique
     }
     if (opts.landmarks) {
-      this.cidade = criarCidade({ low, starTex: this.cena.starTex });
+      this.cidade = criarCidade({ low, starTex: this.cena.starTex,
+        aoRaio: (em) => this.som?.tocar("raio", em, { dist: DISTANCIA.raio, taxa: 0.9 + Math.random() * 0.2 }),
+        aoBater: (em) => this.som?.tocar("coracao", em, { dist: DISTANCIA.coracao }) });
       camuflarGrupo(this.cidade.group);
       { const c = this.cidade;   // lotes: simula com e sem música (o palco, as caixas e a pista pulsam com o grave)
         fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalTunel, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
@@ -759,8 +761,11 @@ export class CyberEngine {
   }
   /** os tubos (na linha da muralha) são sólidos pra quem anda no piso da Zaeon — só os perto (são centenas) e menos o de
    *  quem está nascendo/saindo */
+  /** as CÁPSULAS de nascimento só existem no TUTORIAL do novato (nascer → até o 1º portal): no jogo normal ninguém
+   *  nasce numa cápsula, então elas nem aparecem (nem colidem) */
+  private tubosVisiveis() { return this.instancia || !!this.nascendo || this.saindoDoTubo !== null; }
   private colisoresDosTubos(): Colisor[] {
-    if (!this.bercario) return [];
+    if (!this.bercario || !this.tubosVisiveis()) return [];
     const p = this.eu.pos, out: Colisor[] = [];
     TUBOS.forEach((tb, i) => { if (i !== this.saindoDoTubo && i !== this.nascendo?.tubo && Math.abs(tb.x - p.x) < 6 && Math.abs(tb.z - p.z) < 6) out.push({ x: tb.x, z: tb.z, r: 1.4 }); });
     return out;
@@ -2098,7 +2103,15 @@ export class CyberEngine {
     }
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
-    if (this.cidade && this.regiaoPerto(this.cidade.group, "zaeon", AREA_ZAEON)) { this.cidade.atualizar(dt, t); this.bercario?.atualizar(dt, t); }
+    if (this.cidade && this.regiaoPerto(this.cidade.group, "zaeon", AREA_ZAEON)) {
+      // quem está na Zaeon (local da ilha): os motores de energia do Observatório da Terra reagem a eles
+      const c = CIDADE.centro, pres: { x: number; z: number }[] = [];
+      if (this.noCeu) pres.push({ x: this.eu.pos.x - c.x, z: this.eu.pos.z - c.z });
+      for (const a of this.remotos.values()) if (a.ceu) pres.push({ x: a.pos.x - c.x, z: a.pos.z - c.z });
+      this.cidade.presencas(pres);
+      this.cidade.atualizar(dt, t);
+      if (this.bercario) { const v = this.tubosVisiveis(); this.bercario.group.visible = v; if (v) this.bercario.atualizar(dt, t); }
+    }
     if (this.praca && this.regiaoPerto(this.praca.group, "praca")) this.praca.atualizar(dt, t);
     if (this.somLounge) { this.somLounge.atualizar(dt); this.cidade?.somTocando(this.somLounge.tocando, this.somLounge.nivel); }
     if (this.holo) {   // o holograma acompanha a base do QG (que flutua junto com o marco)

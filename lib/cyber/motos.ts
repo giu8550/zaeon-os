@@ -1,6 +1,6 @@
 /**
- * Cyberespaço — MOTOS VOADORAS (PURO). Dois ESTACIONAMENTOS: um na ilha da praça (1 fila de 4), e o grande da
- * ZAEON (2 filas de 6 = 12), com as vagas bem espaçadas. As motos são pra QUALQUER pessoa (a nave é do dono).
+ * Cyberespaço — MOTOS VOADORAS (PURO). ESTACIONAMENTOS: um na ilha da praça (1 fila de 4), o grande da ZAEON (2 filas
+ * de 6 = 12) e os dos 4 MIRANTES DA TERRA da Zaeon (4 cada) — 32 vagas, com as vagas bem espaçadas. As motos são pra QUALQUER pessoa (a nave é do dono).
  *
  * O modelo:
  *  - VAGA: sempre tem uma moto PRONTA (a do estacionamento). Quem monta nela LEVA a moto: a vaga fica vazia e o ROBÔ
@@ -13,17 +13,20 @@
  * Sem estado no servidor: cada cliente deduz quais vagas esvaziaram pelas presenças e roda o robô dele.
  */
 import { CIDADE, mundo } from "./ceu";
+import { LOTES_MIRANTE } from "./terra";
 import { VOO } from "./voo";
 
 /** um estacionamento: centro, rumo (a frente das vagas aponta pro centro — a praça no chão, o centro da ilha na
  *  Zaeon), `filas` × `porFila` vagas, `espacamento` entre vagas de uma fila e `entreFilas` entre as filas (m) */
-export type Lote = { id: "chao" | "zaeon"; x: number; z: number; rot: number; ceu: boolean; filas: number; porFila: number; espacamento: number; entreFilas: number };
+export type Lote = { id: "chao" | "zaeon" | "mirante"; x: number; z: number; rot: number; ceu: boolean; filas: number; porFila: number; espacamento: number; entreFilas: number };
 const lote = (id: Lote["id"], x: number, z: number, cx: number, cz: number, ceu: boolean, filas: number, porFila: number): Lote =>
   ({ id, x, z, rot: Math.atan2(cx - x, cz - z), ceu, filas, porFila, espacamento: 4.6, entreFilas: 8 });
 const ZAEON_LOCAL = { x: -75, z: -75 };   // (Zaeon mega) longe da capela, da doca da nave, da escada do lounge, do portal e das bases
 export const LOTES: Lote[] = [
   lote("chao", -34, 16, 0, 0, false, 1, 4),   // na ilha da PRAÇA (lib/cyber/praca): cabe dentro da borda
   lote("zaeon", mundo(ZAEON_LOCAL).x, mundo(ZAEON_LOCAL).z, CIDADE.centro.x, CIDADE.centro.z, true, 2, 6),
+  // os 4 MIRANTES DA TERRA (lib/cyber/terra): um estacionamento de 4 motos ao lado de cada um, virado pro centro
+  ...LOTES_MIRANTE.map((a) => lote("mirante", mundo(a).x, mundo(a).z, CIDADE.centro.x, CIDADE.centro.z, true, 1, 4)),
 ];
 /** o lote da Zaeon no referencial da ilha (o piso desenhado dentro dela, flutuando junto) */
 export const LOTE_ZAEON_LOCAL = { ...ZAEON_LOCAL, rot: Math.atan2(-ZAEON_LOCAL.x, -ZAEON_LOCAL.z) };

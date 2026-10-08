@@ -7,6 +7,7 @@
  * Marca/jurídico: estruturas estilizadas e originais; o nome é só rótulo. Não clonar logo/arquitetura real
  * sem permissão — checklist antes de publicar o marco de uma instituição real.
  */
+import { MIRANTES } from "./terra";
 import type { NavPOI } from "./nav";
 import { LOTES, tamanhoDoLote } from "./motos";
 import { CIDADE, mundo } from "./ceu";
@@ -35,10 +36,9 @@ export type POI = {
   nav?: NavPOI;
 };
 
-/** onde fica a RECEPÇÃO no piso da Zaeon (local da ilha): na PONTA leste, perto da borda (o miolo da ilha fica livre),
- *  longe da capela, do estacionamento, das bases do dono, da doca da nave e do buraco negro da cidade — a escada desce
- *  virada pro centro da ilha */
-export const LAR_LOCAL = { x: 192, z: 34 };
+/** onde fica a RECEPÇÃO no piso da Zaeon (local da ilha): na QUINA nordeste, perto da borda — é o mirante 0 dos 4
+ *  MIRANTES DA TERRA, simétricos nas diagonais (lib/cyber/terra); a escada desce virada pro centro da ilha */
+export const LAR_LOCAL = { x: MIRANTES[0]!.x, z: MIRANTES[0]!.z };
 
 /**
  * A RECEPÇÃO — a antiga base do Andrei ("QG do Andrei", o marco andável que ficava no chão perto da praça): saiu do
@@ -49,18 +49,25 @@ export const LAR_LOCAL = { x: 192, z: 34 };
  * PORTÃO das muralhas alinhado a ela. Tudo é relativo à `base` (o piso da Zaeon).
  */
 function zaeonPOI(): POI {
-  const S = 1.6, { x, z } = mundo(LAR_LOCAL);
+  return { ...marcoPiramide(LAR_LOCAL), id: "zaeon", nome: "Recepção", org: "O lar da Zaeon, a anfitriã do hiperespaço.", acesso: "dono" };
+}
+/** os outros 3 MIRANTES DA TERRA: a mesma pirâmide (escada, muralhas, cabaninha), abertos a todos */
+function mirantePOI(i: number): POI {
+  return { ...marcoPiramide(MIRANTES[i]!), id: `mirante-${i}`, nome: "Mirante da Terra", org: "Os observadores da Terra: telão, globo, árvores-jardim e droids.", acesso: "publico" };
+}
+/** a pirâmide andável (a da antiga base do Andrei) num ponto LOCAL da Zaeon, com a escada virada pro centro */
+function marcoPiramide(local: { x: number; z: number }): Omit<POI, "id" | "nome" | "org" | "acesso"> {
+  const S = 1.6, { x, z } = mundo(local);
   const altura = 7 * S + 1.5;                       // ápice da ilha (cone 7×S) fica 1,5 acima do piso
   const pisoY = altura + 0.15 * S;                  // topo do piso interno
   const bordaR = 6.4 * S;                           // borda do PISO (a ilha do protótipo é um cone com o ápice no piso)
   const chaoR = 9 * S + 0.4;                        // base do cone (1,5 m acima do piso): sólida no piso
-  const dir = Math.atan2(-LAR_LOCAL.z, -LAR_LOCAL.x);   // a escada aponta pro centro da ilha
+  const dir = Math.atan2(-local.z, -local.x);   // a escada aponta pro centro da ilha
   return {
-    // o id "zaeon" segue por compatibilidade (o preset visual, presença e testes)
-    id: "zaeon", nome: "Recepção", org: "O lar da Zaeon, a anfitriã do hiperespaço.",
+    // (o id "zaeon" da Recepção segue por compatibilidade: o preset visual, presença e testes)
     preset: "zaeon", x, z, base: CIDADE.pisoY, escala: S,
     footprintR: chaoR, interactR: chaoR + 6,
-    altura, topo: { y: 6.6 }, acesso: "dono",
+    altura, topo: { y: 6.6 },
     nav: {
       pisoY, bordaR, chaoR,
       muralhaR: 6.3 * S, muralhaN: 16, muralhaColR: 2.0, portaoMeia: 0.4,
@@ -93,7 +100,7 @@ function estacionamentoPOI(): POI {
     footprintR: tamanhoDoLote(LOTES[0]!).r, interactR: tamanhoDoLote(LOTES[0]!).r + 3, solido: false, altura: 0, acesso: "publico",
   };
 }
-export const POIS: POI[] = [zaeonPOI(), heliportoPOI(), estacionamentoPOI()];
+export const POIS: POI[] = [zaeonPOI(), mirantePOI(1), mirantePOI(2), mirantePOI(3), heliportoPOI(), estacionamentoPOI()];
 
 /** os marcos apoiados na PRAÇA (os da Zaeon têm `base`) */
 export const naPracaPOI = (p: POI) => p.base === undefined;
