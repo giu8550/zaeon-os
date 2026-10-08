@@ -22,6 +22,7 @@ import type { VRM } from "@pixiv/three-vrm";
 import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./AvatarVrm";
 import { criarAsas, type AsasHandle } from "./AsasAnjo";
 import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
+import type { PoseVrm } from "@/lib/cyber/posesVrm";
 
 /** o corpo DESENHADO (estilo anime — experimento, lib/cyber/estiloAvatar)? */
 const desenhado = () => typeof window !== "undefined" && estiloDe(process.env.NEXT_PUBLIC_CYBER_AVATAR_ESTILO, window.location.search) === "anime";
@@ -83,6 +84,10 @@ export type AvatarLuzHandle = {
   /** ASAS NEGRAS no lugar da mochila a jato (components/cyber/AsasAnjo) — o voo é o mesmo. `escala` < 1 encolhe
    *  (a vitrine do Perfil: abertas, elas têm ~3 m de envergadura) */
   usarAsas(o?: { escala?: number }): void;
+  /** uma POSE própria no corpo VRM (lib/cyber/posesVrm — ex.: a feminina dos personagens parados); null = a do esqueleto */
+  poseVrm(p: PoseVrm | null): void;
+  /** sem a mochila a jato (os PERSONAGENS com corpo VRM próprio — a Nina…): o voo deles é outro assunto */
+  semMochila(): void;
   /** o que as asas fizeram desde a última chamada (o engine toca os sons); null = sem asas */
   eventosAsas(): { bateu: number; abriu: boolean; fechou: boolean; modo: ModoAsas } | null;
   dispose(): void;
@@ -106,7 +111,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   // AURA: casca inflada (back-face, aditiva) em volta do corpo — o que faz dele um ser de luz
   const matAura = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
   matAura.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n transformed += normalize(normal) * 0.05;"); };
-  let escondidos: THREE.Object3D[] | null = null;   // o corpo padrão escondido esperando o VRM (esperarCorpo)
+  let escondidos: THREE.Object3D[] | null = null, poseVrm: PoseVrm | null = null;   // o corpo padrão escondido esperando o VRM (esperarCorpo)
   let mixer: THREE.AnimationMixer | null = null, modeloMx: THREE.Object3D | null = null, repouso: Repouso | null = null, espelho: EspelhoVrm | null = null;
   let asas: AsasHandle | null = null, estAsas = ASAS_INICIO, evAsas = { bateu: 0, abriu: false, fechou: false, modo: "chao" as ModoAsas };
   const aurasMalha: THREE.Mesh[] = [];
@@ -551,6 +556,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (asas) return;
       asas = criarAsas(); asas.group.scale.setScalar(op?.escala ?? 1); corpo.add(asas.group); mochila.visible = false;
     },
+    semMochila() { mochila.visible = false; },
+    poseVrm(p) { poseVrm = p; espelho?.pose(p); },
     eventosAsas() {
       if (!asas) return null;
       const e = { ...evAsas }; evAsas.bateu = 0; evAsas.abriu = false; evAsas.fechou = false;
@@ -565,7 +572,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (!modeloMx || !repouso || espelho) return;
       // o soldado (e as cascas dele: aura, tinta) somem — o esqueleto continua animando, e continua no clique
       modeloMx.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
-      espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso);
+      espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso); espelho.pose(poseVrm);
     },
     recolorir(hex) {
       armadura.set(hex);
