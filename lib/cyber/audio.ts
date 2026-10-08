@@ -38,9 +38,8 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "jato-sopro": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
   baque: { modo: "pos", loop: false, volume: 0.95, sintetico: true },   // o corpo batendo no chão (força pela queda)
   // MOTO por estágio (lib/cyber/somMoto, sintetizados): loops de motor (que faz a lenta)/vento/turbina + os one-shots
-  "moto-motor": { modo: "pos", loop: true, volume: 0.6, sintetico: true },
-  "moto-motor-alto": { modo: "pos", loop: true, volume: 0.5, sintetico: true },
-  "moto-motor-grito": { modo: "pos", loop: true, volume: 0.45, sintetico: true },
+  "moto-motor": { modo: "pos", loop: true, volume: 0.6, ext: "wav" },   // gravação real (CREDITS.md)
+  "moto-motor-alto": { modo: "pos", loop: true, volume: 0.6, ext: "wav" },   // gravação real (CREDITS.md)
   "moto-troca": { modo: "pos", loop: false, volume: 0.5, sintetico: true },
   "moto-estalo": { modo: "pos", loop: false, volume: 0.55, sintetico: true },
   "moto-estrondo": { modo: "pos", loop: false, volume: 1, sintetico: true },
