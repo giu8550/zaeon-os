@@ -3,21 +3,30 @@ import AuraCard from "@/components/profile/AuraCard";
 
 /**
  * EditableProfile — visual clássico Zaeon: CÁPSULA (à esquerda) com DNA girando e a foto
- * no centro + conectores (nome/curso/nível). À DIREITA, uma ÁRVORE DE HABILIDADES (foco,
+ * no centro + conectores (nome/curso/nível). No meio, uma ÁRVORE DE HABILIDADES (foco,
  * disciplina, calma… e negativas como nervosismo) — hoje zeradas, prontas pra valores reais.
+ * À DIREITA, a VITRINE do personagem (o corpo do cyberespaço, em pé, girando) + "Mudar skin".
  * Editável pelo próprio usuário (nome, curso → re-verificação). Sem títulos de módulo.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { Loader2, Check, Upload, FileText, UserCheck, ShieldCheck, ShieldAlert, Camera, Pencil, BookOpen, Award } from "lucide-react";
 import { ALL_COURSES } from "@/constants/courses";
 import NetworkMural from "@/app/workstation/profiles/NetworkMural";
+import ModalSkin from "@/components/profile/ModalSkin";
+import { minhaArmadura } from "@/lib/cyber/cores";
+
+// three.js só no cliente (como o CosmicLounge)
+const VitrinePersonagem = dynamic(() => import("@/components/cyber/VitrinePersonagem"), { ssr: false, loading: () => <div className="w-full h-full" /> });
 
 interface Inviter { name: string | null; image: string | null; course: string | null }
 interface ProfileData {
   name: string; course: string; image: string | null;
   kycStatus: string; eduVerified: boolean; plan: string; academicLevel: string; inviter: Inviter | null;
+  /** o dono da Zaeon (decidido no servidor — a mesma regra do cyberespaço): tem corpo próprio, sem "Mudar skin" */
+  fundador?: boolean;
 }
 
 // Árvore de habilidades — estrutura pronta; `value` 0 até termos métricas reais.
@@ -75,6 +84,8 @@ export default function EditableProfile() {
   const [uploading, setUploading] = useState(false);
   const [img, setImg] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [skinAberto, setSkinAberto] = useState(false);
+  const fecharSkin = useCallback(() => setSkinAberto(false), []);
 
   useEffect(() => {
     let alive = true;
@@ -142,7 +153,7 @@ export default function EditableProfile() {
 
   return (
     <div className="w-full h-full overflow-y-auto custom-scrollbar p-1">
-      <div className="max-w-5xl pb-10">
+      <div className="max-w-5xl xl:max-w-7xl pb-10">
         {/* Editar (sem título de módulo) */}
         <div className="flex justify-end mb-1">
           <button onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
@@ -150,8 +161,8 @@ export default function EditableProfile() {
           </button>
         </div>
 
-        {/* HERO: cápsula (esquerda) + árvore de habilidades (direita) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        {/* HERO: cápsula (esquerda) + árvore de habilidades (meio) + o personagem em pé (direita) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_260px] gap-8 items-start">
           {/* ESQUERDA: cápsula + conectores */}
           <div className="flex items-start gap-2">
             <div className="relative w-[150px] h-[360px] rounded-[80px] border-[3px] border-cyan-400/40 dark:border-cyan-400/30 backdrop-blur-2xl flex items-center justify-center shrink-0 shadow-[0_0_50px_-10px_rgba(34,211,238,0.4)] bg-white/30 dark:bg-cyan-950/10">
@@ -236,7 +247,22 @@ export default function EditableProfile() {
             </div>
             <p className="text-[10px] text-slate-400 dark:text-white/30 mt-4">Valores chegam conforme você usa a Zaeon.</p>
           </div>
+
+          {/* DIREITA: o personagem (vitrine 3D) — no celular/tela média vai abaixo das Habilidades, menor */}
+          <div className="lg:col-span-2 xl:col-span-1 flex flex-col items-center gap-3">
+            <div className="relative w-[200px] h-[320px] xl:w-full xl:h-[420px] rounded-3xl border border-slate-200 dark:border-white/10 bg-gradient-to-b from-white/40 to-cyan-100/30 dark:from-white/[0.02] dark:to-cyan-500/[0.06] overflow-hidden">
+              <VitrinePersonagem fundador={!!data?.fundador} cor={minhaArmadura()} className="w-full h-full" />
+            </div>
+            {!data?.fundador && (
+              <button type="button" onClick={() => setSkinAberto(true)} aria-haspopup="dialog"
+                className="px-6 py-2.5 rounded-full text-white font-black uppercase tracking-widest text-[11px] transition-transform hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+                style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}>
+                Mudar skin
+              </button>
+            )}
+          </div>
         </div>
+        <ModalSkin aberto={skinAberto} fechar={fecharSkin} />
 
         {/* AURA (economia de reputação) — só com NEXT_PUBLIC_AURA_ECONOMY=1; o cartão some sozinho se a rota der 404 */}
         {process.env.NEXT_PUBLIC_AURA_ECONOMY === "1" && <AuraCard />}

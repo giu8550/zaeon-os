@@ -84,11 +84,13 @@ export function resolveGeminiVoice(requested?: string): string {
 /**
  * Sintetiza `text` com Gemini-TTS no Vertex. Retorna {audio_base64, mime:"audio/wav"}
  * ou lança em falha (a rota decide o fallback). `timeoutMs` evita pendurar a função.
+ * `onUsage` (opcional) recebe o `usageMetadata` cru do Vertex — pra quem registra custo no ledger.
  */
 export async function synthGeminiTTS(
   text: string,
   voice?: string,
   timeoutMs = 30_000,
+  onUsage?: (usageMetadata: unknown, model: string) => void,
 ): Promise<{ audio_base64: string; mime: string }> {
   const { project, client_email, private_key, location } = vertexCredentials();
   const voiceName = resolveGeminiVoice(voice);
@@ -124,6 +126,7 @@ export async function synthGeminiTTS(
       throw new Error(`gemini_tts_http_${res.status}:${detail.slice(0, 200)}`);
     }
     const data: any = await res.json();
+    onUsage?.(data?.usageMetadata, GEMINI_TTS_MODEL);
     const part = data?.candidates?.[0]?.content?.parts?.find((p: any) => p?.inlineData?.data);
     const inline = part?.inlineData;
     if (!inline?.data) throw new Error("gemini_tts_no_audio");
