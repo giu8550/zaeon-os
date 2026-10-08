@@ -1,5 +1,6 @@
 "use client";
 
+import { mentoresTab, lojaLabel } from "@/lib/mentores/rota";
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -183,7 +184,7 @@ export const Navbar = () => {
             {/* acesso direto ao laboratório, pra quem não quiser usar o cyberespaço */}
             <Link href="/research-lab" className={getLinkClassName("/research-lab")}>Laboratório</Link>
             {/* "Assistentes" = a antiga Loja de Plugins (o /plugin-store continua no ar pros links antigos) */}
-            <Link href="/assistentes" className={getLinkClassName(pathname.startsWith("/plugin-store") ? "/plugin-store" : "/assistentes")}>Assistentes</Link>
+            <Link href={mentoresTab() ? "/mentores" : "/assistentes"} className={getLinkClassName(pathname.startsWith("/plugin-store") ? "/plugin-store" : mentoresTab() ? "/mentores" : "/assistentes")}>{lojaLabel()}</Link>
             <Link href="/news" className={getLinkClassName("/news")}>Notícias</Link>
           </nav>
 

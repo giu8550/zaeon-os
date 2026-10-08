@@ -28,6 +28,25 @@ type Agente = {
   area: string | null; entrega: string[]; redes: { whatsapp: string | null; instagram: string | null; facebook: string | null };
   uso: { total: number; usuarios: number; ultimoUso: string | null; top: Top[] };
 };
+/** PR-A3 (C5): consumo medido do TokenLedger — por agente no range; agente SEM linha não vem (UI mostra "—"). */
+type Consumo = { chave: string; chamadas: number; ok: number; promptTokens: number; completionTokens: number; cachedTokens: number; totalTokens: number; custoEstimadoUsd: number; tokensPorChamada: number };
+type Tokens = { range: Range; grupos: Consumo[]; serie14d: { dia: string; totalTokens: number }[]; medindoDesde: string | null; hoje: Record<string, number>; tetos: Record<string, { fora: boolean; usado: number; teto: number | null }> };
+type Range = "7d" | "30d" | "all";
+type Ordem = "uso" | "in" | "out" | "cached" | "total" | "custo" | "porTurno";
+export const ORDENS: { k: Ordem; rotulo: string }[] = [
+  { k: "uso", rotulo: "uso" }, { k: "in", rotulo: "tokens in" }, { k: "out", rotulo: "tokens out" }, { k: "cached", rotulo: "cached" },
+  { k: "total", rotulo: "total" }, { k: "custo", rotulo: "custo est." }, { k: "porTurno", rotulo: "tokens/turno" },
+];
+/** PURO: valor da coluna pra ordenar; sem linha no ledger = -1 (vai pro fim, e a UI mostra "—"). */
+export function valorOrdem(a: { uso: { total: number } }, c: Consumo | undefined, k: Ordem): number {
+  if (k === "uso") return a.uso.total;
+  if (!c) return -1;
+  return k === "in" ? c.promptTokens : k === "out" ? c.completionTokens : k === "cached" ? c.cachedTokens : k === "total" ? c.totalTokens : k === "custo" ? c.custoEstimadoUsd : c.tokensPorChamada;
+}
+/** PURO: formata número ou "—" quando não há linha (0 fica reservado a linha existente com zero). */
+export const fmtTok = (c: Consumo | undefined, v: number | undefined): string => (c ? new Intl.NumberFormat("pt-BR").format(v ?? 0) : "—");
+export const fmtUsd = (c: Consumo | undefined): string => (c ? `US$ ${c.custoEstimadoUsd.toFixed(4)}` : "—");
+export const fmtDesde = (iso: string | null): string => (iso ? `medindo desde ${new Date(iso).toLocaleDateString("pt-BR")}` : "sem dados de consumo ainda — a medição começa no próximo turno");
 const H = { "Content-Type": "application/json" };
 const inputCls = `min-h-[40px] px-3 rounded-xl text-[13px] bg-white/70 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-cyan-400/70`;
 
@@ -40,6 +59,16 @@ export default function AgentsModule({ glassPanel }: { glassPanel: string }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [estudio, setEstudio] = useState<Agente | null>(null);
   const [rev, setRev] = useState(0);
+  const [range, setRange] = useState<Range>("7d");
+  const [ordem, setOrdem] = useState<Ordem>("uso");
+  const [tokens, setTokens] = useState<Tokens | null>(null);
+  const carregarTokens = useCallback(async (r: Range) => {
+    try {
+      const res = await fetch(`/api/admin/agents/tokens?range=${r}&groupBy=agente`, { cache: "no-store" });
+      if (res.ok) setTokens(await res.json());
+    } catch { /* o painel de consumo é leitura: falhar aqui não derruba o módulo */ }
+  }, []);
+  useEffect(() => { void carregarTokens(range); }, [carregarTokens, range]);
 
   const carregar = useCallback(async () => {
     try {
@@ -85,14 +114,26 @@ export default function AgentsModule({ glassPanel }: { glassPanel: string }) {
   if (estado === "carregando") return <Aviso glassPanel={glassPanel} texto="Carregando agentes…" />;
 
   const q = filtro.trim().toLowerCase();
-  const lista = q ? agentes.filter((a) => `${a.agentKey} ${a.nome} ${a.curso ?? ""} ${a.tipo}`.toLowerCase().includes(q)) : agentes;
+  const consumoDe = (k: string) => tokens?.grupos.find((g) => g.chave === k);
+  const filtrados = q ? agentes.filter((a) => `${a.agentKey} ${a.nome} ${a.curso ?? ""} ${a.tipo}`.toLowerCase().includes(q)) : agentes;
+  const lista = [...filtrados].sort((x, y) => valorOrdem(y, consumoDe(y.agentKey), ordem) - valorOrdem(x, consumoDe(x.agentKey), ordem) || x.ordem - y.ordem);
   const totalUso = agentes.reduce((s, a) => s + a.uso.total, 0);
+  const totalTokens = tokens?.grupos.reduce((s, g) => s + g.totalTokens, 0) ?? 0;
 
   return (
     <div className={`flex-1 min-h-0 flex flex-col rounded-[32px] p-5 sm:p-7 ${glassPanel}`}>
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <h2 className={`text-xl font-black tracking-tight ${TXT}`}>Agents</h2>
-        <span className={`text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>{agentes.length} agentes · {totalUso} usos</span>
+        <span className={`text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>{agentes.length} agentes · {totalUso} usos{tokens?.grupos.length ? ` · ${new Intl.NumberFormat("pt-BR").format(totalTokens)} tokens (${range})` : ""}</span>
+        <span className={`text-[11px] ${TXT_MUDO}`} title="primeira linha do TokenLedger">{fmtDesde(tokens?.medindoDesde ?? null)}</span>
+        <div role="radiogroup" aria-label="Período do consumo" className="flex gap-1">
+          {(["7d", "30d", "all"] as Range[]).map((r) => (
+            <button key={r} type="button" role="radio" aria-checked={range === r} onClick={() => setRange(r)} className={`min-h-[32px] px-2.5 rounded-lg text-[11px] font-bold ${VIDRO_CHIP} ${range === r ? "ring-1 ring-cyan-400/70 " + TXT : TXT_MUDO}`}>{r === "all" ? "tudo" : r}</button>
+          ))}
+        </div>
+        <select value={ordem} onChange={(e) => setOrdem(e.target.value as Ordem)} aria-label="Ordenar por" className={`${inputCls} w-[150px]`}>
+          {ORDENS.map((o) => <option key={o.k} value={o.k}>↓ {o.rotulo}</option>)}
+        </select>
         <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="filtrar" aria-label="Filtrar agentes" className={`${inputCls} ml-auto w-[180px]`} />
         <button type="button" onClick={() => setCriando((v) => !v)} className={`min-h-[40px] px-4 rounded-xl text-[12px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>{criando ? "fechar" : "+ agente"}</button>
       </div>
@@ -119,7 +160,7 @@ export default function AgentsModule({ glassPanel }: { glassPanel: string }) {
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pr-1">
-        {lista.map((a) => <Card key={`${a.agentKey}-${rev}`} a={a} onPatch={patch} onAvatar={trocarAvatar} onEstudio={() => setEstudio(a)} />)}
+        {lista.map((a) => <Card key={`${a.agentKey}-${rev}`} a={a} consumo={consumoDe(a.agentKey)} teto={tokens?.tetos[a.agentKey]} serie={tokens?.serie14d} onPatch={patch} onAvatar={trocarAvatar} onEstudio={() => setEstudio(a)} />)}
       </div>
       {estudio && <EstudioModal a={estudio} onFechar={() => setEstudio(null)} onMudou={() => { invalidarManifestos(); setRev((r) => r + 1); }} />}
     </div>
@@ -172,8 +213,10 @@ function EstudioModal({ a, onFechar, onMudou }: { a: Agente; onFechar: () => voi
   );
 }
 
-function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean>; onAvatar: (k: string, f: File | null) => void; onEstudio: () => void }) {
+function Card({ a, consumo, teto, serie, onPatch, onAvatar, onEstudio }: { a: Agente; consumo?: Consumo; teto?: { fora: boolean; usado: number; teto: number | null }; serie?: { dia: string; totalTokens: number }[]; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean>; onAvatar: (k: string, f: File | null) => void; onEstudio: () => void }) {
   const [hover, setHover] = useState(false);
+  const [tetoTxt, setTetoTxt] = useState(teto?.teto != null ? String(teto.teto) : "");
+  useEffect(() => { setTetoTxt(teto?.teto != null ? String(teto.teto) : ""); }, [teto?.teto]);
   const [editandoCracha, setEditandoCracha] = useState(false);
   const [nome, setNome] = useState(a.nome);
   const [bio, setBio] = useState(a.bio);
@@ -213,12 +256,32 @@ function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: str
         )}
       </div>
       {editandoCracha && <EditorCracha a={a} onPatch={onPatch} />}
-      {/* USO — o card founder */}
+      {/* USO — o card founder, FUNDIDO com o consumo medido (C5). Um painel só; "—" = sem linha no período. */}
       <div className="pt-3 border-t border-slate-200/70 dark:border-white/10">
         <div className="flex items-baseline gap-3">
           <span className={`text-2xl font-black tabular-nums ${TXT}`}>{a.uso.total}</span>
           <span className={`text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>usos · {a.uso.usuarios} {a.uso.usuarios === 1 ? "usuário" : "usuários"}</span>
           {a.uso.ultimoUso && <span className={`ml-auto text-[10.5px] ${TXT_MUDO}`}>{new Date(a.uso.ultimoUso).toLocaleDateString("pt-BR")}</span>}
+        </div>
+        <div className={`mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-[11px] tabular-nums ${TXT_2}`} title={serie?.length ? `14 dias (todos os agentes): ${serie.map((d) => `${d.dia.slice(5)} ${d.totalTokens}`).join(" · ")}` : undefined}>
+          <span><b className={TXT_MUDO}>in</b> {fmtTok(consumo, consumo?.promptTokens)}</span>
+          <span><b className={TXT_MUDO}>out</b> {fmtTok(consumo, consumo?.completionTokens)}</span>
+          <span title="tokens servidos pelo contextCache — cobrados pelo preço de cache (~10%), exibidos à parte"><b className={TXT_MUDO}>cached</b> {fmtTok(consumo, consumo?.cachedTokens)}</span>
+          <span><b className={TXT_MUDO}>total</b> {fmtTok(consumo, consumo?.totalTokens)}</span>
+          <span title="estimativa pela tabela em lib/ai/preco.ts; não é fatura"><b className={TXT_MUDO}>custo est.</b> {fmtUsd(consumo)}</span>
+          <span><b className={TXT_MUDO}>tokens/turno</b> {fmtTok(consumo, consumo?.tokensPorChamada)}</span>
+        </div>
+        {serie?.length ? (
+          <div className="mt-1.5 flex items-end gap-px h-5" aria-hidden title="14 dias (todos os agentes)">
+            {serie.map((d) => { const max = Math.max(1, ...serie.map((x) => x.totalTokens)); return <span key={d.dia} className="flex-1 rounded-sm bg-cyan-500/50" style={{ height: `${Math.max(2, Math.round((d.totalTokens / max) * 100))}%` }} />; })}
+          </div>
+        ) : null}
+        {/* TETO — ler ≠ agir: aqui só avisa; AGENT_TETO_ENFORCE=1 no servidor é o que barra (e só o autônomo) */}
+        <div className="mt-2 flex items-center gap-2">
+          <label className={`flex items-center gap-1.5 text-[11px] ${TXT_MUDO}`}>teto/dia
+            <input value={tetoTxt} onChange={(e) => setTetoTxt(e.target.value)} onBlur={() => { const n = tetoTxt.trim() === "" ? null : Number(tetoTxt); if (n === null || (Number.isInteger(n) && n >= 0)) void onPatch(a.agentKey, { tetoTokensDia: n }); }} inputMode="numeric" placeholder="sem teto" aria-label={`Teto diário de tokens de ${a.nome}`} className={`${inputCls} w-[96px] text-center`} />
+          </label>
+          {teto?.fora && <span className="text-[11px] font-bold text-amber-600 dark:text-amber-300" title="só avisa; AGENT_TETO_ENFORCE=1 faz o freio agir (e só no trabalho autônomo)">estouraria o teto hoje ({new Intl.NumberFormat("pt-BR").format(teto.usado)}/{new Intl.NumberFormat("pt-BR").format(teto.teto ?? 0)})</span>}
         </div>
         {a.uso.top.length > 0 && (
           <ul className="mt-2 flex flex-col gap-1">

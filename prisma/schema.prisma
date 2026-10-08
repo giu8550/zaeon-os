@@ -1046,6 +1046,7 @@ model AgentProfile {
   whatsapp  String?                          // +5511999999999 (vira wa.me)
   instagram String?                          // handle, sem @
   facebook  String?                          // slug da página
+  tetoTokensDia Int?                         // PR-A3: teto diário de tokens (ledger). null = sem teto. Só AGE com AGENT_TETO_ENFORCE=1 e origem "autonomo"
   updatedAt DateTime @updatedAt
 
   @@map("agent_profiles")

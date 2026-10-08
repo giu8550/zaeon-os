@@ -25,6 +25,8 @@ export type TurnoInput = {
   userId: string;
   /** mensagem que convocou (objetivo preferencial). */
   mensagemId?: string | null;
+  /** PR-A3: quem pediu. "humano" (default) NUNCA é barrado pelo teto; "autonomo" (heartbeat/programa, fatias 6–8) é. */
+  origem?: "humano" | "autonomo";
 };
 
 export type MsgRow = {
@@ -61,7 +63,7 @@ export type TurnoDeps = {
 
 export type TurnoResult =
   | { ok: true; mensagem: MensagemWire }
-  | { ok: false; motivo: "canal" | "gate" | "agente" | "vazio" | "erro"; erro?: string };
+  | { ok: false; motivo: "canal" | "gate" | "agente" | "vazio" | "erro" | "teto"; erro?: string };
 
 // ───────────────────────────── helpers PUROS (exportados p/ teste) ─────────────────────────────
 
@@ -164,6 +166,20 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
   const roster = mergeProfiles(rosterComMentores(mentores), profiles);
   const agente = roster.find((a) => a.agentKey === input.agentKey && a.ativo && a.conversacional);
   if (!agente) return { ok: false, motivo: "agente" };
+
+  // PR-A3 · teto por agente — ler ≠ agir: só freia com AGENT_TETO_ENFORCE=1 E origem "autonomo" (handoff §5 A3).
+  if ((input.origem ?? "humano") === "autonomo" && process.env.AGENT_TETO_ENFORCE === "1") {
+    const { foraPorTeto } = await import("@/lib/llm/teto");
+    const t = await foraPorTeto(prisma as any, agente.agentKey).catch(() => ({ fora: false, usado: 0, teto: null }));
+    if (t.fora) {
+      const { messageForError } = await import("@/lib/agent/errors");
+      await publicar(canal.id, EV_MENSAGEM, {
+        id: `efemera-${Date.now()}`, canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto: messageForError("agent_budget_exhausted"), mencoes: [],
+        createdAt: new Date().toISOString(), autorNome: agente.nome, autorAvatar: agente.avatarUrl, efemera: true,
+      } satisfies MensagemWire & { efemera: true });
+      return { ok: false, motivo: "teto" };
+    }
+  }
 
   const desc = await prisma.canalMensagem.findMany({ where: { canalId: canal.id }, orderBy: { createdAt: "desc" }, take: N_CONTEXTO });
   const msgs = [...desc].reverse();
