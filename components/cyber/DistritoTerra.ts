@@ -16,6 +16,12 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { CABOS, GLOBOS, LOTES_MIRANTE, MOTORES, PONTOS_TERRA, SUPERTREES, TELOES, TOTENS, noMapa, reacaoDoMotor } from "@/lib/cyber/terra";
 import { LOTES, type Lote } from "@/lib/cyber/motos";
 import { criarPisoEstacionamento } from "./Estacionamento";
+import { haQuanto, intercalarTipos, type EventoTerra, type TipoEvento } from "@/lib/cyber/terraAoVivo";
+
+/** a Terra AO VIVO (app/api/cyber/terra): eventos reais, atualizados a cada 10 min */
+const URL_AO_VIVO = "/api/cyber/terra", A_CADA_MS = 10 * 60 * 1000, MAX_VIVO = 24;
+const COR_EVENTO: Record<TipoEvento, string> = { terremoto: "#ffa53c", incendio: "#ff5a2c", tempestade: "#b98cff", vulcao: "#ff2c4a", gelo: "#dff6ff" };
+const IDX_EVENTO: Record<TipoEvento, number> = { terremoto: 0, incendio: 1, tempestade: 2, vulcao: 3, gelo: 4 };
 
 export type DistritoHandle = {
   group: THREE.Group;
@@ -76,26 +82,39 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
   const texTerra = guarda(new THREE.TextureLoader().load(URL_TERRA)); texTerra.colorSpace = THREE.SRGBColorSpace;
   const pontosU = PONTOS_TERRA.map((p) => { const m = noMapa(p.lat, p.lon); return new THREE.Vector3(m.u, m.v, TIPO_IDX[p.tipo]); });
   const uT = { value: 0 };
+  const vivoU = Array.from({ length: MAX_VIVO }, () => new THREE.Vector4());
   // ── TELÕES: o mapa (shader: tom holográfico + grade + pontos pulsando + varredura) + painel (canvas) ──
-  const painel = (() => {
-    const c = document.createElement("canvas"); c.width = 640; c.height = 1024; const g = c.getContext("2d")!;
-    g.fillStyle = "#04101c"; g.fillRect(0, 0, 640, 1024); g.strokeStyle = "#45d6ff"; g.lineWidth = 3; g.strokeRect(6, 6, 628, 1012);
-    g.fillStyle = "#e6f6ff"; g.font = "bold 46px system-ui, sans-serif"; g.fillText("ESTADO", 34, 80); g.fillText("DA TERRA", 34, 132);
-    let y = 196;
+  // o PAINEL lateral (canvas): PROBLEMAS · O QUE ESTÁ SENDO FEITO · AO VIVO (redesenhado quando os eventos chegam)
+  const cvPainel = document.createElement("canvas"); cvPainel.width = 640; cvPainel.height = 1300;
+  const painel = guarda(new THREE.CanvasTexture(cvPainel)); painel.colorSpace = THREE.SRGBColorSpace;
+  const corta = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+  const desenharPainel = (vivo: EventoTerra[] | null) => {
+    const g = cvPainel.getContext("2d")!;
+    g.fillStyle = "#04101c"; g.fillRect(0, 0, 640, 1300); g.strokeStyle = "#45d6ff"; g.lineWidth = 3; g.strokeRect(6, 6, 628, 1288);
+    g.fillStyle = "#e6f6ff"; g.font = "bold 46px system-ui, sans-serif"; g.fillText("ESTADO DA TERRA", 30, 74);
+    let y = 136;
     const sec = (titulo: string, cor: string, tipos: string[]) => {
-      g.fillStyle = cor; g.font = "bold 27px system-ui, sans-serif"; g.fillText(titulo, 34, y); y += 42;
-      for (const p of PONTOS_TERRA.filter((q) => tipos.includes(q.tipo))) { g.fillStyle = COR_TIPO[p.tipo]; g.beginPath(); g.arc(46, y - 8, 8, 0, Math.PI * 2); g.fill(); g.fillStyle = "#e6f6ff"; g.font = "22px system-ui, sans-serif"; g.fillText(p.nome, 66, y); y += 40; }
-      y += 16;
+      g.fillStyle = cor; g.font = "bold 26px system-ui, sans-serif"; g.fillText(titulo, 30, y); y += 38;
+      for (const p of PONTOS_TERRA.filter((q) => tipos.includes(q.tipo))) { g.fillStyle = COR_TIPO[p.tipo]; g.beginPath(); g.arc(42, y - 7, 7, 0, Math.PI * 2); g.fill(); g.fillStyle = "#e6f6ff"; g.font = "21px system-ui, sans-serif"; g.fillText(corta(p.nome, 44), 60, y); y += 33; }
+      y += 14;
     };
     sec("● PROBLEMAS", "#ff6a76", ["problema"]); sec("● O QUE ESTÁ SENDO FEITO", "#7dffa6", ["regeneracao", "desenvolvimento"]);
-    g.fillStyle = "#ffb45a"; g.font = "bold 26px system-ui, sans-serif"; g.fillText("● AO VIVO", 34, 940);
-    g.fillStyle = "rgba(230,246,255,.6)"; g.font = "20px system-ui, sans-serif"; g.fillText("eventos reais: terremotos, incêndios, tempestades", 34, 972); g.fillText("— conectando às fontes públicas —", 34, 998);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return guarda(t);
-  })();
+    g.fillStyle = "#ffb45a"; g.font = "bold 28px system-ui, sans-serif"; g.fillText("● AO VIVO", 30, y); y += 8;
+    g.fillStyle = "rgba(230,246,255,.5)"; g.font = "17px system-ui, sans-serif"; g.fillText("USGS · NASA EONET — eventos reais", 190, y - 8); y += 30;
+    if (!vivo) { g.fillStyle = "rgba(230,246,255,.6)"; g.font = "21px system-ui, sans-serif"; g.fillText("conectando às fontes públicas…", 30, y); }
+    else if (!vivo.length) { g.fillStyle = "rgba(230,246,255,.6)"; g.font = "21px system-ui, sans-serif"; g.fillText("sem eventos agora", 30, y); }
+    else for (const e of intercalarTipos(vivo, 9)) {
+      g.fillStyle = COR_EVENTO[e.tipo]; g.beginPath(); g.moveTo(42, y - 16); g.lineTo(50, y - 7); g.lineTo(42, y + 2); g.lineTo(34, y - 7); g.closePath(); g.fill();
+      g.fillStyle = "#f2f8ff"; g.font = "bold 20px system-ui, sans-serif"; g.fillText(corta(e.titulo, 42), 60, y);
+      g.fillStyle = "rgba(200,225,245,.55)"; g.font = "16px system-ui, sans-serif"; g.fillText(haQuanto(e.quando, Date.now()), 60, y + 20); y += 46;
+    }
+    painel.needsUpdate = true;
+  };
+  desenharPainel(null);
   const matMapa = guarda(new THREE.ShaderMaterial({
-    uniforms: { uMapa: { value: texTerra }, uT, uP: { value: pontosU } },
+    uniforms: { uMapa: { value: texTerra }, uT, uP: { value: pontosU }, uV: { value: vivoU }, uNV: { value: 0 } },
     vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: /* glsl */ `uniform sampler2D uMapa; uniform float uT; uniform vec3 uP[${pontosU.length}]; varying vec2 vUv;
+    fragmentShader: /* glsl */ `uniform sampler2D uMapa; uniform float uT; uniform vec3 uP[${pontosU.length}]; uniform vec4 uV[${MAX_VIVO}]; uniform float uNV; varying vec2 vUv;
       void main() {
         vec3 m = texture2D(uMapa, vUv).rgb;
         float lum = dot(m, vec3(0.3, 0.55, 0.15));
@@ -109,10 +128,33 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
           float forte = p.z < 0.5 ? 1.5 : 1.0;   // os PROBLEMAS pulsam mais forte
           cor += c * (exp(-r * r * 9000.0) * 1.6 + anel) * forte;
         }
+        // AO VIVO: os eventos reais — um losango piscando + anel de onda, na cor do tipo (os mais novos mais fortes)
+        for (int i = 0; i < ${MAX_VIVO}; i++) {
+          if (float(i) >= uNV) break;
+          vec4 e = uV[i]; vec2 d = (vUv - e.xy) * vec2(2.0, 1.0); float r = abs(d.x) + abs(d.y);
+          vec3 c = e.z < 0.5 ? vec3(1.0, 0.65, 0.24) : (e.z < 1.5 ? vec3(1.0, 0.36, 0.17) : (e.z < 2.5 ? vec3(0.73, 0.55, 1.0) : (e.z < 3.5 ? vec3(1.0, 0.17, 0.29) : vec3(0.88, 0.96, 1.0))));
+          float pisca = 0.6 + 0.4 * sin(uT * 4.0 + float(i) * 1.7);
+          float onda = fract(uT * 0.35 + float(i) * 0.21); float anel = exp(-pow((length(d) - onda * 0.05) * 170.0, 2.0)) * (1.0 - onda);
+          cor += c * ((1.0 - smoothstep(0.004, 0.009, r)) * 1.8 * pisca + anel * 0.9) * e.w;
+        }
         float cl = 0.92 + 0.08 * sin(vUv.y * 900.0); gl_FragColor = vec4(cor * cl, 1.0);
       }`,
   }));
   const matPainel = guarda(new THREE.MeshBasicMaterial({ map: painel }));
+  // busca a Terra AO VIVO agora e a cada 10 min (falhou: mantém o que tinha)
+  let vivo = true, timerVivo: ReturnType<typeof setTimeout> | null = null;
+  const aplicarVivo = (evs: EventoTerra[]) => {
+    const agora = Date.now(), lista = evs.slice(0, MAX_VIVO);
+    lista.forEach((e, i) => { const m = noMapa(e.lat, e.lon), idade = (agora - e.quando) / 86400000; vivoU[i]!.set(m.u, m.v, IDX_EVENTO[e.tipo], Math.max(0.45, 1 - idade * 0.12)); });
+    matMapa.uniforms.uNV!.value = lista.length; desenharPainel(lista);
+  };
+  const buscarVivo = async () => {
+    try { const r = await fetch(URL_AO_VIVO); if (r.ok) { const j = (await r.json()) as { eventos?: EventoTerra[] }; if (vivo && Array.isArray(j.eventos)) aplicarVivo(j.eventos); } }
+    catch { /* sem rede: fica o que tinha */ }
+    if (vivo) timerVivo = setTimeout(() => void buscarVivo(), A_CADA_MS);
+  };
+  void buscarVivo();
+  liberar.push({ dispose: () => { vivo = false; if (timerVivo) clearTimeout(timerVivo); } });
   const matMoldura = guarda(new THREE.MeshStandardMaterial({ color: 0x141c2e, roughness: 0.3, metalness: 0.85, emissive: 0x0a1630, emissiveIntensity: 0.6 }));
   const matAura = guarda(new THREE.MeshBasicMaterial({ color: 0x45d6ff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   // o DESTAQUE do telão: palco elevado com bordas de luz, colunas de luz dos lados, aro de neon na moldura, holofote no
