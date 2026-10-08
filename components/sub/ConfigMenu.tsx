@@ -3,7 +3,8 @@
 /**
  * ConfigMenu — a engrenagem da navbar (ao lado do tema): as mesmas opções do "Opções" do menu
  * principal, de qualquer página. Voz da Zaeon · idioma · acessar convite · MODO CEO (o admin
- * escondido: só founder/super-admin vê — mesma regra do menu principal) · sair · deletar conta.
+ * escondido: só founder/super-admin vê — mesma regra do menu principal) · MODO TUTORIAL do cyberespaço (ligado =
+ * toda entrada começa pelo tutorial; pra testar) · sair · deletar conta.
  * Deslogado: só voz e idioma.
  */
 import { useEffect, useRef, useState } from "react";
@@ -11,10 +12,11 @@ import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useTranslation } from "react-i18next";
 import { Cog6ToothIcon, ChevronDownIcon, ChevronRightIcon, ArrowRightStartOnRectangleIcon } from "@heroicons/react/24/outline";
-import { Crown, Mic, Trash2, Loader2, Ticket } from "lucide-react";
+import { Crown, Mic, Trash2, Loader2, Ticket, GraduationCap } from "lucide-react";
 import VoicePicker from "@/components/settings/VoicePicker";
 import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 import { isSuperAdmin } from "@/lib/auth/roles";
+import { PREF_TUTORIAL, tutorialLigado } from "@/lib/cyber/onboarding";
 
 const item = "group relative flex items-center gap-3 w-full min-h-[48px] px-3 rounded-2xl text-left text-sm font-medium text-slate-800 dark:text-white border border-slate-200/80 dark:border-white/[0.06] bg-white/50 dark:bg-white/[0.03] hover:bg-white/80 dark:hover:bg-white/[0.08] hover:border-cyan-400/50 dark:hover:border-cyan-400/30 transition-colors";
 const rotulo = "text-[9px] uppercase font-bold tracking-tighter text-slate-500 dark:text-white/50";
@@ -27,6 +29,7 @@ export default function ConfigMenu() {
   const [vozAberta, setVozAberta] = useState(false);
   const [apagando, setApagando] = useState(false);
   const [convite, setConvite] = useState(false);
+  const [tutorial, setTutorial] = useState(false);
   const raiz = useRef<HTMLDivElement>(null);
   const botao = useRef<HTMLButtonElement>(null);
 
@@ -36,6 +39,7 @@ export default function ConfigMenu() {
   useEffect(() => {
     if (!aberto) return;
     try { setConvite(localStorage.getItem("zaeon.inviteAccessed") === "1"); } catch { /* sem storage */ }
+    setTutorial(tutorialLigado((k) => localStorage.getItem(k)));
     const fora = (e: PointerEvent) => { if (!raiz.current?.contains(e.target as Node)) setAberto(false); };
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { setAberto(false); botao.current?.focus(); } };
     document.addEventListener("pointerdown", fora);
@@ -44,6 +48,10 @@ export default function ConfigMenu() {
   }, [aberto]);
 
   const ir = (href: string) => { setAberto(false); router.push(href); };
+  const mudarTutorial = () => {
+    const novo = !tutorial; setTutorial(novo);
+    try { if (novo) localStorage.setItem(PREF_TUTORIAL, "1"); else localStorage.removeItem(PREF_TUTORIAL); } catch { /* sem storage */ }
+  };
 
   const apagarConta = async () => {
     if (apagando) return;
@@ -99,6 +107,21 @@ export default function ConfigMenu() {
             </span>
             <LanguageFlagToggle size={30} />
           </div>
+
+          {/* MODO TUTORIAL do cyberespaço: ligado, toda entrada começa pelo tutorial (vale na próxima entrada) */}
+          {logado && (
+            <button type="button" role="switch" aria-checked={tutorial} onClick={mudarTutorial} className={item}>
+              <GraduationCap size={16} className="text-cyan-600 dark:text-cyan-300 shrink-0" />
+              <span className="flex flex-col flex-1 min-w-0">
+                <span className={rotulo}>Cyberespaço</span>
+                <span>Modo tutorial</span>
+                <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">{tutorial ? "Ligado: ao entrar no cyberespaço, o tutorial é obrigatório." : "Desligado: o cyberespaço normal."}</span>
+              </span>
+              <span aria-hidden className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${tutorial ? "bg-cyan-500" : "bg-slate-300 dark:bg-white/15"}`}>
+                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${tutorial ? "translate-x-5" : ""}`} />
+              </span>
+            </button>
+          )}
 
           {logado && convite && (
             <button type="button" onClick={() => ir("/convite")} className={item}>

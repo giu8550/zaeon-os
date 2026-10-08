@@ -10,9 +10,13 @@ export const COR_LUZ = "#bfeaff";   // aura/viseira/neurônios: a "luz" é comum
 /** Paleta dos outros: sem azul/ciano pra nunca confundir com você. */
 export const ARMADURAS_OUTROS = ["#ff5fa8", "#ffb43b", "#3fe08a", "#b36bff", "#ff6a4d", "#e6e24a"] as const;
 
+/** a cor com que EU me vejo (no cyberespaço e na vitrine do Perfil). Quando a skin/cor virar cosmético escolhido no
+ *  Perfil (salvo no servidor), é aqui que a escolha entra. */
+export const minhaArmadura = (): string => ARMADURA_EU;
+
 /** `ordem` = ids dos membros na ordem canônica (members[]). */
 export function corDaArmadura(ordem: string[], id: string, euId: string): string {
-  if (id === euId) return ARMADURA_EU;
+  if (id === euId) return minhaArmadura();
   const outros = ordem.filter((x) => x !== euId);
   const i = outros.indexOf(id);
   return ARMADURAS_OUTROS[(i < 0 ? outros.length : i) % ARMADURAS_OUTROS.length]!;

@@ -18,9 +18,10 @@ import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
 import { QualidadeAdaptativa } from "@/lib/cyber/qualidadeAdaptativa";
-import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
+import { DISTANCIA, PASSOS, duracaoVozDroid, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
-import { criarAudioCyber, type AudioCyberHandle, type LoopSom } from "./AudioCyber";
+import { criarAudioCyber, type AudioCyberHandle, type FalaHolograma, type LoopSom } from "./AudioCyber";
+import { ESPERA_VOZ, criarCacheVoz, duracaoComAtraso, falasFixasZaeon, tempoDaFala, textoDaVoz, REPERGUNTA_NOME, type CacheVoz } from "@/lib/cyber/vozZaeon";
 import { criarSomLounge, type SomLoungeHandle } from "./SomLounge";
 import type { SomLounge } from "@/lib/lounge3d/musica";
 import { rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
@@ -117,6 +118,9 @@ export type CyberOpts = {
   /** um turno GERATIVO da conversa com a Zaeon (o React chama o servidor: app/api/lounge3d/[id]/zaeon); sem isto, o
    *  roteiro local (lib/cyber/conversaZaeon `fallbackZaeon`) */
   conversarZaeon?: (p: PedidoZaeon) => Promise<TurnoZaeon>;
+  /** a VOZ da Zaeon (o React chama o servidor: app/api/lounge3d/[id]/zaeon/voz) → o WAV em base64, ou null; sem isto, ela
+   *  fala só no balão (a boca mexe sorteada) */
+  vozZaeon?: (texto: string) => Promise<string | null>;
   /** entrou/saiu da INSTÂNCIA do tutorial (o React esconde o chat da sala e quem está online enquanto ela é só da pessoa) */
   onInstancia?: (on: boolean) => void;
   /** a pessoa desrespeitou a Zaeon: o Droid EXPULSOU ela do cyberespaço (o React tira ela daqui) */
@@ -239,6 +243,16 @@ export class CyberEngine {
   /** EXPULSANDO (abuso): o relógio da cena — o Droid vem pra frente, fala e a pessoa é tirada daqui */
   private expulsando: { t: number; falou: boolean } | null = null;
   private falaZaeon = { pos: new THREE.Vector3(), alt: 0 };
+  /** a VOZ dela (lib/cyber/vozZaeon): o cache das sínteses (WAV), os já decodificados, a fala ESPERANDO o áudio (o balão
+   *  só sai quando a voz começa — ou sem voz, passado o prazo), a voz tocando e quanto a última fala durou */
+  private vozCache: CacheVoz<ArrayBuffer> | null = null;
+  private vozDecod = new Map<string, Promise<AudioBuffer | null>>();
+  private vozPreaquecida = false;
+  private falaZ: { texto: string; ultima: boolean; espera: number; limite: number; buf: AudioBuffer | null | undefined; depois?: () => void } | null = null;
+  /** a fala que está no balão agora (uma voz que chega ATRASADA só toca se ainda for ela) */
+  private falaAtual: NonNullable<CyberEngine["falaZ"]> | null = null;
+  private vozZ: FalaHolograma | null = null;
+  private durFalaZ = 0;
   /** dentro do TÚNEL de um buraco negro (escolhendo o destino): parado até o React responder */
   private tunel: TunelAberto | null = null;
   /** a boca do par do dono só dispara de novo depois de sair dela; o aviso de "só o dono" sai 1× por entrada */
@@ -441,6 +455,8 @@ export class CyberEngine {
     }
 
     this.som = criarAudioCyber({ camera: this.cam, cena: this.cena.scene, low });
+    const sint = opts.vozZaeon;
+    if (sint) this.vozCache = criarCacheVoz(async (t) => { const b64 = await sint(t); return b64 ? base64ParaBuffer(b64) : null; });
     if (this.cidade?.caixasLounge.length && opts.urlMusica) this.somLounge = criarSomLounge({ audio: this.som, caixas: this.cidade.caixasLounge, urlDe: opts.urlMusica });
     this.setPessoas([...opts.membros]);
     if (this.cidade) this.criarDroid();
@@ -780,6 +796,7 @@ export class CyberEngine {
     if (this.conversa?.etapa === "feita") this.conversa = null;
     if (n >= ROTEIRO.length) { this.encerrarGuia(); this.droid?.h.sumir(); return; }
     this.guia = this.novoGuia(n); this.emitirGuia();
+    if (ROTEIRO[n]!.id === "capela") this.preaquecerVozZaeon();   // o Droid vai levar a pessoa até ela: as falas fixas já vão sendo geradas
     this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.perto });
   }
   /** um balão de fala sobre quem fala (uma pessoa ou o Droid); `ms` = quanto fica (Infinity = até a próxima fala) */
@@ -812,17 +829,67 @@ export class CyberEngine {
     const d = this.droid; if (!d) return;
     this.balao(d.fala, texto, DROID.cor, ultima ? Infinity : RITMO_FALA.entre * 1000 + 400);
     this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: DROID.cor, texto });
+    this.som.vozDroid(d.h.group, { dur: duracaoVozDroid(texto) });   // a "voz" dele: sem palavras, de outra dimensão
   }
   // ───────────── a CONVERSA com a Zaeon (o holograma do globo da capela — lib/cyber/conversaZaeon) ─────────────
-  /** a Zaeon FALA: balão embaixo do rosto + a fala no chat (só local) + a boca mexendo */
-  private zaeonFala(texto: string, ultima: boolean) {
-    this.balao(this.falaZaeon, texto, COR_ZAEON, ultima ? Infinity : 3600);
-    this.o.onFalaAgente?.({ id: "zaeon", nome: "Zaeon", cor: COR_ZAEON, texto });
-    this.holoZaeon?.falar(0.6 + texto.length * 0.055);
+  /** a Zaeon FALA: balão embaixo do rosto + a fala no chat (só local) + a VOZ (Leda, com eco de holograma) e a boca
+   *  seguindo o volume dela. Com voz, o balão espera o áudio (até ESPERA_VOZ: fixa = já devia estar no cache; gerativa
+   *  = a síntese acabou de começar — ela fica com a cara de "pensando" enquanto isso); sem voz, sai na hora e a boca
+   *  mexe sorteada. `depois` roda quando o balão aparece (ex.: abrir o painel da pergunta) */
+  private zaeonFala(texto: string, ultima: boolean, o: { gerativa?: boolean; depois?: () => void } = {}) {
+    if (this.falaZ) this.mostrarFalaZaeon(this.falaZ);   // (não acontece no roteiro) a anterior sai já, sem esperar
+    const f = { texto, ultima, espera: 0, limite: ESPERA_VOZ.fixa as number, buf: undefined as AudioBuffer | null | undefined, depois: o.depois };
+    if (!this.vozCache || !this.som.ligado || !this.holoZaeon) { f.buf = null; this.mostrarFalaZaeon(f); return; }
+    // texto que ainda não foi sintetizado (o nome da pessoa, a resposta da IA…): espera mais, com a cara de "pensando"
+    if (o.gerativa || !this.vozCache.tem(texto)) { f.limite = ESPERA_VOZ.gerativa; if (!this.vozCache.tem(texto)) this.holoZaeon.pensar(true); }
+    this.falaZ = f;
+    void this.bufferDaVoz(texto).then((b) => {
+      if (this.falaZ === f) f.buf = b;
+      else if (b && this.falaAtual === f && !f.buf) this.vozAtrasada(f, b);   // passou do prazo e o balão saiu mudo: a voz entra agora
+    });
+  }
+  /** a voz chegou DEPOIS do prazo, mas ela ainda está nessa fala: toca agora, e a fala (o balão e o relógio da
+   *  conversa) se estende pra caber o áudio inteiro */
+  private vozAtrasada(f: NonNullable<CyberEngine["falaZ"]>, b: AudioBuffer) {
+    const h = this.holoZaeon, cv = this.conversa;
+    if (!h || !cv || cv.etapa === "brava" || cv.etapa === "feita" || cv.etapa === "pensando" || this.vozZ) return;   // (pensando: a pessoa já respondeu — a pergunta não fala mais)
+    const voz = this.som.falaHolograma(b, h.rosto); if (!voz) return;
+    f.buf = b; this.vozZ = voz; this.durFalaZ = duracaoComAtraso(cv.t, voz.duracao);
+    const ate = performance.now() + (voz.duracao + 0.8) * 1000;
+    for (const x of this.falas) if (x.ator === this.falaZaeon && x.ate !== Infinity) x.ate = Math.max(x.ate, ate);
+  }
+  private mostrarFalaZaeon(f: NonNullable<CyberEngine["falaZ"]>) {
+    if (this.falaZ === f) this.falaZ = null;
+    this.calarZaeon(); this.falaAtual = f;
+    const h = this.holoZaeon; h?.pensar(false);
+    const voz = f.buf && h ? this.som.falaHolograma(f.buf, h.rosto) : null;
+    this.vozZ = voz; this.durFalaZ = voz ? voz.duracao : 0;
+    this.balao(this.falaZaeon, f.texto, COR_ZAEON, f.ultima ? Infinity : Math.max(3600, (this.durFalaZ + 0.8) * 1000));
+    this.o.onFalaAgente?.({ id: "zaeon", nome: "Zaeon", cor: COR_ZAEON, texto: f.texto });
+    if (!voz) h?.falar(0.6 + f.texto.length * 0.055);   // sem áudio: a boca sorteada (a reserva)
+    f.depois?.();
+  }
+  /** para a voz dela (e a boca volta ao normal) */
+  private calarZaeon() { this.vozZ?.parar(); this.vozZ = null; this.falaAtual = null; this.holoZaeon?.boca(null); }
+  /** o áudio de uma fala: sintetizado (cache por texto) e decodificado (uma vez por texto) */
+  private bufferDaVoz(texto: string): Promise<AudioBuffer | null> {
+    const k = textoDaVoz(texto), c = this.vozCache; if (!c || !k) return Promise.resolve(null);
+    let p = this.vozDecod.get(k);
+    if (!p) {
+      p = c.pegar(k).then((ab) => (ab ? this.som.decodificar(ab) : null)).catch(() => null);
+      this.vozDecod.set(k, p); const pp = p; void pp.then((b) => { if (!b && this.vozDecod.get(k) === pp) this.vozDecod.delete(k); });
+    }
+    return p;
+  }
+  /** as falas FIXAS começam a ser sintetizadas antes da conversa (uma vez) */
+  private preaquecerVozZaeon() {
+    if (!this.vozCache || this.vozPreaquecida) return;
+    this.vozPreaquecida = true; this.vozCache.preaquecer(falasFixasZaeon());
   }
   /** começa a conversa: o rosto sobe do globo; a câmera vira pro globo, de baixo, olhando pra cima */
   private abrirConversa() {
     if (!this.holoZaeon || this.conversa) return;
+    this.preaquecerVozZaeon();
     this.conversa = { etapa: "abrindo", t: 0, linha: 0, i: 0, perfil: {}, historico: [], ia: false, proxima: null, turno: 0, foraSeguidas: 0, serie: ++this.serieConversa };
     this.holoZaeon.aparecer(); this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.perto });
     const d = this.droid; if (d) this.falas = this.falas.filter((f) => { if (f.ator === d.fala) { f.el.remove(); return false; } return true; });   // o Droid se cala: a vez é dela
@@ -830,7 +897,7 @@ export class CyberEngine {
   }
   private fecharConversa() {
     if (this.conversa && this.conversa.etapa === "esperando") this.o.onPergunta?.(null);
-    this.conversa = null; this.holoZaeon?.sumir();
+    this.conversa = null; this.holoZaeon?.sumir(); this.falaZ = null; this.calarZaeon();
     this.falas = this.falas.filter((f) => { if (f.ator === this.falaZaeon) { f.el.remove(); return false; } return true; });
   }
   /** a resposta da pessoa (o painel do React ou o chat): as 2 perguntas FIXAS (nome, situação) são resolvidas aqui; o
@@ -843,14 +910,16 @@ export class CyberEngine {
     if (!cv.ia) {
       const p = PERGUNTAS[cv.i]!;
       if (p.id === "nome") {
-        const n = nomeDe(r); if (!n) { this.perguntarDeNovo("Não peguei… como você quer que eu te chame?"); return true; }
-        cv.perfil.nome = n; this.zaeonFala(reacaoFixa("nome", r, cv.perfil), false); cv.historico.push({ quem: "zaeon", texto: reacaoFixa("nome", r, cv.perfil) });
+        const n = nomeDe(r); if (!n) { this.perguntarDeNovo(REPERGUNTA_NOME); return true; }
+        cv.perfil.nome = n;
+        void this.bufferDaVoz(fechamento(cv.perfil)[0]!);   // o "Obrigada, <nome>!" do fim já vai sendo gerado (só toca minutos depois)
+        this.zaeonFala(reacaoFixa("nome", r, cv.perfil), false, { gerativa: true, depois: () => this.holoZaeon?.sorrir(2.4) }); cv.historico.push({ quem: "zaeon", texto: reacaoFixa("nome", r, cv.perfil) });
       } else {
         cv.perfil.situacao = situacaoDe(r) ?? r;   // texto livre que não deu pra classificar: vai como a pessoa disse (a IA entende)
-        const re = reacaoFixa("situacao", r, cv.perfil); this.zaeonFala(re, false); cv.historico.push({ quem: "zaeon", texto: re });
+        const re = reacaoFixa("situacao", r, cv.perfil); this.zaeonFala(re, false, { depois: () => this.holoZaeon?.sorrir(2.4) }); cv.historico.push({ quem: "zaeon", texto: re });
         const q = perguntaDoRoteiro(faltando(cv.perfil)[0] ?? "objetivo", cv.perfil); cv.ia = true; cv.proxima = q;
       }
-      this.holoZaeon?.sorrir(2.4); cv.etapa = "reagindo"; cv.t = 0; return true;
+      cv.etapa = "reagindo"; cv.t = 0; return true;
     }
     // a parte GERATIVA: a Zaeon pensa (a cara de pensando) enquanto o servidor responde
     cv.etapa = "pensando"; cv.t = 0; this.holoZaeon?.pensar(true);
@@ -860,28 +929,28 @@ export class CyberEngine {
     void espera.then((t) => { if (this.conversa && this.conversa.serie === serie && this.conversa.etapa === "pensando") this.aplicarTurno(t); });
     return true;
   }
-  private perguntarDeNovo(fala: string) {
+  /** ela pergunta (o painel de resposta abre quando o balão — e a voz — começa) */
+  private perguntarDeNovo(fala: string, gerativa = false) {
     const cv = this.conversa; if (!cv) return;
     const p = cv.ia ? { id: "ia", fala, tipo: "texto" as const, outro: true, opcoes: cv.proxima?.opcoes ?? [] } : { ...PERGUNTAS[cv.i]!, fala };
-    this.zaeonFala(fala, true); cv.historico.push({ quem: "zaeon", texto: fala });
-    this.o.onPergunta?.({ ...p, n: Math.min(cv.i + 1 + cv.turno, 6), total: 6 }); this.soltarMouse(); cv.etapa = "esperando";
+    const n = Math.min(cv.i + 1 + cv.turno, 6);
+    this.zaeonFala(fala, true, { gerativa, depois: () => { if (this.conversa === cv && cv.etapa === "esperando") { this.o.onPergunta?.({ ...p, n, total: 6 }); this.soltarMouse(); } } });
+    cv.historico.push({ quem: "zaeon", texto: fala }); cv.etapa = "esperando";
   }
   /** o turno da IA (ou da reserva): abuso → expulsão; fora do assunto → ela pergunta de novo; ok → reage e segue/fecha */
   private aplicarTurno(t: TurnoZaeon) {
     const cv = this.conversa; if (!cv) return;
-    this.holoZaeon?.pensar(false);
-    if (t.classe === "abuso") { this.expulsar(); return; }
+    if (t.classe === "abuso") { this.expulsar(); return; }   // (a cara de "pensando" sai quando a fala dela aparece)
     cv.perfil = { ...cv.perfil, ...t.perfil };
     if (t.classe === "fora") cv.foraSeguidas++; else { cv.foraSeguidas = 0; cv.turno++; }
-    if (t.concluido) { this.zaeonFala(t.fala || "Perfeito!", false); cv.historico.push({ quem: "zaeon", texto: t.fala }); this.holoZaeon?.sorrir(2.6); cv.etapa = "fechando"; cv.linha = 0; cv.t = -1.5; this.o.onPerfil?.({ ...cv.perfil }); return; }
+    if (t.concluido) { this.zaeonFala(t.fala || "Perfeito!", false, { gerativa: true, depois: () => this.holoZaeon?.sorrir(2.6) }); cv.historico.push({ quem: "zaeon", texto: t.fala }); cv.etapa = "fechando"; cv.linha = 0; cv.t = -1.5; this.o.onPerfil?.({ ...cv.perfil }); return; }
     cv.proxima = { fala: t.fala, opcoes: t.opcoes };
-    if (t.classe === "ok") this.holoZaeon?.sorrir(1.6);
-    this.perguntarDeNovo(t.fala);
+    this.perguntarDeNovo(t.fala, true);
   }
   /** ABUSO: a Zaeon fica BRAVA; o Droid (em fúria) vem pra frente da pessoa e a expulsa do cyberespaço */
   private expulsar() {
     const cv = this.conversa; if (cv) { cv.etapa = "brava"; cv.t = 0; }
-    this.o.onPergunta?.(null); this.holoZaeon?.pensar(false); this.holoZaeon?.brava();
+    this.o.onPergunta?.(null); this.falaZ = null; this.calarZaeon(); this.holoZaeon?.pensar(false); this.holoZaeon?.brava();
     this.falas = this.falas.filter((f) => { if (f.ator === this.falaZaeon) { f.el.remove(); return false; } return true; });
     this.droid?.h.furia(true); this.expulsando = { t: 0, falou: false };
     this.guia = null;   // acabou o tutorial (sem avisar o "fim": não conta como visto — da próxima vez nasce no tubo de novo)
@@ -890,27 +959,32 @@ export class CyberEngine {
   private atualizarConversa(dt: number) {
     if (this.expulsando) {
       const x = this.expulsando; x.t += dt;
-      if (!x.falou && x.t >= 1.6) { x.falou = true; const d = this.droid; if (d) { this.balao(d.fala, FALA_EXPULSAO, "#ff5a4a", Infinity); this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: "#ff5a4a", texto: FALA_EXPULSAO }); } }
+      if (!x.falou && x.t >= 1.6) { x.falou = true; const d = this.droid; if (d) { this.balao(d.fala, FALA_EXPULSAO, "#ff5a4a", Infinity); this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: "#ff5a4a", texto: FALA_EXPULSAO }); this.som.vozDroid(d.h.group, { dur: duracaoVozDroid(FALA_EXPULSAO), furia: true }); } }
       if (x.t >= 7) { this.expulsando = null; this.o.onExpulso?.(); }
     }
     const cv = this.conversa, h = this.holoZaeon; if (!cv || !h) return;
     if (h.fase() === "oculto" && cv.etapa !== "feita") { this.conversa = null; return; }
     const a = h.ancora(), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
     this.falaZaeon.pos.set(CIDADE.centro.x, 0, CIDADE.centro.z); this.falaZaeon.alt = ilhaY + a.y - 2.4;
+    // a VOZ: a fala esperando o áudio sai quando ele chega (ou no prazo, muda); a boca segue o volume
+    const fz = this.falaZ; if (fz) { fz.espera += dt; if (fz.buf !== undefined || fz.espera >= fz.limite) this.mostrarFalaZaeon(fz); }
+    const vz = this.vozZ; if (vz) { if (vz.acabou()) { this.vozZ = null; h.boca(null); } else h.boca(vz.nivel()); }
+    if (this.falaZ) return;   // o relógio da conversa só anda depois que a fala aparece
     cv.t += dt;
+    const dur = (fixo: number) => tempoDaFala(fixo, this.durFalaZ);   // a fala ocupa o tempo do roteiro ou o do áudio (+ respiro)
     if (cv.etapa === "abrindo") {
       if (h.fase() !== "visivel") return;
-      if (cv.linha < ABERTURA.length && cv.t >= (cv.linha === 0 ? 0.3 : 3.4)) { this.zaeonFala(ABERTURA[cv.linha]!, false); cv.historico.push({ quem: "zaeon", texto: ABERTURA[cv.linha]! }); cv.linha++; cv.t = 0; }
-      else if (cv.linha >= ABERTURA.length && cv.t >= 3.2) { cv.etapa = "perguntando"; cv.t = 0; }
+      if (cv.linha < ABERTURA.length && cv.t >= (cv.linha === 0 ? 0.3 : dur(3.4))) { this.zaeonFala(ABERTURA[cv.linha]!, false); cv.historico.push({ quem: "zaeon", texto: ABERTURA[cv.linha]! }); cv.linha++; cv.t = 0; }
+      else if (cv.linha >= ABERTURA.length && cv.t >= dur(3.2)) { cv.etapa = "perguntando"; cv.t = 0; }
     } else if (cv.etapa === "perguntando") {
       const p = PERGUNTAS[cv.i]!; this.perguntarDeNovo(p.fala);
-    } else if (cv.etapa === "reagindo" && cv.t >= 2.6) {
+    } else if (cv.etapa === "reagindo" && cv.t >= dur(2.6)) {
       if (!cv.ia) { cv.i++; cv.etapa = "perguntando"; cv.t = 0; }
       else this.perguntarDeNovo(cv.proxima!.fala);
     } else if (cv.etapa === "fechando") {
       const fim = fechamento(cv.perfil);
-      if (cv.linha < fim.length && cv.t >= 3.4) { this.zaeonFala(fim[cv.linha]!, false); cv.linha++; cv.t = 0; }
-      else if (cv.linha >= fim.length && cv.t >= 3.4) { h.sumir(); cv.etapa = "feita"; }
+      if (cv.linha < fim.length && cv.t >= dur(3.4)) { this.zaeonFala(fim[cv.linha]!, false); cv.linha++; cv.t = 0; }
+      else if (cv.linha >= fim.length && cv.t >= dur(3.4)) { h.sumir(); cv.etapa = "feita"; }
     }
   }
 
@@ -2289,7 +2363,7 @@ export class CyberEngine {
     this.cleanups.forEach((f) => f());
     for (const a of [this.eu, ...this.remotos.values()]) if (a) this.removerAtor(a);
     if (this.droid) { this.droid.h.dispose(); this.droid.tag.remove(); }
-    this.holoZaeon?.dispose();
+    this.falaZ = null; this.calarZaeon(); this.holoZaeon?.dispose();
     this.praca?.dispose(); this.bercario?.dispose(); if (this.farol) { this.farol.geometry.dispose(); (this.farol.material as THREE.Material).dispose(); }
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
@@ -2301,4 +2375,9 @@ export class CyberEngine {
     if (this.hudVoo) for (const m of [this.hudVoo.marca, this.hudVoo.borda]) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
     this.fxVel?.dispose(); this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
   }
+}
+
+/** base64 → bytes (o WAV da voz) */
+function base64ParaBuffer(b64: string): ArrayBuffer | null {
+  try { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; } catch { return null; }
 }

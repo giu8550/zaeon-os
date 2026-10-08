@@ -10,15 +10,20 @@
 import * as THREE from "three";
 import { GLOBO_CAPELA } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
+import { bocaDoNivel } from "@/lib/cyber/vozZaeon";
 
 export type FaseHolo = "oculto" | "subindo" | "visivel" | "descendo";
 export type HoloZaeonHandle = {
   group: THREE.Group;
+  /** o rosto (onde a VOZ dela fica presa — o PositionalAudio vai junto quando ele sobe/desce) */
+  rosto: THREE.Object3D;
   fase(): FaseHolo;
   aparecer(): void;
   sumir(): void;
-  /** mexe a boca por `seg` segundos */
+  /** mexe a boca por `seg` segundos (sorteada — a reserva sem áudio) */
   falar(seg: number): void;
+  /** a boca pela VOZ: o nível (0..1) do áudio agora → talk / talk_half / idle; null = sem voz (volta ao sorteio/idle) */
+  boca(nivel: number | null): void;
   sorrir(seg: number): void;
   /** a cara de PENSANDO (esperando a IA responder) */
   pensar(on: boolean): void;
@@ -82,16 +87,17 @@ export function criarHoloZaeon(pai: THREE.Object3D, o: { low: boolean }): HoloZa
   const pmat = new THREE.PointsMaterial({ map: tGlow, color: 0xaef6ff, size: 0.28, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
   const pts = new THREE.Points(pg, pmat); pts.frustumCulled = false; g.add(pts);
 
-  let fase: FaseHolo = "oculto", k = 0, falaAte = 0, sorriAte = 0, piscaEm = 3, troca = 0, agora = 0, estado: Estado = "idle", pensando = false, ira = 0;
+  let fase: FaseHolo = "oculto", k = 0, falaAte = 0, sorriAte = 0, piscaEm = 3, troca = 0, agora = 0, estado: Estado = "idle", pensando = false, ira = 0, nivelVoz: number | null = null;
   const usar = (e: Estado) => { const tx = texs[e] ?? texs.idle; if (tx && uni.uMap.value !== tx) uni.uMap.value = tx; estado = e; };
   const s3 = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
   const anc = new THREE.Vector3(), wpos = new THREE.Vector3();
   return {
-    group: g,
+    group: g, rosto,
     fase: () => fase,
     aparecer() { if (fase === "visivel" || fase === "subindo") return; fase = "subindo"; k = 0; g.visible = true; },
     sumir() { if (fase === "oculto" || fase === "descendo") return; fase = "descendo"; k = 0; },
     falar(seg) { falaAte = agora + seg; },
+    boca(nivel) { if (nivel === null && nivelVoz !== null) falaAte = 0; nivelVoz = nivel; },
     sorrir(seg) { sorriAte = agora + seg; },
     pensar(on) { pensando = on; },
     brava() { ira = 1; falaAte = 0; sorriAte = 0; pensando = false; },
@@ -113,6 +119,7 @@ export function criarHoloZaeon(pai: THREE.Object3D, o: { low: boolean }): HoloZa
       troca -= dt;
       if (ira > 0) usar("angry");   // BRAVA (public/avatars/zaeon/angry.webp)
       else if (pensando) usar("think");
+      else if (nivelVoz !== null) { if (troca <= 0) { troca = 0.06; usar(bocaDoNivel(nivelVoz)); } }   // a boca segue a VOZ (troca a cada ~60 ms: sem tremer)
       else if (t < falaAte) { if (troca <= 0) { troca = 0.08 + Math.random() * 0.08; const r = Math.random(); usar(r < 0.45 ? "talk" : r < 0.8 ? "talk_half" : "idle"); } }
       else if (t < sorriAte) usar("smile");
       else { piscaEm -= dt; if (piscaEm <= 0) { usar("blink"); if (piscaEm < -0.13) piscaEm = 2.5 + Math.random() * 3; } else if (estado !== "idle") usar("idle"); }

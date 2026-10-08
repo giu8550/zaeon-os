@@ -20,8 +20,14 @@ import { deEscada } from "./nav";
 
 /** a chave do "já nasci" (localStorage) — só a reserva quando o servidor não diz (prévia/sem sala) */
 export const CHAVE_ONBOARDING = "zaeon:cyber:onboarding:v1";
+/** o MODO TUTORIAL das Configurações (a engrenagem — components/sub/ConfigMenu): LIGADO, toda entrada no cyberespaço
+ *  começa pelo tutorial (pra testar — vale até pro dono); DESLIGADO, volta o normal. Só neste navegador (localStorage) */
+export const PREF_TUTORIAL = "zaeon_cyber_tutorial";
+export function tutorialLigado(get: (k: string) => string | null): boolean {
+  try { return get(PREF_TUTORIAL) === "1"; } catch { return false; }
+}
 /** nasce no tubo? Quem nunca entrou no cyberespaço (`visto` = o servidor já marcou o nascimento); o dono nasce na nave
- *  dele (a não ser forçado: `?nascer=1`) */
+ *  dele (a não ser forçado: `?nascer=1` ou o modo tutorial ligado) */
 export function deveNascerNoTubo(o: { visto: boolean; forcar: boolean; fundador: boolean }): boolean {
   if (o.forcar) return true;
   return !o.visto && !o.fundador;

@@ -38,3 +38,12 @@ Os `.mp3` originais em `public/assets/sounds/` (leberch/freesound/spaceship) sã
 ## Animações (poses capturadas)
 
 `lib/cyber/poses-ual.json` — Jump_Start / Jump_Loop / Jump_Land da **Quaternius Universal Animation Library** (https://quaternius.itch.io/universal-animation-library), **CC0 1.0**. Convertidas offline em direções de membros por quadro (o GLB original não vai pro bundle).
+
+## Voz do Droid (sem palavras)
+
+| arquivo | fonte | autor | licença | edição |
+|---|---|---|---|---|
+| `droid-agua.wav` | "Sea and River Wave Sounds" (VistulaShort.mp3) — https://opengameart.org/node/92680 | RandomMind | **CC0 1.0** (domínio público) | trecho de 8 s (25,5–33,5 s) do rio Vístula, estéreo 44,1 kHz → mono 22,05 kHz WAV, fades de 60 ms, pico 0,9 |
+| `droid-alien.ogg` | "Ambient Alien Light sfx" — https://opengameart.org/content/ambient-alien-light-sfx | Dr. Neptune | **CC0 1.0** (domínio público) | sem edição (7,9 s, estéreo) |
+
+Esculpidos no navegador (`AudioCyber.vozDroid`, `lib/cyber/audio.ts` `VOZ_DROID`): formantes em "sílabas", delay com repetição e reverb longo por convolução.

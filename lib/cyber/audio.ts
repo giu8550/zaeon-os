@@ -15,7 +15,7 @@ export type NomeSom =
   | "space-bed" | "blackhole-hum" | "crystals" | "ship-flight" | "ship-idle"
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
-  | "jetpack" | "jato-sopro" | "baque"
+  | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien"
   | NomeSomMoto | NomeSomAsas;
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
@@ -27,6 +27,10 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   // JATO da mochila (contínuo enquanto se segura o ESPAÇO) em 2 camadas: o ronco gravado ("Rocket Engine", CC0,
   // OpenGameArt — WAV mono, loop sem emenda) + o sopro/chiado sintetizado por cima
   jetpack: { modo: "pos", loop: true, volume: 0.55, ext: "wav" },
+  // a VOZ DO DROID (sem palavras — `vozDroid` no AudioCyber): água de rio correndo (RandomMind, CC0) + um tom
+  // alienígena (Dr. Neptune, CC0), esculpidos em "sílabas" e jogados num delay e num reverb longos (VOZ_DROID)
+  "droid-agua": { modo: "pos", loop: false, volume: 0.9, ext: "wav" },
+  "droid-alien": { modo: "pos", loop: false, volume: 0.55 },
   // SINTETIZADOS (sem arquivo): gerados no navegador por sintetizarJetpack / sintetizarBaque
   "jato-sopro": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
   baque: { modo: "pos", loop: false, volume: 0.95, sintetico: true },   // o corpo batendo no chão (força pela queda)
@@ -120,7 +124,7 @@ export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = {
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
  *  quem precisa SUMIR de verdade usa `modelo: "linear"` (ganho chega a 0 no `max`). */
 export type Dist = { ref: number; max: number; rolloff: number; modelo?: "inverse" | "linear" };
-export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica", Dist> = {
+export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica" | "holograma", Dist> = {
   padrao: { ref: 6, max: 60, rolloff: 1.2 },
   perto: { ref: 2.5, max: 22, rolloff: 1.4 },       // passos/pulo dos COLEGAS (coisas pequenas)
   eu: { ref: 12, max: 60, rolloff: 1 },             // os MEUS passos/pulo: a câmera (o ouvinte) fica ~8–10 m atrás do avatar
@@ -129,6 +133,7 @@ export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | 
   grande: { ref: 14, max: 160, rolloff: 1 },        // buraco negro, nave dos outros
   naveLocal: { ref: 40, max: 400, rolloff: 0.25 },  // a nave em que EU estou: não vira de lado ao girar a câmera
   musica: { ref: 18, max: 110, rolloff: 1, modelo: "linear" },   // as TORRES DE SOM do clube (lounge): cheio na sala toda, ecoa pela ilha e some longe
+  holograma: { ref: 14, max: 120, rolloff: 0.7 },  // a VOZ DA ZAEON saindo do rosto de ~13 m: cheia em volta do globo (a pessoa fica a ~9 m), ainda se ouve da borda da capela
 };
 
 /** cristais da base: só se ouvem com o AVATAR perto dela (cheio até 4 m, some aos 12 m) — o ouvinte é a câmera */
@@ -254,3 +259,87 @@ export const fatorLeito = (musica: "parado" | "tocando" | "fade") => (musica ===
 
 /** próximo intervalo (s) do brilho dos neurônios na base — esporádico */
 export const intervaloNeuronio = (aleatorio: number) => 7 + aleatorio * 9;
+
+/**
+ * A VOZ DA ZAEON no holograma (components/cyber/AudioCyber `falaHolograma`): a fala (Gemini-TTS, voz Leda) passa por
+ * um passa-alta (tira o grave "de gente" — fica um pouco "projetada"), um REVERB curto por convolução (wet/dry) e um
+ * CHORUS bem leve (um atraso de ~8 ms modulado: o "brilho" trêmulo de holograma). INTELIGÍVEL PRIMEIRO: o efeito é
+ * tempero — o sinal seco continua dominante e o reverb é curto, pra não embolar as palavras.
+ */
+export const HOLO_VOZ = {
+  passaAlta: 180,     // Hz
+  reverbSeg: 1.2,     // a cauda do reverb (−60 dB)
+  preAtraso: 0.012,   // s: o "espaço" antes das reflexões
+  molhado: 0.35,      // quanto do reverb entra (o seco fica com 1 − molhado)
+  chorusMs: 8,        // o atraso base do chorus
+  chorusProfMs: 1.6,  // quanto ele oscila (±)
+  chorusHz: 0.55,     // a velocidade da oscilação
+  chorusMix: 0.22,    // quanto do chorus entra
+  volume: 1.6,
+} as const;
+
+/** um gerador pseudoaleatório com SEMENTE (mulberry32): a mesma semente → o mesmo ruído (testável, sem Math.random) */
+export function aleatorioComSemente(semente: number): () => number {
+  let a = semente >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** a RESPOSTA AO IMPULSO do reverb do holograma (PURA): um pré-atraso em silêncio e depois ruído branco com
+ *  decaimento EXPONENCIAL que chega a −60 dB em `seg` (o RT60), com um ataque de 4 ms (sem estalo). Pico normalizado
+ *  em 1. Uma semente por canal (L ≠ R) deixa o reverb largo. */
+export function respostaImpulso(sr: number, seg: number = HOLO_VOZ.reverbSeg, semente = 1, preAtraso: number = HOLO_VOZ.preAtraso): Float32Array {
+  const n = Math.max(1, Math.round(sr * seg)), ini = Math.min(n - 1, Math.round(sr * preAtraso)), ataque = Math.max(1, Math.round(sr * 0.004));
+  const out = new Float32Array(n), rnd = aleatorioComSemente(semente), k = Math.log(1000) / seg;   // e^(−k·seg) = 1/1000 = −60 dB
+  let pico = 0;
+  for (let i = ini; i < n; i++) {
+    const t = (i - ini) / sr, env = Math.exp(-k * t) * Math.min(1, (i - ini) / ataque);
+    const v = (rnd() * 2 - 1) * env; out[i] = v; pico = Math.max(pico, Math.abs(v));
+  }
+  if (pico > 0) for (let i = ini; i < n; i++) out[i]! /= pico;
+  return out;
+}
+
+/**
+ * A VOZ DO DROID (components/cyber/AudioCyber `vozDroid`): ele não fala palavras — é um som "espiritual", distante,
+ * de outra dimensão. Água correndo (como uma cachoeira) passa por dois filtros de FORMANTE largos que só DERIVAM
+ * devagar (ondas, não sílabas — o dono pediu pouca modulação), um tom alienígena desafinado por baixo, e tudo vai
+ * pra um DELAY discreto e um REVERB longo, mais molhado que seco (soa de outro mundo, longe). Na
+ * FÚRIA (a expulsão), mais grave.
+ */
+export const VOZ_DROID = {
+  /** a duração do som por fala (s): cresce com o texto, entre o mínimo e o máximo */
+  dur: { base: 0.9, porLetra: 0.028, min: 1.3, max: 3.6 },
+  /** as ONDAS: a cada passo (lento) os formantes e o volume deslizam pra um novo alvo — `suave` = a constante de tempo
+   *  do deslize (s): grande = sem "picotar" */
+  silaba: { min: 0.5, max: 0.95 }, suave: 0.32,
+  f1: [320, 760], f2: [1100, 2200], q: 2.2,
+  /** o tom alienígena: afinação e quanto entra */
+  alien: { taxa: [0.82, 1.18], ganho: 0.55 },
+  delay: { seg: 0.42, retorno: 0.38, mix: 0.32, corte: 2200 },   // eco discreto (o dono pediu menos)
+  reverb: { seg: 5, preAtraso: 0.08, molhado: 0.72 },
+  /** a fúria (expulsão): mais grave (afinação × 0,62), formantes mais baixos, mais volume */
+  furia: { taxa: 0.62, formantes: 0.7, ganho: 1.35 },
+  volume: 2.2,
+} as const;
+
+/** quanto dura o som do Droid pra uma fala */
+export function duracaoVozDroid(texto: string): number {
+  const d = VOZ_DROID.dur;
+  return Math.min(d.max, Math.max(d.min, d.base + texto.trim().length * d.porLetra));
+}
+
+/** as ONDAS da voz (puro, com semente): quando cada uma começa e pra onde vão os dois formantes e o volume. A primeira
+ *  começa no 0; nenhuma passa da duração; os formantes ficam nas faixas (× `formantes` na fúria) */
+export type SilabaDroid = { t: number; f1: number; f2: number; ganho: number };
+export function silabasDroid(dur: number, semente: number, o: { formantes?: number } = {}): SilabaDroid[] {
+  const r = aleatorioComSemente(semente), k = o.formantes ?? 1, v = VOZ_DROID, out: SilabaDroid[] = [];
+  const entre = (a: readonly [number, number]) => (a[0] + (a[1] - a[0]) * r()) * k;
+  for (let t = 0; t < dur; t += v.silaba.min + (v.silaba.max - v.silaba.min) * r()) out.push({ t, f1: entre(v.f1), f2: entre(v.f2), ganho: 0.7 + 0.3 * r() });
+  return out;
+}
