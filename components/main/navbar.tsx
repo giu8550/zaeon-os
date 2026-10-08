@@ -177,10 +177,10 @@ export const Navbar = () => {
           </Link>
 
           <nav className="hidden lg:flex items-center gap-7">
-            {/* as seções da landing (sem rótulo nelas: a navbar é o índice) */}
-            <Link href="/#como-funciona" className={ancora} onClick={irPraSecao("como-funciona")}>Como funciona</Link>
-            <Link href="/about" className={getLinkClassName("/about")}>Sobre nós</Link>
+            {/* ordem do dono: Documentação › Sobre nós › Como funciona (a seção da landing; sem rótulo nela: a navbar é o índice) */}
             <Link href="/docs" className={getLinkClassName("/docs")}>Documentação</Link>
+            <Link href="/about" className={getLinkClassName("/about")}>Sobre nós</Link>
+            <Link href="/#como-funciona" className={ancora} onClick={irPraSecao("como-funciona")}>Como funciona</Link>
             {/* acesso direto ao laboratório, pra quem não quiser usar o cyberespaço */}
             <Link href="/research-lab" className={getLinkClassName("/research-lab")}>Laboratório</Link>
             {/* "Assistentes" = a antiga Loja de Plugins (o /plugin-store continua no ar pros links antigos) */}
