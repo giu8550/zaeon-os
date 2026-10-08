@@ -101,10 +101,10 @@ export function blocoCanal(canal: CanalRow, agente: AgentView, colegas: AgentVie
 // ───────────────────────────── gerar (default = harness) ─────────────────────────────
 
 const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userId }) => {
-  const [{ buildHarnessDeps, renderStructuredAnswer }, { runTrajectory }, { geminiJson }] = await Promise.all([
+  const [{ buildHarnessDeps, renderStructuredAnswer }, { runTrajectory }, { gatewayLigado }] = await Promise.all([
     import("@/lib/agent/aura-harness"),
     import("@/lib/agent/trajectory"),
-    import("@/lib/scholar/gemini"),
+    import("@/lib/llm/chaves"),
   ]);
   // Identidade: persona do roster (preâmbulo + prompt) OU mentor do catálogo (BASE + personaText).
   let identidade = "";
@@ -123,8 +123,7 @@ const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userI
   // O harness foi escrito "em Aura"; aqui a voz é do agente convocado. Troca a identidade nos
   // prompts de geração SEM tocar no harness (regra: o harness só muda no incremento de uso).
   const assinatura = `\nIDENTIDADE DESTE TURNO: você é ${agente.nome} (não a Aura). Mantenha a voz e o nome de ${agente.nome} em toda a resposta.`;
-  const genJson = <T,>(system: string, user: string, o?: { temperature?: number; model?: string; timeoutMs?: number }) =>
-    geminiJson<T>(system.replace(/Você é a Aura/g, `Você é ${agente.nome}`) + assinatura, user, o);
+  const transformarSystem = (system: string) => system.replace(/Você é a Aura/g, `Você é ${agente.nome}`) + assinatura;
   const hctx: any = {
     userId,
     activeTab: "escritorio",
@@ -135,7 +134,13 @@ const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userI
     wing,
     canalId: canal.id,
   };
-  const deps = buildHarnessDeps(hctx, { systemContext, history, genJson });
+  // C5/C6: o turno do canal é o ÚNICO opt-in ao gateway nesta fatia (e só com GATEWAY_URL); o ledger
+  // leva agentKey/surface/scopeId e cada fase (plan/reason/draft) grava sua linha.
+  const deps = buildHarnessDeps(hctx, {
+    systemContext, history, transformarSystem,
+    rota: gatewayLigado() ? "gateway" : "vertex",
+    ledger: { agentKey: agente.agentKey, mentorSlug: agente.tipo === "mentor" ? agente.agentKey : null, surface: "canal", scopeId: canal.id, userId: userId ?? null },
+  });
   const answer = await runTrajectory(objective, hctx, deps);
   return renderStructuredAnswer(answer).trim();
 };
