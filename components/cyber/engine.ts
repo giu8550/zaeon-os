@@ -2484,6 +2484,7 @@ function base64ParaBuffer(b64: string): ArrayBuffer | null {
 const PERSONAGENS_DA_CIDADELA = [
   { id: "nina", nome: "Nina", cor: "#f472b6", corMoto: "#ff7ab8" },
   { id: "aura", nome: "Aura", cor: "#a78bfa", corMoto: "#9b7bff" },
+  { id: "teo", nome: "Téo", cor: "#34d399", corMoto: "#1fbf6f" },
 ] as const;
 /** ligados por padrão; `?personagens=0` (ou NEXT_PUBLIC_CYBER_PERSONAGENS=0) desliga */
 function personagensLigados(): boolean {

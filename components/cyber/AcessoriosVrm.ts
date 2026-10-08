@@ -5,7 +5,9 @@
  *    da nuca e as conchas ficam dos lados, apoiadas nas clavículas;
  *  - "presilhaLapis": a presilha amarela em forma de LÁPIS na franja (Nina);
  *  - "oculosRedondos": os óculos de aro fino dourado, redondos (Aura);
- *  - "presilhaEstrela": a presilha de ESTRELA prateada na franja (Aura).
+ *  - "presilhaEstrela": a presilha de ESTRELA prateada na franja (Aura);
+ *  - "oculosRetangulares": os óculos de armação preta retangular (Téo);
+ *  - "golaCircuito": o friso de CIRCUITO verde que brilha na borda do capuz (Téo).
  * As medidas são em metros, no espaço dos ossos do VRM (VRM 1.0: em repouso, eixos alinhados ao mundo, +Z = frente).
  */
 import * as THREE from "three";
@@ -79,15 +81,52 @@ function estrela(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Gr
   return g;
 }
 
+/** os óculos de armação preta retangular (no osso da cabeça) */
+function oculosRet(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group(), PRETO = 0x15171c, L = 0.042, A = 0.024, X = 0.033, e = 0.004;
+  for (const lado of [-1, 1]) {
+    for (const [w, h, x, y] of [[L, e, 0, A / 2], [L, e, 0, -A / 2], [e, A, -L / 2, 0], [e, A, L / 2, 0]] as const) {
+      const b = desenhada(new THREE.BoxGeometry(w, h, 0.004), PRETO, mats, geos); b.position.set(lado * X + x, y, 0); g.add(b);
+    }
+    const haste = desenhada(new THREE.BoxGeometry(0.003, 0.003, 0.1), PRETO, mats, geos); haste.position.set(lado * (X + L / 2 + 0.003), A / 2 - 0.003, -0.05); g.add(haste);
+  }
+  const ponte = desenhada(new THREE.BoxGeometry(0.024, 0.003, 0.004), PRETO, mats, geos); ponte.position.set(0, A / 2 - 0.004, 0); g.add(ponte);
+  g.position.set(0, 0.09, 0.118);
+  return g;
+}
+
+/** o friso de circuito verde na borda do capuz (no osso do pescoço): uma linha que brilha (não leva tinta — é luz) */
+function golaCircuito(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group(), cor = 0x2bf59a;
+  const m = new THREE.MeshBasicMaterial({ color: cor, toneMapped: false }); mats.push(m);
+  const arco = new THREE.TorusGeometry(0.115, 0.0035, 5, 40, Math.PI * 1.3); geos.push(arco);
+  const a = new THREE.Mesh(arco, m); a.rotation.set(Math.PI / 2 + 0.3, 0, Math.PI * 1.35 / 2 + Math.PI / 2 - 0.1); g.add(a);
+  g.position.set(0, 0.02, -0.01);
+  return g;
+}
+
 /** veste os acessórios no VRM (cada um no seu osso); `dispose()` tira e solta tudo */
 export function vestirAcessorios(vrm: VRM, lista: readonly AcessorioVrm[]): AcessoriosHandle {
   const mats: THREE.Material[] = [], geos: THREE.BufferGeometry[] = [], postos: THREE.Object3D[] = [];
   const osso = (n: VRMHumanBoneName) => vrm.humanoid.getRawBoneNode(n);
   for (const a of lista) {
-    const pai = a === "foneNoPescoco" ? osso("neck") ?? osso("upperChest") : osso("head");
+    const pai = a === "foneNoPescoco" || a === "golaCircuito" ? osso("neck") ?? osso("upperChest") : osso("head");
     if (!pai) continue;
-    const obj = a === "foneNoPescoco" ? fone(mats, geos) : a === "oculosRedondos" ? oculos(mats, geos) : a === "presilhaEstrela" ? estrela(mats, geos) : presilha(mats, geos);
+    const obj = a === "foneNoPescoco" ? fone(mats, geos) : a === "oculosRedondos" ? oculos(mats, geos) : a === "presilhaEstrela" ? estrela(mats, geos)
+      : a === "oculosRetangulares" ? oculosRet(mats, geos) : a === "golaCircuito" ? golaCircuito(mats, geos) : presilha(mats, geos);
     pai.add(obj); postos.push(obj);
+    // os ÓCULOS vão onde os olhos estão (os ossos dos olhos do VRM, no referencial da cabeça) — cada rosto tem a sua
+    // proporção
+    if (a === "oculosRedondos" || a === "oculosRetangulares") {
+      const oe = osso("leftEye"), od = osso("rightEye");
+      if (oe && od) {
+        vrm.scene.updateMatrixWorld(true);
+        const m = oe.getWorldPosition(new THREE.Vector3()).add(od.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
+        pai.worldToLocal(m);
+        const frente = new THREE.Vector3(0, 0, 1).applyQuaternion(pai.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(vrm.scene.getWorldQuaternion(new THREE.Quaternion())));
+        obj.position.copy(m).addScaledVector(frente, 0.078);   // o osso do olho é o CENTRO do globo ocular: a lente fica ~7,8 cm à frente
+      }
+    }
   }
   return {
     dispose() {

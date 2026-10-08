@@ -1,26 +1,26 @@
 {
   "agentId": "teo",
-  "versao": "muy3gdir",
+  "versao": "muzkbbju",
   "motor": "sprite",
   "estados": {
-    "idle": "/avatars/teo/idle.webp?v=muy3gdir",
-    "blink": "/avatars/teo/blink.webp?v=muy3gdir",
-    "talk": "/avatars/teo/talk.webp?v=muy3gdir",
-    "talk_half": "/avatars/teo/talk_half.webp?v=muy3gdir",
-    "smile": "/avatars/teo/smile.webp?v=muy3gdir",
-    "happy": "/avatars/teo/happy.webp?v=muy3gdir",
-    "think": "/avatars/teo/think.webp?v=muy3gdir",
-    "confused": "/avatars/teo/confused.webp?v=muy3gdir"
+    "idle": "/avatars/teo/idle.webp?v=muzkbbju",
+    "blink": "/avatars/teo/blink.webp?v=muzkbbju",
+    "talk": "/avatars/teo/talk.webp?v=muzkbbju",
+    "talk_half": "/avatars/teo/talk_half.webp?v=muzkbbju",
+    "smile": "/avatars/teo/smile.webp?v=muzkbbju",
+    "happy": "/avatars/teo/happy.webp?v=muzkbbju",
+    "think": "/avatars/teo/think.webp?v=muzkbbju",
+    "confused": "/avatars/teo/confused.webp?v=muzkbbju"
   },
   "pequeno": {
-    "idle": "/avatars/teo/idle.sm.webp?v=muy3gdir",
-    "blink": "/avatars/teo/blink.sm.webp?v=muy3gdir",
-    "talk": "/avatars/teo/talk.sm.webp?v=muy3gdir",
-    "talk_half": "/avatars/teo/talk_half.sm.webp?v=muy3gdir",
-    "smile": "/avatars/teo/smile.sm.webp?v=muy3gdir",
-    "happy": "/avatars/teo/happy.sm.webp?v=muy3gdir",
-    "think": "/avatars/teo/think.sm.webp?v=muy3gdir",
-    "confused": "/avatars/teo/confused.sm.webp?v=muy3gdir"
+    "idle": "/avatars/teo/idle.sm.webp?v=muzkbbju",
+    "blink": "/avatars/teo/blink.sm.webp?v=muzkbbju",
+    "talk": "/avatars/teo/talk.sm.webp?v=muzkbbju",
+    "talk_half": "/avatars/teo/talk_half.sm.webp?v=muzkbbju",
+    "smile": "/avatars/teo/smile.sm.webp?v=muzkbbju",
+    "happy": "/avatars/teo/happy.sm.webp?v=muzkbbju",
+    "think": "/avatars/teo/think.sm.webp?v=muzkbbju",
+    "confused": "/avatars/teo/confused.sm.webp?v=muzkbbju"
   },
   "cor": "#047857",
   "voz": {
