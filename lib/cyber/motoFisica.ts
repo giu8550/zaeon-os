@@ -9,10 +9,25 @@
  *  - ALTURA: moto não é nave — sobe no máximo `alturaMax` m acima do CHÃO QUE ESTÁ EMBAIXO (o do mapa, o piso da Zaeon,
  *    o do lounge…), sobe devagar e DESCE mais devagar ainda; passou da borda de algo alto (o chão sumiu lá embaixo),
  *    não sobe mais e desce PLANANDO até voltar pra baixo do teto;
+ *  - NA ZAEON (o PODER da moto): no céu da cidadela — até a borda das plataformas das salas — o teto sobe até o INÍCIO
+ *    DA PONTA da capela (a altura das salas e da garagem), pra ir e vir voando entre a central e as plataformas;
  *  - o pouso e os sólidos são os do voo (lib/cyber/voo: `resolverVoo`).
  * Rumo (`yaw`): frente = (sen yaw, cos yaw), igual à nave e ao grupo da moto. Esquerda do piloto = (cos yaw, −sen yaw).
  */
 import { VOO, chaoDoVoo, resolverVoo, type EstadoVoo, type Pilar } from "./voo";
+import { ALTURA_LOUNGE, CIDADE } from "./ceu";
+
+/** o CÉU DA ZAEON pra moto: até a borda da plataforma mais distante (+ folga), o teto é o início da ponta da capela
+ *  (+ uma folga pra passar por cima do guarda-corpo das plataformas e pousar nelas) */
+export const ZONA_MOTO_ZAEON = {
+  r: Math.max(...Object.values(CIDADE.salas).map((s) => Math.hypot(s.x, s.z) + s.r)) + 40,
+  teto: CIDADE.pisoY + ALTURA_LOUNGE + 8,
+} as const;
+/** o teto da moto aqui: `chao` + alturaMax, ou — no céu da Zaeon — o início da ponta da capela, o que for MAIOR */
+export function tetoDaMoto(p: { x: number; z: number }, chao: number): number {
+  const naZaeon = Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= ZONA_MOTO_ZAEON.r;
+  return Math.max(chao + PILOTAGEM.alturaMax, naZaeon ? ZONA_MOTO_ZAEON.teto : -Infinity);
+}
 
 export const PILOTAGEM = {
   /** velocidade de cruzeiro e com boost (m/s): 34 ≈ 120 km/h, 62 ≈ 220 km/h */
@@ -49,7 +64,7 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax): { s: EstadoMoto; pousado: boolean; chaoY: number } {
   const P = PILOTAGEM, acel = clamp(c.acel, -1, 1), giroCmd = clamp(c.giro, -1, 1);
   // rente ao chão a moto não anda (tem que decolar, igual à nave) — mas o guidão gira ela no lugar pra mirar
-  const chao = chaoDoVoo(s, solidos), rente = s.y - chao < VOO.decolar, tetoAqui = chao + P.alturaMax;
+  const chao = chaoDoVoo(s, solidos), rente = s.y - chao < VOO.decolar, tetoAqui = tetoDaMoto(s, chao);
   const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw), lx = Math.cos(s.yaw), lz = -Math.sin(s.yaw);
   let frente = s.vx * fx + s.vz * fz, lado = s.vx * lx + s.vz * lz;
   // BOOST: só com a moto andando pra frente, no ar e com tanque; esvazia aceso, recarrega apagado

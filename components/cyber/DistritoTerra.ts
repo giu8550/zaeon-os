@@ -14,9 +14,7 @@
  */
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { CABOS, GLOBOS, LIGACOES, LOTES_MIRANTE, MOTORES, PONTOS_TERRA, SUPERTREES, TELOES, TELOES_SOLUCAO, TEMAS, TOTENS, ehSolucao, noMapa, reacaoDoMotor, type PontoTerra } from "@/lib/cyber/terra";
-import { LOTES, type Lote } from "@/lib/cyber/motos";
-import { criarPisoEstacionamento } from "./Estacionamento";
+import { CABOS, GLOBOS, LIGACOES, MOTORES, PONTOS_TERRA, SUPERTREES, TELOES, TELOES_SOLUCAO, TEMAS, TOTENS, ehSolucao, noMapa, reacaoDoMotor, type PontoTerra } from "@/lib/cyber/terra";
 import { haQuanto, intercalarTipos, type EventoTerra, type TipoEvento } from "@/lib/cyber/terraAoVivo";
 
 /** a Terra AO VIVO (app/api/cyber/terra): eventos reais, atualizados a cada 10 min */
@@ -73,11 +71,7 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
   const { low } = o, group = new THREE.Group(), alvos: THREE.Object3D[] = [], liberar: { dispose(): void }[] = [];
   const guarda = <T extends { dispose(): void }>(x: T) => { liberar.push(x); return x; };
 
-  // os pisos dos estacionamentos dos mirantes (as motos/robôs são do engine)
-  const pisos = LOTES.filter((l): l is Lote => l.id === "mirante").map((l, i) => {
-    const a = LOTES_MIRANTE[i]!, e = criarPisoEstacionamento({ low, parado: o.parado, lote: l });
-    e.group.position.set(a.x, 0, a.z); e.group.rotation.y = Math.atan2(-a.x, -a.z); group.add(e.group); alvos.push(e.group); return e;
-  });
+  // (as motos dos mirantes foram pra GARAGEM — a ala dos veículos)
 
   // ── a TERRA: textura compartilhada (telões + globo) ─────────────────────────────────────────────────────────────
   const texTerra = guarda(new THREE.TextureLoader().load(URL_TERRA)); texTerra.colorSpace = THREE.SRGBColorSpace;
@@ -336,7 +330,6 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
     presencas(p) { perto = p; },
     atualizar(dt, t) {
       uT.value = t;
-      for (const e of pisos) e.atualizar(t);
       for (const g of globos) g.rotation.y += dt * 0.08;
       { const p = 0.5 + 0.5 * Math.sin(t * 1.6); matAura.opacity = 0.16 + 0.12 * p; matColuna.opacity = 0.28 + 0.2 * p; matHolofote.opacity = 0.16 + 0.12 * p; void auras; }
       // motores: o mais perto acorda o motor (gira mais rápido, o núcleo e os anéis acendem)
@@ -353,6 +346,6 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
       for (let i = 0; i < gotas.length; i++) { const g = gotas[i]!; g.y -= g.vel * dt; if (g.y < 0.2) g.y = g.v.y; vPos[i * 3] = g.x; vPos[i * 3 + 1] = g.y; vPos[i * 3 + 2] = g.z; }
       vGeo.attributes.position!.needsUpdate = true;
     },
-    dispose() { for (const e of pisos) e.dispose?.(); for (const x of liberar) x.dispose(); group.removeFromParent(); },
+    dispose() { for (const x of liberar) x.dispose(); group.removeFromParent(); },
   };
 }

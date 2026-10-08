@@ -26,7 +26,6 @@ describe("registro de POIs", () => {
     const w = mundo(LAR_LOCAL); expect(zaeon).toMatchObject({ x: w.x, z: w.z });
     expect(Math.hypot(LAR_LOCAL.x, LAR_LOCAL.z) + zaeon.footprintR).toBeLessThan(CIDADE.andavelR);
     expect(Math.hypot(LAR_LOCAL.x, LAR_LOCAL.z) - zaeon.footprintR).toBeGreaterThan(CAPELA.r + 10);
-    const lote = LOTES.find((l) => l.id === "zaeon")!; expect(Math.hypot(lote.x - w.x, lote.z - w.z)).toBeGreaterThan(tamanhoDoLote(lote).r + zaeon.footprintR + 10);
     for (const b of BASES_CEU_LOCAIS) expect(Math.hypot(mundo(b).x - w.x, mundo(b).z - w.z)).toBeGreaterThan(zaeon.footprintR + BASE_PLATAFORMA_R + 10);
     expect(Math.hypot(NOS.zaeon.anel.x - w.x, NOS.zaeon.anel.z - w.z)).toBeGreaterThan(60);
   });

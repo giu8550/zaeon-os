@@ -60,17 +60,11 @@ describe("as veias (raízes: colonização de espaço + espiral de ouro + Murray
       for (let i = 0; i < v.p.length; i += 3) if (Math.hypot(v.p[i]!, v.p[i + 2]!) < PE - 1.5) expect(Math.abs(Math.atan2(v.p[i + 2]!, v.p[i]!) - a0)).toBeLessThan(0.01);   // reto (raio)
     }
   });
-  it("o pulso DESCE a capela: 8 nervuras da ponta ao pé do pilar + o eixo central até o globo — tudo saindo do raio", () => {
-    const altas = veias.filter((v) => Math.max(...v.p.filter((_, i) => i % 3 === 1)) > 100);   // (as nervuras e o eixo)
-    expect(altas).toHaveLength(10);   // 8 nervuras + o eixo (2 fitas)
-    const topo = TOPO_DA_CAPELA();
-    for (const v of altas) {
-      const iTopo = v.p.findIndex((_, i) => i % 3 === 1 && v.p[i]! === Math.max(...v.p.filter((_, k) => k % 3 === 1))) - 1;
-      expect(v.a[iTopo / 3]!).toBeLessThan(0.05);                          // no topo: chega junto com o raio
-      expect(Math.min(...v.a)).toBeGreaterThanOrEqual(0);
-      expect(Math.max(...v.p.filter((_, i) => i % 3 === 1))).toBeGreaterThan(topo.y - 3);
-    }
-    expect(distTopo).toBeGreaterThan(150);
+  it("NADA sobe a capela: todas as veias ficam no PISO e os troncos terminam no EPICENTRO (onde o holograma nasce)", () => {
+    for (const v of veias) for (let i = 1; i < v.p.length; i += 3) expect(v.p[i]!).toBeLessThan(0.2);
+    expect(distTopo).toBe(0);
+    const noCentro = doPiso.filter((v) => Math.hypot(v.p[0]!, v.p[2]!) < CIDADE.mesaHolo.r + 1);
+    expect(noCentro.length).toBe(8);
     const m = meridianoDaCapela(); for (let i = 1; i < m.length; i++) expect(m[i]!.y).toBeGreaterThanOrEqual(m[i - 1]!.y - 0.8);
   });
 });

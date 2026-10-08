@@ -1,6 +1,7 @@
 /**
- * Cyberespaço — MOTOS VOADORAS (PURO). ESTACIONAMENTOS: um na ilha da praça (1 fila de 4), o grande da ZAEON (2 filas
- * de 6 = 12) e os dos 4 MIRANTES DA TERRA da Zaeon (4 cada) — 32 vagas, com as vagas bem espaçadas. As motos são pra QUALQUER pessoa (a nave é do dono).
+ * Cyberespaço — MOTOS VOADORAS (PURO). ESTACIONAMENTOS: um na ilha da praça (1 fila de 4) e os 2 da GARAGEM — a ala
+ * dos veículos, a plataforma própria ligada à Zaeon por um fio de energia (2 filas de 7 cada = 28) —, 32 vagas, com as
+ * vagas bem espaçadas. Na plataforma central da Zaeon NÃO há mais motos. As motos são pra QUALQUER pessoa (a nave é do dono).
  *
  * O modelo:
  *  - VAGA: sempre tem uma moto PRONTA (a do estacionamento). Quem monta nela LEVA a moto: a vaga fica vazia e o ROBÔ
@@ -12,24 +13,25 @@
  *  - `s` (a vaga de origem) só serve pro LOOK (cor e carenagem) e pra saber qual vaga esvaziou.
  * Sem estado no servidor: cada cliente deduz quais vagas esvaziaram pelas presenças e roda o robô dele.
  */
-import { CIDADE, mundo } from "./ceu";
-import { LOTES_MIRANTE } from "./terra";
+import { ALTURA_LOUNGE, CIDADE, daSala, mundo, rotDaSala } from "./ceu";
 import { VOO } from "./voo";
 
 /** um estacionamento: centro, rumo (a frente das vagas aponta pro centro — a praça no chão, o centro da ilha na
  *  Zaeon), `filas` × `porFila` vagas, `espacamento` entre vagas de uma fila e `entreFilas` entre as filas (m) */
-export type Lote = { id: "chao" | "zaeon" | "mirante"; x: number; z: number; rot: number; ceu: boolean; filas: number; porFila: number; espacamento: number; entreFilas: number };
+/** `alt` = quanto o piso do lote fica acima do piso da Zaeon (a garagem fica na altura das salas) */
+export type Lote = { id: "chao" | "garagem"; x: number; z: number; rot: number; ceu: boolean; alt: number; filas: number; porFila: number; espacamento: number; entreFilas: number };
 const lote = (id: Lote["id"], x: number, z: number, cx: number, cz: number, ceu: boolean, filas: number, porFila: number): Lote =>
-  ({ id, x, z, rot: Math.atan2(cx - x, cz - z), ceu, filas, porFila, espacamento: 4.6, entreFilas: 8 });
-const ZAEON_LOCAL = { x: -75, z: -75 };   // (Zaeon mega) longe da capela, da doca da nave, da escada do lounge, do portal e das bases
+  ({ id, x, z, rot: Math.atan2(cx - x, cz - z), ceu, alt: 0, filas, porFila, espacamento: 4.6, entreFilas: 8 });
+/** os 2 lotes da GARAGEM no referencial da SALA (+z = a porta, rumo à Zaeon): um atrás do outro, virados pra porta */
+export const LOTES_GARAGEM_SALA = [{ x: 0, z: -24 }, { x: 0, z: 0 }] as const;
+const garagem = (q: { x: number; z: number }): Lote => {
+  const s = CIDADE.salas.garagem, w = mundo(daSala(s, q.x, q.z));
+  return { id: "garagem", x: w.x, z: w.z, rot: rotDaSala(s), ceu: true, alt: ALTURA_LOUNGE + 0.16, filas: 2, porFila: 7, espacamento: 4.6, entreFilas: 8 };
+};
 export const LOTES: Lote[] = [
   lote("chao", -34, 16, 0, 0, false, 1, 4),   // na ilha da PRAÇA (lib/cyber/praca): cabe dentro da borda
-  lote("zaeon", mundo(ZAEON_LOCAL).x, mundo(ZAEON_LOCAL).z, CIDADE.centro.x, CIDADE.centro.z, true, 2, 6),
-  // os 4 MIRANTES DA TERRA (lib/cyber/terra): um estacionamento de 4 motos ao lado de cada um, virado pro centro
-  ...LOTES_MIRANTE.map((a) => lote("mirante", mundo(a).x, mundo(a).z, CIDADE.centro.x, CIDADE.centro.z, true, 1, 4)),
+  ...LOTES_GARAGEM_SALA.map(garagem),         // a GARAGEM da Zaeon (todas as motos de lá)
 ];
-/** o lote da Zaeon no referencial da ilha (o piso desenhado dentro dela, flutuando junto) */
-export const LOTE_ZAEON_LOCAL = { ...ZAEON_LOCAL, rot: Math.atan2(-ZAEON_LOCAL.x, -ZAEON_LOCAL.z) };
 /** largura (ao longo das filas) e profundidade (m) do piso de um lote, e o raio que ele ocupa */
 export const tamanhoDoLote = (l: Lote) => { const larg = l.porFila * l.espacamento + 3, prof = (l.filas - 1) * l.entreFilas + 7.2; return { larg, prof, r: Math.hypot(larg, prof) / 2 }; };
 export const TOTAL_VAGAS = LOTES.reduce((n, l) => n + l.filas * l.porFila, 0);
@@ -60,7 +62,7 @@ export function lookDaVaga(s: number): { cor: string; estilo: number } {
   return { cor: PALETA_MOTO[ordem[s % ordem.length]!]!, estilo: h(s) % 3 };
 }
 
-export type Vaga = { x: number; z: number; yaw: number; ceu: boolean; lote: number };
+export type Vaga = { x: number; z: number; yaw: number; ceu: boolean; alt: number; lote: number };
 /** posição (mundo) e rumo de cada vaga — filas lado a lado, viradas pro centro; a fila 0 é a da FRENTE, as outras atrás
  *  dela. Índice = lote a lote, fila a fila. Constante: calculada uma vez e congelada. */
 let vagasCache: readonly Readonly<Vaga>[] | null = null;
@@ -77,7 +79,7 @@ export const vagaNoLote = (l: Lote, f: number, i: number) => ({ x: (i - (l.porFi
 function calcularVagas(): Vaga[] {
   return LOTES.flatMap((l, k) => Array.from({ length: l.filas * l.porFila }, (_, j) => {
     const p = vagaNoLote(l, Math.floor(j / l.porFila), j % l.porFila), w = noLote(l, p.x, p.z);
-    return { x: w.x, z: w.z, yaw: l.rot, ceu: l.ceu, lote: k };
+    return { x: w.x, z: w.z, yaw: l.rot, ceu: l.ceu, alt: l.alt, lote: k };
   }));
 }
 

@@ -158,10 +158,9 @@ function colonizar(o: { low: boolean; R0: number; LIM: number; raizes: { ang: nu
   return { nx: ox, nz: oz, pai: op };
 }
 
-/** as veias da cidade: a árvore do PISO (colonização + Murray) — DENTRO da capela só 8 troncos RETOS, do globo (onde
- *  o holograma nasce) até os pilares que SOBEM a capela (o pátio fica limpo); os galhos brotam do pé dos pilares pra
- *  fora — + as 8 NERVURAS que descem a capela (pilar → cúpula → tambor → 2ª cúpula → ponta) + o
- *  EIXO central (ponta → globo). Cada ponto guarda o atraso do pulso (o azul que se propaga pelas veias) */
+/** as veias da cidade: SÓ no PISO — a árvore de colonização + Murray: dentro da capela só 8 troncos RETOS, que
+ *  terminam no EPICENTRO (o globo, onde o holograma nasce), no chão; os galhos brotam do pé dos pilares pra fora. Nada
+ *  sobe a capela. Cada ponto guarda o atraso do pulso (o azul que se propaga pelas veias, do centro pra fora) */
 const cacheVeias = new Map<string, { veias: Veia[]; distTopo: number }>();
 /** (determinístico → calculado UMA vez por página: sair e voltar pro cyberespaço não refaz os ~0,2 s de crescimento) */
 export function gerarVeias(o: { semente?: number; low?: boolean } = {}): { veias: Veia[]; distTopo: number } {
@@ -207,23 +206,9 @@ function gerarVeiasSemCache(o: { semente?: number; low?: boolean }): { veias: Ve
       if (v.p.length >= 6) veias.push(v);
     }
   }
-  // as NERVURAS que descem a capela (do raio até o pé dos 8 pilares)
-  const mer = meridianoDaCapela();
-  let distTopo = 0;
-  for (let i = 0; i < 8; i++) {
-    const a = angSobe(i), ca = Math.cos(a), sa = Math.sin(a), nerv = novo(0), cum: number[] = [];
-    let ant = { r: PE, y: Y }, dm = 0;
-    for (const m of mer) { dm += Math.hypot(m.r - ant.r, m.y - ant.y); ant = m; cum.push(dm); }
-    mer.forEach((m, j) => ponto(nerv, ca * m.r, m.y, sa * m.r, ca * m.nr, m.ny, sa * m.nr, 1.5, cum[j]!, (dm - cum[j]!) / CORACAO.velDesce));
-    veias.push(nerv); distTopo = Math.max(distTopo, dm);
-  }
-  // o EIXO central: o raio desce por dentro da ponta e da capela até o globo (2 fitas cruzadas)
-  const topo = TOPO_DA_CAPELA(), yG = GLOBO_CAPELA.y + GLOBO_CAPELA.r;
-  for (const [nx, nz] of [[1, 0], [0, 1]] as const) {
-    const v = novo(0);
-    for (let y = topo.y; y >= yG; y -= 2) ponto(v, 0, y, 0, nx, 0, nz, 0.9, topo.y - y, (topo.y - y) / CORACAO.velDesce);
-    veias.push(v);
-  }
+  // (as NERVURAS que subiam a capela e o EIXO do raio saíram — o dono: "os fios terminam no epicentro onde o holograma
+  //  nasce, ainda no chão. ponto." As veias são só as do PISO)
+  const distTopo = 0;
   return { veias, distTopo };
 }
 
