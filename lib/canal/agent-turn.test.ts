@@ -112,6 +112,18 @@ describe("agent-turn · executarTurno", () => {
     expect(eventos[1]![1]).toMatchObject({ efemera: true, autorTipo: "agente", autorId: "medicina", autorNome: "Osler" }); // …mas o agente avisa (efêmero)
     expect(String(eventos[1]![1].texto)).not.toContain("gemini 404");
   });
+  it("C6 · teto da virtual key: mensagem efêmera do catálogo ('limite diário'), nada persistido", async () => {
+    const { prisma, criadas } = fakePrisma(canal, [msg({ autorId: A, texto: "@medicina e aí?", mencoes: ["medicina"] })]);
+    const eventos: any[] = [];
+    const teto = Object.assign(new Error("llm:teto: Budget has been exceeded! Current cost: 0.011, Max budget: 0.01"), { classe: "teto", provedor: "litellm" });
+    const r = await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A }, { prisma, gerar: async () => { throw teto; }, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+    expect(r.ok).toBe(false);
+    expect(criadas).toHaveLength(0);
+    const efemera = eventos.find(([ev, p]) => ev === EV_MENSAGEM && p?.efemera)![1];
+    expect(efemera.texto).toMatch(/limite diário de uso acabou/);
+    expect(efemera.autorId).toBe("medicina");
+  });
+
   it("mentor do seed responde com seu nome (Osler) mesmo sem profile", async () => {
     const { prisma } = fakePrisma(canal, [msg({ texto: "@Osler explica", mencoes: ["medicina"] })]);
     const gerar = vi.fn().mockResolvedValue("ok");

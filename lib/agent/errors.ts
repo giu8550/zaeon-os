@@ -18,6 +18,7 @@ export type ErrorCode =
   | "missing_topic"
   | "network"
   | "rate_limited"
+  | "agent_budget_exhausted"
   | "empty"
   | "invalid_output"
   | "unknown";
@@ -35,6 +36,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   missing_topic: "Me diz o tema pra eu conseguir gerar isso.",
   network: "Tô sem conexão com o núcleo agora — tenta de novo em instantes.",
   rate_limited: "Muita coisa ao mesmo tempo — espera um segundinho e tenta de novo.",
+  agent_budget_exhausted: "Meu limite diário de uso acabou. Volto amanhã — ou peça pra outro mentor.",
   empty: "Não consegui responder agora. Tenta de novo.",
   invalid_output: "Minha resposta saiu embaralhada — tenta de novo.",
   unknown: "Deu um problema aqui. Tenta de novo em instantes.",
@@ -46,6 +48,8 @@ const isErrorCode = (v: unknown): v is ErrorCode => typeof v === "string" && v i
 export function classifyError(msg?: string | null): ErrorCode {
   const s = (msg || "").toLowerCase();
   if (!s) return "unknown";
+  // teto da virtual key (C6, lei 5): o humano vê que é limite, não ignorância — antes de rate/quota.
+  if (/llm:teto|budget (has been |)exceeded|exceededbudget|max_budget|budget_exceeded/.test(s)) return "agent_budget_exhausted";
   if (/timeout|timed out|deadline|etimedout/.test(s)) return "tool_timeout";
   if (/rate.?limit|\b429\b|quota|resource.?exhausted|exhausted/.test(s)) return "rate_limited";
   if (/network|fetch failed|econnrefused|econnreset|enotfound|socket|dns|getaddrinfo/.test(s)) return "network";

@@ -255,11 +255,14 @@ services:
     environment:
       LITELLM_LOG: "ERROR"
       LITELLM_MODE: "PRODUCTION"
+      # Explícito além do general_settings.database_url: no gate local o readiness veio "db: disconnected"
+      # quando o LiteLLM subiu antes do Postgres — virtual keys (PR-G2) EXIGEM o banco.
+      DATABASE_URL: ${LITELLM_DATABASE_URL:-}
     command: ["--config", "/app/litellm.config.yaml", "--port", "4000"]
     volumes: ["./infra/litellm.config.yaml:/app/litellm.config.yaml:ro"]
     expose: ["4000"]
     depends_on:
-      litellm-db: { condition: service_started }
+      litellm-db: { condition: service_healthy }   # só sobe com o Postgres pronto (senão fica sem DB e sem keys)
       redis: { condition: service_started }
     restart: unless-stopped
     healthcheck:
@@ -279,9 +282,14 @@ services:
     environment:
       POSTGRES_DB: litellm
       POSTGRES_USER: litellm
-      POSTGRES_PASSWORD: ${LITELLM_PG_PASSWORD:?defina LITELLM_PG_PASSWORD no .env}
+      POSTGRES_PASSWORD: ${LITELLM_PG_PASSWORD:-}   # obrigatório SÓ no perfil gateway; ":-" porque o compose interpola o arquivo inteiro mesmo sem o perfil (um ":?" quebraria o deploy enxuto)
     volumes: ["litellm_pg:/var/lib/postgresql/data"]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     deploy:
       resources:
         limits: { memory: 256m }

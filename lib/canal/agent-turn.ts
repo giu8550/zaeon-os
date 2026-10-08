@@ -194,13 +194,15 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     return { ok: true, mensagem: wire };
   } catch (e) {
     const erro = String((e as Error)?.message ?? e);
-    console.error("[canal] turno do agente falhou:", agente.agentKey, erro);
+    // C6 (lei 5): budget da virtual key estourou → chave própria do catálogo, nunca "erro genérico".
+    const teto = (e as any)?.classe === "teto";
+    console.error("[canal] turno do agente falhou:", agente.agentKey, teto ? "teto diário (virtual key)" : erro);
     // Silêncio é pior que erro: o agente "fala" uma mensagem EFÊMERA (não persiste, some no
     // reload) com a frase amigável do catálogo de erros — nunca string à mão, nunca o stack.
     try {
       const { messageForError } = await import("@/lib/agent/errors");
       await publicar(canal.id, EV_MENSAGEM, {
-        id: `efemera-${Date.now()}`, canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto: messageForError(erro), mencoes: [],
+        id: `efemera-${Date.now()}`, canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto: messageForError(teto ? "agent_budget_exhausted" : erro), mencoes: [],
         createdAt: new Date().toISOString(), autorNome: agente.nome, autorAvatar: agente.avatarUrl, efemera: true,
       } satisfies MensagemWire & { efemera: true });
     } catch { /* best-effort */ }
