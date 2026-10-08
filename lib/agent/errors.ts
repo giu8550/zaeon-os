@@ -20,6 +20,8 @@ export type ErrorCode =
   | "rate_limited"
   | "agent_budget_exhausted"
   | "pool_esgotado"
+  | "leitor_offline"
+  | "leitor_dominio_fora_da_lista"
   | "empty"
   | "invalid_output"
   | "unknown";
@@ -39,6 +41,8 @@ const MESSAGES: Record<ErrorCode, string> = {
   rate_limited: "Muita coisa ao mesmo tempo — espera um segundinho e tenta de novo.",
   agent_budget_exhausted: "Meu limite diário de uso acabou. Volto amanhã — ou peça pra outro mentor.",
   // G4 (Fatia 7): só para a chore pedida por humano que EXPIROU (nunca ao adiar).
+  leitor_offline: "Meu leitor de páginas está fora do ar agora — não consigo abrir links por enquanto.",
+  leitor_dominio_fora_da_lista: "Esse domínio não está na lista do Leitor — não abro páginas de fora dela.",
   pool_esgotado: "Os modelos gratuitos que eu uso pra isso ficaram sem cota por hoje — tento de novo amanhã ou peça pra um mentor.",
   empty: "Não consegui responder agora. Tenta de novo.",
   invalid_output: "Minha resposta saiu embaralhada — tenta de novo.",
