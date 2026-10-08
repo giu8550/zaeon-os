@@ -1,26 +1,26 @@
 {
   "agentId": "nina",
-  "versao": "muy3giic",
+  "versao": "muzhsyj9",
   "motor": "sprite",
   "estados": {
-    "idle": "/avatars/nina/idle.webp?v=muy3giic",
-    "blink": "/avatars/nina/blink.webp?v=muy3giic",
-    "talk": "/avatars/nina/talk.webp?v=muy3giic",
-    "talk_half": "/avatars/nina/talk_half.webp?v=muy3giic",
-    "smile": "/avatars/nina/smile.webp?v=muy3giic",
-    "happy": "/avatars/nina/happy.webp?v=muy3giic",
-    "think": "/avatars/nina/think.webp?v=muy3giic",
-    "confused": "/avatars/nina/confused.webp?v=muy3giic"
+    "idle": "/avatars/nina/idle.webp?v=muzhsyj9",
+    "blink": "/avatars/nina/blink.webp?v=muzhsyj9",
+    "talk": "/avatars/nina/talk.webp?v=muzhsyj9",
+    "talk_half": "/avatars/nina/talk_half.webp?v=muzhsyj9",
+    "smile": "/avatars/nina/smile.webp?v=muzhsyj9",
+    "happy": "/avatars/nina/happy.webp?v=muzhsyj9",
+    "think": "/avatars/nina/think.webp?v=muzhsyj9",
+    "confused": "/avatars/nina/confused.webp?v=muzhsyj9"
   },
   "pequeno": {
-    "idle": "/avatars/nina/idle.sm.webp?v=muy3giic",
-    "blink": "/avatars/nina/blink.sm.webp?v=muy3giic",
-    "talk": "/avatars/nina/talk.sm.webp?v=muy3giic",
-    "talk_half": "/avatars/nina/talk_half.sm.webp?v=muy3giic",
-    "smile": "/avatars/nina/smile.sm.webp?v=muy3giic",
-    "happy": "/avatars/nina/happy.sm.webp?v=muy3giic",
-    "think": "/avatars/nina/think.sm.webp?v=muy3giic",
-    "confused": "/avatars/nina/confused.sm.webp?v=muy3giic"
+    "idle": "/avatars/nina/idle.sm.webp?v=muzhsyj9",
+    "blink": "/avatars/nina/blink.sm.webp?v=muzhsyj9",
+    "talk": "/avatars/nina/talk.sm.webp?v=muzhsyj9",
+    "talk_half": "/avatars/nina/talk_half.sm.webp?v=muzhsyj9",
+    "smile": "/avatars/nina/smile.sm.webp?v=muzhsyj9",
+    "happy": "/avatars/nina/happy.sm.webp?v=muzhsyj9",
+    "think": "/avatars/nina/think.sm.webp?v=muzhsyj9",
+    "confused": "/avatars/nina/confused.sm.webp?v=muzhsyj9"
   },
   "cor": "#db2777",
   "voz": {
