@@ -22,6 +22,15 @@ describe("errors · messageForError", () => {
   });
 });
 
+describe("errors · teto da virtual key (C6)", () => {
+  it("budget estourado → agent_budget_exhausted, por code e por string crua (antes de rate/quota)", () => {
+    expect(messageForError("agent_budget_exhausted")).toMatch(/limite diário/);
+    expect(messageForError("llm:teto: Budget has been exceeded! Current cost: 0.51, Max budget: 0.50")).toMatch(/limite diário/);
+    expect(classifyError("ExceededBudget: max_budget reached")).toBe("agent_budget_exhausted");
+    expect(classifyError("429 quota exceeded")).toBe("rate_limited");
+  });
+});
+
 describe("errors · classifyError", () => {
   it("reconhece as famílias", () => {
     expect(classifyError("deadline exceeded")).toBe("tool_timeout");

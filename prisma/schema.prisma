@@ -1046,6 +1046,7 @@ model AgentProfile {
   whatsapp  String?                          // +5511999999999 (vira wa.me)
   instagram String?                          // handle, sem @
   facebook  String?                          // slug da página
+  tetoTokensDia Int?                         // PR-A3: teto diário de tokens (ledger). null = sem teto. Só AGE com AGENT_TETO_ENFORCE=1 e origem "autonomo"
   updatedAt DateTime @updatedAt
 
   @@map("agent_profiles")
@@ -1240,4 +1241,40 @@ model AcademicCredential {
   @@index([status, nivel])
   @@index([docHash])
   @@map("academic_credentials")
+}
+
+// ── Contrato C5 (Fatia 1, PR-A1): TokenLedger — uma linha por chamada de LLM. Escrita BEST-EFFORT
+// (lib/llm/ledger.ts; TOKEN_LEDGER="0" desliga). `cached` à parte (≈10% do prompt), nunca somado
+// como token cheio; `estimatedCostUsd` = ESTIMATIVA pela tabela lib/ai/preco.ts, não fatura.
+model TokenLedger {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  at               DateTime @default(now())
+  userId           String?  @db.ObjectId
+  agentKey         String
+  mentorSlug       String?
+  surface          String
+  scopeId          String?
+  programId        String?  @db.ObjectId
+  taskId           String?  @db.ObjectId
+  phase            String?
+  model            String
+  provedor         String                    // "vertex" | "litellm"
+  rota             String                    // "vertex" | "gateway"
+  alvo             String?                   // provedor upstream (Fatia 7); null = vertex
+  promptTokens     Int      @default(0)      // NÃO cacheado
+  completionTokens Int      @default(0)
+  cachedTokens     Int      @default(0)
+  totalTokens      Int      @default(0)
+  reportado        Boolean  @default(true)   // false = provedor não devolveu usage (zeros, não inventados)
+  jsonValido       Boolean?
+  estimatedCostUsd Float    @default(0)      // ESTIMATIVA (lib/ai/preco.ts), não fatura; cached cobrado à parte
+  ok               Boolean  @default(true)
+  erro             String?                   // classe do erro quando ok=false
+  ms               Int      @default(0)
+
+  @@index([agentKey, at])
+  @@index([userId, at])
+  @@index([programId, at])
+  @@index([at])
+  @@map("token_ledger")
 }

@@ -95,6 +95,11 @@
 Os números de aquecimento (tiers, teto por maturidade, piso de 60 s, 463) entram nos PRs W3/W4 —
 com o motivo registrado: custaram **73 chips em 25/08/2026** (`app/services/warm_speed.py`).
 
+## 12. Gateway / chave única (Escritório v2, Fatia 1)
+| Repo | Licença | O que usamos | Status |
+|---|---|---|---|
+| `BerriAI/litellm` (proxy) | MIT (core) | gateway OpenAI-compatible interno, virtual keys por agente com budget/TTL/allowlist, fallback | ADOTAR — gateway/virtual keys |
+
 ## Alertas de licença (ler antes de codar)
 - **`human-skill-tree` (app) = AGPL-3.0** → copiar o código do app obrigaria abrir a Zaeon sob AGPL. **Só o padrão/estrutura + as `skills/` (MIT).** Nunca o código do app.
 - **`tambo`** → funciona, mas roda o loop/backend dele → **não acoplar**; usar como referência de API. Base de UI generativa preferida = `vercel/ai` (Apache-2.0) ou nativo.

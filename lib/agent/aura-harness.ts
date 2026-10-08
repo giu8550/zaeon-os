@@ -26,7 +26,7 @@ import { normalizeStudioKind } from "@/lib/agent/tools";
 import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
 import { artefatoDeAprender, pedeAula, pedeEngenhariaReversa, DIRETRIZ_ENGENHARIA_REVERSA } from "@/lib/agent/aprender";
 
-type GenJson = <T>(system: string, user: string, opts?: { temperature?: number; model?: string; timeoutMs?: number }) => Promise<T>;
+type GenJson = <T>(system: string, user: string, opts?: { temperature?: number; model?: string; timeoutMs?: number; phase?: string }) => Promise<T>;
 
 export type HarnessOpts = {
   deepThink?: boolean;
@@ -35,8 +35,14 @@ export type HarnessOpts = {
   retryDelayMs?: number;
   history?: { role: string; text: string }[]; // continuidade entre turnos (paridade com o legado)
   systemContext?: string;                      // contexto injetado (PDF/estudo em foco, admin…)
-  genJson?: GenJson;            // injeção p/ teste (default = Gemini real, import tardio)
+  genJson?: GenJson;            // injeção p/ teste (default = envelope real, import tardio)
   runToolImpl?: typeof runToolByName; // injeção p/ teste
+  /** C5: contexto do TokenLedger de cada chamada deste turno (phase entra por call site). */
+  ledger?: import("@/lib/llm/ledger").LedgerCtx;
+  /** Rota do envelope: "gateway" só para a camada autônoma (turno do canal); default vertex. */
+  rota?: import("@/lib/llm/envelope").Rota;
+  /** Troca de identidade no system (ex.: canal fala com a voz do agente convocado) sem tocar no harness. */
+  transformarSystem?: (system: string) => string;
 };
 
 type Observation = { tool: string; code?: string; error?: string };
@@ -47,11 +53,21 @@ export const isRetryableCode = (code?: string): boolean => !!code && RETRYABLE.h
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-// ───────────────────────────── Gemini (import tardio) ─────────────────────────────
-const defaultGenJson: GenJson = async (system, user, opts) => {
-  const { geminiJson } = await import("@/lib/scholar/gemini");
-  return geminiJson(system, user, opts);
-};
+// ───────────────────────────── envelope (import tardio) ─────────────────────────────
+/** genJson default = envelope C5 com ledger + phase; acumula usage.total em `medido` (reconciliação do orçamento). */
+function envelopeGenJson(opts: HarnessOpts, medido: { total: number }): GenJson {
+  return async (system, user, o) => {
+    const { gerarJsonRes } = await import("@/lib/llm/envelope");
+    const ledger = opts.ledger ?? { agentKey: "aura", surface: "estudos" as const };
+    const { valor, res } = await gerarJsonRes<any>({
+      system: opts.transformarSystem ? opts.transformarSystem(system) : system, user, json: true,
+      model: o?.model, temperature: o?.temperature, timeoutMs: o?.timeoutMs, rota: opts.rota ?? "vertex",
+      ctx: { ...ledger, phase: o?.phase ?? ledger.phase ?? null },
+    });
+    medido.total += res.usage.totalTokens;
+    return valor;
+  };
+}
 
 // ───────────────────────────── helpers de prompt ─────────────────────────────
 /** infere o kind do Studio a partir do pedido (gerar_artefato). */
@@ -219,7 +235,8 @@ export function normalizeAnswer(out: Partial<StructuredAnswer> | null | undefine
 
 // ───────────────────────────── o adaptador ─────────────────────────────
 export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): HarnessDeps {
-  const genJson = opts.genJson ?? defaultGenJson;
+  const medido = { total: 0 }; // C5: tokens REAIS somados neste turno (HarnessDeps.usoMedido)
+  const genJson = opts.genJson ?? envelopeGenJson(opts, medido);
   const runTool = opts.runToolImpl ?? runToolByName;
   const retryDelay = opts.retryDelayMs ?? 400;
   const modelFor = (heavy: boolean) => (opts.deepThink && heavy ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH);
@@ -241,7 +258,7 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
           const r = await genJson<{ subquestions?: string[] }>(
             "Você planeja a pesquisa. Gere 2 a 3 SUB-PERGUNTAS/perspectivas distintas que cubram o tema com abrangência. Responda JSON {\"subquestions\":[\"...\"]}.",
             `Tema: ${st.objective}`,
-            { temperature: 0.3, model: modelFor(true), timeoutMs: 15_000 },
+            { temperature: 0.3, model: modelFor(true), timeoutMs: 15_000, phase: "plan" },
           );
           if (Array.isArray(r?.subquestions) && r.subquestions.length) subs = r.subquestions.slice(0, 3);
         } catch { /* fallback: só o objetivo */ }
@@ -267,7 +284,7 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
       const sys = "Você é a Aura raciocinando ANTES de redigir. Conecte a evidência ao objetivo em 2–4 frases. Se faltou evidência, seja honesto — NUNCA invente fontes. Responda JSON {\"reasoning\":\"...\"}.";
       const user = `${preamble}Objetivo: ${st.objective}\nModo: ${st.mode} · Acadêmico: ${st.academicMode}\nEvidência:\n${evidenceBlock(st)}${obsBlock(observations)}`;
       try {
-        const r = await genJson<{ reasoning?: string }>(sys, user, { temperature: 0.3, model: modelFor(false), timeoutMs: 15_000 });
+        const r = await genJson<{ reasoning?: string }>(sys, user, { temperature: 0.3, model: modelFor(false), timeoutMs: 15_000, phase: "reason" });
         return String(r?.reasoning ?? "").trim();
       } catch {
         return ""; // reasoning é auxiliar — nunca derruba o laço
@@ -316,7 +333,7 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
       ].join("\n");
       const user = `${preamble}Objetivo: ${st.objective}\nRaciocínio: ${st.reasoning ?? ""}\nEvidência:\n${evidenceBlock(st)}${obsBlock(observations)}`;
       try {
-        const out = await genJson<Partial<StructuredAnswer>>(sys, user, { temperature: 0.4, model: modelFor(true), timeoutMs: 30_000 });
+        const out = await genJson<Partial<StructuredAnswer>>(sys, user, { temperature: 0.4, model: modelFor(true), timeoutMs: 30_000, phase: "draft" });
         return normalizeAnswer(out, st);
       } catch (e: any) {
         // degradado: núcleo honesto via messageForError (nunca string à mão), laço segue.
@@ -327,6 +344,9 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
     critique: (st) => Promise.resolve(critiqueForState(st)),
 
     emit(step) { opts.onStep?.(step); },
+
+    // C5: o motor frea com o MAIOR entre estimado (COST) e medido (ledger). Só existe com o genJson default.
+    ...(opts.genJson ? {} : { usoMedido: () => medido.total }),
 
     async persistMemory(drawers) {
       try { await nullMemory.write(drawers); } catch { /* memória nunca derruba a resposta */ }

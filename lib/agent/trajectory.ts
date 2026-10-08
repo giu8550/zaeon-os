@@ -71,6 +71,8 @@ export interface HarnessDeps {
   critique(st: TrajectoryState): Promise<ExaminerVerdict>;
   emit(step: AgentStep): void;
   persistMemory(drawers: Drawer[]): Promise<void>;
+  /** C5 (opcional): tokens REAIS já gastos neste turno. COST segue como estimativa de pré-voo. */
+  usoMedido?(): number;
 }
 
 export type TrajectoryOpts = { budget?: Budget };
@@ -116,9 +118,11 @@ function emit(d: HarnessDeps, st: TrajectoryState, phase: Phase, detail?: string
   d.emit({ kind: "say", label: PHASE_LABEL[phase], detail: detail ?? phase });
 }
 
-function charge(st: TrajectoryState, phase: Phase, mult = 1): void {
+function charge(st: TrajectoryState, phase: Phase, mult = 1, d?: HarnessDeps): void {
   st.spent.tokens += COST[phase].tokens * mult;
   st.spent.ms += COST[phase].ms * mult;
+  // C5: reconcilia com o medido — overBudget() frea com o maior entre estimado e real.
+  if (d?.usoMedido) st.spent.tokens = Math.max(st.spent.tokens, d.usoMedido());
 }
 
 function overBudget(st: TrajectoryState): boolean {
@@ -194,7 +198,7 @@ function seedState(objective: string, r: RouterResult, opts?: TrajectoryOpts): T
 
 async function finalize(st: TrajectoryState, d: HarnessDeps): Promise<StructuredAnswer> {
   emit(d, st, "finalize");
-  charge(st, "finalize");
+  charge(st, "finalize", 1, d);
   const answer: StructuredAnswer = st.draft ?? { nucleo: "" };
   // anexa o que as tools reuniram, se o draft não trouxe
   if ((!answer.artifacts || answer.artifacts.length === 0) && st.artifacts.length) answer.artifacts = st.artifacts;
@@ -222,20 +226,20 @@ export async function runTrajectoryTraced(
   d.emit({ kind: "say", label: PHASE_LABEL.route, detail: "route" }); // 1º emit é antes do state existir
   const r = await d.classify(objective, ctx);
   const st = seedState(objective, r, opts);
-  charge(st, "route");
+  charge(st, "route", 1, d);
 
   // QUICK: 1 tiro (paridade com a Fase 0 — sem plano, sem crítico)
   if (st.mode === "quick") {
     emit(d, st, "draft");
     st.draft = await d.draft(st);
-    charge(st, "draft");
+    charge(st, "draft", 1, d);
     st.stop = "aprovado";
     return { answer: await finalize(st, d), state: st };
   }
 
   emit(d, st, "plan"); // fatia 1 do sandwich (reasoning-heavy)
   st.plan = safeSteps(await d.plan(st));
-  charge(st, "plan");
+  charge(st, "plan", 1, d);
 
   for (;;) {
     st.iter++;
@@ -248,7 +252,7 @@ export async function runTrajectoryTraced(
         st.evidence.push(...toFindings(res));
         if (res.artifact) st.artifacts.push(res.artifact);
       }
-      charge(st, "gather", steps.length);
+      charge(st, "gather", steps.length, d);
       // A3 · degradado ≠ sucesso silencioso: gather vazio quando se esperava evidência.
       if (needsEvidence(st) && st.evidence.length === 0) {
         st.degraded = true;
@@ -258,11 +262,11 @@ export async function runTrajectoryTraced(
 
     emit(d, st, "reason");
     st.reasoning = await d.reason(st);
-    charge(st, "reason");
+    charge(st, "reason", 1, d);
 
     emit(d, st, "draft");
     st.draft = await d.draft(st);
-    charge(st, "draft");
+    charge(st, "draft", 1, d);
 
     // loop-guard: rascunho idêntico ao anterior → revisar não adianta.
     if (st.prevNucleo !== undefined && st.draft?.nucleo === st.prevNucleo) { st.stop = "loop"; break; }
@@ -272,7 +276,7 @@ export async function runTrajectoryTraced(
 
     emit(d, st, "critique"); // fatia 2 do sandwich (reasoning-heavy)
     const v = await d.critique(st);
-    charge(st, "critique");
+    charge(st, "critique", 1, d);
     st.critique = v.issues;
     st.score = v.score;
 

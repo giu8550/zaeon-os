@@ -80,6 +80,27 @@ describe("trajectory · stop-conditions (HarnessDeps mockado)", () => {
     expect(state.iter).toBe(1); // criar_trabalho.maxRevisions=2, mas estoura o orçamento antes
   });
 
+  it("C5 · orcamento pelo MEDIDO: usoMedido maior que o estimado estoura o budget antes do maxIter", async () => {
+    // estimado por fase é pequeno (COST); o ledger real diz que já foram 50k tokens → o motor frea.
+    const { deps } = makeDeps({
+      classify: async () => ({ intent: "criar_trabalho", mode: "research", academicMode: "enforced", kind: "artigo" }),
+      critique: async () => verdict({ decision: "revisar", score: 3 }),
+    });
+    (deps as any).usoMedido = () => 50_000;
+    const { state } = await runTrajectoryTraced("gera um artigo sobre X", ctx, deps, { budget: { tokens: 40_000, ms: 999_999 } });
+    expect(state.stop).toBe("orcamento");
+    expect(state.spent.tokens).toBeGreaterThanOrEqual(50_000);
+  });
+
+  it("C5 · sem usoMedido nada muda: o estimado segue mandando", async () => {
+    const { deps } = makeDeps({
+      classify: async () => ({ intent: "criar_trabalho", mode: "research", academicMode: "enforced", kind: "artigo" }),
+      critique: async () => verdict({ decision: "aprovado", score: 9 }),
+    });
+    const { state } = await runTrajectoryTraced("gera um artigo sobre X", ctx, deps, { budget: { tokens: 40_000, ms: 999_999 } });
+    expect(state.stop).not.toBe("orcamento");
+  });
+
   it("loop: rascunho idêntico em 2 iterações → stop=loop", async () => {
     const constDraft = async (): Promise<StructuredAnswer> => ({ nucleo: "IGUAL", proximos_passos: [] });
     const { deps } = makeDeps({
