@@ -51,6 +51,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (fixa) cacheFixas.set(texto, out);
     return NextResponse.json(out);
   } catch (e) {
+    console.warn("[cyber/zaeon-voz] gemini-tts falhou:", String((e as Error)?.message ?? e).slice(0, 300));
     void registrarTokens({ ...ctx, model: modelo, provedor: "vertex", rota: "vertex", usage: USAGE_VAZIO, ms: Date.now() - ini, ok: false, erro: /timeout|abort/i.test(String((e as Error)?.message ?? e)) ? "timeout" : "outro", alvo: "vertex-tts", jsonValido: null }).catch(() => undefined);
     return NextResponse.json({ error: "voz indisponível" }, { status: 503 });
   }

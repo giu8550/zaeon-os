@@ -9,7 +9,7 @@
  * Regras puras e a tabela dos sons em lib/cyber/audio.ts. dispose() para e desconecta tudo.
  */
 import * as THREE from "three";
-import { DISTANCIA, FADE_ENTRADA, HOLO_VOZ, SINTESE, SONS, SONS_ARQUIVO, emendarLoop, recortarCanal, recortePasso, criarLimiteVozes, lerPrefs, respostaImpulso, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
+import { DISTANCIA, FADE_ENTRADA, HOLO_VOZ, VOZ_DROID, silabasDroid, SINTESE, SONS, SONS_ARQUIVO, emendarLoop, recortarCanal, recortePasso, criarLimiteVozes, lerPrefs, respostaImpulso, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
 import { nivelDaBoca } from "@/lib/voice/nivelVoz";
 export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom; vel?: number; taxa?: number; taxaAtual?: number };
 
@@ -49,6 +49,10 @@ export type AudioCyberHandle = {
    *  (wet/dry) → chorus leve (lib/cyber/audio HOLO_VOZ). `nivel()` = o volume da voz agora (0..1, pra boca); null =
    *  sem áudio (sem gesto ou som desligado nas preferências) */
   falaHolograma(buf: AudioBuffer, obj: THREE.Object3D, o?: { dist?: Dist; volume?: number }): FalaHolograma | null;
+  /** a VOZ DO DROID (sem palavras): água correndo esculpida em "sílabas" + um tom alienígena, num delay e num reverb
+   *  longos (lib/cyber/audio VOZ_DROID), posicional preso a `obj`. `dur` = segundos de "fala"; `furia` = a expulsão
+   *  (mais grave). false = não tocou (sem gesto, som desligado ou os arquivos ainda não chegaram) */
+  vozDroid(obj: THREE.Object3D, o?: { dur?: number; furia?: boolean; dist?: Dist; volume?: number }): boolean;
   /** fade dos loops (chamar a cada quadro) */
   atualizar(dt: number): void;
   dispose(): void;
@@ -101,7 +105,14 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
 
   /** as falas de holograma tocando (dispose para todas) + a resposta ao impulso do reverb (uma por contexto) */
   const falasHolo = new Set<{ parar(): void }>();
-  let irHolo: AudioBuffer | null = null;
+  let irHolo: AudioBuffer | null = null, irDroid: AudioBuffer | null = null;
+  /** a resposta ao impulso LONGA da voz do Droid (o espaço "de outra dimensão") */
+  const respostaDroid = (ctx: AudioContext) => {
+    if (irDroid && irDroid.sampleRate === ctx.sampleRate) return irDroid;
+    const r = VOZ_DROID.reverb, n = Math.round(ctx.sampleRate * r.seg), b = ctx.createBuffer(2, n, ctx.sampleRate);
+    b.getChannelData(0).set(respostaImpulso(ctx.sampleRate, r.seg, 31, r.preAtraso)); b.getChannelData(1).set(respostaImpulso(ctx.sampleRate, r.seg, 47, r.preAtraso));
+    return (irDroid = b);
+  };
   const respostaHolo = (ctx: AudioContext) => {
     if (irHolo && irHolo.sampleRate === ctx.sampleRate) return irHolo;
     const n = Math.round(ctx.sampleRate * HOLO_VOZ.reverbSeg), b = ctx.createBuffer(2, n, ctx.sampleRate);
@@ -268,6 +279,63 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       } catch {
         for (const n of nos) { try { n.disconnect(); } catch { /* já */ } }
         return null;
+      }
+    },
+    vozDroid(obj, op = {}) {
+      const agua = buffers.get("droid-agua");
+      if (!listener || !prefs.ligado || !vivo || !agua) return false;
+      const ctx = listener.context, v = VOZ_DROID, furia = !!op.furia, nos: AudioNode[] = [];
+      const no = <N extends AudioNode>(n: N) => { nos.push(n); return n; };
+      const ganho = (x: number) => { const g = no(ctx.createGain()); g.gain.value = x; return g; };
+      const dur = Math.max(0.4, op.dur ?? 2), t0 = ctx.currentTime + 0.03, taxa = furia ? v.furia.taxa : 1, forca = furia ? v.furia.ganho : 1;
+      let solto = false, timer: ReturnType<typeof setTimeout> | null = null;
+      const fontes: AudioScheduledSourceNode[] = [];
+      try {
+        // ÁGUA → dois formantes (bandpass largos) que só derivam devagar, em ondas
+        const sa = no(ctx.createBufferSource()); sa.buffer = agua; sa.playbackRate.value = taxa; fontes.push(sa);
+        const f1 = no(ctx.createBiquadFilter()), f2 = no(ctx.createBiquadFilter()), env = ganho(0);
+        for (const f of [f1, f2]) { f.type = "bandpass"; f.Q.value = v.q; sa.connect(f); f.connect(env); }
+        const sil = silabasDroid(dur, Math.floor(Math.random() * 1e9), { formantes: furia ? v.furia.formantes : 1 });
+        f1.frequency.setValueAtTime(sil[0]!.f1, t0); f2.frequency.setValueAtTime(sil[0]!.f2, t0);
+        for (const x of sil) { const t = t0 + x.t; f1.frequency.setTargetAtTime(x.f1, t, v.suave); f2.frequency.setTargetAtTime(x.f2, t, v.suave); env.gain.setTargetAtTime(x.ganho * forca, t, x.t === 0 ? 0.12 : v.suave); }
+        env.gain.setTargetAtTime(0, t0 + dur - 0.3, 0.25);   // some devagar (o eco e o reverb continuam)
+        const usar = dur * taxa + 0.2;
+        sa.start(t0, Math.random() * Math.max(0, agua.duration - usar), usar);
+        // o TOM ALIENÍGENA por baixo, desafinado a cada fala
+        const soma = ganho(1); env.connect(soma);
+        const alien = buffers.get("droid-alien");
+        if (alien) {
+          const sb = no(ctx.createBufferSource()); sb.buffer = alien; fontes.push(sb);
+          sb.playbackRate.value = (v.alien.taxa[0] + (v.alien.taxa[1] - v.alien.taxa[0]) * Math.random()) * taxa;
+          const ga = ganho(0); ga.gain.setValueAtTime(0, t0); ga.gain.linearRampToValueAtTime(v.alien.ganho * forca, t0 + 0.35); ga.gain.setTargetAtTime(0, t0 + dur - 0.2, 0.25);
+          sb.connect(ga).connect(soma);
+          const usarA = (dur + 0.6) * sb.playbackRate.value;
+          sb.start(t0, Math.random() * Math.max(0, alien.duration - usarA), usarA);
+        }
+        // DELAY com repetição (o retorno passa por um passa-baixa: cada eco mais escuro) e REVERB longo, mais molhado que seco
+        const dl = no(ctx.createDelay(1)), fb = ganho(v.delay.retorno), lp = no(ctx.createBiquadFilter()), ecos = ganho(v.delay.mix), pre = ganho(1);
+        dl.delayTime.value = v.delay.seg; lp.type = "lowpass"; lp.frequency.value = v.delay.corte;
+        soma.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(ecos); soma.connect(pre); ecos.connect(pre);
+        const conv = no(ctx.createConvolver()); conv.buffer = respostaDroid(ctx);
+        const seco = ganho(1 - v.reverb.molhado), molhado = ganho(v.reverb.molhado), saida = ganho(1);
+        pre.connect(seco).connect(saida); pre.connect(conv).connect(molhado).connect(saida);
+        const a = new THREE.PositionalAudio(listener); aplicarDist(a, op.dist ?? DISTANCIA.holograma);
+        a.setNodeSource(saida as unknown as AudioBufferSourceNode); a.setVolume((op.volume ?? 1) * v.volume * SONS["droid-agua"].volume); obj.add(a);
+        const h = { parar() {
+          if (solto) return; solto = true; if (timer) clearTimeout(timer); falasHolo.delete(h);
+          for (const f of fontes) { try { f.stop(); } catch { /* já */ } }
+          try { a.disconnect(); } catch { /* já */ } for (const n of nos) { try { n.disconnect(); } catch { /* já */ } }
+          a.removeFromParent();
+        } };
+        falasHolo.add(h);
+        // solta depois da cauda (os ecos do delay + o reverb)
+        timer = setTimeout(h.parar, (dur + v.reverb.seg + v.delay.seg * 12 + 0.5) * 1000);
+        if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+        return true;
+      } catch {
+        for (const f of fontes) { try { f.stop(); } catch { /* já */ } }
+        for (const n of nos) { try { n.disconnect(); } catch { /* já */ } }
+        return false;
       }
     },
     aplicarPrefs() {

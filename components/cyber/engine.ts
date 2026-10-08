@@ -18,7 +18,7 @@ import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
 import { QualidadeAdaptativa } from "@/lib/cyber/qualidadeAdaptativa";
-import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
+import { DISTANCIA, PASSOS, duracaoVozDroid, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type FalaHolograma, type LoopSom } from "./AudioCyber";
 import { ESPERA_VOZ, criarCacheVoz, duracaoComAtraso, falasFixasZaeon, tempoDaFala, textoDaVoz, REPERGUNTA_NOME, type CacheVoz } from "@/lib/cyber/vozZaeon";
@@ -809,6 +809,7 @@ export class CyberEngine {
     const d = this.droid; if (!d) return;
     this.balao(d.fala, texto, DROID.cor, ultima ? Infinity : RITMO_FALA.entre * 1000 + 400);
     this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: DROID.cor, texto });
+    this.som.vozDroid(d.h.group, { dur: duracaoVozDroid(texto) });   // a "voz" dele: sem palavras, de outra dimensão
   }
   // ───────────── a CONVERSA com a Zaeon (o holograma do globo da capela — lib/cyber/conversaZaeon) ─────────────
   /** a Zaeon FALA: balão embaixo do rosto + a fala no chat (só local) + a VOZ (Leda, com eco de holograma) e a boca
@@ -938,7 +939,7 @@ export class CyberEngine {
   private atualizarConversa(dt: number) {
     if (this.expulsando) {
       const x = this.expulsando; x.t += dt;
-      if (!x.falou && x.t >= 1.6) { x.falou = true; const d = this.droid; if (d) { this.balao(d.fala, FALA_EXPULSAO, "#ff5a4a", Infinity); this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: "#ff5a4a", texto: FALA_EXPULSAO }); } }
+      if (!x.falou && x.t >= 1.6) { x.falou = true; const d = this.droid; if (d) { this.balao(d.fala, FALA_EXPULSAO, "#ff5a4a", Infinity); this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: "#ff5a4a", texto: FALA_EXPULSAO }); this.som.vozDroid(d.h.group, { dur: duracaoVozDroid(FALA_EXPULSAO), furia: true }); } }
       if (x.t >= 7) { this.expulsando = null; this.o.onExpulso?.(); }
     }
     const cv = this.conversa, h = this.holoZaeon; if (!cv || !h) return;
