@@ -25,6 +25,11 @@ import { criarPisoEstacionamento } from "./Estacionamento";
 import { LOTES, LOTE_ZAEON_LOCAL } from "@/lib/cyber/motos";
 import { NOS } from "@/lib/cyber/buracos";
 import { criarBuracoPortal } from "./BuracoPortal";
+import { criarCoracao } from "./CoracaoZaeon";
+import { criarEstacoes } from "./EstacoesAgentes";
+import { TOPO_DA_CAPELA } from "@/lib/cyber/coracao";
+import { criarDistritoTerra } from "./DistritoTerra";
+import { criarObservadores } from "./DroidsObservadores";
 
 export type CidadeHandle = {
   group: THREE.Group;
@@ -47,12 +52,14 @@ export type CidadeHandle = {
   mostrarRecadoNaTV(texto: string | null): void;
   /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
   alturaIlhota(k: number): number;
+  /** quem está na Zaeon agora (local da ilha) — os motores de energia do Observatório reagem */
+  presencas(p: { x: number; z: number }[]): void;
 };
 
 const COLD = 0xbfe8ff, ICE = 0x9fd0ff, FIRE = [0xffe3b0, 0xffb45a, 0xff7a2c];
 const ROTULO_CSS = "position:absolute;transform:translate(-50%,-100%);font:800 13px system-ui,sans-serif;letter-spacing:.08em;padding:4px 12px;border-radius:999px;color:#ffe9c2;background:rgba(18,10,8,.65);border:1px solid rgba(255,190,120,.5);box-shadow:0 0 18px rgba(255,160,80,.35);white-space:nowrap;pointer-events:none;display:none;";
 
-export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): CidadeHandle {
+export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o RAIO saiu do topo da capela (mundo) — o som */ aoRaio?: (em: THREE.Vector3) => void; /** a 1ª bulha do coração (mundo: o globo) — o som */ aoBater?: (em: THREE.Vector3) => void }): CidadeHandle {
   const { low, starTex } = opts;
   const rm = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const raiz = new THREE.Group();
@@ -116,7 +123,9 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const qPts = add(new THREE.Points(qGeo, new THREE.PointsMaterial({ size: 0.5, map: starTex, color: 0x9fe8ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }))); qPts.frustumCulled = false;
 
   // ── piso: disco frio + anéis concêntricos + raios (a "rosa dos ventos" da cidade) ──
-  add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, low ? 64 : 128), new THREE.MeshStandardMaterial({ color: 0x0a2440, emissive: COLD, emissiveIntensity: 0.35, roughness: 0.55, metalness: 0.25 })), ilha, true).position.y = -0.3;
+  // o PISO no tom das colunas (azul-aço acinzentado, um pouco mais escuro que elas): as veias azuis do coração
+  // (CoracaoZaeon) se destacam nele
+  add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, low ? 64 : 128), new THREE.MeshStandardMaterial({ color: 0x2c3f4b, emissive: 0x86a6b4, emissiveIntensity: 1, roughness: 0.55, metalness: 0.15 })), ilha, true).position.y = -0.3;
   // as LINHAS do piso: um padrão REGULAR na escala de gente (antes: 5 anéis com espaços desiguais e 16 raios de 126 m
   // — na Zaeon mega aquilo ficava torto e enorme): anéis finos a cada 18 m da capela até a borda (um mais aceso a cada 3)
   // e 48 raios, também a cada 3 um mais forte
@@ -186,7 +195,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
   const farol = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glow("rgba(220,250,255,1)", "rgba(120,200,255,.4)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); farol.scale.set(22, 22, 1); farol.position.y = yFarol;
 
   // o GLOBO no centro da capela: mesa redonda + esfera de pontos de luz girando + um anel em volta
-  add(new THREE.Mesh(new THREE.CylinderGeometry(CIDADE.mesaHolo.r, CIDADE.mesaHolo.r * 1.1, 2.2, 32), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), ilha, true).position.y = 1.1;
+  const mesaGlobo = add(new THREE.Mesh(new THREE.CylinderGeometry(CIDADE.mesaHolo.r, CIDADE.mesaHolo.r * 1.1, 2.2, 32), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), ilha, true) as THREE.Mesh; mesaGlobo.position.y = 1.1;
   const RG = GLOBO_CAPELA.r, YG = GLOBO_CAPELA.y, NG = low ? 420 : 900, gp = new Float32Array(NG * 3);
   for (let i = 0; i < NG; i++) { const u = Math.random() * 2 - 1, th = Math.random() * 6.283, s = Math.sqrt(1 - u * u); gp[i * 3] = s * Math.cos(th) * RG; gp[i * 3 + 1] = YG + u * RG; gp[i * 3 + 2] = s * Math.sin(th) * RG; }
   const gGeo = new THREE.BufferGeometry(); gGeo.setAttribute("position", new THREE.BufferAttribute(gp, 3));
@@ -309,11 +318,21 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
     ilhotas.push({ g, y0, ph: il.fase });
   });
 
+  // o CORAÇÃO (o globo bate; veias azuis por toda a cidade e subindo a capela; o raio no topo) e as ESTAÇÕES DOS AGENTES
+  const coracao = criarCoracao({ low }); ilha.add(coracao.group);
+  const estacoes = criarEstacoes({ low }); ilha.add(estacoes.group);
+  // o OBSERVATÓRIO DA TERRA + os 4 AUTÓDROMOS (lib/cyber/terra) e os DROIDS OBSERVADORES
+  const distrito = criarDistritoTerra({ low, parado: rm }); ilha.add(distrito.group); alvos.push(...distrito.alvos);
+  const observadores = criarObservadores({ low }); ilha.add(observadores.group);
+  for (const g of [coracao.group, estacoes.group, distrito.group, observadores.group]) g.traverse((n) => { n.userData.semLote = true; });   // fora do lote estático (lotes.ts)
+  const matGlobo = globo.material as THREE.PointsMaterial, matMesa = mesaGlobo.material as THREE.MeshStandardMaterial, matAro = aroGlobo.material as THREE.MeshBasicMaterial;
+  const topoMundo = new THREE.Vector3(), globoMundo = new THREE.Vector3();
+
   const rotulo = document.createElement("div"); rotulo.style.cssText = ROTULO_CSS; rotulo.textContent = "Zaeon";
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {
-    group: raiz, ilha, rotulo, alvos, computadores: telas, portalTunel: bnc.alvo, tvLounge: salas.tv, caixasLounge: salas.caixas, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    group: raiz, ilha, rotulo, alvos, computadores: telas, portalTunel: bnc.alvo, tvLounge: salas.tv, caixasLounge: salas.caixas, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     atualizar(dt, t) {
       ilha.position.y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel;
       for (const f of fogos) { const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp; f.s.scale.set(3.4 * (0.9 + p * 0.25), 5 * (0.8 + p * 0.4), 1); (f.s.material as THREE.SpriteMaterial).opacity = 0.5 + 0.3 * p; }
@@ -324,6 +343,13 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
       salas.atualizar(dt, t);
       estac.atualizar(t);
       globo.rotation.y += dt * 0.25 * vel; aroGlobo.rotation.z += dt * 0.2 * vel;
+      // o CORAÇÃO bate: o globo incha de luz, a mesa e o aro acendem; o pulso corre nas veias; o raio sai do topo
+      { const ev = coracao.atualizar(dt, t), b = coracao.batida();
+        matGlobo.size = 0.22 * (1 + 0.9 * b); matMesa.emissiveIntensity = 0.6 + 1.6 * b; matAro.opacity = 0.55 + 0.4 * b;
+        estacoes.atualizar(dt, t, b);
+        distrito.atualizar(dt, t); observadores.atualizar(dt);
+        if (ev.raio && opts.aoRaio) { const tp = TOPO_DA_CAPELA(); opts.aoRaio(topoMundo.set(tp.x, tp.y, tp.z).applyMatrix4(ilha.matrixWorld)); }
+        if (ev.tum && opts.aoBater) opts.aoBater(globoMundo.set(0, GLOBO_CAPELA.y, 0).applyMatrix4(ilha.matrixWorld)); }
       // a escada de energia: as setas correm, as partículas sobem pelo corredor
       if (fluxoMat) fluxoMat.uniforms.uT!.value = t * vel;
       if (fluxoPts) { const E2 = ESCADA_LOUNGE, H2 = ALTURA_LOUNGE, a = fluxoPts.geo.attributes.position!.array as Float32Array;
@@ -340,6 +366,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
         cGeo.attributes.position!.needsUpdate = true; }
       ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * BOIA_ILHOTA * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
     },
-    dispose() { rotulo.remove(); liberar(raiz, texturas); },
+    dispose() { rotulo.remove(); coracao.dispose(); estacoes.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };
 }

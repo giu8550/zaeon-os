@@ -9,6 +9,7 @@
  * Coordenadas: `centro` no plano (x,z) do mundo; tudo que é "local" é relativo ao centro (sem giro).
  */
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
+import { colisoresDoDistritoTerra } from "./terra";
 
 /** a ZAEON MEGA (out. 2026): a cidadela virou uma MEGA PLATAFORMA — 3× mais larga que antes, bem mais ALTA (450 m) e
  *  longe da UNILAB e da Solana (o mapa cresceu junto). A capela (expandida) fica só com o GLOBO no centro; o LOUNGE saiu
@@ -101,6 +102,25 @@ export function computadorPerto(p: P2, alcance = 3.6): number {
   return melhor;
 }
 
+/** as ESTAÇÕES DE TRABALHO DOS AGENTES (components/cyber/EstacoesAgentes): um anel em volta do pátio central da capela */
+export const ESTACOES = { n: 8, r: 38, platR: 4.4 } as const;
+/** as estações (local da ilha): no anel entre os desktops (r 22) e os pilares (r 54), nos ângulos ENTRE os desktops;
+ *  `rot` deixa o +z local (a frente das telas) virado pro coração */
+export function estacoesLocais(): { x: number; z: number; rot: number }[] {
+  return Array.from({ length: ESTACOES.n }, (_, i) => { const a = (i / ESTACOES.n) * Math.PI * 2; return { x: Math.cos(a) * ESTACOES.r, z: Math.sin(a) * ESTACOES.r, rot: Math.atan2(-Math.cos(a), -Math.sin(a)) }; });
+}
+/** colisores das estações (mundo): a parede de telas atrás, as torres de servidor e o console */
+export function colisoresDasEstacoes(): Colisor[] {
+  const out: Colisor[] = [];
+  for (const e of estacoesLocais()) {
+    const s = Math.sin(e.rot), c = Math.cos(e.rot), em = (lx: number, lz: number) => mundo({ x: e.x + lx * c + lz * s, z: e.z - lx * s + lz * c });
+    for (let x = -3.4; x <= 3.4; x += 1.1) out.push({ ...em(x, -2.6), r: 0.75 });
+    for (const x of [-3.9, 3.9]) out.push({ ...em(x, -2.3), r: 0.85 });
+    out.push({ ...em(0, -0.95), r: 0.95 });
+  }
+  return out;
+}
+
 /** colisores da plataforma (mundo): pilares da capela, a mesa do globo, os desktops, o corrimão da escada do lounge, paredes e móveis
  *  das salas (o lounge, lá em cima). Constante → calculado uma vez (o passo usa todo quadro). */
 let colisoresCache: Colisor[] | null = null;
@@ -118,6 +138,8 @@ export function colisoresDaCidade(): Colisor[] {
   for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
   out.push({ ...mundo({ x: 0, z: 0 }), r: mesaHolo.r });
   for (const m of computadoresLocais()) out.push({ ...mundo(m), r: CIDADE.monitores.colR });
+  out.push(...colisoresDasEstacoes());
+  out.push(...colisoresDoDistritoTerra(mundo));   // o Observatório da Terra (supertrees, motores, telões, globo)
   // corrimão da escada: dos dois lados, do pé até a porta do lounge
   for (let u = 0.4; u <= e.len; u += e.passo) for (const s of [-1, 1]) {
     const lat = s * (e.meia + e.colR); out.push({ ...mundo({ x: e.dir.x * (e.ini + u) - e.dir.z * lat, z: e.dir.z * (e.ini + u) + e.dir.x * lat }), r: e.colR });

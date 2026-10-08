@@ -20,7 +20,7 @@ import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
 import { QualidadeAdaptativa } from "@/lib/cyber/qualidadeAdaptativa";
 import { DISTANCIA, PASSOS, duracaoVozDroid, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
-import { criarAudioCyber, type AudioCyberHandle, type FalaHolograma, type LoopSom } from "./AudioCyber";
+import { criarAudioCyber, preCarregarSons, type AudioCyberHandle, type FalaHolograma, type LoopSom } from "./AudioCyber";
 import { ESPERA_VOZ, criarCacheVoz, duracaoComAtraso, falasFixasZaeon, tempoDaFala, textoDaVoz, REPERGUNTA_NOME, type CacheVoz } from "@/lib/cyber/vozZaeon";
 import { criarSomLounge, type SomLoungeHandle } from "./SomLounge";
 import type { SomLounge } from "@/lib/lounge3d/musica";
@@ -65,6 +65,9 @@ import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
 import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
+import { carregando, type Carregando, type IdEtapa } from "@/lib/cyber/carregamento";
+import { gerarVeias } from "@/lib/cyber/coracao";
+import { URL_TERRA } from "./DistritoTerra";
 import { carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
 import { variacaoBatida, ventoDasAsas } from "@/lib/cyber/asas";
 import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, type IdHabilidade } from "@/lib/cyber/habilidades";
@@ -153,6 +156,8 @@ export type CyberOpts = {
   onEntrarEstudo?: () => void;
   onSessao?: (go: string) => void;
   onPronto?: () => void;
+  /** o carregamento: em que etapa está e quanto da barra já foi (lib/cyber/carregamento) */
+  onCarregando?: (c: Carregando) => void;
 };
 
 type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** o corpo VRM já pedido (o do founder) */ vrm?: boolean; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
@@ -314,7 +319,7 @@ export class CyberEngine {
   private clock = new THREE.Clock();
   private ray = new THREE.Raycaster();
   private rayCam = new THREE.Raycaster();
-  private ro: ResizeObserver; private io: IntersectionObserver | null = null;
+  private ro!: ResizeObserver; private io: IntersectionObserver | null = null;
   private w = 1; private h = 1;
   // estado de jogo
   private menu: boolean; private holdT = 0; private espaco = false;
@@ -376,10 +381,18 @@ export class CyberEngine {
 
   private gltf: GLTF | null;
 
-  /** Carrega o GLB humano (uma vez) e cria a engine. Se o modelo não carregar, os avatares ficam só com a luz/neurônios. */
+  /** Cria a engine e MONTA o mundo em etapas (lib/cyber/carregamento), avisando a tela de loading — só resolve com
+   *  TUDO pronto: corpos, mundo, sons decodificados, imagens, shaders compilados e o primeiro quadro desenhado.
+   *  Se o modelo humano não carregar, os avatares ficam só com a luz/neurônios. */
   static async criar(opts: CyberOpts): Promise<CyberEngine> {
+    const p = (c: Carregando) => opts.onCarregando?.(c);
+    THREE.Cache.enabled = true;   // texturas/arquivos baixados no loading são reaproveitados depois (sem baixar de novo)
+    p(carregando("corpo", 0));
     const gltf = await carregarModeloAvatar().catch((e) => { console.warn("[cyber] avatar GLB não carregou:", e); return null; });
-    return new CyberEngine(opts, gltf);
+    const eng = new CyberEngine(opts, gltf);
+    try { await eng.montarMundo(p); }
+    catch (e) { eng.dispose(); throw e; }
+    return eng;
   }
 
   private constructor(opts: CyberOpts, gltf: GLTF | null) {
@@ -399,10 +412,29 @@ export class CyberEngine {
     container.appendChild(cv);
     this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.15, 3600);   // mapa de raio 1500 (os campi na borda: de um lado se vê o outro)
     this.cena = criarCenaCosmica(low, this.w / this.h);
+  }
+
+  /** MONTA o mundo em etapas, cedendo a vez pro navegador entre elas (a barra anda, a aba não congela). Para se a
+   *  engine for descartada no meio (saiu da página durante o loading). */
+  private async montarMundo(p: (c: Carregando) => void) {
+    const opts = this.o, { container, low } = opts;
+    const etapa = async (id: IdEtapa, dentro = 0, detalhe?: string) => {
+      p(carregando(id, dentro, detalhe));
+      await new Promise<void>((r) => { let ok = false; const fim = () => { if (!ok) { ok = true; r(); } }; requestAnimationFrame(() => setTimeout(fim, 0)); setTimeout(fim, 80); });
+      if (!this.vivo) throw new Error("cyber: carregamento interrompido");
+    };
+    // os SONS começam a ser preparados JÁ (baixam/decodificam em paralelo com a montagem; a etapa "sons" espera)
+    let sonsFeitos = 0, sonsTotal = 1;
+    const sons = preCarregarSons((f, t) => { sonsFeitos = f; sonsTotal = t; });
+    // o corpo do FOUNDER (VRM, ~16 MB) também já começa a baixar — fica no cache pro vestirFundador
+    if (opts.eu.fundador) void new THREE.FileLoader().setResponseType("arraybuffer").loadAsync(CORPO_DO_FUNDADOR.url).catch(() => null);
+    await etapa("hiperespaco", 1);
+    await etapa("praca");
     // a ILHA da praça (sempre: sem chão, as bases precisam de onde ficar)
     { const pr = criarPraca({ low, starTex: this.cena.starTex }); camuflarGrupo(pr.group);
       fundirEstaticos(pr.group, { passo: (_, t) => pr.atualizar(1 / 30, t), manter: [pr.piso] });
       this.cena.scene.add(pr.group); this.praca = pr; }
+    if (opts.landmarks) await etapa("mirantes");
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
       camuflarGrupo(lm.group);   // holograma: sem PBR nem luzes (components/cyber/camuflagem)
@@ -410,7 +442,14 @@ export class CyberEngine {
       this.cena.scene.add(lm.group); this.lms.push(lm);   // sem rótulo na tela (interface limpa); o nome sai no painel do clique
     }
     if (opts.landmarks) {
-      this.cidade = criarCidade({ low, starTex: this.cena.starTex });
+      await etapa("terra");
+      await new THREE.TextureLoader().loadAsync(URL_TERRA).catch(() => null);   // (no cache: os telões e os globos usam essa)
+      await etapa("veias");
+      gerarVeias({ low });   // (determinístico e memorizado: a cidade reaproveita)
+      await etapa("zaeon");
+      this.cidade = criarCidade({ low, starTex: this.cena.starTex,
+        aoRaio: (em) => this.som?.tocar("raio", em, { dist: DISTANCIA.raio, taxa: 0.9 + Math.random() * 0.2 }),
+        aoBater: (em) => this.som?.tocar("coracao", em, { dist: DISTANCIA.coracao }) });
       camuflarGrupo(this.cidade.group);
       { const c = this.cidade;   // lotes: simula com e sem música (o palco, as caixas e a pista pulsam com o grave)
         fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalTunel, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
@@ -419,25 +458,31 @@ export class CyberEngine {
       this.bercario = criarBercario(this.cidade.ilha, { low });   // os tubos de ensaio, ao lado da Recepção (flutuam com a ilha)
       this.holoZaeon = criarHoloZaeon(this.cidade.ilha, { low });   // o rosto da Zaeon (só aparece no tutorial)
       if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
+      await etapa("univ");
       this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); camuflarGrupo(this.univ.group); this.cena.scene.add(this.univ.group);
       { const u = this.univ; fundirEstaticos(u.group, { passo: (_, t) => u.atualizar(1 / 30, t), manter: comDescendentes(u.alvosCamera) }); }
-      for (const id of IDS_CAMPI) {   // os outros campi: prédios instanciados (o lote só junta a fundação/placas)
+      for (const [k, id] of IDS_CAMPI.entries()) {   // os outros campi: prédios instanciados (o lote só junta a fundação/placas)
+        await etapa("campi", k / IDS_CAMPI.length, CAMPI[id].sigla);
         const C = CAMPI[id], h = criarCampus(id, { low }); this.cena.scene.add(h.group);
         fundirEstaticos(h.group, { passo: (_, t) => h.atualizar(1 / 30, t), manter: comDescendentes(h.alvosCamera) });
         this.campi.push({ id, h, area: cil(C.centro, C.r, C.y, Math.min(220, C.r * 0.6) + 20, 110) });
       }
+      await etapa("solana");
       this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); camuflarGrupo(this.solana.group); this.cena.scene.add(this.solana.group);
       { const so = this.solana; fundirEstaticos(so.group, { passo: (_, t) => so.atualizar(1 / 30, t) }); }
       pararCamuflagem(typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+      await etapa("nave");
       this.nave = criarNave({ low, cor: "#2f7bff" }); loteNave(this.nave); this.cena.scene.add(this.nave.group);
       // as motos das VAGAS: paradas pra sempre → um lote estático cada (o robô repõe; quem monta leva uma instância)
-      vagas().forEach((v, i) => {
+      const vs = vagas();
+      for (const [i, v] of vs.entries()) {
+        if (i % 6 === 0) await etapa("motos", i / vs.length, `${i}/${vs.length}`);
         const h = criarMoto({ ...lookDaVaga(i), low });
         for (let k = 0; k < 6; k++) h.atualizar({ dt: 1, t: 0, voando: false, vel: 0, curva: 0 });
         fundirEstaticos(h.group, { manter: comDescendentes(h.alvos) });
         const g = new THREE.Group(); g.add(h.group); g.position.set(v.x, this.yDaVaga(v), v.z); g.rotation.y = v.yaw;
         this.cena.scene.add(g); this.vagaMotos.push({ g, moto: h.group, alvos: h.alvos });
-      });
+      }
       // o ROBÔ de cada estacionamento, pousado na plataforma dele
       for (const l of LOTES) {
         const robo = criarRoboMotos({ low }), b = baseDoRobo(l), y = this.yDoLote(l) + 1.6;
@@ -454,6 +499,9 @@ export class CyberEngine {
       farol.visible = false; this.cena.scene.add(farol); this.farol = farol;
     }
 
+    // os SONS: espera a preparação terminar (a barra mostra quantos já foram)
+    for (;;) { const ok = await Promise.race([sons.then(() => true), new Promise<false>((r) => setTimeout(() => r(false), 120))]); await etapa("sons", sonsFeitos / Math.max(1, sonsTotal), `${sonsFeitos}/${sonsTotal}`); if (ok) break; }
+    await etapa("pessoas");
     this.som = criarAudioCyber({ camera: this.cam, cena: this.cena.scene, low });
     const sint = opts.vozZaeon;
     if (sint) this.vozCache = criarCacheVoz(async (t) => { const b64 = await sint(t); return b64 ? base64ParaBuffer(b64) : null; });
@@ -464,10 +512,18 @@ export class CyberEngine {
     this.ligarEntradas();
     this.ro = new ResizeObserver(() => this.redimensionar()); this.ro.observe(container);
     if (typeof IntersectionObserver !== "undefined") { this.io = new IntersectionObserver((e) => { this.visivel = !!e[0]?.isIntersecting; }); this.io.observe(container); }
+    // a LUZ: compila todos os shaders agora (senão cada material novo trava a tela na 1ª vez que aparece)
+    await etapa("shaders");
+    try { await this.R.compileAsync(this.cena.scene, this.cam); } catch { /* sem a extensão de compilação paralela: compila no 1º quadro */ }
+    await etapa("quadro");
     this.clock.start();
+    const primeiro = new Promise<void>((r) => { this.aoPrimeiroQuadro = r; });
     this.raf = requestAnimationFrame((t) => this.loop(t));
+    if (!document.hidden) await Promise.race([primeiro, new Promise((r) => setTimeout(r, 4000))]);   // (aba oculta não desenha: não espera)
+    p(carregando("quadro", 1));
     if (process.env.NODE_ENV !== "production") (window as unknown as { __cyber?: CyberEngine }).__cyber = this;   // depuração em dev
   }
+  private aoPrimeiroQuadro: (() => void) | null = null;
   /** estado pra depuração/testes em dev */
   get debug() { return { x: this.eu.pos.x, z: this.eu.pos.z, alt: this.eu.alt, altoEm: this.altoEm, noTopo: this.noTopo, pilotando: this.pilotando, pousado: this.pousado, nave: { ...this.naveEst }, moto: this.moto, motoEst: { ...this.motoEst }, motoPousado: this.motoPousado, plat: this.plat, bordo: this.bordo, noAr: this.jet.noAr, tunel: this.tunel?.origem ?? null, guia: this.guia?.passo ?? null, guiaAlvo: this.guia ? this.alvoDoPasso(ROTEIRO[this.guia.passo]!) : null, instancia: this.instancia, bocaDJ: bocaDJMundo(), nascendo: !!this.nascendo, droid: this.droid ? { fase: this.droid.h.fase(), x: this.droid.pos.x, z: this.droid.pos.z, alt: this.droid.alt } : null, guiaAtivo: this.guia?.ativo ?? null }; }
 
@@ -561,7 +617,7 @@ export class CyberEngine {
     if (this.sobreNave) { this.sobreNave = false; this.jet = { tecla: true, noAr: true, y: this.eu.alt, vy: 0 }; this.sitT = 0; this.alvo = null; this.alvoDepois = null; this.som.tocar("jump", this.eu.av.group.position, { dist: DISTANCIA.eu }); return; }
     // decola da praça, do piso do salão da Recepção ou da Zaeon (céu) — da escada não. Do salão da Recepção (que fica
     // no piso da Zaeon) o voo é o da Zaeon
-    if (this.altoEm && !this.noCeu) { const z = this.zaeon(), mn = z ? marcoNav(z.poi) : null; if (!mn || this.yNav < mn.nav.pisoY - 0.01) return; this.altoEm = z && z.poi.base !== undefined ? "ceu" : null; this.yNav = this.altoEm ? CIDADE.pisoY : 0; }
+    if (this.altoEm && !this.noCeu) { const z = this.lms.find((l) => l.poi.id === this.altoEm) ?? this.zaeon(), mn = z ? marcoNav(z.poi) : null; if (!mn || this.yNav < mn.nav.pisoY - 0.01) return; this.altoEm = z && z.poi.base !== undefined ? "ceu" : null; this.yNav = this.altoEm ? CIDADE.pisoY : 0; }
     if (this.plat && !decolaDaPlataforma(this.plat.id, this.plat.andar, this.eu.pos)) return;   // dentro de casa (Solana House) não
     this.jet = { tecla: true, noAr: true, y: this.eu.alt, vy: 0 }; this.sitT = 0; this.alvo = null; this.alvoDepois = null; this.jetV = { x: 0, z: 0 }; this.ilhota = null; this.plat = null; this.bordo = null;
     this.som.tocar("jump", this.eu.av.group.position, { dist: DISTANCIA.eu });
@@ -571,6 +627,10 @@ export class CyberEngine {
   private qgNoAr(): QGNoAr | null { const z = this.zaeon(), mn = z && naPracaPOI(z.poi) ? marcoNav(z.poi) : null; return z && mn ? { ...mn, topoMuralhas: this.pilaresZaeon(z)[0]!.topo } : null; }
   /** a RECEPÇÃO (o marco andável no piso da Zaeon) */
   private recepcao(): { lm: LandmarkHandle; mn: MarcoNav } | null { const z = this.zaeon(), mn = z && z.poi.base !== undefined ? marcoNav(z.poi) : null; return z && mn ? { lm: z, mn } : null; }
+  /** TODOS os marcos andáveis no piso da Zaeon: a Recepção e os 3 Mirantes da Terra (as pirâmides das quinas) */
+  private marcosDaZaeon(): { lm: LandmarkHandle; mn: MarcoNav }[] { return this.marcosNav().filter(({ lm }) => lm.poi.base !== undefined); }
+  /** a altura (mundo) do piso do salão de um marco da Zaeon, com a flutuação */
+  private pisoDoMarco(m: { lm: LandmarkHandle; mn: MarcoNav }) { return (m.lm.poi.base ?? 0) + m.mn.nav.pisoY + this.boia(m.lm); }
   /** um quadro no ar: subir/cair, colisão por altura e pouso (chão, escada/salão do QG ou piso da Zaeon) */
   /** saiu do chão sem querer (borda da Zaeon / de uma ilhota): começa a cair DAQUI (queda normal da mochila) */
   private cairDaqui(embalo = { x: 0, z: 0 }) {
@@ -597,10 +657,9 @@ export class CyberEngine {
       let q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...baixo, ...naves]);
       // a CABINE DO DJ é do dono: pra todo o resto a torre é um campo de força (não se pousa lá em cima de mochila)
       if (!this.ehFundador(this.o.eu.id) && v.y < base + ALTURA_LOUNGE + TORRE_DJ.topo + CAMPO_DJ && naTorreDJ(q, 0.6)) q = foraDaTorreDJ(q);
-      // a RECEPÇÃO: pousa no salão (vindo de cima); por baixo do salão a ilha dela é sólida
-      const rc = this.recepcao();
-      if (rc) {
-        const pisoM = this.yDoNivel("qg"), dx = q.x - rc.mn.x, dz = q.z - rc.mn.z, d = Math.hypot(dx, dz);
+      // a RECEPÇÃO e os MIRANTES: pousa no salão (vindo de cima); por baixo do salão a ilha da pirâmide é sólida
+      for (const rc of this.marcosDaZaeon()) {
+        const pisoM = this.pisoDoMarco(rc), dx = q.x - rc.mn.x, dz = q.z - rc.mn.z, d = Math.hypot(dx, dz);
         if (d <= rc.mn.nav.bordaR - 0.3 && yAnt >= pisoM - 0.05 && v.y <= pisoM && v.vy <= 0) {
           eu.pos.x = q.x; eu.pos.z = q.z; this.jet.y = pisoM; this.jet.noAr = false; this.altoEm = rc.lm.poi.id; this.yNav = rc.mn.nav.pisoY; this.somPouso(v.vy); return;
         }
@@ -722,7 +781,7 @@ export class CyberEngine {
   // ───────────── Cidade Zaeon (céu), a REDE DE BURACOS NEGROS e a nave ─────────────
   get noCeu() { return this.altoEm === "ceu"; }
   /** em pé na Zaeon: no piso dela ou no salão/escada da Recepção (que fica no piso dela) */
-  private get naZaeon() { return this.noCeu || (!!this.altoEm && !!this.recepcao() && this.altoEm === this.recepcao()!.lm.poi.id); }
+  private get naZaeon() { return this.noCeu || (!!this.altoEm && this.marcosDaZaeon().some((m) => m.lm.poi.id === this.altoEm)); }
   /** teleporte (corte seco — o React faz o túnel/fade): aparece no ponto `p` (mundo) do nó `id`, a pé, sem nada */
   private irParaNo(id: IdNo, p: { x: number; z: number; rumo: number } = NOS[id].chegada) {
     this.viagem = null; this.tunel = null;
@@ -777,8 +836,11 @@ export class CyberEngine {
   }
   /** os tubos (na linha da muralha) são sólidos pra quem anda no piso da Zaeon — só os perto (são centenas) e menos o de
    *  quem está nascendo/saindo */
+  /** as CÁPSULAS de nascimento só existem no TUTORIAL do novato (nascer → até o 1º portal): no jogo normal ninguém
+   *  nasce numa cápsula, então elas nem aparecem (nem colidem) */
+  private tubosVisiveis() { return this.instancia || !!this.nascendo || this.saindoDoTubo !== null; }
   private colisoresDosTubos(): Colisor[] {
-    if (!this.bercario) return [];
+    if (!this.bercario || !this.tubosVisiveis()) return [];
     const p = this.eu.pos, out: Colisor[] = [];
     TUBOS.forEach((tb, i) => { if (i !== this.saindoDoTubo && i !== this.nascendo?.tubo && Math.abs(tb.x - p.x) < 6 && Math.abs(tb.z - p.z) < 6) out.push({ x: tb.x, z: tb.z, r: 1.4 }); });
     return out;
@@ -1264,7 +1326,7 @@ export class CyberEngine {
   /** (pra quem NÃO é o dono) o dono está online com a nave → a minha cópia some (só existe uma nave) */
   private naveDoDonoFora() { if (this.ehFundador(this.o.eu.id)) return false; for (const a of this.remotos.values()) if (a.nave) return true; return false; }
   // ───────────── áudio ─────────────
-  /** loops fixos do mundo + destrave. O gesto (o "Iniciar" da landing, ou o 1º clique/toque/tecla) só DESTRAVA: o som do
+  /** loops fixos do mundo + destrave. O gesto (o "Conectar" ao cyberespaço, ou o 1º clique/toque/tecla) só DESTRAVA: o som do
    *  cyberespaço só liga ao ENTRAR de fato na cena 3D (fora do menu) — na landing/menu, nada do cyberespaço toca. */
   private montarSom() {
     const s = this.som;
@@ -2060,9 +2122,8 @@ export class CyberEngine {
         if (k >= 1) { this.viagem = null; this.som.tocar("near-ping", eu.av.group.position, { dist: DISTANCIA.perto }); }
       }
       else if (this.noCeu) {
-        // a RECEPÇÃO fica no piso da Zaeon: do pé da escada sobe-se pro salão; a ilha dela (o cone) é sólida
-        const rc = this.recepcao();
-        if (rc) { const r = resolverPasso(rc.mn, false, prev, eu.pos); eu.pos.x = r.x; eu.pos.z = r.z; if (r.alto) { this.altoEm = rc.lm.poi.id; this.yNav = r.y; } }
+        // a RECEPÇÃO e os MIRANTES ficam no piso da Zaeon: do pé da escada sobe-se pro salão; a ilha (o cone) é sólida
+        for (const rc of this.marcosDaZaeon()) { const r = resolverPasso(rc.mn, false, prev, eu.pos); eu.pos.x = r.x; eu.pos.z = r.z; if (r.alto) { this.altoEm = rc.lm.poi.id; this.yNav = r.y; break; } }
         // sem parede invisível na borda: passou do piso da ilha → cai
         const q = this.noCeu ? empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos(), ...this.colisoresDosTubos()]) : { x: eu.pos.x, z: eu.pos.z }; eu.pos.x = q.x; eu.pos.z = q.z; if (this.noCeu) this.yNav = CIDADE.pisoY;
         if (!this.noCeu) { /* subiu pro pé da escada da Recepção: o resto é dela (resolverChao) */ }
@@ -2174,7 +2235,15 @@ export class CyberEngine {
     }
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
-    if (this.cidade && this.regiaoPerto(this.cidade.group, "zaeon", AREA_ZAEON)) { this.cidade.atualizar(dt, t); this.bercario?.atualizar(dt, t); }
+    if (this.cidade && this.regiaoPerto(this.cidade.group, "zaeon", AREA_ZAEON)) {
+      // quem está na Zaeon (local da ilha): os motores de energia do Observatório da Terra reagem a eles
+      const c = CIDADE.centro, pres: { x: number; z: number }[] = [];
+      if (this.noCeu) pres.push({ x: this.eu.pos.x - c.x, z: this.eu.pos.z - c.z });
+      for (const a of this.remotos.values()) if (a.ceu) pres.push({ x: a.pos.x - c.x, z: a.pos.z - c.z });
+      this.cidade.presencas(pres);
+      this.cidade.atualizar(dt, t);
+      if (this.bercario) { const v = this.tubosVisiveis(); this.bercario.group.visible = v; if (v) this.bercario.atualizar(dt, t); }
+    }
     if (this.praca && this.regiaoPerto(this.praca.group, "praca")) this.praca.atualizar(dt, t);
     if (this.somLounge) { this.somLounge.atualizar(dt); this.cidade?.somTocando(this.somLounge.tocando, this.somLounge.nivel); }
     if (this.holo) {   // o holograma acompanha a base do QG (que flutua junto com o marco)
@@ -2241,7 +2310,7 @@ export class CyberEngine {
     // qualidade adaptativa: só mede jogando (o menu/landing roda a 30 e confundiria a medida)
     if (!this.menu && this.ultimoDesenho > 0 && this.qa.registrar(now - this.ultimoDesenho) !== null) this.aplicarQualidade();
     this.ultimoDesenho = now;
-    if (!this.prontoDisparado) { this.prontoDisparado = true; this.o.onPronto?.(); }
+    if (!this.prontoDisparado) { this.prontoDisparado = true; this.o.onPronto?.(); this.aoPrimeiroQuadro?.(); this.aoPrimeiroQuadro = null; }
   }
 
   private sincronizarRemotos(dt: number, t: number) {
@@ -2361,7 +2430,7 @@ export class CyberEngine {
 
   dispose() {
     if (!this.vivo) return;   // idempotente (desmonta ao ir estudar e de novo no cleanup do React)
-    this.vivo = false; cancelAnimationFrame(this.raf); this.ro.disconnect(); this.io?.disconnect();
+    this.vivo = false; cancelAnimationFrame(this.raf); this.ro?.disconnect(); this.io?.disconnect();
     this.cleanups.forEach((f) => f());
     for (const a of [this.eu, ...this.remotos.values()]) if (a) this.removerAtor(a);
     if (this.droid) { this.droid.h.dispose(); this.droid.tag.remove(); }

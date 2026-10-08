@@ -42,7 +42,9 @@ const EXPRESSOES: { sinal: SinalAvatar; ms: number }[] = [
   { sinal: "falando", ms: 1100 },
 ];
 
-export default function Cracha({ d, emCena = false, acao, tamanhoFoto = 140 }: { d: DadosCracha; emCena?: boolean; acao?: ReactNode; tamanhoFoto?: number }) {
+/** `estavel`: o card NÃO reage ao mouse (sem balanço, sem trocar borda/rosto) — no carrossel da landing, onde passar o
+ *  mouse não pode "apagar" nem mexer no card que está deslizando; o holofote (`emCena`) continua */
+export default function Cracha({ d, emCena = false, acao, tamanhoFoto = 140, estavel = false }: { d: DadosCracha; emCena?: boolean; acao?: ReactNode; tamanhoFoto?: number; estavel?: boolean }) {
   const { reduzido } = useAmbienteAvatar();
   const [hover, setHover] = useState(false);
   const [reacao, setReacao] = useState<SinalAvatar | null>(null);
@@ -81,7 +83,7 @@ export default function Cracha({ d, emCena = false, acao, tamanhoFoto = 140 }: {
   const balanco = hover && !reduzido ? "rotate(-1.6deg) translateY(2px)" : undefined;
 
   return (
-    <div className="shrink-0 w-[250px] sm:w-[262px] pt-7" onPointerEnter={entrar} onPointerLeave={() => setHover(false)}>
+    <div className="shrink-0 w-[250px] sm:w-[262px] pt-7" onPointerEnter={estavel ? undefined : entrar} onPointerLeave={estavel ? undefined : () => setHover(false)}>
       <style>{`@keyframes zcPulo { 0%,100% { transform: translateY(0); } 30% { transform: translateY(-10px); } 55% { transform: translateY(0); } 72% { transform: translateY(-4px); } }
 .zc-pulo { animation: zcPulo .7s cubic-bezier(.3,.7,.4,1) 1; }
 @media (prefers-reduced-motion: reduce) { .zc-pulo { animation: none; } }`}</style>
@@ -90,7 +92,7 @@ export default function Cracha({ d, emCena = false, acao, tamanhoFoto = 140 }: {
         <div className="relative origin-top transition-transform duration-500 ease-out motion-reduce:transition-none" style={{ transform: balanco }}>
           <span aria-hidden className="absolute left-1/2 -translate-x-1/2 -top-7 h-8 w-5 rounded-t-sm bg-gradient-to-b from-cyan-400/0 via-cyan-500/70 to-cyan-500" />
           <span aria-hidden className="absolute left-1/2 -translate-x-1/2 -top-1.5 h-4 w-9 rounded-md bg-gradient-to-b from-slate-200 to-slate-400 shadow-[0_2px_6px_rgba(0,0,0,0.5)] border border-white/60" />
-          <article className={`relative rounded-[22px] border bg-black/80 backdrop-blur-xl px-5 pt-6 pb-4 flex flex-col items-center text-center transition-[border-color,box-shadow] duration-500 ${emCena ? "border-cyan-400/60 shadow-[0_18px_50px_-18px_rgba(34,211,238,0.55)]" : "border-white/10 shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]"}`}>
+          <article className={`relative rounded-[22px] border bg-black/80 backdrop-blur-xl px-5 pt-6 pb-4 flex flex-col items-center text-center transition-[border-color,box-shadow] duration-500 ${emCena ? "border-cyan-400/60 shadow-[0_18px_50px_-18px_rgba(34,211,238,0.55)]" : `border-white/10 shadow-[0_16px_44px_-20px_rgba(0,0,0,0.75)] ${estavel ? "" : "hover:border-cyan-500/50 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.45)]"}`}`}>
             <span aria-hidden className="absolute top-2.5 left-1/2 -translate-x-1/2 h-1.5 w-10 rounded-full bg-white/10 shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]" />
             <div className="w-full flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.22em]">
               <span className="text-white/70">Zaeon</span>

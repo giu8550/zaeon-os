@@ -25,7 +25,7 @@ export type Pose = {
   /** montado numa moto voadora (qualquer pessoa): vaga 0..7, altura com teto, rumo */ moto: { s: number; y: number; yaw: number; de?: string } | null;
   /** a moto que ESTACIONOU (fica onde desceu): vaga, posição no mapa, rumo */ motoLargada: { s: number; x: number; y: number; z: number; yaw: number } | null;
 };
-const VAGAS_MOTO = 16, TETO_MOTO = ALT;   // chão (4) + Zaeon (12) — espelha TOTAL_VAGAS de lib/cyber/motos
+const VAGAS_MOTO = 32, TETO_MOTO = ALT;   // chão (4) + Zaeon (12) + 4 mirantes da Zaeon (16) — espelha TOTAL_VAGAS de lib/cyber/motos
 
 /** saneia a pose do cliente; `fundador` vem do TOKEN (servidor), nunca do cliente */
 export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {

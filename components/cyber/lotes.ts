@@ -51,7 +51,7 @@ export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t
       const m = n as THREE.Mesh & THREE.LineSegments;
       const f = n as unknown as { isInstancedMesh?: boolean; isSkinnedMesh?: boolean };
       if (linha ? !m.isLineSegments : !m.isMesh || f.isInstancedMesh || f.isSkinnedMesh) return;
-      if (Array.isArray(m.material) || manter.has(m) || m.children.length || mexe.has(m) || !m.visible || m.morphTargetInfluences) return;
+      if (Array.isArray(m.material) || manter.has(m) || m.children.length || mexe.has(m) || !m.visible || m.morphTargetInfluences || m.userData.semLote) return;   // semLote: shader com atributos próprios (as veias)
       if (!m.geometry?.attributes.position || Object.keys(m.geometry.morphAttributes).length) return;
       // sobe até o quadro: tudo entre a peça e o quadro tem que estar parado e visível
       let q = m.parent!;

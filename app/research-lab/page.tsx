@@ -151,6 +151,7 @@ import {
   ArrowUturnLeftIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
+import { musica } from "@/lib/audio/musica";
 import { LOUNGE_ROTA, pedeFoco } from "@/lib/ui/loungeHub";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
@@ -2679,7 +2680,7 @@ export default function HomeworkPage({
             {/* Voltar: de volta ao cyberespaço (o lounge só é carregado enquanto se está nele). */}
             <button
               data-tour="voltar-cyberespaco"
-              onClick={() => router.push(LOUNGE_ROTA)}
+              onClick={() => { musica().destravar(); router.push(LOUNGE_ROTA); }}
               aria-label="Voltar ao cyberespaço"
               title="Voltar ao cyberespaço"
               className="flex items-center gap-3 p-2 rounded-xl text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5 group"
