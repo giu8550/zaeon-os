@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, PASSO_FIM_DA_INSTANCIA, cumpriu, deveNascerNoTubo, passoDe, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
+import { PREF_TUTORIAL, tutorialLigado, ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, PASSO_FIM_DA_INSTANCIA, cumpriu, deveNascerNoTubo, passoDe, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
 import { CIDADE as C2, DOCA_ANGULO, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "./ceu";
 import { LAR_LOCAL } from "./landmarks";
 import { AGENTES, DROID, noPisoDaZaeon, posDoGuia } from "./agentes";
@@ -104,5 +104,17 @@ describe("os AGENTES que moram no hiperespaço", () => {
     expect(g.x).toBeLessThan(p.x); expect(g.z).toBeGreaterThan(p.z);
     const g2 = posDoGuia(p, Math.PI / 2);   // olhando pra +x: a direita é +z
     expect(g2.z).toBeGreaterThan(p.z); expect(g2.x).toBeGreaterThan(p.x);
+  });
+});
+
+describe("modo tutorial (Configurações)", () => {
+  it("ligado ('1') força o tutorial; qualquer outro valor, storage vazio ou bloqueado = normal", () => {
+    expect(tutorialLigado((k) => (k === PREF_TUTORIAL ? "1" : null))).toBe(true);
+    expect(tutorialLigado(() => "0")).toBe(false);
+    expect(tutorialLigado(() => null)).toBe(false);
+    expect(tutorialLigado(() => { throw new Error("storage bloqueado"); })).toBe(false);
+    // ligado vale até pro dono e pra quem já nasceu
+    expect(deveNascerNoTubo({ visto: true, fundador: true, forcar: tutorialLigado(() => "1") })).toBe(true);
+    expect(deveNascerNoTubo({ visto: true, fundador: true, forcar: tutorialLigado(() => "0") })).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ESPERA_VOZ, FOLGA_FALA, duracaoComAtraso, MAX_TEXTO_VOZ, REPERGUNTA_NOME, bocaDoNivel, criarCacheVoz, falasFixasZaeon, tempoDaFala, textoDaVoz } from "./vozZaeon";
 import { ABERTURA, PERGUNTAS } from "./conversaZaeon";
-import { HOLO_VOZ, aleatorioComSemente, respostaImpulso, DISTANCIA } from "./audio";
+import { HOLO_VOZ, aleatorioComSemente, respostaImpulso, DISTANCIA, VOZ_DROID, SONS, duracaoVozDroid, silabasDroid } from "./audio";
 
 const rms = (d: Float32Array, a: number, b: number) => { let s = 0; for (let i = a; i < b; i++) s += d[i]! * d[i]!; return Math.sqrt(s / Math.max(1, b - a)); };
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -101,5 +101,37 @@ describe("voz da Zaeon — o cache das sínteses", () => {
     expect(await c.pegar("x")).toBeNull();
     expect(await c.pegar("x")).toBe("ok"); expect(c.tem("x")).toBe(true);
     expect(await c.pegar("  ")).toBeNull();
+  });
+});
+
+describe("a voz do Droid (sem palavras)", () => {
+  it("a duração cresce com o texto, entre o mínimo e o máximo", () => {
+    expect(duracaoVozDroid("")).toBe(VOZ_DROID.dur.min);
+    expect(duracaoVozDroid("x".repeat(500))).toBe(VOZ_DROID.dur.max);
+    expect(duracaoVozDroid("Voando bem! Agora vem comigo.")).toBeGreaterThan(duracaoVozDroid("Oi!"));
+  });
+  it("as ondas começam no 0, ficam dentro da fala, nos formantes, e são determinísticas pela semente", () => {
+    const s = silabasDroid(2.4, 9), s2 = silabasDroid(2.4, 9);
+    expect(s).toEqual(s2);
+    expect(s[0]!.t).toBe(0);
+    expect(s.length).toBeGreaterThanOrEqual(Math.floor(2.4 / VOZ_DROID.silaba.max));
+    for (const x of s) {
+      expect(x.t).toBeLessThan(2.4);
+      expect(x.f1).toBeGreaterThanOrEqual(VOZ_DROID.f1[0]); expect(x.f1).toBeLessThanOrEqual(VOZ_DROID.f1[1]);
+      expect(x.f2).toBeGreaterThanOrEqual(VOZ_DROID.f2[0]); expect(x.f2).toBeLessThanOrEqual(VOZ_DROID.f2[1]);
+      expect(x.ganho).toBeGreaterThan(0); expect(x.ganho).toBeLessThanOrEqual(1);
+    }
+    const furia = silabasDroid(2.4, 9, { formantes: VOZ_DROID.furia.formantes });
+    expect(furia[0]!.f1).toBeCloseTo(s[0]!.f1 * VOZ_DROID.furia.formantes);
+  });
+  it("soa longe e sem picotar: mais molhado que seco, reverb longo, eco discreto que some; ondas lentas", () => {
+    expect(VOZ_DROID.reverb.molhado).toBeGreaterThan(0.6);
+    expect(VOZ_DROID.reverb.seg).toBeGreaterThanOrEqual(5);
+    expect(VOZ_DROID.silaba.min).toBeGreaterThanOrEqual(0.4);   // pouca modulação (o dono pediu)
+    expect(VOZ_DROID.reverb.seg).toBeGreaterThan(HOLO_VOZ.reverbSeg);
+    expect(VOZ_DROID.delay.retorno).toBeLessThan(0.5);   // eco discreto: decai rápido
+    expect(VOZ_DROID.delay.mix).toBeLessThan(0.5);
+    expect(SONS["droid-agua"].modo).toBe("pos"); expect(SONS["droid-alien"].modo).toBe("pos");
+    expect(SONS["droid-agua"].ext).toBe("wav");
   });
 });

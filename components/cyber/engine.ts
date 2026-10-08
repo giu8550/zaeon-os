@@ -18,7 +18,7 @@ import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
 import { QualidadeAdaptativa } from "@/lib/cyber/qualidadeAdaptativa";
-import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
+import { DISTANCIA, PASSOS, duracaoVozDroid, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, preCarregarSons, type AudioCyberHandle, type FalaHolograma, type LoopSom } from "./AudioCyber";
 import { ESPERA_VOZ, criarCacheVoz, duracaoComAtraso, falasFixasZaeon, tempoDaFala, textoDaVoz, REPERGUNTA_NOME, type CacheVoz } from "@/lib/cyber/vozZaeon";
@@ -68,7 +68,7 @@ import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar"
 import { carregando, type Carregando, type IdEtapa } from "@/lib/cyber/carregamento";
 import { gerarVeias } from "@/lib/cyber/coracao";
 import { URL_TERRA } from "./DistritoTerra";
-import { carregarVrm, tingirVrm } from "./AvatarVrm";
+import { carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
 import { variacaoBatida, ventoDasAsas } from "@/lib/cyber/asas";
 import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, type IdHabilidade } from "@/lib/cyber/habilidades";
 
@@ -529,6 +529,7 @@ export class CyberEngine {
 
   /** Reconstrói bases/atores quando a lista de membros muda (alguém entrou na sala). */
   setPessoas(lista: PessoaCyber[]) {
+    if (lista.some((p) => usaCorpoDoFundador(p.fundador, location.search))) void precarregarVrm(CORPO_DO_FUNDADOR.url).catch(() => undefined);   // o corpo do founder já vai baixando
     const ids = lista.map((p) => p.id);
     if (!ids.includes(this.o.eu.id)) { lista = [...lista, this.o.eu]; ids.push(this.o.eu.id); }
     for (const p of lista) this.pessoas.set(p.id, p);
@@ -581,11 +582,12 @@ export class CyberEngine {
     if (a.vrm || !this.gltf || !usaCorpoDoFundador(this.pessoas.get(a.id)?.fundador, location.search)) return;
     a.vrm = true;
     a.av.usarAsas();   // as asas negras no lugar da mochila (já, sem esperar o corpo)
+    a.av.esperarCorpo(true);   // o corpo padrão NÃO aparece enquanto o próprio carrega (o VRM já vem pré-carregado)
     carregarVrm(CORPO_DO_FUNDADOR.url).then((vrm) => {
       const vivo = this.vivo && (a === this.eu || this.remotos.get(a.id) === a);
       if (!vivo) return;
       tingirVrm(vrm, CORPO_DO_FUNDADOR.tintas); a.av.usarVrm(vrm);
-    }).catch((e) => { console.warn("[cyber] corpo do founder (VRM) não carregou:", e); });
+    }).catch((e) => { console.warn("[cyber] corpo do founder (VRM) não carregou:", e); a.av.esperarCorpo(false); });
   }
   private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
@@ -891,6 +893,7 @@ export class CyberEngine {
     const d = this.droid; if (!d) return;
     this.balao(d.fala, texto, DROID.cor, ultima ? Infinity : RITMO_FALA.entre * 1000 + 400);
     this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: DROID.cor, texto });
+    this.som.vozDroid(d.h.group, { dur: duracaoVozDroid(texto) });   // a "voz" dele: sem palavras, de outra dimensão
   }
   // ───────────── a CONVERSA com a Zaeon (o holograma do globo da capela — lib/cyber/conversaZaeon) ─────────────
   /** a Zaeon FALA: balão embaixo do rosto + a fala no chat (só local) + a VOZ (Leda, com eco de holograma) e a boca
@@ -1020,7 +1023,7 @@ export class CyberEngine {
   private atualizarConversa(dt: number) {
     if (this.expulsando) {
       const x = this.expulsando; x.t += dt;
-      if (!x.falou && x.t >= 1.6) { x.falou = true; const d = this.droid; if (d) { this.balao(d.fala, FALA_EXPULSAO, "#ff5a4a", Infinity); this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: "#ff5a4a", texto: FALA_EXPULSAO }); } }
+      if (!x.falou && x.t >= 1.6) { x.falou = true; const d = this.droid; if (d) { this.balao(d.fala, FALA_EXPULSAO, "#ff5a4a", Infinity); this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: "#ff5a4a", texto: FALA_EXPULSAO }); this.som.vozDroid(d.h.group, { dur: duracaoVozDroid(FALA_EXPULSAO), furia: true }); } }
       if (x.t >= 7) { this.expulsando = null; this.o.onExpulso?.(); }
     }
     const cv = this.conversa, h = this.holoZaeon; if (!cv || !h) return;

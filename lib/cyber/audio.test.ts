@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { CRISTAIS_PERTO, DISTANCIA, GATILHO_VOO, gatilhoVooInicial, gatilhosVoo, emendarLoop, recortarCanal, recortePasso, fasesDeContato, pisadasEntre, SINTESE, SONS_ARQUIVO, sintetizarBaque, sintetizarJetpack, FADE_ENTRADA, NAVE_DESCIDA, PASSOS, TAXA_432, fatorCristais, eventosNave, somNaveInicial, SONS, cadenciaPasso, criarLimiteVozes, fatorLeito, lerPrefs, urlDoSom, type NomeSom } from "./audio";
 
 describe("áudio do cyberespaço", () => {
-  it("os 23 sons de arquivo existem (21 .ogg + o jato e a batida de asa .wav) e os sintetizados têm gerador em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
+  it("os 25 sons de arquivo existem (22 .ogg + o jato, a batida de asa e a água do Droid em .wav) e os sintetizados têm gerador em public/assets/sounds/cyber e cada um tem modo (posicional × 2D)", () => {
     const arquivos = readdirSync(join(process.cwd(), "public/assets/sounds/cyber")).filter((f) => /\.(ogg|wav)$/.test(f)).sort();
     expect(SONS_ARQUIVO.map((n) => urlDoSom(n).split("/").pop()!).sort()).toEqual(arquivos);
-    expect(arquivos).toHaveLength(23);
+    expect(arquivos).toHaveLength(25);
     for (const n of Object.keys(SONS) as NomeSom[]) if (SONS[n].sintetico) expect(SINTESE[n]).toBeTypeOf("function");
     expect(Object.keys(SONS)).not.toContain("whoosh-hyperspace");   // trocado pelo cyber-enter
     expect(urlDoSom("ship-flight")).toBe("/assets/sounds/cyber/ship-flight.ogg");
