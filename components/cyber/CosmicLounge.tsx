@@ -74,8 +74,9 @@ function Tela() {
     void recarregar();
   }, [online, membros, recarregar]);
   const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true } : null), [sala.eu]);
-  // quem está online (pra voz abrir/fechar as conexões) — antes de qualquer return condicional (ordem dos hooks)
-  const onlineIds = useMemo(() => sala.online.map((m) => m.id), [sala.online]);
+  // quem está online (pra voz abrir/fechar as conexões) — antes de qualquer return condicional (ordem dos hooks). O novato
+  // no tutorial (a Zaeon só dele, ainda sem a 1ª pose) fica FORA da voz até cruzar o 1º portal
+  const onlineIds = useMemo(() => sala.online.filter((m) => m.pronto !== false).map((m) => m.id), [sala.online]);
   // ações privilegiadas do dono (topo, nave): quem decide é o servidor (sessão → fundador). A Zaeon é aberta a todos.
   const pedirAcesso = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj") => {
     if (!salaId) return { ok: false, erro: "Sem sala." };

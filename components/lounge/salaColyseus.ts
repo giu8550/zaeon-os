@@ -41,7 +41,7 @@ const copiar = (j: JogadorRemoto): JogadorRemoto => { const o = {} as Record<str
 export function conectarColyseus(o: {
   salaId: string; euId: string;
   remotos: Map<string, Presenca>;
-  onOnline: (lista: { id: string; name: string; color: string; fundador: boolean }[]) => void;
+  onOnline: (lista: { id: string; name: string; color: string; fundador: boolean; pronto: boolean }[]) => void;
   onEstado: (e: EstadoColyseus) => void;
   /** onde mostrar quem entrou mas ainda não mandou a 1ª pose (ex.: sentado na própria base) */
   poseInicial?: (userId: string) => { x: number; z: number; facing: number; sit?: boolean } | null;
@@ -92,9 +92,9 @@ export function conectarColyseus(o: {
       o.onEstado("ok");
       rm.onStateChange((estado: unknown) => {
         const players = (estado as { players?: Map<string, JogadorRemoto> }).players; if (!players) return;
-        const agora = performance.now(), vistos = new Set<string>(), lista: { id: string; name: string; color: string; fundador: boolean }[] = [];
+        const agora = performance.now(), vistos = new Set<string>(), lista: { id: string; name: string; color: string; fundador: boolean; pronto: boolean }[] = [];
         players.forEach((j, id) => {
-          lista.push({ id, name: j.name, color: j.color, fundador: j.fundador });
+          lista.push({ id, name: j.name, color: j.color, fundador: j.fundador, pronto: j.pronto === true });
           if (id === o.euId) return;
           vistos.add(id);
           const ant = ultimo.get(id);

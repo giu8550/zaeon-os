@@ -94,6 +94,23 @@ describe("LoungeRoom (servidor de verdade + clientes do SDK)", () => {
     await espera(() => jogadores(b!)?.get(id(1))?.falando === true);
   });
 
+  it("voz: quem ainda não mandou pose (o novato no tutorial) não fala nem ouve ninguém", async () => {
+    const [a] = salas, n = await entrar(id(9));
+    await espera(() => jogadores(a!)?.has(id(9)) === true);
+    const praN: unknown[] = [], praA: unknown[] = [];
+    n.onMessage("rtc", (m) => praN.push(m)); a!.onMessage("rtc", (m) => praA.push(m));
+    a!.send("rtc", { to: id(9), data: { tipo: "offer", sdp: "v=0" } });
+    n.send("rtc", { to: id(1), data: { tipo: "offer", sdp: "v=0" } });
+    n.send("fala", { on: true });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(praN).toHaveLength(0); expect(praA).toHaveLength(0); expect(jogadores(a!)!.get(id(9))!.falando).toBe(false);
+    n.send("pose", { x: 0, z: 0, facing: 0, moving: false, sit: false });   // cruzou o portal: entra no mundo (e na voz)
+    await espera(() => jogadores(a!)?.get(id(9))?.pronto === true);
+    a!.send("rtc", { to: id(9), data: { tipo: "offer", sdp: "v=0" } });
+    await espera(() => praN.length === 1);
+    await n.leave(); await espera(() => jogadores(a!)?.has(id(9)) === false);
+  });
+
   it("a mesma pessoa em outra aba: continua UM avatar", async () => {
     const b2 = await entrar(id(2));
     await espera(() => jogadores(b2)?.size === 2);

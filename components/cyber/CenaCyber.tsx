@@ -121,7 +121,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   // RECADO pro QG: a caixa abre ao clicar na TV do lounge da Zaeon (só o dono)
   // VOZ: segurar G (ou o botão no celular) = falar
   const voz = useRef<VozHandle | null>(null), [falandoEu, setFalandoEu] = useState(false);
-  const comVoz = tela && vozLigada() && !!p.canalVoz;
+  const comVoz = tela && vozLigada() && !!p.canalVoz && !instancia;   // no tutorial (a Zaeon só dele) não fala nem ouve ninguém
   const [somAberto, setSomAberto] = useState(false);
   const [recadoAberto, setRecadoAberto] = useState(false), [recadoTxt, setRecadoTxt] = useState(""), [recadoEnviando, setRecadoEnviando] = useState(false);
   const mudarSom = (n: { ligado: boolean; volume: number }) => {

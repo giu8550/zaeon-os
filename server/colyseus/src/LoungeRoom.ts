@@ -93,13 +93,16 @@ export class LoungeRoom extends Room<{ state: EstadoLounge }> {
     // "falando" (indicador no avatar) — a voz em si vai direto entre navegadores (WebRTC)
     this.onMessage("fala", (client, raw) => {
       const auth = client.auth as Auth | undefined, j = auth && this.state.players.get(auth.u);
-      if (j) j.falando = !!(raw && typeof raw === "object" && (raw as { on?: unknown }).on === true);
+      if (j) j.falando = j.pronto && !!(raw && typeof raw === "object" && (raw as { on?: unknown }).on === true);
     });
-    // signaling da voz: offer/answer/ICE pro destinatário (por userId), com o remetente da SESSÃO
+    // signaling da voz: offer/answer/ICE pro destinatário (por userId), com o remetente da SESSÃO. Só entre quem já está
+    // NO MUNDO (`pronto` = mandou a 1ª pose): o novato no tutorial (a Zaeon só dele) não fala nem ouve ninguém até
+    // cruzar o 1º portal — mesmo com um cliente modificado
     this.onMessage("rtc", (client, raw) => {
       const auth = client.auth as Auth | undefined; if (!auth) return;
       const m = sanitizarRtc(raw, new Set(this.porUsuario.keys()));
       if (!m || m.to === auth.u) return;
+      if (!this.state.players.get(auth.u)?.pronto || !this.state.players.get(m.to)?.pronto) return;
       this.porUsuario.get(m.to)?.send("rtc", { from: auth.u, data: m.data });
     });
   }
