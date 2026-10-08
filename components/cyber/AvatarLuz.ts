@@ -65,8 +65,14 @@ export type AvatarLuzHandle = {
    *  `danca` (0..1) = parado na PISTA do lounge: DANÇA (joelhos no compasso, quadril balançando e uma sequência de
    *  passos: braços alternando pro alto, as duas mãos pro alto acenando, balanço com os cotovelos e pulinho).
    *  `surf` (0..1) = sendo levado pela ESCADA DE ENERGIA: em pé numa PRANCHA DE LUZ (rastro de faíscas atrás), de lado,
-   *  joelhos dobrados, braços abertos se equilibrando — e no meio da viagem dá um 360 com os braços pro alto. */
-  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean } | null; montado?: Montado | null; dj?: number; danca?: number; surf?: number; dt: number; t: number }): void;
+   *  joelhos dobrados, braços abertos se equilibrando — e no meio da viagem dá um 360 com os braços pro alto.
+   *  `descanso` = no LOUNGE (lib/cyber/descanso): `sentar` (0..1) SENTADO no sofá/puff (o quadril desce até a almofada
+   *  em `assentoY`, coxas pra frente, encostado), `deitar` (0..1) DEITADO no sofá (de costas, ao longo dele, a cabeça no
+   *  braço, um joelho dobrado); `relaxa` (0..1) = no PUFE grande, a pose BEM RELAXADA (afundado e reclinado, pernas
+   *  esticadas e abertas, mãos atrás da cabeça). Sentado, os PÉS ficam no chão na frente do móvel (IK — as canelas não
+   *  atravessam a frente do sofá). `tablet` (0..1) = o TABLET se materializando nas mãos (partículas → tablet aceso): com
+   *  ele, os braços seguram o tablet e a cabeça olha pra tela — em pé, sentado ou deitado. */
+  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean } | null; montado?: Montado | null; dj?: number; danca?: number; surf?: number; descanso?: { sentar: number; deitar: number; assentoY: number; relaxa?: number } | null; tablet?: number; dt: number; t: number }): void;
   /** quantas PISADAS (pé encostando no chão na animação de andar/correr) desde a última chamada — o som do passo
    *  sai no compasso do pé; `null` = avatar sem pés (sem o modelo): o engine usa a cadência fixa */
   passosNovos(): number | null;
@@ -219,6 +225,29 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   const PERNA = 0.95;   // comprimento da perna do avatar (m) — escala a altura do quadril das poses capturadas
   const DUR_POUSO = duracaoClipe("Jump_Land") * 0.8;
 
+  // o TABLET (modo estudo): corpo fino escuro, tela acesa com o laboratório, halo; materializa de PARTÍCULAS que
+  //  espiralam pra mão (lib/cyber/descanso `TABLET`). Fica no grupo: a cada quadro vai pro meio das mãos, virado pro rosto
+  const tablet = new THREE.Group(); tablet.visible = false; grupo.add(tablet);
+  const texTela = new THREE.CanvasTexture((() => {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 176; const g = c.getContext("2d")!;
+    const gr = g.createLinearGradient(0, 0, 0, 176); gr.addColorStop(0, "#0a1f3d"); gr.addColorStop(1, "#04101f"); g.fillStyle = gr; g.fillRect(0, 0, 256, 176);
+    g.fillStyle = "#66e6ff"; g.fillRect(0, 0, 256, 22); g.fillStyle = "#04101f"; g.font = "bold 13px system-ui, sans-serif"; g.fillText("ZAEON · LABORATÓRIO", 10, 15);
+    g.fillStyle = "rgba(143,232,255,.85)"; for (let i = 0; i < 7; i++) g.fillRect(12, 38 + i * 17, 70 + ((i * 47) % 90), 6);
+    g.strokeStyle = "#9fe8ff"; g.lineWidth = 3; g.beginPath(); g.arc(205, 92, 30, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.arc(205, 92, 14, 0, Math.PI * 2); g.stroke();
+    return c; })());
+  texTela.colorSpace = THREE.SRGBColorSpace;
+  const matTabCorpo = anime ? materialToonSimples(0x1a2238, armadura.clone().multiplyScalar(0.25)) : new THREE.MeshStandardMaterial({ color: 0x141a2c, roughness: 0.3, metalness: 0.7, emissive: armadura.clone().multiplyScalar(0.25), emissiveIntensity: 0.6 });
+  const matTabTela = new THREE.MeshBasicMaterial({ map: texTela, transparent: true, opacity: 0 });
+  const matTabHalo = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  tablet.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.21, 0.014), matTabCorpo));
+  const telaTab = new THREE.Mesh(new THREE.PlaneGeometry(0.272, 0.186), matTabTela); telaTab.position.z = 0.0075; tablet.add(telaTab);
+  const haloTab = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.48), matTabHalo); haloTab.position.z = -0.012; tablet.add(haloTab);
+  const NPT = low ? 18 : 36, ptPos = new Float32Array(NPT * 3), ptGeo = new THREE.BufferGeometry(); ptGeo.setAttribute("position", new THREE.BufferAttribute(ptPos, 3));
+  const matPtTab = new THREE.PointsMaterial({ size: 0.07, map: starTex, color: luz, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  const particulasTab = new THREE.Points(ptGeo, matPtTab); particulasTab.frustumCulled = false; particulasTab.visible = false; grupo.add(particulasTab);
+  const pTab = new THREE.Vector3(), pCab = new THREE.Vector3(), pMaoE = new THREE.Vector3(), pMaoD = new THREE.Vector3(), qC2 = new THREE.Quaternion(), fC = new THREE.Vector3(), uC = new THREE.Vector3(), lC = new THREE.Vector3();
+  const voltaPraFora = (x: number) => { const c1 = 1.70158, c3 = c1 + 1, u = x - 1; return 1 + c3 * u * u * u + c1 * u * u; };   // ease-out-back (o tablet "estala" no lugar)
+
   // neurônios: ~240 em anel (raio 0.3–0.8, y 0.2–1.8), pulsando e girando devagar
   const n = low ? 80 : 150, np = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { const y = 0.2 + Math.random() * 1.6, r = 0.3 + Math.random() * 0.5, a = Math.random() * 6.28; np[i * 3] = Math.cos(a) * r; np[i * 3 + 1] = y; np[i * 3 + 2] = Math.sin(a) * r; }
@@ -272,7 +301,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   };
   return {
     group: grupo, meshes,
-    animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, montado = null, dj = 0, danca = 0, surf = 0, dt, t }) {
+    animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, montado = null, dj = 0, danca = 0, surf = 0, descanso = null, tablet: wTab = 0, dt, t }) {
       const k = Math.min(1, dt * 8), corre = !!correndo && andando;
       wWalk += ((andando && !corre ? 1 : 0) - wWalk) * k; wRun += ((corre ? 1 : 0) - wRun) * k;
       if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk); run.setEffectiveWeight(wRun); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun)); mixer.update(dt); }
@@ -286,6 +315,14 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       grupo.rotation.y += d * 0.15;
       // na base: em pé, levemente inclinado pro painel; meditando: abaixa (pernas cruzadas) e flutua devagar
       corpo.position.set(0, meditando * (-0.5 + (parado ? 0 : 0.06 * Math.sin(t * 1.1))) - SENTA_Y * pilotando - (montado ? alturaQuadril * montado.w : 0), 0); corpo.rotation.x = -0.07 * sentado + 0.08 * pilotando;
+      // DESCANSO: sentado, o quadril desce até a almofada (um tiquinho pra trás, encostando); deitado, o corpo gira pra
+      // trás (rosto pro céu) em volta dos pés, centrado no sofá e apoiado na almofada — a cabeça um pouco mais alta
+      const wS = descanso ? descanso.sentar : 0, wD = descanso ? descanso.deitar : 0, yAss = descanso?.assentoY ?? 0.7, wR = descanso?.relaxa ?? 0;
+      if (wS > 0.005 || wD > 0.005) {
+        corpo.position.y -= Math.max(0, alturaQuadril - (yAss + 0.08)) * wS; corpo.position.z += (0.06 + 0.1 * wR) * wS;
+        corpo.rotation.x += (Math.PI / 2 - 0.2) * wD; corpo.position.y += (yAss + 0.2) * wD; corpo.position.z -= 0.92 * wD;
+      }
+      if (asas) { const enc = Math.max(wS, wD); asas.group.visible = enc < 0.98; asas.group.scale.setScalar((asas.group.userData.escala ?? 1) * Math.max(0.02, 1 - enc)); }   // sentado/deitado: as asas recolhem pra dentro das costas
       if ((ossos.length || pernas.length) && pilotando > 0.02) {
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
         frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
@@ -296,6 +333,68 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         for (const o of ossos) {
           dirAlvo.copy(cima).multiplyScalar(-0.8).addScaledVector(frente, 0.5).addScaledVector(lateral, 0.15 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, pilotando);
           dirAlvo.copy(frente).multiplyScalar(0.92).addScaledVector(cima, -0.15).addScaledVector(lateral, 0.05 * o.lado).normalize(); apontar(o.ante, o.mao, dirAlvo, pilotando);   // mãos nos manches
+        }
+      }
+      if ((ossos.length || pernas.length) && (wS > 0.01 || wD > 0.01 || wTab > 0.01)) {
+        grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
+        frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();   // lateral·lado = pra fora
+        corpo.updateWorldMatrix(true, false); corpo.getWorldQuaternion(qC2);
+        fC.set(0, 0, -1).applyQuaternion(qC2); uC.set(0, 1, 0).applyQuaternion(qC2); lC.crossVectors(uC, fC).normalize();   // eixos do CORPO (deitado: fC = pro céu, uC = rumo à cabeça)
+        const respira = parado ? 0 : 0.03 * Math.sin(t * 1.4);
+        const wEmPe = Math.max(0, 1 - wS - wD);
+        // SENTADO: coxas pra frente (na almofada), canelas pra baixo, tronco encostado
+        if (wS > 0.01) {
+          // PÉS NO CHÃO na frente do móvel (IK): sentado normal, logo além da frente do sofá; relaxado, bem esticados e
+          // abertos — os joelhos vão pra frente/cima e as canelas ficam fora do móvel
+          grupo.getWorldPosition(pGr);
+          const longe = 0.66 + 0.46 * wR, abre = 0.16 + 0.16 * wR;
+          for (const o of pernas) {
+            alvoM.copy(pGr).addScaledVector(frente, longe).addScaledVector(lateral, abre * o.lado).addScaledVector(cima, 0.09);
+            polo.copy(frente).addScaledVector(cima, 0.45 + 0.4 * wR).addScaledVector(lateral, 0.12 * o.lado);
+            ik(o.coxa, o.canela, o.pe, alvoM, polo, wS);
+          }
+          // o tronco: sentado, encostado de leve; relaxado, RECLINADO no encosto do pufe
+          if (lombar && pescoco) { dirAlvo.copy(cima).multiplyScalar(1 - 0.38 * wR).addScaledVector(frente, -0.2 - 0.62 * wR + 0.18 * wTab + respira).normalize(); apontar(lombar, pescoco, dirAlvo, wS); }
+          if (pescoco && cabeca && wR > 0.01 && wTab < 0.5) { dirAlvo.copy(cima).multiplyScalar(0.85).addScaledVector(frente, 0.5).normalize(); apontar(pescoco, cabeca, dirAlvo, wS * wR); }   // reclinado, mas olhando pra frente
+        }
+        // DEITADO: pernas esticadas ao longo do sofá (a esquerda com o joelho dobrado), tronco reto, cabeça no braço
+        if (wD > 0.01) {
+          for (const o of pernas) {
+            if (o.lado > 0) { dirAlvo.copy(uC).multiplyScalar(-0.55).addScaledVector(fC, 0.83).addScaledVector(lC, 0.1).normalize(); apontar(o.coxa, o.canela, dirAlvo, wD); dirAlvo.copy(uC).multiplyScalar(-0.72).addScaledVector(fC, -0.69).normalize(); apontar(o.canela, o.pe, dirAlvo, wD); }
+            else { dirAlvo.copy(uC).multiplyScalar(-0.98).addScaledVector(fC, 0.1).addScaledVector(lC, -0.08).normalize(); apontar(o.coxa, o.canela, dirAlvo, wD); dirAlvo.copy(uC).multiplyScalar(-0.99).addScaledVector(fC, -0.05).normalize(); apontar(o.canela, o.pe, dirAlvo, wD); }
+          }
+          if (lombar && pescoco) { dirAlvo.copy(uC).addScaledVector(fC, 0.08 + respira).normalize(); apontar(lombar, pescoco, dirAlvo, wD); }
+        }
+        // os BRAÇOS: sem tablet, sentado = mãos nas coxas; deitado = mãos na barriga. Com o TABLET, seguram ele na frente
+        // do peito (em pé/sentado) ou acima do rosto (deitado)
+        const semTab = 1 - wTab;
+        for (const o of ossos) {
+          if (wS * semTab * (1 - wR) > 0.01) {   // sentado: mãos nas coxas
+            dirAlvo.copy(cima).multiplyScalar(-0.85).addScaledVector(frente, 0.32).addScaledVector(lateral, 0.2 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, wS * semTab * (1 - wR));
+            dirAlvo.copy(frente).multiplyScalar(0.82).addScaledVector(cima, -0.5).addScaledVector(lateral, 0.04 * o.lado).normalize(); apontar(o.ante, o.mao, dirAlvo, wS * semTab * (1 - wR));
+          }
+          if (wS * semTab * wR > 0.01) {   // relaxado: as MÃOS ATRÁS DA CABEÇA (cotovelos abertos pra fora)
+            dirAlvo.copy(cima).multiplyScalar(0.62).addScaledVector(lateral, 0.7 * o.lado).addScaledVector(frente, -0.36).normalize(); apontar(o.braco, o.ante, dirAlvo, wS * semTab * wR);
+            dirAlvo.copy(lateral).multiplyScalar(-0.82 * o.lado).addScaledVector(cima, 0.3).addScaledVector(frente, -0.5).normalize(); apontar(o.ante, o.mao, dirAlvo, wS * semTab * wR);
+          }
+          if (wD * semTab > 0.01) {
+            dirAlvo.copy(uC).multiplyScalar(-0.85).addScaledVector(fC, 0.3).addScaledVector(lC, 0.32 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, wD * semTab);
+            dirAlvo.copy(lC).multiplyScalar(-0.9 * o.lado).addScaledVector(fC, 0.3 + respira).addScaledVector(uC, 0.12).normalize(); apontar(o.ante, o.mao, dirAlvo, wD * semTab);
+          }
+          const wTabEmPe = wTab * (wEmPe + wS);
+          if (wTabEmPe > 0.01) {
+            dirAlvo.copy(cima).multiplyScalar(-0.9).addScaledVector(frente, 0.28).addScaledVector(lateral, 0.14 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, wTabEmPe);
+            dirAlvo.copy(frente).multiplyScalar(0.78).addScaledVector(cima, 0.42).addScaledVector(lateral, -0.36 * o.lado).normalize(); apontar(o.ante, o.mao, dirAlvo, wTabEmPe);
+          }
+          if (wTab * wD > 0.01) {
+            dirAlvo.copy(fC).multiplyScalar(0.78).addScaledVector(uC, -0.22).addScaledVector(lC, 0.32 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, wTab * wD);
+            dirAlvo.copy(fC).multiplyScalar(0.55).addScaledVector(uC, 0.6).addScaledVector(lC, -0.42 * o.lado).normalize(); apontar(o.ante, o.mao, dirAlvo, wTab * wD);
+          }
+        }
+        // a CABEÇA olha pra tela do tablet
+        if (pescoco && cabeca && wTab > 0.01) {
+          if (wD < 0.99) { dirAlvo.copy(cima).multiplyScalar(0.72).addScaledVector(frente, 0.6).normalize(); apontar(pescoco, cabeca, dirAlvo, wTab * (1 - wD)); }
+          if (wD > 0.01) { dirAlvo.copy(uC).multiplyScalar(0.8).addScaledVector(fC, 0.55).normalize(); apontar(pescoco, cabeca, dirAlvo, wTab * wD); }
         }
       }
       if (montado && montado.w > 0.02 && (ossos.length || pernas.length)) {
@@ -544,6 +643,25 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       matAura.opacity = (0.62 + Math.max(sentado, meditando, dj) * 0.25 * (0.5 + 0.5 * Math.sin(dj > Math.max(sentado, meditando) ? t * BPM_RAD : t * (meditando > sentado ? 0.9 : 2)))) * (anime ? AURA_NO_DESENHO : 1);
       (neu.material as THREE.PointsMaterial).size = 0.1 + 0.05 * Math.sin(t * 2 + grupo.position.x);
       neu.rotation.y += dt * 0.5;
+      // o TABLET: no meio das mãos, um pouco rumo ao rosto, com a tela virada pra cabeça; materializando: as partículas
+      // espiralam até ele, o halo acende e a tela liga
+      tablet.visible = wTab > 0.01; particulasTab.visible = wTab > 0.01 && wTab < 0.985;
+      if (tablet.visible) {
+        grupo.updateMatrixWorld(true);
+        if (ossos.length >= 2 && cabeca) {
+          ossos[0]!.mao.getWorldPosition(pMaoE); ossos[1]!.mao.getWorldPosition(pMaoD); cabeca.getWorldPosition(pCab);
+          pTab.copy(pMaoE).add(pMaoD).multiplyScalar(0.5); pTab.addScaledVector(vA.copy(pCab).sub(pTab), 0.14);
+          tablet.position.copy(grupo.worldToLocal(pTab.clone())); tablet.lookAt(pCab);
+        } else { tablet.position.set(0, 1.15, -0.38); tablet.rotation.set(-0.7, Math.PI, 0); }
+        const e = voltaPraFora(Math.min(1, wTab)); tablet.scale.setScalar(Math.max(0.001, e));
+        matTabTela.opacity = Math.max(0, Math.min(1, (wTab - 0.55) / 0.4)) * (wTab < 0.98 && !parado ? 0.75 + 0.25 * Math.sin(t * 40) : 1);
+        matTabHalo.opacity = 0.55 * Math.sin(Math.PI * Math.min(1, wTab)) + 0.12 * wTab;
+        if (particulasTab.visible) {
+          const pl = tablet.position, abre = 1 - wTab;
+          for (let i = 0; i < NPT; i++) { const a = i * 2.39996 + t * 5, r = 0.06 + abre * (0.45 + 0.25 * ((i * 7) % 5) / 5), y = (((i * 13) % 11) / 11 - 0.5) * abre * 0.9; ptPos[i * 3] = pl.x + Math.cos(a) * r; ptPos[i * 3 + 1] = pl.y + y; ptPos[i * 3 + 2] = pl.z + Math.sin(a) * r; }
+          ptGeo.attributes.position!.needsUpdate = true; matPtTab.opacity = 0.9 * Math.min(1, abre * 3);
+        }
+      }
       espelho?.atualizar(dt, t);   // corpo VRM: copia a pose final (depois de todas as poses acima)
     },
     passosNovos() { if (!pernas.length) return null; const n = pisadas; pisadas = 0; return n; },
@@ -554,7 +672,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     },
     usarAsas(op) {
       if (asas) return;
-      asas = criarAsas(); asas.group.scale.setScalar(op?.escala ?? 1); corpo.add(asas.group); mochila.visible = false;
+      asas = criarAsas(); asas.group.scale.setScalar(op?.escala ?? 1); asas.group.userData.escala = op?.escala ?? 1; corpo.add(asas.group); mochila.visible = false;
     },
     semMochila() { mochila.visible = false; },
     poseVrm(p) { poseVrm = p; espelho?.pose(p); },
@@ -586,6 +704,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       fone.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); }); matFone.dispose(); matLedFone.dispose();
       prancha.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); if (m.material && m.material !== matPrancha && m.material !== matLuzPrancha) (m.material as THREE.Material).dispose(); }); matPrancha.dispose(); matLuzPrancha.dispose();
       rGeo.dispose(); (faiscas.material as THREE.Material).dispose();
+      tablet.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); }); matTabCorpo.dispose(); matTabTela.dispose(); matTabHalo.dispose(); texTela.dispose(); ptGeo.dispose(); matPtTab.dispose();
       grupo.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry && !gltf) m.geometry.dispose(); });
       grupo.removeFromParent();
     },

@@ -9,6 +9,14 @@ export const LAB_ROTA = "/research-lab";
  * última aba salva) e JÁ em MODO FOCO (`?foco=1`: sem navbar, sidebar cheia). Pela aba "Laboratório" da navbar entra normal.
  */
 export const LAB_ENTRADA = "/research-lab?tab=pesquisa&foco=1";
+/** o laboratório DENTRO do TABLET (modo estudo por cima do cyberespaço — components/cyber/TabletLab): o mesmo da entrada,
+ *  com `?tablet=1` — o "Voltar" dele guarda o tablet (avisa a janela de cima) em vez de abrir outro cyberespaço */
+export const LAB_TABLET = `${LAB_ENTRADA}&tablet=1`;
+export const pedeTablet = (search: string | URLSearchParams | null | undefined): boolean => new URLSearchParams(search ?? "").get("tablet") === "1";
+/** o laboratório no tablet pede pra guardar o tablet (postMessage pra janela de cima, mesma origem) */
+export const MSG_FECHAR_TABLET = "zaeon:close-tablet";
+export const ehMsgFecharTablet = (data: unknown, origin: string, esperada: string): boolean =>
+  origin === esperada && !!data && typeof data === "object" && (data as { type?: unknown }).type === MSG_FECHAR_TABLET;
 /** o laboratório deve abrir em modo foco? (`?foco=1` na URL) */
 export const pedeFoco = (search: string | URLSearchParams | null | undefined): boolean => new URLSearchParams(search ?? "").get("foco") === "1";
 /** Contrato de navegação cyberespaço → laboratório (botão Estudar / clique no monitor). */

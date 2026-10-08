@@ -17,7 +17,7 @@
  * `prefers-reduced-motion` deixa fogo/vórtices quase parados. dispose() completo.
  */
 import * as THREE from "three";
-import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADA_LOUNGE, ILHOTAS, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
@@ -46,6 +46,8 @@ export type CidadeHandle = {
   tvLounge: THREE.Mesh | null;
   /** o som do lounge: as caixas (de onde a música sai), o toca-discos (onde se abre o player) e o "está tocando" */
   caixasLounge: THREE.Object3D[]; tocaDiscos: THREE.Object3D | null; somTocando(on: boolean, nivel?: number): void;
+  /** as caixas de som discretas dos espaços de convivência (a música ambiente de cada sala sai delas) */
+  caixasAmbiente: { sala: NomeSala; obj: THREE.Object3D }[];
   /** mostra na TV o último recado enviado (null = some) */
   mostrarRecadoNaTV(texto: string | null): void;
   /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
@@ -204,12 +206,16 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // ── a ESCADA DE ENERGIA do lounge: uma faixa de luz FLUINDO (setas correndo pra cima) da borda oeste até a porta da
   //    plataforma do lounge, partículas subindo pelo corredor, corrimão de vidro com friso aceso. Ela LEVA quem pisa na
   //    boca (lib/cyber/ceu `bocaDaEscada`) — o avatar vai surfando numa prancha de luz ──
-  let fluxoMat: THREE.ShaderMaterial | null = null, fluxoPts: { geo: THREE.BufferGeometry; d: { u: number; lat: number; y: number; v: number }[] } | null = null;
-  { const E2 = ESCADA_LOUNGE, H2 = ALTURA_LOUNGE, larg = E2.meia * 2;
+  //    (uma por SALA: cada escada é montada no referencial do lounge — correndo pro −x — e girada pro rumo da sala)
+  const COR_SALA: Record<NomeSala, number> = { lounge: 0xb98cff, convivencia: 0xffb46b, biblioteca: 0x7fb8ff, jardim: 0x7dffb0 };
+  let fluxoMat: THREE.ShaderMaterial | null = null;
+  const fluxoPts: { geo: THREE.BufferGeometry; d: { u: number; lat: number; y: number; v: number }[]; len: number; ini: number }[] = [];
+  for (const nomeEsc of Object.keys(ESCADAS) as NomeSala[]) { const EE = ESCADAS[nomeEsc], E2 = { ...EE, dir: { x: -1, z: 0 } }, H2 = ALTURA_LOUNGE, larg = E2.meia * 2;
+    const gEsc = add(new THREE.Group()); gEsc.rotation.y = Math.PI - CIDADE.salas[nomeEsc].ang;   // −x local → o rumo da sala
     const x0 = E2.dir.x * E2.ini, x1 = E2.dir.x * E2.fim, g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([x0, 0.05, -E2.meia, x1, H2 + 0.05, -E2.meia, x1, H2 + 0.05, E2.meia, x0, 0.05, E2.meia]), 3));
     g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]), 2)); g.setIndex([0, 1, 2, 0, 2, 3]); g.computeVertexNormals();
-    fluxoMat = new THREE.ShaderMaterial({
+    fluxoMat ??= new THREE.ShaderMaterial({
       uniforms: { uT: { value: 0 }, uLen: { value: E2.len / larg } },
       vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
       fragmentShader: `uniform float uT; uniform float uLen; varying vec2 vUv;
@@ -225,36 +231,36 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     });
-    const fluxo = add(new THREE.Mesh(g, fluxoMat)); fluxo.renderOrder = 2;
+    const fluxo = add(new THREE.Mesh(g, fluxoMat), gEsc); fluxo.renderOrder = 2;
     // a "pele" de baixo (sólida, pra faixa ter corpo visto de lado/de baixo) e o chão escuro do corredor
     const pele = new THREE.BufferGeometry(); pele.setAttribute("position", new THREE.BufferAttribute(new Float32Array([x0, -0.25, -E2.meia, x1, H2 - 0.25, -E2.meia, x1, H2 - 0.25, E2.meia, x0, -0.25, E2.meia]), 3)); pele.setIndex([0, 2, 1, 0, 3, 2]); pele.computeVertexNormals();
-    add(new THREE.Mesh(pele, new THREE.MeshBasicMaterial({ color: 0x10306a, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })));
+    add(new THREE.Mesh(pele, new THREE.MeshBasicMaterial({ color: 0x10306a, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })), gEsc);
     // partículas subindo pelo corredor
     const NFP = low ? 70 : 160, d = Array.from({ length: NFP }, () => ({ u: Math.random() * E2.len, lat: (Math.random() - 0.5) * larg * 0.9, y: Math.random() * 1.6, v: 6 + Math.random() * 8 }));
     const pg = new THREE.BufferGeometry(); pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NFP * 3), 3));
-    const pts = add(new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.5, map: starTex, color: 0x9fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); pts.frustumCulled = false;
-    fluxoPts = { geo: pg, d };
+    const pts = add(new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.5, map: starTex, color: 0x9fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc); pts.frustumCulled = false;
+    fluxoPts.push({ geo: pg, d, len: E2.len, ini: E2.ini });
     // corrimão de vidro (um paralelogramo de cada lado, acompanhando a inclinação) + friso aceso no alto + viga embaixo
     const vidroCorr = vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.3, side: THREE.DoubleSide }, 0.3);
     const friso: number[] = [];
     for (const sl of [-1, 1]) {
       const z = sl * (E2.meia + 0.25), x0 = E2.dir.x * E2.ini, x1 = E2.dir.x * E2.fim, g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([x0, 0, z, x1, H2, z, x1, H2 + 1.3, z, x0, 0, z, x1, H2 + 1.3, z, x0, 1.3, z]), 3)); g.computeVertexNormals();
-      add(new THREE.Mesh(g, vidroCorr));
+      add(new THREE.Mesh(g, vidroCorr), gEsc);
       friso.push(x0, 1.3, z, x1, H2 + 1.3, z);
     }
     const gf = new THREE.BufferGeometry(); gf.setAttribute("position", new THREE.BufferAttribute(new Float32Array(friso), 3));
-    add(new THREE.LineSegments(gf, new THREE.LineBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending })));
-    const incl = Math.atan2(H2, E2.len), viga = add(new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(E2.len, H2), 0.6, 1.4), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })));
+    add(new THREE.LineSegments(gf, new THREE.LineBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending })), gEsc);
+    const incl = Math.atan2(H2, E2.len), viga = add(new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(E2.len, H2), 0.6, 1.4), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc);
     viga.position.set(E2.dir.x * (E2.ini + E2.len / 2), H2 / 2 - 0.9, 0); viga.rotation.z = E2.dir.x * incl;   // sobe pro lado do lounge (−x)
   }
   // ── a PLATAFORMA DO LOUNGE (só a base; o clube em cima é o Salas): disco de gelo com aro de luz + montanha invertida
   //    de cristal por baixo (como as ilhotas) e o brilho antigravidade ──
-  { const L = CIDADE.salas.lounge, base = new THREE.Group(); base.position.set(L.x, ALTURA_LOUNGE, L.z); add(base);
+  for (const nomeSala of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nomeSala], base = new THREE.Group(); base.position.set(L.x, ALTURA_LOUNGE, L.z); add(base);
     add(new THREE.Mesh(new THREE.CylinderGeometry(L.r + 1, L.r - 1, 1.8, low ? 48 : 96), new THREE.MeshStandardMaterial({ color: 0x0a2440, emissive: COLD, emissiveIntensity: 0.3, roughness: 0.5, metalness: 0.25 })), base, true).position.y = -0.95;
     const cone = add(new THREE.Mesh(new THREE.ConeGeometry(L.r - 2, 56, low ? 9 : 14, 1, false), rocha), base, true); cone.rotation.x = Math.PI; cone.position.y = -1.8 - 28;
     for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2 + 0.3, c = add(new THREE.Mesh(new THREE.ConeGeometry(8 + (k % 2) * 4, 26 + (k % 3) * 8, 7, 1, false), rocha), base); c.rotation.x = Math.PI; c.position.set(Math.cos(a) * L.r * 0.55, -1.8 - (13 + (k % 3) * 4), Math.sin(a) * L.r * 0.55); }
-    const aroL = add(new THREE.Mesh(new THREE.TorusGeometry(L.r + 1, 0.3, 6, low ? 64 : 128), new THREE.MeshBasicMaterial({ color: 0xb98cff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending })), base); aroL.rotation.x = Math.PI / 2; aroL.position.y = -0.1;
+    const aroL = add(new THREE.Mesh(new THREE.TorusGeometry(L.r + 1, 0.3, 6, low ? 64 : 128), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeSala], transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending })), base); aroL.rotation.x = Math.PI / 2; aroL.position.y = -0.1;
     const anti = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glow("rgba(185,140,255,.9)", "rgba(102,230,255,.2)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), base); anti.position.y = -40; anti.scale.setScalar(46);
   }
 
@@ -309,7 +315,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {
-    group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, caixasLounge: salas.caixas, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     atualizar(dt, t) {
       ilha.position.y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel;
       for (const f of fogos) { const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp; f.s.scale.set(3.4 * (0.9 + p * 0.25), 5 * (0.8 + p * 0.4), 1); (f.s.material as THREE.SpriteMaterial).opacity = 0.5 + 0.3 * p; }
@@ -329,9 +335,9 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         if (ev.tum && opts.aoBater) opts.aoBater(globoMundo.set(0, GLOBO_CAPELA.y, 0).applyMatrix4(ilha.matrixWorld)); }
       // a escada de energia: as setas correm, as partículas sobem pelo corredor
       if (fluxoMat) fluxoMat.uniforms.uT!.value = t * vel;
-      if (fluxoPts) { const E2 = ESCADA_LOUNGE, H2 = ALTURA_LOUNGE, a = fluxoPts.geo.attributes.position!.array as Float32Array;
-        fluxoPts.d.forEach((p, i) => { p.u = (p.u + p.v * dt * vel) % E2.len; a[i * 3] = E2.dir.x * (E2.ini + p.u); a[i * 3 + 1] = H2 * (p.u / E2.len) + 0.2 + p.y; a[i * 3 + 2] = p.lat; });
-        fluxoPts.geo.attributes.position!.needsUpdate = true; }
+      for (const fp of fluxoPts) { const H2 = ALTURA_LOUNGE, a = fp.geo.attributes.position!.array as Float32Array;   // (no referencial da escada: corre pro −x)
+        fp.d.forEach((p, i) => { p.u = (p.u + p.v * dt * vel) % fp.len; a[i * 3] = -(fp.ini + p.u); a[i * 3 + 1] = H2 * (p.u / fp.len) + 0.2 + p.y; a[i * 3 + 2] = p.lat; });
+        fp.geo.attributes.position!.needsUpdate = true; }
       bnc.atualizar(dt * vel, t);
       // quedas de luz
       { const a = qGeo.attributes.position!.array as Float32Array;

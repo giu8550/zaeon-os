@@ -13,7 +13,7 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
-import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDaEscada, bocaDoElevador, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PALCO as PALCO_LOUNGE, naSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
+import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, salaEm, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PALCO as PALCO_LOUNGE, naSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
@@ -67,6 +67,7 @@ import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montad
 import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
 import { carregando, type Carregando, type IdEtapa } from "@/lib/cyber/carregamento";
 import { gerarVeias, ouveOCoracao } from "@/lib/cyber/coracao";
+import { SENTAR, TABLET, codificarDescanso, lugarEm, decodificarDescanso, lugarPerto, poseNoLugar, proximoModo, type Lugar, type ModoDescanso } from "@/lib/cyber/descanso";
 import { URL_TERRA } from "./DistritoTerra";
 import { carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
 import { criarPersonagemVivo, type PersonagemVivoHandle } from "./PersonagemVivo";
@@ -100,7 +101,7 @@ export type CyberOpts = {
   /** teclado sempre ouvido (tela cheia). Na janela da landing só com o mouse em cima (não rouba ESPAÇO/rolagem da página). */
   teclasSempre: boolean;
   remotos?: { current: Map<string, Presenca> };
-  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada }) => void;
+  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; desc?: number; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada }) => void;
   /** pontos de interesse (marcos megalíticos) — flag NEXT_PUBLIC_CYBER_LANDMARKS */
   landmarks?: boolean;
   /** clicou num marco estando perto → painel (nome, org, link) */
@@ -157,6 +158,11 @@ export type CyberOpts = {
   onPerto?: (perto: boolean) => void;
   onFalarCom?: (nome: string | null) => void;
   onEntrarEstudo?: () => void;
+  /** o MODO ESTUDO no TABLET (lib/cyber/descanso): o tablet terminou de materializar (abre o laboratório por cima) ou
+   *  sumiu — o React abre/fecha a janela; `engine.fecharTablet()` guarda o tablet */
+  onTablet?: (aberto: boolean) => void;
+  /** perto de um sofá/puff do lounge (mostra a dica "J sentar") / dentro do lounge (o botão do tablet) */
+  onDescanso?: (d: { pertoDeLugar: boolean; noLounge: boolean; modo: ModoDescanso | null }) => void;
   onSessao?: (go: string) => void;
   onPronto?: () => void;
   /** o carregamento: em que etapa está e quanto da barra já foi (lib/cyber/carregamento) */
@@ -170,6 +176,10 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** 
   danca?: number;
   /** sendo levado pela ESCADA DE ENERGIA (0..1, suavizado): surfando na prancha de luz */
   surf?: number;
+  /** DESCANSO no lounge (0..1, suavizados): sentado no sofá/puff, deitado no sofá, o tablet na mão; a altura do assento */
+  sofa?: number; deita?: number; tab?: number; assentoY?: number; relaxa?: number;
+  /** remotos: a pose de descanso que chegou pela rede (lib/cyber/descanso `codificarDescanso`) */
+  desc?: number;
   /** remotos: tempo acumulado desde a última animação (de longe/fora da tela anima menos vezes por segundo) */
   acum?: number;
   /** remotos: no topo da Zaeon / pilotando (só valem pra quem o servidor marcou fundador) / na cidade (qualquer um) */
@@ -276,7 +286,7 @@ export class CyberEngine {
   /** REGIÕES por distância (components/cyber/regioesCena): de longe some o detalhe e a animação para */
   private regioes = new Map<THREE.Object3D, RegiaoCena>();
   /** a viagem na ESCADA DE ENERGIA do lounge (lib/cyber/ceu `bocaDaEscada`): sobe ou desce sozinha, surfando */
-  private viagem: { tipo: "escada" | "elevador"; sentido: "sobe" | "desce"; t: number } | null = null;
+  private viagem: { tipo: "escada" | "elevador"; sentido: "sobe" | "desce"; t: number; sala?: NomeSala } | null = null;
   /** QUALIDADE ADAPTATIVA (lib/cyber/qualidadeAdaptativa): o pixel ratio do perfil é o teto; a escada multiplica */
   private qa!: QualidadeAdaptativa; private prBase = 1; private ultimoDesenho = 0;
   private frustum = new THREE.Frustum(); private mProj = new THREE.Matrix4(); private esfAtor = new THREE.Sphere();
@@ -457,7 +467,7 @@ export class CyberEngine {
         aoBater: (em) => { if (this.noCentroDaCapela()) this.som?.tocar("coracao", em, { dist: DISTANCIA.coracao }); } });
       camuflarGrupo(this.cidade.group);
       { const c = this.cidade;   // lotes: simula com e sem música (o palco, as caixas e a pista pulsam com o grave)
-        fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalTunel, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
+        fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalTunel, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge, ...c.caixasAmbiente.map((x) => x.obj)].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
         c.somTocando(false); for (let i = 0; i < 6; i++) c.atualizar(1, 0); }
       this.cena.scene.add(this.cidade.group);
       this.bercario = criarBercario(this.cidade.ilha, { low });   // os tubos de ensaio, ao lado da Recepção (flutuam com a ilha)
@@ -530,6 +540,55 @@ export class CyberEngine {
     if (process.env.NODE_ENV !== "production") (window as unknown as { __cyber?: CyberEngine }).__cyber = this;   // depuração em dev
   }
   private aoPrimeiroQuadro: (() => void) | null = null;
+  // ───────────── DESCANSO no lounge (J) + MODO ESTUDO no TABLET (T) — lib/cyber/descanso ─────────────
+  /** sentado/deitado: o lugar, o assento e o modo; a FASE — indo (andando até a frente do assento), sentando (vira e
+   *  abaixa), parado (sentado/deitado), levantando (sobe e dá o passo pra frente) — e há quanto tempo está nela */
+  private descanso: { lugar: Lugar; assento: number; modo: ModoDescanso; fase: "indo" | "sentando" | "parado" | "levantando"; t: number } | null = null;
+  /** o tablet: quer ele na mão? quanto já materializou (0..1); o laboratório já está aberto por cima? */
+  private tabletQuer = false; private tabletW = 0; private labAberto = false;
+  private ultDescanso = "";
+  /** onde estão as OUTRAS pessoas na Zaeon (pra não sentar no colo de ninguém) */
+  private outrosNaZaeon(): { x: number; z: number }[] { return [...this.remotos.values()].filter((a) => a.ceu).map((a) => ({ x: a.pos.x, z: a.pos.z })); }
+  /** dá pra sentar/usar o tablet agora? (a pé, parado no piso da Zaeon, fora de veículo/viagem/tutorial) */
+  private aPeLivre(): boolean { return !this.menu && this.noCeu && !this.jet.noAr && this.moto === null && !this.pilotando && !this.bordo && !this.viagem && !this.nascendo && !this.tunel && !this.sobreNave; }
+  /** a tecla J: em pé → sentado → deitado (sofá) → em pé */
+  alternarDescanso() {
+    if (!this.aPeLivre()) return;
+    const outros = this.outrosNaZaeon();
+    const d = this.descanso;
+    if (d) {
+      if (d.fase === "indo") { this.descanso = null; this.alvo = null; return; }   // desistiu no caminho
+      if (d.fase !== "parado") return;   // sentando/levantando: deixa terminar
+      const prox = proximoModo(d.modo, d.lugar, outros);
+      if (prox) { d.modo = prox; this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.perto }); } else this.levantar();
+      return;
+    }
+    const lp = lugarPerto(this.eu.pos, outros);
+    if (!lp) { this.o.onAviso?.("Chegue perto de um sofá ou pufe e aperte J pra sentar."); return; }
+    // ANDA até a frente do assento (o caminho respeita as colisões), depois vira e senta
+    const fr = lp.lugar.frentes[lp.assento]!;
+    this.descanso = { ...lp, modo: "sentado", fase: "indo", t: 0 }; this.alvo = new THREE.Vector2(fr.x, fr.z); this.alvoDepois = null; this.falandoCom = null;
+  }
+  /** levanta: sobe do assento e dá o passo pra frente (fase "levantando"); termina de pé na frente dele */
+  private levantar() {
+    const d = this.descanso; if (!d) return;
+    if (d.fase === "indo") { this.descanso = null; return; }
+    if (d.fase !== "levantando") { d.fase = "levantando"; d.t = 0; }
+  }
+  /** a tecla T / o botão: o TABLET se materializa nas mãos e o laboratório abre por cima; de novo, guarda */
+  alternarTablet() { if (this.tabletQuer || this.labAberto) this.fecharTablet(); else this.abrirTablet(); }
+  abrirTablet() {
+    if (!this.aPeLivre()) { this.o.onAviso?.("Pare em algum lugar (a pé) pra abrir o tablet."); return; }
+    if (this.tabletQuer) return;
+    this.tabletQuer = true; this.alvo = null; this.alvoDepois = null; for (const k of Object.keys(this.keys)) this.keys[k] = false;
+    this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.eu });
+  }
+  /** guarda o tablet (o laboratório já fechou ou vai fechar): ele se desfaz em partículas */
+  fecharTablet() {
+    this.tabletQuer = false;
+    if (this.labAberto) { this.labAberto = false; this.o.onTablet?.(false); }
+  }
+  get tabletAberto() { return this.labAberto; }
   /** no CENTRO da capela (no piso, em volta do globo)? — só ali se ouve o coração e o raio (lib/cyber/coracao) */
   private noCentroDaCapela(): boolean {
     if (!this.noCeu || !this.cidade || this.pilotando || this.bordo) return false;
@@ -1361,6 +1420,8 @@ export class CyberEngine {
     const bn = new THREE.Object3D(); bn.position.set(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); this.cena.scene.add(bn);
     s.volumeLoop(s.loop("blackhole-hum", bn, { dist: DISTANCIA.grande }), 1);
     this.somLoops.jet = this.loopsDoJato(this.eu.av.group, DISTANCIA.eu);   // contínuo enquanto se segura o ESPAÇO
+    // a MÚSICA AMBIENTE dos espaços de convivência: sai das caixas de som discretas de cada sala (lib/cyber/ambiente)
+    for (const c of this.cidade?.caixasAmbiente ?? []) if (c.sala !== "lounge") s.volumeLoop(s.loop(`ambiente-${c.sala}`, c.obj, { dist: DISTANCIA.ambiente, volume: 0.5 }), 1);
     if (this.nave) { this.somLoops.naveIdle = s.loop("ship-idle", this.nave.group, { dist: DISTANCIA.grande }); this.somLoops.naveVoo = s.loop("ship-flight", this.nave.group, { dist: DISTANCIA.naveLocal }); }
     const destravar = () => { musica().destravar(); if (!this.menu) s.ativar(); };
     if (musica().destravado && !this.menu) s.ativar();
@@ -1717,6 +1778,8 @@ export class CyberEngine {
       if (k === "shift") { this.keys.shift = true; return; }
       if (k === " " || k === "spacebar") { if (this.pilotando || this.moto !== null) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.comandoJet(true); e.preventDefault(); } return; }
       if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }
+      if (k === "j" && !this.menu) { if (!e.repeat) this.alternarDescanso(); e.preventDefault(); return; }   // J = sentar / deitar / levantar (lounge)
+      if (k === "t" && !this.menu) { if (!e.repeat) this.alternarTablet(); e.preventDefault(); return; }     // T = o tablet (estudar por cima do cyberespaço)
       // HABILIDADES (lib/cyber/habilidades): G = o Droid companheiro (founder)
       const hab = this.menu ? null : habilidadeDaTecla(k, { fundador: this.ehFundador(this.o.eu.id), digitando: false, repetida: e.repeat, modificador: e.ctrlKey || e.metaKey || e.altKey });
       if (hab) { this.usarHabilidade(hab.id); e.preventDefault(); return; }   // F = a ação de contexto (estudar, montar, embarcar, descer…)
@@ -2090,6 +2153,14 @@ export class CyberEngine {
       const correndo = this.keys.shift || this.correr, spd = correndo ? 7.5 : 4;
       let andando = false;
       if (this.bordo) { const pn = this.poseNave(); if (pn) { const w = paraMundo(pn, this.bordo); eu.pos.x = w.x; eu.pos.z = w.z; } }   // a nave pode ter andado (o dono pilotando)
+      if (this.tabletQuer || this.labAberto) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // estudando no tablet: o avatar fica onde está
+      { const d = this.descanso;   // DESCANSO: andou/pulou/subiu na moto → levanta; sentando/levantando, o corpo é da animação
+        if (d) {
+          const fr = d.lugar.frentes[d.assento]!;
+          if (!this.aPeLivre()) { this.descanso = null; }
+          else if (d.fase === "indo") { if (ix || iz || (this.alvo && Math.hypot(this.alvo.x - fr.x, this.alvo.y - fr.z) > 0.05)) this.descanso = null; else if (!this.alvo) { if (Math.hypot(eu.pos.x - fr.x, eu.pos.z - fr.z) < 0.5) { d.fase = "sentando"; d.t = 0; } else this.descanso = null; } }
+          else { if ((ix || iz || this.alvo) && d.fase === "parado") this.levantar(); ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }
+        } }
       const prev = { x: eu.pos.x, z: eu.pos.z };
       const dir = moverRelativoCamera(ix, iz, this.camAz);
       const vel = this.noTopo ? 2 : spd;   // no topo: passos curtos na plataforma
@@ -2137,11 +2208,22 @@ export class CyberEngine {
           }
         }
       }
+      else if (this.descanso && this.descanso.fase !== "indo") {   // SENTANDO/SENTADO/DEITADO/LEVANTANDO: o corpo está NO móvel (sem colisão)
+        const d = this.descanso, fr = d.lugar.frentes[d.assento]!, ps = poseNoLugar(d.lugar, d.modo, d.assento), ease = (u: number) => u * u * (3 - 2 * u);
+        d.t += dt; andando = false; this.yNav = CIDADE.pisoY; eu.facing = d.modo === "deitado" ? ps.rumo : d.lugar.rumo;
+        if (d.fase === "sentando") {   // de costas pro móvel, abaixa recuando até o assento
+          const u = ease(Math.min(1, d.t / SENTAR.desce)); eu.pos.x = fr.x + (ps.x - fr.x) * u; eu.pos.z = fr.z + (ps.z - fr.z) * u;
+          if (d.t >= SENTAR.desce) { d.fase = "parado"; d.t = 0; }
+        } else if (d.fase === "levantando") {   // sobe e dá o passo pra frente
+          const u = ease(Math.min(1, d.t / SENTAR.sobe)); eu.pos.x = ps.x + (fr.x - ps.x) * u; eu.pos.z = ps.z + (fr.z - ps.z) * u;
+          if (d.t >= SENTAR.sobe) { eu.pos.x = fr.x; eu.pos.z = fr.z; this.descanso = null; }
+        } else { const k = Math.min(1, dt * 5); eu.pos.x += (ps.x - eu.pos.x) * k; eu.pos.z += (ps.z - eu.pos.z) * k; }   // sentado ↔ deitado
+      }
       else if (this.sitT > 0.05) { const s = this.assento(); eu.pos.x += (s.x - eu.pos.x) * Math.min(1, dt * 3); eu.pos.z += (s.z - eu.pos.z) * Math.min(1, dt * 3); eu.facing = this.rotAssento(); }
       else if (this.noTopo) { const e = this.eixoTopo()!, lim = 2.0 * this.escalaZaeon(); const dx = eu.pos.x - e.x, dz = eu.pos.z - e.z, d = Math.hypot(dx, dz); if (d > lim) { eu.pos.x = e.x + (dx / d) * lim; eu.pos.z = e.z + (dz / d) * lim; } }   // não cai da plataforma
       else if (this.noCeu && this.viagem) {
         // a ESCADA DE ENERGIA leva: a posição segue o fluxo (as teclas não mexem), sem passo nem pulo
-        const v = this.viagem; v.t += dt; const k = Math.min(1, v.t / (v.tipo === "escada" ? VIAGEM_ESCADA.dur : TORRE_DJ.elevador.dur)), q = posDaViagem(v.tipo, v.sentido, k);
+        const v = this.viagem; v.t += dt; const k = Math.min(1, v.t / (v.tipo === "escada" ? VIAGEM_ESCADA.dur : TORRE_DJ.elevador.dur)), q = posDaViagem(v.tipo, v.sentido, k, v.sala);
         eu.pos.x = q.p.x; eu.pos.z = q.p.z; eu.facing = q.rumo; andando = false; this.alvo = null; this.alvoDepois = null;
         if (k >= 1) { this.viagem = null; this.som.tocar("near-ping", eu.av.group.position, { dist: DISTANCIA.perto }); }
       }
@@ -2155,8 +2237,8 @@ export class CyberEngine {
         // pisou na boca da escada de energia: ela te leva (pra cima, da central; pra baixo, do lounge)
         // (ou no anel do ELEVADOR DE LUZ da torre do DJ: só desce, da cabine até o palco)
         else {
-          const be = bocaDoElevador(q), boca = be ?? bocaDaEscada(q);
-          if (boca && !this.jet.noAr) { this.viagem = { tipo: be ? "elevador" : "escada", sentido: boca, t: 0 }; this.alvo = null; this.alvoDepois = null; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); }
+          const be = bocaDoElevador(q), bs = be ? null : bocaDeEscada(q), boca = be ?? bs?.sentido ?? null;
+          if (boca && !this.jet.noAr) { this.viagem = { tipo: be ? "elevador" : "escada", sentido: boca, t: 0, sala: bs?.sala }; this.alvo = null; this.alvoDepois = null; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); }
         }
       }
       else if (this.plat) {   // num LUGAR FLUTUANTE: anda com as colisões do andar; passou da borda do disco → cai
@@ -2178,6 +2260,22 @@ export class CyberEngine {
       if (this.motoAlvo !== null && !this.alvo) { const k = this.motoAlvo; this.motoAlvo = null; this.montar(k); }   // chegou na moto clicada
     }
     eu.sit = this.sitT;
+    // DESCANSO + TABLET: os pesos da animação (suaves) e o laboratório abrindo quando o tablet termina de materializar
+    { const kd = Math.min(1, dt * 4), d = this.descanso, m = d && d.fase !== "indo" ? d.modo : null, ease = (u: number) => u * u * (3 - 2 * u);
+      // sentando/levantando: o peso SEGUE a fase (abaixa junto com o recuo); parado: suave
+      const alvoSofa = !d || d.fase === "indo" ? 0 : d.fase === "sentando" ? ease(Math.min(1, d.t / SENTAR.desce)) : d.fase === "levantando" ? 1 - ease(Math.min(1, d.t / SENTAR.sobe)) : m === "sentado" ? 1 : 0;
+      eu.sofa = d && (d.fase === "sentando" || d.fase === "levantando") ? alvoSofa : (eu.sofa ?? 0) + (alvoSofa - (eu.sofa ?? 0)) * kd;
+      eu.deita = (eu.deita ?? 0) + ((m === "deitado" && d?.fase === "parado" ? 1 : 0) - (eu.deita ?? 0)) * kd;
+      if (d) { eu.assentoY = d.lugar.alturaAssento; eu.relaxa = d.lugar.relaxa ? 1 : 0; }
+      if (this.tabletQuer && !this.aPeLivre()) this.fecharTablet();
+      this.tabletW = this.tabletQuer ? Math.min(1, this.tabletW + dt / TABLET.materializa) : Math.max(0, this.tabletW - dt / TABLET.some);
+      eu.tab = this.tabletW;
+      if (this.tabletQuer && !this.labAberto && this.tabletW >= 1) { this.labAberto = true; this.o.onTablet?.(true); }
+      // a dica da J / o botão do tablet: só avisa o React quando muda
+      const noLounge = this.noCeu && salaEm({ x: eu.pos.x - CIDADE.centro.x, z: eu.pos.z - CIDADE.centro.z }) !== null && eu.alt > (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE - 1;   // em qualquer uma das salas
+      const pertoDeLugar = noLounge && (!!this.descanso || lugarPerto(eu.pos, this.outrosNaZaeon()) !== null);
+      const chave = `${noLounge}|${pertoDeLugar}|${m}`;
+      if (chave !== this.ultDescanso) { this.ultDescanso = chave; this.o.onDescanso?.({ pertoDeLugar, noLounge, modo: m }); } }
     // DJ: parado na cabine do lounge (a pé) → é puxado pro lugar atrás da mesa e olha pra pista; o avatar põe o fone
     const souDJ = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !this.sobreNave && !this.bordo && naCabineDJ(eu.pos);
     eu.dj = (eu.dj ?? 0) + ((souDJ ? 1 : 0) - (eu.dj ?? 0)) * Math.min(1, dt * 4);
@@ -2196,7 +2294,7 @@ export class CyberEngine {
       : this.sobreNave ? this.topoNave()
       : this.plat ? PLATAFORMAS[this.plat.id].y + alturaDoAndar(this.plat.id, this.plat.andar)
       : this.ilhota !== null && this.cidade ? this.cidade.alturaIlhota(this.ilhota)
-      : this.noCeu && this.viagem ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + posDaViagem(this.viagem.tipo, this.viagem.sentido, Math.min(1, this.viagem.t / (this.viagem.tipo === "escada" ? VIAGEM_ESCADA.dur : TORRE_DJ.elevador.dur))).y   // sendo levado: a altura do caminho
+      : this.noCeu && this.viagem ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + posDaViagem(this.viagem.tipo, this.viagem.sentido, Math.min(1, this.viagem.t / (this.viagem.tipo === "escada" ? VIAGEM_ESCADA.dur : TORRE_DJ.elevador.dur)), this.viagem.sala).y   // sendo levado: a altura do caminho
       : this.noCeu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + alturaNaCidade(eu.pos)   // + o PALCO do lounge (escada = rampa)
       : this.noTopo ? this.alturaTopo() : (lmAlto?.poi.base ?? 0) + this.yNav + (lmAlto && marcoNav(lmAlto.poi) && this.yNav >= marcoNav(lmAlto.poi)!.nav.pisoY - 1e-6 ? this.boia(lmAlto) : 0);
     if (this.nascendo) eu.alt += 0.35;   // em pé no pedestal do tubo
@@ -2222,7 +2320,8 @@ export class CyberEngine {
     if (perto !== this.perto) { this.perto = perto; this.o.onPerto?.(perto); if (perto) this.som.tocar("near-ping", eu.av.group.position, { dist: DISTANCIA.perto }); }
 
     // rede: eu → difusão; remotos → atores
-    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
+    const desc = codificarDescanso(this.descanso && this.descanso.fase !== "indo" && this.descanso.fase !== "levantando" ? this.descanso.modo : null, this.tabletW > 0.5);
+    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
     this.atualizarNascimentoEGuia(dt);
     this.atualizarConversa(dt);
@@ -2235,13 +2334,17 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: !!(this.keys.shift || this.correr) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, dt, t });
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: !!(this.keys.shift || this.correr) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0 }, tablet: eu.tab ?? 0, dt, t });
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
       a.dj = (a.dj ?? 0) + ((ehDJ ? 1 : 0) - (a.dj ?? 0)) * Math.min(1, dt * 4);
       const dancando = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && !ehDJ && naPistaDeDanca(a.pos);
       a.danca = (a.danca ?? 0) + ((dancando ? 1 : 0) - (a.danca ?? 0)) * Math.min(1, dt * 3);
+      { const dd = decodificarDescanso(a.desc), ok = !!a.ceu && a.jet === undefined && !pilota && monta === null, kd = Math.min(1, dt * 4);   // SENTADO/DEITADO/TABLET dele (a posição já vem no lugar)
+        a.sofa = (a.sofa ?? 0) + ((ok && dd.modo === "sentado" ? 1 : 0) - (a.sofa ?? 0)) * kd; a.deita = (a.deita ?? 0) + ((ok && dd.modo === "deitado" ? 1 : 0) - (a.deita ?? 0)) * kd;
+        a.tab = Math.max(0, Math.min(1, (a.tab ?? 0) + (ok && dd.tablet ? dt / TABLET.materializa : -dt / TABLET.some)));
+        if (dd.modo) { const lg = lugarEm(a.pos); a.assentoY = lg?.alturaAssento ?? 0.7; a.relaxa = lg?.relaxa ? 1 : 0; } }
       // na escada só se está sendo levado; no elevador da torre, quem está no ar dentro da coluna de luz
       const qs = naSala(CIDADE.salas.lounge, a.pos.x - CIDADE.centro.x, a.pos.z - CIDADE.centro.z), naColuna = Math.hypot(qs.x, qs.z - TORRE_DJ.elevador.sobe) < 1.6 && a.alt > CIDADE.pisoY + ALTURA_LOUNGE + PALCO_LOUNGE.h + 0.6;
       const surfando = !!a.ceu && a.jet === undefined && (naEscadaDoLounge(a.pos) || naColuna);
@@ -2254,7 +2357,7 @@ export class CyberEngine {
       a.av.group.visible = naTela;
       const cada = dCam < 25 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 0;
       a.acum = (a.acum ?? 0) + dt;
-      if (a.acum >= cada) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
+      if (a.acum >= cada) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
       else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = (a.naveYaw ?? 0) + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0, fechada: true }); this.noAssento(a.av, a.nave); }
     }
@@ -2361,6 +2464,7 @@ export class CyberEngine {
         a.falando = p.falando === true;   // voz (push-to-talk): 🎙 no rótulo
         const pendente = this.vozPendente.get(id); if (pendente) { this.vozPendente.delete(id); this.vozDe(id, pendente); }
         a.sit += ((p.sit ? 1 : 0) - a.sit) * Math.min(1, dt * 3);
+        a.desc = p.desc ?? 0;
         // "no topo" só vale pra quem o SERVIDOR marcou como fundador (client event forjado não sobe ninguém)
         // regalias (topo/nave) só pra quem o SERVIDOR marcou como fundador — a Zaeon (céu) é aberta
         const fund = !!this.pessoas.get(id)?.fundador;
