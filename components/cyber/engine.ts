@@ -53,7 +53,7 @@ import { criarMoto, type MotoHandle } from "./Moto";
 import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
-import { PILOTAGEM, motoParada, passoMotoSub, sensacaoDeVelocidade, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
+import { PILOTAGEM, motoParada, passoMotoSub, rompeuBarreira, sensacaoDeVelocidade, supersonico, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
 import { LOOPS_MOTO, cambioNeutro, eventosDaMoto, mixDaMoto, passoCambio, setaAcesa, somMotoParada, type Cambio, type EstadoSomMoto } from "@/lib/cyber/somMoto";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
@@ -375,7 +375,7 @@ export class CyberEngine {
   /** botão ⚡ da moto apertado; a câmera volta pra trás da moto a partir de `camSegueEm` (mexeu o mouse = espera) */
   private boostBotao = false; private camSegueEm = 0; private acelMoto = 0;
   /** a sensação de velocidade na tela (suavizada): FOV, blur radial, linhas de velocidade, tremida do boost */
-  private velTela = 0; private fovBase = 0; private fxVel: VelocidadeTela | null = null;
+  private velTela = 0; private fovBase = 0; private fxVel: VelocidadeTela | null = null; /** a onda de choque da barreira do som na MINHA moto: s desde que rompeu (< 0 = nenhuma) */ private ondaT = -1;
   /** a capela, a laje do lounge e a torre do DJ: sólidos pra quem VOA (moto/nave) — fixos, calculados uma vez (a torre
    *  é um campo de força pra quem não é o dono: só ele pousa na cabine) */
   private readonly solidosCidade: Pilar[];
@@ -2136,7 +2136,13 @@ export class CyberEngine {
     if (!this.fovBase) this.fovBase = this.cam.fov;
     const fov = this.fovBase + 12 * Math.min(1.15, this.velTela);
     if (Math.abs(fov - this.cam.fov) > 0.02) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
-    if (this.moto !== null && this.motoEst.boost) { const a = 0.045 * this.velTela, t = performance.now() * 0.001; this.cam.position.x += Math.sin(t * 47) * a; this.cam.position.y += Math.sin(t * 61 + 1) * a; }
+    // tremor: no boost, mais acima da barreira do som e um SOCO na hora em que ela quebra
+    if (this.ondaT >= 0) { this.ondaT += dt; if (this.ondaT > 1.2 || this.moto === null) this.ondaT = -1; }
+    if (this.moto !== null && this.motoEst.boost) {
+      const sup = supersonico(Math.hypot(this.motoEst.vx, this.motoEst.vz)), soco = this.ondaT >= 0 ? 0.35 * Math.exp(-this.ondaT * 5) : 0;
+      const a = 0.045 * this.velTela * (1 + sup) + soco, t = performance.now() * 0.001;
+      this.cam.position.x += Math.sin(t * 47) * a; this.cam.position.y += Math.sin(t * 61 + 1) * a;
+    }
   }
 
   /** as entradas da MOTO: W/S (ou joystick pra frente/trás, ▲▼) = acelerador/freio; A/D (joystick de lado, ◀▶) = guidão;
@@ -2178,7 +2184,9 @@ export class CyberEngine {
     } else if (this.moto !== null) {
       // MOTO: pilotagem de moto (lib/cyber/motoFisica) — W/S acelera/freia, A/D esterça, Shift/⚡ boost
       const c = this.comandoDeMoto(); this.acelMoto = c.acel;
+      const vAntes = Math.hypot(this.motoEst.vx, this.motoEst.vz);
       const r = passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
+      if (!r.pousado && rompeuBarreira(vAntes, Math.hypot(r.s.vx, r.s.vz))) this.ondaT = 0;   // quebrou a barreira do som
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
       eu.pos.set(r.s.x, 0, r.s.z); eu.facing = r.s.yaw; eu.moving = Math.hypot(r.s.vx, r.s.vz) > 1; this.sitT = 0;   // "andando" = a moto em movimento (o netcode extrapola)
     } else if (this.pilotando) {
@@ -2498,9 +2506,10 @@ export class CyberEngine {
     const desenhar = () => { this.R.clear(); this.cena.desenharFundo(this.R, this.qa.atual.nebulosa); this.R.clearDepth(); this.R.render(this.cena.scene, this.cam); };
     // moto rápida (components/cyber/VelocidadeTela): as LINHAS de velocidade estilo anime + vinheta ligam SEMPRE (são
     // baratas); o BLUR radial só quando a qualidade deixa (fora do modo low e dos degraus baixos — é uma tela inteira a mais)
-    if (this.velTela > 0.03) {
+    const onda = this.ondaT >= 0 && this.ondaT < 1 ? this.ondaT : -1;
+    if (this.velTela > 0.03 || onda >= 0) {
       this.fxVel ??= criarVelocidadeTela({ amostrasMsaa: this.R.getContext().getContextAttributes()?.antialias ? 4 : 0 });
-      this.fxVel.render(this.R, this.velTela, t, desenhar, this.qa.atual.aura && !this.o.low);
+      this.fxVel.render(this.R, this.velTela, t, desenhar, this.qa.atual.aura && !this.o.low, onda);
     } else desenhar();
     // o frustum deste quadro (os avatares remotos do próximo quadro usam pra saber se estão na tela)
     this.mProj.multiplyMatrices(this.cam.projectionMatrix, this.cam.matrixWorldInverse); this.frustum.setFromProjectionMatrix(this.mProj);

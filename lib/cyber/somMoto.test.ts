@@ -33,7 +33,7 @@ describe("sons da moto (sintetizados)", () => {
     }
   });
   it("one-shots terminam em silêncio (sem estalo no fim)", () => {
-    for (const n of ["moto-partida", "moto-desliga", "moto-boost", "moto-freio", "moto-decola", "moto-pouso", "moto-troca", "moto-estalo"] as const) {
+    for (const n of ["moto-partida", "moto-desliga", "moto-boost", "moto-freio", "moto-decola", "moto-pouso", "moto-troca", "moto-estalo", "moto-estrondo"] as const) {
       const x = SINTESE_MOTO[n](sr); expect(Math.abs(x[x.length - 1]!), n).toBeLessThan(0.01);
     }
   });
@@ -44,11 +44,11 @@ describe("estágios da moto (mix e eventos)", () => {
   it("parada no chão = o motor em LENTA; no ar o MOTOR sobe de tom com a velocidade; vento só rápido; turbina só no boost", () => {
     const chao = mixDaMoto(no({})), devagar = mixDaMoto(no({ voando: true, vel: 0.1 })), rapido = mixDaMoto(no({ voando: true, vel: 1 })), boost = mixDaMoto(no({ voando: true, vel: 1.6, boost: true }));
     expect(chao["moto-motor"].vol).toBeGreaterThan(0.3); expect(chao["moto-motor"].taxa).toBeLessThan(devagar["moto-motor"].taxa);   // a lenta é o motor em rotação baixa
-    expect(Object.keys(chao)).toEqual(["moto-motor", "moto-motor-alto", "moto-vento", "moto-turbina"]);   // o motor = grave + agudo (mesma afinação)
+    expect(Object.keys(chao)).toEqual(["moto-motor", "moto-motor-alto", "moto-vento", "moto-turbina", "moto-supersonico"]);   // o motor = grave + agudo (mesma afinação)
     expect(rapido["moto-motor"].taxa).toBeGreaterThan(devagar["moto-motor"].taxa + 0.5);
     expect(boost["moto-motor"].taxa).toBeGreaterThan(rapido["moto-motor"].taxa);
     expect(devagar["moto-vento"].vol).toBeLessThan(0.05); expect(rapido["moto-vento"].vol).toBeGreaterThan(0.6);
-    expect(rapido["moto-turbina"].vol).toBe(0); expect(boost["moto-turbina"].vol).toBe(1);
+    expect(rapido["moto-turbina"].vol).toBe(0); expect(boost["moto-turbina"].vol).toBeGreaterThan(0.9);   // (acima da barreira o supersônico divide o espaço com ela)
     // o acelerador puxa a rotação antes da velocidade chegar
     expect(mixDaMoto(no({ voando: true, vel: 0.2, acel: 1 }))["moto-motor"].taxa).toBeGreaterThan(devagar["moto-motor"].taxa + 0.15);
     for (const l of LOOPS_MOTO) expect(mixDaMoto(somMotoParada)[l].vol).toBe(0);   // ninguém montado: silêncio
@@ -104,6 +104,15 @@ describe("câmbio (o tom do motor NÃO vai direto pro teto)", () => {
     expect(eventosDaMoto(no({ marcha: 1, acel: 1 }), no({ marcha: 2, acel: 1 }))).toEqual(["moto-troca"]);
     expect(eventosDaMoto(no({ acel: 1, rpm: 0.9 }), no({ acel: 0, rpm: 0.9 }))).toEqual(["moto-estalo"]);
     expect(eventosDaMoto(no({ acel: 1, rpm: 0.3 }), no({ acel: 0, rpm: 0.3 }))).toEqual([]);
+  });
+  it("BARREIRA DO SOM: o estrondo toca UMA vez ao romper (450 km/h); acima dela o supersônico cresce até os 600", () => {
+    const no = (kmh: number, boost = true): EstadoSomMoto => ({ ...somMotoParada, montada: true, voando: true, acel: 1, boost, vel: kmh / 3.6 / PILOTAGEM.vel });
+    expect(eventosDaMoto(no(440), no(455))).toContain("moto-estrondo");
+    expect(eventosDaMoto(no(455), no(470))).not.toContain("moto-estrondo");
+    expect(eventosDaMoto(no(470), no(440))).not.toContain("moto-estrondo");   // voltando abaixo: nada
+    expect(mixDaMoto(no(400))["moto-supersonico"].vol).toBe(0);
+    expect(mixDaMoto(no(600))["moto-supersonico"].vol).toBeGreaterThan(mixDaMoto(no(480))["moto-supersonico"].vol);
+    expect(mixDaMoto(no(600))["moto-supersonico"].taxa).toBeGreaterThan(mixDaMoto(no(480))["moto-supersonico"].taxa);
   });
   it("a afinação segue a ROTAÇÃO (o grave domina embaixo, o agudo em cima e com o acelerador)", () => {
     const m = (rpm: number, acel = 1) => mixDaMoto({ ...somMotoParada, montada: true, voando: true, vel: 0.5, acel, rpm });

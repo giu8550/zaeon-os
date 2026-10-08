@@ -42,6 +42,8 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "moto-motor-alto": { modo: "pos", loop: true, volume: 0.42, sintetico: true },
   "moto-troca": { modo: "pos", loop: false, volume: 0.5, sintetico: true },
   "moto-estalo": { modo: "pos", loop: false, volume: 0.55, sintetico: true },
+  "moto-estrondo": { modo: "pos", loop: false, volume: 1, sintetico: true },
+  "moto-supersonico": { modo: "pos", loop: true, volume: 0.5, sintetico: true },
   "moto-vento": { modo: "pos", loop: true, volume: 0.35, sintetico: true },
   "moto-turbina": { modo: "pos", loop: true, volume: 0.6, sintetico: true },
   "moto-partida": { modo: "pos", loop: false, volume: 0.75, sintetico: true },

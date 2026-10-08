@@ -12,12 +12,40 @@
  * esquentar e mais pra esfriar): fria, curta e na cor da moto; esquentando, cresce e passa pelo laranja, pelo branco e
  * chega no PLASMA azulado (com os "diamantes de choque" correndo). Junto: os BOCAIS ficam incandescentes, um HALO acende
  * na saída, o miolo do motor clareia, e atrás sai um RASTRO de energia (fita no mundo) e FAÍSCAS.
+ * BARREIRA DO SOM (lib/cyber/motoFisica `BARREIRA_SOM`, 450 km/h, só no boost): acima dela um CONE DE VAPOR envolve a
+ * moto (a nuvem de Prandtl-Glauert: borda branca, anéis correndo pra trás); no instante em que rompe, o cone dá um
+ * clarão e uma ONDA DE CHOQUE (anel + casca) se abre no mundo, onde a moto estava, e fica pra trás.
  * SETAS âmbar nos 4 cantos: piscam do lado da curva (o engine manda qual lado está aceso).
  * Frente = +z local (o mesmo rumo do voo). Voando: INCLINA nas curvas e aponta o nariz com a subida/descida; parada,
  * flutua de leve. `assento` = onde o avatar senta (montado).
  */
 import * as THREE from "three";
 import { ESCALA_MOTO, MOTO } from "@/lib/cyber/motos";
+import { rompeuBarreira, supersonico } from "@/lib/cyber/motoFisica";
+
+/** a BORDA brilhante (fresnel) do cone de vapor e da casca da onda de choque: `uA` = intensidade, `uAneis` = anéis
+ *  correndo (o cone) */
+function materialVapor(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { uA: { value: 0 }, uT: { value: 0 }, uAneis: { value: 1 } },
+    vertexShader: `
+      varying float vBorda; varying vec2 vUv;
+      void main() {
+        vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vBorda = 1.0 - abs(dot(normalize(normalMatrix * normal), normalize(-mv.xyz)));
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform float uA, uT, uAneis; varying float vBorda; varying vec2 vUv;
+      void main() {
+        float aneis = mix(1.0, 0.55 + 0.45 * smoothstep(0.3, 1.0, sin(vUv.y * 38.0 + uT * 46.0)), uAneis);
+        float pontas = uAneis > 0.5 ? smoothstep(0.0, 0.35, vUv.y) * smoothstep(1.0, 0.8, vUv.y) : 1.0;   // o cone some nas pontas
+        float a = pow(vBorda, 2.2) * aneis * pontas * uA;
+        gl_FragColor = vec4(vec3(0.82, 0.92, 1.0) * a, a);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  });
+}
 
 export type MotoHandle = {
   group: THREE.Group;
@@ -328,6 +356,11 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
     peca(new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 6), haloSeta), x + s * 0.02, y, z, gS);
   }
 
+  // ───────────── BARREIRA DO SOM: o cone de vapor (envolve moto e piloto, ponta no bico) ─────────────
+  const vaporMat = materialVapor();
+  const vapor = new THREE.Mesh(new THREE.ConeGeometry(1.35, 3.6, o.low ? 16 : 32, 1, true), vaporMat);
+  vapor.rotation.x = Math.PI / 2; vapor.position.set(0, 1.05, 0.15); vapor.visible = false; vapor.userData.semLote = true; corpo.add(vapor);
+
   // ancoragem do PILOTO (frente da moto = +z; a esquerda de quem pilota = +x): quadril no banco, mãos nos punhos,
   // pés nas pedaleiras — o avatar encaixa nesses pontos por IK (AvatarLuz `montado`)
   const ancora = (x: number, y: number, z: number) => { const a = new THREE.Object3D(); a.position.set(x, y, z); corpo.add(a); return a; };
@@ -337,7 +370,8 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
 
   // ───────────── RASTRO de energia + FAÍSCAS (no MUNDO: ficam pra trás enquanto a moto anda) ─────────────
   const N = o.low ? 16 : 36, NF = o.low ? 12 : 28, RASTRO_SEG = 0.3, RASTRO_M = 8;   // o rastro dura ~0,3 s (por TEMPO, não por quadro) e no máximo 8 m
-  let mundo: { grupo: THREE.Group; fita: THREE.Mesh; pf: THREE.Points; pontos: { p: THREE.Vector3; t: number }[]; faiscas: { p: THREE.Vector3; v: THREE.Vector3; vida: number; max: number }[] } | null = null;
+  type Onda = { g: THREE.Group; anel: THREE.Mesh; casca: THREE.Mesh; t: number };
+  let mundo: { grupo: THREE.Group; fita: THREE.Mesh; pf: THREE.Points; pontos: { p: THREE.Vector3; t: number }[]; faiscas: { p: THREE.Vector3; v: THREE.Vector3; vida: number; max: number }[]; onda: Onda } | null = null;
   const criarMundo = (raiz: THREE.Object3D) => {
     const grupo = new THREE.Group(); grupo.userData.semLote = true; raiz.add(grupo);
     // a fita: duas tiras cruzadas (em pé e deitada) — 4 vértices por ponto, cor (já com o "alfa") por vértice
@@ -351,10 +385,16 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
     gP.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NF * 3), 3)); gP.setAttribute("color", new THREE.BufferAttribute(new Float32Array(NF * 3), 3));
     const pf = new THREE.Points(gP, new THREE.PointsMaterial({ size: 0.22, map: tH, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true }));
     pf.frustumCulled = false; grupo.add(pf);
-    return { grupo, fita, pf, pontos: [] as { p: THREE.Vector3; t: number }[], faiscas: Array.from({ length: NF }, () => ({ p: new THREE.Vector3(), v: new THREE.Vector3(), vida: 0, max: 1 })) };
+    // a ONDA DE CHOQUE: um anel fino de frente pro rumo + uma casca (fresnel) que se abrem onde a moto rompeu a barreira
+    const og = new THREE.Group(); og.visible = false; grupo.add(og);
+    const anel = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, o.low ? 48 : 96), new THREE.MeshBasicMaterial({ color: 0xdff0ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const cascaMat = materialVapor(); cascaMat.uniforms.uAneis!.value = 0;
+    const casca = new THREE.Mesh(new THREE.SphereGeometry(1, o.low ? 16 : 32, o.low ? 12 : 20), cascaMat);
+    og.add(anel, casca); anel.frustumCulled = casca.frustumCulled = false;
+    return { grupo, fita, pf, onda: { g: og, anel, casca, t: -1 }, pontos: [] as { p: THREE.Vector3; t: number }[], faiscas: Array.from({ length: NF }, () => ({ p: new THREE.Vector3(), v: new THREE.Vector3(), vida: 0, max: 1 })) };
   };
   const vS = new THREE.Vector3(), vUp = new THREE.Vector3(), vLado = new THREE.Vector3(), vFr = new THREE.Vector3(), corT = new THREE.Color(), q4 = new THREE.Quaternion();
-  let calor = 0, faiscaAcum = 0, faiscaProx = 0;
+  let calor = 0, faiscaAcum = 0, faiscaProx = 0, velAnt = 0, flash = 0, supSuave = 0;
 
   let rola = 0, nariz2 = 0, boostSuave = 0;
   return {
@@ -385,6 +425,14 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
       temperatura(q, acento, corT); bocalQuente.emissive.copy(corT).multiplyScalar(q * q * 1.4);
       halo.material.color.copy(corT); halo.material.opacity = voando ? 0.05 + 0.7 * q * q : 0; halo.scale.setScalar(0.2 + 1.6 * q + 0.5 * boostSuave);
       nucleoMotor.color.copy(acento).lerp(corT.set(1, 1, 1), q * 0.7);
+
+      // BARREIRA DO SOM: o cone de vapor acima dela; ao romper, clarão no cone + a onda de choque no mundo
+      const rompeu = voando && rompeuBarreira(velAnt, vel); velAnt = voando ? vel : 0;
+      supSuave += ((voando ? supersonico(vel) : 0) - supSuave) * Math.min(1, dt * 5);
+      if (rompeu) flash = 1; else flash = Math.max(0, flash - dt * 2.2);
+      const aVapor = supSuave > 0.001 ? 0.25 + 0.45 * supSuave : 0;
+      vapor.visible = aVapor + flash > 0.01;
+      if (vapor.visible) { vaporMat.uniforms.uA!.value = aVapor + flash * 1.6; vaporMat.uniforms.uT!.value = t; vapor.scale.set(1 + 0.25 * flash, 1 + 0.1 * supSuave, 1 + 0.25 * flash); }
 
       // RASTRO + FAÍSCAS: só com calor (parada, nem cria)
       if (!mundo && q < 0.12) return;
@@ -426,11 +474,20 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
         pp.setXYZ(i, fz.p.x, fz.p.y, fz.p.z); pc.setXYZ(i, corT.r, corT.g, corT.b);
       }
       pp.needsUpdate = true; pc.needsUpdate = true;
+      // a ONDA DE CHOQUE: nasce onde a moto rompeu, de frente pro rumo; abre ~45 m em 1 s e apaga — e fica pra trás
+      const on = mundo.onda;
+      if (rompeu) { on.t = 0; on.g.position.copy(vS); on.g.quaternion.copy(q4); on.g.visible = true; }
+      if (on.t >= 0) {
+        on.t += dt; const u = on.t / 1.0, e = 1 - (1 - Math.min(1, u)) ** 3;
+        on.anel.scale.setScalar(2 + 45 * e); (on.anel.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - u) ** 1.5;
+        on.casca.scale.setScalar(1.5 + 30 * e); (on.casca.material as THREE.ShaderMaterial).uniforms.uA!.value = 1.4 * (1 - u) ** 2;
+        if (u >= 1) { on.t = -1; on.g.visible = false; }
+      }
     },
     dispose() {
       g.traverse((x) => { if ((x as THREE.Sprite).isSprite) { (x as THREE.Sprite).material.dispose(); return; }   // (a geometria do sprite é a compartilhada do three)
         const m = x as THREE.Mesh; m.geometry?.dispose(); const mt = m.material as THREE.Material | undefined; mt?.dispose?.(); });   // (a textura do halo é compartilhada: fica)
-      if (mundo) { mundo.fita.geometry.dispose(); (mundo.fita.material as THREE.Material).dispose(); mundo.pf.geometry.dispose(); (mundo.pf.material as THREE.Material).dispose(); mundo.grupo.removeFromParent(); mundo = null; }
+      if (mundo) { mundo.grupo.traverse((x) => { const m = x as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); mundo.grupo.removeFromParent(); mundo = null; }
       g.removeFromParent();
     },
   };

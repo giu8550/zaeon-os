@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PILOTAGEM, ZONA_MOTO_ZAEON, motoParada, passoMoto, passoMotoSub, sensacaoDeVelocidade, tetoDaMoto, type ComandoMoto, type EstadoMoto } from "./motoFisica";
+import { BARREIRA_SOM, PILOTAGEM, ZONA_MOTO_ZAEON, motoParada, rompeuBarreira, supersonico, passoMoto, passoMotoSub, sensacaoDeVelocidade, tetoDaMoto, type ComandoMoto, type EstadoMoto } from "./motoFisica";
 import * as ceuMod from "./ceu";
 
 const NADA: ComandoMoto = { acel: 0, giro: 0, subir: false, descer: false, boost: false };
@@ -58,14 +58,29 @@ describe("pilotagem da moto (dirigibilidade)", () => {
   });
   it("BOOST passa do cruzeiro, esvazia o tanque, apaga sozinho e recarrega", () => {
     let s = pilotar(noAr(), { acel: 1 }, 9);
-    s = pilotar(s, { acel: 1, boost: true }, 2);
+    s = pilotar(s, { acel: 1, boost: true }, 3);
     expect(s.boost).toBe(true); expect(vel(s)).toBeGreaterThan(PILOTAGEM.vel + 10); expect(s.tanque).toBeLessThan(0.5);
-    s = pilotar(s, { acel: 1, boost: true }, 2);
+    s = pilotar(s, { acel: 1, boost: true }, 2.5);
     expect(s.boost).toBe(false); expect(s.tanque).toBeLessThan(PILOTAGEM.boost.minimo);   // acabou: apaga
-    s = pilotar(s, { acel: 1 }, 4);
+    s = pilotar(s, { acel: 1 }, 6);
     expect(vel(s)).toBeLessThan(PILOTAGEM.vel + 2);   // volta pro cruzeiro
     expect(s.tanque).toBeGreaterThan(0.7);
     expect(sensacaoDeVelocidade(s)).toBeGreaterThan(0.5);
+  });
+  it("o boost é SUPERSÔNICO: rompe a barreira do som (450 km/h) em ~1 s e chega nos 600 km/h — sem boost, nunca", () => {
+    let s = pilotar(noAr(), { acel: 1 }, 9), rompeu = -1, max = 0;
+    expect(supersonico(vel(s))).toBe(0);
+    for (let i = 1; i <= 5 * 60; i++) { const v0 = vel(s); s = passoMotoSub(s, { ...NADA, acel: 1, boost: true }, 1 / 60).s; if (rompeuBarreira(v0, vel(s))) rompeu = i / 60; max = Math.max(max, vel(s)); }
+    expect(rompeu).toBeGreaterThan(0.5); expect(rompeu).toBeLessThan(1.6);
+    expect(max * 3.6).toBeGreaterThan(595); expect(max * 3.6).toBeLessThan(601);
+    expect(BARREIRA_SOM * 3.6).toBeCloseTo(450, 5); expect(supersonico(PILOTAGEM.velBoost)).toBe(1);
+    expect(vel(pilotar(noAr(), { acel: 1 }, 20)) * 3.6).toBeLessThan(BARREIRA_SOM * 3.6);   // só o acelerador fica nos 300
+  });
+  it("a 600 km/h não atravessa um pilar (subpassos de no máximo 1,2 m)", () => {
+    const pilar = { x: 300, z: 340, r: 2, topo: 100, base: 0 };
+    let s = { ...noAr(), vz: PILOTAGEM.velBoost };
+    for (let i = 0; i < 30; i++) s = passoMotoSub(s, { ...NADA, acel: 1, boost: true }, 1 / 30, [pilar]).s;
+    expect(s.z).toBeLessThan(340);
   });
   it("parada não dá boost; no chão não anda (decola primeiro) mas o guidão gira ela no lugar", () => {
     expect(pilotar(noAr(), { boost: true }, 1).boost).toBe(false);

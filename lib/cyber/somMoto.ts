@@ -12,12 +12,16 @@
  *    camadas cruzadas pela rotação: o GRAVE (corpo) e o AGUDO (rasgado, com a carga do acelerador); + o VENTO;
  *  - ALIVIOU (soltou o acelerador em rotação alta): estalos do escape (pipoco);
  *  - BOOST: estouro de ignição + a TURBINA (ronco + assobio agudo) enquanto dura;
+ *  - BARREIRA DO SOM (450 km/h, só no boost): o ESTRONDO sônico (o "crack-crack" duplo da onda N + o trovão rolando) e,
+ *    acima dela, o SUPERSÔNICO (o ar rasgando: ronco grave + chiado agudo tremulando) crescendo até os 600 km/h;
  *  - FREIO (freada forte): chiado de ar;
  *  - SETA (curva): só a luz pisca — SEM som (o clique a cada piscada virava um "tik tik tik" na curva);
  *  - POUSO (encostou no chão): baque + assentamento;
  *  - DESLIGA (desceu da moto): o motor cai de tom e apaga com um sopro.
  * `mixDaMoto` diz o volume/afinação de cada loop; `eventosDaMoto` diz quais one-shots disparar (comparando estados).
  */
+
+import { PILOTAGEM, rompeuBarreira, supersonico } from "./motoFisica";
 
 /** PRNG determinístico (mulberry32): a síntese sai igual sempre (e dá pra testar) */
 function prng(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -87,6 +91,39 @@ export function sintetizarEstaloMoto(sr: number): Float32Array {
     out[i] = v;
   }
   return normalizar(fimSemClique(out, 256), 0.85);
+}
+
+/** ESTRONDO SÔNICO (~2,6 s): a onda N chega como DOIS estalos secos (proa e popa, 0,11 s de distância), um soco grave
+ *  de 38 Hz e o TROVÃO rolando (ruído marrom, passa-baixa fechando, com ondulações) */
+export function sintetizarEstrondoMoto(sr: number): Float32Array {
+  const n = Math.round(sr * 2.6), out = new Float32Array(n), r = prng(107), a = passaBaixa(5000, sr);
+  let lp = 0, marrom = 0, lp2 = 0, fase = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, w = r() * 2 - 1; lp += (w - lp) * a; marrom = 0.996 * marrom + 0.06 * w;
+    let v = 0;
+    for (const t0 of [0.01, 0.12]) { const u = t - t0; if (u >= 0 && u < 0.06) v += (u < 0.002 ? u / 0.002 : 1) * Math.exp(-u * 90) * (lp * 1.6 + (u < 0.004 ? 1.4 : -0.7)); }   // os estalos
+    fase += (2 * Math.PI * (38 + 30 * Math.exp(-t * 6))) / sr;
+    v += Math.sin(fase) * Math.exp(-t * 3.2) * Math.min(1, t * 80) * 0.9;   // o soco grave
+    const fc = 160 + 900 * Math.exp(-t * 2.5); lp2 += (marrom - lp2) * passaBaixa(fc, sr);
+    v += lp2 * 5 * Math.min(1, t * 6) * Math.exp(-t * 1.25) * (0.75 + 0.25 * Math.sin(2 * Math.PI * 3.1 * t + Math.sin(t * 7)));   // o trovão rolando
+    out[i] = v;
+  }
+  return normalizar(fimSemClique(out, 1024), 0.95);
+}
+
+/** SUPERSÔNICO (loop de 2 s): o ar RASGANDO — ronco grave (marrom), um chiado agudo (banda ~2,5 kHz) tremulando a 9 Hz e
+ *  um assobio de choque descendo/subindo devagar */
+export function sintetizarSupersonicoMoto(sr: number): Float32Array {
+  const n = sr * 2, x = Math.round(sr * 0.35), raw = new Float32Array(n + x), r = prng(113);
+  let marrom = 0, lo = 0, band = 0, fase = 0;
+  const f = 2 * Math.sin((Math.PI * 2500) / sr), q = 0.35;
+  for (let i = 0; i < raw.length; i++) {
+    const t = i / sr, w = r() * 2 - 1; marrom = 0.995 * marrom + 0.07 * w;
+    lo += f * band; const hi = w - lo - q * band; band += f * hi;
+    fase += (2 * Math.PI * (900 + 120 * Math.sin(2 * Math.PI * 0.5 * t))) / sr;
+    raw[i] = marrom * 1.8 + band * 0.55 * (0.6 + 0.4 * Math.sin(2 * Math.PI * 9 * t)) + Math.sin(fase) * 0.06;
+  }
+  return normalizar(fecharLoop(raw, n), 0.85);
 }
 
 /** VENTO (loop de 3 s): ruído passa-baixa ondulando (rajadas) */
@@ -196,13 +233,13 @@ export function sintetizarPousoMoto(sr: number): Float32Array {
 }
 
 export const SINTESE_MOTO = {
-  "moto-motor": sintetizarMotorMoto, "moto-motor-alto": sintetizarMotorAltoMoto, "moto-troca": sintetizarTrocaMoto, "moto-estalo": sintetizarEstaloMoto, "moto-vento": sintetizarVentoMoto, "moto-turbina": sintetizarTurbinaMoto,
+  "moto-motor": sintetizarMotorMoto, "moto-motor-alto": sintetizarMotorAltoMoto, "moto-troca": sintetizarTrocaMoto, "moto-estalo": sintetizarEstaloMoto, "moto-estrondo": sintetizarEstrondoMoto, "moto-supersonico": sintetizarSupersonicoMoto, "moto-vento": sintetizarVentoMoto, "moto-turbina": sintetizarTurbinaMoto,
   "moto-partida": sintetizarPartidaMoto, "moto-desliga": sintetizarDesligaMoto, "moto-boost": sintetizarBoostMoto, "moto-freio": sintetizarFreioMoto,
   "moto-decola": sintetizarDecolaMoto, "moto-pouso": sintetizarPousoMoto,
 } as const;
 export type NomeSomMoto = keyof typeof SINTESE_MOTO;
 /** os LOOPS da moto (o resto é one-shot) */
-export const LOOPS_MOTO = ["moto-motor", "moto-motor-alto", "moto-vento", "moto-turbina"] as const satisfies readonly NomeSomMoto[];
+export const LOOPS_MOTO = ["moto-motor", "moto-motor-alto", "moto-vento", "moto-turbina", "moto-supersonico"] as const satisfies readonly NomeSomMoto[];
 
 /** o que a moto está fazendo agora, do ponto de vista do som */
 export type EstadoSomMoto = {
@@ -221,7 +258,7 @@ export const somMotoParada: EstadoSomMoto = { montada: false, voando: false, vel
  *  A rotação na marcha é vel / topo — na troca ela cai pra topo(n)/topo(n+1): queda grande nas primeiras, pequena nas
  *  últimas, como numa moto de verdade */
 export const CAMBIO = {
-  topo: [0.18, 0.36, 0.56, 0.8, 1.16, 1.4],
+  topo: [0.18, 0.36, 0.56, 0.8, 1.16, 2.1],   // a 6ª (só no boost) vai até os 600 km/h
   /** marcha lenta (parada / no chão), a rotação onde sobe a marcha e a fração do topo da anterior onde reduz */
   lenta: 0.14, troca: 0.96, reduz: 0.7,
   /** quanto o acelerador puxa a rotação (carga) e quão rápido ela segue o alvo (1/s); `corte` = duração da troca (s) */
@@ -248,8 +285,9 @@ export function passoCambio(c: Cambio, e: { voando: boolean; vel: number; acel: 
 
 /** volume (0..1) e afinação de cada loop no estado `e` */
 export function mixDaMoto(e: EstadoSomMoto): Record<(typeof LOOPS_MOTO)[number], { vol: number; taxa: number }> {
-  if (!e.montada) return { "moto-motor": { vol: 0, taxa: 0.6 }, "moto-motor-alto": { vol: 0, taxa: 0.6 }, "moto-vento": { vol: 0, taxa: 1 }, "moto-turbina": { vol: 0, taxa: 1 } };
-  const v = Math.max(0, Math.min(1.8, e.vel)), v1 = Math.min(1, v), acel = Math.max(0, e.acel);
+  if (!e.montada) return { "moto-motor": { vol: 0, taxa: 0.6 }, "moto-motor-alto": { vol: 0, taxa: 0.6 }, "moto-vento": { vol: 0, taxa: 1 }, "moto-turbina": { vol: 0, taxa: 1 }, "moto-supersonico": { vol: 0, taxa: 1 } };
+  const sup = e.voando ? supersonico(e.vel * PILOTAGEM.vel) : 0;
+  const v = Math.max(0, Math.min(2.1, e.vel)), v1 = Math.min(1, v), acel = Math.max(0, e.acel);
   // sem câmbio (quem chama não passou rpm): a rotação sai da velocidade, como antes
   const rpm = e.rpm ?? (e.voando ? Math.min(1, 0.2 + 0.6 * v1 + 0.15 * acel) : CAMBIO.lenta + 0.2 * acel);
   const taxa = 0.52 + 1.1 * rpm + (e.boost ? 0.08 : 0), corte = 1 - 0.45 * (e.corte ?? 0), carga = 0.55 + 0.45 * acel;
@@ -259,7 +297,9 @@ export function mixDaMoto(e: EstadoSomMoto): Record<(typeof LOOPS_MOTO)[number],
     "moto-motor": { vol: (e.voando ? 0.5 + 0.25 * v1 : 0.45) * (1 - 0.45 * rpm) * corte, taxa },
     "moto-motor-alto": { vol: Math.pow(Math.max(0, rpm - 0.15) / 0.85, 1.3) * 0.75 * carga * corte, taxa },
     "moto-vento": { vol: e.voando ? Math.pow(v1, 1.6) * 0.8 + (e.boost ? 0.25 : 0) : 0, taxa: 0.8 + 0.45 * Math.min(1.5, v) },
-    "moto-turbina": { vol: e.boost ? 1 : 0, taxa: 1 + 0.15 * Math.min(1.5, v) },
+    "moto-turbina": { vol: e.boost ? 1 - 0.35 * sup : 0, taxa: 1 + 0.15 * Math.min(2, v) },
+    // acima da barreira: o ar rasgando, crescendo e subindo de tom até os 600 km/h
+    "moto-supersonico": { vol: sup > 0 ? 0.45 + 0.55 * sup : 0, taxa: 0.85 + 0.35 * sup },
   };
 }
 
@@ -274,6 +314,7 @@ export function eventosDaMoto(a: EstadoSomMoto, b: EstadoSomMoto): NomeSomMoto[]
   if (!a.boost && b.boost) ev.push("moto-boost");
   if (b.voando && a.acel >= 0 && b.acel < 0 && b.vel > 0.35) ev.push("moto-freio");
   if (b.voando && (b.marcha ?? 0) > (a.marcha ?? 0)) ev.push("moto-troca");
+  if (b.voando && rompeuBarreira(a.vel * PILOTAGEM.vel, b.vel * PILOTAGEM.vel)) ev.push("moto-estrondo");   // quebrou a barreira do som
   if (b.voando && a.acel > 0.5 && b.acel === 0 && (a.rpm ?? 0) > 0.6) ev.push("moto-estalo");   // aliviou em rotação alta: pipoco
   return ev;
 }

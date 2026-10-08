@@ -10,7 +10,7 @@
 export const ATRASO_MS = 100;
 export const MAX_EXTRAP_MS = 250;
 export const VOLTA_MS = 200;
-const SALTO_M = 40;   // acima disso entre duas amostras = teleporte (não interpola) — a moto a 360 km/h anda 25 m entre amostras a 4 Hz
+const SALTO_M = 60;   // acima disso entre duas amostras = teleporte (não interpola) — a moto a 600 km/h anda 42 m entre amostras a 4 Hz
 
 export type Amostra = { t: number; x: number; z: number; facing: number; moving?: boolean };
 
