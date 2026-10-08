@@ -41,14 +41,14 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "moto-motor": { modo: "pos", loop: true, volume: 0.6, ext: "wav" },   // gravação real (CREDITS.md)
   "moto-motor-alto": { modo: "pos", loop: true, volume: 0.6, ext: "wav" },   // gravação real (CREDITS.md)
   "moto-troca": { modo: "pos", loop: false, volume: 0.5, sintetico: true },
-  "moto-estalo": { modo: "pos", loop: false, volume: 0.55, sintetico: true },
+  "moto-pipoco": { modo: "pos", loop: true, volume: 0.85, ext: "wav" },   // o carburador estalando (estouros reais — CREDITS.md)
   "moto-estrondo": { modo: "pos", loop: false, volume: 1, sintetico: true },
   "moto-supersonico": { modo: "pos", loop: true, volume: 0.5, sintetico: true },
   "moto-vento": { modo: "pos", loop: true, volume: 0.35, sintetico: true },
   "moto-turbina": { modo: "pos", loop: true, volume: 0.6, sintetico: true },
   "moto-partida": { modo: "pos", loop: false, volume: 0.75, sintetico: true },
   "moto-desliga": { modo: "pos", loop: false, volume: 0.6, sintetico: true },
-  "moto-boost": { modo: "pos", loop: false, volume: 0.95, ext: "wav" },   // o grito varrendo (gravação real tratada — CREDITS.md)
+  "moto-boost": { modo: "pos", loop: false, volume: 0.95, ext: "wav" },   // tiro de escape + rajada (gravações reais — CREDITS.md)
   "moto-freio": { modo: "pos", loop: false, volume: 0.45, sintetico: true },
   "moto-decola": { modo: "pos", loop: false, volume: 0.55, sintetico: true },
   "moto-pouso": { modo: "pos", loop: false, volume: 0.8, sintetico: true },

@@ -1701,7 +1701,7 @@ export class CyberEngine {
       m.som = est;
       if (quem && !m.loops) m.loops = Object.fromEntries(LOOPS_MOTO.map((n) => [n, this.som.loop(n, g, { dist })])) as Record<(typeof LOOPS_MOTO)[number], LoopSom>;
       if (!quem && m.loops) { for (const l of Object.values(m.loops)) this.som.soltarLoop(l); m.loops = null; }
-      if (m.loops) { const mix = mixDaMoto(est); for (const n of LOOPS_MOTO) { this.som.volumeLoop(m.loops[n], mix[n].vol, n === "moto-turbina" ? 6 : undefined); this.som.taxaLoop(m.loops[n], mix[n].taxa, n.startsWith("moto-motor") ? 16 : undefined); } }
+      if (m.loops) { const mix = mixDaMoto(est); for (const n of LOOPS_MOTO) { this.som.volumeLoop(m.loops[n], mix[n].vol, n === "moto-turbina" ? 6 : n === "moto-pipoco" ? 12 : undefined); this.som.taxaLoop(m.loops[n], mix[n].taxa, n.startsWith("moto-motor") ? 16 : undefined); } }
     }
     return montadas;
   }

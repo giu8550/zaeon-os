@@ -36,7 +36,7 @@ describe("sons da moto (sintetizados)", () => {
     }
   });
   it("os LOOPS sintetizados emendam sem clique: o salto do fim pro começo é do tamanho de um passo TÍPICO (não um estalo)", () => {
-    for (const l of LOOPS_MOTO.filter((n): n is Exclude<typeof n, keyof typeof FAIXAS_MOTOR> => !(n in FAIXAS_MOTOR))) {
+    for (const l of LOOPS_MOTO.filter((n): n is Extract<typeof n, keyof typeof SINTESE_MOTO> => n in SINTESE_MOTO)) {
       const x = SINTESE_MOTO[l](sr);
       let soma = 0; for (let i = 1; i < x.length; i++) soma += Math.abs(x[i]! - x[i - 1]!);
       // a CURVATURA na emenda (2ª diferença: último → 1º → 2º) tem que ser do tamanho das do meio do sinal: um estalo é
@@ -49,7 +49,7 @@ describe("sons da moto (sintetizados)", () => {
     }
   });
   it("one-shots terminam em silêncio (sem estalo no fim)", () => {
-    for (const n of ["moto-partida", "moto-desliga", "moto-freio", "moto-decola", "moto-pouso", "moto-troca", "moto-estalo", "moto-estrondo"] as const) {
+    for (const n of ["moto-partida", "moto-desliga", "moto-freio", "moto-decola", "moto-pouso", "moto-troca", "moto-estrondo"] as const) {
       const x = SINTESE_MOTO[n](sr); expect(Math.abs(x[x.length - 1]!), n).toBeLessThan(0.01);
     }
   });
@@ -61,7 +61,7 @@ describe("estágios da moto (mix e eventos)", () => {
   const soa = (e: EstadoSomMoto) => { const m = mixDaMoto(e); const n = (Object.keys(FAIXAS_MOTOR) as (keyof typeof FAIXAS_MOTOR)[]).reduce((a, b) => (m[b].vol > m[a].vol ? b : a)); return m[n].taxa * FAIXAS_MOTOR[n]; };
   it("parada no chão = a LENTA grossa (a faixa grave); no ar o motor sobe de tom; vento só rápido; turbina só no boost", () => {
     const chao = mixDaMoto(no({})), devagar = no({ voando: true, vel: 0.1 }), rapido = no({ voando: true, vel: 1 }), boost = mixDaMoto(no({ voando: true, vel: 1.6, boost: true }));
-    expect(Object.keys(chao)).toEqual(["moto-motor", "moto-motor-alto", "moto-vento", "moto-turbina", "moto-supersonico"]);
+    expect(Object.keys(chao)).toEqual(["moto-motor", "moto-motor-alto", "moto-pipoco", "moto-vento", "moto-turbina", "moto-supersonico"]);
     expect(chao["moto-motor"].vol).toBeGreaterThan(chao["moto-motor-alto"].vol * 5);   // a lenta é a marcha lenta gravada
     expect(soa(no({}))).toBeLessThan(70);
     expect(soa(rapido)).toBeGreaterThan(soa(devagar) * 2);
@@ -84,8 +84,8 @@ describe("estágios da moto (mix e eventos)", () => {
 });
 
 describe("motor (gravações reais): faixas e frequência", () => {
-  it("a frequência vai da lenta (~30 Hz) ao corte (~180 Hz, grave), subindo o mesmo TOM por pedaço do conta-giros", () => {
-    expect(freqDoMotor(CAMBIO.lenta)).toBeCloseTo(30, 3); expect(freqDoMotor(1)).toBeCloseTo(180, 3);   // GRAVE: o corte em 180 Hz
+  it("a frequência vai da lenta (~30 Hz) ao corte (~150 Hz, grave), subindo o mesmo TOM por pedaço do conta-giros", () => {
+    expect(freqDoMotor(CAMBIO.lenta)).toBeCloseTo(30, 3); expect(freqDoMotor(1)).toBeCloseTo(150, 3);   // GRAVE: o corte em 150 Hz
     expect(freqDoMotor(0.57) / freqDoMotor(CAMBIO.lenta)).toBeCloseTo(freqDoMotor(1) / freqDoMotor(0.57), 3);
   });
   it("embaixo toca a LENTA, da puxada pra cima o GRITO — cada um afinado na frequência do motor", () => {
@@ -129,18 +129,24 @@ describe("câmbio (o tom do motor NÃO vai direto pro teto)", () => {
     let r = { ...cambioNeutro(), marcha: 5, rpm: 0.9 }; for (let i = 0; i < 180; i++) r = passoCambio(r, { voando: true, vel: 0.15, acel: -1, boost: false }, 1 / 60);
     expect(r.marcha).toBeLessThanOrEqual(1);
   });
-  it("BOOST: o giro ESTOURA (bem acima do corte) em menos de 0,4 s — o tom do grito sobe violento", () => {
-    let c = { ...cambioNeutro(), marcha: 5, rpm: 0.95 }; const ini = freqDoMotor(c.rpm);
-    for (let i = 0; i < 24; i++) c = passoCambio(c, { voando: true, vel: 1.05, acel: 1, boost: true }, 1 / 60);
-    expect(c.rpm).toBeGreaterThan(1.2); expect(freqDoMotor(c.rpm) / ini).toBeGreaterThan(1.7);
-    const m = mixDaMoto({ ...somMotoParada, montada: true, voando: true, vel: 1.5, acel: 1, boost: true, rpm: c.rpm });
-    expect(m["moto-motor-alto"].taxa).toBeGreaterThan(1);   // acima do tom gravado: o grito
+  it("BOOST: o motor dá lugar ao CARBURADOR ESTALANDO (o motor quase some)", () => {
+    const m = (boost: boolean) => mixDaMoto({ ...somMotoParada, montada: true, voando: true, vel: 1.2, acel: 1, boost, rpm: 0.95 });
+    expect(m(false)["moto-pipoco"].vol).toBe(0);
+    expect(m(true)["moto-pipoco"].vol).toBe(1);
+    expect(m(true)["moto-motor-alto"].vol).toBeLessThan(m(false)["moto-motor-alto"].vol * 0.2);
   });
-  it("eventos: subir de marcha dá o 'tec' da troca; aliviar em giro alto dá os estalos", () => {
+  it("PERDENDO VELOCIDADE (soltou ou freando, rápido) o carburador pipoca por cima do motor; devagar ou acelerando, não", () => {
+    const m = (vel: number, acel: number) => mixDaMoto({ ...somMotoParada, montada: true, voando: true, vel, acel, rpm: 0.8 });
+    expect(m(0.8, 1)["moto-pipoco"].vol).toBe(0);                       // acelerando: só o motor
+    expect(m(0.8, 0)["moto-pipoco"].vol).toBeGreaterThan(0.5);          // soltou rápido: pipoca
+    expect(m(0.8, -1)["moto-pipoco"].vol).toBeGreaterThan(m(0.8, 0)["moto-pipoco"].vol);   // freando: mais
+    expect(m(0.1, -1)["moto-pipoco"].vol).toBe(0);                      // devagar: nada
+    expect(mixDaMoto({ ...somMotoParada, montada: true, voando: false, vel: 0, acel: 0 })["moto-pipoco"].vol).toBe(0);   // no chão: nada
+  });
+  it("eventos: subir de marcha dá o 'tec' da troca", () => {
     const no = (o: Partial<EstadoSomMoto>): EstadoSomMoto => ({ ...somMotoParada, montada: true, voando: true, ...o });
     expect(eventosDaMoto(no({ marcha: 1, acel: 1 }), no({ marcha: 2, acel: 1 }))).toEqual(["moto-troca"]);
-    expect(eventosDaMoto(no({ acel: 1, rpm: 0.9 }), no({ acel: 0, rpm: 0.9 }))).toEqual(["moto-estalo"]);
-    expect(eventosDaMoto(no({ acel: 1, rpm: 0.3 }), no({ acel: 0, rpm: 0.3 }))).toEqual([]);
+    expect(eventosDaMoto(no({ acel: 1, rpm: 0.9 }), no({ acel: 0, rpm: 0.9 }))).toEqual([]);   // aliviar = o loop do carburador (não um one-shot)
   });
   it("BARREIRA DO SOM: o estrondo toca quando o boost ACENDE rápido (> 300 km/h) — uma vez; o supersônico cresce até os 1000", () => {
     const no = (kmh: number, boost: boolean): EstadoSomMoto => ({ ...somMotoParada, montada: true, voando: true, acel: 1, boost, vel: kmh / 3.6 / PILOTAGEM.vel });
