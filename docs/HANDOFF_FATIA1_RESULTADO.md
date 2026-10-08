@@ -29,3 +29,26 @@ Nota: o que já chamava `geminiJson`/`geminiText` **saiu** desta lista automatic
 - `AgentsModule`: bloco USO **fundido** com in/out/cached/total/custo est./tokens-por-turno, seletor 7d/30d/tudo, ordenação por qualquer coluna, barras CSS 14d, cabeçalho "medindo desde …" / frase do vazio, "—" para agente sem linha, campo teto/dia + aviso "estouraria o teto hoje (usado/teto)". Leitura ligada por default (decisão do Martinez).
 - Freio: `TurnoInput.origem` (`"humano"` default · `"autonomo"`); `AGENT_TETO_ENFORCE=1` barra **só** o autônomo (3 testes: off+autônomo responde · on+autônomo `motivo:"teto"` sem `gerar` · on+humano responde). Nesta fatia ninguém dispara `"autonomo"`: nasce testado e dormente.
 **Não verificado ao vivo:** painel com números reais (sem Mongo/Vertex válidos nesta máquina); `conferir-tokens.mjs` roda no VPS após o merge.
+
+## PASSO 5 · PR-A2 (aba Mentores) — PR stacked
+Corpo da loja extraído para `components/mentors/LojaMentores.tsx`; `/mentores`; `/plugin-store` (e `/assistentes`, alias já existente em main) redirecionam com a flag preservando a query; rótulos via `lib/mentores/rota.ts`. Build-arg nos 3 arquivos. **Não verificado no browser** nesta máquina (sem build).
+
+## PASSO 6 · Verificação final da fatia
+1. **`tsc`** 0 erros fora de `server/colyseus/` (os 22 de lá são pré-existentes: deps do Colyseus não instaladas neste worktree) · **`vitest`** 2070 passed, 1 falha pré-existente (`salaColyseus.int.test.ts`, mesma causa) · CI `build-test` roda nos 5 PRs empilhados: #280 → #284 → #285 → #286 → #287.
+2. **Flags vazias → comportamento zero-diff:** health sem `gateway:"on"` (lido ao vivo: `off`), loja igual (flag off renderiza `LojaMentores` com "Todos"), teto só avisa. Únicas mudanças sem flag nova: o ledger escrevendo (best-effort) e as colunas de consumo no painel USO (decisão do Martinez: leitura ligada por default).
+3. **Runbook de ligar em prod (ordem):**
+   1. No `.env` do VPS: `GATEWAY_MASTER_KEY` (`openssl rand -hex 32`), `LITELLM_PG_PASSWORD`, `LITELLM_DATABASE_URL=postgresql://litellm:<senha>@litellm-db:5432/litellm`, `LITELLM_SALT_KEY` (gerar 1×; trocar = perder as keys). **Pinar a imagem** do `litellm` numa tag `main-vX.Y.Z-stable` recente (a `main-stable` de 2026-10-07 quebra `/key/generate`).
+   2. `docker compose -f docker-compose.beta.yml --profile gateway up -d litellm` → `curl http://litellm:4000/health/readiness` (de dentro da rede) tem de mostrar `"db":"connected"`.
+   3. `node scripts/provar-chaves.mjs --gateway http://127.0.0.1:4000 --key <master>` (com `ports` temporário ou via `docker exec`) → `APTO` nas 4 provas — **é o gate G1 que faltou aqui** (SA local revogada).
+   4. `node scripts/gateway-keys.mjs --agents aura,medicina,enfermagem --budget 0.01` → colar as `GATEWAY_KEY_*` no `.env` → estourar a da `medicina` → só a Osler diz "limite diário" (gate G2).
+   5. `GATEWAY_URL=http://litellm:4000` no `.env` → redeploy → `/api/health` `gateway:"on"`, `provedor:"litellm"`; parar o container → `degraded` e o turno do canal segue pelo Vertex.
+   6. Um `@aura …` no escritório + uma pergunta na Sala de Pesquisa → `token_ledger` com `totalTokens > 0`, `surface` certo, `phase` por fase; `cachedTokens > 0` em pelo menos um turno longo (gate A1). `node scripts/conferir-tokens.mjs --url https://zaeon.com.br --cookie "<sessão admin>"` → diferença 0 (gate A3).
+   7. Variable `NEXT_PUBLIC_MENTORES_TAB=1` → redeploy com `rebuild=true` → `/mentores` abre com "Mentores" primeiro; `/plugin-store?from=x` → `/mentores?from=x` (gate A2).
+   **Rollback:** `GATEWAY_URL=""` + redeploy (turno volta ao Vertex direto na hora, sem rebuild) · Variable `NEXT_PUBLIC_MENTORES_TAB=0` + rebuild · `TOKEN_LEDGER=0` desliga a escrita · `AGENT_TETO_ENFORCE=""` (default) mantém o teto só avisando.
+4. **Medidas (handoff §9), 48h após ligar — preencher aqui:** tokens/dia por agente e por `surface` (`porDia`/`porSurface`), taxa de `ok:false` por classe de erro, chamadas do canal por `provedor:"litellm"` vs `"vertex"`, `cachedTokens`/`promptTokens` (prova de que o `contextCache` entra na conta).
+
+## O que NÃO foi verificado nesta máquina (e por quê)
+- **Resposta real do Vertex via LiteLLM** e **estouro de budget**: a service account do `.env` local está revogada (`invalid_grant` chamando o Google direto) e a imagem `main-stable` do LiteLLM quebrou `/key/generate` hoje.
+- **Linhas reais do ledger / painel com números / conferir-tokens**: sem Mongo nem Vertex válidos aqui.
+- **Estados visuais da loja**: sem `next build`.
+- O teste do gateway encheu o disco do Mac (Docker.raw chegou a 11 GB; 119 MB livres) — containers e imagens de teste removidos, `.env.secrets` vazio criado localmente (gitignored) só para o compose subir.
