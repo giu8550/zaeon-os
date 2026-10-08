@@ -12,6 +12,8 @@ import { CyberEngine, type EstadoGuia, type PessoaCyber } from "./engine";
 import { NOS, type IdNo } from "@/lib/cyber/buracos";
 import { CHAVE_ONBOARDING, deveNascerNoTubo } from "@/lib/cyber/onboarding";
 import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
+import RespostaZaeon from "./RespostaZaeon";
+import type { PerfilZaeon, PerguntaZaeon } from "@/lib/cyber/conversaZaeon";
 import { criarVoz, type VozHandle } from "./Voz";
 import { transporteRealtime, vozLigada } from "@/lib/lounge3d/realtime";
 import { ehTeclaFalar } from "@/lib/cyber/voz";
@@ -40,6 +42,8 @@ export type CenaCyberProps = {
    *  modo solo) vale o localStorage. `marcarNascimento` avisa o servidor que nasceu. */
   novoNoCyber?: boolean;
   marcarNascimento?: () => void;
+  /** o que a pessoa contou pra Zaeon na capela (o servidor guarda em User.cyberPerfil — a memória dos agentes) */
+  salvarPerfil?: (p: PerfilZaeon) => void;
   /** dono da Zaeon (vem do SERVIDOR) — só pinta os botões; quem decide é `pedirAcesso` */
   souFundador?: boolean;
   /** AÇÃO PRIVILEGIADA: pede ao servidor (POST /api/lounge3d/[id]/acesso): o topo da Recepção, a nave, o buraco negro do DJ */
@@ -75,6 +79,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [tunel, setTunel] = useState<ModoTunel | null>(null);
   /** o tutorial do Droid (o passo atual) e as falas dele no chat (SÓ locais: o Droid é de cada um, nada vai pela rede) */
   const [guia, setGuia] = useState<EstadoGuia | null>(null), [falasDroid, setFalasDroid] = useState<MensagemChat[]>([]);
+  /** a pergunta da Zaeon esperando resposta (o painel) */
+  const [pergunta, setPergunta] = useState<(PerguntaZaeon & { n: number; total: number }) | null>(null);
   /** NASCE no tubo de ensaio? Quem nunca entrou no cyberespaço (o servidor diz; sem sala, o localStorage) ou forçado com
    *  ?nascer=1 — decidido 1× */
   const nascer = useMemo(() => {
@@ -167,6 +173,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
       onAviso: avisar,
       nascer, onGuia: (g) => { setGuia(g); if (!g) { try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },
+      onPergunta: setPergunta, onPerfil: (perfil) => cb.current.salvarPerfil?.(perfil),
       onFalaAgente: (f) => setFalasDroid((xs) => [...xs.slice(-20), { id: `agente-${Date.now()}-${xs.length}`, userId: `agente:${f.id}`, name: f.nome, color: f.cor, texto: f.texto, ts: Date.now() }]),
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
       onEstadoQG: setQg, onAcao: setAcao,
@@ -366,6 +373,7 @@ export default function CenaCyber(p: CenaCyberProps) {
           <button type="button" onClick={() => engine.current?.guiaPular()} className="min-h-[28px] rounded-full border border-white/15 px-3 text-amber-50/75 hover:text-white">Pular</button>
         </div>
       )}
+      {!menu && pergunta && <RespostaZaeon pergunta={pergunta} touch={touch} onResponder={(r) => engine.current?.responderZaeon(r)} />}
       {tunel && (
         <TunelBuracoNegro modo={tunel} onCoberto={(c) => engine.current?.pausar(c)}
           onEscolher={(id) => { if (tunel.tipo === "escolher") engine.current?.viajarPeloTunel(id as IdNo | null); else engine.current?.atravessarBuracoDono(tunel.para); }}

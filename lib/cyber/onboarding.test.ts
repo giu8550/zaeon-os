@@ -55,9 +55,9 @@ describe("quem chega NASCE num tubo de ensaio", () => {
 });
 
 describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada instrução)", () => {
-  const nada: CtxGuia = { nascendo: false, andou: 0, noAr: 0, pertoDesktop: false, naMoto: false, motoAndou: 0, tunel: false };
+  const nada: CtxGuia = { nascendo: false, andou: 0, noAr: 0, pertoDesktop: false, conversaFeita: false, naMoto: false, motoAndou: 0, tunel: false };
   it("começa no tubo e acaba no 'tudo seu'; cada passo tem fala curta (cabe no balão) e uma AÇÃO; os alvos ficam na Zaeon", () => {
-    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "voar", "capela", "moto", "pilotar", "descer", "buraco", "fim"]);
+    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "voar", "capela", "zaeon", "moto", "pilotar", "descer", "buraco", "fim"]);
     for (const p of ROTEIRO.slice(1)) { expect(p.falas.length).toBeGreaterThan(0); for (const f of p.falas) expect(f.length).toBeLessThanOrEqual(160); }
     for (const p of ROTEIRO) if (p.alvo) expect(naIlhaPrincipal(p.alvo)).toBe(true);
     const pe = peDaRecepcao(); expect(alturaEm(recepcao, pe)).toBe(0); expect(dentroDeAlgum(pe, colisoresDaCidade())).toBe(false);
@@ -71,6 +71,7 @@ describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada inst
     expect(cumpriu(c("andar"), { ...nada, andou: 2 })).toBe(false); expect(cumpriu(c("andar"), { ...nada, andou: 7 })).toBe(true);
     expect(cumpriu(c("voar"), { ...nada, andou: 99, noAr: 1 })).toBe(false); expect(cumpriu(c("voar"), { ...nada, noAr: 5 })).toBe(true);
     expect(cumpriu(c("capela"), { ...nada, andou: 99 })).toBe(false); expect(cumpriu(c("capela"), { ...nada, pertoDesktop: true })).toBe(true);
+    expect(cumpriu(c("zaeon"), { ...nada, pertoDesktop: true, andou: 99 })).toBe(false); expect(cumpriu(c("zaeon"), { ...nada, conversaFeita: true })).toBe(true);   // só depois de conversar com a Zaeon
     expect(cumpriu(c("moto"), { ...nada, pertoDesktop: true })).toBe(false); expect(cumpriu(c("moto"), { ...nada, naMoto: true })).toBe(true);
     expect(cumpriu(c("pilotar"), { ...nada, naMoto: true, motoAndou: 20 })).toBe(false); expect(cumpriu(c("pilotar"), { ...nada, naMoto: true, motoAndou: 61 })).toBe(true);
     expect(cumpriu(c("pilotar"), { ...nada, naMoto: false, motoAndou: 12 })).toBe(true);   // desceu depois de rodar um pouco: segue

@@ -15,6 +15,7 @@ import { POST as TOPO } from "./[id]/topo/route";
 import { POST as RECADO, DELETE as APAGAR_RECADO } from "./[id]/recado/route";
 import { POST as RT_TOKEN } from "./[id]/rt-token/route";
 import { POST as NASCEU } from "./[id]/nasceu/route";
+import { POST as PERFIL } from "./[id]/perfil/route";
 import { verificarToken } from "@/server/colyseus/src/token";
 
 const ID = "0123456789abcdef01234567", ME = "aaaaaaaaaaaaaaaaaaaaaaaa", OUTRO = "bbbbbbbbbbbbbbbbbbbbbbbb";
@@ -116,6 +117,17 @@ describe("/api/lounge3d/[id]", () => {
     expect(m.userUpdate).not.toHaveBeenCalled();
     m.docFind.mockResolvedValue(doc([OUTRO]));
     expect((await NASCEU(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(404);
+  });
+
+  it("perfil (o que contou pra Zaeon): só chaves conhecidas, limpo, mescla com o anterior; vazio → 400; não-membro → 404", async () => {
+    m.docFind.mockResolvedValue(doc());
+    m.userFind.mockResolvedValueOnce({ id: ME, name: "Ana", image: null }).mockResolvedValueOnce({ cyberPerfil: { nome: "Ana", objetivo: "TCC" } });
+    const r = await PERFIL(json({ perfil: { nome: " Aninha ", area: "Medicina", senha: "x" } }), { params: { id: ID } });
+    expect(r.status).toBe(200);
+    expect(m.userUpdate).toHaveBeenCalledWith({ where: { id: ME }, data: { cyberPerfil: { nome: "Aninha", objetivo: "TCC", area: "Medicina" } } });
+    expect((await PERFIL(json({ perfil: { senha: "x" } }), { params: { id: ID } })).status).toBe(400);
+    m.docFind.mockResolvedValue(doc([OUTRO]));
+    expect((await PERFIL(json({ perfil: { nome: "A" } }), { params: { id: ID } })).status).toBe(404);
   });
 
   it("recado pro QG: só o FUNDADOR manda/apaga; autor da SESSÃO; persiste no conteúdo (sem perder as notas) e difunde", async () => {

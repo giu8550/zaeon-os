@@ -5,7 +5,8 @@
  * volta da Cidade Zaeon, na linha da muralha, entre as torres de cristal; o do novato é um dos perto da Recepção (o lar
  * do DROID, o agente de onboarding — lib/cyber/agentes): o líquido escoa, o vidro sobe e a pessoa sai. O Droid (um
  * ofanim) sai de um mini portal e ENSINA fazendo: fala no balão (e no chat) e ESPERA a pessoa cumprir cada instrução
- * (andar → voar → a capela → montar numa moto → pilotar → descer → o buraco negro) antes da próxima. É de cada um:
+ * (andar → voar → a capela → conhecer a Zaeon (o holograma dela sai do globo e faz perguntas — lib/cyber/conversaZaeon)
+ * → montar numa moto → pilotar → descer → o buraco negro) antes da próxima. É de cada um:
  * spawnado só no cliente da própria pessoa (nada vai pela rede). Hoje o roteiro é fixo; no overhaul a fala vem do
  * cérebro dele.
  */
@@ -79,8 +80,8 @@ export function estadoDoTubo(t: number): { liquido: number; vidro: number } {
  * nascer (o tubo abriu), andar `m` metros, voar `m` metros acima do chão, chegar perto de um desktop da capela, montar
  * numa moto, pilotar `m` metros (ou já ter descido depois de rodar um pouco), descer da moto, entrar num buraco negro.
  */
-export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "voar"; m: number } | { tipo: "desktop" } | { tipo: "montar" } | { tipo: "pilotar"; m: number } | { tipo: "descer" } | { tipo: "tunel" } | { tipo: "fim" };
-export type IdPassoGuia = "nascer" | "andar" | "voar" | "capela" | "moto" | "pilotar" | "descer" | "buraco" | "fim";
+export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "voar"; m: number } | { tipo: "desktop" } | { tipo: "conversa" } | { tipo: "montar" } | { tipo: "pilotar"; m: number } | { tipo: "descer" } | { tipo: "tunel" } | { tipo: "fim" };
+export type IdPassoGuia = "nascer" | "andar" | "voar" | "capela" | "zaeon" | "moto" | "pilotar" | "descer" | "buraco" | "fim";
 /** um passo do tutorial: as FALAS do Droid (balão + chat, uma depois da outra; a última fica até a pessoa cumprir), o
  *  que ela tem que fazer e, se for "ir até", o alvo (o Droid vai na frente; o farol marca) */
 export type PassoGuia = { id: IdPassoGuia; titulo: string; falas: string[]; cond: CondGuia; alvo: (P2 & { r: number }) | null };
@@ -93,7 +94,8 @@ export const ROTEIRO: PassoGuia[] = (() => {
     { id: "andar", titulo: "Andar", falas: ["Oi! Eu sou o Droid, o seu guia no hiperespaço ✦", "Use W A S D (ou o joystick) pra andar. Vem, anda um pouco comigo!"], cond: { tipo: "andar", m: 6 }, alvo: null },
     { id: "voar", titulo: "Voar", falas: ["Isso! Você tem uma mochila a jato.", "Segure ESPAÇO pra subir. Solte pra descer planando."], cond: { tipo: "voar", m: 4 }, alvo: null },
     { id: "capela", titulo: "A capela", falas: ["Voando bem! 🚀", "Agora vem comigo até a capela, no centro da cidade. Me segue!"], cond: { tipo: "desktop" }, alvo: { ...d0, r: 6 } },
-    { id: "moto", titulo: "As motos", falas: ["É aqui que você estuda: perto de um desktop, F abre a sua Sala de Estudos.", "Agora vamos pegar uma moto! Chegue perto de uma e aperte F."], cond: { tipo: "montar" }, alvo: { x: lote.x, z: lote.z, r: 14 } },
+    { id: "zaeon", titulo: "A Zaeon", falas: ["Chegamos! É aqui que você estuda: perto de um desktop, F abre a sua Sala de Estudos.", "Olha o globo… tem alguém querendo te conhecer ✦"], cond: { tipo: "conversa" }, alvo: null },
+    { id: "moto", titulo: "As motos", falas: ["Vamos pegar uma moto! Me segue até o estacionamento.", "Chegue perto de uma e aperte F."], cond: { tipo: "montar" }, alvo: { x: lote.x, z: lote.z, r: 14 } },
     { id: "pilotar", titulo: "Pilotar", falas: ["W acelera, A e D fazem a curva e Shift dá o boost.", "Dá uma volta!"], cond: { tipo: "pilotar", m: 60 }, alvo: null },
     { id: "descer", titulo: "Descer", falas: ["Mandou bem!", "Pra parar: P pousa a moto e F desce dela."], cond: { tipo: "descer" }, alvo: null },
     { id: "buraco", titulo: "O buraco negro", falas: ["Por último, o buraco negro: é o metrô do hiperespaço.", "Entre nele e escolha um destino — as universidades, a Solana House ou a Praça, onde fica a sua base."], cond: { tipo: "tunel" }, alvo: { x: bn.x, z: bn.z, r: 8 } },
@@ -102,7 +104,7 @@ export const ROTEIRO: PassoGuia[] = (() => {
 })();
 
 /** o que o engine mede desde que o Droid deu a instrução do passo */
-export type CtxGuia = { nascendo: boolean; andou: number; noAr: number; pertoDesktop: boolean; naMoto: boolean; motoAndou: number; tunel: boolean };
+export type CtxGuia = { nascendo: boolean; andou: number; noAr: number; pertoDesktop: boolean; conversaFeita: boolean; naMoto: boolean; motoAndou: number; tunel: boolean };
 /** a pessoa fez o que o Droid pediu? */
 export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
   switch (c.tipo) {
@@ -110,6 +112,7 @@ export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
     case "andar": return x.andou >= c.m;
     case "voar": return x.noAr >= c.m;
     case "desktop": return x.pertoDesktop;
+    case "conversa": return x.conversaFeita;
     case "montar": return x.naMoto;
     case "pilotar": return x.motoAndou >= c.m || (!x.naMoto && x.motoAndou >= 10);
     case "descer": return !x.naMoto;

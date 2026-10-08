@@ -17,7 +17,7 @@
  * `prefers-reduced-motion` deixa fogo/vórtices quase parados. dispose() completo.
  */
 import * as THREE from "three";
-import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, ESCADA_LOUNGE, ILHOTAS, TORRES_MURALHA, anguloDaTorre, computadoresLocais, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADA_LOUNGE, ILHOTAS, TORRES_MURALHA, anguloDaTorre, computadoresLocais, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
@@ -187,7 +187,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture }): Cid
 
   // o GLOBO no centro da capela: mesa redonda + esfera de pontos de luz girando + um anel em volta
   add(new THREE.Mesh(new THREE.CylinderGeometry(CIDADE.mesaHolo.r, CIDADE.mesaHolo.r * 1.1, 2.2, 32), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), ilha, true).position.y = 1.1;
-  const RG = CIDADE.mesaHolo.r * 0.75, YG = 2.2 + RG + 1.5, NG = low ? 420 : 900, gp = new Float32Array(NG * 3);
+  const RG = GLOBO_CAPELA.r, YG = GLOBO_CAPELA.y, NG = low ? 420 : 900, gp = new Float32Array(NG * 3);
   for (let i = 0; i < NG; i++) { const u = Math.random() * 2 - 1, th = Math.random() * 6.283, s = Math.sqrt(1 - u * u); gp[i * 3] = s * Math.cos(th) * RG; gp[i * 3 + 1] = YG + u * RG; gp[i * 3 + 2] = s * Math.sin(th) * RG; }
   const gGeo = new THREE.BufferGeometry(); gGeo.setAttribute("position", new THREE.BufferAttribute(gp, 3));
   const globo = add(new THREE.Points(gGeo, new THREE.PointsMaterial({ size: 0.22, map: starTex, color: 0x8fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));

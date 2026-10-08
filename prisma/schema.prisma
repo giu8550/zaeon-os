@@ -31,6 +31,7 @@ model User {
   onboardingComplete  Boolean   @default(false)
   tourDone            Boolean   @default(false)   // tour guiado da Zaeon (onboarding) — visível no dashboard
   cyberNasceuEm       DateTime? // 1ª entrada no CYBERESPAÇO: vazio = nunca entrou → nasce num tubo de ensaio (lib/cyber/onboarding)
+  cyberPerfil         Json?     // o que a pessoa contou pra Zaeon na capela (nome, ocupação, área, objetivo, estilo — lib/cyber/conversaZaeon): memória dos agentes
   torsoImage          String?
   role                String?
   phone               String?   
