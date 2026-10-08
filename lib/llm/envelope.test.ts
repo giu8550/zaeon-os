@@ -120,3 +120,64 @@ describe("gerarJson", () => {
     expect((vertex.mock.calls[0] as any)[0].json).toBe(true);
   });
 });
+
+describe("Fatia 7 — alvo, jsonValido e pool (G3)", () => {
+  const envGw = { GATEWAY_URL: "http://g", GATEWAY_KEY_DEFAULT: "k" };
+  it("gateway: header x-litellm-model-id + body → alvo no retorno e no ledger", async () => {
+    const corpo = { ...okGateway, model: "gemini-2.5-flash-lite" };
+    const f = vi.fn(async () => resposta(200, corpo, { "x-litellm-model-id": "gemini-free" }));
+    const d = deps({ fetchImpl: f as any, env: envGw });
+    const r = await gerar({ user: "oi", model: "zaeon-pool-lite", rota: "gateway", ctx: { agentKey: "aura", surface: "chore" } }, d);
+    expect(r.alvo).toBe("gemini-free");
+    expect((r as any).modelId).toBeUndefined();
+    await new Promise((x) => setTimeout(x, 0));
+    expect(d.linhas[0]).toMatchObject({ alvo: "gemini-free", surface: "chore", ok: true });
+  });
+  it("fallback do router: header cloudflare → alvo cloudflare", async () => {
+    const f = vi.fn(async () => resposta(200, { ...okGateway, model: "@cf/meta/llama-3.1-8b-instruct" }, { "x-litellm-model-id": "cloudflare" }));
+    const r = await gerar({ user: "oi", model: "zaeon-pool-lite", rota: "gateway", ctx }, deps({ fetchImpl: f as any, env: envGw }));
+    expect(r.alvo).toBe("cloudflare");
+  });
+  it("rota vertex → alvo vertex; zaeon-flash pelo gateway (header hash) → vertex", async () => {
+    expect((await gerar({ user: "oi", ctx }, deps())).alvo).toBe("vertex");
+    const f = vi.fn(async () => resposta(200, okGateway, { "x-litellm-model-id": "vertex-flash" }));
+    expect((await gerar({ user: "oi", model: "zaeon-flash", rota: "gateway", ctx }, deps({ fetchImpl: f as any, env: envGw }))).alvo).toBe("vertex");
+  });
+  it("jsonValido: true/false em json:true; ausente em json:false (sem lançar)", async () => {
+    const d1 = deps();
+    const r1 = await gerar({ user: "x", json: true, ctx }, d1);
+    expect(r1.jsonValido).toBe(true);
+    const quebrado = deps({ vertex: async (_r, modelo) => ({ texto: "{quebrado", usage: USAGE_VAZIO, modelo }) });
+    const r2 = await gerar({ user: "x", json: true, ctx }, quebrado);
+    expect(r2.jsonValido).toBe(false);
+    await new Promise((x) => setTimeout(x, 0));
+    expect(quebrado.linhas[0].jsonValido).toBe(false);
+    const r3 = await gerar({ user: "x", ctx }, deps({ vertex: async (_r, modelo) => ({ texto: "{quebrado", usage: USAGE_VAZIO, modelo }) }));
+    expect(r3.jsonValido).toBeUndefined();
+  });
+  it("pool NUNCA cai no Vertex: gateway 503 → ErroLlm relançado, vertex não chamado", async () => {
+    const f = vi.fn(async () => resposta(503, { error: { message: "Service Unavailable" } }));
+    const vertex = vi.fn(vertexOk);
+    const d = deps({ fetchImpl: f as any, vertex, env: envGw });
+    const e = await gerar({ user: "oi", model: "zaeon-pool-lite", rota: "gateway", ctx }, d).catch((x) => x);
+    expect(e).toBeInstanceOf(ErroLlm); expect(e.classe).toBe("provedor_fora"); expect(vertex).not.toHaveBeenCalled();
+    await new Promise((x) => setTimeout(x, 0));
+    expect(d.linhas).toHaveLength(1); expect(d.linhas[0]).toMatchObject({ ok: false, alvo: "gemini-free" });
+  });
+  it("pool sem gateway (GATEWAY_URL vazio) → erro, zero fetch, zero vertex", async () => {
+    const f = vi.fn(); const vertex = vi.fn(vertexOk);
+    const e = await gerar({ user: "oi", model: "zaeon-pool-lite", rota: "gateway", ctx }, deps({ fetchImpl: f as any, vertex, env: {} })).catch((x) => x);
+    expect(e).toBeInstanceOf(ErroLlm); expect(f).not.toHaveBeenCalled(); expect(vertex).not.toHaveBeenCalled();
+  });
+  it("pool pedido com rota vertex também não vira Vertex", async () => {
+    const vertex = vi.fn(vertexOk);
+    await expect(gerar({ user: "oi", model: "zaeon-pool-lite", ctx }, deps({ vertex }))).rejects.toBeInstanceOf(ErroLlm);
+    expect(vertex).not.toHaveBeenCalled();
+  });
+  it("todos os alvos em cooldown → pool_esgotado (sem vertex)", async () => {
+    const f = vi.fn(async () => resposta(429, { error: { message: "No deployments available for selected model, Try again in 60 seconds" } }));
+    const vertex = vi.fn(vertexOk);
+    const e = await gerar({ user: "oi", model: "zaeon-pool-lite", rota: "gateway", ctx }, deps({ fetchImpl: f as any, vertex, env: envGw })).catch((x) => x);
+    expect(e.classe).toBe("pool_esgotado"); expect(vertex).not.toHaveBeenCalled();
+  });
+});

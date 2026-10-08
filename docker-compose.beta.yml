@@ -249,7 +249,9 @@ services:
   #    Segredos (GATEWAY_MASTER_KEY, LITELLM_DATABASE_URL, LITELLM_SALT_KEY, POSTGRES) vêm do .env/.env.secrets do VPS.
   #    Ligar: docker compose -f docker-compose.beta.yml --profile gateway up -d litellm
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    # Tag FIXA (a main-stable de 2026-10-07 veio sem litellm.proxy.guardrails.guardrail_helpers e quebrou /key/generate).
+    # Trocar de versão = LITELLM_IMAGE_TAG no .env do VPS (testar /key/generate antes de deixar).
+    image: ghcr.io/berriai/litellm:${LITELLM_IMAGE_TAG:-v1.103.4}
     container_name: zaeon_litellm
     profiles: ["gateway"]
     env_file: [.env, .env.secrets]
