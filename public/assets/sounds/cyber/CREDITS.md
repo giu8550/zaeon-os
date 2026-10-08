@@ -31,6 +31,7 @@ Os `.mp3` originais em `public/assets/sounds/` (leberch/freesound/spaceship) sã
 | arquivo | fonte | autor | licença | edição |
 |---|---|---|---|---|
 | `jetpack.wav` | "Rocket Engine" — https://opengameart.org/content/rocket-engine | theMinesAreShakin | **CC0 1.0** (domínio público) | estéreo 48 kHz → mono 22,05 kHz WAV (loop sem emenda, 6,1 s) |
+| `asa-bater.wav` | "Large Wings Flap" — https://opengameart.org/content/large-wings-flap (de "fast simple chop 5", https://freesound.org/s/127197/) | AntumDeluge / dave.des | **CC0 1.0** (domínio público) | 1 batida recortada (0,58 s), fade-out, mono 22,05 kHz WAV — as asas negras do founder |
 
 **Sintetizados no navegador (sem arquivo, CC0 — código próprio):** `jato-sopro` (o sopro/chiado do jato, por cima do ronco gravado) e `baque` (o corpo batendo no chão ao pousar) — `lib/cyber/audio.ts` (`sintetizarJetpack`, `sintetizarBaque`).
 

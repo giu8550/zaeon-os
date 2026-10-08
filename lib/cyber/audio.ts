@@ -44,8 +44,9 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "moto-freio": { modo: "pos", loop: false, volume: 0.45, sintetico: true },
   "moto-decola": { modo: "pos", loop: false, volume: 0.55, sintetico: true },
   "moto-pouso": { modo: "pos", loop: false, volume: 0.8, sintetico: true },
-  // ASAS NEGRAS do founder (lib/cyber/asas, sintetizados): a batida (cada descida), o vento planando, abrir e fechar
-  "asa-bater": { modo: "pos", loop: false, volume: 0.7, sintetico: true },
+  // ASAS NEGRAS do founder (lib/cyber/asas): a BATIDA é gravada ("large wings flap", CC0 — OpenGameArt/AntumDeluge, de
+  // dave.des no Freesound; 1 batida recortada, macia, com passa-baixa); o vento, abrir e fechar são sintetizados
+  "asa-bater": { modo: "pos", loop: false, volume: 0.42, ext: "wav", filtro: 3800 },
   "asa-vento": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
   "asa-abrir": { modo: "pos", loop: false, volume: 0.6, sintetico: true },
   "asa-fechar": { modo: "pos", loop: false, volume: 0.5, sintetico: true },

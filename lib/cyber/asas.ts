@@ -1,7 +1,7 @@
 /**
  * Cyberespaço — as ASAS NEGRAS DE ANJO (do founder, no lugar da mochila a jato) — a parte PURA: o que as asas estão
- * fazendo (estado de voo → abertura, batida, eventos) e os SONS delas, sintetizados no navegador (como o jato e a moto:
- * lib/cyber/audio SINTESE). O desenho e as juntas ficam em components/cyber/AsasAnjo.
+ * fazendo (estado de voo → abertura, batida, eventos) e os SONS delas (a batida é gravada; vento, abrir e fechar são
+ * sintetizados no navegador, como o jato e a moto: lib/cyber/audio SINTESE). O desenho e as juntas ficam em components/cyber/AsasAnjo.
  *
  * Os modos (a física do voo é a MESMA da mochila — lib/cyber/jet; aqui só muda o corpo e o som):
  *  - CHÃO: ABERTAS (sempre imponentes — o dono preferiu a recolhida não), só respirando devagar;
@@ -68,27 +68,6 @@ const normalizar = (x: Float32Array, pico: number) => { let m = 0; for (const v 
 const passaBaixa = (fc: number, sr: number) => 1 - Math.exp((-2 * Math.PI * fc) / sr);
 const fimSemClique = (x: Float32Array, k = 128) => { for (let i = 0; i < Math.min(k, x.length); i++) x[x.length - 1 - i]! *= i / k; return x; };
 
-/** BATIDA de asa (~0,45 s): o "vush" — ar empurrado (ruído passa-banda que abre e fecha) + o baque grave do ar
- *  deslocado + o farfalhar das penas (ruído agudo picotado) no começo */
-export function sintetizarBaterAsa(sr: number): Float32Array {
-  const n = Math.round(sr * 0.45), out = new Float32Array(n), r = prng(41);
-  let lpA = 0, lpB = 0, lpGrave = 0, fase = 0;
-  for (let i = 0; i < n; i++) {
-    const t = i / sr, w = r() * 2 - 1;
-    // o "vush": passa-banda cuja frequência sobe e desce com o golpe
-    const fc = 260 + 900 * Math.sin(Math.min(1, t / 0.3) * Math.PI);
-    lpA += (w - lpA) * passaBaixa(fc * 1.6, sr); lpB += (lpA - lpB) * passaBaixa(fc * 0.6, sr);
-    const banda = lpA - lpB, envVush = Math.pow(Math.sin(Math.min(1, t / 0.38) * Math.PI), 1.6);
-    // o baque do ar (grave, curto)
-    fase += (2 * Math.PI * (62 + 30 * Math.exp(-t * 20))) / sr; lpGrave += (w - lpGrave) * passaBaixa(140, sr);
-    const envGrave = (1 - Math.exp(-t * 300)) * Math.exp(-t * 14);
-    // farfalhar: agudo picotado, só no começo
-    const picote = r() < 0.35 ? 1 : 0.2, farfalha = (w - lpA) * picote * Math.exp(-t * 16) * 0.25;
-    out[i] = banda * envVush * 2.6 + (Math.sin(fase) * 0.5 + lpGrave * 1.4) * envGrave + farfalha;
-  }
-  return normalizar(fimSemClique(out), 0.85);
-}
-
 /** VENTO nas penas (loop de 3 s): sopro suave, com rajadas lentas — toca planando */
 export function sintetizarVentoAsas(sr: number, seg = 3): Float32Array {
   const n = Math.round(sr * seg), x = Math.round(sr * 0.3), raw = new Float32Array(n + x), r = prng(43);
@@ -132,5 +111,13 @@ export function sintetizarFecharAsas(sr: number): Float32Array {
   return normalizar(fimSemClique(out), 0.7);
 }
 
-export const SINTESE_ASAS = { "asa-bater": sintetizarBaterAsa, "asa-vento": sintetizarVentoAsas, "asa-abrir": sintetizarAbrirAsas, "asa-fechar": sintetizarFecharAsas } as const;
-export type NomeSomAsas = keyof typeof SINTESE_ASAS;
+export const SINTESE_ASAS = { "asa-vento": sintetizarVentoAsas, "asa-abrir": sintetizarAbrirAsas, "asa-fechar": sintetizarFecharAsas } as const;
+/** a batida vem de ARQUIVO (gravação CC0 — lib/cyber/audio); o resto é sintetizado */
+export type NomeSomAsas = keyof typeof SINTESE_ASAS | "asa-bater";
+
+/** cada batida soa um pouco diferente (afinação e volume sorteados; batendo forte pra subir é mais presente), pra a
+ *  repetição a ~2,6 Hz não virar um metrônomo */
+export function variacaoBatida(modo: ModoAsas, r1: number, r2: number): { taxa: number; volume: number } {
+  const base = modo === "sobe" ? 0.85 : 0.55;
+  return { taxa: 0.86 + 0.26 * r1, volume: base * (0.7 + 0.3 * r2) };
+}
