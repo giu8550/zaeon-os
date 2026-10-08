@@ -29,26 +29,28 @@ export type AgenteCyber = {
   lar: { poi: string; x: number; z: number };
 };
 
-/** a ZAEON — a anfitriã. Mora na RECEPÇÃO (a antiga base do Andrei, no piso da Cidade Zaeon) e recebe quem nasce no
- *  hiperespaço: sai com a pessoa do tubo de ensaio e mostra o que tem pra fazer aqui. */
-export const ZAEON_ANFITRIA: AgenteCyber = {
-  id: "zaeon",
-  persona: "zaeon",
-  nome: "Zaeon",
-  papel: "anfitriã · onboarding",
-  personalidade: "Acolhedora, curiosa e direta. Fala pouco e mostra muito: anda do lado da pessoa, aponta o caminho e explica cada lugar em uma ou duas frases, sem jargão. Celebra as primeiras conquistas e nunca deixa ninguém perdido.",
+/** o DROID — o agente de ONBOARDING. Um OFANIM (Ezequiel 1:15-21): rodas de topázio, uma cruzada dentro da outra,
+ *  cheias de olhos, com luz no centro, planando. É INDIVIDUAL: cada pessoa vê o seu (spawnado só no cliente dela, nada
+ *  vai pela rede), que sai de um mini portal quando ela nasce no tubo de ensaio, ensina fazendo (espera ela cumprir
+ *  cada instrução) e some de volta num portal no fim. Mora na RECEPÇÃO (a antiga base do Andrei): lá, F chama ele. */
+export const DROID: AgenteCyber = {
+  id: "droid",
+  persona: "zaeon",   // o cérebro (no overhaul): a persona da anfitriã
+  nome: "Droid",
+  papel: "guia · onboarding",
+  personalidade: "Um ser antigo e luminoso, gentil e curioso. Fala curto, uma instrução por vez, e espera você fazer antes de seguir. Celebra cada conquista com uma frase e nunca deixa ninguém perdido.",
   tarefas: [
-    "Receber quem acabou de nascer no tubo de ensaio",
-    "Mostrar a capela (os desktops da Sala de Estudos), as motos e o buraco negro",
-    "Explicar a rede de túneis: universidades, Solana House e a praça das bases",
-    "Refazer o tour quando alguém pedir",
+    "Aparecer (num mini portal) pra quem acabou de nascer no tubo de ensaio",
+    "Ensinar fazendo: andar, voar de mochila, a capela, as motos, o buraco negro",
+    "Esperar a pessoa cumprir cada instrução antes da próxima",
+    "Voltar quando chamado na Recepção",
   ],
   funcoes: ["guiar", "apresentar-lugares", "abrir-tunel", "chamar-estudo", "conversar"],
-  cor: "#ffcf6e",
+  cor: "#ffc46b",
   lar: { poi: "zaeon", ...mundo(LAR_LOCAL) },
 };
 
-export const AGENTES: AgenteCyber[] = [ZAEON_ANFITRIA];
+export const AGENTES: AgenteCyber[] = [DROID];
 
 /**
  * Onde o agente GUIA anda enquanto acompanha alguém: um pouco à direita e à frente da pessoa (o rosto dela fica
@@ -59,5 +61,5 @@ export function posDoGuia(p: { x: number; z: number }, facing: number, lado = 1.
   return { x: p.x + rx * lado + fx * frente, z: p.z + rz * lado + fz * frente };
 }
 
-/** a agente fica no piso da Zaeon (sanidade dos testes) */
+/** o lar fica no piso da Zaeon (sanidade dos testes) */
 export const noPisoDaZaeon = (p: { x: number; z: number }) => Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) < CIDADE.andavelR;
