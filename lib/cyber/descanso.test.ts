@@ -13,7 +13,7 @@ describe("os lugares de descanso (todas as salas)", () => {
     expect(ls.filter((l) => l.tipo === "puff")).toHaveLength(contar("puff"));
     expect(ls.filter((l) => l.tipo === "pufe")).toHaveLength(contar("pufe"));
     for (const l of ls) { expect(l.assentos).toHaveLength(l.tipo === "sofa" ? 2 : 1); expect(!!l.deita).toBe(l.tipo === "sofa"); expect(l.relaxa).toBe(l.tipo === "pufe"); expect(l.frentes).toHaveLength(l.assentos.length); }
-    for (const n of nomes) expect(ls.some((l) => l.tipo === "pufe" && l.id.startsWith(n))).toBe(true);   // pufes em TODAS as salas (no lounge, perto dos sofás)
+    for (const n of nomes.filter((x) => x !== "garagem")) expect(ls.some((l) => l.tipo === "pufe" && l.id.startsWith(n))).toBe(true);   // pufes nas salas de estar (no lounge, perto dos sofás); a garagem é dos veículos
   });
   it("ficam no disco de uma sala; quem senta olha pra frente do móvel; a FRENTE de cada assento e a saída ficam fora dos colisores", () => {
     const cs = colisoresDaCidade();

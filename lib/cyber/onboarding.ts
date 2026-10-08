@@ -102,14 +102,14 @@ export const PASSO_FIM_DA_INSTANCIA: IdPassoGuia = "explorar";
 
 /** o ROTEIRO do Droid (mundo) */
 export const ROTEIRO: PassoGuia[] = (() => {
-  const centro = mundo(CENTRO_DA_CAPELA_LOCAL), lote = LOTES.find((l) => l.id === "zaeon")!, bn = NOS.zaeon.anel;
+  const centro = mundo(CENTRO_DA_CAPELA_LOCAL), lote = LOTES.find((l) => l.id === "garagem")!, bn = NOS.zaeon.anel;
   return [
     { id: "nascer", titulo: "Nascendo", falas: [], cond: { tipo: "nascer" }, alvo: null },
     { id: "andar", titulo: "Andar", falas: ["Oi! Eu sou o Droid, o seu guia no hiperespaço ✦", "Use W A S D (ou o joystick) pra andar. Vem, anda um pouco comigo!"], cond: { tipo: "andar", m: 6 }, alvo: null },
     { id: "voar", titulo: "Voar", falas: ["Isso! Você tem uma mochila a jato.", "Segure ESPAÇO pra subir. Solte pra descer planando."], cond: { tipo: "voar", m: 4 }, alvo: null },
     { id: "capela", titulo: "A capela", falas: ["Voando bem! 🚀", "Agora vem comigo até o centro da capela. Tem alguém querendo te conhecer…"], cond: { tipo: "chegar" }, alvo: { ...centro, r: 7 } },
     { id: "zaeon", titulo: "A Zaeon", falas: ["Olha o globo… ✦"], cond: { tipo: "conversa" }, alvo: null },
-    { id: "moto", titulo: "As motos", falas: ["Vamos pegar uma moto! Me segue até o estacionamento.", "Chegue perto de uma e aperte F."], cond: { tipo: "montar" }, alvo: { x: lote.x, z: lote.z, r: 14 } },
+    { id: "moto", titulo: "As motos", falas: ["Vamos pegar uma moto! Elas ficam na GARAGEM, a plataforma laranja.", "Pise na luz do fio de energia na borda da cidade: ele te puxa até lá. Chegue perto de uma moto e aperte F."], cond: { tipo: "montar" }, alvo: { x: lote.x, z: lote.z, r: 14 } },
     { id: "pilotar", titulo: "Pilotar", falas: ["W acelera, A e D fazem a curva e Shift dá o boost.", "Dá uma volta!"], cond: { tipo: "pilotar", m: 60 }, alvo: null },
     { id: "descer", titulo: "Descer", falas: ["Mandou bem!", "Pra parar: P pousa a moto e F desce dela."], cond: { tipo: "descer" }, alvo: null },
     { id: "portal", titulo: "Os portais", falas: ["Agora o mais legal: os buracos negros são os portais do hiperespaço. Me segue!", "A partir daqui você está livre pra explorar — as universidades, a Solana House… Quando quiser, vá pra Praça: lá está a sua máquina de estudos."], cond: { tipo: "portal" }, alvo: { x: bn.x, z: bn.z, r: 8 } },

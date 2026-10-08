@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { CABOS, GLOBOS, GRUPOS_DROIDS, LIGACOES, LOTES_MIRANTE, MIRANTES, MOTORES, PONTOS_TERRA, RONDA_LIDER, R_MIRANTE, SUPERTREES, TELOES, TELOES_SOLUCAO, TEMAS, TOTENS, colisoresDoDistritoTerra, ehSolucao, noMapa, noMirante, poseDoLider, poseDosMenores, reacaoDoMotor } from "./terra";
+import { CABOS, GLOBOS, GRUPOS_DROIDS, LIGACOES, MIRANTES, MOTORES, PONTOS_TERRA, RONDA_LIDER, R_MIRANTE, SUPERTREES, TELOES, TELOES_SOLUCAO, TEMAS, TOTENS, colisoresDoDistritoTerra, ehSolucao, noMapa, noMirante, poseDoLider, poseDosMenores, reacaoDoMotor } from "./terra";
 import { CAPELA, CIDADE, ESCADA_LOUNGE, mundo } from "./ceu";
 import { LAR_LOCAL, POIS } from "./landmarks";
 import { BASES_CEU_LOCAIS } from "./bases";
-import { LOTE_ZAEON_LOCAL, LOTES, tamanhoDoLote } from "./motos";
 import { poseDaDoca, NAVE_QG } from "./naveQG";
 
 const d = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -11,7 +10,6 @@ const doca = (() => { const p = poseDaDoca(); return { x: p.x - CIDADE.centro.x,
 const PIRAMIDE_R = 15;   // o pé do cone da pirâmide (chaoR ≈ 14,8)
 const OCUPADO = [
   { nome: "capela", x: 0, z: 0, r: CAPELA.r + 4 },
-  { nome: "estacionamento da Zaeon", ...LOTE_ZAEON_LOCAL, r: 20 },
   { nome: "buraco negro", ...CIDADE.portalTunel, r: 10 },
   { nome: "chegada do túnel", ...CIDADE.chegada, r: 8 },
   { nome: "nave na doca", ...doca, r: NAVE_QG.raio + 12 },
@@ -32,13 +30,13 @@ describe("os MIRANTES DA TERRA nas 4 quinas (a antiga base do Andrei + 3 cópias
     expect(R_MIRANTE + PIRAMIDE_R).toBeLessThan(CIDADE.andavelR);
   });
   it("NADA na frente da pirâmide: a escada e a vista do centro ficam livres (corredor de 22 m de largura até o centro)", () => {
-    const coisas = [...[...TELOES, ...TELOES_SOLUCAO].map((t) => ({ ...t, r: t.larg / 2 })), ...GLOBOS, ...MOTORES, ...SUPERTREES.map((s) => ({ ...s, r: s.copa })), ...TOTENS.map((t) => ({ ...t, r: 1.5 })), ...LOTES_MIRANTE.map((l) => ({ ...l, r: 12 }))];
+    const coisas = [...[...TELOES, ...TELOES_SOLUCAO].map((t) => ({ ...t, r: t.larg / 2 })), ...GLOBOS, ...MOTORES, ...SUPERTREES.map((s) => ({ ...s, r: s.copa })), ...TOTENS.map((t) => ({ ...t, r: 1.5 }))];
     for (const m of MIRANTES) for (let u = 8; u <= 150; u += 3) for (const c of coisas) {
       const p = noMirante(m, u, 0), q = noMirante(m, u, 11), q2 = noMirante(m, u, -11);
       for (const x of [p, q, q2]) expect(d(x, c), `mirante ${m.id}, u=${u}`).toBeGreaterThan(c.r * 0.999);
     }
   });
-  it("a ESTAÇÃO fica de lado: PROBLEMAS → SOLUÇÕES (2 telões virados pro centro), cards colados no 1º, globo no meio, motores atrás; motos do outro lado", () => {
+  it("a ESTAÇÃO fica de lado: PROBLEMAS → SOLUÇÕES (2 telões virados pro centro), cards colados no 1º, globo no meio, motores atrás", () => {
     MIRANTES.forEach((m, i) => {
       const t = TELOES[i]!, s = TELOES_SOLUCAO[i]!, g = GLOBOS[i]!;
       for (const T of [t, s]) { const rT = Math.hypot(T.x, T.z); expect(Math.sin(T.rot) * -T.x + Math.cos(T.rot) * -T.z).toBeGreaterThan(0.99 * rT); expect(d(T, m)).toBeGreaterThan(30); }
@@ -49,12 +47,11 @@ describe("os MIRANTES DA TERRA nas 4 quinas (a antiga base do Andrei + 3 cópias
       expect(cards.map((c) => c.tema)).toEqual([...TEMAS]);
       for (const c of cards) { expect(d(c, t)).toBeLessThan(d(c, s) - 4); expect(d(c, t) - t.larg / 2).toBeLessThan(18); }   // colados no telão dos problemas (logo depois do palco dele)
       MOTORES.slice(i * 2, i * 2 + 2).forEach((mo, k) => expect(d(mo, k ? s : t)).toBeLessThan(20));          // 1 motor atrás de cada telão
-      expect(Math.sign(LOTES_MIRANTE[i]!.x - m.x) !== Math.sign(t.x - m.x) || Math.sign(LOTES_MIRANTE[i]!.z - m.z) !== Math.sign(t.z - m.z)).toBe(true);   // motos do outro lado
     });
     expect(CABOS).toHaveLength(MOTORES.length * 2);
     expect(LIGACOES).toHaveLength(TOTENS.length);
     LIGACOES.forEach((l, k) => { expect(l.tema).toBe(TOTENS[k]!.tema); expect(d(l.para, TELOES_SOLUCAO[Math.floor(k / TEMAS.length)]!)).toBeLessThan(1e-6); });   // cada card → o telão das soluções
-    const tudo = [...[...TELOES, ...TELOES_SOLUCAO].map((t) => ({ ...t, r: t.larg / 2 })), ...GLOBOS, ...TOTENS.map((t) => ({ ...t, r: 1.5 })), ...LOTES_MIRANTE.map((l) => ({ ...l, r: 12 })), ...MOTORES];
+    const tudo = [...[...TELOES, ...TELOES_SOLUCAO].map((t) => ({ ...t, r: t.larg / 2 })), ...GLOBOS, ...TOTENS.map((t) => ({ ...t, r: 1.5 })), ...MOTORES];
     for (const c of tudo) { expect(Math.hypot(c.x, c.z) + c.r).toBeLessThan(CIDADE.andavelR - 2); for (const o of OCUPADO) expect(d(c, o), `× ${o.nome}`).toBeGreaterThan(c.r + o.r); }
     for (const c of tudo) for (const m of MIRANTES) expect(d(c, m)).toBeGreaterThan(PIRAMIDE_R + c.r);
     for (const s of SUPERTREES) { expect(s.alt).toBeGreaterThanOrEqual(25); expect(s.alt).toBeLessThanOrEqual(50); for (const c of tudo) expect(d(s, c)).toBeGreaterThan(c.r + 2.5); }

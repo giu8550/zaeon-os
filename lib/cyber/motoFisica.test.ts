@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PILOTAGEM, motoParada, passoMotoSub, sensacaoDeVelocidade, type ComandoMoto, type EstadoMoto } from "./motoFisica";
+import { PILOTAGEM, ZONA_MOTO_ZAEON, motoParada, passoMoto, passoMotoSub, sensacaoDeVelocidade, tetoDaMoto, type ComandoMoto, type EstadoMoto } from "./motoFisica";
+import * as ceuMod from "./ceu";
 
 const NADA: ComandoMoto = { acel: 0, giro: 0, subir: false, descer: false, boost: false };
 /** no ar (longe do chão e de tudo), parada, rumo +z */
@@ -93,5 +94,20 @@ describe("pilotagem da moto (dirigibilidade)", () => {
     s = pilotar(s, { subir: true }, 2); expect(s.y).toBeLessThan(450);
     expect(s.vy).toBeLessThan(-PILOTAGEM.planaMin + 1e-6); expect(s.vy).toBeGreaterThanOrEqual(-PILOTAGEM.planaMax - 1e-6);
     s = pilotar(s, {}, 60); expect(s.y).toBeLessThanOrEqual(PILOTAGEM.alturaMax + 1.5);
+  });
+});
+
+describe("o PODER da moto na Zaeon: o teto sobe até o início da ponta da capela", () => {
+  it("no céu da Zaeon (até as plataformas) dá pra subir até a altura das salas; fora dela, o teto baixo de sempre", () => {
+    const { CIDADE, ALTURA_LOUNGE, mundo } = ceuMod;
+    const centro = CIDADE.centro, garagem = mundo(CIDADE.salas.garagem);
+    expect(tetoDaMoto(centro, CIDADE.pisoY)).toBeGreaterThanOrEqual(CIDADE.pisoY + ALTURA_LOUNGE);
+    expect(tetoDaMoto(garagem, CIDADE.pisoY + ALTURA_LOUNGE)).toBeGreaterThan(CIDADE.pisoY + ALTURA_LOUNGE);   // pousa/decola da garagem
+    expect(tetoDaMoto({ x: 0, z: 0 }, 0)).toBe(PILOTAGEM.alturaMax);                                       // na praça: baixo
+    expect(ZONA_MOTO_ZAEON.r).toBeGreaterThan(Math.hypot(CIDADE.salas.garagem.x, CIDADE.salas.garagem.z) + CIDADE.salas.garagem.r);
+    // subindo da central: chega na altura das plataformas (e não passa muito dela)
+    let s = motoParada(centro.x + 100, CIDADE.pisoY + 3, centro.z, 0);
+    for (let i = 0; i < 60 * 25; i++) s = passoMoto(s, { acel: 0, giro: 0, subir: true, descer: false, boost: false }, 1 / 60).s;
+    expect(s.y).toBeGreaterThan(CIDADE.pisoY + ALTURA_LOUNGE); expect(s.y).toBeLessThanOrEqual(ZONA_MOTO_ZAEON.teto + 0.5);
   });
 });

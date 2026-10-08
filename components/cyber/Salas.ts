@@ -16,7 +16,7 @@ import { linhasDoRecado } from "@/lib/cyber/recado";
 /** o tema de cada sala (sem placa com nome: os espaços falam por si) — todas a céu aberto, com guarda-corpo */
 const TEMA: Record<NomeSala, { piso: number; brilho: number; cor: string; alt: number; aberto: boolean }> = {
   lounge: { piso: 0x120a24, brilho: 0xb98cff, cor: "#e2d0ff", alt: 1.6, aberto: true },
-  convivencia: { piso: 0x1c1208, brilho: 0xffb46b, cor: "#ffe0bf", alt: 1.6, aberto: true },
+  garagem: { piso: 0x14100c, brilho: 0xffb46b, cor: "#ffe0bf", alt: 1.6, aberto: true },   // a ALA DOS VEÍCULOS (laranja)
   biblioteca: { piso: 0x081426, brilho: 0x7fb8ff, cor: "#d6e8ff", alt: 1.6, aberto: true },
   jardim: { piso: 0x07180f, brilho: 0x7dffb0, cor: "#d4ffe6", alt: 1.6, aberto: true },
 };
@@ -488,6 +488,14 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
         const k = (t * 0.25) % 1; anel.scale.setScalar(1 + k * (R - 1)); (anel.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - k);   // uma ondinha saindo do meio
         for (const L of luzes) { const a = L.a + t * 0.08; L.l.position.set(Math.cos(a) * L.r, 0.6 + 0.25 * Math.sin(t * 0.9 + L.a * 3), Math.sin(a) * L.r); }
       });
+    },
+    // TORRE DE CARGA (garagem): coluna escura com anéis laranja subindo — a "energia" das motos
+    torreCarga(p, m) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x14100c, roughness: 0.4, metalness: 0.7, emissive: 0x2a1406, emissiveIntensity: 0.6 });
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.7, 6, 12), mat); col.position.y = 3; p.add(col);
+      const topo = new THREE.Mesh(new THREE.OctahedronGeometry(0.75), basica(0xffb46b, 0.9, true)); topo.position.y = 6.8; topo.scale.y = 1.6; p.add(topo);
+      const aneis = [0, 1, 2].map((k) => { const a = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.05, 6, 32), basica(0xffb46b, 0.6, true)); a.rotation.x = Math.PI / 2; p.add(a); return { a, k }; });
+      anim.push((_, t) => { for (const { a, k } of aneis) { const u = (t * 0.35 + k / 3) % 1; a.position.y = 0.4 + u * 5.6; (a.material as THREE.MeshBasicMaterial).opacity = 0.7 * Math.sin(Math.PI * u); } topo.rotation.y = t * 0.6; });
     },
     // CAIXA DE SOM discreta: coluna fina escura, tela de tecido e 2 cones com um aro aceso que respira com a música
     caixaMinimal(p, m) {

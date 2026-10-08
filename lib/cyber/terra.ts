@@ -11,7 +11,7 @@
  *    telão das SOLUÇÕES (projetos e ideias reais); o GLOBO entre os dois, alimentado pelos MOTORES DE ENERGIA (reagem
  *    a quem chega perto); os DROIDS OBSERVADORES (1 líder piramidal + 2 menores): o líder alterna entre as duas telas,
  *    os menores escaneiam o globo — o movimento sai só do RELÓGIO (todos veem igual);
- *  - do OUTRO lado, um ESTACIONAMENTO de 4 motos.
+ *  (as motos que ficavam do outro lado foram pra GARAGEM — lib/cyber/motos)
  * Coordenadas LOCAIS da ilha da Zaeon. Não importa lib/cyber/ceu (evita ciclo: ceu usa daqui).
  */
 import type { Colisor, P2 } from "./colisao";
@@ -67,8 +67,6 @@ export const SUPERTREES: { x: number; z: number; alt: number; copa: number }[] =
     const r = 30, p = noMirante(m, Math.cos(rad(a!)) * r, Math.sin(rad(a!)) * r);
     return { ...p, alt: alta ? 44 - ((i + k) % 2) * 6 : 32 + ((i + k) % 2) * 4, copa: alta ? 10.5 : 8 };
   }));
-/** os ESTACIONAMENTOS dos mirantes (1 fila de 4, do OUTRO lado da pirâmide, virados pro centro) — lib/cyber/motos */
-export const LOTES_MIRANTE = MIRANTES.map((m) => noMirante(m, 30, -50));
 
 /** colisores (mundo, via `mundo`): troncos das supertrees, bases dos motores, pés dos 2 telões, globo e cards */
 export function colisoresDoDistritoTerra(mundo: (p: P2) => P2): Colisor[] {
