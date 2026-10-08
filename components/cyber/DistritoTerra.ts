@@ -33,7 +33,7 @@ export type DistritoHandle = {
   dispose(): void;
 };
 
-const URL_TERRA = "/assets/cyber/terra-blue-marble.jpg";
+export const URL_TERRA = "/assets/cyber/terra-blue-marble.jpg";
 const COR_TIPO = { problema: "#ff4a5a", regeneracao: "#5aff8a", desenvolvimento: "#45d6ff", evento: "#ffb45a" } as const;
 const TIPO_IDX = { problema: 0, regeneracao: 1, desenvolvimento: 2, evento: 3 } as const;
 /** os TOTENS: o tema, a cor e o problema que ele lembra */

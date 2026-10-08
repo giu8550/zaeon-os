@@ -64,6 +64,55 @@ export function tocarUI(nome: NomeSom) {
   } catch { /* sem áudio */ }
 }
 
+/** um som SINTETIZADO (lib/cyber/audio SINTESE) num buffer do contexto `ctx` */
+function sintetizarBuffer(ctx: BaseAudioContext, gerar: (sr: number) => Float32Array): AudioBuffer {
+  const d = gerar(ctx.sampleRate), b = ctx.createBuffer(1, d.length, ctx.sampleRate); b.getChannelData(0).set(d); return b;
+}
+/** um som de ARQUIVO: baixa, decodifica e prepara (loop sem emenda, recorte do passo) — null se faltar */
+async function baixarSom(ctx: BaseAudioContext, n: NomeSom): Promise<AudioBuffer | null> {
+  try {
+    const r = await fetch(urlDoSom(n)); if (!r.ok) return null;
+    let buf = await ctx.decodeAudioData(await r.arrayBuffer());
+    const em = SONS[n].emendar;
+    if (em) {   // vira loop sem emenda (a ponta entra em crossfade no começo)
+      const x = Math.round(em * buf.sampleRate), novo = ctx.createBuffer(buf.numberOfChannels, buf.length - Math.max(1, Math.min(Math.floor(buf.length / 3), x)), buf.sampleRate);
+      for (let c = 0; c < buf.numberOfChannels; c++) novo.getChannelData(c).set(emendarLoop(buf.getChannelData(c), x));
+      buf = novo;
+    }
+    if (SONS[n].recortar) {   // passo: só a batida principal, começando no ataque dela
+      const rp = recortePasso(buf.getChannelData(0), buf.sampleRate), novo = ctx.createBuffer(buf.numberOfChannels, rp.n, buf.sampleRate);
+      for (let c = 0; c < buf.numberOfChannels; c++) novo.getChannelData(c).set(recortarCanal(buf.getChannelData(c), rp, buf.sampleRate));
+      buf = novo;
+    }
+    return buf;
+  } catch { return null; }
+}
+
+/** os sons PREPARADOS antes do gesto (na tela de carregamento) — buffers independem do contexto que os criou */
+const PREPARADOS = new Map<NomeSom, AudioBuffer>();
+let preCarga: Promise<void> | null = null;
+/**
+ * Prepara TODOS os sons do cyberespaço ANTES de entrar (a tela de carregamento espera): os arquivos baixam e
+ * decodificam em paralelo; os sintetizados são gerados um por vez, cedendo a vez pro navegador entre eles (a barra de
+ * loading anda, a aba não congela). Usa um OfflineAudioContext (não precisa de gesto). Uma vez por página.
+ */
+export function preCarregarSons(progresso?: (feitos: number, total: number) => void): Promise<void> {
+  if (preCarga) return preCarga;
+  preCarga = (async () => {
+    if (typeof OfflineAudioContext === "undefined") return;
+    const ctx = new OfflineAudioContext(1, 1, 48000), sint = Object.entries(SINTESE) as [NomeSom, (sr: number) => Float32Array][];
+    const total = sint.length + SONS_ARQUIVO.length; let feitos = 0;
+    const conta = () => { feitos++; progresso?.(feitos, total); };
+    const arquivos = Promise.all(SONS_ARQUIVO.map(async (n) => { const b = await baixarSom(ctx, n); if (b) PREPARADOS.set(n, b); conta(); }));
+    for (const [n, gerar] of sint) {
+      try { PREPARADOS.set(n, sintetizarBuffer(ctx, gerar)); } catch { /* sem esse som */ }
+      conta(); await new Promise((r) => setTimeout(r, 0));
+    }
+    await arquivos;
+  })();
+  return preCarga;
+}
+
 export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; low: boolean }): AudioCyberHandle {
   let listener: THREE.AudioListener | null = null, vivo = true, entrada = 0;   // entrada: 0→1 no fade-in dos loops
   const buffers = new Map<NomeSom, AudioBuffer>();
@@ -141,29 +190,18 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       api.aplicarPrefs();
       for (const v of vozesAoVivo) ligarVoz(v);   // vozes que chegaram antes do gesto
       for (const m of musicas) ligarMusica(m);
-      const loader = new THREE.AudioLoader();
-      // os SINTETIZADOS saem na hora (sem rede): gerados no AudioContext do three
+      // os sons já PREPARADOS na tela de carregamento (preCarregarSons): entram na hora, sem travar o clique
+      for (const [n, b] of PREPARADOS) buffers.set(n, b);
+      // o que faltou (sem pré-carga): sintetiza / baixa agora
       for (const [n, gerar] of Object.entries(SINTESE) as [NomeSom, (sr: number) => Float32Array][]) {
-        try { const d = gerar(ctx.sampleRate), b = ctx.createBuffer(1, d.length, ctx.sampleRate); b.getChannelData(0).set(d); buffers.set(n, b); } catch { /* sem esse som */ }
+        if (buffers.has(n)) continue;
+        try { buffers.set(n, sintetizarBuffer(ctx, gerar)); } catch { /* sem esse som */ }
       }
       montarLoops();
-      SONS_ARQUIVO.forEach((n) => {
-        loader.load(urlDoSom(n), (buf) => {
-          if (!vivo) return;
-          const em = SONS[n].emendar;
-          if (em) {   // vira loop sem emenda (a ponta entra em crossfade no começo)
-            const x = Math.round(em * buf.sampleRate), novo = ctx.createBuffer(buf.numberOfChannels, buf.length - Math.max(1, Math.min(Math.floor(buf.length / 3), x)), buf.sampleRate);
-            for (let c = 0; c < buf.numberOfChannels; c++) novo.getChannelData(c).set(emendarLoop(buf.getChannelData(c), x));
-            buf = novo;
-          }
-          if (SONS[n].recortar) {   // passo: só a batida principal, começando no ataque dela
-            const r = recortePasso(buf.getChannelData(0), buf.sampleRate), novo = ctx.createBuffer(buf.numberOfChannels, r.n, buf.sampleRate);
-            for (let c = 0; c < buf.numberOfChannels; c++) novo.getChannelData(c).set(recortarCanal(buf.getChannelData(c), r, buf.sampleRate));
-            buf = novo;
-          }
-          buffers.set(n, buf); montarLoops();
-        }, undefined, () => { /* arquivo faltando: segue sem esse som */ });
-      });
+      for (const n of SONS_ARQUIVO) {
+        if (buffers.has(n)) continue;
+        void baixarSom(ctx, n).then((buf) => { if (!vivo || !buf) return; buffers.set(n, buf); montarLoops(); });
+      }
     },
     loop(nome, obj, op = {}) {
       const l: LoopSom = { audio: null, alvo: 0, atual: 0, nome };

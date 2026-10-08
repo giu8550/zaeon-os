@@ -6,6 +6,7 @@
  *    base privada por pessoa. Se a sala não abrir (cheia/erro), dá pra entrar sozinho.
  * three.js é client-only e pesado: este módulo é importado com next/dynamic (ssr:false) pelos chamadores.
  */
+import TelaCarregando from "./TelaCarregando";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -113,7 +114,7 @@ function Tela() {
   if (sala.estado === "cheia") {
     return <Carregando><span>Cyberespaço cheio (máximo 5).{" "}<button type="button" onClick={() => setSolo(true)} className="underline">Entrar sozinho</button></span></Carregando>;
   }
-  if (!salaId || !euSala || sala.estado === "carregando") return <Carregando />;
+  if (!salaId || !euSala || sala.estado === "carregando") return <div className="relative h-full w-full"><TelaCarregando carga={{ etapa: "corpo", rotulo: "Conectando à sala do cyberespaço", progresso: 0.01 }} /></div>;
   const aviso = avisoRealtime(sala.realtime, sala.motivoRealtime);
   return (
     <CenaCyber

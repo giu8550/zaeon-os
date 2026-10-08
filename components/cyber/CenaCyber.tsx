@@ -1,5 +1,7 @@
 "use client";
 
+import TelaCarregando from "./TelaCarregando";
+import type { Carregando } from "@/lib/cyber/carregamento";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LAB_ENTRADA, MSG_ENTRAR_ESTUDO, ehMsgEntrarEstudo } from "@/lib/ui/loungeHub";
@@ -78,6 +80,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   const monLabel = useRef<HTMLDivElement>(null);
   const engine = useRef<CyberEngine | null>(null);
   const [pronto, setPronto] = useState(false), [perto, setPerto] = useState(false), [menu, setMenu] = useState(!tela);
+  // a TELA DE LOADING (modo tela): fica até o engine resolver (mundo + sons + shaders + 1º quadro) e sai com fade
+  const [carga, setCarga] = useState<Carregando | null>(null), [loading, setLoading] = useState<"on" | "saindo" | "off">("on");
   const [falandoCom, setFalandoCom] = useState<string | null>(null), [abrindo, setAbrindo] = useState(false), [copiado, setCopiado] = useState(false);
   const [rota, setRota] = useState<"heliporto" | "zaeon" | null>(null);
   /** o TÚNEL de um buraco negro aberto (escolhendo o destino / atravessando o par do dono) */
@@ -180,7 +184,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       eu: cb.current.eu, membros: cb.current.membros, menu: !tela, low, qualidade, teclasSempre: tela,
       remotos: cb.current.remotos, enviarPos: (x) => cb.current.enviarPos?.(x),
       onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
-      onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true),
+      onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true), onCarregando: setCarga,
       landmarks: landmarksOn(), onLandmark: (poi) => { setErroTopo(null); setPoiAberto(poi); }, onTopo: (v) => { setNoTopo(v); if (v) setPoiAberto(null); },
       // os BURACOS NEGROS: o da rede abre o túnel com os destinos (aberto a todos); o par do dono pede acesso antes
       onTunel: (t) => { engine.current?.soltarMouse(); setTunel({ tipo: "escolher", origem: t.origem, nomeOrigem: NOS[t.origem].nome, destinos: t.destinos }); },
@@ -205,7 +209,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onAbrirSom: () => { if (!cb.current.souFundador || !cb.current.musica) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(true); },
       urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon escreve no mural."); return; } setRecadoTxt(""); setRecadoAberto(true); },
-    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); })
+    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); setLoading("saindo"); setTimeout(() => setLoading("off"), 550); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
     // a engine é criada uma vez por montagem; mudanças vão por métodos
@@ -459,7 +463,8 @@ export default function CenaCyber(p: CenaCyberProps) {
           <style>{`@keyframes cyber-entrando{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}`}</style>
         </div>
       )}
-      {!pronto && (
+      {tela && loading !== "off" && !falha && <TelaCarregando carga={carga} saindo={loading === "saindo"} />}
+      {!tela && !pronto && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[#03030a]">
           <div className="h-1.5 w-[220px] overflow-hidden rounded-full bg-white/10"><div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-cyan-200 to-sky-400" /></div>
         </div>
