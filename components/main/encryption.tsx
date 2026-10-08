@@ -27,7 +27,7 @@ const SponsorsTicker = ({ opacity }: { opacity: any }) => {
     return (
         <motion.div style={{ opacity }} className="w-full py-8 overflow-hidden relative z-50">
             <div className="w-full flex justify-center mb-8">
-                <h3 className="text-center text-[11px] font-black tracking-[0.35em] text-cyan-700 dark:text-cyan-300 uppercase">
+                <h3 className="text-center text-[11px] font-black tracking-[0.35em] text-white uppercase">
                     <TextoRevelado texto="Financiado e apoiado por:" />
                 </h3>
             </div>

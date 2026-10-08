@@ -263,7 +263,7 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
                 {/* Lista DUPLICADA: alimenta o loop sem costura do glide contínuo. */}
                 {/* `dark`: os cards dos agentes são VIDRO PRETO nos dois temas (contraste melhor no claro) */}
                 {[...vitrine, ...vitrine].map((m, i) => (
-                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cracha d={dadosCracha(m, i % vitrine.length)} emCena={i === cena} /></div>
+                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cracha d={dadosCracha(m, i % vitrine.length)} emCena={i === cena} estavel /></div>
                 ))}
             </div>
         </div>
