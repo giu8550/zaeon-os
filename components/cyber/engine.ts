@@ -63,6 +63,9 @@ import type { Regiao } from "@/lib/cyber/regioes";
 import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
+import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
+import { carregarVrm, tingirVrm } from "./AvatarVrm";
+import { ventoDasAsas } from "@/lib/cyber/asas";
 
 /**
  * Vêm do SERVIDOR (GET da sala), o cliente só pinta: `fundador` = dono — a base dele fica na ZAEON (a ilha no céu).
@@ -147,7 +150,7 @@ export type CyberOpts = {
   onPronto?: () => void;
 };
 
-type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
+type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** o corpo VRM já pedido (o do founder) */ vrm?: boolean; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
   /** na cabine do DJ do lounge (0..1, suavizado): fone na cabeça, mãos na controladora */
   dj?: number;
   /** parado na pista do lounge (0..1, suavizado): dançando */
@@ -165,7 +168,7 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; pos:
   /** remotos: sons da nave dele (loops idle/voo) e passos */
   somNave?: { idle: LoopSom; voo: LoopSom; g: EstadoGatilhoVoo; voava: boolean; ev: EstadoSomNave; yAnt: number | null; vy: number } | null; passoT?: number; perto?: boolean;
   /** remotos: o jato contínuo da mochila dele + a última velocidade vertical no ar (pro baque do pouso) */
-  somJet?: LoopSom[] | null; vyUlt?: number;
+  somJet?: LoopSom[] | null; vyUlt?: number; /** o vento nas asas (quem tem asas: o founder) */ somAsas?: LoopSom | null;
   /** voz ao vivo (WebRTC) presa ao avatar; `falando` = segurando o push-to-talk agora */
   vozH?: { remover(): void } | null; falando?: boolean;
   /** remotos: montado numa moto voadora (vaga, altura, rumo) */
@@ -457,6 +460,7 @@ export class CyberEngine {
     if (!ids.includes(this.o.eu.id)) { lista = [...lista, this.o.eu]; ids.push(this.o.eu.id); }
     for (const p of lista) this.pessoas.set(p.id, p);
     this.ordem = ids;
+    for (const a of [this.eu, ...(this.remotos?.values() ?? [])]) if (a) this.vestirFundador(a);   // o "founder" pode chegar depois do ator
     // bases especiais (só com os marcos na cena): o dono na ZAEON (céu)
     this.layouts = basesDosMembros(ids, undefined, { ceu: this.cidade ? ids.filter((id) => this.ehFundador(id)) : [] });
     for (const [id, lay] of this.layouts) {
@@ -494,9 +498,23 @@ export class CyberEngine {
     const av = criarAvatarLuz(cor, this.cena.starTex, this.o.low, this.gltf); av.aura(this.qa.atual.aura);
     av.group.position.set(x, 0, z); this.cena.scene.add(av.group);
     const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + cor + ";"; tag.textContent = p.id === this.o.eu.id ? "" : p.name; this.o.overlay.appendChild(tag);   // o próprio avatar não leva rótulo
-    return { id: p.id, name: p.name, color: cor, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag, alt: 0 };
+    const a: Ator = { id: p.id, name: p.name, color: cor, av, pos: new THREE.Vector3(x, 0, z), facing: 0, moving: false, sit: 0, tag, alt: 0 };
+    this.vestirFundador(a);
+    return a;
   }
-  private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
+  /** o FOUNDER tem corpo próprio (VRM do VRoid — lib/cyber/estiloAvatar CORPO_DO_FUNDADOR): baixa sem travar; até
+   *  chegar, ele aparece com o corpo padrão. Vale pro próprio founder e pra quem o vê de fora */
+  private vestirFundador(a: Ator) {
+    if (a.vrm || !this.gltf || !usaCorpoDoFundador(this.pessoas.get(a.id)?.fundador, location.search)) return;
+    a.vrm = true;
+    a.av.usarAsas();   // as asas negras no lugar da mochila (já, sem esperar o corpo)
+    carregarVrm(CORPO_DO_FUNDADOR.url).then((vrm) => {
+      const vivo = this.vivo && (a === this.eu || this.remotos.get(a.id) === a);
+      if (!vivo) return;
+      tingirVrm(vrm, CORPO_DO_FUNDADOR.tintas); a.av.usarVrm(vrm);
+    }).catch((e) => { console.warn("[cyber] corpo do founder (VRM) não carregou:", e); });
+  }
+  private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
   // ───────────── API pública (React → engine) ─────────────
   iniciar(go = "viajar") {
@@ -1171,6 +1189,16 @@ export class CyberEngine {
     this.som.tocar("land", em, { dist: DISTANCIA.eu, volume: 0.6 + 0.4 * f });
     this.som.tocar("baque", em, { dist: DISTANCIA.eu, volume: 0.3 + 0.7 * f, taxa: 1.12 - 0.3 * f });
   }
+  /** os sons das ASAS de alguém: a batida a cada descida (presa ao corpo, afinação variando), abrir ao decolar,
+   *  fechar ao pousar, e o vento contínuo planando (lib/cyber/asas) */
+  private somDasAsas(a: Ator, ev: NonNullable<ReturnType<AvatarLuzHandle["eventosAsas"]>>, dist: Dist, vel: number) {
+    const s = this.som;
+    for (let k = 0; k < Math.min(2, ev.bateu); k++) s.tocar("asa-bater", null, { dist, seguir: a.av.group, taxa: 0.9 + Math.random() * 0.18, volume: ev.modo === "sobe" ? 1 : 0.7 });
+    if (ev.abriu) s.tocar("asa-abrir", null, { dist, seguir: a.av.group });
+    if (ev.fechou) s.tocar("asa-fechar", a.av.group.position, { dist });
+    if (!a.somAsas) a.somAsas = s.loop("asa-vento", a.av.group, { dist });
+    s.volumeLoop(a.somAsas, ventoDasAsas(ev.modo, vel));
+  }
   private soltarSomJet(a: Ator) { if (a.somJet) { for (const l of a.somJet) this.som.soltarLoop(l); a.somJet = null; } }
   /** o jato da mochila em 2 camadas (ronco gravado + sopro sintetizado) presas a um objeto */
   private loopsDoJato(obj: THREE.Object3D, dist: Dist): LoopSom[] { return [this.som.loop("jetpack", obj, { dist }), this.som.loop("jato-sopro", obj, { dist })]; }
@@ -1195,7 +1223,10 @@ export class CyberEngine {
       s.volumeLoop(l, mesmoPiso ? fatorCristais(Math.hypot(this.eu.pos.x - b.x, this.eu.pos.z - b.z)) : 0);
     }
     // a MINHA mochila: jato contínuo (ataque rápido ao apertar, solta suave), mais agudo subindo
-    if (this.somLoops.jet) this.ajustarJato(this.somLoops.jet, this.jet.noAr, this.jet.tecla || this.impulsoFrente, this.jet.tecla ? this.jet.vy : 3);
+    // (o founder tem ASAS no lugar da mochila: em vez do jato, a batida e o vento)
+    const asasEu = this.eu.av.eventosAsas();
+    if (asasEu) { this.somDasAsas(this.eu, asasEu, DISTANCIA.eu, this.eu.moving ? 8 : 0); if (this.somLoops.jet) for (const l of this.somLoops.jet) s.volumeLoop(l, 0); }
+    else if (this.somLoops.jet) this.ajustarJato(this.somLoops.jet, this.jet.noAr, this.jet.tecla || this.impulsoFrente, this.jet.tecla ? this.jet.vy : 3);
     // a MINHA nave: idle parada, voo em movimento; decolagem/pouso nas transições; pilotando quase não paneia
     if (this.nave && this.somLoops.naveIdle && this.somLoops.naveVoo) {
       const voando = this.pilotando && !this.pousado, vel = Math.hypot(this.naveEst.vx, this.naveEst.vz) / VOO.vel;
@@ -1229,8 +1260,11 @@ export class CyberEngine {
         if (pisadas !== null) for (let k = 0; k < pisadas; k++) this.tocarPasso(a, DISTANCIA.perto);
         else { a.passoT = (a.passoT ?? 0) + dt; if (a.passoT >= cadenciaPasso(false)) { a.passoT = 0; this.tocarPasso(a, DISTANCIA.perto); } }
       }
-      // mochila do colega: jato posicional (vem do lado certo); ao pousar, o baque dele
-      if (a.jet !== undefined) {
+      // mochila do colega: jato posicional (vem do lado certo); ao pousar, o baque dele. Com ASAS: batida + vento
+      const asasA = a.av.eventosAsas();
+      if (asasA && d < 60) this.somDasAsas(a, asasA, DISTANCIA.padrao, a.moving ? 8 : 0);
+      else if (asasA) { if (a.somAsas) s.volumeLoop(a.somAsas, 0); }
+      else if (a.jet !== undefined) {
         if (!a.somJet) a.somJet = this.loopsDoJato(a.av.group, DISTANCIA.padrao);
         const vy = a.vyJet ?? 0; this.ajustarJato(a.somJet, true, vy > -3, vy); a.vyUlt = vy;
       } else if (a.somJet) {
