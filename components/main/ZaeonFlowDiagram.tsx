@@ -152,16 +152,14 @@ export const portaEntradaD = (i: number) => porta(D.cerebro, Math.PI, PARES.leng
 export const portaSaidaD = (i: number) => porta(D.cerebro, 0, i);
 
 const entradaD = (i: number) => {
-    const y = D.linha(i);
-    const x0 = D.cardE.x + D.cardE.w;
+    const { x: x0, y } = bolha(false, "E", i).ancora;
     const p = portaEntradaD(i);
     const meio = x0 + (p.x - x0) * 0.55;
     return `M${x0},${y} C${meio},${y} ${p.x - 55},${p.y} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
 };
 
 const saidaD = (i: number) => {
-    const y = D.saida(i);
-    const x1 = D.cardS.x;
+    const { x: x1, y } = bolha(false, "S", i).ancora;
     const p = portaSaidaD(i);
     const meio = p.x + (x1 - p.x) * 0.45;
     return `M${p.x.toFixed(1)},${p.y.toFixed(1)} C${p.x + 55},${p.y} ${meio},${y} ${x1},${y}`;
@@ -179,21 +177,38 @@ const M = {
     coluna: (i: number) => 180 + (i - (PARES.length - 1) / 2) * 90,
 };
 
+/**
+ * Os BALÕES: cada palavra num balãozinho (pílula). Os três de cada lado ficam SIMÉTRICOS: dois por fora e o do meio
+ * mais perto do cérebro. No desktop eles empilham com o do meio avançado; no celular, dois lado a lado e o do meio
+ * centralizado, mais perto (espelhado embaixo, na saída). `ancora` = onde o fio encosta no balão.
+ */
+type Bolha = { x: number; y: number; w: number; h: number; ancora: { x: number; y: number } };
+const BOLHA_D = { w: 190, h: 44, avanco: 90 };
+const BOLHA_M = { w: 150, h: 34 };
+export function bolha(mobile: boolean, lado: "E" | "S", i: number): Bolha {
+    const meio = i === 1;
+    if (!mobile) {
+        const { w, h, avanco } = BOLHA_D, cy = D.linha(i), x = lado === "E" ? D.cardE.x + (meio ? avanco : 0) : D.cardS.x + D.cardS.w - w - (meio ? avanco : 0);
+        return { x, y: cy - h / 2, w, h, ancora: { x: lado === "E" ? x + w : x, y: cy } };
+    }
+    const { w, h } = BOLHA_M, cx = meio ? 180 : i === 0 ? 92 : 268;
+    const cy = lado === "E" ? (meio ? 120 : 62) : (meio ? 460 : 518);
+    return { x: cx - w / 2, y: cy - h / 2, w, h, ancora: { x: cx, y: lado === "E" ? cy + h / 2 : cy - h / 2 } };
+}
+
 /** Portas de cima (entrada) e de baixo (saida) do cerebro no celular. */
 export const portaEntradaM = (i: number) => porta(M.cerebro, -Math.PI / 2, i);
 export const portaSaidaM = (i: number) => porta(M.cerebro, Math.PI / 2, PARES.length - 1 - i);
 
 const entradaM = (i: number) => {
-    const x = M.coluna(i);
-    const y0 = M.cardE.y + M.cardE.h;
+    const { x, y: y0 } = bolha(true, "E", i).ancora;
     const p = portaEntradaM(i);
     const meio = y0 + (p.y - y0) * 0.55;
     return `M${x},${y0} C${x},${meio} ${p.x},${p.y - 45} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
 };
 
 const saidaM = (i: number) => {
-    const x = M.coluna(i);
-    const y1 = M.cardS.y;
+    const { x, y: y1 } = bolha(true, "S", i).ancora;
     const p = portaSaidaM(i);
     const meio = p.y + (y1 - p.y) * 0.45;
     return `M${p.x.toFixed(1)},${p.y.toFixed(1)} C${p.x},${p.y + 45} ${x},${meio} ${x},${y1}`;
@@ -264,9 +279,13 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
 
         return (
             <>
-                {/* os cards: AZULADOS, tingidos pela cor do fluxo que está passando no cérebro agora */}
-                <CardMoldura {...G.cardE} tom={destaque === null ? "#22d3ee" : PARES[destaque].tom} sufixo={sufixo} />
-                <CardMoldura {...G.cardS} tom={destaque === null ? "#22d3ee" : PARES[destaque].tom} sufixo={sufixo} />
+                {/* um BALÃOZINHO por palavra (preto transparente); a borda é um fio de energia na cor do par —
+                    acesa e correndo no par em foco, quieta nos outros */}
+                {PARES.map((p, i) => (
+                    <g key={`mc-${p.entra}`} opacity={esmaecer(i)} style={{ transition: "opacity .45s ease" }}>
+                        {(["E", "S"] as const).map((lado) => { const b = bolha(mobile, lado, i); return <CardMoldura key={lado} x={b.x} y={b.y} w={b.w} h={b.h} rx={b.h / 2} tom={p.tom} ativo={forte(i)} sufixo={sufixo} semMovimento={semMovimento} />; })}
+                    </g>
+                ))}
 
                 {/* FLUXOS primeiro: passam por baixo dos cards e do texto. */}
                 {PARES.map((p, i) => (
@@ -294,6 +313,7 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
                     destaque={destaque !== null}
                     semMovimento={semMovimento}
                     tom={destaque === null ? "#22d3ee" : PARES[destaque].tom}
+                    sufixo={sufixo}
                 />
 
                 {/* POPS: as palavras que saltam do cérebro quando o fluxo chega */}
@@ -328,8 +348,8 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
 
                 {/* TEXTO por cima, com a area de toque do par inteiro. */}
                 {PARES.map((p, i) => {
-                    const yE = G.linha(i);
-                    const yS = G.saida(i);
+                    const bE = bolha(mobile, "E", i), bS = bolha(mobile, "S", i);
+                    const yE = bE.y + bE.h / 2, yS = bS.y + bS.h / 2;
                     return (
                         <g
                             key={`t-${p.entra}`}
@@ -351,26 +371,14 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
                             aria-label={`${p.entra} vira ${p.sai}`}
                         >
                             {/* alvo de toque: a linha inteira, nao so as letras */}
-                            <rect
-                                x={G.cardE.x + 6}
-                                y={yE - 18}
-                                width={G.cardE.w - 12}
-                                height={36}
-                                fill="transparent"
-                            />
-                            <rect
-                                x={G.cardS.x + 6}
-                                y={yS - 18}
-                                width={G.cardS.w - 12}
-                                height={36}
-                                fill="transparent"
-                            />
-                            <No cx={G.cardE.x + 28} cy={yE} par={p} forte={forte(i)} />
-                            <Texto x={G.cardE.x + 48} y={yE} forte={forte(i)} mobile={mobile}>
+                            <rect x={bE.x} y={bE.y} width={bE.w} height={bE.h} rx={bE.h / 2} fill="transparent" />
+                            <rect x={bS.x} y={bS.y} width={bS.w} height={bS.h} rx={bS.h / 2} fill="transparent" />
+                            <No cx={bE.x + (mobile ? 18 : 24)} cy={yE} par={p} forte={forte(i)} />
+                            <Texto x={bE.x + (mobile ? 32 : 42)} y={yE} forte={forte(i)} mobile={mobile}>
                                 {p.entra}
                             </Texto>
-                            <No cx={G.cardS.x + 28} cy={yS} par={p} forte={forte(i)} />
-                            <Texto x={G.cardS.x + 48} y={yS} forte={forte(i)} mobile={mobile}>
+                            <No cx={bS.x + (mobile ? 18 : 24)} cy={yS} par={p} forte={forte(i)} />
+                            <Texto x={bS.x + (mobile ? 32 : 42)} y={yS} forte={forte(i)} mobile={mobile}>
                                 {p.sai}
                             </Texto>
                         </g>
@@ -390,6 +398,9 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
                 @keyframes zf-no      { 0%,100% { r: 3.4; opacity: .5 } 50% { r: 4.8; opacity: 1 } }
                 @keyframes zf-porta   { 0%,100% { r: 2.2; opacity: .55 } 50% { r: 3.6; opacity: 1 } }
                 @keyframes zf-cerebro { 0%,100% { transform: scale(1) } 50% { transform: scale(1.045) } }
+                @keyframes zf-processa { 0%,100% { transform: scale(1) } 12% { transform: scale(1.06) } 22% { transform: scale(.99) } 34% { transform: scale(1.04) } 46% { transform: scale(1) } 70% { transform: scale(1.025) } }
+                @keyframes zf-processa-luz { 0%,100% { transform: scale(.82); opacity: .45 } 12% { transform: scale(1.12); opacity: 1 } 24% { transform: scale(.9); opacity: .6 } 36% { transform: scale(1.06); opacity: .9 } 50% { transform: scale(.86); opacity: .5 } 72% { transform: scale(1); opacity: .75 } }
+                @keyframes zf-gira { to { transform: rotate(360deg) } }
                 @keyframes zf-halo    { 0% { transform: scale(.84); opacity: .5 } 70% { transform: scale(1.2); opacity: 0 } 100% { transform: scale(1.2); opacity: 0 } }
                 @keyframes zf-pop     { 0% { opacity: 0; transform: translate(0, 0) scale(.55) } 18% { opacity: 1 } 78% { opacity: 1 } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1) } }
                 .zf-pop { animation: zf-pop 2.4s cubic-bezier(.2,.7,.2,1) both; transform-box: fill-box; transform-origin: center }
@@ -507,6 +518,17 @@ function Pops({
 function Defs({ sufixo }: { sufixo: string }) {
     return (
         <defs>
+            {/* o fundo dos cards: PRETO transparente (vidro escuro) */}
+            <linearGradient id={`zf-azul-${sufixo}`} x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#000000" stopOpacity="0.55" />
+                <stop offset="100%" stopColor="#000000" stopOpacity="0.7" />
+            </linearGradient>
+            {/* o brilho que PULSA atrás do cérebro (processando) */}
+            <radialGradient id={`zf-nucleo-${sufixo}`}>
+                <stop offset="0%" stopColor="#7fe8ff" stopOpacity="0.85" />
+                <stop offset="45%" stopColor="#3b6bff" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#1d3fd0" stopOpacity="0" />
+            </radialGradient>
             {/* sombra/brilho suave dos cards */}
             <filter id={`zf-card-${sufixo}`} x="-10%" y="-10%" width="120%" height="125%">
                 <feDropShadow dx="0" dy="10" stdDeviation="12" floodColor="#0b1d4a" floodOpacity="0.45" />
@@ -522,17 +544,27 @@ function Defs({ sufixo }: { sufixo: string }) {
     );
 }
 
-function CardMoldura({ x, y, w, h, tom, sufixo }: { x: number; y: number; w: number; h: number; tom: string; sufixo: string }) {
-    // base azul-marinho translúcida + véu da cor do fluxo em foco + borda nessa cor (tudo transiciona junto)
+function CardMoldura({ x, y, w, h, rx = 14, tom, ativo = true, sufixo, semMovimento = false }: { x: number; y: number; w: number; h: number; rx?: number; tom: string; ativo?: boolean; sufixo: string; semMovimento?: boolean }) {
+    // o fundo PRETO transparente; a BORDA é um fio de energia: a trilha pontilhada escorrendo + pacotes de luz correndo
+    // em volta do card, na cor do par (quieta quando o par não está em foco)
+    const b = { x: x + 0.75, y: y + 0.75, width: w - 1.5, height: h - 1.5, rx };
+    const anima = (a: string) => (semMovimento || !ativo ? undefined : a);
     return (
-        <g filter={`url(#zf-card-${sufixo})`}>
-            <rect x={x} y={y} width={w} height={h} rx={14} fill="rgba(10,22,52,0.82)" />
-            <rect x={x} y={y} width={w} height={h} rx={14} fill={tom} opacity={0.13} style={{ transition: "fill .6s ease" }} />
-            <rect
-                x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={14}
-                fill="none" stroke={tom} strokeOpacity={0.55} strokeWidth={1.2}
-                style={{ transition: "stroke .6s ease" }}
-            />
+        <g>
+            <g filter={`url(#zf-card-${sufixo})`}>
+                <rect x={x} y={y} width={w} height={h} rx={rx} fill={`url(#zf-azul-${sufixo})`} />
+                {/* brilho de vidro no topo */}
+                <rect x={x + 1} y={y + 1} width={w - 2} height={h * 0.42} rx={rx - 1} fill="#ffffff" opacity={0.03} />
+            </g>
+            {/* a trilha (como a dos fios): tracejada, escorrendo */}
+            <rect {...b} fill="none" stroke={tom} strokeOpacity={ativo ? 0.7 : 0.35} strokeWidth={1.4} strokeDasharray="5 5"
+                style={{ transition: "stroke .6s ease", animation: anima("zf-trilha 1.1s linear infinite") }} />
+            {/* os pacotes de energia dando a volta no card (um líder e um satélite, como nos fios) */}
+            {ativo && [{ len: 9, peso: 2.4, dur: 3.2, atraso: 0 }, { len: 4, peso: 1.5, dur: 3.2, atraso: -1.6 }].map((p, k) => (
+                <rect key={k} {...b} pathLength={100} fill="none" stroke={tom} strokeWidth={p.peso} strokeLinecap="round"
+                    strokeDasharray={`${p.len} ${100 - p.len}`} filter={`url(#zf-glow-${sufixo})`}
+                    style={{ transition: "stroke .6s ease", animation: anima(`zf-pacote ${p.dur}s linear ${p.atraso}s infinite`) }} />
+            ))}
         </g>
     );
 }
@@ -694,6 +726,7 @@ function Cerebro({
     destaque,
     semMovimento,
     tom,
+    sufixo,
 }: {
     cx: number;
     cy: number;
@@ -701,42 +734,37 @@ function Cerebro({
     destaque: boolean;
     semMovimento: boolean;
     tom: string;
+    sufixo: string;
 }) {
+    // PROCESSANDO: o núcleo de luz atrás pulsa num ritmo irregular (rajadas, como quem calcula), o cérebro bate junto,
+    // dois anéis de dados giram em sentidos opostos e a onda (halo) sai a cada rodada
+    const anima = (a: string) => (semMovimento ? undefined : a);
+    const centro = { transformBox: "fill-box" as const, transformOrigin: "center" };
     return (
         <g>
             {!semMovimento && (
-                <circle
-                    cx={cx}
-                    cy={cy}
-                    r={r * 1.02}
-                    fill="none"
-                    stroke={tom}
-                    strokeWidth={1.2}
-                    style={{
-                        transformBox: "fill-box",
-                        transformOrigin: "center",
-                        animation: "zf-halo 2.6s ease-out infinite",
-                        transition: "stroke .5s ease",
-                    }}
-                />
+                <circle cx={cx} cy={cy} r={r * 1.02} fill="none" stroke={tom} strokeWidth={1.2}
+                    style={{ ...centro, animation: "zf-halo 2.6s ease-out infinite", transition: "stroke .5s ease" }} />
             )}
             <circle
                 cx={cx}
                 cy={cy}
                 r={r}
-                className="fill-white/90 dark:fill-slate-950/90"
+                fill="#071033"
+                fillOpacity={0.92}
                 stroke={tom}
                 strokeWidth={destaque ? 1.6 : 1}
-                opacity={0.95}
                 style={{ transition: "stroke .5s ease, stroke-width .35s ease" }}
             />
-            <g
-                style={{
-                    transformBox: "fill-box",
-                    transformOrigin: "center",
-                    animation: semMovimento ? undefined : "zf-cerebro 3.4s ease-in-out infinite",
-                }}
-            >
+            {/* o núcleo de luz (atrás do cérebro): pulsa em rajadas */}
+            <circle cx={cx} cy={cy} r={r * 0.78} fill={`url(#zf-nucleo-${sufixo})`}
+                style={{ ...centro, animation: anima("zf-processa-luz 2.2s ease-in-out infinite"), opacity: semMovimento ? 0.6 : undefined }} />
+            {/* os anéis de DADOS: tracejados, girando em sentidos opostos, na cor do fluxo */}
+            <circle cx={cx} cy={cy} r={r * 0.9} fill="none" stroke={tom} strokeOpacity={0.55} strokeWidth={1.1} strokeDasharray="2 7" strokeLinecap="round"
+                style={{ ...centro, animation: anima("zf-gira 9s linear infinite"), transition: "stroke .5s ease" }} />
+            <circle cx={cx} cy={cy} r={r * 0.82} fill="none" stroke="#7fe8ff" strokeOpacity={0.35} strokeWidth={0.9} strokeDasharray="10 14"
+                style={{ ...centro, animation: anima("zf-gira 6.5s linear infinite reverse") }} />
+            <g style={{ ...centro, animation: anima("zf-processa 2.2s ease-in-out infinite") }}>
                 <image
                     href={BRAIN}
                     x={cx - r * 0.62}

@@ -15,15 +15,6 @@ import StarBackground from "@/components/main/star-background";
 import MolecularText from "@/components/ui/MolecularText";
 import { copyEntrada } from "@/lib/ui/loungeHub";
 import AuraAoVivo from "@/components/main/AuraAoVivo";
-import AgentAvatar from "@/components/agents/AgentAvatar";
-import { useManifesto } from "@/components/agents/avatar/hooks";
-
-/** Ícone do "Iniciar chat": o rosto da Aura (o chat é ela); sem avatar vivo → o balão de sempre. */
-function RostoDoChat() {
-  const manifest = useManifesto("aura");
-  if (!manifest) return <ChatBubbleLeftRightIcon className="w-4 h-4" />;
-  return <AgentAvatar agentId="aura" manifest={manifest} nome="Aura" size={24} className="-my-1 -ml-1" />;
-}
 
 // Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
 // Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
@@ -179,7 +170,7 @@ export default function HeroPage() {
                 tamanho="md"
                 className="w-full sm:w-auto"
               >
-                <RostoDoChat />
+                <ChatBubbleLeftRightIcon className="w-4 h-4" aria-hidden="true" />
                 Iniciar chat
               </LiquidGlassButton>
               <span className="text-xs uppercase tracking-[0.2em] text-slate-700 dark:text-white/80">ou</span>
