@@ -12,6 +12,7 @@
  * Caminho neural: POST /api/ai/voice (Kokoro/Piper). Fallback: speechSynthesis do navegador.
  */
 import { pickFiller } from "./fillers";
+import { medirNivel } from "./nivelVoz";
 
 export type TTSState = { speaking: boolean; loading: boolean; text: string | null };
 
@@ -30,11 +31,41 @@ export function subscribe(cb: (s: TTSState) => void) {
 }
 export function getTTSState(): TTSState { return state; }
 
+// ── NÍVEL DA VOZ (boca do avatar) ─────────────────────────────────────────
+// Volume do áudio que está tocando, 0..1 (null = nada tocando ou sem medida). O rosto do agente
+// assina isto e a boca segue a voz (components/agents/avatar/hooks → usePublicarPresenca).
+let nivel: number | null = null;
+const ouvintesNivel = new Set<() => void>();
+function emitirNivel(bruto: number | null) {
+  // quantiza nos 3 quadros de boca (fechada/meia/aberta): muda no ritmo das sílabas (~5–10/s), não
+  // a 60 fps — quem assina (o chat inteiro) não re-renderiza a cada frame
+  const n = bruto === null ? null : bruto < 0.15 ? 0 : bruto < 0.45 ? 0.3 : 0.8;
+  if (n === nivel) return;
+  nivel = n;
+  for (const f of ouvintesNivel) f();
+}
+export function subscribeNivel(cb: () => void) {
+  ouvintesNivel.add(cb);
+  return () => { ouvintesNivel.delete(cb); };
+}
+export function getNivel(): number | null { return nivel; }
+let pararMedida: (() => void) | null = null;
+/** Toca um <audio> do controlador medindo o volume; resolve no fim/erro. */
+function tocarMedindo(a: HTMLAudioElement, resolve: () => void) {
+  pararMedida?.();
+  pararMedida = medirNivel(a, emitirNivel);
+  const fim = () => { if (audio === a) audio = null; pararMedida?.(); pararMedida = null; resolve(); };
+  a.onended = fim;
+  a.onerror = fim;
+  a.play().catch(fim);
+}
+
 function pref(key: string): string | undefined {
   try { return localStorage.getItem(key) || undefined; } catch { return undefined; }
 }
 
 export function stop() {
+  pararMedida?.(); pararMedida = null;
   if (ctrl) { ctrl.abort(); ctrl = null; }
   if (audio) { audio.pause(); audio.src = ""; audio = null; }
   try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
@@ -145,9 +176,7 @@ function playPrepared(item: Prepared, ac: AbortController, gender: "f" | "m" = "
     if (item.kind === "audio") {
       const a = new Audio(item.url);
       audio = a;
-      a.onended = () => { if (audio === a) audio = null; resolve(); };
-      a.onerror = () => { if (audio === a) audio = null; resolve(); };
-      a.play().catch(() => { if (audio === a) audio = null; resolve(); });
+      tocarMedindo(a, resolve);
     } else resolve(); // pedaço sem áudio premium → pula em silêncio (sem voz do navegador)
   });
 }
@@ -158,9 +187,7 @@ function playFillerAudio(url: string, ac: AbortController): Promise<void> {
     if (ac.signal.aborted) return resolve();
     const a = new Audio(url);
     audio = a;
-    a.onended = () => { if (audio === a) audio = null; resolve(); };
-    a.onerror = () => { if (audio === a) audio = null; resolve(); }; // clipe faltando → segue
-    a.play().catch(() => { if (audio === a) audio = null; resolve(); });
+    tocarMedindo(a, resolve); // clipe faltando (erro) → segue
   });
 }
 

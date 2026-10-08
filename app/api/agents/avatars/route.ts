@@ -11,6 +11,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { normalizarManifest, type AvatarManifest } from "@/lib/avatars/estados";
 import { manifestosDoBanco } from "@/lib/avatars/banco";
+import { mesclarManifestos } from "@/lib/avatars/mesclar";
 
 function estaticos(): Record<string, AvatarManifest> {
   try {
@@ -24,5 +25,5 @@ function estaticos(): Record<string, AvatarManifest> {
 export async function GET() {
   const headers = { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" };
   const banco = await manifestosDoBanco().catch((e) => { console.warn("[avatars] banco:", (e as Error)?.message); return {}; });
-  return NextResponse.json({ agentes: { ...estaticos(), ...banco } }, { headers });
+  return NextResponse.json({ agentes: mesclarManifestos(estaticos(), banco) }, { headers });
 }

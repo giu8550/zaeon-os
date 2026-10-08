@@ -23,6 +23,7 @@ import VoiceAccessModule from "./modules/VoiceAccessModule";
 import InviteGroupsModule from "./modules/InviteGroupsModule";
 import AgentsModule from "./modules/AgentsModule";
 import { agentsAdmin } from "@/lib/canal/flags";
+import { adminLabelPlugins } from "@/lib/mentores/rota";
 
 // --- APPLE STYLE LOADER ---
 const AppleLoader = ({ status }: { status: string }) => (
@@ -116,7 +117,7 @@ export default function AdminControlRoom() {
                     />
                     <SidebarItem
                         icon={PuzzlePieceIcon}
-                        label="Plugins"
+                        label={adminLabelPlugins()}
                         active={activeTab === 'plugins'}
                         onClick={() => setActiveTab('plugins')}
                         isOpen={isSidebarOpen}

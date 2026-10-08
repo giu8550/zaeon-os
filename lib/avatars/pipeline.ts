@@ -12,7 +12,7 @@
 import sharp from "sharp";
 import { gerarImagemGemini } from "./gemini-image";
 import { colarComMascara, mascaraDeEdicao, FRACAO_MAX, FRACAO_MIN } from "./mascara";
-import { promptBase, promptEdicao, ORDEM_GERACAO } from "./prompts";
+import { PREFIXO_REFERENCIA, promptBase, promptEdicao, ORDEM_GERACAO } from "./prompts";
 import type { EstadoSprite } from "./estados";
 
 /** Tamanho de trabalho/saída cheia e da miniatura (cards de 22–64 px, retina). */
@@ -53,14 +53,21 @@ export async function normalizarBase(img: Buffer): Promise<Buffer> {
   return sharp(img).resize(LADO_BASE, LADO_BASE, { fit: "cover" }).removeAlpha().webp({ quality: 92 }).toBuffer();
 }
 
-/** BASE: texto → imagem. Devolve a base 1024 (pras edições) + o quadro idle. */
-export async function gerarBase(personagem: string, cor?: readonly [string, string], tentativas = 2): Promise<{ base: Buffer; idle: QuadroGerado }> {
+/**
+ * BASE: texto → imagem. Devolve a base 1024 (pras edições) + o quadro idle. Com `referencia` (a base
+ * de um avatar já aprovado), o modelo desenha um personagem NOVO no MESMO estilo anime.
+ */
+export async function gerarBase(personagem: string, cor?: readonly [string, string], tentativas = 2, referencia?: Buffer | null): Promise<{ base: Buffer; idle: QuadroGerado }> {
   const p = (personagem || "").trim();
   if (p.length < 20) throw new Error("descreva o personagem (≥ 20 caracteres)");
   let erro = "";
+  const prompt = promptBase(p, cor ?? COR_PADRAO);
   for (let t = 0; t < tentativas; t++) {
     try {
-      const base = await normalizarBase(await gerarImagemGemini(promptBase(p, cor ?? COR_PADRAO)));
+      const gerada = referencia
+        ? await gerarImagemGemini(`${PREFIXO_REFERENCIA}\n${prompt}`, { data: referencia, mimeType: "image/webp" })
+        : await gerarImagemGemini(prompt);
+      const base = await normalizarBase(gerada);
       return { base, idle: await saidas(await cru(base)) };
     } catch (e) { erro = (e as Error).message; }
   }

@@ -16,11 +16,11 @@ import type { SinalAvatar } from "@/lib/avatars/estados";
 /** Largura reservada pra coluna do rosto (classe Tailwind do recuo das respostas). */
 export const RECUO_ROSTO = "relative pl-12";
 
-export default function AgentePilula({ agentId, nome, estado, ultima = true, className = "" }: { agentId: string; nome: string; estado: SinalAvatar; ultima?: boolean; className?: string }) {
+export default function AgentePilula({ agentId, nome, estado, boca = null, ultima = true, className = "" }: { agentId: string; nome: string; estado: SinalAvatar; /** modo voz: nível da voz tocando */ boca?: number | null; ultima?: boolean; className?: string }) {
   const manifest = useManifesto(agentId);
   if (!manifest) return null;
   const rosto = (
-    <AgentAvatar agentId={agentId} manifest={manifest} nome={nome} size={36} estado={ultima ? estado : "idle"} vivo={ultima} destaque={ultima}
+    <AgentAvatar agentId={agentId} manifest={manifest} nome={nome} size={36} estado={ultima ? estado : "idle"} boca={ultima ? boca : null} vivo={ultima} destaque={ultima}
       className="ring-2 ring-white/80 dark:ring-white/10 shadow-[0_8px_20px_-10px_rgba(124,58,237,0.7)]" />
   );
   if (!ultima) return <span className={`inline-flex rounded-full ${className}`}>{rosto}</span>;

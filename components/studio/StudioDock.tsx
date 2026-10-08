@@ -169,7 +169,7 @@ export default function StudioDock({ spaceId, teach }: { spaceId?: string; teach
                 </button>
               ))}
               {/* 3) Imagem */}
-              <button onClick={() => generateImage()} disabled={busy !== null} title="Gerar imagem didática (Imagen)" className={pillText}>
+              <button onClick={() => generateImage()} disabled={busy !== null} title="Gerar imagem didática" className={pillText}>
                 {busy === "image" ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />} Imagem
               </button>
               {/* 4) Vídeo */}

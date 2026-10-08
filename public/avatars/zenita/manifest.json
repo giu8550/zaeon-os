@@ -1,0 +1,33 @@
+{
+  "agentId": "zenita",
+  "versao": "muy3gbq2",
+  "motor": "sprite",
+  "estados": {
+    "idle": "/avatars/zenita/idle.webp?v=muy3gbq2",
+    "blink": "/avatars/zenita/blink.webp?v=muy3gbq2",
+    "talk": "/avatars/zenita/talk.webp?v=muy3gbq2",
+    "talk_half": "/avatars/zenita/talk_half.webp?v=muy3gbq2",
+    "smile": "/avatars/zenita/smile.webp?v=muy3gbq2",
+    "happy": "/avatars/zenita/happy.webp?v=muy3gbq2",
+    "think": "/avatars/zenita/think.webp?v=muy3gbq2",
+    "confused": "/avatars/zenita/confused.webp?v=muy3gbq2"
+  },
+  "pequeno": {
+    "idle": "/avatars/zenita/idle.sm.webp?v=muy3gbq2",
+    "blink": "/avatars/zenita/blink.sm.webp?v=muy3gbq2",
+    "talk": "/avatars/zenita/talk.sm.webp?v=muy3gbq2",
+    "talk_half": "/avatars/zenita/talk_half.sm.webp?v=muy3gbq2",
+    "smile": "/avatars/zenita/smile.sm.webp?v=muy3gbq2",
+    "happy": "/avatars/zenita/happy.sm.webp?v=muy3gbq2",
+    "think": "/avatars/zenita/think.sm.webp?v=muy3gbq2",
+    "confused": "/avatars/zenita/confused.sm.webp?v=muy3gbq2"
+  },
+  "cor": "#d97706",
+  "voz": {
+    "saudacoes": [
+      "/avatars/zenita/voz/saudacao-01.wav",
+      "/avatars/zenita/voz/saudacao-02.wav",
+      "/avatars/zenita/voz/saudacao-03.wav"
+    ]
+  }
+}

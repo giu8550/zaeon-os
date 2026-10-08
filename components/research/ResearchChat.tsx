@@ -541,7 +541,8 @@ export default function ResearchChat({
   });
   // resposta que chega inteira (sem stream) também vem com ela FALANDO, pelo tamanho do texto
   const sinalAura = useFalaAoChegar(sinalTurno, ultimaMsg?.answer?.nucleo || ultimaMsg?.text || "");
-  usePublicarPresenca("aura", sinalAura);
+  // modo voz: com a voz do app tocando ("ouvir resposta", leitura), o rosto fala com ela
+  const rosto = usePublicarPresenca("aura", sinalAura);
   const recuoRosto = useManifesto("aura") ? RECUO_ROSTO : "";
   /** Índice da pergunta que originou a resposta `i` (pra regenerar). */
   const perguntaDe = (i: number) => {
@@ -596,14 +597,14 @@ export default function ResearchChat({
           de mini-ações (copiar/regenerar/👍👎/sub-tema; na pergunta: copiar/editar) — no hover no desktop. */}
       <div ref={listRef} className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar ${compacto ? "px-3" : "px-4 sm:px-6"}`}>
         <div className={`${recuo} py-5 flex flex-col gap-4`}>
-          {messages.length === 0 && <BoasVindasAgente agentId="aura" nome="Aura" sinal={sinalAura} />}
+          {messages.length === 0 && <BoasVindasAgente agentId="aura" nome="Aura" sinal={rosto.sinal} boca={rosto.boca} />}
           {messages.length === 0 && comAbas && <DicaSubTema threads={threads} ativa={abaAtiva} />}
           {messages.map((m, i) => {
             const isUser = m.role === "user";
             const emCurso = sending && m.id === ultimaResposta;
             // rosto da Aura AO LADO de cada resposta; só a mais recente vive (pensa → fala → sorri)
             const pilula = !isUser
-              ? <AgentePilula agentId="aura" nome="Aura" estado={sinalAura} ultima={m.id === ultimaResposta} className="absolute left-0 top-0" />
+              ? <AgentePilula agentId="aura" nome="Aura" estado={rosto.sinal} boca={rosto.boca} ultima={m.id === ultimaResposta} className="absolute left-0 top-0" />
               : null;
             const acoesResposta = !isUser && !emCurso && m.text ? (
               <AcoesResposta

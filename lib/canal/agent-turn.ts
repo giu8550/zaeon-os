@@ -25,6 +25,8 @@ export type TurnoInput = {
   userId: string;
   /** mensagem que convocou (objetivo preferencial). */
   mensagemId?: string | null;
+  /** PR-A3: quem pediu. "humano" (default) NUNCA é barrado pelo teto; "autonomo" (heartbeat/programa, fatias 6–8) é. */
+  origem?: "humano" | "autonomo";
 };
 
 export type MsgRow = {
@@ -61,7 +63,7 @@ export type TurnoDeps = {
 
 export type TurnoResult =
   | { ok: true; mensagem: MensagemWire }
-  | { ok: false; motivo: "canal" | "gate" | "agente" | "vazio" | "erro"; erro?: string };
+  | { ok: false; motivo: "canal" | "gate" | "agente" | "vazio" | "erro" | "teto"; erro?: string };
 
 // ───────────────────────────── helpers PUROS (exportados p/ teste) ─────────────────────────────
 
@@ -101,10 +103,10 @@ export function blocoCanal(canal: CanalRow, agente: AgentView, colegas: AgentVie
 // ───────────────────────────── gerar (default = harness) ─────────────────────────────
 
 const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userId }) => {
-  const [{ buildHarnessDeps, renderStructuredAnswer }, { runTrajectory }, { geminiJson }] = await Promise.all([
+  const [{ buildHarnessDeps, renderStructuredAnswer }, { runTrajectory }, { gatewayLigado }] = await Promise.all([
     import("@/lib/agent/aura-harness"),
     import("@/lib/agent/trajectory"),
-    import("@/lib/scholar/gemini"),
+    import("@/lib/llm/chaves"),
   ]);
   // Identidade: persona do roster (preâmbulo + prompt) OU mentor do catálogo (BASE + personaText).
   let identidade = "";
@@ -123,8 +125,7 @@ const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userI
   // O harness foi escrito "em Aura"; aqui a voz é do agente convocado. Troca a identidade nos
   // prompts de geração SEM tocar no harness (regra: o harness só muda no incremento de uso).
   const assinatura = `\nIDENTIDADE DESTE TURNO: você é ${agente.nome} (não a Aura). Mantenha a voz e o nome de ${agente.nome} em toda a resposta.`;
-  const genJson = <T,>(system: string, user: string, o?: { temperature?: number; model?: string; timeoutMs?: number }) =>
-    geminiJson<T>(system.replace(/Você é a Aura/g, `Você é ${agente.nome}`) + assinatura, user, o);
+  const transformarSystem = (system: string) => system.replace(/Você é a Aura/g, `Você é ${agente.nome}`) + assinatura;
   const hctx: any = {
     userId,
     activeTab: "escritorio",
@@ -135,7 +136,13 @@ const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userI
     wing,
     canalId: canal.id,
   };
-  const deps = buildHarnessDeps(hctx, { systemContext, history, genJson });
+  // C5/C6: o turno do canal é o ÚNICO opt-in ao gateway nesta fatia (e só com GATEWAY_URL); o ledger
+  // leva agentKey/surface/scopeId e cada fase (plan/reason/draft) grava sua linha.
+  const deps = buildHarnessDeps(hctx, {
+    systemContext, history, transformarSystem,
+    rota: gatewayLigado() ? "gateway" : "vertex",
+    ledger: { agentKey: agente.agentKey, mentorSlug: agente.tipo === "mentor" ? agente.agentKey : null, surface: "canal", scopeId: canal.id, userId: userId ?? null },
+  });
   const answer = await runTrajectory(objective, hctx, deps);
   return renderStructuredAnswer(answer).trim();
 };
@@ -159,6 +166,20 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
   const roster = mergeProfiles(rosterComMentores(mentores), profiles);
   const agente = roster.find((a) => a.agentKey === input.agentKey && a.ativo && a.conversacional);
   if (!agente) return { ok: false, motivo: "agente" };
+
+  // PR-A3 · teto por agente — ler ≠ agir: só freia com AGENT_TETO_ENFORCE=1 E origem "autonomo" (handoff §5 A3).
+  if ((input.origem ?? "humano") === "autonomo" && process.env.AGENT_TETO_ENFORCE === "1") {
+    const { foraPorTeto } = await import("@/lib/llm/teto");
+    const t = await foraPorTeto(prisma as any, agente.agentKey).catch(() => ({ fora: false, usado: 0, teto: null }));
+    if (t.fora) {
+      const { messageForError } = await import("@/lib/agent/errors");
+      await publicar(canal.id, EV_MENSAGEM, {
+        id: `efemera-${Date.now()}`, canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto: messageForError("agent_budget_exhausted"), mencoes: [],
+        createdAt: new Date().toISOString(), autorNome: agente.nome, autorAvatar: agente.avatarUrl, efemera: true,
+      } satisfies MensagemWire & { efemera: true });
+      return { ok: false, motivo: "teto" };
+    }
+  }
 
   const desc = await prisma.canalMensagem.findMany({ where: { canalId: canal.id }, orderBy: { createdAt: "desc" }, take: N_CONTEXTO });
   const msgs = [...desc].reverse();
@@ -189,13 +210,15 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     return { ok: true, mensagem: wire };
   } catch (e) {
     const erro = String((e as Error)?.message ?? e);
-    console.error("[canal] turno do agente falhou:", agente.agentKey, erro);
+    // C6 (lei 5): budget da virtual key estourou → chave própria do catálogo, nunca "erro genérico".
+    const teto = (e as any)?.classe === "teto";
+    console.error("[canal] turno do agente falhou:", agente.agentKey, teto ? "teto diário (virtual key)" : erro);
     // Silêncio é pior que erro: o agente "fala" uma mensagem EFÊMERA (não persiste, some no
     // reload) com a frase amigável do catálogo de erros — nunca string à mão, nunca o stack.
     try {
       const { messageForError } = await import("@/lib/agent/errors");
       await publicar(canal.id, EV_MENSAGEM, {
-        id: `efemera-${Date.now()}`, canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto: messageForError(erro), mencoes: [],
+        id: `efemera-${Date.now()}`, canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto: messageForError(teto ? "agent_budget_exhausted" : erro), mencoes: [],
         createdAt: new Date().toISOString(), autorNome: agente.nome, autorAvatar: agente.avatarUrl, efemera: true,
       } satisfies MensagemWire & { efemera: true });
     } catch { /* best-effort */ }

@@ -1,25 +1,30 @@
 /**
  * lib/whatsapp/sender.ts — transporte de SAÍDA, provider-agnóstico.
  *
+ *   bridge    → chip da ChipFlow via Redis Streams (lib/chipflow/bridge.ts): AgentChannel do agente
+ *               (ou BRIDGE_INSTANCE_ID) define a instância. Handoff v3 §1.2.
  *   evolution → instância única da plataforma no Evolution API (POST /message/sendText/{instance})
- *   disparos  → o repo de disparos (ChipFlow) como sender (POST {DISPAROS_URL}{DISPAROS_SEND_PATH})
- *               ⚠️ seam: o path/corpo exatos são confirmados contra a API real do repo.
+ *   disparos  → legado (repo de disparos); rota não confirmada — remoção prevista no PR-W2 (§8).
  *   log       → sem provider configurado: só loga (dev/CI). Nunca derruba a rota.
  *
- * `buildSendRequest` é puro (testável); `sendWhatsAppText` faz o fetch.
+ * `buildSendRequest` é puro (testável) pros providers HTTP; `sendWhatsAppText` faz o IO.
+ * Resultado é objeto com `.ok` explícito — nunca truthiness.
  */
 import { jidNumber } from "./phone";
+import { resolveBridgeRedisUrl } from "@/lib/chipflow/bridge-request";
 
-export type Provider = "evolution" | "disparos" | "log";
+export type Provider = "evolution" | "disparos" | "log" | "bridge";
 export type SenderEnv = Record<string, string | undefined>;
 export type SendRequest = { url: string; init: RequestInit };
+export type SendOpts = { agentKey?: string; idemKey?: string };
 
 const trimSlash = (u: string) => u.replace(/\/+$/, "");
 
 export function resolveProvider(env: SenderEnv = process.env): Provider {
   const p = (env.WHATSAPP_PROVIDER ?? "").toLowerCase();
-  if (p === "evolution" || p === "disparos" || p === "log") return p;
+  if (p === "evolution" || p === "disparos" || p === "log" || p === "bridge") return p;
   if (env.EVOLUTION_URL) return "evolution";
+  if (resolveBridgeRedisUrl(env)) return "bridge";
   if (env.DISPAROS_URL) return "disparos";
   return "log";
 }
@@ -47,13 +52,37 @@ export function buildSendRequest(provider: Provider, env: SenderEnv, phone: stri
       init: { method: "POST", headers, body: JSON.stringify({ phone, number, text }) },
     };
   }
-  return null;
+  return null; // log e bridge não são HTTP
 }
 
-export type SendResult = { ok: boolean; provider: Provider; status?: number; error?: string };
+export type SendResult = { ok: boolean; provider: Provider; status?: number; error?: string; commandId?: string };
 
-export async function sendWhatsAppText(phone: string, text: string, env: SenderEnv = process.env): Promise<SendResult> {
+async function sendViaBridge(phone: string, text: string, env: SenderEnv, opts: SendOpts): Promise<SendResult> {
+  const [{ resolverCanalEnvio, registrarEnvio }, { sendTextViaBridge, bridgeConfigurado }] = await Promise.all([
+    import("@/lib/chipflow/canal"),
+    import("@/lib/chipflow/bridge"),
+  ]);
+  // Sem URL do bridge é erro de configuração do servidor — não vira "erro do canal" no banco.
+  if (!bridgeConfigurado(env)) {
+    console.log(`[whatsapp:bridge] sem CHIPFLOW_BRIDGE_REDIS_URL/BRIDGE_REDIS_URL → ${phone}: ${text.slice(0, 200)}`);
+    return { ok: false, provider: "bridge", error: "provider_misconfigured" };
+  }
+  const destino = await resolverCanalEnvio(opts.agentKey ?? "aura", env);
+  if (!destino) {
+    console.log(`[whatsapp:bridge] sem canal/BRIDGE_INSTANCE_ID pra ${opts.agentKey ?? "aura"} → ${phone}: ${text.slice(0, 200)}`);
+    return { ok: false, provider: "bridge", error: "provider_misconfigured" };
+  }
+  const r = await sendTextViaBridge({ instanceId: destino.chipflowId, phone, text, idemKey: opts.idemKey, env });
+  if (destino.fonte === "canal") await registrarEnvio(destino.canalId, r);
+  return r.ok
+    ? { ok: true, provider: "bridge", commandId: r.commandId }
+    : { ok: false, provider: "bridge", error: r.error ?? r.status, commandId: r.commandId };
+}
+
+export async function sendWhatsAppText(phone: string, text: string, env: SenderEnv = process.env, opts: SendOpts = {}): Promise<SendResult> {
   const provider = resolveProvider(env);
+  if (provider === "bridge") return sendViaBridge(phone, text, env, opts);
+
   const req = buildSendRequest(provider, env, phone, text);
   if (!req) {
     console.log(`[whatsapp:${provider}] → ${phone}: ${text.slice(0, 200)}`);

@@ -8,20 +8,45 @@
  * "✨ avatar vivo" abre o ESTÚDIO (Etapa B): o founder descreve a persona, vê cada estado sendo
  * gerado ao lado com o avatar já animando, aprova/rerola um a um e salva (banco). Rota:
  * POST/DELETE /api/admin/agents/:key/avatar.
+ * "🪪 crachá" edita o que aparece no CRACHÁ da landing e da sala de Assistentes (área, linha, o que
+ * entrega, emoji, WhatsApp, Instagram, Facebook) com a prévia do crachá ao vivo. Desativar o agente
+ * tira ele da vitrine. "+ agente" (mentor) entra sozinho na landing e nos Assistentes.
  */
 import { useCallback, useEffect, useState } from "react";
 import AgentAvatar from "@/components/agents/AgentAvatar";
 import EstudioAvatar from "@/components/agents/avatar/EstudioAvatar";
 import { invalidarManifestos, useManifesto } from "@/components/agents/avatar/hooks";
 import { AVATAR_LOOKS } from "@/lib/avatars/looks";
+import Cracha from "@/components/agents/Cracha";
+import { nativosVitrine } from "@/lib/agents/nativos";
 import { VIDRO_BOLHA, VIDRO_CHIP, VIDRO_POPOVER, TXT, TXT_2, TXT_MUDO } from "@/lib/canal/vidro";
 
 type Top = { userId: string; contagem: number; ultimoUso: string; nome: string | null; email: string | null };
 type Agente = {
   agentKey: string; tipo: "persona" | "mentor"; nome: string; emoji: string; bio: string; curso?: string;
   avatarUrl: string | null; ativo: boolean; ordem: number; custom: boolean;
+  area: string | null; entrega: string[]; redes: { whatsapp: string | null; instagram: string | null; facebook: string | null };
   uso: { total: number; usuarios: number; ultimoUso: string | null; top: Top[] };
 };
+/** PR-A3 (C5): consumo medido do TokenLedger — por agente no range; agente SEM linha não vem (UI mostra "—"). */
+type Consumo = { chave: string; chamadas: number; ok: number; promptTokens: number; completionTokens: number; cachedTokens: number; totalTokens: number; custoEstimadoUsd: number; tokensPorChamada: number };
+type Tokens = { range: Range; grupos: Consumo[]; serie14d: { dia: string; totalTokens: number }[]; medindoDesde: string | null; hoje: Record<string, number>; tetos: Record<string, { fora: boolean; usado: number; teto: number | null }> };
+type Range = "7d" | "30d" | "all";
+type Ordem = "uso" | "in" | "out" | "cached" | "total" | "custo" | "porTurno";
+export const ORDENS: { k: Ordem; rotulo: string }[] = [
+  { k: "uso", rotulo: "uso" }, { k: "in", rotulo: "tokens in" }, { k: "out", rotulo: "tokens out" }, { k: "cached", rotulo: "cached" },
+  { k: "total", rotulo: "total" }, { k: "custo", rotulo: "custo est." }, { k: "porTurno", rotulo: "tokens/turno" },
+];
+/** PURO: valor da coluna pra ordenar; sem linha no ledger = -1 (vai pro fim, e a UI mostra "—"). */
+export function valorOrdem(a: { uso: { total: number } }, c: Consumo | undefined, k: Ordem): number {
+  if (k === "uso") return a.uso.total;
+  if (!c) return -1;
+  return k === "in" ? c.promptTokens : k === "out" ? c.completionTokens : k === "cached" ? c.cachedTokens : k === "total" ? c.totalTokens : k === "custo" ? c.custoEstimadoUsd : c.tokensPorChamada;
+}
+/** PURO: formata número ou "—" quando não há linha (0 fica reservado a linha existente com zero). */
+export const fmtTok = (c: Consumo | undefined, v: number | undefined): string => (c ? new Intl.NumberFormat("pt-BR").format(v ?? 0) : "—");
+export const fmtUsd = (c: Consumo | undefined): string => (c ? `US$ ${c.custoEstimadoUsd.toFixed(4)}` : "—");
+export const fmtDesde = (iso: string | null): string => (iso ? `medindo desde ${new Date(iso).toLocaleDateString("pt-BR")}` : "sem dados de consumo ainda — a medição começa no próximo turno");
 const H = { "Content-Type": "application/json" };
 const inputCls = `min-h-[40px] px-3 rounded-xl text-[13px] bg-white/70 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-cyan-400/70`;
 
@@ -34,6 +59,16 @@ export default function AgentsModule({ glassPanel }: { glassPanel: string }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [estudio, setEstudio] = useState<Agente | null>(null);
   const [rev, setRev] = useState(0);
+  const [range, setRange] = useState<Range>("7d");
+  const [ordem, setOrdem] = useState<Ordem>("uso");
+  const [tokens, setTokens] = useState<Tokens | null>(null);
+  const carregarTokens = useCallback(async (r: Range) => {
+    try {
+      const res = await fetch(`/api/admin/agents/tokens?range=${r}&groupBy=agente`, { cache: "no-store" });
+      if (res.ok) setTokens(await res.json());
+    } catch { /* o painel de consumo é leitura: falhar aqui não derruba o módulo */ }
+  }, []);
+  useEffect(() => { void carregarTokens(range); }, [carregarTokens, range]);
 
   const carregar = useCallback(async () => {
     try {
@@ -79,14 +114,26 @@ export default function AgentsModule({ glassPanel }: { glassPanel: string }) {
   if (estado === "carregando") return <Aviso glassPanel={glassPanel} texto="Carregando agentes…" />;
 
   const q = filtro.trim().toLowerCase();
-  const lista = q ? agentes.filter((a) => `${a.agentKey} ${a.nome} ${a.curso ?? ""} ${a.tipo}`.toLowerCase().includes(q)) : agentes;
+  const consumoDe = (k: string) => tokens?.grupos.find((g) => g.chave === k);
+  const filtrados = q ? agentes.filter((a) => `${a.agentKey} ${a.nome} ${a.curso ?? ""} ${a.tipo}`.toLowerCase().includes(q)) : agentes;
+  const lista = [...filtrados].sort((x, y) => valorOrdem(y, consumoDe(y.agentKey), ordem) - valorOrdem(x, consumoDe(x.agentKey), ordem) || x.ordem - y.ordem);
   const totalUso = agentes.reduce((s, a) => s + a.uso.total, 0);
+  const totalTokens = tokens?.grupos.reduce((s, g) => s + g.totalTokens, 0) ?? 0;
 
   return (
     <div className={`flex-1 min-h-0 flex flex-col rounded-[32px] p-5 sm:p-7 ${glassPanel}`}>
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <h2 className={`text-xl font-black tracking-tight ${TXT}`}>Agents</h2>
-        <span className={`text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>{agentes.length} agentes · {totalUso} usos</span>
+        <span className={`text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>{agentes.length} agentes · {totalUso} usos{tokens?.grupos.length ? ` · ${new Intl.NumberFormat("pt-BR").format(totalTokens)} tokens (${range})` : ""}</span>
+        <span className={`text-[11px] ${TXT_MUDO}`} title="primeira linha do TokenLedger">{fmtDesde(tokens?.medindoDesde ?? null)}</span>
+        <div role="radiogroup" aria-label="Período do consumo" className="flex gap-1">
+          {(["7d", "30d", "all"] as Range[]).map((r) => (
+            <button key={r} type="button" role="radio" aria-checked={range === r} onClick={() => setRange(r)} className={`min-h-[32px] px-2.5 rounded-lg text-[11px] font-bold ${VIDRO_CHIP} ${range === r ? "ring-1 ring-cyan-400/70 " + TXT : TXT_MUDO}`}>{r === "all" ? "tudo" : r}</button>
+          ))}
+        </div>
+        <select value={ordem} onChange={(e) => setOrdem(e.target.value as Ordem)} aria-label="Ordenar por" className={`${inputCls} w-[150px]`}>
+          {ORDENS.map((o) => <option key={o.k} value={o.k}>↓ {o.rotulo}</option>)}
+        </select>
         <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="filtrar" aria-label="Filtrar agentes" className={`${inputCls} ml-auto w-[180px]`} />
         <button type="button" onClick={() => setCriando((v) => !v)} className={`min-h-[40px] px-4 rounded-xl text-[12px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>{criando ? "fechar" : "+ agente"}</button>
       </div>
@@ -113,7 +160,7 @@ export default function AgentsModule({ glassPanel }: { glassPanel: string }) {
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pr-1">
-        {lista.map((a) => <Card key={`${a.agentKey}-${rev}`} a={a} onPatch={patch} onAvatar={trocarAvatar} onEstudio={() => setEstudio(a)} />)}
+        {lista.map((a) => <Card key={`${a.agentKey}-${rev}`} a={a} consumo={consumoDe(a.agentKey)} teto={tokens?.tetos[a.agentKey]} serie={tokens?.serie14d} onPatch={patch} onAvatar={trocarAvatar} onEstudio={() => setEstudio(a)} />)}
       </div>
       {estudio && <EstudioModal a={estudio} onFechar={() => setEstudio(null)} onMudou={() => { invalidarManifestos(); setRev((r) => r + 1); }} />}
     </div>
@@ -166,8 +213,11 @@ function EstudioModal({ a, onFechar, onMudou }: { a: Agente; onFechar: () => voi
   );
 }
 
-function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean>; onAvatar: (k: string, f: File | null) => void; onEstudio: () => void }) {
+function Card({ a, consumo, teto, serie, onPatch, onAvatar, onEstudio }: { a: Agente; consumo?: Consumo; teto?: { fora: boolean; usado: number; teto: number | null }; serie?: { dia: string; totalTokens: number }[]; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean>; onAvatar: (k: string, f: File | null) => void; onEstudio: () => void }) {
   const [hover, setHover] = useState(false);
+  const [tetoTxt, setTetoTxt] = useState(teto?.teto != null ? String(teto.teto) : "");
+  useEffect(() => { setTetoTxt(teto?.teto != null ? String(teto.teto) : ""); }, [teto?.teto]);
+  const [editandoCracha, setEditandoCracha] = useState(false);
   const [nome, setNome] = useState(a.nome);
   const [bio, setBio] = useState(a.bio);
   const [ordem, setOrdem] = useState(String(a.ordem));
@@ -185,7 +235,10 @@ function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: str
           <input value={nome} onChange={(e) => setNome(e.target.value)} aria-label="Nome" className={`w-full ${inputCls} font-bold`} />
           <p className={`mt-1 text-[10.5px] font-mono uppercase tracking-widest ${TXT_MUDO}`}>@{a.agentKey} · {a.tipo}{a.curso ? ` · ${a.curso}` : ""}{a.custom ? " · custom" : ""}</p>
         </div>
-        <button type="button" onClick={onEstudio} title="Criar / revisar o avatar vivo (estúdio)" className={`shrink-0 min-h-[40px] px-3 rounded-xl text-[11px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>✨ avatar vivo</button>
+        <div className="shrink-0 flex flex-col gap-1.5">
+          <button type="button" onClick={onEstudio} title="Criar / revisar o avatar vivo (estúdio)" className={`min-h-[36px] px-3 rounded-xl text-[11px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>✨ avatar vivo</button>
+          <button type="button" onClick={() => setEditandoCracha((v) => !v)} aria-expanded={editandoCracha} title="O que aparece no crachá da landing e dos Assistentes" className={`min-h-[36px] px-3 rounded-xl text-[11px] font-black uppercase tracking-widest ${VIDRO_CHIP} ${TXT}`}>🪪 crachá</button>
+        </div>
       </div>
       <input value={bio} onChange={(e) => setBio(e.target.value)} placeholder="bio" aria-label="Bio" className={`${inputCls} text-[12px]`} />
       <div className="flex items-center gap-2">
@@ -202,12 +255,33 @@ function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: str
           <button type="button" onClick={() => void onPatch(a.agentKey, { avatarUrl: null })} className={`min-h-[40px] px-2 rounded-xl text-[11px] ${TXT_MUDO} hover:text-rose-500 dark:hover:text-rose-300`} title="Remover foto">sem foto</button>
         )}
       </div>
-      {/* USO — o card founder */}
+      {editandoCracha && <EditorCracha a={a} onPatch={onPatch} />}
+      {/* USO — o card founder, FUNDIDO com o consumo medido (C5). Um painel só; "—" = sem linha no período. */}
       <div className="pt-3 border-t border-slate-200/70 dark:border-white/10">
         <div className="flex items-baseline gap-3">
           <span className={`text-2xl font-black tabular-nums ${TXT}`}>{a.uso.total}</span>
           <span className={`text-[11px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>usos · {a.uso.usuarios} {a.uso.usuarios === 1 ? "usuário" : "usuários"}</span>
           {a.uso.ultimoUso && <span className={`ml-auto text-[10.5px] ${TXT_MUDO}`}>{new Date(a.uso.ultimoUso).toLocaleDateString("pt-BR")}</span>}
+        </div>
+        <div className={`mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-[11px] tabular-nums ${TXT_2}`} title={serie?.length ? `14 dias (todos os agentes): ${serie.map((d) => `${d.dia.slice(5)} ${d.totalTokens}`).join(" · ")}` : undefined}>
+          <span><b className={TXT_MUDO}>in</b> {fmtTok(consumo, consumo?.promptTokens)}</span>
+          <span><b className={TXT_MUDO}>out</b> {fmtTok(consumo, consumo?.completionTokens)}</span>
+          <span title="tokens servidos pelo contextCache — cobrados pelo preço de cache (~10%), exibidos à parte"><b className={TXT_MUDO}>cached</b> {fmtTok(consumo, consumo?.cachedTokens)}</span>
+          <span><b className={TXT_MUDO}>total</b> {fmtTok(consumo, consumo?.totalTokens)}</span>
+          <span title="estimativa pela tabela em lib/ai/preco.ts; não é fatura"><b className={TXT_MUDO}>custo est.</b> {fmtUsd(consumo)}</span>
+          <span><b className={TXT_MUDO}>tokens/turno</b> {fmtTok(consumo, consumo?.tokensPorChamada)}</span>
+        </div>
+        {serie?.length ? (
+          <div className="mt-1.5 flex items-end gap-px h-5" aria-hidden title="14 dias (todos os agentes)">
+            {serie.map((d) => { const max = Math.max(1, ...serie.map((x) => x.totalTokens)); return <span key={d.dia} className="flex-1 rounded-sm bg-cyan-500/50" style={{ height: `${Math.max(2, Math.round((d.totalTokens / max) * 100))}%` }} />; })}
+          </div>
+        ) : null}
+        {/* TETO — ler ≠ agir: aqui só avisa; AGENT_TETO_ENFORCE=1 no servidor é o que barra (e só o autônomo) */}
+        <div className="mt-2 flex items-center gap-2">
+          <label className={`flex items-center gap-1.5 text-[11px] ${TXT_MUDO}`}>teto/dia
+            <input value={tetoTxt} onChange={(e) => setTetoTxt(e.target.value)} onBlur={() => { const n = tetoTxt.trim() === "" ? null : Number(tetoTxt); if (n === null || (Number.isInteger(n) && n >= 0)) void onPatch(a.agentKey, { tetoTokensDia: n }); }} inputMode="numeric" placeholder="sem teto" aria-label={`Teto diário de tokens de ${a.nome}`} className={`${inputCls} w-[96px] text-center`} />
+          </label>
+          {teto?.fora && <span className="text-[11px] font-bold text-amber-600 dark:text-amber-300" title="só avisa; AGENT_TETO_ENFORCE=1 faz o freio agir (e só no trabalho autônomo)">estouraria o teto hoje ({new Intl.NumberFormat("pt-BR").format(teto.usado)}/{new Intl.NumberFormat("pt-BR").format(teto.teto ?? 0)})</span>}
         </div>
         {a.uso.top.length > 0 && (
           <ul className="mt-2 flex flex-col gap-1">
@@ -226,4 +300,68 @@ function Card({ a, onPatch, onAvatar, onEstudio }: { a: Agente; onPatch: (k: str
 
 function Aviso({ glassPanel, texto }: { glassPanel: string; texto: string }) {
   return <div className={`flex-1 grid place-items-center rounded-[32px] ${glassPanel}`}><p className={`text-[13px] ${TXT_MUDO}`}>{texto}</p></div>;
+}
+
+/** Padrão de vitrine do agente (o que o crachá mostra quando o campo do Modo CEO está vazio). */
+function padraoVitrine(a: Agente): { area: string; entrega: string[] } {
+  const n = nativosVitrine().find((x) => x.slug === a.agentKey);
+  return { area: n?.course ?? a.curso ?? "", entrega: n?.signatureArtifacts ?? [] };
+}
+
+/**
+ * Editor do CRACHÁ (Modo CEO): campos à esquerda, o crachá de verdade à direita mudando enquanto
+ * digita. Vazio = usa o padrão do agente. Salva em PATCH /api/admin/agents/:key.
+ */
+function EditorCracha({ a, onPatch }: { a: Agente; onPatch: (k: string, b: Record<string, unknown>) => Promise<boolean> }) {
+  const padrao = padraoVitrine(a);
+  const [f, setF] = useState({
+    area: a.area ?? "", bio: a.bio ?? "", entrega: a.entrega.join(", "), emoji: a.emoji && a.emoji !== "⟁" ? a.emoji : "",
+    whatsapp: a.redes.whatsapp ?? "", instagram: a.redes.instagram ? `@${a.redes.instagram}` : "", facebook: a.redes.facebook ?? "",
+  });
+  const [salvando, setSalvando] = useState(false);
+  const [ok, setOk] = useState(false);
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => { setOk(false); setF({ ...f, [k]: e.target.value }); };
+  const entregaPrevia = f.entrega.split(",").map((x) => x.trim()).filter(Boolean);
+  const salvar = async () => {
+    setSalvando(true);
+    const deu = await onPatch(a.agentKey, { area: f.area, bio: f.bio, entrega: f.entrega, emoji: f.emoji, whatsapp: f.whatsapp, instagram: f.instagram, facebook: f.facebook });
+    setSalvando(false);
+    setOk(deu);
+  };
+  const campo = (rotulo: string, k: keyof typeof f, ph: string) => (
+    <label className="flex flex-col gap-1">
+      <span className={`text-[10px] font-bold uppercase tracking-widest ${TXT_MUDO}`}>{rotulo}</span>
+      <input value={f[k]} onChange={set(k)} placeholder={ph} className={inputCls} />
+    </label>
+  );
+  return (
+    <div className={`p-3 rounded-2xl flex flex-col gap-3 ${VIDRO_POPOVER}`}>
+      <p className={`text-[11px] ${TXT_MUDO}`}>O que aparece no <b>crachá</b> da landing e dos Assistentes. Vazio = o padrão do agente.</p>
+      <div className="grid grid-cols-1 gap-2">
+        {campo("Área", "area", padrao.area || "ex.: Pesquisa, Medicina")}
+        {campo("Linha (frase curta)", "bio", "o que ele faz, em uma frase")}
+        {campo("Entrega (até 4, por vírgula)", "entrega", padrao.entrega.join(", ") || "resumos, quiz, ABNT")}
+        {campo("Emoji (sem foto)", "emoji", "🧬")}
+        {campo("WhatsApp", "whatsapp", "11 99999-8888")}
+        {campo("Instagram", "instagram", "@perfil")}
+        {campo("Facebook", "facebook", "pagina")}
+      </div>
+      <div className="dark flex justify-center rounded-2xl bg-slate-950/90 py-2">
+        <Cracha
+          d={{
+            agentId: a.agentKey, nome: a.nome, curso: f.area || padrao.area, tagline: f.bio, emoji: f.emoji || a.emoji,
+            artefatos: entregaPrevia.length ? entregaPrevia : padrao.entrega, foto: a.avatarUrl, id: a.tipo === "mentor" ? "ZA-000" : "ZA-N00",
+            rotulo: a.tipo === "mentor" ? "mentor" : "nativo",
+            redes: { whatsapp: f.whatsapp || null, instagram: f.instagram.replace(/^@/, "") || null, facebook: f.facebook || null },
+          }}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        {ok && <span className="text-[12px] text-emerald-600 dark:text-emerald-300">salvo ✓</span>}
+        <button type="button" disabled={salvando} onClick={() => void salvar()} className="ml-auto min-h-[40px] px-4 rounded-xl text-[11px] font-black uppercase tracking-widest bg-cyan-500 text-slate-950 disabled:opacity-50">
+          {salvando ? "salvando…" : "salvar crachá"}
+        </button>
+      </div>
+    </div>
+  );
 }

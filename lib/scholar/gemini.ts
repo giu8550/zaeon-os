@@ -8,7 +8,7 @@ import { VertexAI } from "@google-cloud/vertexai";
 const HEAVY_MODEL = process.env.SCHOLAR_GEMINI_MODEL || "gemini-2.5-flash";
 const CHAT_MODEL = process.env.SCHOLAR_GEMINI_CHAT_MODEL || "gemini-2.5-flash";
 
-function makeVertex() {
+export function makeVertex() {
   const credentials = (() => { const __v = vertexCredentials(); return { project_id: __v.project, client_email: __v.client_email, private_key: __v.private_key }; })(); // robust parse
   return new VertexAI({
     project: credentials.project_id || process.env.GOOGLE_PROJECT_ID,
@@ -49,23 +49,23 @@ export function extractText(result: any): string {
 // modelo lento) trava a pesquisa inteira (ex.: planning preso em ~13%). Com timeout, quem
 // chama (planQuery) cai no fallback e a pesquisa SEGUE.
 const GEMINI_TIMEOUT_MS = Number(process.env.SCHOLAR_GEMINI_TIMEOUT_MS || 30000);
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)),
   ]);
 }
 
-export async function geminiJson<T>(systemInstruction: string, userPrompt: string, opts?: { temperature?: number; model?: string; timeoutMs?: number }): Promise<T> {
-  const model = getGeminiModel(systemInstruction, opts);
-  const result = await withTimeout(model.generateContent(userPrompt), opts?.timeoutMs ?? GEMINI_TIMEOUT_MS, "Gemini");
-  const finishReason = result?.response?.candidates?.[0]?.finishReason ?? "?";
-  const cleaned = extractText(result).replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
-  // Erros diagnósticos (em vez de "{}" silencioso) — ajudam a achar a causa real.
-  if (!cleaned) throw new Error(`Gemini retornou resposta vazia (finishReason=${finishReason})`);
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch {
-    throw new Error(`Gemini retornou JSON inválido (finishReason=${finishReason}): ${cleaned.slice(0, 160)}`);
-  }
+/**
+ * Wrapper FINO do envelope (lib/llm/envelope.ts, contrato C5) — assinatura intacta para os ~30 call sites.
+ * Mesmo modelo (HEAVY_MODEL), mesma temperatura (0.2), mesmo timeout e os mesmos erros diagnósticos;
+ * a diferença é que agora cada chamada grava usage no TokenLedger (best-effort). `ctx` é opcional.
+ */
+export async function geminiJson<T>(systemInstruction: string, userPrompt: string, opts?: { temperature?: number; model?: string; timeoutMs?: number; ctx?: import("@/lib/llm/ledger").LedgerCtx }): Promise<T> {
+  const { gerarJson } = await import("@/lib/llm/envelope");
+  return gerarJson<T>({
+    system: systemInstruction, user: userPrompt, json: true, rota: "vertex",
+    model: opts?.model || HEAVY_MODEL, temperature: opts?.temperature ?? 0.2, timeoutMs: opts?.timeoutMs ?? GEMINI_TIMEOUT_MS,
+    ctx: opts?.ctx ?? { agentKey: "aura", surface: "pesquisa" },
+  });
 }

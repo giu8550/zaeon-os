@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { lojaLabel, mentoresTab } from "@/lib/mentores/rota";
 
 /**
  * Footer clássico da Zaeon (inspirado no da ChipFlow): blurb da marca + colunas de
@@ -16,7 +17,7 @@ const COLS: FooterCol[] = [
       { label: "Cyberespaço", href: "/#cyberespaco" },
       { label: "Modelos de IA", href: "/#modelos" },
       { label: "Laboratório", href: "/research-lab" },
-      { label: "Plugins", href: "/plugin-store" },
+      { label: lojaLabel(), href: mentoresTab() ? "/mentores" : "/assistentes" },
     ],
   },
   {

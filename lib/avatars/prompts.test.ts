@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { promptBase, promptEdicao, ORDEM_GERACAO } from "./prompts";
-import { AVATAR_LOOKS } from "./looks";
+import { AVATAR_LOOKS, MENTOR_LOOK_IDS } from "./looks";
 import { PERSONAS } from "@/lib/ai/personas";
+import { MENTOR_SEED } from "@/lib/agent/mentors";
 
 describe("avatares · prompts de consistência", () => {
   it("base leva personagem, cores do fundo e o enquadramento fixo", () => {
@@ -22,7 +23,9 @@ describe("avatares · prompts de consistência", () => {
     expect(ORDEM_GERACAO.slice(0, 2)).toEqual(["blink", "talk"]);
     expect(ORDEM_GERACAO).not.toContain("idle");
   });
-  it("todo look é de uma persona do roster", () => {
-    for (const id of Object.keys(AVATAR_LOOKS)) expect(PERSONAS[id], id).toBeTruthy();
+  it("todo look é de uma persona do roster ou de um mentor (os 13 têm look)", () => {
+    const mentores = new Set(MENTOR_SEED.map((m) => m.slug));
+    for (const id of Object.keys(AVATAR_LOOKS)) expect(!!PERSONAS[id] || mentores.has(id), id).toBe(true);
+    expect([...mentores].every((s) => MENTOR_LOOK_IDS.includes(s))).toBe(true);
   });
 });

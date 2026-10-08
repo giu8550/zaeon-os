@@ -8,7 +8,7 @@
  * acena); ao enviar, o rosto VIAJA (layoutId compartilhado com a AgentePilula) até a 1ª resposta.
  * Sem avatar vivo pro agente → não renderiza (o chat fica como era).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import AgentAvatar from "@/components/agents/AgentAvatar";
 import { useManifesto } from "./hooks";
@@ -21,20 +21,23 @@ export const layoutIdRosto = (agentId: string) => `rosto-vivo-${agentId}`;
 const CHAVE_SESSAO = (id: string) => `zaeon:saudou:${id}`;
 const CHAVE_RODIZIO = (id: string) => `zaeon:saudacao:${id}`;
 
-export default function BoasVindasAgente({ agentId, nome, sinal }: { agentId: string; nome: string; sinal: SinalAvatar }) {
+export default function BoasVindasAgente({ agentId, nome, sinal, boca: bocaVoz = null }: { agentId: string; nome: string; sinal: SinalAvatar; /** voz do app tocando (modo voz) */ boca?: number | null }) {
   const manifest = useManifesto(agentId);
+  const [saudando, setSaudando] = useState(false);
   const [nivel, setNivel] = useState<number | null>(null);
   const fala = useRef<Fala | null>(null);
-  const saudacoes = manifest?.voz?.saudacoes ?? [];
+  // memo: lista estável → `saudar` estável → o timer do autoplay não é cancelado a cada re-render
+  const saudacoes = useMemo(() => manifest?.voz?.saudacoes ?? [], [manifest]);
 
   const saudar = useCallback(() => {
     if (!saudacoes.length) return;
     let i = 0;
     try { i = (Number(localStorage.getItem(CHAVE_RODIZIO(agentId))) || 0) % saudacoes.length; localStorage.setItem(CHAVE_RODIZIO(agentId), String(i + 1)); } catch { /* sem storage: a 1ª */ }
-    fala.current = falarClipe(saudacoes[i], (n) => {
+    fala.current = falarClipe(saudacoes[i], (falando, n) => {
+      setSaudando(falando);
       setNivel(n);
       // a bolinha da aba (e qualquer rosto da Aura) fala junto
-      definirPresenca(agentId, n === null ? { sinal: "idle", boca: null } : { sinal: "falando", boca: n });
+      definirPresenca(agentId, falando ? { sinal: "falando", boca: n } : { sinal: "idle", boca: null });
     });
     fala.current.fim.catch(() => { /* autoplay bloqueado: fica pro toque no rosto */ });
   }, [agentId, saudacoes]);
@@ -55,7 +58,7 @@ export default function BoasVindasAgente({ agentId, nome, sinal }: { agentId: st
   useEffect(() => () => { fala.current?.parar(); }, []);
 
   if (!manifest) return null;
-  const falando = nivel !== null;
+  const falando = saudando;
   return (
     <div className="flex flex-col items-center py-10 sm:py-14 select-none">
       <motion.span layoutId={layoutIdRosto(agentId)} className="inline-flex rounded-full" transition={{ type: "spring", stiffness: 140, damping: 22 }}>
@@ -67,7 +70,7 @@ export default function BoasVindasAgente({ agentId, nome, sinal }: { agentId: st
           className="rounded-full outline-none focus-visible:ring-4 focus-visible:ring-cyan-400/60 disabled:cursor-default"
         >
           <AgentAvatar agentId={agentId} manifest={manifest} nome={nome} size={128}
-            estado={falando ? "falando" : sinal} boca={nivel} destaque
+            estado={falando ? "falando" : sinal} boca={falando ? nivel : bocaVoz} destaque
             className="shadow-[0_18px_50px_-18px_rgba(124,58,237,0.65)] ring-4 ring-white/70 dark:ring-white/10" />
         </button>
       </motion.span>

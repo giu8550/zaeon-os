@@ -60,8 +60,11 @@ celular/toque/economia de dados; lá o card parado fica estático e só reage a 
 - **Aba do chat** ("Chat"/"Aura" na sala de estudos, "Conversa" na pesquisa): a bolinha é o rosto,
   espelha o chat de qualquer aba e mostra um anel "respondeu" se ela terminou com o chat fechado.
 - **Landing**: cartão "Aura ao vivo" no hero (desktop) + rosto no botão "Iniciar chat".
-- **Modo voz (próximo)**: o mesmo `falarClipe`/`boca` serve pro TTS das respostas — publicar o nível
-  do áudio em `definirPresenca(agentId, { sinal: "falando", boca })`.
+- **Modo voz**: toda voz do app (ttsController — "🔊 Ouvir resposta" nas mini-ações, leitura da
+  pesquisa/PDF/bloco do Studio) é medida (`lib/voice/nivelVoz.ts`: `captureStream` + Analyser, sem
+  desviar o som) e quantizada nos 3 quadros de boca; `usePublicarPresenca` vê a voz tocando e o rosto
+  da conversa (resposta, boas-vindas, bolinha da aba) fala com ela. Sem `captureStream` (Safari) →
+  fala com a boca sorteada. A saudação usa a mesma medição.
 - Prova sem login: `/dev/avatares/chat` (dev).
 
 ## Criar avatares
@@ -96,6 +99,34 @@ produção) — o próximo passo é o artista entregar os rigs próprios.
 - **O dono confirmou (07/out/2026) que a Zaeon tem as permissões necessárias.** Por isso o Live2D é
   o motor padrão quando houver modelo próprio.
 
+## Crachás (landing + Assistentes)
+
+- **Landing** (`MentoresCarrossel`): vitrine — nativos (selo "nativo", ID ZA-N01…) e mentores
+  (selo "mentor", ZA-001…) misturados no carrossel, em crachás pendurados com a foto = avatar vivo.
+  **Holofote**: a cada ~5 s um crachá visível entra em cena — pula, dá um "oi" (fala), sorri de
+  alegria e faz caras (sorriso/alegria/pensando). Hover = alegria + sorriso. Sem botão.
+- **Assistentes** (`/assistentes`; `/plugin-store` segue no ar): os mesmos crachás em dois grupos —
+  **Nativos** com "✓ já incluso" e **Mentores** plugáveis ("Contratar mentor", teto 3, soltar).
+  Categorias: Agentes = nativos, Mentores = mentores, Todos = ambos.
+- Componente único: `components/agents/Cracha.tsx` (+ `useHolofote`).
+
+## Modo CEO → Agents (só contas founder; engrenagem da navbar → "Modo CEO")
+
+Cada card de agente tem **✨ avatar vivo** (estúdio) e **🪪 crachá**: área, linha, o que entrega
+(até 4), emoji, **WhatsApp**, **Instagram**, **Facebook** — com a prévia do crachá ao vivo. Vazio =
+padrão do agente. Desativar tira da vitrine; a ordem vale. **+ agente** (mentor) entra sozinho na
+landing e nos Assistentes. Dados em `AgentProfile` (área, entrega[], emoji, whatsapp, instagram,
+facebook) → `GET /api/agents/public` (cache 60 s) → `montarVitrine` (lib/agents/nativos.ts).
+Redes só aparecem no crachá quando preenchidas (wa.me / instagram.com / facebook.com).
+
+## Editar depois (admin)
+
+Admin → Agents → **✨ avatar vivo** no card: o estúdio abre com o set atual (aprovado). Dá pra rerolar
+um estado só (mesma base), ajustar o prompt dele, gerar um personagem novo (↻ no idle) ou partir da
+foto atual; **salvar** grava no banco e passa a valer no lugar do set do git ("apagar avatar vivo"
+volta pro do git). A voz (saudações) e o Live2D do set do git são preservados (lib/avatars/mesclar.ts).
+Saudações ainda se editam só pelo script (`scripts/avatars/gerar-saudacao.mjs`).
+
 ## Créditos (libs)
 
 - Motor de sprites: código próprio (sem dependência).
@@ -108,9 +139,9 @@ produção) — o próximo passo é o artista entregar os rigs próprios.
 
 ## Pendências
 
-- [ ] Dono: aprovar no estúdio os sets das personas (Aura já tem idle/blink/talk½/smile/think
-      aprovados; faltam talk/happy/confused) e criar Zaeon, Nina, Caio, Téo, Zenita, Davi, Scholar,
-      Examiner — com o dono vendo, como pede o handoff.
+- [x] Sets das 9 personas criados no estúdio e aprovados pelo dono (8 quadros cada) + saudações
+      faladas na voz de cada um (Aura Aoede, Zaeon Sulafat, Nina Leda, Caio Charon, Téo Puck, Zenita
+      Kore, Davi Achird, Scholar Iapetus, Examiner Erinome), conferidas por transcrição.
 - [ ] Dono: `prisma db push` (cria a coleção/índice `agent_avatar_quadros`) antes de usar a Etapa B.
 - [ ] Modelos Live2D próprios por agente (artista/rig) → `live2d.model` no manifesto.
 - [ ] Futuro: cabeçalho da sala com o agente ativo; VRM 3D pro avatar grande no ciberespaço.
