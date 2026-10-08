@@ -1,7 +1,7 @@
 # Fatia 7 · Esteira leve: resultado e como ligar
 
 > Executada em 2026-10-08 a partir de `docs/EXECUTOR_PROMPT_FATIA7_ESTEIRA_LEVE.md`.
-> São 6 PRs empilhados, mergeados nesta ordem: **#290 (G3) → #291 (G4) → #292 (G5a) → #294 (G6) → #295 (G5b) → G8**.
+> São 6 PRs empilhados, mergeados nesta ordem: **#290 (G3) → #291 (G4) → #292 (G5a) → #294 (G6) → #295 (G5b) → #296 (G8)**.
 > O merge não muda comportamento: sem as flags e as keys, nenhuma chore existe e o gateway continua só-Vertex.
 
 ## O que entrou
