@@ -80,6 +80,8 @@ export const naEscadaLocal = (l: P2) => { const e = ESCADA_LOUNGE, along = l.x *
 const dentroDaEscada = (l: P2, folga = 0) => { const q = naEscadaLocal(l); return q.u >= -folga && q.u <= ESCADA_LOUNGE.len + folga && Math.abs(q.lat) <= ESCADA_LOUNGE.meia + folga; };
 /** está sobre o disco do lounge (local)? */
 const noDiscoDoLounge = (l: P2, folga = 0) => { const L = CIDADE.salas.lounge; return Math.hypot(l.x - L.x, l.z - L.z) <= L.r + folga; };
+/** (local da ilha) na escada do lounge ou no disco dele — o chão que fica FORA do raio andável da central */
+export const naEscadaOuLounge = (l: P2) => dentroDaEscada(l) || noDiscoDoLounge(l);
 
 export const mundo = (l: P2): P2 => ({ x: CIDADE.centro.x + l.x, z: CIDADE.centro.z + l.z });
 

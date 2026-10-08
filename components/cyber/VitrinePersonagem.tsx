@@ -13,23 +13,27 @@ import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle } from "./Av
 import { carregarVrm, tingirVrm } from "./AvatarVrm";
 import { VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { glowTex } from "./CenaCosmica";
-import { CORPO_DO_FUNDADOR } from "@/lib/cyber/estiloAvatar";
+import { CORPO_DO_FUNDADOR, type CorpoVrm } from "@/lib/cyber/estiloAvatar";
+import { vestirAcessorios, type AcessoriosHandle } from "./AcessoriosVrm";
+import { POSES_VRM } from "@/lib/cyber/posesVrm";
 
 /** o enquadramento: o ponto que a câmera olha (m) e a ALTURA/LARGURA que tem que caber na tela. As asas abertas do
  *  founder vão a 62% (inteiras, elas têm ~3 m de envergadura — o personagem ficaria pequeno numa coluna em pé) */
 const QUADRO = {
   comum: { alvoY: 1.04, altura: 2.45, largura: 1.3 },
   fundador: { alvoY: 1.0, altura: 2.2, largura: 2.05, escalaAsas: 0.62 },
+  personagem: { alvoY: 0.98, altura: 2.15, largura: 1.2 },
 } as const;
 const FOV = 28, GIRO = 0.32;   // graus; rad/s do giro de vitrine
 
-export default function VitrinePersonagem({ fundador, cor, className = "" }: { fundador: boolean; cor: string; className?: string }) {
+/** `corpo` = um PERSONAGEM com corpo VRM próprio (lib/cyber/estiloAvatar CORPOS_VRM — ex.: a Nina), sem asas */
+export default function VitrinePersonagem({ fundador, cor, corpo, className = "" }: { fundador: boolean; cor: string; corpo?: CorpoVrm; className?: string }) {
   const caixa = useRef<HTMLDivElement>(null);
   const [estado, setEstado] = useState<"carregando" | "pronto" | "erro">("carregando");
 
   useEffect(() => {
     const el = caixa.current; if (!el) return;
-    let vivo = true, raf = 0, visivel = true, av: AvatarLuzHandle | null = null, corpoVrm: VRM | null = null;
+    let vivo = true, raf = 0, visivel = true, av: AvatarLuzHandle | null = null, corpoVrm: VRM | null = null, acessorios: AcessoriosHandle | null = null;
     const parado = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     const fraco = window.matchMedia?.("(pointer: coarse)").matches ?? false;
 
@@ -53,7 +57,7 @@ export default function VitrinePersonagem({ fundador, cor, className = "" }: { f
     const disco = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.9), new THREE.MeshBasicMaterial({ map: discoTex, color: new THREE.Color(cor), transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
     disco.rotation.x = -Math.PI / 2; disco.position.y = 0.01; cena.add(disco);
 
-    const q = fundador ? QUADRO.fundador : QUADRO.comum;
+    const q = corpo ? QUADRO.personagem : fundador ? QUADRO.fundador : QUADRO.comum;
     const enquadrar = () => {
       const w = Math.max(1, el.clientWidth), h = Math.max(1, el.clientHeight);
       R.setSize(w, h, false); cam.aspect = w / h;
@@ -97,13 +101,17 @@ export default function VitrinePersonagem({ fundador, cor, className = "" }: { f
       const a = criarAvatarLuz(cor, starTex, fraco, gltf, { anime: true });
       a.olharPara(0);   // de frente pra câmera (o modelo encara −Z; olharPara gira pra facing + π)
       pivo.add(a.group); av = a;
-      if (fundador) {
-        a.usarAsas({ escala: QUADRO.fundador.escalaAsas }); a.esperarCorpo(true);   // o corpo padrão não aparece antes do próprio
-        carregarVrm(CORPO_DO_FUNDADOR.url).then((vrm) => {
+      const proprio: CorpoVrm | null = corpo ?? (fundador ? CORPO_DO_FUNDADOR : null);
+      if (proprio) {
+        if (!corpo) a.usarAsas({ escala: QUADRO.fundador.escalaAsas });   // as asas são do founder
+        else { a.semMochila(); if (corpo.pose) a.poseVrm(POSES_VRM[corpo.pose]); }
+        a.esperarCorpo(true);   // o corpo padrão não aparece antes do próprio
+        carregarVrm(proprio.url).then((vrm) => {
           if (!vivo || av !== a) { VRMUtils.deepDispose(vrm.scene); return; }
-          tingirVrm(vrm, CORPO_DO_FUNDADOR.tintas); a.usarVrm(vrm); corpoVrm = vrm;
+          tingirVrm(vrm, proprio.tintas); a.usarVrm(vrm); corpoVrm = vrm;
+          if (proprio.acessorios?.length) acessorios = vestirAcessorios(vrm, proprio.acessorios);
           setEstado("pronto");
-        }).catch((e) => { console.warn("[vitrine] corpo do founder (VRM) não carregou:", e); a.esperarCorpo(false); if (vivo) setEstado("pronto"); });
+        }).catch((e) => { console.warn("[vitrine] corpo próprio (VRM) não carregou:", e); a.esperarCorpo(false); if (vivo) setEstado("pronto"); });
       } else setEstado("pronto");
       tocar();
     }).catch((e) => { console.warn("[vitrine] o corpo não carregou:", e); if (vivo) setEstado("erro"); });
@@ -115,11 +123,12 @@ export default function VitrinePersonagem({ fundador, cor, className = "" }: { f
       R.domElement.removeEventListener("pointerdown", desce); R.domElement.removeEventListener("pointermove", move);
       R.domElement.removeEventListener("pointerup", sobe); R.domElement.removeEventListener("pointercancel", sobe);
       av?.dispose(); av = null;
+      acessorios?.dispose(); acessorios = null;
       if (corpoVrm) { VRMUtils.deepDispose(corpoVrm.scene); corpoVrm = null; }
       disco.geometry.dispose(); (disco.material as THREE.Material).dispose(); discoTex.dispose(); starTex.dispose();
       R.dispose(); R.forceContextLoss(); R.domElement.remove();
     };
-  }, [fundador, cor]);
+  }, [fundador, cor, corpo]);
 
   return (
     <div ref={caixa} className={`relative ${className}`} aria-label={fundador ? "Seu personagem (corpo de fundador, com asas)" : "Seu personagem"} role="img">

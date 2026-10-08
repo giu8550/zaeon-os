@@ -12,6 +12,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
 import { MIXAMO_PRO_VRM, ORDEM_VRM, paiExistente } from "@/lib/cyber/vrmMapa";
 import { contornarMateriais, trocarJsonDoGlb } from "@/lib/cyber/vrmContorno";
+import { respiracao, type PoseVrm } from "@/lib/cyber/posesVrm";
 
 /** os BYTES do VRM, baixados uma vez por URL (o founder tem 16 MB): começar cedo (`precarregarVrm`) faz o corpo
  *  próprio já estar pronto quando o avatar nasce — sem aparecer o corpo padrão antes */
@@ -71,7 +72,12 @@ export function tingirVrm(vrm: VRM, tintas: Readonly<Record<string, string>>) {
   });
 }
 
-export type EspelhoVrm = { atualizar(dt: number, t: number): void; dispose(): void };
+export type EspelhoVrm = {
+  atualizar(dt: number, t: number): void;
+  /** uma POSE própria (lib/cyber/posesVrm) por cima da cópia do esqueleto — entra/sai suave; null = só a cópia */
+  pose(p: PoseVrm | null): void;
+  dispose(): void;
+};
 /** a pose de REPOUSO (T) do esqueleto mixamo, no referencial do `corpo` — medida ao criar o avatar, antes de qualquer
  *  animação (o VRM pode chegar depois, com o esqueleto já andando) */
 export type Repouso = { q: Map<THREE.Object3D, THREE.Quaternion>; quadril: THREE.Vector3 };
@@ -121,6 +127,8 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
   const delta = new Map<string, THREE.Quaternion>(), ident = new THREE.Quaternion(), d = new THREE.Vector3();
   for (const b of ORDEM_VRM) if (existe(b)) delta.set(b, new THREE.Quaternion());
   let piscaT = 2 + Math.random() * 3, piscando = 0;
+  let pose: PoseVrm | null = null, pesoPose = 0;
+  const qPose = new THREE.Quaternion(), ePose = new THREE.Euler();
 
   return {
     atualizar(dt, t) {
@@ -138,15 +146,25 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
         relativa(quadrilMx, tq, d); d.sub(quadrilRepouso).applyQuaternion(Rinv).divideScalar(escala);
         quadrilVrm.position.copy(hipsRepouso).add(d);
       }
+      // a POSE própria (personagens): sobrepõe a cópia osso a osso, com a respiração no peito
+      pesoPose += ((pose ? 1 : 0) - pesoPose) * Math.min(1, dt * 4);
+      if (pose && pesoPose > 0.001) {
+        const resp = respiracao(pose, t);
+        for (const [b, e] of Object.entries(pose.ossos)) {
+          const n = no(b); if (!n) continue;
+          ePose.set(e[0] + (b === "chest" ? resp : 0), e[1], e[2]); qPose.setFromEuler(ePose);
+          n.quaternion.slerp(qPose, pesoPose);
+        }
+      }
       // piscar de vez em quando (a expressão "blink" do VRM)
       const ex = vrm.expressionManager;
       if (ex) {
         piscaT -= dt; if (piscaT <= 0) { piscando = 0.14; piscaT = 2.2 + Math.random() * 3.5; }
         if (piscando > 0) { piscando -= dt; ex.setValue("blink", Math.sin(Math.max(0, piscando / 0.14) * Math.PI)); } else ex.setValue("blink", 0);
       }
-      void t;
       vrm.update(dt);   // normalizado → ossos reais, física do cabelo/roupa (spring bones), expressões
     },
+    pose(p) { pose = p; },
     dispose() { vrm.scene.removeFromParent(); },
   };
 }

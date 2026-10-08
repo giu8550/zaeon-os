@@ -69,6 +69,8 @@ import { carregando, type Carregando, type IdEtapa } from "@/lib/cyber/carregame
 import { gerarVeias, ouveOCoracao } from "@/lib/cyber/coracao";
 import { URL_TERRA } from "./DistritoTerra";
 import { carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
+import { criarPersonagemVivo, type PersonagemVivoHandle } from "./PersonagemVivo";
+import { CORPOS_VRM } from "@/lib/cyber/estiloAvatar";
 import { variacaoBatida, ventoDasAsas } from "@/lib/cyber/asas";
 import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, type IdHabilidade } from "@/lib/cyber/habilidades";
 
@@ -232,6 +234,8 @@ export class CyberEngine {
   /** o DROID (lib/cyber/agentes): o agente de onboarding — o corpo (um ofanim), onde está, o rótulo e a âncora do balão.
    *  É SÓ deste cliente (cada pessoa tem o seu; nada vai pela rede) */
   private droid: { h: DroidHandle; pos: THREE.Vector3; alt: number; tag: HTMLDivElement; fala: { pos: THREE.Vector3; alt: number } } | null = null;
+  /** os PERSONAGENS que vivem na cidadela (a Nina…): corpo VRM + a agenda do relógio (lib/cyber/vidaPersonagem) */
+  private personagens: { h: PersonagemVivoHandle; tag: HTMLDivElement }[] = [];
   /** NASCENDO no tubo (s desde o começo) — sem andar até o vidro abrir */
   private nascendo: { t: number; tubo: number } | null = null;
   /** o TUTORIAL do Droid: o passo, quantas falas dele já saíram, o relógio da fala, se já está ESPERANDO a pessoa cumprir
@@ -508,6 +512,7 @@ export class CyberEngine {
     if (this.cidade?.caixasLounge.length && opts.urlMusica) this.somLounge = criarSomLounge({ audio: this.som, caixas: this.cidade.caixasLounge, urlDe: opts.urlMusica });
     this.setPessoas([...opts.membros]);
     if (this.cidade) this.criarDroid();
+    if (this.cidade && this.gltf && personagensLigados()) setTimeout(() => this.criarPersonagens(), 2500);   // depois que a cena montou (o VRM é pesado)
     this.montarSom();
     this.ligarEntradas();
     this.ro = new ResizeObserver(() => this.redimensionar()); this.ro.observe(container);
@@ -594,6 +599,21 @@ export class CyberEngine {
       if (!vivo) return;
       tingirVrm(vrm, CORPO_DO_FUNDADOR.tintas); a.av.usarVrm(vrm);
     }).catch((e) => { console.warn("[cyber] corpo do founder (VRM) não carregou:", e); a.av.esperarCorpo(false); });
+  }
+  /** cria os personagens da cidadela (a Nina) — cada um com o corpo VRM dele e a agenda própria */
+  private criarPersonagens() {
+    if (!this.vivo || !this.cidade || !this.gltf || this.personagens.length) return;
+    for (const p of PERSONAGENS_DA_CIDADELA) {
+      const corpo = CORPOS_VRM[p.id]; if (!corpo) continue;
+      const h = criarPersonagemVivo({ ...p, corpo, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene });
+      const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = p.nome; this.o.overlay.appendChild(tag);
+      this.personagens.push({ h, tag });
+    }
+  }
+  private atualizarPersonagens(dt: number, t: number) {
+    if (!this.personagens.length) return;
+    const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, agora = Date.now() / 1000, some = this.instancia;   // no tutorial (instância só da pessoa), ninguém mais aparece
+    for (const p of this.personagens) { p.h.mostrar(!some); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position); }
   }
   private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
@@ -2209,6 +2229,7 @@ export class CyberEngine {
 
     // motos (antes dos avatares: quem está montado encaixa no banco/guidão/pedaleiras da moto já posicionada)
     const ocupadas = this.atualizarMotos(dt, t);
+    this.atualizarPersonagens(dt, t);
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
@@ -2397,6 +2418,7 @@ export class CyberEngine {
     const { eu } = this;
     if (this.dicaMira) this.dicaMira.style.display = this.menu ? "none" : "block";
     const atores = [eu, ...this.remotos.values()];
+    for (const p of this.personagens) { const vis = p.h.group.visible && !this.menu; if (vis) { const s = this.proj(this.vHud.set(p.h.pos.x, p.h.alt + 2.0, p.h.pos.z)); this.noHud(p.tag, s.x, s.y, s.vis && eu.pos.distanceTo(p.h.pos) < 90); } else if (p.tag.style.display !== "none") p.tag.style.display = "none"; }
     { const d = this.droid; if (d) { const vis = d.h.group.visible && !this.menu; if (vis) { const s = this.proj(this.vHud.set(d.pos.x, d.alt + 1.25, d.pos.z)); this.noHud(d.tag, s.x, s.y, s.vis); } else if (d.tag.style.display !== "none") d.tag.style.display = "none"; } }
     for (const a of atores) {
       if (a === eu) { a.tag.style.display = "none"; continue; }   // o próprio avatar não leva nome
@@ -2436,6 +2458,7 @@ export class CyberEngine {
     this.cleanups.forEach((f) => f());
     for (const a of [this.eu, ...this.remotos.values()]) if (a) this.removerAtor(a);
     if (this.droid) { this.droid.h.dispose(); this.droid.tag.remove(); }
+    for (const p of this.personagens) { p.h.dispose(); p.tag.remove(); } this.personagens = [];
     this.falaZ = null; this.calarZaeon(); this.holoZaeon?.dispose();
     this.praca?.dispose(); this.bercario?.dispose(); if (this.farol) { this.farol.geometry.dispose(); (this.farol.material as THREE.Material).dispose(); }
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
@@ -2453,4 +2476,12 @@ export class CyberEngine {
 /** base64 → bytes (o WAV da voz) */
 function base64ParaBuffer(b64: string): ArrayBuffer | null {
   try { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; } catch { return null; }
+}
+
+/** os personagens que vivem na cidadela (id = a chave de CORPOS_VRM; `semente` = a agenda dele) */
+const PERSONAGENS_DA_CIDADELA = [{ id: "nina", nome: "Nina", cor: "#f472b6", semente: 11 }] as const;
+/** ligados por padrão; `?personagens=0` (ou NEXT_PUBLIC_CYBER_PERSONAGENS=0) desliga */
+function personagensLigados(): boolean {
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("personagens") === "0") return false;
+  return process.env.NEXT_PUBLIC_CYBER_PERSONAGENS !== "0";
 }
