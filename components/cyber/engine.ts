@@ -65,7 +65,7 @@ import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
 import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
-import { carregarVrm, tingirVrm } from "./AvatarVrm";
+import { carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
 import { variacaoBatida, ventoDasAsas } from "@/lib/cyber/asas";
 import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, type IdHabilidade } from "@/lib/cyber/habilidades";
 
@@ -473,6 +473,7 @@ export class CyberEngine {
 
   /** Reconstrói bases/atores quando a lista de membros muda (alguém entrou na sala). */
   setPessoas(lista: PessoaCyber[]) {
+    if (lista.some((p) => usaCorpoDoFundador(p.fundador, location.search))) void precarregarVrm(CORPO_DO_FUNDADOR.url).catch(() => undefined);   // o corpo do founder já vai baixando
     const ids = lista.map((p) => p.id);
     if (!ids.includes(this.o.eu.id)) { lista = [...lista, this.o.eu]; ids.push(this.o.eu.id); }
     for (const p of lista) this.pessoas.set(p.id, p);
@@ -525,11 +526,12 @@ export class CyberEngine {
     if (a.vrm || !this.gltf || !usaCorpoDoFundador(this.pessoas.get(a.id)?.fundador, location.search)) return;
     a.vrm = true;
     a.av.usarAsas();   // as asas negras no lugar da mochila (já, sem esperar o corpo)
+    a.av.esperarCorpo(true);   // o corpo padrão NÃO aparece enquanto o próprio carrega (o VRM já vem pré-carregado)
     carregarVrm(CORPO_DO_FUNDADOR.url).then((vrm) => {
       const vivo = this.vivo && (a === this.eu || this.remotos.get(a.id) === a);
       if (!vivo) return;
       tingirVrm(vrm, CORPO_DO_FUNDADOR.tintas); a.av.usarVrm(vrm);
-    }).catch((e) => { console.warn("[cyber] corpo do founder (VRM) não carregou:", e); });
+    }).catch((e) => { console.warn("[cyber] corpo do founder (VRM) não carregou:", e); a.av.esperarCorpo(false); });
   }
   private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 

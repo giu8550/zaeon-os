@@ -77,6 +77,9 @@ export type AvatarLuzHandle = {
   aura(on: boolean): void;
   /** troca o corpo pelo de um VRM (components/cyber/AvatarVrm) — o esqueleto do GLB continua animando por baixo */
   usarVrm(vrm: VRM): void;
+  /** esconde o corpo PADRÃO enquanto o VRM próprio carrega (sem o padrão aparecer antes); false = mostra de novo
+   *  (o VRM falhou) */
+  esperarCorpo(on: boolean): void;
   /** ASAS NEGRAS no lugar da mochila a jato (components/cyber/AsasAnjo) — o voo é o mesmo. `escala` < 1 encolhe
    *  (a vitrine do Perfil: abertas, elas têm ~3 m de envergadura) */
   usarAsas(o?: { escala?: number }): void;
@@ -103,6 +106,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   // AURA: casca inflada (back-face, aditiva) em volta do corpo — o que faz dele um ser de luz
   const matAura = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
   matAura.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n transformed += normalize(normal) * 0.05;"); };
+  let escondidos: THREE.Object3D[] | null = null;   // o corpo padrão escondido esperando o VRM (esperarCorpo)
   let mixer: THREE.AnimationMixer | null = null, modeloMx: THREE.Object3D | null = null, repouso: Repouso | null = null, espelho: EspelhoVrm | null = null;
   let asas: AsasHandle | null = null, estAsas = ASAS_INICIO, evAsas = { bateu: 0, abriu: false, fechou: false, modo: "chao" as ModoAsas };
   const aurasMalha: THREE.Mesh[] = [];
@@ -539,7 +543,10 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     },
     passosNovos() { if (!pernas.length) return null; const n = pisadas; pisadas = 0; return n; },
     olharPara(f) { alvo = f + Math.PI; },
-    aura(on) { for (const c of aurasMalha) c.visible = on && !espelho; },
+    aura(on) {
+      if (escondidos) { for (const c of aurasMalha) { const i = escondidos.indexOf(c); if (on && i < 0) escondidos.push(c); else if (!on && i >= 0) escondidos.splice(i, 1); } return; }   // esperando o VRM: só anota
+      for (const c of aurasMalha) c.visible = on && !espelho;
+    },
     usarAsas(op) {
       if (asas) return;
       asas = criarAsas(); asas.group.scale.setScalar(op?.escala ?? 1); corpo.add(asas.group); mochila.visible = false;
@@ -548,6 +555,11 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (!asas) return null;
       const e = { ...evAsas }; evAsas.bateu = 0; evAsas.abriu = false; evAsas.fechou = false;
       return e;
+    },
+    esperarCorpo(on) {
+      if (espelho || !modeloMx || on === !!escondidos) return;
+      if (on) { escondidos = []; modeloMx.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible) { o.visible = false; escondidos!.push(o); } }); }
+      else { for (const o of escondidos!) o.visible = true; escondidos = null; }   // volta só o que estava à mostra (a aura pode estar desligada)
     },
     usarVrm(vrm) {
       if (!modeloMx || !repouso || espelho) return;
