@@ -7,6 +7,7 @@
  * onChange). Carrega de /api/mentors/plugged ao montar e quando a loja dispara
  * "zaeon:mentors:changed". Sem mentores plugados = pill "⟁ Aura" com atalho pra loja.
  */
+import { lojaHref } from "@/lib/mentores/rota";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Plus } from "lucide-react";
 
@@ -94,7 +95,7 @@ export default function MentorPill({
             <Option key={m.slug} active={value === m.slug} onClick={() => select(m.slug)} emoji={m.emoji || "⟁"} title={m.name} sub={m.course} />
           ))}
           <a
-            href="/plugin-store?from=/research-lab?tab=sala-de-estudos"
+            href={lojaHref("/research-lab?tab=sala-de-estudos")}
             className="mt-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] text-slate-500 dark:text-white/50 hover:text-violet-600 dark:hover:text-violet-300 hover:bg-violet-500/10 transition-colors"
           >
             <Plus size={13} /> {mentors.length ? "Plugar outro mentor" : "Plugar um mentor na loja"}
