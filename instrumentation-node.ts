@@ -17,6 +17,14 @@ export async function iniciarWorkerCanalOpcional() {
   } catch (e) { console.warn("[canal-worker] não iniciado:", (e as Error)?.message); }
 }
 
+/** Worker das chores (Fatia 7, C8): CHORES_WORKER=1 + CHORES_QUEUE=1 + REDIS_URL. Nunca lança. */
+export async function iniciarWorkerChoresOpcional() {
+  try {
+    const { iniciarWorkerChores } = await import("@/lib/queue/chores");
+    if (!(await iniciarWorkerChores())) console.warn("[chores-worker] CHORES_WORKER=1 mas fila desligada (CHORES_QUEUE=1 + REDIS_URL) — não iniciado.");
+  } catch (e) { console.warn("[chores-worker] não iniciado:", (e as Error)?.message); }
+}
+
 export async function iniciarWorkers() {
   const { getRedisConnection, isQueueEnabled, SCHOLAR_QUEUE } = await import("@/lib/queue/scholar");
   if (!isQueueEnabled()) {
