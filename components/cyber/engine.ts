@@ -67,6 +67,9 @@ import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montad
 import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
 import { carregando, type Carregando, type IdEtapa } from "@/lib/cyber/carregamento";
 import { gerarVeias, ouveOCoracao } from "@/lib/cyber/coracao";
+import { criarFrotaIA, type FrotaHandle } from "./FrotaIA";
+import { sanitizarConfig } from "@/lib/cyber/frota/config";
+import { colisoresDeCorpos } from "@/lib/cyber/colisaoAtores";
 import { SENTAR, TABLET, codificarDescanso, lugarEm, decodificarDescanso, lugarPerto, poseNoLugar, proximoModo, type Lugar, type ModoDescanso } from "@/lib/cyber/descanso";
 import { URL_TERRA } from "./DistritoTerra";
 import { carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
@@ -249,6 +252,8 @@ export class CyberEngine {
   private droid: { h: DroidHandle; pos: THREE.Vector3; alt: number; tag: HTMLDivElement; fala: { pos: THREE.Vector3; alt: number } } | null = null;
   /** os PERSONAGENS que vivem na cidadela (a Nina…): corpo VRM + a agenda do relógio (lib/cyber/vidaPersonagem) */
   private personagens: { h: PersonagemVivoHandle; tag: HTMLDivElement }[] = [];
+  /** a FROTA DE IAs (components/cyber/FrotaIA — lib/cyber/frota): centenas de "jogadores" vivendo pelo relógio */
+  private frota: FrotaHandle | null = null;
   /** NASCENDO no tubo (s desde o começo) — sem andar até o vidro abrir */
   private nascendo: { t: number; tubo: number } | null = null;
   /** o TUTORIAL do Droid: o passo, quantas falas dele já saíram, o relógio da fala, se já está ESPERANDO a pessoa cumprir
@@ -528,6 +533,7 @@ export class CyberEngine {
     this.setPessoas([...opts.membros]);
     if (this.cidade) this.criarDroid();
     if (this.cidade && this.gltf && personagensLigados()) setTimeout(() => this.criarPersonagens(), 2500);   // depois que a cena montou (o VRM é pesado)
+    if (this.cidade && !this.o.menu) this.ligarFrota();
     this.montarSom();
     this.ligarEntradas();
     this.ro = new ResizeObserver(() => this.redimensionar()); this.ro.observe(container);
@@ -676,6 +682,20 @@ export class CyberEngine {
     }).catch((e) => { console.warn("[cyber] corpo do founder (VRM) não carregou:", e); a.av.esperarCorpo(false); });
   }
   /** cria os personagens da cidadela (a Nina) — cada um com o corpo VRM dele e a agenda própria */
+  /** a FROTA DE IAs: a config vem do servidor (o mesmo relógio pra todos); sem ela (offline), nada */
+  private ligarFrota() {
+    if (this.frota || !this.vivo) return;
+    this.frota = criarFrotaIA({ cena: this.cena.scene, overlay: this.o.overlay, gltf: this.gltf, starTex: this.cena.starTex, low: this.o.low });
+    void fetch("/api/cyber/frota").then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.config && this.frota) this.frota.configurar(sanitizarConfig(j.config), typeof j.agora === "number" ? j.agora : Date.now()); }).catch(() => undefined);
+  }
+  /** os CORPOS no meu nível (jogadores, personagens, IAs): o meu avatar não entra neles */
+  private colisoresDeAtores() {
+    const corpos: { x: number; z: number; y: number }[] = [];
+    for (const a of this.remotos.values()) if (a.av.group.visible) corpos.push({ x: a.pos.x, z: a.pos.z, y: a.alt });
+    for (const p of this.personagens) if (p.h.group.visible) corpos.push({ x: p.h.pos.x, z: p.h.pos.z, y: p.h.alt });
+    if (this.frota) corpos.push(...this.frota.corpos());
+    return colisoresDeCorpos(corpos, this.eu.alt);
+  }
   private criarPersonagens() {
     if (!this.vivo || !this.cidade || !this.gltf || this.personagens.length) return;
     for (const p of PERSONAGENS_DA_CIDADELA) {
@@ -689,7 +709,8 @@ export class CyberEngine {
   private atualizarPersonagens(dt: number, t: number) {
     if (!this.personagens.length) return;
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, agora = Date.now() / 1000, some = this.instancia;   // no tutorial (instância só da pessoa), ninguém mais aparece
-    for (const p of this.personagens) { p.h.mostrar(!some); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position); }
+    const eu = [{ x: this.eu.pos.x, z: this.eu.pos.z }, ...[...this.remotos.values()].map((a) => ({ x: a.pos.x, z: a.pos.z }))];   // desviam de quem está no caminho
+    for (const p of this.personagens) { p.h.mostrar(!some); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position, eu); }
   }
   private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } if (a.somFio) { this.som.soltarLoop(a.somFio); a.somFio = null; } a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
@@ -831,6 +852,7 @@ export class CyberEngine {
   /** Balão de fala sobre a pessoa (chat da sala). */
   falar(userId: string, texto: string) {
     const a = userId === this.o.eu.id ? this.eu : this.remotos.get(userId); if (!a) return;
+    if (userId === this.o.eu.id) this.frota?.ouvir(texto, { x: this.eu.pos.x, z: this.eu.pos.z, y: this.eu.alt });   // puxou assunto perto de uma IA
     if (userId !== this.o.eu.id) this.som.tocar("chat-pop");
     this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; });
     const el = document.createElement("div"); el.style.cssText = FALA_CSS + "border-color:" + a.color + ";"; el.textContent = texto.slice(0, 140);
@@ -1791,7 +1813,7 @@ export class CyberEngine {
       if (r.alto) { this.altoEm = lm.poi.id; this.yNav = r.y; eu.pos.x = r.x; eu.pos.z = r.z; return; }
       q = r;
     }
-    q = empurrarParaFora(q, [...this.colisores, ...this.colisoresDeNaves(0), ...this.colisoresDeMotos()]);
+    q = empurrarParaFora(q, [...this.colisores, ...this.colisoresDeNaves(0), ...this.colisoresDeMotos(), ...this.colisoresDeAtores()]);
     eu.pos.x = q.x; eu.pos.z = q.z; this.yNav = 0;
     if (!this.jet.noAr && !naPraca(q)) this.cairDaqui({ x: (q.x - prev.x) / Math.max(dt, 1e-3), z: (q.z - prev.z) / Math.max(dt, 1e-3) });   // a borda da praça: o vazio (no ar a queda já é do passoNoAr)
   }
@@ -2260,7 +2282,7 @@ export class CyberEngine {
         // a RECEPÇÃO e os MIRANTES ficam no piso da Zaeon: do pé da escada sobe-se pro salão; a ilha (o cone) é sólida
         for (const rc of this.marcosDaZaeon()) { const r = resolverPasso(rc.mn, false, prev, eu.pos); eu.pos.x = r.x; eu.pos.z = r.z; if (r.alto) { this.altoEm = rc.lm.poi.id; this.yNav = r.y; break; } }
         // sem parede invisível na borda: passou do piso da ilha → cai
-        const q = this.noCeu ? empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos(), ...this.colisoresDosTubos()]) : { x: eu.pos.x, z: eu.pos.z }; eu.pos.x = q.x; eu.pos.z = q.z; if (this.noCeu) this.yNav = CIDADE.pisoY;
+        const q = this.noCeu ? empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos(), ...this.colisoresDosTubos(), ...this.colisoresDeAtores()]) : { x: eu.pos.x, z: eu.pos.z }; eu.pos.x = q.x; eu.pos.z = q.z; if (this.noCeu) this.yNav = CIDADE.pisoY;
         if (!this.noCeu) { /* subiu pro pé da escada da Recepção: o resto é dela (resolverChao) */ }
         else if (!naIlhaPrincipal(q)) this.cairDaqui({ x: (q.x - prev.x) / Math.max(dt, 1e-3), z: (q.z - prev.z) / Math.max(dt, 1e-3) });
         // pisou na boca da escada de energia: ela te leva (pra cima, da central; pra baixo, do lounge)
@@ -2276,7 +2298,7 @@ export class CyberEngine {
         }
       }
       else if (this.plat) {   // num LUGAR FLUTUANTE: anda com as colisões do andar; passou da borda do disco → cai
-        const r = andarNaPlataforma(this.plat.id, this.plat.andar, eu.pos); eu.pos.x = r.x; eu.pos.z = r.z;
+        const r0 = andarNaPlataforma(this.plat.id, this.plat.andar, eu.pos), r1 = empurrarParaFora(r0, this.colisoresDeAtores()), r = { ...r0, x: r1.x, z: r1.z }; eu.pos.x = r.x; eu.pos.z = r.z;
         if (r.fora) this.cairDaqui({ x: (eu.pos.x - prev.x) / Math.max(dt, 1e-3), z: (eu.pos.z - prev.z) / Math.max(dt, 1e-3) });
       }
       else if (this.ilhota !== null) {   // em pé numa ilhota: anda livre no topo; passou da borda dela → cai
@@ -2366,6 +2388,11 @@ export class CyberEngine {
     // motos (antes dos avatares: quem está montado encaixa no banco/guidão/pedaleiras da moto já posicionada)
     const ocupadas = this.atualizarMotos(dt, t);
     this.atualizarPersonagens(dt, t);
+    if (this.frota) {
+      this.frota.mostrar(!this.instancia && !this.menu);
+      this.frota.atualizar(dt, t, { cam: this.cam.position, camera: this.cam, largura: this.w, altura: this.h, ilhaY: this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, pisoY: CIDADE.pisoY, musica: !!this.somLounge?.tocando,
+        obstaculos: [{ x: this.eu.pos.x, z: this.eu.pos.z }, ...[...this.remotos.values()].map((a) => ({ x: a.pos.x, z: a.pos.z })), ...this.personagens.map((p) => ({ x: p.h.pos.x, z: p.h.pos.z }))] });
+    }
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
@@ -2595,6 +2622,7 @@ export class CyberEngine {
   }
 
   dispose() {
+    this.frota?.dispose(); this.frota = null;
     if (!this.vivo) return;   // idempotente (desmonta ao ir estudar e de novo no cleanup do React)
     this.vivo = false; cancelAnimationFrame(this.raf); this.ro?.disconnect(); this.io?.disconnect();
     this.cleanups.forEach((f) => f());

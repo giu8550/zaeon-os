@@ -448,9 +448,9 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         }
         for (const o of ossos) {
           dirAlvo.copy(cima).multiplyScalar(-0.85).addScaledVector(lateral, 0.32 * o.lado).addScaledVector(frente, 0.25).normalize();   // braço: solto, um pouco aberto
-          apontar(o.braco, o.ante, dirAlvo, meditando);
+          apontar(o.braco, o.ante, dirAlvo, meditando * (1 - wTab));   // (com o TABLET, os braços são dele)
           dirAlvo.copy(frente).multiplyScalar(0.72).addScaledVector(cima, -0.45).addScaledVector(lateral, 0.28 * o.lado).normalize();   // antebraço: mãos nos joelhos
-          apontar(o.ante, o.mao, dirAlvo, meditando);
+          apontar(o.ante, o.mao, dirAlvo, meditando * (1 - wTab));
         }
       }
       // ── VOO de mochila + POUSO com poses CAPTURADAS (Quaternius UAL, CC0): no ar = Jump_Loop; tocou o chão = Jump_Land

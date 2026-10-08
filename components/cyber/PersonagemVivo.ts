@@ -14,6 +14,7 @@ import { carregarVrm, tingirVrm } from "./AvatarVrm";
 import { vestirAcessorios, type AcessoriosHandle } from "./AcessoriosVrm";
 import { criarMoto, type MotoHandle } from "./Moto";
 import { mundo } from "@/lib/cyber/ceu";
+import { desviar, empurrao, type P2 } from "@/lib/cyber/colisaoAtores";
 import type { CorpoVrm } from "@/lib/cyber/estiloAvatar";
 import { POSES_VRM } from "@/lib/cyber/posesVrm";
 import { estadoEm, type Bloco, type Estado, type PerfilVida } from "@/lib/cyber/vidaPersonagem";
@@ -25,7 +26,7 @@ export type PersonagemVivoHandle = {
   readonly pos: THREE.Vector3; readonly alt: number;
   readonly estado: Estado | null;
   /** `agora` = relógio de parede (s); `ilhaY` = a altura atual do piso da ilha (ela boia); `cam` = pra economizar longe */
-  atualizar(dt: number, t: number, agora: number, ilhaY: number, cam: THREE.Vector3): void;
+  atualizar(dt: number, t: number, agora: number, ilhaY: number, cam: THREE.Vector3, obstaculos?: readonly P2[]): void;
   mostrar(on: boolean): void;
   dispose(): void;
 };
@@ -48,7 +49,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
   const moto: MotoHandle = criarMoto({ cor: o.corMoto, low: o.low }); raiz.add(moto.group);
 
   const pos = new THREE.Vector3(), w = new THREE.Vector3();
-  let alt = 0, cache: Bloco | null = null, estado: Estado | null = null, mostrado = true, pulo = 0;
+  let alt = 0, cache: Bloco | null = null, estado: Estado | null = null, mostrado = true, pulo = 0, desvio: P2 = { x: 0, z: 0 };
   // as flags suaves (a pose não troca seca entre andar, digitar, dançar…)
   const s = { sentado: 0, danca: 0, meditando: 0 };
   const montado: Montado = { w: 1, maoE: new THREE.Vector3(), maoD: new THREE.Vector3(), peE: new THREE.Vector3(), peD: new THREE.Vector3() };
@@ -58,10 +59,13 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
     id: o.id, nome: o.nome, cor: o.cor, group: raiz,
     get pos() { return pos; }, get alt() { return alt; }, get estado() { return estado; },
     mostrar(on) { mostrado = on; raiz.visible = on; },
-    atualizar(dt, t, agora, ilhaY, cam) {
+    atualizar(dt, t, agora, ilhaY, cam, obstaculos = []) {
       if (!mostrado) return;
       const e = estadoEm(agora, o.perfil, cache); cache = e.bloco; estado = e;
-      const p = mundo(e.pos); pos.set(p.x, 0, p.z);
+      const p0 = mundo(e.pos);
+      // DESVIA de quem está no caminho (o jogador, os outros) — o roteiro não muda, só o corpo contorna
+      desvio = desviar(desvio, !e.moto && e.sentado < 0.5 ? empurrao(p0, obstaculos) : { x: 0, z: 0 }, dt);
+      const p = { x: p0.x + desvio.x, z: p0.z + desvio.z }; pos.set(p.x, 0, p.z);
       const dist = Math.hypot(cam.x - p.x, cam.z - p.z);
       raiz.visible = dist < DIST_ESCONDE; if (!raiz.visible) return;
       // longe, anima a cada 3 quadros (acumulando o dt)
