@@ -65,7 +65,7 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
 import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
 import { carregarVrm, tingirVrm } from "./AvatarVrm";
-import { ventoDasAsas } from "@/lib/cyber/asas";
+import { variacaoBatida, ventoDasAsas } from "@/lib/cyber/asas";
 
 /**
  * Vêm do SERVIDOR (GET da sala), o cliente só pinta: `fundador` = dono — a base dele fica na ZAEON (a ilha no céu).
@@ -1193,7 +1193,7 @@ export class CyberEngine {
    *  fechar ao pousar, e o vento contínuo planando (lib/cyber/asas) */
   private somDasAsas(a: Ator, ev: NonNullable<ReturnType<AvatarLuzHandle["eventosAsas"]>>, dist: Dist, vel: number) {
     const s = this.som;
-    for (let k = 0; k < Math.min(2, ev.bateu); k++) s.tocar("asa-bater", null, { dist, seguir: a.av.group, taxa: 0.9 + Math.random() * 0.18, volume: ev.modo === "sobe" ? 1 : 0.7 });
+    for (let k = 0; k < Math.min(2, ev.bateu); k++) s.tocar("asa-bater", null, { dist, seguir: a.av.group, ...variacaoBatida(ev.modo, Math.random(), Math.random()) });
     if (ev.abriu) s.tocar("asa-abrir", null, { dist, seguir: a.av.group });
     if (ev.fechou) s.tocar("asa-fechar", a.av.group.position, { dist });
     if (!a.somAsas) a.somAsas = s.loop("asa-vento", a.av.group, { dist });

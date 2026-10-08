@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ASAS, ASAS_INICIO, modoDasAsas, passoAsas, sintetizarAbrirAsas, sintetizarBaterAsa, sintetizarFecharAsas, sintetizarVentoAsas, ventoDasAsas, type EntradaAsas } from "./asas";
+import { ASAS, ASAS_INICIO, modoDasAsas, passoAsas, sintetizarAbrirAsas, sintetizarFecharAsas, sintetizarVentoAsas, variacaoBatida, ventoDasAsas, type EntradaAsas } from "./asas";
 import { SINTESE, SONS } from "./audio";
 
 const rodar = (i: EntradaAsas, seg: number, e = ASAS_INICIO) => { const ev = { bateu: 0, abriu: 0, fechou: 0 }; let s = { e } as ReturnType<typeof passoAsas>; for (let k = 0; k < seg * 60; k++) { s = passoAsas(s.e, i, 1 / 60); ev.bateu += +s.bateu; ev.abriu += +s.abriu; ev.fechou += +s.fechou; } return { s, ev }; };
@@ -33,12 +33,19 @@ describe("as asas negras do founder (estado)", () => {
   });
 });
 
-describe("os sons das asas (sintetizados)", () => {
+describe("os sons das asas", () => {
+  it("cada batida varia (afinação e volume) — subindo é mais presente que voando pra frente", () => {
+    const a = variacaoBatida("sobe", 0, 0), b = variacaoBatida("sobe", 1, 1), c = variacaoBatida("frente", 1, 1);
+    expect(a.taxa).toBeLessThan(b.taxa); expect(a.volume).toBeLessThan(b.volume); expect(c.volume).toBeLessThan(b.volume);
+    expect(b.taxa).toBeLessThan(1.15); expect(a.taxa).toBeGreaterThan(0.85);
+  });
   it("existem na tabela, com duração certa e sem clique no fim (one-shots)", () => {
-    for (const n of ["asa-bater", "asa-vento", "asa-abrir", "asa-fechar"] as const) { expect(SONS[n].sintetico).toBe(true); expect(SINTESE[n]).toBeTypeOf("function"); }
-    expect(SONS["asa-vento"].loop).toBe(true); expect(SONS["asa-bater"].loop).toBe(false);
+    for (const n of ["asa-vento", "asa-abrir", "asa-fechar"] as const) { expect(SONS[n].sintetico).toBe(true); expect(SINTESE[n]).toBeTypeOf("function"); }
+    // a batida é a GRAVAÇÃO (CC0), macia: arquivo wav, volume contido, passa-baixa
+    expect(SONS["asa-bater"]).toMatchObject({ ext: "wav", loop: false }); expect(SONS["asa-bater"].sintetico).toBeFalsy(); expect(SONS["asa-bater"].volume).toBeLessThan(0.5);
+    expect(SONS["asa-vento"].loop).toBe(true);
     const sr = 8000;
-    for (const [f, seg] of [[sintetizarBaterAsa, 0.45], [sintetizarAbrirAsas, 0.8], [sintetizarFecharAsas, 0.5]] as const) {
+    for (const [f, seg] of [[sintetizarAbrirAsas, 0.8], [sintetizarFecharAsas, 0.5]] as const) {
       const x = f(sr); expect(x.length).toBe(Math.round(sr * seg)); expect(Math.abs(x[x.length - 1]!)).toBeLessThan(0.01);
       expect(Math.max(...Array.from(x, Math.abs))).toBeGreaterThan(0.5);
     }
