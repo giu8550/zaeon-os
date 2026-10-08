@@ -1278,3 +1278,48 @@ model TokenLedger {
   @@index([at])
   @@map("token_ledger")
 }
+
+// ── Contrato C8 (Fatia 7, PR-G5): AgentChore — tarefa PEQUENA de agente (checar página, resumir
+// link, extrair campos…) rodando no pool grátis quando o conteúdo é público (lib/chore/*).
+// `destino` e `tipo` são FIXADOS na criação (plan-then-execute): nada lido depois — nem do modelo,
+// nem do conteúdo — muda onde/como a chore age. Flag CHORES_QUEUE; sem ela nenhuma chore existe.
+model AgentChore {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  tipo           String                       // checar_pagina | feed_novos | resumir_link | classificar_anexo | extrair_campos | digest | link_rot | formatar_abnt | traduzir_trecho
+  agentKey       String
+  requesterId    String?  @db.ObjectId        // null = autônoma (P3, fatia 8)
+  canalId        String?  @db.ObjectId
+  alvo           Json                         // O QUE LER: {url?, urls?, feedUrl?, anexoId?, texto?, campos?, classes?, referencia?, de?, para?}
+  destino        Json                         // ONDE/COMO AGIR — FIXADO NA CRIAÇÃO: {canalId, parentId: string|null, modo: "thread" | "digest" | "silencioso"}
+  origemConteudo String                       // "web" | "anexo" | "canal" → rotaDaChore(): web = pool via gateway; anexo|canal = vertex (§8.10)
+  status         String   @default("queued")  // queued | running | delayed | done | skipped | failed | expired
+  resultado      Json?                        // {texto?, campos?, classe?, diff?, itens?, fonteUrl, lidoEm, modelo, provedor, alvo, bytes}
+  cursor         String?                      // cursor desta passada (hash do texto normalizado | etag | lastModified)
+  motivo         String?                      // skipped: "sem_mudanca" · failed: ClasseErroLlm | code da tool · expired: "pool_esgotado_expirado"
+  chamadasLlm    Int      @default(0)         // ≤ 3
+  ms             Int      @default(0)
+  jobId          String   @unique             // chore:<tipo>:<sha256(alvo canônico)[:12]>:<YYYY-MM-DD>
+  expiraEm       DateTime                     // createdAt + 24h
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([agentKey, createdAt])
+  @@index([status, updatedAt])
+  @@index([canalId, createdAt])
+  @@index([tipo, createdAt])
+  @@map("agent_chores")
+}
+
+// "Registra que checou" (lei 6) — 1 linha por fonte; diff vazio = não fala e não gasta, mas conta aqui.
+model ChoreCursor {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  fonteHash        String   @unique            // sha256(tipo + alvo canônico)
+  tipo             String
+  ultimoCursor     String?
+  ultimaChecagemEm DateTime @default(now())
+  ultimaMudancaEm  DateTime?
+  checagens        Int      @default(0)
+  mudancas         Int      @default(0)
+
+  @@map("chore_cursors")
+}

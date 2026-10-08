@@ -15,6 +15,7 @@ import { montarAliases, semMencoes } from "@/lib/canal/mention";
 import { registrarUso } from "@/lib/canal/usage";
 import { rosterComMentores, mergeProfiles, type AgentView } from "@/lib/agents/roster";
 import { EV_DIGITANDO, EV_MENSAGEM, publicarPusher, type MensagemWire, type Publicar } from "@/lib/canal/realtime";
+import { limparSaidaAgente } from "@/lib/canal/saida";
 
 export const N_CONTEXTO = 30;
 
@@ -198,7 +199,8 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
 
   await publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: "digitando" });
   try {
-    const texto = (await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId })).trim();
+    // G6 (Fatia 7): nunca persistir imagem remota/HTML vindo do modelo (texto limpo sai idêntico).
+    const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId })).trim());
     if (!texto) throw new Error("resposta vazia");
     const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto, mencoes: [] } });
     const wire: MensagemWire = {

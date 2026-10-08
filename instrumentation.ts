@@ -20,6 +20,11 @@ export async function register() {
     const { iniciarWorkerCanalOpcional } = await import("./instrumentation-node");
     await iniciarWorkerCanalOpcional();
   }
+  // Worker das chores (Fatia 7): CHORES_WORKER=1 + CHORES_QUEUE=1 + REDIS_URL; sem as envs, nenhuma chore existe.
+  if (process.env.CHORES_WORKER === "1") {
+    const { iniciarWorkerChoresOpcional } = await import("./instrumentation-node");
+    await iniciarWorkerChoresOpcional();
+  }
   if (process.env.SCHOLAR_WORKER === "1") {
     const { iniciarWorkers } = await import("./instrumentation-node");
     await iniciarWorkers();
