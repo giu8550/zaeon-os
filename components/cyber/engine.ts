@@ -1373,8 +1373,10 @@ export class CyberEngine {
   private vagaPronta(i: number) { const v = vagas()[i]; return !!v && progressoDaVaga(this.fabricas[v.lote]!.f, i) >= 1; }
   /** o que dá pra montar perto (vaga pronta ou estacionada), no mesmo nível dos meus pés — a pé */
   private motoAoAlcance(): AlvoMoto | null { return this.podeMontar() ? motoParaMontar(this.eu.pos, this.eu.alt, (i) => this.vagaPronta(i), (v) => this.yDaVaga(v), this.largadasAgora()) : null; }
-  /** a pé, no chão do mapa ou no piso da Zaeon (os dois estacionamentos) */
-  private podeMontar() { return !this.menu && !this.pilotando && this.moto === null && !this.jet.noAr && (!this.altoEm || this.noCeu) && !this.noTopo && !this.sobreNave && this.ilhota === null && this.plat === null && this.bordo === null && this.vagaMotos.length > 0; }
+  /** a pé, no chão do mapa, no piso da Zaeon, numa PLATAFORMA flutuante (universidades, Solana, campi) ou numa ILHOTA
+   *  — onde a moto pode ter sido estacionada (a altura/alcance de `motoParaMontar` garante que é a do MEU nível). Antes,
+   *  plataforma e ilhota ficavam de fora: descia-se da moto ali e não dava mais pra montar de novo */
+  private podeMontar() { return !this.menu && !this.pilotando && this.moto === null && !this.jet.noAr && (!this.altoEm || this.noCeu) && !this.noTopo && !this.sobreNave && this.bordo === null && this.vagaMotos.length > 0; }
   /** ninguém (eu, os outros, motos estacionadas) em cima da vaga `s` — o robô espera liberar pra fabricar */
   private vagaLivre(s: number) {
     const v = vagas()[s]; if (!v) return false;
@@ -1398,7 +1400,7 @@ export class CyberEngine {
     // da VAGA: a moto já sai da plataforma PAIRANDO na altura de lançamento (acima do "rente ao chão": anda na hora)
     const y0 = lancar ? p.y - PLATAFORMA_MOTO.altura + ALTURA_LANCAMENTO : p.y;
     this.motoAlvo = null; this.moto = alvo.s; this.motoEst = motoParada(p.x, y0, p.z, p.yaw); this.camAz = p.yaw + Math.PI; this.camSegueEm = 0;
-    this.altoEm = null; this.yNav = 0;   // montado, o nível é o da moto
+    this.altoEm = null; this.yNav = 0; this.plat = null; this.ilhota = null;   // montado, o nível é o da moto (saiu da plataforma/ilhota)
     this.motoPousado = !lancar; this.autoPouso = false;
     this.sitT = 0; this.alvo = null; this.alvoDepois = null; this.falandoCom = null; this.jetV = { x: 0, z: 0 };
     return true;
