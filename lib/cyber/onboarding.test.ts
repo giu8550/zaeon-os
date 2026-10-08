@@ -1,3 +1,4 @@
+import { R_SOM_CORACAO } from "./coracao";
 import { describe, expect, it } from "vitest";
 import { PREF_TUTORIAL, tutorialLigado, ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, PASSO_FIM_DA_INSTANCIA, cumpriu, deveNascerNoTubo, passoDe, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
 import { CIDADE as C2, DOCA_ANGULO, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "./ceu";
@@ -65,7 +66,7 @@ describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada inst
     expect(ROTEIRO.find((p) => p.id === "explorar")!.livre).toBe(true);
     expect(passoDe(PASSO_FIM_DA_INSTANCIA)).toBe(passoDe("portal") + 1);
     const c = mundo(CENTRO_DA_CAPELA_LOCAL); expect(dentroDeAlgum(c, colisoresDaCidade())).toBe(false);
-    expect(Math.hypot(CENTRO_DA_CAPELA_LOCAL.x, CENTRO_DA_CAPELA_LOCAL.z)).toBeLessThan(CIDADE.monitores.r - 3);   // entre o globo e os desktops
+    expect(Math.hypot(CENTRO_DA_CAPELA_LOCAL.x, CENTRO_DA_CAPELA_LOCAL.z)).toBeLessThan(R_SOM_CORACAO);   // perto do globo: ouve o coração
     const pe = peDaRecepcao(); expect(alturaEm(recepcao, pe)).toBe(0); expect(dentroDeAlgum(pe, colisoresDaCidade())).toBe(false);
   });
   it("sem a pessoa fazer nada, nenhum passo anda (o Droid espera)", () => {

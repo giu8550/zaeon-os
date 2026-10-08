@@ -2,9 +2,10 @@
  * DistritoTerra — os MIRANTES DA TERRA nas 4 quinas da Zaeon (layout puro em lib/cyber/terra; as pirâmides são os
  * marcos da Recepção — components/cyber/Landmark):
  *  - os ESTACIONAMENTOS de 4 motos ao lado de cada mirante (o piso é o mesmo do estacionamento da Zaeon);
- *  - TELÕES gigantes mostrando a Terra (mapa Blue Marble da NASA, domínio público) com os pontos de regeneração e
- *    desenvolvimento pulsando e uma varredura — o painel lateral é o lugar dos dados AO VIVO (próxima etapa);
- *  - os GLOBOS holográficos da Terra, um por mirante, flutuando sobre a escada (girando, com os pontos);
+ *  - PROBLEMA → SOLUÇÃO: o telão dos PROBLEMAS DA TERRA (mapa Blue Marble da NASA, domínio público, com os problemas
+ *    pulsando e os eventos AO VIVO) e o telão das SOLUÇÕES PARA A TERRA (os projetos e ideias reais), com os CARDS dos
+ *    temas colados no primeiro e um cabo de luz de cada card até o segundo;
+ *  - os GLOBOS holográficos da Terra, um por mirante, pairando entre os dois telões (girando, com os pontos);
  *  - MOTORES DE ENERGIA: núcleo de plasma + 3 anéis-giroscópio — aceleram e acendem quando alguém chega perto;
  *  - SUPERTREES hídricas (Gardens by the Bay): tronco com jardim vertical + treliça de aço, galhos até a copa larga
  *    com aro de luz (o show de cores à noite), água caindo da copa num véu até o espelho d'água no pé.
@@ -13,7 +14,7 @@
  */
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { CABOS, GLOBOS, LOTES_MIRANTE, MOTORES, PONTOS_TERRA, SUPERTREES, TELOES, TOTENS, noMapa, reacaoDoMotor } from "@/lib/cyber/terra";
+import { CABOS, GLOBOS, LIGACOES, LOTES_MIRANTE, MOTORES, PONTOS_TERRA, SUPERTREES, TELOES, TELOES_SOLUCAO, TEMAS, TOTENS, ehSolucao, noMapa, reacaoDoMotor, type PontoTerra } from "@/lib/cyber/terra";
 import { LOTES, type Lote } from "@/lib/cyber/motos";
 import { criarPisoEstacionamento } from "./Estacionamento";
 import { haQuanto, intercalarTipos, type EventoTerra, type TipoEvento } from "@/lib/cyber/terraAoVivo";
@@ -80,7 +81,8 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
 
   // ── a TERRA: textura compartilhada (telões + globo) ─────────────────────────────────────────────────────────────
   const texTerra = guarda(new THREE.TextureLoader().load(URL_TERRA)); texTerra.colorSpace = THREE.SRGBColorSpace;
-  const pontosU = PONTOS_TERRA.map((p) => { const m = noMapa(p.lat, p.lon); return new THREE.Vector3(m.u, m.v, TIPO_IDX[p.tipo]); });
+  const PROBLEMAS = PONTOS_TERRA.filter((p) => !ehSolucao(p)), SOLUCOES = PONTOS_TERRA.filter(ehSolucao);
+  const pontosU = (l: readonly PontoTerra[]) => l.map((p) => { const m = noMapa(p.lat, p.lon); return new THREE.Vector3(m.u, m.v, TIPO_IDX[p.tipo]); });
   const uT = { value: 0 };
   const vivoU = Array.from({ length: MAX_VIVO }, () => new THREE.Vector4());
   // ── TELÕES: o mapa (shader: tom holográfico + grade + pontos pulsando + varredura) + painel (canvas) ──
@@ -93,12 +95,9 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
     g.fillStyle = "#04101c"; g.fillRect(0, 0, 640, 1300); g.strokeStyle = "#45d6ff"; g.lineWidth = 3; g.strokeRect(6, 6, 628, 1288);
     g.fillStyle = "#e6f6ff"; g.font = "bold 46px system-ui, sans-serif"; g.fillText("ESTADO DA TERRA", 30, 74);
     let y = 136;
-    const sec = (titulo: string, cor: string, tipos: string[]) => {
-      g.fillStyle = cor; g.font = "bold 26px system-ui, sans-serif"; g.fillText(titulo, 30, y); y += 38;
-      for (const p of PONTOS_TERRA.filter((q) => tipos.includes(q.tipo))) { g.fillStyle = COR_TIPO[p.tipo]; g.beginPath(); g.arc(42, y - 7, 7, 0, Math.PI * 2); g.fill(); g.fillStyle = "#e6f6ff"; g.font = "21px system-ui, sans-serif"; g.fillText(corta(p.nome, 44), 60, y); y += 33; }
-      y += 14;
-    };
-    sec("● PROBLEMAS", "#ff6a76", ["problema"]); sec("● O QUE ESTÁ SENDO FEITO", "#7dffa6", ["regeneracao", "desenvolvimento"]);
+    g.fillStyle = "#ff6a76"; g.font = "bold 26px system-ui, sans-serif"; g.fillText("● PROBLEMAS", 30, y); y += 38;
+    for (const p of PROBLEMAS) { g.fillStyle = TEMA[p.tema].cor; g.beginPath(); g.arc(42, y - 7, 7, 0, Math.PI * 2); g.fill(); g.fillStyle = "#e6f6ff"; g.font = "21px system-ui, sans-serif"; g.fillText(corta(p.nome, 44), 60, y); y += 33; }
+    y += 14;
     g.fillStyle = "#ffb45a"; g.font = "bold 28px system-ui, sans-serif"; g.fillText("● AO VIVO", 30, y); y += 8;
     g.fillStyle = "rgba(230,246,255,.5)"; g.font = "17px system-ui, sans-serif"; g.fillText("USGS · NASA EONET — eventos reais", 190, y - 8); y += 30;
     if (!vivo) { g.fillStyle = "rgba(230,246,255,.6)"; g.font = "21px system-ui, sans-serif"; g.fillText("conectando às fontes públicas…", 30, y); }
@@ -111,17 +110,33 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
     painel.needsUpdate = true;
   };
   desenharPainel(null);
-  const matMapa = guarda(new THREE.ShaderMaterial({
-    uniforms: { uMapa: { value: texTerra }, uT, uP: { value: pontosU }, uV: { value: vivoU }, uNV: { value: 0 } },
+  // o painel das SOLUÇÕES (fixo): os projetos e ideias, por tema (a cor do card que liga o problema a eles)
+  const cvSol = document.createElement("canvas"); cvSol.width = 640; cvSol.height = 1300;
+  const painelSol = guarda(new THREE.CanvasTexture(cvSol)); painelSol.colorSpace = THREE.SRGBColorSpace;
+  { const g = cvSol.getContext("2d")!;
+    g.fillStyle = "#03140f"; g.fillRect(0, 0, 640, 1300); g.strokeStyle = "#5aff8a"; g.lineWidth = 3; g.strokeRect(6, 6, 628, 1288);
+    g.fillStyle = "#eafff2"; g.font = "bold 44px system-ui, sans-serif"; g.fillText("SOLUÇÕES", 30, 74);
+    g.fillStyle = "rgba(234,255,242,.6)"; g.font = "19px system-ui, sans-serif"; g.fillText("projetos e ideias que já ajudam a Terra", 30, 104);
+    let y = 166;
+    for (const tema of TEMAS) {
+      const T = TEMA[tema]; g.fillStyle = T.cor; g.font = "bold 26px system-ui, sans-serif"; g.fillText(`● ${T.nome}`, 30, y); y += 38;
+      for (const p of SOLUCOES.filter((q) => q.tema === tema)) { g.fillStyle = COR_TIPO[p.tipo]; g.beginPath(); g.arc(42, y - 7, 7, 0, Math.PI * 2); g.fill(); g.fillStyle = "#eafff2"; g.font = "21px system-ui, sans-serif"; g.fillText(corta(p.nome, 44), 60, y); y += 33; }
+      y += 22;
+    }
+    g.fillStyle = "#7dffa6"; g.font = "bold 24px system-ui, sans-serif"; g.fillText("E a sua ideia?", 30, y + 20);
+    g.fillStyle = "rgba(234,255,242,.7)"; g.font = "20px system-ui, sans-serif"; g.fillText("Leve pro laboratório e transforme em projeto.", 30, y + 52);
+    painelSol.needsUpdate = true; }
+  const criarMatMapa = (pontos: THREE.Vector3[]) => guarda(new THREE.ShaderMaterial({
+    uniforms: { uMapa: { value: texTerra }, uT, uP: { value: pontos }, uV: { value: vivoU }, uNV: { value: 0 } },
     vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: /* glsl */ `uniform sampler2D uMapa; uniform float uT; uniform vec3 uP[${pontosU.length}]; uniform vec4 uV[${MAX_VIVO}]; uniform float uNV; varying vec2 vUv;
+    fragmentShader: /* glsl */ `uniform sampler2D uMapa; uniform float uT; uniform vec3 uP[${pontos.length}]; uniform vec4 uV[${MAX_VIVO}]; uniform float uNV; varying vec2 vUv;
       void main() {
         vec3 m = texture2D(uMapa, vUv).rgb;
         float lum = dot(m, vec3(0.3, 0.55, 0.15));
         vec3 cor = mix(vec3(0.02, 0.07, 0.16), vec3(0.25, 0.75, 1.0), smoothstep(0.08, 0.6, lum)) + m * 0.25;
         vec2 gr = abs(fract(vUv * vec2(36.0, 18.0)) - 0.5); cor += vec3(0.12, 0.35, 0.55) * (1.0 - smoothstep(0.0, 0.035, min(gr.x, gr.y))) * 0.35;
         float varre = exp(-pow((vUv.x - fract(uT * 0.06)) * 40.0, 2.0)); cor += vec3(0.3, 0.8, 1.0) * varre * 0.45;
-        for (int i = 0; i < ${pontosU.length}; i++) {
+        for (int i = 0; i < ${pontos.length}; i++) {
           vec3 p = uP[i]; vec2 d = (vUv - p.xy) * vec2(2.0, 1.0); float r = length(d);
           float onda = fract(uT * 0.5 + float(i) * 0.13); float anel = exp(-pow((r - onda * 0.06) * 160.0, 2.0)) * (1.0 - onda);
           vec3 c = p.z < 0.5 ? vec3(1.0, 0.25, 0.3) : (p.z < 1.5 ? vec3(0.35, 1.0, 0.55) : (p.z < 2.5 ? vec3(0.27, 0.84, 1.0) : vec3(1.0, 0.7, 0.35)));
@@ -140,7 +155,9 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
         float cl = 0.92 + 0.08 * sin(vUv.y * 900.0); gl_FragColor = vec4(cor * cl, 1.0);
       }`,
   }));
-  const matPainel = guarda(new THREE.MeshBasicMaterial({ map: painel }));
+  /** o mapa dos PROBLEMAS (com os eventos ao vivo) e o das SOLUÇÕES (sem eventos: uNV fica 0) */
+  const matMapa = criarMatMapa(pontosU(PROBLEMAS)), matMapaSol = criarMatMapa(pontosU(SOLUCOES));
+  const matPainel = guarda(new THREE.MeshBasicMaterial({ map: painel })), matPainelSol = guarda(new THREE.MeshBasicMaterial({ map: painelSol }));
   // busca a Terra AO VIVO agora e a cada 10 min (falhou: mantém o que tinha)
   let vivo = true, timerVivo: ReturnType<typeof setTimeout> | null = null;
   const aplicarVivo = (evs: EventoTerra[]) => {
@@ -160,27 +177,32 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
   // o DESTAQUE do telão: palco elevado com bordas de luz, colunas de luz dos lados, aro de neon na moldura, holofote no
   // chão na frente e o letreiro flutuante
   const matPalco = guarda(new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.35, metalness: 0.7, emissive: 0x0a1a36, emissiveIntensity: 0.7 }));
-  const matNeon = guarda(new THREE.MeshBasicMaterial({ color: 0x7fe8ff }));
+  const matNeon = guarda(new THREE.MeshBasicMaterial({ color: 0x7fe8ff })), matNeonSol = guarda(new THREE.MeshBasicMaterial({ color: 0x6dff9a }));
   const matColuna = guarda(new THREE.MeshBasicMaterial({ color: 0x45d6ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   const matHolofote = guarda(new THREE.MeshBasicMaterial({ color: 0x45d6ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
-  const letreiro = (() => { const c = document.createElement("canvas"); c.width = 1024; c.height = 160; const g = c.getContext("2d")!; g.font = "900 92px system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.shadowColor = "#45d6ff"; g.shadowBlur = 26; g.fillStyle = "#e9fbff"; g.fillText("ESTADO DA TERRA", 512, 84); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return guarda(t); })();
-  const matLetreiro = guarda(new THREE.MeshBasicMaterial({ map: letreiro, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  const letreiro = (texto: string, brilho: string) => { const c = document.createElement("canvas"); c.width = 1024; c.height = 160; const g = c.getContext("2d")!; g.font = "900 80px system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.shadowColor = brilho; g.shadowBlur = 26; g.fillStyle = "#e9fbff"; g.fillText(texto, 512, 84); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return guarda(t); };
+  const matLetreiro = guarda(new THREE.MeshBasicMaterial({ map: letreiro("PROBLEMAS DA TERRA", "#ff5a6a"), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  const matLetreiroSol = guarda(new THREE.MeshBasicMaterial({ map: letreiro("SOLUÇÕES PARA A TERRA", "#5aff8a"), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
   const auras: THREE.MeshBasicMaterial[] = [matAura, matColuna, matHolofote];
-  for (const t of TELOES) {
+  const telas = [
+    ...TELOES.map((t) => ({ t, mapa: matMapa, painel: matPainel, neon: matNeon, titulo: matLetreiro })),
+    ...TELOES_SOLUCAO.map((t) => ({ t, mapa: matMapaSol, painel: matPainelSol, neon: matNeonSol, titulo: matLetreiroSol })),
+  ];
+  for (const { t, mapa: mMapa, painel: mPainel, neon: mNeon, titulo: mTitulo } of telas) {
     const g = new THREE.Group(); g.position.set(t.x, 0, t.z); g.rotation.y = t.rot; group.add(g);
     const W = t.larg, H = t.alt, wMapa = W * 0.72, wPain = W - wMapa;
     // o palco: 2 degraus com fio de luz na borda
     for (const [w, d, h, y] of [[W + 10, 12, 0.6, 0.3], [W + 5, 8, 0.6, 0.9]] as const) {
       const pl = new THREE.Mesh(guarda(new THREE.BoxGeometry(w, h, d)), matPalco); pl.position.set(0, y, 0.5); g.add(pl);
-      const fio = new THREE.Mesh(guarda(new THREE.BoxGeometry(w + 0.1, 0.08, 0.08)), matNeon); fio.position.set(0, y + h / 2, 0.5 + d / 2); g.add(fio);
+      const fio = new THREE.Mesh(guarda(new THREE.BoxGeometry(w + 0.1, 0.08, 0.08)), mNeon); fio.position.set(0, y + h / 2, 0.5 + d / 2); g.add(fio);
     }
     const mold = new THREE.Mesh(guarda(new THREE.BoxGeometry(W + 1.4, H + 1.4, 1.0)), matMoldura); mold.position.set(0, t.y, -0.55); g.add(mold);
     // o aro de NEON em volta da tela
     for (const [w, h, x, y] of [[W + 1.6, 0.25, 0, t.y + H / 2 + 0.75], [W + 1.6, 0.25, 0, t.y - H / 2 - 0.75], [0.25, H + 1.6, -W / 2 - 0.75, t.y], [0.25, H + 1.6, W / 2 + 0.75, t.y]] as const) {
-      const n = new THREE.Mesh(guarda(new THREE.BoxGeometry(w, h, 0.3)), matNeon); n.position.set(x, y, 0.05); g.add(n);
+      const n = new THREE.Mesh(guarda(new THREE.BoxGeometry(w, h, 0.3)), mNeon); n.position.set(x, y, 0.05); g.add(n);
     }
-    const mapa = new THREE.Mesh(guarda(new THREE.PlaneGeometry(wMapa, H)), matMapa); mapa.position.set(-W / 2 + wMapa / 2, t.y, 0.0); g.add(mapa);
-    const pain = new THREE.Mesh(guarda(new THREE.PlaneGeometry(wPain, H)), matPainel); pain.position.set(W / 2 - wPain / 2, t.y, 0.0); g.add(pain);
+    const mapa = new THREE.Mesh(guarda(new THREE.PlaneGeometry(wMapa, H)), mMapa); mapa.position.set(-W / 2 + wMapa / 2, t.y, 0.0); g.add(mapa);
+    const pain = new THREE.Mesh(guarda(new THREE.PlaneGeometry(wPain, H)), mPainel); pain.position.set(W / 2 - wPain / 2, t.y, 0.0); g.add(pain);
     const aura = new THREE.Mesh(guarda(new THREE.PlaneGeometry(W + 7, H + 7)), matAura); aura.position.set(0, t.y, -1.2); g.add(aura);
     for (const s of [-1, 1]) {
       const pe = new THREE.Mesh(guarda(new THREE.BoxGeometry(1.6, t.y - H / 2 - 1.2, 1.6)), matMoldura); pe.position.set((s * W) / 2.6, 1.2 + (t.y - H / 2 - 1.2) / 2, -0.5); g.add(pe);
@@ -188,7 +210,7 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
       const base = new THREE.Mesh(guarda(new THREE.CylinderGeometry(1.4, 1.6, 1.2, 16)), matPalco); base.position.set(s * (W / 2 + 3.4), 0.6, 0.5); g.add(base);
     }
     const holofote = new THREE.Mesh(guarda(new THREE.CircleGeometry(W * 0.62, 48)), matHolofote); holofote.rotation.x = -Math.PI / 2; holofote.scale.set(1, 0.42, 1); holofote.position.set(0, 0.06, 10); g.add(holofote);
-    const tit = new THREE.Mesh(guarda(new THREE.PlaneGeometry(W * 0.8, W * 0.125)), matLetreiro); tit.position.set(0, t.y + H / 2 + 3.4, 0.2); g.add(tit);
+    const tit = new THREE.Mesh(guarda(new THREE.PlaneGeometry(W * 0.8, W * 0.125)), mTitulo); tit.position.set(0, t.y + H / 2 + 3.4, 0.2); g.add(tit);
   }
 
   // ── os GLOBOS da Terra (holográficos), ao lado de cada telão, num pedestal com anel — alimentados pelos cabos ──
@@ -235,6 +257,27 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
     });
     group.add(new THREE.Mesh(guarda(mergeGeometries(tubos)!), matCabo)); for (const t of tubos) t.dispose();
   }
+  // ── as LIGAÇÕES PROBLEMA → SOLUÇÃO: de cada card até o telão das soluções, um cabo na cor do tema com o pulso
+  //    correndo do problema pra solução (as pontas se abrem ao longo do pé do telão) ──
+  const matLiga = Object.fromEntries(TEMAS.map((tema) => [tema, guarda(new THREE.ShaderMaterial({
+    uniforms: { uT, uCor: { value: new THREE.Color(TEMA[tema].cor) } },
+    vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */ `uniform float uT; uniform vec3 uCor; varying vec2 vUv;
+      void main() { float pulso = pow(max(0.0, sin((vUv.x * 10.0 - uT * 2.2) * 3.14159)), 5.0);
+        gl_FragColor = vec4(mix(uCor * 0.18, uCor * 1.6, 0.2 + 0.8 * pulso), 1.0); }`,
+  }))]));
+  {
+    const porTema = new Map<string, THREE.BufferGeometry[]>();
+    LIGACOES.forEach((l, k) => {
+      const S = TELOES_SOLUCAO[Math.floor(k / TEMAS.length)]!, j = k % TEMAS.length, off = (j - 1.5) * 5;
+      const a = new THREE.Vector3(l.de.x, 0.3, l.de.z), b = new THREE.Vector3(l.para.x + Math.cos(S.rot) * off, 0.3, l.para.z - Math.sin(S.rot) * off);
+      const m = a.clone().lerp(b, 0.5); m.y = 1.6 + j * 0.5;   // um arco baixo (um por cima do outro, sem se embolar)
+      const tubo = new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, m, b), 28, 0.22, 6, false);
+      (porTema.get(l.tema) ?? porTema.set(l.tema, []).get(l.tema)!).push(tubo);
+    });
+    for (const [tema, l] of porTema) { group.add(new THREE.Mesh(guarda(mergeGeometries(l)!), matLiga[tema]!)); for (const t of l) t.dispose(); }
+  }
+
   // ── os TOTENS dos temas (clima, florestas, oceanos, água): placas de luz com os problemas de cada um ──
   const texTotem = Object.fromEntries(Object.entries(TEMA).map(([k, T]) => [k, guarda((() => {
     const c = document.createElement("canvas"); c.width = 256; c.height = 512; const g = c.getContext("2d")!;
@@ -242,7 +285,8 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
     g.fillStyle = T.cor; g.font = "900 40px system-ui, sans-serif"; g.textAlign = "center"; g.fillText(T.nome, 128, 70);
     g.beginPath(); g.arc(128, 170, 52, 0, Math.PI * 2); g.lineWidth = 8; g.stroke();
     g.font = "bold 22px system-ui, sans-serif"; g.fillStyle = "#e6f6ff"; T.linhas.forEach((l, i) => g.fillText(l, 128, 290 + i * 46));
-    g.fillStyle = "rgba(255,106,118,.85)"; g.font = "bold 20px system-ui, sans-serif"; g.fillText("PROBLEMA DA TERRA", 128, 470);
+    g.fillStyle = "rgba(255,106,118,.85)"; g.font = "bold 20px system-ui, sans-serif"; g.fillText("PROBLEMA", 128, 452);
+    g.fillStyle = "rgba(125,255,166,.9)"; g.fillText("→ veja as soluções", 128, 482);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })())]));
   for (const tt of TOTENS) {
     const g = new THREE.Group(); g.position.set(tt.x, 0, tt.z); g.rotation.y = tt.rot; group.add(g);

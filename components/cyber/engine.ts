@@ -13,7 +13,7 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
-import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDaEscada, bocaDoElevador, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PALCO as PALCO_LOUNGE, naSala, ILHOTAS, computadorPerto, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
+import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDaEscada, bocaDoElevador, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PALCO as PALCO_LOUNGE, naSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
@@ -66,7 +66,7 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
 import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
 import { carregando, type Carregando, type IdEtapa } from "@/lib/cyber/carregamento";
-import { gerarVeias } from "@/lib/cyber/coracao";
+import { gerarVeias, ouveOCoracao } from "@/lib/cyber/coracao";
 import { URL_TERRA } from "./DistritoTerra";
 import { carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
 import { variacaoBatida, ventoDasAsas } from "@/lib/cyber/asas";
@@ -448,8 +448,8 @@ export class CyberEngine {
       gerarVeias({ low });   // (determinístico e memorizado: a cidade reaproveita)
       await etapa("zaeon");
       this.cidade = criarCidade({ low, starTex: this.cena.starTex,
-        aoRaio: (em) => this.som?.tocar("raio", em, { dist: DISTANCIA.raio, taxa: 0.9 + Math.random() * 0.2 }),
-        aoBater: (em) => this.som?.tocar("coracao", em, { dist: DISTANCIA.coracao }) });
+        aoRaio: (em) => { if (this.noCentroDaCapela()) this.som?.tocar("raio", em, { dist: DISTANCIA.raio, taxa: 0.9 + Math.random() * 0.2 }); },
+        aoBater: (em) => { if (this.noCentroDaCapela()) this.som?.tocar("coracao", em, { dist: DISTANCIA.coracao }); } });
       camuflarGrupo(this.cidade.group);
       { const c = this.cidade;   // lotes: simula com e sem música (o palco, as caixas e a pista pulsam com o grave)
         fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalTunel, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
@@ -524,6 +524,12 @@ export class CyberEngine {
     if (process.env.NODE_ENV !== "production") (window as unknown as { __cyber?: CyberEngine }).__cyber = this;   // depuração em dev
   }
   private aoPrimeiroQuadro: (() => void) | null = null;
+  /** no CENTRO da capela (no piso, em volta do globo)? — só ali se ouve o coração e o raio (lib/cyber/coracao) */
+  private noCentroDaCapela(): boolean {
+    if (!this.noCeu || !this.cidade || this.pilotando || this.bordo) return false;
+    const c = CIDADE.centro;
+    return ouveOCoracao({ x: this.eu.pos.x - c.x, z: this.eu.pos.z - c.z }) && this.eu.alt - this.cidade.ilha.position.y < 25;
+  }
   /** estado pra depuração/testes em dev */
   get debug() { return { x: this.eu.pos.x, z: this.eu.pos.z, alt: this.eu.alt, altoEm: this.altoEm, noTopo: this.noTopo, pilotando: this.pilotando, pousado: this.pousado, nave: { ...this.naveEst }, moto: this.moto, motoEst: { ...this.motoEst }, motoPousado: this.motoPousado, plat: this.plat, bordo: this.bordo, noAr: this.jet.noAr, tunel: this.tunel?.origem ?? null, guia: this.guia?.passo ?? null, guiaAlvo: this.guia ? this.alvoDoPasso(ROTEIRO[this.guia.passo]!) : null, instancia: this.instancia, bocaDJ: bocaDJMundo(), nascendo: !!this.nascendo, droid: this.droid ? { fase: this.droid.h.fase(), x: this.droid.pos.x, z: this.droid.pos.z, alt: this.droid.alt } : null, guiaAtivo: this.guia?.ativo ?? null }; }
 
@@ -834,15 +840,14 @@ export class CyberEngine {
     const lay = baseNoQG(); if (!lay) { const d = DROID.lar; return { x: d.x, z: d.z, y: CIDADE.pisoY, rumo: 0 }; }
     const s = localParaMundo(lay, 0, -0.15); return { ...s, y: this.yDoNivel("qg"), rumo: lay.rot + Math.PI };
   }
-  /** os tubos (na linha da muralha) são sólidos pra quem anda no piso da Zaeon — só os perto (são centenas) e menos o de
-   *  quem está nascendo/saindo */
-  /** as CÁPSULAS de nascimento só existem no TUTORIAL do novato (nascer → até o 1º portal): no jogo normal ninguém
-   *  nasce numa cápsula, então elas nem aparecem (nem colidem) */
+  /** a CÁPSULA de nascimento só existe no TUTORIAL do novato (nascer → até o 1º portal), e só a DELE (o anel de
+   *  cápsulas na muralha não aparece): no jogo normal ninguém nasce numa cápsula, então ela nem aparece (nem colide) */
   private tubosVisiveis() { return this.instancia || !!this.nascendo || this.saindoDoTubo !== null; }
   private colisoresDosTubos(): Colisor[] {
     if (!this.bercario || !this.tubosVisiveis()) return [];
     const p = this.eu.pos, out: Colisor[] = [];
-    TUBOS.forEach((tb, i) => { if (i !== this.saindoDoTubo && i !== this.nascendo?.tubo && Math.abs(tb.x - p.x) < 6 && Math.abs(tb.z - p.z) < 6) out.push({ x: tb.x, z: tb.z, r: 1.4 }); });
+    const i = tuboDe(this.o.eu.id), tb = TUBOS[i]!;   // só a cápsula dele (sólida, menos enquanto nasce/sai dela)
+    if (i !== this.saindoDoTubo && i !== this.nascendo?.tubo && Math.abs(tb.x - p.x) < 6 && Math.abs(tb.z - p.z) < 6) out.push({ x: tb.x, z: tb.z, r: 1.4 });
     return out;
   }
   private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, andou: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
@@ -1765,7 +1770,7 @@ export class CyberEngine {
     const el = this.plat ? elevadorAqui(this.plat.id, this.plat.andar, this.eu.pos) : null;
     if (el && this.plat) { const pl = this.plat; return { id: `elevador-${pl.andar}`, rotulo: el.rotulo, fazer: () => { pl.andar = el.proximo; this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.eu }); } }; }
     const estudar = { id: "estudar", rotulo: "Estudar", fazer: () => this.o.onEntrarEstudo?.() };
-    if (this.perto || this.noTopo || (this.noCeu && computadorPerto(this.eu.pos, 4) >= 0)) return estudar;
+    if (this.perto || this.noTopo) return estudar;
     const m = this.motoAoAlcance(); if (m) return { id: m.tipo === "vaga" ? `moto-${m.s}` : `moto-${m.dono}`, rotulo: "Montar na moto", fazer: () => { this.montar(m); } };
     if (this.nave && this.navePerto()) return { id: "entrar-nave", rotulo: "Entrar na nave", fazer: () => this.entrarNaNave() };
     if (this.noCeu && this.cidade?.tocaDiscos && this.ehFundador(this.o.eu.id)) {
@@ -1847,12 +1852,9 @@ export class CyberEngine {
     }
     // a NAVE (perto da porta) → entrar
     if (this.nave && this.ray.intersectObjects(this.nave.alvos, true).length && this.navePerto()) { this.entrarNaNave(); return; }
-    // na CIDADE: computador perto = Sala de Estudos; senão anda no piso
+    // na CIDADE: a minha base = Sala de Estudos; senão anda no piso
     if (this.cidade && this.noCeu) {
       if (sob === this.o.eu.id && this.perto) { this.o.onEntrarEstudo?.(); return; }   // a minha base, na Zaeon
-      // os DESKTOPS da capela (Sala de Estudos / biblioteca)
-      const hc = this.ray.intersectObject(this.cidade.computadores, false)[0];
-      if (hc && computadorPerto(this.eu.pos, 4) >= 0) { this.o.onEntrarEstudo?.(); return; }
       // a TV do LOUNGE: o dono escreve o recado pro QG do Andrei (perto dela)
       if (this.cidade.tvLounge && this.ray.intersectObject(this.cidade.tvLounge, false).length) {
         const tv = this.cidade.tvLounge.getWorldPosition(new THREE.Vector3());

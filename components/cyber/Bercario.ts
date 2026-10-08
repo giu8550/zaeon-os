@@ -1,10 +1,9 @@
 /**
- * Bercario — os TUBOS DE ENSAIO em volta da Cidade Zaeon (lib/cyber/onboarding `TUBOS`): na linha da muralha, entre
- * as torres de cristal, no lugar dos antigos blocos de granizo. Cada tubo: pedestal com aro aceso, vidro, tampa e o
- * LÍQUIDO luminoso com um ser de luz "se formando" lá dentro. São centenas — tudo INSTANCIADO (um punhado de draw
- * calls pro anel inteiro). No nascimento (`nascer(i)`), o tubo i sai do lote e um tubo ANIMADO toma o lugar dele: o
- * líquido escoa (com bolhas), o vidro sobe pra dentro da tampa e a pessoa sai; depois o tubo fecha, enche de novo e
- * volta pro lote. Filho do grupo da ilha (coordenadas LOCAIS da Zaeon).
+ * Bercario — a CÁPSULA (tubo de ensaio) onde o novato nasce, na linha da muralha da Cidade Zaeon (lib/cyber/onboarding
+ * `TUBOS` são as vagas possíveis). O ANEL de cápsulas NÃO aparece: só a cápsula de quem está no tutorial, a que
+ * `nascer(i)` mostra — pedestal com aro aceso, vidro, tampa e o LÍQUIDO luminoso com o ser de luz se formando. No
+ * nascimento um tubo ANIMADO toma o lugar dela: o líquido escoa (com bolhas), o vidro sobe pra dentro da tampa e a
+ * pessoa sai; depois o tubo fecha e enche de novo. Filho do grupo da ilha (coordenadas LOCAIS da Zaeon).
  */
 import * as THREE from "three";
 import { CIDADE } from "@/lib/cyber/ceu";
@@ -35,15 +34,16 @@ export function criarBercario(pai: THREE.Object3D, o: { low: boolean }): Bercari
   };
   const N = TUBOS.length, mx = new THREE.Matrix4(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
   const local = TUBOS.map((t) => ({ x: t.x - CIDADE.centro.x, z: t.z - CIDADE.centro.z }));
+  // (instanciado por vaga, mas TODAS escondidas — escala 0 — até `nascer(i)` mostrar a do novato)
   const lote = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
-    const im = new THREE.InstancedMesh(geo, mat, N);
-    local.forEach((l, i) => im.setMatrixAt(i, mx.makeTranslation(l.x, 0, l.z)));
-    im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); g.add(im); return im;
+    const im = new THREE.InstancedMesh(geo, mat, N); im.frustumCulled = false;
+    for (let i = 0; i < N; i++) im.setMatrixAt(i, zero);
+    im.instanceMatrix.needsUpdate = true; g.add(im); return im;
   };
-  lote(geos.ped, pedMat); lote(geos.aro, aroMat); lote(geos.tampa, pedMat); lote(geos.aroT, aroMat);
+  const fixos = [lote(geos.ped, pedMat), lote(geos.aro, aroMat), lote(geos.tampa, pedMat), lote(geos.aroT, aroMat)];
   const vidro = lote(geos.vidro, vidroMat), liq = lote(geos.liq, liqMat);
-  // os seres de luz se formando (um ponto por tubo)
-  const sp = new Float32Array(N * 3); local.forEach((l, i) => { sp[i * 3] = l.x; sp[i * 3 + 1] = P + H * 0.5; sp[i * 3 + 2] = l.z; });
+  // o ser de luz se formando (um ponto por vaga; só o da cápsula mostrada fica no lugar)
+  const sp = new Float32Array(N * 3); local.forEach((l, i) => { sp[i * 3] = l.x; sp[i * 3 + 1] = -999; sp[i * 3 + 2] = l.z; });
   const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
   const serMat = new THREE.PointsMaterial({ map: texSer, color: 0xbffff0, size: 1.5, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
   g.add(new THREE.Points(sg, serMat));
@@ -58,7 +58,15 @@ export function criarBercario(pai: THREE.Object3D, o: { low: boolean }): Bercari
   const bolhaMat = new THREE.PointsMaterial({ color: 0xbffff0, size: 0.09, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
   const bolhas = new THREE.Points(bg, bolhaMat); bolhas.frustumCulled = false; ativo.add(bolhas);
 
-  let atual = -1, t0 = -1, pendente = -1;
+  let atual = -1, t0 = -1, pendente = -1, mostrada = -1;
+  /** mostra SÓ a cápsula `i` (a do novato): esconde a anterior */
+  const mostrar = (i: number) => {
+    if (i === mostrada) return;
+    const pos = (k: number) => mx.makeTranslation(local[k]!.x, 0, local[k]!.z);
+    for (const im of [...fixos, vidro, liq]) { if (mostrada >= 0) im.setMatrixAt(mostrada, zero); im.setMatrixAt(i, pos(i)); im.instanceMatrix.needsUpdate = true; }
+    if (mostrada >= 0) sp[mostrada * 3 + 1] = -999;
+    sp[i * 3 + 1] = P + H * 0.5; sg.attributes.position!.needsUpdate = true; mostrada = i;
+  };
   const noLote = (i: number, m: THREE.Matrix4) => { vidro.setMatrixAt(i, m); liq.setMatrixAt(i, m); vidro.instanceMatrix.needsUpdate = true; liq.instanceMatrix.needsUpdate = true; };
   const devolver = (i: number) => {   // o tubo volta pro lote
     if (i < 0) return; const l = local[i]!;
@@ -69,7 +77,7 @@ export function criarBercario(pai: THREE.Object3D, o: { low: boolean }): Bercari
     nascer(i) { if (i >= 0 && i < N) pendente = i; },   // começa no próximo quadro (no relógio da cena)
     atualizar(dt, t) {
       if (pendente >= 0) {
-        devolver(atual); atual = pendente; pendente = -1; t0 = t;
+        devolver(atual); mostrar(pendente); atual = pendente; pendente = -1; t0 = t;
         noLote(atual, zero); sp[atual * 3 + 1] = -999; sg.attributes.position!.needsUpdate = true;   // o ser de luz desse tubo é a própria pessoa
         ativo.position.set(local[atual]!.x, 0, local[atual]!.z); ativo.visible = true;
       }

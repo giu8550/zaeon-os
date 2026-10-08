@@ -41,9 +41,6 @@ export const CIDADE = {
   cidadela: { r: CAPELA.r, pilares: CAPELA.pilares, pilarColR: CAPELA.pilarColR, altura: CAPELA.altura },
   /** o GLOBO de luz no centro da capela (sobre a mesa) */
   mesaHolo: { r: 2.4 * E },
-  /** os DESKTOPS da capela (monitores verticais clicáveis = Sala de Estudos / biblioteca): um anel em volta do globo,
-   *  virados pro centro — as estantes de livros e os servidores saíram, os desktops ficaram */
-  monitores: { n: 8, r: 22, largura: 2.9, colR: 1.3 },
   /** as SALAS (pavilhões): só o LOUNGE, agora numa plataforma própria FORA da ilha (referencial local, sem giro),
    *  flutuando na altura `y` (acima do piso) — a porta (o +z da sala) dá pra escada que vem da plataforma central */
   salas: {
@@ -89,22 +86,10 @@ export const mundo = (l: P2): P2 => ({ x: CIDADE.centro.x + l.x, z: CIDADE.centr
 /** o GLOBO de luz no centro da capela (local da ilha): raio e altura do centro acima do piso — é de dentro dele que o
  *  holograma da Zaeon sai (components/cyber/HoloZaeon) */
 export const GLOBO_CAPELA = (() => { const r = CIDADE.mesaHolo.r * 0.75; return { r, y: 2.2 + r + 1.5 }; })();
-/** os DESKTOPS (locais) da capela; `rot` deixa o +z local (a tela) virado pro centro — o índice é o instanceId das telas */
-export function computadoresLocais(): { x: number; z: number; rot: number }[] {
-  const { n, r } = CIDADE.monitores, out: { x: number; z: number; rot: number }[] = [];
-  for (let i = 0; i < n; i++) { const a = ((i + 0.5) / n) * Math.PI * 2; out.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, rot: Math.atan2(-Math.cos(a), -Math.sin(a)) }); }
-  return out;
-}
-/** desktop mais próximo (índice em computadoresLocais) dentro de `alcance`, ou -1 */
-export function computadorPerto(p: P2, alcance = 3.6): number {
-  let melhor = -1, md = alcance;
-  computadoresLocais().forEach((c, i) => { const w = mundo(c), d = Math.hypot(p.x - w.x, p.z - w.z); if (d < md) { md = d; melhor = i; } });
-  return melhor;
-}
 
 /** as ESTAÇÕES DE TRABALHO DOS AGENTES (components/cyber/EstacoesAgentes): um anel em volta do pátio central da capela */
 export const ESTACOES = { n: 8, r: 38, platR: 4.4 } as const;
-/** as estações (local da ilha): no anel entre os desktops (r 22) e os pilares (r 54), nos ângulos ENTRE os desktops;
+/** as estações (local da ilha): no anel entre o globo e os pilares (r 54) — os desktops de estudo saíram da capela;
  *  `rot` deixa o +z local (a frente das telas) virado pro coração */
 export function estacoesLocais(): { x: number; z: number; rot: number }[] {
   return Array.from({ length: ESTACOES.n }, (_, i) => { const a = (i / ESTACOES.n) * Math.PI * 2; return { x: Math.cos(a) * ESTACOES.r, z: Math.sin(a) * ESTACOES.r, rot: Math.atan2(-Math.cos(a), -Math.sin(a)) }; });
@@ -121,7 +106,7 @@ export function colisoresDasEstacoes(): Colisor[] {
   return out;
 }
 
-/** colisores da plataforma (mundo): pilares da capela, a mesa do globo, os desktops, o corrimão da escada do lounge, paredes e móveis
+/** colisores da plataforma (mundo): pilares da capela, a mesa do globo, o corrimão da escada do lounge, paredes e móveis
  *  das salas (o lounge, lá em cima). Constante → calculado uma vez (o passo usa todo quadro). */
 let colisoresCache: Colisor[] | null = null;
 export function colisoresDaCidade(): Colisor[] {
@@ -137,7 +122,6 @@ export function colisoresDaCidade(): Colisor[] {
   const { cidadela, mesaHolo } = CIDADE, e = ESCADA_LOUNGE;
   for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
   out.push({ ...mundo({ x: 0, z: 0 }), r: mesaHolo.r });
-  for (const m of computadoresLocais()) out.push({ ...mundo(m), r: CIDADE.monitores.colR });
   out.push(...colisoresDasEstacoes());
   out.push(...colisoresDoDistritoTerra(mundo));   // o Observatório da Terra (supertrees, motores, telões, globo)
   // corrimão da escada: dos dois lados, do pé até a porta do lounge

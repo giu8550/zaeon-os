@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ANGULO_DE_OURO, CORACAO, ESTACOES, T_CORACAO, TOPO_DA_CAPELA, atrasoNoChao, bateAgora, batidaNoCoracao, colisoresDasEstacoes, disparaRaio, estacoesLocais, gerarVeias, meridianoDaCapela, pulso } from "./coracao";
-import { CIDADE, computadoresLocais, CAPELA } from "./ceu";
+import { ANGULO_DE_OURO, CORACAO, R_SOM_CORACAO, ouveOCoracao, ESTACOES, T_CORACAO, TOPO_DA_CAPELA, atrasoNoChao, bateAgora, batidaNoCoracao, colisoresDasEstacoes, disparaRaio, estacoesLocais, gerarVeias, meridianoDaCapela, pulso } from "./coracao";
+import { CIDADE, CAPELA } from "./ceu";
 
 describe("o ciclo do coração da Zaeon: raio → desce a capela → bate → ondas pela cidade", () => {
   it("o 'tum-tum': 1ª bulha forte, a 2ª mais fraca ~0,3 s depois, silêncio no resto do ciclo", () => {
@@ -51,6 +51,15 @@ describe("as veias (raízes: colonização de espaço + espiral de ouro + Murray
     expect(media(perto, (v) => v.w[0]!)).toBeGreaterThan(2 * media(longe, (v) => v.w.at(-1)!));
     for (const v of doPiso) expect(v.a.at(-1)!).toBeGreaterThanOrEqual(v.a[0]! - 1e-6);
   });
+  it("DENTRO da capela só 8 troncos RETOS, do globo (onde o holograma nasce) até os pilares — o pátio fica limpo", () => {
+    const PE = CAPELA.r + 2.2, dentro = doPiso.filter((v) => { for (let i = 0; i < v.p.length; i += 3) if (Math.hypot(v.p[i]!, v.p[i + 2]!) < PE - 1.5) return true; return false; });
+    expect(dentro).toHaveLength(8);
+    for (const v of dentro) {
+      expect(Math.hypot(v.p[0]!, v.p[2]!)).toBeLessThan(CIDADE.mesaHolo.r + 1);   // nasce no globo
+      const a0 = Math.atan2(v.p[2]!, v.p[0]!);
+      for (let i = 0; i < v.p.length; i += 3) if (Math.hypot(v.p[i]!, v.p[i + 2]!) < PE - 1.5) expect(Math.abs(Math.atan2(v.p[i + 2]!, v.p[i]!) - a0)).toBeLessThan(0.01);   // reto (raio)
+    }
+  });
   it("o pulso DESCE a capela: 8 nervuras da ponta ao pé do pilar + o eixo central até o globo — tudo saindo do raio", () => {
     const altas = veias.filter((v) => Math.max(...v.p.filter((_, i) => i % 3 === 1)) > 100);   // (as nervuras e o eixo)
     expect(altas).toHaveLength(10);   // 8 nervuras + o eixo (2 fitas)
@@ -66,13 +75,19 @@ describe("as veias (raízes: colonização de espaço + espiral de ouro + Murray
   });
 });
 
+describe("o som do coração", () => {
+  it("só no CENTRO da capela (em volta do globo); no resto da cidade o pulso é só luz", () => {
+    expect(ouveOCoracao({ x: 0, z: 0 })).toBe(true); expect(ouveOCoracao({ x: 14, z: 3 })).toBe(true);
+    expect(ouveOCoracao({ x: R_SOM_CORACAO + 1, z: 0 })).toBe(false); expect(ouveOCoracao({ x: CAPELA.r, z: 0 })).toBe(false); expect(ouveOCoracao({ x: 150, z: 80 })).toBe(false);
+  });
+});
+
 describe("as estações dos agentes", () => {
-  it("anel em volta do pátio central: entre os desktops e os pilares, viradas pro coração, sem encostar em nada", () => {
+  it("anel em volta do pátio central: entre o globo e os pilares, viradas pro coração", () => {
     const es = estacoesLocais(); expect(es).toHaveLength(ESTACOES.n);
     for (const e of es) {
-      const r = Math.hypot(e.x, e.z); expect(r - ESTACOES.platR).toBeGreaterThan(CIDADE.monitores.r + 3); expect(r + ESTACOES.platR).toBeLessThan(CAPELA.r - 3);
+      const r = Math.hypot(e.x, e.z); expect(r - ESTACOES.platR).toBeGreaterThan(CIDADE.mesaHolo.r + 20); expect(r + ESTACOES.platR).toBeLessThan(CAPELA.r - 3);
       expect(Math.sin(e.rot) * -e.x + Math.cos(e.rot) * -e.z).toBeGreaterThan(0.99 * r);   // o +z local aponta pro centro
-      for (const c of computadoresLocais()) expect(Math.hypot(c.x - e.x, c.z - e.z)).toBeGreaterThan(ESTACOES.platR + 3);
     }
     expect(colisoresDasEstacoes().length).toBeGreaterThan(ESTACOES.n * 5);
   });
