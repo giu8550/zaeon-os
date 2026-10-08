@@ -14,6 +14,7 @@ describe("voz (push-to-talk)", () => {
     expect(ehTeclaFalar({ key: "g", repeat: true }, false)).toBe(false);
     expect(ehTeclaFalar({ key: "g", metaKey: true }, false)).toBe(false);
     expect(ehTeclaFalar({ key: "h" }, false)).toBe(false);
+    expect(ehTeclaFalar({ key: "V" }, false, "v")).toBe(true); expect(ehTeclaFalar({ key: "g" }, false, "v")).toBe(false);   // quem tem habilidade no G fala no V
   });
   it("voz por proximidade: some de verdade longe (modelo linear)", () => {
     expect(DISTANCIA.voz.modelo).toBe("linear");

@@ -66,6 +66,7 @@ import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montad
 import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
 import { carregarVrm, tingirVrm } from "./AvatarVrm";
 import { variacaoBatida, ventoDasAsas } from "@/lib/cyber/asas";
+import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, type IdHabilidade } from "@/lib/cyber/habilidades";
 
 /**
  * Vêm do SERVIDOR (GET da sala), o cliente só pinta: `fundador` = dono — a base dele fica na ZAEON (a ilha no céu).
@@ -788,6 +789,25 @@ export class CyberEngine {
     this.o.overlay.appendChild(el); this.falas.push({ el, ator: a, ate: performance.now() + ms });
   }
   /** o Droid FALA: balão em cima dele + a fala no chat (só local) */
+  /** o DROID COMPANHEIRO (habilidade do G): fora do tutorial, ele sai do portal e passa a seguir a pessoa; G de novo, volta */
+  private companheiro = false;
+  private usoHabilidade = new Map<IdHabilidade, number>();
+  /** usa uma habilidade (lib/cyber/habilidades) — recarga e efeito */
+  usarHabilidade(id: IdHabilidade): boolean {
+    const agora = performance.now() / 1000, h = HABILIDADES.find((x) => x.id === id);
+    if (!h || !prontaPraUsar(h, this.usoHabilidade.get(id), agora)) return false;
+    if (id === "droid-companheiro") {
+      if (!this.droid) return false;
+      if (this.guia || this.expulsando || this.conversa) { this.o.onAviso?.("O Droid está ocupado te guiando agora."); return false; }
+      this.companheiro = !this.companheiro;
+      this.usoHabilidade.set(id, agora);
+      // a fala: chegando, quando ele já saiu do portal; indo, já (o balão some junto)
+      if (this.companheiro) this.falaCompanheiroEm = agora + 1.3;
+      else { this.droidFala(sortear(FALAS_DROID.vai, Math.random()), false); this.falaCompanheiroEm = 0; }
+    }
+    return true;
+  }
+  private falaCompanheiroEm = 0;
   private droidFala(texto: string, ultima: boolean) {
     const d = this.droid; if (!d) return;
     this.balao(d.fala, texto, DROID.cor, ultima ? Infinity : RITMO_FALA.entre * 1000 + 400);
@@ -953,16 +973,20 @@ export class CyberEngine {
   private atualizarAgentes(dt: number, t: number) {
     const d = this.droid; if (!d) return;
     const eu = this.eu, fase = d.h.fase(), passo = this.guia ? ROTEIRO[this.guia.passo] : undefined;
-    const quer = (!!this.guia && !this.nascendo && !this.menu && passo?.cond.tipo !== "nascer" && !passo?.livre) || !!this.expulsando;   // livre (explorando): ele some
+    const guiando = (!!this.guia && !this.nascendo && !this.menu && passo?.cond.tipo !== "nascer" && !passo?.livre) || !!this.expulsando;   // livre (explorando): ele some
+    const comigo = this.companheiro && !guiando && !this.menu;   // o companheiro (habilidade do G)
+    const quer = guiando || comigo;
     // pra onde ele vai: do lado da pessoa — ou, num passo "vem comigo até…", ELE VAI: voa rumo ao alvo e, se a pessoa
     // ficar pra trás, para e espera por ela (virado pra ela)
-    const a = passo ? this.alvoDoPasso(passo) : null, altAlvo = eu.alt + (this.expulsando ? 5 : 2.3);   // expulsando: no meio da tela, encarando
+    const a = passo && this.guia ? this.alvoDoPasso(passo) : null, altAlvo = eu.alt + (this.expulsando ? 5 : 2.3);   // expulsando: no meio da tela, encarando
     const lidera = !!a && (this.naZaeon || passo?.id === "base") && !this.tunel && !this.expulsando;   // "vem comigo até…": ele VAI até lá e espera lá
     // NA FRENTE da pessoa, no campo de visão (a câmera olha por cima do ombro): ~5 m à frente, um pouco de lado pra não
     // tapar o personagem — é ali que ele nasce do portal, de frente pros nossos olhos
     const vx0 = -Math.sin(this.camAz), vz0 = -Math.cos(this.camAz);
     const deLado = passo?.cond.tipo === "conversa" && !this.expulsando;   // com a Zaeon falando, ele sai da frente (fica do lado)
-    const alvo = this.expulsando ? { x: eu.pos.x + vx0 * 6, z: eu.pos.z + vz0 * 6 } : deLado ? { x: eu.pos.x + vx0 * 1.5 - vz0 * 4.2, z: eu.pos.z + vz0 * 1.5 + vx0 * 4.2 } : { x: eu.pos.x + vx0 * 5.2 - vz0 * 1.2, z: eu.pos.z + vz0 * 5.2 + vx0 * 1.2 };
+    // o COMPANHEIRO nasce na frente (de frente pros nossos olhos) e depois fica por cima do ombro direito, um pouco atrás
+    const seguindo = comigo && fase === "visivel";
+    const alvo = this.expulsando ? { x: eu.pos.x + vx0 * 6, z: eu.pos.z + vz0 * 6 } : deLado ? { x: eu.pos.x + vx0 * 1.5 - vz0 * 4.2, z: eu.pos.z + vz0 * 1.5 + vx0 * 4.2 } : seguindo ? { x: eu.pos.x - vx0 * 0.6 - vz0 * 1.9, z: eu.pos.z - vz0 * 0.6 + vx0 * 1.9 } : { x: eu.pos.x + vx0 * 5.2 - vz0 * 1.2, z: eu.pos.z + vz0 * 5.2 + vx0 * 1.2 };
     if (quer && fase === "oculto") { d.pos.set(alvo.x, 0, alvo.z); d.alt = altAlvo; d.h.aparecer(); this.som.tocar(this.som.temSom("cyber-enter") ? "cyber-enter" : "rise", d.h.group.position, { dist: DISTANCIA.perto }); this.som.tocar("rise", d.h.group.position, { dist: DISTANCIA.perto }); }
     else if (!quer && (fase === "visivel" || fase === "entrando")) d.h.sumir();
     else if (fase === "visivel") {
@@ -981,6 +1005,7 @@ export class CyberEngine {
         d.alt += (altAlvo - d.alt) * Math.min(1, dt * 3);
       }
     }
+    if (comigo && this.falaCompanheiroEm && fase === "visivel" && performance.now() / 1000 >= this.falaCompanheiroEm) { this.falaCompanheiroEm = 0; this.droidFala(sortear(FALAS_DROID.chega, Math.random()), false); }
     if (fase === "oculto" && !d.h.group.visible) { d.tag.style.display = "none"; return; }
     d.h.group.position.set(d.pos.x, d.alt, d.pos.z);
     d.fala.alt = d.alt - 1.0;
@@ -1526,7 +1551,10 @@ export class CyberEngine {
       if (this.digitando() || (!this.o.teclasSempre && !this.sobContainer)) return; const k = e.key.toLowerCase();
       if (k === "shift") { this.keys.shift = true; return; }
       if (k === " " || k === "spacebar") { if (this.pilotando || this.moto !== null) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.comandoJet(true); e.preventDefault(); } return; }
-      if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }   // F = a ação de contexto (estudar, montar, embarcar, descer…)
+      if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }
+      // HABILIDADES (lib/cyber/habilidades): G = o Droid companheiro (founder)
+      const hab = this.menu ? null : habilidadeDaTecla(k, { fundador: this.ehFundador(this.o.eu.id), digitando: false, repetida: e.repeat, modificador: e.ctrlKey || e.metaKey || e.altKey });
+      if (hab) { this.usarHabilidade(hab.id); e.preventDefault(); return; }   // F = a ação de contexto (estudar, montar, embarcar, descer…)
       if (k === "p" && (this.pilotando || this.moto !== null)) { this.pousar(); e.preventDefault(); return; }   // P = pousar (no desktop não há o botão)
       if ((k === "e" || k === "q") && (this.pilotando || this.moto !== null)) { this.voY[k === "e" ? "subir" : "descer"] = true; this.autoPouso = false; e.preventDefault(); return; }
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { this.keys[k] = true; e.preventDefault(); }

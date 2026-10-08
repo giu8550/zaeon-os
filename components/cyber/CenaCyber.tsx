@@ -17,6 +17,7 @@ import type { PedidoZaeon, PerfilZaeon, PerguntaZaeon, TurnoZaeon } from "@/lib/
 import { criarVoz, type VozHandle } from "./Voz";
 import { transporteRealtime, vozLigada } from "@/lib/lounge3d/realtime";
 import { ehTeclaFalar } from "@/lib/cyber/voz";
+import { teclaDoRadio } from "@/lib/cyber/habilidades";
 import type { CanalVoz } from "@/components/lounge/salaColyseus";
 import Joystick from "./Joystick";
 import ControlesVoo from "./ControlesVoo";
@@ -221,12 +222,13 @@ export default function CenaCyber(p: CenaCyberProps) {
   useEffect(() => {
     if (!comVoz) return;
     const digitando = () => { const a = document.activeElement; return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || (a as HTMLElement).isContentEditable); };
-    const baixo = (e: KeyboardEvent) => { if (ehTeclaFalar(e, digitando())) { e.preventDefault(); falar(true); } };
-    const cima = (e: KeyboardEvent) => { if (e.key === "g" || e.key === "G") falar(false); };
+    const tecla = teclaDoRadio(!!p.souFundador);   // G — ou V, se o G é uma habilidade sua (lib/cyber/habilidades)
+    const baixo = (e: KeyboardEvent) => { if (ehTeclaFalar(e, digitando(), tecla)) { e.preventDefault(); falar(true); } };
+    const cima = (e: KeyboardEvent) => { if (e.key.toLowerCase() === tecla) falar(false); };
     const solta = () => falar(false);
     window.addEventListener("keydown", baixo); window.addEventListener("keyup", cima); window.addEventListener("blur", solta);
     return () => { window.removeEventListener("keydown", baixo); window.removeEventListener("keyup", cima); window.removeEventListener("blur", solta); };
-  }, [comVoz, falar]);
+  }, [comVoz, falar, p.souFundador]);
   // OLHAR LIVRE (mouse travado): abriu um painel → solta o mouse pra clicar nele; Enter (fora de um campo) → solta e
   // foca o chat (dá pra falar sem precisar do Esc antes)
   const chatRef = useRef<HTMLInputElement | null>(null);
