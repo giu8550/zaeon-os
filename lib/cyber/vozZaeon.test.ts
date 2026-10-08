@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ESPERA_VOZ, FOLGA_FALA, MAX_TEXTO_VOZ, REPERGUNTA_NOME, bocaDoNivel, criarCacheVoz, falasFixasZaeon, tempoDaFala, textoDaVoz } from "./vozZaeon";
+import { ESPERA_VOZ, FOLGA_FALA, duracaoComAtraso, MAX_TEXTO_VOZ, REPERGUNTA_NOME, bocaDoNivel, criarCacheVoz, falasFixasZaeon, tempoDaFala, textoDaVoz } from "./vozZaeon";
 import { ABERTURA, PERGUNTAS } from "./conversaZaeon";
 import { HOLO_VOZ, aleatorioComSemente, respostaImpulso, DISTANCIA } from "./audio";
 
@@ -45,6 +45,11 @@ describe("voz da Zaeon — tempo da fala, boca e texto", () => {
     expect(tempoDaFala(3.4, 5)).toBeCloseTo(5 + FOLGA_FALA);
     expect(tempoDaFala(2.6, Number.NaN)).toBe(2.6);
     expect(ESPERA_VOZ.fixa).toBeLessThan(ESPERA_VOZ.gerativa);
+  });
+  it("voz atrasada: a fala ocupa o que já passou + o áudio inteiro + a folga", () => {
+    expect(tempoDaFala(3.4, duracaoComAtraso(1.2, 3))).toBeCloseTo(1.2 + 3 + FOLGA_FALA);
+    expect(tempoDaFala(3.4, duracaoComAtraso(-1.5, 1))).toBe(3.4);   // (o fechamento começa com o relógio negativo)
+    expect(duracaoComAtraso(Number.NaN, 2)).toBe(2);
   });
   it("a boca segue o nível: baixo fecha, médio entreabre, alto abre", () => {
     expect(bocaDoNivel(0)).toBe("idle");

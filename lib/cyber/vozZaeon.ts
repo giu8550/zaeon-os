@@ -32,14 +32,21 @@ export function falasFixasZaeon(): string[] {
   return [...new Set(todas.map(textoDaVoz).filter(Boolean))];
 }
 
-/** quanto esperar (s) o áudio antes de mostrar o balão SEM voz: fixa (já devia estar no cache) × gerativa (a síntese
- *  só começa quando a IA responde — ela continua com a cara de "pensando" enquanto isso) */
-export const ESPERA_VOZ = { fixa: 1.5, gerativa: 3.5 } as const;
+/** quanto esperar (s) o áudio antes de mostrar o balão SEM voz: fixa (já devia estar no cache) × gerativa (texto novo —
+ *  o nome da pessoa, a resposta da IA: a síntese acabou de começar e ela fica com a cara de "pensando"). Se a voz
+ *  chegar depois do prazo e ela ainda estiver nessa fala, a voz entra atrasada (`duracaoComAtraso`) */
+export const ESPERA_VOZ = { fixa: 1.5, gerativa: 6 } as const;
 /** o respiro depois da voz antes da próxima fala */
 export const FOLGA_FALA = 0.4;
 /** quanto tempo a fala OCUPA (s): o tempo fixo do roteiro ou a duração do áudio + a folga — o que for maior */
 export function tempoDaFala(fixo: number, durAudio?: number | null): number {
   return durAudio && Number.isFinite(durAudio) && durAudio > 0 ? Math.max(fixo, durAudio + FOLGA_FALA) : fixo;
+}
+
+/** a voz que chegou ATRASADA (o balão já está na tela há `decorrido` s): a fala passa a ocupar o que já passou + o
+ *  áudio inteiro (o `tempoDaFala` soma a folga) */
+export function duracaoComAtraso(decorrido: number, durAudio: number): number {
+  return Math.max(0, Number.isFinite(decorrido) ? decorrido : 0) + Math.max(0, durAudio);
 }
 
 /** a boca do holograma pelo nível da voz (0..1, de lib/voice/nivelVoz `nivelDaBoca`): 3 degraus, como no laboratório */

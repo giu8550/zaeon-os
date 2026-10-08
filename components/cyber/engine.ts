@@ -21,7 +21,7 @@ import { QualidadeAdaptativa } from "@/lib/cyber/qualidadeAdaptativa";
 import { DISTANCIA, PASSOS, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, type AudioCyberHandle, type FalaHolograma, type LoopSom } from "./AudioCyber";
-import { ESPERA_VOZ, criarCacheVoz, falasFixasZaeon, tempoDaFala, textoDaVoz, REPERGUNTA_NOME, type CacheVoz } from "@/lib/cyber/vozZaeon";
+import { ESPERA_VOZ, criarCacheVoz, duracaoComAtraso, falasFixasZaeon, tempoDaFala, textoDaVoz, REPERGUNTA_NOME, type CacheVoz } from "@/lib/cyber/vozZaeon";
 import { criarSomLounge, type SomLoungeHandle } from "./SomLounge";
 import type { SomLounge } from "@/lib/lounge3d/musica";
 import { rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
@@ -248,6 +248,8 @@ export class CyberEngine {
   private vozDecod = new Map<string, Promise<AudioBuffer | null>>();
   private vozPreaquecida = false;
   private falaZ: { texto: string; ultima: boolean; espera: number; limite: number; buf: AudioBuffer | null | undefined; depois?: () => void } | null = null;
+  /** a fala que está no balão agora (uma voz que chega ATRASADA só toca se ainda for ela) */
+  private falaAtual: NonNullable<CyberEngine["falaZ"]> | null = null;
   private vozZ: FalaHolograma | null = null;
   private durFalaZ = 0;
   /** dentro do TÚNEL de um buraco negro (escolhendo o destino): parado até o React responder */
@@ -815,15 +817,29 @@ export class CyberEngine {
    *  mexe sorteada. `depois` roda quando o balão aparece (ex.: abrir o painel da pergunta) */
   private zaeonFala(texto: string, ultima: boolean, o: { gerativa?: boolean; depois?: () => void } = {}) {
     if (this.falaZ) this.mostrarFalaZaeon(this.falaZ);   // (não acontece no roteiro) a anterior sai já, sem esperar
-    const f = { texto, ultima, espera: 0, limite: o.gerativa ? ESPERA_VOZ.gerativa : ESPERA_VOZ.fixa, buf: undefined as AudioBuffer | null | undefined, depois: o.depois };
+    const f = { texto, ultima, espera: 0, limite: ESPERA_VOZ.fixa as number, buf: undefined as AudioBuffer | null | undefined, depois: o.depois };
     if (!this.vozCache || !this.som.ligado || !this.holoZaeon) { f.buf = null; this.mostrarFalaZaeon(f); return; }
+    // texto que ainda não foi sintetizado (o nome da pessoa, a resposta da IA…): espera mais, com a cara de "pensando"
+    if (o.gerativa || !this.vozCache.tem(texto)) { f.limite = ESPERA_VOZ.gerativa; if (!this.vozCache.tem(texto)) this.holoZaeon.pensar(true); }
     this.falaZ = f;
-    if (o.gerativa && !this.vozCache.tem(texto)) this.holoZaeon.pensar(true);
-    void this.bufferDaVoz(texto).then((b) => { if (this.falaZ === f) f.buf = b; });
+    void this.bufferDaVoz(texto).then((b) => {
+      if (this.falaZ === f) f.buf = b;
+      else if (b && this.falaAtual === f && !f.buf) this.vozAtrasada(f, b);   // passou do prazo e o balão saiu mudo: a voz entra agora
+    });
+  }
+  /** a voz chegou DEPOIS do prazo, mas ela ainda está nessa fala: toca agora, e a fala (o balão e o relógio da
+   *  conversa) se estende pra caber o áudio inteiro */
+  private vozAtrasada(f: NonNullable<CyberEngine["falaZ"]>, b: AudioBuffer) {
+    const h = this.holoZaeon, cv = this.conversa;
+    if (!h || !cv || cv.etapa === "brava" || cv.etapa === "feita" || cv.etapa === "pensando" || this.vozZ) return;   // (pensando: a pessoa já respondeu — a pergunta não fala mais)
+    const voz = this.som.falaHolograma(b, h.rosto); if (!voz) return;
+    f.buf = b; this.vozZ = voz; this.durFalaZ = duracaoComAtraso(cv.t, voz.duracao);
+    const ate = performance.now() + (voz.duracao + 0.8) * 1000;
+    for (const x of this.falas) if (x.ator === this.falaZaeon && x.ate !== Infinity) x.ate = Math.max(x.ate, ate);
   }
   private mostrarFalaZaeon(f: NonNullable<CyberEngine["falaZ"]>) {
     if (this.falaZ === f) this.falaZ = null;
-    this.calarZaeon();
+    this.calarZaeon(); this.falaAtual = f;
     const h = this.holoZaeon; h?.pensar(false);
     const voz = f.buf && h ? this.som.falaHolograma(f.buf, h.rosto) : null;
     this.vozZ = voz; this.durFalaZ = voz ? voz.duracao : 0;
@@ -833,7 +849,7 @@ export class CyberEngine {
     f.depois?.();
   }
   /** para a voz dela (e a boca volta ao normal) */
-  private calarZaeon() { this.vozZ?.parar(); this.vozZ = null; this.holoZaeon?.boca(null); }
+  private calarZaeon() { this.vozZ?.parar(); this.vozZ = null; this.falaAtual = null; this.holoZaeon?.boca(null); }
   /** o áudio de uma fala: sintetizado (cache por texto) e decodificado (uma vez por texto) */
   private bufferDaVoz(texto: string): Promise<AudioBuffer | null> {
     const k = textoDaVoz(texto), c = this.vozCache; if (!c || !k) return Promise.resolve(null);
@@ -874,7 +890,9 @@ export class CyberEngine {
       const p = PERGUNTAS[cv.i]!;
       if (p.id === "nome") {
         const n = nomeDe(r); if (!n) { this.perguntarDeNovo(REPERGUNTA_NOME); return true; }
-        cv.perfil.nome = n; this.zaeonFala(reacaoFixa("nome", r, cv.perfil), false, { gerativa: true, depois: () => this.holoZaeon?.sorrir(2.4) }); cv.historico.push({ quem: "zaeon", texto: reacaoFixa("nome", r, cv.perfil) });
+        cv.perfil.nome = n;
+        void this.bufferDaVoz(fechamento(cv.perfil)[0]!);   // o "Obrigada, <nome>!" do fim já vai sendo gerado (só toca minutos depois)
+        this.zaeonFala(reacaoFixa("nome", r, cv.perfil), false, { gerativa: true, depois: () => this.holoZaeon?.sorrir(2.4) }); cv.historico.push({ quem: "zaeon", texto: reacaoFixa("nome", r, cv.perfil) });
       } else {
         cv.perfil.situacao = situacaoDe(r) ?? r;   // texto livre que não deu pra classificar: vai como a pessoa disse (a IA entende)
         const re = reacaoFixa("situacao", r, cv.perfil); this.zaeonFala(re, false, { depois: () => this.holoZaeon?.sorrir(2.4) }); cv.historico.push({ quem: "zaeon", texto: re });
