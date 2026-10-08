@@ -2,8 +2,14 @@
  * FrotaIA — a FROTA DE IAs vivendo no cyberespaço (lib/cyber/frota): centenas de "jogadores" que estudam no tablet,
  * andam de moto, voam de mochila, vão pra festa e conversam com os amigos. Ninguém disso passa pela rede: cada IA é uma
  * função do relógio (o plano do dia — o mesmo em todo cliente). Aqui só o DESENHO:
- *  - a cada ~0,4 s escolhe as IAs mais PERTO da câmera (as de longe nem existem em 3D) e dá a elas um corpo de um
- *    POOL (o avatar anime na cor de cada uma, o nome em cima da cabeça, a moto quando está nela);
+ *  - TODO MUNDO num raio de ~240 m aparece SEMPRE, como uma SILHUETA de luz na cor da IA (um InstancedMesh só — centenas
+ *    numa draw call; sentada, deitada, de moto conforme o estado). Nada aparece/some com a câmera ou andando: só o
+ *    nível de detalhe muda;
+ *  - a cada ~0,4 s, as mais PERTO DO MEU PERSONAGEM (não da câmera — girar a câmera não troca ninguém) ganham o corpo
+ *    COMPLETO de um POOL (o avatar anime, o nome em cima da cabeça, a moto quando está nela), com HISTERESE: quem já tem
+ *    corpo só perde se sair bem do alcance ou se alguém MUITO mais perto precisar da vaga;
+ *  - a moto de um corpo completo se MATERIALIZA (cresce) ao montar e se desfaz ao descer (fora da Zaeon a IA invoca a
+ *    moto; na Zaeon ela pega/larga na garagem — lib/cyber/frota/corpo);
  *  - todo quadro, o corpo segue o estado exato (lib/cyber/frota/corpo, com o A*) e DESVIA de quem está no caminho;
  *  - os BALÕES das conversas: "..." pra quem está em cloak; o texto das outras vem do servidor na 1ª vez que alguém vê
  *    (/api/cyber/frota/conversa — o mesmo pra todos);
@@ -20,6 +26,7 @@ import { estadoDaIA, type EstadoIA } from "@/lib/cyber/frota/corpo";
 import { episodiosDoDia, type Episodio } from "@/lib/cyber/frota/conversas";
 import type { ConfigSalva } from "@/lib/cyber/frota/config";
 import { desviar, empurrao, type P2 } from "@/lib/cyber/colisaoAtores";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 export type FrotaHandle = {
   configurar(c: ConfigSalva, agoraServidor: number): void;
@@ -33,17 +40,37 @@ export type FrotaHandle = {
   mostrar(on: boolean): void;
   dispose(): void;
 };
-export type CtxFrota = { cam: THREE.Vector3; camera: THREE.Camera; largura: number; altura: number; ilhaY: number; pisoY: number; musica: boolean; obstaculos: P2[] };
+/** `eu` = o MEU personagem (mundo, y dos pés): quem ganha corpo completo é escolhido pela distância até ele */
+export type CtxFrota = { cam: THREE.Vector3; eu: { x: number; y: number; z: number }; camera: THREE.Camera; largura: number; altura: number; ilhaY: number; pisoY: number; musica: boolean; obstaculos: P2[] };
 
-const ESCOLHE_A_CADA = 0.4, ALCANCE = 95, ALCANCE_MOTO = 160;
+/** escolhe a cada `ESCOLHE_A_CADA` s; corpo completo até `ALCANCE` m (mantém até `ALCANCE × FICA`); silhuetas até
+ *  `ALCANCE_SILHUETA` m; um novo só toma a vaga de um que já tem corpo se estiver a menos de `TROCA` × a distância dele */
+const ESCOLHE_A_CADA = 0.4, ALCANCE = 70, FICA = 1.3, ALCANCE_SILHUETA = 240, TROCA = 0.55;
+const MOVE = new Set(["andando", "mochila", "moto"]);
 const TAG = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const BALAO = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:220px;font:500 12.5px system-ui,sans-serif;line-height:1.3;padding:6px 10px;border-radius:14px 14px 14px 4px;background:rgba(255,255,255,.94);color:#0b1020;box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:none;display:none;";
 
-type Corpo = { av: AvatarLuzHandle; tag: HTMLDivElement; balao: HTMLDivElement; moto: MotoHandle | null; id: string | null; desvio: P2; yAnt: number };
+type Corpo = { av: AvatarLuzHandle; tag: HTMLDivElement; balao: HTMLDivElement; moto: MotoHandle | null; id: string | null; desvio: P2; yAnt: number; /** a moto: 0..1 materializada */ motoK: number; motoEm: { x: number; y: number; z: number; rumo: number } | null };
+
+/** a SILHUETA (corpo + cabeça, uma geometria só) e a moto-silhueta */
+function geoSilhueta(): THREE.BufferGeometry {
+  const corpo = new THREE.CapsuleGeometry(0.21, 0.78, 3, 8); corpo.translate(0, 0.62, 0);
+  const cabeca = new THREE.SphereGeometry(0.16, 10, 8); cabeca.translate(0, 1.42, 0);
+  const g = mergeGeometries([corpo.toNonIndexed(), cabeca.toNonIndexed()])!; corpo.dispose(); cabeca.dispose(); return g;
+}
 
 export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf: GLTF | null; starTex: THREE.Texture; low: boolean; max?: number }): FrotaHandle {
-  const MAX = o.max ?? (o.low ? 8 : 16);
+  const MAX = o.max ?? (o.low ? 8 : 18), MAX_SILHUETAS = o.low ? 300 : 900;
   const corpos: Corpo[] = [];
+  // as SILHUETAS: um InstancedMesh pra gente e outro pras motos (cor por instância)
+  const matSil = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x1a2140, transparent: true, opacity: 0.85 });
+  const silhuetas = new THREE.InstancedMesh(geoSilhueta(), matSil, MAX_SILHUETAS); silhuetas.count = 0; silhuetas.frustumCulled = false; o.cena.add(silhuetas);
+  const geoMotoSil = new THREE.CapsuleGeometry(0.28, 1.9, 3, 8); geoMotoSil.rotateX(Math.PI / 2);
+  const motosSil = new THREE.InstancedMesh(geoMotoSil, matSil, Math.round(MAX_SILHUETAS / 3)); motosSil.count = 0; motosSil.frustumCulled = false; o.cena.add(motosSil);
+  silhuetas.setColorAt(0, new THREE.Color()); motosSil.setColorAt(0, new THREE.Color());
+  /** quem aparece (silhueta ou corpo): o estado aproximado de cada uma, refeito a cada escolha (e a cada quadro, pra quem se move) */
+  let vistos: { id: string; e: EstadoIA; move: boolean }[] = [];
+  const mS = new THREE.Matrix4(), qS = new THREE.Quaternion(), pS = new THREE.Vector3(), eS = new THREE.Vector3(), cS = new THREE.Color(), eixoX = new THREE.Vector3(1, 0, 0), eixoY = new THREE.Vector3(0, 1, 0), qD = new THREE.Quaternion();
   let config: ConfigSalva | null = null, offset = 0, frota: AgenteIA[] = [], porId = new Map<string, AgenteIA>();
   let plano: PlanoDia | null = null, eps = new Map<string, Episodio[]>(), dia = -1, calculando = false;
   let escolherEm = 0, escolhidos: string[] = [], online = 0, visivel = true;
@@ -70,7 +97,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     const av = criarAvatarLuz("#7fd3ff", o.starTex, o.low, o.gltf, { anime: true }); o.cena.add(av.group); av.group.visible = false;
     const tag = document.createElement("div"); tag.style.cssText = TAG + "display:none;"; o.overlay.appendChild(tag);
     const balao = document.createElement("div"); balao.style.cssText = BALAO; o.overlay.appendChild(balao);
-    return { av, tag, balao, moto: null, id: null, desvio: { x: 0, z: 0 }, yAnt: 0 };
+    return { av, tag, balao, moto: null, id: null, desvio: { x: 0, z: 0 }, yAnt: 0, motoK: 0, motoEm: null };
   }
   const agoraMs = () => Date.now() + offset;
   /** o balão de uma IA agora: "..." (cloak ou sem texto ainda), o texto, ou nada */
@@ -99,31 +126,64 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       recalcular(diaDe(agoraMs()));
     },
     atualizar(dt, t, ctx) {
+      silhuetas.visible = motosSil.visible = !!config && visivel;
       if (!config || !visivel) { for (const k of corpos) { k.av.group.visible = false; k.tag.style.display = "none"; k.balao.style.display = "none"; if (k.moto) k.moto.group.visible = false; } return; }
       const ms = agoraMs(), d = diaDe(ms), minuto = minutoDoDia(ms);
       if (d !== dia) recalcular(d);
       if (!plano) return;
-      // 1) escolher quem desenhar (as mais perto da câmera)
+      // 1) quem aparece e quem ganha corpo completo (perto do MEU personagem, com histerese)
+      const yDe = (e: EstadoIA) => (e.zaeon ? e.y + (ctx.ilhaY - ctx.pisoY) : e.y);
+      const distEu = (e: EstadoIA) => Math.hypot(e.x - ctx.eu.x, yDe(e) - ctx.eu.y, e.z - ctx.eu.z);
       escolherEm -= dt;
       if (escolherEm <= 0) {
         escolherEm = ESCOLHE_A_CADA;
-        const cand: { id: string; d: number }[] = []; let n = 0;
+        const lista: { id: string; e: EstadoIA; move: boolean; d: number }[] = []; let n = 0;
         for (const { agente, blocos } of plano.agentes.values()) {
           const e = estadoDaIA(agente.id, blocos, minuto, config.flags, ctx.musica, false);
           if (!e.visivel) continue; n++;
-          const y = e.zaeon ? e.y + (ctx.ilhaY - ctx.pisoY) : e.y, dist = Math.hypot(e.x - ctx.cam.x, y - ctx.cam.y, e.z - ctx.cam.z);
-          if (dist < (e.pose === "moto" ? ALCANCE_MOTO : ALCANCE)) cand.push({ id: agente.id, d: dist });
+          const d = distEu(e); if (d < ALCANCE_SILHUETA) lista.push({ id: agente.id, e, move: MOVE.has(e.pose), d });
         }
-        online = n; cand.sort((a, b) => a.d - b.d); escolhidos = cand.slice(0, MAX).map((c) => c.id);
-        // solta quem saiu; os que ficam mantêm o corpo
-        for (const k of corpos) if (k.id && !escolhidos.includes(k.id)) k.id = null;
+        online = n; lista.sort((a, b) => a.d - b.d); vistos = lista.slice(0, MAX_SILHUETAS);
+        const dist = new Map(lista.map((c) => [c.id, c.d]));
+        // quem já tem corpo FICA enquanto estiver no alcance largo; a vaga só troca por alguém MUITO mais perto
+        const ficam = corpos.filter((k) => k.id && (dist.get(k.id) ?? Infinity) < ALCANCE * FICA).map((k) => k.id!);
+        const novos = lista.filter((c) => c.d < ALCANCE && !ficam.includes(c.id));
+        escolhidos = [...ficam];
+        for (const c of novos) {
+          if (escolhidos.length < MAX) { escolhidos.push(c.id); continue; }
+          let pior = -1, dPior = -1; escolhidos.forEach((id, k) => { const dd = dist.get(id)!; if (dd > dPior) { dPior = dd; pior = k; } });
+          if (c.d < dPior * TROCA) escolhidos[pior] = c.id; else break;   // (a lista está em ordem: os próximos são mais longe ainda)
+        }
+        for (const k of corpos) if (k.id && !escolhidos.includes(k.id)) { k.id = null; k.motoK = 0; }
         let criou = false;   // (um avatar novo por rodada: criar é pesado — o pool enche aos poucos)
         for (const id of escolhidos) if (!corpos.some((k) => k.id === id)) {
           let k = corpos.find((x) => !x.id);
           if (!k && corpos.length < MAX && !criou) { k = novoCorpo(); corpos.push(k); criou = true; }
           if (!k) break;
-          const a = porId.get(id)!; k.id = id; k.av.recolorir(a.cor); k.tag.textContent = a.nome; k.tag.style.color = a.cor; k.desvio = { x: 0, z: 0 };
+          const a = porId.get(id)!; k.id = id; k.av.recolorir(a.cor); k.tag.textContent = a.nome; k.tag.style.color = a.cor; k.desvio = { x: 0, z: 0 }; k.motoK = 0;
         }
+      }
+      // 1b) as SILHUETAS: todo mundo que aparece e NÃO tem corpo completo (quem se move é refeito a cada quadro)
+      {
+        const comCorpo = new Set(corpos.filter((k) => k.id && k.av.group.visible).map((k) => k.id!));
+        let ni = 0, nm = 0;
+        for (const v of vistos) {
+          if (comCorpo.has(v.id)) continue;
+          if (v.move) { const p = plano.agentes.get(v.id); if (p) v.e = estadoDaIA(v.id, p.blocos, minuto, config.flags, ctx.musica, false); }
+          const e = v.e; if (!e.visivel) continue;
+          const y = yDe(e), cor = cS.set(porId.get(v.id)?.cor ?? "#7fd3ff");
+          // a pose da silhueta: de pé; sentada/relaxada (encolhida, no assento); no chão (mais baixa); deitada (tombada); de moto (em cima da moto)
+          let sy = 1, dy = 0; qS.setFromAxisAngle(eixoY, e.rumo);
+          if (e.pose === "sentado" || e.pose === "relaxa") { sy = 1 - 0.38 * e.sentar; dy = e.assentoY * 0.6 * e.sentar; }
+          else if (e.pose === "chao") sy = 1 - 0.45 * e.sentar;
+          else if (e.pose === "deitado") { qD.setFromAxisAngle(eixoX, -Math.PI / 2 * e.sentar); qS.multiply(qD); dy = 0.55 * e.sentar; }
+          else if (e.pose === "moto") { dy = 0.85; sy = 0.75; }
+          if (ni < MAX_SILHUETAS) { mS.compose(pS.set(e.x, y + dy, e.z), qS, eS.set(1, sy, 1)); silhuetas.setMatrixAt(ni, mS); silhuetas.setColorAt(ni, cor); ni++; }
+          if (e.pose === "moto" && nm < motosSil.instanceMatrix.count) { qS.setFromAxisAngle(eixoY, e.rumo); mS.compose(pS.set(e.x, y + 0.75, e.z), qS, eS.set(1, 1, 1)); motosSil.setMatrixAt(nm, mS); motosSil.setColorAt(nm, cor); nm++; }
+        }
+        silhuetas.count = ni; motosSil.count = nm;
+        silhuetas.instanceMatrix.needsUpdate = true; motosSil.instanceMatrix.needsUpdate = true;
+        if (silhuetas.instanceColor) silhuetas.instanceColor.needsUpdate = true; if (motosSil.instanceColor) motosSil.instanceColor.needsUpdate = true;
       }
       // 2) cada corpo: o estado exato, o desvio, a pose
       const ocupados: P2[] = [];
@@ -139,12 +199,19 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
         let m: Montado | null = null;
         if (e.pose === "moto") {
           if (!k.moto) { k.moto = criarMoto({ cor: porId.get(k.id)!.cor, low: o.low }); o.cena.add(k.moto.group); }
-          k.moto.group.visible = true; k.moto.group.position.set(x, y, z); k.moto.group.rotation.y = e.rumo;
+          // a moto se MATERIALIZA (cresce em ~0,45 s) ao montar
+          k.motoK = Math.min(1, k.motoK + dt / 0.45); const em = k.motoK * k.motoK * (3 - 2 * k.motoK); k.motoEm = { x, y, z, rumo: e.rumo };
+          k.moto.group.visible = true; k.moto.group.position.set(x, y, z); k.moto.group.rotation.y = e.rumo; k.moto.group.scale.setScalar(Math.max(0.02, em));
           k.moto.atualizar({ dt, t, voando: true, vel: e.moto?.vel ?? 30, curva: e.moto?.curva ?? 0 }); k.moto.group.updateMatrixWorld(true);
           k.moto.assento.getWorldPosition(w); k.av.group.position.copy(w); k.av.olharPara(e.rumo);
           k.moto.pontos.maoE.getWorldPosition(montado.maoE); k.moto.pontos.maoD.getWorldPosition(montado.maoD); k.moto.pontos.peE.getWorldPosition(montado.peE); k.moto.pontos.peD.getWorldPosition(montado.peD);
           m = montado;
-        } else { if (k.moto) k.moto.group.visible = false; k.av.group.position.set(x, y, z); k.av.olharPara(e.rumo); }
+        } else {
+          // desceu: a moto se DESFAZ (encolhe) onde ficou, em ~0,35 s
+          if (k.moto && k.motoK > 0 && k.motoEm) { k.motoK = Math.max(0, k.motoK - dt / 0.35); const em = k.motoK * k.motoK * (3 - 2 * k.motoK); k.moto.group.scale.setScalar(Math.max(0.02, em)); k.moto.group.visible = k.motoK > 0; }
+          else if (k.moto) k.moto.group.visible = false;
+          k.av.group.position.set(x, y, z); k.av.olharPara(e.rumo);
+        }
         k.av.group.visible = true;
         const vy = (y - k.yAnt) / Math.max(dt, 1e-3); k.yAnt = y;
         const deitado = e.pose === "deitado";
@@ -158,7 +225,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
         // o nome e o balão em cima da cabeça
         proj.set(x, k.av.group.position.y + (deitado ? 1.2 : e.pose === "chao" ? 1.5 : 2.2), z).project(ctx.camera);
         const tela = proj.z < 1 && Math.abs(proj.x) < 1.1 && Math.abs(proj.y) < 1.1, sx = (proj.x * 0.5 + 0.5) * ctx.largura, sy = (-proj.y * 0.5 + 0.5) * ctx.altura;
-        const longe = Math.hypot(x - ctx.cam.x, z - ctx.cam.z) > 45;
+        const longe = Math.hypot(x - ctx.cam.x, z - ctx.cam.z) > 55;
         k.tag.style.display = tela && !longe ? "block" : "none"; if (tela) k.tag.style.transform = `translate(${sx}px,${sy}px) translate(-50%,-100%)`;
         const fala = tela && !longe ? balaoDe(k.id, minuto) : null;
         k.balao.style.display = fala ? "block" : "none";
@@ -183,6 +250,9 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     },
     online: () => online,
     mostrar(on) { visivel = on; },
-    dispose() { for (const k of corpos) { k.av.dispose(); k.moto?.dispose(); k.tag.remove(); k.balao.remove(); } corpos.length = 0; },
+    dispose() {
+      for (const k of corpos) { k.av.dispose(); k.moto?.dispose(); k.tag.remove(); k.balao.remove(); } corpos.length = 0;
+      for (const m of [silhuetas, motosSil]) { m.geometry.dispose(); m.removeFromParent(); m.dispose(); } matSil.dispose();
+    },
   };
 }

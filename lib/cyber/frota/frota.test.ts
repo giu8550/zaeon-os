@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { FROTA_PADRAO, gerarFrota, amigosDe } from "./frota";
 import { FLAGS_PADRAO, REGRAS, agendaBase, diaDe, minutoDoDia, type Bloco } from "./agenda";
 import { planejarDia } from "./plano";
-import { estadoDaIA, MOV, OFFLINE, roteiroMoto, viagem } from "./corpo";
+import { estadoDaIA, MOV, OFFLINE, pontoDaGaragem, roteiroMoto, viagem } from "./corpo";
 import { CONVERSA, divaga, episodiosDoDia, limparFala, normalizarFala, promptEpisodio, tomDaResposta, validarFalas } from "./conversas";
 import { gerarFalasSemRepetir, gerarResposta, type DepsTexto } from "./texto";
 import { CONFIG_PADRAO, novoLote, sanitizarConfig, totalDaFrota } from "./config";
-import { spotsDe } from "./lugares";
+import { salaDoPonto, spotsDe } from "./lugares";
 import { CIDADE, mundo, salaEm } from "../ceu";
 
 const frota = gerarFrota(), DIA = 20734, plano = planejarDia(frota, DIA, FLAGS_PADRAO);
@@ -116,14 +116,30 @@ describe("o corpo no instante", () => {
     expect(estadoDaIA(x.agente.id, x.blocos, m, FLAGS_PADRAO, true).pose).toBe("danca");
     expect(estadoDaIA(x.agente.id, x.blocos, m, FLAGS_PADRAO, false).visivel).toBe(false);
   });
-  it("viagens: dentro da Zaeon de MOCHILA; pra fora de MOTO; o trajeto é contínuo (sem teleporte no meio)", () => {
+  it("viagens: dentro da Zaeon de MOCHILA; pra fora de MOTO PEGA NA GARAGEM (nada de moto saindo de sala); contínuo", () => {
     const de = { x: mundo({ x: 30, z: 0 }).x, y: CIDADE.pisoY, z: mundo({ x: 30, z: 0 }).z }, sala = mundo(CIDADE.salas.biblioteca);
     expect(viagem(de, { x: sala.x, y: CIDADE.pisoY + 88, z: sala.z }, FLAGS_PADRAO, "t").modo).toBe("mochila");
-    const univ = spotsDe("univ")[0]!, v = viagem(de, univ, FLAGS_PADRAO, "t2");
-    expect(v.modo).toBe("moto");
+    const univ = spotsDe("univ")[0]!, v = viagem(de, univ, FLAGS_PADRAO, "t2"), g = pontoDaGaragem("t2");
+    expect(v.em(0.02).modo).toBe("mochila");   // sai de mochila…
+    expect(v.em(0.98).modo).toBe("moto");      // …e chega de moto
+    // a troca (mochila → moto) acontece NA garagem
+    let troca: { x: number; z: number } | null = null; for (let u = 0; u <= 1 && !troca; u += 0.001) { const p = v.em(u); if (p.modo === "moto") troca = p; }
+    expect(Math.hypot(troca!.x - g.x, troca!.z - g.z)).toBeLessThan(1);
+    expect(salaDoPonto(g)).toBe("garagem");
+    // e o caminho de volta: pousa a moto na garagem e segue de mochila
+    const volta = viagem(univ, de, FLAGS_PADRAO, "t3"); expect(volta.em(0.02).modo).toBe("moto"); expect(volta.em(0.98).modo).toBe("mochila");
     let ant = v.em(0);
-    for (let u = 0.01; u <= 1; u += 0.01) { const p = v.em(u); expect(Math.hypot(p.x - ant.x, p.y - ant.y, p.z - ant.z)).toBeLessThan(MOV.moto * v.dur * 0.02 + 30); ant = p; }
+    for (let u = 0.01; u <= 1; u += 0.01) { const p = v.em(u); expect(Math.hypot(p.x - ant.x, p.y - ant.y, p.z - ant.z)).toBeLessThan(MOV.moto * v.dur * 0.02 + 60); ant = p; }   // (+ a descida da moto até a UNILAB, ~300 m em 5 s)
     expect(Math.hypot(v.em(1).x - univ.x, v.em(1).z - univ.z)).toBeLessThan(0.01);
+  });
+  it("ninguém EMPILHADO: em qualquer minuto, IAs paradas/estudando visíveis não dividem o mesmo ponto (< 0,6 m)", () => {
+    for (const m of [10 * 60, 14 * 60 + 17, 18 * 60 + 41]) {
+      const pts: { x: number; z: number; y: number }[] = [];
+      for (const { agente, blocos } of plano.agentes.values()) { const e = estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false); if (e.visivel && !["moto", "mochila", "andando"].includes(e.pose)) pts.push(e); }
+      const grade = new Map<string, number>(); let colisoes = 0;
+      for (const p of pts) { const k = `${Math.round(p.x / 0.6)},${Math.round(p.z / 0.6)},${Math.round(p.y)}`; const n = grade.get(k) ?? 0; if (n) colisoes++; grade.set(k, n + 1); }
+      expect(colisoes / pts.length).toBeLessThan(0.03);
+    }
   });
   it("o passeio de moto visita lugares FORA da cidadela (a volta dentro dela não passa de 2 min)", () => {
     for (const { agente, blocos } of [...plano.agentes.values()].slice(0, 120)) blocos.forEach((b, i) => {
