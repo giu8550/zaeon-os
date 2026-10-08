@@ -3,10 +3,11 @@
  *
  * Quem NUNCA entrou no cyberespaço (o servidor sabe: User.cyberNasceuEm) NASCE num TUBO DE ENSAIO — os tubos ficam em
  * volta da Cidade Zaeon, na linha da muralha, entre as torres de cristal; o do novato é um dos perto da Recepção (o lar
- * da Zaeon, a anfitriã — lib/cyber/agentes): o líquido escoa, o vidro sobe e a pessoa sai. A
- * Zaeon vem buscar e GUIA, andando do lado: a casa dela → a capela (os desktops da Sala de Estudos) → as motos → o
- * buraco negro (o metrô pros outros lugares). Cada passo termina quando a pessoa chega no alvo (ou toca "Próximo").
- * Hoje o roteiro é fixo; no overhaul a fala vem do cérebro dela.
+ * do DROID, o agente de onboarding — lib/cyber/agentes): o líquido escoa, o vidro sobe e a pessoa sai. O Droid (um
+ * ofanim) sai de um mini portal e ENSINA fazendo: fala no balão (e no chat) e ESPERA a pessoa cumprir cada instrução
+ * (andar → voar → a capela → montar numa moto → pilotar → descer → o buraco negro) antes da próxima. É de cada um:
+ * spawnado só no cliente da própria pessoa (nada vai pela rede). Hoje o roteiro é fixo; no overhaul a fala vem do
+ * cérebro dele.
  */
 import type { P2 } from "./colisao";
 import { CIDADE, DOCA_ANGULO, anguloDaTorre, computadoresLocais, mundo, naAberturaDaEscada, TORRES_MURALHA } from "./ceu";
@@ -54,9 +55,10 @@ export const TUBOS: Tubo[] = (() => {
   }
   return out;
 })();
-/** os tubos onde os NOVATOS nascem: os mais perto da Recepção (o tour começa lá) */
+/** os tubos onde os NOVATOS nascem: perto da Recepção, mas um pouco AO LADO dela (bem atrás, a ilha dela tampava a
+ *  vista de quem sai do tubo) */
 export const TUBOS_DO_NOVATO: number[] = (() => {
-  const a = Math.atan2(LAR_LOCAL.z, LAR_LOCAL.x);
+  const a = Math.atan2(LAR_LOCAL.z, LAR_LOCAL.x) + 0.24;
   return TUBOS.map((t, i) => ({ i, d: difAng(t.ang, a) })).sort((p, q) => p.d - q.d).slice(0, 12).map((x) => x.i).sort((p, q) => p - q);
 })();
 /** qual tubo é o de quem nasce (pelo id: sempre o mesmo pra mesma pessoa), entre os perto da Recepção */
@@ -72,26 +74,51 @@ export function estadoDoTubo(t: number): { liquido: number; vidro: number } {
   return { liquido: 1 - s(c(t / NASCIMENTO.escoa)), vidro: s(c((t - NASCIMENTO.escoa) / (NASCIMENTO.abre - NASCIMENTO.escoa))) };
 }
 
-export type IdPassoGuia = "nascer" | "lar" | "capela" | "motos" | "buraco" | "fim";
-export type PassoGuia = { id: IdPassoGuia; titulo: string; fala: string; alvo: (P2 & { r: number }) | null };
+/**
+ * O que a pessoa tem que FAZER pro Droid seguir (ele espera até ela fazer — lib/cyber/onboarding `cumpriu`):
+ * nascer (o tubo abriu), andar `m` metros, voar `m` metros acima do chão, chegar perto de um desktop da capela, montar
+ * numa moto, pilotar `m` metros (ou já ter descido depois de rodar um pouco), descer da moto, entrar num buraco negro.
+ */
+export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "voar"; m: number } | { tipo: "desktop" } | { tipo: "montar" } | { tipo: "pilotar"; m: number } | { tipo: "descer" } | { tipo: "tunel" } | { tipo: "fim" };
+export type IdPassoGuia = "nascer" | "andar" | "voar" | "capela" | "moto" | "pilotar" | "descer" | "buraco" | "fim";
+/** um passo do tutorial: as FALAS do Droid (balão + chat, uma depois da outra; a última fica até a pessoa cumprir), o
+ *  que ela tem que fazer e, se for "ir até", o alvo (o Droid vai na frente; o farol marca) */
+export type PassoGuia = { id: IdPassoGuia; titulo: string; falas: string[]; cond: CondGuia; alvo: (P2 & { r: number }) | null };
 
-/** o ROTEIRO da Zaeon (cada `alvo` em mundo: chegou dentro do raio → próximo passo) */
+/** o ROTEIRO do Droid (mundo) */
 export const ROTEIRO: PassoGuia[] = (() => {
-  const pe = peDaRecepcao(), d0 = mundo(computadoresLocais()[0]!), lote = LOTES.find((l) => l.id === "zaeon")!, bn = NOS.zaeon.anel;
+  const d0 = mundo(computadoresLocais()[0]!), lote = LOTES.find((l) => l.id === "zaeon")!, bn = NOS.zaeon.anel;
   return [
-    { id: "nascer", titulo: "Bem-vindo ao hiperespaço", fala: "Oi! Eu sou a Zaeon, a anfitriã daqui. Você acabou de nascer no hiperespaço — calma, o vidro já vai abrir.", alvo: null },
-    { id: "lar", titulo: "A Recepção", fala: "Esta é a minha casa, a Recepção. Sempre que se perder, volte aqui e fale comigo. Vem comigo até a escada.", alvo: { ...pe, r: 6 } },
-    { id: "capela", titulo: "A Capela", fala: "Na capela, os desktops em volta do globo abrem a sua Sala de Estudos. Chegue perto de um e aperte F.", alvo: { ...d0, r: 6 } },
-    { id: "motos", titulo: "As motos voadoras", fala: "As motos são de todo mundo. F monta; W acelera, A e D fazem a curva, Shift dá o boost. Quando alguém leva uma, o robô fabrica outra.", alvo: { x: lote.x, z: lote.z, r: 14 } },
-    { id: "buraco", titulo: "O buraco negro", fala: "Este é o metrô do hiperespaço. Entre no buraco negro e escolha pra onde ir: UNILAB, UFC, Unifor, UECE, a Solana House ou a Praça, onde fica a sua base.", alvo: { x: bn.x, z: bn.z, r: 8 } },
-    { id: "fim", titulo: "Tudo seu", fala: "Pronto! Agora o hiperespaço é seu. Quando quiser rever o caminho, volte à Recepção e fale comigo. Bons estudos ✦", alvo: null },
+    { id: "nascer", titulo: "Nascendo", falas: [], cond: { tipo: "nascer" }, alvo: null },
+    { id: "andar", titulo: "Andar", falas: ["Oi! Eu sou o Droid, o seu guia no hiperespaço ✦", "Use W A S D (ou o joystick) pra andar. Vem, anda um pouco comigo!"], cond: { tipo: "andar", m: 6 }, alvo: null },
+    { id: "voar", titulo: "Voar", falas: ["Isso! Você tem uma mochila a jato.", "Segure ESPAÇO pra subir. Solte pra descer planando."], cond: { tipo: "voar", m: 4 }, alvo: null },
+    { id: "capela", titulo: "A capela", falas: ["Voando bem! 🚀", "Agora vem comigo até a capela, no centro da cidade. Me segue!"], cond: { tipo: "desktop" }, alvo: { ...d0, r: 6 } },
+    { id: "moto", titulo: "As motos", falas: ["É aqui que você estuda: perto de um desktop, F abre a sua Sala de Estudos.", "Agora vamos pegar uma moto! Chegue perto de uma e aperte F."], cond: { tipo: "montar" }, alvo: { x: lote.x, z: lote.z, r: 14 } },
+    { id: "pilotar", titulo: "Pilotar", falas: ["W acelera, A e D fazem a curva e Shift dá o boost.", "Dá uma volta!"], cond: { tipo: "pilotar", m: 60 }, alvo: null },
+    { id: "descer", titulo: "Descer", falas: ["Mandou bem!", "Pra parar: P pousa a moto e F desce dela."], cond: { tipo: "descer" }, alvo: null },
+    { id: "buraco", titulo: "O buraco negro", falas: ["Por último, o buraco negro: é o metrô do hiperespaço.", "Entre nele e escolha um destino — as universidades, a Solana House ou a Praça, onde fica a sua base."], cond: { tipo: "tunel" }, alvo: { x: bn.x, z: bn.z, r: 8 } },
+    { id: "fim", titulo: "Tudo seu", falas: ["Pronto! Agora o hiperespaço é seu ✦", "Se quiser rever, me chame na Recepção. Até mais!"], cond: { tipo: "fim" }, alvo: null },
   ];
 })();
 
-/** chegou no alvo do passo `i`? → o próximo passo; senão o mesmo */
-export function avancarGuia(i: number, p: P2): number {
-  const a = ROTEIRO[i]?.alvo; if (!a) return i;
-  return Math.hypot(p.x - a.x, p.z - a.z) <= a.r ? Math.min(ROTEIRO.length - 1, i + 1) : i;
+/** o que o engine mede desde que o Droid deu a instrução do passo */
+export type CtxGuia = { nascendo: boolean; andou: number; noAr: number; pertoDesktop: boolean; naMoto: boolean; motoAndou: number; tunel: boolean };
+/** a pessoa fez o que o Droid pediu? */
+export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
+  switch (c.tipo) {
+    case "nascer": return !x.nascendo;
+    case "andar": return x.andou >= c.m;
+    case "voar": return x.noAr >= c.m;
+    case "desktop": return x.pertoDesktop;
+    case "montar": return x.naMoto;
+    case "pilotar": return x.motoAndou >= c.m || (!x.naMoto && x.motoAndou >= 10);
+    case "descer": return !x.naMoto;
+    case "tunel": return x.tunel;
+    case "fim": return false;   // o fim acaba sozinho (o Droid se despede e some no portal)
+  }
 }
-/** a agente está no piso da Zaeon (sanidade) */
+/** quanto o Droid espera entre uma fala e outra (s) — e depois da última, antes de começar a conferir */
+export const RITMO_FALA = { entre: 3.4, antesDeConferir: 0.8, fimSome: 4.5 } as const;
+
+/** o Droid/guia está no piso da Zaeon (sanidade) */
 export const naZaeon = (p: P2) => Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= CIDADE.andavelR;

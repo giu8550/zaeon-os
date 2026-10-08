@@ -12,7 +12,6 @@ import { CyberEngine, type EstadoGuia, type PessoaCyber } from "./engine";
 import { NOS, type IdNo } from "@/lib/cyber/buracos";
 import { CHAVE_ONBOARDING, deveNascerNoTubo } from "@/lib/cyber/onboarding";
 import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
-import GuiaOnboarding from "./GuiaOnboarding";
 import { criarVoz, type VozHandle } from "./Voz";
 import { transporteRealtime, vozLigada } from "@/lib/lounge3d/realtime";
 import { ehTeclaFalar } from "@/lib/cyber/voz";
@@ -74,8 +73,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [rota, setRota] = useState<"heliporto" | "zaeon" | null>(null);
   /** o TÚNEL de um buraco negro aberto (escolhendo o destino / atravessando o par do dono) */
   const [tunel, setTunel] = useState<ModoTunel | null>(null);
-  /** o tour da anfitriã (o passo atual) e a conversa com ela (F perto dela) */
-  const [guia, setGuia] = useState<EstadoGuia | null>(null), [conversa, setConversa] = useState<{ nome: string; cor: string } | null>(null);
+  /** o tutorial do Droid (o passo atual) e as falas dele no chat (SÓ locais: o Droid é de cada um, nada vai pela rede) */
+  const [guia, setGuia] = useState<EstadoGuia | null>(null), [falasDroid, setFalasDroid] = useState<MensagemChat[]>([]);
   /** NASCE no tubo de ensaio? Quem nunca entrou no cyberespaço (o servidor diz; sem sala, o localStorage) ou forçado com
    *  ?nascer=1 — decidido 1× */
   const nascer = useMemo(() => {
@@ -168,7 +167,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
       onAviso: avisar,
       nascer, onGuia: (g) => { setGuia(g); if (!g) { try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },
-      onFalarAgente: (a) => { engine.current?.soltarMouse(); setConversa({ nome: a.nome, cor: a.cor }); },
+      onFalaAgente: (f) => setFalasDroid((xs) => [...xs.slice(-20), { id: `agente-${Date.now()}-${xs.length}`, userId: `agente:${f.id}`, name: f.nome, color: f.cor, texto: f.texto, ts: Date.now() }]),
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
       onEstadoQG: setQg, onAcao: setAcao,
       onVoo: setVoo,
@@ -292,7 +291,7 @@ export default function CenaCyber(p: CenaCyberProps) {
             <div className="absolute z-20 w-[min(68vw,300px)] rounded-2xl border border-violet-300/25 bg-[#0a081e]/70 p-2.5 backdrop-blur" style={touch ? { left: 10, top: 64 } : { left: 16, bottom: 16 }}>
               <div className="h-4 px-1 text-[10.5px] text-cyan-200">{falandoCom ? `💬 falando com ${falandoCom}` : ""}</div>
               <div className="mb-1.5 flex max-h-[96px] flex-col gap-0.5 overflow-y-auto px-1 text-[12.5px] text-violet-100" aria-live="polite">
-                {(p.chat ?? []).slice(-8).map((m) => <div key={m.id}><b style={{ color: m.color }}>{m.name}:</b> {m.texto}</div>)}
+                {[...(p.chat ?? []), ...falasDroid].sort((a, b) => a.ts - b.ts).slice(-8).map((m) => <div key={m.id}><b style={{ color: m.color }}>{m.name}{m.userId.startsWith("agente:") ? " ✦" : ""}:</b> {m.texto}</div>)}
               </div>
               <input ref={chatRef} value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") enviar(); }} maxLength={400} placeholder="Falar…  (Enter)" aria-label="Falar na sala" className="w-full rounded-xl border border-violet-300/30 bg-[#0a081e]/70 px-3 py-2 text-[13px] text-white outline-none focus:border-cyan-300" />
             </div>
@@ -359,14 +358,13 @@ export default function CenaCyber(p: CenaCyberProps) {
           )}
         </div>
       )}
-      {/* o TOUR da anfitriã (quem acabou de nascer) — ou a conversa com ela (F perto dela) */}
-      {!menu && guia && (
-        <GuiaOnboarding touch={touch} cartao={{ agente: guia.agente, cor: guia.cor, titulo: guia.titulo, fala: guia.fala, passo: guia.passo, total: guia.total }}
-          acoes={guia.id === "nascer" ? [] : guia.id === "fim" ? [{ rotulo: "Concluir", principal: true, fazer: () => engine.current?.guiaPular() }] : [{ rotulo: "Pular tour", fazer: () => engine.current?.guiaPular() }, { rotulo: "Próximo", principal: true, fazer: () => engine.current?.guiaProximo() }]} />
-      )}
-      {!menu && !guia && conversa && (
-        <GuiaOnboarding touch={touch} cartao={{ agente: conversa.nome, cor: conversa.cor, titulo: "Oi! 👋", fala: "Quer que eu te mostre o hiperespaço de novo? Ou explore à vontade: o buraco negro da cidade leva pra todos os lugares — as universidades, a Solana House e a praça das bases." }}
-          acoes={[{ rotulo: "Fechar", fazer: () => setConversa(null) }, { rotulo: "Refazer o tour", principal: true, fazer: () => { setConversa(null); engine.current?.guiaRefazer(); } }]} />
+      {/* o TUTORIAL do Droid: ele fala nos balões (e no chat); aqui só o passo e o "Pular" */}
+      {!menu && guia && guia.id !== "nascer" && (
+        <div className="absolute left-1/2 top-3 z-[26] flex -translate-x-1/2 items-center gap-2 rounded-full border bg-[#0d0a1c]/80 py-1 pl-3 pr-1 text-[11.5px] text-amber-50/85 backdrop-blur" style={{ borderColor: `${guia.cor}66` }}>
+          <span style={{ color: guia.cor }} className="font-bold">✦ {guia.agente}</span>
+          <span className="tabular-nums text-amber-50/60">{guia.passo}/{guia.total - 1} · {guia.titulo}</span>
+          <button type="button" onClick={() => engine.current?.guiaPular()} className="min-h-[28px] rounded-full border border-white/15 px-3 text-amber-50/75 hover:text-white">Pular</button>
+        </div>
       )}
       {tunel && (
         <TunelBuracoNegro modo={tunel} onCoberto={(c) => engine.current?.pausar(c)}

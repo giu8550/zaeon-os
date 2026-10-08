@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, avancarGuia, deveNascerNoTubo, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
+import { ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, cumpriu, deveNascerNoTubo, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
 import { CIDADE as C2, DOCA_ANGULO, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "./ceu";
 import { LAR_LOCAL } from "./landmarks";
-import { AGENTES, ZAEON_ANFITRIA, noPisoDaZaeon, posDoGuia } from "./agentes";
+import { AGENTES, DROID, noPisoDaZaeon, posDoGuia } from "./agentes";
 import { CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal } from "./ceu";
 import { POIS, marcoNav } from "./landmarks";
 import { alturaEm } from "./nav";
@@ -39,7 +39,7 @@ describe("quem chega NASCE num tubo de ensaio", () => {
     expect(TUBOS_DO_NOVATO.length).toBeGreaterThanOrEqual(8);
     const lar = mundo(LAR_LOCAL);
     for (const i of TUBOS_DO_NOVATO) {
-      const t = TUBOS[i]!; expect(Math.hypot(t.x - lar.x, t.z - lar.z)).toBeLessThan(80);
+      const t = TUBOS[i]!; expect(Math.hypot(t.x - lar.x, t.z - lar.z)).toBeLessThan(100);
       expect(Math.hypot(t.x - recepcao.x, t.z - recepcao.z)).toBeGreaterThan(recepcao.nav.chaoR + TUBO.r + 2); expect(alturaEm(recepcao, t)).toBe(0);
     }
   });
@@ -54,31 +54,40 @@ describe("quem chega NASCE num tubo de ensaio", () => {
   });
 });
 
-describe("o TOUR da anfitriã", () => {
-  it("começa no tubo e acaba no 'tudo seu'; cada alvo fica num chão firme da Zaeon", () => {
-    expect(ROTEIRO[0]!.id).toBe("nascer"); expect(ROTEIRO.at(-1)!.id).toBe("fim");
-    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "lar", "capela", "motos", "buraco", "fim"]);
-    for (const p of ROTEIRO) { expect(p.fala.length).toBeGreaterThan(20); if (p.alvo) expect(naIlhaPrincipal(p.alvo)).toBe(true); }
+describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada instrução)", () => {
+  const nada: CtxGuia = { nascendo: false, andou: 0, noAr: 0, pertoDesktop: false, naMoto: false, motoAndou: 0, tunel: false };
+  it("começa no tubo e acaba no 'tudo seu'; cada passo tem fala curta (cabe no balão) e uma AÇÃO; os alvos ficam na Zaeon", () => {
+    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "voar", "capela", "moto", "pilotar", "descer", "buraco", "fim"]);
+    for (const p of ROTEIRO.slice(1)) { expect(p.falas.length).toBeGreaterThan(0); for (const f of p.falas) expect(f.length).toBeLessThanOrEqual(160); }
+    for (const p of ROTEIRO) if (p.alvo) expect(naIlhaPrincipal(p.alvo)).toBe(true);
     const pe = peDaRecepcao(); expect(alturaEm(recepcao, pe)).toBe(0); expect(dentroDeAlgum(pe, colisoresDaCidade())).toBe(false);
   });
-  it("chegar no alvo avança; longe não; andando de alvo em alvo vai até o fim", () => {
-    expect(avancarGuia(0, mundo({ x: 0, z: 0 }))).toBe(0);   // nascendo: só o tubo avança
-    expect(avancarGuia(1, mundo({ x: -200, z: 0 }))).toBe(1);
-    let i = 1;
-    for (let k = 0; k < 10 && ROTEIRO[i]!.alvo; k++) i = avancarGuia(i, ROTEIRO[i]!.alvo!);
-    expect(ROTEIRO[i]!.id).toBe("fim");
-    expect(avancarGuia(ROTEIRO.length - 1, ROTEIRO[1]!.alvo!)).toBe(ROTEIRO.length - 1);
+  it("sem a pessoa fazer nada, nenhum passo anda (o Droid espera)", () => {
+    for (const p of ROTEIRO.slice(1)) expect(cumpriu(p.cond, { ...nada, naMoto: p.cond.tipo === "descer" })).toBe(false);
+  });
+  it("cada instrução se cumpre com a ação certa — e só com ela", () => {
+    const c = (id: string) => ROTEIRO.find((p) => p.id === id)!.cond;
+    expect(cumpriu(c("nascer"), { ...nada, nascendo: true })).toBe(false); expect(cumpriu(c("nascer"), nada)).toBe(true);
+    expect(cumpriu(c("andar"), { ...nada, andou: 2 })).toBe(false); expect(cumpriu(c("andar"), { ...nada, andou: 7 })).toBe(true);
+    expect(cumpriu(c("voar"), { ...nada, andou: 99, noAr: 1 })).toBe(false); expect(cumpriu(c("voar"), { ...nada, noAr: 5 })).toBe(true);
+    expect(cumpriu(c("capela"), { ...nada, andou: 99 })).toBe(false); expect(cumpriu(c("capela"), { ...nada, pertoDesktop: true })).toBe(true);
+    expect(cumpriu(c("moto"), { ...nada, pertoDesktop: true })).toBe(false); expect(cumpriu(c("moto"), { ...nada, naMoto: true })).toBe(true);
+    expect(cumpriu(c("pilotar"), { ...nada, naMoto: true, motoAndou: 20 })).toBe(false); expect(cumpriu(c("pilotar"), { ...nada, naMoto: true, motoAndou: 61 })).toBe(true);
+    expect(cumpriu(c("pilotar"), { ...nada, naMoto: false, motoAndou: 12 })).toBe(true);   // desceu depois de rodar um pouco: segue
+    expect(cumpriu(c("descer"), { ...nada, naMoto: true })).toBe(false); expect(cumpriu(c("descer"), nada)).toBe(true);
+    expect(cumpriu(c("buraco"), { ...nada, andou: 999 })).toBe(false); expect(cumpriu(c("buraco"), { ...nada, tunel: true })).toBe(true);
+    expect(cumpriu(c("fim"), { ...nada, tunel: true, andou: 99 })).toBe(false);   // o fim acaba sozinho (despedida + portal)
   });
 });
 
 describe("os AGENTES que moram no hiperespaço", () => {
-  it("a Zaeon (anfitriã): o cérebro é a persona 'zaeon'; mora na Recepção, no piso da Zaeon; tem personalidade, tarefas e funções", () => {
-    expect(AGENTES).toContain(ZAEON_ANFITRIA);
-    expect(PERSONAS[ZAEON_ANFITRIA.persona]?.name).toBe("Zaeon");
-    expect(POIS.some((p) => p.id === ZAEON_ANFITRIA.lar.poi)).toBe(true);
-    expect(noPisoDaZaeon(ZAEON_ANFITRIA.lar)).toBe(true);
-    expect(ZAEON_ANFITRIA.personalidade.length).toBeGreaterThan(40);
-    expect(ZAEON_ANFITRIA.tarefas.length).toBeGreaterThanOrEqual(3); expect(ZAEON_ANFITRIA.funcoes).toContain("guiar");
+  it("o DROID (o agente de onboarding): cérebro = a persona da anfitriã; mora na Recepção, no piso da Zaeon; tem personalidade, tarefas e funções", () => {
+    expect(AGENTES).toContain(DROID);
+    expect(DROID.nome).toBe("Droid"); expect(PERSONAS[DROID.persona]).toBeDefined();
+    expect(POIS.some((p) => p.id === DROID.lar.poi)).toBe(true);
+    expect(noPisoDaZaeon(DROID.lar)).toBe(true);
+    expect(DROID.personalidade.length).toBeGreaterThan(40);
+    expect(DROID.tarefas.length).toBeGreaterThanOrEqual(3); expect(DROID.funcoes).toContain("guiar");
     expect(new Set(AGENTES.map((a) => a.id)).size).toBe(AGENTES.length);
     expect(CIDADE.pisoY).toBeGreaterThan(0);
   });
