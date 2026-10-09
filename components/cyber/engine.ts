@@ -63,6 +63,7 @@ import { fundirEstaticos } from "./lotes";
 import { esferaRapida, matrizDoAvatar, matrizesDaCena, matrizSeMudou } from "./matrizes";
 import { umaPassadaNosTransparentes } from "./umaPassada";
 import { criarPoolGemeos, type PoolGemeos } from "./poolGemeos";
+import { criarOclusaoDePisos } from "./oclusaoPisos";
 import type { Regiao } from "@/lib/cyber/regioes";
 import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -566,6 +567,8 @@ export class CyberEngine {
   private luzesBase: THREE.PointLight[] = [];
   /** as bases desenhadas juntas (components/cyber/poolGemeos) */
   private poolBases: PoolGemeos | null = null;
+  /** os pisos que escondem (components/cyber/oclusaoPisos) */
+  private oclusao: ReturnType<typeof criarOclusaoDePisos> | null = null;
   private criarLuzesBase() { if (!this.o.low && !this.luzesBase.length) for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0x9fd8ff, 0, 11); this.cena.scene.add(l); this.luzesBase.push(l); } }
   /** SOBE pra GPU tudo que está no galho (geometria, texturas; e calcula as esferas das geometrias): um desenho de 1
    *  pixel com o recorte desligado. Senão isso cai no 1º quadro em que o objeto aparece (a travada ao chegar num lugar) */
@@ -2544,6 +2547,10 @@ export class CyberEngine {
     this.atualizarCamera(dt);
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
     this.atualizarHud(now);
+    // PISOS QUE ESCONDEM (as células/portais do céu aberto): o que está em cima de uma plataforma some pra quem está
+    // embaixo dela (components/cyber/oclusaoPisos) — antes das matrizes (o invisível nem recalcula)
+    if (this.cidade && !this.oclusao) { this.oclusao = criarOclusaoDePisos(); for (const p of this.cidade.plataformas) this.oclusao.adicionar(p); }
+    this.oclusao?.atualizar(this.cam.position);
     matrizesDaCena(this.cena.scene);   // o que está invisível no topo da cena não recalcula matrizes (components/cyber/matrizes)
     // transparentes de dupla face numa passada só (components/cyber/umaPassada) — de tempos em tempos pega os materiais novos
     if (now - this.passadaEm > 2000) { this.passadaEm = now; umaPassadaNosTransparentes(this.cena.scene); }

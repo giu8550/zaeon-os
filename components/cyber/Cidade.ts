@@ -17,6 +17,7 @@
  * `prefers-reduced-motion` deixa fogo/vórtices quase parados. dispose() completo.
  */
 import * as THREE from "three";
+import type { PisoOclusor } from "./oclusaoPisos";
 import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
@@ -44,6 +45,8 @@ export type CidadeHandle = {
   dispose(): void;
   /** a tela da TV do lounge (clicável: o dono escreve o recado pro mural da Recepção) */
   tvLounge: THREE.Mesh | null;
+  /** o conteúdo de cada sala por cima do piso (a câmera abaixo da plataforma não enxerga — components/cyber/oclusaoPisos) */
+  plataformas: PisoOclusor[];
   /** o som do lounge: as caixas (de onde a música sai), o toca-discos (onde se abre o player) e o "está tocando" */
   caixasLounge: THREE.Object3D[]; tocaDiscos: THREE.Object3D | null; somTocando(on: boolean, nivel?: number): void;
   /** as caixas de som discretas dos espaços de convivência (a música ambiente de cada sala sai delas) */
@@ -309,7 +312,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {
-    group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     atualizar(dt, t) {
       // a ilha BOIA (25 cm, ciclo de ~21 s): só move quando andou 2 mm — mexer nela força recalcular as matrizes dos
       // ~1.300 nós da cidade; a cada quadro andaria menos de meio milímetro (components/cyber/matrizes)

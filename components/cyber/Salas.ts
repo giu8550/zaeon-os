@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { BN_NA_SALA, CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
 import { BOCA_DJ } from "@/lib/cyber/buracos";
 import { linhasDoRecado } from "@/lib/cyber/recado";
+import type { PisoOclusor } from "./oclusaoPisos";
 
 /** o tema de cada sala (sem placa com nome: os espaços falam por si) — todas a céu aberto, com guarda-corpo */
 const TEMA: Record<NomeSala, { piso: number; brilho: number; cor: string; alt: number; aberto: boolean }> = {
@@ -38,6 +39,8 @@ export type SalasHandle = {
   /** tem música tocando? + a energia dos graves agora (0..1): as luzes, as caixas e a pista pulsam com ela */
   somTocando(on: boolean, nivel?: number): void;
   atualizar(dt: number, t: number): void;
+  /** o conteúdo de cada sala por cima do piso (components/cyber/oclusaoPisos) */
+  plataformas: PisoOclusor[];
 };
 
 /** o FEIXE de luz (volumétrico fake): cone aberto com o ápice na origem, abrindo pra +y; some na ponta e nas bordas */
@@ -54,6 +57,7 @@ function materialFeixe(): THREE.ShaderMaterial {
 
 export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   const alvos: THREE.Object3D[] = [], anim: ((dt: number, t: number) => void)[] = [], calmo = reducedMotion();
+  const plataformas: PisoOclusor[] = [];
   const tela = (w: number, h: number, pintar: (g: CanvasRenderingContext2D, w: number, h: number) => void, rep = false) => {
     const c = document.createElement("canvas"); c.width = w; c.height = h; pintar(c.getContext("2d")!, w, h);
     const t = new THREE.CanvasTexture(c); if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; o.texturas.push(t); return t;
@@ -571,8 +575,15 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     // móveis (`y` = elevação própria, ex.: a mesa do DJ em cima do palco; senão, no piso da sala)
     salaAtual = nome;
     for (const m of MOVEIS[nome]) { const p = new THREE.Group(); p.position.set(m.x, m.y ?? 0.16, m.z); p.rotation.y = m.rot; g.add(p); MOVEL[m.tipo]?.(p, m, tema); }
+    // tudo que está EM CIMA do piso num grupo próprio: quem está abaixo da plataforma não enxerga (components/cyber/oclusaoPisos)
+    // — e os lotes ficam dentro dele (`limite`), senão se misturariam com o resto da cidade
+    const acima = new THREE.Group(); acima.name = `sala-${nome}-acima`; acima.userData.lote = "limite";
+    for (const c of [...g.children]) if (c !== piso) acima.add(c);
+    g.add(acima); g.userData.lote = "limite";
+    plataformas.push({ acima, r: s.r + 0.2, topo: 0.16 });
   }
   return {
+    plataformas,
     alvos, tv: tvTela, caixas: caixasSom, tocaDiscos, ambiente,
     somTocando(on, nivel = 0) { tocando = on; nivelAlvo = on ? Math.max(0, Math.min(1, nivel)) : 0; },
     mostrarRecado(texto) {
