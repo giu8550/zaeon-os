@@ -2,14 +2,17 @@
  * Frota de IAs — o PLANO DO DIA da frota inteira (PURO, determinístico): a agenda de cada grupo (lib/cyber/frota/agenda)
  * + o LUGAR de cada bloco de estudo/festa, sem duas IAs no mesmo assento ao mesmo tempo. Os amigos sentam PERTO quando
  * estão no mesmo ambiente na mesma hora (é aí que conversam). No sofá, às vezes uma deita (ocupa o sofá todo).
+ * Cada bloco num lugar com ESTACIONAMENTO ganha uma VAGA (a fila da frente enche primeiro; no máximo 33 por lugar) —
+ * lotou, chega sem moto parada (lib/cyber/estacionamentosEstudo).
  * Custo: uma vez por dia por cliente (~ms) — o mesmo resultado em todo cliente (mesma frota, mesmo dia, mesmas flags).
  */
 import { acasoDe, hash } from "./aleatorio";
 import { AMBIENTES_ESTUDO, agendaDoGrupo, type Bloco, type FlagsFrota } from "./agenda";
 import type { AgenteIA } from "./frota";
 import { spotsDe, type Spot } from "./lugares";
+import { VAGAS_POR_ESTACIONAMENTO, temVaga, vagaEstudo, type VagaEstudo } from "../estacionamentosEstudo";
 
-export type BlocoPlano = Bloco & { spot?: Spot; deitado?: boolean };
+export type BlocoPlano = Bloco & { spot?: Spot; deitado?: boolean; /** a VAGA no estacionamento do lugar (chegou de moto e a moto fica lá) — lib/cyber/estacionamentosEstudo */ vaga?: VagaEstudo };
 export type PlanoDia = { dia: number; agentes: Map<string, { agente: AgenteIA; blocos: BlocoPlano[] }> };
 
 /** chance de, num sofá livre inteiro, a IA DEITAR pra estudar */
@@ -60,6 +63,12 @@ export function planejarDia(frota: readonly AgenteIA[], dia: number, flags: Flag
       if (par && livre(par, b.ini)) { ocupadoAte.set(par.id, b.fim); b.deitado = true; }
     }
     ondeEsta.set(a.id, { spot: escolhido, fim: b.fim, ambiente: amb });
+    // a VAGA da moto no estacionamento do lugar (ocupada até pouco depois do fim: a saída é no começo do próximo bloco)
+    const lugar = b.atividade === "festa" ? "lounge" : b.ambiente;
+    if (temVaga(lugar)) for (let k = 0; k < VAGAS_POR_ESTACIONAMENTO; k++) {
+      const id = `vaga:${lugar}:${k}`;
+      if ((ocupadoAte.get(id) ?? -1) <= b.ini) { b.vaga = vagaEstudo(lugar, k); ocupadoAte.set(id, b.fim + 3); break; }
+    }
   }
   return { dia, agentes };
 }

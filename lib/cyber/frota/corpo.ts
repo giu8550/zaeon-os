@@ -3,6 +3,9 @@
  * que o corpo faz. Cada bloco = VIAGEM até o lugar (no começo do bloco) + a ATIVIDADE lá:
  *  - viagem DENTRO da Zaeon (central e salas): de MOCHILA A JATO (um arco por cima das coisas — sem lotar os fios dos
  *    jogadores); sem mochila (flag), a pé na central e de moto pras salas;
+ *  - entre os LUGARES DE ESTUDO (salas da Zaeon e universidades): de MOTO, de vaga em vaga — cada lugar tem um
+ *    ESTACIONAMENTO (lib/cyber/estacionamentosEstudo): chega de moto, a moto FICA na vaga (`vagaMoto`) e ela vai de
+ *    mochila até o lugar; na saída, volta de mochila pra vaga e sai de moto (lotou: como antes);
  *  - viagem pra FORA (universidades, praça, Solana): de MOTO, voando alto. Saindo da Zaeon, a IA vai de mochila até a
  *    GARAGEM e PEGA a moto lá (`pontoDaGaragem`: cada uma na sua vaga de decolagem); voltando, POUSA na garagem e segue
  *    de mochila — ninguém mais sobe de moto de dentro de uma sala. Fora da Zaeon (de um lugar visitado pra outro) a
@@ -14,21 +17,23 @@
  *  - MOTO (o passeio): VOANDO quase o tempo todo — uma cadeia de pontos no céu (em volta da Zaeon, circulando os campi
  *    flutuantes, entre eles), pousando às vezes num campus por 1–2 min (`roteiroMoto`); na CORRIDA, o grupo dá voltas
  *    juntos num circuito e depois para junto num lugar;
- *  - ANDAR: passeia pela Zaeon ANDANDO de ponto em ponto vizinho (A* pra quem está à vista), com paradas curtas
- *    (10–35 s) pra olhar (`roteiroAndar`);
+ *  - ANDAR: a TURMA vai a pé aos PONTOS DE INTERESSE da Zaeon — os telões dos mirantes (problemas → soluções) e o
+ *    salão da capela — e FICA lá (3–8 min em cada), cada um no seu lugar perto dos amigos, virado pro que está vendo
+ *    (`roteiroAndar`; ninguém vagando de um lado pro outro — pedido do dono, out/2026);
  *  - FESTA: dança na pista do lounge (só se estiver rolando som — senão já foi embora).
  * Fora dos blocos: offline (não aparece). Coordenadas do MUNDO; `zaeon` = está na ilha/salas (o engine soma a boia).
  */
-import { ALTURA_LOUNGE, CIDADE, daSala, mundo } from "../ceu";
+import { ALTURA_LOUNGE, CIDADE, colisoresDaCidade, daSala, mundo } from "../ceu";
 import { comprimento, pontoNaRota, rotaAPe } from "../caminhos";
 import { NOS } from "../buracos";
 import { PLATAFORMAS } from "../plataformas";
 import { PRACA } from "../praca";
-import { MIRANTES } from "../terra";
+import { ESTACAO, MEIO_TELOES, MIRANTES, noMirante } from "../terra";
 import { acasoDe, entre, inteiro, embaralhar } from "./aleatorio";
 import type { FlagsFrota } from "./agenda";
 import type { BlocoPlano } from "./plano";
 import { spotsDe, type Spot } from "./lugares";
+import type { VagaEstudo } from "../estacionamentosEstudo";
 
 type P3 = { x: number; y: number; z: number };
 export type PoseIA = "andando" | "parado" | "mochila" | "moto" | "sentado" | "deitado" | "relaxa" | "chao" | "danca";
@@ -39,10 +44,12 @@ export type EstadoIA = {
   sentar: number; tablet: number; assentoY: number;
   /** a moto (quando está nela) */
   moto: { vel: number; curva: number } | null;
+  /** a MOTO DELA parada num estacionamento agora (chegou e está no lugar, ou ainda indo buscar) — o render desenha */
+  vagaMoto: VagaEstudo | null;
   /** índice do bloco e o tipo de atividade (pra conversa e debug) */
   bloco: number; atividade: BlocoPlano["atividade"] | null; ambiente: string | null; evento: string | null;
 };
-export const OFFLINE: EstadoIA = { visivel: false, x: 0, y: 0, z: 0, rumo: 0, zaeon: false, pose: "parado", sentar: 0, tablet: 0, assentoY: 0.7, moto: null, bloco: -1, atividade: null, ambiente: null, evento: null };
+export const OFFLINE: EstadoIA = { visivel: false, x: 0, y: 0, z: 0, rumo: 0, zaeon: false, pose: "parado", sentar: 0, tablet: 0, assentoY: 0.7, moto: null, vagaMoto: null, bloco: -1, atividade: null, ambiente: null, evento: null };
 
 /** as velocidades (m/s) e os tempos (s) */
 export const MOV = { pe: 1.5, mochila: 13, moto: 42, decola: 3.5, pousa: 3.5, sobeMoto: 5, cruzeiroAcima: 28, senta: 0.8, tabletIn: 0.9, corridaVolta: 110, corridaMax: 8 * 60, rodaZaeonMax: 120 } as const;
@@ -52,20 +59,23 @@ const local = (p: { x: number; z: number }) => ({ x: p.x - CIDADE.centro.x, z: p
 const naZaeon = (p: { x: number; z: number }) => Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) < 520;
 const s3 = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
 
-/** os pontos de VISITA de moto pelo mapa (fora da Zaeon) e os de PASSEIO a pé na Zaeon (central) */
-type Ponto = P3 & { id: string; estudo: boolean };
+/** os pontos de VISITA de moto pelo mapa (fora da Zaeon) */
+type Ponto = P3 & { id: string; estudo: boolean; /** (passeio a pé) pra onde olha parado aqui e quanto fica (s) */ olha?: number; fica?: number };
 const VISITAS: Ponto[] = [
   ...(["univ", "ufc", "unifor", "uece", "solana"] as const).map((id) => { const P = PLATAFORMAS[id]; return { id, x: P.chegada.x, y: P.y, z: P.chegada.z, estudo: id !== "solana" }; }),
   { id: "praca", x: PRACA.x + 18, y: PRACA.y, z: PRACA.z + 12, estudo: false },
 ];
-const PASSEIO_ZAEON: Ponto[] = [
-  ...MIRANTES.map((m, i) => { const w = mundo({ x: m.x * 0.82, z: m.z * 0.82 }); return { id: `mirante-${i}`, x: w.x, y: PISO, z: w.z, estudo: false }; }),
-  ...[0, 1, 2, 3, 4, 5].map((k) => { const a = (k / 6) * Math.PI * 2 + 0.4, w = mundo({ x: Math.cos(a) * 95, z: Math.sin(a) * 95 }); return { id: `praca-zaeon-${k}`, x: w.x, y: PISO, z: w.z, estudo: false }; }),
-];
-/** pontos do passeio A PÉ: os de cima + anéis no piso da central (entre a capela e a borda) — vizinhos a 40–110 m */
-const ANDAR_ZAEON: Ponto[] = [
-  ...PASSEIO_ZAEON,
-  ...[140, 185].flatMap((r, j) => Array.from({ length: 8 + j * 2 }, (_, k) => { const a = (k / (8 + j * 2)) * Math.PI * 2 + j * 0.3, w = mundo({ x: Math.cos(a) * r, z: Math.sin(a) * r }); return { id: `anel-${r}-${k}`, x: w.x, y: PISO, z: w.z, estudo: false }; })),
+/** os PONTOS DE INTERESSE do passeio a pé na Zaeon central (local da ilha): a plateia na frente de cada telão dos
+ *  mirantes (PROBLEMAS e SOLUÇÕES — fora do palco, dos cards e do globo) e o SALÃO da capela (em volta do globo).
+ *  `lugar(u, v)` (u, v em 0..1) dá um ponto da área e `alvo` é pra onde se olha */
+type Interesse = { id: string; lugar(u: number, v: number): { x: number; z: number }; alvo: { x: number; z: number } };
+const INTERESSES: Interesse[] = [
+  ...MIRANTES.flatMap((m) => ([["problemas", -MEIO_TELOES], ["solucoes", MEIO_TELOES]] as const).map(([nome, dv]): Interesse => ({
+    id: `telao-${nome}-${m.id}`,
+    lugar: (u, v) => noMirante(m, ESTACAO.u + 12 + u * 16, ESTACAO.v + dv + (v - 0.5) * 22),   // 12–28 m na frente, na largura do telão
+    alvo: noMirante(m, ESTACAO.u, ESTACAO.v + dv),
+  }))),
+  { id: "salao", lugar: (u, v) => { const a = v * Math.PI * 2, r = CIDADE.mesaHolo.r + 6 + u * (CIDADE.cidadela.r - CIDADE.mesaHolo.r - 14); return { x: Math.cos(a) * r, z: Math.sin(a) * r }; }, alvo: { x: 0, z: 0 } },
 ];
 /** pontos do CÉU pro passeio de moto (passa voando, sem pousar): o anel em volta da Zaeon, a volta de cada campus, e
  *  pontos soltos entre eles; `fora` = fora da Zaeon (o passeio começa e termina num desses) */
@@ -170,19 +180,26 @@ function trechosDoCeu(rot: Parada[], de: P3, deChao: boolean, agente: string, i:
   }
   return out;
 }
-/** o PASSEIO A PÉ pela Zaeon: de ponto em ponto VIZINHO (40–110 m), parando 10–35 s em cada; enche ~90 % do bloco */
+/** o PASSEIO A PÉ: a TURMA (os amigos, `b.turma`) sorteia a mesma sequência de PONTOS DE INTERESSE — os dois telões de um
+ *  mirante (problemas → soluções, a ordem de leitura) e/ou o salão da capela — e cada um fica no SEU lugar perto do
+ *  ponto de encontro da turma (2–5 m), virado pro telão/globo, 3–8 min em cada. Quem passeia no mesmo pedaço da tarde
+ *  que um amigo acaba no mesmo lugar que ele */
 export function roteiroAndar(b: BlocoPlano, a: string, iBloco: number): Ponto[] {
   return lembrar(`andar|${a}|${iBloco}|${b.ini}`, () => {
-    const r = acasoDe("andar", a, iBloco), alvo = (b.fim - b.ini) * 60 * 0.9;
-    let atual = ANDAR_ZAEON[Math.floor(r() * ANDAR_ZAEON.length)]!, tempo = 60;
-    const lista: Ponto[] = [atual];
-    while (tempo < alvo && lista.length < 120) {
-      const viz = ANDAR_ZAEON.filter((q) => q !== atual && Math.hypot(q.x - atual.x, q.z - atual.z) > 40 && Math.hypot(q.x - atual.x, q.z - atual.z) < 110);
-      const prox = viz.length ? viz[Math.floor(r() * viz.length)]! : ANDAR_ZAEON[Math.floor(r() * ANDAR_ZAEON.length)]!;
-      tempo += (Math.hypot(prox.x - atual.x, prox.z - atual.z) * 1.35) / MOV.pe + 22;
-      lista.push(prox); atual = prox;
-    }
-    return lista;
+    const turma = b.turma ?? a, rt = acasoDe("interesse", turma, Math.floor(b.ini / 40));   // (a turma, nesse pedaço do dia)
+    const m = Math.floor(rt() * MIRANTES.length), tel = (n: string) => INTERESSES.find((q) => q.id === `telao-${n}-${m}`)!, salao = INTERESSES.at(-1)!;
+    const seq = rt() < 0.4 ? [salao, tel("problemas"), tel("solucoes")] : rt() < 0.6 ? [tel("problemas"), tel("solucoes"), salao] : [tel("problemas"), tel("solucoes")];
+    const ra = acasoDe("lugar-interesse", a, iBloco);
+    const solidos = colisoresDaCidade(), livre = (w: { x: number; z: number }) => solidos.every((c) => Math.hypot(w.x - c.x, w.z - c.z) > c.r + 0.5);
+    return seq.map((q, k) => {
+      const enc = q.lugar(rt(), rt());
+      let l = enc, w = mundo(l);
+      for (let t = 0; t < 12; t++) {   // o lugar de cada um em volta do encontro (2–5 m), fora de tudo que é sólido
+        const ang = ra() * Math.PI * 2, d = entre(ra, 2, 5 + t * 0.5); l = { x: enc.x + Math.cos(ang) * d, z: enc.z + Math.sin(ang) * d }; w = mundo(l);
+        if (livre(w)) break;
+      }
+      return { id: `${q.id}#${k}`, x: w.x, y: PISO, z: w.z, estudo: false, olha: Math.atan2(q.alvo.x - l.x, q.alvo.z - l.z), fica: entre(rt, 180, 480) };
+    });
   });
 }
 /** o CIRCUITO da corrida: um anel em volta da Zaeon por fora (raio 330 m, 40 m acima do piso), com uma ondulação */
@@ -194,7 +211,10 @@ export function noCircuito(evento: string, s: number): P3 & { rumo: number } {
 
 // ── as VIAGENS ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export type ModoViagem = "mochila" | "moto" | "pe";
-type Viagem = { modo: ModoViagem; dur: number; em(u: number): P3 & { rumo: number; modo?: ModoViagem }; rota?: { x: number; z: number }[] };
+type Viagem = { modo: ModoViagem; dur: number; em(u: number): P3 & { rumo: number; modo?: ModoViagem }; rota?: { x: number; z: number }[];
+  /** (com estacionamento, em s da viagem) até quando a moto ainda está PARADA na vaga de onde sai; desde quando já está
+   *  parada na vaga de chegada */
+  saida?: number; chegada?: number };
 const rotasPe = new Map<string, { x: number; z: number }[]>();
 /** um trecho de MOCHILA: o arco — sobe, voa reto, desce */
 function deMochila(de: P3, para: P3): Viagem {
@@ -244,19 +264,44 @@ export function viagem(de: P3, para: P3, flags: FlagsFrota, chave: string, preci
   return deMoto(de, para);
 }
 
+/** a viagem com ESTACIONAMENTO: sai da vaga do lugar anterior (vai de mochila até ela) e/ou chega na vaga do destino
+ *  (de lá, de mochila até o lugar). Sem moto parada dos dois lados: a viagem de sempre. Sem vaga de um lado: na Zaeon
+ *  central a moto é pega/largada na GARAGEM; fora, ela se materializa/desfaz (components/cyber/FrotaIA) */
+export function viagemComVaga(de: P3, vagaDe: VagaEstudo | null, para: P3, vagaPara: VagaEstudo | null, flags: FlagsFrota, chave: string, preciso = true): Viagem {
+  if (!vagaDe && !vagaPara) return viagem(de, para, flags, chave, preciso);
+  if (vagaDe && vagaPara && vagaDe.ambiente === vagaPara.ambiente) return viagem(de, para, flags, chave, preciso);   // (o mesmo lugar)
+  const pernas: Viagem[] = [];
+  let m0: P3, saida: number | undefined;
+  if (vagaDe) { const a = deMochila(de, vagaDe); pernas.push(a); m0 = vagaDe; saida = a.dur; }
+  else if (naZaeon(de)) { const g = pontoDaGaragem(chave); pernas.push(deMochila(de, g)); m0 = g; }
+  else m0 = de;
+  let m1: P3, cauda: Viagem | null = null;
+  if (vagaPara) { m1 = vagaPara; cauda = deMochila(vagaPara, para); }
+  else if (naZaeon(para)) { const g = pontoDaGaragem(chave); m1 = g; cauda = deMochila(g, para); }
+  else m1 = para;
+  pernas.push(deMoto(m0, m1)); if (cauda) pernas.push(cauda);
+  const v = pernas.reduce(emSeguida);
+  return { ...v, saida, chegada: vagaPara && cauda ? v.dur - cauda.dur : undefined };
+}
+/** a vaga onde a moto ficou no bloco ANTERIOR (se ele encosta neste) */
+const vagaAnterior = (blocos: readonly BlocoPlano[], i: number) => (i > 0 && blocos[i - 1]!.fim >= blocos[i]!.ini - 1 ? blocos[i - 1]!.vaga ?? null : null);
+/** qual moto parada é dela no instante `u` (s) de uma viagem `v` com estacionamento */
+const motoParadaNa = (v: Viagem, u: number, vagaDe: VagaEstudo | null, vagaPara: VagaEstudo | null): VagaEstudo | null =>
+  vagaDe && v.saida !== undefined && u < v.saida ? vagaDe : vagaPara && v.chegada !== undefined && u >= v.chegada ? vagaPara : null;
+
 /** o ESTADO de uma IA no minuto `min` (do dia). `musica` = está rolando som no lounge agora */
 export function estadoDaIA(agente: string, blocos: readonly BlocoPlano[], min: number, flags: FlagsFrota, musica: boolean, preciso = true): EstadoIA {
   const i = blocos.findIndex((b) => min >= b.ini && min < b.fim);
   if (i < 0) return OFFLINE;
   const b = blocos[i]!, t = (min - b.ini) * 60, durBloco = (b.fim - b.ini) * 60;
   if (b.atividade === "festa" && !musica) return OFFLINE;   // a festa só acontece com som
-  const ant = antDoBloco(agente, blocos, i, flags);
-  const base = { visivel: true, bloco: i, atividade: b.atividade, ambiente: b.ambiente ?? null, evento: b.evento ?? null, sentar: 0, tablet: 0, assentoY: 0.7, moto: null };
+  const ant = antDoBloco(agente, blocos, i, flags), vAnt = vagaAnterior(blocos, i), vAqui = b.vaga ?? null;
+  const base = { visivel: true, bloco: i, atividade: b.atividade, ambiente: b.ambiente ?? null, evento: b.evento ?? null, sentar: 0, tablet: 0, assentoY: 0.7, moto: null, vagaMoto: null };
   const comViagem = (destino: P3, ini: number): { fim: number; estado?: EstadoIA } => {
-    const v = viagem(ant, destino, flags, `${agente}|${i}|${destino.x.toFixed(1)}`, preciso), d = Math.min(v.dur, durBloco * 0.6);
+    const v = viagemComVaga(ant, vAnt, destino, vAqui, flags, `${agente}|${i}|${destino.x.toFixed(1)}`, preciso), d = Math.min(v.dur, durBloco * 0.6);
     if (t - ini >= d) return { fim: ini + d };
-    const p = v.em(d > 0 ? (t - ini) / d : 1), modo = p.modo ?? v.modo;
-    return { fim: ini + d, estado: { ...base, x: p.x, y: p.y, z: p.z, rumo: p.rumo, zaeon: naZaeon(p), pose: poseDoModo(modo), moto: modo === "moto" ? { vel: MOV.moto, curva: 0 } : null } };
+    const u = d > 0 ? (t - ini) / d : 1, p = v.em(u), modo = p.modo ?? v.modo;
+    return { fim: ini + d, estado: { ...base, x: p.x, y: p.y, z: p.z, rumo: p.rumo, zaeon: naZaeon(p), pose: poseDoModo(modo), moto: modo === "moto" ? { vel: MOV.moto, curva: 0 } : null, vagaMoto: motoParadaNa(v, u * v.dur, vAnt, vAqui) } };
   };
   // ESTUDO e FESTA: viaja, senta (ou dança) e fica
   if (b.spot) {
@@ -264,15 +309,15 @@ export function estadoDaIA(agente: string, blocos: readonly BlocoPlano[], min: n
     const v = comViagem(destino, 0); if (v.estado) return v.estado;
     const kf = t - v.fim, fimSentar = durBloco - kf;   // (levanta no fim, junto com a próxima viagem)
     const sentar = Math.min(s3(kf / MOV.senta), s3(fimSentar / MOV.senta));
-    if (b.atividade === "festa") return { ...base, x: s.x, y: s.y, z: s.z, rumo: s.rumo, zaeon: s.zaeon, pose: "danca" };
+    if (b.atividade === "festa") return { ...base, x: s.x, y: s.y, z: s.z, rumo: s.rumo, zaeon: s.zaeon, pose: "danca", vagaMoto: vAqui };
     const pose: PoseIA = b.deitado ? "deitado" : s.tipo === "pufe" ? "relaxa" : s.tipo === "piso" ? "chao" : "sentado";
-    return { ...base, x: alvo.x, y: s.y, z: alvo.z, rumo: alvo.rumo, zaeon: s.zaeon, pose, sentar, tablet: s3((kf - MOV.senta) / MOV.tabletIn) * s3(fimSentar / MOV.tabletIn), assentoY: s.tipo === "sofa" ? 0.78 : s.tipo === "pufe" ? 0.74 : s.tipo === "puff" ? 0.7 : 0 };
+    return { ...base, vagaMoto: vAqui, x: alvo.x, y: s.y, z: alvo.z, rumo: alvo.rumo, zaeon: s.zaeon, pose, sentar, tablet: s3((kf - MOV.senta) / MOV.tabletIn) * s3(fimSentar / MOV.tabletIn), assentoY: s.tipo === "sofa" ? 0.78 : s.tipo === "pufe" ? 0.74 : s.tipo === "puff" ? 0.7 : 0 };
   }
   // CORRIDA / MOTO / ANDAR: a ida + (a corrida) + o roteiro já cortado pro tempo do bloco (`movimento`)
   if (b.atividade === "moto" || b.atividade === "andar") {
     const mv = movimentoCache(agente, blocos, i, flags, preciso);
     const estadoDe = (p: P3 & { rumo: number; modo?: ModoViagem }, modo: ModoViagem): EstadoIA => ({ ...base, x: p.x, y: p.y, z: p.z, rumo: p.rumo, zaeon: naZaeon(p), pose: poseDoModo(modo), moto: modo === "moto" ? { vel: MOV.moto, curva: 0.15 } : null });
-    if (t < mv.idaDur) { const p = mv.ida.em(t / mv.idaDur); return estadoDe(p, p.modo ?? mv.ida.modo); }
+    if (t < mv.idaDur) { const u = t / mv.idaDur, p = mv.ida.em(u); return { ...estadoDe(p, p.modo ?? mv.ida.modo), vagaMoto: motoParadaNa(mv.ida, u * mv.ida.dur, vAnt, null) }; }
     let k = t - mv.idaDur;
     if (mv.corrida) {   // dá voltas com a turma (cada um no seu ritmo e na sua faixa)
       const c = mv.corrida;
@@ -300,17 +345,17 @@ function movimento(agente: string, blocos: readonly BlocoPlano[], i: number, fla
     const rot = roteiroMoto(b, agente, i);
     if (b.evento?.startsWith("corrida")) {
       const r = acasoDe("piloto", agente, b.evento), ritmo = entre(r, 0.94, 1.06), faixa = entre(r, -4, 4);
-      const ida = viagem(ant, noCircuito(b.evento, 0), flags, `${agente}|${i}|corrida`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
+      const ida = viagemComVaga(ant, vagaAnterior(blocos, i), noCircuito(b.evento, 0), null, flags, `${agente}|${i}|corrida`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
       const dur = Math.min(MOV.corridaMax, (durBloco - idaDur) * 0.5), fimC = noCircuito(b.evento, (dur / MOV.corridaVolta) * 2 * Math.PI * 330 * ritmo);
       const disponivel = durBloco - idaDur - dur, trechos = cortar(trechosDoCeu(rot, fimC, false, agente, i, true), disponivel);
       return { ida, idaDur, corrida: { dur, ritmo, faixa }, trechos, disponivel, fim: trechos.at(-1)?.ate ?? { id: "corrida", ...fimC, estudo: false } };
     }
-    const ida = viagem(ant, rot[0]!.p, { ...flags, mochila: false }, `${agente}|${i}|m0`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
+    const ida = viagemComVaga(ant, vagaAnterior(blocos, i), rot[0]!.p, null, { ...flags, mochila: false }, `${agente}|${i}|m0`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
     const disponivel = durBloco - idaDur, trechos = cortar(trechosDoCeu(rot, rot[0]!.p, false, agente, i), disponivel);
     return { ida, idaDur, corrida: null, trechos, disponivel, fim: trechos.at(-1)?.ate ?? rot[0]!.p };
   }
   const rot = roteiroAndar(b, agente, i);
-  const ida = viagem(ant, rot[0]!, flags, `${agente}|${i}|a0`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
+  const ida = viagemComVaga(ant, vagaAnterior(blocos, i), rot[0]!, null, flags, `${agente}|${i}|a0`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
   const todos: Trecho[] = [];
   for (let j = 1; j < rot.length; j++) {
     const de = rot[j - 1]!, p = rot[j]!, reta = Math.hypot(p.x - de.x, p.z - de.z), dur = (reta * 1.35) / MOV.pe, chave = `${agente}|${i}|a${j}`;
@@ -320,11 +365,13 @@ function movimento(agente: string, blocos: readonly BlocoPlano[], i: number, fla
       rota ??= [de, p];
       const L = comprimento(rota), q = pontoNaRota(rota, L * u); return { x: q.x, y: PISO, z: q.z, rumo: q.rumo, modo: "pe" };
     } };
-    // a parada: no ponto de chegada, virada pro lado (sem sair do lugar — o próximo trecho sai dali)
-    todos.push({ v, fica: entre(acasoDe("fica", agente, i, j), 10, 35), ate: p, parada: () => ({ x: p.x, y: p.y, z: p.z, rumo: entre(acasoDe("olha", agente, i, j), 0, 6.28) }) });
+    // a parada: no ponto, virada pro que está vendo (o telão, o globo) — o próximo trecho sai dali
+    todos.push({ v, fica: p.fica ?? 30, ate: p, parada: () => ({ x: p.x, y: p.y, z: p.z, rumo: p.olha ?? 0 }) });
   }
-  const disponivel = durBloco - idaDur, trechos = cortar(todos, disponivel);
-  return { ida, idaDur, corrida: null, trechos, disponivel, fim: trechos.at(-1)?.ate ?? rot[0]! };
+  // a CHEGADA conta como a 1ª parada (fica no 1º ponto antes de ir pro 2º): um trecho parado no lugar
+  const p0 = rot[0]!, chegada: Trecho = { v: { modo: "pe", dur: 0, em: () => ({ x: p0.x, y: p0.y, z: p0.z, rumo: p0.olha ?? 0, modo: "pe" }) }, fica: p0.fica ?? 30, ate: p0, parada: () => ({ x: p0.x, y: p0.y, z: p0.z, rumo: p0.olha ?? 0 }) };
+  const disponivel = durBloco - idaDur, trechos = cortar([chegada, ...todos], disponivel);
+  return { ida, idaDur, corrida: null, trechos, disponivel, fim: trechos.at(-1)?.ate ?? p0 };
 }
 /** um canto em volta de um ponto do passeio (2–9 m, cada IA no seu, virada pro ponto) — ninguém empilhado */
 function cantoEmVolta(p: P3, agente: string, chave: number): { x: number; z: number; rumo: number } {

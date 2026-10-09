@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { FROTA_PADRAO, gerarFrota, amigosDe } from "./frota";
 import { FLAGS_PADRAO, REGRAS, agendaBase, diaDe, fullNoDia, minutoDoDia, type Bloco } from "./agenda";
 import { planejarDia } from "./plano";
-import { estadoDaIA, MOV, OFFLINE, pontoDaGaragem, roteiroMoto, viagem } from "./corpo";
+import { estadoDaIA, MOV, OFFLINE, pontoDaGaragem, roteiroAndar, roteiroMoto, viagem } from "./corpo";
 import { CONVERSA, divaga, episodiosDoDia, limparFala, normalizarFala, promptEpisodio, tomDaResposta, validarFalas } from "./conversas";
 import { gerarFalasSemRepetir, gerarResposta, type DepsTexto } from "./texto";
 import { CONFIG_PADRAO, aplicarMigracoes, novoLote, sanitizarConfig, totalDaFrota } from "./config";
 import { salaDoPonto, spotsDe } from "./lugares";
-import { CIDADE, mundo, salaEm } from "../ceu";
+import { CIDADE, colisoresDaCidade, mundo, salaEm } from "../ceu";
 
 const frota = gerarFrota(), DIA = 20734, plano = planejarDia(frota, DIA, FLAGS_PADRAO);
 const dur = (b: Bloco) => b.fim - b.ini;
@@ -167,7 +167,7 @@ describe("o corpo no instante", () => {
     for (let u = 0.01; u <= 1; u += 0.01) { const p = v.em(u); expect(Math.hypot(p.x - ant.x, p.y - ant.y, p.z - ant.z)).toBeLessThan(MOV.moto * v.dur * 0.02 + 60); ant = p; }   // (+ a descida da moto até a UNILAB, ~300 m em 5 s)
     expect(Math.hypot(v.em(1).x - univ.x, v.em(1).z - univ.z)).toBeLessThan(0.01);
   });
-  it("uma Zaeon VIVA: de moto, a maior parte do tempo VOANDO; passeando a pé, a maior parte ANDANDO (não parados)", () => {
+  it("uma Zaeon VIVA: de moto, a maior parte do tempo VOANDO; a pé, a maior parte PARADO num ponto de interesse (não vagando)", () => {
     const n = { moto: 0, motoMove: 0, andar: 0, andarMove: 0 };
     for (let m = 9 * 60; m < 22 * 60; m += 11) for (const { agente, blocos } of plano.agentes.values()) {
       const e = estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false); if (!e.visivel) continue;
@@ -175,7 +175,34 @@ describe("o corpo no instante", () => {
       if (e.atividade === "andar") { n.andar++; if (["andando", "mochila"].includes(e.pose)) n.andarMove++; }
     }
     expect(n.motoMove / n.moto).toBeGreaterThan(0.8);
-    expect(n.andarMove / n.andar).toBeGreaterThan(0.55);
+    expect(n.andarMove / n.andar).toBeLessThan(0.35);
+  });
+  it("a pé, a TURMA fica junta num ponto de interesse (telão ou salão), cada um virado pro que está vendo", () => {
+    const amostra = [...plano.agentes.values()].flatMap(({ agente, blocos }) => blocos.map((b, i) => ({ agente, b, i })).filter((x) => x.b.atividade === "andar")).slice(0, 300);
+    expect(amostra.length).toBeGreaterThan(50);
+    for (const { agente, b, i } of amostra) {
+      const rot = roteiroAndar(b, agente.id, i);
+      expect(rot.length).toBeGreaterThanOrEqual(2);
+      for (const p of rot) { expect(p.id).toMatch(/^(telao-(problemas|solucoes)-[0-3]|salao)#/); expect(p.fica!).toBeGreaterThanOrEqual(180); }
+    }
+    // dois amigos passeando no mesmo pedaço do dia vão aos MESMOS pontos, a poucos metros um do outro
+    const porTurma = new Map<string, typeof amostra>();
+    for (const x of amostra) { const k = `${x.b.turma}|${Math.floor(x.b.ini / 40)}`; porTurma.set(k, [...(porTurma.get(k) ?? []), x]); }
+    let pares = 0;
+    for (const l of porTurma.values()) if (l.length > 1) {
+      const [a, c] = [roteiroAndar(l[0]!.b, l[0]!.agente.id, l[0]!.i), roteiroAndar(l[1]!.b, l[1]!.agente.id, l[1]!.i)];
+      expect(a.map((p) => p.id)).toEqual(c.map((p) => p.id));
+      expect(Math.hypot(a[0]!.x - c[0]!.x, a[0]!.z - c[0]!.z)).toBeLessThan(10.5);
+      pares++;
+    }
+    expect(pares).toBeGreaterThan(0);
+  });
+  it("os lugares da plateia não caem dentro de nada sólido (palco, cards, árvores, pilares, globo)", () => {
+    const cs = colisoresDaCidade();
+    for (const { agente, blocos } of [...plano.agentes.values()].slice(0, 400)) blocos.forEach((b, i) => {
+      if (b.atividade !== "andar") return;
+      for (const p of roteiroAndar(b, agente.id, i)) for (const c of cs) expect(Math.hypot(p.x - c.x, p.z - c.z), `${p.id} em ${c.x.toFixed(0)},${c.z.toFixed(0)}`).toBeGreaterThan(c.r + 0.3);
+    });
   });
   it("o passeio de moto e a pé: contínuos (sem teleporte de um minuto pro outro)", () => {
     const amostra = [...plano.agentes.values()].filter((p) => p.blocos.some((b) => b.atividade === "moto" || b.atividade === "andar")).slice(0, 40);

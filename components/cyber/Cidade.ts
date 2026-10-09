@@ -23,6 +23,7 @@ import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
 import { criarPisoEstacionamento } from "./Estacionamento";
+import { criarPisosEstudo } from "./EstacionamentosEstudo";
 import { LOTES } from "@/lib/cyber/motos";
 import { NOS } from "@/lib/cyber/buracos";
 import { criarBuracoPortal } from "./BuracoPortal";
@@ -276,6 +277,10 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     const e = criarPisoEstacionamento({ low, parado: rm, lote: l });
     e.group.position.set(l.x - CIDADE.centro.x, l.alt, l.z - CIDADE.centro.z); e.group.rotation.y = l.rot; add(e.group, ilha, true); return e;
   });
+
+  // ── os ESTACIONAMENTOS das salas de estudo e do lounge (pra fora de cada sala, flutuando com a ilha): as IAs chegam
+  //    de moto e deixam a moto lá (lib/cyber/estacionamentosEstudo; as motos paradas são do components/cyber/FrotaIA) ──
+  add(criarPisosEstudo({ low, onde: "zaeon" }));
 
   // ── o BURACO NEGRO da cidade: o nó central da rede de túneis (pisou no anel = escolhe o destino) ──
   const pt = CIDADE.portalTunel, bnc = criarBuracoPortal(ilha, { x: pt.x, y: 0, z: pt.z, anelR: pt.r, h: NOS.zaeon.bh.h, r: NOS.zaeon.bh.r, low, starTex });

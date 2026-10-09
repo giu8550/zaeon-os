@@ -25,6 +25,7 @@ import { gerarFrota, type AgenteIA } from "@/lib/cyber/frota/frota";
 import { planejarDia, type PlanoDia } from "@/lib/cyber/frota/plano";
 import { diaDe, fullNoDia, minutoDoDia } from "@/lib/cyber/frota/agenda";
 import { estadoDaIA, type EstadoIA } from "@/lib/cyber/frota/corpo";
+import { criarMotosEstacionadas, type MotoParada } from "./EstacionamentosEstudo";
 import { episodiosDoDia, type Episodio } from "@/lib/cyber/frota/conversas";
 import type { ConfigSalva } from "@/lib/cyber/frota/config";
 import type { PedidoFrota, RespostaFrota } from "./frota.worker";
@@ -56,7 +57,7 @@ const ORCAMENTO_MS = 0.8;
 const TAG = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const BALAO = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:220px;font:500 12.5px system-ui,sans-serif;line-height:1.3;padding:6px 10px;border-radius:14px 14px 14px 4px;background:rgba(255,255,255,.94);color:#0b1020;box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:none;display:none;";
 
-type Corpo = { /** dt guardado dos quadros em que a animação pulou (longe: anima um quadro sim, um não) */ animDt: number; av: AvatarLuzHandle; tag: HTMLDivElement; balao: HTMLDivElement; moto: MotoHandle | null; id: string | null; desvio: P2; yAnt: number; /** a moto: 0..1 materializada */ motoK: number; motoEm: { x: number; y: number; z: number; rumo: number } | null };
+type Corpo = { /** dt guardado dos quadros em que a animação pulou (longe: anima um quadro sim, um não) */ animDt: number; /** a moto dela estava parada numa vaga no quadro anterior */ tinhaVaga: boolean; av: AvatarLuzHandle; tag: HTMLDivElement; balao: HTMLDivElement; moto: MotoHandle | null; id: string | null; desvio: P2; yAnt: number; /** a moto: 0..1 materializada */ motoK: number; motoEm: { x: number; y: number; z: number; rumo: number } | null };
 
 /** a fase da animação de cada IA (s): ninguém anda no mesmo passo que o vizinho */
 const faseDe = (id: string) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return (Math.abs(h) % 1000) / 100; };
@@ -94,7 +95,9 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   /** quem aparece (silhueta ou corpo): o estado aproximado de cada uma, refeito a cada escolha (e a cada quadro, pra quem se move) */
   let vistos: { id: string; e: EstadoIA; move: boolean }[] = [];
   let quadroPar = false, quadroSil = 0;
-  let varrer: { ags: { agente: AgenteIA; blocos: PlanoDia["agentes"] extends Map<string, infer V> ? V extends { blocos: infer B } ? B : never : never }[]; i: number; lista: { id: string; e: EstadoIA; move: boolean; d: number }[]; n: number } | null = null;
+  let varrer: { ags: { agente: AgenteIA; blocos: PlanoDia["agentes"] extends Map<string, infer V> ? V extends { blocos: infer B } ? B : never : never }[]; i: number; lista: { id: string; e: EstadoIA; move: boolean; d: number }[]; n: number; paradas: MotoParada[] } | null = null;
+  /** as MOTOS PARADAS nos estacionamentos dos lugares de estudo (as das IAs que estão estudando ali) */
+  const estacionadas = criarMotosEstacionadas({ cena: o.cena, low: o.low });
   const mS = new THREE.Matrix4(), qS = new THREE.Quaternion(), pS = new THREE.Vector3(), eS = new THREE.Vector3(), cS = new THREE.Color(), eixoX = new THREE.Vector3(1, 0, 0), eixoY = new THREE.Vector3(0, 1, 0), qD = new THREE.Quaternion();
   let config: ConfigSalva | null = null, offset = 0, frota: AgenteIA[] = [], porId = new Map<string, AgenteIA>();
   let plano: PlanoDia | null = null, eps = new Map<string, Episodio[]>(), dia = -1, calculando = false;
@@ -147,7 +150,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     const av = criarAvatarLuz("#7fd3ff", o.starTex, o.low, o.gltf, { anime: true }); o.cena.add(av.group); av.group.visible = false;
     const tag = document.createElement("div"); tag.style.cssText = TAG + "display:none;"; o.overlay.appendChild(tag);
     const balao = document.createElement("div"); balao.style.cssText = BALAO; o.overlay.appendChild(balao);
-    return { animDt: 0, av, tag, balao, moto: null, id: null, desvio: { x: 0, z: 0 }, yAnt: 0, motoK: 0, motoEm: null };
+    return { animDt: 0, tinhaVaga: false, av, tag, balao, moto: null, id: null, desvio: { x: 0, z: 0 }, yAnt: 0, motoK: 0, motoEm: null };
   }
   const agoraMs = () => Date.now() + offset;
   /** o balão de uma IA agora: "..." (cloak ou sem texto ainda), o texto, ou nada */
@@ -177,7 +180,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     },
     atualizar(dt, t, ctx) {
       silhuetas.visible = motosSil.visible = !!config && visivel; if (multidao) multidao.malha.visible = silhuetas.visible;
-      if (!config || !visivel) { for (const k of corpos) { k.av.group.visible = false; k.tag.style.display = "none"; k.balao.style.display = "none"; if (k.moto) k.moto.group.visible = false; } return; }
+      if (!config || !visivel) { estacionadas.definir([]); for (const k of corpos) { k.av.group.visible = false; k.tag.style.display = "none"; k.balao.style.display = "none"; if (k.moto) k.moto.group.visible = false; } return; }
       const ms = agoraMs(), d = diaDe(ms), minuto = minutoDoDia(ms);
       if (d !== dia) recalcular(d);
       if (!plano) return;
@@ -187,19 +190,22 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       // a VARREDURA de todo mundo é FATIADA: cada quadro avança até gastar `ORCAMENTO_MS` (com 2000 IAs, de uma vez
       // eram ~13 ms — um tranco a cada 0,4 s; e ~400 ms na 1ª, com os roteiros frios); fechou a volta → escolhe
       escolherEm -= dt;
-      varrer ??= { ags: [...plano.agentes.values()], i: 0, lista: [], n: 0 };
+      varrer ??= { ags: [...plano.agentes.values()], i: 0, lista: [], n: 0, paradas: [] };
+      estacionadas.boia(ctx.ilhaY - ctx.pisoY);
       { const t0 = performance.now(), v = varrer;
         while (v.i < v.ags.length && performance.now() - t0 < ORCAMENTO_MS) {
           for (const lim = Math.min(v.ags.length, v.i + 40); v.i < lim; v.i++) {
             const { agente, blocos } = v.ags[v.i]!, e = estadoDaIA(agente.id, blocos, minuto, config.flags, ctx.musica, false);
             if (!e.visivel) continue; v.n++;
+            if (e.vagaMoto) v.paradas.push({ vaga: e.vagaMoto, cor: porId.get(agente.id)?.cor ?? "#7fd3ff" });
             const d = distEu(e); if (d < ALCANCE_SILHUETA) v.lista.push({ id: agente.id, e, move: MOVE.has(e.pose), d });
           }
         }
       }
       if (escolherEm <= 0 && varrer.i >= varrer.ags.length) {
         escolherEm = ESCOLHE_A_CADA;
-        const { lista, n } = varrer; varrer = null;
+        const { lista, n, paradas } = varrer; varrer = null;
+        estacionadas.definir(paradas);
         online = n; lista.sort((a, b) => a.d - b.d); vistos = lista.slice(0, MAX_SILHUETAS);
         const dist = new Map(lista.map((c) => [c.id, c.d]));
         // quem já tem corpo FICA enquanto estiver no alcance largo; a vaga só troca por alguém MUITO mais perto
@@ -261,6 +267,10 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
         k.desvio = desviar(k.desvio, livre ? empurrao({ x: e.x, z: e.z }, [...ctx.obstaculos, ...ocupados]) : { x: 0, z: 0 }, dt);
         const x = e.x + k.desvio.x, z = e.z + k.desvio.z; ocupados.push({ x, z });
         let m: Montado | null = null;
+        // saindo da VAGA a moto não se materializa: ela já estava parada ali (components/cyber/EstacionamentosEstudo); chegando,
+        // ela encolhe no pedestal enquanto a parada aparece (a lista das paradas se renova a cada volta da varredura)
+        if (e.pose === "moto" && k.tinhaVaga && k.motoK === 0) k.motoK = 1;
+        k.tinhaVaga = !!e.vagaMoto;
         if (e.pose === "moto") {
           if (!k.moto) { k.moto = loteMoto(criarMoto({ cor: porId.get(k.id)!.cor, low: o.low })); o.cena.add(k.moto.group); }
           // a moto se MATERIALIZA (cresce em ~0,45 s) ao montar
@@ -325,7 +335,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       if (prazo) clearTimeout(prazo); worker?.terminate(); worker = null;
       for (const k of corpos) { k.av.dispose(); k.moto?.dispose(); k.tag.remove(); k.balao.remove(); } corpos.length = 0;
       for (const m of [silhuetas, motosSil]) { m.geometry.dispose(); m.removeFromParent(); m.dispose(); } matSil.dispose();
-      if (tAssar) clearTimeout(tAssar); multidao?.dispose(); multidao = null;
+      if (tAssar) clearTimeout(tAssar); multidao?.dispose(); multidao = null; estacionadas.dispose();
     },
   };
 }
