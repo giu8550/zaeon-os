@@ -105,6 +105,23 @@ O spiderbench roda uma Nova York inteira com multidão animada no navegador. O q
 8. **Uploads mínimos**: os atributos por instância ficam num buffer intercalado (2 uploads por pool por quadro, não
    6), e só a faixa viva é enviada (`addUpdateRange`).
 
+## O que já foi aplicado (PR #318, out/2026) e o que mediu
+
+| Mudança | Onde | Efeito medido |
+|---|---|---|
+| Distrito da Terra entra no lote; células de 120 m | `lotes.ts`, `Cidade.ts` | Zaeon ~1000 → ~720 draw calls |
+| Acessórios dos VRM: materiais compartilhados + 1 lote por acessório | `AcessoriosVrm.ts` | personagens ~225 → ~105 draws |
+| Motos de personagens/frota pelo lote (`loteMoto`) | `Moto.ts` | ~43 peças → ~1 dúzia por moto |
+| Base de estudo: linhas, medidores e cristais instanciados | `BaseEstudo.ts` | ~45 → ~14 draws **por jogador** (praça com 12: ~1300 → ~670) |
+| **Congelar** o que a simulação viu parado (`matrixAutoUpdate = false`) | `lotes.ts` | ~3.600 nós a menos recalculando por quadro |
+| Avatar só recalcula matrizes quando animou/andou; topo invisível não recalcula | `matrizes.ts` | Zaeon com 12 jogadores ~64 → ~75 fps |
+
+**Lição do perfil:** com jogadores presentes o gargalo deixa de ser draw call e vira **CPU do grafo de cena**
+(`updateMatrixWorld` + `multiplyMatrices` ≈ 35% do quadro, ~5 ms). Ferramentas de medida (scratchpad da sessão, recriáveis):
+contar draw calls por motivo (`userData.foraDoLote`), perfil de CPU via CDP `Profiler`, tempo de `scene.updateMatrixWorld`
+por quadro, e A/B na MESMA página (a máquina de dev é compartilhada; fps entre páginas diferentes varia ±15).
+Chaves A/B: `?semLotes`, `?semCongelar`, `?celula=N`.
+
 ## Como escalar para a Zaeon inteira (próximos passos)
 
 Em ordem de retorno (draw calls economizadas por esforço):

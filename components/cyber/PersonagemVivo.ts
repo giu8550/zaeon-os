@@ -13,6 +13,7 @@ import { criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz"
 import { carregarVrm, tingirVrm } from "./AvatarVrm";
 import { vestirAcessorios, type AcessoriosHandle } from "./AcessoriosVrm";
 import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
+import { matrizDoAvatar } from "./matrizes";
 import { mundo } from "@/lib/cyber/ceu";
 import { desviar, empurrao, type P2 } from "@/lib/cyber/colisaoAtores";
 import type { CorpoVrm } from "@/lib/cyber/estiloAvatar";
@@ -69,7 +70,8 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
       const dist = Math.hypot(cam.x - p.x, cam.z - p.z);
       raiz.visible = dist < DIST_ESCONDE; if (!raiz.visible) return;
       // longe, anima a cada 3 quadros (acumulando o dt)
-      pulo += dt; if (dist > DIST_ANIMA_SEMPRE && (pulo < 0.05)) return;
+      pulo += dt; if (dist > DIST_ANIMA_SEMPRE && (pulo < 0.05)) { matrizDoAvatar(raiz, false); return; }   // nada mudou: o esqueleto (~170 ossos) não recalcula
+      matrizDoAvatar(raiz, true);
       const dtA = Math.min(0.2, pulo); pulo = 0;
       const k = Math.min(1, dtA * 3);
       s.sentado += (e.sentado - s.sentado) * k; s.danca += (e.danca - s.danca) * k; s.meditando += (e.meditando - s.meditando) * k;

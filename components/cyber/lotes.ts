@@ -12,6 +12,11 @@
  *  - `manter` (alvos de clique/câmera), InstancedMesh, SkinnedMesh, multi-material, morph, escala espelhada;
  *  - geometria com ATRIBUTOS PRÓPRIOS (além de posição/normal/uv/cor — ex.: as veias do coração): juntar perderia o atributo.
  * Em dev, cada peça que ficou de fora ganha `userData.foraDoLote` = o motivo (o perfil de draw calls agrupa por ele).
+ *
+ * CONGELAR (o `matrixAutoUpdate = false` do spiderbench): o three recalcula a matriz de TODO objeto da cena a cada
+ * quadro, mesmo dos que nunca se mexem — com ~9 mil objetos, ~35% da CPU do quadro. No fim, todo nó que a simulação
+ * viu PARADO (menos a raiz, que o engine move, e os `manter`) para de recalcular a matriz local; a do mundo continua
+ * seguindo o pai (a ilha que boia). Medido: Zaeon com 12 jogadores 64 → 78 fps.
  * Antes de juntar, MATERIAIS iguais (mesmo tipo/cor/opacidade/textura/mistura…) viram um só — os builders criam um
  * por peça. Material que muda durante a simulação (opacidade pulsando, cor) fica com a peça dele, sozinho.
  * Peças pequenas (< 4 m) vão pra lotes separados marcados `userData.detalhe` (a região continua escondendo de longe),
@@ -29,9 +34,9 @@ const DEV = process.env.NODE_ENV !== "production";
 type Foto = { m: THREE.Matrix4; v: boolean };
 
 /** junta as peças estáticas (malhas e linhas de aresta) de `raiz`; devolve quantas saíram e quantos lotes entraram */
-export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t: number) => void; quadros?: number; manter?: Iterable<THREE.Object3D> } = {}): { antes: number; lotes: number } {
+export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t: number) => void; quadros?: number; manter?: Iterable<THREE.Object3D>; congelar?: boolean } = {}): { antes: number; lotes: number; congelados: number } {
   // `?semLotes` na URL desliga (comparar antes/depois, como o `?batch=0` do CS Brasil)
-  if (typeof location !== "undefined" && new URLSearchParams(location.search).has("semLotes")) return { antes: 0, lotes: 0 };
+  if (typeof location !== "undefined" && new URLSearchParams(location.search).has("semLotes")) return { antes: 0, lotes: 0, congelados: 0 };
   const manter = new Set(o.manter ?? []);
   raiz.updateMatrixWorld(true);
   // 1) foto de todos os nós
@@ -117,7 +122,14 @@ export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t
   const vivas = new Set<THREE.BufferGeometry>(); raiz.traverse((n) => { const g = (n as THREE.Mesh).geometry; if (g) vivas.add(g); });
   for (const g of usadas) if (!vivas.has(g)) g.dispose();
   raiz.updateMatrixWorld(true);
-  return { antes, lotes };
+  // CONGELA o que ficou parado (`?semCongelar` desliga, pra comparar)
+  let congelados = 0;
+  const semCongelar = o.congelar === false || (typeof location !== "undefined" && new URLSearchParams(location.search).has("semCongelar"));
+  if (!semCongelar) raiz.traverse((n) => {
+    if (n === raiz || !n.matrixAutoUpdate || mexe.has(n) || manter.has(n) || !fotos.has(n) || (n as THREE.Bone).isBone) return;
+    n.updateMatrix(); n.matrixAutoUpdate = false; n.userData.congelado = true; congelados++;
+  });
+  return { antes, lotes, congelados };
 }
 
 /** cópia com o mesmo conjunto de atributos (posição, normal, uv [, cor]) e índice — o `mergeGeometries` exige */

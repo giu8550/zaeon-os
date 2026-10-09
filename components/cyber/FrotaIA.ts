@@ -19,6 +19,7 @@ import * as THREE from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
 import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
+import { matrizDoAvatar } from "./matrizes";
 import { gerarFrota, type AgenteIA } from "@/lib/cyber/frota/frota";
 import { planejarDia, type PlanoDia } from "@/lib/cyber/frota/plano";
 import { diaDe, fullNoDia, minutoDoDia } from "@/lib/cyber/frota/agenda";
@@ -261,7 +262,8 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
         // somado — o esqueleto + IK é o mais caro do corpo, e a 60 fps a diferença não aparece; perto, todo quadro
         const pertoCam = Math.hypot(x - ctx.cam.x, y - ctx.cam.y, z - ctx.cam.z) < 25;
         k.animDt += dt; quadroPar = !quadroPar;
-        if (pertoCam || quadroPar) { const dtA = k.animDt; k.animDt = 0;
+        const animou = pertoCam || quadroPar;
+        if (animou) { const dtA = k.animDt; k.animDt = 0;
         k.av.animar({
           andando: e.pose === "andando", correndo: false, montado: m,
           jato: e.pose === "mochila" ? 0.9 : 0, ar: e.pose === "mochila" ? { vy, movendo: true } : null,
@@ -269,6 +271,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
           descanso: { sentar: deitado || e.pose === "chao" ? 0 : e.sentar, deitar: deitado ? e.sentar : 0, assentoY: e.assentoY, relaxa: e.pose === "relaxa" ? 1 : 0 },
           tablet: e.tablet, dt: dtA, t,
         }); }
+        matrizDoAvatar(k.av.group, animou);   // o esqueleto só recalcula no quadro em que animou ou andou (components/cyber/matrizes)
         // o nome e o balão em cima da cabeça
         proj.set(x, k.av.group.position.y + (deitado ? 1.2 : e.pose === "chao" ? 1.5 : 2.2), z).project(ctx.camera);
         const tela = proj.z < 1 && Math.abs(proj.x) < 1.1 && Math.abs(proj.y) < 1.1, sx = (proj.x * 0.5 + 0.5) * ctx.largura, sy = (-proj.y * 0.5 + 0.5) * ctx.altura;

@@ -14,7 +14,7 @@ describe("lotes estáticos (o StaticBatch do CS Brasil)", () => {
     raiz.position.set(10, 3, 7); raiz.rotation.y = 0.7;
     const antes = pos(raiz);
     const r = fundirEstaticos(raiz);
-    expect(r).toEqual({ antes: 5, lotes: 1 });
+    expect(r).toMatchObject({ antes: 5, lotes: 1 });
     expect(malhas(raiz)).toHaveLength(1);
     expect(pos(raiz)).toEqual(antes);
   });
@@ -91,5 +91,24 @@ describe("lotes estáticos (o StaticBatch do CS Brasil)", () => {
     const ms = malhas(raiz);
     expect(ms).toHaveLength(2);   // o MESMO objeto ainda junta (2 lotes), mas a e b nunca se misturam
     expect(new Set(ms.map((m) => m.material))).toEqual(new Set([a, b]));
+  });
+  it("CONGELA o que ficou parado (matriz local não é mais recalculada); o que se mexe, a raiz e os `manter` seguem vivos", () => {
+    const raiz = new THREE.Group(), mat = new THREE.MeshBasicMaterial(), parado = new THREE.Group(), gira = new THREE.Group(), alvo = caixa(mat, 9);
+    parado.add(new THREE.InstancedMesh(new THREE.BoxGeometry(), mat, 2)); gira.add(caixa(mat, 0)); raiz.add(parado, gira, alvo);
+    const r = fundirEstaticos(raiz, { passo: (_, t) => { gira.rotation.y = t; }, manter: [alvo] });
+    expect(r.congelados).toBeGreaterThan(0);
+    expect(parado.matrixAutoUpdate).toBe(false);
+    expect(parado.children[0]!.matrixAutoUpdate).toBe(false);
+    expect(gira.matrixAutoUpdate).toBe(true);
+    expect(alvo.matrixAutoUpdate).toBe(true);
+    expect(raiz.matrixAutoUpdate).toBe(true);
+    // a matriz do MUNDO continua seguindo o pai (a ilha que boia)
+    raiz.position.y = 5; raiz.updateMatrixWorld();
+    expect(new THREE.Vector3().setFromMatrixPosition(parado.matrixWorld).y).toBeCloseTo(5, 6);
+  });
+  it("congelar: false deixa tudo como estava", () => {
+    const raiz = new THREE.Group(), g = new THREE.Group(); raiz.add(g); g.add(new THREE.Points());
+    expect(fundirEstaticos(raiz, { congelar: false }).congelados).toBe(0);
+    expect(g.matrixAutoUpdate).toBe(true);
   });
 });
