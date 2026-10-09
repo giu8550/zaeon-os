@@ -40,8 +40,8 @@ const DIST_ANIMA_SEMPRE = 70;
 const DIST = (low: boolean) => low ? { carrega: 160, solta: 360, esconde: 650 } : { carrega: 900, solta: 1300, esconde: 300 };
 /** a FILA de carga: um VRM por vez (parse + skeleton + compilar + subir as texturas), pra não juntar tudo num quadro */
 let fila: Promise<void> = Promise.resolve();
-/** de 25 a 70 m o esqueleto anima a cada ~2 quadros (como os corpos da frota): ~450 nós por VRM, 14 na cidadela */
-const DIST_ANIMA_CHEIO = 25;
+/** de 12 a 70 m o esqueleto anima a cada ~2 quadros (como os corpos da frota): ~450 nós por VRM, 14 na cidadela */
+const DIST_ANIMA_CHEIO = 12;
 /** o CONTORNO do MToon (traço de 3,5–8,5 mm no mundo) vira menos de 1 pixel além de ~30 m — e custa 1 draw call por
  *  peça do VRM. Some além de `DIST_CONTORNO`, volta perto (histerese pra não piscar na fronteira) */
 const DIST_CONTORNO = { some: 34, volta: 28 };

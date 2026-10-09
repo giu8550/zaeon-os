@@ -314,9 +314,9 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   return {
     group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     atualizar(dt, t) {
-      // a ilha BOIA (25 cm, ciclo de ~21 s): só move quando andou 2 mm — mexer nela força recalcular as matrizes dos
+      // a ilha BOIA (25 cm, ciclo de ~21 s): só move quando andou 1 cm — mexer nela força recalcular as matrizes dos
       // ~1.300 nós da cidade; a cada quadro andaria menos de meio milímetro (components/cyber/matrizes)
-      { const y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel; if (Math.abs(y - ilha.position.y) > 0.002) ilha.position.y = y; }
+      { const y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel; if (Math.abs(y - ilha.position.y) > 0.01) ilha.position.y = y; }
       for (const f of fogos) { const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp; f.s.scale.set(3.4 * (0.9 + p * 0.25), 5 * (0.8 + p * 0.4), 1); (f.s.material as THREE.SpriteMaterial).opacity = 0.5 + 0.3 * p; }
       if (quente) quente.intensity = 1.4 + 0.3 * Math.sin(t * 1.6) * fogoAmp;
       (brasa.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.15 * Math.sin(t * 1.4) * fogoAmp;
