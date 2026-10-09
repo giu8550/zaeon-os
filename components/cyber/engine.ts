@@ -559,7 +559,10 @@ export class CyberEngine {
     p(carregando("quadro", 1));
   }
   /** depuração em dev: `window.__cyber` = o motor VIVO (quem monta chama — no modo estrito o React monta 2 e o cancelado terminava por último) */
-  exporDepuracao() { if (process.env.NODE_ENV !== "production" && this.vivo) (window as unknown as { __cyber?: CyberEngine }).__cyber = this; }
+  exporDepuracao() {
+    const pedido = typeof location !== "undefined" && new URLSearchParams(location.search).has("depurar");   // (em produção, só com ?depurar: as medidas de desempenho)
+    if ((process.env.NODE_ENV !== "production" || pedido) && this.vivo) (window as unknown as { __cyber?: CyberEngine }).__cyber = this;
+  }
   private aoPrimeiroQuadro: (() => void) | null = null;
   private passadaEm = -Infinity;
   /** as LUZES das bases: um conjunto FIXO (o nº de luzes da cena não muda quando alguém entra — mudar recompila todos os
