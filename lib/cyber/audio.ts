@@ -7,6 +7,7 @@
  *  - o leito ambiente "abaixa" enquanto a música da intro toca (cross-fade quando ela fadeia).
  */
 import { SINTESE_MOTO, type NomeSomMoto } from "./somMoto";
+import { SINTESE_CORRIDA, type NomeSomCorrida } from "./somCorrida";
 import { SINTESE_ASAS, type NomeSomAsas } from "./asas";
 import { sintetizarBatida, sintetizarRaio } from "./coracao";
 import { sintetizarAmbiente } from "./ambiente";
@@ -19,7 +20,7 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
   | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien"
-  | NomeSomMoto | NomeSomAsas | "coracao" | "raio" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa";
+  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | "coracao" | "raio" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -52,6 +53,13 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "moto-freio": { modo: "pos", loop: false, volume: 0.45, sintetico: true },
   "moto-decola": { modo: "pos", loop: false, volume: 0.55, sintetico: true },
   "moto-pouso": { modo: "pos", loop: false, volume: 0.8, sintetico: true },
+  // CORRIDAS (lib/cyber/somCorrida): 2D — são do HUD, não de um lugar
+  "corrida-bip": { modo: "2d", loop: false, volume: 0.55, sintetico: true },
+  "corrida-largada": { modo: "2d", loop: false, volume: 0.65, sintetico: true },
+  "corrida-portao": { modo: "2d", loop: false, volume: 0.45, sintetico: true },
+  "corrida-boost": { modo: "2d", loop: false, volume: 0.55, sintetico: true },
+  "corrida-volta": { modo: "2d", loop: false, volume: 0.6, sintetico: true },
+  "corrida-fim": { modo: "2d", loop: false, volume: 0.7, sintetico: true },
   // ASAS NEGRAS do founder (lib/cyber/asas): a BATIDA é gravada ("large wings flap", CC0 — OpenGameArt/AntumDeluge, de
   // dave.des no Freesound; 1 batida recortada, macia, com passa-baixa); o vento, abrir e fechar são sintetizados
   "asa-bater": { modo: "pos", loop: false, volume: 0.42, ext: "wav", filtro: 3800 },
@@ -135,7 +143,7 @@ export function sintetizarBaque(sr: number): Float32Array {
   for (let i = 0; i < 64; i++) out[n - 1 - i]! *= i / 64;   // fim sem clique
   return normalizar(out, 0.92);
 }
-export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_ASAS, coracao: sintetizarBatida, raio: sintetizarRaio,
+export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_CORRIDA, ...SINTESE_ASAS, coracao: sintetizarBatida, raio: sintetizarRaio,
   "ambiente-biblioteca": (sr) => sintetizarAmbiente("biblioteca", sr), "ambiente-jardim": (sr) => sintetizarAmbiente("jardim", sr),
   "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio };
 

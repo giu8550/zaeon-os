@@ -12,7 +12,7 @@
  *  - ESTUDO: senta no lugar (sofá, pufe — a pose relaxada —, puff, ou no chão de perna cruzada; às vezes deita no sofá)
  *    e estuda no TABLET;
  *  - MOTO (o passeio): voa até 2–3 lugares do mapa e fica um tempo em cada (andando por ali); na CORRIDA, o grupo dá
- *    voltas juntos num circuito em volta da Zaeon e depois para junto num lugar;
+ *    voltas juntos na pista de verdade do Anel da Praça (pelos portões) e depois para junto num lugar;
  *  - ANDAR: passeia pela Zaeon (a pé; trechos longos de mochila), parando pra olhar as coisas;
  *  - FESTA: dança na pista do lounge (só se estiver rolando som — senão já foi embora).
  * Fora dos blocos: offline (não aparece). Coordenadas do MUNDO; `zaeon` = está na ilha/salas (o engine soma a boia).
@@ -27,6 +27,7 @@ import { acasoDe, entre, inteiro, embaralhar } from "./aleatorio";
 import type { FlagsFrota } from "./agenda";
 import type { BlocoPlano } from "./plano";
 import { spotsDe, type Spot } from "./lugares";
+import { PISTAS } from "../corrida/pistas";
 
 type P3 = { x: number; y: number; z: number };
 export type PoseIA = "andando" | "parado" | "mochila" | "moto" | "sentado" | "deitado" | "relaxa" | "chao" | "danca";
@@ -43,7 +44,7 @@ export type EstadoIA = {
 export const OFFLINE: EstadoIA = { visivel: false, x: 0, y: 0, z: 0, rumo: 0, zaeon: false, pose: "parado", sentar: 0, tablet: 0, assentoY: 0.7, moto: null, bloco: -1, atividade: null, ambiente: null, evento: null };
 
 /** as velocidades (m/s) e os tempos (s) */
-export const MOV = { pe: 1.5, mochila: 13, moto: 34, decola: 3.5, pousa: 3.5, sobeMoto: 5, cruzeiroAcima: 28, senta: 0.8, tabletIn: 0.9, corridaVolta: 110, corridaMax: 8 * 60, rodaZaeonMax: 120 } as const;
+export const MOV = { pe: 1.5, mochila: 13, moto: 34, decola: 3.5, pousa: 3.5, sobeMoto: 5, cruzeiroAcima: 28, senta: 0.8, tabletIn: 0.9, corridaMax: 8 * 60, rodaZaeonMax: 120 } as const;
 
 const PISO = CIDADE.pisoY;
 const local = (p: { x: number; z: number }) => ({ x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z });
@@ -89,12 +90,12 @@ export function roteiroAndar(b: BlocoPlano, a: string, iBloco: number): Ponto[] 
   const r = acasoDe("andar", a, iBloco), n = inteiro(r, 3, 5);
   return embaralhar(r, PASSEIO_ZAEON).slice(0, n);
 }
-/** o CIRCUITO da corrida: um anel em volta da Zaeon por fora (raio 330 m, 40 m acima do piso), com uma ondulação */
-export function noCircuito(evento: string, s: number): P3 & { rumo: number } {
-  const r = acasoDe("circuito", evento), R = 330 + entre(r, -20, 30), fase = r() * Math.PI * 2, L = 2 * Math.PI * R;
-  const a = fase + (s / L) * Math.PI * 2, c = CIDADE.centro;
-  return { x: c.x + Math.cos(a) * R, y: PISO + 40 + Math.sin(a * 3) * 6, z: c.z + Math.sin(a) * R, rumo: Math.atan2(-Math.sin(a), Math.cos(a)) };
-}
+/** o CIRCUITO da corrida da turma: a pista de verdade do "Anel da Praça" (lib/cyber/corrida/pistas) — quem passa por lá
+ *  vê os amigos disputando pelos portões. `s` = metros desde a largada */
+const PISTA_DA_TURMA = PISTAS.find((p) => p.id === "anel-da-praca")!;
+export function noCircuito(_evento: string, s: number): P3 & { rumo: number } { return PISTA_DA_TURMA.ponto(s + 30); }
+/** quantos metros por segundo a turma anda na corrida (o ritmo de cada um multiplica) */
+const VEL_CORRIDA = MOV.moto * 0.9;
 
 // ── as VIAGENS ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export type ModoViagem = "mochila" | "moto" | "pe";
@@ -173,10 +174,10 @@ export function estadoDaIA(agente: string, blocos: readonly BlocoPlano[], min: n
     const largada = noCircuito(b.evento, 0), v = comViagem(largada, 0); if (v.estado) return v.estado;
     const kc = t - v.fim, corrida = Math.min(MOV.corridaMax, durBloco * 0.5);
     if (kc < corrida) {
-      const sAt = (kc / MOV.corridaVolta) * 2 * Math.PI * 330 * ritmo, p = noCircuito(b.evento, sAt), lx = Math.cos(p.rumo), lz = -Math.sin(p.rumo);
+      const sAt = kc * VEL_CORRIDA * ritmo, p = noCircuito(b.evento, sAt), lx = Math.cos(p.rumo), lz = -Math.sin(p.rumo);
       return { ...base, x: p.x + lx * faixa, y: p.y, z: p.z + lz * faixa, rumo: p.rumo, zaeon: true, pose: "moto", moto: { vel: MOV.moto * ritmo, curva: 0.3 } };
     }
-    const ponto = roteiroMoto(b, agente, i)[0]!.p, fim = noCircuito(b.evento, (corrida / MOV.corridaVolta) * 2 * Math.PI * 330 * ritmo);
+    const ponto = roteiroMoto(b, agente, i)[0]!.p, fim = noCircuito(b.evento, corrida * VEL_CORRIDA * ritmo);
     const v2 = viagem(fim, ponto, flags, `${agente}|${i}|corrida`, preciso), k2 = kc - corrida;
     if (k2 < v2.dur) { const p = v2.em(k2 / v2.dur), modo = p.modo ?? v2.modo; return { ...base, x: p.x, y: p.y, z: p.z, rumo: p.rumo, zaeon: naZaeon(p), pose: poseDoModo(modo), moto: modo === "moto" ? { vel: MOV.moto, curva: 0 } : null }; }
     return paradoPerto(base, ponto, agente, i, t);

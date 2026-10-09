@@ -53,6 +53,9 @@ import { criarMoto, type MotoHandle } from "./Moto";
 import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
+import { criarPistas, type PistasHandle } from "./PistaCorrida";
+import { pistaPorId, type Pista } from "@/lib/cyber/corrida/pistas";
+import { CONTAGEM, novaCorrida, passoCorrida, tempoDeCorrida, type Corrida, type EventoCorrida, type FaseCorrida } from "@/lib/cyber/corrida/corrida";
 import { PILOTAGEM, motoParada, passoMotoSub, rompeuBarreira, sensacaoDeVelocidade, supersonico, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
 import { LOOPS_MOTO, cambioNeutro, eventosDaMoto, mixDaMoto, passoCambio, setaAcesa, somMotoParada, type Cambio, type EstadoSomMoto } from "@/lib/cyber/somMoto";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
@@ -143,6 +146,8 @@ export type CyberOpts = {
   /** a AÇÃO de contexto mudou (o que o F faz agora: "Estudar", "Montar na moto"…) ou acabou (null) */
   onAcao?: (a: { rotulo: string } | null) => void;
   onEstadoQG?: (s: { noCeu: boolean; navePerto: boolean; pilotando: boolean; pousado: boolean; moto: boolean; motoPerto: boolean }) => void;
+  /** CORRIDA: cada evento (contagem, largada, portão, volta, fim) — e null quando a corrida acaba/é abandonada */
+  onCorrida?: (e: (EventoCorrida & { pista: string }) | null) => void;
   /** HUD de voo (pilotando): altímetro — só quando muda (≤ 10×/s) */
   onVoo?: (h: { y: number }) => void;
   /** atalho de rota em andamento (piloto automático) ou null (chegou / cancelado) */
@@ -233,6 +238,18 @@ const AREA_SOLANA = cil(PLATAFORMAS.solana.centro, PLATAFORMAS.solana.r + 10, PL
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
 const TAG_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
+
+/** o que o HUD da corrida mostra (lido a cada quadro: `engine.corridaHud`) */
+export type HudCorrida = {
+  pista: string; nome: string; fase: FaseCorrida; contagem: number; tempo: number; volta: number; voltas: number;
+  portao: number; nPortoes: number; tempos: number[]; total: number | null;
+  /** o próximo portão: a direção em relação à câmera (rad, 0 = em frente, + = à direita) e a distância (m) */
+  seta: number; dist: number;
+};
+/** a MELHOR corrida de cada pista (neste aparelho): as parciais (pro delta) e o total */
+const CHAVE_MELHOR = (pista: string) => `zaeon_corrida_melhor_${pista}`;
+function lerMelhor(pista: string): { parciais: number[]; total: number } | null { try { const j = JSON.parse(localStorage.getItem(CHAVE_MELHOR(pista)) ?? "null"); return j && Array.isArray(j.parciais) && typeof j.total === "number" ? j : null; } catch { return null; } }
+function gravarMelhor(pista: string, m: { parciais: number[]; total: number }) { try { localStorage.setItem(CHAVE_MELHOR(pista), JSON.stringify(m)); } catch { /* sem armazenamento */ } }
 
 export class CyberEngine {
   private o: CyberOpts;
@@ -375,6 +392,8 @@ export class CyberEngine {
   /** botão ⚡ da moto apertado; a câmera volta pra trás da moto a partir de `camSegueEm` (mexeu o mouse = espera) */
   private boostBotao = false; private camSegueEm = 0; private acelMoto = 0;
   /** a sensação de velocidade na tela (suavizada): FOV, blur radial, linhas de velocidade, tremida do boost */
+  /** as PISTAS de corrida no mundo e a corrida em andamento (minha) */
+  private pistas: PistasHandle | null = null; private corrida: { c: Corrida; pista: Pista; melhor: { parciais: number[]; total: number } | null } | null = null;
   private velTela = 0; private fovBase = 0; private fxVel: VelocidadeTela | null = null; /** a onda de choque da barreira do som na MINHA moto: s desde que rompeu (< 0 = nenhuma) */ private ondaT = -1;
   /** a capela, a laje do lounge e a torre do DJ: sólidos pra quem VOA (moto/nave) — fixos, calculados uma vez (a torre
    *  é um campo de força pra quem não é o dono: só ele pousa na cabine) */
@@ -507,6 +526,8 @@ export class CyberEngine {
         const g = new THREE.Group(); g.add(h.group); g.position.set(v.x, this.yDaVaga(v), v.z); g.rotation.y = v.yaw;
         this.cena.scene.add(g); this.vagaMotos.push({ g, moto: h.group, alvos: h.alvos });
       }
+      // as PISTAS de corrida (rasantes, por baixo dos campi e da Zaeon) — sempre no mundo, discretas
+      this.pistas = criarPistas({ low, starTex: this.cena.starTex }); this.cena.scene.add(this.pistas.group);
       // o ROBÔ de cada estacionamento, pousado na plataforma dele
       for (const l of LOTES) {
         const robo = criarRoboMotos({ low }), b = baseDoRobo(l), y = this.yDoLote(l) + 1.6;
@@ -1437,6 +1458,7 @@ export class CyberEngine {
   private desceDaMotoAqui() { const m = this.motoEst; return this.moto !== null && this.motoPousado && (m.y > 0.5 || naPraca(m)); }
   desmontar() {
     if (this.moto === null || !this.desceDaMotoAqui()) return;
+    this.sairCorrida();
     const m = this.motoEst, lx = Math.cos(m.yaw), lz = -Math.sin(m.yaw);   // a esquerda de quem pilota
     this.motoLargada = { s: this.moto, x: m.x, y: m.y, z: m.z, yaw: m.yaw };
     this.soltarInst("eu:p"); this.renomearInst("eu:r", "eu:p");   // a MESMA moto fica ali (a estacionada antiga some)
@@ -2157,6 +2179,49 @@ export class CyberEngine {
     if (acel || subir || descer) this.autoPouso = false;
     return { acel: Math.max(-1, Math.min(1, acel)), giro: Math.max(-1, Math.min(1, giro)), subir, descer: descer || this.autoPouso, boost };
   }
+  // ───────────── CORRIDAS ─────────────
+  /** LARGA uma corrida (precisa estar na moto): a moto vai pro GRID da pista, tanque cheio, e começa a contagem */
+  iniciarCorrida(id: string): boolean {
+    const p = pistaPorId(id); if (!p || this.moto === null) return false;
+    const g = p.grid;
+    this.motoEst = { ...motoParada(g.x, g.y, g.z, g.rumo), tanque: 1 }; this.motoPousado = false; this.autoPouso = false;
+    this.voY.subir = this.voY.descer = false; this.camAz = g.rumo + Math.PI; this.camSegueEm = 0;
+    this.corrida = { c: novaCorrida(p), pista: p, melhor: lerMelhor(p.id) };
+    this.pistas?.definir({ pista: p.id, proximo: 1 });
+    return true;
+  }
+  /** abandona a corrida (ou fecha o resultado) */
+  sairCorrida() { if (!this.corrida) return; this.corrida = null; this.pistas?.definir(null); this.o.onCorrida?.(null); }
+  /** um quadro da corrida: a moto foi de `de` até onde está agora */
+  private passoDaCorrida(de: { x: number; y: number; z: number }, dt: number) {
+    const k = this.corrida!, m = this.motoEst;
+    if (k.c.fase === "contagem") { const g = k.pista.grid; this.motoEst = { ...m, x: g.x, y: g.y, z: g.z, vx: 0, vy: 0, vz: 0, yaw: g.rumo }; }
+    const r = passoCorrida(k.c, k.pista, de, { x: this.motoEst.x, y: this.motoEst.y, z: this.motoEst.z }, dt, k.melhor?.parciais);
+    k.c = r.c; this.pistas?.definir({ pista: k.pista.id, proximo: k.c.proximo });
+    for (const e of r.eventos) {
+      if (e.tipo === "contagem") this.som?.tocar("corrida-bip");
+      else if (e.tipo === "largou") this.som?.tocar("corrida-largada");
+      else if (e.tipo === "portao") this.som?.tocar("corrida-portao");
+      else if (e.tipo === "boost") { this.som?.tocar("corrida-boost"); this.motoEst = { ...this.motoEst, tanque: 1 }; }   // portão de boost: tanque cheio
+      else if (e.tipo === "volta") this.som?.tocar(k.c.fase === "fim" ? "corrida-fim" : "corrida-volta");
+      else if (e.tipo === "fim" && (!k.melhor || e.total < k.melhor.total)) gravarMelhor(k.pista.id, { parciais: k.c.parciais, total: e.total });
+      this.o.onCorrida?.({ ...e, pista: k.pista.id });
+    }
+  }
+  /** o HUD da corrida (null fora dela) */
+  get corridaHud(): HudCorrida | null {
+    const k = this.corrida; if (!k) return null;
+    const c = k.c, g = k.pista.portoes[c.proximo]!, m = this.motoEst;
+    this.cam.getWorldDirection(this.vCorrida);
+    const frente = Math.atan2(this.vCorrida.x, this.vCorrida.z), alvo = Math.atan2(g.x - m.x, g.z - m.z);
+    let seta = frente - alvo; while (seta > Math.PI) seta -= 2 * Math.PI; while (seta < -Math.PI) seta += 2 * Math.PI;
+    return {
+      pista: k.pista.id, nome: k.pista.nome, fase: c.fase, contagem: Math.max(0, Math.ceil(CONTAGEM - c.t)), tempo: tempoDeCorrida(c),
+      volta: Math.min(c.volta + 1, k.pista.voltas), voltas: k.pista.voltas, portao: c.proximo === 0 ? k.pista.portoes.length : c.proximo, nPortoes: k.pista.portoes.length,
+      tempos: c.voltas, total: c.total, seta, dist: Math.hypot(g.x - m.x, g.z - m.z),
+    };
+  }
+  private vCorrida = new THREE.Vector3();
   /** botão ⚡ (segurar) da moto */
   boostMoto(v: boolean) { this.boostBotao = v; }
   /** o tanque de boost (0..1) e se está aceso — o HUD lê */
@@ -2184,10 +2249,13 @@ export class CyberEngine {
     } else if (this.moto !== null) {
       // MOTO: pilotagem de moto (lib/cyber/motoFisica) — W/S acelera/freia, A/D esterça, Shift/⚡ boost
       const c = this.comandoDeMoto(); this.acelMoto = c.acel;
+      const deCorrida = { x: this.motoEst.x, y: this.motoEst.y, z: this.motoEst.z };
+      if (this.corrida?.c.fase === "contagem") { c.acel = 0; c.boost = false; c.subir = c.descer = false; }   // no grid: o motor ronca, a moto não sai
       const boostAntes = this.motoEst.boost;
       const r = passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
       if (!r.pousado && rompeuBarreira(boostAntes, r.s.boost, Math.hypot(r.s.vx, r.s.vz))) this.ondaT = 0;   // acendeu o boost rápido: quebrou a barreira do som
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
+      if (this.corrida) this.passoDaCorrida(deCorrida, dtReal);
       eu.pos.set(r.s.x, 0, r.s.z); eu.facing = r.s.yaw; eu.moving = Math.hypot(r.s.vx, r.s.vz) > 1; this.sitT = 0;   // "andando" = a moto em movimento (o netcode extrapola)
     } else if (this.pilotando) {
       // VOO: WASD/joystick/direcional relativo à câmera; Espaço/E/SUBIR sobe; Shift/Q/DESCER desce; pousa ao encostar
@@ -2475,6 +2543,8 @@ export class CyberEngine {
       const dentro = !!pv && (!!this.bordo || this.pilotando);
       for (const h of [this.nave, ...[...this.remotos.values()].map((a) => a.nave)]) if (h) h.verDentro(dentro && !!pv && pv.h === h); }
     this.atualizarHudVoo(now);
+    this.pistas?.atualizar(t);
+    if (this.corrida && this.moto === null) this.sairCorrida();
     this.atualizarSom(dt);
     const navePerto = !this.pilotando && !!this.nave && this.navePerto();
     const naMoto = this.moto !== null, motoPertoAgora = !!this.motoAoAlcance(), pousado = naMoto ? this.motoPousado : this.pousado;
@@ -2637,7 +2707,7 @@ export class CyberEngine {
   }
 
   dispose() {
-    this.frota?.dispose(); this.frota = null;
+    this.frota?.dispose(); this.frota = null; this.pistas?.dispose(); this.pistas = null;
     if (!this.vivo) return;   // idempotente (desmonta ao ir estudar e de novo no cleanup do React)
     this.vivo = false; cancelAnimationFrame(this.raf); this.ro?.disconnect(); this.io?.disconnect();
     this.cleanups.forEach((f) => f());

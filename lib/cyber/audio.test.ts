@@ -18,7 +18,7 @@ describe("áudio do cyberespaço", () => {
     expect(FADE_ENTRADA).toBeGreaterThan(0.5);
   });
   it("leito e UI são 2D; fontes do mundo e a nave são posicionais", () => {
-    const d2: NomeSom[] = ["space-bed", "cyber-enter", "study-confirm", "chat-pop"];
+    const d2: NomeSom[] = ["space-bed", "cyber-enter", "study-confirm", "chat-pop", "corrida-bip", "corrida-largada", "corrida-portao", "corrida-boost", "corrida-volta", "corrida-fim"];   // (os da corrida são do HUD)
     for (const [n, s] of Object.entries(SONS)) expect(s.modo).toBe(d2.includes(n as NomeSom) ? "2d" : "pos");
     for (const n of ["ship-flight", "ship-idle", "space-bed", "blackhole-hum", "crystals"] as NomeSom[]) expect(SONS[n].loop).toBe(true);
   });
