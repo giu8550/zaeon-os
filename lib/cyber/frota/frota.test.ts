@@ -53,6 +53,17 @@ describe("a frota (700 IAs)", () => {
     expect(aplicarMigracoes(semOLote).c.frota.lotes).toHaveLength(1);                   // o dono apagou: não volta
     expect(totalDaFrota(CONFIG_PADRAO)).toBe(1500); expect(new Set(gerarFrota(CONFIG_PADRAO.frota).map((a) => a.nome)).size).toBe(1500);
   });
+  it("TETO 1500 em produção: a config que já tinha rodado o +1300 (2000 salvas) volta pra 1500 — os 700 de sempre não mudam", () => {
+    const de2000 = { frota: { lotes: [{ semente: 2026, total: 700 }, { semente: 2027, total: 1300 }], tamanhoGrupo: 4 }, flags: {}, versao: 7, migracoes: ["2026-10-mais-1300", "2026-10-modo-full-ate-12"] };
+    const m = aplicarMigracoes(sanitizarConfig(de2000));
+    expect(totalDaFrota(m.c)).toBe(1500); expect(m.mudou).toBe(true);
+    expect(m.c.frota.lotes.map((l) => [l.semente, l.total])).toEqual([[2026, 700], [2027, 800]]);
+    const antes = gerarFrota({ lotes: de2000.frota.lotes.slice(0, 1).map((l) => ({ ...l, fracaoMulheres: 0.6, fracaoCloak: 0.7 })), tamanhoGrupo: 4 }).map((a) => a.nome);
+    const depois = gerarFrota(m.c.frota).map((a) => a.nome);
+    expect(depois.slice(0, 700)).toEqual(antes);   // os 700 de sempre continuam os mesmos
+    expect(new Set(depois).size).toBe(1500);
+    expect(aplicarMigracoes(m.c).mudou).toBe(false);
+  });
 });
 
 describe("a agenda do dia", () => {
