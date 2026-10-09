@@ -2,13 +2,15 @@
  * Frota de IAs — a CONFIGURAÇÃO salva (PURO): os lotes da frota + as chaves ON/OFF (o painel "Deploy agents" do Modo
  * CEO grava; os clientes e o servidor leem). Fica no banco em SystemSetting (chave `frota-ia`), como JSON. `versao` muda a
  * cada gravação (o cache do plano do dia é por versão). Tudo que vem de fora passa por `sanitizarConfig`.
+ * MIGRAÇÕES (`MIGRACOES`): mudanças na frota que têm que chegar até numa config JÁ SALVA (ex.: +1300 IAs) — cada uma
+ * aplica UMA vez (o id fica em `migracoes`) e o servidor grava o resultado (lib/cyber/frota/servidor `lerConfig`); se o
+ * dono apagar o lote depois pelo painel, ele não volta.
  */
 import { FLAGS_PADRAO, type FlagsFrota } from "./agenda";
 import { FROTA_PADRAO, type ConfigFrota, type LoteFrota } from "./frota";
 
 export const CHAVE_CONFIG = "frota-ia";
-export type ConfigSalva = { frota: ConfigFrota; flags: FlagsFrota; versao: number };
-export const CONFIG_PADRAO: ConfigSalva = { frota: FROTA_PADRAO, flags: FLAGS_PADRAO, versao: 1 };
+export type ConfigSalva = { frota: ConfigFrota; flags: FlagsFrota; versao: number; /** as migrações já aplicadas */ migracoes: string[] };
 /** limites do painel */
 export const LIMITES = { totalMax: 5000, loteMax: 2000, lotesMax: 20 } as const;
 
@@ -26,7 +28,8 @@ export function sanitizarConfig(v: unknown): ConfigSalva {
   const sementes = new Set<number>(); lotes = lotes.filter((l) => (sementes.has(l.semente) ? false : (sementes.add(l.semente), true)));
   let soma = 0; lotes = lotes.filter((l) => (soma + l.total <= LIMITES.totalMax ? ((soma += l.total), true) : false));
   const flags = Object.fromEntries((Object.keys(FLAGS_PADRAO) as (keyof FlagsFrota)[]).map((k) => [k, typeof fl[k] === "boolean" ? fl[k] : FLAGS_PADRAO[k]])) as FlagsFrota;
-  return { frota: { lotes, tamanhoGrupo: Math.floor(num(f.tamanhoGrupo, 2, 8, 4)) }, flags, versao: Math.floor(num(o.versao, 1, 1e12, 1)) };
+  const migracoes = Array.isArray(o.migracoes) ? [...new Set(o.migracoes.filter((x): x is string => typeof x === "string" && x.length <= 60))].slice(0, 50) : [];
+  return { frota: { lotes, tamanhoGrupo: Math.floor(num(f.tamanhoGrupo, 2, 8, 4)) }, flags, versao: Math.floor(num(o.versao, 1, 1e12, 1)), migracoes };
 }
 /** um LOTE NOVO (criação em massa): semente nova (diferente das existentes), N agentes, 60/40, 70% cloak */
 export function novoLote(c: ConfigSalva, total: number, semente: number): ConfigSalva {
@@ -35,3 +38,16 @@ export function novoLote(c: ConfigSalva, total: number, semente: number): Config
   return sanitizarConfig({ ...c, frota: { ...c.frota, lotes: [...c.frota.lotes, { semente: s, total, fracaoMulheres: 0.6, fracaoCloak: 0.7 }] } });
 }
 export const totalDaFrota = (c: ConfigSalva) => c.frota.lotes.reduce((n, l) => n + l.total, 0);
+
+/** as MIGRAÇÕES da frota, em ordem (o id nunca muda depois de publicado) */
+export const MIGRACOES: readonly { id: string; desc: string; aplicar(c: ConfigSalva): ConfigSalva }[] = [
+  { id: "2026-10-mais-1300", desc: "+1300 IAs no mesmo mundo (total 2000)", aplicar: (c) => novoLote(c, 1300, 2027) },
+];
+/** aplica as migrações que faltam (cada uma uma vez); `mudou` = tem coisa nova pra gravar */
+export function aplicarMigracoes(c: ConfigSalva): { c: ConfigSalva; mudou: boolean } {
+  let out = c, mudou = false;
+  for (const m of MIGRACOES) if (!out.migracoes.includes(m.id)) { out = { ...m.aplicar(out), migracoes: [...out.migracoes, m.id] }; mudou = true; }
+  return { c: out, mudou };
+}
+/** a config de quando não há nada salvo: a frota base com as migrações já aplicadas */
+export const CONFIG_PADRAO: ConfigSalva = aplicarMigracoes({ frota: FROTA_PADRAO, flags: FLAGS_PADRAO, versao: 1, migracoes: [] }).c;

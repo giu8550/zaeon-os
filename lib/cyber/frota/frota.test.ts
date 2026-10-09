@@ -5,7 +5,7 @@ import { planejarDia } from "./plano";
 import { estadoDaIA, MOV, OFFLINE, pontoDaGaragem, roteiroMoto, viagem } from "./corpo";
 import { CONVERSA, divaga, episodiosDoDia, limparFala, normalizarFala, promptEpisodio, tomDaResposta, validarFalas } from "./conversas";
 import { gerarFalasSemRepetir, gerarResposta, type DepsTexto } from "./texto";
-import { CONFIG_PADRAO, novoLote, sanitizarConfig, totalDaFrota } from "./config";
+import { CONFIG_PADRAO, aplicarMigracoes, novoLote, sanitizarConfig, totalDaFrota } from "./config";
 import { salaDoPonto, spotsDe } from "./lugares";
 import { CIDADE, mundo, salaEm } from "../ceu";
 
@@ -23,7 +23,7 @@ describe("a frota (700 IAs)", () => {
     expect(gerarFrota()).toEqual(frota);   // determinística
   });
   it("criar em massa acrescenta um lote sem mudar quem já existia", () => {
-    const c2 = novoLote(CONFIG_PADRAO, 100, 777), f2 = gerarFrota(c2.frota);
+    const c2 = novoLote(sanitizarConfig({ frota: FROTA_PADRAO }), 100, 777), f2 = gerarFrota(c2.frota);
     expect(totalDaFrota(c2)).toBe(800); expect(f2.slice(0, 700)).toEqual(frota);
     expect(new Set(f2.map((a) => a.nome)).size).toBe(800);
     expect(Math.min(...f2.slice(700).map((a) => a.grupo))).toBeGreaterThan(Math.max(...frota.map((a) => a.grupo)));
@@ -32,7 +32,16 @@ describe("a frota (700 IAs)", () => {
     const c = sanitizarConfig({ frota: { lotes: [{ semente: 5, total: 99999 }, { semente: "x" }], tamanhoGrupo: 99 }, flags: { moto: false, lixo: 1 }, versao: -3 });
     expect(c.frota.lotes[0]!.total).toBeLessThanOrEqual(2000); expect(c.frota.lotes).toHaveLength(1); expect(c.frota.tamanhoGrupo).toBe(8);
     expect(c.flags.moto).toBe(false); expect(c.flags.estudoPlataforma).toBe(true); expect(c.versao).toBe(1);
-    expect(sanitizarConfig(null)).toEqual(CONFIG_PADRAO);
+    expect(aplicarMigracoes(sanitizarConfig(null)).c).toEqual(CONFIG_PADRAO);
+  });
+  it("MIGRAÇÃO +1300: a config salva antiga (700) vira 2000 UMA vez; quem já existia não muda; apagar o lote depois não traz de volta", () => {
+    const salva = sanitizarConfig({ frota: { lotes: [{ semente: 2026, total: 700 }], tamanhoGrupo: 4 }, flags: {}, versao: 1 });
+    const m = aplicarMigracoes(salva); expect(m.mudou).toBe(true); expect(totalDaFrota(m.c)).toBe(2000);
+    expect(gerarFrota(m.c.frota).slice(0, 700)).toEqual(gerarFrota(salva.frota));   // os 700 continuam os mesmos
+    expect(aplicarMigracoes(m.c).mudou).toBe(false);                                    // não aplica de novo
+    const semOLote = sanitizarConfig({ ...m.c, frota: { ...m.c.frota, lotes: m.c.frota.lotes.slice(0, 1) } });
+    expect(aplicarMigracoes(semOLote).c.frota.lotes).toHaveLength(1);                   // o dono apagou: não volta
+    expect(totalDaFrota(CONFIG_PADRAO)).toBe(2000); expect(new Set(gerarFrota(CONFIG_PADRAO.frota).map((a) => a.nome)).size).toBe(2000);
   });
 });
 

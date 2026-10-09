@@ -5,7 +5,7 @@
  */
 import { prisma } from "@/src/lib/prisma";
 import { falarJson } from "@/lib/cyber/ia/motor";
-import { CHAVE_CONFIG, CONFIG_PADRAO, sanitizarConfig, type ConfigSalva } from "./config";
+import { CHAVE_CONFIG, CONFIG_PADRAO, aplicarMigracoes, sanitizarConfig, type ConfigSalva } from "./config";
 import { gerarFrota, type AgenteIA } from "./frota";
 import { planejarDia, type PlanoDia } from "./plano";
 import { episodiosDoDia, type Episodio } from "./conversas";
@@ -16,11 +16,20 @@ let cacheConfig: { em: number; c: ConfigSalva } | null = null;
 export async function lerConfig(): Promise<ConfigSalva> {
   if (cacheConfig && Date.now() - cacheConfig.em < 15_000) return cacheConfig.c;
   let c = CONFIG_PADRAO;
-  try { const s = await prisma.systemSetting.findUnique({ where: { key: CHAVE_CONFIG } }); if (s) c = sanitizarConfig(JSON.parse(s.value)); } catch { /* sem banco: o padrão */ }
+  try {
+    const s = await prisma.systemSetting.findUnique({ where: { key: CHAVE_CONFIG } });
+    if (s) {
+      // a config SALVA: aplica as migrações que faltam (uma vez) e grava (a versão sobe: os clientes recalculam o dia)
+      const m = aplicarMigracoes(sanitizarConfig(JSON.parse(s.value)));
+      c = m.c;
+      if (m.mudou) { c = { ...c, versao: c.versao + 1 }; await prisma.systemSetting.update({ where: { key: CHAVE_CONFIG }, data: { value: JSON.stringify(c) } }); }
+    }
+  } catch { /* sem banco: o padrão */ }
   cacheConfig = { em: Date.now(), c }; return c;
 }
 export async function salvarConfig(c: ConfigSalva): Promise<ConfigSalva> {
-  const atual = await lerConfig(), nova = sanitizarConfig({ ...c, versao: atual.versao + 1 });
+  // as migrações já aplicadas FICAM (mesmo que o painel mande uma config sem elas) — senão um lote apagado voltava
+  const atual = await lerConfig(), nova = sanitizarConfig({ ...c, versao: atual.versao + 1, migracoes: [...new Set([...atual.migracoes, ...(c.migracoes ?? [])])] });
   await prisma.systemSetting.upsert({ where: { key: CHAVE_CONFIG }, create: { key: CHAVE_CONFIG, value: JSON.stringify(nova) }, update: { value: JSON.stringify(nova) } });
   cacheConfig = { em: Date.now(), c: nova }; return nova;
 }
