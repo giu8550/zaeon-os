@@ -48,6 +48,8 @@ export type Montado = { w: number; maoE: THREE.Vector3; maoD: THREE.Vector3; peE
 
 export type AvatarLuzHandle = {
   group: THREE.Group;
+  /** a MOCHILA a jato (a multidão na GPU grava a matriz dela por quadro — components/cyber/MultidaoGPU) */
+  mochila: THREE.Object3D;
   /** meshes do corpo (raycast do clique). */
   meshes: THREE.Object3D[];
   /** Idle/Walk/Run em crossfade + neurônios + `sentado` (0..1) = na própria base: em pé no painel holográfico,
@@ -312,7 +314,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     meio.getWorldPosition(pB); dirAlvo.copy(alvo).sub(pB).normalize(); apontar(meio, ponta, dirAlvo, w);
   };
   return {
-    group: grupo, meshes,
+    group: grupo, meshes, mochila,
     animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, montado = null, dj = 0, danca = 0, surf = 0, puxado: wP = 0, descanso = null, tablet: wTab = 0, dt, t }) {
       const k = Math.min(1, dt * 8), corre = !!correndo && andando;
       wWalk += ((andando && !corre ? 1 : 0) - wWalk) * k; wRun += ((corre ? 1 : 0) - wRun) * k;
