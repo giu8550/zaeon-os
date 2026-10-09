@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Award, BookOpen, GraduationCap, Sparkles, ShieldCheck, ExternalLink, RefreshCw, Wallet, Clock, AlertCircle } from "lucide-react";
+import { SolanaSelo } from "@/components/solana/SolanaMark";
 
 type Credential = {
   id: string;
@@ -38,14 +39,11 @@ const TYPE: Record<string, { label: string; icon: React.ReactNode; ring: string 
   work: { label: "Trabalho", icon: <BookOpen size={14} />, ring: "from-violet-400/40 to-fuchsia-500/10" },
   course: { label: "Aula", icon: <GraduationCap size={14} />, ring: "from-emerald-400/40 to-teal-500/10" },
   "mentor-cert": { label: "Mentor", icon: <Award size={14} />, ring: "from-amber-400/50 to-orange-500/10" },
+  academic: { label: "Título acadêmico", icon: <GraduationCap size={14} />, ring: "from-emerald-400/40 to-cyan-500/10" },
 };
 
-/** Selo Solana: gradiente da marca (roxo→verde), discreto, só um "S" estilizado. */
-const SolanaSeal = ({ title }: { title: string }) => (
-  <span title={title} className="inline-flex items-center gap-1 rounded-full px-2 py-[2px] text-[9px] font-black uppercase tracking-widest text-white bg-gradient-to-r from-[#9945FF] to-[#14F195] shadow-[0_0_10px_rgba(20,241,149,0.35)]">
-    <ShieldCheck size={10} /> Solana
-  </span>
-);
+/** Selo Solana: logomark OFICIAL (components/solana/SolanaMark), discreto. */
+const SolanaSeal = ({ title }: { title: string }) => <SolanaSelo title={title} />;
 
 const StatusPill = ({ c }: { c: Credential }) => {
   if (c.status === "issued" && c.verified) return <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-emerald-500"><ShieldCheck size={10} /> verificada</span>;
@@ -107,8 +105,9 @@ export default function AchievementsMural({ className }: { className?: string })
         <div className="text-[11px] text-slate-400">Carregando suas conquistas…</div>
       ) : creds.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 dark:border-white/10 p-5 text-center">
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Cada conquista sua — nó de habilidade dominado, aula ou trabalho concluído — vira um certificado seu, permanente e verificável. Aparece aqui automaticamente.
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Nenhuma credencial verificada ainda</p>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            Cada conquista sua — nó de habilidade dominado, aula ou trabalho concluído, título verificado por um professor ou instituição — vira um certificado seu, permanente e verificável. Aparece aqui automaticamente.
           </p>
         </div>
       ) : (

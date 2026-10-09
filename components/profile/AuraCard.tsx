@@ -8,12 +8,14 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { levelFromAura, NIVEIS_ACADEMICOS, ROTULO_NIVEL, seloDoMetodo, type NivelAcademico } from "@/lib/aura/rules";
+import CredencialCard from "@/components/solana/CredencialCard";
+import SolanaMark from "@/components/solana/SolanaMark";
 
 type Aura = {
   aura: number; level: number; titulo: string; prox: number | null; min: number; proxMin: number | null;
   validatedSkills: number; completedBrains: number; learnedNodes: number; academicLevel: string | null;
   academicas: { id: string; nivel: string; area: string | null; instituicao: string | null; metodo: string; status: string; verifiedAt: string | null }[];
-  parede: { id: string; type: string; title: string; assetId: string | null; network: string; issuedAt: string | null }[];
+  parede: { id: string; type: string; title: string; assetId: string | null; network: string; issuedAt: string | null; explorerUrl?: string | null; validadoPor?: string | null }[];
   recent: { id: string; source: string; amount: number; reason: string | null; at: string }[];
   /** Cérebros do aluno (PR-D): título, arquétipo, completudes. */
   cerebros?: { id: string; titulo: string; tipoTopico: string; modoValidacao: string; aprendizado: number; conclusao: number; passos: number; completo: boolean }[];
@@ -33,6 +35,9 @@ const SELO: Record<ReturnType<typeof seloDoMetodo>, { t: string; c: string }> = 
   vinculo: { t: "vínculo verificado", c: "text-sky-700 dark:text-sky-200 border-sky-400/50" },
   verificado: { t: "✓ verificado", c: "text-emerald-700 dark:text-emerald-200 border-emerald-400/60" },
   ouro: { t: "✓ verificado · selo ouro", c: "text-amber-700 dark:text-amber-200 border-amber-400/70" },
+};
+const TIPO_ATESTADO: Record<string, string> = {
+  skill: "Habilidade dominada", work: "Trabalho concluído", course: "Aula concluída", "mentor-cert": "Certificação de mentor", academic: "Título acadêmico verificado",
 };
 const explorer = (assetId: string, network: string) => `https://explorer.solana.com/address/${assetId}${network === "mainnet" || network === "mainnet-beta" ? "" : `?cluster=${network}`}`;
 
@@ -172,13 +177,29 @@ export default function AuraCard() {
 
         {/* parede de atestados + recentes */}
         <div className={`${card} p-5`}>
-          <div className={`${label} mb-3`}>Parede de atestados</div>
-          {d.parede.length === 0 && <p className={`text-[12px] ${mudo}`}>Seus atestados on-chain aparecem aqui conforme você valida habilidades e títulos.</p>}
+          <div className="flex items-center justify-between mb-3">
+            <div className={label}>Parede de atestados</div>
+            <span className={`inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest ${mudo}`}><SolanaMark size={9} title="" /> verificável na Solana</span>
+          </div>
+          {d.parede.length === 0 && <p className={`text-[12px] ${mudo}`}>Nenhuma credencial verificada ainda. Seus atestados on-chain aparecem aqui conforme você valida habilidades e títulos.</p>}
+          {d.parede.length > 0 && (
+            <CredencialCard
+              titulo={d.parede[0].title}
+              tipo={TIPO_ATESTADO[d.parede[0].type] ?? "Credencial verificável"}
+              validadoPor={d.parede[0].validadoPor ?? null}
+              emitidaEm={d.parede[0].issuedAt}
+              assetId={d.parede[0].assetId}
+              explorerUrl={d.parede[0].explorerUrl ?? (d.parede[0].assetId ? explorer(d.parede[0].assetId, d.parede[0].network) : null)}
+              rede={d.parede[0].network}
+              status="issued"
+              className="mb-3"
+            />
+          )}
           <ul className="flex flex-col gap-2">
-            {d.parede.map((p) => (
+            {d.parede.slice(1).map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-2">
                 <span className={`text-[13px] font-semibold truncate ${txt}`}>{p.title}</span>
-                {p.assetId ? <a href={explorer(p.assetId, p.network)} target="_blank" rel="noreferrer" className="shrink-0 text-[11px] font-bold text-cyan-700 dark:text-cyan-300 hover:underline">ver on-chain ↗</a> : <span className={`text-[10px] ${mudo}`}>{p.type}</span>}
+                {p.assetId ? <a href={p.explorerUrl ?? explorer(p.assetId, p.network)} target="_blank" rel="noreferrer" className="shrink-0 text-[11px] font-bold text-cyan-700 dark:text-cyan-300 hover:underline">ver on-chain ↗</a> : <span className={`text-[10px] ${mudo}`}>{p.type}</span>}
               </li>
             ))}
           </ul>
