@@ -554,6 +554,17 @@ export class CyberEngine {
   exporDepuracao() { if (process.env.NODE_ENV !== "production" && this.vivo) (window as unknown as { __cyber?: CyberEngine }).__cyber = this; }
   private aoPrimeiroQuadro: (() => void) | null = null;
   private passadaEm = -Infinity;
+  /** as LUZES das bases: um conjunto FIXO (o nº de luzes da cena não muda quando alguém entra — mudar recompila todos os
+   *  materiais) que vai pras bases mais perto da câmera (components/cyber/BaseEstudo `luz`) */
+  private luzesBase: THREE.PointLight[] = [];
+  private acenderBases() {
+    if (this.o.low) return;
+    if (!this.luzesBase.length) for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0x9fd8ff, 0, 11); this.cena.scene.add(l); this.luzesBase.push(l); }
+    const todas = [...this.bases.values(), ...(this.baseQG ? [this.baseQG] : [])].filter((b) => b.group.visible)
+      .map((b) => { const l = b.luz(new THREE.Vector3()); return { ...l, d: l.pos.distanceToSquared(this.cam.position) }; })
+      .sort((a, b) => a.d - b.d);
+    this.luzesBase.forEach((l, i) => { const b = todas[i]; if (b && b.d < 140 * 140) { l.position.copy(b.pos); l.intensity = b.forca; } else l.intensity = 0; });
+  }
   // ───────────── DESCANSO no lounge (J) + MODO ESTUDO no TABLET (T) — lib/cyber/descanso ─────────────
   /** sentado/deitado: o lugar, o assento e o modo; a FASE — indo (andando até a frente do assento), sentando (vira e
    *  abaixa), parado (sentado/deitado), levantando (sobe e dá o passo pra frente) — e há quanto tempo está nela */
@@ -2487,6 +2498,7 @@ export class CyberEngine {
       if (this.regiaoPerto(b.group, "base")) b.atualizar({ dt, t, ativa: alguemPerto, hover: this.hoverBase === id, perto: id === euId && perto, energia });
     }
     if (this.baseQG) { this.baseQG.group.position.y = this.yDoNivel("qg"); if (this.regiaoPerto(this.baseQG.group, "base-qg")) this.baseQG.atualizar({ dt, t, ativa: false, hover: false, perto: false }); }
+    this.acenderBases();
     // motos: de longe some a moto inteira (ninguém vê 2 m de moto a 1 km); a montada está sempre perto da câmera
     for (const m of this.vagaMotos) this.regiaoPerto(m.g, "moto");
     for (const m of this.instMotos.values()) this.regiaoPerto(m.g, "moto");

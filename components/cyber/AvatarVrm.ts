@@ -162,6 +162,7 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
   // escondido, que o espelho já recalcula toda vez que anima. ~40% dos nós de um personagem VRM.
   const rigN = H.normalizedHumanBonesRoot, semPassada = () => {};
   rigN.updateMatrixWorld = semPassada;
+  rigN.visible = false;   // nada pra desenhar lá: a montagem da lista de desenho nem entra (components/cyber/matrizes)
   const atualizarModelo = THREE.Object3D.prototype.updateMatrixWorld.bind(modelo);
   if (o.economico) modelo.updateMatrixWorld = semPassada;
   const no = (b: string) => H.getNormalizedBoneNode(b as VRMHumanBoneName);

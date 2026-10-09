@@ -18,6 +18,7 @@ import { COR_LUZ } from "@/lib/cyber/cores";
 import { FIO, MESA_DJ, PALCO } from "@/lib/cyber/ceu";
 import { AURA_NO_DESENHO, TINTA, estiloDe } from "@/lib/cyber/estiloAvatar";
 import { corDesenho, materialTinta, materialToon, materialToonSimples } from "./AvatarAnime";
+import { esconderOssosVazios } from "./matrizes";
 import type { VRM } from "@pixiv/three-vrm";
 import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./AvatarVrm";
 import { criarAsas, type AsasHandle } from "./AsasAnjo";
@@ -313,6 +314,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     dirAlvo.copy(cot).sub(pA).normalize(); apontar(raiz, meio, dirAlvo, w);
     meio.getWorldPosition(pB); dirAlvo.copy(alvo).sub(pB).normalize(); apontar(meio, ponta, dirAlvo, w);
   };
+  if (modeloMx) esconderOssosVazios(modeloMx);   // os ~50 ossos do esqueleto sem nada pendurado: fora da lista de desenho (matrizes)
   return {
     group: grupo, meshes, mochila,
     animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, montado = null, dj = 0, danca = 0, surf = 0, puxado: wP = 0, descanso = null, tablet: wTab = 0, dt, t }) {
@@ -730,6 +732,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       // o soldado (e as cascas dele: aura, tinta) somem — o esqueleto continua animando, e continua no clique
       modeloMx.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
       espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso, { economico: op?.economico }); espelho.pose(poseVrm);
+      esconderOssosVazios(vrm.scene); esconderOssosVazios(modeloMx);   // ossos sem nada pra desenhar fora da lista (matrizes)
     },
     soltarVrm() { espelho?.dispose(); espelho = null; },
     recolorir(hex) {

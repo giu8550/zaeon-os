@@ -25,3 +25,26 @@ export function matrizDoAvatar(raiz: THREE.Object3D, animou: boolean): void {
 export function matrizesDaCena(cena: THREE.Object3D): void {
   for (const c of cena.children) { if (!c.visible) c.matrixWorldAutoUpdate = false; else if (!c.userData.matrizManual) c.matrixWorldAutoUpdate = true; }
 }
+
+/** OSSOS SEM NADA PRA DESENHAR saem da montagem da lista de desenho. O three percorre todo objeto VISÍVEL a cada quadro
+ *  (`projectObject`), e osso é objeto: ~400 por VRM, ~50 por avatar — na Zaeon cheia, metade dos ~9.500 nós visíveis.
+ *  Esconder o osso não muda o skinning (que usa só a matriz) nem a matriz (que o three recalcula invisível ou não).
+ *  Osso que carrega alguma coisa desenhável no galho (acessório, fone, tablet — mesmo escondido agora) fica visível.
+ *  Chame depois de montar o avatar e de vestir/trocar o VRM. Devolve quantos escondeu. */
+export function esconderOssosVazios(raiz: THREE.Object3D): number {
+  let n = 0;
+  const temDesenho = (o: THREE.Object3D): boolean => {
+    let tem = false;
+    for (const c of o.children) if (temDesenho(c)) tem = true;   // (sem atalho: todo galho é visitado e marcado)
+    const desenha = (o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite;
+    if ((o as THREE.Bone).isBone && !tem && !desenha) { if (o.visible) n++; o.visible = false; }
+    return tem || desenha;
+  };
+  temDesenho(raiz);
+  return n;
+}
+
+/** quem PENDURA algo desenhável num osso (acessório) reabre o caminho até a raiz (os ossos vazios podem estar escondidos) */
+export function mostrarCaminho(o: THREE.Object3D): void {
+  for (let k: THREE.Object3D | null = o.parent; k; k = k.parent) if ((k as THREE.Bone).isBone) k.visible = true;
+}

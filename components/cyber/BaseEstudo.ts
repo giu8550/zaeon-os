@@ -23,6 +23,8 @@ export type BaseEstudoHandle = {
    * `energia` (0..1) = o dono na base (digitando no painel) → o fluxo de energia mãos → telas.
    */
   atualizar(o: { dt: number; t: number; ativa: boolean; hover: boolean; perto: boolean; energia?: number }): void;
+  /** a luz da base agora (o engine acende as 4 bases mais perto da câmera com um conjunto fixo de PointLights) */
+  luz(alvo: THREE.Vector3): { forca: number; pos: THREE.Vector3 };
   dispose(): void;
 };
 
@@ -81,10 +83,12 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
   const specLinhas: { pai: THREE.Object3D; x: number; y: number; w: number; k: number; i: number }[] = [];
   const specBarras: { pai: THREE.Object3D; x: number; y: number; k: number; i: number }[] = [];
   const criarTela = (pai: THREE.Object3D, w: number, h: number, nLinhas: number, nBarras: number): THREE.Mesh => {
-    const glow = new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    // as 2 telas LATERAIS animam igual: o mesmo material (o lote junta as duas — components/cyber/lotes)
+    const lateral = telas.length > 0 && telas.length < 3 && telas[1] ? telas[1] : null;
+    const glow = lateral?.glow ?? new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     const g = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.2, h + 0.18), glow); g.position.z = -0.02; pai.add(g);
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: 0x0a2436, transparent: true, opacity: 0.62, side: THREE.DoubleSide })); pai.add(scr);
-    const edge = new THREE.LineBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.85 }); pai.add(new THREE.LineSegments(new THREE.EdgesGeometry(scr.geometry), edge));
+    const edge = lateral?.edge ?? new THREE.LineBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.85 }); pai.add(new THREE.LineSegments(new THREE.EdgesGeometry(scr.geometry), edge));
     // moldura fina (bezel) atrás + cantoneiras em L (HUD) na frente
     const bezel = arestas(new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, h + 0.12, 0.05), casco)); bezel.position.z = -0.05; pai.add(bezel);
     const L = Math.min(w, h) * 0.18, cx = w / 2 + 0.05, cy = h / 2 + 0.05, c: number[] = [];
@@ -97,7 +101,7 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
     for (let i = 0; i < nLinhas; i++) { const lw = (0.25 + Math.random() * 0.6) * w; specLinhas.push({ pai, x: -w / 2 + 0.1 + lw / 2, y: h / 2 - 0.28 - i * 0.15, w: lw, k, i }); }
     // medidores (barras verticais) no canto de baixo
     for (let i = 0; i < nBarras; i++) specBarras.push({ pai, x: w / 2 - 0.12 - i * 0.09, y: -h / 2 + 0.08, k, i });
-    telas.push({ glow, edge });
+    telas.push({ glow, edge });   // (a 2ª lateral repete os materiais da 1ª: animar as duas dá o mesmo resultado)
     return scr;
   };
 
@@ -128,8 +132,10 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
   const refBarras = specBarras.map((b) => noRef(b.pai, b.x, b.y));
   refBarras.forEach((m, j) => barras.setMatrixAt(j, m)); barras.instanceMatrix.setUsage(THREE.DynamicDrawUsage); barras.frustumCulled = false; office.add(barras);
 
-  // luz pontual por base pesa no shader de TODA a cena (uma por pessoa): no `low` (celular) fica só o emissivo
-  const luz = low ? null : new THREE.PointLight(0x9fd8ff, 1.6, 11); if (luz) { luz.position.set(0, 3.1, -0.6); office.add(luz); }
+  // a LUZ da base não é mais uma PointLight própria: cada uma pesava no shader de TODA a cena (17 luzes com 14 jogadores,
+  // e cada um que entrava recompilava os materiais). O engine tem 4 luzes que vão pras 4 bases mais perto da câmera
+  // (alcance de 11 m: longe, a base já não ilumina nada que se veja) — aqui fica só onde e com que força
+  const luzLocal = new THREE.Vector3(0, 3.1, -0.6); let luzForca = 1.6;
 
   // ── fluxo de ENERGIA: do painel (mãos) até as três telas, em curvas; só com o dono sentado ──
   const origem = new THREE.Vector3(0, ANEL_CTRL.y, ANEL_CTRL.z);
@@ -172,6 +178,7 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
   let e = 0;   // energia suavizada
   return {
     group: office, layout, monitor: scr,
+    luz(alvo) { return { forca: luzForca, pos: office.localToWorld(alvo.copy(luzLocal)) }; },
     mover(l) { this.layout = l; office.position.set(l.x, office.position.y, l.z); office.rotation.y = l.rot; },
     atualizar({ dt, t, ativa, hover, perto, energia = 0 }) {
       e += (energia - e) * Math.min(1, dt * 2.5);
@@ -186,7 +193,7 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
       linhas.instanceColor!.needsUpdate = true;
       specBarras.forEach((b, j) => barras.setMatrixAt(j, mI.copy(refBarras[j]!).multiply(mS.makeScale(1, 0.25 + (0.35 + 0.65 * e) * (0.5 + 0.5 * Math.sin(t * (1.3 + b.i * 0.37) + b.k * 1.7 + b.i)), 1))));
       barras.instanceMatrix.needsUpdate = true;
-      if (luz) luz.intensity = 1.5 + (ativa ? 1.4 : 0) + 1.2 * e;
+      luzForca = 1.5 + (ativa ? 1.4 : 0) + 1.2 * e;
       for (const c of cristais) c.rot += dt * 0.6;
       cristaisAt(t, ativa); malhaCristais.instanceMatrix.needsUpdate = true; malhaCristais.instanceColor!.needsUpdate = true;
       (joia.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.9 + 0.6 * e + 0.2 * pulso; joia.rotation.y += dt * (0.3 + 0.9 * e);
