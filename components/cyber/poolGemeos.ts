@@ -18,7 +18,7 @@ import * as THREE from "three";
 type Tipo = "mesh" | "inst" | "linha" | "pontos";
 type Peca = THREE.Mesh | THREE.InstancedMesh | THREE.LineSegments | THREE.Points;
 type Slot = { tipo: Tipo; assinatura: string; desenho: THREE.Object3D; padrao: number; cor: "aditivo" | "emissivo" | "cor" | "instancia"; /** o material é do pool (não o do molde) */ proprio: boolean };
-type Cache = { m: Float32Array; r: number; g: number; b: number; vis: boolean | null; vM: number; vC: number; vP: number; a?: number };
+type Cache = { m: Float64Array; r: number; g: number; b: number; vis: boolean | null; vM: number; vC: number; vP: number; a?: number };
 type Membro = { raiz: THREE.Object3D; pecas: Peca[]; cache: Cache[] };
 
 const tipoDe = (o: THREE.Object3D): Tipo | null => (o as THREE.InstancedMesh).isInstancedMesh ? "inst" : (o as THREE.Mesh).isMesh ? "mesh" : (o as THREE.LineSegments).isLineSegments ? "linha" : (o as THREE.Points).isPoints ? "pontos" : null;
@@ -113,7 +113,7 @@ export function criarPoolGemeos(o: { max: number; nome: string }): PoolGemeos {
             const p = mb.pecas[k]!, vis = visRaiz[j]! && visivel(p, mb.raiz), mt = matDe(p), pi = p as THREE.InstancedMesh, qtd = s.tipo === "inst" ? pi.count : 1;
             const fator = s.cor === "aditivo" ? mt.opacity : 1;
             if (s.cor === "emissivo") cor.copy(mt.emissive!).multiplyScalar(mt.emissiveIntensity ?? 1); else if (mt.color) cor.copy(mt.color).multiplyScalar(fator); else cor.set(1, 1, 1);
-            const c = (mb.cache[k] ??= { m: new Float32Array(16).fill(NaN), r: NaN, g: NaN, b: NaN, vis: null, vM: -1, vC: -1, vP: -1 });
+            const c = (mb.cache[k] ??= { m: new Float64Array(16).fill(NaN), r: NaN, g: NaN, b: NaN, vis: null, vM: -1, vC: -1, vP: -1 });
             const e = p.matrixWorld.elements; let igual = c.vis === vis && c.r === cor.r && c.g === cor.g && c.b === cor.b;
             for (let q = 0; q < 16 && igual; q++) if (c.m[q] !== e[q]) igual = false;
             if (s.tipo === "inst" && igual) igual = c.vM === pi.instanceMatrix.version && c.vC === (pi.instanceColor?.version ?? -1);
@@ -144,7 +144,7 @@ export function criarPoolGemeos(o: { max: number; nome: string }): PoolGemeos {
         let o2 = 0, sujoP = false, sujoC = false;
         membros.forEach((mb, j) => {
           const p = mb.pecas[k]!, src = p.geometry.attributes.position as THREE.BufferAttribute, mt = matDe(p), vis = visRaiz[j]! && visivel(p, mb.raiz);
-          const c = (mb.cache[k] ??= { m: new Float32Array(16).fill(NaN), r: NaN, g: NaN, b: NaN, vis: null, vM: -1, vC: -1, vP: -1, a: NaN });
+          const c = (mb.cache[k] ??= { m: new Float64Array(16).fill(NaN), r: NaN, g: NaN, b: NaN, vis: null, vM: -1, vC: -1, vP: -1, a: NaN });
           const e = p.matrixWorld.elements, n = src.count;
           let mesmaM = true; for (let q = 0; q < 16 && mesmaM; q++) if (c.m[q] !== e[q]) mesmaM = false;
           // (escondida, nem as posições precisam: a cor vai com alfa 0)

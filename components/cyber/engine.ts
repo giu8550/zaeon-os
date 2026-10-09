@@ -60,7 +60,7 @@ import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
 import { atualizarRegiao, criarRegiao, soltarRegiao, type RegiaoCena } from "./regioesCena";
 import { fundirEstaticos } from "./lotes";
-import { matrizDoAvatar, matrizesDaCena } from "./matrizes";
+import { matrizDoAvatar, matrizesDaCena, matrizSeMudou } from "./matrizes";
 import { umaPassadaNosTransparentes } from "./umaPassada";
 import { criarPoolGemeos, type PoolGemeos } from "./poolGemeos";
 import type { Regiao } from "@/lib/cyber/regioes";
@@ -1674,6 +1674,7 @@ export class CyberEngine {
       const v = vs[i]!, k = progressoDaVaga(this.fabricas[v.lote]!.f, i);
       m.moto.visible = k > 0.001; m.g.position.set(v.x, this.yDaVaga(v), v.z);
       const e = k >= 1 ? 1 : 0.02 + 0.98 * (1 - Math.pow(1 - k, 3)); m.moto.scale.set(1, e, 1);
+      matrizSeMudou(m.g, matrizSeMudou(m.moto));   // parada na vaga: nem recalcula nem percorre o galho (components/cyber/matrizes)
     });
     // 4) as INSTÂNCIAS que devem existir agora (montadas e estacionadas)
     type Quer = { s: number; quem: Ator | null; pose?: { x: number; y: number; z: number; yaw: number } };
