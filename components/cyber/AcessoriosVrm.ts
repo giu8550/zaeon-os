@@ -22,6 +22,7 @@ import * as THREE from "three";
 import type { VRM, VRMHumanBoneName } from "@pixiv/three-vrm";
 import { tintaFixa, toon } from "./AvatarAnime";
 import { fundirEstaticos } from "./lotes";
+import { mostrarCaminho } from "./matrizes";
 import type { AcessorioVrm } from "@/lib/cyber/estiloAvatar";
 
 export type AcessoriosHandle = { dispose(): void };
@@ -343,7 +344,7 @@ export function vestirAcessorios(vrm: VRM, lista: readonly AcessorioVrm[]): Aces
     const pai = qual === "neck" ? osso("neck") ?? osso("upperChest") : qual === "upperChest" ? osso("upperChest") ?? osso("chest") : osso("head");
     if (!pai) continue;
     const obj = fazer();
-    pai.add(obj); postos.push(obj);
+    pai.add(obj); postos.push(obj); mostrarCaminho(obj);   // (os ossos vazios ficam escondidos — components/cyber/matrizes)
     // os ÓCULOS vão onde os olhos estão (os ossos dos olhos do VRM, no referencial da cabeça) — cada rosto tem a sua
     // proporção
     if (a === "oculosRedondos" || a === "oculosRetangulares" || a === "oculosRetPrata" || a === "monoculo") {

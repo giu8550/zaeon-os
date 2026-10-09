@@ -45,10 +45,25 @@ export function criarAsas(): AsasHandle {
   const mat = toon(COR_PENA, { rim: new THREE.Color(COR_BRILHO), rimForca: 0.14, brilho: 0 });   // (rim forte em pena chapada vista de raspão acendia a pena inteira)
   const tinta = tintaFixa(0.007);
   const geos: THREE.BufferGeometry[] = [];
-  const malha = (g: THREE.BufferGeometry, pai: THREE.Object3D) => {
-    geos.push(g);
-    const m = new THREE.Mesh(g, mat), t = new THREE.Mesh(g, tinta); t.raycast = () => {};
-    pai.add(m, t);
+  // cada asa vira UMA malha com esqueleto (os ossos = ombro, cotovelo, pulso e os 9 pivôs das primárias): 2 draw calls
+  // por asa (penas + contorno) — eram 24 (cada pena e cada segmento com o toon e a tinta dele)
+  let partes: { g: THREE.BufferGeometry; osso: THREE.Object3D }[] = [];
+  const malha = (g: THREE.BufferGeometry, pai: THREE.Object3D) => { geos.push(g); partes.push({ g, osso: pai }); };
+  const esqueletizar = (raiz: THREE.Object3D, ossos: THREE.Object3D[]) => {
+    raiz.updateMatrixWorld(true);
+    const inv = raiz.matrixWorld.clone().invert(), m = new THREE.Matrix4();
+    const gs = partes.map(({ g, osso: o }) => {
+      const c = g.clone().applyMatrix4(m.multiplyMatrices(inv, o.matrixWorld)), n = c.attributes.position!.count, k = ossos.indexOf(o);
+      const si = new Float32Array(n * 4), sw = new Float32Array(n * 4); for (let i = 0; i < n; i++) { si[i * 4] = k; sw[i * 4] = 1; }
+      c.setAttribute("skinIndex", new THREE.BufferAttribute(si, 4)); c.setAttribute("skinWeight", new THREE.BufferAttribute(sw, 4));
+      return c;
+    });
+    const geo = mergeGeometries(gs)!; gs.forEach((g) => g.dispose()); geos.push(geo); partes = [];
+    const penas = new THREE.SkinnedMesh(geo, mat), contorno = new THREE.SkinnedMesh(geo, tinta);
+    penas.frustumCulled = contorno.frustumCulled = false; contorno.raycast = () => {};
+    raiz.add(penas, contorno); raiz.updateMatrixWorld(true);
+    const esq = new THREE.Skeleton(ossos as THREE.Bone[]); penas.bind(esq); contorno.bind(esq);
+    geo.computeBoundingSphere(); penas.boundingSphere = geo.boundingSphere!.clone(); contorno.boundingSphere = geo.boundingSphere!.clone();   // (sem a deformação na CPU no 1º desenho)
   };
 
   // as penas de cada segmento (iguais nos dois lados; a esquerda é espelhada)
@@ -77,6 +92,7 @@ export function criarAsas(): AsasHandle {
       malha(pena(0.86 + 0.035 * i, 0.135 - 0.004 * i, 0.12), piv);
       primarias.push({ m: piv, base: 0.12 + (1.25 * i) / 8 });
     }
+    esqueletizar(raiz, [ombro, cotovelo, pulso, ...primarias.map((p) => p.m)]);
     return { raiz, ombro, cotovelo, pulso, primarias };
   };
   const asas = [lado(1), lado(-1)];

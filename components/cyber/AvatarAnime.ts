@@ -9,7 +9,7 @@ import { FAIXAS_TOON, TINTA, espessuraTinta } from "@/lib/cyber/estiloAvatar";
 
 let faixas: THREE.DataTexture | null = null;
 /** o gradiente do cel shading (1 textura pra todos os avatares) */
-function texFaixas(): THREE.DataTexture {
+export function texFaixas(): THREE.DataTexture {
   if (faixas) return faixas;
   const t = new THREE.DataTexture(new Uint8Array(FAIXAS_TOON), FAIXAS_TOON.length, 1, THREE.RedFormat);
   t.minFilter = THREE.NearestFilter; t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true;

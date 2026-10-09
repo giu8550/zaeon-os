@@ -50,8 +50,12 @@ function materialChama(cor: THREE.Color, nucleo: boolean, u: { uT: { value: numb
         // tremula: a chama "respira" de lado, mais na ponta
         float tremor = 1.0 + 0.14 * sin(uT * 41.0 + p.y * 13.0) * uv.y + 0.06 * sin(uT * 67.0 + p.y * 29.0);
         p.xz *= tremor;
-        vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        vFrente = pow(abs(dot(normalize(normalMatrix * normal), normalize(-mv.xyz))), 1.4);   // borda some macia
+        vec4 pl = vec4(p, 1.0); vec3 nl = normal;
+        #ifdef USE_INSTANCING
+          pl = instanceMatrix * pl; nl = mat3(instanceMatrix) * normal;   // (as chamas da moto são UMA malha instanciada)
+        #endif
+        vec4 mv = modelViewMatrix * pl;
+        vFrente = pow(abs(dot(normalize(normalMatrix * nl), normalize(-mv.xyz))), 1.4);   // borda some macia
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
@@ -143,6 +147,9 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   const garganta = new THREE.MeshBasicMaterial({ color: acento.clone().lerp(new THREE.Color(0xffffff), 0.5) });
   type Prop = { chama: THREE.Group; tam: number; tipo: "principal" | "sustenta" | "manobra"; lado: number };
   const props: Prop[] = [];
+  // as CHAMAS: um cone UNITÁRIO compartilhado (o tamanho de cada propulsor vai na escala) — todas viram 2 malhas
+  // instanciadas por moto (chama e miolo) no fim: eram 18 draw calls (cada chama presa num propulsor que se mexe)
+  const coneUnit = new THREE.ConeGeometry(1, 1, seg, 1, true), fontes: { fora: THREE.Mesh; miolo: THREE.Mesh; caminho: THREE.Object3D[] }[] = [];
   /** um propulsor em (x,y,z), apontando pra `dir` ("tras" = −z, "baixo" = −y, "lado" = ±x pra fora) */
   const propulsor = (x: number, y: number, z: number, r: number, dir: "tras" | "baixo" | "lado", tam: number) => {
     const g2 = new THREE.Group(); g2.position.set(x, y, z); corpo.add(g2);
@@ -153,8 +160,10 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
     const fundo = new THREE.Mesh(new THREE.CircleGeometry(r * 0.76, seg), garganta); fundo.rotation.x = -Math.PI / 2; fundo.position.y = r * 0.55; g2.add(fundo);
     // a chama: cone com a BASE no bocal e a ponta pra fora (comprimento 1 → escala `tam × força`)
     const chama = new THREE.Group(); chama.position.y = r * 0.95; g2.add(chama);
-    const fora = new THREE.Mesh(new THREE.ConeGeometry(r * 0.95, 1, seg, 1, true), chamaMat); fora.position.y = 0.5; chama.add(fora);
-    const miolo = new THREE.Mesh(new THREE.ConeGeometry(r * 0.5, 0.55, seg, 1, true), nucleoMat); miolo.position.y = 0.275; chama.add(miolo);
+    const fora = new THREE.Mesh(coneUnit, chamaMat); fora.position.y = 0.5; fora.scale.set(r * 0.95, 1, r * 0.95); chama.add(fora);
+    const miolo = new THREE.Mesh(coneUnit, nucleoMat); miolo.position.y = 0.275; miolo.scale.set(r * 0.5, 0.55, r * 0.5); chama.add(miolo);
+    for (const m of [fora, miolo]) { m.layers.mask = 0; m.userData.semLote = true; }   // (quem desenha é a instanciada)
+    fontes.push({ fora, miolo, caminho: [corpo, g2, chama] });
     props.push({ chama, tam, tipo: dir === "tras" ? "principal" : dir === "baixo" ? "sustenta" : "manobra", lado: Math.sign(x) });
   };
   // TRASEIRA: os propulsores SAEM da rabeta (antes ficavam enterrados no corpo das carenagens novas): uma nacele escura
@@ -196,6 +205,22 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   const assento = ancora(0, MOTO.banco / ESCALA_MOTO, -0.36);   // (dentro do corpo já escalado)
   const pontos = { maoE: ancora(0.37, 1.24, 0.6), maoD: ancora(-0.37, 1.24, 0.6), peE: ancora(0.34, 0.54, 0.16), peD: ancora(-0.34, 0.54, 0.16) };
 
+  const chamasI = new THREE.InstancedMesh(coneUnit, chamaMat, fontes.length), miolosI = new THREE.InstancedMesh(coneUnit, nucleoMat, fontes.length);
+  for (const im of [chamasI, miolosI]) { im.frustumCulled = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.add(im); }
+  const mC = new THREE.Matrix4(), mF = new THREE.Matrix4(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  /** as matrizes das chamas (no referencial da moto): corpo · propulsor · chama · cone */
+  const chamasNoLugar = () => {
+    fontes.forEach((f, i) => {
+      let vis = true; mC.identity();
+      for (const n of f.caminho) { if (!n.visible) vis = false; if (n.matrixAutoUpdate) n.updateMatrix(); mC.multiply(n.matrix); }
+      if (!vis) { chamasI.setMatrixAt(i, zero); miolosI.setMatrixAt(i, zero); return; }
+      f.fora.updateMatrix(); f.miolo.updateMatrix();
+      chamasI.setMatrixAt(i, mF.multiplyMatrices(mC, f.fora.matrix)); miolosI.setMatrixAt(i, mF.multiplyMatrices(mC, f.miolo.matrix));
+    });
+    chamasI.instanceMatrix.needsUpdate = true; miolosI.instanceMatrix.needsUpdate = true;
+  };
+  chamasNoLugar();
+
   let rola = 0, nariz2 = 0, boostSuave = 0;
   return {
     group: g, assento, pontos, alvos,
@@ -217,6 +242,7 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
         p.chama.scale.set(1 + 0.25 * boostSuave * (p.tipo === "principal" ? 1 : 0), Math.max(0.02, p.tam * forca * tremor), 1 + 0.25 * boostSuave * (p.tipo === "principal" ? 1 : 0));
       });
       setas[-1]!.visible = seta === -1; setas[1]!.visible = seta === 1;
+      chamasNoLugar();
     },
     dispose() {
       g.traverse((x) => { const m = x as THREE.Mesh; m.geometry?.dispose(); const mt = m.material as THREE.Material | undefined; mt?.dispose?.(); });

@@ -60,8 +60,9 @@ import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
 import { atualizarRegiao, criarRegiao, soltarRegiao, type RegiaoCena } from "./regioesCena";
 import { fundirEstaticos } from "./lotes";
-import { matrizDoAvatar, matrizesDaCena } from "./matrizes";
+import { esferaRapida, matrizDoAvatar, matrizesDaCena, matrizSeMudou } from "./matrizes";
 import { umaPassadaNosTransparentes } from "./umaPassada";
+import { criarPoolGemeos, type PoolGemeos } from "./poolGemeos";
 import type { Regiao } from "@/lib/cyber/regioes";
 import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -542,7 +543,13 @@ export class CyberEngine {
     if (typeof IntersectionObserver !== "undefined") { this.io = new IntersectionObserver((e) => { this.visivel = !!e[0]?.isIntersecting; }); this.io.observe(container); }
     // a LUZ: compila todos os shaders agora (senão cada material novo trava a tela na 1ª vez que aparece)
     await etapa("shaders");
-    try { await this.R.compileAsync(this.cena.scene, this.cam); } catch { /* sem a extensão de compilação paralela: compila no 1º quadro */ }
+    this.criarLuzesBase();   // (ANTES de compilar: o nº de luzes muda o programa de todo material)
+    // inclusive o que está ESCONDIDO agora (o detalhe das regiões longe, o interior da nave…): o three só compila o que é
+    // visível, e o resto compilava no 1º quadro em que aparecesse — a travada ao chegar num lugar. Nada é desenhado aqui.
+    { const escondidos: THREE.Object3D[] = []; this.cena.scene.traverse((o) => { if (!o.visible) { escondidos.push(o); o.visible = true; } });
+      try { await this.R.compileAsync(this.cena.scene, this.cam); } catch { /* sem a extensão de compilação paralela: compila no 1º quadro */ }
+      this.subirParaGpu(this.cena.scene);   // geometrias e texturas já na GPU (atrás da tela de carregamento)
+      for (const o of escondidos) o.visible = false; }
     await etapa("quadro");
     this.clock.start();
     const primeiro = new Promise<void>((r) => { this.aoPrimeiroQuadro = r; });
@@ -554,6 +561,29 @@ export class CyberEngine {
   exporDepuracao() { if (process.env.NODE_ENV !== "production" && this.vivo) (window as unknown as { __cyber?: CyberEngine }).__cyber = this; }
   private aoPrimeiroQuadro: (() => void) | null = null;
   private passadaEm = -Infinity;
+  /** as LUZES das bases: um conjunto FIXO (o nº de luzes da cena não muda quando alguém entra — mudar recompila todos os
+   *  materiais) que vai pras bases mais perto da câmera (components/cyber/BaseEstudo `luz`) */
+  private luzesBase: THREE.PointLight[] = [];
+  /** as bases desenhadas juntas (components/cyber/poolGemeos) */
+  private poolBases: PoolGemeos | null = null;
+  private criarLuzesBase() { if (!this.o.low && !this.luzesBase.length) for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0x9fd8ff, 0, 11); this.cena.scene.add(l); this.luzesBase.push(l); } }
+  /** SOBE pra GPU tudo que está no galho (geometria, texturas; e calcula as esferas das geometrias): um desenho de 1
+   *  pixel com o recorte desligado. Senão isso cai no 1º quadro em que o objeto aparece (a travada ao chegar num lugar) */
+  private subirParaGpu(raiz: THREE.Object3D) {
+    const recorte: THREE.Object3D[] = [];
+    raiz.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && !g.boundingSphere) g.computeBoundingSphere(); if (o.frustumCulled) { recorte.push(o); o.frustumCulled = false; } });
+    const sc = this.R.getScissorTest(), vp = new THREE.Vector4(); this.R.getScissor(vp);
+    this.R.setScissorTest(true); this.R.setScissor(0, 0, 1, 1);
+    try { this.R.render(this.cena.scene, this.cam); } finally { this.R.setScissor(vp); this.R.setScissorTest(sc); for (const o of recorte) o.frustumCulled = true; }
+  }
+  private acenderBases() {
+    if (this.o.low) return;
+    this.criarLuzesBase();
+    const todas = [...this.bases.values(), ...(this.baseQG ? [this.baseQG] : [])].filter((b) => b.group.visible)
+      .map((b) => { const l = b.luz(new THREE.Vector3()); return { ...l, d: l.pos.distanceToSquared(this.cam.position) }; })
+      .sort((a, b) => a.d - b.d);
+    this.luzesBase.forEach((l, i) => { const b = todas[i]; if (b && b.d < 140 * 140) { l.position.copy(b.pos); l.intensity = b.forca; } else l.intensity = 0; });
+  }
   // ───────────── DESCANSO no lounge (J) + MODO ESTUDO no TABLET (T) — lib/cyber/descanso ─────────────
   /** sentado/deitado: o lugar, o assento e o modo; a FASE — indo (andando até a frente do assento), sentando (vira e
    *  abaixa), parado (sentado/deitado), levantando (sobe e dá o passo pra frente) — e há quanto tempo está nela */
@@ -644,7 +674,7 @@ export class CyberEngine {
     // a Recepção sempre tem a mesa e os cristais no centro do salão: a mesa da anfitriã
     const lqg = this.zaeon() ? baseNoQG() : null;
     if (lqg && !this.baseQG) { this.baseQG = criarBase(lqg, COR_QG, this.cena.starTex, this.o.low); this.loteBase(this.baseQG); this.baseQG.group.position.y = this.yDoNivel("qg"); this.cena.scene.add(this.baseQG.group); }
-    if (!lqg && this.baseQG) { this.soltar(this.baseQG.group); this.baseQG.dispose(); this.baseQG = null; }
+    if (!lqg && this.baseQG) { this.poolBases?.remover(this.baseQG.group); this.soltar(this.baseQG.group); this.baseQG.dispose(); this.baseQG = null; }
     for (const a of [this.eu, ...this.remotos.values()]) { if (!a) continue; const c = this.corDe(a.id); if (c !== a.color) { a.color = c; a.av.recolorir(c); a.tag.style.color = c; } }
     // colisão: bases do anel + marcos (a MESMA lista; empurrarParaFora faz o deslizar)
     this.colisores = [...this.layouts.values()].filter((l) => !l.nivel).map((l) => ({ x: l.x, z: l.z, r: BASE_COLLIDER_R }))
@@ -705,10 +735,24 @@ export class CyberEngine {
     for (const p of PERSONAGENS_DA_CIDADELA) {
       const corpo = CORPOS_VRM[p.id]; if (!corpo) continue;
       const perfil = PERFIS_VIDA[p.id]; if (!perfil) continue;
-      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene });
+      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene, preparar: (obj) => this.prepararVrm(obj) });
       const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = p.nome; this.o.overlay.appendChild(tag);
       this.personagens.push({ h, tag });
     }
+  }
+  /** prepara um corpo VRM ANTES de entrar na cena: os shaders compilam em paralelo (sem travar o quadro) e as texturas
+   *  sobem uma por quadro (a de 2048² sozinha levava dezenas de ms) — senão tudo isso caía no 1º quadro em que ele aparece */
+  private async prepararVrm(obj: THREE.Object3D) {
+    esferaRapida(obj);
+    try { await this.R.compileAsync(obj, this.cam, this.cena.scene); } catch { /* sem compilação paralela: compila ao aparecer */ }
+    const texs = new Set<THREE.Texture>();
+    obj.traverse((n) => { const ms = (n as THREE.Mesh).material; for (const m of Array.isArray(ms) ? ms : ms ? [ms] : []) { for (const v of Object.values(m)) if ((v as THREE.Texture)?.isTexture) texs.add(v as THREE.Texture);
+      for (const u of Object.values((m as THREE.ShaderMaterial).uniforms ?? {})) if ((u?.value as THREE.Texture)?.isTexture) texs.add(u.value as THREE.Texture); } });   // (o MToon guarda nos uniforms)
+    for (const t of texs) { if (!this.vivo) return; this.R.initTexture(t); await new Promise((r) => requestAnimationFrame(r)); }
+    // a geometria também: entra na cena só pelo desenho de 1 pixel (os personagens longe ficam escondidos e só subiriam
+    // na chegada)
+    if (!this.vivo) return;
+    this.cena.scene.add(obj); try { this.subirParaGpu(obj); } finally { obj.removeFromParent(); }
   }
   private atualizarPersonagens(dt: number, t: number) {
     if (!this.personagens.length) return;
@@ -1660,6 +1704,7 @@ export class CyberEngine {
       const v = vs[i]!, k = progressoDaVaga(this.fabricas[v.lote]!.f, i);
       m.moto.visible = k > 0.001; m.g.position.set(v.x, this.yDaVaga(v), v.z);
       const e = k >= 1 ? 1 : 0.02 + 0.98 * (1 - Math.pow(1 - k, 3)); m.moto.scale.set(1, e, 1);
+      matrizSeMudou(m.g, matrizSeMudou(m.moto));   // parada na vaga: nem recalcula nem percorre o galho (components/cyber/matrizes)
     });
     // 4) as INSTÂNCIAS que devem existir agora (montadas e estacionadas)
     type Quer = { s: number; quem: Ator | null; pose?: { x: number; y: number; z: number; yaw: number } };
@@ -2065,6 +2110,9 @@ export class CyberEngine {
   private loteBase(b: BaseEstudoHandle) {
     fundirEstaticos(b.group, { passo: (k, t) => b.atualizar({ dt: 1 / 30, t, ativa: k % 2 === 0, hover: k % 3 === 0, perto: k % 4 < 2, energia: (k % 5) / 4 }), manter: comDescendentes([b.monitor]) });
     for (let k = 0; k < 6; k++) b.atualizar({ dt: 1, t: 0, ativa: false, hover: false, perto: false, energia: 0 });   // volta ao repouso
+    // todas as bases desenhadas JUNTAS (components/cyber/poolGemeos): cada peça uma malha instanciada pra todas
+    if (!this.poolBases) { this.poolBases = criarPoolGemeos({ max: 64, nome: "pool-bases" }); this.cena.scene.add(this.poolBases.grupo); }
+    this.poolBases.registrar(b.group, [b.monitor]);
   }
   /** aplica o degrau da qualidade adaptativa: resolução (o pixel ratio do perfil × o degrau) e a aura dos avatares
    *  (a nebulosa lê o degrau direto no desenho) — nada recompila */
@@ -2487,6 +2535,8 @@ export class CyberEngine {
       if (this.regiaoPerto(b.group, "base")) b.atualizar({ dt, t, ativa: alguemPerto, hover: this.hoverBase === id, perto: id === euId && perto, energia });
     }
     if (this.baseQG) { this.baseQG.group.position.y = this.yDoNivel("qg"); if (this.regiaoPerto(this.baseQG.group, "base-qg")) this.baseQG.atualizar({ dt, t, ativa: false, hover: false, perto: false }); }
+    this.acenderBases();
+    this.poolBases?.atualizar();
     // motos: de longe some a moto inteira (ninguém vê 2 m de moto a 1 km); a montada está sempre perto da câmera
     for (const m of this.vagaMotos) this.regiaoPerto(m.g, "moto");
     for (const m of this.instMotos.values()) this.regiaoPerto(m.g, "moto");
@@ -2640,6 +2690,7 @@ export class CyberEngine {
     for (const p of this.personagens) { p.h.dispose(); p.tag.remove(); } this.personagens = [];
     this.falaZ = null; this.calarZaeon(); this.holoZaeon?.dispose();
     this.praca?.dispose(); this.bercario?.dispose(); if (this.farol) { this.farol.geometry.dispose(); (this.farol.material as THREE.Material).dispose(); }
+    this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
     this.somLounge?.dispose(); this.som.dispose();

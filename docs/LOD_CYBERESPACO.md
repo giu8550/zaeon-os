@@ -63,6 +63,8 @@ distância à câmera:  0 ──── perto ──── médio ──── lo
 |---|---|---|
 | Completo | as 18 IAs mais próximas (`MAX = 18`; `low` = 8) | avatar anime completo |
 | Anim. econômica | corpo completo a mais de 25 m da câmera | anima em quadros alternados (`quadroPar`, `animDt` acumulado) |
+| **Multidão GPU — perto** | sem corpo completo, até 35 m (até 220) | `MultidaoGPU.ts`: a MESMA malha do corpo completo, esqueleto animado no vertex shader a partir de uma textura com as poses assadas; armadura toon na cor do card + contorno + visor + mochila; 2 draw calls |
+| **Multidão GPU — longe** | 35 a 90 m (até 220) | a mesma coisa com o corpo simplificado (`SimplifyModifier`, 40% dos vértices); 2 draw calls |
 | Silhueta | todo o resto que está visível (até `MAX_SILHUETAS = 900`; `low` = 300) | `InstancedMesh` cápsula+esfera, Lambert opaco, cor por instância; motos idem |
 | Atualização | silhuetas que se movem | todo quadro até 120 m; além, 1 em cada 4 (`quadroSil`) |
 
@@ -127,6 +129,41 @@ O spiderbench roda uma Nova York inteira com multidão animada no navegador. O q
 contar draw calls por motivo (`userData.foraDoLote`), perfil de CPU via CDP `Profiler`, tempo de `scene.updateMatrixWorld`
 por quadro, e A/B na MESMA página (a máquina de dev é compartilhada; fps entre páginas diferentes varia ±15).
 Chaves A/B: `?semLotes`, `?semCongelar`, `?celula=N`.
+
+## Rodada 2 (branch feat/multidao-gpu) — o que mediu
+
+Ferramentas novas de medida (mais estáveis que fps numa máquina compartilhada):
+- **tempo de GPU por quadro** (`EXT_disjoint_timer_query_webgl2`, somando as passadas do quadro): 2–4 ms — a GPU NÃO é o gargalo;
+- **CPU dentro do `render`** separada em matrizes (`scene.updateMatrixWorld`) e o resto (montar a lista + desenhar);
+- **trace do Chrome** (FireAnimationFrame vs. ocioso): a thread principal ficava ~3 ms ociosa por quadro na praça — o
+  resto do quadro é o PROCESSO DE GPU do Chrome traduzindo cada draw call (WebGL → ANGLE → Metal): draw call custa
+  CPU, mas fora da página.
+
+| Mudança | Onde | Efeito |
+|---|---|---|
+| Ossos sem nada desenhável no galho → `visible = false` (o skinning usa só a matriz) | `matrizes.ts` (`esconderOssosVazios`, `mostrarCaminho`) | Zaeon cheia: nós percorridos 9.525 → 4.295; CPU do render 16 → 9 ms |
+| Luzes das bases: 4 PointLights FIXAS que vão pras bases mais perto (eram 1 por base: 17 no shader da cena inteira, e cada jogador que entrava recompilava os materiais) | `engine.ts` (`acenderBases`), `BaseEstudo.ts` (`luz`) | 17 → 4 luzes |
+| Asas do founder: 1 malha com esqueleto por asa | `AsasAnjo.ts` | 48 → 4 draw calls |
+| As 2 telas laterais da base com o mesmo material | `BaseEstudo.ts` | o lote junta |
+| **Pool de gêmeos**: as bases (estruturas idênticas) desenhadas juntas, cada peça uma malha instanciada pra todas | `poolGemeos.ts` | praça com 12 jogadores ~720 → ~400 draw calls; ~0,2 ms/quadro |
+| Multidão na GPU (abaixo) | `MultidaoGPU.ts` | as IAs até 90 m animadas de verdade, sem custo de fps mensurável |
+
+## A multidão na GPU (como funciona) — `components/cyber/MultidaoGPU.ts`
+
+1. **Assar** (uma vez, ~330 ms, 1,5 s depois da cena montar): um `AvatarLuz` de verdade passa por cada `PoseIA` da frota
+   com os MESMOS parâmetros que a FrotaIA usa nos corpos completos (andando, parado, mochila, moto montada com IK,
+   sentado, deitado, relaxa, chão, dança). A cada quadro (15 por segundo) as matrizes dos ossos vão pra uma `DataTexture`
+   float (4 texels por osso; +1 "osso" pra MOCHILA, que é rígida e reposicionada pela espinha).
+2. **Geometria**: o corpo do GLB + o visor (que tem esqueleto PRÓPRIO de 2 ossos: cada vértice é levado pro osso
+   equivalente do corpo) + a mochila (caixa, bocais, friso). Atributos `aVisor` (acende na cor da luz) e `aFixa` (cor
+   fixa da mochila + 20% da cor da armadura, como o `materialToonSimples`).
+3. **Desenho**: 1 `InstancedMesh` por nível com 2 grupos da mesma faixa de índices (armadura toon e contorno de tinta).
+   Por instância: matriz (posição + rumo), cor (a do card) e `aAnim` (quadro inicial, nº de quadros, fase, velocidade).
+   O vertex shader interpola 2 quadros. `?semMultidao` desliga (A/B).
+
+Gotchas: `SimplifyModifier` com atributo `color` quebra (usa `THREE.Color` sem importar) — os atributos do esqueleto
+voltam pelo vértice original na mesma posição; atributo intercalado não tem `getComponent` (use `getX..getW`); bloco GLSL
+prefixado precisa terminar em `\n` (senão gruda no `#define` seguinte).
 
 ## Como escalar para a Zaeon inteira (próximos passos)
 
