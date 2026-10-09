@@ -127,7 +127,7 @@ const ProcessFlowchart = () => {
                     relative w-full max-w-[1200px] rounded-[2rem] 
                     
                     /* --- AZUL nos dois temas (destaque) --- */
-                    border border-cyan-500/50 bg-[#1e3a8a]/85 backdrop-blur-xl shadow-[0_0_30px_rgba(6,182,212,0.25)]
+                    border border-cyan-500/50 bg-[#1e3a8a]/85 backdrop-blur-md shadow-[0_0_30px_rgba(6,182,212,0.25)]
                     
                     /* --- MODO ESCURO (Azul Transparente) --- */
                     dark:border-cyan-500/50 dark:bg-[#1e3a8a]/85 dark:shadow-[0_0_30px_rgba(6,182,212,0.15)]
