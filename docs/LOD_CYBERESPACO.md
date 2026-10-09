@@ -165,6 +165,30 @@ Gotchas: `SimplifyModifier` com atributo `color` quebra (usa `THREE.Color` sem i
 voltam pelo vértice original na mesma posição; atributo intercalado não tem `getComponent` (use `getX..getW`); bloco GLSL
 prefixado precisa terminar em `\n` (senão gruda no `#define` seguinte).
 
+## Pisos que escondem — as células/portais do céu aberto (`oclusaoPisos.ts`)
+
+Ideia tirada do motor do Black Ops 1 (`r_dpvs.cpp`, analisado em out/2026 — código descompilado da Activision, SEM
+licença: só as ideias, nenhuma linha copiada). Lá o mapa é dividido em CÉLULAS ligadas por PORTAIS e só se desenha a
+célula que se enxerga por algum portal. A cidadela é a céu aberto (paredes de vidro: portal não esconde nada), mas é
+feita de PLATAFORMAS — e o piso de uma plataforma esconde o que está do outro lado dele.
+
+- Cada plataforma registra `{ acima, r, topo }`: o grupo do conteúdo em cima do piso, o raio do disco e a altura do piso.
+- Com a câmera ABAIXO do piso, cada peça (num invólucro próprio, criado depois do lote) some se as linhas de visão até
+  os 8 cantos da caixa dela cruzam o plano do piso dentro do disco. Exato e conservador: o miolo some, a borda que
+  aparece por cima fica. 8 cantos por peça por quadro (~0,05 ms pras 4 salas).
+- Da chegada na Zaeon: 81 das 213 peças das salas somem (~60 draw calls).
+
+### O padrão pros LABORATÓRIOS embaixo da Zaeon (nascer assim)
+1. **Cada sala do laboratório = uma plataforma** registrada na oclusão: quem está na capela (em cima do piso da ilha)
+   não desenha os laboratórios embaixo, e vice-versa — o "subir" entre eles é o portal.
+2. **Teto de atores animados por área** (o Zombies mantém no máximo 24 zumbis vivos; o resto espera): cada sala tem um
+   máximo de corpos completos; o excedente vai pra multidão na GPU (`MultidaoGPU`), e além dela, silhueta.
+3. **Raios mortais, peças girando, ritmos de energia: animação no shader** (uniform de tempo), nunca material por peça
+   — senão o lote não junta (ver "sozinha:material-muda").
+4. **Peças repetidas instanciadas** (cristais dos santuários, painéis): `InstancedMesh` com cor por instância.
+5. **Orçamento como teste** (o `mapkit/selftest_budget` do motor): cada sala nova passa pelo perfil de draw calls
+   (`userData.foraDoLote`) e pela régua de 73 fps com 12 jogadores antes de entrar.
+
 ## Como escalar para a Zaeon inteira (próximos passos)
 
 Em ordem de retorno (draw calls economizadas por esforço):
