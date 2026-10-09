@@ -26,6 +26,12 @@ import {
 // IMPORT DO FUNDO ESTELAR/PARTÍCULAS
 import StarsCanvas from "@/components/main/star-background";
 
+// CAMADA VERIFICÁVEL (Solana): marca oficial, ícones, card de credencial e diagramas
+import SolanaMark from "@/components/solana/SolanaMark";
+import IconeCredencial, { MedalhaoIcone, type NomeIcone } from "@/components/solana/IconesCredencial";
+import CredencialCard from "@/components/solana/CredencialCard";
+import { FluxoVerificacaoDiagrama, PrivacidadeDiagrama, PresencaDiagrama, ChancelaDiagrama, LivroRazaoDiagrama } from "@/components/solana/Diagramas";
+
 // ============================================================================
 // DADOS DO MANIFESTO E DOS PILARES DE VERIFICAÇÃO
 // (espelha o posicionamento de /docs: universidade operada por IA, validada por humanos)
@@ -78,7 +84,7 @@ const VERIFICACAO_DATA = [
     {
         id: "v3",
         title: "CREDENCIAIS VERIFICÁVEIS",
-        status: "Em expansão",
+        status: "Quando ativado",
         isCurrent: false,
         desc: "Ao validar, o sistema emite um registro portável e à prova de adulteração de proveniência: o que foi feito, quem validou e quando."
     },
@@ -89,6 +95,51 @@ const VERIFICACAO_DATA = [
         isCurrent: false,
         desc: "A pesquisa que vira tecnologia, medicina e bem público é aberta e auditável — pensada para circular, não para ficar trancada."
     }
+];
+
+// ============================================================================
+// A CAMADA VERIFICÁVEL — pilares ancorados no código (lib/aura/*, lib/solana/*, app/api/academic/*)
+// Regra: só o que o código faz; o que é feature-gated diz "quando ativado".
+// ============================================================================
+type Pilar = { numeral: string; icone: NomeIcone; tom: "cyan" | "amber" | "emerald" | "violet"; title: string; desc: string; pontos: string[]; ancora: string };
+const PILARES: Pilar[] = [
+    {
+        numeral: "I", icone: "identidade", tom: "cyan",
+        title: "IDENTIDADE E PAPÉIS",
+        desc: "Cada conta tem um papel — aluno, professor, instituição — e o que ela pode fazer é decidido na sessão, rota a rota. O vínculo professor↔aluno é um registro explícito; a instituição só enxerga as credenciais que emitiu.",
+        pontos: ["papel na conta (User.role) + habilitação pra verificar", "vínculo professor↔aluno registrado (TeacherStudent)", "instituição filtra pela própria emissão"],
+        ancora: "lib/aura/academico-server.ts · eu() · vinculado() · alunosDoVerificador()",
+    },
+    {
+        numeral: "II", icone: "chancela", tom: "amber",
+        title: "A CHANCELA HUMANA",
+        desc: "O portão obrigatório. Nenhuma credencial, nenhuma AURA e nenhum registro on-chain acontece antes de um humano habilitado chancelar. Quem tenta verificar a si mesmo recebe 403. Admin só modera: rejeita, nunca verifica.",
+        pontos: ["papel ✓ vínculo ✓ não-é-você ✓ documento ✓", "sem documento não há verificação — fica “declarado”", "rejeitar depois de verificado reverte tudo"],
+        ancora: "lib/aura/academico.ts · elegibilidade() · metodoPermitido()",
+    },
+    {
+        numeral: "III", icone: "livro", tom: "emerald",
+        title: "LIVRO-RAZÃO",
+        desc: "A reputação é um livro-razão que só cresce: um evento por conquista, único por (usuário, fonte, referência). Reverter é um evento negativo — nada se apaga. O saldo é a soma do ledger e o nível é derivado dele, nunca um campo solto.",
+        pontos: ["AuraEvent append-only, idempotente", "reversão auditável (evento negativo)", "saldo recomputável a partir do ledger"],
+        ancora: "lib/aura/ledger.ts · grantAura() · reverseAura() · recomputeAura()",
+    },
+    {
+        numeral: "IV", icone: "economia", tom: "violet",
+        title: "ECONOMIA DA VERIFICAÇÃO",
+        desc: "AURA cresce com verificação, não com volume: validado vale muito mais que aplicado, que vale mais que aprendido. Título acadêmico só pontua com documento revisado; declarado vale zero. Só a validação humana gera atestado on-chain.",
+        pontos: ["aprendido 5 · aplicado 15 · validado 50 · cérebro completo 200", "título: Técnico 60 → Pós-Doutorado 800 (só com doc_review)", "atestado on-chain só quando modo = humana"],
+        ancora: "lib/aura/rules.ts · AURA · AURA_NIVEL · auraPorCredencial() · daAtestado()",
+    },
+];
+
+/** O que acontece, em ordem, quando o revisor marca “verificado” (app/api/academic/[id]/verificar). */
+const AO_CHANCELAR: { icone: NomeIcone; t: string; d: string }[] = [
+    { icone: "livro", t: "AURA entra no livro-razão", d: "um evento credential_verified, uma vez por credencial, com o valor do nível liberado pelo método." },
+    { icone: "identidade", t: "O nível acadêmico sobe", d: "User.academicLevel passa a ser o maior título verificado do aluno." },
+    { icone: "credencial", t: "A credencial é cunhada", d: "issueCredential({ type: \"academic\" }) grava o registro e manda a Crossmint cunhar na carteira do aluno — sem segurar a resposta." },
+    { icone: "portavel", t: "Na carteira do aluno", d: "a carteira custodial nasce do e-mail no primeiro login (sem seed phrase, sem gas); o mint é soulbound: não se vende nem transfere." },
+    { icone: "hash", t: "Posse confirmada on-chain", d: "o mural lê a Solana (Helius DAS) e marca “verificada” só quando o asset existe, não foi queimado e está na carteira do aluno." },
 ];
 
 // ============================================================================
@@ -390,6 +441,163 @@ const VerificacaoSection = () => {
     );
 };
 
+// --- SECTION: A CAMADA VERIFICÁVEL (Solana) ---
+const CamadaVerificavelSection = () => {
+    const anim = (delay = 0) => ({ initial: { opacity: 0, y: 24 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, margin: "-60px" }, transition: { duration: 0.55, delay } });
+    const cabecalho = "text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-400 mb-4 opacity-90";
+    const titulo = "text-3xl md:text-5xl lg:text-6xl font-black text-slate-900 dark:text-white tracking-tighter mb-4 transition-colors";
+    const lead = "text-sm md:text-base text-slate-600 dark:text-cyan-50/70 font-light leading-relaxed max-w-3xl mx-auto";
+    const cardCls = "rounded-[2rem] bg-white/80 dark:bg-white/5 border border-blue-200/50 dark:border-white/10 backdrop-blur-xl shadow-lg dark:shadow-none p-6 md:p-8";
+
+    return (
+        <section className="relative z-30 w-full flex flex-col items-center p-6 md:p-12 lg:px-32 lg:py-24 overflow-hidden transition-colors duration-500">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+
+            {/* ── cabeçalho ── */}
+            <motion.div {...anim()} className="mb-12 md:mb-16 text-center relative z-10 max-w-4xl">
+                <h4 className={cabecalho}>A Camada Verificável</h4>
+                <h2 className={titulo}>PRODUZIDO ≠ CONFIÁVEL</h2>
+                <p className={lead}>
+                    Nenhum resultado é tratado como verdade só porque foi gerado. A passagem de “produzido” para “confiável” exige um revisor humano — um pesquisador ou uma instituição. Ao aprovar, a Zaeon emite uma credencial verificável: um registro portável e à prova de adulteração do que foi feito, por quem foi validado e quando.
+                </p>
+                <div className="mt-6 inline-flex items-center gap-3 rounded-full border border-white/15 bg-black/80 px-4 py-2 shadow-[0_0_30px_rgba(220,31,255,0.15)]">
+                    <SolanaMark size={16} wordmark />
+                    <span className="h-4 w-px bg-white/15" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/80">credenciais emitidas na Solana</span>
+                </div>
+            </motion.div>
+
+            {/* ── pilares I–IV ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-7xl relative z-10">
+                {PILARES.map((p, idx) => (
+                    <motion.div key={p.numeral} {...anim(idx * 0.08)} whileHover={{ y: -4 }} className={`${cardCls} flex flex-col gap-4 group hover:border-cyan-500/30 transition-colors`}>
+                        <div className="flex items-start justify-between gap-4">
+                            <MedalhaoIcone name={p.icone} tom={p.tom} size={52} title={p.title} />
+                            <span className="text-[10px] font-mono font-black uppercase tracking-[0.3em] text-slate-400 dark:text-white/35">Pilar {p.numeral}</span>
+                        </div>
+                        <h3 className="text-xl md:text-2xl font-black tracking-tight text-slate-900 dark:text-white">{p.title}</h3>
+                        <p className="text-sm leading-relaxed font-light text-slate-600 dark:text-white/60">{p.desc}</p>
+                        <ul className="flex flex-col gap-1.5">
+                            {p.pontos.map((pt) => (
+                                <li key={pt} className="flex items-start gap-2 text-[12px] text-slate-700 dark:text-white/75">
+                                    <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-500 shadow-[0_0_8px_#22d3ee]" />
+                                    <span>{pt}</span>
+                                </li>
+                            ))}
+                        </ul>
+                        {p.numeral === "II" && <div className="mt-2"><ChancelaDiagrama /></div>}
+                        {p.numeral === "III" && <div className="mt-2"><LivroRazaoDiagrama /></div>}
+                        <p className="mt-auto pt-3 border-t border-slate-200/70 dark:border-white/10 font-mono text-[9px] text-cyan-700/80 dark:text-cyan-300/70 break-words">{p.ancora}</p>
+                    </motion.div>
+                ))}
+            </div>
+
+            {/* ── Verificação & Credenciais (peça central) ── */}
+            <motion.div {...anim()} className="mt-20 md:mt-28 mb-10 text-center relative z-10 max-w-4xl">
+                <h4 className={cabecalho}>Verificação &amp; Credenciais</h4>
+                <h2 className={titulo}>DO PRODUZIDO AO CONFIÁVEL</h2>
+                <p className={lead}>
+                    Três etapas, uma única passagem. Os agentes produzem; um humano habilitado revisa; só então o sistema emite a credencial — e faz isso no mesmo ato em que registra a reputação e atualiza o nível do aluno.
+                </p>
+            </motion.div>
+            <div className="w-full max-w-7xl relative z-10">
+                <FluxoVerificacaoDiagrama />
+            </div>
+
+            <div className="mt-12 grid grid-cols-1 lg:grid-cols-5 gap-6 w-full max-w-7xl relative z-10 items-start">
+                {/* card da credencial (ilustrativo) */}
+                <motion.div {...anim(0.1)} className="lg:col-span-2 lg:sticky lg:top-28">
+                    <CredencialCard
+                        ilustrativo
+                        tipo="Título acadêmico verificado"
+                        titulo="Mestrado em Agronomia — UFC"
+                        validadoPor="Instituição emissora (selo ouro)"
+                        emitidaEm={new Date("2026-10-02T12:00:00Z")}
+                        assetId="A1q7FxJ3kZcP9u2vT8yWm4nR6sL0dH5eK2bN8cV3xG1p"
+                        rede="devnet"
+                        status="issued"
+                    />
+                </motion.div>
+
+                {/* o que acontece ao chancelar */}
+                <motion.div {...anim(0.2)} className={`lg:col-span-3 ${cardCls}`}>
+                    <div className="flex items-center justify-between gap-3 mb-5">
+                        <h3 className="text-lg md:text-xl font-black tracking-tight text-slate-900 dark:text-white">Quando o revisor marca “verificado”</h3>
+                        <IconeCredencial name="chancela" size={22} className="text-amber-500" title="Chancela" />
+                    </div>
+                    <ol className="flex flex-col gap-4">
+                        {AO_CHANCELAR.map((e, i) => (
+                            <li key={e.t} className="flex items-start gap-4">
+                                <span className="relative shrink-0">
+                                    <MedalhaoIcone name={e.icone} size={40} tom={i === 4 ? "emerald" : i === 3 ? "violet" : "cyan"} />
+                                    <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[9px] font-black grid place-items-center">{i + 1}</span>
+                                </span>
+                                <div>
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{e.t}</p>
+                                    <p className="text-[12px] text-slate-600 dark:text-white/60 leading-snug">{e.d}</p>
+                                </div>
+                            </li>
+                        ))}
+                    </ol>
+                    <div className="mt-6 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-[11px] leading-relaxed text-slate-700 dark:text-cyan-50/70">
+                        <b className="text-slate-900 dark:text-white">Quando ativado.</b> A economia AURA e a fila de verificação respondem atrás de uma chave de ativação; a cunhagem on-chain acontece quando a camada Solana (Crossmint + Helius) está configurada. Sem ela, a conquista do aluno fica intacta e a credencial espera — nunca aparece um selo falso.
+                    </div>
+                    <p className="mt-4 font-mono text-[9px] text-cyan-700/80 dark:text-cyan-300/70 break-words">app/api/academic/[id]/verificar/route.ts · lib/solana/credentials.ts · lib/solana/crossmint.ts · lib/solana/helius.ts</p>
+                </motion.div>
+            </div>
+
+            {/* ── Privacidade por proveniência ── */}
+            <motion.div {...anim()} className="mt-20 md:mt-28 mb-10 text-center relative z-10 max-w-4xl">
+                <h4 className={cabecalho}>Privacidade por proveniência</h4>
+                <h2 className={titulo}>PROVAR SEM EXPOR</h2>
+                <p className={lead}>
+                    A camada Solana existe para provar proveniência sem expor a pessoa. O que vai para a cadeia é a prova — título, tipo, data, ponteiro de origem — nunca o conteúdo do trabalho, o documento do diploma, o nome ou o e-mail de quem o conquistou.
+                </p>
+            </motion.div>
+            <div className="w-full max-w-7xl relative z-10">
+                <PrivacidadeDiagrama />
+            </div>
+
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5 w-full max-w-7xl relative z-10">
+                <motion.div {...anim(0.05)} className={`${cardCls} flex flex-col gap-3`}>
+                    <MedalhaoIcone name="hash" tom="emerald" size={44} title="Integridade sem revelar" />
+                    <h3 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">Integridade sem revelar</h3>
+                    <p className="text-[13px] leading-relaxed font-light text-slate-600 dark:text-white/60">
+                        O documento do diploma vira uma impressão digital (sha256) usada só para detectar o mesmo arquivo reaproveitado em outra conta. O arquivo em si fica guardado: só o dono e um revisor elegível o abrem, por uma rota própria e sem cache.
+                    </p>
+                    <p className="mt-auto font-mono text-[9px] text-cyan-700/80 dark:text-cyan-300/70">lib/aura/academico.ts · hashDocumento() · app/api/academic/[id]/doc</p>
+                </motion.div>
+                <motion.div {...anim(0.12)} className={`${cardCls} flex flex-col gap-3`}>
+                    <MedalhaoIcone name="portavel" tom="violet" size={44} title="A credencial é sua" />
+                    <h3 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">A credencial é sua</h3>
+                    <p className="text-[13px] leading-relaxed font-light text-slate-600 dark:text-white/60">
+                        A carteira nasce do seu e-mail, sem seed phrase nem gas, e a credencial é cunhada nela — soulbound: não se vende, não se transfere, não se revende. Você pode reivindicar a carteira e levar as provas para fora da Zaeon. A plataforma emite; não é dona.
+                    </p>
+                    <p className="mt-auto font-mono text-[9px] text-cyan-700/80 dark:text-cyan-300/70">lib/solana/wallet.ts · ensureCustodialWallet() · claimWalletUrl()</p>
+                </motion.div>
+                <motion.div {...anim(0.2)} className={`${cardCls} flex flex-col gap-3`}>
+                    <MedalhaoIcone name="privacidade" tom="amber" size={44} title="No ciberespaço" />
+                    <h3 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">No ciberespaço</h3>
+                    <p className="text-[13px] leading-relaxed font-light text-slate-600 dark:text-white/60">
+                        Quando você anda, conversa e colabora com outras pessoas, a presença leva só o seu avatar, a sua cor e o seu nome de exibição. E-mail, documentos, carteira e credenciais não viajam com você — a competência é provada pela credencial, não pela exposição.
+                    </p>
+                    <div className="mt-2"><PresencaDiagrama /></div>
+                    <p className="mt-auto font-mono text-[9px] text-cyan-700/80 dark:text-cyan-300/70">app/api/lounge3d/[id]/rt-token · server/colyseus LoungeRoom.Jogador</p>
+                </motion.div>
+            </div>
+
+            <motion.div {...anim(0.1)} className="mt-14 flex flex-col items-center gap-3 text-center relative z-10">
+                <div className="flex items-center gap-4 text-cyan-600 dark:text-cyan-500 font-mono text-[10px] uppercase tracking-[0.5em]">
+                    <CubeIcon className="w-4 h-4" /> Público é a prova · privado é a pessoa <CubeIcon className="w-4 h-4" />
+                </div>
+                <Link href="/docs" className="text-[10px] font-black uppercase tracking-widest text-cyan-600 dark:text-cyan-400 hover:text-cyan-300 underline underline-offset-4">
+                    Ler a documentação
+                </Link>
+            </motion.div>
+        </section>
+    );
+};
+
 export default function TechnicalAboutPage() {
     return (
         <div className="relative w-full font-sans overflow-x-hidden selection:bg-cyan-500 selection:text-white">
@@ -418,6 +626,13 @@ export default function TechnicalAboutPage() {
             {/* SEÇÃO 3: VERIFICAÇÃO */}
             <div className="bg-slate-50/50 dark:bg-transparent transition-colors duration-500">
                 <VerificacaoSection />
+            </div>
+
+            <div className="relative z-30"><SectionSeparator /></div>
+
+            {/* SEÇÃO 4: A CAMADA VERIFICÁVEL (Solana) — pilares, fluxo Verificação & Credenciais, privacidade */}
+            <div className="bg-slate-50/50 dark:bg-transparent transition-colors duration-500">
+                <CamadaVerificavelSection />
             </div>
 
             <style jsx global>{`

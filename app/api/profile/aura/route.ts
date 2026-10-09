@@ -10,6 +10,7 @@ import { prisma, eu, exigirFlag } from "@/lib/aura/academico-server";
 import { levelFromAura } from "@/lib/aura/rules";
 import { somaEventos } from "@/lib/aura/ledger";
 import { viewPublica } from "@/lib/aura/academico";
+import { explorerUrl, type SolanaNetwork } from "@/lib/solana/config";
 
 export async function GET() {
   const off = exigirFlag(); if (off) return off;
@@ -18,11 +19,15 @@ export async function GET() {
   const [eventos, academicas, atestados, user, mapas] = await Promise.all([
     prisma.auraEvent.findMany({ where: { userId: me.id }, orderBy: { createdAt: "desc" } }),
     prisma.academicCredential.findMany({ where: { userId: me.id }, orderBy: { createdAt: "desc" } }),
-    prisma.credential.findMany({ where: { userId: me.id, status: "issued" }, orderBy: { issuedAt: "desc" }, select: { id: true, type: true, title: true, assetId: true, network: true, issuedAt: true } }),
+    prisma.credential.findMany({ where: { userId: me.id, status: "issued" }, orderBy: { issuedAt: "desc" }, select: { id: true, type: true, title: true, assetId: true, network: true, issuedAt: true, metadata: true } }),
     prisma.user.findUnique({ where: { id: me.id }, select: { aura: true, academicLevel: true } }),
     // Cérebros do aluno (HANDOFF_CEREBRO_AURA §8 — perfil): título, arquétipo, duas completudes.
     Promise.resolve().then(() => prisma.mapaProbabilistico.findMany({ where: { ownerId: me.id }, orderBy: { updatedAt: "desc" }, take: 20, select: { id: true, titulo: true, tipoTopico: true, modoValidacao: true, completudeAprendizado: true, completudeConclusao: true, backbone: true, updatedAt: true } })).catch(() => [] as never[]),
   ]);
+  // "validado por": quem chancelou (verifiedById na metadata da credencial acadêmica / validação) → nome. Só o dono vê.
+  const verifIds = [...new Set(atestados.map((a) => (a.metadata as { verifiedById?: unknown } | null)?.verifiedById).filter((v): v is string => typeof v === "string" && /^[a-f0-9]{24}$/i.test(v)))];
+  const verificadores = verifIds.length ? await prisma.user.findMany({ where: { id: { in: verifIds } }, select: { id: true, name: true, institution: true } }).catch(() => []) : [];
+  const nomeVerificador = new Map(verificadores.map((v) => [v.id, v.name || v.institution || null]));
   const aura = somaEventos(eventos);
   const nivel = levelFromAura(aura);
   const conta = (s: string) => eventos.filter((e) => e.source === s).length;
@@ -35,7 +40,15 @@ export async function GET() {
     habilidadesValidadas: eventos.filter((e) => e.source === "node_validated").map((e) => ({ id: e.id, titulo: e.reason ?? e.refId, at: e.createdAt.toISOString() })),
     cerebros: mapas.map((m) => ({ id: m.id, titulo: m.titulo, tipoTopico: m.tipoTopico, modoValidacao: m.modoValidacao, aprendizado: m.completudeAprendizado, conclusao: m.completudeConclusao, passos: m.backbone.length, completo: m.backbone.length > 0 && m.completudeConclusao >= 1, updatedAt: m.updatedAt.toISOString() })),
     academicas: academicas.map(viewPublica),
-    parede: atestados.map((a) => ({ ...a, issuedAt: a.issuedAt ? a.issuedAt.toISOString() : null })),
+    parede: atestados.map(({ metadata, ...a }) => {
+      const vid = (metadata as { verifiedById?: unknown } | null)?.verifiedById;
+      return {
+        ...a,
+        issuedAt: a.issuedAt ? a.issuedAt.toISOString() : null,
+        explorerUrl: a.assetId ? explorerUrl(a.assetId, (a.network as SolanaNetwork) || undefined) : null,
+        validadoPor: typeof vid === "string" ? nomeVerificador.get(vid) ?? null : null,
+      };
+    }),
     recent: eventos.slice(0, 10).map((e) => ({ id: e.id, source: e.source, amount: e.amount, reason: e.reason, at: e.createdAt.toISOString() })),
   });
 }

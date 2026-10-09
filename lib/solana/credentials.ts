@@ -108,7 +108,11 @@ function errMsg(e: unknown): string {
   return m.slice(0, 500);
 }
 
-/** Metadados do NFT (o que o aluno/jurado vê no explorer). Sem jargão cripto no título. */
+/**
+ * Metadados do NFT (o que o aluno/jurado vê no explorer). Sem jargão cripto no título.
+ * PRIVACIDADE: nada de dado pessoal aqui — isto vai pro IPFS/cadeia (público). Só o quê (título da
+ * conquista), o ponteiro (refId) e quando. Nome, e-mail e documento do aluno ficam fora da cadeia.
+ */
 export function buildNftMetadata(input: {
   type: CredentialType;
   title: string;
@@ -116,20 +120,18 @@ export function buildNftMetadata(input: {
   standard: CredentialStandard;
   network: string;
   description?: string;
-  recipientName?: string | null;
   issuedAt: Date;
 }): NftMetadata {
   const label = TYPE_LABEL[input.type];
   const badge = new URL(`${publicBaseUrl()}/api/credentials/badge`);
   badge.searchParams.set("type", input.type);
   badge.searchParams.set("title", input.title.slice(0, 80));
-  const who = input.recipientName ? ` por ${input.recipientName}` : "";
   return {
     name: `${label}: ${input.title}`.slice(0, 32 * 4),
     image: badge.toString(),
     description:
       input.description ||
-      `${label} na Zaeon${who}. Credencial soulbound (intransferível), emitida pela Zaeon e verificável na Solana.`,
+      `${label} na Zaeon. Credencial soulbound (intransferível), emitida pela Zaeon e verificável na Solana.`,
     attributes: [
       { trait_type: "Tipo", value: label },
       { trait_type: "Origem", value: input.refId },
@@ -169,7 +171,7 @@ export async function issueCredential(userId: string, input: IssueInput, deps: D
     const existing = await db.credential.findUnique({ where });
     if (existing && existing.status !== "error") return existing;
 
-    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, name: true, solanaWallet: true } });
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, solanaWallet: true } });
     const baseData = {
       title,
       standard,
@@ -204,7 +206,6 @@ export async function issueCredential(userId: string, input: IssueInput, deps: D
     const metadata = buildNftMetadata({
       type, title, refId, standard, network,
       description: input.description,
-      recipientName: user.name ?? null,
       issuedAt: now(),
     });
 

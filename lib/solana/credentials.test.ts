@@ -68,10 +68,18 @@ describe("config", () => {
 
 describe("buildNftMetadata", () => {
   it("monta nome/imagem/atributos sem jargão cripto no título", () => {
-    const m = buildNftMetadata({ type: "skill", title: "Revisão sistemática", refId: "n1", standard: "cnft", network: "devnet", recipientName: "Ana", issuedAt: new Date("2026-09-09T00:00:00Z") });
+    const m = buildNftMetadata({ type: "skill", title: "Revisão sistemática", refId: "n1", standard: "cnft", network: "devnet", issuedAt: new Date("2026-09-09T00:00:00Z") });
     expect(m.name).toBe("Habilidade dominada: Revisão sistemática");
     expect(m.image).toBe("https://beta.zaeon.space/api/credentials/badge?type=skill&title=Revis%C3%A3o+sistem%C3%A1tica");
     expect(m.attributes).toEqual(expect.arrayContaining([{ trait_type: "Soulbound", value: "sim" }, { trait_type: "Emitida em", value: "2026-09-09" }]));
+  });
+  it("não leva dado pessoal pra cadeia: só o quê (título), o ponteiro (refId) e quando", () => {
+    const m = buildNftMetadata({ type: "academic", title: "Mestrado em Agronomia", refId: "cred-1", standard: "cnft", network: "devnet", issuedAt: new Date("2026-09-09T00:00:00Z") });
+    const tudo = JSON.stringify(m);
+    expect(tudo).not.toMatch(/ por /);
+    expect(tudo).not.toMatch(/@/);
+    expect(m.attributes).toEqual(expect.arrayContaining([{ trait_type: "Origem", value: "cred-1" }]));
+    expect(Object.keys(m).sort()).toEqual(["attributes", "description", "image", "name"]);
   });
 });
 
