@@ -2,7 +2,7 @@
  * Frota de IAs — a CONFIGURAÇÃO salva (PURO): os lotes da frota + as chaves ON/OFF (o painel "Deploy agents" do Modo
  * CEO grava; os clientes e o servidor leem). Fica no banco em SystemSetting (chave `frota-ia`), como JSON. `versao` muda a
  * cada gravação (o cache do plano do dia é por versão). Tudo que vem de fora passa por `sanitizarConfig`.
- * MIGRAÇÕES (`MIGRACOES`): mudanças na frota que têm que chegar até numa config JÁ SALVA (ex.: +1300 IAs) — cada uma
+ * MIGRAÇÕES (`MIGRACOES`): mudanças na frota que têm que chegar até numa config JÁ SALVA (ex.: +800 IAs) — cada uma
  * aplica UMA vez (o id fica em `migracoes`) e o servidor grava o resultado (lib/cyber/frota/servidor `lerConfig`); se o
  * dono apagar o lote depois pelo painel, ele não volta.
  */
@@ -14,7 +14,7 @@ export type ConfigSalva = { frota: ConfigFrota; flags: FlagsFrota; versao: numbe
   /** MODO FULL até (epoch ms): todo mundo online 24 h nos dias que começam antes disso (lib/cyber/frota/agenda `fullNoDia`) */
   modoFullAte: number | null };
 /** limites do painel */
-export const LIMITES = { totalMax: 5000, loteMax: 2000, lotesMax: 20 } as const;
+export const LIMITES = { totalMax: 1500, loteMax: 1500, lotesMax: 20 } as const;   // 1500 = o TETO do dono (desempenho: a régua de 77 fps)
 
 const num = (v: unknown, a: number, b: number, padrao: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(b, Math.max(a, v)) : padrao);
 function loteDe(v: unknown): LoteFrota | null {
@@ -44,7 +44,7 @@ export const totalDaFrota = (c: ConfigSalva) => c.frota.lotes.reduce((n, l) => n
 
 /** as MIGRAÇÕES da frota, em ordem (o id nunca muda depois de publicado) */
 export const MIGRACOES: readonly { id: string; desc: string; aplicar(c: ConfigSalva): ConfigSalva }[] = [
-  { id: "2026-10-mais-1300", desc: "+1300 IAs no mesmo mundo (total 2000)", aplicar: (c) => novoLote(c, 1300, 2027) },
+  { id: "2026-10-total-1500", desc: "+800 IAs no mesmo mundo (total 1500 — o teto do dono)", aplicar: (c) => novoLote(c, 800, 2027) },
   // o dono quebrou a regra do horário: todo mundo online 24 h até o fim do dia 12/10/2026 (meia-noite de Fortaleza)
   { id: "2026-10-modo-full-ate-12", desc: "modo full (24 h) até 12/10", aplicar: (c) => ({ ...c, modoFullAte: Date.UTC(2026, 9, 13, 3, 0, 0) }) },
 ];
