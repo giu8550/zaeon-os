@@ -3,6 +3,9 @@
  * que o corpo faz. Cada bloco = VIAGEM até o lugar (no começo do bloco) + a ATIVIDADE lá:
  *  - viagem DENTRO da Zaeon (central e salas): de MOCHILA A JATO (um arco por cima das coisas — sem lotar os fios dos
  *    jogadores); sem mochila (flag), a pé na central e de moto pras salas;
+ *  - entre os LUGARES DE ESTUDO (salas da Zaeon e universidades): de MOTO, de vaga em vaga — cada lugar tem um
+ *    ESTACIONAMENTO (lib/cyber/estacionamentosEstudo): chega de moto, a moto FICA na vaga (`vagaMoto`) e ela vai de
+ *    mochila até o lugar; na saída, volta de mochila pra vaga e sai de moto (lotou: como antes);
  *  - viagem pra FORA (universidades, praça, Solana): de MOTO, voando alto. Saindo da Zaeon, a IA vai de mochila até a
  *    GARAGEM e PEGA a moto lá (`pontoDaGaragem`: cada uma na sua vaga de decolagem); voltando, POUSA na garagem e segue
  *    de mochila — ninguém mais sobe de moto de dentro de uma sala. Fora da Zaeon (de um lugar visitado pra outro) a
@@ -30,6 +33,7 @@ import { acasoDe, entre, inteiro, embaralhar } from "./aleatorio";
 import type { FlagsFrota } from "./agenda";
 import type { BlocoPlano } from "./plano";
 import { spotsDe, type Spot } from "./lugares";
+import type { VagaEstudo } from "../estacionamentosEstudo";
 
 type P3 = { x: number; y: number; z: number };
 export type PoseIA = "andando" | "parado" | "mochila" | "moto" | "sentado" | "deitado" | "relaxa" | "chao" | "danca";
@@ -40,10 +44,12 @@ export type EstadoIA = {
   sentar: number; tablet: number; assentoY: number;
   /** a moto (quando está nela) */
   moto: { vel: number; curva: number } | null;
+  /** a MOTO DELA parada num estacionamento agora (chegou e está no lugar, ou ainda indo buscar) — o render desenha */
+  vagaMoto: VagaEstudo | null;
   /** índice do bloco e o tipo de atividade (pra conversa e debug) */
   bloco: number; atividade: BlocoPlano["atividade"] | null; ambiente: string | null; evento: string | null;
 };
-export const OFFLINE: EstadoIA = { visivel: false, x: 0, y: 0, z: 0, rumo: 0, zaeon: false, pose: "parado", sentar: 0, tablet: 0, assentoY: 0.7, moto: null, bloco: -1, atividade: null, ambiente: null, evento: null };
+export const OFFLINE: EstadoIA = { visivel: false, x: 0, y: 0, z: 0, rumo: 0, zaeon: false, pose: "parado", sentar: 0, tablet: 0, assentoY: 0.7, moto: null, vagaMoto: null, bloco: -1, atividade: null, ambiente: null, evento: null };
 
 /** as velocidades (m/s) e os tempos (s) */
 export const MOV = { pe: 1.5, mochila: 13, moto: 42, decola: 3.5, pousa: 3.5, sobeMoto: 5, cruzeiroAcima: 28, senta: 0.8, tabletIn: 0.9, corridaVolta: 110, corridaMax: 8 * 60, rodaZaeonMax: 120 } as const;
@@ -205,7 +211,10 @@ export function noCircuito(evento: string, s: number): P3 & { rumo: number } {
 
 // ── as VIAGENS ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export type ModoViagem = "mochila" | "moto" | "pe";
-type Viagem = { modo: ModoViagem; dur: number; em(u: number): P3 & { rumo: number; modo?: ModoViagem }; rota?: { x: number; z: number }[] };
+type Viagem = { modo: ModoViagem; dur: number; em(u: number): P3 & { rumo: number; modo?: ModoViagem }; rota?: { x: number; z: number }[];
+  /** (com estacionamento, em s da viagem) até quando a moto ainda está PARADA na vaga de onde sai; desde quando já está
+   *  parada na vaga de chegada */
+  saida?: number; chegada?: number };
 const rotasPe = new Map<string, { x: number; z: number }[]>();
 /** um trecho de MOCHILA: o arco — sobe, voa reto, desce */
 function deMochila(de: P3, para: P3): Viagem {
@@ -255,19 +264,44 @@ export function viagem(de: P3, para: P3, flags: FlagsFrota, chave: string, preci
   return deMoto(de, para);
 }
 
+/** a viagem com ESTACIONAMENTO: sai da vaga do lugar anterior (vai de mochila até ela) e/ou chega na vaga do destino
+ *  (de lá, de mochila até o lugar). Sem moto parada dos dois lados: a viagem de sempre. Sem vaga de um lado: na Zaeon
+ *  central a moto é pega/largada na GARAGEM; fora, ela se materializa/desfaz (components/cyber/FrotaIA) */
+export function viagemComVaga(de: P3, vagaDe: VagaEstudo | null, para: P3, vagaPara: VagaEstudo | null, flags: FlagsFrota, chave: string, preciso = true): Viagem {
+  if (!vagaDe && !vagaPara) return viagem(de, para, flags, chave, preciso);
+  if (vagaDe && vagaPara && vagaDe.ambiente === vagaPara.ambiente) return viagem(de, para, flags, chave, preciso);   // (o mesmo lugar)
+  const pernas: Viagem[] = [];
+  let m0: P3, saida: number | undefined;
+  if (vagaDe) { const a = deMochila(de, vagaDe); pernas.push(a); m0 = vagaDe; saida = a.dur; }
+  else if (naZaeon(de)) { const g = pontoDaGaragem(chave); pernas.push(deMochila(de, g)); m0 = g; }
+  else m0 = de;
+  let m1: P3, cauda: Viagem | null = null;
+  if (vagaPara) { m1 = vagaPara; cauda = deMochila(vagaPara, para); }
+  else if (naZaeon(para)) { const g = pontoDaGaragem(chave); m1 = g; cauda = deMochila(g, para); }
+  else m1 = para;
+  pernas.push(deMoto(m0, m1)); if (cauda) pernas.push(cauda);
+  const v = pernas.reduce(emSeguida);
+  return { ...v, saida, chegada: vagaPara && cauda ? v.dur - cauda.dur : undefined };
+}
+/** a vaga onde a moto ficou no bloco ANTERIOR (se ele encosta neste) */
+const vagaAnterior = (blocos: readonly BlocoPlano[], i: number) => (i > 0 && blocos[i - 1]!.fim >= blocos[i]!.ini - 1 ? blocos[i - 1]!.vaga ?? null : null);
+/** qual moto parada é dela no instante `u` (s) de uma viagem `v` com estacionamento */
+const motoParadaNa = (v: Viagem, u: number, vagaDe: VagaEstudo | null, vagaPara: VagaEstudo | null): VagaEstudo | null =>
+  vagaDe && v.saida !== undefined && u < v.saida ? vagaDe : vagaPara && v.chegada !== undefined && u >= v.chegada ? vagaPara : null;
+
 /** o ESTADO de uma IA no minuto `min` (do dia). `musica` = está rolando som no lounge agora */
 export function estadoDaIA(agente: string, blocos: readonly BlocoPlano[], min: number, flags: FlagsFrota, musica: boolean, preciso = true): EstadoIA {
   const i = blocos.findIndex((b) => min >= b.ini && min < b.fim);
   if (i < 0) return OFFLINE;
   const b = blocos[i]!, t = (min - b.ini) * 60, durBloco = (b.fim - b.ini) * 60;
   if (b.atividade === "festa" && !musica) return OFFLINE;   // a festa só acontece com som
-  const ant = antDoBloco(agente, blocos, i, flags);
-  const base = { visivel: true, bloco: i, atividade: b.atividade, ambiente: b.ambiente ?? null, evento: b.evento ?? null, sentar: 0, tablet: 0, assentoY: 0.7, moto: null };
+  const ant = antDoBloco(agente, blocos, i, flags), vAnt = vagaAnterior(blocos, i), vAqui = b.vaga ?? null;
+  const base = { visivel: true, bloco: i, atividade: b.atividade, ambiente: b.ambiente ?? null, evento: b.evento ?? null, sentar: 0, tablet: 0, assentoY: 0.7, moto: null, vagaMoto: null };
   const comViagem = (destino: P3, ini: number): { fim: number; estado?: EstadoIA } => {
-    const v = viagem(ant, destino, flags, `${agente}|${i}|${destino.x.toFixed(1)}`, preciso), d = Math.min(v.dur, durBloco * 0.6);
+    const v = viagemComVaga(ant, vAnt, destino, vAqui, flags, `${agente}|${i}|${destino.x.toFixed(1)}`, preciso), d = Math.min(v.dur, durBloco * 0.6);
     if (t - ini >= d) return { fim: ini + d };
-    const p = v.em(d > 0 ? (t - ini) / d : 1), modo = p.modo ?? v.modo;
-    return { fim: ini + d, estado: { ...base, x: p.x, y: p.y, z: p.z, rumo: p.rumo, zaeon: naZaeon(p), pose: poseDoModo(modo), moto: modo === "moto" ? { vel: MOV.moto, curva: 0 } : null } };
+    const u = d > 0 ? (t - ini) / d : 1, p = v.em(u), modo = p.modo ?? v.modo;
+    return { fim: ini + d, estado: { ...base, x: p.x, y: p.y, z: p.z, rumo: p.rumo, zaeon: naZaeon(p), pose: poseDoModo(modo), moto: modo === "moto" ? { vel: MOV.moto, curva: 0 } : null, vagaMoto: motoParadaNa(v, u * v.dur, vAnt, vAqui) } };
   };
   // ESTUDO e FESTA: viaja, senta (ou dança) e fica
   if (b.spot) {
@@ -275,15 +309,15 @@ export function estadoDaIA(agente: string, blocos: readonly BlocoPlano[], min: n
     const v = comViagem(destino, 0); if (v.estado) return v.estado;
     const kf = t - v.fim, fimSentar = durBloco - kf;   // (levanta no fim, junto com a próxima viagem)
     const sentar = Math.min(s3(kf / MOV.senta), s3(fimSentar / MOV.senta));
-    if (b.atividade === "festa") return { ...base, x: s.x, y: s.y, z: s.z, rumo: s.rumo, zaeon: s.zaeon, pose: "danca" };
+    if (b.atividade === "festa") return { ...base, x: s.x, y: s.y, z: s.z, rumo: s.rumo, zaeon: s.zaeon, pose: "danca", vagaMoto: vAqui };
     const pose: PoseIA = b.deitado ? "deitado" : s.tipo === "pufe" ? "relaxa" : s.tipo === "piso" ? "chao" : "sentado";
-    return { ...base, x: alvo.x, y: s.y, z: alvo.z, rumo: alvo.rumo, zaeon: s.zaeon, pose, sentar, tablet: s3((kf - MOV.senta) / MOV.tabletIn) * s3(fimSentar / MOV.tabletIn), assentoY: s.tipo === "sofa" ? 0.78 : s.tipo === "pufe" ? 0.74 : s.tipo === "puff" ? 0.7 : 0 };
+    return { ...base, vagaMoto: vAqui, x: alvo.x, y: s.y, z: alvo.z, rumo: alvo.rumo, zaeon: s.zaeon, pose, sentar, tablet: s3((kf - MOV.senta) / MOV.tabletIn) * s3(fimSentar / MOV.tabletIn), assentoY: s.tipo === "sofa" ? 0.78 : s.tipo === "pufe" ? 0.74 : s.tipo === "puff" ? 0.7 : 0 };
   }
   // CORRIDA / MOTO / ANDAR: a ida + (a corrida) + o roteiro já cortado pro tempo do bloco (`movimento`)
   if (b.atividade === "moto" || b.atividade === "andar") {
     const mv = movimentoCache(agente, blocos, i, flags, preciso);
     const estadoDe = (p: P3 & { rumo: number; modo?: ModoViagem }, modo: ModoViagem): EstadoIA => ({ ...base, x: p.x, y: p.y, z: p.z, rumo: p.rumo, zaeon: naZaeon(p), pose: poseDoModo(modo), moto: modo === "moto" ? { vel: MOV.moto, curva: 0.15 } : null });
-    if (t < mv.idaDur) { const p = mv.ida.em(t / mv.idaDur); return estadoDe(p, p.modo ?? mv.ida.modo); }
+    if (t < mv.idaDur) { const u = t / mv.idaDur, p = mv.ida.em(u); return { ...estadoDe(p, p.modo ?? mv.ida.modo), vagaMoto: motoParadaNa(mv.ida, u * mv.ida.dur, vAnt, null) }; }
     let k = t - mv.idaDur;
     if (mv.corrida) {   // dá voltas com a turma (cada um no seu ritmo e na sua faixa)
       const c = mv.corrida;
@@ -311,17 +345,17 @@ function movimento(agente: string, blocos: readonly BlocoPlano[], i: number, fla
     const rot = roteiroMoto(b, agente, i);
     if (b.evento?.startsWith("corrida")) {
       const r = acasoDe("piloto", agente, b.evento), ritmo = entre(r, 0.94, 1.06), faixa = entre(r, -4, 4);
-      const ida = viagem(ant, noCircuito(b.evento, 0), flags, `${agente}|${i}|corrida`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
+      const ida = viagemComVaga(ant, vagaAnterior(blocos, i), noCircuito(b.evento, 0), null, flags, `${agente}|${i}|corrida`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
       const dur = Math.min(MOV.corridaMax, (durBloco - idaDur) * 0.5), fimC = noCircuito(b.evento, (dur / MOV.corridaVolta) * 2 * Math.PI * 330 * ritmo);
       const disponivel = durBloco - idaDur - dur, trechos = cortar(trechosDoCeu(rot, fimC, false, agente, i, true), disponivel);
       return { ida, idaDur, corrida: { dur, ritmo, faixa }, trechos, disponivel, fim: trechos.at(-1)?.ate ?? { id: "corrida", ...fimC, estudo: false } };
     }
-    const ida = viagem(ant, rot[0]!.p, { ...flags, mochila: false }, `${agente}|${i}|m0`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
+    const ida = viagemComVaga(ant, vagaAnterior(blocos, i), rot[0]!.p, null, { ...flags, mochila: false }, `${agente}|${i}|m0`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
     const disponivel = durBloco - idaDur, trechos = cortar(trechosDoCeu(rot, rot[0]!.p, false, agente, i), disponivel);
     return { ida, idaDur, corrida: null, trechos, disponivel, fim: trechos.at(-1)?.ate ?? rot[0]!.p };
   }
   const rot = roteiroAndar(b, agente, i);
-  const ida = viagem(ant, rot[0]!, flags, `${agente}|${i}|a0`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
+  const ida = viagemComVaga(ant, vagaAnterior(blocos, i), rot[0]!, null, flags, `${agente}|${i}|a0`, preciso), idaDur = Math.min(ida.dur, durBloco * 0.6);
   const todos: Trecho[] = [];
   for (let j = 1; j < rot.length; j++) {
     const de = rot[j - 1]!, p = rot[j]!, reta = Math.hypot(p.x - de.x, p.z - de.z), dur = (reta * 1.35) / MOV.pe, chave = `${agente}|${i}|a${j}`;

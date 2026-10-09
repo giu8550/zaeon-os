@@ -72,6 +72,7 @@ import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar"
 import { carregando, type Carregando, type IdEtapa } from "@/lib/cyber/carregamento";
 import { gerarVeias, ouveOCoracao } from "@/lib/cyber/coracao";
 import { criarFrotaIA, type FrotaHandle } from "./FrotaIA";
+import { criarPisosEstudo } from "./EstacionamentosEstudo";
 import { sanitizarConfig } from "@/lib/cyber/frota/config";
 import { colisoresDeCorpos } from "@/lib/cyber/colisaoAtores";
 import { SENTAR, TABLET, codificarDescanso, lugarEm, decodificarDescanso, lugarPerto, poseNoLugar, proximoModo, type Lugar, type ModoDescanso } from "@/lib/cyber/descanso";
@@ -495,6 +496,8 @@ export class CyberEngine {
         fundirEstaticos(h.group, { passo: (_, t) => h.atualizar(1 / 30, t), manter: comDescendentes(h.alvosCamera) });
         this.campi.push({ id, h, area: cil(C.centro, C.r, C.y, Math.min(220, C.r * 0.6) + 20, 110) });
       }
+      { // os ESTACIONAMENTOS das universidades (colados no disco, do lado da Zaeon) — os da Zaeon vêm com a cidade
+        const pf = criarPisosEstudo({ low, onde: "fora" }); this.cena.scene.add(pf); fundirEstaticos(pf); this.pisosEstudo = pf; }
       await etapa("solana");
       this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); camuflarGrupo(this.solana.group); this.cena.scene.add(this.solana.group);
       { const so = this.solana; fundirEstaticos(so.group, { passo: (_, t) => so.atualizar(1 / 30, t) }); }
@@ -572,6 +575,8 @@ export class CyberEngine {
   private poolBases: PoolGemeos | null = null;
   /** os pisos que escondem (components/cyber/oclusaoPisos) */
   private oclusao: ReturnType<typeof criarOclusaoDePisos> | null = null;
+  /** os estacionamentos das universidades (components/cyber/EstacionamentosEstudo) */
+  private pisosEstudo: THREE.Group | null = null;
   private criarLuzesBase() { if (!this.o.low && !this.luzesBase.length) for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0x9fd8ff, 0, 11); this.cena.scene.add(l); this.luzesBase.push(l); } }
   /** SOBE pra GPU tudo que está no galho (geometria, texturas; e calcula as esferas das geometrias): um desenho de 1
    *  pixel com o recorte desligado. Senão isso cai no 1º quadro em que o objeto aparece (a travada ao chegar num lugar) */
@@ -2704,6 +2709,7 @@ export class CyberEngine {
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
     this.somLounge?.dispose(); this.som.dispose();
+    this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }
     for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.casca.removeFromParent();

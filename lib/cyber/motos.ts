@@ -19,7 +19,7 @@ import { VOO } from "./voo";
 /** um estacionamento: centro, rumo (a frente das vagas aponta pro centro — a praça no chão, o centro da ilha na
  *  Zaeon), `filas` × `porFila` vagas, `espacamento` entre vagas de uma fila e `entreFilas` entre as filas (m) */
 /** `alt` = quanto o piso do lote fica acima do piso da Zaeon (a garagem fica na altura das salas) */
-export type Lote = { id: "chao" | "garagem"; x: number; z: number; rot: number; ceu: boolean; alt: number; filas: number; porFila: number; espacamento: number; entreFilas: number };
+export type Lote = { id: "chao" | "garagem" | "estudo"; x: number; z: number; rot: number; ceu: boolean; alt: number; filas: number; porFila: number; espacamento: number; entreFilas: number };
 const lote = (id: Lote["id"], x: number, z: number, cx: number, cz: number, ceu: boolean, filas: number, porFila: number): Lote =>
   ({ id, x, z, rot: Math.atan2(cx - x, cz - z), ceu, alt: 0, filas, porFila, espacamento: 4.6, entreFilas: 8 });
 /** os 2 lotes da GARAGEM no referencial da SALA (+z = a porta, rumo à Zaeon): um atrás do outro, virados pra porta */
