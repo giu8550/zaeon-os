@@ -189,6 +189,21 @@ feita de PLATAFORMAS — e o piso de uma plataforma esconde o que está do outro
 5. **Orçamento como teste** (o `mapkit/selftest_budget` do motor): cada sala nova passa pelo perfil de draw calls
    (`userData.foraDoLote`) e pela régua de 73 fps com 12 jogadores antes de entrar.
 
+## Resultado final da rodada (PR #320, build de PRODUÇÃO, 12 jogadores simulados)
+
+| Ponto | fps (prod) | loop da página |
+|---|---|---|
+| Praça | 80–82 | ~9,5 ms |
+| UNILAB | 82–85 | — |
+| Zaeon | 56–77 (varia com a carga da máquina) | 11,3 ms (era ~14) |
+
+A máquina de medição estava disputada (iCloud ~70% de CPU, 8–10 GB de swap): numa rodada calma a Zaeon deu 76–77, na
+seguinte, com carga 13–15, deu 47–55 — mesma build. O dono aceitou a faixa 56–74 em produção.
+
+**Ficou pra depois (pequeno):** a varredura de materiais transparentes a cada 2 s (um pico curto), os 16 brilhos do
+jardim instanciados, os pisos que escondem também nos lugares flutuantes (UNILAB, Solana, campi) e a troca de LOD sem
+"pop" (dither).
+
 ## Como escalar para a Zaeon inteira (próximos passos)
 
 Em ordem de retorno (draw calls economizadas por esforço):
