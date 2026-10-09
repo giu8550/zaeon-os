@@ -130,6 +130,24 @@ contar draw calls por motivo (`userData.foraDoLote`), perfil de CPU via CDP `Pro
 por quadro, e A/B na MESMA página (a máquina de dev é compartilhada; fps entre páginas diferentes varia ±15).
 Chaves A/B: `?semLotes`, `?semCongelar`, `?celula=N`.
 
+## Rodada 2 (branch feat/multidao-gpu) — o que mediu
+
+Ferramentas novas de medida (mais estáveis que fps numa máquina compartilhada):
+- **tempo de GPU por quadro** (`EXT_disjoint_timer_query_webgl2`, somando as passadas do quadro): 2–4 ms — a GPU NÃO é o gargalo;
+- **CPU dentro do `render`** separada em matrizes (`scene.updateMatrixWorld`) e o resto (montar a lista + desenhar);
+- **trace do Chrome** (FireAnimationFrame vs. ocioso): a thread principal ficava ~3 ms ociosa por quadro na praça — o
+  resto do quadro é o PROCESSO DE GPU do Chrome traduzindo cada draw call (WebGL → ANGLE → Metal): draw call custa
+  CPU, mas fora da página.
+
+| Mudança | Onde | Efeito |
+|---|---|---|
+| Ossos sem nada desenhável no galho → `visible = false` (o skinning usa só a matriz) | `matrizes.ts` (`esconderOssosVazios`, `mostrarCaminho`) | Zaeon cheia: nós percorridos 9.525 → 4.295; CPU do render 16 → 9 ms |
+| Luzes das bases: 4 PointLights FIXAS que vão pras bases mais perto (eram 1 por base: 17 no shader da cena inteira, e cada jogador que entrava recompilava os materiais) | `engine.ts` (`acenderBases`), `BaseEstudo.ts` (`luz`) | 17 → 4 luzes |
+| Asas do founder: 1 malha com esqueleto por asa | `AsasAnjo.ts` | 48 → 4 draw calls |
+| As 2 telas laterais da base com o mesmo material | `BaseEstudo.ts` | o lote junta |
+| **Pool de gêmeos**: as bases (estruturas idênticas) desenhadas juntas, cada peça uma malha instanciada pra todas | `poolGemeos.ts` | praça com 12 jogadores ~720 → ~400 draw calls; ~0,2 ms/quadro |
+| Multidão na GPU (abaixo) | `MultidaoGPU.ts` | as IAs até 90 m animadas de verdade, sem custo de fps mensurável |
+
 ## A multidão na GPU (como funciona) — `components/cyber/MultidaoGPU.ts`
 
 1. **Assar** (uma vez, ~330 ms, 1,5 s depois da cena montar): um `AvatarLuz` de verdade passa por cada `PoseIA` da frota
