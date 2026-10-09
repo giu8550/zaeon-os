@@ -215,7 +215,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onAbrirSom: () => { if (!cb.current.souFundador || !cb.current.musica) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(true); },
       urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon escreve no mural."); return; } setRecadoTxt(""); setRecadoAberto(true); },
-    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.setPessoas(cb.current.membros); setLoading("saindo"); setTimeout(() => setLoading("off"), 550); })
+    }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.exporDepuracao(); eng.setPessoas(cb.current.membros); setLoading("saindo"); setTimeout(() => setLoading("off"), 550); })
       .catch(() => { if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
     // a engine é criada uma vez por montagem; mudanças vão por métodos

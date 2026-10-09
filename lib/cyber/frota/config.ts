@@ -2,7 +2,7 @@
  * Frota de IAs — a CONFIGURAÇÃO salva (PURO): os lotes da frota + as chaves ON/OFF (o painel "Deploy agents" do Modo
  * CEO grava; os clientes e o servidor leem). Fica no banco em SystemSetting (chave `frota-ia`), como JSON. `versao` muda a
  * cada gravação (o cache do plano do dia é por versão). Tudo que vem de fora passa por `sanitizarConfig`.
- * MIGRAÇÕES (`MIGRACOES`): mudanças na frota que têm que chegar até numa config JÁ SALVA (ex.: +1300 IAs) — cada uma
+ * MIGRAÇÕES (`MIGRACOES`): mudanças na frota que têm que chegar até numa config JÁ SALVA (ex.: o teto de 1500) — cada uma
  * aplica UMA vez (o id fica em `migracoes`) e o servidor grava o resultado (lib/cyber/frota/servidor `lerConfig`); se o
  * dono apagar o lote depois pelo painel, ele não volta.
  */
@@ -14,7 +14,7 @@ export type ConfigSalva = { frota: ConfigFrota; flags: FlagsFrota; versao: numbe
   /** MODO FULL até (epoch ms): todo mundo online 24 h nos dias que começam antes disso (lib/cyber/frota/agenda `fullNoDia`) */
   modoFullAte: number | null };
 /** limites do painel */
-export const LIMITES = { totalMax: 5000, loteMax: 2000, lotesMax: 20 } as const;
+export const LIMITES = { totalMax: 1500, loteMax: 1500, lotesMax: 20 } as const;   // 1500 = o TETO do dono (desempenho: a régua de 77 fps)
 
 const num = (v: unknown, a: number, b: number, padrao: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(b, Math.max(a, v)) : padrao);
 function loteDe(v: unknown): LoteFrota | null {
@@ -44,9 +44,14 @@ export const totalDaFrota = (c: ConfigSalva) => c.frota.lotes.reduce((n, l) => n
 
 /** as MIGRAÇÕES da frota, em ordem (o id nunca muda depois de publicado) */
 export const MIGRACOES: readonly { id: string; desc: string; aplicar(c: ConfigSalva): ConfigSalva }[] = [
+  // (publicada na #318; com o teto de 1500 o lote de 1300 não cabe e o sanitizarConfig o descarta — o `teto-1500` refaz)
   { id: "2026-10-mais-1300", desc: "+1300 IAs no mesmo mundo (total 2000)", aplicar: (c) => novoLote(c, 1300, 2027) },
   // o dono quebrou a regra do horário: todo mundo online 24 h até o fim do dia 12/10/2026 (meia-noite de Fortaleza)
   { id: "2026-10-modo-full-ate-12", desc: "modo full (24 h) até 12/10", aplicar: (c) => ({ ...c, modoFullAte: Date.UTC(2026, 9, 13, 3, 0, 0) }) },
+  // o TETO do dono: 1500 no total — completa com a MESMA semente do lote de +1300 (as primeiras 800 IAs dele continuam
+  // as mesmas); vale pra config nova e pra que já tinha 2000 salvas (o sanitizar descarta o lote que estoura o teto)
+  { id: "2026-10-teto-1500", desc: "teto de 1500 IAs (completa com o lote 2027)", aplicar: (c) => {
+    const t = totalDaFrota(c); return t < LIMITES.totalMax && !c.frota.lotes.some((l) => l.semente === 2027) ? novoLote(c, LIMITES.totalMax - t, 2027) : c; } },
 ];
 /** aplica as migrações que faltam (cada uma uma vez); `mudou` = tem coisa nova pra gravar */
 export function aplicarMigracoes(c: ConfigSalva): { c: ConfigSalva; mudou: boolean } {

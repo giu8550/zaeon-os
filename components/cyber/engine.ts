@@ -49,7 +49,7 @@ import { DECK_ANTIGO, GIRO_PLANTA, noCorredorDaRampa, NAVE_QG, RAIO_REDOMA, acao
 import { ESCALA_NAVE, ESCALA_NAVE_V, criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
 import { atualizarCamuflagem, camuflarGrupo, pararCamuflagem } from "./camuflagem";
-import { criarMoto, type MotoHandle } from "./Moto";
+import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
 import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
@@ -60,6 +60,8 @@ import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
 import { atualizarRegiao, criarRegiao, soltarRegiao, type RegiaoCena } from "./regioesCena";
 import { fundirEstaticos } from "./lotes";
+import { matrizDoAvatar, matrizesDaCena } from "./matrizes";
+import { umaPassadaNosTransparentes } from "./umaPassada";
 import type { Regiao } from "@/lib/cyber/regioes";
 import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -547,9 +549,11 @@ export class CyberEngine {
     this.raf = requestAnimationFrame((t) => this.loop(t));
     if (!document.hidden) await Promise.race([primeiro, new Promise((r) => setTimeout(r, 4000))]);   // (aba oculta não desenha: não espera)
     p(carregando("quadro", 1));
-    if (process.env.NODE_ENV !== "production") (window as unknown as { __cyber?: CyberEngine }).__cyber = this;   // depuração em dev
   }
+  /** depuração em dev: `window.__cyber` = o motor VIVO (quem monta chama — no modo estrito o React monta 2 e o cancelado terminava por último) */
+  exporDepuracao() { if (process.env.NODE_ENV !== "production" && this.vivo) (window as unknown as { __cyber?: CyberEngine }).__cyber = this; }
   private aoPrimeiroQuadro: (() => void) | null = null;
+  private passadaEm = -Infinity;
   // ───────────── DESCANSO no lounge (J) + MODO ESTUDO no TABLET (T) — lib/cyber/descanso ─────────────
   /** sentado/deitado: o lugar, o assento e o modo; a FASE — indo (andando até a frente do assento), sentando (vira e
    *  abaixa), parado (sentado/deitado), levantando (sobe e dá o passo pra frente) — e há quanto tempo está nela */
@@ -656,8 +660,8 @@ export class CyberEngine {
     }
   }
 
-  /** Armadura: a minha é azul; a dos outros vem da ordem canônica dos membros (lib/cyber/cores). */
-  private corDe(id: string) { return corDaArmadura(this.ordem, id, this.o.eu.id); }
+  /** Armadura: a cor REAL de cada um (lib/cyber/cores) — a mesma que ele vê em si e que os outros veem nele */
+  private corDe(id: string) { return corDaArmadura(id); }
 
   private novoAtor(p: PessoaCyber, x: number, z: number): Ator {
     const cor = this.corDe(p.id);
@@ -1606,8 +1610,7 @@ export class CyberEngine {
   private pegarInst(s: number): InstMoto {
     const look = String(s), livre = this.poolMotos.get(look)?.pop();   // o look é da vaga (cor + carenagem)
     if (livre) { livre.s = s; livre.casca.visible = true; livre.som = somMotoParada; livre.yAnt = null; return livre; }
-    const h = criarMoto({ ...lookDaVaga(s), low: this.o.low });
-    fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5, boost: k % 3 === 0 ? 1 : 0, seta: (k % 3) - 1 }), manter: comDescendentes(h.alvos) });
+    const h = loteMoto(criarMoto({ ...lookDaVaga(s), low: this.o.low }));
     const casca = new THREE.Group(); casca.add(h.group); this.cena.scene.add(casca);
     return { h, g: h.group, casca, look, s, loops: null, som: somMotoParada, yawAnt: 0, yAnt: null, vy: 0 };
   }
@@ -2420,7 +2423,9 @@ export class CyberEngine {
       a.av.group.visible = naTela;
       const cada = dCam < 25 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 0;
       a.acum = (a.acum ?? 0) + dt;
-      if (a.acum >= cada) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
+      const animou = a.acum >= cada;
+      if (animou) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
+      matrizDoAvatar(a.av.group, animou);   // o esqueleto dele só recalcula no quadro em que animou ou andou (components/cyber/matrizes)
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
       else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = (a.naveYaw ?? 0) + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0, fechada: true }); this.noAssento(a.av, a.nave); }
     }
@@ -2489,6 +2494,9 @@ export class CyberEngine {
     this.atualizarCamera(dt);
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
     this.atualizarHud(now);
+    matrizesDaCena(this.cena.scene);   // o que está invisível no topo da cena não recalcula matrizes (components/cyber/matrizes)
+    // transparentes de dupla face numa passada só (components/cyber/umaPassada) — de tempos em tempos pega os materiais novos
+    if (now - this.passadaEm > 2000) { this.passadaEm = now; umaPassadaNosTransparentes(this.cena.scene); }
     const desenhar = () => { this.R.clear(); this.cena.desenharFundo(this.R, this.qa.atual.nebulosa); this.R.clearDepth(); this.R.render(this.cena.scene, this.cam); };
     // moto rápida (components/cyber/VelocidadeTela): as LINHAS de velocidade estilo anime + vinheta ligam SEMPRE (são
     // baratas); o BLUR radial só quando a qualidade deixa (fora do modo low e dos degraus baixos — é uma tela inteira a mais)
@@ -2623,6 +2631,7 @@ export class CyberEngine {
 
   dispose() {
     this.frota?.dispose(); this.frota = null;
+    const w = window as unknown as { __cyber?: CyberEngine }; if (w.__cyber === this) delete w.__cyber;
     if (!this.vivo) return;   // idempotente (desmonta ao ir estudar e de novo no cleanup do React)
     this.vivo = false; cancelAnimationFrame(this.raf); this.ro?.disconnect(); this.io?.disconnect();
     this.cleanups.forEach((f) => f());

@@ -21,15 +21,26 @@
 import * as THREE from "three";
 import type { VRM, VRMHumanBoneName } from "@pixiv/three-vrm";
 import { tintaFixa, toon } from "./AvatarAnime";
+import { fundirEstaticos } from "./lotes";
 import type { AcessorioVrm } from "@/lib/cyber/estiloAvatar";
 
 export type AcessoriosHandle = { dispose(): void };
 
 const TINTA = 0.004;
+/** os materiais COMPARTILHADOS de um personagem (1 tinta + 1 toon por cor): assim cada acessório vira 1 lote por material
+ *  (components/cyber/lotes) — antes cada pecinha tinha os 2 dela (o Examiner sozinho somava ~60 draw calls) */
+const compartilhados = new WeakMap<THREE.Material[], { tinta: THREE.Material; toons: Map<string, THREE.Material> }>();
+function materiais(mats: THREE.Material[], cor: THREE.ColorRepresentation): [THREE.Material, THREE.Material] {
+  let c = compartilhados.get(mats);
+  if (!c) { c = { tinta: tintaFixa(TINTA), toons: new Map() }; compartilhados.set(mats, c); mats.push(c.tinta); }
+  const k = new THREE.Color(cor).getHexString();
+  let m = c.toons.get(k); if (!m) { m = toon(cor, { brilho: 0.25 }); c.toons.set(k, m); mats.push(m); }
+  return [m, c.tinta];
+}
 /** uma malha desenhada: o material toon + o contorno (casca invertida) */
 function desenhada(g: THREE.BufferGeometry, cor: THREE.ColorRepresentation, mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
-  const m = toon(cor, { brilho: 0.25 }), t = tintaFixa(TINTA);
-  mats.push(m, t); geos.push(g);
+  const [m, t] = materiais(mats, cor);
+  geos.push(g);
   const grupo = new THREE.Group(), corpo = new THREE.Mesh(g, m), traco = new THREE.Mesh(g, t);
   corpo.frustumCulled = traco.frustumCulled = false; traco.raycast = () => {};
   grupo.add(corpo, traco);
@@ -346,6 +357,8 @@ export function vestirAcessorios(vrm: VRM, lista: readonly AcessorioVrm[]): Aces
         obj.position.copy(m).addScaledVector(frente, 0.078);   // o osso do olho é o CENTRO do globo ocular: a lente fica ~7,8 cm à frente
       }
     }
+    // as pecinhas não se mexem dentro do acessório: viram 1 malha por material, presa ao osso como antes
+    fundirEstaticos(obj);
   }
   return {
     dispose() {

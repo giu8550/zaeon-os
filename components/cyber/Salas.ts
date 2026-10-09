@@ -483,10 +483,15 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const R = m.larg / 2, borda = new THREE.Mesh(new THREE.TorusGeometry(R, 0.3, 8, 64), new THREE.MeshStandardMaterial({ color: 0x1a2430, roughness: 0.6, metalness: 0.3 })); borda.rotation.x = Math.PI / 2; borda.position.y = 0.2; p.add(borda);
       const agua = new THREE.Mesh(new THREE.CircleGeometry(R - 0.1, 48), new THREE.MeshStandardMaterial({ color: 0x0a2a3a, roughness: 0.05, metalness: 0.6, emissive: m.cor ?? 0x7dffb0, emissiveIntensity: 0.12, transparent: true, opacity: 0.9 })); agua.rotation.x = -Math.PI / 2; agua.position.y = 0.15; p.add(agua);
       const anel = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.3, 40), basica(m.cor ?? 0x7dffb0, 0.5, true)); anel.rotation.x = -Math.PI / 2; anel.position.y = 0.17; p.add(anel);
-      const NL = o.low ? 8 : 16, luzes = Array.from({ length: NL }, (_, i) => { const l = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), basica(i % 2 ? 0x7dffb0 : 0xd4ffe6, 0.9, true)); p.add(l); return { l, a: (i / NL) * Math.PI * 2, r: 1.5 + (i % 4) * 1.2 }; });
+      // os pontos de luz: UMA malha instanciada (1 draw call; eram 16), cor alternada por instância
+      const NL = o.low ? 8 : 16, luzes = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 8, 6), basica(0xffffff, 0.9, true), NL);
+      luzes.frustumCulled = false; luzes.instanceMatrix.setUsage(THREE.DynamicDrawUsage); p.add(luzes);
+      const cl = new THREE.Color(); for (let i = 0; i < NL; i++) luzes.setColorAt(i, cl.setHex(i % 2 ? 0x7dffb0 : 0xd4ffe6));
+      const mL = new THREE.Matrix4(), cada = Array.from({ length: NL }, (_, i) => ({ a: (i / NL) * Math.PI * 2, r: 1.5 + (i % 4) * 1.2 }));
       anim.push((dt, t) => {
         const k = (t * 0.25) % 1; anel.scale.setScalar(1 + k * (R - 1)); (anel.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - k);   // uma ondinha saindo do meio
-        for (const L of luzes) { const a = L.a + t * 0.08; L.l.position.set(Math.cos(a) * L.r, 0.6 + 0.25 * Math.sin(t * 0.9 + L.a * 3), Math.sin(a) * L.r); }
+        cada.forEach((L, i) => { const a = L.a + t * 0.08; luzes.setMatrixAt(i, mL.makeTranslation(Math.cos(a) * L.r, 0.6 + 0.25 * Math.sin(t * 0.9 + L.a * 3), Math.sin(a) * L.r)); });
+        luzes.instanceMatrix.needsUpdate = true;
       });
     },
     // TORRE DE CARGA (garagem): coluna escura com anéis laranja subindo — a "energia" das motos
