@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ATIVIDADES, EPOCA, LUGARES, PERFIS_VIDA, blocoEm, estadoEm, motoEm, permitido, posNoLugar, proximoBloco, rotaEntre, VOO_DA_MOTO, type Bloco } from "./vidaPersonagem";
+import { ATIVIDADES, EPOCA, LUGARES, PERFIS_VIDA, VIRADA, blocoEm, diaDe, disputado, estadoEm, motoEm, posNoLugar, proximoBloco, rotaEntre, VOO_DA_MOTO, type Bloco } from "./vidaPersonagem";
 import { livre, comprimento } from "./caminhos";
 import { CIDADE } from "./ceu";
 
@@ -72,18 +72,24 @@ describe("a vida própria dos personagens (agenda)", () => {
 });
 
 describe("dois personagens na mesma cidadela", () => {
-  it("cada um tem as suas estações, os seus cantos da pista e a sua vaga — nunca o mesmo ponto", () => {
-    const todos = Object.values(PERFIS_VIDA);
-    for (const n of todos) for (const a of todos) {
-      if (n === a) continue;
-      for (let i = 0; i < LUGARES.length; i++) {
-        if (permitido(i, n) && permitido(i, a)) { const p = posNoLugar(i, n), q = posNoLugar(i, a); expect(Math.hypot(p.x - q.x, p.z - q.z), `${n.id}×${a.id} ${LUGARES[i]!.id}`).toBeGreaterThan(2); }
-      }
-      expect(n.estacoes.some((d) => a.estacoes.includes(d))).toBe(false);
-      expect(n.pistas.some((d) => a.pistas.includes(d))).toBe(false);
-      expect(Math.hypot(n.vaga.x - a.vaga.x, n.vaga.z - a.vaga.z)).toBeGreaterThan(5);
+  it("ninguém fica no mesmo lugar no mesmo horário (os lugares são de quem chega primeiro) e cada um tem a sua vaga", () => {
+    const todos = Object.values(PERFIS_VIDA), t0 = EPOCA + 86400 * 6 + VIRADA, t1 = t0 + 86400;
+    const ficando: { id: string; lugar: number; de: number; ate: number }[] = [];
+    for (const p of todos) {
+      let b = blocoEm(t0, p);
+      while (b.ini < t1) { if (disputado(b.lugar)) ficando.push({ id: p.id, lugar: b.lugar, de: b.ini + b.viagem, ate: b.fim }); b = blocoEm(b.fim, p, b); }
     }
-    for (const p of todos) for (let i = 0; i < LUGARES.length; i++) if (permitido(i, p)) expect(livre(posNoLugar(i, p)), `${p.id} ${LUGARES[i]!.id}`).toBe(true);
+    for (const x of ficando) for (const y of ficando) {
+      if (x.id >= y.id || x.lugar !== y.lugar || diaDe(x.de) !== diaDe(y.de)) continue;
+      expect(x.de < y.ate && y.de < x.ate, `${x.id}×${y.id} ${LUGARES[x.lugar]!.id} ${x.de}`).toBe(false);
+    }
+    for (const n of todos) for (const a of todos) if (n !== a) expect(Math.hypot(n.vaga.x - a.vaga.x, n.vaga.z - a.vaga.z)).toBeGreaterThan(5);
+    for (const p of todos) for (let i = 0; i < LUGARES.length; i++) expect(livre(posNoLugar(i, p)), `${p.id} ${LUGARES[i]!.id}`).toBe(true);
+  });
+  it("a agenda recomeça na virada do dia (04:00 de Brasília) e é a mesma calculada de qualquer ponto", () => {
+    const p = PERFIS_VIDA.examiner!, t = EPOCA + 86400 * 9 + VIRADA + 5 * 3600;
+    expect(blocoEm(t, p)).toEqual(blocoEm(t, p, blocoEm(t - 7200, p)));
+    expect(blocoEm(EPOCA + 86400 * 9 + VIRADA + 1, p).n).toBe(1);
   });
   it("as agendas são diferentes (sementes diferentes) e ninguém para colado em ninguém (todos os pares)", () => {
     const todos = Object.values(PERFIS_VIDA);

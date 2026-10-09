@@ -10,7 +10,12 @@
  *  - "golaCircuito": o friso de CIRCUITO verde que brilha na borda do capuz (Téo);
  *  - "gravataCarmesim": a gravata vermelha no decote do blazer (Examiner);
  *  - "distintivoPrata": o distintivo prateado em forma de escudo no peito, do lado esquerdo dela (Examiner);
- *  - "mechaCarmesim": a mecha vermelha na franja, do lado direito dela (Examiner) — o VRoid não pinta mecha por mecha.
+ *  - "mechaCarmesim": a mecha vermelha na franja, do lado direito dela (Examiner) — o VRoid não pinta mecha por mecha;
+ *  - "presilhaRelogio": o enfeite redondo de RELÓGIO dourado na base do rabo de cavalo (Zenita);
+ *  - "golaAlta": a gola rulê (turtleneck) creme em volta do pescoço (Zenita);
+ *  - Scholar: "monoculo"; Zaeon: "pingenteTriangulo", "linhasCiano"; Caio: "gravataAzul", "canetaPrata"; Davi e
+ *    Farmácia: "distintivoPrata"; Enfermagem: "cruzEnfermagem"; Medicina: "estetoscopio"; Farmácia: "oculosRetPrata";
+ *    Química: "oculosProtecao", "frascoVerde"; Engenharia Civil: "capacete", "coleteRefletivo".
  * As medidas são em metros, no espaço dos ossos do VRM (VRM 1.0: em repouso, eixos alinhados ao mundo, +Z = frente).
  */
 import * as THREE from "three";
@@ -96,8 +101,8 @@ function estrela(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Gr
 }
 
 /** os óculos de armação preta retangular (no osso da cabeça) */
-function oculosRet(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
-  const g = new THREE.Group(), PRETO = 0x15171c, L = 0.042, A = 0.024, X = 0.033, e = 0.004;
+function oculosRet(mats: THREE.Material[], geos: THREE.BufferGeometry[], PRETO: THREE.ColorRepresentation = 0x15171c): THREE.Group {
+  const g = new THREE.Group(), L = 0.042, A = 0.024, X = 0.033, e = 0.004;
   for (const lado of [-1, 1]) {
     for (const [w, h, x, y] of [[L, e, 0, A / 2], [L, e, 0, -A / 2], [e, A, -L / 2, 0], [e, A, L / 2, 0]] as const) {
       const b = desenhada(new THREE.BoxGeometry(w, h, 0.004), PRETO, mats, geos); b.position.set(lado * X + x, y, 0); g.add(b);
@@ -122,12 +127,12 @@ function golaCircuito(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THR
 const CARMESIM = 0xc41e3a;
 /** a gravata (no osso do pescoço): o nó logo abaixo da gola e a lâmina descendo pelo decote, inclinada pra acompanhar
  *  o peito */
-function gravata(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+function gravata(mats: THREE.Material[], geos: THREE.BufferGeometry[], cor: THREE.ColorRepresentation = CARMESIM): THREE.Group {
   const g = new THREE.Group();
-  const no = desenhada(new THREE.CylinderGeometry(0.014, 0.01, 0.022, 4), CARMESIM, mats, geos); no.rotation.y = Math.PI / 4; g.add(no);
+  const no = desenhada(new THREE.CylinderGeometry(0.014, 0.01, 0.022, 4), cor, mats, geos); no.rotation.y = Math.PI / 4; g.add(no);
   // a lâmina: um trapézio fino que alarga pra baixo e termina em ponta
   const sh = new THREE.Shape(); sh.moveTo(-0.009, 0); sh.lineTo(0.009, 0); sh.lineTo(0.017, -0.1); sh.lineTo(0, -0.118); sh.lineTo(-0.017, -0.1); sh.closePath();
-  const lamina = desenhada(new THREE.ExtrudeGeometry(sh, { depth: 0.005, bevelEnabled: false }), CARMESIM, mats, geos);
+  const lamina = desenhada(new THREE.ExtrudeGeometry(sh, { depth: 0.005, bevelEnabled: false }), cor, mats, geos);
   lamina.position.set(0, -0.01, 0.004); lamina.rotation.x = -0.68; g.add(lamina);
   g.position.set(0, -0.005, 0.085);
   return g;
@@ -138,6 +143,137 @@ function distintivo(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE
   const sh = new THREE.Shape(); sh.moveTo(-0.017, 0.018); sh.lineTo(0.017, 0.018); sh.lineTo(0.017, -0.002); sh.quadraticCurveTo(0.014, -0.016, 0, -0.024); sh.quadraticCurveTo(-0.014, -0.016, -0.017, -0.002); sh.closePath();
   const g = desenhada(new THREE.ExtrudeGeometry(sh, { depth: 0.004, bevelEnabled: false }), 0xd9dee8, mats, geos);
   g.scale.setScalar(0.8); g.position.set(0.085, 0.03, 0.12); g.rotation.y = 0.25;
+  return g;
+}
+
+/** o enfeite de relógio (no osso da cabeça): um relógio redondo dourado com o mostrador creme e os ponteiros, preso na
+ *  base do rabo de cavalo, no alto da cabeça */
+function relogio(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group(), OURO = 0xe0b04a;
+  const aro = desenhada(new THREE.CylinderGeometry(0.021, 0.021, 0.008, 24), OURO, mats, geos); aro.rotation.x = Math.PI / 2; g.add(aro);
+  const mostrador = desenhada(new THREE.CylinderGeometry(0.016, 0.016, 0.002, 24), 0xfbf3df, mats, geos); mostrador.rotation.x = Math.PI / 2; mostrador.position.z = 0.0045; g.add(mostrador);
+  for (const [c, a] of [[0.011, 0.3], [0.008, 2.2]] as const) {
+    const p = desenhada(new THREE.BoxGeometry(0.0022, c, 0.0015), 0x3a2a12, mats, geos);
+    p.position.set(Math.sin(a) * c / 2, Math.cos(a) * c / 2, 0.006); p.rotation.z = -a; g.add(p);
+  }
+  g.position.set(0, 0.185, -0.098); g.rotation.x = -0.75;   // no prendedor do rabo de cavalo, no alto da cabeça, virado pra cima
+  return g;
+}
+
+/** a gola rulê (no osso do pescoço): um tubo de tricô creme dobrado em volta do pescoço */
+function golaAlta(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  const tubo = desenhada(new THREE.CylinderGeometry(0.049, 0.055, 0.045, 24, 1, true), 0xf1e8d4, mats, geos); g.add(tubo);
+  const dobra = desenhada(new THREE.TorusGeometry(0.05, 0.007, 8, 24), 0xf1e8d4, mats, geos); dobra.rotation.x = Math.PI / 2; dobra.position.y = 0.022; g.add(dobra);
+  g.position.set(0, 0.012, 0.006);
+  return g;
+}
+
+/** um material que BRILHA (luz, sem tinta nem sombra) */
+function luzMat(cor: THREE.ColorRepresentation, mats: THREE.Material[]) { const m = new THREE.MeshBasicMaterial({ color: cor, toneMapped: false }); mats.push(m); return m; }
+
+/** a caneta-tinteiro prateada presa no bolso do colete (no peito superior, do lado esquerdo dele) */
+function caneta(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  const corpo = desenhada(new THREE.CylinderGeometry(0.0045, 0.0045, 0.07, 8), 0xc9ced6, mats, geos); g.add(corpo);
+  const clipe = desenhada(new THREE.BoxGeometry(0.002, 0.03, 0.003), 0xe6e9ee, mats, geos); clipe.position.set(0, 0.012, 0.005); g.add(clipe);
+  g.position.set(0.075, -0.02, 0.118); g.rotation.z = 0.05;
+  return g;
+}
+
+/** o monóculo dourado no olho direito (no osso da cabeça) e a correntinha descendo até o peito */
+function monoculo(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group(), OURO = 0xd8b45a;
+  const aro = desenhada(new THREE.TorusGeometry(0.019, 0.0024, 6, 28), OURO, mats, geos); g.add(aro);
+  const curva = new THREE.CatmullRomCurve3([[-0.019, -0.006, 0], [-0.03, -0.06, -0.01], [-0.035, -0.13, 0.0], [-0.03, -0.2, 0.01]].map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+  const cord = new THREE.TubeGeometry(curva, 20, 0.0012, 4, false); geos.push(cord);
+  const m = new THREE.MeshBasicMaterial({ color: OURO }); mats.push(m); g.add(new THREE.Mesh(cord, m));
+  return g;
+}
+
+/** o pingente de TRIÂNGULO ciano (luz) num colar fino (no osso do pescoço) */
+function pingente(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  const colar = new THREE.TorusGeometry(0.06, 0.0012, 4, 32, Math.PI); geos.push(colar);
+  const c = new THREE.Mesh(colar, luzMat(0xbff6ff, mats)); c.rotation.set(Math.PI / 2 + 0.9, 0, Math.PI); c.position.set(0, -0.035, 0.03); g.add(c);
+  const sh = new THREE.Shape(); sh.moveTo(0, -0.014); sh.lineTo(0.012, 0.008); sh.lineTo(-0.012, 0.008); sh.closePath();
+  const tri = new THREE.ExtrudeGeometry(sh, { depth: 0.003, bevelEnabled: false }); geos.push(tri);
+  const t = new THREE.Mesh(tri, luzMat(0x22d3ee, mats)); t.position.set(0, -0.085, 0.095); g.add(t);
+  return g;
+}
+
+/** os frisos de luz ciano descendo pela frente da jaqueta branca (no peito superior) */
+function linhasCiano(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group(), m = luzMat(0x5eead4, mats);
+  for (const x of [-0.045, 0.045]) { const b = new THREE.BoxGeometry(0.0035, 0.2, 0.002); geos.push(b); const l = new THREE.Mesh(b, m); l.position.set(x, -0.06, 0.118); l.rotation.x = -0.12; g.add(l); }
+  return g;
+}
+
+/** o broche da enfermagem: um quadradinho vermelho com a cruz branca (no peito, do lado esquerdo dela) */
+function cruz(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  const base = desenhada(new THREE.BoxGeometry(0.026, 0.026, 0.003), 0xd23b3b, mats, geos); g.add(base);
+  for (const [w, h] of [[0.016, 0.005], [0.005, 0.016]] as const) { const b = new THREE.BoxGeometry(w, h, 0.0015); geos.push(b); const m = new THREE.MeshBasicMaterial({ color: 0xffffff }); mats.push(m); const x = new THREE.Mesh(b, m); x.position.z = 0.0022; g.add(x); }
+  g.position.set(0.08, 0.02, 0.112); g.rotation.y = 0.25;
+  return g;
+}
+
+/** o ESTETOSCÓPIO (no osso do pescoço): o tubo passa por trás do pescoço e as duas pontas descem pela frente; numa delas,
+ *  o diafragma prateado */
+function estetoscopio(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group(), TUBO = 0x23262d;
+  for (const lado of [-1, 1]) {
+    const curva = new THREE.CatmullRomCurve3([[0, 0.035, -0.07], [lado * 0.078, 0.025, -0.02], [lado * 0.095, -0.02, 0.075], [lado * 0.08, -0.1, 0.145], [lado * 0.062, -0.19, 0.16]].map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+    g.add(desenhada(new THREE.TubeGeometry(curva, 24, 0.0055, 6, false), TUBO, mats, geos));
+  }
+  const disco = desenhada(new THREE.CylinderGeometry(0.018, 0.018, 0.008, 20), 0xc9ced6, mats, geos); disco.rotation.x = Math.PI / 2; disco.position.set(0.062, -0.205, 0.165); g.add(disco);
+  return g;
+}
+
+/** os ÓCULOS DE PROTEÇÃO levantados na testa (no osso da cabeça): a faixa em volta da cabeça e as lentes largas */
+function oculosProtecao(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  const faixa = desenhada(new THREE.TorusGeometry(0.098, 0.006, 6, 40), 0x2a2d33, mats, geos); faixa.rotation.x = Math.PI / 2 - 0.35; g.add(faixa);
+  for (const lado of [-1, 1]) {
+    const lente = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.012), new THREE.MeshBasicMaterial({ color: 0xcfe7ef, transparent: true, opacity: 0.55 }));
+    geos.push(lente.geometry); mats.push(lente.material as THREE.Material);
+    lente.position.set(lado * 0.03, 0.03, 0.097); lente.rotation.x = -0.35; g.add(lente);
+    const aro = desenhada(new THREE.BoxGeometry(0.054, 0.034, 0.008), 0x8d939c, mats, geos); aro.position.copy(lente.position).add(new THREE.Vector3(0, 0, -0.004)); aro.rotation.x = -0.35; g.add(aro);
+  }
+  g.position.set(0, 0.14, 0);
+  return g;
+}
+
+/** o broche de FRASCO verde (no peito, do lado esquerdo dele) */
+function frasco(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  const bojo = desenhada(new THREE.ConeGeometry(0.012, 0.018, 12), 0x4ade80, mats, geos); g.add(bojo);
+  const gargalo = desenhada(new THREE.CylinderGeometry(0.004, 0.004, 0.01, 8), 0xe2e8f0, mats, geos); gargalo.position.y = 0.013; g.add(gargalo);
+  g.position.set(0.08, 0.02, 0.118);
+  return g;
+}
+
+/** o CAPACETE de obra branco (no osso da cabeça), com o escudinho prateado na frente */
+function capacete(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  const casco = desenhada(new THREE.SphereGeometry(0.118, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), 0xf4f5f7, mats, geos); casco.scale.set(1.12, 0.95, 1.22); g.add(casco);
+  const aba = desenhada(new THREE.CylinderGeometry(0.135, 0.135, 0.008, 28), 0xf4f5f7, mats, geos); aba.scale.set(1.1, 1, 1.25); aba.position.z = 0.012; g.add(aba);
+  const crista = desenhada(new THREE.BoxGeometry(0.025, 0.012, 0.22), 0xe9eaee, mats, geos); crista.position.set(0, 0.112, 0.005); g.add(crista);
+  const esc = distintivo(mats, geos); esc.position.set(0, 0.06, 0.143); esc.rotation.set(-0.35, 0, 0); esc.scale.setScalar(0.7); g.add(esc);
+  g.position.set(0, 0.115, -0.005);
+  return g;
+}
+
+/** o COLETE refletivo laranja (no peito): aberto na frente, com duas faixas prateadas em volta */
+function colete(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group(), abre = 0.55;
+  const corpo = desenhada(new THREE.CylinderGeometry(0.175, 0.17, 0.4, 28, 1, true, abre / 2, Math.PI * 2 - abre), 0xf47a1f, mats, geos); g.add(corpo);
+  for (const y of [-0.06, -0.13]) {
+    const f = new THREE.CylinderGeometry(0.177, 0.176, 0.022, 28, 1, true, abre / 2, Math.PI * 2 - abre); geos.push(f);
+    const m = new THREE.MeshBasicMaterial({ color: 0xe6e9ef, side: THREE.DoubleSide }); mats.push(m);
+    const fx = new THREE.Mesh(f, m); fx.position.y = y; g.add(fx);
+  }
+  g.scale.set(1.1, 1, 0.9); g.position.set(0, -0.1, -0.015);
   return g;
 }
 
@@ -188,22 +324,34 @@ function pintarMecha(vrm: VRM, cor: THREE.ColorRepresentation): (() => void) | n
 export function vestirAcessorios(vrm: VRM, lista: readonly AcessorioVrm[]): AcessoriosHandle {
   const mats: THREE.Material[] = [], geos: THREE.BufferGeometry[] = [], postos: THREE.Object3D[] = [], desfazer: (() => void)[] = [];
   const osso = (n: VRMHumanBoneName) => vrm.humanoid.getRawBoneNode(n);
+  type Osso = "neck" | "head" | "upperChest";
+  const TABELA: Record<Exclude<AcessorioVrm, "mechaCarmesim">, [Osso, () => THREE.Group]> = {
+    foneNoPescoco: ["neck", () => fone(mats, geos)], golaCircuito: ["neck", () => golaCircuito(mats, geos)], golaAlta: ["neck", () => golaAlta(mats, geos)],
+    gravataCarmesim: ["neck", () => gravata(mats, geos)], gravataAzul: ["neck", () => gravata(mats, geos, 0x3b6fd8)],
+    estetoscopio: ["neck", () => estetoscopio(mats, geos)], pingenteTriangulo: ["neck", () => pingente(mats, geos)],
+    distintivoPrata: ["upperChest", () => distintivo(mats, geos)], canetaPrata: ["upperChest", () => caneta(mats, geos)],
+    linhasCiano: ["upperChest", () => linhasCiano(mats, geos)], cruzEnfermagem: ["upperChest", () => cruz(mats, geos)],
+    frascoVerde: ["upperChest", () => frasco(mats, geos)], coleteRefletivo: ["upperChest", () => colete(mats, geos)],
+    presilhaLapis: ["head", () => presilha(mats, geos)], oculosRedondos: ["head", () => oculos(mats, geos)], presilhaEstrela: ["head", () => estrela(mats, geos)],
+    oculosRetangulares: ["head", () => oculosRet(mats, geos)], oculosRetPrata: ["head", () => oculosRet(mats, geos, 0xb9c0ca)],
+    presilhaRelogio: ["head", () => relogio(mats, geos)], monoculo: ["head", () => monoculo(mats, geos)],
+    oculosProtecao: ["head", () => oculosProtecao(mats, geos)], capacete: ["head", () => capacete(mats, geos)],
+  };
   for (const a of lista) {
     if (a === "mechaCarmesim") { const d = pintarMecha(vrm, CARMESIM); if (d) desfazer.push(d); continue; }
-    const pai = a === "foneNoPescoco" || a === "golaCircuito" || a === "gravataCarmesim" ? osso("neck") ?? osso("upperChest")
-      : a === "distintivoPrata" ? osso("upperChest") ?? osso("chest") : osso("head");
+    const [qual, fazer] = TABELA[a];
+    const pai = qual === "neck" ? osso("neck") ?? osso("upperChest") : qual === "upperChest" ? osso("upperChest") ?? osso("chest") : osso("head");
     if (!pai) continue;
-    const obj = a === "foneNoPescoco" ? fone(mats, geos) : a === "oculosRedondos" ? oculos(mats, geos) : a === "presilhaEstrela" ? estrela(mats, geos)
-      : a === "oculosRetangulares" ? oculosRet(mats, geos) : a === "golaCircuito" ? golaCircuito(mats, geos)
-      : a === "gravataCarmesim" ? gravata(mats, geos) : a === "distintivoPrata" ? distintivo(mats, geos) : presilha(mats, geos);
+    const obj = fazer();
     pai.add(obj); postos.push(obj);
     // os ÓCULOS vão onde os olhos estão (os ossos dos olhos do VRM, no referencial da cabeça) — cada rosto tem a sua
     // proporção
-    if (a === "oculosRedondos" || a === "oculosRetangulares") {
+    if (a === "oculosRedondos" || a === "oculosRetangulares" || a === "oculosRetPrata" || a === "monoculo") {
       const oe = osso("leftEye"), od = osso("rightEye");
       if (oe && od) {
         vrm.scene.updateMatrixWorld(true);
-        const m = oe.getWorldPosition(new THREE.Vector3()).add(od.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
+        // o monóculo vai só no olho DIREITO (o do VRM: rightEye); os óculos, no meio dos dois
+        const m = a === "monoculo" ? od.getWorldPosition(new THREE.Vector3()) : oe.getWorldPosition(new THREE.Vector3()).add(od.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
         pai.worldToLocal(m);
         const frente = new THREE.Vector3(0, 0, 1).applyQuaternion(pai.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(vrm.scene.getWorldQuaternion(new THREE.Quaternion())));
         obj.position.copy(m).addScaledVector(frente, 0.078);   // o osso do olho é o CENTRO do globo ocular: a lente fica ~7,8 cm à frente

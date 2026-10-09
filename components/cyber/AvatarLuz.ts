@@ -86,6 +86,8 @@ export type AvatarLuzHandle = {
   aura(on: boolean): void;
   /** troca o corpo pelo de um VRM (components/cyber/AvatarVrm) — o esqueleto do GLB continua animando por baixo */
   usarVrm(vrm: VRM): void;
+  /** tira o corpo VRM (ele continua escondendo o padrão — esperarCorpo): o VRM é solto por quem o carregou */
+  soltarVrm(): void;
   /** esconde o corpo PADRÃO enquanto o VRM próprio carrega (sem o padrão aparecer antes); false = mostra de novo
    *  (o VRM falhou) */
   esperarCorpo(on: boolean): void;
@@ -727,6 +729,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       modeloMx.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
       espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso); espelho.pose(poseVrm);
     },
+    soltarVrm() { espelho?.dispose(); espelho = null; },
     recolorir(hex) {
       armadura.set(hex);
       if (anime) { corDesenho(armadura, matArmadura.color); matArmadura.emissive.copy(armadura).multiplyScalar(0.22); matMochila.emissive.copy(armadura).multiplyScalar(0.2); matFone.emissive.copy(armadura).multiplyScalar(0.35); }

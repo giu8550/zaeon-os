@@ -73,14 +73,18 @@ export interface PerfilAparelho {
   dprMax: number;
 }
 
-/** Quanto o aparelho aguenta, pelos sinais que o navegador dá (núcleos, memória, largura da tela). */
+/** Quanto o aparelho aguenta, pelos sinais que o navegador dá (núcleos, memória, largura da tela). É o FUNDO: leve
+ *  em qualquer máquina — teto de 30 FPS (o movimento é lento, não precisa de 60) e canvas em 1x (pontos pequenos não
+ *  ganham nada com retina), e no máximo 900 partículas (eram 2000). */
+export const FPS_FUNDO = 30;
 export function perfilDoAparelho(sinais: { nucleos?: number; memoriaGb?: number; largura: number }): PerfilAparelho {
   const nucleos = sinais.nucleos ?? 4;
   const memoria = sinais.memoriaGb ?? 4;
   const fraco = nucleos <= 4 || memoria <= 4 || sinais.largura < 768;
-  if (fraco) return { particulas: 600, intervaloMinMs: 1000 / 30, dprMax: 1 };
-  if (nucleos <= 8) return { particulas: 1500, intervaloMinMs: 0, dprMax: 1.5 };
-  return { particulas: 2000, intervaloMinMs: 0, dprMax: 1.5 };
+  const base = { intervaloMinMs: 1000 / FPS_FUNDO, dprMax: 1 };
+  if (fraco) return { particulas: 350, ...base };
+  if (nucleos <= 8) return { particulas: 650, ...base };
+  return { particulas: 900, ...base };
 }
 
 /**
@@ -100,11 +104,12 @@ export function escalaPerspectiva(z: number, raio: number): number {
 export const PARTICULAS_MIN = 300;
 
 /**
- * Ajuste automático: se a média do passo indica < ~35 FPS, corta as partículas pela metade
- * (até o mínimo). Nunca aumenta de volta — evita ficar oscilando.
+ * Ajuste automático: se a média do passo indica que o aparelho não está dando o FPS esperado (< ~35 FPS sem teto;
+ * < ~22 FPS com o teto de 30 — `passoEsperado` = o passo do teto, em quadros de 60), corta as partículas pela
+ * metade (até o mínimo). Nunca aumenta de volta — evita ficar oscilando.
  */
-export function ajustarQualidade(ativas: number, mediaPasso: number): number {
-  if (mediaPasso > 1.7 && ativas > PARTICULAS_MIN) return Math.max(PARTICULAS_MIN, Math.floor(ativas / 2));
+export function ajustarQualidade(ativas: number, mediaPasso: number, passoEsperado = 1): number {
+  if (mediaPasso > Math.max(1.7, passoEsperado * 1.35) && ativas > PARTICULAS_MIN) return Math.max(PARTICULAS_MIN, Math.floor(ativas / 2));
   return ativas;
 }
 

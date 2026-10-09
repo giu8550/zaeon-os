@@ -6,9 +6,11 @@ import React, { useCallback, useEffect, useState } from "react";
  * Diagrama vivo: o que a pessoa traz -> a Zaeon -> o que ela leva.
  *
  * As duas listas pareiam NA ORDEM: sao TRES TRANSFORMACOES, uma por pilar
- * da Zaeon (ideias, estudos, negocios). Quando o
- * fluxo chega no cerebro, saltam dele as AREAS que aquela funcao cobre (Pops) --
- * passar o dedo numa linha fixa o par e as palavras continuam saltando.
+ * da Zaeon (ideias, estudos, negocios). Passar o dedo numa linha fixa o par.
+ *
+ * LEVE de proposito: um pacote de luz por fio, sem desfoque (filtro SVG) nem
+ * ondulacao, e as bordas dos baloes so escorrem no par em foco. As palavras que
+ * saltavam do cerebro sairam (pesavam e disputavam o olho com os baloes).
  *
  * Tudo e SVG com viewBox, incluindo o texto. A alternativa (cards em DOM e
  * linhas por cima) exige sincronizar coordenadas a cada resize e sempre erra
@@ -18,103 +20,28 @@ import React, { useCallback, useEffect, useState } from "react";
  * Dois viewBox: horizontal no desktop, vertical no celular. Nao e o mesmo
  * desenho encolhido -- um leque de 4 linhas que funciona em 1000px de largura
  * vira um emaranhado ilegivel em 360px.
- *
- * ── Por que os conectores sao assim ──────────────────────────────────────
- * Uma linha com um pontinho correndo em cima le como "diagrama com animacao".
- * O que da a impressao de sistema em funcionamento sao tres coisas juntas:
- *
- * 1. TRILHA PONTILHADA QUE ANDA. O proprio caminho e tracejado e o tracejado
- *    escorre devagar. Mesmo a linha fora de foco continua sendo um barramento
- *    com dados passando, nao um risco parado.
- * 2. TRAFEGO, NAO UM PONTO. Tres pacotes por linha, com fases distribuidas ao
- *    longo do ciclo (atrasos negativos, entao a linha ja nasce cheia) e
- *    espessuras diferentes: um lider grosso e dois satelites finos.
- * 3. ONDULACAO FORA DE FASE. Cada grupo oscila alguns pixels no eixo
- *    transversal, com periodo proprio. E o que tira o aspecto de tabela: o
- *    conjunto respira em vez de marchar.
- *
- * Os periodos sao deliberadamente sem multiplo comum (3.2 / 3.9 / 3.5 / 4.3s
- * de trafego, 7 a 10.7s de ondulacao). Periodos multiplos voltam a coincidir a
- * cada poucos segundos e o olho percebe a batida; sem multiplo comum levam
- * minutos para repetir a mesma configuracao.
  */
 
 type Par = {
     entra: string;
     sai: string;
-    /** As palavras que SALTAM do cérebro quando o fluxo chega nele: o que aquela função da Zaeon cobre. */
-    pops: string[];
-    /** Em vez da lista fixa, GERA as palavras de cada rodada (ex.: ideia → "SaaS de agronomia"). */
-    gerar?: (rodada: number, n: number) => string[];
     tom: string;
     /** Ritmo do trafego. Cada fluxo tem o seu: o conjunto respira em vez de marchar. */
     duracao: number;
     /** Fase inicial do trafego. */
     atraso: number;
-    /** Periodo da ondulacao transversal, proposital sem multiplo comum com os vizinhos. */
+    /** Periodo do escorrer da trilha. */
     onda: number;
 };
 
-// IDEIAS mostra as ÁREAS DE CONHECIMENTO de onde PROJETOS nascem (não ideias prontas): só as áreas mais propensas a
-// projetar/construir — engenharias, arquitetura e urbanismo, design, computação, tecnologia, agrárias técnicas.
-// Embaralhada UMA vez (semente fixa); cada visita mostra as próximas 4, então TODAS aparecem antes de alguma repetir.
-// Determinístico: desktop e celular batem.
-export const AREAS_CONHECIMENTO = [
-    "engenharia civil", "engenharia elétrica", "engenharia mecânica", "engenharia química", "engenharia ambiental",
-    "engenharia de produção", "engenharia de software", "engenharia de computação", "engenharia aeroespacial",
-    "engenharia biomédica", "engenharia de materiais", "engenharia agrícola", "engenharia naval",
-    "engenharia de automação", "engenharia de energia", "arquitetura e urbanismo", "design de produto",
-    "design gráfico", "design de interiores", "ciência da computação", "sistemas de informação", "ciência de dados",
-    "inteligência artificial", "mecatrônica", "robótica", "eletrônica", "eletrotécnica", "telecomunicações",
-    "agronomia", "biotecnologia", "construção civil", "game design", "paisagismo", "edificações",
-];
-/** gerador pseudo-aleatório pequeno com semente (mulberry32) */
-const sorteio = (semente: number) => () => {
-    let t = (semente += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-};
-const ORDEM_AREAS = (() => {   // Fisher–Yates com semente fixa
-    const rnd = sorteio(2026), a = [...AREAS_CONHECIMENTO];
-    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j]!, a[i]!]; }
-    return a;
-})();
-/** as n áreas da rodada: percorre a lista inteira antes de repetir */
-export function areasDaRodada(rodada: number, n: number): string[] {
-    const N = ORDEM_AREAS.length;
-    return Array.from({ length: n }, (_, k) => ORDEM_AREAS[(((rodada * n + k) % N) + N) % N]!);
-}
-
-// TRÊS PILARES (no plural): ideias → projetos (as áreas de conhecimento que projetam), estudos → pesquisas (cada
-// nível de estudo ligado à sua produção principal: TCC, artigo, relatório) e negócios → crescimento.
+// TRÊS PILARES (no plural): ideias → projetos, estudos → pesquisas e negócios → crescimento.
 const PARES: Par[] = [
-    { entra: "ideias", sai: "projetos", tom: "#22d3ee", duracao: 3.2, atraso: 0, onda: 7.0,
-      pops: ["engenharia", "arquitetura", "design", "computação"], gerar: areasDaRodada },
-    { entra: "estudos", sai: "pesquisas", tom: "#818cf8", duracao: 3.7, atraso: 0.6, onda: 9.3,
-      pops: [
-          // "nível|produção": a produção (TCC, artigo, relatório) sai em destaque — preto no claro, branco no escuro
-          "graduação|TCC", "pós-graduação|artigo", "mestrado|artigo", "graduação|relatório",
-          "doutorado|artigo", "pós-graduação|TCC", "graduação|artigo", "mestrado|relatório",
-      ] },
-    { entra: "negócios", sai: "crescimento", tom: "#2dd4bf", duracao: 4.3, atraso: 1.2, onda: 10.7,
-      pops: ["marketing", "vendas", "finanças", "gestão", "e-commerce", "empreendedorismo", "atendimento", "estratégia", "contabilidade", "operações"] },
+    { entra: "ideias", sai: "projetos", tom: "#22d3ee", duracao: 3.2, atraso: 0, onda: 7.0 },
+    { entra: "estudos", sai: "pesquisas", tom: "#818cf8", duracao: 3.7, atraso: 0.6, onda: 9.3 },
+    { entra: "negócios", sai: "crescimento", tom: "#2dd4bf", duracao: 4.3, atraso: 1.2, onda: 10.7 },
 ];
-
-/** Quantas palavras saltam por vez e onde (graus em volta do cérebro): em cima e embaixo no desktop (os fluxos
- *  entram e saem pelos lados); dos lados no celular (os fluxos entram e saem por cima e por baixo). */
-const POPS_POR_VEZ = 4;
-const ANG_POP_D = [-128, -52, 52, 128];
-const ANG_POP_M = [-158, -22, 22, 158];
 
 const BRAIN = "/assets/zaeon-brain-logo.png";
-
-/** Quantos pacotes correm em cada trilha ao mesmo tempo, e com que peso. */
-const PACOTES = [
-    { fracao: 0, peso: 1, brilho: 1 },
-    { fracao: 1 / 3, peso: 0.58, brilho: 0.7 },
-    { fracao: 2 / 3, peso: 0.42, brilho: 0.5 },
-];
 
 /* ── geometria: computada, nunca escrita a mao ──────────────────────────── */
 
@@ -250,19 +177,6 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
 
     const destaque = fixado ?? sobre ?? auto;
 
-    // POPS: a cada chegada do fluxo no cérebro (uma "rodada"), saltam POPS_POR_VEZ palavras do par em foco; a
-    // rodada seguinte pega as próximas da lista — a vitrine gira.
-    // Um contador POR PAR: cada visita ao par avança a vitrine dele em uma rodada (com um contador só, cada
-    // visita pulava as rodadas dos outros pares e a lista de áreas não era percorrida inteira).
-    const [rodadas, setRodadas] = useState<number[]>(() => PARES.map(() => 0));
-    useEffect(() => {
-        if (destaque === null || semMovimento) return;
-        const avancar = () => setRodadas((rs) => rs.map((r, i) => (i === destaque ? r + 1 : r)));
-        avancar();
-        const id = setInterval(avancar, 2600);
-        return () => clearInterval(id);
-    }, [destaque, semMovimento]);
-    const rodada = destaque === null ? 0 : rodadas[destaque] ?? 0;
     const marcar = useCallback((i: number | null) => setSobre(i), []);
     const fixar = useCallback((i: number) => setFixado((f) => (f === i ? null : i)), []);
 
@@ -275,7 +189,6 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
         const G = mobile ? M : D;
         const dEntrada = mobile ? entradaM : entradaD;
         const dSaida = mobile ? saidaM : saidaD;
-        const eixo = mobile ? "x" : "y";
 
         return (
             <>
@@ -294,15 +207,8 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
                         opacity={esmaecer(i)}
                         style={{ transition: "opacity .45s ease" }}
                     >
-                        <Fluxo d={dEntrada(i)} par={p} forte={forte(i)} eixo={eixo} glow={sufixo} />
-                        <Fluxo
-                            d={dSaida(i)}
-                            par={p}
-                            forte={forte(i)}
-                            eixo={eixo}
-                            glow={sufixo}
-                            fase={p.duracao * 0.5}
-                        />
+                        <Fluxo d={dEntrada(i)} par={p} forte={forte(i)} />
+                        <Fluxo d={dSaida(i)} par={p} forte={forte(i)} fase={p.duracao * 0.5} />
                     </g>
                 ))}
 
@@ -315,20 +221,6 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
                     tom={destaque === null ? "#22d3ee" : PARES[destaque].tom}
                     sufixo={sufixo}
                 />
-
-                {/* POPS: as palavras que saltam do cérebro quando o fluxo chega */}
-                {destaque !== null && (
-                    <Pops
-                        key={`pop-${destaque}-${rodada}-${sufixo}`}
-                        par={PARES[destaque]}
-                        rodada={rodada}
-                        cx={G.cerebro.cx}
-                        cy={G.cerebro.cy}
-                        r={G.cerebro.r}
-                        mobile={mobile}
-                        estatico={semMovimento}
-                    />
-                )}
 
                 {/* PORTAS por cima do cerebro: onde cada linha atraca. */}
                 {PARES.map((p, i) => (
@@ -393,29 +285,16 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
             <style>{`
                 @keyframes zf-pacote  { from { stroke-dashoffset: 100 } to { stroke-dashoffset: 0 } }
                 @keyframes zf-trilha  { from { stroke-dashoffset: 0 }   to { stroke-dashoffset: -15 } }
-                @keyframes zf-onda-y  { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
-                @keyframes zf-onda-x  { 0%,100% { transform: translateX(0) } 50% { transform: translateX(4px) } }
-                @keyframes zf-no      { 0%,100% { r: 3.4; opacity: .5 } 50% { r: 4.8; opacity: 1 } }
-                @keyframes zf-porta   { 0%,100% { r: 2.2; opacity: .55 } 50% { r: 3.6; opacity: 1 } }
                 @keyframes zf-cerebro { 0%,100% { transform: scale(1) } 50% { transform: scale(1.045) } }
-                @keyframes zf-processa { 0%,100% { transform: scale(1) } 12% { transform: scale(1.06) } 22% { transform: scale(.99) } 34% { transform: scale(1.04) } 46% { transform: scale(1) } 70% { transform: scale(1.025) } }
                 @keyframes zf-processa-luz { 0%,100% { transform: scale(.82); opacity: .45 } 12% { transform: scale(1.12); opacity: 1 } 24% { transform: scale(.9); opacity: .6 } 36% { transform: scale(1.06); opacity: .9 } 50% { transform: scale(.86); opacity: .5 } 72% { transform: scale(1); opacity: .75 } }
                 @keyframes zf-gira { to { transform: rotate(360deg) } }
-                @keyframes zf-halo    { 0% { transform: scale(.84); opacity: .5 } 70% { transform: scale(1.2); opacity: 0 } 100% { transform: scale(1.2); opacity: 0 } }
-                @keyframes zf-pop     { 0% { opacity: 0; transform: translate(0, 0) scale(.55) } 18% { opacity: 1 } 78% { opacity: 1 } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1) } }
-                .zf-pop { animation: zf-pop 2.4s cubic-bezier(.2,.7,.2,1) both; transform-box: fill-box; transform-origin: center }
 
                 .zf-pacote { animation-name: zf-pacote; animation-timing-function: linear; animation-iteration-count: infinite }
                 .zf-trilha { animation-name: zf-trilha; animation-timing-function: linear; animation-iteration-count: infinite }
-                .zf-onda-y { animation-name: zf-onda-y; animation-timing-function: ease-in-out; animation-iteration-count: infinite }
-                .zf-onda-x { animation-name: zf-onda-x; animation-timing-function: ease-in-out; animation-iteration-count: infinite }
-                .zf-no     { animation-name: zf-no;     animation-timing-function: ease-in-out; animation-iteration-count: infinite }
-                .zf-porta  { animation-name: zf-porta;  animation-timing-function: ease-in-out; animation-iteration-count: infinite }
 
                 @media (prefers-reduced-motion: reduce) {
-                    .zf-pacote, .zf-trilha, .zf-onda-y, .zf-onda-x, .zf-no, .zf-porta { animation: none !important }
+                    .zf-pacote, .zf-trilha { animation: none !important }
                     .zf-pacote { stroke-dashoffset: 55 !important }
-                    .zf-pop { animation: none !important; opacity: 1 }
                 }
             `}</style>
 
@@ -445,76 +324,6 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
 
 /* ── pecas ──────────────────────────────────────────────────────────────── */
 
-/**
- * As palavras que SALTAM do cérebro: nascem na borda dele e escorregam pra fora (em cima/embaixo no desktop,
- * dos lados no celular), com um halo escuro atrás do texto pra ler por cima das partículas do fundo. Cada rodada
- * mostra as próximas POPS_POR_VEZ palavras da lista do par, em cascata.
- */
-/** celular: rótulo longo quebra em 2 linhas, no espaço mais perto do meio ("engenharia / aeroespacial") */
-function quebrar(t: string): [string, string] {
-    if (t.length <= 12 || !t.includes(" ")) return [t, ""];
-    let melhor = -1;
-    for (let i = 0; i < t.length; i++) if (t[i] === " " && (melhor < 0 || Math.abs(i - t.length / 2) < Math.abs(melhor - t.length / 2))) melhor = i;
-    return [t.slice(0, melhor), t.slice(melhor + 1)];
-}
-
-function Pops({
-    par, rodada, cx, cy, r, mobile, estatico,
-}: { par: Par; rodada: number; cx: number; cy: number; r: number; mobile: boolean; estatico: boolean }) {
-    const angs = mobile ? ANG_POP_M : ANG_POP_D;
-    const n = par.pops.length;
-    const gerado = par.gerar?.(rodada, angs.length);
-    return (
-        <g aria-hidden="true" pointerEvents="none">
-            {angs.map((g, k) => {
-                const palavra = gerado ? gerado[k]! : par.pops[(rodada * POPS_POR_VEZ + k) % n];
-                // DESKTOP: na faixa livre acima e abaixo do cérebro (2 linhas em cima, 2 embaixo, centradas) — cabe
-                // frase longa sem cruzar os cards. CELULAR: dos lados, e a frase quebra em 2 linhas ("app de / saúde").
-                let x: number, y: number, dx: number, dy: number, ancora: "middle" | "start" | "end";
-                if (!mobile) {
-                    const emCima = k < 2, fila = k % 2;
-                    x = cx; y = emCima ? cy - r : cy + r;
-                    dx = 0; dy = emCima ? -(26 + fila * 24) : 22 + fila * 24;
-                    ancora = "middle";
-                } else {
-                    const a = (g * Math.PI) / 180, cos = Math.cos(a), sin = Math.sin(a);
-                    x = cx + cos * r * 0.92; y = cy + sin * r * 0.92;
-                    dx = cos * r * 0.35; dy = sin * r * 0.9;
-                    ancora = cos < 0 ? "end" : "start";
-                }
-                const par2 = palavra.includes("|") ? palavra.split("|") as [string, string] : null;   // "nível|produção"
-                const [l1, l2] = par2 ? (mobile ? par2 : [palavra, ""]) : mobile ? quebrar(palavra) : [palavra, ""];
-                const destaque = (t: string) => <tspan className="fill-slate-900 dark:fill-white" fontWeight={800}>{t}</tspan>;
-                return (
-                    <text
-                        key={k}
-                        x={x}
-                        y={y}
-                        textAnchor={ancora}
-                        dominantBaseline="middle"
-                        fontSize={mobile ? (Math.max(l1.length, l2.length) > 13 ? 10.2 : 11.5) : 15}
-                        fontWeight={600}
-                        fill={par.tom}
-                        className="zf-pop font-mono [stroke:rgba(255,255,255,0.92)] dark:[stroke:rgba(2,6,23,0.85)]"
-                        strokeWidth={4}
-                        paintOrder="stroke"
-                        style={{
-                            ["--dx" as string]: `${dx.toFixed(1)}px`,
-                            ["--dy" as string]: `${dy.toFixed(1)}px`,
-                            animationDelay: estatico ? undefined : `${k * 0.18}s`,
-                            filter: `drop-shadow(0 0 6px ${par.tom})`,
-                        } as React.CSSProperties}
-                    >
-                        {l2
-                            ? (<><tspan x={x} dy="-0.55em">{l1}</tspan><tspan x={x} dy="1.15em">{par2 ? destaque(l2) : l2}</tspan></>)
-                            : par2 ? (<>{par2[0]} {destaque(par2[1])}</>) : palavra}
-                    </text>
-                );
-            })}
-        </g>
-    );
-}
-
 function Defs({ sufixo }: { sufixo: string }) {
     return (
         <defs>
@@ -533,20 +342,12 @@ function Defs({ sufixo }: { sufixo: string }) {
             <filter id={`zf-card-${sufixo}`} x="-10%" y="-10%" width="120%" height="125%">
                 <feDropShadow dx="0" dy="10" stdDeviation="12" floodColor="#0b1d4a" floodOpacity="0.45" />
             </filter>
-            <filter id={`zf-glow-${sufixo}`} x="-70%" y="-70%" width="240%" height="240%">
-                <feGaussianBlur stdDeviation="3.5" result="b" />
-                <feMerge>
-                    <feMergeNode in="b" />
-                    <feMergeNode in="SourceGraphic" />
-                </feMerge>
-            </filter>
         </defs>
     );
 }
 
 function CardMoldura({ x, y, w, h, rx = 14, tom, ativo = true, sufixo, semMovimento = false }: { x: number; y: number; w: number; h: number; rx?: number; tom: string; ativo?: boolean; sufixo: string; semMovimento?: boolean }) {
-    // o fundo PRETO transparente; a BORDA é um fio de energia: a trilha pontilhada escorrendo + pacotes de luz correndo
-    // em volta do card, na cor do par (quieta quando o par não está em foco)
+    // o fundo PRETO transparente; a BORDA é a trilha pontilhada na cor do par, escorrendo só no par em foco
     const b = { x: x + 0.75, y: y + 0.75, width: w - 1.5, height: h - 1.5, rx };
     const anima = (a: string) => (semMovimento || !ativo ? undefined : a);
     return (
@@ -559,12 +360,6 @@ function CardMoldura({ x, y, w, h, rx = 14, tom, ativo = true, sufixo, semMovime
             {/* a trilha (como a dos fios): tracejada, escorrendo */}
             <rect {...b} fill="none" stroke={tom} strokeOpacity={ativo ? 0.7 : 0.35} strokeWidth={1.4} strokeDasharray="5 5"
                 style={{ transition: "stroke .6s ease", animation: anima("zf-trilha 1.1s linear infinite") }} />
-            {/* os pacotes de energia dando a volta no card (um líder e um satélite, como nos fios) */}
-            {ativo && [{ len: 9, peso: 2.4, dur: 3.2, atraso: 0 }, { len: 4, peso: 1.5, dur: 3.2, atraso: -1.6 }].map((p, k) => (
-                <rect key={k} {...b} pathLength={100} fill="none" stroke={tom} strokeWidth={p.peso} strokeLinecap="round"
-                    strokeDasharray={`${p.len} ${100 - p.len}`} filter={`url(#zf-glow-${sufixo})`}
-                    style={{ transition: "stroke .6s ease", animation: anima(`zf-pacote ${p.dur}s linear ${p.atraso}s infinite`) }} />
-            ))}
         </g>
     );
 }
@@ -601,25 +396,14 @@ function Texto({
     );
 }
 
-/** O ponto ao lado da palavra. Respira no ritmo do proprio fluxo. */
+/** O ponto ao lado da palavra (cresce no par em foco). */
 function No({ cx, cy, par, forte }: { cx: number; cy: number; par: Par; forte: boolean }) {
     return (
-        <circle
-            className="zf-no"
-            cx={cx}
-            cy={cy}
-            r={3.4}
-            fill={par.tom}
-            style={{
-                animationDuration: `${par.duracao}s`,
-                animationDelay: `${-par.atraso}s`,
-                filter: forte ? "brightness(1.3)" : undefined,
-            }}
-        />
+        <circle cx={cx} cy={cy} r={forte ? 4.4 : 3.4} fill={par.tom} style={{ transition: "r .35s ease" }} />
     );
 }
 
-/** A porta onde um fluxo atraca no cerebro. Pisca no ritmo do proprio trafego. */
+/** A porta onde um fluxo atraca no cerebro. */
 function Porta({
     p,
     par,
@@ -630,91 +414,44 @@ function Porta({
     forte: boolean;
 }) {
     return (
-        <circle
-            className="zf-porta"
-            cx={p.x}
-            cy={p.y}
-            r={2.4}
-            fill={par.tom}
-            style={{
-                animationDuration: `${par.duracao}s`,
-                animationDelay: `${-(par.atraso + par.duracao * 0.5)}s`,
-                filter: forte ? "brightness(1.35)" : undefined,
-            }}
-        />
+        <circle cx={p.x} cy={p.y} r={forte ? 3.2 : 2.4} fill={par.tom} style={{ transition: "r .35s ease" }} />
     );
 }
 
 /**
- * Um conector. Tres camadas: trilha pontilhada que escorre, tres pacotes com
- * fases distribuidas, e o grupo inteiro ondulando fora de fase com os vizinhos.
+ * Um conector: a trilha pontilhada (escorre só no par em foco) e UM pacote de luz correndo.
  *
  * `pathLength={100}` normaliza o comprimento: dasharray e dashoffset viram
  * porcentagem do caminho, entao o pacote tem o mesmo tamanho e a mesma
- * velocidade relativa em curvas de comprimentos diferentes. Sem isso, a linha
- * mais longa ficaria com o pacote proporcionalmente menor e mais lento.
+ * velocidade relativa em curvas de comprimentos diferentes.
  */
-function Fluxo({
-    d,
-    par,
-    forte,
-    eixo,
-    glow,
-    fase = 0,
-}: {
-    d: string;
-    par: Par;
-    forte: boolean;
-    eixo: "x" | "y";
-    glow: string;
-    fase?: number;
-}) {
-    const dur = forte ? par.duracao * 0.55 : par.duracao;
-
+function Fluxo({ d, par, forte, fase = 0 }: { d: string; par: Par; forte: boolean; fase?: number }) {
+    const dur = forte ? par.duracao * 0.7 : par.duracao;
     return (
-        <g
-            className={eixo === "y" ? "zf-onda-y" : "zf-onda-x"}
-            style={{
-                animationDuration: `${par.onda}s`,
-                animationDelay: `${-par.atraso * 2}s`,
-            }}
-        >
-            {/* trilha: pontilhada e escorrendo, entao a linha parada tambem tem transito */}
+        <g>
             <path
-                className="zf-trilha"
+                className={forte ? "zf-trilha" : undefined}
                 d={d}
                 fill="none"
                 stroke={par.tom}
-                strokeWidth={forte ? 1.6 : 1.1}
+                strokeWidth={forte ? 1.4 : 1}
                 strokeDasharray="1.6 5.5"
                 strokeLinecap="round"
-                opacity={forte ? 0.95 : 0.5}
-                style={{
-                    animationDuration: `${par.onda * 0.5}s`,
-                    transition: "opacity .35s ease, stroke-width .35s ease",
-                }}
+                opacity={forte ? 0.85 : 0.4}
+                style={{ animationDuration: `${par.onda * 0.5}s`, transition: "opacity .35s ease" }}
             />
-
-            {PACOTES.map((pk, k) => (
-                <path
-                    key={k}
-                    className="zf-pacote"
-                    d={d}
-                    fill="none"
-                    pathLength={100}
-                    stroke={par.tom}
-                    strokeWidth={(forte ? 3.2 : 2.2) * pk.peso + 0.7}
-                    strokeLinecap="round"
-                    strokeDasharray={`${4 + k} ${96 - k}`}
-                    opacity={(forte ? 1 : 0.7) * pk.brilho}
-                    filter={k === 0 ? `url(#zf-glow-${glow})` : undefined}
-                    style={{
-                        animationDuration: `${dur}s`,
-                        animationDelay: `${-(par.atraso + fase + pk.fracao * dur)}s`,
-                        transition: "stroke-width .35s ease, opacity .35s ease",
-                    }}
-                />
-            ))}
+            <path
+                className="zf-pacote"
+                d={d}
+                fill="none"
+                pathLength={100}
+                stroke={par.tom}
+                strokeWidth={forte ? 2.6 : 1.8}
+                strokeLinecap="round"
+                strokeDasharray="4 96"
+                opacity={forte ? 0.95 : 0.55}
+                style={{ animationDuration: `${dur}s`, animationDelay: `${-(par.atraso + fase)}s`, transition: "opacity .35s ease" }}
+            />
         </g>
     );
 }
@@ -736,16 +473,11 @@ function Cerebro({
     tom: string;
     sufixo: string;
 }) {
-    // PROCESSANDO: o núcleo de luz atrás pulsa num ritmo irregular (rajadas, como quem calcula), o cérebro bate junto,
-    // dois anéis de dados giram em sentidos opostos e a onda (halo) sai a cada rodada
+    // PROCESSANDO: o núcleo de luz atrás pulsa em rajadas e um anel de dados gira, na cor do fluxo
     const anima = (a: string) => (semMovimento ? undefined : a);
     const centro = { transformBox: "fill-box" as const, transformOrigin: "center" };
     return (
         <g>
-            {!semMovimento && (
-                <circle cx={cx} cy={cy} r={r * 1.02} fill="none" stroke={tom} strokeWidth={1.2}
-                    style={{ ...centro, animation: "zf-halo 2.6s ease-out infinite", transition: "stroke .5s ease" }} />
-            )}
             <circle
                 cx={cx}
                 cy={cy}
@@ -759,12 +491,10 @@ function Cerebro({
             {/* o núcleo de luz (atrás do cérebro): pulsa em rajadas */}
             <circle cx={cx} cy={cy} r={r * 0.78} fill={`url(#zf-nucleo-${sufixo})`}
                 style={{ ...centro, animation: anima("zf-processa-luz 2.2s ease-in-out infinite"), opacity: semMovimento ? 0.6 : undefined }} />
-            {/* os anéis de DADOS: tracejados, girando em sentidos opostos, na cor do fluxo */}
+            {/* o anel de DADOS: tracejado, girando, na cor do fluxo */}
             <circle cx={cx} cy={cy} r={r * 0.9} fill="none" stroke={tom} strokeOpacity={0.55} strokeWidth={1.1} strokeDasharray="2 7" strokeLinecap="round"
                 style={{ ...centro, animation: anima("zf-gira 9s linear infinite"), transition: "stroke .5s ease" }} />
-            <circle cx={cx} cy={cy} r={r * 0.82} fill="none" stroke="#7fe8ff" strokeOpacity={0.35} strokeWidth={0.9} strokeDasharray="10 14"
-                style={{ ...centro, animation: anima("zf-gira 6.5s linear infinite reverse") }} />
-            <g style={{ ...centro, animation: anima("zf-processa 2.2s ease-in-out infinite") }}>
+            <g>
                 <image
                     href={BRAIN}
                     x={cx - r * 0.62}

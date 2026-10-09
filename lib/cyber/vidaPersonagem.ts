@@ -9,6 +9,9 @@
  * agenda e vê o personagem no mesmo lugar, fazendo a mesma coisa — sem servidor, sem rede (como os droids
  * observadores). Cada BLOCO = andar até um lugar (a rota a pé de lib/cyber/caminhos) + ficar lá fazendo a atividade.
  * A sequência é aleatória (semente por bloco), sem repetir a atividade nem o lugar, com o trabalho voltando sempre.
+ * Os LUGARES são de quem chega primeiro: um personagem nunca escolhe um lugar que outro (antes dele na lista
+ * PERFIS_VIDA) vai estar ocupando no mesmo horário — cabem muitos personagens nas mesmas 8 estações. A agenda
+ * RECOMEÇA todo dia às 04:00 de Brasília (madrugada): nunca precisa ser calculada desde a época.
  * Coordenadas LOCAIS da ilha; a altura é acima do piso da ilha.
  */
 import { aleatorioComSemente } from "./audio";
@@ -48,15 +51,24 @@ function peDoMirante(i: number): P2 {
 /** a moto da Nina: estacionada AO LADO do lote da Zaeon (local) */
 export const VAGA_DA_NINA: P2 & { rumo: number } = { x: -60, z: -92, rumo: Math.atan2(60, 92) };
 
-/** o PERFIL de vida de cada personagem: a semente da agenda, as estações e os cantos da pista DELE (dois personagens
- *  nunca disputam o mesmo ponto), a vaga da moto e um deslocamento de lado (m) nos lugares que todos usam (telão,
- *  praça, mirante) — se coincidirem, ficam lado a lado em vez de um dentro do outro */
-export type PerfilVida = { id: string; semente: number; lado: number; estacoes: readonly number[]; pistas: readonly number[]; vaga: P2 & { rumo: number } };
+/** o PERFIL de vida de cada personagem: a semente da agenda, a vaga da moto dele e um deslocamento de lado (m) nos
+ *  lugares de todos (telão, praça, mirante). A ORDEM da lista é a prioridade: quem vem antes escolhe o lugar primeiro */
+export type PerfilVida = { id: string; semente: number; lado: number; vaga: P2 & { rumo: number } };
 export const PERFIS_VIDA: Readonly<Record<string, PerfilVida>> = {
-  nina: { id: "nina", semente: 11, lado: -2.2, estacoes: [1, 4], pistas: [0], vaga: VAGA_DA_NINA },
-  aura: { id: "aura", semente: 23, lado: 2.2, estacoes: [0, 6], pistas: [2], vaga: { x: -50, z: -100, rumo: Math.atan2(50, 100) } },
-  teo: { id: "teo", semente: 37, lado: 0, estacoes: [2, 5], pistas: [1], vaga: { x: -40, z: -108, rumo: Math.atan2(40, 108) } },
-  examiner: { id: "examiner", semente: 53, lado: 4.4, estacoes: [3, 7], pistas: [3], vaga: { x: -30, z: -116, rumo: Math.atan2(30, 116) } },
+  nina: { id: "nina", semente: 11, lado: -2.2, vaga: VAGA_DA_NINA },
+  aura: { id: "aura", semente: 23, lado: 2.2, vaga: { x: -50, z: -100, rumo: Math.atan2(50, 100) } },
+  teo: { id: "teo", semente: 37, lado: 0, vaga: { x: -40, z: -108, rumo: Math.atan2(40, 108) } },
+  examiner: { id: "examiner", semente: 53, lado: 4.4, vaga: { x: -30, z: -116, rumo: Math.atan2(30, 116) } },
+  zenita: { id: "zenita", semente: 61, lado: -2.2, vaga: { x: -20, z: -124, rumo: Math.atan2(20, 124) } },
+  core_active: { id: "core_active", semente: 71, lado: 0, vaga: { x: -10, z: -132, rumo: Math.atan2(10, 132) } },
+  scholar: { id: "scholar", semente: 79, lado: 2.2, vaga: { x: 0, z: -140, rumo: Math.atan2(0, 140) } },
+  zaeon: { id: "zaeon", semente: 83, lado: -2.2, vaga: { x: -70, z: -84, rumo: Math.atan2(70, 84) } },
+  caio: { id: "caio", semente: 89, lado: 0, vaga: { x: -80, z: -76, rumo: Math.atan2(80, 76) } },
+  enfermagem: { id: "enfermagem", semente: 97, lado: 2.2, vaga: { x: -90, z: -68, rumo: Math.atan2(90, 68) } },
+  medicina: { id: "medicina", semente: 101, lado: -2.2, vaga: { x: -100, z: -60, rumo: Math.atan2(100, 60) } },
+  farmacia: { id: "farmacia", semente: 107, lado: 0, vaga: { x: -110, z: -52, rumo: Math.atan2(110, 52) } },
+  quimica: { id: "quimica", semente: 109, lado: 2.2, vaga: { x: -120, z: -44, rumo: Math.atan2(120, 44) } },
+  "eng-civil": { id: "eng-civil", semente: 113, lado: -2.2, vaga: { x: -130, z: -36, rumo: Math.atan2(130, 36) } },
 };
 
 /** onde o operador fica numa estação (no referencial dela: +z = rumo ao coração; o console fica em z −0,95) */
@@ -78,19 +90,15 @@ export const LUGARES: readonly Lugar[] = [
   // meditar no alto das pirâmides dos mirantes 1–3 (chega no pé da escada; a subida é parte da atividade)
   ...[1, 2, 3].map((i) => { const p = peDoMirante(i), m = MIRANTES[i]!; return { id: `mirante-${i}`, atividade: "meditar" as const, pos: p, rumo: Math.atan2(m.x - p.x, m.z - p.z), mirante: i }; }),
   // passeios pela praça
-  ...[[110, 20], [60, -140], [-150, 40], [20, 160], [-60, -180], [170, -60], [-120, -60], [140, 90]].map(([x, z], i) => ({ id: `praca-${i}`, atividade: "passear" as const, pos: { x: x!, z: z! }, rumo: Math.atan2(-x!, -z!) })),
+  ...[[110, 20], [60, -140], [-150, 40], [20, 160], [-60, -180], [170, -60], [-120, -60], [140, 90], [90, -95], [-35, 115], [185, 15], [-175, -15], [30, 180], [-95, 150], [110, -160], [-10, -205]].map(([x, z], i) => ({ id: `praca-${i}`, atividade: "passear" as const, pos: { x: x!, z: z! }, rumo: Math.atan2(-x!, -z!) })),
   // a moto (a posição de verdade é a VAGA de cada um — `posNoLugar`)
   { id: "moto", atividade: "moto", pos: { x: VAGA_DA_NINA.x, z: VAGA_DA_NINA.z }, rumo: VAGA_DA_NINA.rumo },
 ];
 
-/** o lugar é deste personagem? (as estações e os cantos da pista são divididos) */
-export function permitido(i: number, perfil: PerfilVida): boolean {
-  const id = LUGARES[i]!.id, m = /^(estacao|pista)-(\d+)$/.exec(id);
-  if (!m) return true;
-  return (m[1] === "estacao" ? perfil.estacoes : perfil.pistas).includes(Number(m[2]));
-}
+/** o lugar é disputado? (a moto não: cada um tem a sua vaga) */
+export const disputado = (i: number) => LUGARES[i]!.atividade !== "moto";
 /** onde ESTE personagem fica no lugar: a moto na vaga dele; nos lugares de todos (telão, praça, pé do mirante),
- *  deslocado de lado; estação e pista, no ponto exato (já são só dele) */
+ *  deslocado de lado; estação e pista, no ponto exato */
 export function posNoLugar(i: number, perfil: PerfilVida): P2 {
   const l = LUGARES[i]!;
   if (l.atividade === "moto") return { x: perfil.vaga.x, z: perfil.vaga.z };
@@ -98,11 +106,20 @@ export function posNoLugar(i: number, perfil: PerfilVida): P2 {
   return { x: l.pos.x + Math.cos(l.rumo) * perfil.lado, z: l.pos.z - Math.sin(l.rumo) * perfil.lado };   // a direita de quem olha pro rumo
 }
 
-export type Bloco = { n: number; ini: number; atividade: Atividade; lugar: number; de: number; viagem: number; fim: number };
+export type Bloco = { dia: number; n: number; ini: number; atividade: Atividade; lugar: number; de: number; viagem: number; fim: number };
 
-/** sorteia o próximo bloco a partir do anterior (determinístico pela semente e pelo número do bloco) */
-export function proximoBloco(ant: Bloco, perfil: PerfilVida): Bloco {
-  const n = ant.n + 1, r = aleatorioComSemente((perfil.semente * 7919 + n * 104729) >>> 0);
+/** a virada do dia da agenda: 07:00 UTC = 04:00 em Brasília */
+export const VIRADA = 7 * 3600;
+export const diaDe = (t: number) => Math.floor((t - EPOCA - VIRADA) / 86400);
+const inicioDoDia = (d: number) => EPOCA + VIRADA + d * 86400;
+const ORDEM = () => Object.values(PERFIS_VIDA);
+/** `livre(lugar, de, ate)`: o lugar está livre nesse intervalo (os outros personagens não estão lá)? */
+export type Livre = (lugar: number, de: number, ate: number) => boolean;
+
+/** sorteia o próximo bloco a partir do anterior (determinístico pela semente, pelo dia e pelo número do bloco); com
+ *  `livre`, pula os lugares que outro personagem vai estar ocupando */
+export function proximoBloco(ant: Bloco, perfil: PerfilVida, livre?: Livre): Bloco {
+  const n = ant.n + 1, r = aleatorioComSemente((perfil.semente * 7919 + n * 104729 + ant.dia * 15485863) >>> 0);
   const semTrabalhar = ant.atividade !== "trabalhar" && ant.n > 0 && r() < 0.55;   // volta pro trabalho com frequência
   let atividade: Atividade = "trabalhar";
   if (!semTrabalhar) {
@@ -111,21 +128,52 @@ export function proximoBloco(ant: Bloco, perfil: PerfilVida): Bloco {
     atividade = opcoes.find((a) => (x -= ATIVIDADES[a].peso) < 0) ?? opcoes[0]!;
   }
   if (atividade === ant.atividade) atividade = "passear";
-  const candidatos = LUGARES.map((l, i) => ({ l, i })).filter(({ l, i }) => l.atividade === atividade && i !== ant.lugar && permitido(i, perfil));
-  const lugar = candidatos[Math.floor(r() * candidatos.length)]!.i;
-  const a = posNoLugar(ant.lugar, perfil), b = posNoLugar(lugar, perfil);
-  const viagem = Math.max(6, (Math.hypot(b.x - a.x, b.z - a.z) * 1.15) / VEL_A_PE);
-  const [fmin, fmax] = ATIVIDADES[atividade].fica, fica = fmin + r() * (fmax - fmin);
-  const ini = ant.fim;
-  return { n, ini, atividade, lugar, de: ant.lugar, viagem, fim: ini + viagem + fica };
+  const sorteio = r(), [fmin, fmax] = ATIVIDADES[atividade].fica, fica = fmin + r() * (fmax - fmin);
+  const ini = ant.fim, a = posNoLugar(ant.lugar, perfil);
+  const montar = (lugar: number, atv: Atividade): Bloco => {
+    const b = posNoLugar(lugar, perfil), viagem = Math.max(6, (Math.hypot(b.x - a.x, b.z - a.z) * 1.15) / VEL_A_PE);
+    return { dia: ant.dia, n, ini, atividade: atv, lugar, de: ant.lugar, viagem, fim: ini + viagem + fica };
+  };
+  // os lugares da atividade, a partir de um sorteado (dá a volta); o 1º livre ganha. Tudo tomado → passeia num livre
+  for (const atv of atividade === "passear" ? ["passear" as const] : [atividade, "passear" as const]) {
+    const cand = LUGARES.map((l, i) => ({ l, i })).filter(({ l, i }) => l.atividade === atv && i !== ant.lugar).map(({ i }) => i);
+    const s0 = Math.floor(sorteio * cand.length);
+    for (let k = 0; k < cand.length; k++) {
+      const b = montar(cand[(s0 + k) % cand.length]!, atv);
+      if (!livre || !disputado(b.lugar) || livre(b.lugar, b.ini + b.viagem - 2, b.fim + 2)) return b;
+    }
+  }
+  return montar(LUGARES.findIndex((l, i) => l.atividade === "passear" && i !== ant.lugar), "passear");
 }
 
-/** o bloco em que o relógio `t` (s, UTC) cai — anda a partir da época (ou de um bloco já conhecido, `cache`) */
+/** as agendas do dia de cada personagem (memória: só o dia atual e o anterior) */
+const agendas = new Map<string, Bloco[]>();
+function agendaAte(perfil: PerfilVida, dia: number, ate: number): Bloco[] {
+  const chave = `${perfil.id}:${dia}`; let ag = agendas.get(chave);
+  const ordem = ORDEM(), k = ordem.findIndex((p) => p.id === perfil.id), antes = k < 0 ? ordem : ordem.slice(0, k);
+  if (!ag) {
+    for (const c of agendas.keys()) if (Number(c.slice(c.lastIndexOf(":") + 1)) < dia - 1) agendas.delete(c);
+    const est = Math.max(0, k) % 8, i0 = inicioDoDia(dia);
+    ag = [{ dia, n: 0, ini: i0 - 1, atividade: "trabalhar", lugar: est, de: est, viagem: 0, fim: i0 }];
+    agendas.set(chave, ag);
+  }
+  const livre: Livre = (lugar, de, a) => antes.every((q) => {
+    const bq = agendaAte(q, dia, a);
+    for (let j = bq.length - 1; j >= 0 && bq[j]!.fim > de; j--) { const x = bq[j]!; if (x.lugar === lugar && x.ini + x.viagem < a) return false; }
+    return true;
+  });
+  while (ag[ag.length - 1]!.fim <= ate) ag.push(proximoBloco(ag[ag.length - 1]!, perfil, livre));
+  return ag;
+}
+
+/** o bloco em que o relógio `t` (s, UTC) cai (`cache` = o bloco de antes, se ainda valer) */
 export function blocoEm(t: number, perfil: PerfilVida, cache?: Bloco | null): Bloco {
-  const d0 = perfil.estacoes[0] ?? 0;
-  let b: Bloco = cache && cache.ini <= t ? cache : { n: 0, ini: EPOCA - 1, atividade: "trabalhar", lugar: d0, de: d0, viagem: 0, fim: EPOCA };
-  while (b.fim <= t) b = proximoBloco(b, perfil);
-  return b;
+  const dia = diaDe(t);
+  if (cache && cache.dia === dia && cache.ini <= t && t < cache.fim) return cache;
+  const ag = agendaAte(perfil, dia, t);
+  let lo = 0, hi = ag.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (ag[m]!.fim <= t) lo = m + 1; else hi = m; }
+  return ag[lo]!;
 }
 
 /** o que ela está fazendo agora (pra o corpo): onde (local), a altura acima do piso, pra onde olha e as flags da pose */

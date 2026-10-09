@@ -58,7 +58,7 @@ export default function AuraAoVivo({ onAbrir }: { onAbrir: () => void }) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.8, delay: 0.6, ease: "easeOut" }}
       aria-label="Conversar com a Aura — iniciar chat"
-      className="group relative w-full text-left rounded-[30px] p-5 pt-16 backdrop-blur-2xl backdrop-saturate-150
+      className="group relative w-full text-left rounded-[30px] p-5 pt-16 backdrop-blur-md backdrop-saturate-150
         bg-white/70 border border-white/80 shadow-[0_30px_80px_-30px_rgba(76,29,149,0.55)]
         dark:bg-white/[0.06] dark:border-white/[0.12] dark:shadow-[0_30px_80px_-30px_rgba(139,92,246,0.55)]
         transition-transform duration-300 hover:-translate-y-1"
