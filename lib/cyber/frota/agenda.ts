@@ -5,8 +5,8 @@
  *    INTERVALOS de 30 a 60 min em que sai do modo estudo e faz outra coisa;
  *  - no tempo todo do dia: a maior parte estudando no tablet nas PLATAFORMAS DE ESTUDO (de preferência nas
  *    UNIVERSIDADES flutuantes), um pouco nos SOFÁS DO LOUNGE (onde rola som), MOTO visitando outros lugares do mapa e
- *    pouca gente ANDANDO pela própria Zaeon (a Zaeon cheia de pedestre sem contexto e o lounge lotado eram ruído —
- *    out/2026, o dono pediu levar o movimento pras universidades);
+ *    pouca gente a pé na própria Zaeon — e com CONTEXTO: em turma, nos pontos de interesse (os telões dos mirantes, o
+ *    salão da capela), nunca vagando (out/2026, o dono pediu levar o movimento pras universidades);
  *  - às vezes, à noite, a FESTA no lounge com o grupo (só acontece se estiver rolando som — o engine confere na hora);
  *  - os amigos se ACHAM: escolhem o mesmo lugar de estudo com frequência e, quando os intervalos se cruzam, fazem
  *    CORRIDA de moto juntos (em dupla ou em bando).
@@ -22,6 +22,8 @@ export type Bloco = {
   ambiente?: AmbienteEstudo;
   /** atividade em GRUPO (corrida de moto, festa): o id do evento — quem tem o mesmo id está junto */
   evento?: string;
+  /** passeio a pé (`andar`): a TURMA no dia (grupo|dia) — os amigos sorteiam os mesmos pontos de interesse e ficam juntos */
+  turma?: string;
 };
 /** os ambientes de estudo (as universidades flutuantes e as salas de convivência da Zaeon). A ORDEM importa: quem acha
  *  o seu lotado vai pro primeiro com lugar (lib/cyber/frota/plano) — as universidades vêm antes */
@@ -91,7 +93,7 @@ export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferid
   const out: Bloco[] = [];
   let t = ini, estudado = 0, guarda = 0;
   // no modo full, METADE começa o dia por um intervalo (todo mundo estudando junto à meia-noite lotava as salas)
-  if (full && r() < 0.5) { const at = atividadeDoIntervalo(r, a, flags), dur = Math.round(entre(r, REGRAS.intervalo[0], REGRAS.intervalo[1])); if (at) out.push({ ini: t, fim: t + dur, atividade: at }); t += dur; }
+  if (full && r() < 0.5) { const at = atividadeDoIntervalo(r, a, flags), dur = Math.round(entre(r, REGRAS.intervalo[0], REGRAS.intervalo[1])); if (at) out.push({ ini: t, fim: t + dur, atividade: at, ...(at === "andar" ? { turma: `${a.grupo}|${dia}` } : {}) }); t += dur; }
   while (estudado < total - 5 && t < 24 * 60 && guarda++ < (full ? 200 : 40)) {
     const lugar = lugarDeEstudo(r, flags, preferido);
     if (lugar) {
@@ -101,7 +103,7 @@ export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferid
     if (estudado >= total - 5 && lugar) break;
     const at = atividadeDoIntervalo(r, a, flags);
     const [i0, i1] = REGRAS.intervalo, dur = Math.round(Math.min(i1, Math.max(i0, i0 + (i1 - i0) * (0.95 - 0.8 * foco) + entre(r, -8, 8))));
-    if (at) out.push({ ini: t, fim: t + dur, atividade: at });
+    if (at) out.push({ ini: t, fim: t + dur, atividade: at, ...(at === "andar" ? { turma: `${a.grupo}|${dia}` } : {}) });
     t += dur;
     if (!lugar && !at) break;
   }
