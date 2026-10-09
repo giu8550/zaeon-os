@@ -82,20 +82,25 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const quente = low ? null : add(new THREE.PointLight(0xff8a3c, 1.6, 280)); quente?.position.set(0, 15, 0);
 
   // ── ilha monumental (montanha invertida) + camada de rocha + estalactites ──
+  // os cones são ABERTOS em cima (sem tampa): o piso é de vidro e, por ele, vê-se o universo embaixo — de dentro, a
+  // casca não desenha (FrontSide) e só aparecem as janelas, as estalactites e o espaço; de fora, a ilha é a mesma.
+  // Tudo que fica SOB o piso desenha ANTES do vidro (renderOrder): assim o vidro passa por cima e o tinge — sem isso as
+  // estalactites furavam o chão, brancas, como se estivessem em cima dele
+  const SOB_O_VIDRO = -2;
   const rocha = vidro({ color: 0x0b1a30, emissive: 0x10325e, emissiveIntensity: 0.55, roughness: 0.35, metalness: 0.1, transmission: 0.2, thickness: 2, transparent: true, opacity: 0.97 }, 0.97);
-  const cone = add(new THREE.Mesh(new THREE.ConeGeometry(R, H, low ? 10 : 14, 1, false), rocha), ilha, true);
-  cone.rotation.x = Math.PI; cone.position.y = -H / 2 - 0.65;   // o topo do cone fica sob o piso (sem z-fighting)
-  const cone2 = add(new THREE.Mesh(new THREE.ConeGeometry(R * 0.72, H * 0.7, low ? 8 : 12, 1, false), rocha), ilha, true);
-  cone2.rotation.x = Math.PI; cone2.position.set(R * 0.18, -H * 0.42, -R * 0.12); cone2.rotation.y = 0.7;
-  const cone3 = add(new THREE.Mesh(new THREE.ConeGeometry(R * 0.6, H * 0.62, low ? 7 : 11, 1, false), rocha), ilha, true);
-  cone3.rotation.x = Math.PI; cone3.position.set(-R * 0.2, -H * 0.36, R * 0.16); cone3.rotation.y = 1.9;
+  const cone = add(new THREE.Mesh(new THREE.ConeGeometry(R, H, low ? 10 : 14, 1, true), rocha), ilha, true);
+  cone.rotation.x = Math.PI; cone.position.y = -H / 2 - 0.65; cone.renderOrder = SOB_O_VIDRO;   // o topo do cone fica sob o piso (sem z-fighting)
+  const cone2 = add(new THREE.Mesh(new THREE.ConeGeometry(R * 0.72, H * 0.7, low ? 8 : 12, 1, true), rocha), ilha, true);
+  cone2.rotation.x = Math.PI; cone2.position.set(R * 0.18, -H * 0.42, -R * 0.12); cone2.rotation.y = 0.7; cone2.renderOrder = SOB_O_VIDRO;
+  const cone3 = add(new THREE.Mesh(new THREE.ConeGeometry(R * 0.6, H * 0.62, low ? 7 : 11, 1, true), rocha), ilha, true);
+  cone3.rotation.x = Math.PI; cone3.position.set(-R * 0.2, -H * 0.36, R * 0.16); cone3.rotation.y = 1.9; cone3.renderOrder = SOB_O_VIDRO;
   // AGULHA: a ponta afiada que desce do ápice (o volume sólido dela está em CIDADE.agulha) + 3 espinhos menores — sem luz
   const AG = CIDADE.agulha, agTopo = -H * 0.7, agFundo = -H - AG.altura, agLen = agTopo - agFundo;
   const agulha = add(new THREE.Mesh(new THREE.ConeGeometry(AG.r * 1.5, agLen, 6, 1, false), rocha), ilha, true);
-  agulha.rotation.x = Math.PI; agulha.position.y = agTopo - agLen / 2;
+  agulha.rotation.x = Math.PI; agulha.position.y = agTopo - agLen / 2; agulha.renderOrder = SOB_O_VIDRO;
   for (let k = 0; k < 3; k++) {
     const a = (k / 3) * Math.PI * 2 + 0.5, esp = add(new THREE.Mesh(new THREE.ConeGeometry(AG.r * 0.6, agLen * 0.55, 5, 1, false), rocha));
-    esp.position.set(Math.cos(a) * AG.r * 1.3, agTopo - agLen * 0.3, Math.sin(a) * AG.r * 1.3);
+    esp.position.set(Math.cos(a) * AG.r * 1.3, agTopo - agLen * 0.3, Math.sin(a) * AG.r * 1.3); esp.renderOrder = SOB_O_VIDRO;
     esp.rotation.set(Math.PI - Math.sin(a) * 0.22, 0, Math.cos(a) * 0.22);   // abre um pouco pra fora
   }
   // ANDARES DE SERVIDORES no casco: faixas de janelas acesas + um anel de luz por andar (vistos de baixo)
@@ -111,24 +116,27 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         janelas.setColorAt(d * NJ + i, c.setHex(i % 7 === 3 ? 0xffb45a : i % 3 ? 0x66e6ff : 0x9affd0).multiplyScalar(i % 5 === 1 ? 0.35 : 0.9));
       }
       const anelD = add(new THREE.Mesh(new THREE.TorusGeometry(r + 0.2, 0.09, 6, low ? 48 : 96), new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending })));
-      anelD.rotation.x = Math.PI / 2; anelD.position.y = y - 0.55;
+      anelD.rotation.x = Math.PI / 2; anelD.position.y = y - 0.55; anelD.renderOrder = SOB_O_VIDRO;
     });
-    janelas.instanceMatrix.needsUpdate = true; if (janelas.instanceColor) janelas.instanceColor.needsUpdate = true; janelas.computeBoundingSphere(); }
+    janelas.renderOrder = SOB_O_VIDRO; janelas.instanceMatrix.needsUpdate = true; if (janelas.instanceColor) janelas.instanceColor.needsUpdate = true; janelas.computeBoundingSphere(); }
   const NE = low ? 50 : 110, estal = add(new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 6), vidro({ color: 0xcfe9ff, emissive: ICE, emissiveIntensity: 0.4, roughness: 0.1, metalness: 0, transmission: 0.8, thickness: 0.5, transparent: true, opacity: 0.75 }, 0.7), NE));
   { const m = new THREE.Matrix4(), q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI), s = new THREE.Vector3(), p = new THREE.Vector3();
     for (let i = 0; i < NE; i++) { const a = Math.random() * 6.283, r = 4 + Math.random() * (R - 8), yS = -H * (1 - r / R); const len = (3 + Math.random() * 9) * (H / 34), w = 0.5 + Math.random() * 1.6; p.set(Math.cos(a) * r, yS - len / 2 + 0.5, Math.sin(a) * r); s.set(w, len, w); estal.setMatrixAt(i, m.compose(p, q, s)); }
-    estal.instanceMatrix.needsUpdate = true; estal.computeBoundingSphere(); }
+    estal.renderOrder = SOB_O_VIDRO; estal.instanceMatrix.needsUpdate = true; estal.computeBoundingSphere(); }
 
   // ── quedas de luz escorrendo pelas bordas ──
   const NQ = low ? 4 : 6, PQ = low ? 16 : 24, QUEDA = H + 50;
   const quedas = Array.from({ length: NQ * PQ }, (_, i) => ({ a: (Math.floor(i / PQ) / NQ) * Math.PI * 2 + 0.2, y: -Math.random() * QUEDA, sp: 6 + Math.random() * 8, j: (Math.random() - 0.5) * 1.2 }));
   const qGeo = new THREE.BufferGeometry(); qGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(quedas.length * 3), 3));
-  const qPts = add(new THREE.Points(qGeo, new THREE.PointsMaterial({ size: 0.5, map: starTex, color: 0x9fe8ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }))); qPts.frustumCulled = false;
+  const qPts = add(new THREE.Points(qGeo, new THREE.PointsMaterial({ size: 0.5, map: starTex, color: 0x9fe8ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }))); qPts.frustumCulled = false; qPts.renderOrder = SOB_O_VIDRO;
 
   // ── piso: disco frio + anéis concêntricos + raios (a "rosa dos ventos" da cidade) ──
-  // o PISO no tom das colunas (azul-aço acinzentado, um pouco mais escuro que elas): as veias azuis do coração
-  // (CoracaoZaeon) se destacam nele
-  add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, low ? 64 : 128), new THREE.MeshStandardMaterial({ color: 0x2c3f4b, emissive: 0x86a6b4, emissiveIntensity: 1, roughness: 0.55, metalness: 0.15 })), ilha, true).position.y = -0.3;
+  // o PISO é de VIDRO, no material da cúpula da capela: o universo aparece em cima e embaixo, e as linhas e as veias
+  // azuis do coração (CoracaoZaeon) correm por cima dele. Um disco só (uma face, sem bordas): desenhado ANTES de todo
+  // transparente e sem gravar profundidade, então o que está embaixo (janelas, estalactites, estrelas) aparece através
+  // dele. Continua alvo do clique/câmera (o raycast não olha a opacidade)
+  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(R, low ? 64 : 128), vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3 }, 0.4)), ilha, true);
+  piso.rotation.x = -Math.PI / 2; (piso.material as THREE.Material).depthWrite = false; piso.renderOrder = SOB_O_VIDRO + 1;
   // as LINHAS do piso: um padrão REGULAR na escala de gente (antes: 5 anéis com espaços desiguais e 16 raios de 126 m
   // — na Zaeon mega aquilo ficava torto e enorme): anéis finos a cada 18 m da capela até a borda (um mais aceso a cada 3)
   // e 48 raios, também a cada 3 um mais forte

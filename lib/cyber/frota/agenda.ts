@@ -3,8 +3,10 @@
  *  - começa a partir das 9h (+ o atraso de costume dela, que muda um pouco a cada dia);
  *  - ESTUDA de 5 a 8 h no total (as mulheres tendem a estudar mais — o `foco` delas é maior), em blocos de ~1 h, com
  *    INTERVALOS de 30 a 60 min em que sai do modo estudo e faz outra coisa;
- *  - no tempo todo do dia: ~40% estudando no tablet nas PLATAFORMAS DE ESTUDO, ~20% estudando no tablet nos SOFÁS DO
- *    LOUNGE (onde rola som), ~30% de MOTO visitando outros lugares do mapa, ~10% ANDANDO pela própria Zaeon;
+ *  - no tempo todo do dia: a maior parte estudando no tablet nas PLATAFORMAS DE ESTUDO (de preferência nas
+ *    UNIVERSIDADES flutuantes), um pouco nos SOFÁS DO LOUNGE (onde rola som), MOTO visitando outros lugares do mapa e
+ *    pouca gente ANDANDO pela própria Zaeon (a Zaeon cheia de pedestre sem contexto e o lounge lotado eram ruído —
+ *    out/2026, o dono pediu levar o movimento pras universidades);
  *  - às vezes, à noite, a FESTA no lounge com o grupo (só acontece se estiver rolando som — o engine confere na hora);
  *  - os amigos se ACHAM: escolhem o mesmo lugar de estudo com frequência e, quando os intervalos se cruzam, fazem
  *    CORRIDA de moto juntos (em dupla ou em bando).
@@ -21,8 +23,11 @@ export type Bloco = {
   /** atividade em GRUPO (corrida de moto, festa): o id do evento — quem tem o mesmo id está junto */
   evento?: string;
 };
-/** os ambientes de estudo (as salas de convivência da Zaeon e as universidades flutuantes) */
-export const AMBIENTES_ESTUDO = ["biblioteca", "jardim", "univ", "ufc", "unifor", "uece"] as const;
+/** os ambientes de estudo (as universidades flutuantes e as salas de convivência da Zaeon). A ORDEM importa: quem acha
+ *  o seu lotado vai pro primeiro com lugar (lib/cyber/frota/plano) — as universidades vêm antes */
+export const AMBIENTES_ESTUDO = ["univ", "ufc", "unifor", "uece", "biblioteca", "jardim"] as const;
+/** o peso de cada ambiente na escolha do lugar de estudo: as universidades levam a maior parte (a Zaeon ~18%) */
+export const PESO_AMBIENTE: Readonly<Record<(typeof AMBIENTES_ESTUDO)[number], number>> = { univ: 3, ufc: 2, unifor: 2, uece: 2, biblioteca: 1, jardim: 1 };
 export type AmbienteEstudo = (typeof AMBIENTES_ESTUDO)[number] | "lounge";
 
 /** as chaves que o painel CEO liga e desliga */
@@ -32,8 +37,8 @@ export type FlagsFrota = {
 };
 export const FLAGS_PADRAO: FlagsFrota = { ativa: true, estudoPlataforma: true, estudoLounge: true, moto: true, andar: true, festa: true, corridas: true, conversas: true, cloak: true, mochila: true, responderUsuarios: true };
 
-/** a proporção do dia (o pedido do dono) */
-export const PROPORCAO = { "estudo-plataforma": 40, "estudo-lounge": 20, moto: 30, andar: 10 } as const;
+/** a proporção do dia (o pedido do dono; out/2026: menos lounge e menos pedestre na Zaeon — eram 40/20/30/10) */
+export const PROPORCAO = { "estudo-plataforma": 57, "estudo-lounge": 8, moto: 30, andar: 5 } as const;
 export const REGRAS = {
   inicio: 9 * 60,
   /** estudo total por dia (min) */
@@ -55,15 +60,15 @@ export const minutoDoDia = (ms: number) => { const m = (ms + FUSO_MIN * 60000) /
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
-/** a escolha do lugar de estudo do bloco: plataforma (40) × lounge (20), com a preferência do GRUPO no dia */
+/** a escolha do lugar de estudo do bloco: plataforma × lounge (PROPORCAO), com a preferência do GRUPO no dia */
 function lugarDeEstudo(r: Acaso, flags: FlagsFrota, preferido: AmbienteEstudo): { atividade: Atividade; ambiente: AmbienteEstudo } | null {
   const pesos = { "estudo-plataforma": flags.estudoPlataforma ? PROPORCAO["estudo-plataforma"] : 0, "estudo-lounge": flags.estudoLounge ? PROPORCAO["estudo-lounge"] : 0 };
   if (!pesos["estudo-plataforma"] && !pesos["estudo-lounge"]) return null;
   const at = ponderado(r, pesos);
   if (at === "estudo-lounge") return { atividade: at, ambiente: "lounge" };
-  return { atividade: at, ambiente: r() < 0.62 ? preferido : escolher(r, AMBIENTES_ESTUDO) };   // o grupo tende a estudar junto
+  return { atividade: at, ambiente: r() < 0.62 ? preferido : ponderado(r, PESO_AMBIENTE) };   // o grupo tende a estudar junto
 }
-/** o que fazer no intervalo: moto (30) × andar (10), puxado pelo gosto de cada um */
+/** o que fazer no intervalo: moto × andar (PROPORCAO), puxado pelo gosto de cada um */
 function atividadeDoIntervalo(r: Acaso, a: AgenteIA, flags: FlagsFrota): Atividade | null {
   const pesos = { moto: flags.moto ? PROPORCAO.moto * (0.6 + 0.8 * a.ritmo.moto) : 0, andar: flags.andar ? PROPORCAO.andar * (1.4 - 0.8 * a.ritmo.moto) : 0 };
   if (!pesos.moto && !pesos.andar) return null;
@@ -109,7 +114,7 @@ export function agendaDoGrupo(membros: readonly AgenteIA[], dia: number, flags: 
   const out = new Map<string, Bloco[]>();
   if (!membros.length) return out;
   const g = membros[0]!.grupo, rg = acasoDe("grupo", g, dia);
-  const preferido = escolher(rg, AMBIENTES_ESTUDO);
+  const preferido = ponderado(rg, PESO_AMBIENTE);
   for (const a of membros) out.set(a.id, agendaBase(a, dia, flags, preferido, full));
   // CORRIDAS: cada intervalo de moto que cruza o de um amigo vira um evento (o maior trecho em comum)
   if (flags.corridas && flags.moto) {

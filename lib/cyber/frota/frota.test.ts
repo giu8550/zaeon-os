@@ -74,19 +74,24 @@ describe("a agenda do dia", () => {
       expect(blocos[0]!.ini).toBeGreaterThanOrEqual(REGRAS.inicio);
       const estudo = blocos.filter((b) => b.atividade.startsWith("estudo")).reduce((s, b) => s + dur(b), 0);
       expect(estudo).toBeGreaterThanOrEqual(REGRAS.estudoMin - 6); expect(estudo).toBeLessThanOrEqual(REGRAS.estudoMax + 1);
-      for (const b of blocos.filter((x) => (x.atividade === "moto" || x.atividade === "andar") && !x.evento)) { expect(dur(b)).toBeGreaterThanOrEqual(REGRAS.intervalo[0]); expect(dur(b)).toBeLessThanOrEqual(REGRAS.intervalo[1]); }
+      for (const b of blocos.filter((x) => (x.atividade === "moto" || x.atividade === "andar") && !x.evento)) { expect(dur(b)).toBeGreaterThanOrEqual(REGRAS.intervalo[0] - 1e-6); expect(dur(b)).toBeLessThanOrEqual(REGRAS.intervalo[1] + 1e-6); }   // (minutos em ponto flutuante)
       for (let i = 1; i < blocos.length; i++) expect(blocos[i]!.ini).toBeGreaterThanOrEqual(blocos[i - 1]!.ini);
       void agente;
     }
   });
-  it("a proporção: ~40% estudo nas plataformas, ~20% no lounge, ~30% moto, ~10% andando", () => {
+  it("a proporção: ~58% estudo nas plataformas, ~8% no lounge, ~30% moto, ~5% andando (pouco pedestre na Zaeon)", () => {
     const t: Record<string, number> = {}; let total = 0;
     for (const { blocos } of todos) for (const b of blocos) if (b.atividade !== "festa") { t[b.atividade] = (t[b.atividade] ?? 0) + dur(b); total += dur(b); }
     const pct = (k: string) => (100 * (t[k] ?? 0)) / total;
-    expect(pct("estudo-plataforma")).toBeGreaterThan(36); expect(pct("estudo-plataforma")).toBeLessThan(50);
-    expect(pct("estudo-lounge")).toBeGreaterThan(14); expect(pct("estudo-lounge")).toBeLessThan(25);
-    expect(pct("moto")).toBeGreaterThan(20); expect(pct("moto")).toBeLessThan(34);
-    expect(pct("andar")).toBeGreaterThan(5); expect(pct("andar")).toBeLessThan(14);
+    expect(pct("estudo-plataforma")).toBeGreaterThan(52); expect(pct("estudo-plataforma")).toBeLessThan(64);
+    expect(pct("estudo-lounge")).toBeGreaterThan(4); expect(pct("estudo-lounge")).toBeLessThan(11);
+    expect(pct("moto")).toBeGreaterThan(24); expect(pct("moto")).toBeLessThan(35);
+    expect(pct("andar")).toBeGreaterThan(2); expect(pct("andar")).toBeLessThan(8);
+  });
+  it("o estudo fica mais nas UNIVERSIDADES: a Zaeon (biblioteca, jardim e lounge) leva bem menos da metade", () => {
+    let zaeon = 0, total = 0;
+    for (const { blocos } of todos) for (const b of blocos) if (b.atividade.startsWith("estudo")) { total += dur(b); if (["biblioteca", "jardim", "lounge"].includes(b.ambiente!)) zaeon += dur(b); }
+    expect(zaeon / total).toBeLessThan(0.35);
   });
   it("as MULHERES tendem a estudar mais que os homens", () => {
     const media = (g: "f" | "m") => { const l = todos.filter((x) => x.agente.genero === g && x.blocos.length).map((x) => x.blocos.filter((b) => b.atividade.startsWith("estudo")).reduce((s, b) => s + dur(b), 0)); return l.reduce((s, v) => s + v, 0) / l.length; };
