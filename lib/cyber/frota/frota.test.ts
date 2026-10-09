@@ -132,6 +132,27 @@ describe("o corpo no instante", () => {
     for (let u = 0.01; u <= 1; u += 0.01) { const p = v.em(u); expect(Math.hypot(p.x - ant.x, p.y - ant.y, p.z - ant.z)).toBeLessThan(MOV.moto * v.dur * 0.02 + 60); ant = p; }   // (+ a descida da moto até a UNILAB, ~300 m em 5 s)
     expect(Math.hypot(v.em(1).x - univ.x, v.em(1).z - univ.z)).toBeLessThan(0.01);
   });
+  it("uma Zaeon VIVA: de moto, a maior parte do tempo VOANDO; passeando a pé, a maior parte ANDANDO (não parados)", () => {
+    const n = { moto: 0, motoMove: 0, andar: 0, andarMove: 0 };
+    for (let m = 9 * 60; m < 22 * 60; m += 11) for (const { agente, blocos } of plano.agentes.values()) {
+      const e = estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false); if (!e.visivel) continue;
+      if (e.atividade === "moto") { n.moto++; if (["moto", "mochila"].includes(e.pose)) n.motoMove++; }
+      if (e.atividade === "andar") { n.andar++; if (["andando", "mochila"].includes(e.pose)) n.andarMove++; }
+    }
+    expect(n.motoMove / n.moto).toBeGreaterThan(0.8);
+    expect(n.andarMove / n.andar).toBeGreaterThan(0.55);
+  });
+  it("o passeio de moto e a pé: contínuos (sem teleporte de um minuto pro outro)", () => {
+    const amostra = [...plano.agentes.values()].filter((p) => p.blocos.some((b) => b.atividade === "moto" || b.atividade === "andar")).slice(0, 40);
+    for (const { agente, blocos } of amostra) for (const b of blocos.filter((x) => x.atividade === "moto" || x.atividade === "andar")) {
+      let ant = estadoDaIA(agente.id, blocos, b.ini + 0.01, FLAGS_PADRAO, true, false);
+      for (let m = b.ini + 0.01 + 1 / 60; m < b.fim - 0.02; m += 1 / 60) {   // a cada segundo
+        const e = estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false);
+        if (e.visivel && ant.visivel) expect(Math.hypot(e.x - ant.x, e.y - ant.y, e.z - ant.z), `${agente.id} ${b.atividade} ${m.toFixed(2)}`).toBeLessThan(MOV.moto * 1.4 + 15);   // (a moto no ritmo mais rápido)
+        ant = e;
+      }
+    }
+  });
   it("ninguém EMPILHADO: em qualquer minuto, IAs paradas/estudando visíveis não dividem o mesmo ponto (< 0,6 m)", () => {
     for (const m of [10 * 60, 14 * 60 + 17, 18 * 60 + 41]) {
       const pts: { x: number; z: number; y: number }[] = [];
