@@ -49,7 +49,7 @@ import { DECK_ANTIGO, GIRO_PLANTA, noCorredorDaRampa, NAVE_QG, RAIO_REDOMA, acao
 import { ESCALA_NAVE, ESCALA_NAVE_V, criarNave, type NaveHandle } from "./Nave";
 import { criarLandmark, type LandmarkHandle } from "./Landmark";
 import { atualizarCamuflagem, camuflarGrupo, pararCamuflagem } from "./camuflagem";
-import { criarMoto, type MotoHandle } from "./Moto";
+import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
 import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
@@ -547,8 +547,9 @@ export class CyberEngine {
     this.raf = requestAnimationFrame((t) => this.loop(t));
     if (!document.hidden) await Promise.race([primeiro, new Promise((r) => setTimeout(r, 4000))]);   // (aba oculta não desenha: não espera)
     p(carregando("quadro", 1));
-    if (process.env.NODE_ENV !== "production") (window as unknown as { __cyber?: CyberEngine }).__cyber = this;   // depuração em dev
   }
+  /** depuração em dev: `window.__cyber` = o motor VIVO (quem monta chama — no modo estrito o React monta 2 e o cancelado terminava por último) */
+  exporDepuracao() { if (process.env.NODE_ENV !== "production" && this.vivo) (window as unknown as { __cyber?: CyberEngine }).__cyber = this; }
   private aoPrimeiroQuadro: (() => void) | null = null;
   // ───────────── DESCANSO no lounge (J) + MODO ESTUDO no TABLET (T) — lib/cyber/descanso ─────────────
   /** sentado/deitado: o lugar, o assento e o modo; a FASE — indo (andando até a frente do assento), sentando (vira e
@@ -656,8 +657,8 @@ export class CyberEngine {
     }
   }
 
-  /** Armadura: a minha é azul; a dos outros vem da ordem canônica dos membros (lib/cyber/cores). */
-  private corDe(id: string) { return corDaArmadura(this.ordem, id, this.o.eu.id); }
+  /** Armadura: a cor REAL de cada um (lib/cyber/cores) — a mesma que ele vê em si e que os outros veem nele */
+  private corDe(id: string) { return corDaArmadura(id); }
 
   private novoAtor(p: PessoaCyber, x: number, z: number): Ator {
     const cor = this.corDe(p.id);
@@ -1606,8 +1607,7 @@ export class CyberEngine {
   private pegarInst(s: number): InstMoto {
     const look = String(s), livre = this.poolMotos.get(look)?.pop();   // o look é da vaga (cor + carenagem)
     if (livre) { livre.s = s; livre.casca.visible = true; livre.som = somMotoParada; livre.yAnt = null; return livre; }
-    const h = criarMoto({ ...lookDaVaga(s), low: this.o.low });
-    fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5, boost: k % 3 === 0 ? 1 : 0, seta: (k % 3) - 1 }), manter: comDescendentes(h.alvos) });
+    const h = loteMoto(criarMoto({ ...lookDaVaga(s), low: this.o.low }));
     const casca = new THREE.Group(); casca.add(h.group); this.cena.scene.add(casca);
     return { h, g: h.group, casca, look, s, loops: null, som: somMotoParada, yawAnt: 0, yAnt: null, vy: 0 };
   }
@@ -2623,6 +2623,7 @@ export class CyberEngine {
 
   dispose() {
     this.frota?.dispose(); this.frota = null;
+    const w = window as unknown as { __cyber?: CyberEngine }; if (w.__cyber === this) delete w.__cyber;
     if (!this.vivo) return;   // idempotente (desmonta ao ir estudar e de novo no cleanup do React)
     this.vivo = false; cancelAnimationFrame(this.raf); this.ro?.disconnect(); this.io?.disconnect();
     this.cleanups.forEach((f) => f());

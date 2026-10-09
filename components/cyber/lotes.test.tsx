@@ -72,4 +72,24 @@ describe("lotes estáticos (o StaticBatch do CS Brasil)", () => {
     expect(draws(h.group)).toBeLessThanOrEqual(45);
     for (const a of h.alvos) expect(a.parent).not.toBeNull();   // o clique (montar) continua achando a moto
   });
+  it("geometria com ATRIBUTO PRÓPRIO (shader das veias) fica de fora — e diz o porquê", () => {
+    const raiz = new THREE.Group(), mat = new THREE.MeshBasicMaterial();
+    const veia = caixa(mat, 0); veia.geometry.setAttribute("aFluxo", new THREE.Float32BufferAttribute(new Float32Array(veia.geometry.attributes.position!.count), 1));
+    raiz.add(veia, caixa(mat, 2), caixa(mat, 4));
+    fundirEstaticos(raiz);
+    expect(veia.parent).toBe(raiz);
+    expect(veia.geometry.attributes.aFluxo).toBeDefined();
+    expect(veia.userData.foraDoLote).toBe("atributo-proprio");
+    expect(malhas(raiz)).toHaveLength(2);   // a veia + 1 lote com as outras 2
+  });
+  it("materiais com shader REMENDADO (onBeforeCompile próprio) não viram um só — o remendo pode ser diferente", () => {
+    const raiz = new THREE.Group();
+    const remendo = (k: number) => { const m = new THREE.MeshBasicMaterial({ color: 0xffffff }); m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("void main() {", `void main() { float k = ${k}.0;`); }; return m; };
+    const a = remendo(1), b = remendo(2);
+    raiz.add(caixa(a, 0), caixa(a, 2), caixa(b, 4), caixa(b, 6));
+    fundirEstaticos(raiz);
+    const ms = malhas(raiz);
+    expect(ms).toHaveLength(2);   // o MESMO objeto ainda junta (2 lotes), mas a e b nunca se misturam
+    expect(new Set(ms.map((m) => m.material))).toEqual(new Set([a, b]));
+  });
 });

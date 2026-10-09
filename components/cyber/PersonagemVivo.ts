@@ -12,7 +12,7 @@ import { VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
 import { carregarVrm, tingirVrm } from "./AvatarVrm";
 import { vestirAcessorios, type AcessoriosHandle } from "./AcessoriosVrm";
-import { criarMoto, type MotoHandle } from "./Moto";
+import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
 import { mundo } from "@/lib/cyber/ceu";
 import { desviar, empurrao, type P2 } from "@/lib/cyber/colisaoAtores";
 import type { CorpoVrm } from "@/lib/cyber/estiloAvatar";
@@ -46,7 +46,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
   }).catch((e) => { console.warn(`[cyber] corpo de ${o.nome} (VRM) não carregou:`, e); av.esperarCorpo(false); });
 
   // a moto dele (na cor do card): estacionada na vaga dele, ao lado do lote da Zaeon, quando não está voando
-  const moto: MotoHandle = criarMoto({ cor: o.corMoto, low: o.low }); raiz.add(moto.group);
+  const moto: MotoHandle = loteMoto(criarMoto({ cor: o.corMoto, low: o.low })); raiz.add(moto.group);
 
   const pos = new THREE.Vector3(), w = new THREE.Vector3();
   let alt = 0, cache: Bloco | null = null, estado: Estado | null = null, mostrado = true, pulo = 0, desvio: P2 = { x: 0, z: 0 };

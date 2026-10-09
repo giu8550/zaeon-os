@@ -13,6 +13,7 @@
  */
 import * as THREE from "three";
 import { ESCALA_MOTO, MOTO } from "@/lib/cyber/motos";
+import { fundirEstaticos } from "./lotes";
 
 export type MotoHandle = {
   group: THREE.Group;
@@ -27,6 +28,14 @@ export type MotoHandle = {
   atualizar(o: { dt: number; t: number; voando: boolean; vel: number; curva: number; vy?: number; inclina?: number; boost?: number; seta?: number }): void;
   dispose(): void;
 };
+
+/** junta as peças PARADAS da moto num lote por material (components/cyber/lotes): a simulação passa pelos estados
+ *  (voando, inclinando, boost, pisca) pra achar o que se mexe; os alvos de clique ficam como estão. ~43 peças → ~1 dúzia */
+export function loteMoto(h: MotoHandle): MotoHandle {
+  const manter: THREE.Object3D[] = []; for (const a of h.alvos) a.traverse((n) => { manter.push(n); });
+  fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5, boost: k % 3 === 0 ? 1 : 0, seta: (k % 3) - 1 }), manter });
+  return h;
+}
 
 export const ESTILOS_MOTO = ["raio", "tubarao", "gota"] as const;
 

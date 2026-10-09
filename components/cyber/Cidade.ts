@@ -299,7 +299,9 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // o OBSERVATÓRIO DA TERRA + os 4 AUTÓDROMOS (lib/cyber/terra) e os DROIDS OBSERVADORES
   const distrito = criarDistritoTerra({ low, parado: rm }); ilha.add(distrito.group); alvos.push(...distrito.alvos);
   const observadores = criarObservadores({ low }); ilha.add(observadores.group);
-  for (const g of [coracao.group, estacoes.group, distrito.group, observadores.group]) g.traverse((n) => { n.userData.semLote = true; });   // fora do lote estático (lotes.ts)
+  // fora do lote estático (lotes.ts): o coração (pulsa por EVENTO — o raio — que a simulação da montagem não vê), as
+  // estações (já instanciadas) e os droids (andam). O distrito entra: anima pelo relógio (a simulação vê) e materiais compartilhados
+  for (const g of [coracao.group, estacoes.group, observadores.group]) g.traverse((n) => { n.userData.semLote = true; });
   const matGlobo = globo.material as THREE.PointsMaterial, matMesa = mesaGlobo.material as THREE.MeshStandardMaterial, matAro = aroGlobo.material as THREE.MeshBasicMaterial;
   const topoMundo = new THREE.Vector3(), globoMundo = new THREE.Vector3();
 
