@@ -86,16 +86,31 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   // o WORKER do plano (components/cyber/frota.worker): com 2000 IAs o plano + as conversas levam ~1 s — fora da tela
   let worker: Worker | null = null, pedidoId = 0;
   try { worker = new Worker(new URL("./frota.worker.ts", import.meta.url)); } catch { worker = null; }
-  if (worker) worker.onmessage = (ev: MessageEvent<RespostaFrota>) => {
-    const r = ev.data; if (r.id !== pedidoId) return;   // (um pedido velho: a config mudou no meio)
-    calculando = false;
-    if ("erro" in r) { console.warn("[frota] worker:", r.erro); worker?.terminate(); worker = null; return; }
-    plano = r.plano; eps = new Map(r.eps); dia = r.dia; varrer = null;
+  let prazo: ReturnType<typeof setTimeout> | null = null;
+  /** o worker falhou (não carregou, deu erro, não respondeu em 10 s): desliga ele e calcula do jeito antigo (no ocioso) */
+  const semWorker = (motivo: string) => {
+    if (!worker) return; console.warn("[frota] sem worker —", motivo);
+    worker.terminate(); worker = null; if (prazo) clearTimeout(prazo); prazo = null;
+    calculando = false; if (config) recalcular(diaDe(agoraMs()));
   };
+  if (worker) {
+    worker.onmessage = (ev: MessageEvent<RespostaFrota>) => {
+      const r = ev.data; if (r.id !== pedidoId) return;   // (um pedido velho: a config mudou no meio)
+      if (prazo) clearTimeout(prazo); prazo = null;
+      if ("erro" in r) { semWorker(r.erro); return; }
+      calculando = false; plano = r.plano; eps = new Map(r.eps); dia = r.dia; varrer = null;
+    };
+    worker.onerror = (e) => { e.preventDefault?.(); semWorker(e.message || "erro ao carregar"); };
+    worker.onmessageerror = () => semWorker("mensagem ilegível");
+  }
   function recalcular(d: number) {
     if (!config || calculando) return;
     calculando = true;
-    if (worker) { worker.postMessage({ id: ++pedidoId, frota: config.frota, dia: d, flags: config.flags } satisfies PedidoFrota); return; }
+    if (worker) {
+      worker.postMessage({ id: ++pedidoId, frota: config.frota, dia: d, flags: config.flags } satisfies PedidoFrota);
+      if (prazo) clearTimeout(prazo); prazo = setTimeout(() => semWorker("não respondeu em 10 s"), 10_000);
+      return;
+    }
     const fazer = () => {
       try {
         const p = planejarDia(frota, d, config!.flags), m = new Map<string, Episodio[]>();
@@ -272,7 +287,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     online: () => online,
     mostrar(on) { visivel = on; },
     dispose() {
-      worker?.terminate(); worker = null;
+      if (prazo) clearTimeout(prazo); worker?.terminate(); worker = null;
       for (const k of corpos) { k.av.dispose(); k.moto?.dispose(); k.tag.remove(); k.balao.remove(); } corpos.length = 0;
       for (const m of [silhuetas, motosSil]) { m.geometry.dispose(); m.removeFromParent(); m.dispose(); } matSil.dispose();
     },
