@@ -85,7 +85,7 @@ export type AvatarLuzHandle = {
   /** liga/desliga a AURA (a 2ª malha com skinning — a qualidade adaptativa tira quando a máquina sofre) */
   aura(on: boolean): void;
   /** troca o corpo pelo de um VRM (components/cyber/AvatarVrm) — o esqueleto do GLB continua animando por baixo */
-  usarVrm(vrm: VRM): void;
+  usarVrm(vrm: VRM, o?: { /** personagem (NPC): o esqueleto escondido sai da passada de matrizes da cena (AvatarVrm) */ economico?: boolean }): void;
   /** tira o corpo VRM (ele continua escondendo o padrão — esperarCorpo): o VRM é solto por quem o carregou */
   soltarVrm(): void;
   /** esconde o corpo PADRÃO enquanto o VRM próprio carrega (sem o padrão aparecer antes); false = mostra de novo
@@ -723,11 +723,11 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (on) { escondidos = []; modeloMx.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible) { o.visible = false; escondidos!.push(o); } }); }
       else { for (const o of escondidos!) o.visible = true; escondidos = null; }   // volta só o que estava à mostra (a aura pode estar desligada)
     },
-    usarVrm(vrm) {
+    usarVrm(vrm, op) {
       if (!modeloMx || !repouso || espelho) return;
       // o soldado (e as cascas dele: aura, tinta) somem — o esqueleto continua animando, e continua no clique
       modeloMx.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
-      espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso); espelho.pose(poseVrm);
+      espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso, { economico: op?.economico }); espelho.pose(poseVrm);
     },
     soltarVrm() { espelho?.dispose(); espelho = null; },
     recolorir(hex) {

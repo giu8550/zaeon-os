@@ -154,14 +154,22 @@ export function medirRepouso(modelo: THREE.Object3D, corpo: THREE.Object3D): Rep
 /** liga o VRM ao esqueleto mixamo `modelo` (já dentro do `corpo` do avatar, na pose de repouso). O VRM entra no
  *  `corpo` virado pro −Z (a frente do modelo) e na escala em que o quadril fica na mesma altura do quadril do GLB
  *  (o mundo foi medido com ele: assento, moto, cabine) */
-export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Object3D, repouso: Repouso): EspelhoVrm {
+export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Object3D, repouso: Repouso, o: { economico?: boolean } = {}): EspelhoVrm {
   const H = vrm.humanoid;
+  // MATRIZES (components/cyber/matrizes): a passada da cena NÃO refaz (1) o rig NORMALIZADO do three-vrm — o
+  // `humanoid.update` só usa as rotações locais dele (o quadril pede a própria posição na hora) — e, no modo `economico`
+  // (os personagens: sem fone/tablet/asas presos no esqueleto e posicionados ANTES de animar), (2) o esqueleto mixamo
+  // escondido, que o espelho já recalcula toda vez que anima. ~40% dos nós de um personagem VRM.
+  const rigN = H.normalizedHumanBonesRoot, semPassada = () => {};
+  rigN.updateMatrixWorld = semPassada;
+  const atualizarModelo = THREE.Object3D.prototype.updateMatrixWorld.bind(modelo);
+  if (o.economico) modelo.updateMatrixWorld = semPassada;
   const no = (b: string) => H.getNormalizedBoneNode(b as VRMHumanBoneName);
   const existe = (b: string) => !!no(b);
   const osso = (n: string) => modelo.getObjectByName(`mixamorig${n}`) ?? null;
 
   // a pose de repouso do mixamo (medida na criação) e a do VRM, no referencial do `corpo`
-  corpo.updateWorldMatrix(true, false); modelo.updateMatrixWorld(true);
+  corpo.updateWorldMatrix(true, false); atualizarModelo(true);
   const corpoInv = new THREE.Matrix4(), m = new THREE.Matrix4(), tp = new THREE.Vector3(), tq = new THREE.Quaternion(), ts = new THREE.Vector3();
   const relativa = (o: THREE.Object3D, q: THREE.Quaternion, p?: THREE.Vector3) => { m.multiplyMatrices(corpoInv, o.matrixWorld).decompose(p ?? tp, q, ts); };
   corpoInv.copy(corpo.matrixWorld).invert();
@@ -191,7 +199,7 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
 
   return {
     atualizar(dt, t) {
-      corpo.updateWorldMatrix(true, false); corpoInv.copy(corpo.matrixWorld).invert(); modelo.updateMatrixWorld(true);
+      corpo.updateWorldMatrix(true, false); corpoInv.copy(corpo.matrixWorld).invert(); atualizarModelo(true);
       for (const b of ORDEM_VRM) {
         const n = no(b), q = delta.get(b); if (!n || !q) continue;
         const pai = paiExistente(b, existe), qPai = pai ? delta.get(pai)! : ident;
@@ -224,6 +232,9 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
       vrm.update(dt);   // normalizado → ossos reais, física do cabelo/roupa (spring bones), expressões
     },
     pose(p) { pose = p; },
-    dispose() { vrm.scene.removeFromParent(); },
+    dispose() {
+      vrm.scene.removeFromParent();
+      if (modelo.updateMatrixWorld === semPassada) delete (modelo as { updateMatrixWorld?: unknown }).updateMatrixWorld;   // volta ao do protótipo
+    },
   };
 }

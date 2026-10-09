@@ -115,6 +115,12 @@ O spiderbench roda uma Nova York inteira com multidão animada no navegador. O q
 | Base de estudo: linhas, medidores e cristais instanciados | `BaseEstudo.ts` | ~45 → ~14 draws **por jogador** (praça com 12: ~1300 → ~670) |
 | **Congelar** o que a simulação viu parado (`matrixAutoUpdate = false`) | `lotes.ts` | ~3.600 nós a menos recalculando por quadro |
 | Avatar só recalcula matrizes quando animou/andou; topo invisível não recalcula | `matrizes.ts` | Zaeon com 12 jogadores ~64 → ~75 fps |
+| Transparente + dupla face numa passada só (`forceSinglePass`) | `umaPassada.ts` | trocas de programa ~8.600/s → ~800/s |
+| VRM: contorno some além de 34 m (< 1 px); 25–70 m anima a cada ~2 quadros; rig normalizado e esqueleto escondido fora da passada da cena | `PersonagemVivo.ts`, `AvatarVrm.ts` | ~40% menos nós por personagem |
+| A ilha só boia quando andou 2 mm | `Cidade.ts` | os ~1.300 nós da cidade não recalculam todo quadro |
+
+**Armadilha do three:** material `transparent` + `DoubleSide` é desenhado em 2 passadas e o three troca `side` +
+`needsUpdate` a CADA objeto, a cada quadro (re-checagem de programa). Use `forceSinglePass` (aditivo: idêntico).
 
 **Lição do perfil:** com jogadores presentes o gargalo deixa de ser draw call e vira **CPU do grafo de cena**
 (`updateMatrixWorld` + `multiplyMatrices` ≈ 35% do quadro, ~5 ms). Ferramentas de medida (scratchpad da sessão, recriáveis):

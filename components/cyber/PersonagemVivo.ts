@@ -34,6 +34,11 @@ export type PersonagemVivoHandle = {
 };
 
 const DIST_ANIMA_SEMPRE = 70, DIST_ESCONDE = 650, DIST_CARREGA = 160, DIST_SOLTA = 360;
+/** de 25 a 70 m o esqueleto anima a cada ~2 quadros (como os corpos da frota): ~450 nós por VRM, 14 na cidadela */
+const DIST_ANIMA_CHEIO = 25;
+/** o CONTORNO do MToon (traço de 3,5–8,5 mm no mundo) vira menos de 1 pixel além de ~30 m — e custa 1 draw call por
+ *  peça do VRM. Some além de `DIST_CONTORNO`, volta perto (histerese pra não piscar na fronteira) */
+const DIST_CONTORNO = { some: 34, volta: 28 };
 
 export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; corMoto: string; corpo: CorpoVrm; perfil: PerfilVida; starTex: THREE.Texture; low: boolean; gltf: GLTF; cena: THREE.Scene }): PersonagemVivoHandle {
   const raiz = new THREE.Group(); raiz.name = `personagem-${o.id}`; o.cena.add(raiz);
@@ -43,20 +48,23 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
   // o corpo VRM (~10 MB cada) só baixa quando a câmera chega PERTO e é solto quando ela se afasta bem — com muitos
   // personagens na cidadela, ninguém baixa todos de uma vez
   let vrm: VRM | null = null, acessorios: AcessoriosHandle | null = null, vivo = true, carregando = false, geracao = 0;
+  let tracos: THREE.Material[] = [], comTraco = true;
   const carregar = () => {
     if (vrm || carregando) return;
     carregando = true; const g = ++geracao;
     carregarVrm(o.corpo.url).then((v) => {
       carregando = false;
       if (!vivo || g !== geracao) { VRMUtils.deepDispose(v.scene); return; }
-      tingirVrm(v, o.corpo.tintas); acabarVrm(v, o.corpo); av.usarVrm(v); vrm = v;
+      tingirVrm(v, o.corpo.tintas); acabarVrm(v, o.corpo); av.usarVrm(v, { economico: true }); vrm = v;
+      tracos = []; v.scene.traverse((n) => { const ms = (n as THREE.Mesh).material; for (const m of Array.isArray(ms) ? ms : ms ? [ms] : []) if ((m as { isOutline?: boolean }).isOutline) tracos.push(m); });
+      comTraco = true;
       if (o.corpo.acessorios?.length) acessorios = vestirAcessorios(v, o.corpo.acessorios);
     }).catch((e) => { carregando = false; console.warn(`[cyber] corpo de ${o.nome} (VRM) não carregou:`, e); });
   };
   const soltar = () => {
     geracao++; carregando = false;
     if (!vrm) return;
-    acessorios?.dispose(); acessorios = null; av.soltarVrm(); VRMUtils.deepDispose(vrm.scene); vrm = null;
+    acessorios?.dispose(); acessorios = null; av.soltarVrm(); VRMUtils.deepDispose(vrm.scene); vrm = null; tracos = [];
   };
 
   // a moto dele (na cor do card): estacionada na vaga dele, ao lado do lote da Zaeon, quando não está voando
@@ -83,8 +91,12 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
       const dist = Math.hypot(cam.x - p.x, cam.z - p.z);
       if (dist < DIST_CARREGA) carregar(); else if (dist > DIST_SOLTA) soltar();
       raiz.visible = dist < DIST_ESCONDE; if (!raiz.visible) return;
-      // longe, anima a cada 3 quadros (acumulando o dt)
-      pulo += dt; if (dist > DIST_ANIMA_SEMPRE && (pulo < 0.05)) { matrizDoAvatar(raiz, false); return; }   // nada mudou: o esqueleto (~170 ossos) não recalcula
+      // o contorno de tinta só onde ele aparece (de longe é menor que um pixel)
+      const querTraco = comTraco ? dist < DIST_CONTORNO.some : dist < DIST_CONTORNO.volta;
+      if (querTraco !== comTraco) { comTraco = querTraco; for (const m of tracos) m.visible = querTraco; }
+      // longe, anima a cada 3 quadros; no meio, a cada ~2 (acumulando o dt)
+      pulo += dt; const cada = dist > DIST_ANIMA_SEMPRE ? 0.05 : dist > DIST_ANIMA_CHEIO ? 1 / 40 : 0;
+      if (pulo < cada) { matrizDoAvatar(raiz, false); return; }   // nada mudou: o esqueleto (~450 nós) não recalcula
       matrizDoAvatar(raiz, true);
       const dtA = Math.min(0.2, pulo); pulo = 0;
       const k = Math.min(1, dtA * 3);
