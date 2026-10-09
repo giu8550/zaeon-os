@@ -86,6 +86,8 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       try {
         const p = planejarDia(frota, d, config!.flags), m = new Map<string, Episodio[]>();
         for (const e of episodiosDoDia(p, config!.flags)) for (const id of new Set(e.falas.map((f) => f.agente))) (m.get(id) ?? m.set(id, []).get(id)!).push(e);
+        // aquece os roteiros de todo mundo AGORA (no ocioso), senão a 1ª escolha montava ~600 de uma vez num quadro
+        const minuto = minutoDoDia(agoraMs()); for (const { agente, blocos } of p.agentes.values()) estadoDaIA(agente.id, blocos, minuto, config!.flags, true, false);
         plano = p; eps = m; dia = d;
       } finally { calculando = false; }
     };
