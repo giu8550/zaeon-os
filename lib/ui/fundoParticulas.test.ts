@@ -95,14 +95,22 @@ describe("aparelho fraco", () => {
     }
   });
 
-  it("máquina boa nunca passa de 2000 partículas (antes: até 5050 somando os 3 canvases)", () => {
-    expect(perfilDoAparelho({ nucleos: 16, memoriaGb: 32, largura: 2560 }).particulas).toBeLessThanOrEqual(2000);
+  it("o fundo é leve em QUALQUER máquina: no máximo 900 partículas, 30 FPS e canvas em 1x", () => {
+    for (const s of [{ nucleos: 16, memoriaGb: 32, largura: 2560 }, { nucleos: 8, memoriaGb: 8, largura: 1440 }, { nucleos: 2, memoriaGb: 2, largura: 390 }]) {
+      const p = perfilDoAparelho(s);
+      expect(p.particulas).toBeLessThanOrEqual(900); expect(p.intervaloMinMs).toBeCloseTo(1000 / 30); expect(p.dprMax).toBe(1);
+    }
   });
 
   it("FPS caindo corta pela metade até o mínimo; FPS bom não mexe", () => {
     expect(ajustarQualidade(1000, 1)).toBe(1000);
     expect(ajustarQualidade(1000, 2.5)).toBe(500);
     expect(ajustarQualidade(PARTICULAS_MIN, 3)).toBe(PARTICULAS_MIN);
+  });
+
+  it("com o teto de 30 FPS, rodar a 30 é o normal (não corta); só corta se cair abaixo de ~22", () => {
+    expect(ajustarQualidade(900, 2, 2)).toBe(900);
+    expect(ajustarQualidade(900, 2.9, 2)).toBe(450);
   });
 });
 

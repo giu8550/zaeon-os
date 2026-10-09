@@ -10,6 +10,7 @@ import {
     fatorLerp,
     passoNormalizado,
     perfilDoAparelho,
+    QUADRO_MS,
     type Relogio,
 } from "@/lib/ui/fundoParticulas";
 
@@ -178,7 +179,7 @@ const StarBackground: React.FC = () => {
 
             // Mede o FPS real e corta partículas se o aparelho não estiver dando conta.
             mediaPasso = mediaPasso * 0.95 + passo * 0.05;
-            if (++amostras % 120 === 0) ativas = ajustarQualidade(ativas, mediaPasso);
+            if (++amostras % 120 === 0) ativas = ajustarQualidade(ativas, mediaPasso, perfil.intervaloMinMs / QUADRO_MS);
 
             fundo(fatorLerp(RASTRO, passo));
             relogio = avancarFaseSemGlobo(relogio, passo);

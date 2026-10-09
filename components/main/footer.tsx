@@ -49,7 +49,7 @@ const COLS: FooterCol[] = [
 export const Footer = () => {
   const year = new Date().getFullYear();
   return (
-    <footer className="w-full border-t border-slate-200 dark:border-white/10 bg-white/40 dark:bg-black/30 backdrop-blur-xl text-slate-600 dark:text-gray-400">
+    <footer className="w-full border-t border-slate-200 dark:border-white/10 bg-white/40 dark:bg-black/30 backdrop-blur-md text-slate-600 dark:text-gray-400">
       <div className="zaeon-borda py-14">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-10">
           {/* Coluna da marca */}

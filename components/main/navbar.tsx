@@ -166,7 +166,7 @@ export const Navbar = () => {
       {/* Apple liquid glass: translúcido, backdrop-blur + saturação, borda fina e um
           fio de luz especular no topo. Vale nos dois modos (whitish no claro, esfumado
           no escuro) — o material é o mesmo do 'Iniciar' e do menu principal. */}
-      <div className="pointer-events-auto w-full h-[64px] flex items-center backdrop-blur-2xl backdrop-saturate-[1.6]
+      <div className="pointer-events-auto w-full h-[64px] flex items-center backdrop-blur-md backdrop-saturate-[1.6]
           bg-white/50 dark:bg-white/[0.06]
           border-b border-white/60 dark:border-white/[0.12]
           shadow-[inset_0_1px_0_0_rgba(255,255,255,0.9)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28)]">
