@@ -63,6 +63,7 @@ import { fundirEstaticos } from "./lotes";
 import { esferaRapida, matrizDoAvatar, matrizesDaCena, matrizSeMudou } from "./matrizes";
 import { umaPassadaNosTransparentes } from "./umaPassada";
 import { criarPoolGemeos, type PoolGemeos } from "./poolGemeos";
+import { criarOclusaoDePisos } from "./oclusaoPisos";
 import type { Regiao } from "@/lib/cyber/regioes";
 import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -558,7 +559,10 @@ export class CyberEngine {
     p(carregando("quadro", 1));
   }
   /** depuração em dev: `window.__cyber` = o motor VIVO (quem monta chama — no modo estrito o React monta 2 e o cancelado terminava por último) */
-  exporDepuracao() { if (process.env.NODE_ENV !== "production" && this.vivo) (window as unknown as { __cyber?: CyberEngine }).__cyber = this; }
+  exporDepuracao() {
+    const pedido = typeof location !== "undefined" && new URLSearchParams(location.search).has("depurar");   // (em produção, só com ?depurar: as medidas de desempenho)
+    if ((process.env.NODE_ENV !== "production" || pedido) && this.vivo) (window as unknown as { __cyber?: CyberEngine }).__cyber = this;
+  }
   private aoPrimeiroQuadro: (() => void) | null = null;
   private passadaEm = -Infinity;
   /** as LUZES das bases: um conjunto FIXO (o nº de luzes da cena não muda quando alguém entra — mudar recompila todos os
@@ -566,6 +570,8 @@ export class CyberEngine {
   private luzesBase: THREE.PointLight[] = [];
   /** as bases desenhadas juntas (components/cyber/poolGemeos) */
   private poolBases: PoolGemeos | null = null;
+  /** os pisos que escondem (components/cyber/oclusaoPisos) */
+  private oclusao: ReturnType<typeof criarOclusaoDePisos> | null = null;
   private criarLuzesBase() { if (!this.o.low && !this.luzesBase.length) for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0x9fd8ff, 0, 11); this.cena.scene.add(l); this.luzesBase.push(l); } }
   /** SOBE pra GPU tudo que está no galho (geometria, texturas; e calcula as esferas das geometrias): um desenho de 1
    *  pixel com o recorte desligado. Senão isso cai no 1º quadro em que o objeto aparece (a travada ao chegar num lugar) */
@@ -2469,7 +2475,7 @@ export class CyberEngine {
       // mesmo atrás de mim (o passo dele soa)
       const dCam = this.cam.position.distanceTo(a.av.group.position), naTela = this.frustum.intersectsSphere(this.esfAtor.set(a.av.group.position, 2.2)) || dCam < 4;
       a.av.group.visible = naTela;
-      const cada = dCam < 25 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 0;
+      const cada = dCam < 12 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 1 / 40;   // 12–40 m: um quadro sim, um não (LOD de animação)
       a.acum = (a.acum ?? 0) + dt;
       const animou = a.acum >= cada;
       if (animou) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
@@ -2544,6 +2550,10 @@ export class CyberEngine {
     this.atualizarCamera(dt);
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
     this.atualizarHud(now);
+    // PISOS QUE ESCONDEM (as células/portais do céu aberto): o que está em cima de uma plataforma some pra quem está
+    // embaixo dela (components/cyber/oclusaoPisos) — antes das matrizes (o invisível nem recalcula)
+    if (this.cidade && !this.oclusao) { this.oclusao = criarOclusaoDePisos(); for (const p of this.cidade.plataformas) this.oclusao.adicionar(p); }
+    this.oclusao?.atualizar(this.cam.position);
     matrizesDaCena(this.cena.scene);   // o que está invisível no topo da cena não recalcula matrizes (components/cyber/matrizes)
     // transparentes de dupla face numa passada só (components/cyber/umaPassada) — de tempos em tempos pega os materiais novos
     if (now - this.passadaEm > 2000) { this.passadaEm = now; umaPassadaNosTransparentes(this.cena.scene); }

@@ -50,8 +50,9 @@ export type CtxFrota = { cam: THREE.Vector3; eu: { x: number; y: number; z: numb
  *  `ALCANCE_SILHUETA` m; um novo só toma a vaga de um que já tem corpo se estiver a menos de `TROCA` × a distância dele */
 const ESCOLHE_A_CADA = 0.4, ALCANCE = 70, FICA = 1.3, ALCANCE_SILHUETA = 240, TROCA = 0.55;
 const MOVE = new Set(["andando", "mochila", "moto"]);
-/** quanto da varredura cabe num quadro (ms) */
-const ORCAMENTO_MS = 1.5;
+/** quanto da varredura cabe num quadro (ms) — era 1,5: a lista de quem aparece só demora mais quadros pra se renovar (quem
+ *  se move perto é refeito todo quadro de qualquer jeito) e o quadro da Zaeon cheia ganha ~0,7 ms */
+const ORCAMENTO_MS = 0.8;
 const TAG = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const BALAO = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:220px;font:500 12.5px system-ui,sans-serif;line-height:1.3;padding:6px 10px;border-radius:14px 14px 14px 4px;background:rgba(255,255,255,.94);color:#0b1020;box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:none;display:none;";
 
@@ -280,7 +281,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
         const deitado = e.pose === "deitado";
         // LONGE (> 25 m da câmera): a animação roda um quadro sim, um não (metade alternada a cada quadro), com o dt
         // somado — o esqueleto + IK é o mais caro do corpo, e a 60 fps a diferença não aparece; perto, todo quadro
-        const pertoCam = Math.hypot(x - ctx.cam.x, y - ctx.cam.y, z - ctx.cam.z) < 25;
+        const pertoCam = Math.hypot(x - ctx.cam.x, y - ctx.cam.y, z - ctx.cam.z) < 12;   // (o "LOD de animação" dos jogos: perto, todo quadro; além, um sim um não)
         k.animDt += dt; quadroPar = !quadroPar;
         const animou = pertoCam || quadroPar;
         if (animou) { const dtA = k.animDt; k.animDt = 0;
