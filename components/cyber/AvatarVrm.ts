@@ -72,6 +72,65 @@ export function tingirVrm(vrm: VRM, tintas: Readonly<Record<string, string>>) {
   });
 }
 
+/** o resto do ACABAMENTO de um corpo de personagem (lib/cyber/estiloAvatar CorpoVrm), depois de tingir:
+ *  - `gravidadeCabelo`: o VRoid exporta a física do cabelo SEM gravidade — mecha longa (rabo de cavalo) fica
+ *    espetada no ar; com gravidade ela cai;
+ *  - `recortes`: tira de uma peça os triângulos presos a certos ossos (ex.: o body de gola alta do VRoid cobre as
+ *    mãos como luva — sem os triângulos das mãos, aparece a pele; sem os do pescoço, vira gola careca; sem os das pernas, não vaza pela calça);
+ *  - `recolorir`: troca a cor só das partes COLORIDAS da textura de uma peça (o colete azul-claro do VRoid vira
+ *    azul-marinho e a camisa branca do mesmo molde continua branca) */
+const OSSOS_DAS_MAOS = /^(left|right)(Hand|Thumb|Index|Middle|Ring|Little)/, OSSOS_DO_PESCOCO = /^(neck|head|leftEye|rightEye|jaw)$/;
+const OSSOS_DAS_PERNAS = /^(left|right)(UpperLeg|LowerLeg|Foot|Toes)$/;
+type Acabamento = { gravidadeCabelo?: number; recortes?: readonly { peca: string; maos?: boolean; pescoco?: boolean; pernas?: boolean }[]; recolorir?: readonly { peca: string; cor: string }[] };
+export function acabarVrm(vrm: VRM, corpo: Acabamento) {
+  for (const r of corpo.recolorir ?? []) recolorirPeca(vrm, r.peca, r.cor);
+  if (corpo.gravidadeCabelo) for (const j of vrm.springBoneManager?.joints ?? []) if (/Hair/i.test(j.bone.name)) j.settings.gravityPower = Math.max(j.settings.gravityPower, corpo.gravidadeCabelo);
+  for (const r of corpo.recortes ?? []) {
+    const fora = new Set<THREE.Object3D>();
+    for (const [nome, b] of Object.entries(vrm.humanoid.rawHumanBones)) if (b?.node && ((r.maos && OSSOS_DAS_MAOS.test(nome)) || (r.pescoco && OSSOS_DO_PESCOCO.test(nome)) || (r.pernas && OSSOS_DAS_PERNAS.test(nome)))) fora.add(b.node);
+    vrm.scene.traverse((o) => {
+      const m = o as THREE.SkinnedMesh;
+      if (!m.isSkinnedMesh || !m.geometry.index || !(Array.isArray(m.material) ? m.material : [m.material]).some((x) => x.name.includes(`_${r.peca}_`))) return;
+      const g = m.geometry, si = g.attributes.skinIndex as THREE.BufferAttribute, sw = g.attributes.skinWeight as THREE.BufferAttribute, idx = g.index!;
+      const dele = (v: number) => { let melhor = 0, osso = 0; for (let k = 0; k < 4; k++) { const w = sw.getComponent(v, k); if (w > melhor) { melhor = w; osso = si.getComponent(v, k); } } return fora.has(m.skeleton.bones[osso]!); };
+      const fica: number[] = [];
+      for (let t = 0; t < idx.count; t += 3) { const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2); if (!dele(a) && !dele(b) && !dele(c)) fica.push(a, b, c); }
+      const grupos = g.groups.map((x) => ({ ...x }));
+      g.setIndex(fica); g.clearGroups(); for (const x of grupos) g.addGroup(0, fica.length, x.materialIndex);
+    });
+  }
+}
+
+function recolorirPeca(vrm: VRM, peca: string, hex: string) {
+  if (typeof document === "undefined") return;
+  const alvo = new THREE.Color(hex).convertLinearToSRGB(), feitas = new Map<THREE.Texture, THREE.Texture>();
+  vrm.scene.traverse((o) => {
+    const m = o as THREE.Mesh; if (!m.isMesh) return;
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+      const mt = mat as THREE.Material & { map?: THREE.Texture | null; emissiveMap?: THREE.Texture | null; isOutline?: boolean };
+      if (mt.isOutline || !mt.name.includes(`_${peca}_`) || !mt.map?.image) continue;
+      let nova = feitas.get(mt.map);
+      if (!nova) {
+        const img = mt.map.image as CanvasImageSource & { width: number; height: number };
+        const cv = document.createElement("canvas"); cv.width = img.width; cv.height = img.height;
+        const ctx = cv.getContext("2d")!; ctx.drawImage(img, 0, 0);
+        const px = ctx.getImageData(0, 0, cv.width, cv.height), d = px.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i]! / 255, g = d[i + 1]! / 255, b = d[i + 2]! / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          if (mx - mn < 0.1) continue;   // branco/cinza (a camisa) fica como está
+          const k = Math.min(1.25, mx / 0.82);   // o claro/escuro do tricô vira o claro/escuro da cor nova
+          d[i] = Math.min(255, alvo.r * k * 255); d[i + 1] = Math.min(255, alvo.g * k * 255); d[i + 2] = Math.min(255, alvo.b * k * 255);
+        }
+        ctx.putImageData(px, 0, 0);
+        nova = new THREE.CanvasTexture(cv); nova.flipY = mt.map.flipY; nova.colorSpace = mt.map.colorSpace;
+        nova.wrapS = mt.map.wrapS; nova.wrapT = mt.map.wrapT; nova.needsUpdate = true; feitas.set(mt.map, nova);
+      }
+      if (mt.emissiveMap === mt.map) mt.emissiveMap = nova;
+      mt.map = nova; mt.needsUpdate = true;
+    }
+  });
+}
+
 export type EspelhoVrm = {
   atualizar(dt: number, t: number): void;
   /** uma POSE própria (lib/cyber/posesVrm) por cima da cópia do esqueleto — entra/sai suave; null = só a cópia */

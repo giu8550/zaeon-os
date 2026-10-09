@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle } from "./AvatarLuz";
-import { carregarVrm, tingirVrm } from "./AvatarVrm";
+import { acabarVrm, carregarVrm, tingirVrm } from "./AvatarVrm";
 import { VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { glowTex } from "./CenaCosmica";
 import { CORPO_DO_FUNDADOR, type CorpoVrm } from "@/lib/cyber/estiloAvatar";
@@ -108,7 +108,7 @@ export default function VitrinePersonagem({ fundador, cor, corpo, className = ""
         a.esperarCorpo(true);   // o corpo padrão não aparece antes do próprio
         carregarVrm(proprio.url).then((vrm) => {
           if (!vivo || av !== a) { VRMUtils.deepDispose(vrm.scene); return; }
-          tingirVrm(vrm, proprio.tintas); a.usarVrm(vrm); corpoVrm = vrm;
+          tingirVrm(vrm, proprio.tintas); acabarVrm(vrm, proprio); a.usarVrm(vrm); corpoVrm = vrm;
           if (proprio.acessorios?.length) acessorios = vestirAcessorios(vrm, proprio.acessorios);
           setEstado("pronto");
         }).catch((e) => { console.warn("[vitrine] corpo próprio (VRM) não carregou:", e); a.esperarCorpo(false); if (vivo) setEstado("pronto"); });
