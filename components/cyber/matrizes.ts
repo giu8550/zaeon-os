@@ -68,3 +68,14 @@ export function matrizSeMudou(o: THREE.Object3D, filhoMudou = false): boolean {
   o.matrixWorldAutoUpdate = mudou || filhoMudou || o.matrixWorldNeedsUpdate;
   return mudou || filhoMudou;
 }
+
+/** ESFERA RÁPIDA pras malhas com esqueleto: na 1ª vez que uma SkinnedMesh é desenhada, o three calcula a esfera dela
+ *  deformando TODOS os vértices na CPU (pra ordenar os transparentes) — num VRM, centenas de ms num quadro só. A esfera da
+ *  geometria em repouso serve igual pra ordenar (e todo avatar daqui já desenha com frustumCulled = false) */
+export function esferaRapida(raiz: THREE.Object3D): void {
+  raiz.traverse((o) => {
+    const s = o as THREE.SkinnedMesh; if (!s.isSkinnedMesh || s.boundingSphere) return;
+    if (!s.geometry.boundingSphere) s.geometry.computeBoundingSphere();
+    s.boundingSphere = s.geometry.boundingSphere!.clone();
+  });
+}

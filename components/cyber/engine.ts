@@ -60,7 +60,7 @@ import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
 import { atualizarRegiao, criarRegiao, soltarRegiao, type RegiaoCena } from "./regioesCena";
 import { fundirEstaticos } from "./lotes";
-import { matrizDoAvatar, matrizesDaCena, matrizSeMudou } from "./matrizes";
+import { esferaRapida, matrizDoAvatar, matrizesDaCena, matrizSeMudou } from "./matrizes";
 import { umaPassadaNosTransparentes } from "./umaPassada";
 import { criarPoolGemeos, type PoolGemeos } from "./poolGemeos";
 import type { Regiao } from "@/lib/cyber/regioes";
@@ -543,7 +543,13 @@ export class CyberEngine {
     if (typeof IntersectionObserver !== "undefined") { this.io = new IntersectionObserver((e) => { this.visivel = !!e[0]?.isIntersecting; }); this.io.observe(container); }
     // a LUZ: compila todos os shaders agora (senão cada material novo trava a tela na 1ª vez que aparece)
     await etapa("shaders");
-    try { await this.R.compileAsync(this.cena.scene, this.cam); } catch { /* sem a extensão de compilação paralela: compila no 1º quadro */ }
+    this.criarLuzesBase();   // (ANTES de compilar: o nº de luzes muda o programa de todo material)
+    // inclusive o que está ESCONDIDO agora (o detalhe das regiões longe, o interior da nave…): o three só compila o que é
+    // visível, e o resto compilava no 1º quadro em que aparecesse — a travada ao chegar num lugar. Nada é desenhado aqui.
+    { const escondidos: THREE.Object3D[] = []; this.cena.scene.traverse((o) => { if (!o.visible) { escondidos.push(o); o.visible = true; } });
+      try { await this.R.compileAsync(this.cena.scene, this.cam); } catch { /* sem a extensão de compilação paralela: compila no 1º quadro */ }
+      this.subirParaGpu(this.cena.scene);   // geometrias e texturas já na GPU (atrás da tela de carregamento)
+      for (const o of escondidos) o.visible = false; }
     await etapa("quadro");
     this.clock.start();
     const primeiro = new Promise<void>((r) => { this.aoPrimeiroQuadro = r; });
@@ -560,9 +566,19 @@ export class CyberEngine {
   private luzesBase: THREE.PointLight[] = [];
   /** as bases desenhadas juntas (components/cyber/poolGemeos) */
   private poolBases: PoolGemeos | null = null;
+  private criarLuzesBase() { if (!this.o.low && !this.luzesBase.length) for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0x9fd8ff, 0, 11); this.cena.scene.add(l); this.luzesBase.push(l); } }
+  /** SOBE pra GPU tudo que está no galho (geometria, texturas; e calcula as esferas das geometrias): um desenho de 1
+   *  pixel com o recorte desligado. Senão isso cai no 1º quadro em que o objeto aparece (a travada ao chegar num lugar) */
+  private subirParaGpu(raiz: THREE.Object3D) {
+    const recorte: THREE.Object3D[] = [];
+    raiz.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && !g.boundingSphere) g.computeBoundingSphere(); if (o.frustumCulled) { recorte.push(o); o.frustumCulled = false; } });
+    const sc = this.R.getScissorTest(), vp = new THREE.Vector4(); this.R.getScissor(vp);
+    this.R.setScissorTest(true); this.R.setScissor(0, 0, 1, 1);
+    try { this.R.render(this.cena.scene, this.cam); } finally { this.R.setScissor(vp); this.R.setScissorTest(sc); for (const o of recorte) o.frustumCulled = true; }
+  }
   private acenderBases() {
     if (this.o.low) return;
-    if (!this.luzesBase.length) for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0x9fd8ff, 0, 11); this.cena.scene.add(l); this.luzesBase.push(l); }
+    this.criarLuzesBase();
     const todas = [...this.bases.values(), ...(this.baseQG ? [this.baseQG] : [])].filter((b) => b.group.visible)
       .map((b) => { const l = b.luz(new THREE.Vector3()); return { ...l, d: l.pos.distanceToSquared(this.cam.position) }; })
       .sort((a, b) => a.d - b.d);
@@ -719,10 +735,24 @@ export class CyberEngine {
     for (const p of PERSONAGENS_DA_CIDADELA) {
       const corpo = CORPOS_VRM[p.id]; if (!corpo) continue;
       const perfil = PERFIS_VIDA[p.id]; if (!perfil) continue;
-      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene });
+      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene, preparar: (obj) => this.prepararVrm(obj) });
       const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = p.nome; this.o.overlay.appendChild(tag);
       this.personagens.push({ h, tag });
     }
+  }
+  /** prepara um corpo VRM ANTES de entrar na cena: os shaders compilam em paralelo (sem travar o quadro) e as texturas
+   *  sobem uma por quadro (a de 2048² sozinha levava dezenas de ms) — senão tudo isso caía no 1º quadro em que ele aparece */
+  private async prepararVrm(obj: THREE.Object3D) {
+    esferaRapida(obj);
+    try { await this.R.compileAsync(obj, this.cam, this.cena.scene); } catch { /* sem compilação paralela: compila ao aparecer */ }
+    const texs = new Set<THREE.Texture>();
+    obj.traverse((n) => { const ms = (n as THREE.Mesh).material; for (const m of Array.isArray(ms) ? ms : ms ? [ms] : []) { for (const v of Object.values(m)) if ((v as THREE.Texture)?.isTexture) texs.add(v as THREE.Texture);
+      for (const u of Object.values((m as THREE.ShaderMaterial).uniforms ?? {})) if ((u?.value as THREE.Texture)?.isTexture) texs.add(u.value as THREE.Texture); } });   // (o MToon guarda nos uniforms)
+    for (const t of texs) { if (!this.vivo) return; this.R.initTexture(t); await new Promise((r) => requestAnimationFrame(r)); }
+    // a geometria também: entra na cena só pelo desenho de 1 pixel (os personagens longe ficam escondidos e só subiriam
+    // na chegada)
+    if (!this.vivo) return;
+    this.cena.scene.add(obj); try { this.subirParaGpu(obj); } finally { obj.removeFromParent(); }
   }
   private atualizarPersonagens(dt: number, t: number) {
     if (!this.personagens.length) return;

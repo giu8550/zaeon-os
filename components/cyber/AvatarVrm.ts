@@ -135,6 +135,8 @@ export type EspelhoVrm = {
   atualizar(dt: number, t: number): void;
   /** uma POSE própria (lib/cyber/posesVrm) por cima da cópia do esqueleto — entra/sai suave; null = só a cópia */
   pose(p: PoseVrm | null): void;
+  /** perto (true, o padrão) roda tudo; longe pula a física do cabelo, o olhar e os materiais (components/cyber/PersonagemVivo) */
+  detalhe(on: boolean): void;
   dispose(): void;
 };
 /** a pose de REPOUSO (T) do esqueleto mixamo, no referencial do `corpo` — medida ao criar o avatar, antes de qualquer
@@ -195,7 +197,7 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
   const delta = new Map<string, THREE.Quaternion>(), ident = new THREE.Quaternion(), d = new THREE.Vector3();
   for (const b of ORDEM_VRM) if (existe(b)) delta.set(b, new THREE.Quaternion());
   let piscaT = 2 + Math.random() * 3, piscando = 0;
-  let pose: PoseVrm | null = null, pesoPose = 0;
+  let pose: PoseVrm | null = null, pesoPose = 0, detalhe = true, voltouDetalhe = false;
   const qPose = new THREE.Quaternion(), ePose = new THREE.Euler();
 
   return {
@@ -230,9 +232,19 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
         piscaT -= dt; if (piscaT <= 0) { piscando = 0.14; piscaT = 2.2 + Math.random() * 3.5; }
         if (piscando > 0) { piscando -= dt; ex.setValue("blink", Math.sin(Math.max(0, piscando / 0.14) * Math.PI)); } else ex.setValue("blink", 0);
       }
-      vrm.update(dt);   // normalizado → ossos reais, física do cabelo/roupa (spring bones), expressões
+      // o vrm.update por partes: o esqueleto (normalizado → ossos reais) e as expressões SEMPRE; o olhar, as restrições,
+      // a FÍSICA do cabelo/roupa (spring bones — o mais caro) e os materiais MToon só com DETALHE (perto): de longe o
+      // cabelo parado e o uniforme do material não mudam nada que se veja
+      vrm.humanoid.update(); vrm.expressionManager?.update();
+      if (detalhe) {
+        vrm.lookAt?.update(dt); vrm.nodeConstraintManager?.update();
+        if (voltouDetalhe) { vrm.springBoneManager?.reset(); voltouDetalhe = false; }   // (recomeça do repouso, sem o salto do rabo parado)
+        vrm.springBoneManager?.update(dt);
+        for (const m of vrm.materials ?? []) (m as { update?: (d: number) => void }).update?.(dt);
+      }
     },
     pose(p) { pose = p; },
+    detalhe(on) { if (on && !detalhe) voltouDetalhe = true; detalhe = on; },
     dispose() {
       vrm.scene.removeFromParent();
       if (modelo.updateMatrixWorld === semPassada) delete (modelo as { updateMatrixWorld?: unknown }).updateMatrixWorld;   // volta ao do protótipo

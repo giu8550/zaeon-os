@@ -63,6 +63,7 @@ export function criarAsas(): AsasHandle {
     penas.frustumCulled = contorno.frustumCulled = false; contorno.raycast = () => {};
     raiz.add(penas, contorno); raiz.updateMatrixWorld(true);
     const esq = new THREE.Skeleton(ossos as THREE.Bone[]); penas.bind(esq); contorno.bind(esq);
+    geo.computeBoundingSphere(); penas.boundingSphere = geo.boundingSphere!.clone(); contorno.boundingSphere = geo.boundingSphere!.clone();   // (sem a deformação na CPU no 1º desenho)
   };
 
   // as penas de cada segmento (iguais nos dois lados; a esquerda é espelhada)
