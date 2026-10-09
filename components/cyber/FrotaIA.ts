@@ -21,7 +21,7 @@ import { criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz"
 import { criarMoto, type MotoHandle } from "./Moto";
 import { gerarFrota, type AgenteIA } from "@/lib/cyber/frota/frota";
 import { planejarDia, type PlanoDia } from "@/lib/cyber/frota/plano";
-import { diaDe, minutoDoDia } from "@/lib/cyber/frota/agenda";
+import { diaDe, fullNoDia, minutoDoDia } from "@/lib/cyber/frota/agenda";
 import { estadoDaIA, type EstadoIA } from "@/lib/cyber/frota/corpo";
 import { episodiosDoDia, type Episodio } from "@/lib/cyber/frota/conversas";
 import type { ConfigSalva } from "@/lib/cyber/frota/config";
@@ -107,13 +107,13 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     if (!config || calculando) return;
     calculando = true;
     if (worker) {
-      worker.postMessage({ id: ++pedidoId, frota: config.frota, dia: d, flags: config.flags } satisfies PedidoFrota);
+      worker.postMessage({ id: ++pedidoId, frota: config.frota, dia: d, flags: config.flags, full: fullNoDia(d, config.modoFullAte) } satisfies PedidoFrota);
       if (prazo) clearTimeout(prazo); prazo = setTimeout(() => semWorker("não respondeu em 10 s"), 10_000);
       return;
     }
     const fazer = () => {
       try {
-        const p = planejarDia(frota, d, config!.flags), m = new Map<string, Episodio[]>();
+        const p = planejarDia(frota, d, config!.flags, fullNoDia(d, config!.modoFullAte)), m = new Map<string, Episodio[]>();
         for (const e of episodiosDoDia(p, config!.flags)) for (const id of new Set(e.falas.map((f) => f.agente))) (m.get(id) ?? m.set(id, []).get(id)!).push(e);
         plano = p; eps = m; dia = d; varrer = null;
       } finally { calculando = false; }

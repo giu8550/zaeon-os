@@ -9,6 +9,7 @@ import { CHAVE_CONFIG, CONFIG_PADRAO, aplicarMigracoes, sanitizarConfig, type Co
 import { gerarFrota, type AgenteIA } from "./frota";
 import { planejarDia, type PlanoDia } from "./plano";
 import { episodiosDoDia, type Episodio } from "./conversas";
+import { fullNoDia } from "./agenda";
 import type { DepsTexto } from "./texto";
 
 let cacheConfig: { em: number; c: ConfigSalva } | null = null;
@@ -38,9 +39,9 @@ type Dia = { frota: AgenteIA[]; porId: Map<string, AgenteIA>; plano: PlanoDia; e
 const cacheDia = new Map<string, Dia>();
 /** a frota, o plano e os episódios de um dia (cacheados por versão+dia; ~0,3 s na 1ª vez) */
 export function diaDaFrota(c: ConfigSalva, dia: number): Dia {
-  const k = `${c.versao}|${dia}`; let d = cacheDia.get(k);
+  const k = `${c.versao}|${dia}|${fullNoDia(dia, c.modoFullAte) ? 1 : 0}`; let d = cacheDia.get(k);
   if (d) return d;
-  const frota = gerarFrota(c.frota), plano = planejarDia(frota, dia, c.flags);
+  const frota = gerarFrota(c.frota), plano = planejarDia(frota, dia, c.flags, fullNoDia(dia, c.modoFullAte));
   d = { frota, porId: new Map(frota.map((a) => [a.id, a])), plano, episodios: new Map(episodiosDoDia(plano, c.flags).map((e) => [e.id, e])) };
   cacheDia.set(k, d); while (cacheDia.size > 4) cacheDia.delete(cacheDia.keys().next().value!);
   return d;

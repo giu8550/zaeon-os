@@ -9,14 +9,14 @@ import { planejarDia } from "@/lib/cyber/frota/plano";
 import { episodiosDoDia, type Episodio } from "@/lib/cyber/frota/conversas";
 import type { FlagsFrota } from "@/lib/cyber/frota/agenda";
 
-export type PedidoFrota = { id: number; frota: ConfigFrota; dia: number; flags: FlagsFrota };
+export type PedidoFrota = { id: number; frota: ConfigFrota; dia: number; flags: FlagsFrota; /** o dia está no MODO FULL (24 h) */ full: boolean };
 export type RespostaFrota = { id: number; dia: number; plano: ReturnType<typeof planejarDia>; eps: [string, Episodio[]][] } | { id: number; erro: string };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 ctx.onmessage = (ev: MessageEvent<PedidoFrota>) => {
-  const { id, frota, dia, flags } = ev.data;
+  const { id, frota, dia, flags, full } = ev.data;
   try {
-    const plano = planejarDia(gerarFrota(frota), dia, flags), m = new Map<string, Episodio[]>();
+    const plano = planejarDia(gerarFrota(frota), dia, flags, full), m = new Map<string, Episodio[]>();
     for (const e of episodiosDoDia(plano, flags)) for (const a of new Set(e.falas.map((f) => f.agente))) (m.get(a) ?? m.set(a, []).get(a)!).push(e);
     ctx.postMessage({ id, dia, plano, eps: [...m.entries()] } satisfies RespostaFrota);
   } catch (e) { ctx.postMessage({ id, erro: String((e as Error)?.message ?? e) } satisfies RespostaFrota); }

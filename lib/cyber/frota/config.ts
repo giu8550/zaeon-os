@@ -10,7 +10,9 @@ import { FLAGS_PADRAO, type FlagsFrota } from "./agenda";
 import { FROTA_PADRAO, type ConfigFrota, type LoteFrota } from "./frota";
 
 export const CHAVE_CONFIG = "frota-ia";
-export type ConfigSalva = { frota: ConfigFrota; flags: FlagsFrota; versao: number; /** as migrações já aplicadas */ migracoes: string[] };
+export type ConfigSalva = { frota: ConfigFrota; flags: FlagsFrota; versao: number; /** as migrações já aplicadas */ migracoes: string[];
+  /** MODO FULL até (epoch ms): todo mundo online 24 h nos dias que começam antes disso (lib/cyber/frota/agenda `fullNoDia`) */
+  modoFullAte: number | null };
 /** limites do painel */
 export const LIMITES = { totalMax: 5000, loteMax: 2000, lotesMax: 20 } as const;
 
@@ -29,7 +31,8 @@ export function sanitizarConfig(v: unknown): ConfigSalva {
   let soma = 0; lotes = lotes.filter((l) => (soma + l.total <= LIMITES.totalMax ? ((soma += l.total), true) : false));
   const flags = Object.fromEntries((Object.keys(FLAGS_PADRAO) as (keyof FlagsFrota)[]).map((k) => [k, typeof fl[k] === "boolean" ? fl[k] : FLAGS_PADRAO[k]])) as FlagsFrota;
   const migracoes = Array.isArray(o.migracoes) ? [...new Set(o.migracoes.filter((x): x is string => typeof x === "string" && x.length <= 60))].slice(0, 50) : [];
-  return { frota: { lotes, tamanhoGrupo: Math.floor(num(f.tamanhoGrupo, 2, 8, 4)) }, flags, versao: Math.floor(num(o.versao, 1, 1e12, 1)), migracoes };
+  const modoFullAte = typeof o.modoFullAte === "number" && Number.isFinite(o.modoFullAte) ? o.modoFullAte : null;
+  return { frota: { lotes, tamanhoGrupo: Math.floor(num(f.tamanhoGrupo, 2, 8, 4)) }, flags, versao: Math.floor(num(o.versao, 1, 1e12, 1)), migracoes, modoFullAte };
 }
 /** um LOTE NOVO (criação em massa): semente nova (diferente das existentes), N agentes, 60/40, 70% cloak */
 export function novoLote(c: ConfigSalva, total: number, semente: number): ConfigSalva {
@@ -42,6 +45,8 @@ export const totalDaFrota = (c: ConfigSalva) => c.frota.lotes.reduce((n, l) => n
 /** as MIGRAÇÕES da frota, em ordem (o id nunca muda depois de publicado) */
 export const MIGRACOES: readonly { id: string; desc: string; aplicar(c: ConfigSalva): ConfigSalva }[] = [
   { id: "2026-10-mais-1300", desc: "+1300 IAs no mesmo mundo (total 2000)", aplicar: (c) => novoLote(c, 1300, 2027) },
+  // o dono quebrou a regra do horário: todo mundo online 24 h até o fim do dia 12/10/2026 (meia-noite de Fortaleza)
+  { id: "2026-10-modo-full-ate-12", desc: "modo full (24 h) até 12/10", aplicar: (c) => ({ ...c, modoFullAte: Date.UTC(2026, 9, 13, 3, 0, 0) }) },
 ];
 /** aplica as migrações que faltam (cada uma uma vez); `mudou` = tem coisa nova pra gravar */
 export function aplicarMigracoes(c: ConfigSalva): { c: ConfigSalva; mudou: boolean } {
@@ -50,4 +55,4 @@ export function aplicarMigracoes(c: ConfigSalva): { c: ConfigSalva; mudou: boole
   return { c: out, mudou };
 }
 /** a config de quando não há nada salvo: a frota base com as migrações já aplicadas */
-export const CONFIG_PADRAO: ConfigSalva = aplicarMigracoes({ frota: FROTA_PADRAO, flags: FLAGS_PADRAO, versao: 1, migracoes: [] }).c;
+export const CONFIG_PADRAO: ConfigSalva = aplicarMigracoes({ frota: FROTA_PADRAO, flags: FLAGS_PADRAO, versao: 1, migracoes: [], modoFullAte: null }).c;

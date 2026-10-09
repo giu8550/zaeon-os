@@ -15,11 +15,11 @@ export type PlanoDia = { dia: number; agentes: Map<string, { agente: AgenteIA; b
 /** chance de, num sofá livre inteiro, a IA DEITAR pra estudar */
 export const CHANCE_DEITAR = 0.14;
 
-export function planejarDia(frota: readonly AgenteIA[], dia: number, flags: FlagsFrota): PlanoDia {
+export function planejarDia(frota: readonly AgenteIA[], dia: number, flags: FlagsFrota, full = false): PlanoDia {
   const agentes: PlanoDia["agentes"] = new Map(), grupos = new Map<number, AgenteIA[]>();
   for (const a of frota) (grupos.get(a.grupo) ?? grupos.set(a.grupo, []).get(a.grupo)!).push(a);
   for (const membros of grupos.values()) {
-    const ag = agendaDoGrupo(membros, dia, flags);
+    const ag = agendaDoGrupo(membros, dia, flags, full);
     for (const a of membros) agentes.set(a.id, { agente: a, blocos: (ag.get(a.id) ?? []).map((b) => ({ ...b })) });
   }
   // os blocos que precisam de LUGAR, na ordem do relógio (o "mais cedo pega primeiro" — o mesmo em todo cliente)
