@@ -2404,7 +2404,7 @@ export class CyberEngine {
     this.atualizarPersonagens(dt, t);
     if (this.frota) {
       this.frota.mostrar(!this.instancia && !this.menu);
-      this.frota.atualizar(dt, t, { cam: this.cam.position, camera: this.cam, largura: this.w, altura: this.h, ilhaY: this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, pisoY: CIDADE.pisoY, musica: !!this.somLounge?.tocando,
+      this.frota.atualizar(dt, t, { cam: this.cam.position, eu: { x: this.eu.pos.x, y: this.eu.alt, z: this.eu.pos.z }, camera: this.cam, largura: this.w, altura: this.h, ilhaY: this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, pisoY: CIDADE.pisoY, musica: !!this.somLounge?.tocando,
         obstaculos: [{ x: this.eu.pos.x, z: this.eu.pos.z }, ...[...this.remotos.values()].map((a) => ({ x: a.pos.x, z: a.pos.z })), ...this.personagens.map((p) => ({ x: p.h.pos.x, z: p.h.pos.z }))] });
     }
     // avatares
