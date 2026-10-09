@@ -43,6 +43,28 @@
   table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
   th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top} th{background:var(--accent-weak)}
   .hidden{display:none!important}
+  .flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:8px;align-items:stretch;margin:16px 0}
+  .flow .step{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:12px 13px;box-shadow:var(--shadow)}
+  .flow .step b{display:block;font-size:14px;margin-bottom:3px}
+  .flow .step small{display:block;color:var(--soft);font-size:12.5px;line-height:1.45}
+  .flow .step code{display:inline-block;margin-top:8px;font-size:11px}
+  .flow .step.gate{border-color:var(--accent);background:var(--accent-weak)}
+  .flow .arrow{display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--accent);font-size:20px;line-height:1;min-width:34px}
+  .flow .arrow small{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);text-align:center;margin-top:4px}
+  .blocked{display:flex;gap:10px;align-items:center;border:1px dashed #d9486b;border-radius:10px;padding:10px 12px;margin:10px 0 16px;font-size:13.5px;color:var(--ink)}
+  .blocked .x{color:#d9486b;font-weight:800;font-size:18px}
+  .sol{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:20px;padding:5px 12px 5px 9px;font-size:12.5px;font-weight:700;box-shadow:var(--shadow)}
+  .sol svg{width:18px;height:auto;display:block}
+  .sides{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch;margin:14px 0}
+  .sides .card ul{margin:6px 0 0;padding-left:18px} .sides .card li{font-size:13.5px;margin:3px 0}
+  .sides .card.pub{border-color:var(--accent)}
+  .sides .mid{display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--accent);font-size:20px;min-width:40px}
+  .sides .mid small{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);text-align:center;margin-top:4px}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:12px 0}
+  .steps li{counter-increment:s;position:relative;padding:6px 0 6px 34px;border-left:1px solid var(--line);margin-left:11px}
+  .steps li::before{content:counter(s);position:absolute;left:-12px;top:7px;width:23px;height:23px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center}
+  .steps li b{display:block}
+  @media(max-width:860px){.flow,.sides{grid-template-columns:1fr} .flow .arrow,.sides .mid{transform:rotate(90deg);min-height:34px}}
   @media(max-width:860px){.wrap{grid-template-columns:1fr} aside{position:fixed;z-index:20;width:280px;transform:translateX(-100%);transition:.25s} aside.open{transform:none} .menu{display:inline-block} main{padding:20px} .grid2{grid-template-columns:1fr}}
   .menu{display:none;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:6px 10px;cursor:pointer}
 </style>
@@ -69,6 +91,8 @@
       <a href="#fontes">Fontes & evidência</a>
       <a href="#dados">Modelo de dados</a>
       <a href="#verificacao">Verificação & credenciais</a>
+      <a href="#solana">Camada Solana</a>
+      <a href="#privacidade">Privacidade & proveniência</a>
       <a href="#visualizacao">Visualização científica</a>
       <a href="#stack">Stack & infraestrutura</a>
       <a href="#seguranca">Segurança & governança</a>
@@ -156,7 +180,7 @@ Recuperação & grounding  ── busca de literatura · deduplicação · verif
    │
 Raciocínio & síntese     ── modelos de linguagem + ferramentas
    │
-Gate de verificação      ── revisão humana → credencial verificável
+Gate de verificação      ── revisão humana → AURA no livro-razão → credencial verificável (Solana)
    │
 Persistência             ── sessões, memória, grafo de conhecimento, artefatos</pre>
       <p>Cada camada é isolável: a recuperação pode trocar de fonte, o modelo pode mudar, e a verificação permanece como etapa obrigatória antes de qualquer entrega.</p>
@@ -217,7 +241,9 @@ Persistência             ── sessões, memória, grafo de conhecimento, arte
         <tr><td>Sessão de pesquisa</td><td>Uma execução do pipeline — estado, progresso e retomada.</td></tr>
         <tr><td>Trabalho / documento</td><td>O artefato em construção (revisão, artigo, proposta), editável por seções com histórico.</td></tr>
         <tr><td>Nó & aresta do grafo</td><td>A memória estruturada: unidades de conhecimento e suas relações.</td></tr>
-        <tr><td>Credencial</td><td>Prova verificável de uma conquista validada (proveniência).</td></tr>
+        <tr><td>Credencial acadêmica</td><td>Título enviado pelo aluno (nível, área, instituição, documento privado) com status <code>pendente → verificado | rejeitado</code>, quem verificou e quando.</td></tr>
+        <tr><td>Evento AURA</td><td>Livro-razão append-only da reputação: um evento por conquista, único por (usuário, fonte, referência); reversão é evento negativo.</td></tr>
+        <tr><td>Credencial (on-chain)</td><td>Prova verificável de uma conquista validada, cunhada como token soulbound na Solana — guarda o asset, a transação e a carteira do aluno.</td></tr>
         <tr><td>Artefato de mídia</td><td>Visualizações e modelos gerados, com licença/crédito quando reutilizados.</td></tr>
       </table>
       <p>Consultas de caminho quente usam índices explícitos; edições de documento são por seção, com versões — a última aplicação vence, mas o histórico permite desfazer.</p>
@@ -226,7 +252,95 @@ Persistência             ── sessões, memória, grafo de conhecimento, arte
     <section id="verificacao">
       <h2>Verificação & credenciais</h2>
       <p>Nenhum resultado é tratado como verdade só porque foi gerado. A transição de "produzido" para "confiável" exige um <b>revisor humano</b> (pesquisador ou instituição). Ao aprovar, o sistema emite uma <b>credencial verificável</b> — um registro portável e à prova de adulteração da proveniência: o que foi feito, por quem foi validado e quando.</p>
-      <p>O mesmo mecanismo serve a dois casos: comprovar habilidades de um estudante e chancelar a entrega de um projeto. A idempotência garante que uma mesma conquista não seja contada duas vezes.</p>
+      <p>O mesmo mecanismo serve a dois casos: comprovar habilidades e títulos de um estudante e chancelar a entrega de um projeto. A idempotência garante que uma mesma conquista não seja contada duas vezes.</p>
+      <p><span class="sol"><svg viewBox="0 0 397.7 311.7" role="img" aria-label="Solana"><defs><linearGradient id="solg" gradientUnits="userSpaceOnUse" x1="360.8791" y1="351.4553" x2="141.213" y2="-69.2936" gradientTransform="matrix(1 0 0 -1 0 314)"><stop offset="0" stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient></defs><path fill="url(#solg)" d="M64.6,237.9c2.4-2.4,5.7-3.8,9.2-3.8h317.4c5.8,0,8.7,7,4.6,11.1l-62.7,62.7c-2.4,2.4-5.7,3.8-9.2,3.8H6.5c-5.8,0-8.7-7-4.6-11.1L64.6,237.9z"/><path fill="url(#solg)" d="M64.6,3.8C67.1,1.4,70.4,0,73.8,0h317.4c5.8,0,8.7,7,4.6,11.1l-62.7,62.7c-2.4,2.4-5.7,3.8-9.2,3.8H6.5c-5.8,0-8.7-7-4.6-11.1L64.6,3.8z"/><path fill="url(#solg)" d="M333.1,120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8,0-8.7,7-4.6,11.1l62.7,62.7c2.4,2.4,5.7,3.8,9.2,3.8h317.4c5.8,0,8.7-7,4.6-11.1L333.1,120.1z"/></svg> Credenciais emitidas na Solana</span></p>
+
+      <h3>Três etapas, uma única passagem</h3>
+      <div class="flow">
+        <div class="step"><b>1 · Produzido</b><small>Agentes pesquisam, escrevem, ensinam. O aluno envia o título com o documento; entra como <i>pendente</i>.</small><code>POST /api/credentials/academic</code></div>
+        <div class="arrow">→<small>só pela revisão humana</small></div>
+        <div class="step gate"><b>2 · Revisado</b><small>Professor vinculado (e habilitado) ou a instituição emissora abre a fila, vê o documento e chancela.</small><code>POST /api/academic/[id]/verificar</code></div>
+        <div class="arrow">→<small>ao chancelar</small></div>
+        <div class="step"><b>3 · Credencial</b><small>AURA no livro-razão, nível acadêmico atualizado e credencial soulbound cunhada na carteira do aluno.</small><code>issueCredential({ type: "academic" })</code></div>
+      </div>
+      <div class="blocked"><span class="x">✕</span><span>Não existe atalho de "produzido" para "credencial". Sem documento, o título fica <b>declarado</b>: zero AURA e badge "não verificado".</span></div>
+
+      <h3>Quem chancela</h3>
+      <table>
+        <tr><th>Papel</th><th>Pode verificar?</th><th>Condição</th></tr>
+        <tr><td>Professor</td><td>Sim</td><td>Vínculo registrado com o aluno <b>e</b> habilitação (flag do admin ou credencial própria já verificada).</td></tr>
+        <tr><td>Instituição</td><td>Sim · selo ouro</td><td>Só as credenciais emitidas em seu nome; pode registrar como <code>registry</code>/<code>onchain</code>.</td></tr>
+        <tr><td>Admin</td><td>Não</td><td>Só modera: rejeita ou escala. Nunca verifica no fluxo normal.</td></tr>
+        <tr><td>O próprio aluno</td><td>Não</td><td>Ninguém verifica a própria credencial — a rota devolve <code>403</code>.</td></tr>
+      </table>
+
+      <h3>O que acontece quando o revisor marca "verificado"</h3>
+      <ol class="steps">
+        <li><b>AURA entra no livro-razão</b> um evento <code>credential_verified</code>, uma vez por credencial, com o valor do nível liberado pelo método (doc_review/registry/onchain = base cheia; declarado = 0).</li>
+        <li><b>O nível acadêmico sobe</b> o perfil passa a mostrar o maior título verificado (Técnico → Graduação → Especialização → Mestrado → Doutorado → Pós-Doutorado).</li>
+        <li><b>A credencial é cunhada</b> o registro é gravado e a cunhagem na Solana parte em segundo plano — nunca segura a resposta do revisor.</li>
+        <li><b>Na carteira do aluno</b> a carteira custodial nasce do e-mail (sem seed phrase, sem gas); o token é soulbound: não se vende nem transfere.</li>
+        <li><b>Posse confirmada on-chain</b> o mural lê a Solana e só marca "verificada" quando o asset existe, não foi queimado e está na carteira do aluno.</li>
+      </ol>
+      <p>Rejeitar uma credencial já verificada <b>reverte</b> tudo: evento negativo no livro-razão e nível acadêmico recalculado a partir do que restou verificado. Nada é apagado.</p>
+
+      <h3>Economia da verificação (AURA)</h3>
+      <p>A reputação cresce com <b>verificação</b>, não com volume. Os valores vivem num único lugar do código e só transições verificadas pagam de verdade:</p>
+      <table>
+        <tr><th>Conquista</th><th>AURA</th><th>Portão</th></tr>
+        <tr><td>Nó aprendido</td><td>5</td><td>soft-cap diário (anti-grind)</td></tr>
+        <tr><td>Nó aplicado</td><td>15</td><td>—</td></tr>
+        <tr><td>Nó validado pelo professor</td><td>50</td><td>validação humana → atestado on-chain</td></tr>
+        <tr><td>Cérebro completo</td><td>200</td><td>todo o backbone validado</td></tr>
+        <tr><td>Título acadêmico</td><td>60 (Técnico) → 800 (Pós-Doutorado)</td><td>só com documento revisado; declarado = 0; vínculo institucional = 20</td></tr>
+      </table>
+      <div class="callout"><b>Quando ativado.</b> A economia AURA e a fila de verificação respondem atrás de uma chave de ativação (<code>AURA_ECONOMY</code>); a cunhagem on-chain acontece quando a camada Solana está configurada. Sem ela, a conquista do aluno fica intacta e a credencial espera — nunca aparece um selo falso.</div>
+    </section>
+
+    <section id="solana">
+      <h2>Camada Solana</h2>
+      <p>Toda conquista validada vira uma <b>credencial soulbound</b> na Solana: um token intransferível, emitido pela Zaeon na carteira do aluno, que qualquer pessoa consegue conferir num explorador público. O web3 fica invisível para quem estuda — não há extensão, seed phrase nem taxa.</p>
+      <table>
+        <tr><th>Peça</th><th>Como funciona</th></tr>
+        <tr><td>Carteira</td><td>Custodial, criada a partir do e-mail no primeiro login (Crossmint). O endereço fica no perfil; o aluno pode <b>reivindicar</b> a carteira e levá-la para fora da Zaeon.</td></tr>
+        <tr><td>Cunhagem</td><td>Gasless, em segundo plano, idempotente por (aluno, tipo, referência). Falhou? A conquista continua valendo e a credencial fica em <i>erro</i> para tentar de novo — nunca bloqueia o aluno.</td></tr>
+        <tr><td>Padrão</td><td>cNFT comprimido (Bubblegum, soulbound) para habilidades, aulas, trabalhos e títulos; token-2022 <i>non-transferable</i> para a certificação de mentor (alto valor).</td></tr>
+        <tr><td>Verificação de posse</td><td>Leitura on-chain via Helius DAS: o asset existe, não foi queimado e está na carteira do aluno. Sem a leitura disponível, o mural diz "verificação on-chain indisponível" — não inventa.</td></tr>
+        <tr><td>Rede</td><td>devnet ou mainnet por configuração; a troca é de ambiente, não de código.</td></tr>
+        <tr><td>Tipos</td><td><code>skill</code> habilidade dominada · <code>course</code> aula concluída · <code>work</code> trabalho concluído · <code>academic</code> título acadêmico verificado · <code>mentor-cert</code> certificação de mentor.</td></tr>
+      </table>
+      <h3>O que a credencial carrega</h3>
+      <p>Os metadados públicos do token são deliberadamente mínimos — <b>o quê, quando e um ponteiro</b>:</p>
+      <pre>name        "Título acadêmico verificado: Mestrado em Agronomia — UFC"
+image       badge SVG gerado pela Zaeon (sem dados do aluno)
+description "… Credencial soulbound (intransferível), emitida pela Zaeon e verificável na Solana."
+attributes  Tipo · Origem (id de referência) · Emissor: Zaeon · Rede · Padrão · Soulbound: sim · Emitida em</pre>
+      <p>Quem revisou, o método e a trilha de evidência ficam na base da Zaeon, ligados à credencial — auditáveis por quem tem direito, não públicos.</p>
+    </section>
+
+    <section id="privacidade">
+      <h2>Privacidade & proveniência</h2>
+      <p>A camada Solana existe para <b>provar proveniência sem expor a pessoa</b>. Público é a prova; privado é o conteúdo e a identidade.</p>
+      <div class="sides">
+        <div class="card"><h3>Privado · fica com você</h3><ul>
+          <li><b>O documento do diploma</b> — só o dono e um revisor elegível abrem, por uma rota própria e sem cache.</li>
+          <li><b>Nome e e-mail</b> — ficam na conta; não entram nos metadados do token.</li>
+          <li><b>A impressão do documento</b> — um hash (sha256) serve só para detectar o mesmo diploma reaproveitado em outra conta, sem expor o arquivo.</li>
+          <li><b>Quem revisou e como</b> — metadados da credencial no servidor.</li>
+          <li><b>O conteúdo do trabalho</b> — nunca vai para a cadeia.</li>
+        </ul></div>
+        <div class="mid">→<small>só a prova atravessa</small></div>
+        <div class="card pub"><h3>Público · a prova</h3><ul>
+          <li><b>O quê</b> — título e tipo da conquista.</li>
+          <li><b>Quando</b> — data de emissão.</li>
+          <li><b>Ponteiro</b> — id de origem (referência, não conteúdo).</li>
+          <li><b>Dono</b> — a carteira do aluno; soulbound, intransferível.</li>
+          <li><b>Emissor</b> — Zaeon.</li>
+        </ul></div>
+      </div>
+      <h3>No ciberespaço</h3>
+      <p>Quando você anda, conversa e colabora com outras pessoas, a presença leva só <b>avatar, cor e nome de exibição</b>. E-mail, documentos, carteira e credenciais não viajam com você — a competência é provada pela credencial, não pela exposição.</p>
+      <div class="callout">A credencial é sua, não da plataforma: a Zaeon emite, mas não é dona nem revende. Sendo soulbound, ela também não vira ativo negociável — vale como prova, não como moeda.</div>
     </section>
 
     <section id="visualizacao">
@@ -254,6 +368,7 @@ Persistência             ── sessões, memória, grafo de conhecimento, arte
         <tr><td>Trabalho em segundo plano</td><td>fila Redis + processo worker dedicado</td></tr>
         <tr><td>Tempo real</td><td>canal de eventos para colaboração e notificações</td></tr>
         <tr><td>Visualização 3D</td><td>three.js / React-Three-Fiber</td></tr>
+        <tr><td>Credenciais verificáveis</td><td>Solana — cNFT soulbound (Bubblegum) e token-2022 non-transferable via Crossmint; leitura on-chain via Helius DAS</td></tr>
         <tr><td>Entrega</td><td>contêineres Docker em VPS, deploy automatizado por CI/CD</td></tr>
       </table>
       <p>A escolha do modelo é desacoplada do código: trocar de provedor é configuração, não reescrita. O trabalho pesado nunca roda no caminho da requisição web — vai para o worker.</p>
@@ -266,16 +381,17 @@ Persistência             ── sessões, memória, grafo de conhecimento, arte
         <li><b>Conteúdo externo é não-confiável</b>: texto de fontes e da web é tratado como dado, nunca como instrução privilegiada.</li>
         <li><b>Licenças e atribuição</b>: todo ativo reutilizado carrega licença e crédito; o foco é conhecimento aberto.</li>
         <li><b>Limites e isolamento</b>: rate-limiting, validação de entrada e separação entre dados de usuários.</li>
-        <li><b>Verificação humana no caminho crítico</b>: nada vira entrega sem revisão.</li>
+        <li><b>Verificação humana no caminho crítico</b>: nada vira entrega sem revisão; ninguém verifica a própria credencial.</li>
+        <li><b>Nada de dado pessoal on-chain</b>: o token carrega só título, tipo, data, emissor e um ponteiro; documento, nome e e-mail ficam na base, com acesso guardado.</li>
       </ul>
     </section>
 
     <section id="participar">
       <h2>Como participar</h2>
       <div class="grid2">
-        <div class="card"><h3>Estudantes</h3><p>Aprendem com os agentes e comprovam habilidades com credenciais verificáveis.</p></div>
+        <div class="card"><h3>Estudantes</h3><p>Aprendem com os agentes e comprovam habilidades e títulos com credenciais verificáveis na Solana — portáveis, suas.</p></div>
         <div class="card"><h3>Pesquisadores & professores</h3><p>Orientam, revisam e chancelam resultados; abrem novas linhas.</p></div>
-        <div class="card"><h3>Instituições</h3><p>Trazem problemas reais e credenciam validações.</p></div>
+        <div class="card"><h3>Instituições</h3><p>Trazem problemas reais e chancelam títulos emitidos em seu nome (selo ouro).</p></div>
         <div class="card"><h3>Sociedade</h3><p>Destinatária final das soluções em saúde, clima e bens públicos.</p></div>
       </div>
     </section>
@@ -283,7 +399,9 @@ Persistência             ── sessões, memória, grafo de conhecimento, arte
     <section id="faq">
       <h2>FAQ</h2>
       <h3>A Zaeon dispensa cientistas humanos?</h3><p>Não. Ela amplia e acelera a pesquisa; a decisão final de validade é sempre humana.</p>
-      <h3>Como confiar num resultado?</h3><p>Cada resultado traz suas fontes e passa por revisão de especialistas antes de qualquer uso, com credencial de proveniência.</p>
+      <h3>Como confiar num resultado?</h3><p>Cada resultado traz suas fontes e passa por revisão de especialistas antes de qualquer uso, com credencial de proveniência verificável na Solana.</p>
+      <h3>Preciso de carteira cripto?</h3><p>Não. A carteira custodial nasce do seu e-mail, sem seed phrase, extensão ou taxa. Se um dia quiser, você reivindica a carteira e leva suas credenciais para fora da Zaeon.</p>
+      <h3>O que vai para a blockchain?</h3><p>Só a prova: título e tipo da conquista, data, emissor e um ponteiro de referência. Documento, nome, e-mail e o conteúdo do trabalho ficam na Zaeon, com acesso guardado. Veja <a href="#privacidade">Privacidade & proveniência</a>.</p>
       <h3>O conhecimento é aberto?</h3><p>O propósito é bem público, com dados e resultados abertos sempre que possível, sob licenças claras.</p>
       <h3>Dá para integrar com sistemas externos?</h3><p>Sim — a arquitetura em camadas e o roteamento de modelos foram feitos para conectar fontes e serviços.</p>
     </section>
@@ -294,7 +412,7 @@ Persistência             ── sessões, memória, grafo de conhecimento, arte
         <li>Ampliar o corpo de agentes autônomos e as fontes acadêmicas cobertas.</li>
         <li>Visualização 3D para anatomia, engenharia e robótica, com atlas e geração paramétrica.</li>
         <li>Colaboração multiusuário em tempo real sobre o mesmo grafo de conhecimento.</li>
-        <li>Expansão das credenciais verificáveis e das trilhas de ensino.</li>
+        <li>Expansão das credenciais verificáveis (mais tipos de conquista, mainnet) e das trilhas de ensino.</li>
       </ul>
       <div class="callout">Esta documentação evolui junto com a plataforma; seções técnicas serão detalhadas conforme os módulos amadurecem.</div>
     </section>
