@@ -16,6 +16,7 @@
  * modelo como o materialTinta): 1 InstancedMesh, 2 draw calls, a mesma matriz/pose pras duas.
  */
 import * as THREE from "three";
+import { SimplifyModifier } from "three/examples/jsm/modifiers/SimplifyModifier.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { criarAvatarLuz, type Montado } from "./AvatarLuz";
 import { criarMoto } from "./Moto";
@@ -31,12 +32,16 @@ export const POSES_ASSADAS = Object.keys(QUADROS) as PoseIA[];
 
 export type Clipe = { inicio: number; quadros: number };
 export type MultidaoHandle = {
-  malha: THREE.InstancedMesh;
+  /** os 2 níveis de detalhe (perto: a malha inteira; longe: a simplificada) — num grupo só */
+  malha: THREE.Group;
   clipes: Record<PoseIA, Clipe>;
-  /** a instância `i`: onde (pés no chão / no assento), pra onde olha (rumo), a pose, a cor (a do card), a fase (s) */
-  colocar(i: number, x: number, y: number, z: number, rumo: number, pose: PoseIA, cor: THREE.Color, fase: number): void;
-  /** quantas instâncias desenhar neste quadro (depois dos `colocar`) */
-  fechar(n: number): void;
+  /** começa o quadro (zera as listas) */
+  comecar(): void;
+  /** mais uma IA: onde (pés no chão / no assento), pra onde olha (rumo), a pose, a cor (a do card), a fase (s) e se está
+   *  LONGE (vai pra malha simplificada); devolve false se a lista daquele nível encheu */
+  adicionar(x: number, y: number, z: number, rumo: number, pose: PoseIA, cor: THREE.Color, fase: number, longe: boolean): boolean;
+  /** fecha o quadro (sobe só as instâncias vivas) */
+  fechar(): void;
   /** o relógio da animação */
   atualizar(t: number): void;
   dispose(): void;
@@ -110,13 +115,16 @@ function assar(gltf: GLTF, starTex: THREE.Texture) {
     if (g.index) { const ix = g.index; out.setIndex(Array.from({ length: ix.count }, (_, i) => ix.getX(i))); }
     return out;
   };
-  let geo = so(corpo.geometry, 0);
-  if (visor) { const gv = visorNoCorpo(visor, corpo, raiz); if (gv) { const junta = juntar([geo, gv]); if (junta) geo = junta; } }
-  { const gm = geoMochila(nOssos); const junta = juntar([geo, gm]); if (junta) geo = junta; }
+  const corpoG = so(corpo.geometry, 0), extras: THREE.BufferGeometry[] = [];
+  if (visor) { const gv = visorNoCorpo(visor, corpo, raiz); if (gv) extras.push(gv); }
+  extras.push(geoMochila(nOssos));
+  const geo = juntar([corpoG, ...extras]) ?? corpoG;
+  // o nível LONGE: o corpo simplificado (~40% dos vértices); visor e mochila já são leves e vão inteiros
+  const simples = simplificar(corpoG, 0.4), geoLonge = (simples && juntar([simples, ...extras])) ?? geo;
   geo.computeBoundingBox(); const tam = geo.boundingBox!.getSize(new THREE.Vector3());
   const espessura = espessuraTinta(Math.max(tam.x, tam.y, tam.z));
   moto.dispose(); av.dispose();
-  return { tex, clipes, geo, espessura, nOssos };
+  return { tex, clipes, geo, geoLonge, espessura, nOssos };
 }
 
 /** o VISOR tem um esqueleto PRÓPRIO (2 ossos): cada vértice vai pro osso equivalente do corpo (o de maior peso, peso 1)
@@ -166,6 +174,28 @@ function geoMochila(slot: number): THREE.BufferGeometry {
   return juntar(gs)!;
 }
 
+/** o corpo SIMPLIFICADO (o SimplifyModifier do three, que só preserva posição/normal — e cuja versão com cor quebra:
+ *  usa THREE.Color sem importar). Os vértices que sobram ficam na posição ORIGINAL: os atributos do esqueleto, o visor e
+ *  a mochila voltam procurando o vértice original na mesma posição */
+function simplificar(g: THREE.BufferGeometry, fracao: number): THREE.BufferGeometry | null {
+  try {
+    const P = g.attributes.position!, n = P.count, chave = (x: number, y: number, z: number) => `${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}`;
+    const origem = new Map<string, number>(); for (let i = 0; i < n; i++) { const k = chave(P.getX(i), P.getY(i), P.getZ(i)); if (!origem.has(k)) origem.set(k, i); }
+    const t = new THREE.BufferGeometry(); t.setAttribute("position", P.clone()); t.setAttribute("normal", g.attributes.normal!.clone()); if (g.index) t.setIndex(g.index.clone());
+    const r = new SimplifyModifier().modify(t, Math.floor(n * (1 - fracao))); t.dispose();
+    const R = r.attributes.position!, m = R.count;
+    const copiar = (nome: string, tam: number) => { const a = g.attributes[nome]!, f = new Float32Array(m * tam), ler = [a.getX, a.getY, a.getZ, a.getW].map((fn) => fn.bind(a));
+      for (let i = 0; i < m; i++) { const o = origem.get(chave(R.getX(i), R.getY(i), R.getZ(i))); if (o === undefined) throw new Error("vértice sem origem"); for (let c = 0; c < tam; c++) f[i * tam + c] = ler[c]!(o); }
+      return new THREE.BufferAttribute(f, tam); };
+    const out = new THREE.BufferGeometry();
+    out.setAttribute("position", R); out.setAttribute("normal", r.attributes.normal!);
+    out.setAttribute("skinIndex", copiar("skinIndex", 4)); out.setAttribute("skinWeight", copiar("skinWeight", 4));
+    out.setAttribute("aVisor", copiar("aVisor", 1)); out.setAttribute("aFixa", copiar("aFixa", 1));
+    out.setIndex(r.index ? Array.from(r.index.array as ArrayLike<number>) : [...Array(m).keys()]);
+    return out;
+  } catch (e) { console.warn("[multidão] não simplificou o corpo — longe usa o inteiro:", String(e)); return null; }
+}
+
 /** junta 2 geometrias indexadas com os mesmos atributos (sem depender do BufferGeometryUtils pros atributos inteiros) */
 function juntar(gs: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   const out = new THREE.BufferGeometry(); let base = 0; const idx: number[] = [];
@@ -195,7 +225,7 @@ const PELE_PARS = /* glsl */ `
 `;
 
 export function criarMultidao(o: { gltf: GLTF; starTex: THREE.Texture; max: number }): MultidaoHandle {
-  const { tex, clipes, geo, espessura } = assar(o.gltf, o.starTex);
+  const { tex, clipes, geo, geoLonge, espessura } = assar(o.gltf, o.starTex);
   const uni = { uAnim: { value: tex }, uTempo: { value: 0 }, uFps: { value: FPS_ASSADO }, uLuz: { value: new THREE.Color(COR_LUZ) }, uFixa: { value: corDesenho(new THREE.Color(COR_MOCHILA)) }, uEsp: { value: espessura } };
   // a ARMADURA desenhada (o mesmo toon dos corpos completos: 3 faixas, brilho recortado, borda na cor da luz) — a cor é
   // a da instância (vColor) e o visor sai na cor da luz
@@ -231,28 +261,36 @@ export function criarMultidao(o: { gltf: GLTF; starTex: THREE.Texture; max: numb
     sh.fragmentShader = sh.fragmentShader.replace("#include <color_fragment>", "#include <color_fragment>\n diffuseColor.rgb = diffuse;");   // a tinta não pega a cor da instância
   };
   tinta.customProgramCacheKey = () => "multidao-tinta-v1";
-  // 2 grupos da MESMA faixa de índices: armadura e contorno (1 InstancedMesh, 2 draw calls)
-  const n = geo.index!.count; geo.clearGroups(); geo.addGroup(0, n, 0); geo.addGroup(0, n, 1);
-  const aAnim = new THREE.InstancedBufferAttribute(new Float32Array(o.max * 4), 4); aAnim.setUsage(THREE.DynamicDrawUsage);
-  geo.setAttribute("aAnim", aAnim);
-  const malha = new THREE.InstancedMesh(geo, [toon, tinta], o.max);
-  malha.instanceMatrix.setUsage(THREE.DynamicDrawUsage); malha.count = 0; malha.frustumCulled = false; malha.name = "multidao-gpu";
-  malha.setColorAt(0, new THREE.Color(1, 1, 1));
+  // cada nível: 2 grupos da MESMA faixa de índices (armadura e contorno) — 1 InstancedMesh, 2 draw calls
+  const nivel = (g: THREE.BufferGeometry, max: number, nome: string) => {
+    const n = g.index!.count; g.clearGroups(); g.addGroup(0, n, 0); g.addGroup(0, n, 1);
+    const aAnim = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4); aAnim.setUsage(THREE.DynamicDrawUsage); g.setAttribute("aAnim", aAnim);
+    const m = new THREE.InstancedMesh(g, [toon, tinta], max);
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.count = 0; m.frustumCulled = false; m.name = nome; m.setColorAt(0, new THREE.Color(1, 1, 1));
+    return { m, aAnim, k: 0, max };
+  };
+  const perto = nivel(geo, o.max, "multidao-gpu"), longe = nivel(geoLonge === geo ? geo.clone() : geoLonge, o.max, "multidao-gpu-longe");
+  const malha = new THREE.Group(); malha.name = "multidao"; malha.add(perto.m, longe.m);
   const mI = new THREE.Matrix4(), q = new THREE.Quaternion(), eixo = new THREE.Vector3(0, 1, 0), p = new THREE.Vector3(), um = new THREE.Vector3(1, 1, 1), cI = new THREE.Color();
+  const subir = (nv: typeof perto) => {
+    const { m, aAnim, k } = nv; m.count = k;
+    m.instanceMatrix.clearUpdateRanges(); m.instanceMatrix.addUpdateRange(0, k * 16); m.instanceMatrix.needsUpdate = true;
+    aAnim.clearUpdateRanges(); aAnim.addUpdateRange(0, k * 4); aAnim.needsUpdate = true;
+    if (m.instanceColor) { m.instanceColor.clearUpdateRanges(); m.instanceColor.addUpdateRange(0, k * 3); m.instanceColor.needsUpdate = true; }
+  };
   return {
     malha, clipes,
-    colocar(i, x, y, z, rumo, pose, cor, fase) {
-      malha.setMatrixAt(i, mI.compose(p.set(x, y, z), q.setFromAxisAngle(eixo, rumo), um));
-      malha.setColorAt(i, corDesenho(cor, cI));
-      const c = clipes[pose]; aAnim.setXYZW(i, c.inicio, c.quadros, fase, 1);
+    comecar() { perto.k = 0; longe.k = 0; },
+    adicionar(x, y, z, rumo, pose, cor, fase, ehLonge) {
+      const nv = ehLonge ? longe : perto; if (nv.k >= nv.max) return false;
+      const i = nv.k++;
+      nv.m.setMatrixAt(i, mI.compose(p.set(x, y, z), q.setFromAxisAngle(eixo, rumo), um));
+      nv.m.setColorAt(i, corDesenho(cor, cI));
+      const c = clipes[pose]; nv.aAnim.setXYZW(i, c.inicio, c.quadros, fase, 1);
+      return true;
     },
-    fechar(k) {
-      malha.count = k; malha.instanceMatrix.needsUpdate = true; if (malha.instanceColor) malha.instanceColor.needsUpdate = true; aAnim.needsUpdate = true;
-      malha.instanceMatrix.clearUpdateRanges(); malha.instanceMatrix.addUpdateRange(0, k * 16);
-      aAnim.clearUpdateRanges(); aAnim.addUpdateRange(0, k * 4);
-      if (malha.instanceColor) { malha.instanceColor.clearUpdateRanges(); malha.instanceColor.addUpdateRange(0, k * 3); }
-    },
+    fechar() { subir(perto); subir(longe); },
     atualizar(t) { uni.uTempo.value = t; },
-    dispose() { malha.removeFromParent(); geo.dispose(); toon.dispose(); tinta.dispose(); tex.dispose(); },
+    dispose() { malha.removeFromParent(); perto.m.geometry.dispose(); longe.m.geometry.dispose(); toon.dispose(); tinta.dispose(); tex.dispose(); },
   };
 }

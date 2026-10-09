@@ -69,7 +69,7 @@ function geoSilhueta(): THREE.BufferGeometry {
 }
 
 export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf: GLTF | null; starTex: THREE.Texture; low: boolean; max?: number }): FrotaHandle {
-  const MAX = o.max ?? (o.low ? 8 : 18), MAX_SILHUETAS = o.low ? 300 : 900, MAX_MULTIDAO = 220, DIST_MULTIDAO = 90;
+  const MAX = o.max ?? (o.low ? 8 : 18), MAX_SILHUETAS = o.low ? 300 : 900, MAX_MULTIDAO = 220, DIST_MULTIDAO = 90, DIST_MULTIDAO_PERTO = 35;
   const corpos: Corpo[] = [];
   // as SILHUETAS: um InstancedMesh pra gente e outro pras motos (cor por instância)
   // OPACA (transparente custava a ordenação e a mistura de centenas de silhuetas por quadro)
@@ -84,7 +84,10 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   let multidao: MultidaoHandle | null = null;
   const semMultidao = typeof location !== "undefined" && new URLSearchParams(location.search).has("semMultidao");   // A/B
   const tAssar = o.gltf && !o.low && !semMultidao ? setTimeout(() => {
-    try { multidao = criarMultidao({ gltf: o.gltf!, starTex: o.starTex, max: MAX_MULTIDAO }); o.cena.add(multidao.malha); }
+    try {
+      const t0 = performance.now(); multidao = criarMultidao({ gltf: o.gltf!, starTex: o.starTex, max: MAX_MULTIDAO }); o.cena.add(multidao.malha);
+      if (process.env.NODE_ENV !== "production") console.info(`[frota] multidão na GPU pronta em ${Math.round(performance.now() - t0)} ms`);
+    }
     catch (e) { console.warn("[frota] multidão na GPU não montou — fica a silhueta:", String((e as Error)?.stack ?? e)); }
   }, 1500) : null;
   /** quem aparece (silhueta ou corpo): o estado aproximado de cada uma, refeito a cada escolha (e a cada quadro, pra quem se move) */
@@ -219,7 +222,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       // 1b) as SILHUETAS: todo mundo que aparece e NÃO tem corpo completo (quem se move é refeito a cada quadro)
       {
         const comCorpo = new Set(corpos.filter((k) => k.id && k.av.group.visible).map((k) => k.id!));
-        let ni = 0, nm = 0, nmul = 0;
+        let ni = 0, nm = 0; multidao?.comecar();
         quadroSil = (quadroSil + 1) % 4;
         for (let iv = 0; iv < vistos.length; iv++) {
           const v = vistos[iv]!;
@@ -235,12 +238,13 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
           else if (e.pose === "deitado") { qD.setFromAxisAngle(eixoX, -Math.PI / 2 * e.sentar); qS.multiply(qD); dy = 0.55 * e.sentar; }
           else if (e.pose === "moto") { dy = 0.85; sy = 0.75; }
           // perto: a multidão animada (a moto continua a silhueta dela, logo abaixo)
-          if (multidao && nmul < MAX_MULTIDAO && Math.hypot(e.x - ctx.cam.x, y - ctx.cam.y, e.z - ctx.cam.z) < DIST_MULTIDAO) { multidao.colocar(nmul++, e.x, y, e.z, e.rumo, e.pose, cor, faseDe(v.id)); }
+          const dC = Math.hypot(e.x - ctx.cam.x, y - ctx.cam.y, e.z - ctx.cam.z);
+          if (multidao && dC < DIST_MULTIDAO && multidao.adicionar(e.x, y, e.z, e.rumo, e.pose, cor, faseDe(v.id), dC > DIST_MULTIDAO_PERTO)) { /* na multidão */ }
           else if (ni < MAX_SILHUETAS) { mS.compose(pS.set(e.x, y + dy, e.z), qS, eS.set(1, sy, 1)); silhuetas.setMatrixAt(ni, mS); silhuetas.setColorAt(ni, cor); ni++; }
           if (e.pose === "moto" && nm < motosSil.instanceMatrix.count) { qS.setFromAxisAngle(eixoY, e.rumo); mS.compose(pS.set(e.x, y + 0.75, e.z), qS, eS.set(1, 1, 1)); motosSil.setMatrixAt(nm, mS); motosSil.setColorAt(nm, cor); nm++; }
         }
         silhuetas.count = ni; motosSil.count = nm;
-        if (multidao) { multidao.fechar(nmul); multidao.atualizar(t); }
+        if (multidao) { multidao.fechar(); multidao.atualizar(t); }
         silhuetas.instanceMatrix.needsUpdate = true; motosSil.instanceMatrix.needsUpdate = true;
         if (silhuetas.instanceColor) silhuetas.instanceColor.needsUpdate = true; if (motosSil.instanceColor) motosSil.instanceColor.needsUpdate = true;
       }
