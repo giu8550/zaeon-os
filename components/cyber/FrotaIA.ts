@@ -21,10 +21,11 @@ import { criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz"
 import { criarMoto, type MotoHandle } from "./Moto";
 import { gerarFrota, type AgenteIA } from "@/lib/cyber/frota/frota";
 import { planejarDia, type PlanoDia } from "@/lib/cyber/frota/plano";
-import { diaDe, minutoDoDia } from "@/lib/cyber/frota/agenda";
+import { diaDe, fullNoDia, minutoDoDia } from "@/lib/cyber/frota/agenda";
 import { estadoDaIA, type EstadoIA } from "@/lib/cyber/frota/corpo";
 import { episodiosDoDia, type Episodio } from "@/lib/cyber/frota/conversas";
 import type { ConfigSalva } from "@/lib/cyber/frota/config";
+import type { PedidoFrota, RespostaFrota } from "./frota.worker";
 import { desviar, empurrao, type P2 } from "@/lib/cyber/colisaoAtores";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
@@ -47,6 +48,8 @@ export type CtxFrota = { cam: THREE.Vector3; eu: { x: number; y: number; z: numb
  *  `ALCANCE_SILHUETA` m; um novo só toma a vaga de um que já tem corpo se estiver a menos de `TROCA` × a distância dele */
 const ESCOLHE_A_CADA = 0.4, ALCANCE = 70, FICA = 1.3, ALCANCE_SILHUETA = 240, TROCA = 0.55;
 const MOVE = new Set(["andando", "mochila", "moto"]);
+/** quanto da varredura cabe num quadro (ms) */
+const ORCAMENTO_MS = 2.5;
 const TAG = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const BALAO = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:220px;font:500 12.5px system-ui,sans-serif;line-height:1.3;padding:6px 10px;border-radius:14px 14px 14px 4px;background:rgba(255,255,255,.94);color:#0b1020;box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:none;display:none;";
 
@@ -70,6 +73,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   silhuetas.setColorAt(0, new THREE.Color()); motosSil.setColorAt(0, new THREE.Color());
   /** quem aparece (silhueta ou corpo): o estado aproximado de cada uma, refeito a cada escolha (e a cada quadro, pra quem se move) */
   let vistos: { id: string; e: EstadoIA; move: boolean }[] = [];
+  let varrer: { ags: { agente: AgenteIA; blocos: PlanoDia["agentes"] extends Map<string, infer V> ? V extends { blocos: infer B } ? B : never : never }[]; i: number; lista: { id: string; e: EstadoIA; move: boolean; d: number }[]; n: number } | null = null;
   const mS = new THREE.Matrix4(), qS = new THREE.Quaternion(), pS = new THREE.Vector3(), eS = new THREE.Vector3(), cS = new THREE.Color(), eixoX = new THREE.Vector3(1, 0, 0), eixoY = new THREE.Vector3(0, 1, 0), qD = new THREE.Quaternion();
   let config: ConfigSalva | null = null, offset = 0, frota: AgenteIA[] = [], porId = new Map<string, AgenteIA>();
   let plano: PlanoDia | null = null, eps = new Map<string, Episodio[]>(), dia = -1, calculando = false;
@@ -79,16 +83,39 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   const w = new THREE.Vector3(), proj = new THREE.Vector3();
 
   /** o plano do dia (uma vez por dia, fora do quadro) */
+  // o WORKER do plano (components/cyber/frota.worker): com 2000 IAs o plano + as conversas levam ~1 s — fora da tela
+  let worker: Worker | null = null, pedidoId = 0;
+  try { worker = new Worker(new URL("./frota.worker.ts", import.meta.url)); } catch { worker = null; }
+  let prazo: ReturnType<typeof setTimeout> | null = null;
+  /** o worker falhou (não carregou, deu erro, não respondeu em 10 s): desliga ele e calcula do jeito antigo (no ocioso) */
+  const semWorker = (motivo: string) => {
+    if (!worker) return; console.warn("[frota] sem worker —", motivo);
+    worker.terminate(); worker = null; if (prazo) clearTimeout(prazo); prazo = null;
+    calculando = false; if (config) recalcular(diaDe(agoraMs()));
+  };
+  if (worker) {
+    worker.onmessage = (ev: MessageEvent<RespostaFrota>) => {
+      const r = ev.data; if (r.id !== pedidoId) return;   // (um pedido velho: a config mudou no meio)
+      if (prazo) clearTimeout(prazo); prazo = null;
+      if ("erro" in r) { semWorker(r.erro); return; }
+      calculando = false; plano = r.plano; eps = new Map(r.eps); dia = r.dia; varrer = null;
+    };
+    worker.onerror = (e) => { e.preventDefault?.(); semWorker(e.message || "erro ao carregar"); };
+    worker.onmessageerror = () => semWorker("mensagem ilegível");
+  }
   function recalcular(d: number) {
     if (!config || calculando) return;
     calculando = true;
+    if (worker) {
+      worker.postMessage({ id: ++pedidoId, frota: config.frota, dia: d, flags: config.flags, full: fullNoDia(d, config.modoFullAte) } satisfies PedidoFrota);
+      if (prazo) clearTimeout(prazo); prazo = setTimeout(() => semWorker("não respondeu em 10 s"), 10_000);
+      return;
+    }
     const fazer = () => {
       try {
-        const p = planejarDia(frota, d, config!.flags), m = new Map<string, Episodio[]>();
+        const p = planejarDia(frota, d, config!.flags, fullNoDia(d, config!.modoFullAte)), m = new Map<string, Episodio[]>();
         for (const e of episodiosDoDia(p, config!.flags)) for (const id of new Set(e.falas.map((f) => f.agente))) (m.get(id) ?? m.set(id, []).get(id)!).push(e);
-        // aquece os roteiros de todo mundo AGORA (no ocioso), senão a 1ª escolha montava ~600 de uma vez num quadro
-        const minuto = minutoDoDia(agoraMs()); for (const { agente, blocos } of p.agentes.values()) estadoDaIA(agente.id, blocos, minuto, config!.flags, true, false);
-        plano = p; eps = m; dia = d;
+        plano = p; eps = m; dia = d; varrer = null;
       } finally { calculando = false; }
     };
     const ric = (globalThis as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
@@ -123,7 +150,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   return {
     configurar(c, agoraServidor) {
       config = c; offset = agoraServidor - Date.now();
-      frota = gerarFrota(c.frota); porId = new Map(frota.map((a) => [a.id, a])); plano = null; dia = -1; escolhidos = [];
+      frota = gerarFrota(c.frota); porId = new Map(frota.map((a) => [a.id, a])); plano = null; dia = -1; escolhidos = []; varrer = null; calculando = false; pedidoId++;
       for (const k of corpos) k.id = null;
       recalcular(diaDe(agoraMs()));
     },
@@ -136,15 +163,22 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       // 1) quem aparece e quem ganha corpo completo (perto do MEU personagem, com histerese)
       const yDe = (e: EstadoIA) => (e.zaeon ? e.y + (ctx.ilhaY - ctx.pisoY) : e.y);
       const distEu = (e: EstadoIA) => Math.hypot(e.x - ctx.eu.x, yDe(e) - ctx.eu.y, e.z - ctx.eu.z);
+      // a VARREDURA de todo mundo é FATIADA: cada quadro avança até gastar `ORCAMENTO_MS` (com 2000 IAs, de uma vez
+      // eram ~13 ms — um tranco a cada 0,4 s; e ~400 ms na 1ª, com os roteiros frios); fechou a volta → escolhe
       escolherEm -= dt;
-      if (escolherEm <= 0) {
-        escolherEm = ESCOLHE_A_CADA;
-        const lista: { id: string; e: EstadoIA; move: boolean; d: number }[] = []; let n = 0;
-        for (const { agente, blocos } of plano.agentes.values()) {
-          const e = estadoDaIA(agente.id, blocos, minuto, config.flags, ctx.musica, false);
-          if (!e.visivel) continue; n++;
-          const d = distEu(e); if (d < ALCANCE_SILHUETA) lista.push({ id: agente.id, e, move: MOVE.has(e.pose), d });
+      varrer ??= { ags: [...plano.agentes.values()], i: 0, lista: [], n: 0 };
+      { const t0 = performance.now(), v = varrer;
+        while (v.i < v.ags.length && performance.now() - t0 < ORCAMENTO_MS) {
+          for (const lim = Math.min(v.ags.length, v.i + 40); v.i < lim; v.i++) {
+            const { agente, blocos } = v.ags[v.i]!, e = estadoDaIA(agente.id, blocos, minuto, config.flags, ctx.musica, false);
+            if (!e.visivel) continue; v.n++;
+            const d = distEu(e); if (d < ALCANCE_SILHUETA) v.lista.push({ id: agente.id, e, move: MOVE.has(e.pose), d });
+          }
         }
+      }
+      if (escolherEm <= 0 && varrer.i >= varrer.ags.length) {
+        escolherEm = ESCOLHE_A_CADA;
+        const { lista, n } = varrer; varrer = null;
         online = n; lista.sort((a, b) => a.d - b.d); vistos = lista.slice(0, MAX_SILHUETAS);
         const dist = new Map(lista.map((c) => [c.id, c.d]));
         // quem já tem corpo FICA enquanto estiver no alcance largo; a vaga só troca por alguém MUITO mais perto
@@ -253,6 +287,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     online: () => online,
     mostrar(on) { visivel = on; },
     dispose() {
+      if (prazo) clearTimeout(prazo); worker?.terminate(); worker = null;
       for (const k of corpos) { k.av.dispose(); k.moto?.dispose(); k.tag.remove(); k.balao.remove(); } corpos.length = 0;
       for (const m of [silhuetas, motosSil]) { m.geometry.dispose(); m.removeFromParent(); m.dispose(); } matSil.dispose();
     },

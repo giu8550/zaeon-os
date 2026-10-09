@@ -70,20 +70,24 @@ function atividadeDoIntervalo(r: Acaso, a: AgenteIA, flags: FlagsFrota): Ativida
   return ponderado(r, pesos);
 }
 
-/** a agenda de UM agente no dia (sem os eventos de grupo — veja `agendaDoGrupo`) */
-export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferido: AmbienteEstudo): Bloco[] {
+/** a agenda de UM agente no dia (sem os eventos de grupo — veja `agendaDoGrupo`). `full` = o MODO FULL (o dono quebra a
+ *  regra por uns dias): o dia é CONTÍNUO, da meia-noite à meia-noite — estudo e intervalos se alternando o dia inteiro,
+ *  sem folga e sem hora de começar (todo mundo online o tempo todo) */
+export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferido: AmbienteEstudo, full = false): Bloco[] {
   if (!flags.ativa) return [];
   const r = acasoDe("agenda", a.id, dia);
-  if (r() < REGRAS.folga) return [];   // folga
+  if (r() < REGRAS.folga && !full) return [];   // folga
   const hum = a.ritmo.humor;
-  // o começo: 9h + o costume dela, variando com o humor do dia (nunca antes das 9h)
-  const ini = REGRAS.inicio + Math.max(0, a.ritmo.chegada * (1 + (r() - 0.5) * hum * 1.6) + entre(r, -10, 25));
+  // o começo: 9h + o costume dela, variando com o humor do dia (nunca antes das 9h); no modo full, logo depois da meia-noite
+  const ini = full ? entre(r, 0, 12) : REGRAS.inicio + Math.max(0, a.ritmo.chegada * (1 + (r() - 0.5) * hum * 1.6) + entre(r, -10, 25));
   // o total de estudo do dia: 5–8 h, puxado pelo foco (mais pras que estudam mais), variando com o humor
   const foco = clamp(a.ritmo.foco + (r() - 0.5) * hum * 0.7, 0, 1);
-  const total = Math.round(REGRAS.estudoMin + (REGRAS.estudoMax - REGRAS.estudoMin) * foco);
+  const total = full ? 24 * 60 : Math.round(REGRAS.estudoMin + (REGRAS.estudoMax - REGRAS.estudoMin) * foco);
   const out: Bloco[] = [];
   let t = ini, estudado = 0, guarda = 0;
-  while (estudado < total - 5 && guarda++ < 40) {
+  // no modo full, METADE começa o dia por um intervalo (todo mundo estudando junto à meia-noite lotava as salas)
+  if (full && r() < 0.5) { const at = atividadeDoIntervalo(r, a, flags), dur = Math.round(entre(r, REGRAS.intervalo[0], REGRAS.intervalo[1])); if (at) out.push({ ini: t, fim: t + dur, atividade: at }); t += dur; }
+  while (estudado < total - 5 && t < 24 * 60 && guarda++ < (full ? 200 : 40)) {
     const lugar = lugarDeEstudo(r, flags, preferido);
     if (lugar) {
       const [b0, b1] = REGRAS.bloco, alvo = b0 + (b1 - b0) * (0.25 + 0.6 * foco), dur = Math.min(total - estudado, Math.round(alvo + entre(r, -12, 12)));
@@ -101,12 +105,12 @@ export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferid
 
 /** a agenda do GRUPO no dia: as de cada um + o lugar de estudo preferido do grupo + a FESTA (todos juntos, à noite) +
  *  as CORRIDAS (intervalos de moto que se cruzam viram corrida juntos, na janela em comum) */
-export function agendaDoGrupo(membros: readonly AgenteIA[], dia: number, flags: FlagsFrota): Map<string, Bloco[]> {
+export function agendaDoGrupo(membros: readonly AgenteIA[], dia: number, flags: FlagsFrota, full = false): Map<string, Bloco[]> {
   const out = new Map<string, Bloco[]>();
   if (!membros.length) return out;
   const g = membros[0]!.grupo, rg = acasoDe("grupo", g, dia);
   const preferido = escolher(rg, AMBIENTES_ESTUDO);
-  for (const a of membros) out.set(a.id, agendaBase(a, dia, flags, preferido));
+  for (const a of membros) out.set(a.id, agendaBase(a, dia, flags, preferido, full));
   // CORRIDAS: cada intervalo de moto que cruza o de um amigo vira um evento (o maior trecho em comum)
   if (flags.corridas && flags.moto) {
     const motos = membros.flatMap((a) => (out.get(a.id) ?? []).filter((b) => b.atividade === "moto").map((b) => ({ a, b })));
@@ -124,10 +128,16 @@ export function agendaDoGrupo(membros: readonly AgenteIA[], dia: number, flags: 
   }
   // FESTA: o grupo vai junto (quem gosta) — começa entre 19h e 21h, depois do dia de todo mundo
   if (flags.festa && rg() < REGRAS.festaChance) {
-    const fimDoDia = Math.max(...membros.map((a) => (out.get(a.id) ?? []).at(-1)?.fim ?? 0));
+    const fimDoDia = full ? 0 : Math.max(...membros.map((a) => (out.get(a.id) ?? []).at(-1)?.fim ?? 0));   // (full: o dia não acaba — a festa abre espaço)
     const ini = Math.max(fimDoDia + 15, Math.round(entre(rg, REGRAS.festaIni[0], REGRAS.festaIni[1]))), dur = inteiro(rg, REGRAS.festaDur[0], REGRAS.festaDur[1]);
     const vao = membros.filter((a) => (out.get(a.id) ?? []).length && a.ritmo.festa > 0.25);
-    if (vao.length >= 2 && ini + dur < 24 * 60) for (const a of vao) out.get(a.id)!.push({ ini, fim: ini + dur, atividade: "festa", ambiente: "lounge", evento: `festa-${g}-${dia}` });
+    if (vao.length >= 2 && ini + dur < 24 * 60) for (const a of vao) {
+      const fim = ini + dur, ag = out.get(a.id)!;
+      // abre o espaço da festa na agenda (no modo full ela está cheia): corta o que cruza [ini, fim] — o resto continua
+      const resto = ag.flatMap((b): Bloco[] => (b.fim <= ini || b.ini >= fim ? [b] : [...(b.ini < ini - 5 ? [{ ...b, fim: ini }] : []), ...(b.fim > fim + 5 ? [{ ...b, ini: fim, evento: undefined }] : [])]));
+      const festa: Bloco = { ini, fim, atividade: "festa", ambiente: "lounge", evento: `festa-${g}-${dia}` };
+      out.set(a.id, [...resto, festa].sort((x, y) => x.ini - y.ini));
+    }
   }
   return out;
 }
@@ -137,3 +147,6 @@ export function blocoEm(agenda: readonly Bloco[], min: number): Bloco | null {
   for (const b of agenda) if (min >= b.ini && min < b.fim) return b;
   return null;
 }
+
+/** o dia `dia` está no MODO FULL? (`ate` = até quando — epoch ms; o dia conta se COMEÇA antes disso) */
+export const fullNoDia = (dia: number, ate: number | null | undefined) => !!ate && dia * 86400000 - FUSO_MIN * 60000 < ate;

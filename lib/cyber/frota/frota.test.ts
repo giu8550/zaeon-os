@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { FROTA_PADRAO, gerarFrota, amigosDe } from "./frota";
-import { FLAGS_PADRAO, REGRAS, agendaBase, diaDe, minutoDoDia, type Bloco } from "./agenda";
+import { FLAGS_PADRAO, REGRAS, agendaBase, diaDe, fullNoDia, minutoDoDia, type Bloco } from "./agenda";
 import { planejarDia } from "./plano";
 import { estadoDaIA, MOV, OFFLINE, pontoDaGaragem, roteiroMoto, viagem } from "./corpo";
 import { CONVERSA, divaga, episodiosDoDia, limparFala, normalizarFala, promptEpisodio, tomDaResposta, validarFalas } from "./conversas";
 import { gerarFalasSemRepetir, gerarResposta, type DepsTexto } from "./texto";
-import { CONFIG_PADRAO, novoLote, sanitizarConfig, totalDaFrota } from "./config";
+import { CONFIG_PADRAO, aplicarMigracoes, novoLote, sanitizarConfig, totalDaFrota } from "./config";
 import { salaDoPonto, spotsDe } from "./lugares";
 import { CIDADE, mundo, salaEm } from "../ceu";
 
@@ -23,7 +23,7 @@ describe("a frota (700 IAs)", () => {
     expect(gerarFrota()).toEqual(frota);   // determinística
   });
   it("criar em massa acrescenta um lote sem mudar quem já existia", () => {
-    const c2 = novoLote(CONFIG_PADRAO, 100, 777), f2 = gerarFrota(c2.frota);
+    const c2 = novoLote(sanitizarConfig({ frota: FROTA_PADRAO }), 100, 777), f2 = gerarFrota(c2.frota);
     expect(totalDaFrota(c2)).toBe(800); expect(f2.slice(0, 700)).toEqual(frota);
     expect(new Set(f2.map((a) => a.nome)).size).toBe(800);
     expect(Math.min(...f2.slice(700).map((a) => a.grupo))).toBeGreaterThan(Math.max(...frota.map((a) => a.grupo)));
@@ -32,7 +32,26 @@ describe("a frota (700 IAs)", () => {
     const c = sanitizarConfig({ frota: { lotes: [{ semente: 5, total: 99999 }, { semente: "x" }], tamanhoGrupo: 99 }, flags: { moto: false, lixo: 1 }, versao: -3 });
     expect(c.frota.lotes[0]!.total).toBeLessThanOrEqual(2000); expect(c.frota.lotes).toHaveLength(1); expect(c.frota.tamanhoGrupo).toBe(8);
     expect(c.flags.moto).toBe(false); expect(c.flags.estudoPlataforma).toBe(true); expect(c.versao).toBe(1);
-    expect(sanitizarConfig(null)).toEqual(CONFIG_PADRAO);
+    expect(aplicarMigracoes(sanitizarConfig(null)).c).toEqual(CONFIG_PADRAO);
+  });
+  it("MODO FULL até 12/10: o prazo fecha no fim do dia 12; no modo full ~todo mundo online de madrugada (e sem ele, ninguém)", () => {
+    const ate = CONFIG_PADRAO.modoFullAte;
+    expect(fullNoDia(diaDe(Date.UTC(2026, 9, 12, 15)), ate)).toBe(true);
+    expect(fullNoDia(diaDe(Date.UTC(2026, 9, 13, 4)), ate)).toBe(false);   // 13/10 01h em Fortaleza: acabou
+    expect(fullNoDia(DIA, null)).toBe(false);
+    const turma = frota.slice(0, 200), full = planejarDia(turma, DIA, FLAGS_PADRAO, true), normal = planejarDia(turma, DIA, FLAGS_PADRAO, false);
+    const online = (p: typeof full, m: number) => [...p.agentes.values()].filter(({ agente, blocos }) => estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false).visivel).length;
+    expect(online(full, 3 * 60)).toBeGreaterThan(turma.length * 0.85); expect(online(normal, 3 * 60)).toBe(0);
+    expect(online(full, 15 * 60)).toBeGreaterThan(turma.length * 0.85);
+  });
+  it("MIGRAÇÃO +1300: a config salva antiga (700) vira 2000 UMA vez; quem já existia não muda; apagar o lote depois não traz de volta", () => {
+    const salva = sanitizarConfig({ frota: { lotes: [{ semente: 2026, total: 700 }], tamanhoGrupo: 4 }, flags: {}, versao: 1 });
+    const m = aplicarMigracoes(salva); expect(m.mudou).toBe(true); expect(totalDaFrota(m.c)).toBe(2000);
+    expect(gerarFrota(m.c.frota).slice(0, 700)).toEqual(gerarFrota(salva.frota));   // os 700 continuam os mesmos
+    expect(aplicarMigracoes(m.c).mudou).toBe(false);                                    // não aplica de novo
+    const semOLote = sanitizarConfig({ ...m.c, frota: { ...m.c.frota, lotes: m.c.frota.lotes.slice(0, 1) } });
+    expect(aplicarMigracoes(semOLote).c.frota.lotes).toHaveLength(1);                   // o dono apagou: não volta
+    expect(totalDaFrota(CONFIG_PADRAO)).toBe(2000); expect(new Set(gerarFrota(CONFIG_PADRAO.frota).map((a) => a.nome)).size).toBe(2000);
   });
 });
 

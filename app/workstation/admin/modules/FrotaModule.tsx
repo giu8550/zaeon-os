@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bot, Loader2, Plus, Rocket, Search, Trash2 } from "lucide-react";
 import { gerarFrota } from "@/lib/cyber/frota/frota";
 import { planejarDia } from "@/lib/cyber/frota/plano";
-import { diaDe, minutoDoDia, type FlagsFrota } from "@/lib/cyber/frota/agenda";
+import { diaDe, fullNoDia, minutoDoDia, type FlagsFrota } from "@/lib/cyber/frota/agenda";
 import { estadoDaIA } from "@/lib/cyber/frota/corpo";
 import { CONFIG_PADRAO, LIMITES, novoLote, sanitizarConfig, totalDaFrota, type ConfigSalva } from "@/lib/cyber/frota/config";
 
@@ -45,7 +45,7 @@ export default function FrotaModule({ glassPanel }: { glassPanel?: string }) {
   }, []);
 
   const frota = useMemo(() => gerarFrota(cfg.frota), [cfg.frota]);
-  const plano = useMemo(() => planejarDia(frota, diaDe(agora), cfg.flags), [frota, cfg.flags, agora]);
+  const plano = useMemo(() => planejarDia(frota, diaDe(agora), cfg.flags, fullNoDia(diaDe(agora), cfg.modoFullAte)), [frota, cfg.flags, cfg.modoFullAte, agora]);
   const estados = useMemo(() => { const m = minutoDoDia(agora); return new Map(frota.map((a) => [a.id, estadoDaIA(a.id, plano.agentes.get(a.id)?.blocos ?? [], m, cfg.flags, false, false)])); }, [frota, plano, cfg.flags, agora]);
   const resumo = useMemo(() => {
     const f = frota.filter((a) => a.genero === "f").length, c = frota.filter((a) => a.cloak).length, on = [...estados.values()].filter((e) => e.visivel);
