@@ -8,6 +8,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { corDaArmadura } from "@/lib/cyber/cores";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
@@ -45,6 +46,8 @@ export async function GET() {
     academicLevel: u.academicLevel || "Graduação",
     inviter,
     fundador: isSuperAdmin({ email: session.user.email, role: u.role }),
+    /** a cor REAL da armadura (a mesma que os outros veem no cyberespaço) — lib/cyber/cores */
+    corArmadura: corDaArmadura(u.id),
   });
 }
 

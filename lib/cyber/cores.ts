@@ -1,23 +1,17 @@
 /**
  * Cores dos seres de luz do cyberespaço — PURO. Todo mundo é um ser de LUZ (aura clara); o que muda é a cor da
- * ARMADURA. A SUA é sempre azul (você se reconhece); as dos outros vêm de uma paleta SEM azul, atribuída pela ordem
- * canônica dos membros (igual pra todos, e cores diferentes entre si até 6 pessoas). Mais tarde isto vira
- * cosmético escolhido no perfil: é só devolver a cor escolhida em `corDaArmadura`.
+ * ARMADURA. Cada pessoa tem UMA cor REAL (lib/lounge3d/tipos `corDoUsuario`, determinística pelo id): ela se vê com
+ * essa cor e todo mundo a vê com a mesma (antes: "a minha é sempre azul" e a dos outros pela ordem da sala — cada
+ * observador via uma cor diferente pra mesma pessoa). Quando a skin virar cosmético escolhido no Perfil, a escolha
+ * entra em `corDaArmadura`.
  */
+import { corDoUsuario } from "@/lib/lounge3d/tipos";
+
+/** a cor de quem ainda não tem id (visitante, prévia sem login) */
 export const ARMADURA_EU = "#2f7bff";
 export const COR_LUZ = "#bfeaff";   // aura/viseira/neurônios: a "luz" é comum a todos
 
-/** Paleta dos outros: sem azul/ciano pra nunca confundir com você. */
-export const ARMADURAS_OUTROS = ["#ff5fa8", "#ffb43b", "#3fe08a", "#b36bff", "#ff6a4d", "#e6e24a"] as const;
-
-/** a cor com que EU me vejo (no cyberespaço e na vitrine do Perfil). Quando a skin/cor virar cosmético escolhido no
- *  Perfil (salvo no servidor), é aqui que a escolha entra. */
-export const minhaArmadura = (): string => ARMADURA_EU;
-
-/** `ordem` = ids dos membros na ordem canônica (members[]). */
-export function corDaArmadura(ordem: string[], id: string, euId: string): string {
-  if (id === euId) return minhaArmadura();
-  const outros = ordem.filter((x) => x !== euId);
-  const i = outros.indexOf(id);
-  return ARMADURAS_OUTROS[(i < 0 ? outros.length : i) % ARMADURAS_OUTROS.length]!;
-}
+/** a cor REAL da armadura de alguém — a mesma pra ele e pra todos os observadores */
+export const corDaArmadura = (id: string | null | undefined): string => (id ? corDoUsuario(id) : ARMADURA_EU);
+/** a cor com que EU me vejo (no cyberespaço e na vitrine do Perfil) = a minha cor real */
+export const minhaArmadura = (id?: string | null): string => corDaArmadura(id);
