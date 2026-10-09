@@ -59,6 +59,16 @@ export const PERFIS_VIDA: Readonly<Record<string, PerfilVida>> = {
   aura: { id: "aura", semente: 23, lado: 2.2, vaga: { x: -50, z: -100, rumo: Math.atan2(50, 100) } },
   teo: { id: "teo", semente: 37, lado: 0, vaga: { x: -40, z: -108, rumo: Math.atan2(40, 108) } },
   examiner: { id: "examiner", semente: 53, lado: 4.4, vaga: { x: -30, z: -116, rumo: Math.atan2(30, 116) } },
+  zenita: { id: "zenita", semente: 61, lado: -2.2, vaga: { x: -20, z: -124, rumo: Math.atan2(20, 124) } },
+  core_active: { id: "core_active", semente: 71, lado: 0, vaga: { x: -10, z: -132, rumo: Math.atan2(10, 132) } },
+  scholar: { id: "scholar", semente: 79, lado: 2.2, vaga: { x: 0, z: -140, rumo: Math.atan2(0, 140) } },
+  zaeon: { id: "zaeon", semente: 83, lado: -2.2, vaga: { x: -70, z: -84, rumo: Math.atan2(70, 84) } },
+  caio: { id: "caio", semente: 89, lado: 0, vaga: { x: -80, z: -76, rumo: Math.atan2(80, 76) } },
+  enfermagem: { id: "enfermagem", semente: 97, lado: 2.2, vaga: { x: -90, z: -68, rumo: Math.atan2(90, 68) } },
+  medicina: { id: "medicina", semente: 101, lado: -2.2, vaga: { x: -100, z: -60, rumo: Math.atan2(100, 60) } },
+  farmacia: { id: "farmacia", semente: 107, lado: 0, vaga: { x: -110, z: -52, rumo: Math.atan2(110, 52) } },
+  quimica: { id: "quimica", semente: 109, lado: 2.2, vaga: { x: -120, z: -44, rumo: Math.atan2(120, 44) } },
+  "eng-civil": { id: "eng-civil", semente: 113, lado: -2.2, vaga: { x: -130, z: -36, rumo: Math.atan2(130, 36) } },
 };
 
 /** onde o operador fica numa estação (no referencial dela: +z = rumo ao coração; o console fica em z −0,95) */

@@ -4,13 +4,14 @@
  * que é uma função do relógio: todo cliente a vê no mesmo lugar, fazendo a mesma coisa, sem rede.
  * Anima com as MESMAS poses dos jogadores (AvatarLuz): andar, digitar na estação (`sentado`), dançar, meditar e
  * pilotar a moto (com a IK das mãos e dos pés nos pontos da moto). A pose feminina vale quando ela está parada em pé.
- * Leve: o VRM só baixa depois que a cena montou; longe da câmera, anima menos vezes; escondido, nem anima.
+ * Leve: o VRM só baixa quando a câmera chega perto (e é solto quando ela se afasta); longe, anima menos vezes;
+ * escondido, nem anima.
  */
 import * as THREE from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
-import { carregarVrm, tingirVrm } from "./AvatarVrm";
+import { acabarVrm, carregarVrm, tingirVrm } from "./AvatarVrm";
 import { vestirAcessorios, type AcessoriosHandle } from "./AcessoriosVrm";
 import { criarMoto, type MotoHandle } from "./Moto";
 import { mundo } from "@/lib/cyber/ceu";
@@ -30,19 +31,31 @@ export type PersonagemVivoHandle = {
   dispose(): void;
 };
 
-const DIST_ANIMA_SEMPRE = 70, DIST_ESCONDE = 650;
+const DIST_ANIMA_SEMPRE = 70, DIST_ESCONDE = 650, DIST_CARREGA = 160, DIST_SOLTA = 360;
 
 export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; corMoto: string; corpo: CorpoVrm; perfil: PerfilVida; starTex: THREE.Texture; low: boolean; gltf: GLTF; cena: THREE.Scene }): PersonagemVivoHandle {
   const raiz = new THREE.Group(); raiz.name = `personagem-${o.id}`; o.cena.add(raiz);
   const av: AvatarLuzHandle = criarAvatarLuz(o.cor, o.starTex, o.low, o.gltf, { anime: true });
   av.semMochila(); av.esperarCorpo(true); raiz.add(av.group);
   const poseParada = o.corpo.pose ? POSES_VRM[o.corpo.pose] : null;
-  let vrm: VRM | null = null, acessorios: AcessoriosHandle | null = null, vivo = true;
-  carregarVrm(o.corpo.url).then((v) => {
-    if (!vivo) { VRMUtils.deepDispose(v.scene); return; }
-    tingirVrm(v, o.corpo.tintas); av.usarVrm(v); vrm = v;
-    if (o.corpo.acessorios?.length) acessorios = vestirAcessorios(v, o.corpo.acessorios);
-  }).catch((e) => { console.warn(`[cyber] corpo de ${o.nome} (VRM) não carregou:`, e); av.esperarCorpo(false); });
+  // o corpo VRM (~10 MB cada) só baixa quando a câmera chega PERTO e é solto quando ela se afasta bem — com muitos
+  // personagens na cidadela, ninguém baixa todos de uma vez
+  let vrm: VRM | null = null, acessorios: AcessoriosHandle | null = null, vivo = true, carregando = false, geracao = 0;
+  const carregar = () => {
+    if (vrm || carregando) return;
+    carregando = true; const g = ++geracao;
+    carregarVrm(o.corpo.url).then((v) => {
+      carregando = false;
+      if (!vivo || g !== geracao) { VRMUtils.deepDispose(v.scene); return; }
+      tingirVrm(v, o.corpo.tintas); acabarVrm(v, o.corpo); av.usarVrm(v); vrm = v;
+      if (o.corpo.acessorios?.length) acessorios = vestirAcessorios(v, o.corpo.acessorios);
+    }).catch((e) => { carregando = false; console.warn(`[cyber] corpo de ${o.nome} (VRM) não carregou:`, e); });
+  };
+  const soltar = () => {
+    geracao++; carregando = false;
+    if (!vrm) return;
+    acessorios?.dispose(); acessorios = null; av.soltarVrm(); VRMUtils.deepDispose(vrm.scene); vrm = null;
+  };
 
   // a moto dele (na cor do card): estacionada na vaga dele, ao lado do lote da Zaeon, quando não está voando
   const moto: MotoHandle = criarMoto({ cor: o.corMoto, low: o.low }); raiz.add(moto.group);
@@ -63,6 +76,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
       const e = estadoEm(agora, o.perfil, cache); cache = e.bloco; estado = e;
       const p = mundo(e.pos); pos.set(p.x, 0, p.z);
       const dist = Math.hypot(cam.x - p.x, cam.z - p.z);
+      if (dist < DIST_CARREGA) carregar(); else if (dist > DIST_SOLTA) soltar();
       raiz.visible = dist < DIST_ESCONDE; if (!raiz.visible) return;
       // longe, anima a cada 3 quadros (acumulando o dt)
       pulo += dt; if (dist > DIST_ANIMA_SEMPRE && (pulo < 0.05)) return;
@@ -89,8 +103,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
       av.animar({ andando: e.andando, correndo: false, sentado: s.sentado, meditando: s.meditando, danca: s.danca, montado: m, dt: dtA, t });
     },
     dispose() {
-      vivo = false; acessorios?.dispose(); av.dispose(); moto.dispose();
-      if (vrm) VRMUtils.deepDispose(vrm.scene);
+      vivo = false; soltar(); av.dispose(); moto.dispose();
       raiz.removeFromParent();
     },
   };

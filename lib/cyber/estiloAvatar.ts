@@ -30,8 +30,17 @@ export const usaCorpoDoFundador = (fundador: boolean | undefined, busca: string)
 
 /** os ACESSÓRIOS feitos em código (presos aos ossos do VRM — components/cyber/AcessoriosVrm): o VRoid não tem esses */
 export type AcessorioVrm = "foneNoPescoco" | "presilhaLapis" | "oculosRedondos" | "presilhaEstrela" | "oculosRetangulares" | "golaCircuito"
-  | "gravataCarmesim" | "distintivoPrata" | "mechaCarmesim";
-export type CorpoVrm = { url: string; tintas: Readonly<Record<string, string>>; acessorios?: readonly AcessorioVrm[]; /** a pose parada (lib/cyber/posesVrm) */ pose?: "feminina" | "masculina" };
+  | "gravataCarmesim" | "distintivoPrata" | "mechaCarmesim"
+  | "presilhaRelogio" | "golaAlta"
+  | "monoculo" | "pingenteTriangulo" | "linhasCiano" | "gravataAzul" | "canetaPrata" | "cruzEnfermagem" | "estetoscopio"
+  | "oculosRetPrata" | "oculosProtecao" | "frascoVerde" | "capacete" | "coleteRefletivo";
+export type CorpoVrm = {
+  url: string; tintas: Readonly<Record<string, string>>; acessorios?: readonly AcessorioVrm[];
+  /** a pose parada (lib/cyber/posesVrm) */ pose?: "feminina" | "masculina";
+  /** gravidade na física do cabelo (o VRoid exporta sem — mecha longa fica espetada) */ gravidadeCabelo?: number;
+  /** peças sem os triângulos de certos ossos (ex.: o body do VRoid que cobre as mãos como luva) */ recortes?: readonly { peca: string; maos?: boolean; pescoco?: boolean; pernas?: boolean }[];
+  /** troca a cor só das partes coloridas da textura de uma peça (o branco fica) */ recolorir?: readonly { peca: string; cor: string }[];
+};
 /** os corpos VRM dos PERSONAGENS (os agentes que vivem na cidadela Zaeon), feitos no VRoid Studio (~/Documents/<id>.vroid)
  *  a partir do card (public/avatars/<id>): a roupa branca do VRoid é tingida aqui */
 export const CORPOS_VRM: Readonly<Record<string, CorpoVrm>> = {
@@ -40,5 +49,24 @@ export const CORPOS_VRM: Readonly<Record<string, CorpoVrm>> = {
   aura: { url: "/avatars/aura/aura.vrm", tintas: { Tops: "#b9a0f2", Bottoms: "#38407a" }, acessorios: ["oculosRedondos", "presilhaEstrela"], pose: "feminina" },
   // o blazer do VRoid é azul-marinho (textura) e a camisa é outra peça de "Tops" (a 007_02, fica branca): só o blazer
   // (007_01) escurece até o preto
+  // o terninho é o molde "Suit" (branco) e o body de gola alta é a peça "Onepiece" — tudo tingido aqui
+  zenita: { url: "/avatars/zenita/zenita.vrm", tintas: { Tops: "#bba386", Bottoms: "#b59e82", Onepiece: "#ece2cc", Shoes: "#6b4529" }, acessorios: ["presilhaRelogio", "golaAlta"], pose: "feminina",
+    gravidadeCabelo: 0.5, recortes: [{ peca: "Onepiece", maos: true, pernas: true }] },
+  // ── os assistentes e mentores da leva de 8/out (VRoid: moldes brancos, tingidos aqui; "Onepiece" = o body por baixo) ──
+  core_active: { url: "/avatars/core_active/core_active.vrm", tintas: { Tops: "#6f7d4c", Onepiece: "#f4f4f2", Bottoms: "#41608f", Shoes: "#f2f2f2" },
+    acessorios: ["distintivoPrata"], pose: "masculina", recortes: [{ peca: "Onepiece", maos: true, pescoco: true, pernas: true }] },
+  scholar: { url: "/avatars/scholar/scholar.vrm", tintas: { Tops: "#4b5361", Onepiece: "#a3a9b2", Bottoms: "#4b5361", Shoes: "#1d1e22" },
+    acessorios: ["monoculo"], pose: "masculina", recortes: [{ peca: "Onepiece", maos: true, pernas: true }] },
+  zaeon: { url: "/avatars/zaeon/zaeon.vrm", tintas: { Tops: "#b9c6d3", Bottoms: "#b3c0cd", Shoes: "#c3ced9" }, acessorios: ["pingenteTriangulo", "linhasCiano"], pose: "feminina", gravidadeCabelo: 0.4 },
+  caio: { url: "/avatars/caio/caio.vrm", tintas: { Bottoms: "#4a4e57", Shoes: "#5b3a24" }, recolorir: [{ peca: "Tops", cor: "#25335e" }],
+    acessorios: ["gravataAzul", "canetaPrata"], pose: "masculina" },
+  enfermagem: { url: "/avatars/enfermagem/enfermagem.vrm", tintas: { Tops: "#26386a", Bottoms: "#26386a", Shoes: "#f2f2f2" }, acessorios: ["cruzEnfermagem"], pose: "feminina" },
+  medicina: { url: "/avatars/medicina/medicina.vrm", tintas: { Tops: "#e9edf1", Onepiece: "#a8c6ea", Bottoms: "#27324d", Shoes: "#1d1e22" },
+    acessorios: ["estetoscopio"], pose: "masculina", recortes: [{ peca: "Onepiece", maos: true, pernas: true }] },
+  farmacia: { url: "/avatars/farmacia/farmacia.vrm", tintas: { Tops: "#e9edf1", Onepiece: "#d8c9ab", Bottoms: "#b49c74", Shoes: "#f2f2f2" },
+    acessorios: ["oculosRetPrata", "distintivoPrata"], pose: "masculina", recortes: [{ peca: "Onepiece", maos: true, pescoco: true, pernas: true }] },
+  quimica: { url: "/avatars/quimica/quimica.vrm", tintas: { Tops: "#e9edf1", Onepiece: "#1e1f24", Bottoms: "#23242a", Shoes: "#1d1e22" },
+    acessorios: ["oculosProtecao", "frascoVerde"], pose: "masculina", recortes: [{ peca: "Onepiece", maos: true, pescoco: true, pernas: true }] },
+  "eng-civil": { url: "/avatars/eng-civil/eng-civil.vrm", tintas: { Tops: "#8e9198", Bottoms: "#3f5f93", Shoes: "#b58a52" }, acessorios: ["capacete", "coleteRefletivo"], pose: "masculina" },
   examiner: { url: "/avatars/examiner/examiner.vrm", tintas: { "007_01_Tops": "#3a3836", Bottoms: "#26262c", Shoes: "#1b1b22" }, acessorios: ["gravataCarmesim", "distintivoPrata", "mechaCarmesim"], pose: "feminina" },
 };
