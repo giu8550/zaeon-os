@@ -62,6 +62,7 @@ import { atualizarRegiao, criarRegiao, soltarRegiao, type RegiaoCena } from "./r
 import { fundirEstaticos } from "./lotes";
 import { matrizDoAvatar, matrizesDaCena } from "./matrizes";
 import { umaPassadaNosTransparentes } from "./umaPassada";
+import { criarPoolGemeos, type PoolGemeos } from "./poolGemeos";
 import type { Regiao } from "@/lib/cyber/regioes";
 import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -557,6 +558,8 @@ export class CyberEngine {
   /** as LUZES das bases: um conjunto FIXO (o nº de luzes da cena não muda quando alguém entra — mudar recompila todos os
    *  materiais) que vai pras bases mais perto da câmera (components/cyber/BaseEstudo `luz`) */
   private luzesBase: THREE.PointLight[] = [];
+  /** as bases desenhadas juntas (components/cyber/poolGemeos) */
+  private poolBases: PoolGemeos | null = null;
   private acenderBases() {
     if (this.o.low) return;
     if (!this.luzesBase.length) for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0x9fd8ff, 0, 11); this.cena.scene.add(l); this.luzesBase.push(l); }
@@ -655,7 +658,7 @@ export class CyberEngine {
     // a Recepção sempre tem a mesa e os cristais no centro do salão: a mesa da anfitriã
     const lqg = this.zaeon() ? baseNoQG() : null;
     if (lqg && !this.baseQG) { this.baseQG = criarBase(lqg, COR_QG, this.cena.starTex, this.o.low); this.loteBase(this.baseQG); this.baseQG.group.position.y = this.yDoNivel("qg"); this.cena.scene.add(this.baseQG.group); }
-    if (!lqg && this.baseQG) { this.soltar(this.baseQG.group); this.baseQG.dispose(); this.baseQG = null; }
+    if (!lqg && this.baseQG) { this.poolBases?.remover(this.baseQG.group); this.soltar(this.baseQG.group); this.baseQG.dispose(); this.baseQG = null; }
     for (const a of [this.eu, ...this.remotos.values()]) { if (!a) continue; const c = this.corDe(a.id); if (c !== a.color) { a.color = c; a.av.recolorir(c); a.tag.style.color = c; } }
     // colisão: bases do anel + marcos (a MESMA lista; empurrarParaFora faz o deslizar)
     this.colisores = [...this.layouts.values()].filter((l) => !l.nivel).map((l) => ({ x: l.x, z: l.z, r: BASE_COLLIDER_R }))
@@ -2076,6 +2079,9 @@ export class CyberEngine {
   private loteBase(b: BaseEstudoHandle) {
     fundirEstaticos(b.group, { passo: (k, t) => b.atualizar({ dt: 1 / 30, t, ativa: k % 2 === 0, hover: k % 3 === 0, perto: k % 4 < 2, energia: (k % 5) / 4 }), manter: comDescendentes([b.monitor]) });
     for (let k = 0; k < 6; k++) b.atualizar({ dt: 1, t: 0, ativa: false, hover: false, perto: false, energia: 0 });   // volta ao repouso
+    // todas as bases desenhadas JUNTAS (components/cyber/poolGemeos): cada peça uma malha instanciada pra todas
+    if (!this.poolBases) { this.poolBases = criarPoolGemeos({ max: 64, nome: "pool-bases" }); this.cena.scene.add(this.poolBases.grupo); }
+    this.poolBases.registrar(b.group, [b.monitor]);
   }
   /** aplica o degrau da qualidade adaptativa: resolução (o pixel ratio do perfil × o degrau) e a aura dos avatares
    *  (a nebulosa lê o degrau direto no desenho) — nada recompila */
@@ -2499,6 +2505,7 @@ export class CyberEngine {
     }
     if (this.baseQG) { this.baseQG.group.position.y = this.yDoNivel("qg"); if (this.regiaoPerto(this.baseQG.group, "base-qg")) this.baseQG.atualizar({ dt, t, ativa: false, hover: false, perto: false }); }
     this.acenderBases();
+    this.poolBases?.atualizar();
     // motos: de longe some a moto inteira (ninguém vê 2 m de moto a 1 km); a montada está sempre perto da câmera
     for (const m of this.vagaMotos) this.regiaoPerto(m.g, "moto");
     for (const m of this.instMotos.values()) this.regiaoPerto(m.g, "moto");
@@ -2652,6 +2659,7 @@ export class CyberEngine {
     for (const p of this.personagens) { p.h.dispose(); p.tag.remove(); } this.personagens = [];
     this.falaZ = null; this.calarZaeon(); this.holoZaeon?.dispose();
     this.praca?.dispose(); this.bercario?.dispose(); if (this.farol) { this.farol.geometry.dispose(); (this.farol.material as THREE.Material).dispose(); }
+    this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
     this.somLounge?.dispose(); this.som.dispose();
