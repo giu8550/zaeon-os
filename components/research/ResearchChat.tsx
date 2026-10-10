@@ -504,7 +504,7 @@ export default function ResearchChat({
     } finally {
       setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined } : m)));
       setSending(false);
-      if (cerebro.ligado) setTimeout(() => void cerebro.refetch(), 1500); // o gatekeeper/fixar são fire-and-forget no servidor
+      if (cerebro.ligado) cerebro.conferirDepoisDoTurno(); // o gatekeeper/fixar são fire-and-forget no servidor
     }
   }, [input, sending, wt, runResearchGenerate, materializarArtefatos, modoTcc, tccWorkId, cerebro, anexoRef, onAtivar]);
   sendRef.current = (t?: string) => { void send(t); };

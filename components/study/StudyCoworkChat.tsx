@@ -51,6 +51,10 @@ import DocumentoArtefato from "@/components/studio/DocumentoArtefato";
 import { abrirDocumento, EVT_ABRIR_DOC, KINDS_EM_ABA, ROTULO_DOC, type DocArtefato } from "@/lib/chat/documentos";
 import { assuntoDe, pedeAula } from "@/lib/agent/aprender";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
+import { AnimatePresence } from "framer-motion";
+import BolinhaCerebro from "@/components/cerebro/BolinhaCerebro";
+import CerebroPanel from "@/components/cerebro/CerebroPanel";
+import { useCerebro } from "@/components/cerebro/useCerebro";
 import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
 import { fonteChat } from "@/lib/ui/chatFontScale";
 import { AvisoSoltar, ChipAnexo, EVT_ANEXAR, pdfDaBiblioteca, useAnexoChat } from "@/components/chat/useAnexoChat";
@@ -183,6 +187,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [tccAberto, setTccAberto] = useState(false);
   const abaAtivaRef = useRef<string | null>(null);
   abaAtivaRef.current = abaAtiva;
+  // o CÉREBRO da conversa ativa (o mesmo da Sala de Pesquisa — HANDOFF_CEREBRO_AURA §3): o turno já marca a conversa
+  // como estudável (lib/map/gatekeeper, pelo `cartolinaScopeId`); aqui entram a bolinha ("Gerar mapa") e o painel
+  const [cerebroAberto, setCerebroAberto] = useState(false);
+  const cerebro = useCerebro(abaAtiva, { aberto: cerebroAberto });
+  const conferirCerebro = useRef(cerebro.conferirDepoisDoTurno); conferirCerebro.current = cerebro.conferirDepoisDoTurno;
+  useEffect(() => { setCerebroAberto(false); }, [abaAtiva]);
   const tccDaAba = TCC_CROSS_ON && abaAtiva ? tccPorAba[abaAtiva] ?? null : null;
   // Trocar de aba fecha o TCC aberto (ele é DAQUELA conversa) e descobre se a nova aba tem TCC.
   useEffect(() => {
@@ -869,6 +879,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       setSending(false);
       // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
       if (tree) setTreeRefresh((n) => n + 1);
+      // a conversa pode ter virado ESTUDO (o servidor decide depois da resposta) → a bolinha "Gerar mapa" aparece
+      conferirCerebro.current();
     }
   }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso, aplicarFinal, anexoRef]);
   sendRefA.current = (t: string) => { void send(t); };
@@ -1092,8 +1104,36 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             </button>
           )}
           <div className="flex-1" />
+          {/* o MAPA da conversa: aparece quando ela vira estudo ("Gerar mapa"); depois, "Ver mapa" */}
+          {cerebro.ligado && abaAtiva && (
+            <BolinhaCerebro
+              estado={cerebro.estado}
+              completude={cerebro.mapa?.completudeAprendizado ?? 0}
+              aberto={cerebroAberto}
+              onClick={() => {
+                if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
+                else setCerebroAberto((v) => !v);
+              }}
+            />
+          )}
           <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
         </div>
+
+        {/* o painel do MAPA: por cima da conversa (abaixo da linha de cima, que segue mostrando a bolinha) */}
+        <AnimatePresence>
+          {cerebro.ligado && cerebroAberto && (
+            <div key="cerebro" className="absolute inset-x-0 bottom-0 top-[52px] z-40">
+              <CerebroPanel
+                st={cerebro}
+                onFechar={() => setCerebroAberto(false)}
+                onAbrirMensagem={(msgId) => {
+                  setCerebroAberto(false);
+                  requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(msgId)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+                }}
+              />
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* O documento aberto ocupa a sala (abaixo da linha de Documentos); a conversa fica montada embaixo. */}
         {docs.map((d) => (
