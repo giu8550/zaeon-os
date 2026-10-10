@@ -14,7 +14,6 @@ import Link from "next/link";
 import { useId } from "react";
 import { motion } from "framer-motion";
 import { TituloSecao } from "@/components/layout/secao";
-import TextoRevelado from "@/components/ui/TextoRevelado";
 import SolanaMark from "@/components/solana/SolanaMark";
 import IconeCredencial, { type NomeIcone } from "@/components/solana/IconesCredencial";
 
@@ -131,25 +130,23 @@ export default function SolanaPrivacidade() {
       <div id="privacidade-titulo">
         <TituloSecao className="font-display" forte="Seu conhecimento, sua prova." fraco="Sua identidade, só sua." />
       </div>
+      {/* o elemento da Solana logo após o sub-header */}
+      <div className="mt-5 inline-flex w-fit items-center gap-3 rounded-full border border-white/15 bg-black/80 px-4 py-2 shadow-[0_0_30px_rgba(220,31,255,0.15)]">
+        <SolanaMark size={15} wordmark />
+        <span className="h-4 w-px bg-white/15" />
+        <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/80">credenciais verificáveis</span>
+      </div>
 
       <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-        {/* texto */}
+        {/* cards */}
         <div className="lg:col-span-5 flex flex-col gap-6">
-          <p className="font-display text-base md:text-lg font-light leading-relaxed text-slate-900 dark:text-white max-w-[520px]">
-            <TextoRevelado texto="Tudo o que você conquista aqui vira uma prova que ninguém falsifica e ninguém tira de você — registrada na Solana, na sua carteira, sem expor quem você é." delay={0.15} />
-          </p>
-          <div className="inline-flex w-fit items-center gap-3 rounded-full border border-white/15 bg-black/80 px-4 py-2 shadow-[0_0_30px_rgba(220,31,255,0.15)]">
-            <SolanaMark size={15} wordmark />
-            <span className="h-4 w-px bg-white/15" />
-            <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/80">credenciais verificáveis</span>
-          </div>
           <ul className="flex flex-col gap-3">
             {CARDS.map((c, i) => (
               <motion.li
                 key={c.t}
                 initial={{ opacity: 0, x: -16 }}
                 whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: false, margin: "-40px" }}
+                viewport={{ once: true, margin: "-40px" }}
                 transition={{ duration: 0.45, delay: i * 0.08 }}
                 className="dark flex items-start gap-4 rounded-2xl border border-cyan-400/25 bg-[#0f1f44]/80 backdrop-blur-md p-4 shadow-[0_0_24px_rgba(6,182,212,0.12)]"
               >
@@ -173,7 +170,7 @@ export default function SolanaPrivacidade() {
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: false, margin: "-60px" }}
+          viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.6 }}
           className="dark lg:col-span-7 rounded-[2rem] border border-cyan-400/25 bg-[#0b1733]/80 backdrop-blur-md p-4 md:p-8 shadow-[0_0_40px_rgba(6,182,212,0.12)]"
         >
