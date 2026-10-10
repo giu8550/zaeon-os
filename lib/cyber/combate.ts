@@ -12,12 +12,15 @@ export const VIDA_MAX = 100;
  *  empurra (m/s) e o quanto o corpo AVANÇA no golpe (m) */
 export type Golpe = { n: 1 | 2 | 3; dur: number; ativoIni: number; ativoFim: number; dano: number; empurra: number; avanco: number; alcanceExtra: number };
 export const COMBO: readonly Golpe[] = [
-  { n: 1, dur: 0.44, ativoIni: 0.13, ativoFim: 0.25, dano: 1, empurra: 3, avanco: 0.9, alcanceExtra: 0 },        // horizontal, da direita pra esquerda
-  { n: 2, dur: 0.44, ativoIni: 0.12, ativoFim: 0.24, dano: 1.15, empurra: 3.5, avanco: 0.9, alcanceExtra: 0 },   // de volta, subindo
-  { n: 3, dur: 0.66, ativoIni: 0.24, ativoFim: 0.36, dano: 2, empurra: 9, avanco: 1.6, alcanceExtra: 0.4 },      // por cima, pesado
+  // a DUAS MÃOS, no ritmo dos jogos de ação (Devil May Cry): antecipação longa, corte rápido, recuperação que pesa
+  { n: 1, dur: 0.8, ativoIni: 0.3, ativoFim: 0.42, dano: 1.25, empurra: 4.5, avanco: 1.2, alcanceExtra: 0.1 },    // diagonal descendo
+  { n: 2, dur: 0.8, ativoIni: 0.28, ativoFim: 0.4, dano: 1.45, empurra: 5.5, avanco: 1.0, alcanceExtra: 0.1 },   // diagonal subindo, de volta
+  { n: 3, dur: 1.15, ativoIni: 0.5, ativoFim: 0.62, dano: 2.6, empurra: 12, avanco: 2.0, alcanceExtra: 0.6 },    // o PESADO por cima (esmaga o chão)
 ];
 /** depois de um golpe acabar, quanto tempo o próximo do combo ainda encadeia (s) */
-export const JANELA_COMBO = 0.4;
+export const JANELA_COMBO = 0.45;
+/** o HIT-STOP (s): quando o golpe PEGA, a ação congela um instante (o peso do impacto, como nos jogos de ação) */
+export const HIT_STOP: Record<1 | 2 | 3, number> = { 1: 0.07, 2: 0.08, 3: 0.13 };
 /** o raio do corpo de quem apanha (m) — a lâmina pega até a borda dele */
 export const RAIO_CORPO = 0.45;
 /** caído (s) e invulnerável depois de renascer (s) */

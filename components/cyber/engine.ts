@@ -55,7 +55,7 @@ import { DASH, VOO_TURBO, iniciarDash, passoDash, podeDash, sensacaoAPe, tremorD
 import { criarEfeitosMovimento, type EfeitosMovimentoHandle } from "./EfeitosMovimento";
 import { DECOLAGEM, HEROI, pesoAlerta } from "@/lib/cyber/posesCombate";
 import { ITENS, chaveInventario, equipar as equiparNoInv, inventarioInicial, sanitizarInventario, type IdItem, type Inventario } from "@/lib/cyber/inventario";
-import { CAIDO, COMBO, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAcabou, acerta, codificarGolpe, cortouEntre, danoDoGolpe, decodificarGolpe, proximoGolpe, type EstadoAtaque, type Golpe } from "@/lib/cyber/combate";
+import { CAIDO, COMBO, HIT_STOP, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAcabou, acerta, codificarGolpe, cortouEntre, danoDoGolpe, decodificarGolpe, proximoGolpe, type EstadoAtaque, type Golpe } from "@/lib/cyber/combate";
 import { BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
 import { criarArena, type ArenaHandle } from "./Arena";
 import { criarEspadaEspiritual, type EspadaHandle } from "./EspadaEspiritual";
@@ -408,6 +408,8 @@ export class CyberEngine {
   private ataque: EstadoAtaque | null = null; private filaAtaque = false; private seqAtaque = 0; private tAtacou = -Infinity; private acertados = new Set<string>();
   private vida = VIDA_MAX; private caidoAte = -Infinity; private protegidoAte = -Infinity; private empurrao = { x: 0, z: 0 }; private wGuardaArena = 0;
   private vRastroB = new THREE.Vector3(); private vRastroP = new THREE.Vector3();
+  /** o HIT-STOP (até quando a ação fica congelada — o peso do golpe que pegou) e o golpe pesado que já esmagou o chão */
+  private pausaAte = -Infinity; private esmagou = -1;
   private arena: ArenaHandle | null = null;
   /** golpes de OUTROS jogadores que podem me pegar: confere no meio da janela que corta (quem apanha decide — sabe se estava no dash) */
   private golpesChegando: { de: Ator; g: Golpe; quando: number; x: number; z: number; rumo: number }[] = []; private hudCombate: HTMLDivElement | null = null; private numeros: { el: HTMLDivElement; p: THREE.Vector3; t0: number }[] = [];
@@ -899,7 +901,7 @@ export class CyberEngine {
     this.ataque = { golpe: g, ini: this.agora, seq: ++this.seqAtaque }; this.filaAtaque = false; this.tAtacou = this.agora; this.acertados.clear();
     const f = moverRelativoCamera(0, -1, this.camAz); if (f && this.olharLivre) this.eu.facing = Math.atan2(f.wx, f.wz);   // (mouse travado: golpeia pra onde olha)
     this.alvo = null; this.alvoDepois = null;
-    this.som.tocar("golpe", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: g.n === 3 ? 1 : 0.85, taxa: g.n === 3 ? 0.82 : 0.95 + Math.random() * 0.1 });
+    this.som.tocar("golpe", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 1, taxa: g.n === 3 ? 0.66 : g.n === 2 ? 0.78 : 0.83 + Math.random() * 0.05 });   // (grave: a lâmina pesada a duas mãos)
   }
   /** a vida e o estado do combate (o HUD do React lê) */
   combate() { return { vida: this.vida, max: VIDA_MAX, caido: this.agora < this.caidoAte, naArena: !!this.eu && !this.noCeu && naArena(this.eu.pos), arma: this.inv.equipado ? ITENS[this.inv.equipado].nome : null }; }
@@ -908,14 +910,24 @@ export class CyberEngine {
   private passoCombate(eu: Ator, t: number, dt: number, andando: boolean) {
     this.conferirGolpesChegando(t);
     const a = this.ataque, arma = this.inv.equipado;
+    if (a && t < this.pausaAte) a.ini += Math.min(dt, this.pausaAte - (t - dt));   // HIT-STOP: o golpe fica parado no tempo enquanto dura
     if (a && arma) {
       const u = t - a.ini, g = a.golpe;
       if (u < g.ativoFim) { const k = g.avanco / g.ativoFim; eu.pos.x += Math.sin(eu.facing) * k * dt; eu.pos.z += Math.cos(eu.facing) * k * dt; }   // o corpo AVANÇA no golpe
       if (cortouEntre(a, this.tAnt || t, t) && this.arena) for (const b of this.arena.bonecos) {
         if (!b.vivo || this.acertados.has(b.id) || !acerta({ x: eu.pos.x, z: eu.pos.z, rumo: eu.facing }, b, arma, g)) continue;
+        // o HIT-STOP: no 1º acerto do golpe a ação congela um instante (e a linha do tempo do golpe espera junto)
+        if (!this.acertados.size) this.pausaAte = t + HIT_STOP[g.n];
         this.acertados.add(b.id); const dano = danoDoGolpe(arma, g);
         this.arena.acertar(b.id, dano, eu.pos, t); this.numero(String(dano), b.pos.clone().setY(2.6), g.n === 3 ? "#ffd36b" : "#ffffff");
-        this.som.tocar("acerto", b.pos, { dist: DISTANCIA.eu, volume: g.n === 3 ? 1 : 0.8, taxa: g.n === 3 ? 0.8 : 1 }); this.tremor = Math.max(this.tremor, g.n === 3 ? 0.14 : 0.06);
+        this.som.tocar("acerto", b.pos, { dist: DISTANCIA.eu, volume: g.n === 3 ? 1 : 0.8, taxa: g.n === 3 ? 0.8 : 1 }); this.tremor = Math.max(this.tremor, g.n === 3 ? 0.22 : 0.1);
+      }
+      // o PESADO esmaga o CHÃO no fim do corte: onda de choque na frente, tranco e estrondo (pegando ou não)
+      if (g.n === 3 && this.esmagou !== a.seq && t - a.ini >= g.ativoFim) {
+        this.esmagou = a.seq;
+        const pt = eu.av.group.position.clone(); pt.x += Math.sin(eu.facing) * 2.2; pt.z += Math.cos(eu.facing) * 2.2;
+        this.fxMov?.onda(pt, 0.85); this.tremor = Math.max(this.tremor, 0.3);
+        this.som.tocar("impacto-heroi", pt, { dist: DISTANCIA.eu, volume: 0.85, taxa: 0.9 });
       }
       if (golpeAcabou(a, t)) { if (this.filaAtaque) this.comecarGolpe(); }
     }
@@ -2759,7 +2771,7 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0 }, tablet: eu.tab ?? 0, dt: this.moto === null && !this.jet.noAr && eu.moving ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (no sprint as pernas giram mais rápido)
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0 }, tablet: eu.tab ?? 0, dt: t < this.pausaAte ? 0 : this.moto === null && !this.jet.noAr && eu.moving ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (hit-stop: a pose congela)   // (no sprint as pernas giram mais rápido)
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele

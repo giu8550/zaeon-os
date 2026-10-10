@@ -604,7 +604,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       //    andando, apontada à frente na guarda. A arma vai na mão direita, a lâmina pra onde a pose manda ──
       const esp = acao?.espada ?? null;
       if (esp && (ossos.length || pernas.length) && pilotando < 0.05 && !montado) {
-        const g = esp.golpe, pe: PoseEspada | null = g ? poseGolpe(g.n, g.u, g.ativo) : null;
+        const g = esp.golpe, pe: (PoseEspada & { duasMaos?: number }) | null = g ? poseGolpe(g.n, g.u, g.ativo) : null, wDuas = pe?.duasMaos ?? 0;
         const so = poseEmpunhaSolta(), gu = poseEmpunhaGuarda(), wg = Math.max(0, Math.min(1, esp.guarda));
         const bD = pe ? pe.bracoD : misturar(so.bracoD, gu.bracoD, wg), aD = pe ? pe.anteD : misturar(so.anteD, gu.anteD, wg);
         const lam = pe ? pe.lamina : misturar(so.lamina, gu.lamina, wg), pla = pe ? pe.plano : misturar(so.plano, gu.plano, wg);
@@ -621,7 +621,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         };
         if (pe) {
           ap(pe.tronco, lombar, pescoco, 0.9);
-          for (const o of ossos) if (o.lado > 0) { ap(pe.bracoE, o.braco, o.ante, 1); ap(pe.anteE, o.ante, o.mao, 1); }
+          if (wDuas < 0.99) for (const o of ossos) if (o.lado > 0) { ap(pe.bracoE, o.braco, o.ante, 1 - wDuas); ap(pe.anteE, o.ante, o.mao, 1 - wDuas); }
           if (pe.pernas) for (const o of pernas) { ap(pe.pernas.coxa(o.lado), o.coxa, o.canela, 1, true); ap(pe.pernas.canela(o.lado), o.canela, o.pe, 1, true); ap(pe.pernas.pe(o.lado), o.pe, o.dedo, 0.8, true); }
         }
         const dir = ossos.find((o) => o.lado < 0);
@@ -636,7 +636,14 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           mLam.makeBasis(xLam, dLam, dPla); qLam.setFromRotationMatrix(mLam);
           grupo.getWorldQuaternion(qGrupo);
           arma.quaternion.copy(qGrupo.invert().multiply(qLam));
-          arma.position.copy(grupo.worldToLocal(pMao));
+          arma.position.copy(grupo.worldToLocal(pMao.clone()));
+          // A DUAS MÃOS: a esquerda vai no CABO, logo abaixo da direita (IK — o cotovelo pra baixo e pra fora)
+          const esq = ossos.find((o) => o.lado > 0);
+          if (esq && wDuas > 0.01) {
+            alvoM.copy(pMao).addScaledVector(dLam, -0.2 * arma.scale.y);
+            polo.copy(lateral).multiplyScalar(0.6).addScaledVector(cimaC, -0.8);
+            ik(esq.braco, esq.ante, esq.mao, alvoM, polo, wDuas);
+          }
         }
       }
       // ── DJ na cabine: fone (pescoço → cabeça), mãos na controladora por IK, balanço no compasso ──

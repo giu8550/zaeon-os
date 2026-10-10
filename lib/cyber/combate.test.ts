@@ -33,8 +33,8 @@ describe("combate", () => {
     const a = { golpe: COMBO[0]!, ini: 10, seq: 1 };
     expect(cortando(a, 10.05)).toBe(false); expect(cortando(a, 10 + a.golpe.ativoIni + 0.01)).toBe(true); expect(cortando(a, 10 + a.golpe.ativoFim + 0.05)).toBe(false);
     expect(acabou(a, 10 + a.golpe.dur + 1e-6)).toBe(true);
-    expect(cortouEntre(a, 10.05, 10.4)).toBe(true);   // um quadro LONGO que engole a janela inteira ainda corta
-    expect(cortouEntre(a, 10.3, 10.4)).toBe(false);
+    expect(cortouEntre(a, 10.05, 10.6)).toBe(true);   // um quadro LONGO que engole a janela inteira ainda corta
+    expect(cortouEntre(a, 10.5, 10.6)).toBe(false);
   });
   it("acerta na frente, no alcance; não pega atrás nem longe", () => {
     const g = COMBO[0]!, at = { x: 0, z: 0, rumo: 0 };
@@ -68,12 +68,22 @@ describe("a arena (a praça inteira)", () => {
   });
 });
 
-describe("as poses dos golpes", () => {
-  it("a lâmina VARRE: o 1º da direita pra esquerda pela frente; o 3º de cima pra frente-baixo", () => {
-    const g1 = (u: number) => poseGolpe(1, u, [0.3, 0.57]).lamina;
-    expect(g1(0.3)[2]).toBeLessThan(-0.3); expect(g1(0.43)[0]).toBeGreaterThan(0.5); expect(g1(0.57)[2]).toBeGreaterThan(0.5);
-    const g3 = (u: number) => poseGolpe(3, u, [0.36, 0.55]).lamina;
-    expect(g3(0.36)[0]).toBeLessThan(-0.3); expect(g3(0.46)[1]).toBeGreaterThan(0.5); expect(g3(0.55)[1]).toBeLessThan(-0.5);
-    for (const n of [1, 2, 3] as const) for (let u = 0; u <= 1; u += 0.05) { const p = poseGolpe(n, u, [0.3, 0.55]); for (const d of [p.lamina, p.bracoD, p.anteD, p.tronco]) expect(Math.hypot(...d)).toBeCloseTo(1, 5); }
+describe("as poses dos golpes (a duas mãos, estilo Devil May Cry)", () => {
+  const at = (n: 1 | 2 | 3) => { const g = COMBO[n - 1]!; return [g.ativoIni / g.dur, g.ativoFim / g.dur] as [number, number]; };
+  it("o 1º: DIAGONAL descendo — de cima/atrás à direita, passa pela frente, termina embaixo à esquerda", () => {
+    const [a0, a1] = at(1), l = (u: number) => poseGolpe(1, u, [a0, a1]).lamina;
+    expect(l(a0)[1]).toBeGreaterThan(0.5); expect(l(a0)[2]).toBeLessThan(-0.3);
+    expect(l((a0 + a1) / 2)[0]).toBeGreaterThan(0.8);
+    expect(l(a1)[1]).toBeLessThan(-0.6); expect(l(a1)[2]).toBeGreaterThan(0.4);
+  });
+  it("o 3º: o PESADO — a lâmina atrás da cabeça, passa lá em cima e esmaga pra frente-baixo; o corpo agacha", () => {
+    const [a0, a1] = at(3), p = (u: number) => poseGolpe(3, u, [a0, a1]);
+    expect(p(a0).lamina[0]).toBeLessThan(-0.6); expect(p((a0 + a1) / 2).lamina[1]).toBeGreaterThan(0.9);
+    expect(p(a1).lamina[0]).toBeGreaterThan(0.5); expect(p(a1).lamina[1]).toBeLessThan(-0.6); expect(p(a1).desce).toBeGreaterThan(0.3);
+  });
+  it("a duas mãos no golpe todo; a antecipação é LONGA (mais lento, mais peso) e o pesado é o mais longo", () => {
+    for (const n of [1, 2, 3] as const) { const [a0] = at(n); expect(poseGolpe(n, a0, at(n)).duasMaos).toBe(1); expect(COMBO[n - 1]!.ativoIni).toBeGreaterThanOrEqual(0.28); }
+    expect(COMBO[2]!.dur).toBeGreaterThan(COMBO[0]!.dur);
+    for (const n of [1, 2, 3] as const) for (let u = 0; u <= 1; u += 0.05) { const p = poseGolpe(n, u, at(n)); for (const d of [p.lamina, p.bracoD, p.anteD, p.tronco, p.plano]) expect(Math.hypot(...d)).toBeCloseTo(1, 5); }
   });
 });
