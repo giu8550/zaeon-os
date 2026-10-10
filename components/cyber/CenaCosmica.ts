@@ -3,7 +3,8 @@
  * estilo filme (esfera preta + anel de fótons billboard + disco de acreção quente edge-on; NÃO é Saturno) e estrelas
  * redondas girando devagar. SEM CHÃO (out. 2026): o hiperespaço é só vazio + áreas flutuantes — as estrelas cercam
  * tudo, inclusive embaixo, e uma casca de estrelas bem longe acompanha a câmera (o vazio nunca fica "preto chapado").
- * O buraco negro grande paira em cima do palco do lounge da Zaeon (lib/cyber/ceu `BURACO_NEGRO`).
+ * O buraco negro grande SAIU de cima do palco do lounge (out/2026: ali fica o OLHO/a mandala do show — components/cyber
+ * MandalaSagrada); o ponto `BURACO_NEGRO` de lib/cyber/ceu continua sendo o centro de onde a nebulosa irradia.
  * Dois passes: o fundo (nebulosa) numa cena ortográfica, depois a cena 3D por cima.
  */
 import * as THREE from "three";
@@ -86,18 +87,7 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
   const casca = new THREE.Points(fg, new THREE.PointsMaterial({ color: 0xdfe8ff, size: 1.7, map: starTex, sizeAttenuation: false, transparent: true, opacity: 0.75, depthWrite: false, blending: THREE.AdditiveBlending }));
   casca.frustumCulled = false; scene.add(casca);
 
-  // buraco negro estilo filme (em cima do palco do lounge)
-  const bh = new THREE.Group(); bh.position.set(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z);
-  const horizonte = new THREE.Mesh(new THREE.SphereGeometry(6, 48, 48), new THREE.MeshBasicMaterial({ color: 0x000000 })); bh.add(horizonte);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex("rgba(255,200,130,0.55)", "rgba(180,90,30,0.18)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-  halo.scale.set(30, 30, 1); bh.add(halo);
-  const dMat = (c: number, op: number) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const disk = new THREE.Group();
-  for (const [a, b, c, o] of [[6.6, 15, 0xffe3b0, 0.85], [6.6, 11, 0xffb45a, 0.8], [6.6, 8.6, 0xff7a2c, 0.7]] as const) disk.add(new THREE.Mesh(new THREE.RingGeometry(a, b, 180), dMat(c, o)));
-  disk.rotation.x = -Math.PI / 2 + 0.06; bh.add(disk);
-  const photon = new THREE.Mesh(new THREE.RingGeometry(6.0, 6.6, 128), dMat(0xfff0d6, 0.95)); bh.add(photon);
-  scene.add(bh);
-
+  // (o buraco negro estilo filme que pairava em cima do palco do lounge saiu: no lugar dele, o olho/a mandala do show)
   const bhNdc = new THREE.Vector3();
   // o fundo em resolução reduzida: render target + um quadrado que estica ele na tela
   let rt: THREE.WebGLRenderTarget | null = null, quadro = 0;
@@ -107,7 +97,7 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
     vertexShader: NEB_VERT, fragmentShader: "uniform sampler2D mapa; varying vec2 vUv; void main(){ gl_FragColor = texture2D(mapa, vUv); }" });
   const cenaEstica = new THREE.Scene(); cenaEstica.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), matEstica));
   return {
-    bgScene, bgCam, scene, starTex, buracoNegro: [horizonte, disk],
+    bgScene, bgCam, scene, starTex, buracoNegro: [],
     desenharFundo(R, escala) {
       R.getDrawingBufferSize(tam);
       const w = Math.max(1, Math.round(tam.x * escala)), h = Math.max(1, Math.round(tam.y * escala));
@@ -124,7 +114,6 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
       casca.position.copy(cam.position);
       for (const m of nebulas) { m.uniforms.uTime!.value += dt; m.uniforms.uAspect!.value = asp; (m.uniforms.uCenter!.value as THREE.Vector2).set(bhNdc.x, bhNdc.y); }
       stars.rotation.y -= dt * 0.014;
-      photon.lookAt(cam.position); (halo.material as THREE.SpriteMaterial).opacity = 0.75 + 0.12 * Math.sin(t * 1.5);
     },
     dispose() {
       for (const sc of [bgScene, scene]) sc.traverse((o) => {

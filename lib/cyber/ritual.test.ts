@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ANUNCIADOR, ENERGIZA_S, FORMACAO_S, FRASE_LOUVOR, MAX_MS, RITUAL_OFF, TURBO_NAVE, chegou, faseDaTempestade, instanteDaEnergia, intensidadeDaTempestade, posDoAnunciador, proximaFala, ritualDesligado, sanitizarRitual, sensacaoDaNave } from "./ritual";
+import { ANUNCIADOR, CORTE, ENERGIZA_S, FORMACAO_S, FRASE_LOUVOR, MAX_MS, REVELACAO, RITUAL_OFF, TURBO_NAVE, chegou, corteDasCaixas, noPerimetro, faseDaTempestade, instanteDaEnergia, intensidadeDaTempestade, posDoAnunciador, proximaFala, revelacaoDaNave, ritualDesligado, sanitizarRitual, sensacaoDaNave } from "./ritual";
 
 const T0 = 1_700_000_000_000;
 
@@ -7,12 +7,13 @@ describe("o ritual da chegada do dono", () => {
   it("sanitiza: lixo → desligado; o instante e a flag dos droids passam", () => {
     expect(sanitizarRitual(null)).toEqual(RITUAL_OFF); expect(sanitizarRitual("x")).toEqual(RITUAL_OFF);
     expect(sanitizarRitual({ tempestade: -5, droids: "sim" })).toEqual(RITUAL_OFF);
-    expect(sanitizarRitual({ tempestade: T0 + 0.7, droids: true })).toEqual({ tempestade: T0, droids: true });
+    expect(sanitizarRitual({ tempestade: T0 + 0.7, droids: true })).toEqual({ tempestade: T0, droids: true, veu: 0 });
+    expect(sanitizarRitual({ veu: T0 }).veu).toBe(T0); expect(ritualDesligado(sanitizarRitual({ veu: T0 }))).toBe(false);
     expect(ritualDesligado(sanitizarRitual({ droids: true }))).toBe(false);
     expect(ritualDesligado(RITUAL_OFF)).toBe(true);
   });
   it("a tempestade se forma em ~8 s (suave), fica armada e se apaga sozinha depois do máximo", () => {
-    const r = { tempestade: T0, droids: false };
+    const r = { tempestade: T0, droids: false, veu: 0 };
     expect(intensidadeDaTempestade(r, T0 - 1000)).toBe(0);
     expect(intensidadeDaTempestade(r, T0)).toBe(0);
     const meio = intensidadeDaTempestade(r, T0 + (FORMACAO_S / 2) * 1000); expect(meio).toBeGreaterThan(0.4); expect(meio).toBeLessThan(0.6);
@@ -23,7 +24,7 @@ describe("o ritual da chegada do dono", () => {
     let ant = 0; for (let s = 0; s <= FORMACAO_S; s += 0.1) { const v = intensidadeDaTempestade(r, T0 + s * 1000); expect(v).toBeGreaterThanOrEqual(ant); ant = v; }
   });
   it("as fases: formando (só nuvens) → raios (mudos) → armada (energizou, todo raio com som)", () => {
-    const r = { tempestade: T0, droids: false };
+    const r = { tempestade: T0, droids: false, veu: 0 };
     expect(faseDaTempestade(RITUAL_OFF, T0)).toBe("off");
     expect(faseDaTempestade(r, T0 + 1000)).toBe("formando");
     expect(faseDaTempestade(r, T0 + 5000)).toBe("raios");
@@ -53,7 +54,27 @@ describe("o ritual da chegada do dono", () => {
     expect(sensacaoDaNave(78, 1)).toBeGreaterThan(0.7); expect(sensacaoDaNave(50, 1)).toBeLessThan(sensacaoDaNave(70, 1));
   });
   it("o ritual acaba quando o DONO pisa no lounge", () => {
-    const r = { tempestade: T0, droids: true };
+    const r = { tempestade: T0, droids: true, veu: 0 };
     expect(chegou(true, true, r)).toBe(true); expect(chegou(false, true, r)).toBe(false); expect(chegou(true, false, r)).toBe(false); expect(chegou(true, true, RITUAL_OFF)).toBe(false);
+  });
+});
+
+describe("o corte da música pelos raios e a nave invisível", () => {
+  const r = { tempestade: T0, droids: false, veu: 0 };
+  it("o raio cala a ESQUERDA, depois a DIREITA, depois a música do lounge para de vez (só a nave toca); desligado, nada cortado", () => {
+    expect(corteDasCaixas(r, T0 + 2000)).toEqual({ esquerda: false, direita: false, total: false });
+    expect(corteDasCaixas(r, T0 + CORTE.esquerda * 1000 + 10)).toEqual({ esquerda: true, direita: false, total: false });
+    expect(corteDasCaixas(r, T0 + CORTE.direita * 1000 + 10)).toEqual({ esquerda: true, direita: true, total: false });
+    expect(corteDasCaixas(r, T0 + CORTE.total * 1000 + 10)).toEqual({ esquerda: true, direita: true, total: true });
+    expect(corteDasCaixas(RITUAL_OFF, T0 + 60_000).total).toBe(false);
+    expect(CORTE.esquerda).toBeGreaterThanOrEqual(FORMACAO_S); expect(CORTE.direita).toBeGreaterThan(CORTE.esquerda); expect(CORTE.total).toBeGreaterThan(CORTE.direita);   // a tempestade já formada; um de cada vez
+  });
+  it("a nave do dono é invisível; no perímetro das nuvens (ritual ligado) o DONO escolhe tirar o véu — o evento a revela em ~1,6 s", () => {
+    expect(noPerimetro(RITUAL_OFF, 10)).toBe(false); expect(noPerimetro(r, REVELACAO.perimetro + 1)).toBe(false); expect(noPerimetro(r, REVELACAO.perimetro - 1)).toBe(true);
+    expect(revelacaoDaNave(RITUAL_OFF, T0)).toBe(0); expect(revelacaoDaNave(r, T0 + 60_000)).toBe(0);   // sem o evento, segue invisível
+    const v = { ...r, veu: T0 + 10_000 };
+    expect(revelacaoDaNave(v, T0 + 10_000)).toBe(0); expect(revelacaoDaNave(v, T0 + 10_000 + REVELACAO.veu * 1000)).toBe(1); expect(revelacaoDaNave(v, T0 + 90_000)).toBe(1);
+    const meio = revelacaoDaNave(v, T0 + 10_000 + (REVELACAO.veu * 1000) / 2); expect(meio).toBeGreaterThan(0.3); expect(meio).toBeLessThan(0.7);
+    expect(revelacaoDaNave({ ...v, tempestade: 0 }, T0 + 90_000)).toBe(0);   // acabou o ritual: o véu volta
   });
 });

@@ -16,9 +16,11 @@ export type Ritual = {
   tempestade: number;
   /** os anunciadores estão soltos pelo mapa? */
   droids: boolean;
+  /** o instante (ms, servidor) em que o dono TIROU O VÉU da nave (o evento, perto das nuvens); 0 = a nave invisível */
+  veu: number;
 };
-export const RITUAL_OFF: Ritual = { tempestade: 0, droids: false };
-export const ritualDesligado = (r: Ritual | null | undefined) => !r || (r.tempestade <= 0 && !r.droids);
+export const RITUAL_OFF: Ritual = { tempestade: 0, droids: false, veu: 0 };
+export const ritualDesligado = (r: Ritual | null | undefined) => !r || (r.tempestade <= 0 && !r.droids && r.veu <= 0);
 
 /** a FORMAÇÃO das nuvens (s) — "cerca de 8 segundos"; os raios começam no meio dela; `ENERGIZA_S` = o 1º trovão que
  *  energiza as caixas do lounge (o som sai do buraco negro em cima da cabine do DJ) */
@@ -31,8 +33,8 @@ export const DESMANCHA_S = 12;
 export function sanitizarRitual(v: unknown): Ritual {
   if (!v || typeof v !== "object") return RITUAL_OFF;
   const o = v as Record<string, unknown>;
-  const t = typeof o.tempestade === "number" && Number.isFinite(o.tempestade) && o.tempestade > 0 ? Math.floor(o.tempestade) : 0;
-  return { tempestade: t, droids: o.droids === true };
+  const ms = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+  return { tempestade: ms(o.tempestade), droids: o.droids === true, veu: ms(o.veu) };
 }
 
 /** a INTENSIDADE da tempestade (0..1) no instante `agora` (relógio do servidor, ms): sobe em `FORMACAO_S`, fica em 1,
@@ -56,6 +58,33 @@ export function faseDaTempestade(r: Ritual | null | undefined, agora: number): F
 }
 /** o instante (ms, servidor) em que o 1º trovão energiza as caixas */
 export const instanteDaEnergia = (r: Ritual) => r.tempestade + ENERGIZA_S * 1000;
+
+/** o CORTE DA MÚSICA do lounge pelos raios (o dono, out/2026): o ritual usa os raios que já estão no lounge como
+ *  mensageiros — um acerta a caixa da ESQUERDA e cala aquele lado, outro (um pouco depois) acerta a da DIREITA e cala
+ *  o outro; depois a música do lounge para de vez e só se ouve a que sai da NAVE do dono. Segundos desde o começo */
+export const CORTE = { esquerda: ENERGIZA_S, direita: ENERGIZA_S + 1.7, total: ENERGIZA_S + 3.6 } as const;
+export type Corte = { esquerda: boolean; direita: boolean; total: boolean };
+/** o que já foi cortado no instante `agora` (ms, servidor) */
+export function corteDasCaixas(r: Ritual | null | undefined, agora: number): Corte {
+  if (!r || r.tempestade <= 0) return { esquerda: false, direita: false, total: false };
+  const s = (agora - r.tempestade) / 1000;
+  if (s > MAX_MS / 1000) return { esquerda: false, direita: false, total: false };
+  return { esquerda: s >= CORTE.esquerda, direita: s >= CORTE.direita, total: s >= CORTE.total };
+}
+
+/** a NAVE do dono é INVISÍVEL (só o formato e os propulsores). Chegando no PERÍMETRO das NUVENS da capela em cima do
+ *  lounge (o ritual ligado), o dono ESCOLHE tirar o véu — um evento (`ritual.veu`): um vento a revela inteira, e ela
+ *  fica revelada até o ritual acabar. `d` = a distância (m) da nave ao centro das nuvens; `perimetro` = até onde o
+ *  evento pode ser disparado; `veu` = quanto o véu leva pra sair (s) */
+export const REVELACAO = { perimetro: 220, veu: 1.6 } as const;
+/** a nave está no perímetro das nuvens (dá pra tirar o véu)? */
+export const noPerimetro = (r: Ritual | null | undefined, d: number) => !!r && r.tempestade > 0 && d <= REVELACAO.perimetro;
+/** o véu saindo: 0 (invisível) → 1 (inteira) em `veu` s desde o evento (`agora` ms, servidor); sem ritual/sem evento, 0 */
+export function revelacaoDaNave(r: Ritual | null | undefined, agora: number): number {
+  if (!r || r.tempestade <= 0 || r.veu <= 0) return 0;
+  const k = Math.max(0, Math.min(1, (agora - r.veu) / 1000 / REVELACAO.veu));
+  return k * k * (3 - 2 * k);
+}
 
 // ───────────── os ANUNCIADORES ─────────────
 /** cada pessoa no mapa ganha UM anunciador: um droid (ofanim) rodeando a cabeça dela — `altura` acima dos pés, no raio

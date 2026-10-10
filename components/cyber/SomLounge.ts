@@ -15,10 +15,19 @@ export type SomLoungeHandle = {
   atualizar(dt: number): void;
   /** tem música saindo agora? (as caixas pulsam, o disco gira) */
   readonly tocando: boolean;
+  /** onde a música está (a faixa e o segundo dentro dela, no relógio do servidor) — o show do lounge segue isso */
+  posicao(): { i: number; t: number } | null;
+  /** a música está TOCANDO NA SALA (o estado compartilhado), mesmo que aqui o áudio ainda não tenha sido liberado —
+   *  o show (a mandala, as serpentes, a névoa) é visual: segue a sala, não o alto-falante local */
+  readonly tocandoNaSala: boolean;
   /** a batida agora (energia dos graves, 0..1; 0 se parado) — as luzes do palco pulsam com ela */
   readonly nivel: number;
   /** ABAFA as caixas por `seg` s (o trovão energizando o som do lounge): o volume cai a zero e volta devagar */
   abafar(seg: number): void;
+  /** os LADOS (o ritual corta uma caixa de cada vez): o volume de cada caixa, na ordem delas (0..1) */
+  lados(fatores: number[]): void;
+  /** SILENCIA de vez (o ritual: só a nave do dono toca) — a música continua "andando" no relógio; volta de onde está */
+  silenciar(on: boolean): void;
   dispose(): void;
 };
 
@@ -27,7 +36,8 @@ export const DESGARRE_MAX_S = 1.2;
 export function criarSomLounge(o: { audio: AudioCyberHandle; caixas: THREE.Object3D[]; urlDe: (arq: string) => string }): SomLoungeHandle {
   const el = new Audio(); el.preload = "auto";
   const saida = o.audio.musica(o.caixas, el);
-  let som: SomLounge | null = null, offset = 0, acc = 1, arqAtual = "", buscaPendente: number | null = null, vivo = true, abafado = 0;
+  let som: SomLounge | null = null, offset = 0, acc = 1, arqAtual = "", buscaPendente: number | null = null, vivo = true, abafado = 0, silencio = false;
+  const aplicarVolume = () => saida.volume(silencio ? 0 : abafado > 0.6 ? 0 : abafado > 0 ? 1 - abafado / 0.6 : 1);
   el.addEventListener("loadedmetadata", () => { if (buscaPendente !== null) { try { el.currentTime = buscaPendente; } catch { /* ainda não dá */ } buscaPendente = null; } });
 
   const sincronizar = () => {
@@ -48,10 +58,14 @@ export function criarSomLounge(o: { audio: AudioCyberHandle; caixas: THREE.Objec
     aplicar(s, off) { som = s && s.faixas.length ? s : null; offset = off; acc = 1; sincronizar(); },
     atualizar(dt) {
       acc += dt; if (acc >= 0.4) { acc = 0; sincronizar(); }
-      if (abafado > 0) { abafado -= dt; saida.volume(abafado > 0.6 ? 0 : 1 - abafado / 0.6); if (abafado <= 0) saida.volume(1); }
+      if (abafado > 0) { abafado -= dt; aplicarVolume(); }
     },
-    abafar(seg) { abafado = Math.max(abafado, seg); saida.volume(0); },
-    get tocando() { return !el.paused && !!som?.estado.tocando; },
+    abafar(seg) { abafado = Math.max(abafado, seg); aplicarVolume(); },
+    lados(f) { f.forEach((v, i) => saida.volumeCaixa(i, v)); },
+    silenciar(on) { if (silencio === on) return; silencio = on; aplicarVolume(); },
+    get tocando() { return !el.paused && !!som?.estado.tocando && !silencio; },
+    posicao() { return som ? posicaoAgora(som, Date.now() + offset) : null; },
+    get tocandoNaSala() { return !!som?.estado.tocando && !silencio; },
     get nivel() { return !el.paused && som?.estado.tocando ? saida.nivel() : 0; },
     dispose() { vivo = false; el.pause(); el.removeAttribute("src"); el.load(); saida.remover(); },
   };

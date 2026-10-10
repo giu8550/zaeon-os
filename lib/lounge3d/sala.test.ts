@@ -27,7 +27,7 @@ describe("sanitização (XSS/lixo nunca chega ao DOM)", () => {
     expect(lerConteudo("{nope")).toEqual({ notes: [], artifacts: [] });
     // o som da NAVE e o RITUAL do dono (lib/cyber/ritual) vivem no conteúdo também — e sobrevivem às edições de notas
     const c = lerConteudo({ notes: [], artifacts: [], somNave: { faixas: [{ id: "f1aaaaaa", nome: "n", arq: "lm_00000000000000000000.mp3", dur: 5, deId: "d" }], estado: { i: 0, tocando: true, desde: 1, pos: 0 } }, ritual: { tempestade: 1700000000000, droids: true } });
-    expect(c.somNave?.faixas).toHaveLength(1); expect(c.ritual).toEqual({ tempestade: 1700000000000, droids: true });
+    expect(c.somNave?.faixas).toHaveLength(1); expect(c.ritual).toEqual({ tempestade: 1700000000000, droids: true, veu: 0 });
     expect(lerConteudo({ ritual: { tempestade: 0, droids: false } }).ritual).toBeUndefined();
     const dep = aplicarOps(c, { upsertNotes: [{ id: "z", x: 0, z: 0, text: "z" }] }); expect(dep.somNave).toEqual(c.somNave); expect(dep.ritual).toEqual(c.ritual);
     expect(lerConteudo(JSON.stringify({ notes: [{ id: "n", x: 0, z: 0, text: "a" }, null], artifacts: [{ id: "m", type: "molecula", x: 1, z: 1 }] })).notes).toHaveLength(1);

@@ -13,6 +13,9 @@ import { BN_NA_SALA, CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ,
 import { BOCA_DJ } from "@/lib/cyber/buracos";
 import { DECK, PATIO, saidaDoLounge } from "@/lib/cyber/templo";
 import { criarOlho } from "./OlhoHolografico";
+import { criarMandala } from "./MandalaSagrada";
+import { criarTempestade } from "./Tempestade";
+import type { EstadoShow } from "@/lib/cyber/showLounge";
 import { linhasDoRecado } from "@/lib/cyber/recado";
 import type { PisoOclusor } from "./oclusaoPisos";
 
@@ -40,6 +43,10 @@ export type SalasHandle = {
   ambiente: { sala: NomeSala; obj: THREE.Object3D }[];
   /** tem música tocando? + a energia dos graves agora (0..1): as luzes, as caixas e a pista pulsam com ela */
   somTocando(on: boolean, nivel?: number): void;
+  /** o SHOW do lounge (lib/cyber/showLounge): o estado no ponto da música; `olho` = o modo ritual (o olho no lugar da mandala) */
+  show(e: EstadoShow, olho: number): void;
+  /** um relâmpago da névoa do lounge agora (`vel` = a velocidade do piscar; `alvoMundo` = onde cai — ex.: uma caixa de som) */
+  raioNoLounge(vel?: number, alvoMundo?: THREE.Vector3): void;
   atualizar(dt: number, t: number): void;
   /** o conteúdo de cada sala por cima do piso (components/cyber/oclusaoPisos) */
   plataformas: PisoOclusor[];
@@ -126,6 +133,8 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   };
 
   let salaAtual: NomeSala = "lounge";
+  let showLounge: { olho: { group: THREE.Group }; mandala: ReturnType<typeof criarMandala>; nevoa: ReturnType<typeof criarTempestade>; grupo: THREE.Group } | null = null;
+  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, nevoa: 0, nivel: 0, turno: 0 };
   const ambiente: { sala: NomeSala; obj: THREE.Object3D }[] = [];
   const tema = (_m: Movel) => TEMA[salaAtual];
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
@@ -285,21 +294,18 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       for (let i = 0; i < 4; i++) { const r2 = new THREE.Mesh(new THREE.TorusGeometry(e.r * 0.95, 0.04, 6, 32), basica(0x9affd0, 0.8, true)); r2.rotation.x = Math.PI / 2; r2.position.set(0, (i / 4) * A, zS); p.add(r2); subindo.push(r2); }
       const passarela = new THREE.Mesh(new THREE.PlaneGeometry(1.6, Math.abs(zS) - T.r + 0.4), basica(0x9affd0, 0.25, true)); passarela.rotation.x = -Math.PI / 2; passarela.position.set(0, A + 0.02, (zS + -T.r) / 2); p.add(passarela);
       const anelCima = new THREE.Mesh(new THREE.RingGeometry(e.rDesce - 0.12, e.rDesce, 32), basica(0x9affd0, 0.9, true)); anelCima.rotation.x = -Math.PI / 2; anelCima.position.set(0, A + 0.03, zD); p.add(anelCima);
-      // a BOCA do buraco negro grande, na cabine: aro quente + poço escuro + um aro girando; e o FIO de luz subindo até
-      // o buraco (que paira em cima do palco, BN_NA_SALA) — pisou (o dono) = atravessa pra nave
+      // a BOCA do par do dono, na cabine: aro quente + poço escuro + um aro girando — pisou (o dono) = atravessa pra nave
+      // (o buraco negro grande que pairava em cima do palco saiu: no lugar dele, o olho/a mandala do show)
       const bx = BOCA_DJ.x, bz = BOCA_DJ.z - T.z;
       const bocaAro = new THREE.Mesh(new THREE.TorusGeometry(BOCA_DJ.r, 0.06, 6, 40), basica(0xffb45a, 0.9, true)); bocaAro.rotation.x = Math.PI / 2; bocaAro.position.set(bx, A + 0.05, bz); p.add(bocaAro);
       const bocaPoco = new THREE.Mesh(new THREE.CircleGeometry(BOCA_DJ.r - 0.05, 32), new THREE.MeshBasicMaterial({ color: 0x05030a, transparent: true, opacity: 0.9 })); bocaPoco.rotation.x = -Math.PI / 2; bocaPoco.position.set(bx, A + 0.03, bz); p.add(bocaPoco);
       const bocaGiro = new THREE.Mesh(new THREE.RingGeometry(BOCA_DJ.r * 0.5, BOCA_DJ.r * 0.6, 32, 1, 0, Math.PI * 1.5), basica(0xff7a2c, 0.8, true)); bocaGiro.rotation.x = -Math.PI / 2; bocaGiro.position.set(bx, A + 0.04, bz); p.add(bocaGiro);
-      const fioDe = new THREE.Vector3(bx, A + 0.1, bz), fioD = new THREE.Vector3(0, BN_NA_SALA.y - DECK.h - PALCO.h - 5, BN_NA_SALA.z - T.z).sub(fioDe), fioL = fioD.length();
-      const fioG = new THREE.CylinderGeometry(0.9, BOCA_DJ.r * 0.7, fioL, 16, 1, true); fioG.translate(0, fioL / 2, 0);
-      const fio = new THREE.Mesh(fioG, basica(0xffb45a, 0.2, true)); fio.position.copy(fioDe); fio.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), fioD.normalize()); p.add(fio);
       anim.push((dt, t) => {
         const b = batida(); nucleoMat.opacity = 0.22 + 0.45 * b + 0.2 * pulso * ativo;
         aneis.forEach((an, i) => { (an.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.7 * Math.max(0, Math.sin(t * 3 - i * 0.9)) * (0.4 + 0.6 * b); });
         subindo.forEach((r2) => { r2.position.y = (r2.position.y - dt * 3 + A) % A; (r2.material as THREE.MeshBasicMaterial).opacity = 0.8 * (r2.position.y / A); });   // descendo
         (anelCima.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.3 * Math.sin(t * 2.5 + 1);
-        (bocaAro.material as THREE.MeshBasicMaterial).opacity = 0.65 + 0.3 * Math.sin(t * 3); bocaGiro.rotation.z -= dt * 2; (fio.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.1 * Math.sin(t * 1.7);
+        (bocaAro.material as THREE.MeshBasicMaterial).opacity = 0.65 + 0.3 * Math.sin(t * 3); bocaGiro.rotation.z -= dt * 2;
       });
     },
     // CAIXA SUSPENSA: um LINE ARRAY pendurado no braço da treliça (cabos de aço até lá em cima) — 8 gabinetes curvando
@@ -600,8 +606,14 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const halo = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), basica(0xffc87a, 0.18, true)); halo.position.copy(lamp.position); g.add(halo);
     }
     // o OLHO em cima do DJ (acima do buraco negro), inclinado pra pista
-    const olho = criarOlho({ low: o.low, tam: 46 }); olho.group.position.set(0, DECK.h + 60, -44); olho.group.rotation.x = 0.55; g.add(olho.group);
-    anim.push((_, t) => olho.atualizar(calmo ? t * 0.3 : t, batida(), ativo));
+    const olho = criarOlho({ low: o.low, tam: 46 }); olho.group.position.set(0, DECK.h + 60, -44); olho.group.rotation.x = 0.55; olho.group.visible = false; g.add(olho.group);
+    olho.group.traverse((n) => { n.userData.semLote = true; });
+    // a MANDALA do show (no mesmo centro do olho), as serpentes e os tentáculos; e a NÉVOA do lounge com os trovões leves
+    const mandala = criarMandala({ low: o.low, estrela: o.estrela, tam: 44 }); mandala.group.position.copy(olho.group.position); mandala.group.rotation.x = 0.55; g.add(mandala.group);
+    const nevoa = criarTempestade({ low: o.low, yBase: DECK.h + 48, yTopo: DECK.h + 80, raioMax: 70, alvoPonta: new THREE.Vector3(0, DECK.h + 60, -44), cor: new THREE.Color(0.22, 0.13, 0.32), semAbismo: true, densidade: 0.45 });
+    nevoa.group.position.set(0, 0, 0); nevoa.group.traverse((n) => { n.userData.semLote = true; }); g.add(nevoa.group); nevoa.definir(0, false);
+    showLounge = { olho, mandala, nevoa, grupo: g };
+    anim.push((_, t) => { const tt = calmo ? t * 0.3 : t; if (olho.group.visible) olho.atualizar(tt, batida(), ativo); mandala.definir(estadoShow, batida(), tt); nevoa.atualizar(t); });
   }
 
   for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) {
@@ -643,6 +655,18 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     plataformas,
     alvos, tv: tvTela, caixas: caixasSom, tocaDiscos, ambiente,
     somTocando(on, nivel = 0) { tocando = on; nivelAlvo = on ? Math.max(0, Math.min(1, nivel)) : 0; },
+    show(e, olho) {
+      if (!showLounge) return;
+      const ritual = olho > 0.001;
+      estadoShow = ritual ? { ...e, nascimento: 0, serpentes: 0, tentaculos: 0 } : e;   // no ritual, a mandala se recolhe: fica o olho
+      showLounge.olho.group.visible = ritual;
+      showLounge.nevoa.definir(Math.max(e.nevoa, olho), e.nivel > 0 || olho > 0.5);   // no ritual, a névoa do lounge se forma junto com a do templo (os raios cortam as caixas)
+    },
+    raioNoLounge(vel = 1, alvoMundo) {
+      if (!showLounge) return;
+      if (!alvoMundo) { showLounge.nevoa.raioAgora(undefined, vel); return; }
+      showLounge.nevoa.group.updateMatrixWorld(); showLounge.nevoa.raioAgora(showLounge.nevoa.group.worldToLocal(alvoMundo.clone()), vel);
+    },
     mostrarRecado(texto) {
       if (!recadoFaixa) return;
       recadoFaixa.visible = !!texto; if (!texto) return;
