@@ -12,11 +12,12 @@ import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useTranslation } from "react-i18next";
 import { Cog6ToothIcon, ChevronDownIcon, ChevronRightIcon, ArrowRightStartOnRectangleIcon } from "@heroicons/react/24/outline";
-import { Crown, Mic, Trash2, Loader2, Ticket, GraduationCap } from "lucide-react";
+import { Activity, Gauge, Crown, Mic, Trash2, Loader2, Ticket, GraduationCap } from "lucide-react";
 import VoicePicker from "@/components/settings/VoicePicker";
 import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 import { isSuperAdmin } from "@/lib/auth/roles";
 import { PREF_TUTORIAL, tutorialLigado } from "@/lib/cyber/onboarding";
+import { PREF_GRAFICOS, PREF_MOSTRAR_FPS, lerPreferencia, type PreferenciaGraficos } from "@/lib/cyber/dispositivo";
 
 const item = "group relative flex items-center gap-3 w-full min-h-[48px] px-3 rounded-2xl text-left text-sm font-medium text-slate-800 dark:text-white border border-slate-200/80 dark:border-white/[0.06] bg-white/50 dark:bg-white/[0.03] hover:bg-white/80 dark:hover:bg-white/[0.08] hover:border-cyan-400/50 dark:hover:border-cyan-400/30 transition-colors";
 const rotulo = "text-[9px] uppercase font-bold tracking-tighter text-slate-500 dark:text-white/50";
@@ -30,6 +31,8 @@ export default function ConfigMenu() {
   const [apagando, setApagando] = useState(false);
   const [convite, setConvite] = useState(false);
   const [tutorial, setTutorial] = useState(false);
+  const [graficos, setGraficos] = useState<PreferenciaGraficos>("auto");
+  const [mostrarFps, setMostrarFps] = useState(false);
   const raiz = useRef<HTMLDivElement>(null);
   const botao = useRef<HTMLButtonElement>(null);
 
@@ -40,6 +43,7 @@ export default function ConfigMenu() {
     if (!aberto) return;
     try { setConvite(localStorage.getItem("zaeon.inviteAccessed") === "1"); } catch { /* sem storage */ }
     setTutorial(tutorialLigado((k) => localStorage.getItem(k)));
+    try { setGraficos(lerPreferencia(localStorage.getItem(PREF_GRAFICOS))); setMostrarFps(localStorage.getItem(PREF_MOSTRAR_FPS) === "1"); } catch { /* sem storage */ }
     const fora = (e: PointerEvent) => { if (!raiz.current?.contains(e.target as Node)) setAberto(false); };
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { setAberto(false); botao.current?.focus(); } };
     document.addEventListener("pointerdown", fora);
@@ -52,6 +56,10 @@ export default function ConfigMenu() {
     const novo = !tutorial; setTutorial(novo);
     try { if (novo) localStorage.setItem(PREF_TUTORIAL, "1"); else localStorage.removeItem(PREF_TUTORIAL); } catch { /* sem storage */ }
   };
+
+  // GRÁFICOS do cyberespaço (vale ao abrir o cyberespaço de novo): automático = pela placa de vídeo
+  const mudarGraficos = (g: PreferenciaGraficos) => { setGraficos(g); try { if (g === "auto") localStorage.removeItem(PREF_GRAFICOS); else localStorage.setItem(PREF_GRAFICOS, g); } catch { /* sem storage */ } };
+  const mudarFps = () => { const novo = !mostrarFps; setMostrarFps(novo); try { if (novo) localStorage.setItem(PREF_MOSTRAR_FPS, "1"); else localStorage.removeItem(PREF_MOSTRAR_FPS); } catch { /* sem storage */ } };
 
   const apagarConta = async () => {
     if (apagando) return;
@@ -122,6 +130,35 @@ export default function ConfigMenu() {
               </span>
             </button>
           )}
+
+          {/* GRÁFICOS do cyberespaço: automático (pela placa de vídeo), leve (placa integrada / notebook) ou completo */}
+          <div className={`${item} flex-col !items-stretch gap-2 py-2.5`}>
+            <span className="flex items-center gap-3">
+              <Gauge size={16} className="text-cyan-600 dark:text-cyan-300 shrink-0" />
+              <span className="flex flex-col flex-1 min-w-0">
+                <span className={rotulo}>Cyberespaço</span>
+                <span>Gráficos</span>
+                <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">{graficos === "auto" ? "Automático: leve em placa de vídeo integrada (Intel/AMD de notebook)." : graficos === "leve" ? "Leve: menos coisa ao longe, 30 fps, sem serrilhado." : "Completo: tudo no máximo (precisa de placa de vídeo)."} Vale ao abrir o cyberespaço de novo.</span>
+              </span>
+            </span>
+            <span role="radiogroup" aria-label="Gráficos do cyberespaço" className="grid grid-cols-3 gap-1 rounded-xl bg-slate-200/60 p-1 dark:bg-white/[0.06]">
+              {([["auto", "Automático"], ["leve", "Leve"], ["cheio", "Completo"]] as const).map(([v, t]) => (
+                <button key={v} type="button" role="radio" aria-checked={graficos === v} onClick={() => mudarGraficos(v)}
+                  className={`min-h-[34px] rounded-lg text-xs font-semibold transition-colors ${graficos === v ? "bg-white text-slate-900 shadow dark:bg-cyan-500/25 dark:text-white" : "text-slate-600 hover:text-slate-900 dark:text-white/60 dark:hover:text-white"}`}>{t}</button>
+              ))}
+            </span>
+          </div>
+          <button type="button" role="switch" aria-checked={mostrarFps} onClick={mudarFps} className={item}>
+            <Activity size={16} className="text-cyan-600 dark:text-cyan-300 shrink-0" />
+            <span className="flex flex-col flex-1 min-w-0">
+              <span className={rotulo}>Cyberespaço</span>
+              <span>Mostrar FPS</span>
+              <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">O contador de quadros e o nome da placa de vídeo no canto da tela — se estiver lento, manda um print.</span>
+            </span>
+            <span aria-hidden className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${mostrarFps ? "bg-cyan-500" : "bg-slate-300 dark:bg-white/15"}`}>
+              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${mostrarFps ? "translate-x-5" : ""}`} />
+            </span>
+          </button>
 
           {logado && convite && (
             <button type="button" onClick={() => ir("/convite")} className={item}>
