@@ -127,7 +127,7 @@ float petalas(float id) { int i = int(id + 0.5); if (i == 0 || i == 1 || i == 4 
 vec2 leque(vec2 p, float n) { float a = atan(p.y, p.x), r = length(p), s = PI / n; float k = floor(a / (2.0 * s)); a = mod(a, 2.0 * s) - s; a = abs(a); return vec2(cos(a), sin(a)) * r; }
 float setorDe(vec2 p, float n) { float a = atan(p.y, p.x) + PI; return floor(a / (2.0 * PI / n)); }
 void main() {
-  vec2 p = (vUv - 0.5) * 10.0;
+  vec2 p = (vUv - 0.5) * 12.4;
   float r = length(p), a = atan(p.y, p.x);
   float pulso = 1.0 - 0.05 * uB, w = 0.045 + 0.014 * uB;
   vec2 q = rot(uT * 0.03) * p / pulso;
@@ -139,9 +139,11 @@ void main() {
   float nFora = n * (uComp > 0.5 ? 2.0 : 1.0);
   vec2 l = leque(rot(uT * 0.02) * p, n);
   float rp = (r - R0) / (5.0 - R0);                       // 0..1 na coroa
-  // o campo da pétala: a mesma forma, encolhida e posta no meio da coroa
+  // o campo da pétala: a mesma forma, encolhida e posta no meio da coroa — as linhas (petL) e o CORPO (petC: a forma
+  // engrossada até virar silhueta cheia — os triângulos e as demais ganham preenchimento, não só traço)
   vec2 pp = (l - vec2(R0 + 1.2, 0.0)) * 2.3;
   float petL = mix(forma(uForma, pp, w * 2.2), forma(uProx, pp, w * 2.2), uMix);
+  float petC = clamp(mix(forma(uForma, pp, w * 9.0), forma(uProx, pp, w * 9.0), uMix) * 0.55, 0.0, 1.0);
   // as BANDAS de cor: anéis finos e setores alternados (o padrão da mandala), cada banda com uma cor da paleta
   float banda = floor(rp * (5.0 + 4.0 * uComp)), setor = setorDe(rot(uT * 0.02) * p, nFora);
   float idx = banda * 3.0 + mod(setor, 2.0) * 4.0 + floor(uForma + 0.5) + floor(uT * 0.08);
@@ -154,16 +156,32 @@ void main() {
   vec3 fill = mix(corBanda, corSetor, lado) * (0.62 + 0.3 * uB) * (1.0 - 0.3 * rp);
   fill = mix(fill, paleta(idx + 5.0) * 0.8, smoothstep(0.5, 0.95, abs(fluxo)) * 0.35);   // os veios entre as bandas
   // as PÉTALAS recortam o preenchimento (a forma repetida vira a silhueta colorida) + as linhas acesas da forma
-  float petalaCheia = smoothstep(0.25, 0.9, petL);
+  float petalaCheia = max(smoothstep(0.25, 0.9, petL), petC);
   float bordas = linha(fract(rp * (5.0 + 4.0 * uComp)) - 0.5, 0.04) * 0.5 + linha(fract(atan(p.y, p.x) / (2.0 * PI) * nFora) - 0.5, 0.012 + 0.02 * rp) * 0.35;
   float coroa = smoothstep(R0 - 0.1, R0 + 0.3, r) * smoothstep(5.2, 4.6, r);
-  vec3 col = (fill * (0.75 + 0.9 * petalaCheia) + paleta(idx + 2.0) * petL * (0.9 + 0.8 * uB) + vec3(1.0) * bordas * 0.45) * coroa;
+  vec3 col = (fill * (0.75 + 1.1 * petalaCheia) + paleta(idx + 2.0) * petL * (0.9 + 0.8 * uB) + paleta(idx + 4.0) * petC * 0.9 + vec3(1.0) * bordas * 0.45) * coroa;
+  // ── a PROGRESSÃO (nível 2): a 2ª coroa, por fora, de TRIÂNGULOS entrelaçados e MEMBRANAS (células de luz) — vem com a
+  //    complexidade e ocupa mais espaço (a coroa de dentro encolhe um pouco pra dar lugar) ──
+  float nivel2 = smoothstep(0.3, 0.6, uComp);
+  if (nivel2 > 0.001) {
+    vec2 l2 = leque(rot(-uT * 0.025) * p, nFora * 2.0);
+    float r2 = (r - 4.2) / 1.6;                                      // 0..1 na 2ª coroa (4,2..5,8)
+    vec2 q2 = (l2 - vec2(5.0, 0.0)) * 3.2;
+    float triL = tri(q2, 1.6, w * 2.0) + tri(rot(PI) * q2, 1.6, w * 2.0), triC = clamp((tri(q2, 1.6, w * 8.0) + tri(rot(PI) * q2, 1.6, w * 8.0)) * 0.5, 0.0, 1.0);
+    // as membranas: células que respiram (um campo de senos dobrado), em cor complementar
+    float cel = sin(r2 * 9.0 - uT * 1.1 + sin(ang * nFora + uT * 0.4) * 1.5) * sin(ang * nFora * 2.0 + r2 * 4.0 - uT * 0.7);
+    float membrana = smoothstep(0.15, 0.75, cel);
+    vec3 cor2 = mix(paleta(idx + 3.0), paleta(idx + 6.0), membrana);
+    float coroa2 = smoothstep(4.1, 4.4, r) * smoothstep(6.0, 5.5, r) * nivel2;
+    col = col * (1.0 - 0.35 * coroa2) + (cor2 * (0.5 + 0.35 * uB) * (0.5 + membrana) * (0.4 + 0.9 * triC) + paleta(idx + 1.0) * triL * (0.9 + 0.7 * uB)) * coroa2;
+  }
   // o centro: a cor corre com o raio e o ângulo; o grave acende
   vec3 corC = hsv(fract(0.62 + r * 0.12 - uT * 0.04 + 0.08 * sin(a * 3.0 + uT * 0.3)), 0.8, 1.0);
   col += corC * centro * (1.2 + 1.1 * uB) + vec3(0.9, 0.85, 1.0) * centro * centro * 0.5;
   col += vec3(1.0, 0.95, 0.8) * smoothstep(0.1, 0.0, r) * (1.5 + 2.0 * uB) * step(0.01, uNasc);   // o ponto do centro (de onde tudo nasce)
   // o nascimento: do centro pra fora
-  col *= smoothstep(uNasc * 5.3, uNasc * 5.3 - 0.6, r) * smoothstep(5.1, 4.7, r);
+  float borda = mix(5.0, 5.9, nivel2);
+  col *= smoothstep(uNasc * 6.2, uNasc * 6.2 - 0.6, r) * smoothstep(borda + 0.2, borda - 0.3, r);
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -179,6 +197,11 @@ vec3 caminho(float u) {
     float sai = clamp(uProg * 1.6 - u * 0.6, 0.0, 1.0); sai = sai * sai * (3.0 - 2.0 * sai);
     return mix(vec3(0.0), p, sai);
   }
+  if (uTipo > 1.5) {   // FITA DE DNA: uma hélice em volta da mandala, no plano dela (o z é a normal); a outra fita tem a fase oposta
+    float a = u * 2.0 * PI + uT * 0.12 * uGiro, h = 1.3 + 0.3 * uB, k = 14.0;
+    float rr = uRaio * uProg + h * cos(a * k + uFase);
+    return vec3(cos(a) * rr, sin(a) * rr, h * sin(a * k + uFase) + 0.8 * sin(uT * 0.9 + a * 3.0));
+  }
   // TENTÁCULO: sai do centro, abre pra fora e pra baixo, balança da direita pra esquerda no compasso
   float bal = sin(uT * 0.9 + uFase) * (0.55 + 0.25 * uB), curva = u * u;
   float a = uFase + bal * (0.3 + 0.9 * u), rr = uRaio * u * uProg;
@@ -191,6 +214,7 @@ void main() {
   vec3 t = normalize(c2 - c + vec3(1e-4)), up = vec3(0.0, 1.0, 0.0), n = normalize(cross(t, up)), b = cross(n, t);
   float raio = uTipo < 0.5 ? (0.55 + 0.35 * (1.0 - smoothstep(0.0, 0.12, u)) * 0.0 + 0.5 * smoothstep(1.0, 0.75, u) * (0.6 + 0.4 * smoothstep(0.0, 0.1, u))) : (1.6 * (1.0 - u) * (1.0 - u) + 0.08);
   if (uTipo < 0.5) raio = 0.42 + 0.38 * smoothstep(0.0, 0.1, u) * smoothstep(1.0, 0.8, u);   // a cabeça e a cauda mais finas
+  if (uTipo > 1.5) raio = 0.3;
   vec3 pos = c + n * position.x * raio + b * position.z * raio;
   vN = n * position.x + b * position.z; vLado = atan(position.z, position.x);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
@@ -200,10 +224,11 @@ uniform float uT, uB, uTipo, uFase; uniform vec3 uCor;
 varying float vU; varying float vLado; varying vec3 vN;
 void main() {
   float escamas = uTipo < 0.5 ? smoothstep(0.35, 0.5, abs(fract(vU * 60.0 - uT * 0.6) - 0.5)) * smoothstep(0.3, 0.5, abs(fract(vLado * 1.2732 + vU * 60.0) - 0.5)) : 0.0;
-  float ventosas = uTipo < 0.5 ? 0.0 : smoothstep(0.18, 0.05, length(vec2(fract(vU * 26.0) - 0.5, (vLado / 3.14159) * 0.9)) ) * step(0.0, -cos(vLado + 1.57));
+  float ventosas = uTipo < 0.5 || uTipo > 1.5 ? 0.0 : smoothstep(0.18, 0.05, length(vec2(fract(vU * 26.0) - 0.5, (vLado / 3.14159) * 0.9)) ) * step(0.0, -cos(vLado + 1.57));
+  float degraus = uTipo > 1.5 ? smoothstep(0.42, 0.5, abs(fract(vU * 56.0) - 0.5)) : 0.0;   // os degraus da escada do DNA
   float borda = pow(1.0 - abs(cos(vLado)), 2.0);   // as laterais acesas (o filamento), o dorso escuro
-  vec3 cor = uCor * (0.25 + 0.75 * borda) + vec3(1.0) * escamas * 0.6 + vec3(1.0, 0.95, 0.8) * ventosas * (0.9 + 0.8 * uB);
-  float a = 0.35 + 0.65 * borda + escamas * 0.3 + ventosas;
+  vec3 cor = uCor * (0.25 + 0.75 * borda) + vec3(1.0) * escamas * 0.6 + vec3(1.0, 0.95, 0.8) * ventosas * (0.9 + 0.8 * uB) + vec3(1.0) * degraus * 0.9;
+  float a = 0.35 + 0.65 * borda + escamas * 0.3 + ventosas + degraus;
   gl_FragColor = vec4(cor * (0.8 + 0.5 * uB) * a, 1.0);
 }`;
 
@@ -223,11 +248,11 @@ export function criarMandala(o: { low: boolean; estrela?: THREE.Texture; tam?: n
 
   // as CRIATURAS: serpentes (rodeiam o lounge) e tentáculos (saem do centro)
   type Criatura = { m: THREE.Mesh; u: Record<string, { value: number | THREE.Color }> };
-  const criar = (tipo: 0 | 1, n: number, cores: number[], centro: THREE.Vector3, raio: number, alt: number): Criatura[] => {
+  const criar = (tipo: 0 | 1 | 2, n: number, cores: number[], centro: THREE.Vector3, raio: number, alt: number): Criatura[] => {
     const out: Criatura[] = [];
     for (let i = 0; i < n; i++) {
       const gg = new THREE.CylinderGeometry(1, 1, 1, tipo ? 10 : 8, o.low ? 48 : 110, true); geos.push(gg);
-      const u = { uT: { value: 0 }, uB: { value: 0 }, uProg: { value: 0 }, uFase: { value: (i / n) * Math.PI * 2 + tipo * 0.7 }, uRaio: { value: raio * (1 + 0.12 * (i % 3)) }, uAlt: { value: alt + (i % 2) * 3 }, uComp: { value: 0 }, uTipo: { value: tipo }, uGiro: { value: i % 2 ? -1 : 1 }, uCor: { value: new THREE.Color(cores[i % cores.length]!) } };
+      const u = { uT: { value: 0 }, uB: { value: 0 }, uProg: { value: 0 }, uFase: { value: tipo === 2 ? (i % 2) * Math.PI : (i / n) * Math.PI * 2 + tipo * 0.7 }, uRaio: { value: tipo === 2 ? raio * (1 + 0.14 * Math.floor(i / 2)) : raio * (1 + 0.12 * (i % 3)) }, uAlt: { value: alt + (i % 2) * 3 }, uComp: { value: 0 }, uTipo: { value: tipo }, uGiro: { value: tipo === 2 ? (Math.floor(i / 2) % 2 ? -1 : 1) : i % 2 ? -1 : 1 }, uCor: { value: new THREE.Color(cores[i % cores.length]!) } };
       const m = new THREE.Mesh(gg, new THREE.ShaderMaterial({ uniforms: u, vertexShader: VERT_CRIATURA, fragmentShader: FRAG_CRIATURA, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
       mats.push(m.material as THREE.Material); m.frustumCulled = false; m.renderOrder = 3; m.position.copy(centro); m.visible = false; g.add(m); out.push({ m, u });
     }
@@ -237,6 +262,8 @@ export function criarMandala(o: { low: boolean; estrela?: THREE.Texture; tam?: n
   const centroLounge = new THREE.Vector3(0, -22, 44);
   const serpentes = criar(0, o.low ? 4 : 6, [0x9affd0, 0xb98cff, 0xffd36b, 0x66e6ff, 0xff7ab8, 0x6bff9a], centroLounge, 52, 0);
   const tentaculos = criar(1, o.low ? 3 : 5, [0xb98cff, 0xff5fd2, 0x66e6ff, 0xff9a5c, 0x9affd0], new THREE.Vector3(0, 0, 0), 46, 34);
+  // as FITAS DE DNA (a progressão, nível 2): 2 fitas por hélice, 2 hélices em volta da mandala (no plano dela)
+  const dna = criar(2, o.low ? 2 : 4, [0x00ffff, 0xff1493, 0xccff00, 0xdf00ff], new THREE.Vector3(0, 0, 0), tam * 0.46, 0);
   for (const c of [...serpentes, ...tentaculos]) c.m.userData.semLote = true;
   g.traverse((n) => { n.userData.semLote = true; });
 
@@ -251,6 +278,7 @@ export function criarMandala(o: { low: boolean; estrela?: THREE.Texture; tam?: n
         pg.attributes.position!.needsUpdate = true; (pontos.material as THREE.PointsMaterial).opacity = 0.3 + 0.6 * e.complexidade; }
       for (const c of serpentes) { c.m.visible = e.serpentes > 0.001; (c.u.uT as { value: number }).value = t; (c.u.uB as { value: number }).value = batida; (c.u.uProg as { value: number }).value = e.serpentes; (c.u.uComp as { value: number }).value = e.complexidade; }
       for (const c of tentaculos) { c.m.visible = e.tentaculos > 0.001; (c.u.uT as { value: number }).value = t; (c.u.uB as { value: number }).value = batida; (c.u.uProg as { value: number }).value = e.tentaculos; (c.u.uComp as { value: number }).value = e.complexidade; }
+      for (const c of dna) { c.m.visible = e.dna > 0.001; (c.u.uT as { value: number }).value = t; (c.u.uB as { value: number }).value = batida; (c.u.uProg as { value: number }).value = e.dna * e.area; (c.u.uComp as { value: number }).value = e.complexidade; }
     },
     dispose() { for (const x of geos) x.dispose(); for (const m of mats) m.dispose(); g.removeFromParent(); },
   };

@@ -1188,7 +1188,8 @@ export class CyberEngine {
       const base = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
       // teto e paredes baixas contados do PISO de onde se voa (no lounge, 88 m acima da central: antes caía de lá)
       const pisoAqui = base + pisoDeVoo(eu.pos, yAnt - base);
-      const v = passoVertical(this.jet.y, this.jet.vy, this.jet.tecla, dt, pisoAqui + tetoDoJet(null), this.impulsoFrente);
+      const tetoC = pisoAqui + tetoDoJet(null), tetoAqui = yAnt > tetoC ? Math.max(tetoC, yAnt) : tetoC;   // quem chega de CIMA (saiu da nave) não é puxado pra baixo de uma vez
+      const v = passoVertical(this.jet.y, this.jet.vy, this.jet.tecla, dt, tetoAqui, this.impulsoFrente);
       const baixo = v.y - pisoAqui < JET.alturaBases ? this.colisoresDoNivel("ceu") : [], naves = v.y < topo - 0.2 ? this.colisoresDeNaves(CIDADE.pisoY) : [];
       let q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...baixo, ...naves]);
       // a CABINE DO DJ é do dono: pra todo o resto a torre é um campo de força (não se pousa lá em cima de mochila)
@@ -1231,6 +1232,10 @@ export class CyberEngine {
     const v = passoVertical(this.jet.y, this.jet.vy, this.jet.tecla, dt, teto, this.impulsoFrente);
     if (this.cidade && v.y > 40) {   // lá em cima: a ilha da Zaeon e as ilhotas são pousos (e corpos sólidos)
       const topoIlha = this.cidade.ilha.position.y;
+      // ENTROU no espaço aéreo da Zaeon (saindo da nave, descendo do céu livre) acima do piso dela: daqui pra frente é o
+      // ramo da cidade que manda — as paredes, os móveis, o lounge, a escadaria e o templo colidem e são piso (antes, só
+      // o piso central pousava: descia-se atravessando tudo)
+      if (naIlhaPrincipal(eu.pos) && v.y >= topoIlha - 0.5 && !this.saindoPelaRedoma) { this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; this.jet.y = v.y; this.jet.vy = v.vy; return; }
       if (naIlhaPrincipal(eu.pos) && yAnt >= topoIlha - 0.05 && v.y <= topoIlha && v.vy <= 0) {
         this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; this.jet.noAr = false; this.somPouso(v.vy); return;
       }

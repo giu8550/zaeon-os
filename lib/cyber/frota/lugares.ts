@@ -6,7 +6,7 @@
  *  - a PISTA do lounge (a festa).
  * Tudo no MUNDO; `y` é absoluto (as salas da Zaeon: o piso da ilha + a altura das salas — o engine soma a boia da ilha).
  */
-import { CIDADE, MOVEIS, alturaNaCidade, colisoresDaCidade, daSala, mundo, naSala, rotDaSala, type NomeSala } from "../ceu";
+import { CIDADE, MOVEIS, PISTA, alturaNaCidade, colisoresDaCidade, daSala, mundo, naSala, rotDaSala, type NomeSala } from "../ceu";
 import { DECK } from "../templo";
 import { lugaresDoLounge } from "../descanso";
 import { PLATAFORMAS, andarNaPlataforma, type IdPlataforma } from "../plataformas";
@@ -41,7 +41,7 @@ function assentos(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
 /** pontos no CHÃO de uma sala: grade, longe dos colisores, dos assentos, da pista/palco e do corredor da porta */
 function chaoDaSala(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
   const s = CIDADE.salas[sala], cs = colisoresDaCidade(), ocupados = lugaresDoLounge().flatMap((l) => l.assentos), out: Spot[] = [];
-  const pista = MOVEIS[sala].find((m) => m.tipo === "pista"), passo = 2.6, R = s.r - 5;
+  const pista = sala === "lounge" ? PISTA : null, passo = 2.6, R = s.r - 5;
   for (let lx = -R; lx <= R; lx += passo) for (let lz = -R; lz <= R; lz += passo) {
     if (Math.hypot(lx, lz) > R) continue;
     if (Math.abs(lx) < 4.5 && lz > s.r - 16) continue;   // o corredor da porta (de quem chega)
@@ -71,7 +71,7 @@ function chaoDaPlataforma(id: IdPlataforma): Spot[] {
 }
 /** a PISTA do lounge (a festa): grade em cima do LED, todo mundo virado pro palco */
 function pista(): Spot[] {
-  const s = CIDADE.salas.lounge, p = MOVEIS.lounge.find((m) => m.tipo === "pista")!, out: Spot[] = [];
+  const s = CIDADE.salas.lounge, p = PISTA, out: Spot[] = [];
   for (let lx = -p.larg / 2 + 1.5; lx <= p.larg / 2 - 1.5; lx += 1.7) for (let lz = -p.prof / 2 + 1.5; lz <= p.prof / 2 - 1.5; lz += 1.7) {
     const w = mundo(daSala(s, p.x + lx, p.z + lz));
     out.push({ id: `pista-${out.length}`, ambiente: "pista", tipo: "pista", x: w.x, z: w.z, y: ySala(w), rumo: rotDaSala(s) + Math.PI, zaeon: true });

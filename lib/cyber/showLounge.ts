@@ -18,6 +18,8 @@ export const NASCIMENTO = { ini: 0, dur: 6 } as const;
 /** as serpentes saem da mandala; os tentáculos vêm depois delas; a névoa se forma antes do 1º trovão */
 export const SERPENTES = { ini: 28, dur: 14, n: 6 } as const;
 export const TENTACULOS = { ini: 75, dur: 20, n: 5 } as const;
+/** as FITAS DE DNA em volta da mandala (a progressão, nível 2) */
+export const DNA = { ini: 110, dur: 20 } as const;
 export const NEVOA = { ini: 44, dur: 16 } as const;
 /** o TURNO: 1 min de música; o nível dos trovões sobe por turno (1 → 2 → 3) — até `MAX_TROVOES` por turno */
 export const TURNO_S = 60, MAX_TROVOES = 3;
@@ -29,8 +31,8 @@ export type EstadoShow = {
   forma: number; proxima: number; mistura: number;
   /** complexidade (0..1) e o fator de ÁREA (1 = o tamanho de nascença; cresce ao longo da faixa) */
   complexidade: number; area: number;
-  /** as serpentes (0..1 saindo da mandala) e os tentáculos (0..1) */
-  serpentes: number; tentaculos: number;
+  /** as serpentes (0..1 saindo da mandala), os tentáculos (0..1) e as fitas de DNA (0..1) */
+  serpentes: number; tentaculos: number; dna: number;
   /** a névoa (0..1) e o nível dos trovões (0 = ainda nenhum, 1..3) */
   nevoa: number; nivel: 0 | 1 | 2 | 3;
   /** o turno atual (0 = o 1º minuto) */
@@ -46,15 +48,15 @@ export function nivelDoTurno(t: number): 0 | 1 | 2 | 3 {
 }
 /** o estado do show no ponto `t` (s desde o começo da faixa; `tocando` false = tudo recolhido) */
 export function estadoDoShow(t: number, tocando: boolean): EstadoShow {
-  if (!tocando || t < 0) return { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, nevoa: 0, nivel: 0, turno: 0 };
+  if (!tocando || t < 0) return { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0 };
   const k = Math.floor(t / DURACAO_FORMA), dentro = t - k * DURACAO_FORMA, n = FORMAS.length;
   const forma = k % n, proxima = (k + 1) % n, mistura = s3((dentro - (DURACAO_FORMA - TRANSICAO)) / TRANSICAO);
   return {
     nascimento: rampa(t, NASCIMENTO.ini, NASCIMENTO.dur),
     forma, proxima, mistura,
-    complexidade: Math.min(1, t / 240),                                   // 4 min pra chegar ao máximo
-    area: 1 + 1.1 * s3(t / 200),                                          // cresce até 2,1× (≈125 m) em ~3,5 min
-    serpentes: rampa(t, SERPENTES.ini, SERPENTES.dur), tentaculos: rampa(t, TENTACULOS.ini, TENTACULOS.dur),
+    complexidade: Math.min(0.72, t / 240),                                // a progressão desta seção para no NÍVEL 2 (o 3 fica pra depois)
+    area: 1 + 1.5 * s3(t / 220),                                          // cresce até 2,5× (≈150 m) em ~4 min
+    serpentes: rampa(t, SERPENTES.ini, SERPENTES.dur), tentaculos: rampa(t, TENTACULOS.ini, TENTACULOS.dur), dna: rampa(t, DNA.ini, DNA.dur),
     nevoa: rampa(t, NEVOA.ini, NEVOA.dur), nivel: nivelDoTurno(t), turno: Math.floor(t / TURNO_S),
   };
 }

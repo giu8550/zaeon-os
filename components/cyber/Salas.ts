@@ -2,7 +2,7 @@
  * Salas — os pavilhões da Zaeon. O LOUNGE é um CLUBE A CÉU ABERTO na plataforma própria (lá no alto, na altura do
  * início da ponta da capela — chega-se pela escada): PALCO alto de cristais de gelo com a MESA DO DJ (2 pickups +
  * controladora), a TRELIÇA de metal alta com as CAIXAS SUSPENSAS (line arrays penduradas nos braços), subs no chão,
- * TELÃO no fundo, PISTA de LED com o cristal-espelho flutuando e as LUZES saindo do palco e da treliça. Tudo pulsa com
+ * (sem telão nem pista de LED: o centro do evento é a MANDALA em cima do DJ — components/cyber/MandalaSagrada) e as LUZES saindo do palco e da treliça. Tudo pulsa com
  * os GRAVES da música (`somTocando(on, nivel)`); parado, respira devagar. Guarda-corpo de vidro em volta com a
  * ENTRADA virada pra escada (o +z da sala). Layout, móveis e colisores em
  * lib/cyber/ceu.ts (CIDADE.salas, MOVEIS, PALCO) — aqui só o three. Sem estrobo; `low` corta os detalhes miúdos.
@@ -134,7 +134,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
 
   let salaAtual: NomeSala = "lounge";
   let showLounge: { olho: { group: THREE.Group }; mandala: ReturnType<typeof criarMandala>; nevoa: ReturnType<typeof criarTempestade>; grupo: THREE.Group } | null = null;
-  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, nevoa: 0, nivel: 0, turno: 0 };
+  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0 };
   const ambiente: { sala: NomeSala; obj: THREE.Object3D }[] = [];
   const tema = (_m: Movel) => TEMA[salaAtual];
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
@@ -328,8 +328,30 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       caixa(mira, W + 0.4, 0.25, D + 0.3, metal, 0, topo + 0.2, 0);
       for (const sx of [-1, 1]) caixa(mira, 0.05, TRELICA.alt - topo - 0.4, 0.05, metal, sx * (W / 2 - 0.2), (TRELICA.alt + topo) / 2 + 0.1, 0);
       const boca = new THREE.Object3D(); boca.position.set(0, (topo + y) / 2, D / 2 + 0.5); mira.add(boca); caixasSom.push(boca);   // de onde a música sai
+      // a ONDA (a que era da pista de LED): a cada batida, anéis de luz saem da boca da caixa e correm pela sala — num
+      // disco vertical na frente dela (o centro do evento é a mandala; o chão fica livre)
+      const ondaMat = new THREE.ShaderMaterial({
+        uniforms: { uT: { value: 0 }, uB: { value: 0 }, uOnda: { value: 40 }, uA: { value: 0 } },
+        vertexShader: `varying vec2 vP; void main() { vP = (uv - 0.5) * 2.0; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `uniform float uT, uB, uOnda, uA; varying vec2 vP;
+          vec3 pal(float k) { k = fract(k); return k < 0.2 ? vec3(0.4,0.9,1.0) : k < 0.4 ? vec3(0.73,0.55,1.0) : k < 0.6 ? vec3(1.0,0.37,0.82) : k < 0.8 ? vec3(0.42,1.0,0.6) : vec3(0.3,0.48,1.0); }
+          void main() {
+            float d = length(vP) * 18.0;
+            float onda = exp(-pow((d - uOnda) * 0.9, 2.0)) + 0.55 * exp(-pow((d - uOnda + 2.2) * 0.9, 2.0)) + 0.3 * exp(-pow((d - uOnda + 4.4) * 0.9, 2.0));
+            float v = onda * uA * (0.45 + 0.55 * uB) * smoothstep(18.0, 12.0, d);
+            vec3 col = pal(d * 0.04 + uT * 0.1) * v;
+            gl_FragColor = vec4(col, v);
+          }`,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      });
+      const onda = new THREE.Mesh(new THREE.PlaneGeometry(36, 36), ondaMat); onda.position.set(0, (topo + y) / 2, D / 2 + 0.6); onda.renderOrder = 3; mira.add(onda); onda.userData.semLote = true;
+      let vistaC = 0;
       const luzMat = luz.material as THREE.MeshBasicMaterial;
-      anim.push(() => { luzMat.opacity = 0.35 + 0.65 * batida(); mira.position.z = 0.02 * batida(); });
+      anim.push((dt, t) => {
+        luzMat.opacity = 0.35 + 0.65 * batida(); mira.position.z = 0.02 * batida();
+        const u = ondaMat.uniforms; u.uT!.value = t; u.uB!.value = energia; u.uA!.value = ativo;
+        if (batidas !== vistaC) { vistaC = batidas; u.uOnda!.value = 0; } else u.uOnda!.value += dt * 14;   // a onda nasce na boca a cada batida e corre pra fora
+      });
     },
     // TORRE DE SOM gigante no chão (a de antes, maior: 10 m): subs embaixo, 4 médios, corneta em cima; LEDs nas quinas
     // e um feixe no topo — a música sai das caixas SUSPENSAS; estas dão o peso visual do palco
@@ -526,38 +548,6 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const puff = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 10), new THREE.MeshStandardMaterial({ color: 0x3b2470, roughness: 0.9, emissive: m.cor ?? 0x1a0f3a, emissiveIntensity: 0.18 })); puff.scale.set(1, 0.55, 1); puff.position.y = 0.28; p.add(puff);
       const f = new THREE.Mesh(new THREE.TorusGeometry(0.47, 0.02, 6, 32), basica(m.cor ?? 0xb98cff, 0.75, true)); f.rotation.x = Math.PI / 2; f.position.y = 0.12; p.add(f);
     },
-    // PISTA de LED: ladrilhos de 1 m com cores da festa, uma onda saindo do centro a cada batida; o CRISTAL-ESPELHO gira em cima
-    pista(p, m) {
-      const mat = new THREE.ShaderMaterial({
-        uniforms: { uT: { value: 0 }, uB: { value: 0 }, uOnda: { value: 9 }, uA: { value: 0 }, uTam: { value: new THREE.Vector2(m.larg, m.prof) } },
-        vertexShader: `varying vec2 vP; uniform vec2 uTam; void main() { vP = (uv - 0.5) * uTam; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-        fragmentShader: `uniform float uT; uniform float uB; uniform float uOnda; uniform float uA; varying vec2 vP;
-          vec3 pal(float k) { k = fract(k); return k < 0.2 ? vec3(0.4,0.9,1.0) : k < 0.4 ? vec3(0.73,0.55,1.0) : k < 0.6 ? vec3(1.0,0.37,0.82) : k < 0.8 ? vec3(0.42,1.0,0.6) : vec3(0.3,0.48,1.0); }
-          void main() {
-            vec2 c = floor(vP), f = fract(vP);
-            float h = fract(sin(dot(c, vec2(12.9898, 78.233))) * 43758.5453);
-            float junta = smoothstep(0.0, 0.06, f.x) * smoothstep(0.0, 0.06, f.y) * smoothstep(1.0, 0.94, f.x) * smoothstep(1.0, 0.94, f.y);
-            float d = length(c + 0.5), onda = exp(-pow((d - uOnda) * 1.1, 2.0));
-            float pisca = 0.5 + 0.5 * sin(uT * (0.8 + h * 1.6) + h * 30.0);
-            float v = mix(0.10 + 0.08 * pisca, 0.18 + 0.55 * pisca * uB + 0.9 * onda * uA, uA);
-            vec3 col = pal(h + floor(uT * 0.35) * 0.37) * v * junta + vec3(0.02, 0.03, 0.08);
-            gl_FragColor = vec4(col, 1.0);
-          }`,
-      });
-      const piso = new THREE.Mesh(new THREE.PlaneGeometry(m.larg, m.prof), mat); piso.rotation.x = -Math.PI / 2; piso.position.y = 0.025; p.add(piso); alvos.push(piso);
-      // o cristal-espelho (bola de espelhos facetada) + o cabo até o teto
-      const geoBola = new THREE.IcosahedronGeometry(1.6, 1); geoBola.computeVertexNormals();   // não indexada → normal por face (facetada)
-      const bola = new THREE.Mesh(geoBola, new THREE.MeshStandardMaterial({ color: 0xcfe8ff, emissive: 0x223a66, emissiveIntensity: 0.8, roughness: 0.1, metalness: 0.9 }));
-      const bolaG = new THREE.Group(); bolaG.position.y = 13; bolaG.add(bola); p.add(bolaG);   // a céu aberto: flutua (sem cabo)
-      const facetas = new THREE.Mesh(new THREE.IcosahedronGeometry(1.66, 1), new THREE.MeshBasicMaterial({ color: 0x66e6ff, wireframe: true, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false })); bolaG.add(facetas);
-      const brilho = new THREE.Mesh(new THREE.SphereGeometry(3, 16, 12), basica(0xb98cff, 0.12, true)); bolaG.add(brilho);
-      let vista = 0;
-      anim.push((dt, t) => {
-        const u = mat.uniforms; u.uT!.value = calmo ? t * 0.3 : t; u.uB!.value = energia; u.uA!.value = ativo;
-        if (batidas !== vista) { vista = batidas; u.uOnda!.value = 0; } else u.uOnda!.value += dt * 9;   // a onda nasce no centro a cada batida e corre pra fora
-        bolaG.rotation.y += dt * (0.3 + 0.9 * ativo); bolaG.position.y = 13 + 0.4 * Math.sin(t * 0.6); (brilho.material as THREE.MeshBasicMaterial).opacity = 0.06 + 0.3 * batida();
-      });
-    },
   };
 
   /** o LOUNGE EM DOIS NÍVEIS (lib/cyber/templo): o DECK da festa (laje alta atrás de `zFrente`, com guarda-corpo de
@@ -658,7 +648,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     show(e, olho) {
       if (!showLounge) return;
       const ritual = olho > 0.001;
-      estadoShow = ritual ? { ...e, nascimento: 0, serpentes: 0, tentaculos: 0 } : e;   // no ritual, a mandala se recolhe: fica o olho
+      estadoShow = ritual ? { ...e, nascimento: 0, serpentes: 0, tentaculos: 0, dna: 0 } : e;   // no ritual, a mandala se recolhe: fica o olho
       showLounge.olho.group.visible = ritual;
       showLounge.nevoa.definir(Math.max(e.nevoa, olho), e.nivel > 0 || olho > 0.5);   // no ritual, a névoa do lounge se forma junto com a do templo (os raios cortam as caixas)
     },
