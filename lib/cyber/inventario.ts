@@ -15,8 +15,8 @@ export type Item = {
 export const ITENS: Record<IdItem, Item> = {
   "espada-espiritual": {
     id: "espada-espiritual", nome: "Espada Espiritual", tipo: "arma", nivel: 7, raridade: "epica",
-    descricao: "Lâmina de metal escuro com o núcleo de energia verde-água. Se materializa na mão de quem a chama e se desfaz em luz.",
-    arma: { dano: 12, alcance: 2.7, arco: 1.05 },
+    descricao: "Montante enorme de metal escuro com o núcleo de energia verde-água — pesa como uma porta. Se materializa na mão de quem a chama e se desfaz em luz.",
+    arma: { dano: 12, alcance: 4.1, arco: 1.0 },   // (uma montante ENORME, ~3 m: alcance longo)
   },
 };
 /** o dano cresce com o nível do item (+6% por nível acima do 1º) */

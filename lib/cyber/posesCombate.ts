@@ -125,19 +125,27 @@ const vert = (fi: number): Dir3 => n([Math.cos(fi), Math.sin(fi), -0.12]);
 
 /** o braço esquerdo, aberto e dobrado (o mesmo da guarda) — equilibra os golpes */
 const ESQ_ABERTO = { braco: n([0.05, -0.5, 0.86]), ante: n([0.82, -0.28, 0.38]) };
-/** segurando a espada em GUARDA: a mão direita à frente-direita, a lâmina pra frente e pra baixo (ameaçando) */
+/** segurando a espada (uma MONTANTE de ~3 m) em GUARDA: a mão direita à frente-direita, a lâmina apontada à frente,
+ *  um pouco pra baixo — a ponta fica no ar, à altura do joelho (ameaçando) */
 export function poseEmpunhaGuarda(): PoseEspada {
-  return { inclina: 0, desce: 0, tronco: n([0.38, 0.92, 0]), bracoD: n([0.25, -0.75, -0.6]), anteD: n([0.78, -0.2, -0.58]), ...{ bracoE: ESQ_ABERTO.braco, anteE: ESQ_ABERTO.ante }, lamina: n([0.6, -0.42, -0.68]), plano: n([0, 1, 0]), pernas: null };
+  return { inclina: 0, desce: 0, tronco: n([0.38, 0.92, 0]), bracoD: n([0.25, -0.75, -0.6]), anteD: n([0.78, -0.2, -0.58]), ...{ bracoE: ESQ_ABERTO.braco, anteE: ESQ_ABERTO.ante }, lamina: n([0.78, -0.16, -0.6]), plano: n([0, 1, 0]), pernas: null };
 }
-/** andando com a espada: o braço solto, a lâmina pra trás e pra baixo (arrastando) */
+/** andando com a montante: APOIADA NO OMBRO direito (a lâmina pra cima e pra trás) — arrastada, cravaria no chão */
 export function poseEmpunhaSolta(): PoseEspada {
-  return { inclina: 0, desce: 0, tronco: n([0.1, 0.99, 0]), bracoD: n([-0.05, -0.97, -0.22]), anteD: n([0.35, -0.88, -0.3]), bracoE: n([0, -0.98, 0.2]), anteE: n([0.25, -0.95, 0.15]), lamina: n([-0.5, -0.8, -0.32]), plano: n([0, 0, 1]), pernas: null };
+  return { inclina: 0, desce: 0, tronco: n([0.12, 0.99, 0]), bracoD: n([0.2, -0.62, -0.76]), anteD: n([0.35, 0.88, -0.32]), bracoE: n([0, -0.98, 0.2]), anteE: n([0.25, -0.95, 0.15]), lamina: n([-0.6, 0.7, -0.38]), plano: n([0, 0, 1]), pernas: null };
 }
 /** um ARCO por vários pontos (direções): a lâmina passa por cada um, girando pelo caminho mais curto entre eles */
 function arco(pontos: Dir3[], k: number): Dir3 {
   const segs = pontos.length - 1, x = Math.max(0, Math.min(0.9999, k)) * segs, i = Math.floor(x), f = x - i, a = pontos[i]!, b = pontos[i + 1]!;
   const dot = Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])), om = Math.acos(dot);
   if (om < 1e-4) return a;
+  const sa = Math.sin((1 - f) * om) / Math.sin(om), sb = Math.sin(f * om) / Math.sin(om);
+  return n([a[0] * sa + b[0] * sb, a[1] * sa + b[1] * sb, a[2] * sa + b[2] * sb]);
+}
+/** gira de `a` pra `b` pelo caminho mais curto, e PASSA do ponto se `f` > 1 (a inércia do golpe pesado) */
+function alem(a: Dir3, b: Dir3, f: number): Dir3 {
+  const dot = Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])), om = Math.acos(dot);
+  if (om < 1e-4) return b;
   const sa = Math.sin((1 - f) * om) / Math.sin(om), sb = Math.sin(f * om) / Math.sin(om);
   return n([a[0] * sa + b[0] * sb, a[1] * sa + b[1] * sb, a[2] * sa + b[2] * sb]);
 }
@@ -153,25 +161,29 @@ const chaves = (lista: Dir3[], k: number) => arco(lista, k);
  *  3 — o PESADO por cima: a espada lá no alto (o corpo arqueia pra trás) e ESMAGA pra frente-baixo (agacha, investe) */
 export function poseGolpe(nGolpe: 1 | 2 | 3, u: number, ativo: [number, number]): PoseEspada & { duasMaos: number } {
   const [a0, a1] = ativo;
-  const kc = u < a0 ? 0 : u < a1 ? suave((u - a0) / (a1 - a0)) : 1;   // o CORTE: 0 → 1 dentro da janela
-  const prep = suave(u / Math.max(0.01, a0)), volta = suave((u - a1) / (1 - a1));
+  // o PESO da montante: a ANTECIPAÇÃO chega lá em cima antes e SEGURA (a carga); o CORTE começa devagar e ganha
+  // embalo (a massa acelerando); depois do corte a lâmina PASSA DO PONTO (inércia) e o corpo é puxado junto; a volta
+  // pra guarda é lenta (levantar o peso de novo)
+  const x = u < a0 ? 0 : u < a1 ? (u - a0) / (a1 - a0) : 1, kc = x * x * (2.2 - 1.2 * x);
+  const prep = suave(u / Math.max(0.01, a0 * 0.78)), volta = suave((u - a1 - 0.1) / Math.max(0.05, 1 - a1 - 0.1));
+  const inercia = u > a1 ? Math.sin(Math.PI * Math.min(1, (u - a1) / 0.22)) * (u - a1 < 0.22 ? 1 : 0) : 0;   // 0 → 1 → 0 logo depois do corte
   const G = poseEmpunhaGuarda();
   type Quadro = { tronco: Dir3; bracoD: Dir3; anteD: Dir3; lamina: Dir3; inclina: number; desce: number };
   let ini: Quadro, meio: Quadro, fim: Quadro, pernas: PoseEspada["pernas"] = null;
   if (nGolpe === 1) {
     ini = { tronco: n([0.15, 0.97, -0.2]), bracoD: n([0.1, 0.55, -0.83]), anteD: n([-0.2, 0.95, -0.25]), lamina: n([-0.45, 0.75, -0.48]), inclina: 0.04, desce: 0.1 };
     meio = { tronco: n([0.35, 0.93, 0]), bracoD: n([0.75, -0.3, -0.58]), anteD: n([0.95, 0.08, 0.25]), lamina: n([0.96, 0.18, 0.2]), inclina: -0.12, desce: 0.18 };
-    fim = { tronco: n([0.5, 0.85, 0.2]), bracoD: n([0.55, -0.65, 0.5]), anteD: n([0.5, -0.62, 0.6]), lamina: n([0.25, -0.8, 0.55]), inclina: -0.2, desce: 0.24 };
+    fim = { tronco: n([0.5, 0.85, 0.2]), bracoD: n([0.55, -0.65, 0.5]), anteD: n([0.5, -0.62, 0.6]), lamina: n([0.42, -0.32, 0.85]), inclina: -0.2, desce: 0.24 };   // (a montante para RENTE ao chão)
     pernas = { coxa: (l) => (l > 0 ? n([0.45, -0.75, 0.48]) : n([-0.3, -0.78, -0.55])), canela: (l) => n([-0.3, -0.94, 0.14 * l]), pe: (l) => (l > 0 ? n([0.88, -0.4, 0.25]) : n([0.55, -0.55, -0.62])) };
   } else if (nGolpe === 2) {
-    ini = { tronco: n([0.5, 0.85, 0.22]), bracoD: n([0.55, -0.65, 0.5]), anteD: n([0.5, -0.62, 0.6]), lamina: n([0.25, -0.8, 0.55]), inclina: -0.18, desce: 0.22 };
+    ini = { tronco: n([0.5, 0.85, 0.22]), bracoD: n([0.55, -0.65, 0.5]), anteD: n([0.5, -0.62, 0.6]), lamina: n([0.42, -0.32, 0.85]), inclina: -0.18, desce: 0.22 };
     meio = { tronco: n([0.3, 0.94, 0]), bracoD: n([0.85, -0.15, -0.5]), anteD: n([0.95, 0.15, -0.28]), lamina: n([0.95, -0.02, -0.3]), inclina: -0.1, desce: 0.15 };
     fim = { tronco: n([0.05, 0.98, -0.25]), bracoD: n([0.35, 0.6, -0.72]), anteD: n([0.1, 0.95, -0.3]), lamina: n([-0.1, 0.85, -0.5]), inclina: 0.05, desce: 0.08 };
     pernas = { coxa: (l) => (l > 0 ? n([0.25, -0.8, 0.55]) : n([-0.15, -0.8, -0.58])), canela: (l) => n([-0.25, -0.95, 0.1 * l]), pe: (l) => (l > 0 ? n([0.85, -0.45, 0.3]) : n([0.5, -0.55, -0.65])) };
   } else {
     ini = { tronco: n([-0.12, 0.98, 0]), bracoD: n([0.15, 0.95, -0.25]), anteD: n([-0.25, 0.96, -0.1]), lamina: n([-0.85, 0.5, -0.1]), inclina: 0.12, desce: 0.05 };
     meio = { tronco: n([0.2, 0.97, 0]), bracoD: n([0.45, 0.85, -0.25]), anteD: n([0.5, 0.85, -0.1]), lamina: n([0.15, 0.99, -0.05]), inclina: 0, desce: 0.1 };
-    fim = { tronco: n([0.68, 0.73, 0]), bracoD: n([0.82, -0.52, -0.22]), anteD: n([0.85, -0.52, -0.05]), lamina: n([0.66, -0.75, 0]), inclina: -0.42, desce: 0.34 };
+    fim = { tronco: n([0.68, 0.73, 0]), bracoD: n([0.82, -0.52, -0.22]), anteD: n([0.85, -0.52, -0.05]), lamina: n([0.93, -0.36, 0]), inclina: -0.42, desce: 0.34 };   // (a PONTA bate no chão lá na frente)
     pernas = { coxa: (l) => (l > 0 ? n([0.75, -0.6, 0.18]) : n([-0.55, -0.8, -0.2])), canela: (l) => (l > 0 ? n([-0.2, -0.98, 0]) : n([-0.85, -0.5, 0])), pe: (l) => (l > 0 ? n([0.8, -0.6, 0]) : n([-0.25, -0.97, 0])) };
   }
   // o CORPO segue o golpe: na antecipação vai da guarda até o preparo; no corte, preparo → meio → fim; volta pra guarda
@@ -179,9 +191,9 @@ export function poseGolpe(nGolpe: 1 | 2 | 3, u: number, ativo: [number, number])
   const num = (q: (x: Quadro) => number) => (u < a0 ? q(ini) * prep : kc < 0.5 ? q(ini) + (q(meio) - q(ini)) * kc * 2 : q(meio) + (q(fim) - q(meio)) * (kc - 0.5) * 2);
   const w = u > a1 ? 1 - volta : 1;
   const m = (a: Dir3, b: Dir3) => mix(a, b, w);
-  const lam = quadro((x) => x.lamina);
+  const lam0 = quadro((x) => x.lamina), lam = inercia > 0 ? alem(meio.lamina, fim.lamina, 1 + 0.16 * inercia) : lam0;
   return {
-    inclina: num((x) => x.inclina) * w, desce: num((x) => x.desce) * w,
+    inclina: (num((x) => x.inclina) - 0.06 * inercia) * w, desce: (num((x) => x.desce) + 0.05 * inercia) * w,
     tronco: m(G.tronco, quadro((x) => x.tronco)), bracoD: m(G.bracoD, quadro((x) => x.bracoD)), anteD: m(G.anteD, quadro((x) => x.anteD)),
     bracoE: G.bracoE, anteE: G.anteE,
     lamina: w >= 1 ? lam : m(G.lamina, lam), plano: cruz(ini.lamina, fim.lamina),

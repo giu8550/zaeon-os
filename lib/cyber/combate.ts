@@ -11,12 +11,17 @@ export const VIDA_MAX = 100;
 /** um golpe do combo: duração (s), a janela em que a lâmina CORTA (s, do começo), o dano (× o da arma), o quanto
  *  empurra (m/s) e o quanto o corpo AVANÇA no golpe (m) */
 export type Golpe = { n: 1 | 2 | 3; dur: number; ativoIni: number; ativoFim: number; dano: number; empurra: number; avanco: number; alcanceExtra: number };
-export const COMBO: readonly Golpe[] = [
+/** a VELOCIDADE dos golpes (o dono escolhe): os golpes são animados LENTOS, com o peso da montante (antecipação que
+ *  segura lá em cima, o corte ganhando embalo, a inércia passando do ponto) — e tocados `RITMO_GOLPES`× mais rápido */
+export const RITMO_GOLPES = 1.2;
+/** o combo como foi ANIMADO (lento, pesado) — o jogo usa o `COMBO`, já no ritmo */
+const COMBO_ANIMADO: readonly Golpe[] = [
   // a DUAS MÃOS, no ritmo dos jogos de ação (Devil May Cry): antecipação longa, corte rápido, recuperação que pesa
-  { n: 1, dur: 0.8, ativoIni: 0.3, ativoFim: 0.42, dano: 1.25, empurra: 4.5, avanco: 1.2, alcanceExtra: 0.1 },    // diagonal descendo
-  { n: 2, dur: 0.8, ativoIni: 0.28, ativoFim: 0.4, dano: 1.45, empurra: 5.5, avanco: 1.0, alcanceExtra: 0.1 },   // diagonal subindo, de volta
-  { n: 3, dur: 1.15, ativoIni: 0.5, ativoFim: 0.62, dano: 2.6, empurra: 12, avanco: 2.0, alcanceExtra: 0.6 },    // o PESADO por cima (esmaga o chão)
+  { n: 1, dur: 1.0, ativoIni: 0.42, ativoFim: 0.58, dano: 1.25, empurra: 4.5, avanco: 1.2, alcanceExtra: 0.1 },    // diagonal descendo
+  { n: 2, dur: 1.0, ativoIni: 0.38, ativoFim: 0.54, dano: 1.45, empurra: 5.5, avanco: 1.0, alcanceExtra: 0.1 },   // diagonal subindo, de volta
+  { n: 3, dur: 1.4, ativoIni: 0.62, ativoFim: 0.8, dano: 2.6, empurra: 12, avanco: 2.0, alcanceExtra: 0.6 },     // o PESADO por cima (esmaga o chão)
 ];
+export const COMBO: readonly Golpe[] = COMBO_ANIMADO.map((g) => ({ ...g, dur: g.dur / RITMO_GOLPES, ativoIni: g.ativoIni / RITMO_GOLPES, ativoFim: g.ativoFim / RITMO_GOLPES }));
 /** depois de um golpe acabar, quanto tempo o próximo do combo ainda encadeia (s) */
 export const JANELA_COMBO = 0.45;
 /** o HIT-STOP (s): quando o golpe PEGA, a ação congela um instante (o peso do impacto, como nos jogos de ação) */

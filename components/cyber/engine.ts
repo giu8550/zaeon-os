@@ -59,6 +59,8 @@ import { CAIDO, COMBO, HIT_STOP, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAca
 import { BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
 import { criarArena, type ArenaHandle } from "./Arena";
 import { criarEspadaEspiritual, type EspadaHandle } from "./EspadaEspiritual";
+/** a Espada Espiritual na mão: uma MONTANTE enorme (~3 m) — o peso dela define o golpe (o dono, out/2026) */
+const ESCALA_ESPADA = 2.2;
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
 import { PILOTAGEM, motoParada, passoMotoSub, sensacaoDeVelocidade, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
@@ -409,7 +411,7 @@ export class CyberEngine {
   private vida = VIDA_MAX; private caidoAte = -Infinity; private protegidoAte = -Infinity; private empurrao = { x: 0, z: 0 }; private wGuardaArena = 0;
   private vRastroB = new THREE.Vector3(); private vRastroP = new THREE.Vector3();
   /** o HIT-STOP (até quando a ação fica congelada — o peso do golpe que pegou) e o golpe pesado que já esmagou o chão */
-  private pausaAte = -Infinity; private esmagou = -1;
+  private pausaAte = -Infinity; private esmagou = -1; private raiosExtra = 0;
   private arena: ArenaHandle | null = null;
   /** golpes de OUTROS jogadores que podem me pegar: confere no meio da janela que corta (quem apanha decide — sabe se estava no dash) */
   private golpesChegando: { de: Ator; g: Golpe; quando: number; x: number; z: number; rumo: number }[] = []; private hudCombate: HTMLDivElement | null = null; private numeros: { el: HTMLDivElement; p: THREE.Vector3; t0: number }[] = [];
@@ -886,7 +888,7 @@ export class CyberEngine {
   }
   /** a arma equipada vai pra mão (a espada se cria uma vez); sem arma, a mão fica livre */
   private aplicarArma() {
-    if (this.inv.equipado === "espada-espiritual") { if (!this.espada) { this.espada = criarEspadaEspiritual({ low: this.o.low }); this.espada.group.scale.setScalar(1.25); } this.eu?.av.empunhar(this.espada.group); }   // (uma espada GRANDE, como na arte)
+    if (this.inv.equipado === "espada-espiritual") { if (!this.espada) { this.espada = criarEspadaEspiritual({ low: this.o.low }); this.espada.group.scale.setScalar(ESCALA_ESPADA); } this.eu?.av.empunhar(this.espada.group); }   // (uma MONTANTE enorme, ~3 m)
     else { this.eu?.av.empunhar(null); this.revela = 0; this.espada?.atualizar(this.agora, 0); }
   }
   /** ATACAR (X / clique com o mouse travado / botão ATACAR): o próximo golpe do COMBO (lib/cyber/combate); no meio de
@@ -917,7 +919,7 @@ export class CyberEngine {
       if (cortouEntre(a, this.tAnt || t, t) && this.arena) for (const b of this.arena.bonecos) {
         if (!b.vivo || this.acertados.has(b.id) || !acerta({ x: eu.pos.x, z: eu.pos.z, rumo: eu.facing }, b, arma, g)) continue;
         // o HIT-STOP: no 1º acerto do golpe a ação congela um instante (e a linha do tempo do golpe espera junto)
-        if (!this.acertados.size) this.pausaAte = t + HIT_STOP[g.n];
+        if (!this.acertados.size) { this.pausaAte = t + HIT_STOP[g.n]; this.raiosExtra += g.n === 3 ? 10 : 6; }   // (hit-stop + a rajada de raios no acerto)
         this.acertados.add(b.id); const dano = danoDoGolpe(arma, g);
         this.arena.acertar(b.id, dano, eu.pos, t); this.numero(String(dano), b.pos.clone().setY(2.6), g.n === 3 ? "#ffd36b" : "#ffffff");
         this.som.tocar("acerto", b.pos, { dist: DISTANCIA.eu, volume: g.n === 3 ? 1 : 0.8, taxa: g.n === 3 ? 0.8 : 1 }); this.tremor = Math.max(this.tremor, g.n === 3 ? 0.22 : 0.1);
@@ -925,7 +927,7 @@ export class CyberEngine {
       // o PESADO esmaga o CHÃO no fim do corte: onda de choque na frente, tranco e estrondo (pegando ou não)
       if (g.n === 3 && this.esmagou !== a.seq && t - a.ini >= g.ativoFim) {
         this.esmagou = a.seq;
-        const pt = eu.av.group.position.clone(); pt.x += Math.sin(eu.facing) * 2.2; pt.z += Math.cos(eu.facing) * 2.2;
+        const pt = eu.av.group.position.clone(); pt.x += Math.sin(eu.facing) * 3.1; pt.z += Math.cos(eu.facing) * 3.1;   // (onde a ponta da montante bate)
         this.fxMov?.onda(pt, 0.85); this.tremor = Math.max(this.tremor, 0.3);
         this.som.tocar("impacto-heroi", pt, { dist: DISTANCIA.eu, volume: 0.85, taxa: 0.9 });
       }
@@ -960,7 +962,13 @@ export class CyberEngine {
     if (this.espada && this.fxMov) {
       const at = this.ataque, ativo = !!at && this.revela > 0.5 && t - at.ini >= at.golpe.ativoIni - 0.04 && t - at.ini <= at.golpe.ativoFim + 0.03;
       this.espada.group.updateWorldMatrix(true, false);
-      this.fxMov.rastroLamina(this.espada.group.localToWorld(this.vRastroB.set(0, 0.75, 0)), this.espada.group.localToWorld(this.vRastroP.set(0, 1.3, 0)), ativo, dt);   // (só a metade de fora da lâmina)
+      this.fxMov.rastroLamina(this.espada.group.localToWorld(this.vRastroB.set(0, 1.0, 0)), this.espada.group.localToWorld(this.vRastroP.set(0, 1.3, 0)), ativo, dt);   // (só o terço de fora da lâmina: com a montante enorme, mais seria uma parede)
+      // os RAIOS ROXOS saindo da lâmina enquanto o golpe dura (mais no corte; rajada no acerto; o pesado desce no chão)
+      const golpeando = !!at && !golpeAcabou(at, t) && this.revela > 0.5, u = at ? t - at.ini : 0;
+      const quantos = !golpeando ? 0 : ativo ? 3 : u > at!.golpe.ativoIni * 0.4 ? 1 : 0;
+      const chao = golpeando && at!.golpe.n === 3 && u >= at!.golpe.ativoFim - 0.02 && u <= at!.golpe.ativoFim + 0.12 ? this.vRastroP.clone().setY(this.eu.av.group.position.y) : undefined;
+      this.fxMov.raios(this.espada.group.localToWorld(this.vRastroB.set(0, 0.2, 0)), this.espada.group.localToWorld(this.vRastroP.set(0, 1.28, 0)), quantos + this.raiosExtra, dt, chao);
+      this.raiosExtra = 0;
     }
   }
   /** o HUD do combate: a barra de vida (na arena ou ferido) e os números que sobem */
@@ -1003,7 +1011,7 @@ export class CyberEngine {
     if (a.golpe && t - a.golpe.ini > a.golpe.g.dur) a.golpe = null;
     // a espada dele: materializa/desfaz junto com a dele
     const quer = p.arma === 1;
-    if (quer && !a.espada) { a.espada = criarEspadaEspiritual({ low: true }); a.espada.group.scale.setScalar(1.25); a.av.empunhar(a.espada.group); a.revela = 0; }
+    if (quer && !a.espada) { a.espada = criarEspadaEspiritual({ low: true }); a.espada.group.scale.setScalar(ESCALA_ESPADA); a.av.empunhar(a.espada.group); a.revela = 0; }
     if (a.espada) { a.revela = Math.max(0, Math.min(1, (a.revela ?? 0) + (quer ? 1 : -1) * (1 / 30) / (quer ? 0.35 : 0.5))); a.espada.atualizar(t, a.revela); }
   }
   /** confere os golpes dos outros que chegaram na hora do corte (a posição dele naquele instante) */
