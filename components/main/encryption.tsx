@@ -7,7 +7,8 @@ import NextImage from "next/image";
 import { useTranslation } from "react-i18next";
 import ZaeonFlowDiagram from "./ZaeonFlowDiagram";
 import MentoresCarrossel from "./MentoresCarrossel";
-import EquipadosCom from "./EquipadosCom";
+import SolanaPrivacidade from "./SolanaPrivacidade";
+import ChavesApi from "./ChavesApi";
 import { TituloSecao } from "@/components/layout/secao";
 import MolecularText from "@/components/ui/MolecularText";
 
@@ -87,17 +88,16 @@ const HireAgentsSection = () => {
                 viewport={{ once: true }}
                 transition={{ duration: 0.6 }}
             >
-                <TituloSecao className="font-display" forte="Cada um no seu quadrado." fraco="Conhecimento é específico, não geral." />
+                <TituloSecao className="font-display" forte="Estude com os melhores e mais modernos agentes de IA." />
 
+                {/* carrossel LEVE: só foto, nome e função; quem passa pelo meio da tela ganha a borda destacada */}
                 <div className="mt-10">
-                    <MentoresCarrossel semRotulo />
-                </div>
-
-                {/* Âncora do botão "Ver os modelos" do hero: as IAs vivem aqui embaixo. */}
-                <div id="modelos" className="scroll-mt-24">
-                    <EquipadosCom className="mt-14" />
+                    <MentoresCarrossel semRotulo leve />
                 </div>
             </motion.div>
+
+            {/* "ou traga as chaves de API dos seus" + o briefing das chaves (+ as casas de modelos, #modelos) */}
+            <ChavesApi className="mt-16 md:mt-20" />
         </div>
     );
 };
@@ -132,18 +132,18 @@ const ProcessFlowchart = () => {
                     /* --- MODO ESCURO (Azul Transparente) --- */
                     dark:border-cyan-500/50 dark:bg-[#1e3a8a]/85 dark:shadow-[0_0_30px_rgba(6,182,212,0.15)]
                     
-                    flex flex-col md:flex-row items-center justify-between
+                    flex flex-col items-center justify-center text-center
                     p-8 md:p-12 gap-8 group overflow-hidden
                     hover:border-cyan-500/50 transition-all duration-500
                 "
             >
                 {/* Coluna da Esquerda: Ícone e Texto */}
-                <div className="flex flex-col gap-6 flex-1 text-center md:text-left items-center md:items-start z-10">
+                <div className="flex flex-col gap-4 text-center items-center z-10 max-w-2xl">
                     <h3 className="text-2xl md:text-3xl font-light text-slate-900 dark:text-white leading-tight">
                         <span className="font-bold text-cyan-600 dark:text-cyan-400 drop-shadow-md dark:drop-shadow-[0_0_10px_rgba(34,211,238,0.3)]">Blockchain</span> como Tecnologia de Uso Inteligente no Ceará
                     </h3>
 
-                    <p className="text-sm text-slate-700 dark:text-white/90 font-medium leading-relaxed max-w-lg">
+                    <p className="text-sm text-slate-700 dark:text-white/90 font-medium leading-relaxed max-w-lg mx-auto">
                         <a
                             href="https://programacentelha.com.br/wp-content/uploads/2025/01/CE-Lista-Final-Empresas-Contratadas.pdf"
                             target="_blank"
@@ -156,7 +156,7 @@ const ProcessFlowchart = () => {
                 </div>
 
                 {/* Coluna da Direita: Logos MCTI */}
-                <div className="w-full md:w-auto flex flex-col items-center justify-center border-t md:border-t-0 md:border-l border-slate-200 dark:border-white/10 pt-8 md:pt-0 md:pl-12 mt-2 md:mt-0 z-10">
+                <div className="w-full flex flex-col items-center justify-center border-t border-slate-200 dark:border-white/10 pt-8 z-10">
                     <span className="text-[10px] text-slate-800 dark:text-white/90 uppercase tracking-widest mb-6 font-semibold">Apoio Oficial</span>
 
                     {/* `h-26` não existe no Tailwind → a caixa tinha altura 0 e o logo (fill) nunca aparecia.
@@ -229,11 +229,14 @@ export default function Encryption() {
                 scroll horizontal na pagina inteira. `clip` em vez de `hidden`
                 porque `hidden` criaria um contexto de rolagem e mataria qualquer
                 `sticky` daqui para dentro. */}
+            {/* NO LUGAR dos agentes: a Solana cobrindo a digital — privacidade e credenciais (v4) */}
+            <SolanaPrivacidade />
+
             <div className="relative z-40 w-full overflow-x-clip flex flex-col items-center justify-center bg-transparent pt-10">
                 <HireAgentsSection />
             </div>
 
-            {/* FLUXOGRAMA NO FINAL (Intacto) */}
+            {/* PENÚLTIMO: o fomento (Centelha), centralizado no desktop */}
             <ProcessFlowchart />
         </div>
     );

@@ -53,7 +53,7 @@ const ELENCO: Mentor[] = [
     { slug: "farmacia", course: "Farmácia", name: "Kekulé", tagline: "Da molécula ao efeito, passo a passo.", signatureArtifacts: ["molécula 3D", "via metabólica"], guardrail: "Educacional" },
 ];
 
-export default function MentoresCarrossel({ className = "", semRotulo = false }: { className?: string; /** sem a linha "13 mentores · ao vivo…" */ semRotulo?: boolean }) {
+export default function MentoresCarrossel({ className = "", semRotulo = false, leve = false }: { className?: string; /** sem a linha "13 mentores · ao vivo…" */ semRotulo?: boolean; /** crachás só com foto, nome e função + destaque de quem passa pelo meio */ leve?: boolean }) {
     const [mentores, setMentores] = useState<Mentor[]>(ELENCO);
     /** Perfis públicos (Modo CEO): crachá editado, quem está ativo, ordem. */
     const [perfis, setPerfis] = useState<PerfilPublico[]>([]);
@@ -65,6 +65,8 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
     const trilhoRef = useRef<HTMLDivElement>(null);
     // HOLOFOTE: um crachá visível por vez fica "em cena" (pula, dá um oi, sorri, faz caras)
     const cena = useHolofote(trilhoRef, vitrine.length * 2);
+    /** o crachá cujo centro está mais perto do MEIO do trilho (borda destacada na passagem) */
+    const [centro, setCentro] = useState(-1);
     const [podeVoltar, setPodeVoltar] = useState(false);
     const [podeAvancar, setPodeAvancar] = useState(true);
     const [semMovimento, setSemMovimento] = useState(false);
@@ -201,13 +203,25 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
         // é DUPLICADA no render, então ao cruzar a 1ª metade voltamos o equivalente e o
         // loop fica sem costura (invisível, pois a 2ª cópia está idêntica naquele ponto).
         const VEL = 0.5; // px por frame (~30px/s a 60fps): presente, sem distrair
-        let raf = 0;
+        let raf = 0, quadro = 0;
         const passo = () => {
             raf = requestAnimationFrame(passo);
-            if (pausadoRef.current || document.hidden) return;
-            if (Date.now() < esperaAteRef.current) return;
+            if (document.hidden) return;
             const r = el.getBoundingClientRect();
             if (!(r.bottom > 0 && r.top < window.innerHeight)) return;
+            // quem está passando pelo MEIO (medido a cada 6 quadros — barato; vale mesmo com o trilho parado/arrastado)
+            if (++quadro % 6 === 0) {
+                const meioX = r.left + r.width / 2;
+                let melhor = -1, dist = Infinity;
+                [...el.children].forEach((c, i) => {
+                    const b = c.getBoundingClientRect();
+                    const d = Math.abs(b.left + b.width / 2 - meioX);
+                    if (d < dist) { dist = d; melhor = i; }
+                });
+                setCentro((atual) => (atual === melhor ? atual : melhor));
+            }
+            if (pausadoRef.current) return;
+            if (Date.now() < esperaAteRef.current) return;
             el.scrollLeft += VEL;
             const meia = el.scrollWidth / 2;
             if (meia > 0 && el.scrollLeft >= meia) el.scrollLeft -= meia;
@@ -263,7 +277,7 @@ export default function MentoresCarrossel({ className = "", semRotulo = false }:
                 {/* Lista DUPLICADA: alimenta o loop sem costura do glide contínuo. */}
                 {/* `dark`: os cards dos agentes são VIDRO PRETO nos dois temas (contraste melhor no claro) */}
                 {[...vitrine, ...vitrine].map((m, i) => (
-                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cracha d={dadosCracha(m, i % vitrine.length)} emCena={i === cena} estavel /></div>
+                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cracha d={dadosCracha(m, i % vitrine.length)} emCena={i === cena} noCentro={leve && i === centro} leve={leve} estavel /></div>
                 ))}
             </div>
         </div>
