@@ -8,6 +8,7 @@
  *  - a boca do holograma pelo volume da voz (`bocaDoNivel`);
  *  - o CACHE das sínteses (em memória, por texto) com uma fila de poucas chamadas ao mesmo tempo.
  */
+import { FRASES_CAPELA } from "./falasCapela";
 import { ABERTURA, OPCOES_SITUACAO, PERGUNTAS, compromissoFixo, fechamento, reacaoFixa } from "./conversaZaeon";
 
 /** a voz da Zaeon (o id do catálogo de lib/voice/gemini-tts) */
@@ -26,6 +27,12 @@ export function falasFixasZaeon(): string[] {
   const reservas = [...OPCOES_SITUACAO.map((o) => ({ situacao: o.v })), {}].map((p) => `${reacaoFixa("situacao", "", p)} ${compromissoFixo(p)}`);
   const todas = [...ABERTURA, ...PERGUNTAS.map((p) => p.fala), ...reservas, ...fechamento()];
   return [...new Set(todas.map(textoDaVoz).filter(Boolean))];
+}
+/** o que o SERVIDOR guarda em cache (iguais pra todo mundo): as falas do tutorial + as frases da CAPELA (lib/cyber/
+ *  falasCapela). As da capela ficam FORA de `falasFixasZaeon` (a pré-carga do tutorial pede todas de uma vez e o limite da
+ *  rota é 40/min) — o holograma pede uma por vez, a próxima antes de falar */
+export function falasEmCacheNoServidor(): string[] {
+  return [...new Set([...falasFixasZaeon(), ...FRASES_CAPELA.map(textoDaVoz).filter(Boolean)])];
 }
 
 /** quanto esperar (s) o áudio antes de mostrar o balão SEM voz: fixa (já devia estar no cache) × gerativa (texto novo —

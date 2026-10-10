@@ -5,6 +5,8 @@
  * na borda das bases, sentar ao parar na própria base, monitor destacável (hover) que leva à Sala de Estudos.
  * Rede = só o que o hook de sala entrega (remotos + enviarPos); aqui não há fetch/Pusher.
  */
+import { RotinaExaminer } from "@/lib/cyber/examiner";
+import { RAIO_CAPELA, proximoTurno, sortearFrase } from "@/lib/cyber/falasCapela";
 import * as THREE from "three";
 import { corDaArmadura } from "@/lib/cyber/cores";
 import { BASE_COLLIDER_R, BASE_INTERACT_R, baseNoQG, basesDosMembros, localParaMundo, spawnDaBase, type LayoutBase, type NivelBase } from "@/lib/cyber/bases";
@@ -338,7 +340,10 @@ export class CyberEngine {
   private vozCache: CacheVoz<ArrayBuffer> | null = null;
   private vozDecod = new Map<string, Promise<AudioBuffer | null>>();
   private vozPreaquecida = false;
-  private falaZ: { texto: string; ultima: boolean; espera: number; limite: number; buf: AudioBuffer | null | undefined; depois?: () => void } | null = null;
+  private falaZ: { texto: string; ultima: boolean; espera: number; limite: number; buf: AudioBuffer | null | undefined; depois?: () => void; semChat?: boolean } | null = null;
+  /** a ROTINA da Examiner (o altar do lounge e a pista) e o turno das falas da Zaeon na capela */
+  private rotinaExaminer = new RotinaExaminer();
+  private capelaZ: { proxima: number; recentes: string[]; prox: string | null } = { proxima: 0, recentes: [], prox: null };
   /** a fala que está no balão agora (uma voz que chega ATRASADA só toca se ainda for ela) */
   private falaAtual: NonNullable<CyberEngine["falaZ"]> | null = null;
   private vozZ: FalaHolograma | null = null;
@@ -914,7 +919,7 @@ export class CyberEngine {
     for (const p of PERSONAGENS_DA_CIDADELA) {
       const corpo = CORPOS_VRM[p.id]; if (!corpo) continue;
       const perfil = PERFIS_VIDA[p.id]; if (!perfil) continue;
-      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene, preparar: (obj) => this.prepararVrm(obj) });
+      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene, preparar: (obj) => this.prepararVrm(obj), ...(p.id === "examiner" ? { roteiro: () => this.rotinaExaminer.estado() } : {}) });
       const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = p.nome; this.o.overlay.appendChild(tag);
       this.personagens.push({ h, tag });
     }
@@ -935,6 +940,7 @@ export class CyberEngine {
   }
   private atualizarPersonagens(dt: number, t: number) {
     if (!this.personagens.length) return;
+    this.rotinaExaminer.passo(dt, !!this.somLounge?.tocando);   // com música, às vezes ela desce do altar pra pista
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, agora = Date.now() / 1000, some = this.instancia;   // no tutorial (instância só da pessoa), ninguém mais aparece
     const eu = [{ x: this.eu.pos.x, z: this.eu.pos.z }, ...[...this.remotos.values()].map((a) => ({ x: a.pos.x, z: a.pos.z }))];   // desviam de quem está no caminho
     for (const p of this.personagens) { p.h.mostrar(!some); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position, eu); }
@@ -1492,9 +1498,9 @@ export class CyberEngine {
    *  seguindo o volume dela. Com voz, o balão espera o áudio (até ESPERA_VOZ: fixa = já devia estar no cache; gerativa
    *  = a síntese acabou de começar — ela fica com a cara de "pensando" enquanto isso); sem voz, sai na hora e a boca
    *  mexe sorteada. `depois` roda quando o balão aparece (ex.: abrir o painel da pergunta) */
-  private zaeonFala(texto: string, ultima: boolean, o: { gerativa?: boolean; depois?: () => void } = {}) {
+  private zaeonFala(texto: string, ultima: boolean, o: { gerativa?: boolean; depois?: () => void; semChat?: boolean } = {}) {
     if (this.falaZ) this.mostrarFalaZaeon(this.falaZ);   // (não acontece no roteiro) a anterior sai já, sem esperar
-    const f = { texto, ultima, espera: 0, limite: ESPERA_VOZ.fixa as number, buf: undefined as AudioBuffer | null | undefined, depois: o.depois };
+    const f = { texto, ultima, espera: 0, limite: ESPERA_VOZ.fixa as number, buf: undefined as AudioBuffer | null | undefined, depois: o.depois, semChat: o.semChat };
     if (!this.vozCache || !this.som.ligado || !this.holoZaeon) { f.buf = null; this.mostrarFalaZaeon(f); return; }
     // texto que ainda não foi sintetizado (o nome da pessoa, a resposta da IA…): espera mais, com a cara de "pensando"
     if (o.gerativa || !this.vozCache.tem(texto)) { f.limite = ESPERA_VOZ.gerativa; if (!this.vozCache.tem(texto)) this.holoZaeon.pensar(true); }
@@ -1521,9 +1527,29 @@ export class CyberEngine {
     const voz = f.buf && h ? this.som.falaHolograma(f.buf, h.rosto) : null;
     this.vozZ = voz; this.durFalaZ = voz ? voz.duracao : 0;
     this.balao(this.falaZaeon, f.texto, COR_ZAEON, f.ultima ? Infinity : Math.max(3600, (this.durFalaZ + 0.8) * 1000));
-    this.o.onFalaAgente?.({ id: "zaeon", nome: "Zaeon", cor: COR_ZAEON, texto: f.texto });
+    if (!f.semChat) this.o.onFalaAgente?.({ id: "zaeon", nome: "Zaeon", cor: COR_ZAEON, texto: f.texto });   // (as frases da capela: só o balão e a voz)
     if (!voz) h?.falar(0.6 + f.texto.length * 0.055);   // sem áudio: a boca sorteada (a reserva)
     f.depois?.();
+  }
+  /** a ZAEON DA CAPELA (reforma de out/2026): pra quem está na Zaeon perto da capela, o holograma sobe do globo e ela
+   *  fala, em turnos aleatórios, frases de motivação, disciplina, atenção e cuidado (lib/cyber/falasCapela) — sempre
+   *  feliz e leve (sorri depois de cada fala). Só o balão e a voz (o chat não enche). A próxima frase já vai sendo
+   *  sintetizada (fica no cache do servidor: as frases são fixas). Fora da conversa do tutorial */
+  private atualizarZaeonCapela(t: number) {
+    const h = this.holoZaeon; if (!h || this.conversa || this.instancia || this.menu) return;
+    const c = CIDADE.centro, z = this.capelaZ;
+    const perto = this.noCeu && !!this.cidade && Math.hypot(this.eu.pos.x - c.x, this.eu.pos.z - c.z) < RAIO_CAPELA;
+    if (!perto) {
+      if (h.fase() === "visivel" || h.fase() === "subindo") { h.sumir(); this.calarZaeon(); this.falas = this.falas.filter((f) => { if (f.ator === this.falaZaeon) { f.el.remove(); return false; } return true; }); }
+      z.proxima = 0; return;
+    }
+    if (h.fase() === "oculto" || h.fase() === "descendo") { h.aparecer(); h.sorrir(2.5); }
+    if (!z.prox) { z.prox = sortearFrase(Math.random(), z.recentes); this.vozCache?.preaquecer([z.prox]); }
+    if (!z.proxima) { z.proxima = t + 5; return; }   // chegou agora: ela fala logo
+    if (t < z.proxima) return;
+    const frase = z.prox; z.prox = null; z.recentes = [...z.recentes.slice(-6), frase];
+    this.zaeonFala(frase, false, { semChat: true, depois: () => this.holoZaeon?.sorrir(3) });
+    z.proxima = t + proximoTurno(Math.random());
   }
   /** para a voz dela (e a boca volta ao normal) */
   private calarZaeon() { this.vozZ?.parar(); this.vozZ = null; this.falaAtual = null; this.holoZaeon?.boca(null); }
@@ -3196,6 +3222,7 @@ export class CyberEngine {
     this.atualizarAgentes(dt, t);
     this.atualizarRitual(dt, t);
     this.atualizarAnunciadores(dt, t);
+    this.atualizarZaeonCapela(t);
     if (this.holoZaeon && this.holoZaeon.fase() !== "oculto") this.holoZaeon.atualizar(dt, t, this.cam.position);
 
     // motos (antes dos avatares: quem está montado encaixa no banco/guidão/pedaleiras da moto já posicionada)
@@ -3493,13 +3520,9 @@ const DJ_DO_LOUNGE = { id: "scholar", nome: "Scholar", cor: "#94a3b8", corMoto: 
 /** os personagens que vivem na cidadela (id = a chave de CORPOS_VRM e de PERFIS_VIDA — a agenda dele). Téo, Davi, Caio,
  *  Kekulé, Mendeleev e Eiffel saíram do mapa (pedido do dono, out/2026) */
 const PERSONAGENS_DA_CIDADELA = [
-  { id: "nina", nome: "Nina", cor: "#f472b6", corMoto: "#ff7ab8" },
-  { id: "aura", nome: "Aura", cor: "#a78bfa", corMoto: "#9b7bff" },
+  // reforma da capela (out/2026): só a EXAMINER anda pela cidadela — no altar do lounge e, com música, na pista
+  // (lib/cyber/examiner). A Zaeon virou o holograma da capela; os outros saíram do mapa
   { id: "examiner", nome: "Examiner", cor: "#f87171", corMoto: "#dc2626" },
-  { id: "zenita", nome: "Zenita", cor: "#fcd34d", corMoto: "#f5b82e" },
-  { id: "zaeon", nome: "Zaeon", cor: "#38bdf8", corMoto: "#0ea5e9" },
-  { id: "enfermagem", nome: "Nightingale", cor: "#fda4af", corMoto: "#f43f5e" },
-  { id: "medicina", nome: "Osler", cor: "#5eead4", corMoto: "#14b8a6" },
 ] as const;
 /** ligados por padrão; `?personagens=0` (ou NEXT_PUBLIC_CYBER_PERSONAGENS=0) desliga */
 function personagensLigados(): boolean {
