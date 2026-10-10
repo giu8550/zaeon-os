@@ -48,7 +48,7 @@ export function poseDash(): PoseAcao {
 
 /** a GUARDA de alerta depois do dash — a "postura de poder" dos heróis de jogo de ação (referência do dono: o Delsin de
  *  inFAMOUS Second Son), pra passar sensação de PERIGO: tronco curvado pra frente (sem ficar ereto) com a cabeça baixa
- *  olhando por cima, BRAÇOS BEM ABERTOS pros lados e pra baixo, base larga e joelhos dobrados. A RESPIRAÇÃO OFEGANTE
+ *  olhando por cima, BRAÇOS BEM ABERTOS (cotovelos pra fora) e DOBRADOS (antebraços pra frente), base larga e joelhos dobrados. A RESPIRAÇÃO OFEGANTE
  *  move o corpo todo: no inspirar o peito e os ombros sobem e os braços se ABREM e sobem; no expirar caem. E o peso
  *  balança devagar de um lado pro outro (o predador medindo o adversário). `tDesde` = s desde o esforço (o fôlego acalma) */
 export function poseAlerta(t: number, tDesde = 1): PoseAcao {
@@ -57,8 +57,9 @@ export function poseAlerta(t: number, tDesde = 1): PoseAcao {
   return {
     inclina: -0.15 - 0.03 * r, desce: 0.24 + 0.03 * r,
     tronco: n([0.4 - 0.07 * r, 0.91, balanco]), cabeca: n([-0.16, 0.99, -balanco * 0.5]),
-    braco: (l) => n([0.12, -0.5 + 0.17 * r, (0.84 + 0.06 * r) * l]),
-    ante: (l) => n([0.3 - 0.05 * r, -0.36 + 0.16 * r, (0.88 + 0.04 * r) * l]),
+    // os braços ABERTOS (cotovelos pra fora) mas DOBRADOS: o antebraço vem pra frente (~70° no cotovelo) — garras prontas
+    braco: (l) => n([0.05, -0.5 + 0.17 * r, (0.86 + 0.06 * r) * l]),
+    ante: (l) => n([0.82 - 0.04 * r, -0.28 + 0.14 * r, (0.38 + 0.05 * r) * l]),
     coxa: (l) => (l > 0 ? n([0.3, -0.74, 0.6]) : n([-0.16, -0.77, -0.62])),
     canela: (l) => n([-0.3, -0.94, 0.14 * l]),
     pe: (l) => (l > 0 ? n([0.88, -0.4, 0.25]) : n([0.6, -0.5, -0.62])),

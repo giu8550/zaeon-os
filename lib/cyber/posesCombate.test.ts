@@ -19,10 +19,14 @@ describe("poses de ação (hack and slash)", () => {
     expect(p.desce).toBeGreaterThan(0.15);
     expect(p.coxa!(1)[0]).toBeGreaterThan(0.5); expect(p.coxa!(-1)[0]).toBeLessThan(-0.4); expect(p.canela!(-1)[0]).toBeLessThan(-0.7);
   });
-  it("alerta (postura de poder, perigo): tronco curvado, braços BEM abertos pros lados e pra baixo, base larga", () => {
+  it("alerta (postura de poder, perigo): tronco curvado, braços BEM abertos e DOBRADOS, base larga", () => {
     const p = poseAlerta(0, 0);
     expect(p.desce).toBeGreaterThan(0.18); expect(p.tronco[0]).toBeGreaterThan(0.3);
-    for (const l of [1, -1]) { expect(p.braco(l)[2] * l).toBeGreaterThan(0.75); expect(p.braco(l)[1]).toBeLessThan(-0.3); expect(p.ante(l)[2] * l).toBeGreaterThan(0.75); }
+    for (const l of [1, -1]) {
+      expect(p.braco(l)[2] * l).toBeGreaterThan(0.75); expect(p.braco(l)[1]).toBeLessThan(-0.3);   // abertos
+      const b = p.braco(l), a = p.ante(l), cot = Math.acos(b[0] * a[0] + b[1] * a[1] + b[2] * a[2]);
+      expect(cot).toBeGreaterThan(0.9); expect(a[0]).toBeGreaterThan(0.6);   // DOBRADOS: o antebraço vem pra frente
+    }
     expect(p.coxa!(1)[2]).toBeGreaterThan(0.5); expect(p.coxa!(-1)[2]).toBeLessThan(-0.5);
   });
   it("os braços sobem e descem com a respiração (inspirando, abertos mais alto)", () => {
