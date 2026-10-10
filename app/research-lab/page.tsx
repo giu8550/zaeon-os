@@ -774,15 +774,16 @@ export default function HomeworkPage({
   // --- CORE STATES ---
   const [mounted, setMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  // Sidebar AUTOMÁTICA (sem botão): o mouse parado nela por 1,3 s abre e ela FICA aberta; só recolhe
-  // depois de 1,3 s com o mouse fora (e nunca no meio de uma edição — renomear conversa). Passar
-  // o mouse de raspão não abre nem fecha nada.
+  // Sidebar POR HOVER: passar o mouse em cima abre (quase na hora); tirar o mouse recolhe. Ela passa POR
+  // CIMA do módulo do chat (fixed, z alto) — então pode crescer à vontade sem brigar com o chat: pra ver
+  // o chat a sidebar fica descansada; pra abrir uma conversa nova ou olhar as coisas, é só pousar o mouse.
+  // Nunca recolhe no meio de uma edição (renomear conversa).
   const navRef = useRef<HTMLElement>(null);
   const timerSidebar = useRef<ReturnType<typeof setTimeout>>();
-  const DWELL_SIDEBAR_MS = 1300;
+  const ABRIR_SIDEBAR_MS = 120, FECHAR_SIDEBAR_MS = 320;
   const entrouSidebar = () => {
     clearTimeout(timerSidebar.current);
-    if (!isSidebarOpen) timerSidebar.current = setTimeout(() => setIsSidebarOpen(true), DWELL_SIDEBAR_MS);
+    if (!isSidebarOpen) timerSidebar.current = setTimeout(() => setIsSidebarOpen(true), ABRIR_SIDEBAR_MS);
   };
   const saiuSidebar = () => {
     clearTimeout(timerSidebar.current);
@@ -790,12 +791,12 @@ export default function HomeworkPage({
     const tentarFechar = () => {
       const foco = document.activeElement;
       if (foco && navRef.current?.contains(foco) && /^(INPUT|TEXTAREA)$/.test(foco.tagName)) {
-        timerSidebar.current = setTimeout(tentarFechar, DWELL_SIDEBAR_MS);   // editando: espera
+        timerSidebar.current = setTimeout(tentarFechar, FECHAR_SIDEBAR_MS);   // editando: espera
         return;
       }
       setIsSidebarOpen(false);
     };
-    timerSidebar.current = setTimeout(tentarFechar, DWELL_SIDEBAR_MS);
+    timerSidebar.current = setTimeout(tentarFechar, FECHAR_SIDEBAR_MS);
   };
   useEffect(() => () => clearTimeout(timerSidebar.current), []);
   // Onde o chat da sala ativa desenha a lista de conversas (portal) — components/chat/ConversasSlot.
@@ -2561,10 +2562,11 @@ export default function HomeworkPage({
           ref={navRef}
           onMouseEnter={entrouSidebar}
           onMouseLeave={saiuSidebar}
+          onFocusCapture={entrouSidebar}
           initial={false}
           animate={{ width: sidebarAberta ? SIDEBAR_ABERTA : SIDEBAR_FECHADA }}
-          transition={{ type: "tween", duration: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
-          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-colors
+          transition={{ type: "tween", duration: 0.22, ease: [0.22, 0.61, 0.36, 1] }}
+          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[590] py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-colors
             bg-gradient-to-b from-sky-100/90 to-blue-200/80 border-blue-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]
             dark:from-transparent dark:to-transparent dark:bg-[rgba(22,22,34,0.55)] dark:border-white/10 dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)]
             ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}

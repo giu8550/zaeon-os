@@ -8,7 +8,8 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { X, RefreshCw, Sparkles, MessageSquare } from "lucide-react";
+import { X, RefreshCw, Sparkles, MessageSquare, ChevronDown, History } from "lucide-react";
+import { pedirConversa } from "@/lib/chat/conversasNav";
 import { ARQUETIPOS } from "@/lib/map/arquetipo";
 import { proximoDoBackbone } from "@/lib/map/backbone";
 import { ROTULO } from "@/lib/map/bolinha";
@@ -58,6 +59,7 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
   // Esc fecha (o X, o clique fora e a bolinha são tratados por quem monta o painel).
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [fichaId, onFechar]);
   const gerar = onGerar ?? (() => void st.gerar());
+  const [anteriores, setAnteriores] = useState(false);
 
   return (
     <motion.div
@@ -65,17 +67,31 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
       className="absolute inset-0 z-50 flex flex-col bg-[#060a1a] text-[#dbe8ff]" role="dialog" aria-modal="true" aria-label="Mapa de conhecimento"
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {/* cabeçalho */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-2.5">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-bold">{mapa?.titulo || st.tituloSugerido || "Mapa de conhecimento"}</p>
-          {mapa && <p className="truncate text-[11px] text-[#9fb6e0]">{ARQUETIPOS[mapa.tipoTopico].rotulo} · {mapa.objetivo || "objetivo a definir"}</p>}
-        </div>
-        {st.estado !== "gerando" && mapa && (
-          <button onClick={() => void st.gerar()} title={mapa.backbone.length ? "Retraçar o percurso" : ROTULO.vazia} className="rounded-lg border border-white/15 p-1.5 text-[#9fb6e0] hover:text-white"><RefreshCw size={14} /></button>
-        )}
+      {/* cabeçalho: SEM título da conversa nem subtítulo — só o botão CIRCULAR que gera/retraça, a aba
+          "mapas anteriores" e o fechar */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-4 py-2">
+        <button
+          onClick={st.estado === "gerando" ? undefined : gerar}
+          disabled={st.estado === "gerando"}
+          aria-label={mapa?.backbone.length ? "Retraçar o percurso" : ROTULO[st.estado === "oculta" ? "vazia" : st.estado] || "Gerar o percurso"}
+          title={mapa?.backbone.length ? "Retraçar o percurso" : "Gerar o percurso"}
+          className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-cyan-300/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-70"
+        >
+          {st.estado === "gerando" ? <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-cyan-300" aria-hidden /> : null}
+          {mapa?.backbone.length ? <RefreshCw size={15} /> : <Sparkles size={15} />}
+        </button>
+        <button
+          onClick={() => setAnteriores((v) => !v)}
+          aria-pressed={anteriores}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors ${anteriores ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-100" : "border-white/15 text-[#9fb6e0] hover:text-white"}`}
+        >
+          <History size={13} /> Mapas anteriores
+        </button>
+        <div className="flex-1" />
         <button onClick={onFechar} aria-label="Fechar o mapa" className="rounded-lg border border-white/15 p-1.5 text-[#9fb6e0] hover:text-white"><X size={16} /></button>
       </div>
+      {/* sub-aba: as GAVETAS dos mapas gerados antes (abre embaixo do cabeçalho) */}
+      {anteriores && <MapasAnteriores atualId={mapa?.id ?? null} onFechar={() => setAnteriores(false)} />}
 
       {/* corpo por estado */}
       <div className="relative min-h-0 flex-1">
@@ -176,6 +192,62 @@ function Lista({ regioes, aoRegiao }: { regioes: RegiaoVisual[]; aoRegiao: (r: R
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+type MapaResumo = { id: string; scopeId: string; surface: string; titulo: string; tipoTopico: string; objetivo: string; modoValidacao: string; passos: number; aprendizado: number; conclusao: number; updatedAt: string };
+
+/** Gavetas expansíveis com os mapas gerados anteriormente (GET /api/map?lista=1). Abrir = vai pra conversa daquele mapa. */
+function MapasAnteriores({ atualId, onFechar }: { atualId: string | null; onFechar: () => void }) {
+  const [lista, setLista] = useState<MapaResumo[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [aberto, setAberto] = useState<string | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/map?lista=1", { cache: "no-store" })
+      .then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((d) => { if (vivo) setLista(Array.isArray(d?.mapas) ? d.mapas : []); })
+      .catch((e) => { if (vivo) { setErro(e?.message ?? "falha"); setLista([]); } });
+    return () => { vivo = false; };
+  }, []);
+  const abrir = (m: MapaResumo) => {
+    pedirConversa({ sala: m.surface === "pesquisa" ? "pesquisa" : "estudos", id: m.scopeId });
+    onFechar();
+  };
+  return (
+    <div className="shrink-0 max-h-[46%] overflow-y-auto border-b border-white/10 bg-[#070c1f] px-3 py-2">
+      {lista === null && <p className="px-1 py-2 text-[12px] text-[#9fb6e0]">Carregando os mapas…</p>}
+      {erro && <p className="px-1 py-2 text-[12px] text-rose-300">Não deu pra listar: {erro}</p>}
+      {lista && lista.length === 0 && !erro && <p className="px-1 py-2 text-[12px] text-[#9fb6e0]">Nenhum mapa gerado ainda.</p>}
+      <ul className="flex flex-col gap-1">
+        {(lista ?? []).map((m) => {
+          const exp = aberto === m.id;
+          return (
+            <li key={m.id} className={`rounded-xl border ${m.id === atualId ? "border-cyan-400/40 bg-cyan-500/[0.07]" : "border-white/10 bg-white/[0.03]"}`}>
+              <button type="button" onClick={() => setAberto(exp ? null : m.id)} aria-expanded={exp} className="flex w-full items-center gap-2 px-3 py-2 text-left">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: m.passos ? "#49b6ff" : "rgba(120,160,230,.35)", boxShadow: m.passos ? "0 0 8px #49b6ff" : undefined }} aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[#dbe8ff]">{m.titulo || "Estudo"}</span>
+                <span className="shrink-0 text-[10px] text-[#9fb6e0]">{Math.round(m.aprendizado * 100)}%</span>
+                <ChevronDown size={14} className={`shrink-0 text-[#9fb6e0] transition-transform ${exp ? "rotate-180" : ""}`} aria-hidden />
+              </button>
+              {exp && (
+                <div className="px-3 pb-3">
+                  <p className="text-[11px] text-[#9fb6e0]">{(ARQUETIPOS as any)[m.tipoTopico]?.rotulo ?? m.tipoTopico} · {m.objetivo || "objetivo a definir"} · {m.passos} passo{m.passos === 1 ? "" : "s"}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10" title={`aprendizado ${Math.round(m.aprendizado * 100)}%`}><div className="h-full bg-[#78beff]" style={{ width: `${Math.round(m.aprendizado * 100)}%` }} /></div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10" title={`conclusão ${Math.round(m.conclusao * 100)}%`}><div className="h-full bg-[#ffd56b]" style={{ width: `${Math.round(m.conclusao * 100)}%` }} /></div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-[#9fb6e0]">
+                    <span>{new Date(m.updatedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</span>
+                    {m.id === atualId ? <span className="text-cyan-200">este mapa</span> : <button type="button" onClick={() => abrir(m)} className="inline-flex items-center gap-1 text-[#9fe0ff] hover:underline"><MessageSquare size={11} /> abrir a conversa</button>}
+                  </div>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

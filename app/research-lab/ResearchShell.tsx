@@ -133,6 +133,10 @@ export default function ResearchShell({
   const abas = unifiedView === "abas";
   const [vista, setVista] = useState<string>("chat");
   const [lateral, setLateral] = useState<HTMLDivElement | null>(null);
+  // O traçador de percurso (bolinha do cérebro) mora no TOPO da sala, sem nome — o chat desenha aqui por portal.
+  const [slotTopo, setSlotTopo] = useState<HTMLDivElement | null>(null);
+  // 🧭 DIAGRAMAS: a gaveta dos diagramas gerados (as abas de artefato "diagram") — é onde eles ficam guardados.
+  const [diagramasAberto, setDiagramasAberto] = useState(false);
   // Com a sidebar principal do app (components/chat/ConversasSlot), as conversas vão pra lá — sem 2ª coluna.
   const slotSidebar = useConversasSlot("pesquisa");
   const [maisAberto, setMaisAberto] = useState(false);
@@ -278,7 +282,8 @@ export default function ResearchShell({
             (nova pesquisa). A aba ativa ocupa a sala; a conversa mostrada é a que está acesa na barra da esquerda. */}
         {abas && (
           <div className="relative shrink-0 flex items-center gap-1.5 px-3 py-2.5 overflow-x-auto no-scrollbar" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }} role="tablist" aria-label="Documentos">
-            <span className="shrink-0 pr-1 text-[9px] font-black uppercase tracking-[0.16em] text-white/45">Documentos</span>
+            {/* o traçador de percurso: só o sinal da bolinha (gira quando um percurso está pronto pra ser criado) */}
+            <div ref={setSlotTopo} className="shrink-0 flex items-center empty:hidden" />
             <div
               role="tab"
               aria-selected={vista === "chat"}
@@ -297,6 +302,26 @@ export default function ResearchShell({
               </RostoDaAba>
               <span className="text-[11px] font-bold">Conversa</span>
             </div>
+            {/* 🧭 os DIAGRAMAS gerados ficam guardados aqui */}
+            {(() => {
+              const diagramas = windows.filter((w) => w.type === "artefato" && (w as any).artefato?.studioKind === "diagram");
+              return (
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setDiagramasAberto((v) => !v)}
+                    aria-haspopup="menu"
+                    aria-expanded={diagramasAberto}
+                    aria-label={`Diagramas (${diagramas.length})`}
+                    title={diagramas.length ? `Diagramas gerados (${diagramas.length})` : "Diagramas — os que a IA gerar ficam aqui"}
+                    className={`relative inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${diagramasAberto ? "bg-black dark:bg-white text-white dark:text-black border-transparent" : "text-slate-700 dark:text-white/70 border-slate-200 dark:border-white/10 hover:border-cyan-400/50"}`}
+                  >
+                    <span className="text-[13px] leading-none" aria-hidden>🧭</span>
+                    {diagramas.length > 0 && <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-cyan-500 text-[9px] font-black text-black grid place-items-center">{diagramas.length}</span>}
+                  </button>
+                </div>
+              );
+            })()}
             {windows.filter((w) => w.type !== "document").map((w) => {
               const atual = vista === w.id;
               const rotulo = w.id === "research" ? (workType ? `Meu ${workType}` : "Minha pesquisa") : w.label;
@@ -376,6 +401,21 @@ export default function ResearchShell({
           onToggleChat={unifiedView ? undefined : () => setChatOpen((v) => !v)}
         />}
 
+        {/* 🧭 a gaveta dos diagramas (fora da barra, que recorta por causa do overflow) */}
+        {abas && diagramasAberto && (() => {
+          const diagramas = windows.filter((w) => w.type === "artefato" && (w as any).artefato?.studioKind === "diagram");
+          return (
+            <div role="menu" className="absolute z-[70] top-12 left-3 flex flex-col gap-1 p-1.5 rounded-2xl min-w-[220px]" style={{ background: "rgba(14,16,28,0.96)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 20px 50px -20px rgba(0,0,0,0.9)" }} onMouseLeave={() => setDiagramasAberto(false)}>
+              <span className="px-2 pt-1 pb-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-white/45">Diagramas</span>
+              {diagramas.length === 0 && <span className="px-2 pb-1.5 text-[11px] text-white/55">Nenhum diagrama ainda — peça um na conversa e ele fica guardado aqui.</span>}
+              {diagramas.map((w) => (
+                <button key={w.id} type="button" role="menuitem" onClick={() => { verJanela(w.id); setDiagramasAberto(false); }} className={`flex items-center gap-2 px-2 py-1.5 rounded-xl text-left text-[12px] ${vista === w.id ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/5"}`}>
+                  <span aria-hidden>🧭</span><span className="truncate">{w.label}</span>
+                </button>
+              ))}
+            </div>
+          );
+        })()}
         {/* Sheet area — all windows mounted, inactive ones hidden via display:none */}
         <div ref={containerRef} className="flex-1 relative min-h-0 overflow-hidden">
           {/* Chat (Escritor/Revisor) sobrepõe o trabalho quando ligado na pill — alterna responsivo. */}
@@ -390,6 +430,7 @@ export default function ResearchShell({
                 active={chatActive && chatVisible}
                 comAbas={!!unifiedView}
                 lateral={abas ? lateral : undefined}
+                slotTopo={abas ? slotTopo : undefined}
                 emCena={chatVisible}
                 onAtivar={abas ? () => setVista("chat") : undefined}
               />
