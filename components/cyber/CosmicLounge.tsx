@@ -10,7 +10,7 @@ import TelaCarregando from "./TelaCarregando";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { corDoUsuario } from "@/lib/lounge3d/tipos";
+import { LIMITE_SALA, corDoUsuario } from "@/lib/lounge3d/tipos";
 import { basesDosMembros, poseNoAssento } from "@/lib/cyber/bases";
 import { temWebGL } from "@/lib/ui/globo";
 import { LAB_ENTRADA, MSG_FECHAR_TABLET } from "@/lib/ui/loungeHub";
@@ -53,7 +53,7 @@ function Janela({ onSessaoIniciada }: { onSessaoIniciada?: () => void }) {
 
 function Tela() {
   const { data } = useSession();
-  const { salaId, erro, tentarDeNovo } = useResolverSala();
+  const { salaId, erro, tentarDeNovo } = useResolverSala(true, "Minha sala de estudos", true);   // o MUNDO: todos no mesmo servidor
   const [solo, setSolo] = useState(false);
   // ordem canônica dos membros (define a base de cada um) — ref, pq o hook a consulta dentro dos eventos do Pusher
   const ordemRef = useRef<string[]>([]);
@@ -117,7 +117,7 @@ function Tela() {
     return <Carregando><span>Não deu para abrir a sala.{" "}<button type="button" onClick={tentarDeNovo} className="underline">Tentar de novo</button>{" · "}<button type="button" onClick={() => setSolo(true)} className="underline">Entrar sozinho</button></span></Carregando>;
   }
   if (sala.estado === "cheia") {
-    return <Carregando><span>Cyberespaço cheio (máximo 5).{" "}<button type="button" onClick={() => setSolo(true)} className="underline">Entrar sozinho</button></span></Carregando>;
+    return <Carregando><span>Cyberespaço cheio (máximo {LIMITE_SALA}).{" "}<button type="button" onClick={() => setSolo(true)} className="underline">Entrar sozinho</button></span></Carregando>;
   }
   if (!salaId || !euSala || sala.estado === "carregando") return <div className="relative h-full w-full"><TelaCarregando carga={{ etapa: "corpo", rotulo: "Conectando à sala do cyberespaço", progresso: 0.01 }} /></div>;
   const aviso = avisoRealtime(sala.realtime, sala.motivoRealtime);

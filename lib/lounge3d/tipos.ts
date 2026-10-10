@@ -11,7 +11,9 @@ export const lounge3dOn = (): boolean => process.env.NEXT_PUBLIC_LOUNGE_3D === "
 
 export const KIND_SALA = "lounge_canvas";
 /** Teto de ocupantes por sala — aplicado NO SERVIDOR (auth do canal de presença). */
-export const LIMITE_SALA = 5;
+/** quantas pessoas cabem numa sala ao mesmo tempo — o MUNDO do cyberespaço é uma sala só pra todo mundo (lib/lounge3d/mundo;
+ *  era 5). Espelhado no Colyseus (server/colyseus/src/regras `MAX_JOGADORES`); presença do Pusher aguenta até 100 */
+export const LIMITE_SALA = 40;
 
 export const MAX_NOTAS = 200;
 export const MAX_ARTEFATOS = 50;

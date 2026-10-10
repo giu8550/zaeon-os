@@ -47,13 +47,13 @@ describe("aplicarOps (por item, tetos)", () => {
   });
 });
 
-describe("admissão ≤5", () => {
-  it("5 dentro → 6º recusado; quem já está dentro reconecta", () => {
-    const cinco = ["1", "2", "3", "4", "5"];
-    expect(admitir(cinco, "6")).toEqual({ ok: false, motivo: "cheia" });
-    expect(admitir(cinco, "3")).toEqual({ ok: true });
-    expect(admitir(cinco.slice(0, 4), "6")).toEqual({ ok: true });
-    expect(LIMITE_SALA).toBe(5);
+describe("admissão ≤ LIMITE_SALA", () => {
+  it("cheia → o próximo é recusado; quem já está dentro reconecta", () => {
+    const cheia = Array.from({ length: LIMITE_SALA }, (_, i) => String(i + 1));
+    expect(admitir(cheia, "novo")).toEqual({ ok: false, motivo: "cheia" });
+    expect(admitir(cheia, "3")).toEqual({ ok: true });
+    expect(admitir(cheia.slice(0, LIMITE_SALA - 1), "novo")).toEqual({ ok: true });
+    expect(LIMITE_SALA).toBe(40);   // (o MUNDO: todo mundo na mesma sala)
   });
 });
 
