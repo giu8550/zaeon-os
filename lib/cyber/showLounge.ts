@@ -23,6 +23,14 @@ export const DNA = { ini: 110, dur: 20 } as const;
 export const NEVOA = { ini: 44, dur: 16 } as const;
 /** o TURNO: 1 min de música; o nível dos trovões sobe por turno (1 → 2 → 3) — até `MAX_TROVOES` por turno */
 export const TURNO_S = 60, MAX_TROVOES = 3;
+/** o 3º MODO (depois das mandalas): o OLHO de volta, com as geometrias na íris e, em volta, a mandala dos SIGILOS
+ *  ANGELICAIS — Mikael, Gabriel, Rafael, Uriel, Haniel e Metatron — primeiro todos num círculo, depois um a um dentro da
+ *  íris, no lugar da geometria sagrada (`SIGILO_S` s cada) */
+export const SIGILOS = ["mikael", "gabriel", "rafael", "uriel", "haniel", "metatron"] as const;
+export type Sigilo = (typeof SIGILOS)[number];
+export const OLHO = { ini: 240, dur: 10 } as const;
+export const ANEL_SIGILOS = { ini: 246, dur: 8 } as const;
+export const SIGILO_NA_IRIS = { ini: 262, cada: 10 } as const;
 
 export type EstadoShow = {
   /** 0..1: a mandala nascendo do centro (0 = só o ponto) */
@@ -37,6 +45,9 @@ export type EstadoShow = {
   nevoa: number; nivel: 0 | 1 | 2 | 3;
   /** o turno atual (0 = o 1º minuto) */
   turno: number;
+  /** o 3º modo: o OLHO (0..1, a mandala dá lugar a ele), o anel dos sigilos (0..1) e o sigilo dentro da íris (−1 =
+   *  nenhum: a geometria; 0..5 = SIGILOS[i]) */
+  olho: number; anelSigilos: number; sigilo: number;
 };
 const s3 = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
 const rampa = (t: number, ini: number, dur: number) => s3((t - ini) / dur);
@@ -48,7 +59,7 @@ export function nivelDoTurno(t: number): 0 | 1 | 2 | 3 {
 }
 /** o estado do show no ponto `t` (s desde o começo da faixa; `tocando` false = tudo recolhido) */
 export function estadoDoShow(t: number, tocando: boolean): EstadoShow {
-  if (!tocando || t < 0) return { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0 };
+  if (!tocando || t < 0) return { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0, olho: 0, anelSigilos: 0, sigilo: -1 };
   const k = Math.floor(t / DURACAO_FORMA), dentro = t - k * DURACAO_FORMA, n = FORMAS.length;
   const forma = k % n, proxima = (k + 1) % n, mistura = s3((dentro - (DURACAO_FORMA - TRANSICAO)) / TRANSICAO);
   return {
@@ -58,6 +69,8 @@ export function estadoDoShow(t: number, tocando: boolean): EstadoShow {
     area: 1 + 1.5 * s3(t / 220),                                          // cresce até 2,5× (≈150 m) em ~4 min
     serpentes: rampa(t, SERPENTES.ini, SERPENTES.dur), tentaculos: rampa(t, TENTACULOS.ini, TENTACULOS.dur), dna: rampa(t, DNA.ini, DNA.dur),
     nevoa: rampa(t, NEVOA.ini, NEVOA.dur), nivel: nivelDoTurno(t), turno: Math.floor(t / TURNO_S),
+    olho: rampa(t, OLHO.ini, OLHO.dur), anelSigilos: rampa(t, ANEL_SIGILOS.ini, ANEL_SIGILOS.dur),
+    sigilo: t < SIGILO_NA_IRIS.ini ? -1 : Math.floor((t - SIGILO_NA_IRIS.ini) / SIGILO_NA_IRIS.cada) % SIGILOS.length,
   };
 }
 

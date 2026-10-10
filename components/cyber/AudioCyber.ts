@@ -254,7 +254,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       musicas.add(m); ligarMusica(m);
       return {
         pronta: () => !!m.src,
-        volume(v) { m.fator = Math.max(0, Math.min(1, v)); m.as.forEach((a, i) => a.setVolume(m.volume * m.fator * (m.fatores[i] ?? 1))); },
+        volume(v) { m.fator = Math.max(0, Math.min(2, v)); m.as.forEach((a, i) => a.setVolume(m.volume * m.fator * (m.fatores[i] ?? 1))); },
         volumeCaixa(i, v) { m.fatores[i] = Math.max(0, Math.min(1, v)); const a = m.as[i]; if (a) a.setVolume(m.volume * m.fator * m.fatores[i]!); },
         nivel() {   // média dos graves (~0–190 Hz: os 4 primeiros "baldes" de ~94 Hz), com um piso pra o silêncio dar 0
           if (!m.an || !m.buf) return 0;
