@@ -92,8 +92,13 @@ describe("as poses dos golpes (a duas mãos, estilo Devil May Cry)", () => {
   it("os golpes tocam no RITMO escolhido (animados lentos, tocados mais rápido)", () => {
     expect(RITMO_GOLPES).toBeGreaterThan(1); expect(COMBO[0]!.dur).toBeCloseTo(1 / RITMO_GOLPES, 5);
   });
+  it("o golpe COMEÇA com o braço abaixado (a espada arrastando) e volta pra ele", () => {
+    const [a0, a1] = at(1), p0 = poseGolpe(1, 0, [a0, a1]), pf = poseGolpe(1, 1, [a0, a1]);
+    for (const p of [p0, pf]) { expect(p.bracoD[1]).toBeLessThan(-0.9); expect(p.lamina[0]).toBeLessThan(-0.6); }
+    expect(poseGolpe(1, a0, [a0, a1]).bracoD[1]).toBeGreaterThan(0.3);   // no preparo, lá em cima
+  });
   it("a duas mãos no golpe todo; a antecipação é LONGA (mais lento, mais peso) e o pesado é o mais longo", () => {
-    for (const n of [1, 2, 3] as const) { const [a0] = at(n); expect(poseGolpe(n, a0, at(n)).duasMaos).toBe(1); expect(COMBO[n - 1]!.ativoIni).toBeGreaterThanOrEqual(0.3); }
+    for (const n of [1, 2, 3] as const) { const [a0] = at(n); expect(poseGolpe(n, a0, at(n)).duasMaos).toBe(1); expect(COMBO[n - 1]!.ativoIni / COMBO[n - 1]!.dur).toBeGreaterThan(0.35); }   // (a antecipação é mais de um terço do golpe, em qualquer ritmo)
     expect(COMBO[2]!.dur).toBeGreaterThan(COMBO[0]!.dur);
     for (const n of [1, 2, 3] as const) for (let u = 0; u <= 1; u += 0.05) { const p = poseGolpe(n, u, at(n)); for (const d of [p.lamina, p.bracoD, p.anteD, p.tronco, p.plano]) expect(Math.hypot(...d)).toBeCloseTo(1, 5); }
   });

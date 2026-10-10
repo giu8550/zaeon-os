@@ -13,7 +13,7 @@ export const VIDA_MAX = 100;
 export type Golpe = { n: 1 | 2 | 3; dur: number; ativoIni: number; ativoFim: number; dano: number; empurra: number; avanco: number; alcanceExtra: number };
 /** a VELOCIDADE dos golpes (o dono escolhe): os golpes são animados LENTOS, com o peso da montante (antecipação que
  *  segura lá em cima, o corte ganhando embalo, a inércia passando do ponto) — e tocados `RITMO_GOLPES`× mais rápido */
-export const RITMO_GOLPES = 1.2;
+export const RITMO_GOLPES = 1.5;
 /** o combo como foi ANIMADO (lento, pesado) — o jogo usa o `COMBO`, já no ritmo */
 const COMBO_ANIMADO: readonly Golpe[] = [
   // a DUAS MÃOS, no ritmo dos jogos de ação (Devil May Cry): antecipação longa, corte rápido, recuperação que pesa

@@ -125,10 +125,10 @@ const vert = (fi: number): Dir3 => n([Math.cos(fi), Math.sin(fi), -0.12]);
 
 /** o braço esquerdo, aberto e dobrado (o mesmo da guarda) — equilibra os golpes */
 const ESQ_ABERTO = { braco: n([0.05, -0.5, 0.86]), ante: n([0.82, -0.28, 0.38]) };
-/** segurando a espada (uma MONTANTE de ~3 m) em GUARDA: a mão direita à frente-direita, a lâmina apontada à frente,
- *  um pouco pra baixo — a ponta fica no ar, à altura do joelho (ameaçando) */
+/** a GUARDA com a montante (~3 m): o BRAÇO ABAIXADO, a espada ARRASTANDO atrás à direita, a ponta rente ao chão — é
+ *  daqui que todo golpe parte (ergue até o ombro no preparo) e pra onde volta (o dono, out/2026) */
 export function poseEmpunhaGuarda(): PoseEspada {
-  return { inclina: 0, desce: 0, tronco: n([0.38, 0.92, 0]), bracoD: n([0.25, -0.75, -0.6]), anteD: n([0.78, -0.2, -0.58]), ...{ bracoE: ESQ_ABERTO.braco, anteE: ESQ_ABERTO.ante }, lamina: n([0.78, -0.16, -0.6]), plano: n([0, 1, 0]), pernas: null };
+  return { inclina: 0, desce: 0, tronco: n([0.38, 0.92, 0]), bracoD: n([-0.05, -0.97, -0.25]), anteD: n([0.2, -0.95, -0.24]), ...{ bracoE: ESQ_ABERTO.braco, anteE: ESQ_ABERTO.ante }, lamina: n([-0.82, -0.3, -0.48]), plano: n([0, 1, 0]), pernas: null };
 }
 /** andando com a montante: APOIADA NO OMBRO direito (a lâmina pra cima e pra trás) — arrastada, cravaria no chão */
 export function poseEmpunhaSolta(): PoseEspada {
