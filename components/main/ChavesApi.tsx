@@ -37,7 +37,7 @@ export default function ChavesApi({ className = "" }: { className?: string }) {
             key={p.t}
             initial={{ opacity: 0, y: 18 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: false, margin: "-40px" }}
+            viewport={{ once: true, margin: "-40px" }}
             transition={{ duration: 0.45, delay: i * 0.07 }}
             className="dark relative flex flex-col gap-3 rounded-2xl border border-cyan-400/25 bg-[#0f1f44]/80 backdrop-blur-md p-5 shadow-[0_0_24px_rgba(6,182,212,0.12)]"
           >

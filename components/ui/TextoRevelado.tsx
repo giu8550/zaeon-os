@@ -4,10 +4,9 @@ import React from "react";
 import { motion } from "framer-motion";
 
 /**
- * Texto MENOR animado (parágrafos, selos, legendas): aparece PALAVRA por palavra (fade + leve desfoque + subida),
- * mais leve que o MolecularText (letra a letra), e anima nos DOIS sentidos — entra ao aparecer e sai ao deixar a
- * tela, descendo ou subindo a página (`once: false`). Palavra é `inline-block`, mas o espaço entre elas fica livre
- * pra quebrar linha normalmente.
+ * Texto MENOR animado (parágrafos, selos, legendas): aparece PALAVRA por palavra (fade + subida), mais leve que o
+ * MolecularText (letra a letra). SÓ fade-in, uma vez (`once: true`): o texto fica na página ao rolar de volta.
+ * Palavra é `inline-block`, mas o espaço entre elas fica livre pra quebrar linha normalmente.
  */
 export default function TextoRevelado({
   texto,
@@ -28,10 +27,10 @@ export default function TextoRevelado({
         {palavras.map((p, i) => (
           <React.Fragment key={i}>
             <motion.span
-              className="inline-block will-change-[opacity,transform]"
-              initial={{ opacity: 0, y: 6, filter: "blur(4px)" }}
-              whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              viewport={{ once: false, amount: 0.4 }}
+              className="inline-block"
+              initial={{ opacity: 0, y: 6 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.4 }}
               transition={{ duration: 0.45, ease: "easeOut", delay: delay + i * passo }}
             >
               {p}

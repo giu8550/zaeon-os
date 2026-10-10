@@ -14,7 +14,10 @@ import StarBackground from "@/components/main/star-background";
 import MolecularText from "@/components/ui/MolecularText";
 import { copyEntrada } from "@/lib/ui/loungeHub";
 import GlitchTexto from "@/components/ui/GlitchTexto";
-import CyberCta from "@/components/main/CyberCta";
+import { precarregarCyber } from "@/lib/cyber/precarga";
+
+/** o botão do cyberespaço (lá embaixo, em cima do módulo) pede o login daqui quando a pessoa está deslogada */
+export const EVENTO_ABRIR_LOGIN = "zaeon:abrir-login";
 
 // Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
 // Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
@@ -88,6 +91,14 @@ export default function HeroPage() {
 
   const logado = status === "authenticated";
   const copy = copyEntrada(logado);
+
+  // a PRÉ-CARGA do cyberespaço começa na primeira tela (o botão com a barra fica em cima do módulo, lá embaixo)
+  useEffect(() => { precarregarCyber(); }, []);
+  useEffect(() => {
+    const abrir = () => { setShowChatbox(true); window.scrollTo({ top: 0, behavior: "smooth" }); };
+    window.addEventListener(EVENTO_ABRIR_LOGIN, abrir);
+    return () => window.removeEventListener(EVENTO_ABRIR_LOGIN, abrir);
+  }, []);
 
   return (
     <main className="w-full flex flex-col items-center justify-center text-center relative zaeon-borda min-h-[calc(100svh-110px)] pt-10 md:pt-14 pb-16 md:pb-20 overflow-hidden transition-colors duration-700 font-display">
@@ -180,9 +191,6 @@ export default function HeroPage() {
                 <ChatBubbleLeftRightIcon className="w-4 h-4" aria-hidden="true" />
                 Iniciar chat
               </LiquidGlassButton>
-              <span className="text-xs uppercase tracking-[0.2em] text-slate-700 dark:text-white/80">ou</span>
-              {/* o cyberespaço com a BARRA dentro: a pré-carga começa aqui, na página inicial; o botão libera quando acaba */}
-              <CyberCta logado={logado} onLogin={() => setShowChatbox(true)} />
             </motion.div>
           )}
         </AnimatePresence>
