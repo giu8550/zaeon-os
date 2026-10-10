@@ -1,3 +1,4 @@
+import { LIMITE_SALA } from "@/lib/lounge3d/tipos";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const m = vi.hoisted(() => ({ session: vi.fn(), userFind: vi.fn(), userUpdate: vi.fn(), llm: vi.fn(), docFind: vi.fn(), docUpdate: vi.fn(), docCreate: vi.fn(), trigger: vi.fn(), get: vi.fn(), guard: vi.fn(), pusher: vi.fn() }));
@@ -77,10 +78,11 @@ describe("/api/lounge3d/[id]", () => {
     m.docFind.mockResolvedValue(doc([OUTRO]));
     expect((await AUTH(form(`presence-lounge3d-${ID}`), { params: { id: ID } })).status).toBe(404);
     m.docFind.mockResolvedValue(doc());
-    m.get.mockResolvedValue({ ok: true, json: async () => ({ users: [{ id: "1" }, { id: "2" }, { id: "3" }, { id: "4" }, { id: "5" }] }) });
+    const lotado = Array.from({ length: LIMITE_SALA }, (_, i) => ({ id: String(i + 1) }));
+    m.get.mockResolvedValue({ ok: true, json: async () => ({ users: lotado }) });
     const cheia = await AUTH(form(`presence-lounge3d-${ID}`), { params: { id: ID } });
     expect(cheia.status).toBe(403); expect((await cheia.json()).motivo).toBe("cheia");
-    m.get.mockResolvedValue({ ok: true, json: async () => ({ users: [{ id: "1" }, { id: "2" }, { id: "3" }, { id: "4" }, { id: ME }] }) });
+    m.get.mockResolvedValue({ ok: true, json: async () => ({ users: [...lotado.slice(1), { id: ME }] }) });
     expect((await AUTH(form(`presence-lounge3d-${ID}`), { params: { id: ID } })).status).toBe(200);
     m.get.mockResolvedValue({ ok: false, json: async () => ({}) }); // Pusher REST fora: não bloqueia a entrada
     const ok = await (await AUTH(form(`presence-lounge3d-${ID}`), { params: { id: ID } })).json();
