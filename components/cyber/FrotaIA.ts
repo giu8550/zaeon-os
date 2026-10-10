@@ -22,6 +22,8 @@ import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
 import { matrizDoAvatar } from "./matrizes";
 import { criarMultidao, type MultidaoHandle } from "./MultidaoGPU";
 import { gerarFrota, type AgenteIA } from "@/lib/cyber/frota/frota";
+import { hierarquiaDaCidadela, type MembroCidadela } from "@/lib/cyber/frota/hierarquia";
+import { MODELOS_CREDENCIAL, nomeComTitulo, resumoDaCredencial } from "@/lib/cyber/credenciais";
 import { planejarDia, type PlanoDia } from "@/lib/cyber/frota/plano";
 import { diaDe, fullNoDia, minutoDoDia } from "@/lib/cyber/frota/agenda";
 import { estadoDaIA, type EstadoIA } from "@/lib/cyber/frota/corpo";
@@ -71,7 +73,7 @@ const ORCAMENTO_MS = 0.8;
 const TAG = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const BALAO = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:220px;font:500 12.5px system-ui,sans-serif;line-height:1.3;padding:6px 10px;border-radius:14px 14px 14px 4px;background:rgba(255,255,255,.94);color:#0b1020;box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:none;display:none;";
 
-type Corpo = { /** dt guardado dos quadros em que a animação pulou (longe: anima um quadro sim, um não) */ animDt: number; /** de quem é a moto montada (a carenagem é da IA) e as motos do corpo (uma por carenagem) */ motoDe?: string | null; motos?: (MotoHandle | null)[]; /** a moto dela estava parada numa vaga no quadro anterior */ tinhaVaga: boolean; av: AvatarLuzHandle; tag: HTMLDivElement; balao: HTMLDivElement; moto: MotoHandle | null; id: string | null; desvio: P2; yAnt: number; /** a moto: 0..1 materializada */ motoK: number; motoEm: { x: number; y: number; z: number; rumo: number } | null };
+type Corpo = { /** a 2ª linha do crachá (quem tem credencial na cidadela: o status — estudando — ou o programa) */ status?: HTMLSpanElement | null; /** dt guardado dos quadros em que a animação pulou (longe: anima um quadro sim, um não) */ animDt: number; /** de quem é a moto montada (a carenagem é da IA) e as motos do corpo (uma por carenagem) */ motoDe?: string | null; motos?: (MotoHandle | null)[]; /** a moto dela estava parada numa vaga no quadro anterior */ tinhaVaga: boolean; av: AvatarLuzHandle; tag: HTMLDivElement; balao: HTMLDivElement; moto: MotoHandle | null; id: string | null; desvio: P2; yAnt: number; /** a moto: 0..1 materializada */ motoK: number; motoEm: { x: number; y: number; z: number; rumo: number } | null };
 
 /** a fase da animação de cada IA (s): ninguém anda no mesmo passo que o vizinho */
 const faseDe = (id: string) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return (Math.abs(h) % 1000) / 100; };
@@ -114,7 +116,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   /** as MOTOS PARADAS nos estacionamentos dos lugares de estudo (as das IAs que estão estudando ali) */
   const estacionadas = criarMotosEstacionadas({ cena: o.cena, low: o.low });
   const mS = new THREE.Matrix4(), qS = new THREE.Quaternion(), pS = new THREE.Vector3(), eS = new THREE.Vector3(), cS = new THREE.Color(), eixoX = new THREE.Vector3(1, 0, 0), eixoY = new THREE.Vector3(0, 1, 0), qD = new THREE.Quaternion();
-  let config: ConfigSalva | null = null, offset = 0, frota: AgenteIA[] = [], porId = new Map<string, AgenteIA>();
+  let config: ConfigSalva | null = null, offset = 0, frota: AgenteIA[] = [], porId = new Map<string, AgenteIA>(), hier = new Map<string, MembroCidadela>();
   let plano: PlanoDia | null = null, eps = new Map<string, Episodio[]>(), dia = -1, calculando = false;
   let escolherEm = 0, escolhidos: string[] = [], online = 0, visivel = true;
   const textos = new Map<string, (string | null)[] | "carregando">(), respostas = new Map<string, { n: number; texto: string | null; ate: number }>();
@@ -161,6 +163,13 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     if (ric) ric(fazer, { timeout: 1500 }); else setTimeout(fazer, 0);
   }
   /** um corpo novo pro pool (o avatar é pesado: no máximo um por quadro) */
+  /** o CRACHÁ: o nome (com o título da credencial de quem é da hierarquia da cidadela) e, embaixo, o status */
+  function crachar(k: Corpo, a: AgenteIA) {
+    const m = hier.get(a.id); k.tag.textContent = m ? nomeComTitulo(m.credencial, a.nome) : a.nome; k.tag.style.color = a.cor; k.status = null;
+    if (!m) { k.tag.style.borderColor = ""; return; }
+    k.tag.style.borderColor = MODELOS_CREDENCIAL[m.credencial.nivel].cor;
+    const st = document.createElement("span"); st.style.cssText = "display:block;font:600 9px system-ui,sans-serif;opacity:.82;text-align:center;color:#e9eeff;margin-top:1px;"; k.tag.appendChild(st); k.status = st;
+  }
   function novoCorpo(): Corpo {
     const av = criarAvatarLuz("#7fd3ff", o.starTex, o.low, o.gltf, { anime: true }); o.cena.add(av.group); av.group.visible = false;
     const tag = document.createElement("div"); tag.style.cssText = TAG + "display:none;"; o.overlay.appendChild(tag);
@@ -189,7 +198,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   return {
     configurar(c, agoraServidor) {
       config = c; offset = agoraServidor - Date.now();
-      frota = gerarFrota(c.frota); porId = new Map(frota.map((a) => [a.id, a])); plano = null; dia = -1; escolhidos = []; varrer = null; calculando = false; pedidoId++;
+      frota = gerarFrota(c.frota); porId = new Map(frota.map((a) => [a.id, a])); hier = hierarquiaDaCidadela(frota); plano = null; dia = -1; escolhidos = []; varrer = null; calculando = false; pedidoId++;
       for (const k of corpos) k.id = null;
       recalcular(diaDe(agoraMs()));
     },
@@ -238,7 +247,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
           let k = corpos.find((x) => !x.id);
           if (!k && corpos.length < MAX && !criou) { k = novoCorpo(); corpos.push(k); criou = true; }
           if (!k) break;
-          const a = porId.get(id)!; k.id = id; k.av.recolorir(a.cor); k.tag.textContent = a.nome; k.tag.style.color = a.cor; k.desvio = { x: 0, z: 0 }; k.motoK = 0;
+          const a = porId.get(id)!; k.id = id; k.av.recolorir(a.cor); crachar(k, a); k.desvio = { x: 0, z: 0 }; k.motoK = 0;
         }
       }
       // 1b) as SILHUETAS: todo mundo que aparece e NÃO tem corpo completo (quem se move é refeito a cada quadro)
@@ -329,6 +338,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
         const tela = proj.z < 1 && Math.abs(proj.x) < 1.1 && Math.abs(proj.y) < 1.1, sx = (proj.x * 0.5 + 0.5) * ctx.largura, sy = (-proj.y * 0.5 + 0.5) * ctx.altura;
         const longe = Math.hypot(x - ctx.cam.x, z - ctx.cam.z) > 55;
         k.tag.style.display = tela && !longe ? "block" : "none"; if (tela) k.tag.style.transform = `translate(${sx}px,${sy}px) translate(-50%,-100%)`;
+        if (k.status && tela && !longe) { const m = hier.get(k.id)!, st = e.ambiente === "cidadela" && e.sentar > 0.5 ? "● estudando" : resumoDaCredencial(m.credencial); if (k.status.textContent !== st) k.status.textContent = st; }
         const fala = tela && !longe ? balaoDe(k.id, minuto) : null;
         k.balao.style.display = fala ? "block" : "none";
         if (fala) { if (k.balao.textContent !== fala) k.balao.textContent = fala; k.balao.style.transform = `translate(${sx}px,${sy - 22}px) translate(-50%,-100%)`; }

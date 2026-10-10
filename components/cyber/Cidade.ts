@@ -30,6 +30,7 @@ import { NOS } from "@/lib/cyber/buracos";
 import { criarBuracoPortal } from "./BuracoPortal";
 import { criarCoracao } from "./CoracaoZaeon";
 import { criarEstacoes } from "./EstacoesAgentes";
+import { criarCabinesEstudo } from "./CabinesEstudo";
 import { TOPO_DA_CAPELA } from "@/lib/cyber/coracao";
 import { criarDistritoTerra } from "./DistritoTerra";
 import { criarObservadores } from "./DroidsObservadores";
@@ -261,6 +262,10 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // ── os ESTACIONAMENTOS das salas de estudo e do lounge (pra fora de cada sala, flutuando com a ilha): as IAs chegam
   //    de moto e deixam a moto lá (lib/cyber/estacionamentosEstudo; as motos paradas são do components/cyber/FrotaIA) ──
   add(criarPisosEstudo({ low, onde: "zaeon" }));
+
+  // ── as CABINES DE ESTUDO da hierarquia (professores junto dos pilares da capela, doutores atrás, mestrandos depois —
+  //    lib/cyber/credenciais; os graduandos estudam no chão em volta das supertrees) ──
+  add(criarCabinesEstudo({ low }).group);
 
   // ── o BURACO NEGRO da cidade: o nó central da rede de túneis (pisou no anel = escolhe o destino) ──
   const pt = CIDADE.portalTunel, bnc = criarBuracoPortal(ilha, { x: pt.x, y: 0, z: pt.z, anelR: pt.r, h: NOS.zaeon.bh.h, r: NOS.zaeon.bh.r, low, starTex });

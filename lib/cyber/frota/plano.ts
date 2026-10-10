@@ -11,6 +11,7 @@ import { AMBIENTES_ESTUDO, AREAS_PADRAO, agendaDoGrupo, type AreasFrota, type Bl
 import type { AgenteIA } from "./frota";
 import { spotsDe, type Spot } from "./lugares";
 import { VAGAS_POR_ESTACIONAMENTO, temVaga, vagaEstudo, type VagaEstudo } from "../estacionamentosEstudo";
+import { agendaDaCidadela, hierarquiaDaCidadela } from "./hierarquia";
 
 export type BlocoPlano = Bloco & { spot?: Spot; deitado?: boolean; /** a VAGA no estacionamento do lugar (chegou de moto e a moto fica lá) — lib/cyber/estacionamentosEstudo */ vaga?: VagaEstudo };
 export type PlanoDia = { dia: number; agentes: Map<string, { agente: AgenteIA; blocos: BlocoPlano[] }> };
@@ -19,12 +20,17 @@ export type PlanoDia = { dia: number; agentes: Map<string, { agente: AgenteIA; b
 export const CHANCE_DEITAR = 0.14;
 
 export function planejarDia(frota: readonly AgenteIA[], dia: number, flags: FlagsFrota, full = false, ar: AreasFrota = AREAS_PADRAO): PlanoDia {
-  const agentes: PlanoDia["agentes"] = new Map(), grupos = new Map<number, AgenteIA[]>();
+  const agentes: PlanoDia["agentes"] = new Map(), grupos = new Map<number, AgenteIA[]>(), hier = hierarquiaDaCidadela(frota);
   for (const a of frota) (grupos.get(a.grupo) ?? grupos.set(a.grupo, []).get(a.grupo)!).push(a);
   for (const membros of grupos.values()) {
     const ag = agendaDoGrupo(membros, dia, flags, full, ar);
-    for (const a of membros) agentes.set(a.id, { agente: a, blocos: (ag.get(a.id) ?? []).map((b) => ({ ...b })) });
+    // (quem tem credencial na CIDADELA: a agenda dela — o lugar fixo, e só 30%/70% com rotina fora)
+    for (const a of membros) { const m = hier.get(a.id), bl = ag.get(a.id) ?? []; agentes.set(a.id, { agente: a, blocos: (m ? agendaDaCidadela(m, bl, dia) : bl).map((b) => ({ ...b })) }); }
   }
+  // evento de GRUPO (corrida, festa) com uma pessoa só não existe: os amigos dela que só ficam logados no laboratório
+  // (lib/cyber/frota/hierarquia) saíram do evento — ela também sai (fica offline nesse pedaço)
+  { const n = new Map<string, number>(); for (const { blocos } of agentes.values()) for (const b of blocos) if (b.evento) n.set(b.evento, (n.get(b.evento) ?? 0) + 1);
+    for (const v of agentes.values()) v.blocos = v.blocos.filter((b) => !b.evento || (n.get(b.evento) ?? 0) >= 2); }
   // os blocos que precisam de LUGAR, na ordem do relógio (o "mais cedo pega primeiro" — o mesmo em todo cliente)
   const fila: { a: AgenteIA; b: BlocoPlano }[] = [];
   for (const { agente, blocos } of agentes.values()) for (const b of blocos) if (b.atividade === "estudo-plataforma" || b.atividade === "estudo-lounge" || b.atividade === "festa") fila.push({ a: agente, b });
@@ -38,6 +44,8 @@ export function planejarDia(frota: readonly AgenteIA[], dia: number, flags: Flag
   /** onde cada agente está sentado agora (pra os amigos sentarem perto) */
   const ondeEsta = new Map<string, { spot: Spot; fim: number; ambiente: string }>();
   for (const { a, b } of fila) {
+    // a CIDADELA: o lugar é FIXO e só dela (a cabine, ou a roda do grupo de estudos) — ninguém mais senta ali
+    if (b.ambiente === "cidadela") { const m = hier.get(a.id); if (m) { b.spot = m.lugar; ondeEsta.set(a.id, { spot: m.lugar, fim: b.fim, ambiente: "cidadela" }); } continue; }
     const amb: string = b.atividade === "festa" ? "pista" : b.ambiente!, todos = amb === "lounge" ? loungeLimitado : spotsDe(amb as "pista");
     if (!todos.length) continue;
     // um amigo já no mesmo ambiente, na mesma hora? os spots perto dele vêm primeiro

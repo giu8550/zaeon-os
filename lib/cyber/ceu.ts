@@ -159,6 +159,58 @@ export function colisoresDasEstacoes(): Colisor[] {
   return out;
 }
 
+/** as BASES DO DONO na Zaeon (local): fora da capela, uma por fundador (lib/cyber/bases usa estas) — as cabines de
+ *  estudo desviam delas */
+export const BASES_DONO_LOCAIS: readonly { x: number; z: number }[] = [{ x: 0, z: 75 }, { x: 0, z: -75 }, { x: -75, z: -18.75 }];
+
+/** a HIERARQUIA da cidadela (lib/cyber/credenciais): quem tem CABINE DE ESTUDO e em que fileira. Logo depois dos
+ *  pilares da capela, os PROFESSORES (doutorado); atrás deles, os DOUTORES; depois, os MESTRANDOS. Graduando não tem
+ *  cabine (estuda no chão, em volta das supertrees e das cabines, nas pontas — lib/cyber/cidadela) */
+export type NivelCabine = "professor" | "doutor" | "mestrando";
+export const FILEIRAS_CABINES: readonly { nivel: NivelCabine; r: number; n: number; fase: number }[] = [
+  { nivel: "professor", r: 64, n: 9, fase: 0.5 },
+  { nivel: "doutor", r: 78, n: 9, fase: 0 },
+  { nivel: "mestrando", r: 93, n: 34, fase: 0.25 },
+];
+/** a CABINE (referencial dela: o +z = a frente, virada pra capela; a pessoa senta em `assento`, de frente pra mesa e
+ *  pra capela, com o monitor entre ela e o centro) */
+export const CABINE = { larg: 3.0, prof: 2.8, mesaZ: 0.75, monitorZ: 1.05, assento: { x: 0, z: -0.35 }, painelX: 1.45 } as const;
+export type CabineEstudo = { id: string; nivel: NivelCabine; fileira: number; i: number; x: number; z: number; rot: number };
+/** um ponto do referencial de uma cabine → local da ilha */
+export function daCabine(c: { x: number; z: number; rot: number }, lx: number, lz: number): P2 {
+  const s = Math.sin(c.rot), co = Math.cos(c.rot);
+  return { x: c.x + lx * co + lz * s, z: c.z - lx * s + lz * co };
+}
+/** as cabines (local da ilha), fileira por fileira, espaçadas por igual; uma vaga que cai na boca de uma escada, no
+ *  portal/chegada do túnel ou numa base do dono desliza pro lado até ficar livre. Determinístico (constante) */
+let cabinesCache: CabineEstudo[] | null = null;
+export function cabinesDaCidadela(): CabineEstudo[] {
+  if (cabinesCache) return cabinesCache;
+  const out: CabineEstudo[] = [], pt = CIDADE.portalTunel, ch = CIDADE.chegada;
+  const livre = (l: P2) => !escadaEm(l, 4) && Math.hypot(l.x - pt.x, l.z - pt.z) > 12 && Math.hypot(l.x - ch.x, l.z - ch.z) > 10
+    && BASES_DONO_LOCAIS.every((b) => Math.hypot(l.x - b.x, l.z - b.z) > 9) && out.every((o) => Math.hypot(l.x - o.x, l.z - o.z) > CABINE.larg + 2.4);
+  FILEIRAS_CABINES.forEach((f, fi) => {
+    const passo = (Math.PI * 2) / f.n;
+    for (let i = 0; i < f.n; i++) {
+      const a0 = (i + f.fase) * passo;
+      let l = { x: Math.cos(a0) * f.r, z: Math.sin(a0) * f.r };
+      for (let k = 1; k <= 8 && !livre(l); k++) { const a = a0 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * passo * 0.18; l = { x: Math.cos(a) * f.r, z: Math.sin(a) * f.r }; }
+      out.push({ id: `cabine-${f.nivel}-${i}`, nivel: f.nivel, fileira: fi, i, x: l.x, z: l.z, rot: Math.atan2(-l.x, -l.z) });
+    }
+  });
+  return (cabinesCache = out);
+}
+/** colisores das cabines (mundo): a mesa com o monitor e os dois painéis de vidro dos lados (a cadeira não: quem senta
+ *  entra por trás) */
+export function colisoresDasCabines(): Colisor[] {
+  const out: Colisor[] = [];
+  for (const c of cabinesDaCidadela()) {
+    for (const x of [-0.65, 0.65]) out.push({ ...mundo(daCabine(c, x, CABINE.mesaZ + 0.1)), r: 0.75 });
+    for (const sx of [-1, 1]) for (const z of [-0.7, 0.5]) out.push({ ...mundo(daCabine(c, sx * CABINE.painelX, z)), r: 0.4 });
+  }
+  return out;
+}
+
 /** colisores da plataforma (mundo): pilares da capela, a mesa do globo, paredes e móveis
  *  das salas (o lounge, lá em cima). Constante → calculado uma vez (o passo usa todo quadro). */
 let colisoresCache: Colisor[] | null = null;
@@ -180,6 +232,7 @@ export function colisoresDaCidade(): Colisor[] {
   for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
   out.push({ ...mundo({ x: 0, z: 0 }), r: mesaHolo.r });
   out.push(...colisoresDasEstacoes());
+  out.push(...colisoresDasCabines());   // as CABINES DE ESTUDO da hierarquia (professores, doutores, mestrandos)
   out.push(...colisoresDoDistritoTerra(mundo));   // o Observatório da Terra (supertrees, motores, telões, globo)
   // (sem corrimão: as escadas viraram FIOS DE ENERGIA — o corredor não é piso, ninguém anda nele)
   colisoresCache = out;

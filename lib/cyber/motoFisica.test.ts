@@ -100,20 +100,29 @@ describe("pilotagem da moto (dirigibilidade)", () => {
     const s = pilotar(motoParada(300, 20, 300, Math.PI / 2), { acel: 1 }, 3);
     expect(s.x - 300).toBeGreaterThan(30); expect(Math.abs(s.z - 300)).toBeLessThan(1e-6);
   });
-  it("ALTURA: sobe no máximo alturaMax acima do chão de baixo — segurando SUBIR, para lá", () => {
-    const s = pilotar(motoParada(300, 0, 300, 0), { subir: true }, 8);
+  it("ALTURA: sobe no máximo alturaMax acima do chão de baixo — segurando SUBIR, para lá (na praça-ilha)", () => {
+    const s = pilotar(motoParada(10, 0, 10, 0), { subir: true }, 8);
     expect(s.y).toBeLessThanOrEqual(PILOTAGEM.alturaMax + 1e-6); expect(s.y).toBeGreaterThan(PILOTAGEM.alturaMax - 1.5);
   });
   it("sobe devagar e DESCE mais devagar que sobe (nada de despencar)", () => {
     // (dentro do teto: começa a 7,5 m, que é abaixo dos 8 m — acima dele a descida é a "planando")
-    const sobe = pilotar(motoParada(300, 0, 300, 0), { subir: true }, 0.6), desce = pilotar(motoParada(300, 7.5, 300, 0), { descer: true }, 0.6);
+    const sobe = pilotar(motoParada(10, 0, 10, 0), { subir: true }, 0.6), desce = pilotar(motoParada(10, 7.5, 10, 0), { descer: true }, 0.6);
     expect(sobe.y).toBeGreaterThan(2); expect(sobe.y).toBeLessThan(PILOTAGEM.alturaMax);
     expect(7.5 - desce.y).toBeLessThan(sobe.y); expect(7.5 - desce.y).toBeGreaterThan(1);
-    expect(pilotar(motoParada(300, 7.5, 300, 0), { descer: true }, 0.9).vy).toBeGreaterThanOrEqual(-PILOTAGEM.desce - 1e-6);
+    expect(pilotar(motoParada(10, 7.5, 10, 0), { descer: true }, 0.9).vy).toBeGreaterThanOrEqual(-PILOTAGEM.desce - 1e-6);
     expect(PILOTAGEM.alturaMax).toBeLessThanOrEqual(10);   // moto voa BAIXO
   });
-  it("passou da borda (chão sumiu lá embaixo): não sobe e desce PLANANDO até ficar abaixo do teto", () => {
-    let s = motoParada(300, 450, 300, 0);   // 450 m acima do chão do mapa (como quem sai da borda da Zaeon)
+  it("sobre o VAZIO (fora da Zaeon, depois de um boost): o ESPAÇO continua subindo até o céu da moto — o bug do dono", () => {
+    const c = ceuMod.CIDADE.centro;
+    let s = motoParada(c.x, ceuMod.CIDADE.pisoY + 30, c.z, 0); s = { ...s, vz: 40 };
+    s = pilotar(s, { acel: 1 }, 1.5); s = pilotar(s, { acel: 1, boost: true }, 3);   // o boost leva pra bem longe da Zaeon
+    expect(Math.hypot(s.x - c.x, s.z - c.z)).toBeGreaterThan(ZONA_MOTO_ZAEON.r);
+    const y0 = s.y; s = pilotar(s, { subir: true }, 2); expect(s.y).toBeGreaterThan(y0 + 8);
+    s = pilotar(s, { subir: true }, 30); expect(s.y).toBeLessThanOrEqual(ZONA_MOTO_ZAEON.teto + 0.5); expect(s.y).toBeGreaterThan(ZONA_MOTO_ZAEON.teto - 2);
+    expect(tetoDaMoto({ x: 300, z: 300 }, 0)).toBe(ZONA_MOTO_ZAEON.teto);   // o vazio: o céu da moto
+  });
+  it("passou da borda de algo alto por cima de um piso de verdade (a praça): não sobe e desce PLANANDO até ficar abaixo do teto", () => {
+    let s = motoParada(10, 450, 10, 0);   // 450 m acima da praça-ilha
     s = pilotar(s, { subir: true }, 2); expect(s.y).toBeLessThan(450);
     expect(s.vy).toBeLessThan(-PILOTAGEM.planaMin + 1e-6); expect(s.vy).toBeGreaterThanOrEqual(-PILOTAGEM.planaMax - 1e-6);
     s = pilotar(s, {}, 60); expect(s.y).toBeLessThanOrEqual(PILOTAGEM.alturaMax + 1.5);

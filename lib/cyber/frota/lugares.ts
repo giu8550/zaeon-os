@@ -12,8 +12,10 @@ import { lugaresDoLounge } from "../descanso";
 import { PLATAFORMAS, andarNaPlataforma, type IdPlataforma } from "../plataformas";
 import { acasoDe, embaralhar } from "./aleatorio";
 import type { AmbienteEstudo } from "./agenda";
+import { lugaresDaCidadela } from "../cidadela";
 
-export type TipoSpot = "sofa" | "pufe" | "puff" | "piso" | "pista";
+/** `cabine` = a cadeira de uma CABINE DE ESTUDO da cidadela (lib/cyber/cidadela) */
+export type TipoSpot = "sofa" | "pufe" | "puff" | "piso" | "pista" | "cabine";
 export type Spot = {
   id: string; ambiente: AmbienteEstudo | "pista"; tipo: TipoSpot;
   x: number; z: number; y: number; rumo: number;
@@ -99,6 +101,7 @@ export function spotsDe(amb: AmbienteEstudo | "pista"): Spot[] {
   let s = cache.get(amb);
   if (s) return s;
   if (amb === "pista") s = pista();
+  else if (amb === "cidadela") s = lugaresDaCidadela();   // (cada membro da hierarquia tem o SEU — lib/cyber/frota/hierarquia)
   else if (amb === "lounge") s = [...assentos("lounge", "lounge"), ...chaoDaSala("lounge", "lounge").slice(0, 220)];   // os sofás primeiro; lotou, o chão perto deles (o pátio também) — quantos, o plano limita (painel admin `loungeChao`, padrão 60)
   else if (SALAS[amb]) s = [...assentos(SALAS[amb]!, amb), ...chaoDaSala(SALAS[amb]!, amb)];
   else s = chaoDaPlataforma(amb as IdPlataforma);
