@@ -609,7 +609,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     const olho = criarOlho({ low: o.low, tam: 46 }); olho.group.position.set(0, DECK.h + 60, -44); olho.group.rotation.x = 0.55; olho.group.visible = false; g.add(olho.group);
     olho.group.traverse((n) => { n.userData.semLote = true; });
     // a MANDALA do show (no mesmo centro do olho), as serpentes e os tentáculos; e a NÉVOA do lounge com os trovões leves
-    const mandala = criarMandala({ low: o.low, estrela: o.estrela, tam: 44 }); mandala.group.position.copy(olho.group.position); mandala.group.rotation.x = 0.55; g.add(mandala.group);
+    const mandala = criarMandala({ low: o.low, estrela: o.estrela, tam: 60 }); mandala.group.position.copy(olho.group.position); mandala.group.rotation.x = 0.55; g.add(mandala.group);
     const nevoa = criarTempestade({ low: o.low, yBase: DECK.h + 48, yTopo: DECK.h + 80, raioMax: 70, alvoPonta: new THREE.Vector3(0, DECK.h + 60, -44), cor: new THREE.Color(0.22, 0.13, 0.32), semAbismo: true, densidade: 0.45 });
     nevoa.group.position.set(0, 0, 0); nevoa.group.traverse((n) => { n.userData.semLote = true; }); g.add(nevoa.group); nevoa.definir(0, false);
     showLounge = { olho, mandala, nevoa, grupo: g };

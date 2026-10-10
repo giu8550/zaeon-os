@@ -14,7 +14,7 @@ describe("o show do lounge durante a música", () => {
   it("cresce em complexidade e em área ao longo da faixa; sem música, tudo recolhido", () => {
     const a = estadoDoShow(10, true), b = estadoDoShow(120, true), c = estadoDoShow(300, true);
     expect(b.complexidade).toBeGreaterThan(a.complexidade); expect(c.complexidade).toBe(1);
-    expect(b.area).toBeGreaterThan(a.area); expect(c.area).toBeGreaterThan(2);
+    expect(b.area).toBeGreaterThan(a.area); expect(c.area).toBeGreaterThan(1.9);
     const off = estadoDoShow(120, false); expect(off.nascimento).toBe(0); expect(off.nevoa).toBe(0); expect(off.nivel).toBe(0); expect(off.serpentes).toBe(0);
   });
   it("as serpentes saem da mandala, depois a névoa se forma, e só depois das serpentes vêm os tentáculos", () => {

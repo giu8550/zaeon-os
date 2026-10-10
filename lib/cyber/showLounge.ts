@@ -53,7 +53,7 @@ export function estadoDoShow(t: number, tocando: boolean): EstadoShow {
     nascimento: rampa(t, NASCIMENTO.ini, NASCIMENTO.dur),
     forma, proxima, mistura,
     complexidade: Math.min(1, t / 240),                                   // 4 min pra chegar ao máximo
-    area: 1 + 1.6 * s3(t / 200),                                          // cresce até 2,6× em ~3,5 min
+    area: 1 + 1.1 * s3(t / 200),                                          // cresce até 2,1× (≈125 m) em ~3,5 min
     serpentes: rampa(t, SERPENTES.ini, SERPENTES.dur), tentaculos: rampa(t, TENTACULOS.ini, TENTACULOS.dur),
     nevoa: rampa(t, NEVOA.ini, NEVOA.dur), nivel: nivelDoTurno(t), turno: Math.floor(t / TURNO_S),
   };

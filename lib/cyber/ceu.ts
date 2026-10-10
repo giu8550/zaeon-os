@@ -232,7 +232,6 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
   // LED e sofás nas laterais
   // (out/2026) tudo isso em cima do DECK da festa (`y` já soma DECK.h); o pátio (a chegada, as motos) fica na frente
   lounge: noDeck([
-    { tipo: "tv", x: 0, z: -62, rot: 0, larg: 30, prof: 1 },
     { tipo: "palco", x: 0, z: PALCO.z, rot: 0, larg: 0, prof: 0, solido: false, y: 0 },   // colisão própria (bordaDoPalco)
     { tipo: "torreDJ", x: 0, z: TORRE_DJ.z, rot: 0, larg: 0, prof: 0, solido: false, y: PALCO.h },   // colisão própria (bordaDaTorre)
     { tipo: "mesaDJ", x: MESA_DJ.x, z: MESA_DJ.z, rot: 0, larg: MESA_DJ.larg, prof: MESA_DJ.prof, y: TORRE_DJ.topo },

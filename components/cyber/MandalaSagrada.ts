@@ -35,13 +35,12 @@ float florDaVida(vec2 p, float w) {
     vec2 c = vec2(float(i) + 0.5 * float(j), 0.8660254 * float(j));
     if (length(c) < 2.05) v += anel(p, c, 1.0, w);
   }
-  v += anel(p, vec2(0.0), 3.0, w) + anel(p, vec2(0.0), 3.12, w * 0.7);
   return v;
 }
 float sementeDaVida(vec2 p, float w) {
   float v = anel(p, vec2(0.0), 1.0, w);
   for (int i = 0; i < 6; i++) { float a = float(i) * PI / 3.0; v += anel(p, vec2(cos(a), sin(a)), 1.0, w); }
-  return v + anel(p, vec2(0.0), 2.0, w) + anel(p, vec2(0.0), 2.1, w * 0.6);
+  return v;
 }
 float cuboDeMetatron(vec2 p, float w) {
   vec2 c[13]; c[0] = vec2(0.0);
@@ -50,7 +49,7 @@ float cuboDeMetatron(vec2 p, float w) {
   for (int i = 0; i < 13; i++) v += anel(p, c[i], 0.5, w);
   if (uLow < 0.5) { for (int i = 0; i < 13; i++) for (int j = 0; j < 13; j++) if (j > i) v += 0.55 * seg(p, c[i], c[j], w * 0.7); }
   else { for (int i = 7; i < 13; i++) for (int j = 0; j < 13; j++) if (j != i) v += 0.55 * seg(p, c[i], c[j], w * 0.7); }
-  return v + anel(p, vec2(0.0), 2.55, w);
+  return v;
 }
 float sriYantra(vec2 p, float w) {
   float v = 0.0;
@@ -60,11 +59,11 @@ float sriYantra(vec2 p, float w) {
   // o bindu, os lótus de 8 e 16 pétalas e o bhupura (a muralha)
   v += smoothstep(0.08, 0.0, length(p)) * 1.5;
   for (int i = 0; i < 16; i++) { float a = float(i) * PI / 8.0; vec2 q = rot(-a) * p; float petala = linha(length((q - vec2(1.45, 0.0)) * vec2(1.0, 2.6)) - 0.28, w * 1.6); v += petala * (i < 8 || uComp > 0.3 ? 1.0 : 0.0); }
-  v += anel(p, vec2(0.0), 1.3, w) + anel(p, vec2(0.0), 1.8, w) + anel(p, vec2(0.0), 2.4, w);
+  v += anel(p, vec2(0.0), 2.4, w);
   v += poli(p, 4.0, 2.75, w) + poli(p, 4.0, 2.9, w * 0.8);
   return v;
 }
-float hexagrama(vec2 p, float w) { return tri(rot(PI / 2.0) * p, 2.4, w) + tri(rot(-PI / 2.0) * p, 2.4, w) + anel(p, vec2(0.0), 1.2, w) + anel(p, vec2(0.0), 2.4, w) + poli(p, 6.0, 2.75, w); }
+float hexagrama(vec2 p, float w) { return tri(rot(PI / 2.0) * p, 2.4, w) + tri(rot(-PI / 2.0) * p, 2.4, w) + poli(p, 6.0, 2.75, w); }
 float arvoreDaVida(vec2 p, float w) {
   vec2 s[10];
   s[0] = vec2(0.0, 2.6); s[1] = vec2(1.0, 1.9); s[2] = vec2(-1.0, 1.9); s[3] = vec2(1.0, 0.7); s[4] = vec2(-1.0, 0.7); s[5] = vec2(0.0, 0.1);
@@ -81,8 +80,8 @@ float arvoreDaVida(vec2 p, float w) {
 }
 float toro(vec2 p, float w) {
   float v = 0.0;
-  for (int i = 0; i < 24; i++) { float a = float(i) * PI / 12.0 + uT * 0.05; v += anel(p, 0.95 * vec2(cos(a), sin(a)), 1.25, w * 0.8); }
-  return v * 0.7 + anel(p, vec2(0.0), 2.2, w) + anel(p, vec2(0.0), 0.3, w);
+  for (int i = 0; i < 16; i++) { float a = float(i) * PI / 8.0 + uT * 0.05; v += anel(p, 0.95 * vec2(cos(a), sin(a)), 1.25, w * 0.8); }
+  return v * 0.7;
 }
 float espiral(vec2 p, float w) {
   float r = length(p), a = atan(p.y, p.x), b = 0.3063489;   // o fator áureo (phi^(2/pi))
@@ -97,12 +96,12 @@ float vesica(vec2 p, float w) {
   float v = anel(p, vec2(-0.75, 0.0), 1.5, w) + anel(p, vec2(0.75, 0.0), 1.5, w) + anel(p, vec2(0.0), 1.5, w * 0.7);
   v += seg(p, vec2(0.0, 1.3), vec2(0.0, -1.3), w) + seg(p, vec2(-2.25, 0.0), vec2(2.25, 0.0), w * 0.7);
   for (int i = 0; i < 6; i++) { float a = float(i) * PI / 3.0; v += 0.5 * anel(p, 0.75 * vec2(cos(a), sin(a)), 1.5, w * 0.7); }
-  return v + anel(p, vec2(0.0), 2.7, w);
+  return v;
 }
 float merkaba(vec2 p, float w) {
   float v = tri(rot(PI / 2.0) * p, 2.6, w) + tri(rot(-PI / 2.0) * p, 2.6, w) + poli(p, 6.0, 1.3, w);
   for (int i = 0; i < 6; i++) { float a = float(i) * PI / 3.0; v += seg(p, vec2(0.0), 1.3 * vec2(cos(a), sin(a)), w * 0.8) + seg(p, 1.3 * vec2(cos(a), sin(a)), 1.3 * vec2(cos(a + PI / 3.0), sin(a + PI / 3.0)), w); }
-  return v + anel(p, vec2(0.0), 2.75, w);
+  return v;
 }
 float forma(float id, vec2 p, float w) {
   int i = int(id + 0.5);
@@ -110,24 +109,61 @@ float forma(float id, vec2 p, float w) {
   if (i == 4) return hexagrama(p, w); if (i == 5) return arvoreDaVida(p, w); if (i == 6) return toro(p, w); if (i == 7) return espiral(p, w);
   if (i == 8) return vesica(p, w); return merkaba(p, w);
 }
+// a PALETA psicodélica (neon em pares complementares: rosa-choque/ciano, lima/violeta, laranja/azul-elétrico, amarelo)
+vec3 paleta(float i) {
+  float k = mod(i, 8.0);
+  if (k < 1.0) return vec3(1.0, 0.08, 0.58);   // #FF1493 rosa-choque
+  if (k < 2.0) return vec3(0.0, 1.0, 1.0);     // #00FFFF ciano elétrico
+  if (k < 3.0) return vec3(0.8, 1.0, 0.0);     // #CCFF00 lima elétrica
+  if (k < 4.0) return vec3(0.87, 0.0, 1.0);    // #DF00FF roxo psicodélico
+  if (k < 5.0) return vec3(1.0, 0.48, 0.17);   // #FF7A2C laranja
+  if (k < 6.0) return vec3(0.1, 0.26, 0.61);   // #1A429C azul-elétrico fundo
+  if (k < 7.0) return vec3(0.98, 0.92, 0.39);  // #FAEB63 amarelo neon
+  return vec3(0.54, 0.17, 0.89);               // #8A2BE2 violeta
+}
+// quantas PÉTALAS a mandala de cada forma tem (segue a simetria da geometria)
+float petalas(float id) { int i = int(id + 0.5); if (i == 0 || i == 1 || i == 4 || i == 9) return 12.0; if (i == 2 || i == 6) return 12.0; if (i == 3 || i == 7) return 8.0; if (i == 5) return 10.0; return 6.0; }
+// dobra o plano num leque de n setores espelhados
+vec2 leque(vec2 p, float n) { float a = atan(p.y, p.x), r = length(p), s = PI / n; float k = floor(a / (2.0 * s)); a = mod(a, 2.0 * s) - s; a = abs(a); return vec2(cos(a), sin(a)) * r; }
+float setorDe(vec2 p, float n) { float a = atan(p.y, p.x) + PI; return floor(a / (2.0 * PI / n)); }
 void main() {
-  vec2 p = (vUv - 0.5) * 6.6;
+  vec2 p = (vUv - 0.5) * 10.0;
   float r = length(p), a = atan(p.y, p.x);
-  float pulso = 1.0 - 0.05 * uB;
+  float pulso = 1.0 - 0.05 * uB, w = 0.045 + 0.014 * uB;
   vec2 q = rot(uT * 0.03) * p / pulso;
-  float w = 0.042 + 0.014 * uB;
-  float v = mix(forma(uForma, q, w), forma(uProx, q, w), uMix);
-  // a complexidade: uma 2ª camada menor girando ao contrário e anéis finos em volta
-  float v2 = mix(forma(uProx, rot(-uT * 0.07) * q * 2.3, w * 1.6), forma(uForma, rot(-uT * 0.07) * q * 2.3, w * 1.6), uMix) * smoothstep(0.0, 1.0, uComp) * 0.35 * smoothstep(1.4, 0.6, r);
-  float aneis = linha(sin(r * 14.0 - uT * 1.2) * 0.5, 0.06) * smoothstep(2.6, 3.0, r) * smoothstep(3.3, 3.05, r) * uComp * 0.5;
-  // o nascimento: do centro pra fora
-  float nasc = smoothstep(uNasc * 3.4, uNasc * 3.4 - 0.5, r);
-  float luz = (v + v2 + aneis) * nasc;
-  // as cores: correm devagar com o raio e o ângulo; o grave acende
-  vec3 cor = hsv(fract(0.62 + r * 0.09 - uT * 0.04 + 0.08 * sin(a * 3.0 + uT * 0.3)), 0.72, 1.0);
-  vec3 col = cor * luz * (1.15 + 1.1 * uB) + vec3(0.9, 0.85, 1.0) * luz * luz * 0.5;
+  // ── o CENTRO: a geometria sagrada (linhas) ──
+  float R0 = 2.6;
+  float centro = mix(forma(uForma, q / 0.9, w), forma(uProx, q / 0.9, w), uMix) * smoothstep(R0 + 0.3, R0 - 0.2, r);
+  // ── a MANDALA em volta: pétalas que REPETEM a geometria (menor, deitada no raio), coloridas em bandas ──
+  float n = mix(petalas(uForma), petalas(uProx), uMix); n = floor(n + 0.5);
+  float nFora = n * (uComp > 0.5 ? 2.0 : 1.0);
+  vec2 l = leque(rot(uT * 0.02) * p, n);
+  float rp = (r - R0) / (5.0 - R0);                       // 0..1 na coroa
+  // o campo da pétala: a mesma forma, encolhida e posta no meio da coroa
+  vec2 pp = (l - vec2(R0 + 1.2, 0.0)) * 2.3;
+  float petL = mix(forma(uForma, pp, w * 2.2), forma(uProx, pp, w * 2.2), uMix);
+  // as BANDAS de cor: anéis finos e setores alternados (o padrão da mandala), cada banda com uma cor da paleta
+  float banda = floor(rp * (5.0 + 4.0 * uComp)), setor = setorDe(rot(uT * 0.02) * p, nFora);
+  float idx = banda * 3.0 + mod(setor, 2.0) * 4.0 + floor(uForma + 0.5) + floor(uT * 0.08);
+  vec3 corBanda = paleta(idx), corSetor = paleta(idx + 1.0 + mod(setor, 3.0));
+  // o CAMPO DE COR (a membrana): as bandas se misturam num fluxo ondulado, deformado pelo ângulo (estilo projeção
+  // psicodélica — TAS Visuals): regiões cheias de cor saturada, não só linhas
+  float ang = atan(p.y, p.x);
+  float fluxo = sin(rp * 16.0 - uT * 1.4 + 1.3 * sin(ang * nFora * 0.5 + uT * 0.6) + 0.8 * sin(rp * 7.0 + ang * 3.0 - uT * 0.9));
+  float lado = smoothstep(-0.25, 0.25, fluxo);
+  vec3 fill = mix(corBanda, corSetor, lado) * (0.62 + 0.3 * uB) * (1.0 - 0.3 * rp);
+  fill = mix(fill, paleta(idx + 5.0) * 0.8, smoothstep(0.5, 0.95, abs(fluxo)) * 0.35);   // os veios entre as bandas
+  // as PÉTALAS recortam o preenchimento (a forma repetida vira a silhueta colorida) + as linhas acesas da forma
+  float petalaCheia = smoothstep(0.25, 0.9, petL);
+  float bordas = linha(fract(rp * (5.0 + 4.0 * uComp)) - 0.5, 0.04) * 0.5 + linha(fract(atan(p.y, p.x) / (2.0 * PI) * nFora) - 0.5, 0.012 + 0.02 * rp) * 0.35;
+  float coroa = smoothstep(R0 - 0.1, R0 + 0.3, r) * smoothstep(5.2, 4.6, r);
+  vec3 col = (fill * (0.75 + 0.9 * petalaCheia) + paleta(idx + 2.0) * petL * (0.9 + 0.8 * uB) + vec3(1.0) * bordas * 0.45) * coroa;
+  // o centro: a cor corre com o raio e o ângulo; o grave acende
+  vec3 corC = hsv(fract(0.62 + r * 0.12 - uT * 0.04 + 0.08 * sin(a * 3.0 + uT * 0.3)), 0.8, 1.0);
+  col += corC * centro * (1.2 + 1.1 * uB) + vec3(0.9, 0.85, 1.0) * centro * centro * 0.5;
   col += vec3(1.0, 0.95, 0.8) * smoothstep(0.1, 0.0, r) * (1.5 + 2.0 * uB) * step(0.01, uNasc);   // o ponto do centro (de onde tudo nasce)
-  col *= smoothstep(3.3, 2.9, r);
+  // o nascimento: do centro pra fora
+  col *= smoothstep(uNasc * 5.3, uNasc * 5.3 - 0.6, r) * smoothstep(5.1, 4.7, r);
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -173,15 +209,15 @@ void main() {
 
 export function criarMandala(o: { low: boolean; estrela?: THREE.Texture; tam?: number }): MandalaHandle {
   const g = new THREE.Group(); g.name = "mandala-sagrada";
-  const tam = o.tam ?? 44, geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [];
+  const tam = o.tam ?? 60, geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [];
   const uni = { uT: { value: 0 }, uB: { value: 0 }, uNasc: { value: 0 }, uComp: { value: 0 }, uMix: { value: 0 }, uForma: { value: 0 }, uProx: { value: 1 }, uLow: { value: o.low ? 1 : 0 } };
   const mat = new THREE.ShaderMaterial({ uniforms: uni, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }); mats.push(mat);
   const geo = new THREE.PlaneGeometry(tam, tam); geos.push(geo);
   const plano = new THREE.Mesh(geo, mat); plano.renderOrder = 4; plano.frustumCulled = false; g.add(plano);
   // os ARTEFATOS: pontos de luz orbitando (contraste) e 3 anéis finos inclinados
   const linhaMat = (cor: number, op: number) => { const m = new THREE.LineBasicMaterial({ color: cor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }); mats.push(m); return m; };
-  const aneis = [0xffe7a8, 0x9affd0, 0xff9ad5].map((c, i) => { const pts: THREE.Vector3[] = []; const R = tam * (0.5 + i * 0.07), n = o.low ? 48 : 96; for (let k = 0; k <= n; k++) { const a = (k / n) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * R, Math.sin(a) * R, 0)); } const gg = new THREE.BufferGeometry().setFromPoints(pts); geos.push(gg); const l = new THREE.LineLoop(gg, linhaMat(c, 0.5)); g.add(l); return l; });
-  const NP = o.low ? 140 : 320, pv = new Float32Array(NP * 3), pd = Array.from({ length: NP }, (_, i) => ({ a: (i / NP) * Math.PI * 2 * 7.3, r: 0.35 + 0.65 * ((i * 37) % 100) / 100, y: ((i * 53) % 100) / 100 - 0.5, v: 0.05 + ((i * 11) % 7) * 0.02 }));
+  void linhaMat;
+  const NP = o.low ? 90 : 200, pv = new Float32Array(NP * 3), pd = Array.from({ length: NP }, (_, i) => ({ a: (i / NP) * Math.PI * 2 * 7.3, r: 0.35 + 0.65 * ((i * 37) % 100) / 100, y: ((i * 53) % 100) / 100 - 0.5, v: 0.05 + ((i * 11) % 7) * 0.02 }));
   const pg = new THREE.BufferGeometry(); pg.setAttribute("position", new THREE.BufferAttribute(pv, 3)); geos.push(pg);
   const pontos = new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.9, map: o.estrela ?? null, color: 0xfff1d6, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })); pontos.frustumCulled = false; mats.push(pontos.material as THREE.Material); g.add(pontos);
 
@@ -210,7 +246,6 @@ export function criarMandala(o: { low: boolean; estrela?: THREE.Texture; tam?: n
       const vis = e.nascimento > 0.001; g.visible = vis; if (!vis) return;
       uni.uT.value = t; uni.uB.value = batida; uni.uNasc.value = e.nascimento; uni.uComp.value = e.complexidade; uni.uMix.value = e.mistura; uni.uForma.value = e.forma; uni.uProx.value = e.proxima;
       plano.scale.setScalar(e.area * (1 + 0.03 * batida));
-      aneis.forEach((an, i) => { an.rotation.set(t * (0.11 + i * 0.05), t * (0.07 - i * 0.03), i * 1.1); an.scale.setScalar(e.area * e.nascimento * (1 + 0.04 * batida)); (an.material as THREE.LineBasicMaterial).opacity = 0.25 + 0.45 * e.complexidade; });
       { const a = pg.attributes.position!.array as Float32Array, R = tam * 0.62 * e.area;
         pd.forEach((p, i) => { const ang = p.a + t * p.v, rr = R * p.r * e.nascimento; a[i * 3] = Math.cos(ang) * rr; a[i * 3 + 1] = Math.sin(ang) * rr * 0.75 + p.y * 6 * e.complexidade; a[i * 3 + 2] = Math.sin(ang * 2 + i) * 4 * e.complexidade; });
         pg.attributes.position!.needsUpdate = true; (pontos.material as THREE.PointsMaterial).opacity = 0.3 + 0.6 * e.complexidade; }
