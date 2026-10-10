@@ -1,6 +1,5 @@
 "use client";
 
-import TextoRevelado from "@/components/ui/TextoRevelado";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -14,7 +13,8 @@ import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 import MolecularText from "@/components/ui/MolecularText";
 import { copyEntrada } from "@/lib/ui/loungeHub";
-import AuraAoVivo from "@/components/main/AuraAoVivo";
+import GlitchTexto from "@/components/ui/GlitchTexto";
+import CyberCta from "@/components/main/CyberCta";
 
 // Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
 // Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
@@ -72,8 +72,10 @@ function LogoModelo({ slug, name, org }: { slug: string; name: string; org?: str
   );
 }
 
-// H1 (v3): o resultado, em três verbos — curto (< 44 caracteres), como pedem os heróis que convertem.
-const FRASE_COMPLETA = "Aprenda, Construa e Entregue.";
+// H1 (v4): a promessa — "Evolua sua vida." + "com conhecimento." (a palavra em destaque).
+// O sub-header traz os três verbos com o glitch chinês e a palavra que gira (ideias, estudos, trabalhos, pesquisas).
+const FRASE_COMPLETA = "Evolua sua vida. com conhecimento.";
+const GIRO = ["ideias", "estudos", "trabalhos", "pesquisas"];
 /** pra onde "Iniciar chat" leva quem já está logado: o chat da Aura (Sala de Estudos) */
 const CHAT_ROTA = "/research-lab?tab=sala-de-estudos";
 
@@ -85,8 +87,6 @@ export default function HeroPage() {
   const [showChatbox, setShowChatbox] = useState(false);
 
   const logado = status === "authenticated";
-  // "Ir pro cyberespaço" desce até a seção que explica o que é (no fim da página).
-  const irProCyberespaco = () => document.getElementById("cyberespaco")?.scrollIntoView({ behavior: "smooth", block: "start" });
   const copy = copyEntrada(logado);
 
   return (
@@ -121,12 +121,16 @@ export default function HeroPage() {
             <h1 className="text-[clamp(2.25rem,6.2vw,5.75rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.05] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
               <span aria-hidden="true">
-                <MolecularText text="Aprenda," />{" "}
-                <MolecularText text="Construa" delay={0.15} />{" "}
                 <span className="whitespace-nowrap">
-                  <MolecularText text="e" delay={0.3} />{" "}
+                  <MolecularText text="Evolua" />{" "}
+                  <MolecularText text="sua" delay={0.12} />{" "}
+                  <MolecularText text="vida." delay={0.24} />
+                </span>
+                <br />
+                <span className="whitespace-nowrap">
+                  <MolecularText text="com" delay={0.36} />{" "}
                   <span className="text-cyan-600 dark:text-cyan-400">
-                    <MolecularText text="Entregue." delay={0.4} />
+                    <MolecularText text="conhecimento." delay={0.46} />
                   </span>
                 </span>
               </span>
@@ -141,11 +145,14 @@ export default function HeroPage() {
                 transition={{ duration: 0.4, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                  {/* sub-header: UM texto só — a chamada do limite (levemente destacada) e o fecho "nunca mais fique na mão" */}
+                  {/* sub-header: os três verbos com o GLITCH CHINÊS + a palavra que gira (ideias, estudos, trabalhos, pesquisas) */}
                   <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-900 dark:text-white font-light leading-relaxed">
-                    <TextoRevelado texto="Todas as IAs num lugar só — ChatGPT, Claude, Gemini, Grok, DeepSeek e muito mais." delay={0.3} />{" "}
-                    <TextoRevelado className="font-normal text-cyan-700 dark:text-cyan-200" texto="Acabou o limite de uma? Passa pra outra." delay={0.65} />{" "}
-                    <TextoRevelado texto="Nunca mais fique na mão." delay={0.9} />
+                    <GlitchTexto
+                      texto="Aprenda, construa, entregue"
+                      palavras={GIRO}
+                      classePalavra="font-normal text-cyan-700 dark:text-cyan-200"
+                      delay={0.5}
+                    />
                   </p>
               </motion.div>
             )}
@@ -174,13 +181,8 @@ export default function HeroPage() {
                 Iniciar chat
               </LiquidGlassButton>
               <span className="text-xs uppercase tracking-[0.2em] text-slate-700 dark:text-white/80">ou</span>
-              <button
-                type="button"
-                onClick={irProCyberespaco}
-                className="group relative flex items-center justify-center gap-2 px-8 py-4 rounded-full border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 font-medium uppercase tracking-[0.18em] text-[11px] transition-all hover:border-cyan-400 hover:scale-105 bg-transparent w-full sm:w-auto"
-              >
-                ✦ Ir pro cyberespaço
-              </button>
+              {/* o cyberespaço com a BARRA dentro: a pré-carga começa aqui, na página inicial; o botão libera quando acaba */}
+              <CyberCta logado={logado} onLogin={() => setShowChatbox(true)} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -205,15 +207,7 @@ export default function HeroPage() {
         )}
       </motion.div>
 
-      {/* A AURA AO VIVO (desktop): o chat tem rosto — ela responde perguntas de verdade ali do lado do
-          título, e o cartão inteiro é o "Iniciar chat". No celular o rosto vai no botão do CTA. */}
-      <AnimatePresence>
-        {!showChatbox && (
-          <div className="hidden lg:flex absolute z-10 w-[360px] xl:w-[380px] right-[3%] xl:right-[6%] top-1/2 -translate-y-[18%]">
-            <AuraAoVivo onAbrir={() => (logado ? router.push(CHAT_ROTA) : setShowChatbox(true))} />
-          </div>
-        )}
-      </AnimatePresence>
+      {/* (v4) o cartão da Aura ao vivo saiu de cena no desktop — o hero é só a promessa + os dois CTAs. */}
 
       {/* O cyberespaço embutido mora agora em "Crie a sua própria estação de trabalho" (app/study-rooms). */}
 
