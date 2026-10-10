@@ -1,13 +1,16 @@
 /**
- * EfeitosMovimento — o que se VÊ do movimento turbinado (lib/cyber/movimento): o RASTRO do dash (fantasmas de luz do
- * corpo, na cor da pessoa, que ficam pra trás e somem) e a ONDA DE CHOQUE do impacto (um anel de luz que se abre no chão
- * no pouso forte e no dash que bate). Pool fixo (12 fantasmas, 4 ondas), aditivo, sem sombra — custo ~zero parado.
+ * EfeitosMovimento — o que se VÊ do movimento turbinado (lib/cyber/movimento): os RISCOS DE VENTO (varetas finas de
+ * luz que saem do corpo e ficam pra trás — sprint e dash), o ECO leve da silhueta no dash e a ONDA DE CHOQUE do impacto (um anel de luz que se abre no chão
+ * no pouso forte e no dash que bate). Pool fixo (16 ecos, 40 riscos, 4 ondas), aditivo, sem sombra — custo ~zero parado.
  */
 import * as THREE from "three";
 
 export type EfeitosMovimentoHandle = {
   /** um fantasma do corpo em `p` (os pés), virado pra `rumo`, na `cor` */
-  fantasma(p: THREE.Vector3, rumo: number, cor: THREE.ColorRepresentation): void;
+  fantasma(p: THREE.Vector3, rumo: number, cor: THREE.ColorRepresentation, forca?: number): void;
+  /** RISCOS DE VENTO (estilo anime): `n` riscos finos saindo do corpo em `p` (os pés) e ficando pra trás na direção
+   *  oposta a `dir` (unitária, no plano) — a velocidade sem esconder o corpo */
+  vento(p: THREE.Vector3, dir: { x: number; z: number }, cor: THREE.ColorRepresentation, n: number, comp?: number): void;
   /** uma onda de choque no chão em `p`, força 0..1 */
   onda(p: THREE.Vector3, forca: number): void;
   atualizar(dt: number): void;
@@ -18,11 +21,19 @@ const VIDA_FANTASMA = 0.32, VIDA_ONDA = 0.55;
 
 export function criarEfeitosMovimento(cena: THREE.Object3D): EfeitosMovimentoHandle {
   const g = new THREE.Group(); g.name = "efeitos-movimento"; cena.add(g);
-  // o fantasma: uma cápsula do tamanho do corpo (o avatar é um ser de luz — a silhueta brilhando basta)
-  const geoF = new THREE.CapsuleGeometry(0.32, 1.05, 4, 10); geoF.translate(0, 0.85, 0);
-  const fantasmas = Array.from({ length: 12 }, () => {
+  // o fantasma: um ECO leve da silhueta (cápsula estreita, bem transparente — o corpo continua aparecendo)
+  const geoF = new THREE.CapsuleGeometry(0.22, 1.15, 4, 10); geoF.translate(0, 0.85, 0);
+  // o RISCO de vento: uma vareta fina de luz (1 m no eixo z; a escala estica) — vista de qualquer ângulo
+  const geoV = new THREE.BoxGeometry(0.022, 0.022, 1); geoV.translate(0, 0, -0.5);
+  const riscos = Array.from({ length: 40 }, () => {
+    const m = new THREE.Mesh(geoV, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.visible = false; m.frustumCulled = false; g.add(m); return { m, vida: 0, dur: 0.25, comp: 2 };
+  });
+  let iV = 0, semente = 1;
+  const acaso = () => { semente = (semente * 16807) % 2147483647; return semente / 2147483647; };
+  const fantasmas = Array.from({ length: 16 }, () => {
     const m = new THREE.Mesh(geoF, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    m.visible = false; m.frustumCulled = false; g.add(m); return { m, vida: 0 };
+    m.visible = false; m.frustumCulled = false; g.add(m); return { m, vida: 0, forca: 1 };
   });
   const geoO = new THREE.RingGeometry(0.82, 1, 56); geoO.rotateX(-Math.PI / 2);
   const ondas = Array.from({ length: 4 }, () => {
@@ -31,9 +42,19 @@ export function criarEfeitosMovimento(cena: THREE.Object3D): EfeitosMovimentoHan
   });
   let iF = 0, iO = 0;
   return {
-    fantasma(p, rumo, cor) {
+    fantasma(p, rumo, cor, forca = 1) {
       const f = fantasmas[iF++ % fantasmas.length]!;
-      f.m.position.copy(p); f.m.rotation.y = rumo; (f.m.material as THREE.MeshBasicMaterial).color.set(cor); f.vida = VIDA_FANTASMA; f.m.visible = true;
+      f.m.position.copy(p); f.m.rotation.y = rumo; (f.m.material as THREE.MeshBasicMaterial).color.set(cor); f.vida = VIDA_FANTASMA; f.forca = forca; f.m.visible = true;
+    },
+    vento(p, dir, cor, n, comp = 2.2) {
+      const lx = -dir.z, lz = dir.x;   // o lado
+      for (let k = 0; k < n; k++) {
+        const r = riscos[iV++ % riscos.length]!, h = 0.25 + acaso() * 1.55, lado = (acaso() - 0.5) * 1.1;
+        r.m.position.set(p.x + lx * lado - dir.x * 0.2, p.y + h, p.z + lz * lado - dir.z * 0.2);
+        r.m.rotation.set(0, Math.atan2(dir.x, dir.z), 0);   // o −z local (pra onde a vareta cresce) fica pra TRÁS
+        (r.m.material as THREE.MeshBasicMaterial).color.set(cor).lerp(new THREE.Color(0xffffff), 0.55);
+        r.dur = 0.18 + acaso() * 0.14; r.vida = r.dur; r.comp = comp * (0.6 + acaso() * 0.8); r.m.visible = true;
+      }
     },
     onda(p, forca) {
       const o = ondas[iO++ % ondas.length]!;
@@ -43,7 +64,13 @@ export function criarEfeitosMovimento(cena: THREE.Object3D): EfeitosMovimentoHan
       for (const f of fantasmas) {
         if (!f.m.visible) continue;
         f.vida -= dt; if (f.vida <= 0) { f.m.visible = false; continue; }
-        const k = f.vida / VIDA_FANTASMA; (f.m.material as THREE.MeshBasicMaterial).opacity = 0.42 * k * k; f.m.scale.set(1 + (1 - k) * 0.25, 1, 1 + (1 - k) * 0.25);
+        const k = f.vida / VIDA_FANTASMA; (f.m.material as THREE.MeshBasicMaterial).opacity = 0.16 * f.forca * k * k; f.m.scale.set(1 + (1 - k) * 0.25, 1, 1 + (1 - k) * 0.25);
+      }
+      for (const r of riscos) {
+        if (!r.m.visible) continue;
+        r.vida -= dt; if (r.vida <= 0) { r.m.visible = false; continue; }
+        const u = 1 - r.vida / r.dur;   // nasce curto, estica e some
+        r.m.scale.set(1, 1, r.comp * (0.35 + 0.65 * Math.min(1, u * 2.5))); (r.m.material as THREE.MeshBasicMaterial).opacity = 0.75 * (1 - u) * Math.min(1, u * 6);
       }
       for (const o of ondas) {
         if (!o.m.visible) continue;
@@ -54,6 +81,7 @@ export function criarEfeitosMovimento(cena: THREE.Object3D): EfeitosMovimentoHan
     },
     dispose() {
       for (const f of fantasmas) (f.m.material as THREE.Material).dispose();
+      for (const r of riscos) (r.m.material as THREE.Material).dispose(); geoV.dispose();
       for (const o of ondas) (o.m.material as THREE.Material).dispose();
       geoF.dispose(); geoO.dispose(); g.removeFromParent();
     },

@@ -53,6 +53,7 @@ import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
 import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
 import { DASH, VOO_TURBO, iniciarDash, passoDash, podeDash, sensacaoAPe, tremorDoImpacto, velocidadeAPe, type EstadoDash } from "@/lib/cyber/movimento";
 import { criarEfeitosMovimento, type EfeitosMovimentoHandle } from "./EfeitosMovimento";
+import { pesoAlerta } from "@/lib/cyber/posesCombate";
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
 import { PILOTAGEM, motoParada, passoMotoSub, sensacaoDeVelocidade, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
@@ -388,6 +389,8 @@ export class CyberEngine {
    *  no plano (a sensação de velocidade), o tremor dos impactos e os efeitos (rastro do dash, onda de choque) */
   private tCorrendo = 0; private velAPe = 4; private dash: EstadoDash = null; private dashUlt: { x: number; z: number; esperado: number } | null = null;
   private velPlano = 0; private posAnt: { x: number; z: number } | null = null; private tremor = 0; private fantasmaT = 0; private agora = 0; private dashAtivo = false; private tAnt = 0;
+  /** as poses de AÇÃO (lib/cyber/posesCombate): o peso do sprint e do dash, e quando o último dash acabou (a guarda) */
+  private wSprint = 0; private wDash = 0; private tFimDash = -Infinity;
   private fxMov: EfeitosMovimentoHandle | null = null;
   /** a capela, a laje do lounge e a torre do DJ: sólidos pra quem VOA (moto/nave) — fixos, calculados uma vez (a torre
    *  é um campo de força pra quem não é o dono: só ele pousa na cabine) */
@@ -835,7 +838,7 @@ export class CyberEngine {
     const d = moverRelativoCamera(ix, iz, this.camAz);
     this.dash = iniciarDash(this.agora, d ? { x: d.wx, z: d.wz } : null, this.eu.facing); this.dashUlt = null;
     this.alvo = null; this.alvoDepois = null; this.velTela = Math.max(this.velTela, 0.85);   // o "soco" no FOV e as linhas na hora
-    this.som.tocar("jump", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.9, taxa: 1.55 });
+    this.som.tocar("dash", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 1, taxa: 0.95 + Math.random() * 0.12 });   // (o swoosh sintetizado — lib/cyber/somMovimento)
     return true;
   }
   /** (combate) está desviando agora? — o começo do dash */
@@ -2371,14 +2374,21 @@ export class CyberEngine {
       if (this.dash && this.dashUlt && !this.jet.noAr && Math.hypot(eu.pos.x - this.dashUlt.x, eu.pos.z - this.dashUlt.z) < this.dashUlt.esperado * 0.35) {
         this.impacto(0.55); this.dash = null; this.dashUlt = null;
       }
-      { const p = passoDash(this.dash, this.tAnt || t, t); this.dashAtivo = !!p;
+      { const p = passoDash(this.dash, this.tAnt || t, t), estava = this.dashAtivo; this.dashAtivo = !!p;
+        if (estava && !p && !this.jet.noAr) { this.tFimDash = t; this.som.tocar("alerta", eu.av.group.position, { dist: DISTANCIA.eu, volume: 1, taxa: 0.96 + Math.random() * 0.08 }); }   // acabou o dash no chão: entra em GUARDA
         if (p) {
           if (this.jet.noAr) this.jetV = { x: this.dash!.dir.x * DASH.vel, z: this.dash!.dir.z * DASH.vel };   // no ar: o embalo do arranque
           else { this.dashUlt = { x: eu.pos.x, z: eu.pos.z, esperado: Math.hypot(p.x, p.z) }; eu.pos.x += p.x; eu.pos.z += p.z; }   // (de onde saiu e quanto pediu: o próximo quadro vê se andou)
           eu.facing = Math.atan2(this.dash!.dir.x, this.dash!.dir.z); andando = true;
-          this.fantasmaT -= dt; if (this.fantasmaT <= 0) { this.fantasmaT = 0.03; this.fxMov ??= criarEfeitosMovimento(this.cena.scene); this.fxMov.fantasma(eu.av.group.position, eu.facing, this.corDe(euId)); }
+          this.fantasmaT -= dt; if (this.fantasmaT <= 0) { this.fantasmaT = 0.03; this.fxMov ??= criarEfeitosMovimento(this.cena.scene); this.fxMov.fantasma(eu.av.group.position, eu.facing, this.corDe(euId)); this.fxMov.vento(eu.av.group.position, this.dash!.dir, this.corDe(euId), 3, 3); }
         } else this.dashUlt = null;
       }
+      // o SPRINT também deixa rastro (mais fraco, mais espaçado) e a corrida ninja; voando, de moto ou parado: sem guarda
+      const sprintando = andando && !this.jet.noAr && this.velAPe > 11.5;
+      this.wSprint += ((sprintando ? 1 : 0) - this.wSprint) * Math.min(1, dt * 7);
+      this.wDash += ((this.dashAtivo ? 1 : 0) - this.wDash) * Math.min(1, dt * (this.dashAtivo ? 30 : 9));
+      if (sprintando && !this.dashAtivo) { this.fantasmaT -= dt; if (this.fantasmaT <= 0) { this.fantasmaT = 0.045; this.fxMov?.vento(eu.av.group.position, { x: Math.sin(eu.facing), z: Math.cos(eu.facing) }, this.corDe(euId), 2); } }   // (sprint: só os riscos de vento)
+      if (this.jet.noAr || sprintando) this.tFimDash = -Infinity;
       // sentar ao parar perto da PRÓPRIA base
       const querSentar = this.distBase(euId, eu.pos) < BASE_INTERACT_R && !andando && !this.alvo && !this.jet.noAr && !this.sobreNave;
       this.sitT += ((querSentar ? 1 : 0) - this.sitT) * Math.min(1, dt * 3);
@@ -2545,7 +2555,7 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0 }, tablet: eu.tab ?? 0, dt: this.moto === null && !this.jet.noAr && eu.moving ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (no sprint as pernas giram mais rápido)
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: pesoAlerta(t - this.tFimDash) } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0 }, tablet: eu.tab ?? 0, dt: this.moto === null && !this.jet.noAr && eu.moving ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (no sprint as pernas giram mais rápido)
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
