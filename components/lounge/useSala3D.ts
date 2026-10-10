@@ -16,7 +16,7 @@ import { classificarErroPusher, ehFalhaDeConexao, type EstadoRealtime, type Moti
 import { POSE_HZ_COLYSEUS, transporteRealtime } from "@/lib/lounge3d/realtime";
 import { conectarColyseus, type CanalVoz, type ConexaoColyseus } from "./salaColyseus";
 import { sanitizarSom, type AcaoSom } from "@/lib/lounge3d/musica";
-import { EV_RITUAL, CAMPO_DO_CANAL, canalDe, EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG, type CanalSom } from "@/lib/lounge3d/tipos";
+import { EV_RITUAL, CAMPO_DO_CANAL, canalDe, EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, juntarChat, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG, type CanalSom } from "@/lib/lounge3d/tipos";
 import { ritualDesligado, sanitizarRitual } from "@/lib/cyber/ritual";
 
 export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean; /** (Colyseus) já mandou a 1ª pose — o novato no tutorial não: nem aparece nem entra na voz */ pronto?: boolean };
@@ -134,7 +134,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
         const onPos = (raw: unknown) => { const pr = sanitizarPresenca(raw); if (pr && pr.userId !== euId) mapaRemotos.set(pr.userId, pr); };
         ch.bind(EV_POS_CLIENTE, onPos); ch.bind(EV_POS, onPos);
       }
-      ch.bind(EV_CHAT, (m: MensagemChat) => setChat((c) => [...c.slice(-199), m]));
+      ch.bind(EV_CHAT, (m: MensagemChat) => setChat((c) => juntarChat(c, m)));
       // recado do dono pro QG (holograma ao lado da tela do Andrei): chega na hora e fica no conteúdo
       ch.bind(EV_RECADO, (d: { recado: RecadoQG | null }) => setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, recadoQG: d.recado } } : s)));
       // o toca-discos do lounge (playlist/controle do dono): o relógio do servidor vem junto (sincronia da música)
@@ -210,7 +210,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
   const enviarChat = useCallback(async (texto: string) => {
     if (!salaId || !texto.trim()) return;
     const r = await fetch(`/api/lounge3d/${salaId}/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto }) });
-    if (r.ok && realtime !== "pusher") { const d = await r.json().catch(() => null); if (d?.msg) setChat((c) => [...c.slice(-199), d.msg]); }
+    if (r.ok && realtime !== "pusher") { const d = await r.json().catch(() => null); if (d?.msg) setChat((c) => juntarChat(c, d.msg)); }
   }, [salaId, realtime]);
 
   /** Aplica no servidor e localmente (otimista) — o evento "conteudo" cobre os outros. */

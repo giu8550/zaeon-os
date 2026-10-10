@@ -28,6 +28,7 @@ export type Pose = {
   /** DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (espelha lib/cyber/descanso) */ desc: number;
   /** ARENA PvP (espelha lib/cyber/combate): o golpe (seq×4 + nº; 0 = nenhum), a vida (0–100), a espada na mão */ atk: number; hp: number; arma: boolean;
   /** o MOVIMENTO TURBINADO (espelha lib/cyber/movimento): 0 nada, 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem */ mov: number;
+  /** quando o cliente MANDOU a pose (ms no relógio dele; 0 = sem) — quem recebe interpola pelo tempo de quem mandou */ t: number;
 };
 const VAGAS_MOTO = 32, TETO_MOTO = ALT;   // chão (4) + Zaeon (12) + 4 mirantes da Zaeon (16) — espelha TOTAL_VAGAS de lib/cyber/motos
 
@@ -56,6 +57,7 @@ export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
     hp: typeof r.hp === "number" && Number.isInteger(r.hp) && r.hp >= 0 && r.hp <= 100 ? r.hp : 100,
     arma: r.arma === 1,
     mov: typeof r.mov === "number" && Number.isInteger(r.mov) && r.mov >= 0 && r.mov <= 5 ? r.mov : 0,
+    t: num(r.t, 0, 1e12) ?? 0,
   };
 }
 function motoDe(v: unknown): Pose["moto"] {

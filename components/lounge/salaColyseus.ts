@@ -12,7 +12,7 @@
  */
 import type { Presenca } from "@/lib/lounge3d/tipos";
 import type { Pose } from "@/lib/lounge3d/pose";
-import { Trilha } from "@/lib/lounge3d/netcode";
+import { RelogioRemoto, Trilha } from "@/lib/lounge3d/netcode";
 import { urlColyseus } from "@/lib/lounge3d/realtime";
 import type { ServidorIce } from "@/lib/lounge3d/ice";
 
@@ -22,6 +22,7 @@ type JogadorRemoto = {
   x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean;
   voando: boolean; vooY: number; vooYaw: number; parada: boolean; npX: number; npY: number; npZ: number; npYaw: number;
   jet: number; alt: number; falando: boolean; pronto: boolean; motoS: number; motoY: number; motoYaw: number; motoDe: string; mlS: number; mlX: number; mlY: number; mlZ: number; mlYaw: number; desc: number; atk: number; hp: number; arma: boolean; mov: number;
+  /** quando a pose foi MANDADA (ms, no relógio de quem mandou; 0 = cliente/servidor antigo) */ t: number;
 };
 export type CanalVoz = {
   /** manda offer/answer/ICE pra alguém da sala (por userId) */
@@ -35,7 +36,7 @@ export type CanalVoz = {
 export type ConexaoColyseus = { enviar(p: Pose): void; voz: CanalVoz; sair(): void };
 
 /** os campos de um jogador do estado (os do Schema são acessores — espalhar com {...j} não copia) */
-const CAMPOS: (keyof JogadorRemoto)[] = ["motoS", "motoY", "motoYaw", "motoDe", "mlS", "mlX", "mlY", "mlZ", "mlYaw", "userId", "name", "color", "fundador", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto", "desc", "atk", "hp", "arma", "mov"];
+const CAMPOS: (keyof JogadorRemoto)[] = ["motoS", "motoY", "motoYaw", "motoDe", "mlS", "mlX", "mlY", "mlZ", "mlYaw", "userId", "name", "color", "fundador", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto", "desc", "atk", "hp", "arma", "mov", "t"];
 const copiar = (j: JogadorRemoto): JogadorRemoto => { const o = {} as Record<string, unknown>; for (const k of CAMPOS) o[k] = j[k]; return o as JogadorRemoto; };
 
 export function conectarColyseus(o: {
@@ -48,7 +49,8 @@ export function conectarColyseus(o: {
 }): ConexaoColyseus {
   let vivo = true, room: { send(t: string, m: unknown): void; leave(consented?: boolean): Promise<unknown>; onMessage(t: string, cb: (m: unknown) => void): unknown } | null = null;
   let tentativas = 0, timerReentrar: ReturnType<typeof setTimeout> | null = null, raf = 0;
-  const trilhas = new Map<string, Trilha>(), ultimo = new Map<string, JogadorRemoto>();
+  const trilhas = new Map<string, Trilha>(), ultimo = new Map<string, JogadorRemoto>(), relogios = new Map<string, RelogioRemoto>();
+  const t0 = performance.now();   // o MEU relógio das poses (vai no `t`)
   const ouvintesVoz = new Set<(from: string, data: unknown) => void>();
   const ice: ServidorIce[] = [];
   // laço de desenho no ritmo da tela (fora do navegador — testes — cai num timer de ~60 Hz)
@@ -106,9 +108,14 @@ export function conectarColyseus(o: {
           // dele fica vazia até lá
           if (!j.pronto) { trilhas.delete(id); o.remotos.delete(id); return; }
           let t = trilhas.get(id); if (!t) { t = new Trilha(); trilhas.set(id, t); }
-          if (!ant || ant.x !== j.x || ant.z !== j.z || ant.facing !== j.facing || ant.moving !== j.moving || t.vazia) t.empurrar({ t: agora, x: j.x, z: j.z, facing: j.facing, moving: j.moving });
+          // a amostra vale no instante em que foi MANDADA (o `t` dela no relógio local), não na chegada do patch
+          const nova = j.t > 0 ? !ant || ant.t !== j.t : !ant || ant.x !== j.x || ant.z !== j.z || ant.facing !== j.facing || ant.moving !== j.moving;
+          if (nova || t.vazia) {
+            let rl = relogios.get(id); if (!rl) { rl = new RelogioRemoto(); relogios.set(id, rl); }
+            t.empurrar({ t: j.t > 0 ? rl.local(j.t, agora) : agora, x: j.x, z: j.z, facing: j.facing, moving: j.moving });
+          }
         });
-        for (const id of [...ultimo.keys()]) if (!vistos.has(id)) { ultimo.delete(id); trilhas.delete(id); o.remotos.delete(id); }   // saiu: o avatar some
+        for (const id of [...ultimo.keys()]) if (!vistos.has(id)) { ultimo.delete(id); trilhas.delete(id); relogios.delete(id); o.remotos.delete(id); }   // saiu: o avatar some
         o.onOnline(lista);
       });
       rm.onMessage("rtc", (m: unknown) => { const x = m as { from?: string; data?: unknown }; if (x?.from) for (const cb of ouvintesVoz) cb(x.from, x.data); });
@@ -134,7 +141,7 @@ export function conectarColyseus(o: {
   raf = proximoQuadro(desenhar);
 
   return {
-    enviar(p) { try { room?.send("pose", p); } catch { /* reconectando */ } },
+    enviar(p) { try { room?.send("pose", { ...p, t: Math.round(performance.now() - t0) + 1 }); } catch { /* reconectando */ } },
     voz: {
       enviar(to, data) { try { room?.send("rtc", { to, data }); } catch { /* sem sala */ } },
       assinar(cb) { ouvintesVoz.add(cb); return () => { ouvintesVoz.delete(cb); }; },
@@ -144,7 +151,7 @@ export function conectarColyseus(o: {
     sair() {
       vivo = false; cancelarQuadro(raf); if (timerReentrar) clearTimeout(timerReentrar);
       try { void room?.leave(true); } catch { /* já */ }
-      room = null; trilhas.clear(); ultimo.clear(); ouvintesVoz.clear();
+      room = null; trilhas.clear(); ultimo.clear(); relogios.clear(); ouvintesVoz.clear();
     },
   };
 }
