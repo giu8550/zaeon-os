@@ -10,7 +10,8 @@ describe("precarga do cyberespaço", () => {
     const faltando = manifesto(true).filter((i) => !existsSync(join(process.cwd(), "public", i.url)));
     expect(faltando).toEqual([]);
     expect(urlsDosSons().length).toBeGreaterThan(15);
-    expect(urlsDosCorpos().length).toBeGreaterThan(10);
+    expect(urlsDosCorpos().length).toBeGreaterThanOrEqual(8);   // os 8 do mapa + o founder (os que saíram do mapa não baixam)
+    for (const id of ["teo", "core_active", "caio", "farmacia", "quimica", "eng-civil"]) expect(urlsDosCorpos().some((u) => u.includes(`/avatars/${id}/`))).toBe(false);
   });
 
   it("sintetizados não entram; o fundador entra uma vez só", () => {

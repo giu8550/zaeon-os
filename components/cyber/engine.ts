@@ -3396,21 +3396,16 @@ function base64ParaBuffer(b64: string): ArrayBuffer | null {
 /** o DJ do lounge (out/2026): o SCHOLAR saiu da agenda da cidadela e ficou FIXO na cabine do DJ, comandando a festa
  *  (a música quem põe é o dono, da cabine da nave) */
 const DJ_DO_LOUNGE = { id: "scholar", nome: "Scholar", cor: "#94a3b8", corMoto: "#64748b" } as const;
-/** os personagens que vivem na cidadela (id = a chave de CORPOS_VRM e de PERFIS_VIDA — a agenda dele) */
+/** os personagens que vivem na cidadela (id = a chave de CORPOS_VRM e de PERFIS_VIDA — a agenda dele). Téo, Davi, Caio,
+ *  Kekulé, Mendeleev e Eiffel saíram do mapa (pedido do dono, out/2026) */
 const PERSONAGENS_DA_CIDADELA = [
   { id: "nina", nome: "Nina", cor: "#f472b6", corMoto: "#ff7ab8" },
   { id: "aura", nome: "Aura", cor: "#a78bfa", corMoto: "#9b7bff" },
-  { id: "teo", nome: "Téo", cor: "#34d399", corMoto: "#1fbf6f" },
   { id: "examiner", nome: "Examiner", cor: "#f87171", corMoto: "#dc2626" },
   { id: "zenita", nome: "Zenita", cor: "#fcd34d", corMoto: "#f5b82e" },
-  { id: "core_active", nome: "Davi", cor: "#fb923c", corMoto: "#f97316" },
   { id: "zaeon", nome: "Zaeon", cor: "#38bdf8", corMoto: "#0ea5e9" },
-  { id: "caio", nome: "Caio", cor: "#60a5fa", corMoto: "#3b82f6" },
   { id: "enfermagem", nome: "Nightingale", cor: "#fda4af", corMoto: "#f43f5e" },
   { id: "medicina", nome: "Osler", cor: "#5eead4", corMoto: "#14b8a6" },
-  { id: "farmacia", nome: "Kekulé", cor: "#99f6e4", corMoto: "#2dd4bf" },
-  { id: "quimica", nome: "Mendeleev", cor: "#67e8f9", corMoto: "#06b6d4" },
-  { id: "eng-civil", nome: "Eiffel", cor: "#fcd34d", corMoto: "#f59e0b" },
 ] as const;
 /** ligados por padrão; `?personagens=0` (ou NEXT_PUBLIC_CYBER_PERSONAGENS=0) desliga */
 function personagensLigados(): boolean {
