@@ -57,6 +57,10 @@ export type CidadeHandle = {
   mostrarRecadoNaTV(texto: string | null): void;
   /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
   alturaIlhota(k: number): number;
+  /** o SHOW do lounge durante a música (lib/cyber/showLounge) e o olho no ritual */
+  showLounge(e: import("@/lib/cyber/showLounge").EstadoShow, olho: number): void;
+  /** um relâmpago da névoa do lounge (`alvoMundo` = onde cai, ex.: uma caixa de som) */
+  raioNoLounge(vel?: number, alvoMundo?: THREE.Vector3): void;
   /** a TEMPESTADE do templo (o ritual do dono): a intensidade das nuvens (0..1) e se os raios caem */
   tempestade(intensidade: number, raios: boolean): void;
   /** estoura um relâmpago na tempestade do templo agora — caindo em `alvoMundo` (o buraco negro do DJ) ou à toa */
@@ -336,6 +340,8 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   return {
     group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    showLounge: (e, olho) => salas.show(e, olho),
+    raioNoLounge: (vel, alvo) => salas.raioNoLounge(vel, alvo),
     tempestade: (i, raios) => templo.tempestade(i, raios),
     raioNoTemplo: (alvo) => templo.raioAgora(alvo),
     atualizar(dt, t) {

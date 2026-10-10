@@ -76,7 +76,7 @@ export type CenaCyberProps = {
   musicaNave?: (ApiMusica & { urlDe(arq: string): string }) | null;
   /** o RITUAL da chegada do dono (lib/cyber/ritual): o estado da sala e como o dono liga/desliga (o servidor confere) */
   ritual?: Ritual | null;
-  definirRitual?: (m: { tempestade?: boolean; droids?: boolean }) => Promise<{ ok: boolean; erro?: string }>;
+  definirRitual?: (m: { tempestade?: boolean; droids?: boolean; veu?: boolean }) => Promise<{ ok: boolean; erro?: string }>;
   /** a NAVE-QG: onde ela está estacionada (da sala) e como o dono guarda onde a estacionou */
   naveQG?: { x: number; y: number; z: number; yaw: number } | null;
   salvarNave?: (pose: { x: number; y: number; z: number; yaw: number }) => void;
@@ -474,7 +474,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       )}
       {somAberto === "lounge" && p.musica && <TocaDiscos som={p.somLounge ?? null} offsetMs={p.offsetMusica ?? 0} api={p.musica} onFechar={() => setSomAberto(null)} />}
       {somAberto === "nave" && p.musicaNave && <TocaDiscos canal="nave" som={p.somNave ?? null} offsetMs={p.offsetMusica ?? 0} api={p.musicaNave} onFechar={() => setSomAberto(null)} />}
-      {ritualAberto && p.definirRitual && <RitualPainel ritual={p.ritual ?? null} offsetMs={p.offsetMusica ?? 0} definir={p.definirRitual} onFechar={() => setRitualAberto(false)} />}
+      {ritualAberto && p.definirRitual && <RitualPainel ritual={p.ritual ?? null} offsetMs={p.offsetMusica ?? 0} definir={p.definirRitual} noPerimetro={() => !!engine.current?.naveNoPerimetro()} onFechar={() => setRitualAberto(false)} />}
       {recadoAberto && (
         <div role="dialog" aria-modal="true" aria-label="Recado pro mural da Recepção" className="absolute inset-0 z-50 flex items-center justify-center bg-[#03030a]/60 px-4" onClick={() => setRecadoAberto(false)}>
           <div className="w-full max-w-[420px] rounded-2xl border border-cyan-300/30 bg-[#070c22]/95 p-4 text-sky-100 shadow-[0_0_40px_rgba(102,230,255,.15)]" onClick={(e) => e.stopPropagation()}>
