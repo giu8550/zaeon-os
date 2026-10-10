@@ -771,15 +771,23 @@ export class CyberEngine {
   abrirTablet() {
     if (!this.aPeParaTablet()) { this.o.onAviso?.("Pare em algum lugar (de pé) pra abrir o tablet."); return; }
     if (this.tabletQuer) return;
-    this.tabletQuer = true; this.alvo = null; this.alvoDepois = null; for (const k of Object.keys(this.keys)) this.keys[k] = false;
+    this.tabletQuer = true; this.alvo = null; this.alvoDepois = null; this.soltarTeclas();
     this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.eu });
   }
   /** guarda o tablet (o laboratório já fechou ou vai fechar): ele se desfaz em partículas */
   fecharTablet() {
-    this.tabletQuer = false;
+    this.tabletQuer = false; this.soltarTeclas();   // o que ficou "apertado" enquanto o lab tinha o foco não anda sozinho depois
+
     if (this.labAberto) { this.labAberto = false; this.o.onTablet?.(false); }
   }
   get tabletAberto() { return this.labAberto; }
+  /** SOLTA tudo o que está "segurado" (WASD, Shift, espaço, E/Q, joystick). Bug de out/2026: apertar uma tecla enquanto o
+   *  tablet surgia e soltá-la já com o foco no laboratório (o iframe) — o keyup ia pro lab, a tecla ficava presa aqui e, ao
+   *  guardar o tablet, o personagem saía andando sozinho. Vale também pra janela que perde o foco (alt-tab, iframe) */
+  soltarTeclas() {
+    this.keys = {}; this.joy = { x: 0, y: 0, on: false }; this.voY.subir = false; this.voY.descer = false;
+    if (this.espaco) { this.espaco = false; this.comandoJet(false); }
+  }
   /** no CENTRO da capela (no piso, em volta do globo)? — só ali se ouve o coração e o raio (lib/cyber/coracao) */
   private noCentroDaCapela(): boolean {
     if (!this.noCeu || !this.cidade || this.pilotando || this.bordo) return false;
@@ -2446,6 +2454,9 @@ export class CyberEngine {
       if ((k === "e" || k === "q") && (this.pilotando || this.moto !== null)) { this.voY[k === "e" ? "subir" : "descer"] = true; this.autoPouso = false; e.preventDefault(); return; }
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { this.keys[k] = true; e.preventDefault(); }
     });
+    // a janela perdeu o foco (o lab do tablet, outra aba, alt-tab): o keyup não vem mais pra cá — solta tudo
+    on("blur", () => this.soltarTeclas());
+    { const oculto = () => { if (document.hidden) this.soltarTeclas(); }; document.addEventListener("visibilitychange", oculto); this.cleanups.push(() => document.removeEventListener("visibilitychange", oculto)); }
     on("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "shift") { this.keys.shift = false; return; } if (k === " " || k === "spacebar") { this.espaco = false; this.voY.subir = false; this.comandoJet(false); return; } if (k === "e") this.voY.subir = false; if (k === "q") this.voY.descer = false; this.keys[k] = false; });
     // olhar livre: trava/solta o ponteiro
     const aoTravar = () => {
@@ -3035,7 +3046,7 @@ export class CyberEngine {
       if (this.tabletQuer && !this.aPeParaTablet()) this.fecharTablet();
       this.tabletW = this.tabletQuer ? Math.min(1, this.tabletW + dt / TABLET.materializa) : Math.max(0, this.tabletW - dt / TABLET.some);
       eu.tab = this.tabletW;
-      if (this.tabletQuer && !this.labAberto && this.tabletW >= 1) { this.labAberto = true; this.o.onTablet?.(true); }
+      if (this.tabletQuer && !this.labAberto && this.tabletW >= 1) { this.labAberto = true; this.soltarTeclas(); this.o.onTablet?.(true); }
       // a dica da J / o botão do tablet: só avisa o React quando muda
       const noLounge = this.noCeu && salaEm({ x: eu.pos.x - CIDADE.centro.x, z: eu.pos.z - CIDADE.centro.z }) !== null && eu.alt > (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE - 1;   // em qualquer uma das salas
       const pertoDeLugar = noLounge && (!!this.descanso || lugarPerto(eu.pos, this.outrosNaZaeon()) !== null);
