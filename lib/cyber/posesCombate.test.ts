@@ -19,14 +19,16 @@ describe("poses de ação (hack and slash)", () => {
     expect(p.desce).toBeGreaterThan(0.15);
     expect(p.coxa!(1)[0]).toBeGreaterThan(0.5); expect(p.coxa!(-1)[0]).toBeLessThan(-0.4); expect(p.canela!(-1)[0]).toBeLessThan(-0.7);
   });
-  it("alerta (postura de poder): tronco erguido, cabeça alta, braços BEM abertos pros lados e pra baixo, base larga", () => {
+  it("alerta (postura de poder, perigo): tronco curvado, braços BEM abertos pros lados e pra baixo, base larga", () => {
     const p = poseAlerta(0, 0);
-    expect(p.desce).toBeGreaterThan(0.15); expect(p.tronco[0]).toBeLessThan(0.3); expect(p.tronco[1]).toBeGreaterThan(0.95);
-    for (const l of [1, -1]) {
-      expect(p.braco(l)[2] * l).toBeGreaterThan(0.75); expect(p.braco(l)[1]).toBeLessThan(-0.4);   // abertos e pra baixo
-      expect(p.ante(l)[2] * l).toBeGreaterThan(0.75);                                                   // as mãos longe do quadril
-    }
+    expect(p.desce).toBeGreaterThan(0.18); expect(p.tronco[0]).toBeGreaterThan(0.3);
+    for (const l of [1, -1]) { expect(p.braco(l)[2] * l).toBeGreaterThan(0.75); expect(p.braco(l)[1]).toBeLessThan(-0.3); expect(p.ante(l)[2] * l).toBeGreaterThan(0.75); }
     expect(p.coxa!(1)[2]).toBeGreaterThan(0.5); expect(p.coxa!(-1)[2]).toBeLessThan(-0.5);
+  });
+  it("os braços sobem e descem com a respiração (inspirando, abertos mais alto)", () => {
+    const alturaBraco = (t: number) => poseAlerta(t, 0).braco(1)[1];
+    let a = Infinity, b = -Infinity; for (let t = 0; t < 1; t += 0.01) { a = Math.min(a, alturaBraco(t)); b = Math.max(b, alturaBraco(t)); }
+    expect(b - a).toBeGreaterThan(0.2);
   });
   it("a respiração é OFEGANTE logo depois do esforço e acalma", () => {
     const amp = (tDesde: number) => { let a = Infinity, b = -Infinity; for (let t = 0; t < 1; t += 0.01) { const d = poseAlerta(t, tDesde).desce; a = Math.min(a, d); b = Math.max(b, d); } return b - a; };

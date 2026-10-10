@@ -47,16 +47,18 @@ export function poseDash(): PoseAcao {
 }
 
 /** a GUARDA de alerta depois do dash — a "postura de poder" dos heróis de jogo de ação (referência do dono: o Delsin de
- *  inFAMOUS Second Son): tronco ERGUIDO e confiante (um tico pra frente), cabeça alta olhando à frente, BRAÇOS BEM ABERTOS
- *  pros lados e pra baixo (cotovelos levemente dobrados, as mãos longe do quadril), base larga quase simétrica e joelhos
- *  dobrados. RESPIRAÇÃO OFEGANTE: forte logo depois do esforço (`tDesde` s), acalmando — sobe o peito e os ombros */
+ *  inFAMOUS Second Son), pra passar sensação de PERIGO: tronco curvado pra frente (sem ficar ereto) com a cabeça baixa
+ *  olhando por cima, BRAÇOS BEM ABERTOS pros lados e pra baixo, base larga e joelhos dobrados. A RESPIRAÇÃO OFEGANTE
+ *  move o corpo todo: no inspirar o peito e os ombros sobem e os braços se ABREM e sobem; no expirar caem. E o peso
+ *  balança devagar de um lado pro outro (o predador medindo o adversário). `tDesde` = s desde o esforço (o fôlego acalma) */
 export function poseAlerta(t: number, tDesde = 1): PoseAcao {
-  const folego = 0.4 + 0.6 * Math.exp(-tDesde * 1.1), r = Math.sin(t * 11.5) * folego;   // ~1,8 respirações/s
+  const folego = 0.5 + 0.5 * Math.exp(-tDesde * 0.9), r = Math.sin(t * 11) * folego;   // ~1,75 respirações/s
+  const balanco = Math.sin(t * 1.6) * 0.07;
   return {
-    inclina: -0.09 - 0.02 * r, desce: 0.2 + 0.02 * r,
-    tronco: n([0.24 - 0.05 * r, 0.97, 0]), cabeca: n([0.02, 1, 0]),
-    braco: (l) => n([0.14, -0.56 + 0.05 * r, 0.82 * l]),
-    ante: (l) => n([0.32, -0.42 + 0.04 * r, 0.85 * l]),
+    inclina: -0.15 - 0.03 * r, desce: 0.24 + 0.03 * r,
+    tronco: n([0.4 - 0.07 * r, 0.91, balanco]), cabeca: n([-0.16, 0.99, -balanco * 0.5]),
+    braco: (l) => n([0.12, -0.5 + 0.17 * r, (0.84 + 0.06 * r) * l]),
+    ante: (l) => n([0.3 - 0.05 * r, -0.36 + 0.16 * r, (0.88 + 0.04 * r) * l]),
     coxa: (l) => (l > 0 ? n([0.3, -0.74, 0.6]) : n([-0.16, -0.77, -0.62])),
     canela: (l) => n([-0.3, -0.94, 0.14 * l]),
     pe: (l) => (l > 0 ? n([0.88, -0.4, 0.25]) : n([0.6, -0.5, -0.62])),
