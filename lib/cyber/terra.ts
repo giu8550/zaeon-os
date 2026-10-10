@@ -22,6 +22,11 @@ const rad = (graus: number) => (graus * Math.PI) / 180;
 export const R_MIRANTE = 195;
 export const MIRANTES = [45, 135, 225, 315].map((g, id) => ({ id, ang: rad(g), x: Math.cos(rad(g)) * R_MIRANTE, z: Math.sin(rad(g)) * R_MIRANTE }));
 export type Mirante = (typeof MIRANTES)[number];
+/** os mirantes com a ESTAÇÃO (telões, globo, cards, motores, cabos, supertrees e droids): só os 2 do lado do LOUNGE
+ *  (oeste: 135° e 225°) — pedido do dono (out/2026, fps): eram 4 cópias; a outra ponta fica limpa */
+export const MIRANTES_ESTACAO = MIRANTES.filter((m) => m.id === 1 || m.id === 2);
+/** os mirantes que têm a PIRÂMIDE: a Recepção (0, o lar da Zaeon e do tutorial) e os 2 do lado do lounge (o 3 saiu) */
+export const MIRANTES_PIRAMIDE = MIRANTES.filter((m) => m.id !== 3);
 /** no referencial do mirante: `u` = rumo ao CENTRO da ilha, `v` = de lado → local da ilha */
 export function noMirante(m: Mirante, u: number, v: number): P2 {
   const nx = -Math.cos(m.ang), nz = -Math.sin(m.ang), tx = -Math.sin(m.ang), tz = Math.cos(m.ang);
@@ -42,15 +47,15 @@ export const MEIO_TELOES = 34;
 const est = (m: Mirante, du: number, dv: number) => noMirante(m, ESTACAO.u + du, ESTACAO.v + dv);
 const telao = (m: Mirante, dv: number) => { const p = est(m, 0, dv); return { ...p, rot: proCentro(p), larg: 30, alt: 17, y: 14 }; };
 /** o telão dos PROBLEMAS (o mais perto da pirâmide), virado pro centro da ilha */
-export const TELOES = MIRANTES.map((m) => telao(m, -MEIO_TELOES));
+export const TELOES = MIRANTES_ESTACAO.map((m) => telao(m, -MEIO_TELOES));
 /** o telão das SOLUÇÕES (projetos e ideias que ajudam a Terra), do outro lado */
-export const TELOES_SOLUCAO = MIRANTES.map((m) => telao(m, MEIO_TELOES));
+export const TELOES_SOLUCAO = MIRANTES_ESTACAO.map((m) => telao(m, MEIO_TELOES));
 /** o GLOBO da Terra: pairando ENTRE os dois telões (um pouco atrás dos cards, acima deles), num pedestal */
-export const GLOBOS = MIRANTES.map((m) => ({ ...est(m, -5, 0), r: 6.5, y: 14 }));
+export const GLOBOS = MIRANTES_ESTACAO.map((m) => ({ ...est(m, -5, 0), r: 6.5, y: 14 }));
 /** os MOTORES DE ENERGIA: 1 atrás de cada telão (as fontes dos cabos) */
-export const MOTORES = MIRANTES.flatMap((m) => [-MEIO_TELOES, MEIO_TELOES].map((dv) => ({ ...est(m, -14, dv), r: 3.2 })));
+export const MOTORES = MIRANTES_ESTACAO.flatMap((m) => [-MEIO_TELOES, MEIO_TELOES].map((dv) => ({ ...est(m, -14, dv), r: 3.2 })));
 /** os CABOS ALIMENTADORES: de cada motor até o pé do globo e até o pé do telão dele (no chão) */
-export const CABOS = MIRANTES.flatMap((m, i) => {
+export const CABOS = MIRANTES_ESTACAO.flatMap((m, i) => {
   const g = GLOBOS[i]!, ts = [TELOES[i]!, TELOES_SOLUCAO[i]!], ms = MOTORES.slice(i * 2, i * 2 + 2);
   return ms.flatMap((mo, k) => [{ de: { x: mo.x, z: mo.z }, para: { x: g.x, z: g.z } }, { de: { x: mo.x, z: mo.z }, para: { x: ts[k]!.x, z: ts[k]!.z } }]);
 });
@@ -58,11 +63,11 @@ export const CABOS = MIRANTES.flatMap((m, i) => {
  *  frente do globo, virados pro centro */
 export const TEMAS = ["clima", "florestas", "oceanos", "agua"] as const;
 export type Tema = (typeof TEMAS)[number];
-export const TOTENS = MIRANTES.flatMap((m) => TEMAS.map((tema, k) => { const p = est(m, 5, -MEIO_TELOES + 21.4 + k * 3.4); return { ...p, tema, rot: proCentro(p) }; }));
+export const TOTENS = MIRANTES_ESTACAO.flatMap((m) => TEMAS.map((tema, k) => { const p = est(m, 5, -MEIO_TELOES + 21.4 + k * 3.4); return { ...p, tema, rot: proCentro(p) }; }));
 /** as LIGAÇÕES problema → solução: de cada card até o pé do telão das soluções (o pulso corre do problema pra solução) */
 export const LIGACOES = TOTENS.map((t, k) => { const s = TELOES_SOLUCAO[Math.floor(k / TEMAS.length)]!; return { tema: t.tema, de: { x: t.x, z: t.z }, para: { x: s.x, z: s.z } }; });
 /** as SUPERTREES em volta de cada pirâmide (dos lados e atrás — a frente fica livre pra escada) */
-export const SUPERTREES: { x: number; z: number; alt: number; copa: number }[] = MIRANTES.flatMap((m, i) =>
+export const SUPERTREES: { x: number; z: number; alt: number; copa: number }[] = MIRANTES_ESTACAO.flatMap((m, i) =>
   [[70, 1], [-70, 1], [128, 0], [-128, 0], [180, 1]].map(([a, alta], k) => {
     const r = 30, p = noMirante(m, Math.cos(rad(a!)) * r, Math.sin(rad(a!)) * r);
     return { ...p, alt: alta ? 44 - ((i + k) % 2) * 6 : 32 + ((i + k) % 2) * 4, copa: alta ? 10.5 : 8 };
@@ -85,7 +90,7 @@ export const reacaoDoMotor = (dist: number) => Math.max(0, Math.min(1, (26 - dis
 // ── os DROIDS OBSERVADORES ───────────────────────────────────────────────────────────────────────────────────────────
 /** um grupo por estação: o LÍDER paira BAIXO na frente dos telões e alterna — lê o PROBLEMA, voa até a SOLUÇÃO, lê,
  *  volta (o feixe vai pra tela que ele lê); os 2 MENORES orbitam o GLOBO, escaneando a Terra */
-export const GRUPOS_DROIDS = MIRANTES.map((_, i) => ({ id: i, tela: TELOES[i]!, solucao: TELOES_SOLUCAO[i]!, globo: GLOBOS[i]!, fase: i * 1.7 }));
+export const GRUPOS_DROIDS = MIRANTES_ESTACAO.map((_, i) => ({ id: i, tela: TELOES[i]!, solucao: TELOES_SOLUCAO[i]!, globo: GLOBOS[i]!, fase: i * 1.7 }));
 type P3 = { x: number; y: number; z: number };
 type Telao = (typeof TELOES)[number];
 /** o ciclo do líder (s): lê os problemas, voa, lê as soluções, volta */

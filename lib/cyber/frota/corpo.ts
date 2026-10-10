@@ -27,7 +27,7 @@ import { ALTURA_LOUNGE, CIDADE, colisoresDaCidade, daSala, mundo } from "../ceu"
 import { comprimento, pontoNaRota, rotaAPe } from "../caminhos";
 import { NOS } from "../buracos";
 import { PLATAFORMAS, IDS_PLATAFORMAS } from "../plataformas";
-import { ESTACAO, MEIO_TELOES, MIRANTES, noMirante } from "../terra";
+import { ESTACAO, MEIO_TELOES, MIRANTES_ESTACAO, noMirante } from "../terra";
 import { acasoDe, entre, inteiro, embaralhar } from "./aleatorio";
 import type { FlagsFrota } from "./agenda";
 import type { BlocoPlano } from "./plano";
@@ -69,7 +69,7 @@ const VISITAS: Ponto[] = [
  *  `lugar(u, v)` (u, v em 0..1) dá um ponto da área e `alvo` é pra onde se olha */
 type Interesse = { id: string; lugar(u: number, v: number): { x: number; z: number }; alvo: { x: number; z: number } };
 const INTERESSES: Interesse[] = [
-  ...MIRANTES.flatMap((m) => ([["problemas", -MEIO_TELOES], ["solucoes", MEIO_TELOES]] as const).map(([nome, dv]): Interesse => ({
+  ...MIRANTES_ESTACAO.flatMap((m) => ([["problemas", -MEIO_TELOES], ["solucoes", MEIO_TELOES]] as const).map(([nome, dv]): Interesse => ({
     id: `telao-${nome}-${m.id}`,
     lugar: (u, v) => noMirante(m, ESTACAO.u + 12 + u * 16, ESTACAO.v + dv + (v - 0.5) * 22),   // 12–28 m na frente, na largura do telão
     alvo: noMirante(m, ESTACAO.u, ESTACAO.v + dv),
@@ -186,7 +186,7 @@ function trechosDoCeu(rot: Parada[], de: P3, deChao: boolean, agente: string, i:
 export function roteiroAndar(b: BlocoPlano, a: string, iBloco: number): Ponto[] {
   return lembrar(`andar|${a}|${iBloco}|${b.ini}`, () => {
     const turma = b.turma ?? a, rt = acasoDe("interesse", turma, Math.floor(b.ini / 40));   // (a turma, nesse pedaço do dia)
-    const m = Math.floor(rt() * MIRANTES.length), tel = (n: string) => INTERESSES.find((q) => q.id === `telao-${n}-${m}`)!, salao = INTERESSES.at(-1)!;
+    const m = MIRANTES_ESTACAO[Math.floor(rt() * MIRANTES_ESTACAO.length)]!.id, tel = (n: string) => INTERESSES.find((q) => q.id === `telao-${n}-${m}`)!, salao = INTERESSES.at(-1)!;
     const seq = rt() < 0.4 ? [salao, tel("problemas"), tel("solucoes")] : rt() < 0.6 ? [tel("problemas"), tel("solucoes"), salao] : [tel("problemas"), tel("solucoes")];
     const ra = acasoDe("lugar-interesse", a, iBloco);
     const solidos = colisoresDaCidade(), livre = (w: { x: number; z: number }) => solidos.every((c) => Math.hypot(w.x - c.x, w.z - c.z) > c.r + 0.5);

@@ -45,7 +45,7 @@ const CORES = ["#ff6ad5", "#45d6ff", "#ffc46b", "#9affd0", "#a98bff", "#5aff8a",
 export type LoteFrota = { semente: number; total: number; fracaoMulheres: number; fracaoCloak: number };
 /** a FROTA: os lotes + o tamanho dos grupos de amigos */
 export type ConfigFrota = { lotes: LoteFrota[]; tamanhoGrupo: number };
-export const LOTE_INICIAL: LoteFrota = { semente: 2026, total: 700, fracaoMulheres: 0.6, fracaoCloak: 0.7 };
+export const LOTE_INICIAL: LoteFrota = { semente: 2026, total: 700, fracaoMulheres: 0.6, fracaoCloak: 0.7 };   // (com o teto de 500, o sanitizar apara em 500)
 export const FROTA_PADRAO: ConfigFrota = { lotes: [LOTE_INICIAL], tamanhoGrupo: 4 };
 
 /** um nome completo que ainda não existe na frota (primeiro nome + sobrenome; às vezes dois sobrenomes) */

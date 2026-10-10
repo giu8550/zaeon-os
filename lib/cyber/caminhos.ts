@@ -9,7 +9,7 @@
  * mesma rota em qualquer cliente.
  */
 import { CIDADE, colisoresDaCidade, naEscadaOuLounge } from "./ceu";
-import { MIRANTES } from "./terra";
+import { MIRANTES_PIRAMIDE } from "./terra";
 import type { P2 } from "./colisao";
 
 /** o tamanho da célula (m), a folga do corpo (m) e a caixa da grade (local) — a caixa cobre a central e o lounge */
@@ -36,7 +36,7 @@ export function grade(): Grade {
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (chaoAndavel(centroDa(i, j))) livre[j * w + i] = 1;
   const c = CIDADE.centro;
   const obst: { x: number; z: number; r: number }[] = colisoresDaCidade().map((o) => ({ x: o.x - c.x, z: o.z - c.z, r: o.r }));
-  for (const m of MIRANTES) obst.push({ x: m.x, z: m.z, r: PIRAMIDE_R });
+  for (const m of MIRANTES_PIRAMIDE) obst.push({ x: m.x, z: m.z, r: PIRAMIDE_R });
   obst.push({ x: CIDADE.portalTunel.x, z: CIDADE.portalTunel.z, r: CIDADE.portalTunel.r });
   for (const o of obst) {
     const r = o.r + GRADE.folga, a = celula(o.x - r, o.z - r), b = celula(o.x + r, o.z + r);

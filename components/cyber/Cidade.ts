@@ -18,7 +18,7 @@
  */
 import * as THREE from "three";
 import type { PisoOclusor } from "./oclusaoPisos";
-import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
@@ -150,37 +150,40 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   // ── CAPELA monumental (a cidadela, 3× maior): pilares + coroamento + cúpula estelar + tambor + 2ª cúpula + PONTA +
   //    farol. Por dentro, vazia: só o GLOBO de luz no centro (os livros e os servidores saíram) ──
-  const { cidadela } = CIDADE, CA = cidadela.altura, RC = cidadela.r + 1, ACH = CAPELA.achata;
-  const pil = add(new THREE.InstancedMesh(new THREE.CylinderGeometry(1.9, 2.4, CA, 10), torreMat, cidadela.pilares), ilha, true);
-  { const m = new THREE.Matrix4(); for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; pil.setMatrixAt(i, m.makeTranslation(Math.cos(a) * cidadela.r, CA / 2, Math.sin(a) * cidadela.r)); } pil.instanceMatrix.needsUpdate = true; pil.computeBoundingSphere(); }
-  const coroaMat = new THREE.MeshStandardMaterial({ color: 0x0c1a30, emissive: 0x66c8ff, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.4 });
-  for (const [y, rr] of [[CA, 1.4], [0.4, 0.9]] as const) { const t = add(new THREE.Mesh(new THREE.TorusGeometry(cidadela.r, rr, 8, low ? 96 : 192), coroaMat)); t.rotation.x = Math.PI / 2; t.position.y = y; }
-  const domoMat = vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.4, thickness: 1, transparent: true, opacity: 0.45, side: THREE.DoubleSide }, 0.4);
-  const cupula = add(new THREE.Mesh(new THREE.SphereGeometry(RC, low ? 32 : 56, low ? 14 : 24, 0, Math.PI * 2, 0, Math.PI / 2), domoMat));
-  cupula.position.y = CA; cupula.scale.y = ACH;
-  // nervuras da cúpula (meridianos, um por pilar) — dão estrutura à casca
-  { const lin: number[] = [], NS = 12; for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2;
-      for (let k = 0; k < NS; k++) { const p0 = (k / NS) * 1.3, p1 = ((k + 1) / NS) * 1.3; lin.push(Math.cos(a) * Math.cos(p0) * RC, CA + Math.sin(p0) * RC * ACH, Math.sin(a) * Math.cos(p0) * RC, Math.cos(a) * Math.cos(p1) * RC, CA + Math.sin(p1) * RC * ACH, Math.sin(a) * Math.cos(p1) * RC); } }
-    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(lin), 3)); add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending }))); }
-  { const N = low ? 120 : 260, pv = new Float32Array(N * 3); for (let i = 0; i < N; i++) { const a = Math.random() * 6.283, ph = Math.random() * Math.PI / 2, r = RC - 0.8; pv[i * 3] = Math.cos(a) * Math.cos(ph) * r; pv[i * 3 + 1] = CA + Math.sin(ph) * r * ACH; pv[i * 3 + 2] = Math.sin(a) * Math.cos(ph) * r; }
-    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pv, 3)); add(new THREE.Points(g, new THREE.PointsMaterial({ size: 0.7, map: starTex, color: 0xbfe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); }
-  // 2º andar: tambor de vidro sobre a cúpula (com costelas de luz) + cúpula menor + PONTA de cristal (o lounge flutua
-  // na altura em que ela começa — lib/cyber/ceu `inicioDaPonta`)
-  const RT = CAPELA.tamborR, yT0 = CA + Math.sqrt(RC * RC - RT * RT) * ACH - 1, AT = CAPELA.tamborAlt;
-  const tambor = add(new THREE.Mesh(new THREE.CylinderGeometry(RT * 0.92, RT, AT, low ? 20 : 32, 1, true), domoMat)); tambor.position.y = yT0 + AT / 2;
-  { const N = low ? 12 : 18, g = new THREE.InstancedMesh(new THREE.BoxGeometry(0.8, AT, 0.8), coroaMat, N), m = new THREE.Matrix4();
-    for (let i = 0; i < N; i++) { const a = (i / N) * Math.PI * 2; g.setMatrixAt(i, m.makeTranslation(Math.cos(a) * RT * 0.96, yT0 + AT / 2, Math.sin(a) * RT * 0.96)); }
-    g.instanceMatrix.needsUpdate = true; g.computeBoundingSphere(); add(g); }
-  const anelT = add(new THREE.Mesh(new THREE.TorusGeometry(RT * 0.92, 0.8, 8, low ? 48 : 96), coroaMat)); anelT.rotation.x = Math.PI / 2; anelT.position.y = yT0 + AT;
-  const cupula2 = add(new THREE.Mesh(new THREE.SphereGeometry(RT * 0.92, low ? 20 : 36, low ? 10 : 18, 0, Math.PI * 2, 0, Math.PI / 2), vidro({ color: 0x0a1830, emissive: 0x3a6ab0, emissiveIntensity: 0.7, roughness: 0.2, metalness: 0.3, transmission: 0.4, thickness: 1, transparent: true, opacity: 0.5, side: THREE.DoubleSide }, 0.5)));
-  cupula2.position.y = yT0 + AT; cupula2.scale.y = 0.9;
-  const yPin = yT0 + AT + RT * 0.92 * 0.9 - 0.5, LPIN = CAPELA.pontaLen;
-  const pinaculo = add(new THREE.Mesh(new THREE.ConeGeometry(4, LPIN, 6), new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x9fe8ff, emissiveIntensity: 1.2, roughness: 0.2, flatShading: true })));
-  pinaculo.position.y = yPin + LPIN / 2;
-  const yFarol = yPin + LPIN + 2;
-  const farolMat = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const feixe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.8, 4.5, 120, 16, 1, true), farolMat)); feixe.position.y = yFarol + 60;
-  const farol = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glow("rgba(220,250,255,1)", "rgba(120,200,255,.4)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); farol.scale.set(22, 22, 1); farol.position.y = yFarol;
+  let farol: THREE.Sprite | null = null;
+  if (CAPELA_NA_ZAEON) {
+    const { cidadela } = CIDADE, CA = cidadela.altura, RC = cidadela.r + 1, ACH = CAPELA.achata;
+    const pil = add(new THREE.InstancedMesh(new THREE.CylinderGeometry(1.9, 2.4, CA, 10), torreMat, cidadela.pilares), ilha, true);
+    { const m = new THREE.Matrix4(); for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; pil.setMatrixAt(i, m.makeTranslation(Math.cos(a) * cidadela.r, CA / 2, Math.sin(a) * cidadela.r)); } pil.instanceMatrix.needsUpdate = true; pil.computeBoundingSphere(); }
+    const coroaMat = new THREE.MeshStandardMaterial({ color: 0x0c1a30, emissive: 0x66c8ff, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.4 });
+    for (const [y, rr] of [[CA, 1.4], [0.4, 0.9]] as const) { const t = add(new THREE.Mesh(new THREE.TorusGeometry(cidadela.r, rr, 8, low ? 96 : 192), coroaMat)); t.rotation.x = Math.PI / 2; t.position.y = y; }
+    const domoMat = vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.4, thickness: 1, transparent: true, opacity: 0.45, side: THREE.DoubleSide }, 0.4);
+    const cupula = add(new THREE.Mesh(new THREE.SphereGeometry(RC, low ? 32 : 56, low ? 14 : 24, 0, Math.PI * 2, 0, Math.PI / 2), domoMat));
+    cupula.position.y = CA; cupula.scale.y = ACH;
+    // nervuras da cúpula (meridianos, um por pilar) — dão estrutura à casca
+    { const lin: number[] = [], NS = 12; for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2;
+        for (let k = 0; k < NS; k++) { const p0 = (k / NS) * 1.3, p1 = ((k + 1) / NS) * 1.3; lin.push(Math.cos(a) * Math.cos(p0) * RC, CA + Math.sin(p0) * RC * ACH, Math.sin(a) * Math.cos(p0) * RC, Math.cos(a) * Math.cos(p1) * RC, CA + Math.sin(p1) * RC * ACH, Math.sin(a) * Math.cos(p1) * RC); } }
+      const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(lin), 3)); add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending }))); }
+    { const N = low ? 120 : 260, pv = new Float32Array(N * 3); for (let i = 0; i < N; i++) { const a = Math.random() * 6.283, ph = Math.random() * Math.PI / 2, r = RC - 0.8; pv[i * 3] = Math.cos(a) * Math.cos(ph) * r; pv[i * 3 + 1] = CA + Math.sin(ph) * r * ACH; pv[i * 3 + 2] = Math.sin(a) * Math.cos(ph) * r; }
+      const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pv, 3)); add(new THREE.Points(g, new THREE.PointsMaterial({ size: 0.7, map: starTex, color: 0xbfe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); }
+    // 2º andar: tambor de vidro sobre a cúpula (com costelas de luz) + cúpula menor + PONTA de cristal (o lounge flutua
+    // na altura em que ela começa — lib/cyber/ceu `inicioDaPonta`)
+    const RT = CAPELA.tamborR, yT0 = CA + Math.sqrt(RC * RC - RT * RT) * ACH - 1, AT = CAPELA.tamborAlt;
+    const tambor = add(new THREE.Mesh(new THREE.CylinderGeometry(RT * 0.92, RT, AT, low ? 20 : 32, 1, true), domoMat)); tambor.position.y = yT0 + AT / 2;
+    { const N = low ? 12 : 18, g = new THREE.InstancedMesh(new THREE.BoxGeometry(0.8, AT, 0.8), coroaMat, N), m = new THREE.Matrix4();
+      for (let i = 0; i < N; i++) { const a = (i / N) * Math.PI * 2; g.setMatrixAt(i, m.makeTranslation(Math.cos(a) * RT * 0.96, yT0 + AT / 2, Math.sin(a) * RT * 0.96)); }
+      g.instanceMatrix.needsUpdate = true; g.computeBoundingSphere(); add(g); }
+    const anelT = add(new THREE.Mesh(new THREE.TorusGeometry(RT * 0.92, 0.8, 8, low ? 48 : 96), coroaMat)); anelT.rotation.x = Math.PI / 2; anelT.position.y = yT0 + AT;
+    const cupula2 = add(new THREE.Mesh(new THREE.SphereGeometry(RT * 0.92, low ? 20 : 36, low ? 10 : 18, 0, Math.PI * 2, 0, Math.PI / 2), vidro({ color: 0x0a1830, emissive: 0x3a6ab0, emissiveIntensity: 0.7, roughness: 0.2, metalness: 0.3, transmission: 0.4, thickness: 1, transparent: true, opacity: 0.5, side: THREE.DoubleSide }, 0.5)));
+    cupula2.position.y = yT0 + AT; cupula2.scale.y = 0.9;
+    const yPin = yT0 + AT + RT * 0.92 * 0.9 - 0.5, LPIN = CAPELA.pontaLen;
+    const pinaculo = add(new THREE.Mesh(new THREE.ConeGeometry(4, LPIN, 6), new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x9fe8ff, emissiveIntensity: 1.2, roughness: 0.2, flatShading: true })));
+    pinaculo.position.y = yPin + LPIN / 2;
+    const yFarol = yPin + LPIN + 2;
+    const farolMat = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const feixe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.8, 4.5, 120, 16, 1, true), farolMat)); feixe.position.y = yFarol + 60;
+    farol = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glow("rgba(220,250,255,1)", "rgba(120,200,255,.4)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); farol.scale.set(22, 22, 1); farol.position.y = yFarol;
+  }
 
   // o GLOBO no centro da capela: mesa redonda + esfera de pontos de luz girando + um anel em volta
   const mesaGlobo = add(new THREE.Mesh(new THREE.CylinderGeometry(CIDADE.mesaHolo.r, CIDADE.mesaHolo.r * 1.1, 2.2, 32), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), ilha, true) as THREE.Mesh; mesaGlobo.position.y = 1.1;
@@ -295,14 +298,14 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   });
 
   // o CORAÇÃO (o globo bate; veias azuis por toda a cidade e subindo a capela; o raio no topo) e as ESTAÇÕES DOS AGENTES
-  const coracao = criarCoracao({ low }); ilha.add(coracao.group);
+  const coracao = CAPELA_NA_ZAEON ? criarCoracao({ low }) : null; if (coracao) ilha.add(coracao.group);
   const estacoes = criarEstacoes({ low }); ilha.add(estacoes.group);
   // o OBSERVATÓRIO DA TERRA + os 4 AUTÓDROMOS (lib/cyber/terra) e os DROIDS OBSERVADORES
   const distrito = criarDistritoTerra({ low, parado: rm }); ilha.add(distrito.group); alvos.push(...distrito.alvos);
   const observadores = criarObservadores({ low }); ilha.add(observadores.group);
   // fora do lote estático (lotes.ts): o coração (pulsa por EVENTO — o raio — que a simulação da montagem não vê), as
   // estações (já instanciadas) e os droids (andam). O distrito entra: anima pelo relógio (a simulação vê) e materiais compartilhados
-  for (const g of [coracao.group, estacoes.group, observadores.group]) g.traverse((n) => { n.userData.semLote = true; });
+  for (const g of [...(coracao ? [coracao.group] : []), estacoes.group, observadores.group]) g.traverse((n) => { n.userData.semLote = true; });
   const matGlobo = globo.material as THREE.PointsMaterial, matMesa = mesaGlobo.material as THREE.MeshStandardMaterial, matAro = aroGlobo.material as THREE.MeshBasicMaterial;
   const topoMundo = new THREE.Vector3(), globoMundo = new THREE.Vector3();
 
@@ -323,12 +326,12 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       if (quente) quente.intensity = 1.4 + 0.3 * Math.sin(t * 1.6) * fogoAmp;
       (brasa.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.15 * Math.sin(t * 1.4) * fogoAmp;
       pontas.forEach((p, i) => { (p.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.3 + 0.4 * Math.sin(t * 1.2 + i); p.rotation.y += dt * 0.4 * vel; });
-      farol.material.opacity = 0.75 + 0.2 * Math.sin(t * 1.1);
+      if (farol) farol.material.opacity = 0.75 + 0.2 * Math.sin(t * 1.1);
       salas.atualizar(dt, t); templo.atualizar(dt, t);
       for (const e of estacs) e.atualizar(t);
       globo.rotation.y += dt * 0.25 * vel; aroGlobo.rotation.z += dt * 0.2 * vel;
       // o CORAÇÃO bate: o globo incha de luz, a mesa e o aro acendem; o pulso corre nas veias; o raio sai do topo
-      { const ev = coracao.atualizar(dt, t), b = coracao.batida();
+      { const ev = coracao ? coracao.atualizar(dt, t) : { raio: false, tum: false }, b = coracao ? coracao.batida() : 0;
         matGlobo.size = 0.22 * (1 + 0.9 * b); matMesa.emissiveIntensity = 0.6 + 1.6 * b; matAro.opacity = 0.55 + 0.4 * b;
         estacoes.atualizar(dt, t, b);
         distrito.atualizar(dt, t); observadores.atualizar(dt);
@@ -346,6 +349,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         cGeo.attributes.position!.needsUpdate = true; }
       ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * BOIA_ILHOTA * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
     },
-    dispose() { rotulo.remove(); templo.dispose(); coracao.dispose(); estacoes.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
+    dispose() { rotulo.remove(); templo.dispose(); coracao?.dispose(); estacoes.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };
 }

@@ -5,6 +5,7 @@
  * O `peso` é o quanto cada etapa ocupa da barra (≈ o tempo que ela leva).
  */
 import { UNIVERSIDADES_NO_MAPA } from "./plataformas";
+import { CAPELA_NA_ZAEON } from "./ceu";
 
 const TODAS_ETAPAS = [
   { id: "corpo", rotulo: "Despertando os corpos dos avatares", peso: 7 },
@@ -26,7 +27,7 @@ const TODAS_ETAPAS = [
 ] as const;
 export type IdEtapa = (typeof TODAS_ETAPAS)[number]["id"];
 /** as etapas que de fato rodam (sem universidades no mapa, a UNILAB e os campi não montam) */
-export const ETAPAS: readonly (typeof TODAS_ETAPAS)[number][] = TODAS_ETAPAS.filter((e) => UNIVERSIDADES_NO_MAPA || (e.id !== "univ" && e.id !== "campi"));
+export const ETAPAS: readonly (typeof TODAS_ETAPAS)[number][] = TODAS_ETAPAS.filter((e) => (UNIVERSIDADES_NO_MAPA || (e.id !== "univ" && e.id !== "campi")) && (CAPELA_NA_ZAEON || e.id !== "veias"));
 export type Carregando = { etapa: IdEtapa; rotulo: string; /** 0..1 da barra inteira */ progresso: number; /** detalhe opcional ("23/41 sons") */ detalhe?: string };
 
 const TOTAL = ETAPAS.reduce((s, e) => s + e.peso, 0);
