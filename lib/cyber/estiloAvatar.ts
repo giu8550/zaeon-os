@@ -43,6 +43,9 @@ export type CorpoVrm = {
 };
 /** os corpos VRM dos PERSONAGENS (os agentes que vivem na cidadela Zaeon), feitos no VRoid Studio (~/Documents/<id>.vroid)
  *  a partir do card (public/avatars/<id>): a roupa branca do VRoid é tingida aqui */
+/** personagens que SAÍRAM do mapa do cyberespaço (pedido do dono, out/2026): o corpo continua aqui (pros crachás/
+ *  escritório), mas a pré-carga do cyberespaço não baixa e o engine não põe no mundo */
+export const CORPOS_FORA_DO_MAPA: ReadonlySet<string> = new Set(["teo", "core_active", "caio", "farmacia", "quimica", "eng-civil"]);
 export const CORPOS_VRM: Readonly<Record<string, CorpoVrm>> = {
   nina: { url: "/avatars/nina/nina.vrm", tintas: { Tops: "#f6b9d1" }, acessorios: ["foneNoPescoco", "presilhaLapis"], pose: "feminina" },
   teo: { url: "/avatars/teo/teo.vrm", tintas: { Tops: "#3b3f46", Bottoms: "#4d72b8" }, acessorios: ["oculosRetangulares", "golaCircuito"], pose: "masculina" },

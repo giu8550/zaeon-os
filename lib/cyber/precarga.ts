@@ -15,7 +15,7 @@
  * chegar), então a barra anda no ritmo da rede, não "um arquivo = um passo".
  */
 import { PASTA_SONS, SONS } from "./audio";
-import { CORPOS_VRM, CORPO_DO_FUNDADOR } from "./estiloAvatar";
+import { CORPOS_FORA_DO_MAPA, CORPOS_VRM, CORPO_DO_FUNDADOR } from "./estiloAvatar";
 
 export type TipoItem = "codigo" | "som" | "textura" | "corpo";
 export type ItemPrecarga = { url: string; tipo: TipoItem };
@@ -36,7 +36,7 @@ export function urlsDosSons(): string[] {
 
 /** os corpos VRM (personagens + o do founder), sem repetir */
 export function urlsDosCorpos(): string[] {
-  return [...new Set([...Object.values(CORPOS_VRM).map((c) => c.url), CORPO_DO_FUNDADOR.url])];
+  return [...new Set([...Object.entries(CORPOS_VRM).filter(([id]) => !CORPOS_FORA_DO_MAPA.has(id)).map(([, c]) => c.url), CORPO_DO_FUNDADOR.url])];
 }
 
 /** o manifesto desta máquina: `pesados` liga os VRMs */

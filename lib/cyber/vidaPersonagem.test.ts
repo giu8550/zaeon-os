@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ATIVIDADES, EPOCA, LUGARES, PERFIS_VIDA, VIRADA, blocoEm, casaDe, diaDe, disputado, estadoEm, lugarDaCasa, motoEm, posNoLugar, proximoBloco, rotaEntre, VOO_DA_MOTO, type Bloco } from "./vidaPersonagem";
+import { ATIVIDADES, EPOCA, LUGARES, PERFIS_VIDA, VIRADA, blocoEm, casaDe, diaDe, disputado, estadoEm, lugarDaCasa, motoEm, posNoLugar, proximoBloco, rotaEntre, VOO_DA_MOTO, type Bloco, type PerfilVida } from "./vidaPersonagem";
 import { salaEm } from "./ceu";
 import { livre, comprimento } from "./caminhos";
 import { CIDADE } from "./ceu";
@@ -7,7 +7,9 @@ import { CIDADE } from "./ceu";
 const SEMENTE = PERFIS_VIDA.nina!, AURA = PERFIS_VIDA.aura!;
 /** os lugares da central (a A* cobre: a ilha e o lounge) — os das salas de estudo têm teste próprio */
 const NA_CENTRAL = LUGARES.map((l, i) => ({ l, i })).filter(({ l }) => !l.sala || l.sala === "lounge").map(({ i }) => i);
-const DA_CIDADELA = Object.values(PERFIS_VIDA).filter((p) => casaDe(p) === "cidadela"), DAS_SALAS = Object.values(PERFIS_VIDA).filter((p) => casaDe(p) === "salas");
+const DA_CIDADELA = Object.values(PERFIS_VIDA).filter((p) => casaDe(p) === "cidadela");
+/** ninguém mora nas salas hoje (os 6 saíram do mapa — out/2026); o mecanismo fica, testado com um perfil de teste */
+const DAS_SALAS: PerfilVida = { id: "teste-salas", semente: 37, lado: 0, vaga: { x: -40, z: -108, rumo: 0 }, casa: "salas" };
 const dia = (d: number, h = 0) => EPOCA + d * 86400 + h * 3600;
 
 describe("a vida própria dos personagens (agenda)", () => {
@@ -110,13 +112,13 @@ describe("dois personagens na mesma cidadela", () => {
 });
 
 describe("quem mora na cidadela × quem mora nas salas de estudo (pedido do dono, out/2026)", () => {
-  it("na cidadela: Nina, Aura, Zenita, Examiner, Osler, Nightingale e a Zaeon — o resto mora nas salas", () => {
-    expect(DA_CIDADELA.map((p) => p.id).sort()).toEqual(["aura", "enfermagem", "examiner", "medicina", "nina", "scholar", "zaeon", "zenita"].sort());   // (o Scholar é o DJ fixo do lounge)
-    expect(DAS_SALAS.map((p) => p.id).sort()).toEqual(["caio", "core_active", "eng-civil", "farmacia", "quimica", "teo"].sort());
+  it("no mapa: só Nina, Aura, Zenita, Examiner, Osler, Nightingale e a Zaeon (+ o Scholar, DJ fixo) — Téo, Davi, Caio, Kekulé, Mendeleev e Eiffel saíram", () => {
+    expect(Object.keys(PERFIS_VIDA).sort()).toEqual(["aura", "enfermagem", "examiner", "medicina", "nina", "scholar", "zaeon", "zenita"].sort());
+    expect(DA_CIDADELA).toHaveLength(Object.keys(PERFIS_VIDA).length);
   });
   it("cada um só vai aos lugares da sua casa (a pista do lounge é de todos); quem é das salas estuda, passeia e dança nelas", () => {
     const t0 = EPOCA + 86400 * 7 + VIRADA;
-    for (const p of Object.values(PERFIS_VIDA)) {
+    for (const p of [...Object.values(PERFIS_VIDA), DAS_SALAS]) {
       let b = blocoEm(t0, p); const salas = new Set<string>();
       for (let i = 0; i < 120; i++) {
         const l = LUGARES[b.lugar]!; expect(lugarDaCasa(l, casaDe(p)), `${p.id} em ${l.id}`).toBe(true);
@@ -129,11 +131,11 @@ describe("quem mora na cidadela × quem mora nas salas de estudo (pedido do dono
   });
   it("os lugares das salas ficam DENTRO da sala; estudando, sentado no pufe", () => {
     for (const l of LUGARES.filter((x) => x.sala && x.sala !== "lounge")) expect(salaEm(l.pos), l.id).toBe(l.sala);
-    const p = PERFIS_VIDA.teo!; let b = blocoEm(EPOCA + 86400 * 3 + VIRADA, p); while (b.atividade !== "estudar") b = blocoEm(b.fim, p, b);
+    const p = DAS_SALAS; let b = blocoEm(EPOCA + 86400 * 3 + VIRADA, p); while (b.atividade !== "estudar") b = blocoEm(b.fim, p, b);
     expect(estadoEm(b.fim - 1, p, b).sentado).toBe(1);
   });
   it("de uma sala pra outra vai de MOTO, voando por fora da capela, e chega no lugar", () => {
-    const p = PERFIS_VIDA.quimica!; let b = blocoEm(EPOCA + 86400 * 5 + VIRADA, p), vistos = 0;
+    const p = DAS_SALAS; let b = blocoEm(EPOCA + 86400 * 5 + VIRADA, p), vistos = 0;
     for (let i = 0; i < 200 && vistos < 6; i++) {
       const de = LUGARES[b.de]!.sala, para = LUGARES[b.lugar]!.sala;
       if (de && para && de !== para) {
