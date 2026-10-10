@@ -20,6 +20,7 @@ const CAIXA = "rounded-2xl border border-sky-300/25 bg-[#070b1c]/80 text-sky-50 
 export default function PainelCorrida({ engine, moto, evento }: { engine: React.MutableRefObject<CyberEngine | null>; moto: boolean; evento: (EventoCorrida & { pista: string }) | null }) {
   const [aberto, setAberto] = useState(false);
   const [hud, setHud] = useState<HudCorrida | null>(null);
+  const [outra, setOutra] = useState(false);   // a corrida de CHECKPOINTS (ou o box dela) está na tela: este painel some
   const [delta, setDelta] = useState<{ v: number; ate: number } | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [rankings, setRankings] = useState<Record<string, Ranking>>({});
@@ -27,7 +28,7 @@ export default function PainelCorrida({ engine, moto, evento }: { engine: React.
 
   // o HUD: lê o engine ~12 vezes por segundo
   useEffect(() => {
-    const id = setInterval(() => setHud(engine.current?.corridaHud ?? null), 80);
+    const id = setInterval(() => { setHud(engine.current?.corridaHud ?? null); setOutra(!!engine.current?.corridaCkHud || !!engine.current?.boxCk); }, 80);
     return () => clearInterval(id);
   }, [engine]);
   // a lista: os rankings das pistas (o meu melhor)
@@ -111,7 +112,7 @@ export default function PainelCorrida({ engine, moto, evento }: { engine: React.
     );
   }
 
-  if (!moto) return null;
+  if (!moto || outra) return null;
   // ── na moto: o botão e a lista ──
   return (
     <>

@@ -8,6 +8,7 @@
  */
 import * as THREE from "three";
 import { PISTAS, type Pista } from "@/lib/cyber/corrida/pistas";
+import { BOX_CK } from "@/lib/cyber/corrida/checkpoints";
 
 export type PistasHandle = {
   group: THREE.Group;
@@ -28,7 +29,7 @@ function materialAnel(cor: THREE.Color, uT: { value: number }): THREE.ShaderMate
       void main() {
         float corre = 0.55 + 0.45 * smoothstep(0.6, 1.0, sin(vUv.x * 6.2831 * 6.0 - uT * 9.0));   // pulsos correndo em volta
         float borda = 0.6 + 0.4 * sin(vUv.y * 6.2831);
-        vec3 c = mix(uCor, vec3(1.0), 0.25 * corre) * corre * borda * uForca * 1.6;
+        vec3 c = mix(uCor, vec3(1.0), 0.2 + 0.4 * corre) * corre * borda * uForca * 1.6;   // (mais claros: puxam pro branco — o dono, out/2026)
         gl_FragColor = vec4(c, 1.0);
       }`,
     blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
@@ -48,13 +49,25 @@ type PistaVis = { pista: Pista; grupo: THREE.Group; portoes: PortaoVis[]; trilha
 export function criarPistas(o: { low: boolean; starTex: THREE.Texture }): PistasHandle {
   const group = new THREE.Group(); group.name = "pistas";
   const uT = { value: 0 }, quad = texQuadriculado();
-  const geoAnel = new Map<number, THREE.TorusGeometry>(), anel = (r: number) => { let g = geoAnel.get(r); if (!g) { g = new THREE.TorusGeometry(r, 0.55, 8, o.low ? 40 : 72); geoAnel.set(r, g); } return g; };
+  const geoAnel = new Map<number, THREE.TorusGeometry>(), anel = (r: number) => { let g = geoAnel.get(r); if (!g) { g = new THREE.TorusGeometry(r, 0.75, 8, o.low ? 40 : 72); geoAnel.set(r, g); } return g; };
   const geoPilar = new THREE.CylinderGeometry(0.9, 1.1, 1, 10), matPilar = new THREE.MeshStandardMaterial({ color: 0x1c2436, metalness: 0.7, roughness: 0.35, emissive: 0x0a1020 });
   const matFaixa = new THREE.MeshBasicMaterial({ map: quad, side: THREE.DoubleSide });
   const matDisco = new THREE.MeshBasicMaterial({ color: AMBAR, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
   // o FEIXE do próximo portão (um só, muda de lugar)
   const feixe = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 160, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   feixe.visible = false; group.add(feixe);
+  // o BOX DE LARGADA das corridas de checkpoint (lib/cyber/corrida/checkpoints): um anel deitado, grande, com o piso de luz
+  // e a placa — entra-se nele de moto e escolhe solo ou em dupla
+  const box = new THREE.Group(); box.position.set(BOX_CK.x, BOX_CK.y, BOX_CK.z); group.add(box);
+  const matBox = materialAnel(new THREE.Color("#7dffb0"), uT); matBox.uniforms.uForca!.value = 1;
+  const aroBox = new THREE.Mesh(new THREE.TorusGeometry(BOX_CK.r, 0.9, 10, o.low ? 48 : 96), matBox); aroBox.rotation.x = Math.PI / 2; box.add(aroBox);
+  const pisoBox = new THREE.Mesh(new THREE.CircleGeometry(BOX_CK.r, o.low ? 32 : 64), new THREE.MeshBasicMaterial({ color: 0x7dffb0, transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  pisoBox.rotation.x = -Math.PI / 2; box.add(pisoBox);
+  if (typeof document !== "undefined") {
+    const c = document.createElement("canvas"); c.width = 512; c.height = 128; const x = c.getContext("2d");
+    if (x) { x.fillStyle = "rgba(4,16,12,.75)"; x.fillRect(0, 0, 512, 128); x.strokeStyle = "#7dffb0"; x.lineWidth = 6; x.strokeRect(3, 3, 506, 122); x.fillStyle = "#eafff2"; x.font = "bold 54px system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("🏁 BOX DE LARGADA", 256, 66); }
+    const placa = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false })); placa.scale.set(24, 6, 1); placa.position.y = 14; box.add(placa);
+  }
 
   const pistas: PistaVis[] = PISTAS.map((p) => {
     const g = new THREE.Group(); g.name = `pista-${p.id}`; group.add(g);
@@ -68,13 +81,13 @@ export function criarPistas(o: { low: boolean; starTex: THREE.Texture }): Pistas
         for (const s of [-1, 1]) { const pil = new THREE.Mesh(geoPilar, matPilar); pil.scale.y = pt.r + 10; pil.position.set(s * (pt.r + 2), (pt.r + 10) / 2 - pt.y, 0); gp.add(pil); }
         const faixa = new THREE.Mesh(new THREE.PlaneGeometry(pt.r * 2 + 6, 3.2), matFaixa); faixa.position.set(0, pt.r + 4, 0); gp.add(faixa);
       }
-      return { grupo: gp, mat, base: pt.tipo === "largada" ? 0.55 : 0.32 };
+      return { grupo: gp, mat, base: pt.tipo === "largada" ? 0.95 : 0.7 };   // (mais claros: eram 0,55/0,32)
     });
     // a TRILHA: pontinhos a cada 14 m, 3 m abaixo do traçado
     const n = Math.floor(p.comprimento / 14), pos = new Float32Array(n * 3);
     for (let k = 0; k < n; k++) { const q = p.ponto(k * 14); pos[k * 3] = q.x; pos[k * 3 + 1] = q.y - 3; pos[k * 3 + 2] = q.z; }
     const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    const matTrilha = new THREE.PointsMaterial({ size: 1.6, map: o.starTex, color: cor, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
+    const matTrilha = new THREE.PointsMaterial({ size: 1.9, map: o.starTex, color: cor, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
     const trilha = new THREE.Points(geo, matTrilha); trilha.frustumCulled = false; g.add(trilha);
     return { pista: p, grupo: g, portoes, trilha, matTrilha };
   });
@@ -87,7 +100,7 @@ export function criarPistas(o: { low: boolean; starTex: THREE.Texture }): Pistas
       uT.value = t;
       for (const v of pistas) {
         const minha = ativa?.pista === v.pista.id;
-        v.matTrilha.opacity = minha ? 0.75 : ativa ? 0.12 : 0.3;
+        v.matTrilha.opacity = minha ? 0.85 : ativa ? 0.18 : 0.55;
         v.portoes.forEach((p, i) => {
           const prox = minha && i === ativa!.proximo;
           const f = prox ? 1.3 + 0.5 * Math.sin(t * 8) : minha ? p.base * 1.4 : ativa ? p.base * 0.4 : p.base;
