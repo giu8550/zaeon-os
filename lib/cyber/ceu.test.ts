@@ -190,7 +190,8 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
   });
   it("móveis: telão, palco alto, mesa do DJ, a TRELIÇA com as caixas SUSPENSAS, subs, pista e sofás; tudo dentro", () => {
     const tipos = MOVEIS.lounge.map((m) => m.tipo);
-    expect(tipos).toEqual(expect.arrayContaining(["sofa", "tv", "caixaSom", "torreSom", "palco", "mesaDJ", "sub", "pista", "trelica"]));
+    expect(tipos).toEqual(expect.arrayContaining(["sofa", "caixaSom", "torreSom", "palco", "mesaDJ", "sub", "pista", "trelica"]));
+    expect(tipos).not.toContain("tv");   // o telão saiu (out/2026): o fundo do deck é o olho/a mandala
     expect(MOVEIS.lounge.filter((m) => m.tipo === "torreSom").every((m) => m.solido !== false)).toBe(true);   // as do chão são sólidas
     expect(MOVEIS.lounge.filter((m) => m.tipo === "caixaSom").every((m) => m.solido === false)).toBe(true);   // suspensas: o chão é livre
     for (const m of MOVEIS.lounge) for (const [a, b] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
