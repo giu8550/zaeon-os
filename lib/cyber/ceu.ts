@@ -163,13 +163,13 @@ export function colisoresDasEstacoes(): Colisor[] {
  *  estudo desviam delas */
 export const BASES_DONO_LOCAIS: readonly { x: number; z: number }[] = [{ x: 0, z: 75 }, { x: 0, z: -75 }, { x: -75, z: -18.75 }];
 
-/** a HIERARQUIA da cidadela (lib/cyber/credenciais): quem tem CABINE DE ESTUDO e em que fileira. Logo depois dos
- *  pilares da capela, os PROFESSORES (doutorado); atrás deles, os DOUTORES; depois, os MESTRANDOS. Graduando não tem
- *  cabine (estuda no chão, em volta das supertrees e das cabines, nas pontas — lib/cyber/cidadela) */
-export type NivelCabine = "professor" | "doutor" | "mestrando";
+/** a HIERARQUIA da cidadela por LEVEL (lib/cyber/credenciais): quem tem CABINE DE ESTUDO e em que fileira. Logo depois
+ *  dos pilares da capela, os level 10 (PhD); atrás deles, os level 7–9 (doutorado); depois, os level 4–6 (mestrado). Level
+ *  1–3 (graduação) não tem cabine (estuda no chão, em volta das supertrees e das cabines, nas pontas — lib/cyber/cidadela) */
+export type NivelCabine = "phd" | "doutorando" | "mestrando";
 export const FILEIRAS_CABINES: readonly { nivel: NivelCabine; r: number; n: number; fase: number }[] = [
-  { nivel: "professor", r: 64, n: 9, fase: 0.5 },
-  { nivel: "doutor", r: 78, n: 9, fase: 0 },
+  { nivel: "phd", r: 64, n: 9, fase: 0.5 },
+  { nivel: "doutorando", r: 78, n: 9, fase: 0 },
   { nivel: "mestrando", r: 93, n: 34, fase: 0.25 },
 ];
 /** a CABINE (referencial dela: o +z = a frente, virada pra capela; a pessoa senta em `assento`, de frente pra mesa e

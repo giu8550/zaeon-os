@@ -22,7 +22,8 @@ import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
 import { matrizDoAvatar } from "./matrizes";
 import { criarMultidao, type MultidaoHandle } from "./MultidaoGPU";
 import { gerarFrota, type AgenteIA } from "@/lib/cyber/frota/frota";
-import { hierarquiaDaCidadela, type MembroCidadela } from "@/lib/cyber/frota/hierarquia";
+import { credenciaisDaFrota, hierarquiaDaCidadela, type MembroCidadela } from "@/lib/cyber/frota/hierarquia";
+import type { CredencialAcademica } from "@/lib/cyber/credenciais";
 import { MODELOS_CREDENCIAL, nomeComTitulo, resumoDaCredencial } from "@/lib/cyber/credenciais";
 import { planejarDia, type PlanoDia } from "@/lib/cyber/frota/plano";
 import { diaDe, fullNoDia, minutoDoDia } from "@/lib/cyber/frota/agenda";
@@ -116,7 +117,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   /** as MOTOS PARADAS nos estacionamentos dos lugares de estudo (as das IAs que estão estudando ali) */
   const estacionadas = criarMotosEstacionadas({ cena: o.cena, low: o.low });
   const mS = new THREE.Matrix4(), qS = new THREE.Quaternion(), pS = new THREE.Vector3(), eS = new THREE.Vector3(), cS = new THREE.Color(), eixoX = new THREE.Vector3(1, 0, 0), eixoY = new THREE.Vector3(0, 1, 0), qD = new THREE.Quaternion();
-  let config: ConfigSalva | null = null, offset = 0, frota: AgenteIA[] = [], porId = new Map<string, AgenteIA>(), hier = new Map<string, MembroCidadela>();
+  let config: ConfigSalva | null = null, offset = 0, frota: AgenteIA[] = [], porId = new Map<string, AgenteIA>(), hier = new Map<string, MembroCidadela>(), creds = new Map<string, CredencialAcademica>();
   let plano: PlanoDia | null = null, eps = new Map<string, Episodio[]>(), dia = -1, calculando = false;
   let escolherEm = 0, escolhidos: string[] = [], online = 0, visivel = true;
   const textos = new Map<string, (string | null)[] | "carregando">(), respostas = new Map<string, { n: number; texto: string | null; ate: number }>();
@@ -163,11 +164,12 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     if (ric) ric(fazer, { timeout: 1500 }); else setTimeout(fazer, 0);
   }
   /** um corpo novo pro pool (o avatar é pesado: no máximo um por quadro) */
-  /** o CRACHÁ: o nome (com o título da credencial de quem é da hierarquia da cidadela) e, embaixo, o status */
+  /** o CRACHÁ: o LEVEL da credencial (1–10) e o nome; a borda na cor do degrau; quem é da cidadela ganha a 2ª linha
+   *  (o status — estudando — ou a área e o grupo/instituição) */
   function crachar(k: Corpo, a: AgenteIA) {
-    const m = hier.get(a.id); k.tag.textContent = m ? nomeComTitulo(m.credencial, a.nome) : a.nome; k.tag.style.color = a.cor; k.status = null;
-    if (!m) { k.tag.style.borderColor = ""; return; }
-    k.tag.style.borderColor = MODELOS_CREDENCIAL[m.credencial.nivel].cor;
+    const c = creds.get(a.id); k.tag.textContent = c ? nomeComTitulo(c, a.nome) : a.nome; k.tag.style.color = a.cor; k.status = null;
+    k.tag.style.borderColor = c ? MODELOS_CREDENCIAL[c.degrau].cor : "";
+    if (!hier.has(a.id)) return;
     const st = document.createElement("span"); st.style.cssText = "display:block;font:600 9px system-ui,sans-serif;opacity:.82;text-align:center;color:#e9eeff;margin-top:1px;"; k.tag.appendChild(st); k.status = st;
   }
   function novoCorpo(): Corpo {
@@ -198,7 +200,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   return {
     configurar(c, agoraServidor) {
       config = c; offset = agoraServidor - Date.now();
-      frota = gerarFrota(c.frota); porId = new Map(frota.map((a) => [a.id, a])); hier = hierarquiaDaCidadela(frota); plano = null; dia = -1; escolhidos = []; varrer = null; calculando = false; pedidoId++;
+      frota = gerarFrota(c.frota); porId = new Map(frota.map((a) => [a.id, a])); hier = hierarquiaDaCidadela(frota); creds = credenciaisDaFrota(frota); plano = null; dia = -1; escolhidos = []; varrer = null; calculando = false; pedidoId++;
       for (const k of corpos) k.id = null;
       recalcular(diaDe(agoraMs()));
     },
