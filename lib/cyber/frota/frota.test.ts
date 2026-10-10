@@ -24,10 +24,10 @@ describe("a frota (700 IAs)", () => {
     expect(gerarFrota()).toEqual(frota);   // determinística
   });
   it("criar em massa acrescenta um lote sem mudar quem já existia", () => {
-    const c2 = novoLote(sanitizarConfig({ frota: FROTA_PADRAO }), 100, 777), f2 = gerarFrota(c2.frota);
-    expect(totalDaFrota(c2)).toBe(800); expect(f2.slice(0, 700)).toEqual(frota);
-    expect(new Set(f2.map((a) => a.nome)).size).toBe(800);
-    expect(Math.min(...f2.slice(700).map((a) => a.grupo))).toBeGreaterThan(Math.max(...frota.map((a) => a.grupo)));
+    const c1 = sanitizarConfig({ frota: { lotes: [{ semente: 2026, total: 300 }], tamanhoGrupo: 4 } }), c2 = novoLote(c1, 100, 777), f2 = gerarFrota(c2.frota);
+    expect(totalDaFrota(c2)).toBe(400); expect(f2.slice(0, 300)).toEqual(gerarFrota(c1.frota));
+    expect(new Set(f2.map((a) => a.nome)).size).toBe(400);
+    expect(Math.min(...f2.slice(300).map((a) => a.grupo))).toBeGreaterThan(Math.max(...f2.slice(0, 300).map((a) => a.grupo)));
   });
   it("a config de fora é saneada (lixo volta ao padrão; limites)", () => {
     const c = sanitizarConfig({ frota: { lotes: [{ semente: 5, total: 99999 }, { semente: "x" }], tamanhoGrupo: 99 }, flags: { moto: false, lixo: 1 }, versao: -3 });
@@ -45,33 +45,20 @@ describe("a frota (700 IAs)", () => {
     expect(online(full, 3 * 60)).toBeGreaterThan(turma.length * 0.85); expect(online(normal, 3 * 60)).toBe(0);
     expect(online(full, 15 * 60)).toBeGreaterThan(turma.length * 0.85);
   });
-  it("MIGRAÇÃO: a config salva antiga (700) vira 1000 (o teto) UMA vez; quem já existia não muda; apagar o lote depois não traz de volta", () => {
-    const salva = sanitizarConfig({ frota: { lotes: [{ semente: 2026, total: 700 }], tamanhoGrupo: 4 }, flags: {}, versao: 1 });
-    const m = aplicarMigracoes(salva); expect(m.mudou).toBe(true); expect(totalDaFrota(m.c)).toBe(1000);
-    expect(gerarFrota(m.c.frota).slice(0, 700)).toEqual(gerarFrota(salva.frota));   // os 700 continuam os mesmos
-    expect(aplicarMigracoes(m.c).mudou).toBe(false);                                    // não aplica de novo
-    const semOLote = sanitizarConfig({ ...m.c, frota: { ...m.c.frota, lotes: m.c.frota.lotes.slice(0, 1) } });
-    expect(aplicarMigracoes(semOLote).c.frota.lotes).toHaveLength(1);                   // o dono apagou: não volta
-    expect(totalDaFrota(CONFIG_PADRAO)).toBe(1000); expect(new Set(gerarFrota(CONFIG_PADRAO.frota).map((a) => a.nome)).size).toBe(1000);
-  });
-  it("TETO 1000 em produção: a config que já tinha rodado o +1300 (2000 salvas) volta pra 1000 — os 700 de sempre não mudam", () => {
-    const de2000 = { frota: { lotes: [{ semente: 2026, total: 700 }, { semente: 2027, total: 1300 }], tamanhoGrupo: 4 }, flags: {}, versao: 7, migracoes: ["2026-10-mais-1300", "2026-10-modo-full-ate-12"] };
-    const m = aplicarMigracoes(sanitizarConfig(de2000));
-    expect(totalDaFrota(m.c)).toBe(1000); expect(m.mudou).toBe(true);
-    expect(m.c.frota.lotes.map((l) => [l.semente, l.total])).toEqual([[2026, 700], [2027, 300]]);
-    const antes = gerarFrota({ lotes: de2000.frota.lotes.slice(0, 1).map((l) => ({ ...l, fracaoMulheres: 0.6, fracaoCloak: 0.7 })), tamanhoGrupo: 4 }).map((a) => a.nome);
-    const depois = gerarFrota(m.c.frota).map((a) => a.nome);
-    expect(depois.slice(0, 700)).toEqual(antes);   // os 700 de sempre continuam os mesmos
-    expect(new Set(depois).size).toBe(1000);
-    expect(aplicarMigracoes(m.c).mudou).toBe(false);
-  });
-  it("TETO 1000 (out/2026): a config de PROD (700 + 800, já com o teto-1500) cai pra 1000 — as 300 primeiras do lote 2027 são as mesmas", () => {
-    const de1500 = { frota: { lotes: [{ semente: 2026, total: 700 }, { semente: 2027, total: 800 }], tamanhoGrupo: 4 }, flags: {}, versao: 9, migracoes: ["2026-10-mais-1300", "2026-10-modo-full-ate-12", "2026-10-teto-1500"] };
-    const m = aplicarMigracoes(sanitizarConfig(de1500));
-    expect(m.mudou).toBe(true); expect(m.c.frota.lotes.map((l) => [l.semente, l.total])).toEqual([[2026, 700], [2027, 300]]);
-    const antes = gerarFrota(sanitizarConfig({ ...de1500, frota: { ...de1500.frota, lotes: [{ semente: 2026, total: 700 }, { semente: 2027, total: 300 }] } }).frota).map((a) => a.nome);
-    expect(gerarFrota(m.c.frota).map((a) => a.nome)).toEqual(antes);
-    expect(aplicarMigracoes(m.c).mudou).toBe(false);
+  it("TETO 500 (out/2026, fps): toda config vira o lote de sempre (2026) com 500 — a nova, a de 2000 e a de PROD (700 + 800) dão a MESMA frota", () => {
+    const antes = gerarFrota({ lotes: [{ semente: 2026, total: 500, fracaoMulheres: 0.6, fracaoCloak: 0.7 }], tamanhoGrupo: 4 }).map((a) => a.nome);
+    for (const salva of [
+      { frota: { lotes: [{ semente: 2026, total: 700 }], tamanhoGrupo: 4 }, flags: {}, versao: 1 },
+      { frota: { lotes: [{ semente: 2026, total: 700 }, { semente: 2027, total: 1300 }], tamanhoGrupo: 4 }, flags: {}, versao: 7, migracoes: ["2026-10-mais-1300", "2026-10-modo-full-ate-12"] },
+      { frota: { lotes: [{ semente: 2026, total: 700 }, { semente: 2027, total: 800 }], tamanhoGrupo: 4 }, flags: {}, versao: 9, migracoes: ["2026-10-mais-1300", "2026-10-modo-full-ate-12", "2026-10-teto-1500", "2026-10-teto-1000"] },
+    ]) {
+      const m = aplicarMigracoes(sanitizarConfig(salva));
+      expect(m.c.frota.lotes.map((l) => [l.semente, l.total])).toEqual([[2026, 500]]); expect(m.mudou).toBe(true);
+      expect(gerarFrota(m.c.frota).map((a) => a.nome)).toEqual(antes);
+      expect(aplicarMigracoes(m.c).mudou).toBe(false);
+    }
+    expect(totalDaFrota(CONFIG_PADRAO)).toBe(500);
+    expect(totalDaFrota(novoLote(CONFIG_PADRAO, 50, 9))).toBe(500);   // no teto: criar mais não passa de 500
   });
 });
 

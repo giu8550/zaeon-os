@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { comprimento, linhaLivre, livre, pontoNaRota, rotaAPe } from "./caminhos";
-import { CIDADE, colisoresDaCidade, estacoesLocais } from "./ceu";
+import { CAPELA_NA_ZAEON, CIDADE, colisoresDaCidade, estacoesLocais } from "./ceu";
 
 const c = CIDADE.centro;
 const local = (p: { x: number; z: number }) => ({ x: p.x - c.x, z: p.z - c.z });
@@ -20,7 +20,7 @@ const pontosAmostrados = (r: { x: number; z: number }[]) => r.flatMap((b, i) => 
 describe("caminhos a pé na Zaeon", () => {
   it("o centro do globo e as colunas da capela não são livres; a praça aberta é", () => {
     expect(livre({ x: 0, z: 0 })).toBe(false);
-    expect(livre({ x: CIDADE.cidadela.r, z: 0 })).toBe(false);   // a coluna 0
+    expect(livre({ x: CIDADE.cidadela.r, z: 0 })).toBe(!CAPELA_NA_ZAEON);   // a coluna 0 (sem a capela, livre)
     expect(livre({ x: 120, z: -10 })).toBe(true);
     expect(livre({ x: 400, z: 0 })).toBe(false);                 // fora da ilha
   });

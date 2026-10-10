@@ -16,7 +16,7 @@ export type ConfigSalva = { frota: ConfigFrota; flags: FlagsFrota; versao: numbe
   /** os CONTROLES POR ÁREA do painel admin (proporção do dia, peso de cada lugar de estudo, chão do lounge, vagas) */
   areas: AreasFrota };
 /** limites do painel */
-export const LIMITES = { totalMax: 1000, loteMax: 1000, lotesMax: 20 } as const;   // 1000 = o TETO do dono (desempenho; era 1500 até out/2026)
+export const LIMITES = { totalMax: 500, loteMax: 500, lotesMax: 20 } as const;   // 500 = o TETO do dono (fps; era 1500, depois 1000 — out/2026)
 
 const num = (v: unknown, a: number, b: number, padrao: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(b, Math.max(a, v)) : padrao);
 function loteDe(v: unknown): LoteFrota | null {
@@ -41,7 +41,8 @@ export function sanitizarConfig(v: unknown): ConfigSalva {
   const o = (v ?? {}) as Record<string, unknown>, f = (o.frota ?? {}) as Record<string, unknown>, fl = (o.flags ?? {}) as Record<string, unknown>;
   let lotes = (Array.isArray(f.lotes) ? f.lotes : FROTA_PADRAO.lotes).map(loteDe).filter((l): l is LoteFrota => !!l).slice(0, LIMITES.lotesMax);
   const sementes = new Set<number>(); lotes = lotes.filter((l) => (sementes.has(l.semente) ? false : (sementes.add(l.semente), true)));
-  let soma = 0; lotes = lotes.filter((l) => (soma + l.total <= LIMITES.totalMax ? ((soma += l.total), true) : false));
+  // o lote que estoura o teto é APARADO (a mesma semente, menos gente — o sorteio refaz a turma); o que não cabe nada sai
+  let soma = 0; lotes = lotes.map((l) => { const cabe = Math.max(0, Math.min(l.total, LIMITES.totalMax - soma)); soma += cabe; return { ...l, total: cabe }; }).filter((l) => l.total > 0);
   const flags = Object.fromEntries((Object.keys(FLAGS_PADRAO) as (keyof FlagsFrota)[]).map((k) => [k, typeof fl[k] === "boolean" ? fl[k] : FLAGS_PADRAO[k]])) as FlagsFrota;
   const migracoes = Array.isArray(o.migracoes) ? [...new Set(o.migracoes.filter((x): x is string => typeof x === "string" && x.length <= 60))].slice(0, 50) : [];
   const modoFullAte = typeof o.modoFullAte === "number" && Number.isFinite(o.modoFullAte) ? o.modoFullAte : null;
@@ -69,6 +70,8 @@ export const MIGRACOES: readonly { id: string; desc: string; aplicar(c: ConfigSa
   // completa até 1000 com a MESMA semente 2027 — as primeiras 300 IAs dela continuam as mesmas pessoas
   { id: "2026-10-teto-1000", desc: "teto de 1000 IAs (performance)", aplicar: (c) => {
     const t = totalDaFrota(c); return t < LIMITES.totalMax ? novoLote(c, LIMITES.totalMax - t, 2027) : c; } },
+  // 500 (fps): o sanitizar já APARA o lote de sempre (2026) em 500 e tira o 2027 — esta só grava a config aparada
+  { id: "2026-10-teto-500", desc: "teto de 500 IAs (fps)", aplicar: (c) => c },
 ];
 /** aplica as migrações que faltam (cada uma uma vez); `mudou` = tem coisa nova pra gravar */
 export function aplicarMigracoes(c: ConfigSalva): { c: ConfigSalva; mudou: boolean } {

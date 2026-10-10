@@ -53,7 +53,7 @@ describe("a HIERARQUIA da cidadela", () => {
     const grupos = new Map<string, string[]>();
     for (const m of porNivel("graduando")) { const g = m.credencial.grupoDeEstudos!; (grupos.get(g.id) ?? grupos.set(g.id, []).get(g.id)!).push(m.agente.id); expect(g.membros).toBeGreaterThanOrEqual(2); }
     for (const [, ids] of grupos) { const gs = new Set(ids.map((id) => hier.get(id)!.agente.grupo)); expect(gs.size).toBe(1); }   // o grupo de estudos = os amigos
-    const rodas = rodasDeEstudo(); expect(rodas.filter((r) => r.tipo === "supertree").length).toBeGreaterThanOrEqual(15);
+    const rodas = rodasDeEstudo(); expect(rodas.filter((r) => r.tipo === "supertree").length).toBeGreaterThanOrEqual(7);   // (as supertrees só dos 2 mirantes do lado do lounge)
     for (const m of porNivel("graduando")) {   // perto de uma supertree ou atrás de uma cabine
       const perto = SUPERTREES.some((t) => Math.hypot(m.lugar.x - mundo(t).x, m.lugar.z - mundo(t).z) < 9) || rodas.some((r) => r.tipo === "cabine" && r.lugares.some((l) => l.id === m.lugar.id));
       expect(perto).toBe(true);

@@ -21,6 +21,10 @@ const E = ESCALA_ZAEON;
 
 /** a CAPELA (cidadela): pilares + cúpula + tambor + 2ª cúpula + PONTA (pináculo). As medidas ficam aqui porque a altura
  *  do início da ponta decide a altura do lounge. */
+/** a CAPELA monumental no centro da Zaeon (pilares, cúpulas, ponta, farol) e o CORAÇÃO (raio na ponta + veias subindo
+ *  por ela). DESLIGADA a pedido do dono (out/2026, fps): fica só o GLOBO na mesa (de onde o rosto da Zaeon sai no
+ *  tutorial). As medidas continuam (a altura do lounge, as cabines e as estações se medem por elas) */
+export const CAPELA_NA_ZAEON = false;
 export const CAPELA = { r: 18 * E, pilares: 28, pilarColR: 1.3 * E, altura: 32, achata: 0.55, tamborR: 18, tamborAlt: 14, pontaLen: 60 } as const;
 /** a altura (acima do piso) onde a PONTA da capela começa — o lounge flutua mais ou menos aqui */
 export function inicioDaPonta(): number {
@@ -229,7 +233,7 @@ export function colisoresDaCidade(): Colisor[] {
     for (const c of bordasDaEscadaria(L.r)) out.push({ ...mundo(daSala(L, c.x, c.z)), r: 0.5 });
     for (const c of colisoresDoTemplo()) out.push({ ...mundo(daSala(L, c.x, c.z)), r: c.r }); }
   const { cidadela, mesaHolo } = CIDADE;
-  for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
+  if (CAPELA_NA_ZAEON) for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
   out.push({ ...mundo({ x: 0, z: 0 }), r: mesaHolo.r });
   out.push(...colisoresDasEstacoes());
   out.push(...colisoresDasCabines());   // as CABINES DE ESTUDO da hierarquia (professores, doutores, mestrandos)
