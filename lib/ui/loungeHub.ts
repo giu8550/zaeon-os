@@ -9,9 +9,27 @@ export const LAB_ROTA = "/research-lab";
  * última aba salva) e JÁ em MODO FOCO (`?foco=1`: sem navbar, sidebar cheia). Pela aba "Laboratório" da navbar entra normal.
  */
 export const LAB_ENTRADA = "/research-lab?tab=pesquisa&foco=1";
-/** o laboratório DENTRO do TABLET (modo estudo por cima do cyberespaço — components/cyber/TabletLab): o mesmo da entrada,
- *  com `?tablet=1` — o "Voltar" dele guarda o tablet (avisa a janela de cima) em vez de abrir outro cyberespaço */
-export const LAB_TABLET = `${LAB_ENTRADA}&tablet=1`;
+/** o laboratório DENTRO do TABLET (modo estudo por cima do cyberespaço — components/cyber/TabletLab), com `?tablet=1` — o
+ *  "Voltar" dele guarda o tablet (avisa a janela de cima) em vez de abrir outro cyberespaço. A 1ª VEZ de todas abre na
+ *  Sala de Estudos, no CHAT (`estudo=chat`); depois, o laboratório volta pra onde a pessoa estava (a última aba salva) */
+export const LAB_TABLET_PRIMEIRA = `${LAB_ROTA}?tab=sala-de-estudos&estudo=chat&foco=1&tablet=1`;
+export const LAB_TABLET = `${LAB_ROTA}?foco=1&tablet=1`;
+/** já abriu o tablet alguma vez? (localStorage) */
+export const CHAVE_TABLET_JA_ABRIU = "zaeon.tablet.jaAbriu";
+/** a URL do laboratório no tablet: a da 1ª vez ou a de sempre */
+export const urlDoLabNoTablet = (jaAbriu: boolean) => (jaAbriu ? LAB_TABLET : LAB_TABLET_PRIMEIRA);
+/** o laboratório no tablet avisa a janela de cima do trabalho de IA em andamento (lib/ui/monitorIA) */
+export const MSG_IA = "zaeon:ia";
+export type EstadoIALab = {
+  /** quantas chamadas de IA estão rodando agora */
+  ativos: number;
+  /** desde quando (ms, relógio da página) a mais antiga das que estão rodando começou; null = nenhuma */
+  desde: number | null;
+  /** a última leva que terminou: quando acabou e quanto durou (ms) */
+  terminou: { em: number; durMs: number } | null;
+};
+export const ehMsgIA = (data: unknown, origin: string, esperada: string): data is { type: string; estado: EstadoIALab } =>
+  origin === esperada && !!data && typeof data === "object" && (data as { type?: unknown }).type === MSG_IA && typeof (data as { estado?: { ativos?: unknown } }).estado?.ativos === "number";
 export const pedeTablet = (search: string | URLSearchParams | null | undefined): boolean => new URLSearchParams(search ?? "").get("tablet") === "1";
 /** o laboratório no tablet pede pra guardar o tablet (postMessage pra janela de cima, mesma origem) */
 export const MSG_FECHAR_TABLET = "zaeon:close-tablet";

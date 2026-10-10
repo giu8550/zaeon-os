@@ -152,7 +152,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import { musica } from "@/lib/audio/musica";
-import { LOUNGE_ROTA, MSG_FECHAR_TABLET, pedeFoco, pedeTablet } from "@/lib/ui/loungeHub";
+import { LOUNGE_ROTA, MSG_FECHAR_TABLET, MSG_IA, pedeFoco, pedeTablet } from "@/lib/ui/loungeHub";
+import { instalarMonitorIA } from "@/lib/ui/monitorIA";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, projetosOn, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
@@ -1493,6 +1494,16 @@ export default function HomeworkPage({
     }
   }, [status]);
 
+  // NO TABLET (o laboratório num iframe por cima do cyberespaço): decidido UMA vez, na montagem — nada que mude a URL
+  // depois faz o "Voltar" carregar um cyberespaço DENTRO do tablet (era a tela de loading de novo)
+  const noTablet = useRef(false);
+  useEffect(() => {
+    noTablet.current = window.parent !== window && (pedeTablet(window.location.search) || (() => { try { return window.parent.location.pathname.startsWith(LOUNGE_ROTA); } catch { return false; } })());
+    if (!noTablet.current) return;
+    // a CONCORRÊNCIA: o trabalho de IA que roda aqui (qualquer aba/sub-aba) vai pra barra de IA do HUD do cyberespaço
+    return instalarMonitorIA((estado) => window.parent.postMessage({ type: MSG_IA, estado }, window.location.origin));
+  }, []);
+
   // ?foco=1 (entrada pelo "Estudar" do cyberespaço): abre JÁ em modo foco — a navbar global ouve o evento e some
   useEffect(() => {
     if (!pedeFoco(window.location.search)) return;
@@ -2684,7 +2695,7 @@ export default function HomeworkPage({
               data-tour="voltar-cyberespaco"
               onClick={() => {
                 // no TABLET (o lab aberto por cima do cyberespaço): só guarda o tablet — o cyberespaço já está ali atrás
-                if (window.parent !== window && pedeTablet(window.location.search)) { window.parent.postMessage({ type: MSG_FECHAR_TABLET }, window.location.origin); return; }
+                if (noTablet.current || (window.parent !== window && pedeTablet(window.location.search))) { window.parent.postMessage({ type: MSG_FECHAR_TABLET }, window.location.origin); return; }
                 musica().destravar(); router.push(LOUNGE_ROTA);
               }}
               aria-label="Voltar ao cyberespaço"

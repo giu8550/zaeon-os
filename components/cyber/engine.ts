@@ -71,6 +71,7 @@ import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
 import { criarPistas, type PistasHandle } from "./PistaCorrida";
 import { pistaPorId, type Pista } from "@/lib/cyber/corrida/pistas";
 import { CONTAGEM, novaCorrida, passoCorrida, tempoDeCorrida, type Corrida, type EventoCorrida, type FaseCorrida } from "@/lib/cyber/corrida/corrida";
+import { gastarDash, passoVigor, podeCorrer, vigorCheio, type EstadoVigor } from "@/lib/cyber/vigor";
 import { PILOTAGEM, motoParada, passoMotoSub, rompeuBarreira, sensacaoDeVelocidade, supersonico, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
 import { LOOPS_MOTO, cambioNeutro, eventosDaMoto, mixDaMoto, passoCambio, setaAcesa, somMotoParada, type Cambio, type EstadoSomMoto } from "@/lib/cyber/somMoto";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
@@ -712,6 +713,8 @@ export class CyberEngine {
   private descanso: { lugar: Lugar; assento: number; modo: ModoDescanso; fase: "indo" | "sentando" | "parado" | "levantando"; t: number } | null = null;
   /** o tablet: quer ele na mão? quanto já materializou (0..1); o laboratório já está aberto por cima? */
   private tabletQuer = false; private tabletW = 0; private labAberto = false;
+  /** o VIGOR (lib/cyber/vigor): o sprint gasta, o dash custa, parado recupera — a barra do HUD */
+  private vigor: EstadoVigor = vigorCheio();
   private ultDescanso = "";
   /** onde estão as OUTRAS pessoas na Zaeon (pra não sentar no colo de ninguém) */
   private outrosNaZaeon(): { x: number; z: number }[] { return [...this.remotos.values()].filter((a) => a.ceu).map((a) => ({ x: a.pos.x, z: a.pos.z })); }
@@ -754,8 +757,13 @@ export class CyberEngine {
   }
   /** a tecla T / o botão: o TABLET se materializa nas mãos e o laboratório abre por cima; de novo, guarda */
   alternarTablet() { if (this.tabletQuer || this.labAberto) this.fecharTablet(); else this.abrirTablet(); }
+  /** dá pra abrir o TABLET? em QUALQUER lugar, de pé (a Zaeon, a praça, os campi, a nave por dentro…) — só não voando,
+   *  de moto, pilotando, numa viagem/túnel ou nascendo */
+  private aPeParaTablet(): boolean { return !this.menu && !this.jet.noAr && this.moto === null && !this.pilotando && !this.viagem && !this.nascendo && !this.tunel && !this.sobreNave; }
+  /** o vigor agora (0..1) e se está exausto — pro HUD */
+  vigorAgora() { return { v: this.vigor.v, exausto: this.vigor.exausto }; }
   abrirTablet() {
-    if (!this.aPeLivre()) { this.o.onAviso?.("Pare em algum lugar (a pé) pra abrir o tablet."); return; }
+    if (!this.aPeParaTablet()) { this.o.onAviso?.("Pare em algum lugar (de pé) pra abrir o tablet."); return; }
     if (this.tabletQuer) return;
     this.tabletQuer = true; this.alvo = null; this.alvoDepois = null; for (const k of Object.keys(this.keys)) this.keys[k] = false;
     this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.eu });
@@ -933,6 +941,8 @@ export class CyberEngine {
     if (this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.noTopo) return false;
     const agora = performance.now() * 0.001;   // (o relógio de VERDADE no aperto — o do último quadro pode estar atrasado; a esquiva é questão de ms)
     if (!podeDash(this.dash, agora)) return false;
+    const comVigor = gastarDash(this.vigor, this.agora); if (!comVigor) return false;   // sem vigor: não sai
+    this.vigor = comVigor;
     let ix = 0, iz = 0;
     if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
     if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
@@ -2866,7 +2876,7 @@ export class CyberEngine {
       if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
       if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
       if (this.nascendo || this.tunel) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // dentro do tubo / do túnel: parado
-      const correndo = this.keys.shift || this.correr;
+      const correndo = (this.keys.shift || this.correr) && podeCorrer(this.vigor);   // (exausto: anda)
       let andando = false;
       if (this.bordo) { const pn = this.poseNave(); if (pn) { const w = paraMundo(pn, this.bordo); eu.pos.x = w.x; eu.pos.z = w.z; } }   // a nave pode ter andado (o dono pilotando)
       if (this.tabletQuer || this.labAberto) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // estudando no tablet: o avatar fica onde está
@@ -2885,6 +2895,7 @@ export class CyberEngine {
       // correr segurado ANDANDO vira SPRINT (2× a corrida) depois de ~0,7 s (lib/cyber/movimento)
       this.tCorrendo = correndo && dir && !this.jet.noAr ? this.tCorrendo + Math.min(0.25, this.agora - this.tAnt) : 0;   // (pelo relógio: com fps baixo o dt é cortado)
       this.velAPe = velocidadeAPe(!!correndo, this.tCorrendo);
+      this.vigor = passoVigor(this.vigor, !!correndo && !!dir && !this.jet.noAr, dt, this.agora);   // o fôlego: correndo gasta, parado recupera
       const vel = (this.noTopo ? 2 : this.velAPe) * (this.ataque && !golpeAcabou(this.ataque, this.agora) ? 0.25 : 1);   // no topo: passos curtos; golpeando: quase parado
       const turbo = (this.keys.shift || this.correr) && this.jet.noAr ? VOO_TURBO : 1;   // no ar, correr = VOO TURBO (2× os jatos)
       if (this.jet.noAr) {
@@ -3016,7 +3027,7 @@ export class CyberEngine {
       eu.sofa = d && (d.fase === "sentando" || d.fase === "levantando") ? alvoSofa : (eu.sofa ?? 0) + (alvoSofa - (eu.sofa ?? 0)) * kd;
       eu.deita = (eu.deita ?? 0) + ((m === "deitado" && d?.fase === "parado" ? 1 : 0) - (eu.deita ?? 0)) * kd;
       if (d) { eu.assentoY = d.lugar.alturaAssento; eu.relaxa = d.lugar.relaxa ? 1 : 0; }
-      if (this.tabletQuer && !this.aPeLivre()) this.fecharTablet();
+      if (this.tabletQuer && !this.aPeParaTablet()) this.fecharTablet();
       this.tabletW = this.tabletQuer ? Math.min(1, this.tabletW + dt / TABLET.materializa) : Math.max(0, this.tabletW - dt / TABLET.some);
       eu.tab = this.tabletW;
       if (this.tabletQuer && !this.labAberto && this.tabletW >= 1) { this.labAberto = true; this.o.onTablet?.(true); }

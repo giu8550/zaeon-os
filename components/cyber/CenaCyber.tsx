@@ -2,6 +2,8 @@
 
 import TelaCarregando from "./TelaCarregando";
 import TabletLab from "./TabletLab";
+import BarrasHud from "./BarrasHud";
+import type { EstadoIALab } from "@/lib/ui/loungeHub";
 import PainelAdminCyber from "./admin/PainelAdminCyber";
 import InventarioPainel from "./InventarioPainel";
 import type { Carregando } from "@/lib/cyber/carregamento";
@@ -99,6 +101,9 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [rota, setRota] = useState<"heliporto" | "zaeon" | null>(null);
   // o MODO ESTUDO no tablet (TabletLab) e o DESCANSO no lounge (J): o que o engine avisa
   const [tabletAberto, setTabletAberto] = useState(false);
+  /** o trabalho de IA rodando no laboratório do tablet (mesmo guardado) — a barra de IA do HUD */
+  const [iaLab, setIaLab] = useState<EstadoIALab | null>(null);
+  const lerBarras = useCallback(() => { const e = engine.current; if (!e) return null; const c = e.combate(), v = e.vigorAgora(); return { vida: c.vida, vidaMax: c.max, caido: c.caido, vigor: v.v, exausto: v.exausto }; }, []);
   // o INVENTÁRIO (tecla I — lib/cyber/inventario): a arma equipada vai pra mão
   const [inventarioAberto, setInventarioAberto] = useState(false);
   const lerInventario = useCallback(() => engine.current?.inventario() ?? null, []);
@@ -328,7 +333,9 @@ export default function CenaCyber(p: CenaCyberProps) {
       <div ref={cont} className="absolute inset-0" />
       <div ref={overlay} className="pointer-events-none absolute inset-0 overflow-hidden" />
       {/* o laboratório no TABLET, por cima da cena (o cyberespaço segue vivo atrás) */}
-      <TabletLab aberto={tabletAberto} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
+      <TabletLab aberto={tabletAberto} onIA={setIaLab} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
+      {/* as barras do HUD: SAÚDE, VIGOR e o uso CONCORRENTE de IA (o laboratório do tablet) */}
+      {tela && !menu && !tabletAberto && <BarrasHud ler={lerBarras} ia={iaLab} touch={touch} />}
       <InventarioPainel aberto={inventarioAberto} onFechar={() => setInventarioAberto(false)} ler={lerInventario} equipar={equiparItem} />
 
       {/* rótulo do monitor (hover) */}
@@ -355,21 +362,19 @@ export default function CenaCyber(p: CenaCyberProps) {
                   </div>
                 )}
               </div>
-              {typeof p.online === "number" && !instancia && <span className="rounded-full border border-white/15 bg-black/50 px-3 py-2 text-xs text-white/80">{p.online}/5 online</span>}
               {p.tokenConvite && <button type="button" onClick={convidar} className="min-h-[44px] rounded-full border border-cyan-300/40 bg-cyan-400/15 px-4 text-xs font-semibold text-cyan-100 backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">{copiado ? "Link copiado ✓" : "Convidar"}</button>}
             </div>
           )}
-          {/* LOUNGE: sentar/deitar (J) e o modo estudo no TABLET (T) — o laboratório abre por cima e o avatar fica aqui */}
-          {tela && descanso.noLounge && !tabletAberto && (
-            <div className="absolute left-1/2 z-[21] flex -translate-x-1/2 items-center gap-2" style={{ bottom: touch ? 168 : 28 }}>
+          {/* no CELULAR: sentar/deitar e o TABLET por botão (sem teclado); no computador são as teclas J e T — o lugar dos
+              botões é das barras do HUD (components/cyber/BarrasHud) */}
+          {tela && touch && !tabletAberto && (
+            <div className="absolute left-1/2 z-[21] flex -translate-x-1/2 items-center gap-2" style={{ bottom: 168 }}>
               {(descanso.pertoDeLugar || descanso.modo) && (
                 <button type="button" onClick={() => engine.current?.alternarDescanso()} className="min-h-[40px] rounded-full border border-violet-300/35 bg-[#0a081e]/75 px-4 text-xs font-semibold text-violet-100 backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">
-                  {!touch && <kbd className="mr-1.5 rounded border border-white/25 px-1.5 text-[10px]">J</kbd>}{descanso.modo === null ? "Sentar" : descanso.modo === "sentado" && descanso.podeDeitar ? "Deitar / levantar" : "Levantar"}
+                  {descanso.modo === null ? "Sentar" : descanso.modo === "sentado" && descanso.podeDeitar ? "Deitar / levantar" : "Levantar"}
                 </button>
               )}
-              <button type="button" onClick={() => engine.current?.alternarTablet()} className="min-h-[40px] rounded-full bg-gradient-to-b from-cyan-200 to-sky-400 px-4 text-xs font-extrabold text-slate-950 shadow-[0_0_20px_rgba(90,200,255,.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
-                {!touch && <kbd className="mr-1.5 rounded border border-slate-900/30 px-1.5 text-[10px]">T</kbd>}📱 Estudar no tablet
-              </button>
+              <button type="button" aria-label="Tablet" onClick={() => engine.current?.alternarTablet()} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-cyan-200/40 bg-[#06102a]/70 text-lg backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">📱</button>
             </div>
           )}
           {p.aviso && <p role="status" className="absolute left-1/2 top-[120px] z-20 -translate-x-1/2 rounded-full bg-amber-300/90 px-3 py-1 text-xs font-medium text-slate-900">{p.aviso}</p>}
