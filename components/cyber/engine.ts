@@ -54,7 +54,7 @@ import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
 import { DASH, VOO_TURBO, iniciarDash, passoDash, podeDash, sensacaoAPe, tremorDoImpacto, velocidadeAPe, type EstadoDash } from "@/lib/cyber/movimento";
 import { criarEfeitosMovimento, type EfeitosMovimentoHandle } from "./EfeitosMovimento";
 import { DECOLAGEM, HEROI, pesoAlerta } from "@/lib/cyber/posesCombate";
-import { ITENS, chaveInventario, equipar as equiparNoInv, inventarioInicial, sanitizarInventario, type IdItem, type Inventario } from "@/lib/cyber/inventario";
+import { ITENS, chaveInventario, equipar as equiparNoInv, inventarioInicial, itensPermitidos, sanitizarInventario, type IdItem, type Inventario } from "@/lib/cyber/inventario";
 import { CAIDO, COMBO, HIT_STOP, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAcabou, acerta, codificarGolpe, cortouEntre, danoDoGolpe, decodificarGolpe, proximoGolpe, type EstadoAtaque, type Golpe } from "@/lib/cyber/combate";
 import { BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
 import { criarArena, type ArenaHandle } from "./Arena";
@@ -120,7 +120,7 @@ export type CyberOpts = {
   /** teclado sempre ouvido (tela cheia). Na janela da landing só com o mouse em cima (não rouba ESPAÇO/rolagem da página). */
   teclasSempre: boolean;
   remotos?: { current: Map<string, Presenca> };
-  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; desc?: number; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada; atk?: number; hp?: number; arma?: number }) => void;
+  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; desc?: number; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada; atk?: number; hp?: number; arma?: number; mov?: number }) => void;
   /** pontos de interesse (marcos megalíticos) — flag NEXT_PUBLIC_CYBER_LANDMARKS */
   landmarks?: boolean;
   /** clicou num marco estando perto → painel (nome, org, link) */
@@ -200,6 +200,8 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** 
   /** ARENA PvP (remotos): o último golpe que chegou (a presença), o golpe animando agora, a espada na mão (e quanto dela
    *  está materializada) e a vida */
   atkUlt?: number; golpe?: { g: Golpe; ini: number } | null; espada?: EspadaHandle | null; revela?: number; hp?: number;
+  /** o MOVIMENTO TURBINADO dele (a presença `mov`): o estado, desde quando, e os pesos suavizados do sprint/dash/guarda */
+  mov?: number; tMov?: number; wSpR?: number; wDaR?: number; wAlR?: number;
   /** DESCANSO no lounge (0..1, suavizados): sentado no sofá/puff, deitado no sofá, o tablet na mão; a altura do assento */
   sofa?: number; deita?: number; tab?: number; assentoY?: number; relaxa?: number;
   /** remotos: a pose de descanso que chegou pela rede (lib/cyber/descanso `codificarDescanso`) */
@@ -721,6 +723,7 @@ export class CyberEngine {
     for (const a of [this.eu, ...(this.remotos?.values() ?? [])]) if (a) this.vestirFundador(a);   // o "founder" pode chegar depois do ator
     // bases especiais (só com os marcos na cena): o dono na ZAEON (céu)
     this.layouts = basesDosMembros(ids, undefined, { ceu: this.cidade ? ids.filter((id) => this.ehFundador(id)) : [], todosNaZaeon: !!this.cidade });   // (a praça é a ARENA PvP: com a cidade, todo mundo mora na Zaeon)
+    if (this.eu && !this.menu) this.carregarInventario();   // (o "fundador" pode chegar depois: a espada é só dele)
     for (const [id, lay] of this.layouts) {
       const existente = this.bases.get(id);
       if (existente) { if (existente.layout.x !== lay.x || existente.layout.z !== lay.z || existente.layout.nivel !== lay.nivel) existente.mover(lay); continue; }
@@ -878,11 +881,12 @@ export class CyberEngine {
   /** o INVENTÁRIO (lib/cyber/inventario): o que está nos espaços e o que está equipado — salvo no navegador por pessoa */
   inventario(): Inventario { return this.inv; }
   carregarInventario() {
-    try { const raw = localStorage.getItem(chaveInventario(this.o.eu.id)); this.inv = raw ? sanitizarInventario(JSON.parse(raw)) : inventarioInicial(); } catch { this.inv = inventarioInicial(); }
+    const fund = this.ehFundador(this.o.eu.id);   // (a espada e os golpes são só do personagem do dono)
+    try { const raw = localStorage.getItem(chaveInventario(this.o.eu.id)); this.inv = itensPermitidos(raw ? sanitizarInventario(JSON.parse(raw)) : inventarioInicial(fund), fund); } catch { this.inv = inventarioInicial(fund); }
     this.aplicarArma();
   }
   equipar(id: IdItem | null): Inventario {
-    this.inv = equiparNoInv(this.inv, id);
+    this.inv = itensPermitidos(equiparNoInv(this.inv, id), this.ehFundador(this.o.eu.id));
     try { localStorage.setItem(chaveInventario(this.o.eu.id), JSON.stringify(this.inv)); } catch { /* sem armazenamento: vale só nesta sessão */ }
     this.aplicarArma(); return this.inv;
   }
@@ -904,6 +908,16 @@ export class CyberEngine {
     const f = moverRelativoCamera(0, -1, this.camAz); if (f && this.olharLivre) this.eu.facing = Math.atan2(f.wx, f.wz);   // (mouse travado: golpeia pra onde olha)
     this.alvo = null; this.alvoDepois = null;
     this.som.tocar("golpe", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 1, taxa: g.n === 3 ? 0.66 : g.n === 2 ? 0.78 : 0.83 + Math.random() * 0.05 });   // (grave: a lâmina pesada a duas mãos)
+  }
+  /** o MOVIMENTO TURBINADO agora, pros outros verem (a presença `mov`): 2 dash, 4 hero landing, 5 decolagem, 1 sprint,
+   *  3 guarda — nessa prioridade; 0 = nada */
+  private movAgora(t: number): number {
+    if (this.dashAtivo) return 2;
+    if (t - this.tHeroi < 1.1) return 4;
+    if (this.decola || t - this.tDecolou < this.esperaDecolou + 0.45) return 5;
+    if (this.wSprint > 0.5) return 1;
+    if (pesoAlerta(t - this.tFimDash) > 0.3 || this.wGuardaArena > 0.5) return 3;
+    return 0;
   }
   /** a vida e o estado do combate (o HUD do React lê) */
   combate() { return { vida: this.vida, max: VIDA_MAX, caido: this.agora < this.caidoAte, naArena: !!this.eu && !this.noCeu && naArena(this.eu.pos), arma: this.inv.equipado ? ITENS[this.inv.equipado].nome : null }; }
@@ -998,8 +1012,14 @@ export class CyberEngine {
   }
   /** ARENA PvP — um jogador remoto: o GOLPE novo (a presença trouxe outro `atk`) anima nele e, se nós dois estamos na
    *  arena, entra na fila pra conferir se me pega; a espada dele aparece/some com `arma`; a vida dele vai no rótulo */
-  private combateRemoto(a: Ator, p: { atk?: number; hp?: number; arma?: number }, t: number) {
+  private combateRemoto(a: Ator, p: { atk?: number; hp?: number; arma?: number; mov?: number }, t: number) {
     a.hp = p.hp ?? VIDA_MAX;
+    // o MOVIMENTO TURBINADO dele: o estado que chegou (e desde quando) e os pesos suavizados (a pose sem tranco)
+    const mov = p.mov ?? 0; if (mov !== a.mov) { a.mov = mov; a.tMov = t; }
+    const k = Math.min(1, (1 / 30) * 8);
+    a.wSpR = (a.wSpR ?? 0) + ((mov === 1 ? 1 : 0) - (a.wSpR ?? 0)) * k;
+    a.wDaR = (a.wDaR ?? 0) + ((mov === 2 ? 1 : 0) - (a.wDaR ?? 0)) * Math.min(1, k * 2);
+    a.wAlR = (a.wAlR ?? 0) + ((mov === 3 ? 1 : 0) - (a.wAlR ?? 0)) * k;
     if (p.atk && p.atk !== a.atkUlt) {
       const novo = a.atkUlt !== undefined, { n } = decodificarGolpe(p.atk); a.atkUlt = p.atk;
       if (novo && n >= 1 && n <= 3) {
@@ -2761,7 +2781,7 @@ export class CyberEngine {
 
     // rede: eu → difusão; remotos → atores
     const desc = codificarDescanso(this.descanso && this.descanso.fase !== "indo" && this.descanso.fase !== "levantando" ? this.descanso.modo : null, this.tabletW > 0.5);
-    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
+    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.movAgora(t) ? { mov: this.movAgora(t) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
     this.atualizarNascimentoEGuia(dt);
     this.atualizarConversa(dt);
@@ -2804,7 +2824,7 @@ export class CyberEngine {
       const cada = dCam < 12 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 1 / 40;   // 12–40 m: um quadro sim, um não (LOD de animação)
       a.acum = (a.acum ?? 0) + dt;
       const animou = a.acum >= cada;
-      if (animou) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, acao: a.espada && (a.revela ?? 0) > 0.02 ? { sprint: 0, dash: 0, alerta: 0, espada: { golpe: a.golpe ? { n: a.golpe.g.n, u: Math.min(1, (t - a.golpe.ini) / a.golpe.g.dur), ativo: [a.golpe.g.ativoIni / a.golpe.g.dur, a.golpe.g.ativoFim / a.golpe.g.dur] } : null, guarda: a.moving ? 0 : 1 } } : null, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
+      if (animou) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, acao: { sprint: a.wSpR ?? 0, dash: a.wDaR ?? 0, alerta: a.wAlR ?? 0, alertaT: t - (a.tMov ?? t), heroi: a.mov === 4 ? t - (a.tMov ?? t) : null, decola: a.mov === 5 ? { t: t - (a.tMov ?? t), espera: 0.07 } : null, espada: !a.espada || (a.revela ?? 0) <= 0.02 ? null : { golpe: a.golpe ? { n: a.golpe.g.n, u: Math.min(1, (t - a.golpe.ini) / a.golpe.g.dur), ativo: [a.golpe.g.ativoIni / a.golpe.g.dur, a.golpe.g.ativoFim / a.golpe.g.dur] } : null, guarda: a.moving ? 0 : 1 } }, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
       matrizDoAvatar(a.av.group, animou);   // o esqueleto dele só recalcula no quadro em que animou ou andou (components/cyber/matrizes)
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
       else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = (a.naveYaw ?? 0) + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0, fechada: true }); this.noAssento(a.av, a.nave); }

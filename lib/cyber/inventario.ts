@@ -26,10 +26,20 @@ export const ESPACOS = 12;
 export type Inventario = { espacos: (IdItem | null)[]; equipado: IdItem | null };
 export const ehItem = (v: unknown): v is IdItem => typeof v === "string" && v in ITENS;
 
-/** quem nunca abriu o inventário: a espada no 1º espaço, já equipada */
-export function inventarioInicial(): Inventario {
-  const espacos: (IdItem | null)[] = Array.from({ length: ESPACOS }, () => null); espacos[0] = "espada-espiritual";
+/** os itens que só o FUNDADOR tem (a espada e os golpes são do personagem do dono, out/2026) */
+export const ITENS_DO_FUNDADOR: readonly IdItem[] = ["espada-espiritual"];
+/** quem nunca abriu o inventário: o fundador com a espada no 1º espaço, já equipada; todo o resto, vazio */
+export function inventarioInicial(fundador = true): Inventario {
+  const espacos: (IdItem | null)[] = Array.from({ length: ESPACOS }, () => null);
+  if (!fundador) return { espacos, equipado: null };
+  espacos[0] = "espada-espiritual";
   return { espacos, equipado: "espada-espiritual" };
+}
+/** tira o que a pessoa não pode ter (os itens do fundador, de quem não é) */
+export function itensPermitidos(inv: Inventario, fundador: boolean): Inventario {
+  if (fundador) return inv;
+  const espacos = inv.espacos.map((x) => (x && ITENS_DO_FUNDADOR.includes(x) ? null : x));
+  return { espacos, equipado: inv.equipado && espacos.includes(inv.equipado) ? inv.equipado : null };
 }
 /** limpa o que veio do navegador (item desconhecido some; o equipado precisa estar nos espaços) */
 export function sanitizarInventario(v: unknown): Inventario {

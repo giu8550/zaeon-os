@@ -487,10 +487,10 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       // DESACELERAR o corpo ergue (a "freada" dos super-heróis); na CURVA, inclina pro lado dela (como quem voa de verdade)
       const velAr = ar?.vel ?? (movendo ? 16 : 0), velAnt = velArS;
       velArS += (velAr - velArS) * Math.min(1, dt * 4);
-      turboAr += ((ar ? Math.max(0, Math.min(1, (velArS - 17) / 13)) : 0) - turboAr) * Math.min(1, dt * 3);
+      turboAr += ((ar ? Math.max(0, Math.min(1, (velArS - 17) / 13)) : 0) - turboAr) * Math.min(1, dt * 1.1);   // (o turbo deita o corpo AOS POUCOS — no começo, quase reto)
       const desacel = dt > 0 ? (velAnt - velArS) / dt : 0;
       freioAr += ((ar && desacel > 6 ? Math.min(1, desacel / 25) : 0) - freioAr) * Math.min(1, dt * 5);
-      inclinaVoo += ((ar ? (movendo ? -0.75 - 0.5 * turboAr : caindo ? 0.1 : -0.12) + 0.55 * freioAr : 0) - inclinaVoo) * Math.min(1, dt * 3);
+      inclinaVoo += ((ar ? (movendo ? -0.62 - 0.38 * turboAr * turboAr : caindo ? 0.1 : -0.12) + 0.55 * freioAr : 0) - inclinaVoo) * Math.min(1, dt * 2);
       bancoVoo += ((ar && movendo ? Math.max(-0.55, Math.min(0.55, giroAlvo * 1.6)) : 0) - bancoVoo) * Math.min(1, dt * 4);
       const aVoo = inclinaVoo * wAr, QUADRIL = 1.0;
       corpo.rotation.x += aVoo; corpo.rotation.z += bancoVoo * wAr;

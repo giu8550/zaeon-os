@@ -150,10 +150,10 @@ function naveParadaDe(v: unknown): { naveParada?: { x: number; y: number; z: num
 }
 
 /** os campos da ARENA PvP (lib/cyber/combate) — inteiros nos limites; o resto some */
-export function combateDe(r: Record<string, unknown>): { atk?: number; hp?: number; arma?: number } {
+export function combateDe(r: Record<string, unknown>): { atk?: number; hp?: number; arma?: number; mov?: number } {
   const int = (v: unknown, a: number, b: number) => (typeof v === "number" && Number.isInteger(v) && v >= a && v <= b ? v : null);
-  const atk = int(r.atk, 1, 400000), hp = int(r.hp, 0, 100), arma = int(r.arma, 1, 1);
-  return { ...(atk !== null ? { atk } : {}), ...(hp !== null && hp < 100 ? { hp } : {}), ...(arma !== null ? { arma } : {}) };
+  const atk = int(r.atk, 1, 400000), hp = int(r.hp, 0, 100), arma = int(r.arma, 1, 1), mov = int(r.mov, 1, 5);
+  return { ...(mov !== null ? { mov } : {}), ...(atk !== null ? { atk } : {}), ...(hp !== null && hp < 100 ? { hp } : {}), ...(arma !== null ? { arma } : {}) };
 }
 
 /** Presença vinda da rede: só o que é número/strings curtas; lixo → null. */

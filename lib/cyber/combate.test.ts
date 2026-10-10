@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COMBO, JANELA_COMBO, RITMO_GOLPES, VIDA_MAX, acabou, acerta, codificarGolpe, cortando, cortouEntre, danoDoGolpe, decodificarGolpe, levarGolpe, proximoGolpe } from "./combate";
-import { ESPACOS, ITENS, equipar, inventarioInicial, sanitizarInventario } from "./inventario";
+import { ESPACOS, ITENS, equipar, inventarioInicial, itensPermitidos, sanitizarInventario } from "./inventario";
 import { ARENA, BONECOS, PILARES_ARENA, naArena, pontoDeRenascer } from "./arena";
 import { PORTAL_PRACA, PRACA } from "./praca";
 import { poseGolpe } from "./posesCombate";
@@ -10,6 +10,11 @@ describe("inventário", () => {
     const inv = inventarioInicial();
     expect(inv.espacos).toHaveLength(ESPACOS); expect(inv.espacos[0]).toBe("espada-espiritual"); expect(inv.equipado).toBe("espada-espiritual");
     expect(ITENS["espada-espiritual"].nivel).toBe(7);
+  });
+  it("a espada (e os golpes) são só do FUNDADOR: os outros têm o inventário, vazio — e não ficam com ela nem forjando", () => {
+    expect(inventarioInicial(false)).toEqual({ espacos: Array(ESPACOS).fill(null), equipado: null });
+    expect(itensPermitidos(inventarioInicial(true), false)).toEqual({ espacos: Array(ESPACOS).fill(null), equipado: null });
+    expect(itensPermitidos(inventarioInicial(true), true)).toEqual(inventarioInicial(true));
   });
   it("o que vem do navegador é limpo; só equipa o que está nos espaços", () => {
     expect(sanitizarInventario({ espacos: ["xyz", "espada-espiritual"], equipado: "xyz" })).toEqual({ espacos: [null, "espada-espiritual", ...Array(ESPACOS - 2).fill(null)], equipado: null });
