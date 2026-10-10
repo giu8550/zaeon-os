@@ -145,7 +145,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
       s.sentado += (e.sentado - s.sentado) * k; s.danca += (e.danca - s.danca) * k; s.meditando += (e.meditando - s.meditando) * k;
       let m: Montado | null = null;
       if (e.moto) {
-        moto.group.position.set(p.x, ilhaY + e.moto.y, p.z); moto.group.rotation.y = e.moto.rumo;
+        moto.group.visible = true; moto.group.position.set(p.x, ilhaY + e.moto.y, p.z); moto.group.rotation.y = e.moto.rumo;
         moto.atualizar({ dt: dtA, t, voando: e.moto.voando, vel: e.moto.vel, curva: e.moto.curva });
         moto.group.updateMatrixWorld(true);
         moto.assento.getWorldPosition(w); av.group.position.copy(w); av.olharPara(e.moto.rumo);
@@ -155,6 +155,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
       } else {
         moto.group.position.set(vagaW.x, ilhaY, vagaW.z); moto.group.rotation.y = o.perfil.vaga.rumo;
         moto.atualizar({ dt: dtA, t, voando: false, vel: 0, curva: 0 });
+        moto.group.visible = o.perfil.casa !== "salas";   // quem mora nas SALAS não tem moto parada na central: ela só aparece no trajeto
         alt = ilhaY + e.y; av.group.position.set(p.x, alt, p.z); av.olharPara(e.rumo);
       }
       // a pose feminina quando parada em pé (passeando, olhando o telão); nas outras, o esqueleto manda
