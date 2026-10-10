@@ -33,7 +33,7 @@ describe("modo admin: as áreas do mapa", () => {
     const a = sanitizarAreas({ proporcao: { moto: 500, andar: -3 }, pesos: { univ: 99, jardim: "x" }, loungeChao: 999, vagas: 50 });
     expect(a.proporcao.moto).toBe(100); expect(a.proporcao.andar).toBe(0); expect(a.proporcao.estudoLounge).toBe(AREAS_PADRAO.proporcao.estudoLounge);
     expect(a.pesos.univ).toBe(10); expect(a.pesos.jardim).toBe(AREAS_PADRAO.pesos.jardim);
-    expect(a.loungeChao).toBe(110); expect(a.vagas).toBe(33);
+    expect(a.loungeChao).toBe(220); expect(a.vagas).toBe(33);
   });
   it("peso 0 tira o lugar do mapa (nem quem transborda vai pra lá); peso alto puxa gente", () => {
     const base = estudoPorLugar(AREAS_PADRAO);

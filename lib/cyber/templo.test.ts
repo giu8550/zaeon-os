@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CAPELA, inicioDaPonta, ALTURA_LOUNGE, CIDADE, PISO_FESTA, alturaNaCidade, colisoresDaCidade, daSala, mundo, naIlhaPrincipal, pisoNoAr, resolverCidade, salaEm } from "./ceu";
-import { DECK, ESCADARIA, PATIO, TEMPLO, pontaDaCapelaDoTemplo, alturaDaEscadaria, curvaDaEscadaria, entradaDoTemplo, noTemplo, saidaDoLounge } from "./templo";
+import { CAPELA, inicioDaPonta, ALTURA_LOUNGE, CIDADE, PISO_FESTA, alturaNaCidade, bocaDaGaragem, colisoresDaCidade, daSala, durDaViagem, mundo, naColunaDaGaragem, naIlhaPrincipal, naSala, pisoNoAr, posDaViagem, resolverCidade, salaEm, solidosDaCidade } from "./ceu";
+import { DECK, ESCADARIA, GARAGEM_LOUNGE, TEMPLO, naGaragemDoLounge, pontaDaCapelaDoTemplo, alturaDaEscadaria, curvaDaEscadaria, entradaDoTemplo, noTemplo, saidaDoLounge } from "./templo";
 import { dentroDeAlgum } from "./colisao";
 import { ESTACIONAMENTOS, vagaEstudo } from "./estacionamentosEstudo";
 
@@ -25,15 +25,29 @@ describe("o LOUNGE em dois níveis (pátio + deck da festa)", () => {
     for (const z of [L.r - 1, 60, 45, DECK.zFrente + DECK.rampa.len, DECK.zFrente + 4, DECK.zFrente - 1]) for (const x of [-2, 0, 2]) expect(dentroDeAlgum(W(x, z), cs)).toBe(false);
     for (const sx of [-1, 1]) expect(dentroDeAlgum(W(sx * (DECK.rampa.meia + 0.3), DECK.zFrente + 6), cs)).toBe(true);   // laterais da rampa
   });
-  it("as motos do lounge ficam no PÁTIO, com a calçada passando no meio das vagas", () => {
-    const l = ESTACIONAMENTOS.lounge;
-    expect(l.corredor).toBe(PATIO.lote.corredor);
+  it("as motos do lounge ficam na GARAGEM: a plataforma do lado esquerdo (−x), 25 m abaixo do lounge, fora do disco — e a vaga é piso lá; o pátio ficou livre", () => {
+    const G = GARAGEM_LOUNGE, l = ESTACIONAMENTOS.lounge;
+    expect(G.desce).toBe(25); expect(l.zaeon).toBe(true); expect(l.alt).toBeCloseTo(L.y - G.desce + 0.16, 5);
     for (let i = 0; i < 33; i++) {
-      const v = vagaEstudo("lounge", i), c = mundo({ x: L.x, z: L.z }), d = Math.hypot(v.x - c.x, v.z - c.z);
-      expect(d).toBeLessThan(L.r - 3);
-      expect(alturaNaCidade(v)).toBe(ALTURA_LOUNGE);   // no pátio, não no deck nem na rampa
-      expect(v.y).toBeCloseTo(CIDADE.pisoY + ALTURA_LOUNGE + 0.16 + 1.1, 5);
+      const v = vagaEstudo("lounge", i), q = naSala(L, v.x - CIDADE.centro.x, v.z - CIDADE.centro.z);
+      expect(q.x).toBeLessThan(-L.r - 2); expect(naGaragemDoLounge(q)).toBe(true);
+      expect(alturaNaCidade(v)).toBe(ALTURA_LOUNGE - G.desce); expect(naIlhaPrincipal(v)).toBe(true);
+      expect(v.y).toBeCloseTo(CIDADE.pisoY + ALTURA_LOUNGE - G.desce + 0.16 + 1.1, 5);
+      const r = resolverCidade(v); expect(r.x).toBeCloseTo(v.x, 6); expect(r.z).toBeCloseTo(v.z, 6);   // andar na plataforma não é puxado de volta pro raio andável
     }
+    expect(alturaNaCidade(W(0, 47))).toBe(ALTURA_LOUNGE); expect(alturaNaCidade(W(-20, 40))).toBe(ALTURA_LOUNGE);   // o pátio continua piso do lounge
+    expect(alturaNaCidade(W(-150, 20))).toBe(0); expect(naIlhaPrincipal(W(-150, 20))).toBe(false);   // passou da plataforma: cai
+  });
+  it("o ELEVADOR DE LUZ da garagem: o anel no pé sobe 25 m e desliza pro lado esquerdo do pátio; o anel de cima desce; a viagem começa e termina no piso; a plataforma é sólida pra quem voa", () => {
+    const e = GARAGEM_LOUNGE.elevador, pe = W(e.pe.x, e.pe.z), topo = W(e.topo.x, e.topo.z), base = ALTURA_LOUNGE - GARAGEM_LOUNGE.desce;
+    expect(bocaDaGaragem(pe)).toBe("sobe"); expect(bocaDaGaragem(topo)).toBe("desce"); expect(bocaDaGaragem(W(0, 40))).toBeNull();
+    expect(alturaNaCidade(pe)).toBe(base); expect(alturaNaCidade(topo)).toBe(ALTURA_LOUNGE); expect(salaEm({ x: topo.x - CIDADE.centro.x, z: topo.z - CIDADE.centro.z })).toBe("lounge");
+    const a = posDaViagem("garagem", "sobe", 0), b = posDaViagem("garagem", "sobe", 1), meio = posDaViagem("garagem", "sobe", 0.4);
+    expect(a.y).toBeCloseTo(base, 5); expect(a.p.x).toBeCloseTo(pe.x, 4); expect(b.y).toBeCloseTo(ALTURA_LOUNGE, 5); expect(b.p.x).toBeCloseTo(topo.x, 4); expect(b.p.z).toBeCloseTo(topo.z, 4);
+    expect(meio.y).toBeGreaterThan(base + 3); expect(meio.y).toBeLessThan(ALTURA_LOUNGE);
+    const d0 = posDaViagem("garagem", "desce", 0), d1 = posDaViagem("garagem", "desce", 1); expect(d0.p.x).toBeCloseTo(topo.x, 4); expect(d1.y).toBeCloseTo(base, 5); expect(d1.p.x).toBeCloseTo(pe.x, 4);
+    expect(durDaViagem("garagem")).toBe(e.dur); expect(naColunaDaGaragem(pe, ALTURA_LOUNGE - 10)).toBe(true); expect(naColunaDaGaragem(pe, base)).toBe(false); expect(naColunaDaGaragem(topo, ALTURA_LOUNGE - 10)).toBe(false);
+    expect(solidosDaCidade().some((s) => Math.hypot(s.x - pe.x, s.z - pe.z) < s.r && Math.abs(s.topo - (CIDADE.pisoY + base)) < 1e-6)).toBe(true);
   });
 });
 

@@ -5,21 +5,24 @@
  *    LAJE flutuante com borda de luz; parado (sem pulsar) e estático — entra no lote do lugar (components/cyber/lotes);
  *  - as motos paradas são UMA malha instanciada por peça da moto (a moto de sempre, já fundida por material — ~10 peças):
  *    as 231 vagas custam ~10 draw calls por conjunto (Zaeon / fora), seja quantas motos estiverem paradas. Sem chama e sem
- *    pisca (parada); a pintura e os frisos na cor de cada IA (instanceColor).
+ *    pisca (parada); a pintura e os frisos na cor de cada IA (instanceColor);
+ *  - na GARAGEM DO LOUNGE (a plataforma 25 m abaixo dele) as motos NÃO são carregadas de verdade (pedido do dono: mais
+ *    frames): cada uma é um FANTASMA — uma caixa de luz na cor da IA, numa única malha instanciada.
  */
 import * as THREE from "three";
 import { CIDADE } from "@/lib/cyber/ceu";
 import { estiloDaVaga, tamanhoDoLote } from "@/lib/cyber/motos";
 import { AMBIENTES_COM_VAGA, ESTACIONAMENTOS, VAGAS_POR_ESTACIONAMENTO, type EstacionamentoEstudo, type VagaEstudo } from "@/lib/cyber/estacionamentosEstudo";
+import { GARAGEM_LOUNGE } from "@/lib/cyber/templo";
 import { criarPisoEstacionamento } from "./Estacionamento";
 import { criarMoto, loteMoto } from "./Moto";
 
 /** um estacionamento: a laje flutuante + o piso das vagas (referencial do lote: a fila corre em x, a frente é +z) */
 function criarPlataforma(l: EstacionamentoEstudo, low: boolean): THREE.Group {
-  const g = new THREE.Group(), { larg, prof } = tamanhoDoLote(l), L = larg + 3, P = prof + 3, H = 1.4;
-  if (l.ambiente === "lounge") { g.add(criarPisoEstacionamento({ low, parado: true, lote: l }).group); return g; }   // no PÁTIO do lounge: sem laje
+  // (a do LOUNGE é a plataforma da GARAGEM inteira — lib/cyber/templo: as filas correm no z da sala, o elevador fica no +x)
+  const g = new THREE.Group(), { larg, prof } = tamanhoDoLote(l), G = GARAGEM_LOUNGE, lounge = l.ambiente === "lounge", L = lounge ? G.prof : larg + 3, P = lounge ? G.larg : prof + 3, H = 1.4;
   const laje = new THREE.Mesh(new THREE.BoxGeometry(L, H, P), new THREE.MeshStandardMaterial({ color: 0x0a1424, emissive: 0x0c1c36, emissiveIntensity: 0.5, roughness: 0.6, metalness: 0.5 }));
-  laje.position.y = -H / 2; g.add(laje);
+  laje.position.y = -H / 2; if (lounge) laje.position.z = 4; g.add(laje);   // (o centro da plataforma fica 4 m à frente do centro do lote: o lado do elevador)
   // a BORDA de luz (em cima e embaixo da laje) — dá pra ver de longe onde a plataforma está
   const borda = new THREE.LineSegments(new THREE.EdgesGeometry(laje.geometry), new THREE.LineBasicMaterial({ color: 0x7fe0ff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }));
   borda.position.copy(laje.position); g.add(borda);
@@ -84,13 +87,20 @@ export function criarMotosEstacionadas(o: { cena: THREE.Object3D; low: boolean }
     return { g, porEstilo };
   };
   const zaeon = conjunto("motos-paradas-zaeon"), fora = conjunto("motos-paradas-fora");
+  // os FANTASMAS da garagem do lounge: uma caixa de luz por moto (uma malha; a cor da IA)
+  const fantasmas = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.95, 2.3), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false }), VAGAS_POR_ESTACIONAMENTO);
+  fantasmas.count = 0; fantasmas.frustumCulled = false; fantasmas.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(VAGAS_POR_ESTACIONAMENTO * 3), 3); zaeon.g.add(fantasmas);
   const mV = new THREE.Matrix4(), mI = new THREE.Matrix4(), q = new THREE.Quaternion(), eixo = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), um = new THREE.Vector3(1, 1, 1);
   const cor = new THREE.Color(), clara = new THREE.Color(), branco = new THREE.Color(0xffffff);
 
   return {
     definir(lista) {
-      const n = [zaeon, fora].map(() => [0, 0, 0]);
+      const n = [zaeon, fora].map(() => [0, 0, 0]); let nF = 0;
       for (const { vaga, cor: c } of lista) {
+        if (vaga.ambiente === "lounge") {   // a garagem do lounge: só o fantasma
+          if (nF >= VAGAS_POR_ESTACIONAMENTO) continue;
+          fantasmas.setMatrixAt(nF, mV.compose(pos.set(vaga.x, vaga.y + 0.5, vaga.z), q.setFromAxisAngle(eixo, vaga.rumo), um)); fantasmas.setColorAt(nF, cor.set(c)); nF++; continue;
+        }
         const qual = vaga.zaeon ? 0 : 1, s = qual ? fora : zaeon, est = estiloDaVaga(vaga.i), i = n[qual]![est]!++;
         if (i >= MAX) continue;
         mV.compose(pos.set(vaga.x, vaga.y, vaga.z), q.setFromAxisAngle(eixo, vaga.rumo), um);
@@ -100,12 +110,14 @@ export function criarMotosEstacionadas(o: { cena: THREE.Object3D; low: boolean }
           if (p.cor) im.setColorAt(i, p.cor === "pintura" ? clara : cor);
         }
       }
+      fantasmas.count = nF; fantasmas.instanceMatrix.needsUpdate = true; if (fantasmas.instanceColor) fantasmas.instanceColor.needsUpdate = true;
       [zaeon, fora].forEach((s, qual) => s.porEstilo.forEach((malhas, est) => { for (const { im } of malhas) {
         im.count = Math.min(n[qual]![est]!, MAX); im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
       } }));
     },
     boia(dy) { if (Math.abs(zaeon.g.position.y - dy) > 0.01) { zaeon.g.position.y = dy; zaeon.g.updateMatrixWorld(true); } },
     dispose() {
+      fantasmas.geometry.dispose(); (fantasmas.material as THREE.Material).dispose(); fantasmas.dispose();
       for (const s of [zaeon, fora]) { for (const malhas of s.porEstilo) for (const { im } of malhas) im.dispose(); s.g.removeFromParent(); }
       for (const { molde, pecas } of moldes) { for (const p of pecas) if (p.cor === "pintura") p.mat.dispose(); molde.dispose(); }
     },

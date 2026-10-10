@@ -16,12 +16,13 @@ describe("os estacionamentos das plataformas de estudo", () => {
     expect(todas).toHaveLength(7 * 33);
     for (let i = 0; i < todas.length; i++) for (let j = i + 1; j < todas.length; j++) expect(Math.hypot(todas[i]!.x - todas[j]!.x, todas[i]!.z - todas[j]!.z)).toBeGreaterThan(3);
   });
-  it("ficam FORA do lugar (colados nele, sem invadir o disco da sala/do campus nem a ilha central) — menos o do lounge, no pátio", () => {
-    for (const a of ["biblioteca", "jardim"] as const) {   // (o do LOUNGE fica dentro dele, no pátio — lib/cyber/templo.test)
+  it("ficam FORA do lugar (colados nele, sem invadir o disco da sala/do campus nem a ilha central) — o do lounge na garagem, 25 m abaixo", () => {
+    for (const a of ["biblioteca", "jardim", "lounge"] as const) {   // (o do LOUNGE: a plataforma da garagem, do lado esquerdo e embaixo — lib/cyber/templo.test)
       const s = CIDADE.salas[a], c = mundo(s);
-      for (let i = 0; i < 33; i++) { const v = vagaEstudo(a, i), d = Math.hypot(v.x - c.x, v.z - c.z); expect(d).toBeGreaterThan(s.r + 4); expect(d).toBeLessThan(s.r + 45); expect(Math.hypot(v.x - CIDADE.centro.x, v.z - CIDADE.centro.z)).toBeGreaterThan(CIDADE.bordaR); }
+      for (let i = 0; i < 33; i++) { const v = vagaEstudo(a, i), d = Math.hypot(v.x - c.x, v.z - c.z); expect(d).toBeGreaterThan(s.r + 4); expect(d).toBeLessThan(s.r + 70); expect(Math.hypot(v.x - CIDADE.centro.x, v.z - CIDADE.centro.z)).toBeGreaterThan(CIDADE.bordaR); }
       expect(ESTACIONAMENTOS[a].zaeon).toBe(true);
     }
+    expect(ESTACIONAMENTOS.lounge.y).toBeLessThan(ESTACIONAMENTOS.biblioteca.y - 20);
     for (const a of ["univ", "ufc", "unifor", "uece"] as const) {
       const P = PLATAFORMAS[a];
       for (let i = 0; i < 33; i++) { const v = vagaEstudo(a, i), d = Math.hypot(v.x - P.centro.x, v.z - P.centro.z); expect(d).toBeGreaterThan(P.r + 4); expect(d).toBeLessThan(P.r + 45); }
