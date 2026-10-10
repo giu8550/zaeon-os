@@ -13,7 +13,7 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
-import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
+import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
 import { TEMPLO } from "@/lib/cyber/templo";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
 import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
@@ -345,7 +345,7 @@ export class CyberEngine {
   /** REGIÕES por distância (components/cyber/regioesCena): de longe some o detalhe e a animação para */
   private regioes = new Map<THREE.Object3D, RegiaoCena>();
   /** a viagem na ESCADA DE ENERGIA do lounge (lib/cyber/ceu `bocaDaEscada`): sobe ou desce sozinha, surfando */
-  private viagem: { tipo: "escada" | "elevador"; sentido: "sobe" | "desce"; t: number; sala?: NomeSala } | null = null;
+  private viagem: { tipo: "escada" | "elevador" | "garagem"; sentido: "sobe" | "desce"; t: number; sala?: NomeSala } | null = null;
   /** QUALIDADE ADAPTATIVA (lib/cyber/qualidadeAdaptativa): o pixel ratio do perfil é o teto; a escada multiplica */
   private qa!: QualidadeAdaptativa; private prBase = 1; private ultimoDesenho = 0;
   private frustum = new THREE.Frustum(); private mProj = new THREE.Matrix4(); private esfAtor = new THREE.Sphere();
@@ -2960,7 +2960,7 @@ export class CyberEngine {
       else if (this.noTopo) { const e = this.eixoTopo()!, lim = 2.0 * this.escalaZaeon(); const dx = eu.pos.x - e.x, dz = eu.pos.z - e.z, d = Math.hypot(dx, dz); if (d > lim) { eu.pos.x = e.x + (dx / d) * lim; eu.pos.z = e.z + (dz / d) * lim; } }   // não cai da plataforma
       else if (this.noCeu && this.viagem) {
         // a ESCADA DE ENERGIA leva: a posição segue o fluxo (as teclas não mexem), sem passo nem pulo
-        const v = this.viagem; v.t += dt; const k = Math.min(1, v.t / (v.tipo === "escada" ? VIAGEM_ESCADA.dur : TORRE_DJ.elevador.dur)), q = posDaViagem(v.tipo, v.sentido, k, v.sala);
+        const v = this.viagem; v.t += dt; const k = Math.min(1, v.t / durDaViagem(v.tipo)), q = posDaViagem(v.tipo, v.sentido, k, v.sala);
         eu.pos.x = q.p.x; eu.pos.z = q.p.z; eu.facing = q.rumo; andando = false; this.alvo = null; this.alvoDepois = null;
         if (k >= 1) { this.viagem = null; this.som.tocar("near-ping", eu.av.group.position, { dist: DISTANCIA.perto }); }
       }
@@ -2974,13 +2974,14 @@ export class CyberEngine {
         // pisou na boca da escada de energia: ela te leva (pra cima, da central; pra baixo, do lounge)
         // (ou no anel do ELEVADOR DE LUZ da torre do DJ: só desce, da cabine até o palco)
         else {
-          const be = bocaDoElevador(q), bs = be ? null : bocaDeEscada(q);
-          let boca = be ?? bs?.sentido ?? null;
+          // (ou no anel do elevador da GARAGEM do lounge: sobe da plataforma das motos pro pátio, e desce)
+          const bg = bocaDaGaragem(q), be = bg ? null : bocaDoElevador(q), bs = be || bg ? null : bocaDeEscada(q);
+          let boca = bg ?? be ?? bs?.sentido ?? null;
           if (bs && boca && this.noFio(bs.sala) >= FIO.max) {   // o FIO já está puxando o máximo de gente: espera
             boca = null;
             if (t - this.avisoFioCheio > 4) { this.avisoFioCheio = t; this.o.onAviso?.(`Este fio de energia já está puxando ${FIO.max} pessoas — espere um instante.`); }
           }
-          if (boca && !this.jet.noAr) { this.viagem = { tipo: be ? "elevador" : "escada", sentido: boca, t: 0, sala: bs?.sala }; this.alvo = null; this.alvoDepois = null; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); }
+          if (boca && !this.jet.noAr) { this.viagem = { tipo: bg ? "garagem" : be ? "elevador" : "escada", sentido: boca, t: 0, sala: bs?.sala }; this.alvo = null; this.alvoDepois = null; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); }
         }
       }
       else if (this.plat) {   // num LUGAR FLUTUANTE: anda com as colisões do andar; passou da borda do disco → cai
@@ -3022,7 +3023,7 @@ export class CyberEngine {
     const souDJ = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !this.sobreNave && !this.bordo && naCabineDJ(eu.pos);
     eu.dj = (eu.dj ?? 0) + ((souDJ ? 1 : 0) - (eu.dj ?? 0)) * Math.min(1, dt * 4);
     if (souDJ) { const c = pontoDaCabineDJ(), k = Math.min(1, dt * 4); eu.pos.x += (c.x - eu.pos.x) * k; eu.pos.z += (c.z - eu.pos.z) * k; eu.facing = rumoDoDJ(); }
-    eu.surf = (eu.surf ?? 0) + ((this.viagem?.tipo === "elevador" ? 1 : 0) - (eu.surf ?? 0)) * Math.min(1, dt * 5);
+    eu.surf = (eu.surf ?? 0) + ((this.viagem?.tipo === "elevador" || this.viagem?.tipo === "garagem" ? 1 : 0) - (eu.surf ?? 0)) * Math.min(1, dt * 5);
     eu.puxa = (eu.puxa ?? 0) + ((this.viagem?.tipo === "escada" ? 1 : 0) - (eu.puxa ?? 0)) * Math.min(1, dt * 5);
     // DANÇA: parado na PISTA do lounge → dança virado pro palco
     const danco = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !souDJ && naPistaDeDanca(eu.pos);
@@ -3037,7 +3038,7 @@ export class CyberEngine {
       : this.sobreNave ? this.topoNave()
       : this.plat ? PLATAFORMAS[this.plat.id].y + alturaDoAndar(this.plat.id, this.plat.andar)
       : this.ilhota !== null && this.cidade ? this.cidade.alturaIlhota(this.ilhota)
-      : this.noCeu && this.viagem ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + posDaViagem(this.viagem.tipo, this.viagem.sentido, Math.min(1, this.viagem.t / (this.viagem.tipo === "escada" ? VIAGEM_ESCADA.dur : TORRE_DJ.elevador.dur)), this.viagem.sala).y   // sendo levado: a altura do caminho
+      : this.noCeu && this.viagem ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + posDaViagem(this.viagem.tipo, this.viagem.sentido, Math.min(1, this.viagem.t / durDaViagem(this.viagem.tipo)), this.viagem.sala).y   // sendo levado: a altura do caminho
       : this.noCeu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + alturaNaCidade(eu.pos)   // + o PALCO do lounge (escada = rampa)
       : this.noTopo ? this.alturaTopo() : (lmAlto?.poi.base ?? 0) + this.yNav + (lmAlto && marcoNav(lmAlto.poi) && this.yNav >= marcoNav(lmAlto.poi)!.nav.pisoY - 1e-6 ? this.boia(lmAlto) : 0);
     if (this.nascendo) eu.alt += 0.35;   // em pé no pedestal do tubo
@@ -3097,7 +3098,7 @@ export class CyberEngine {
         a.tab = Math.max(0, Math.min(1, (a.tab ?? 0) + (ok && dd.tablet ? dt / TABLET.materializa : -dt / TABLET.some)));
         if (dd.modo) { const lg = lugarEm(a.pos); a.assentoY = lg?.alturaAssento ?? 0.7; a.relaxa = lg?.relaxa ? 1 : 0; } }
       // na escada só se está sendo levado; no elevador da torre, quem está no ar dentro da coluna de luz
-      const qs = naSala(CIDADE.salas.lounge, a.pos.x - CIDADE.centro.x, a.pos.z - CIDADE.centro.z), naColuna = Math.hypot(qs.x, qs.z - TORRE_DJ.elevador.sobe) < 1.6 && a.alt > CIDADE.pisoY + PISO_FESTA + PALCO_LOUNGE.h + 0.6;
+      const qs = naSala(CIDADE.salas.lounge, a.pos.x - CIDADE.centro.x, a.pos.z - CIDADE.centro.z), naColuna = (Math.hypot(qs.x, qs.z - TORRE_DJ.elevador.sobe) < 1.6 && a.alt > CIDADE.pisoY + PISO_FESTA + PALCO_LOUNGE.h + 0.6) || naColunaDaGaragem(a.pos, a.alt - CIDADE.pisoY);
       const surfando = !!a.ceu && a.jet === undefined && naColuna, puxado = !!a.ceu && a.jet === undefined && monta === null && naEscadaDoLounge(a.pos);
       a.surf = (a.surf ?? 0) + ((surfando ? 1 : 0) - (a.surf ?? 0)) * Math.min(1, dt * 5);
       a.puxa = (a.puxa ?? 0) + ((puxado ? 1 : 0) - (a.puxa ?? 0)) * Math.min(1, dt * 5);

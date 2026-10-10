@@ -50,7 +50,7 @@ export type AreasFrota = {
 };
 export const AREAS_PADRAO: AreasFrota = {
   proporcao: { estudoPlataforma: PROPORCAO["estudo-plataforma"], estudoLounge: PROPORCAO["estudo-lounge"], moto: PROPORCAO.moto, andar: PROPORCAO.andar },
-  pesos: { ...PESO_AMBIENTE }, loungeChao: 30, vagas: 33,
+  pesos: { ...PESO_AMBIENTE }, loungeChao: 60, vagas: 33,
 };
 /** os pesos do lugar de estudo (sem nenhum peso: ninguém estuda nas plataformas) */
 const algumPeso = (ar: AreasFrota) => Object.values(ar.pesos).some((v) => v > 0);

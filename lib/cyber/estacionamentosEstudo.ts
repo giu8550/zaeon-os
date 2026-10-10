@@ -6,11 +6,12 @@
  * enquanto ela estuda), vai de mochila até o lugar dela e, na hora de ir embora, volta pra vaga e sai de moto.
  * Lotou: chega como antes (sem moto parada). O mesmo layout pra todo mundo e pro render.
  *  - nas SALAS da Zaeon: pra FORA da sala (do lado oposto à escada), na altura do piso dela — flutua com a ilha; o do
- *    LOUNGE fica dentro dele, no PÁTIO (o lounge de dois níveis, lib/cyber/templo);
+ *    LOUNGE fica na GARAGEM dele: uma plataforma do lado esquerdo, 25 m abaixo, com um elevador de luz até o pátio
+ *    (lib/cyber/templo `GARAGEM_LOUNGE`) — as motos saíram do pátio (mais frames; mais gente na festa);
  *  - nas UNIVERSIDADES: colada à borda do disco, do lado virado pra Zaeon (de onde as motos chegam).
  */
 import { CIDADE, daSala, mundo } from "./ceu";
-import { PATIO } from "./templo";
+import { GARAGEM_LOUNGE } from "./templo";
 import { PLATAFORMAS } from "./plataformas";
 import { PLATAFORMA_MOTO, noLote, tamanhoDoLote, vagaNoLote, type Lote } from "./motos";
 
@@ -47,15 +48,14 @@ function naUniversidade(amb: "univ" | "ufc" | "unifor" | "uece"): Estacionamento
   return { id: "estudo", ambiente: amb, x, z, rot: Math.atan2(P.centro.x - x, P.centro.z - z), ceu: false, alt: 0, zaeon: false, y: P.y, ...base };
 }
 
-/** o do LOUNGE fica DENTRO dele, no PÁTIO (lib/cyber/templo): 3 filas de 12 com a CALÇADA passando no meio (o vão),
- *  a frente das vagas virada pro deck da festa; no piso do pátio (sem laje) */
-function noPatioDoLounge(): EstacionamentoEstudo {
-  const s = CIDADE.salas.lounge, L = PATIO.lote, c = daSala(s, 0, L.z), f = daSala(s, 0, L.z - 1), w = mundo(c);
-  return { id: "estudo", ambiente: "lounge", x: w.x, z: w.z, rot: Math.atan2(f.x - c.x, f.z - c.z), ceu: true, alt: s.y + 0.16, zaeon: true, y: CIDADE.pisoY + s.y + 0.16,
-    filas: FILAS, porFila: 12, espacamento: L.espacamento, entreFilas: 8, corredor: L.corredor };
+/** o do LOUNGE fica na GARAGEM dele (lib/cyber/templo `GARAGEM_LOUNGE`): a plataforma do lado esquerdo, `desce` m
+ *  abaixo do piso do lounge; as filas correm no eixo z da sala e a frente das vagas vira pro elevador (+x) */
+function naGaragemDoLounge(): EstacionamentoEstudo {
+  const s = CIDADE.salas.lounge, G = GARAGEM_LOUNGE, c = daSala(s, G.x - 4, G.z), f = daSala(s, G.x - 3, G.z), w = mundo(c), alt = s.y - G.desce + 0.16;
+  return { id: "estudo", ambiente: "lounge", x: w.x, z: w.z, rot: Math.atan2(f.x - c.x, f.z - c.z), ceu: true, alt, zaeon: true, y: CIDADE.pisoY + alt, ...base };
 }
 export const ESTACIONAMENTOS: Record<AmbienteVaga, EstacionamentoEstudo> = {
-  biblioteca: naSalaDaZaeon("biblioteca"), jardim: naSalaDaZaeon("jardim"), lounge: noPatioDoLounge(),
+  biblioteca: naSalaDaZaeon("biblioteca"), jardim: naSalaDaZaeon("jardim"), lounge: naGaragemDoLounge(),
   univ: naUniversidade("univ"), ufc: naUniversidade("ufc"), unifor: naUniversidade("unifor"), uece: naUniversidade("uece"),
 };
 

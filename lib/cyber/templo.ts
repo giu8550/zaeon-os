@@ -1,8 +1,8 @@
 /**
  * Cyberespaço — o LOUNGE EM DOIS NÍVEIS e o TEMPLO (PURO, sem three e SEM importar o ceu: tudo aqui é no referencial
  * da SALA do lounge — +z = a porta, rumo ao centro da ilha; +x = a DIREITA de quem entra — e quem converte pro mundo é
- * lib/cyber/ceu). Pedido do dono (out/2026): o lounge ~3× maior, com um PÁTIO embaixo (a chegada do fio, as MOTOS
- * estacionadas e as calçadas), uma RAMPA larga subindo pra FESTA (o DECK, onde ficam o DJ, a pista e as rodas de sofá)
+ * lib/cyber/ceu). Pedido do dono (out/2026): o lounge ~3× maior, com um PÁTIO embaixo (a chegada do fio, as calçadas e
+ * mais gente na festa), uma RAMPA larga subindo pra FESTA (o DECK, onde ficam o DJ, a pista e as rodas de sofá)
  * e, saindo do lado direito do deck, uma ESCADARIA em curva acentuada mas contínua, colada numa MURALHA vertical que
  * pulsa como uma VEIA, até o TEMPLO — uma plataforma do tamanho do lounge antigo, mais alta, com uma CAPELA (a irmã
  * pequena da capela da Zaeon) e o SANFONEIRO tocando no meio dela.
@@ -13,9 +13,18 @@ type P2 = { x: number; z: number };
 /** o DECK da festa: tudo que está atrás de `zFrente` (o −z da sala) fica `h` m acima do pátio; a RAMPA sobe do pátio
  *  até ele pelo meio (|x| ≤ `meia`, de `zFrente + len` até `zFrente`) */
 export const DECK = { h: 4, zFrente: 14, rampa: { meia: 7, len: 16 }, colR: 0.5, passo: 0.6 } as const;
-/** a calçada central do pátio (da porta até o pé da rampa) e o estacionamento das motos (centro do lote, `corredor` =
- *  o vão da calçada no meio das vagas) */
-export const PATIO = { calcadaMeia: 5, lote: { z: 47, corredor: 10, espacamento: 3.8 } } as const;
+/** a calçada central do pátio (da porta até o pé da rampa) */
+export const PATIO = { calcadaMeia: 5 } as const;
+/** a GARAGEM DO LOUNGE (pedido do dono, out/2026: as motos saíram do pátio — mais frames e mais gente na festa): uma
+ *  plataforma flutuante do lado ESQUERDO (−x) e `desce` m ABAIXO do piso do lounge, com o estacionamento das motos
+ *  (lib/cyber/estacionamentosEstudo) e um ELEVADOR DE LUZ que sobe `desce` m e desliza pra dentro do lounge, do lado
+ *  esquerdo do pátio (`elevador.pe` embaixo, `elevador.topo` em cima — anéis no piso; pisou, ele te leva) */
+export const GARAGEM_LOUNGE = {
+  x: -98, z: 20, larg: 46, prof: 62, desce: 25,
+  elevador: { pe: { x: -78, z: 20 }, topo: { x: -62, z: 20 }, r: 1.1, dur: 4.6 },
+} as const;
+/** está na plataforma da garagem do lounge (referencial da sala)? */
+export const naGaragemDoLounge = (q: P2, folga = 0) => { const G = GARAGEM_LOUNGE; return Math.abs(q.x - G.x) <= G.larg / 2 + folga && Math.abs(q.z - G.z) <= G.prof / 2 + folga; };
 
 /** o TEMPLO: centro, raio, altura do piso acima do pátio do lounge e a CAPELA dele (mais estreita que a da Zaeon, mais alta) */
 export const TEMPLO = {

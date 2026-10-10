@@ -7,7 +7,7 @@
  * Tudo no MUNDO; `y` é absoluto (as salas da Zaeon: o piso da ilha + a altura das salas — o engine soma a boia da ilha).
  */
 import { CIDADE, MOVEIS, PISTA, alturaNaCidade, colisoresDaCidade, daSala, mundo, naSala, rotDaSala, type NomeSala } from "../ceu";
-import { DECK } from "../templo";
+import { DECK, PATIO } from "../templo";
 import { lugaresDoLounge } from "../descanso";
 import { PLATAFORMAS, andarNaPlataforma, type IdPlataforma } from "../plataformas";
 import { acasoDe, embaralhar } from "./aleatorio";
@@ -46,7 +46,8 @@ function chaoDaSala(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
     if (Math.hypot(lx, lz) > R) continue;
     if (Math.abs(lx) < 4.5 && lz > s.r - 16) continue;   // o corredor da porta (de quem chega)
     if (pista && Math.abs(lx - pista.x) < pista.larg / 2 + 2 && Math.abs(lz - pista.z) < pista.prof / 2 + 2) continue;
-    if (sala === "lounge" && (lz < -32 || lz > DECK.zFrente - 2.5 || (lx > 52 && lz > -28 && lz < -10))) continue;   // o palco, a torre e as caixas; o pátio (as motos); a saída pro templo
+    if (sala === "lounge" && (lz < -32 || (lx > 52 && lz > -28 && lz < -10))) continue;   // o palco, a torre e as caixas; a saída pro templo
+    if (sala === "lounge" && lz > DECK.zFrente - 2.5 && noPatioOcupado(lx, lz)) continue;   // a rampa, a calçada central e os postes do pátio
     const w = mundo(daSala(s, lx, lz));
     if (cs.some((c) => Math.hypot(w.x - c.x, w.z - c.z) < c.r + 1.1)) continue;
     if (ocupados.some((o) => Math.hypot(w.x - o.x, w.z - o.z) < 1.6)) continue;
@@ -69,12 +70,24 @@ function chaoDaPlataforma(id: IdPlataforma): Spot[] {
   }
   return embaralhar(acasoDe("plataforma", id), out).slice(0, 160);
 }
-/** a PISTA do lounge (a festa): grade em cima do LED, todo mundo virado pro palco */
+/** o que NÃO é lugar no pátio do lounge (referencial da sala): a rampa, a calçada central (com os postes) */
+function noPatioOcupado(lx: number, lz: number): boolean {
+  const { zFrente, rampa } = DECK;
+  if (Math.abs(lx) <= rampa.meia + 1 && lz <= zFrente + rampa.len + 1) return true;
+  return Math.abs(lx) <= PATIO.calcadaMeia + 2.2;
+}
+/** a PISTA do lounge (a festa): a área de dança do deck e, desde que as motos saíram (out/2026), o PÁTIO inteiro em
+ *  volta da calçada — muito mais gente na festa; todo mundo virado pro palco (a mandala em cima do DJ) */
 function pista(): Spot[] {
-  const s = CIDADE.salas.lounge, p = PISTA, out: Spot[] = [];
-  for (let lx = -p.larg / 2 + 1.5; lx <= p.larg / 2 - 1.5; lx += 1.7) for (let lz = -p.prof / 2 + 1.5; lz <= p.prof / 2 - 1.5; lz += 1.7) {
-    const w = mundo(daSala(s, p.x + lx, p.z + lz));
-    out.push({ id: `pista-${out.length}`, ambiente: "pista", tipo: "pista", x: w.x, z: w.z, y: ySala(w), rumo: rotDaSala(s) + Math.PI, zaeon: true });
+  const s = CIDADE.salas.lounge, p = PISTA, out: Spot[] = [], rumo = rotDaSala(s) + Math.PI, R = s.r - 5;
+  const poe = (lx: number, lz: number) => { const w = mundo(daSala(s, lx, lz)); out.push({ id: `pista-${out.length}`, ambiente: "pista", tipo: "pista", x: w.x, z: w.z, y: ySala(w), rumo, zaeon: true }); };
+  for (let lx = -p.larg / 2 + 1.5; lx <= p.larg / 2 - 1.5; lx += 1.7) for (let lz = -p.prof / 2 + 1.5; lz <= p.prof / 2 - 1.5; lz += 1.7) poe(p.x + lx, p.z + lz);
+  const cs = colisoresDaCidade();
+  for (let lx = -R; lx <= R; lx += 2.1) for (let lz = DECK.zFrente + 2; lz <= R; lz += 2.1) {
+    if (Math.hypot(lx, lz) > R || noPatioOcupado(lx, lz)) continue;
+    if (Math.abs(lx) < 4.5 && lz > s.r - 16) continue;   // o corredor da porta
+    const w = mundo(daSala(s, lx, lz)); if (cs.some((c) => Math.hypot(w.x - c.x, w.z - c.z) < c.r + 1.1)) continue;
+    poe(lx, lz);
   }
   return out;
 }
@@ -86,7 +99,7 @@ export function spotsDe(amb: AmbienteEstudo | "pista"): Spot[] {
   let s = cache.get(amb);
   if (s) return s;
   if (amb === "pista") s = pista();
-  else if (amb === "lounge") s = [...assentos("lounge", "lounge"), ...chaoDaSala("lounge", "lounge").slice(0, 110)];   // os sofás primeiro; lotou, o chão perto deles — quantos, o plano limita (painel admin `loungeChao`, padrão 30)
+  else if (amb === "lounge") s = [...assentos("lounge", "lounge"), ...chaoDaSala("lounge", "lounge").slice(0, 220)];   // os sofás primeiro; lotou, o chão perto deles (o pátio também) — quantos, o plano limita (painel admin `loungeChao`, padrão 60)
   else if (SALAS[amb]) s = [...assentos(SALAS[amb]!, amb), ...chaoDaSala(SALAS[amb]!, amb)];
   else s = chaoDaPlataforma(amb as IdPlataforma);
   cache.set(amb, s); return s;

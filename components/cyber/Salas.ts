@@ -11,7 +11,7 @@
 import * as THREE from "three";
 import { BN_NA_SALA, CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
 import { BOCA_DJ } from "@/lib/cyber/buracos";
-import { DECK, PATIO, saidaDoLounge } from "@/lib/cyber/templo";
+import { DECK, GARAGEM_LOUNGE, PATIO, saidaDoLounge } from "@/lib/cyber/templo";
 import { criarOlho } from "./OlhoHolografico";
 import { criarMandala } from "./MandalaSagrada";
 import { criarTempestade } from "./Tempestade";
@@ -594,6 +594,21 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       caixa(g, 1.1, 0.08, 0.16, posteMat, x - sx * 0.5, 4.2, z);
       const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), basica(0xffe2b0, 1)); lamp.position.set(x - sx * 1.0, 4.05, z); g.add(lamp);
       const halo = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), basica(0xffc87a, 0.18, true)); halo.position.copy(lamp.position); g.add(halo);
+    }
+    // o ELEVADOR DE LUZ da GARAGEM (as motos ficam numa plataforma 25 m abaixo, do lado esquerdo — lib/cyber/templo):
+    // a coluna do pé (na plataforma) até a altura do pátio, anéis subindo, o anel de embarque embaixo, o de descer no
+    // pátio e a passarela de luz entre eles (a viagem desliza por ela pra dentro do lounge)
+    { const G = GARAGEM_LOUNGE, e = G.elevador, alt = G.desce + 0.6, aneisG: THREE.Mesh[] = [];
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(e.r + 0.3, e.r + 0.5, alt, 24, 1, true), basica(0x66e6ff, 0.16, true)); col.position.set(e.pe.x, -G.desce + alt / 2, e.pe.z); g.add(col);
+      const nucleo = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, alt, 8, 1, true), basica(0xd8f6ff, 0.5, true)); nucleo.position.copy(col.position); g.add(nucleo);
+      for (let i = 0; i < 5; i++) { const an = new THREE.Mesh(new THREE.TorusGeometry(e.r + 0.35, 0.06, 6, 40), basica(0xb98cff, 0.8, true)); an.rotation.x = Math.PI / 2; an.position.set(e.pe.x, -G.desce, e.pe.z); g.add(an); aneisG.push(an); }
+      for (const [p, y] of [[e.pe, -G.desce + 0.05], [e.topo, 0.22]] as const) {
+        const an = new THREE.Mesh(new THREE.TorusGeometry(e.r, 0.08, 6, 40), basica(0x66e6ff, 0.9, true)); an.rotation.x = Math.PI / 2; an.position.set(p.x, y, p.z); g.add(an);
+        const disco = new THREE.Mesh(new THREE.CircleGeometry(e.r - 0.1, 32), basica(0x66e6ff, 0.18, true)); disco.rotation.x = -Math.PI / 2; disco.position.set(p.x, y + 0.01, p.z); g.add(disco);
+      }
+      const pass = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(e.topo.x - e.pe.x), 0.08, 2.2), basica(0x9fe8ff, 0.35, true)); pass.position.set((e.pe.x + e.topo.x) / 2, 0.35, e.pe.z); g.add(pass);
+      for (const n of [col, nucleo, pass, ...aneisG]) n.userData.semLote = true;
+      anim.push((_, t) => { for (const [i, an] of aneisG.entries()) an.position.y = -G.desce + ((t * 2.4 + (i * alt) / 5) % alt); });
     }
     // o OLHO em cima do DJ (acima do buraco negro), inclinado pra pista
     const olho = criarOlho({ low: o.low, tam: 46 }); olho.group.position.set(0, DECK.h + 60, -44); olho.group.rotation.x = 0.55; olho.group.visible = false; g.add(olho.group);

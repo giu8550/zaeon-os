@@ -25,8 +25,8 @@ function loteDe(v: unknown): LoteFrota | null {
   if (!semente || total < 0) return null;
   return { semente, total, fracaoMulheres: num(o.fracaoMulheres, 0, 1, 0.6), fracaoCloak: num(o.fracaoCloak, 0, 1, 0.7) };
 }
-/** limites dos controles por área (o que o código aguenta hoje: 110 lugares de chão no lounge, 33 vagas por estacionamento) */
-export const LIMITES_AREAS = { proporcao: 100, peso: 10, loungeChao: 110, vagas: 33 } as const;
+/** limites dos controles por área (o que o código aguenta hoje: 220 lugares de chão no lounge — o pátio sem as motos —, 33 vagas por estacionamento) */
+export const LIMITES_AREAS = { proporcao: 100, peso: 10, loungeChao: 220, vagas: 33 } as const;
 /** limpa os controles por área (o que faltar ou vier errado fica no padrão) */
 export function sanitizarAreas(v: unknown): AreasFrota {
   const o = (v ?? {}) as Record<string, unknown>, p = (o.proporcao ?? {}) as Record<string, unknown>, w = (o.pesos ?? {}) as Record<string, unknown>, P = AREAS_PADRAO;
