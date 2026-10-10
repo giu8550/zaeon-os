@@ -30,6 +30,7 @@ export type Pose = {
   /** o MOVIMENTO TURBINADO (espelha lib/cyber/movimento): 0 nada, 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem */ mov: number;
   /** quando o cliente MANDOU a pose (ms no relógio dele; 0 = sem) — quem recebe interpola pelo tempo de quem mandou */ t: number;
   /** CORRIDA DE CHECKPOINTS: quantos pegou e a corrida ("semente:largada" — o convite da dupla; "" = nenhuma) */ ck: number; cr: string;
+  /** A BORDO da nave-QG: posição LOCAL na planta, nível (0 casa, 1 cabine) e a escada (null = fora da nave) */ bordo: { x: number; z: number; nivel: 0 | 1; esc: number | null } | null;
 };
 const VAGAS_MOTO = 32, TETO_MOTO = ALT;   // chão (4) + Zaeon (12) + 4 mirantes da Zaeon (16) — espelha TOTAL_VAGAS de lib/cyber/motos
 
@@ -61,7 +62,14 @@ export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
     t: num(r.t, 0, 1e12) ?? 0,
     ck: typeof r.ck === "number" && Number.isInteger(r.ck) && r.ck >= 0 && r.ck < 10000 ? r.ck : 0,
     cr: typeof r.cr === "string" && /^\d{1,10}:\d{12,14}$/.test(r.cr) ? r.cr : "",
+    bordo: bordoDe(r.bordo),
   };
+}
+function bordoDe(v: unknown): Pose["bordo"] {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>, x = num(o.x, -80, 80), z = num(o.z, -80, 80);
+  if (x === null || z === null || (o.nivel !== 0 && o.nivel !== 1)) return null;
+  return { x, z, nivel: o.nivel, esc: num(o.esc, 0, 50) };
 }
 function motoDe(v: unknown): Pose["moto"] {
   if (!v || typeof v !== "object") return null;

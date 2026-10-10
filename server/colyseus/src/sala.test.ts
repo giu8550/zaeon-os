@@ -28,6 +28,10 @@ describe("regras da pose", () => {
     expect(sanitizarPose({ x: "1", z: 0, facing: 0 }, false)).toBeNull();
     expect(sanitizarPose({ x: 1, z: 0, facing: 0, t: 1234.5 }, false)!.t).toBe(1234.5);   // o relógio de quem mandou (netcode)
     expect(sanitizarPose({ x: 1, z: 0, facing: 0, t: "x" }, false)!.t).toBe(0);
+    // a bordo da nave: a posição LOCAL (com teto) e o nível; lixo = fora da nave
+    expect(sanitizarPose({ x: 1, z: 0, facing: 0, bordo: { x: 2.5, z: -300, nivel: 1, esc: 3 } }, false)!.bordo).toEqual({ x: 2.5, z: -80, nivel: 1, esc: 3 });
+    expect(sanitizarPose({ x: 1, z: 0, facing: 0, bordo: { x: 1, z: 1, nivel: 7 } }, false)!.bordo).toBeNull();
+    expect(sanitizarPose({ x: 1, z: 0, facing: 0 }, false)!.bordo).toBeNull();
     const p = sanitizarPose({ x: 1e9, z: -3, facing: 0.5, topo: true, ceu: true, voo: { y: 50, yaw: 1 }, jet: 7 }, false)!;
     expect(p.x).toBe(1540); expect(p.topo).toBe(false); expect(p.ceu).toBe(true); expect(p.voo).toBeNull(); expect(p.jet).toBe(7);
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, topo: true, voo: { y: 50, yaw: 1 } }, true)!.voo).toEqual({ y: 50, yaw: 1 });

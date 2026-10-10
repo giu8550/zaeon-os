@@ -7,6 +7,13 @@ describe("pose", () => {
   const p = { x: 1, z: 2, facing: 0.5, moving: false, sit: false };
   it("primeiro envio sempre", () => { expect(poseMudou(null, p)).toBe(true); });
   it("parado não reenvia", () => { expect(poseMudou(p, { ...p, x: 1.001 })).toBe(false); });
+  it("a bordo da nave: entrar/sair, andar na planta e trocar de nível reenviam", () => {
+    const b = { ...p, bordo: { x: 0, z: 2, nivel: 0 as const } };
+    expect(poseMudou(p, b)).toBe(true); expect(poseMudou(b, p)).toBe(true);
+    expect(poseMudou(b, { ...b, bordo: { x: 0.5, z: 2, nivel: 0 } })).toBe(true);
+    expect(poseMudou(b, { ...b, bordo: { x: 0, z: 2, nivel: 1 } })).toBe(true);
+    expect(poseMudou(b, { ...b, bordo: { x: 0.001, z: 2, nivel: 0 } })).toBe(false);
+  });
   it("andou, girou, mudou moving/sit → reenvia", () => {
     expect(poseMudou(p, { ...p, x: 1.5 })).toBe(true);
     expect(poseMudou(p, { ...p, facing: 0.9 })).toBe(true);
