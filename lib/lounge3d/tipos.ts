@@ -88,6 +88,12 @@ export type OpsSala = {
 };
 
 export type MensagemChat = { id: string; userId: string; name: string; color: string; texto: string; ts: number };
+/** junta uma mensagem no chat (as últimas 200) SEM repetir: no modo Colyseus quem envia põe a própria mensagem na hora
+ *  (a resposta do POST) e o evento do Pusher traz a MESMA de volta — o id decide (bug de out/2026: tudo saía em dobro) */
+export function juntarChat(lista: MensagemChat[], m: MensagemChat): MensagemChat[] {
+  if (!m?.id || lista.some((x) => x.id === m.id)) return lista;
+  return [...lista.slice(-199), m];
+}
 
 // ───────────── canal Pusher (presença) e eventos ─────────────
 export const canalSala = (salaId: string) => `presence-lounge3d-${salaId}`;
