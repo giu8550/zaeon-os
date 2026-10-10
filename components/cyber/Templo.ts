@@ -15,7 +15,15 @@ import * as THREE from "three";
 import { DECK, ESCADARIA, TEMPLO, alturaDaEscadaria, curvaDaEscadaria, entradaDoTemplo, rumoDoSanfoneiro } from "@/lib/cyber/templo";
 import { criarSanfoneiro } from "./Sanfoneiro";
 
-export type TemploHandle = { group: THREE.Group; alvos: THREE.Object3D[]; atualizar(dt: number, t: number): void; /** estoura um relâmpago na tempestade agora */ raioAgora(): void; dispose(): void };
+export type TemploHandle = {
+  group: THREE.Group; alvos: THREE.Object3D[]; atualizar(dt: number, t: number): void;
+  /** a TEMPESTADE (o ritual do dono — lib/cyber/ritual): a intensidade das nuvens (0..1, 0 = céu limpo) e se os raios já
+   *  estão caindo; quem manda é o engine, a cada quadro */
+  tempestade(intensidade: number, raios: boolean): void;
+  /** estoura um relâmpago na tempestade agora — caindo em `alvoMundo` (ex.: o buraco negro em cima do DJ) ou à toa */
+  raioAgora(alvoMundo?: THREE.Vector3): void;
+  dispose(): void;
+};
 
 /** o pulso de luz correndo ao longo de `vUv.x` (as veias e o vaso) */
 function materialFluxo(cor: THREE.Color, n: number): THREE.ShaderMaterial {
@@ -100,25 +108,26 @@ function criarTempestade(o: { low: boolean; yBase: number; yTopo: number; raioMa
     aT.set([26 + rnd() * 34, rnd() * 6.28], i * 2);
   }
   geo.setAttribute("aNuvem", new THREE.InstancedBufferAttribute(aN, 4)); geo.setAttribute("aTam", new THREE.InstancedBufferAttribute(aT, 2)); geo.instanceCount = N;
-  const uni = { uT: { value: 0 }, uTex: { value: tex }, uFlashP: { value: new THREE.Vector3() }, uFlash: { value: 0 } };
+  const uni = { uT: { value: 0 }, uTex: { value: tex }, uFlashP: { value: new THREE.Vector3() }, uFlash: { value: 0 }, uI: { value: 0 } };
   const mat = new THREE.ShaderMaterial({
     uniforms: uni, transparent: true, depthWrite: false,
-    vertexShader: `attribute vec4 aNuvem; attribute vec2 aTam; uniform float uT; varying vec2 vUv; varying vec3 vW; varying float vF;
+    vertexShader: `attribute vec4 aNuvem; attribute vec2 aTam; uniform float uT, uI; varying vec2 vUv; varying vec3 vW; varying float vF;
       void main(){
-        float a = aNuvem.y + uT * aNuvem.w;
-        vec3 c = vec3(cos(a) * aNuvem.x, aNuvem.z + sin(uT * 0.3 + aTam.y) * 1.8, sin(a) * aNuvem.x);
+        float a = aNuvem.y + uT * aNuvem.w * (0.6 + 0.8 * uI);
+        float r = aNuvem.x * (1.7 - 0.7 * uI);   // se formando: as nuvens vêm de longe e se juntam em volta da ponta
+        vec3 c = vec3(cos(a) * r, aNuvem.z + 12.0 * (1.0 - uI) + sin(uT * 0.3 + aTam.y) * 1.8, sin(a) * r);
         vec4 mv = modelViewMatrix * vec4(c, 1.0);
         float rot = aTam.y + uT * 0.04 * (mod(aTam.y * 3.0, 2.0) - 1.0);
         mv.xy += mat2(cos(rot), -sin(rot), sin(rot), cos(rot)) * position.xy * aTam.x;
         vUv = uv; vW = c; vF = aTam.y; gl_Position = projectionMatrix * mv;
       }`,
-    fragmentShader: `uniform sampler2D uTex; uniform vec3 uFlashP; uniform float uFlash, uT; varying vec2 vUv; varying vec3 vW; varying float vF;
+    fragmentShader: `uniform sampler2D uTex; uniform vec3 uFlashP; uniform float uFlash, uT, uI; varying vec2 vUv; varying vec3 vW; varying float vF;
       void main(){
         float a = texture2D(uTex, vUv).a;
         float d = length(vW - uFlashP), luz = uFlash * exp(-d * d / 1400.0);
         vec3 c = mix(vec3(0.16, 0.14, 0.24), vec3(0.32, 0.28, 0.42), 0.5 + 0.5 * sin(vF * 4.0 + uT * 0.2));
         c += vec3(0.85, 0.8, 1.0) * luz * 2.6;
-        gl_FragColor = vec4(c, a * (0.32 + 0.4 * luz));   // névoa LEVE: dá pra ver a ponta atravessando
+        gl_FragColor = vec4(c, a * (0.32 + 0.4 * luz) * uI);   // nevoa LEVE: da pra ver a ponta atravessando; uI = a tempestade se formando
       }`,
   });
   const nuvens = new THREE.Mesh(geo, mat); nuvens.frustumCulled = false; nuvens.renderOrder = 5; g.add(nuvens);
@@ -146,20 +155,24 @@ function criarTempestade(o: { low: boolean; yBase: number; yTopo: number; raioMa
       if (nivel < 1 && Math.random() < 0.12) { const d = pts[i]!.clone().add(new THREE.Vector3((Math.random() - 0.5) * 22, -6 - Math.random() * 14, (Math.random() - 0.5) * 22)); raio(pts[i]!, d, esp * 0.55, nivel + 1); }
     }
   };
-  let prox = 2 + Math.random() * 3, ini = -1, dur = 0.5, forcar = false;
+  let prox = 2 + Math.random() * 3, ini = -1, dur = 0.5, forcar: THREE.Vector3 | true | null = null, intensidade = 0, comRaios = false;
   const flashP = uni.uFlashP.value;
   return {
     group: g,
     /** devolve onde caiu o raio (local do templo), se caiu um agora */
+    /** a intensidade das nuvens (0..1) e se os raios caem — do ritual */
+    definir(i: number, raios: boolean) { intensidade = i; comRaios = raios; uni.uI.value = i; g.visible = i > 0.005; },
     atualizar(t: number): THREE.Vector3 | null {
       uni.uT.value = t;
       let caiu: THREE.Vector3 | null = null;
+      if (intensidade <= 0.005) { if (ini >= 0) { ini = -1; miolo.visible = halo.visible = false; uni.uFlash.value = 0; } return null; }
+      if (!comRaios && !forcar) prox = Math.max(prox, t + 0.5);   // ainda só nuvens: os raios esperam
       if ((t >= prox || forcar) && ini < 0) {
-        forcar = false;
+        const alvoForcado = forcar instanceof THREE.Vector3 ? forcar.clone() : null; forcar = null;
         ini = t; dur = 0.35 + Math.random() * 0.35; n = 0;
         const a0 = Math.random() * Math.PI * 2, r0 = 8 + Math.random() * o.raioMax * 0.7, de = new THREE.Vector3(Math.cos(a0) * r0, o.yBase + Math.random() * (o.yTopo - o.yBase), Math.sin(a0) * r0);
         const tipo = Math.random();
-        const para = tipo < 0.3 ? o.alvoPonta.clone()   // na ponta da capela (o para-raio)
+        const para = alvoForcado ? alvoForcado : tipo < 0.3 ? o.alvoPonta.clone()   // na ponta da capela (o para-raio)
           : tipo < 0.75 ? new THREE.Vector3(Math.cos(a0 + 0.6) * (48 + Math.random() * 30), -20 - Math.random() * 40, Math.sin(a0 + 0.6) * (48 + Math.random() * 30))   // caindo no abismo, por fora do templo
           : new THREE.Vector3(Math.cos(a0 + 2) * r0, de.y - 4 + Math.random() * 8, Math.sin(a0 + 2) * r0);   // correndo DENTRO da nuvem
         raio(de, para, 0.22 + Math.random() * 0.12, 0);
@@ -175,8 +188,8 @@ function criarTempestade(o: { low: boolean; yBase: number; yTopo: number; raioMa
       } else uni.uFlash.value = 0;
       return caiu;
     },
-    /** um raio já (o show do dono vai usar) */
-    raioAgora() { forcar = true; },
+    /** um raio já — em `alvo` (local do templo) ou à toa */
+    raioAgora(alvo?: THREE.Vector3) { forcar = alvo ?? true; },
     dispose() { tex.dispose(); base.dispose(); geo.dispose(); mat.dispose(); cil.dispose(); (miolo.material as THREE.Material).dispose(); (halo.material as THREE.Material).dispose(); g.removeFromParent(); },
   };
 }
@@ -306,6 +319,7 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
   // a TEMPESTADE em volta da ponta (as nuvens ficam no terço de cima da ponta; a ponta fura e o farol sai por cima)
   const tempestade = criarTempestade({ low: o.low, yBase: yPin + C.pontaLen * 0.25, yTopo: yPin + C.pontaLen * 0.8, raioMax: 95, alvoPonta: new THREE.Vector3(0, yPin + C.pontaLen * 0.7, 0) });
   tg.add(tempestade.group); tempestade.group.traverse((n) => { n.userData.semLote = true; });
+  tempestade.definir(0, false);   // céu limpo até o dono ligar o ritual
   const ondeCaiu = new THREE.Vector3();
 
   // ── o PALCO do sanfoneiro no meio da capela, o SANFONEIRO, as esferas de luz e os feixes quentes caindo nele ──
@@ -357,7 +371,8 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
 
   return {
     group: g, alvos,
-    raioAgora: () => tempestade.raioAgora(),
+    tempestade: (i, raios) => tempestade.definir(i, raios),
+    raioAgora: (alvoMundo) => { if (!alvoMundo) { tempestade.raioAgora(); return; } tg.updateMatrixWorld(); tempestade.raioAgora(tg.worldToLocal(alvoMundo.clone())); },
     atualizar(dt, t) {
       sanf.atualizar(t);
       { const c = tempestade.atualizar(t); if (c && o.aoTrovao) { tg.updateMatrixWorld(); o.aoTrovao(ondeCaiu.copy(c).applyMatrix4(tg.matrixWorld)); } }

@@ -59,3 +59,4 @@ Esculpidos no navegador (`AudioCyber.vozDroid`, `lib/cyber/audio.ts` `VOZ_DROID`
 | `moto-boost.wav` | o mesmo "Sportsbike Flyby" (o grito da superbike) | richwise | **CC0 1.0** | o grito tocado com a afinação SUBINDO de 0,45× a 2,1× em 0,7 s (exponencial), segura e some; saturado (tanh) + reverb 28 % (1,4 s); 2,2 s mono 44,1 kHz |
 
 O jogo toca os dois afinados na rotação do motor (`lib/cyber/somMoto` `mixDaMoto`/`freqDoMotor`): a lenta embaixo, o grito da superbike da puxada até o corte.
+| `droid-louvor.wav` | a fala dos ANUNCIADORES do ritual ("Louvado seja o Senhor Jesus Cristo") — sintetizada pelo Gemini-TTS do projeto (voz Charon, pt-BR) | Zaeon | gerada no projeto (out/2026) | WAV 24 kHz mono; o dono pode trocar pelo arquivo dele (mesmo nome) |

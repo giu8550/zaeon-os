@@ -80,7 +80,7 @@ export function paredesDaNave(): Parede[] {
   return paredesCache;
 }
 
-export type MovelNave = { tipo: "console" | "leme" | "terminal" | "sofa" | "mesinha" | "poltrona" | "bar" | "tela" | "rack" | "vaso" | "pia" | "chuveiro" | "painel" | "mesa"; x0: number; x1: number; z0: number; z1: number; alt: number; solido?: boolean };
+export type MovelNave = { tipo: "console" | "leme" | "terminal" | "pcLounge" | "pcNave" | "sofa" | "mesinha" | "poltrona" | "bar" | "tela" | "rack" | "vaso" | "pia" | "chuveiro" | "painel" | "mesa"; x0: number; x1: number; z0: number; z1: number; alt: number; solido?: boolean };
 /** um móvel: o CENTRO escala com a planta (K), o tamanho não (é de gente) */
 const r = (tipo: MovelNave["tipo"], x0: number, x1: number, z0: number, z1: number, alt: number, solido = true): MovelNave => {
   const cx = ((x0 + x1) / 2) * K, cz = ((z0 + z1) / 2) * K, hx = (x1 - x0) / 2, hz = (z1 - z0) / 2;
@@ -114,7 +114,11 @@ export const MOVEIS_CABINE: MovelNave[] = ([
   { tipo: "console", x0: -1.0, x1: 4.0, z0: 4.4, z1: 5.1, alt: 1.1 },
   { tipo: "leme", x0: 1.05, x1: 1.95, z0: 2.2, z1: 3.05, alt: 1.2, solido: false },
   { tipo: "terminal", x0: -0.6, x1: 3.6, z0: -5.9, z1: -5.0, alt: 0.78 },   // o MEU DESKTOP (onde se abre o laboratório): no fundo, do lado oposto ao leme
-  { tipo: "console", x0: 5.4, x1: 6.2, z0: 1.4, z1: 3.0, alt: 1.15 },
+  // os 4 PCs da cabine, um em cada direção (out/2026): o leme (frente), o desktop de estudos (fundo), o SOM DO LOUNGE
+  // (a playlist que toca nas caixas do lounge — bombordo) e o SOM DA NAVE (a música que sai da própria nave — estibordo)
+  { tipo: "pcLounge", x0: -5.2, x1: -4.3, z0: -1.2, z1: 1.2, alt: 0.78 },   // (encostados no guarda-corpo, como o console lateral; longe do leme e do vão da escada)
+  { tipo: "pcNave", x0: 4.3, x1: 5.2, z0: -1.2, z1: 1.2, alt: 0.78 },
+  { tipo: "console", x0: 5.4, x1: 6.2, z0: 1.4, z1: 3.0, alt: 1.15 },   // o console lateral (os servidores)
 ] as MovelNave[]).map((m) => ({ ...m, x0: -m.x1, x1: -m.x0, z0: -m.z1, z1: -m.z0 }));   // meia volta: olhando pra frente da nave (o lado da rampa)
 /** o guarda-corpo da cabine (as bordas do mezanino) e o do vão da escada (aberto só no topo dela) */
 let paredesCabCache: Parede[] | null = null;
@@ -213,15 +217,19 @@ export function andarNaNave(l: P2, ant: Bordo): Bordo {
 }
 
 const perto = (a: P2, b: P2, d: number) => Math.hypot(a.x - b.x, a.z - b.z) < d;
-/** onde se fica pra usar o terminal: na frente dele, do lado do meio da cabine */
-export function pontoDoTerminal(): P2 {
-  const t = MOVEIS_CABINE.find((m) => m.tipo === "terminal")!, cx = (t.x0 + t.x1) / 2, cz = (t.z0 + t.z1) / 2, d = Math.hypot(cx, cz) || 1;
+/** onde se fica pra usar um PC da cabine: na frente dele, do lado do meio da cabine */
+export function pontoDoPc(tipo: "terminal" | "pcLounge" | "pcNave"): P2 {
+  const t = MOVEIS_CABINE.find((m) => m.tipo === tipo)!, cx = (t.x0 + t.x1) / 2, cz = (t.z0 + t.z1) / 2, d = Math.hypot(cx, cz) || 1;
   return { x: cx - (cx / d) * 1.3, z: cz - (cz / d) * 1.3 };
 }
-/** o que dá pra fazer a bordo (F): pilotar (dono, SÓ na cabine, no leme), estudar no terminal (cabine), sair pela porta (casa) */
-export function acaoNaNave(b: Bordo, dono: boolean): "pilotar" | "estudar" | "sair" | null {
+export const pontoDoTerminal = () => pontoDoPc("terminal");
+/** o que dá pra fazer a bordo (F): pilotar (dono, SÓ na cabine, no leme), estudar no terminal (cabine), os PCs do som
+ *  (dono: o do lounge e o da nave), sair pela porta (casa) */
+export function acaoNaNave(b: Bordo, dono: boolean): "pilotar" | "estudar" | "somLounge" | "somNave" | "sair" | null {
   if (b.nivel === 1 && dono && perto(b, N.leme, N.alcance + 0.6)) return "pilotar";
   if (b.nivel === 1 && perto(b, pontoDoTerminal(), N.alcance)) return "estudar";
+  if (b.nivel === 1 && dono && perto(b, pontoDoPc("pcLounge"), N.alcance)) return "somLounge";
+  if (b.nivel === 1 && dono && perto(b, pontoDoPc("pcNave"), N.alcance)) return "somNave";
   if (b.nivel === 0 && perto(b, N.portaDentro, N.alcance)) return "sair";
   return null;
 }

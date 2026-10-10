@@ -17,6 +17,8 @@ export type SomLoungeHandle = {
   readonly tocando: boolean;
   /** a batida agora (energia dos graves, 0..1; 0 se parado) — as luzes do palco pulsam com ela */
   readonly nivel: number;
+  /** ABAFA as caixas por `seg` s (o trovão energizando o som do lounge): o volume cai a zero e volta devagar */
+  abafar(seg: number): void;
   dispose(): void;
 };
 
@@ -25,7 +27,7 @@ export const DESGARRE_MAX_S = 1.2;
 export function criarSomLounge(o: { audio: AudioCyberHandle; caixas: THREE.Object3D[]; urlDe: (arq: string) => string }): SomLoungeHandle {
   const el = new Audio(); el.preload = "auto";
   const saida = o.audio.musica(o.caixas, el);
-  let som: SomLounge | null = null, offset = 0, acc = 1, arqAtual = "", buscaPendente: number | null = null, vivo = true;
+  let som: SomLounge | null = null, offset = 0, acc = 1, arqAtual = "", buscaPendente: number | null = null, vivo = true, abafado = 0;
   el.addEventListener("loadedmetadata", () => { if (buscaPendente !== null) { try { el.currentTime = buscaPendente; } catch { /* ainda não dá */ } buscaPendente = null; } });
 
   const sincronizar = () => {
@@ -44,7 +46,11 @@ export function criarSomLounge(o: { audio: AudioCyberHandle; caixas: THREE.Objec
 
   return {
     aplicar(s, off) { som = s && s.faixas.length ? s : null; offset = off; acc = 1; sincronizar(); },
-    atualizar(dt) { acc += dt; if (acc >= 0.4) { acc = 0; sincronizar(); } },
+    atualizar(dt) {
+      acc += dt; if (acc >= 0.4) { acc = 0; sincronizar(); }
+      if (abafado > 0) { abafado -= dt; saida.volume(abafado > 0.6 ? 0 : 1 - abafado / 0.6); if (abafado <= 0) saida.volume(1); }
+    },
+    abafar(seg) { abafado = Math.max(abafado, seg); saida.volume(0); },
     get tocando() { return !el.paused && !!som?.estado.tocando; },
     get nivel() { return !el.paused && som?.estado.tocando ? saida.nivel() : 0; },
     dispose() { vivo = false; el.pause(); el.removeAttribute("src"); el.load(); saida.remover(); },

@@ -77,6 +77,22 @@ describe("/api/lounge3d/[id]/musica (toca-discos do lounge)", () => {
     expect((await ARQUIVO(new Request("http://x/"), { params: { id: ID, arq: "lm_ffffffffffffffffffff.mp3" } })).status).toBe(404);   // não está na playlist
     expect((await ARQUIVO(new Request("http://x/"), { params: { id: ID, arq: "../../etc/passwd" } })).status).toBe(400);
   });
+  it("o 2º CANAL (?canal=nave): a playlist da NAVE é separada da do lounge, difunde com `canal` e o arquivo é servido", async () => {
+    await POST(subir("festa.mp3"), p); await POST(subir("viagem.mp3"), p);
+    const f = new FormData(); f.append("file", new File([new Uint8Array(100)], "nave.mp3", { type: "audio/mpeg" })); f.append("dur", "90"); f.append("nome", "Nave");
+    const rn = await POST(new Request("http://x/?canal=nave", { method: "POST", body: f }), p), dn = await rn.json();
+    expect(rn.status).toBe(200); expect(dn.canal).toBe("nave"); expect(dn.som.faixas).toHaveLength(1); expect(dn.som.faixas[0].nome).toBe("Nave");
+    expect((conteudo.somLounge as { faixas: unknown[] }).faixas).toHaveLength(2);   // a do lounge continua com as 2
+    expect((conteudo.somNave as { faixas: unknown[] }).faixas).toHaveLength(1);
+    expect(m.trigger).toHaveBeenLastCalledWith(`presence-lounge3d-${ID}`, "musica-lounge", expect.objectContaining({ canal: "nave" }));
+    const dp = await (await PATCH(new Request("http://x/?canal=nave", { method: "PATCH", body: JSON.stringify({ acao: "pausar" }) }), p)).json();
+    expect(dp.som.estado.tocando).toBe(false); expect((conteudo.somLounge as { estado: { tocando: boolean } }).estado.tocando).toBe(true);
+    const arq = (conteudo.somNave as { faixas: { arq: string }[] }).faixas[0]!.arq;
+    m.ler.mockResolvedValue(Buffer.from([1, 2, 3]));
+    expect((await ARQUIVO(new Request("http://x/"), { params: { id: ID, arq } })).status).toBe(200);
+    const dd = await (await DELETE(new Request(`http://x/?canal=nave&faixa=${dn.som.faixas[0].id}`, { method: "DELETE" }), p)).json();
+    expect(dd.som.faixas).toHaveLength(0); expect((conteudo.somLounge as { faixas: unknown[] }).faixas).toHaveLength(2);
+  });
   it("apagar o recado do QG não apaga a playlist", async () => {
     await POST(subir(), p);
     conteudo.recadoQG = { id: "r1", texto: "oi", deId: ME, deNome: "Ana", deCor: "#ffffff", ts: 1 };

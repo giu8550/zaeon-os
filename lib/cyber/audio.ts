@@ -20,7 +20,7 @@ export type NomeSom =
   | "space-bed" | "blackhole-hum" | "crystals" | "ship-flight" | "ship-idle"
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
-  | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien"
+  | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien" | "droid-louvor"
   | NomeSomMoto | NomeSomCorrida | NomeSomAsas | "coracao" | "raio" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
@@ -36,6 +36,9 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   // alienígena (Dr. Neptune, CC0), esculpidos em "sílabas" e jogados num delay e num reverb longos (VOZ_DROID)
   "droid-agua": { modo: "pos", loop: false, volume: 0.9, ext: "wav" },
   "droid-alien": { modo: "pos", loop: false, volume: 0.55 },
+  // a FALA dos ANUNCIADORES (o ritual do dono — lib/cyber/ritual `FRASE_LOUVOR`): a voz gravada; sem o arquivo, a voz
+  // sem palavras do Droid (`vozDroid`) faz as vezes
+  "droid-louvor": { modo: "pos", loop: false, volume: 1, ext: "wav" },
   // SINTETIZADOS (sem arquivo): gerados no navegador por sintetizarJetpack / sintetizarBaque
   "jato-sopro": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
   baque: { modo: "pos", loop: false, volume: 0.95, sintetico: true },   // o corpo batendo no chão (força pela queda)

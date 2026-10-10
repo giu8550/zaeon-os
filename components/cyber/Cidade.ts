@@ -57,8 +57,10 @@ export type CidadeHandle = {
   mostrarRecadoNaTV(texto: string | null): void;
   /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
   alturaIlhota(k: number): number;
-  /** estoura um relâmpago na tempestade do templo agora (o show do dono; depuração) */
-  raioNoTemplo(): void;
+  /** a TEMPESTADE do templo (o ritual do dono): a intensidade das nuvens (0..1) e se os raios caem */
+  tempestade(intensidade: number, raios: boolean): void;
+  /** estoura um relâmpago na tempestade do templo agora — caindo em `alvoMundo` (o buraco negro do DJ) ou à toa */
+  raioNoTemplo(alvoMundo?: THREE.Vector3): void;
   /** quem está na Zaeon agora (local da ilha) — os motores de energia do Observatório reagem */
   presencas(p: { x: number; z: number }[]): void;
 };
@@ -334,7 +336,8 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   return {
     group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
-    raioNoTemplo: () => templo.raioAgora(),
+    tempestade: (i, raios) => templo.tempestade(i, raios),
+    raioNoTemplo: (alvo) => templo.raioAgora(alvo),
     atualizar(dt, t) {
       // a ilha BOIA (25 cm, ciclo de ~21 s): só move quando andou 1 cm — mexer nela força recalcular as matrizes dos
       // ~1.300 nós da cidade; a cada quadro andaria menos de meio milímetro (components/cyber/matrizes)

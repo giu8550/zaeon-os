@@ -29,6 +29,8 @@ import ControlesVoo from "./ControlesVoo";
 import PainelCorrida from "./PainelCorrida";
 import type { EventoCorrida } from "@/lib/cyber/corrida/corrida";
 import TocaDiscos, { type ApiMusica } from "./TocaDiscos";
+import RitualPainel from "./RitualPainel";
+import type { Ritual } from "@/lib/cyber/ritual";
 import type { SomLounge } from "@/lib/lounge3d/musica";
 
 export type CenaCyberProps = {
@@ -59,7 +61,7 @@ export type CenaCyberProps = {
   /** dono da Zaeon (vem do SERVIDOR) — só pinta os botões; quem decide é `pedirAcesso` */
   souFundador?: boolean;
   /** AÇÃO PRIVILEGIADA: pede ao servidor (POST /api/lounge3d/[id]/acesso): o topo da Recepção, a nave, o buraco negro do DJ */
-  pedirAcesso?: (alvo: "topo" | "ceu" | "nave" | "dj") => Promise<{ ok: boolean; erro?: string }>;
+  pedirAcesso?: (alvo: "topo" | "ceu" | "nave" | "dj" | "ritual") => Promise<{ ok: boolean; erro?: string }>;
   /** o recado ATUAL do dono pro mural da Recepção (holograma ao lado da mesa; a TV do lounge mostra o último enviado) */
   recadoQG?: RecadoQG | null;
   /** o DONO manda (texto) ou apaga (null) o recado — o servidor confere a sessão */
@@ -69,6 +71,12 @@ export type CenaCyberProps = {
   somLounge?: SomLounge | null;
   offsetMusica?: number;
   musica?: (ApiMusica & { urlDe(arq: string): string }) | null;
+  /** o 2º canal do toca-discos: a MÚSICA DA NAVE do dono (o PC "som da nave" na cabine) */
+  somNave?: SomLounge | null;
+  musicaNave?: (ApiMusica & { urlDe(arq: string): string }) | null;
+  /** o RITUAL da chegada do dono (lib/cyber/ritual): o estado da sala e como o dono liga/desliga (o servidor confere) */
+  ritual?: Ritual | null;
+  definirRitual?: (m: { tempestade?: boolean; droids?: boolean }) => Promise<{ ok: boolean; erro?: string }>;
   /** a NAVE-QG: onde ela está estacionada (da sala) e como o dono guarda onde a estacionou */
   naveQG?: { x: number; y: number; z: number; yaw: number } | null;
   salvarNave?: (pose: { x: number; y: number; z: number; yaw: number }) => void;
@@ -139,9 +147,9 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [evCorrida, setEvCorrida] = useState<(EventoCorrida & { pista: string }) | null>(null);
   const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
   /** ação privilegiada: pergunta ao SERVIDOR antes (cb sempre fresco via ref) */
-  const pedir = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj", ok: () => void) => {
+  const pedir = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj" | "ritual", ok: () => void) => {
     const fn = cb.current.pedirAcesso;
-    if (!cb.current.souFundador || !fn) { avisar(alvo === "dj" ? "Só o dono atravessa este buraco negro." : alvo === "nave" ? "Só o dono pilota a nave." : "Só o dono sobe ao topo."); return; }
+    if (!cb.current.souFundador || !fn) { avisar(alvo === "dj" ? "Só o dono atravessa este buraco negro." : alvo === "nave" ? "Só o dono pilota a nave." : alvo === "ritual" ? "Só o dono inicia o ritual." : "Só o dono sobe ao topo."); return; }
     try { const r = await fn(alvo); if (r.ok) ok(); else avisar(r.erro ?? "Não autorizado."); } catch { avisar("Sem conexão."); }
   }, [avisar]);
   const [poiAberto, setPoiAberto] = useState<POI | null>(null), [noTopo, setNoTopo] = useState(false), [subindo, setSubindo] = useState(false), [erroTopo, setErroTopo] = useState<string | null>(null);
@@ -153,7 +161,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   // VOZ: segurar G (ou o botão no celular) = falar
   const voz = useRef<VozHandle | null>(null), [falandoEu, setFalandoEu] = useState(false);
   const comVoz = tela && vozLigada() && !!p.canalVoz && !instancia;   // no tutorial (a Zaeon só dele) não fala nem ouve ninguém
-  const [somAberto, setSomAberto] = useState(false);
+  const [somAberto, setSomAberto] = useState<"lounge" | "nave" | null>(null);
+  const [ritualAberto, setRitualAberto] = useState(false);
   const [recadoAberto, setRecadoAberto] = useState(false), [recadoTxt, setRecadoTxt] = useState(""), [recadoEnviando, setRecadoEnviando] = useState(false);
   const mudarSom = (n: { ligado: boolean; volume: number }) => {
     setSom(n);
@@ -231,11 +240,13 @@ export default function CenaCyber(p: CenaCyberProps) {
       onRota: setRota,
       remotosSuaves: transporteRealtime() === "colyseus",
       onNaveParada: (pose) => cb.current.salvarNave?.(pose),
-      onAbrirSom: () => { if (!cb.current.souFundador || !cb.current.musica) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(true); },
+      onAbrirSom: (canal) => { if (!cb.current.souFundador || !(canal === "nave" ? cb.current.musicaNave : cb.current.musica)) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(canal); },
+      onRitual: () => { void pedir("ritual", () => setRitualAberto(true)); },
+      onRitualChegou: () => { void cb.current.definirRitual?.({ tempestade: false }); },
       urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon escreve no mural."); return; } setRecadoTxt(""); setRecadoAberto(true); },
     }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.exporDepuracao(); eng.setPessoas(cb.current.membros); setLoading("saindo"); setTimeout(() => setLoading("off"), 550); })
-      .catch(() => { if (!cancelado) setFalha(true); });
+      .catch((e) => { console.error("[cyber] o motor não iniciou:", e); if (!cancelado) setFalha(true); });
     return () => { cancelado = true; e?.dispose(); engine.current = null; };
     // a engine é criada uma vez por montagem; mudanças vão por métodos
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,11 +275,14 @@ export default function CenaCyber(p: CenaCyberProps) {
   // OLHAR LIVRE (mouse travado): abriu um painel → solta o mouse pra clicar nele; Enter (fora de um campo) → solta e
   // foca o chat (dá pra falar sem precisar do Esc antes)
   const chatRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => { if (poiAberto || recadoAberto || somAberto) engine.current?.soltarMouse(); }, [poiAberto, recadoAberto, somAberto]);
+  useEffect(() => { if (poiAberto || recadoAberto || somAberto || ritualAberto) engine.current?.soltarMouse(); }, [poiAberto, recadoAberto, somAberto, ritualAberto]);
   // a nave-QG estacionada (da sala): vale enquanto o dono não mexe nela nesta sessão
   useEffect(() => { engine.current?.setNaveQG(p.naveQG ?? null); }, [p.naveQG, pronto]);
   // o toca-discos: o estado da sala vai pro player (a música sai das caixas do lounge, sincronizada)
   useEffect(() => { engine.current?.setSomLounge(p.somLounge ?? null, p.offsetMusica ?? 0); }, [p.somLounge, p.offsetMusica, pronto]);
+  useEffect(() => { engine.current?.setSomNave(p.somNave ?? null, p.offsetMusica ?? 0); }, [p.somNave, p.offsetMusica, pronto]);
+  // o ritual da chegada do dono: a tempestade e os anunciadores (o relógio do servidor vem com o offset da música)
+  useEffect(() => { engine.current?.setRitual(p.ritual ?? null, p.offsetMusica ?? 0); }, [p.ritual, p.offsetMusica, pronto]);
   useEffect(() => {
     const enter = (e: KeyboardEvent) => {
       const a = document.activeElement, campo = !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || (a as HTMLElement).isContentEditable);
@@ -458,7 +472,9 @@ export default function CenaCyber(p: CenaCyberProps) {
           onEscolher={(id) => { if (tunel.tipo === "escolher") engine.current?.viajarPeloTunel(id as IdNo | null); else engine.current?.atravessarBuracoDono(tunel.para); }}
           onFim={() => setTunel(null)} />
       )}
-      {somAberto && p.musica && <TocaDiscos som={p.somLounge ?? null} offsetMs={p.offsetMusica ?? 0} api={p.musica} onFechar={() => setSomAberto(false)} />}
+      {somAberto === "lounge" && p.musica && <TocaDiscos som={p.somLounge ?? null} offsetMs={p.offsetMusica ?? 0} api={p.musica} onFechar={() => setSomAberto(null)} />}
+      {somAberto === "nave" && p.musicaNave && <TocaDiscos canal="nave" som={p.somNave ?? null} offsetMs={p.offsetMusica ?? 0} api={p.musicaNave} onFechar={() => setSomAberto(null)} />}
+      {ritualAberto && p.definirRitual && <RitualPainel ritual={p.ritual ?? null} offsetMs={p.offsetMusica ?? 0} definir={p.definirRitual} onFechar={() => setRitualAberto(false)} />}
       {recadoAberto && (
         <div role="dialog" aria-modal="true" aria-label="Recado pro mural da Recepção" className="absolute inset-0 z-50 flex items-center justify-center bg-[#03030a]/60 px-4" onClick={() => setRecadoAberto(false)}>
           <div className="w-full max-w-[420px] rounded-2xl border border-cyan-300/30 bg-[#070c22]/95 p-4 text-sky-100 shadow-[0_0_40px_rgba(102,230,255,.15)]" onClick={(e) => e.stopPropagation()}>

@@ -79,7 +79,7 @@ function Tela() {
   // no tutorial (a Zaeon só dele, ainda sem a 1ª pose) fica FORA da voz até cruzar o 1º portal
   const onlineIds = useMemo(() => sala.online.filter((m) => m.pronto !== false).map((m) => m.id), [sala.online]);
   // ações privilegiadas do dono (topo, nave): quem decide é o servidor (sessão → fundador). A Zaeon é aberta a todos.
-  const pedirAcesso = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj") => {
+  const pedirAcesso = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj" | "ritual") => {
     if (!salaId) return { ok: false, erro: "Sem sala." };
     const r = await fetch(`/api/lounge3d/${salaId}/acesso`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ alvo }) });
     const d = await r.json().catch(() => ({}));
@@ -125,6 +125,7 @@ function Tela() {
       novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon} vozZaeon={vozZaeon}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
+      somNave={sala.somNave} musicaNave={sala.musicaNave} ritual={sala.ritual} definirRitual={sala.definirRitual}
       naveQG={sala.naveQG} salvarNave={sala.salvarNave}
       canalVoz={sala.canalVoz} onlineIds={onlineIds}
     />

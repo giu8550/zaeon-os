@@ -50,7 +50,10 @@ const DIST_DETALHE_VRM = { some: 24, volta: 20 };
 
 export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; corMoto: string; corpo: CorpoVrm; perfil: PerfilVida; starTex: THREE.Texture; low: boolean; gltf: GLTF; cena: THREE.Scene;
   /** prepara o VRM ANTES de entrar na cena (o engine: compila os shaders sem travar e sobe as texturas uma por quadro) */
-  preparar?: (o: THREE.Object3D) => Promise<void> }): PersonagemVivoHandle {
+  preparar?: (o: THREE.Object3D) => Promise<void>;
+  /** um personagem FIXO (sem agenda): fica em `pos` (mundo), `y` m acima do piso da ilha, virado pra `rumo` — o DJ do
+   *  lounge (`dj`: fone na cabeça, mãos na controladora, no compasso) */
+  fixo?: { pos: { x: number; z: number }; y: number; rumo: number; dj?: boolean } }): PersonagemVivoHandle {
   const { carrega: DIST_CARREGA, solta: DIST_SOLTA, esconde: DIST_ESCONDE } = DIST(o.low);
   const raiz = new THREE.Group(); raiz.name = `personagem-${o.id}`; o.cena.add(raiz);
   const av: AvatarLuzHandle = criarAvatarLuz(o.cor, o.starTex, o.low, o.gltf, { anime: true });
@@ -102,6 +105,23 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
     mostrar(on) { mostrado = on; raiz.visible = on; },
     atualizar(dt, t, agora, ilhaY, cam, obstaculos = []) {
       if (!mostrado) return;
+      if (o.fixo) {   // o personagem FIXO (o DJ): sem agenda nem moto — só o corpo no lugar, na pose dele
+        const f = o.fixo, dist = Math.hypot(cam.x - f.pos.x, cam.z - f.pos.z);
+        pos.set(f.pos.x, 0, f.pos.z); alt = ilhaY + f.y;
+        if (dist < DIST_CARREGA) carregar(); else if (dist > DIST_SOLTA) soltar();
+        raiz.visible = dist < DIST_ESCONDE; moto.group.visible = false; if (!raiz.visible) return;
+        const querDetalhe = comDetalhe ? dist < DIST_DETALHE_VRM.some : dist < DIST_DETALHE_VRM.volta;
+        if (querDetalhe !== comDetalhe) { comDetalhe = querDetalhe; av.detalheVrm(querDetalhe); }
+        const querTraco = comTraco ? dist < DIST_CONTORNO.some : dist < DIST_CONTORNO.volta;
+        if (querTraco !== comTraco) { comTraco = querTraco; for (const m of tracos) m.visible = querTraco; }
+        pulo += dt; const cada = dist > DIST_ANIMA_SEMPRE ? 0.05 : dist > DIST_ANIMA_CHEIO ? 1 / 40 : 0;
+        if (pulo < cada) { matrizDoAvatar(raiz, false); return; }
+        matrizDoAvatar(raiz, true);
+        const dtA = Math.min(0.2, pulo); pulo = 0;
+        av.group.position.set(f.pos.x, alt, f.pos.z); av.olharPara(f.rumo); av.poseVrm(null);
+        av.animar({ andando: false, correndo: false, dj: f.dj ? 1 : 0, dt: dtA, t });
+        return;
+      }
       const e = estadoEm(agora, o.perfil, cache); cache = e.bloco; estado = e;
       const p0 = mundo(e.pos);
       // DESVIA de quem está no caminho (o jogador, os outros) — o roteiro não muda, só o corpo contorna

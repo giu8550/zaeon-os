@@ -4,6 +4,7 @@
  * chat→nota. Nada de three/DOM/rede aqui.
  */
 import { sanitizarSom } from "./musica";
+import { ritualDesligado, sanitizarRitual } from "@/lib/cyber/ritual";
 import {
   LIMITE_SALA, MAX_ARTEFATOS, MAX_NOTAS, MAX_TEXTO_CHAT, MAX_TEXTO_NOTA, MAX_TEXTO_RECADO,
   type ArtefatoCanvas, type ConteudoSala, type NotaCanvas, type OpsSala, type Presenca, type RecadoQG,
@@ -83,8 +84,9 @@ export function lerConteudo(json: unknown): ConteudoSala {
   if (typeof json === "string") { try { o = JSON.parse(json); } catch { o = null; } }
   const notes = Array.isArray(o?.notes) ? o.notes.map(sanitizarNota).filter((n: NotaCanvas | null): n is NotaCanvas => !!n).slice(0, MAX_NOTAS) : [];
   const artifacts = Array.isArray(o?.artifacts) ? o.artifacts.map(sanitizarArtefato).filter((a: ArtefatoCanvas | null): a is ArtefatoCanvas => !!a).slice(0, MAX_ARTEFATOS) : [];
-  const recadoQG = sanitizarRecado(o?.recadoQG), somLounge = sanitizarSom(o?.somLounge), naveQG = naveParadaDe(o?.naveQG).naveParada;
-  return { notes, artifacts, ...(recadoQG ? { recadoQG } : {}), ...(somLounge && somLounge.faixas.length ? { somLounge } : {}), ...(naveQG ? { naveQG } : {}) };
+  const recadoQG = sanitizarRecado(o?.recadoQG), somLounge = sanitizarSom(o?.somLounge), somNave = sanitizarSom(o?.somNave), naveQG = naveParadaDe(o?.naveQG).naveParada;
+  const ritual = sanitizarRitual(o?.ritual);
+  return { notes, artifacts, ...(recadoQG ? { recadoQG } : {}), ...(somLounge && somLounge.faixas.length ? { somLounge } : {}), ...(somNave && somNave.faixas.length ? { somNave } : {}), ...(ritualDesligado(ritual) ? {} : { ritual }), ...(naveQG ? { naveQG } : {}) };
 }
 
 /**
@@ -105,6 +107,8 @@ export function aplicarOps(atual: ConteudoSala, ops: OpsSala): ConteudoSala {
   const out: ConteudoSala = { notes: notes.slice(-MAX_NOTAS), artifacts: artifacts.slice(-MAX_ARTEFATOS) };
   if (atual.recadoQG) out.recadoQG = atual.recadoQG;   // editar notas não apaga o recado do QG…
   if (atual.somLounge) out.somLounge = atual.somLounge;   // …nem a playlist do lounge…
+  if (atual.somNave) out.somNave = atual.somNave;         // …nem a da nave…
+  if (atual.ritual) out.ritual = atual.ritual;            // …nem o ritual do dono…
   if (atual.naveQG) out.naveQG = atual.naveQG;            // …nem onde a nave-QG está estacionada
   return out;
 }

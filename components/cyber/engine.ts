@@ -15,7 +15,8 @@ import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } fro
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
 import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
 import { TEMPLO } from "@/lib/cyber/templo";
-import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
+import { ANUNCIADOR, FRASE_LOUVOR, TURBO_NAVE, chegou as chegouDoRitual, faseDaTempestade, instanteDaEnergia, intensidadeDaTempestade, posDoAnunciador, proximaFala, ritualDesligado, sensacaoDaNave, type FaseRitual, type Ritual } from "@/lib/cyber/ritual";
+import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type ComandoVoo, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
 import { QualidadeAdaptativa } from "@/lib/cyber/qualidadeAdaptativa";
@@ -174,7 +175,12 @@ export type CyberOpts = {
   /** o dono ESTACIONOU a nave-QG (largou o leme): onde ela ficou parada — o React guarda na sala (todos a veem ali) */
   onNaveParada?: (pose: PoseNave) => void;
   /** o dono usou o TOCA-DISCOS do lounge (F perto dele) → abre o player de música */
-  onAbrirSom?: () => void;
+  /** abrir o toca-discos: `canal` = as caixas do lounge (a mesa do DJ / o PC da cabine) ou a MÚSICA DA NAVE (o outro PC) */
+  onAbrirSom?: (canal: "lounge" | "nave") => void;
+  /** o dono pisou na "call" do RITUAL (o buraco negro da nave): o React abre o painel do ritual (pede acesso antes) */
+  onRitual?: () => void;
+  /** o dono CHEGOU no lounge com a tempestade armada: o React desliga a tempestade (o ritual acabou) */
+  onRitualChegou?: () => void;
   /** URL de uma música da playlist do lounge (rota da sala); sem isto (modo solo/prévia) o lounge fica sem som */
   urlMusica?: (arq: string) => string;
   /** as poses remotas JÁ chegam suavizadas (netcode do Colyseus: interpolação + dead reckoning) → usa direto, sem
@@ -355,6 +361,16 @@ export class CyberEngine {
   private solana: SolanaHouseHandle | null = null;
   /** o player do toca-discos do lounge (a música sai das caixas, sincronizada pra sala toda) */
   private somLounge: SomLoungeHandle | null = null;
+  /** a MÚSICA DA NAVE do dono (o 2º canal do toca-discos): sai da nave, posicional — criado quando a nave existe */
+  private musicaNave: SomLoungeHandle | null = null; private musicaNavePendente: { som: SomLounge | null; offset: number } | null = null;
+  /** o RITUAL da chegada do dono (lib/cyber/ritual): o estado da sala + o relógio (servidor − cliente) */
+  private ritual: Ritual | null = null; private ritualOffset = 0; private ritualFase: FaseRitual = "off";
+  /** o instante (servidor) da última ENERGIZAÇÃO das caixas já disparada (não repete pro mesmo ritual) */
+  private ritualEnergizado = 0; private ritualChegouAvisado = 0;
+  /** os ANUNCIADORES: um droid por pessoa (eu + os remotos), rodeando a cabeça dela e louvando */
+  private anunciadores = new Map<string, { h: DroidHandle; k: number; prox: number; fala: { pos: THREE.Vector3; alt: number }; indo: boolean }>();
+  /** o TURBO da nave (0..1, com rampa) */
+  private turboNave = 0;
   /** em pé num LUGAR FLUTUANTE (universidade / Solana House) e em que andar (lib/cyber/plataformas) */
   private plat: { id: IdPlataforma; andar: number } | null = null;
   private nave: NaveHandle | null = null;
@@ -479,7 +495,7 @@ export class CyberEngine {
     const gltf = await carregarModeloAvatar().catch((e) => { console.warn("[cyber] avatar GLB não carregou:", e); return null; });
     const eng = new CyberEngine(opts, gltf);
     try { await eng.montarMundo(p); }
-    catch (e) { eng.dispose(); throw e; }
+    catch (e) { console.error("[cyber] montarMundo falhou:", e); try { eng.dispose(); } catch { /* já quebrado */ } throw e; }
     return eng;
   }
 
@@ -542,7 +558,7 @@ export class CyberEngine {
         aoBater: (em) => { if (this.noCentroDaCapela()) this.som?.tocar("coracao", em, { dist: DISTANCIA.coracao }); },
         // o TROVÃO da tempestade do templo: só pra quem está perto (na Zaeon do lado do lounge) e chega DEPOIS do clarão (o som anda ~340 m/s)
         aoTrovao: (em) => {
-          if (!this.prontoDisparado || !this.noCeu || this.bordo) return;
+          if (!this.prontoDisparado || !this.noCeu || this.bordo || this.ritualFase !== "armada") return;   // (os raios só ganham som depois do trovão que energiza as caixas)
           const d = Math.hypot(em.x - this.eu.pos.x, em.y - this.eu.alt, em.z - this.eu.pos.z); if (d > 600) return;
           const p = em.clone(); setTimeout(() => this.som?.tocar("raio", p, { dist: DISTANCIA.raio, taxa: 0.6 + Math.random() * 0.25 }), Math.min(1500, (d / 340) * 1000));
         } });
@@ -844,6 +860,14 @@ export class CyberEngine {
   }
   private criarPersonagens() {
     if (!this.vivo || !this.cidade || !this.gltf || this.personagens.length) return;
+    // o DJ (o Scholar) na cabine da torre, de frente pra pista, com o fone e as mãos na controladora — PRIMEIRO da lista:
+    // o corpo dele é o 1º da fila de VRMs (a festa não espera os 13 da cidadela carregarem)
+    { const p = DJ_DO_LOUNGE, corpo = CORPOS_VRM[p.id], perfil = PERFIS_VIDA[p.id];
+      if (corpo && perfil) {
+        const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene, preparar: (obj) => this.prepararVrm(obj), fixo: { pos: pontoDaCabineDJ(), y: PISO_FESTA + TORRE_DJ.topo, rumo: rumoDoDJ(), dj: true } });
+        const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = `${p.nome} · DJ`; this.o.overlay.appendChild(tag);
+        this.personagens.push({ h, tag });
+      } }
     for (const p of PERSONAGENS_DA_CIDADELA) {
       const corpo = CORPOS_VRM[p.id]; if (!corpo) continue;
       const perfil = PERFIS_VIDA[p.id]; if (!perfil) continue;
@@ -1614,6 +1638,68 @@ export class CyberEngine {
   }
   /** o DROID: aparece num mini portal do lado da pessoa (quando o tutorial começa — e de novo depois de um teleporte);
    *  vai PLANANDO do lado dela, ou NA FRENTE quando o passo é "vem comigo até…"; olha pra ela; some no portal no fim */
+  /** o RITUAL da chegada do dono (lib/cyber/ritual): a tempestade se forma em cima da capela do templo (todo mundo vê
+   *  a mesma formação: o instante vem do servidor), os raios começam no meio dela e, no fim, o 1º TROVÃO ENERGIZA as
+   *  caixas do lounge — a música cala um instante e o som do raio sai do buraco negro em cima da cabine do DJ; daí em
+   *  diante todo raio tem som. Acaba quando o dono pisa no lounge (o cliente dele avisa o React) */
+  private atualizarRitual(dt: number, t: number) {
+    void dt; void t;
+    const agora = Date.now() + this.ritualOffset, r = this.ritual, i = intensidadeDaTempestade(r, agora), fase = faseDaTempestade(r, agora);
+    this.ritualFase = fase;
+    this.cidade?.tempestade(i, fase === "raios" || fase === "armada");
+    if (!r || fase === "off") return;
+    const energia = instanteDaEnergia(r);
+    if (agora >= energia && this.ritualEnergizado !== r.tempestade && agora - energia < 20_000) {   // (quem chega bem depois não repete o estouro)
+      this.ritualEnergizado = r.tempestade;
+      const bn = new THREE.Vector3(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z);
+      this.cidade?.raioNoTemplo(bn);                          // o relâmpago cai do templo no buraco negro do DJ
+      this.somLounge?.abafar(2.2);                            // as caixas calam: o trovão energizou o som do lounge
+      if (this.noCeu && !this.bordo) this.som.tocar("raio", bn, { dist: DISTANCIA.raio, volume: 1, taxa: 0.75 });   // o som do raio saindo do buraco negro
+    } else if (this.ritualEnergizado !== r.tempestade && agora >= energia) this.ritualEnergizado = r.tempestade;
+    // o DONO CHEGOU no lounge (a pé): o ritual acabou — o React desliga a tempestade (uma vez por ritual)
+    const noLounge = this.noCeu && !this.bordo && !this.pilotando && salaEm({ x: this.eu.pos.x - CIDADE.centro.x, z: this.eu.pos.z - CIDADE.centro.z }) === "lounge" && this.eu.alt > (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE - 1;
+    if (chegouDoRitual(this.ehFundador(this.o.eu.id), noLounge, r) && this.ritualChegouAvisado !== r.tempestade && agora - r.tempestade > 15_000) { this.ritualChegouAvisado = r.tempestade; this.o.onRitualChegou?.(); }
+  }
+  /** os ANUNCIADORES (lib/cyber/ritual): com o ritual ligado, cada pessoa no mapa (eu e os outros) ganha um droid
+   *  rodeando a cabeça dela, louvando o dono em voz alta de vez em quando; desligado, somem no portal */
+  private atualizarAnunciadores(dt: number, t: number) {
+    const querem = !!this.ritual?.droids && !this.menu && !this.instancia;
+    const alvos: { id: string; x: number; y: number; z: number; obj: THREE.Object3D }[] = [];
+    if (querem) {
+      if (!this.bordo && !this.pilotando && !this.nascendo) alvos.push({ id: this.o.eu.id, x: this.eu.pos.x, y: this.eu.alt, z: this.eu.pos.z, obj: this.eu.av.group });
+      for (const [id, a] of this.remotos) if (a.av.group.visible && !a.nave) alvos.push({ id, x: a.pos.x, y: a.alt, z: a.pos.z, obj: a.av.group });
+    }
+    const vistos = new Set<string>();
+    alvos.forEach((al, idx) => {
+      vistos.add(al.id);
+      let an = this.anunciadores.get(al.id);
+      if (!an) {
+        const h = criarDroid({ low: this.o.low }); h.group.scale.setScalar(ANUNCIADOR.escala); this.cena.scene.add(h.group);
+        const p0 = posDoAnunciador(idx, t, al); h.group.position.set(p0.x, p0.y, p0.z); h.aparecer();
+        an = { h, k: idx, prox: t + 1.5 + (idx % 5) * 0.9, fala: { pos: new THREE.Vector3(p0.x, 0, p0.z), alt: p0.y - 0.9 }, indo: false };
+        this.anunciadores.set(al.id, an);
+      } else if (an.indo && an.h.fase() === "oculto") { an.h.aparecer(); an.indo = false; }
+      const p = posDoAnunciador(an.k, t, al);
+      an.h.group.position.set(p.x, p.y, p.z); an.fala.pos.set(p.x, 0, p.z); an.fala.alt = p.y - 0.9;
+      an.h.atualizar(dt, t, p.rumo);
+      // o LOUVOR: a voz gravada (droid-louvor, com PALAVRAS) presa ao droid — sem o arquivo ainda (carregando), fica só o
+      // balão: a voz sem palavras do Droid do tutorial NÃO entra aqui (o dono quer ouvir a frase)
+      if (t >= an.prox && an.h.fase() === "visivel") {
+        an.prox = proximaFala(an.k, t);
+        const d = this.cam.position.distanceTo(an.h.group.position);
+        if (d < 140) {
+          this.balao(an.fala, FRASE_LOUVOR, DROID.cor, 3800);
+          if (this.som.temSom("droid-louvor")) this.som.tocar("droid-louvor", null, { dist: DISTANCIA.eu, volume: 1.2, seguir: an.h.group });
+        }
+      }
+    });
+    for (const [id, an] of this.anunciadores) {
+      if (vistos.has(id)) continue;
+      if (!an.indo) { an.indo = true; an.h.sumir(); this.falas = this.falas.filter((f) => { if (f.ator === an.fala) { f.el.remove(); return false; } return true; }); }
+      else if (an.h.fase() === "oculto") { an.h.dispose(); this.anunciadores.delete(id); }
+      else an.h.atualizar(dt, t, 0);
+    }
+  }
   private atualizarAgentes(dt: number, t: number) {
     const d = this.droid; if (!d) return;
     const eu = this.eu, fase = d.h.fase(), passo = this.guia ? ROTEIRO[this.guia.passo] : undefined;
@@ -1925,6 +2011,7 @@ export class CyberEngine {
     if (this.nave && this.somLoops.naveIdle && this.somLoops.naveVoo) {
       const voando = this.pilotando && !this.pousado, vel = Math.hypot(this.naveEst.vx, this.naveEst.vz) / VOO.vel;
       s.volumeLoop(this.somLoops.naveVoo, voando ? 0.35 + 0.65 * Math.min(1, vel) : 0);
+      s.taxaLoop(this.somLoops.naveVoo, 1 + 0.45 * this.turboNave, 3);   // em turbo, o motor sobe de tom
       s.volumeLoop(this.somLoops.naveIdle, voando || !this.nave.group.visible ? 0 : 1);
       s.distanciaLoop(this.somLoops.naveIdle, this.pilotando ? DISTANCIA.naveLocal : DISTANCIA.grande);
       // SUBIR/DESCER: o som sai UMA vez, no começo da ação (apertou), preso à nave; depois fica só o som de voo
@@ -1993,6 +2080,20 @@ export class CyberEngine {
   }
   /** a playlist/estado do toca-discos do lounge (da sala) + a diferença de relógio servidor − cliente (ms) */
   setSomLounge(som: SomLounge | null, offsetMs = 0) { this.somLounge?.aplicar(som, offsetMs); }
+  /** a música da NAVE (o PC "som da nave"): sai da própria nave do dono — a minha, pilotando ou parada, ou a dele, remota */
+  setSomNave(som: SomLounge | null, offsetMs = 0) {
+    this.musicaNavePendente = { som, offset: offsetMs };
+    if (!this.musicaNave) { const fonte = this.fonteDaNave(); if (fonte && this.o.urlMusica) this.musicaNave = criarSomLounge({ audio: this.som, caixas: [fonte], urlDe: this.o.urlMusica }); }
+    this.musicaNave?.aplicar(som, offsetMs);
+  }
+  /** de onde a música da nave sai: a nave do dono (a minha, se eu sou ele; senão a dele, remota) */
+  private fonteDaNave(): THREE.Object3D | null {
+    if (this.nave && this.ehFundador(this.o.eu.id)) return this.nave.group;
+    for (const [id, a] of this.remotos) if (a.nave && this.ehFundador(id)) return a.nave.group;
+    return null;
+  }
+  /** o RITUAL da chegada do dono mudou (a sala): a tempestade no templo e os anunciadores */
+  setRitual(r: Ritual | null, offsetMs = 0) { this.ritual = r && !ritualDesligado(r) ? r : null; this.ritualOffset = offsetMs; }
   /** releitura das preferências de som (o React chama ao mudar liga/desliga ou volume) */
   aplicarPrefsSom() { this.som.aplicarPrefs(); }
 
@@ -2300,6 +2401,9 @@ export class CyberEngine {
       const a = acaoNaNave(this.bordo, this.ehFundador(this.o.eu.id));
       if (a === "pilotar") return { id: "pilotar", rotulo: "Pilotar a nave", fazer: () => this.o.onEmbarcar?.() };
       if (a === "estudar") return { id: "estudar-nave", rotulo: "Estudar (meu desktop)", fazer: () => this.o.onEntrarEstudo?.() };
+      if (a === "somLounge") return { id: "som-lounge", rotulo: "Som do lounge (playlist)", fazer: () => this.o.onAbrirSom?.("lounge") };
+      if (a === "somNave") return { id: "som-nave", rotulo: "Som da nave (playlist)", fazer: () => this.o.onAbrirSom?.("nave") };
+      if (naBocaNave(this.bordo) && this.ehFundador(this.o.eu.id)) return { id: "ritual", rotulo: this.ritual?.tempestade ? "Ritual da chegada (armado)" : "Iniciar o ritual da chegada", fazer: () => this.o.onRitual?.() };
       if (a === "sair" && this.saidaSegura()) return { id: "sair-nave", rotulo: "Sair da nave", fazer: () => this.sairDaNave() };   // pairando no ar: desce-se pela rampa (e pula-se de mochila)
       return null;
     }
@@ -2313,7 +2417,7 @@ export class CyberEngine {
     if (this.nave && this.navePerto()) return { id: "entrar-nave", rotulo: "Entrar na nave", fazer: () => this.entrarNaNave() };
     if (this.noCeu && this.cidade?.tocaDiscos && this.ehFundador(this.o.eu.id)) {
       const td = this.cidade.tocaDiscos.getWorldPosition(this.tmp);
-      if (Math.hypot(this.eu.pos.x - td.x, this.eu.pos.z - td.z) < 2.6) return { id: "som", rotulo: "Mesa do DJ", fazer: () => this.o.onAbrirSom?.() };
+      if (Math.hypot(this.eu.pos.x - td.x, this.eu.pos.z - td.z) < 2.6) return { id: "som", rotulo: "Mesa do DJ", fazer: () => this.o.onAbrirSom?.("lounge") };
     }
     if (this.noCeu && this.cidade?.tvLounge && this.ehFundador(this.o.eu.id)) {
       const tv = this.cidade.tvLounge.getWorldPosition(this.tmp);
@@ -2534,7 +2638,8 @@ export class CyberEngine {
     if (this.posAnt) { const v = Math.hypot(this.eu.pos.x - this.posAnt.x, this.eu.pos.z - this.posAnt.z) / Math.max(dt, 1e-3); this.velPlano += ((v > 80 ? 0 : v) - this.velPlano) * Math.min(1, dt * 10); }
     this.posAnt = { x: this.eu.pos.x, z: this.eu.pos.z };
     const aPe = this.moto === null && !this.pilotando && !this.menu ? sensacaoAPe(this.velPlano, this.jet.noAr) : 0;
-    const alvoVel = Math.max(this.moto !== null && !this.motoPousado ? sensacaoDeVelocidade(this.motoEst) : 0, aPe);
+    const naveTurbo = this.pilotando && !this.pousado ? sensacaoDaNave(Math.hypot(this.naveEst.vx, this.naveEst.vz), this.turboNave) : 0;
+    const alvoVel = Math.max(this.moto !== null && !this.motoPousado ? sensacaoDeVelocidade(this.motoEst) : 0, aPe, naveTurbo);
     this.velTela += (alvoVel - this.velTela) * (1 - Math.exp(-dt * (alvoVel > this.velTela ? 3 : 1.8)));
     if (!this.fovBase) this.fovBase = this.cam.fov;
     const fov = this.fovBase + 12 * Math.min(1.15, this.velTela);
@@ -2649,11 +2754,14 @@ export class CyberEngine {
       if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
       if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
       ix += this.botDir.x; iz += this.botDir.z;
-      const subir = this.voY.subir, descerManual = this.voY.descer || !!this.keys.shift;
+      const subir = this.voY.subir, descerManual = this.voY.descer;
       this.cmdVoo.subir = subir; this.cmdVoo.descer = descerManual;
       if (ix || iz || subir || descerManual) { this.autoPouso = false; this.pararRota(); }
+      // o TURBO (Shift / ⚡, como correr a pé): a nave cruza o mapa a 2,6× — com rampa, e só com a direção apertada
+      const querTurbo = (!!this.keys.shift || this.boostBotao) && (ix !== 0 || iz !== 0) && !this.pousado;
+      this.turboNave += ((querTurbo ? 1 : 0) - this.turboNave) * Math.min(1, dtReal / TURBO_NAVE.rampa);
       const dir = moverRelativoCamera(ix, iz, this.camAz);
-      let cmd = { wx: dir?.wx ?? 0, wz: dir?.wz ?? 0, subir, descer: descerManual || this.autoPouso };
+      let cmd: ComandoVoo = { wx: dir?.wx ?? 0, wz: dir?.wz ?? 0, subir, descer: descerManual || this.autoPouso, turbo: this.turboNave };
       if (this.rota) {   // atalho: o piloto automático aperta os mesmos botões (direção em mundo)
         const f = seguirRota(this.naveEst, this.rota.pontos, this.pousado);
         this.rota.pontos = f.rota; cmd = f.cmd;
@@ -2856,12 +2964,13 @@ export class CyberEngine {
       if (no && this.portalArmado) this.abrirTunel(no);
       else if (!no) this.portalArmado = true;
     }
-    // o PAR DO DONO: a boca na cabine do DJ (lá em cima da torre) e a da nave (sala de reuniões)
-    if (!this.menu && !this.pilotando && this.moto === null && !this.jet.noAr && !this.tunel) {
-      const naBoca = this.bordo ? naBocaNave(this.bordo) : this.noCeu && naBocaDJ(eu.pos) && eu.alt > (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + PISO_FESTA + TORRE_DJ.topo - 0.5;
+    // o PAR DO DONO: a boca na cabine do DJ (lá em cima da torre) leva pra nave; a da nave (sala de reuniões) virou a
+    // "call" do RITUAL (F — lib/cyber/ritual): o dono chega de nave, anunciado
+    if (!this.menu && !this.pilotando && this.moto === null && !this.jet.noAr && !this.tunel && !this.bordo) {
+      const naBoca = this.noCeu && naBocaDJ(eu.pos) && eu.alt > (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + PISO_FESTA + TORRE_DJ.topo - 0.5;
       if (naBoca && this.bocaDonoArmada) {
         this.bocaDonoArmada = false;
-        if (this.ehFundador(this.o.eu.id)) this.o.onBuracoDono?.(this.bordo ? "dj" : "nave");
+        if (this.ehFundador(this.o.eu.id)) this.o.onBuracoDono?.("nave");
         else this.o.onAviso?.("Só o dono atravessa este buraco negro.");
       } else if (!naBoca) this.bocaDonoArmada = true;
     }
@@ -2877,6 +2986,8 @@ export class CyberEngine {
     this.atualizarNascimentoEGuia(dt);
     this.atualizarConversa(dt);
     this.atualizarAgentes(dt, t);
+    this.atualizarRitual(dt, t);
+    this.atualizarAnunciadores(dt, t);
     if (this.holoZaeon && this.holoZaeon.fase() !== "oculto") this.holoZaeon.atualizar(dt, t, this.cam.position);
 
     // motos (antes dos avatares: quem está montado encaixa no banco/guidão/pedaleiras da moto já posicionada)
@@ -2933,6 +3044,7 @@ export class CyberEngine {
     }
     if (this.praca && this.regiaoPerto(this.praca.group, "praca")) this.praca.atualizar(dt, t);
     if (this.somLounge) { this.somLounge.atualizar(dt); this.cidade?.somTocando(this.somLounge.tocando, this.somLounge.nivel); }
+    if (this.musicaNave) this.musicaNave.atualizar(dt); else if (this.musicaNavePendente?.som) this.setSomNave(this.musicaNavePendente.som, this.musicaNavePendente.offset);   // (a nave do dono apareceu: liga a música dela)
     if (this.holo) {   // o holograma acompanha a base do QG (que flutua junto com o marco)
       const lay = baseNoQG(), w = lay ? localParaMundo(lay, HOLO_NA_BASE.x, HOLO_NA_BASE.z) : null;
       if (lay && w) { this.holo.group.position.set(w.x, this.yDoNivel("qg"), w.z); this.holo.group.rotation.y = lay.rot + HOLO_NA_BASE.giro; }
@@ -3146,7 +3258,7 @@ export class CyberEngine {
     this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.somLounge?.dispose(); this.som.dispose();
+    this.somLounge?.dispose(); this.musicaNave?.dispose(); for (const a of this.anunciadores.values()) a.h.dispose(); this.anunciadores.clear(); this.som.dispose();
     this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }
@@ -3162,6 +3274,9 @@ function base64ParaBuffer(b64: string): ArrayBuffer | null {
   try { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; } catch { return null; }
 }
 
+/** o DJ do lounge (out/2026): o SCHOLAR saiu da agenda da cidadela e ficou FIXO na cabine do DJ, comandando a festa
+ *  (a música quem põe é o dono, da cabine da nave) */
+const DJ_DO_LOUNGE = { id: "scholar", nome: "Scholar", cor: "#94a3b8", corMoto: "#64748b" } as const;
 /** os personagens que vivem na cidadela (id = a chave de CORPOS_VRM e de PERFIS_VIDA — a agenda dele) */
 const PERSONAGENS_DA_CIDADELA = [
   { id: "nina", nome: "Nina", cor: "#f472b6", corMoto: "#ff7ab8" },
@@ -3170,7 +3285,6 @@ const PERSONAGENS_DA_CIDADELA = [
   { id: "examiner", nome: "Examiner", cor: "#f87171", corMoto: "#dc2626" },
   { id: "zenita", nome: "Zenita", cor: "#fcd34d", corMoto: "#f5b82e" },
   { id: "core_active", nome: "Davi", cor: "#fb923c", corMoto: "#f97316" },
-  { id: "scholar", nome: "Scholar", cor: "#94a3b8", corMoto: "#64748b" },
   { id: "zaeon", nome: "Zaeon", cor: "#38bdf8", corMoto: "#0ea5e9" },
   { id: "caio", nome: "Caio", cor: "#60a5fa", corMoto: "#3b82f6" },
   { id: "enfermagem", nome: "Nightingale", cor: "#fda4af", corMoto: "#f43f5e" },
