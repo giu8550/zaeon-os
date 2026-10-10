@@ -17,6 +17,7 @@ import { criarMoto, loteMoto } from "./Moto";
 /** um estacionamento: a laje flutuante + o piso das vagas (referencial do lote: a fila corre em x, a frente é +z) */
 function criarPlataforma(l: EstacionamentoEstudo, low: boolean): THREE.Group {
   const g = new THREE.Group(), { larg, prof } = tamanhoDoLote(l), L = larg + 3, P = prof + 3, H = 1.4;
+  if (l.ambiente === "lounge") { g.add(criarPisoEstacionamento({ low, parado: true, lote: l }).group); return g; }   // no PÁTIO do lounge: sem laje
   const laje = new THREE.Mesh(new THREE.BoxGeometry(L, H, P), new THREE.MeshStandardMaterial({ color: 0x0a1424, emissive: 0x0c1c36, emissiveIntensity: 0.5, roughness: 0.6, metalness: 0.5 }));
   laje.position.y = -H / 2; g.add(laje);
   // a BORDA de luz (em cima e embaixo da laje) — dá pra ver de longe onde a plataforma está

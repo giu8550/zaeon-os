@@ -13,7 +13,8 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
-import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PALCO as PALCO_LOUNGE, naSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
+import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
+import { TEMPLO } from "@/lib/cyber/templo";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
@@ -253,7 +254,9 @@ const comDescendentes = (objs: (THREE.Object3D | null | undefined)[]) => { const
 
 /** as áreas das 3 grandes regiões (a caixa automática pegaria o anel do elevador / o portal lá no chão) */
 const cil = (c: { x: number; z: number }, r: number, y: number, abaixo: number, acima: number) => () => ({ x: c.x, z: c.z, r, y0: y - abaixo, y1: y + acima });
-const AREA_ZAEON = cil(CIDADE.centro, Math.max(CIDADE.bordaR + 90, -CIDADE.salas.lounge.x + CIDADE.salas.lounge.r + 10), CIDADE.pisoY, CIDADE.ilhaAltura + CIDADE.agulha.altura + 10, 220);   // + ilhotas, a escada e o lounge
+/** até onde vai o TEMPLO (lib/cyber/templo), medido do centro da ilha */
+function raioDoTemplo() { const L = CIDADE.salas.lounge, t = daSala(L, TEMPLO.x, TEMPLO.z); return Math.hypot(t.x, t.z) + TEMPLO.r; }
+const AREA_ZAEON = cil(CIDADE.centro, Math.max(CIDADE.bordaR + 90, -CIDADE.salas.lounge.x + CIDADE.salas.lounge.r + 10, raioDoTemplo() + 10), CIDADE.pisoY, CIDADE.ilhaAltura + CIDADE.agulha.altura + 10, 220);   // + ilhotas, a escada e o lounge
 const AREA_UNILAB = cil(UNIVERSIDADE.centro, UNIVERSIDADE.discoR, UNIVERSIDADE.y, 100, 80);
 const AREA_SOLANA = cil(PLATAFORMAS.solana.centro, PLATAFORMAS.solana.r + 10, PLATAFORMAS.solana.y, 40, 40);
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
@@ -536,7 +539,13 @@ export class CyberEngine {
       await etapa("zaeon");
       this.cidade = criarCidade({ low, starTex: this.cena.starTex,
         aoRaio: (em) => { if (this.noCentroDaCapela()) this.som?.tocar("raio", em, { dist: DISTANCIA.raio, taxa: 0.9 + Math.random() * 0.2 }); },
-        aoBater: (em) => { if (this.noCentroDaCapela()) this.som?.tocar("coracao", em, { dist: DISTANCIA.coracao }); } });
+        aoBater: (em) => { if (this.noCentroDaCapela()) this.som?.tocar("coracao", em, { dist: DISTANCIA.coracao }); },
+        // o TROVÃO da tempestade do templo: só pra quem está perto (na Zaeon do lado do lounge) e chega DEPOIS do clarão (o som anda ~340 m/s)
+        aoTrovao: (em) => {
+          if (!this.prontoDisparado || !this.noCeu || this.bordo) return;
+          const d = Math.hypot(em.x - this.eu.pos.x, em.y - this.eu.alt, em.z - this.eu.pos.z); if (d > 600) return;
+          const p = em.clone(); setTimeout(() => this.som?.tocar("raio", p, { dist: DISTANCIA.raio, taxa: 0.6 + Math.random() * 0.25 }), Math.min(1500, (d / 340) * 1000));
+        } });
       camuflarGrupo(this.cidade.group);
       { const c = this.cidade;   // lotes: simula com e sem música (o palco, as caixas e a pista pulsam com o grave)
         fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalTunel, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge, ...c.caixasAmbiente.map((x) => x.obj)].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
@@ -1153,7 +1162,7 @@ export class CyberEngine {
       const baixo = v.y - pisoAqui < JET.alturaBases ? this.colisoresDoNivel("ceu") : [], naves = v.y < topo - 0.2 ? this.colisoresDeNaves(CIDADE.pisoY) : [];
       let q = empurrarParaFora(resolverCidadeLivre(eu.pos), [...baixo, ...naves]);
       // a CABINE DO DJ é do dono: pra todo o resto a torre é um campo de força (não se pousa lá em cima de mochila)
-      if (!this.ehFundador(this.o.eu.id) && v.y < base + ALTURA_LOUNGE + TORRE_DJ.topo + CAMPO_DJ && naTorreDJ(q, 0.6)) q = foraDaTorreDJ(q);
+      if (!this.ehFundador(this.o.eu.id) && v.y < base + PISO_FESTA + TORRE_DJ.topo + CAMPO_DJ && naTorreDJ(q, 0.6)) q = foraDaTorreDJ(q);
       // a RECEPÇÃO e os MIRANTES: pousa no salão (vindo de cima); por baixo do salão a ilha da pirâmide é sólida
       for (const rc of this.marcosDaZaeon()) {
         const pisoM = this.pisoDoMarco(rc), dx = q.x - rc.mn.x, dz = q.z - rc.mn.z, d = Math.hypot(dx, dz);
@@ -2849,7 +2858,7 @@ export class CyberEngine {
     }
     // o PAR DO DONO: a boca na cabine do DJ (lá em cima da torre) e a da nave (sala de reuniões)
     if (!this.menu && !this.pilotando && this.moto === null && !this.jet.noAr && !this.tunel) {
-      const naBoca = this.bordo ? naBocaNave(this.bordo) : this.noCeu && naBocaDJ(eu.pos) && eu.alt > (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE + TORRE_DJ.topo - 0.5;
+      const naBoca = this.bordo ? naBocaNave(this.bordo) : this.noCeu && naBocaDJ(eu.pos) && eu.alt > (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + PISO_FESTA + TORRE_DJ.topo - 0.5;
       if (naBoca && this.bocaDonoArmada) {
         this.bocaDonoArmada = false;
         if (this.ehFundador(this.o.eu.id)) this.o.onBuracoDono?.(this.bordo ? "dj" : "nave");
@@ -2893,7 +2902,7 @@ export class CyberEngine {
         a.tab = Math.max(0, Math.min(1, (a.tab ?? 0) + (ok && dd.tablet ? dt / TABLET.materializa : -dt / TABLET.some)));
         if (dd.modo) { const lg = lugarEm(a.pos); a.assentoY = lg?.alturaAssento ?? 0.7; a.relaxa = lg?.relaxa ? 1 : 0; } }
       // na escada só se está sendo levado; no elevador da torre, quem está no ar dentro da coluna de luz
-      const qs = naSala(CIDADE.salas.lounge, a.pos.x - CIDADE.centro.x, a.pos.z - CIDADE.centro.z), naColuna = Math.hypot(qs.x, qs.z - TORRE_DJ.elevador.sobe) < 1.6 && a.alt > CIDADE.pisoY + ALTURA_LOUNGE + PALCO_LOUNGE.h + 0.6;
+      const qs = naSala(CIDADE.salas.lounge, a.pos.x - CIDADE.centro.x, a.pos.z - CIDADE.centro.z), naColuna = Math.hypot(qs.x, qs.z - TORRE_DJ.elevador.sobe) < 1.6 && a.alt > CIDADE.pisoY + PISO_FESTA + PALCO_LOUNGE.h + 0.6;
       const surfando = !!a.ceu && a.jet === undefined && naColuna, puxado = !!a.ceu && a.jet === undefined && monta === null && naEscadaDoLounge(a.pos);
       a.surf = (a.surf ?? 0) + ((surfando ? 1 : 0) - (a.surf ?? 0)) * Math.min(1, dt * 5);
       a.puxa = (a.puxa ?? 0) + ((puxado ? 1 : 0) - (a.puxa ?? 0)) * Math.min(1, dt * 5);

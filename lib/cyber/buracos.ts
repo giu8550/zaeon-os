@@ -63,7 +63,7 @@ export const destinosDe = (origem: IdNo | null) => IDS_NOS.filter((id) => id !==
 // ───────────── o PAR DO DONO: cabine do DJ ↔ nave ─────────────
 /** a boca do buraco negro grande NA CABINE do DJ (referencial da sala do lounge, lá em cima da torre) — atrás da
  *  mesa, longe do anel de descer e do lugar do DJ */
-export const BOCA_DJ = { x: -2.4, z: -20.2, r: 0.75 } as const;
+export const BOCA_DJ = { x: -2.4, z: TORRE_DJ.z - 2.2, r: 0.75 } as const;
 /** onde se aparece na cabine ao chegar da nave (referencial da sala): o topo do elevador, de frente pra pista */
 export const CHEGADA_DJ = { x: 0, z: TORRE_DJ.elevador.chegaEmCima } as const;
 /** a boca no mundo (o visual e os testes) */

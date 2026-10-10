@@ -11,6 +11,8 @@
 import * as THREE from "three";
 import { BN_NA_SALA, CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
 import { BOCA_DJ } from "@/lib/cyber/buracos";
+import { DECK, PATIO, saidaDoLounge } from "@/lib/cyber/templo";
+import { criarOlho } from "./OlhoHolografico";
 import { linhasDoRecado } from "@/lib/cyber/recado";
 import type { PisoOclusor } from "./oclusaoPisos";
 
@@ -289,7 +291,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const bocaAro = new THREE.Mesh(new THREE.TorusGeometry(BOCA_DJ.r, 0.06, 6, 40), basica(0xffb45a, 0.9, true)); bocaAro.rotation.x = Math.PI / 2; bocaAro.position.set(bx, A + 0.05, bz); p.add(bocaAro);
       const bocaPoco = new THREE.Mesh(new THREE.CircleGeometry(BOCA_DJ.r - 0.05, 32), new THREE.MeshBasicMaterial({ color: 0x05030a, transparent: true, opacity: 0.9 })); bocaPoco.rotation.x = -Math.PI / 2; bocaPoco.position.set(bx, A + 0.03, bz); p.add(bocaPoco);
       const bocaGiro = new THREE.Mesh(new THREE.RingGeometry(BOCA_DJ.r * 0.5, BOCA_DJ.r * 0.6, 32, 1, 0, Math.PI * 1.5), basica(0xff7a2c, 0.8, true)); bocaGiro.rotation.x = -Math.PI / 2; bocaGiro.position.set(bx, A + 0.04, bz); p.add(bocaGiro);
-      const fioDe = new THREE.Vector3(bx, A + 0.1, bz), fioD = new THREE.Vector3(0, BN_NA_SALA.y - PALCO.h - 5, BN_NA_SALA.z - T.z).sub(fioDe), fioL = fioD.length();
+      const fioDe = new THREE.Vector3(bx, A + 0.1, bz), fioD = new THREE.Vector3(0, BN_NA_SALA.y - DECK.h - PALCO.h - 5, BN_NA_SALA.z - T.z).sub(fioDe), fioL = fioD.length();
       const fioG = new THREE.CylinderGeometry(0.9, BOCA_DJ.r * 0.7, fioL, 16, 1, true); fioG.translate(0, fioL / 2, 0);
       const fio = new THREE.Mesh(fioG, basica(0xffb45a, 0.2, true)); fio.position.copy(fioDe); fio.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), fioD.normalize()); p.add(fio);
       anim.push((dt, t) => {
@@ -552,6 +554,56 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     },
   };
 
+  /** o LOUNGE EM DOIS NÍVEIS (lib/cyber/templo): o DECK da festa (laje alta atrás de `zFrente`, com guarda-corpo de
+   *  vidro na frente), a RAMPA larga do meio, as CALÇADAS do pátio (a central, da porta até a rampa, com postes de luz;
+   *  e a da frente do deck) e o OLHO holográfico em cima do DJ */
+  function doisNiveis(g: THREE.Group, s: { r: number }) {
+    const R = s.r - 0.35, zf = DECK.zFrente, h = DECK.h + 0.16, xf = Math.sqrt(R * R - zf * zf), fr = Math.atan2(-zf, xf);
+    // o DECK: o disco cortado na frente, extrudado pra cima (forma no plano: y = −z da sala)
+    const sh = new THREE.Shape(); sh.moveTo(-xf, -zf); sh.lineTo(xf, -zf); sh.absarc(0, 0, R, fr, Math.PI - fr, false);
+    const dg = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false, curveSegments: o.low ? 32 : 72 }); dg.rotateX(-Math.PI / 2);
+    const topoMat = new THREE.MeshStandardMaterial({ color: 0x170b2c, emissive: 0x1a0d36, emissiveIntensity: 0.7, roughness: 0.35, metalness: 0.45 });
+    const ladoMat = new THREE.MeshStandardMaterial({ color: 0x0b0f1e, emissive: 0x0c1430, emissiveIntensity: 0.5, roughness: 0.5, metalness: 0.6 });
+    const deck = new THREE.Mesh(dg, [topoMat, ladoMat]); g.add(deck); alvos.push(deck);
+    // o rejunte de luz do deck (anéis concêntricos fininhos em volta da pista, como um palco de show)
+    for (const rr of [24, 36, 48]) { const a = new THREE.Mesh(new THREE.RingGeometry(rr - 0.06, rr + 0.06, o.low ? 48 : 96, 1, 0.25, Math.PI - 0.5), basica(0x7a5aff, 0.35, true)); a.rotation.x = -Math.PI / 2; a.position.set(0, h + 0.01, -12); g.add(a); }
+    // a frente do deck: faixa de LED na quina, frisos verticais no espelho e o guarda-corpo de vidro (menos na rampa)
+    const { meia, len } = DECK.rampa;
+    for (const sx of [-1, 1]) {
+      const w = xf - meia, cx = sx * (meia + w / 2);
+      caixa(g, w, 0.07, 0.07, basica(0xb98cff, 0.95, true), cx, h - 0.04, zf + 0.04);
+      caixa(g, w, 1.1, 0.06, o.paredeMat, cx, h + 0.55, zf + 0.1);
+      caixa(g, w, 0.05, 0.08, basica(0x66e6ff, 0.9, true), cx, h + 1.1, zf + 0.1);
+      for (let x = meia + 1.5; x < xf - 1; x += 3) caixa(g, 0.06, h - 0.4, 0.04, basica(FESTA[Math.floor(x / 3) % FESTA.length]!, 0.55, true), sx * x, h / 2, zf + 0.03);
+    }
+    // a RAMPA: a laje inclinada, os degraus de luz e os corrimãos de vidro dos lados
+    const L = Math.hypot(len, DECK.h), ang = Math.atan2(DECK.h, len), rampa = new THREE.Group(); rampa.position.set(0, 0.16 + DECK.h / 2, zf + len / 2); rampa.rotation.x = ang; g.add(rampa);
+    const laje = new THREE.Mesh(new THREE.BoxGeometry(meia * 2, 0.3, L), topoMat); laje.position.y = -0.15; rampa.add(laje); alvos.push(laje);
+    for (let k = 1; k < 12; k++) caixa(rampa, meia * 2 - 0.4, 0.02, 0.06, basica(0x9fe8ff, 0.5, true), 0, 0.01, -L / 2 + (k * L) / 12);
+    for (const sx of [-1, 1]) { caixa(rampa, 0.06, 1.0, L, o.paredeMat, sx * (meia + 0.3), 0.5, 0); caixa(rampa, 0.08, 0.06, L, basica(0x66e6ff, 0.9, true), sx * (meia + 0.3), 1.0, 0); }
+    // a base da rampa (a cunha embaixo), escura
+    { const cg = new THREE.BufferGeometry(), z0 = zf, z1 = zf + len, y1 = h, mx = meia;
+      const v = [-mx, 0.16, z0, mx, 0.16, z0, mx, y1, z0, -mx, y1, z0, -mx, 0.16, z1, mx, 0.16, z1];
+      cg.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); cg.setIndex([0, 2, 1, 0, 3, 2, 0, 4, 3, 1, 2, 5, 3, 4, 5, 3, 5, 2]); cg.computeVertexNormals();
+      g.add(new THREE.Mesh(cg, ladoMat)); }
+    // as CALÇADAS do pátio: a central (da porta até o pé da rampa) e a da frente do deck; postes de luz na central
+    const calcMat = new THREE.MeshStandardMaterial({ color: 0x2a2440, emissive: 0x241a44, emissiveIntensity: 0.6, roughness: 0.6, metalness: 0.2 });
+    const cm = PATIO.calcadaMeia, cz0 = zf + len, cz1 = s.r - 0.5;
+    const calc = new THREE.Mesh(new THREE.BoxGeometry(cm * 2, 0.06, cz1 - cz0), calcMat); calc.position.set(0, 0.19, (cz0 + cz1) / 2); g.add(calc);
+    for (const sx of [-1, 1]) caixa(g, 0.1, 0.03, cz1 - cz0, basica(0xb98cff, 0.85, true), sx * cm, 0.23, (cz0 + cz1) / 2);
+    const frente = new THREE.Mesh(new THREE.BoxGeometry(2 * Math.sqrt(R * R - (zf + 4) ** 2), 0.06, 4), calcMat); frente.position.set(0, 0.19, zf + 2); g.add(frente);
+    const posteMat = new THREE.MeshStandardMaterial({ color: 0x1c2438, roughness: 0.35, metalness: 0.85 });
+    for (let z = cz0 + 4; z < cz1 - 2; z += 9) for (const sx of [-1, 1]) {
+      const x = sx * (cm + 0.8); caixa(g, 0.16, 4.2, 0.16, posteMat, x, 2.1, z);
+      caixa(g, 1.1, 0.08, 0.16, posteMat, x - sx * 0.5, 4.2, z);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), basica(0xffe2b0, 1)); lamp.position.set(x - sx * 1.0, 4.05, z); g.add(lamp);
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), basica(0xffc87a, 0.18, true)); halo.position.copy(lamp.position); g.add(halo);
+    }
+    // o OLHO em cima do DJ (acima do buraco negro), inclinado pra pista
+    const olho = criarOlho({ low: o.low, tam: 46 }); olho.group.position.set(0, DECK.h + 60, -44); olho.group.rotation.x = 0.55; g.add(olho.group);
+    anim.push((_, t) => olho.atualizar(calmo ? t * 0.3 : t, batida(), ativo));
+  }
+
   for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) {
     const s = CIDADE.salas[nome], tema = TEMA[nome], porta = s.porta ?? CIDADE.salaParede.porta, ALT = tema.alt;
     const g = new THREE.Group(); g.position.set(s.x, s.y ?? 0, s.z); g.rotation.y = rotDaSala(s); ilha.add(g);   // o lounge: lá no alto
@@ -560,9 +612,13 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     piso.position.y = 0.08; g.add(piso); alvos.push(piso);
     const friso = new THREE.Mesh(new THREE.RingGeometry(s.r - 0.32, s.r - 0.18, 64), basica(tema.brilho, 0.7, true)); friso.rotation.x = -Math.PI / 2; friso.position.y = 0.17; g.add(friso);
     // parede de vidro com a PORTA em +z local (no CylinderGeometry: x = r·sen θ, z = r·cos θ → +z é θ = 0)
-    const parede = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r, ALT, o.low ? 32 : 48, 1, true, porta, Math.PI * 2 - 2 * porta), o.paredeMat); parede.position.y = ALT / 2; g.add(parede);
-    const aro = new THREE.TorusGeometry(s.r, 0.09, 6, 64, Math.PI * 2 - 2 * porta); aro.rotateX(Math.PI / 2); aro.rotateY(-(Math.PI / 2 + porta));
-    for (const y of [ALT, 0.25]) { const m = new THREE.Mesh(aro, basica(tema.brilho, 0.8, true)); m.position.y = y; g.add(m); }
+    // (o LOUNGE tem também a SAÍDA pra escadaria do templo, à direita — lib/cyber/templo)
+    const arcos: [number, number][] = nome === "lounge" ? (() => { const sd = saidaDoLounge(s.r), th = Math.PI / 2 - sd.ang; return [[porta, th - sd.meia], [th + sd.meia, Math.PI * 2 - porta]]; })() : [[porta, Math.PI * 2 - porta]];
+    const segP = o.low ? 32 : nome === "lounge" ? 96 : 48;
+    for (const [a0, a1] of arcos) {
+      const parede = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r, ALT, segP, 1, true, a0, a1 - a0), o.paredeMat); parede.position.y = ALT / 2; g.add(parede);
+      for (const y of [ALT, 0.25]) { const m = new THREE.Mesh(new THREE.CylinderGeometry(s.r + 0.02, s.r + 0.02, 0.16, segP, 1, true, a0, a1 - a0), basica(tema.brilho, 0.8, true)); m.position.y = y; g.add(m); }
+    }
     // portal da porta: 2 colunas + verga (no clube a céu aberto, um PÓRTICO alto na chegada da escada)
     const pz = Math.cos(porta) * s.r, px = Math.sin(porta) * s.r, colMat = new THREE.MeshStandardMaterial({ color: 0x0c1a30, emissive: tema.brilho, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.4 });
     const AP = tema.aberto ? 9 : ALT + 0.5;
@@ -572,6 +628,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const teto = new THREE.Mesh(new THREE.SphereGeometry(s.r, o.low ? 20 : 32, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x0a1830, emissive: tema.brilho, emissiveIntensity: 0.12, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false, roughness: 0.2 }));
       teto.scale.y = 0.32; teto.position.y = ALT; g.add(teto);
     }
+    if (nome === "lounge") doisNiveis(g, s);
     // móveis (`y` = elevação própria, ex.: a mesa do DJ em cima do palco; senão, no piso da sala)
     salaAtual = nome;
     for (const m of MOVEIS[nome]) { const p = new THREE.Group(); p.position.set(m.x, m.y ?? 0.16, m.z); p.rotation.y = m.rot; g.add(p); MOVEL[m.tipo]?.(p, m, tema); }

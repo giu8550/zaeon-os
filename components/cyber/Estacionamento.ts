@@ -6,14 +6,16 @@
  * vêm uma atrás da outra (lib/cyber/motos: `vagaNoLote`). As motos e o robô são do engine.
  */
 import * as THREE from "three";
-import { PLATAFORMA_MOTO, tamanhoDoLote, vagaNoLote, type Lote } from "@/lib/cyber/motos";
+import { PLATAFORMA_MOTO, faixasDoLote, tamanhoDoLote, vagaNoLote, type Lote } from "@/lib/cyber/motos";
 
 export type PisoEstacionamentoHandle = { group: THREE.Group; atualizar(t: number): void; dispose(): void };
 
 export function criarPisoEstacionamento(o: { low: boolean; parado?: boolean; lote: Lote }): PisoEstacionamentoHandle {
   const g = new THREE.Group(), l = o.lote, { larg, prof } = tamanhoDoLote(l), e = l.espacamento;
-  const piso = new THREE.Mesh(new THREE.BoxGeometry(larg, 0.1, prof), new THREE.MeshStandardMaterial({ color: 0x0b1222, emissive: 0x0c1830, emissiveIntensity: 0.45, roughness: 0.8, metalness: 0.35 }));
-  piso.position.y = 0.05; g.add(piso);
+  const pisoMat = new THREE.MeshStandardMaterial({ color: 0x0b1222, emissive: 0x0c1830, emissiveIntensity: 0.45, roughness: 0.8, metalness: 0.35 });
+  if (l.corredor) for (const sx of [-1, 1]) { const w = (larg - l.corredor) / 2, pm = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, prof), pisoMat); pm.position.set(sx * (l.corredor / 2 + w / 2), 0.05, 0); g.add(pm); }   // o vão da calçada fica livre
+  else { const piso = new THREE.Mesh(new THREE.BoxGeometry(larg, 0.1, prof), pisoMat); piso.position.y = 0.05; g.add(piso); }
+  const faixas = faixasDoLote(l);
   const faixa = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.8 });
   const fundo = new THREE.MeshBasicMaterial({ color: 0x45d6ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
   const poste = new THREE.MeshStandardMaterial({ color: 0x1c2438, roughness: 0.35, metalness: 0.85 });
@@ -23,8 +25,8 @@ export function criarPisoEstacionamento(o: { low: boolean; parado?: boolean; lot
   for (let f = 0; f < l.filas; f++) {
     const zf = vagaNoLote(l, f, 0).z;
     // faixas entre as vagas (ao longo da profundidade) + a linha do fundo + o fundo de luz de cada vaga
-    for (let i = 0; i <= l.porFila; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 5), faixa); b.position.set((i - l.porFila / 2) * e, 0.115, zf); g.add(b); }
-    const linha = new THREE.Mesh(new THREE.BoxGeometry(l.porFila * e, 0.03, 0.12), faixa); linha.position.set(0, 0.115, zf - 2.56); g.add(linha);
+    for (const x of faixas) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 5), faixa); b.position.set(x, 0.115, zf); g.add(b); }
+    for (const sx of l.corredor ? [-1, 1] : [0]) { const w = l.corredor ? (l.porFila / 2) * e : l.porFila * e, linha = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, 0.12), faixa); linha.position.set(sx * (w / 2 + (l.corredor ?? 0) / 2), 0.115, zf - 2.56); g.add(linha); }
     for (let i = 0; i < l.porFila; i++) { const q = new THREE.Mesh(new THREE.PlaneGeometry(e - 0.8, 4.6), fundo); q.rotation.x = -Math.PI / 2; q.position.set(vagaNoLote(l, f, i).x, 0.12, zf); g.add(q); }
     // a PLATAFORMA DE LANÇAMENTO de cada vaga: pedestal sextavado (a moto parada fica em cima), anel de luz no topo e
     // uma faixa de luz na lateral — de onde se sai pairando
@@ -37,8 +39,7 @@ export function criarPisoEstacionamento(o: { low: boolean; parado?: boolean; lot
       const faixaLat = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.06, R * 1.08, 0.06, 6, 1, true), anelMat); faixaLat.position.set(x, H * 0.45, zf); faixaLat.rotation.y = Math.PI / 6; g.add(faixaLat);
     }
     // postes de recarga atrás da fila (um entre cada vaga), com um anel de luz no alto
-    for (let i = 0; i <= l.porFila; i++) {
-      const x = (i - l.porFila / 2) * e;
+    for (const x of faixas) {
       const p = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 2.6, o.low ? 6 : 10), poste); p.position.set(x, 1.3, zf - 3.15); g.add(p);
       const a = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 6, 16), anelMat); a.rotation.x = Math.PI / 2; a.position.set(x, 2.45, zf - 3.15); g.add(a);
     }
@@ -52,7 +53,7 @@ export function criarPisoEstacionamento(o: { low: boolean; parado?: boolean; lot
     atualizar(t) { if (o.parado) return; anelMat.opacity = 0.55 + 0.2 * Math.sin(t * 1.4); fundo.opacity = 0.18 + 0.06 * Math.sin(t * 1.1); },
     dispose() {
       g.traverse((x) => { const m = x as THREE.Mesh; m.geometry?.dispose(); });
-      for (const m of [piso.material as THREE.Material, faixa, fundo, poste, anelMat, pedestal, tampo]) m.dispose();
+      for (const m of [pisoMat, faixa, fundo, poste, anelMat, pedestal, tampo]) m.dispose();
       g.removeFromParent();
     },
   };
