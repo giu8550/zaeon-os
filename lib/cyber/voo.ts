@@ -8,12 +8,14 @@ import { foraDaIlha, chaoDaNave } from "./ceu";
 import type { Colisor } from "./colisao";
 
 export type EstadoVoo = { x: number; y: number; z: number; yaw: number; vx: number; vy: number; vz: number };
-export type ComandoVoo = { wx: number; wz: number; subir: boolean; descer: boolean };
+/** `turbo` (0..1): o modo TURBO da nave (Shift, como correr a pé — lib/cyber/ritual `TURBO_NAVE`): a velocidade de
+ *  cruzeiro vira até `VOO.turbo`× */
+export type ComandoVoo = { wx: number; wz: number; subir: boolean; descer: boolean; turbo?: number };
 
 /** vel/sobe em m/s; `dtMax` = maior quadro aceito (aba que voltou do fundo); `subpasso` = passo da física */
 /** `freio`: soltar a direção para a nave em poucos metros (paira ali) */
 /** `decolar`: no chão (ou a menos disso acima dele) a nave NÃO anda de lado — tem que subir primeiro */
-export const VOO = { vel: 30, sobe: 38, inercia: 3, freio: 7, decolar: 1.5, yMax: 720, raioMapa: 1500, dtMax: 0.25, subpasso: 1 / 60 };
+export const VOO = { vel: 30, sobe: 38, inercia: 3, freio: 7, decolar: 1.5, yMax: 720, raioMapa: 1500, dtMax: 0.25, subpasso: 1 / 60, turbo: 2.6 };
 
 /** folga de pouso: o topo dos marcos flutua (±0,15 m); parada a até isso acima do chão = pousada */
 export const POUSO_TOL = 0.3;
@@ -34,7 +36,8 @@ export function passoVoo(s: EstadoVoo, c: ComandoVoo, dt: number, solidos: Pilar
   const rente = s.y - chaoDoVoo(s, solidos) < VOO.decolar;
   const m = rente ? 0 : Math.hypot(c.wx, c.wz);
   const k = Math.min(1, dt * (m > 0 ? VOO.inercia : VOO.freio)), ky = Math.min(1, dt * (c.subir || c.descer ? VOO.inercia : VOO.freio));
-  const tx = m > 0 ? (c.wx / m) * VOO.vel : 0, tz = m > 0 ? (c.wz / m) * VOO.vel : 0;
+  const vel = VOO.vel * (1 + (VOO.turbo - 1) * Math.max(0, Math.min(1, c.turbo ?? 0)));   // o TURBO
+  const tx = m > 0 ? (c.wx / m) * vel : 0, tz = m > 0 ? (c.wz / m) * vel : 0;
   const ty = (c.subir ? VOO.sobe : 0) - (c.descer ? VOO.sobe : 0);
   let { x, y, z, yaw, vx, vy, vz } = s;
   vx += (tx - vx) * k; vz += (tz - vz) * k; vy += (ty - vy) * ky;

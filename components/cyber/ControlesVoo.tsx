@@ -54,7 +54,7 @@ function DicaTeclado({ engine, moto }: { engine: React.MutableRefObject<CyberEng
   const tecla = "rounded border border-white/25 bg-white/10 px-1.5 py-px font-mono text-[10px] text-white";
   const itens: [string, string][] = moto
     ? [["W S", "acelera · freia"], ["A D", "vira"], ["Shift", "boost"], ["Espaço Q", "sobe · desce"], ["P", "pousa"], ["F", "desce da moto"]]
-    : [["W A S D", "voa"], ["Espaço Q", "sobe · desce"], ["P", "pousa"], ["F", "sai"]];
+    : [["W A S D", "voa"], ["Shift", "turbo"], ["Espaço Q", "sobe · desce"], ["P", "pousa"], ["F", "sai"]];
   return (
     <div ref={caixa} aria-label="Teclas do veículo" className="group pointer-events-none absolute z-[25] flex flex-col items-end gap-1.5 rounded-xl border border-sky-300/20 bg-[#070b1c]/60 px-3 py-2 text-[11px] text-sky-50/85 backdrop-blur" style={{ right: "max(16px, env(safe-area-inset-right))", bottom: "max(16px, env(safe-area-inset-bottom))" }}>
       {itens.map(([k, o]) => <div key={k} className="flex items-center gap-2"><span>{o}</span><span className="flex gap-1">{k.split(" ").map((x) => <kbd key={x} className={tecla}>{x}</kbd>)}</span></div>)}
@@ -84,7 +84,8 @@ function BotoesToque({ engine, pousado, moto }: { engine: React.MutableRefObject
         <button type="button" onClick={() => engine.current?.pousar()} className={`${BTN} absolute z-[25] h-[44px] px-4 text-[12px]`}
           style={{ right: "max(22px, env(safe-area-inset-right))", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 144px)" }}>Pousar</button>
       )}
-      {/* ⚡ ao lado do Subir */}
+      {/* ⚡ ao lado do Subir (a moto: o boost com o tanque; a nave: o TURBO) */}
+      {!moto && <Segurar aria="Turbo (segurar; Shift no teclado)" rotulo="⚡ Turbo" on={(v) => engine.current?.boostMoto(v)} className="absolute z-[25] h-[62px] w-[78px] text-[13px]" style={{ right: "calc(max(22px, env(safe-area-inset-right)) + 88px)", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 72px)" }} />}
       {moto && <Boost engine={engine} style={{ right: "calc(max(22px, env(safe-area-inset-right)) + 88px)", bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 72px)" }} />}
     </>
   );

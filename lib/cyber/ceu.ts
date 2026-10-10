@@ -10,6 +10,7 @@
  */
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 import { colisoresDoDistritoTerra } from "./terra";
+import { DECK, TEMPLO, alturaDaEscadaria, alturaNoLounge, bordaDoDeck, bordasDaEscadaria, colisoresDoTemplo, noCorredorDaEscadaria, noTemplo, saidaDoLounge } from "./templo";
 
 /** a ZAEON MEGA (out. 2026): a cidadela virou uma MEGA PLATAFORMA — 3× mais larga que antes, bem mais ALTA (450 m) e
  *  longe da UNILAB e da Solana (o mapa cresceu junto). A capela (expandida) fica só com o GLOBO no centro; o LOUNGE saiu
@@ -47,7 +48,7 @@ export const CIDADE = {
    *  os robôs que as fabricam — maior) e 2 espaços de convivência minimalistas e sonorizados (biblioteca e jardim), em
    *  leque a cada 60°, todos do lado oposto à doca da nave. As salas se ligam à central por FIOS DE ENERGIA que puxam */
   salas: {
-    lounge: { x: 0 as number, z: 0 as number, r: 40, y: 0 as number, porta: 0.15, ang: Math.PI },
+    lounge: { x: 0 as number, z: 0 as number, r: 70, y: 0 as number, porta: 0.15, ang: Math.PI },   // 3× maior (out/2026): pátio + deck da festa (lib/cyber/templo)
     garagem: { x: 0 as number, z: 0 as number, r: 62, y: 0 as number, porta: 0.15, ang: (Math.PI * 4) / 3 },
     biblioteca: { x: 0 as number, z: 0 as number, r: 40, y: 0 as number, porta: 0.15, ang: (Math.PI * 5) / 3 },
     jardim: { x: 0 as number, z: 0 as number, r: 40, y: 0 as number, porta: 0.15, ang: 0 },
@@ -75,6 +76,8 @@ for (const sl of Object.values(CIDADE.salas)) {
   sl.x = limpo(Math.cos(sl.ang) * d); sl.z = limpo(Math.sin(sl.ang) * d);
 }
 export const ALTURA_LOUNGE = CIDADE.salas.lounge.y;
+/** o piso da FESTA (o deck do lounge, acima do pátio) — o palco, a torre e a cabine do DJ ficam em cima dele */
+export const PISO_FESTA = ALTURA_LOUNGE + DECK.h;
 
 /**
  * A ESCADA do lounge: reta, flutuando, do piso da plataforma central (perto da borda) até a porta da plataforma do
@@ -106,6 +109,13 @@ export function salaEm(l: P2, folga = 0): NomeSala | null {
 const noDiscoDoLounge = (l: P2, folga = 0) => { const L = CIDADE.salas.lounge; return Math.hypot(l.x - L.x, l.z - L.z) <= L.r + folga; };
 /** (local da ilha) numa escada ou no disco de uma sala — o chão que fica FORA do raio andável da central */
 export const naEscadaOuLounge = (l: P2) => dentroDaEscada(l) || salaEm(l) !== null;
+/** (local da ilha) no TEMPLO ou na ESCADARIA que leva a ele (lib/cyber/templo) — chão também, fora das salas */
+export function noTemploOuEscadaria(l: P2, folga = 0): boolean {
+  const L = CIDADE.salas.lounge;
+  if (Math.hypot(l.x - L.x, l.z - L.z) > L.r + TEMPLO.r * 2 + 80) return false;   // (longe: nem calcula)
+  const q = naSala(L, l.x, l.z);
+  return noTemplo(q, folga) || (q.x > 40 && q.z < 0 && noCorredorDaEscadaria(q, folga) !== null);
+}
 /** o FIO DE ENERGIA de cada escada: o cabo passa a `alturaFio` m acima da linha da rampa (do pé ao topo); quem é puxado
  *  vai pendurado na alça, com os pés a `pes` m acima dela; no máximo `max` pessoas por fio ao mesmo tempo */
 export const FIO = { alturaFio: 3.1, pes: 0.55, max: 4, flecha: 2.2 } as const;
@@ -154,6 +164,10 @@ export function colisoresDaCidade(): Colisor[] {
   }
   for (const c of bordaDoPalco()) out.push({ ...mundo(daSala(CIDADE.salas.lounge, c.x, c.z)), r: PALCO.colR });
   for (const c of bordaDaTorre()) out.push({ ...mundo(daSala(CIDADE.salas.lounge, c.x, c.z)), r: TORRE_DJ.colR });
+  { const L = CIDADE.salas.lounge;   // o desnível pátio↔deck, a escadaria do templo (muralha + guarda-corpo) e o templo
+    for (const c of bordaDoDeck(L.r)) out.push({ ...mundo(daSala(L, c.x, c.z)), r: DECK.colR });
+    for (const c of bordasDaEscadaria(L.r)) out.push({ ...mundo(daSala(L, c.x, c.z)), r: 0.5 });
+    for (const c of colisoresDoTemplo()) out.push({ ...mundo(daSala(L, c.x, c.z)), r: c.r }); }
   const { cidadela, mesaHolo } = CIDADE;
   for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
   out.push({ ...mundo({ x: 0, z: 0 }), r: mesaHolo.r });
@@ -174,23 +188,23 @@ export type Movel = { tipo: string; x: number; z: number; rot: number; larg: num
  * controladora). Atrás da mesa, a CABINE: quem para ali vira DJ (fone na cabeça, mãos na controladora, balançando).
  */
 export const PALCO = {
-  z: -17, r: 10, h: 3,   // mais alto e maior (o lounge cresceu: plataforma própria de 40 m)
+  z: -44, r: 10, h: 3,   // no fundo do DECK da festa (o lounge cresceu de novo: 70 m) — em cima do deck (`PISO_FESTA`)
   /** escada: meia-largura e comprimento (desce do palco rumo à pista) */
   escada: { meia: 2.5, len: 6 },
   /** colisores da borda: passo e raio */
   passo: 0.6, colR: 0.5,   // (0,6: os colisores se sobrepõem bem — num quadro lento o passo não atravessa a borda)
   /** a cabine do DJ (atrás da mesa, lá em cima na TORRE): centro, raio; quem está nela olha pra pista (+z da sala) */
-  cabine: { x: 0, z: -17.35, r: 0.95 },   // encosta na mesa (o colisor dela vai até −17,05): as mãos alcançam a controladora
+  cabine: { x: 0, z: -44.35, r: 0.95 },   // encosta na mesa (o colisor dela vai até −17,05): as mãos alcançam a controladora
 } as const;
 /** a TORRE DO DJ: a MEGA ESTRUTURA de cristal que sobe do palco até a cabine, lá no alto (na altura da bola de
  *  espelhos). O círculo dela é sólido pra quem está no palco e é o guarda-corpo de quem está lá em cima; sobe-se pelo
  *  ELEVADOR DE LUZ atrás dela (pisou no anel do palco, sobe surfando; no anel lá de cima, desce). */
-export const TORRE_DJ = { z: -18, r: 4.5, topo: 12, colR: 0.5, passo: 0.6,
-  elevador: { r: 1, sobe: -23.9, chegaEmCima: -20.4, desce: -21.6, rDesce: 0.7, chegaEmbaixo: -25.3, dur: 3.6 } } as const;
-export const MESA_DJ = { x: 0, z: -16.4, larg: 4.2, prof: 1, topo: 1.05 } as const;
+export const TORRE_DJ = { z: -45, r: 4.5, topo: 12, colR: 0.5, passo: 0.6,
+  elevador: { r: 1, sobe: -50.9, chegaEmCima: -47.4, desce: -48.6, rDesce: 0.7, chegaEmbaixo: -52.3, dur: 3.6 } } as const;
+export const MESA_DJ = { x: 0, z: -43.4, larg: 4.2, prof: 1, topo: 1.05 } as const;
 /** a ESTRUTURA DE METAL alta (treliça) de onde pendem as caixas: 2 torres + viga; as caixas SUSPENSAS (line arrays) */
-export const TRELICA = { x: 17, z: -19, alt: 26, viga: 24 } as const;
-export const CAIXAS_SUSPENSAS = [{ x: -14, z: -11 }, { x: 14, z: -11 }] as const;
+export const TRELICA = { x: 17, z: -46, alt: 26, viga: 24 } as const;
+export const CAIXAS_SUSPENSAS = [{ x: -14, z: -38 }, { x: 14, z: -38 }] as const;
 /** uma ZONA de lounge (referencial da sala): tapete aceso + o miolo (mesinha baixa com narguilé, fogueira holográfica
  *  ou só a mesinha) + os assentos em volta virados pra ele, com a boca aberta pra `abre` (ângulo: sen/cos = x/z) */
 export function zonaLounge(cx: number, cz: number, abre: number, cor: number, tipo: "narguile" | "fogueira" | "mesinha"): Movel[] {
@@ -210,12 +224,15 @@ export function zonaLounge(cx: number, cz: number, abre: number, cor: number, ti
   }
   return out;
 }
+/** os móveis do lounge vão em cima do DECK da festa: a elevação de cada um soma DECK.h */
+function noDeck(lista: Movel[]): Movel[] { return lista.map((m) => ({ ...m, y: (m.y ?? 0.16) + DECK.h })); }
 export const MOVEIS: Record<NomeSala, Movel[]> = {
   // LOUNGE = CLUBE a céu aberto na plataforma própria: telão no fundo, palco de cristal alto com a mesa do DJ, a
   // treliça com as caixas suspensas (as torres dela são sólidas), as TORRES de som gigantes e os subs no chão, pista de
   // LED e sofás nas laterais
-  lounge: [
-    { tipo: "tv", x: 0, z: -33, rot: 0, larg: 22, prof: 1 },
+  // (out/2026) tudo isso em cima do DECK da festa (`y` já soma DECK.h); o pátio (a chegada, as motos) fica na frente
+  lounge: noDeck([
+    { tipo: "tv", x: 0, z: -62, rot: 0, larg: 30, prof: 1 },
     { tipo: "palco", x: 0, z: PALCO.z, rot: 0, larg: 0, prof: 0, solido: false, y: 0 },   // colisão própria (bordaDoPalco)
     { tipo: "torreDJ", x: 0, z: TORRE_DJ.z, rot: 0, larg: 0, prof: 0, solido: false, y: PALCO.h },   // colisão própria (bordaDaTorre)
     { tipo: "mesaDJ", x: MESA_DJ.x, z: MESA_DJ.z, rot: 0, larg: MESA_DJ.larg, prof: MESA_DJ.prof, y: TORRE_DJ.topo },
@@ -223,18 +240,20 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     { tipo: "trelica", x: TRELICA.x, z: TRELICA.z, rot: 0, larg: 2.4, prof: 2.4 },
     { tipo: "caixaSom", x: CAIXAS_SUSPENSAS[0].x, z: CAIXAS_SUSPENSAS[0].z, rot: 0.3, larg: 3.2, prof: 2.2, solido: false },   // suspensa: não ocupa o chão
     { tipo: "caixaSom", x: CAIXAS_SUSPENSAS[1].x, z: CAIXAS_SUSPENSAS[1].z, rot: -0.3, larg: 3.2, prof: 2.2, solido: false },
-    { tipo: "torreSom", x: -22, z: -10, rot: 0.45, larg: 3.6, prof: 2.6 },   // as TORRES de som gigantes no chão (10 m), como antes — além das suspensas
-    { tipo: "torreSom", x: 22, z: -10, rot: -0.45, larg: 3.6, prof: 2.6 },
-    { tipo: "sub", x: -13, z: -4, rot: 0.3, larg: 3, prof: 2 },
-    { tipo: "sub", x: 13, z: -4, rot: -0.3, larg: 3, prof: 2 },
-    { tipo: "pista", x: 0, z: 9, rot: 0, larg: 26, prof: 18, solido: false },
-    // as ZONAS de lounge (pra não ser só pista): 2 rodas de sofá com NARGUILÉ nas laterais, puffs em volta de uma
-    // FOGUEIRA holográfica e um cantinho com mesinha perto da entrada — todas abertas pro lado da pista/do caminho
-    ...zonaLounge(-27, 7, Math.PI / 2, 0xb98cff, "narguile"),
-    ...zonaLounge(27, 7, -Math.PI / 2, 0x66e6ff, "narguile"),
-    ...zonaLounge(-17, 27, Math.PI / 2, 0xff9a5c, "fogueira"),
-    ...zonaLounge(17, 27, -Math.PI / 2, 0xff5fd2, "mesinha"),
-  ],
+    { tipo: "torreSom", x: -25, z: -37, rot: 0.45, larg: 3.6, prof: 2.6 },   // as TORRES de som gigantes no chão (10 m), como antes — além das suspensas
+    { tipo: "torreSom", x: 25, z: -37, rot: -0.45, larg: 3.6, prof: 2.6 },
+    { tipo: "sub", x: -14, z: -30, rot: 0.3, larg: 3, prof: 2 },
+    { tipo: "sub", x: 14, z: -30, rot: -0.3, larg: 3, prof: 2 },
+    { tipo: "pista", x: 0, z: -12, rot: 0, larg: 36, prof: 26, solido: false },   // a pista cresceu junto (cabe muito mais gente)
+    // as ZONAS de lounge (pra não ser só pista): rodas de sofá com NARGUILÉ, puffs em volta de FOGUEIRAS holográficas e
+    // cantinhos com mesinha, dos dois lados da pista — o corredor da DIREITA (rumo à escadaria do templo) fica livre
+    ...zonaLounge(-34, -22, Math.PI / 2, 0xb98cff, "narguile"),
+    ...zonaLounge(34, 0, -Math.PI / 2, 0x66e6ff, "narguile"),
+    ...zonaLounge(-30, 2, Math.PI / 2, 0xff9a5c, "fogueira"),
+    ...zonaLounge(42, -42, -Math.PI / 2, 0xff5fd2, "fogueira"),
+    ...zonaLounge(-42, -40, Math.PI / 2, 0x9affd0, "mesinha"),
+    ...zonaLounge(-52, -12, Math.PI / 2, 0xffc46b, "mesinha"),
+  ]),
   // os 3 espaços de CONVIVÊNCIA: minimalistas e sonorizados (CAIXAS de som discretas com música ambiente) — sofás,
   // pufes, plantas; NADA de estrutura de festa (sem palco, pista, treliça). O corredor do meio (da porta, +z, ao centro)
   // fica livre
@@ -300,13 +319,18 @@ export function alturaNaCidade(p: P2): number {
   const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z };
   if (noDiscoDoLounge(l)) {
     const s = CIDADE.salas.lounge, q = naSala(s, l.x, l.z), { r, z, h, escada } = PALCO;
-    if (Math.hypot(q.x, q.z - TORRE_DJ.z) <= TORRE_DJ.r) return ALTURA_LOUNGE + TORRE_DJ.topo;   // lá em cima, na cabine da torre
-    if (Math.hypot(q.x, q.z - z) <= r) return ALTURA_LOUNGE + h;
+    if (Math.hypot(q.x, q.z - TORRE_DJ.z) <= TORRE_DJ.r) return PISO_FESTA + TORRE_DJ.topo;   // lá em cima, na cabine da torre
+    if (Math.hypot(q.x, q.z - z) <= r) return PISO_FESTA + h;
     const z0 = z + r - 0.3;
-    if (Math.abs(q.x) <= escada.meia && q.z >= z0 && q.z <= z0 + escada.len) return ALTURA_LOUNGE + h * (1 - (q.z - z0) / escada.len);
-    return ALTURA_LOUNGE;
+    if (Math.abs(q.x) <= escada.meia && q.z >= z0 && q.z <= z0 + escada.len) return PISO_FESTA + h * (1 - (q.z - z0) / escada.len);
+    return ALTURA_LOUNGE + alturaNoLounge(q);   // o pátio, a rampa ou o deck
   }
   if (salaEm(l)) return ALTURA_LOUNGE;   // as outras salas: piso plano
+  if (noTemploOuEscadaria(l)) {   // o TEMPLO e a escadaria em curva até ele
+    const q = naSala(CIDADE.salas.lounge, l.x, l.z);
+    if (noTemplo(q)) return ALTURA_LOUNGE + TEMPLO.h;
+    const e = noCorredorDaEscadaria(q); if (e) return ALTURA_LOUNGE + alturaDaEscadaria(e.s);
+  }
   return 0;   // (o corredor do FIO não é piso: atravessa-se pendurado nele)
 }
 /** está na CABINE do DJ (atrás da mesa, em cima do palco)? `p` no mundo */
@@ -379,7 +403,7 @@ export function posDaViagem(tipo: "escada" | "elevador", sentido: "sobe" | "desc
     return { p, y: noChao + (pendurado - noChao) * solto, rumo: rumoDaViagem(sentido, nomeSala) };
   }
   const L = CIDADE.salas.lounge, e = TORRE_DJ.elevador, c = Math.max(0, Math.min(1, k)), s = (x: number) => x * x * (3 - 2 * x);
-  const embaixo = ALTURA_LOUNGE + PALCO.h, emCima = ALTURA_LOUNGE + TORRE_DJ.topo, sala = (z: number) => mundo(daSala(L, 0, z));
+  const embaixo = PISO_FESTA + PALCO.h, emCima = PISO_FESTA + TORRE_DJ.topo, sala = (z: number) => mundo(daSala(L, 0, z));
   if (sentido === "sobe") {
     if (c < 0.7) return { p: sala(e.sobe), y: embaixo + (emCima + 0.4 - embaixo) * s(c / 0.7), rumo: rumoDoDJ() };
     const u = s((c - 0.7) / 0.3); return { p: sala(e.sobe + (e.chegaEmCima - e.sobe) * u), y: emCima + 0.4 * (1 - u), rumo: rumoDoDJ() };
@@ -412,6 +436,7 @@ export function paredeDaSala(s: { x: number; z: number; r: number; porta?: numbe
     const a = (i / n) * Math.PI * 2;   // ângulo no referencial da sala: a porta fica em +z local (a = π/2)
     let d = a - Math.PI / 2; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
     if (Math.abs(d) < porta) continue;
+    if (s === CIDADE.salas.lounge) { const sd = saidaDoLounge(s.r); let e = a - sd.ang; while (e > Math.PI) e -= 2 * Math.PI; while (e < -Math.PI) e += 2 * Math.PI; if (Math.abs(e) < sd.meia) continue; }   // a SAÍDA pra escadaria do templo
     out.push(daSala(s, Math.cos(a) * s.r, Math.sin(a) * s.r));
   }
   return out;
@@ -459,7 +484,7 @@ export const ALTURA_CORPO_ILHOTA = 1.4;
  *  parede invisível em volta da central; a escada e o lounge têm corrimão/parede) */
 export const naIlhaPrincipal = (p: P2) => {
   const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z };
-  return Math.hypot(l.x, l.z) <= CIDADE.bordaR + 0.1 || salaEm(l, 0.3) !== null;   // (o corredor do fio não é piso)
+  return Math.hypot(l.x, l.z) <= CIDADE.bordaR + 0.1 || salaEm(l, 0.3) !== null || noTemploOuEscadaria(l, 0.3);   // (o corredor do fio não é piso)
 };
 
 /** o PISO sob quem voa de mochila na Zaeon (altura acima do piso central), ou `null` = não há piso embaixo (saiu da
@@ -482,7 +507,7 @@ export const resolverCidadeLivre = (prop: P2): P2 => empurrarParaFora(prop, coli
 export function resolverCidade(prop: P2): P2 {
   let q = empurrarParaFora(prop, colisoresDaCidade());
   const c = CIDADE.centro, dx = q.x - c.x, dz = q.z - c.z, d = Math.hypot(dx, dz), l = { x: dx, z: dz };
-  if (d > CIDADE.andavelR && salaEm(l) === null) q = { x: c.x + (dx / d) * CIDADE.andavelR, z: c.z + (dz / d) * CIDADE.andavelR };
+  if (d > CIDADE.andavelR && salaEm(l) === null && !noTemploOuEscadaria(l)) q = { x: c.x + (dx / d) * CIDADE.andavelR, z: c.z + (dz / d) * CIDADE.andavelR };
   return q;
 }
 
@@ -512,6 +537,7 @@ export function foraDaIlha(p: { x: number; y: number; z: number }): { x: number;
 export function chaoDaNave(p: { x: number; y: number; z: number }): number {
   const c = CIDADE.centro, h = alturaNaCidade(p);
   if (h > 0 && p.y >= CIDADE.pisoY + h - 0.5) return CIDADE.pisoY + h;
+  if (h > ALTURA_LOUNGE && salaEm({ x: p.x - c.x, z: p.z - c.z }) && p.y >= CIDADE.pisoY + ALTURA_LOUNGE - 0.5) return CIDADE.pisoY + ALTURA_LOUNGE;   // de lado no deck/palco: o pátio
   return Math.hypot(p.x - c.x, p.z - c.z) <= CIDADE.andavelR && p.y >= CIDADE.pisoY - 0.5 ? CIDADE.pisoY : 0;
 }
 /** os SÓLIDOS de voo da Zaeon além da ilha (cilindros `{x,z,r,topo,base}` no mundo — o mesmo formato dos `Pilar` do
@@ -524,7 +550,9 @@ export function solidosDaCidade(dono = true): { x: number; z: number; r: number;
   return [
     { x: c.x, z: c.z, r: CAPELA.r + 1, topo: CIDADE.pisoY + inicioDaPonta(), base: CIDADE.pisoY - 1 },
     { x: c.x + s.x, z: c.z + s.z, r: s.r, topo: L, base: L - 2.5 },   // a LAJE do lounge
-    { x: torre.x, z: torre.z, r: TORRE_DJ.r, topo: L + TORRE_DJ.topo + (dono ? 0 : CAMPO_DJ), base: L - 0.1 },
+    { x: torre.x, z: torre.z, r: TORRE_DJ.r, topo: L + DECK.h + TORRE_DJ.topo + (dono ? 0 : CAMPO_DJ), base: L - 0.1 },
+    (() => { const t = mundo(daSala(s, TEMPLO.x, TEMPLO.z)), y = L + TEMPLO.h; return { x: t.x, z: t.z, r: TEMPLO.r, topo: y, base: y - 3 }; })(),   // a laje do TEMPLO
+    (() => { const t = mundo(daSala(s, TEMPLO.x, TEMPLO.z)), y = L + TEMPLO.h, C = TEMPLO.capela; return { x: t.x, z: t.z, r: C.r + 1, topo: y + C.altura + C.r * C.achata, base: y }; })(),   // a CAPELA do templo
     ...(Object.keys(CIDADE.salas) as NomeSala[]).filter((n) => n !== "lounge").map((n) => { const sl = CIDADE.salas[n]; return { x: c.x + sl.x, z: c.z + sl.z, r: sl.r, topo: L, base: L - 2.5 }; }),   // as lajes das outras salas
   ];
 }
@@ -537,7 +565,7 @@ export const CAMPO_DJ = 40;
  * na cabine (lá em cima da torre) é a boca dele. Centro (mundo) e raio do horizonte.
  */
 /** o buraco negro grande no referencial da SALA do lounge: `z` (atrás do palco) e a altura `y` acima do piso do lounge */
-export const BN_NA_SALA = { z: -27, y: 33 } as const;
+export const BN_NA_SALA = { z: -54, y: 33 + DECK.h } as const;
 export const BURACO_NEGRO = (() => {
   const s = CIDADE.salas.lounge, w = mundo(daSala(s, 0, BN_NA_SALA.z));
   return { x: w.x, y: CIDADE.pisoY + ALTURA_LOUNGE + BN_NA_SALA.y, z: w.z, r: 6 };

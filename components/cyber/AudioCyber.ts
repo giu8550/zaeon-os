@@ -11,7 +11,7 @@
 import * as THREE from "three";
 import { DISTANCIA, FADE_ENTRADA, HOLO_VOZ, VOZ_DROID, silabasDroid, SINTESE, SONS, SONS_ARQUIVO, emendarLoop, recortarCanal, recortePasso, criarLimiteVozes, lerPrefs, respostaImpulso, urlDoSom, type Dist, type NomeSom } from "@/lib/cyber/audio";
 import { nivelDaBoca } from "@/lib/voice/nivelVoz";
-export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom; vel?: number; taxa?: number; taxaAtual?: number };
+export type LoopSom = { audio: THREE.Audio<GainNode | PannerNode> | null; alvo: number; atual: number; nome: NomeSom; vel?: number; taxa?: number; taxaAtual?: number; taxaVel?: number };
 
 export type AudioCyberHandle = {
   /** já tem gesto + listener (e os buffers estão carregando/carregados) */
@@ -28,8 +28,9 @@ export type AudioCyberHandle = {
   soltarLoop(l: LoopSom): void;
   /** muda o alvo de volume de um loop (0..1 × o volume base do som); o fade é suave, a cada quadro (`vel` = 1/s; padrão 2,5) */
   volumeLoop(l: LoopSom, alvo: number, vel?: number): void;
-  /** afinação (playbackRate) de um loop, suave — ex.: o jato fica mais agudo subindo */
-  taxaLoop(l: LoopSom, taxa: number): void;
+  /** afinação (playbackRate) de um loop, suave — ex.: o jato fica mais agudo subindo (`vel` = 1/s; padrão 4 — o motor
+   *  da moto usa mais, pra troca de marcha soar seca) */
+  taxaLoop(l: LoopSom, taxa: number, vel?: number): void;
   /** ajusta a distância de um loop posicional (ex.: a nave em que eu estou) */
   distanciaLoop(l: LoopSom, d: Dist): void;
   /** one-shot: posicional num ponto do mundo (`em`) ou 2D (`em` ausente); `seguir` = preso a um objeto que se move
@@ -42,7 +43,7 @@ export type AudioCyberHandle = {
   voz(obj: THREE.Object3D, stream: MediaStream): { remover(): void };
   /** MÚSICA de um <audio> saindo POSICIONAL de várias caixas de som ao mesmo tempo (o toca-discos do lounge); antes
    *  do gesto que libera o áudio, espera e liga sozinha. `remover()` desliga. */
-  musica(caixas: THREE.Object3D[], el: HTMLMediaElement, volume?: number): { remover(): void; pronta(): boolean; /** energia dos GRAVES agora (0..1) — as luzes e as caixas pulsam com ela */ nivel(): number };
+  musica(caixas: THREE.Object3D[], el: HTMLMediaElement, volume?: number): { remover(): void; pronta(): boolean; /** energia dos GRAVES agora (0..1) — as luzes e as caixas pulsam com ela */ nivel(): number; /** o volume (0..1 × o base): abafar as caixas (o trovão energizando) */ volume(v: number): void };
   /** decodifica um áudio (WAV/MP3…) no contexto do three — null sem gesto ainda (sem listener) ou se não decodificar */
   decodificar(dados: ArrayBuffer): Promise<AudioBuffer | null>;
   /** a FALA DE HOLOGRAMA (a voz da Zaeon): `buf` toca posicional preso a `obj`, com passa-alta → reverb por convolução
@@ -136,7 +137,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
   };
   const ler = () => lerPrefs((k) => (typeof localStorage !== "undefined" ? localStorage.getItem(k) : null));
   let prefs = ler();
-  type Musica = { caixas: THREE.Object3D[]; el: HTMLMediaElement; volume: number; src: MediaElementAudioSourceNode | null; as: THREE.PositionalAudio[]; an: AnalyserNode | null; buf: Uint8Array<ArrayBuffer> | null };
+  type Musica = { caixas: THREE.Object3D[]; el: HTMLMediaElement; volume: number; /** o abafamento (0..1) */ fator: number; src: MediaElementAudioSourceNode | null; as: THREE.PositionalAudio[]; an: AnalyserNode | null; buf: Uint8Array<ArrayBuffer> | null };
   const musicas = new Set<Musica>();
   /** um MediaElementSource só pode existir 1× por elemento: guarda e reaproveita */
   const fontesDeElemento = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
@@ -146,7 +147,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       const ctx = listener.context; let src = fontesDeElemento.get(m.el);
       if (!src) { src = ctx.createMediaElementSource(m.el); fontesDeElemento.set(m.el, src); }
       m.src = src;
-      for (const c of m.caixas) { const a = new THREE.PositionalAudio(listener); aplicarDist(a, DISTANCIA.musica); a.setNodeSource(src as unknown as AudioBufferSourceNode); a.setVolume(m.volume); c.add(a); m.as.push(a); }
+      for (const c of m.caixas) { const a = new THREE.PositionalAudio(listener); aplicarDist(a, DISTANCIA.musica); a.setNodeSource(src as unknown as AudioBufferSourceNode); a.setVolume(m.volume * m.fator); c.add(a); m.as.push(a); }
       // o "ouvido" das luzes: um analisador na mesma fonte (não sai som por ele)
       const an = ctx.createAnalyser(); an.fftSize = 512; an.smoothingTimeConstant = 0.55; src.connect(an); m.an = an; m.buf = new Uint8Array(an.frequencyBinCount);
     } catch { /* sem áudio */ }
@@ -226,7 +227,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       loops.splice(i, 1);
     },
     volumeLoop(l, alvo, vel) { l.alvo = Math.max(0, Math.min(1, alvo)); if (vel !== undefined) l.vel = vel; },
-    taxaLoop(l, taxa) { l.taxa = taxa; },
+    taxaLoop(l, taxa, vel) { l.taxa = taxa; if (vel !== undefined) l.taxaVel = vel; },
     distanciaLoop(l, d) { if (l.audio && (l.audio as THREE.PositionalAudio).panner) aplicarDist(l.audio as THREE.PositionalAudio, d); },
     tocar(nome, em, op = {}) {
       if (!listener || !prefs.ligado || !buffers.has(nome) || !vozes.pegar()) return;
@@ -249,10 +250,11 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       return { remover() { vozesAoVivo.delete(v); try { v.a?.disconnect(); } catch { /* já */ } v.a?.removeFromParent(); if (v.el) { v.el.srcObject = null; } } };
     },
     musica(caixas, el, volume = 0.9) {
-      const m: Musica = { caixas, el, volume, src: null, as: [], an: null, buf: null };
+      const m: Musica = { caixas, el, volume, fator: 1, src: null, as: [], an: null, buf: null };
       musicas.add(m); ligarMusica(m);
       return {
         pronta: () => !!m.src,
+        volume(v) { m.fator = Math.max(0, Math.min(1, v)); for (const a of m.as) a.setVolume(m.volume * m.fator); },
         nivel() {   // média dos graves (~0–190 Hz: os 4 primeiros "baldes" de ~94 Hz), com um piso pra o silêncio dar 0
           if (!m.an || !m.buf) return 0;
           m.an.getByteFrequencyData(m.buf); let soma = 0; for (let i = 0; i < 4; i++) soma += m.buf[i]!;
@@ -388,7 +390,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
         const a = x.l.audio; if (!a) continue;
         x.l.atual += (x.l.alvo - x.l.atual) * (x.l.vel ? Math.min(1, dt * x.l.vel) : k);
         a.setVolume(x.l.atual * x.volBase * entrada);
-        if (x.l.taxa !== undefined) { const tA = x.l.taxaAtual ?? x.l.taxa; x.l.taxaAtual = tA + (x.l.taxa - tA) * Math.min(1, dt * 4); a.setPlaybackRate(x.l.taxaAtual); }
+        if (x.l.taxa !== undefined) { const tA = x.l.taxaAtual ?? x.l.taxa; x.l.taxaAtual = tA + (x.l.taxa - tA) * Math.min(1, dt * (x.l.taxaVel ?? 4)); a.setPlaybackRate(x.l.taxaAtual); }
       }
     },
     dispose() {

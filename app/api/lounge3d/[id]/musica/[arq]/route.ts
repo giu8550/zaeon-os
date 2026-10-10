@@ -15,7 +15,8 @@ export async function GET(req: Request, { params }: { params: { id: string; arq:
   const me = await eu(); if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!ARQ_RE.test(params.arq)) return NextResponse.json({ error: "Inválido" }, { status: 400 });
   const s = await salaDoMembro(params.id, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!lerConteudo(s.content).somLounge?.faixas.some((f) => f.arq === params.arq)) return NextResponse.json({ error: "Not found" }, { status: 404 });   // só o que está na playlist DESTA sala
+  const c = lerConteudo(s.content);
+  if (![c.somLounge, c.somNave].some((pl) => pl?.faixas.some((f) => f.arq === params.arq))) return NextResponse.json({ error: "Not found" }, { status: 404 });   // só o que está numa playlist DESTA sala (lounge ou nave)
   const dot = params.arq.lastIndexOf("."), ext = params.arq.slice(dot + 1);
   let buf: Buffer;
   try { buf = await readStudioFile(params.arq.slice(0, dot), ext); } catch { return NextResponse.json({ error: "Não encontrado" }, { status: 404 }); }

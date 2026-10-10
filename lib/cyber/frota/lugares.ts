@@ -6,7 +6,8 @@
  *  - a PISTA do lounge (a festa).
  * Tudo no MUNDO; `y` é absoluto (as salas da Zaeon: o piso da ilha + a altura das salas — o engine soma a boia da ilha).
  */
-import { ALTURA_LOUNGE, CIDADE, MOVEIS, colisoresDaCidade, daSala, mundo, naSala, rotDaSala, type NomeSala } from "../ceu";
+import { CIDADE, MOVEIS, alturaNaCidade, colisoresDaCidade, daSala, mundo, naSala, rotDaSala, type NomeSala } from "../ceu";
+import { DECK } from "../templo";
 import { lugaresDoLounge } from "../descanso";
 import { PLATAFORMAS, andarNaPlataforma, type IdPlataforma } from "../plataformas";
 import { acasoDe, embaralhar } from "./aleatorio";
@@ -22,7 +23,8 @@ export type Spot = {
   par?: string; deita?: { x: number; z: number; rumo: number };
 };
 
-const Y_SALA = CIDADE.pisoY + ALTURA_LOUNGE;
+/** a altura (mundo) do piso num ponto de uma sala — o lounge tem o pátio e o DECK da festa */
+const ySala = (w: { x: number; z: number }) => CIDADE.pisoY + alturaNaCidade(w);
 const SALAS: Partial<Record<AmbienteEstudo, NomeSala>> = { biblioteca: "biblioteca", jardim: "jardim", lounge: "lounge" };
 
 /** os ASSENTOS de uma sala (sofá: 1 spot por assento, com o par e a pose deitada; puff e pufe) */
@@ -30,7 +32,7 @@ function assentos(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
   const out: Spot[] = [];
   for (const l of lugaresDoLounge().filter((x) => x.id.startsWith(`${sala}-`))) {
     l.assentos.forEach((a, k) => out.push({
-      id: `${l.id}#${k}`, ambiente: amb, tipo: l.tipo, x: a.x, z: a.z, y: Y_SALA, rumo: l.rumo, zaeon: true,
+      id: `${l.id}#${k}`, ambiente: amb, tipo: l.tipo, x: a.x, z: a.z, y: ySala(a), rumo: l.rumo, zaeon: true,
       ...(l.tipo === "sofa" ? { par: `${l.id}#${1 - k}`, deita: { ...l.deita!, rumo: l.rumoDeitado } } : {}),
     }));
   }
@@ -44,13 +46,13 @@ function chaoDaSala(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
     if (Math.hypot(lx, lz) > R) continue;
     if (Math.abs(lx) < 4.5 && lz > s.r - 16) continue;   // o corredor da porta (de quem chega)
     if (pista && Math.abs(lx - pista.x) < pista.larg / 2 + 2 && Math.abs(lz - pista.z) < pista.prof / 2 + 2) continue;
-    if (sala === "lounge" && lz < -6) continue;   // o palco, a torre e as caixas
+    if (sala === "lounge" && (lz < -32 || lz > DECK.zFrente - 2.5 || (lx > 52 && lz > -28 && lz < -10))) continue;   // o palco, a torre e as caixas; o pátio (as motos); a saída pro templo
     const w = mundo(daSala(s, lx, lz));
     if (cs.some((c) => Math.hypot(w.x - c.x, w.z - c.z) < c.r + 1.1)) continue;
     if (ocupados.some((o) => Math.hypot(w.x - o.x, w.z - o.z) < 1.6)) continue;
     // de frente pro meio da sala (ou pro lado, um pouco variado)
     const r = acasoDe("piso", sala, Math.round(lx * 10), Math.round(lz * 10)), rumo = rotDaSala(s) + Math.atan2(-lx, -lz) + (r() - 0.5) * 1.2;
-    out.push({ id: `${sala}-piso-${out.length}`, ambiente: amb, tipo: "piso", x: w.x, z: w.z, y: Y_SALA, rumo, zaeon: true });
+    out.push({ id: `${sala}-piso-${out.length}`, ambiente: amb, tipo: "piso", x: w.x, z: w.z, y: ySala(w), rumo, zaeon: true });
   }
   return out;
 }
@@ -72,7 +74,7 @@ function pista(): Spot[] {
   const s = CIDADE.salas.lounge, p = MOVEIS.lounge.find((m) => m.tipo === "pista")!, out: Spot[] = [];
   for (let lx = -p.larg / 2 + 1.5; lx <= p.larg / 2 - 1.5; lx += 1.7) for (let lz = -p.prof / 2 + 1.5; lz <= p.prof / 2 - 1.5; lz += 1.7) {
     const w = mundo(daSala(s, p.x + lx, p.z + lz));
-    out.push({ id: `pista-${out.length}`, ambiente: "pista", tipo: "pista", x: w.x, z: w.z, y: Y_SALA, rumo: rotDaSala(s) + Math.PI, zaeon: true });
+    out.push({ id: `pista-${out.length}`, ambiente: "pista", tipo: "pista", x: w.x, z: w.z, y: ySala(w), rumo: rotDaSala(s) + Math.PI, zaeon: true });
   }
   return out;
 }

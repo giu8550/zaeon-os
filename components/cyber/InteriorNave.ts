@@ -76,7 +76,7 @@ export function criarInteriorNave(o: { low: boolean; cor: THREE.Color }): Interi
     const L2 = Math.hypot(w.bx - w.ax, w.bz - w.az), giro = -Math.atan2(w.bz - w.az, w.bx - w.ax), cx = (w.ax + w.bx) / 2, cz = (w.az + w.bz) / 2;
     cbox(L2, w.alt, 0.06, vidro, cx, w.alt / 2, cz).rotation.y = giro; cbox(L2, 0.06, 0.1, frisoMat, cx, w.alt, cz).rotation.y = giro;
   }
-  for (const mv of MOVEIS_CABINE) if (mv.tipo !== "leme") cbox(mv.x1 - mv.x0, mv.alt, mv.z1 - mv.z0, escuro, (mv.x0 + mv.x1) / 2, mv.alt / 2, (mv.z0 + mv.z1) / 2);
+  for (const mv of MOVEIS_CABINE) if (mv.tipo !== "leme" && mv.tipo !== "pcLounge" && mv.tipo !== "pcNave") cbox(mv.x1 - mv.x0, mv.alt, mv.z1 - mv.z0, escuro, (mv.x0 + mv.x1) / 2, mv.alt / 2, (mv.z0 + mv.z1) / 2);
   const telaProa = tela("#66e6ff"), telaTerm = tela("#9affd0", 8), telaServ = tela("#b98cff");
   // a cabine olha pra FRENTE da nave (o −z da planta, o lado da rampa): as telas da proa e a cadeira do piloto são
   // montadas como sempre foram (olhando pro +z) dentro de um grupo de MEIA VOLTA — `orig` desfaz o giro dos dados
@@ -98,6 +98,28 @@ export function criarInteriorNave(o: { low: boolean; cor: THREE.Color }): Interi
   const auraTerm = aditivo(0x9fd0ff, 0.25), aura = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.5), auraTerm); aura.position.set(0, term.alt + 0.85, -0.27); mesa.add(aura);
   anim.push((_, t) => { auraTerm.opacity = 0.15 + 0.12 * Math.sin(t * 2); });
   const sb = MOVEIS_CABINE.filter((m) => m.tipo === "console")[1]!, tSb = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.9), new THREE.MeshBasicMaterial({ map: telaServ })); virarPraCabine(tSb, sb);
+  // os PCs DO SOM (out/2026), um de cada lado da cabine: o do LOUNGE (a playlist das caixas de lá — roxo) e o da NAVE
+  // (a música que sai da própria nave — âmbar): mesa, monitor com as ondas, teclado, cadeira e a aura da tela
+  const telaPc = (cor: string, rotulo: string) => { const c = document.createElement("canvas"); c.width = 512; c.height = 288; const g = c.getContext("2d")!, w = c.width, h = c.height; (() => {
+    g.fillStyle = "#070b1c"; g.fillRect(0, 0, w, h);
+    g.strokeStyle = cor; g.lineWidth = 3; g.globalAlpha = 0.85;
+    for (let k = 0; k < 3; k++) { g.beginPath(); for (let x = 0; x <= w; x += 4) { const y = h * 0.58 + Math.sin((x / w) * Math.PI * (3 + k) + k) * (18 + k * 10) * Math.sin((x / w) * Math.PI); x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+    g.globalAlpha = 1; g.fillStyle = "#ffffff"; g.font = "800 40px system-ui,sans-serif"; g.textAlign = "center"; g.fillText(rotulo, w / 2, 70);
+    g.fillStyle = cor; g.font = "600 22px system-ui,sans-serif"; g.fillText("toca-discos · F", w / 2, 108);
+    for (let i = 0; i < 12; i++) { g.fillStyle = i % 3 ? cor : "#ffffff"; g.globalAlpha = 0.5 + 0.5 * ((i * 7) % 5) / 4; g.fillRect(40 + i * 36, h - 60 - ((i * 13) % 5) * 8, 20, 40 + ((i * 13) % 5) * 8); }
+  })(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; texturasNave.push(t); return t; };
+  for (const [tipo, cor, rotulo] of [["pcLounge", "#b98cff", "SOM DO LOUNGE"], ["pcNave", "#ffc46b", "SOM DA NAVE"]] as const) {
+    const m = MOVEIS_CABINE.find((x) => x.tipo === tipo)!, cx = (m.x0 + m.x1) / 2, cz = (m.z0 + m.z1) / 2;
+    const pc = new THREE.Group(); pc.position.set(cx, 0, cz); pc.rotation.y = Math.atan2(-cx, -cz); cab.add(pc);   // a frente (+z) virada pro meio da cabine
+    const w = Math.max(m.x1 - m.x0, m.z1 - m.z0), d = Math.min(m.x1 - m.x0, m.z1 - m.z0);
+    const mesa = new THREE.Mesh(new THREE.BoxGeometry(w, m.alt, d), escuro); mesa.position.y = m.alt / 2; pc.add(mesa);
+    const tx = telaPc(cor, rotulo), mon = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.85), new THREE.MeshBasicMaterial({ map: tx })); mon.position.set(0, m.alt + 0.72, -0.2); mon.rotation.x = -0.12; pc.add(mon);
+    const mold = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.95, 0.05), escuro); mold.position.set(0, m.alt + 0.72, -0.24); mold.rotation.x = -0.12; pc.add(mold);
+    const tec = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.03, 0.24), escuro); tec.position.set(0, m.alt + 0.02, 0.1); pc.add(tec);
+    const friso = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, 0.03), aditivo(cor, 0.9)); friso.position.set(0, m.alt + 0.005, d / 2); pc.add(friso);
+    const am = aditivo(cor, 0.2), au = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.3), am); au.position.set(0, m.alt + 0.72, -0.22); au.rotation.x = -0.12; pc.add(au);
+    anim.push((_, t) => { am.opacity = 0.12 + 0.1 * Math.sin(t * 1.7 + (tipo === "pcNave" ? 1.5 : 0)); });
+  }
   // a CADEIRA DO PILOTO (o leme): pedestal, assento, encosto alto, braços com manches — o avatar senta no `assento`
   const L = { x: -NAVE_QG.leme.x, z: -NAVE_QG.leme.z };   // (no grupo de meia volta)
   const gbox = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); girado.add(m); return m; };

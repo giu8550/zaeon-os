@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { noCorredorDaRampa, ESCALA_NAVE_QG, CABINE, COMODOS, RAIO_REDOMA, RAMPA, alturaDaRampa, naPontaDaRampa, naRampaLaFora, pousoNaNave, rampaDaNave, ESCADA, TOTAL_ESCADA, pontoDaEscada, MOVEIS_CABINE, MOVEIS_NAVE, NAVE_QG, REATOR, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, comodoEm, docaLivre, paraLocal, paraMundo, pertoDaEntrada, pontoDoTerminal, poseDaDoca, redomaAberta, type Bordo, ESCALA_NAVE_QG_V } from "./naveQG";
+import { noCorredorDaRampa, ESCALA_NAVE_QG, CABINE, COMODOS, RAIO_REDOMA, RAMPA, alturaDaRampa, naPontaDaRampa, naRampaLaFora, pousoNaNave, rampaDaNave, ESCADA, TOTAL_ESCADA, pontoDaEscada, MOVEIS_CABINE, MOVEIS_NAVE, NAVE_QG, REATOR, acaoNaNave, alturaDoConves, alturaNoBordo, andarNaNave, comodoEm, docaLivre, paraLocal, paraMundo, pertoDaEntrada, pontoDoPc, pontoDoTerminal, poseDaDoca, redomaAberta, type Bordo, ESCALA_NAVE_QG_V } from "./naveQG";
 import { CIDADE, mundo, naIlhaPrincipal } from "./ceu";
 
 /** anda em linha reta de `de` até `ate` (passos de 0,25 m), como o engine faz a cada quadro */
@@ -90,6 +90,19 @@ describe("nave-QG: ações (F), redoma e porta", () => {
     expect(acaoNaNave({ ...pontoDoTerminal(), nivel: 1 }, false)).toBe("estudar");
     expect(acaoNaNave({ ...NAVE_QG.portaDentro, nivel: 0 }, false)).toBe("sair");
     expect(MOVEIS_CABINE.some((m) => m.tipo === "terminal")).toBe(true);
+  });
+  it("os 4 PCs da cabine, em 4 direções: o leme, o desktop, o SOM DO LOUNGE e o SOM DA NAVE (os do som só pro dono)", () => {
+    const t = MOVEIS_CABINE.find((m) => m.tipo === "terminal")!, l = MOVEIS_CABINE.find((m) => m.tipo === "pcLounge")!, n = MOVEIS_CABINE.find((m) => m.tipo === "pcNave")!;
+    const ang = (m: { x0: number; x1: number; z0: number; z1: number }) => Math.atan2((m.z0 + m.z1) / 2, (m.x0 + m.x1) / 2);
+    const dirs = [ang(t), ang(l), ang(n), Math.atan2(NAVE_QG.leme.z, NAVE_QG.leme.x)].sort((a, b) => a - b);
+    for (let i = 1; i < dirs.length; i++) expect(dirs[i]! - dirs[i - 1]!).toBeGreaterThan(1.2);   // bem espalhados (≥ ~70° entre si)
+    expect(acaoNaNave({ ...pontoDoPc("pcLounge"), nivel: 1 }, true)).toBe("somLounge");
+    expect(acaoNaNave({ ...pontoDoPc("pcNave"), nivel: 1 }, true)).toBe("somNave");
+    expect(acaoNaNave({ ...pontoDoPc("pcLounge"), nivel: 1 }, false)).toBeNull();
+    expect(acaoNaNave({ ...pontoDoPc("pcNave"), nivel: 0 }, true)).toBeNull();
+    // cada PC fica DENTRO da cabine e dá pra ficar de pé na frente dele
+    for (const m of [l, n]) { expect(m.x0).toBeGreaterThanOrEqual(CABINE.x0 - 2); expect(m.x1).toBeLessThanOrEqual(CABINE.x1 + 2); }
+    for (const tipo of ["pcLounge", "pcNave"] as const) { const q = andarNaNave(pontoDoPc(tipo), { ...pontoDoPc(tipo), nivel: 1 }); expect(Math.hypot(q.x - pontoDoPc(tipo).x, q.z - pontoDoPc(tipo).z)).toBeLessThan(0.3); }
   });
   it("a REDOMA abre só com alguém DE PÉ na cabine (sem pilotar); desceu a escada ou pegou o leme, fecha", () => {
     expect(redomaAberta({ x: 0, z: 0, nivel: 1 }, false)).toBe(true);

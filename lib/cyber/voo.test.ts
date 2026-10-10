@@ -180,3 +180,15 @@ describe("voo — independente de FPS", () => {
   });
 });
 
+describe("o TURBO da nave (Shift, como correr a pé)", () => {
+  it("com turbo a nave cruza o mapa a mais de 2× a velocidade de cruzeiro; sem, continua igual", () => {
+    const ini: EstadoVoo = { x: 0, y: 200, z: 0, yaw: 0, vx: 0, vy: 0, vz: 0 };
+    const voar = (turbo: number) => { let s = ini; for (let i = 0; i < 60 * 6; i++) s = passoVoo(s, { wx: 0, wz: 1, subir: false, descer: false, turbo }, 1 / 60).s; return s; };
+    const normal = voar(0), rapido = voar(1), meio = voar(0.5);
+    expect(Math.hypot(normal.vx, normal.vz)).toBeCloseTo(VOO.vel, 0);
+    expect(Math.hypot(rapido.vx, rapido.vz)).toBeCloseTo(VOO.vel * VOO.turbo, 0);
+    expect(VOO.turbo).toBeGreaterThan(2);
+    expect(Math.hypot(meio.vx, meio.vz)).toBeGreaterThan(VOO.vel * 1.3); expect(Math.hypot(meio.vx, meio.vz)).toBeLessThan(VOO.vel * VOO.turbo);
+    expect(passoVoo(ini, { wx: 0, wz: 1, subir: false, descer: false }, 1 / 60)).toEqual(passoVoo(ini, { wx: 0, wz: 1, subir: false, descer: false, turbo: 0 }, 1 / 60));
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BOCA_DJ, BURACO_NAVE, CHEGADA_NAVE, CHEGADA_DJ, IDS_NOS, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel } from "./buracos";
-import { CIDADE, TORRE_DJ, alturaNaCidade, colisoresDaCidade, naCabineDJ, naIlhaPrincipal, naTorreDJ, ALTURA_LOUNGE } from "./ceu";
+import { CIDADE, TORRE_DJ, alturaNaCidade, colisoresDaCidade, naCabineDJ, naIlhaPrincipal, naTorreDJ, PISO_FESTA } from "./ceu";
 import { IDS_PLATAFORMAS, andarNaPlataforma } from "./plataformas";
 import { PRACA, QUEDA_VAZIO, naPraca } from "./praca";
 import { COMODOS, andarNaNave } from "./naveQG";
@@ -41,7 +41,7 @@ describe("o PAR do dono: nave ↔ cabine do DJ (a única entrada da cabine)", ()
   it("a boca fica NA cabine (no alto da torre), longe do lugar do DJ e do anel de descer", () => {
     const b = bocaDJMundo();
     expect(naBocaDJ(b)).toBe(true); expect(naTorreDJ(b)).toBe(true);
-    expect(alturaNaCidade(b)).toBe(ALTURA_LOUNGE + TORRE_DJ.topo);
+    expect(alturaNaCidade(b)).toBe(PISO_FESTA + TORRE_DJ.topo);
     expect(naCabineDJ(b)).toBe(false);
     expect(Math.hypot(BOCA_DJ.x, BOCA_DJ.z - TORRE_DJ.elevador.desce)).toBeGreaterThan(BOCA_DJ.r + TORRE_DJ.elevador.rDesce + 0.5);
     expect(Math.hypot(BOCA_DJ.x, BOCA_DJ.z - TORRE_DJ.z) + BOCA_DJ.r).toBeLessThan(TORRE_DJ.r);
@@ -49,7 +49,7 @@ describe("o PAR do dono: nave ↔ cabine do DJ (a única entrada da cabine)", ()
   it("chegando da nave: na cabine, fora da boca (não volta na hora) e fora do lugar do DJ", () => {
     const c = chegadaDJMundo();
     expect(naBocaDJ(c)).toBe(false); expect(naTorreDJ(c)).toBe(true); expect(naCabineDJ(c)).toBe(false);
-    expect(alturaNaCidade(c)).toBe(ALTURA_LOUNGE + TORRE_DJ.topo);
+    expect(alturaNaCidade(c)).toBe(PISO_FESTA + TORRE_DJ.topo);
     expect(CHEGADA_DJ.z).toBe(TORRE_DJ.elevador.chegaEmCima);
     expect(CIDADE.salas.lounge).toBeDefined();
   });

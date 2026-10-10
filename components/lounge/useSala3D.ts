@@ -16,7 +16,8 @@ import { classificarErroPusher, ehFalhaDeConexao, type EstadoRealtime, type Moti
 import { POSE_HZ_COLYSEUS, transporteRealtime } from "@/lib/lounge3d/realtime";
 import { conectarColyseus, type CanalVoz, type ConexaoColyseus } from "./salaColyseus";
 import { sanitizarSom, type AcaoSom } from "@/lib/lounge3d/musica";
-import { EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
+import { EV_RITUAL, CAMPO_DO_CANAL, canalDe, EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG, type CanalSom } from "@/lib/lounge3d/tipos";
+import { ritualDesligado, sanitizarRitual } from "@/lib/cyber/ritual";
 
 export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean; /** (Colyseus) já mandou a 1ª pose — o novato no tutorial não: nem aparece nem entra na voz */ pronto?: boolean };
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
@@ -137,7 +138,9 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       // recado do dono pro QG (holograma ao lado da tela do Andrei): chega na hora e fica no conteúdo
       ch.bind(EV_RECADO, (d: { recado: RecadoQG | null }) => setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, recadoQG: d.recado } } : s)));
       // o toca-discos do lounge (playlist/controle do dono): o relógio do servidor vem junto (sincronia da música)
-      ch.bind(EV_MUSICA, (d: { som: unknown; agora?: number }) => aplicarMusicaRef.current(d));
+      ch.bind(EV_MUSICA, (d: { som: unknown; agora?: number; canal?: unknown }) => aplicarMusicaRef.current(d));
+      // o RITUAL do dono (a tempestade no templo e os anunciadores): o relógio do servidor vem junto (a formação é sincronizada)
+      ch.bind(EV_RITUAL, (d: { ritual: unknown; agora?: number }) => aplicarRitualRef.current(d));
       ch.bind(EV_CONTEUDO, (d: { fromUserId: string; conteudo: ConteudoSala; title?: string }) => {
         if (d.fromUserId === euId) return; // o autor já aplicou localmente
         setSala((s) => (s ? { ...s, conteudo: d.conteudo, title: d.title ?? s.title } : s));
@@ -189,7 +192,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
 
   /** O engine chama a cada frame: guarda a pose e só envia quando MUDOU (parado não gasta a cota do Pusher). */
   const enviarPos = useCallback((p: Omit<Presenca, "userId" | "name" | "color">) => {
-    const pose: Pose = { x: p.x, z: p.z, facing: p.facing, moving: !!p.moving, sit: !!p.sit, topo: !!p.topo, ceu: !!p.ceu, ...(p.voo ? { voo: p.voo } : {}), ...(p.naveParada ? { naveParada: p.naveParada } : {}), ...(typeof p.jet === "number" ? { jet: p.jet } : {}), ...(typeof p.alt === "number" ? { alt: p.alt } : {}), ...(p.moto ? { moto: p.moto } : {}), ...(p.motoLargada ? { motoLargada: p.motoLargada } : {}), ...(p.desc ? { desc: p.desc } : {}) };
+    const pose: Pose = { x: p.x, z: p.z, facing: p.facing, moving: !!p.moving, sit: !!p.sit, topo: !!p.topo, ceu: !!p.ceu, ...(p.voo ? { voo: p.voo } : {}), ...(p.naveParada ? { naveParada: p.naveParada } : {}), ...(typeof p.jet === "number" ? { jet: p.jet } : {}), ...(typeof p.alt === "number" ? { alt: p.alt } : {}), ...(p.moto ? { moto: p.moto } : {}), ...(p.motoLargada ? { motoLargada: p.motoLargada } : {}), ...(p.desc ? { desc: p.desc } : {}), ...(p.mov ? { mov: p.mov } : {}), ...(p.atk ? { atk: p.atk } : {}), ...(typeof p.hp === "number" && p.hp < 100 ? { hp: p.hp } : {}), ...(p.arma ? { arma: p.arma } : {}) };
     ultimaPose.current = pose;
     if (poseMudou(ultimaEnviada.current, pose)) emitir(pose, false);
   }, [emitir]);
@@ -221,27 +224,45 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
 
   /** SOM DO LOUNGE: aplica um estado vindo do servidor (evento ou resposta) e acerta o relógio (servidor − cliente) */
   const [offsetMusica, setOffsetMusica] = useState(0);
-  const aplicarMusica = useCallback((d: { som: unknown; agora?: number }) => {
+  const aplicarMusica = useCallback((d: { som: unknown; agora?: number; canal?: unknown }) => {
     if (typeof d.agora === "number" && Number.isFinite(d.agora)) setOffsetMusica(d.agora - Date.now());
-    const som = sanitizarSom(d.som);
-    setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, somLounge: som && som.faixas.length ? som : null } } : s));
+    const som = sanitizarSom(d.som), campo = CAMPO_DO_CANAL[canalDe(d.canal)];
+    setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, [campo]: som && som.faixas.length ? som : null } } : s));
   }, []);
   const aplicarMusicaRef = useRef(aplicarMusica); aplicarMusicaRef.current = aplicarMusica;
-  /** o DONO mexe no toca-discos: sobe uma música, controla (tocar/pausar/parar/próxima/anterior/ir) ou tira uma faixa */
-  const musica = useMemo(() => {
+  /** o DONO mexe no toca-discos: sobe uma música, controla (tocar/pausar/parar/próxima/anterior/ir) ou tira uma faixa —
+   *  um por CANAL: as caixas do lounge (`musica`) e a nave dele (`musicaNave`) */
+  const apiMusica = useCallback((canal: CanalSom) => {
     const resp = async (r: Response): Promise<{ ok: boolean; erro?: string }> => {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) return { ok: false, erro: (d as { error?: string })?.error ?? "Não deu." };
-      aplicarMusica(d as { som: unknown; agora?: number }); return { ok: true };
+      aplicarMusica(d as { som: unknown; agora?: number; canal?: unknown }); return { ok: true };
     };
-    const url = salaId ? `/api/lounge3d/${salaId}/musica` : "";
+    const url = salaId ? `/api/lounge3d/${salaId}/musica` : "", q = `?canal=${canal}`;
     return {
-      async subir(file: File, dur: number, nome: string) { if (!url) return { ok: false, erro: "Sem sala." }; const f = new FormData(); f.append("file", file); f.append("dur", String(dur)); f.append("nome", nome); return resp(await fetch(url, { method: "POST", body: f })); },
-      async controlar(acao: AcaoSom, i?: number) { if (!url) return { ok: false, erro: "Sem sala." }; return resp(await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, i }) })); },
-      async remover(id: string) { if (!url) return { ok: false, erro: "Sem sala." }; return resp(await fetch(`${url}?faixa=${encodeURIComponent(id)}`, { method: "DELETE" })); },
+      async subir(file: File, dur: number, nome: string) { if (!url) return { ok: false, erro: "Sem sala." }; const f = new FormData(); f.append("file", file); f.append("dur", String(dur)); f.append("nome", nome); return resp(await fetch(url + q, { method: "POST", body: f })); },
+      async controlar(acao: AcaoSom, i?: number) { if (!url) return { ok: false, erro: "Sem sala." }; return resp(await fetch(url + q, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, i }) })); },
+      async remover(id: string) { if (!url) return { ok: false, erro: "Sem sala." }; return resp(await fetch(`${url}${q}&faixa=${encodeURIComponent(id)}`, { method: "DELETE" })); },
       urlDe: (arq: string) => `${url}/${arq}`,
     };
   }, [salaId, aplicarMusica]);
+  const musica = useMemo(() => apiMusica("lounge"), [apiMusica]);
+  const musicaNave = useMemo(() => apiMusica("nave"), [apiMusica]);
+
+  /** o RITUAL da chegada do dono: aplica o estado (evento ou resposta) e acerta o relógio; o DONO liga/desliga */
+  const aplicarRitual = useCallback((d: { ritual: unknown; agora?: number }) => {
+    if (typeof d.agora === "number" && Number.isFinite(d.agora)) setOffsetMusica(d.agora - Date.now());
+    const ritual = sanitizarRitual(d.ritual);
+    setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, ritual: ritualDesligado(ritual) ? null : ritual } } : s));
+  }, []);
+  const aplicarRitualRef = useRef(aplicarRitual); aplicarRitualRef.current = aplicarRitual;
+  const definirRitual = useCallback(async (mudanca: { tempestade?: boolean; droids?: boolean }): Promise<{ ok: boolean; erro?: string }> => {
+    if (!salaId) return { ok: false, erro: "Sem sala." };
+    const r = await fetch(`/api/lounge3d/${salaId}/ritual`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mudanca) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, erro: (d as { error?: string })?.error ?? "Não deu." };
+    aplicarRitual(d as { ritual: unknown; agora?: number }); return { ok: true };
+  }, [salaId, aplicarRitual]);
 
   /** o DONO estacionou a nave-QG: guarda onde ela ficou (todos a veem ali, mesmo com ele offline) */
   const salvarNave = useCallback(async (pose: { x: number; y: number; z: number; yaw: number }) => {
@@ -261,5 +282,5 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     return { ok: true };
   }, [salaId]);
 
-  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, canalVoz, recadoQG: sala?.conteudo.recadoQG ?? null, somLounge: sala?.conteudo.somLounge ?? null, offsetMusica, musica, naveQG: sala?.conteudo.naveQG ?? null, salvarNave, recarregar: carregar };
+  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, canalVoz, recadoQG: sala?.conteudo.recadoQG ?? null, somLounge: sala?.conteudo.somLounge ?? null, somNave: sala?.conteudo.somNave ?? null, offsetMusica, musica, musicaNave, ritual: sala?.conteudo.ritual ?? null, definirRitual, naveQG: sala?.conteudo.naveQG ?? null, salvarNave, recarregar: carregar };
 }

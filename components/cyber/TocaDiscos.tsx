@@ -24,7 +24,8 @@ function duracaoDe(file: File): Promise<number> {
 
 const BTN = "flex h-11 w-11 items-center justify-center rounded-full border border-cyan-300/35 bg-[#0a081e]/80 text-base text-sky-100 hover:border-cyan-200 disabled:opacity-40";
 
-export default function TocaDiscos(p: { som: SomLounge | null; offsetMs: number; api: ApiMusica; onFechar: () => void }) {
+export default function TocaDiscos(p: { som: SomLounge | null; offsetMs: number; api: ApiMusica; onFechar: () => void; /** o canal: as caixas do lounge (padrão) ou a música da NAVE do dono */ canal?: "lounge" | "nave" }) {
+  const nave = p.canal === "nave";
   const [agora, setAgora] = useState(() => Date.now());
   const [enviando, setEnviando] = useState<string | null>(null), [erro, setErro] = useState<string | null>(null), [ocupado, setOcupado] = useState(false);
   const input = useRef<HTMLInputElement | null>(null);
@@ -50,8 +51,8 @@ export default function TocaDiscos(p: { som: SomLounge | null; offsetMs: number;
   return (
     <div role="dialog" aria-modal="true" aria-label="Toca-discos do lounge" className="absolute inset-0 z-50 flex items-center justify-center bg-[#03030a]/60 px-4" onClick={p.onFechar}>
       <div className="flex max-h-[86vh] w-full max-w-[460px] flex-col rounded-2xl border border-cyan-300/30 bg-[#070c22]/95 p-4 text-sky-100 shadow-[0_0_40px_rgba(102,230,255,.15)]" onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm font-bold text-cyan-200">Toca-discos do lounge</p>
-        <p className="mt-1 text-xs text-sky-100/60">Suas músicas tocam nas caixas de som do lounge — quem estiver por perto ouve junto, no mesmo ponto da música.</p>
+        <p className="text-sm font-bold text-cyan-200">{nave ? "Som da nave" : "Toca-discos do lounge"}</p>
+        <p className="mt-1 text-xs text-sky-100/60">{nave ? "Suas músicas saem da própria nave, por onde ela passar — quem estiver por perto ouve junto, no mesmo ponto da música." : "Suas músicas tocam nas caixas de som do lounge — quem estiver por perto ouve junto, no mesmo ponto da música."}</p>
 
         {/* tocando agora + controles */}
         <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">

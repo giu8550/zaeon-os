@@ -19,7 +19,8 @@ import { VOO } from "./voo";
 /** um estacionamento: centro, rumo (a frente das vagas aponta pro centro — a praça no chão, o centro da ilha na
  *  Zaeon), `filas` × `porFila` vagas, `espacamento` entre vagas de uma fila e `entreFilas` entre as filas (m) */
 /** `alt` = quanto o piso do lote fica acima do piso da Zaeon (a garagem fica na altura das salas) */
-export type Lote = { id: "chao" | "garagem" | "estudo"; x: number; z: number; rot: number; ceu: boolean; alt: number; filas: number; porFila: number; espacamento: number; entreFilas: number };
+export type Lote = { id: "chao" | "garagem" | "estudo"; x: number; z: number; rot: number; ceu: boolean; alt: number; filas: number; porFila: number; espacamento: number; entreFilas: number;
+  /** o VÃO no meio das filas (m): a calçada passa por ele (o pátio do lounge) */ corredor?: number };
 const lote = (id: Lote["id"], x: number, z: number, cx: number, cz: number, ceu: boolean, filas: number, porFila: number): Lote =>
   ({ id, x, z, rot: Math.atan2(cx - x, cz - z), ceu, alt: 0, filas, porFila, espacamento: 4.6, entreFilas: 8 });
 /** os 2 lotes da GARAGEM no referencial da SALA (+z = a porta, rumo à Zaeon): um atrás do outro, virados pra porta */
@@ -33,7 +34,7 @@ export const LOTES: Lote[] = [
   ...LOTES_GARAGEM_SALA.map(garagem),         // a GARAGEM da Zaeon (todas as motos de lá)
 ];
 /** largura (ao longo das filas) e profundidade (m) do piso de um lote, e o raio que ele ocupa */
-export const tamanhoDoLote = (l: Lote) => { const larg = l.porFila * l.espacamento + 3, prof = (l.filas - 1) * l.entreFilas + 7.2; return { larg, prof, r: Math.hypot(larg, prof) / 2 }; };
+export const tamanhoDoLote = (l: Lote) => { const larg = l.porFila * l.espacamento + 3 + (l.corredor ?? 0), prof = (l.filas - 1) * l.entreFilas + 7.2; return { larg, prof, r: Math.hypot(larg, prof) / 2 }; };
 export const TOTAL_VAGAS = LOTES.reduce((n, l) => n + l.filas * l.porFila, 0);
 
 /** a moto é modelada em ~1:1 e escalada no render pra proporção do avatar (~2 m) */
@@ -55,11 +56,17 @@ export const ALTURA_LANCAMENTO = 2;
 /** o LOOK de cada vaga — cor e carenagem — embaralhado (não repete em sequência; 16 cores bem diferentes), o mesmo pra
  *  todo mundo (é da vaga: a moto que você leva continua com a cara dela) */
 const PALETA_MOTO = ["#45d6ff", "#ff6ad5", "#ffc46b", "#9affd0", "#ff5a5a", "#a98bff", "#5aff8a", "#ff9a3c", "#3c8bff", "#f2ff5a", "#ff3c9e", "#5afff2", "#c46bff", "#ffd1a3", "#7dd3ff", "#b6ff3c"];
+/** a carenagem (0 Raio, 1 Tubarão, 2 Gota) de uma vaga / de quem pilota: os três por igual */
+export const estiloDaVaga = (s: number) => ((Math.floor(s) % 3) + 3) % 3;
+/** a carenagem de uma pessoa/IA pelo id (estável; os três tipos por igual na frota) */
+export function estiloDoId(id: string): number { let x = 2166136261; for (let i = 0; i < id.length; i++) x = Math.imul(x ^ id.charCodeAt(i), 16777619) >>> 0; return x % 3; }
 export function lookDaVaga(s: number): { cor: string; estilo: number } {
   const h = (n: number) => { let x = (n + 1) * 2654435761; x = (x ^ (x >>> 13)) >>> 0; return x; };
-  // a cor: uma permutação fixa das 16 (sem duas vizinhas iguais); a carenagem: sorteada pela vaga
+  // a cor: uma permutação fixa das 16 (sem duas vizinhas iguais); a carenagem: os 3 tipos se ALTERNAM (Raio, Tubarão,
+  // Gota) — cada estacionamento fica com os três por igual (o dono, out/2026)
   const ordem = [5, 12, 0, 9, 3, 14, 7, 1, 10, 4, 15, 8, 2, 13, 6, 11];
-  return { cor: PALETA_MOTO[ordem[s % ordem.length]!]!, estilo: h(s) % 3 };
+  void h;
+  return { cor: PALETA_MOTO[ordem[s % ordem.length]!]!, estilo: estiloDaVaga(s) };
 }
 
 export type Vaga = { x: number; z: number; yaw: number; ceu: boolean; alt: number; lote: number };
@@ -75,7 +82,16 @@ export function noLote(l: Lote, lx: number, lz: number): { x: number; z: number 
   return { x: l.x + lx * c + lz * s, z: l.z - lx * s + lz * c };
 }
 /** a posição da vaga `i` (de uma fila de `porFila`, na fila `f`) no referencial do lote */
-export const vagaNoLote = (l: Lote, f: number, i: number) => ({ x: (i - (l.porFila - 1) / 2) * l.espacamento, z: ((l.filas - 1) / 2 - f) * l.entreFilas });
+export const vagaNoLote = (l: Lote, f: number, i: number) => {
+  const u = i - (l.porFila - 1) / 2;
+  return { x: u * l.espacamento + (l.corredor ? Math.sign(u) * (l.corredor / 2) : 0), z: ((l.filas - 1) / 2 - f) * l.entreFilas };
+};
+/** onde ficam as FAIXAS entre as vagas de uma fila (x no referencial do lote): as bordas de cada vaga, sem repetir */
+export function faixasDoLote(l: Lote): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < l.porFila; i++) { const x = vagaNoLote(l, 0, i).x, e = l.espacamento / 2; for (const b of [x - e, x + e]) if (!out.some((o) => Math.abs(o - b) < 0.01)) out.push(b); }
+  return out;
+}
 function calcularVagas(): Vaga[] {
   return LOTES.flatMap((l, k) => Array.from({ length: l.filas * l.porFila }, (_, j) => {
     const p = vagaNoLote(l, Math.floor(j / l.porFila), j % l.porFila), w = noLote(l, p.x, p.z);

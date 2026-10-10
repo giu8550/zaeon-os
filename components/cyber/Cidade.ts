@@ -18,10 +18,11 @@
  */
 import * as THREE from "three";
 import type { PisoOclusor } from "./oclusaoPisos";
-import { ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
+import { criarTemplo } from "./Templo";
 import { criarPisoEstacionamento } from "./Estacionamento";
 import { criarPisosEstudo } from "./EstacionamentosEstudo";
 import { LOTES } from "@/lib/cyber/motos";
@@ -56,6 +57,10 @@ export type CidadeHandle = {
   mostrarRecadoNaTV(texto: string | null): void;
   /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
   alturaIlhota(k: number): number;
+  /** a TEMPESTADE do templo (o ritual do dono): a intensidade das nuvens (0..1) e se os raios caem */
+  tempestade(intensidade: number, raios: boolean): void;
+  /** estoura um relâmpago na tempestade do templo agora — caindo em `alvoMundo` (o buraco negro do DJ) ou à toa */
+  raioNoTemplo(alvoMundo?: THREE.Vector3): void;
   /** quem está na Zaeon agora (local da ilha) — os motores de energia do Observatório reagem */
   presencas(p: { x: number; z: number }[]): void;
 };
@@ -63,7 +68,7 @@ export type CidadeHandle = {
 const COLD = 0xbfe8ff, ICE = 0x9fd0ff, FIRE = [0xffe3b0, 0xffb45a, 0xff7a2c];
 const ROTULO_CSS = "position:absolute;transform:translate(-50%,-100%);font:800 13px system-ui,sans-serif;letter-spacing:.08em;padding:4px 12px;border-radius:999px;color:#ffe9c2;background:rgba(18,10,8,.65);border:1px solid rgba(255,190,120,.5);box-shadow:0 0 18px rgba(255,160,80,.35);white-space:nowrap;pointer-events:none;display:none;";
 
-export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o RAIO saiu do topo da capela (mundo) — o som */ aoRaio?: (em: THREE.Vector3) => void; /** a 1ª bulha do coração (mundo: o globo) — o som */ aoBater?: (em: THREE.Vector3) => void }): CidadeHandle {
+export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o RAIO saiu do topo da capela (mundo) — o som */ aoRaio?: (em: THREE.Vector3) => void; /** a 1ª bulha do coração (mundo: o globo) — o som */ aoBater?: (em: THREE.Vector3) => void; /** caiu um raio da tempestade do templo (mundo) — o trovão */ aoTrovao?: (em: THREE.Vector3) => void }): CidadeHandle {
   const { low, starTex } = opts;
   const rm = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const raiz = new THREE.Group();
@@ -268,8 +273,13 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // (sem hangar: a nave-QG do dono fica PAIRANDO atracada ao lado da ilha — lib/cyber/naveQG `poseDaDoca`)
 
   // ── SALAS (lounge) ──
-  const salas = criarSalas(ilha, { low, texturas, estrela: starTex, paredeMat: vidro({ color: 0x0a1830, emissive: 0x2a3a70, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.3, thickness: 1, transparent: true, opacity: 0.32, side: THREE.DoubleSide }, 0.3) });
+  const vidroSala = vidro({ color: 0x0a1830, emissive: 0x2a3a70, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.3, thickness: 1, transparent: true, opacity: 0.32, side: THREE.DoubleSide }, 0.3);
+  const salas = criarSalas(ilha, { low, texturas, estrela: starTex, paredeMat: vidroSala });
   alvos.push(...salas.alvos);
+  // ── o TEMPLO (lib/cyber/templo): a escadaria em curva que sai da direita do deck do lounge, a muralha-veia e o templo
+  //    com a capela e o sanfoneiro — montado no referencial da sala do lounge ──
+  const templo = criarTemplo({ low, paredeMat: vidroSala, estrela: starTex, aoTrovao: opts.aoTrovao });
+  { const L = CIDADE.salas.lounge; templo.group.position.set(L.x, ALTURA_LOUNGE, L.z); templo.group.rotation.y = rotDaSala(L); add(templo.group); alvos.push(...templo.alvos); }
 
   // ── os ESTACIONAMENTOS da GARAGEM (a ala dos veículos — as motos e os robôs são do engine): o piso dos lotes, lá em
   //    cima na plataforma da garagem (flutuando junto com a ilha); entra no clique de andar ──
@@ -326,6 +336,8 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   return {
     group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    tempestade: (i, raios) => templo.tempestade(i, raios),
+    raioNoTemplo: (alvo) => templo.raioAgora(alvo),
     atualizar(dt, t) {
       // a ilha BOIA (25 cm, ciclo de ~21 s): só move quando andou 1 cm — mexer nela força recalcular as matrizes dos
       // ~1.300 nós da cidade; a cada quadro andaria menos de meio milímetro (components/cyber/matrizes)
@@ -335,7 +347,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       (brasa.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.15 * Math.sin(t * 1.4) * fogoAmp;
       pontas.forEach((p, i) => { (p.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.3 + 0.4 * Math.sin(t * 1.2 + i); p.rotation.y += dt * 0.4 * vel; });
       farol.material.opacity = 0.75 + 0.2 * Math.sin(t * 1.1);
-      salas.atualizar(dt, t);
+      salas.atualizar(dt, t); templo.atualizar(dt, t);
       for (const e of estacs) e.atualizar(t);
       globo.rotation.y += dt * 0.25 * vel; aroGlobo.rotation.z += dt * 0.2 * vel;
       // o CORAÇÃO bate: o globo incha de luz, a mesa e o aro acendem; o pulso corre nas veias; o raio sai do topo
@@ -361,6 +373,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         cGeo.attributes.position!.needsUpdate = true; }
       ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * BOIA_ILHOTA * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
     },
-    dispose() { rotulo.remove(); coracao.dispose(); estacoes.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
+    dispose() { rotulo.remove(); templo.dispose(); coracao.dispose(); estacoes.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };
 }

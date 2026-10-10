@@ -4,6 +4,7 @@
  * colaborativo: notas editáveis, artefatos, avatares que andam, chat efêmero.
  */
 import type { SomLounge } from "./musica";
+import type { Ritual } from "@/lib/cyber/ritual";
 
 /** Flag de BUILD (NEXT_PUBLIC_*): precisa ser build-arg no Dockerfile/compose, senão "some" em prod. */
 export const lounge3dOn = (): boolean => process.env.NEXT_PUBLIC_LOUNGE_3D === "1";
@@ -41,6 +42,8 @@ export type Presenca = {
   moto?: { s: number; y: number; yaw: number; de?: string };   // montado numa MOTO voadora (vaga de origem, altura, rumo; `de` = de quem era a estacionada que pegou) — qualquer pessoa
   motoLargada?: { s: number; x: number; y: number; z: number; yaw: number };   // a moto que ESTACIONOU (fica lá, não volta pra vaga)
   desc?: number;      // DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (lib/cyber/descanso)
+  mov?: number;       // o MOVIMENTO TURBINADO (lib/cyber/movimento): 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem
+  atk?: number; hp?: number; arma?: number;   // ARENA PvP (lib/cyber/combate): o golpe (seq×4 + nº do combo), a vida (0–100), a espada na mão (1)
   ts?: number;
 };
 
@@ -66,8 +69,16 @@ export type ArtefatoCanvas = {
 /** o recado ATUAL pro QG (um só; o novo substitui) — quem mandou vem da SESSÃO no servidor */
 export type RecadoQG = { id: string; texto: string; deId: string; deNome: string; deCor: string; ts: number };
 export type ConteudoSala = { notes: NotaCanvas[]; artifacts: ArtefatoCanvas[]; recadoQG?: RecadoQG | null; somLounge?: SomLounge | null;
+  /** a música que sai da NAVE do dono (o 2º canal do toca-discos — o PC "som da nave" na cabine) */
+  somNave?: SomLounge | null;
+  /** o RITUAL da chegada do dono (lib/cyber/ritual): a tempestade no templo e os anunciadores */
+  ritual?: Ritual | null;
   /** onde a NAVE-QG do dono ficou estacionada (todos a veem ali, mesmo com ele offline) */
   naveQG?: { x: number; y: number; z: number; yaw: number } | null };
+/** os CANAIS do toca-discos: as caixas do lounge e a nave do dono */
+export type CanalSom = "lounge" | "nave";
+export const CAMPO_DO_CANAL: Record<CanalSom, "somLounge" | "somNave"> = { lounge: "somLounge", nave: "somNave" };
+export const canalDe = (v: unknown): CanalSom => (v === "nave" ? "nave" : "lounge");
 
 export type OpsSala = {
   upsertNotes?: unknown[]; removeNotes?: unknown[];
@@ -90,8 +101,10 @@ export const EV_CHAT = "chat";
 export const EV_CONTEUDO = "conteudo";
 /** recado do dono pro QG (broadcast pelo servidor; persiste no conteúdo da sala) */
 export const EV_RECADO = "recado-qg";
-/** o som do lounge da Zaeon mudou (playlist ou controle) — `agora` = relógio do servidor (acerta o dos clientes) */
+/** o som do lounge da Zaeon (ou o da nave: `canal`) mudou (playlist ou controle) — `agora` = relógio do servidor (acerta o dos clientes) */
 export const EV_MUSICA = "musica-lounge";
+/** o RITUAL do dono mudou (ligou/desligou a tempestade ou os anunciadores) — `agora` = relógio do servidor */
+export const EV_RITUAL = "ritual";
 
 /** Cor de accent determinística pelo userId (até o perfil ter campo próprio). */
 export function corDoUsuario(userId: string): string {

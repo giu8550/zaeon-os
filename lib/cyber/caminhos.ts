@@ -13,7 +13,7 @@ import { MIRANTES } from "./terra";
 import type { P2 } from "./colisao";
 
 /** o tamanho da célula (m), a folga do corpo (m) e a caixa da grade (local) — a caixa cobre a central e o lounge */
-export const GRADE = { passo: 1, folga: 0.7, x0: -440, x1: 236, z0: -236, z1: 236 } as const;
+export const GRADE = { passo: 1, folga: 0.7, x0: -500, x1: 236, z0: -236, z1: 236 } as const;
 /** a base sólida das pirâmides dos mirantes (o cone de 9×1,6 m + 0,4) */
 const PIRAMIDE_R = 9 * 1.6 + 0.4;
 
