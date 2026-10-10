@@ -46,18 +46,51 @@ export function poseDash(): PoseAcao {
   };
 }
 
-/** a guarda de alerta (o pé esquerdo à frente, a mão esquerda mais à frente); `t` = a respiração */
-export function poseAlerta(t: number): PoseAcao {
-  const resp = 0.012 * Math.sin(t * 2.6);
+/** a GUARDA de alerta depois do dash, no padrão dos jogos de ação "AAA": base BEM aberta (pé esquerdo à frente), bem
+ *  agachado, tronco curvado pra frente e a cabeça baixa olhando por cima; a mão da frente pronta (baixa, à frente), a de
+ *  trás junto do quadril. RESPIRAÇÃO OFEGANTE: forte logo depois do esforço (`tDesde` s), acalmando. `t` = o relógio */
+export function poseAlerta(t: number, tDesde = 1): PoseAcao {
+  const folego = 0.4 + 0.6 * Math.exp(-tDesde * 1.1), r = Math.sin(t * 11.5) * folego;   // ~1,8 respirações/s
   return {
-    inclina: -0.07, desce: 0.13 + resp,
-    tronco: n([0.2, 0.98, -0.04]), cabeca: n([0.05, 0.998, 0]),
-    braco: (l) => n([0.22, -0.72, 0.62 * l]),
-    ante: (l) => (l > 0 ? n([0.86, 0.42, -0.28]) : n([0.66, 0.6, 0.42 * l])),
-    coxa: (l) => (l > 0 ? n([0.55, -0.8, 0.22]) : n([-0.38, -0.88, -0.28])),
-    canela: (l) => (l > 0 ? n([-0.36, -0.93, 0.05]) : n([-0.42, -0.9, -0.05])),
-    pe: (l) => (l > 0 ? n([0.9, -0.42, 0.1]) : n([0.55, -0.6, -0.55])),
+    inclina: -0.2 - 0.025 * r, desce: 0.27 + 0.022 * r,
+    tronco: n([0.48 - 0.05 * r, 0.87, -0.06]), cabeca: n([-0.22, 0.97, 0]),
+    braco: (l) => (l > 0 ? n([0.48, -0.78 + 0.04 * r, 0.4]) : n([-0.15, -0.88 + 0.03 * r, -0.45])),
+    ante: (l) => (l > 0 ? n([0.9, -0.12 + 0.05 * r, -0.16]) : n([0.42, -0.86, -0.28])),
+    coxa: (l) => (l > 0 ? n([0.52, -0.66, 0.54]) : n([-0.42, -0.7, -0.58])),
+    canela: (l) => (l > 0 ? n([-0.38, -0.92, 0.12]) : n([-0.35, -0.93, -0.12])),
+    pe: (l) => (l > 0 ? n([0.88, -0.4, 0.25]) : n([0.45, -0.55, -0.7])),
   };
+}
+
+/** o HERO LANDING (o pouso de super-herói, só de queda ALTA): joelho direito no chão, o pé esquerdo plantado à frente,
+ *  o punho direito no chão, o braço esquerdo aberto pra trás, tronco debruçado e a cabeça baixa */
+export function poseHeroi(): PoseAcao {
+  return {
+    inclina: -0.3, desce: 0.47,
+    tronco: n([0.72, 0.69, 0]), cabeca: n([0.45, 0.89, 0]),
+    braco: (l) => (l > 0 ? n([-0.5, -0.42, 0.76]) : n([0.42, -0.9, -0.12])),
+    ante: (l) => (l > 0 ? n([-0.72, -0.25, 0.65]) : n([0.12, -0.99, 0])),
+    coxa: (l) => (l > 0 ? n([0.95, -0.2, 0.22]) : n([0.1, -0.99, -0.12])),
+    canela: (l) => (l > 0 ? n([0.02, -1, 0]) : n([-0.98, -0.18, 0])),
+    pe: (l) => (l > 0 ? n([0.9, -0.42, 0.05]) : n([-0.6, 0.3, 0])),
+  };
+}
+/** quanto o HERO LANDING pesa `t` s depois do impacto: crava na hora, segura e levanta */
+export const HEROI = { segura: 0.6, levanta: 0.5, trava: 0.45, alturaMin: 9 } as const;
+export function pesoHeroi(t: number): number {
+  if (t < 0) return 0;
+  const entra = Math.min(1, t / 0.05), sai = t < HEROI.segura ? 1 : Math.max(0, 1 - (t - HEROI.segura) / HEROI.levanta);
+  return entra * sai * sai * (3 - 2 * sai);
+}
+
+/** a DECOLAGEM com impulso: agacha `espera` s (parado mais, correndo quase nada — o embalo continua) e lança. Os braços
+ *  vão pra trás no agachamento e sobem na hora do impulso. `tD` = s desde o comando */
+export const DECOLAGEM = { esperaParado: 0.16, esperaAndando: 0.07, impulso: 12 } as const;
+export function bracosDaDecolagem(tD: number, espera: number): { braco(l: number): Dir3; ante(l: number): Dir3; w: number } {
+  const u = tD - espera, lanca = Math.max(0, Math.min(1, u / 0.12));
+  const w = tD < espera ? Math.min(1, tD / Math.max(0.03, espera * 0.6)) : Math.max(0, 1 - Math.max(0, u - 0.25) / 0.3);
+  const mistura = (a: Dir3, b: Dir3): Dir3 => n([a[0] + (b[0] - a[0]) * lanca, a[1] + (b[1] - a[1]) * lanca, a[2] + (b[2] - a[2]) * lanca]);
+  return { w, braco: (l) => mistura([-0.5, -0.83, 0.22 * l], [0.45, 0.55, 0.32 * l]), ante: (l) => mistura([-0.55, -0.82, 0.1 * l], [0.25, 0.95, 0.1 * l]) };
 }
 
 /** os PESOS das poses de ação no instante: o sprint segue a velocidade; o dash acende rápido e solta em 0,15 s depois

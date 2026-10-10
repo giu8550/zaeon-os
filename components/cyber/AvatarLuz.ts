@@ -12,7 +12,7 @@ import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { amostrarPose, duracaoClipe, envelopePouso, misturar, type Dir3, type Pose } from "@/lib/cyber/poses";
 import { impactoDoPouso } from "@/lib/cyber/jet";
-import { poseAlerta, poseDash, poseSprint, type PoseAcao } from "@/lib/cyber/posesCombate";
+import { bracosDaDecolagem, pesoHeroi, poseAlerta, poseDash, poseHeroi, poseSprint, type PoseAcao } from "@/lib/cyber/posesCombate";
 import { fasesDeContato, pisadasEntre } from "@/lib/cyber/audio";
 import { clone as skClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { COR_LUZ } from "@/lib/cyber/cores";
@@ -78,7 +78,7 @@ export type AvatarLuzHandle = {
    *  esticadas e abertas, mãos atrás da cabeça). Sentado, os PÉS ficam no chão na frente do móvel (IK — as canelas não
    *  atravessam a frente do sofá). `tablet` (0..1) = o TABLET se materializando nas mãos (partículas → tablet aceso): com
    *  ele, os braços seguram o tablet e a cabeça olha pra tela — em pé, sentado ou deitado. */
-  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean; /** velocidade no plano (m/s) — o voo turbo deita o corpo */ vel?: number } | null; /** as poses de AÇÃO (lib/cyber/posesCombate): pesos 0..1 do sprint, do dash e do alerta */ acao?: { sprint: number; dash: number; alerta: number } | null; montado?: Montado | null; dj?: number; danca?: number; surf?: number; puxado?: number; descanso?: { sentar: number; deitar: number; assentoY: number; relaxa?: number } | null; tablet?: number; dt: number; t: number }): void;
+  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean; /** velocidade no plano (m/s) — o voo turbo deita o corpo */ vel?: number } | null; /** as poses de AÇÃO (lib/cyber/posesCombate): pesos 0..1 do sprint, do dash e do alerta (`alertaT` = s desde o dash — o fôlego); `heroi` = s desde o HERO LANDING (ou null); `decola` = a decolagem com impulso (s desde o comando e o agachamento) */ acao?: { sprint: number; dash: number; alerta: number; alertaT?: number; heroi?: number | null; decola?: { t: number; espera: number } | null } | null; montado?: Montado | null; dj?: number; danca?: number; surf?: number; puxado?: number; descanso?: { sentar: number; deitar: number; assentoY: number; relaxa?: number } | null; tablet?: number; dt: number; t: number }): void;
   /** quantas PISADAS (pé encostando no chão na animação de andar/correr) desde a última chamada — o som do passo
    *  sai no compasso do pé; `null` = avatar sem pés (sem o modelo): o engine usa a cadência fixa */
   passosNovos(): number | null;
@@ -303,6 +303,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     osso.updateWorldMatrix(false, true);
   };
   const frente = new THREE.Vector3(), lateral = new THREE.Vector3(), cima = new THREE.Vector3(0, 1, 0), cimaC = new THREE.Vector3(), qG = new THREE.Quaternion();
+  const fChao = new THREE.Vector3(), lChao = new THREE.Vector3();   // (os eixos do CHÃO: as poses de ação plantam os pés neles)
   const pN = new THREE.Vector3(), pH = new THREE.Vector3(), cimaH = new THREE.Vector3(), latH = new THREE.Vector3(), zH = new THREE.Vector3(), pF = new THREE.Vector3(), mBase = new THREE.Matrix4(), qCab = new THREE.Quaternion(), qPesc = new THREE.Quaternion(), qInv = new THREE.Quaternion(), alvoM = new THREE.Vector3(), pGr = new THREE.Vector3(), pConcha = new THREE.Vector3(), pesFixos = [new THREE.Vector3(), new THREE.Vector3()];
   const suave = (x: number) => { const u = Math.max(0, Math.min(1, x)); return u * u * (3 - 2 * u); };
   const polo = new THREE.Vector3(), pA = new THREE.Vector3(), pB = new THREE.Vector3(), pC = new THREE.Vector3(), eixo = new THREE.Vector3(), lado2 = new THREE.Vector3(), cot = new THREE.Vector3();
@@ -475,7 +476,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (estavaNoAr && !ar) { tPouso = 0; forcaPouso = impactoDoPouso(vyAr); }   // tocou o chão
       estavaNoAr = !!ar;
       if (tPouso >= 0) { tPouso += dt * (1.5 - 0.5 * forcaPouso); if (tPouso > DUR_POUSO) tPouso = -1; }   // pousinho = mais rápido
-      const wPouso = tPouso >= 0 && !ar ? envelopePouso(tPouso / DUR_POUSO) * (0.4 + 0.6 * forcaPouso) : 0;
+      const wPouso = (tPouso >= 0 && !ar ? envelopePouso(tPouso / DUR_POUSO) * (0.4 + 0.6 * forcaPouso) : 0) * (acao?.heroi != null ? 1 - pesoHeroi(acao.heroi) : 1);   // (no hero landing, ele manda)
       // inclinação do voo: andando no ar deita pra frente (~43°); pairando, levemente; caindo, um pouco pra trás
       // mais REALISTA: quanto mais rápido, mais deitado (no turbo, quase na horizontal — braços e pernas colados); ao
       // DESACELERAR o corpo ergue (a "freada" dos super-heróis); na CURVA, inclina pro lado dela (como quem voa de verdade)
@@ -539,7 +540,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         const poses: [PoseAcao, number, number][] = [];
         if (wSp > 0.01) poses.push([poseSprint(t), wSp, 0]);
         if (wDa > 0.01 && !ar) poses.push([poseDash(), wDa, wDa]);
-        if (wAl > 0.01) poses.push([poseAlerta(t), wAl, wAl * pernasLivres]);
+        if (wAl > 0.01) poses.push([poseAlerta(t, acao?.alertaT ?? 1), wAl, wAl * pernasLivres]);
         let inc = 0, des = 0; for (const [p, w] of poses) { inc += p.inclina * w; des += p.desce * w; }
         corpo.rotation.x += inc; corpo.position.z += -QUADRIL * Math.sin(inc); corpo.position.y += QUADRIL * (1 - Math.cos(inc)) - des;
         corpo.updateWorldMatrix(true, false); corpo.getWorldQuaternion(qG);
@@ -548,10 +549,49 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           if (!osso || !filho || w <= 0.01) return;
           dirAlvo.copy(frente).multiplyScalar(v[0]).addScaledVector(cimaC, v[1]).addScaledVector(lateral, v[2]).normalize(); apontar(osso, filho, dirAlvo, w);
         };
+        // as PERNAS no referencial do CHÃO (o corpo inclinado não leva os pés junto: eles ficam plantados)
+        grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qC2);
+        const fC = fChao.set(0, 0, -1).applyQuaternion(qC2), lC = lChao.crossVectors(cima, fC).normalize();
+        const apChao = (v: Dir3, osso: THREE.Object3D | null, filho: THREE.Object3D | null, w: number) => {
+          if (!osso || !filho || w <= 0.01) return;
+          dirAlvo.copy(fC).multiplyScalar(v[0]).addScaledVector(cima, v[1]).addScaledVector(lC, v[2]).normalize(); apontar(osso, filho, dirAlvo, w);
+        };
         for (const [p, w, wp] of poses) {
           ap(p.tronco, lombar, pescoco, w); ap(p.cabeca, pescoco, cabeca, w * 0.7);
           for (const o of ossos) { ap(p.braco(o.lado), o.braco, o.ante, w); ap(p.ante(o.lado), o.ante, o.mao, w); }
-          if (wp > 0.01 && p.coxa && p.canela && p.pe) for (const o of pernas) { ap(p.coxa(o.lado), o.coxa, o.canela, wp); ap(p.canela(o.lado), o.canela, o.pe, wp); ap(p.pe(o.lado), o.pe, o.dedo, wp * 0.8); }
+          if (wp > 0.01 && p.coxa && p.canela && p.pe) for (const o of pernas) { apChao(p.coxa(o.lado), o.coxa, o.canela, wp); apChao(p.canela(o.lado), o.canela, o.pe, wp); apChao(p.pe(o.lado), o.pe, o.dedo, wp * 0.8); }
+        }
+      }
+      // ── HERO LANDING (queda alta) e a DECOLAGEM com impulso (agacha → lança: o Jump_Start capturado nas pernas e no
+      //    tronco, os braços vão pra trás e sobem no impulso) — por cima de tudo ──
+      const wHe = acao?.heroi != null ? pesoHeroi(acao.heroi) : 0, dec = acao?.decola ?? null;
+      const bDec = dec ? bracosDaDecolagem(dec.t, dec.espera) : null, wDec = bDec ? bDec.w * (1 - wHe) : 0;
+      if ((wHe > 0.01 || wDec > 0.01) && (ossos.length || pernas.length)) {
+        const pDec = wDec > 0.01 ? amostrarPose("Jump_Start", Math.max(0, dec!.t - dec!.espera) * 1.15, false) : null;
+        let inc = 0, des = 0;
+        if (wHe > 0.01) { const h = poseHeroi(); inc += h.inclina * wHe; des += h.desce * wHe; }
+        if (pDec) des -= pDec.quadril * PERNA * 0.9 * wDec * (dec!.t < dec!.espera ? 1 : 0.5);
+        corpo.rotation.x += inc; corpo.position.z += -QUADRIL * Math.sin(inc); corpo.position.y += QUADRIL * (1 - Math.cos(inc)) - des;
+        corpo.updateWorldMatrix(true, false); corpo.getWorldQuaternion(qG);
+        frente.set(0, 0, -1).applyQuaternion(qG); cimaC.set(0, 1, 0).applyQuaternion(qG); lateral.crossVectors(cimaC, frente).normalize();
+        grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qC2);
+        const fC = fChao.set(0, 0, -1).applyQuaternion(qC2), lC = lChao.crossVectors(cima, fC).normalize();
+        const ap = (v: Dir3, osso: THREE.Object3D | null, filho: THREE.Object3D | null, w: number, chao = false) => {
+          if (!osso || !filho || w <= 0.01) return;
+          if (chao) dirAlvo.copy(fC).multiplyScalar(v[0]).addScaledVector(cima, v[1]).addScaledVector(lC, v[2]).normalize();
+          else dirAlvo.copy(frente).multiplyScalar(v[0]).addScaledVector(cimaC, v[1]).addScaledVector(lateral, v[2]).normalize();
+          apontar(osso, filho, dirAlvo, w);
+        };
+        if (pDec) {
+          ap(pDec.tronco, lombar, pescoco, wDec * 0.8);
+          for (const o of pernas) { const E = o.lado > 0; ap(pDec[E ? "coxaE" : "coxaD"], o.coxa, o.canela, wDec); ap(pDec[E ? "canelaE" : "canelaD"], o.canela, o.pe, wDec); ap(pDec[E ? "peE" : "peD"], o.pe, o.dedo, wDec * 0.8); }
+          for (const o of ossos) { ap(bDec!.braco(o.lado), o.braco, o.ante, wDec); ap(bDec!.ante(o.lado), o.ante, o.mao, wDec); }
+        }
+        if (wHe > 0.01) {
+          const h = poseHeroi();
+          ap(h.tronco, lombar, pescoco, wHe); ap(h.cabeca, pescoco, cabeca, wHe * 0.8);
+          for (const o of ossos) { ap(h.braco(o.lado), o.braco, o.ante, wHe); ap(h.ante(o.lado), o.ante, o.mao, wHe); }
+          for (const o of pernas) { ap(h.coxa!(o.lado), o.coxa, o.canela, wHe, true); ap(h.canela!(o.lado), o.canela, o.pe, wHe, true); ap(h.pe!(o.lado), o.pe, o.dedo, wHe * 0.8, true); }
         }
       }
       // ── DJ na cabine: fone (pescoço → cabeça), mãos na controladora por IK, balanço no compasso ──

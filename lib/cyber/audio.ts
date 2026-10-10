@@ -11,7 +11,7 @@ import { SINTESE_ASAS, type NomeSomAsas } from "./asas";
 import { sintetizarBatida, sintetizarRaio } from "./coracao";
 import { sintetizarAmbiente } from "./ambiente";
 import { sintetizarPuxaFio, sintetizarZumbidoFio } from "./somFio";
-import { sintetizarAlerta, sintetizarDash } from "./somMovimento";
+import { sintetizarAlerta, sintetizarDash, sintetizarDecola, sintetizarImpactoHeroi } from "./somMovimento";
 
 export const PASTA_SONS = "/assets/sounds/cyber/";
 
@@ -20,7 +20,7 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
   | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien"
-  | NomeSomMoto | NomeSomAsas | "coracao" | "raio" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta";
+  | NomeSomMoto | NomeSomAsas | "coracao" | "raio" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -38,9 +38,11 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   // SINTETIZADOS (sem arquivo): gerados no navegador por sintetizarJetpack / sintetizarBaque
   "jato-sopro": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
   baque: { modo: "pos", loop: false, volume: 0.95, sintetico: true },   // o corpo batendo no chão (força pela queda)
-  // o MOVIMENTO TURBINADO (lib/cyber/somMovimento): o swoosh do DASH e o "shing" de quando o corpo entra em guarda
+  // o MOVIMENTO TURBINADO (lib/cyber/somMovimento): o DASH, a expiração da GUARDA, a DECOLAGEM e o HERO LANDING
   dash: { modo: "pos", loop: false, volume: 0.85, sintetico: true },
-  alerta: { modo: "pos", loop: false, volume: 0.3, sintetico: true },
+  alerta: { modo: "pos", loop: false, volume: 0.45, sintetico: true },   // (a expiração pesada da guarda)
+  decola: { modo: "pos", loop: false, volume: 0.8, sintetico: true },     // a ignição do jato no impulso
+  "impacto-heroi": { modo: "pos", loop: false, volume: 1, sintetico: true },   // o estrondo do hero landing (queda alta)
   // MOTO por estágio (lib/cyber/somMoto, sintetizados): loops de motor (que faz a lenta)/vento/turbina + os one-shots
   "moto-motor": { modo: "pos", loop: true, volume: 0.55, sintetico: true },
   "moto-vento": { modo: "pos", loop: true, volume: 0.35, sintetico: true },
@@ -136,7 +138,7 @@ export function sintetizarBaque(sr: number): Float32Array {
 }
 export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_ASAS, coracao: sintetizarBatida, raio: sintetizarRaio,
   "ambiente-biblioteca": (sr) => sintetizarAmbiente("biblioteca", sr), "ambiente-jardim": (sr) => sintetizarAmbiente("jardim", sr),
-  "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta };
+  "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta, decola: sintetizarDecola, "impacto-heroi": sintetizarImpactoHeroi };
 
 /** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo).
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
