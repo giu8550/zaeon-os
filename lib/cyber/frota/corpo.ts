@@ -26,7 +26,7 @@
 import { ALTURA_LOUNGE, CIDADE, colisoresDaCidade, daSala, mundo } from "../ceu";
 import { comprimento, pontoNaRota, rotaAPe } from "../caminhos";
 import { NOS } from "../buracos";
-import { PLATAFORMAS } from "../plataformas";
+import { PLATAFORMAS, IDS_PLATAFORMAS } from "../plataformas";
 import { ESTACAO, MEIO_TELOES, MIRANTES, noMirante } from "../terra";
 import { acasoDe, entre, inteiro, embaralhar } from "./aleatorio";
 import type { FlagsFrota } from "./agenda";
@@ -61,7 +61,7 @@ const s3 = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c 
 /** os pontos de VISITA de moto pelo mapa (fora da Zaeon) */
 type Ponto = P3 & { id: string; estudo: boolean; /** (passeio a pé) pra onde olha parado aqui e quanto fica (s) */ olha?: number; fica?: number };
 const VISITAS: Ponto[] = [
-  ...(["univ", "ufc", "unifor", "uece", "solana"] as const).map((id) => { const P = PLATAFORMAS[id]; return { id, x: P.chegada.x, y: P.y, z: P.chegada.z, estudo: id !== "solana" }; }),
+  ...IDS_PLATAFORMAS.map((id) => { const P = PLATAFORMAS[id]; return { id, x: P.chegada.x, y: P.y, z: P.chegada.z, estudo: id !== "solana" }; }),
   // (a PRAÇA saiu: virou a ARENA PvP — lib/cyber/arena; IA não pousa no meio da luta)
 ];
 /** os PONTOS DE INTERESSE do passeio a pé na Zaeon central (local da ilha): a plateia na frente de cada telão dos
@@ -81,7 +81,7 @@ const INTERESSES: Interesse[] = [
 type PontoCeu = Ponto & { fora: boolean; pousa: boolean };
 const CEU: PontoCeu[] = [
   ...Array.from({ length: 10 }, (_, k) => { const a = (k / 10) * Math.PI * 2, R = 330 + (k % 3) * 25; return { id: `ceu-zaeon-${k}`, x: CIDADE.centro.x + Math.cos(a) * R, y: PISO - 40 + (k % 3) * 25, z: CIDADE.centro.z + Math.sin(a) * R, estudo: false, fora: false, pousa: false }; }),
-  ...(["univ", "ufc", "unifor", "uece", "solana"] as const).flatMap((id) => { const P = PLATAFORMAS[id]; return [0, 1, 2, 3].map((k) => { const a = (k / 4) * Math.PI * 2 + 0.5, R = P.r + 45; return { id: `ceu-${id}-${k}`, x: P.centro.x + Math.cos(a) * R, y: P.y + 22, z: P.centro.z + Math.sin(a) * R, estudo: false, fora: true, pousa: false }; }); }),
+  ...IDS_PLATAFORMAS.flatMap((id) => { const P = PLATAFORMAS[id]; return [0, 1, 2, 3].map((k) => { const a = (k / 4) * Math.PI * 2 + 0.5, R = P.r + 45; return { id: `ceu-${id}-${k}`, x: P.centro.x + Math.cos(a) * R, y: P.y + 22, z: P.centro.z + Math.sin(a) * R, estudo: false, fora: true, pousa: false }; }); }),
   ...([[0, 320, 120], [520, 220, 160], [-520, -180, 140], [320, -380, 210], [-620, 520, 170], [880, -120, 230], [-300, -700, 260]] as const).map(([x, z, y], k) => ({ id: `ceu-meio-${k}`, x, y, z, estudo: false, fora: true, pousa: false })),
   ...VISITAS.map((v) => ({ ...v, fora: true, pousa: true })),
 ];

@@ -6,9 +6,10 @@
  * cada lugar de estudo e a capacidade (chão do lounge, vagas por estacionamento). Usado no Modo CEO ("Deploy agents") e
  * no painel admin dentro do cyberespaço. Só edita o rascunho — quem grava é quem usa.
  */
-import { AREAS_PADRAO, type AreasFrota } from "@/lib/cyber/frota/agenda";
+import { AREAS_PADRAO, ambienteNoMapa, type AreasFrota } from "@/lib/cyber/frota/agenda";
 import { LIMITES_AREAS } from "@/lib/cyber/frota/config";
 import { AREAS, type AreaId } from "@/lib/cyber/frota/areas";
+import { PLATAFORMAS, plataformaAtiva, type IdPlataforma } from "@/lib/cyber/plataformas";
 
 const NOME_LUGAR: Record<keyof AreasFrota["pesos"], string> = { univ: "UNILAB", ufc: "UFC", unifor: "Unifor", uece: "UECE", biblioteca: "Zaeon · biblioteca", jardim: "Zaeon · jardim" };
 const pct = (v: number, total: number) => (total > 0 ? Math.round((100 * v) / total) : 0);
@@ -46,7 +47,7 @@ export default function ControlesAreasFrota({ areas, onChange }: { areas: AreasF
       <section>
         <h4 className={titulo}>Peso de cada lugar de estudo (0 = ninguém)</h4>
         <div className="grid gap-3 sm:grid-cols-2">
-          {(Object.keys(NOME_LUGAR) as (keyof AreasFrota["pesos"])[]).map((k) => (
+          {(Object.keys(NOME_LUGAR) as (keyof AreasFrota["pesos"])[]).filter(ambienteNoMapa).map((k) => (
             <Faixa key={k} rotulo={`${NOME_LUGAR[k]} · ${pct(areas.pesos[k], somaPesos)}%`} valor={areas.pesos[k]} max={LIMITES_AREAS.peso} passo={0.5} onChange={(v) => onChange({ ...areas, pesos: { ...areas.pesos, [k]: v } })} />
           ))}
         </div>
@@ -69,7 +70,7 @@ export function TabelaAreas({ linhas }: { linhas: Record<AreaId, { bots: number;
     <table className="w-full text-left text-xs">
       <thead className="text-[10px] uppercase tracking-widest opacity-60"><tr><th className="py-1">Área</th><th className="text-right">Bots</th><th className="text-right">Usuários reais</th></tr></thead>
       <tbody>
-        {AREAS.map((a) => {
+        {AREAS.filter((a) => !(a.id in PLATAFORMAS) || plataformaAtiva(a.id as IdPlataforma)).map((a) => {   // (sem as universidades fora do mapa)
           const l = linhas[a.id];
           return (
             <tr key={a.id} className="border-t border-slate-400/20">

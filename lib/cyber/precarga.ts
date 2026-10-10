@@ -23,7 +23,9 @@ export type ItemPrecarga = { url: string; tipo: TipoItem };
 /** estimativa de bytes por tipo, usada só até o `content-length` chegar */
 export const ESTIMATIVA: Record<TipoItem, number> = { codigo: 2_500_000, som: 250_000, textura: 900_000, corpo: 11_000_000 };
 
-export const TEXTURAS = ["/assets/cyber/terra-blue-marble.jpg", "/assets/cyber/logo-unilab.png", "/assets/cyber/logo-uece.png", "/assets/cyber/logo-superteam-br.png"] as const;
+// (os logos da UNILAB/UECE saíram com as universidades do mapa — lib/cyber/plataformas `UNIVERSIDADES_NO_MAPA`; se voltarem, o
+// próprio campus baixa o logo dele)
+export const TEXTURAS = ["/assets/cyber/terra-blue-marble.jpg", "/assets/cyber/logo-superteam-br.png"] as const;
 
 /** os sons com ARQUIVO (os sintetizados nascem no navegador, não baixam nada) */
 export function urlsDosSons(): string[] {

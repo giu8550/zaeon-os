@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IDS_PLATAFORMAS, PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, decolaDaPlataforma, elevadorAqui, noArNaPlataforma, noPortalDaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma } from "./plataformas";
+import { UNIVERSIDADES_NO_MAPA, IDS_PLATAFORMAS, PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, decolaDaPlataforma, elevadorAqui, noArNaPlataforma, noPortalDaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma } from "./plataformas";
 import { ANDARES_SOLANA, NOMES_ANDARES, ROOFTOP, SOLANA, moveisDoAndar, mundoS, paredesDoAndar, resolverNoAndar, ESCALA_SOLANA } from "./solana";
 import { CIDADE } from "./ceu";
 import { PRACA } from "./praca";
@@ -37,9 +37,10 @@ describe("lugares flutuantes (Universidade e Solana House)", () => {
     }
   });
   it("mochila: a 'bolha' de cada lugar, e o pouso no disco vindo de cima", () => {
-    const U = PLATAFORMAS.univ;
-    expect(plataformaPerto(U.chegada, U.y + 5)).toBe("univ");
-    expect(plataformaPerto(U.chegada, 0)).toBeNull();          // lá embaixo (no vazio, na altura da praça): não
+    const U = PLATAFORMAS.univ, S = PLATAFORMAS.solana;
+    expect(plataformaPerto(S.chegada, S.y + 5)).toBe("solana");
+    expect(plataformaPerto(S.chegada, 0)).toBeNull();          // lá embaixo (no vazio, na altura da praça): não
+    expect(plataformaPerto(U.chegada, U.y + 5)).toBe(UNIVERSIDADES_NO_MAPA ? "univ" : null);   // (universidades fora do mapa: não tem disco)          // lá embaixo (no vazio, na altura da praça): não
     expect(pousosNaPlataforma("univ", U.chegada)).toEqual([0]);
     expect(pousosNaPlataforma("univ", { x: U.centro.x + U.r + 2, z: U.centro.z })).toEqual([]);
   });

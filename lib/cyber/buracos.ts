@@ -50,7 +50,7 @@ export const NOS: Record<IdNo, NoTunel> = {
   })) as Record<IdPlataforma, NoTunel>),
 };
 /** a ordem dos destinos no túnel */
-export const IDS_NOS: IdNo[] = ["zaeon", "praca", "univ", "ufc", "unifor", "uece", "solana"];
+export const IDS_NOS: IdNo[] = (["zaeon", "praca", "univ", "ufc", "unifor", "uece", "solana"] as IdNo[]).filter((id) => id === "zaeon" || id === "praca" || IDS_PLATAFORMAS.includes(id));
 
 /** pisou no anel de qual nó? `y` = a altura dos pés (o anel só vale no piso dele) */
 export function noDoAnel(p: P2, y: number): IdNo | null {

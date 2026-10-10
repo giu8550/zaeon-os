@@ -45,24 +45,32 @@ describe("a frota (700 IAs)", () => {
     expect(online(full, 3 * 60)).toBeGreaterThan(turma.length * 0.85); expect(online(normal, 3 * 60)).toBe(0);
     expect(online(full, 15 * 60)).toBeGreaterThan(turma.length * 0.85);
   });
-  it("MIGRAÇÃO +800: a config salva antiga (700) vira 1500 (o teto) UMA vez; quem já existia não muda; apagar o lote depois não traz de volta", () => {
+  it("MIGRAÇÃO: a config salva antiga (700) vira 1000 (o teto) UMA vez; quem já existia não muda; apagar o lote depois não traz de volta", () => {
     const salva = sanitizarConfig({ frota: { lotes: [{ semente: 2026, total: 700 }], tamanhoGrupo: 4 }, flags: {}, versao: 1 });
-    const m = aplicarMigracoes(salva); expect(m.mudou).toBe(true); expect(totalDaFrota(m.c)).toBe(1500);
+    const m = aplicarMigracoes(salva); expect(m.mudou).toBe(true); expect(totalDaFrota(m.c)).toBe(1000);
     expect(gerarFrota(m.c.frota).slice(0, 700)).toEqual(gerarFrota(salva.frota));   // os 700 continuam os mesmos
     expect(aplicarMigracoes(m.c).mudou).toBe(false);                                    // não aplica de novo
     const semOLote = sanitizarConfig({ ...m.c, frota: { ...m.c.frota, lotes: m.c.frota.lotes.slice(0, 1) } });
     expect(aplicarMigracoes(semOLote).c.frota.lotes).toHaveLength(1);                   // o dono apagou: não volta
-    expect(totalDaFrota(CONFIG_PADRAO)).toBe(1500); expect(new Set(gerarFrota(CONFIG_PADRAO.frota).map((a) => a.nome)).size).toBe(1500);
+    expect(totalDaFrota(CONFIG_PADRAO)).toBe(1000); expect(new Set(gerarFrota(CONFIG_PADRAO.frota).map((a) => a.nome)).size).toBe(1000);
   });
-  it("TETO 1500 em produção: a config que já tinha rodado o +1300 (2000 salvas) volta pra 1500 — os 700 de sempre não mudam", () => {
+  it("TETO 1000 em produção: a config que já tinha rodado o +1300 (2000 salvas) volta pra 1000 — os 700 de sempre não mudam", () => {
     const de2000 = { frota: { lotes: [{ semente: 2026, total: 700 }, { semente: 2027, total: 1300 }], tamanhoGrupo: 4 }, flags: {}, versao: 7, migracoes: ["2026-10-mais-1300", "2026-10-modo-full-ate-12"] };
     const m = aplicarMigracoes(sanitizarConfig(de2000));
-    expect(totalDaFrota(m.c)).toBe(1500); expect(m.mudou).toBe(true);
-    expect(m.c.frota.lotes.map((l) => [l.semente, l.total])).toEqual([[2026, 700], [2027, 800]]);
+    expect(totalDaFrota(m.c)).toBe(1000); expect(m.mudou).toBe(true);
+    expect(m.c.frota.lotes.map((l) => [l.semente, l.total])).toEqual([[2026, 700], [2027, 300]]);
     const antes = gerarFrota({ lotes: de2000.frota.lotes.slice(0, 1).map((l) => ({ ...l, fracaoMulheres: 0.6, fracaoCloak: 0.7 })), tamanhoGrupo: 4 }).map((a) => a.nome);
     const depois = gerarFrota(m.c.frota).map((a) => a.nome);
     expect(depois.slice(0, 700)).toEqual(antes);   // os 700 de sempre continuam os mesmos
-    expect(new Set(depois).size).toBe(1500);
+    expect(new Set(depois).size).toBe(1000);
+    expect(aplicarMigracoes(m.c).mudou).toBe(false);
+  });
+  it("TETO 1000 (out/2026): a config de PROD (700 + 800, já com o teto-1500) cai pra 1000 — as 300 primeiras do lote 2027 são as mesmas", () => {
+    const de1500 = { frota: { lotes: [{ semente: 2026, total: 700 }, { semente: 2027, total: 800 }], tamanhoGrupo: 4 }, flags: {}, versao: 9, migracoes: ["2026-10-mais-1300", "2026-10-modo-full-ate-12", "2026-10-teto-1500"] };
+    const m = aplicarMigracoes(sanitizarConfig(de1500));
+    expect(m.mudou).toBe(true); expect(m.c.frota.lotes.map((l) => [l.semente, l.total])).toEqual([[2026, 700], [2027, 300]]);
+    const antes = gerarFrota(sanitizarConfig({ ...de1500, frota: { ...de1500.frota, lotes: [{ semente: 2026, total: 700 }, { semente: 2027, total: 300 }] } }).frota).map((a) => a.nome);
+    expect(gerarFrota(m.c.frota).map((a) => a.nome)).toEqual(antes);
     expect(aplicarMigracoes(m.c).mudou).toBe(false);
   });
 });
@@ -91,10 +99,10 @@ describe("a agenda do dia", () => {
     expect(pct("moto")).toBeGreaterThan(24); expect(pct("moto")).toBeLessThan(35);
     expect(pct("andar")).toBeGreaterThan(2); expect(pct("andar")).toBeLessThan(8);
   });
-  it("o estudo fica mais nas UNIVERSIDADES: a Zaeon (biblioteca, jardim e lounge) leva bem menos da metade", () => {
+  it("sem universidades no mapa, o estudo é todo na Zaeon (biblioteca, jardim, lounge e a cidadela)", () => {
     let zaeon = 0, total = 0;
-    for (const { blocos } of todos) for (const b of blocos) if (b.atividade.startsWith("estudo")) { total += dur(b); if (["biblioteca", "jardim", "lounge"].includes(b.ambiente!)) zaeon += dur(b); }
-    expect(zaeon / total).toBeLessThan(0.35);
+    for (const { blocos } of todos) for (const b of blocos) if (b.atividade.startsWith("estudo") && b.spot) { total += dur(b); if (["biblioteca", "jardim", "lounge", "cidadela"].includes(b.ambiente!)) zaeon += dur(b); }
+    expect(total).toBeGreaterThan(0); expect(zaeon / total).toBe(1);
   });
   it("as MULHERES tendem a estudar mais que os homens", () => {
     const media = (g: "f" | "m") => { const l = todos.filter((x) => x.agente.genero === g && x.blocos.length).map((x) => x.blocos.filter((b) => b.atividade.startsWith("estudo")).reduce((s, b) => s + dur(b), 0)); return l.reduce((s, v) => s + v, 0) / l.length; };

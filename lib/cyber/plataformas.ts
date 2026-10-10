@@ -53,7 +53,13 @@ export const PLATAFORMAS: Record<IdPlataforma, Plataforma> = {
     } satisfies Plataforma];
   })) as Record<IdCampus, Plataforma>,
 };
-export const IDS_PLATAFORMAS = Object.keys(PLATAFORMAS) as IdPlataforma[];
+/** as UNIVERSIDADES no mapa (a UNILAB e os campi UFC/Unifor/UECE). DESLIGADAS a pedido do dono (out/2026): pesavam no
+ *  fundo do mapa — ficam só a Zaeon, as salas dela e a Solana House. Os módulos continuam (true = voltam). */
+export const UNIVERSIDADES_NO_MAPA = false;
+/** este lugar flutuante está no mapa? */
+export const plataformaAtiva = (id: IdPlataforma) => UNIVERSIDADES_NO_MAPA || id === "solana";
+/** os lugares flutuantes que EXISTEM no mapa (física, túneis, bots, contadores) */
+export const IDS_PLATAFORMAS = (Object.keys(PLATAFORMAS) as IdPlataforma[]).filter(plataformaAtiva);
 
 const dentro = (p: P2, a: Anel) => Math.hypot(p.x - a.x, p.z - a.z) < a.r;
 /** pisou no anel do buraco negro desta plataforma (no disco)? */
@@ -112,8 +118,7 @@ export function pilaresDasPlataformas(): Pilar[] { return (pilaresCache ??= calc
 function calcularPilares(): Pilar[] {
   const P = PLATAFORMAS.solana, pr = SOLANA.predio, cx = (pr.x0 + pr.x1) / 2, cz = (pr.z0 + pr.z1) / 2;
   return [
-    ...pilaresDaUniversidade(),
-    ...IDS_CAMPI.flatMap((id) => pilaresDoCampus(id)),
+    ...(UNIVERSIDADES_NO_MAPA ? [...pilaresDaUniversidade(), ...IDS_CAMPI.flatMap((id) => pilaresDoCampus(id))] : []),
     { ...P.centro, r: P.r, topo: P.y, base: P.y - SOLANA.espessura },
     { ...mundoS({ x: cx, z: cz }), r: Math.hypot(pr.x1 - cx, pr.z1 - cz), topo: P.y + ANDARES_SOLANA[ROOFTOP] + SOLANA.guardaCorpo, base: P.y },
   ];
