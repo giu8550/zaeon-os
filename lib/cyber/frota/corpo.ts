@@ -82,7 +82,10 @@ type PontoCeu = Ponto & { fora: boolean; pousa: boolean };
 const CEU: PontoCeu[] = [
   ...Array.from({ length: 10 }, (_, k) => { const a = (k / 10) * Math.PI * 2, R = 330 + (k % 3) * 25; return { id: `ceu-zaeon-${k}`, x: CIDADE.centro.x + Math.cos(a) * R, y: PISO - 40 + (k % 3) * 25, z: CIDADE.centro.z + Math.sin(a) * R, estudo: false, fora: false, pousa: false }; }),
   ...IDS_PLATAFORMAS.flatMap((id) => { const P = PLATAFORMAS[id]; return [0, 1, 2, 3].map((k) => { const a = (k / 4) * Math.PI * 2 + 0.5, R = P.r + 45; return { id: `ceu-${id}-${k}`, x: P.centro.x + Math.cos(a) * R, y: P.y + 22, z: P.centro.z + Math.sin(a) * R, estudo: false, fora: true, pousa: false }; }); }),
-  ...([[0, 320, 120], [520, 220, 160], [-520, -180, 140], [320, -380, 210], [-620, 520, 170], [880, -120, 230], [-300, -700, 260]] as const).map(([x, z, y], k) => ({ id: `ceu-meio-${k}`, x, y, z, estudo: false, fora: true, pousa: false })),
+  // o FLUXO entre as PLATAFORMAS DE ESTUDO (pedido do dono, out/2026): 3 pontos no céu do lado de fora de cada uma
+  // (biblioteca, jardim, lounge) — o passeio vai de uma pra outra (os pontos soltos pelo mapa, dos campi, saíram)
+  ...(["biblioteca", "jardim", "lounge"] as const).flatMap((nome) => { const s = CIDADE.salas[nome], c = mundo(s); return [-0.45, 0, 0.45].map((da, k) => {
+    const a = s.ang + da, R = s.r + 35; return { id: `ceu-${nome}-${k}`, x: c.x + Math.cos(a) * R, y: PISO + s.y + 16 + k * 5, z: c.z + Math.sin(a) * R, estudo: false, fora: false, pousa: false }; }); }),
   ...VISITAS.map((v) => ({ ...v, fora: true, pousa: true })),
 ];
 const CHEGADA: P3 = { x: NOS.zaeon.chegada.x, y: PISO, z: NOS.zaeon.chegada.z };

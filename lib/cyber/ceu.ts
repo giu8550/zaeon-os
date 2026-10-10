@@ -22,9 +22,11 @@ const E = ESCALA_ZAEON;
 /** a CAPELA (cidadela): pilares + cúpula + tambor + 2ª cúpula + PONTA (pináculo). As medidas ficam aqui porque a altura
  *  do início da ponta decide a altura do lounge. */
 /** a CAPELA monumental no centro da Zaeon (pilares, cúpulas, ponta, farol) e o CORAÇÃO (raio na ponta + veias subindo
- *  por ela). DESLIGADA a pedido do dono (out/2026, fps): fica só o GLOBO na mesa (de onde o rosto da Zaeon sai no
- *  tutorial). As medidas continuam (a altura do lounge, as cabines e as estações se medem por elas) */
-export const CAPELA_NA_ZAEON = false;
+ *  por ela). Saiu por fps e VOLTOU a pedido do dono (out/2026): "a capela central é parte da Zaeon" */
+export const CAPELA_NA_ZAEON = true;
+/** as TORRES de cristal da muralha (16, com a ponta acesa) e as LÍNGUAS DE FOGO da borda — fora a pedido do dono (out/2026,
+ *  fps: "retire as pilastras e os pontos de luz nas bordas"). Os tubos de ensaio continuam medidos pelos ângulos delas */
+export const TORRES_NA_BORDA = false, FOGO_NA_BORDA = false;
 export const CAPELA = { r: 18 * E, pilares: 28, pilarColR: 1.3 * E, altura: 32, achata: 0.55, tamborR: 18, tamborAlt: 14, pontaLen: 60 } as const;
 /** a altura (acima do piso) onde a PONTA da capela começa — o lounge flutua mais ou menos aqui */
 export function inicioDaPonta(): number {
@@ -326,8 +328,7 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     ...[[-44, -14], [44, -14], [-46, 14], [46, 14], [-30, -42], [30, -42]].map(([x, z]) => ({ tipo: "torreCarga", x: x!, z: z!, rot: Math.atan2(-x!, -z!), larg: 1.6, prof: 1.6 })),
   ],
   biblioteca: [
-    // ESTANTES em arco no fundo e nas laterais, viradas pro meio
-    ...[-1.2, -0.9, -0.6, -0.3, 0, 0.3, 0.6, 0.9, 1.2, -1.65, 1.65, -1.95, 1.95].map((a) => { const x = Math.sin(a) * 33, z = -Math.cos(a) * 33; return { tipo: "estante", x, z, rot: Math.atan2(-x, -z), larg: 5.6, prof: 1 }; }),
+    // (as ESTANTES em arco saíram a pedido do dono — out/2026, fps)
     // MESAS de leitura com luminária, um pufe de cada lado
     ...[[-7, -10], [7, -10], [-7, 2], [7, 2]].flatMap(([x, z]) => [
       { tipo: "mesaLeitura", x: x!, z: z!, rot: 0, larg: 3, prof: 1.4, cor: 0x7fb8ff },
