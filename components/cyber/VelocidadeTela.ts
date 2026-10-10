@@ -29,6 +29,9 @@ export type VelocidadeTela = {
   /** desenha o quadro: `desenhar()` = o desenho normal da cena (no alvo atual); `forca` 0..~1.2; `blur` = liga a
    *  passada cara (o blur radial) — sem ela, as linhas e a vinheta vão por cima da cena */
   render(R: THREE.WebGLRenderer, forca: number, t: number, desenhar: () => void, blur: boolean): void;
+  /** (no carregamento) compila os materiais da `cena` na versão de desenhar NA TEXTURA do blur — é outro programa por
+   *  material (a saída fica linear); sem isso, o 1º blur compilava a cena inteira de novo (~0,3 s travado) */
+  compilar(R: THREE.WebGLRenderer, cena: THREE.Object3D, cam: THREE.Camera): Promise<void>;
   dispose(): void;
 };
 
@@ -75,19 +78,27 @@ export function criarVelocidadeTela(o: { amostrasMsaa: number }): VelocidadeTela
   const cenaQuad = new THREE.Scene(); cenaQuad.add(quad);
   const camQuad = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const preparar = (m: THREE.ShaderMaterial, forca: number, t: number) => { m.uniforms.uForca!.value = forca; m.uniforms.uT!.value = t; m.uniforms.uAspecto!.value = tam.x / Math.max(1, tam.y); quad.material = m; };
+  const alvo = (R: THREE.WebGLRenderer) => {
+    R.getDrawingBufferSize(tam);
+    if (!rt || rt.width !== tam.x || rt.height !== tam.y) {
+      rt?.dispose();
+      // HalfFloat: a cena fica LINEAR na textura (a conversão pra sRGB é no quad) — com 8 bits o escuro faria degraus
+      rt = new THREE.WebGLRenderTarget(tam.x, tam.y, { type: THREE.HalfFloatType, samples: o.amostrasMsaa, depthBuffer: true });
+    }
+    return rt;
+  };
   return {
+    async compilar(R, cena, cam) {
+      const ant = R.getRenderTarget(); R.setRenderTarget(alvo(R));
+      try { await R.compileAsync(cena, cam); } catch { /* sem compilação paralela: compila no 1º blur */ } finally { R.setRenderTarget(ant); }
+    },
     render(R, forca, t, desenhar, blur) {
       if (forca < 0.03) { desenhar(); return; }
       R.getDrawingBufferSize(tam);
       if (!blur) { desenhar(); preparar(matLinhas, forca, t); R.render(cenaQuad, camQuad); return; }
-      if (!rt || rt.width !== tam.x || rt.height !== tam.y) {
-        rt?.dispose();
-        // HalfFloat: a cena fica LINEAR na textura (a conversão pra sRGB é no quad) — com 8 bits o escuro faria degraus
-        rt = new THREE.WebGLRenderTarget(tam.x, tam.y, { type: THREE.HalfFloatType, samples: o.amostrasMsaa, depthBuffer: true });
-      }
-      const ant = R.getRenderTarget();
-      R.setRenderTarget(rt); desenhar(); R.setRenderTarget(ant);
-      matBlur.uniforms.tCena!.value = rt.texture; preparar(matBlur, forca, t);
+      const alvoBlur = alvo(R), ant = R.getRenderTarget();
+      R.setRenderTarget(alvoBlur); desenhar(); R.setRenderTarget(ant);
+      matBlur.uniforms.tCena!.value = alvoBlur.texture; preparar(matBlur, forca, t);
       R.render(cenaQuad, camQuad);
     },
     dispose() { rt?.dispose(); matBlur.dispose(); matLinhas.dispose(); quad.geometry.dispose(); },
