@@ -54,7 +54,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (turno.classe === "abuso") await prisma.user.update({ where: { id: me.id }, data: { cyberExpulsoEm: new Date() } });
     else {
       const atual = await prisma.user.findUnique({ where: { id: me.id }, select: { cyberPerfil: true } });
-      const antes = atual?.cyberPerfil && typeof atual.cyberPerfil === "object" && !Array.isArray(atual.cyberPerfil) ? limparPerfil(atual.cyberPerfil) : {};
+      // (o que já estava guardado — do tutorial antigo — fica como está; o novo só acrescenta situação e área)
+      const antes = atual?.cyberPerfil && typeof atual.cyberPerfil === "object" && !Array.isArray(atual.cyberPerfil) ? (atual.cyberPerfil as Record<string, unknown>) : {};
       await prisma.user.update({ where: { id: me.id }, data: { cyberPerfil: { ...antes, ...turno.perfil }, ...(turno.concluido && me.novo ? { cyberNasceuEm: new Date() } : {}) } });
     }
   } catch { /* gravar é melhor-esforço: a conversa segue */ }

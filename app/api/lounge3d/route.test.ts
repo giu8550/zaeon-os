@@ -123,26 +123,28 @@ describe("/api/lounge3d/[id]", () => {
 
   it("perfil (o que contou pra Zaeon): só chaves conhecidas, limpo, mescla com o anterior; vazio → 400; não-membro → 404", async () => {
     m.docFind.mockResolvedValue(doc());
+    // (o que já estava guardado — do tutorial antigo — fica; o novo só manda situação e área, e nada de nome)
     m.userFind.mockResolvedValueOnce({ id: ME, name: "Ana", image: null }).mockResolvedValueOnce({ cyberPerfil: { nome: "Ana", objetivo: "TCC" } });
-    const r = await PERFIL(json({ perfil: { nome: " Aninha ", area: "Medicina", senha: "x" } }), { params: { id: ID } });
+    const r = await PERFIL(json({ perfil: { nome: " Aninha ", situacao: "estuda", area: "Medicina", senha: "x" } }), { params: { id: ID } });
     expect(r.status).toBe(200);
-    expect(m.userUpdate).toHaveBeenCalledWith({ where: { id: ME }, data: { cyberPerfil: { nome: "Aninha", objetivo: "TCC", area: "Medicina" } } });
+    expect(m.userUpdate).toHaveBeenCalledWith({ where: { id: ME }, data: { cyberPerfil: { nome: "Ana", objetivo: "TCC", situacao: "estuda", area: "Medicina" } } });
     expect((await PERFIL(json({ perfil: { senha: "x" } }), { params: { id: ID } })).status).toBe(400);
     m.docFind.mockResolvedValue(doc([OUTRO]));
-    expect((await PERFIL(json({ perfil: { nome: "A" } }), { params: { id: ID } })).status).toBe(404);
+    expect((await PERFIL(json({ perfil: { area: "A" } }), { params: { id: ID } })).status).toBe(404);
   });
 
   it("zaeon (o turno GERATIVO): a IA responde pelo harness do CYBERESPAÇO (agente zaeon); o perfil é gravado; concluir marca o nascimento", async () => {
     m.docFind.mockResolvedValue(doc());
-    m.llm.mockResolvedValue({ classe: "ok", fala: "Medicina! E o que você quer aprender aqui?", perfil: { foco: "Medicina" }, opcoes: ["Cardio"], concluido: false });
-    const corpo = { perfil: { nome: "Ana", situacao: "estuda" }, historico: [{ quem: "zaeon", texto: "O que você estuda?" }], resposta: "Medicina", turno: 0, foraSeguidas: 0 };
+    // UMA pergunta: a resposta vira a fala do COMPROMISSO e a conversa fecha (marca o nascimento)
+    m.llm.mockResolvedValue({ classe: "ok", fala: "Medicina! Um pouco de estudo todo dia e você vai longe.", perfil: { area: "Medicina" } });
+    const corpo = { perfil: { situacao: "estuda" }, historico: [{ quem: "zaeon", texto: "Hoje você estuda, trabalha ou empreende?" }], resposta: "Estudo medicina", turno: 0, foraSeguidas: 0 };
     const d = await (await ZAEON(json(corpo), { params: { id: ID } })).json();
-    expect(d).toMatchObject({ classe: "ok", ia: true, perfil: { foco: "Medicina" } });
+    expect(d).toMatchObject({ classe: "ok", ia: true, concluido: true, perfil: { situacao: "estuda", area: "Medicina" } });
     expect(m.llm.mock.calls[0]![0]).toMatchObject({ agente: "zaeon", userId: ME });
-    expect(m.userUpdate).toHaveBeenLastCalledWith({ where: { id: ME }, data: { cyberPerfil: expect.objectContaining({ foco: "Medicina" }) } });
-    m.llm.mockResolvedValue({ classe: "ok", fala: "Fechado, Ana!", perfil: { objetivo: "Residência" }, concluido: true });
-    await ZAEON(json({ ...corpo, turno: 2 }), { params: { id: ID } });
-    expect(m.userUpdate).toHaveBeenLastCalledWith({ where: { id: ME }, data: { cyberPerfil: expect.any(Object), cyberNasceuEm: expect.any(Date) } });
+    expect(m.userUpdate).toHaveBeenLastCalledWith({ where: { id: ME }, data: { cyberPerfil: expect.objectContaining({ area: "Medicina" }), cyberNasceuEm: expect.any(Date) } });
+    // a IA perguntou algo de volta? não vale (uma pergunta só): entra a reserva local
+    m.llm.mockResolvedValue({ classe: "ok", fala: "Legal! E qual o seu nome?" });
+    expect((await (await ZAEON(json(corpo), { params: { id: ID } })).json()).ia).toBe(false);
   });
   it("zaeon: abuso óbvio nem chega na IA → expulsão gravada; IA quebrada/JSON inválido → a reserva local (nunca trava)", async () => {
     m.docFind.mockResolvedValue(doc()); m.llm.mockReset();
@@ -151,7 +153,7 @@ describe("/api/lounge3d/[id]", () => {
     expect(m.userUpdate).toHaveBeenLastCalledWith({ where: { id: ME }, data: { cyberExpulsoEm: expect.any(Date) } });
     m.llm.mockRejectedValue(new Error("vertex fora"));
     const f = await (await ZAEON(json({ perfil: { situacao: "estuda" }, historico: [], resposta: "Direito", turno: 0 }), { params: { id: ID } })).json();
-    expect(f).toMatchObject({ classe: "ok", ia: false, perfil: { foco: "Direito" } });
+    expect(f).toMatchObject({ classe: "ok", ia: false, concluido: true, perfil: { situacao: "estuda" } });
     m.llm.mockResolvedValue({ qualquer: "coisa" });
     expect((await (await ZAEON(json({ perfil: { situacao: "estuda" }, historico: [], resposta: "Direito", turno: 0 }), { params: { id: ID } })).json()).ia).toBe(false);
     expect((await ZAEON(json({ resposta: "" }), { params: { id: ID } })).status).toBe(400);

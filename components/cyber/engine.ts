@@ -26,7 +26,7 @@ import { QualidadeAdaptativa } from "@/lib/cyber/qualidadeAdaptativa";
 import { DISTANCIA, PASSOS, duracaoVozDroid, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
 import { criarAudioCyber, preCarregarSons, type AudioCyberHandle, type FalaHolograma, type LoopSom } from "./AudioCyber";
-import { ESPERA_VOZ, criarCacheVoz, duracaoComAtraso, falasFixasZaeon, tempoDaFala, textoDaVoz, REPERGUNTA_NOME, type CacheVoz } from "@/lib/cyber/vozZaeon";
+import { ESPERA_VOZ, criarCacheVoz, duracaoComAtraso, falasFixasZaeon, tempoDaFala, textoDaVoz, type CacheVoz } from "@/lib/cyber/vozZaeon";
 import { criarSomLounge, type SomLoungeHandle } from "./SomLounge";
 import type { SomLounge } from "@/lib/lounge3d/musica";
 import { rotaPara, seguirRota, type DestinoRota, type Waypoint } from "@/lib/cyber/rota";
@@ -45,7 +45,7 @@ import { DROID } from "@/lib/cyber/agentes";
 import { NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
 import { criarDroid, type DroidHandle } from "./Droid";
 import { criarHoloZaeon, type HoloZaeonHandle } from "./HoloZaeon";
-import { ABERTURA, FALA_EXPULSAO, PERGUNTAS, fallbackZaeon, fechamento, limparResposta, nomeDe, perguntaDoRoteiro, faltando, reacaoFixa, situacaoDe, type FalaConversa, type PedidoZaeon, type PerfilZaeon, type PerguntaZaeon, type TurnoZaeon } from "@/lib/cyber/conversaZaeon";
+import { ABERTURA, FALA_EXPULSAO, PERGUNTAS, fallbackZaeon, fechamento, limparResposta, situacaoDe, type FalaConversa, type PedidoZaeon, type PerfilZaeon, type PerguntaZaeon, type TurnoZaeon } from "@/lib/cyber/conversaZaeon";
 import { moderar } from "@/lib/cyber/moderacao";
 import { criarPraca, type PracaHandle } from "./Praca";
 import { criarBercario, type BercarioHandle } from "./Bercario";
@@ -1542,52 +1542,39 @@ export class CyberEngine {
     this.conversa = null; this.holoZaeon?.sumir(); this.falaZ = null; this.calarZaeon();
     this.falas = this.falas.filter((f) => { if (f.ator === this.falaZaeon) { f.el.remove(); return false; } return true; });
   }
-  /** a resposta da pessoa (o painel do React ou o chat): as 2 perguntas FIXAS (nome, situação) são resolvidas aqui; o
-   *  resto vai pra IA (`conversarZaeon`) — ou pro roteiro local. Abuso óbvio já expulsa aqui, sem esperar a rede */
+  /** a resposta da pessoa (o painel do React ou o chat) à ÚNICA pergunta (estuda, trabalha, empreende?): a situação é
+   *  entendida aqui e a Zaeon responde com o COMPROMISSO COM O CONHECIMENTO — gerado (`conversarZaeon`) ou a reserva
+   *  fixa — e fecha. Abuso óbvio já expulsa aqui, sem esperar a rede */
   responderZaeon(texto: string): boolean {
-    const cv = this.conversa; if (!cv || cv.etapa !== "esperando") return false;
+    const cv = this.conversa; if (!cv || cv.etapa !== "esperando" || cv.ia) return false;
     const r = limparResposta(texto); if (!r) return false;
     this.o.onPergunta?.(null); cv.historico.push({ quem: "eu", texto: r });
     if (moderar(r).abuso) { this.expulsar(); return true; }
-    if (!cv.ia) {
-      const p = PERGUNTAS[cv.i]!;
-      if (p.id === "nome") {
-        const n = nomeDe(r); if (!n) { this.perguntarDeNovo(REPERGUNTA_NOME); return true; }
-        cv.perfil.nome = n;
-        void this.bufferDaVoz(fechamento(cv.perfil)[0]!);   // o "Obrigada, <nome>!" do fim já vai sendo gerado (só toca minutos depois)
-        this.zaeonFala(reacaoFixa("nome", r, cv.perfil), false, { gerativa: true, depois: () => this.holoZaeon?.sorrir(2.4) }); cv.historico.push({ quem: "zaeon", texto: reacaoFixa("nome", r, cv.perfil) });
-      } else {
-        cv.perfil.situacao = situacaoDe(r) ?? r;   // texto livre que não deu pra classificar: vai como a pessoa disse (a IA entende)
-        const re = reacaoFixa("situacao", r, cv.perfil); this.zaeonFala(re, false, { depois: () => this.holoZaeon?.sorrir(2.4) }); cv.historico.push({ quem: "zaeon", texto: re });
-        const q = perguntaDoRoteiro(faltando(cv.perfil)[0] ?? "objetivo", cv.perfil); cv.ia = true; cv.proxima = q;
-      }
-      cv.etapa = "reagindo"; cv.t = 0; return true;
-    }
-    // a parte GERATIVA: a Zaeon pensa (a cara de pensando) enquanto o servidor responde
+    cv.perfil.situacao = situacaoDe(r) ?? r;   // texto livre que não deu pra classificar: vai como a pessoa disse (a IA entende)
+    cv.ia = true;
+    // a fala do compromisso: a Zaeon pensa (a cara de pensando) enquanto o servidor responde
     cv.etapa = "pensando"; cv.t = 0; this.holoZaeon?.pensar(true);
     const pedido: PedidoZaeon = { perfil: { ...cv.perfil }, historico: cv.historico.slice(-12), resposta: r, turno: cv.turno, foraSeguidas: cv.foraSeguidas }, serie = cv.serie;
     const local = () => fallbackZaeon(pedido);
-    const espera = this.o.conversarZaeon ? Promise.race([this.o.conversarZaeon(pedido), new Promise<TurnoZaeon>((ok) => setTimeout(() => ok(local()), 12000))]).catch(local) : Promise.resolve(local());
+    const espera = this.o.conversarZaeon ? Promise.race([this.o.conversarZaeon(pedido), new Promise<TurnoZaeon>((ok) => setTimeout(() => ok(local()), 8000))]).catch(local) : Promise.resolve(local());
     void espera.then((t) => { if (this.conversa && this.conversa.serie === serie && this.conversa.etapa === "pensando") this.aplicarTurno(t); });
     return true;
   }
   /** ela pergunta (o painel de resposta abre quando o balão — e a voz — começa) */
   private perguntarDeNovo(fala: string, gerativa = false) {
     const cv = this.conversa; if (!cv) return;
-    const p = cv.ia ? { id: "ia", fala, tipo: "texto" as const, outro: true, opcoes: cv.proxima?.opcoes ?? [] } : { ...PERGUNTAS[cv.i]!, fala };
-    const n = Math.min(cv.i + 1 + cv.turno, 6);
-    this.zaeonFala(fala, true, { gerativa, depois: () => { if (this.conversa === cv && cv.etapa === "esperando") { this.o.onPergunta?.({ ...p, n, total: 6 }); this.soltarMouse(); } } });
+    const p = { ...PERGUNTAS[0]!, fala };
+    // (a etapa vira "esperando" ANTES da fala: sem voz — som desligado — a fala sai na hora e o painel abria nunca)
     cv.historico.push({ quem: "zaeon", texto: fala }); cv.etapa = "esperando";
+    this.zaeonFala(fala, true, { gerativa, depois: () => { if (this.conversa === cv && cv.etapa === "esperando") { this.o.onPergunta?.({ ...p, n: 1, total: 1 }); this.soltarMouse(); } } });
   }
-  /** o turno da IA (ou da reserva): abuso → expulsão; fora do assunto → ela pergunta de novo; ok → reage e segue/fecha */
+  /** o turno da IA (ou da reserva): abuso → expulsão; senão a fala do COMPROMISSO e ela fecha (é uma pergunta só) */
   private aplicarTurno(t: TurnoZaeon) {
     const cv = this.conversa; if (!cv) return;
     if (t.classe === "abuso") { this.expulsar(); return; }   // (a cara de "pensando" sai quando a fala dela aparece)
-    cv.perfil = { ...cv.perfil, ...t.perfil };
-    if (t.classe === "fora") cv.foraSeguidas++; else { cv.foraSeguidas = 0; cv.turno++; }
-    if (t.concluido) { this.zaeonFala(t.fala || "Perfeito!", false, { gerativa: true, depois: () => this.holoZaeon?.sorrir(2.6) }); cv.historico.push({ quem: "zaeon", texto: t.fala }); cv.etapa = "fechando"; cv.linha = 0; cv.t = -1.5; this.o.onPerfil?.({ ...cv.perfil }); return; }
-    cv.proxima = { fala: t.fala, opcoes: t.opcoes };
-    this.perguntarDeNovo(t.fala, true);
+    cv.perfil = { ...cv.perfil, ...t.perfil }; cv.turno++;
+    this.zaeonFala(t.fala || "Que bom ter você aqui ✦", false, { gerativa: true, depois: () => this.holoZaeon?.sorrir(2.6) });
+    cv.historico.push({ quem: "zaeon", texto: t.fala }); cv.etapa = "fechando"; cv.linha = 0; cv.t = -1.5; this.o.onPerfil?.({ ...cv.perfil });
   }
   /** ABUSO: a Zaeon fica BRAVA; o Droid (em fúria) vem pra frente da pessoa e a expulsa do cyberespaço */
   private expulsar() {

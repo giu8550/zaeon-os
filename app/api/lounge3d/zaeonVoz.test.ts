@@ -9,7 +9,7 @@ vi.mock("@/lib/voice/gemini-tts", () => ({ synthGeminiTTS: m.tts }));
 vi.mock("@/lib/llm/ledger", () => ({ registrarTokens: m.ledger }));
 
 import { POST } from "./[id]/zaeon/voz/route";
-import { ABERTURA } from "@/lib/cyber/conversaZaeon";
+import { PERGUNTAS } from "@/lib/cyber/conversaZaeon";
 
 const ID = "0123456789abcdef01234567", ME = "aaaaaaaaaaaaaaaaaaaaaaaa";
 const req = (b: unknown) => new Request("http://x/", { method: "POST", body: JSON.stringify(b), headers: { "Content-Type": "application/json" } });
@@ -52,7 +52,7 @@ describe("POST /api/lounge3d/[id]/zaeon/voz", () => {
   });
 
   it("as falas fixas ficam em cache (a 2ª pessoa não paga); a gerativa não", async () => {
-    const fixa = ABERTURA[1]!;
+    const fixa = PERGUNTAS[0]!.fala;
     await POST(req({ texto: fixa }), { params: { id: ID } });
     m.guard.mockClear();
     expect((await POST(req({ texto: fixa }), { params: { id: ID } })).status).toBe(200);

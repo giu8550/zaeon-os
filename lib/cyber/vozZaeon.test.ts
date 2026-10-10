@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ESPERA_VOZ, FOLGA_FALA, duracaoComAtraso, MAX_TEXTO_VOZ, REPERGUNTA_NOME, bocaDoNivel, criarCacheVoz, falasFixasZaeon, tempoDaFala, textoDaVoz } from "./vozZaeon";
+import { ESPERA_VOZ, FOLGA_FALA, duracaoComAtraso, MAX_TEXTO_VOZ, bocaDoNivel, criarCacheVoz, falasFixasZaeon, tempoDaFala, textoDaVoz } from "./vozZaeon";
 import { ABERTURA, PERGUNTAS } from "./conversaZaeon";
 import { HOLO_VOZ, aleatorioComSemente, respostaImpulso, DISTANCIA, VOZ_DROID, SONS, duracaoVozDroid, silabasDroid } from "./audio";
 
@@ -63,13 +63,13 @@ describe("voz da Zaeon — tempo da fala, boca e texto", () => {
     expect(textoDaVoz("Voando bem! 🚀  ok")).toBe("Voando bem! ok");
     expect(textoDaVoz("x".repeat(1000))).toHaveLength(MAX_TEXTO_VOZ);
   });
-  it("as falas fixas incluem a abertura, as perguntas e a repergunta do nome — sem repetição", () => {
+  it("as falas fixas incluem a abertura, a ÚNICA pergunta, as reservas e o fim — sem repetição e sem nada de nome", () => {
     const f = falasFixasZaeon();
     for (const a of ABERTURA) expect(f).toContain(textoDaVoz(a));
     for (const p of PERGUNTAS) expect(f).toContain(textoDaVoz(p.fala));
-    expect(f).toContain(textoDaVoz(REPERGUNTA_NOME));
     expect(new Set(f).size).toBe(f.length);
-    expect(f.length).toBeGreaterThanOrEqual(10);
+    for (const t of f) expect(t.toLowerCase()).not.toMatch(/te chame|seu nome|como voc[eê] se chama/);
+    expect(f.length).toBeGreaterThanOrEqual(6);
     expect(f.length).toBeLessThanOrEqual(24);   // cabe no limite da rota (40/min)
     for (const t of f) expect(t).not.toMatch(/✦/);
   });

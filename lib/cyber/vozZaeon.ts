@@ -8,7 +8,7 @@
  *  - a boca do holograma pelo volume da voz (`bocaDoNivel`);
  *  - o CACHE das sínteses (em memória, por texto) com uma fila de poucas chamadas ao mesmo tempo.
  */
-import { ABERTURA, OPCOES_SITUACAO, PERGUNTAS, fechamento, perguntaDoRoteiro, reacaoFixa } from "./conversaZaeon";
+import { ABERTURA, OPCOES_SITUACAO, PERGUNTAS, compromissoFixo, fechamento, reacaoFixa } from "./conversaZaeon";
 
 /** a voz da Zaeon (o id do catálogo de lib/voice/gemini-tts) */
 export const VOZ_ZAEON = "leda";
@@ -20,15 +20,11 @@ export function textoDaVoz(texto: string): string {
   return texto.replace(/[\p{Extended_Pictographic}✦✧✨️]/gu, " ").replace(/[\p{Cc}<>]/gu, " ").replace(/\s+/g, " ").trim().slice(0, MAX_TEXTO_VOZ);
 }
 
-/** a fala que ela repete quando não entende o nome (engine `responderZaeon`) */
-export const REPERGUNTA_NOME = "Não peguei… como você quer que eu te chame?";
-
-/** as falas FIXAS da conversa (as que não dependem do que a pessoa responde) — já no texto da voz, sem repetição */
+/** as falas FIXAS da conversa — já no texto da voz, sem repetição: a abertura, a ÚNICA pergunta, a fala da reserva
+ *  (reação + compromisso) de cada situação e o fim */
 export function falasFixasZaeon(): string[] {
-  const situacoes = [...OPCOES_SITUACAO.map((o) => reacaoFixa("situacao", o.rotulo, { situacao: o.v })), reacaoFixa("situacao", "", {})];
-  // a 1ª pergunta depois da situação (do roteiro: depende só da situação)
-  const roteiro = [...OPCOES_SITUACAO.map((o) => perguntaDoRoteiro("foco", { situacao: o.v }).fala), perguntaDoRoteiro("querEstudar", {}).fala, perguntaDoRoteiro("objetivo", {}).fala];
-  const todas = [...ABERTURA, ...PERGUNTAS.map((p) => p.fala), REPERGUNTA_NOME, ...situacoes, ...roteiro, ...fechamento({}).slice(1)];
+  const reservas = [...OPCOES_SITUACAO.map((o) => ({ situacao: o.v })), {}].map((p) => `${reacaoFixa("situacao", "", p)} ${compromissoFixo(p)}`);
+  const todas = [...ABERTURA, ...PERGUNTAS.map((p) => p.fala), ...reservas, ...fechamento()];
   return [...new Set(todas.map(textoDaVoz).filter(Boolean))];
 }
 
