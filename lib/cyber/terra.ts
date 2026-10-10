@@ -68,7 +68,7 @@ export const TOTENS = MIRANTES_ESTACAO.flatMap((m) => TEMAS.map((tema, k) => { c
 export const LIGACOES = TOTENS.map((t, k) => { const s = TELOES_SOLUCAO[Math.floor(k / TEMAS.length)]!; return { tema: t.tema, de: { x: t.x, z: t.z }, para: { x: s.x, z: s.z } }; });
 /** as SUPERTREES em volta de cada pirâmide (dos lados e atrás — a frente fica livre pra escada) */
 export const SUPERTREES: { x: number; z: number; alt: number; copa: number }[] = MIRANTES_ESTACAO.flatMap((m, i) =>
-  [[70, 1], [-70, 1], [128, 0], [-128, 0], [180, 1]].map(([a, alta], k) => {
+  [[70, 1], [-70, 1], [180, 1]].map(([a, alta], k) => {   // 3 por lote (eram 5 — o dono, out/2026)
     const r = 30, p = noMirante(m, Math.cos(rad(a!)) * r, Math.sin(rad(a!)) * r);
     return { ...p, alt: alta ? 44 - ((i + k) % 2) * 6 : 32 + ((i + k) % 2) * 4, copa: alta ? 10.5 : 8 };
   }));

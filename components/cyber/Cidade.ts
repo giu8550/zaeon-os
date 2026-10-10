@@ -18,7 +18,7 @@
  */
 import * as THREE from "three";
 import type { PisoOclusor } from "./oclusaoPisos";
-import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, FOGO_NA_BORDA, TORRES_NA_BORDA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
@@ -90,7 +90,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   // luzes: preenchimento frio no interior + fogo rasante quente
   const fria = add(new THREE.PointLight(0x7fe9ff, 2.2, 480)); fria.position.set(0, 55, 0);
-  const quente = low ? null : add(new THREE.PointLight(0xff8a3c, 1.6, 280)); quente?.position.set(0, 15, 0);
+  const quente = low || !FOGO_NA_BORDA ? null : add(new THREE.PointLight(0xff8a3c, 1.6, 280)); quente?.position.set(0, 15, 0);
 
   // ── ilha monumental (montanha invertida) + camada de rocha + estalactites ──
   // os cones são ABERTOS em cima (sem tampa): o piso é de vidro e, por ele, vê-se o universo embaixo — de dentro, a
@@ -131,7 +131,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const torreMat = vidro({ color: 0xdff0ff, emissive: ICE, emissiveIntensity: 0.4, roughness: 0.08, metalness: 0, transmission: 0.85, thickness: 0.8, transparent: true, opacity: 0.75 }, 0.7);
   const pontas: THREE.Mesh[] = [];
   const NT = TORRES_MURALHA.n, ATR = TORRES_MURALHA.alt;   // 16 torres na muralha (a Zaeon mega)
-  for (let k = 0; k < NT; k++) {
+  if (TORRES_NA_BORDA) for (let k = 0; k < NT; k++) {
     const a = anguloDaTorre(k), x = Math.cos(a) * CIDADE.muralhaR, z = Math.sin(a) * CIDADE.muralhaR;
     const torre = add(new THREE.Mesh(new THREE.CylinderGeometry(2.6, TORRES_MURALHA.rBase, ATR, 8), torreMat), ilha, true); torre.position.set(x, ATR / 2, z);
     const ponta = add(new THREE.Mesh(new THREE.OctahedronGeometry(2.6), new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x9fe8ff, emissiveIntensity: 1.6, roughness: 0.2, flatShading: true })));
@@ -140,13 +140,13 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   // ── línguas de fogo na borda + anel de brasa (sem estrobo) ──
   const texFogo = glow("rgba(255,225,170,.95)", "rgba(255,120,40,.3)");
-  const NF = low ? 36 : 64, fogos = Array.from({ length: NF }, (_, i) => {
+  const NF = !FOGO_NA_BORDA ? 0 : low ? 36 : 64, fogos = Array.from({ length: NF }, (_, i) => {
     const a = (i / NF) * Math.PI * 2, s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texFogo, color: FIRE[i % 3]!, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
     s.position.set(Math.cos(a) * (R - 0.8), 2.4, Math.sin(a) * (R - 0.8)); s.scale.set(3.4, 5, 1); if (naAberturaDaEscada(s.position.x, s.position.z)) s.visible = false;
     return { s, ph: Math.random() * 6.283 };
   });
-  const brasa = add(new THREE.Mesh(new THREE.TorusGeometry(R - 0.8, 0.2, 8, low ? 64 : 120), new THREE.MeshBasicMaterial({ color: 0xff7a2c, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending })));
-  brasa.rotation.x = Math.PI / 2; brasa.position.y = 0.4;
+  const brasa = FOGO_NA_BORDA ? add(new THREE.Mesh(new THREE.TorusGeometry(R - 0.8, 0.2, 8, low ? 64 : 120), new THREE.MeshBasicMaterial({ color: 0xff7a2c, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending }))) : null;
+  if (brasa) { brasa.rotation.x = Math.PI / 2; brasa.position.y = 0.4; }
 
   // ── CAPELA monumental (a cidadela, 3× maior): pilares + coroamento + cúpula estelar + tambor + 2ª cúpula + PONTA +
   //    farol. Por dentro, vazia: só o GLOBO de luz no centro (os livros e os servidores saíram) ──
@@ -324,7 +324,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       { const y = CIDADE.pisoY + Math.sin(t * 0.3) * 0.25 * vel; if (Math.abs(y - ilha.position.y) > 0.01) ilha.position.y = y; }
       for (const f of fogos) { const p = 0.72 + 0.28 * Math.sin(t * 1.8 + f.ph) * fogoAmp; f.s.scale.set(3.4 * (0.9 + p * 0.25), 5 * (0.8 + p * 0.4), 1); (f.s.material as THREE.SpriteMaterial).opacity = 0.5 + 0.3 * p; }
       if (quente) quente.intensity = 1.4 + 0.3 * Math.sin(t * 1.6) * fogoAmp;
-      (brasa.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.15 * Math.sin(t * 1.4) * fogoAmp;
+      if (brasa) (brasa.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.15 * Math.sin(t * 1.4) * fogoAmp;
       pontas.forEach((p, i) => { (p.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.3 + 0.4 * Math.sin(t * 1.2 + i); p.rotation.y += dt * 0.4 * vel; });
       if (farol) farol.material.opacity = 0.75 + 0.2 * Math.sin(t * 1.1);
       salas.atualizar(dt, t); templo.atualizar(dt, t);
