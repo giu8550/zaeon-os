@@ -21,7 +21,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const perfil = limparPerfil((b as { perfil?: unknown })?.perfil);
   if (!Object.keys(perfil).length) return NextResponse.json({ error: "perfil vazio" }, { status: 400 });
   const atual = await prisma.user.findUnique({ where: { id: me.id }, select: { cyberPerfil: true } });
-  const antes = atual?.cyberPerfil && typeof atual.cyberPerfil === "object" && !Array.isArray(atual.cyberPerfil) ? limparPerfil(atual.cyberPerfil) : {};
+  // o que já estava guardado fica como está (quem passou pelo tutorial antigo tem chaves que o novo não pergunta mais)
+  const antes = atual?.cyberPerfil && typeof atual.cyberPerfil === "object" && !Array.isArray(atual.cyberPerfil) ? (atual.cyberPerfil as Record<string, unknown>) : {};
   const novo = { ...antes, ...perfil };
   await prisma.user.update({ where: { id: me.id }, data: { cyberPerfil: novo } });
   return NextResponse.json({ ok: true, perfil: novo });
