@@ -8,6 +8,7 @@ import { ArrowLeftIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { useTranslation } from "react-i18next";
 import MacSplash from "@/components/ui/MacSplash";
 import { PLAN_INFO } from "@/lib/plans";
+import PdaEquipe from "@/components/about/PdaEquipe";
 // Sem este import o i18n só inicializa se outra página (home) já o carregou: num acesso direto
 // ou F5 em /about o `isInitialized` ficava falso e a página parava no splash, em branco.
 import "@/src/i18n";
@@ -106,14 +107,11 @@ const CyberTitle = ({
     const { displayText: sText, isComplete: sDone } = useScrambleText(secondaryText, startAnimations);
     const { displayText: mText, isComplete: mDone } = useScrambleText(mainText, startAnimations);
 
+    // v2: o texto PRINCIPAL em cima ("Seja quem você nasceu pra ser.") e o subtexto azul embaixo ("conquiste sua
+    // evolução"); os dois nascem dos ideogramas (scramble) e assentam.
     return (
-        <div className="text-center mb-16 relative z-20 min-h-[200px] flex flex-col justify-center">
-            <h2 className="text-lg md:text-2xl font-medium tracking-[0.3em] mb-3 font-mono uppercase h-8">
-                <span className={`${sDone ? "text-cyan-400/90" : "text-white/40"} transition-all duration-1000`}>
-                    {sText}
-                </span>
-            </h2>
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter text-white font-mono uppercase h-24">
+        <div className="text-center mb-16 relative z-20 min-h-[220px] flex flex-col justify-center max-w-5xl mx-auto">
+            <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter text-white font-mono uppercase leading-[1.05] min-h-[2.1em]">
                 <span
                     className={`${mDone ? "text-white drop-shadow-[0_0_30px_rgba(34,211,238,0.8)]" : "text-white/20"
                         }`}
@@ -121,6 +119,11 @@ const CyberTitle = ({
                     {mText}
                 </span>
             </h1>
+            <h2 className="text-base md:text-2xl font-medium tracking-[0.3em] mt-4 font-mono uppercase min-h-[1.4em]">
+                <span className={`${sDone ? "text-cyan-400/90" : "text-white/40"} transition-all duration-1000`}>
+                    {sText}
+                </span>
+            </h2>
             <div className="mt-10 flex flex-col items-center gap-3">
                 <span className="text-cyan-400 font-bold text-[10px] uppercase tracking-[0.5em] animate-pulse">
                     {scrollText}
@@ -146,7 +149,7 @@ const TextBlock = ({
     customBg?: string;
 }) => {
     const ref = useRef(null);
-    const isInView = useInView(ref, { once: false, margin: "-15% 0px" });
+    const isInView = useInView(ref, { once: true, margin: "-15% 0px" });
     const alignClass =
         align === "left"
             ? "items-start text-left"
@@ -288,9 +291,9 @@ const MoleculeSection = () => {
     const node1Ref = useRef<HTMLDivElement>(null);
     const node2Ref = useRef<HTMLDivElement>(null);
 
-    const isNode0 = useInView(node0Ref, { once: false, margin: "-10% 0px" });
-    const isNode1 = useInView(node1Ref, { once: false, margin: "-10% 0px" });
-    const isNode2 = useInView(node2Ref, { once: false, margin: "-10% 0px" });
+    const isNode0 = useInView(node0Ref, { once: true, margin: "-10% 0px" });
+    const isNode1 = useInView(node1Ref, { once: true, margin: "-10% 0px" });
+    const isNode2 = useInView(node2Ref, { once: true, margin: "-10% 0px" });
 
     const activeMap = [isNode0, isNode1, isNode2];
     const refs = [node0Ref, node1Ref, node2Ref];
@@ -508,8 +511,8 @@ export default function AboutUsPage() {
                 {/* Hero Title */}
                 <CyberTitle
                     startAnimations={true}
-                    secondaryText={t("about.title_secondary", "Uma universidade operada por IA.")}
-                    mainText="ZAEON"
+                    mainText={t("about.title_hero", "Seja quem você nasceu pra ser.")}
+                    secondaryText={t("about.title_secondary", "conquiste sua evolução")}
                     scrollText={t("about.scroll_down", "Descubra mais")}
                 />
 
@@ -596,24 +599,13 @@ export default function AboutUsPage() {
                     </div>
                 </div>
 
-                {/* ── CTA ── */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    transition={{ duration: 1.5 }}
-                    className="text-center relative z-40 pb-[10vh]"
-                >
-                    <h2 className="text-4xl md:text-7xl font-black text-white mb-12 tracking-tighter drop-shadow-2xl opacity-90">
-                        {t("about.cta.tour_title")}
-                    </h2>
-                    <Link
-                        href="/about/about-us"
-                        className="group relative inline-block px-20 py-8 bg-black/40 border border-cyan-500/30 text-white font-black text-xl uppercase tracking-[0.3em] overflow-hidden hover:scale-105 transition-all duration-500 rounded-2xl shadow-2xl backdrop-blur-md"
-                    >
-                        <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600/40 via-cyan-500/40 to-blue-600/40 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
-                        <span className="relative z-10 group-hover:text-cyan-100 group-hover:drop-shadow-[0_0_10px_white] transition-all">
-                            {t("about.cta.button_go")}
-                        </span>
+                {/* ── Conheça a equipe (interface do PDA) ── */}
+                <PdaEquipe titulo={t("about.team.title", "Conheça a equipe")} subtitulo={t("about.team.subtitle", "")} />
+
+                {/* link discreto pra arquitetura (o antigo "quer entender a fundo") */}
+                <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 1 }} className="text-center relative z-40 -mt-[14vh] pb-[6vh]">
+                    <Link href="/about/about-us" className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.3em] text-cyan-400/80 hover:text-cyan-200 underline underline-offset-8 decoration-cyan-500/40 transition-colors">
+                        {t("about.cta.tour_title")} →
                     </Link>
                 </motion.div>
             </div>

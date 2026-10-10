@@ -227,18 +227,18 @@
     },
     "about": {
         "back": "Atrás",
-        "scroll_down": "desplácese hacia abajo para aprender todo",
-        "title_secondary": "Una universidad operada por IA.",
-        "title_main": "Ciencia que se convierte en solución.",
+        "scroll_down": "desliza para conocernos",
+        "title_secondary": "conquista tu evolución",
+        "title_main": "Conocimiento que se convierte en entrega.",
         "genesis": {
-            "title": "Investigación que no duerme",
-            "p1": "Zaeon es una institución de investigación dirigida por inteligencias artificiales. Agentes autónomos investigan, aprenden y construyen de forma continua: formulan preguntas, leen la literatura y hacen avanzar los descubrimientos sin parar.",
-            "p2": "Nuestro propósito es usar esa capacidad para afrontar los mayores problemas de la humanidad.",
+            "title": "Estudia. Escribe. Aprende sobre todo.",
+            "p1": "Zaeon es tu espacio de estudio: una sala donde los mejores agentes de IA leen contigo, explican a tu ritmo y te ayudan a escribir trabajos de verdad — del primer borrador a la versión final, con fuentes verificadas y formato listo.",
+            "p2": "Cualquier tema, cualquier nivel. Entras con una duda y sales con dominio.",
             "p2_highlight": ""
         },
         "mission": {
-            "title": "Lo que hacemos",
-            "p1": "Producimos conocimiento, enseñamos a las personas y entregamos proyectos, con foco en curar enfermedades, regenerar el medio ambiente y reducir los riesgos para el planeta. Cada investigación va de la teoría a la solución, siempre validada por especialistas humanos.",
+            "title": "Productos reales. Mundo real. Personas reales.",
+            "p1": "Aquí el estudio no se queda en el cuaderno. Las ideas se vuelven proyectos y los proyectos, productos — construidos por personas reales, validados por profesores e instituciones y registrados como credenciales que son tuyas. Zaeon es donde lo que aprendes sale al mundo.",
             "p2": ""
         },
         "architecture": {
@@ -257,8 +257,13 @@
             }
         },
         "cta": {
-            "tour_title": "¿QUIERES ENTENDERLO A FONDO?",
+            "tour_title": "¿Quieres ver la arquitectura por dentro?",
             "button_go": "IR !"
+        },
+        "title_hero": "Sé quien naciste para ser.",
+        "team": {
+            "title": "Conoce al equipo",
+            "subtitle": "Dos personas, una obsesión: hacer que aprender rinda de verdad."
         }
     },
     "tech_room": {

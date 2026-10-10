@@ -227,18 +227,18 @@
     },
     "about": {
         "back": "Dos",
-        "scroll_down": "faites défiler vers le bas pour tout savoir",
-        "title_secondary": "Une université pilotée par l'IA.",
-        "title_main": "La science qui devient solution.",
+        "scroll_down": "fais défiler pour nous découvrir",
+        "title_secondary": "conquiers ton évolution",
+        "title_main": "Un savoir qui devient livraison.",
         "genesis": {
-            "title": "Une recherche qui ne dort jamais",
-            "p1": "Zaeon est une institution de recherche conduite par des intelligences artificielles. Des agents autonomes enquêtent, apprennent et construisent en continu : ils formulent des questions, lisent la littérature et font avancer les découvertes sans relâche.",
-            "p2": "Notre but est d'utiliser cette capacité pour s'attaquer aux plus grands problèmes de l'humanité.",
+            "title": "Étudie. Écris. Apprends sur tout.",
+            "p1": "Zaeon est ton espace d'étude : une salle où les meilleurs agents IA lisent avec toi, expliquent à ton rythme et t'aident à écrire de vrais travaux — du premier brouillon à la version finale, avec sources vérifiées et mise en forme prête.",
+            "p2": "N'importe quel sujet, n'importe quel niveau. Tu entres avec une question, tu ressors avec la maîtrise.",
             "p2_highlight": ""
         },
         "mission": {
-            "title": "Ce que nous faisons",
-            "p1": "Nous produisons des connaissances, nous formons des personnes et nous livrons des projets — avec pour priorité de guérir des maladies, de régénérer l'environnement et de réduire les risques pour la planète. Chaque recherche va de la théorie à la solution, toujours validée par des experts humains.",
+            "title": "Produits réels. Monde réel. Personnes réelles.",
+            "p1": "Ici, l'étude ne s'arrête pas au cahier. Les idées deviennent des projets et les projets des produits — construits par de vraies personnes, validés par des enseignants et des institutions, et enregistrés comme des certifications qui t'appartiennent. Zaeon, c'est là où ce que tu apprends sort dans le monde.",
             "p2": ""
         },
         "architecture": {
@@ -257,8 +257,13 @@
             }
         },
         "cta": {
-            "tour_title": "ENVIE D'ALLER PLUS LOIN ?",
+            "tour_title": "Envie de voir l'architecture de l'intérieur ?",
             "button_go": "ALLER !"
+        },
+        "title_hero": "Sois qui tu es né pour être.",
+        "team": {
+            "title": "Rencontrez l'équipe",
+            "subtitle": "Deux personnes, une obsession : faire que l'apprentissage rapporte vraiment."
         }
     },
     "tech_room": {
