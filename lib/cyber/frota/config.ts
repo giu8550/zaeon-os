@@ -6,7 +6,7 @@
  * aplica UMA vez (o id fica em `migracoes`) e o servidor grava o resultado (lib/cyber/frota/servidor `lerConfig`); se o
  * dono apagar o lote depois pelo painel, ele não volta.
  */
-import { AMBIENTES_ESTUDO, AREAS_PADRAO, FLAGS_PADRAO, type AreasFrota, type FlagsFrota } from "./agenda";
+import { AMBIENTES_ESTUDO, AREAS_PADRAO, ambienteNoMapa, FLAGS_PADRAO, type AreasFrota, type FlagsFrota } from "./agenda";
 import { FROTA_PADRAO, type ConfigFrota, type LoteFrota } from "./frota";
 
 export const CHAVE_CONFIG = "frota-ia";
@@ -16,7 +16,7 @@ export type ConfigSalva = { frota: ConfigFrota; flags: FlagsFrota; versao: numbe
   /** os CONTROLES POR ÁREA do painel admin (proporção do dia, peso de cada lugar de estudo, chão do lounge, vagas) */
   areas: AreasFrota };
 /** limites do painel */
-export const LIMITES = { totalMax: 1500, loteMax: 1500, lotesMax: 20 } as const;   // 1500 = o TETO do dono (desempenho: a régua de 77 fps)
+export const LIMITES = { totalMax: 1000, loteMax: 1000, lotesMax: 20 } as const;   // 1000 = o TETO do dono (desempenho; era 1500 até out/2026)
 
 const num = (v: unknown, a: number, b: number, padrao: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(b, Math.max(a, v)) : padrao);
 function loteDe(v: unknown): LoteFrota | null {
@@ -32,7 +32,7 @@ export function sanitizarAreas(v: unknown): AreasFrota {
   const o = (v ?? {}) as Record<string, unknown>, p = (o.proporcao ?? {}) as Record<string, unknown>, w = (o.pesos ?? {}) as Record<string, unknown>, P = AREAS_PADRAO;
   return {
     proporcao: { estudoPlataforma: num(p.estudoPlataforma, 0, LIMITES_AREAS.proporcao, P.proporcao.estudoPlataforma), estudoLounge: num(p.estudoLounge, 0, LIMITES_AREAS.proporcao, P.proporcao.estudoLounge), moto: num(p.moto, 0, LIMITES_AREAS.proporcao, P.proporcao.moto), andar: num(p.andar, 0, LIMITES_AREAS.proporcao, P.proporcao.andar) },
-    pesos: Object.fromEntries(AMBIENTES_ESTUDO.map((k) => [k, num(w[k], 0, LIMITES_AREAS.peso, P.pesos[k])])) as AreasFrota["pesos"],
+    pesos: Object.fromEntries(AMBIENTES_ESTUDO.map((k) => [k, ambienteNoMapa(k) ? num(w[k], 0, LIMITES_AREAS.peso, P.pesos[k]) : 0])) as AreasFrota["pesos"],   // (lugar fora do mapa: ninguém vai pra lá, mesmo com peso salvo)
     loungeChao: Math.floor(num(o.loungeChao, 0, LIMITES_AREAS.loungeChao, P.loungeChao)), vagas: Math.floor(num(o.vagas, 0, LIMITES_AREAS.vagas, P.vagas)),
   };
 }
@@ -65,6 +65,10 @@ export const MIGRACOES: readonly { id: string; desc: string; aplicar(c: ConfigSa
   // as mesmas); vale pra config nova e pra que já tinha 2000 salvas (o sanitizar descarta o lote que estoura o teto)
   { id: "2026-10-teto-1500", desc: "teto de 1500 IAs (completa com o lote 2027)", aplicar: (c) => {
     const t = totalDaFrota(c); return t < LIMITES.totalMax && !c.frota.lotes.some((l) => l.semente === 2027) ? novoLote(c, LIMITES.totalMax - t, 2027) : c; } },
+  // o dono baixou pra 1000 (performance). O sanitizar já descarta o lote que estoura o teto (o de 800 da semente 2027):
+  // completa até 1000 com a MESMA semente 2027 — as primeiras 300 IAs dela continuam as mesmas pessoas
+  { id: "2026-10-teto-1000", desc: "teto de 1000 IAs (performance)", aplicar: (c) => {
+    const t = totalDaFrota(c); return t < LIMITES.totalMax ? novoLote(c, LIMITES.totalMax - t, 2027) : c; } },
 ];
 /** aplica as migrações que faltam (cada uma uma vez); `mudou` = tem coisa nova pra gravar */
 export function aplicarMigracoes(c: ConfigSalva): { c: ConfigSalva; mudou: boolean } {

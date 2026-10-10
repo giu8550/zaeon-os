@@ -38,7 +38,7 @@ import { criarUniversidade, type UniversidadeHandle } from "./Universidade";
 import { naUniversidade, UNIVERSIDADE } from "@/lib/cyber/universidade";
 import { CAMPI, IDS_CAMPI, type IdCampus } from "@/lib/cyber/campi";
 import { criarCampus, type CampusHandle } from "./Campus";
-import { PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, decolaDaPlataforma, elevadorAqui, noArNaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma, tetoNaPlataforma, type IdPlataforma } from "@/lib/cyber/plataformas";
+import { PLATAFORMAS, UNIVERSIDADES_NO_MAPA, alturaDoAndar, andarDoPouso, andarNaPlataforma, decolaDaPlataforma, elevadorAqui, noArNaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma, tetoNaPlataforma, type IdPlataforma } from "@/lib/cyber/plataformas";
 import { PRACA, QUEDA_VAZIO, naPraca } from "@/lib/cyber/praca";
 import { CHEGADA_NAVE, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel, type IdNo } from "@/lib/cyber/buracos";
 import { DROID } from "@/lib/cyber/agentes";
@@ -589,6 +589,7 @@ export class CyberEngine {
       this.bercario = criarBercario(this.cidade.ilha, { low });   // os tubos de ensaio, ao lado da Recepção (flutuam com a ilha)
       this.holoZaeon = criarHoloZaeon(this.cidade.ilha, { low });   // o rosto da Zaeon (só aparece no tutorial)
       if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
+      if (UNIVERSIDADES_NO_MAPA) {   // (desligadas a pedido do dono — performance: só a Zaeon, as salas e a Solana House)
       await etapa("univ");
       this.univ = criarUniversidade({ low, starTex: this.cena.starTex }); camuflarGrupo(this.univ.group); this.cena.scene.add(this.univ.group);
       { const u = this.univ; fundirEstaticos(u.group, { passo: (_, t) => u.atualizar(1 / 30, t), manter: comDescendentes(u.alvosCamera) }); }
@@ -600,6 +601,7 @@ export class CyberEngine {
       }
       { // os ESTACIONAMENTOS das universidades (colados no disco, do lado da Zaeon) — os da Zaeon vêm com a cidade
         const pf = criarPisosEstudo({ low, onde: "fora" }); this.cena.scene.add(pf); fundirEstaticos(pf); this.pisosEstudo = pf; }
+      }
       await etapa("solana");
       this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); camuflarGrupo(this.solana.group); this.cena.scene.add(this.solana.group);
       { const so = this.solana; fundirEstaticos(so.group, { passo: (_, t) => so.atualizar(1 / 30, t) }); }
@@ -2356,7 +2358,7 @@ export class CyberEngine {
     return b === undefined ? ps : ps.map((p) => ({ ...p, base: b - 1 }));   // apoiado no piso da Zaeon: sólido só dali pra cima
   }
   /** sólidos pra nave: os marcos andáveis como cilindros (quem vem de cima pousa no topo) */
-  private solidosDeVoo(): Pilar[] { return [...this.solidosCidade, ...this.marcosNav().flatMap(({ lm }) => this.pilaresZaeon(lm)), ...(this.univ ? pilaresDasPlataformas() : []), ...this.pilaresDasIlhotas(), ...this.pilaresDaNaveQG()]; }
+  private solidosDeVoo(): Pilar[] { return [...this.solidosCidade, ...this.marcosNav().flatMap(({ lm }) => this.pilaresZaeon(lm)), ...(this.solana ? pilaresDasPlataformas() : []), ...this.pilaresDasIlhotas(), ...this.pilaresDaNaveQG()]; }
   /** a nave-QG parada é sólida pra quem voa (moto, a nave dos outros): pousa-se no dorso dela */
   private pilaresDaNaveQG(): Pilar[] { if (this.pilotando) return []; const p = this.poseNave(); return p ? [{ x: p.x, z: p.z, r: NAVE_QG.raio, topo: p.y + 2.2 * ESCALA_NAVE_V, base: p.y + 0.5 }] : []; }
 

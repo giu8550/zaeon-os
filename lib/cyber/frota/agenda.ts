@@ -14,6 +14,7 @@
  */
 import { acasoDe, entre, inteiro, ponderado, escolher, type Acaso } from "./aleatorio";
 import type { AgenteIA } from "./frota";
+import { UNIVERSIDADES_NO_MAPA, plataformaAtiva, type IdPlataforma } from "../plataformas";
 
 export type Atividade = "estudo-plataforma" | "estudo-lounge" | "moto" | "andar" | "festa";
 export type Bloco = {
@@ -29,7 +30,11 @@ export type Bloco = {
  *  o seu lotado vai pro primeiro com lugar (lib/cyber/frota/plano) — as universidades vêm antes */
 export const AMBIENTES_ESTUDO = ["univ", "ufc", "unifor", "uece", "biblioteca", "jardim"] as const;
 /** o peso de cada ambiente na escolha do lugar de estudo: as universidades levam a maior parte (a Zaeon ~18%) */
-export const PESO_AMBIENTE: Readonly<Record<(typeof AMBIENTES_ESTUDO)[number], number>> = { univ: 3, ufc: 2, unifor: 2, uece: 2, biblioteca: 1, jardim: 1 };
+export const PESO_AMBIENTE: Readonly<Record<(typeof AMBIENTES_ESTUDO)[number], number>> = UNIVERSIDADES_NO_MAPA
+  ? { univ: 3, ufc: 2, unifor: 2, uece: 2, biblioteca: 1, jardim: 1 }
+  : { univ: 0, ufc: 0, unifor: 0, uece: 0, biblioteca: 1, jardim: 1 };   // (sem universidades no mapa: estuda-se na Zaeon)
+/** um ambiente de estudo que existe no mapa (as universidades só com UNIVERSIDADES_NO_MAPA) */
+export const ambienteNoMapa = (a: string) => a === "biblioteca" || a === "jardim" || plataformaAtiva(a as IdPlataforma);
 /** `cidadela` = o lugar FIXO de quem tem credencial na hierarquia da cidadela (lib/cyber/frota/hierarquia) */
 export type AmbienteEstudo = (typeof AMBIENTES_ESTUDO)[number] | "lounge" | "cidadela";
 

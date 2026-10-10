@@ -4,7 +4,9 @@
  * pronto: corpos, mundo, sons decodificados, imagens, shaders compilados e o primeiro quadro desenhado.
  * O `peso` é o quanto cada etapa ocupa da barra (≈ o tempo que ela leva).
  */
-export const ETAPAS = [
+import { UNIVERSIDADES_NO_MAPA } from "./plataformas";
+
+const TODAS_ETAPAS = [
   { id: "corpo", rotulo: "Despertando os corpos dos avatares", peso: 7 },
   { id: "hiperespaco", rotulo: "Abrindo o hiperespaço", peso: 3 },
   { id: "praca", rotulo: "Erguendo a praça das bases", peso: 3 },
@@ -22,7 +24,9 @@ export const ETAPAS = [
   { id: "shaders", rotulo: "Compilando a luz (shaders)", peso: 10 },
   { id: "quadro", rotulo: "Desenhando o primeiro quadro", peso: 3 },
 ] as const;
-export type IdEtapa = (typeof ETAPAS)[number]["id"];
+export type IdEtapa = (typeof TODAS_ETAPAS)[number]["id"];
+/** as etapas que de fato rodam (sem universidades no mapa, a UNILAB e os campi não montam) */
+export const ETAPAS: readonly (typeof TODAS_ETAPAS)[number][] = TODAS_ETAPAS.filter((e) => UNIVERSIDADES_NO_MAPA || (e.id !== "univ" && e.id !== "campi"));
 export type Carregando = { etapa: IdEtapa; rotulo: string; /** 0..1 da barra inteira */ progresso: number; /** detalhe opcional ("23/41 sons") */ detalhe?: string };
 
 const TOTAL = ETAPAS.reduce((s, e) => s + e.peso, 0);
@@ -32,7 +36,7 @@ export function progressoDe(id: IdEtapa, dentro = 0): number {
   for (const e of ETAPAS) { if (e.id === id) return Math.min(1, (antes + e.peso * Math.max(0, Math.min(1, dentro))) / TOTAL); antes += e.peso; }
   return 1;
 }
-export const carregando = (id: IdEtapa, dentro = 0, detalhe?: string): Carregando => ({ etapa: id, rotulo: ETAPAS.find((e) => e.id === id)!.rotulo, progresso: progressoDe(id, dentro), detalhe });
+export const carregando = (id: IdEtapa, dentro = 0, detalhe?: string): Carregando => ({ etapa: id, rotulo: TODAS_ETAPAS.find((e) => e.id === id)!.rotulo, progresso: progressoDe(id, dentro), detalhe });
 
 /** as dicas que passam na tela de loading (rodando) */
 export const DICAS = [
