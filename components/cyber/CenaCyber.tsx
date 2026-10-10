@@ -26,6 +26,8 @@ import { teclaDoRadio } from "@/lib/cyber/habilidades";
 import type { CanalVoz } from "@/components/lounge/salaColyseus";
 import Joystick from "./Joystick";
 import ControlesVoo from "./ControlesVoo";
+import PainelCorrida from "./PainelCorrida";
+import type { EventoCorrida } from "@/lib/cyber/corrida/corrida";
 import TocaDiscos, { type ApiMusica } from "./TocaDiscos";
 import type { SomLounge } from "@/lib/lounge3d/musica";
 
@@ -134,6 +136,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   // o MODO ADMIN (só super admin): o contador bots × usuários e os controles por área da frota
   const contagemAdmin = useCallback(() => engine.current?.contagemAdmin() ?? null, []);
   const frotaAplicada = useCallback(() => engine.current?.recarregarFrota(), []);
+  const [evCorrida, setEvCorrida] = useState<(EventoCorrida & { pista: string }) | null>(null);
   const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
   /** ação privilegiada: pergunta ao SERVIDOR antes (cb sempre fresco via ref) */
   const pedir = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj", ok: () => void) => {
@@ -223,7 +226,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onPergunta: setPergunta, onPerfil: (perfil) => cb.current.salvarPerfil?.(perfil),
       onFalaAgente: (f) => setFalasDroid((xs) => [...xs.slice(-20), { id: `agente-${Date.now()}-${xs.length}`, userId: `agente:${f.id}`, name: f.nome, color: f.cor, texto: f.texto, ts: Date.now() }]),
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
-      onEstadoQG: setQg, onAcao: setAcao,
+      onEstadoQG: setQg, onAcao: setAcao, onCorrida: setEvCorrida,
       onVoo: setVoo,
       onRota: setRota,
       remotosSuaves: transporteRealtime() === "colyseus",
@@ -415,6 +418,7 @@ export default function CenaCyber(p: CenaCyberProps) {
         </button>
       )}
       {!menu && (qg.pilotando || qg.moto) && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} moto={qg.moto} />}
+      {!menu && <PainelCorrida engine={engine} moto={qg.moto} evento={evCorrida} />}
       {/* MOTO VOADORA: o altímetro (montar/descer é a ação de contexto, F) */}
       {!menu && qg.moto && voo && !qg.pousado && (
         <p className="absolute left-1/2 top-[110px] z-30 -translate-x-1/2 rounded-full bg-[#070c22]/70 px-3 py-1 text-center text-xs font-bold tabular-nums text-sky-100 backdrop-blur">↕ {voo.y} m</p>
