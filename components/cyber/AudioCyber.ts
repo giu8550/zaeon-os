@@ -249,7 +249,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       vozesAoVivo.add(v); ligarVoz(v);
       return { remover() { vozesAoVivo.delete(v); try { v.a?.disconnect(); } catch { /* já */ } v.a?.removeFromParent(); if (v.el) { v.el.srcObject = null; } } };
     },
-    musica(caixas, el, volume = 0.9) {
+    musica(caixas, el, volume = 1.15) {
       const m: Musica = { caixas, el, volume, fator: 1, src: null, as: [], an: null, buf: null };
       musicas.add(m); ligarMusica(m);
       return {

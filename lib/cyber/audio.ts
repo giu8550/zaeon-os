@@ -170,7 +170,7 @@ export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | 
   voz: { ref: 3, max: 28, rolloff: 1, modelo: "linear" },        // VOZ por proximidade: cheia de perto, some aos ~28 m
   grande: { ref: 14, max: 160, rolloff: 1 },        // buraco negro, nave dos outros
   naveLocal: { ref: 40, max: 400, rolloff: 0.25 },  // a nave em que EU estou: não vira de lado ao girar a câmera
-  musica: { ref: 18, max: 110, rolloff: 1, modelo: "linear" },   // as TORRES DE SOM do clube (lounge): cheio na sala toda, ecoa pela ilha e some longe
+  musica: { ref: 44, max: 640, rolloff: 1, modelo: "linear" },   // as TORRES DE SOM do clube (lounge, agora de 70 m): cheio na sala toda, ecoa pela Zaeon inteira e ainda chega (baixinho) na nave atracada na doca (~490 m); some longe
   holograma: { ref: 14, max: 120, rolloff: 0.7 },  // a VOZ DA ZAEON saindo do rosto de ~13 m: cheia em volta do globo (a pessoa fica a ~9 m), ainda se ouve da borda da capela
   coracao: { ref: 10, max: 70, rolloff: 1, modelo: "linear" },     // a batida do coração: sentida no pátio da capela, some longe
   raio: { ref: 60, max: 900, rolloff: 0.6 },
