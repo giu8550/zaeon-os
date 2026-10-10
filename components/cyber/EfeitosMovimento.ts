@@ -11,6 +11,9 @@ export type EfeitosMovimentoHandle = {
   /** RISCOS DE VENTO (estilo anime): `n` riscos finos saindo do corpo em `p` (os pés) e ficando pra trás na direção
    *  oposta a `dir` (unitária, no plano) — a velocidade sem esconder o corpo */
   vento(p: THREE.Vector3, dir: { x: number; z: number }, cor: THREE.ColorRepresentation, n: number, comp?: number): void;
+  /** o RASTRO DA LÂMINA no golpe: a faixa de luz entre o cabo (`base`) e a ponta, nos últimos ~0,12 s — `ativo` = está
+   *  cortando agora (chame todo quadro: parado, o rastro só envelhece e some) */
+  rastroLamina(base: THREE.Vector3, ponta: THREE.Vector3, ativo: boolean, dt: number): void;
   /** uma onda de choque no chão em `p`, força 0..1 */
   onda(p: THREE.Vector3, forca: number): void;
   atualizar(dt: number): void;
@@ -41,6 +44,14 @@ export function criarEfeitosMovimento(cena: THREE.Object3D): EfeitosMovimentoHan
     m.visible = false; m.frustumCulled = false; g.add(m); return { m, vida: 0, forca: 0 };
   });
   let iF = 0, iO = 0;
+  // o RASTRO DA LÂMINA: uma fita (pares base/ponta) com o alfa caindo com a idade (aditiva: alfa = cor escurecida)
+  const MAXR = 18, VIDA_RASTRO = 0.1, amostras: { b: THREE.Vector3; p: THREE.Vector3; idade: number }[] = [];
+  const geoR = new THREE.BufferGeometry(), posR = new Float32Array(MAXR * 2 * 3), corR = new Float32Array(MAXR * 2 * 3), idxR: number[] = [];
+  for (let i = 0; i < MAXR - 1; i++) { const a = i * 2; idxR.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  geoR.setIndex(idxR); geoR.setAttribute("position", new THREE.BufferAttribute(posR, 3)); geoR.setAttribute("color", new THREE.BufferAttribute(corR, 3));
+  const fita = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  fita.frustumCulled = false; fita.visible = false; g.add(fita);
+  const corFita = new THREE.Color(0x35ffd0), branco = new THREE.Color(0xd8fff6);
   return {
     fantasma(p, rumo, cor, forca = 1) {
       const f = fantasmas[iF++ % fantasmas.length]!;
@@ -55,6 +66,20 @@ export function criarEfeitosMovimento(cena: THREE.Object3D): EfeitosMovimentoHan
         (r.m.material as THREE.MeshBasicMaterial).color.set(cor).lerp(new THREE.Color(0xffffff), 0.55);
         r.dur = 0.18 + acaso() * 0.14; r.vida = r.dur; r.comp = comp * (0.6 + acaso() * 0.8); r.m.visible = true;
       }
+    },
+    rastroLamina(base, ponta, ativo, dt) {
+      for (const a of amostras) a.idade += dt;
+      while (amostras.length && amostras[0]!.idade > VIDA_RASTRO) amostras.shift();
+      if (ativo) { amostras.push({ b: base.clone(), p: ponta.clone(), idade: 0 }); if (amostras.length > MAXR) amostras.shift(); }
+      const n = amostras.length; fita.visible = n >= 2;
+      if (n < 2) return;
+      for (let i = 0; i < n; i++) {
+        const a = amostras[i]!, k = 1 - a.idade / VIDA_RASTRO, j = i * 6;
+        posR.set([a.b.x, a.b.y, a.b.z, a.p.x, a.p.y, a.p.z], j);
+        const cb = corFita.clone().multiplyScalar(0), cp = corFita.clone().lerp(branco, 0.35 * k).multiplyScalar(0.55 * k * k);   // (some pra dentro; o fio da ponta mais aceso)
+        corR.set([cb.r, cb.g, cb.b, cp.r, cp.g, cp.b], j);
+      }
+      geoR.setDrawRange(0, (n - 1) * 6); geoR.attributes.position!.needsUpdate = true; geoR.attributes.color!.needsUpdate = true;
     },
     onda(p, forca) {
       const o = ondas[iO++ % ondas.length]!;
@@ -82,6 +107,7 @@ export function criarEfeitosMovimento(cena: THREE.Object3D): EfeitosMovimentoHan
     dispose() {
       for (const f of fantasmas) (f.m.material as THREE.Material).dispose();
       for (const r of riscos) (r.m.material as THREE.Material).dispose(); geoV.dispose();
+      geoR.dispose(); (fita.material as THREE.Material).dispose();
       for (const o of ondas) (o.m.material as THREE.Material).dispose();
       geoF.dispose(); geoO.dispose(); g.removeFromParent();
     },

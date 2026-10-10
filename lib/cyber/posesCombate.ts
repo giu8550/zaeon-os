@@ -105,3 +105,65 @@ export function pesoAlerta(tDesdeFimDash: number): number {
   const entra = Math.min(1, tDesdeFimDash / 0.12), sai = tDesdeFimDash < ALERTA.dura ? 1 : Math.max(0, 1 - (tDesdeFimDash - ALERTA.dura) / ALERTA.sai);
   return entra * sai;
 }
+
+// ── a ESPADA na mão: as poses dos GOLPES do combo (lib/cyber/combate) e a empunhadura ───────────────────────────────
+/** a pose da espada: o braço DIREITO segura (o esquerdo equilibra), a direção da LÂMINA e a normal do plano do corte
+ *  (a lâmina corta de fio: a face larga fica pra essa normal) — tudo no referencial do corpo (frente, cima, esquerda) */
+export type PoseEspada = {
+  inclina: number; desce: number; tronco: Dir3;
+  bracoD: Dir3; anteD: Dir3; bracoE: Dir3; anteE: Dir3;
+  lamina: Dir3; plano: Dir3;
+  /** as pernas (só no golpe pesado — a investida); null = as da caminhada/guarda */
+  pernas: { coxa(l: number): Dir3; canela(l: number): Dir3; pe(l: number): Dir3 } | null;
+};
+const mix = (a: Dir3, b: Dir3, t: number): Dir3 => n([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]);
+const suave = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
+/** no plano horizontal do corpo: ângulo `th` a partir da frente rumo à ESQUERDA, `el` = quanto sobe */
+const horiz = (th: number, el = 0): Dir3 => n([Math.cos(th), el, Math.sin(th)]);
+/** no plano frente–cima: ângulo `fi` a partir da frente rumo a CIMA (um pouco pra direita, do lado do braço) */
+const vert = (fi: number): Dir3 => n([Math.cos(fi), Math.sin(fi), -0.12]);
+
+/** o braço esquerdo, aberto e dobrado (o mesmo da guarda) — equilibra os golpes */
+const ESQ_ABERTO = { braco: n([0.05, -0.5, 0.86]), ante: n([0.82, -0.28, 0.38]) };
+/** segurando a espada em GUARDA: a mão direita à frente-direita, a lâmina pra frente e pra baixo (ameaçando) */
+export function poseEmpunhaGuarda(): PoseEspada {
+  return { inclina: 0, desce: 0, tronco: n([0.38, 0.92, 0]), bracoD: n([0.25, -0.75, -0.6]), anteD: n([0.78, -0.2, -0.58]), ...{ bracoE: ESQ_ABERTO.braco, anteE: ESQ_ABERTO.ante }, lamina: n([0.6, -0.42, -0.68]), plano: n([0, 1, 0]), pernas: null };
+}
+/** andando com a espada: o braço solto, a lâmina pra trás e pra baixo (arrastando) */
+export function poseEmpunhaSolta(): PoseEspada {
+  return { inclina: 0, desce: 0, tronco: n([0.1, 0.99, 0]), bracoD: n([-0.05, -0.97, -0.22]), anteD: n([0.35, -0.88, -0.3]), bracoE: n([0, -0.98, 0.2]), anteE: n([0.25, -0.95, 0.15]), lamina: n([-0.5, -0.8, -0.32]), plano: n([0, 0, 1]), pernas: null };
+}
+/** a pose do golpe `nGolpe` (1–3) na fase `u` (0..1 da duração); `ativo` = a fração (ini, fim) em que corta */
+export function poseGolpe(nGolpe: 1 | 2 | 3, u: number, ativo: [number, number]): PoseEspada {
+  const [a0, a1] = ativo;
+  const k = u < a0 ? 0 : u < a1 ? suave((u - a0) / (a1 - a0)) : 1;   // 0 = preparo … 1 = fim do corte
+  const prep = suave(u / Math.max(0.01, a0)), volta = suave((u - a1) / (1 - a1));   // entrando no preparo; voltando pra guarda
+  const G = poseEmpunhaGuarda();
+  let p: PoseEspada;
+  if (nGolpe === 1) {   // HORIZONTAL: da direita (atrás) pra esquerda, passando pela frente; o tronco torce junto
+    const th = -2.2 + (1.7 + 2.2) * k;
+    p = { inclina: -0.08, desce: 0.1, tronco: mix(n([0.3, 0.93, -0.22]), n([0.36, 0.91, 0.2]), k),
+      bracoD: mix(n([-0.35, -0.12, -0.93]), n([0.72, -0.08, 0.69]), k), anteD: mix(n([-0.1, 0.02, -0.99]), n([0.32, 0.02, 0.95]), k),
+      bracoE: ESQ_ABERTO.braco, anteE: ESQ_ABERTO.ante, lamina: horiz(th, 0.08), plano: n([0, 1, 0]), pernas: null };
+  } else if (nGolpe === 2) {   // DE VOLTA, subindo: da esquerda (baixo) pra direita (alto)
+    const th = 1.7 - (1.7 + 1.45) * k, el = -0.25 + 0.95 * k;
+    p = { inclina: -0.06, desce: 0.08, tronco: mix(n([0.36, 0.91, 0.2]), n([0.25, 0.94, -0.24]), k),
+      bracoD: mix(n([0.7, -0.28, 0.66]), n([0.35, 0.45, -0.82]), k), anteD: mix(n([0.3, -0.3, 0.9]), n([0.25, 0.8, -0.55]), k),
+      bracoE: ESQ_ABERTO.braco, anteE: ESQ_ABERTO.ante, lamina: horiz(th, el), plano: n([0, 0.6, 0.8]), pernas: null };
+  } else {   // POR CIMA, pesado: a lâmina vem de trás da cabeça até a frente-baixo; o corpo investe (agacha, avança)
+    const fi = 2.4 - (2.4 + 0.85) * k;
+    p = { inclina: 0.05 - 0.38 * k, desce: 0.05 + 0.2 * k, tronco: mix(n([0.0, 0.99, -0.1]), n([0.55, 0.83, 0]), k),
+      bracoD: mix(n([0.05, 0.97, -0.25]), n([0.8, -0.5, -0.25]), k), anteD: mix(n([-0.35, 0.93, -0.1]), n([0.85, -0.5, -0.12]), k),
+      bracoE: mix(n([0.2, 0.9, 0.3]), ESQ_ABERTO.braco, k), anteE: mix(n([-0.2, 0.95, 0.1]), ESQ_ABERTO.ante, k),
+      lamina: vert(fi), plano: n([0, 0, 1]),
+      pernas: { coxa: (l) => (l > 0 ? mix(n([0.2, -0.97, 0.12]), n([0.72, -0.66, 0.1]), k) : mix(n([-0.1, -0.98, -0.12]), n([-0.55, -0.83, -0.1]), k)),
+        canela: (l) => (l > 0 ? mix(n([-0.15, -0.98, 0]), n([-0.18, -0.98, 0]), k) : mix(n([-0.2, -0.97, 0]), n([-0.85, -0.52, 0]), k)),
+        pe: (l) => (l > 0 ? n([0.8, -0.6, 0]) : n([-0.25, -0.97, 0])) } };
+  }
+  // entra do jeito que estava (a guarda) no preparo e volta pra ela no fim
+  const w = u < a0 ? prep : u > a1 ? 1 - volta : 1;
+  const m = (a: Dir3, b: Dir3) => mix(a, b, w);
+  return { inclina: G.inclina + (p.inclina - G.inclina) * w, desce: G.desce + (p.desce - G.desce) * w, tronco: m(G.tronco, p.tronco),
+    bracoD: m(G.bracoD, p.bracoD), anteD: m(G.anteD, p.anteD), bracoE: m(G.bracoE, p.bracoE), anteE: m(G.anteE, p.anteE),
+    lamina: w >= 1 || (u >= a0 && u <= a1) ? p.lamina : m(G.lamina, p.lamina), plano: m(G.plano, p.plano), pernas: p.pernas && w > 0.05 ? p.pernas : null };
+}

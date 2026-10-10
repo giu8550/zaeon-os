@@ -54,6 +54,11 @@ import { criarVelocidadeTela, type VelocidadeTela } from "./VelocidadeTela";
 import { DASH, VOO_TURBO, iniciarDash, passoDash, podeDash, sensacaoAPe, tremorDoImpacto, velocidadeAPe, type EstadoDash } from "@/lib/cyber/movimento";
 import { criarEfeitosMovimento, type EfeitosMovimentoHandle } from "./EfeitosMovimento";
 import { DECOLAGEM, HEROI, pesoAlerta } from "@/lib/cyber/posesCombate";
+import { ITENS, chaveInventario, equipar as equiparNoInv, inventarioInicial, sanitizarInventario, type IdItem, type Inventario } from "@/lib/cyber/inventario";
+import { CAIDO, COMBO, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAcabou, acerta, codificarGolpe, cortouEntre, danoDoGolpe, decodificarGolpe, proximoGolpe, type EstadoAtaque, type Golpe } from "@/lib/cyber/combate";
+import { BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
+import { criarArena, type ArenaHandle } from "./Arena";
+import { criarEspadaEspiritual, type EspadaHandle } from "./EspadaEspiritual";
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
 import { PILOTAGEM, motoParada, passoMotoSub, sensacaoDeVelocidade, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
@@ -113,7 +118,7 @@ export type CyberOpts = {
   /** teclado sempre ouvido (tela cheia). Na janela da landing só com o mouse em cima (não rouba ESPAÇO/rolagem da página). */
   teclasSempre: boolean;
   remotos?: { current: Map<string, Presenca> };
-  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; desc?: number; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada }) => void;
+  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; desc?: number; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada; atk?: number; hp?: number; arma?: number }) => void;
   /** pontos de interesse (marcos megalíticos) — flag NEXT_PUBLIC_CYBER_LANDMARKS */
   landmarks?: boolean;
   /** clicou num marco estando perto → painel (nome, org, link) */
@@ -190,6 +195,9 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** 
   surf?: number;
   /** sendo PUXADO por um FIO DE ENERGIA até uma sala (0..1, suavizado): pendurado na alça; e o assobio dele (remotos) */
   puxa?: number; somFio?: LoopSom | null;
+  /** ARENA PvP (remotos): o último golpe que chegou (a presença), o golpe animando agora, a espada na mão (e quanto dela
+   *  está materializada) e a vida */
+  atkUlt?: number; golpe?: { g: Golpe; ini: number } | null; espada?: EspadaHandle | null; revela?: number; hp?: number;
   /** DESCANSO no lounge (0..1, suavizados): sentado no sofá/puff, deitado no sofá, o tablet na mão; a altura do assento */
   sofa?: number; deita?: number; tab?: number; assentoY?: number; relaxa?: number;
   /** remotos: a pose de descanso que chegou pela rede (lib/cyber/descanso `codificarDescanso`) */
@@ -394,6 +402,15 @@ export class CyberEngine {
   /** a DECOLAGEM com impulso (agacha → lança, com o embalo do chão), a altura máxima do voo e o HERO LANDING (queda alta) */
   private decola: { t0: number; espera: number; momento: { x: number; z: number } } | null = null; private tDecolou = -Infinity; private esperaDecolou = 0;
   private altMaxVoo = -Infinity; private tHeroi = -Infinity;
+  /** o COMBATE da arena (lib/cyber/combate, lib/cyber/arena): o inventário (a arma equipada), a espada na mão (e quanto
+   *  dela está materializada), o golpe do combo agora, a vida, caído/protegido, o empurrão e o HUD (vida, números) */
+  private inv: Inventario = inventarioInicial(); private espada: EspadaHandle | null = null; private revela = 0;
+  private ataque: EstadoAtaque | null = null; private filaAtaque = false; private seqAtaque = 0; private tAtacou = -Infinity; private acertados = new Set<string>();
+  private vida = VIDA_MAX; private caidoAte = -Infinity; private protegidoAte = -Infinity; private empurrao = { x: 0, z: 0 }; private wGuardaArena = 0;
+  private vRastroB = new THREE.Vector3(); private vRastroP = new THREE.Vector3();
+  private arena: ArenaHandle | null = null;
+  /** golpes de OUTROS jogadores que podem me pegar: confere no meio da janela que corta (quem apanha decide — sabe se estava no dash) */
+  private golpesChegando: { de: Ator; g: Golpe; quando: number; x: number; z: number; rumo: number }[] = []; private hudCombate: HTMLDivElement | null = null; private numeros: { el: HTMLDivElement; p: THREE.Vector3; t0: number }[] = [];
   private fxMov: EfeitosMovimentoHandle | null = null;
   /** a capela, a laje do lounge e a torre do DJ: sólidos pra quem VOA (moto/nave) — fixos, calculados uma vez (a torre
    *  é um campo de força pra quem não é o dono: só ele pousa na cabine) */
@@ -477,6 +494,8 @@ export class CyberEngine {
     { const pr = criarPraca({ low, starTex: this.cena.starTex }); camuflarGrupo(pr.group);
       fundirEstaticos(pr.group, { passo: (_, t) => pr.atualizar(1 / 30, t), manter: [pr.piso] });
       this.cena.scene.add(pr.group); this.praca = pr; }
+    // a ARENA PvP (a praça inteira — lib/cyber/arena): o anel de combate, os pilares, a placa e os bonecos de treino
+    if (!this.o.menu) { this.arena = criarArena({ low }); this.cena.scene.add(this.arena.group); }
     if (opts.landmarks) await etapa("mirantes");
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
@@ -697,7 +716,7 @@ export class CyberEngine {
     this.ordem = ids;
     for (const a of [this.eu, ...(this.remotos?.values() ?? [])]) if (a) this.vestirFundador(a);   // o "founder" pode chegar depois do ator
     // bases especiais (só com os marcos na cena): o dono na ZAEON (céu)
-    this.layouts = basesDosMembros(ids, undefined, { ceu: this.cidade ? ids.filter((id) => this.ehFundador(id)) : [] });
+    this.layouts = basesDosMembros(ids, undefined, { ceu: this.cidade ? ids.filter((id) => this.ehFundador(id)) : [], todosNaZaeon: !!this.cidade });   // (a praça é a ARENA PvP: com a cidade, todo mundo mora na Zaeon)
     for (const [id, lay] of this.layouts) {
       const existente = this.bases.get(id);
       if (existente) { if (existente.layout.x !== lay.x || existente.layout.z !== lay.z || existente.layout.nivel !== lay.nivel) existente.mover(lay); continue; }
@@ -713,7 +732,8 @@ export class CyberEngine {
     for (const a of [this.eu, ...this.remotos.values()]) { if (!a) continue; const c = this.corDe(a.id); if (c !== a.color) { a.color = c; a.av.recolorir(c); a.tag.style.color = c; } }
     // colisão: bases do anel + marcos (a MESMA lista; empurrarParaFora faz o deslizar)
     this.colisores = [...this.layouts.values()].filter((l) => !l.nivel).map((l) => ({ x: l.x, z: l.z, r: BASE_COLLIDER_R }))
-      .concat(colisoresDosPOIs(this.lms.map((l) => l.poi).filter((poi) => !poi.nav)));   // marcos andáveis: lib/cyber/nav
+      .concat(colisoresDosPOIs(this.lms.map((l) => l.poi).filter((poi) => !poi.nav)))   // marcos andáveis: lib/cyber/nav
+      .concat(this.arena ? [...BONECOS.map((b) => ({ x: b.x, z: b.z, r: 0.6 })), ...PILARES_ARENA] : []);   // a ARENA: bonecos e pilares são sólidos
     if (!this.eu) {
       const lay = this.layouts.get(this.o.eu.id), sp = spawnDaBase(lay);
       this.eu = this.novoAtor(this.o.eu, sp.x, sp.z);
@@ -722,6 +742,7 @@ export class CyberEngine {
       else this.eu.facing = lay?.nivel ? this.rotAssento() + Math.PI : Math.atan2(-sp.x, -sp.z);
       this.camT.set(this.eu.pos.x, 1.2 + this.yDoNivel(lay?.nivel), this.eu.pos.z);
       if (!this.menu && !(this.o.nascer && this.nascerNoTubo())) this.spawnNaNave();   // quem chega nasce no tubo; o dono, a bordo da nave
+      if (!this.menu) this.carregarInventario();   // a arma equipada (lib/cyber/inventario) já vai pra mão
     }
   }
 
@@ -814,7 +835,7 @@ export class CyberEngine {
     const eu = [{ x: this.eu.pos.x, z: this.eu.pos.z }, ...[...this.remotos.values()].map((a) => ({ x: a.pos.x, z: a.pos.z }))];   // desviam de quem está no caminho
     for (const p of this.personagens) { p.h.mostrar(!some); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position, eu); }
   }
-  private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } if (a.somFio) { this.som.soltarLoop(a.somFio); a.somFio = null; } a.nave?.dispose(); a.nave = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
+  private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } if (a.somFio) { this.som.soltarLoop(a.somFio); a.somFio = null; } a.nave?.dispose(); a.nave = null; a.espada?.dispose(); a.espada = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
   // ───────────── API pública (React → engine) ─────────────
   iniciar(go = "viajar") {
@@ -833,19 +854,174 @@ export class CyberEngine {
    *  o começo é intocável (lib/cyber/movimento). Não vale de moto, pilotando, sentado, no tablet, no tubo ou no túnel */
   darDash(): boolean {
     if (this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.noTopo) return false;
-    if (!podeDash(this.dash, this.agora)) return false;
+    const agora = performance.now() * 0.001;   // (o relógio de VERDADE no aperto — o do último quadro pode estar atrasado; a esquiva é questão de ms)
+    if (!podeDash(this.dash, agora)) return false;
     let ix = 0, iz = 0;
     if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
     if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
     if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
     const d = moverRelativoCamera(ix, iz, this.camAz);
-    this.dash = iniciarDash(this.agora, d ? { x: d.wx, z: d.wz } : null, this.eu.facing); this.dashUlt = null;
+    this.dash = iniciarDash(agora, d ? { x: d.wx, z: d.wz } : null, this.eu.facing); this.dashUlt = null;
     this.alvo = null; this.alvoDepois = null; this.velTela = Math.max(this.velTela, 0.85);   // o "soco" no FOV e as linhas na hora
     this.som.tocar("dash", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 1, taxa: 0.95 + Math.random() * 0.12 });   // (o swoosh sintetizado — lib/cyber/somMovimento)
     return true;
   }
   /** (combate) está desviando agora? — o começo do dash */
-  intocavel(): boolean { return !!this.dash && this.agora - this.dash.ini < DASH.intocavel; }
+  intocavel(): boolean { return this.intocavelEm(Math.max(this.agora, performance.now() * 0.001)); }
+  /** estava intocável no instante `t`? (o golpe é conferido no instante em que a lâmina CORTOU, não no quadro em que se
+   *  confere — com fps baixo são décimos de segundo de diferença) */
+  private intocavelEm(t: number): boolean { return !!this.dash && t - this.dash.ini >= -0.03 && t - this.dash.ini < DASH.intocavel; }
+  /** o INVENTÁRIO (lib/cyber/inventario): o que está nos espaços e o que está equipado — salvo no navegador por pessoa */
+  inventario(): Inventario { return this.inv; }
+  carregarInventario() {
+    try { const raw = localStorage.getItem(chaveInventario(this.o.eu.id)); this.inv = raw ? sanitizarInventario(JSON.parse(raw)) : inventarioInicial(); } catch { this.inv = inventarioInicial(); }
+    this.aplicarArma();
+  }
+  equipar(id: IdItem | null): Inventario {
+    this.inv = equiparNoInv(this.inv, id);
+    try { localStorage.setItem(chaveInventario(this.o.eu.id), JSON.stringify(this.inv)); } catch { /* sem armazenamento: vale só nesta sessão */ }
+    this.aplicarArma(); return this.inv;
+  }
+  /** a arma equipada vai pra mão (a espada se cria uma vez); sem arma, a mão fica livre */
+  private aplicarArma() {
+    if (this.inv.equipado === "espada-espiritual") { if (!this.espada) { this.espada = criarEspadaEspiritual({ low: this.o.low }); this.espada.group.scale.setScalar(1.25); } this.eu?.av.empunhar(this.espada.group); }   // (uma espada GRANDE, como na arte)
+    else { this.eu?.av.empunhar(null); this.revela = 0; this.espada?.atualizar(this.agora, 0); }
+  }
+  /** ATACAR (X / clique com o mouse travado / botão ATACAR): o próximo golpe do COMBO (lib/cyber/combate); no meio de
+   *  um golpe fica na fila e encadeia. Vira pra onde a câmera olha. Sem arma, de moto, pilotando, sentado ou caído: nada */
+  atacar(): boolean {
+    if (!this.inv.equipado || this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte) return false;
+    if (this.ataque && !golpeAcabou(this.ataque, this.agora)) { this.filaAtaque = true; return true; }
+    this.comecarGolpe(); return true;
+  }
+  private comecarGolpe() {
+    const g = proximoGolpe(this.ataque, this.agora);
+    this.ataque = { golpe: g, ini: this.agora, seq: ++this.seqAtaque }; this.filaAtaque = false; this.tAtacou = this.agora; this.acertados.clear();
+    const f = moverRelativoCamera(0, -1, this.camAz); if (f && this.olharLivre) this.eu.facing = Math.atan2(f.wx, f.wz);   // (mouse travado: golpeia pra onde olha)
+    this.alvo = null; this.alvoDepois = null;
+    this.som.tocar("golpe", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: g.n === 3 ? 1 : 0.85, taxa: g.n === 3 ? 0.82 : 0.95 + Math.random() * 0.1 });
+  }
+  /** a vida e o estado do combate (o HUD do React lê) */
+  combate() { return { vida: this.vida, max: VIDA_MAX, caido: this.agora < this.caidoAte, naArena: !!this.eu && !this.noCeu && naArena(this.eu.pos), arma: this.inv.equipado ? ITENS[this.inv.equipado].nome : null }; }
+  /** o COMBATE a cada quadro: o golpe (avança, corta os bonecos na janela, encadeia a fila), o empurrão, o sparring,
+   *  caído → renasce, e a espada (materializa na arena, golpeando e na guarda; se desfaz fora de combate) */
+  private passoCombate(eu: Ator, t: number, dt: number, andando: boolean) {
+    this.conferirGolpesChegando(t);
+    const a = this.ataque, arma = this.inv.equipado;
+    if (a && arma) {
+      const u = t - a.ini, g = a.golpe;
+      if (u < g.ativoFim) { const k = g.avanco / g.ativoFim; eu.pos.x += Math.sin(eu.facing) * k * dt; eu.pos.z += Math.cos(eu.facing) * k * dt; }   // o corpo AVANÇA no golpe
+      if (cortouEntre(a, this.tAnt || t, t) && this.arena) for (const b of this.arena.bonecos) {
+        if (!b.vivo || this.acertados.has(b.id) || !acerta({ x: eu.pos.x, z: eu.pos.z, rumo: eu.facing }, b, arma, g)) continue;
+        this.acertados.add(b.id); const dano = danoDoGolpe(arma, g);
+        this.arena.acertar(b.id, dano, eu.pos, t); this.numero(String(dano), b.pos.clone().setY(2.6), g.n === 3 ? "#ffd36b" : "#ffffff");
+        this.som.tocar("acerto", b.pos, { dist: DISTANCIA.eu, volume: g.n === 3 ? 1 : 0.8, taxa: g.n === 3 ? 0.8 : 1 }); this.tremor = Math.max(this.tremor, g.n === 3 ? 0.14 : 0.06);
+      }
+      if (golpeAcabou(a, t)) { if (this.filaAtaque) this.comecarGolpe(); }
+    }
+    // o empurrão (de quem bateu) desliza e para
+    if (Math.abs(this.empurrao.x) + Math.abs(this.empurrao.z) > 0.01) { eu.pos.x += this.empurrao.x * dt; eu.pos.z += this.empurrao.z * dt; const k = Math.exp(-dt * 6); this.empurrao.x *= k; this.empurrao.z *= k; }
+    // o SPARRING (boneco que ataca): o golpe pega se eu estiver na frente dele, no alcance — e não no dash
+    const naAr = !this.noCeu && naArena(eu.pos) && !this.jet.noAr;
+    if (this.arena) {
+      const r = this.arena.atualizar(dt, t, naAr && t >= this.caidoAte ? eu.pos : null);
+      if (r.golpe && naAr) {
+        const dx = eu.pos.x - r.golpe.x, dz = eu.pos.z - r.golpe.z, d = Math.hypot(dx, dz);
+        let dif = Math.atan2(dx, dz) - r.golpe.rumo; while (dif > Math.PI) dif -= 2 * Math.PI; while (dif < -Math.PI) dif += 2 * Math.PI;
+        if (d < SPARRING.alcance + 0.45 && Math.abs(dif) < 1.1) this.levar({ dano: SPARRING.dano, de: r.golpe, empurra: SPARRING.empurra });
+      }
+    }
+    // caído: renasce na borda da arena com a vida cheia (e protegido um tempo)
+    if (this.caidoAte > -Infinity && t >= this.caidoAte) {
+      const p = pontoDeRenascer(null); eu.pos.set(p.x, 0, p.z); eu.facing = p.rumo; this.vida = VIDA_MAX; this.caidoAte = -Infinity; this.protegidoAte = t + PROTECAO_RENASCER; this.empurrao = { x: 0, z: 0 };
+    }
+    // a GUARDA de combate na arena: parado, com a arma, o corpo fica em guarda (a mesma pose de depois do dash)
+    this.wGuardaArena += ((naAr && arma && !andando && !this.ataque ? 1 : 0) - this.wGuardaArena) * Math.min(1, dt * 5);
+    // a ESPADA: materializa na arena, golpeando e em guarda; se desfaz uns segundos depois de sair do combate
+    if (this.espada) {
+      const quer = !!arma && (naAr || t - this.tAtacou < 3 || pesoAlerta(t - this.tFimDash) > 0.05);
+      this.revela += ((quer ? 1 : 0) - this.revela > 0 ? Math.min(1 - this.revela, dt / 0.35) : -Math.min(this.revela, dt / 0.5));
+      this.espada.atualizar(t, this.revela);
+    }
+    if (this.ataque && golpeAcabou(this.ataque, t) && t - this.ataque.ini > this.ataque.golpe.dur + 1.2) this.ataque = null;   // (o combo esquece)
+    // o RASTRO da lâmina (do cabo à ponta) enquanto corta (um tico antes e depois da janela)
+    if (this.espada && this.fxMov) {
+      const at = this.ataque, ativo = !!at && this.revela > 0.5 && t - at.ini >= at.golpe.ativoIni - 0.04 && t - at.ini <= at.golpe.ativoFim + 0.03;
+      this.espada.group.updateWorldMatrix(true, false);
+      this.fxMov.rastroLamina(this.espada.group.localToWorld(this.vRastroB.set(0, 0.75, 0)), this.espada.group.localToWorld(this.vRastroP.set(0, 1.3, 0)), ativo, dt);   // (só a metade de fora da lâmina)
+    }
+  }
+  /** o HUD do combate: a barra de vida (na arena ou ferido) e os números que sobem */
+  private atualizarHudCombate() {
+    const t = this.agora;
+    for (let i = this.numeros.length - 1; i >= 0; i--) {
+      const n = this.numeros[i]!, u = (t - n.t0) / 0.9;
+      if (u >= 1) { n.el.remove(); this.numeros.splice(i, 1); continue; }
+      const s = this.proj(this.vHud.set(n.p.x, n.p.y + u * 1.2, n.p.z));
+      n.el.style.display = s.vis ? "block" : "none"; n.el.style.left = s.x + "px"; n.el.style.top = s.y + "px"; n.el.style.opacity = String(1 - u * u);
+    }
+    const c = this.combate(), mostrar = !this.menu && (c.naArena || c.vida < c.max);
+    if (!this.hudCombate && mostrar) {
+      const el = document.createElement("div");
+      el.style.cssText = "position:absolute;left:50%;bottom:22px;transform:translateX(-50%);width:min(360px,70vw);pointer-events:none;z-index:7;font:800 11px system-ui,sans-serif;color:#d9fff6;letter-spacing:.12em;text-align:center;";
+      el.innerHTML = '<div data-r="rot" style="margin-bottom:5px;text-shadow:0 0 8px #000"></div><div style="height:10px;border-radius:999px;background:rgba(5,14,12,.75);border:1px solid rgba(125,255,226,.35);overflow:hidden"><div data-r="barra" style="height:100%;width:100%;background:linear-gradient(90deg,#1fd6a8,#7dffe2);transition:width .15s"></div></div>';
+      this.o.overlay.appendChild(el); this.hudCombate = el;
+    }
+    if (this.hudCombate) {
+      this.hudCombate.style.display = mostrar ? "block" : "none";
+      if (mostrar) {
+        const barra = this.hudCombate.querySelector('[data-r="barra"]') as HTMLDivElement, rot = this.hudCombate.querySelector('[data-r="rot"]') as HTMLDivElement;
+        const f = c.vida / c.max; barra.style.width = `${Math.round(f * 100)}%`; barra.style.background = f > 0.5 ? "linear-gradient(90deg,#1fd6a8,#7dffe2)" : f > 0.25 ? "linear-gradient(90deg,#d9932c,#ffd36b)" : "linear-gradient(90deg,#c21f35,#ff5a6a)";
+        rot.textContent = c.caido ? "CAÍDO — RENASCENDO…" : `${c.naArena ? "ARENA PvP · " : ""}VIDA ${c.vida}/${c.max}${c.arma ? ` · ${c.arma.toUpperCase()}` : ""}`;
+      }
+    }
+  }
+  /** ARENA PvP — um jogador remoto: o GOLPE novo (a presença trouxe outro `atk`) anima nele e, se nós dois estamos na
+   *  arena, entra na fila pra conferir se me pega; a espada dele aparece/some com `arma`; a vida dele vai no rótulo */
+  private combateRemoto(a: Ator, p: { atk?: number; hp?: number; arma?: number }, t: number) {
+    a.hp = p.hp ?? VIDA_MAX;
+    if (p.atk && p.atk !== a.atkUlt) {
+      const novo = a.atkUlt !== undefined, { n } = decodificarGolpe(p.atk); a.atkUlt = p.atk;
+      if (novo && n >= 1 && n <= 3) {
+        const g = COMBO[n - 1]!; a.golpe = { g, ini: t };
+        this.som.tocar("golpe", a.av.group.position, { dist: DISTANCIA.perto, volume: 0.8, taxa: n === 3 ? 0.82 : 1 });
+        if (!this.noCeu && naArena(this.eu.pos) && !a.ceu && naArena(a.pos)) this.golpesChegando.push({ de: a, g, quando: t + (g.ativoIni + g.ativoFim) / 2, x: a.pos.x, z: a.pos.z, rumo: a.facing });
+      }
+    } else if (!p.atk) a.atkUlt = 0;
+    if (a.golpe && t - a.golpe.ini > a.golpe.g.dur) a.golpe = null;
+    // a espada dele: materializa/desfaz junto com a dele
+    const quer = p.arma === 1;
+    if (quer && !a.espada) { a.espada = criarEspadaEspiritual({ low: true }); a.espada.group.scale.setScalar(1.25); a.av.empunhar(a.espada.group); a.revela = 0; }
+    if (a.espada) { a.revela = Math.max(0, Math.min(1, (a.revela ?? 0) + (quer ? 1 : -1) * (1 / 30) / (quer ? 0.35 : 0.5))); a.espada.atualizar(t, a.revela); }
+  }
+  /** confere os golpes dos outros que chegaram na hora do corte (a posição dele naquele instante) */
+  private conferirGolpesChegando(t: number) {
+    for (let i = this.golpesChegando.length - 1; i >= 0; i--) {
+      const h = this.golpesChegando[i]!; if (t < h.quando) continue;
+      this.golpesChegando.splice(i, 1);
+      const de = { x: h.de.pos.x, z: h.de.pos.z, rumo: h.de.facing };   // (onde ele está agora — o golpe avança junto)
+      if (!this.noCeu && naArena(this.eu.pos) && acerta(de, this.eu.pos, "espada-espiritual", h.g)) this.levar({ dano: danoDoGolpe("espada-espiritual", h.g), de, empurra: h.g.empurra, em: h.quando });
+    }
+  }
+  /** um NÚMERO (dano, "DESVIOU!") que sobe e some em cima de `p` */
+  private numero(texto: string, p: THREE.Vector3, cor: string) {
+    const el = document.createElement("div"); el.textContent = texto;
+    el.style.cssText = `position:absolute;pointer-events:none;font:900 ${texto.length > 4 ? 15 : 20}px system-ui,sans-serif;color:${cor};text-shadow:0 0 10px ${cor},0 2px 3px #000;transform:translate(-50%,-50%);white-space:nowrap;z-index:6;`;
+    this.o.overlay.appendChild(el); this.numeros.push({ el, p: p.clone(), t0: this.agora });
+  }
+  /** levei um golpe (do sparring ou de alguém): desviando no dash não pega; senão perde vida, é empurrado, a tela pisca */
+  private levar(o: { dano: number; de: { x: number; z: number }; empurra: number; em?: number }) {
+    if (this.agora < this.caidoAte) return;
+    const desviando = o.em !== undefined ? this.intocavelEm(o.em) : this.intocavel(), protegido = this.agora < this.protegidoAte, cab = this.eu.av.group.position.clone().setY(this.eu.av.group.position.y + 2.2);
+    if (desviando || protegido) { if (desviando) { this.numero("DESVIOU!", cab, "#7dffe2"); this.som.tocar("alerta", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.6, taxa: 1.15 }); } return; }
+    this.vida = Math.max(0, this.vida - o.dano);
+    const dx = this.eu.pos.x - o.de.x, dz = this.eu.pos.z - o.de.z, d = Math.hypot(dx, dz) || 1;
+    this.empurrao = { x: (dx / d) * o.empurra, z: (dz / d) * o.empurra };
+    this.numero(`-${o.dano}`, cab, "#ff5a6a"); this.tremor = Math.max(this.tremor, 0.18);
+    this.som.tocar("acerto", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 1, taxa: 0.85 });
+    if (this.hudCombate) { this.hudCombate.dataset.dano = String(this.agora); }
+    if (this.vida <= 0) { this.caidoAte = this.agora + CAIDO; this.ataque = null; this.som.tocar("impacto-heroi", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.7, taxa: 1.3 }); }
+  }
   /** ESPAÇO / botão VOAR (segurar): decola e sobe; soltar cai planando até pousar */
   /** ESPAÇO / VOAR: no chão, a DECOLAGEM com impulso — agacha um instante (parado mais; andando/correndo quase nada, o
    *  embalo segue) e só então lança (`decolarJa`), com um empuxo forte pra cima e a velocidade que tinha no chão */
@@ -1977,7 +2153,8 @@ export class CyberEngine {
       if (k === " " || k === "spacebar") { if (this.pilotando || this.moto !== null) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.comandoJet(true); e.preventDefault(); } return; }
       if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }
       if (k === "j" && !this.menu) { if (!e.repeat) this.alternarDescanso(); e.preventDefault(); return; }
-      if (k === "c" && !this.menu) { if (!e.repeat) this.darDash(); e.preventDefault(); return; }   // C = DASH (o arranque — desvio)   // J = sentar / deitar / levantar (lounge)
+      if (k === "c" && !this.menu) { if (!e.repeat) this.darDash(); e.preventDefault(); return; }   // C = DASH (o arranque — desvio)
+      if (k === "x" && !this.menu) { if (!e.repeat) this.atacar(); e.preventDefault(); return; }   // X = ATACAR (o combo da espada; o clique também, com o mouse travado)   // J = sentar / deitar / levantar (lounge)
       if (k === "t" && !this.menu) { if (!e.repeat) this.alternarTablet(); e.preventDefault(); return; }     // T = o tablet (estudar por cima do cyberespaço)
       // HABILIDADES (lib/cyber/habilidades): G = o Droid companheiro (founder)
       const hab = this.menu ? null : habilidadeDaTecla(k, { fundador: this.ehFundador(this.o.eu.id), digitando: false, repetida: e.repeat, modificador: e.ctrlKey || e.metaKey || e.altKey });
@@ -1999,7 +2176,7 @@ export class CyberEngine {
       this.cleanups.push(() => { dica.remove(); if (document.pointerLockElement === cv) document.exitPointerLock(); });
     }
     onC("pointerdown", (e) => {
-      if (this.olharLivre) return;   // mouse travado: clicar não faz nada (as ações são no F)
+      if (this.olharLivre) { if (e.pointerType === "mouse" && e.button === 0) this.atacar(); return; }   // mouse travado: o clique ATACA (com arma; as outras ações são no F)
       if (e.pointerType === "mouse" && e.button === 0 && this.podeOlharLivre()) {   // 1º clique: trava o mouse (não é um clique de ação)
         this.travando = true;
         try { const pr = cv.requestPointerLock() as unknown as Promise<void> | undefined; pr?.catch?.(() => { this.travando = false; }); } catch { this.travando = false; }
@@ -2373,13 +2550,13 @@ export class CyberEngine {
         } }
       this.lancarDecolagem();
       if (this.jet.noAr) this.altMaxVoo = Math.max(this.altMaxVoo, this.jet.y);
-      if (this.agora - this.tHeroi < HEROI.trava) { ix = 0; iz = 0; }   // cravou no chão: um instante parado (o peso do pouso)
+      if (this.agora - this.tHeroi < HEROI.trava || this.agora < this.caidoAte) { ix = 0; iz = 0; }   // cravou no chão / caído: parado
       const prev = { x: eu.pos.x, z: eu.pos.z };
       const dir = moverRelativoCamera(ix, iz, this.camAz);
       // correr segurado ANDANDO vira SPRINT (2× a corrida) depois de ~0,7 s (lib/cyber/movimento)
       this.tCorrendo = correndo && dir && !this.jet.noAr ? this.tCorrendo + Math.min(0.25, this.agora - this.tAnt) : 0;   // (pelo relógio: com fps baixo o dt é cortado)
       this.velAPe = velocidadeAPe(!!correndo, this.tCorrendo);
-      const vel = this.noTopo ? 2 : this.velAPe;   // no topo: passos curtos na plataforma
+      const vel = (this.noTopo ? 2 : this.velAPe) * (this.ataque && !golpeAcabou(this.ataque, this.agora) ? 0.25 : 1);   // no topo: passos curtos; golpeando: quase parado
       const turbo = (this.keys.shift || this.correr) && this.jet.noAr ? VOO_TURBO : 1;   // no ar, correr = VOO TURBO (2× os jatos)
       if (this.jet.noAr) {
         // NO AR: o IMPULSO da mochila move — W (frente) a toda, lados/trás mais devagar; soltou, segue no embalo
@@ -2415,6 +2592,7 @@ export class CyberEngine {
       this.wDash += ((this.dashAtivo ? 1 : 0) - this.wDash) * Math.min(1, dt * (this.dashAtivo ? 30 : 9));
       if (sprintando && !this.dashAtivo) { this.fantasmaT -= dt; if (this.fantasmaT <= 0) { this.fantasmaT = 0.045; this.fxMov?.vento(eu.av.group.position, { x: Math.sin(eu.facing), z: Math.cos(eu.facing) }, this.corDe(euId), 2); } }   // (sprint: só os riscos de vento)
       if (this.jet.noAr || sprintando) this.tFimDash = -Infinity;
+      this.passoCombate(eu, t, dt, andando);
       // sentar ao parar perto da PRÓPRIA base
       const querSentar = this.distBase(euId, eu.pos) < BASE_INTERACT_R && !andando && !this.alvo && !this.jet.noAr && !this.sobreNave;
       this.sitT += ((querSentar ? 1 : 0) - this.sitT) * Math.min(1, dt * 3);
@@ -2563,7 +2741,7 @@ export class CyberEngine {
 
     // rede: eu → difusão; remotos → atores
     const desc = codificarDescanso(this.descanso && this.descanso.fase !== "indo" && this.descanso.fase !== "levantando" ? this.descanso.modo : null, this.tabletW > 0.5);
-    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
+    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
     this.atualizarNascimentoEGuia(dt);
     this.atualizarConversa(dt);
@@ -2581,7 +2759,7 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: pesoAlerta(t - this.tFimDash), alertaT: t - this.tFimDash, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0 }, tablet: eu.tab ?? 0, dt: this.moto === null && !this.jet.noAr && eu.moving ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (no sprint as pernas giram mais rápido)
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0 }, tablet: eu.tab ?? 0, dt: this.moto === null && !this.jet.noAr && eu.moving ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (no sprint as pernas giram mais rápido)
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
@@ -2606,7 +2784,7 @@ export class CyberEngine {
       const cada = dCam < 12 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 1 / 40;   // 12–40 m: um quadro sim, um não (LOD de animação)
       a.acum = (a.acum ?? 0) + dt;
       const animou = a.acum >= cada;
-      if (animou) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
+      if (animou) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0 }, tablet: a.tab ?? 0, acao: a.espada && (a.revela ?? 0) > 0.02 ? { sprint: 0, dash: 0, alerta: 0, espada: { golpe: a.golpe ? { n: a.golpe.g.n, u: Math.min(1, (t - a.golpe.ini) / a.golpe.g.dur), ativo: [a.golpe.g.ativoIni / a.golpe.g.dur, a.golpe.g.ativoFim / a.golpe.g.dur] } : null, guarda: a.moving ? 0 : 1 } } : null, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
       matrizDoAvatar(a.av.group, animou);   // o esqueleto dele só recalcula no quadro em que animou ou andou (components/cyber/matrizes)
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
       else if (a.nave) { a.nave.group.position.set(a.pos.x, a.alt, a.pos.z); a.nave.group.rotation.y = (a.naveYaw ?? 0) + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: a.alt > 0.5, vel: a.moving ? 1 : 0, curva: 0, fechada: true }); this.noAssento(a.av, a.nave); }
@@ -2676,6 +2854,7 @@ export class CyberEngine {
     for (const m of this.instMotos.values()) this.regiaoPerto(m.g, "moto");
 
     this.atualizarCamera(dt);
+    this.atualizarHudCombate();
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
     this.atualizarHud(now);
     // PISOS QUE ESCONDEM (as células/portais do céu aberto): o que está em cima de uma plataforma some pra quem está
@@ -2724,6 +2903,7 @@ export class CyberEngine {
         const pendente = this.vozPendente.get(id); if (pendente) { this.vozPendente.delete(id); this.vozDe(id, pendente); }
         a.sit += ((p.sit ? 1 : 0) - a.sit) * Math.min(1, dt * 3);
         a.desc = p.desc ?? 0;
+        this.combateRemoto(a, p, t);
         // "no topo" só vale pra quem o SERVIDOR marcou como fundador (client event forjado não sobe ninguém)
         // regalias (topo/nave) só pra quem o SERVIDOR marcou como fundador — a Zaeon (céu) é aberta
         const fund = !!this.pessoas.get(id)?.fundador;
@@ -2789,7 +2969,7 @@ export class CyberEngine {
       if (a === eu) { a.tag.style.display = "none"; continue; }   // o próprio avatar não leva nome
       const s = this.proj(this.vHud.set(a.pos.x, 2.1 + a.sit * -0.3 + a.alt, a.pos.z));
       this.noHud(a.tag, s.x, s.y, !this.menu && s.vis && a.av.group.visible);
-      { const perto = eu.pos.distanceTo(a.pos) < 3.0, borda = a.falando ? "#9affd0" : perto ? "#fff" : "", txt = (a.falando ? "🎙 " : perto ? "💬 " : "") + a.name;
+      { const perto = eu.pos.distanceTo(a.pos) < 3.0, borda = a.falando ? "#9affd0" : perto ? "#fff" : "", txt = (a.falando ? "🎙 " : perto ? "💬 " : "") + a.name + (a.hp !== undefined && a.hp < VIDA_MAX ? ` · ♥ ${a.hp}` : "");   // (na arena, a vida dele no rótulo)
         if (a.tag.style.borderColor !== borda) a.tag.style.borderColor = borda; if (a.tag.textContent !== txt) a.tag.textContent = txt; }
     }
     for (let i = this.falas.length - 1; i >= 0; i--) {
@@ -2839,7 +3019,7 @@ export class CyberEngine {
     for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.casca.removeFromParent();
     for (const f of this.fabricas) f.robo.dispose();
     if (this.hudVoo) for (const m of [this.hudVoo.marca, this.hudVoo.borda]) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
-    this.fxVel?.dispose(); this.fxMov?.dispose(); this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
+    this.fxVel?.dispose(); this.fxMov?.dispose(); this.arena?.dispose(); this.espada?.dispose(); this.hudCombate?.remove(); for (const n of this.numeros) n.el.remove(); this.cena.dispose(); this.R.dispose(); this.R.forceContextLoss(); this.R.domElement.remove();
   }
 }
 
