@@ -70,6 +70,7 @@ import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, l
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
 import { criarPistas, type PistasHandle } from "./PistaCorrida";
 import { pistaPorId, type Pista } from "@/lib/cyber/corrida/pistas";
+import { CONTAGEM_CK, ESPERA_DUPLA_MS, PISTA_CK, botEm, crDe, faseCk, gridCk, lerCr, noBoxCk, novaCorridaCk, passoCk, vencedores, type BotCk, type Concorrente, type CorridaCk, type ModoCk } from "@/lib/cyber/corrida/checkpoints";
 import { CONTAGEM, novaCorrida, passoCorrida, tempoDeCorrida, type Corrida, type EventoCorrida, type FaseCorrida } from "@/lib/cyber/corrida/corrida";
 import { gastarDash, passoVigor, podeCorrer, vigorCheio, type EstadoVigor } from "@/lib/cyber/vigor";
 import { PILOTAGEM, motoParada, passoMotoSub, rompeuBarreira, sensacaoDeVelocidade, supersonico, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
@@ -129,7 +130,7 @@ export type CyberOpts = {
   /** teclado sempre ouvido (tela cheia). Na janela da landing só com o mouse em cima (não rouba ESPAÇO/rolagem da página). */
   teclasSempre: boolean;
   remotos?: { current: Map<string, Presenca> };
-  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; desc?: number; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada; atk?: number; hp?: number; arma?: number; mov?: number }) => void;
+  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; desc?: number; ck?: number; cr?: string; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada; atk?: number; hp?: number; arma?: number; mov?: number }) => void;
   /** pontos de interesse (marcos megalíticos) — flag NEXT_PUBLIC_CYBER_LANDMARKS */
   landmarks?: boolean;
   /** clicou num marco estando perto → painel (nome, org, link) */
@@ -249,7 +250,8 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** 
   /** remotos: montado numa moto voadora (vaga, altura, rumo) */
   moto?: MotoMontada | null;
   /** remotos: a moto que ele ESTACIONOU (fica lá até ele montar noutra ou sair) */
-  motoLargada?: MotoLargada | null };
+  motoLargada?: MotoLargada | null;
+  /** a CORRIDA DE CHECKPOINTS dele: o placar e a corrida ("semente:largada") — da pose */ ck?: number; cr?: string };
 /** um balão de fala preso a quem fala (uma pessoa ou o Droid: só a posição e a altura importam) */
 type Fala = { el: HTMLDivElement; ator: { pos: THREE.Vector3; alt: number }; ate: number };
 
@@ -2021,7 +2023,7 @@ export class CyberEngine {
   private desceDaMotoAqui() { const m = this.motoEst; return this.moto !== null && this.motoPousado && (m.y > 0.5 || naPraca(m)); }
   desmontar() {
     if (this.moto === null || !this.desceDaMotoAqui()) return;
-    this.sairCorrida();
+    this.sairCorrida(); this.sairCorridaCk();
     const m = this.motoEst, lx = Math.cos(m.yaw), lz = -Math.sin(m.yaw);   // a esquerda de quem pilota
     this.motoLargada = { s: this.moto, x: m.x, y: m.y, z: m.z, yaw: m.yaw };
     this.soltarInst("eu:p"); this.renomearInst("eu:r", "eu:p");   // a MESMA moto fica ali (a estacionada antiga some)
@@ -2836,6 +2838,85 @@ export class CyberEngine {
     };
   }
   private vCorrida = new THREE.Vector3();
+
+  // ───────────── a CORRIDA DE CHECKPOINTS (lib/cyber/corrida/checkpoints): sem estatística — pegar o próximo anel ─────────────
+  private ck: { c: CorridaCk; pista: Pista; bots: { b: BotCk; g: THREE.Group; moto: MotoHandle; ck: number }[]; resultado: { lista: Concorrente[]; vencedores: Concorrente[] } | null; contou: number } | null = null;
+  /** larga uma corrida de checkpoints (de moto): SOLO (`semente`/`inicio` novos) ou EM DUPLA (quem chama: vaga 0, largada
+   *  daqui a ESPERA_DUPLA_MS; quem entra: a semente e a largada do convite, vaga 1). A moto vai pro grid e fica presa até a largada */
+  entrarNaCorridaCk(modo: ModoCk, convite?: { semente: number; inicio: number }): boolean {
+    if (this.moto === null) { this.o.onAviso?.("Venha de moto pro box de largada pra correr."); return false; }
+    const pista = pistaPorId(PISTA_CK); if (!pista) return false;
+    this.sairCorrida(); this.sairCorridaCk();
+    const semente = convite?.semente ?? Math.floor(Math.random() * 2 ** 30), inicio = convite?.inicio ?? Date.now() + (modo === "dupla" ? ESPERA_DUPLA_MS : CONTAGEM_CK * 1000);
+    const c = novaCorridaCk(modo, semente, inicio, convite ? 1 : 0), g = gridCk(pista, c.vaga);
+    this.motoEst = { ...motoParada(g.x, g.y, g.z, g.rumo), tanque: 1 }; this.motoPousado = false; this.autoPouso = false;
+    this.voY.subir = this.voY.descer = false; this.camAz = g.rumo + Math.PI; this.camSegueEm = 0;
+    const bots = c.bots.map((b) => {
+      const moto = loteMoto(criarMoto({ cor: b.cor, low: this.o.low })), grupo = new THREE.Group(); grupo.add(moto.group);
+      // o piloto: um boneco de luz na cor do bot (leve — não é um avatar)
+      const mat = new THREE.MeshStandardMaterial({ color: b.cor, emissive: b.cor, emissiveIntensity: 0.6, roughness: 0.5 });
+      const corpo = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.7, 4, 8), mat); corpo.position.set(0, 1.35, -0.15); corpo.rotation.x = 0.5;
+      const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), mat); cabeca.position.set(0, 1.95, 0.12);
+      grupo.add(corpo, cabeca); this.cena.scene.add(grupo);
+      return { b, g: grupo, moto, ck: 0 };
+    });
+    this.ck = { c, pista, bots, resultado: null, contou: -1 };
+    this.pistas?.definir({ pista: pista.id, proximo: c.proximo });
+    return true;
+  }
+  /** sai da corrida (ou fecha o resultado) */
+  sairCorridaCk() {
+    const k = this.ck; if (!k) return; this.ck = null;
+    for (const x of k.bots) { x.moto.dispose(); x.g.traverse((n) => { const m = n as THREE.Mesh; if (m.isMesh && m.geometry) { m.geometry.dispose(); (m.material as THREE.Material).dispose?.(); } }); x.g.removeFromParent(); }
+    this.pistas?.definir(this.corrida ? { pista: this.corrida.pista.id, proximo: this.corrida.c.proximo } : null);
+  }
+  private passoDaCorridaCk(de: { x: number; y: number; z: number }) {
+    const k = this.ck!, agora = Date.now(), f = faseCk(k.c, agora);
+    if (f.fase === "contagem") { const g = gridCk(k.pista, k.c.vaga); this.motoEst = { ...this.motoEst, x: g.x, y: g.y, z: g.z, vx: 0, vy: 0, vz: 0, yaw: g.rumo }; if (f.contagem <= 3 && f.contagem !== k.contou) { k.contou = f.contagem; this.som?.tocar("corrida-bip"); } return; }
+    if (k.contou !== 0 && f.fase === "correndo") { k.contou = 0; this.som?.tocar("corrida-largada"); }
+    if (f.fase === "fim") { if (!k.resultado) this.fecharCorridaCk(); return; }
+    const antes = k.c.proximo, r = passoCk(k.c, k.pista, de, { x: this.motoEst.x, y: this.motoEst.y, z: this.motoEst.z }, agora);
+    if (!r.pegou) return;
+    k.c = r.c; this.som?.tocar("corrida-portao"); this.pistas?.definir({ pista: k.pista.id, proximo: k.c.proximo });
+    if (k.pista.portoes[antes]!.tipo === "boost") this.motoEst = { ...this.motoEst, tanque: 1 };   // o anel âmbar enche o boost
+  }
+  /** acabou o tempo: quem pegou mais checkpoints ganha (a dupla: o placar dela vem da pose) */
+  private fecharCorridaCk() {
+    const k = this.ck!, agora = Date.now(), cr = crDe(k.c);
+    const lista: Concorrente[] = [{ id: this.o.eu.id, nome: "Você", cor: this.corDe(this.o.eu.id), ck: k.c.meus, eu: true }, ...k.bots.map((x) => ({ id: x.b.id, nome: x.b.nome, cor: x.b.cor, ck: botEm(x.b, k.pista, k.c, agora).ck }))];
+    if (k.c.modo === "dupla") for (const a of this.remotos.values()) if (a.cr === cr) lista.push({ id: a.id, nome: a.name, cor: a.color, ck: a.ck ?? 0 });
+    lista.sort((a, b) => b.ck - a.ck);
+    k.resultado = { lista, vencedores: vencedores(lista) };
+    this.som?.tocar("corrida-fim");
+  }
+  /** os bots andando pela pista (pelo relógio) */
+  private atualizarBotsCk(t: number) {
+    const k = this.ck!, agora = Date.now();
+    for (const x of k.bots) {
+      const p = botEm(x.b, k.pista, k.c, agora), f = faseCk(k.c, agora).fase;
+      x.g.position.set(p.x, p.y, p.z); x.g.rotation.y = p.rumo; x.ck = p.ck;
+      x.moto.atualizar({ dt: 1 / 60, t, voando: true, vel: f === "correndo" ? x.b.vel : 0, curva: 0 });
+    }
+  }
+  /** o que a tela da corrida de checkpoints mostra (null fora dela) */
+  get corridaCkHud(): { modo: ModoCk; fase: "contagem" | "correndo" | "fim"; contagem: number; resta: number; meus: number; seta: number; dist: number; resultado: { lista: Concorrente[]; vencedores: Concorrente[] } | null } | null {
+    const k = this.ck; if (!k) return null;
+    const f = faseCk(k.c, Date.now()), g = k.pista.portoes[k.c.proximo]!, m = this.motoEst;
+    this.cam.getWorldDirection(this.vCorrida);
+    const frente = Math.atan2(this.vCorrida.x, this.vCorrida.z), alvo = Math.atan2(g.x - m.x, g.z - m.z);
+    let seta = frente - alvo; while (seta > Math.PI) seta -= 2 * Math.PI; while (seta < -Math.PI) seta += 2 * Math.PI;
+    return { modo: k.c.modo, fase: f.fase, contagem: f.contagem, resta: f.resta, meus: k.c.meus, seta, dist: Math.hypot(g.x - m.x, g.z - m.z), resultado: k.resultado };
+  }
+  /** o BOX DE LARGADA: estou nele (de moto, fora de corrida)? quem mais está (pra dupla) e os convites de dupla abertos */
+  get boxCk(): { parceiros: { id: string; nome: string }[]; convites: { id: string; nome: string; semente: number; inicio: number }[] } | null {
+    if (this.moto === null || this.ck || this.corrida || !noBoxCk({ x: this.motoEst.x, y: this.motoEst.y, z: this.motoEst.z })) return null;
+    const agora = Date.now(), parceiros: { id: string; nome: string }[] = [], convites: { id: string; nome: string; semente: number; inicio: number }[] = [];
+    for (const a of this.remotos.values()) {
+      if (a.moto && noBoxCk({ x: a.pos.x, y: a.alt, z: a.pos.z })) parceiros.push({ id: a.id, nome: a.name });
+      const cv = lerCr(a.cr); if (cv && cv.inicio - agora > 1500 && cv.inicio - agora < ESPERA_DUPLA_MS + 5000) convites.push({ id: a.id, nome: a.name, ...cv });   // (dá tempo de chegar no grid)
+    }
+    return { parceiros, convites };
+  }
   /** botão ⚡ (segurar) da moto */
   boostMoto(v: boolean) { this.boostBotao = v; }
   /** o tanque de boost (0..1) e se está aceso — o HUD lê */
@@ -2864,12 +2945,13 @@ export class CyberEngine {
       // MOTO: pilotagem de moto (lib/cyber/motoFisica) — W/S acelera/freia, A/D esterça, Shift/⚡ boost
       const c = this.comandoDeMoto(); this.acelMoto = c.acel;
       const deCorrida = { x: this.motoEst.x, y: this.motoEst.y, z: this.motoEst.z };
-      if (this.corrida?.c.fase === "contagem") { c.acel = 0; c.boost = false; c.subir = c.descer = false; }   // no grid: o motor ronca, a moto não sai
+      if (this.corrida?.c.fase === "contagem" || (this.ck && faseCk(this.ck.c, Date.now()).fase === "contagem")) { c.acel = 0; c.boost = false; c.subir = c.descer = false; }   // no grid: o motor ronca, a moto não sai
       const boostAntes = this.motoEst.boost;
       const r = passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
       if (!r.pousado && rompeuBarreira(boostAntes, r.s.boost, Math.hypot(r.s.vx, r.s.vz))) this.ondaT = 0;   // acendeu o boost rápido: quebrou a barreira do som
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
       if (this.corrida) this.passoDaCorrida(deCorrida, dtReal);
+      if (this.ck) this.passoDaCorridaCk(deCorrida);
       eu.pos.set(r.s.x, 0, r.s.z); eu.facing = r.s.yaw; eu.moving = Math.hypot(r.s.vx, r.s.vz) > 1; this.sitT = 0;   // "andando" = a moto em movimento (o netcode extrapola)
     } else if (this.pilotando) {
       // VOO: WASD/joystick/direcional relativo à câmera; Espaço/E/SUBIR sobe; Shift/Q/DESCER desce; pousa ao encostar
@@ -3107,7 +3189,7 @@ export class CyberEngine {
 
     // rede: eu → difusão; remotos → atores
     const desc = codificarDescanso(this.descanso && this.descanso.fase !== "indo" && this.descanso.fase !== "levantando" ? this.descanso.modo : null, this.tabletW > 0.5);
-    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.movAgora(t) ? { mov: this.movAgora(t) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
+    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.movAgora(t) ? { mov: this.movAgora(t) } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
     this.atualizarNascimentoEGuia(dt);
     this.atualizarConversa(dt);
@@ -3198,6 +3280,8 @@ export class CyberEngine {
     this.atualizarHudVoo(now);
     this.pistas?.atualizar(t);
     if (this.corrida && this.moto === null) this.sairCorrida();
+    if (this.ck && this.moto === null) this.sairCorridaCk();
+    if (this.ck) this.atualizarBotsCk(t);
     this.atualizarSom(dt);
     const navePerto = !this.pilotando && !!this.nave && this.navePerto();
     const naMoto = this.moto !== null, motoPertoAgora = !!this.motoAoAlcance(), pousado = naMoto ? this.motoPousado : this.pousado;
@@ -3306,6 +3390,7 @@ export class CyberEngine {
         a.naveP = parada;
         a.moto = !voando && p.moto ? p.moto : null;   // moto: qualquer pessoa (sem regalia)
         a.motoLargada = p.motoLargada ?? null;
+        a.ck = typeof p.ck === "number" ? p.ck : 0; a.cr = typeof p.cr === "string" ? p.cr : "";
         const jetAnt = a.jet; a.jet = !voando && !a.moto && typeof p.jet === "number" ? p.jet : undefined;
         if (a.jet !== undefined && jetAnt !== undefined && dt > 0) a.vyJet = (a.vyJet ?? 0) + (((a.jet - jetAnt) / dt) - (a.vyJet ?? 0)) * Math.min(1, dt * 4); else a.vyJet = 0;
         const altAlvo = voando ? p.voo!.y : a.moto ? a.moto.y : a.jet !== undefined ? a.jet : typeof p.alt === "number" ? p.alt : a.topo ? this.alturaTopo() : a.ceu ? CIDADE.pisoY + alturaNaCidade(a.pos) : this.alturaChao(a.pos);
@@ -3373,7 +3458,7 @@ export class CyberEngine {
 
   dispose() {
     if (this.relogioFrota) clearInterval(this.relogioFrota); this.relogioFrota = null;
-    this.frota?.dispose(); this.frota = null; this.pistas?.dispose(); this.pistas = null;
+    this.sairCorridaCk(); this.frota?.dispose(); this.frota = null; this.pistas?.dispose(); this.pistas = null;
     const w = window as unknown as { __cyber?: CyberEngine }; if (w.__cyber === this) delete w.__cyber;
     if (!this.vivo) return;   // idempotente (desmonta ao ir estudar e de novo no cleanup do React)
     this.vivo = false; cancelAnimationFrame(this.raf); this.ro?.disconnect(); this.io?.disconnect();

@@ -47,6 +47,8 @@ export type Presenca = {
   mov?: number;       // o MOVIMENTO TURBINADO (lib/cyber/movimento): 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem
   atk?: number; hp?: number; arma?: number;   // ARENA PvP (lib/cyber/combate): o golpe (seq×4 + nº do combo), a vida (0–100), a espada na mão (1)
   ts?: number;
+  /** corrida de checkpoints: quantos pegou e a corrida ("semente:largada") */
+  ck?: number; cr?: string;
 };
 
 export type NotaCanvas = {

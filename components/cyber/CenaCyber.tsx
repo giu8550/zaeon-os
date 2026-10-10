@@ -30,6 +30,7 @@ import type { CanalVoz } from "@/components/lounge/salaColyseus";
 import Joystick from "./Joystick";
 import ControlesVoo from "./ControlesVoo";
 import PainelCorrida from "./PainelCorrida";
+import PainelCorridaCk from "./PainelCorridaCk";
 import type { EventoCorrida } from "@/lib/cyber/corrida/corrida";
 import TocaDiscos, { type ApiMusica } from "./TocaDiscos";
 import RitualPainel from "./RitualPainel";
@@ -453,6 +454,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       )}
       {!menu && (qg.pilotando || qg.moto) && <ControlesVoo engine={engine} touch={touch} pousado={qg.pousado} moto={qg.moto} />}
       {!menu && <PainelCorrida engine={engine} moto={qg.moto} evento={evCorrida} />}
+      {!menu && <PainelCorridaCk engine={engine} />}
       {/* MOTO VOADORA: o altímetro (montar/descer é a ação de contexto, F) */}
       {!menu && qg.moto && voo && !qg.pousado && (
         <p className="absolute left-1/2 top-[110px] z-30 -translate-x-1/2 rounded-full bg-[#070c22]/70 px-3 py-1 text-center text-xs font-bold tabular-nums text-sky-100 backdrop-blur">↕ {voo.y} m</p>
