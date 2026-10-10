@@ -243,7 +243,6 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     { tipo: "torreSom", x: 25, z: -37, rot: -0.45, larg: 3.6, prof: 2.6 },
     { tipo: "sub", x: -14, z: -30, rot: 0.3, larg: 3, prof: 2 },
     { tipo: "sub", x: 14, z: -30, rot: -0.3, larg: 3, prof: 2 },
-    { tipo: "pista", x: 0, z: -12, rot: 0, larg: 36, prof: 26, solido: false },   // a pista cresceu junto (cabe muito mais gente)
     // as ZONAS de lounge (pra não ser só pista): rodas de sofá com NARGUILÉ, puffs em volta de FOGUEIRAS holográficas e
     // cantinhos com mesinha, dos dois lados da pista — o corredor da DIREITA (rumo à escadaria do templo) fica livre
     ...zonaLounge(-34, -22, Math.PI / 2, 0xb98cff, "narguile"),
@@ -339,11 +338,13 @@ export function naCabineDJ(p: P2): boolean {
 }
 /** o ponto (mundo) onde o DJ fica — quem para na cabine é puxado devagar pra cá (as mãos caem na controladora) */
 export const pontoDaCabineDJ = (): P2 => mundo(daSala(CIDADE.salas.lounge, PALCO.cabine.x, PALCO.cabine.z));
-/** está na PISTA de dança do lounge (o retângulo de LED)? `p` no mundo — quem para ali dança */
+/** a ÁREA DE DANÇA do deck (referencial da sala): sem piso de LED (saiu — o centro do evento é a MANDALA em cima do
+ *  DJ); quem para aqui dança, virado pra ela */
+export const PISTA = { x: 0, z: -12, larg: 36, prof: 26 } as const;
+/** está na área de dança do lounge? `p` no mundo — quem para ali dança */
 export function naPistaDeDanca(p: P2): boolean {
-  const pista = MOVEIS.lounge.find((m) => m.tipo === "pista"); if (!pista) return false;
   const q = naSala(CIDADE.salas.lounge, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z);
-  return Math.abs(q.x - pista.x) <= pista.larg / 2 && Math.abs(q.z - pista.z) <= pista.prof / 2;
+  return Math.abs(q.x - PISTA.x) <= PISTA.larg / 2 && Math.abs(q.z - PISTA.z) <= PISTA.prof / 2;
 }
 /** pra onde quem dança olha: pro palco (o −z da sala) */
 export const rumoDaPista = () => rotDaSala(CIDADE.salas.lounge) + Math.PI;

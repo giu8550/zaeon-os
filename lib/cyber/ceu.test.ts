@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PISO_FESTA, BURACO_NEGRO, CIDADE, ESCADAS, FIO, alturaDoFio, bocaDeEscada, chaoDaNave, colisoresDaCidade, foraDaIlha, mundo, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, naTorreDJ, foraDaTorreDJ, CAMPO_DJ, BN_NA_SALA, TRELICA, type NomeSala } from "./ceu";
+import { PISTA, PISO_FESTA, BURACO_NEGRO, CIDADE, ESCADAS, FIO, alturaDoFio, bocaDeEscada, chaoDaNave, colisoresDaCidade, foraDaIlha, mundo, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, naTorreDJ, foraDaTorreDJ, CAMPO_DJ, BN_NA_SALA, TRELICA, type NomeSala } from "./ceu";
 import { NOS, noDoAnel } from "./buracos";
 import { PRACA } from "./praca";
 import { BASES_CEU_LOCAIS, BASE_COLLIDER_R, baseNoCeu, spawnDaBase } from "./bases";
@@ -190,8 +190,8 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
   });
   it("móveis: telão, palco alto, mesa do DJ, a TRELIÇA com as caixas SUSPENSAS, subs, pista e sofás; tudo dentro", () => {
     const tipos = MOVEIS.lounge.map((m) => m.tipo);
-    expect(tipos).toEqual(expect.arrayContaining(["sofa", "caixaSom", "torreSom", "palco", "mesaDJ", "sub", "pista", "trelica"]));
-    expect(tipos).not.toContain("tv");   // o telão saiu (out/2026): o fundo do deck é o olho/a mandala
+    expect(tipos).toEqual(expect.arrayContaining(["sofa", "caixaSom", "torreSom", "palco", "mesaDJ", "sub", "trelica"]));
+    expect(tipos).not.toContain("tv"); expect(tipos).not.toContain("pista");   // o telão e o piso de LED saíram (out/2026): o centro do evento é a MANDALA
     expect(MOVEIS.lounge.filter((m) => m.tipo === "torreSom").every((m) => m.solido !== false)).toBe(true);   // as do chão são sólidas
     expect(MOVEIS.lounge.filter((m) => m.tipo === "caixaSom").every((m) => m.solido === false)).toBe(true);   // suspensas: o chão é livre
     for (const m of MOVEIS.lounge) for (const [a, b] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
@@ -271,7 +271,7 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
     for (let lz = L.r - 1; lz > PALCO.z + PALCO.r + PALCO.escada.len; lz -= 0.5) for (const lx of [-2, 0, 2]) expect(dentroDeAlgum(W(lx, lz), cs)).toBe(false);
   });
   it("PISTA de dança: quem para no retângulo de LED dança (virado pro palco); fora dela, não", () => {
-    const W = (lx: number, lz: number) => mundo(daSala(L, lx, lz)), pista = MOVEIS.lounge.find((m) => m.tipo === "pista")!;
+    const W = (lx: number, lz: number) => mundo(daSala(L, lx, lz)), pista = PISTA;
     expect(naPistaDeDanca(W(pista.x, pista.z))).toBe(true);
     expect(naPistaDeDanca(W(pista.x + pista.larg / 2 - 0.5, pista.z - pista.prof / 2 + 0.5))).toBe(true);
     expect(naPistaDeDanca(W(0, PALCO.z))).toBe(false);          // no palco, não
