@@ -98,5 +98,16 @@ export function useCerebro(scopeId: string | null, opts: { aberto?: boolean } = 
     }
   }, [on, scopeId, refetch]);
 
-  return { ...st, refetch, gerar, ligado: on };
+  /** depois de um TURNO do chat: o servidor decide se a conversa é estudável (lib/map/gatekeeper) em segundo plano, com
+   *  uma chamada de IA de até ~8 s — então confere em 3 tempos (uma vez só, cedo demais, a bolinha não aparecia até trocar
+   *  de conversa) */
+  const timersTurno = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const conferirDepoisDoTurno = useCallback(() => {
+    if (!on || !scopeId) return;
+    for (const t of timersTurno.current) clearTimeout(t);
+    timersTurno.current = [1500, 5000, 10000].map((ms) => setTimeout(() => void refetch(), ms));
+  }, [on, scopeId, refetch]);
+  useEffect(() => () => { for (const t of timersTurno.current) clearTimeout(t); }, []);
+
+  return { ...st, refetch, gerar, conferirDepoisDoTurno, ligado: on };
 }
