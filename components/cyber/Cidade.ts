@@ -18,7 +18,7 @@
  */
 import * as THREE from "three";
 import type { PisoOclusor } from "./oclusaoPisos";
-import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, FOGO_NA_BORDA, TORRES_NA_BORDA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, ESTACOES_NA_CAPELA, FOGO_NA_BORDA, TORRES_NA_BORDA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
@@ -299,13 +299,13 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   // o CORAÇÃO (o globo bate; veias azuis por toda a cidade e subindo a capela; o raio no topo) e as ESTAÇÕES DOS AGENTES
   const coracao = CAPELA_NA_ZAEON ? criarCoracao({ low }) : null; if (coracao) ilha.add(coracao.group);
-  const estacoes = criarEstacoes({ low }); ilha.add(estacoes.group);
+  const estacoes = ESTACOES_NA_CAPELA ? criarEstacoes({ low }) : null; if (estacoes) ilha.add(estacoes.group);   // (saíram na reforma da capela)
   // o OBSERVATÓRIO DA TERRA + os 4 AUTÓDROMOS (lib/cyber/terra) e os DROIDS OBSERVADORES
   const distrito = criarDistritoTerra({ low, parado: rm }); ilha.add(distrito.group); alvos.push(...distrito.alvos);
   const observadores = criarObservadores({ low }); ilha.add(observadores.group);
   // fora do lote estático (lotes.ts): o coração (pulsa por EVENTO — o raio — que a simulação da montagem não vê), as
   // estações (já instanciadas) e os droids (andam). O distrito entra: anima pelo relógio (a simulação vê) e materiais compartilhados
-  for (const g of [...(coracao ? [coracao.group] : []), estacoes.group, observadores.group]) g.traverse((n) => { n.userData.semLote = true; });
+  for (const g of [...(coracao ? [coracao.group] : []), ...(estacoes ? [estacoes.group] : []), observadores.group]) g.traverse((n) => { n.userData.semLote = true; });
   const matGlobo = globo.material as THREE.PointsMaterial, matMesa = mesaGlobo.material as THREE.MeshStandardMaterial, matAro = aroGlobo.material as THREE.MeshBasicMaterial;
   const topoMundo = new THREE.Vector3(), globoMundo = new THREE.Vector3();
 
@@ -333,7 +333,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       // o CORAÇÃO bate: o globo incha de luz, a mesa e o aro acendem; o pulso corre nas veias; o raio sai do topo
       { const ev = coracao ? coracao.atualizar(dt, t) : { raio: false, tum: false }, b = coracao ? coracao.batida() : 0;
         matGlobo.size = 0.22 * (1 + 0.9 * b); matMesa.emissiveIntensity = 0.6 + 1.6 * b; matAro.opacity = 0.55 + 0.4 * b;
-        estacoes.atualizar(dt, t, b);
+        estacoes?.atualizar(dt, t, b);
         distrito.atualizar(dt, t); observadores.atualizar(dt);
         if (ev.raio && opts.aoRaio) { const tp = TOPO_DA_CAPELA(); opts.aoRaio(topoMundo.set(tp.x, tp.y, tp.z).applyMatrix4(ilha.matrixWorld)); }
         if (ev.tum && opts.aoBater) opts.aoBater(globoMundo.set(0, GLOBO_CAPELA.y, 0).applyMatrix4(ilha.matrixWorld)); }
@@ -349,6 +349,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         cGeo.attributes.position!.needsUpdate = true; }
       ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * BOIA_ILHOTA * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
     },
-    dispose() { rotulo.remove(); templo.dispose(); coracao?.dispose(); estacoes.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
+    dispose() { rotulo.remove(); templo.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };
 }

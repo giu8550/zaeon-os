@@ -18,10 +18,10 @@ import { eu, salaDoMembro } from "@/lib/lounge3d/server";
 import { synthGeminiTTS } from "@/lib/voice/gemini-tts";
 import { registrarTokens } from "@/lib/llm/ledger";
 import { usageDoVertex, USAGE_VAZIO, type Usage } from "@/lib/llm/usage";
-import { VOZ_ZAEON, falasFixasZaeon, textoDaVoz } from "@/lib/cyber/vozZaeon";
+import { VOZ_ZAEON, falasEmCacheNoServidor, textoDaVoz } from "@/lib/cyber/vozZaeon";
 
 type Audio = { audio_base64: string; mime: string };
-const FIXAS = new Set(falasFixasZaeon());
+const FIXAS = new Set(falasEmCacheNoServidor());   // (o tutorial + as frases da capela)
 /** (no globalThis: o servidor de dev reavalia o módulo da rota — o cache sobrevive, como o do prisma) */
 const cacheFixas = ((globalThis as { __cyberVozFixas?: Map<string, Audio> }).__cyberVozFixas ??= new Map<string, Audio>());
 const PRAZO_MS = 12_000;

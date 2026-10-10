@@ -27,6 +27,9 @@ export const CAPELA_NA_ZAEON = true;
 /** as TORRES de cristal da muralha (16, com a ponta acesa) e as LÍNGUAS DE FOGO da borda — fora a pedido do dono (out/2026,
  *  fps: "retire as pilastras e os pontos de luz nas bordas"). Os tubos de ensaio continuam medidos pelos ângulos delas */
 export const TORRES_NA_BORDA = false, FOGO_NA_BORDA = false;
+/** os TERMINAIS DOS AGENTES em volta do pátio da capela (components/cyber/EstacoesAgentes) — saíram na reforma da capela
+ *  (out/2026): ela fica só com a Zaeon em holograma, saindo do globo */
+export const ESTACOES_NA_CAPELA = false;
 export const CAPELA = { r: 18 * E, pilares: 28, pilarColR: 1.3 * E, altura: 32, achata: 0.55, tamborR: 18, tamborAlt: 14, pontaLen: 60 } as const;
 /** a altura (acima do piso) onde a PONTA da capela começa — o lounge flutua mais ou menos aqui */
 export function inicioDaPonta(): number {
@@ -174,9 +177,10 @@ export const BASES_DONO_LOCAIS: readonly { x: number; z: number }[] = [{ x: 0, z
  *  1–3 (graduação) não tem cabine (estuda no chão, em volta das supertrees e das cabines, nas pontas — lib/cyber/cidadela) */
 export type NivelCabine = "phd" | "doutorando" | "mestrando";
 export const FILEIRAS_CABINES: readonly { nivel: NivelCabine; r: number; n: number; fase: number }[] = [
-  { nivel: "phd", r: 64, n: 9, fase: 0.5 },
-  { nivel: "doutorando", r: 78, n: 9, fase: 0 },
-  { nivel: "mestrando", r: 93, n: 34, fase: 0.25 },
+  // (afastadas das colunas da capela na reforma de out/2026 — eram 64/78/93: o pátio em volta dela ficou livre)
+  { nivel: "phd", r: 112, n: 9, fase: 0.5 },
+  { nivel: "doutorando", r: 126, n: 9, fase: 0 },
+  { nivel: "mestrando", r: 141, n: 34, fase: 0.25 },
 ];
 /** a CABINE (referencial dela: o +z = a frente, virada pra capela; a pessoa senta em `assento`, de frente pra mesa e
  *  pra capela, com o monitor entre ela e o centro) */
@@ -237,7 +241,7 @@ export function colisoresDaCidade(): Colisor[] {
   const { cidadela, mesaHolo } = CIDADE;
   if (CAPELA_NA_ZAEON) for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; out.push({ ...mundo({ x: Math.cos(a) * cidadela.r, z: Math.sin(a) * cidadela.r }), r: cidadela.pilarColR }); }
   out.push({ ...mundo({ x: 0, z: 0 }), r: mesaHolo.r });
-  out.push(...colisoresDasEstacoes());
+  if (ESTACOES_NA_CAPELA) out.push(...colisoresDasEstacoes());
   out.push(...colisoresDasCabines());   // as CABINES DE ESTUDO da hierarquia (professores, doutores, mestrandos)
   out.push(...colisoresDoDistritoTerra(mundo));   // o Observatório da Terra (supertrees, motores, telões, globo)
   // (sem corrimão: as escadas viraram FIOS DE ENERGIA — o corredor não é piso, ninguém anda nele)

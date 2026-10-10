@@ -53,7 +53,9 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
   preparar?: (o: THREE.Object3D) => Promise<void>;
   /** um personagem FIXO (sem agenda): fica em `pos` (mundo), `y` m acima do piso da ilha, virado pra `rumo` — o DJ do
    *  lounge (`dj`: fone na cabeça, mãos na controladora, no compasso) */
-  fixo?: { pos: { x: number; z: number }; y: number; rumo: number; dj?: boolean } }): PersonagemVivoHandle {
+  fixo?: { pos: { x: number; z: number }; y: number; rumo: number; dj?: boolean };
+  /** um ROTEIRO próprio no lugar da agenda (a Examiner: o altar e a pista — lib/cyber/examiner); sem moto */
+  roteiro?: () => Estado }): PersonagemVivoHandle {
   const { carrega: DIST_CARREGA, solta: DIST_SOLTA, esconde: DIST_ESCONDE } = DIST(o.low);
   const raiz = new THREE.Group(); raiz.name = `personagem-${o.id}`; o.cena.add(raiz);
   const av: AvatarLuzHandle = criarAvatarLuz(o.cor, o.starTex, o.low, o.gltf, { anime: true });
@@ -122,7 +124,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
         av.animar({ andando: false, correndo: false, dj: f.dj ? 1 : 0, dt: dtA, t });
         return;
       }
-      const e = estadoEm(agora, o.perfil, cache); cache = e.bloco; estado = e;
+      const e = o.roteiro ? o.roteiro() : estadoEm(agora, o.perfil, cache); if (!o.roteiro) cache = (e as ReturnType<typeof estadoEm>).bloco; estado = e;
       const p0 = mundo(e.pos);
       // DESVIA de quem está no caminho (o jogador, os outros) — o roteiro não muda, só o corpo contorna
       desvio = desviar(desvio, !e.moto && e.sentado < 0.5 ? empurrao(p0, obstaculos) : { x: 0, z: 0 }, dt);
@@ -155,7 +157,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
       } else {
         moto.group.position.set(vagaW.x, ilhaY, vagaW.z); moto.group.rotation.y = o.perfil.vaga.rumo;
         moto.atualizar({ dt: dtA, t, voando: false, vel: 0, curva: 0 });
-        moto.group.visible = o.perfil.casa !== "salas";   // quem mora nas SALAS não tem moto parada na central: ela só aparece no trajeto
+        moto.group.visible = o.perfil.casa !== "salas" && !o.roteiro;   // quem mora nas SALAS não tem moto parada na central: ela só aparece no trajeto
         alt = ilhaY + e.y; av.group.position.set(p.x, alt, p.z); av.olharPara(e.rumo);
       }
       // a pose feminina quando parada em pé (passeando, olhando o telão); nas outras, o esqueleto manda
