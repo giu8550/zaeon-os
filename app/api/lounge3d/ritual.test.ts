@@ -41,13 +41,15 @@ describe("/api/lounge3d/[id]/ritual (a call do ritual da chegada do dono)", () =
     expect(salvo.ritual).toEqual(d.ritual); expect(salvo.somLounge?.faixas).toHaveLength(1); expect(salvo.notes).toHaveLength(1);
     expect(m.trigger).toHaveBeenCalledWith(`presence-lounge3d-${ID}`, "ritual", expect.objectContaining({ ritual: d.ritual, agora: expect.any(Number) }));
     const d2 = await (await PATCH(req({ droids: true, tempestade: true }), p)).json();
-    expect(d2.ritual).toEqual({ tempestade: d.ritual.tempestade, droids: true, veu: 0 });   // a formação não recomeça
+    expect(d2.ritual).toEqual({ tempestade: d.ritual.tempestade, droids: true, veu: 0, nave: false });   // a formação não recomeça
     const dv = await (await PATCH(req({ veu: true }), p)).json();
     expect(dv.ritual.veu).toBeGreaterThanOrEqual(t0); expect((await (await PATCH(req({ veu: true }), p)).json()).ritual.veu).toBe(dv.ritual.veu);   // o evento não repete
     const d3 = await (await PATCH(req({ tempestade: false }), p)).json();
-    expect(d3.ritual).toEqual({ tempestade: 0, droids: true, veu: 0 });   // sem tempestade, o véu volta
+    expect(d3.ritual).toEqual({ tempestade: 0, droids: true, veu: 0, nave: false });   // sem tempestade, o véu volta
     const d4 = await (await PATCH(req({ droids: false }), p)).json();
-    expect(d4.ritual).toEqual({ tempestade: 0, droids: false, veu: 0 });
+    expect(d4.ritual).toEqual({ tempestade: 0, droids: false, veu: 0, nave: false });
     expect(lerConteudo(JSON.stringify(conteudo)).ritual).toBeUndefined();   // desligado de vez: some do conteúdo
+    const dn = await (await PATCH(req({ nave: true }), p)).json(); expect(dn.ritual.nave).toBe(true);   // o ritual DA NAVE (K) sozinho já é ritual
+    expect(lerConteudo(JSON.stringify(conteudo)).ritual?.nave).toBe(true);
   });
 });

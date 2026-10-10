@@ -76,7 +76,7 @@ export type CenaCyberProps = {
   musicaNave?: (ApiMusica & { urlDe(arq: string): string }) | null;
   /** o RITUAL da chegada do dono (lib/cyber/ritual): o estado da sala e como o dono liga/desliga (o servidor confere) */
   ritual?: Ritual | null;
-  definirRitual?: (m: { tempestade?: boolean; droids?: boolean; veu?: boolean }) => Promise<{ ok: boolean; erro?: string }>;
+  definirRitual?: (m: { tempestade?: boolean; droids?: boolean; veu?: boolean; nave?: boolean }) => Promise<{ ok: boolean; erro?: string }>;
   /** a NAVE-QG: onde ela está estacionada (da sala) e como o dono guarda onde a estacionou */
   naveQG?: { x: number; y: number; z: number; yaw: number } | null;
   salvarNave?: (pose: { x: number; y: number; z: number; yaw: number }) => void;
@@ -243,6 +243,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onAbrirSom: (canal) => { if (!cb.current.souFundador || !(canal === "nave" ? cb.current.musicaNave : cb.current.musica)) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(canal); },
       onRitual: () => { void pedir("ritual", () => setRitualAberto(true)); },
       onRitualChegou: () => { void cb.current.definirRitual?.({ tempestade: false }); },
+      onRitualNave: (ligar) => { if (!cb.current.souFundador || !cb.current.definirRitual) { avisar("Só o dono liga o ritual da nave."); return; } void cb.current.definirRitual({ nave: ligar }).then((r) => { if (!r.ok) avisar(r.erro ?? "Não deu."); }); },
       urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon escreve no mural."); return; } setRecadoTxt(""); setRecadoAberto(true); },
     }).then((eng) => { if (cancelado) { eng.dispose(); return; } e = eng; engine.current = eng; eng.exporDepuracao(); eng.setPessoas(cb.current.membros); setLoading("saindo"); setTimeout(() => setLoading("off"), 550); })

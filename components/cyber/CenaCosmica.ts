@@ -62,7 +62,8 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
     });
     bgScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m)); nebulas.push(m); return m;
   };
-  neb(1.2, 0.25, 0.85, 0.08, 0.95, 0.25, 1.5); neb(1.9, 0.45, 1.0, -0.05, 0.9, 0.4, 1.0);
+  // (as nebulosas roxas presas à câmera saíram — o dono: o fundo do cyberespaço é PRETO, só as estrelas; `neb` fica pra quem quiser religar)
+  void neb;
 
   const scene = new THREE.Scene(); scene.background = null;
   scene.add(new THREE.HemisphereLight(0x5566aa, 0x0a0a16, 0.9));
@@ -99,6 +100,7 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
   return {
     bgScene, bgCam, scene, starTex, buracoNegro: [],
     desenharFundo(R, escala) {
+      if (!nebulas.length) return;   // fundo preto: nada a desenhar
       R.getDrawingBufferSize(tam);
       const w = Math.max(1, Math.round(tam.x * escala)), h = Math.max(1, Math.round(tam.y * escala));
       if (!rt || rt.width !== w || rt.height !== h) {

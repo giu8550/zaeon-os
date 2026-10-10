@@ -18,9 +18,12 @@ export type Ritual = {
   droids: boolean;
   /** o instante (ms, servidor) em que o dono TIROU O VÉU da nave (o evento, perto das nuvens); 0 = a nave invisível */
   veu: number;
+  /** o RITUAL DA NAVE (tecla K): a nave toca a música dela e gera a mandala, as nuvens e os trovões em volta, em escala
+   *  menor (menos partículas) — por ela mesma, onde estiver */
+  nave: boolean;
 };
-export const RITUAL_OFF: Ritual = { tempestade: 0, droids: false, veu: 0 };
-export const ritualDesligado = (r: Ritual | null | undefined) => !r || (r.tempestade <= 0 && !r.droids && r.veu <= 0);
+export const RITUAL_OFF: Ritual = { tempestade: 0, droids: false, veu: 0, nave: false };
+export const ritualDesligado = (r: Ritual | null | undefined) => !r || (r.tempestade <= 0 && !r.droids && r.veu <= 0 && !r.nave);
 
 /** a FORMAÇÃO das nuvens (s) — "cerca de 8 segundos"; os raios começam no meio dela; `ENERGIZA_S` = o 1º trovão que
  *  energiza as caixas do lounge (o som sai do buraco negro em cima da cabine do DJ) */
@@ -34,7 +37,7 @@ export function sanitizarRitual(v: unknown): Ritual {
   if (!v || typeof v !== "object") return RITUAL_OFF;
   const o = v as Record<string, unknown>;
   const ms = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
-  return { tempestade: ms(o.tempestade), droids: o.droids === true, veu: ms(o.veu) };
+  return { tempestade: ms(o.tempestade), droids: o.droids === true, veu: ms(o.veu), nave: o.nave === true };
 }
 
 /** a INTENSIDADE da tempestade (0..1) no instante `agora` (relógio do servidor, ms): sobe em `FORMACAO_S`, fica em 1,

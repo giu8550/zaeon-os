@@ -9,13 +9,13 @@ import { FORMACAO_S, faseDaTempestade, type Ritual } from "@/lib/cyber/ritual";
 
 const FASE: Record<string, string> = { off: "céu limpo", formando: "as nuvens se formando…", raios: "raios caindo na capela (ainda mudos)", armada: "tempestade armada — as caixas energizadas" };
 
-export default function RitualPainel(p: { ritual: Ritual | null; offsetMs: number; definir: (m: { tempestade?: boolean; droids?: boolean; veu?: boolean }) => Promise<{ ok: boolean; erro?: string }>; /** a nave está no perímetro das nuvens (dá pra tirar o véu)? */ noPerimetro: () => boolean; onFechar: () => void }) {
+export default function RitualPainel(p: { ritual: Ritual | null; offsetMs: number; definir: (m: { tempestade?: boolean; droids?: boolean; veu?: boolean; nave?: boolean }) => Promise<{ ok: boolean; erro?: string }>; /** a nave está no perímetro das nuvens (dá pra tirar o véu)? */ noPerimetro: () => boolean; onFechar: () => void }) {
   const [agora, setAgora] = useState(() => Date.now()), [ocupado, setOcupado] = useState(false), [erro, setErro] = useState<string | null>(null), [perto, setPerto] = useState(false);
   useEffect(() => { const id = setInterval(() => { setAgora(Date.now()); setPerto(p.noPerimetro()); }, 500); return () => clearInterval(id); }, [p]);
   useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === "Escape") p.onFechar(); }; window.addEventListener("keydown", esc); return () => window.removeEventListener("keydown", esc); }, [p]);
   const r = p.ritual, tempestade = !!r && r.tempestade > 0, droids = !!r?.droids, veu = !!r && r.veu > 0, fase = faseDaTempestade(r, agora + p.offsetMs);
   const s = tempestade ? Math.max(0, (agora + p.offsetMs - r!.tempestade) / 1000) : 0;
-  const mudar = async (m: { tempestade?: boolean; droids?: boolean; veu?: boolean }) => { if (ocupado) return; setOcupado(true); setErro(null); try { const x = await p.definir(m); if (!x.ok) setErro(x.erro ?? "Não deu."); } catch { setErro("Sem conexão."); } finally { setOcupado(false); } };
+  const mudar = async (m: { tempestade?: boolean; droids?: boolean; veu?: boolean; nave?: boolean }) => { if (ocupado) return; setOcupado(true); setErro(null); try { const x = await p.definir(m); if (!x.ok) setErro(x.erro ?? "Não deu."); } catch { setErro("Sem conexão."); } finally { setOcupado(false); } };
   const BTN = "min-h-[44px] rounded-full px-4 text-xs font-black uppercase tracking-widest disabled:opacity-50";
   return (
     <div role="dialog" aria-modal="true" aria-label="Ritual da chegada" className="absolute inset-0 z-50 flex items-center justify-center bg-[#03030a]/60 px-4" onClick={p.onFechar}>

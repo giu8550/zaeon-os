@@ -1,6 +1,6 @@
 /**
  * O RITUAL da chegada do dono (lib/cyber/ritual) — a "call" dentro da nave:
- *  PATCH { tempestade?: boolean; droids?: boolean; veu?: boolean } → liga/desliga a TEMPESTADE no templo (o instante fica no
+ *  PATCH { tempestade?: boolean; droids?: boolean; veu?: boolean; nave?: boolean } → liga/desliga a TEMPESTADE no templo (o instante fica no
  *  relógio do servidor: todo mundo vê as nuvens se formarem no mesmo tempo), solta/recolhe os ANUNCIADORES e/ou TIRA O
  *  VÉU da nave (`veu: true` — o evento, com o instante; a nave volta a ser invisível quando a tempestade desliga).
  * Só o DONO (fundador, pela SESSÃO). Vai pro conteúdo da sala (quem entra depois vê a tempestade armada) e é difundido
@@ -23,13 +23,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const me = await eu(); if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const s = await salaDoMembro(params.id, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!me.fundador) return NextResponse.json({ error: "Só o dono inicia o ritual." }, { status: 403 });
-  const b = (await req.json().catch(() => ({}))) as { tempestade?: unknown; droids?: unknown; veu?: unknown };
-  if (typeof b.tempestade !== "boolean" && typeof b.droids !== "boolean" && typeof b.veu !== "boolean") return NextResponse.json({ error: "nada pra mudar" }, { status: 400 });
+  const b = (await req.json().catch(() => ({}))) as { tempestade?: unknown; droids?: unknown; veu?: unknown; nave?: unknown };
+  if (typeof b.tempestade !== "boolean" && typeof b.droids !== "boolean" && typeof b.veu !== "boolean" && typeof b.nave !== "boolean") return NextResponse.json({ error: "nada pra mudar" }, { status: 400 });
   const conteudo = lerConteudo(s.content), atual: Ritual = conteudo.ritual ?? RITUAL_OFF, agora = Date.now();
   const ritual: Ritual = {
     tempestade: typeof b.tempestade === "boolean" ? (b.tempestade ? (atual.tempestade > 0 ? atual.tempestade : agora) : 0) : atual.tempestade,   // (já ligada: não recomeça a formação)
     droids: typeof b.droids === "boolean" ? b.droids : atual.droids,
     veu: typeof b.veu === "boolean" ? (b.veu ? (atual.veu > 0 ? atual.veu : agora) : 0) : atual.veu,
+    nave: typeof b.nave === "boolean" ? b.nave : atual.nave,   // o ritual DA NAVE (K): a mandala e as nuvens em volta dela
   };
   if (ritual.tempestade <= 0) ritual.veu = 0;   // sem tempestade, a nave volta a ser invisível
   const novo = { ...conteudo, ...(ritualDesligado(ritual) ? { ritual: null } : { ritual }) };
