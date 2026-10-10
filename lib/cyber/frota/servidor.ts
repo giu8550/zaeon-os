@@ -41,7 +41,7 @@ const cacheDia = new Map<string, Dia>();
 export function diaDaFrota(c: ConfigSalva, dia: number): Dia {
   const k = `${c.versao}|${dia}|${fullNoDia(dia, c.modoFullAte) ? 1 : 0}`; let d = cacheDia.get(k);
   if (d) return d;
-  const frota = gerarFrota(c.frota), plano = planejarDia(frota, dia, c.flags, fullNoDia(dia, c.modoFullAte));
+  const frota = gerarFrota(c.frota), plano = planejarDia(frota, dia, c.flags, fullNoDia(dia, c.modoFullAte), c.areas);
   d = { frota, porId: new Map(frota.map((a) => [a.id, a])), plano, episodios: new Map(episodiosDoDia(plano, c.flags).map((e) => [e.id, e])) };
   cacheDia.set(k, d); while (cacheDia.size > 4) cacheDia.delete(cacheDia.keys().next().value!);
   return d;

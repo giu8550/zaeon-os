@@ -41,6 +41,19 @@ export const FLAGS_PADRAO: FlagsFrota = { ativa: true, estudoPlataforma: true, e
 
 /** a proporção do dia (o pedido do dono; out/2026: menos lounge e menos pedestre na Zaeon — eram 40/20/30/10) */
 export const PROPORCAO = { "estudo-plataforma": 57, "estudo-lounge": 8, moto: 30, andar: 5 } as const;
+/** os CONTROLES POR ÁREA que o painel admin mexe (lib/cyber/frota/config `areas`): a proporção do dia, o peso de cada
+ *  lugar de estudo, quantos lugares no CHÃO do lounge e quantas vagas por estacionamento. O padrão = as constantes daqui */
+export type AreasFrota = {
+  proporcao: { estudoPlataforma: number; estudoLounge: number; moto: number; andar: number };
+  pesos: Record<(typeof AMBIENTES_ESTUDO)[number], number>;
+  loungeChao: number; vagas: number;
+};
+export const AREAS_PADRAO: AreasFrota = {
+  proporcao: { estudoPlataforma: PROPORCAO["estudo-plataforma"], estudoLounge: PROPORCAO["estudo-lounge"], moto: PROPORCAO.moto, andar: PROPORCAO.andar },
+  pesos: { ...PESO_AMBIENTE }, loungeChao: 30, vagas: 33,
+};
+/** os pesos do lugar de estudo (sem nenhum peso: ninguém estuda nas plataformas) */
+const algumPeso = (ar: AreasFrota) => Object.values(ar.pesos).some((v) => v > 0);
 export const REGRAS = {
   inicio: 9 * 60,
   /** estudo total por dia (min) */
@@ -63,16 +76,16 @@ export const minutoDoDia = (ms: number) => { const m = (ms + FUSO_MIN * 60000) /
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 /** a escolha do lugar de estudo do bloco: plataforma × lounge (PROPORCAO), com a preferência do GRUPO no dia */
-function lugarDeEstudo(r: Acaso, flags: FlagsFrota, preferido: AmbienteEstudo): { atividade: Atividade; ambiente: AmbienteEstudo } | null {
-  const pesos = { "estudo-plataforma": flags.estudoPlataforma ? PROPORCAO["estudo-plataforma"] : 0, "estudo-lounge": flags.estudoLounge ? PROPORCAO["estudo-lounge"] : 0 };
+function lugarDeEstudo(r: Acaso, flags: FlagsFrota, preferido: AmbienteEstudo | null, ar: AreasFrota): { atividade: Atividade; ambiente: AmbienteEstudo } | null {
+  const pesos = { "estudo-plataforma": flags.estudoPlataforma && preferido ? ar.proporcao.estudoPlataforma : 0, "estudo-lounge": flags.estudoLounge ? ar.proporcao.estudoLounge : 0 };
   if (!pesos["estudo-plataforma"] && !pesos["estudo-lounge"]) return null;
   const at = ponderado(r, pesos);
   if (at === "estudo-lounge") return { atividade: at, ambiente: "lounge" };
-  return { atividade: at, ambiente: r() < 0.62 ? preferido : ponderado(r, PESO_AMBIENTE) };   // o grupo tende a estudar junto
+  return { atividade: at, ambiente: r() < 0.62 && preferido ? preferido : ponderado(r, ar.pesos) };   // o grupo tende a estudar junto
 }
 /** o que fazer no intervalo: moto × andar (PROPORCAO), puxado pelo gosto de cada um */
-function atividadeDoIntervalo(r: Acaso, a: AgenteIA, flags: FlagsFrota): Atividade | null {
-  const pesos = { moto: flags.moto ? PROPORCAO.moto * (0.6 + 0.8 * a.ritmo.moto) : 0, andar: flags.andar ? PROPORCAO.andar * (1.4 - 0.8 * a.ritmo.moto) : 0 };
+function atividadeDoIntervalo(r: Acaso, a: AgenteIA, flags: FlagsFrota, ar: AreasFrota): Atividade | null {
+  const pesos = { moto: flags.moto ? ar.proporcao.moto * (0.6 + 0.8 * a.ritmo.moto) : 0, andar: flags.andar ? ar.proporcao.andar * (1.4 - 0.8 * a.ritmo.moto) : 0 };
   if (!pesos.moto && !pesos.andar) return null;
   return ponderado(r, pesos);
 }
@@ -80,7 +93,7 @@ function atividadeDoIntervalo(r: Acaso, a: AgenteIA, flags: FlagsFrota): Ativida
 /** a agenda de UM agente no dia (sem os eventos de grupo — veja `agendaDoGrupo`). `full` = o MODO FULL (o dono quebra a
  *  regra por uns dias): o dia é CONTÍNUO, da meia-noite à meia-noite — estudo e intervalos se alternando o dia inteiro,
  *  sem folga e sem hora de começar (todo mundo online o tempo todo) */
-export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferido: AmbienteEstudo, full = false): Bloco[] {
+export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferido: AmbienteEstudo | null, full = false, ar: AreasFrota = AREAS_PADRAO): Bloco[] {
   if (!flags.ativa) return [];
   const r = acasoDe("agenda", a.id, dia);
   if (r() < REGRAS.folga && !full) return [];   // folga
@@ -93,15 +106,15 @@ export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferid
   const out: Bloco[] = [];
   let t = ini, estudado = 0, guarda = 0;
   // no modo full, METADE começa o dia por um intervalo (todo mundo estudando junto à meia-noite lotava as salas)
-  if (full && r() < 0.5) { const at = atividadeDoIntervalo(r, a, flags), dur = Math.round(entre(r, REGRAS.intervalo[0], REGRAS.intervalo[1])); if (at) out.push({ ini: t, fim: t + dur, atividade: at, ...(at === "andar" ? { turma: `${a.grupo}|${dia}` } : {}) }); t += dur; }
+  if (full && r() < 0.5) { const at = atividadeDoIntervalo(r, a, flags, ar), dur = Math.round(entre(r, REGRAS.intervalo[0], REGRAS.intervalo[1])); if (at) out.push({ ini: t, fim: t + dur, atividade: at, ...(at === "andar" ? { turma: `${a.grupo}|${dia}` } : {}) }); t += dur; }
   while (estudado < total - 5 && t < 24 * 60 && guarda++ < (full ? 200 : 40)) {
-    const lugar = lugarDeEstudo(r, flags, preferido);
+    const lugar = lugarDeEstudo(r, flags, preferido, ar);
     if (lugar) {
       const [b0, b1] = REGRAS.bloco, alvo = b0 + (b1 - b0) * (0.25 + 0.6 * foco), dur = Math.min(total - estudado, Math.round(alvo + entre(r, -12, 12)));
       out.push({ ini: t, fim: t + dur, atividade: lugar.atividade, ambiente: lugar.ambiente }); t += dur; estudado += dur;
     } else estudado = total;   // estudo desligado no painel: o dia vira só intervalos
     if (estudado >= total - 5 && lugar) break;
-    const at = atividadeDoIntervalo(r, a, flags);
+    const at = atividadeDoIntervalo(r, a, flags, ar);
     const [i0, i1] = REGRAS.intervalo, dur = Math.round(Math.min(i1, Math.max(i0, i0 + (i1 - i0) * (0.95 - 0.8 * foco) + entre(r, -8, 8))));
     if (at) out.push({ ini: t, fim: t + dur, atividade: at, ...(at === "andar" ? { turma: `${a.grupo}|${dia}` } : {}) });
     t += dur;
@@ -112,12 +125,12 @@ export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferid
 
 /** a agenda do GRUPO no dia: as de cada um + o lugar de estudo preferido do grupo + a FESTA (todos juntos, à noite) +
  *  as CORRIDAS (intervalos de moto que se cruzam viram corrida juntos, na janela em comum) */
-export function agendaDoGrupo(membros: readonly AgenteIA[], dia: number, flags: FlagsFrota, full = false): Map<string, Bloco[]> {
+export function agendaDoGrupo(membros: readonly AgenteIA[], dia: number, flags: FlagsFrota, full = false, ar: AreasFrota = AREAS_PADRAO): Map<string, Bloco[]> {
   const out = new Map<string, Bloco[]>();
   if (!membros.length) return out;
   const g = membros[0]!.grupo, rg = acasoDe("grupo", g, dia);
-  const preferido = ponderado(rg, PESO_AMBIENTE);
-  for (const a of membros) out.set(a.id, agendaBase(a, dia, flags, preferido, full));
+  const preferido = algumPeso(ar) ? ponderado(rg, ar.pesos) : null;
+  for (const a of membros) out.set(a.id, agendaBase(a, dia, flags, preferido, full, ar));
   // CORRIDAS: cada intervalo de moto que cruza o de um amigo vira um evento (o maior trecho em comum)
   if (flags.corridas && flags.moto) {
     const motos = membros.flatMap((a) => (out.get(a.id) ?? []).filter((b) => b.atividade === "moto").map((b) => ({ a, b })));

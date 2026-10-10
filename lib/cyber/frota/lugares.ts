@@ -84,7 +84,7 @@ export function spotsDe(amb: AmbienteEstudo | "pista"): Spot[] {
   let s = cache.get(amb);
   if (s) return s;
   if (amb === "pista") s = pista();
-  else if (amb === "lounge") s = [...assentos("lounge", "lounge"), ...chaoDaSala("lounge", "lounge").slice(0, 30)];   // os sofás primeiro; lotou, um pouco de chão perto deles (eram 110: lotava) — depois, as universidades
+  else if (amb === "lounge") s = [...assentos("lounge", "lounge"), ...chaoDaSala("lounge", "lounge").slice(0, 110)];   // os sofás primeiro; lotou, o chão perto deles — quantos, o plano limita (painel admin `loungeChao`, padrão 30)
   else if (SALAS[amb]) s = [...assentos(SALAS[amb]!, amb), ...chaoDaSala(SALAS[amb]!, amb)];
   else s = chaoDaPlataforma(amb as IdPlataforma);
   cache.set(amb, s); return s;

@@ -6,13 +6,15 @@
  * aplica UMA vez (o id fica em `migracoes`) e o servidor grava o resultado (lib/cyber/frota/servidor `lerConfig`); se o
  * dono apagar o lote depois pelo painel, ele não volta.
  */
-import { FLAGS_PADRAO, type FlagsFrota } from "./agenda";
+import { AMBIENTES_ESTUDO, AREAS_PADRAO, FLAGS_PADRAO, type AreasFrota, type FlagsFrota } from "./agenda";
 import { FROTA_PADRAO, type ConfigFrota, type LoteFrota } from "./frota";
 
 export const CHAVE_CONFIG = "frota-ia";
 export type ConfigSalva = { frota: ConfigFrota; flags: FlagsFrota; versao: number; /** as migrações já aplicadas */ migracoes: string[];
   /** MODO FULL até (epoch ms): todo mundo online 24 h nos dias que começam antes disso (lib/cyber/frota/agenda `fullNoDia`) */
-  modoFullAte: number | null };
+  modoFullAte: number | null;
+  /** os CONTROLES POR ÁREA do painel admin (proporção do dia, peso de cada lugar de estudo, chão do lounge, vagas) */
+  areas: AreasFrota };
 /** limites do painel */
 export const LIMITES = { totalMax: 1500, loteMax: 1500, lotesMax: 20 } as const;   // 1500 = o TETO do dono (desempenho: a régua de 77 fps)
 
@@ -23,6 +25,17 @@ function loteDe(v: unknown): LoteFrota | null {
   if (!semente || total < 0) return null;
   return { semente, total, fracaoMulheres: num(o.fracaoMulheres, 0, 1, 0.6), fracaoCloak: num(o.fracaoCloak, 0, 1, 0.7) };
 }
+/** limites dos controles por área (o que o código aguenta hoje: 110 lugares de chão no lounge, 33 vagas por estacionamento) */
+export const LIMITES_AREAS = { proporcao: 100, peso: 10, loungeChao: 110, vagas: 33 } as const;
+/** limpa os controles por área (o que faltar ou vier errado fica no padrão) */
+export function sanitizarAreas(v: unknown): AreasFrota {
+  const o = (v ?? {}) as Record<string, unknown>, p = (o.proporcao ?? {}) as Record<string, unknown>, w = (o.pesos ?? {}) as Record<string, unknown>, P = AREAS_PADRAO;
+  return {
+    proporcao: { estudoPlataforma: num(p.estudoPlataforma, 0, LIMITES_AREAS.proporcao, P.proporcao.estudoPlataforma), estudoLounge: num(p.estudoLounge, 0, LIMITES_AREAS.proporcao, P.proporcao.estudoLounge), moto: num(p.moto, 0, LIMITES_AREAS.proporcao, P.proporcao.moto), andar: num(p.andar, 0, LIMITES_AREAS.proporcao, P.proporcao.andar) },
+    pesos: Object.fromEntries(AMBIENTES_ESTUDO.map((k) => [k, num(w[k], 0, LIMITES_AREAS.peso, P.pesos[k])])) as AreasFrota["pesos"],
+    loungeChao: Math.floor(num(o.loungeChao, 0, LIMITES_AREAS.loungeChao, P.loungeChao)), vagas: Math.floor(num(o.vagas, 0, LIMITES_AREAS.vagas, P.vagas)),
+  };
+}
 /** limpa uma config vinda do banco ou do painel (o que estiver errado volta ao padrão) */
 export function sanitizarConfig(v: unknown): ConfigSalva {
   const o = (v ?? {}) as Record<string, unknown>, f = (o.frota ?? {}) as Record<string, unknown>, fl = (o.flags ?? {}) as Record<string, unknown>;
@@ -32,7 +45,7 @@ export function sanitizarConfig(v: unknown): ConfigSalva {
   const flags = Object.fromEntries((Object.keys(FLAGS_PADRAO) as (keyof FlagsFrota)[]).map((k) => [k, typeof fl[k] === "boolean" ? fl[k] : FLAGS_PADRAO[k]])) as FlagsFrota;
   const migracoes = Array.isArray(o.migracoes) ? [...new Set(o.migracoes.filter((x): x is string => typeof x === "string" && x.length <= 60))].slice(0, 50) : [];
   const modoFullAte = typeof o.modoFullAte === "number" && Number.isFinite(o.modoFullAte) ? o.modoFullAte : null;
-  return { frota: { lotes, tamanhoGrupo: Math.floor(num(f.tamanhoGrupo, 2, 8, 4)) }, flags, versao: Math.floor(num(o.versao, 1, 1e12, 1)), migracoes, modoFullAte };
+  return { frota: { lotes, tamanhoGrupo: Math.floor(num(f.tamanhoGrupo, 2, 8, 4)) }, flags, versao: Math.floor(num(o.versao, 1, 1e12, 1)), migracoes, modoFullAte, areas: sanitizarAreas(o.areas) };
 }
 /** um LOTE NOVO (criação em massa): semente nova (diferente das existentes), N agentes, 60/40, 70% cloak */
 export function novoLote(c: ConfigSalva, total: number, semente: number): ConfigSalva {
@@ -60,4 +73,4 @@ export function aplicarMigracoes(c: ConfigSalva): { c: ConfigSalva; mudou: boole
   return { c: out, mudou };
 }
 /** a config de quando não há nada salvo: a frota base com as migrações já aplicadas */
-export const CONFIG_PADRAO: ConfigSalva = aplicarMigracoes({ frota: FROTA_PADRAO, flags: FLAGS_PADRAO, versao: 1, migracoes: [], modoFullAte: null }).c;
+export const CONFIG_PADRAO: ConfigSalva = aplicarMigracoes({ frota: FROTA_PADRAO, flags: FLAGS_PADRAO, versao: 1, migracoes: [], modoFullAte: null, areas: AREAS_PADRAO }).c;

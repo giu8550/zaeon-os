@@ -2,6 +2,7 @@
 
 import TelaCarregando from "./TelaCarregando";
 import TabletLab from "./TabletLab";
+import PainelAdminCyber from "./admin/PainelAdminCyber";
 import type { Carregando } from "@/lib/cyber/carregamento";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -118,6 +119,9 @@ export default function CenaCyber(p: CenaCyberProps) {
   /** a AÇÃO de contexto (o que o F faz agora) — o chip "F · Estudar" etc.; no celular, tocar no chip faz a ação */
   const [acao, setAcao] = useState<{ rotulo: string } | null>(null);
   const [qg, setQg] = useState({ noCeu: false, navePerto: false, pilotando: false, pousado: true, moto: false, motoPerto: false }), [aviso2, setAviso2] = useState<string | null>(null);
+  // o MODO ADMIN (só super admin): o contador bots × usuários e os controles por área da frota
+  const contagemAdmin = useCallback(() => engine.current?.contagemAdmin() ?? null, []);
+  const frotaAplicada = useCallback(() => engine.current?.recarregarFrota(), []);
   const avisar = useCallback((m: string) => { setAviso2(m); setTimeout(() => setAviso2((x) => (x === m ? null : x)), 3500); }, []);
   /** ação privilegiada: pergunta ao SERVIDOR antes (cb sempre fresco via ref) */
   const pedir = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj", ok: () => void) => {
@@ -310,6 +314,7 @@ export default function CenaCyber(p: CenaCyberProps) {
           )}
           {tela && (
             <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+              <PainelAdminCyber contagem={contagemAdmin} aplicada={frotaAplicada} />
               <div className="relative">
                 <button type="button" aria-label={som.ligado ? "Som (ligado)" : "Som (desligado)"} aria-expanded={painelSom} onClick={() => setPainelSom((v) => !v)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-white/15 bg-black/50 text-base text-white/85 backdrop-blur">{som.ligado && som.volume > 0 ? "🔊" : "🔇"}</button>
                 {painelSom && (
