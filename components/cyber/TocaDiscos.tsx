@@ -27,7 +27,7 @@ const BTN = "flex h-11 w-11 items-center justify-center rounded-full border bord
 export default function TocaDiscos(p: { som: SomLounge | null; offsetMs: number; api: ApiMusica; onFechar: () => void; /** o canal: as caixas do lounge (padrão) ou a música da NAVE do dono */ canal?: "lounge" | "nave" }) {
   const nave = p.canal === "nave";
   const [agora, setAgora] = useState(() => Date.now());
-  const [enviando, setEnviando] = useState<string | null>(null), [erro, setErro] = useState<string | null>(null), [ocupado, setOcupado] = useState(false);
+  const [enviando, setEnviando] = useState<string | null>(null), [erro, setErro] = useState<string | null>(null), [ocupado, setOcupado] = useState(false), [volLocal, setVolLocal] = useState<number | null>(null);
   const input = useRef<HTMLInputElement | null>(null);
   useEffect(() => { const id = setInterval(() => setAgora(Date.now()), 500); return () => clearInterval(id); }, []);
   useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === "Escape") p.onFechar(); }; window.addEventListener("keydown", esc); return () => window.removeEventListener("keydown", esc); }, [p]);
@@ -59,6 +59,10 @@ export default function TocaDiscos(p: { som: SomLounge | null; offsetMs: number;
           <p className="truncate text-sm font-semibold text-white">{atual ? `${tocando ? "▶" : "⏸"} ${atual.nome}` : "Nenhuma música ainda"}</p>
           {atual && pos && <p className="text-xs tabular-nums text-sky-100/60">{tempo(pos.t)}{atual.dur ? ` / ${tempo(atual.dur)}` : ""}{!tocando && pos.t === 0 ? " · parado" : !tocando ? " · pausado" : ""}</p>}
           {atual && atual.dur > 0 && pos && <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-gradient-to-r from-cyan-300 to-violet-400" style={{ width: `${Math.min(100, (pos.t / atual.dur) * 100)}%` }} /></div>}
+          <label className="mt-2 flex items-center gap-2 text-[11px] text-sky-100/60"><span>🔈</span>
+            <input type="range" min={0} max={2} step={0.05} value={som?.vol ?? 1} aria-label="Volume" disabled={!faixas.length || ocupado} className="flex-1 accent-cyan-300"
+              onChange={(e) => { const v = Number(e.target.value); setVolLocal(v); }} onPointerUp={(e) => void fazer(() => p.api.controlar("volume", Number((e.target as HTMLInputElement).value)))} onKeyUp={(e) => void fazer(() => p.api.controlar("volume", Number((e.target as HTMLInputElement).value)))} />
+            <span className="w-10 text-right tabular-nums">{Math.round((volLocal ?? som?.vol ?? 1) * 100)}%</span></label>
           <div className="mt-2.5 flex items-center justify-center gap-3" role="group" aria-label="Controles">
             <button type="button" aria-label="Anterior" disabled={!faixas.length || ocupado} onClick={() => void fazer(() => p.api.controlar("anterior"))} className={BTN}>⏮</button>
             <button type="button" aria-label={tocando ? "Pausar" : "Tocar"} disabled={!faixas.length || ocupado} onClick={() => void fazer(() => p.api.controlar(tocando ? "pausar" : "tocar"))} className={`${BTN} h-12 w-12 bg-gradient-to-b from-cyan-200 to-sky-400 text-slate-950`}>{tocando ? "⏸" : "▶"}</button>

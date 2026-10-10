@@ -8,8 +8,9 @@
  */
 export type Faixa = { id: string; nome: string; arq: string; dur: number; deId: string };
 export type EstadoSom = { i: number; tocando: boolean; desde: number; pos: number };
-export type SomLounge = { faixas: Faixa[]; estado: EstadoSom };
-export type AcaoSom = "tocar" | "pausar" | "parar" | "proxima" | "anterior" | "ir";
+/** `vol`: o volume (0..2, padrão 1) — o dono sobe/desce o som da nave (e do lounge) pra todo mundo */
+export type SomLounge = { faixas: Faixa[]; estado: EstadoSom; vol?: number };
+export type AcaoSom = "tocar" | "pausar" | "parar" | "proxima" | "anterior" | "ir" | "volume";
 
 export const MAX_FAIXAS = 30;
 export const MAX_BYTES_FAIXA = 20 * 1024 * 1024;
@@ -41,7 +42,8 @@ export function sanitizarSom(raw: unknown): SomLounge | null {
   const faixas = (Array.isArray(r.faixas) ? r.faixas : []).map(sanitizarFaixa).filter((f): f is Faixa => !!f).slice(0, MAX_FAIXAS);
   const e = (r.estado && typeof r.estado === "object" ? r.estado : {}) as Record<string, unknown>;
   const i = Math.round(num(e.i, 0, Math.max(0, faixas.length - 1), 0));
-  return { faixas, estado: { i, tocando: e.tocando === true && faixas.length > 0, desde: num(e.desde, 0, 1e14, 0), pos: num(e.pos, 0, 4 * 3600, 0) } };
+  const vol = typeof r.vol === "number" && Number.isFinite(r.vol) ? Math.min(2, Math.max(0, r.vol)) : undefined;
+  return { faixas, estado: { i, tocando: e.tocando === true && faixas.length > 0, desde: num(e.desde, 0, 1e14, 0), pos: num(e.pos, 0, 4 * 3600, 0) }, ...(vol !== undefined ? { vol } : {}) };
 }
 
 /** onde a música está AGORA (`agora` no relógio do servidor, ms): faixa e segundo dentro dela; a playlist dá a volta */
@@ -63,7 +65,7 @@ export function posicaoAgora(s: SomLounge, agora: number): { i: number; t: numbe
 
 /** aplica um controle do toca-discos no instante `agora` (relógio do servidor) */
 export function controlar(s: SomLounge, acao: AcaoSom, agora: number, alvo?: number): SomLounge {
-  const n = s.faixas.length; if (!n) return { ...s, estado: { i: 0, tocando: false, desde: 0, pos: 0 } };
+  const n = s.faixas.length; if (!n) return acao === "volume" && typeof alvo === "number" ? { ...s, vol: Math.min(2, Math.max(0, alvo)) } : { ...s, estado: { i: 0, tocando: false, desde: 0, pos: 0 } };
   const p = posicaoAgora(s, agora)!, tocando = s.estado.tocando;
   const em = (i: number, pos: number, toca: boolean): SomLounge => ({ ...s, estado: { i: ((i % n) + n) % n, tocando: toca, desde: toca ? agora - pos * 1000 : 0, pos: toca ? 0 : pos } });
   switch (acao) {
@@ -73,6 +75,7 @@ export function controlar(s: SomLounge, acao: AcaoSom, agora: number, alvo?: num
     case "proxima": return em(p.i + 1, 0, tocando);
     case "anterior": return p.t > VOLTA_INICIO_S ? em(p.i, 0, tocando) : em(p.i - 1, 0, tocando);
     case "ir": return typeof alvo === "number" && alvo >= 0 && alvo < n ? em(Math.floor(alvo), 0, true) : s;
+    case "volume": return typeof alvo === "number" && Number.isFinite(alvo) ? { ...s, vol: Math.min(2, Math.max(0, alvo)) } : s;
   }
 }
 

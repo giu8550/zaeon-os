@@ -9,7 +9,7 @@
 import { SINTESE_MOTO, type NomeSomMoto } from "./somMoto";
 import { SINTESE_CORRIDA, type NomeSomCorrida } from "./somCorrida";
 import { SINTESE_ASAS, type NomeSomAsas } from "./asas";
-import { sintetizarBatida, sintetizarRaio } from "./coracao";
+import { sintetizarBatida, sintetizarRaio, sintetizarTrovao } from "./coracao";
 import { sintetizarAmbiente } from "./ambiente";
 import { sintetizarPuxaFio, sintetizarZumbidoFio } from "./somFio";
 import { sintetizarAcerto, sintetizarAlerta, sintetizarDash, sintetizarDecola, sintetizarGolpe, sintetizarImpactoHeroi } from "./somMovimento";
@@ -21,7 +21,7 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
   | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien" | "droid-louvor"
-  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | "coracao" | "raio" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto";
+  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | "coracao" | "raio" | "trovao" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -78,6 +78,8 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   // o CORAÇÃO da Zaeon (lib/cyber/coracao, sintetizados): a batida (perto do globo) e o RAIO no topo da capela
   coracao: { modo: "pos", loop: false, volume: 0.55, sintetico: true },
   raio: { modo: "pos", loop: false, volume: 0.8, sintetico: true },
+  // o TROVÃO DE VERDADE das tempestades (lounge, templo, nave): estalo seco + sub-grave + rumble longo (lib/cyber/coracao)
+  trovao: { modo: "pos", loop: false, volume: 1, sintetico: true },
   // a MÚSICA AMBIENTE dos espaços de convivência (lib/cyber/ambiente, sintetizada): sai das caixas de som de cada sala
   "ambiente-biblioteca": { modo: "pos", loop: true, volume: 0.36, sintetico: true },
   // os FIOS DE ENERGIA (lib/cyber/somFio, sintetizados): o zumbido do cabo nos postes e o assobio de quem é puxado
@@ -154,7 +156,7 @@ export function sintetizarBaque(sr: number): Float32Array {
   for (let i = 0; i < 64; i++) out[n - 1 - i]! *= i / 64;   // fim sem clique
   return normalizar(out, 0.92);
 }
-export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_CORRIDA, ...SINTESE_ASAS, coracao: sintetizarBatida, raio: sintetizarRaio,
+export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_CORRIDA, ...SINTESE_ASAS, coracao: sintetizarBatida, raio: sintetizarRaio, trovao: sintetizarTrovao,
   "ambiente-biblioteca": (sr) => sintetizarAmbiente("biblioteca", sr), "ambiente-jardim": (sr) => sintetizarAmbiente("jardim", sr),
   "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta, decola: sintetizarDecola, "impacto-heroi": sintetizarImpactoHeroi, golpe: sintetizarGolpe, acerto: sintetizarAcerto };
 

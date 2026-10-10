@@ -24,7 +24,7 @@ import { CAMPO_DO_CANAL, EV_MUSICA, canalDe, canalSala, type CanalSom } from "@/
 import { EXT_AUDIO, MAX_BYTES_FAIXA, MAX_FAIXAS, adicionarFaixa, controlar, nomeDoArquivo, removerFaixa, somVazio, type AcaoSom, type SomLounge } from "@/lib/lounge3d/musica";
 
 const NEGADO = "Só o dono da Zaeon mexe no toca-discos.";
-const ACOES = new Set<AcaoSom>(["tocar", "pausar", "parar", "proxima", "anterior", "ir"]);
+const ACOES = new Set<AcaoSom>(["tocar", "pausar", "parar", "proxima", "anterior", "ir", "volume"]);
 
 type Me = NonNullable<Awaited<ReturnType<typeof eu>>>;
 type Sala = NonNullable<Awaited<ReturnType<typeof salaDoMembro>>>;

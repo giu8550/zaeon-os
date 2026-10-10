@@ -570,7 +570,7 @@ export class CyberEngine {
         aoTrovao: (em) => {
           if (!this.prontoDisparado || !this.noCeu || this.bordo || this.ritualFase !== "armada") return;   // (os raios só ganham som depois do trovão que energiza as caixas)
           const d = Math.hypot(em.x - this.eu.pos.x, em.y - this.eu.alt, em.z - this.eu.pos.z); if (d > 600) return;
-          const p = em.clone(); setTimeout(() => this.som?.tocar("raio", p, { dist: DISTANCIA.raio, taxa: 0.6 + Math.random() * 0.25 }), Math.min(1500, (d / 340) * 1000));
+          const p = em.clone(); setTimeout(() => this.som?.tocar("trovao", p, { dist: DISTANCIA.raio, volume: 1, taxa: 0.8 + Math.random() * 0.3 }), Math.min(1500, (d / 340) * 1000));
         } });
       camuflarGrupo(this.cidade.group);
       { const c = this.cidade;   // lotes: simula com e sem música (o palco, as caixas e a pista pulsam com o grave)
@@ -1676,7 +1676,7 @@ export class CyberEngine {
     const e = estadoDoShow(tf, tocando), batida = this.musicaNave?.nivel ?? 0;
     sn.mandala.definir({ ...e, nascimento: Math.max(e.nascimento, 0.6), area: Math.min(e.area, 1.6), serpentes: 0, tentaculos: 0 }, batida, t);   // (sem música: a mandala fica, parada no nascimento; as criaturas não cabem numa nave)
     sn.nevoa.definir(1, true); sn.nevoa.atualizar(t);
-    if (tocando && sn.t >= 0 && tf > sn.t) for (const tr of trovoesEntre(sn.t, tf)) { sn.nevoa.raioAgora(undefined, tr.vel); if (!this.bordo) this.som.tocar("raio", nave.position, { dist: DISTANCIA.raio, volume: 0.2 + 0.4 * tr.forca, taxa: 0.85 + 0.5 * tr.vel }); }
+    if (tocando && sn.t >= 0 && tf > sn.t) for (const tr of trovoesEntre(sn.t, tf)) { sn.nevoa.raioAgora(undefined, tr.vel); if (!this.bordo) this.som.tocar("trovao", nave.position, { dist: DISTANCIA.raio, volume: 0.45 + 0.45 * tr.forca, taxa: 0.9 + 0.35 * tr.vel }); }
     sn.t = tocando ? tf : -1;
   }
   private atualizarShowLounge(dt: number) {
@@ -1688,7 +1688,7 @@ export class CyberEngine {
     if (tocando && this.showT >= 0 && t > this.showT) {
       for (const tr of trovoesEntre(this.showT, t)) {
         this.cidade.raioNoLounge(tr.vel);
-        if (this.noCeu && !this.bordo) { const w = new THREE.Vector3(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); this.som.tocar("raio", w, { dist: DISTANCIA.raio, volume: 0.25 + 0.45 * tr.forca, taxa: 0.8 + 0.5 * tr.vel }); }
+        if (this.noCeu && !this.bordo) { const w = new THREE.Vector3(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); this.som.tocar("trovao", w, { dist: DISTANCIA.raio, volume: 0.5 + 0.5 * tr.forca, taxa: 0.85 + 0.35 * tr.vel }); }
       }
     }
     this.showT = tocando ? t : -1;
@@ -1713,7 +1713,7 @@ export class CyberEngine {
       if (s - em > 20) return;   // (chegou tarde: sem estouro)
       const alvo = caixas[caixa]?.getWorldPosition(new THREE.Vector3()) ?? new THREE.Vector3(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z);
       this.cidade?.raioNoLounge(1.3 + 0.3 * caixa, alvo);
-      if (this.noCeu && !this.bordo) this.som.tocar("raio", alvo, { dist: DISTANCIA.raio, volume: 1, taxa: 0.7 + 0.15 * caixa });
+      if (this.noCeu && !this.bordo) this.som.tocar("trovao", alvo, { dist: DISTANCIA.raio, volume: 1, taxa: 0.8 + 0.1 * caixa });
     };
     passo(corte.esquerda, CORTE.esquerda, 0); passo(corte.direita, CORTE.direita, 1);
     this.somLounge?.lados([corte.esquerda ? 0 : 1, corte.direita ? 0 : 1]);

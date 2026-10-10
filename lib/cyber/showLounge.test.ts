@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DURACAO_FORMA, FORMAS, MAX_TROVOES, NEVOA, SERPENTES, TENTACULOS, TURNO_S, estadoDoShow, nivelDoTurno, nomeDaForma, trovoesDoTurno, trovoesEntre } from "./showLounge";
+import { ANEL_SIGILOS, DURACAO_FORMA, FORMAS, MAX_TROVOES, NEVOA, OLHO, SERPENTES, SIGILOS, SIGILO_NA_IRIS, TENTACULOS, TURNO_S, estadoDoShow, nivelDoTurno, nomeDaForma, trovoesDoTurno, trovoesEntre } from "./showLounge";
 
 describe("o show do lounge durante a música", () => {
   it("começa pela FLOR DA VIDA (nunca um olho), nascendo do centro, e vai passando por toda a geometria sagrada em loop", () => {
@@ -22,6 +22,14 @@ describe("o show do lounge durante a música", () => {
     expect(estadoDoShow(SERPENTES.ini - 1, true).serpentes).toBe(0); expect(estadoDoShow(SERPENTES.ini + SERPENTES.dur, true).serpentes).toBe(1);
     expect(estadoDoShow(NEVOA.ini + NEVOA.dur, true).nevoa).toBe(1); expect(estadoDoShow(TENTACULOS.ini - 1, true).tentaculos).toBe(0); expect(estadoDoShow(TENTACULOS.ini + TENTACULOS.dur, true).tentaculos).toBe(1);
     expect(NEVOA.ini + NEVOA.dur).toBeLessThanOrEqual(TURNO_S);   // a névoa já está formada quando o 1º trovão cai (1 min)
+  });
+  it("o 3º modo: aos 4 min a mandala dá lugar ao OLHO (geometrias na íris), o anel dos 6 sigilos angelicais se forma e depois eles aparecem um a um na íris, em loop", () => {
+    expect(SIGILOS).toEqual(["mikael", "gabriel", "rafael", "uriel", "haniel", "metatron"]);
+    expect(estadoDoShow(200, true).olho).toBe(0); expect(estadoDoShow(OLHO.ini + OLHO.dur, true).olho).toBe(1);
+    expect(estadoDoShow(OLHO.ini + 2, true).anelSigilos).toBe(0); expect(estadoDoShow(ANEL_SIGILOS.ini + ANEL_SIGILOS.dur, true).anelSigilos).toBe(1);
+    expect(estadoDoShow(SIGILO_NA_IRIS.ini - 1, true).sigilo).toBe(-1); expect(estadoDoShow(SIGILO_NA_IRIS.ini + 1, true).sigilo).toBe(0);
+    expect(estadoDoShow(SIGILO_NA_IRIS.ini + SIGILO_NA_IRIS.cada * 5 + 1, true).sigilo).toBe(5); expect(estadoDoShow(SIGILO_NA_IRIS.ini + SIGILO_NA_IRIS.cada * 6 + 1, true).sigilo).toBe(0);
+    expect(estadoDoShow(300, false).olho).toBe(0);
   });
   it("os trovões: nenhum no 1º minuto; nível 1, 2 e 3 por turno; no máximo 3 por turno; os 3 só caem JUNTOS no nível 3, em velocidades distintas", () => {
     expect(nivelDoTurno(30)).toBe(0); expect(nivelDoTurno(61)).toBe(1); expect(nivelDoTurno(125)).toBe(2); expect(nivelDoTurno(190)).toBe(3); expect(nivelDoTurno(900)).toBe(3);

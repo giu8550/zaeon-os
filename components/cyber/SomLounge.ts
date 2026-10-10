@@ -37,7 +37,7 @@ export function criarSomLounge(o: { audio: AudioCyberHandle; caixas: THREE.Objec
   const el = new Audio(); el.preload = "auto";
   const saida = o.audio.musica(o.caixas, el);
   let som: SomLounge | null = null, offset = 0, acc = 1, arqAtual = "", buscaPendente: number | null = null, vivo = true, abafado = 0, silencio = false;
-  const aplicarVolume = () => saida.volume(silencio ? 0 : abafado > 0.6 ? 0 : abafado > 0 ? 1 - abafado / 0.6 : 1);
+  const aplicarVolume = () => saida.volume((som?.vol ?? 1) * (silencio ? 0 : abafado > 0.6 ? 0 : abafado > 0 ? 1 - abafado / 0.6 : 1));
   el.addEventListener("loadedmetadata", () => { if (buscaPendente !== null) { try { el.currentTime = buscaPendente; } catch { /* ainda não dá */ } buscaPendente = null; } });
 
   const sincronizar = () => {
@@ -55,7 +55,7 @@ export function criarSomLounge(o: { audio: AudioCyberHandle; caixas: THREE.Objec
   };
 
   return {
-    aplicar(s, off) { som = s && s.faixas.length ? s : null; offset = off; acc = 1; sincronizar(); },
+    aplicar(s, off) { som = s && s.faixas.length ? s : null; offset = off; acc = 1; sincronizar(); aplicarVolume(); },
     atualizar(dt) {
       acc += dt; if (acc >= 0.4) { acc = 0; sincronizar(); }
       if (abafado > 0) { abafado -= dt; aplicarVolume(); }

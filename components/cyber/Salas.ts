@@ -134,7 +134,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
 
   let salaAtual: NomeSala = "lounge";
   let showLounge: { olho: { group: THREE.Group }; mandala: ReturnType<typeof criarMandala>; nevoa: ReturnType<typeof criarTempestade>; grupo: THREE.Group } | null = null;
-  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0 };
+  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0, olho: 0, anelSigilos: 0, sigilo: -1 }, olhoRitual = 0;
   const ambiente: { sala: NomeSala; obj: THREE.Object3D }[] = [];
   const tema = (_m: Movel) => TEMA[salaAtual];
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
@@ -600,10 +600,19 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     olho.group.traverse((n) => { n.userData.semLote = true; });
     // a MANDALA do show (no mesmo centro do olho), as serpentes e os tentáculos; e a NÉVOA do lounge com os trovões leves
     const mandala = criarMandala({ low: o.low, estrela: o.estrela, tam: 60 }); mandala.group.position.copy(olho.group.position); mandala.group.rotation.x = 0.55; g.add(mandala.group);
-    const nevoa = criarTempestade({ low: o.low, yBase: DECK.h + 48, yTopo: DECK.h + 80, raioMax: 70, alvoPonta: new THREE.Vector3(0, DECK.h + 60, -44), cor: new THREE.Color(0.22, 0.13, 0.32), semAbismo: true, densidade: 0.45 });
+    const nevoa = criarTempestade({ low: o.low, yBase: DECK.h + 48, yTopo: DECK.h + 80, raioMax: 70, alvoPonta: new THREE.Vector3(0, DECK.h + 60, -44), cor: new THREE.Color(0.22, 0.13, 0.32), semAbismo: true, densidade: 0.4, nuvens: o.low ? 18 : 36 });   // (menos nuvens: não pesar)
     nevoa.group.position.set(0, 0, 0); nevoa.group.traverse((n) => { n.userData.semLote = true; }); g.add(nevoa.group); nevoa.definir(0, false);
     showLounge = { olho, mandala, nevoa, grupo: g };
-    anim.push((_, t) => { const tt = calmo ? t * 0.3 : t; if (olho.group.visible) olho.atualizar(tt, batida(), ativo); mandala.definir(estadoShow, batida(), tt); nevoa.atualizar(t); });
+    anim.push((_, t) => {
+      const tt = calmo ? t * 0.3 : t, b = batida();
+      if (olho.group.visible) {   // (no 3º modo do show o olho nasce crescendo, no lugar da mandala)
+        olho.group.scale.setScalar(Math.max(0.001, olhoRitual > 0.001 ? 1 : estadoShow.olho));
+        olho.atualizar(tt, b, Math.max(ativo, olhoRitual, estadoShow.olho), { anel: estadoShow.anelSigilos, iris: estadoShow.olho > 0.5 ? estadoShow.sigilo : -1 });
+      }
+      // a complexidade PULSA no ritmo (o grave acrescenta camadas por um instante)
+      mandala.definir({ ...estadoShow, complexidade: Math.min(0.72, estadoShow.complexidade + 0.18 * b), nascimento: estadoShow.nascimento * (1 - estadoShow.olho) }, b, tt);
+      nevoa.atualizar(t);
+    });
   }
 
   for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) {
@@ -647,9 +656,9 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     somTocando(on, nivel = 0) { tocando = on; nivelAlvo = on ? Math.max(0, Math.min(1, nivel)) : 0; },
     show(e, olho) {
       if (!showLounge) return;
-      const ritual = olho > 0.001;
-      estadoShow = ritual ? { ...e, nascimento: 0, serpentes: 0, tentaculos: 0, dna: 0 } : e;   // no ritual, a mandala se recolhe: fica o olho
-      showLounge.olho.group.visible = ritual;
+      const ritual = olho > 0.001; olhoRitual = olho;
+      estadoShow = ritual ? { ...e, nascimento: 0, serpentes: 0, tentaculos: 0, dna: 0, anelSigilos: 0, sigilo: -1, olho: 1 } : e;   // no ritual, a mandala se recolhe: fica o olho (sem os sigilos)
+      showLounge.olho.group.visible = ritual || e.olho > 0.02;   // (o 3º modo do show: o olho de volta, com os sigilos)
       showLounge.nevoa.definir(Math.max(e.nevoa, olho), e.nivel > 0 || olho > 0.5);   // no ritual, a névoa do lounge se forma junto com a do templo (os raios cortam as caixas)
     },
     raioNoLounge(vel = 1, alvoMundo) {

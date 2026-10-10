@@ -245,6 +245,32 @@ export function sintetizarBatida(sr: number): Float32Array {
   return normalizarS(fimS(out), 0.85);
 }
 
+/** o TROVÃO DE VERDADE (~4,2 s — o das tempestades do lounge, do templo e da nave): o ESTALO seco e muito agudo rasgando o ar
+ *  (ruído branco com um passa-alta, dois estalos quase juntos), o PESO (um pulso sub-grave) e o RUMBLE rolando depois,
+ *  em ondas que vão e voltam (vários "trovões menores" espalhados: a nuvem inteira respondendo), morrendo devagar */
+export function sintetizarTrovao(sr: number): Float32Array {
+  const n = Math.round(sr * 4.2), out = new Float32Array(n), r = prngS(131);
+  let hp = 0, ant = 0, lp1 = 0, lp2 = 0, lp3 = 0, sub = 0;
+  const eco = [0.0, 0.11, 0.9, 1.5, 2.3, 3.1].map((t, i) => ({ t, g: [1, 0.7, 0.55, 0.42, 0.3, 0.2][i]! }));
+  const kA = 1 - Math.exp((-2 * Math.PI * 70) / sr), kB = 1 - Math.exp((-2 * Math.PI * 160) / sr), kS = 1 - Math.exp((-2 * Math.PI * 28) / sr);
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, w = r() * 2 - 1;
+    hp = 0.95 * (hp + w - ant); ant = w;
+    // os estalos: o 1º é o raio em si (0..0,12 s), o 2º um galho dele; picotados (o ar rasgando)
+    let estalo = 0;
+    for (const [t0, g] of [[0, 1], [0.13, 0.55]] as const) { const d = t - t0; if (d >= 0 && d < 0.35) estalo += hp * g * Math.exp(-d * 18) * (r() < 0.35 + 0.6 * Math.exp(-d * 40) ? 1 : 0.08); }
+    // o peso: um sub-grave que desce de tom (o "soco" no peito)
+    const f0 = 55 * Math.exp(-t * 1.6) + 22; sub += (2 * Math.PI * f0) / sr; const peso = Math.sin(sub) * Math.exp(-t * 2.4) * Math.min(1, t * 60);
+    // o rumble: ruído grave filtrado em cascata, com os ecos (trovões menores) somando em ondas
+    lp1 += (w - lp1) * kB; lp2 += (lp1 - lp2) * kA; lp3 += (lp2 - lp3) * kS;
+    let env = 0; for (const e of eco) { const d = t - e.t; if (d > 0) env += e.g * Math.exp(-d * 1.3) * Math.min(1, d * 9); }
+    const rola = 0.7 + 0.3 * Math.sin(2 * Math.PI * 2.7 * t + 0.5) * Math.sin(2 * Math.PI * 0.9 * t);
+    const rumble = (lp2 * 6 + lp3 * 14) * env * rola;
+    out[i] = estalo * 1.1 + peso * 0.9 + rumble;
+  }
+  return normalizarS(fimS(out, 2048), 0.95);
+}
+
 /** o RAIO (~1,8 s): o estalo elétrico (ruído picotado agudo, rasgando) + o trovão grave rolando depois */
 export function sintetizarRaio(sr: number): Float32Array {
   const n = Math.round(sr * 1.8), out = new Float32Array(n), r = prngS(67);
