@@ -46,19 +46,20 @@ export function poseDash(): PoseAcao {
   };
 }
 
-/** a GUARDA de alerta depois do dash, no padrão dos jogos de ação "AAA": base BEM aberta (pé esquerdo à frente), bem
- *  agachado, tronco curvado pra frente e a cabeça baixa olhando por cima; a mão da frente pronta (baixa, à frente), a de
- *  trás junto do quadril. RESPIRAÇÃO OFEGANTE: forte logo depois do esforço (`tDesde` s), acalmando. `t` = o relógio */
+/** a GUARDA de alerta depois do dash — a "postura de poder" dos heróis de jogo de ação (referência do dono: o Delsin de
+ *  inFAMOUS Second Son): tronco ERGUIDO e confiante (um tico pra frente), cabeça alta olhando à frente, BRAÇOS BEM ABERTOS
+ *  pros lados e pra baixo (cotovelos levemente dobrados, as mãos longe do quadril), base larga quase simétrica e joelhos
+ *  dobrados. RESPIRAÇÃO OFEGANTE: forte logo depois do esforço (`tDesde` s), acalmando — sobe o peito e os ombros */
 export function poseAlerta(t: number, tDesde = 1): PoseAcao {
   const folego = 0.4 + 0.6 * Math.exp(-tDesde * 1.1), r = Math.sin(t * 11.5) * folego;   // ~1,8 respirações/s
   return {
-    inclina: -0.2 - 0.025 * r, desce: 0.27 + 0.022 * r,
-    tronco: n([0.48 - 0.05 * r, 0.87, -0.06]), cabeca: n([-0.22, 0.97, 0]),
-    braco: (l) => (l > 0 ? n([0.48, -0.78 + 0.04 * r, 0.4]) : n([-0.15, -0.88 + 0.03 * r, -0.45])),
-    ante: (l) => (l > 0 ? n([0.9, -0.12 + 0.05 * r, -0.16]) : n([0.42, -0.86, -0.28])),
-    coxa: (l) => (l > 0 ? n([0.52, -0.66, 0.54]) : n([-0.42, -0.7, -0.58])),
-    canela: (l) => (l > 0 ? n([-0.38, -0.92, 0.12]) : n([-0.35, -0.93, -0.12])),
-    pe: (l) => (l > 0 ? n([0.88, -0.4, 0.25]) : n([0.45, -0.55, -0.7])),
+    inclina: -0.09 - 0.02 * r, desce: 0.2 + 0.02 * r,
+    tronco: n([0.24 - 0.05 * r, 0.97, 0]), cabeca: n([0.02, 1, 0]),
+    braco: (l) => n([0.14, -0.56 + 0.05 * r, 0.82 * l]),
+    ante: (l) => n([0.32, -0.42 + 0.04 * r, 0.85 * l]),
+    coxa: (l) => (l > 0 ? n([0.3, -0.74, 0.6]) : n([-0.16, -0.77, -0.62])),
+    canela: (l) => n([-0.3, -0.94, 0.14 * l]),
+    pe: (l) => (l > 0 ? n([0.88, -0.4, 0.25]) : n([0.6, -0.5, -0.62])),
   };
 }
 
