@@ -54,7 +54,7 @@ function DicaTeclado({ engine, moto }: { engine: React.MutableRefObject<CyberEng
   const tecla = "rounded border border-white/25 bg-white/10 px-1.5 py-px font-mono text-[10px] text-white";
   const itens: [string, string][] = moto
     ? [["W S", "acelera · freia"], ["A D", "vira"], ["Shift", "boost"], ["Espaço Q", "sobe · desce"], ["P", "pousa"], ["F", "desce da moto"]]
-    : [["W A S D", "voa"], ["Shift", "turbo"], ["Espaço Q", "sobe · desce"], ["P", "pousa"], ["F", "sai"]];
+    : [["W A S D", "voa"], ["Shift", "turbo"], ["Espaço Q", "sobe · desce"], ["P", "pousa"], ["K", "ritual da nave"], ["F", "sai"]];
   return (
     <div ref={caixa} aria-label="Teclas do veículo" className="group pointer-events-none absolute z-[25] flex flex-col items-end gap-1.5 rounded-xl border border-sky-300/20 bg-[#070b1c]/60 px-3 py-2 text-[11px] text-sky-50/85 backdrop-blur" style={{ right: "max(16px, env(safe-area-inset-right))", bottom: "max(16px, env(safe-area-inset-bottom))" }}>
       {itens.map(([k, o]) => <div key={k} className="flex items-center gap-2"><span>{o}</span><span className="flex gap-1">{k.split(" ").map((x) => <kbd key={x} className={tecla}>{x}</kbd>)}</span></div>)}

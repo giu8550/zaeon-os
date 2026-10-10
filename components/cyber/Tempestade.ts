@@ -30,9 +30,9 @@ export function texturaNuvem(): THREE.CanvasTexture {
  *  - os raios: segmentos instanciados (o miolo branco + o halo violeta aditivo), ~2 draws.
  */
 export type TempestadeHandle = ReturnType<typeof criarTempestade>;
-export function criarTempestade(o: { low: boolean; yBase: number; yTopo: number; raioMax: number; alvoPonta: THREE.Vector3; /** a cor das nuvens (escura) e do clarão */ cor?: THREE.Color; /** sem o abismo em volta (o lounge): os raios à toa caem no alvo ou correm na nuvem */ semAbismo?: boolean; /** a densidade da névoa (1 = a do templo; o lounge usa menos: névoa LEVE) */ densidade?: number }) {
+export function criarTempestade(o: { low: boolean; yBase: number; yTopo: number; raioMax: number; alvoPonta: THREE.Vector3; /** a cor das nuvens (escura) e do clarão */ cor?: THREE.Color; /** sem o abismo em volta (o lounge): os raios à toa caem no alvo ou correm na nuvem */ semAbismo?: boolean; /** a densidade da névoa (1 = a do templo; o lounge usa menos: névoa LEVE) */ densidade?: number; /** quantas nuvens (billboards) — a nave usa poucas, pra não pesar */ nuvens?: number }) {
   const g = new THREE.Group(); g.name = "tempestade";
-  const N = o.low ? 60 : 130, tex = texturaNuvem();
+  const N = o.nuvens ?? (o.low ? 60 : 130), tex = texturaNuvem();
   const base = new THREE.PlaneGeometry(1, 1), geo = new THREE.InstancedBufferGeometry();
   geo.index = base.index; geo.setAttribute("position", base.getAttribute("position")); geo.setAttribute("uv", base.getAttribute("uv"));
   const aN = new Float32Array(N * 4), aT = new Float32Array(N * 2);

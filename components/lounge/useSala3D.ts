@@ -256,7 +256,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     setSala((s) => (s ? { ...s, conteudo: { ...s.conteudo, ritual: ritualDesligado(ritual) ? null : ritual } } : s));
   }, []);
   const aplicarRitualRef = useRef(aplicarRitual); aplicarRitualRef.current = aplicarRitual;
-  const definirRitual = useCallback(async (mudanca: { tempestade?: boolean; droids?: boolean; veu?: boolean }): Promise<{ ok: boolean; erro?: string }> => {
+  const definirRitual = useCallback(async (mudanca: { tempestade?: boolean; droids?: boolean; veu?: boolean; nave?: boolean }): Promise<{ ok: boolean; erro?: string }> => {
     if (!salaId) return { ok: false, erro: "Sem sala." };
     const r = await fetch(`/api/lounge3d/${salaId}/ritual`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mudanca) });
     const d = await r.json().catch(() => ({}));

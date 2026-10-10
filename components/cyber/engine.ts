@@ -16,6 +16,8 @@ import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
 import { ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
 import { TEMPLO } from "@/lib/cyber/templo";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
+import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
+import { criarTempestade, type TempestadeHandle } from "./Tempestade";
 import { ANUNCIADOR, CORTE, FRASE_LOUVOR, TURBO_NAVE, chegou as chegouDoRitual, corteDasCaixas, noPerimetro, faseDaTempestade, intensidadeDaTempestade, posDoAnunciador, proximaFala, revelacaoDaNave, ritualDesligado, sensacaoDaNave, type FaseRitual, type Ritual } from "@/lib/cyber/ritual";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type ComandoVoo, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
@@ -182,6 +184,8 @@ export type CyberOpts = {
   onRitual?: () => void;
   /** o dono CHEGOU no lounge com a tempestade armada: o React desliga a tempestade (o ritual acabou) */
   onRitualChegou?: () => void;
+  /** K: o dono liga/desliga o RITUAL DA NAVE (a mandala, as nuvens e os trovões em volta dela, com a música dela) */
+  onRitualNave?: (ligar: boolean) => void;
   /** URL de uma música da playlist do lounge (rota da sala); sem isto (modo solo/prévia) o lounge fica sem som */
   urlMusica?: (arq: string) => string;
   /** as poses remotas JÁ chegam suavizadas (netcode do Colyseus: interpolação + dead reckoning) → usa direto, sem
@@ -1653,6 +1657,28 @@ export class CyberEngine {
    *  PONTO DA MÚSICA (o relógio do servidor: todo mundo vê o mesmo); os trovões de cada turno de 1 min caem no quadro
    *  certo (com o som pra quem está na Zaeon). No ritual, a mandala se recolhe e fica o OLHO. */
   private showT = -1;
+  /** o SHOW DA NAVE (o ritual da nave, tecla K — lib/cyber/ritual `nave`): a mandala (menor), poucas nuvens e os trovões
+   *  seguindo a nave do dono, no ritmo da MÚSICA DELA (o 2º canal do toca-discos) — pra todo mundo */
+  private showNave: { group: THREE.Group; mandala: MandalaHandle; nevoa: TempestadeHandle; t: number } | null = null;
+  private atualizarShowNave(dt: number, t: number) {
+    void dt;
+    const ligado = !!this.ritual?.nave, nave = ligado ? this.naveDoDono() : null;
+    if (!nave) { if (this.showNave) { this.showNave.group.visible = false; this.showNave.nevoa.definir(0, false); this.showNave.t = -1; } return; }
+    if (!this.showNave) {
+      const group = new THREE.Group(); group.name = "show-nave"; this.cena.scene.add(group);
+      const mandala = criarMandala({ low: this.o.low, estrela: this.cena.starTex, tam: 26 }); mandala.group.position.set(0, 30, 0); mandala.group.rotation.x = -Math.PI / 2 + 0.4; group.add(mandala.group);
+      const nevoa = criarTempestade({ low: this.o.low, yBase: 16, yTopo: 36, raioMax: 36, alvoPonta: new THREE.Vector3(0, 28, 0), cor: new THREE.Color(0.2, 0.12, 0.3), semAbismo: true, densidade: 0.45, nuvens: this.o.low ? 16 : 30 });
+      group.add(nevoa.group); group.traverse((n) => { n.userData.semLote = true; });
+      this.showNave = { group, mandala, nevoa, t: -1 };
+    }
+    const sn = this.showNave; sn.group.visible = true; sn.group.position.copy(nave.position); sn.mandala.group.rotation.z = t * 0.05;
+    const pos = this.musicaNave?.posicao() ?? null, tocando = !!this.musicaNave?.tocandoNaSala && !!pos, tf = tocando && pos ? pos.t : 0;
+    const e = estadoDoShow(tf, tocando), batida = this.musicaNave?.nivel ?? 0;
+    sn.mandala.definir({ ...e, nascimento: Math.max(e.nascimento, 0.6), area: Math.min(e.area, 1.6), serpentes: 0, tentaculos: 0 }, batida, t);   // (sem música: a mandala fica, parada no nascimento; as criaturas não cabem numa nave)
+    sn.nevoa.definir(1, true); sn.nevoa.atualizar(t);
+    if (tocando && sn.t >= 0 && tf > sn.t) for (const tr of trovoesEntre(sn.t, tf)) { sn.nevoa.raioAgora(undefined, tr.vel); if (!this.bordo) this.som.tocar("raio", nave.position, { dist: DISTANCIA.raio, volume: 0.2 + 0.4 * tr.forca, taxa: 0.85 + 0.5 * tr.vel }); }
+    sn.t = tocando ? tf : -1;
+  }
   private atualizarShowLounge(dt: number) {
     void dt;
     if (!this.cidade) return;
@@ -2391,6 +2417,7 @@ export class CyberEngine {
       if (k === "c" && !this.menu) { if (!e.repeat) this.darDash(); e.preventDefault(); return; }   // C = DASH (o arranque — desvio)
       if (k === "x" && !this.menu) { if (!e.repeat) this.atacar(); e.preventDefault(); return; }   // X = ATACAR (o combo da espada; o clique também, com o mouse travado)   // J = sentar / deitar / levantar (lounge)
       if (k === "t" && !this.menu) { if (!e.repeat) this.alternarTablet(); e.preventDefault(); return; }     // T = o tablet (estudar por cima do cyberespaço)
+      if (k === "k" && !this.menu && this.ehFundador(this.o.eu.id)) { if (!e.repeat) this.o.onRitualNave?.(!this.ritual?.nave); e.preventDefault(); return; }   // K = o RITUAL DA NAVE (o dono)
       // HABILIDADES (lib/cyber/habilidades): G = o Droid companheiro (founder)
       const hab = this.menu ? null : habilidadeDaTecla(k, { fundador: this.ehFundador(this.o.eu.id), digitando: false, repetida: e.repeat, modificador: e.ctrlKey || e.metaKey || e.altKey });
       if (hab) { this.usarHabilidade(hab.id); e.preventDefault(); return; }   // F = a ação de contexto (estudar, montar, embarcar, descer…)
@@ -3101,7 +3128,7 @@ export class CyberEngine {
     }
     if (this.praca && this.regiaoPerto(this.praca.group, "praca")) this.praca.atualizar(dt, t);
     if (this.somLounge) { this.somLounge.atualizar(dt); this.cidade?.somTocando(this.somLounge.tocando, this.somLounge.nivel); }
-    this.atualizarShowLounge(dt);
+    this.atualizarShowLounge(dt); this.atualizarShowNave(dt, t);
     if (this.musicaNave) this.musicaNave.atualizar(dt); else if (this.musicaNavePendente?.som) this.setSomNave(this.musicaNavePendente.som, this.musicaNavePendente.offset);   // (a nave do dono apareceu: liga a música dela)
     if (this.holo) {   // o holograma acompanha a base do QG (que flutua junto com o marco)
       const lay = baseNoQG(), w = lay ? localParaMundo(lay, HOLO_NA_BASE.x, HOLO_NA_BASE.z) : null;
@@ -3316,7 +3343,7 @@ export class CyberEngine {
     this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.somLounge?.dispose(); this.musicaNave?.dispose(); for (const a of this.anunciadores.values()) a.h.dispose(); this.anunciadores.clear(); this.som.dispose();
+    this.somLounge?.dispose(); this.musicaNave?.dispose(); for (const a of this.anunciadores.values()) a.h.dispose(); this.anunciadores.clear(); if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose();
     this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }
