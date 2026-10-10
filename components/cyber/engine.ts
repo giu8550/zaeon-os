@@ -357,6 +357,8 @@ export class CyberEngine {
   private viagem: { tipo: "escada" | "elevador" | "garagem"; sentido: "sobe" | "desce"; t: number; sala?: NomeSala } | null = null;
   /** QUALIDADE ADAPTATIVA (lib/cyber/qualidadeAdaptativa): o pixel ratio do perfil é o teto; a escada multiplica */
   private qa!: QualidadeAdaptativa; private prBase = 1; private ultimoDesenho = 0;
+  /** o alcance da câmera no degrau cheio (no leve, metade: o mapa sem os campi cabe) e o medidor de FPS (as configs) */
+  private farBase = 3600; private quadrosSeg = 0; private inicioSeg = 0; private fpsAgora = 0;
   private frustum = new THREE.Frustum(); private mProj = new THREE.Matrix4(); private esfAtor = new THREE.Sphere();
   private noTopo = false;
   /** em qual marco andável estou no ALTO (escada/plataforma), e a altura do chão sob mim */
@@ -533,7 +535,8 @@ export class CyberEngine {
     this.R.autoClear = false; this.R.outputColorSpace = THREE.SRGBColorSpace;
     const cv = this.R.domElement; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:" + (opts.menu ? "pan-y" : "none");
     container.appendChild(cv);
-    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.15, 3600);   // mapa de raio 1500 (os campi na borda: de um lado se vê o outro)
+    this.farBase = this.o.low ? 1800 : 3600;   // (no leve: da praça a Zaeon inteira ainda aparece — ~810 m)
+    this.cam = new THREE.PerspectiveCamera(45, this.w / this.h, 0.15, this.farBase);
     this.cena = criarCenaCosmica(low, this.w / this.h);
   }
 
@@ -866,7 +869,7 @@ export class CyberEngine {
   /** a FROTA DE IAs: a config vem do servidor (o mesmo relógio pra todos); sem ela (offline), nada */
   private ligarFrota() {
     if (this.frota || !this.vivo) return;
-    this.frota = criarFrotaIA({ cena: this.cena.scene, overlay: this.o.overlay, gltf: this.gltf, starTex: this.cena.starTex, low: this.o.low });
+    this.frota = criarFrotaIA({ cena: this.cena.scene, overlay: this.o.overlay, gltf: this.gltf, starTex: this.cena.starTex, low: this.o.low }); this.frota.alcance(this.qa.atual.alcance);
     this.recarregarFrota();
     // a config muda pelo painel admin: confere a cada minuto (só replaneja se a VERSÃO mudou)
     this.relogioFrota = setInterval(() => this.recarregarFrota(), 60_000);
@@ -2694,7 +2697,12 @@ export class CyberEngine {
     const d = this.qa.atual;
     this.R.setPixelRatio(this.prBase * d.dpr);
     for (const a of [this.eu, ...this.remotos.values()]) a?.av.aura(d.aura);
+    // o ALCANCE: a câmera e as IAs da frota encurtam ANTES da resolução cair (lib/cyber/qualidadeAdaptativa)
+    this.cam.far = Math.max(1000, this.farBase * d.alcance); this.cam.updateProjectionMatrix();
+    this.frota?.alcance(d.alcance);
   }
+  /** o que o contador das configs mostra: quadros por segundo de verdade e o degrau da qualidade adaptativa */
+  estatisticas() { return { fps: this.fpsAgora, degrau: this.qa.atual.nome, leve: this.o.low }; }
   private soltar(raiz: THREE.Object3D) { const r = this.regioes.get(raiz); if (r) { soltarRegiao(r); this.regioes.delete(raiz); } }
 
   private atualizarCamera(dt = 1 / 60) {
@@ -3241,6 +3249,7 @@ export class CyberEngine {
     // qualidade adaptativa: só mede jogando (o menu/landing roda a 30 e confundiria a medida)
     if (!this.menu && this.ultimoDesenho > 0 && this.qa.registrar(now - this.ultimoDesenho) !== null) this.aplicarQualidade();
     this.ultimoDesenho = now;
+    this.quadrosSeg++; if (now - this.inicioSeg >= 1000) { this.fpsAgora = Math.round((this.quadrosSeg * 1000) / Math.max(1, now - this.inicioSeg)); this.quadrosSeg = 0; this.inicioSeg = now; }
     if (!this.prontoDisparado) { this.prontoDisparado = true; this.o.onPronto?.(); this.aoPrimeiroQuadro?.(); this.aoPrimeiroQuadro = null; }
   }
 

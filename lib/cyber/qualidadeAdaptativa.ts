@@ -5,16 +5,19 @@
  *  - SOBE um degrau depois de ~12 s dentro de 105% (liso — com o limite de fps, o intervalo nunca fica muito abaixo);
  *  - carência de 4 s depois de qualquer troca; se cair 2× no MESMO degrau, ele vira o piso da sessão (não oscila);
  *  - quadro > 1 s (aba escondida, pausa, carregamento) não conta.
- * Os degraus só mexem no visual: resolução (multiplica o pixel ratio do perfil), nebulosa e aura dos avatares. PURO.
+ * Os degraus mexem no que pesa, NESTA ordem (out/2026): nebulosa, o ALCANCE (até onde se desenha: a câmera, as IAs da
+ * frota com corpo e em silhueta), a aura dos avatares e, por último, a resolução — que nunca cai abaixo de 0,8 (o dono:
+ * "não deixar o serrilhado no talo"; antes descia até 0,6). PURO.
  */
-export type Degrau = { nome: string; dpr: number; nebulosa: number; aura: boolean };
+export type Degrau = { nome: string; dpr: number; nebulosa: number; aura: boolean; /** multiplica as distâncias de desenho */ alcance: number };
 export const DEGRAUS: readonly Degrau[] = [
-  { nome: "cheio", dpr: 1, nebulosa: 0.5, aura: true },
-  { nome: "dpr-", dpr: 0.85, nebulosa: 0.5, aura: true },
-  { nome: "nebulosa-", dpr: 0.85, nebulosa: 0.35, aura: true },
-  { nome: "dpr--", dpr: 0.72, nebulosa: 0.35, aura: true },
-  { nome: "sem-aura", dpr: 0.72, nebulosa: 0.35, aura: false },
-  { nome: "minimo", dpr: 0.6, nebulosa: 0.25, aura: false },
+  { nome: "cheio", dpr: 1, nebulosa: 0.5, aura: true, alcance: 1 },
+  { nome: "nebulosa-", dpr: 1, nebulosa: 0.35, aura: true, alcance: 1 },
+  { nome: "alcance-", dpr: 1, nebulosa: 0.35, aura: true, alcance: 0.7 },
+  { nome: "sem-aura", dpr: 1, nebulosa: 0.3, aura: false, alcance: 0.7 },
+  { nome: "alcance--", dpr: 1, nebulosa: 0.3, aura: false, alcance: 0.5 },
+  { nome: "dpr-", dpr: 0.9, nebulosa: 0.25, aura: false, alcance: 0.5 },
+  { nome: "minimo", dpr: 0.8, nebulosa: 0.25, aura: false, alcance: 0.4 },
 ];
 export const QA = { janelaS: 1, desceApos: 3, sobeApos: 12, margemDesce: 1.15, margemSobe: 1.05, carenciaS: 4, viagensMax: 2, quadroMaxMs: 1000 } as const;
 

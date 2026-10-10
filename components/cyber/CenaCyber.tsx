@@ -10,7 +10,8 @@ import type { Carregando } from "@/lib/cyber/carregamento";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LAB_ENTRADA, MSG_ENTRAR_ESTUDO, ehMsgEntrarEstudo } from "@/lib/ui/loungeHub";
-import { detectarPerfil, precisaGirar, qualidadeDe } from "@/lib/cyber/dispositivo";
+import { PREF_GRAFICOS, PREF_MOSTRAR_FPS, comPreferencia, detectarPerfil, lerGpu, lerPreferencia, precisaGirar, qualidadeDe } from "@/lib/cyber/dispositivo";
+import ContadorFps from "./ContadorFps";
 import { PREF_SFX, PREF_VOLUME, lerPrefs } from "@/lib/cyber/audio";
 import { tocarUI } from "./AudioCyber";
 import { MAX_TEXTO_RECADO, type MensagemChat, type Presenca, type RecadoQG } from "@/lib/lounge3d/tipos";
@@ -182,10 +183,14 @@ export default function CenaCyber(p: CenaCyberProps) {
   };
   const touch = useMemo(() => typeof window !== "undefined" && (matchMedia("(pointer:coarse)").matches || "ontouchstart" in window), []);
   // ONDE está rodando (celular × desktop, aparelho fraco) → capas de efeito só onde precisa (lib/cyber/dispositivo)
-  const perfil = useMemo(() => typeof window === "undefined" ? { movel: false, leve: false, fraco: false } : detectarPerfil({
+  // (+ a PLACA DE VÍDEO: integrada → leve; e a escolha das configurações — automático, leve ou completo)
+  const gpu = useMemo(() => (typeof window === "undefined" ? undefined : lerGpu()), []);
+  const prefs = useMemo(() => { try { return { graficos: lerPreferencia(localStorage.getItem(PREF_GRAFICOS)), fps: localStorage.getItem(PREF_MOSTRAR_FPS) === "1" }; } catch { return { graficos: lerPreferencia(null), fps: false }; } }, []);
+  const perfil = useMemo(() => typeof window === "undefined" ? { movel: false, leve: false, fraco: false } : comPreferencia(detectarPerfil({
     coarse: matchMedia("(pointer: coarse)").matches, toques: navigator.maxTouchPoints || 0, ua: navigator.userAgent, largura: innerWidth, altura: innerHeight,
-    memoriaGB: (navigator as Navigator & { deviceMemory?: number }).deviceMemory, nucleos: navigator.hardwareConcurrency || undefined,
-  }), []);
+    memoriaGB: (navigator as Navigator & { deviceMemory?: number }).deviceMemory, nucleos: navigator.hardwareConcurrency || undefined, gpu,
+  }), prefs.graficos), [gpu, prefs.graficos]);
+  const lerFps = useCallback(() => engine.current?.estatisticas() ?? null, []);
   const qualidade = useMemo(() => qualidadeDe(perfil), [perfil]);
   const low = qualidade.leve;
   // celular: o cyberespaço é NA HORIZONTAL — em pé, pede pra girar e pausa a cena
@@ -344,6 +349,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       <TabletLab aberto={tabletAberto} onIA={(e) => setIaLab((antes) => juntarEstadoIA(antes, e))} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
       {/* as barras do HUD: SAÚDE, VIGOR e o uso CONCORRENTE de IA (o laboratório do tablet) */}
       {tela && !menu && !tabletAberto && <BarrasHud ler={lerBarras} ia={iaLab} touch={touch} />}
+      {tela && <ContadorFps mostrar={prefs.fps} gpu={gpu} classe={perfil.gpu} ler={lerFps} />}
       <InventarioPainel aberto={inventarioAberto} onFechar={() => setInventarioAberto(false)} ler={lerInventario} equipar={equiparItem} />
 
       {/* rótulo do monitor (hover) */}

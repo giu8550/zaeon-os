@@ -54,6 +54,8 @@ export type FrotaHandle = {
   atualizar(dt: number, t: number, ctx: CtxFrota): void;
   /** os corpos das IAs desenhadas (pro meu avatar colidir) — mundo, com a altura dos pés */
   corpos(): (P2 & { y: number })[];
+  /** a QUALIDADE ADAPTATIVA encurta o alcance (0..1 — corpo completo e silhuetas): menos IAs pra simular e desenhar */
+  alcance(k: number): void;
   /** eu falei no chat: a IA mais perto (até 6 m) responde */
   ouvir(texto: string, eu: P2 & { y: number }): void;
   /** quantas estão online agora (pro HUD, se quiser) */
@@ -90,6 +92,7 @@ function geoSilhueta(): THREE.BufferGeometry {
 export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf: GLTF | null; starTex: THREE.Texture; low: boolean; max?: number }): FrotaHandle {
   const MAX = o.max ?? (o.low ? 8 : 18), MAX_SILHUETAS = o.low ? 300 : 900, MAX_MULTIDAO = 220, DIST_MULTIDAO = 90, DIST_MULTIDAO_PERTO = 35;
   const corpos: Corpo[] = [];
+  let kAlcance = 1;   // (a qualidade adaptativa: `alcance`)
   // as SILHUETAS: um InstancedMesh pra gente e outro pras motos (cor por instância)
   // OPACA (transparente custava a ordenação e a mistura de centenas de silhuetas por quadro)
   const matSil = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x1a2140 });
@@ -224,7 +227,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
             const { agente, blocos } = v.ags[v.i]!, e = estadoDaIA(agente.id, blocos, minuto, config.flags, ctx.musica, false);
             if (!e.visivel) continue; v.n++; v.areas[areaDe(e, e.pose === "moto" || e.pose === "mochila")]++;
             if (e.vagaMoto) v.paradas.push({ vaga: e.vagaMoto, cor: porId.get(agente.id)?.cor ?? "#7fd3ff" });
-            const d = distEu(e); if (d < ALCANCE_SILHUETA) v.lista.push({ id: agente.id, e, move: MOVE.has(e.pose), d });
+            const d = distEu(e); if (d < ALCANCE_SILHUETA * kAlcance) v.lista.push({ id: agente.id, e, move: MOVE.has(e.pose), d });
           }
         }
       }
@@ -235,8 +238,8 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
         online = n; lista.sort((a, b) => a.d - b.d); vistos = lista.slice(0, MAX_SILHUETAS);
         const dist = new Map(lista.map((c) => [c.id, c.d]));
         // quem já tem corpo FICA enquanto estiver no alcance largo; a vaga só troca por alguém MUITO mais perto
-        const ficam = corpos.filter((k) => k.id && (dist.get(k.id) ?? Infinity) < ALCANCE * FICA).map((k) => k.id!);
-        const novos = lista.filter((c) => c.d < ALCANCE && !ficam.includes(c.id));
+        const ficam = corpos.filter((k) => k.id && (dist.get(k.id) ?? Infinity) < ALCANCE * kAlcance * FICA).map((k) => k.id!);
+        const novos = lista.filter((c) => c.d < ALCANCE * kAlcance && !ficam.includes(c.id));
         escolhidos = [...ficam];
         for (const c of novos) {
           if (escolhidos.length < MAX) { escolhidos.push(c.id); continue; }
@@ -346,6 +349,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
         if (fala) { if (k.balao.textContent !== fala) k.balao.textContent = fala; k.balao.style.transform = `translate(${sx}px,${sy - 22}px) translate(-50%,-100%)`; }
       }
     },
+    alcance(k) { kAlcance = Math.max(0.2, Math.min(1, k)); },
     corpos() {
       const out: (P2 & { y: number })[] = [];
       for (const k of corpos) if (k.id && k.av.group.visible) out.push({ x: k.av.group.position.x, z: k.av.group.position.z, y: k.av.group.position.y });

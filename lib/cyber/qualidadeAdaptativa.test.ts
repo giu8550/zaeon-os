@@ -8,10 +8,13 @@ describe("qualidade adaptativa (a escada do CS Brasil: desce rápido, sobe devag
   it("a escada só piora: resolução cai, aura e nebulosa vão saindo", () => {
     for (let i = 1; i < DEGRAUS.length; i++) {
       const a = DEGRAUS[i - 1]!, b = DEGRAUS[i]!;
-      expect(b.dpr).toBeLessThanOrEqual(a.dpr); expect(b.nebulosa).toBeLessThanOrEqual(a.nebulosa);
+      expect(b.dpr).toBeLessThanOrEqual(a.dpr); expect(b.nebulosa).toBeLessThanOrEqual(a.nebulosa); expect(b.alcance).toBeLessThanOrEqual(a.alcance);
       if (!a.aura) expect(b.aura).toBe(false);
     }
-    expect(DEGRAUS[0]).toMatchObject({ dpr: 1, aura: true });
+    expect(DEGRAUS[0]).toMatchObject({ dpr: 1, aura: true, alcance: 1 });
+    // a resolução é a ÚLTIMA a cair e nunca abaixo de 0,8 (serrilhado); antes dela, o alcance já caiu
+    for (const d of DEGRAUS) expect(d.dpr).toBeGreaterThanOrEqual(0.8);
+    const primeiroDpr = DEGRAUS.findIndex((d) => d.dpr < 1); expect(DEGRAUS[primeiroDpr - 1]!.alcance).toBeLessThanOrEqual(0.5);
   });
   it("rodando liso, não mexe", () => {
     const q = new QualidadeAdaptativa(60);
