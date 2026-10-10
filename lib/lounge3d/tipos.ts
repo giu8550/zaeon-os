@@ -49,6 +49,8 @@ export type Presenca = {
   ts?: number;
   /** corrida de checkpoints: quantos pegou e a corrida ("semente:largada") */
   ck?: number; cr?: string;
+  /** a bordo da nave-QG: posição LOCAL na planta, nível e escada */
+  bordo?: { x: number; z: number; nivel: 0 | 1; esc?: number };
 };
 
 export type NotaCanvas = {

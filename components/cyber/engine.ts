@@ -132,7 +132,7 @@ export type CyberOpts = {
   /** teclado sempre ouvido (tela cheia). Na janela da landing só com o mouse em cima (não rouba ESPAÇO/rolagem da página). */
   teclasSempre: boolean;
   remotos?: { current: Map<string, Presenca> };
-  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; desc?: number; ck?: number; cr?: string; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada; atk?: number; hp?: number; arma?: number; mov?: number }) => void;
+  enviarPos?: (p: { x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean; desc?: number; ck?: number; cr?: string; bordo?: { x: number; z: number; nivel: 0 | 1; esc?: number }; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number; moto?: MotoMontada; motoLargada?: MotoLargada; atk?: number; hp?: number; arma?: number; mov?: number }) => void;
   /** pontos de interesse (marcos megalíticos) — flag NEXT_PUBLIC_CYBER_LANDMARKS */
   landmarks?: boolean;
   /** clicou num marco estando perto → painel (nome, org, link) */
@@ -253,7 +253,8 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** 
   moto?: MotoMontada | null;
   /** remotos: a moto que ele ESTACIONOU (fica lá até ele montar noutra ou sair) */
   motoLargada?: MotoLargada | null;
-  /** a CORRIDA DE CHECKPOINTS dele: o placar e a corrida ("semente:largada") — da pose */ ck?: number; cr?: string };
+  /** a CORRIDA DE CHECKPOINTS dele: o placar e a corrida ("semente:largada") — da pose */ ck?: number; cr?: string;
+  /** A BORDO da nave: a posição LOCAL (suavizada) — o corpo vai em cima da nave que EU vejo */ bordo?: Bordo | null };
 /** um balão de fala preso a quem fala (uma pessoa ou o Droid: só a posição e a altura importam) */
 type Fala = { el: HTMLDivElement; ator: { pos: THREE.Vector3; alt: number }; ate: number };
 
@@ -3215,7 +3216,7 @@ export class CyberEngine {
 
     // rede: eu → difusão; remotos → atores
     const desc = codificarDescanso(this.descanso && this.descanso.fase !== "indo" && this.descanso.fase !== "levantando" ? this.descanso.modo : null, this.tabletW > 0.5);
-    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.movAgora(t) ? { mov: this.movAgora(t) } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
+    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.movAgora(t) ? { mov: this.movAgora(t) } : {}), ...(this.bordo && !this.pilotando ? { bordo: { x: this.bordo.x, z: this.bordo.z, nivel: this.bordo.nivel, ...(this.bordo.esc !== undefined ? { esc: this.bordo.esc } : {}) } } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
     this.atualizarNascimentoEGuia(dt);
     this.atualizarConversa(dt);
@@ -3418,10 +3419,17 @@ export class CyberEngine {
         a.moto = !voando && p.moto ? p.moto : null;   // moto: qualquer pessoa (sem regalia)
         a.motoLargada = p.motoLargada ?? null;
         a.ck = typeof p.ck === "number" ? p.ck : 0; a.cr = typeof p.cr === "string" ? p.cr : "";
+        // a bordo: a posição LOCAL na nave, suavizada (os pacotes chegam a 15 Hz); troca de nível ou entrou agora = corte seco
+        if (p.bordo) { const b = a.bordo, nb = p.bordo, k = Math.min(1, dt * 12);
+          a.bordo = b && b.nivel === nb.nivel ? { x: b.x + (nb.x - b.x) * k, z: b.z + (nb.z - b.z) * k, nivel: nb.nivel, ...(nb.esc !== undefined ? { esc: (b.esc ?? nb.esc) + (nb.esc - (b.esc ?? nb.esc)) * k } : {}) } : { ...nb };
+        } else a.bordo = null;
         const jetAnt = a.jet; a.jet = !voando && !a.moto && typeof p.jet === "number" ? p.jet : undefined;
         if (a.jet !== undefined && jetAnt !== undefined && dt > 0) a.vyJet = (a.vyJet ?? 0) + (((a.jet - jetAnt) / dt) - (a.vyJet ?? 0)) * Math.min(1, dt * 4); else a.vyJet = 0;
         const altAlvo = voando ? p.voo!.y : a.moto ? a.moto.y : a.jet !== undefined ? a.jet : typeof p.alt === "number" ? p.alt : a.topo ? this.alturaTopo() : a.ceu ? CIDADE.pisoY + alturaNaCidade(a.pos) : this.alturaChao(a.pos);
         a.alt += (altAlvo - a.alt) * (Math.abs(altAlvo - a.alt) > 40 ? 1 : Math.min(1, dt * 6));   // portal = corte seco
+        // A BORDO da nave: em cima da nave que EU vejo (a minha, em tempo real, ou a do dono como chega aqui) — no mundo, a
+        // posição dela vinha calculada sobre a nave ATRASADA da tela dela e ficava pra trás, fora da nave voando
+        if (a.bordo) { const pn = this.poseNave(); if (pn) { const w = paraMundo(pn, a.bordo); a.pos.x = w.x; a.pos.z = w.z; a.alt = alturaDoConves(pn) + alturaNoBordo(a.bordo, this.quedaRampa()); } }
         if (voando) a.naveYaw = p.voo!.yaw;
         void t;
       }
