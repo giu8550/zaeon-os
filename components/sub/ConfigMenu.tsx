@@ -91,7 +91,10 @@ export default function ConfigMenu() {
         <div
           role="dialog"
           aria-label="Configurações"
-          className="absolute right-0 top-full mt-2 w-[min(92vw,330px)] max-h-[min(78vh,620px)] overflow-y-auto custom-scrollbar p-3 flex flex-col gap-2 rounded-[24px]
+          // `[&>*]:shrink-0`: numa tela BAIXA (Windows a 100% de zoom) as linhas, em coluna flex com altura
+          // máxima, encolhiam até o `min-h` e o conteúdo (o seletor Automático/Leve/Completo) vazava por cima
+          // da linha de baixo, que ficava com o clique. Sem encolher, o painel ROLA (overflow-y-auto).
+          className="absolute right-0 top-full mt-2 w-[min(92vw,330px)] max-h-[min(78vh,620px)] overflow-y-auto custom-scrollbar p-3 flex flex-col gap-2 rounded-[24px] [&>*]:shrink-0
             backdrop-blur-2xl backdrop-saturate-[1.6] border border-white/60 dark:border-white/[0.12]
             bg-white/90 dark:bg-[#0b1020]/95 shadow-[0_18px_50px_-20px_rgba(37,99,235,0.45)] dark:shadow-[0_18px_50px_-20px_rgba(0,0,0,0.8)]"
         >
