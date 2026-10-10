@@ -1,7 +1,7 @@
 /**
  * CabinesEstudo — as CABINES DE ESTUDO da cidadela (lib/cyber/ceu `cabinesDaCidadela`), por hierarquia acadêmica
- * (lib/cyber/credenciais): a fileira dos PROFESSORES logo depois dos pilares da capela, a dos DOUTORES atrás e a dos
- * MESTRANDOS depois. Cada cabine: o piso de vidro escuro com o friso na cor do degrau, a mesa, o monitor aceso (virado
+ * por LEVEL (lib/cyber/credenciais): a fileira dos level 10 (PhD) logo depois dos pilares da capela, a dos level 7–9
+ * (doutorado) atrás e a dos level 4–6 (mestrado) depois. Cada cabine: o piso de vidro escuro com o friso na cor do degrau, a mesa, o monitor aceso (virado
  * pra quem senta), a cadeira, dois painéis de vidro dos lados com o topo aceso e um losango flutuando em cima (a cor do
  * degrau). UMA malha instanciada por peça (~10 draw calls pras 52 cabines); no referencial da ILHA (flutua com ela).
  */

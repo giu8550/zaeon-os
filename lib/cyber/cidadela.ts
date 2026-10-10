@@ -1,8 +1,8 @@
 /**
- * Cyberespaço — os LUGARES DE ESTUDO DA CIDADELA por hierarquia acadêmica (PURO). As CABINES (professores, doutores,
+ * Cyberespaço — os LUGARES DE ESTUDO DA CIDADELA por hierarquia acadêmica (PURO). As CABINES (level 10, 7–9,
  * mestrandos) são do layout da ilha (lib/cyber/ceu `cabinesDaCidadela`, entram nos colisores); aqui ficam:
  *  - o ASSENTO de cada cabine (a cadeira, de frente pra mesa e pra capela);
- *  - as RODAS DE ESTUDO dos GRADUANDOS (sem cabine): grupos de 4 lugares no chão, em volta das SUPERTREES (as árvores de
+ *  - as RODAS DE ESTUDO dos level 1–3 (graduação, sem cabine): grupos de 4 lugares no chão, em volta das SUPERTREES (as árvores de
  *    Singapura, nas pontas da cidadela) e atrás das cabines dos mestrandos — cada GRUPO DE ESTUDOS fica numa roda.
  * Tudo determinístico; local da ilha → mundo pelo `mundo` do ceu.
  */
@@ -18,10 +18,10 @@ export function assentoDaCabine(c: CabineEstudo): Spot {
   return { id: `cidadela-${c.id}`, ambiente: "cidadela", tipo: "cabine", x: w.x, z: w.z, y: CIDADE.pisoY, rumo: c.rot, zaeon: true };
 }
 
-/** uma RODA DE ESTUDO dos graduandos: o centro (local) e os 4 lugares no chão (mundo), virados pro centro da roda */
+/** uma RODA DE ESTUDO dos level 1–3: o centro (local) e os 4 lugares no chão (mundo), virados pro centro da roda */
 export type RodaDeEstudo = { id: string; tipo: "supertree" | "cabine"; centro: P2; lugares: Spot[] };
 export const LUGARES_POR_RODA = 4;
-/** quantos metros do tronco da supertree os graduandos sentam */
+/** quantos metros do tronco da supertree os level 1–3 sentam */
 export const RODA_SUPERTREE_R = 5.4;
 
 let rodasCache: RodaDeEstudo[] | null = null;
