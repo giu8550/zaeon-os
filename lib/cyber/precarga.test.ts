@@ -14,7 +14,8 @@ describe("precarga do cyberespaço", () => {
   });
 
   it("sintetizados não entram; o fundador entra uma vez só", () => {
-    expect(urlsDosSons().some((u) => /jato-sopro|baque|moto-/.test(u))).toBe(false);
+    expect(urlsDosSons().some((u) => /jato-sopro|baque/.test(u))).toBe(false);   // (os da moto viraram .wav de verdade: entram)
+    expect(urlsDosSons().some((u) => /moto-motor/.test(u))).toBe(true);
     const corpos = urlsDosCorpos();
     expect(corpos.filter((u) => u.includes("fundador")).length).toBe(1);
     expect(manifesto(false).some((i) => i.tipo === "corpo")).toBe(false);

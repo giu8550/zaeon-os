@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { COMBO, JANELA_COMBO, RITMO_GOLPES, VIDA_MAX, acabou, acerta, codificarGolpe, cortando, cortouEntre, danoDoGolpe, decodificarGolpe, levarGolpe, proximoGolpe } from "./combate";
 import { ESPACOS, ITENS, equipar, inventarioInicial, itensPermitidos, sanitizarInventario } from "./inventario";
-import { ARENA, BONECOS, PILARES_ARENA, naArena, pontoDeRenascer } from "./arena";
+import { ARENA, ARENA_ATIVA, BONECOS, PILARES_ARENA, dentroDaArena, naArena, pontoDeRenascer } from "./arena";
 import { PORTAL_PRACA, PRACA } from "./praca";
 import { poseGolpe } from "./posesCombate";
 
@@ -67,9 +67,11 @@ describe("combate", () => {
 describe("a arena (a praça inteira)", () => {
   it("cabe na praça; pilares na borda, longe do buraco negro; bonecos dentro", () => {
     expect(ARENA.r).toBeLessThan(PRACA.r);
-    for (const p of PILARES_ARENA) { expect(naArena(p)).toBe(true); expect(Math.hypot(p.x - PORTAL_PRACA.x, p.z - PORTAL_PRACA.z)).toBeGreaterThan(8); }
-    for (const b of BONECOS) expect(naArena(b)).toBe(true);
-    const r = pontoDeRenascer({ x: 10, z: 0 }); expect(naArena(r)).toBe(true); expect(r.x).toBeLessThan(0);
+    for (const p of PILARES_ARENA) { expect(dentroDaArena(p)).toBe(true); expect(Math.hypot(p.x - PORTAL_PRACA.x, p.z - PORTAL_PRACA.z)).toBeGreaterThan(8); }
+    for (const b of BONECOS) expect(dentroDaArena(b)).toBe(true);
+    const r = pontoDeRenascer({ x: 10, z: 0 }); expect(dentroDaArena(r)).toBe(true); expect(r.x).toBeLessThan(0);
+    // a praça é dos NOVATOS (sem PvP): com a arena desmontada, ninguém está "na arena"
+    expect(ARENA_ATIVA).toBe(false); expect(naArena({ x: 0, z: 0 })).toBe(false); expect(naArena({ x: 0, z: 0 }, true)).toBe(true);
   });
 });
 

@@ -7,8 +7,13 @@
 import { PRACA, PORTAL_PRACA } from "./praca";
 
 export const ARENA = { x: PRACA.x, z: PRACA.z, r: PRACA.r - 3, y: PRACA.y } as const;
-/** está dentro da arena (no chão da praça, longe da borda)? */
-export const naArena = (p: { x: number; z: number }) => Math.hypot(p.x - ARENA.x, p.z - ARENA.z) <= ARENA.r;
+/** a ARENA está montada na praça? (out/2026: NÃO — a praça virou o lugar onde os NOVOS usuários nascem, sem PvP; a
+ *  arena volta ligando isto) */
+export const ARENA_ATIVA = false;
+/** a REGIÃO da arena (no chão da praça, longe da borda) — a geometria, valha a arena ou não */
+export const dentroDaArena = (p: { x: number; z: number }) => Math.hypot(p.x - ARENA.x, p.z - ARENA.z) <= ARENA.r;
+/** está numa arena DE VERDADE (montada)? — é isto que libera o combate */
+export const naArena = (p: { x: number; z: number }, ativa: boolean = ARENA_ATIVA) => ativa && dentroDaArena(p);
 
 /** os PILARES de energia na borda (8, a cada 45°, deixando livre o lado do buraco negro) */
 export const PILARES_ARENA = Array.from({ length: 8 }, (_, k) => { const a = (k / 8) * Math.PI * 2 + Math.PI / 8, r = ARENA.r - 1.5; return { x: ARENA.x + Math.cos(a) * r, z: ARENA.z + Math.sin(a) * r, r: 1.2 }; })

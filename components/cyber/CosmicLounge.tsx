@@ -13,7 +13,7 @@ import { useSession } from "next-auth/react";
 import { corDoUsuario } from "@/lib/lounge3d/tipos";
 import { basesDosMembros, poseNoAssento } from "@/lib/cyber/bases";
 import { temWebGL } from "@/lib/ui/globo";
-import { LAB_ENTRADA } from "@/lib/ui/loungeHub";
+import { LAB_ENTRADA, MSG_FECHAR_TABLET } from "@/lib/ui/loungeHub";
 import { avisoRealtime } from "@/lib/lounge3d/realtimeEstado";
 import { useResolverSala } from "@/components/lounge/useResolverSala";
 import { useSala3D } from "@/components/lounge/useSala3D";
@@ -22,7 +22,12 @@ import CenaCyber from "./CenaCyber";
 import type { PessoaCyber } from "./engine";
 
 export default function CosmicLounge({ modo, onSessaoIniciada }: { modo: "janela" | "tela"; onSessaoIniciada?: () => void }) {
+  // DENTRO do TABLET (o laboratório num iframe por cima do cyberespaço) o cyberespaço NUNCA sobe de novo: era a tela de
+  // loading recarregando o mapa quando se saía do tablet por um link do laboratório. Ele só pede pra guardar o tablet.
+  const [noIframe] = useState(() => typeof window !== "undefined" && window.self !== window.top);
+  useEffect(() => { if (noIframe) { try { window.parent.postMessage({ type: MSG_FECHAR_TABLET }, window.location.origin); } catch { /* outra origem */ } } }, [noIframe]);
   const webgl = useMemo(() => (typeof window === "undefined" ? true : temWebGL()), []);
+  if (noIframe) return <div className="h-full w-full bg-transparent" />;
   if (!webgl) return <SemWebGL />;
   return modo === "janela" ? <Janela onSessaoIniciada={onSessaoIniciada} /> : <Tela />;
 }

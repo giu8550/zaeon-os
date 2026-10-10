@@ -152,7 +152,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import { musica } from "@/lib/audio/musica";
-import { LOUNGE_ROTA, MSG_FECHAR_TABLET, pedeFoco, pedeTablet } from "@/lib/ui/loungeHub";
+import { LOUNGE_ROTA, MSG_FECHAR_TABLET, MSG_IA, pedeFoco, pedeTablet } from "@/lib/ui/loungeHub";
+import { instalarMonitorIA } from "@/lib/ui/monitorIA";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, projetosOn, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
@@ -785,7 +786,11 @@ export default function HomeworkPage({
     clearTimeout(timerSidebar.current);
     if (!isSidebarOpen) timerSidebar.current = setTimeout(() => setIsSidebarOpen(true), ABRIR_SIDEBAR_MS);
   };
-  const saiuSidebar = () => {
+  const saiuSidebar = (e?: { relatedTarget?: EventTarget | null }) => {
+    // a lista de conversas é desenhada por PORTAL (components/chat/ConversasSlot): pro React, descer o mouse até ela é
+    // "sair" da sidebar — mas na tela ela está DENTRO. Só recolhe se o mouse saiu de verdade (o DOM decide)
+    const pra = e?.relatedTarget as Node | null | undefined;
+    if (pra && navRef.current?.contains(pra)) return;
     clearTimeout(timerSidebar.current);
     if (!isSidebarOpen) return;
     const tentarFechar = () => {
@@ -1492,6 +1497,16 @@ export default function HomeworkPage({
       }
     }
   }, [status]);
+
+  // NO TABLET (o laboratório num iframe por cima do cyberespaço): decidido UMA vez, na montagem — nada que mude a URL
+  // depois faz o "Voltar" carregar um cyberespaço DENTRO do tablet (era a tela de loading de novo)
+  const noTablet = useRef(false);
+  useEffect(() => {
+    noTablet.current = window.parent !== window && (pedeTablet(window.location.search) || (() => { try { return window.parent.location.pathname.startsWith(LOUNGE_ROTA); } catch { return false; } })());
+    if (!noTablet.current) return;
+    // a CONCORRÊNCIA: o trabalho de IA que roda aqui (qualquer aba/sub-aba) vai pra barra de IA do HUD do cyberespaço
+    return instalarMonitorIA((estado) => window.parent.postMessage({ type: MSG_IA, estado }, window.location.origin));
+  }, []);
 
   // ?foco=1 (entrada pelo "Estudar" do cyberespaço): abre JÁ em modo foco — a navbar global ouve o evento e some
   useEffect(() => {
@@ -2547,7 +2562,7 @@ export default function HomeworkPage({
               initial={{ opacity: 0, y: -50 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -100 }}
-              className="absolute top-0 left-0 w-full z-50"
+              className="absolute top-0 left-0 w-full z-[595]"
             >
               <Navbar />
             </motion.div>
@@ -2654,8 +2669,8 @@ export default function HomeworkPage({
             </button>
           </div>
 
-          {/* EXTRAS — layout + foco; pb-16 deixa o cantinho inferior livre pro FAB da Zaeon encaixar */}
-          <div className="px-2.5 pt-3 pb-16 flex flex-col gap-3">
+          {/* EXTRAS — layout, foco e voltar: colados no pé da sidebar (pedido do dono — mais espaço pras salas e conversas) */}
+          <div className="px-2.5 pt-2 pb-3 flex flex-col gap-1.5">
             <div className="h-[1px] bg-slate-300 dark:bg-white/10" />
             <button
               data-tour="layout-toggle"
@@ -2684,7 +2699,7 @@ export default function HomeworkPage({
               data-tour="voltar-cyberespaco"
               onClick={() => {
                 // no TABLET (o lab aberto por cima do cyberespaço): só guarda o tablet — o cyberespaço já está ali atrás
-                if (window.parent !== window && pedeTablet(window.location.search)) { window.parent.postMessage({ type: MSG_FECHAR_TABLET }, window.location.origin); return; }
+                if (noTablet.current || (window.parent !== window && pedeTablet(window.location.search))) { window.parent.postMessage({ type: MSG_FECHAR_TABLET }, window.location.origin); return; }
                 musica().destravar(); router.push(LOUNGE_ROTA);
               }}
               aria-label="Voltar ao cyberespaço"
@@ -2701,11 +2716,11 @@ export default function HomeworkPage({
 
       <main
         style={recuoSidebar}
-        className={`flex-1 flex flex-col h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : "p-6"} gap-6`}
+        className={`flex-1 flex flex-col h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : activeTab === "escritorio" ? "px-4 pt-4 pb-4" : "p-6"} gap-6`}
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
-        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos"].includes(activeTab) && (
+        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos", "escritorio"].includes(activeTab) && (
           <div className="flex items-end justify-between shrink-0">
             <div>
               <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">

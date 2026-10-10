@@ -226,6 +226,8 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
     useEffect(() => {
         if (!room) return;
         try {
+            // a 1ª vez do TABLET (lib/ui/loungeHub `LAB_TABLET_PRIMEIRA`): abre no CHAT, não na última aba salva
+            if (new URLSearchParams(window.location.search).get("estudo") === "chat") { setActiveTab("meus-estudos"); tabRestored.current = true; return; }
             const saved = localStorage.getItem(`zaeon:lastTab:${room}`);
             if (saved && (saved === "meus-estudos" || allTabs.some((t) => t.id === saved))) setActiveTab(saved);
         } catch { /* ignore */ }

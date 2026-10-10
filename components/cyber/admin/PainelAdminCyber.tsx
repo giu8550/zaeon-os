@@ -57,8 +57,7 @@ export function PainelAdmin({ contagem, aplicada }: Props) {
   return (
     <div className="relative">
       <button type="button" aria-expanded={aberto} aria-label="Modo admin: bots e usuários" onClick={() => setAberto((v) => !v)} className="flex h-[44px] items-center gap-2 rounded-full border border-amber-300/40 bg-black/55 px-3 text-xs font-semibold text-amber-100 backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">
-        <span aria-hidden>🛠</span>
-        <span className="tabular-nums">🤖 {c?.bots ?? "…"} · 👤 {c?.usuarios ?? "…"}</span>
+        <span aria-hidden>🛠</span>{/* (a contagem bots × pessoas só dentro do painel — pedido do dono: nada de número na tela) */}
       </button>
       {aberto && (
         <div className="absolute right-0 top-[52px] z-30 max-h-[calc(100vh-90px)] w-[min(92vw,420px)] overflow-y-auto rounded-2xl border border-white/15 bg-[#070c22]/92 p-4 text-white/90 backdrop-blur">
