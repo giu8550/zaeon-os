@@ -30,7 +30,8 @@ export type Bloco = {
 export const AMBIENTES_ESTUDO = ["univ", "ufc", "unifor", "uece", "biblioteca", "jardim"] as const;
 /** o peso de cada ambiente na escolha do lugar de estudo: as universidades levam a maior parte (a Zaeon ~18%) */
 export const PESO_AMBIENTE: Readonly<Record<(typeof AMBIENTES_ESTUDO)[number], number>> = { univ: 3, ufc: 2, unifor: 2, uece: 2, biblioteca: 1, jardim: 1 };
-export type AmbienteEstudo = (typeof AMBIENTES_ESTUDO)[number] | "lounge";
+/** `cidadela` = o lugar FIXO de quem tem credencial na hierarquia da cidadela (lib/cyber/frota/hierarquia) */
+export type AmbienteEstudo = (typeof AMBIENTES_ESTUDO)[number] | "lounge" | "cidadela";
 
 /** as chaves que o painel CEO liga e desliga */
 export type FlagsFrota = {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { hierarquiaDaCidadela } from "./hierarquia";
 import { FROTA_PADRAO, gerarFrota, amigosDe } from "./frota";
 import { FLAGS_PADRAO, REGRAS, agendaBase, diaDe, fullNoDia, minutoDoDia, type Bloco } from "./agenda";
 import { planejarDia } from "./plano";
@@ -69,9 +70,11 @@ describe("a frota (700 IAs)", () => {
 describe("a agenda do dia", () => {
   const todos = [...plano.agentes.values()];
   it("começa a partir das 9h; estuda de 5 a 8 h; intervalos de 30 a 60 min entre os estudos", () => {
+    const hier = hierarquiaDaCidadela(frota);
     for (const { agente, blocos } of todos) {
       if (!blocos.length) continue;
       expect(blocos[0]!.ini).toBeGreaterThanOrEqual(REGRAS.inicio);
+      if (hier.get(agente.id)?.rotina === false) continue;   // (só logado no laboratório: um bloco o dia online inteiro — lib/cyber/frota/hierarquia.test)
       const estudo = blocos.filter((b) => b.atividade.startsWith("estudo")).reduce((s, b) => s + dur(b), 0);
       expect(estudo).toBeGreaterThanOrEqual(REGRAS.estudoMin - 6); expect(estudo).toBeLessThanOrEqual(REGRAS.estudoMax + 1);
       for (const b of blocos.filter((x) => (x.atividade === "moto" || x.atividade === "andar") && !x.evento)) { expect(dur(b)).toBeGreaterThanOrEqual(REGRAS.intervalo[0] - 1e-6); expect(dur(b)).toBeLessThanOrEqual(REGRAS.intervalo[1] + 1e-6); }   // (minutos em ponto flutuante)
@@ -142,7 +145,8 @@ describe("o corpo no instante", () => {
       const e = est(a.id, 15 * 60 + 17);
       if (!e.visivel) continue; on++;
       expect(Number.isFinite(e.x + e.y + e.z + e.rumo)).toBe(true);
-      if (e.atividade?.startsWith("estudo") && ["sentado", "relaxa", "chao", "deitado"].includes(e.pose) && e.sentar > 0.99) { expect(e.tablet).toBeGreaterThan(0.99); tablet++; }
+      const naCabine = e.ambiente === "cidadela" && e.pose === "sentado";   // (na cabine da cidadela: o monitor, sem tablet)
+      if (!naCabine && e.atividade?.startsWith("estudo") && ["sentado", "relaxa", "chao", "deitado"].includes(e.pose) && e.sentar > 0.99) { expect(e.tablet).toBeGreaterThan(0.99); tablet++; }
     }
     expect(on).toBeGreaterThan(450); expect(tablet).toBeGreaterThan(150);
   });
