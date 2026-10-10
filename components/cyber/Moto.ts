@@ -210,6 +210,7 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   const escuro = new THREE.MeshStandardMaterial({ color: 0x1c2436, roughness: 0.38, metalness: 0.7, emissive: 0x0a1020, emissiveIntensity: 0.6 });
   const cromado = new THREE.MeshStandardMaterial({ color: 0x9aa4ba, roughness: 0.16, metalness: 0.95, emissive: 0x141a28, emissiveIntensity: 0.4 });
   const brilho = new THREE.MeshBasicMaterial({ color: acento, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
+  pintura.userData.pintura = true; brilho.userData.friso = true;   // (marcados: quem reaproveita a moto — a frota, as paradas instanciadas — repinta na cor de cada um)
   const vidro = new THREE.MeshStandardMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.1, emissive: 0x2a6bd0, emissiveIntensity: 0.4, side: THREE.DoubleSide });
   const couro = new THREE.MeshStandardMaterial({ color: 0x10131c, roughness: 0.85, metalness: 0.1 });
   const farol = new THREE.MeshBasicMaterial({ color: 0xeaf6ff }), lanterna = new THREE.MeshBasicMaterial({ color: 0xff2a3a });
