@@ -2,7 +2,7 @@
 
 import TelaCarregando from "./TelaCarregando";
 import TabletLab from "./TabletLab";
-import BarrasHud from "./BarrasHud";
+import BarrasHud, { juntarEstadoIA } from "./BarrasHud";
 import type { EstadoIALab } from "@/lib/ui/loungeHub";
 import PainelAdminCyber from "./admin/PainelAdminCyber";
 import InventarioPainel from "./InventarioPainel";
@@ -142,6 +142,12 @@ export default function CenaCyber(p: CenaCyberProps) {
     return deveNascerNoTubo({ visto, forcar, fundador: !!p.souFundador });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  /** onde o novato nasce: na PRAÇA (o normal — de lá só pelo portal pra Zaeon); no TUBO com o tour do Droid só quando o
+   *  modo tutorial está ligado (ou `?nascer=1`) */
+  const nascerNa = useMemo<"praca" | "tubo">(() => {
+    if (typeof window === "undefined") return "praca";
+    try { return new URLSearchParams(location.search).get("nascer") === "1" || tutorialLigado((k) => localStorage.getItem(k)) ? "tubo" : "praca"; } catch { return "praca"; }
+  }, []);
   const [voo, setVoo] = useState<{ y: number } | null>(null);
   /** a AÇÃO de contexto (o que o F faz agora) — o chip "F · Estudar" etc.; no celular, tocar no chip faz a ação */
   const [acao, setAcao] = useState<{ rotulo: string } | null>(null);
@@ -229,7 +235,9 @@ export default function CenaCyber(p: CenaCyberProps) {
       onTunel: (t) => { engine.current?.soltarMouse(); setTunel({ tipo: "escolher", origem: t.origem, nomeOrigem: NOS[t.origem].nome, destinos: t.destinos }); },
       onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
       onAviso: avisar,
-      nascer, onGuia: (g) => { setGuia(g); if (!g) { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },   // o tutorial acabou (ou foi pulado): da próxima vez nasce na base
+      nascer, nascerNa,
+      onNasceu: () => { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } },   // o novato chegou na Zaeon pelo portal
+      onGuia: (g) => { setGuia(g); if (!g) { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },   // o tutorial acabou (ou foi pulado): da próxima vez nasce na base
       onInstancia: setInstancia,
       conversarZaeon: cb.current.conversarZaeon ? (pd) => cb.current.conversarZaeon!(pd) : undefined,
       vozZaeon: cb.current.vozZaeon ? (t) => cb.current.vozZaeon!(t) : undefined,
@@ -333,7 +341,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       <div ref={cont} className="absolute inset-0" />
       <div ref={overlay} className="pointer-events-none absolute inset-0 overflow-hidden" />
       {/* o laboratório no TABLET, por cima da cena (o cyberespaço segue vivo atrás) */}
-      <TabletLab aberto={tabletAberto} onIA={setIaLab} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
+      <TabletLab aberto={tabletAberto} onIA={(e) => setIaLab((antes) => juntarEstadoIA(antes, e))} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
       {/* as barras do HUD: SAÚDE, VIGOR e o uso CONCORRENTE de IA (o laboratório do tablet) */}
       {tela && !menu && !tabletAberto && <BarrasHud ler={lerBarras} ia={iaLab} touch={touch} />}
       <InventarioPainel aberto={inventarioAberto} onFechar={() => setInventarioAberto(false)} ler={lerInventario} equipar={equiparItem} />

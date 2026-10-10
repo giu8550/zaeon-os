@@ -8,7 +8,7 @@
 import type { EstadoIALab } from "./loungeHub";
 
 /** rotas POST que NÃO são trabalho de IA (login, presença, o cyberespaço, uploads, telemetria) */
-export const IGNORAR = ["/api/auth", "/api/cyber", "/api/lounge3d", "/api/presence", "/api/presenca", "/api/pusher", "/api/realtime", "/api/analytics", "/api/telemetry", "/api/upload", "/api/uploads", "/api/log", "/api/ping", "/api/heartbeat", "/api/tour"] as const;
+export const IGNORAR = ["/api/auth", "/api/cyber", "/api/lounge3d", "/api/presence", "/api/presenca", "/api/pusher", "/api/realtime", "/api/analytics", "/api/telemetry", "/api/upload", "/api/uploads", "/api/log", "/api/ping", "/api/heartbeat", "/api/tour", "/api/ai/transcript"] as const;   // (transcript = salvar a conversa depois da resposta)
 
 /** é uma chamada de IA? (POST, mesma origem, em /api/, fora das ignoradas) */
 export function ehChamadaDeIA(url: string, metodo: string | undefined, origem: string): boolean {

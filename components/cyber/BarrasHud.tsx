@@ -18,6 +18,12 @@ export const IA_PRONTO_MS = 12_000;
 export const enchimentoIA = (ms: number) => 0.92 * (1 - Math.exp(-ms / 22_000));
 const relogio = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
+/** junta o estado novo do laboratório com o anterior: um trabalho CURTO (um salvamento logo depois da resposta) não
+ *  apaga o "pronto" de um trabalho longo */
+export function juntarEstadoIA(antes: EstadoIALab | null, novo: EstadoIALab): EstadoIALab {
+  const terminou = novo.terminou && novo.terminou.durMs >= IA_MIN_MS ? novo.terminou : antes?.terminou ?? null;
+  return { ...novo, terminou };
+}
 /** o estado da barra de IA agora */
 export function barraIA(e: EstadoIALab | null, agora: number): { modo: "livre" | "trabalhando" | "pronto"; f: number; rotulo: string } {
   if (e && e.ativos > 0 && e.desde !== null && agora - e.desde >= IA_MIN_MS) { const ms = agora - e.desde; return { modo: "trabalhando", f: enchimentoIA(ms), rotulo: `IA trabalhando · ${relogio(ms)}` }; }

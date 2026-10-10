@@ -61,7 +61,7 @@ import { criarEfeitosMovimento, type EfeitosMovimentoHandle } from "./EfeitosMov
 import { DECOLAGEM, HEROI, pesoAlerta } from "@/lib/cyber/posesCombate";
 import { ITENS, chaveInventario, equipar as equiparNoInv, inventarioInicial, itensPermitidos, sanitizarInventario, type IdItem, type Inventario } from "@/lib/cyber/inventario";
 import { CAIDO, COMBO, HIT_STOP, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAcabou, acerta, codificarGolpe, cortouEntre, danoDoGolpe, decodificarGolpe, proximoGolpe, type EstadoAtaque, type Golpe } from "@/lib/cyber/combate";
-import { BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
+import { ARENA_ATIVA, BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
 import { criarArena, type ArenaHandle } from "./Arena";
 import { criarEspadaEspiritual, type EspadaHandle } from "./EspadaEspiritual";
 /** a Espada Espiritual na mão: uma MONTANTE enorme (~3 m) — o peso dela define o golpe (o dono, out/2026) */
@@ -143,6 +143,11 @@ export type CyberOpts = {
   /** um aviso curto pra pessoa (caiu no vazio, buraco negro só do dono…) */
   onAviso?: (msg: string) => void;
   /** NASCE num tubo de ensaio do berçário e faz o tour da anfitriã (o React decide: 1ª vez no hiperespaço novo) */
+  /** ONDE o novato nasce: na PRAÇA, a plataforma de baixo (o normal desde out/2026 — de lá só se vai pra Zaeon pelo
+   *  portal), ou no TUBO de ensaio com o tour do Droid (o "modo tutorial" ligado / `?nascer=1`) */
+  nascerNa?: "praca" | "tubo";
+  /** o novato que nasceu na praça cruzou o portal pra Zaeon pela 1ª vez: já nasceu (não é mais novato) */
+  onNasceu?: () => void;
   nascer?: boolean;
   /** o passo do tour mudou (null = acabou/pulou) */
   onGuia?: (g: EstadoGuia | null) => void;
@@ -553,7 +558,7 @@ export class CyberEngine {
       fundirEstaticos(pr.group, { passo: (_, t) => pr.atualizar(1 / 30, t), manter: [pr.piso] });
       this.cena.scene.add(pr.group); this.praca = pr; }
     // a ARENA PvP (a praça inteira — lib/cyber/arena): o anel de combate, os pilares, a placa e os bonecos de treino
-    if (!this.o.menu) { this.arena = criarArena({ low }); this.cena.scene.add(this.arena.group); }
+    if (!this.o.menu && ARENA_ATIVA) { this.arena = criarArena({ low }); this.cena.scene.add(this.arena.group); }   // (desmontada: a praça é dos novatos)
     if (opts.landmarks) await etapa("mirantes");
     if (opts.landmarks) for (const poi of POIS) {
       const lm = criarLandmark(poi, { low, starTex: this.cena.starTex });
@@ -928,7 +933,9 @@ export class CyberEngine {
     this.o.els.menu && (this.o.els.menu.style.display = "none"); if (this.o.els.hold) this.o.els.hold.style.width = "0%";
     this.som.ativar();   // o whoosh de entrada sai em atualizarSom, quando o buffer chegar
     this.R.domElement.style.touchAction = "none";
-    if (!(this.o.nascer && this.nascerNoTubo())) this.spawnNaNave();   // saiu da vista/menu: quem chega nasce no tubo; o dono, a bordo
+    // saiu da vista/menu: o NOVATO nasce na praça (ou no tubo, no modo tutorial); o dono, a bordo da nave
+    const nasceu = this.o.nascer && (this.o.nascerNa === "tubo" ? this.nascerNoTubo() : this.nascerNaPraca());
+    if (!nasceu) this.spawnNaNave();
     this.o.onSessao?.(go);
   }
   setJoystick(x: number, y: number) { this.joy.x = x; this.joy.y = y; this.joy.on = Math.hypot(x, y) > 0.15; }
@@ -1363,6 +1370,7 @@ export class CyberEngine {
     if (destino === "zaeon" && !this.cidade) { this.tunel = null; return; }
     this.irParaNo(destino);
     if (this.guia) this.guia.portal = true;   // cruzou um portal (o tutorial pedia isso)
+    if (this.novatoNaPraca && destino === "zaeon") { this.novatoNaPraca = false; this.o.onNasceu?.(); }   // o novato chegou na Zaeon pelo portal
     this.sairDaInstancia();   // e daqui em diante o mundo é COMPARTILHADO (as pessoas reais)
   }
   /** a INSTÂNCIA do tutorial: do nascimento no tubo até cruzar o 1º portal, a Zaeon é SÓ do novato — ele não vê
@@ -1374,6 +1382,15 @@ export class CyberEngine {
   // ───────────── NASCIMENTO no tubo + o TOUR da anfitriã + os AGENTES (lib/cyber/onboarding, lib/cyber/agentes) ─────────────
   /** saindo do tubo depois de nascer (o vidro dele não empurra até sair) */
   private saindoDoTubo: number | null = null;
+  /** o novato que nasceu na PRAÇA e ainda não foi pra Zaeon (pelo portal) */
+  private novatoNaPraca = false;
+  /** nasce na PRAÇA (a plataforma de baixo, sem arena nem terminais): no ponto de chegada dela, perto do portal — a
+   *  Zaeon fica lá em cima, e só se chega nela pelo buraco negro */
+  private nascerNaPraca(): boolean {
+    if (this.menu) return false;
+    this.irParaNo("praca"); this.novatoNaPraca = true;
+    return true;
+  }
   /** nasce no TUBO DE ENSAIO do berçário (ao lado da Recepção): parado até o vidro abrir; a anfitriã vem buscar */
   private nascerNoTubo(): boolean {
     if (!this.cidade || !this.bercario || this.menu) return false;

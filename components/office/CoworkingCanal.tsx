@@ -9,6 +9,7 @@
  * Vidro Apple, claro === escuro (lib/canal/vidro.ts). Notificações fora da tela
  * (lib/canal/notificacoes.ts + useNotificacoesSO). Alvos ≥44px, input com safe-area.
  */
+import ChatMarkdown from "@/components/study/ChatMarkdown";
 import PusherClient from "pusher-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AgentAvatar from "@/components/agents/AgentAvatar";
@@ -422,6 +423,10 @@ function Vazio({ texto }: { texto: string }) {
 
 const hora = (iso: string) => { try { return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 
+/** o texto do agente antes do markdown: negrito VAZIO ("****") some e o negrito-itálico (***x***) vira negrito — nada de
+ *  asteriscos soltos na conversa */
+export const limparMarkdownDoAgente = (t: string) => t.replace(/\*{3}([^*\n]+?)\*{3}/g, "**$1**").replace(/\*{4,}/g, "");
+
 /** Bolha: humano e agente com o MESMO vidro; identidade = avatar + nome. @mentions em destaque. */
 function Bolha({ m, minha, aliases }: { m: MensagemWire; minha: boolean; aliases: Map<string, string> }) {
   const partes = useMemo(() => m.texto.split(/(@[\p{L}\p{N}_-]+)/u), [m.texto]);
@@ -435,8 +440,9 @@ function Bolha({ m, minha, aliases }: { m: MensagemWire; minha: boolean; aliases
             {nome}{m.autorTipo === "agente" ? ` · @${m.autorId}` : ""}
           </span>
         )}
-        <div className={`px-3.5 py-2.5 rounded-2xl ${minha ? `rounded-br-md ${VIDRO_BOLHA_MINHA}` : `rounded-bl-md ${VIDRO_BOLHA}`} ${TXT} text-[14px] leading-relaxed whitespace-pre-wrap break-words`}>
-          {partes.map((p, i) => {
+        <div className={`px-3.5 py-2.5 rounded-2xl ${minha ? `rounded-br-md ${VIDRO_BOLHA_MINHA}` : `rounded-bl-md ${VIDRO_BOLHA}`} ${TXT} text-[14px] leading-relaxed break-words ${m.autorTipo === "agente" ? "" : "whitespace-pre-wrap"}`}>
+          {/* o AGENTE responde em markdown (o mesmo do chat): sem isso o **negrito** aparecia como "****" */}
+          {m.autorTipo === "agente" ? <ChatMarkdown text={limparMarkdownDoAgente(m.texto)} /> : partes.map((p, i) => {
             const alvo = p.startsWith("@") ? aliases.get(p.slice(1).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()) : null;
             return alvo ? <span key={i} className="font-bold text-blue-700 dark:text-cyan-300">{p}</span> : <span key={i}>{p}</span>;
           })}
