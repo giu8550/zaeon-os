@@ -26,6 +26,7 @@ import { planejarDia, type PlanoDia } from "@/lib/cyber/frota/plano";
 import { diaDe, fullNoDia, minutoDoDia } from "@/lib/cyber/frota/agenda";
 import { estadoDaIA, type EstadoIA } from "@/lib/cyber/frota/corpo";
 import { criarMotosEstacionadas, type MotoParada } from "./EstacionamentosEstudo";
+import { areaDe, contagemVazia, type AreaId } from "@/lib/cyber/frota/areas";
 import { episodiosDoDia, type Episodio } from "@/lib/cyber/frota/conversas";
 import type { ConfigSalva } from "@/lib/cyber/frota/config";
 import type { PedidoFrota, RespostaFrota } from "./frota.worker";
@@ -34,6 +35,8 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 
 export type FrotaHandle = {
   configurar(c: ConfigSalva, agoraServidor: number): void;
+  /** (modo admin) quantas IAs online agora e em cada área do mapa — refeito a cada volta da varredura */
+  contagem(): { online: number; porArea: Record<AreaId, number>; versao: number | null };
   atualizar(dt: number, t: number, ctx: CtxFrota): void;
   /** os corpos das IAs desenhadas (pro meu avatar colidir) — mundo, com a altura dos pés */
   corpos(): (P2 & { y: number })[];
@@ -95,7 +98,8 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   /** quem aparece (silhueta ou corpo): o estado aproximado de cada uma, refeito a cada escolha (e a cada quadro, pra quem se move) */
   let vistos: { id: string; e: EstadoIA; move: boolean }[] = [];
   let quadroPar = false, quadroSil = 0;
-  let varrer: { ags: { agente: AgenteIA; blocos: PlanoDia["agentes"] extends Map<string, infer V> ? V extends { blocos: infer B } ? B : never : never }[]; i: number; lista: { id: string; e: EstadoIA; move: boolean; d: number }[]; n: number; paradas: MotoParada[] } | null = null;
+  let varrer: { ags: { agente: AgenteIA; blocos: PlanoDia["agentes"] extends Map<string, infer V> ? V extends { blocos: infer B } ? B : never : never }[]; i: number; lista: { id: string; e: EstadoIA; move: boolean; d: number }[]; n: number; paradas: MotoParada[]; areas: Record<AreaId, number> } | null = null;
+  let porArea = contagemVazia();
   /** as MOTOS PARADAS nos estacionamentos dos lugares de estudo (as das IAs que estão estudando ali) */
   const estacionadas = criarMotosEstacionadas({ cena: o.cena, low: o.low });
   const mS = new THREE.Matrix4(), qS = new THREE.Quaternion(), pS = new THREE.Vector3(), eS = new THREE.Vector3(), cS = new THREE.Color(), eixoX = new THREE.Vector3(1, 0, 0), eixoY = new THREE.Vector3(0, 1, 0), qD = new THREE.Quaternion();
@@ -131,13 +135,13 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
     if (!config || calculando) return;
     calculando = true;
     if (worker) {
-      worker.postMessage({ id: ++pedidoId, frota: config.frota, dia: d, flags: config.flags, full: fullNoDia(d, config.modoFullAte) } satisfies PedidoFrota);
+      worker.postMessage({ id: ++pedidoId, frota: config.frota, dia: d, flags: config.flags, full: fullNoDia(d, config.modoFullAte), areas: config.areas } satisfies PedidoFrota);
       if (prazo) clearTimeout(prazo); prazo = setTimeout(() => semWorker("não respondeu em 10 s"), 10_000);
       return;
     }
     const fazer = () => {
       try {
-        const p = planejarDia(frota, d, config!.flags, fullNoDia(d, config!.modoFullAte)), m = new Map<string, Episodio[]>();
+        const p = planejarDia(frota, d, config!.flags, fullNoDia(d, config!.modoFullAte), config!.areas), m = new Map<string, Episodio[]>();
         for (const e of episodiosDoDia(p, config!.flags)) for (const id of new Set(e.falas.map((f) => f.agente))) (m.get(id) ?? m.set(id, []).get(id)!).push(e);
         plano = p; eps = m; dia = d; varrer = null;
       } finally { calculando = false; }
@@ -190,13 +194,13 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       // a VARREDURA de todo mundo é FATIADA: cada quadro avança até gastar `ORCAMENTO_MS` (com 2000 IAs, de uma vez
       // eram ~13 ms — um tranco a cada 0,4 s; e ~400 ms na 1ª, com os roteiros frios); fechou a volta → escolhe
       escolherEm -= dt;
-      varrer ??= { ags: [...plano.agentes.values()], i: 0, lista: [], n: 0, paradas: [] };
+      varrer ??= { ags: [...plano.agentes.values()], i: 0, lista: [], n: 0, paradas: [], areas: contagemVazia() };
       estacionadas.boia(ctx.ilhaY - ctx.pisoY);
       { const t0 = performance.now(), v = varrer;
         while (v.i < v.ags.length && performance.now() - t0 < ORCAMENTO_MS) {
           for (const lim = Math.min(v.ags.length, v.i + 40); v.i < lim; v.i++) {
             const { agente, blocos } = v.ags[v.i]!, e = estadoDaIA(agente.id, blocos, minuto, config.flags, ctx.musica, false);
-            if (!e.visivel) continue; v.n++;
+            if (!e.visivel) continue; v.n++; v.areas[areaDe(e, e.pose === "moto" || e.pose === "mochila")]++;
             if (e.vagaMoto) v.paradas.push({ vaga: e.vagaMoto, cor: porId.get(agente.id)?.cor ?? "#7fd3ff" });
             const d = distEu(e); if (d < ALCANCE_SILHUETA) v.lista.push({ id: agente.id, e, move: MOVE.has(e.pose), d });
           }
@@ -204,7 +208,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       }
       if (escolherEm <= 0 && varrer.i >= varrer.ags.length) {
         escolherEm = ESCOLHE_A_CADA;
-        const { lista, n, paradas } = varrer; varrer = null;
+        const { lista, n, paradas, areas } = varrer; varrer = null; porArea = areas;
         estacionadas.definir(paradas);
         online = n; lista.sort((a, b) => a.d - b.d); vistos = lista.slice(0, MAX_SILHUETAS);
         const dist = new Map(lista.map((c) => [c.id, c.d]));
@@ -330,6 +334,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
         .then((x) => (x.ok ? x.json() : null)).then((j) => { if (typeof j?.fala === "string" && j.fala) { r.texto = j.fala; r.ate = Date.now() + 4200; } }).catch(() => undefined);
     },
     online: () => online,
+    contagem: () => ({ online, porArea, versao: config?.versao ?? null }),
     mostrar(on) { visivel = on; },
     dispose() {
       if (prazo) clearTimeout(prazo); worker?.terminate(); worker = null;

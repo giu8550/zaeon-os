@@ -73,6 +73,7 @@ import { carregando, type Carregando, type IdEtapa } from "@/lib/cyber/carregame
 import { gerarVeias, ouveOCoracao } from "@/lib/cyber/coracao";
 import { criarFrotaIA, type FrotaHandle } from "./FrotaIA";
 import { criarPisosEstudo } from "./EstacionamentosEstudo";
+import { AREAS, areaDe, type AreaId } from "@/lib/cyber/frota/areas";
 import { sanitizarConfig } from "@/lib/cyber/frota/config";
 import { colisoresDeCorpos } from "@/lib/cyber/colisaoAtores";
 import { SENTAR, TABLET, codificarDescanso, lugarEm, decodificarDescanso, lugarPerto, poseNoLugar, proximoModo, type Lugar, type ModoDescanso } from "@/lib/cyber/descanso";
@@ -731,7 +732,26 @@ export class CyberEngine {
   private ligarFrota() {
     if (this.frota || !this.vivo) return;
     this.frota = criarFrotaIA({ cena: this.cena.scene, overlay: this.o.overlay, gltf: this.gltf, starTex: this.cena.starTex, low: this.o.low });
-    void fetch("/api/cyber/frota").then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.config && this.frota) this.frota.configurar(sanitizarConfig(j.config), typeof j.agora === "number" ? j.agora : Date.now()); }).catch(() => undefined);
+    this.recarregarFrota();
+    // a config muda pelo painel admin: confere a cada minuto (só replaneja se a VERSÃO mudou)
+    this.relogioFrota = setInterval(() => this.recarregarFrota(), 60_000);
+  }
+  private relogioFrota: ReturnType<typeof setInterval> | null = null;
+  /** busca a config da frota no servidor e aplica se for nova (o painel admin chama logo depois de gravar) */
+  recarregarFrota() {
+    void fetch("/api/cyber/frota", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (!j?.config || !this.frota) return;
+      const c = sanitizarConfig(j.config); if (c.versao === this.frota.contagem().versao) return;
+      this.frota.configurar(c, typeof j.agora === "number" ? j.agora : Date.now());
+    }).catch(() => undefined);
+  }
+  /** (modo admin) bots × usuários REAIS: no total e em cada área do mapa (lib/cyber/frota/areas). Os usuários são eu +
+   *  quem a rede da sala me mostra */
+  contagemAdmin(): { bots: number; usuarios: number; areas: Record<AreaId, { bots: number; usuarios: number }> } {
+    const f = this.frota?.contagem(), areas = Object.fromEntries(AREAS.map((a) => [a.id, { bots: f?.porArea[a.id] ?? 0, usuarios: 0 }])) as Record<AreaId, { bots: number; usuarios: number }>;
+    let usuarios = 1; areas[areaDe(this.eu.pos, this.jet.noAr || !!this.moto || this.pilotando)].usuarios++;
+    for (const p of this.o.remotos?.current.values() ?? []) { usuarios++; areas[areaDe(p, !!(p.jet || p.voo))].usuarios++; }
+    return { bots: f?.online ?? 0, usuarios, areas };
   }
   /** os CORPOS no meu nível (jogadores, personagens, IAs): o meu avatar não entra neles */
   private colisoresDeAtores() {
@@ -2695,6 +2715,7 @@ export class CyberEngine {
   }
 
   dispose() {
+    if (this.relogioFrota) clearInterval(this.relogioFrota); this.relogioFrota = null;
     this.frota?.dispose(); this.frota = null;
     const w = window as unknown as { __cyber?: CyberEngine }; if (w.__cyber === this) delete w.__cyber;
     if (!this.vivo) return;   // idempotente (desmonta ao ir estudar e de novo no cleanup do React)

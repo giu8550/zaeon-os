@@ -4,7 +4,8 @@
  * FrotaModule — "Deploy agents": a FROTA DE IAs do cyberespaço (lib/cyber/frota) no Modo CEO. O catálogo (700 de início,
  * nomes de gente de verdade, 60% mulheres / 40% homens), as chaves ON/OFF de cada comportamento (estudar nas
  * plataformas, no lounge, moto, andar, festa, corridas, conversas, cloak, mochila, responder usuários), a CRIAÇÃO EM
- * MASSA (um lote novo de N agentes — os que já existem não mudam) e o que cada uma está fazendo agora. Grava em
+ * MASSA (um lote novo de N agentes — os que já existem não mudam), as ÁREAS DO MAPA (quanto vai pra cada lugar — os mesmos
+ * controles do painel admin dentro do cyberespaço — e o contador bots × usuários reais) e o que cada uma está fazendo agora. Grava em
  * PUT /api/cyber/frota (só o dono); os clientes do cyberespaço leem a mesma config e calculam a frota pelo relógio.
  */
 import { useEffect, useMemo, useState } from "react";
@@ -14,13 +15,15 @@ import { planejarDia } from "@/lib/cyber/frota/plano";
 import { diaDe, fullNoDia, minutoDoDia, type FlagsFrota } from "@/lib/cyber/frota/agenda";
 import { estadoDaIA } from "@/lib/cyber/frota/corpo";
 import { CONFIG_PADRAO, LIMITES, novoLote, sanitizarConfig, totalDaFrota, type ConfigSalva } from "@/lib/cyber/frota/config";
+import { AREAS, areaDe, type AreaId } from "@/lib/cyber/frota/areas";
+import ControlesAreasFrota, { TabelaAreas } from "@/components/cyber/admin/ControlesAreasFrota";
 
 const CHAVES: { k: keyof FlagsFrota; nome: string; desc: string }[] = [
   { k: "ativa", nome: "Frota ativa", desc: "Liga/desliga todas as IAs no cyberespaço." },
-  { k: "estudoPlataforma", nome: "Estudar nas plataformas", desc: "Tablet na biblioteca, no jardim e nas universidades (~40% do dia)." },
-  { k: "estudoLounge", nome: "Estudar no lounge", desc: "Tablet nos sofás do lounge, onde rola som (~20%)." },
-  { k: "moto", nome: "Passear de moto", desc: "Visitar outros lugares do mapa (~30%)." },
-  { k: "andar", nome: "Andar pela Zaeon", desc: "Passear pela cidadela (~10%)." },
+  { k: "estudoPlataforma", nome: "Estudar nas plataformas", desc: "Tablet nas universidades, na biblioteca e no jardim (a moto fica no estacionamento do lugar)." },
+  { k: "estudoLounge", nome: "Estudar no lounge", desc: "Tablet nos sofás do lounge, onde rola som." },
+  { k: "moto", nome: "Passear de moto", desc: "Nos intervalos: voar entre os lugares do mapa." },
+  { k: "andar", nome: "A pé na Zaeon", desc: "Nos intervalos: a turma vai ver os telões e o salão da capela." },
   { k: "festa", nome: "Festa no lounge", desc: "O grupo vai junto à noite — só quando está rolando som." },
   { k: "corridas", nome: "Corridas de moto", desc: "Em dupla ou em bando, quando os intervalos dos amigos se cruzam." },
   { k: "conversas", nome: "Conversas", desc: "Entre amigos do mesmo grupo (4), quando estão juntos — até 8 falas." },
@@ -45,12 +48,25 @@ export default function FrotaModule({ glassPanel }: { glassPanel?: string }) {
   }, []);
 
   const frota = useMemo(() => gerarFrota(cfg.frota), [cfg.frota]);
-  const plano = useMemo(() => planejarDia(frota, diaDe(agora), cfg.flags, fullNoDia(diaDe(agora), cfg.modoFullAte)), [frota, cfg.flags, cfg.modoFullAte, agora]);
+  const plano = useMemo(() => planejarDia(frota, diaDe(agora), cfg.flags, fullNoDia(diaDe(agora), cfg.modoFullAte), cfg.areas), [frota, cfg.flags, cfg.modoFullAte, cfg.areas, agora]);
   const estados = useMemo(() => { const m = minutoDoDia(agora); return new Map(frota.map((a) => [a.id, estadoDaIA(a.id, plano.agentes.get(a.id)?.blocos ?? [], m, cfg.flags, false, false)])); }, [frota, plano, cfg.flags, agora]);
   const resumo = useMemo(() => {
     const f = frota.filter((a) => a.genero === "f").length, c = frota.filter((a) => a.cloak).length, on = [...estados.values()].filter((e) => e.visivel);
     return { total: frota.length, f, m: frota.length - f, cloak: c, grupos: new Set(frota.map((a) => a.grupo)).size, online: on.length, estudando: on.filter((e) => e.atividade?.startsWith("estudo")).length };
   }, [frota, estados]);
+  // as ÁREAS: quantos bots em cada lugar agora (pelo plano deste rascunho) + os usuários reais (presença no Pusher)
+  const porArea = useMemo(() => {
+    const l = Object.fromEntries(AREAS.map((a) => [a.id, { bots: 0, usuarios: null as number | null }])) as Record<AreaId, { bots: number; usuarios: number | null }>;
+    for (const e of estados.values()) if (e.visivel) l[areaDe(e, e.pose === "moto" || e.pose === "mochila")].bots++;
+    return l;
+  }, [estados]);
+  const [reais, setReais] = useState<number | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    const ler = () => fetch("/api/cyber/frota/presenca", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (vivo) setReais(typeof j?.usuarios === "number" ? j.usuarios : null); }).catch(() => undefined);
+    void ler(); const t = setInterval(ler, 30_000);
+    return () => { vivo = false; clearInterval(t); };
+  }, []);
   const lista = useMemo(() => { const s = q.trim().toLowerCase(); return s ? frota.filter((a) => a.nome.toLowerCase().includes(s) || a.curso.toLowerCase().includes(s)) : frota; }, [frota, q]);
   const mudou = JSON.stringify({ ...cfg, versao: 0 }) !== JSON.stringify({ ...(salva ?? cfg), versao: 0 });
 
@@ -95,6 +111,21 @@ export default function FrotaModule({ glassPanel }: { glassPanel?: string }) {
               <span><span className="block text-sm font-bold">{nome} <span className={`ml-1 text-[10px] font-black ${cfg.flags[k] ? "text-emerald-400" : "text-slate-400"}`}>{cfg.flags[k] ? "ON" : "OFF"}</span></span><span className="block text-xs text-slate-500 dark:text-white/45">{desc}</span></span>
             </label>
           ))}
+        </div>
+      </section>
+
+      <section className={card}>
+        <h3 className="mb-3 text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-white/40">Áreas do mapa</h3>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div>
+            <div className="mb-3 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-slate-200 p-3 dark:border-white/10"><div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-white/40">Bots online agora</div><div className="mt-1 text-2xl font-black tabular-nums">{resumo.online}</div></div>
+              <div className="rounded-2xl border border-slate-200 p-3 dark:border-white/10"><div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-white/40">Usuários reais no cyberespaço</div><div className="mt-1 text-2xl font-black tabular-nums">{reais ?? "—"}</div></div>
+            </div>
+            <TabelaAreas linhas={porArea} />
+            <p className="mt-2 text-xs text-slate-500 dark:text-white/45">Os bots por área seguem o rascunho abaixo (a prévia muda antes de implantar). Usuários por área: no modo admin dentro do cyberespaço (🛠 no canto de cima).</p>
+          </div>
+          <ControlesAreasFrota areas={cfg.areas} onChange={(areas) => setCfg({ ...cfg, areas })} />
         </div>
       </section>
 
