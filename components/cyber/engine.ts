@@ -203,6 +203,9 @@ export type CyberOpts = {
   onPronto?: () => void;
   /** o carregamento: em que etapa está e quanto da barra já foi (lib/cyber/carregamento) */
   onCarregando?: (c: Carregando) => void;
+  /** a música do lounge JÁ na montagem (atrás da tela de carregamento, enquanto as fotos passam): o som começa antes
+   *  do mundo aparecer (sem o menu da landing; o áudio destrava se o navegador já tem o gesto da pessoa) */
+  somLounge?: SomLounge | null; offsetMusica?: number;
 };
 
 type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** o corpo VRM já pedido (o do founder) */ vrm?: boolean; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
@@ -637,6 +640,9 @@ export class CyberEngine {
     if (this.cidade && this.gltf && personagensLigados()) setTimeout(() => this.criarPersonagens(), 2500);   // depois que a cena montou (o VRM é pesado)
     if (this.cidade && !this.o.menu) this.ligarFrota();
     this.montarSom();
+    // sem o menu (entrou pelo site): o SOM já liga aqui, atrás da tela de carregamento — o ambiente e a música do lounge
+    // começam enquanto as fotos passam (o navegador só deixa tocar se já houve um gesto; senão, no 1º toque)
+    if (!this.menu) { this.som.ativar(); if (opts.somLounge) this.setSomLounge(opts.somLounge, opts.offsetMusica ?? 0); }
     this.ligarEntradas();
     this.ro = new ResizeObserver(() => this.redimensionar()); this.ro.observe(container);
     if (typeof IntersectionObserver !== "undefined") { this.io = new IntersectionObserver((e) => { this.visivel = !!e[0]?.isIntersecting; }); this.io.observe(container); }

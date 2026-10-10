@@ -214,7 +214,7 @@ export default function CenaCyber(p: CenaCyberProps) {
     let cancelado = false, e: CyberEngine | null = null;
     CyberEngine.criar({
       container: cont.current, overlay: overlay.current, els: { menu: null, hold: null, monLabel: monLabel.current },
-      eu: cb.current.eu, membros: cb.current.membros, menu: !tela, low, qualidade, teclasSempre: tela,
+      eu: cb.current.eu, membros: cb.current.membros, menu: !tela, low, qualidade, teclasSempre: tela, somLounge: p.somLounge ?? null, offsetMusica: p.offsetMusica ?? 0,
       remotos: cb.current.remotos, enviarPos: (x) => cb.current.enviarPos?.(x),
       onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
       onTablet: (on) => { setTabletAberto(on); if (on) { engine.current?.soltarMouse(); tocarUI("study-confirm"); } }, onDescanso: setDescanso,
