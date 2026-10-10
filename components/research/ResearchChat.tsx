@@ -114,6 +114,7 @@ export default function ResearchChat({
   comAbas = false,
   compacto = false,
   lateral,
+  slotTopo,
   emCena = true,
   onAtivar,
 }: {
@@ -129,6 +130,9 @@ export default function ResearchChat({
   /** Sala com ABAS: a barra de conversas vai pra coluna ESQUERDA da sala (portal) — fica à mostra
    *  mesmo com um documento aberto no topo; sem isto, ela fica à esquerda dentro do próprio chat. */
   lateral?: HTMLElement | null;
+  /** O TOPO da sala (barra de documentos): a bolinha do cérebro (traçador de percurso) vai pra lá por
+   *  portal, só o sinal, sem nome. Sem slot, ela fica aqui, no topo do chat. */
+  slotTopo?: HTMLElement | null;
   /** A conversa está à mostra (e não um documento) — senão nenhuma conversa fica acesa na barra. */
   emCena?: boolean;
   /** Clicou numa conversa → a sala mostra o chat (o documento aberto no topo continua o mesmo). */
@@ -559,18 +563,23 @@ export default function ResearchChat({
       <div className="relative flex-1 min-w-0 flex flex-col">
       {/* Topo do chat: bolinha do cérebro (à esquerda) e o A−/A+ do texto (à direita). */}
       <div className={`shrink-0 ${compacto ? "px-3" : "px-4 sm:px-6"} pt-2 flex items-center gap-2 min-h-[36px]`}>
-        {comAbas && cerebro.ligado && (
-          <BolinhaCerebro
-            estado={cerebro.estado}
-            completude={cerebro.mapa?.completudeAprendizado ?? 0}
-            aberto={cerebroAberto}
-            onClick={() => {
-              onAtivar?.();
-              if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
-              else setCerebroAberto((v) => !v);
-            }}
-          />
-        )}
+        {comAbas && cerebro.ligado && (() => {
+          const bolinha = (
+            <BolinhaCerebro
+              estado={cerebro.estado}
+              completude={cerebro.mapa?.completudeAprendizado ?? 0}
+              aberto={cerebroAberto}
+              soSinal={!!slotTopo}
+              onClick={() => {
+                onAtivar?.();
+                if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
+                else setCerebroAberto((v) => !v);
+              }}
+            />
+          );
+          // no topo da sala (sem nome, só o sinal que gira quando um percurso está pronto pra nascer)
+          return slotTopo ? createPortal(bolinha, slotTopo) : bolinha;
+        })()}
         <div className="flex-1" />
         <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
       </div>
