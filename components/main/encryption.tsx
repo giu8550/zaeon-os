@@ -53,11 +53,16 @@ const SponsorCard = ({ item }: { item: { name: string; src: string; url: string 
         <motion.a
             href={item.url} target="_blank" rel="noopener noreferrer"
             whileHover={{ scale: 1.05, borderColor: "rgba(34, 211, 238, 0.4)", backgroundColor: "rgba(255, 255, 255, 0.05)" }}
-            className="relative flex items-center justify-center min-w-[200px] h-[100px] rounded-[1.5rem] border border-white/5 bg-[#0a0a0f]/40 backdrop-blur-md transition-all duration-500 group overflow-hidden cursor-pointer"
+            // o card fica ESCURO nos dois temas: as logos (a da Funcap é branca) foram feitas pra fundo escuro — no claro, com o
+            // card cinza-translúcido, a Funcap sumia e as outras ficavam lavadas (incidente em produção, out/2026)
+            className="relative flex items-center justify-center min-w-[200px] h-[100px] rounded-[1.5rem] border border-black/10 dark:border-white/5 bg-[#0a0a0f]/90 dark:bg-[#0a0a0f]/40 backdrop-blur-md transition-all duration-500 group overflow-hidden cursor-pointer"
         >
             <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12)_0%,transparent_70%)]" />
             <div className="relative w-full h-full p-6 flex items-center justify-center">
-                <NextImage src={item.src} alt={item.name} fill className="max-w-full max-h-full object-contain opacity-100 transition-all duration-500" />
+                {/* `unoptimized`: as logos são PNGs pequenos e locais; sem passar pelo /_next/image (que já falhou em
+                    produção e deixava os cards vazios — o next/image esconde a imagem quebrada com color:transparent). O service
+                    worker guarda /sponsors/* (stale-while-revalidate), então elas carregam mesmo com a rede ruim */}
+                <NextImage src={item.src} alt={item.name} fill unoptimized className="max-w-full max-h-full object-contain opacity-100 transition-all duration-500" />
             </div>
         </motion.a>
     );
@@ -167,15 +172,13 @@ const ProcessFlowchart = () => {
                             alt="Ministério da Ciência, Tecnologia e Inovação — Governo do Brasil"
                             fill
                             sizes="256px"
-                            className="w-full h-full object-contain block dark:hidden"
-                        />
+                            className="w-full h-full object-contain block dark:hidden" unoptimized />
                         <NextImage
                             src="/sponsors/MCTI_dark_alpha.png"
                             alt="Ministério da Ciência, Tecnologia e Inovação — Governo do Brasil"
                             fill
                             sizes="256px"
-                            className="w-full h-full object-contain hidden dark:block"
-                        />
+                            className="w-full h-full object-contain hidden dark:block" unoptimized />
                     </div>
                 </div>
             </motion.div>
