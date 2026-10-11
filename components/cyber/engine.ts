@@ -16,7 +16,7 @@ import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, typ
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
 import { CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
-import { TEMPLO } from "@/lib/cyber/templo";
+import { TEMPLO, noTemplo } from "@/lib/cyber/templo";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
 import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
 import { criarTempestade, type TempestadeHandle } from "./Tempestade";
@@ -495,6 +495,8 @@ export class CyberEngine {
   // ── ÁUDIO (components/cyber/AudioCyber): loops presos aos objetos + one-shots nos eventos ──
   private som!: AudioCyberHandle;
   private somLoops: { leito?: LoopSom; naveIdle?: LoopSom; naveVoo?: LoopSom; jet?: LoopSom[]; fio?: LoopSom } = {};
+  /** o zumbido de máquina de cada DROID das estações da Terra (o líder voando acelera) */
+  private somDroids: { em: { voando: boolean; lider: boolean }; l: LoopSom }[] = [];
   /** quando avisei por último que o fio está cheio (s, relógio da cena) */
   private avisoFioCheio = -99;
   /** subir/descer da MINHA nave: o som sai 1× no começo da ação (gatilhosVoo) */
@@ -925,7 +927,7 @@ export class CyberEngine {
     for (const p of PERSONAGENS_DA_CIDADELA) {
       const corpo = CORPOS_VRM[p.id]; if (!corpo) continue;
       const perfil = PERFIS_VIDA[p.id]; if (!perfil) continue;
-      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene, preparar: (obj) => this.prepararVrm(obj), ...(p.id === "examiner" ? { roteiro: () => this.rotinaExaminer.estado() } : {}) });
+      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene, preparar: (obj) => this.prepararVrm(obj), ...(p.id === "examiner" ? { roteiro: () => this.rotinaExaminer.estado(), asas: true } : {}) });
       const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = p.nome; this.o.overlay.appendChild(tag);
       this.personagens.push({ h, tag });
     }
@@ -944,9 +946,19 @@ export class CyberEngine {
     if (!this.vivo) return;
     this.cena.scene.add(obj); try { this.subirParaGpu(obj); } finally { obj.removeFromParent(); }
   }
+  /** tem jogador (eu ou alguém da sala) no piso do TEMPLO agora? */
+  private genteNoTemplo(): boolean {
+    const y = (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE + TEMPLO.h, L = CIDADE.salas.lounge;
+    const la = (p: { x: number; z: number }, alt: number) => Math.abs(alt - y) < 12 && noTemplo(naSala(L, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z), 3);
+    if (!this.instancia && la(this.eu.pos, this.eu.alt)) return true;
+    for (const a of this.remotos.values()) if (la(a.pos, a.alt)) return true;
+    return false;
+  }
   private atualizarPersonagens(dt: number, t: number) {
     if (!this.personagens.length) return;
-    this.rotinaExaminer.passo(dt, !!this.somLounge?.tocando);   // com música, às vezes ela desce do altar pra pista
+    // a Examiner trabalha no desktop do templo e NÃO fica na sala com quem chega: tem gente lá em cima, ela desce pro
+    // lounge (e com música, às vezes, desce por conta própria — lib/cyber/examiner)
+    this.rotinaExaminer.passo(dt, !!this.somLounge?.tocando, this.genteNoTemplo());
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, agora = Date.now() / 1000, some = this.instancia;   // no tutorial (instância só da pessoa), ninguém mais aparece
     const eu = [{ x: this.eu.pos.x, z: this.eu.pos.z }, ...[...this.remotos.values()].map((a) => ({ x: a.pos.x, z: a.pos.z }))];   // desviam de quem está no caminho
     for (const p of this.personagens) { p.h.mostrar(!some); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position, eu); }
@@ -2086,6 +2098,8 @@ export class CyberEngine {
     this.somLoops.fio = s.loop("fio-puxa", this.eu.av.group, { dist: DISTANCIA.eu });
     // a MÚSICA AMBIENTE dos espaços de convivência: sai das caixas de som discretas de cada sala (lib/cyber/ambiente)
     for (const c of this.cidade?.caixasAmbiente ?? []) if (c.sala === "biblioteca" || c.sala === "jardim") s.volumeLoop(s.loop(`ambiente-${c.sala}`, c.obj, { dist: DISTANCIA.ambiente, volume: 0.5 }), 1);
+    // os DROIDS das estações da Terra: maquinário flutuando (lib/cyber/somDroid) — o líder mais grave e mais alto
+    for (const em of this.cidade?.somDroids ?? []) { const l = s.loop("droid-maquina", em.obj, { dist: DISTANCIA.droid, volume: em.lider ? 1 : 0.55 }); s.volumeLoop(l, 1); s.taxaLoop(l, em.lider ? 0.82 : 1.18); this.somDroids.push({ em, l }); }
     if (this.nave) { this.somLoops.naveIdle = s.loop("ship-idle", this.nave.group, { dist: DISTANCIA.grande }); this.somLoops.naveVoo = s.loop("ship-flight", this.nave.group, { dist: DISTANCIA.naveLocal }); }
     const destravar = () => { musica().destravar(); if (!this.menu) s.ativar(); };
     if (musica().destravado && !this.menu) s.ativar();
@@ -2142,6 +2156,7 @@ export class CyberEngine {
     const td = this.somLounge?.tocando && this.noCeu && this.cidade?.tocaDiscos ? this.cidade.tocaDiscos.getWorldPosition(this.tmp) : null;
     const naMusica = !!td && Math.hypot(this.eu.pos.x - td.x, this.eu.pos.z - td.z) < 22;
     if (this.somLoops.leito) s.volumeLoop(this.somLoops.leito, fatorLeito(musica().estado) * (naMusica ? 0.25 : 1));
+    for (const d of this.somDroids) if (d.em.lider) s.taxaLoop(d.l, d.em.voando ? 1.08 : 0.82, 1.5);   // o líder voando de uma tela pra outra: o motor acelera
     if (this.somLoops.fio) {   // sendo puxado: o assobio sobe de tom com a velocidade (sai devagar, corre no meio, chega devagar)
       const v = this.viagem, k = v?.tipo === "escada" ? Math.min(1, v.t / VIAGEM_ESCADA.dur) : 0;
       s.volumeLoop(this.somLoops.fio, v?.tipo === "escada" ? 0.5 + 0.5 * 4 * k * (1 - k) : 0, 4); s.taxaLoop(this.somLoops.fio, 0.85 + 0.5 * 4 * k * (1 - k));

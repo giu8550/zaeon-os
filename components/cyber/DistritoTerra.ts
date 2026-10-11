@@ -10,6 +10,8 @@
  *  - SUPERTREES hídricas (Gardens by the Bay): tronco com jardim vertical + treliça de aço, galhos até a copa larga
  *    com aro de luz (o show de cores à noite), água caindo da copa num véu até o espelho d'água no pé.
  * Leve: as supertrees são UMA malha por material (fundidas), as zebras são instanciadas; texturas compartilhadas.
+ * No modo LEVE (placa integrada): árvores simples (menos faces, sem a treliça e sem o véu d'água), sem o halo dos motores.
+ * Os CARDS em pé dos temas saíram (lib/cyber/terra `CARDS_NA_ESTACAO`).
  * Tudo no referencial da ILHA.
  */
 import * as THREE from "three";
@@ -47,7 +49,7 @@ const TEMA = {
 function supertree(alt: number, copa: number, low: boolean) {
   const prof: THREE.Vector2[] = [];
   for (let i = 0; i <= 12; i++) { const u = i / 12, r = u < 0.55 ? 2.4 - 1.1 * Math.sin(u / 0.55 * Math.PI / 2) : 1.3 + (u - 0.55) / 0.45 * (copa * 0.32 - 1.3) * ((u - 0.55) / 0.45); prof.push(new THREE.Vector2(r, u * alt * 0.86)); }
-  const tronco = new THREE.LatheGeometry(prof, low ? 10 : 16);
+  const tronco = new THREE.LatheGeometry(prof, low ? 7 : 16);
   // a treliça de aço: hélices nos dois sentidos seguindo o perfil
   const trel: number[] = [], NH = low ? 6 : 10, NS = 24;
   for (const sent of [1, -1]) for (let h = 0; h < NH; h++) for (let i = 0; i < NS; i++) {
@@ -55,14 +57,14 @@ function supertree(alt: number, copa: number, low: boolean) {
     trel.push(...p(i), ...p(i + 1));
   }
   // os galhos (da parte de cima do tronco até a borda da copa) + a copa (guarda-chuva aberto, pra cima) + o aro
-  const yT = alt * 0.86, galhos: THREE.BufferGeometry[] = [], NG = low ? 8 : 14;
+  const yT = alt * 0.86, galhos: THREE.BufferGeometry[] = [], NG = low ? 6 : 14;
   for (let k = 0; k < NG; k++) {
     const a = (k / NG) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
     const curva = new THREE.QuadraticBezierCurve3(new THREE.Vector3(c * 1.6, yT - 3, s * 1.6), new THREE.Vector3(c * copa * 0.45, yT + 1.5, s * copa * 0.45), new THREE.Vector3(c * copa, yT + 4, s * copa));
-    galhos.push(new THREE.TubeGeometry(curva, 8, 0.18, 5, false));
+    galhos.push(new THREE.TubeGeometry(curva, low ? 4 : 8, 0.18, low ? 3 : 5, false));
   }
-  const copaG = new THREE.CylinderGeometry(copa, copa * 0.25, 4.2, low ? 12 : 20, 1, true); copaG.translate(0, yT + 2.1, 0);
-  const aro = new THREE.TorusGeometry(copa, 0.28, 6, low ? 24 : 40); aro.rotateX(Math.PI / 2); aro.translate(0, yT + 4.1, 0);
+  const copaG = new THREE.CylinderGeometry(copa, copa * 0.25, 4.2, low ? 8 : 20, 1, true); copaG.translate(0, yT + 2.1, 0);
+  const aro = new THREE.TorusGeometry(copa, 0.28, low ? 3 : 6, low ? 16 : 40); aro.rotateX(Math.PI / 2); aro.translate(0, yT + 4.1, 0);
   const trelG = new THREE.BufferGeometry(); trelG.setAttribute("position", new THREE.Float32BufferAttribute(trel, 3));
   return { tronco, trel: trelG, galhos: mergeGeometries(galhos.map((g) => g.toNonIndexed()))!, copa: copaG, aro, yT };
 }
@@ -273,7 +275,7 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
   }
 
   // ── os TOTENS dos temas (clima, florestas, oceanos, água): placas de luz com os problemas de cada um ──
-  const texTotem = Object.fromEntries(Object.entries(TEMA).map(([k, T]) => [k, guarda((() => {
+  const texTotem = !TOTENS.length ? {} as Record<string, THREE.Texture> : Object.fromEntries(Object.entries(TEMA).map(([k, T]) => [k, guarda((() => {
     const c = document.createElement("canvas"); c.width = 256; c.height = 512; const g = c.getContext("2d")!;
     g.fillStyle = "#04101c"; g.fillRect(0, 0, 256, 512); g.strokeStyle = T.cor; g.lineWidth = 6; g.strokeRect(6, 6, 244, 500);
     g.fillStyle = T.cor; g.font = "900 40px system-ui, sans-serif"; g.textAlign = "center"; g.fillText(T.nome, 128, 70);
@@ -296,7 +298,7 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
     const nucleoMat = guarda(new THREE.MeshBasicMaterial({ color: 0x66e6ff })), nucleo = new THREE.Mesh(guarda(new THREE.IcosahedronGeometry(1.3, 2)), nucleoMat); nucleo.position.y = 5; g.add(nucleo);
     const aneisMat = guarda(new THREE.MeshStandardMaterial({ color: 0x1a2440, metalness: 0.9, roughness: 0.25, emissive: 0x45d6ff, emissiveIntensity: 0.3 }));
     const aneis = [2.4, 3.0, 3.6].map((r, k) => { const a = new THREE.Mesh(guarda(new THREE.TorusGeometry(r, 0.16, 8, 48)), aneisMat); a.position.y = 5; a.rotation.set(k * 0.9, k * 0.5, 0); g.add(a); return a; });
-    const brilho = new THREE.Sprite(guarda(new THREE.SpriteMaterial({ map: brilhoTex(), color: 0x66e6ff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }))); brilho.position.y = 5; brilho.scale.setScalar(6); g.add(brilho);
+    const brilho = new THREE.Sprite(guarda(new THREE.SpriteMaterial({ map: brilhoTex(), color: 0x66e6ff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }))); brilho.position.y = 5; brilho.scale.setScalar(6); if (!low) g.add(brilho);   // (leve: sem o halo)
     return { m, nucleo, nucleoMat, aneis, aneisMat, brilho, vel: 0.2, fase: i };
   });
   function brilhoTex() { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d")!; const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(220,250,255,1)"); gr.addColorStop(0.4, "rgba(102,230,255,.5)"); gr.addColorStop(1, "rgba(40,120,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return guarda(new THREE.CanvasTexture(c)); }
@@ -317,12 +319,13 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
   const matCopa = guarda(new THREE.MeshStandardMaterial({ color: 0x1a2440, roughness: 0.5, metalness: 0.6, emissive: 0x6a3cff, emissiveIntensity: 0.45, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
   const matAro = guarda(new THREE.MeshBasicMaterial({ color: 0xb98cff }));
   const matEspelho = guarda(new THREE.MeshStandardMaterial({ color: 0x0a2a44, roughness: 0.08, metalness: 0.4, emissive: 0x1f6dff, emissiveIntensity: 0.35, transparent: true, opacity: 0.85 }));
-  group.add(new THREE.Mesh(fundir(partes.tronco), matTronco), new THREE.LineSegments(fundir(partes.trel), matTrel), new THREE.Mesh(fundir(partes.galhos), matGalho),
+  group.add(new THREE.Mesh(fundir(partes.tronco), matTronco), new THREE.Mesh(fundir(partes.galhos), matGalho),
     new THREE.Mesh(fundir(partes.copa), matCopa), new THREE.Mesh(fundir(partes.aro), matAro), new THREE.Mesh(fundir(partes.espelho), matEspelho));
+  if (!low) group.add(new THREE.LineSegments(fundir(partes.trel), matTrel));   // (leve: árvore SIMPLES — sem a treliça de linhas)
   // o VÉU d'água: gotas caindo da borda da copa até o espelho (uma nuvem de pontos pra todas as árvores)
-  const PORV = low ? 50 : 110, NV = veus.length * PORV, vPos = new Float32Array(NV * 3), gotas = Array.from({ length: NV }, (_, i) => { const v = veus[Math.floor(i / PORV)]!, a = Math.random() * Math.PI * 2, rr = v.r * (0.75 + Math.random() * 0.25); return { v, x: v.x + Math.cos(a) * rr, z: v.z + Math.sin(a) * rr, y: Math.random() * v.y, vel: 9 + Math.random() * 6 }; });
+  const PORV = low ? 0 : 110, NV = veus.length * PORV, vPos = new Float32Array(NV * 3), gotas = Array.from({ length: NV }, (_, i) => { const v = veus[Math.floor(i / PORV)]!, a = Math.random() * Math.PI * 2, rr = v.r * (0.75 + Math.random() * 0.25); return { v, x: v.x + Math.cos(a) * rr, z: v.z + Math.sin(a) * rr, y: Math.random() * v.y, vel: 9 + Math.random() * 6 }; });
   const vGeo = guarda(new THREE.BufferGeometry()); vGeo.setAttribute("position", new THREE.BufferAttribute(vPos, 3));
-  const veu = new THREE.Points(vGeo, guarda(new THREE.PointsMaterial({ color: 0x9fd8ff, size: 0.45, map: brilhoTex(), transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }))); veu.frustumCulled = false; group.add(veu);
+  const veu = new THREE.Points(vGeo, guarda(new THREE.PointsMaterial({ color: 0x9fd8ff, size: 0.45, map: brilhoTex(), transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }))); veu.frustumCulled = false; if (NV) group.add(veu);   // (leve: sem o véu d'água — partículas somadas por cima de tudo)
 
   let perto: { x: number; z: number }[] = [];
   return {

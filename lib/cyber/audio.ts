@@ -12,6 +12,7 @@ import { SINTESE_ASAS, type NomeSomAsas } from "./asas";
 import { sintetizarBatida, sintetizarRaio, sintetizarTrovao } from "./coracao";
 import { sintetizarAmbiente } from "./ambiente";
 import { sintetizarPuxaFio, sintetizarZumbidoFio } from "./somFio";
+import { sintetizarMaquinaNoAr } from "./somDroid";
 import { sintetizarAcerto, sintetizarAlerta, sintetizarDash, sintetizarDecola, sintetizarGolpe, sintetizarImpactoHeroi } from "./somMovimento";
 
 export const PASTA_SONS = "/assets/sounds/cyber/";
@@ -21,7 +22,7 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
   | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien" | "droid-louvor"
-  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | "coracao" | "raio" | "trovao" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto";
+  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | "coracao" | "raio" | "trovao" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto" | "droid-maquina";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -84,6 +85,8 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "ambiente-biblioteca": { modo: "pos", loop: true, volume: 0.36, sintetico: true },
   // os FIOS DE ENERGIA (lib/cyber/somFio, sintetizados): o zumbido do cabo nos postes e o assobio de quem é puxado
   "fio-zumbido": { modo: "pos", loop: true, volume: 0.32, sintetico: true },
+  // os DROIDS das estações da Terra (lib/cyber/somDroid): maquinário tecnológico flutuando — um loop em cada um
+  "droid-maquina": { modo: "pos", loop: true, volume: 0.5, sintetico: true },
   "fio-puxa": { modo: "pos", loop: true, volume: 0.6, sintetico: true },
   "ambiente-jardim": { modo: "pos", loop: true, volume: 0.4, sintetico: true },
   "asa-abrir": { modo: "pos", loop: false, volume: 0.6, sintetico: true },
@@ -158,13 +161,13 @@ export function sintetizarBaque(sr: number): Float32Array {
 }
 export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_CORRIDA, ...SINTESE_ASAS, coracao: sintetizarBatida, raio: sintetizarRaio, trovao: sintetizarTrovao,
   "ambiente-biblioteca": (sr) => sintetizarAmbiente("biblioteca", sr), "ambiente-jardim": (sr) => sintetizarAmbiente("jardim", sr),
-  "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta, decola: sintetizarDecola, "impacto-heroi": sintetizarImpactoHeroi, golpe: sintetizarGolpe, acerto: sintetizarAcerto };
+  "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta, decola: sintetizarDecola, "impacto-heroi": sintetizarImpactoHeroi, golpe: sintetizarGolpe, acerto: sintetizarAcerto, "droid-maquina": sintetizarMaquinaNoAr };
 
 /** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo).
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
  *  quem precisa SUMIR de verdade usa `modelo: "linear"` (ganho chega a 0 no `max`). */
 export type Dist = { ref: number; max: number; rolloff: number; modelo?: "inverse" | "linear" };
-export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica" | "holograma" | "coracao" | "raio" | "ambiente" | "fio", Dist> = {
+export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | "grande" | "naveLocal" | "musica" | "holograma" | "coracao" | "raio" | "ambiente" | "fio" | "droid", Dist> = {
   padrao: { ref: 6, max: 60, rolloff: 1.2 },
   perto: { ref: 2.5, max: 22, rolloff: 1.4 },       // passos/pulo dos COLEGAS (coisas pequenas)
   eu: { ref: 12, max: 60, rolloff: 1 },             // os MEUS passos/pulo: a câmera (o ouvinte) fica ~8–10 m atrás do avatar
@@ -177,6 +180,7 @@ export const DISTANCIA: Record<"padrao" | "perto" | "eu" | "cristais" | "voz" | 
   coracao: { ref: 10, max: 70, rolloff: 1, modelo: "linear" },     // a batida do coração: sentida no pátio da capela, some longe
   raio: { ref: 60, max: 900, rolloff: 0.6 },
   ambiente: { ref: 12, max: 58, rolloff: 1, modelo: "linear" },
+  droid: { ref: 5, max: 48, rolloff: 1, modelo: "linear" },        // os droids das estações: perto dos telões; some longe
   fio: { ref: 4, max: 32, rolloff: 1, modelo: "linear" },          // o zumbido do fio e o assobio de quem vai nele: só perto   // a música das salas: cheia na sala toda (4 caixas), some fora dela                         // o raio no topo da capela: ouve-se da cidade toda (e de longe)
 };
 

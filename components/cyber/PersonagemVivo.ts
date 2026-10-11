@@ -55,11 +55,14 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
    *  lounge (`dj`: fone na cabeça, mãos na controladora, no compasso) */
   fixo?: { pos: { x: number; z: number }; y: number; rumo: number; dj?: boolean };
   /** um ROTEIRO próprio no lugar da agenda (a Examiner: o altar e a pista — lib/cyber/examiner); sem moto */
-  roteiro?: () => Estado }): PersonagemVivoHandle {
+  roteiro?: () => Estado;
+  /** as ASAS NEGRAS de anjo nas costas (a Examiner — components/cyber/AsasAnjo) */
+  asas?: boolean }): PersonagemVivoHandle {
   const { carrega: DIST_CARREGA, solta: DIST_SOLTA, esconde: DIST_ESCONDE } = DIST(o.low);
   const raiz = new THREE.Group(); raiz.name = `personagem-${o.id}`; o.cena.add(raiz);
   const av: AvatarLuzHandle = criarAvatarLuz(o.cor, o.starTex, o.low, o.gltf, { anime: true });
   av.semMochila(); av.esperarCorpo(true); raiz.add(av.group);
+  if (o.asas) av.usarAsas();
   const poseParada = o.corpo.pose ? POSES_VRM[o.corpo.pose] : null;
   // o corpo VRM (~10 MB cada) só baixa quando a câmera chega PERTO e é solto quando ela se afasta bem — com muitos
   // personagens na cidadela, ninguém baixa todos de uma vez

@@ -8,12 +8,13 @@
  *    "vaso" grosso no topo — o pulso corre do lounge pro templo, como sangue numa veia;
  *  - o TEMPLO: a laje (com a montanha invertida embaixo, como as salas), o piso com a mandala dourada, o guarda-corpo de
  *    vidro, o pórtico da entrada, as BANDEIRINHAS de luz (São João) e a CAPELA — a irmã pequena da capela da Zaeon
- *    (pilares, coroas acesas, cúpula de vidro estrelada, tambor, 2ª cúpula, ponta e farol) — com o SANFONEIRO tocando no
- *    palco do meio, esferas de luz girando em volta e feixes quentes caindo nele.
+ *    (pilares, a coroa acesa no alto, cúpula de vidro estrelada, tambor, 2ª cúpula, ponta e farol) — no meio dela o
+ *    SIGILO DE METATRON no piso (o Cubo de Metatron: as 13 esferas da Fruta da Vida ligadas por todas as retas, girando
+ *    devagar) e, do lado oposto à entrada, o DESKTOP da Examiner (lib/cyber/examiner). O sanfoneiro saiu (out/2026).
+ * Leve: a muralha vira pele escura lisa (sem o shader de veias, o mais caro do templo) e as veias que descem nela saem.
  */
 import * as THREE from "three";
-import { DECK, ESCADARIA, TEMPLO, alturaDaEscadaria, curvaDaEscadaria, entradaDoTemplo, rumoDoSanfoneiro } from "@/lib/cyber/templo";
-import { criarSanfoneiro } from "./Sanfoneiro";
+import { DECK, ESCADARIA, MESA_EXAMINER, TEMPLO, alturaDaEscadaria, curvaDaEscadaria, entradaDoTemplo, mesaDaExaminer } from "@/lib/cyber/templo";
 import { criarTempestade } from "./Tempestade";
 
 export type TemploHandle = {
@@ -77,6 +78,21 @@ function texturaPisoTemplo(): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 
+/** o SIGILO DE METATRON (canvas, fundo transparente): as 13 esferas da Fruta da Vida (o centro, o anel de 6 e o de 6
+ *  mais longe) e as 78 retas ligando todos os centros — o Cubo de Metatron —, num duplo círculo de contorno */
+function texturaMetatron(): THREE.CanvasTexture {
+  const S = 1024, c = document.createElement("canvas"); c.width = c.height = S; const g = c.getContext("2d")!;
+  g.translate(S / 2, S / 2); g.lineCap = "round";
+  const u = S * 0.13, centros: [number, number][] = [[0, 0]];
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 - Math.PI / 2; centros.push([Math.cos(a) * u * 1.15, Math.sin(a) * u * 1.15]); }
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 - Math.PI / 2; centros.push([Math.cos(a) * u * 2.3, Math.sin(a) * u * 2.3]); }
+  const brilho = (cor: string, larg: number, desenhar: () => void) => { g.strokeStyle = cor; g.shadowColor = cor; g.shadowBlur = larg * 4; g.lineWidth = larg; desenhar(); g.shadowBlur = 0; };
+  brilho("rgba(255,214,120,1)", 8, () => { for (const r of [S * 0.47, S * 0.455]) { g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke(); } });
+  brilho("rgba(160,240,255,1)", 6, () => { g.beginPath(); for (let i = 0; i < centros.length; i++) for (let j = i + 1; j < centros.length; j++) { g.moveTo(centros[i]![0], centros[i]![1]); g.lineTo(centros[j]![0], centros[j]![1]); } g.stroke(); });
+  brilho("rgba(255,224,150,1)", 7, () => { for (const [x, y] of centros) { g.beginPath(); g.arc(x, y, u * 0.575, 0, Math.PI * 2); g.stroke(); } });
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+
 export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrela?: THREE.Texture; /** caiu um raio da tempestade (mundo): o trovão */ aoTrovao?: (em: THREE.Vector3) => void }): TemploHandle {
   const g = new THREE.Group(); g.name = "templo";
   const alvos: THREE.Object3D[] = [], anim: ((dt: number, t: number) => void)[] = [], texs: THREE.Texture[] = [];
@@ -125,6 +141,7 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
 
   // ── a MURALHA-VEIA (o lado de FORA da curva, o −lat): sobe do abismo até `alt` acima da escada, ondulando como pele ──
   const muro = materialMuralha(); muro.uniforms.uLen!.value = len;
+  const muroLeve = new THREE.MeshBasicMaterial({ color: 0x14081c, side: THREE.DoubleSide });   // (leve: pele escura lisa)
   { const pos: number[] = [], uv: number[] = [], idx: number[] = [], A = M.muralha.alt; let k = 0;
     for (let s = Math.max(0, sIni - 2); s <= Math.min(len, sFim + 2); s += 0.8) {
       const p = em(s), y = alturaDaEscadaria(s), u = (s - sIni) / Math.max(1, sFim - sIni);
@@ -135,13 +152,13 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
       if (k) idx.push(2 * k - 2, 2 * k, 2 * k - 1, 2 * k - 1, 2 * k, 2 * k + 1); k++;
     }
     const mg = new THREE.BufferGeometry(); mg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); mg.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); mg.setIndex(idx); mg.computeVertexNormals();
-    g.add(new THREE.Mesh(mg, muro));
+    g.add(new THREE.Mesh(mg, o.low ? muroLeve : muro));
     // o VASO no topo (o tubo grosso por onde o pulso corre) e as VEIAS que descem pela parede, ramificando
     const topoPts: THREE.Vector3[] = []; for (let i = 0; i < pos.length; i += 12) topoPts.push(new THREE.Vector3(pos[i + 3]!, pos[i + 4]! + 0.4, pos[i + 5]!));
     const vasoMat = materialFluxo(new THREE.Color(0xff3c8c), len / 7);
     g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(topoPts), o.low ? 60 : 160, 1.0, 10, false), vasoMat));
     const veiaMat = materialFluxo(new THREE.Color(0xc46bff), 3);
-    const nV = o.low ? 6 : 12;
+    const nV = o.low ? 0 : 12;   // (leve: sem as veias descendo a parede)
     for (let v = 0; v < nV; v++) {
       const s0 = sIni + ((v + 0.5) / nV) * (sFim - sIni), out: THREE.Vector3[] = [];
       for (let j = 0; j <= 8; j++) {   // desce do vaso, serpenteando pra frente (rumo ao templo)
@@ -184,7 +201,7 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
     for (let i = 0; i < C.pilares; i++) { const a = (i / C.pilares) * Math.PI * 2 + Math.PI / C.pilares; pil.setMatrixAt(i, m.makeTranslation(Math.cos(a) * C.r, C.altura / 2, Math.sin(a) * C.r)); }
     pil.instanceMatrix.needsUpdate = true; pil.computeBoundingSphere(); tg.add(pil); }
   const coroaMat = new THREE.MeshStandardMaterial({ color: 0x0c1a30, emissive: 0x66c8ff, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.4 });
-  for (const [y, rr] of [[C.altura, 0.6], [0.3, 0.4]] as const) { const t = new THREE.Mesh(new THREE.TorusGeometry(C.r, rr, 8, o.low ? 64 : 128), coroaMat); t.rotation.x = Math.PI / 2; t.position.y = y; tg.add(t); }
+  { const t = new THREE.Mesh(new THREE.TorusGeometry(C.r, 0.6, 8, o.low ? 64 : 128), coroaMat); t.rotation.x = Math.PI / 2; t.position.y = C.altura; tg.add(t); }   // (só a do alto: o anel no chão saiu — o dono, out/2026)
   const domoMat = new THREE.MeshStandardMaterial({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false });
   const cupula = new THREE.Mesh(new THREE.SphereGeometry(RC, o.low ? 28 : 48, o.low ? 12 : 20, 0, Math.PI * 2, 0, Math.PI / 2), domoMat); cupula.position.y = C.altura; cupula.scale.y = ACH; tg.add(cupula);
   { const lin: number[] = [], NS = 10; for (let i = 0; i < C.pilares; i++) { const a = (i / C.pilares) * Math.PI * 2 + Math.PI / C.pilares;
@@ -205,28 +222,31 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
   tempestade.definir(0, false);   // céu limpo até o dono ligar o ritual
   const ondeCaiu = new THREE.Vector3();
 
-  // ── o PALCO do sanfoneiro no meio da capela, o SANFONEIRO, as esferas de luz e os feixes quentes caindo nele ──
-  const P = T.palco;
-  const palco = new THREE.Mesh(new THREE.CylinderGeometry(P.r, P.r + 0.25, P.h, 24), new THREE.MeshStandardMaterial({ color: 0x2a1a10, emissive: 0x3a1a08, emissiveIntensity: 0.5, roughness: 0.5, metalness: 0.4 }));
-  palco.position.y = P.h / 2 + 0.12; tg.add(palco);
-  const aroP = new THREE.Mesh(new THREE.TorusGeometry(P.r + 0.1, 0.07, 6, 48), basica(0xffc46b, 0.9, true)); aroP.rotation.x = Math.PI / 2; aroP.position.y = P.h + 0.14; tg.add(aroP);
-  const sanf = criarSanfoneiro({ low: o.low }); sanf.group.scale.setScalar(1.7); sanf.group.position.y = P.h + 0.12; sanf.group.rotation.y = rumoDoSanfoneiro(); tg.add(sanf.group);
-  sanf.group.traverse((n) => { n.userData.semLote = true; });
-  const esferas: { m: THREE.Mesh; a: number; r: number; y: number; v: number }[] = [];
-  const corEsf = [0xffd36b, 0xff7ab8, 0x7dffd0, 0xffa64d, 0xb98cff];
-  for (let i = 0; i < (o.low ? 6 : 12); i++) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8), basica(corEsf[i % corEsf.length]!, 1)); tg.add(m);
-    if (o.estrela) { const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: o.estrela, color: corEsf[i % corEsf.length]!, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })); h.scale.setScalar(2.4); m.add(h); }   // o brilho em volta
-    esferas.push({ m, a: (i / 12) * Math.PI * 2, r: 5 + (i % 3) * 1.6, y: 2.5 + (i % 4) * 1.4, v: 0.25 + (i % 5) * 0.06 });
-  }
-  esferas.forEach((e) => e.m.traverse((n) => { n.userData.semLote = true; }));
-  // feixes quentes saindo do alto dos pilares rumo ao palco
-  const feixes: THREE.Mesh[] = [];
-  for (let i = 0; i < (o.low ? 3 : 6); i++) {
-    const a = (i / 6) * Math.PI * 2 + 0.2, de = new THREE.Vector3(Math.cos(a) * C.r * 0.9, C.altura - 0.5, Math.sin(a) * C.r * 0.9), para = new THREE.Vector3(0, P.h + 1.6, 0), d = para.clone().sub(de), L = d.length();
-    const cg = new THREE.ConeGeometry(2.2, L, 16, 1, true); cg.translate(0, -L / 2, 0);   // o ápice no pilar, abrindo pro palco
-    const f = new THREE.Mesh(cg, basica(i % 2 ? 0xffc46b : 0xff7ab8, 0.07, true)); f.position.copy(de); f.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), d.normalize()); f.renderOrder = 3; tg.add(f); feixes.push(f);
-  }
+  // ── o SIGILO DE METATRON no centro da capela: o desenho no piso (girando devagar) + um halo fraco por baixo ──
+  const texSig = texturaMetatron(); texs.push(texSig);
+  const sigMat = new THREE.MeshBasicMaterial({ map: texSig, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+  const sigilo = new THREE.Mesh(new THREE.CircleGeometry(T.sigilo.r, 64), sigMat); sigilo.rotation.x = -Math.PI / 2; sigilo.position.y = 0.16; sigilo.renderOrder = 2; tg.add(sigilo);
+  const sigHalo = o.low ? null : new THREE.Mesh(new THREE.CircleGeometry(T.sigilo.r * 1.08, 48), basica(0xffc46b, 0.07, true));
+  if (sigHalo) { sigHalo.rotation.x = -Math.PI / 2; sigHalo.position.y = 0.14; tg.add(sigHalo); }
+
+  // ── o DESKTOP da Examiner (do lado oposto à entrada): a mesa escura com a quina acesa, dois monitores e o teclado de
+  //    luz — virado pro centro (ela trabalha de costas pro sigilo) ──
+  { const m = mesaDaExaminer(), M = MESA_EXAMINER, dg = new THREE.Group();
+    dg.position.set(m.x - T.x, 0.12, m.z - T.z); dg.rotation.y = Math.atan2(-Math.cos(m.ang), -Math.sin(m.ang)); tg.add(dg);   // o +z da mesa aponta pro centro
+    const escuro = new THREE.MeshStandardMaterial({ color: 0x14101c, roughness: 0.35, metalness: 0.7, emissive: 0x0c0818, emissiveIntensity: 0.6 });
+    const tampo = new THREE.Mesh(new THREE.BoxGeometry(M.larg, 0.08, M.prof), escuro); tampo.position.y = M.alt; dg.add(tampo);
+    for (const sx of [-1, 1]) { const pe = new THREE.Mesh(new THREE.BoxGeometry(0.08, M.alt, M.prof * 0.8), escuro); pe.position.set(sx * (M.larg / 2 - 0.1), M.alt / 2, 0); dg.add(pe); }
+    const quinaM = new THREE.Mesh(new THREE.BoxGeometry(M.larg, 0.025, 0.025), basica(0xff7ab8, 0.9, true)); quinaM.position.set(0, M.alt + 0.03, M.prof / 2); dg.add(quinaM);
+    const telaMat = new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
+    for (const [x, giro] of [[-0.55, 0.22], [0.55, -0.22]] as const) {
+      const mon = new THREE.Group(); mon.position.set(x, M.alt + 0.42, -M.prof / 2 + 0.22); mon.rotation.y = giro; dg.add(mon);
+      const moldura = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.6, 0.04), escuro); mon.add(moldura);
+      const tela = new THREE.Mesh(new THREE.PlaneGeometry(0.94, 0.54), telaMat); tela.position.z = 0.025; mon.add(tela);
+      const haste = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.36, 0.05), escuro); haste.position.set(0, -0.42, -0.02); mon.add(haste);
+    }
+    const teclado = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.28), basica(0x9fe8ff, 0.5, true)); teclado.rotation.x = -Math.PI / 2; teclado.position.set(0, M.alt + 0.05, 0.12); dg.add(teclado);
+    anim.push((_, t) => { telaMat.opacity = 0.75 + 0.1 * Math.sin(t * 2.3); (teclado.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.2 * Math.max(0, Math.sin(t * 11)); });
+    alvos.push(tampo); }
 
   // ── as BANDEIRINHAS de luz (São João): cordões do topo dos pilares até o guarda-corpo, bandeirinhas coloridas ──
   { const cores = [0xff5a5a, 0xffd36b, 0x5aff8a, 0x45d6ff, 0xff6ad5, 0xffa64d], bandeiras: { p: THREE.Vector3; q: THREE.Quaternion; c: number }[] = [], fios: number[] = [];
@@ -257,13 +277,10 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
     tempestade: (i, raios) => tempestade.definir(i, raios),
     raioAgora: (alvoMundo) => { if (!alvoMundo) { tempestade.raioAgora(); return; } tg.updateMatrixWorld(); tempestade.raioAgora(tg.worldToLocal(alvoMundo.clone())); },
     atualizar(dt, t) {
-      sanf.atualizar(t);
+      sigilo.rotation.z = t * 0.05; if (sigHalo) (sigHalo.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.03 * Math.sin(t * 0.9);
       { const c = tempestade.atualizar(t); if (c && o.aoTrovao) { tg.updateMatrixWorld(); o.aoTrovao(ondeCaiu.copy(c).applyMatrix4(tg.matrixWorld)); } }
-      for (const e of esferas) { e.a += dt * e.v; e.m.position.set(Math.cos(e.a) * e.r, e.y + Math.sin(t * 1.3 + e.a) * 0.5, Math.sin(e.a) * e.r); }
-      feixes.forEach((f, i) => { (f.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.04 * Math.sin(t * 1.7 + i * 1.3); });
-      (aroP.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.3 * Math.sin(t * 3.7);
       for (const f of anim) f(dt, t);
     },
-    dispose() { sanf.dispose(); tempestade.dispose(); for (const x of texs) x.dispose(); g.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); const mt = m.material as THREE.Material | THREE.Material[] | undefined; if (Array.isArray(mt)) mt.forEach((x) => x.dispose()); else mt?.dispose(); }); g.removeFromParent(); },
+    dispose() { tempestade.dispose(); muroLeve.dispose(); muro.dispose(); for (const x of texs) x.dispose(); g.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); const mt = m.material as THREE.Material | THREE.Material[] | undefined; if (Array.isArray(mt)) mt.forEach((x) => x.dispose()); else mt?.dispose(); }); g.removeFromParent(); },
   };
 }

@@ -5,7 +5,8 @@
  * mais gente na festa), uma RAMPA larga subindo pra FESTA (o DECK, onde ficam o DJ, a pista e as rodas de sofá)
  * e, saindo do lado direito do deck, uma ESCADARIA em curva acentuada mas contínua, colada numa MURALHA vertical que
  * pulsa como uma VEIA, até o TEMPLO — uma plataforma do tamanho do lounge antigo, mais alta, com uma CAPELA (a irmã
- * pequena da capela da Zaeon) e o SANFONEIRO tocando no meio dela.
+ * pequena da capela da Zaeon). No meio dela, o SIGILO DE METATRON no piso; a EXAMINER (asas negras) trabalha num
+ * DESKTOP do outro lado do sigilo — e sai quando alguém chega (lib/cyber/examiner). O sanfoneiro saiu (out/2026).
  */
 
 type P2 = { x: number; z: number };
@@ -31,8 +32,8 @@ export const TEMPLO = {
   x: 124, z: -124, r: 40, h: 46,   // (o dono: bem mais alto que o deck — a escadaria sobe 42 m)
   /** a capela do templo é MAIS ALTA que a da Zaeon (a ponta passa ~80 m acima da dela) e fura as NUVENS da tempestade */
   capela: { r: 20, pilares: 16, pilarR: 1.3, altura: 22, achata: 0.55, tamborR: 7, tamborAlt: 6, pontaLen: 50 },
-  /** o PALCO redondo do sanfoneiro (no centro da capela) */
-  palco: { r: 3.4, h: 0.7 },
+  /** o SIGILO DE METATRON no centro da capela (rente ao piso: dá pra pisar) */
+  sigilo: { r: 7.5 },
   colR: 0.6, passo: 1,
 } as const;
 
@@ -136,8 +137,16 @@ export function bordasDaEscadaria(rLounge: number): P2[] {
   }
   return out;
 }
+/** o DESKTOP da Examiner: do lado OPOSTO à entrada, dentro da capela (`d` m do centro do templo); ela trabalha em pé,
+ *  de costas pro sigilo (quem entra vê as asas), de frente pra tela */
+export const MESA_EXAMINER = { d: 12.6, larg: 2.4, prof: 0.9, alt: 1.02, frente: 1.25 } as const;
+/** a mesa (referencial do lounge): o centro, o ângulo (no referencial do templo) e onde ela fica em pé */
+export function mesaDaExaminer(): { x: number; z: number; ang: number; pe: P2 } {
+  const a = entradaDoTemplo().ang + Math.PI, M = MESA_EXAMINER, c = Math.cos(a), s = Math.sin(a);
+  return { x: TEMPLO.x + c * M.d, z: TEMPLO.z + s * M.d, ang: a, pe: { x: TEMPLO.x + c * (M.d - M.frente), z: TEMPLO.z + s * (M.d - M.frente) } };
+}
 /** os COLISORES (referencial do lounge) do templo: a parede em volta (menos a entrada da escadaria), os pilares da
- *  capela e o palco do sanfoneiro */
+ *  capela e a mesa da Examiner (o sigilo é rente ao piso: pisa-se nele) */
 export function colisoresDoTemplo(): { x: number; z: number; r: number }[] {
   const T = TEMPLO, out: { x: number; z: number; r: number }[] = [], ent = entradaDoTemplo(), n = Math.ceil((2 * Math.PI * T.r) / T.passo);
   for (let i = 0; i < n; i++) {
@@ -147,8 +156,6 @@ export function colisoresDoTemplo(): { x: number; z: number; r: number }[] {
   }
   const C = T.capela;
   for (let i = 0; i < C.pilares; i++) { const a = (i / C.pilares) * Math.PI * 2 + Math.PI / C.pilares; out.push({ x: T.x + Math.cos(a) * C.r, z: T.z + Math.sin(a) * C.r, r: C.pilarR + 0.2 }); }
-  out.push({ x: T.x, z: T.z, r: T.palco.r });
+  { const m = mesaDaExaminer(), tx = -Math.sin(m.ang), tz = Math.cos(m.ang); for (const k of [-0.8, 0, 0.8]) out.push({ x: m.x + tx * k, z: m.z + tz * k, r: 0.55 }); }
   return out;
 }
-/** pra onde o SANFONEIRO olha (ângulo no referencial do lounge, atan2(dx, dz)): pra entrada do templo */
-export const rumoDoSanfoneiro = () => { const e = entradaDoTemplo(); return Math.atan2(Math.cos(e.ang), Math.sin(e.ang)); };

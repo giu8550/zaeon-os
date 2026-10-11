@@ -39,21 +39,17 @@ describe("os MIRANTES DA TERRA nas 4 quinas (a antiga base do Andrei + 3 cópias
       for (const x of [p, q, q2]) expect(d(x, c), `mirante ${m.id}, u=${u}`).toBeGreaterThan(c.r * 0.999);
     }
   });
-  it("a ESTAÇÃO fica de lado: PROBLEMAS → SOLUÇÕES (2 telões virados pro centro), cards colados no 1º, globo no meio, motores atrás", () => {
+  it("a ESTAÇÃO fica de lado: PROBLEMAS → SOLUÇÕES (2 telões virados pro centro), globo no meio, motores atrás — sem os cards no chão", () => {
     MIRANTES_ESTACAO.forEach((m, i) => {
       const t = TELOES[i]!, s = TELOES_SOLUCAO[i]!, g = GLOBOS[i]!;
       for (const T of [t, s]) { const rT = Math.hypot(T.x, T.z); expect(Math.sin(T.rot) * -T.x + Math.cos(T.rot) * -T.z).toBeGreaterThan(0.99 * rT); expect(d(T, m)).toBeGreaterThan(30); }
       expect(d(t, m)).toBeLessThan(d(s, m));                                                    // o dos problemas é o mais perto da pirâmide
       expect(d(t, s)).toBeGreaterThan(t.larg + 20);                                             // cabem os palcos, os cards e o globo no meio
       expect(Math.abs(d(g, t) - d(g, s))).toBeLessThan(1);                                      // o globo entre os dois
-      const cards = TOTENS.filter((_, k) => Math.floor(k / TEMAS.length) === i);
-      expect(cards.map((c) => c.tema)).toEqual([...TEMAS]);
-      for (const c of cards) { expect(d(c, t)).toBeLessThan(d(c, s) - 4); expect(d(c, t) - t.larg / 2).toBeLessThan(18); }   // colados no telão dos problemas (logo depois do palco dele)
       MOTORES.slice(i * 2, i * 2 + 2).forEach((mo, k) => expect(d(mo, k ? s : t)).toBeLessThan(20));          // 1 motor atrás de cada telão
     });
     expect(CABOS).toHaveLength(MOTORES.length * 2);
-    expect(LIGACOES).toHaveLength(TOTENS.length);
-    LIGACOES.forEach((l, k) => { expect(l.tema).toBe(TOTENS[k]!.tema); expect(d(l.para, TELOES_SOLUCAO[Math.floor(k / TEMAS.length)]!)).toBeLessThan(1e-6); });   // cada card → o telão das soluções
+    expect(TOTENS).toHaveLength(0); expect(LIGACOES).toHaveLength(0);   // (os cards em pé saíram das duas estações — o dono, out/2026)
     const tudo = [...[...TELOES, ...TELOES_SOLUCAO].map((t) => ({ ...t, r: t.larg / 2 })), ...GLOBOS, ...TOTENS.map((t) => ({ ...t, r: 1.5 })), ...MOTORES];
     for (const c of tudo) { expect(Math.hypot(c.x, c.z) + c.r).toBeLessThan(CIDADE.andavelR - 2); for (const o of OCUPADO) expect(d(c, o), `× ${o.nome}`).toBeGreaterThan(c.r + o.r); }
     for (const c of tudo) for (const m of MIRANTES) expect(d(c, m)).toBeGreaterThan(PIRAMIDE_R + c.r);
