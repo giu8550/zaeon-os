@@ -184,6 +184,9 @@ function NoRoomFound() {
 // CONFERIR a composição/rótulos das abas + QA de runtime antes de mergear na base.
 const StudyCoworkChat = dynamic(() => import("@/components/study/StudyCoworkChat"), { ssr: false });
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
+// "Meus Estudos" voltou a ser o BOARD (o canvas colaborativo, estética de blueprint — lib/estudos/board); o caderno
+// de blocos (MeusEstudosFeed) segue abrindo por um botão no canto do board (os estudos antigos não se perdem)
+const BoardEstudos = dynamic(() => import("@/components/estudos/BoardEstudos"), { ssr: false });
 const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlunosPanel"), { ssr: false });
 
 /**
@@ -237,6 +240,17 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
         if (!tabRestored.current || !room) return;
         try { localStorage.setItem(`zaeon:lastTab:${room}`, activeTab); } catch { /* ignore */ }
     }, [activeTab, room]);
+
+    // o BOARD de Meus Estudos aberto por um link de convite (?board=<id>&convite=<token>) e o caderno antigo por cima
+    const [boardDoLink, setBoardDoLink] = useState<{ id: string | null; convite: string | null }>({ id: null, convite: null });
+    const [cadernoAberto, setCadernoAberto] = useState(false);
+    useEffect(() => {
+        try {
+            const sp = new URLSearchParams(window.location.search), id = sp.get("board");
+            if (id && /^[a-f0-9]{24}$/i.test(id)) { setBoardDoLink({ id, convite: sp.get("convite") }); setActiveTab("feed"); }
+            if (sp.get("space")) setCadernoAberto(true);   // (o link de um estudo do caderno antigo)
+        } catch { /* ignore */ }
+    }, []);
 
     // Deep-link do menu inicial: ?space=<id> → abre direto em "Meus Estudos"
     // (o MeusEstudosFeed resolve qual estudo carregar pelo mesmo param). Sem isso,
@@ -422,8 +436,14 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
                             <StudyCoworkChat active={activeTab === "meus-estudos"} />
                         </div>
                         {activeTab === "feed" ? (
-                            // Sala unificada: "Meus Estudos" = o feed/caderno + biblioteca.
-                            <div className="h-full"><MeusEstudosFeed /></div>
+                            // "Meus Estudos" = o BOARD (cards colados e arrastados, mais de uma pessoa ao mesmo
+                            // tempo); o caderno antigo abre por cima, pelo botão do canto
+                            <div className="relative h-full">
+                                {cadernoAberto ? <MeusEstudosFeed /> : <BoardEstudos boardInicialId={boardDoLink.id} convite={boardDoLink.convite} />}
+                                <button type="button" onClick={() => setCadernoAberto((v) => !v)} className="absolute bottom-3 left-1/2 z-[95] -translate-x-1/2 rounded-full border border-sky-300/30 bg-[#05162a]/85 px-3 py-1 font-mono text-[10.5px] tracking-wide text-sky-100/80 backdrop-blur hover:text-white">
+                                    {cadernoAberto ? "← voltar pro board" : "abrir o caderno antigo"}
+                                </button>
+                            </div>
                         ) : activeTab === "meus-estudos" ? null : activeTab === "community" ? (
                             <OmegaScholarWorkspace />
                         ) : activeTab === "students" ? (
