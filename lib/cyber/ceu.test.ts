@@ -14,10 +14,13 @@ import { POIS } from "./landmarks";
 const PATIO = { x: 102, z: 36 };
 
 describe("cidade no céu", () => {
-  it("flutua BEEEM alto e LONGE da praça: o céu da praça fica aberto (nem a ilha nem as ilhotas passam por cima dela)", () => {
-    const praca = { x: 0, z: 0 }, alcance = CIDADE.bordaR + 30 + 2 * 16 + 20;   // a ilha + o anel de ilhotas
-    expect(Math.hypot(praca.x - CIDADE.centro.x, praca.z - CIDADE.centro.z)).toBeGreaterThan(alcance);
-    expect(CIDADE.pisoY - CIDADE.ilhaAltura - CIDADE.agulha.altura).toBeGreaterThan(PRACA.y + 150);   // o fundo da ilha, bem acima da praça
+  it("a Zaeon fica a 450 m; a PRAÇA a 100 m da borda dela, um pouco abaixo (vê-se pela borda) — o céu da praça fica aberto", () => {
+    expect(CIDADE.pisoY).toBe(450); expect(CIDADE.centro).toEqual({ x: 0, z: -560 });   // (a Zaeon não muda de lugar nem de altura)
+    const d = Math.hypot(PRACA.x - CIDADE.centro.x, PRACA.z - CIDADE.centro.z);
+    expect(d - CIDADE.bordaR - PRACA.r).toBeCloseTo(100, 6);                                         // a 100 m da borda
+    expect(CIDADE.pisoY - PRACA.y).toBeGreaterThan(20); expect(CIDADE.pisoY - PRACA.y).toBeLessThan(60);   // um pouquinho mais abaixo
+    expect(CIDADE.pisoY - CIDADE.ilhaAltura).toBeGreaterThan(PRACA.y);                               // a laje da ilha acima do nível da praça
+    for (const il of ILHOTAS) { const w = mundo(il); expect(Math.hypot(w.x - PRACA.x, w.z - PRACA.z)).toBeGreaterThan(PRACA.r + il.r + 10); }   // nenhuma ilhota em cima da praça
     expect(VOO.yMax).toBeGreaterThan(CIDADE.pisoY + 40);                              // a nave sobrevoa por cima
   });
   it("é maior que a Zaeon do chão", () => {
@@ -56,36 +59,30 @@ describe("cidade no céu", () => {
     for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2 + 0.2; for (const r of [12, 18, 24]) expect(dentroDeAlgum(mundo({ x: Math.cos(a) * r, z: Math.sin(a) * r }), cs)).toBe(false); }
   });
   it("a ilha é sólida pra nave (pousa em cima; não atravessa por baixo nem pelo lado)", () => {
-    const meio = { ...mundo({ x: 5, z: 0 }), y: CIDADE.pisoY - 2 };
+    const meio = { ...mundo({ x: 5, z: 0 }), y: CIDADE.pisoY - 1 };   // (a laje tem 3 m: mais perto de cima)
     expect(foraDaIlha(meio).y).toBe(CIDADE.pisoY);
     const embaixo = { ...mundo({ x: 5, z: 0 }), y: CIDADE.pisoY - CIDADE.ilhaAltura + 1 };
     expect(foraDaIlha(embaixo).y).toBe(CIDADE.pisoY - CIDADE.ilhaAltura);
     expect(chaoDaNave({ ...mundo({ x: 0, z: 0 }), y: CIDADE.pisoY + 3 })).toBe(CIDADE.pisoY);
-    expect(chaoDaNave({ x: 0, y: 10, z: 0 })).toBe(0);
+    expect(chaoDaNave({ x: 0, y: PRACA.y + 10, z: 600 })).toBe(PRACA.y);   // fora de tudo: o "chão" do hiperespaço (lib/cyber/praca CHAO)
   });
-  it("a agulha embaixo do ápice: afiada, sólida e bem acima da praça", () => {
-    const fundo = CIDADE.pisoY - CIDADE.ilhaAltura - CIDADE.agulha.altura;
-    expect(fundo).toBeGreaterThan(PRACA.y + 150);
-    expect(CIDADE.agulha.r).toBeLessThan(CIDADE.bordaR / 4);
-    const dentro = { ...mundo({ x: 1, z: 0 }), y: fundo + 20 };
-    const q = foraDaIlha(dentro);
-    expect(Math.hypot(q.x - CIDADE.centro.x, q.z - CIDADE.centro.z)).toBeCloseTo(CIDADE.agulha.r, 6);   // desliza pra fora
-    expect(foraDaIlha({ ...mundo({ x: 1, z: 0 }), y: fundo + 0.5 }).y).toBe(fundo);                     // de baixo: para na ponta
-    const lado = CIDADE.agulha.r + 5;
-    expect(foraDaIlha({ ...mundo({ x: lado, z: 0 }), y: fundo + 20 })).toEqual({ ...mundo({ x: lado, z: 0 }), y: fundo + 20 });   // fora dela: livre
+  it("sem a montanha invertida nem a agulha: embaixo da laje é livre (a nave passa por baixo)", () => {
+    const sob = { ...mundo({ x: 1, z: 0 }), y: CIDADE.pisoY - CIDADE.ilhaAltura - 1 };
+    expect(foraDaIlha(sob)).toEqual(sob);
+    expect(CIDADE.ilhaAltura).toBeLessThan(10);
   });
 });
 
 describe("voo da nave", () => {
   const parada: EstadoVoo = { ...mundo(PATIO), y: CIDADE.pisoY, yaw: 0, vx: 0, vy: 0, vz: 0 };
-  const voar = (s: EstadoVoo, cmd: Parameters<typeof passoVoo>[1], seg: number) => { let r = { s, pousado: true, chaoY: 0 }; for (let i = 0; i < seg * 60; i++) r = passoVoo(r.s, cmd, 1 / 60); return r; };
+  const voar = (s: EstadoVoo, cmd: Parameters<typeof passoVoo>[1], seg: number) => { let r = { s, pousado: true, chaoY: PRACA.y }; for (let i = 0; i < seg * 60; i++) r = passoVoo(r.s, cmd, 1 / 60); return r; };
   it("decola da ilha, sobrevoa e pousa no chão do mapa", () => {
     const sobe = voar(parada, { wx: 0, wz: 0, subir: true, descer: false }, 2);
     expect(sobe.pousado).toBe(false); expect(sobe.s.y).toBeGreaterThan(CIDADE.pisoY + 5);
     const sai = voar(sobe.s, { wx: 0, wz: 1, subir: false, descer: false }, 12);   // vai pra +z (rumo à praça) — a Zaeon mega é larga
     expect(Math.hypot(sai.s.x - CIDADE.centro.x, sai.s.z - CIDADE.centro.z)).toBeGreaterThan(CIDADE.bordaR);
     const desce = voar(sai.s, { wx: 0, wz: 0, subir: false, descer: true }, 40);   // (e alta: 450 m)
-    expect(desce.pousado).toBe(true); expect(desce.s.y).toBe(0); expect(desce.chaoY).toBe(0);
+    expect(desce.pousado).toBe(true); expect(desce.s.y).toBe(PRACA.y); expect(desce.chaoY).toBe(PRACA.y);   // (o chão do hiperespaço — lib/cyber/praca)
   });
   it("não sai do mapa nem passa do teto", () => {
     const r = voar({ x: 0, y: VOO.yMax - 5, z: 0, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: 1, wz: 0, subir: true, descer: false }, 30);
@@ -356,7 +353,7 @@ describe("MOTO na Zaeon mega (voo com os sólidos da cidade)", () => {
   it("descendo sobre o lounge, POUSA no piso do lounge (antes atravessava até a plataforma central)", () => {
     const p = { x: centroLounge.x + 30, z: centroLounge.z + 30 };   // no PÁTIO (o meio é o deck da festa, 4 m acima)
     expect(chaoDaNave({ ...p, y: pisoLounge + 20 })).toBeCloseTo(pisoLounge, 5);
-    expect(chaoDaNave({ ...p, y: pisoLounge - 10 })).toBe(0);   // por baixo da laje: o chão é lá embaixo
+    expect(chaoDaNave({ ...p, y: pisoLounge - 10 })).toBe(PRACA.y);   // por baixo da laje: o chão é lá embaixo
     const s = voar({ ...p, y: pisoLounge + 20, yaw: 0, vx: 0, vy: 0, vz: 0 }, { wx: 0, wz: 0, subir: false, descer: true }, 3);
     expect(s.y).toBeCloseTo(pisoLounge, 3);
   });

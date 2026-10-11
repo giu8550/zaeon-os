@@ -21,7 +21,7 @@ describe("motos voadoras — estacionamentos (chão + GARAGEM da Zaeon)", () => 
     const v = vagas();
     for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++) if (v[i]!.lote === v[j]!.lote) expect(Math.hypot(v[i]!.x - v[j]!.x, v[i]!.z - v[j]!.z)).toBeGreaterThanOrEqual(4.5);
     for (const x of v) {
-      const alvo = x.ceu ? CIDADE.centro : { x: 0, z: 0 }, fx = Math.sin(x.yaw), fz = Math.cos(x.yaw), dx = alvo.x - x.x, dz = alvo.z - x.z;
+      const alvo = x.ceu ? CIDADE.centro : PRACA, fx = Math.sin(x.yaw), fz = Math.cos(x.yaw), dx = alvo.x - x.x, dz = alvo.z - x.z;
       expect((fx * dx + fz * dz) / Math.hypot(dx, dz)).toBeGreaterThan(0.9);   // a frente aponta pro centro
     }
   });

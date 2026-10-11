@@ -69,9 +69,9 @@ describe("a arena (a praça inteira)", () => {
     expect(ARENA.r).toBeLessThan(PRACA.r);
     for (const p of PILARES_ARENA) { expect(dentroDaArena(p)).toBe(true); expect(Math.hypot(p.x - PORTAL_PRACA.x, p.z - PORTAL_PRACA.z)).toBeGreaterThan(8); }
     for (const b of BONECOS) expect(dentroDaArena(b)).toBe(true);
-    const r = pontoDeRenascer({ x: 10, z: 0 }); expect(dentroDaArena(r)).toBe(true); expect(r.x).toBeLessThan(0);
+    const r = pontoDeRenascer({ x: ARENA.x + 10, z: ARENA.z }); expect(dentroDaArena(r)).toBe(true); expect(r.x).toBeLessThan(ARENA.x);
     // a praça é dos NOVATOS (sem PvP): com a arena desmontada, ninguém está "na arena"
-    expect(ARENA_ATIVA).toBe(false); expect(naArena({ x: 0, z: 0 })).toBe(false); expect(naArena({ x: 0, z: 0 }, true)).toBe(true);
+    expect(ARENA_ATIVA).toBe(false); expect(naArena(ARENA)).toBe(false); expect(naArena(ARENA, true)).toBe(true);
   });
 });
 

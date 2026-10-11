@@ -1,8 +1,7 @@
 /**
  * Cidade — a ZAEON, a ilha no céu, o coração do hiperespaço (sem chão embaixo: só o vazio). Mesmo idioma da Recepção (cristal, gelo,
  * granizo, fogo contido, querubins, contraste frio×quente), maior e mais rica, no conceito das cidades flutuantes:
- *  - ilha monumental de cristal (montanha INVERTIDA: larga em cima, ápice embaixo), LIMPA por baixo — só a rocha e uma
- *    AGULHA afiada descendo do ápice (só rocha: sem luz na ponta);
+ *  - a ilha é uma LAJE de vidro com a borda de rocha (a montanha invertida e a agulha embaixo saíram — out/2026);
  *  - ilhotas flutuantes em volta, com aglomerados de cristal;
  *  - 16 torres de cristal com pontas luminosas na borda (entre elas, os TUBOS DE ENSAIO do berçário — Bercario); línguas
  *    de fogo na borda (cintilar lento, sem estrobo);
@@ -101,12 +100,10 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // estalactites furavam o chão, brancas, como se estivessem em cima dele
   const SOB_O_VIDRO = -2;
   const rocha = vidro({ color: 0x0b1a30, emissive: 0x10325e, emissiveIntensity: 0.55, roughness: 0.35, metalness: 0.1, transmission: 0.2, thickness: 2, transparent: true, opacity: 0.97 }, 0.97);
-  const cone = add(new THREE.Mesh(new THREE.ConeGeometry(R, H, low ? 10 : 14, 1, true), rocha), ilha, true);
-  cone.rotation.x = Math.PI; cone.position.y = -H / 2 - 0.65; cone.renderOrder = SOB_O_VIDRO;   // o topo do cone fica sob o piso (sem z-fighting)
-  // AGULHA: a ponta afiada que desce do ápice (o volume sólido dela está em CIDADE.agulha) + 3 espinhos menores — sem luz
-  const AG = CIDADE.agulha, agTopo = -H * 0.7, agFundo = -H - AG.altura, agLen = agTopo - agFundo;
-  const agulha = add(new THREE.Mesh(new THREE.ConeGeometry(AG.r * 1.5, agLen, 6, 1, false), rocha), ilha, true);
-  agulha.rotation.x = Math.PI; agulha.position.y = agTopo - agLen / 2; agulha.renderOrder = SOB_O_VIDRO;
+  // SEM A MONTANHA INVERTIDA (out/2026, o dono: "as superfícies de baixo não existem"): a ilha é a LAJE de vidro — a
+  // borda (uma casca de `H` m de rocha) e o fundo de vidro, de onde se vê o universo (e a praça, 40 m abaixo, pela borda)
+  const casca = add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, low ? 64 : 128, 1, true), rocha), ilha, true);
+  casca.position.y = -H / 2 - 0.05; casca.renderOrder = SOB_O_VIDRO;
   // (os 3 espinhos, os andares de servidores com as janelas e os anéis, as estalactites e as quedas de luz saíram — o dono: a base da cidadela é LIMPA, só a rocha e a agulha)
 
   // ── piso: disco frio + anéis concêntricos + raios (a "rosa dos ventos" da cidade) ──
@@ -114,7 +111,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // azuis do coração (CoracaoZaeon) correm por cima dele. Um disco só (uma face, sem bordas): desenhado ANTES de todo
   // transparente e sem gravar profundidade, então o que está embaixo (janelas, estalactites, estrelas) aparece através
   // dele. Continua alvo do clique/câmera (o raycast não olha a opacidade)
-  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(R, low ? 64 : 128), vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3 }, 0.4)), ilha, true);
+  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(R, low ? 64 : 128), vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, side: THREE.DoubleSide }, 0.4)), ilha, true);   // (dupla face: de baixo, a laje de vidro)
   piso.rotation.x = -Math.PI / 2; (piso.material as THREE.Material).depthWrite = false; piso.renderOrder = SOB_O_VIDRO + 1;
   // as LINHAS do piso: um padrão REGULAR na escala de gente (antes: 5 anéis com espaços desiguais e 16 raios de 126 m
   // — na Zaeon mega aquilo ficava torto e enorme): anéis finos a cada 18 m da capela até a borda (um mais aceso a cada 3)
@@ -236,14 +233,11 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     const pts = add(new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.45, map: starTex, color: 0x9fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc); pts.frustumCulled = false;
     fluxoPts.push({ geo: pg, d, esc: EE });
   }
-  // ── a PLATAFORMA DO LOUNGE (só a base; o clube em cima é o Salas): disco de gelo com aro de luz + montanha invertida
-  //    de cristal por baixo (como as ilhotas) e o brilho antigravidade ──
+  // ── a PLATAFORMA de cada sala (só a base; o clube em cima é o Salas): a laje de gelo com o aro de luz (a montanha
+  //    invertida e o brilho antigravidade embaixo saíram — out/2026) ──
   for (const nomeSala of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nomeSala], base = new THREE.Group(); base.position.set(L.x, ALTURA_LOUNGE, L.z); add(base);
     add(new THREE.Mesh(new THREE.CylinderGeometry(L.r + 1, L.r - 1, 1.8, low ? 48 : 96), new THREE.MeshStandardMaterial({ color: 0x0a2440, emissive: COLD, emissiveIntensity: 0.3, roughness: 0.5, metalness: 0.25 })), base, true).position.y = -0.95;
-    const cone = add(new THREE.Mesh(new THREE.ConeGeometry(L.r - 2, 56, low ? 9 : 14, 1, false), rocha), base, true); cone.rotation.x = Math.PI; cone.position.y = -1.8 - 28;
-    for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2 + 0.3, c = add(new THREE.Mesh(new THREE.ConeGeometry(8 + (k % 2) * 4, 26 + (k % 3) * 8, 7, 1, false), rocha), base); c.rotation.x = Math.PI; c.position.set(Math.cos(a) * L.r * 0.55, -1.8 - (13 + (k % 3) * 4), Math.sin(a) * L.r * 0.55); }
     const aroL = add(new THREE.Mesh(new THREE.TorusGeometry(L.r + 1, 0.3, 6, low ? 64 : 128), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeSala], transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending })), base); aroL.rotation.x = Math.PI / 2; aroL.position.y = -0.1;
-    if (!low) { const anti = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glow("rgba(185,140,255,.9)", "rgba(102,230,255,.2)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), base); anti.position.y = -40; anti.scale.setScalar(46); }   // (leve: sem o brilho antigravidade)
   }
 
   // (sem hangar: a nave-QG do dono fica PAIRANDO atracada ao lado da ilha — lib/cyber/naveQG `poseDaDoca`)
@@ -291,7 +285,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   ILHOTAS.forEach((il, k) => {
     const rr = il.r, y0 = CIDADE.pisoY + il.dy;
     const g = new THREE.Group(); g.position.set(CIDADE.centro.x + il.x, y0, CIDADE.centro.z + il.z); raiz.add(g);
-    const c = new THREE.Mesh(new THREE.ConeGeometry(rr, rr * 1.9, low ? 8 : 12), rocha); c.rotation.x = Math.PI; c.position.y = -rr * 0.95 - 0.4; g.add(c);
     // piso: a face de CIMA fica exatamente na altura do grupo (= a altura da colisão)
     const topo = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, 0.4, low ? 8 : 16), new THREE.MeshStandardMaterial({ color: 0x0a2440, emissive: COLD, emissiveIntensity: 0.3 })); topo.position.y = -0.2; g.add(topo);
     const aro = new THREE.Mesh(new THREE.TorusGeometry(rr - 0.1, 0.06, 6, 48), new THREE.MeshBasicMaterial({ color: COLD, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending })); aro.rotation.x = Math.PI / 2; aro.position.y = 0.02; g.add(aro);

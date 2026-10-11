@@ -188,7 +188,7 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
  * O anel "respira" devagar (sem piscar); com prefers-reduced-motion fica parado.
  */
 function heliporto(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, rotulo: HTMLDivElement): LandmarkHandle {
-  const g = new THREE.Group(); g.position.set(poi.x, 0, poi.z);
+  const g = new THREE.Group(); g.position.set(poi.x, poi.base ?? 0, poi.z);
   const r = poi.footprintR, seg = low ? 32 : 64, parado = reducedMotion();
   const disco = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 0.15, 0.12, seg), new THREE.MeshStandardMaterial({ color: 0x0c1a33, emissive: 0x16305c, emissiveIntensity: 0.5, roughness: 0.7, metalness: 0.3 }));
   disco.position.y = 0.06; g.add(disco);
@@ -210,7 +210,7 @@ function heliporto(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, 
  *  são do engine — clicar numa = montar; o piso não é alvo de clique (clicar nele = andar até ali). */
 function estacionamento(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, rotulo: HTMLDivElement): LandmarkHandle {
   const lote = LOTES.find((l) => l.id === "chao")!;
-  const g = new THREE.Group(); g.position.set(poi.x, 0, poi.z); g.rotation.y = lote.rot;
+  const g = new THREE.Group(); g.position.set(poi.x, poi.base ?? 0, poi.z); g.rotation.y = lote.rot;
   const piso = criarPisoEstacionamento({ low, parado: reducedMotion(), lote }); g.add(piso.group);
   return {
     poi, group: g, rotulo, alvos: [], topo: null, monitorTopo: null, escada: null,

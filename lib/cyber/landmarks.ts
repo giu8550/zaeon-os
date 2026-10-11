@@ -11,6 +11,7 @@ import { MIRANTES } from "./terra";
 import type { NavPOI } from "./nav";
 import { LOTES, tamanhoDoLote } from "./motos";
 import { CIDADE, mundo } from "./ceu";
+import { CHAO, naPracaLocal } from "./praca";
 
 export type AcessoPOI = "publico" | "dono";
 export type PresetPOI = "zaeon" | "generico" | "heliporto" | "estacionamento";
@@ -20,7 +21,7 @@ export type POI = {
   org: string;           // descrição curta do painel
   preset: PresetPOI;
   x: number; z: number;  // posição no plano (FORA do anel de bases)
-  /** a altura (mundo) do PISO em que o marco se apoia: sem isto, a praça (y = 0); a Recepção fica no piso da Zaeon */
+  /** a altura (mundo) do PISO em que o marco se apoia: a praça (lib/cyber/praca `CHAO`) ou o piso da Zaeon (a Recepção) */
   base?: number;
   footprintR: number;    // raio sólido (colisão no chão) — e o chão que as bases não podem ocupar
   /** `false` = chão plano andável (ex.: heliporto): ninguém colide, mas as bases continuam desviando */
@@ -81,11 +82,11 @@ function marcoPiramide(local: { x: number; z: number }): Omit<POI, "id" | "nome"
  * HELIPORTO — o pouso da nave na PRAÇA (a ilha flutuante das bases, lib/cyber/praca). Disco plano e andável; as bases
  * desviam dele. Destino do atalho "Heliporto".
  */
-export const HELIPORTO = { x: 24, z: 24, r: 5 };
+export const HELIPORTO = { ...naPracaLocal(24, 24), r: 5 };
 function heliportoPOI(): POI {
   return {
     id: "heliporto", nome: "Heliporto", org: "Pouso da nave, perto da praça.",
-    preset: "heliporto", x: HELIPORTO.x, z: HELIPORTO.z,
+    preset: "heliporto", x: HELIPORTO.x, z: HELIPORTO.z, base: CHAO,
     footprintR: HELIPORTO.r, interactR: HELIPORTO.r + 3, solido: false,
     altura: 0, acesso: "publico",
   };
@@ -96,14 +97,14 @@ function heliportoPOI(): POI {
 function estacionamentoPOI(): POI {
   return {
     id: "estacionamento", nome: "Estacionamento", org: "Motos voadoras — pra todo mundo.",
-    preset: "estacionamento", x: LOTES[0]!.x, z: LOTES[0]!.z,
+    preset: "estacionamento", x: LOTES[0]!.x, z: LOTES[0]!.z, base: CHAO,
     footprintR: tamanhoDoLote(LOTES[0]!).r, interactR: tamanhoDoLote(LOTES[0]!).r + 3, solido: false, altura: 0, acesso: "publico",
   };
 }
 export const POIS: POI[] = [zaeonPOI(), mirantePOI(1), mirantePOI(2), heliportoPOI(), estacionamentoPOI()];   // (o mirante 3, na outra ponta, saiu — fps)
 
-/** os marcos apoiados na PRAÇA (os da Zaeon têm `base`) */
-export const naPracaPOI = (p: POI) => p.base === undefined;
+/** os marcos apoiados na PRAÇA (o piso dela é o `CHAO`; os da Zaeon têm a `base` no piso dela) */
+export const naPracaPOI = (p: POI) => p.base === undefined || p.base === CHAO;
 export const colisoresDosPOIs = (pois: POI[] = POIS) => pois.filter((p) => p.solido !== false && naPracaPOI(p)).map((p) => ({ x: p.x, z: p.z, r: p.footprintR }));
 
 /** Flag de render (BUILD): "1" liga, "0" desliga; sem valor → ligada em dev, desligada em produção. */

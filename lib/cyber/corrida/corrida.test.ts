@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { PISTAS, pistaPorId, raioDeCurva, RAIO_LIVRE_PRACA, type Pista } from "./pistas";
 import { CONTAGEM, cruzou, formatarTempo, novaCorrida, passoCorrida, tempoMinimo, type Corrida, type EventoCorrida } from "./corrida";
 import { PILOTAGEM, motoParada, passoMotoSub, type EstadoMoto } from "../motoFisica";
-import { PRACA } from "../praca";
+import { CHAO, PRACA } from "../praca";
+import { CIDADE } from "../ceu";
+import { NAVE_QG, poseDaDoca } from "../naveQG";
 import { NOS } from "../buracos";
 import { VOO } from "../voo";
 
@@ -37,10 +39,12 @@ describe("pistas de corrida", () => {
       const a = p.ponto(0), b = p.ponto(p.comprimento); expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeLessThan(0.5);   // fecha
       for (let s = 0; s < p.comprimento; s += 10) {
         const q = p.ponto(s);
-        expect(q.y, p.id).toBeGreaterThan(2); expect(q.y, p.id).toBeLessThan(PILOTAGEM.alturaMax - 1);
+        expect(q.y - CHAO, p.id).toBeGreaterThan(2); expect(q.y - CHAO, p.id).toBeLessThan(PILOTAGEM.alturaMax - 1);   // (rasante: acima do CHÃO do hiperespaço)
+        expect(Math.hypot(q.x - CIDADE.centro.x, q.z - CIDADE.centro.z), p.id).toBeGreaterThan(CIDADE.bordaR + 30);          // nunca por baixo da Zaeon
+        { const d = poseDaDoca(); expect(Math.hypot(q.x - d.x, q.z - d.z), p.id).toBeGreaterThan(NAVE_QG.raio + 8); }       // nem por baixo da nave atracada
         expect(Math.hypot(q.x - PRACA.x, q.z - PRACA.z), p.id).toBeGreaterThan(RAIO_LIVRE_PRACA);
         expect(Math.hypot(q.x, q.z)).toBeLessThan(VOO.raioMapa - 120);
-        for (const n of Object.values(NOS)) if (n.y < 30) expect(Math.hypot(q.x - n.anel.x, q.z - n.anel.z)).toBeGreaterThan(60);
+        for (const n of Object.values(NOS)) if (n.y < CHAO + 30) expect(Math.hypot(q.x - n.anel.x, q.z - n.anel.z)).toBeGreaterThan(60);
       }
       // os portões: espaçados e o grid DEPOIS da largada (largar não fecha uma volta)
       for (let i = 1; i < p.portoes.length; i++) expect(p.portoes[i]!.s - p.portoes[i - 1]!.s).toBeGreaterThan(150);

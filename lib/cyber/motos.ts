@@ -15,10 +15,12 @@
  */
 import { ALTURA_LOUNGE, CIDADE, daSala, mundo, rotDaSala } from "./ceu";
 import { VOO } from "./voo";
+import { PRACA, naPracaLocal } from "./praca";
 
 /** um estacionamento: centro, rumo (a frente das vagas aponta pro centro — a praça no chão, o centro da ilha na
  *  Zaeon), `filas` × `porFila` vagas, `espacamento` entre vagas de uma fila e `entreFilas` entre as filas (m) */
-/** `alt` = quanto o piso do lote fica acima do piso da Zaeon (a garagem fica na altura das salas) */
+/** `alt` = quanto o piso do lote fica acima do piso dele: o da Zaeon (`ceu`: a garagem fica na altura das salas) ou o
+ *  da praça (lib/cyber/praca `CHAO`) */
 export type Lote = { id: "chao" | "garagem" | "estudo"; x: number; z: number; rot: number; ceu: boolean; alt: number; filas: number; porFila: number; espacamento: number; entreFilas: number;
   /** o VÃO no meio das filas (m): a calçada passa por ele (o pátio do lounge) */ corredor?: number };
 const lote = (id: Lote["id"], x: number, z: number, cx: number, cz: number, ceu: boolean, filas: number, porFila: number): Lote =>
@@ -30,7 +32,7 @@ const garagem = (q: { x: number; z: number }): Lote => {
   return { id: "garagem", x: w.x, z: w.z, rot: rotDaSala(s), ceu: true, alt: ALTURA_LOUNGE + 0.16, filas: 2, porFila: 7, espacamento: 4.6, entreFilas: 8 };
 };
 export const LOTES: Lote[] = [
-  lote("chao", -34, 16, 0, 0, false, 1, 4),   // na ilha da PRAÇA (lib/cyber/praca): cabe dentro da borda
+  lote("chao", naPracaLocal(-34, 16).x, naPracaLocal(-34, 16).z, PRACA.x, PRACA.z, false, 1, 4),   // na ilha da PRAÇA (lib/cyber/praca): cabe dentro da borda — o piso é o CHAO
   ...LOTES_GARAGEM_SALA.map(garagem),         // a GARAGEM da Zaeon (todas as motos de lá)
 ];
 /** largura (ao longo das filas) e profundidade (m) do piso de um lote, e o raio que ele ocupa */

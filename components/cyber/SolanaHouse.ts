@@ -64,7 +64,8 @@ export function criarSolanaHouse(o: { low: boolean; starTex: THREE.Texture }): S
   const borda = add(new THREE.Mesh(new THREE.CylinderGeometry(S.r, S.r - 1, 1.6, seg, 1, true), concreto)); borda.position.y = -0.8;
   for (const [cor, y, r] of [[ROXO, 0.12, S.r], [VERDE, -1.6, S.r - 1]] as const) { const a = add(new THREE.Mesh(new THREE.TorusGeometry(r, 0.18, 6, seg), new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }))); a.rotation.x = Math.PI / 2; a.position.y = y; }
   const baseMat = new THREE.MeshStandardMaterial({ color: 0x0c0a1a, roughness: 0.35, metalness: 0.5, emissive: 0x2a1060, emissiveIntensity: 0.5, flatShading: true });
-  const cone = add(new THREE.Mesh(new THREE.ConeGeometry(S.r - 1, 26, low ? 8 : 14, 2), baseMat)); cone.rotation.x = Math.PI; cone.position.y = -1.6 - 13;
+  // (sem a montanha invertida embaixo — out/2026: uma base baixa que guarda a GARAGEM dos devs e termina num fundo liso)
+  const baseG = add(new THREE.Mesh(new THREE.CylinderGeometry(S.r - 1, S.r - 3, 9, low ? 24 : 48), baseMat)); baseG.position.y = -1.6 - 4.5;
   const texAnti = glowTex("rgba(160,110,255,.95)", "rgba(20,241,149,.25)"); texturas.push(texAnti);
   const antis: THREE.Sprite[] = [];
   for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2, s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texAnti, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); s.position.set(Math.cos(a) * S.r * 0.7, -3.5, Math.sin(a) * S.r * 0.7); s.scale.setScalar(10); antis.push(s); }

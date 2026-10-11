@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { BASE_COLLIDER_R, BASE_PLATAFORMA_R, BASES_POR_ANEL, basesDosMembros, localParaMundo, posicaoDaBase, spawnDaBase } from "./bases";
 import { dentroDeAlgum, empurrarParaFora } from "./colisao";
 import { decidirClique, rotuloMonitor } from "./clique";
+import { PRACA } from "./praca";
 
 describe("bases", () => {
   it("fixas: mesma posição sempre; a primeira é a canônica do protótipo (mesma direção)", () => {
     expect(posicaoDaBase(0)).toEqual(posicaoDaBase(0));
     const b = posicaoDaBase(0);
-    expect(Math.atan2(b.z, b.x)).toBeCloseTo(Math.atan2(-3, 6), 6);
+    expect(Math.atan2(b.z - PRACA.z, b.x - PRACA.x)).toBeCloseTo(Math.atan2(-3, 6), 6);   // (no referencial da praça)
   });
   it("espaçadas: plataformas nunca se sobrepõem (inclui anéis externos)", () => {
     const n = BASES_POR_ANEL * 3;
@@ -17,7 +18,7 @@ describe("bases", () => {
     }
   });
   it("próximas: as do 1º anel ficam na praça (≤ 12 do centro)", () => {
-    for (let i = 0; i < BASES_POR_ANEL; i++) { const b = posicaoDaBase(i); expect(Math.hypot(b.x, b.z)).toBeLessThanOrEqual(12); }
+    for (let i = 0; i < BASES_POR_ANEL; i++) { const b = posicaoDaBase(i); expect(Math.hypot(b.x - PRACA.x, b.z - PRACA.z)).toBeLessThanOrEqual(12); }
   });
   it("por membro, na ordem; sair da sala não muda nada (a ordem só cresce)", () => {
     const m = basesDosMembros(["a", "b", "c", "a"]);
@@ -28,9 +29,10 @@ describe("bases", () => {
   it("monitor fica atrás de quem entra (longe da praça) e o spawn fica entre a praça e a base", () => {
     const b = posicaoDaBase(2);
     const mon = localParaMundo(b, 0, -1.44);
-    expect(Math.hypot(mon.x, mon.z)).toBeGreaterThan(Math.hypot(b.x, b.z));
-    expect(Math.hypot(...Object.values(spawnDaBase(b)) as [number, number])).toBeLessThan(Math.hypot(b.x, b.z));
-    expect(spawnDaBase(undefined)).toEqual({ x: 0, z: 0 });
+    const daPraca = (p: { x: number; z: number }) => Math.hypot(p.x - PRACA.x, p.z - PRACA.z);
+    expect(daPraca(mon)).toBeGreaterThan(daPraca(b));
+    expect(daPraca(spawnDaBase(b))).toBeLessThan(daPraca(b));
+    expect(spawnDaBase(undefined)).toEqual({ x: PRACA.x, z: PRACA.z });
   });
 });
 

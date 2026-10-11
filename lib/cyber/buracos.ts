@@ -11,7 +11,7 @@
 import type { P2 } from "./colisao";
 import { CIDADE, TORRE_DJ, daSala, mundo, naSala } from "./ceu";
 import { PLATAFORMAS, IDS_PLATAFORMAS, type IdPlataforma } from "./plataformas";
-import { PORTAL_PRACA, PRACA } from "./praca";
+import { PORTAL_PRACA, PRACA, naPracaLocal } from "./praca";
 import { COMODOS } from "./naveQG";
 
 export type IdNo = "zaeon" | "praca" | IdPlataforma;
@@ -43,7 +43,7 @@ export const NOS: Record<IdNo, NoTunel> = {
     const a = mundo(CIDADE.portalTunel), c = mundo(CIDADE.chegada);
     return { id: "zaeon", nome: "Cidade Zaeon", desc: DESC.zaeon, anel: { ...a, r: CIDADE.portalTunel.r }, y: CIDADE.pisoY, chegada: { ...c, rumo: Math.atan2(-CIDADE.chegada.x, -CIDADE.chegada.z) }, bh: { h: 7.5, r: 2.2 } } satisfies NoTunel;
   })(),
-  praca: { id: "praca", nome: "Praça das bases", desc: DESC.praca, anel: PORTAL_PRACA, y: PRACA.y, chegada: { x: 20, z: -18, rumo: Math.atan2(-20, 18) }, bh: { h: 6, r: 1.8 } },
+  praca: { id: "praca", nome: "Praça das bases", desc: DESC.praca, anel: PORTAL_PRACA, y: PRACA.y, chegada: { ...naPracaLocal(20, -18), rumo: Math.atan2(-20, 18) }, bh: { h: 6, r: 1.8 } },
   ...(Object.fromEntries(IDS_PLATAFORMAS.map((id) => {
     const P = PLATAFORMAS[id];
     return [id, { id, nome: P.nome, desc: DESC[id], anel: P.portal, y: P.y, chegada: P.chegada, bh: { h: 5.5, r: 1.6 } } satisfies NoTunel];

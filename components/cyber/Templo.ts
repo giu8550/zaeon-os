@@ -6,7 +6,7 @@
  *    lado de dentro da curva;
  *  - a MURALHA do lado de fora: uma parede alta e orgânica que sobe do abismo, com VEIAS de luz se ramificando nela e o
  *    "vaso" grosso no topo — o pulso corre do lounge pro templo, como sangue numa veia;
- *  - o TEMPLO: a laje (com a montanha invertida embaixo, como as salas), o piso com a mandala dourada, o guarda-corpo de
+ *  - o TEMPLO: a laje (sem a montanha invertida embaixo — out/2026), o piso com a mandala dourada, o guarda-corpo de
  *    vidro, o pórtico da entrada, as BANDEIRINHAS de luz (São João) e a CAPELA — a irmã pequena da capela da Zaeon
  *    (pilares, a coroa acesa no alto, cúpula de vidro estrelada, tambor, 2ª cúpula, ponta e farol) — no meio dela o
  *    SIGILO DE METATRON no piso (o Cubo de Metatron: as 13 esferas da Fruta da Vida ligadas por todas as retas, girando
@@ -170,14 +170,12 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
     anim.push((_, t) => { muro.uniforms.uT!.value = t; vasoMat.uniforms.uT!.value = t; veiaMat.uniforms.uT!.value = t * 1.3; (espinha.material as THREE.ShaderMaterial).uniforms.uT!.value = t; });
   }
 
-  // ── o TEMPLO: a laje + a montanha invertida embaixo + o aro (como as plataformas das salas) ──
+  // ── o TEMPLO: a laje + o aro (como as plataformas das salas) ──
   const tg = new THREE.Group(); tg.position.set(T.x, T.h, T.z); g.add(tg);
   const ouro = new THREE.MeshStandardMaterial({ color: 0xd8b04a, roughness: 0.3, metalness: 0.8, emissive: 0x4a3008, emissiveIntensity: 0.5 });
-  const rocha = new THREE.MeshStandardMaterial({ color: 0x120a16, roughness: 0.9, metalness: 0.1, flatShading: true });
   const laje = new THREE.Mesh(new THREE.CylinderGeometry(T.r + 1, T.r - 1, 1.8, o.low ? 48 : 96), new THREE.MeshStandardMaterial({ color: 0x1a1020, emissive: 0x2a1030, emissiveIntensity: 0.4, roughness: 0.5, metalness: 0.3 }));
   laje.position.y = -0.9; tg.add(laje);
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(T.r - 2, 46, o.low ? 9 : 14), rocha); cone.rotation.x = Math.PI; cone.position.y = -1.8 - 23; tg.add(cone);
-  for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2 + 0.6, c = new THREE.Mesh(new THREE.ConeGeometry(6 + (k % 2) * 3, 20 + (k % 3) * 6, 7), rocha); c.rotation.x = Math.PI; c.position.set(Math.cos(a) * T.r * 0.55, -12 - (k % 3) * 3, Math.sin(a) * T.r * 0.55); tg.add(c); }
+  // (a montanha invertida embaixo do templo saiu — out/2026)
   const aro = new THREE.Mesh(new THREE.TorusGeometry(T.r + 1, 0.3, 6, o.low ? 64 : 128), basica(0xffb46b, 0.8, true)); aro.rotation.x = Math.PI / 2; aro.position.y = -0.4; tg.add(aro);
   // o piso com a mandala
   const texPiso = texturaPisoTemplo(); texs.push(texPiso);
