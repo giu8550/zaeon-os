@@ -1,4 +1,5 @@
 "use client";
+import PastasEmpilhadas, { CORPO_DA_PASTA, type Pasta } from "@/components/chat/PastasEmpilhadas";
 import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
 import { useCallback, useState, useEffect } from "react";
 import type { WindowEntry } from "@/lib/useWindowStore";
@@ -280,98 +281,67 @@ export default function ResearchShell({
         <div className="relative flex-1 min-w-0 min-h-0 flex flex-col">
         {/* TOPO = DOCUMENTOS: a conversa em cena, a pesquisa ("Minha pesquisa") e os PDFs abertos no leitor, e o ＋
             (nova pesquisa). A aba ativa ocupa a sala; a conversa mostrada é a que está acesa na barra da esquerda. */}
-        {abas && (
-          <div className="relative shrink-0 flex items-center gap-1.5 px-3 py-2.5 overflow-x-auto no-scrollbar" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }} role="tablist" aria-label="Documentos">
-            {/* o traçador de percurso: só o sinal da bolinha (gira quando um percurso está pronto pra ser criado) */}
-            <div ref={setSlotTopo} className="shrink-0 flex items-center empty:hidden" />
-            <div
-              role="tab"
-              aria-selected={vista === "chat"}
-              tabIndex={0}
-              onClick={() => setVista("chat")}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setVista("chat"); } }}
-              title="Voltar pra conversa"
-              className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
-                vista === "chat"
-                  ? "bg-black dark:bg-white text-white dark:text-black border-transparent"
-                  : "text-slate-700 dark:text-white/70 border-slate-200 dark:border-white/10 hover:border-cyan-400/50"
-              }`}
-            >
-              <RostoDaAba agentId="aura" nome="Aura" ativa={vista === "chat"} size={20}>
-                <span className="text-[11px] leading-none">⟁</span>
-              </RostoDaAba>
-              <span className="text-[11px] font-bold">Conversa</span>
-            </div>
-            {/* 🧭 os DIAGRAMAS gerados ficam guardados aqui */}
-            {(() => {
-              const diagramas = windows.filter((w) => w.type === "artefato" && (w as any).artefato?.studioKind === "diagram");
-              return (
-                <div className="relative shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setDiagramasAberto((v) => !v)}
-                    aria-haspopup="menu"
-                    aria-expanded={diagramasAberto}
-                    aria-label={`Diagramas (${diagramas.length})`}
-                    title={diagramas.length ? `Diagramas gerados (${diagramas.length})` : "Diagramas — os que a IA gerar ficam aqui"}
-                    className={`relative inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${diagramasAberto ? "bg-black dark:bg-white text-white dark:text-black border-transparent" : "text-slate-700 dark:text-white/70 border-slate-200 dark:border-white/10 hover:border-cyan-400/50"}`}
-                  >
-                    <span className="text-[13px] leading-none" aria-hidden>🧭</span>
-                    {diagramas.length > 0 && <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-cyan-500 text-[9px] font-black text-black grid place-items-center">{diagramas.length}</span>}
-                  </button>
-                </div>
-              );
-            })()}
-            {windows.filter((w) => w.type !== "document").map((w) => {
-              const atual = vista === w.id;
+        {abas && (() => {
+          const diagramas = windows.filter((w) => w.type === "artefato" && (w as any).artefato?.studioKind === "diagram");
+          const pastas: Pasta[] = [
+            {
+              id: "chat", rotulo: "Conversa", titulo: "A conversa",
+              icone: <RostoDaAba agentId="aura" nome="Aura" ativa={vista === "chat"} size={18}><span className="text-[11px] leading-none">⟁</span></RostoDaAba>,
+            },
+            ...windows.filter((w) => w.type !== "document").map((w): Pasta => {
               const rotulo = w.id === "research" ? (workType ? `Meu ${workType}` : "Minha pesquisa") : w.label;
-              return (
-                <div
-                  key={w.id}
-                  role="tab"
-                  aria-selected={atual}
-                  tabIndex={0}
-                  onClick={() => verJanela(w.id)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); verJanela(w.id); } }}
-                  title={rotulo}
-                  className={`group shrink-0 inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full border cursor-pointer transition-colors max-w-[190px] ${
-                    atual
-                      ? "bg-black dark:bg-white text-white dark:text-black border-transparent"
-                      : "text-slate-700 dark:text-white/70 border-slate-200 dark:border-white/10 hover:border-cyan-400/50"
-                  }`}
+              return {
+                id: w.id, rotulo,
+                icone: w.id === "research" && onReadResearch ? (
+                  <span
+                    role="button"
+                    aria-label={isReadingResearch ? "Parar leitura" : "Ouvir a pesquisa"}
+                    title={isReadingResearch ? "Parar a leitura" : "Ouvir a pesquisa em voz"}
+                    onClick={(e) => { e.stopPropagation(); onReadResearch(); }}
+                    className="text-[10px]"
+                  >{isReadingResearch ? "⏹" : "▶"}</span>
+                ) : w.emoji,
+                onFechar: w.id !== "research" ? () => { removeWindow(w.id); if (vista === w.id) setVista("chat"); } : undefined,
+              };
+            }),
+          ];
+          return (
+            // TOPO = PASTAS: a conversa na frente e os documentos dela (a pesquisa, os PDFs no leitor, diagramas, aulas)
+            // empilhados atrás — puxar uma aba traz a pasta pra frente (components/chat/PastasEmpilhadas).
+            <PastasEmpilhadas
+              pastas={pastas}
+              ativa={vista}
+              onAbrir={(id) => (id === "chat" ? setVista("chat") : verJanela(id))}
+              // o traçador de percurso: só o sinal da bolinha (gira quando um percurso está pronto pra ser criado)
+              antes={<div ref={setSlotTopo} className="shrink-0 flex items-center self-center empty:hidden" />}
+              depois={<>
+                {/* 🧭 os DIAGRAMAS gerados ficam guardados aqui */}
+                <button
+                  type="button"
+                  onClick={() => setDiagramasAberto((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={diagramasAberto}
+                  aria-label={`Diagramas (${diagramas.length})`}
+                  title={diagramas.length ? `Diagramas gerados (${diagramas.length})` : "Diagramas — os que a IA gerar ficam aqui"}
+                  className={`relative inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${diagramasAberto ? "bg-black dark:bg-white text-white dark:text-black border-transparent" : "text-slate-700 dark:text-white/70 border-slate-200 dark:border-white/10 hover:border-cyan-400/50"}`}
                 >
-                  {w.id === "research" && onReadResearch ? (
-                    <span
-                      role="button"
-                      aria-label={isReadingResearch ? "Parar leitura" : "Ouvir a pesquisa"}
-                      title={isReadingResearch ? "Parar a leitura" : "Ouvir a pesquisa em voz"}
-                      onClick={(e) => { e.stopPropagation(); onReadResearch(); }}
-                      className="text-[10px] leading-none"
-                    >{isReadingResearch ? "⏹" : "▶"}</span>
-                  ) : <span className="text-[11px] leading-none">{w.emoji}</span>}
-                  <span className="text-[11px] font-bold truncate">{rotulo}</span>
-                  {w.id !== "research" ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); removeWindow(w.id); if (vista === w.id) setVista("chat"); }}
-                      aria-label={`Fechar ${rotulo}`}
-                      className={`shrink-0 rounded-full px-1 text-[12px] leading-none transition-opacity ${atual ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover:opacity-70 hover:!opacity-100"}`}
-                    >×</button>
-                  ) : <span className="w-1" />}
-                </div>
-              );
-            })}
-            <button
-              onClick={() => setMaisAberto((v) => !v)}
-              title="Novo documento"
-              aria-label="Novo documento"
-              aria-expanded={maisAberto}
-              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-dashed border-slate-300 dark:border-white/15 text-slate-600 dark:text-white/60 hover:border-cyan-400/60 hover:text-cyan-600 dark:hover:text-cyan-300 transition-colors"
-            >
-              <span className="text-[13px] leading-none">＋</span>
-              <span className="text-[11px] font-bold">Nova</span>
-            </button>
-          </div>
-        )}
+                  <span className="text-[13px] leading-none" aria-hidden>🧭</span>
+                  {diagramas.length > 0 && <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-cyan-500 text-[9px] font-black text-black grid place-items-center">{diagramas.length}</span>}
+                </button>
+                <button
+                  onClick={() => setMaisAberto((v) => !v)}
+                  title="Novo documento"
+                  aria-label="Novo documento"
+                  aria-expanded={maisAberto}
+                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-dashed border-slate-300 dark:border-white/15 text-slate-600 dark:text-white/60 hover:border-cyan-400/60 hover:text-cyan-600 dark:hover:text-cyan-300 transition-colors"
+                >
+                  <span className="text-[13px] leading-none">＋</span>
+                  <span className="text-[11px] font-bold">Nova</span>
+                </button>
+              </>}
+            />
+          );
+        })()}
         {abas && maisAberto && (
           <div className="absolute z-[70] top-12 left-3 flex flex-col gap-1 p-1.5 rounded-2xl min-w-[200px]" style={{ background: "rgba(14,16,28,0.96)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 20px 50px -20px rgba(0,0,0,0.9)" }} onMouseLeave={() => setMaisAberto(false)}>
             {onNewWork && (
@@ -417,7 +387,7 @@ export default function ResearchShell({
           );
         })()}
         {/* Sheet area — all windows mounted, inactive ones hidden via display:none */}
-        <div ref={containerRef} className="flex-1 relative min-h-0 overflow-hidden">
+        <div ref={containerRef} className={`flex-1 relative min-h-0 overflow-hidden ${abas ? CORPO_DA_PASTA : ""}`}>
           {/* Chat (Escritor/Revisor) sobrepõe o trabalho quando ligado na pill — alterna responsivo. */}
           {/* Sala unificada: o chat fica MONTADO (só escondido) ao ir pra folha — uma resposta em curso
               não é derrubada, o rascunho não some e o composer não precisa remontar. Fora da sala
