@@ -80,7 +80,7 @@ import { criarPistas, type PistasHandle } from "./PistaCorrida";
 import { pistaPorId, type Pista } from "@/lib/cyber/corrida/pistas";
 import { CONTAGEM_CK, ESPERA_DUPLA_MS, PISTA_CK, botEm, crDe, faseCk, gridCk, lerCr, noBoxCk, novaCorridaCk, passoCk, vencedores, type BotCk, type Concorrente, type CorridaCk, type ModoCk } from "@/lib/cyber/corrida/checkpoints";
 import { CONTAGEM, novaCorrida, passoCorrida, tempoDeCorrida, type Corrida, type EventoCorrida, type FaseCorrida } from "@/lib/cyber/corrida/corrida";
-import { gastarDash, passoVigor, podeCorrer, vigorCheio, type EstadoVigor } from "@/lib/cyber/vigor";
+import { aguaCheia, efeitoNaVida, gastarDashAgua, naFonte, passoAgua, podeEsforcar, type EstadoAgua, type Fonte } from "@/lib/cyber/agua";
 import { PILOTAGEM, motoParada, passoMotoSub, rompeuBarreira, sensacaoDeVelocidade, supersonico, type ComandoMoto, type EstadoMoto } from "@/lib/cyber/motoFisica";
 import { LOOPS_MOTO, cambioNeutro, eventosDaMoto, mixDaMoto, passoCambio, setaAcesa, somMotoParada, type Cambio, type EstadoSomMoto } from "@/lib/cyber/somMoto";
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
@@ -293,6 +293,11 @@ function raioDoTemplo() { const L = CIDADE.salas.lounge, t = daSala(L, TEMPLO.x,
 const AREA_ZAEON = cil(CIDADE.centro, Math.max(CIDADE.bordaR + 90, -CIDADE.salas.lounge.x + CIDADE.salas.lounge.r + 10, raioDoTemplo() + 10), CIDADE.pisoY, CIDADE.ilhaAltura + 60, 220);   // + ilhotas, a escada e o lounge
 const AREA_UNILAB = cil(UNIVERSIDADE.centro, UNIVERSIDADE.discoR, UNIVERSIDADE.y, 100, 80);
 const AREA_SOLANA = cil(PLATAFORMAS.solana.centro, PLATAFORMAS.solana.r + 10, PLATAFORMAS.solana.y, 40, 40);
+/** as FONTES de água (lib/cyber/agua): o espelho d'água do jardim e o coração da capela (o globo das veias azuis) */
+const FONTES_AGUA: Fonte[] = [
+  { ...daSala(CIDADE.salas.jardim, 0, -8), r: 9, y: ALTURA_LOUNGE, nome: "Espelho d'água" },
+  { x: 0, z: 0, r: 22, y: 0, nome: "Coração da capela" },
+];
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
 const TAG_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
@@ -768,8 +773,9 @@ export class CyberEngine {
   private descanso: { lugar: Lugar; assento: number; modo: ModoDescanso; fase: "indo" | "sentando" | "parado" | "levantando"; t: number } | null = null;
   /** o tablet: quer ele na mão? quanto já materializou (0..1); o laboratório já está aberto por cima? */
   private tabletQuer = false; private tabletW = 0; private labAberto = false;
-  /** o VIGOR (lib/cyber/vigor): o sprint gasta, o dash custa, parado recupera — a barra do HUD */
-  private vigor: EstadoVigor = vigorCheio();
+  /** a ÁGUA (lib/cyber/agua) — o recurso mais vital: o sprint e o turbo gastam, o dash custa um gole, parado volta
+   *  devagar, nas FONTES rápido; hidratado a vida volta, com sede ela cai — a barra do HUD. `fonte` = onde está bebendo */
+  private agua: EstadoAgua = aguaCheia(); private fonteAgora: string | null = null;
   private ultDescanso = "";
   /** onde estão as OUTRAS pessoas na Zaeon (pra não sentar no colo de ninguém) */
   private outrosNaZaeon(): { x: number; z: number }[] { return [...this.remotos.values()].filter((a) => a.ceu).map((a) => ({ x: a.pos.x, z: a.pos.z })); }
@@ -815,8 +821,8 @@ export class CyberEngine {
   /** dá pra abrir o TABLET? em QUALQUER lugar, de pé (a Zaeon, a praça, os campi, a nave por dentro…) — só não voando,
    *  de moto, pilotando, numa viagem/túnel ou nascendo */
   private aPeParaTablet(): boolean { return !this.menu && !this.jet.noAr && this.moto === null && !this.pilotando && !this.viagem && !this.nascendo && !this.tunel && !this.sobreNave; }
-  /** o vigor agora (0..1) e se está exausto — pro HUD */
-  vigorAgora() { return { v: this.vigor.v, exausto: this.vigor.exausto }; }
+  /** a água agora (0..1), se está seco e onde está bebendo — pro HUD */
+  aguaAgora() { return { v: this.agua.v, seco: this.agua.seco, fonte: this.fonteAgora, sede: this.agua.v <= 0 }; }
   abrirTablet() {
     if (!this.aPeParaTablet()) { this.o.onAviso?.("Pare em algum lugar (de pé) pra abrir o tablet."); return; }
     if (this.tabletQuer) return;
@@ -1028,8 +1034,8 @@ export class CyberEngine {
     if (this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.noTopo) return false;
     const agora = performance.now() * 0.001;   // (o relógio de VERDADE no aperto — o do último quadro pode estar atrasado; a esquiva é questão de ms)
     if (!podeDash(this.dash, agora)) return false;
-    const comVigor = gastarDash(this.vigor, this.agora); if (!comVigor) return false;   // sem vigor: não sai
-    this.vigor = comVigor;
+    const comAgua = gastarDashAgua(this.agua, this.agora); if (!comAgua) return false;   // sem água: não sai
+    this.agua = comAgua;
     let ix = 0, iz = 0;
     if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
     if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
@@ -3137,7 +3143,7 @@ export class CyberEngine {
       if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
       if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
       if (this.nascendo || this.tunel || this.emCena) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // dentro do tubo / do túnel / numa cutscene: parado
-      const correndo = (this.keys.shift || this.correr) && podeCorrer(this.vigor);   // (exausto: anda)
+      const correndo = (this.keys.shift || this.correr) && podeEsforcar(this.agua);   // (seco: anda)
       let andando = false;
       if (this.bordo) { const pn = this.poseNave(); if (pn) { const w = paraMundo(pn, this.bordo); eu.pos.x = w.x; eu.pos.z = w.z; } }   // a nave pode ter andado (o dono pilotando)
       if (this.tabletQuer || this.labAberto) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // estudando no tablet: o avatar fica onde está
@@ -3156,9 +3162,15 @@ export class CyberEngine {
       // correr segurado ANDANDO vira SPRINT (2× a corrida) depois de ~0,7 s (lib/cyber/movimento)
       this.tCorrendo = correndo && dir && !this.jet.noAr ? this.tCorrendo + Math.min(0.25, this.agora - this.tAnt) : 0;   // (pelo relógio: com fps baixo o dt é cortado)
       this.velAPe = velocidadeAPe(!!correndo, this.tCorrendo);
-      this.vigor = passoVigor(this.vigor, !!correndo && !!dir && !this.jet.noAr, dt, this.agora);   // o fôlego: correndo gasta, parado recupera
+      // a ÁGUA: correndo e no turbo gasta; parado volta devagar; numa FONTE enche rápido. A vida segue a água
+      { const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, c = CIDADE.centro;
+        const f = this.naZaeon || this.plat === null ? naFonte(FONTES_AGUA, { x: eu.pos.x - c.x, z: eu.pos.z - c.z }, eu.alt - ilhaY) : null;
+        this.fonteAgora = f?.nome ?? null;
+        const turbando = this.jet.noAr && (this.keys.shift || this.correr) && podeEsforcar(this.agua) && Math.hypot(this.jetV.x, this.jetV.z) > 1;
+        this.agua = passoAgua(this.agua, { correndo: !!correndo && !!dir && !this.jet.noAr, turbo: turbando, naFonte: !!f }, dt, this.agora);
+        if (this.agora >= this.caidoAte && !this.nascendo) this.vida = Math.max(this.agua.v <= 0 ? 5 : 0, Math.min(VIDA_MAX, this.vida + efeitoNaVida(this.agua) * dt)); }   // (a sede não mata: a vida para em 5)
       const vel = (this.noTopo ? 2 : this.velAPe) * (this.ataque && !golpeAcabou(this.ataque, this.agora) ? 0.25 : 1);   // no topo: passos curtos; golpeando: quase parado
-      const turbo = (this.keys.shift || this.correr) && this.jet.noAr ? VOO_TURBO : 1;   // no ar, correr = VOO TURBO (2× os jatos)
+      const turbo = (this.keys.shift || this.correr) && this.jet.noAr && podeEsforcar(this.agua) ? VOO_TURBO : 1;   // no ar, correr = VOO TURBO (2× os jatos) — gasta água
       if (this.jet.noAr) {
         // NO AR: o IMPULSO da mochila move — W (frente) a toda, lados/trás mais devagar; soltou, segue no embalo
         const frente = iz < -0.3 && Math.abs(ix) <= Math.abs(iz) + 1e-6;
