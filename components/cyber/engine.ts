@@ -66,6 +66,8 @@ import { CAIDO, COMBO, HIT_STOP, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAca
 import { ARENA_ATIVA, BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
 import { criarArena, type ArenaHandle } from "./Arena";
 import { criarEspadaEspiritual, type EspadaHandle } from "./EspadaEspiritual";
+import { criarLivrosEstudos, type LivrosHandle } from "./LivrosEstudos";
+import type { ItemEstudo } from "@/lib/estudos/itens";
 /** a Espada Espiritual na mão: uma MONTANTE enorme (~3 m) — o peso dela define o golpe (o dono, out/2026) */
 const ESCALA_ESPADA = 2.2;
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
@@ -374,6 +376,17 @@ export class CyberEngine {
   private alvoDepois: THREE.Vector2 | null = null;
   /** CIDADE ZAEON (céu) + a NAVE do dono */
   private cidade: CidadeHandle | null = null;
+  /** os ESTUDOS da pessoa como LIVROS na biblioteca (components/cyber/LivrosEstudos — lib/estudos/itens) */
+  private livros: LivrosHandle | null = null;
+  private async carregarLivros() {
+    try {
+      const r = await fetch("/api/estudos/itens", { cache: "no-store" }); if (!r.ok) return;
+      const { itens } = (await r.json()) as { itens: ItemEstudo[] };
+      if (!this.vivo || !this.cidade || !itens?.length) return;
+      this.livros?.dispose(); this.livros = criarLivrosEstudos(itens, { low: this.o.low });
+      this.livros.group.traverse((n) => { n.userData.semLote = true; }); this.cidade.ilha.add(this.livros.group);
+    } catch { /* sem os livros: a biblioteca segue como está */ }
+  }
   /** o holograma do recado do dono, ao lado da tela de trabalho da base do QG (do Andrei) */
   private holo: HoloRecadoHandle | null = null; private recadoId: string | null | undefined = undefined;
   /** a Universidade (castelo no chão, ao norte da praça) */
@@ -591,6 +604,7 @@ export class CyberEngine {
         // ou na nave (antes só a pé na Zaeon: o dono, que chega de nave, nunca ouvia) — e DEPOIS do clarão (~340 m/s)
         aoTrovao: (em) => this.trovejar(em) });
       camuflarGrupo(this.cidade.group);
+      if (!this.o.menu) void this.carregarLivros();   // os ESTUDOS da pessoa como livros na biblioteca (não segura o carregamento)
       { const c = this.cidade;   // lotes: simula com e sem música (o palco, as caixas e a pista pulsam com o grave)
         fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalTunel, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge, ...c.caixasAmbiente.map((x) => x.obj)].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
         c.somTocando(false); for (let i = 0; i < 6; i++) c.atualizar(1, 0); }
@@ -3301,7 +3315,7 @@ export class CyberEngine {
       if (this.noCeu) pres.push({ x: this.eu.pos.x - c.x, z: this.eu.pos.z - c.z });
       for (const a of this.remotos.values()) if (a.ceu) pres.push({ x: a.pos.x - c.x, z: a.pos.z - c.z });
       this.cidade.presencas(pres);
-      this.cidade.atualizar(dt, t);
+      this.cidade.atualizar(dt, t); this.livros?.atualizar(t);
       if (this.bercario) { const v = this.tubosVisiveis(); this.bercario.group.visible = v; if (v) this.bercario.atualizar(dt, t); }
     }
     if (this.praca && this.regiaoPerto(this.praca.group, "praca")) this.praca.atualizar(dt, t);
@@ -3533,7 +3547,7 @@ export class CyberEngine {
     this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.somLounge?.dispose(); this.musicaNave?.dispose(); if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose();
+    this.somLounge?.dispose(); this.musicaNave?.dispose(); this.livros?.dispose(); this.livros = null; if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose();
     this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }
