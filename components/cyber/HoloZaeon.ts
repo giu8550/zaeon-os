@@ -27,6 +27,8 @@ export type HoloZaeonHandle = {
   sorrir(seg: number): void;
   /** a cara de PENSANDO (esperando a IA responder) */
   pensar(on: boolean): void;
+  /** está com a cara de pensando? (o engine põe o "…" em cima da cabeça dela) */
+  estaPensando(): boolean;
   /** BRAVA (a pessoa desrespeitou): a cara fechada, o holograma fica vermelho, treme e falha */
   brava(): void;
   /** o ponto (local da ilha) logo acima da cabeça — onde o balão de fala fica */
@@ -100,6 +102,7 @@ export function criarHoloZaeon(pai: THREE.Object3D, o: { low: boolean }): HoloZa
     boca(nivel) { if (nivel === null && nivelVoz !== null) falaAte = 0; nivelVoz = nivel; },
     sorrir(seg) { sorriAte = agora + seg; },
     pensar(on) { pensando = on; },
+    estaPensando() { return pensando; },
     brava() { ira = 1; falaAte = 0; sorriAte = 0; pensando = false; },
     ancora() { return anc.set(0, rosto.position.y + TAM * 0.36, 0); },
     atualizar(dt, t, cam) {
