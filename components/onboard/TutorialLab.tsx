@@ -10,7 +10,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import RetratoDroid from "@/components/cyber/RetratoDroid";
 import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
-import { MSG_PESQUISA_SALVA, type PesquisaSalva } from "@/lib/ui/loungeHub";
+import { MSG_PESQUISA_SALVA, MSG_TUTORIAL_ETAPA, type PesquisaSalva } from "@/lib/ui/loungeHub";
 import { getDraftState } from "@/lib/research/draftRun";
 import {
   EVT_ESTUDOS_VISTA, EVT_OMEGA_RODAR, EVT_PESQUISA_SALVA, EVT_TEMA, SALTOS_LAB, assinarTutorialLab, avancarAte, avancarTutorialLab, encerrarTutorialLab,
@@ -33,6 +33,11 @@ export default function TutorialLab() {
   const [montado, setMontado] = useState(false);
   useEffect(() => { setMontado(true); iniciarTutorialLab(); }, []);
   const etapa = etapaDe(st.etapa);
+
+  // a etapa de agora → o cyberespaço (o tablet destaca o "Guardar"; o Droid de lá ensina a concorrência)
+  useEffect(() => {
+    try { window.parent?.postMessage({ type: MSG_TUTORIAL_ETAPA, etapa: st.ativo ? st.etapa : "fim" }, window.location.origin); } catch { /* fora do tablet */ }
+  }, [st.ativo, st.etapa]);
 
   // o TEMA (a 1ª etapa): vai pro Marketplace › Estudos, direto na tela roxa, já pesquisando
   useEffect(() => {

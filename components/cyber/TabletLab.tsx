@@ -14,10 +14,13 @@
  * do iframe é da mesma origem e lê o mesmo tema.
  */
 import { useEffect, useRef, useState } from "react";
-import { CHAVE_TABLET_JA_ABRIU, ehMsgFecharTablet, ehMsgIA, ehMsgPesquisaSalva, urlDoLabNoTablet, urlDoLabNoTutorial, type EstadoIALab, type PesquisaSalva } from "@/lib/ui/loungeHub";
+import { CHAVE_TABLET_JA_ABRIU, ehMsgFecharTablet, ehMsgIA, ehMsgPesquisaSalva, ehMsgTutorialEtapa, urlDoLabNoTablet, urlDoLabNoTutorial, type EstadoIALab, type PesquisaSalva } from "@/lib/ui/loungeHub";
 
-export default function TabletLab({ aberto, onFechar, onIA, tutorial, onPesquisaSalva }: { aberto: boolean; onFechar: () => void; onIA?: (e: EstadoIALab) => void; /** a 1ª abertura é a do TUTORIAL do novato: o lab roda o tour da 1ª missão */ tutorial?: boolean; onPesquisaSalva?: (p: PesquisaSalva) => void }) {
+export default function TabletLab({ aberto, onFechar, onIA, tutorial, onPesquisaSalva, onEtapaTutorial }: { aberto: boolean; onFechar: () => void; onIA?: (e: EstadoIALab) => void; /** a 1ª abertura é a do TUTORIAL do novato: o lab roda o tour da 1ª missão */ tutorial?: boolean; onPesquisaSalva?: (p: PesquisaSalva) => void; /** a etapa do tour do tablet (o tutorial) */ onEtapaTutorial?: (etapa: string) => void }) {
   const salva = useRef(onPesquisaSalva); salva.current = onPesquisaSalva;
+  const etapaCb = useRef(onEtapaTutorial); etapaCb.current = onEtapaTutorial;
+  /** na espera da pesquisa do tutorial, o "Guardar tablet" pisca (a lição da concorrência) */
+  const [destacarGuardar, setDestacarGuardar] = useState(false);
   const [src, setSrc] = useState<string | null>(null), [carregou, setCarregou] = useState(false);
   const fechar = useRef(onFechar); fechar.current = onFechar;
   const ia = useRef(onIA); ia.current = onIA;
@@ -34,6 +37,7 @@ export default function TabletLab({ aberto, onFechar, onIA, tutorial, onPesquisa
     const onMsg = (e: MessageEvent) => {
       if (ehMsgIA(e.data, e.origin, window.location.origin)) { ia.current?.(e.data.estado); return; }
       if (ehMsgPesquisaSalva(e.data, e.origin, window.location.origin)) { salva.current?.(e.data.pesquisa); return; }
+      if (ehMsgTutorialEtapa(e.data, e.origin, window.location.origin)) { setDestacarGuardar(e.data.etapa === "pesquisando"); etapaCb.current?.(e.data.etapa); return; }
       if (abertoRef.current && ehMsgFecharTablet(e.data, e.origin, window.location.origin)) fechar.current();
     };
     window.addEventListener("message", onMsg);
@@ -61,7 +65,7 @@ export default function TabletLab({ aberto, onFechar, onIA, tutorial, onPesquisa
         {/* a barra do tablet: o que é, e guardar */}
         <div className="flex h-9 shrink-0 items-center justify-between px-3 text-[11px] text-sky-900/80 dark:text-cyan-100/80">
           <span className="flex items-center gap-2"><span aria-hidden className="h-2 w-2 rounded-full bg-sky-500 shadow-[0_0_8px_rgba(56,140,255,.8)] dark:bg-cyan-300 dark:shadow-[0_0_8px_rgba(102,230,255,.9)]" />Tablet · Laboratório <span className="hidden text-sky-900/45 dark:text-white/40 sm:inline">— guarde quando quiser: o que estiver rodando continua</span></span>
-          <button type="button" tabIndex={aberto ? 0 : -1} onClick={() => fechar.current()} className="min-h-[32px] rounded-full border border-sky-900/15 bg-sky-900/5 px-3 font-semibold text-sky-950/85 hover:bg-sky-900/10 dark:border-white/15 dark:bg-white/5 dark:text-white/85 dark:hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">Guardar tablet <span className="text-sky-900/40 dark:text-white/40">(Esc)</span></button>
+          <button type="button" tabIndex={aberto ? 0 : -1} onClick={() => fechar.current()} className={`min-h-[32px] rounded-full border border-sky-900/15 bg-sky-900/5 px-3 font-semibold text-sky-950/85 hover:bg-sky-900/10 dark:border-white/15 dark:bg-white/5 dark:text-white/85 dark:hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 ${destacarGuardar ? "!border-[#ffc46b] !text-[#ffe2a8] shadow-[0_0_0_2px_#ffc46b,0_0_22px_rgba(255,196,107,.8)] motion-safe:animate-pulse" : ""}`}>Guardar tablet <span className="text-sky-900/40 dark:text-white/40">(Esc)</span></button>
         </div>
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-[22px] bg-slate-50 dark:bg-black">
           {!carregou && <div className="absolute inset-0 flex items-center justify-center text-sm text-sky-900/60 dark:text-cyan-100/70"><span className="animate-pulse">Abrindo o laboratório…</span></div>}

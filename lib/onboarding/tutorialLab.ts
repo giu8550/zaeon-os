@@ -28,7 +28,7 @@ export const ETAPAS_LAB: EtapaLab[] = [
   { id: "tema", alvos: ['[data-tour="sugestoes"]', '[data-tour="composer-estudos"]'], avancaEm: [EVT_TEMA],
     fala: "Escolha uma opção e escreva o tema. Eu estudaria sobre chocolate, morango, o vento, cachoeiras… escolhe coisas fáceis pra começar." },
   { id: "pesquisando", alvos: ['[data-tour="omega"]'], avancaEm: ["zaeon:research:done"],
-    fala: "Aqui a gente pesquisa a fundo: estou buscando artigos de verdade sobre “{tema}”. Segura aí um instante…" },
+    fala: "Aqui a gente pesquisa a fundo, com artigos de verdade sobre “{tema}”. Isso leva uns minutos — então guarde o tablet (Esc ou “Guardar tablet”) e continue no cyberespaço: a pesquisa segue rodando." },
   { id: "referencias", alvos: ['[data-tour="salvar-ref"]', '[data-tour="result-tabs"]'], avancaEm: [],
     fala: "Essas são as REFERÊNCIAS — os artigos que sustentam o seu tema. O botão “Salvar” guarda cada uma." },
   { id: "relacionados", alvos: ['[data-tour="relacionados"]'], avancaEm: [],
