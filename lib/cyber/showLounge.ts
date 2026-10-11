@@ -74,6 +74,24 @@ export function estadoDoShow(t: number, tocando: boolean): EstadoShow {
   };
 }
 
+/** o SHOW NO RITUAL (o dono, out/2026: "o olho no centro com TUDO do modo normal — caleidoscópios, membranas, tudo —
+ *  e os sigilos angelicais"): o show INTEIRO, com ou sem música — a mandala girando pelas formas, as serpentes, os
+ *  tentáculos, o DNA, o OLHO no centro com o ANEL DOS SIGILOS e um sigilo de cada vez na íris. `t` = segundos desde que o
+ *  ritual ligou (as formas e os sigilos vão girando); `musica` = o show da música (o que ela já trouxe soma); `forca`
+ *  (0..1) = o ritual subindo/apagando devagar */
+export function estadoDoRitual(t: number, musica: EstadoShow, forca: number): EstadoShow {
+  const k = Math.max(0, Math.min(1, forca)), cheio = estadoDoShow(SIGILO_NA_IRIS.ini + Math.max(0, t), true);
+  const m = (a: number, b: number) => Math.max(a, b) * k;
+  const comMusica = musica.nascimento > 0;
+  return {
+    ...(comMusica ? { forma: musica.forma, proxima: musica.proxima, mistura: musica.mistura } : { forma: cheio.forma, proxima: cheio.proxima, mistura: cheio.mistura }),
+    nascimento: m(musica.nascimento, 1), complexidade: Math.max(musica.complexidade, cheio.complexidade), area: Math.max(musica.area, cheio.area),
+    serpentes: m(musica.serpentes, 1), tentaculos: m(musica.tentaculos, 1), dna: m(musica.dna, 1),
+    nevoa: Math.max(musica.nevoa, k), nivel: comMusica ? musica.nivel : cheio.nivel, turno: comMusica ? musica.turno : cheio.turno,
+    olho: k, anelSigilos: k, sigilo: cheio.sigilo,
+  };
+}
+
 /** um TROVÃO do show: em que segundo do turno cai, a VELOCIDADE do relâmpago (1 = normal; cada um do turno tem a sua),
  *  e a força (0..1) */
 export type Trovao = { em: number; vel: number; forca: number };
