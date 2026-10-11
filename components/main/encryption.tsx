@@ -202,7 +202,7 @@ export default function Encryption() {
         <div className="w-full relative">
             <section id="como-funciona" className="relative z-[30] w-full bg-transparent pt-12 md:pt-16 pb-12 scroll-mt-28">
                 <div className="zaeon-borda">
-                    <TituloSecao className="font-display" forte="Feito pra quem estuda, trabalha ou empreende." />
+                    <TituloSecao className="font-display" forte="Transforme seu conhecimento em dinheiro." />
 
                     {/* DIAGRAMA VIVO: entrada -> cerebro Zaeon -> saida.
                         O painel nao e enfeite: o ParticleSystem da landing corre

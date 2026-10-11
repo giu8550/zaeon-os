@@ -14,7 +14,7 @@ const COLS: FooterCol[] = [
   {
     title: "Plataforma",
     links: [
-      { label: "Cyberespaço", href: "/#cyberespaco" },
+      { label: "Play game", href: "/#cyberespaco" },
       { label: "Modelos de IA", href: "/#modelos" },
       { label: "Laboratório", href: "/research-lab" },
       { label: lojaLabel(), href: mentoresTab() ? "/mentores" : "/assistentes" },

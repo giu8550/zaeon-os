@@ -23,7 +23,7 @@ describe("loungeHub", () => {
     expect(pedeFoco(null)).toBe(false);
   });
   it("copy por estado de login", () => {
-    expect(copyEntrada(true).cta).toMatch(/cyberespaço/);
+    expect(copyEntrada(true).cta).toMatch(/Play game/); expect(copyEntrada(false).cta).toMatch(/Criar minha conta/);   // (o cyberespaço agora é só o GAME)
     expect(copyEntrada(false).badges.length).toBeGreaterThan(0);
   });
 });

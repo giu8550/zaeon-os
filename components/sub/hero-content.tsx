@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { ChatBubbleLeftRightIcon } from "@heroicons/react/24/outline";
+import { ChatBubbleLeftRightIcon, PuzzlePieceIcon, UserPlusIcon } from "@heroicons/react/24/outline";
 
 // Componentes Internos
 import MenuNavigation from "@/components/sub/MenuNavigation";
@@ -81,6 +81,8 @@ const FRASE_COMPLETA = "Evolua sua vida. com conhecimento.";
 const GIRO = ["ideias", "estudos", "trabalhos", "pesquisas"];
 /** pra onde "Iniciar chat" leva quem já está logado: o chat da Aura (Sala de Estudos) */
 const CHAT_ROTA = "/research-lab?tab=sala-de-estudos";
+/** o GAME: o cyberespaço (precisa de conta — sem ela, o botão abre o login) */
+const GAME_ROTA = "/lounge-cosmico";
 
 export default function HeroPage() {
   const { t } = useTranslation();
@@ -180,20 +182,37 @@ export default function HeroPage() {
               transition={{ duration: 0.4, delay: 0.2 }}
               className="mt-9 flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto items-center justify-start"
             >
-              {/* Mesmo material do "Iniciar", em vidro TINGIDO: vidro incolor aqui
-                  derrubaria a hierarquia e este é o primário da página. */}
+              {/* PRIMÁRIO (vidro TINGIDO): sem conta, "Criar minha conta" (abre o login/cadastro); conectado, o chat.
+                  SECUNDÁRIO (vidro incolor): "Play game" — o cyberespaço (agora é só o GAME) (sem conta, também abre o login). */}
               <LiquidGlassButton
                 onClick={() => (logado ? router.push(CHAT_ROTA) : setShowChatbox(true))}
                 tom="destaque"
                 tamanho="md"
                 className="w-full sm:w-auto"
               >
-                <ChatBubbleLeftRightIcon className="w-4 h-4" aria-hidden="true" />
-                Iniciar chat
+                {logado ? <ChatBubbleLeftRightIcon className="w-4 h-4" aria-hidden="true" /> : <UserPlusIcon className="w-4 h-4" aria-hidden="true" />}
+                {logado ? "Iniciar chat" : "Criar minha conta"}
+              </LiquidGlassButton>
+              <LiquidGlassButton
+                onClick={() => (logado ? router.push(GAME_ROTA) : setShowChatbox(true))}
+                tom="neutro"
+                tamanho="md"
+                className="w-full sm:w-auto"
+              >
+                <PuzzlePieceIcon className="w-4 h-4" aria-hidden="true" />
+                Play game
               </LiquidGlassButton>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* o ACEITE do game: o mini ecossistema de ideias e blueprints que já existe — e a chance de criar o seu */}
+        {!showChatbox && (
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.45 }}
+            className="mt-4 max-w-xl text-sm leading-relaxed text-slate-700 dark:text-white/70">
+            Um mini ecossistema de <span className="font-semibold text-cyan-700 dark:text-cyan-300">ideias e blueprints</span> já disponíveis no game — e a chance de você criar o seu.
+          </motion.p>
+        )}
 
         {/* MURAL DE MODELOS removido do hero — as IAs agora vivem só na seção
             "Equipados com", abaixo dos cards dos agentes (encryption.tsx). */}
