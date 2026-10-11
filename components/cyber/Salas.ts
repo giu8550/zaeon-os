@@ -30,7 +30,7 @@ const TEMA: Record<NomeSala, { piso: number; brilho: number; cor: string; alt: n
 const FESTA = [0x66e6ff, 0xb98cff, 0xff5fd2, 0x6bff9a, 0x4d7bff];
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material; /** a textura de ponto de luz (fumaça, faíscas) */ estrela?: THREE.Texture };
+type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material; /** a textura de ponto de luz (fumaça, faíscas) */ estrela?: THREE.Texture; /** caiu um raio do RITUAL na névoa do lounge (mundo): o trovão */ aoTrovao?: (em: THREE.Vector3) => void };
 export type SalasHandle = {
   alvos: THREE.Object3D[];
   /** a TELA do telão do lounge (clicável: o dono escreve o recado pro QG do Andrei) */
@@ -43,10 +43,12 @@ export type SalasHandle = {
   ambiente: { sala: NomeSala; obj: THREE.Object3D }[];
   /** tem música tocando? + a energia dos graves agora (0..1): as luzes, as caixas e a pista pulsam com ela */
   somTocando(on: boolean, nivel?: number): void;
-  /** o SHOW do lounge (lib/cyber/showLounge): o estado no ponto da música; `olho` = o modo ritual (o olho no lugar da mandala) */
-  show(e: EstadoShow, olho: number): void;
+  /** o SHOW do lounge (lib/cyber/showLounge): o estado no ponto da música; `ritual` = a fumaça do ritual no topo (0..1); `olho` = o OLHO no centro (o ritual ou os anunciadores) */
+  show(e: EstadoShow, ritual: number, olho?: number): void;
   /** um relâmpago da névoa do lounge agora (`vel` = a velocidade do piscar; `alvoMundo` = onde cai — ex.: uma caixa de som) */
   raioNoLounge(vel?: number, alvoMundo?: THREE.Vector3): void;
+  /** as BATIDAS da música do lounge (contador — sobe 1 a cada grave forte) e a força do momento (0..1) */
+  batidas(): number; pulso(): number;
   atualizar(dt: number, t: number): void;
   /** o conteúdo de cada sala por cima do piso (components/cyber/oclusaoPisos) */
   plataformas: PisoOclusor[];
@@ -134,7 +136,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
 
   let salaAtual: NomeSala = "lounge";
   let showLounge: { olho: { group: THREE.Group }; mandala: ReturnType<typeof criarMandala>; nevoa: ReturnType<typeof criarTempestade>; grupo: THREE.Group } | null = null;
-  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0, olho: 0, anelSigilos: 0, sigilo: -1 }, olhoRitual = 0;
+  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0, olho: 0, anelSigilos: 0, sigilo: -1 }, olhoRitual = 0, fumacaRitual = 0;
   const ambiente: { sala: NomeSala; obj: THREE.Object3D }[] = [];
   const tema = (_m: Movel) => TEMA[salaAtual];
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
@@ -644,7 +646,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       }
       // a complexidade PULSA no ritmo (o grave acrescenta camadas por um instante)
       mandala.definir({ ...estadoShow, complexidade: Math.min(0.72, estadoShow.complexidade + 0.18 * b), nascimento: estadoShow.nascimento * (1 - estadoShow.olho) }, b, tt);
-      nevoa.atualizar(t);
+      { const c = nevoa.atualizar(t); if (c && fumacaRitual > 0.3 && o.aoTrovao) { nevoa.group.updateMatrixWorld(); o.aoTrovao(c.clone().applyMatrix4(nevoa.group.matrixWorld)); } }   // o raio do RITUAL troveja (os do show, o engine toca no compasso)
     });
   }
 
@@ -687,13 +689,15 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     plataformas,
     alvos, tv: tvTela, caixas: caixasSom, tocaDiscos, ambiente,
     somTocando(on, nivel = 0) { tocando = on; nivelAlvo = on ? Math.max(0, Math.min(1, nivel)) : 0; },
-    show(e, olho) {
+    show(e, ritual, olhoR = ritual) {
       if (!showLounge) return;
-      const ritual = olho > 0.001; olhoRitual = olho;
-      estadoShow = ritual ? { ...e, nascimento: 0, serpentes: 0, tentaculos: 0, dna: 0, anelSigilos: 0, sigilo: -1, olho: 1 } : e;   // no ritual, a mandala se recolhe: fica o olho (sem os sigilos)
-      showLounge.olho.group.visible = ritual || e.olho > 0.02;   // (o 3º modo do show: o olho de volta, com os sigilos)
-      showLounge.nevoa.definir(Math.max(e.nevoa, olho), e.nivel > 0 || olho > 0.5);   // no ritual, a névoa do lounge se forma junto com a do templo (os raios cortam as caixas)
+      const noRitual = olhoR > 0.001; fumacaRitual = ritual; olhoRitual = olhoR;
+      // no RITUAL, o OLHO fica no centro (requisito do dono): a mandala se recolhe e fica o olho (sem os sigilos)
+      estadoShow = noRitual ? { ...e, nascimento: 0, serpentes: 0, tentaculos: 0, dna: 0, anelSigilos: 0, sigilo: -1, olho: 1 } : e;
+      showLounge.olho.group.visible = noRitual || e.olho > 0.02;   // (o 3º modo do show: o olho, com os sigilos)
+      showLounge.nevoa.definir(Math.max(e.nevoa, ritual), e.nivel > 0 || ritual > 0.4);   // no RITUAL, a névoa do lounge é a fumaça do topo dele (com trovões)
     },
+    batidas: () => batidas, pulso: () => pulso * ativo,
     raioNoLounge(vel = 1, alvoMundo) {
       if (!showLounge) return;
       if (!alvoMundo) { showLounge.nevoa.raioAgora(undefined, vel); return; }

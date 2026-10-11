@@ -24,30 +24,34 @@ export type TemploHandle = {
   tempestade(intensidade: number, raios: boolean): void;
   /** estoura um relâmpago na tempestade agora — caindo em `alvoMundo` (ex.: o buraco negro em cima do DJ) ou à toa */
   raioAgora(alvoMundo?: THREE.Vector3): void;
+  /** a ESCADARIA reagindo à música (os anunciadores do ritual — lib/cyber/ritual): 0 = as cores dela, 1 = toda VERMELHA,
+   *  com o pulso mais forte e mais rápido */
+  escadaria(vermelho: number): void;
   dispose(): void;
 };
 
 /** o pulso de luz correndo ao longo de `vUv.x` (as veias e o vaso) */
 function materialFluxo(cor: THREE.Color, n: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    uniforms: { uT: { value: 0 }, uCor: { value: cor }, uN: { value: n } },
+    uniforms: { uT: { value: 0 }, uCor: { value: cor }, uN: { value: n }, uVermelho: { value: 0 } },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-    fragmentShader: `uniform float uT, uN; uniform vec3 uCor; varying vec2 vUv;
+    fragmentShader: `uniform float uT, uN, uVermelho; uniform vec3 uCor; varying vec2 vUv;
       void main(){
-        float p = fract(vUv.x * uN - uT * 0.55);
+        float p = fract(vUv.x * uN - uT * (0.55 + 1.2 * uVermelho));
         float pulso = smoothstep(0.0, 0.04, p) * smoothstep(0.4, 0.06, p);
         float miolo = 1.0 - abs(vUv.y - 0.5) * 1.6;
-        gl_FragColor = vec4(uCor * (0.35 + 1.8 * pulso) * (0.6 + 0.6 * miolo) + vec3(1.0) * pulso * 0.25, 1.0);
+        vec3 cor = mix(uCor, vec3(1.0, 0.06, 0.04), uVermelho);
+        gl_FragColor = vec4(cor * (0.35 + (1.8 + 1.4 * uVermelho) * pulso) * (0.6 + 0.6 * miolo) + vec3(1.0, 0.8 - 0.6 * uVermelho, 0.8 - 0.6 * uVermelho) * pulso * 0.25, 1.0);
       }`,
   });
 }
 /** a parede da MURALHA: pele escura com as veias ramificadas (ruído "ridged") pulsando rumo ao templo */
 function materialMuralha(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    uniforms: { uT: { value: 0 }, uLen: { value: 80 } },
+    uniforms: { uT: { value: 0 }, uLen: { value: 80 }, uVermelho: { value: 0 } },
     side: THREE.DoubleSide,
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-    fragmentShader: `uniform float uT, uLen; varying vec2 vUv;
+    fragmentShader: `uniform float uT, uLen, uVermelho; varying vec2 vUv;
       float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
       float ridged(vec2 p){ float s = 0.0, a = 0.55; for (int i = 0; i < 4; i++) { s += a * (1.0 - abs(n(p) * 2.0 - 1.0)); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
@@ -57,8 +61,9 @@ function materialMuralha(): THREE.ShaderMaterial {
         float veia = smoothstep(0.86, 0.98, r), halo = smoothstep(0.7, 0.95, r);
         float fluxo = 0.5 + 0.5 * sin((vUv.x * uLen - uT * 9.0) * 0.35 + vUv.y * 2.0);
         vec3 pele = mix(vec3(0.025, 0.012, 0.04), vec3(0.07, 0.025, 0.09), n(p * 3.0)) * (0.6 + 0.6 * vUv.y);
-        vec3 corV = mix(vec3(0.95, 0.12, 0.45), vec3(0.75, 0.35, 1.0), vUv.y);
-        vec3 c = pele + corV * (halo * 0.25 + veia * (0.6 + 1.6 * fluxo)) + vec3(1.0, 0.8, 0.95) * veia * fluxo * 0.25;
+        vec3 corV = mix(mix(vec3(0.95, 0.12, 0.45), vec3(0.75, 0.35, 1.0), vUv.y), vec3(1.0, 0.05, 0.03), uVermelho);
+        pele = mix(pele, vec3(0.12, 0.01, 0.01) * (0.6 + 0.6 * vUv.y), uVermelho * 0.8);
+        vec3 c = pele + corV * (halo * 0.25 + veia * (0.6 + (1.6 + 1.2 * uVermelho) * fluxo)) + vec3(1.0, 0.8, 0.95) * veia * fluxo * 0.25;
         c *= smoothstep(0.0, 0.18, vUv.y);   // some no abismo, embaixo
         gl_FragColor = vec4(c, 1.0);
       }`,
@@ -141,6 +146,7 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
 
   // ── a MURALHA-VEIA (o lado de FORA da curva, o −lat): sobe do abismo até `alt` acima da escada, ondulando como pele ──
   const muro = materialMuralha(); muro.uniforms.uLen!.value = len;
+  const fluxos: THREE.ShaderMaterial[] = [];   // (as veias, o vaso e a espinha: ficam vermelhos com a música — `escadaria`)
   const muroLeve = new THREE.MeshBasicMaterial({ color: 0x14081c, side: THREE.DoubleSide });   // (leve: pele escura lisa)
   { const pos: number[] = [], uv: number[] = [], idx: number[] = [], A = M.muralha.alt; let k = 0;
     for (let s = Math.max(0, sIni - 2); s <= Math.min(len, sFim + 2); s += 0.8) {
@@ -168,6 +174,7 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
       g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(out), 24, 0.16 + (v % 3) * 0.05, 6, false), veiaMat));
     }
     anim.push((_, t) => { muro.uniforms.uT!.value = t; vasoMat.uniforms.uT!.value = t; veiaMat.uniforms.uT!.value = t * 1.3; (espinha.material as THREE.ShaderMaterial).uniforms.uT!.value = t; });
+    fluxos.push(vasoMat, veiaMat, espinha.material as THREE.ShaderMaterial);
   }
 
   // ── o TEMPLO: a laje + o aro (como as plataformas das salas) ──
@@ -273,6 +280,12 @@ export function criarTemplo(o: { low: boolean; paredeMat: THREE.Material; estrel
   return {
     group: g, alvos,
     tempestade: (i, raios) => tempestade.definir(i, raios),
+    escadaria(v) {
+      const k = Math.max(0, Math.min(1, v));
+      muro.uniforms.uVermelho!.value = k; for (const m of fluxos) m.uniforms.uVermelho!.value = k;
+      muroLeve.color.setRGB(0.08 + 0.32 * k, 0.03 * (1 - k), 0.11 * (1 - k));
+      (quina.material as THREE.MeshBasicMaterial).color.setRGB(1, 0.48 * (1 - k) + 0.04 * k, 0.72 * (1 - k) + 0.03 * k);
+    },
     raioAgora: (alvoMundo) => { if (!alvoMundo) { tempestade.raioAgora(); return; } tg.updateMatrixWorld(); tempestade.raioAgora(tg.worldToLocal(alvoMundo.clone())); },
     atualizar(dt, t) {
       sigilo.rotation.z = t * 0.05; if (sigHalo) (sigHalo.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.03 * Math.sin(t * 0.9);

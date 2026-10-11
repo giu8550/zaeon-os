@@ -17,11 +17,12 @@
  */
 import * as THREE from "three";
 import type { PisoOclusor } from "./oclusaoPisos";
-import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, ESTACOES_NA_CAPELA, FOGO_NA_BORDA, TORRES_NA_BORDA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, inicioDaPonta, ESTACOES_NA_CAPELA, FOGO_NA_BORDA, TORRES_NA_BORDA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarSalas } from "./Salas";
 import { criarTemplo } from "./Templo";
+import { criarTempestade } from "./Tempestade";
 import { criarPisoEstacionamento } from "./Estacionamento";
 import { criarPisosEstudo } from "./EstacionamentosEstudo";
 import { LOTES } from "@/lib/cyber/motos";
@@ -57,12 +58,18 @@ export type CidadeHandle = {
   mostrarRecadoNaTV(texto: string | null): void;
   /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
   alturaIlhota(k: number): number;
-  /** o SHOW do lounge durante a música (lib/cyber/showLounge) e o olho no ritual */
-  showLounge(e: import("@/lib/cyber/showLounge").EstadoShow, olho: number): void;
-  /** um relâmpago da névoa do lounge (`alvoMundo` = onde cai, ex.: uma caixa de som) */
+  /** o SHOW do lounge durante a música (lib/cyber/showLounge) e a fumaça do ritual no topo do lounge (0..1) */
+  showLounge(e: import("@/lib/cyber/showLounge").EstadoShow, ritual: number, olho?: number): void;
+  /** um relâmpago da névoa do lounge (`alvoMundo` = onde cai) */
   raioNoLounge(vel?: number, alvoMundo?: THREE.Vector3): void;
-  /** a TEMPESTADE do templo (o ritual do dono): a intensidade das nuvens (0..1) e se os raios caem */
-  tempestade(intensidade: number, raios: boolean): void;
+  /** a FUMAÇA E OS TROVÕES do ritual (lib/cyber/ritual): a intensidade (0..1) e se os raios caem — no topo da capela, das
+   *  salas de estudo e do templo (o do lounge é a névoa do show); `torre` = a fumaça EXTRA da torre do templo (os
+   *  anunciadores: a escadaria vermelha) */
+  tempestade(intensidade: number, raios: boolean, torre?: number): void;
+  /** a ESCADARIA do templo ficando vermelha (0..1 — os anunciadores, com a música) */
+  escadaria(vermelho: number): void;
+  /** as batidas da música do lounge (contador) e a força do momento */
+  batidasLounge(): number; pulsoLounge(): number;
   /** estoura um relâmpago na tempestade do templo agora — caindo em `alvoMundo` (o buraco negro do DJ) ou à toa */
   raioNoTemplo(alvoMundo?: THREE.Vector3): void;
   /** quem está na Zaeon agora (local da ilha) — os motores de energia do Observatório reagem */
@@ -244,7 +251,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   // ── SALAS (lounge) ──
   const vidroSala = vidro({ color: 0x0a1830, emissive: 0x2a3a70, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.3, thickness: 1, transparent: true, opacity: 0.32, side: THREE.DoubleSide }, 0.3);
-  const salas = criarSalas(ilha, { low, texturas, estrela: starTex, paredeMat: vidroSala });
+  const salas = criarSalas(ilha, { low, texturas, estrela: starTex, paredeMat: vidroSala, aoTrovao: opts.aoTrovao });
   alvos.push(...salas.alvos);
   // ── o TEMPLO (lib/cyber/templo): a escadaria em curva que sai da direita do deck do lounge, a muralha-veia e o templo
   //    com a capela, o sigilo de Metatron e o desktop da Examiner — montado no referencial da sala do lounge ──
@@ -292,6 +299,20 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     ilhotas.push({ g, y0, ph: il.fase });
   });
 
+  // ── a FUMAÇA E OS TROVÕES do ritual (lib/cyber/ritual) no topo da CAPELA e das SALAS DE ESTUDO (o templo tem a dele e o
+  //    lounge, a névoa do show): nuvens girando e raios caindo — o som é do engine (`aoTrovao`) ──
+  const tempestades: { h: ReturnType<typeof criarTempestade>; g: THREE.Group }[] = [];
+  { const yP = inicioDaPonta(), L = CAPELA.pontaLen;
+    const nova = (x: number, z: number, y0: number, y1: number, raio: number, alvoY: number, nuvens: number) => {
+      const g = new THREE.Group(); g.position.set(x, 0, z); ilha.add(g);
+      const h = criarTempestade({ low, yBase: y0, yTopo: y1, raioMax: raio, alvoPonta: new THREE.Vector3(0, alvoY, 0), nuvens });
+      g.add(h.group); h.group.traverse((n) => { n.userData.semLote = true; }); h.definir(0, false); tempestades.push({ h, g });
+    };
+    if (CAPELA_NA_ZAEON) nova(0, 0, yP + L * 0.25, yP + L * 0.85, 150, yP + L * 0.7, low ? 50 : 110);   // a capela (a ponta fura a fumaça)
+    for (const nome of ["biblioteca", "jardim"] as const) { const s = CIDADE.salas[nome]; nova(s.x, s.z, ALTURA_LOUNGE + 24, ALTURA_LOUNGE + 44, s.r + 24, ALTURA_LOUNGE + 26, low ? 28 : 60); }
+  }
+  const ondeTrovejou = new THREE.Vector3();
+
   // o CORAÇÃO (o globo bate; veias azuis por toda a cidade e subindo a capela; o raio no topo) e as ESTAÇÕES DOS AGENTES
   const coracao = CAPELA_NA_ZAEON ? criarCoracao({ low }) : null; if (coracao) ilha.add(coracao.group);
   const estacoes = ESTACOES_NA_CAPELA ? criarEstacoes({ low }) : null; if (estacoes) ilha.add(estacoes.group);   // (saíram na reforma da capela)
@@ -310,9 +331,11 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   return {
     group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     somDroids: observadores.emissores,
-    showLounge: (e, olho) => salas.show(e, olho),
+    showLounge: (e, ritual, olho) => salas.show(e, ritual, olho),
     raioNoLounge: (vel, alvo) => salas.raioNoLounge(vel, alvo),
-    tempestade: (i, raios) => templo.tempestade(i, raios),
+    tempestade: (i, raios, torre = 0) => { templo.tempestade(Math.max(i, torre), raios || torre > 0.2); for (const tp of tempestades) tp.h.definir(i, raios); },
+    escadaria: (v) => templo.escadaria(v),
+    batidasLounge: () => salas.batidas(), pulsoLounge: () => salas.pulso(),
     raioNoTemplo: (alvo) => templo.raioAgora(alvo),
     atualizar(dt, t) {
       // a ilha BOIA (25 cm, ciclo de ~21 s): só move quando andou 1 cm — mexer nela força recalcular as matrizes dos
@@ -324,6 +347,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       pontas.forEach((p, i) => { (p.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.3 + 0.4 * Math.sin(t * 1.2 + i); p.rotation.y += dt * 0.4 * vel; });
       if (farol) farol.material.opacity = 0.75 + 0.2 * Math.sin(t * 1.1);
       salas.atualizar(dt, t); templo.atualizar(dt, t);
+      for (const tp of tempestades) { if (!tp.h.group.visible) continue; const c = tp.h.atualizar(t); if (c && opts.aoTrovao) { tp.g.updateMatrixWorld(); opts.aoTrovao(ondeTrovejou.copy(c).applyMatrix4(tp.g.matrixWorld)); } }
       for (const e of estacs) e.atualizar(t);
       globo.rotation.y += dt * 0.25 * vel; aroGlobo.rotation.z += dt * 0.2 * vel;
       // o CORAÇÃO bate: o globo incha de luz, a mesa e o aro acendem; o pulso corre nas veias; o raio sai do topo
@@ -345,6 +369,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         cGeo.attributes.position!.needsUpdate = true; }
       ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * BOIA_ILHOTA * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
     },
-    dispose() { rotulo.remove(); templo.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
+    dispose() { rotulo.remove(); templo.dispose(); for (const tp of tempestades) tp.h.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };
 }

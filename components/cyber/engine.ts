@@ -15,12 +15,12 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
-import { CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
-import { TEMPLO, noTemplo } from "@/lib/cyber/templo";
+import { PISTA, rotDaSala, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
+import { DECK, TEMPLO, noTemplo } from "@/lib/cyber/templo";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
 import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
 import { criarTempestade, type TempestadeHandle } from "./Tempestade";
-import { ANUNCIADOR, CORTE, FRASE_LOUVOR, TURBO_NAVE, chegou as chegouDoRitual, corteDasCaixas, noPerimetro, faseDaTempestade, intensidadeDaTempestade, posDoAnunciador, proximaFala, revelacaoDaNave, ritualDesligado, sensacaoDaNave, type FaseRitual, type Ritual } from "@/lib/cyber/ritual";
+import { BALADA, TURBO_NAVE, corDoFlash, escuroDaBalada, fumacaDaTorre, noPerimetro, faseDaTempestade, intensidadeDaTempestade, passoDaEscadaria, raioNaBatida, revelacaoDaNave, ritualDesligado, sensacaoDaNave, suavizarRitual, type FaseRitual, type Ritual } from "@/lib/cyber/ritual";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type ComandoVoo, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
@@ -192,8 +192,6 @@ export type CyberOpts = {
   onAbrirSom?: (canal: "lounge" | "nave") => void;
   /** o dono pisou na "call" do RITUAL (o buraco negro da nave): o React abre o painel do ritual (pede acesso antes) */
   onRitual?: () => void;
-  /** o dono CHEGOU no lounge com a tempestade armada: o React desliga a tempestade (o ritual acabou) */
-  onRitualChegou?: () => void;
   /** K: o dono liga/desliga o RITUAL DA NAVE (a mandala, as nuvens e os trovões em volta dela, com a música dela) */
   onRitualNave?: (ligar: boolean) => void;
   /** URL de uma música da playlist do lounge (rota da sala); sem isto (modo solo/prévia) o lounge fica sem som */
@@ -390,15 +388,16 @@ export class CyberEngine {
   private musicaNave: SomLoungeHandle | null = null; private musicaNavePendente: { som: SomLounge | null; offset: number } | null = null;
   /** o RITUAL da chegada do dono (lib/cyber/ritual): o estado da sala + o relógio (servidor − cliente) */
   private ritual: Ritual | null = null; private ritualOffset = 0; private ritualFase: FaseRitual = "off";
-  /** o instante (servidor) da última ENERGIZAÇÃO das caixas já disparada (não repete pro mesmo ritual) */
-  private ritualChegouAvisado = 0;
-  /** os passos do corte já disparados neste ritual (`${instante}|${caixa}`) */
-  private ritualCortes = new Set<string>();
+  /** o que se MOSTRA do ritual (0..1, suavizado — desligado no botão, some devagar): a fumaça e os trovões, e os
+   *  anunciadores (a balada e a escadaria); o VERMELHO da escadaria (vai subindo com a música) */
+  private ritualI = 0; private anunI = 0; private escadaV = 0;
+  /** a BALADA no lounge: as batidas já vistas, o flash da batida (0..1, decaindo), a cor dele, o próximo flash sem música,
+   *  o quanto a câmera está DENTRO do lounge (suavizado) e o que se desenha por cima da cena (o véu escuro e os lasers) */
+  private batidasVistas = 0; private flash = 0; private flashN = 0; private proxFlash = 0; private noLoungeCam = 0;
+  private balada: { veu: THREE.Mesh; cenaVeu: THREE.Scene; camVeu: THREE.OrthographicCamera; neon: THREE.Scene; lasers: THREE.Group; feixes: THREE.Mesh[] } | null = null;
   /** o centro das NUVENS da capela do templo (mundo) — a nave do dono só aparece perto delas; `naveRevelada` = o instante
    *  (s) em que o véu de cada nave saiu (o evento, 1× por ritual) */
   private centroDasNuvens: THREE.Vector3 | null = null;
-  /** os ANUNCIADORES: um droid por pessoa (eu + os remotos), rodeando a cabeça dela e louvando */
-  private anunciadores = new Map<string, { h: DroidHandle; k: number; prox: number; fala: { pos: THREE.Vector3; alt: number }; indo: boolean }>();
   /** o TURBO da nave (0..1, com rampa) */
   private turboNave = 0;
   /** em pé num LUGAR FLUTUANTE (universidade / Solana House) e em que andar (lib/cyber/plataformas) */
@@ -588,12 +587,9 @@ export class CyberEngine {
       this.cidade = criarCidade({ low, starTex: this.cena.starTex,
         aoRaio: (em) => { if (this.noCentroDaCapela()) this.som?.tocar("raio", em, { dist: DISTANCIA.raio, taxa: 0.9 + Math.random() * 0.2 }); },
         aoBater: (em) => { if (this.noCentroDaCapela()) this.som?.tocar("coracao", em, { dist: DISTANCIA.coracao }); },
-        // o TROVÃO da tempestade do templo: só pra quem está perto (na Zaeon do lado do lounge) e chega DEPOIS do clarão (o som anda ~340 m/s)
-        aoTrovao: (em) => {
-          if (!this.prontoDisparado || !this.noCeu || this.bordo || this.ritualFase !== "armada") return;   // (os raios só ganham som depois do trovão que energiza as caixas)
-          const d = Math.hypot(em.x - this.eu.pos.x, em.y - this.eu.alt, em.z - this.eu.pos.z); if (d > 600) return;
-          const p = em.clone(); setTimeout(() => this.som?.tocar("trovao", p, { dist: DISTANCIA.raio, volume: 1, taxa: 0.8 + Math.random() * 0.3 }), Math.min(1500, (d / 340) * 1000));
-        } });
+        // o TROVÃO de cada raio do ritual (a capela, as salas de estudo, o templo): pra QUEM ESTIVER PERTO — a pé, de moto
+        // ou na nave (antes só a pé na Zaeon: o dono, que chega de nave, nunca ouvia) — e DEPOIS do clarão (~340 m/s)
+        aoTrovao: (em) => this.trovejar(em) });
       camuflarGrupo(this.cidade.group);
       { const c = this.cidade;   // lotes: simula com e sem música (o palco, as caixas e a pista pulsam com o grave)
         fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalTunel, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge, ...c.caixasAmbiente.map((x) => x.obj)].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
@@ -1769,45 +1765,78 @@ export class CyberEngine {
     if (!this.cidade) return;
     const pos = this.somLounge?.posicao() ?? null, tocando = !!this.somLounge?.tocandoNaSala && !!pos, t = tocando && pos ? pos.t : 0;
     const e = estadoDoShow(t, tocando);
-    this.cidade.showLounge(e, intensidadeDaTempestade(this.ritual, Date.now() + this.ritualOffset));
+    this.cidade.showLounge(e, this.ritualI, Math.max(this.ritualI, this.anunI));   // (no ritual a névoa do lounge é a fumaça do TOPO dele; o OLHO fica no centro — requisito do dono)
     if (tocando && this.showT >= 0 && t > this.showT) {
       for (const tr of trovoesEntre(this.showT, t)) {
         this.cidade.raioNoLounge(tr.vel);
-        if (this.noCeu && !this.bordo) { const w = new THREE.Vector3(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); this.som.tocar("trovao", w, { dist: DISTANCIA.raio, volume: 0.5 + 0.5 * tr.forca, taxa: 0.85 + 0.35 * tr.vel }); }
+        { const w = new THREE.Vector3(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); if (this.cam.position.distanceTo(w) < 900) this.som.tocar("trovao", w, { dist: DISTANCIA.raio, volume: 0.5 + 0.5 * tr.forca, taxa: 0.85 + 0.35 * tr.vel }); }
       }
     }
     this.showT = tocando ? t : -1;
   }
-  /** o RITUAL da chegada do dono (lib/cyber/ritual): a tempestade se forma em cima da capela do templo (todo mundo vê
-   *  a mesma formação: o instante vem do servidor), os raios começam no meio dela e, no fim, o 1º TROVÃO ENERGIZA as
-   *  caixas do lounge — a música cala um instante e o som do raio sai do buraco negro em cima da cabine do DJ; daí em
-   *  diante todo raio tem som. Acaba quando o dono pisa no lounge (o cliente dele avisa o React) */
+  /** o RITUAL do dono (lib/cyber/ritual): a FUMAÇA E OS TROVÕES se formam no topo da capela, das salas de estudo, do
+   *  lounge e do templo (o instante vem do servidor: todo mundo vê a mesma formação); os ANUNCIADORES são os 2 efeitos da
+   *  música — a BALADA escura no lounge (flashes neon na batida) e a ESCADARIA ficando vermelha, com mais raios e fumaça
+   *  na torre do templo. Não acaba sozinho: só pelo botão, e então tudo some DEVAGAR (`suavizarRitual`) */
   private atualizarRitual(dt: number, t: number) {
-    void dt; void t;
-    const agora = Date.now() + this.ritualOffset, r = this.ritual, i = intensidadeDaTempestade(r, agora), fase = faseDaTempestade(r, agora);
+    const agora = Date.now() + this.ritualOffset, r = this.ritual, fase = faseDaTempestade(r, agora);
     this.ritualFase = fase;
-    this.cidade?.tempestade(i, fase === "raios" || fase === "armada");
-    if (!r || fase === "off") { if (this.ritualCortes.size) { this.ritualCortes.clear(); this.somLounge?.lados([1, 1]); this.somLounge?.silenciar(false); } this.revelarNaves(null, agora); return; }
-    // o CORTE da música do lounge pelos RAIOS (lib/cyber/ritual `CORTE`): um raio na caixa da ESQUERDA (cala aquele lado),
-    // outro na da DIREITA, e então a música do lounge para de vez — só a da NAVE do dono continua. Cada passo dispara 1×
-    // por ritual, no quadro em que o relógio do servidor cruza o instante (quem chega bem depois só vê o resultado)
-    const corte = corteDasCaixas(r, agora), s = (agora - r.tempestade) / 1000, caixas = this.cidade?.caixasLounge ?? [];
-    const passo = (feito: boolean, em: number, caixa: number) => {
-      if (!feito || this.ritualCortes.has(`${r.tempestade}|${caixa}`)) return;
-      this.ritualCortes.add(`${r.tempestade}|${caixa}`);
-      if (s - em > 20) return;   // (chegou tarde: sem estouro)
-      const alvo = caixas[caixa]?.getWorldPosition(new THREE.Vector3()) ?? new THREE.Vector3(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z);
-      this.cidade?.raioNoLounge(1.3 + 0.3 * caixa, alvo);
-      if (this.noCeu && !this.bordo) this.som.tocar("trovao", alvo, { dist: DISTANCIA.raio, volume: 1, taxa: 0.8 + 0.1 * caixa });
-    };
-    passo(corte.esquerda, CORTE.esquerda, 0); passo(corte.direita, CORTE.direita, 1);
-    this.somLounge?.lados([corte.esquerda ? 0 : 1, corte.direita ? 0 : 1]);
-    this.somLounge?.silenciar(corte.total);
+    this.ritualI = suavizarRitual(this.ritualI, intensidadeDaTempestade(r, agora), dt);
+    const raios = this.ritualI > 0.25 && fase !== "formando";   // (desligando: os raios seguem até a fumaça rarear)
+    // os ANUNCIADORES: liga em ~2 s, desliga devagar
+    const querAnun = r?.droids ? 1 : 0;
+    this.anunI = querAnun > this.anunI ? Math.min(1, this.anunI + dt / 2) : suavizarRitual(this.anunI, 0, dt);
+    const tocando = !!this.somLounge?.tocandoNaSala, nb = this.cidade?.batidasLounge() ?? 0, bateu = nb !== this.batidasVistas; this.batidasVistas = nb;
+    // a ESCADARIA: vai ficando vermelha com a música (cada batida empurra mais um pouco); a torre do templo ganha fumaça e raios
+    this.escadaV = passoDaEscadaria(this.escadaV, dt, tocando && this.anunI > 0.5, bateu);
+    this.cidade?.escadaria(this.escadaV * this.anunI);
+    this.cidade?.tempestade(this.ritualI, raios, this.anunI * fumacaDaTorre(this.escadaV));
+    if (bateu && tocando && this.anunI > 0.5 && Math.random() < raioNaBatida(this.escadaV)) this.cidade?.raioNoTemplo();
+    // a BALADA: o flash na batida (sem música, de tempos em tempos), decaindo rápido
+    if (bateu && tocando) { this.flash = 1; this.flashN++; }
+    else if (!tocando && this.anunI > 0.5 && t >= this.proxFlash) { this.flash = 0.8; this.flashN++; this.proxFlash = t + BALADA.semMusica[0] + Math.random() * (BALADA.semMusica[1] - BALADA.semMusica[0]); }
+    this.flash *= Math.exp(-dt * BALADA.decai);
     // a NAVE do dono é invisível: só aparece chegando perto das NUVENS da capela do templo
-    this.revelarNaves(r, agora);
-    // o DONO CHEGOU no lounge (a pé): o ritual acabou — o React desliga a tempestade (uma vez por ritual)
-    const noLounge = this.noCeu && !this.bordo && !this.pilotando && salaEm({ x: this.eu.pos.x - CIDADE.centro.x, z: this.eu.pos.z - CIDADE.centro.z }) === "lounge" && this.eu.alt > (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE - 1;
-    if (chegouDoRitual(this.ehFundador(this.o.eu.id), noLounge, r) && this.ritualChegouAvisado !== r.tempestade && agora - r.tempestade > 15_000) { this.ritualChegouAvisado = r.tempestade; this.o.onRitualChegou?.(); }
+    this.revelarNaves(r && fase !== "off" ? r : null, agora);
+  }
+  /** um TROVÃO (o som) de um raio em `em` (mundo): quem ouve é a câmera — chega depois do clarão (~340 m/s), longe some */
+  private trovejar(em: THREE.Vector3) {
+    if (!this.prontoDisparado || !this.som) return;
+    const d = this.cam.position.distanceTo(em); if (d > 900) return;
+    const p = em.clone(); setTimeout(() => this.som?.tocar("trovao", p, { dist: DISTANCIA.raio, volume: 1, taxa: 0.78 + Math.random() * 0.32 }), Math.min(2200, (d / 340) * 1000));
+  }
+  /** a BALADA (os anunciadores): por cima da cena, pra quem está DENTRO do lounge — o véu escuro que a batida abre (com a
+   *  cor neon do flash) e os LASERS neon varrendo a pista (esses por cima do véu: brilham no escuro) */
+  private desenharBalada(t: number) {
+    const L = CIDADE.salas.lounge, c = this.cam.position, ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
+    const dentro = salaEm({ x: c.x - CIDADE.centro.x, z: c.z - CIDADE.centro.z }, 6) === "lounge" && c.y > ilhaY + ALTURA_LOUNGE - 3 && c.y < ilhaY + ALTURA_LOUNGE + 70 ? 1 : 0;
+    this.noLoungeCam += (dentro - this.noLoungeCam) * 0.08;   // (entrando/saindo do lounge: o escuro vem e vai em ~½ s)
+    const liga = this.anunI * this.noLoungeCam, escuro = escuroDaBalada(liga, this.flash);
+    if (liga < 0.01) return;
+    if (!this.balada) {
+      const veu = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
+      const cenaVeu = new THREE.Scene(); cenaVeu.add(veu);
+      const camVeu = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      const neon = new THREE.Scene(), lasers = new THREE.Group(); neon.add(lasers);
+      const w = mundo(L); lasers.position.set(w.x, 0, w.z); lasers.rotation.y = rotDaSala(L);
+      const geo = new THREE.CylinderGeometry(0.06, 1.6, 1, 10, 1, true); geo.translate(0, -0.5, 0);   // a ponta no alto, abrindo pra baixo
+      const feixes = Array.from({ length: this.o.low ? 6 : 10 }, (_, i) => { const f = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: corDoFlash(i), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); lasers.add(f); return f; });
+      this.balada = { veu, cenaVeu, camVeu, neon, lasers, feixes };
+    }
+    const B = this.balada, cor = new THREE.Color(corDoFlash(this.flashN));
+    (B.veu.material as THREE.MeshBasicMaterial).color.setRGB(cor.r * 0.18 * this.flash, cor.g * 0.18 * this.flash, cor.b * 0.18 * this.flash);
+    (B.veu.material as THREE.MeshBasicMaterial).opacity = escuro;
+    B.lasers.position.y = ilhaY + ALTURA_LOUNGE;
+    const topo = DECK.h + 26, nF = B.feixes.length;
+    B.feixes.forEach((f, i) => {
+      const lado = i % 2 ? 1 : -1, a = t * (0.6 + 0.15 * (i % 3)) + i * 1.7 + this.flashN * 0.9;   // (a cada batida a varredura dá um salto)
+      const ox = lado * (10 + (i % 3) * 5), oz = PISTA.z - 22, alvo = new THREE.Vector3(PISTA.x + Math.sin(a) * PISTA.larg * 0.45, DECK.h, PISTA.z + Math.cos(a * 1.3) * PISTA.prof * 0.45);
+      const de = new THREE.Vector3(ox, topo, oz), dir = alvo.clone().sub(de), len = dir.length(); dir.normalize();
+      f.position.copy(de); f.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir); f.scale.set(1, len, 1);
+      const m = f.material as THREE.MeshBasicMaterial; m.color.setHex(corDoFlash(this.flashN + i)); m.opacity = liga * (0.12 + 0.55 * this.flash) * (i < nF ? 1 : 0);
+    });
+    this.R.render(B.cenaVeu, B.camVeu);
+    this.R.render(B.neon, this.cam);
   }
   /** a NAVE do dono (a minha ou a dele, remota) é INVISÍVEL — só o formato e os propulsores; perto das nuvens da capela
    *  do templo (no ritual) ela se revela inteira (lib/cyber/ritual `revelacaoDaNave`) */
@@ -1827,46 +1856,6 @@ export class CyberEngine {
     if (!this.centroDasNuvens) { const L = CIDADE.salas.lounge, t = mundo(daSala(L, TEMPLO.x, TEMPLO.z)); this.centroDasNuvens = new THREE.Vector3(t.x, CIDADE.pisoY + ALTURA_LOUNGE + TEMPLO.h + 75, t.z); }
     const c = this.centroDasNuvens, ilhaY = this.cidade ? this.cidade.ilha.position.y - CIDADE.pisoY : 0;
     return noPerimetro(this.ritual, Math.hypot(g.position.x - c.x, g.position.y - (c.y + ilhaY), g.position.z - c.z));
-  }
-  /** os ANUNCIADORES (lib/cyber/ritual): com o ritual ligado, cada pessoa no mapa (eu e os outros) ganha um droid
-   *  rodeando a cabeça dela, louvando o dono em voz alta de vez em quando; desligado, somem no portal */
-  private atualizarAnunciadores(dt: number, t: number) {
-    const querem = !!this.ritual?.droids && !this.menu && !this.instancia;
-    const alvos: { id: string; x: number; y: number; z: number; obj: THREE.Object3D }[] = [];
-    if (querem) {
-      if (!this.bordo && !this.pilotando && !this.nascendo) alvos.push({ id: this.o.eu.id, x: this.eu.pos.x, y: this.eu.alt, z: this.eu.pos.z, obj: this.eu.av.group });
-      for (const [id, a] of this.remotos) if (a.av.group.visible && !a.nave) alvos.push({ id, x: a.pos.x, y: a.alt, z: a.pos.z, obj: a.av.group });
-    }
-    const vistos = new Set<string>();
-    alvos.forEach((al, idx) => {
-      vistos.add(al.id);
-      let an = this.anunciadores.get(al.id);
-      if (!an) {
-        const h = criarDroid({ low: this.o.low }); h.group.scale.setScalar(ANUNCIADOR.escala); this.cena.scene.add(h.group);
-        const p0 = posDoAnunciador(idx, t, al); h.group.position.set(p0.x, p0.y, p0.z); h.aparecer();
-        an = { h, k: idx, prox: t + 1.5 + (idx % 5) * 0.9, fala: { pos: new THREE.Vector3(p0.x, 0, p0.z), alt: p0.y - 0.9 }, indo: false };
-        this.anunciadores.set(al.id, an);
-      } else if (an.indo && an.h.fase() === "oculto") { an.h.aparecer(); an.indo = false; }
-      const p = posDoAnunciador(an.k, t, al);
-      an.h.group.position.set(p.x, p.y, p.z); an.fala.pos.set(p.x, 0, p.z); an.fala.alt = p.y - 0.9;
-      an.h.atualizar(dt, t, p.rumo);
-      // o LOUVOR: a voz gravada (droid-louvor, com PALAVRAS) presa ao droid — sem o arquivo ainda (carregando), fica só o
-      // balão: a voz sem palavras do Droid do tutorial NÃO entra aqui (o dono quer ouvir a frase)
-      if (t >= an.prox && an.h.fase() === "visivel") {
-        an.prox = proximaFala(an.k, t);
-        const d = this.cam.position.distanceTo(an.h.group.position);
-        if (d < 140) {
-          this.balao(an.fala, FRASE_LOUVOR, DROID.cor, 3800);
-          if (this.som.temSom("droid-louvor")) this.som.tocar("droid-louvor", null, { dist: DISTANCIA.eu, volume: 1.2, seguir: an.h.group });
-        }
-      }
-    });
-    for (const [id, an] of this.anunciadores) {
-      if (vistos.has(id)) continue;
-      if (!an.indo) { an.indo = true; an.h.sumir(); this.falas = this.falas.filter((f) => { if (f.ator === an.fala) { f.el.remove(); return false; } return true; }); }
-      else if (an.h.fase() === "oculto") { an.h.dispose(); this.anunciadores.delete(id); }
-      else an.h.atualizar(dt, t, 0);
-    }
   }
   private atualizarAgentes(dt: number, t: number) {
     const d = this.droid; if (!d) return;
@@ -3249,7 +3238,6 @@ export class CyberEngine {
     this.atualizarConversa(dt);
     this.atualizarAgentes(dt, t);
     this.atualizarRitual(dt, t);
-    this.atualizarAnunciadores(dt, t);
     this.atualizarZaeonCapela(t);
     if (this.holoZaeon && this.holoZaeon.fase() !== "oculto") this.holoZaeon.atualizar(dt, t, this.cam.position);
 
@@ -3377,7 +3365,7 @@ export class CyberEngine {
     matrizesDaCena(this.cena.scene);   // o que está invisível no topo da cena não recalcula matrizes (components/cyber/matrizes)
     // transparentes de dupla face numa passada só (components/cyber/umaPassada) — de tempos em tempos pega os materiais novos
     if (now - this.passadaEm > 2000) { this.passadaEm = now; umaPassadaNosTransparentes(this.cena.scene); }
-    const desenhar = () => { this.R.clear(); this.cena.desenharFundo(this.R, this.qa.atual.nebulosa); this.R.clearDepth(); this.R.render(this.cena.scene, this.cam); };
+    const desenhar = () => { this.R.clear(); this.cena.desenharFundo(this.R, this.qa.atual.nebulosa); this.R.clearDepth(); this.R.render(this.cena.scene, this.cam); this.desenharBalada(t); };
     // moto rápida (components/cyber/VelocidadeTela): as LINHAS de velocidade estilo anime + vinheta ligam SEMPRE (são
     // baratas); o BLUR radial só quando a qualidade deixa (fora do modo low e dos degraus baixos — é uma tela inteira a mais)
     const onda = this.ondaT >= 0 && this.ondaT < 1 ? this.ondaT : -1;
@@ -3535,7 +3523,7 @@ export class CyberEngine {
     this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.somLounge?.dispose(); this.musicaNave?.dispose(); for (const a of this.anunciadores.values()) a.h.dispose(); this.anunciadores.clear(); if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose();
+    this.somLounge?.dispose(); this.musicaNave?.dispose(); if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose();
     this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }
