@@ -44,6 +44,7 @@ export default function PastasEmpilhadas({ pastas, ativa, onAbrir, antes, depois
             <div
               key={p.id}
               role="tab"
+              data-tour={i === 0 ? "pasta-conversa" : undefined}
               aria-selected={frente}
               tabIndex={0}
               title={p.titulo ?? p.rotulo}
