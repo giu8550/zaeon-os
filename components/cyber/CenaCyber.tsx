@@ -352,7 +352,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       <div ref={cont} className="absolute inset-0" />
       <div ref={overlay} className="pointer-events-none absolute inset-0 overflow-hidden" />
       {/* o laboratório no TABLET, por cima da cena (o cyberespaço segue vivo atrás) */}
-      <TabletLab aberto={tabletAberto} onIA={(e) => setIaLab((antes) => juntarEstadoIA(antes, e))} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
+      <TabletLab aberto={tabletAberto} tutorial={!!guia} onPesquisaSalva={(p) => engine.current?.pesquisaSalva(p)} onIA={(e) => setIaLab((antes) => juntarEstadoIA(antes, e))} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
       {/* as barras do HUD: SAÚDE, VIGOR e o uso CONCORRENTE de IA (o laboratório do tablet) */}
       {tela && !menu && !tabletAberto && <BarrasHud ler={lerBarras} ia={iaLab} touch={touch} />}
       {tela && <ContadorFps mostrar={prefs.fps} gpu={gpu} classe={perfil.gpu} ler={lerFps} />}

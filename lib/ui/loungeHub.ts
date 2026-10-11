@@ -52,3 +52,13 @@ export function copyEntrada(logado: boolean): CopyEntrada {
   if (logado) return { cta: "Iniciar chat · iniciar jogo", badges: [] };
   return { cta: "Criar minha conta · iniciar jogo", badges: ["1 mês grátis", "Sem cartão", "Sem limites", "Tecnologia de ponta"] };
 }
+
+/** o TUTORIAL no tablet (lib/onboarding/tutorialLab): a 1ª abertura do novato leva `tutorial=1` — o laboratório roda o
+ *  tour da 1ª missão. Quando a pesquisa fica SALVA de verdade, o lab avisa a janela de cima (o Droid interrompe) */
+export const urlDoLabNoTutorial = () => `${LAB_TABLET_PRIMEIRA}&tutorial=1`;
+export const pedeTutorial = (search: string | URLSearchParams | null | undefined): boolean => new URLSearchParams(search ?? "").get("tutorial") === "1";
+export const MSG_PESQUISA_SALVA = "zaeon:tutorial:pesquisa-salva";
+/** a pesquisa que a pessoa criou no tutorial (vira o livro do inventário) */
+export type PesquisaSalva = { titulo: string; palavras: number; workId: string | null };
+export const ehMsgPesquisaSalva = (data: unknown, origin: string, esperada: string): data is { type: string; pesquisa: PesquisaSalva } =>
+  origin === esperada && !!data && typeof data === "object" && (data as { type?: unknown }).type === MSG_PESQUISA_SALVA && typeof (data as { pesquisa?: { titulo?: unknown } }).pesquisa?.titulo === "string";

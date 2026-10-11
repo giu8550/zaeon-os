@@ -1,4 +1,5 @@
 "use client";
+import BandejaFontes from "./BandejaFontes";
 import { useEffect, useRef, useState } from "react";
 import { BookMarked, Lightbulb, BookOpen, Layers } from "lucide-react";
 import { useOmegaScholar } from "./OmegaScholarContext";
@@ -47,11 +48,13 @@ export default function OmegaScholarWorkspace() {
     <div ref={containerRef} className="h-full overflow-y-auto custom-scrollbar p-6">
       {/* MODAL DA PESQUISA — bloco único destacado (cor da antiga barra do Omega): ⟁ + glitch
           + barra de busca + informes dos agentes, separado do fundo branco da página. */}
-      <div className="mb-5 rounded-[1.8rem] bg-gradient-to-br from-violet-500/15 to-purple-500/5 border border-violet-300/30 dark:border-white/10 shadow-[0_18px_50px_-24px_rgba(124,58,237,0.45)] px-4 sm:px-5 pt-4 pb-1 relative overflow-hidden">
+      <div data-tour="omega" className="mb-5 rounded-[1.8rem] bg-gradient-to-br from-violet-500/15 to-purple-500/5 border border-violet-300/30 dark:border-white/10 shadow-[0_18px_50px_-24px_rgba(124,58,237,0.45)] px-4 sm:px-5 pt-4 pb-1 relative overflow-hidden">
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-violet-400/10 rounded-full blur-[55px] pointer-events-none" />
         <div className="relative z-10">
           <OmegaScholarBar collapsible flushTop />
           <ActivityThread />
+          {/* a BANDEJA: o que já foi salvo (referências, citações) fica à vista */}
+          <BandejaFontes />
           {/* "Gerar pesquisa" — logo abaixo da barra/resposta, só quando o estudo concluiu. */}
           {status === "done" && (
             <GenerateResearchPanel

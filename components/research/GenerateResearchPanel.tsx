@@ -53,6 +53,7 @@ export default function GenerateResearchPanel({ topic, references = [] }: Props)
           </button>
         ) : (
           <button
+            data-tour="iniciar-pesquisa"
             onClick={start}
             className="group relative inline-block px-9 py-3 rounded-2xl overflow-hidden border text-white font-black text-[11px] uppercase tracking-[0.24em] shadow-[0_0_24px_rgba(34,211,238,0.25)] backdrop-blur-md transition-all duration-500 hover:scale-105 animate-pulse hover:animate-none"
             style={{ background: "linear-gradient(135deg, rgba(124,58,237,0.55), rgba(6,182,212,0.55))", borderColor: "rgba(34,211,238,0.45)" }}

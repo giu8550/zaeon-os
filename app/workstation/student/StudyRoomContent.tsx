@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { isSuperAdminEmail } from "@/lib/auth/roles";
 import { unifiedResearchRoom } from "@/lib/research/unifiedRoom";
+import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, EVT_ESTUDOS_IR, anunciarAbaEstudos, consumirAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
 import OmegaScholarWorkspace from "./omega/OmegaScholarWorkspace";
@@ -261,6 +262,12 @@ export default function StudyRoomContent({ flushTop = false, unified = false, ab
     const [boardDoLink, setBoardDoLink] = useState<{ id: string | null; convite: string | null }>({ id: null, convite: null });
     const [cadernoAberto, setCadernoAberto] = useState(false);
     const [estudosVista, setEstudosVista] = useState<"vitrine" | "pesquisar">("vitrine");
+    // o tutorial do tablet abre o Marketplace direto na pesquisa (a tela roxa)
+    useEffect(() => {
+        const f = (e: Event) => { const v = (e as CustomEvent<"vitrine" | "pesquisar">).detail; if (v === "vitrine" || v === "pesquisar") setEstudosVista(v); };
+        window.addEventListener(EVT_ESTUDOS_VISTA, f);
+        return () => window.removeEventListener(EVT_ESTUDOS_VISTA, f);
+    }, []);
     useEffect(() => {
         try {
             const sp = new URLSearchParams(window.location.search), id = sp.get("board");
