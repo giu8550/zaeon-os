@@ -81,8 +81,8 @@ export const CORPOS_VRM: Readonly<Record<string, CorpoVrm>> = {
  *  diz qual é o de cada conta (lib/lounge3d/corposDeUsuario) e o cliente só pinta */
 export const CORPOS_DE_JOGADOR: Readonly<Record<string, CorpoVrm>> = {
   // Giulia: regata preta (vira frente única com a gola em código), pantalona branca de cintura alta com cinto de corda,
-  // sapato nude, pulseira de contas e brincos; o cabelo do VRoid é castanho médio → escurece aqui
-  giulia: { url: "/avatars/jogadores/giulia.vrm", tintas: { Hair: "#6b5244", HairBack: "#6b5244", Bottoms: "#f4f2ec", Shoes: "#d8b28c" },
+  // sapato nude, pulseira de contas e brincos; cabelo castanho-escuro repartido de lado, batom vermelho e sardas (VRoid)
+  giulia: { url: "/avatars/jogadores/giulia.vrm", tintas: { Bottoms: "#f4f2ec", Shoes: "#d8b28c" },
     acessorios: ["golaFrenteUnica", "cintoCorda", "pulseiraContas", "brincos"], gravidadeCabelo: 0.35, pose: "feminina" },
 };
 /** o corpo próprio de quem está no cyberespaço: o do FOUNDER (com as asas) ou o de jogador que o servidor mandou */
