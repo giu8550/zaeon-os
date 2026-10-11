@@ -23,6 +23,7 @@ import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
 import RespostaZaeon from "./RespostaZaeon";
 import CaixaDialogo from "./CaixaDialogo";
 import type { Dialogo } from "@/lib/cyber/dialogo";
+import type { PesquisaSalva } from "@/lib/ui/loungeHub";
 import type { PedidoZaeon, PerfilZaeon, PerguntaZaeon, TurnoZaeon } from "@/lib/cyber/conversaZaeon";
 import { criarVoz, type VozHandle } from "./Voz";
 import { transporteRealtime, vozLigada } from "@/lib/lounge3d/realtime";
@@ -112,6 +113,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const lerBarras = useCallback(() => { const e = engine.current; if (!e) return null; const c = e.combate(), v = e.vigorAgora(); return { vida: c.vida, vidaMax: c.max, caido: c.caido, vigor: v.v, exausto: v.exausto }; }, []);
   // o INVENTÁRIO (tecla I — lib/cyber/inventario): a arma equipada vai pra mão
   const [inventarioAberto, setInventarioAberto] = useState(false);
+  const [destaqueInv, setDestaqueInv] = useState<PesquisaSalva | null>(null);   // a pesquisa nova do tutorial
   const lerInventario = useCallback(() => engine.current?.inventario() ?? null, []);
   const equiparItem = useCallback((id: Parameters<CyberEngine["equipar"]>[0]) => engine.current?.equipar(id) ?? null, []);
   useEffect(() => {
@@ -257,6 +259,7 @@ export default function CenaCyber(p: CenaCyberProps) {
         setTimeout(() => { engine.current?.dispose(); engine.current = null; router.push("/"); }, 3200);
       },
       onDialogo: setDialogo,
+      onInventario: (p) => { if (p) { setDestaqueInv(p); if (document.pointerLockElement) document.exitPointerLock(); setInventarioAberto(true); } else setInventarioAberto(false); },
       onPergunta: setPergunta, onPerfil: (perfil) => cb.current.salvarPerfil?.(perfil),
       onFalaAgente: (f) => setFalasDroid((xs) => [...xs.slice(-20), { id: `agente-${Date.now()}-${xs.length}`, userId: `agente:${f.id}`, name: f.nome, color: f.cor, texto: f.texto, ts: Date.now() }]),
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
@@ -356,7 +359,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* as barras do HUD: SAÚDE, VIGOR e o uso CONCORRENTE de IA (o laboratório do tablet) */}
       {tela && !menu && !tabletAberto && <BarrasHud ler={lerBarras} ia={iaLab} touch={touch} />}
       {tela && <ContadorFps mostrar={prefs.fps} gpu={gpu} classe={perfil.gpu} ler={lerFps} />}
-      <InventarioPainel aberto={inventarioAberto} onFechar={() => setInventarioAberto(false)} ler={lerInventario} equipar={equiparItem} />
+      <InventarioPainel aberto={inventarioAberto} destaque={destaqueInv} onFechar={() => { setInventarioAberto(false); engine.current?.inventarioFechado(); }} ler={lerInventario} equipar={equiparItem} />
 
       {/* rótulo do monitor (hover) */}
       <div ref={monLabel} className="pointer-events-none absolute z-[22] hidden -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full bg-gradient-to-b from-cyan-100 to-sky-400 px-3 py-1.5 text-[12.5px] font-bold text-slate-950 shadow-[0_0_18px_rgba(90,200,255,.7)] data-[longe=true]:border data-[longe=true]:border-sky-300/35 data-[longe=true]:bg-slate-900/80 data-[longe=true]:from-transparent data-[longe=true]:to-transparent data-[longe=true]:text-sky-100 data-[longe=true]:shadow-none" />

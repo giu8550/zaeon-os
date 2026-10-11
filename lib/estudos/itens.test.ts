@@ -18,3 +18,13 @@ describe("os estudos viram ITENS do game (livros que evoluem)", () => {
     expect(proximaRaridade(60)).toEqual({ raridade: "lendaria", faltam: 15 }); expect(proximaRaridade(80)).toBeNull();
   });
 });
+
+describe("pesquisa como item do inventário", () => {
+  it("conta as páginas pelas palavras (mínimo 1) e limpa o título", async () => {
+    const { pesquisaComoItem } = await import("./itens");
+    const it1 = pesquisaComoItem({ id: "w1", title: "Chocolate.pdf", content: "uma frase curta", updatedAt: new Date("2026-10-11T00:00:00Z") });
+    expect(it1).toMatchObject({ id: "w1", titulo: "Chocolate", paginas: 1, palavras: 3, atualizadoEm: "2026-10-11T00:00:00.000Z" });
+    const it2 = pesquisaComoItem({ id: "w2", title: null, content: Array(650).fill("palavra").join(" "), updatedAt: null });
+    expect(it2).toMatchObject({ titulo: "Pesquisa sem título", paginas: 3, atualizadoEm: null });
+  });
+});
