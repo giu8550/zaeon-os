@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { BOOST_SUPER, PILOTAGEM, ZONA_MOTO_ZAEON, motoParada, rompeuBarreira, supersonico, passoMoto, passoMotoSub, sensacaoDeVelocidade, tetoDaMoto, type ComandoMoto, type EstadoMoto } from "./motoFisica";
 import * as ceuMod from "./ceu";
+import { CHAO as G, PRACA } from "./praca";
+/** um ponto na PRAÇA (o referencial antigo: a praça era a origem e o chão, 0) */
+const P = (x: number, y: number, z: number) => [PRACA.x + x, G + y, PRACA.z + z] as const;
 
 const NADA: ComandoMoto = { acel: 0, giro: 0, subir: false, descer: false, boost: false };
 /** no ar (longe do chão e de tudo), parada, rumo +z */
-const noAr = (): EstadoMoto => motoParada(300, 20, 300, 0);
+const noAr = (): EstadoMoto => motoParada(300, G + 20, 300, 0);
 const pilotar = (s: EstadoMoto, c: Partial<ComandoMoto>, seg: number) => { for (let i = 0; i < seg * 30; i++) s = passoMotoSub(s, { ...NADA, ...c }, 1 / 30).s; return s; };
 const vel = (s: EstadoMoto) => Math.hypot(s.vx, s.vz);
 
@@ -84,32 +87,32 @@ describe("pilotagem da moto (dirigibilidade)", () => {
     expect(vel(devagar)).toBeLessThan(BOOST_SUPER); expect(d2.boost).toBe(true); expect(rompeuBarreira(devagar.boost, d2.boost, vel(d2))).toBe(false);
   });
   it("a 1000 km/h não atravessa um pilar (subpassos de no máximo 1,2 m)", () => {
-    const pilar = { x: 300, z: 340, r: 2, topo: 100, base: 0 };
+    const pilar = { x: 300, z: 340, r: 2, topo: G + 100, base: G };
     let s = { ...noAr(), vz: PILOTAGEM.velBoost };
     for (let i = 0; i < 30; i++) s = passoMotoSub(s, { ...NADA, acel: 1, boost: true }, 1 / 30, [pilar]).s;
     expect(s.z).toBeLessThan(340);
   });
   it("parada não dá boost; no chão não anda (decola primeiro) mas o guidão gira ela no lugar", () => {
     expect(pilotar(noAr(), { boost: true }, 1).boost).toBe(false);
-    const chao = motoParada(300, 0, 300, 0), s = pilotar(chao, { acel: 1, giro: 1 }, 1);
+    const chao = motoParada(300, G, 300, 0), s = pilotar(chao, { acel: 1, giro: 1 }, 1);
     expect(Math.hypot(s.x - 300, s.z - 300)).toBeLessThan(0.01);
     expect(s.yaw).toBeLessThan(-0.3);
-    const sobe = pilotar(chao, { subir: true }, 1); expect(sobe.y).toBeGreaterThan(5);
+    const sobe = pilotar(chao, { subir: true }, 1); expect(sobe.y).toBeGreaterThan(G + 5);
   });
   it("o rumo NÃO depende de pra onde a câmera olha (W é sempre a frente da moto)", () => {
-    const s = pilotar(motoParada(300, 20, 300, Math.PI / 2), { acel: 1 }, 3);
+    const s = pilotar(motoParada(300, G + 20, 300, Math.PI / 2), { acel: 1 }, 3);
     expect(s.x - 300).toBeGreaterThan(30); expect(Math.abs(s.z - 300)).toBeLessThan(1e-6);
   });
   it("ALTURA: sobe no máximo alturaMax acima do chão de baixo — segurando SUBIR, para lá (na praça-ilha)", () => {
-    const s = pilotar(motoParada(10, 0, 10, 0), { subir: true }, 8);
-    expect(s.y).toBeLessThanOrEqual(PILOTAGEM.alturaMax + 1e-6); expect(s.y).toBeGreaterThan(PILOTAGEM.alturaMax - 1.5);
+    const s = pilotar(motoParada(...P(10, 0, 10), 0), { subir: true }, 8);
+    expect(s.y).toBeLessThanOrEqual(G + PILOTAGEM.alturaMax + 1e-6); expect(s.y).toBeGreaterThan(G + PILOTAGEM.alturaMax - 1.5);
   });
   it("sobe devagar e DESCE mais devagar que sobe (nada de despencar)", () => {
     // (dentro do teto: começa a 7,5 m, que é abaixo dos 8 m — acima dele a descida é a "planando")
-    const sobe = pilotar(motoParada(10, 0, 10, 0), { subir: true }, 0.6), desce = pilotar(motoParada(10, 7.5, 10, 0), { descer: true }, 0.6);
-    expect(sobe.y).toBeGreaterThan(2); expect(sobe.y).toBeLessThan(PILOTAGEM.alturaMax);
-    expect(7.5 - desce.y).toBeLessThan(sobe.y); expect(7.5 - desce.y).toBeGreaterThan(1);
-    expect(pilotar(motoParada(10, 7.5, 10, 0), { descer: true }, 0.9).vy).toBeGreaterThanOrEqual(-PILOTAGEM.desce - 1e-6);
+    const sobe = pilotar(motoParada(...P(10, 0, 10), 0), { subir: true }, 0.6), desce = pilotar(motoParada(...P(10, 7.5, 10), 0), { descer: true }, 0.6);
+    expect(sobe.y - G).toBeGreaterThan(2); expect(sobe.y - G).toBeLessThan(PILOTAGEM.alturaMax);
+    expect(G + 7.5 - desce.y).toBeLessThan(sobe.y - G); expect(G + 7.5 - desce.y).toBeGreaterThan(1);
+    expect(pilotar(motoParada(...P(10, 7.5, 10), 0), { descer: true }, 0.9).vy).toBeGreaterThanOrEqual(-PILOTAGEM.desce - 1e-6);
     expect(PILOTAGEM.alturaMax).toBeLessThanOrEqual(10);   // moto voa BAIXO
   });
   it("sobre o VAZIO (fora da Zaeon, depois de um boost): o ESPAÇO continua subindo até o céu da moto — o bug do dono", () => {
@@ -119,13 +122,13 @@ describe("pilotagem da moto (dirigibilidade)", () => {
     expect(Math.hypot(s.x - c.x, s.z - c.z)).toBeGreaterThan(ZONA_MOTO_ZAEON.r);
     const y0 = s.y; s = pilotar(s, { subir: true }, 2); expect(s.y).toBeGreaterThan(y0 + 8);
     s = pilotar(s, { subir: true }, 30); expect(s.y).toBeLessThanOrEqual(ZONA_MOTO_ZAEON.teto + 0.5); expect(s.y).toBeGreaterThan(ZONA_MOTO_ZAEON.teto - 2);
-    expect(tetoDaMoto({ x: 300, z: 300 }, 0)).toBe(ZONA_MOTO_ZAEON.teto);   // o vazio: o céu da moto
+    expect(tetoDaMoto({ x: 300, z: 300 }, G)).toBe(ZONA_MOTO_ZAEON.teto);   // o vazio: o céu da moto
   });
   it("passou da borda de algo alto por cima de um piso de verdade (a praça): não sobe e desce PLANANDO até ficar abaixo do teto", () => {
-    let s = motoParada(10, 450, 10, 0);   // 450 m acima da praça-ilha
-    s = pilotar(s, { subir: true }, 2); expect(s.y).toBeLessThan(450);
+    let s = motoParada(...P(10, 160, 10), 0);   // 160 m acima da praça-ilha
+    s = pilotar(s, { subir: true }, 2); expect(s.y).toBeLessThan(G + 160);
     expect(s.vy).toBeLessThan(-PILOTAGEM.planaMin + 1e-6); expect(s.vy).toBeGreaterThanOrEqual(-PILOTAGEM.planaMax - 1e-6);
-    s = pilotar(s, {}, 60); expect(s.y).toBeLessThanOrEqual(PILOTAGEM.alturaMax + 1.5);
+    s = pilotar(s, {}, 60); expect(s.y).toBeLessThanOrEqual(G + PILOTAGEM.alturaMax + 1.5);
   });
 });
 
@@ -135,7 +138,7 @@ describe("o PODER da moto na Zaeon: o teto sobe até o início da ponta da capel
     const centro = CIDADE.centro, garagem = mundo(CIDADE.salas.garagem);
     expect(tetoDaMoto(centro, CIDADE.pisoY)).toBeGreaterThanOrEqual(CIDADE.pisoY + ALTURA_LOUNGE);
     expect(tetoDaMoto(garagem, CIDADE.pisoY + ALTURA_LOUNGE)).toBeGreaterThan(CIDADE.pisoY + ALTURA_LOUNGE);   // pousa/decola da garagem
-    expect(tetoDaMoto({ x: 0, z: 0 }, 0)).toBe(PILOTAGEM.alturaMax);                                       // na praça: baixo
+    expect(tetoDaMoto(PRACA, G)).toBe(G + PILOTAGEM.alturaMax);                                            // na praça: baixo
     expect(ZONA_MOTO_ZAEON.r).toBeGreaterThan(Math.hypot(CIDADE.salas.garagem.x, CIDADE.salas.garagem.z) + CIDADE.salas.garagem.r);
     // subindo da central: chega na altura das plataformas (e não passa muito dela)
     let s = motoParada(centro.x + 100, CIDADE.pisoY + 3, centro.z, 0);

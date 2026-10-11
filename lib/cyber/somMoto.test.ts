@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { CAMBIO, FAIXAS_MOTOR, LOOPS_MOTO, SINTESE_MOTO, cambioNeutro, eventosDaMoto, freqDoMotor, mixDaMoto, passoCambio, setaAcesa, somMotoParada, type EstadoSomMoto } from "./somMoto";
 import { PILOTAGEM, motoParada, passoMotoSub } from "./motoFisica";
 import { SINTESE, SONS, SONS_ARQUIVO } from "./audio";
+import { CHAO } from "./praca";
 
 const sr = 22050;
 const pico = (x: Float32Array) => x.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
@@ -100,7 +101,7 @@ describe("motor (gravações reais): faixas e frequência", () => {
 describe("câmbio (o tom do motor NÃO vai direto pro teto)", () => {
   /** acelera tudo a 60 fps e anota cada troca e a rotação por segundo */
   const acelerar = (seg: number, boostDepois = Infinity) => {
-    let s = motoParada(300, 20, 300, 0), c = cambioNeutro(); const trocas: { t: number; antes: number; depois: number }[] = [];
+    let s = motoParada(300, CHAO + 20, 300, 0), c = cambioNeutro(); const trocas: { t: number; antes: number; depois: number }[] = [];
     for (let i = 1; i <= seg * 60; i++) {
       const t = i / 60; s = passoMotoSub(s, { acel: 1, giro: 0, subir: false, descer: false, boost: t > boostDepois }, 1 / 60).s;
       const antes = c.rpm, m = c.marcha; c = passoCambio(c, { voando: true, vel: Math.hypot(s.vx, s.vz) / PILOTAGEM.vel, acel: 1, boost: s.boost }, 1 / 60);

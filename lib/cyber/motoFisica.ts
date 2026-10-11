@@ -21,7 +21,7 @@
  */
 import { VOO, chaoDoVoo, resolverVoo, type EstadoVoo, type Pilar } from "./voo";
 import { ALTURA_LOUNGE, CIDADE } from "./ceu";
-import { naPraca } from "./praca";
+import { CHAO, naPraca } from "./praca";
 
 /** o CÉU DA ZAEON pra moto: até a borda da plataforma mais distante (+ folga), o teto é o início da ponta da capela
  *  (+ uma folga pra passar por cima do guarda-corpo das plataformas e pousar nelas) */
@@ -32,12 +32,13 @@ export const ZONA_MOTO_ZAEON = {
   teto: CIDADE.pisoY + ALTURA_LOUNGE + 8,
 } as const;
 /** o teto da moto aqui: `chao` + alturaMax, ou — no céu da Zaeon E sobre o VAZIO — o início da ponta da capela, o que
- *  for MAIOR. O hiperespaço não tem chão (o "chão" 0 lá embaixo é o vazio; só a praça-ilha fica nele): antes, saindo da
+ *  for MAIOR. O hiperespaço não tem chão (o "chão" `CHAO` é o vazio; só a praça-ilha fica nele): antes, saindo da
  *  zona da Zaeon — o boost leva pra fora em ~2 s — o teto caía pra 8 m acima do vazio, o ESPAÇO não subia mais e a moto
  *  descia planando (o bug do dono, out/2026). Sobre um piso de verdade (a praça, um campus) continua o teto baixo */
 export function tetoDaMoto(p: { x: number; z: number }, chao: number): number {
-  const naZaeon = Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= ZONA_MOTO_ZAEON.r;
-  const noVazio = chao <= 0.5 && !naPraca(p, 6);
+  // (a PRAÇA fica dentro da zona da Zaeon — lib/cyber/praca —, mas em cima dela a moto voa BAIXO, como sempre)
+  const naZaeon = Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= ZONA_MOTO_ZAEON.r && !naPraca(p, 6);
+  const noVazio = chao <= CHAO + 0.5 && !naPraca(p, 6);
   return Math.max(chao + PILOTAGEM.alturaMax, naZaeon || noVazio ? ZONA_MOTO_ZAEON.teto : -Infinity);
 }
 

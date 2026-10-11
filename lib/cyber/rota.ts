@@ -8,12 +8,14 @@ import { CIDADE } from "./ceu";
 import { poseDaDoca } from "./naveQG";
 import { HELIPORTO } from "./landmarks";
 import { VOO, type ComandoVoo, type EstadoVoo } from "./voo";
+import { CHAO } from "./praca";
 
 export type DestinoRota = "heliporto" | "zaeon";
 export type Waypoint = { x: number; y: number; z: number; pousar?: boolean };
 
-/** altitude de cruzeiro perto da praça: acima das bases e do heliporto, bem abaixo da ponta da agulha da Zaeon */
-export const CRUZEIRO = 40;
+/** altitude de cruzeiro perto da praça: acima das bases e do heliporto (15 m acima do chão — lib/cyber/praca `CHAO`),
+ *  abaixo da laje da Zaeon (40 m acima do chão) */
+export const CRUZEIRO = CHAO + 15;
 const FOLGA_BORDA = 8, ACIMA_DA_CIDADE = 8;
 
 const daCidade = (p: { x: number; z: number }) => Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z);
@@ -27,7 +29,7 @@ function saidaDaIlha(rumo: { x: number; z: number }, y: number): Waypoint {
 
 /** onde cada atalho pousa: no heliporto (na ilha da praça) ou atracada na doca da Zaeon */
 export function alvoDoAtalho(destino: DestinoRota): Waypoint {
-  if (destino === "heliporto") return { x: HELIPORTO.x, y: 0, z: HELIPORTO.z, pousar: true };
+  if (destino === "heliporto") return { x: HELIPORTO.x, y: CHAO, z: HELIPORTO.z, pousar: true };
   const d = poseDaDoca(); return { x: d.x, y: d.y, z: d.z };   // atraca PAIRANDO na doca, ao lado da ilha (sem pousar)
 }
 
@@ -42,7 +44,7 @@ export function rotaPara(destino: DestinoRota, s: EstadoVoo): Waypoint[] {
     // pra doca da Zaeon (céu): embaixo da ilha, decola e sai pela lateral; sobe POR FORA; atraca ao lado da ilha, do lado da doca
     if (!naCidade) {
       if (naColuna) {
-        const yv = Math.max(p.y, VOO.decolar + SOLTA_V + 2);
+        const yv = Math.max(p.y, CHAO + VOO.decolar + SOLTA_V + 2);
         if (yv > p.y + 1) { rota.push({ x: p.x, y: yv, z: p.z }); p = { ...p, y: yv }; }
         const sai = saidaDaIlha(alvo, yv); rota.push(sai); p = sai;
       }
@@ -59,7 +61,7 @@ export function rotaPara(destino: DestinoRota, s: EstadoVoo): Waypoint[] {
     const sai = saidaDaIlha(alvo, altoCidade); rota.push(sai); p = sai;
   } else if (naColuna && p.y < CIDADE.pisoY) {
     // embaixo da ilha: decola o bastante (no chão a nave não anda de lado) e sai pela lateral
-    const yv = Math.max(p.y, VOO.decolar + SOLTA_V + 2);
+    const yv = Math.max(p.y, CHAO + VOO.decolar + SOLTA_V + 2);
     if (yv > p.y + 1) { rota.push({ x: p.x, y: yv, z: p.z }); p = { ...p, y: yv }; }
     const sai = saidaDaIlha(alvo, yv); rota.push(sai); p = sai;
   }

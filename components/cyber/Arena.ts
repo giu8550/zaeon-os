@@ -65,7 +65,7 @@ export function criarArena(o: { low: boolean }): ArenaHandle {
   { const tex = textura("ARENA PvP"); texs.push(tex);
     const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }); mats.push(m);
     const ge = new THREE.PlaneGeometry(14, 3.5); geos.push(ge);
-    const placa = add(new THREE.Mesh(ge, m)), a = Math.atan2(PORTAL_PRACA.z, PORTAL_PRACA.x) + 0.55, r = ARENA.r - 6;
+    const placa = add(new THREE.Mesh(ge, m)), a = Math.atan2(PORTAL_PRACA.z - ARENA.z, PORTAL_PRACA.x - ARENA.x) + 0.55, r = ARENA.r - 6;
     placa.position.set(Math.cos(a) * r, 6.5, Math.sin(a) * r); placa.lookAt(0, 6.5, 0); }
 
   // ── os BONECOS DE TREINO (hologramas) ──

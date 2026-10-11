@@ -4,7 +4,7 @@
  * esquivas sozinho — um deles ataca de volta, com aviso) e onde se RENASCE depois de cair.
  * A praça continua sendo a mesma ilha (lib/cyber/praca: chão, borda, o buraco negro de chegada).
  */
-import { PRACA, PORTAL_PRACA } from "./praca";
+import { PRACA, PORTAL_PRACA, naPracaLocal } from "./praca";
 
 export const ARENA = { x: PRACA.x, z: PRACA.z, r: PRACA.r - 3, y: PRACA.y } as const;
 /** a ARENA está montada na praça? (out/2026: NÃO — a praça virou o lugar onde os NOVOS usuários nascem, sem PvP; a
@@ -22,12 +22,12 @@ export const PILARES_ARENA = Array.from({ length: 8 }, (_, k) => { const a = (k 
 /** os BONECOS DE TREINO: hologramas que apanham (mostram o dano) — o "sparring" ataca quem chega perto (o golpe vem
  *  com um AVISO vermelho de `aviso` s: dá pra desviar no dash) */
 export type Boneco = { id: string; x: number; z: number; rumo: number; sparring: boolean };
-export const BONECOS: readonly Boneco[] = [
+export const BONECOS: readonly Boneco[] = ([
   { id: "boneco-1", x: -9, z: 6, rumo: Math.PI * 0.75, sparring: false },
   { id: "boneco-2", x: 9, z: 6, rumo: -Math.PI * 0.75, sparring: false },
   { id: "boneco-3", x: 0, z: 13, rumo: Math.PI, sparring: false },
   { id: "sparring", x: 0, z: -10, rumo: 0, sparring: true },
-];
+] as Boneco[]).map((b) => ({ ...b, ...naPracaLocal(b.x, b.z) }));   // (no referencial da praça)
 export const SPARRING = { alcance: 3.2, aviso: 0.6, intervalo: 2.4, dano: 10, empurra: 5 } as const;
 
 /** onde se RENASCE na arena (depois de cair): na borda, do lado oposto de quem derrubou (ou num ponto fixo) */

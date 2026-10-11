@@ -223,10 +223,10 @@ describe("o corpo no instante", () => {
       expect(colisoes / pts.length).toBeLessThan(0.03);
     }
   });
-  it("o passeio de moto visita lugares FORA da cidadela (a volta dentro dela não passa de 2 min)", () => {
+  it("o passeio de moto visita lugares FORA da cidadela (a volta dentro dela não passa de 2 min) — a Solana House e a praça ficam pertinho, a 70–100 m da borda", () => {
     for (const { agente, blocos } of [...plano.agentes.values()].slice(0, 120)) blocos.forEach((b, i) => {
       if (b.atividade !== "moto") return;
-      for (const p of roteiroMoto(b, agente.id, i)) expect(Math.hypot(p.p.x - CIDADE.centro.x, p.p.z - CIDADE.centro.z)).toBeGreaterThan(CIDADE.bordaR + 50);
+      for (const p of roteiroMoto(b, agente.id, i)) expect(Math.hypot(p.p.x - CIDADE.centro.x, p.p.z - CIDADE.centro.z)).toBeGreaterThan(CIDADE.bordaR + 30);
     });
     expect(MOV.rodaZaeonMax).toBeLessThanOrEqual(120);
   });

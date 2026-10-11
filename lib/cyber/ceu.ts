@@ -10,6 +10,7 @@
  */
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 import { colisoresDoDistritoTerra } from "./terra";
+import { CHAO } from "./praca";
 import { DECK, TEMPLO, alturaDaEscadaria, alturaNoLounge, bordaDoDeck, bordasDaEscadaria, colisoresDoTemplo, noCorredorDaEscadaria, noTemplo, saidaDoLounge, GARAGEM_LOUNGE, naGaragemDoLounge } from "./templo";
 
 /** a ZAEON MEGA (out. 2026): a cidadela virou uma MEGA PLATAFORMA — 3× mais larga que antes, bem mais ALTA (450 m) e
@@ -45,9 +46,9 @@ export const CIDADE = {
   bordaR: 84 * E,       // borda da ilha principal (252 m)
   andavelR: 76 * E,     // até onde se anda (as muralhas ficam em muralhaR)
   muralhaR: 80 * E,
-  ilhaAltura: 180,      // a ilha (cone invertido) vai do piso até pisoY - ilhaAltura
-  /** a AGULHA embaixo da ilha: a ponta afiada que desce do ápice (sólida pra nave) */
-  agulha: { r: 16, altura: 70 },
+  /** a espessura da LAJE da ilha (sólida pra nave/moto): sem a montanha invertida embaixo — as superfícies de baixo não
+   *  existem mais (o dono, out/2026: a praça subiu pra perto da Zaeon, lib/cyber/praca `CHAO`, 40 m abaixo do piso) */
+  ilhaAltura: 3,
   cidadela: { r: CAPELA.r, pilares: CAPELA.pilares, pilarColR: CAPELA.pilarColR, altura: CAPELA.altura },
   /** o GLOBO de luz no centro da capela (sobre a mesa) */
   mesaHolo: { r: 2.4 * E },
@@ -573,8 +574,8 @@ export function ilhotaEm(p: P2, folga = 0): number {
   for (let k = 0; k < ILHOTAS.length; k++) { const il = ILHOTAS[k]!, w = mundo(il); if (Math.hypot(p.x - w.x, p.z - w.z) < il.r - 0.3 + folga) return k; }
   return -1;
 }
-/** o corpo da ilhota (sólido): cilindro aproximado do topo até `ALTURA_CORPO_ILHOTA × r` pra baixo (o cone afina) */
-export const ALTURA_CORPO_ILHOTA = 1.4;
+/** o corpo da ilhota (sólido): a laje do topo até `ALTURA_CORPO_ILHOTA × r` pra baixo (sem o cone embaixo: out/2026) */
+export const ALTURA_CORPO_ILHOTA = 0.12;
 
 /** ainda em cima de um PISO da Zaeon (a plataforma central, a escada ou o lounge)? Passou da borda = cai (não há
  *  parede invisível em volta da central; a escada e o lounge têm corrimão/parede) */
@@ -608,17 +609,10 @@ export function resolverCidade(prop: P2): P2 {
 }
 
 export const dentroDe = (p: P2, alvo: { x: number; z: number; r: number }) => Math.hypot(p.x - alvo.x, p.z - alvo.z) <= alvo.r;
-/** volume sólido da ilha (pra NAVE): cilindro aproximado [pisoY - ilhaAltura, pisoY] × bordaR + a AGULHA embaixo (cilindro fino) */
+/** volume sólido da ilha (pra NAVE): a LAJE [pisoY - ilhaAltura, pisoY] × bordaR (sem a montanha e a agulha embaixo) */
 export function foraDaIlha(p: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
   const c = CIDADE.centro, dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz);
   const base = CIDADE.pisoY - CIDADE.ilhaAltura, topo = CIDADE.pisoY;
-  // a agulha (ponta embaixo do ápice): vindo de baixo, para na ponta; de lado, desliza pra fora
-  const ag = CIDADE.agulha, fundo = base - ag.altura;
-  if (d < ag.r && p.y >= fundo && p.y < base) {
-    if (p.y - fundo < ag.r - d) return { ...p, y: fundo };
-    const k = d > 1e-4 ? ag.r / d : 1;
-    return { x: c.x + (d > 1e-4 ? dx * k : ag.r), y: p.y, z: c.z + (d > 1e-4 ? dz * k : 0) };
-  }
   if (d > CIDADE.bordaR || p.y < base || p.y > topo) return p;
   // dentro do volume: sai pelo lado mais perto (cima = pousa no piso; baixo; ou radialmente)
   const paraCima = topo - p.y, paraBaixo = p.y - base, paraFora = CIDADE.bordaR - d;
@@ -634,7 +628,7 @@ export function chaoDaNave(p: { x: number; y: number; z: number }): number {
   const c = CIDADE.centro, h = alturaNaCidade(p);
   if (h > 0 && p.y >= CIDADE.pisoY + h - 0.5) return CIDADE.pisoY + h;
   if (h > ALTURA_LOUNGE && salaEm({ x: p.x - c.x, z: p.z - c.z }) && p.y >= CIDADE.pisoY + ALTURA_LOUNGE - 0.5) return CIDADE.pisoY + ALTURA_LOUNGE;   // de lado no deck/palco: o pátio
-  return Math.hypot(p.x - c.x, p.z - c.z) <= CIDADE.andavelR && p.y >= CIDADE.pisoY - 0.5 ? CIDADE.pisoY : 0;
+  return Math.hypot(p.x - c.x, p.z - c.z) <= CIDADE.andavelR && p.y >= CIDADE.pisoY - 0.5 ? CIDADE.pisoY : CHAO;   // (o "chão" do hiperespaço: lib/cyber/praca)
 }
 /** os SÓLIDOS de voo da Zaeon além da ilha (cilindros `{x,z,r,topo,base}` no mundo — o mesmo formato dos `Pilar` do
  *  voo): a CAPELA (de moto não se entra nela; de cima, pousa no telhado do tambor), a LAJE do lounge (de lado não se

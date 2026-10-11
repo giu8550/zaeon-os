@@ -1,18 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { UNIVERSIDADES_NO_MAPA, IDS_PLATAFORMAS, PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, decolaDaPlataforma, elevadorAqui, noArNaPlataforma, noPortalDaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma } from "./plataformas";
 import { ANDARES_SOLANA, NOMES_ANDARES, ROOFTOP, SOLANA, moveisDoAndar, mundoS, paredesDoAndar, resolverNoAndar, ESCALA_SOLANA } from "./solana";
-import { CIDADE } from "./ceu";
+import { ALTURA_LOUNGE, CIDADE, ILHOTAS, mundo } from "./ceu";
+import { poseDaDoca } from "./naveQG";
 import { PRACA } from "./praca";
 import { VOO, passoVooSub, type EstadoVoo } from "./voo";
 
 const dist = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
 
 describe("lugares flutuantes (Universidade e Solana House)", () => {
-  it("flutuam abaixo da Zaeon, longe uns dos outros, da Zaeon e da ilha da praça", () => {
+  it("a Solana House fica na ALTURA DO LOUNGE, a ~70 m da borda da Zaeon; longe da praça e dentro do mapa", () => {
     const zaeon = { x: CIDADE.centro.x, z: CIDADE.centro.z, r: CIDADE.bordaR };
+    expect(PLATAFORMAS.solana.y).toBe(CIDADE.pisoY + ALTURA_LOUNGE);
+    expect(dist(PLATAFORMAS.solana.centro, zaeon) - zaeon.r - PLATAFORMAS.solana.r).toBeCloseTo(70, 6);
+    for (const il of ILHOTAS) expect(dist(PLATAFORMAS.solana.centro, mundo(il))).toBeGreaterThan(PLATAFORMAS.solana.r + il.r + 10);   // nenhuma ilhota encosta
+    expect(dist(PLATAFORMAS.solana.centro, poseDaDoca())).toBeGreaterThan(PLATAFORMAS.solana.r + 40);                          // nem a nave atracada
+    for (const s of Object.values(CIDADE.salas)) expect(dist(PLATAFORMAS.solana.centro, mundo(s))).toBeGreaterThan(PLATAFORMAS.solana.r + s.r + 40);
     for (const id of IDS_PLATAFORMAS) {
       const P = PLATAFORMAS[id];
-      expect(P.y).toBeLessThan(CIDADE.pisoY); expect(P.y).toBeGreaterThan(60);
+      expect(P.y).toBeGreaterThan(60);
       expect(dist(P.centro, zaeon)).toBeGreaterThan(P.r + zaeon.r + 40);
       expect(Math.hypot(P.centro.x, P.centro.z) + P.r).toBeLessThan(VOO.raioMapa + 60);
     }

@@ -4,6 +4,7 @@ import { HELIPORTO, POIS } from "./landmarks";
 import { passoVooSub, pilaresDoMarco, type EstadoVoo } from "./voo";
 import { poseDaDoca } from "./naveQG";
 import { alvoDoAtalho, rotaPara, seguirRota, type DestinoRota } from "./rota";
+import { CHAO as G } from "./praca";
 
 const Z = POIS.find((p) => p.id === "zaeon")!;   // a Recepção (marco andável, no piso da Zaeon)
 const solidosZ = pilaresDoMarco({ x: Z.x, z: Z.z, chaoR: Z.nav!.chaoR, altura: (Z.base ?? 0) + Z.altura, escala: Z.escala ?? 1, cupula: true }).map((p) => ({ ...p, base: (Z.base ?? 0) - 1 }));
@@ -29,38 +30,38 @@ describe("atalhos de rota (piloto automático com as entradas dos botões)", () 
   for (const fps of [60, 10]) {
     it(`Heliporto: do piso da Zaeon (céu) até o heliporto, contornando a ilha, a ${fps} FPS`, () => {
       const r = voarAtalho("heliporto", est(hangar.x, CIDADE.pisoY, hangar.z), fps);
-      expect(r.chegou).toBe(true); expect(r.pousado).toBe(true); expect(r.s.y).toBe(0);
+      expect(r.chegou).toBe(true); expect(r.pousado).toBe(true); expect(r.s.y).toBe(G);
       expect(Math.hypot(r.s.x - HELIPORTO.x, r.s.z - HELIPORTO.z)).toBeLessThan(HELIPORTO.r);
       expect(r.trilha.some(dentroDaIlha)).toBe(false); expect(r.trilha.some(dentroDoQG)).toBe(false);
-      expect(r.t).toBeLessThan(36);   // (a Zaeon mega fica a 450 m e longe da praça)
+      expect(r.t).toBeLessThan(30);   // (a praça fica a 100 m da borda da Zaeon, 40 m abaixo)
     });
     it(`do chão EMBAIXO da ilha até o heliporto a ${fps} FPS`, () => {
-      const r = voarAtalho("heliporto", est(CIDADE.centro.x + 3, 0, CIDADE.centro.z + 2), fps);
-      expect(r.chegou).toBe(true); expect(r.s.y).toBe(0);
+      const r = voarAtalho("heliporto", est(CIDADE.centro.x + 3, G, CIDADE.centro.z + 2), fps);
+      expect(r.chegou).toBe(true); expect(r.s.y).toBe(G);
       expect(r.trilha.some(dentroDaIlha)).toBe(false);
     });
   }
   for (const fps of [60, 10]) {
     it(`Zaeon: do heliporto (chão) até ATRACAR PAIRANDO na doca, ao lado da ilha, sem atravessar a ilha, a ${fps} FPS`, () => {
-      const r = voarAtalho("zaeon", est(HELIPORTO.x, 0, HELIPORTO.z), fps);
+      const r = voarAtalho("zaeon", est(HELIPORTO.x, G, HELIPORTO.z), fps);
       expect(r.chegou).toBe(true); expect(r.pousado).toBe(false);
       expect(Math.hypot(r.s.x - doca.x, r.s.z - doca.z)).toBeLessThan(6); expect(Math.abs(r.s.y - doca.y)).toBeLessThan(6);   // (o engine encaixa na doca ao chegar)
       expect(r.trilha.some(dentroDaIlha)).toBe(false); expect(r.trilha.some(dentroDoQG)).toBe(false);
     });
     it(`Zaeon: do chão EMBAIXO da ilha até a doca a ${fps} FPS`, () => {
-      const r = voarAtalho("zaeon", est(CIDADE.centro.x + 3, 0, CIDADE.centro.z + 2), fps);
+      const r = voarAtalho("zaeon", est(CIDADE.centro.x + 3, G, CIDADE.centro.z + 2), fps);
       expect(r.chegou).toBe(true); expect(Math.abs(r.s.y - doca.y)).toBeLessThan(6);
       expect(r.trilha.some(dentroDaIlha)).toBe(false);
     });
   }
   it("do meio do caminho (no ar, longe) as rotas também fecham", () => {
     for (const d of ["heliporto", "zaeon"] as const) {
-      const r = voarAtalho(d, est(-120, 90, 60), 30);
+      const r = voarAtalho(d, est(-120, G + 90, 60), 30);
       expect(r.chegou).toBe(true); expect(r.pousado).toBe(d !== "zaeon");   // na Zaeon a nave atraca PAIRANDO
     }
   });
   it("os atalhos são só o heliporto (na praça) e a doca da Zaeon — o QG do Andrei saiu (virou a Recepção, na Zaeon)", () => {
-    expect(alvoDoAtalho("heliporto")).toMatchObject({ x: HELIPORTO.x, y: 0, z: HELIPORTO.z, pousar: true });
+    expect(alvoDoAtalho("heliporto")).toMatchObject({ x: HELIPORTO.x, y: G, z: HELIPORTO.z, pousar: true });
     expect(alvoDoAtalho("zaeon")).toMatchObject({ x: doca.x, y: doca.y, z: doca.z });
     expect(seguirRota(est(0, 0, 0), [], true).chegou).toBe(true);
   });

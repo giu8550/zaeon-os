@@ -9,7 +9,7 @@
 import { POIS, baseLivreDosPOIs, marcoNav, type POI } from "./landmarks";
 import { BASES_DONO_LOCAIS, CIDADE, colisoresDaCidade, escadaEm, mundo } from "./ceu";
 import { MIRANTES } from "./terra";
-import { PORTAL_PRACA } from "./praca";
+import { PORTAL_PRACA, PRACA } from "./praca";
 
 export const BASE_COLLIDER_R = 2.4;   // raio sólido (plano XZ): o trono do computador (asas até ±2,4 m)
 export const BASE_INTERACT_R = 3.4;   // raio de ativação do estudo + clique no monitor
@@ -81,8 +81,8 @@ export function posicaoDaBase(indice: number): LayoutBase {
   const anel = Math.floor(i / BASES_POR_ANEL), k = i % BASES_POR_ANEL;
   const r = PRACA_R + anel * ESPACO_ENTRE_ANEIS;
   const ang = ANG0 + k * ((2 * Math.PI) / BASES_POR_ANEL) + anel * (Math.PI / BASES_POR_ANEL);
-  const x = Math.cos(ang) * r, z = Math.sin(ang) * r;
-  return { x, z, rot: Math.atan2(-x, -z) };
+  const x = Math.cos(ang) * r, z = Math.sin(ang) * r;   // (no referencial da praça)
+  return { x: PRACA.x + x, z: PRACA.z + z, rot: Math.atan2(-x, -z) };
 }
 
 /**
@@ -108,7 +108,7 @@ export function basesDosMembros(ids: string[], pois: POI[] = POIS, especiais: { 
 /** Onde a pessoa nasce no cyberespaço: no caminho entre o centro da praça e a própria base; fora dela, na frente da base. */
 export function spawnDaBase(b: LayoutBase | undefined): { x: number; z: number } {
   if (b?.nivel) return localParaMundo(b, 0, 2.6);
-  return b ? { x: b.x * 0.45, z: b.z * 0.45 } : { x: 0, z: 0 };
+  return b ? { x: PRACA.x + (b.x - PRACA.x) * 0.45, z: PRACA.z + (b.z - PRACA.z) * 0.45 } : { x: PRACA.x, z: PRACA.z };
 }
 
 /** Pontos locais da base (mesa/tela/cadeira) → mundo. */

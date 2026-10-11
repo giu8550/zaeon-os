@@ -215,14 +215,14 @@ describe("a PRAÇA é uma ilha (sem chão): heliporto, estacionamento, buraco ne
   const heli = POIS.find((p) => p.id === "heliporto")!;
   it("heliporto: plano e andável (não colide), dentro da ilha, longe do estacionamento e do buraco negro da praça", () => {
     expect(colisoresDosPOIs().some((c) => c.x === HELIPORTO.x && c.z === HELIPORTO.z)).toBe(false);
-    const d = Math.hypot(HELIPORTO.x, HELIPORTO.z); expect(d).toBeGreaterThan(20); expect(d + HELIPORTO.r).toBeLessThan(PRACA.r - 4);
+    const d = Math.hypot(HELIPORTO.x - PRACA.x, HELIPORTO.z - PRACA.z); expect(d).toBeGreaterThan(20); expect(d + HELIPORTO.r).toBeLessThan(PRACA.r - 4);
     expect(baseLivreDosPOIs(HELIPORTO, HELIPORTO.r, POIS.filter((p) => p.id !== "heliporto"))).toBe(true);
     expect(Math.hypot(HELIPORTO.x - PORTAL_PRACA.x, HELIPORTO.z - PORTAL_PRACA.z)).toBeGreaterThan(HELIPORTO.r + PORTAL_PRACA.r + 10);
     expect(poiPerto(HELIPORTO)?.id).toBe("heliporto");
     expect(heli.acesso).toBe("publico");
   });
   it("o estacionamento pequeno e o buraco negro ficam dentro da ilha; as bases de uma sala grande também (e longe do anel)", () => {
-    const l = LOTES.find((x) => x.id === "chao")!; expect(Math.hypot(l.x, l.z) + tamanhoDoLote(l).r).toBeLessThan(PRACA.r);
+    const l = LOTES.find((x) => x.id === "chao")!; expect(Math.hypot(l.x - PRACA.x, l.z - PRACA.z) + tamanhoDoLote(l).r).toBeLessThan(PRACA.r);
     expect(naPraca(PORTAL_PRACA, -PORTAL_PRACA.r - 3)).toBe(true);
     const ids = Array.from({ length: 20 }, (_, i) => String(i).padStart(24, "0"));
     for (const b of basesDosMembros(ids).values()) {
