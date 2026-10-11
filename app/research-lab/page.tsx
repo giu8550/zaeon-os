@@ -14,6 +14,8 @@ import { Mic, MicOff, Code2, Building2 } from "lucide-react";
 import { ConversasSlotContext } from "@/components/chat/ConversasSlot";
 import ConversasDaSala from "@/components/chat/ConversasDaSala";
 import { useSidebarHover } from "@/components/lab/useSidebarHover";
+import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
+import { usePresenca } from "@/components/agents/avatar/hooks";
 import { EVT_ESTUDOS_ABA, abaEstudosAtual, irPraAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
 
 // Ramo da árvore sob o nome da sala na sidebar: o da sala aberta cresce e rola; o da outra é curto.
@@ -107,15 +109,10 @@ function navItem(active: boolean, accent: keyof typeof NAV_ACTIVE) {
 // O TRILHO (sidebar descansada): cada ícone na SUA pill (38 px, centrada nos 52 px de dentro); aberta, a pill estica com
 // o nome. Só largura/margem/cor animam aqui — a largura da sidebar quem anima é o framer (nada de transition-all nela).
 const pill = (aberta: boolean) => `shrink-0 overflow-hidden ${aberta ? "w-full" : "w-[38px]"}`;
-// Subitens da Sala de Estudos ("Meus Estudos", "Estudos"): pill menor, recuada sob a sala quando aberta.
-const subPill = (aberta: boolean) => `shrink-0 overflow-hidden ${aberta ? "ml-5 w-[calc(100%-20px)]" : "ml-1 w-[30px]"}`;
-const SUB_BASE = "flex items-center gap-2.5 p-1.5 rounded-xl border transition-all duration-300 -mt-1.5";
-// "Estudos" é o subitem DESTACADO (a vitrine): degradê violeta→ciano mesmo em repouso.
-const SUB_DESTAQUE = "bg-gradient-to-r from-violet-500/15 to-cyan-500/15 border-cyan-400/40 text-cyan-800 hover:border-cyan-400/70 dark:text-cyan-100 dark:border-cyan-300/30 shadow-[0_6px_16px_-8px_rgba(34,211,238,0.6)]";
-function subItem(active: boolean, destaque: boolean) {
-  if (active) return `${SUB_BASE} ${NAV_ACTIVE_PILL}${destaque ? " !ring-cyan-400/50" : ""}`;
-  return `${SUB_BASE} ${destaque ? SUB_DESTAQUE : NAV_IDLE}`;
-}
+// O "Marketplace" (a vitrine) é DESTACADO: degradê violeta→ciano mesmo em repouso.
+const DESTAQUE = "bg-gradient-to-r from-violet-500/15 to-cyan-500/15 border-cyan-400/40 text-cyan-800 hover:border-cyan-400/70 dark:text-cyan-100 dark:border-cyan-300/30 shadow-[0_6px_16px_-8px_rgba(34,211,238,0.6)]";
+// O agente do chat da Sala de Estudos (a foto e o nome na aba do chat).
+const AGENTE_CHAT = { id: "aura", nome: "Aura" } as const;
 /** O nome do item: some no trilho (a pill recorta, e a opacidade evita a lasquinha de texto na borda). */
 function Rotulo({ v, children }: { v: boolean; children: React.ReactNode }) {
   return <span className={`text-[10px] font-black uppercase whitespace-nowrap transition-opacity duration-200 ${v ? "opacity-100" : "opacity-0"}`}>{children}</span>;
@@ -155,6 +152,7 @@ import {
   PowerIcon,
   BeakerIcon,
   ChatBubbleLeftRightIcon,
+  ShoppingBagIcon,
   ClipboardDocumentIcon,
   DocumentChartBarIcon,
   CheckBadgeIcon,
@@ -804,6 +802,9 @@ export default function HomeworkPage({
     return () => window.removeEventListener(EVT_ESTUDOS_ABA, f);
   }, []);
   const irEstudos = (aba: AbaEstudos) => { setActiveTab("sala-de-estudos"); irPraAbaEstudos(aba); };
+  // o agente está pensando/respondendo? (a presença que o chat publica — components/agents/avatar) → o nome brilha
+  const { sinal: sinalAgente } = usePresenca(AGENTE_CHAT.id);
+  const agenteProcessando = sinalAgente === "pensando" || sinalAgente === "falando";
   // Onde o chat da sala ativa desenha a lista de conversas (portal) — components/chat/ConversasSlot.
   const [slotConversas, setSlotConversas] = useState<HTMLDivElement | null>(null);
   const [isChatLeft, setIsChatLeft] = useState(false);
@@ -2588,16 +2589,23 @@ export default function HomeworkPage({
               DESCANSADA (o trilho): cada ícone na sua pill, os rótulos somem; ABERTA: as pills se esticam com o nome. */}
           <div className="h-full flex flex-col" style={{ width: SIDEBAR_ABERTA - 2 }}>
           <div className="flex-1 min-h-0 flex flex-col gap-3 px-[7px] overflow-y-auto overflow-x-hidden no-scrollbar">
-            {/* SALA DE ESTUDOS = um nó com tudo dela embaixo: as conversas, "Meus Estudos" e, por último e destacado,
-                "Estudos" (sem pills no topo da sala). Clicar no nome da sala volta pra CONVERSA. */}
+            {/* O CHAT tem a aba dele: a FOTO e o NOME do agente (o nome brilha enquanto a resposta é processada), com as
+                conversas embaixo. Depois, os dois lugares de estudo: a "Sala de Estudos" (o board) e o "Marketplace" (a
+                vitrine, destacado). Sem pills no topo da sala — tudo aqui. */}
             <button
               data-tour="estudos"
               onClick={() => irEstudos("meus-estudos")}
-              title="Sala de Estudos"
-              className={`${navItem(activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos", "blue")} ${pill(sidebarAberta)}`}
+              title={agenteProcessando ? `${AGENTE_CHAT.nome} está respondendo…` : `Conversar com ${AGENTE_CHAT.nome}`}
+              className={`${navItem(activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos", "blue")} ${pill(sidebarAberta)} !p-[7px]`}
             >
-              <DocumentTextIcon className="w-5 h-5 shrink-0" />
-              <Rotulo v={sidebarAberta}>Sala de Estudos</Rotulo>
+              <span className={`relative grid place-items-center shrink-0 w-[22px] h-[22px] rounded-full ${agenteProcessando ? "ring-2 ring-cyan-300/80 shadow-[0_0_14px_rgba(34,211,238,0.85)] motion-safe:animate-pulse" : ""}`}>
+                <RostoDaAba agentId={AGENTE_CHAT.id} nome={AGENTE_CHAT.nome} ativa={activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos"} size={22}>
+                  <span className="text-[13px] leading-none text-cyan-500 dark:text-cyan-300">⟁</span>
+                </RostoDaAba>
+              </span>
+              <Rotulo v={sidebarAberta}>
+                <span className={agenteProcessando ? "nome-agente-brilhando" : "normal-case text-[12px] tracking-wide"}>{AGENTE_CHAT.nome}</span>
+              </Rotulo>
             </button>
             <Ramo aberto={sidebarAberta}>
               {activeTab === "sala-de-estudos"
@@ -2607,20 +2615,20 @@ export default function HomeworkPage({
             <button
               data-tour="tab-feed"
               onClick={() => irEstudos("feed")}
-              title="Meus Estudos"
-              className={`${subItem(activeTab === "sala-de-estudos" && abaEstudos === "feed", false)} ${subPill(sidebarAberta)}`}
+              title="Sala de Estudos"
+              className={`${navItem(activeTab === "sala-de-estudos" && abaEstudos === "feed", "blue")} ${pill(sidebarAberta)}`}
             >
-              <BookOpenIcon className="w-4 h-4 shrink-0" />
-              <Rotulo v={sidebarAberta}>Meus Estudos</Rotulo>
+              <DocumentTextIcon className="w-5 h-5 shrink-0" />
+              <Rotulo v={sidebarAberta}>Sala de Estudos</Rotulo>
             </button>
             <button
               data-tour="tab-community"
               onClick={() => irEstudos("community")}
-              title="Estudos"
-              className={`${subItem(activeTab === "sala-de-estudos" && abaEstudos === "community", true)} ${subPill(sidebarAberta)}`}
+              title="Marketplace"
+              className={`${activeTab === "sala-de-estudos" && abaEstudos === "community" ? `${NAV_BASE} ${NAV_ACTIVE_PILL} !ring-cyan-400/50` : `${NAV_BASE} ${DESTAQUE}`} ${pill(sidebarAberta)}`}
             >
-              <SparklesIcon className="w-4 h-4 shrink-0" />
-              <Rotulo v={sidebarAberta}>Estudos</Rotulo>
+              <ShoppingBagIcon className="w-5 h-5 shrink-0" />
+              <Rotulo v={sidebarAberta}>Marketplace</Rotulo>
             </button>
 
             {/* Sala de Pesquisa */}

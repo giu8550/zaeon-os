@@ -220,8 +220,8 @@ export default function StudyRoomContent({ flushTop = false, unified = false, ab
     // (a busca). Sem aba "Chat"/"Aura", sem Aulas/Meus Alunos aqui. `meus-estudos` segue sendo o id
     // interno da CONVERSA (é o que fica ativo quando nenhuma das duas abas está).
     const allTabs = useMemo(() => [
-        { id: "feed", label: "Meus Estudos", icon: BookOpen },
-        { id: "community", label: "Estudos", icon: Users },
+        { id: "feed", label: "Sala de Estudos", icon: BookOpen },
+        { id: "community", label: "Marketplace", icon: Users },
     ], []);
 
     // Padrão = a aba "Aura" (chats/co-working). Só cai numa aba de estudo/pesquisa se

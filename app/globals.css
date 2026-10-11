@@ -67,3 +67,25 @@ html { scroll-behavior: smooth; }
 body {
     padding-bottom: env(safe-area-inset-bottom);
 }
+
+/* O NOME do agente na aba do chat (sidebar do laboratório) BRILHA enquanto a resposta é processada:
+   um reflexo de luz correndo pelas letras + halo ciano. */
+.nome-agente-brilhando {
+    text-transform: none;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    background: linear-gradient(100deg, #67e8f9 0%, #a78bfa 30%, #ffffff 50%, #a78bfa 70%, #67e8f9 100%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.75));
+    animation: nomeAgenteBrilha 1.6s linear infinite;
+}
+@keyframes nomeAgenteBrilha {
+    from { background-position: 120% 0; }
+    to { background-position: -120% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .nome-agente-brilhando { animation: none; background-position: 50% 0; }
+}
