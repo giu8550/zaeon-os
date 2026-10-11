@@ -11,24 +11,21 @@ import { createPortal } from "react-dom";
 import RetratoDroid from "@/components/cyber/RetratoDroid";
 import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
 import { MSG_PESQUISA_SALVA, type PesquisaSalva } from "@/lib/ui/loungeHub";
+import { getDraftState } from "@/lib/research/draftRun";
 import {
-  EVT_ESTUDOS_VISTA, EVT_OMEGA_RODAR, EVT_PESQUISA_SALVA, EVT_TEMA, assinarTutorialLab, avancarTutorialLab, encerrarTutorialLab,
+  EVT_ESTUDOS_VISTA, EVT_OMEGA_RODAR, EVT_PESQUISA_SALVA, EVT_TEMA, SALTOS_LAB, assinarTutorialLab, avancarAte, avancarTutorialLab, encerrarTutorialLab,
   etapaDe, falaDaEtapa, iniciarTutorialLab, lerTutorialLab,
 } from "@/lib/onboarding/tutorialLab";
 
 const COR = "#ffc46b";
 type Caixa = { x: number; y: number; w: number; h: number };
 
-/** o 1º alvo que está NA TELA (visível) */
-function acharAlvo(sel: string[]): Caixa | null {
-  for (const s of sel) {
-    for (const el of Array.from(document.querySelectorAll<HTMLElement>(s))) {
-      const r = el.getBoundingClientRect();
-      if (r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < window.innerHeight) return { x: r.left, y: r.top, w: r.width, h: r.height };
-    }
-  }
+/** o 1º alvo que EXISTE (renderizado, com tamanho) — na ordem dos seletores */
+function acharElemento(sel: string[]): HTMLElement | null {
+  for (const s of sel) for (const el of Array.from(document.querySelectorAll<HTMLElement>(s))) { const r = el.getBoundingClientRect(); if (r.width > 4 && r.height > 4) return el; }
   return null;
 }
+const naTela = (r: DOMRect) => r.bottom > 0 && r.top < window.innerHeight;
 
 export default function TutorialLab() {
   const st = useSyncExternalStore(assinarTutorialLab, lerTutorialLab, lerTutorialLab);
@@ -37,42 +34,52 @@ export default function TutorialLab() {
   useEffect(() => { setMontado(true); iniciarTutorialLab(); }, []);
   const etapa = etapaDe(st.etapa);
 
-  // a etapa anda com a AÇÃO (os eventos do laboratório)
+  // o TEMA (a 1ª etapa): vai pro Marketplace › Estudos, direto na tela roxa, já pesquisando
   useEffect(() => {
-    if (!st.ativo) return;
-    const offs: (() => void)[] = [];
-    for (const ev of etapa.avancaEm) {
-      const f = (e: Event) => {
-        const d = (e as CustomEvent).detail;
-        if (ev === EVT_TEMA) {
-          const tema = String(d?.tema ?? "").trim(); if (!tema) return;
-          avancarTutorialLab({ tema });
-          // o tema vai pro Marketplace › Estudos, direto na tela roxa, já pesquisando
-          irPraAbaEstudos("community");
-          window.dispatchEvent(new CustomEvent(EVT_ESTUDOS_VISTA, { detail: "pesquisar" }));
-          setTimeout(() => window.dispatchEvent(new CustomEvent(EVT_OMEGA_RODAR, { detail: { prompt: tema } })), 350);
-          return;
-        }
-        if (ev === "zaeon:research:draftdone" && d && d.ok === false) return;   // falhou: continua pedindo pra gerar
-        if (ev === EVT_PESQUISA_SALVA) {
-          const p: PesquisaSalva = { titulo: String(d?.titulo || st.tema || "Minha pesquisa"), palavras: Number(d?.palavras) || 0, workId: d?.workId ?? null };
-          try { window.parent?.postMessage({ type: MSG_PESQUISA_SALVA, pesquisa: p }, window.location.origin); } catch { /* fora do tablet */ }
-          encerrarTutorialLab();
-          return;
-        }
-        avancarTutorialLab();
-      };
-      window.addEventListener(ev, f); offs.push(() => window.removeEventListener(ev, f));
-    }
-    return () => { for (const o of offs) o(); };
-  }, [st.ativo, st.etapa, st.tema, etapa.avancaEm]);
+    if (!st.ativo || st.etapa !== "tema") return;
+    const f = (e: Event) => {
+      const tema = String((e as CustomEvent).detail?.tema ?? "").trim(); if (!tema) return;
+      avancarTutorialLab({ tema });
+      irPraAbaEstudos("community");
+      window.dispatchEvent(new CustomEvent(EVT_ESTUDOS_VISTA, { detail: "pesquisar" }));
+      setTimeout(() => window.dispatchEvent(new CustomEvent(EVT_OMEGA_RODAR, { detail: { prompt: tema } })), 350);
+    };
+    window.addEventListener(EVT_TEMA, f);
+    return () => window.removeEventListener(EVT_TEMA, f);
+  }, [st.ativo, st.etapa]);
+
+  // depois do tema, as AÇÕES valem EM QUALQUER etapa: fazer algo mais adiante pula o tour até lá — o tour nunca fica
+  // esperando uma ação que já aconteceu (o bug do "gerei a pesquisa mas não reconheceu": o botão Gerar já está na tela
+  // enquanto o Droid mostra as referências). Salvar de verdade, a qualquer momento, encerra a missão
+  useEffect(() => {
+    if (!st.ativo || st.etapa === "tema" || st.etapa === "fim") return;
+    const offs = Object.entries(SALTOS_LAB).map(([ev, ate]) => {
+      const f = (e: Event) => { const d = (e as CustomEvent).detail; if (ev === "zaeon:research:draftdone" && d && d.ok === false) return; avancarAte(ate); };
+      window.addEventListener(ev, f); return () => window.removeEventListener(ev, f);
+    });
+    const salva = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      const p: PesquisaSalva = { titulo: String(d?.titulo || st.tema || "Minha pesquisa"), palavras: Number(d?.palavras) || 0, workId: d?.workId ?? null };
+      try { window.parent?.postMessage({ type: MSG_PESQUISA_SALVA, pesquisa: p }, window.location.origin); } catch { /* fora do tablet */ }
+      encerrarTutorialLab();
+    };
+    window.addEventListener(EVT_PESQUISA_SALVA, salva);
+    // a pesquisa sugerida JÁ estava gerada (o painel abre direto no "Iniciar pesquisa"): não espera gerar de novo
+    if (st.etapa === "gerar" && getDraftState().status === "done") avancarAte("abrir");
+    return () => { for (const o of offs) o(); window.removeEventListener(EVT_PESQUISA_SALVA, salva); };
+  }, [st.ativo, st.etapa, st.tema]);
 
   // o destaque segue o card (ele aparece, rola, muda de tamanho)
   useEffect(() => {
     if (!st.ativo || !etapa.alvos.length) { setAlvo(null); return; }
-    let raf = 0, ult = "";
+    let raf = 0, ult = "", rolou: HTMLElement | null = null;
     const medir = () => {
-      const c = acharAlvo(etapa.alvos), k = c ? `${Math.round(c.x)},${Math.round(c.y)},${Math.round(c.w)},${Math.round(c.h)}` : "";
+      // o card da vez pode estar FORA da tela (o "Gerar pesquisa" fica embaixo da tela roxa): o tour rola até ele (uma
+      // vez por card — depois a pessoa rola à vontade) e destaca
+      const el = acharElemento(etapa.alvos);
+      if (el && rolou !== el) { rolou = el; if (!naTela(el.getBoundingClientRect())) el.scrollIntoView({ behavior: "smooth", block: "center" }); }
+      const r = el?.getBoundingClientRect(), c = r && naTela(r) ? { x: r.left, y: r.top, w: r.width, h: r.height } : null;
+      const k = c ? `${Math.round(c.x)},${Math.round(c.y)},${Math.round(c.w)},${Math.round(c.h)}` : "";
       if (k !== ult) { ult = k; setAlvo(c); }
       raf = requestAnimationFrame(medir);
     };

@@ -31,3 +31,14 @@ describe("tutorial do tablet", () => {
     expect(contarPalavras("A fotossíntese — luz, água e CO₂ (2024).")).toBe(7);
   });
 });
+
+describe("o tour não trava esperando uma ação que já aconteceu", () => {
+  it("pula pra frente (nunca volta): gerar durante as referências leva direto pro abrir", async () => {
+    const { iniciarTutorialLab, avancarTutorialLab, avancarAte, lerTutorialLab, SALTOS_LAB } = await import("./tutorialLab");
+    iniciarTutorialLab(); avancarTutorialLab({ tema: "chocolate" }); avancarAte("referencias");
+    expect(lerTutorialLab().etapa).toBe("referencias");
+    avancarAte(SALTOS_LAB["zaeon:research:draftdone"]!); expect(lerTutorialLab().etapa).toBe("abrir");
+    avancarAte("referencias"); expect(lerTutorialLab().etapa).toBe("abrir");   // não volta
+    avancarAte(SALTOS_LAB["zaeon:research:newdoc"]!); expect(lerTutorialLab().etapa).toBe("salvar");
+  });
+});
