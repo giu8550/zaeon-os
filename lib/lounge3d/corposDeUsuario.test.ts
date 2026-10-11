@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORPO_POR_USUARIO, TRIPULACAO_DA_NAVE, corpoDoUsuario, pilotaANave } from "./corposDeUsuario";
+import { CORPO_POR_USUARIO, corpoDoUsuario, pilotaANave } from "./corposDeUsuario";
 import { CORPOS_DE_JOGADOR, corpoProprio } from "@/lib/cyber/estiloAvatar";
 
 describe("corpo próprio de jogador", () => {
@@ -17,10 +17,9 @@ describe("corpo próprio de jogador", () => {
     expect(corpoProprio({ fundador: true }, "?founder=0")).toBeNull();
     expect(corpoProprio({}, "")).toBeNull();
   });
-  it("a nave: o dono e a tripulação pilotam; os outros não", () => {
-    const giulia = [...TRIPULACAO_DA_NAVE][0]!;
-    expect(pilotaANave(giulia, false)).toBe(true);
-    expect(pilotaANave("000000000000000000000000", true)).toBe(true);
-    expect(pilotaANave("000000000000000000000000", false)).toBe(false);
+  it("a nave: SÓ o dono pilota (a tripulação acabou); os outros super admins também não", () => {
+    expect(pilotaANave("donmartinezcaiudoceu@gmail.com")).toBe(true);
+    expect(pilotaANave("zaeondao@gmail.com")).toBe(false);
+    expect(pilotaANave(null)).toBe(false);
   });
 });

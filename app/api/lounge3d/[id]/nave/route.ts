@@ -1,7 +1,7 @@
 /**
  * PUT /api/lounge3d/[id]/nave { x, y, z, yaw } — o DONO estacionou a nave-QG (largou o leme): guarda onde ela ficou
  * no conteúdo da sala, pra todo mundo a ver ali mesmo com ele offline (ao vivo, a presença `naveParada` já leva).
- * Só o fundador ou a tripulação da nave (pela SESSÃO); números saneados (mesmos limites da presença).
+ * Só o dono (pela SESSÃO — lib/lounge3d/corposDeUsuario `pilotaANave`); números saneados (mesmos limites da presença).
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const rl = await guard(req, "lounge3d-nave"); if (!rl.ok) return rl.response;
   const me = await eu(); if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const s = await salaDoMembro(params.id, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!me.fundador && !me.nave) return NextResponse.json({ error: "Só o dono (ou a tripulação) estaciona a nave." }, { status: 403 });
+  if (!me.nave) return NextResponse.json({ error: "Só o dono estaciona a nave." }, { status: 403 });   // (pilotaANave: só o dono)
   const b = await req.json().catch(() => ({}));
   const naveQG = sanitizarPresenca({ userId: me.id, name: "x", color: "#000000", x: 0, z: 0, facing: 0, naveParada: b })?.naveParada;
   if (!naveQG) return NextResponse.json({ error: "pose inválida" }, { status: 400 });

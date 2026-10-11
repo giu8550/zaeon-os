@@ -26,6 +26,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const b = await req.json().catch(() => ({}));
   const alvo = String((b as { alvo?: unknown })?.alvo ?? "");
   if (!ALVOS.has(alvo)) return NextResponse.json({ error: "alvo inválido" }, { status: 400 });
-  if (!me.fundador && alvo !== "ceu" && !(alvo === "nave" && me.nave)) return NextResponse.json({ error: NEGADO[alvo] }, { status: 403 });
+  if (alvo === "nave" ? !me.nave : !me.fundador && alvo !== "ceu") return NextResponse.json({ error: NEGADO[alvo] }, { status: 403 });   // a nave: SÓ o dono (pilotaANave)
   return NextResponse.json({ ok: true, alvo });
 }
