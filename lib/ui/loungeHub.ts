@@ -62,3 +62,9 @@ export const MSG_PESQUISA_SALVA = "zaeon:tutorial:pesquisa-salva";
 export type PesquisaSalva = { titulo: string; palavras: number; workId: string | null };
 export const ehMsgPesquisaSalva = (data: unknown, origin: string, esperada: string): data is { type: string; pesquisa: PesquisaSalva } =>
   origin === esperada && !!data && typeof data === "object" && (data as { type?: unknown }).type === MSG_PESQUISA_SALVA && typeof (data as { pesquisa?: { titulo?: unknown } }).pesquisa?.titulo === "string";
+
+/** a ETAPA do tour do tablet (lib/onboarding/tutorialLab) → a janela de cima: na espera da pesquisa o tablet destaca o
+ *  "Guardar tablet" e o Droid do cyberespaço ensina a CONCORRÊNCIA (a pesquisa segue rodando com o tablet guardado) */
+export const MSG_TUTORIAL_ETAPA = "zaeon:tutorial:etapa";
+export const ehMsgTutorialEtapa = (data: unknown, origin: string, esperada: string): data is { type: string; etapa: string } =>
+  origin === esperada && !!data && typeof data === "object" && (data as { type?: unknown }).type === MSG_TUTORIAL_ETAPA && typeof (data as { etapa?: unknown }).etapa === "string";

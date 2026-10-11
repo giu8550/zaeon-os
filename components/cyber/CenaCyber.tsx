@@ -110,7 +110,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [tabletAberto, setTabletAberto] = useState(false);
   /** o trabalho de IA rodando no laboratório do tablet (mesmo guardado) — a barra de IA do HUD */
   const [iaLab, setIaLab] = useState<EstadoIALab | null>(null);
-  const lerBarras = useCallback(() => { const e = engine.current; if (!e) return null; const c = e.combate(), v = e.vigorAgora(); return { vida: c.vida, vidaMax: c.max, caido: c.caido, vigor: v.v, exausto: v.exausto }; }, []);
+  const lerBarras = useCallback(() => { const e = engine.current; if (!e) return null; const c = e.combate(), a = e.aguaAgora(); return { vida: c.vida, vidaMax: c.max, caido: c.caido, agua: a.v, seco: a.seco, fonte: a.fonte, sede: a.sede }; }, []);
   // o INVENTÁRIO (tecla I — lib/cyber/inventario): a arma equipada vai pra mão
   const [inventarioAberto, setInventarioAberto] = useState(false);
   const [destaqueInv, setDestaqueInv] = useState<PesquisaSalva | null>(null);   // a pesquisa nova do tutorial
@@ -241,7 +241,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       eu: cb.current.eu, membros: cb.current.membros, menu: !tela, low, qualidade, teclasSempre: tela, somLounge: p.somLounge ?? null, offsetMusica: p.offsetMusica ?? 0,
       remotos: cb.current.remotos, enviarPos: (x) => cb.current.enviarPos?.(x),
       onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
-      onTablet: (on) => { setTabletAberto(on); if (on) { engine.current?.soltarMouse(); tocarUI("study-confirm"); } }, onDescanso: setDescanso,
+      onTablet: (on) => { setTabletAberto(on); if (on) engine.current?.soltarMouse(); }, onDescanso: setDescanso,   // (o som é o do tablet abrindo/guardando, no engine)
       onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true), onCarregando: setCarga,
       landmarks: landmarksOn(), onLandmark: (poi) => { setErroTopo(null); setPoiAberto(poi); }, onTopo: (v) => { setNoTopo(v); if (v) setPoiAberto(null); },
       // os BURACOS NEGROS: o da rede abre o túnel com os destinos (aberto a todos); o par do dono pede acesso antes
@@ -356,7 +356,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       <div ref={cont} className="absolute inset-0" />
       <div ref={overlay} className="pointer-events-none absolute inset-0 overflow-hidden" />
       {/* o laboratório no TABLET, por cima da cena (o cyberespaço segue vivo atrás) */}
-      <TabletLab aberto={tabletAberto} tutorial={!!guia} onPesquisaSalva={(p) => engine.current?.pesquisaSalva(p)} onIA={(e) => setIaLab((antes) => juntarEstadoIA(antes, e))} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
+      <TabletLab aberto={tabletAberto} tutorial={!!guia} onPesquisaSalva={(p) => engine.current?.pesquisaSalva(p)} onEtapaTutorial={(e) => engine.current?.etapaDoTablet(e)} onIA={(e) => setIaLab((antes) => juntarEstadoIA(antes, e))} onFechar={() => { engine.current?.fecharTablet(); setTabletAberto(false); }} />
       {/* as barras do HUD: SAÚDE, VIGOR e o uso CONCORRENTE de IA (o laboratório do tablet) */}
       {tela && !menu && !tabletAberto && <BarrasHud ler={lerBarras} ia={iaLab} touch={touch} />}
       {tela && <ContadorFps mostrar={prefs.fps} gpu={gpu} classe={perfil.gpu} ler={lerFps} />}

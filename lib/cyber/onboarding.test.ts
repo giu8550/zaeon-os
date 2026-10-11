@@ -149,3 +149,14 @@ describe("o ritmo das falas", () => {
     expect(esperaDepoisDaUltima(ROTEIRO.find((p) => p.id === "andar")!)).toBe(RITMO_FALA.antesDeConferir);
   });
 });
+
+describe("a concorrência no tutorial (o tablet guardado enquanto a pesquisa roda)", () => {
+  it("na espera da pesquisa ensina; quando a IA entrega chama de volta; aberto, fica quieto", async () => {
+    const { lembreteDoTablet } = await import("./onboarding");
+    expect(lembreteDoTablet({ fechado: false, etapaLab: "pesquisando", viuConcorrencia: false })).toBe("");
+    expect(lembreteDoTablet({ fechado: true, etapaLab: "pesquisando", viuConcorrencia: false })).toBe("concorrencia");
+    expect(lembreteDoTablet({ fechado: true, etapaLab: "referencias", viuConcorrencia: true })).toBe("entregou");
+    expect(lembreteDoTablet({ fechado: true, etapaLab: "gerar", viuConcorrencia: true })).toBe("volte");
+    expect(lembreteDoTablet({ fechado: true, etapaLab: "tema", viuConcorrencia: false })).toBe("volte");
+  });
+});

@@ -44,7 +44,7 @@ import { PLATAFORMAS, UNIVERSIDADES_NO_MAPA, alturaDoAndar, andarDoPouso, andarN
 import { CHAO, PRACA, QUEDA_VAZIO, naPraca } from "@/lib/cyber/praca";
 import { CHEGADA_NAVE, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel, type IdNo } from "@/lib/cyber/buracos";
 import { DROID } from "@/lib/cyber/agentes";
-import { FALA_VOLTE_AO_TABLET, PASSO_DA_MISSAO, SALA_DO_SABER_LOCAL, esperaDepoisDaUltima, passoDe, tempoDeLeitura, NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
+import { FALA_CONCORRENCIA, FALA_IA_ENTREGOU, FALA_VOLTE_AO_TABLET, lembreteDoTablet, PASSO_DA_MISSAO, SALA_DO_SABER_LOCAL, esperaDepoisDaUltima, passoDe, tempoDeLeitura, NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
 import type { PesquisaSalva } from "@/lib/ui/loungeHub";
 import { FAIXA_CINEMA, misturarPose, passoPeso, planoConversa, planoTelao, poseDoPlano, seguirPose, suave, type Plano, type Pose } from "@/lib/cyber/cutscene";
 import { FALA_DESTAQUE_CSS, ondeFala, type Dialogo } from "@/lib/cyber/dialogo";
@@ -340,7 +340,7 @@ export class CyberEngine {
   private nascendo: { t: number; tubo: number } | null = null;
   /** o TUTORIAL do Droid: o passo, quantas falas dele já saíram, o relógio da fala, se já está ESPERANDO a pessoa cumprir
    *  (`ativo`) e o que ela fez desde então (`andou`, `motoAndou`, `tunel`, a altura do chão de onde voou) */
-  private guia: { passo: number; fala: number; falaT: number; ativo: boolean; lembrou: boolean; invT: number; saberT: number; andou: number; correu: number; turbo: number; motoAndou: number; portal: boolean; pisoY: number; prev: { x: number; z: number } } | null = null;
+  private guia: { passo: number; fala: number; falaT: number; ativo: boolean; lembrete: "" | "concorrencia" | "entregou" | "volte"; viuConcorrencia: boolean; invT: number; saberT: number; andou: number; correu: number; turbo: number; motoAndou: number; portal: boolean; pisoY: number; prev: { x: number; z: number } } | null = null;
   /** o tutorial já passou da 1ª conversa com a Zaeon: as falas fora de cena viram BALÕES (antes, a caixa de diálogo) */
   private balaoLiberado = false;
   /** a CUTSCENE (lib/cyber/cutscene): o plano de agora (null = a câmera normal), o peso da mistura, a pose suavizada e
@@ -354,6 +354,9 @@ export class CyberEngine {
     this.pesquisaDoTutorial = p; this.fecharTablet();
   }
   get pesquisaTutorial() { return this.pesquisaDoTutorial; }
+  /** a etapa do tour do TABLET (o laboratório avisa — lib/ui/loungeHub MSG_TUTORIAL_ETAPA) */
+  private etapaLab: string | null = null;
+  etapaDoTablet(etapa: string) { this.etapaLab = etapa; }
   /** a pessoa fechou o inventário (no passo do inventário, o tutorial anda) */
   inventarioFechado() { const g = this.guia; if (g && ROTEIRO[g.passo]?.cond.tipo === "inventario" && g.ativo) g.invT = Infinity; }
   /** depois do tutorial, o Droid fica ESPERANDO na Sala do Saber ("só venha falar comigo quando tiver algo de valor") */
@@ -836,10 +839,11 @@ export class CyberEngine {
     if (!this.aPeParaTablet()) { this.o.onAviso?.("Pare em algum lugar (de pé) pra abrir o tablet."); return; }
     if (this.tabletQuer) return;
     this.tabletQuer = true; this.alvo = null; this.alvoDepois = null; this.soltarTeclas();
-    this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.eu });
+    this.som.tocar("tablet-abre", this.eu.av.group.position, { dist: DISTANCIA.eu });
   }
   /** guarda o tablet (o laboratório já fechou ou vai fechar): ele se desfaz em partículas */
   fecharTablet() {
+    if (this.tabletQuer || this.labAberto) this.som.tocar("tablet-fecha", this.eu.av.group.position, { dist: DISTANCIA.eu });
     this.tabletQuer = false; this.soltarTeclas();   // o que ficou "apertado" enquanto o lab tinha o foco não anda sozinho depois
 
     if (this.labAberto) { this.labAberto = false; this.o.onTablet?.(false); }
@@ -1518,7 +1522,7 @@ export class CyberEngine {
     if (i !== this.saindoDoTubo && i !== this.nascendo?.tubo && Math.abs(tb.x - p.x) < 6 && Math.abs(tb.z - p.z) < 6) out.push({ x: tb.x, z: tb.z, r: 1.4 });
     return out;
   }
-  private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, lembrou: false, invT: 0, saberT: -1, andou: 0, correu: 0, turbo: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
+  private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, lembrete: "" as "" | "concorrencia" | "entregou" | "volte", viuConcorrencia: false, invT: 0, saberT: -1, andou: 0, correu: 0, turbo: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
   private emitirGuia() {
     if (!this.guia) { this.o.onGuia?.(null); return; }
     const p = ROTEIRO[this.guia.passo]!;
@@ -1777,11 +1781,16 @@ export class CyberEngine {
       if (passo.cond.tipo === "saber" && this.droid) { const sp = mundo(SALA_DO_SABER_LOCAL); if (Math.hypot(this.droid.pos.x - sp.x, this.droid.pos.z - sp.z) < 6) g.saberT = Math.max(0, g.saberT) + dt; }
       // o INVENTÁRIO do tutorial: abre na 1ª vez (a pesquisa em destaque) e conta o tempo aberto
       if (passo.cond.tipo === "inventario" && g.invT !== Infinity) { if (g.invT === 0) this.o.onInventario?.(this.pesquisaDoTutorial); g.invT += dt; }
-      // guardou o tablet antes de terminar a missão: o Droid lembra (uma vez por vez que guardar)
+      // o tablet GUARDADO no meio da missão: na espera da pesquisa, o Droid ensina a CONCORRÊNCIA (a pesquisa segue
+      // rodando — de olho na barra de IA); quando a IA entrega, chama de volta; noutra hora, lembra de voltar
       if (passo.cond.tipo === "pesquisa" && !this.pesquisaDoTutorial) {
-        const fechado = !this.labAberto && !this.tabletQuer;
-        if (fechado && !g.lembrou) { g.lembrou = true; this.droidFala(FALA_VOLTE_AO_TABLET, true); }
-        else if (!fechado && g.lembrou) { g.lembrou = false; this.o.onDialogo?.(null); this.calarBalaoDroid(); }
+        const quer = lembreteDoTablet({ fechado: !this.labAberto && !this.tabletQuer, etapaLab: this.etapaLab, viuConcorrencia: g.viuConcorrencia });
+        if (quer !== g.lembrete) {
+          g.lembrete = quer; this.o.onDialogo?.(null); this.calarBalaoDroid();
+          if (quer === "concorrencia") { g.viuConcorrencia = true; this.droidFala(FALA_CONCORRENCIA, true); }
+          else if (quer === "entregou") { this.droidFala(FALA_IA_ENTREGOU, true); this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.eu }); }
+          else if (quer === "volte") this.droidFala(FALA_VOLTE_AO_TABLET, true);
+        }
       }
     } else if (!this.jet.noAr) g.pisoY = eu.alt;
     // as falas: só com o Droid já ali (saiu do portal)

@@ -13,6 +13,7 @@ import { sintetizarBatida, sintetizarRaio, sintetizarTrovao } from "./coracao";
 import { sintetizarAmbiente } from "./ambiente";
 import { sintetizarPuxaFio, sintetizarZumbidoFio } from "./somFio";
 import { sintetizarMaquinaNoAr } from "./somDroid";
+import { sintetizarTablet } from "./somTablet";
 import { sintetizarAcerto, sintetizarAlerta, sintetizarDash, sintetizarDecola, sintetizarGolpe, sintetizarImpactoHeroi } from "./somMovimento";
 
 export const PASTA_SONS = "/assets/sounds/cyber/";
@@ -22,7 +23,7 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
   | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien" | "droid-louvor"
-  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | "coracao" | "raio" | "trovao" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto" | "droid-maquina";
+  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | "coracao" | "raio" | "trovao" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto" | "droid-maquina" | "tablet-abre" | "tablet-fecha";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -45,7 +46,10 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   baque: { modo: "pos", loop: false, volume: 0.95, sintetico: true },   // o corpo batendo no chão (força pela queda)
   // o MOVIMENTO TURBINADO (lib/cyber/somMovimento): o DASH, a expiração da GUARDA, a DECOLAGEM e o HERO LANDING
   dash: { modo: "pos", loop: false, volume: 0.85, sintetico: true },
-  alerta: { modo: "pos", loop: false, volume: 0.45, sintetico: true },   // (a expiração pesada da guarda)
+  alerta: { modo: "pos", loop: false, volume: 0.45, sintetico: true },
+  // o TABLET abrindo/guardando: suave, sutil, tecnológico (lib/cyber/somTablet)
+  "tablet-abre": { modo: "pos", loop: false, volume: 0.32, sintetico: true },
+  "tablet-fecha": { modo: "pos", loop: false, volume: 0.28, sintetico: true },   // (a expiração pesada da guarda)
   decola: { modo: "pos", loop: false, volume: 0.8, sintetico: true },     // a ignição do jato no impulso
   "impacto-heroi": { modo: "pos", loop: false, volume: 1, sintetico: true },   // o estrondo do hero landing (queda alta)
   golpe: { modo: "pos", loop: false, volume: 0.8, sintetico: true },      // o corte de ar da espada (arena)
@@ -161,7 +165,7 @@ export function sintetizarBaque(sr: number): Float32Array {
 }
 export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_CORRIDA, ...SINTESE_ASAS, coracao: sintetizarBatida, raio: sintetizarRaio, trovao: sintetizarTrovao,
   "ambiente-biblioteca": (sr) => sintetizarAmbiente("biblioteca", sr), "ambiente-jardim": (sr) => sintetizarAmbiente("jardim", sr),
-  "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta, decola: sintetizarDecola, "impacto-heroi": sintetizarImpactoHeroi, golpe: sintetizarGolpe, acerto: sintetizarAcerto, "droid-maquina": sintetizarMaquinaNoAr };
+  "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta, decola: sintetizarDecola, "impacto-heroi": sintetizarImpactoHeroi, golpe: sintetizarGolpe, acerto: sintetizarAcerto, "droid-maquina": sintetizarMaquinaNoAr, "tablet-abre": (sr: number) => sintetizarTablet(sr, true), "tablet-fecha": (sr: number) => sintetizarTablet(sr, false) };
 
 /** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo).
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);

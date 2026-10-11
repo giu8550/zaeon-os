@@ -136,6 +136,16 @@ export const SALA_DO_SABER_LOCAL: P2 = { x: CIDADE.salas.biblioteca.x, z: CIDADE
 export const PASSO_DA_MISSAO: IdPassoGuia = "missao";
 /** o Droid, se a pessoa guardar o tablet antes de terminar a missão */
 export const FALA_VOLTE_AO_TABLET = "Sua missão ainda não acabou: aperte T pra abrir o tablet e terminar o estudo.";
+/** a CONCORRÊNCIA (o tablet guardado enquanto a pesquisa roda — a feature mais importante do tablet) */
+export const FALA_CONCORRENCIA = "Isso! A pesquisa continua rodando enquanto você explora. De olho na barra de IA: quando ela ficar neon, a IA entregou.";
+export const FALA_IA_ENTREGOU = "A IA entregou! ✦ A barra está neon — aperte T pra voltar ao tablet e seguir a missão.";
+/** o lembrete do Droid com o tablet GUARDADO no meio da missão, pela etapa do tour do tablet */
+export function lembreteDoTablet(o: { fechado: boolean; etapaLab: string | null; viuConcorrencia: boolean }): "" | "concorrencia" | "entregou" | "volte" {
+  if (!o.fechado) return "";
+  if (o.etapaLab === "pesquisando") return "concorrencia";
+  if (o.viuConcorrencia && o.etapaLab === "referencias") return "entregou";
+  return "volte";
+}
 
 /** o que o engine mede desde que o Droid deu a instrução do passo */
 export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean; /** s com o inventário aberto no passo (Infinity = a pessoa fechou) */ inventario: number; /** s desde que o Droid chegou na Sala do Saber (-1 = voando) */ droidNoSaber: number };
