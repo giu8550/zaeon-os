@@ -1053,12 +1053,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           </button>
         )}
 
-        {/* TOPO = DOCUMENTOS desta conversa (TCC, cartolina) + o A−/A+ do texto. As conversas ficam na
+        {/* TOPO = os documentos desta conversa (TCC, cartolina — sem rótulo, pedido do dono) + o A−/A+ do texto. As conversas ficam na
             barra da esquerda: trocar de conversa lá não abre/fecha documento aqui, e vice-versa. */}
         <div className="shrink-0 px-3 pt-2 flex items-center gap-2 min-h-[44px]">
-          {((CARTOLINA_ON && abaAtiva) || (tccDaAba && !tccAberto) || docs.length > 0) && (
-            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Documentos</span>
-          )}
           {docs.length > 0 && (
             <button type="button" onClick={() => setDocAtivo(null)} aria-pressed={!docAtivo}
               className={`${DOC_PILL} ${!docAtivo ? "!bg-slate-900 !text-white dark:!bg-white dark:!text-slate-900 !border-transparent" : ""}`}>
