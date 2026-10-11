@@ -1,7 +1,7 @@
 /**
  * LoungeRoom — a sala do CYBERESPAÇO no Colyseus: presença + posição (estado sincronizado) e o relay do
  * signaling da VOZ (WebRTC). Uma room POR SALA do app (`filterBy(["salaId"])` → o convite cai na mesma room).
- *  - entrada só com TOKEN assinado pelo app (sessão do NextAuth), da MESMA sala; teto de 5;
+ *  - entrada só com TOKEN assinado pelo app (sessão do NextAuth), da MESMA sala; teto de MAX_JOGADORES (40);
  *  - o estado (players por userId) vai pros clientes em patches a 20 Hz — quem entra já recebe todo mundo na hora
  *    (sem a assimetria "um vê, o outro não" do client event efêmero);
  *  - a mesma pessoa em 2 abas = 1 avatar (a aba nova assume, a antiga sai);

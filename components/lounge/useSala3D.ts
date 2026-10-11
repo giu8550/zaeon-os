@@ -19,7 +19,7 @@ import { sanitizarSom, type AcaoSom } from "@/lib/lounge3d/musica";
 import { EV_RITUAL, CAMPO_DO_CANAL, canalDe, EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, juntarChat, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG, type CanalSom } from "@/lib/lounge3d/tipos";
 import { ritualDesligado, sanitizarRitual } from "@/lib/cyber/ritual";
 
-export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** o corpo próprio (servidor) */ corpo?: string; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean; /** (Colyseus) já mandou a 1ª pose — o novato no tutorial não: nem aparece nem entra na voz */ pronto?: boolean };
+export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** o corpo próprio (servidor) */ corpo?: string; /** pilota a nave-QG (servidor) */ nave?: boolean; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean; /** (Colyseus) já mandou a 1ª pose — o novato no tutorial não: nem aparece nem entra na voz */ pronto?: boolean };
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
 export type EstadoSala = "carregando" | "ok" | "cheia" | "erro" | "off";
 
@@ -66,7 +66,7 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       if (r.status === 404) { setEstado("off"); return; }
       if (!r.ok) throw new Error(String(r.status));
       const d = await r.json();
-      setSala(d.sala); setMembros(d.membros ?? []); setEu({ id: d.eu.id, name: d.eu.name, image: d.eu.image ?? null, color: d.eu.color, fundador: d.eu.fundador === true, novo: d.eu.novo === true, corpo: typeof d.eu.corpo === "string" ? d.eu.corpo : undefined });
+      setSala(d.sala); setMembros(d.membros ?? []); setEu({ id: d.eu.id, name: d.eu.name, image: d.eu.image ?? null, color: d.eu.color, fundador: d.eu.fundador === true, novo: d.eu.novo === true, corpo: typeof d.eu.corpo === "string" ? d.eu.corpo : undefined, nave: d.eu.nave === true });
       setEstado((e) => (e === "cheia" ? e : "ok"));
     } catch { setEstado("erro"); }
   }, [salaId]);

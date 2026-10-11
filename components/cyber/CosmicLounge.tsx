@@ -68,7 +68,7 @@ function Tela() {
   // a ORDEM de `sala.members[]` (só cresce) define a base de cada pessoa — igual pra todo mundo
   const membros = useMemo<PessoaCyber[]>(() => {
     const porId = new Map(sala.membros.map((m) => [m.id, m] as const));
-    return (sala.sala?.members ?? []).flatMap((id) => { const m = porId.get(id); return m ? [{ id: m.id, name: m.name, color: m.color, fundador: m.fundador === true, corpo: m.corpo }] : []; });
+    return (sala.sala?.members ?? []).flatMap((id) => { const m = porId.get(id); return m ? [{ id: m.id, name: m.name, color: m.color, fundador: m.fundador === true, corpo: m.corpo, nave: m.nave === true }] : []; });
   }, [sala.membros, sala.sala?.members]);
   // alguém que entrou depois de eu carregar: rebusca a sala (ordem canônica + nome)
   const { online, recarregar } = sala;
@@ -79,7 +79,7 @@ function Tela() {
     faltam.forEach((o) => pedidos.current.add(o.id));   // 1 refetch por pessoa nova (sem loop se o servidor não a listar)
     void recarregar();
   }, [online, membros, recarregar]);
-  const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true, corpo: sala.eu.corpo } : null), [sala.eu]);
+  const euSala = useMemo<PessoaCyber | null>(() => (sala.eu ? { id: sala.eu.id, name: sala.eu.name, color: sala.eu.color, fundador: sala.eu.fundador === true, corpo: sala.eu.corpo, nave: sala.eu.nave === true } : null), [sala.eu]);
   // quem está online (pra voz abrir/fechar as conexões) — antes de qualquer return condicional (ordem dos hooks). O novato
   // no tutorial (a Zaeon só dele, ainda sem a 1ª pose) fica FORA da voz até cruzar o 1º portal
   const onlineIds = useMemo(() => sala.online.filter((m) => m.pronto !== false).map((m) => m.id), [sala.online]);
@@ -126,7 +126,7 @@ function Tela() {
       modo="tela" eu={euSala} membros={membros.length ? membros : [euSala]}
       remotos={sala.remotos} enviarPos={sala.enviarPos} chat={sala.chat} enviarChat={sala.enviarChat}
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
-      souFundador={euSala.fundador === true} pedirAcesso={pedirAcesso}
+      souFundador={euSala.fundador === true} pilotoDaNave={euSala.nave === true} pedirAcesso={pedirAcesso}
       novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon} vozZaeon={vozZaeon}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}

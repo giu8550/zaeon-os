@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client, type Room } from "@colyseus/sdk";
 import { assinarToken, verificarToken, VALIDADE_TOKEN_MS } from "./token";
-import { sanitizarPose, sanitizarRtc } from "./regras";
+import { MAX_JOGADORES, sanitizarPose, sanitizarRtc } from "./regras";
 
 const SEGREDO = "segredo-de-teste-123";
 process.env.REALTIME_SECRET = SEGREDO;
@@ -124,17 +124,17 @@ describe("LoungeRoom (servidor de verdade + clientes do SDK)", () => {
     expect(jogadores(salas[0]!)!.size).toBe(2);
   });
 
-  it("teto de 5 por sala; outra sala (outro convite) é outra room", async () => {
-    await entrar(id(3)); await entrar(id(4)); await entrar(id(5));
-    await espera(() => jogadores(salas[0]!)?.size === 5);
-    await expect(entrar(id(6))).rejects.toBeTruthy();   // o 6º não entra
-    const fora = await entrar(id(7), { s: OUTRA });
+  it("teto de MAX_JOGADORES por sala; outra sala (outro convite) é outra room", async () => {
+    for (let k = 3; k <= MAX_JOGADORES; k++) await entrar(id(k));
+    await espera(() => jogadores(salas[0]!)?.size === MAX_JOGADORES, 10_000);
+    await expect(entrar(id(MAX_JOGADORES + 1))).rejects.toBeTruthy();   // o (teto+1)º não entra
+    const fora = await entrar(id(MAX_JOGADORES + 2), { s: OUTRA });
     await espera(() => jogadores(fora)?.size === 1);
-    expect(jogadores(salas[0]!)!.has(id(7))).toBe(false);
-  });
+    expect(jogadores(salas[0]!)!.has(id(MAX_JOGADORES + 2))).toBe(false);
+  }, 30_000);
 
   it("sair remove o avatar pros outros", async () => {
-    const a = salas[0]!, ultimo = salas.find((r) => (jogadores(r)?.size ?? 0) === 5 && r !== a)!;
+    const a = salas[0]!, ultimo = salas.find((r) => (jogadores(r)?.size ?? 0) === MAX_JOGADORES && r !== a)!;
     await a.leave();
     await espera(() => !jogadores(ultimo)?.has(id(1)));
   });

@@ -64,6 +64,8 @@ export type CenaCyberProps = {
   vozZaeon?: (texto: string) => Promise<string | null>;
   /** dono da Zaeon (vem do SERVIDOR) — só pinta os botões; quem decide é `pedirAcesso` */
   souFundador?: boolean;
+  /** pilota a nave-QG (o dono ou a tripulação — o servidor decide; aqui só não pergunta à toa) */
+  pilotoDaNave?: boolean;
   /** AÇÃO PRIVILEGIADA: pede ao servidor (POST /api/lounge3d/[id]/acesso): o topo da Recepção, a nave, o buraco negro do DJ */
   pedirAcesso?: (alvo: "topo" | "ceu" | "nave" | "dj" | "ritual") => Promise<{ ok: boolean; erro?: string }>;
   /** o recado ATUAL do dono pro mural da Recepção (holograma ao lado da mesa; a TV do lounge mostra o último enviado) */
@@ -162,7 +164,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   /** ação privilegiada: pergunta ao SERVIDOR antes (cb sempre fresco via ref) */
   const pedir = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj" | "ritual", ok: () => void) => {
     const fn = cb.current.pedirAcesso;
-    if (!cb.current.souFundador || !fn) { avisar(alvo === "dj" ? "Só o dono atravessa este buraco negro." : alvo === "nave" ? "Só o dono pilota a nave." : alvo === "ritual" ? "Só o dono inicia o ritual." : "Só o dono sobe ao topo."); return; }
+    if (!(cb.current.souFundador || (alvo === "nave" && cb.current.pilotoDaNave)) || !fn) { avisar(alvo === "dj" ? "Só o dono atravessa este buraco negro." : alvo === "nave" ? "Só o dono pilota a nave." : alvo === "ritual" ? "Só o dono inicia o ritual." : "Só o dono sobe ao topo."); return; }
     try { const r = await fn(alvo); if (r.ok) ok(); else avisar(r.erro ?? "Não autorizado."); } catch { avisar("Sem conexão."); }
   }, [avisar]);
   const [poiAberto, setPoiAberto] = useState<POI | null>(null), [noTopo, setNoTopo] = useState(false), [subindo, setSubindo] = useState(false), [erroTopo, setErroTopo] = useState<string | null>(null);

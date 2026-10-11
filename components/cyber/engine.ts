@@ -112,7 +112,7 @@ import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, ty
  * Vêm do SERVIDOR (GET da sala), o cliente só pinta: `fundador` = dono — a base dele fica na ZAEON (a ilha no céu).
  * Regalias são validadas na API.
  */
-export type PessoaCyber = { id: string; name: string; color: string; fundador?: boolean; /** o corpo próprio de jogador (o servidor decide — lib/lounge3d/corposDeUsuario) */ corpo?: string };
+export type PessoaCyber = { id: string; name: string; color: string; fundador?: boolean; /** o corpo próprio de jogador (o servidor decide — lib/lounge3d/corposDeUsuario) */ corpo?: string; /** pilota a nave-QG: o dono ou a tripulação (o servidor decide) */ nave?: boolean };
 /** o TÚNEL de um buraco negro: de onde se entrou e pra onde dá pra ir */
 export type TunelAberto = { origem: IdNo; destinos: { id: IdNo; nome: string; desc: string }[] };
 /** o TOUR da anfitriã (lib/cyber/onboarding): o passo atual — o React mostra a fala */
@@ -1813,7 +1813,7 @@ export class CyberEngine {
   }
   private veuTirado = 0;
   /** a nave do dono (a minha, se eu sou ele; senão a dele, remota) */
-  private naveDoDono(): THREE.Object3D | null { if (this.nave && this.ehFundador(this.o.eu.id)) return this.nave.group; for (const [id, a] of this.remotos) if (a.nave && this.ehFundador(id)) return a.nave.group; return null; }
+  private naveDoDono(): THREE.Object3D | null { if (this.nave && this.euNoComando()) return this.nave.group; for (const [id, a] of this.remotos) if (a.nave && this.podeNave(id)) return a.nave.group; return null; }
   /** a nave do dono está no PERÍMETRO das nuvens da capela (dá pra tirar o véu)? — o painel do ritual pergunta */
   naveNoPerimetro(): boolean {
     const g = this.naveDoDono(); if (!g) return false;
@@ -1933,7 +1933,7 @@ export class CyberEngine {
   /** embarca na nave (precisa estar perto dela) */
   embarcar() {
     // assume o LEME (só a bordo, na ponte; o React já validou no servidor que é o dono)
-    if (!this.nave || this.pilotando || this.moto !== null || !this.bordo || acaoNaNave(this.bordo, true) !== "pilotar" || !this.ehFundador(this.o.eu.id)) return;
+    if (!this.nave || this.pilotando || this.moto !== null || !this.bordo || acaoNaNave(this.bordo, true) !== "pilotar" || !this.euNoComando()) return;
     this.pilotando = true; this.bordo = null; this.autoPouso = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0; this.naveMexida = true;
     this.naveEst = { ...this.naveEst, vx: 0, vy: 0, vz: 0 };
     this.pousado = this.naveEst.y - chaoDoVoo(this.naveEst, this.solidosDeVoo()) < 0.35;
@@ -1946,7 +1946,7 @@ export class CyberEngine {
     const n = this.naveEst; this.naveEst = { ...n, vx: 0, vy: 0, vz: 0 };
     this.pilotando = false; this.bordo = { ...NAVE_QG.emPe, nivel: 1 };   // de pé na cabine: a redoma abre
     this.eu.facing = n.yaw; this.eu.av.group.visible = true;
-    if (this.ehFundador(this.o.eu.id)) this.o.onNaveParada?.({ x: n.x, y: n.y, z: n.z, yaw: n.yaw });
+    if (this.euNoComando()) this.o.onNaveParada?.({ x: n.x, y: n.y, z: n.z, yaw: n.yaw });
   }
   /** SPAWN do dono: dentro da nave-QG, de pé na CABINE DE COMANDO (redoma aberta), olhando pra proa — onde quer que
    *  ela esteja estacionada (a posição é no referencial da nave). Os outros nascem como antes. */
@@ -2078,9 +2078,9 @@ export class CyberEngine {
     else if (m.y > 0.5) { this.eu.alt = m.y; this.cairDaqui(); }
   }
   /** o dono manda onde a nave dele está estacionada (presença `naveParada`) — sem hangar, sempre que não está pilotando */
-  private naveForaDoHangar() { return !!this.nave && this.ehFundador(this.o.eu.id); }   // sem hangar: a nave do dono está sempre "parada em algum lugar"
+  private naveForaDoHangar() { return !!this.nave && this.euNoComando(); }   // sem hangar: a nave do dono está sempre "parada em algum lugar"
   /** (pra quem NÃO é o dono) o dono está online com a nave → a minha cópia some (só existe uma nave) */
-  private naveDoDonoFora() { if (this.ehFundador(this.o.eu.id)) return false; for (const a of this.remotos.values()) if (a.nave) return true; return false; }
+  private naveDoDonoFora() { if (this.ehFundador(this.o.eu.id)) return false; for (const [id, a] of this.remotos) if (a.nave && (this.ehFundador(id) || !this.pilotando)) return true; return false; }
   // ───────────── áudio ─────────────
   /** loops fixos do mundo + destrave. O gesto (o "Conectar" ao cyberespaço, ou o 1º clique/toque/tecla) só DESTRAVA: o som do
    *  cyberespaço só liga ao ENTRAR de fato na cena 3D (fora do menu) — na landing/menu, nada do cyberespaço toca. */
@@ -2252,8 +2252,8 @@ export class CyberEngine {
   }
   /** de onde a música da nave sai: a nave do dono (a minha, se eu sou ele; senão a dele, remota) */
   private fonteDaNave(): THREE.Object3D | null {
-    if (this.nave && this.ehFundador(this.o.eu.id)) return this.nave.group;
-    for (const [id, a] of this.remotos) if (a.nave && this.ehFundador(id)) return a.nave.group;
+    if (this.nave && this.euNoComando()) return this.nave.group;
+    for (const [id, a] of this.remotos) if (a.nave && this.podeNave(id)) return a.nave.group;
     return null;
   }
   /** o RITUAL da chegada do dono mudou (a sala): a tempestade no templo e os anunciadores */
@@ -2426,6 +2426,11 @@ export class CyberEngine {
   private zaeon(): LandmarkHandle | undefined { return this.lms.find((l) => l.poi.acesso === "dono" && l.topo); }
   /** fundador = marcado pelo SERVIDOR (e só faz sentido se a Zaeon está na cena) */
   private ehFundador(id: string) { return !!this.pessoas.get(id)?.fundador && !!this.zaeon(); }
+  /** pilota a nave-QG: o dono ou a TRIPULAÇÃO (o servidor marcou `nave`) */
+  private podeNave(id: string) { const p = this.pessoas.get(id); return (!!p?.fundador || !!p?.nave) && !!this.zaeon(); }
+  /** EU estou no comando da nave: o dono sempre; a tripulação quando nenhum outro piloto está online com ela (só existe
+   *  uma nave — com o dono online, a tripulação embarca na dele) */
+  private euNoComando() { return this.ehFundador(this.o.eu.id) || (this.podeNave(this.o.eu.id) && !this.naveDoDonoFora()); }
   /** pose do eixo do topo (centro + giro atual do marco) e a altura do topo no mundo */
   private eixoTopo(): LayoutBase | null { const z = this.zaeon(); return z ? { x: z.poi.x, z: z.poi.z, rot: z.group.rotation.y } : null; }
   private escalaZaeon() { return this.zaeon()?.poi.escala ?? 1; }
@@ -2566,7 +2571,7 @@ export class CyberEngine {
     if (this.menu) return null;
     if (this.pilotando) return { id: `leme-${this.pousado}`, rotulo: this.pousado ? "Largar o leme" : "Estacionar aqui (largar o leme)", fazer: () => this.desembarcar() };
     if (this.bordo) {   // A BORDO: o leme (dono), o terminal de estudos, a porta
-      const a = acaoNaNave(this.bordo, this.ehFundador(this.o.eu.id));
+      const a = acaoNaNave(this.bordo, this.euNoComando());
       if (a === "pilotar") return { id: "pilotar", rotulo: "Pilotar a nave", fazer: () => this.o.onEmbarcar?.() };
       if (a === "estudar") return { id: "estudar-nave", rotulo: "Estudar (meu desktop)", fazer: () => this.o.onEntrarEstudo?.() };
       if (a === "somLounge") return { id: "som-lounge", rotulo: "Som do lounge (playlist)", fazer: () => this.o.onAbrirSom?.("lounge") };
@@ -3411,11 +3416,10 @@ export class CyberEngine {
         a.desc = p.desc ?? 0;
         this.combateRemoto(a, p, t);
         // "no topo" só vale pra quem o SERVIDOR marcou como fundador (client event forjado não sobe ninguém)
-        // regalias (topo/nave) só pra quem o SERVIDOR marcou como fundador — a Zaeon (céu) é aberta
-        const fund = !!this.pessoas.get(id)?.fundador;
+        // regalias: o topo só pra quem o SERVIDOR marcou como fundador; a nave, o dono ou a tripulação — a Zaeon (céu) é aberta
         a.topo = p.topo === true && this.ehFundador(id);
         a.ceu = p.ceu === true;   // a Zaeon é aberta a todos (o topo e a nave continuam do dono)
-        const voando = fund && !!p.voo, parada = fund && !voando && p.naveParada ? p.naveParada : null;
+        const piloto = this.podeNave(id), voando = piloto && !!p.voo, parada = piloto && !voando && p.naveParada ? p.naveParada : null;
         if ((voando || parada) && !a.nave && this.cidade) {
           a.nave = criarNave({ low: this.o.low, cor: a.color }); loteNave(a.nave); this.cena.scene.add(a.nave.group);
           a.somNave = { idle: this.som.loop("ship-idle", a.nave.group, { dist: DISTANCIA.grande }), voo: this.som.loop("ship-flight", a.nave.group, { dist: DISTANCIA.grande }), g: gatilhoVooInicial(), voava: voando, ev: somNaveInicial(!voando), yAnt: null, vy: 0 };   // já chega voando: sem decolagem fantasma
