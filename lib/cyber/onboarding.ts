@@ -86,12 +86,12 @@ export function estadoDoTubo(t: number): { liquido: number; vidro: number } {
  * (Shift andando), VOAR `m` metros acima do chão (Espaço), o VOO LONGO (`m` metros de turbo: Shift no ar), CHEGAR no
  * alvo, conversar com a Zaeon, OUVIR (o passo é só a cena — anda quando as falas acabam) e abrir o TABLET.
  */
-export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "pesquisa" } | { tipo: "inventario"; s: number } | { tipo: "fim" };
-export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "estudo" | "aviso" | "inventario" | "fim";
+export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "pesquisa" } | { tipo: "inventario"; s: number } | { tipo: "saber"; s: number } | { tipo: "fim" };
+export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "estudo" | "aviso" | "inventario" | "despedida" | "saber" | "fim";
 /** a CUTSCENE do passo (lib/cyber/cutscene): enquanto o Droid fala, a câmera enquadra outra coisa — "droid" = ele (a
  *  apresentação e a missão), "teloes" = os telões PROBLEMA → SOLUÇÃO. A câmera solta na INSTRUÇÃO (a última fala),
  *  a não ser que `cenaInteira` (o passo todo é cena — a pessoa não precisa se mexer) */
-export type CenaGuia = "droid" | "teloes";
+export type CenaGuia = "droid" | "teloes" | "saber";
 /** um passo do tutorial: as FALAS do Droid (uma depois da outra; a última — a INSTRUÇÃO — fica na tela até a pessoa
  *  cumprir), o que ela tem que fazer, o alvo de "vem comigo até…" (o Droid vai na frente; o farol marca), a CENA e as
  *  TECLAS que a caixa de diálogo mostra em destaque */
@@ -122,15 +122,23 @@ export const ROTEIRO: PassoGuia[] = (() => {
     { id: "aviso", titulo: "O veredito do Droid", cena: "droid", cenaInteira: true, alerta: true, falas: ["Pare um instante. Deixa eu ver o que você fez…", "Essa pesquisa ainda não tem base de estudos pra ter algum valor ainda. Não dá pra vender nem publicar.", "Mas você pode guardar ela no seu inventário e me entregar algo melhor depois."], cond: { tipo: "ouvir" }, alvo: null },
     // o INVENTÁRIO abre com a pesquisa (o livro-holograma) em destaque; anda quando a pessoa fecha ou depois de `s` s
     { id: "inventario", titulo: "O inventário", falas: [], cond: { tipo: "inventario", s: 11 }, alvo: null },
+    // a DESPEDIDA: o Droid sai de cena e vai pra SALA DO SABER (a biblioteca, na borda mais vazia da Zaeon) — a câmera
+    // segue ele até lá, mostra a sala e volta devagar pro personagem: o tutorial acabou, as salas abrem
+    { id: "despedida", titulo: "Até logo", cena: "droid", cenaInteira: true, falas: ["Pressione I pra abrir seu inventário.", "E só venha falar comigo quando tiver algo de valor. Estarei te esperando na Sala do Saber."], cond: { tipo: "ouvir" }, alvo: null },
+    { id: "saber", titulo: "A Sala do Saber", cena: "saber", cenaInteira: true, falas: [], cond: { tipo: "saber", s: 3.2 }, alvo: null },
   ];
 })();
 /** o índice de um passo */
 export const passoDe = (id: IdPassoGuia) => ROTEIRO.findIndex((p) => p.id === id);
+/** a SALA DO SABER (local da ilha): a biblioteca — o lar do Droid depois do tutorial ("estarei te esperando…") */
+export const SALA_DO_SABER_LOCAL: P2 = { x: CIDADE.salas.biblioteca.x, z: CIDADE.salas.biblioteca.z };
+/** antes deste passo, o tablet e as salas ficam travados (o tutorial ainda não chegou na missão) */
+export const PASSO_DA_MISSAO: IdPassoGuia = "missao";
 /** o Droid, se a pessoa guardar o tablet antes de terminar a missão */
 export const FALA_VOLTE_AO_TABLET = "Sua missão ainda não acabou: aperte T pra abrir o tablet e terminar o estudo.";
 
 /** o que o engine mede desde que o Droid deu a instrução do passo */
-export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean; /** s com o inventário aberto no passo (Infinity = a pessoa fechou) */ inventario: number };
+export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean; /** s com o inventário aberto no passo (Infinity = a pessoa fechou) */ inventario: number; /** s desde que o Droid chegou na Sala do Saber (-1 = voando) */ droidNoSaber: number };
 /** a pessoa fez o que o Droid pediu? */
 export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
   switch (c.tipo) {
@@ -145,11 +153,18 @@ export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
     case "tablet": return x.tabletAberto;
     case "pesquisa": return x.pesquisaSalva;
     case "inventario": return x.inventario >= c.s;
+    case "saber": return x.droidNoSaber >= c.s;
     case "fim": return false;   // o fim acaba sozinho (o Droid se despede)
   }
 }
 /** quanto o Droid espera entre uma fala e outra (s) — e depois da última, antes de começar a conferir */
 export const RITMO_FALA = { entre: 3.4, antesDeConferir: 0.8, fimSome: 4.5 } as const;
+/** quanto tempo uma fala fica na tela antes da próxima (s): o mínimo do ritmo, ou o tempo de LER (a máquina de escrever
+ *  + ~17 letras por segundo) — as falas longas (o aviso, os telões) não somem antes de a pessoa terminar de ler */
+export const tempoDeLeitura = (texto: string) => Math.max(RITMO_FALA.entre, 1.2 + Array.from(texto).length / 17);
+/** depois da ÚLTIMA fala, quanto esperar antes de conferir a ação: nos passos de só OUVIR (cena), o tempo de ler */
+export const esperaDepoisDaUltima = (passo: { cond: { tipo: string }; falas: string[] }) =>
+  passo.cond.tipo === "ouvir" && passo.falas.length ? tempoDeLeitura(passo.falas[passo.falas.length - 1]!) : RITMO_FALA.antesDeConferir;
 
 /** o Droid/guia está no piso da Zaeon (sanidade) */
 export const naZaeon = (p: P2) => Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= CIDADE.andavelR;

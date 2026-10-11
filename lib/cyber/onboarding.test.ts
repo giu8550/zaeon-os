@@ -1,6 +1,6 @@
 import { R_SOM_CORACAO } from "./coracao";
 import { describe, expect, it } from "vitest";
-import { PREF_TUTORIAL, tutorialLigado, ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, FRENTE_DOS_TELOES_LOCAL, cumpriu, deveNascerNoTubo, passoDe, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
+import { PREF_TUTORIAL, tutorialLigado, ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, FRENTE_DOS_TELOES_LOCAL, SALA_DO_SABER_LOCAL, cumpriu, deveNascerNoTubo, passoDe, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
 import { CIDADE as C2, DOCA_ANGULO, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "./ceu";
 import { LAR_LOCAL } from "./landmarks";
 import { AGENTES, DROID, noPisoDaZaeon, posDoGuia } from "./agentes";
@@ -57,9 +57,9 @@ describe("quem chega NASCE num tubo de ensaio", () => {
 });
 
 describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada instrução)", () => {
-  const nada: CtxGuia = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0 };
+  const nada: CtxGuia = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0, droidNoSaber: -1 };
   it("tubo → andar → correr → voo curto → voo longo até a capela → a Zaeon → os telões → a 1ª missão (o tablet) — sem motos, portais nem dash", () => {
-    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "correr", "voar", "voo-longo", "capela", "zaeon", "ir-teloes", "teloes", "missao", "estudo", "aviso", "inventario"]);
+    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "correr", "voar", "voo-longo", "capela", "zaeon", "ir-teloes", "teloes", "missao", "estudo", "aviso", "inventario", "despedida", "saber"]);
     for (const p of ROTEIRO.slice(1)) for (const f of p.falas) expect(f.length).toBeLessThanOrEqual(170);
     for (const p of ROTEIRO) if (p.alvo) expect(naIlhaPrincipal(p.alvo)).toBe(true);
     expect(ROTEIRO.map((p) => p.falas.join(" ")).join(" ")).not.toMatch(/moto|portal|dash|\bC\b/i);
@@ -82,6 +82,9 @@ describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada inst
     expect(pa("andar").cena).toBe("droid"); expect(pa("teloes").cena).toBe("teloes"); expect(pa("teloes").cenaInteira).toBe(true);
     expect(pa("missao").cena).toBe("droid");
     expect(pa("aviso").alerta).toBe(true); expect(pa("aviso").cenaInteira).toBe(true);
+    expect(pa("despedida").falas.join(" ")).toMatch(/Pressione I pra abrir seu inventário.*Estarei te esperando na Sala do Saber/);
+    expect(pa("saber").cena).toBe("saber");
+    expect(Math.hypot(SALA_DO_SABER_LOCAL.x, SALA_DO_SABER_LOCAL.z)).toBeGreaterThan(CIDADE.bordaR);   // a biblioteca é uma sala de BORDA
     expect(pa("aviso").falas.join(" ")).toMatch(/não tem base de estudos.*Não dá pra vender nem publicar.*guardar ela no seu inventário e me entregar algo melhor depois/);
     expect(pa("andar").teclas).toEqual(["W", "A", "S", "D"]); expect(pa("correr").teclas).toEqual(["Shift"]); expect(pa("voar").teclas).toEqual(["Espaço"]);
   });
@@ -101,6 +104,7 @@ describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada inst
     expect(cumpriu(c("missao"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("missao"), { ...nada, tabletAberto: true })).toBe(true);
     expect(cumpriu(c("estudo"), { ...nada, tabletAberto: true })).toBe(false); expect(cumpriu(c("estudo"), { ...nada, pesquisaSalva: true })).toBe(true);
     expect(cumpriu(c("inventario"), { ...nada, inventario: 3 })).toBe(false); expect(cumpriu(c("inventario"), { ...nada, inventario: Infinity })).toBe(true);
+    expect(cumpriu(c("saber"), { ...nada, droidNoSaber: 1 })).toBe(false); expect(cumpriu(c("saber"), { ...nada, droidNoSaber: 4 })).toBe(true);
   });
 });
 
@@ -132,5 +136,16 @@ describe("modo tutorial (Configurações)", () => {
     // ligado vale até pro dono e pra quem já nasceu
     expect(deveNascerNoTubo({ visto: true, fundador: true, forcar: tutorialLigado(() => "1") })).toBe(true);
     expect(deveNascerNoTubo({ visto: true, fundador: true, forcar: tutorialLigado(() => "0") })).toBe(false);
+  });
+});
+
+describe("o ritmo das falas", () => {
+  it("fala curta = o ritmo mínimo; fala longa = o tempo de ler; os passos de só ouvir esperam a pessoa ler a última", async () => {
+    const { tempoDeLeitura, esperaDepoisDaUltima, RITMO_FALA, ROTEIRO } = await import("./onboarding");
+    expect(tempoDeLeitura("Isso!")).toBe(RITMO_FALA.entre);
+    const longa = ROTEIRO.find((p) => p.id === "aviso")!.falas[1]!;
+    expect(tempoDeLeitura(longa)).toBeGreaterThan(6);
+    expect(esperaDepoisDaUltima(ROTEIRO.find((p) => p.id === "despedida")!)).toBeGreaterThan(5);
+    expect(esperaDepoisDaUltima(ROTEIRO.find((p) => p.id === "andar")!)).toBe(RITMO_FALA.antesDeConferir);
   });
 });
