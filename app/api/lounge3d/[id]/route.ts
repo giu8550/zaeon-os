@@ -5,6 +5,7 @@
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+import { corpoDoUsuario } from "@/lib/lounge3d/corposDeUsuario";
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { guard } from "@/src/lib/ratelimit";
@@ -21,7 +22,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const s = await salaDoMembro(params.id, me.id); if (!s) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const users = await prisma.user.findMany({ where: { id: { in: s.members } }, select: { id: true, name: true, image: true, email: true, role: true } });
   // `fundador` (dono da Zaeon) é decidido no servidor; e-mail/role NÃO saem daqui
-  return NextResponse.json({ sala: viewSala(s, me.id), membros: users.map((u) => ({ id: u.id, name: (u.name || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email: u.email, role: u.role }) })), eu: me });
+  return NextResponse.json({ sala: viewSala(s, me.id), membros: users.map((u) => ({ id: u.id, name: (u.name || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email: u.email, role: u.role }), corpo: corpoDoUsuario(u.id) })), eu: me });
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {

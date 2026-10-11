@@ -15,7 +15,8 @@
  *  - "golaAlta": a gola rulê (turtleneck) creme em volta do pescoço (Zenita);
  *  - Scholar: "monoculo"; Zaeon: "pingenteTriangulo", "linhasCiano"; Caio: "gravataAzul", "canetaPrata"; Davi e
  *    Farmácia: "distintivoPrata"; Enfermagem: "cruzEnfermagem"; Medicina: "estetoscopio"; Farmácia: "oculosRetPrata";
- *    Química: "oculosProtecao", "frascoVerde"; Engenharia Civil: "capacete", "coleteRefletivo".
+ *    Química: "oculosProtecao", "frascoVerde"; Engenharia Civil: "capacete", "coleteRefletivo";
+ *  - Giulia (jogadora): "golaFrenteUnica", "cintoCorda", "pulseiraContas", "brincos".
  * As medidas são em metros, no espaço dos ossos do VRM (VRM 1.0: em repouso, eixos alinhados ao mundo, +Z = frente).
  */
 import * as THREE from "three";
@@ -278,6 +279,50 @@ function colete(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Gro
   return g;
 }
 
+/** a GOLA da blusa frente única (no pescoço): a faixa preta alta em volta do pescoço, presa atrás */
+function golaFrenteUnica(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  const faixa = desenhada(new THREE.CylinderGeometry(0.047, 0.05, 0.032, 24, 1, true), 0x141418, mats, geos); g.add(faixa);
+  // as duas alças descendo da gola até o decote da blusa, deixando o recorte gota no meio
+  for (const lado of [-1, 1]) {
+    const alca = desenhada(new THREE.BoxGeometry(0.022, 0.07, 0.006), 0x141418, mats, geos);
+    alca.position.set(lado * 0.024, -0.045, 0.05); alca.rotation.set(-0.35, 0, lado * 0.32); g.add(alca);
+  }
+  g.position.set(0, 0.012, 0.004);
+  return g;
+}
+
+/** o CINTO de corda trançada branca (no quadril), amarrado na frente com as duas pontas de franja caindo */
+function cintoCorda(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group(), BRANCO = 0xf2efe6;
+  const volta = desenhada(new THREE.TorusGeometry(0.135, 0.007, 6, 40), BRANCO, mats, geos); volta.rotation.x = Math.PI / 2; volta.scale.set(1.0, 0.8, 1); g.add(volta);
+  const no = desenhada(new THREE.SphereGeometry(0.014, 10, 8), BRANCO, mats, geos); no.position.set(0, 0, 0.108); g.add(no);
+  for (const [dx, comp] of [[-0.012, 0.16], [0.014, 0.13]] as const) {
+    const ponta = desenhada(new THREE.CylinderGeometry(0.005, 0.005, comp, 6), BRANCO, mats, geos); ponta.position.set(dx, -comp / 2, 0.112); g.add(ponta);
+    const franja = desenhada(new THREE.ConeGeometry(0.011, 0.03, 8), BRANCO, mats, geos); franja.position.set(dx, -comp - 0.012, 0.112); franja.rotation.x = Math.PI; g.add(franja);
+  }
+  g.position.set(0, 0.07, 0.01);
+  return g;
+}
+
+/** a PULSEIRA de contas escuras (no pulso direito dela) */
+function pulseira(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group(), n = 14, R = 0.03;
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2, conta = desenhada(new THREE.SphereGeometry(0.0055, 8, 6), 0x2a2420, mats, geos);
+    conta.position.set(0, Math.cos(a) * R, Math.sin(a) * R); g.add(conta);
+  }
+  g.position.set(-0.01, 0, 0);
+  return g;
+}
+
+/** os BRINCOS: pontinhos claros no lóbulo das duas orelhas (na cabeça) */
+function brincos(mats: THREE.Material[], geos: THREE.BufferGeometry[]): THREE.Group {
+  const g = new THREE.Group();
+  for (const lado of [-1, 1]) { const b = desenhada(new THREE.SphereGeometry(0.006, 10, 8), 0xf3efe6, mats, geos); b.position.set(lado * 0.074, 0.035, 0.0); g.add(b); }
+  return g;
+}
+
 /** a MECHA carmesim: pinta mechas DE VERDADE do cabelo do VRM (não é peça por cima). O cabelo do VRoid é uma malha só,
  *  feita de mechas soltas (cada uma é um pedaço conexo da malha): escolhe as da frente, do lado direito dela, que descem
  *  da risca até o queixo (medidas na pose de repouso, a partir do osso da cabeça), e passa os triângulos delas pra um
@@ -325,7 +370,7 @@ function pintarMecha(vrm: VRM, cor: THREE.ColorRepresentation): (() => void) | n
 export function vestirAcessorios(vrm: VRM, lista: readonly AcessorioVrm[]): AcessoriosHandle {
   const mats: THREE.Material[] = [], geos: THREE.BufferGeometry[] = [], postos: THREE.Object3D[] = [], desfazer: (() => void)[] = [];
   const osso = (n: VRMHumanBoneName) => vrm.humanoid.getRawBoneNode(n);
-  type Osso = "neck" | "head" | "upperChest";
+  type Osso = "neck" | "head" | "upperChest" | "hips" | "rightHand";
   const TABELA: Record<Exclude<AcessorioVrm, "mechaCarmesim">, [Osso, () => THREE.Group]> = {
     foneNoPescoco: ["neck", () => fone(mats, geos)], golaCircuito: ["neck", () => golaCircuito(mats, geos)], golaAlta: ["neck", () => golaAlta(mats, geos)],
     gravataCarmesim: ["neck", () => gravata(mats, geos)], gravataAzul: ["neck", () => gravata(mats, geos, 0x3b6fd8)],
@@ -337,11 +382,13 @@ export function vestirAcessorios(vrm: VRM, lista: readonly AcessorioVrm[]): Aces
     oculosRetangulares: ["head", () => oculosRet(mats, geos)], oculosRetPrata: ["head", () => oculosRet(mats, geos, 0xb9c0ca)],
     presilhaRelogio: ["head", () => relogio(mats, geos)], monoculo: ["head", () => monoculo(mats, geos)],
     oculosProtecao: ["head", () => oculosProtecao(mats, geos)], capacete: ["head", () => capacete(mats, geos)],
+    golaFrenteUnica: ["neck", () => golaFrenteUnica(mats, geos)], cintoCorda: ["hips", () => cintoCorda(mats, geos)],
+    pulseiraContas: ["rightHand", () => pulseira(mats, geos)], brincos: ["head", () => brincos(mats, geos)],
   };
   for (const a of lista) {
     if (a === "mechaCarmesim") { const d = pintarMecha(vrm, CARMESIM); if (d) desfazer.push(d); continue; }
     const [qual, fazer] = TABELA[a];
-    const pai = qual === "neck" ? osso("neck") ?? osso("upperChest") : qual === "upperChest" ? osso("upperChest") ?? osso("chest") : osso("head");
+    const pai = qual === "neck" ? osso("neck") ?? osso("upperChest") : qual === "upperChest" ? osso("upperChest") ?? osso("chest") : osso(qual);
     if (!pai) continue;
     const obj = fazer();
     pai.add(obj); postos.push(obj); mostrarCaminho(obj);   // (os ossos vazios ficam escondidos — components/cyber/matrizes)
