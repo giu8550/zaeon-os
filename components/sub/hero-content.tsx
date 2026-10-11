@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { ChatBubbleLeftRightIcon, PuzzlePieceIcon, UserPlusIcon } from "@heroicons/react/24/outline";
+import { ChatBubbleLeftRightIcon, PlayIcon, UserPlusIcon } from "@heroicons/react/24/outline";
 
 // Componentes Internos
 import MenuNavigation from "@/components/sub/MenuNavigation";
@@ -81,7 +81,7 @@ const FRASE_COMPLETA = "Evolua sua vida. com conhecimento.";
 const GIRO = ["ideias", "estudos", "trabalhos", "pesquisas"];
 /** pra onde "Iniciar chat" leva quem já está logado: o chat da Aura (Sala de Estudos) */
 const CHAT_ROTA = "/research-lab?tab=sala-de-estudos";
-/** o GAME: o cyberespaço (precisa de conta — sem ela, o botão abre o login) */
+/** o GAME: o cyberespaço — a rota já abre a sessão em jogo (sem menu). Sem conta, o botão abre o login, que volta direto pra cá. */
 const GAME_ROTA = "/lounge-cosmico";
 
 export default function HeroPage() {
@@ -183,7 +183,8 @@ export default function HeroPage() {
               className="mt-9 flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto items-center justify-start"
             >
               {/* PRIMÁRIO (vidro TINGIDO): sem conta, "Criar minha conta" (abre o login/cadastro); conectado, o chat.
-                  SECUNDÁRIO (vidro incolor): "Play game" — o cyberespaço (agora é só o GAME) (sem conta, também abre o login). */}
+                  SECUNDÁRIO (vidro incolor): "Iniciar jogo" — o cyberespaço agora é o JOGO: entra direto na sessão
+                  (sem conta, abre o login, e o login já cai no jogo). */}
               <LiquidGlassButton
                 onClick={() => (logado ? router.push(CHAT_ROTA) : setShowChatbox(true))}
                 tom="destaque"
@@ -199,8 +200,8 @@ export default function HeroPage() {
                 tamanho="md"
                 className="w-full sm:w-auto"
               >
-                <PuzzlePieceIcon className="w-4 h-4" aria-hidden="true" />
-                Play game
+                <PlayIcon className="w-4 h-4" aria-hidden="true" />
+                Iniciar jogo
               </LiquidGlassButton>
             </motion.div>
           )}
