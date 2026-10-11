@@ -96,7 +96,7 @@ describe("/api/lounge3d/[id]", () => {
     expect(r.status).toBe(503);
   });
 
-  it("acesso privilegiado (topo/nave): só o FUNDADOR (pela sessão) recebe 200; a Zaeon (céu) é aberta; alvo inválido 400", async () => {
+  it("acesso privilegiado (topo/nave): só o FUNDADOR (pela sessão) recebe 200 — a nave só o DONO; a Zaeon (céu) é aberta; alvo inválido 400", async () => {
     const req = (alvo: string) => new Request("http://x/", { method: "POST", body: JSON.stringify({ alvo }), headers: { "Content-Type": "application/json" } });
     m.docFind.mockResolvedValue(doc());
     // Ana (a@b.c) não está na allowlist nem tem role → 403 no topo e na nave; a Zaeon abre pra qualquer membro
@@ -104,10 +104,15 @@ describe("/api/lounge3d/[id]", () => {
     expect((await ACESSO(req("ceu"), { params: { id: ID } })).status).toBe(200);
     expect((await ACESSO(req("voar-pelado"), { params: { id: ID } })).status).toBe(400);
     expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(403);
-    // fundador por role no banco → 200 (o cliente nunca decide)
+    // fundador por role no banco → 200 (o cliente nunca decide) — menos a NAVE, que é SÓ do dono (pilotaANave, pelo e-mail)
     m.userFind.mockResolvedValue({ id: ME, name: "Ana", image: null, role: "super_admin" });
-    for (const alvo of ["topo", "ceu", "nave", "dj", "ritual"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(200);
+    for (const alvo of ["topo", "ceu", "dj", "ritual"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(200);
+    expect((await ACESSO(req("nave"), { params: { id: ID } })).status).toBe(403);
     expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(200);
+    // o DONO (o e-mail dele) pilota a nave
+    m.session.mockResolvedValue({ user: { email: "donmartinezcaiudoceu@gmail.com" } });
+    expect((await ACESSO(req("nave"), { params: { id: ID } })).status).toBe(200);
+    m.session.mockResolvedValue({ user: { email: "a@b.c" } });
   });
 
   it("1ª entrada no cyberespaço: GET diz `novo` (nunca entrou → nasce no tubo); POST /nasceu marca 1× (idempotente); não-membro → 404", async () => {

@@ -46,6 +46,7 @@ import { CHEGADA_NAVE, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, n
 import { DROID } from "@/lib/cyber/agentes";
 import { type CtxGuia, FALA_DESISTIU, ROTEIRO_ENTREGA, ROTEIRO_MOTOS, passoDaRecusa, type PassoGuia, FALA_CONCORRENCIA, FALA_IA_ENTREGOU, FALA_VOLTE_AO_TABLET, lembreteDoTablet, PASSO_DA_MISSAO, SALA_DO_SABER_LOCAL, esperaDepoisDaUltima, passoDe, tempoDeLeitura, NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
 import type { PesquisaSalva } from "@/lib/ui/loungeHub";
+import { criarPortalViagem, type PortalViagemHandle } from "./PortalViagem";
 import { FAIXA_CINEMA, misturarPose, passoPeso, planoConversa, planoTelao, poseDoPlano, seguirPose, suave, type Plano, type Pose } from "@/lib/cyber/cutscene";
 import { FALA_DESTAQUE_CSS, ondeFala, type Dialogo } from "@/lib/cyber/dialogo";
 import { TELOES as TELOES_TERRA, TELOES_SOLUCAO } from "@/lib/cyber/terra";
@@ -379,7 +380,7 @@ export class CyberEngine {
   private entregaVeredito: { aceito: boolean; faltando: string[] } | "desistiu" | null = null;
   private entregaArmada = true;
   /** pode MONTAR numa moto? (liberadas, o dono, ou no meio do tutorial delas) */
-  private podeMoto() { return this.motosLiberadas || this.ehFundador(this.o.eu.id) || (this.rot === ROTEIRO_MOTOS && !!this.guia); }
+  private podeMoto() { return this.motosLiberadas || this.podeNave(this.o.eu.id) || (this.rot === ROTEIRO_MOTOS && !!this.guia); }
   /** o resultado da ENTREGA (o painel do React mandou pro servidor): null = a pessoa desistiu */
   resultadoEntrega(r: { aceito: boolean; faltando: string[] } | null) {
     const g = this.guia; if (!g || this.rot !== ROTEIRO_ENTREGA) return;
@@ -2118,6 +2119,42 @@ export class CyberEngine {
     return this.nave ? { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw, h: this.nave } : null;
   }
   /** ENTRA na nave (perto da porta de trás, lá fora — a pé ou de mochila): aparece no corredor, olhando pra proa */
+  /** a VIAGEM pelo PORTAL até dentro da nave (tecla M — só o dono): abre um portal aqui, a pessoa é sugada; abre outro
+   *  dentro da nave e ela sai dele — o mesmo efeito do portal do Droid (components/cyber/PortalViagem) */
+  private viagemNave: { fase: "saindo" | "chegando"; t: number; trocou: boolean } | null = null;
+  private portais: [PortalViagemHandle, PortalViagemHandle] | null = null;
+  portalPraNave() {
+    if (!this.podeNave(this.o.eu.id)) { this.o.onAviso?.("Só o dono convoca a nave."); return; }
+    if (this.viagemNave) return;
+    if (this.bordo) { this.o.onAviso?.("Você já está dentro da nave."); return; }
+    if (this.pilotando || this.moto !== null || this.nascendo || this.tunel || this.tabletQuer || this.labAberto) { this.o.onAviso?.("Pare (a pé) pra abrir o portal."); return; }
+    if (!this.poseNave()) { this.o.onAviso?.("A nave não está no mundo agora."); return; }
+    if (!this.portais) { this.portais = [criarPortalViagem({ low: this.o.low }), criarPortalViagem({ low: this.o.low })]; for (const p of this.portais) this.cena.scene.add(p.group); }
+    const rumo = Math.atan2(this.cam.position.x - this.eu.pos.x, this.cam.position.z - this.eu.pos.z);   // o portal de frente pra câmera
+    this.portais[0].abrir("entra", new THREE.Vector3(this.eu.pos.x, this.eu.alt, this.eu.pos.z), rumo);
+    this.viagemNave = { fase: "saindo", t: 0, trocou: false }; this.alvo = null; this.alvoDepois = null; this.soltarTeclas();
+    this.som.tocar(this.som.temSom("cyber-enter") ? "cyber-enter" : "rise", this.eu.av.group.position, { dist: DISTANCIA.eu });
+  }
+  private atualizarViagemNave(dt: number, t: number) {
+    if (this.portais) for (const p of this.portais) p.atualizar(dt, t);
+    const v = this.viagemNave; if (!v) return;
+    v.t += dt;
+    if (v.fase === "saindo") {
+      if (v.t >= 0.75) this.eu.av.group.visible = false;   // sugado pelo portal
+      if (v.t >= 1.05) {
+        this.entrarNaNave();
+        if (!this.bordo) { this.eu.av.group.visible = true; this.viagemNave = null; return; }   // (a nave sumiu no meio do caminho)
+        const ilhaY = this.eu.alt, rumo = Math.atan2(this.cam.position.x - this.eu.pos.x, this.cam.position.z - this.eu.pos.z);
+        this.portais![1].abrir("sai", new THREE.Vector3(this.eu.pos.x, ilhaY, this.eu.pos.z), rumo);
+        this.camT.set(this.eu.pos.x, this.eu.alt + 1.2, this.eu.pos.z);   // a câmera vai junto (sem atravessar o mapa)
+        this.som.tocar(this.som.temSom("cyber-enter") ? "cyber-enter" : "rise", this.eu.av.group.position, { dist: DISTANCIA.eu });
+        v.fase = "chegando"; v.t = 0;
+      }
+    } else {
+      if (v.t >= 0.6) this.eu.av.group.visible = true;   // sai do portal, dentro da nave
+      if (v.t >= 1.7) this.viagemNave = null;
+    }
+  }
   entrarNaNave() {
     const p = this.poseNave(); if (!p || this.pilotando || this.moto !== null) return;
     this.altoEm = null; this.yNav = 0; this.noTopo = false; this.ilhota = null; this.plat = null; this.sobreNave = false; this.jet.noAr = false; this.jetV = { x: 0, z: 0 };
@@ -2232,7 +2269,7 @@ export class CyberEngine {
   /** o dono manda onde a nave dele está estacionada (presença `naveParada`) — sem hangar, sempre que não está pilotando */
   private naveForaDoHangar() { return !!this.nave && this.euNoComando(); }   // sem hangar: a nave do dono está sempre "parada em algum lugar"
   /** (pra quem NÃO é o dono) o dono está online com a nave → a minha cópia some (só existe uma nave) */
-  private naveDoDonoFora() { if (this.ehFundador(this.o.eu.id)) return false; for (const [id, a] of this.remotos) if (a.nave && (this.ehFundador(id) || !this.pilotando)) return true; return false; }
+  private naveDoDonoFora() { return false; }   // (só o dono pilota: não há outro piloto com a nave fora)
   // ───────────── áudio ─────────────
   /** loops fixos do mundo + destrave. O gesto (o "Conectar" ao cyberespaço, ou o 1º clique/toque/tecla) só DESTRAVA: o som do
    *  cyberespaço só liga ao ENTRAR de fato na cena 3D (fora do menu) — na landing/menu, nada do cyberespaço toca. */
@@ -2579,10 +2616,11 @@ export class CyberEngine {
   /** fundador = marcado pelo SERVIDOR (e só faz sentido se a Zaeon está na cena) */
   private ehFundador(id: string) { return !!this.pessoas.get(id)?.fundador && !!this.zaeon(); }
   /** pilota a nave-QG: o dono ou a TRIPULAÇÃO (o servidor marcou `nave`) */
-  private podeNave(id: string) { const p = this.pessoas.get(id); return (!!p?.fundador || !!p?.nave) && !!this.zaeon(); }
+  /** quem pilota a nave-QG: SÓ o dono (o servidor manda `nave` — lib/lounge3d/corposDeUsuario `pilotaANave`; a tripulação acabou) */
+  private podeNave(id: string) { const p = this.pessoas.get(id); return !!p?.nave && !!this.zaeon(); }
   /** EU estou no comando da nave: o dono sempre; a tripulação quando nenhum outro piloto está online com ela (só existe
    *  uma nave — com o dono online, a tripulação embarca na dele) */
-  private euNoComando() { return this.ehFundador(this.o.eu.id) || (this.podeNave(this.o.eu.id) && !this.naveDoDonoFora()); }
+  private euNoComando() { return this.podeNave(this.o.eu.id); }
   /** pose do eixo do topo (centro + giro atual do marco) e a altura do topo no mundo */
   private eixoTopo(): LayoutBase | null { const z = this.zaeon(); return z ? { x: z.poi.x, z: z.poi.z, rot: z.group.rotation.y } : null; }
   private escalaZaeon() { return this.zaeon()?.poi.escala ?? 1; }
@@ -2654,7 +2692,8 @@ export class CyberEngine {
       if (k === "j" && !this.menu) { if (!e.repeat) this.alternarDescanso(); e.preventDefault(); return; }
       if (k === "c" && !this.menu) { if (!e.repeat) this.darDash(); e.preventDefault(); return; }   // C = DASH (o arranque — desvio)
       if (k === "x" && !this.menu) { if (!e.repeat) this.atacar(); e.preventDefault(); return; }   // X = ATACAR (o combo da espada; o clique também, com o mouse travado)   // J = sentar / deitar / levantar (lounge)
-      if (k === "t" && !this.menu) { if (!e.repeat) this.alternarTablet(); e.preventDefault(); return; }     // T = o tablet (estudar por cima do cyberespaço)
+      if (k === "t" && !this.menu) { if (!e.repeat) this.alternarTablet(); e.preventDefault(); return; }
+      if (k === "m" && !this.menu) { if (!e.repeat) this.portalPraNave(); e.preventDefault(); return; }   // M = o dono se TELEPORTA pra dentro da nave (um portal aqui, outro lá)     // T = o tablet (estudar por cima do cyberespaço)
       if (k === "k" && !this.menu && this.ehFundador(this.o.eu.id)) { if (!e.repeat) this.o.onRitualNave?.(!this.ritual?.nave); e.preventDefault(); return; }   // K = o RITUAL DA NAVE (o dono)
       // HABILIDADES (lib/cyber/habilidades): G = o Droid companheiro (founder)
       const hab = this.menu ? null : habilidadeDaTecla(k, { fundador: this.ehFundador(this.o.eu.id), digitando: false, repetida: e.repeat, modificador: e.ctrlKey || e.metaKey || e.altKey });
@@ -3241,7 +3280,7 @@ export class CyberEngine {
       if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
       if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
       if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
-      if (this.nascendo || this.tunel || this.emCena) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // dentro do tubo / do túnel / numa cutscene: parado
+      if (this.nascendo || this.tunel || this.emCena || this.viagemNave) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // dentro do tubo / do túnel / numa cutscene: parado
       const correndo = (this.keys.shift || this.correr) && podeEsforcar(this.agua);   // (seco: anda)
       let andando = false;
       if (this.bordo) { const pn = this.poseNave(); if (pn) { const w = paraMundo(pn, this.bordo); eu.pos.x = w.x; eu.pos.z = w.z; } }   // a nave pode ter andado (o dono pilotando)
@@ -3458,6 +3497,7 @@ export class CyberEngine {
     if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.movAgora(t) ? { mov: this.movAgora(t) } : {}), ...(this.bordo && !this.pilotando ? { bordo: { x: this.bordo.x, z: this.bordo.z, nivel: this.bordo.nivel, ...(this.bordo.esc !== undefined ? { esc: this.bordo.esc } : {}) } } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
     this.atualizarNascimentoEGuia(dt);
+    this.atualizarViagemNave(dt, t);   // o portal do M (o dono indo pra dentro da nave)
     this.atualizarConversa(dt);
     this.atualizarAgentes(dt, t);
     this.atualizarRitual(dt, t);
@@ -3744,7 +3784,7 @@ export class CyberEngine {
     this.cleanups.forEach((f) => f());
     for (const a of [this.eu, ...this.remotos.values()]) if (a) this.removerAtor(a);
     if (this.droid) { this.droid.h.dispose(); this.droid.tag.remove(); }
-    for (const f of this.cine.faixas) f.remove(); this.cine.faixas = []; this.pensandoZ?.remove(); this.pensandoZ = null;
+    for (const f of this.cine.faixas) f.remove(); this.cine.faixas = []; if (this.portais) for (const p of this.portais) p.dispose(); this.portais = null; this.pensandoZ?.remove(); this.pensandoZ = null;
     for (const p of this.personagens) { p.h.dispose(); p.tag.remove(); } this.personagens = [];
     this.falaZ = null; this.calarZaeon(); this.holoZaeon?.dispose();
     this.praca?.dispose(); this.bercario?.dispose(); if (this.farol) { this.farol.geometry.dispose(); (this.farol.material as THREE.Material).dispose(); }

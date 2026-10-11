@@ -174,7 +174,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   /** ação privilegiada: pergunta ao SERVIDOR antes (cb sempre fresco via ref) */
   const pedir = useCallback(async (alvo: "topo" | "ceu" | "nave" | "dj" | "ritual", ok: () => void) => {
     const fn = cb.current.pedirAcesso;
-    if (!(cb.current.souFundador || (alvo === "nave" && cb.current.pilotoDaNave)) || !fn) { avisar(alvo === "dj" ? "Só o dono atravessa este buraco negro." : alvo === "nave" ? "Só o dono pilota a nave." : alvo === "ritual" ? "Só o dono inicia o ritual." : "Só o dono sobe ao topo."); return; }
+    if (!(alvo === "nave" ? cb.current.pilotoDaNave : cb.current.souFundador) || !fn) { avisar(alvo === "dj" ? "Só o dono atravessa este buraco negro." : alvo === "nave" ? "Só o dono pilota a nave." : alvo === "ritual" ? "Só o dono inicia o ritual." : "Só o dono sobe ao topo."); return; }
     try { const r = await fn(alvo); if (r.ok) ok(); else avisar(r.erro ?? "Não autorizado."); } catch { avisar("Sem conexão."); }
   }, [avisar]);
   const [poiAberto, setPoiAberto] = useState<POI | null>(null), [noTopo, setNoTopo] = useState(false), [subindo, setSubindo] = useState(false), [erroTopo, setErroTopo] = useState<string | null>(null);
@@ -384,6 +384,13 @@ export default function CenaCyber(p: CenaCyberProps) {
           {tela && (
             <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
               <PainelAdminCyber contagem={contagemAdmin} aplicada={frotaAplicada} />
+              {/* a NAVE do dono: um portal aqui, outro dentro dela (tecla M) — só ele (pilotaANave) */}
+              {p.pilotoDaNave && (
+                <button type="button" onClick={() => engine.current?.portalPraNave()} title="Ir pra dentro da nave (M)" aria-label="Ir pra dentro da nave (tecla M)"
+                  className="flex h-[44px] items-center gap-1.5 rounded-full border border-[#ffc46b]/50 bg-black/50 px-3.5 text-xs font-bold text-[#ffe2a8] backdrop-blur hover:border-[#ffc46b]">
+                  <span aria-hidden>🚀</span>Nave <kbd className="rounded border border-[#ffc46b]/40 px-1 font-mono text-[10px]">M</kbd>
+                </button>
+              )}
               <div className="relative">
                 <button type="button" aria-label={som.ligado ? "Som (ligado)" : "Som (desligado)"} aria-expanded={painelSom} onClick={() => setPainelSom((v) => !v)} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-white/15 bg-black/50 text-base text-white/85 backdrop-blur">{som.ligado && som.volume > 0 ? "🔊" : "🔇"}</button>
                 {painelSom && (

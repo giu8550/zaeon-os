@@ -32,7 +32,7 @@ export async function eu(): Promise<Eu | null> {
   const email = s?.user?.email;
   if (!email) return null;
   const u = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, image: true, role: true, cyberNasceuEm: true, cyberPerfil: true } });
-  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email, role: u.role }), novo: !u.cyberNasceuEm, motos: isSuperAdmin({ email, role: u.role }) || !!(u.cyberPerfil as { motosLiberadasEm?: unknown } | null)?.motosLiberadasEm, corpo: corpoDoUsuario(u.id), nave: pilotaANave(u.id, isSuperAdmin({ email, role: u.role })) } : null;
+  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email, role: u.role }), novo: !u.cyberNasceuEm, motos: pilotaANave(email) || !!(u.cyberPerfil as { motosLiberadasEm?: unknown } | null)?.motosLiberadasEm, corpo: corpoDoUsuario(u.id), nave: pilotaANave(email) } : null;
 }
 
 export type SalaRow = { id: string; ownerId: string; title: string; kind: string; content: string; members: string[]; token: string; updatedAt: Date };
