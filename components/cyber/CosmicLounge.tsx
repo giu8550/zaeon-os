@@ -127,7 +127,7 @@ function Tela() {
       remotos={sala.remotos} enviarPos={sala.enviarPos} chat={sala.chat} enviarChat={sala.enviarChat}
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
       souFundador={euSala.fundador === true} pilotoDaNave={euSala.nave === true} pedirAcesso={pedirAcesso}
-      novoNoCyber={sala.eu?.novo === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon} vozZaeon={vozZaeon}
+      novoNoCyber={sala.eu?.novo === true} motosLiberadas={sala.eu?.motos === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon} vozZaeon={vozZaeon}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
       somNave={sala.somNave} musicaNave={sala.musicaNave} ritual={sala.ritual} definirRitual={sala.definirRitual}

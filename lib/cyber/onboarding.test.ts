@@ -57,7 +57,7 @@ describe("quem chega NASCE num tubo de ensaio", () => {
 });
 
 describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada instrução)", () => {
-  const nada: CtxGuia = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0, droidNoSaber: -1 };
+  const nada: CtxGuia = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0, droidNoSaber: -1, entrega: null, naMoto: false, motoAndou: 0 };
   it("tubo → andar → correr → voo curto → voo longo até a capela → a Zaeon → os telões → a 1ª missão (o tablet) — sem motos, portais nem dash", () => {
     expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "correr", "voar", "voo-longo", "capela", "zaeon", "ir-teloes", "teloes", "missao", "estudo", "aviso", "inventario", "despedida", "saber"]);
     for (const p of ROTEIRO.slice(1)) for (const f of p.falas) expect(f.length).toBeLessThanOrEqual(170);
@@ -158,5 +158,22 @@ describe("a concorrência no tutorial (o tablet guardado enquanto a pesquisa rod
     expect(lembreteDoTablet({ fechado: true, etapaLab: "referencias", viuConcorrencia: true })).toBe("entregou");
     expect(lembreteDoTablet({ fechado: true, etapaLab: "gerar", viuConcorrencia: true })).toBe("volte");
     expect(lembreteDoTablet({ fechado: true, etapaLab: "tema", viuConcorrencia: false })).toBe("volte");
+  });
+});
+
+describe("a ENTREGA na Sala do Saber e o tutorial das MOTOS", () => {
+  it("o Droid pede com zoom; o veredito anda; recusado diz o que falta; aceito vira as motos (garagem → montar → pilotar → descer)", async () => {
+    const { ROTEIRO_ENTREGA, ROTEIRO_MOTOS, passoDaRecusa, cumpriu } = await import("./onboarding");
+    const nada0 = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0, droidNoSaber: -1, entrega: null, naMoto: false, motoAndou: 0 } as const;
+    expect(ROTEIRO_ENTREGA[0]!.cena).toBe("droid-perto");
+    expect(cumpriu(ROTEIRO_ENTREGA[0]!.cond, nada0)).toBe(false);
+    expect(cumpriu(ROTEIRO_ENTREGA[0]!.cond, { ...nada0, entrega: "recusada" })).toBe(true);
+    const r = passoDaRecusa(["o RESUMO", "a CONCLUSÃO", "as REFERÊNCIAS", "as CITAÇÕES"]);
+    expect(r.falas[1]).toMatch(/Falta o RESUMO; a CONCLUSÃO; as REFERÊNCIAS…/); for (const f of r.falas) expect(f.length).toBeLessThanOrEqual(170);
+    expect(ROTEIRO_MOTOS.map((p) => p.id)).toEqual(["motos-aceite", "motos-ver", "moto", "pilotar", "descer", "motos-fim"]);
+    const c = (id: string) => ROTEIRO_MOTOS.find((p) => p.id === id)!.cond;
+    expect(cumpriu(c("moto"), { ...nada0, naMoto: true })).toBe(true);
+    expect(cumpriu(c("pilotar"), { ...nada0, naMoto: true, motoAndou: 20 })).toBe(false); expect(cumpriu(c("pilotar"), { ...nada0, naMoto: true, motoAndou: 61 })).toBe(true);
+    expect(cumpriu(c("descer"), { ...nada0, naMoto: true })).toBe(false); expect(cumpriu(c("descer"), nada0)).toBe(true);
   });
 });

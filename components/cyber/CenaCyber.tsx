@@ -22,6 +22,7 @@ import { CHAVE_ONBOARDING, deveNascerNoTubo, tutorialLigado } from "@/lib/cyber/
 import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
 import RespostaZaeon from "./RespostaZaeon";
 import CaixaDialogo from "./CaixaDialogo";
+import EntregaDroid from "./EntregaDroid";
 import type { Dialogo } from "@/lib/cyber/dialogo";
 import type { PesquisaSalva } from "@/lib/ui/loungeHub";
 import type { PedidoZaeon, PerfilZaeon, PerguntaZaeon, TurnoZaeon } from "@/lib/cyber/conversaZaeon";
@@ -58,6 +59,8 @@ export type CenaCyberProps = {
   /** NUNCA entrou no cyberespaço (vem do SERVIDOR: User.cyberNasceuEm) → nasce num tubo de ensaio; sem isto (prévia,
    *  modo solo) vale o localStorage. `marcarNascimento` avisa o servidor que nasceu. */
   novoNoCyber?: boolean;
+  /** as MOTOS liberadas (o servidor diz — a entrega ao Droid aceita + o tutorial delas; o dono sempre) */
+  motosLiberadas?: boolean;
   marcarNascimento?: () => void;
   /** o que a pessoa contou pra Zaeon na capela (o servidor guarda em User.cyberPerfil — a memória dos agentes) */
   salvarPerfil?: (p: PerfilZaeon) => void;
@@ -156,6 +159,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   const nascerNa: "praca" | "tubo" = nascer ? "tubo" : "praca";
   /** o banner de TUTORIAL COMPLETO (as salas abrem) */
   const [completo, setCompleto] = useState(false);
+  /** a ENTREGA ao Droid na Sala do Saber: o painel de escolher a pesquisa */
+  const [entregaAberta, setEntregaAberta] = useState(false);
   useEffect(() => { if (!completo) return; const t = setTimeout(() => setCompleto(false), 6500); return () => clearTimeout(t); }, [completo]);
   const [voo, setVoo] = useState<{ y: number } | null>(null);
   /** a AÇÃO de contexto (o que o F faz agora) — o chip "F · Estudar" etc.; no celular, tocar no chip faz a ação */
@@ -248,7 +253,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onTunel: (t) => { engine.current?.soltarMouse(); setTunel({ tipo: "escolher", origem: t.origem, nomeOrigem: NOS[t.origem].nome, destinos: t.destinos }); },
       onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
       onAviso: avisar,
-      nascer, nascerNa,
+      nascer, nascerNa, motosLiberadas: !!p.motosLiberadas,
       onNasceu: () => { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } },   // o novato chegou na Zaeon pelo portal
       onGuia: (g) => { setGuia(g); if (!g) { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },   // o tutorial acabou (ou foi pulado): da próxima vez nasce na base
       onInstancia: setInstancia,
@@ -260,6 +265,8 @@ export default function CenaCyber(p: CenaCyberProps) {
       },
       onDialogo: setDialogo,
       onTutorialCompleto: () => setCompleto(true),
+      onEntrega: (abrir) => { setEntregaAberta(abrir); if (abrir && document.pointerLockElement) document.exitPointerLock(); },
+      onMotosLiberadas: () => { void fetch("/api/cyber/motos", { method: "POST" }).catch(() => undefined); avisar("As motos são suas ✦"); },
       onInventario: (p) => { if (p) { setDestaqueInv(p); if (document.pointerLockElement) document.exitPointerLock(); setInventarioAberto(true); } else setInventarioAberto(false); },
       onPergunta: setPergunta, onPerfil: (perfil) => cb.current.salvarPerfil?.(perfil),
       onFalaAgente: (f) => setFalasDroid((xs) => [...xs.slice(-20), { id: `agente-${Date.now()}-${xs.length}`, userId: `agente:${f.id}`, name: f.nome, color: f.cor, texto: f.texto, ts: Date.now() }]),
@@ -486,6 +493,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* o TUTORIAL do Droid: a CAIXA DE DIÁLOGO (RPG) com a fala/instrução de agora; em cima, o OBJETIVO (o "quest
           log": o passo e o "Pular") */}
       {!menu && dialogo && <CaixaDialogo d={dialogo} touch={touch} />}
+      {!menu && entregaAberta && <EntregaDroid onVeredito={(r) => { setEntregaAberta(false); engine.current?.resultadoEntrega(r); }} />}
       {/* TUTORIAL COMPLETO: como o fim de uma quest — e as salas (Estudar, F, o tablet) abrem */}
       {completo && (
         <div role="status" className="pointer-events-none absolute left-1/2 top-[22%] z-[30] -translate-x-1/2 text-center motion-safe:animate-[pulse_2.8s_ease-in-out_infinite]">
