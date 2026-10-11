@@ -2,6 +2,7 @@
  * lib/lounge3d/server.ts — helpers SERVER da sala 3D: sessão, sala por id com IDOR por `members[]`,
  * conteúdo lido/salvo no CollabDoc (kind lounge_canvas). Nada daqui vai pro cliente.
  */
+import { corpoDoUsuario } from "./corposDeUsuario";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
@@ -25,13 +26,13 @@ export function exigirFlag(): NextResponse | null {
  * `fundador` = dono da Zaeon (isSuperAdmin: allowlist + User.role); `novo` = NUNCA entrou no cyberespaço
  * (User.cyberNasceuEm vazio → nasce num tubo de ensaio) — decididos AQUI, no servidor; o cliente só pinta.
  */
-export type Eu = { id: string; name: string; image: string | null; color: string; fundador: boolean; novo: boolean };
+export type Eu = { id: string; name: string; image: string | null; color: string; fundador: boolean; novo: boolean; /** o corpo próprio (lib/lounge3d/corposDeUsuario) */ corpo?: string };
 export async function eu(): Promise<Eu | null> {
   const s = await getServerSession(authOptions).catch(() => null);
   const email = s?.user?.email;
   if (!email) return null;
   const u = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, image: true, role: true, cyberNasceuEm: true } });
-  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email, role: u.role }), novo: !u.cyberNasceuEm } : null;
+  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email, role: u.role }), novo: !u.cyberNasceuEm, corpo: corpoDoUsuario(u.id) } : null;
 }
 
 export type SalaRow = { id: string; ownerId: string; title: string; kind: string; content: string; members: string[]; token: string; updatedAt: Date };

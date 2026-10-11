@@ -33,7 +33,8 @@ export type AcessorioVrm = "foneNoPescoco" | "presilhaLapis" | "oculosRedondos" 
   | "gravataCarmesim" | "distintivoPrata" | "mechaCarmesim"
   | "presilhaRelogio" | "golaAlta"
   | "monoculo" | "pingenteTriangulo" | "linhasCiano" | "gravataAzul" | "canetaPrata" | "cruzEnfermagem" | "estetoscopio"
-  | "oculosRetPrata" | "oculosProtecao" | "frascoVerde" | "capacete" | "coleteRefletivo";
+  | "oculosRetPrata" | "oculosProtecao" | "frascoVerde" | "capacete" | "coleteRefletivo"
+  | "golaFrenteUnica" | "cintoCorda" | "pulseiraContas" | "brincos";
 export type CorpoVrm = {
   url: string; tintas: Readonly<Record<string, string>>; acessorios?: readonly AcessorioVrm[];
   /** a pose parada (lib/cyber/posesVrm) */ pose?: "feminina" | "masculina";
@@ -75,3 +76,19 @@ export const CORPOS_VRM: Readonly<Record<string, CorpoVrm>> = {
   "eng-civil": { url: "/avatars/eng-civil/eng-civil.vrm", tintas: { Tops: "#8e9198", Bottoms: "#3f5f93", Shoes: "#b58a52" }, acessorios: ["capacete", "coleteRefletivo"], pose: "masculina" },
   examiner: { url: "/avatars/examiner/examiner.vrm", tintas: { "007_01_Tops": "#3a3836", Bottoms: "#26262c", Shoes: "#1b1b22" }, acessorios: ["gravataCarmesim", "distintivoPrata", "mechaCarmesim"], pose: "feminina" },
 };
+
+/** os corpos PRÓPRIOS de JOGADORES (feitos sob medida no VRoid a partir de fotos, com a pessoa de acordo): o servidor
+ *  diz qual é o de cada conta (lib/lounge3d/corposDeUsuario) e o cliente só pinta */
+export const CORPOS_DE_JOGADOR: Readonly<Record<string, CorpoVrm>> = {
+  // Giulia: regata preta (vira frente única com a gola em código), pantalona branca de cintura alta com cinto de corda,
+  // sapato nude, pulseira de contas e brincos; o cabelo do VRoid é castanho médio → escurece aqui
+  giulia: { url: "/avatars/jogadores/giulia.vrm", tintas: { Hair: "#6b5244", HairBack: "#6b5244", Bottoms: "#f4f2ec", Shoes: "#d8b28c" },
+    acessorios: ["golaFrenteUnica", "cintoCorda", "pulseiraContas", "brincos"], gravidadeCabelo: 0.35, pose: "feminina" },
+};
+/** o corpo próprio de quem está no cyberespaço: o do FOUNDER (com as asas) ou o de jogador que o servidor mandou */
+export function corpoProprio(p: { fundador?: boolean; corpo?: string } | undefined, busca: string): { corpo: CorpoVrm; asas: boolean } | null {
+  if (!p) return null;
+  if (usaCorpoDoFundador(p.fundador, busca)) return { corpo: CORPO_DO_FUNDADOR, asas: true };
+  const c = p.corpo ? CORPOS_DE_JOGADOR[p.corpo] : undefined;
+  return c ? { corpo: c, asas: false } : null;
+}

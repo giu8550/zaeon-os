@@ -90,7 +90,7 @@ import type { Regiao } from "@/lib/cyber/regioes";
 import { TELA_BASE, criarBase, type BaseEstudoHandle } from "./BaseEstudo";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
-import { CORPO_DO_FUNDADOR, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
+import { CORPO_DO_FUNDADOR, corpoProprio, usaCorpoDoFundador } from "@/lib/cyber/estiloAvatar";
 import { carregando, type Carregando, type IdEtapa } from "@/lib/cyber/carregamento";
 import { gerarVeias, ouveOCoracao } from "@/lib/cyber/coracao";
 import { criarFrotaIA, type FrotaHandle } from "./FrotaIA";
@@ -100,7 +100,8 @@ import { sanitizarConfig } from "@/lib/cyber/frota/config";
 import { colisoresDeCorpos } from "@/lib/cyber/colisaoAtores";
 import { SENTAR, TABLET, codificarDescanso, lugarEm, decodificarDescanso, lugarPerto, poseNoLugar, proximoModo, type Lugar, type ModoDescanso } from "@/lib/cyber/descanso";
 import { URL_TERRA } from "./DistritoTerra";
-import { carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
+import { acabarVrm, carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
+import { vestirAcessorios } from "./AcessoriosVrm";
 import { criarPersonagemVivo, type PersonagemVivoHandle } from "./PersonagemVivo";
 import { PERFIS_VIDA } from "@/lib/cyber/vidaPersonagem";
 import { CORPOS_VRM } from "@/lib/cyber/estiloAvatar";
@@ -111,7 +112,7 @@ import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, ty
  * Vêm do SERVIDOR (GET da sala), o cliente só pinta: `fundador` = dono — a base dele fica na ZAEON (a ilha no céu).
  * Regalias são validadas na API.
  */
-export type PessoaCyber = { id: string; name: string; color: string; fundador?: boolean };
+export type PessoaCyber = { id: string; name: string; color: string; fundador?: boolean; /** o corpo próprio de jogador (o servidor decide — lib/lounge3d/corposDeUsuario) */ corpo?: string };
 /** o TÚNEL de um buraco negro: de onde se entrou e pra onde dá pra ir */
 export type TunelAberto = { origem: IdNo; destinos: { id: IdNo; nome: string; desc: string }[] };
 /** o TOUR da anfitriã (lib/cyber/onboarding): o passo atual — o React mostra a fala */
@@ -811,6 +812,7 @@ export class CyberEngine {
   /** Reconstrói bases/atores quando a lista de membros muda (alguém entrou na sala). */
   setPessoas(lista: PessoaCyber[]) {
     if (lista.some((p) => usaCorpoDoFundador(p.fundador, location.search))) void precarregarVrm(CORPO_DO_FUNDADOR.url).catch(() => undefined);   // o corpo do founder já vai baixando
+    for (const p of lista) { const c = corpoProprio(p, location.search); if (c && !c.asas) void precarregarVrm(c.corpo.url).catch(() => undefined); }   // e o dos jogadores com corpo próprio
     const ids = lista.map((p) => p.id);
     if (!ids.includes(this.o.eu.id)) { lista = [...lista, this.o.eu]; ids.push(this.o.eu.id); }
     for (const p of lista) this.pessoas.set(p.id, p);
@@ -860,19 +862,22 @@ export class CyberEngine {
     this.vestirFundador(a);
     return a;
   }
-  /** o FOUNDER tem corpo próprio (VRM do VRoid — lib/cyber/estiloAvatar CORPO_DO_FUNDADOR): baixa sem travar; até
-   *  chegar, ele aparece com o corpo padrão. Vale pro próprio founder e pra quem o vê de fora */
+  /** CORPO PRÓPRIO (VRM do VRoid): o do FOUNDER (CORPO_DO_FUNDADOR, com as asas) ou o de um jogador que o servidor
+   *  marcou (lib/cyber/estiloAvatar CORPOS_DE_JOGADOR). Baixa sem travar; vale pra pessoa e pra quem a vê de fora */
   private vestirFundador(a: Ator) {
-    if (a.vrm || !this.gltf || !usaCorpoDoFundador(this.pessoas.get(a.id)?.fundador, location.search)) return;
+    const proprio = corpoProprio(this.pessoas.get(a.id), location.search);
+    if (a.vrm || !this.gltf || !proprio) return;
     a.vrm = true;
-    a.av.usarAsas();   // as asas negras no lugar da mochila (já, sem esperar o corpo)
-    a.av.esperarCorpo(true);   // o corpo padrão NÃO aparece enquanto o próprio carrega (o VRM já vem pré-carregado)
-    carregarVrm(CORPO_DO_FUNDADOR.url).then((vrm) => {
+    if (proprio.asas) a.av.usarAsas();   // as asas negras no lugar da mochila (já, sem esperar o corpo) — só o founder
+    a.av.esperarCorpo(true);   // o corpo padrão NÃO aparece enquanto o próprio carrega
+    carregarVrm(proprio.corpo.url).then((vrm) => {
       const vivo = this.vivo && (a === this.eu || this.remotos.get(a.id) === a);
       if (!vivo) return;
-      tingirVrm(vrm, CORPO_DO_FUNDADOR.tintas); a.av.usarVrm(vrm);
-    }).catch((e) => { console.warn("[cyber] corpo do founder (VRM) não carregou:", e); a.av.esperarCorpo(false); });
+      tingirVrm(vrm, proprio.corpo.tintas); acabarVrm(vrm, proprio.corpo); a.av.usarVrm(vrm);
+      if (proprio.corpo.acessorios?.length) vestirAcessorios(vrm, proprio.corpo.acessorios);
+    }).catch((e) => { console.warn("[cyber] corpo próprio (VRM) não carregou:", e); a.av.esperarCorpo(false); });
   }
+
   /** cria os personagens da cidadela (a Nina) — cada um com o corpo VRM dele e a agenda própria */
   /** a FROTA DE IAs: a config vem do servidor (o mesmo relógio pra todos); sem ela (offline), nada */
   private ligarFrota() {

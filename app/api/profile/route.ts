@@ -8,6 +8,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { corpoDoUsuario } from "@/lib/lounge3d/corposDeUsuario";
 import { corDaArmadura } from "@/lib/cyber/cores";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -46,6 +47,7 @@ export async function GET() {
     academicLevel: u.academicLevel || "Graduação",
     inviter,
     fundador: isSuperAdmin({ email: session.user.email, role: u.role }),
+    corpo: corpoDoUsuario(u.id) ?? null,   // o corpo próprio (a vitrine do Perfil mostra ele)
     /** a cor REAL da armadura (a mesma que os outros veem no cyberespaço) — lib/cyber/cores */
     corArmadura: corDaArmadura(u.id),
   });

@@ -1,4 +1,5 @@
 "use client";
+import { CORPOS_DE_JOGADOR } from "@/lib/cyber/estiloAvatar";
 import AuraCard from "@/components/profile/AuraCard";
 
 /**
@@ -27,6 +28,8 @@ interface ProfileData {
   kycStatus: string; eduVerified: boolean; plan: string; academicLevel: string; inviter: Inviter | null;
   /** o dono da Zaeon (decidido no servidor — a mesma regra do cyberespaço): tem corpo próprio, sem "Mudar skin" */
   fundador?: boolean;
+  /** o corpo próprio de jogador (lib/lounge3d/corposDeUsuario) */
+  corpo?: string | null;
   corArmadura?: string;
 }
 
@@ -252,7 +255,7 @@ export default function EditableProfile() {
           {/* DIREITA: o personagem (vitrine 3D) — no celular/tela média vai abaixo das Habilidades, menor */}
           <div className="lg:col-span-2 xl:col-span-1 flex flex-col items-center gap-3">
             <div className="relative w-[200px] h-[320px] xl:w-full xl:h-[420px] rounded-3xl border border-slate-200 dark:border-white/10 bg-gradient-to-b from-white/40 to-cyan-100/30 dark:from-white/[0.02] dark:to-cyan-500/[0.06] overflow-hidden">
-              <VitrinePersonagem fundador={!!data?.fundador} cor={data?.corArmadura ?? minhaArmadura()} className="w-full h-full" />
+              <VitrinePersonagem fundador={!!data?.fundador} corpo={data?.corpo ? CORPOS_DE_JOGADOR[data.corpo] : undefined} cor={data?.corArmadura ?? minhaArmadura()} className="w-full h-full" />
             </div>
             {!data?.fundador && (
               <button type="button" onClick={() => setSkinAberto(true)} aria-haspopup="dialog"
