@@ -263,7 +263,6 @@ export default function CenaCyber(p: CenaCyberProps) {
       onNaveParada: (pose) => cb.current.salvarNave?.(pose),
       onAbrirSom: (canal) => { if (!cb.current.souFundador || !(canal === "nave" ? cb.current.musicaNave : cb.current.musica)) { avisar("Só o dono da Zaeon mexe no toca-discos."); return; } setSomAberto(canal); },
       onRitual: () => { void pedir("ritual", () => setRitualAberto(true)); },
-      onRitualChegou: () => { void cb.current.definirRitual?.({ tempestade: false }); },
       onRitualNave: (ligar) => { if (!cb.current.souFundador || !cb.current.definirRitual) { avisar("Só o dono liga o ritual da nave."); return; } void cb.current.definirRitual({ nave: ligar }).then((r) => { if (!r.ok) avisar(r.erro ?? "Não deu."); }); },
       urlMusica: cb.current.musica ? (arq: string) => cb.current.musica!.urlDe(arq) : undefined,
       onAbrirRecado: () => { if (!cb.current.souFundador || !cb.current.enviarRecado) { avisar("Só o dono da Zaeon escreve no mural."); return; } setRecadoTxt(""); setRecadoAberto(true); },

@@ -1,7 +1,7 @@
 /**
- * O RITUAL da chegada do dono (lib/cyber/ritual) — a "call" dentro da nave:
- *  PATCH { tempestade?: boolean; droids?: boolean; veu?: boolean; nave?: boolean } → liga/desliga a TEMPESTADE no templo (o instante fica no
- *  relógio do servidor: todo mundo vê as nuvens se formarem no mesmo tempo), solta/recolhe os ANUNCIADORES e/ou TIRA O
+ * O RITUAL do dono (lib/cyber/ritual) — a "call" dentro da nave:
+ *  PATCH { tempestade?: boolean; droids?: boolean; veu?: boolean; nave?: boolean } → liga/desliga a FUMAÇA E OS TROVÕES (o instante fica no
+ *  relógio do servidor: todo mundo vê a fumaça se formar no mesmo tempo; desligada, cada cliente a desmancha devagar), liga/desliga os ANUNCIADORES e/ou TIRA O
  *  VÉU da nave (`veu: true` — o evento, com o instante; a nave volta a ser invisível quando a tempestade desliga).
  * Só o DONO (fundador, pela SESSÃO). Vai pro conteúdo da sala (quem entra depois vê a tempestade armada) e é difundido
  * na hora (EV_RITUAL, com o relógio do servidor).

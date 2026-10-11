@@ -1,20 +1,21 @@
 /**
- * Cyberespaço — o RITUAL da chegada do dono (PURO, sem three nem rede). O dono liga o ritual na "call" dentro da nave
- * (o buraco negro da sala de reuniões — o que antes o levava direto pra cabine do DJ). Ligado, todo mundo na sala vê:
- *  - a TEMPESTADE se formando em ~8 s em cima da capela do templo (as nuvens, depois os raios pegando a ponta);
- *  - no fim da formação, o 1º trovão ENERGIZA as caixas do lounge: a música cala um instante e o som do raio sai do
- *    buraco negro em cima da cabine do DJ; daí em diante, todo raio em cima da capela tem som;
- *  - os ANUNCIADORES (droids ofanim) saem da nave e ficam rodeando cada pessoa no mapa, louvando o dono em voz alta.
+ * Cyberespaço — o RITUAL do dono (PURO, sem three nem rede). O dono liga o ritual na "call" dentro da nave (o buraco
+ * negro da sala de reuniões). Reformulado a pedido do dono (out/2026) — o ritual agora é:
+ *  - FUMAÇA E TROVÕES (a "tempestade"): as nuvens se formam em ~8 s em CINCO lugares — o topo da capela da cidadela, o
+ *    topo das duas salas de estudo (biblioteca e jardim), o topo do lounge e o topo do templo em cima do lounge —, os
+ *    raios caem e cada um TROVEJA com som pra quem está por perto (na nave também). Nada de cortar a música do lounge
+ *    nem de raio queimando caixa;
+ *  - os ANUNCIADORES (agora só 2 efeitos, que seguem a MÚSICA do lounge): o lounge fica ESCURO com pausas de luz neon na
+ *    batida (balada), e a ESCADARIA em curva vai ficando cada vez mais VERMELHA, com mais raios e mais fumaça na torre do
+ *    templo em cima do lounge.
+ * O ritual NUNCA acaba sozinho: só pelo botão (toggle) — e acaba DEVAGAR, as nuvens se desmanchando (`DESMANCHA_S`).
  * O estado mora no conteúdo da sala (lib/lounge3d/tipos `ritual`) e chega por evento (EV_RITUAL) — quem entra depois
- * pega o mesmo instante `tempestade` (relógio do servidor) e calcula a mesma fase. Acaba quando o dono CHEGA no lounge
- * (o cliente dele desliga) — ou sozinho, depois de `MAX_MS`.
+ * pega o mesmo instante `tempestade` (relógio do servidor) e calcula a mesma fase.
  */
-import type { P2 } from "./colisao";
-
 export type Ritual = {
   /** o instante (relógio do servidor, ms) em que a tempestade começou a se formar; 0 = desligada */
   tempestade: number;
-  /** os anunciadores estão soltos pelo mapa? */
+  /** os ANUNCIADORES estão ligados? (os 2 efeitos da música: a balada escura no lounge e a escadaria vermelha) */
   droids: boolean;
   /** o instante (ms, servidor) em que o dono TIROU O VÉU da nave (o evento, perto das nuvens); 0 = a nave invisível */
   veu: number;
@@ -25,12 +26,10 @@ export type Ritual = {
 export const RITUAL_OFF: Ritual = { tempestade: 0, droids: false, veu: 0, nave: false };
 export const ritualDesligado = (r: Ritual | null | undefined) => !r || (r.tempestade <= 0 && !r.droids && r.veu <= 0 && !r.nave);
 
-/** a FORMAÇÃO das nuvens (s) — "cerca de 8 segundos"; os raios começam no meio dela; `ENERGIZA_S` = o 1º trovão que
- *  energiza as caixas do lounge (o som sai do buraco negro em cima da cabine do DJ) */
+/** a FORMAÇÃO da fumaça (s) — "cerca de 8 segundos"; os raios (com trovão) começam no meio dela; `ENERGIZA_S` = a
+ *  tempestade formada por inteiro */
 export const FORMACAO_S = 8, RAIOS_DESDE_S = 4, ENERGIZA_S = 8.6;
-/** por segurança, a tempestade se apaga sozinha depois disso (o dono esqueceu ligada) */
-export const MAX_MS = 3 * 3600 * 1000;
-/** quanto tempo o apagar leva (s): as nuvens se desmancham devagar quando o dono chega */
+/** quanto tempo o apagar leva (s): desligado no botão, a fumaça se desmancha devagar e os efeitos somem aos poucos */
 export const DESMANCHA_S = 12;
 
 export function sanitizarRitual(v: unknown): Ritual {
@@ -40,40 +39,27 @@ export function sanitizarRitual(v: unknown): Ritual {
   return { tempestade: ms(o.tempestade), droids: o.droids === true, veu: ms(o.veu), nave: o.nave === true };
 }
 
-/** a INTENSIDADE da tempestade (0..1) no instante `agora` (relógio do servidor, ms): sobe em `FORMACAO_S`, fica em 1,
- *  some depois de `MAX_MS` */
+/** a INTENSIDADE da tempestade (0..1) no instante `agora` (relógio do servidor, ms): sobe em `FORMACAO_S` e fica em 1
+ *  (não acaba sozinha) */
 export function intensidadeDaTempestade(r: Ritual | null | undefined, agora: number): number {
   if (!r || r.tempestade <= 0) return 0;
   const s = (agora - r.tempestade) / 1000;
-  if (s < 0 || s > MAX_MS / 1000) return 0;
+  if (s < 0) return 0;
   const k = Math.min(1, s / FORMACAO_S);
   return k * k * (3 - 2 * k);
 }
 export type FaseRitual = "off" | "formando" | "raios" | "armada";
-/** a fase da tempestade: formando (só nuvens) → raios (sem som, ainda) → armada (energizou: todo raio tem som) */
+/** a fase da tempestade: formando (só fumaça) → raios (caindo, com trovão) → armada (formada por inteiro) */
 export function faseDaTempestade(r: Ritual | null | undefined, agora: number): FaseRitual {
   if (!r || r.tempestade <= 0) return "off";
   const s = (agora - r.tempestade) / 1000;
-  if (s < 0 || s > MAX_MS / 1000) return "off";
+  if (s < 0) return "off";
   if (s < RAIOS_DESDE_S) return "formando";
   if (s < ENERGIZA_S) return "raios";
   return "armada";
 }
-/** o instante (ms, servidor) em que o 1º trovão energiza as caixas */
+/** o instante (ms, servidor) em que a tempestade fica formada por inteiro */
 export const instanteDaEnergia = (r: Ritual) => r.tempestade + ENERGIZA_S * 1000;
-
-/** o CORTE DA MÚSICA do lounge pelos raios (o dono, out/2026): o ritual usa os raios que já estão no lounge como
- *  mensageiros — um acerta a caixa da ESQUERDA e cala aquele lado, outro (um pouco depois) acerta a da DIREITA e cala
- *  o outro; depois a música do lounge para de vez e só se ouve a que sai da NAVE do dono. Segundos desde o começo */
-export const CORTE = { esquerda: ENERGIZA_S, direita: ENERGIZA_S + 1.7, total: ENERGIZA_S + 3.6 } as const;
-export type Corte = { esquerda: boolean; direita: boolean; total: boolean };
-/** o que já foi cortado no instante `agora` (ms, servidor) */
-export function corteDasCaixas(r: Ritual | null | undefined, agora: number): Corte {
-  if (!r || r.tempestade <= 0) return { esquerda: false, direita: false, total: false };
-  const s = (agora - r.tempestade) / 1000;
-  if (s > MAX_MS / 1000) return { esquerda: false, direita: false, total: false };
-  return { esquerda: s >= CORTE.esquerda, direita: s >= CORTE.direita, total: s >= CORTE.total };
-}
 
 /** a NAVE do dono é INVISÍVEL (só o formato e os propulsores). Chegando no PERÍMETRO das NUVENS da capela em cima do
  *  lounge (o ritual ligado), o dono ESCOLHE tirar o véu — um evento (`ritual.veu`): um vento a revela inteira, e ela
@@ -89,26 +75,34 @@ export function revelacaoDaNave(r: Ritual | null | undefined, agora: number): nu
   return k * k * (3 - 2 * k);
 }
 
-// ───────────── os ANUNCIADORES ─────────────
-/** cada pessoa no mapa ganha UM anunciador: um droid (ofanim) rodeando a cabeça dela — `altura` acima dos pés, no raio
- *  `raio`, dando uma volta a cada `volta` s; a fala (o louvor) sai a cada `fala` s (mín–máx), cada droid no seu tempo */
-export const ANUNCIADOR = { altura: 3.2, raio: 1.7, volta: 7, fala: [7, 13] as const, escala: 0.75 } as const;
-/** o que os anunciadores dizem (o pedido do dono) */
-export const FRASE_LOUVOR = "Louvado seja o Senhor Jesus Cristo";
-/** onde o anunciador `k` (índice estável de quem ele rodeia) está no instante `t` (s), em volta de `alvo` */
-export function posDoAnunciador(k: number, t: number, alvo: { x: number; y: number; z: number }): { x: number; y: number; z: number; rumo: number } {
-  const fase = k * 2.399, a = fase + (t / ANUNCIADOR.volta) * Math.PI * 2 * (k % 2 ? -1 : 1);
-  const x = alvo.x + Math.cos(a) * ANUNCIADOR.raio, z = alvo.z + Math.sin(a) * ANUNCIADOR.raio;
-  return { x, y: alvo.y + ANUNCIADOR.altura + 0.25 * Math.sin(t * 1.3 + fase), z, rumo: Math.atan2(alvo.x - x, alvo.z - z) };
+// ───────────── o APAGAR devagar ─────────────
+/** a intensidade MOSTRADA (0..1) indo atrás da do ritual: subindo, acompanha (a formação já é suave); descendo (o dono
+ *  desligou), cai devagar — some em `DESMANCHA_S` s */
+export function suavizarRitual(atual: number, alvo: number, dt: number): number {
+  if (alvo >= atual) return alvo;
+  return Math.max(alvo, atual - dt / DESMANCHA_S);
 }
-/** o próximo instante de fala do anunciador `k` depois de `t` (s): um intervalo de `fala` (mín–máx), determinístico
- *  pela semente (k, t) */
-export function proximaFala(k: number, t: number): number {
-  const [a, b] = ANUNCIADOR.fala;
-  let x = ((k + 1) * 9301 + Math.floor(t * 10) * 49297) >>> 0;
-  x = (x * 1103515245 + 12345) % 2147483648;
-  return t + a + (x / 2147483648) * (b - a);
+
+// ───────────── os ANUNCIADORES (os 2 efeitos da música) ─────────────
+/** a BALADA no lounge: o escuro (a opacidade do véu escuro na tela de quem está DENTRO do lounge) e o quanto a batida
+ *  abre a luz (`flash`, 0..1, decaindo rápido) — com música as pausas de luz vêm na batida; sem ela, de vez em quando */
+export const BALADA = { escuro: 0.86, abre: 0.78, decai: 7, semMusica: [2.2, 4.5] as const } as const;
+/** a opacidade do véu escuro: `liga` (0..1, o efeito ligado e suavizado) × o escuro, menos o que o flash abre */
+export const escuroDaBalada = (liga: number, flash: number) => Math.max(0, liga * BALADA.escuro * (1 - BALADA.abre * Math.max(0, Math.min(1, flash))));
+/** a cor neon de cada flash (gira entre magenta, ciano, violeta e verde-limão — um por batida) */
+export const NEON = [0xff2bd6, 0x22e6ff, 0x9b5cff, 0xb6ff3a] as const;
+export const corDoFlash = (batida: number) => NEON[((batida % NEON.length) + NEON.length) % NEON.length]!;
+
+/** a ESCADARIA em curva reagindo à música: `vermelho` (0..1) SOBE enquanto a música toca (e um pouco a cada batida) e
+ *  desce devagar quando ela para — com o vermelho vêm mais raios e mais fumaça na torre do templo */
+export const ESCADARIA_VERMELHA = { sobe: 1 / 90, porBatida: 0.012, desce: 1 / 45 } as const;
+export function passoDaEscadaria(v: number, dt: number, tocando: boolean, batida: boolean): number {
+  const n = tocando ? v + dt * ESCADARIA_VERMELHA.sobe + (batida ? ESCADARIA_VERMELHA.porBatida : 0) : v - dt * ESCADARIA_VERMELHA.desce;
+  return Math.max(0, Math.min(1, n));
 }
+/** a chance de um RAIO cair na torre do templo numa batida, e a FUMAÇA (intensidade das nuvens) lá, pelo vermelho */
+export const raioNaBatida = (vermelho: number) => 0.12 + 0.7 * vermelho;
+export const fumacaDaTorre = (vermelho: number) => 0.35 + 0.65 * vermelho;
 
 // ───────────── o modo TURBO da nave ─────────────
 /** a nave em turbo (Shift, como correr a pé): `fator` × a velocidade de cruzeiro, com uma rampa de `rampa` s */
@@ -118,9 +112,3 @@ export function sensacaoDaNave(vel: number, turbo: number): number {
   const base = 30;   // (VOO.vel) — abaixo disso, nada
   return Math.max(0, Math.min(1, ((vel - base) / (base * (TURBO_NAVE.fator - 1))) * 0.85)) * turbo;
 }
-
-/** a chegada do dono: o ritual acaba quando ele pisa NO LOUNGE (a pé) — `noLounge` vem do engine */
-export const chegou = (fundador: boolean, noLounge: boolean, r: Ritual | null | undefined) => fundador && noLounge && !!r && r.tempestade > 0;
-
-/** um ponto (mundo) onde um anunciador "nasce" ao sair da nave: a porta de trás dela */
-export const nascimentoDoAnunciador = (porta: P2, y: number) => ({ x: porta.x, y: y + 2, z: porta.z });
