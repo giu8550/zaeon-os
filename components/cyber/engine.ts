@@ -44,7 +44,7 @@ import { PLATAFORMAS, UNIVERSIDADES_NO_MAPA, alturaDoAndar, andarDoPouso, andarN
 import { CHAO, PRACA, QUEDA_VAZIO, naPraca } from "@/lib/cyber/praca";
 import { CHEGADA_NAVE, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel, type IdNo } from "@/lib/cyber/buracos";
 import { DROID } from "@/lib/cyber/agentes";
-import { FALA_CONCORRENCIA, FALA_IA_ENTREGOU, FALA_VOLTE_AO_TABLET, lembreteDoTablet, PASSO_DA_MISSAO, SALA_DO_SABER_LOCAL, esperaDepoisDaUltima, passoDe, tempoDeLeitura, NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
+import { type CtxGuia, FALA_DESISTIU, ROTEIRO_ENTREGA, ROTEIRO_MOTOS, passoDaRecusa, type PassoGuia, FALA_CONCORRENCIA, FALA_IA_ENTREGOU, FALA_VOLTE_AO_TABLET, lembreteDoTablet, PASSO_DA_MISSAO, SALA_DO_SABER_LOCAL, esperaDepoisDaUltima, passoDe, tempoDeLeitura, NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
 import type { PesquisaSalva } from "@/lib/ui/loungeHub";
 import { FAIXA_CINEMA, misturarPose, passoPeso, planoConversa, planoTelao, poseDoPlano, seguirPose, suave, type Plano, type Pose } from "@/lib/cyber/cutscene";
 import { FALA_DESTAQUE_CSS, ondeFala, type Dialogo } from "@/lib/cyber/dialogo";
@@ -167,6 +167,12 @@ export type CyberOpts = {
   onInventario?: (destaque: PesquisaSalva | null) => void;
   /** o tutorial acabou de verdade (não pulado): o banner de "tutorial completo" e as salas abrem */
   onTutorialCompleto?: () => void;
+  /** as MOTOS já estão liberadas pra esta pessoa (o servidor diz — User.cyberPerfil) */
+  motosLiberadas?: boolean;
+  /** a ENTREGA ao Droid: abrir o painel de escolher a pesquisa */
+  onEntrega?: (abrir: boolean) => void;
+  /** o tutorial das motos acabou: o servidor grava a liberação */
+  onMotosLiberadas?: () => void;
   /** a Zaeon (holograma na capela) fez uma PERGUNTA: o React mostra o painel de resposta (null = fechou) */
   onPergunta?: (p: (PerguntaZaeon & { n: number; total: number }) | null) => void;
   /** a conversa com a Zaeon acabou: o perfil (o React salva no servidor — User.cyberPerfil) */
@@ -300,6 +306,8 @@ const FONTES_AGUA: Fonte[] = [
   { ...daSala(CIDADE.salas.jardim, 0, -8), r: 9, y: ALTURA_LOUNGE, nome: "Espelho d'água" },
   { x: 0, z: 0, r: 22, y: 0, nome: "Coração da capela" },
 ];
+/** a moto travada (antes da entrega ao Droid) */
+const AVISO_MOTO_TRAVADA = "As motos se liberam quando o Droid aceitar uma pesquisa sua, completa e em ABNT — leve na Sala do Saber.";
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
 const TAG_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
@@ -341,6 +349,8 @@ export class CyberEngine {
   /** o TUTORIAL do Droid: o passo, quantas falas dele já saíram, o relógio da fala, se já está ESPERANDO a pessoa cumprir
    *  (`ativo`) e o que ela fez desde então (`andou`, `motoAndou`, `tunel`, a altura do chão de onde voou) */
   private guia: { passo: number; fala: number; falaT: number; ativo: boolean; lembrete: "" | "concorrencia" | "entregou" | "volte"; viuConcorrencia: boolean; invT: number; saberT: number; andou: number; correu: number; turbo: number; motoAndou: number; portal: boolean; pisoY: number; prev: { x: number; z: number } } | null = null;
+  /** o ROTEIRO em curso: o tutorial do novato (ROTEIRO), a ENTREGA na Sala do Saber ou o tutorial das MOTOS */
+  private rot: PassoGuia[] = ROTEIRO;
   /** o tutorial já passou da 1ª conversa com a Zaeon: as falas fora de cena viram BALÕES (antes, a caixa de diálogo) */
   private balaoLiberado = false;
   /** a CUTSCENE (lib/cyber/cutscene): o plano de agora (null = a câmera normal), o peso da mistura, a pose suavizada e
@@ -350,7 +360,7 @@ export class CyberEngine {
   private pesquisaDoTutorial: PesquisaSalva | null = null;
   /** o laboratório (no tablet) avisou que a pesquisa da 1ª missão está SALVA: o Droid interrompe — guarda o tablet */
   pesquisaSalva(p: PesquisaSalva) {
-    const g = this.guia; if (!g || ROTEIRO[g.passo]?.cond.tipo !== "pesquisa") return;
+    const g = this.guia; if (!g || this.rot[g.passo]?.cond.tipo !== "pesquisa") return;
     this.pesquisaDoTutorial = p; this.fecharTablet();
   }
   get pesquisaTutorial() { return this.pesquisaDoTutorial; }
@@ -358,9 +368,34 @@ export class CyberEngine {
   private etapaLab: string | null = null;
   etapaDoTablet(etapa: string) { this.etapaLab = etapa; }
   /** a pessoa fechou o inventário (no passo do inventário, o tutorial anda) */
-  inventarioFechado() { const g = this.guia; if (g && ROTEIRO[g.passo]?.cond.tipo === "inventario" && g.ativo) g.invT = Infinity; }
-  /** depois do tutorial, o Droid fica ESPERANDO na Sala do Saber ("só venha falar comigo quando tiver algo de valor") */
+  inventarioFechado() { const g = this.guia; if (g && this.rot[g.passo]?.cond.tipo === "inventario" && g.ativo) g.invT = Infinity; }
+  /** depois do tutorial, o Droid fica ESPERANDO na Sala do Saber ("só venha falar comigo quando tiver algo de valor") —
+   *  pra quem já fez o tutorial (não está nascendo agora), desde a entrada */
   private droidNoSaber = false;
+  /** as MOTOS liberadas (o Droid aceitou uma entrega e o tutorial delas acabou — ou é o dono) */
+  private motosLiberadas = false;
+  /** o veredito da ENTREGA na Sala do Saber (null = esperando a pessoa escolher) e a trava pra não repetir a cena
+   *  enquanto ela não se afastar */
+  private entregaVeredito: { aceito: boolean; faltando: string[] } | "desistiu" | null = null;
+  private entregaArmada = true;
+  /** pode MONTAR numa moto? (liberadas, o dono, ou no meio do tutorial delas) */
+  private podeMoto() { return this.motosLiberadas || this.ehFundador(this.o.eu.id) || (this.rot === ROTEIRO_MOTOS && !!this.guia); }
+  /** o resultado da ENTREGA (o painel do React mandou pro servidor): null = a pessoa desistiu */
+  resultadoEntrega(r: { aceito: boolean; faltando: string[] } | null) {
+    const g = this.guia; if (!g || this.rot !== ROTEIRO_ENTREGA) return;
+    this.entregaVeredito = r ?? "desistiu";
+    if (!r) this.rot = [ROTEIRO_ENTREGA[0]!, { id: "recusa", titulo: "Até logo", cena: "droid-perto", cenaInteira: true, falas: [FALA_DESISTIU], cond: { tipo: "ouvir" }, alvo: null }];
+    else if (!r.aceito) this.rot = [ROTEIRO_ENTREGA[0]!, passoDaRecusa(r.faltando)];
+  }
+  /** a pessoa chegou perto do Droid na Sala do Saber (motos ainda travadas): a cena da ENTREGA começa */
+  private talvezEntrega() {
+    const d = this.droid; if (!d || !this.droidNoSaber || this.guia || this.menu || this.podeMoto() || d.h.fase() !== "visivel") return;
+    const longe = Math.hypot(this.eu.pos.x - d.pos.x, this.eu.pos.z - d.pos.z), alto = Math.abs(this.eu.alt - d.alt);
+    if (longe > 30) this.entregaArmada = true;
+    if (!this.entregaArmada || longe > 9 || alto > 8) return;
+    this.entregaArmada = false; this.entregaVeredito = null; this.soltarMouse();
+    this.rot = ROTEIRO_ENTREGA; this.guia = this.novoGuia(0); this.emitirGuia();
+  }
   /** o "…" em cima da cabeça da Zaeon enquanto ela pensa numa resposta */
   private pensandoZ: HTMLDivElement | null = null;
   /** o farol do alvo do tour (uma coluna de luz) */
@@ -582,6 +617,7 @@ export class CyberEngine {
 
   private constructor(opts: CyberOpts, gltf: GLTF | null) {
     this.o = opts; this.menu = opts.menu; this.gltf = gltf;
+    this.motosLiberadas = !!opts.motosLiberadas; this.droidNoSaber = !opts.nascer;   // quem já fez o tutorial: o Droid espera na Sala do Saber
     this.solidosCidade = solidosDaCidade(!!opts.eu.fundador);
     const { container, low } = opts;
     this.w = Math.max(1, container.clientWidth); this.h = Math.max(1, container.clientHeight);
@@ -863,7 +899,7 @@ export class CyberEngine {
     return ouveOCoracao({ x: this.eu.pos.x - c.x, z: this.eu.pos.z - c.z }) && this.eu.alt - this.cidade.ilha.position.y < 25;
   }
   /** estado pra depuração/testes em dev */
-  get debug() { return { x: this.eu.pos.x, z: this.eu.pos.z, alt: this.eu.alt, altoEm: this.altoEm, noTopo: this.noTopo, pilotando: this.pilotando, pousado: this.pousado, nave: { ...this.naveEst }, moto: this.moto, motoEst: { ...this.motoEst }, motoPousado: this.motoPousado, plat: this.plat, bordo: this.bordo, noAr: this.jet.noAr, tunel: this.tunel?.origem ?? null, guia: this.guia?.passo ?? null, guiaAlvo: this.guia ? this.alvoDoPasso(ROTEIRO[this.guia.passo]!) : null, instancia: this.instancia, bocaDJ: bocaDJMundo(), nascendo: !!this.nascendo, droid: this.droid ? { fase: this.droid.h.fase(), x: this.droid.pos.x, z: this.droid.pos.z, alt: this.droid.alt } : null, guiaAtivo: this.guia?.ativo ?? null }; }
+  get debug() { return { x: this.eu.pos.x, z: this.eu.pos.z, alt: this.eu.alt, altoEm: this.altoEm, noTopo: this.noTopo, pilotando: this.pilotando, pousado: this.pousado, nave: { ...this.naveEst }, moto: this.moto, motoEst: { ...this.motoEst }, motoPousado: this.motoPousado, plat: this.plat, bordo: this.bordo, noAr: this.jet.noAr, tunel: this.tunel?.origem ?? null, guia: this.guia?.passo ?? null, guiaAlvo: this.guia ? this.alvoDoPasso(this.rot[this.guia.passo]!) : null, instancia: this.instancia, bocaDJ: bocaDJMundo(), nascendo: !!this.nascendo, droid: this.droid ? { fase: this.droid.h.fase(), x: this.droid.pos.x, z: this.droid.pos.z, alt: this.droid.alt } : null, guiaAtivo: this.guia?.ativo ?? null }; }
 
   /** Reconstrói bases/atores quando a lista de membros muda (alguém entrou na sala). */
   setPessoas(lista: PessoaCyber[]) {
@@ -1498,7 +1534,7 @@ export class CyberEngine {
     this.nascendo = { t: 0, tubo: i }; this.bercario.nascer(i);
     this.instancia = true; this.o.onInstancia?.(true);
     this.camPitch = 0.12; this.camDist = 4.6;   // a câmera PERTO (dentro da ilha, por baixo da tampa do tubo): o Droid nasce de frente pra nós
-    this.guia = this.novoGuia(0); this.emitirGuia();
+    this.rot = ROTEIRO; this.guia = this.novoGuia(0); this.emitirGuia();
     return true;
   }
   /** o corpo do DROID (escondido até o tutorial começar: aparece num mini portal) */
@@ -1525,26 +1561,37 @@ export class CyberEngine {
   private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, lembrete: "" as "" | "concorrencia" | "entregou" | "volte", viuConcorrencia: false, invT: 0, saberT: -1, andou: 0, correu: 0, turbo: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
   private emitirGuia() {
     if (!this.guia) { this.o.onGuia?.(null); return; }
-    const p = ROTEIRO[this.guia.passo]!;
-    this.o.onGuia?.({ passo: this.guia.passo, total: ROTEIRO.length, id: p.id, titulo: p.titulo, agente: DROID.nome, cor: DROID.cor });
+    const p = this.rot[this.guia.passo]!;
+    // (o HUD mostra passo/total-1: no tutorial o passo 0 é o nascer; a entrega e as motos contam a partir do 1)
+    const principal = this.rot === ROTEIRO;
+    this.o.onGuia?.({ passo: principal ? this.guia.passo : this.guia.passo + 1, total: principal ? this.rot.length : this.rot.length + 1, id: p.id, titulo: p.titulo, agente: DROID.nome, cor: DROID.cor });
   }
   private encerrarGuia() { this.guia = null; this.emitirGuia(); this.o.onDialogo?.(null); this.sairDaInstancia(); }
   /** o tutorial: "Próximo" (pula o passo — dev), "Pular" (o Droid se despede no portal) e "Refazer" (chamado na Recepção) */
   guiaProximo() { if (!this.guia || this.nascendo) return; this.irProPasso(this.guia.passo + 1); }
   guiaPular() { if (this.guia) { this.encerrarGuia(); this.droid?.h.sumir(); this.fecharConversa(); } this.sairDaInstancia(); }
-  guiaRefazer() { if (!this.cidade || this.menu) return; this.balaoLiberado = false; this.guia = this.novoGuia(1); this.emitirGuia(); }
+  guiaRefazer() { if (!this.cidade || this.menu) return; this.rot = ROTEIRO; this.balaoLiberado = false; this.guia = this.novoGuia(1); this.emitirGuia(); }
   private irProPasso(n: number) {
     if (this.conversa?.etapa === "feita") this.conversa = null;
     // a ação foi feita: a instrução sai da tela (a caixa de diálogo e o balão do Droid)
     this.o.onDialogo?.(null); this.calarBalaoDroid();
-    if (this.guia && ROTEIRO[this.guia.passo]?.cond.tipo === "inventario") this.o.onInventario?.(null);   // o Droid fecha o inventário
-    if (n >= ROTEIRO.length) {
+    if (this.guia && this.rot[this.guia.passo]?.cond.tipo === "inventario") this.o.onInventario?.(null);   // o Droid fecha o inventário
+    // a ENTREGA ACEITA: o Droid passa direto pro tutorial das MOTOS (a recompensa)
+    if (this.rot === ROTEIRO_ENTREGA && n >= this.rot.length && this.entregaVeredito !== null && this.entregaVeredito !== "desistiu" && this.entregaVeredito.aceito) { this.rot = ROTEIRO_MOTOS; n = 0; }
+    else if (n >= this.rot.length && this.rot !== ROTEIRO) {
+      // o fim da ENTREGA (recusada/desistiu) ou das MOTOS: o Droid volta pra Sala do Saber (as motos, liberadas)
+      const eraMotos = this.rot === ROTEIRO_MOTOS;
+      this.encerrarGuia(); this.cine.lenta = true;
+      if (eraMotos) { this.motosLiberadas = true; this.o.onMotosLiberadas?.(); }
+      return;
+    }
+    if (n >= this.rot.length) {
       // CONCLUÍDO (o Droid chegou na Sala do Saber): ele fica lá esperando; a câmera volta DEVAGAR pro personagem
-      if (this.guia && ROTEIRO[this.guia.passo]?.cond.tipo === "saber") { this.droidNoSaber = true; this.cine.lenta = true; this.encerrarGuia(); this.o.onTutorialCompleto?.(); return; }
+      if (this.guia && this.rot[this.guia.passo]?.cond.tipo === "saber") { this.droidNoSaber = true; this.cine.lenta = true; this.encerrarGuia(); this.o.onTutorialCompleto?.(); return; }
       this.encerrarGuia(); this.droid?.h.sumir(); return;
     }
     this.guia = this.novoGuia(n); this.emitirGuia();
-    if (ROTEIRO[n]!.id === "capela") this.preaquecerVozZaeon();   // o Droid vai levar a pessoa até ela: as falas fixas já vão sendo geradas
+    if (this.rot[n]!.id === "capela") this.preaquecerVozZaeon();   // o Droid vai levar a pessoa até ela: as falas fixas já vão sendo geradas
     this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.perto });
   }
   /** um balão de fala sobre quem fala (uma pessoa ou o Droid); `ms` = quanto fica (Infinity = até a próxima fala) */
@@ -1578,7 +1625,7 @@ export class CyberEngine {
     const d = this.droid; if (!d) return;
     // o TUTORIAL fala como um RPG (lib/cyber/dialogo): a caixa de diálogo antes da Zaeon e em toda cena; depois, o balão
     // em destaque. A última fala (a instrução) fica até a ação ser feita
-    const g = this.guia, passo = g ? ROTEIRO[g.passo] : undefined;
+    const g = this.guia, passo = g ? this.rot[g.passo] : undefined;
     const emCena = !!passo?.cena && (!!passo.cenaInteira || !ultima);
     if (passo && ondeFala({ tutorial: true, balaoLiberado: this.balaoLiberado, emCena }) === "caixa") {
       this.calarBalaoDroid();
@@ -1766,8 +1813,8 @@ export class CyberEngine {
     }
     if (this.saindoDoTubo !== null) { const tb = TUBOS[this.saindoDoTubo]!; if (Math.hypot(eu.pos.x - tb.x, eu.pos.z - tb.z) > 2.2) this.saindoDoTubo = null; }
     const farol = this.farol, g = this.guia;
-    if (!g) { if (farol) farol.visible = false; return; }
-    const passo = ROTEIRO[g.passo]!;
+    if (!g) { if (farol) farol.visible = false; this.talvezEntrega(); return; }
+    const passo = this.rot[g.passo]!;
     if (passo.cond.tipo === "nascer") { if (!this.nascendo) this.irProPasso(g.passo + 1); return; }
     // o que a pessoa fez desde a instrução
     const dx = eu.pos.x - g.prev.x, dz = eu.pos.z - g.prev.z; g.prev = { x: eu.pos.x, z: eu.pos.z };
@@ -1777,6 +1824,9 @@ export class CyberEngine {
       else if (this.keys.shift || this.correr) g.turbo += d;   // no ar com Shift = o VOO TURBO (o voo longo)
       // a MISSÃO: o Droid abre o tablet (de pé; voando, espera pousar)
       if (passo.cond.tipo === "tablet" && !this.tabletQuer && this.aPeParaTablet()) this.abrirTablet();
+      if (this.moto !== null) g.motoAndou += Math.hypot(this.motoEst.vx, this.motoEst.vz) * dt;
+      // a ENTREGA: o painel pra escolher a pesquisa abre uma vez (o veredito chega por `resultadoEntrega`)
+      if (passo.cond.tipo === "entrega" && !g.lembrete) { g.lembrete = "volte"; this.o.onEntrega?.(true); }
       // a SALA DO SABER: o Droid voa até lá; chegando, conta o tempo da câmera mostrando a sala
       if (passo.cond.tipo === "saber" && this.droid) { const sp = mundo(SALA_DO_SABER_LOCAL); if (Math.hypot(this.droid.pos.x - sp.x, this.droid.pos.z - sp.z) < 6) g.saberT = Math.max(0, g.saberT) + dt; }
       // o INVENTÁRIO do tutorial: abre na 1ª vez (a pesquisa em destaque) e conta o tempo aberto
@@ -1803,20 +1853,22 @@ export class CyberEngine {
       if (g.fala >= passo.falas.length && g.falaT >= RITMO_FALA.fimSome && this.droid) { this.droid.h.sumir(); this.falas = this.falas.filter((f) => { if (f.ator === this.droid!.fala) { f.el.remove(); return false; } return true; }); this.encerrarGuia(); }
     } else if ((g.ativo || passo.livre) && cumpriu(passo.cond, this.ctxGuia(g, passo))) this.irProPasso(g.passo + 1);
     if (farol) {
-      const pa = this.guia ? ROTEIRO[this.guia.passo] : undefined, a = pa ? this.alvoDoPasso(pa) : null;
+      const pa = this.guia ? this.rot[this.guia.passo] : undefined, a = pa ? this.alvoDoPasso(pa) : null;
       farol.visible = !!a && !this.nascendo && this.naZaeon;
       if (a && farol.visible) { farol.position.set(a.x, (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + 28, a.z); (farol.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.08 * Math.sin(performance.now() * 0.003); }
     }
   }
   /** o alvo do passo (mundo) */
-  private alvoDoPasso(p: (typeof ROTEIRO)[number]): { x: number; z: number; r: number } | null { return p.alvo; }
+  private alvoDoPasso(p: PassoGuia): { x: number; z: number; r: number } | null { return p.alvo; }
   /** o que a pessoa fez (pra `cumpriu`) */
-  private ctxGuia(g: NonNullable<CyberEngine["guia"]>, passo: (typeof ROTEIRO)[number]) {
+  private ctxGuia(g: NonNullable<CyberEngine["guia"]>, passo: PassoGuia) {
     const eu = this.eu, a = this.alvoDoPasso(passo);
     return {
       nascendo: !!this.nascendo, andou: g.andou, correu: g.correu, noAr: this.jet.noAr ? this.jet.y - g.pisoY : 0, turbo: g.turbo,
       chegou: !!a && Math.hypot(eu.pos.x - a.x, eu.pos.z - a.z) <= a.r && !this.jet.noAr,
       conversaFeita: this.conversa?.etapa === "feita", tabletAberto: this.labAberto, pesquisaSalva: !!this.pesquisaDoTutorial, inventario: g.invT, droidNoSaber: g.saberT,
+      entrega: (this.entregaVeredito === null ? null : this.entregaVeredito === "desistiu" ? "desistiu" : this.entregaVeredito.aceito ? "aceita" : "recusada") as CtxGuia["entrega"],
+      naMoto: this.moto !== null, motoAndou: g.motoAndou,
     };
   }
   /** o DROID: aparece num mini portal do lado da pessoa (quando o tutorial começa — e de novo depois de um teleporte);
@@ -1952,7 +2004,7 @@ export class CyberEngine {
   }
   private atualizarAgentes(dt: number, t: number) {
     const d = this.droid; if (!d) return;
-    const eu = this.eu, fase = d.h.fase(), passo = this.guia ? ROTEIRO[this.guia.passo] : undefined;
+    const eu = this.eu, fase = d.h.fase(), passo = this.guia ? this.rot[this.guia.passo] : undefined;
     const guiando = (!!this.guia && !this.nascendo && !this.menu && passo?.cond.tipo !== "nascer" && !passo?.livre) || !!this.expulsando;   // livre (explorando): ele some
     const comigo = this.companheiro && !guiando && !this.menu;   // o companheiro (habilidade do G)
     // a SALA DO SABER: no fim do tutorial ele voa pra lá — e depois fica lá, esperando (só pra quem acabou o tutorial)
@@ -1984,7 +2036,7 @@ export class CyberEngine {
         // ele VAI: voa direto pro alvo (um pouco mais rápido que quem anda — dá pra ver ele indo e seguir) e, chegando,
         // fica PAIRANDO lá em cima do alvo, esperando a pessoa chegar
         const vx = a.x - d.pos.x, vz = a.z - d.pos.z, dd = Math.hypot(vx, vz);
-        const voando = passo?.cond.tipo === "turbo" || passo?.id === "ir-teloes";   // no VOO LONGO ele voa rápido, na frente
+        const voando = passo?.cond.tipo === "turbo" || passo?.id === "ir-teloes" || passo?.id === "moto";   // no VOO LONGO ele voa rápido, na frente
         if (dd > 0.6) { const v = Math.min(voando ? 26 : 9, 2 + dd * 0.6), k = Math.min(dd, v * dt); d.pos.x += (vx / dd) * k; d.pos.z += (vz / dd) * k; }
         const yAlvo = (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + 3.2;
         d.alt += (yAlvo - d.alt) * Math.min(1, dt * 2);
@@ -2140,6 +2192,7 @@ export class CyberEngine {
   private tomarVaga(s: number) { const v = vagas()[s]; if (v && this.vagaPronta(s)) esvaziou(this.fabricas[v.lote]!.f, s); }
   /** MONTA: numa VAGA (leva a moto — o robô repõe) ou numa ESTACIONADA (a minha ou a de outra pessoa: `de` avisa o dono) */
   montar(alvo: AlvoMoto | null = this.motoAoAlcance()): boolean {
+    if (alvo && !this.podeMoto()) { this.o.onAviso?.(AVISO_MOTO_TRAVADA); return false; }   // (as motos se liberam com a entrega ao Droid)
     if (!alvo || !this.podeMontar()) return false;
     let p: { x: number; y: number; z: number; yaw: number } | null = null;
     let lancar = false;
@@ -2685,7 +2738,9 @@ export class CyberEngine {
     if (el && this.plat) { const pl = this.plat; return { id: `elevador-${pl.andar}`, rotulo: el.rotulo, fazer: () => { pl.andar = el.proximo; this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.eu }); } }; }
     const estudar = { id: "estudar", rotulo: "Estudar", fazer: () => this.o.onEntrarEstudo?.() };
     if ((this.perto || this.noTopo) && !this.guia) return estudar;   // (no tutorial as salas ficam fechadas até o fim)
-    const m = this.motoAoAlcance(); if (m) return { id: m.tipo === "vaga" ? `moto-${m.s}` : `moto-${m.dono}`, rotulo: "Montar na moto", fazer: () => { this.montar(m); } };
+    const m = this.motoAoAlcance();
+    if (m && !this.podeMoto()) return { id: "moto-travada", rotulo: "Moto travada", fazer: () => this.o.onAviso?.(AVISO_MOTO_TRAVADA) };
+    if (m) return { id: m.tipo === "vaga" ? `moto-${m.s}` : `moto-${m.dono}`, rotulo: "Montar na moto", fazer: () => { this.montar(m); } };
     if (this.nave && this.navePerto()) return { id: "entrar-nave", rotulo: "Entrar na nave", fazer: () => this.entrarNaNave() };
     if (this.noCeu && this.cidade?.tocaDiscos && this.ehFundador(this.o.eu.id)) {
       const td = this.cidade.tocaDiscos.getWorldPosition(this.tmp);
@@ -2870,7 +2925,7 @@ export class CyberEngine {
       const a = h.ancora(), c = CIDADE.centro;
       return planoConversa({ x: c.x, y: ilhaY + a.y - 4.5, z: c.z }, eu, { lado: 0.32, pitch: -0.04, recuo: 8 });
     }
-    const p = ROTEIRO[g.passo]!; if (!p.cena || (g.fala === 0 && p.falas.length > 0)) return null;
+    const p = this.rot[g.passo]!; if (!p.cena || (g.fala === 0 && p.falas.length > 0)) return null;
     if (p.cena === "saber") {   // a câmera SEGUE o Droid voando até a Sala do Saber e, quando ele chega, mostra a sala
       const d = this.droid; if (!d) return null;
       const sp = mundo(SALA_DO_SABER_LOCAL), ySaber = ilhaY + ALTURA_LOUNGE + 5, c = CIDADE.centro;
@@ -2878,9 +2933,14 @@ export class CyberEngine {
       return { foco: { x: sp.x, y: ySaber - 3, z: sp.z }, az: Math.atan2(c.x - sp.x, c.z - sp.z) + 0.3, pitch: 0.3, dist: 88 };
     }
     if (!p.cenaInteira && g.fala >= p.falas.length) return null;   // a instrução: a câmera volta pra quem vai agir
-    if (p.cena === "droid") {
+    if (p.cena === "droid" || p.cena === "droid-perto") {   // "perto" = o ZOOM da entrega
       const d = this.droid; if (!d || d.h.fase() !== "visivel") return null;
-      return planoConversa({ x: d.pos.x, y: d.alt + 0.5, z: d.pos.z }, eu, { lado: 0.6, pitch: 0.12, recuo: 4 });
+      return p.cena === "droid" ? planoConversa({ x: d.pos.x, y: d.alt + 0.5, z: d.pos.z }, eu, { lado: 0.6, pitch: 0.12, recuo: 4 })
+        : planoConversa({ x: d.pos.x, y: d.alt + 0.3, z: d.pos.z }, eu, { lado: 0.4, pitch: 0.05, recuo: 0.6 });
+    }
+    if (p.cena === "motos") {   // a GARAGEM: as motos estacionadas, de cima, do lado da cidade
+      const lote = LOTES.find((l) => l.id === "garagem")!, c = CIDADE.centro;
+      return { foco: { x: lote.x, y: ilhaY + ALTURA_LOUNGE + 1, z: lote.z }, az: Math.atan2(c.x - lote.x, c.z - lote.z) + 0.25, pitch: 0.38, dist: 34 };
     }
     // os TELÕES: a 1ª fala no dos problemas, a 2ª no das soluções, a 3ª os dois (de longe)
     const k = g.fala - 1, tp = TELOES_TERRA[0]!, ts = TELOES_SOLUCAO[0]!;

@@ -14,6 +14,7 @@ import type { P2 } from "./colisao";
 import { CIDADE, DOCA_ANGULO, anguloDaTorre, mundo, naAberturaDaEscada, TORRES_MURALHA } from "./ceu";
 import { LAR_LOCAL, POIS, marcoNav } from "./landmarks";
 import { ESTACAO, MIRANTES_ESTACAO, noMirante } from "./terra";
+import { LOTES } from "./motos";
 import { deEscada } from "./nav";
 
 /** a chave do "já nasci" (localStorage) — só a reserva quando o servidor não diz (prévia/sem sala) */
@@ -86,12 +87,12 @@ export function estadoDoTubo(t: number): { liquido: number; vidro: number } {
  * (Shift andando), VOAR `m` metros acima do chão (Espaço), o VOO LONGO (`m` metros de turbo: Shift no ar), CHEGAR no
  * alvo, conversar com a Zaeon, OUVIR (o passo é só a cena — anda quando as falas acabam) e abrir o TABLET.
  */
-export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "pesquisa" } | { tipo: "inventario"; s: number } | { tipo: "saber"; s: number } | { tipo: "fim" };
-export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "estudo" | "aviso" | "inventario" | "despedida" | "saber" | "fim";
+export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "pesquisa" } | { tipo: "inventario"; s: number } | { tipo: "saber"; s: number } | { tipo: "entrega" } | { tipo: "montar" } | { tipo: "pilotar"; m: number } | { tipo: "descer" } | { tipo: "fim" };
+export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "estudo" | "aviso" | "inventario" | "despedida" | "saber" | "entrega" | "recusa" | "motos-aceite" | "motos-ver" | "moto" | "pilotar" | "descer" | "motos-fim" | "fim";
 /** a CUTSCENE do passo (lib/cyber/cutscene): enquanto o Droid fala, a câmera enquadra outra coisa — "droid" = ele (a
  *  apresentação e a missão), "teloes" = os telões PROBLEMA → SOLUÇÃO. A câmera solta na INSTRUÇÃO (a última fala),
  *  a não ser que `cenaInteira` (o passo todo é cena — a pessoa não precisa se mexer) */
-export type CenaGuia = "droid" | "teloes" | "saber";
+export type CenaGuia = "droid" | "droid-perto" | "teloes" | "saber" | "motos";
 /** um passo do tutorial: as FALAS do Droid (uma depois da outra; a última — a INSTRUÇÃO — fica na tela até a pessoa
  *  cumprir), o que ela tem que fazer, o alvo de "vem comigo até…" (o Droid vai na frente; o farol marca), a CENA e as
  *  TECLAS que a caixa de diálogo mostra em destaque */
@@ -130,6 +131,33 @@ export const ROTEIRO: PassoGuia[] = (() => {
 })();
 /** o índice de um passo */
 export const passoDe = (id: IdPassoGuia) => ROTEIRO.findIndex((p) => p.id === id);
+/**
+ * A ENTREGA (depois do tutorial — lib/cyber/entregaAbnt): quem volta na SALA DO SABER e chega perto do Droid vê uma
+ * cutscene com ZOOM nele, e ele pede a pesquisa. Completa e em ABNT → ele aceita e começa o tutorial das MOTOS (até lá,
+ * as motos ficam travadas — menos pro dono). Recusada → ele diz o que falta.
+ */
+export const ROTEIRO_ENTREGA: PassoGuia[] = [
+  { id: "entrega", titulo: "A entrega", cena: "droid-perto", cenaInteira: true, falas: ["Você voltou, viajante.", "Trouxe algo de valor? Me entregue a sua pesquisa — completa e em ABNT."], cond: { tipo: "entrega" }, alvo: null },
+];
+/** o Droid recusando: o que falta (até 3 itens, as falas cabem na caixa) */
+export function passoDaRecusa(faltando: string[]): PassoGuia {
+  const lista = faltando.slice(0, 3).map((f) => f.replace(/\.$/, ""));
+  return { id: "recusa", titulo: "Ainda não", cena: "droid-perto", cenaInteira: true, alerta: true, falas: ["Ainda não tem valor.", `Falta ${lista.join("; ")}${faltando.length > 3 ? "…" : "."}`.slice(0, 168), "Volte quando estiver completa e em ABNT. Estarei aqui."], cond: { tipo: "ouvir" }, alvo: null };
+}
+export const FALA_DESISTIU = "Sem pressa. Volte quando tiver algo de valor — estarei aqui.";
+/** o TUTORIAL DAS MOTOS (a recompensa da entrega): o Droid mostra a garagem e ensina a montar, pilotar e descer */
+export const ROTEIRO_MOTOS: PassoGuia[] = (() => {
+  const lote = LOTES.find((l) => l.id === "garagem")!;
+  return [
+    { id: "motos-aceite", titulo: "Aceita", cena: "droid-perto", cenaInteira: true, falas: ["Isso sim tem valor. ✦ Aceito.", "Como recompensa, as MOTOS da Zaeon agora são suas. Vem ver."], cond: { tipo: "ouvir" }, alvo: null },
+    { id: "motos-ver", titulo: "A garagem", cena: "motos", cenaInteira: true, falas: ["Elas ficam na GARAGEM, a plataforma laranja na borda da cidade.", "Pise na luz do fio de energia na borda: ele te puxa até lá."], cond: { tipo: "ouvir" }, alvo: null },
+    { id: "moto", titulo: "Montar", teclas: ["F"], falas: ["Vá até a garagem, chegue perto de uma moto e aperte F."], cond: { tipo: "montar" }, alvo: { x: lote.x, z: lote.z, r: 14 } },
+    { id: "pilotar", titulo: "Pilotar", teclas: ["W", "A", "D", "Shift"], falas: ["W acelera, A e D fazem a curva e Shift dá o boost. Dá uma volta!"], cond: { tipo: "pilotar", m: 60 }, alvo: null },
+    { id: "descer", titulo: "Descer", teclas: ["P", "F"], falas: ["Mandou bem! Pra parar: P pousa a moto e F desce dela."], cond: { tipo: "descer" }, alvo: null },
+    { id: "motos-fim", titulo: "As motos são suas", falas: ["As motos são suas. Até a próxima entrega, viajante. ✦"], cond: { tipo: "ouvir" }, alvo: null },
+  ];
+})();
+
 /** a SALA DO SABER (local da ilha): a biblioteca — o lar do Droid depois do tutorial ("estarei te esperando…") */
 export const SALA_DO_SABER_LOCAL: P2 = { x: CIDADE.salas.biblioteca.x, z: CIDADE.salas.biblioteca.z };
 /** antes deste passo, o tablet e as salas ficam travados (o tutorial ainda não chegou na missão) */
@@ -148,7 +176,7 @@ export function lembreteDoTablet(o: { fechado: boolean; etapaLab: string | null;
 }
 
 /** o que o engine mede desde que o Droid deu a instrução do passo */
-export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean; /** s com o inventário aberto no passo (Infinity = a pessoa fechou) */ inventario: number; /** s desde que o Droid chegou na Sala do Saber (-1 = voando) */ droidNoSaber: number };
+export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean; /** s com o inventário aberto no passo (Infinity = a pessoa fechou) */ inventario: number; /** s desde que o Droid chegou na Sala do Saber (-1 = voando) */ droidNoSaber: number; /** a ENTREGA na Sala do Saber: o veredito (null = esperando) */ entrega: "aceita" | "recusada" | "desistiu" | null; naMoto: boolean; motoAndou: number };
 /** a pessoa fez o que o Droid pediu? */
 export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
   switch (c.tipo) {
@@ -164,6 +192,10 @@ export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
     case "pesquisa": return x.pesquisaSalva;
     case "inventario": return x.inventario >= c.s;
     case "saber": return x.droidNoSaber >= c.s;
+    case "entrega": return x.entrega !== null;
+    case "montar": return x.naMoto;
+    case "pilotar": return x.motoAndou >= c.m || (!x.naMoto && x.motoAndou >= 10);
+    case "descer": return !x.naMoto;
     case "fim": return false;   // o fim acaba sozinho (o Droid se despede)
   }
 }

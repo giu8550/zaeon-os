@@ -19,7 +19,7 @@ import { sanitizarSom, type AcaoSom } from "@/lib/lounge3d/musica";
 import { EV_RITUAL, CAMPO_DO_CANAL, canalDe, EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, juntarChat, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG, type CanalSom } from "@/lib/lounge3d/tipos";
 import { ritualDesligado, sanitizarRitual } from "@/lib/cyber/ritual";
 
-export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** o corpo próprio (servidor) */ corpo?: string; /** pilota a nave-QG (servidor) */ nave?: boolean; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean; /** (Colyseus) já mandou a 1ª pose — o novato no tutorial não: nem aparece nem entra na voz */ pronto?: boolean };
+export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** o corpo próprio (servidor) */ corpo?: string; /** pilota a nave-QG (servidor) */ nave?: boolean; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean; /** (só `eu`) as MOTOS liberadas (entrega ao Droid + tutorial delas; o dono sempre) */ motos?: boolean; /** (Colyseus) já mandou a 1ª pose — o novato no tutorial não: nem aparece nem entra na voz */ pronto?: boolean };
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
 export type EstadoSala = "carregando" | "ok" | "cheia" | "erro" | "off";
 
