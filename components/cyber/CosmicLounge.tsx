@@ -112,7 +112,7 @@ function Tela() {
   const salvarPerfil = useCallback((perfil: Record<string, string>) => { if (salaId) void fetch(`/api/lounge3d/${salaId}/perfil`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ perfil }) }).catch(() => {}); }, [salaId]);
 
   if (solo) return <CenaCyber modo="tela" eu={euSolo} membros={[euSolo]} aviso="Modo solo — você não aparece para os outros." />;
-  if (erro === "login") return <Carregando>Entre na sua conta para entrar no cyberespaço.</Carregando>;
+  if (erro === "login") return <Carregando>Entre na sua conta para jogar.</Carregando>;
   if (erro || sala.estado === "erro" || sala.estado === "off") {
     return <Carregando><span>Não deu para abrir a sala.{" "}<button type="button" onClick={tentarDeNovo} className="underline">Tentar de novo</button>{" · "}<button type="button" onClick={() => setSolo(true)} className="underline">Entrar sozinho</button></span></Carregando>;
   }

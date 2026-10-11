@@ -52,3 +52,18 @@ describe("o show do lounge durante a música", () => {
     expect(trovoesEntre(200, 5)).toEqual([]);   // a faixa recomeçou: o quadro não vale
   });
 });
+
+import { estadoDoRitual, SIGILOS as SIGILOS_R } from "./showLounge";
+describe("o show no RITUAL: o olho no centro com TUDO (caleidoscópio, membranas, serpentes, tentáculos, DNA) e os sigilos angelicais", () => {
+  it("sem música: o show inteiro, o olho, o anel dos sigilos e um sigilo de cada vez na íris; as formas giram", () => {
+    const parado = estadoDoShow(0, false), e = estadoDoRitual(3, parado, 1);
+    expect(e).toMatchObject({ nascimento: 1, serpentes: 1, tentaculos: 1, dna: 1, olho: 1, anelSigilos: 1 });
+    expect(e.sigilo).toBeGreaterThanOrEqual(0); expect(e.sigilo).toBeLessThan(SIGILOS_R.length);
+    const sigs = new Set(Array.from({ length: 12 }, (_, i) => estadoDoRitual(i * 10, parado, 1).sigilo)); expect(sigs.size).toBe(SIGILOS_R.length);
+    const formas = new Set(Array.from({ length: 30 }, (_, i) => estadoDoRitual(i * 10, parado, 1).forma)); expect(formas.size).toBeGreaterThan(3);
+  });
+  it("com música, a forma segue a música; apagando, tudo cai junto com a força", () => {
+    const m = estadoDoShow(50, true), e = estadoDoRitual(3, m, 1); expect(e.forma).toBe(m.forma); expect(e.serpentes).toBe(1);
+    const meio = estadoDoRitual(3, estadoDoShow(0, false), 0.4); expect(meio.nascimento).toBeCloseTo(0.4, 9); expect(meio.olho).toBeCloseTo(0.4, 9);
+  });
+});

@@ -15,7 +15,7 @@ import { DECK, GARAGEM_LOUNGE, PATIO, saidaDoLounge } from "@/lib/cyber/templo";
 import { criarOlho } from "./OlhoHolografico";
 import { criarMandala } from "./MandalaSagrada";
 import { criarTempestade } from "./Tempestade";
-import type { EstadoShow } from "@/lib/cyber/showLounge";
+import { estadoDoRitual, type EstadoShow } from "@/lib/cyber/showLounge";
 import { linhasDoRecado } from "@/lib/cyber/recado";
 import type { PisoOclusor } from "./oclusaoPisos";
 
@@ -136,7 +136,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
 
   let salaAtual: NomeSala = "lounge";
   let showLounge: { olho: { group: THREE.Group }; mandala: ReturnType<typeof criarMandala>; nevoa: ReturnType<typeof criarTempestade>; grupo: THREE.Group } | null = null;
-  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0, olho: 0, anelSigilos: 0, sigilo: -1 }, olhoRitual = 0, fumacaRitual = 0;
+  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0, olho: 0, anelSigilos: 0, sigilo: -1 }, olhoRitual = 0, fumacaRitual = 0, tRitual = 0, musicaShow: EstadoShow = estadoShow;
   const ambiente: { sala: NomeSala; obj: THREE.Object3D }[] = [];
   const tema = (_m: Movel) => TEMA[salaAtual];
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
@@ -638,14 +638,16 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     const nevoa = criarTempestade({ low: o.low, yBase: DECK.h + 48, yTopo: DECK.h + 80, raioMax: 70, alvoPonta: new THREE.Vector3(0, DECK.h + 60, -44), cor: new THREE.Color(0.22, 0.13, 0.32), semAbismo: true, densidade: 0.4, nuvens: o.low ? 18 : 36 });   // (menos nuvens: não pesar)
     nevoa.group.position.set(0, 0, 0); nevoa.group.traverse((n) => { n.userData.semLote = true; }); g.add(nevoa.group); nevoa.definir(0, false);
     showLounge = { olho, mandala, nevoa, grupo: g };
-    anim.push((_, t) => {
+    anim.push((dt, t) => {
       const tt = calmo ? t * 0.3 : t, b = batida();
+      if (olhoRitual > 0.001) { tRitual += Math.min(0.1, dt); estadoShow = estadoDoRitual(tRitual, musicaShow, olhoRitual); } else tRitual = 0;   // (as formas e os sigilos giram com o ritual ligado)
       if (olho.group.visible) {   // (no 3º modo do show o olho nasce crescendo, no lugar da mandala)
         olho.group.scale.setScalar(Math.max(0.001, olhoRitual > 0.001 ? 1 : estadoShow.olho));
         olho.atualizar(tt, b, Math.max(ativo, olhoRitual, estadoShow.olho), { anel: estadoShow.anelSigilos, iris: estadoShow.olho > 0.5 ? estadoShow.sigilo : -1 });
       }
       // a complexidade PULSA no ritmo (o grave acrescenta camadas por um instante)
-      mandala.definir({ ...estadoShow, complexidade: Math.min(0.72, estadoShow.complexidade + 0.18 * b), nascimento: estadoShow.nascimento * (1 - estadoShow.olho) }, b, tt);
+      // (no ritual a mandala FICA junto com o olho — o show inteiro; no show normal ela dá lugar ao olho)
+      mandala.definir({ ...estadoShow, complexidade: Math.min(0.72, estadoShow.complexidade + 0.18 * b), nascimento: olhoRitual > 0.001 ? estadoShow.nascimento : estadoShow.nascimento * (1 - estadoShow.olho) }, b, tt);
       { const c = nevoa.atualizar(t); if (c && fumacaRitual > 0.3 && o.aoTrovao) { nevoa.group.updateMatrixWorld(); o.aoTrovao(c.clone().applyMatrix4(nevoa.group.matrixWorld)); } }   // o raio do RITUAL troveja (os do show, o engine toca no compasso)
     });
   }
@@ -691,9 +693,10 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     somTocando(on, nivel = 0) { tocando = on; nivelAlvo = on ? Math.max(0, Math.min(1, nivel)) : 0; },
     show(e, ritual, olhoR = ritual) {
       if (!showLounge) return;
-      const noRitual = olhoR > 0.001; fumacaRitual = ritual; olhoRitual = olhoR;
-      // no RITUAL, o OLHO fica no centro (requisito do dono): a mandala se recolhe e fica o olho (sem os sigilos)
-      estadoShow = noRitual ? { ...e, nascimento: 0, serpentes: 0, tentaculos: 0, dna: 0, anelSigilos: 0, sigilo: -1, olho: 1 } : e;
+      const noRitual = olhoR > 0.001; fumacaRitual = ritual; olhoRitual = olhoR; musicaShow = e;
+      // no RITUAL: o show INTEIRO (lib/cyber/showLounge `estadoDoRitual`) — o OLHO no centro com o anel dos sigilos
+      // angelicais, a mandala/caleidoscópio, as serpentes, os tentáculos e o DNA, com ou sem música (o anim atualiza)
+      estadoShow = noRitual ? estadoDoRitual(tRitual, e, olhoR) : e;
       showLounge.olho.group.visible = noRitual || e.olho > 0.02;   // (o 3º modo do show: o olho, com os sigilos)
       showLounge.nevoa.definir(Math.max(e.nevoa, ritual), e.nivel > 0 || ritual > 0.4);   // no RITUAL, a névoa do lounge é a fumaça do topo dele (com trovões)
     },
