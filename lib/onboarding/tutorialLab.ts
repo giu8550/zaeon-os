@@ -60,6 +60,20 @@ export function avancarTutorialLab(o: { tema?: string } = {}) {
   estado = { ...estado, etapa: prox.id, tema: o.tema ?? estado.tema };
   avisar();
 }
+/** pula pra etapa `id` se ela está À FRENTE (nunca volta): a pessoa fez uma ação de uma etapa mais adiante — ex.: gerou
+ *  a pesquisa enquanto o Droid ainda mostrava as referências (o botão "Gerar" já está na tela). Sem isso o tour ficava
+ *  esperando uma ação que já tinha acontecido (bug de out/2026: "gerei a pesquisa mas não reconheceu") */
+export function avancarAte(id: IdEtapaLab) {
+  if (!estado.ativo) return;
+  const i = ETAPAS_LAB.findIndex((e) => e.id === estado.etapa), j = ETAPAS_LAB.findIndex((e) => e.id === id);
+  if (j > i) { estado = { ...estado, etapa: id }; avisar(); }
+}
+/** as AÇÕES que valem em qualquer etapa (depois do tema): o evento → a etapa que vem DEPOIS dela */
+export const SALTOS_LAB: Record<string, IdEtapaLab> = {
+  "zaeon:research:done": "referencias",       // a pesquisa na tela roxa terminou
+  "zaeon:research:draftdone": "abrir",        // a pesquisa sugerida foi gerada
+  "zaeon:research:newdoc": "salvar",          // abriu em Pesquisas
+};
 /** no tutorial, escolher o tema NÃO manda a mensagem pro chat: ela vira a pesquisa na tela roxa */
 export const temaNoTutorial = () => estado.ativo && estado.etapa === "tema";
 
