@@ -45,6 +45,9 @@ import { CHAO, PRACA, QUEDA_VAZIO, naPraca } from "@/lib/cyber/praca";
 import { CHEGADA_NAVE, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel, type IdNo } from "@/lib/cyber/buracos";
 import { DROID } from "@/lib/cyber/agentes";
 import { NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
+import { FAIXA_CINEMA, misturarPose, passoPeso, planoConversa, planoTelao, poseDoPlano, seguirPose, suave, type Plano, type Pose } from "@/lib/cyber/cutscene";
+import { FALA_DESTAQUE_CSS, ondeFala, type Dialogo } from "@/lib/cyber/dialogo";
+import { TELOES as TELOES_TERRA, TELOES_SOLUCAO } from "@/lib/cyber/terra";
 import { criarDroid, type DroidHandle } from "./Droid";
 import { criarHoloZaeon, type HoloZaeonHandle } from "./HoloZaeon";
 import { ABERTURA, FALA_EXPULSAO, PERGUNTAS, fallbackZaeon, fechamento, limparResposta, situacaoDe, type FalaConversa, type PedidoZaeon, type PerfilZaeon, type PerguntaZaeon, type TurnoZaeon } from "@/lib/cyber/conversaZaeon";
@@ -157,6 +160,8 @@ export type CyberOpts = {
   nascer?: boolean;
   /** o passo do tour mudou (null = acabou/pulou) */
   onGuia?: (g: EstadoGuia | null) => void;
+  /** a CAIXA DE DIÁLOGO do tutorial (lib/cyber/dialogo): a fala de agora, ou null = some */
+  onDialogo?: (d: Dialogo | null) => void;
   /** a Zaeon (holograma na capela) fez uma PERGUNTA: o React mostra o painel de resposta (null = fechou) */
   onPergunta?: (p: (PerguntaZaeon & { n: number; total: number }) | null) => void;
   /** a conversa com a Zaeon acabou: o perfil (o React salva no servidor — User.cyberPerfil) */
@@ -325,7 +330,14 @@ export class CyberEngine {
   private nascendo: { t: number; tubo: number } | null = null;
   /** o TUTORIAL do Droid: o passo, quantas falas dele já saíram, o relógio da fala, se já está ESPERANDO a pessoa cumprir
    *  (`ativo`) e o que ela fez desde então (`andou`, `motoAndou`, `tunel`, a altura do chão de onde voou) */
-  private guia: { passo: number; fala: number; falaT: number; ativo: boolean; andou: number; motoAndou: number; portal: boolean; pisoY: number; prev: { x: number; z: number } } | null = null;
+  private guia: { passo: number; fala: number; falaT: number; ativo: boolean; andou: number; correu: number; turbo: number; motoAndou: number; portal: boolean; pisoY: number; prev: { x: number; z: number } } | null = null;
+  /** o tutorial já passou da 1ª conversa com a Zaeon: as falas fora de cena viram BALÕES (antes, a caixa de diálogo) */
+  private balaoLiberado = false;
+  /** a CUTSCENE (lib/cyber/cutscene): o plano de agora (null = a câmera normal), o peso da mistura, a pose suavizada e
+   *  se a volta é a lenta (o fim do tutorial); `faixas` = as faixas de cinema (DOM) */
+  private cine: { plano: Plano | null; w: number; pose: Pose | null; lenta: boolean; faixas: HTMLDivElement[] } = { plano: null, w: 0, pose: null, lenta: false, faixas: [] };
+  /** o "…" em cima da cabeça da Zaeon enquanto ela pensa numa resposta */
+  private pensandoZ: HTMLDivElement | null = null;
   /** o farol do alvo do tour (uma coluna de luz) */
   private farol: THREE.Mesh | null = null;
   /** o rosto da Zaeon em holograma (sai do globo da capela no tutorial) e a CONVERSA com ela (as perguntas) */
@@ -1478,28 +1490,30 @@ export class CyberEngine {
     if (i !== this.saindoDoTubo && i !== this.nascendo?.tubo && Math.abs(tb.x - p.x) < 6 && Math.abs(tb.z - p.z) < 6) out.push({ x: tb.x, z: tb.z, r: 1.4 });
     return out;
   }
-  private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, andou: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
+  private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, andou: 0, correu: 0, turbo: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
   private emitirGuia() {
     if (!this.guia) { this.o.onGuia?.(null); return; }
     const p = ROTEIRO[this.guia.passo]!;
     this.o.onGuia?.({ passo: this.guia.passo, total: ROTEIRO.length, id: p.id, titulo: p.titulo, agente: DROID.nome, cor: DROID.cor });
   }
-  private encerrarGuia() { this.guia = null; this.emitirGuia(); this.sairDaInstancia(); }
+  private encerrarGuia() { this.guia = null; this.emitirGuia(); this.o.onDialogo?.(null); this.sairDaInstancia(); }
   /** o tutorial: "Próximo" (pula o passo — dev), "Pular" (o Droid se despede no portal) e "Refazer" (chamado na Recepção) */
   guiaProximo() { if (!this.guia || this.nascendo) return; this.irProPasso(this.guia.passo + 1); }
   guiaPular() { if (this.guia) { this.encerrarGuia(); this.droid?.h.sumir(); this.fecharConversa(); } this.sairDaInstancia(); }
-  guiaRefazer() { if (!this.cidade || this.menu) return; this.guia = this.novoGuia(1); this.emitirGuia(); }
+  guiaRefazer() { if (!this.cidade || this.menu) return; this.balaoLiberado = false; this.guia = this.novoGuia(1); this.emitirGuia(); }
   private irProPasso(n: number) {
     if (this.conversa?.etapa === "feita") this.conversa = null;
+    // a ação foi feita: a instrução sai da tela (a caixa de diálogo e o balão do Droid)
+    this.o.onDialogo?.(null); this.calarBalaoDroid();
     if (n >= ROTEIRO.length) { this.encerrarGuia(); this.droid?.h.sumir(); return; }
     this.guia = this.novoGuia(n); this.emitirGuia();
     if (ROTEIRO[n]!.id === "capela") this.preaquecerVozZaeon();   // o Droid vai levar a pessoa até ela: as falas fixas já vão sendo geradas
     this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.perto });
   }
   /** um balão de fala sobre quem fala (uma pessoa ou o Droid); `ms` = quanto fica (Infinity = até a próxima fala) */
-  private balao(a: { pos: THREE.Vector3; alt: number }, texto: string, cor: string, ms = 4200) {
+  private balao(a: { pos: THREE.Vector3; alt: number }, texto: string, cor: string, ms = 4200, destaque = false) {
     this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; });
-    const el = document.createElement("div"); el.style.cssText = FALA_CSS + "border-color:" + cor + ";"; el.textContent = texto.slice(0, 160);
+    const el = document.createElement("div"); el.style.cssText = (destaque ? FALA_DESTAQUE_CSS + `box-shadow:0 0 22px -6px ${cor};` : FALA_CSS) + "border-color:" + cor + ";"; el.textContent = texto.slice(0, 160);
     this.o.overlay.appendChild(el); this.falas.push({ el, ator: a, ate: performance.now() + ms });
   }
   /** o Droid FALA: balão em cima dele + a fala no chat (só local) */
@@ -1522,9 +1536,18 @@ export class CyberEngine {
     return true;
   }
   private falaCompanheiroEm = 0;
+  private calarBalaoDroid() { const d = this.droid; if (d) this.falas = this.falas.filter((f) => { if (f.ator === d.fala) { f.el.remove(); return false; } return true; }); }
   private droidFala(texto: string, ultima: boolean) {
     const d = this.droid; if (!d) return;
-    this.balao(d.fala, texto, DROID.cor, ultima ? Infinity : RITMO_FALA.entre * 1000 + 400);
+    // o TUTORIAL fala como um RPG (lib/cyber/dialogo): a caixa de diálogo antes da Zaeon e em toda cena; depois, o balão
+    // em destaque. A última fala (a instrução) fica até a ação ser feita
+    const g = this.guia, passo = g ? ROTEIRO[g.passo] : undefined;
+    const emCena = !!passo?.cena && (!!passo.cenaInteira || !ultima);
+    if (passo && ondeFala({ tutorial: true, balaoLiberado: this.balaoLiberado, emCena }) === "caixa") {
+      this.calarBalaoDroid();
+      const instrucao = ultima && passo.cond.tipo !== "ouvir" && passo.cond.tipo !== "tablet";
+      this.o.onDialogo?.({ quem: "droid", nome: DROID.nome, cor: DROID.cor, texto, instrucao, teclas: instrucao ? passo.teclas : undefined, objetivo: passo.titulo });
+    } else this.balao(d.fala, texto, DROID.cor, ultima ? Infinity : RITMO_FALA.entre * 1000 + 400, !!passo);
     this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: DROID.cor, texto });
     this.som.vozDroid(d.h.group, { dur: duracaoVozDroid(texto) });   // a "voz" dele: sem palavras, de outra dimensão
   }
@@ -1561,7 +1584,8 @@ export class CyberEngine {
     const h = this.holoZaeon; h?.pensar(false);
     const voz = f.buf && h ? this.som.falaHolograma(f.buf, h.rosto) : null;
     this.vozZ = voz; this.durFalaZ = voz ? voz.duracao : 0;
-    this.balao(this.falaZaeon, f.texto, COR_ZAEON, f.ultima ? Infinity : Math.max(3600, (this.durFalaZ + 0.8) * 1000));
+    if (this.guia && this.conversa && !this.balaoLiberado) this.o.onDialogo?.({ quem: "zaeon", nome: "Zaeon", cor: COR_ZAEON, texto: f.texto, instrucao: false });   // a 1ª conversa: na caixa de diálogo (cutscene)
+    else this.balao(this.falaZaeon, f.texto, COR_ZAEON, f.ultima ? Infinity : Math.max(3600, (this.durFalaZ + 0.8) * 1000));
     if (!f.semChat) this.o.onFalaAgente?.({ id: "zaeon", nome: "Zaeon", cor: COR_ZAEON, texto: f.texto });   // (as frases da capela: só o balão e a voz)
     if (!voz) h?.falar(0.6 + f.texto.length * 0.055);   // sem áudio: a boca sorteada (a reserva)
     f.depois?.();
@@ -1688,7 +1712,7 @@ export class CyberEngine {
     } else if (cv.etapa === "fechando") {
       const fim = fechamento(cv.perfil);
       if (cv.linha < fim.length && cv.t >= dur(3.4)) { this.zaeonFala(fim[cv.linha]!, false); cv.linha++; cv.t = 0; }
-      else if (cv.linha >= fim.length && cv.t >= dur(3.4)) { h.sumir(); cv.etapa = "feita"; }
+      else if (cv.linha >= fim.length && cv.t >= dur(3.4)) { h.sumir(); cv.etapa = "feita"; if (this.guia) { this.balaoLiberado = true; this.o.onDialogo?.(null); this.camPitch = 0.16; this.camDist = 9; } }   // daqui em diante, os balões ficam nos personagens
     }
   }
 
@@ -1711,39 +1735,36 @@ export class CyberEngine {
     // o que a pessoa fez desde a instrução
     const dx = eu.pos.x - g.prev.x, dz = eu.pos.z - g.prev.z; g.prev = { x: eu.pos.x, z: eu.pos.z };
     if (g.ativo) {
-      if (this.moto !== null) g.motoAndou += Math.hypot(this.motoEst.vx, this.motoEst.vz) * dt;
-      else if (!this.jet.noAr && !this.viagem && Math.hypot(dx, dz) < 2) g.andou += Math.hypot(dx, dz);   // (um teleporte não conta)
+      const d = Math.hypot(dx, dz) < 2 && !this.viagem ? Math.hypot(dx, dz) : 0;   // (um teleporte não conta)
+      if (!this.jet.noAr) { g.andou += d; if (this.tCorrendo > 0) g.correu += d; }   // correndo = Shift segurado andando
+      else if (this.keys.shift || this.correr) g.turbo += d;   // no ar com Shift = o VOO TURBO (o voo longo)
+      // a MISSÃO: o Droid abre o tablet (de pé; voando, espera pousar)
+      if (passo.cond.tipo === "tablet" && !this.tabletQuer && this.aPeParaTablet()) this.abrirTablet();
     } else if (!this.jet.noAr) g.pisoY = eu.alt;
     // as falas: só com o Droid já ali (saiu do portal)
     if (this.droid?.h.fase() === "visivel") {
       g.falaT += dt;
       if (g.fala < passo.falas.length && g.falaT >= (g.fala === 0 ? 0.35 : RITMO_FALA.entre)) { this.droidFala(passo.falas[g.fala]!, g.fala === passo.falas.length - 1); g.fala++; g.falaT = 0; }
-      else if (g.fala >= passo.falas.length && !g.ativo && g.falaT >= RITMO_FALA.antesDeConferir) { g.ativo = true; g.andou = 0; g.motoAndou = 0; g.portal = false; if (passo.cond.tipo === "conversa") this.abrirConversa(); }
+      else if (g.fala >= passo.falas.length && !g.ativo && g.falaT >= RITMO_FALA.antesDeConferir) { g.ativo = true; g.andou = 0; g.correu = 0; g.turbo = 0; g.motoAndou = 0; g.portal = false; if (passo.cond.tipo === "conversa") this.abrirConversa(); }
     }
     if (passo.cond.tipo === "fim") {   // o fim: ele se despede e some no portal
       if (g.fala >= passo.falas.length && g.falaT >= RITMO_FALA.fimSome && this.droid) { this.droid.h.sumir(); this.falas = this.falas.filter((f) => { if (f.ator === this.droid!.fala) { f.el.remove(); return false; } return true; }); this.encerrarGuia(); }
     } else if ((g.ativo || passo.livre) && cumpriu(passo.cond, this.ctxGuia(g, passo))) this.irProPasso(g.passo + 1);
     if (farol) {
       const pa = this.guia ? ROTEIRO[this.guia.passo] : undefined, a = pa ? this.alvoDoPasso(pa) : null;
-      farol.visible = !!a && !this.nascendo && (this.naZaeon || pa?.id === "base");
-      if (a && farol.visible) { farol.position.set(a.x, (pa?.id === "base" ? this.eu.alt : this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + 28, a.z); (farol.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.08 * Math.sin(performance.now() * 0.003); }
+      farol.visible = !!a && !this.nascendo && this.naZaeon;
+      if (a && farol.visible) { farol.position.set(a.x, (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + 28, a.z); (farol.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.08 * Math.sin(performance.now() * 0.003); }
     }
   }
-  /** o alvo do passo (mundo): o do roteiro — ou, no passo da máquina de estudos, a frente da PRÓPRIA base */
-  private alvoDoPasso(p: (typeof ROTEIRO)[number]): { x: number; z: number; r: number } | null {
-    if (p.id !== "base") return p.alvo;
-    const b = this.minhaBase; if (!b) return null;
-    const f = localParaMundo(b, 0, 2.4); return { ...f, r: BASE_INTERACT_R };
-  }
+  /** o alvo do passo (mundo) */
+  private alvoDoPasso(p: (typeof ROTEIRO)[number]): { x: number; z: number; r: number } | null { return p.alvo; }
   /** o que a pessoa fez (pra `cumpriu`) */
   private ctxGuia(g: NonNullable<CyberEngine["guia"]>, passo: (typeof ROTEIRO)[number]) {
     const eu = this.eu, a = this.alvoDoPasso(passo);
     return {
-      nascendo: !!this.nascendo, andou: g.andou, noAr: this.jet.noAr ? this.jet.y - g.pisoY : 0,
+      nascendo: !!this.nascendo, andou: g.andou, correu: g.correu, noAr: this.jet.noAr ? this.jet.y - g.pisoY : 0, turbo: g.turbo,
       chegou: !!a && Math.hypot(eu.pos.x - a.x, eu.pos.z - a.z) <= a.r && !this.jet.noAr,
-      conversaFeita: this.conversa?.etapa === "feita", naMoto: this.moto !== null, motoAndou: g.motoAndou, cruzouPortal: g.portal,
-      naPraca: !this.altoEm && !this.plat && !this.bordo && !this.jet.noAr && this.moto === null && naPraca(eu.pos),
-      pertoDaBase: this.perto,
+      conversaFeita: this.conversa?.etapa === "feita", tabletAberto: this.labAberto,
     };
   }
   /** o DROID: aparece num mini portal do lado da pessoa (quando o tutorial começa — e de novo depois de um teleporte);
@@ -1886,7 +1907,7 @@ export class CyberEngine {
     // pra onde ele vai: do lado da pessoa — ou, num passo "vem comigo até…", ELE VAI: voa rumo ao alvo e, se a pessoa
     // ficar pra trás, para e espera por ela (virado pra ela)
     const a = passo && this.guia ? this.alvoDoPasso(passo) : null, altAlvo = eu.alt + (this.expulsando ? 5 : 2.3);   // expulsando: no meio da tela, encarando
-    const lidera = !!a && (this.naZaeon || passo?.id === "base") && !this.tunel && !this.expulsando;   // "vem comigo até…": ele VAI até lá e espera lá
+    const lidera = !!a && this.naZaeon && !this.tunel && !this.expulsando;   // "vem comigo até…": ele VAI até lá e espera lá
     // NA FRENTE da pessoa, no campo de visão (a câmera olha por cima do ombro): ~5 m à frente, um pouco de lado pra não
     // tapar o personagem — é ali que ele nasce do portal, de frente pros nossos olhos
     const vx0 = -Math.sin(this.camAz), vz0 = -Math.cos(this.camAz);
@@ -1902,8 +1923,9 @@ export class CyberEngine {
         // ele VAI: voa direto pro alvo (um pouco mais rápido que quem anda — dá pra ver ele indo e seguir) e, chegando,
         // fica PAIRANDO lá em cima do alvo, esperando a pessoa chegar
         const vx = a.x - d.pos.x, vz = a.z - d.pos.z, dd = Math.hypot(vx, vz);
-        if (dd > 0.6) { const v = Math.min(9, 2 + dd * 0.6), k = Math.min(dd, v * dt); d.pos.x += (vx / dd) * k; d.pos.z += (vz / dd) * k; }
-        const yAlvo = (passo?.id === "base" ? eu.alt : this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + 3.2;
+        const voando = passo?.cond.tipo === "turbo" || passo?.id === "ir-teloes";   // no VOO LONGO ele voa rápido, na frente
+        if (dd > 0.6) { const v = Math.min(voando ? 26 : 9, 2 + dd * 0.6), k = Math.min(dd, v * dt); d.pos.x += (vx / dd) * k; d.pos.z += (vz / dd) * k; }
+        const yAlvo = (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + 3.2;
         d.alt += (yAlvo - d.alt) * Math.min(1, dt * 2);
       } else if (longe > 60 || Math.abs(altAlvo - d.alt) > 30) d.h.sumir();   // ficou pra trás (teleporte, túnel, queda): some e reaparece do lado
       else {
@@ -2775,6 +2797,48 @@ export class CyberEngine {
   estatisticas() { return { fps: this.fpsAgora, degrau: this.qa.atual.nome, leve: this.o.low }; }
   private soltar(raiz: THREE.Object3D) { const r = this.regioes.get(raiz); if (r) { soltarRegiao(r); this.regioes.delete(raiz); } }
 
+  /** o PLANO da cutscene agora (lib/cyber/cutscene) — ou null (a câmera normal). Tutorial: a 1ª conversa com a Zaeon
+   *  (enquadra o rosto dela por trás de quem ouve), a apresentação e a missão do Droid (ele em destaque) e os telões
+   *  PROBLEMA → SOLUÇÃO (um telão por fala). Fora da cena inteira, a câmera solta na INSTRUÇÃO (a última fala) */
+  private planoDaCena(): Plano | null {
+    const g = this.guia; if (!g || this.menu || this.expulsando) return null;
+    const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
+    const eu = { x: this.eu.pos.x, y: this.eu.alt + 1.6, z: this.eu.pos.z };
+    const cv = this.conversa, h = this.holoZaeon;
+    if (cv && h && cv.etapa !== "feita" && cv.etapa !== "brava" && h.fase() !== "oculto") {
+      const a = h.ancora(), c = CIDADE.centro;
+      return planoConversa({ x: c.x, y: ilhaY + a.y - 4.5, z: c.z }, eu, { lado: 0.32, pitch: -0.04, recuo: 8 });
+    }
+    const p = ROTEIRO[g.passo]!; if (!p.cena || g.fala === 0) return null;
+    if (!p.cenaInteira && g.fala >= p.falas.length) return null;   // a instrução: a câmera volta pra quem vai agir
+    if (p.cena === "droid") {
+      const d = this.droid; if (!d || d.h.fase() !== "visivel") return null;
+      return planoConversa({ x: d.pos.x, y: d.alt + 0.5, z: d.pos.z }, eu, { lado: 0.6, pitch: 0.12, recuo: 4 });
+    }
+    // os TELÕES: a 1ª fala no dos problemas, a 2ª no das soluções, a 3ª os dois (de longe)
+    const k = g.fala - 1, tp = TELOES_TERRA[0]!, ts = TELOES_SOLUCAO[0]!;
+    const t = k === 0 ? tp : k === 1 ? ts : { ...tp, x: (tp.x + ts.x) / 2, z: (tp.z + ts.z) / 2, larg: tp.larg * 2.6 };
+    const w = mundo({ x: t.x, z: t.z });
+    return planoTelao({ x: w.x, z: w.z, y: ilhaY + t.y, rot: t.rot, larg: t.larg });
+  }
+  /** mistura a câmera normal com a da cena (o peso sobe/desce suave) e põe as faixas de cinema */
+  private aplicarCena(normal: Pose, dt: number): Pose {
+    const cn = this.cine, plano = this.planoDaCena(); cn.plano = plano;
+    if (plano) { const alvo = poseDoPlano(plano); cn.pose = cn.pose && cn.w > 0 ? seguirPose(cn.pose, alvo, dt, 2.2) : alvo; }
+    cn.w = passoPeso(cn.w, !!plano, dt, cn.lenta);
+    if (!cn.faixas.length) for (const lado of ["top", "bottom"] as const) {
+      const f = document.createElement("div");
+      f.style.cssText = `position:absolute;left:0;right:0;${lado}:0;height:0;background:#000;pointer-events:none;z-index:24;`;
+      this.o.overlay.appendChild(f); cn.faixas.push(f);
+    }
+    const hFaixa = `${(FAIXA_CINEMA * 100 * suave(cn.w)).toFixed(2)}vh`;
+    for (const f of cn.faixas) if (f.style.height !== hFaixa) f.style.height = hFaixa;
+    if (cn.w <= 0 || !cn.pose) { cn.pose = null; cn.lenta = false; return normal; }
+    return misturarPose(normal, cn.pose, cn.w);
+  }
+  /** em cena, quem joga não anda (a câmera está noutro lugar) */
+  private get emCena() { return !!this.cine.plano; }
+
   private atualizarCamera(dt = 1 / 60) {
     const l = this.minhaBase;
     if (this.menu && l) {
@@ -2824,7 +2888,8 @@ export class CyberEngine {
       if (h) dist = Math.max(2.2, h.distance - 0.6);
     }
     // órbita livre: por cima olha pro personagem; arrastando pra baixo encosta no chão e o olhar sobe pro céu
-    const c = poseDaCamera({ olho: { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z }, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
+    let c = poseDaCamera({ olho: { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z }, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
+    c = this.aplicarCena(c, dt);   // a CUTSCENE do tutorial (se houver) leva a câmera pra outro enquadramento
     this.cam.position.set(c.pos.x, c.pos.y, c.pos.z);
     this.cam.lookAt(c.olhar.x, c.olhar.y, c.olhar.z);
     // SENSAÇÃO DE VELOCIDADE (moto): o FOV abre com a velocidade (+12°, ~+14° no boost) e, no boost, a câmera treme de leve
@@ -3049,7 +3114,7 @@ export class CyberEngine {
       if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
       if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
       if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
-      if (this.nascendo || this.tunel) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // dentro do tubo / do túnel: parado
+      if (this.nascendo || this.tunel || this.emCena) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // dentro do tubo / do túnel / numa cutscene: parado
       const correndo = (this.keys.shift || this.correr) && podeCorrer(this.vigor);   // (exausto: anda)
       let andando = false;
       if (this.bordo) { const pn = this.poseNave(); if (pn) { const w = paraMundo(pn, this.bordo); eu.pos.x = w.x; eu.pos.z = w.z; } }   // a nave pode ter andado (o dono pilotando)
@@ -3511,6 +3576,11 @@ export class CyberEngine {
       const f = this.falas[i]!; if (now > f.ate) { f.el.remove(); this.falas.splice(i, 1); continue; }
       const p = this.proj(this.vHud.set(f.ator.pos.x, 2.4 + f.ator.alt, f.ator.pos.z)); this.noHud(f.el, Math.min(this.w - 108, Math.max(108, p.x)), Math.max(70, p.y), p.vis);   // o balão não sai da tela
     }
+    // o "…" da ZAEON PENSANDO numa resposta: em cima da cabeça do holograma, os três pontos pulando
+    { const h = this.holoZaeon, pensa = !!h && h.estaPensando() && h.fase() === "visivel" && !this.menu;
+      if (pensa && !this.pensandoZ) { const el = document.createElement("div"); el.className = "zaeon-pensando"; el.setAttribute("aria-label", "A Zaeon está pensando"); el.innerHTML = "<i></i><i></i><i></i>"; this.o.overlay.appendChild(el); this.pensandoZ = el; }
+      if (!pensa && this.pensandoZ) { this.pensandoZ.remove(); this.pensandoZ = null; }
+      if (pensa && this.pensandoZ && h) { const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, a = h.ancora(); const p = this.proj(this.vHud.set(CIDADE.centro.x, ilhaY + a.y + 1.2, CIDADE.centro.z)); this.noHud(this.pensandoZ, p.x, Math.max(118, p.y), p.vis); } }   // (na cena, o topo da cabeça sai do quadro: o "…" fica na beirada)
     // menu projetado no monitor (retrato: fixo, sempre tocável)
     const m = this.o.els.menu;
     if (m && this.menu) {
@@ -3541,6 +3611,7 @@ export class CyberEngine {
     this.cleanups.forEach((f) => f());
     for (const a of [this.eu, ...this.remotos.values()]) if (a) this.removerAtor(a);
     if (this.droid) { this.droid.h.dispose(); this.droid.tag.remove(); }
+    for (const f of this.cine.faixas) f.remove(); this.cine.faixas = []; this.pensandoZ?.remove(); this.pensandoZ = null;
     for (const p of this.personagens) { p.h.dispose(); p.tag.remove(); } this.personagens = [];
     this.falaZ = null; this.calarZaeon(); this.holoZaeon?.dispose();
     this.praca?.dispose(); this.bercario?.dispose(); if (this.farol) { this.farol.geometry.dispose(); (this.farol.material as THREE.Material).dispose(); }

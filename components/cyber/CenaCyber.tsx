@@ -21,6 +21,8 @@ import { NOS, type IdNo } from "@/lib/cyber/buracos";
 import { CHAVE_ONBOARDING, deveNascerNoTubo, tutorialLigado } from "@/lib/cyber/onboarding";
 import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
 import RespostaZaeon from "./RespostaZaeon";
+import CaixaDialogo from "./CaixaDialogo";
+import type { Dialogo } from "@/lib/cyber/dialogo";
 import type { PedidoZaeon, PerfilZaeon, PerguntaZaeon, TurnoZaeon } from "@/lib/cyber/conversaZaeon";
 import { criarVoz, type VozHandle } from "./Voz";
 import { transporteRealtime, vozLigada } from "@/lib/lounge3d/realtime";
@@ -124,6 +126,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [tunel, setTunel] = useState<ModoTunel | null>(null);
   /** o tutorial do Droid (o passo atual) e as falas dele no chat (SÓ locais: o Droid é de cada um, nada vai pela rede) */
   const [guia, setGuia] = useState<EstadoGuia | null>(null), [falasDroid, setFalasDroid] = useState<MensagemChat[]>([]);
+  const [dialogo, setDialogo] = useState<Dialogo | null>(null);   // a caixa de diálogo RPG do tutorial
   /** a pergunta da Zaeon esperando resposta (o painel) */
   const [pergunta, setPergunta] = useState<(PerguntaZaeon & { n: number; total: number }) | null>(null);
   /** EXPULSO pelo Droid (desrespeitou a Zaeon): a tela vermelha e a saída */
@@ -250,9 +253,10 @@ export default function CenaCyber(p: CenaCyberProps) {
       conversarZaeon: cb.current.conversarZaeon ? (pd) => cb.current.conversarZaeon!(pd) : undefined,
       vozZaeon: cb.current.vozZaeon ? (t) => cb.current.vozZaeon!(t) : undefined,
       onExpulso: () => {
-        setExpulso(true); setPergunta(null); setGuia(null); engine.current?.soltarMouse();
+        setExpulso(true); setPergunta(null); setGuia(null); setDialogo(null); engine.current?.soltarMouse();
         setTimeout(() => { engine.current?.dispose(); engine.current = null; router.push("/"); }, 3200);
       },
+      onDialogo: setDialogo,
       onPergunta: setPergunta, onPerfil: (perfil) => cb.current.salvarPerfil?.(perfil),
       onFalaAgente: (f) => setFalasDroid((xs) => [...xs.slice(-20), { id: `agente-${Date.now()}-${xs.length}`, userId: `agente:${f.id}`, name: f.nome, color: f.cor, texto: f.texto, ts: Date.now() }]),
       onEmbarcar: () => { void pedir("nave", () => engine.current?.embarcar()); },
@@ -475,15 +479,18 @@ export default function CenaCyber(p: CenaCyberProps) {
           )}
         </div>
       )}
-      {/* o TUTORIAL do Droid: ele fala nos balões (e no chat); aqui só o passo e o "Pular" */}
+      {/* o TUTORIAL do Droid: a CAIXA DE DIÁLOGO (RPG) com a fala/instrução de agora; em cima, o OBJETIVO (o "quest
+          log": o passo e o "Pular") */}
+      {!menu && dialogo && <CaixaDialogo d={dialogo} touch={touch} />}
       {!menu && guia && guia.id !== "nascer" && (
-        <div className="absolute left-1/2 top-3 z-[26] flex -translate-x-1/2 items-center gap-2 rounded-full border bg-[#0d0a1c]/80 py-1 pl-3 pr-1 text-[11.5px] text-amber-50/85 backdrop-blur" style={{ borderColor: `${guia.cor}66` }}>
-          <span style={{ color: guia.cor }} className="font-bold">✦ {guia.agente}</span>
-          <span className="tabular-nums text-amber-50/60">{guia.passo}/{guia.total - 1} · {guia.titulo}</span>
+        <div className="absolute left-1/2 top-3 z-[26] flex -translate-x-1/2 items-center gap-2.5 rounded-md border-2 bg-[#0d0a1c]/85 py-1 pl-3 pr-1 text-[12px] text-amber-50/85 shadow-[0_8px_24px_-10px_rgba(0,0,0,.8)] backdrop-blur" style={{ borderColor: `${guia.cor}88` }}>
+          <span style={{ color: guia.cor }} className="font-black uppercase tracking-[0.18em]">◆ Objetivo</span>
+          <span className="font-semibold text-amber-50/90">{guia.titulo}</span>
+          <span className="tabular-nums text-amber-50/45">{guia.passo}/{guia.total - 1}</span>
           <button type="button" onClick={() => engine.current?.guiaPular()} className="min-h-[28px] rounded-full border border-white/15 px-3 text-amber-50/75 hover:text-white">Pular</button>
         </div>
       )}
-      {!menu && pergunta && <RespostaZaeon pergunta={pergunta} touch={touch} onResponder={responderZaeon} />}
+      {!menu && pergunta && <RespostaZaeon pergunta={pergunta} touch={touch} onResponder={responderZaeon} acimaDaCaixa={!!dialogo} />}
       {expulso && (
         <div role="alert" className="absolute inset-0 z-[70] flex flex-col items-center justify-center gap-3 bg-[#2a0404]/85 px-8 text-center text-red-50 backdrop-blur-sm">
           <p className="text-2xl font-extrabold tracking-wide">Você foi expulso do cyberespaço.</p>

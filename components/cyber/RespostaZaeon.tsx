@@ -7,13 +7,13 @@
 import { useEffect, useRef, useState } from "react";
 import { MAX_RESPOSTA, type PerguntaZaeon } from "@/lib/cyber/conversaZaeon";
 
-export default function RespostaZaeon(p: { pergunta: PerguntaZaeon & { n: number; total: number }; touch: boolean; onResponder(r: string): void }) {
+export default function RespostaZaeon(p: { pergunta: PerguntaZaeon & { n: number; total: number }; touch: boolean; onResponder(r: string): void; /** a caixa de diálogo do tutorial está embaixo: sobe por cima dela */ acimaDaCaixa?: boolean }) {
   const q = p.pergunta, [txt, setTxt] = useState(""), campo = useRef<HTMLInputElement>(null);
   const comTexto = q.tipo === "texto" || q.outro;
   useEffect(() => { setTxt(""); if (q.tipo === "texto") campo.current?.focus(); }, [q.id, q.tipo]);
   const enviar = (r: string) => { const v = r.trim(); if (v) p.onResponder(v); };
   return (
-    <div role="dialog" aria-label={`Zaeon pergunta: ${q.fala}`} className="absolute left-1/2 z-[27] w-[min(94vw,520px)] -translate-x-1/2 rounded-2xl border border-cyan-300/40 bg-[#041322]/88 p-3.5 text-sm text-cyan-50 shadow-[0_0_40px_-10px_rgba(127,232,255,.7)] backdrop-blur" style={{ bottom: p.touch ? 150 : 96 }}>
+    <div role="dialog" aria-label={`Zaeon pergunta: ${q.fala}`} className="absolute left-1/2 z-[27] w-[min(94vw,520px)] -translate-x-1/2 rounded-2xl border border-cyan-300/40 bg-[#041322]/88 p-3.5 text-sm text-cyan-50 shadow-[0_0_40px_-10px_rgba(127,232,255,.7)] backdrop-blur" style={{ bottom: (p.touch ? 150 : 96) + (p.acimaDaCaixa ? 78 : 0) }}>
       {/* a pergunta já está no balão da Zaeon (e na voz dela): aqui, só as respostas — nada de repetir a fala */}
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-200/80">Responda à Zaeon</p>
       {q.opcoes && (

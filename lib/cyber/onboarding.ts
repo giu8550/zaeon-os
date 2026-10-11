@@ -4,18 +4,16 @@
  * Quem NUNCA entrou no cyberespaço (o servidor sabe: User.cyberNasceuEm) NASCE num TUBO DE ENSAIO — os tubos ficam em
  * volta da Cidade Zaeon, na linha da muralha, entre as torres de cristal; o do novato é um dos perto da Recepção (o lar
  * do DROID, o agente de onboarding — lib/cyber/agentes): o líquido escoa, o vidro sobe e a pessoa sai. O Droid (um
- * ofanim) sai de um mini portal e ENSINA fazendo: fala no balão (e no chat) e ESPERA a pessoa cumprir cada instrução
- * (andar → voar → o centro da capela → conhecer a Zaeon (o holograma dela sai do globo e conversa —
- * lib/cyber/conversaZaeon) → montar numa moto → pilotar → descer → os portais (aqui ela fica LIVRE pra explorar) → na
- * Praça, a sua máquina de estudos → despedida). É de cada um: spawnado só no cliente da própria pessoa (nada vai pela
- * rede). E até cruzar o 1º portal a pessoa está numa INSTÂNCIA: a Zaeon é só dela (não vê ninguém, ninguém vê ela
- * andando) — dali em diante, o mundo com as pessoas reais.
+ * ofanim) sai de um mini portal e ENSINA fazendo, como num RPG (out/2026 — docs/superpowers/specs/2026-10-11-tutorial-rpg
+ * -design.md): fala numa CAIXA DE DIÁLOGO e em CUTSCENES (lib/cyber/cutscene) e ESPERA a pessoa cumprir cada instrução
+ * (andar → correr → voo curto → voo longo até a capela → conhecer a Zaeon (o holograma sai do globo e conversa —
+ * lib/cyber/conversaZaeon) → os telões PROBLEMA → SOLUÇÃO → a 1ª missão: o tablet). É de cada um: spawnado só no
+ * cliente da própria pessoa (nada vai pela rede), numa INSTÂNCIA (a Zaeon é só dela) até o fim do tutorial.
  */
 import type { P2 } from "./colisao";
 import { CIDADE, DOCA_ANGULO, anguloDaTorre, mundo, naAberturaDaEscada, TORRES_MURALHA } from "./ceu";
 import { LAR_LOCAL, POIS, marcoNav } from "./landmarks";
-import { LOTES } from "./motos";
-import { NOS } from "./buracos";
+import { ESTACAO, MIRANTES_ESTACAO, noMirante } from "./terra";
 import { deEscada } from "./nav";
 
 /** a chave do "já nasci" (localStorage) — só a reserva quando o servidor não diz (prévia/sem sala) */
@@ -83,61 +81,62 @@ export function estadoDoTubo(t: number): { liquido: number; vidro: number } {
 }
 
 /**
- * O que a pessoa tem que FAZER pro Droid seguir (ele espera até ela fazer — `cumpriu`): nascer (o tubo abriu), andar
- * `m` metros, voar `m` metros acima do chão, CHEGAR no alvo do passo, conversar com a Zaeon, montar numa moto, pilotar
- * `m` metros (ou já ter descido depois de rodar um pouco), descer, CRUZAR um portal (buraco negro), estar na PRAÇA e
- * chegar perto da PRÓPRIA base (a máquina de estudos).
+ * O que a pessoa tem que FAZER pro Droid seguir (ele espera até ela fazer — `cumpriu`). O tutorial de out/2026 é 100%
+ * MOVIMENTO (sem motos, portais nem dash — pedido do dono): nascer (o tubo abriu), ANDAR `m` metros, CORRER `m` metros
+ * (Shift andando), VOAR `m` metros acima do chão (Espaço), o VOO LONGO (`m` metros de turbo: Shift no ar), CHEGAR no
+ * alvo, conversar com a Zaeon, OUVIR (o passo é só a cena — anda quando as falas acabam) e abrir o TABLET.
  */
-export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "voar"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "montar" } | { tipo: "pilotar"; m: number } | { tipo: "descer" } | { tipo: "portal" } | { tipo: "praca" } | { tipo: "base" } | { tipo: "fim" };
-export type IdPassoGuia = "nascer" | "andar" | "voar" | "capela" | "zaeon" | "moto" | "pilotar" | "descer" | "portal" | "explorar" | "base" | "fim";
-/** um passo do tutorial: as FALAS do Droid (balão + chat, uma depois da outra; a última fica até a pessoa cumprir), o
- *  que ela tem que fazer e, se for "ir até", o alvo (o Droid vai na frente; o farol marca). `livre` = o Droid some e a
- *  pessoa explora sozinha (o tutorial só espera ela chegar na praça) */
-export type PassoGuia = { id: IdPassoGuia; titulo: string; falas: string[]; cond: CondGuia; alvo: (P2 & { r: number }) | null; livre?: boolean };
+export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "fim" };
+export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "fim";
+/** a CUTSCENE do passo (lib/cyber/cutscene): enquanto o Droid fala, a câmera enquadra outra coisa — "droid" = ele (a
+ *  apresentação e a missão), "teloes" = os telões PROBLEMA → SOLUÇÃO. A câmera solta na INSTRUÇÃO (a última fala),
+ *  a não ser que `cenaInteira` (o passo todo é cena — a pessoa não precisa se mexer) */
+export type CenaGuia = "droid" | "teloes";
+/** um passo do tutorial: as FALAS do Droid (uma depois da outra; a última — a INSTRUÇÃO — fica na tela até a pessoa
+ *  cumprir), o que ela tem que fazer, o alvo de "vem comigo até…" (o Droid vai na frente; o farol marca), a CENA e as
+ *  TECLAS que a caixa de diálogo mostra em destaque */
+export type PassoGuia = { id: IdPassoGuia; titulo: string; falas: string[]; cond: CondGuia; alvo: (P2 & { r: number }) | null; cena?: CenaGuia; cenaInteira?: boolean; teclas?: string[]; livre?: boolean };
 
 /** onde o Droid leva no CENTRO da capela: ao lado do globo (a Zaeon sai dele), do lado de quem vem do leste */
 export const CENTRO_DA_CAPELA_LOCAL = { x: 14, z: 3 };
-/** a partir de qual passo o mundo é COMPARTILHADO (antes, a Zaeon do tutorial é só da pessoa — a "instância") */
-export const PASSO_FIM_DA_INSTANCIA: IdPassoGuia = "explorar";
+/** onde a pessoa para pra ver os TELÕES (local): na frente da estação PROBLEMA → SOLUÇÃO do mirante 1, do lado do
+ *  centro, entre os dois telões — dali se lê o da esquerda (problemas) e o da direita (soluções) */
+export const FRENTE_DOS_TELOES_LOCAL: P2 = noMirante(MIRANTES_ESTACAO[0]!, ESTACAO.u + 22, ESTACAO.v);
 
 /** o ROTEIRO do Droid (mundo) */
 export const ROTEIRO: PassoGuia[] = (() => {
-  const centro = mundo(CENTRO_DA_CAPELA_LOCAL), lote = LOTES.find((l) => l.id === "garagem")!, bn = NOS.zaeon.anel;
+  const centro = mundo(CENTRO_DA_CAPELA_LOCAL), teloes = mundo(FRENTE_DOS_TELOES_LOCAL);
   return [
-    { id: "nascer", titulo: "Nascendo", falas: [], cond: { tipo: "nascer" }, alvo: null },
-    { id: "andar", titulo: "Andar", falas: ["Oi! Eu sou o Droid, o seu guia no hiperespaço ✦", "Use W A S D (ou o joystick) pra andar. Vem, anda um pouco comigo!"], cond: { tipo: "andar", m: 6 }, alvo: null },
-    { id: "voar", titulo: "Voar", falas: ["Isso! Você tem uma mochila a jato.", "Segure ESPAÇO pra subir. Solte pra descer planando."], cond: { tipo: "voar", m: 4 }, alvo: null },
-    { id: "capela", titulo: "A capela", falas: ["Voando bem! 🚀", "Agora vem comigo até o centro da capela. Tem alguém querendo te conhecer…"], cond: { tipo: "chegar" }, alvo: { ...centro, r: 7 } },
-    { id: "zaeon", titulo: "A Zaeon", falas: ["Olha o globo… ✦"], cond: { tipo: "conversa" }, alvo: null },
-    { id: "moto", titulo: "As motos", falas: ["Vamos pegar uma moto! Elas ficam na GARAGEM, a plataforma laranja.", "Pise na luz do fio de energia na borda da cidade: ele te puxa até lá. Chegue perto de uma moto e aperte F."], cond: { tipo: "montar" }, alvo: { x: lote.x, z: lote.z, r: 14 } },
-    { id: "pilotar", titulo: "Pilotar", falas: ["W acelera, A e D fazem a curva e Shift dá o boost.", "Dá uma volta!"], cond: { tipo: "pilotar", m: 60 }, alvo: null },
-    { id: "descer", titulo: "Descer", falas: ["Mandou bem!", "Pra parar: P pousa a moto e F desce dela."], cond: { tipo: "descer" }, alvo: null },
-    { id: "portal", titulo: "Os portais", falas: ["Agora o mais legal: os buracos negros são os portais do hiperespaço. Me segue!", "A partir daqui você está livre pra explorar — as universidades, a Solana House… Quando quiser, vá pra Praça: lá está a sua máquina de estudos."], cond: { tipo: "portal" }, alvo: { x: bn.x, z: bn.z, r: 8 } },
-    { id: "explorar", titulo: "Livre · vá à Praça", falas: [], cond: { tipo: "praca" }, alvo: null, livre: true },
-    { id: "base", titulo: "A sua máquina de estudos", falas: ["Bem-vindo à Praça! Esta é a sua máquina de estudos ✦", "Pare perto dela e aperte F: ela abre a sua Sala de Estudos."], cond: { tipo: "base" }, alvo: null },
-    { id: "fim", titulo: "Tudo seu", falas: ["É isso! Agora o hiperespaço é seu ✦", "Se quiser rever o caminho, me chame na Recepção, na Zaeon. Bons estudos!"], cond: { tipo: "fim" }, alvo: null },
+    { id: "nascer", titulo: "Despertar", falas: [], cond: { tipo: "nascer" }, alvo: null },
+    { id: "andar", titulo: "Andar", cena: "droid", teclas: ["W", "A", "S", "D"], falas: ["Ah… você despertou. Bem-vindo ao hiperespaço, viajante.", "Eu sou o Droid, guardião desta cidadela — a Zaeon. Vou guiar os seus primeiros passos.", "Use W A S D para andar. Venha, caminhe um pouco comigo."], cond: { tipo: "andar", m: 6 }, alvo: null },
+    { id: "correr", titulo: "Correr", teclas: ["Shift"], falas: ["Bom. Seus pés ainda lembram o caminho.", "Agora segure SHIFT enquanto anda para correr. Mais rápido!"], cond: { tipo: "correr", m: 20 }, alvo: null },
+    { id: "voar", titulo: "Voo curto", teclas: ["Espaço"], falas: ["Você é mais rápido do que parece.", "Mas aqui ninguém fica preso ao chão. Aperte ESPAÇO: a mochila a jato te tira do solo."], cond: { tipo: "voar", m: 4 }, alvo: null },
+    { id: "voo-longo", titulo: "Voo longo", teclas: ["Espaço", "Shift"], falas: ["Isso! Você está voando.", "Para ir longe, segure SHIFT no ar: o turbo te leva muito mais rápido. Siga-me até a capela, no coração da cidadela!"], cond: { tipo: "turbo", m: 50 }, alvo: { ...centro, r: 7 } },
+    { id: "capela", titulo: "A capela", falas: ["Que voo! Agora pouse no centro da capela, ao lado do globo."], cond: { tipo: "chegar" }, alvo: { ...centro, r: 7 } },
+    { id: "zaeon", titulo: "A Zaeon", falas: ["Olhe o globo… alguém quer te conhecer. ✦"], cond: { tipo: "conversa" }, alvo: null },
+    { id: "ir-teloes", titulo: "Os telões", teclas: ["Espaço", "Shift"], falas: ["A Zaeon gostou de você.", "Agora venha comigo: quero te mostrar o que move esta cidade."], cond: { tipo: "chegar" }, alvo: { ...teloes, r: 9 } },
+    { id: "teloes", titulo: "Problema → solução", cena: "teloes", cenaInteira: true, falas: ["Neste telão, os PROBLEMAS DA TERRA: o clima, as florestas, os oceanos, a água.", "E deste lado, as SOLUÇÕES — ideias e projetos de gente como você.", "Cada solução começou como um ESTUDO. É assim que se cria valor aqui."], cond: { tipo: "ouvir" }, alvo: null },
+    { id: "missao", titulo: "A primeira missão", cena: "droid", cenaInteira: true, falas: ["Agora sua primeira missão é criar um estudo sobre qualquer tema que te interessa.", "Vou abrir o seu tablet. ✦"], cond: { tipo: "tablet" }, alvo: null },
   ];
 })();
 /** o índice de um passo */
 export const passoDe = (id: IdPassoGuia) => ROTEIRO.findIndex((p) => p.id === id);
 
 /** o que o engine mede desde que o Droid deu a instrução do passo */
-export type CtxGuia = { nascendo: boolean; andou: number; noAr: number; chegou: boolean; conversaFeita: boolean; naMoto: boolean; motoAndou: number; cruzouPortal: boolean; naPraca: boolean; pertoDaBase: boolean };
+export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean };
 /** a pessoa fez o que o Droid pediu? */
 export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
   switch (c.tipo) {
     case "nascer": return !x.nascendo;
     case "andar": return x.andou >= c.m;
+    case "correr": return x.correu >= c.m;
     case "voar": return x.noAr >= c.m;
+    case "turbo": return x.turbo >= c.m;
     case "chegar": return x.chegou;
     case "conversa": return x.conversaFeita;
-    case "montar": return x.naMoto;
-    case "pilotar": return x.motoAndou >= c.m || (!x.naMoto && x.motoAndou >= 10);
-    case "descer": return !x.naMoto;
-    case "portal": return x.cruzouPortal;
-    case "praca": return x.naPraca;
-    case "base": return x.pertoDaBase;
-    case "fim": return false;   // o fim acaba sozinho (o Droid se despede e some no portal)
+    case "ouvir": return true;   // (o engine só confere depois que as falas acabam)
+    case "tablet": return x.tabletAberto;
+    case "fim": return false;   // o fim acaba sozinho (o Droid se despede)
   }
 }
 /** quanto o Droid espera entre uma fala e outra (s) — e depois da última, antes de começar a conferir */

@@ -1,6 +1,6 @@
 import { R_SOM_CORACAO } from "./coracao";
 import { describe, expect, it } from "vitest";
-import { PREF_TUTORIAL, tutorialLigado, ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, PASSO_FIM_DA_INSTANCIA, cumpriu, deveNascerNoTubo, passoDe, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
+import { PREF_TUTORIAL, tutorialLigado, ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, FRENTE_DOS_TELOES_LOCAL, cumpriu, deveNascerNoTubo, passoDe, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
 import { CIDADE as C2, DOCA_ANGULO, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "./ceu";
 import { LAR_LOCAL } from "./landmarks";
 import { AGENTES, DROID, noPisoDaZaeon, posDoGuia } from "./agentes";
@@ -9,6 +9,7 @@ import { POIS, marcoNav } from "./landmarks";
 import { alturaEm } from "./nav";
 import { dentroDeAlgum } from "./colisao";
 import { NOS } from "./buracos";
+import { TELOES, TELOES_SOLUCAO, colisoresDoDistritoTerra } from "./terra";
 import { PERSONAS } from "@/lib/ai/personas";
 
 const recepcao = marcoNav(POIS.find((p) => p.id === "zaeon")!)!;
@@ -56,36 +57,46 @@ describe("quem chega NASCE num tubo de ensaio", () => {
 });
 
 describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada instrução)", () => {
-  const nada: CtxGuia = { nascendo: false, andou: 0, noAr: 0, chegou: false, conversaFeita: false, naMoto: false, motoAndou: 0, cruzouPortal: false, naPraca: false, pertoDaBase: false };
-  it("tubo → andar → voar → o CENTRO da capela (a Zaeon, não os desktops) → conversa → motos → portais (LIVRE) → a Praça (a sua máquina de estudos) → fim", () => {
-    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "voar", "capela", "zaeon", "moto", "pilotar", "descer", "portal", "explorar", "base", "fim"]);
+  const nada: CtxGuia = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false };
+  it("tubo → andar → correr → voo curto → voo longo até a capela → a Zaeon → os telões → a 1ª missão (o tablet) — sem motos, portais nem dash", () => {
+    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "correr", "voar", "voo-longo", "capela", "zaeon", "ir-teloes", "teloes", "missao"]);
     for (const p of ROTEIRO.slice(1)) for (const f of p.falas) expect(f.length).toBeLessThanOrEqual(170);
     for (const p of ROTEIRO) if (p.alvo) expect(naIlhaPrincipal(p.alvo)).toBe(true);
+    expect(ROTEIRO.map((p) => p.falas.join(" ")).join(" ")).not.toMatch(/moto|portal|dash|\bC\b/i);
     expect(ROTEIRO.find((p) => p.id === "capela")!.falas.join(" ")).not.toMatch(/desktop|estud/i);   // a capela agora é pra ver a Zaeon
-    expect(ROTEIRO.find((p) => p.id === "base")!.falas.join(" ")).toMatch(/máquina de estudos/);
-    expect(ROTEIRO.find((p) => p.id === "explorar")!.livre).toBe(true);
-    expect(passoDe(PASSO_FIM_DA_INSTANCIA)).toBe(passoDe("portal") + 1);
+    expect(ROTEIRO.find((p) => p.id === "missao")!.falas[0]).toBe("Agora sua primeira missão é criar um estudo sobre qualquer tema que te interessa.");
     const c = mundo(CENTRO_DA_CAPELA_LOCAL); expect(dentroDeAlgum(c, colisoresDaCidade())).toBe(false);
     expect(Math.hypot(CENTRO_DA_CAPELA_LOCAL.x, CENTRO_DA_CAPELA_LOCAL.z)).toBeLessThan(R_SOM_CORACAO);   // perto do globo: ouve o coração
     const pe = peDaRecepcao(); expect(alturaEm(recepcao, pe)).toBe(0); expect(dentroDeAlgum(pe, colisoresDaCidade())).toBe(false);
   });
-  it("sem a pessoa fazer nada, nenhum passo anda (o Droid espera)", () => {
-    for (const p of ROTEIRO.slice(1)) expect(cumpriu(p.cond, { ...nada, naMoto: p.cond.tipo === "descer" })).toBe(false);
+  it("a frente dos telões é chão livre na ilha, entre os dois telões e do lado do centro", () => {
+    const f = mundo(FRENTE_DOS_TELOES_LOCAL);
+    expect(naIlhaPrincipal(f)).toBe(true);
+    expect(dentroDeAlgum(f, [...colisoresDaCidade(), ...colisoresDoDistritoTerra(mundo)])).toBe(false);
+    const [p, s] = [TELOES[0]!, TELOES_SOLUCAO[0]!];
+    expect(Math.abs(Math.hypot(FRENTE_DOS_TELOES_LOCAL.x - p.x, FRENTE_DOS_TELOES_LOCAL.z - p.z) - Math.hypot(FRENTE_DOS_TELOES_LOCAL.x - s.x, FRENTE_DOS_TELOES_LOCAL.z - s.z))).toBeLessThan(1);
+    expect(Math.hypot(FRENTE_DOS_TELOES_LOCAL.x, FRENTE_DOS_TELOES_LOCAL.z)).toBeLessThan(Math.hypot(p.x, p.z));
+  });
+  it("as cenas: o Droid se apresenta e passa a missão; os telões são cena inteira; as instruções mostram as teclas", () => {
+    const pa = (id: string) => ROTEIRO.find((p) => p.id === id)!;
+    expect(pa("andar").cena).toBe("droid"); expect(pa("teloes").cena).toBe("teloes"); expect(pa("teloes").cenaInteira).toBe(true);
+    expect(pa("missao").cena).toBe("droid");
+    expect(pa("andar").teclas).toEqual(["W", "A", "S", "D"]); expect(pa("correr").teclas).toEqual(["Shift"]); expect(pa("voar").teclas).toEqual(["Espaço"]);
+  });
+  it("sem a pessoa fazer nada, nenhum passo anda (o Droid espera) — a não ser o de só ouvir", () => {
+    for (const p of ROTEIRO.slice(1)) if (p.cond.tipo !== "ouvir") expect(cumpriu(p.cond, nada)).toBe(false);
   });
   it("cada instrução se cumpre com a ação certa — e só com ela", () => {
     const c = (id: string) => ROTEIRO.find((p) => p.id === id)!.cond;
     expect(cumpriu(c("nascer"), { ...nada, nascendo: true })).toBe(false); expect(cumpriu(c("nascer"), nada)).toBe(true);
     expect(cumpriu(c("andar"), { ...nada, andou: 2 })).toBe(false); expect(cumpriu(c("andar"), { ...nada, andou: 7 })).toBe(true);
-    expect(cumpriu(c("voar"), { ...nada, andou: 99, noAr: 1 })).toBe(false); expect(cumpriu(c("voar"), { ...nada, noAr: 5 })).toBe(true);
-    expect(cumpriu(c("capela"), { ...nada, andou: 99 })).toBe(false); expect(cumpriu(c("capela"), { ...nada, chegou: true })).toBe(true);
+    expect(cumpriu(c("correr"), { ...nada, andou: 99 })).toBe(false); expect(cumpriu(c("correr"), { ...nada, correu: 21 })).toBe(true);
+    expect(cumpriu(c("voar"), { ...nada, correu: 99, noAr: 1 })).toBe(false); expect(cumpriu(c("voar"), { ...nada, noAr: 5 })).toBe(true);
+    expect(cumpriu(c("voo-longo"), { ...nada, noAr: 30, chegou: true })).toBe(false); expect(cumpriu(c("voo-longo"), { ...nada, turbo: 51 })).toBe(true);
+    expect(cumpriu(c("capela"), { ...nada, turbo: 99 })).toBe(false); expect(cumpriu(c("capela"), { ...nada, chegou: true })).toBe(true);
     expect(cumpriu(c("zaeon"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("zaeon"), { ...nada, conversaFeita: true })).toBe(true);
-    expect(cumpriu(c("moto"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("moto"), { ...nada, naMoto: true })).toBe(true);
-    expect(cumpriu(c("pilotar"), { ...nada, naMoto: true, motoAndou: 20 })).toBe(false); expect(cumpriu(c("pilotar"), { ...nada, naMoto: true, motoAndou: 61 })).toBe(true);
-    expect(cumpriu(c("descer"), { ...nada, naMoto: true })).toBe(false); expect(cumpriu(c("descer"), nada)).toBe(true);
-    expect(cumpriu(c("portal"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("portal"), { ...nada, cruzouPortal: true })).toBe(true);
-    expect(cumpriu(c("explorar"), { ...nada, cruzouPortal: true })).toBe(false); expect(cumpriu(c("explorar"), { ...nada, naPraca: true })).toBe(true);
-    expect(cumpriu(c("base"), { ...nada, naPraca: true })).toBe(false); expect(cumpriu(c("base"), { ...nada, pertoDaBase: true })).toBe(true);
-    expect(cumpriu(c("fim"), { ...nada, pertoDaBase: true, naPraca: true })).toBe(false);
+    expect(cumpriu(c("ir-teloes"), { ...nada, conversaFeita: true })).toBe(false); expect(cumpriu(c("ir-teloes"), { ...nada, chegou: true })).toBe(true);
+    expect(cumpriu(c("missao"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("missao"), { ...nada, tabletAberto: true })).toBe(true);
   });
 });
 
