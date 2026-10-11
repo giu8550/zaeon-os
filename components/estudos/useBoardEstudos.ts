@@ -152,5 +152,19 @@ export function useBoardEstudos(o: { boardId?: string | null; convite?: string |
     finally { setGerando((g) => { const n = { ...g }; delete n[cardId]; return n; }); }
   }, [gravar]);
 
-  return { board, compartilhados, erro, presentes, cursores, salvando, gerando, mudar, renomear, moverCursor, convidar, gerar, abrir: (id: string | null) => setAlvo({ id, convite: null }) };
+  /** a CAMADA DE VALIDAÇÃO do blueprint: o servidor confere os links do estudo e grava o selo */
+  const checarSelos = useCallback(async (cardId: string): Promise<string | null> => {
+    const b = boardRef.current; if (!b) return null;
+    if (fila.current.upsert.size || fila.current.remove.size) await gravar();
+    try {
+      const r = await fetch(`/api/estudos/board/${b.id}/selos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return j?.error ?? "Não deu pra checar agora.";
+      setBoard((atual) => (atual && atual.id === j.board.id ? { ...j.board, cards: mesclarRemoto(atual.cards, j.board.cards, pendentes()) } : atual));
+      const l = j.links as { ok: number; total: number };
+      return !l.total ? "Nenhum link pra checar ainda (fontes ou entregável)." : l.ok === l.total ? `Todos os ${l.total} links responderam.` : `${l.total - l.ok} de ${l.total} links não responderam: ${(j.quebrados as string[]).slice(0, 3).join(", ")}`;
+    } catch { return "Sem conexão."; }
+  }, [gravar]);
+
+  return { board, compartilhados, erro, presentes, cursores, salvando, gerando, mudar, renomear, moverCursor, convidar, gerar, checarSelos, abrir: (id: string | null) => setAlvo({ id, convite: null }) };
 }

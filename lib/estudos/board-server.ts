@@ -53,12 +53,12 @@ export async function boardsCompartilhados(userId: string): Promise<{ id: string
 
 export type ResultadoPatch = { ok: true; board: BoardEstudosView } | { ok: false; motivo: "not_found" | "forbidden" | "conflict" };
 /** aplica as operações com controle otimista (relê e reaplica se outro colaborador gravou no meio) e avisa o canal */
-export async function patchBoardEstudos(id: string, userId: string, ops: OpsBoard & { titulo?: unknown }): Promise<ResultadoPatch> {
+export async function patchBoardEstudos(id: string, userId: string, ops: OpsBoard & { titulo?: unknown }, o: { servidor?: boolean } = {}): Promise<ResultadoPatch> {
   for (let i = 0; i < 5; i++) {
     const atual = await boardDoUsuario(id, userId);
     if (!atual) return { ok: false, motivo: "not_found" };
     if (!podeEscrever(atual.papel)) return { ok: false, motivo: "forbidden" };
-    const cards = aplicarOps(atual.cards, ops);
+    const cards = aplicarOps(atual.cards, ops, o);
     const titulo = typeof ops.titulo === "string" && ops.titulo.trim() ? ops.titulo.trim().slice(0, 200) : atual.titulo;
     const r = await prisma.cartolina.updateMany({ where: { id, rev: atual.rev }, data: { cards: cards as never, titulo, rev: atual.rev + 1 } });
     if (r.count === 1) {

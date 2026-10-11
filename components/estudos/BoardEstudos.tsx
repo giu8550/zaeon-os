@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { LARGURA, filhosDe, novoIdCard, posicaoDoFilho, profundidade, type CardEstudo, type TipoCard } from "@/lib/estudos/board";
 import { useBoardEstudos } from "./useBoardEstudos";
+import BlueprintEstudo from "./BlueprintEstudo";
 
 const AZUL = "#0b2c4d", LINHA = "rgba(170,220,255,.9)", LINHA_FRACA = "rgba(150,205,255,.14)", TINTA = "#e8f6ff";
 const ROTULO: Record<TipoCard, string> = { estudo: "ESTUDO", percurso: "PERCURSO", confirmacao: "CONFIRMAÇÃO", especulacao: "ESPECULAÇÃO", nota: "NOTA", pergunta: "PERGUNTA" };
@@ -98,6 +99,7 @@ export default function BoardEstudos({ boardInicialId, convite }: { boardInicial
     B.mudar([c]); setEditando(c.id);
   };
   const [erroCard, setErroCard] = useState<Record<string, string>>({});
+  const [blueprint, setBlueprint] = useState<string | null>(null);
   const gerar = async (c: CardEstudo, acao: "percurso" | "resposta") => {
     setErroCard((e) => { const n = { ...e }; delete n[c.id]; return n; });
     const erro = await B.gerar(c.id, acao);
@@ -200,6 +202,7 @@ export default function BoardEstudos({ boardInicialId, convite }: { boardInicial
                 {!leitor && !ed && !B.gerando[c.id] && (c.tipo === "estudo" || c.tipo === "percurso" || c.tipo === "confirmacao") && (
                   <div className="mt-2 flex flex-wrap gap-1.5" onPointerDown={(e) => e.stopPropagation()}>
                     {c.tipo === "estudo" && <Botao cor="#ffd36b" titulo="O percursor traça o caminho do estudo (cada passo vira um card à esquerda)" onClick={() => gerar(c, "percurso")}>⟵ Gerar percurso</Botao>}
+                    {c.tipo === "estudo" && <Botao cor="#7fe0ff" titulo="A prancha técnica do estudo: produto final, o que é factível, validação e o item que ele vira" onClick={() => setBlueprint(c.id)}>▤ blueprint</Botao>}
                     {(c.tipo === "estudo" || c.tipo === "percurso") && <Botao cor="#7dffb0" titulo="Busca na literatura: o que a citação confirma vira confirmação; o resto, especulação" onClick={() => gerar(c, "resposta")}>⟵ Resposta certeira</Botao>}
                     <Botao cor="#c9b6ff" titulo="Uma ideia ainda não confirmada: fica num card menor" onClick={() => ramificar(c, "especulacao")}>+ especulação</Botao>
                     <Botao cor="#e8f6ff" titulo="Uma nota ligada a este card" onClick={() => ramificar(c, "nota")}>+ nota</Botao>
@@ -233,6 +236,12 @@ export default function BoardEstudos({ boardInicialId, convite }: { boardInicial
         <span className="text-sky-300/60">{B.salvando ? "salvando…" : "salvo"}</span>
       </div>
       {conviteMsg && <div className="absolute left-3 top-16 z-[90] rounded border px-3 py-1.5 font-mono text-[11px] text-sky-50" style={{ background: "rgba(5,22,42,.9)", borderColor: "rgba(127,224,255,.3)" }}>{conviteMsg}</div>}
+
+      {/* o BLUEPRINT do estudo (a prancha técnica) */}
+      {blueprint && board && (
+        <BlueprintEstudo cards={board.cards} estudoId={blueprint} rev={board.rev} autorNome={(sessao?.user?.name as string | undefined) ?? "você"} podeEditar={!leitor}
+          onSalvar={(c) => B.mudar([c])} onChecar={() => B.checarSelos(blueprint)} onFechar={() => setBlueprint(null)} />
+      )}
 
       {/* QUEM ESTÁ no board agora */}
       <div className="absolute right-3 top-3 z-[90] flex items-center -space-x-2" onPointerDown={(e) => e.stopPropagation()}>
