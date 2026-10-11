@@ -84,11 +84,17 @@ export function suavizarRitual(atual: number, alvo: number, dt: number): number 
 }
 
 // ───────────── os ANUNCIADORES (os 2 efeitos da música) ─────────────
-/** a BALADA no lounge: o escuro (a opacidade do véu escuro na tela de quem está DENTRO do lounge) e o quanto a batida
- *  abre a luz (`flash`, 0..1, decaindo rápido) — com música as pausas de luz vêm na batida; sem ela, de vez em quando */
-export const BALADA = { escuro: 0.86, abre: 0.78, decai: 7, semMusica: [2.2, 4.5] as const } as const;
-/** a opacidade do véu escuro: `liga` (0..1, o efeito ligado e suavizado) × o escuro, menos o que o flash abre */
-export const escuroDaBalada = (liga: number, flash: number) => Math.max(0, liga * BALADA.escuro * (1 - BALADA.abre * Math.max(0, Math.min(1, flash))));
+/** a BALADA no lounge, como numa festa de verdade (o dono, out/2026): o lounge fica ESCURO e, na batida, as LUZES
+ *  ACENDEM de vez por um instante — o estouro de luz neon (`segura` s no máximo) — e APAGAM de novo (`decai`). Com
+ *  música os estouros vêm na batida; sem ela, de tempos em tempos. `escuro` = o véu na tela de quem está DENTRO do
+ *  lounge; `brilho` = o quanto o estouro clareia por cima da cena */
+export const BALADA = { escuro: 0.88, segura: 0.12, decai: 10, brilho: 0.42, semMusica: [2.2, 4.5] as const } as const;
+/** a LUZ do estouro (0..1) `desde` s depois dele: acesa no máximo por `segura`, e apagando rápido */
+export const luzDoFlash = (desde: number) => (desde < 0 ? 0 : desde <= BALADA.segura ? 1 : Math.exp(-(desde - BALADA.segura) * BALADA.decai));
+/** a opacidade do véu escuro: `liga` (0..1, o efeito ligado e suavizado) × o escuro — o estouro de luz o tira inteiro */
+export const escuroDaBalada = (liga: number, luz: number) => Math.max(0, liga * BALADA.escuro * (1 - Math.max(0, Math.min(1, luz))));
+/** o quanto o estouro CLAREIA a cena (a luz neon acesa por cima, somada) */
+export const brilhoDaBalada = (liga: number, luz: number) => Math.max(0, liga * BALADA.brilho * Math.max(0, Math.min(1, luz)));
 /** a cor neon de cada flash (gira entre magenta, ciano, violeta e verde-limão — um por batida) */
 export const NEON = [0xff2bd6, 0x22e6ff, 0x9b5cff, 0xb6ff3a] as const;
 export const corDoFlash = (batida: number) => NEON[((batida % NEON.length) + NEON.length) % NEON.length]!;

@@ -20,7 +20,7 @@ import { DECK, TEMPLO, noTemplo } from "@/lib/cyber/templo";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
 import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
 import { criarTempestade, type TempestadeHandle } from "./Tempestade";
-import { BALADA, TURBO_NAVE, corDoFlash, escuroDaBalada, fumacaDaTorre, noPerimetro, faseDaTempestade, intensidadeDaTempestade, passoDaEscadaria, raioNaBatida, revelacaoDaNave, ritualDesligado, sensacaoDaNave, suavizarRitual, type FaseRitual, type Ritual } from "@/lib/cyber/ritual";
+import { BALADA, TURBO_NAVE, brilhoDaBalada, corDoFlash, escuroDaBalada, luzDoFlash, fumacaDaTorre, noPerimetro, faseDaTempestade, intensidadeDaTempestade, passoDaEscadaria, raioNaBatida, revelacaoDaNave, ritualDesligado, sensacaoDaNave, suavizarRitual, type FaseRitual, type Ritual } from "@/lib/cyber/ritual";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type ComandoVoo, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
 import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
@@ -393,8 +393,8 @@ export class CyberEngine {
   private ritualI = 0; private anunI = 0; private escadaV = 0;
   /** a BALADA no lounge: as batidas já vistas, o flash da batida (0..1, decaindo), a cor dele, o próximo flash sem música,
    *  o quanto a câmera está DENTRO do lounge (suavizado) e o que se desenha por cima da cena (o véu escuro e os lasers) */
-  private batidasVistas = 0; private flash = 0; private flashN = 0; private proxFlash = 0; private noLoungeCam = 0;
-  private balada: { veu: THREE.Mesh; cenaVeu: THREE.Scene; camVeu: THREE.OrthographicCamera; neon: THREE.Scene; lasers: THREE.Group; feixes: THREE.Mesh[] } | null = null;
+  private batidasVistas = 0; private flash = 0; private flashEm = -99; private flashN = 0; private proxFlash = 0; private noLoungeCam = 0;
+  private balada: { veu: THREE.Mesh; luz: THREE.Mesh; cenaVeu: THREE.Scene; camVeu: THREE.OrthographicCamera; neon: THREE.Scene; lasers: THREE.Group; feixes: THREE.Mesh[] } | null = null;
   /** o centro das NUVENS da capela do templo (mundo) — a nave do dono só aparece perto delas; `naveRevelada` = o instante
    *  (s) em que o véu de cada nave saiu (o evento, 1× por ritual) */
   private centroDasNuvens: THREE.Vector3 | null = null;
@@ -1793,9 +1793,10 @@ export class CyberEngine {
     this.cidade?.tempestade(this.ritualI, raios, this.anunI * fumacaDaTorre(this.escadaV));
     if (bateu && tocando && this.anunI > 0.5 && Math.random() < raioNaBatida(this.escadaV)) this.cidade?.raioNoTemplo();
     // a BALADA: o flash na batida (sem música, de tempos em tempos), decaindo rápido
-    if (bateu && tocando) { this.flash = 1; this.flashN++; }
-    else if (!tocando && this.anunI > 0.5 && t >= this.proxFlash) { this.flash = 0.8; this.flashN++; this.proxFlash = t + BALADA.semMusica[0] + Math.random() * (BALADA.semMusica[1] - BALADA.semMusica[0]); }
-    this.flash *= Math.exp(-dt * BALADA.decai);
+    // o ESTOURO DE LUZ: acende de vez por um instante e apaga de novo (luzDoFlash)
+    if (bateu && tocando) { this.flashEm = t; this.flashN++; }
+    else if (!tocando && this.anunI > 0.5 && t >= this.proxFlash) { this.flashEm = t; this.flashN++; this.proxFlash = t + BALADA.semMusica[0] + Math.random() * (BALADA.semMusica[1] - BALADA.semMusica[0]); }
+    this.flash = luzDoFlash(t - this.flashEm);
     // a NAVE do dono é invisível: só aparece chegando perto das NUVENS da capela do templo
     this.revelarNaves(r && fase !== "off" ? r : null, agora);
   }
@@ -1815,17 +1816,22 @@ export class CyberEngine {
     if (liga < 0.01) return;
     if (!this.balada) {
       const veu = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
-      const cenaVeu = new THREE.Scene(); cenaVeu.add(veu);
+      const luz = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+      const cenaVeu = new THREE.Scene(); cenaVeu.add(veu, luz);
       const camVeu = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       const neon = new THREE.Scene(), lasers = new THREE.Group(); neon.add(lasers);
       const w = mundo(L); lasers.position.set(w.x, 0, w.z); lasers.rotation.y = rotDaSala(L);
       const geo = new THREE.CylinderGeometry(0.06, 1.6, 1, 10, 1, true); geo.translate(0, -0.5, 0);   // a ponta no alto, abrindo pra baixo
       const feixes = Array.from({ length: this.o.low ? 6 : 10 }, (_, i) => { const f = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: corDoFlash(i), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); lasers.add(f); return f; });
-      this.balada = { veu, cenaVeu, camVeu, neon, lasers, feixes };
+      this.balada = { veu, luz, cenaVeu, camVeu, neon, lasers, feixes };
     }
     const B = this.balada, cor = new THREE.Color(corDoFlash(this.flashN));
-    (B.veu.material as THREE.MeshBasicMaterial).color.setRGB(cor.r * 0.18 * this.flash, cor.g * 0.18 * this.flash, cor.b * 0.18 * this.flash);
+    (B.veu.material as THREE.MeshBasicMaterial).color.setRGB(0, 0, 0);
     (B.veu.material as THREE.MeshBasicMaterial).opacity = escuro;
+    // as LUZES ACESAS do estouro: a cor neon da batida somada por cima da cena (clareia tudo por um instante)
+    const brilho = brilhoDaBalada(liga, this.flash);
+    (B.luz.material as THREE.MeshBasicMaterial).color.setRGB(0.55 + 0.45 * cor.r, 0.55 + 0.45 * cor.g, 0.55 + 0.45 * cor.b);
+    (B.luz.material as THREE.MeshBasicMaterial).opacity = brilho; B.luz.visible = brilho > 0.005;
     B.lasers.position.y = ilhaY + ALTURA_LOUNGE;
     const topo = DECK.h + 26, nF = B.feixes.length;
     B.feixes.forEach((f, i) => {
@@ -3527,7 +3533,7 @@ export class CyberEngine {
     this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.somLounge?.dispose(); this.musicaNave?.dispose(); if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose();
+    this.somLounge?.dispose(); this.musicaNave?.dispose(); if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose();
     this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }

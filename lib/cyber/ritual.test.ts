@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BALADA, DESMANCHA_S, ENERGIZA_S, ESCADARIA_VERMELHA, FORMACAO_S, NEON, REVELACAO, RITUAL_OFF, TURBO_NAVE, corDoFlash, escuroDaBalada, fumacaDaTorre, noPerimetro, faseDaTempestade, instanteDaEnergia, intensidadeDaTempestade, passoDaEscadaria, raioNaBatida, revelacaoDaNave, ritualDesligado, sanitizarRitual, sensacaoDaNave, suavizarRitual } from "./ritual";
+import { BALADA, DESMANCHA_S, brilhoDaBalada, luzDoFlash, ENERGIZA_S, ESCADARIA_VERMELHA, FORMACAO_S, NEON, REVELACAO, RITUAL_OFF, TURBO_NAVE, corDoFlash, escuroDaBalada, fumacaDaTorre, noPerimetro, faseDaTempestade, instanteDaEnergia, intensidadeDaTempestade, passoDaEscadaria, raioNaBatida, revelacaoDaNave, ritualDesligado, sanitizarRitual, sensacaoDaNave, suavizarRitual } from "./ritual";
 
 const T0 = 1_700_000_000_000;
 
@@ -40,10 +40,13 @@ describe("o ritual da chegada do dono", () => {
     expect(t).toBeGreaterThan(DESMANCHA_S - 0.2); expect(t).toBeLessThan(DESMANCHA_S + 0.2);
     expect(DESMANCHA_S).toBeGreaterThanOrEqual(8);
   });
-  it("os ANUNCIADORES: o lounge escuro com pausas de luz neon na batida", () => {
-    expect(escuroDaBalada(0, 0)).toBe(0);                          // desligado: nada de escuro
-    expect(escuroDaBalada(1, 0)).toBeCloseTo(BALADA.escuro, 9);    // ligado: escuro
-    expect(escuroDaBalada(1, 1)).toBeLessThan(BALADA.escuro * 0.3); // a batida abre a luz
+  it("os ANUNCIADORES: o lounge ESCURO e, na batida, as luzes ACENDEM de vez por um instante e APAGAM de novo (festa de verdade)", () => {
+    expect(escuroDaBalada(0, 0)).toBe(0); expect(brilhoDaBalada(0, 1)).toBe(0);   // desligado: nada
+    expect(escuroDaBalada(1, 0)).toBeCloseTo(BALADA.escuro, 9);                   // apagado: escuro
+    expect(escuroDaBalada(1, 1)).toBe(0); expect(brilhoDaBalada(1, 1)).toBeCloseTo(BALADA.brilho, 9);   // o estouro: acende tudo
+    expect(luzDoFlash(0)).toBe(1); expect(luzDoFlash(BALADA.segura)).toBe(1);      // segura acesa por um instante…
+    expect(luzDoFlash(BALADA.segura + 0.3)).toBeLessThan(0.1); expect(luzDoFlash(-1)).toBe(0);   // …e apaga de novo
+    expect(BALADA.segura).toBeLessThan(0.3);
     expect(escuroDaBalada(0.5, 0)).toBeCloseTo(BALADA.escuro / 2, 9);
     expect(new Set([0, 1, 2, 3].map(corDoFlash)).size).toBe(NEON.length); expect(corDoFlash(-1)).toBe(NEON[NEON.length - 1]);
   });
