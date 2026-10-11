@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CAPELA, inicioDaPonta, ALTURA_LOUNGE, CIDADE, PISO_FESTA, alturaNaCidade, bocaDaGaragem, colisoresDaCidade, daSala, durDaViagem, mundo, naColunaDaGaragem, naIlhaPrincipal, naSala, pisoNoAr, posDaViagem, resolverCidade, salaEm, solidosDaCidade } from "./ceu";
-import { DECK, ESCADARIA, GARAGEM_LOUNGE, TEMPLO, naGaragemDoLounge, pontaDaCapelaDoTemplo, alturaDaEscadaria, curvaDaEscadaria, entradaDoTemplo, noTemplo, saidaDoLounge } from "./templo";
+import { DECK, ESCADARIA, GARAGEM_LOUNGE, TEMPLO, naGaragemDoLounge, pontaDaCapelaDoTemplo, alturaDaEscadaria, curvaDaEscadaria, entradaDoTemplo, mesaDaExaminer, noTemplo, saidaDoLounge } from "./templo";
 import { dentroDeAlgum } from "./colisao";
 import { ESTACIONAMENTOS, vagaEstudo } from "./estacionamentosEstudo";
 
@@ -92,11 +92,16 @@ describe("a ESCADARIA em curva e o TEMPLO", () => {
     expect(TEMPLO.h - DECK.h).toBeGreaterThanOrEqual(40);
     expect(ALTURA_LOUNGE + TEMPLO.h + pontaDaCapelaDoTemplo().topo).toBeGreaterThan(inicioDaPonta() + CAPELA.pontaLen + 30);
   });
-  it("o templo: piso alto, a capela com o palco do sanfoneiro no meio (sólido) e espaço pra plateia em volta", () => {
+  it("o templo: piso alto, o SIGILO no meio (pisa-se nele), a mesa da Examiner sólida do lado oposto à entrada", () => {
     const T = TEMPLO, c = W(T.x, T.z);
     expect(alturaNaCidade(W(T.x + 10, T.z))).toBe(ALTURA_LOUNGE + T.h);
-    expect(dentroDeAlgum(c, cs)).toBe(true);                               // o palco
-    expect(dentroDeAlgum(W(T.x + T.palco.r + 2.5, T.z), cs)).toBe(false); // a plateia
+    expect(dentroDeAlgum(c, cs)).toBe(false);                              // o sigilo (rente ao piso)
+    expect(dentroDeAlgum(W(T.x + T.sigilo.r + 2.5, T.z), cs)).toBe(false); // em volta dele
+    const m = mesaDaExaminer();
+    expect(dentroDeAlgum(W(m.x, m.z), cs)).toBe(true);                     // a mesa
+    expect(dentroDeAlgum(W(m.pe.x, m.pe.z), cs)).toBe(false);              // onde ela fica em pé
+    expect(Math.hypot(m.pe.x - T.x, m.pe.z - T.z)).toBeGreaterThan(T.sigilo.r);   // fora do sigilo
+    { const e = entradaDoTemplo().ang, ex = T.x + Math.cos(e) * T.r, ez = T.z + Math.sin(e) * T.r; expect(Math.hypot(m.x - ex, m.z - ez)).toBeGreaterThan(T.r); }   // longe da entrada
     expect(dentroDeAlgum(W(T.x + T.r, T.z), cs)).toBe(true);               // o guarda-corpo
     expect(salaEm({ x: c.x - CIDADE.centro.x, z: c.z - CIDADE.centro.z })).toBeNull();
     expect(naIlhaPrincipal(W(T.x + 10, T.z))).toBe(true);

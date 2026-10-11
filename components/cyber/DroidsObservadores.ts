@@ -11,7 +11,10 @@
 import * as THREE from "three";
 import { GRUPOS_DROIDS, poseDoLider, poseDosMenores } from "@/lib/cyber/terra";
 
-export type ObservadoresHandle = { group: THREE.Group; atualizar(dt: number): void; dispose(): void };
+export type ObservadoresHandle = { group: THREE.Group; atualizar(dt: number): void; dispose(): void;
+  /** de onde sai o SOM de cada droid (o zumbido de máquina flutuando — lib/cyber/somDroid): segue o droid; `voando` =
+   *  o líder indo de uma tela pra outra (o motor acelera) */
+  emissores: { obj: THREE.Object3D; lider: boolean; voando: boolean }[] };
 
 const BRONZE = 0xe6cfa4;
 /** o líder trabalha BAIXO, na frente do telão: menor que um droid "de céu" (não tampa a tela) */
@@ -97,9 +100,11 @@ export function criarObservadores(o: { low: boolean }): ObservadoresHandle {
   const halos = Array.from({ length: NL }, () => { const s = new THREE.Sprite(g(new THREE.SpriteMaterial({ map: brilho, color: 0x8fd0ff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }))); s.scale.setScalar(5); group.add(s); return s; });
 
   const base = new THREE.Matrix4(), mat = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), um = new THREE.Vector3(1, 1, 1);
+  const emissores = [...Array.from({ length: NL }, () => ({ obj: new THREE.Object3D(), lider: true, voando: false })), ...Array.from({ length: NM }, () => ({ obj: new THREE.Object3D(), lider: false, voando: false }))];
+  for (const em of emissores) group.add(em.obj);
   const pousar = (lista: typeof lideres, i: number, b: THREE.Matrix4) => { for (const pt of lista) pt.locais.forEach((l, k) => pt.im.setMatrixAt(i * pt.locais.length + k, mat.multiplyMatrices(b, l))); };
   return {
-    group,
+    group, emissores,
     atualizar(dt) {
       const t = relogio(); void dt;
       GRUPOS_DROIDS.forEach((gr, i) => {
@@ -110,9 +115,11 @@ export function criarObservadores(o: { low: boolean }): ObservadoresHandle {
         base.compose(p.set(l.x, l.y, l.z), q, um.set(ESCALA_LIDER, ESCALA_LIDER, ESCALA_LIDER)); um.set(1, 1, 1); pousar(lideres, i, base);
         nucleoMat.color.setHSL(0.56, 1, 0.7 + 0.15 * Math.sin(t * 2.2));
         const f = feixes[i]!; f.visible = true; mirar(f, { x: l.x, y: l.y - 0.2, z: l.z }, l.alvo, 1.2 + 2.2 * l.lendo); (f.material as THREE.MeshBasicMaterial).opacity = 0.1 + 0.2 * l.lendo;
+        emissores[i]!.obj.position.set(l.x, l.y, l.z); emissores[i]!.voando = l.lendoTela === null;
         halos[i]!.position.set(l.x, l.y - 0.2, l.z); halos[i]!.material.opacity = 0.55 + 0.35 * l.lendo;
         // os 2 menores: escaneando o GLOBO (de frente pra ele, girando devagar), um feixe fino cada
         poseDosMenores(gr, t).forEach((m, k) => {
+          emissores[NL + i * 2 + k]!.obj.position.set(m.x, m.y, m.z);
           e.set(0, m.rumo, t * 0.8 + k * 1.3, "YXZ"); q.setFromEuler(e); base.compose(p.set(m.x, m.y, m.z), q, um); pousar(menores, i * 2 + k, base);
           const fm = feixesMen[i * 2 + k]!; mirar(fm, m, { x: gr.globo.x, y: gr.globo.y + Math.sin(t * 1.3 + k) * gr.globo.r * 0.5, z: gr.globo.z }, 0.7);
           (fm.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.1 * Math.sin(t * 3 + k);

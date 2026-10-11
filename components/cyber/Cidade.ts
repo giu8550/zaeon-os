@@ -68,6 +68,8 @@ export type CidadeHandle = {
   raioNoTemplo(alvoMundo?: THREE.Vector3): void;
   /** quem está na Zaeon agora (local da ilha) — os motores de energia do Observatório reagem */
   presencas(p: { x: number; z: number }[]): void;
+  /** de onde sai o som dos DROIDS das estações (seguem os droids — components/cyber/DroidsObservadores) */
+  somDroids: import("./DroidsObservadores").ObservadoresHandle["emissores"];
 };
 
 const COLD = 0xbfe8ff, ICE = 0x9fd0ff, FIRE = [0xffe3b0, 0xffb45a, 0xff7a2c];
@@ -156,7 +158,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     const pil = add(new THREE.InstancedMesh(new THREE.CylinderGeometry(1.9, 2.4, CA, 10), torreMat, cidadela.pilares), ilha, true);
     { const m = new THREE.Matrix4(); for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; pil.setMatrixAt(i, m.makeTranslation(Math.cos(a) * cidadela.r, CA / 2, Math.sin(a) * cidadela.r)); } pil.instanceMatrix.needsUpdate = true; pil.computeBoundingSphere(); }
     const coroaMat = new THREE.MeshStandardMaterial({ color: 0x0c1a30, emissive: 0x66c8ff, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.4 });
-    for (const [y, rr] of [[CA, 1.4], [0.4, 0.9]] as const) { const t = add(new THREE.Mesh(new THREE.TorusGeometry(cidadela.r, rr, 8, low ? 96 : 192), coroaMat)); t.rotation.x = Math.PI / 2; t.position.y = y; }
+    { const t = add(new THREE.Mesh(new THREE.TorusGeometry(cidadela.r, 1.4, 8, low ? 96 : 192), coroaMat)); t.rotation.x = Math.PI / 2; t.position.y = CA; }   // (só a coroa do alto: o anel azul de baixo saiu — o dono, out/2026)
     const domoMat = vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.4, thickness: 1, transparent: true, opacity: 0.45, side: THREE.DoubleSide }, 0.4);
     const cupula = add(new THREE.Mesh(new THREE.SphereGeometry(RC, low ? 32 : 56, low ? 14 : 24, 0, Math.PI * 2, 0, Math.PI / 2), domoMat));
     cupula.position.y = CA; cupula.scale.y = ACH;
@@ -181,7 +183,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     pinaculo.position.y = yPin + LPIN / 2;
     const yFarol = yPin + LPIN + 2;
     const farolMat = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    const feixe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.8, 4.5, 120, 16, 1, true), farolMat)); feixe.position.y = yFarol + 60;
+    if (!low) { const feixe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.8, 4.5, 120, 16, 1, true), farolMat)); feixe.position.y = yFarol + 60; } else farolMat.dispose();   // (leve: sem o cone de luz de 120 m)
     farol = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glow("rgba(220,250,255,1)", "rgba(120,200,255,.4)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); farol.scale.set(22, 22, 1); farol.position.y = yFarol;
   }
 
@@ -241,7 +243,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     const cone = add(new THREE.Mesh(new THREE.ConeGeometry(L.r - 2, 56, low ? 9 : 14, 1, false), rocha), base, true); cone.rotation.x = Math.PI; cone.position.y = -1.8 - 28;
     for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2 + 0.3, c = add(new THREE.Mesh(new THREE.ConeGeometry(8 + (k % 2) * 4, 26 + (k % 3) * 8, 7, 1, false), rocha), base); c.rotation.x = Math.PI; c.position.set(Math.cos(a) * L.r * 0.55, -1.8 - (13 + (k % 3) * 4), Math.sin(a) * L.r * 0.55); }
     const aroL = add(new THREE.Mesh(new THREE.TorusGeometry(L.r + 1, 0.3, 6, low ? 64 : 128), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeSala], transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending })), base); aroL.rotation.x = Math.PI / 2; aroL.position.y = -0.1;
-    const anti = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glow("rgba(185,140,255,.9)", "rgba(102,230,255,.2)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), base); anti.position.y = -40; anti.scale.setScalar(46);
+    if (!low) { const anti = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glow("rgba(185,140,255,.9)", "rgba(102,230,255,.2)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), base); anti.position.y = -40; anti.scale.setScalar(46); }   // (leve: sem o brilho antigravidade)
   }
 
   // (sem hangar: a nave-QG do dono fica PAIRANDO atracada ao lado da ilha — lib/cyber/naveQG `poseDaDoca`)
@@ -251,7 +253,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const salas = criarSalas(ilha, { low, texturas, estrela: starTex, paredeMat: vidroSala });
   alvos.push(...salas.alvos);
   // ── o TEMPLO (lib/cyber/templo): a escadaria em curva que sai da direita do deck do lounge, a muralha-veia e o templo
-  //    com a capela e o sanfoneiro — montado no referencial da sala do lounge ──
+  //    com a capela, o sigilo de Metatron e o desktop da Examiner — montado no referencial da sala do lounge ──
   const templo = criarTemplo({ low, paredeMat: vidroSala, estrela: starTex, aoTrovao: opts.aoTrovao });
   { const L = CIDADE.salas.lounge; templo.group.position.set(L.x, ALTURA_LOUNGE, L.z); templo.group.rotation.y = rotDaSala(L); add(templo.group); alvos.push(...templo.alvos); }
 
@@ -277,9 +279,9 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   add(new THREE.Mesh(new THREE.CylinderGeometry(pt.r + 1.4, pt.r + 1.7, 0.18, 40), new THREE.MeshStandardMaterial({ color: 0x14203a, emissive: 0x1b2b55, emissiveIntensity: 0.5 })), ilha, true).position.set(pt.x, -0.06, pt.z);
 
   // ── querubins orbitando a cidadela ──
-  const CN = low ? 80 : 180, cher = Array.from({ length: CN }, () => ({ a: Math.random() * 6.283, r: CIDADE.cidadela.r + 6 + Math.random() * 90, y: 6 + Math.random() * 70, sp: 0.02 + Math.random() * 0.07 }));
+  const CN = low ? 0 : 180, cher = Array.from({ length: CN }, () => ({ a: Math.random() * 6.283, r: CIDADE.cidadela.r + 6 + Math.random() * 90, y: 6 + Math.random() * 70, sp: 0.02 + Math.random() * 0.07 }));
   const cGeo = new THREE.BufferGeometry(); cGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CN * 3), 3));
-  const cPts = add(new THREE.Points(cGeo, new THREE.PointsMaterial({ size: 0.3, map: starTex, color: 0xeaf4ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); cPts.frustumCulled = false;
+  const cPts = add(new THREE.Points(cGeo, new THREE.PointsMaterial({ size: 0.3, map: starTex, color: 0xeaf4ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); cPts.frustumCulled = false; cPts.visible = CN > 0;   // (leve: sem os querubins)
 
   // ── ilhotas flutuantes em volta (montanhas invertidas + cristais na BORDA), cada uma com sua flutuação ──
   //    Layout FIXO em lib/cyber/ceu.ts (ILHOTAS) — o mesmo da colisão: dá pra pousar no topo e andar nele.
@@ -314,6 +316,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   return {
     group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    somDroids: observadores.emissores,
     showLounge: (e, olho) => salas.show(e, olho),
     raioNoLounge: (vel, alvo) => salas.raioNoLounge(vel, alvo),
     tempestade: (i, raios) => templo.tempestade(i, raios),

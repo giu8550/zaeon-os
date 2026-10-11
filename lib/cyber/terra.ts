@@ -63,7 +63,10 @@ export const CABOS = MIRANTES_ESTACAO.flatMap((m, i) => {
  *  frente do globo, virados pro centro */
 export const TEMAS = ["clima", "florestas", "oceanos", "agua"] as const;
 export type Tema = (typeof TEMAS)[number];
-export const TOTENS = MIRANTES_ESTACAO.flatMap((m) => TEMAS.map((tema, k) => { const p = est(m, 5, -MEIO_TELOES + 21.4 + k * 3.4); return { ...p, tema, rot: proCentro(p) }; }));
+/** os CARDS em pé no chão (e os cabos de luz deles até o telão das soluções) SAÍRAM das duas estações (o dono, out/2026):
+ *  os telões, o globo e os motores contam a história sozinhos */
+export const CARDS_NA_ESTACAO = false;
+export const TOTENS = !CARDS_NA_ESTACAO ? [] : MIRANTES_ESTACAO.flatMap((m) => TEMAS.map((tema, k) => { const p = est(m, 5, -MEIO_TELOES + 21.4 + k * 3.4); return { ...p, tema, rot: proCentro(p) }; }));
 /** as LIGAÇÕES problema → solução: de cada card até o pé do telão das soluções (o pulso corre do problema pra solução) */
 export const LIGACOES = TOTENS.map((t, k) => { const s = TELOES_SOLUCAO[Math.floor(k / TEMAS.length)]!; return { tema: t.tema, de: { x: t.x, z: t.z }, para: { x: s.x, z: s.z } }; });
 /** as SUPERTREES em volta de cada pirâmide (dos lados e atrás — a frente fica livre pra escada) */

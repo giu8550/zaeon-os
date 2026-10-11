@@ -5,7 +5,7 @@
  *  - o globo BATE ("tum-tum") e o azul se PROPAGA pelas VEIAS, do coração pra fora (pelo caminho de cada uma).
  * As veias são UMA malha (fitas deitadas na superfície) com o ATRASO do pulso em cada vértice; azul sólido (mistura
  * normal — o piso é claro como as colunas, e luz somada sumiria nele). Sem luz, sem sombra: barato.
- * Com movimento reduzido: o raio não tremula. Tudo no referencial da ILHA.
+ * Com movimento reduzido: o raio não tremula. No modo leve, sem as veias. Tudo no referencial da ILHA.
  */
 import * as THREE from "three";
 import { CORACAO, T_CORACAO, TOPO_DA_CAPELA, bateAgora, batidaNoCoracao, disparaRaio, gerarVeias } from "@/lib/cyber/coracao";
@@ -86,7 +86,9 @@ function texBrilho(): THREE.CanvasTexture {
 export function criarCoracao(o: { low: boolean }): CoracaoHandle {
   const rm = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const group = new THREE.Group();
-  const { veias } = gerarVeias({ low: o.low });
+  // LEVE (placa integrada): sem as VEIAS pulsando no piso — uma malha transparente do tamanho da ilha, desenhada por
+  // cima de tudo a cada quadro (o raio e o clarão no topo ficam)
+  const { veias } = o.low ? { veias: [] } : gerarVeias({ low: o.low });
 
   // ── as VEIAS ──
   const uT = { value: 0 };
@@ -109,7 +111,7 @@ export function criarCoracao(o: { low: boolean }): CoracaoHandle {
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
   });
   const geoVeias = fitas(veias);
-  const malhaVeias = new THREE.Mesh(geoVeias, matVeia); malhaVeias.frustumCulled = false; malhaVeias.renderOrder = 1; group.add(malhaVeias);
+  const malhaVeias = new THREE.Mesh(geoVeias, matVeia); malhaVeias.frustumCulled = false; malhaVeias.renderOrder = 1; if (veias.length) group.add(malhaVeias);
 
   // ── o RAIO no topo ──
   const topo = TOPO_DA_CAPELA(), formatos = Array.from({ length: 6 }, (_, i) => formatoDeRaio(1000 + i * 77, 150));
