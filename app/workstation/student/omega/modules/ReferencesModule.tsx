@@ -111,6 +111,7 @@ function PaperCard({ p, evidence, onOpenViewer }: {
           {/* Salvar arquivo na biblioteca — só quando há arquivo (pdfUrl) */}
           {p.pdfUrl && (
             <button
+              data-tour="salvar-ref"
               onClick={handleSave}
               disabled={savedFeedback}
               title={isSaved ? "Arquivo na biblioteca" : "Salvar arquivo na biblioteca"}

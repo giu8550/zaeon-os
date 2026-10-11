@@ -14,6 +14,8 @@ export type Dialogo = {
   teclas?: string[];
   /** o objetivo do passo (o "quest log": Andar, Correr…) */
   objetivo?: string;
+  /** um AVISO em destaque (o veredito do Droid sobre a pesquisa) */
+  alerta?: boolean;
 };
 
 /** onde a fala sai: na CAIXA (tutorial antes da Zaeon, ou em cena) ou no BALÃO em cima de quem fala */

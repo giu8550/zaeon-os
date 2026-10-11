@@ -86,8 +86,8 @@ export function estadoDoTubo(t: number): { liquido: number; vidro: number } {
  * (Shift andando), VOAR `m` metros acima do chão (Espaço), o VOO LONGO (`m` metros de turbo: Shift no ar), CHEGAR no
  * alvo, conversar com a Zaeon, OUVIR (o passo é só a cena — anda quando as falas acabam) e abrir o TABLET.
  */
-export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "fim" };
-export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "fim";
+export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "pesquisa" } | { tipo: "fim" };
+export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "estudo" | "aviso" | "fim";
 /** a CUTSCENE do passo (lib/cyber/cutscene): enquanto o Droid fala, a câmera enquadra outra coisa — "droid" = ele (a
  *  apresentação e a missão), "teloes" = os telões PROBLEMA → SOLUÇÃO. A câmera solta na INSTRUÇÃO (a última fala),
  *  a não ser que `cenaInteira` (o passo todo é cena — a pessoa não precisa se mexer) */
@@ -95,7 +95,7 @@ export type CenaGuia = "droid" | "teloes";
 /** um passo do tutorial: as FALAS do Droid (uma depois da outra; a última — a INSTRUÇÃO — fica na tela até a pessoa
  *  cumprir), o que ela tem que fazer, o alvo de "vem comigo até…" (o Droid vai na frente; o farol marca), a CENA e as
  *  TECLAS que a caixa de diálogo mostra em destaque */
-export type PassoGuia = { id: IdPassoGuia; titulo: string; falas: string[]; cond: CondGuia; alvo: (P2 & { r: number }) | null; cena?: CenaGuia; cenaInteira?: boolean; teclas?: string[]; livre?: boolean };
+export type PassoGuia = { id: IdPassoGuia; titulo: string; falas: string[]; cond: CondGuia; alvo: (P2 & { r: number }) | null; cena?: CenaGuia; cenaInteira?: boolean; teclas?: string[]; livre?: boolean; /** as falas são um AVISO em destaque (a caixa de diálogo de alerta) */ alerta?: boolean };
 
 /** onde o Droid leva no CENTRO da capela: ao lado do globo (a Zaeon sai dele), do lado de quem vem do leste */
 export const CENTRO_DA_CAPELA_LOCAL = { x: 14, z: 3 };
@@ -117,13 +117,18 @@ export const ROTEIRO: PassoGuia[] = (() => {
     { id: "ir-teloes", titulo: "Os telões", teclas: ["Espaço", "Shift"], falas: ["A Zaeon gostou de você.", "Agora venha comigo: quero te mostrar o que move esta cidade."], cond: { tipo: "chegar" }, alvo: { ...teloes, r: 9 } },
     { id: "teloes", titulo: "Problema → solução", cena: "teloes", cenaInteira: true, falas: ["Neste telão, os PROBLEMAS DA TERRA: o clima, as florestas, os oceanos, a água.", "E deste lado, as SOLUÇÕES — ideias e projetos de gente como você.", "Cada solução começou como um ESTUDO. É assim que se cria valor aqui."], cond: { tipo: "ouvir" }, alvo: null },
     { id: "missao", titulo: "A primeira missão", cena: "droid", cenaInteira: true, falas: ["Agora sua primeira missão é criar um estudo sobre qualquer tema que te interessa.", "Vou abrir o seu tablet. ✦"], cond: { tipo: "tablet" }, alvo: null },
+    // no TABLET: o tour da 1ª missão (lib/onboarding/tutorialLab) até a pesquisa estar SALVA — aí o Droid interrompe
+    { id: "estudo", titulo: "Criar um estudo", falas: [], cond: { tipo: "pesquisa" }, alvo: null },
+    { id: "aviso", titulo: "O veredito do Droid", cena: "droid", cenaInteira: true, alerta: true, falas: ["Pare um instante. Deixa eu ver o que você fez…", "Essa pesquisa ainda não tem base de estudos pra ter algum valor ainda. Não dá pra vender nem publicar.", "Mas você pode guardar ela no seu inventário e me entregar algo melhor depois."], cond: { tipo: "ouvir" }, alvo: null },
   ];
 })();
 /** o índice de um passo */
 export const passoDe = (id: IdPassoGuia) => ROTEIRO.findIndex((p) => p.id === id);
+/** o Droid, se a pessoa guardar o tablet antes de terminar a missão */
+export const FALA_VOLTE_AO_TABLET = "Sua missão ainda não acabou: aperte T pra abrir o tablet e terminar o estudo.";
 
 /** o que o engine mede desde que o Droid deu a instrução do passo */
-export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean };
+export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean };
 /** a pessoa fez o que o Droid pediu? */
 export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
   switch (c.tipo) {
@@ -136,6 +141,7 @@ export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
     case "conversa": return x.conversaFeita;
     case "ouvir": return true;   // (o engine só confere depois que as falas acabam)
     case "tablet": return x.tabletAberto;
+    case "pesquisa": return x.pesquisaSalva;
     case "fim": return false;   // o fim acaba sozinho (o Droid se despede)
   }
 }

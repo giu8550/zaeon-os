@@ -40,6 +40,8 @@ import MagazineAnswerView, { podeVirarRevista } from "@/components/study/Magazin
 import MagazineBoundary from "@/components/study/MagazineBoundary";
 import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import PastasEmpilhadas, { CORPO_DA_PASTA, type Pasta } from "@/components/chat/PastasEmpilhadas";
+import SugestoesConversa from "@/components/chat/SugestoesConversa";
+import { EVT_TEMA, temaDoTexto, temaNoTutorial } from "@/lib/onboarding/tutorialLab";
 import { useConversasSlot } from "@/components/chat/ConversasSlot";
 import { consumirPedido, EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
 
@@ -751,6 +753,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const send = useCallback(async (override?: string) => {
     const prompt = (typeof override === "string" ? override : input).trim();
     if (!prompt || sending) return;
+    // o TUTORIAL do tablet (lib/onboarding/tutorialLab): o tema escolhido não vai pro chat — vira a pesquisa na tela roxa
+    if (temaNoTutorial()) { const tema = temaDoTexto(prompt); if (!tema) return; setInput(""); window.dispatchEvent(new CustomEvent(EVT_TEMA, { detail: { tema } })); return; }
     setQuickThinking(isQuickPrompt(prompt));
 
     // O histórico levava só `m.text`, que numa resposta estruturada é o NÚCLEO — uma
@@ -970,6 +974,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     ) : null
   ), [focusIds, spaceTitle, removeFocus, skillNode]);
 
+  // as 3 sugestões da conversa nova: o começo vai pro campo e o cursor fica no fim (a pessoa completa com o tema)
+  const escolherSugestao = (comeco: string) => {
+    setInput(comeco);
+    requestAnimationFrame(() => { const t = colunaRef.current?.querySelector<HTMLTextAreaElement>("textarea"); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } });
+  };
   return (
     <div className="relative h-full flex lg:flex-row flex-col" style={zoom.style}>
       {/* Borda-degradê navy na aresta esquerda (par visual com a sidebar da esquerda) — só no claro. */}
@@ -1127,7 +1136,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2 py-4 flex flex-col gap-4">
             {/* B2: cursor piscando da resposta em streaming */}
             <style>{`@keyframes zCaret { 0%,45% { opacity:1 } 50%,100% { opacity:0 } } .z-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-0.15em; background:currentColor; opacity:.7; animation: zCaret 1s steps(1) infinite; } @media (prefers-reduced-motion: reduce) { .z-caret { animation: none; } }`}</style>
-            {messages.length === 0 ? <><BoasVindasAgente agentId="aura" nome="Aura" sinal={rosto.sinal} boca={rosto.boca} /><DicaSubTema threads={threads} ativa={abaAtiva} /></> : (
+            {messages.length === 0 ? <><BoasVindasAgente agentId="aura" nome="Aura" sinal={rosto.sinal} boca={rosto.boca} /><SugestoesConversa onEscolher={escolherSugestao} /><DicaSubTema threads={threads} ativa={abaAtiva} /></> : (
               messages.map((m, i) => {
                 // rosto da Aura AO LADO de cada resposta; só a mais recente vive (pensa → fala → sorri)
                 const pilula = m.role === "assistant" && (m.kind === "text" || m.kind === "structured")
@@ -1270,7 +1279,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         {/* composer estilo Claude — mais largo, esticando até perto da biblioteca
             (mantém o recuo à esquerda; sem teto de largura à direita). */}
         <div className="px-4 sm:px-6 pb-4 pt-2">
-          <div className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2">
+          <div data-tour="composer-estudos" className="ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2">
             <CoworkComposer
               value={input}
               onChange={setInput}

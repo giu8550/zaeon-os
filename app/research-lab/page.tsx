@@ -14,6 +14,7 @@ import { Mic, MicOff, Code2, Building2 } from "lucide-react";
 import { ConversasSlotContext } from "@/components/chat/ConversasSlot";
 import ConversasDaSala from "@/components/chat/ConversasDaSala";
 import { useSidebarHover } from "@/components/lab/useSidebarHover";
+import { EVT_PESQUISA_SALVA, contarPalavras } from "@/lib/onboarding/tutorialLab";
 import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
 import { usePresenca } from "@/components/agents/avatar/hooks";
 import { EVT_ESTUDOS_ABA, abaEstudosAtual, irPraAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
@@ -76,6 +77,7 @@ const EscritorioRoom = dynamic(
 );
 // Escritório COWORKING (canal em tempo real, estilo Buzz; sem 3D). Entra no lugar do 3D quando
 // NEXT_PUBLIC_ESCRITORIO_COWORK=1 (lib/canal/flags). Client-only (Pusher/Notification API).
+const TutorialLab = dynamic(() => import("@/components/onboard/TutorialLab"), { ssr: false });
 const CoworkingCanal = dynamic(
   () => import("@/components/office/CoworkingCanal"),
   { ssr: false },
@@ -168,7 +170,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import { musica } from "@/lib/audio/musica";
-import { LOUNGE_ROTA, MSG_FECHAR_TABLET, MSG_IA, pedeFoco, pedeTablet } from "@/lib/ui/loungeHub";
+import { LOUNGE_ROTA, MSG_FECHAR_TABLET, MSG_IA, pedeFoco, pedeTablet, pedeTutorial } from "@/lib/ui/loungeHub";
 import { instalarMonitorIA } from "@/lib/ui/monitorIA";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
@@ -1502,8 +1504,11 @@ export default function HomeworkPage({
   // NO TABLET (o laboratório num iframe por cima do cyberespaço): decidido UMA vez, na montagem — nada que mude a URL
   // depois faz o "Voltar" carregar um cyberespaço DENTRO do tablet (era a tela de loading de novo)
   const noTablet = useRef(false);
+  // o laboratório no tablet do TUTORIAL do novato (`?tutorial=1`): roda o tour da 1ª missão
+  const [tutorialLab, setTutorialLab] = useState(false);
   useEffect(() => {
     noTablet.current = window.parent !== window && (pedeTablet(window.location.search) || (() => { try { return window.parent.location.pathname.startsWith(LOUNGE_ROTA); } catch { return false; } })());
+    if (noTablet.current && pedeTutorial(window.location.search)) setTutorialLab(true);
     if (!noTablet.current) return;
     // a CONCORRÊNCIA: o trabalho de IA que roda aqui (qualquer aba/sub-aba) vai pra barra de IA do HUD do cyberespaço
     return instalarMonitorIA((estado) => window.parent.postMessage({ type: MSG_IA, estado }, window.location.origin));
@@ -2312,6 +2317,10 @@ export default function HomeworkPage({
     }
   };
 
+  /** a pesquisa ficou SALVA de verdade (exportou ou o servidor confirmou): quem quiser saber escuta (o tutorial do tablet) */
+  const avisarPesquisaSalva = () => {
+    try { window.dispatchEvent(new CustomEvent(EVT_PESQUISA_SALVA, { detail: { titulo: docTitle.replace(/\.(pdf|docx)$/i, ""), palavras: contarPalavras(docContent), workId: currentWorkIdRef.current } })); } catch { /* */ }
+  };
   const handleSaveWorkspace = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (saveState === "saving") return;
@@ -2326,13 +2335,15 @@ export default function HomeworkPage({
         citations: JSON.stringify(citationNotes),
       };
 
-      await fetch("/api/workspace", {
+      const r = await fetch("/api/workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!r.ok) throw new Error(`workspace ${r.status}`);
 
       setSaveState("saved");
+      avisarPesquisaSalva();
       setTimeout(() => setSaveState("idle"), 2500);
     } catch (error) {
       console.error(error);
@@ -2444,6 +2455,7 @@ export default function HomeworkPage({
       URL.revokeObjectURL(url);
 
       showToast(`Documento ABNT exportado com sucesso!`);
+      avisarPesquisaSalva();
       setIsSaveModalOpen(false);
       setAbntStep(1);
     } catch (err) {
@@ -2911,6 +2923,7 @@ export default function HomeworkPage({
                       <div className="flex gap-3">
                         {/* BOTÃO SALVAR QUE ABRE O MODAL */}
                         <button
+                          data-tour="salvar-pesquisa"
                           onClick={(e) => {
                             e.stopPropagation();
                             setIsSaveModalOpen(true);
@@ -3210,6 +3223,7 @@ export default function HomeworkPage({
               initial={{ opacity: 0, scale: 0.92, y: 32 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 32 }}
+              data-tour="modal-salvar"
               className="relative w-full max-w-md bg-white dark:bg-[#0a0a0a] rounded-[32px] p-8 shadow-2xl border border-slate-200 dark:border-white/10 text-left"
             >
               {!isExporting && (
@@ -3682,8 +3696,8 @@ export default function HomeworkPage({
         )}
       </AnimatePresence>
 
-      {/* Tour guiado da Zaeon (golden path) agora é GLOBAL (montado no layout),
-          pra começar no menu inicial e continuar aqui. (Tour antigo removido.) */}
+      {/* o TUTORIAL da 1ª missão (só no tablet aberto pelo tutorial do cyberespaço — lib/onboarding/tutorialLab) */}
+      {tutorialLab && <TutorialLab />}
     </div>
     </ConversasSlotContext.Provider>
   );

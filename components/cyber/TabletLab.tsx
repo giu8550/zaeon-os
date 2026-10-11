@@ -14,9 +14,10 @@
  * do iframe é da mesma origem e lê o mesmo tema.
  */
 import { useEffect, useRef, useState } from "react";
-import { CHAVE_TABLET_JA_ABRIU, ehMsgFecharTablet, ehMsgIA, urlDoLabNoTablet, type EstadoIALab } from "@/lib/ui/loungeHub";
+import { CHAVE_TABLET_JA_ABRIU, ehMsgFecharTablet, ehMsgIA, ehMsgPesquisaSalva, urlDoLabNoTablet, urlDoLabNoTutorial, type EstadoIALab, type PesquisaSalva } from "@/lib/ui/loungeHub";
 
-export default function TabletLab({ aberto, onFechar, onIA }: { aberto: boolean; onFechar: () => void; onIA?: (e: EstadoIALab) => void }) {
+export default function TabletLab({ aberto, onFechar, onIA, tutorial, onPesquisaSalva }: { aberto: boolean; onFechar: () => void; onIA?: (e: EstadoIALab) => void; /** a 1ª abertura é a do TUTORIAL do novato: o lab roda o tour da 1ª missão */ tutorial?: boolean; onPesquisaSalva?: (p: PesquisaSalva) => void }) {
+  const salva = useRef(onPesquisaSalva); salva.current = onPesquisaSalva;
   const [src, setSrc] = useState<string | null>(null), [carregou, setCarregou] = useState(false);
   const fechar = useRef(onFechar); fechar.current = onFechar;
   const ia = useRef(onIA); ia.current = onIA;
@@ -25,13 +26,14 @@ export default function TabletLab({ aberto, onFechar, onIA }: { aberto: boolean;
   useEffect(() => {
     if (!aberto || src) return;
     let ja = false; try { ja = localStorage.getItem(CHAVE_TABLET_JA_ABRIU) === "1"; localStorage.setItem(CHAVE_TABLET_JA_ABRIU, "1"); } catch { /* sem storage: abre no chat */ }
-    setSrc(urlDoLabNoTablet(ja));
-  }, [aberto, src]);
+    setSrc(tutorial ? urlDoLabNoTutorial() : urlDoLabNoTablet(ja));
+  }, [aberto, src, tutorial]);
   // as mensagens do laboratório: guardar o tablet e o trabalho de IA (este, mesmo com o tablet guardado)
   useEffect(() => {
     if (!src) return;
     const onMsg = (e: MessageEvent) => {
       if (ehMsgIA(e.data, e.origin, window.location.origin)) { ia.current?.(e.data.estado); return; }
+      if (ehMsgPesquisaSalva(e.data, e.origin, window.location.origin)) { salva.current?.(e.data.pesquisa); return; }
       if (abertoRef.current && ehMsgFecharTablet(e.data, e.origin, window.location.origin)) fechar.current();
     };
     window.addEventListener("message", onMsg);

@@ -44,7 +44,8 @@ import { PLATAFORMAS, UNIVERSIDADES_NO_MAPA, alturaDoAndar, andarDoPouso, andarN
 import { CHAO, PRACA, QUEDA_VAZIO, naPraca } from "@/lib/cyber/praca";
 import { CHEGADA_NAVE, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel, type IdNo } from "@/lib/cyber/buracos";
 import { DROID } from "@/lib/cyber/agentes";
-import { NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
+import { FALA_VOLTE_AO_TABLET, NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
+import type { PesquisaSalva } from "@/lib/ui/loungeHub";
 import { FAIXA_CINEMA, misturarPose, passoPeso, planoConversa, planoTelao, poseDoPlano, seguirPose, suave, type Plano, type Pose } from "@/lib/cyber/cutscene";
 import { FALA_DESTAQUE_CSS, ondeFala, type Dialogo } from "@/lib/cyber/dialogo";
 import { TELOES as TELOES_TERRA, TELOES_SOLUCAO } from "@/lib/cyber/terra";
@@ -330,12 +331,20 @@ export class CyberEngine {
   private nascendo: { t: number; tubo: number } | null = null;
   /** o TUTORIAL do Droid: o passo, quantas falas dele já saíram, o relógio da fala, se já está ESPERANDO a pessoa cumprir
    *  (`ativo`) e o que ela fez desde então (`andou`, `motoAndou`, `tunel`, a altura do chão de onde voou) */
-  private guia: { passo: number; fala: number; falaT: number; ativo: boolean; andou: number; correu: number; turbo: number; motoAndou: number; portal: boolean; pisoY: number; prev: { x: number; z: number } } | null = null;
+  private guia: { passo: number; fala: number; falaT: number; ativo: boolean; lembrou: boolean; andou: number; correu: number; turbo: number; motoAndou: number; portal: boolean; pisoY: number; prev: { x: number; z: number } } | null = null;
   /** o tutorial já passou da 1ª conversa com a Zaeon: as falas fora de cena viram BALÕES (antes, a caixa de diálogo) */
   private balaoLiberado = false;
   /** a CUTSCENE (lib/cyber/cutscene): o plano de agora (null = a câmera normal), o peso da mistura, a pose suavizada e
    *  se a volta é a lenta (o fim do tutorial); `faixas` = as faixas de cinema (DOM) */
   private cine: { plano: Plano | null; w: number; pose: Pose | null; lenta: boolean; faixas: HTMLDivElement[] } = { plano: null, w: 0, pose: null, lenta: false, faixas: [] };
+  /** a pesquisa que a pessoa salvou no tablet durante o tutorial (vira o livro do inventário) */
+  private pesquisaDoTutorial: PesquisaSalva | null = null;
+  /** o laboratório (no tablet) avisou que a pesquisa da 1ª missão está SALVA: o Droid interrompe — guarda o tablet */
+  pesquisaSalva(p: PesquisaSalva) {
+    const g = this.guia; if (!g || ROTEIRO[g.passo]?.cond.tipo !== "pesquisa") return;
+    this.pesquisaDoTutorial = p; this.fecharTablet();
+  }
+  get pesquisaTutorial() { return this.pesquisaDoTutorial; }
   /** o "…" em cima da cabeça da Zaeon enquanto ela pensa numa resposta */
   private pensandoZ: HTMLDivElement | null = null;
   /** o farol do alvo do tour (uma coluna de luz) */
@@ -1490,7 +1499,7 @@ export class CyberEngine {
     if (i !== this.saindoDoTubo && i !== this.nascendo?.tubo && Math.abs(tb.x - p.x) < 6 && Math.abs(tb.z - p.z) < 6) out.push({ x: tb.x, z: tb.z, r: 1.4 });
     return out;
   }
-  private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, andou: 0, correu: 0, turbo: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
+  private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, lembrou: false, andou: 0, correu: 0, turbo: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
   private emitirGuia() {
     if (!this.guia) { this.o.onGuia?.(null); return; }
     const p = ROTEIRO[this.guia.passo]!;
@@ -1546,7 +1555,7 @@ export class CyberEngine {
     if (passo && ondeFala({ tutorial: true, balaoLiberado: this.balaoLiberado, emCena }) === "caixa") {
       this.calarBalaoDroid();
       const instrucao = ultima && passo.cond.tipo !== "ouvir" && passo.cond.tipo !== "tablet";
-      this.o.onDialogo?.({ quem: "droid", nome: DROID.nome, cor: DROID.cor, texto, instrucao, teclas: instrucao ? passo.teclas : undefined, objetivo: passo.titulo });
+      this.o.onDialogo?.({ quem: "droid", nome: DROID.nome, cor: passo.alerta ? "#ff8a3d" : DROID.cor, texto, instrucao, teclas: instrucao ? passo.teclas : undefined, objetivo: passo.titulo, alerta: passo.alerta });
     } else this.balao(d.fala, texto, DROID.cor, ultima ? Infinity : RITMO_FALA.entre * 1000 + 400, !!passo);
     this.o.onFalaAgente?.({ id: DROID.id, nome: DROID.nome, cor: DROID.cor, texto });
     this.som.vozDroid(d.h.group, { dur: duracaoVozDroid(texto) });   // a "voz" dele: sem palavras, de outra dimensão
@@ -1740,6 +1749,12 @@ export class CyberEngine {
       else if (this.keys.shift || this.correr) g.turbo += d;   // no ar com Shift = o VOO TURBO (o voo longo)
       // a MISSÃO: o Droid abre o tablet (de pé; voando, espera pousar)
       if (passo.cond.tipo === "tablet" && !this.tabletQuer && this.aPeParaTablet()) this.abrirTablet();
+      // guardou o tablet antes de terminar a missão: o Droid lembra (uma vez por vez que guardar)
+      if (passo.cond.tipo === "pesquisa" && !this.pesquisaDoTutorial) {
+        const fechado = !this.labAberto && !this.tabletQuer;
+        if (fechado && !g.lembrou) { g.lembrou = true; this.droidFala(FALA_VOLTE_AO_TABLET, true); }
+        else if (!fechado && g.lembrou) { g.lembrou = false; this.o.onDialogo?.(null); this.calarBalaoDroid(); }
+      }
     } else if (!this.jet.noAr) g.pisoY = eu.alt;
     // as falas: só com o Droid já ali (saiu do portal)
     if (this.droid?.h.fase() === "visivel") {
@@ -1764,7 +1779,7 @@ export class CyberEngine {
     return {
       nascendo: !!this.nascendo, andou: g.andou, correu: g.correu, noAr: this.jet.noAr ? this.jet.y - g.pisoY : 0, turbo: g.turbo,
       chegou: !!a && Math.hypot(eu.pos.x - a.x, eu.pos.z - a.z) <= a.r && !this.jet.noAr,
-      conversaFeita: this.conversa?.etapa === "feita", tabletAberto: this.labAberto,
+      conversaFeita: this.conversa?.etapa === "feita", tabletAberto: this.labAberto, pesquisaSalva: !!this.pesquisaDoTutorial,
     };
   }
   /** o DROID: aparece num mini portal do lado da pessoa (quando o tutorial começa — e de novo depois de um teleporte);
