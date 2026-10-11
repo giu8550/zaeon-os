@@ -5,11 +5,14 @@
  * triangulares (painel escuro com "raios" azuis) em volta de um cristal. Eles ANALISAM a Terra na estação de cada
  * mirante: o líder voa baixo na frente do TELÃO, varrendo os dados com um feixe; os menores escaneiam o GLOBO.
  *
+ * DROIDS DE LUZ (out/2026, o dono): eles saíram dos telões e PASSEIAM PELAS SALAS DE ESTUDO (a biblioteca e o jardim),
+ * por cima das cabeças dos alunos, levando luz — o feixe aponta pro chão e acende uma poça de luz embaixo (rota em
+ * lib/cyber/droidsLuz). O som de máquina flutuando sai de cada um (`emissores`).
  * Comuns e visíveis pra todos: a pose sai do RELÓGIO de parede (`Date.now`) — todo mundo vê os droids no mesmo lugar.
  * Leve: cada TIPO de peça é UM InstancedMesh pra todos os droids (≈ 14 chamadas de desenho no total).
  */
 import * as THREE from "three";
-import { GRUPOS_DROIDS, poseDoLider, poseDosMenores } from "@/lib/cyber/terra";
+import { N_LIDERES, poseDoLiderNaSala, poseDosMenoresNaSala } from "@/lib/cyber/droidsLuz";
 
 export type ObservadoresHandle = { group: THREE.Group; atualizar(dt: number): void; dispose(): void;
   /** de onde sai o SOM de cada droid (o zumbido de máquina flutuando — lib/cyber/somDroid): segue o droid; `voando` =
@@ -18,7 +21,7 @@ export type ObservadoresHandle = { group: THREE.Group; atualizar(dt: number): vo
 
 const BRONZE = 0xe6cfa4;
 /** o líder trabalha BAIXO, na frente do telão: menor que um droid "de céu" (não tampa a tela) */
-const ESCALA_LIDER = 0.55;   // dourado-claro (o da referência), não laranja
+const ESCALA_LIDER = 0.42;   // dourado-claro (o da referência), não laranja
 /** o relógio de parede (s) — o mesmo pra todos os jogadores (ignora a pequena diferença entre relógios) */
 const relogio = () => (Date.now() % 1e9) / 1000;
 
@@ -30,7 +33,7 @@ function canvasTex(w: number, h: number, desenho: (g: CanvasRenderingContext2D) 
 const triangulo = (l: number) => { const h = (l * Math.sqrt(3)) / 2, s = new THREE.Shape(); s.moveTo(0, (2 * h) / 3); s.lineTo(l / 2, -h / 3); s.lineTo(-l / 2, -h / 3); s.closePath(); return s; };
 
 export function criarObservadores(o: { low: boolean }): ObservadoresHandle {
-  const group = new THREE.Group(), NL = GRUPOS_DROIDS.length, NM = NL * 2, liberar: { dispose(): void }[] = [];
+  const group = new THREE.Group(), NL = N_LIDERES, NM = NL * 2, liberar: { dispose(): void }[] = [];
   const g = <T extends { dispose(): void }>(x: T) => { liberar.push(x); return x; };
   const bronze = g(new THREE.MeshStandardMaterial({ color: BRONZE, metalness: 0.5, roughness: 0.38, emissive: 0x4a3a22, emissiveIntensity: 0.5 }));
   const escuro = g(new THREE.MeshStandardMaterial({ color: 0x1c2230, metalness: 0.6, roughness: 0.4, emissive: 0x0a1020, emissiveIntensity: 0.4 }));
@@ -102,29 +105,34 @@ export function criarObservadores(o: { low: boolean }): ObservadoresHandle {
   const base = new THREE.Matrix4(), mat = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), um = new THREE.Vector3(1, 1, 1);
   const emissores = [...Array.from({ length: NL }, () => ({ obj: new THREE.Object3D(), lider: true, voando: false })), ...Array.from({ length: NM }, () => ({ obj: new THREE.Object3D(), lider: false, voando: false }))];
   for (const em of emissores) group.add(em.obj);
+  // a POÇA DE LUZ no chão embaixo de cada droid (o que eles "levam" pros alunos)
+  const pocaGeo = g(new THREE.CircleGeometry(1, 32)); pocaGeo.rotateX(-Math.PI / 2);
+  const pocas = Array.from({ length: NL + NM }, (_, k) => { const m = new THREE.Mesh(pocaGeo, g(new THREE.MeshBasicMaterial({ color: k < NL ? 0xcfeeff : 0xa8e6ff, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }))); m.scale.setScalar(k < NL ? 2.6 : 1.1); m.renderOrder = 2; group.add(m); return m; });
   const pousar = (lista: typeof lideres, i: number, b: THREE.Matrix4) => { for (const pt of lista) pt.locais.forEach((l, k) => pt.im.setMatrixAt(i * pt.locais.length + k, mat.multiplyMatrices(b, l))); };
   return {
     group, emissores,
     atualizar(dt) {
       const t = relogio(); void dt;
-      GRUPOS_DROIDS.forEach((gr, i) => {
-        const l = poseDoLider(gr, t);
-        // o líder: BAIXO, na frente do telão, de frente pra ele (as costas pra quem chega), inclinado olhando o ponto
-        // que lê; menor que os do céu (não tampa a tela)
-        e.set(Math.atan2(l.alvo.y - l.y, 9) * 0.5 + Math.sin(t * 0.7 + i) * 0.04, l.rumo, Math.sin(t * 0.5 + i) * 0.06, "YXZ"); q.setFromEuler(e);
+      for (let i = 0; i < NL; i++) {
+        const l = poseDoLiderNaSala(i, t);
+        // o líder: voando de frente pro caminho, levemente inclinado pra frente; o feixe LARGO cai no chão embaixo dele
+        e.set(0.18 + Math.sin(t * 0.7 + i) * 0.04, l.rumo, Math.sin(t * 0.5 + i) * 0.06, "YXZ"); q.setFromEuler(e);
         base.compose(p.set(l.x, l.y, l.z), q, um.set(ESCALA_LIDER, ESCALA_LIDER, ESCALA_LIDER)); um.set(1, 1, 1); pousar(lideres, i, base);
         nucleoMat.color.setHSL(0.56, 1, 0.7 + 0.15 * Math.sin(t * 2.2));
-        const f = feixes[i]!; f.visible = true; mirar(f, { x: l.x, y: l.y - 0.2, z: l.z }, l.alvo, 1.2 + 2.2 * l.lendo); (f.material as THREE.MeshBasicMaterial).opacity = 0.1 + 0.2 * l.lendo;
-        emissores[i]!.obj.position.set(l.x, l.y, l.z); emissores[i]!.voando = l.lendoTela === null;
-        halos[i]!.position.set(l.x, l.y - 0.2, l.z); halos[i]!.material.opacity = 0.55 + 0.35 * l.lendo;
-        // os 2 menores: escaneando o GLOBO (de frente pra ele, girando devagar), um feixe fino cada
-        poseDosMenores(gr, t).forEach((m, k) => {
-          emissores[NL + i * 2 + k]!.obj.position.set(m.x, m.y, m.z);
-          e.set(0, m.rumo, t * 0.8 + k * 1.3, "YXZ"); q.setFromEuler(e); base.compose(p.set(m.x, m.y, m.z), q, um); pousar(menores, i * 2 + k, base);
-          const fm = feixesMen[i * 2 + k]!; mirar(fm, m, { x: gr.globo.x, y: gr.globo.y + Math.sin(t * 1.3 + k) * gr.globo.r * 0.5, z: gr.globo.z }, 0.7);
-          (fm.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.1 * Math.sin(t * 3 + k);
+        const pulso = 0.5 + 0.5 * Math.sin(t * 1.4 + i);
+        const f = feixes[i]!; f.visible = true; mirar(f, { x: l.x, y: l.y - 0.3, z: l.z }, l.luz, 2.4 + 0.3 * pulso); (f.material as THREE.MeshBasicMaterial).opacity = 0.1 + 0.06 * pulso;
+        pocas[i]!.position.set(l.luz.x, l.luz.y + 0.06, l.luz.z); (pocas[i]!.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.1 * pulso;
+        emissores[i]!.obj.position.set(l.x, l.y, l.z); emissores[i]!.voando = true;
+        halos[i]!.position.set(l.x, l.y - 0.2, l.z); halos[i]!.material.opacity = 0.6 + 0.3 * pulso;
+        // os 2 menores: orbitando o líder, cada um com o feixe fino pro chão
+        poseDosMenoresNaSala(i, t).forEach((m, k) => {
+          const j = i * 2 + k;
+          emissores[NL + j]!.obj.position.set(m.x, m.y, m.z);
+          e.set(0, m.rumo, t * 0.8 + k * 1.3, "YXZ"); q.setFromEuler(e); base.compose(p.set(m.x, m.y, m.z), q, um); pousar(menores, j, base);
+          const fm = feixesMen[j]!; mirar(fm, m, m.luz, 0.9); (fm.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.06 * Math.sin(t * 3 + k);
+          pocas[NL + j]!.position.set(m.luz.x, m.luz.y + 0.05, m.luz.z);
         });
-      });
+      }
       for (const pt of [...lideres, ...menores]) pt.im.instanceMatrix.needsUpdate = true;
     },
     dispose() { for (const x of liberar) x.dispose(); group.removeFromParent(); },

@@ -348,8 +348,11 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     // o ESPELHO D'ÁGUA no meio, com PUFES em volta virados pra ele (menos do lado da porta)
     { tipo: "espelhoAgua", x: 0, z: -8, rot: 0, larg: 14, prof: 14, cor: 0x7dffb0 },
     ...[1.15, 1.9, 2.65, 3.63, 4.38, 5.13].map((a) => ({ tipo: "pufe", x: Math.sin(a) * 10.5, z: -8 + Math.cos(a) * 10.5, rot: a + Math.PI, larg: 1.3, prof: 1.3, cor: 0x7dffb0 })),
-    // ÁRVORES de luz em volta (a porta, +z, fica aberta)
-    ...[0.62, 1.05, 1.5, 1.95, 2.4, 2.85, 3.43, 3.88, 4.33, 4.78, 5.23, 5.66].map((a) => ({ tipo: "planta", x: Math.sin(a) * 34, z: Math.cos(a) * 34, rot: a, larg: 1.6, prof: 1.6 })),
+    // ESMERALDAS de luz (no lugar das árvores — o dono, out/2026: "uma sessão de cura com cristais"): uma grande pairando
+    // em cima do espelho d'água e 8 em volta (a porta, +z, e as rodas de mesinha ficam livres) — cada uma com o feixe
+    // verde caindo no chão; não ocupam o chão (dá pra ficar embaixo, na luz)
+    { tipo: "esmeralda", x: 0, z: -8, rot: 0, larg: 3, prof: 3, solido: false, cor: 0x2dff8f },
+    ...[0.62, 1.6, 2.2, 2.8, 3.48, 4.08, 4.68, 5.66].map((a) => ({ tipo: "esmeralda", x: Math.sin(a) * 30, z: Math.cos(a) * 30, rot: a, larg: 1.4, prof: 1.4, solido: false, cor: 0x2dff8f })),
     ...zonaLounge(-22, 12, Math.PI / 2, 0x7dffb0, "mesinha"),
     ...zonaLounge(22, 12, -Math.PI / 2, 0xa8ffcf, "mesinha"),
     ...caixasEmVolta([0.8, -0.8, 2.4, -2.4], 36),

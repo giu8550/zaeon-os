@@ -512,6 +512,24 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
         for (let i = 0; i < 3; i++) { const f = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42 - i * 0.07, 0), folha); f.position.set((i - 1) * 0.16, 0.95 + i * 0.32, ((i * 7) % 3 - 1) * 0.1); p.add(f); }
       }
     },
+    // ESMERALDA de luz (o jardim — out/2026): um cristal verde lapidado (bipirâmide de 6 faces, alongada) pairando e
+    // girando devagar, com o miolo aceso; um feixe de luz verde cai dele até um anel no chão, "respirando" devagar
+    esmeralda(p, m) {
+      const grande = m.larg >= 2.5, h = grande ? 3.4 : 1.7, r = grande ? 1.15 : 0.58, alt = grande ? 5.2 : 2.7, cor = m.cor ?? 0x2dff8f;
+      const cristal = new THREE.Group(); cristal.position.y = alt; p.add(cristal);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x0b7a40, emissive: cor, emissiveIntensity: 0.75, roughness: 0.12, metalness: 0.25, transparent: true, opacity: 0.86, flatShading: true });
+      const cima = new THREE.Mesh(new THREE.CylinderGeometry(0, r, h * 0.62, 6), mat); cima.position.y = h * 0.31; cristal.add(cima);
+      const baixo = new THREE.Mesh(new THREE.CylinderGeometry(r, 0, h * 0.38, 6), mat); baixo.position.y = -h * 0.19; cristal.add(baixo);
+      const miolo = new THREE.Mesh(new THREE.OctahedronGeometry(r * 0.45, 0), basica(0xc8ffe2, 0.9, true)); miolo.scale.y = 1.8; cristal.add(miolo);
+      const feixe = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.35, r * 2.4, alt, o.low ? 10 : 20, 1, true), basica(cor, 0.1, true)); feixe.position.y = alt / 2; feixe.renderOrder = 3; p.add(feixe);
+      const anel = new THREE.Mesh(new THREE.RingGeometry(r * 1.9, r * 2.4, o.low ? 24 : 48), basica(cor, 0.4, true)); anel.rotation.x = -Math.PI / 2; anel.position.y = 0.04; p.add(anel);
+      const fase = m.x * 0.37 + m.z * 0.21;
+      anim.push((dt, t) => {
+        const resp = 0.5 + 0.5 * Math.sin(t * 0.55 + fase);   // a "respiração" (~11 s)
+        cristal.rotation.y += dt * 0.35; cristal.position.y = alt + Math.sin(t * 0.8 + fase) * 0.18;
+        mat.emissiveIntensity = 0.55 + 0.5 * resp; (feixe.material as THREE.MeshBasicMaterial).opacity = 0.06 + 0.08 * resp; (anel.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.3 * resp;
+      });
+    },
     // ESPELHO D'ÁGUA: borda de pedra escura, água quase parada (reflexo frio) e pontos de luz flutuando em cima
     espelhoAgua(p, m) {
       const R = m.larg / 2, borda = new THREE.Mesh(new THREE.TorusGeometry(R, 0.3, 8, 64), new THREE.MeshStandardMaterial({ color: 0x1a2430, roughness: 0.6, metalness: 0.3 })); borda.rotation.x = Math.PI / 2; borda.position.y = 0.2; p.add(borda);
