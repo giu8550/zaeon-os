@@ -57,7 +57,7 @@ export default function VitrinePersonagem({ fundador, cor, corpo, className = ""
     const disco = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.9), new THREE.MeshBasicMaterial({ map: discoTex, color: new THREE.Color(cor), transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
     disco.rotation.x = -Math.PI / 2; disco.position.y = 0.01; cena.add(disco);
 
-    const q = corpo ? QUADRO.personagem : fundador ? QUADRO.fundador : QUADRO.comum;
+    const q = corpo?.asas || (!corpo && fundador) ? QUADRO.fundador : corpo ? QUADRO.personagem : QUADRO.comum;
     const enquadrar = () => {
       const w = Math.max(1, el.clientWidth), h = Math.max(1, el.clientHeight);
       R.setSize(w, h, false); cam.aspect = w / h;
@@ -103,8 +103,9 @@ export default function VitrinePersonagem({ fundador, cor, corpo, className = ""
       pivo.add(a.group); av = a;
       const proprio: CorpoVrm | null = corpo ?? (fundador ? CORPO_DO_FUNDADOR : null);
       if (proprio) {
-        if (!corpo) a.usarAsas({ escala: QUADRO.fundador.escalaAsas });   // as asas são do founder
-        else { a.semMochila(); if (corpo.pose) a.poseVrm(POSES_VRM[corpo.pose]); }
+        if (!corpo || corpo.asas) a.usarAsas({ escala: QUADRO.fundador.escalaAsas });   // as asas: do founder (e de quem as ganhou)
+        else a.semMochila();
+        if (corpo?.pose) a.poseVrm(POSES_VRM[corpo.pose]);
         a.esperarCorpo(true);   // o corpo padrão não aparece antes do próprio
         carregarVrm(proprio.url).then((vrm) => {
           if (!vivo || av !== a) { VRMUtils.deepDispose(vrm.scene); return; }

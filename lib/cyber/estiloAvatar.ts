@@ -41,6 +41,7 @@ export type CorpoVrm = {
   /** gravidade na física do cabelo (o VRoid exporta sem — mecha longa fica espetada) */ gravidadeCabelo?: number;
   /** peças sem os triângulos de certos ossos (ex.: o body do VRoid que cobre as mãos como luva) */ recortes?: readonly { peca: string; maos?: boolean; pescoco?: boolean; pernas?: boolean }[];
   /** troca a cor só das partes coloridas da textura de uma peça (o branco fica) */ recolorir?: readonly { peca: string; cor: string }[];
+  /** nasce com as ASAS negras no lugar da mochila (como o founder) */ asas?: boolean;
 };
 /** os corpos VRM dos PERSONAGENS (os agentes que vivem na cidadela Zaeon), feitos no VRoid Studio (~/Documents/<id>.vroid)
  *  a partir do card (public/avatars/<id>): a roupa branca do VRoid é tingida aqui */
@@ -83,12 +84,13 @@ export const CORPOS_DE_JOGADOR: Readonly<Record<string, CorpoVrm>> = {
   // Giulia: regata preta (vira frente única com a gola em código), pantalona branca de cintura alta com cinto de corda,
   // sapato nude, pulseira de contas e brincos; cabelo castanho-escuro repartido de lado, batom vermelho e sardas (VRoid)
   giulia: { url: "/avatars/jogadores/giulia.vrm", tintas: { Bottoms: "#f4f2ec", Shoes: "#d8b28c" },
-    acessorios: ["golaFrenteUnica", "cintoCorda", "pulseiraContas", "brincos"], gravidadeCabelo: 0.35, pose: "feminina" },
+    acessorios: ["golaFrenteUnica", "cintoCorda", "pulseiraContas", "brincos"], gravidadeCabelo: 0.35, pose: "feminina", asas: true },
 };
-/** o corpo próprio de quem está no cyberespaço: o do FOUNDER (com as asas) ou o de jogador que o servidor mandou */
+/** o corpo próprio de quem está no cyberespaço: o do FOUNDER (com as asas) ou o de jogador que o servidor mandou (com
+ *  asas se o corpo tiver `asas`) */
 export function corpoProprio(p: { fundador?: boolean; corpo?: string } | undefined, busca: string): { corpo: CorpoVrm; asas: boolean } | null {
   if (!p) return null;
   if (usaCorpoDoFundador(p.fundador, busca)) return { corpo: CORPO_DO_FUNDADOR, asas: true };
   const c = p.corpo ? CORPOS_DE_JOGADOR[p.corpo] : undefined;
-  return c ? { corpo: c, asas: false } : null;
+  return c ? { corpo: c, asas: !!c.asas } : null;
 }
