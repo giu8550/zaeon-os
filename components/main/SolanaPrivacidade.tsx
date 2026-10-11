@@ -127,20 +127,30 @@ function ImpressaoSolana() {
 export default function SolanaPrivacidade() {
   return (
     <section id="privacidade" aria-labelledby="privacidade-titulo" className="zaeon-borda relative z-40 w-full scroll-mt-28 pt-6 pb-16 md:pb-24">
-      <div id="privacidade-titulo">
-        <TituloSecao className="font-display" forte="Seu conhecimento, sua prova." fraco="Sua identidade, só sua." />
+      {/* o CARD ANIMADO da Solana vem PRIMEIRO; o título fica EMBAIXO dele (o dono, out/2026) */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.6 }}
+        className="dark mx-auto w-full max-w-3xl rounded-[2rem] border border-cyan-400/25 bg-[#0b1733]/80 backdrop-blur-md p-4 md:p-8 shadow-[0_0_40px_rgba(6,182,212,0.12)]"
+      >
+        <ImpressaoSolana />
+      </motion.div>
+      <div id="privacidade-titulo" className="mt-6">
+        <TituloSecao className="font-display" forte="Privacidade e segurança," fraco="construído na Solana." />
       </div>
-      {/* o elemento da Solana logo após o sub-header */}
+      {/* o selo da Solana logo após o título */}
       <div className="mt-5 inline-flex w-fit items-center gap-3 rounded-full border border-white/15 bg-black/80 px-4 py-2 shadow-[0_0_30px_rgba(220,31,255,0.15)]">
         <SolanaMark size={15} wordmark />
         <span className="h-4 w-px bg-white/15" />
         <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/80">credenciais verificáveis</span>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+      <div className="mt-8">
         {/* cards */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
-          <ul className="flex flex-col gap-3">
+        <div className="flex flex-col gap-6">
+          <ul className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {CARDS.map((c, i) => (
               <motion.li
                 key={c.t}
@@ -166,16 +176,6 @@ export default function SolanaPrivacidade() {
           </div>
         </div>
 
-        {/* desenho */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.6 }}
-          className="dark lg:col-span-7 rounded-[2rem] border border-cyan-400/25 bg-[#0b1733]/80 backdrop-blur-md p-4 md:p-8 shadow-[0_0_40px_rgba(6,182,212,0.12)]"
-        >
-          <ImpressaoSolana />
-        </motion.div>
       </div>
     </section>
   );

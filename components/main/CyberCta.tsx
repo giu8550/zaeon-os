@@ -41,7 +41,7 @@ export default function CyberCta({ logado, onLogin, className = "" }: { logado: 
       onClick={entrar}
       aria-disabled={!pronto}
       aria-busy={!pronto}
-      aria-label={pronto ? "Entrar no cyberespaço" : `Carregando o cyberespaço: ${pct}% — ${e.etapa}`}
+      aria-label={pronto ? "Play game" : `Carregando o game: ${pct}% — ${e.etapa}`}
       title={pronto ? undefined : e.etapa}
       className={`group relative overflow-hidden flex flex-col items-stretch justify-center rounded-full border font-medium uppercase tracking-[0.18em] text-[11px] transition-all bg-transparent w-full sm:w-auto min-w-[250px]
         ${pronto
@@ -50,7 +50,7 @@ export default function CyberCta({ logado, onLogin, className = "" }: { logado: 
     >
       <span className="relative z-10 flex items-center justify-center gap-2 px-8 pt-4 pb-3">
         <span aria-hidden>✦</span>
-        {pronto ? "Entrar no cyberespaço" : "Ir pro cyberespaço"}
+        Play game
         {!pronto && <span className="font-mono tabular-nums text-[10px] text-cyan-600 dark:text-cyan-300/90">{pct}%</span>}
       </span>
       {/* a barra: dentro do botão, colada embaixo */}
