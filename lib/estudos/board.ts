@@ -31,6 +31,16 @@ export type CardEstudo = {
   fontes?: Fonte[];
   /** quem criou (userId) — pra mostrar a cor de quem colou */
   autor?: string;
+  /** (só no ESTUDO) o PRODUTO FINAL — o resultado que dá pra entregar/vender (o blueprint — lib/estudos/blueprint) */
+  produto?: string;
+  /** (só no ESTUDO) o link do código/entregável (pode ser PRIVADO: só quem valida abre) */
+  repo?: string;
+  /** (só no ESTUDO) os SELOS de validação — gravados SÓ pelo servidor (o cliente não forja: `aplicarOps` mantém os do banco) */
+  selos?: Selos;
+};
+export type Selos = {
+  /** a checagem dos links (as fontes e o repositório): quantos responderam e quando */
+  links?: { ok: number; total: number; em: number };
 };
 
 export const MAX_CARDS_ESTUDO = 300;
@@ -62,6 +72,13 @@ export function sanitizarCard(raw: unknown): CardEstudo | null {
   if (corpo) card.corpo = corpo;
   if (idOk(c.pai) && c.pai !== c.id) card.pai = c.pai;
   if (idOk(c.autor)) card.autor = c.autor;
+  if (tipo === "estudo") {
+    const produto = str(c.produto, 2000), repo = urlSegura(c.repo);
+    if (produto) card.produto = produto;
+    if (repo) card.repo = repo;
+    const l = (c.selos as Selos | undefined)?.links;
+    if (l && typeof l === "object") { const ok = num(l.ok, 0, 100), total = num(l.total, 0, 100), em = num(l.em, 0, 9e15); if (ok !== undefined && total !== undefined && em !== undefined && ok <= total) card.selos = { links: { ok: Math.round(ok), total: Math.round(total), em: Math.round(em) } }; }
+  }
   if (tipo === "confirmacao" && Array.isArray(c.fontes)) {
     const fs = c.fontes.map((f): Fonte | null => {
       if (!f || typeof f !== "object") return null;
@@ -80,11 +97,16 @@ export function lerCards(json: unknown): CardEstudo[] {
 }
 
 export type OpsBoard = { upsert?: unknown[]; remove?: unknown[] };
-/** aplica as operações (por card): remove primeiro, depois insere/atualiza; os filhos de um card removido viram soltos */
-export function aplicarOps(atual: readonly CardEstudo[], ops: OpsBoard): CardEstudo[] {
+/** aplica as operações (por card): remove primeiro, depois insere/atualiza; os filhos de um card removido viram soltos.
+ *  Os SELOS são do servidor: vindos do cliente (`servidor` falso) são ignorados e os do banco ficam */
+export function aplicarOps(atual: readonly CardEstudo[], ops: OpsBoard, o: { servidor?: boolean } = {}): CardEstudo[] {
   const remover = new Set((Array.isArray(ops.remove) ? ops.remove : []).filter(idOk));
   const mapa = new Map(atual.filter((c) => !remover.has(c.id)).map((c) => [c.id, c] as const));
-  for (const raw of Array.isArray(ops.upsert) ? ops.upsert : []) { const c = sanitizarCard(raw); if (c && !remover.has(c.id)) mapa.set(c.id, c); }
+  for (const raw of Array.isArray(ops.upsert) ? ops.upsert : []) {
+    const c = sanitizarCard(raw); if (!c || remover.has(c.id)) continue;
+    if (!o.servidor) { const antes = mapa.get(c.id)?.selos; delete c.selos; if (antes) c.selos = antes; }
+    mapa.set(c.id, c);
+  }
   const out = [...mapa.values()].slice(0, MAX_CARDS_ESTUDO);
   return out.map((c) => { if (c.pai && !mapa.has(c.pai)) { const { pai: _p, ...solto } = c; void _p; return solto; } return c; });
 }
