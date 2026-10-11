@@ -187,6 +187,8 @@ const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed
 // "Meus Estudos" voltou a ser o BOARD (o canvas colaborativo, estética de blueprint — lib/estudos/board); o caderno
 // de blocos (MeusEstudosFeed) segue abrindo por um botão no canto do board (os estudos antigos não se perdem)
 const BoardEstudos = dynamic(() => import("@/components/estudos/BoardEstudos"), { ssr: false });
+// "Estudos" abre na VITRINE de blueprints (lib/estudos/vitrine); a busca na literatura (o Omega) fica a um clique
+const VitrineEstudos = dynamic(() => import("@/components/estudos/VitrineEstudos"), { ssr: false });
 const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlunosPanel"), { ssr: false });
 
 /**
@@ -244,6 +246,7 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
     // o BOARD de Meus Estudos aberto por um link de convite (?board=<id>&convite=<token>) e o caderno antigo por cima
     const [boardDoLink, setBoardDoLink] = useState<{ id: string | null; convite: string | null }>({ id: null, convite: null });
     const [cadernoAberto, setCadernoAberto] = useState(false);
+    const [estudosVista, setEstudosVista] = useState<"vitrine" | "pesquisar">("vitrine");
     useEffect(() => {
         try {
             const sp = new URLSearchParams(window.location.search), id = sp.get("board");
@@ -445,7 +448,14 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
                                 </button>
                             </div>
                         ) : activeTab === "meus-estudos" ? null : activeTab === "community" ? (
-                            <OmegaScholarWorkspace />
+                            <div className="relative h-full">
+                                {estudosVista === "vitrine" ? <VitrineEstudos /> : <OmegaScholarWorkspace />}
+                                <div className="absolute right-3 top-3 z-30 flex overflow-hidden rounded-full border border-sky-300/30 bg-[#05162a]/85 font-mono text-[10.5px] backdrop-blur">
+                                    {(["vitrine", "pesquisar"] as const).map((v) => (
+                                        <button key={v} type="button" onClick={() => setEstudosVista(v)} className={`px-3 py-1 ${estudosVista === v ? "bg-sky-300/20 text-white" : "text-sky-100/70 hover:text-white"}`}>{v === "vitrine" ? "vitrine" : "pesquisar na literatura"}</button>
+                                    ))}
+                                </div>
+                            </div>
                         ) : activeTab === "students" ? (
                             <MeusAlunosPanel />
                         ) : activeTab === "classes" && isTeacher ? (
