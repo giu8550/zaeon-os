@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { isSuperAdmin } from "@/lib/auth/roles";
+import { ehAdminDoMapa } from "@/lib/cyber/adminMapa";
 import { sanitizarConfig, type ConfigSalva } from "@/lib/cyber/frota/config";
 import type { AreasFrota } from "@/lib/cyber/frota/agenda";
 import type { AreaId } from "@/lib/cyber/frota/areas";
@@ -17,10 +17,10 @@ import ControlesAreasFrota, { TabelaAreas } from "./ControlesAreasFrota";
 export type ContagemAdmin = { bots: number; usuarios: number; areas: Record<AreaId, { bots: number; usuarios: number }> };
 
 type Props = { contagem: () => ContagemAdmin | null; aplicada: () => void };
-/** o botão + o painel — só aparece pra super admin (a sessão decide; o PUT confere de novo no servidor) */
+/** o botão + o painel — só aparece pro ADMIN DO MAPA (o dono — lib/cyber/adminMapa; o PUT confere de novo no servidor) */
 export default function PainelAdminCyber(props: Props) {
   const { data } = useSession();
-  return isSuperAdmin({ email: data?.user?.email, role: (data?.user as { role?: string } | undefined)?.role }) ? <PainelAdmin {...props} /> : null;
+  return ehAdminDoMapa(data?.user?.email) ? <PainelAdmin {...props} /> : null;
 }
 
 export function PainelAdmin({ contagem, aplicada }: Props) {

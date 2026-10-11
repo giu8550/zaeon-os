@@ -6,6 +6,7 @@
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+import { ehAdminDoMapa } from "@/lib/cyber/adminMapa";
 import { NextResponse } from "next/server";
 import { lerConfig, salvarConfig } from "@/lib/cyber/frota/servidor";
 import { sanitizarConfig } from "@/lib/cyber/frota/config";
@@ -18,6 +19,7 @@ export async function GET() {
 export async function PUT(req: Request) {
   const { assertAdmin } = await import("@/lib/admin/assertAdmin");   // (tardio: o GET público não depende do auth/banco)
   const a = await assertAdmin(); if (!a.ok) return NextResponse.json({ error: "forbidden" }, { status: a.status });
+  if (!ehAdminDoMapa(a.email)) return NextResponse.json({ error: "forbidden" }, { status: 403 });   // o mapa: só o dono (lib/cyber/adminMapa)
   const corpo = await req.json().catch(() => null);
   if (!corpo || typeof corpo !== "object") return NextResponse.json({ error: "config inválida" }, { status: 400 });
   const config = await salvarConfig(sanitizarConfig(corpo));

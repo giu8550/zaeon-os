@@ -3,12 +3,13 @@ import { ETAPAS_LAB, avancarTutorialLab, contarPalavras, encerrarTutorialLab, fa
 
 describe("tutorial do tablet", () => {
   it("a ordem pedida: tema → pesquisa na tela roxa → referências → relacionados → bandeja → gerar → abrir → salvar", () => {
-    expect(ETAPAS_LAB.map((e) => e.id)).toEqual(["tema", "pesquisando", "referencias", "relacionados", "bandeja", "gerar", "abrir", "salvar", "fim"]);
+    expect(ETAPAS_LAB.map((e) => e.id)).toEqual(["tema", "pesquisando", "referencias", "relacionados", "bandeja", "gerar", "abrir", "chat-pesquisa", "salvar", "fim"]);
     expect(ETAPAS_LAB[0]!.fala).toMatch(/chocolate, morango, o vento, cachoeiras/);
     // as etapas obrigatórias só andam com a ação (evento); as de "ver" andam no Próximo
     const pa = (id: string) => ETAPAS_LAB.find((e) => e.id === id)!;
     for (const id of ["tema", "pesquisando", "gerar", "abrir", "salvar"]) expect(pa(id).avancaEm.length).toBeGreaterThan(0);
-    for (const id of ["referencias", "relacionados", "bandeja"]) expect(pa(id).avancaEm).toEqual([]);
+    for (const id of ["referencias", "relacionados", "bandeja", "chat-pesquisa"]) expect(pa(id).avancaEm).toEqual([]);
+    expect(pa("chat-pesquisa").fala).toMatch(/volte aqui depois pra continuar essa pesquisa se quiser.*Hoje você só deve entregar pra mim/);
   });
   it("o estado anda e guarda o tema; no tema, a mensagem não vai pro chat", () => {
     iniciarTutorialLab(); expect(temaNoTutorial()).toBe(true);
@@ -39,6 +40,6 @@ describe("o tour não trava esperando uma ação que já aconteceu", () => {
     expect(lerTutorialLab().etapa).toBe("referencias");
     avancarAte(SALTOS_LAB["zaeon:research:draftdone"]!); expect(lerTutorialLab().etapa).toBe("abrir");
     avancarAte("referencias"); expect(lerTutorialLab().etapa).toBe("abrir");   // não volta
-    avancarAte(SALTOS_LAB["zaeon:research:newdoc"]!); expect(lerTutorialLab().etapa).toBe("salvar");
+    avancarAte(SALTOS_LAB["zaeon:research:newdoc"]!); expect(lerTutorialLab().etapa).toBe("chat-pesquisa");
   });
 });

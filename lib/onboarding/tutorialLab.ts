@@ -7,7 +7,7 @@
  *
  * Estado só no cliente (o laboratório do tablet, `?tutorial=1`); um store mínimo com assinatura (sem React aqui).
  */
-export type IdEtapaLab = "tema" | "pesquisando" | "referencias" | "relacionados" | "bandeja" | "gerar" | "abrir" | "salvar" | "fim";
+export type IdEtapaLab = "tema" | "pesquisando" | "referencias" | "relacionados" | "bandeja" | "gerar" | "abrir" | "chat-pesquisa" | "salvar" | "fim";
 export type EtapaLab = {
   id: IdEtapaLab;
   /** o que o Droid diz no balão ({tema} = o tema escolhido) */
@@ -39,6 +39,9 @@ export const ETAPAS_LAB: EtapaLab[] = [
     fala: "Fase final, obrigatória: gere a pesquisa sugerida a partir dessas fontes." },
   { id: "abrir", alvos: ['[data-tour="iniciar-pesquisa"]'], avancaEm: ["zaeon:research:newdoc"],
     fala: "Ficou pronta! Abra a pesquisa na aba Pesquisas." },
+  // a SALA DE PESQUISA: o Droid apresenta o CHAT dela (a pasta "Conversa") — dá pra voltar depois e continuar
+  { id: "chat-pesquisa", alvos: ['[data-tour="pasta-conversa"]', '[data-tour="pesquisa"]'], avancaEm: [],
+    fala: "Esta é a Sala de Pesquisa. Na pasta Conversa, o chat te ajuda a aprofundar a pesquisa com a IA — volte aqui depois pra continuar essa pesquisa se quiser. Hoje você só deve entregar pra mim." },
   { id: "salvar", alvos: ['[data-tour="save-research"]', '[data-tour="modal-salvar"]', '[data-tour="salvar-pesquisa"]'], avancaEm: [EVT_PESQUISA_SALVA],
     fala: "Agora salve ou exporte a sua pesquisa. Só termina quando o arquivo estiver salvo de verdade." },
   { id: "fim", alvos: [], avancaEm: [], fala: "" },
@@ -72,7 +75,7 @@ export function avancarAte(id: IdEtapaLab) {
 export const SALTOS_LAB: Record<string, IdEtapaLab> = {
   "zaeon:research:done": "referencias",       // a pesquisa na tela roxa terminou
   "zaeon:research:draftdone": "abrir",        // a pesquisa sugerida foi gerada
-  "zaeon:research:newdoc": "salvar",          // abriu em Pesquisas
+  "zaeon:research:newdoc": "chat-pesquisa",   // abriu em Pesquisas (o Droid apresenta o chat de lá)
 };
 /** no tutorial, escolher o tema NÃO manda a mensagem pro chat: ela vira a pesquisa na tela roxa */
 export const temaNoTutorial = () => estado.ativo && estado.etapa === "tema";
