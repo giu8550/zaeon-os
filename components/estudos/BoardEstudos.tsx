@@ -5,7 +5,8 @@
  * BLUEPRINT: papel azul técnico com a grade, traço branco/ciano, carimbos de prancha (ESTUDO · E-01).
  * As RAMIFICAÇÕES crescem da DIREITA pra ESQUERDA, quase em 3D: cada nível é um plano um pouco mais fundo (inclina e
  * escurece), e a linha técnica liga o lado esquerdo do pai ao direito do filho; as ESPECULAÇÕES são cards menores e
- * tracejados. O card de ESTUDO traz a PROFUNDIDADE e (as próximas entregas) o "Gerar percurso" e a "Resposta certeira".
+ * tracejados. O card de ESTUDO traz a PROFUNDIDADE, o "Gerar percurso" (o percursor) e a "Resposta certeira" (a
+ * literatura, com cada citação conferida) — lib/estudos/harness.
  * Arrastar o fundo = mover; roda = zoom; duplo clique num card = editar.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -96,6 +97,12 @@ export default function BoardEstudos({ boardInicialId, convite }: { boardInicial
     const c: CardEstudo = { id: novoIdCard(tipo), tipo, ...pos, pai: pai.id, corpo: "", autor: euId ?? undefined };
     B.mudar([c]); setEditando(c.id);
   };
+  const [erroCard, setErroCard] = useState<Record<string, string>>({});
+  const gerar = async (c: CardEstudo, acao: "percurso" | "resposta") => {
+    setErroCard((e) => { const n = { ...e }; delete n[c.id]; return n; });
+    const erro = await B.gerar(c.id, acao);
+    if (erro) { setErroCard((e) => ({ ...e, [c.id]: erro })); setTimeout(() => setErroCard((e) => { const n = { ...e }; delete n[c.id]; return n; }), 6000); }
+  };
   const salvarTexto = (c: CardEstudo, titulo: string, corpo: string) => { setEditando(null); if ((c.titulo ?? "") !== titulo || (c.corpo ?? "") !== corpo) B.mudar([{ ...c, titulo: titulo.trim() || undefined, corpo: corpo.trim() || undefined }]); };
 
   // ── convite ──
@@ -184,11 +191,16 @@ export default function BoardEstudos({ boardInicialId, convite }: { boardInicial
                     <div className="mt-1 font-mono text-[10px] text-sky-200/60">{prof.confirmacoes} confirmações · {prof.fontes} fontes · {prof.especulacoes} especulações · {prof.passos} passos</div>
                   </div>
                 )}
-                {/* as AÇÕES do harness (dentro do card): ramificar — o percurso e a resposta certeira geradas vêm na próxima entrega */}
-                {!leitor && !ed && (c.tipo === "estudo" || c.tipo === "percurso" || c.tipo === "confirmacao") && (
+                {/* as AÇÕES do harness (dentro do card): o percurso (no estudo), a resposta certeira (no estudo e em cada
+                    passo) e as ramificações à mão */}
+                {B.gerando[c.id] && (
+                  <div className="mt-2 font-mono text-[10.5px] tracking-wide text-sky-200/80"><span className="inline-block animate-pulse">▮</span> {B.gerando[c.id] === "percurso" ? "o percursor está traçando o caminho…" : "buscando na literatura e conferindo cada citação…"}</div>
+                )}
+                {erroCard[c.id] && <div className="mt-2 font-mono text-[10.5px] text-amber-200/90">{erroCard[c.id]}</div>}
+                {!leitor && !ed && !B.gerando[c.id] && (c.tipo === "estudo" || c.tipo === "percurso" || c.tipo === "confirmacao") && (
                   <div className="mt-2 flex flex-wrap gap-1.5" onPointerDown={(e) => e.stopPropagation()}>
-                    {c.tipo === "estudo" && <Botao cor="#ffd36b" titulo="O percursor gera o caminho do estudo (próxima entrega)" desabilitado>⟵ Gerar percurso</Botao>}
-                    {c.tipo === "estudo" && <Botao cor="#7dffb0" titulo="Resposta checada na literatura (próxima entrega)" desabilitado>⟵ Resposta certeira</Botao>}
+                    {c.tipo === "estudo" && <Botao cor="#ffd36b" titulo="O percursor traça o caminho do estudo (cada passo vira um card à esquerda)" onClick={() => gerar(c, "percurso")}>⟵ Gerar percurso</Botao>}
+                    {(c.tipo === "estudo" || c.tipo === "percurso") && <Botao cor="#7dffb0" titulo="Busca na literatura: o que a citação confirma vira confirmação; o resto, especulação" onClick={() => gerar(c, "resposta")}>⟵ Resposta certeira</Botao>}
                     <Botao cor="#c9b6ff" titulo="Uma ideia ainda não confirmada: fica num card menor" onClick={() => ramificar(c, "especulacao")}>+ especulação</Botao>
                     <Botao cor="#e8f6ff" titulo="Uma nota ligada a este card" onClick={() => ramificar(c, "nota")}>+ nota</Botao>
                   </div>

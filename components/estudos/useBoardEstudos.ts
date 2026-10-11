@@ -136,5 +136,21 @@ export function useBoardEstudos(o: { boardId?: string | null; convite?: string |
     return `${window.location.origin}/research-lab?tab=sala-de-estudos&board=${b.id}&convite=${encodeURIComponent(token)}`;
   }, []);
 
-  return { board, compartilhados, erro, presentes, cursores, salvando, mudar, renomear, moverCursor, convidar, abrir: (id: string | null) => setAlvo({ id, convite: null }) };
+  /** o HARNESS dentro do card: gera o percurso ou a resposta certeira (o servidor cria os cards pra todo mundo) */
+  const [gerando, setGerando] = useState<Record<string, "percurso" | "resposta">>({});
+  const gerar = useCallback(async (cardId: string, acao: "percurso" | "resposta"): Promise<string | null> => {
+    const b = boardRef.current; if (!b) return null;
+    if (fila.current.upsert.size || fila.current.remove.size) await gravar();   // (o texto do card precisa estar salvo)
+    setGerando((g) => ({ ...g, [cardId]: acao }));
+    try {
+      const r = await fetch(`/api/estudos/board/${b.id}/gerar`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId, acao }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return j?.error ?? "Não deu agora — tente de novo.";
+      setBoard((atual) => (atual && atual.id === j.board.id ? { ...j.board, cards: mesclarRemoto(atual.cards, j.board.cards, pendentes()) } : atual));
+      return j.criados ? null : "Nada novo pra ramificar.";
+    } catch { return "Sem conexão."; }
+    finally { setGerando((g) => { const n = { ...g }; delete n[cardId]; return n; }); }
+  }, [gravar]);
+
+  return { board, compartilhados, erro, presentes, cursores, salvando, gerando, mudar, renomear, moverCursor, convidar, gerar, abrir: (id: string | null) => setAlvo({ id, convite: null }) };
 }
