@@ -39,6 +39,7 @@ import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import MagazineAnswerView, { podeVirarRevista } from "@/components/study/MagazineAnswerView";
 import MagazineBoundary from "@/components/study/MagazineBoundary";
 import ConversasSidebar from "@/components/chat/ConversasSidebar";
+import PastasEmpilhadas, { CORPO_DA_PASTA, type Pasta } from "@/components/chat/PastasEmpilhadas";
 import { useConversasSlot } from "@/components/chat/ConversasSlot";
 import { consumirPedido, EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
 
@@ -136,10 +137,6 @@ function enxugarArtefatos(m: Msg): Msg {
   const extras = (m.blocosExtra ?? []).map(leve).filter(Boolean) as StudioBlockData[];
   return { ...m, studioBlock: leve(m.studioBlock), blocosExtra: extras.length ? extras : undefined, desenhando: undefined };
 }
-
-/** Pílula de documento no topo do chat (TCC, cartolina). */
-const DOC_PILL =
-  "min-h-[36px] px-3 rounded-full inline-flex items-center gap-1.5 text-[13px] font-semibold bg-white/90 dark:bg-white/10 border border-slate-200 dark:border-white/15 text-slate-700 dark:text-white/85 hover:text-cyan-600 dark:hover:text-cyan-300 hover:border-cyan-400/50 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500";
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
@@ -1003,7 +1000,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         return slotSidebar ? createPortal(lista, slotSidebar) : lista;
       })()}
       {/* ── COLUNA CENTRAL: conversa + composer ── */}
-      <div ref={colunaRef} className="relative flex-1 min-w-0 flex flex-col" onDragOver={soltar.onDragOver} onDragLeave={soltar.onDragLeave} onDrop={(e) => { if (e.dataTransfer.files?.length || e.dataTransfer.getData("text/zaeon-file")) soltar.onDrop(e); }}>
+      <div ref={colunaRef} className={`relative flex-1 min-w-0 flex flex-col ${CORPO_DA_PASTA}`} onDragOver={soltar.onDragOver} onDragLeave={soltar.onDragLeave} onDrop={(e) => { if (e.dataTransfer.files?.length || e.dataTransfer.getData("text/zaeon-file")) soltar.onDrop(e); }}>
         {arrastando && <AvisoSoltar />}
 
         {/* ⟁ Árvore de habilidades — drawer opt-in por cima da conversa (não troca a tela) */}
@@ -1053,73 +1050,52 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           </button>
         )}
 
-        {/* TOPO = os documentos desta conversa (TCC, cartolina — sem rótulo, pedido do dono) + o A−/A+ do texto. As conversas ficam na
-            barra da esquerda: trocar de conversa lá não abre/fecha documento aqui, e vice-versa. */}
-        <div className="shrink-0 px-3 pt-2 flex items-center gap-2 min-h-[44px]">
-          {docs.length > 0 && (
-            <button type="button" onClick={() => setDocAtivo(null)} aria-pressed={!docAtivo}
-              className={`${DOC_PILL} ${!docAtivo ? "!bg-slate-900 !text-white dark:!bg-white dark:!text-slate-900 !border-transparent" : ""}`}>
-              ⟁ Conversa
-            </button>
-          )}
-          {docs.map((d) => {
-            const r = ROTULO_DOC[d.studioKind] ?? { emoji: "⟁", nome: "Documento" };
-            const atual = docAtivo === d.artifactId;
-            return (
-              <span key={d.artifactId} className={`${DOC_PILL} !pr-1 ${atual ? "!bg-slate-900 !text-white dark:!bg-white dark:!text-slate-900 !border-transparent" : ""}`}>
-                <button type="button" onClick={() => setDocAtivo(d.artifactId)} aria-pressed={atual} title={d.titulo} className="inline-flex items-center gap-1.5 max-w-[180px]">
-                  <span aria-hidden>{r.emoji}</span><span className="truncate">{d.titulo || r.nome}</span>
-                </button>
-                <button type="button" aria-label={`Fechar ${d.titulo || r.nome}`} onClick={() => { setDocs((xs) => xs.filter((x) => x.artifactId !== d.artifactId)); if (atual) setDocAtivo(null); }}
-                  className="w-6 h-6 rounded-full flex items-center justify-center opacity-70 hover:opacity-100"><X size={12} /></button>
-              </span>
-            );
-          })}
-          {/* TCC da conversa: abre por cima do chat (a sala não muda). Só existe depois do
-              "crie um TCC sobre…" — ou de abrir o card dele na cartolina. */}
-          {tccDaAba && !tccAberto && (
-            <button
-              type="button"
-              onClick={() => setTccAberto(true)}
-              aria-label="Abrir o TCC desta conversa"
-              title="TCC desta conversa"
-              className={DOC_PILL}
-            >
-              <GraduationCap size={14} /> TCC
-            </button>
-          )}
-          {/* Cartolina da conversa: o board abre por cima do chat. Tap num card → volta à resposta. */}
-          {CARTOLINA_ON && abaAtiva && (
-            <button
-              type="button"
-              onClick={() => setCartolinaAberta(true)}
-              aria-label="Abrir a cartolina desta conversa"
-              title="Cartolina desta conversa"
-              className={DOC_PILL}
-            >
-              <FileText size={14} /> Cartolina
-            </button>
-          )}
-          <div className="flex-1" />
-          {/* o MAPA da conversa: aparece quando ela vira estudo ("Gerar mapa"); depois, "Ver mapa" */}
-          {cerebro.ligado && abaAtiva && (
-            <BolinhaCerebro
-              estado={cerebro.estado}
-              completude={cerebro.mapa?.completudeAprendizado ?? 0}
-              aberto={cerebroAberto}
-              onClick={() => {
-                if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
-                else setCerebroAberto((v) => !v);
-              }}
-            />
-          )}
-          <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
-        </div>
+        {/* TOPO = PASTAS: a CONVERSA na frente e os documentos dela (aulas/diagramas, TCC, cartolina) empilhados atrás —
+            puxar a aba traz a pasta pra frente (components/chat/PastasEmpilhadas). As conversas ficam na barra da esquerda:
+            trocar de conversa lá não abre/fecha documento aqui, e vice-versa. */}
+        <PastasEmpilhadas
+          pastas={[
+            { id: "conversa", rotulo: "Conversa", titulo: "A conversa", icone: <span className="text-cyan-600 dark:text-cyan-300">⟁</span> },
+            ...docs.map((d): Pasta => {
+              const r = ROTULO_DOC[d.studioKind] ?? { emoji: "⟁", nome: "Documento" };
+              return {
+                id: d.artifactId, rotulo: d.titulo || r.nome, titulo: d.titulo, icone: r.emoji,
+                onFechar: () => { setDocs((xs) => xs.filter((x) => x.artifactId !== d.artifactId)); if (docAtivo === d.artifactId) setDocAtivo(null); },
+              };
+            }),
+            // o TCC da conversa (abre por cima do chat; só existe depois do "crie um TCC sobre…" ou do card na cartolina)
+            ...(tccDaAba ? [{ id: "tcc", rotulo: "TCC", titulo: "TCC desta conversa", icone: <GraduationCap size={13} /> }] : []),
+            // a cartolina da conversa (o board abre por cima; tap num card → volta à resposta)
+            ...(CARTOLINA_ON && abaAtiva ? [{ id: "cartolina", rotulo: "Cartolina", titulo: "Cartolina desta conversa", icone: <FileText size={13} /> }] : []),
+          ]}
+          ativa={cartolinaAberta && CARTOLINA_ON ? "cartolina" : tccAberto && tccDaAba ? "tcc" : docAtivo ?? "conversa"}
+          onAbrir={(id) => {
+            if (id === "tcc") { setTccAberto(true); setCartolinaAberta(false); return; }
+            if (id === "cartolina") { setCartolinaAberta(true); return; }
+            setTccAberto(false); setCartolinaAberta(false);
+            setDocAtivo(id === "conversa" ? null : id);
+          }}
+          depois={<>
+            {/* o MAPA da conversa: aparece quando ela vira estudo ("Gerar mapa"); depois, "Ver mapa" */}
+            {cerebro.ligado && abaAtiva && (
+              <BolinhaCerebro
+                estado={cerebro.estado}
+                completude={cerebro.mapa?.completudeAprendizado ?? 0}
+                aberto={cerebroAberto}
+                onClick={() => {
+                  if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
+                  else setCerebroAberto((v) => !v);
+                }}
+              />
+            )}
+            <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
+          </>}
+        />
 
         {/* o painel do MAPA: por cima da conversa (abaixo da linha de cima, que segue mostrando a bolinha) */}
         <AnimatePresence>
           {cerebro.ligado && cerebroAberto && (
-            <div key="cerebro" className="absolute inset-x-0 bottom-0 top-[52px] z-40">
+            <div key="cerebro" className="absolute inset-x-0 bottom-0 top-[46px] z-40">
               <CerebroPanel
                 st={cerebro}
                 onFechar={() => setCerebroAberto(false)}
@@ -1134,7 +1110,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
 
         {/* O documento aberto ocupa a sala (abaixo da linha de Documentos); a conversa fica montada embaixo. */}
         {docs.map((d) => (
-          <div key={d.artifactId} className="absolute inset-x-0 bottom-0 top-[52px] z-30 bg-white dark:bg-[#070b14]" style={{ display: docAtivo === d.artifactId ? undefined : "none" }}>
+          <div key={d.artifactId} className="absolute inset-x-0 bottom-0 top-[46px] z-30 bg-white dark:bg-[#070b14]" style={{ display: docAtivo === d.artifactId ? undefined : "none" }}>
             <DocumentoArtefato doc={d} />
           </div>
         ))}
