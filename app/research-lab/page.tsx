@@ -13,6 +13,8 @@ import { Navbar } from "@/components/main/navbar";
 import { Mic, MicOff, Code2, Building2 } from "lucide-react";
 import { ConversasSlotContext } from "@/components/chat/ConversasSlot";
 import ConversasDaSala from "@/components/chat/ConversasDaSala";
+import { useSidebarHover } from "@/components/lab/useSidebarHover";
+import { EVT_ESTUDOS_ABA, abaEstudosAtual, irPraAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
 
 // Ramo da árvore sob o nome da sala na sidebar: o da sala aberta cresce e rola; o da outra é curto.
 // Larguras da sidebar: fechada = trilho de ícones; aberta = o conteúdo inteiro (que tem largura fixa).
@@ -101,6 +103,22 @@ const NAV_ACTIVE_PILL =
 function navItem(active: boolean, accent: keyof typeof NAV_ACTIVE) {
   void accent; // accent mantido por compatibilidade; o ativo agora é sempre a pill preta
   return `${NAV_BASE} ${active ? NAV_ACTIVE_PILL : NAV_IDLE}`;
+}
+// O TRILHO (sidebar descansada): cada ícone na SUA pill (38 px, centrada nos 52 px de dentro); aberta, a pill estica com
+// o nome. Só largura/margem/cor animam aqui — a largura da sidebar quem anima é o framer (nada de transition-all nela).
+const pill = (aberta: boolean) => `shrink-0 overflow-hidden ${aberta ? "w-full" : "w-[38px]"}`;
+// Subitens da Sala de Estudos ("Meus Estudos", "Estudos"): pill menor, recuada sob a sala quando aberta.
+const subPill = (aberta: boolean) => `shrink-0 overflow-hidden ${aberta ? "ml-5 w-[calc(100%-20px)]" : "ml-1 w-[30px]"}`;
+const SUB_BASE = "flex items-center gap-2.5 p-1.5 rounded-xl border transition-all duration-300 -mt-1.5";
+// "Estudos" é o subitem DESTACADO (a vitrine): degradê violeta→ciano mesmo em repouso.
+const SUB_DESTAQUE = "bg-gradient-to-r from-violet-500/15 to-cyan-500/15 border-cyan-400/40 text-cyan-800 hover:border-cyan-400/70 dark:text-cyan-100 dark:border-cyan-300/30 shadow-[0_6px_16px_-8px_rgba(34,211,238,0.6)]";
+function subItem(active: boolean, destaque: boolean) {
+  if (active) return `${SUB_BASE} ${NAV_ACTIVE_PILL}${destaque ? " !ring-cyan-400/50" : ""}`;
+  return `${SUB_BASE} ${destaque ? SUB_DESTAQUE : NAV_IDLE}`;
+}
+/** O nome do item: some no trilho (a pill recorta, e a opacidade evita a lasquinha de texto na borda). */
+function Rotulo({ v, children }: { v: boolean; children: React.ReactNode }) {
+  return <span className={`text-[10px] font-black uppercase whitespace-nowrap transition-opacity duration-200 ${v ? "opacity-100" : "opacity-0"}`}>{children}</span>;
 }
 import { startTour, getTour, nextTour, TOUR_STEPS } from "@/lib/onboarding/tour";
 import { capabilities } from "@/lib/runtime/mode";
@@ -774,36 +792,18 @@ export default function HomeworkPage({
   const [isMuralLoading, setIsMuralLoading] = useState(false);
   // --- CORE STATES ---
   const [mounted, setMounted] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  // Sidebar POR HOVER: passar o mouse em cima abre (quase na hora); tirar o mouse recolhe. Ela passa POR
-  // CIMA do módulo do chat (fixed, z alto) — então pode crescer à vontade sem brigar com o chat: pra ver
-  // o chat a sidebar fica descansada; pra abrir uma conversa nova ou olhar as coisas, é só pousar o mouse.
-  // Nunca recolhe no meio de uma edição (renomear conversa).
-  const navRef = useRef<HTMLElement>(null);
-  const timerSidebar = useRef<ReturnType<typeof setTimeout>>();
-  const ABRIR_SIDEBAR_MS = 120, FECHAR_SIDEBAR_MS = 320;
-  const entrouSidebar = () => {
-    clearTimeout(timerSidebar.current);
-    if (!isSidebarOpen) timerSidebar.current = setTimeout(() => setIsSidebarOpen(true), ABRIR_SIDEBAR_MS);
-  };
-  const saiuSidebar = (e?: { relatedTarget?: EventTarget | null }) => {
-    // a lista de conversas é desenhada por PORTAL (components/chat/ConversasSlot): pro React, descer o mouse até ela é
-    // "sair" da sidebar — mas na tela ela está DENTRO. Só recolhe se o mouse saiu de verdade (o DOM decide)
-    const pra = e?.relatedTarget as Node | null | undefined;
-    if (pra && navRef.current?.contains(pra)) return;
-    clearTimeout(timerSidebar.current);
-    if (!isSidebarOpen) return;
-    const tentarFechar = () => {
-      const foco = document.activeElement;
-      if (foco && navRef.current?.contains(foco) && /^(INPUT|TEXTAREA)$/.test(foco.tagName)) {
-        timerSidebar.current = setTimeout(tentarFechar, FECHAR_SIDEBAR_MS);   // editando: espera
-        return;
-      }
-      setIsSidebarOpen(false);
-    };
-    timerSidebar.current = setTimeout(tentarFechar, FECHAR_SIDEBAR_MS);
-  };
-  useEffect(() => () => clearTimeout(timerSidebar.current), []);
+  // Sidebar POR HOVER: passar o mouse em cima abre; tirar o mouse a devolve pro canto (o trilho de ícones). Ela passa
+  // POR CIMA do módulo do chat. A lógica (e o porquê de ela ficar presa aberta antes) mora em components/lab/useSidebarHover.
+  const { aberta: isSidebarOpen, navRef, handlers: hoverSidebar } = useSidebarHover<HTMLElement>();
+  // a aba em que a Sala de Estudos está (a conversa, Meus Estudos ou Estudos) — os subitens dela moram na sidebar
+  const [abaEstudos, setAbaEstudos] = useState<AbaEstudos>("meus-estudos");
+  useEffect(() => {
+    setAbaEstudos(abaEstudosAtual());
+    const f = (e: Event) => setAbaEstudos((e as CustomEvent<AbaEstudos>).detail);
+    window.addEventListener(EVT_ESTUDOS_ABA, f);
+    return () => window.removeEventListener(EVT_ESTUDOS_ABA, f);
+  }, []);
+  const irEstudos = (aba: AbaEstudos) => { setActiveTab("sala-de-estudos"); irPraAbaEstudos(aba); };
   // Onde o chat da sala ativa desenha a lista de conversas (portal) — components/chat/ConversasSlot.
   const [slotConversas, setSlotConversas] = useState<HTMLDivElement | null>(null);
   const [isChatLeft, setIsChatLeft] = useState(false);
@@ -2575,9 +2575,7 @@ export default function HomeworkPage({
       {!isEmbedded && (
         <motion.nav
           ref={navRef}
-          onMouseEnter={entrouSidebar}
-          onMouseLeave={saiuSidebar}
-          onFocusCapture={entrouSidebar}
+          {...hoverSidebar}
           initial={false}
           animate={{ width: sidebarAberta ? SIDEBAR_ABERTA : SIDEBAR_FECHADA }}
           transition={{ type: "tween", duration: 0.22, ease: [0.22, 0.61, 0.36, 1] }}
@@ -2586,40 +2584,54 @@ export default function HomeworkPage({
             dark:from-transparent dark:to-transparent dark:bg-[rgba(22,22,34,0.55)] dark:border-white/10 dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)]
             ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
-          {/* Conteúdo com LARGURA FIXA: a sidebar só recorta (54 ↔ 264 px) — nada se reorganiza no meio
-              da animação. Rótulos e listas ficam montados o tempo todo. */}
+          {/* Conteúdo com LARGURA FIXA: a sidebar só recorta (54 ↔ 264 px) — nada se reorganiza no meio da animação.
+              DESCANSADA (o trilho): cada ícone na sua pill, os rótulos somem; ABERTA: as pills se esticam com o nome. */}
           <div className="h-full flex flex-col" style={{ width: SIDEBAR_ABERTA - 2 }}>
-          <div className="flex-1 min-h-0 flex flex-col gap-3 px-2.5 overflow-y-auto overflow-x-hidden no-scrollbar">
-            {/* Cada SALA é um nó com as SUAS conversas embaixo (estilo ChatGPT): a sala aberta mostra a lista
-                completa (o chat dela desenha aqui por portal — components/chat/ConversasSlot); a outra, as
-                recentes (clicar entra na sala e abre a conversa — lib/chat/conversasNav). */}
-            {/* Sala de Estudos */}
+          <div className="flex-1 min-h-0 flex flex-col gap-3 px-[7px] overflow-y-auto overflow-x-hidden no-scrollbar">
+            {/* SALA DE ESTUDOS = um nó com tudo dela embaixo: as conversas, "Meus Estudos" e, por último e destacado,
+                "Estudos" (sem pills no topo da sala). Clicar no nome da sala volta pra CONVERSA. */}
             <button
               data-tour="estudos"
-              onClick={() => setActiveTab("sala-de-estudos")}
-              className={navItem(activeTab === "sala-de-estudos", "blue")}
+              onClick={() => irEstudos("meus-estudos")}
+              title="Sala de Estudos"
+              className={`${navItem(activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos", "blue")} ${pill(sidebarAberta)}`}
             >
               <DocumentTextIcon className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Sala de Estudos
-                </span>
+              <Rotulo v={sidebarAberta}>Sala de Estudos</Rotulo>
             </button>
             <Ramo aberto={sidebarAberta}>
               {activeTab === "sala-de-estudos"
                 ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
                 : <div className={RAMO}><ConversasDaSala sala="estudos" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>}
             </Ramo>
+            <button
+              data-tour="tab-feed"
+              onClick={() => irEstudos("feed")}
+              title="Meus Estudos"
+              className={`${subItem(activeTab === "sala-de-estudos" && abaEstudos === "feed", false)} ${subPill(sidebarAberta)}`}
+            >
+              <BookOpenIcon className="w-4 h-4 shrink-0" />
+              <Rotulo v={sidebarAberta}>Meus Estudos</Rotulo>
+            </button>
+            <button
+              data-tour="tab-community"
+              onClick={() => irEstudos("community")}
+              title="Estudos"
+              className={`${subItem(activeTab === "sala-de-estudos" && abaEstudos === "community", true)} ${subPill(sidebarAberta)}`}
+            >
+              <SparklesIcon className="w-4 h-4 shrink-0" />
+              <Rotulo v={sidebarAberta}>Estudos</Rotulo>
+            </button>
 
             {/* Sala de Pesquisa */}
             <button
               data-tour="pesquisa"
               onClick={() => setActiveTab("pesquisa")}
-              className={navItem(activeTab === "pesquisa", "purple")}
+              title="Sala de Pesquisa"
+              className={`${navItem(activeTab === "pesquisa", "purple")} ${pill(sidebarAberta)}`}
             >
               <AcademicCapIcon className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Sala de Pesquisa
-                </span>
+              <Rotulo v={sidebarAberta}>Sala de Pesquisa</Rotulo>
             </button>
             {UNIFIED && (
               <Ramo aberto={sidebarAberta}>
@@ -2634,24 +2646,22 @@ export default function HomeworkPage({
             {PROJETOS && (
             <button
               onClick={() => setActiveTab("projetos")}
-              className={navItem(activeTab === "projetos", "cyan")}
+              title="Projetos"
+              className={`${navItem(activeTab === "projetos", "cyan")} ${pill(sidebarAberta)}`}
             >
               <Code2 className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Projetos
-                </span>
+              <Rotulo v={sidebarAberta}>Projetos</Rotulo>
             </button>
             )}
 
             {/* Escritório: os agentes da Zaeon como um lugar */}
             <button
               onClick={() => setActiveTab("escritorio")}
-              className={navItem(activeTab === "escritorio", "cyan")}
+              title="Escritório"
+              className={`${navItem(activeTab === "escritorio", "cyan")} ${pill(sidebarAberta)}`}
             >
               <Building2 className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Escritório
-                </span>
+              <Rotulo v={sidebarAberta}>Escritório</Rotulo>
             </button>
 
             <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
@@ -2660,39 +2670,38 @@ export default function HomeworkPage({
             <button
               data-tour="profile-tab"
               onClick={() => setActiveTab("profile")}
-              className={navItem(activeTab === "profile", "violet")}
+              title="Perfil"
+              className={`${navItem(activeTab === "profile", "violet")} ${pill(sidebarAberta)}`}
             >
               <UserCircleIcon className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Perfil
-                </span>
+              <Rotulo v={sidebarAberta}>Perfil</Rotulo>
             </button>
           </div>
 
           {/* EXTRAS — layout, foco e voltar: colados no pé da sidebar (pedido do dono — mais espaço pras salas e conversas) */}
-          <div className="px-2.5 pt-2 pb-3 flex flex-col gap-1.5">
+          <div className="px-[7px] pt-2 pb-3 flex flex-col gap-1.5">
             <div className="h-[1px] bg-slate-300 dark:bg-white/10" />
             <button
               data-tour="layout-toggle"
               onClick={() => setIsChatLeft(!isChatLeft)}
-              className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group"
+              title="Layout"
+              className={`flex items-center gap-3 p-2 rounded-xl border border-transparent hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group ${pill(sidebarAberta)}`}
             >
               <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Layout
-                </span>
+              <Rotulo v={sidebarAberta}>Layout</Rotulo>
             </button>
             <button
               data-tour="focus-mode"
               onClick={toggleFocusMode}
-              className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30" : "text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5"}`}
+              title="Foco"
+              className={`flex items-center gap-3 p-2 rounded-xl border ${isFocusMode ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30" : "border-transparent text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5"} ${pill(sidebarAberta)}`}
             >
               {isFocusMode ? (
-                <EyeIcon className="w-5 h-5" />
+                <EyeIcon className="w-5 h-5 shrink-0" />
               ) : (
-                <PowerIcon className="w-5 h-5" />
+                <PowerIcon className="w-5 h-5 shrink-0" />
               )}
-              <span className="text-[10px] font-black uppercase">Foco</span>
+              <Rotulo v={sidebarAberta}>Foco</Rotulo>
             </button>
             {/* Voltar: de volta ao cyberespaço (o lounge só é carregado enquanto se está nele). */}
             <button
@@ -2704,10 +2713,10 @@ export default function HomeworkPage({
               }}
               aria-label="Voltar ao cyberespaço"
               title="Voltar ao cyberespaço"
-              className="flex items-center gap-3 p-2 rounded-xl text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5 group"
+              className={`flex items-center gap-3 p-2 rounded-xl border border-transparent text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5 group ${pill(sidebarAberta)}`}
             >
               <ArrowUturnLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-              <span className="text-[10px] font-black uppercase">Voltar</span>
+              <Rotulo v={sidebarAberta}>Voltar</Rotulo>
             </button>
           </div>
           </div>
@@ -3048,7 +3057,7 @@ export default function HomeworkPage({
             className={`w-full h-full overflow-hidden ${activeTab === "sala-de-estudos" ? "" : "hidden"}`}
           >
             {/* Sala de Estudos = Chat (Aura objetiva) · Meus Estudos · Estudos. */}
-            <StudyRoomContent flushTop unified={UNIFIED} />
+            <StudyRoomContent flushTop unified={UNIFIED} abasNaSidebar />
           </div>
 
           {!UNIFIED && activeTab === "pesquisas" && (

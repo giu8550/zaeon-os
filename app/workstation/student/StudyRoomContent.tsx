@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { isSuperAdminEmail } from "@/lib/auth/roles";
 import { unifiedResearchRoom } from "@/lib/research/unifiedRoom";
-import { EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA } from "@/lib/chat/conversasNav";
+import { EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, EVT_ESTUDOS_IR, anunciarAbaEstudos, consumirAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
 import OmegaScholarWorkspace from "./omega/OmegaScholarWorkspace";
 import StudyRoomSuggestionDock from "./omega/StudyRoomSuggestionDock";
@@ -196,8 +196,11 @@ const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlun
  * StudyCoworkChat — objetivo, sem fonte obrigatória) · Meus Estudos (caderno + biblioteca) ·
  * Estudos (Omega). O chat de Pesquisa mora na Sala de Pesquisa. Com a flag ligada, "Aulas" e
  * "Meus Alunos" somem em qualquer lugar (inclusive na workstation).
+ *
+ * `abasNaSidebar` (o laboratório): SEM as pills do topo — "Meus Estudos" e "Estudos" ficam na sidebar principal, sob
+ * "Sala de Estudos" (lib/chat/conversasNav: a sala anuncia a aba, a sidebar pede outra).
  */
-export default function StudyRoomContent({ flushTop = false, unified = false }: { flushTop?: boolean; unified?: boolean } = {}) {
+export default function StudyRoomContent({ flushTop = false, unified = false, abasNaSidebar = false }: { flushTop?: boolean; unified?: boolean; abasNaSidebar?: boolean } = {}) {
     const { data: session } = useSession();
 
     const course = (session?.user as any)?.course as string | undefined;
@@ -235,6 +238,8 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
             if (new URLSearchParams(window.location.search).get("estudo") === "chat") { setActiveTab("meus-estudos"); tabRestored.current = true; return; }
             const saved = localStorage.getItem(`zaeon:lastTab:${room}`);
             if (saved && (saved === "meus-estudos" || allTabs.some((t) => t.id === saved))) setActiveTab(saved);
+            const pedida = consumirAbaEstudos();   // a sidebar pediu uma aba antes da sala montar
+            if (pedida) setActiveTab(pedida);
         } catch { /* ignore */ }
         tabRestored.current = true;
     }, [room, allTabs]);
@@ -242,6 +247,15 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
         if (!tabRestored.current || !room) return;
         try { localStorage.setItem(`zaeon:lastTab:${room}`, activeTab); } catch { /* ignore */ }
     }, [activeTab, room]);
+    // a sidebar destaca a aba em que a sala está, e pede outra pelos subitens de "Sala de Estudos"
+    useEffect(() => {
+        if (activeTab === "meus-estudos" || activeTab === "feed" || activeTab === "community") anunciarAbaEstudos(activeTab);
+    }, [activeTab]);
+    useEffect(() => {
+        const ir = (e: Event) => { const a = (e as CustomEvent<AbaEstudos>).detail; consumirAbaEstudos(); if (a) setActiveTab(a); };
+        window.addEventListener(EVT_ESTUDOS_IR, ir);
+        return () => window.removeEventListener(EVT_ESTUDOS_IR, ir);
+    }, []);
 
     // o BOARD de Meus Estudos aberto por um link de convite (?board=<id>&convite=<token>) e o caderno antigo por cima
     const [boardDoLink, setBoardDoLink] = useState<{ id: string | null; convite: string | null }>({ id: null, convite: null });
@@ -338,7 +352,8 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
             */}
             <div className={`flex-1 ${flushTop ? "mx-0 mt-3 mb-0" : "mx-6 mt-4 mb-6"} flex flex-col rounded-[2rem] overflow-hidden bg-white/50 dark:bg-slate-950/40 backdrop-blur-3xl border border-white/40 dark:border-white/10 shadow-2xl min-h-0`}>
 
-                {/* Tab bar header */}
+                {/* Tab bar header (no laboratório as abas moram na sidebar — sem pills aqui) */}
+                {!abasNaSidebar && (
                 <div ref={tabHeaderRef} className="relative flex-shrink-0 z-10 bg-white/50 dark:bg-slate-950/40">
 
                     {/* Tab buttons row */}
@@ -416,6 +431,7 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
                         )}
                     </div>
                 </div>
+                )}
 
                 {/*
                     ── CONTENT AREA ────────────────────────────────────────────
