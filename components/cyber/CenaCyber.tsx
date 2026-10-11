@@ -151,12 +151,12 @@ export default function CenaCyber(p: CenaCyberProps) {
     return deveNascerNoTubo({ visto, forcar, fundador: !!p.souFundador });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  /** onde o novato nasce: na PRAÇA (o normal — de lá só pelo portal pra Zaeon); no TUBO com o tour do Droid só quando o
-   *  modo tutorial está ligado (ou `?nascer=1`) */
-  const nascerNa = useMemo<"praca" | "tubo">(() => {
-    if (typeof window === "undefined") return "praca";
-    try { return new URLSearchParams(location.search).get("nascer") === "1" || tutorialLigado((k) => localStorage.getItem(k)) ? "tubo" : "praca"; } catch { return "praca"; }
-  }, []);
+  /** onde o novato nasce: no TUBO, com o tutorial do Droid — o PADRÃO de todo usuário novo (out/2026: docs/superpowers/
+   *  specs/2026-10-11-tutorial-rpg-design.md). Quem já nasceu entra normal (na base / na nave do dono) */
+  const nascerNa: "praca" | "tubo" = nascer ? "tubo" : "praca";
+  /** o banner de TUTORIAL COMPLETO (as salas abrem) */
+  const [completo, setCompleto] = useState(false);
+  useEffect(() => { if (!completo) return; const t = setTimeout(() => setCompleto(false), 6500); return () => clearTimeout(t); }, [completo]);
   const [voo, setVoo] = useState<{ y: number } | null>(null);
   /** a AÇÃO de contexto (o que o F faz agora) — o chip "F · Estudar" etc.; no celular, tocar no chip faz a ação */
   const [acao, setAcao] = useState<{ rotulo: string } | null>(null);
@@ -259,6 +259,7 @@ export default function CenaCyber(p: CenaCyberProps) {
         setTimeout(() => { engine.current?.dispose(); engine.current = null; router.push("/"); }, 3200);
       },
       onDialogo: setDialogo,
+      onTutorialCompleto: () => setCompleto(true),
       onInventario: (p) => { if (p) { setDestaqueInv(p); if (document.pointerLockElement) document.exitPointerLock(); setInventarioAberto(true); } else setInventarioAberto(false); },
       onPergunta: setPergunta, onPerfil: (perfil) => cb.current.salvarPerfil?.(perfil),
       onFalaAgente: (f) => setFalasDroid((xs) => [...xs.slice(-20), { id: `agente-${Date.now()}-${xs.length}`, userId: `agente:${f.id}`, name: f.nome, color: f.cor, texto: f.texto, ts: Date.now() }]),
@@ -485,6 +486,15 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* o TUTORIAL do Droid: a CAIXA DE DIÁLOGO (RPG) com a fala/instrução de agora; em cima, o OBJETIVO (o "quest
           log": o passo e o "Pular") */}
       {!menu && dialogo && <CaixaDialogo d={dialogo} touch={touch} />}
+      {/* TUTORIAL COMPLETO: como o fim de uma quest — e as salas (Estudar, F, o tablet) abrem */}
+      {completo && (
+        <div role="status" className="pointer-events-none absolute left-1/2 top-[22%] z-[30] -translate-x-1/2 text-center motion-safe:animate-[pulse_2.8s_ease-in-out_infinite]">
+          <div className="mx-auto mb-2 h-px w-[min(70vw,520px)]" style={{ background: "linear-gradient(90deg,transparent,#ffc46b,transparent)" }} />
+          <p className="text-[clamp(22px,4vw,40px)] font-black uppercase tracking-[0.34em] text-[#ffe2a8]" style={{ textShadow: "0 0 24px rgba(255,196,107,.85), 0 2px 0 #000" }}>◆ Tutorial completo ◆</p>
+          <p className="mt-1 text-[14px] font-semibold tracking-wide text-amber-50/85" style={{ textShadow: "0 1px 0 #000" }}>As salas estão abertas. Pressione <kbd className="rounded border border-amber-200/50 px-1.5 font-mono">I</kbd> para o inventário.</p>
+          <div className="mx-auto mt-2 h-px w-[min(70vw,520px)]" style={{ background: "linear-gradient(90deg,transparent,#ffc46b,transparent)" }} />
+        </div>
+      )}
       {!menu && guia && guia.id !== "nascer" && (
         <div className="absolute left-1/2 top-3 z-[26] flex -translate-x-1/2 items-center gap-2.5 rounded-md border-2 bg-[#0d0a1c]/85 py-1 pl-3 pr-1 text-[12px] text-amber-50/85 shadow-[0_8px_24px_-10px_rgba(0,0,0,.8)] backdrop-blur" style={{ borderColor: `${guia.cor}88` }}>
           <span style={{ color: guia.cor }} className="font-black uppercase tracking-[0.18em]">◆ Objetivo</span>
