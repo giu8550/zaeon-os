@@ -163,6 +163,8 @@ export type CyberOpts = {
   onGuia?: (g: EstadoGuia | null) => void;
   /** a CAIXA DE DIÁLOGO do tutorial (lib/cyber/dialogo): a fala de agora, ou null = some */
   onDialogo?: (d: Dialogo | null) => void;
+  /** o tutorial abre (com a pesquisa nova em destaque) ou fecha o INVENTÁRIO */
+  onInventario?: (destaque: PesquisaSalva | null) => void;
   /** a Zaeon (holograma na capela) fez uma PERGUNTA: o React mostra o painel de resposta (null = fechou) */
   onPergunta?: (p: (PerguntaZaeon & { n: number; total: number }) | null) => void;
   /** a conversa com a Zaeon acabou: o perfil (o React salva no servidor — User.cyberPerfil) */
@@ -331,7 +333,7 @@ export class CyberEngine {
   private nascendo: { t: number; tubo: number } | null = null;
   /** o TUTORIAL do Droid: o passo, quantas falas dele já saíram, o relógio da fala, se já está ESPERANDO a pessoa cumprir
    *  (`ativo`) e o que ela fez desde então (`andou`, `motoAndou`, `tunel`, a altura do chão de onde voou) */
-  private guia: { passo: number; fala: number; falaT: number; ativo: boolean; lembrou: boolean; andou: number; correu: number; turbo: number; motoAndou: number; portal: boolean; pisoY: number; prev: { x: number; z: number } } | null = null;
+  private guia: { passo: number; fala: number; falaT: number; ativo: boolean; lembrou: boolean; invT: number; andou: number; correu: number; turbo: number; motoAndou: number; portal: boolean; pisoY: number; prev: { x: number; z: number } } | null = null;
   /** o tutorial já passou da 1ª conversa com a Zaeon: as falas fora de cena viram BALÕES (antes, a caixa de diálogo) */
   private balaoLiberado = false;
   /** a CUTSCENE (lib/cyber/cutscene): o plano de agora (null = a câmera normal), o peso da mistura, a pose suavizada e
@@ -345,6 +347,8 @@ export class CyberEngine {
     this.pesquisaDoTutorial = p; this.fecharTablet();
   }
   get pesquisaTutorial() { return this.pesquisaDoTutorial; }
+  /** a pessoa fechou o inventário (no passo do inventário, o tutorial anda) */
+  inventarioFechado() { const g = this.guia; if (g && ROTEIRO[g.passo]?.cond.tipo === "inventario" && g.ativo) g.invT = Infinity; }
   /** o "…" em cima da cabeça da Zaeon enquanto ela pensa numa resposta */
   private pensandoZ: HTMLDivElement | null = null;
   /** o farol do alvo do tour (uma coluna de luz) */
@@ -1499,7 +1503,7 @@ export class CyberEngine {
     if (i !== this.saindoDoTubo && i !== this.nascendo?.tubo && Math.abs(tb.x - p.x) < 6 && Math.abs(tb.z - p.z) < 6) out.push({ x: tb.x, z: tb.z, r: 1.4 });
     return out;
   }
-  private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, lembrou: false, andou: 0, correu: 0, turbo: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
+  private novoGuia(passo: number) { return { passo, fala: 0, falaT: 0, ativo: false, lembrou: false, invT: 0, andou: 0, correu: 0, turbo: 0, motoAndou: 0, portal: false, pisoY: this.eu.alt, prev: { x: this.eu.pos.x, z: this.eu.pos.z } }; }
   private emitirGuia() {
     if (!this.guia) { this.o.onGuia?.(null); return; }
     const p = ROTEIRO[this.guia.passo]!;
@@ -1514,6 +1518,7 @@ export class CyberEngine {
     if (this.conversa?.etapa === "feita") this.conversa = null;
     // a ação foi feita: a instrução sai da tela (a caixa de diálogo e o balão do Droid)
     this.o.onDialogo?.(null); this.calarBalaoDroid();
+    if (this.guia && ROTEIRO[this.guia.passo]?.cond.tipo === "inventario") this.o.onInventario?.(null);   // o Droid fecha o inventário
     if (n >= ROTEIRO.length) { this.encerrarGuia(); this.droid?.h.sumir(); return; }
     this.guia = this.novoGuia(n); this.emitirGuia();
     if (ROTEIRO[n]!.id === "capela") this.preaquecerVozZaeon();   // o Droid vai levar a pessoa até ela: as falas fixas já vão sendo geradas
@@ -1749,6 +1754,8 @@ export class CyberEngine {
       else if (this.keys.shift || this.correr) g.turbo += d;   // no ar com Shift = o VOO TURBO (o voo longo)
       // a MISSÃO: o Droid abre o tablet (de pé; voando, espera pousar)
       if (passo.cond.tipo === "tablet" && !this.tabletQuer && this.aPeParaTablet()) this.abrirTablet();
+      // o INVENTÁRIO do tutorial: abre na 1ª vez (a pesquisa em destaque) e conta o tempo aberto
+      if (passo.cond.tipo === "inventario" && g.invT !== Infinity) { if (g.invT === 0) this.o.onInventario?.(this.pesquisaDoTutorial); g.invT += dt; }
       // guardou o tablet antes de terminar a missão: o Droid lembra (uma vez por vez que guardar)
       if (passo.cond.tipo === "pesquisa" && !this.pesquisaDoTutorial) {
         const fechado = !this.labAberto && !this.tabletQuer;
@@ -1779,7 +1786,7 @@ export class CyberEngine {
     return {
       nascendo: !!this.nascendo, andou: g.andou, correu: g.correu, noAr: this.jet.noAr ? this.jet.y - g.pisoY : 0, turbo: g.turbo,
       chegou: !!a && Math.hypot(eu.pos.x - a.x, eu.pos.z - a.z) <= a.r && !this.jet.noAr,
-      conversaFeita: this.conversa?.etapa === "feita", tabletAberto: this.labAberto, pesquisaSalva: !!this.pesquisaDoTutorial,
+      conversaFeita: this.conversa?.etapa === "feita", tabletAberto: this.labAberto, pesquisaSalva: !!this.pesquisaDoTutorial, inventario: g.invT,
     };
   }
   /** o DROID: aparece num mini portal do lado da pessoa (quando o tutorial começa — e de novo depois de um teleporte);

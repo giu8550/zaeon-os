@@ -86,8 +86,8 @@ export function estadoDoTubo(t: number): { liquido: number; vidro: number } {
  * (Shift andando), VOAR `m` metros acima do chão (Espaço), o VOO LONGO (`m` metros de turbo: Shift no ar), CHEGAR no
  * alvo, conversar com a Zaeon, OUVIR (o passo é só a cena — anda quando as falas acabam) e abrir o TABLET.
  */
-export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "pesquisa" } | { tipo: "fim" };
-export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "estudo" | "aviso" | "fim";
+export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "pesquisa" } | { tipo: "inventario"; s: number } | { tipo: "fim" };
+export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "estudo" | "aviso" | "inventario" | "fim";
 /** a CUTSCENE do passo (lib/cyber/cutscene): enquanto o Droid fala, a câmera enquadra outra coisa — "droid" = ele (a
  *  apresentação e a missão), "teloes" = os telões PROBLEMA → SOLUÇÃO. A câmera solta na INSTRUÇÃO (a última fala),
  *  a não ser que `cenaInteira` (o passo todo é cena — a pessoa não precisa se mexer) */
@@ -120,6 +120,8 @@ export const ROTEIRO: PassoGuia[] = (() => {
     // no TABLET: o tour da 1ª missão (lib/onboarding/tutorialLab) até a pesquisa estar SALVA — aí o Droid interrompe
     { id: "estudo", titulo: "Criar um estudo", falas: [], cond: { tipo: "pesquisa" }, alvo: null },
     { id: "aviso", titulo: "O veredito do Droid", cena: "droid", cenaInteira: true, alerta: true, falas: ["Pare um instante. Deixa eu ver o que você fez…", "Essa pesquisa ainda não tem base de estudos pra ter algum valor ainda. Não dá pra vender nem publicar.", "Mas você pode guardar ela no seu inventário e me entregar algo melhor depois."], cond: { tipo: "ouvir" }, alvo: null },
+    // o INVENTÁRIO abre com a pesquisa (o livro-holograma) em destaque; anda quando a pessoa fecha ou depois de `s` s
+    { id: "inventario", titulo: "O inventário", falas: [], cond: { tipo: "inventario", s: 11 }, alvo: null },
   ];
 })();
 /** o índice de um passo */
@@ -128,7 +130,7 @@ export const passoDe = (id: IdPassoGuia) => ROTEIRO.findIndex((p) => p.id === id
 export const FALA_VOLTE_AO_TABLET = "Sua missão ainda não acabou: aperte T pra abrir o tablet e terminar o estudo.";
 
 /** o que o engine mede desde que o Droid deu a instrução do passo */
-export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean };
+export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean; /** s com o inventário aberto no passo (Infinity = a pessoa fechou) */ inventario: number };
 /** a pessoa fez o que o Droid pediu? */
 export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
   switch (c.tipo) {
@@ -142,6 +144,7 @@ export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
     case "ouvir": return true;   // (o engine só confere depois que as falas acabam)
     case "tablet": return x.tabletAberto;
     case "pesquisa": return x.pesquisaSalva;
+    case "inventario": return x.inventario >= c.s;
     case "fim": return false;   // o fim acaba sozinho (o Droid se despede)
   }
 }

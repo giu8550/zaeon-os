@@ -57,9 +57,9 @@ describe("quem chega NASCE num tubo de ensaio", () => {
 });
 
 describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada instrução)", () => {
-  const nada: CtxGuia = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false };
+  const nada: CtxGuia = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0 };
   it("tubo → andar → correr → voo curto → voo longo até a capela → a Zaeon → os telões → a 1ª missão (o tablet) — sem motos, portais nem dash", () => {
-    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "correr", "voar", "voo-longo", "capela", "zaeon", "ir-teloes", "teloes", "missao", "estudo", "aviso"]);
+    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "correr", "voar", "voo-longo", "capela", "zaeon", "ir-teloes", "teloes", "missao", "estudo", "aviso", "inventario"]);
     for (const p of ROTEIRO.slice(1)) for (const f of p.falas) expect(f.length).toBeLessThanOrEqual(170);
     for (const p of ROTEIRO) if (p.alvo) expect(naIlhaPrincipal(p.alvo)).toBe(true);
     expect(ROTEIRO.map((p) => p.falas.join(" ")).join(" ")).not.toMatch(/moto|portal|dash|\bC\b/i);
@@ -100,6 +100,7 @@ describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada inst
     expect(cumpriu(c("ir-teloes"), { ...nada, conversaFeita: true })).toBe(false); expect(cumpriu(c("ir-teloes"), { ...nada, chegou: true })).toBe(true);
     expect(cumpriu(c("missao"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("missao"), { ...nada, tabletAberto: true })).toBe(true);
     expect(cumpriu(c("estudo"), { ...nada, tabletAberto: true })).toBe(false); expect(cumpriu(c("estudo"), { ...nada, pesquisaSalva: true })).toBe(true);
+    expect(cumpriu(c("inventario"), { ...nada, inventario: 3 })).toBe(false); expect(cumpriu(c("inventario"), { ...nada, inventario: Infinity })).toBe(true);
   });
 });
 
