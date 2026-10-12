@@ -155,8 +155,9 @@ describe("a concorrência no tutorial (o tablet guardado enquanto a pesquisa rod
     const { lembreteDoTablet } = await import("./onboarding");
     expect(lembreteDoTablet({ fechado: false, etapaLab: "pesquisando", viuConcorrencia: false })).toBe("");
     expect(lembreteDoTablet({ fechado: true, etapaLab: "pesquisando", viuConcorrencia: false })).toBe("concorrencia");
-    expect(lembreteDoTablet({ fechado: true, etapaLab: "referencias", viuConcorrencia: true })).toBe("entregou");
-    expect(lembreteDoTablet({ fechado: true, etapaLab: "gerar", viuConcorrencia: true })).toBe("volte");
+    expect(lembreteDoTablet({ fechado: true, etapaLab: "gerar", viuConcorrencia: true })).toBe("entregou");
+    expect(lembreteDoTablet({ fechado: true, etapaLab: "gerar", viuConcorrencia: false })).toBe("volte");
+    expect(lembreteDoTablet({ fechado: true, etapaLab: "abrir", viuConcorrencia: true })).toBe("volte");
     expect(lembreteDoTablet({ fechado: true, etapaLab: "tema", viuConcorrencia: false })).toBe("volte");
   });
 });

@@ -1739,8 +1739,9 @@ export class CyberEngine {
     // a fala do compromisso: a Zaeon pensa (a cara de pensando) enquanto o servidor responde
     cv.etapa = "pensando"; cv.t = 0; this.holoZaeon?.pensar(true);
     const pedido: PedidoZaeon = { perfil: { ...cv.perfil }, historico: cv.historico.slice(-12), resposta: r, turno: cv.turno, foraSeguidas: cv.foraSeguidas }, serie = cv.serie;
-    const local = () => fallbackZaeon(pedido);
-    const espera = this.o.conversarZaeon ? Promise.race([this.o.conversarZaeon(pedido), new Promise<TurnoZaeon>((ok) => setTimeout(() => ok(local()), 8000))]).catch(local) : Promise.resolve(local());
+    // a resposta é FIXA por situação (não gerativa — pedido do dono, out/2026: casa com o texto dos cards do tutorial e a
+    // voz já vem do cache); só uma pausa curta com o "…" em cima da cabeça dela, pra soar natural
+    const espera = new Promise<TurnoZaeon>((ok) => setTimeout(() => ok(fallbackZaeon(pedido)), 1400));
     void espera.then((t) => { if (this.conversa && this.conversa.serie === serie && this.conversa.etapa === "pensando") this.aplicarTurno(t); });
     return true;
   }

@@ -171,7 +171,7 @@ export const FALA_IA_ENTREGOU = "A IA entregou! ✦ A barra está neon — apert
 export function lembreteDoTablet(o: { fechado: boolean; etapaLab: string | null; viuConcorrencia: boolean }): "" | "concorrencia" | "entregou" | "volte" {
   if (!o.fechado) return "";
   if (o.etapaLab === "pesquisando") return "concorrencia";
-  if (o.viuConcorrencia && o.etapaLab === "referencias") return "entregou";
+  if (o.viuConcorrencia && o.etapaLab === "gerar") return "entregou";   // a pesquisa terminou → o tour foi pro Gerar
   return "volte";
 }
 

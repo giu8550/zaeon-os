@@ -78,6 +78,7 @@ const EscritorioRoom = dynamic(
 // Escritório COWORKING (canal em tempo real, estilo Buzz; sem 3D). Entra no lugar do 3D quando
 // NEXT_PUBLIC_ESCRITORIO_COWORK=1 (lib/canal/flags). Client-only (Pusher/Notification API).
 const TutorialLab = dynamic(() => import("@/components/onboard/TutorialLab"), { ssr: false });
+const TourSala = dynamic(() => import("@/components/onboard/TourSala"), { ssr: false });
 const CoworkingCanal = dynamic(
   () => import("@/components/office/CoworkingCanal"),
   { ssr: false },
@@ -3698,6 +3699,8 @@ export default function HomeworkPage({
 
       {/* o TUTORIAL da 1ª missão (só no tablet aberto pelo tutorial do cyberespaço — lib/onboarding/tutorialLab) */}
       {tutorialLab && <TutorialLab />}
+      {/* fora do tutorial: na 1ª vez, o Droid mostra a SALA INTEIRA (lib/onboarding/tourSala) */}
+      <TourSala noTutorial={tutorialLab} />
     </div>
     </ConversasSlotContext.Provider>
   );
