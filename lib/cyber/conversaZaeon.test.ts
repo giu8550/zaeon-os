@@ -3,7 +3,7 @@ import { ABERTURA, FALA_EXPULSAO, LIMITES, MAX_RESPOSTA, OPCOES_SITUACAO, PERGUN
 import { GLOBO_CAPELA, CIDADE } from "./ceu";
 
 const pedido = (o: Partial<PedidoZaeon> = {}): PedidoZaeon => ({ perfil: { situacao: "estuda" }, historico: [], resposta: "Estudo medicina", turno: 0, foraSeguidas: 0, ...o });
-const semNome = (t: string) => expect(t.toLowerCase()).not.toMatch(/te chame|seu nome|como voc[eê] se chama|idade|e-?mail|telefone/);
+const semNome = (t: string) => expect(t.toLowerCase()).not.toMatch(/te chame|seu nome|como voc[eê] se chama|\bidade\b|e-?mail|telefone/);
 
 describe("a conversa com a Zaeon — UMA pergunta só", () => {
   it("abre com uma fala e faz uma ÚNICA pergunta: estuda, trabalha ou empreende (e os dois / começar algo novo)", () => {
@@ -13,6 +13,12 @@ describe("a conversa com a Zaeon — UMA pergunta só", () => {
     expect(PERGUNTAS[0]!.opcoes).toEqual(expect.arrayContaining(["Estudo", "Trabalho", "Empreendo", "Estudo e trabalho"]));
     for (const f of [...ABERTURA, ...fechamento(), FALA_EXPULSAO, ...PERGUNTAS.map((p) => p.fala)]) { expect(f.length).toBeLessThanOrEqual(160); semNome(f); }
     expect(LIMITES.turnosIa).toBe(1);
+  });
+  it("ela NÃO diz o próprio nome (saudação de quem esperava) e as respostas falam a língua dos telões (estudo → solução)", () => {
+    const tudo = [...ABERTURA, ...fechamento(), ...[...OPCOES_SITUACAO.map((x) => ({ situacao: x.v })), {}].map((o) => `${reacaoFixa("situacao", "", o)} ${compromissoFixo(o)}`)];
+    for (const t of tudo) expect(t).not.toMatch(/\bzaeon\b/i);
+    for (const o of OPCOES_SITUACAO) expect(compromissoFixo({ situacao: o.v })).toMatch(/SOLUÇÃO|ESTUDO/);
+    expect(fechamento()[0]).toMatch(/problemas/); expect(fechamento()[0]).not.toMatch(/moto/i);
   });
   it("entende a situação mesmo em texto livre", () => {
     expect(situacaoDe("Estudo")).toBe("estuda"); expect(situacaoDe("trabalho numa loja de roupas")).toBe("empreende");

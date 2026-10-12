@@ -28,8 +28,8 @@ export type PerfilZaeon = {
 export const CHAVES_PERFIL = ["situacao", "area"] as const;
 export type FalaConversa = { quem: "zaeon" | "eu"; texto: string };
 
-/** a abertura: UMA fala (a pergunta já diz o resto) */
-export const ABERTURA = ["Oi! Eu sou a Zaeon ✦"];
+/** a abertura: UMA fala — uma saudação de quem estava esperando, SEM dizer o próprio nome (pedido do dono, out/2026) */
+export const ABERTURA = ["Você despertou. Bem-vindo à cidadela, viajante — aqui, tudo o que você aprende vira algo real. ✦"];
 export const OPCOES_SITUACAO: { rotulo: string; v: Situacao }[] = [
   { rotulo: "Estudo", v: "estuda" }, { rotulo: "Trabalho", v: "trabalha" }, { rotulo: "Empreendo", v: "empreende" },
   { rotulo: "Estudo e trabalho", v: "estuda_e_trabalha" }, { rotulo: "Quero começar algo novo", v: "nenhum" },
@@ -59,28 +59,29 @@ export function situacaoDe(r: string): Situacao | null {
   if (est) return "estuda"; if (trab) return "trabalha";
   return null;
 }
-/** a reação à resposta (uma frase, sem pergunta) */
+/** a RESPOSTA dela, FIXA por situação (não gerativa — pedido do dono): a 1ª frase reconhece o que a pessoa faz; a 2ª
+ *  já fala a língua dos próximos cards do tutorial (os telões PROBLEMAS → SOLUÇÕES, "cada solução começou como um ESTUDO",
+ *  o VALOR) — a conversa e o roteiro do Droid contam a mesma história */
 export function reacaoFixa(_id: IdPergunta, _r: string, perfil: PerfilZaeon): string {
   switch (perfil.situacao) {
-    case "estuda": return "Que demais! Então aqui é o seu lugar.";
-    case "trabalha": return "Legal! Dá pra aprender no seu ritmo, junto com o trabalho.";
-    case "empreende": return "Uau! Conhecimento é o que mais faz um negócio crescer.";
-    case "estuda_e_trabalha": return "Os dois! Vou te ajudar a render no pouco tempo que sobra.";
-    default: return "Que bom — é um ótimo momento pra começar algo novo.";
+    case "estuda": return "Então você já conhece o caminho.";
+    case "trabalha": return "Então você sabe o valor do tempo.";
+    case "empreende": return "Então você resolve problemas por ofício.";
+    case "estuda_e_trabalha": return "Os dois — então cada minuto conta.";
+    default: return "Então começamos do jeito certo: pela curiosidade.";
   }
 }
-/** o COMPROMISSO COM O CONHECIMENTO (a reserva fixa da fala gerada): uma frase por situação */
 export function compromissoFixo(perfil: PerfilZaeon): string {
   switch (perfil.situacao) {
-    case "estuda": return "O meu combinado com você é simples: um pouco todo dia, e o conhecimento vira seu de verdade.";
-    case "trabalha": return "Cada coisa que você aprender aqui volta pro seu trabalho — e ninguém tira isso de você.";
-    case "empreende": return "Aqui cada estudo vira decisão melhor no seu negócio. Compromisso com o conhecimento é compromisso com ele.";
-    case "estuda_e_trabalha": return "Constância vale mais que tempo: pouco, todo dia, e você chega longe.";
-    default: return "Todo grande caminho começa com a vontade de aprender. O resto a gente constrói junto.";
+    case "estuda": return "Aqui, cada estudo seu pode virar a SOLUÇÃO de um problema real — e isso tem valor.";
+    case "trabalha": return "Aqui, o que você estuda vira SOLUÇÃO — no trabalho e fora dele. E solução tem valor.";
+    case "empreende": return "Aqui, cada ESTUDO vira uma solução — e solução bem feita vira valor de verdade.";
+    case "estuda_e_trabalha": return "Aqui, um pouco por dia vira ESTUDO, e estudo vira solução de verdade.";
+    default: return "Aqui, um estudo seu pode virar a SOLUÇÃO de um problema real.";
   }
 }
-/** o fim: a vez é do Droid */
-export const fechamento = (_perfil: PerfilZaeon = {}) => ["Agora o Droid vai te levar até as motos. Até já! ✦"];
+/** o fim: a vez é do Droid — ele vai mostrar os telões (PROBLEMAS DA TERRA → SOLUÇÕES) */
+export const fechamento = (_perfil: PerfilZaeon = {}) => ["O Droid vai te mostrar os problemas que esta cidade quer resolver. Até já ✦"];
 /** o que o Droid diz ao EXPULSAR quem desrespeitou a Zaeon */
 export const FALA_EXPULSAO = "Você não tem poder nenhum aqui, humano. Seu comportamento é vergonhoso. Vá embora.";
 
