@@ -13,6 +13,8 @@ import ChatMarkdown from "@/components/study/ChatMarkdown";
 import PusherClient from "pusher-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AgentAvatar from "@/components/agents/AgentAvatar";
+import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
+import { fonteChat } from "@/lib/ui/chatFontScale";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
@@ -42,6 +44,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [novoTitulo, setNovoTitulo] = useState("");
   const [emailConvite, setEmailConvite] = useState("");
   const [sugIdx, setSugIdx] = useState(0);
+  // A− / A+ do texto das mensagens: a MESMA escolha do chat das salas de estudo e pesquisa (por aparelho).
+  const zoom = useChatFontScale();
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fimRef = useRef<HTMLDivElement>(null);
@@ -269,6 +273,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   const canal = det.canal;
   const meuId = det.eu.id;
+  // Perfis no topo: dono + membros + você, e quem estiver online mesmo sem ser membro (canal aberto).
+  const onlineIds = new Set(online.map((p) => p.id));
+  const doCanal = det.pessoas.filter((p) => p.id === canal.ownerId || p.id === meuId || canal.membros.includes(p.id));
+  const pessoasNoTopo: Pessoa[] = [...doCanal, ...online.filter((o) => !doCanal.some((p) => p.id === o.id))];
   // Sem @, responde o último agente que falou. A dica só aparece em canal de uma pessoa: com mais
   // gente, o servidor só atende quem estava conversando com o agente (lib/canal/alvo.ts).
   const ultimoAgente = [...det.mensagens].reverse().find((m) => m.autorTipo === "agente" && !m.id.startsWith("efemera-"))?.autorId;
@@ -277,7 +285,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const outros = agentes.filter((a) => !canal.agentes.includes(a.agentKey));
 
   return (
-    <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4">
+    <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4" style={zoom.style}>
       <div className={`relative flex-1 min-h-0 flex flex-col rounded-[28px] overflow-hidden ${VIDRO_PAINEL}`}>
         {/* barra: canal · presença · cartolina · config */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-white/50 dark:border-white/[0.08]">
@@ -306,11 +314,19 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
           </div>
 
           <div className="ml-auto flex items-center gap-1.5">
-            {/* presença: quem está online agora (humanos) */}
-            <div className="hidden xs:flex sm:flex -space-x-2" aria-label={`${online.length} online`}>
-              {online.slice(0, 6).map((p) => <AgentAvatar key={p.id} src={p.avatar} nome={p.nome} size={28} className="ring-2 ring-emerald-400/70" />)}
+            {/* pessoas do canal (dono, membros e você): anel verde = online agora; cinza = fora. Os agentes ficam embaixo. */}
+            <div className="hidden xs:flex sm:flex -space-x-2" aria-label={`${online.length} online de ${pessoasNoTopo.length}`}>
+              {pessoasNoTopo.slice(0, 6).map((p) => {
+                const aqui = onlineIds.has(p.id);
+                return (
+                  <span key={p.id} title={`${p.nome}${aqui ? " · online" : ""}`} className="inline-flex">
+                    <AgentAvatar src={p.avatar} nome={p.nome} size={28} className={`ring-2 ${aqui ? "ring-emerald-400/70" : "ring-slate-400/40 opacity-70"}`} />
+                  </span>
+                );
+              })}
             </div>
-            {online.length > 0 && <span className={`text-[11px] ${TXT_MUDO}`}>{online.length}</span>}
+            {pessoasNoTopo.length > 6 && <span className={`text-[11px] ${TXT_MUDO}`}>+{pessoasNoTopo.length - 6}</span>}
+            {online.length > 0 && <span className={`text-[11px] ${TXT_MUDO}`} title="online agora">{online.length} on</span>}
             {canal.cartolinaId && (
               <button type="button" onClick={abrirCartolina} className={`${TOQUE} px-3 rounded-2xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT}`} title="Abrir a cartolina da sala">▦ cartolina</button>
             )}
@@ -348,6 +364,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
                 )}
               </div>
             )}
+            {/* zoom das letras, no canto superior direito (igual ao chat das salas) */}
+            <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
           </div>
         </div>
 
@@ -446,7 +464,7 @@ function Bolha({ m, minha, aliases }: { m: MensagemWire; minha: boolean; aliases
             {nome}{m.autorTipo === "agente" ? ` · @${m.autorId}` : ""}
           </span>
         )}
-        <div className={`px-3.5 py-2.5 rounded-2xl ${minha ? `rounded-br-md ${VIDRO_BOLHA_MINHA}` : `rounded-bl-md ${VIDRO_BOLHA}`} ${TXT} text-[14px] leading-relaxed break-words ${m.autorTipo === "agente" ? "" : "whitespace-pre-wrap"}`}>
+        <div className={`px-3.5 py-2.5 rounded-2xl ${minha ? `rounded-br-md ${VIDRO_BOLHA_MINHA}` : `rounded-bl-md ${VIDRO_BOLHA}`} ${TXT} leading-relaxed break-words ${m.autorTipo === "agente" ? "" : "whitespace-pre-wrap"}`} style={{ fontSize: fonteChat(14) }}>
           {/* o AGENTE responde em markdown (o mesmo do chat): sem isso o **negrito** aparecia como "****" */}
           {m.autorTipo === "agente" ? <ChatMarkdown text={limparMarkdownDoAgente(m.texto)} /> : partes.map((p, i) => {
             const alvo = p.startsWith("@") ? aliases.get(p.slice(1).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()) : null;
