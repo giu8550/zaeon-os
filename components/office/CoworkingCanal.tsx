@@ -205,13 +205,15 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       if (!r.ok) { const j = await r.json().catch(() => ({})); setErro(j?.error || `Falhou (${r.status})`); return; }
       const j = await r.json();
       const m: MensagemWire = j.mensagem;
-      for (const k of m.mencoes ?? []) meusAgentes.current.add(k);
-      if (m.mencoes?.length) setDigitando((prev) => [...new Set([...prev, ...m.mencoes])]);
+      // Quem vai responder = os `turnos` do servidor: as @menções OU, sem @, o último agente do canal.
+      const alvos: string[] = Array.isArray(j.turnos) ? j.turnos.map((t: { agentKey: string }) => t.agentKey) : (m.mencoes ?? []);
+      for (const k of alvos) meusAgentes.current.add(k);
+      if (alvos.length) setDigitando((prev) => [...new Set([...prev, ...alvos])]);
       setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
       setTexto("");
       setErro(null);
       // agentes recém-convocados passam a constar no canal
-      if (m.mencoes?.length) setCanais((cs) => cs.map((c) => (c.id === ativoId ? { ...c, agentes: [...new Set([...c.agentes, ...m.mencoes])] } : c)));
+      if (alvos.length) setCanais((cs) => cs.map((c) => (c.id === ativoId ? { ...c, agentes: [...new Set([...c.agentes, ...alvos])] } : c)));
     } catch (e) {
       setErro(String((e as Error)?.message ?? e));
     } finally {
@@ -267,6 +269,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   const canal = det.canal;
   const meuId = det.eu.id;
+  // Sem @, responde o último agente que falou. A dica só aparece em canal de uma pessoa: com mais
+  // gente, o servidor só atende quem estava conversando com o agente (lib/canal/alvo.ts).
+  const ultimoAgente = [...det.mensagens].reverse().find((m) => m.autorTipo === "agente" && !m.id.startsWith("efemera-"))?.autorId;
+  const agenteAtivo = canal.membros.length === 0 ? agentes.find((a) => a.agentKey === ultimoAgente) ?? null : null;
   const presentes = agentes.filter((a) => canal.agentes.includes(a.agentKey));
   const outros = agentes.filter((a) => !canal.agentes.includes(a.agentKey));
 
@@ -396,7 +402,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               onKeyUp={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               onClick={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               onKeyDown={aoTeclar}
-              placeholder="Mensagem · @agente convoca"
+              placeholder={agenteAtivo ? `Mensagem · ${agenteAtivo.nome} responde · @ troca de agente` : "Mensagem · @agente convoca"}
               aria-label="Mensagem"
               className={`flex-1 min-h-[44px] max-h-[140px] px-4 py-3 rounded-2xl resize-none text-[14px] leading-5 bg-white/70 dark:bg-white/[0.06] border border-white/70 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70 dark:focus:border-cyan-300/50`}
               style={{ height: Math.min(140, 24 + 20 * Math.max(1, texto.split("\n").length)) }}
