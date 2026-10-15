@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ALCANCE_DESCANSO, codificarDescanso, decodificarDescanso, lugarPerto, lugaresDoLounge, podeDeitar, poseNoLugar, proximoModo } from "./descanso";
-import { CIDADE, MOVEIS, colisoresDaCidade, salaEm, type NomeSala } from "./ceu";
+import { ALCANCE_DESCANSO, ALTURA_TRONO, codificarDescanso, decodificarDescanso, lugarPerto, lugaresDoLounge, podeDeitar, poseNoLugar, proximoModo } from "./descanso";
+import { CIDADE, MOVEIS, colisoresDaCidade, resolverCidade, salaEm, type NomeSala } from "./ceu";
 import { dentroDeAlgum } from "./colisao";
 
 const d = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -25,6 +25,28 @@ describe("os lugares de descanso (todas as salas)", () => {
       l.frentes.forEach((f, k) => { expect(dentroDeAlgum(f, cs)).toBe(false); expect(d(f, l.assentos[k]!)).toBeGreaterThan(0.8); expect(d(f, l.assentos[k]!)).toBeLessThan(1.4); });
       if (l.deita) expect(d(l.assentos[0]!, l.assentos[1]!)).toBeCloseTo(1.5, 5);
     }
+  });
+});
+
+describe("os TRONOS de fluido do pátio do lounge", () => {
+  const tronos = lugaresDoLounge().filter((l) => l.tipo === "trono");
+  it("12 tronos (2 rodas de 6), 1 assento cada, sem deitar, na altura do trono", () => {
+    expect(tronos).toHaveLength(12);
+    for (const t of tronos) { expect(t.assentos).toHaveLength(1); expect(t.deita).toBeNull(); expect(t.alturaAssento).toBe(ALTURA_TRONO); expect(t.id.startsWith("lounge-trono")).toBe(true); }
+  });
+  it("a FRENTE fica livre com folga pro corpo (fora do colisor do pedestal + o raio de quem anda) e o pátio a alcança", () => {
+    const cs = colisoresDaCidade();
+    for (const t of tronos) {
+      const f = t.frentes[0]!, a = t.assentos[0]!;
+      expect(dentroDeAlgum(f, cs.map((c) => ({ ...c, r: c.r + 0.3 })))).toBe(false);   // (0,3 m = meio corpo)
+      expect(resolverCidade(f)).toEqual(f);   // ninguém é empurrado pra fora daqui
+      expect(d(f, a)).toBeGreaterThan(1.2);
+    }
+  });
+  it("J perto da frente senta no trono; a pose fica no assento, olhando pro núcleo", () => {
+    const t = tronos[0]!, m = lugarPerto(t.frentes[0]!);
+    expect(m?.lugar.id).toBe(t.id); expect(proximoModo(null, t)).toBe("sentado"); expect(proximoModo("sentado", t)).toBeNull();
+    const pose = poseNoLugar(t, "sentado"); expect(pose.x).toBeCloseTo(t.assentos[0]!.x, 6); expect(pose.rumo).toBe(t.rumo);
   });
 });
 

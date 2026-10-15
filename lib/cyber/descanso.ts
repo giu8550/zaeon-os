@@ -14,7 +14,7 @@ import { CIDADE, MOVEIS, daSala, mundo, rotDaSala, type Movel, type NomeSala } f
 
 type P2 = { x: number; z: number };
 export type ModoDescanso = "sentado" | "deitado";
-export type TipoLugar = "sofa" | "puff" | "pufe";
+export type TipoLugar = "sofa" | "puff" | "pufe" | "trono";
 export type Lugar = {
   id: string; tipo: TipoLugar;
   /** os pontos de SENTAR (mundo) — o sofá tem 2; o puff, 1 */
@@ -33,11 +33,20 @@ export type Lugar = {
   relaxa: boolean;
   /** a altura do assento (m acima do piso) */
   alturaAssento: number;
+  /** onde os pés pousam, à frente (m) — sem isto, o padrão do avatar */
+  pes?: number;
 };
 
 /** alturas (m, acima de onde o pé pisa no lounge): o topo da almofada do sofá e do puff (components/cyber/Salas — os
  *  móveis ficam num tablado de 0,16 m) */
 export const ALTURA_SOFA = 0.78, ALTURA_PUFF = 0.7, ALTURA_PUFE = 0.74;   // o pufe: em CIMA do saco (antes afundava dentro dele)
+/** o TRONO de fluido do pátio do lounge (components/cyber/TronoFluido): o assento, e onde a pessoa para na frente dele
+ *  pra virar e sentar (fora do colisor do pedestal e no vão livre entre os tentáculos da frente) */
+export const ALTURA_TRONO = 0.64, FRENTE_TRONO = 1.35;
+/** onde os PÉS pousam, à frente de quem senta (m): medido no avatar (coxa 0,50 m, canela 0,51 m) — com o assento a
+ *  0,64 m, a COXA fica na horizontal e a CANELA na vertical, o joelho dobrado em ~90°. Os outros lugares usam o padrão do
+ *  avatar (components/cyber/AvatarLuz) */
+export const PES_TRONO = 0.58;
 /** até onde a J alcança um lugar (m) e a distância que já conta como "alguém está aqui" */
 export const ALCANCE_DESCANSO = 2.6, OCUPADO_R = 0.45;
 /** os assentos no referencial do SOFÁ (x ao longo da largura, z pra frente) */
@@ -64,6 +73,7 @@ export function lugaresDoLounge(): Lugar[] {
         frentes: ASSENTOS_SOFA.map((x) => em(m, x, m.prof / 2 + 0.6)),
       });
       else if (m.tipo === "puff") out.push({ id, tipo: "puff", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_PUFF, relaxa: false, assentos: [em(m, 0, 0)], deita: null, saida: em(m, 0, 1.1), frentes: [em(m, 0, 1.0)] });
+      else if (m.tipo === "trono") out.push({ id, tipo: "trono", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_TRONO, pes: PES_TRONO, relaxa: false, assentos: [em(m, 0, 0.06)], deita: null, saida: em(m, 0, FRENTE_TRONO + 0.1), frentes: [em(m, 0, FRENTE_TRONO)] });
       else if (m.tipo === "pufe") out.push({ id, tipo: "pufe", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_PUFE, relaxa: true, assentos: [em(m, 0, 0.18)], deita: null, saida: em(m, 0, 1.3), frentes: [em(m, 0, 1.2)] });   // o quadril um pouco à frente: as costas deitam NO encosto, não dentro dele
     });
   }
