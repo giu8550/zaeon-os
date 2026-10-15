@@ -23,6 +23,8 @@ beforeEach(() => {
     const metodo = init?.method ?? "GET";
     chamadas.push({ url: String(url), metodo, body: init?.body ? JSON.parse(String(init.body)) : undefined });
     if (metodo === "GET") {
+      // rede "lenta" de propósito: enquanto carrega, os quadrados ficam desligados (foi o que quebrou no CI)
+      await new Promise((r) => setTimeout(r, 400));
       if (falharGet) return resp(403, { error: "Forbidden" });
       return resp(200, { eu: EU, blocos, pessoas: [{ id: EU, nome: "Giulia", avatar: null }, { id: OUTRA, nome: "Martinez", avatar: null }] });
     }
@@ -40,6 +42,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const abrir = () => render(<AgendaBandeja canalId={CANAL} aberta onFechar={() => {}} versao={0} />);
 const celula = (rotulo: string) => screen.getByRole("button", { name: rotulo });
+/**
+ * Espera o quadrado ficar CLICÁVEL: enquanto a agenda carrega, os quadrados aparecem mas ficam desligados
+ * e o clique é ignorado. Esperar só "aparecer" passava aqui e quebrava no CI (máquina mais lenta).
+ */
+const pronta = (rotulo: string) => waitFor(() => expect((celula(rotulo) as HTMLButtonElement).disabled).toBe(false), { timeout: 3000 });
 
 describe("AgendaBandeja", () => {
   it("fechada não desenha nada nem busca", () => {
@@ -50,7 +57,7 @@ describe("AgendaBandeja", () => {
 
   it("aberta carrega a agenda do canal e mostra a grade (segunda a domingo)", async () => {
     abrir();
-    await waitFor(() => expect(celula("Ter 9h: livre")).toBeTruthy());
+    await pronta("Ter 9h: livre");
     expect(chamadas[0]).toMatchObject({ url: `/api/canal/${CANAL}/agenda`, metodo: "GET" });
     expect(screen.getByText("Seg")).toBeTruthy();
     expect(screen.getByText("Dom")).toBeTruthy();
@@ -58,14 +65,14 @@ describe("AgendaBandeja", () => {
 
   it("o exemplo do card: terça 9 + terça 15 salva das 9 às 15 e pinta o intervalo", async () => {
     abrir();
-    await waitFor(() => expect(celula("Ter 9h: livre")).toBeTruthy());
+    await pronta("Ter 9h: livre");
     fireEvent.click(celula("Ter 9h: livre"));
     expect(screen.getByText(/toque no horário FINAL/i)).toBeTruthy();
     fireEvent.click(celula("Ter 15h: livre"));
     await waitFor(() => expect(chamadas.some((c) => c.metodo === "POST")).toBe(true));
     expect(chamadas.find((c) => c.metodo === "POST")!.body).toEqual({ dia: 2, inicio: 9, fim: 15 });
     // recarregou: os quadrados das 9h às 15h agora são da Giulia; 16h continua livre
-    await waitFor(() => expect(celula("Ter 12h: Giulia")).toBeTruthy());
+    await pronta("Ter 12h: Giulia");
     expect(celula("Ter 9h: Giulia")).toBeTruthy();
     expect(celula("Ter 15h: Giulia")).toBeTruthy();
     expect(celula("Ter 16h: livre")).toBeTruthy();
@@ -73,7 +80,7 @@ describe("AgendaBandeja", () => {
 
   it("2º clique em outro dia recomeça a seleção (não salva)", async () => {
     abrir();
-    await waitFor(() => expect(celula("Ter 9h: livre")).toBeTruthy());
+    await pronta("Ter 9h: livre");
     fireEvent.click(celula("Ter 9h: livre"));
     fireEvent.click(celula("Qui 10h: livre"));
     expect(chamadas.some((c) => c.metodo === "POST")).toBe(false);
@@ -82,7 +89,7 @@ describe("AgendaBandeja", () => {
 
   it("Esc cancela a seleção em andamento", async () => {
     abrir();
-    await waitFor(() => expect(celula("Ter 9h: livre")).toBeTruthy());
+    await pronta("Ter 9h: livre");
     fireEvent.click(celula("Ter 9h: livre"));
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.getByText(/Toque no horário inicial/)).toBeTruthy());
@@ -92,7 +99,7 @@ describe("AgendaBandeja", () => {
     blocos = [{ id: "c".repeat(24), userId: EU, dia: 1, inicio: 8, fim: 10 }];
     const confirmar = vi.spyOn(window, "confirm").mockReturnValue(true);
     abrir();
-    await waitFor(() => expect(celula("Seg 8h: Giulia")).toBeTruthy());
+    await pronta("Seg 8h: Giulia");
     fireEvent.click(celula("Seg 8h: Giulia"));
     expect(confirmar).toHaveBeenCalledWith(expect.stringContaining("segunda, das 8h às 11h"));
     await waitFor(() => expect(chamadas.some((c) => c.metodo === "DELETE" && c.url.includes("c".repeat(24)))).toBe(true));
@@ -102,7 +109,7 @@ describe("AgendaBandeja", () => {
     blocos = [{ id: "c".repeat(24), userId: EU, dia: 1, inicio: 8, fim: 10 }];
     vi.spyOn(window, "confirm").mockReturnValue(false);
     abrir();
-    await waitFor(() => expect(celula("Seg 8h: Giulia")).toBeTruthy());
+    await pronta("Seg 8h: Giulia");
     fireEvent.click(celula("Seg 8h: Giulia"));
     expect(chamadas.some((c) => c.metodo === "DELETE")).toBe(false);
   });
@@ -111,7 +118,7 @@ describe("AgendaBandeja", () => {
     blocos = [{ id: "f".repeat(24), userId: OUTRA, dia: 1, inicio: 8, fim: 10 }];
     const confirmar = vi.spyOn(window, "confirm");
     abrir();
-    await waitFor(() => expect(celula("Seg 8h: Martinez")).toBeTruthy());
+    await pronta("Seg 8h: Martinez");
     fireEvent.click(celula("Seg 8h: Martinez"));
     expect(confirmar).not.toHaveBeenCalled();
     expect(chamadas.some((c) => c.metodo === "DELETE")).toBe(false);
