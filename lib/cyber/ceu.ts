@@ -134,7 +134,13 @@ export function noTemploOuEscadaria(l: P2, folga = 0): boolean {
   const q = naSala(L, l.x, l.z);
   return noTemplo(q, folga) || (q.x > 40 && q.z < 0 && noCorredorDaEscadaria(q, folga) !== null);
 }
-/** o FIO DE ENERGIA de cada escada: o cabo passa a `alturaFio` m acima da linha da rampa (do pé ao topo); quem é puxado
+/** a ESCADA DE PEDRA (out/2026, no lugar dos fios de energia — o estilo de El Castillo, Chichén Itzá): `DEGRAU` = a
+ *  altura de cada degrau (m). O piso é a rampa da linha dos degraus — o desenho (components/cyber/Cidade) põe os degraus
+ *  em cima dela */
+export const DEGRAU = 0.45;
+/** a altura do piso da escada `e` a `u` m do pé (0 no pé, `ALTURA_LOUNGE` na porta da sala) */
+export const alturaDaEscada = (e: Escada, u: number) => ALTURA_LOUNGE * Math.max(0, Math.min(1, u / e.len));
+/** (legado: os FIOS DE ENERGIA saíram — a pose de quem era puxado ainda lê `FIO`) o FIO DE ENERGIA de cada escada: o cabo passa a `alturaFio` m acima da linha da rampa (do pé ao topo); quem é puxado
  *  vai pendurado na alça, com os pés a `pes` m acima dela; no máximo `max` pessoas por fio ao mesmo tempo */
 export const FIO = { alturaFio: 3.1, pes: 0.55, max: 4, flecha: 2.2 } as const;
 /** a altura do CABO (acima do piso central) a `u` m do pé da escada `e`: a linha da rampa + `alturaFio`, com uma
@@ -245,7 +251,11 @@ export function colisoresDaCidade(): Colisor[] {
   if (ESTACOES_NA_CAPELA) out.push(...colisoresDasEstacoes());
   out.push(...colisoresDasCabines());   // as CABINES DE ESTUDO da hierarquia (professores, doutores, mestrandos)
   out.push(...colisoresDoDistritoTerra(mundo));   // o Observatório da Terra (supertrees, motores, telões, globo)
-  // (sem corrimão: as escadas viraram FIOS DE ENERGIA — o corredor não é piso, ninguém anda nele)
+  // as BALAUSTRADAS das escadas de pedra (o estilo de El Castillo): dos dois lados, do pé até a porta da sala — só se
+  // entra pelo pé e sai na sala; ninguém sobe pela lateral nem cai dela
+  for (const e of Object.values(ESCADAS)) for (let u = 0.4; u <= e.len; u += e.passo) for (const s of [-1, 1]) {
+    const lat = s * (e.meia + e.colR); out.push({ ...mundo({ x: e.dir.x * (e.ini + u) - e.dir.z * lat, z: e.dir.z * (e.ini + u) + e.dir.x * lat }), r: e.colR });
+  }
   colisoresCache = out;
   return out;
 }
@@ -409,7 +419,8 @@ export function alturaNaCidade(p: P2): number {
     if (noTemplo(q)) return ALTURA_LOUNGE + TEMPLO.h;
     const e = noCorredorDaEscadaria(q); if (e) return ALTURA_LOUNGE + alturaDaEscadaria(e.s);
   }
-  return 0;   // (o corredor do FIO não é piso: atravessa-se pendurado nele)
+  const e = escadaEm(l); if (e) return alturaDaEscada(e, naEscadaLocal(l, e).u);   // a ESCADA de pedra: sobe-se andando
+  return 0;
 }
 /** está na CABINE do DJ (atrás da mesa, em cima do palco)? `p` no mundo */
 export function naCabineDJ(p: P2): boolean {
@@ -430,11 +441,14 @@ export function naPistaDeDanca(p: P2): boolean {
 export const rumoDaPista = () => rotDaSala(CIDADE.salas.lounge) + Math.PI;
 /** A ESCADA DE ENERGIA leva sozinha: pisou na BOCA de baixo (vindo da central) sobe; na de cima (vindo do lounge),
  *  desce. A viagem dura `dur` s e termina FORA das bocas (não dispara de novo sem querer). */
+/** a escada LEVA sozinha (as bocas)? Desligado: a escada de pedra se sobe andando */
+export const ESCADA_LEVA = false as boolean;
 export const VIAGEM_ESCADA = { dur: 6.5, boca: 2, alemDoTopo: 2.5, antesDoPe: 3 } as const;
 /** está no corredor de ALGUMA escada (de qualquer sala)? `p` no mundo */
 export const naEscadaDoLounge = (p: P2) => dentroDaEscada({ x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z });
 /** pisou numa BOCA de escada? qual sala e pra que lado ela leva */
 export function bocaDeEscada(p: P2): { sala: NomeSala; sentido: "sobe" | "desce" } | null {
+  if (!ESCADA_LEVA) return null;   // (as escadas de pedra sobem-se ANDANDO — ninguém é levado)
   const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z }, B = VIAGEM_ESCADA.boca;
   for (const e of Object.values(ESCADAS)) {
     const q = naEscadaLocal(l, e);
@@ -589,7 +603,7 @@ export const ALTURA_CORPO_ILHOTA = 0.12;
  *  parede invisível em volta da central; a escada e o lounge têm corrimão/parede) */
 export const naIlhaPrincipal = (p: P2) => {
   const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z };
-  return Math.hypot(l.x, l.z) <= CIDADE.bordaR + 0.1 || salaEm(l, 0.3) !== null || noTemploOuEscadaria(l, 0.3) || naGaragemLocal(l, 0.3);   // (o corredor do fio não é piso)
+  return Math.hypot(l.x, l.z) <= CIDADE.bordaR + 0.1 || dentroDaEscada(l, 0.3) || salaEm(l, 0.3) !== null || noTemploOuEscadaria(l, 0.3) || naGaragemLocal(l, 0.3);   // (a escada de pedra é piso)
 };
 
 /** o PISO sob quem voa de mochila na Zaeon (altura acima do piso central), ou `null` = não há piso embaixo (saiu da
@@ -612,7 +626,7 @@ export const resolverCidadeLivre = (prop: P2): P2 => empurrarParaFora(prop, coli
 export function resolverCidade(prop: P2): P2 {
   let q = empurrarParaFora(prop, colisoresDaCidade());
   const c = CIDADE.centro, dx = q.x - c.x, dz = q.z - c.z, d = Math.hypot(dx, dz), l = { x: dx, z: dz };
-  if (d > CIDADE.andavelR && salaEm(l) === null && !noTemploOuEscadaria(l) && !naGaragemLocal(l)) q = { x: c.x + (dx / d) * CIDADE.andavelR, z: c.z + (dz / d) * CIDADE.andavelR };
+  if (d > CIDADE.andavelR && !dentroDaEscada(l) && salaEm(l) === null && !noTemploOuEscadaria(l) && !naGaragemLocal(l)) q = { x: c.x + (dx / d) * CIDADE.andavelR, z: c.z + (dz / d) * CIDADE.andavelR };
   return q;
 }
 

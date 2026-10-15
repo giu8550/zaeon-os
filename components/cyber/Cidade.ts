@@ -20,6 +20,7 @@ import type { PisoOclusor } from "./oclusaoPisos";
 import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, inicioDaPonta, ESTACOES_NA_CAPELA, FOGO_NA_BORDA, TORRES_NA_BORDA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
+import { criarEscadasDePedra } from "./EscadaPiramide";
 import { criarSalas } from "./Salas";
 import { criarTemplo } from "./Templo";
 import { criarTempestade } from "./Tempestade";
@@ -200,46 +201,10 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const aroGlobo = add(new THREE.Mesh(new THREE.TorusGeometry(RG * 1.35, 0.12, 6, 96), new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })));
   aroGlobo.position.y = YG; aroGlobo.rotation.x = Math.PI / 2 - 0.35;
 
-  // ── os FIOS DE ENERGIA (um por SALA — no lugar das antigas escadas com corrimão): um cabo aceso da borda da central
-  //    até a porta da sala, com pulsos de luz correndo pra cima, um halo, faíscas e um POSTE de luz em cada ponta; no
-  //    chão, a BOCA (o disco aceso) onde se pisa pra ser puxado (lib/cyber/ceu `FIO`, `alturaDoFio`, `bocaDeEscada`).
-  //    Cada fio é montado correndo pro −x local e girado pro rumo da sala ──
+  // ── as ESCADAS DE PEDRA (out/2026, no lugar dos fios de energia): o estilo de El Castillo — degraus, balaustradas,
+  //    cabeças de serpente no pé e a muralha embaixo; a Sala do Saber no topo da pirâmide (components/cyber/EscadaPiramide) ──
   const COR_SALA: Record<NomeSala, number> = { lounge: 0xb98cff, garagem: 0xffb46b, biblioteca: 0x7fb8ff, jardim: 0x7dffb0 };
-  let fluxoMat: THREE.ShaderMaterial | null = null;
-  const fluxoPts: { geo: THREE.BufferGeometry; d: { u: number; lat: number; y: number; v: number }[]; esc: (typeof ESCADAS)[NomeSala] }[] = [];
-  const matPoste = new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.35, metalness: 0.8, emissive: 0x0a1a36, emissiveIntensity: 0.6 });
-  for (const nomeEsc of Object.keys(ESCADAS) as NomeSala[]) {
-    const EE = ESCADAS[nomeEsc], gEsc = add(new THREE.Group()); gEsc.rotation.y = Math.PI - CIDADE.salas[nomeEsc].ang;   // −x local → o rumo da sala
-    const em = (u: number, dy = 0) => new THREE.Vector3(-(EE.ini + u), alturaDoFio(EE, u) + dy, 0);
-    const curva = new THREE.CatmullRomCurve3(Array.from({ length: 13 }, (_, k) => em((k / 12) * EE.len)));
-    fluxoMat ??= new THREE.ShaderMaterial({
-      uniforms: { uT: { value: 0 } },
-      vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-      fragmentShader: `uniform float uT; varying vec2 vUv;
-        void main(){
-          float p = fract(vUv.x * 9.0 - uT * 0.9);                       // os PULSOS correndo pra sala
-          float pulso = smoothstep(0.0, 0.05, p) * smoothstep(0.35, 0.08, p);
-          vec3 c = mix(vec3(0.3, 0.85, 1.0), vec3(0.75, 0.6, 1.0), vUv.x);
-          gl_FragColor = vec4(c * (0.55 + 1.6 * pulso), 1.0);
-        }`,
-    });
-    add(new THREE.Mesh(new THREE.TubeGeometry(curva, low ? 60 : 140, 0.09, 8, false), fluxoMat), gEsc);   // o cabo
-    add(new THREE.Mesh(new THREE.TubeGeometry(curva, low ? 40 : 90, 0.42, 8, false), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeEsc], transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc);   // o halo
-    // os POSTES das pontas (o cabo nasce no topo deles) e a BOCA acesa no chão
-    for (const [u, base] of [[0, 0], [EE.len, ALTURA_LOUNGE]] as const) {
-      const h = alturaDoFio(EE, u) - base + 0.5, poste = add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, h, 10), matPoste), gEsc); poste.position.set(-(EE.ini + u), base + h / 2, 1.4);
-      const braco = add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.4), matPoste), gEsc); braco.position.set(-(EE.ini + u), alturaDoFio(EE, u), 0.7);
-      const anel = add(new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.05, 6, 24), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeEsc], transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc);
-      anel.position.copy(em(u)); anel.rotation.y = Math.PI / 2;
-    }
-    const boca = add(new THREE.Mesh(new THREE.CircleGeometry(EE.meia * 0.55, 40), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeEsc], transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc);
-    boca.rotation.x = -Math.PI / 2; boca.position.set(-(EE.ini + 1), 0.05, 0);
-    // faíscas correndo pelo cabo
-    const NFP = low ? 30 : 70, d = Array.from({ length: NFP }, () => ({ u: Math.random() * EE.len, lat: (Math.random() - 0.5) * 0.5, y: (Math.random() - 0.5) * 0.5, v: 8 + Math.random() * 10 }));
-    const pg = new THREE.BufferGeometry(); pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NFP * 3), 3));
-    const pts = add(new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.45, map: starTex, color: 0x9fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), gEsc); pts.frustumCulled = false;
-    fluxoPts.push({ geo: pg, d, esc: EE });
-  }
+  { const ep = criarEscadasDePedra({ low, cores: COR_SALA }); add(ep.group); alvos.push(...ep.alvos); }
   // ── a PLATAFORMA de cada sala (só a base; o clube em cima é o Salas): a laje de gelo com o aro de luz (a montanha
   //    invertida e o brilho antigravidade embaixo saíram — out/2026) ──
   for (const nomeSala of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nomeSala], base = new THREE.Group(); base.position.set(L.x, ALTURA_LOUNGE, L.z); add(base);
@@ -357,11 +322,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         distrito.atualizar(dt, t); observadores.atualizar(dt);
         if (ev.raio && opts.aoRaio) { const tp = TOPO_DA_CAPELA(); opts.aoRaio(topoMundo.set(tp.x, tp.y, tp.z).applyMatrix4(ilha.matrixWorld)); }
         if (ev.tum && opts.aoBater) opts.aoBater(globoMundo.set(0, GLOBO_CAPELA.y, 0).applyMatrix4(ilha.matrixWorld)); }
-      // a escada de energia: as setas correm, as partículas sobem pelo corredor
-      if (fluxoMat) fluxoMat.uniforms.uT!.value = t * vel;
-      for (const fp of fluxoPts) { const a = fp.geo.attributes.position!.array as Float32Array, E = fp.esc;   // (no referencial do fio: corre pro −x)
-        fp.d.forEach((p, i) => { p.u = (p.u + p.v * dt * vel) % E.len; a[i * 3] = -(E.ini + p.u); a[i * 3 + 1] = alturaDoFio(E, p.u) + p.y; a[i * 3 + 2] = p.lat; });
-        fp.geo.attributes.position!.needsUpdate = true; }
       bnc.atualizar(dt * vel, t);
       // querubins
       { const a = cGeo.attributes.position!.array as Float32Array;

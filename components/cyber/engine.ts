@@ -2374,11 +2374,8 @@ export class CyberEngine {
     const bn = new THREE.Object3D(); bn.position.set(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z); this.cena.scene.add(bn);
     s.volumeLoop(s.loop("blackhole-hum", bn, { dist: DISTANCIA.grande }), 1);
     this.somLoops.jet = this.loopsDoJato(this.eu.av.group, DISTANCIA.eu);   // contínuo enquanto se segura o ESPAÇO
-    // os FIOS DE ENERGIA: o zumbido nos postes das duas pontas de cada fio (presos à ilha, que flutua) e o MEU assobio
-    if (this.cidade) for (const e of Object.values(ESCADAS)) for (const u of [0, e.len]) {
-      const o = new THREE.Object3D(); o.position.set(e.dir.x * (e.ini + u), alturaDoFio(e, u), e.dir.z * (e.ini + u)); this.cidade.ilha.add(o);
-      s.volumeLoop(s.loop("fio-zumbido", o, { dist: DISTANCIA.fio }), 1);
-    }
+    // o MEU assobio (o loop "fio-puxa": legado dos fios de energia — sem viagem pela escada, fica mudo)
+    // (o zumbido dos postes dos fios de energia saiu com eles: as escadas agora são de pedra)
     this.somLoops.fio = s.loop("fio-puxa", this.eu.av.group, { dist: DISTANCIA.eu });
     // a MÚSICA AMBIENTE dos espaços de convivência: sai das caixas de som discretas de cada sala (lib/cyber/ambiente)
     for (const c of this.cidade?.caixasAmbiente ?? []) if (c.sala === "biblioteca" || c.sala === "jardim") s.volumeLoop(s.loop(`ambiente-${c.sala}`, c.obj, { dist: DISTANCIA.ambiente, volume: 0.5 }), 1);
@@ -3632,7 +3629,7 @@ export class CyberEngine {
         if (dd.modo) { const lg = lugarEm(a.pos); a.assentoY = lg?.alturaAssento ?? 0.7; a.relaxa = lg?.relaxa ? 1 : 0; } }
       // na escada só se está sendo levado; no elevador da torre, quem está no ar dentro da coluna de luz
       const qs = naSala(CIDADE.salas.lounge, a.pos.x - CIDADE.centro.x, a.pos.z - CIDADE.centro.z), naColuna = (Math.hypot(qs.x, qs.z - TORRE_DJ.elevador.sobe) < 1.6 && a.alt > CIDADE.pisoY + PISO_FESTA + PALCO_LOUNGE.h + 0.6) || naColunaDaGaragem(a.pos, a.alt - CIDADE.pisoY);
-      const surfando = !!a.ceu && a.jet === undefined && naColuna, puxado = !!a.ceu && a.jet === undefined && monta === null && naEscadaDoLounge(a.pos);
+      const surfando = !!a.ceu && a.jet === undefined && naColuna, puxado = false;   // (os fios de energia saíram: na escada de pedra se sobe andando)
       a.surf = (a.surf ?? 0) + ((surfando ? 1 : 0) - (a.surf ?? 0)) * Math.min(1, dt * 5);
       a.puxa = (a.puxa ?? 0) + ((puxado ? 1 : 0) - (a.puxa ?? 0)) * Math.min(1, dt * 5);
       a.av.group.position.set(a.pos.x, a.alt, a.pos.z); a.av.olharPara(pilota ? a.naveYaw ?? a.facing : a.facing);
