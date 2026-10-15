@@ -135,111 +135,112 @@ def _setup_base_style(doc: Document, font_name: str):
 # ── Capa ───────────────────────────────────────────────────────
 
 def _add_cover_page(doc: Document, payload: DocumentPayload, font: str):
+    """Capa em 3 blocos (topo · meio · base) posicionados com space_before em Pt.
+
+    Nada de empilhar parágrafos vazios: toda linha da capa tem entrelinha EXATA
+    (R.COVER_LINE_PT), então a altura de cada bloco é conhecida e o espaço entre
+    eles é calculado — trocar Times↔Arial ou mudar o tamanho do título não
+    desloca a capa nem cria página em branco extra.
+    """
     cover = payload.cover
+    L = R.COVER_LINE_PT
+    W = R.CHARS_PER_LINE
 
-    def centered(text: str, size: int = R.FONT_SIZE_BODY_PT, bold: bool = False) -> None:
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.first_line_indent = Cm(0)
-        p.paragraph_format.space_before = Pt(0)
-        p.paragraph_format.space_after  = Pt(0)
-        run = p.add_run(text)
-        run.font.name = font
-        run.font.size = Pt(size)
-        run.bold = bold
-
-    # Instituição — topo centralizado
-    centered(cover.institution.upper(), bold=True)
-    centered(cover.course)
-
-    # Espaço entre instituição e autor
-    for _ in range(8):
-        _blank_line(doc, font)
-
-    centered(cover.author.upper())
-
-    for _ in range(8):
-        _blank_line(doc, font)
-
-    # Título em maiúsculas, negrito
-    centered(payload.title.upper(), bold=True)
-
-    # Natureza do trabalho (se TCC ou Relatório)
+    top = [(cover.institution.upper(), True), (cover.course, False)]
+    author = [(cover.author.upper(), False)]
+    middle = [(payload.title.upper(), True)]
+    nature = []
     if payload.work_type in ("TCC", "Relatório"):
-        for _ in range(4):
-            _blank_line(doc, font)
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.first_line_indent = Cm(0)
-        run = p.add_run(f"{payload.work_type} apresentado como requisito parcial.")
-        run.font.name = font
-        run.font.size = Pt(R.FONT_SIZE_BODY_PT)
+        nature.append((f"{payload.work_type} apresentado como requisito parcial.", False))
         if cover.advisor:
-            p2 = doc.add_paragraph()
-            p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p2.paragraph_format.first_line_indent = Cm(0)
-            run2 = p2.add_run(f"Orientador: {cover.advisor}")
-            run2.font.name = font
-            run2.font.size = Pt(R.FONT_SIZE_BODY_PT)
+            nature.append((f"Orientador: {cover.advisor}", False))
+    bottom = [(cover.city.upper(), False), (cover.year, False)]
 
-    # Cidade e ano — rodapé
-    for _ in range(8):
-        _blank_line(doc, font)
+    h = lambda block, width=W: sum(_line_count(t, width, bold) for t, bold in block) * L
+    H = _usable_height_pt()
+    gap_author = R.COVER_GAP_AUTHOR_LINES * L
+    gap_nature = R.COVER_GAP_NATURE_LINES * L
 
-    centered(cover.city.upper())
-    centered(cover.year)
+    cursor = h(top) + gap_author + h(author)
+    title_before = max(L, H / 2 - h(middle, R.CHARS_PER_LINE_TITLE) / 2 - cursor)
+    cursor += title_before + h(middle, R.CHARS_PER_LINE_TITLE) + (gap_nature + h(nature) if nature else 0)
+    bottom_before = max(L, H - cursor - h(bottom) - R.COVER_BOTTOM_SAFETY_PT)
+
+    for i, (t, bold) in enumerate(top):
+        _cover_line(doc, t, font, bold)
+    for i, (t, bold) in enumerate(author):
+        _cover_line(doc, t, font, bold, space_before=gap_author if i == 0 else 0)
+    for i, (t, bold) in enumerate(middle):
+        _cover_line(doc, t, font, bold, space_before=title_before if i == 0 else 0)
+    for i, (t, bold) in enumerate(nature):
+        _cover_line(doc, t, font, bold, space_before=gap_nature if i == 0 else 0)
+    for i, (t, bold) in enumerate(bottom):
+        _cover_line(doc, t, font, bold, space_before=bottom_before if i == 0 else 0)
 
 
 # ── Folha de rosto ─────────────────────────────────────────────
 
 def _add_title_page(doc: Document, payload: DocumentPayload, font: str):
+    """Folha de rosto: autor no topo, título no terço superior, nota de natureza
+    recuada 8 cm no meio, cidade/ano na base — mesmo cálculo em Pt da capa."""
     cover = payload.cover
+    L = R.COVER_LINE_PT
+    H = _usable_height_pt()
 
-    def centered(text: str, bold: bool = False) -> None:
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.first_line_indent = Cm(0)
-        run = p.add_run(text)
-        run.font.name = font
-        run.font.size = Pt(R.FONT_SIZE_BODY_PT)
-        run.bold = bold
-
-    centered(cover.author.upper())
-
-    for _ in range(8):
-        _blank_line(doc, font)
-
-    centered(payload.title.upper(), bold=True)
-
-    for _ in range(6):
-        _blank_line(doc, font)
-
-    # Nota explicativa (alinhada à direita, metade da largura)
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p.paragraph_format.first_line_indent = Cm(0)
-    p.paragraph_format.left_indent = Cm(8)
-    run = p.add_run(
+    note = [
         f"{payload.work_type} apresentado ao Curso de {cover.course} "
         f"da {cover.institution}, como requisito parcial para conclusão."
-    )
+    ]
+    if cover.advisor:
+        note.append(f"Orientador(a): {cover.advisor}")
+
+    author_h = _line_count(cover.author.upper(), R.CHARS_PER_LINE) * L
+    title_h = _line_count(payload.title.upper(), R.CHARS_PER_LINE_TITLE, True) * L
+    note_h = sum(_line_count(t, R.CHARS_PER_LINE_NOTE) for t in note) * L
+    bottom_h = 2 * L
+
+    title_before = max(L, H * R.TITLE_PAGE_TITLE_AT - title_h / 2 - author_h)
+    note_before = R.TITLE_PAGE_GAP_NOTE_LINES * L
+    cursor = author_h + title_before + title_h + note_before + note_h
+    bottom_before = max(L, H - cursor - bottom_h - R.COVER_BOTTOM_SAFETY_PT)
+
+    _cover_line(doc, cover.author.upper(), font)
+    _cover_line(doc, payload.title.upper(), font, bold=True, space_before=title_before)
+    for i, t in enumerate(note):
+        _cover_line(doc, t, font, space_before=note_before if i == 0 else 0,
+                    align=WD_ALIGN_PARAGRAPH.JUSTIFY, left_indent_cm=R.TITLE_PAGE_NOTE_INDENT_CM)
+    _cover_line(doc, cover.city.upper(), font, space_before=bottom_before)
+    _cover_line(doc, cover.year, font)
+
+
+def _cover_line(doc: Document, text: str, font: str, bold: bool = False, space_before: float = 0,
+                align=WD_ALIGN_PARAGRAPH.CENTER, left_indent_cm: float = 0):
+    """Uma linha de capa/folha de rosto: entrelinha EXATA, espaço só por space_before."""
+    p = doc.add_paragraph()
+    p.alignment = align
+    fmt = p.paragraph_format
+    fmt.first_line_indent = Cm(0)
+    fmt.left_indent = Cm(left_indent_cm)
+    fmt.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    fmt.line_spacing = Pt(R.COVER_LINE_PT)
+    fmt.space_before = Pt(round(space_before, 1))
+    fmt.space_after = Pt(0)
+    run = p.add_run(_one_line(text))
     run.font.name = font
     run.font.size = Pt(R.FONT_SIZE_BODY_PT)
+    run.bold = bold
+    return p
 
-    if cover.advisor:
-        p2 = doc.add_paragraph()
-        p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        p2.paragraph_format.first_line_indent = Cm(0)
-        p2.paragraph_format.left_indent = Cm(8)
-        run2 = p2.add_run(f"Orientador(a): {cover.advisor}")
-        run2.font.name = font
-        run2.font.size = Pt(R.FONT_SIZE_BODY_PT)
 
-    for _ in range(8):
-        _blank_line(doc, font)
+def _usable_height_pt() -> float:
+    return (R.PAGE_HEIGHT_CM - R.MARGIN_TOP_CM - R.MARGIN_BOTTOM_CM) / 2.54 * 72
 
-    centered(cover.city.upper())
-    centered(cover.year)
+
+def _line_count(text: str, chars_per_line: int, bold: bool = False) -> int:
+    """Linhas que o texto ocupa (estimativa conservadora; negrito ~8% mais largo)."""
+    import math
+    width = chars_per_line * (0.92 if bold else 1.0)
+    return max(1, math.ceil(len(_one_line(text)) / width))
 
 
 # ── Resumo ─────────────────────────────────────────────────────
@@ -247,7 +248,7 @@ def _add_title_page(doc: Document, payload: DocumentPayload, font: str):
 def _add_resumo(doc: Document, resumo: str, palavras_chave: list, font: str):
     _section_title(doc, "RESUMO", font)
 
-    p = doc.add_paragraph(resumo)
+    p = doc.add_paragraph(_one_paragraph(resumo))
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY  # resumo justificado (NBR 14724)
     p.paragraph_format.first_line_indent = Cm(0)  # resumo sem recuo
     p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
@@ -255,8 +256,6 @@ def _add_resumo(doc: Document, resumo: str, palavras_chave: list, font: str):
     for run in p.runs:
         run.font.name = font
         run.font.size = Pt(R.FONT_SIZE_BODY_PT)
-
-    _blank_line(doc, font)
 
     _keywords_line(doc, "Palavras-chave: ", palavras_chave, font)
 
@@ -266,7 +265,7 @@ def _add_resumo(doc: Document, resumo: str, palavras_chave: list, font: str):
 def _add_abstract(doc: Document, abstract: str, keywords: list, font: str):
     _section_title(doc, "ABSTRACT", font)
 
-    p = doc.add_paragraph(abstract)
+    p = doc.add_paragraph(_one_paragraph(abstract))
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p.paragraph_format.first_line_indent = Cm(0)
     p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
@@ -275,8 +274,6 @@ def _add_abstract(doc: Document, abstract: str, keywords: list, font: str):
         run.font.name = font
         run.font.size = Pt(R.FONT_SIZE_BODY_PT)
 
-    _blank_line(doc, font)
-
     _keywords_line(doc, "Keywords: ", keywords or [], font)
 
 
@@ -284,6 +281,8 @@ def _keywords_line(doc: Document, label: str, terms: list, font: str):
     kw = doc.add_paragraph()
     kw.alignment = WD_ALIGN_PARAGRAPH.LEFT  # palavras-chave alinhadas à esquerda
     kw.paragraph_format.first_line_indent = Cm(0)
+    # a "linha em branco" entre resumo e palavras-chave é espaço do parágrafo, não um parágrafo vazio
+    kw.paragraph_format.space_before = Pt(R.SPACE_BEFORE_KEYWORDS_PT)
     r_bold = kw.add_run(label)
     r_bold.bold = True
     r_bold.font.name = font
@@ -416,13 +415,13 @@ def _add_body_section(doc: Document, section_data, number: int, font: str, count
     title_text = f"{number} {section_data.title.upper()}"
     _section_title(doc, title_text, font, outline_level=0)
 
-    for block in _split_paragraphs(section_data.content):
+    for block in _normalize_blocks(section_data.content):
         _add_paragraph(doc, block, font, counters)
 
     for j, sub in enumerate(section_data.subsections, start=1):
         sub_title = f"{number}.{j} {sub.title.upper()}"
         _subsection_title(doc, sub_title, font)
-        for block in _split_paragraphs(sub.content):
+        for block in _normalize_blocks(sub.content):
             _add_paragraph(doc, block, font, counters)
 
 
@@ -435,6 +434,7 @@ def _add_paragraph(doc: Document, text: str, font: str, counters: dict = None):
     if counters is not None and _is_figure(text):
         _add_figure(doc, text, font, counters)
         return
+    text = _one_line(text)  # \n nunca entra num run
     if _is_long_quote(text):
         _add_long_quote(doc, text, font)
     else:
@@ -494,8 +494,67 @@ def _is_long_quote(text: str) -> bool:
     return _is_quotation(text) and _estimate_lines(text.strip()) > R.LONG_QUOTE_MIN_LINES
 
 
-def _split_paragraphs(content: str) -> list:
-    return [b.strip() for b in content.split("\n\n") if b.strip()]
+# ── Normalização do conteúdo (a raiz do "espaçamento esquisito") ──
+# O conteúdo chega do editor, do LLM ou colado de outro lugar: \r\n, \n soltos no meio
+# da frase, 3+ quebras seguidas. Antes, só "\n\n" separava parágrafos e o resto do
+# \n ia LITERAL pro run (o Word renderiza isso de forma inconsistente). Agora todo
+# bloco sai limpo: um parágrafo por bloco, nenhum \n dentro de run, nada vazio.
+_LIST_ITEM_RE = re.compile(r'^([-*•–]\s+|\d{1,3}[.)]\s+|[a-z][)]\s+)')
+_TERMINAL_RE = re.compile(r'[.!?:;…"”»]$')
+_ZERO_WIDTH_RE = re.compile('[\u200b-\u200d\ufeff]')
+
+
+def _one_line(text: str) -> str:
+    """Colapsa qualquer quebra/espaço repetido num espaço único."""
+    return re.sub(r'\s+', ' ', _ZERO_WIDTH_RE.sub('', text or '')).strip()
+
+
+def _one_paragraph(text: str) -> str:
+    """Resumo/abstract: parágrafo único (NBR 6028), venha como vier."""
+    return " ".join(_normalize_blocks(text))
+
+
+def _normalize_blocks(content: str) -> list:
+    """Divide o conteúdo em parágrafos limpos.
+
+    - Linha(s) em branco SEMPRE separam blocos (3+ quebras = 1 separação).
+    - Dentro de um bloco, \n simples: se a linha anterior termina em pontuação final,
+      começa parágrafo novo; senão é quebra "mole" (texto colado/LLM) e vira espaço.
+      Item de lista e marcador de figura sempre ficam em parágrafo próprio; citação
+      aberta com aspas só fecha quando as aspas fecham.
+    - Bloco de %%tabela/%%quadro mantém as linhas (são as linhas da tabela).
+    """
+    text = (content or "").replace("\r\n", "\n").replace("\r", "\n").replace("\t", " ")
+    text = _ZERO_WIDTH_RE.sub("", text)
+    raw_blocks = re.split(r'\n[ \u00a0]*\n', text)
+    out = []
+    for raw in raw_blocks:
+        lines = [ln.strip() for ln in raw.split("\n") if ln.strip()]
+        if not lines:
+            continue
+        if _is_table_block(lines[0]):
+            out.append("\n".join(lines))
+            continue
+        cur = []
+        for ln in lines:
+            starts_new = (
+                not cur
+                or _LIST_ITEM_RE.match(ln)
+                or _is_figure(ln)
+                or _is_figure(" ".join(cur))
+                or _is_table_block(ln)
+            )
+            if not starts_new:
+                joined = " ".join(cur)
+                in_open_quote = _is_quotation(joined) and joined[-1:] not in _QUOTE_CHARS_CLOSE
+                starts_new = bool(_TERMINAL_RE.search(joined)) and not in_open_quote
+            if starts_new and cur:
+                out.append(_one_line(" ".join(cur)))
+                cur = []
+            cur.append(ln)
+        if cur:
+            out.append(_one_line(" ".join(cur)))
+    return [b for b in out if b]
 
 
 # ── Figuras / Ilustrações (NBR 14724:2024) ─────────────────────
@@ -755,7 +814,7 @@ def _add_appendices(doc: Document, itens: list, rotulo: str, font: str, counters
         run.font.size = Pt(R.FONT_SIZE_BODY_PT)
         _set_outline_level(p, 0)
 
-        for bloco in _split_paragraphs(getattr(item, "content", "") or ""):
+        for bloco in _normalize_blocks(getattr(item, "content", "") or ""):
             _add_paragraph(doc, bloco, font, counters)
 
 
@@ -915,16 +974,6 @@ def _subsection_title(doc: Document, title: str, font: str, outline_level: int =
     run.font.size = Pt(R.FONT_SIZE_BODY_PT)
     if outline_level is not None:
         _set_outline_level(p, outline_level)
-
-
-def _blank_line(doc: Document, font: str):
-    p = doc.add_paragraph()
-    p.paragraph_format.first_line_indent = Cm(0)
-    p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after  = Pt(0)
-    run = p.add_run("")
-    run.font.name = font
-    run.font.size = Pt(R.FONT_SIZE_BODY_PT)
 
 
 # ── Numeração de páginas ───────────────────────────────────────

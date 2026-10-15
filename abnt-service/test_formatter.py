@@ -519,3 +519,123 @@ def test_mais_de_vinte_e_seis_nao_derruba_a_exportacao():
     assert _letra_do_indice(0) == "A"
     assert _letra_do_indice(25) == "Z"
     assert _letra_do_indice(26) == "AA"
+
+
+# ── Espaçamento (golden): o "espaçamento esquisito" não volta ──────────────────
+# Raiz antiga: capa/rosto/resumo usavam N parágrafos vazios a 1,5 pra empurrar texto,
+# e o corpo só separava por "\n\n" (o \n simples ia literal pro run).
+import math
+from docx.enum.text import WD_LINE_SPACING
+from formatter import _normalize_blocks, _usable_height_pt, _line_count
+
+DIRTY = (
+    "Primeiro parágrafo com quebra\nmole no meio da frase.\nSegundo parágrafo "
+    "começa aqui.\n\n\n\nTerceiro   depois de quatro quebras.\r\n\r\nQuarto com CRLF."
+)
+CLEAN = (
+    "Primeiro parágrafo com quebra mole no meio da frase.\n\nSegundo parágrafo começa aqui."
+    "\n\nTerceiro depois de quatro quebras.\n\nQuarto com CRLF."
+)
+
+
+def _is_structural(p) -> bool:
+    """Parágrafo sem texto que é legítimo: quebra de página/seção ou campo (sumário)."""
+    xml = p._p.xml
+    return 'w:type="page"' in xml or "w:sectPr" in xml or "w:fldChar" in xml or "w:fldSimple" in xml or "w:drawing" in xml
+
+
+def test_nenhum_paragrafo_vazio_de_enchimento():
+    for font in ("Times New Roman", "Arial"):
+        doc = _build(font_choice=font)
+        vazios = [i for i, p in enumerate(doc.paragraphs) if not p.text.strip() and not _is_structural(p)]
+        assert vazios == [], f"{font}: parágrafos vazios de enchimento em {vazios}"
+
+
+def test_nenhum_run_com_quebra_literal():
+    doc = _build(sections=[SectionData(type="introducao", title="Intro", content=DIRTY)])
+    for p in doc.paragraphs:
+        for r in p.runs:
+            assert "\n" not in r.text and "\r" not in r.text, repr(r.text)
+
+
+def test_conteudo_sujo_e_limpo_geram_os_mesmos_paragrafos():
+    assert _normalize_blocks(DIRTY) == _normalize_blocks(CLEAN) == [
+        "Primeiro parágrafo com quebra mole no meio da frase.",
+        "Segundo parágrafo começa aqui.",
+        "Terceiro depois de quatro quebras.",
+        "Quarto com CRLF.",
+    ]
+    a = _build(sections=[SectionData(type="introducao", title="Intro", content=DIRTY)])
+    b = _build(sections=[SectionData(type="introducao", title="Intro", content=CLEAN)])
+    assert [p.text for p in a.paragraphs] == [p.text for p in b.paragraphs]
+
+
+def test_normalizacao_preserva_tabela_lista_figura_e_citacao():
+    content = (
+        "Veja os itens:\n- primeiro item\n- segundo item\n"
+        "![Mapa|própria](https://x/y.png)\n"
+        '"Uma citação longa que quebra\nde linha. E continua depois do ponto\nate fechar."\n\n'
+        "%%tabela Dados\n| a | b |\n| 1 | 2 |"
+    )
+    assert _normalize_blocks(content) == [
+        "Veja os itens:",
+        "- primeiro item",
+        "- segundo item",
+        "![Mapa|própria](https://x/y.png)",
+        '"Uma citação longa que quebra de linha. E continua depois do ponto ate fechar."',
+        "%%tabela Dados\n| a | b |\n| 1 | 2 |",
+    ]
+
+
+def test_entrelinha_do_corpo_e_1_5_e_capa_exata():
+    doc = _build()
+    corpo = _find_para(doc, BODY_MARKER)
+    assert corpo.paragraph_format.line_spacing == R.LINE_SPACING_BODY
+    assert corpo.paragraph_format.space_before in (None, Pt(0))
+    capa = _find_para(doc, "UNIVERSIDADE FEDERAL DE TESTE")
+    assert capa.paragraph_format.line_spacing_rule == WD_LINE_SPACING.EXACTLY
+    assert capa.paragraph_format.line_spacing == Pt(R.COVER_LINE_PT)
+
+
+def test_palavras_chave_separadas_por_espaco_de_paragrafo():
+    doc = _build()
+    idx = next(i for i, p in enumerate(doc.paragraphs) if p.text.startswith("Palavras-chave"))
+    kw = doc.paragraphs[idx]
+    assert kw.paragraph_format.space_before == Pt(R.SPACE_BEFORE_KEYWORDS_PT)
+    assert "resumo do trabalho" in doc.paragraphs[idx - 1].text  # colado no resumo, sem parágrafo vazio
+
+
+def _altura_da_capa(doc) -> float:
+    """Soma space_before + linhas×entrelinha exata dos parágrafos da 1ª seção (capa)."""
+    total = 0.0
+    for p in doc.paragraphs:
+        if "w:sectPr" in p._p.xml:
+            break
+        f = p.paragraph_format
+        bold = any(r.bold for r in p.runs)
+        width = R.CHARS_PER_LINE_TITLE if bold and p.text.isupper() and len(p.text) > 40 else R.CHARS_PER_LINE
+        total += (f.space_before.pt if f.space_before else 0) + _line_count(p.text, width, bold) * f.line_spacing.pt
+    return total
+
+
+@pytest.mark.parametrize("titulo", [
+    "IA",
+    "Um título razoável sobre aprendizagem de máquina aplicada à agricultura",
+    "Um título enorme " * 12,
+])
+@pytest.mark.parametrize("font", ["Times New Roman", "Arial"])
+@pytest.mark.parametrize("work_type", ["Artigo", "TCC"])
+def test_capa_cabe_numa_pagina_sem_folha_em_branco(titulo, font, work_type):
+    doc = _build(title=titulo, font_choice=font, work_type=work_type)
+    alt = _altura_da_capa(doc)
+    assert alt <= _usable_height_pt(), f"capa com {alt:.0f}pt > {_usable_height_pt():.0f}pt úteis"
+    # cidade/ano ancorados embaixo (título curto não deixa a base subir pro meio)
+    if len(titulo) < 100:
+        assert alt >= _usable_height_pt() - R.COVER_BOTTOM_SAFETY_PT - R.COVER_LINE_PT
+
+
+def test_capa_e_identica_entre_times_e_arial():
+    """Posição em Pt independe da fonte: a capa não 'escorre' quando a fonte muda."""
+    t, a = _build(font_choice="Times New Roman"), _build(font_choice="Arial")
+    sb = lambda d: [p.paragraph_format.space_before for p in d.paragraphs[:12]]
+    assert sb(t) == sb(a)
