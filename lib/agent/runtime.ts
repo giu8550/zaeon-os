@@ -43,7 +43,15 @@ export type ToolContext = AgentContext & {
   execMode?: ExecMode;
   courseTags?: string[];
   gpuAvailable?: boolean;
+  /** Modo da tarefa (Octa Code, §2 do pack). `review`/`answer` = só leitura; ausente = comportamento antigo. */
+  taskMode?: TaskMode;
 };
+
+/** `review`/`answer` não podem mutar nada; `change` pode (sujeito ao resto do permit e ao file-lock do Octa). */
+export type TaskMode = "review" | "answer" | "change";
+export function isReadOnlyMode(mode: TaskMode | undefined): boolean {
+  return mode === "review" || mode === "answer";
+}
 
 export interface ToolDef {
   name: string;
@@ -82,12 +90,13 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 // ───────────────────────────── permissão (deny-by-default, §11.2) ─────────────────────────────
 /**
- * Decisão determinística ANTES de rodar: risco × plano × GPU × execMode.
+ * Decisão determinística ANTES de rodar: risco × plano × modo da tarefa × GPU × execMode.
  * Deny-by-default: plano insuficiente = DENY; destrutivo ou GPU-por-demanda = REQUIRE_APPROVAL;
  * em `guiado`, `write` sobe pra aprovação; leitura/geração em `auto` = ALLOW.
  */
 export function permit(def: ToolDef, ctx: ToolContext): Gate {
   if (!planAtLeast(ctx.plan, def.minPlan)) return "DENY";
+  if (isReadOnlyMode(ctx.taskMode) && def.risk !== "read") return "DENY"; // modo leitura nunca escreve
   if (def.demandGpu && !ctx.gpuAvailable) return "REQUIRE_APPROVAL"; // T3 sob demanda
   if (def.risk === "destructive") return "REQUIRE_APPROVAL";
   if (ctx.execMode === "guiado" && def.risk === "write") return "REQUIRE_APPROVAL";

@@ -50,8 +50,21 @@ jobs:
           node-version: "20"
           cache: "npm"
 
+      # Supply-chain (Pack Octa §1). ANTES do npm ci: pacote novo com install script (ou versão nova) só
+      # entra depois de revisado em config/vetting/install-scripts.json; repo REJEITADO não entra nunca.
+      - name: Vetting de dependências (lockfile + install scripts + repos rejeitados)
+        run: node scripts/vet-deps.mjs
+
+      # `--ignore-scripts`: nenhum postinstall roda antes de a lista acima ser checada; os revisados rodam no rebuild.
       - name: Install deps
-        run: npm ci
+        run: |
+          npm ci --ignore-scripts
+          npm rebuild
+
+      # SCA com catraca: advisory high/critical NOVA nas deps de produção = vermelho. As herdadas estão em
+      # config/vetting/audit-baseline.json (pagar aos poucos, nunca acrescentar calado).
+      - name: SCA (npm audit, catraca)
+        run: node scripts/vet-audit.mjs
 
       - name: Prisma generate
         run: npx prisma generate

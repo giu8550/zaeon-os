@@ -1,0 +1,13 @@
+{
+  "_nota": "Baseline herdada (out/2026): pacotes que já tinham install script quando o vetting entrou. Entrada NOVA exige revisão do script + versão pinada.",
+  "packages": {
+    "@prisma/client": "6.19.2",
+    "@prisma/engines": "6.19.2",
+    "canvas": "2.11.2",
+    "esbuild": "0.28.2",
+    "fsevents": "2.3.3",
+    "msgpackr-extract": "3.0.4",
+    "prisma": "6.19.2",
+    "sharp": "0.34.5"
+  }
+}
