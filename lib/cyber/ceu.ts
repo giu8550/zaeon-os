@@ -251,6 +251,8 @@ export function colisoresDaCidade(): Colisor[] {
 }
 
 export type NomeSala = keyof typeof CIDADE.salas;
+/** o RELICÁRIO DO SABER no referencial da biblioteca (a Sala do Saber): o centro e o raio da cabine */
+export const RELICARIO_SALA = { x: 0, z: -6, r: 3.4 } as const;
 /** móvel de uma sala, no referencial da SALA (+z local = rumo à porta/centro da ilha); `rot` = giro do móvel (a frente
  *  dele é o seu +z); `larg`×`prof` = pegada (vira colisores). `solido: false` = só visual (tapete). */
 export type Movel = { tipo: string; x: number; z: number; rot: number; larg: number; prof: number; solido?: boolean; /** elevação (m) — ex.: em cima do palco */ y?: number; /** cor de destaque (zonas do lounge) */ cor?: number };
@@ -333,6 +335,9 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     ...[[-44, -14], [44, -14], [-46, 14], [46, 14], [-30, -42], [30, -42]].map(([x, z]) => ({ tipo: "torreCarga", x: x!, z: z!, rot: Math.atan2(-x!, -z!), larg: 1.6, prof: 1.6 })),
   ],
   biblioteca: [
+    // o RELICÁRIO DO SABER (lib/cyber/relicario — a cabine de metal negro com cristais e o livro dourado): sólido, no
+    // corredor do meio, entre as mesas (o desenho é próprio — components/cyber/Relicario; aqui só a pegada/colisão)
+    { tipo: "relicario", x: RELICARIO_SALA.x, z: RELICARIO_SALA.z, rot: 0, larg: RELICARIO_SALA.r * 2, prof: RELICARIO_SALA.r * 2 - 0.3 },
     // (as ESTANTES em arco saíram a pedido do dono — out/2026, fps)
     // MESAS de leitura com luminária, um pufe de cada lado
     ...[[-7, -10], [7, -10], [-7, 2], [7, 2]].flatMap(([x, z]) => [

@@ -18,11 +18,11 @@ import { MAX_TEXTO_RECADO, type MensagemChat, type Presenca, type RecadoQG } fro
 import { landmarksOn, type POI } from "@/lib/cyber/landmarks";
 import { CyberEngine, type EstadoGuia, type PessoaCyber } from "./engine";
 import { NOS, type IdNo } from "@/lib/cyber/buracos";
-import { CHAVE_ONBOARDING, deveNascerNoTubo, tutorialLigado } from "@/lib/cyber/onboarding";
+import { CHAVE_ONBOARDING, CHAVE_PROGRESSO, decidirTutorial, lerProgresso, type ProgressoTutorial, tutorialLigado } from "@/lib/cyber/onboarding";
 import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
 import RespostaZaeon from "./RespostaZaeon";
 import CaixaDialogo from "./CaixaDialogo";
-import EntregaDroid from "./EntregaDroid";
+import type { EventoRelicario, ItemEncaixe } from "@/lib/cyber/relicario";
 import type { Dialogo } from "@/lib/cyber/dialogo";
 import type { PesquisaSalva } from "@/lib/ui/loungeHub";
 import type { PedidoZaeon, PerfilZaeon, PerguntaZaeon, TurnoZaeon } from "@/lib/cyber/conversaZaeon";
@@ -95,6 +95,10 @@ export type CenaCyberProps = {
   /** VOZ (push-to-talk, NEXT_PUBLIC_VOZ=on + colyseus): o signaling da room e quem está online (userIds) */
   canalVoz?: CanalVoz | null;
   onlineIds?: string[];
+  /** a SALA do cyberespaço (vai no POST da entrega: a cena do Relicário vai pra todo mundo dela — EV_RELICARIO) */
+  salaId?: string | null;
+  /** uma ENTREGA de alguém da sala (EV_RELICARIO): a mesma cena do Relicário, do ponto em que ela está */
+  eventoRelicario?: EventoRelicario | null;
 };
 
 
@@ -143,15 +147,18 @@ export default function CenaCyber(p: CenaCyberProps) {
     if (!engine.current?.responderZaeon(r)) return;
     setFalasDroid((xs) => [...xs.slice(-20), { id: `eu-${Date.now()}`, userId: cb.current.eu.id, name: cb.current.eu.name, color: cb.current.eu.color, texto: r, ts: Date.now() }]);
   };
-  /** NASCE no tubo de ensaio? Quem nunca entrou no cyberespaço (o servidor diz; sem sala, o localStorage) ou forçado com
-   *  ?nascer=1 ou com o MODO TUTORIAL ligado nas Configurações — decidido 1× (ao entrar) */
-  const nascer = useMemo(() => {
-    if (!tela || typeof window === "undefined") return false;
+  /** NASCE no tubo de ensaio? Quem nunca entrou no cyberespaço (o servidor diz; sem sala, o localStorage), forçado com
+   *  ?nascer=1 ou com o MODO TUTORIAL ligado nas Configurações — ou RETOMA um tutorial pela metade (o progresso salvo
+   *  neste navegador: lib/cyber/onboarding `decidirTutorial`) — decidido 1× (ao entrar) */
+  const { nascer, retomar } = useMemo(() => {
+    if (!tela || typeof window === "undefined") return { nascer: false, retomar: null };
     let visto = false;
     if (p.novoNoCyber !== undefined) visto = !p.novoNoCyber;
     else try { visto = localStorage.getItem(CHAVE_ONBOARDING) === "1"; } catch { /* storage bloqueado */ }
-    const forcar = new URLSearchParams(location.search).get("nascer") === "1" || tutorialLigado((k) => localStorage.getItem(k));
-    return deveNascerNoTubo({ visto, forcar, fundador: !!p.souFundador });
+    let progresso: ProgressoTutorial | null = null;
+    try { progresso = lerProgresso((k) => localStorage.getItem(k)); } catch { /* storage bloqueado */ }
+    const d = decidirTutorial({ visto, forcarUrl: new URLSearchParams(location.search).get("nascer") === "1", modoTutorial: tutorialLigado((k) => localStorage.getItem(k)), fundador: !!p.souFundador, progresso });
+    return { nascer: d.nascer, retomar: d.retomar ? { ...d.retomar, pesquisa: progresso?.pesquisa ?? null } : null };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   /** onde o novato nasce: no TUBO, com o tutorial do Droid — o PADRÃO de todo usuário novo (out/2026: docs/superpowers/
@@ -159,8 +166,9 @@ export default function CenaCyber(p: CenaCyberProps) {
   const nascerNa: "praca" | "tubo" = nascer ? "tubo" : "praca";
   /** o banner de TUTORIAL COMPLETO (as salas abrem) */
   const [completo, setCompleto] = useState(false);
-  /** a ENTREGA ao Droid na Sala do Saber: o painel de escolher a pesquisa */
-  const [entregaAberta, setEntregaAberta] = useState(false);
+  /** o ENCAIXE no Relicário do Saber (lib/cyber/relicario): o inventário no modo de entrega (▶ nos itens que cabem),
+   *  o item indo pro servidor (o id) e o erro do POST */
+  const [encaixeAtivo, setEncaixeAtivo] = useState(false), [encaixeEnviando, setEncaixeEnviando] = useState<string | null>(null), [encaixeErro, setEncaixeErro] = useState<string | null>(null);
   useEffect(() => { if (!completo) return; const t = setTimeout(() => setCompleto(false), 6500); return () => clearTimeout(t); }, [completo]);
   const [voo, setVoo] = useState<{ y: number } | null>(null);
   /** a AÇÃO de contexto (o que o F faz agora) — o chip "F · Estudar" etc.; no celular, tocar no chip faz a ação */
@@ -223,6 +231,21 @@ export default function CenaCyber(p: CenaCyberProps) {
 
   // callbacks sempre frescos sem recriar a engine
   const cb = useRef(p); cb.current = p;
+  /** a ENTREGA no Relicário: o item vai pro servidor (POST /api/cyber/entrega — ele avalia e avisa a sala); a cena roda
+   *  no engine e o veredito só sai quando a Zaeon acaba de ler */
+  const entregar = useCallback(async (it: ItemEncaixe) => {
+    if (encaixeEnviando) return;
+    if (engine.current?.relicarioOcupado()) { setEncaixeErro("A Zaeon está lendo outra entrega. Espere ela acabar."); return; }
+    setEncaixeEnviando(it.id); setEncaixeErro(null);
+    try {
+      const r = await fetch("/api/cyber/entrega", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tipo: it.tipo, id: it.id, salaId: cb.current.salaId ?? undefined }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setEncaixeErro(r.status === 404 ? "Esse item não é seu ou não existe mais." : r.status === 401 ? "Entre de novo na sua conta pra entregar." : r.status === 429 ? "Calma: espere um instante e tente de novo." : r.status === 400 ? "Esse item não cabe no Relicário." : "A Zaeon não conseguiu ler agora. Tente de novo."); return; }
+      setEncaixeAtivo(false); setInventarioAberto(false);
+      engine.current?.entregarNoRelicario({ aceito: !!j.aceito, faltando: Array.isArray(j.faltando) ? j.faltando : [], titulo: typeof j.titulo === "string" && j.titulo ? j.titulo : it.titulo });
+    } catch { setEncaixeErro("Sem conexão. Tente de novo."); }
+    finally { setEncaixeEnviando(null); }
+  }, [encaixeEnviando]);
   // contrato: a intenção sai como postMessage({type:"zaeon:enter-study"}) (mesma origem) → router.push("/research-lab?tab=pesquisa")
   const entrarEstudo = useCallback(() => { window.postMessage({ type: MSG_ENTRAR_ESTUDO }, window.location.origin); }, []);
   useEffect(() => {
@@ -253,7 +276,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       onTunel: (t) => { engine.current?.soltarMouse(); setTunel({ tipo: "escolher", origem: t.origem, nomeOrigem: NOS[t.origem].nome, destinos: t.destinos }); },
       onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
       onAviso: avisar,
-      nascer, nascerNa, motosLiberadas: !!p.motosLiberadas,
+      nascer, nascerNa, retomar, motosLiberadas: !!p.motosLiberadas,
       onNasceu: () => { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } },   // o novato chegou na Zaeon pelo portal
       onGuia: (g) => { setGuia(g); if (!g) { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },   // o tutorial acabou (ou foi pulado): da próxima vez nasce na base
       onInstancia: setInstancia,
@@ -265,7 +288,8 @@ export default function CenaCyber(p: CenaCyberProps) {
       },
       onDialogo: setDialogo,
       onTutorialCompleto: () => setCompleto(true),
-      onEntrega: (abrir) => { setEntregaAberta(abrir); if (abrir && document.pointerLockElement) document.exitPointerLock(); },
+      onProgresso: (pr) => { try { localStorage.setItem(CHAVE_PROGRESSO, JSON.stringify(pr)); } catch { /* storage bloqueado */ } },   // recarregar a página retoma dali
+      onRelicario: (abrir) => { if (abrir) { if (document.pointerLockElement) document.exitPointerLock(); setEncaixeAtivo(true); setEncaixeErro(null); setInventarioAberto(true); } else { setEncaixeAtivo(false); setInventarioAberto(false); } },
       onMotosLiberadas: () => { void fetch("/api/cyber/motos", { method: "POST" }).catch(() => undefined); avisar("As motos são suas ✦"); },
       onInventario: (p) => { if (p) { setDestaqueInv(p); if (document.pointerLockElement) document.exitPointerLock(); setInventarioAberto(true); } else setInventarioAberto(false); },
       onPergunta: setPergunta, onPerfil: (perfil) => cb.current.salvarPerfil?.(perfil),
@@ -329,6 +353,12 @@ export default function CenaCyber(p: CenaCyberProps) {
   }, []);
   // o recado atual: holograma no QG + a TV do lounge (e um "ping" quando chega um novo)
   useEffect(() => { engine.current?.setRecado(p.recadoQG ?? null); }, [p.recadoQG, pronto]);
+  // a entrega de OUTRA pessoa da sala (EV_RELICARIO): a mesma cena do Relicário — cada evento 1× (um re-render não repete)
+  const evRelicarioVisto = useRef<string | null>(null);
+  useEffect(() => {
+    const ev = p.eventoRelicario; if (!ev || !engine.current || evRelicarioVisto.current === ev.id) return;
+    evRelicarioVisto.current = ev.id; engine.current.recebeuEventoRelicario(ev);
+  }, [p.eventoRelicario, pronto]);
 
   // chat da sala → balões sobre os avatares
   const vistas = useRef(0);
@@ -367,7 +397,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* as barras do HUD: SAÚDE, VIGOR e o uso CONCORRENTE de IA (o laboratório do tablet) */}
       {tela && !menu && !tabletAberto && <BarrasHud ler={lerBarras} ia={iaLab} touch={touch} />}
       {tela && <ContadorFps mostrar={prefs.fps} gpu={gpu} classe={perfil.gpu} ler={lerFps} />}
-      <InventarioPainel aberto={inventarioAberto} destaque={destaqueInv} onFechar={() => { setInventarioAberto(false); engine.current?.inventarioFechado(); }} ler={lerInventario} equipar={equiparItem} />
+      <InventarioPainel aberto={inventarioAberto} destaque={destaqueInv} encaixe={encaixeAtivo ? { ativo: true, onEntregar: (it: ItemEncaixe) => void entregar(it), enviando: encaixeEnviando, erro: encaixeErro } : undefined} onFechar={() => { setInventarioAberto(false); setEncaixeAtivo(false); setEncaixeErro(null); engine.current?.inventarioFechado(); }} ler={lerInventario} equipar={equiparItem} />
 
       {/* rótulo do monitor (hover) */}
       <div ref={monLabel} className="pointer-events-none absolute z-[22] hidden -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full bg-gradient-to-b from-cyan-100 to-sky-400 px-3 py-1.5 text-[12.5px] font-bold text-slate-950 shadow-[0_0_18px_rgba(90,200,255,.7)] data-[longe=true]:border data-[longe=true]:border-sky-300/35 data-[longe=true]:bg-slate-900/80 data-[longe=true]:from-transparent data-[longe=true]:to-transparent data-[longe=true]:text-sky-100 data-[longe=true]:shadow-none" />
@@ -500,7 +530,6 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* o TUTORIAL do Droid: a CAIXA DE DIÁLOGO (RPG) com a fala/instrução de agora; em cima, o OBJETIVO (o "quest
           log": o passo e o "Pular") */}
       {!menu && dialogo && <CaixaDialogo d={dialogo} touch={touch} />}
-      {!menu && entregaAberta && <EntregaDroid onVeredito={(r) => { setEntregaAberta(false); engine.current?.resultadoEntrega(r); }} />}
       {/* TUTORIAL COMPLETO: como o fim de uma quest — e as salas (Estudar, F, o tablet) abrem */}
       {completo && (
         <div role="status" className="pointer-events-none absolute left-1/2 top-[22%] z-[30] -translate-x-1/2 text-center motion-safe:animate-[pulse_2.8s_ease-in-out_infinite]">

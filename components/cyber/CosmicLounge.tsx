@@ -132,6 +132,7 @@ function Tela() {
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
       somNave={sala.somNave} musicaNave={sala.musicaNave} ritual={sala.ritual} definirRitual={sala.definirRitual}
       naveQG={sala.naveQG} salvarNave={sala.salvarNave}
+      salaId={salaId} eventoRelicario={sala.eventoRelicario}
       canalVoz={sala.canalVoz} onlineIds={onlineIds}
     />
   );

@@ -44,7 +44,9 @@ import { PLATAFORMAS, UNIVERSIDADES_NO_MAPA, alturaDoAndar, andarDoPouso, andarN
 import { CHAO, PRACA, QUEDA_VAZIO, naPraca } from "@/lib/cyber/praca";
 import { CHEGADA_NAVE, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel, type IdNo } from "@/lib/cyber/buracos";
 import { DROID } from "@/lib/cyber/agentes";
-import { type CtxGuia, FALA_DESISTIU, ROTEIRO_ENTREGA, ROTEIRO_MOTOS, passoDaRecusa, type PassoGuia, FALA_CONCORRENCIA, FALA_IA_ENTREGOU, FALA_VOLTE_AO_TABLET, lembreteDoTablet, PASSO_DA_MISSAO, SALA_DO_SABER_LOCAL, esperaDepoisDaUltima, passoDe, tempoDeLeitura, NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
+import { type CtxGuia, FALA_DESISTIU, ROTEIRO_ENTREGA, ROTEIRO_MOTOS, passoDaRecusa, type PassoGuia, FALA_CONCORRENCIA, FALA_IA_ENTREGOU, FALA_VOLTE_AO_TABLET, FALA_DICA_RELICARIO, FRENTE_DO_SABER_SALA, CENTRO_DA_CAPELA_LOCAL, FRENTE_DOS_TELOES_LOCAL, type IdPassoGuia, type OndeRetomar, type ProgressoTutorial, lembreteDoTablet, PASSO_DA_MISSAO, SALA_DO_SABER_LOCAL, esperaDepoisDaUltima, passoDe, tempoDeLeitura, NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
+import { criarRelicario, type RelicarioHandle } from "./Relicario";
+import { ALCANCE_RELICARIO, type EventoRelicario, eventoVivo, faseDoRelicario, relicarioLocal, relicarioMundo } from "@/lib/cyber/relicario";
 import type { PesquisaSalva } from "@/lib/ui/loungeHub";
 import { criarPortalViagem, type PortalViagemHandle } from "./PortalViagem";
 import { FAIXA_CINEMA, misturarPose, passoPeso, planoConversa, planoTelao, poseDoPlano, seguirPose, suave, type Plano, type Pose } from "@/lib/cyber/cutscene";
@@ -170,8 +172,13 @@ export type CyberOpts = {
   onTutorialCompleto?: () => void;
   /** as MOTOS já estão liberadas pra esta pessoa (o servidor diz — User.cyberPerfil) */
   motosLiberadas?: boolean;
-  /** a ENTREGA ao Droid: abrir o painel de escolher a pesquisa */
-  onEntrega?: (abrir: boolean) => void;
+  /** o RELICÁRIO DO SABER (lib/cyber/relicario): F/clique nele abre o INVENTÁRIO no modo de ENCAIXE (▶ nos itens que
+   *  cabem); o React manda o item pro servidor e devolve o veredito em `entregarNoRelicario` */
+  onRelicario?: (abrir: boolean) => void;
+  /** o PROGRESSO do tutorial mudou (o React guarda no localStorage — recarregar a página retoma de lá) */
+  onProgresso?: (p: ProgressoTutorial) => void;
+  /** RETOMAR o tutorial de um progresso salvo (em vez de nascer no tubo): o passo e o lugar */
+  retomar?: { passo: IdPassoGuia; onde: OndeRetomar; pesquisa?: PesquisaSalva | null } | null;
   /** o tutorial das motos acabou: o servidor grava a liberação */
   onMotosLiberadas?: () => void;
   /** a Zaeon (holograma na capela) fez uma PERGUNTA: o React mostra o painel de resposta (null = fechou) */
@@ -362,7 +369,7 @@ export class CyberEngine {
   /** o laboratório (no tablet) avisou que a pesquisa da 1ª missão está SALVA: o Droid interrompe — guarda o tablet */
   pesquisaSalva(p: PesquisaSalva) {
     const g = this.guia; if (!g || this.rot[g.passo]?.cond.tipo !== "pesquisa") return;
-    this.pesquisaDoTutorial = p; this.fecharTablet();
+    this.pesquisaDoTutorial = p; this.fecharTablet(); this.salvarProgresso(this.rot[g.passo]!.id);
   }
   get pesquisaTutorial() { return this.pesquisaDoTutorial; }
   /** a etapa do tour do TABLET (o laboratório avisa — lib/ui/loungeHub MSG_TUTORIAL_ETAPA) */
@@ -382,20 +389,55 @@ export class CyberEngine {
   /** pode MONTAR numa moto? (liberadas, o dono, ou no meio do tutorial delas) */
   private podeMoto() { return this.motosLiberadas || this.podeNave(this.o.eu.id) || (this.rot === ROTEIRO_MOTOS && !!this.guia); }
   /** o resultado da ENTREGA (o painel do React mandou pro servidor): null = a pessoa desistiu */
-  resultadoEntrega(r: { aceito: boolean; faltando: string[] } | null) {
+  private resultadoEntrega(r: { aceito: boolean; faltando: string[] } | null) {
     const g = this.guia; if (!g || this.rot !== ROTEIRO_ENTREGA) return;
     this.entregaVeredito = r ?? "desistiu";
     if (!r) this.rot = [ROTEIRO_ENTREGA[0]!, { id: "recusa", titulo: "Até logo", cena: "droid-perto", cenaInteira: true, falas: [FALA_DESISTIU], cond: { tipo: "ouvir" }, alvo: null }];
     else if (!r.aceito) this.rot = [ROTEIRO_ENTREGA[0]!, passoDaRecusa(r.faltando)];
+    // aceita de NOVO (as motos já são dela, ou é o dono): a recompensa já foi — o Droid só reconhece, sem refazer as motos
+    else if (this.motosLiberadas || this.podeNave(this.o.eu.id)) this.rot = [ROTEIRO_ENTREGA[0]!, { id: "motos-fim", titulo: "Aceito", cena: "droid-perto", cenaInteira: true, falas: ["Isso sim tem valor. ✦ Aceito.", "Cada entrega de valor fica no Relicário — e conta pra você. Traga a próxima."], cond: { tipo: "ouvir" }, alvo: null }];
   }
-  /** a pessoa chegou perto do Droid na Sala do Saber (motos ainda travadas): a cena da ENTREGA começa */
+  /** o RELICÁRIO DO SABER na Sala do Saber (components/cyber/Relicario) e a entrega em curso (o veredito só sai quando a
+   *  Zaeon acaba de ler — lib/cyber/relicario `faseDoRelicario`) */
+  private relicario: RelicarioHandle | null = null;
+  private entregaPendente: { aceito: boolean; faltando: string[]; t: number } | null = null;
+  /** tem uma leitura rodando no Relicário agora? (o React não manda outra entrega por cima) */
+  relicarioOcupado() { return !!this.relicario?.ocupado(); }
+  private pertoDoRelicario(): boolean {
+    if (!this.relicario || !this.noCeu || this.jet.noAr || this.moto !== null) return false;
+    const r = relicarioMundo(), y = (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE;
+    return Math.hypot(this.eu.pos.x - r.x, this.eu.pos.z - r.z) <= ALCANCE_RELICARIO && Math.abs(this.eu.alt - y) < 3;
+  }
+  /** F/clique no Relicário: abre o inventário no modo de encaixe (fora do tutorial e com a Zaeon livre) */
+  private abrirRelicario() {
+    if (!this.relicario) return;
+    if (this.guia) { this.o.onAviso?.(this.rot === ROTEIRO ? "Primeiro, ouça o Droid." : "A Zaeon está lendo. Espere o veredito."); return; }
+    if (this.relicario.ocupado()) { this.o.onAviso?.("A Zaeon está lendo outra entrega. Espere a leitura acabar."); return; }
+    this.soltarMouse(); this.o.onRelicario?.(true);
+  }
+  /** a ENTREGA foi pro servidor (o React): a cena roda aqui (o item voa, a Zaeon lê) e o veredito sai no fim da leitura */
+  entregarNoRelicario(r: { aceito: boolean; faltando: string[]; titulo: string }) {
+    if (!this.relicario || this.guia || this.menu) return;
+    this.o.onRelicario?.(false);
+    if (this.relicario.ocupado()) { this.o.onAviso?.("A Zaeon está lendo outra entrega. A sua fica na fila — tente de novo quando ela acabar."); return; }
+    this.relicario.tocar({ de: new THREE.Vector3(this.eu.pos.x, this.eu.alt, this.eu.pos.z), aceito: r.aceito, titulo: r.titulo, nome: this.o.eu.name, cor: this.o.eu.color });
+    this.entregaVeredito = null; this.entregaPendente = { aceito: r.aceito, faltando: r.faltando, t: 0 };
+    this.rot = ROTEIRO_ENTREGA; this.guia = this.novoGuia(0); this.emitirGuia();
+    this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.perto });
+  }
+  /** uma entrega de OUTRA pessoa da sala (EV_RELICARIO): a mesma cena, do ponto em que ela está */
+  recebeuEventoRelicario(ev: EventoRelicario) {
+    if (!this.relicario || ev.userId === this.o.eu.id || !eventoVivo(ev, Date.now()) || this.relicario.ocupado()) return;   // (uma leitura de cada vez)
+    const a = this.remotos.get(ev.userId), de = a ? new THREE.Vector3(a.pos.x, a.alt, a.pos.z) : null;
+    this.relicario.tocar({ de, aceito: ev.aceito, titulo: ev.titulo, nome: ev.nome, cor: ev.cor, decorrido: Math.max(0, (Date.now() - ev.agora) / 1000) });
+  }
+  /** o Droid espera na Sala do Saber: quem chega perto dele (motos ainda travadas) ganha a DICA do Relicário, uma vez */
   private talvezEntrega() {
     const d = this.droid; if (!d || !this.droidNoSaber || this.guia || this.menu || this.podeMoto() || d.h.fase() !== "visivel") return;
     const longe = Math.hypot(this.eu.pos.x - d.pos.x, this.eu.pos.z - d.pos.z), alto = Math.abs(this.eu.alt - d.alt);
     if (longe > 30) this.entregaArmada = true;
     if (!this.entregaArmada || longe > 9 || alto > 8) return;
-    this.entregaArmada = false; this.entregaVeredito = null; this.soltarMouse();
-    this.rot = ROTEIRO_ENTREGA; this.guia = this.novoGuia(0); this.emitirGuia();
+    this.entregaArmada = false; this.droidFala(FALA_DICA_RELICARIO, false);
   }
   /** o "…" em cima da cabeça da Zaeon enquanto ela pensa numa resposta */
   private pensandoZ: HTMLDivElement | null = null;
@@ -683,6 +725,10 @@ export class CyberEngine {
         fundirEstaticos(c.group, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.portalTunel, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge, ...c.caixasAmbiente.map((x) => x.obj)].filter((x): x is THREE.Object3D => !!x)] });   // a mesa do DJ e as bocas das caixas: só o próprio nó (é posição/som, não clique)
         c.somTocando(false); for (let i = 0; i < 6; i++) c.atualizar(1, 0); }
       this.cena.scene.add(this.cidade.group);
+      {   // o RELICÁRIO DO SABER na biblioteca (fora dos lotes: ele anima e é alvo de clique)
+        const rl = relicarioLocal(), h = criarRelicario({ low }); h.group.position.set(rl.x, ALTURA_LOUNGE, rl.z); h.group.rotation.y = rl.rumo;
+        h.group.traverse((n) => { n.userData.semLote = true; }); this.cidade.ilha.add(h.group); this.relicario = h;
+      }
       this.bercario = criarBercario(this.cidade.ilha, { low });   // os tubos de ensaio, ao lado da Recepção (flutuam com a ilha)
       this.holoZaeon = criarHoloZaeon(this.cidade.ilha, { low });   // o rosto da Zaeon (só aparece no tutorial)
       if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
@@ -938,7 +984,7 @@ export class CyberEngine {
       if (this.menu) { const s = this.assento(); this.eu.pos.set(s.x, 0, s.z); this.eu.facing = this.rotAssento(); this.eu.sit = 1; this.sitT = 1; }
       else this.eu.facing = lay?.nivel ? this.rotAssento() + Math.PI : Math.atan2(PRACA.x - sp.x, PRACA.z - sp.z);
       this.camT.set(this.eu.pos.x, 1.2 + this.yDoNivel(lay?.nivel), this.eu.pos.z);
-      if (!this.menu && !(this.o.nascer && this.nascerNoTubo())) this.spawnNaNave();   // quem chega nasce no tubo; o dono, a bordo da nave
+      if (!this.menu && !(this.o.nascer && (this.o.retomar ? this.retomarTutorial(this.o.retomar) : this.nascerNoTubo()))) this.spawnNaNave();   // quem chega nasce no tubo; o dono, a bordo da nave
       if (!this.menu) this.carregarInventario();   // a arma equipada (lib/cyber/inventario) já vai pra mão
     }
   }
@@ -1070,7 +1116,7 @@ export class CyberEngine {
     this.som.ativar();   // o whoosh de entrada sai em atualizarSom, quando o buffer chegar
     this.R.domElement.style.touchAction = "none";
     // saiu da vista/menu: o NOVATO nasce na praça (ou no tubo, no modo tutorial); o dono, a bordo da nave
-    const nasceu = this.o.nascer && (this.o.nascerNa === "tubo" ? this.nascerNoTubo() : this.nascerNaPraca());
+    const nasceu = this.o.nascer && (this.o.nascerNa === "tubo" ? (this.o.retomar ? this.retomarTutorial(this.o.retomar) : this.nascerNoTubo()) : this.nascerNaPraca());
     if (!nasceu) this.spawnNaNave();
     this.o.onSessao?.(go);
   }
@@ -1538,6 +1584,24 @@ export class CyberEngine {
     this.rot = ROTEIRO; this.guia = this.novoGuia(0); this.emitirGuia();
     return true;
   }
+  /** RETOMA o tutorial de um progresso salvo (lib/cyber/onboarding `retomadaDe`): a pessoa reaparece no lugar da cena
+   *  (na frente do tubo, no centro da capela, na frente dos telões ou na Sala do Saber) e o Droid segue daquele passo */
+  private retomarTutorial(r: { passo: IdPassoGuia; onde: OndeRetomar; pesquisa?: PesquisaSalva | null }): boolean {
+    if (!this.cidade || this.menu) return false;
+    const n = passoDe(r.passo); if (n < 0) return this.nascerNoTubo();
+    let p: { x: number; z: number; rumo: number };
+    if (r.onde === "tubo") { const tb = TUBOS[tuboDe(this.o.eu.id)]!; p = { x: tb.x + Math.sin(tb.rumo) * 2.6, z: tb.z + Math.cos(tb.rumo) * 2.6, rumo: tb.rumo }; }
+    else if (r.onde === "capela") { const c = mundo(CENTRO_DA_CAPELA_LOCAL); p = { x: c.x + 2.5, z: c.z, rumo: -Math.PI / 2 }; }
+    else if (r.onde === "teloes") { const c = mundo(FRENTE_DOS_TELOES_LOCAL); p = { x: c.x, z: c.z, rumo: 0 }; }
+    else { const c = mundo(daSala(CIDADE.salas.biblioteca, FRENTE_DO_SABER_SALA.x, FRENTE_DO_SABER_SALA.z)), rl = relicarioMundo(); p = { x: c.x, z: c.z, rumo: Math.atan2(rl.x - c.x, rl.z - c.z) }; }
+    this.irParaNo("zaeon", p); this.portalArmado = false;
+    this.instancia = true; this.o.onInstancia?.(true);
+    this.balaoLiberado = n > passoDe("zaeon");   // depois da conversa com a Zaeon, as falas viram balões
+    this.pesquisaDoTutorial = r.pesquisa ?? null;
+    this.rot = ROTEIRO; this.guia = this.novoGuia(n); this.emitirGuia();
+    if (r.passo === "zaeon" || r.passo === "capela") this.preaquecerVozZaeon();
+    return true;
+  }
   /** o corpo do DROID (escondido até o tutorial começar: aparece num mini portal) */
   private criarDroid() {
     const h = criarDroid({ low: this.o.low }); this.cena.scene.add(h.group);
@@ -1568,9 +1632,13 @@ export class CyberEngine {
     this.o.onGuia?.({ passo: principal ? this.guia.passo : this.guia.passo + 1, total: principal ? this.rot.length : this.rot.length + 1, id: p.id, titulo: p.titulo, agente: DROID.nome, cor: DROID.cor });
   }
   private encerrarGuia() { this.guia = null; this.emitirGuia(); this.o.onDialogo?.(null); this.sairDaInstancia(); }
+  /** guarda o PROGRESSO do tutorial principal (só o ROTEIRO do novato; a entrega e as motos não retomam) */
+  private salvarProgresso(passo: IdPassoGuia | "fim") {
+    const pq = this.pesquisaDoTutorial; this.o.onProgresso?.({ passo, pesquisa: pq ? { titulo: pq.titulo, palavras: pq.palavras, workId: pq.workId } : null });
+  }
   /** o tutorial: "Próximo" (pula o passo — dev), "Pular" (o Droid se despede no portal) e "Refazer" (chamado na Recepção) */
   guiaProximo() { if (!this.guia || this.nascendo) return; this.irProPasso(this.guia.passo + 1); }
-  guiaPular() { if (this.guia) { this.encerrarGuia(); this.droid?.h.sumir(); this.fecharConversa(); } this.sairDaInstancia(); }
+  guiaPular() { if (this.guia) { if (this.rot === ROTEIRO) this.salvarProgresso("fim"); this.encerrarGuia(); this.droid?.h.sumir(); this.fecharConversa(); } this.sairDaInstancia(); }
   guiaRefazer() { if (!this.cidade || this.menu) return; this.rot = ROTEIRO; this.balaoLiberado = false; this.guia = this.novoGuia(1); this.emitirGuia(); }
   private irProPasso(n: number) {
     if (this.conversa?.etapa === "feita") this.conversa = null;
@@ -1587,11 +1655,13 @@ export class CyberEngine {
       return;
     }
     if (n >= this.rot.length) {
-      // CONCLUÍDO (o Droid chegou na Sala do Saber): ele fica lá esperando; a câmera volta DEVAGAR pro personagem
-      if (this.guia && this.rot[this.guia.passo]?.cond.tipo === "saber") { this.droidNoSaber = true; this.cine.lenta = true; this.encerrarGuia(); this.o.onTutorialCompleto?.(); return; }
+      // CONCLUÍDO (a palavra final na frente da Sala do Saber): o Droid fica lá esperando; a câmera volta DEVAGAR
+      this.salvarProgresso("fim");
+      if (this.guia && this.rot[this.guia.passo]?.id === "palavra-final") { this.droidNoSaber = true; this.cine.lenta = true; this.encerrarGuia(); this.o.onTutorialCompleto?.(); return; }
       this.encerrarGuia(); this.droid?.h.sumir(); return;
     }
     this.guia = this.novoGuia(n); this.emitirGuia();
+    if (this.rot === ROTEIRO) this.salvarProgresso(this.rot[n]!.id);
     if (this.rot[n]!.id === "capela") this.preaquecerVozZaeon();   // o Droid vai levar a pessoa até ela: as falas fixas já vão sendo geradas
     this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.perto });
   }
@@ -1767,6 +1837,7 @@ export class CyberEngine {
     this.o.onPergunta?.(null); this.falaZ = null; this.calarZaeon(); this.holoZaeon?.pensar(false); this.holoZaeon?.brava();
     this.falas = this.falas.filter((f) => { if (f.ator === this.falaZaeon) { f.el.remove(); return false; } return true; });
     this.droid?.h.furia(true); this.expulsando = { t: 0, falou: false };
+    this.salvarProgresso("nascer");   // expulso: da próxima vez, do tubo de novo (sem retomar na capela)
     this.guia = null;   // acabou o tutorial (sem avisar o "fim": não conta como visto — da próxima vez nasce no tubo de novo)
     this.som.tocar("baque", this.eu.av.group.position, { dist: DISTANCIA.perto, volume: 1, taxa: 0.6 });
   }
@@ -1818,6 +1889,11 @@ export class CyberEngine {
     if (!g) { if (farol) farol.visible = false; this.talvezEntrega(); return; }
     const passo = this.rot[g.passo]!;
     if (passo.cond.tipo === "nascer") { if (!this.nascendo) this.irProPasso(g.passo + 1); return; }
+    // a ENTREGA no Relicário: o veredito só sai quando a Zaeon ACABA DE LER (a cena roda em components/cyber/Relicario)
+    if (passo.cond.tipo === "entrega" && this.entregaPendente) {
+      const e = this.entregaPendente; e.t += dt;
+      const f = faseDoRelicario(e.t); if (f === "veredito" || f === "fim") { this.entregaPendente = null; this.resultadoEntrega({ aceito: e.aceito, faltando: e.faltando }); }
+    }
     // o que a pessoa fez desde a instrução
     const dx = eu.pos.x - g.prev.x, dz = eu.pos.z - g.prev.z; g.prev = { x: eu.pos.x, z: eu.pos.z };
     if (g.ativo) {
@@ -1827,10 +1903,8 @@ export class CyberEngine {
       // a MISSÃO: o Droid abre o tablet (de pé; voando, espera pousar)
       if (passo.cond.tipo === "tablet" && !this.tabletQuer && this.aPeParaTablet()) this.abrirTablet();
       if (this.moto !== null) g.motoAndou += Math.hypot(this.motoEst.vx, this.motoEst.vz) * dt;
-      // a ENTREGA: o painel pra escolher a pesquisa abre uma vez (o veredito chega por `resultadoEntrega`)
-      if (passo.cond.tipo === "entrega" && !g.lembrete) { g.lembrete = "volte"; this.o.onEntrega?.(true); }
-      // a SALA DO SABER: o Droid voa até lá; chegando, conta o tempo da câmera mostrando a sala
-      if (passo.cond.tipo === "saber" && this.droid) { const sp = mundo(SALA_DO_SABER_LOCAL); if (Math.hypot(this.droid.pos.x - sp.x, this.droid.pos.z - sp.z) < 6) g.saberT = Math.max(0, g.saberT) + dt; }
+      // o PORTAL: o Droid abre um portal e leva a pessoa (com ele) até a frente da Sala do Saber
+      if (passo.cond.tipo === "portal" && !this.viagemNave && !g.portal) this.portalPraSaber();
       // o INVENTÁRIO do tutorial: abre na 1ª vez (a pesquisa em destaque) e conta o tempo aberto
       if (passo.cond.tipo === "inventario" && g.invT !== Infinity) { if (g.invT === 0) this.o.onInventario?.(this.pesquisaDoTutorial); g.invT += dt; }
       // o tablet GUARDADO no meio da missão: na espera da pesquisa, o Droid ensina a CONCORRÊNCIA (a pesquisa segue
@@ -1870,7 +1944,7 @@ export class CyberEngine {
       chegou: !!a && Math.hypot(eu.pos.x - a.x, eu.pos.z - a.z) <= a.r && !this.jet.noAr,
       conversaFeita: this.conversa?.etapa === "feita", tabletAberto: this.labAberto, pesquisaSalva: !!this.pesquisaDoTutorial, inventario: g.invT, droidNoSaber: g.saberT,
       entrega: (this.entregaVeredito === null ? null : this.entregaVeredito === "desistiu" ? "desistiu" : this.entregaVeredito.aceito ? "aceita" : "recusada") as CtxGuia["entrega"],
-      naMoto: this.moto !== null, motoAndou: g.motoAndou,
+      naMoto: this.moto !== null, motoAndou: g.motoAndou, portal: g.portal,
     };
   }
   /** o DROID: aparece num mini portal do lado da pessoa (quando o tutorial começa — e de novo depois de um teleporte);
@@ -2011,7 +2085,7 @@ export class CyberEngine {
     const comigo = this.companheiro && !guiando && !this.menu;   // o companheiro (habilidade do G)
     // a SALA DO SABER: no fim do tutorial ele voa pra lá — e depois fica lá, esperando (só pra quem acabou o tutorial)
     const sp = mundo(SALA_DO_SABER_LOCAL), ySaber = (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE + 5;
-    const indoSaber = passo?.cond.tipo === "saber", noSaber = this.droidNoSaber && !comigo && !this.guia && !this.menu && !this.expulsando;
+    const noSaber = this.droidNoSaber && !comigo && !this.guia && !this.menu && !this.expulsando;
     const quer = guiando || comigo || noSaber;
     // pra onde ele vai: do lado da pessoa — ou, num passo "vem comigo até…", ELE VAI: voa rumo ao alvo e, se a pessoa
     // ficar pra trás, para e espera por ela (virado pra ela)
@@ -2026,7 +2100,7 @@ export class CyberEngine {
     const alvo = this.expulsando ? { x: eu.pos.x + vx0 * 6, z: eu.pos.z + vz0 * 6 } : deLado ? { x: eu.pos.x + vx0 * 1.5 - vz0 * 4.2, z: eu.pos.z + vz0 * 1.5 + vx0 * 4.2 } : seguindo ? { x: eu.pos.x - vx0 * 0.6 - vz0 * 1.9, z: eu.pos.z - vz0 * 0.6 + vx0 * 1.9 } : { x: eu.pos.x + vx0 * 5.2 - vz0 * 1.2, z: eu.pos.z + vz0 * 5.2 + vx0 * 1.2 };
     if (quer && fase === "oculto") { if (noSaber) { d.pos.set(sp.x, 0, sp.z); d.alt = ySaber; } else { d.pos.set(alvo.x, 0, alvo.z); d.alt = altAlvo; } d.h.aparecer(); this.som.tocar(this.som.temSom("cyber-enter") ? "cyber-enter" : "rise", d.h.group.position, { dist: DISTANCIA.perto }); this.som.tocar("rise", d.h.group.position, { dist: DISTANCIA.perto }); }
     else if (!quer && (fase === "visivel" || fase === "entrando")) d.h.sumir();
-    else if (fase === "visivel" && (indoSaber || noSaber)) {
+    else if (fase === "visivel" && noSaber) {
       // VOA até a Sala do Saber (rápido, a câmera vai junto) e fica pairando lá
       const vx = sp.x - d.pos.x, vz = sp.z - d.pos.z, dd = Math.hypot(vx, vz);
       if (dd > 0.5) { const k = Math.min(dd, Math.min(70, 4 + dd * 0.8) * dt); d.pos.x += (vx / dd) * k; d.pos.z += (vz / dd) * k; }
@@ -2122,7 +2196,7 @@ export class CyberEngine {
   /** ENTRA na nave (perto da porta de trás, lá fora — a pé ou de mochila): aparece no corredor, olhando pra proa */
   /** a VIAGEM pelo PORTAL até dentro da nave (tecla M — só o dono): abre um portal aqui, a pessoa é sugada; abre outro
    *  dentro da nave e ela sai dele — o mesmo efeito do portal do Droid (components/cyber/PortalViagem) */
-  private viagemNave: { fase: "saindo" | "chegando"; t: number; trocou: boolean } | null = null;
+  private viagemNave: { fase: "saindo" | "chegando"; t: number; trocou: boolean; para: "nave" | "saber" } | null = null;
   private portais: [PortalViagemHandle, PortalViagemHandle] | null = null;
   portalPraNave() {
     if (!this.podeNave(this.o.eu.id)) { this.o.onAviso?.("Só o dono convoca a nave."); return; }
@@ -2133,8 +2207,28 @@ export class CyberEngine {
     if (!this.portais) { this.portais = [criarPortalViagem({ low: this.o.low }), criarPortalViagem({ low: this.o.low })]; for (const p of this.portais) this.cena.scene.add(p.group); }
     const rumo = Math.atan2(this.cam.position.x - this.eu.pos.x, this.cam.position.z - this.eu.pos.z);   // o portal de frente pra câmera
     this.portais[0].abrir("entra", new THREE.Vector3(this.eu.pos.x, this.eu.alt, this.eu.pos.z), rumo);
-    this.viagemNave = { fase: "saindo", t: 0, trocou: false }; this.alvo = null; this.alvoDepois = null; this.soltarTeclas();
+    this.viagemNave = { fase: "saindo", t: 0, trocou: false, para: "nave" }; this.alvo = null; this.alvoDepois = null; this.soltarTeclas();
     this.som.tocar(this.som.temSom("cyber-enter") ? "cyber-enter" : "rise", this.eu.av.group.position, { dist: DISTANCIA.eu });
+  }
+  /** o PORTAL do tutorial: o Droid leva a pessoa (e vai junto) até a FRENTE da Sala do Saber — o mesmo efeito do M */
+  private portalPraSaber() {
+    if (this.viagemNave || !this.cidade) return;
+    if (!this.portais) { this.portais = [criarPortalViagem({ low: this.o.low }), criarPortalViagem({ low: this.o.low })]; for (const p of this.portais) this.cena.scene.add(p.group); }
+    const rumo = Math.atan2(this.cam.position.x - this.eu.pos.x, this.cam.position.z - this.eu.pos.z);
+    this.portais[0].abrir("entra", new THREE.Vector3(this.eu.pos.x, this.eu.alt, this.eu.pos.z), rumo);
+    this.viagemNave = { fase: "saindo", t: 0, trocou: false, para: "saber" }; this.alvo = null; this.alvoDepois = null; this.soltarTeclas();
+    this.som.tocar(this.som.temSom("cyber-enter") ? "cyber-enter" : "rise", this.eu.av.group.position, { dist: DISTANCIA.eu });
+  }
+  /** chega na frente da Sala do Saber, de frente pro Relicário; o Droid aparece do lado */
+  private chegarNoSaber() {
+    const c = mundo(daSala(CIDADE.salas.biblioteca, FRENTE_DO_SABER_SALA.x, FRENTE_DO_SABER_SALA.z)), rl = relicarioMundo(), rumo = Math.atan2(rl.x - c.x, rl.z - c.z);
+    this.viagem = null; this.tunel = null; this.pilotando = false; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0;
+    this.jet.noAr = false; this.jetV = { x: 0, z: 0 }; this.sobreNave = false; this.ilhota = null; this.plat = null; this.bordo = null;
+    this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; this.portalArmado = false;
+    this.eu.pos.set(c.x, 0, c.z); this.eu.facing = rumo; this.camAz = rumo + Math.PI;
+    const y = (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + alturaNaCidade(c); this.eu.alt = y; this.camT.set(c.x, y + 1.2, c.z);
+    const d = this.droid; if (d) { d.pos.set(c.x - Math.cos(rumo) * 2.2 + Math.sin(rumo) * 1.5, 0, c.z + Math.sin(rumo) * 2.2 + Math.cos(rumo) * 1.5); d.alt = y + 2.3; }
+    if (this.guia) this.guia.portal = true;
   }
   private atualizarViagemNave(dt: number, t: number) {
     if (this.portais) for (const p of this.portais) p.atualizar(dt, t);
@@ -2143,8 +2237,8 @@ export class CyberEngine {
     if (v.fase === "saindo") {
       if (v.t >= 0.75) this.eu.av.group.visible = false;   // sugado pelo portal
       if (v.t >= 1.05) {
-        this.entrarNaNave();
-        if (!this.bordo) { this.eu.av.group.visible = true; this.viagemNave = null; return; }   // (a nave sumiu no meio do caminho)
+        if (v.para === "saber") this.chegarNoSaber(); else this.entrarNaNave();
+        if (v.para === "nave" && !this.bordo) { this.eu.av.group.visible = true; this.viagemNave = null; return; }   // (a nave sumiu no meio do caminho)
         const ilhaY = this.eu.alt, rumo = Math.atan2(this.cam.position.x - this.eu.pos.x, this.cam.position.z - this.eu.pos.z);
         this.portais![1].abrir("sai", new THREE.Vector3(this.eu.pos.x, ilhaY, this.eu.pos.z), rumo);
         this.camT.set(this.eu.pos.x, this.eu.alt + 1.2, this.eu.pos.z);   // a câmera vai junto (sem atravessar o mapa)
@@ -2776,6 +2870,7 @@ export class CyberEngine {
     if (this.jet.noAr || this.nascendo || this.tunel || this.expulsando) return null;
     const el = this.plat ? elevadorAqui(this.plat.id, this.plat.andar, this.eu.pos) : null;
     if (el && this.plat) { const pl = this.plat; return { id: `elevador-${pl.andar}`, rotulo: el.rotulo, fazer: () => { pl.andar = el.proximo; this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.eu }); } }; }
+    if (this.pertoDoRelicario()) return { id: "relicario", rotulo: this.relicario?.ocupado() ? "A Zaeon está lendo…" : "Entregar no Relicário", fazer: () => this.abrirRelicario() };
     const estudar = { id: "estudar", rotulo: "Estudar", fazer: () => this.o.onEntrarEstudo?.() };
     if ((this.perto || this.noTopo) && !this.guia) return estudar;   // (no tutorial as salas ficam fechadas até o fim)
     const m = this.motoAoAlcance();
@@ -2868,6 +2963,12 @@ export class CyberEngine {
       if (this.cidade.tvLounge && this.ray.intersectObject(this.cidade.tvLounge, false).length) {
         const tv = this.cidade.tvLounge.getWorldPosition(new THREE.Vector3());
         if (Math.hypot(this.eu.pos.x - tv.x, this.eu.pos.z - tv.z) < 14) { this.o.onAbrirRecado?.(); return; }
+      }
+      // o RELICÁRIO: perto = entregar; longe = anda até a frente dele
+      if (this.relicario && this.ray.intersectObjects(this.relicario.alvos, true).length) {
+        if (this.pertoDoRelicario()) { this.abrirRelicario(); return; }
+        const rl = relicarioLocal(), f = mundo({ x: rl.x + Math.sin(rl.rumo) * 5.2, z: rl.z + Math.cos(rl.rumo) * 5.2 });
+        this.alvo = new THREE.Vector2(f.x, f.z); this.alvoDepois = null; return;
       }
       const h = this.ray.intersectObjects(this.cidade.alvos, true)[0];
       if (h) { const q = resolverCidade({ x: h.point.x, z: h.point.z }); this.alvo = new THREE.Vector2(q.x, q.z); this.alvoDepois = null; }
@@ -2966,13 +3067,15 @@ export class CyberEngine {
       return planoConversa({ x: c.x, y: ilhaY + a.y - 4.5, z: c.z }, eu, { lado: 0.32, pitch: -0.04, recuo: 8 });
     }
     const p = this.rot[g.passo]!; if (!p.cena || (g.fala === 0 && p.falas.length > 0)) return null;
-    if (p.cena === "saber") {   // a câmera SEGUE o Droid voando até a Sala do Saber e, quando ele chega, mostra a sala
-      const d = this.droid; if (!d) return null;
-      const sp = mundo(SALA_DO_SABER_LOCAL), ySaber = ilhaY + ALTURA_LOUNGE + 5, c = CIDADE.centro;
-      if (Math.hypot(d.pos.x - sp.x, d.pos.z - sp.z) > 8) return { foco: { x: d.pos.x, y: d.alt + 0.5, z: d.pos.z }, az: Math.atan2(eu.x - d.pos.x, eu.z - d.pos.z) + 0.35, pitch: 0.16, dist: 13 };
-      return { foco: { x: sp.x, y: ySaber - 3, z: sp.z }, az: Math.atan2(c.x - sp.x, c.z - sp.z) + 0.3, pitch: 0.3, dist: 88 };
-    }
     if (!p.cenaInteira && g.fala >= p.falas.length) return null;   // a instrução: a câmera volta pra quem vai agir
+    if (p.cena === "capela") {   // do ALTO, sobre o coração da capela (o globo): "pouse ali"
+      const c = mundo(CENTRO_DA_CAPELA_LOCAL);
+      return { foco: { x: c.x, y: ilhaY + 3, z: c.z }, az: Math.atan2(eu.x - c.x, eu.z - c.z) + 0.2, pitch: 0.58, dist: 38 };
+    }
+    if (p.cena === "relicario") {   // o RELICÁRIO inteiro, com o holograma da Zaeon em cima, do lado de quem olha
+      const r = relicarioMundo();
+      return { foco: { x: r.x, y: ilhaY + ALTURA_LOUNGE + 5.6, z: r.z }, az: Math.atan2(eu.x - r.x, eu.z - r.z) + 0.3, pitch: 0.14, dist: 17 };
+    }
     if (p.cena === "droid" || p.cena === "droid-perto") {   // "perto" = o ZOOM da entrega
       const d = this.droid; if (!d || d.h.fase() !== "visivel") return null;
       return p.cena === "droid" ? planoConversa({ x: d.pos.x, y: d.alt + 0.5, z: d.pos.z }, eu, { lado: 0.6, pitch: 0.12, recuo: 4 })
@@ -3554,7 +3657,7 @@ export class CyberEngine {
       if (this.noCeu) pres.push({ x: this.eu.pos.x - c.x, z: this.eu.pos.z - c.z });
       for (const a of this.remotos.values()) if (a.ceu) pres.push({ x: a.pos.x - c.x, z: a.pos.z - c.z });
       this.cidade.presencas(pres);
-      this.cidade.atualizar(dt, t); this.livros?.atualizar(t);
+      this.cidade.atualizar(dt, t); this.livros?.atualizar(t); this.relicario?.atualizar(dt, t, this.cam.position);
       if (this.bercario) { const v = this.tubosVisiveis(); this.bercario.group.visible = v; if (v) this.bercario.atualizar(dt, t); }
     }
     if (this.praca && this.regiaoPerto(this.praca.group, "praca")) this.praca.atualizar(dt, t);
@@ -3792,7 +3895,7 @@ export class CyberEngine {
     this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.somLounge?.dispose(); this.musicaNave?.dispose(); this.livros?.dispose(); this.livros = null; if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose();
+    this.somLounge?.dispose(); this.musicaNave?.dispose(); this.livros?.dispose(); this.livros = null; this.relicario?.dispose(); this.relicario = null; if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose();
     this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }

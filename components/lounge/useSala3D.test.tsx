@@ -108,6 +108,18 @@ describe("useSala3D · multiplayer", () => {
     expect((globalThis as any).fetch).toHaveBeenCalledWith(`/api/lounge3d/${SALA}/pos`, expect.objectContaining({ method: "POST" }));
   });
 
+  it("Relicário: o evento válido da sala vira `eventoRelicario` (saneado); lixo é ignorado", async () => {
+    const h = await montar();
+    expect(h.result.current.eventoRelicario).toBeNull();
+    await act(async () => { fake.canal.emit("relicario", {}); });
+    expect(h.result.current.eventoRelicario).toBeNull();
+    const ev = { id: "ev1", userId: AMIGO, nome: "Amigo", cor: "#ff5fa8", titulo: "Minha pesquisa", tipo: "pesquisa", aceito: true, agora: 1000, extra: "fora" };
+    await act(async () => { fake.canal.emit("relicario", ev); });
+    expect(h.result.current.eventoRelicario).toEqual({ id: "ev1", userId: AMIGO, nome: "Amigo", cor: "#ff5fa8", titulo: "Minha pesquisa", tipo: "pesquisa", aceito: true, agora: 1000 });
+    await act(async () => { fake.canal.emit("relicario", { id: "ev2", tipo: "livro" }); });   // sem userId/agora: não entra, o anterior fica
+    expect(h.result.current.eventoRelicario?.id).toBe("ev1");
+  });
+
   it("4301 (client events desligado) → cai pro POST /pos", async () => {
     const h = await montar();
     vi.spyOn(console, "warn").mockImplementation(() => {});
