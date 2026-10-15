@@ -1396,3 +1396,43 @@ model CorridaTempo {
   @@index([pista, userId])
   @@map("corrida_tempos")
 }
+
+// ───── Octa Code — Pack Sinistro (docs/HANDOFF_OCTA_CODE_PACK.md) ─────
+// Segredo do cofre do Octa. `cifra` = AES-256-GCM com OCTA_VAULT_KEY; o valor em claro NUNCA é gravado.
+model OctaSecret {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  nome      String    @unique
+  descricao String?
+  escopo    String[]
+  oculto    Boolean   @default(true)
+  criadoEm  DateTime
+  expiraEm  DateTime?
+  versao    Int
+  cifra     String
+  @@map("octa_secrets")
+}
+
+// Auditoria de uso de segredo: quem pediu qual ação — SEM o valor.
+model OctaSecretAudit {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  em        DateTime
+  sessionId String
+  acao      String
+  nome      String
+  resultado String   // resolvido | negado | expirado | inexistente
+  @@index([nome, em])
+  @@map("octa_secret_audit")
+}
+
+// Uma execução da rotina anti-alucinação (§5) — o painel 🩺 lê as últimas por agente.
+model OctaEvalRun {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agente    String
+  em        DateTime @default(now())
+  status    String   // verde | amarelo | vermelho
+  taxaPass  Float
+  drift     Float?
+  relatorio Json
+  @@index([agente, em])
+  @@map("octa_eval_runs")
+}
