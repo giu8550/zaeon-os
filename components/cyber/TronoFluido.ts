@@ -4,15 +4,15 @@
  * FLUIDO CIANO vivo (veias de luz correndo — shader). Senta-se nele com a J (lib/cyber/descanso, lugar "trono").
  *
  * Montado no referencial do móvel (components/cyber/Salas): +z = a FRENTE (pra onde quem senta olha), y = 0 no tablado.
- * O ASSENTO fica a `ALTURA_TRONO` m acima de onde o pé pisa (o tablado tem 0,16 m). Os tentáculos da frente deixam um vão
+ * A ALMOFADA fica a `ALMOFADA_TRONO` m acima de onde o pé pisa (o tablado tem 0,16 m); o quadril do avatar, mais alto. Os tentáculos da frente deixam um vão
  * livre (±40°) pra pessoa chegar, virar e sentar sem atravessar nada.
  */
 import * as THREE from "three";
-import { ALTURA_TRONO } from "@/lib/cyber/descanso";
+import { ALMOFADA_TRONO } from "@/lib/cyber/descanso";
 
 const TABLADO = 0.16;
 /** o topo do assento no referencial do grupo (y) */
-export const ASSENTO_Y = ALTURA_TRONO - TABLADO;
+export const ASSENTO_Y = ALMOFADA_TRONO - TABLADO;
 
 /** os materiais do trono, compartilhados por todos (um shader de fluido só: o `uT` anima todos de uma vez) */
 export type MatsTrono = { metal: THREE.MeshStandardMaterial; fluido: THREE.ShaderMaterial; brilho: THREE.MeshBasicMaterial; halo: THREE.MeshBasicMaterial; haloPainel: THREE.MeshBasicMaterial };
