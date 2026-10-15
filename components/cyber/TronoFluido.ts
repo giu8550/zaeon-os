@@ -62,8 +62,9 @@ function pilar(pai: THREE.Object3D, mats: MatsTrono, x: number, z: number, y0: n
 export function montarTrono(p: THREE.Group, mats: MatsTrono, o: { low: boolean }) {
   const low = o.low, S = ASSENTO_Y, add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); p.add(m); return m; };
   // o PEDESTAL (o "barril" entalhado sob o assento) e o ASSENTO
-  add(new THREE.CylinderGeometry(0.42, 0.34, S - 0.1, low ? 10 : 18), mats.metal, 0, (S - 0.1) / 2, 0.02);
-  const assento = add(new THREE.CylinderGeometry(0.56, 0.5, 0.14, low ? 14 : 26), mats.metal, 0, S - 0.07, 0.02); assento.scale.z = 0.92;
+  // (estreitos na FRENTE: as canelas de quem senta descem logo à frente da almofada — antes o pedestal largo as engolia)
+  add(new THREE.CylinderGeometry(0.24, 0.2, S - 0.1, low ? 10 : 18), mats.metal, 0, (S - 0.1) / 2, -0.08);
+  const assento = add(new THREE.CylinderGeometry(0.52, 0.46, 0.14, low ? 14 : 26), mats.metal, 0, S - 0.07, -0.1); assento.scale.z = 0.8;
   // o ENCOSTO baixo em LEQUE: costelas finas em meia-volta atrás do assento
   const nCost = low ? 12 : 26;
   for (let i = 0; i < nCost; i++) {

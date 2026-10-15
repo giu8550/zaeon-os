@@ -32,7 +32,8 @@ const SALAS: Partial<Record<AmbienteEstudo, NomeSala>> = { biblioteca: "bibliote
 /** os ASSENTOS de uma sala (sofá: 1 spot por assento, com o par e a pose deitada; puff e pufe) */
 function assentos(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
   const out: Spot[] = [];
-  for (const l of lugaresDoLounge().filter((x) => x.id.startsWith(`${sala}-`))) {
+  // (os TRONOS do pátio ficam pras PESSOAS: a frota não enxerga quem já sentou e sentava por cima)
+  for (const l of lugaresDoLounge().filter((x) => x.id.startsWith(`${sala}-`) && x.tipo !== "trono")) {
     l.assentos.forEach((a, k) => out.push({
       id: `${l.id}#${k}`, ambiente: amb, tipo: l.tipo, x: a.x, z: a.z, y: ySala(a), rumo: l.rumo, zaeon: true,
       ...(l.tipo === "sofa" ? { par: `${l.id}#${1 - k}`, deita: { ...l.deita!, rumo: l.rumoDeitado } } : {}),

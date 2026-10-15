@@ -35,6 +35,8 @@ export type Lugar = {
   alturaAssento: number;
   /** onde os pés pousam, à frente (m) — sem isto, o padrão do avatar */
   pes?: number;
+  /** a pose do avatar sentado aqui: "trono" = à vontade (components/cyber/AvatarLuz) */
+  pose?: "trono";
 };
 
 /** alturas (m, acima de onde o pé pisa no lounge): o topo da almofada do sofá e do puff (components/cyber/Salas — os
@@ -76,7 +78,7 @@ export function lugaresDoLounge(): Lugar[] {
         frentes: ASSENTOS_SOFA.map((x) => em(m, x, m.prof / 2 + 0.6)),
       });
       else if (m.tipo === "puff") out.push({ id, tipo: "puff", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_PUFF, relaxa: false, assentos: [em(m, 0, 0)], deita: null, saida: em(m, 0, 1.1), frentes: [em(m, 0, 1.0)] });
-      else if (m.tipo === "trono") out.push({ id, tipo: "trono", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_TRONO, pes: PES_TRONO, relaxa: false, assentos: [em(m, 0, 0.06)], deita: null, saida: em(m, 0, FRENTE_TRONO + 0.1), frentes: [em(m, 0, FRENTE_TRONO)] });
+      else if (m.tipo === "trono") out.push({ id, tipo: "trono", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_TRONO, pes: PES_TRONO, pose: "trono", relaxa: false, assentos: [em(m, 0, 0.06)], deita: null, saida: em(m, 0, FRENTE_TRONO + 0.1), frentes: [em(m, 0, FRENTE_TRONO)] });
       else if (m.tipo === "pufe") out.push({ id, tipo: "pufe", rumo, rumoDeitado: rumo, alturaAssento: ALTURA_PUFE, relaxa: true, assentos: [em(m, 0, 0.18)], deita: null, saida: em(m, 0, 1.3), frentes: [em(m, 0, 1.2)] });   // o quadril um pouco à frente: as costas deitam NO encosto, não dentro dele
     });
   }
