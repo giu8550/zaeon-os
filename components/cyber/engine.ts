@@ -106,7 +106,7 @@ import { criarFrotaIA, type FrotaHandle } from "./FrotaIA";
 import { criarPisosEstudo } from "./EstacionamentosEstudo";
 import { AREAS, areaDe, type AreaId } from "@/lib/cyber/frota/areas";
 import { sanitizarConfig } from "@/lib/cyber/frota/config";
-import { colisoresDeCorpos } from "@/lib/cyber/colisaoAtores";
+import { atoresEmpurram, colisoresDeCorpos } from "@/lib/cyber/colisaoAtores";
 import { SENTAR, TABLET, codificarDescanso, lugarEm, decodificarDescanso, lugarPerto, poseNoLugar, proximoModo, type Lugar, type ModoDescanso } from "@/lib/cyber/descanso";
 import { URL_TERRA } from "./DistritoTerra";
 import { acabarVrm, carregarVrm, precarregarVrm, tingirVrm } from "./AvatarVrm";
@@ -1043,8 +1043,11 @@ export class CyberEngine {
     for (const p of this.o.remotos?.current.values() ?? []) { usuarios++; areas[areaDe(p, !!(p.jet || p.voo))].usuarios++; }
     return { bots: f?.online ?? 0, usuarios, areas };
   }
-  /** os CORPOS no meu nível (jogadores, personagens, IAs): o meu avatar não entra neles */
+  /** este quadro, os outros corpos podem empurrar o meu avatar? (só andando — lib/cyber/colisaoAtores atoresEmpurram) */
+  private euEmpurravel = true;
+  /** os CORPOS no meu nível (jogadores, personagens, IAs): o meu avatar não entra neles — mas, PARADO, ninguém me arrasta */
   private colisoresDeAtores() {
+    if (!this.euEmpurravel) return [];
     const corpos: { x: number; z: number; y: number }[] = [];
     for (const a of this.remotos.values()) if (a.av.group.visible) corpos.push({ x: a.pos.x, z: a.pos.z, y: a.alt });
     for (const p of this.personagens) if (p.h.group.visible) corpos.push({ x: p.h.pos.x, z: p.h.pos.z, y: p.h.alt });
@@ -2778,6 +2781,8 @@ export class CyberEngine {
     const onC = <K extends keyof HTMLElementEventMap>(t: K, f: (e: HTMLElementEventMap[K]) => void, opt?: AddEventListenerOptions) => { cv.addEventListener(t, f as EventListener, opt); this.cleanups.push(() => cv.removeEventListener(t, f as EventListener)); };
     on("keydown", (e) => {
       if (this.digitando() || (!this.o.teclasSempre && !this.sobContainer)) return; const k = e.key.toLowerCase();
+      // ESTUDANDO no tablet: o jogo não ouve o teclado (o foco pode estar na moldura, não no iframe) — só o T, que guarda
+      if (this.labAberto && k !== "t") return;
       if (k === "shift") { this.keys.shift = true; return; }
       if (k === " " || k === "spacebar") { if (this.pilotando || this.moto !== null) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.comandoJet(true); e.preventDefault(); } return; }
       if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }
@@ -3386,6 +3391,7 @@ export class CyberEngine {
       let andando = false;
       if (this.bordo) { const pn = this.poseNave(); if (pn) { const w = paraMundo(pn, this.bordo); eu.pos.x = w.x; eu.pos.z = w.z; } }   // a nave pode ter andado (o dono pilotando)
       if (this.tabletQuer || this.labAberto) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // estudando no tablet: o avatar fica onde está
+      this.euEmpurravel = atoresEmpurram({ andando: !!(ix || iz || this.alvo), tablet: this.tabletQuer || this.labAberto, descansando: !!this.descanso });
       { const d = this.descanso;   // DESCANSO: andou/pulou/subiu na moto → levanta; sentando/levantando, o corpo é da animação
         if (d) {
           const fr = d.lugar.frentes[d.assento]!;
