@@ -9,10 +9,14 @@
  *  - os LIVROS DOS ESTUDOS (lib/estudos/itens — evoluem com o blueprint do board de Meus Estudos);
  *  - as PESQUISAS (ResearchWork): livros-holograma com as páginas que a pessoa escreveu — sem base de estudos ainda não
  *    têm valor (o veredito do Droid no tutorial). `destaque` = a pesquisa recém-criada (vem escolhida e com o selo NOVO).
+ * O MODO DE ENTREGA (`encaixe.ativo`, o Relicário do Saber — lib/cyber/relicario): o cabeçalho vira a faixa dourada, os
+ * itens que CABEM (estudos e pesquisas) ganham o ▶ e as armas apagam; a pesquisa ainda local (sem id do servidor) não
+ * tem ▶ — "sincronizando…". O ▶ (ou o botão do inspetor) chama `onEntregar`; quem fala com o servidor é o chamador.
  */
 import { useEffect, useMemo, useState } from "react";
 import { COMBO, danoDoGolpe } from "@/lib/cyber/combate";
 import { ITENS, type IdItem, type Inventario } from "@/lib/cyber/inventario";
+import { encaixaNoRelicario, type ItemEncaixe } from "@/lib/cyber/relicario";
 import type { ItemEstudo, ItemPesquisa } from "@/lib/estudos/itens";
 import { VALOR_PESQUISA_SEM_BASE } from "@/lib/cyber/livroHolograma";
 import { paginasDe } from "@/lib/onboarding/tutorialLab";
@@ -23,6 +27,8 @@ const COR_RARIDADE: Record<string, string> = { comum: "#c9d4dc", rara: "#5fb8ff"
 const NOME_RARIDADE: Record<string, string> = { comum: "Comum", rara: "Rara", epica: "Épica", lendaria: "Lendária" };
 const COR_PESQUISA = "#7fe8ff";
 const MIN_ESPACOS = 20;
+/** o ouro do Relicário (o mesmo do selo NOVO e dos cantos ◆) */
+const OURO = "#ffc46b", OURO_TEXTO = "#1a1004", OURO_BORDA = "#fff1cf";
 
 /** o ícone de um LIVRO (aberto, na cor da raridade) */
 function IconeLivro({ cor, tam = 40 }: { cor: string; tam?: number }) {
@@ -68,7 +74,29 @@ const ABAS: { id: Aba; nome: string }[] = [{ id: "tudo", nome: "Tudo" }, { id: "
 /** a pesquisa do tutorial como item (antes do servidor listar, ou sem id): as páginas pelas palavras */
 const pesquisaLocal = (p: PesquisaSalva): ItemPesquisa => ({ id: p.workId ?? `local:${p.titulo}`, titulo: p.titulo, paginas: paginasDe(p.palavras), palavras: p.palavras, atualizadoEm: null });
 
-export default function InventarioPainel({ aberto, onFechar, ler, equipar, destaque }: { aberto: boolean; onFechar: () => void; ler: () => Inventario | null; equipar: (id: IdItem | null) => Inventario | null; destaque?: PesquisaSalva | null }) {
+/** o MODO DE ENTREGA: `enviando` = o id do item indo pro servidor agora (ou null); `erro` = o texto do servidor/rede pra mostrar */
+export type EncaixeInventario = { ativo: boolean; onEntregar: (it: ItemEncaixe) => void; enviando?: string | null; erro?: string | null };
+/** a entrada como item de encaixe (null = não cabe no Relicário: as armas) */
+const itemDeEncaixe = (e: Entrada): ItemEncaixe | null => (e.tipo !== "arma" && encaixaNoRelicario(e.tipo) ? { tipo: e.tipo, id: e.it.id, titulo: e.it.titulo } : null);
+/** a pesquisa que ainda não tem id do servidor (o tutorial, antes de sincronizar) — não dá pra entregar */
+const aindaLocal = (it: ItemEncaixe) => it.tipo === "pesquisa" && it.id.startsWith("local:");
+
+/** o botão dourado do INSPETOR no modo de entrega (desligado enquanto o item vai pro servidor ou ainda é local) */
+function BotaoEntregar({ it, encaixe }: { it: ItemEncaixe; encaixe: EncaixeInventario }) {
+  const enviando = encaixe.enviando === it.id, local = aindaLocal(it);
+  return (
+    <>
+      <button type="button" disabled={enviando || local} onClick={() => encaixe.onEntregar(it)}
+        className="mt-3 min-h-[40px] w-full rounded-full text-xs font-black uppercase tracking-widest transition-opacity disabled:cursor-not-allowed disabled:opacity-55"
+        style={{ background: `linear-gradient(180deg,${OURO_BORDA},${OURO})`, color: OURO_TEXTO, boxShadow: `0 0 22px -6px ${OURO}` }}>
+        {enviando ? "Enviando…" : local ? "Sincronizando…" : "Entregar no Relicário ▶"}
+      </button>
+      {encaixe.erro && <p role="alert" className="mt-1.5 text-[12px] leading-snug text-rose-300">{encaixe.erro}</p>}
+    </>
+  );
+}
+
+export default function InventarioPainel({ aberto, onFechar, ler, equipar, destaque, encaixe }: { aberto: boolean; onFechar: () => void; ler: () => Inventario | null; equipar: (id: IdItem | null) => Inventario | null; destaque?: PesquisaSalva | null; encaixe?: EncaixeInventario }) {
   const [inv, setInv] = useState<Inventario | null>(null);
   const [livros, setLivros] = useState<ItemEstudo[] | null>(null), [pesquisas, setPesquisas] = useState<ItemPesquisa[] | null>(null);
   const [aba, setAba] = useState<Aba>("tudo"), [sel, setSel] = useState<string | null>(null);
@@ -104,6 +132,7 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
   const paginasTotais = entradas.reduce((s, e) => s + (e.tipo === "pesquisa" ? e.it.paginas : 0), 0);
   const armaEquipada = inv.equipado ? ITENS[inv.equipado] : null;
   const vagas = Math.max(MIN_ESPACOS, Math.ceil(visiveis.length / 5) * 5);
+  const entrega = encaixe?.ativo ? encaixe : null;
 
   return (
     <div role="dialog" aria-label="Inventário" onPointerDown={(e) => e.stopPropagation()}
@@ -111,11 +140,18 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
       style={{ borderColor: "#3b6fb066", background: "linear-gradient(180deg,rgba(9,14,32,.97),rgba(4,6,16,.98))", boxShadow: "0 0 0 1px #000 inset, 0 0 0 5px rgba(127,232,255,.05) inset, 0 30px 90px -20px rgba(0,0,0,.9), 0 0 60px -20px rgba(127,232,255,.45)" }}>
       {["left-2 top-2", "right-2 top-2", "left-2 bottom-2", "right-2 bottom-2"].map((k) => <span key={k} aria-hidden className={`pointer-events-none absolute ${k} text-[10px] text-[#ffc46b]`}>◆</span>)}
       {/* o título e as abas */}
-      <div className="flex items-center gap-4 border-b border-white/10 px-5 py-3" style={{ background: "linear-gradient(90deg,rgba(127,232,255,.08),transparent 40%,rgba(185,140,255,.08))" }}>
-        <div>
-          <h2 className="text-[15px] font-black uppercase tracking-[0.32em] text-white" style={{ textShadow: "0 0 14px rgba(127,232,255,.6)" }}>Inventário</h2>
-          <p className="text-[10.5px] uppercase tracking-[0.2em] text-sky-200/50">A mochila do viajante</p>
-        </div>
+      <div className="flex items-center gap-4 border-b border-white/10 px-5 py-3" style={{ background: entrega ? `linear-gradient(90deg,${OURO}24,transparent 55%,${OURO}10)` : "linear-gradient(90deg,rgba(127,232,255,.08),transparent 40%,rgba(185,140,255,.08))" }}>
+        {entrega ? (
+          <div className="min-w-0 rounded-md border px-3 py-1.5" style={{ borderColor: `${OURO}80`, background: `${OURO}14`, boxShadow: `0 0 18px -8px ${OURO}` }}>
+            <h2 className="truncate text-[13px] font-black tracking-[0.12em]" style={{ color: OURO, textShadow: `0 0 14px ${OURO}99` }}>◆ MODO DE ENTREGA · Escolha o que vai pro Relicário do Saber</h2>
+            <p className="text-[10.5px] text-[#ffe2a8]/70">Só estudos e pesquisas cabem nele. A Zaeon lê — e a sala assiste.</p>
+          </div>
+        ) : (
+          <div>
+            <h2 className="text-[15px] font-black uppercase tracking-[0.32em] text-white" style={{ textShadow: "0 0 14px rgba(127,232,255,.6)" }}>Inventário</h2>
+            <p className="text-[10.5px] uppercase tracking-[0.2em] text-sky-200/50">A mochila do viajante</p>
+          </div>
+        )}
         <div role="tablist" aria-label="Categorias" className="ml-2 flex flex-wrap gap-1.5">
           {ABAS.map((a) => {
             const n = a.id === "tudo" ? entradas.length : entradas.filter((e) => e.tipo === a.id).length;
@@ -158,16 +194,29 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
               if (!e) return <div key={`v${i}`} aria-hidden className="aspect-square rounded-lg border border-white/[0.06] bg-[repeating-linear-gradient(45deg,rgba(255,255,255,.015)_0_6px,transparent_6px_12px)]" />;
               const on = atual?.key === e.key;
               const nome = e.tipo === "arma" ? ITENS[e.id].nome : e.it.titulo;
+              // no modo de entrega: o ▶ nos que cabem (irmão do tile — botão dentro de botão não vale), as armas apagadas
+              const cabe = entrega ? itemDeEncaixe(e) : null, local = !!cabe && aindaLocal(cabe), apagado = !!entrega && e.tipo === "arma";
               return (
-                <button key={e.key} type="button" onClick={() => setSel(e.key)} aria-pressed={on} aria-label={nome}
-                  className={`relative grid aspect-square place-items-center rounded-lg border-2 transition-transform ${on ? "scale-[1.04]" : "hover:scale-[1.03]"}`}
-                  style={{ borderColor: `${e.cor}${on ? "ee" : "55"}`, background: `radial-gradient(circle at 50% 40%, ${e.cor}22, rgba(0,0,0,.35) 70%)`, boxShadow: on ? `0 0 18px -2px ${e.cor}` : undefined }}>
-                  {e.tipo === "arma" ? <IconeEspada tam={42} /> : e.tipo === "livro" ? <IconeLivro cor={e.cor} tam={42} /> : <IconePesquisa tam={42} />}
-                  {e.tipo === "arma" && inv.equipado === e.id && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_6px_#35ffd0]" title="Equipado" />}
-                  {e.tipo === "pesquisa" && <span className="absolute bottom-0.5 right-1 text-[9.5px] font-black tabular-nums text-sky-100/80">{e.it.paginas}p</span>}
-                  {e.tipo === "livro" && <span className="absolute bottom-0.5 right-1 text-[9px] font-black text-white/70">{e.it.nivel}</span>}
-                  {e.tipo === "pesquisa" && e.nova && <span className="absolute -left-1 -top-1.5 rounded-sm bg-[#ffc46b] px-1 text-[8.5px] font-black uppercase tracking-wider text-[#1a1004] motion-safe:animate-pulse">Novo</span>}
-                </button>
+                <div key={e.key} className="relative">
+                  <button type="button" onClick={() => setSel(e.key)} aria-pressed={on} aria-label={nome}
+                    className={`relative grid aspect-square w-full place-items-center rounded-lg border-2 transition-transform ${on ? "scale-[1.04]" : "hover:scale-[1.03]"} ${apagado ? "pointer-events-none opacity-40" : ""}`}
+                    style={{ borderColor: `${e.cor}${on ? "ee" : "55"}`, background: `radial-gradient(circle at 50% 40%, ${e.cor}22, rgba(0,0,0,.35) 70%)`, boxShadow: on ? `0 0 18px -2px ${e.cor}` : undefined }}>
+                    {e.tipo === "arma" ? <IconeEspada tam={42} /> : e.tipo === "livro" ? <IconeLivro cor={e.cor} tam={42} /> : <IconePesquisa tam={42} />}
+                    {e.tipo === "arma" && inv.equipado === e.id && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_6px_#35ffd0]" title="Equipado" />}
+                    {e.tipo === "pesquisa" && <span className="absolute bottom-0.5 right-1 text-[9.5px] font-black tabular-nums text-sky-100/80">{e.it.paginas}p</span>}
+                    {e.tipo === "livro" && <span className="absolute bottom-0.5 right-1 text-[9px] font-black text-white/70">{e.it.nivel}</span>}
+                    {e.tipo === "pesquisa" && e.nova && <span className="absolute -left-1 -top-1.5 rounded-sm bg-[#ffc46b] px-1 text-[8.5px] font-black uppercase tracking-wider text-[#1a1004] motion-safe:animate-pulse">Novo</span>}
+                    {local && <span className="absolute bottom-0.5 left-1 max-w-[70%] truncate text-[8px] font-bold tracking-wide" style={{ color: `${OURO}d9` }}>sincronizando…</span>}
+                  </button>
+                  {cabe && !local && (
+                    <button type="button" aria-label={`Entregar ${cabe.titulo}`} title="Entregar no Relicário"
+                      onClick={(ev) => { ev.stopPropagation(); entrega!.onEntregar(cabe); }} disabled={entrega!.enviando === cabe.id}
+                      className="absolute -right-1.5 -top-1.5 z-10 grid h-7 w-7 place-items-center rounded-full border text-[10px] font-black leading-none transition-transform hover:scale-110 disabled:opacity-50 motion-safe:animate-pulse"
+                      style={{ background: OURO, color: OURO_TEXTO, borderColor: OURO_BORDA, boxShadow: `0 0 10px 2px ${OURO}8c, 0 0 22px -2px ${OURO}` }}>
+                      <span className="translate-x-[1px]">▶</span>
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -188,6 +237,7 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
                 <div className="rounded-lg bg-black/30 p-2"><dt className="text-white/45">Palavras</dt><dd className="text-sm font-black tabular-nums">{atual.it.palavras}</dd></div>
               </dl>
               <p className="mt-2 rounded-lg border border-amber-300/30 bg-amber-300/[0.07] px-2.5 py-2 text-[11.5px] leading-snug text-amber-100/90">⚠ {VALOR_PESQUISA_SEM_BASE}. Junte estudos de base pra ela ganhar valor.</p>
+              {entrega && <BotaoEntregar it={{ tipo: "pesquisa", id: atual.it.id, titulo: atual.it.titulo }} encaixe={entrega} />}
             </>
           ) : atual.tipo === "livro" ? (
             <>
@@ -200,6 +250,7 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
                 <div className="rounded-lg bg-black/30 p-2"><dt className="text-white/45">Componentes</dt><dd className="text-sm font-black">{atual.it.componentes}</dd></div>
                 <div className="rounded-lg bg-black/30 p-2"><dt className="text-white/45">Fontes</dt><dd className="text-sm font-black">{atual.it.fontes}</dd></div>
               </dl>
+              {entrega && <BotaoEntregar it={{ tipo: "livro", id: atual.it.id, titulo: atual.it.titulo }} encaixe={entrega} />}
               <a href={`/research-lab?tab=sala-de-estudos&board=${atual.it.boardId}`} className="mt-3 flex min-h-[40px] w-full items-center justify-center rounded-full bg-gradient-to-b from-sky-200 to-sky-400 text-xs font-black uppercase tracking-widest text-slate-950">Abrir o estudo no board</a>
             </>
           ) : (() => {
@@ -219,6 +270,8 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
                   className={`mt-3 min-h-[40px] w-full rounded-full text-xs font-black uppercase tracking-widest ${equipado ? "border border-white/20 text-white/80" : "bg-gradient-to-b from-emerald-200 to-emerald-400 text-slate-950"}`}>
                   {equipado ? "Desequipar" : "Equipar"}
                 </button>
+                {entrega && <p className="mt-2 text-center text-[11.5px] text-white/40">Armas não cabem no Relicário.</p>}
+                {entrega?.erro && <p role="alert" className="mt-1.5 text-center text-[12px] leading-snug text-rose-300">{entrega.erro}</p>}
               </>
             );
           })()}

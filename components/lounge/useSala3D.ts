@@ -16,8 +16,9 @@ import { classificarErroPusher, ehFalhaDeConexao, type EstadoRealtime, type Moti
 import { POSE_HZ_COLYSEUS, transporteRealtime } from "@/lib/lounge3d/realtime";
 import { conectarColyseus, type CanalVoz, type ConexaoColyseus } from "./salaColyseus";
 import { sanitizarSom, type AcaoSom } from "@/lib/lounge3d/musica";
-import { EV_RITUAL, CAMPO_DO_CANAL, canalDe, EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, juntarChat, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG, type CanalSom } from "@/lib/lounge3d/tipos";
+import { EV_RITUAL, EV_RELICARIO, CAMPO_DO_CANAL, canalDe, EV_MUSICA, EV_CHAT, EV_CONTEUDO, EV_POS, EV_POS_CLIENTE, EV_RECADO, POS_HZ, POS_HZ_FALLBACK, canalSala, juntarChat, type ConteudoSala, type MensagemChat, type OpsSala, type Presenca, type RecadoQG, type CanalSom } from "@/lib/lounge3d/tipos";
 import { ritualDesligado, sanitizarRitual } from "@/lib/cyber/ritual";
+import { sanitizarEventoRelicario, type EventoRelicario } from "@/lib/cyber/relicario";
 
 export type Membro = { id: string; name: string; image: string | null; color: string; fundador?: boolean; /** o corpo próprio (servidor) */ corpo?: string; /** pilota a nave-QG (servidor) */ nave?: boolean; /** (só `eu`) nunca entrou no cyberespaço: nasce num tubo de ensaio */ novo?: boolean; /** (só `eu`) as MOTOS liberadas (entrega ao Droid + tutorial delas; o dono sempre) */ motos?: boolean; /** (Colyseus) já mandou a 1ª pose — o novato no tutorial não: nem aparece nem entra na voz */ pronto?: boolean };
 export type Sala = { id: string; title: string; ownerId: string; isOwner: boolean; members: string[]; token: string | null; conteudo: ConteudoSala };
@@ -141,6 +142,8 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
       ch.bind(EV_MUSICA, (d: { som: unknown; agora?: number; canal?: unknown }) => aplicarMusicaRef.current(d));
       // o RITUAL do dono (a tempestade no templo e os anunciadores): o relógio do servidor vem junto (a formação é sincronizada)
       ch.bind(EV_RITUAL, (d: { ritual: unknown; agora?: number }) => aplicarRitualRef.current(d));
+      // a entrega no Relicário do Saber: a mesma cena pra todo mundo da sala (quem, o quê, o veredito e o instante)
+      ch.bind(EV_RELICARIO, (d: unknown) => aplicarRelicarioRef.current(d));
       ch.bind(EV_CONTEUDO, (d: { fromUserId: string; conteudo: ConteudoSala; title?: string }) => {
         if (d.fromUserId === euId) return; // o autor já aplicou localmente
         setSala((s) => (s ? { ...s, conteudo: d.conteudo, title: d.title ?? s.title } : s));
@@ -264,6 +267,11 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     aplicarRitual(d as { ritual: unknown; agora?: number }); return { ok: true };
   }, [salaId, aplicarRitual]);
 
+  /** a ENTREGA no Relicário (evento da sala): só o evento válido entra; o engine decide se é meu ou de outro e se ainda está vivo */
+  const [eventoRelicario, setEventoRelicario] = useState<EventoRelicario | null>(null);
+  const aplicarRelicario = useCallback((raw: unknown) => { const ev = sanitizarEventoRelicario(raw); if (ev) setEventoRelicario(ev); }, []);
+  const aplicarRelicarioRef = useRef(aplicarRelicario); aplicarRelicarioRef.current = aplicarRelicario;
+
   /** o DONO estacionou a nave-QG: guarda onde ela ficou (todos a veem ali, mesmo com ele offline) */
   const salvarNave = useCallback(async (pose: { x: number; y: number; z: number; yaw: number }) => {
     if (!salaId) return;
@@ -282,5 +290,5 @@ export function useSala3D(salaId: string | null, opts: OpcoesSala3D = {}) {
     return { ok: true };
   }, [salaId]);
 
-  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, canalVoz, recadoQG: sala?.conteudo.recadoQG ?? null, somLounge: sala?.conteudo.somLounge ?? null, somNave: sala?.conteudo.somNave ?? null, offsetMusica, musica, musicaNave, ritual: sala?.conteudo.ritual ?? null, definirRitual, naveQG: sala?.conteudo.naveQG ?? null, salvarNave, recarregar: carregar };
+  return { sala, eu, membros, online, chat, estado, realtime, motivoRealtime, remotos, enviarPos, enviarChat, patch, enviarRecado, canalVoz, recadoQG: sala?.conteudo.recadoQG ?? null, somLounge: sala?.conteudo.somLounge ?? null, somNave: sala?.conteudo.somNave ?? null, offsetMusica, musica, musicaNave, ritual: sala?.conteudo.ritual ?? null, definirRitual, naveQG: sala?.conteudo.naveQG ?? null, salvarNave, eventoRelicario, recarregar: carregar };
 }

@@ -16,7 +16,7 @@ import { Activity, Gauge, Crown, Mic, Trash2, Loader2, Ticket, GraduationCap } f
 import VoicePicker from "@/components/settings/VoicePicker";
 import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 import { isSuperAdmin } from "@/lib/auth/roles";
-import { PREF_TUTORIAL, tutorialLigado } from "@/lib/cyber/onboarding";
+import { CHAVE_PROGRESSO, PREF_TUTORIAL, tutorialLigado } from "@/lib/cyber/onboarding";
 import { PREF_GRAFICOS, PREF_MOSTRAR_FPS, lerPreferencia, type PreferenciaGraficos } from "@/lib/cyber/dispositivo";
 
 const item = "group relative flex items-center gap-3 w-full min-h-[48px] px-3 rounded-2xl text-left text-sm font-medium text-slate-800 dark:text-white border border-slate-200/80 dark:border-white/[0.06] bg-white/50 dark:bg-white/[0.03] hover:bg-white/80 dark:hover:bg-white/[0.08] hover:border-cyan-400/50 dark:hover:border-cyan-400/30 transition-colors";
@@ -52,9 +52,12 @@ export default function ConfigMenu() {
   }, [aberto]);
 
   const ir = (href: string) => { setAberto(false); router.push(href); };
+  // MODO TUTORIAL: ligar ou desligar sempre APAGA o progresso salvo (lib/cyber/onboarding) — desligar e ligar de novo
+  // = recomeçar do tubo (pedido do dono)
   const mudarTutorial = () => {
     const novo = !tutorial; setTutorial(novo);
     try { if (novo) localStorage.setItem(PREF_TUTORIAL, "1"); else localStorage.removeItem(PREF_TUTORIAL); } catch { /* sem storage */ }
+    try { localStorage.removeItem(CHAVE_PROGRESSO); } catch { /* sem storage */ }
   };
 
   // GRÁFICOS do cyberespaço (vale ao abrir o cyberespaço de novo): automático = pela placa de vídeo
