@@ -15,6 +15,17 @@ export function colisoresDeCorpos(outros: Iterable<P2 & { y: number }>, meuY: nu
   return out;
 }
 
+/**
+ * Os OUTROS corpos empurram o MEU avatar? Só quando sou EU que estou andando (tecla, joystick, clique-pra-ir): aí eu não
+ * atravesso ninguém. PARADO — e sempre estudando no tablet ou descansando — eu sou obstáculo FIXO e quem anda em roteiro
+ * desvia (desviar). Bug de out/2026: parado no tablet, uma IA da frota cujo roteiro passava por mim me empurrava a cada
+ * quadro; o ponto de contato andava junto com ela e o meu avatar saía "andando sozinho", colado nela ("pareado") — e
+ * podia ser empurrado pra fora da ilha (cair) ou pra boca de uma escada de energia (viajar sozinho).
+ */
+export function atoresEmpurram(eu: { andando: boolean; tablet: boolean; descansando: boolean }): boolean {
+  return eu.andando && !eu.tablet && !eu.descansando;
+}
+
 /** quanto um corpo em `p` precisa ser empurrado pra sair de cima dos `obstaculos` (soma dos empurrões; 0 se livre) */
 export function empurrao(p: P2, obstaculos: readonly P2[], minimo = ENTRE_CORPOS): P2 {
   let x = 0, z = 0;
