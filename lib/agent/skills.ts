@@ -67,13 +67,29 @@ export function parseFrontmatter(md: string): ParsedSkill | null {
     if (!kv) return null; // linha inválida → YAML quebrado
     const key = kv[1];
     const val = kv[2].trim();
+    if (/^[>|][+-]?$/.test(val)) {
+      // escalar em bloco (`>` dobrado / `|` literal): as linhas indentadas seguintes
+      const parts: string[] = [];
+      let j = i + 1;
+      while (j < lines.length && (/^\s+\S/.test(lines[j]) || !lines[j].trim())) { parts.push(lines[j].trim()); j++; }
+      while (parts.length && !parts[parts.length - 1]) parts.pop();
+      fm[key] = val.startsWith(">") ? parts.join(" ").replace(/\s+/g, " ").trim() : parts.join("\n");
+      i = j;
+      continue;
+    }
     if (val === "") {
-      // pode ser uma lista em bloco (- item)
+      // pode ser uma lista em bloco (- item) ou um mapa aninhado de 1 nível (  chave: valor)
       const list: string[] = [];
       let j = i + 1;
       while (j < lines.length && /^\s*-\s+/.test(lines[j])) {
         list.push(lines[j].replace(/^\s*-\s+/, "").trim().replace(/^["']|["']$/g, ""));
         j++;
+      }
+      if (!list.length) {
+        const map: Record<string, any> = {};
+        let sub: RegExpExecArray | null;
+        while (j < lines.length && (sub = /^\s+([A-Za-z0-9_.-]+):\s*(.*)$/.exec(lines[j]))) { map[sub[1]] = parseScalar(sub[2].trim()); j++; }
+        if (Object.keys(map).length) { fm[key] = map; i = j; continue; }
       }
       fm[key] = list.length ? list : "";
       i = j;
