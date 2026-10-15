@@ -16,6 +16,9 @@ import { registrarUso } from "@/lib/canal/usage";
 import { rosterComMentores, mergeProfiles, type AgentView } from "@/lib/agents/roster";
 import { EV_DIGITANDO, EV_MENSAGEM, publicarPusher, type MensagemWire, type Publicar } from "@/lib/canal/realtime";
 import { limparSaidaAgente } from "@/lib/canal/saida";
+import { estadoDeFase, type EstadoAgente } from "@/lib/canal/estadoAgente";
+import { proximoDaCadeia, podePassar } from "@/lib/canal/encadear";
+import { agentesDasSalas } from "@/lib/canal/agentesSalas";
 
 export const N_CONTEXTO = 30;
 
@@ -28,6 +31,12 @@ export type TurnoInput = {
   mensagemId?: string | null;
   /** PR-A3: quem pediu. "humano" (default) NUNCA é barrado pelo teto; "autonomo" (heartbeat/programa, fatias 6–8) é. */
   origem?: "humano" | "autonomo";
+  /** #396 (B): posição na cadeia de agentes (0 = chamado por humano) — lib/canal/encadear. */
+  cadeia?: number;
+  /** #396 (B): o agente que passou a bola pra este. */
+  chamadoPor?: string | null;
+  /** #396 (B): quem já falou nesta cadeia (não chama de volta). */
+  jaNaCadeia?: string[];
 };
 
 export type MsgRow = {
@@ -53,6 +62,8 @@ export type GerarArgs = {
   history: { role: "user" | "assistant"; text: string }[];
   canal: CanalRow;
   userId: string;
+  /** a cada fase do harness (route, plan, gather, …): vira o estado mostrado na tela ("pesquisando"). */
+  onFase?: (fase: string) => void;
 };
 export type Gerar = (args: GerarArgs) => Promise<string>;
 
@@ -60,10 +71,12 @@ export type TurnoDeps = {
   prisma: TurnoPrisma;
   gerar?: Gerar;          // default = harness (import tardio)
   publicar?: Publicar;    // default = Pusher
+  /** #396 (B): dispara o turno do próximo agente da cadeia (a fila injeta; sem isto, não encadeia). */
+  encadear?: (job: TurnoInput & { mensagemId: string }) => Promise<unknown> | unknown;
 };
 
 export type TurnoResult =
-  | { ok: true; mensagem: MensagemWire }
+  | { ok: true; mensagem: MensagemWire; encadeado?: string | null }
   | { ok: false; motivo: "canal" | "gate" | "agente" | "vazio" | "erro" | "teto"; erro?: string };
 
 // ───────────────────────────── helpers PUROS (exportados p/ teste) ─────────────────────────────
@@ -90,20 +103,32 @@ export function montarObjetivo(msgs: MsgRow[], agentKey: string, mensagemId: str
 }
 
 /** Bloco de contexto do canal (vai no systemContext do harness). */
-export function blocoCanal(canal: CanalRow, agente: AgentView, colegas: AgentView[], humanos: string[]): string {
+export function blocoCanal(
+  canal: CanalRow, agente: AgentView, colegas: AgentView[], humanos: string[],
+  /** #396 (B): quem passou a bola e se este turno ainda pode passar adiante. */
+  opts: { chamadoPor?: Pick<AgentView, "agentKey" | "nome"> | null; podePassar?: boolean } = {},
+): string {
   const outros = colegas.filter((c) => c.agentKey !== agente.agentKey).map((c) => `@${c.agentKey} (${c.nome})`);
+  const passa = opts.podePassar !== false;
   return [
     "=== CANAL DE COWORKING ===",
     `Canal: "${canal.titulo}". Você é ${agente.nome} e foi convocado(a) por @${agente.agentKey}.`,
     humanos.length ? `Pessoas no canal: ${humanos.join(", ")}.` : "",
-    outros.length ? `Outros agentes no canal: ${outros.join(", ")}. Passe a bola com @chave quando for da área deles.` : "",
+    outros.length ? `Outros agentes no canal: ${outros.join(", ")}.` : "",
+    // nicho: cada agente responde a parte da área dele; o resto ele passa (o colega responde sozinho em seguida)
+    passa
+      ? "Fique no SEU nicho: responda só a parte da sua área. Se o pedido (ou parte dele) for da área de um colega, diga isso em UMA linha e marque UM colega com @chave — ele responde em seguida, sem a pessoa precisar chamar."
+      : "Não chame outros agentes agora: resolva com o que é da sua área e diga o que fica faltando.",
+    opts.chamadoPor
+      ? `Você foi chamado(a) por @${opts.chamadoPor.agentKey} (${opts.chamadoPor.nome}) para a parte da sua área: responda essa parte e feche com 1 a 3 próximos passos curtos.`
+      : "",
     "Formato: conversa de canal — responda em 1ª pessoa, como " + agente.nome + ", direto ao ponto, em poucos parágrafos curtos (sem cabeçalhos). Fale só do que te pediram; não repita a pergunta; não se apresente.",
   ].filter(Boolean).join("\n");
 }
 
 // ───────────────────────────── gerar (default = harness) ─────────────────────────────
 
-const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userId }) => {
+const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userId, onFase }) => {
   const [{ buildHarnessDeps, renderStructuredAnswer }, { runTrajectory }, { gatewayLigado }] = await Promise.all([
     import("@/lib/agent/aura-harness"),
     import("@/lib/agent/trajectory"),
@@ -141,6 +166,8 @@ const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userI
   // leva agentKey/surface/scopeId e cada fase (plan/reason/draft) grava sua linha.
   const deps = buildHarnessDeps(hctx, {
     systemContext, history, transformarSystem,
+    // o harness já emite cada fase em step.detail; aqui só repassamos pro estado visível no canal
+    onStep: (s) => onFase?.(String(s?.detail ?? "")),
     rota: gatewayLigado() ? "gateway" : "vertex",
     ledger: { agentKey: agente.agentKey, mentorSlug: agente.tipo === "mentor" ? agente.agentKey : null, surface: "canal", scopeId: canal.id, userId: userId ?? null },
   });
@@ -195,12 +222,27 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
   if (!objective) return { ok: false, motivo: "vazio" };
   const history = montarHistorico(msgs, agente.agentKey, nomes);
   const colegas = roster.filter((a) => canal.agentes.includes(a.agentKey));
-  const agenteComCanal = Object.assign(Object.create(null), agente, { __blocoCanal: blocoCanal(canal, agente, colegas, [...nomes].filter(([k]) => humanoIds.includes(k)).map(([, v]) => v)) }) as AgentView;
+  // #396 (B): quem pode receber a bola — os agentes do canal + as personas da plataforma (ativos e que conversam)
+  const ativos = roster.filter((a) => a.ativo && a.conversacional);
+  const permitidos = [...new Set([...canal.agentes, ...agentesDasSalas(ativos)])].filter((k) => ativos.some((a) => a.agentKey === k));
+  const cadeia = input.cadeia ?? 0;
+  const chamadoPor = input.chamadoPor ? roster.find((a) => a.agentKey === input.chamadoPor) ?? null : null;
+  const bloco = blocoCanal(canal, agente, colegas, [...nomes].filter(([k]) => humanoIds.includes(k)).map(([, v]) => v), { chamadoPor, podePassar: podePassar(cadeia) });
+  const agenteComCanal = Object.assign(Object.create(null), agente, { __blocoCanal: bloco }) as AgentView;
 
   await publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: "digitando" });
+  // Estado em palavras: só publica quando MUDA (o harness emite várias vezes a mesma fase).
+  let atual: EstadoAgente = "digitando";
+  let fim: EstadoAgente = "ocioso";
+  const onFase = (fase: string) => {
+    const e = estadoDeFase(fase);
+    if (e === atual) return;
+    atual = e;
+    void Promise.resolve(publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: e })).catch(() => undefined);
+  };
   try {
     // G6 (Fatia 7): nunca persistir imagem remota/HTML vindo do modelo (texto limpo sai idêntico).
-    const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId })).trim());
+    const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId, onFase })).trim());
     if (!texto) throw new Error("resposta vazia");
     const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto, mencoes: [] } });
     const wire: MensagemWire = {
@@ -209,11 +251,27 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     };
     await publicar(canal.id, EV_MENSAGEM, wire);
     void registrarUso(prisma, agente.agentKey, input.userId);
-    return { ok: true, mensagem: wire };
+    // #396 (B): a resposta marcou um colega → ele responde sozinho em seguida (limite e regras em lib/canal/encadear).
+    // Roda como "autonomo" pro teto de uso valer; um erro aqui nunca derruba a resposta que já saiu.
+    const proximo = deps.encadear
+      ? proximoDaCadeia({ texto: row.texto, aliases, permitidos, eu: agente.agentKey, cadeia, jaNaCadeia: input.jaNaCadeia })
+      : null;
+    if (proximo && deps.encadear) {
+      try {
+        await deps.encadear({
+          canalId: canal.id, agentKey: proximo, userId: input.userId, mensagemId: row.id, origem: "autonomo",
+          cadeia: cadeia + 1, chamadoPor: agente.agentKey, jaNaCadeia: [...(input.jaNaCadeia ?? []), agente.agentKey],
+        });
+      } catch (e) {
+        console.warn("[canal] encadear falhou:", (e as Error)?.message);
+      }
+    }
+    return { ok: true, mensagem: wire, encadeado: proximo };
   } catch (e) {
     const erro = String((e as Error)?.message ?? e);
     // C6 (lei 5): budget da virtual key estourou → chave própria do catálogo, nunca "erro genérico".
     const teto = (e as any)?.classe === "teto";
+    if (teto) fim = "descanso"; // chegou ao limite: a tela mostra "em descanso" em vez de voltar a ocioso
     console.error("[canal] turno do agente falhou:", agente.agentKey, teto ? "teto diário (virtual key)" : erro);
     // Silêncio é pior que erro: o agente "fala" uma mensagem EFÊMERA (não persiste, some no
     // reload) com a frase amigável do catálogo de erros — nunca string à mão, nunca o stack.
@@ -226,6 +284,6 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     } catch { /* best-effort */ }
     return { ok: false, motivo: "erro", erro };
   } finally {
-    await publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: "ocioso" });
+    await publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: fim });
   }
 }

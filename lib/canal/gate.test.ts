@@ -25,6 +25,23 @@ describe("gate · author gate (A dono, B membro, C fora)", () => {
     expect(podeGerir(canal("aberto"), B)).toBe(false);
     expect(podeGerir(canal("aberto"), null)).toBe(false);
   });
+  it("#396 · conversa privada (dmCom): só as duas pessoas, qualquer que seja o acesso", () => {
+    const dm = (acesso: string) => ({ ownerId: A, acesso, membros: [], dmCom: B });
+    for (const acesso of ["privado", "turma", "aberto"]) {
+      expect(podeLer(dm(acesso), A)).toBe(true);   // quem convidou
+      expect(podeLer(dm(acesso), B)).toBe(true);   // quem aceitou
+      expect(podeLer(dm(acesso), C)).toBe(false);  // ninguém mais, nem com "aberto"
+      expect(podeEscrever(dm(acesso), C)).toBe(false);
+    }
+    expect(podeGerir(dm("privado"), B)).toBe(false); // o convidado conversa, mas não gere
+  });
+  it("#396 · membro em canal com dmCom não ganha acesso por ser membro", () => {
+    expect(podeLer({ ownerId: A, acesso: "turma", membros: [C], dmCom: B }, C)).toBe(false);
+  });
+  it("sem dmCom o comportamento antigo não muda", () => {
+    expect(podeLer({ ownerId: A, acesso: "privado", membros: [B], dmCom: null }, B)).toBe(false);
+    expect(podeLer({ ownerId: A, acesso: "turma", membros: [B], dmCom: null }, B)).toBe(true);
+  });
   it("acesso desconhecido cai em turma", () => {
     expect(normalizarAcesso("x")).toBe("turma");
     expect(normalizarAcesso("privado")).toBe("privado");

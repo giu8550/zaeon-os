@@ -14,7 +14,8 @@ export async function GET() {
   const u = await sessaoUsuario();
   if (!u) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const canais = await prisma.canal.findMany({
-    where: { OR: [{ ownerId: u.id }, { membros: { has: u.id } }] },
+    // dono, membro, ou o outro lado de uma conversa privada (#396: dmCom)
+    where: { OR: [{ ownerId: u.id }, { membros: { has: u.id } }, { dmCom: u.id }] },
     orderBy: { updatedAt: "desc" },
     take: 50,
   });
