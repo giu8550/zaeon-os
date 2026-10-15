@@ -314,7 +314,7 @@ export function estadoDaIA(agente: string, blocos: readonly BlocoPlano[], min: n
     if (b.atividade === "festa") return { ...base, x: s.x, y: s.y, z: s.z, rumo: s.rumo, zaeon: s.zaeon, pose: "danca", vagaMoto: vAqui };
     const pose: PoseIA = b.deitado ? "deitado" : s.tipo === "pufe" ? "relaxa" : s.tipo === "piso" ? "chao" : "sentado";
     // (na CABINE da cidadela: na cadeira, de frente pro monitor — sem o tablet)
-    return { ...base, vagaMoto: vAqui, x: alvo.x, y: s.y, z: alvo.z, rumo: alvo.rumo, zaeon: s.zaeon, pose, sentar, tablet: s.tipo === "cabine" ? 0 : s3((kf - MOV.senta) / MOV.tabletIn) * s3(fimSentar / MOV.tabletIn), assentoY: s.tipo === "sofa" ? 0.78 : s.tipo === "pufe" ? 0.74 : s.tipo === "puff" ? 0.7 : s.tipo === "trono" ? 0.64 : s.tipo === "cabine" ? 0.56 : 0 };
+    return { ...base, vagaMoto: vAqui, x: alvo.x, y: s.y, z: alvo.z, rumo: alvo.rumo, zaeon: s.zaeon, pose, sentar, tablet: s.tipo === "cabine" ? 0 : s3((kf - MOV.senta) / MOV.tabletIn) * s3(fimSentar / MOV.tabletIn), assentoY: s.tipo === "sofa" ? 0.78 : s.tipo === "pufe" ? 0.74 : s.tipo === "puff" ? 0.7 : s.tipo === "trono" ? 0.76 : s.tipo === "cabine" ? 0.56 : 0 };
   }
   // CORRIDA / MOTO / ANDAR: a ida + (a corrida) + o roteiro já cortado pro tempo do bloco (`movimento`)
   if (b.atividade === "moto" || b.atividade === "andar") {
