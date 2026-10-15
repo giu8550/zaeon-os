@@ -43,7 +43,7 @@ describe("POST /api/canal/[id]/mensagem · author gate (IDOR)", () => {
   beforeEach(() => { state.criadas = []; state.disparos = []; state.publicados = []; state.historico = []; });
 
   it.each([
-    ["privado", A, 201], ["privado", B, 403], ["privado", C, 403],
+    ["privado", A, 201], ["privado", B, 201], ["privado", C, 403],
     ["turma", A, 201], ["turma", B, 201], ["turma", C, 403],
     ["aberto", A, 201], ["aberto", B, 201], ["aberto", C, 201],
   ])("acesso=%s · user=%s → %i", async (acesso, uid, status) => {

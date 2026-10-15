@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag } from "@/lib/canal/server";
-import { normalizarAcesso } from "@/lib/canal/gate";
+import { normalizarAcesso, podeLer } from "@/lib/canal/gate";
 import { isAgentKey } from "@/lib/agents/roster";
 
 export async function GET() {
@@ -19,7 +19,8 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
     take: 50,
   });
-  return NextResponse.json({ canais: canais.map((c) => ({ ...c, souDono: c.ownerId === u.id })) });
+  // só o que a pessoa LÊ (a mesma regra das outras rotas): a lista nunca oferece um canal que vai dar 403
+  return NextResponse.json({ canais: canais.filter((c) => podeLer(c, u.id)).map((c) => ({ ...c, souDono: c.ownerId === u.id })) });
 }
 
 export async function POST(req: Request) {
