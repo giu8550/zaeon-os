@@ -34,7 +34,7 @@ export class ExecutorLocal implements Executor {
   rodar(c: Comando, cwd: string): Promise<Execucao> {
     return new Promise((resolve) => {
       const t0 = Date.now();
-      const p = spawn(c.argv[0], c.argv.slice(1), { cwd, shell: false, env: { PATH: process.env.PATH ?? "" } });
+      const p = spawn(c.argv[0], c.argv.slice(1), { cwd, shell: false, env: { PATH: process.env.PATH ?? "" } as unknown as NodeJS.ProcessEnv });
       let stdout = "", stderr = "";
       p.stdout.on("data", (d) => { stdout = (stdout + d).slice(-20_000); });
       p.stderr.on("data", (d) => { stderr = (stderr + d).slice(-20_000); });
