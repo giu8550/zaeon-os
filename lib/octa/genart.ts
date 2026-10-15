@@ -64,5 +64,7 @@ export function verificarDeterminismo(seed: string, vezes = 3): { ok: boolean; h
   return { ok: new Set(hashes).size === 1, hashes };
 }
 
-/** O chat do Octa decide se a mensagem é um pedido de arte (mora em chatPlugin, que roda no navegador). */
-export { ehPedidoDeArte } from "./chatPlugin";
+/** O Octa decide se a mensagem é um pedido de arte (abre a peça como artefato). */
+export function ehPedidoDeArte(msg: string): boolean {
+  return /\b(arte|generativ[ao]|gen ?art|desenh[ae]|pintura|ilustra[çc][ãa]o)\b/i.test(msg) && !/\b(arte final|estado da arte)\b/i.test(msg);
+}

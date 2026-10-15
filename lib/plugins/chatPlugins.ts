@@ -1,8 +1,8 @@
 "use client";
 /**
- * lib/plugins/chatPlugins.ts — o que o aluno PLUGOU no chat a partir do Marketplace (vitrine de blueprints).
- * Preferência por pessoa, no navegador: plugar/desplugar é instantâneo e não depende da moeda (ZAEON stable)
- * estar no ar. Todo acesso ao storage é protegido: aba anônima ou storage bloqueado = nada plugado, sem quebrar.
+ * lib/plugins/chatPlugins.ts — os AGENTES que o aluno adicionou pelo Marketplace (vitrine de blueprints): eles
+ * passam a aparecer no seletor do rosto do agente na sidebar (lib/agents/chatAgentes). Preferência por pessoa, no
+ * navegador: adicionar/remover é instantâneo e não depende da moeda (ZAEON stable) estar no ar. Todo acesso ao storage é protegido: aba anônima ou storage bloqueado = nada plugado, sem quebrar.
  */
 import { useEffect, useState } from "react";
 
