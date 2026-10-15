@@ -1131,11 +1131,30 @@ model Canal {
   membros     String[] @default([])        // userIds (turma = via convite/adição do dono)
   agentes     String[] @default([])        // agentKeys presentes no canal
   cartolinaId String?  @db.ObjectId        // quadro compartilhado (PR da cartolina)
+  dmCom       String?  @db.ObjectId        // conversa privada 1 a 1 (#396): o outro lado; só os dois leem
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([ownerId, updatedAt])
+  @@index([dmCom, updatedAt])
   @@map("canais")
+}
+
+// Convite do escritório (#396): cai na aba PRIVADO de quem foi convidado; aceito → nasce a conversa
+// privada (Canal com dmCom) e os dois viram "contatos" (o dono pode pôr a pessoa em turma/aberto).
+// Regras em lib/canal/convite.ts.
+model CanalConvite {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  deId         String    @db.ObjectId          // quem convidou
+  paraId       String    @db.ObjectId          // quem foi convidado
+  status       String    @default("pendente")  // "pendente" | "aceito" | "recusado"
+  dmCanalId    String?   @db.ObjectId          // a conversa privada criada no aceite
+  createdAt    DateTime  @default(now())
+  respondidoEm DateTime?
+
+  @@index([paraId, status])
+  @@index([deId, status])
+  @@map("canal_convites")
 }
 
 model CanalMensagem {

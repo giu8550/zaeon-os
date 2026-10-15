@@ -10,12 +10,17 @@ export function normalizarAcesso(v: unknown): Acesso {
   return ACESSOS.includes(v as Acesso) ? (v as Acesso) : "turma";
 }
 
-export type CanalGate = { ownerId: string; acesso: string; membros: string[] };
+/** `dmCom` = conversa privada 1 a 1 (#396): o outro lado, que aceitou o convite. */
+export type CanalGate = { ownerId: string; acesso: string; membros: string[]; dmCom?: string | null };
 
-/** Dono sempre pode; "turma" = dono + membros; "aberto" = qualquer logado; "privado" = só dono. */
+/**
+ * Dono sempre pode; "turma" = dono + membros; "aberto" = qualquer logado; "privado" = só dono.
+ * Conversa privada (dmCom): SÓ as duas pessoas — vale antes de qualquer acesso (nunca vira aberta).
+ */
 export function podeLer(canal: CanalGate, userId: string | null | undefined): boolean {
   if (!userId) return false;
   if (canal.ownerId === userId) return true;
+  if (canal.dmCom) return canal.dmCom === userId;
   const acesso = normalizarAcesso(canal.acesso);
   if (acesso === "aberto") return true;
   if (acesso === "turma") return (canal.membros ?? []).includes(userId);

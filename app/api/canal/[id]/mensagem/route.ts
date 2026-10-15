@@ -11,6 +11,7 @@ import { prisma, sessaoUsuario, exigirFlag, isObjectId, agentesDoCanal } from "@
 import { podeEscrever } from "@/lib/canal/gate";
 import { montarAliases, parseMentions } from "@/lib/canal/mention";
 import { resolverAlvos } from "@/lib/canal/alvo";
+import { humanosNoCanal } from "@/lib/canal/convite";
 import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
 
@@ -45,7 +46,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     historico: [...recentes].reverse(),
     remetenteId: u.id,
     disponiveis: agentes.map((a) => a.agentKey),
-    humanos: 1 + canal.membros.filter((m) => m !== canal.ownerId).length,
+    // conversa privada conta as duas pessoas → a IA não responde sozinha numa conversa de duas pessoas
+    humanos: humanosNoCanal(canal),
   });
 
   const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "humano", autorId: u.id, texto, mencoes } });

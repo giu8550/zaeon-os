@@ -120,6 +120,24 @@ describe("POST /api/canal/[id]/mensagem · sem @ → agente ativo (lib/canal/alv
     expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
   });
 
+  it("#396 · conversa privada (dmCom): sem @ a IA não responde sozinha (são duas pessoas conversando)", async () => {
+    state.canal = { ...canal("privado"), membros: [], dmCom: B };
+    state.user = user(A);
+    await POST(req("oi, tudo bem?"), { params: { id: CANAL } });
+    expect(state.disparos).toHaveLength(0);
+    // com @ a IA entra na conversa normalmente
+    await POST(req("@aura resume pra gente"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+
+  it("#396 · conversa privada: o outro lado também escreve; terceiro não (403)", async () => {
+    state.canal = { ...canal("privado"), membros: [], dmCom: B };
+    state.user = user(B);
+    expect((await POST(req("oi"), { params: { id: CANAL } })).status).toBe(201);
+    state.user = user(C);
+    expect((await POST(req("oi"), { params: { id: CANAL } })).status).toBe(403);
+  });
+
   it("canal com 2+ pessoas: outra pessoa sem @ não aciona o agente", async () => {
     state.canal = canal("turma"); // dono A + membro B
     state.user = user(B);
