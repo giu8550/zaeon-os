@@ -215,7 +215,7 @@ export const ROTEIRO_MOTOS: PassoGuia[] = (() => {
   const lote = LOTES.find((l) => l.id === "garagem")!;
   return [
     { id: "motos-aceite", titulo: "Aceita", cena: "droid-perto", cenaInteira: true, falas: ["Isso sim tem valor. ✦ Aceito.", "Eu prometi uma recompensa: as MOTOS da Zaeon agora são suas. Vem ver."], cond: { tipo: "ouvir" }, alvo: null },
-    { id: "motos-ver", titulo: "A garagem", cena: "motos", cenaInteira: true, falas: ["Elas ficam na GARAGEM, a plataforma laranja na borda da cidade.", "Pise na luz do fio de energia na borda: ele te puxa até lá."], cond: { tipo: "ouvir" }, alvo: null },
+    { id: "motos-ver", titulo: "A garagem", cena: "motos", cenaInteira: true, falas: ["Elas ficam na GARAGEM, a plataforma laranja na borda da cidade.", "Suba a escada de pedra da borda: ela leva direto até lá."], cond: { tipo: "ouvir" }, alvo: null },
     { id: "moto", titulo: "Montar", teclas: ["F"], falas: ["Vá até a garagem, chegue perto de uma moto e aperte F."], cond: { tipo: "montar" }, alvo: { x: lote.x, z: lote.z, r: 14 } },
     { id: "pilotar", titulo: "Pilotar", teclas: ["W", "A", "D", "Shift"], falas: ["W acelera, A e D fazem a curva e Shift dá o boost. Dá uma volta!"], cond: { tipo: "pilotar", m: 60 }, alvo: null },
     { id: "descer", titulo: "Descer", teclas: ["P", "F"], falas: ["Mandou bem! Pra parar: P pousa a moto e F desce dela."], cond: { tipo: "descer" }, alvo: null },

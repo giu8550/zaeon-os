@@ -78,7 +78,7 @@ export type AvatarLuzHandle = {
    *  esticadas e abertas, mãos atrás da cabeça). Sentado, os PÉS ficam no chão na frente do móvel (IK — as canelas não
    *  atravessam a frente do sofá). `tablet` (0..1) = o TABLET se materializando nas mãos (partículas → tablet aceso): com
    *  ele, os braços seguram o tablet e a cabeça olha pra tela — em pé, sentado ou deitado. */
-  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean; /** velocidade no plano (m/s) — o voo turbo deita o corpo */ vel?: number } | null; /** as poses de AÇÃO (lib/cyber/posesCombate): pesos 0..1 do sprint, do dash e do alerta (`alertaT` = s desde o dash — o fôlego); `heroi` = s desde o HERO LANDING (ou null); `decola` = a decolagem com impulso (s desde o comando e o agachamento) */ acao?: { sprint: number; dash: number; alerta: number; alertaT?: number; heroi?: number | null; decola?: { t: number; espera: number } | null; /** a ESPADA na mão: o golpe do combo agora (fase 0..1 e a janela que corta) e o peso da guarda */ espada?: { golpe: { n: 1 | 2 | 3; u: number; ativo: [number, number] } | null; guarda: number } | null } | null; montado?: Montado | null; dj?: number; danca?: number; surf?: number; puxado?: number; descanso?: { sentar: number; deitar: number; assentoY: number; relaxa?: number } | null; tablet?: number; dt: number; t: number }): void;
+  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean; /** velocidade no plano (m/s) — o voo turbo deita o corpo */ vel?: number } | null; /** as poses de AÇÃO (lib/cyber/posesCombate): pesos 0..1 do sprint, do dash e do alerta (`alertaT` = s desde o dash — o fôlego); `heroi` = s desde o HERO LANDING (ou null); `decola` = a decolagem com impulso (s desde o comando e o agachamento) */ acao?: { sprint: number; dash: number; alerta: number; alertaT?: number; heroi?: number | null; decola?: { t: number; espera: number } | null; /** a ESPADA na mão: o golpe do combo agora (fase 0..1 e a janela que corta) e o peso da guarda */ espada?: { golpe: { n: 1 | 2 | 3; u: number; ativo: [number, number] } | null; guarda: number } | null } | null; montado?: Montado | null; dj?: number; danca?: number; surf?: number; puxado?: number; descanso?: { sentar: number; deitar: number; assentoY: number; relaxa?: number; /** onde os pés pousam à frente (m) — o trono: perto, o joelho dobra */ pes?: number; /** "trono": a pose À VONTADE (encostado, braços nos braços do trono, pernas que se ajeitam, a cabeça olhando em volta) */ estilo?: "trono" } | null; tablet?: number; dt: number; t: number }): void;
   /** quantas PISADAS (pé encostando no chão na animação de andar/correr) desde a última chamada — o som do passo
    *  sai no compasso do pé; `null` = avatar sem pés (sem o modelo): o engine usa a cadência fixa */
   passosNovos(): number | null;
@@ -139,6 +139,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   const pernas: { coxa: THREE.Bone; canela: THREE.Bone; pe: THREE.Object3D; dedo: THREE.Object3D | null; lado: 1 | -1 }[] = [];
   let lombar: THREE.Bone | null = null, pescoco: THREE.Object3D | null = null, cabeca: THREE.Object3D | null = null, alturaQuadril = 1.0;   // o tronco das poses capturadas
   let espinha: THREE.Object3D | null = null;   // a mochila acompanha o tronco (anda, senta, medita)
+  let ossoQuadril: THREE.Object3D | null = null;   // a pelve (sentado no trono, ela fica de frente — a animação de base a deixava torta)
   let idle: THREE.AnimationAction | null = null, walk: THREE.AnimationAction | null = null, run: THREE.AnimationAction | null = null;
 
   if (gltf) {
@@ -177,7 +178,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     lombar = (modelo.getObjectByName("mixamorigSpine") as THREE.Bone | undefined) ?? null; pescoco = modelo.getObjectByName("mixamorigNeck") ?? null; cabeca = modelo.getObjectByName("mixamorigHead") ?? null;
     // altura do QUADRIL em pé (na pose de repouso): montado, o corpo desce isso pra o quadril cair no banco
     const quadril = modelo.getObjectByName("mixamorigHips");
-    if (quadril) { grupo.updateMatrixWorld(true); alturaQuadril = quadril.getWorldPosition(new THREE.Vector3()).y - grupo.position.y; }
+    if (quadril) { grupo.updateMatrixWorld(true); alturaQuadril = quadril.getWorldPosition(new THREE.Vector3()).y - grupo.position.y; ossoQuadril = quadril; }
     if (gltf.animations.length) {
       mixer = new THREE.AnimationMixer(modelo);
       const cl = gltf.animations;
@@ -346,7 +347,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       corpo.position.set(0, meditando * (-0.5 + (parado ? 0 : 0.06 * Math.sin(t * 1.1))) - SENTA_Y * pilotando - (montado ? alturaQuadril * montado.w : 0), 0); corpo.rotation.x = -0.07 * sentado + 0.08 * pilotando;
       // DESCANSO: sentado, o quadril desce até a almofada (um tiquinho pra trás, encostando); deitado, o corpo gira pra
       // trás (rosto pro céu) em volta dos pés, centrado no sofá e apoiado na almofada — a cabeça um pouco mais alta
-      const wS = descanso ? descanso.sentar : 0, wD = descanso ? descanso.deitar : 0, yAss = descanso?.assentoY ?? 0.7, wR = descanso?.relaxa ?? 0;
+      const wS = descanso ? descanso.sentar : 0, wD = descanso ? descanso.deitar : 0, yAss = descanso?.assentoY ?? 0.7, wR = descanso?.relaxa ?? 0, wTr = descanso?.estilo === "trono" ? 1 : 0;
       if (wS > 0.005 || wD > 0.005) {
         corpo.position.y -= Math.max(0, alturaQuadril - (yAss + 0.08)) * wS; corpo.position.z += (0.06 + 0.1 * wR) * wS;
         corpo.rotation.x += (Math.PI / 2 - 0.2) * wD; corpo.position.y += (yAss + 0.2) * wD; corpo.position.z -= 0.92 * wD;
@@ -376,14 +377,29 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           // PÉS NO CHÃO na frente do móvel (IK): sentado normal, logo além da frente do sofá; relaxado, bem esticados e
           // abertos — os joelhos vão pra frente/cima e as canelas ficam fora do móvel
           grupo.getWorldPosition(pGr);
-          const longe = 0.66 + 0.46 * wR, abre = 0.16 + 0.16 * wR;
+          // no TRONO: a pelve de frente (a animação de base a deixa torta — a coxa de um lado ia pra trás, dentro do
+          // pedestal) e as pernas À VONTADE: abertas, e devagar uma estica enquanto a outra recolhe (e troca)
+          if (wTr > 0.01 && ossoQuadril && pernas.length === 2) {
+            const pe = pernas[0]!.lado > 0 ? pernas[0]! : pernas[1]!, pd = pe === pernas[0] ? pernas[1]! : pernas[0]!;
+            pe.coxa.getWorldPosition(pA); pd.coxa.getWorldPosition(pB); eixo.copy(pA).sub(pB).setY(0);
+            if (eixo.lengthSq() > 1e-6) {
+              const ang = Math.atan2(eixo.x, eixo.z) - Math.atan2(lateral.x, lateral.z);
+              const a2 = Math.atan2(Math.sin(ang), Math.cos(ang));
+              ossoQuadril.getWorldQuaternion(qOsso); ossoQuadril.parent!.getWorldQuaternion(qPai);
+              qDelta.setFromAxisAngle(cima, -a2 * wTr);
+              ossoQuadril.quaternion.copy(qPai.invert().multiply(qDelta.multiply(qOsso))); ossoQuadril.updateWorldMatrix(false, true);
+            }
+          }
+          const longe0 = descanso?.pes ?? 0.66 + 0.46 * wR, abre0 = 0.16 + 0.16 * wR;
           for (const o of pernas) {
+            const fase = 0.5 + 0.5 * Math.sin(t * 0.16 + (o.lado > 0 ? 0 : Math.PI));   // 0..1: esta perna estica (a outra recolhe)
+            const longe = longe0 + wTr * (0.16 * fase - 0.02), abre = abre0 + wTr * (0.1 + 0.05 * fase);
             alvoM.copy(pGr).addScaledVector(frente, longe).addScaledVector(lateral, abre * o.lado).addScaledVector(cima, 0.09);
             polo.copy(frente).addScaledVector(cima, 0.45 + 0.4 * wR).addScaledVector(lateral, 0.12 * o.lado);
             ik(o.coxa, o.canela, o.pe, alvoM, polo, wS);
           }
           // o tronco: sentado, encostado de leve; relaxado, RECLINADO no encosto do pufe
-          if (lombar && pescoco) { dirAlvo.copy(cima).multiplyScalar(1 - 0.38 * wR).addScaledVector(frente, -0.2 - 0.62 * wR + 0.18 * wTab + respira).normalize(); apontar(lombar, pescoco, dirAlvo, wS); }
+          if (lombar && pescoco) { dirAlvo.copy(cima).multiplyScalar(1 - 0.38 * wR).addScaledVector(frente, -0.2 - 0.62 * wR - 0.24 * wTr * (1 - wTab) + 0.18 * wTab + respira).addScaledVector(lateral, 0.07 * wTr * Math.sin(t * 0.13)).normalize(); apontar(lombar, pescoco, dirAlvo, wS); }   // (no trono: ENCOSTADO, o peso indo de um lado pro outro devagar)
           if (pescoco && cabeca && wR > 0.01 && wTab < 0.5) { dirAlvo.copy(cima).multiplyScalar(0.85).addScaledVector(frente, 0.5).normalize(); apontar(pescoco, cabeca, dirAlvo, wS * wR); }   // reclinado, mas olhando pra frente
         }
         // DEITADO: pernas esticadas ao longo do sofá (a esquerda com o joelho dobrado), tronco reto, cabeça no braço
@@ -398,9 +414,15 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         // do peito (em pé/sentado) ou acima do rosto (deitado)
         const semTab = 1 - wTab;
         for (const o of ossos) {
-          if (wS * semTab * (1 - wR) > 0.01) {   // sentado: mãos nas coxas
-            dirAlvo.copy(cima).multiplyScalar(-0.85).addScaledVector(frente, 0.32).addScaledVector(lateral, 0.2 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, wS * semTab * (1 - wR));
-            dirAlvo.copy(frente).multiplyScalar(0.82).addScaledVector(cima, -0.5).addScaledVector(lateral, 0.04 * o.lado).normalize(); apontar(o.ante, o.mao, dirAlvo, wS * semTab * (1 - wR));
+          const wCoxa = wS * semTab * (1 - wR) * (1 - wTr), wBraco = wS * semTab * wTr;
+          if (wCoxa > 0.01) {   // sentado: mãos nas coxas
+            dirAlvo.copy(cima).multiplyScalar(-0.85).addScaledVector(frente, 0.32).addScaledVector(lateral, 0.2 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, wCoxa);
+            dirAlvo.copy(frente).multiplyScalar(0.82).addScaledVector(cima, -0.5).addScaledVector(lateral, 0.04 * o.lado).normalize(); apontar(o.ante, o.mao, dirAlvo, wCoxa);
+          }
+          if (wBraco > 0.01) {   // no TRONO: os braços DESCANSAM nos braços dele (cotovelo pra fora, antebraço pra frente, a mão solta no bulbo)
+            const mexe = 0.05 * Math.sin(t * 0.37 + o.lado);   // (os dedos/mãos não ficam congelados)
+            dirAlvo.copy(cima).multiplyScalar(-0.78).addScaledVector(lateral, 0.5 * o.lado).addScaledVector(frente, 0.08).normalize(); apontar(o.braco, o.ante, dirAlvo, wBraco);
+            dirAlvo.copy(frente).multiplyScalar(0.8).addScaledVector(lateral, 0.32 * o.lado).addScaledVector(cima, -0.1 + mexe).normalize(); apontar(o.ante, o.mao, dirAlvo, wBraco);
           }
           if (wS * semTab * wR > 0.01) {   // relaxado: as MÃOS ATRÁS DA CABEÇA (cotovelos abertos pra fora)
             dirAlvo.copy(cima).multiplyScalar(0.62).addScaledVector(lateral, 0.7 * o.lado).addScaledVector(frente, -0.36).normalize(); apontar(o.braco, o.ante, dirAlvo, wS * semTab * wR);
@@ -419,6 +441,17 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
             dirAlvo.copy(fC).multiplyScalar(0.78).addScaledVector(uC, -0.22).addScaledVector(lC, 0.32 * o.lado).normalize(); apontar(o.braco, o.ante, dirAlvo, wTab * wD);
             dirAlvo.copy(fC).multiplyScalar(0.55).addScaledVector(uC, 0.6).addScaledVector(lC, -0.42 * o.lado).normalize(); apontar(o.ante, o.mao, dirAlvo, wTab * wD);
           }
+        }
+        // no TRONO, sem o tablet: a CABEÇA olha EM VOLTA — vira devagar de um lado pro outro e, de vez em quando, olha pra
+        // cima (o céu do lounge, a mandala); senão abaixa um pouco, à vontade
+        const wOlhar = wS * wTr * (1 - wTab);
+        if (cabeca && wOlhar > 0.01) {
+          const yaw = 0.55 * Math.sin(t * 0.19) + 0.22 * Math.sin(t * 0.53 + 1.3);
+          const cima01 = Math.max(0, Math.sin(t * 0.23 + 0.7)), pitch = 0.42 * cima01 * cima01 - 0.06 + 0.04 * Math.sin(t * 0.9);   // + = pra cima
+          cabeca.getWorldQuaternion(qOsso); cabeca.parent!.getWorldQuaternion(qPai);
+          eixo.copy(lateral).applyAxisAngle(cima, yaw * wOlhar);
+          qDelta.setFromAxisAngle(eixo, -pitch * wOlhar).multiply(qCab.setFromAxisAngle(cima, yaw * wOlhar));
+          cabeca.quaternion.copy(qPai.invert().multiply(qDelta.multiply(qOsso))); cabeca.updateWorldMatrix(false, true);
         }
         // a CABEÇA olha pra tela do tablet
         if (pescoco && cabeca && wTab > 0.01) {

@@ -18,6 +18,7 @@ import { criarTempestade } from "./Tempestade";
 import { estadoDoRitual, type EstadoShow } from "@/lib/cyber/showLounge";
 import { linhasDoRecado } from "@/lib/cyber/recado";
 import type { PisoOclusor } from "./oclusaoPisos";
+import { criarMatsTrono, montarNucleoFluido, montarTrono, type MatsTrono } from "./TronoFluido";
 
 /** o tema de cada sala (sem placa com nome: os espaços falam por si) — todas a céu aberto, com guarda-corpo */
 const TEMA: Record<NomeSala, { piso: number; brilho: number; cor: string; alt: number; aberto: boolean }> = {
@@ -139,6 +140,9 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0, olho: 0, anelSigilos: 0, sigilo: -1 }, olhoRitual = 0, fumacaRitual = 0, tRitual = 0, musicaShow: EstadoShow = estadoShow;
   const ambiente: { sala: NomeSala; obj: THREE.Object3D }[] = [];
   const tema = (_m: Movel) => TEMA[salaAtual];
+  // os materiais dos TRONOS (criados na 1ª vez que um aparece; o fluido anima com o relógio)
+  let mats: MatsTrono | null = null;
+  const matsTrono = () => { if (!mats) { const m = criarMatsTrono(); mats = m; anim.push((_, t) => { m.fluido.uniforms.uT!.value = t; }); } return mats; };
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
     // TELÃO alto atrás do palco (acima da coroa de cristais): é a "TV" do recado pro QG
     tv(p, m) {
@@ -462,6 +466,9 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     },
     // PUFF: almofadão redondo, macio (esfera achatada) com o friso aceso
     // PUFE grande (de largar o corpo): saco macio afundado + o encosto que sobe atrás (o −z), aro de luz no pé
+    // o TRONO de fluido (components/cyber/TronoFluido) e o NÚCLEO no meio da roda — um material de fluido pra todos
+    trono(p) { montarTrono(p, matsTrono(), { low: o.low }); },
+    nucleoFluido(p) { montarNucleoFluido(p, matsTrono(), { low: o.low }); },
     pufe(p, m) {
       const cor = new THREE.Color(m.cor ?? 0xb98cff), tecido = new THREE.MeshStandardMaterial({ color: cor.clone().multiplyScalar(0.28).add(new THREE.Color(0x1a1530)), roughness: 0.95, emissive: cor, emissiveIntensity: 0.08 });
       const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.72, 20, 12), tecido); corpo.scale.set(1, 0.42, 1); corpo.position.y = 0.26; p.add(corpo);
