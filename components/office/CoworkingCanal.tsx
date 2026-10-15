@@ -16,6 +16,7 @@ import AgentAvatar from "@/components/agents/AgentAvatar";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { fonteChat } from "@/lib/ui/chatFontScale";
 import { montarTopoPessoas } from "@/lib/canal/topoPessoas";
+import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
@@ -39,6 +40,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [naoLidas, setNaoLidas] = useState<Record<string, number>>({});
   const [online, setOnline] = useState<Pessoa[]>([]);
   const [digitando, setDigitando] = useState<string[]>([]);
+  // o que cada agente está fazendo (pesquisando, investigando…) e quem está "em descanso" (lib/canal/estadoAgente)
+  const [estadoAgente, setEstadoAgente] = useState<Record<string, EstadoAgente>>({});
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [menu, setMenu] = useState<"canais" | "config" | null>(null);
@@ -98,6 +101,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     meusAliases.current = [nome, nome.split(/\s+/)[0] ?? ""].filter(Boolean);
     setDet(d);
     setDigitando([]);
+    setEstadoAgente({});
     setNaoLidas((n) => ({ ...n, [id]: 0 }));
     try { localStorage.setItem(LS_ULTIMO, id); } catch { /* ignore */ }
   }, []);
@@ -123,7 +127,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       ch.bind(EV_MENSAGEM, (m: MensagemWire) => aoChegar(m, c.id));
       ch.bind(EV_DIGITANDO, (d: { agentKey: string; estado: string }) => {
         if (c.id !== ativoRef.current) return;
-        setDigitando((prev) => (d.estado === "digitando" ? [...new Set([...prev, d.agentKey])] : prev.filter((k) => k !== d.agentKey)));
+        // estado em palavras (pesquisando, investigando, em descanso…); valor desconhecido = "digitando"
+        const est = normalizarEstado(d.estado);
+        setEstadoAgente((m) => ({ ...m, [d.agentKey]: est }));
+        setDigitando((prev) => (estaAtivo(est) ? [...new Set([...prev, d.agentKey])] : prev.filter((k) => k !== d.agentKey)));
       });
     }
     return () => { /* mantém assinaturas enquanto o componente vive; desconecta no unmount abaixo */ };
@@ -213,7 +220,11 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       // Quem vai responder = os `turnos` do servidor: as @menções OU, sem @, o último agente do canal.
       const alvos: string[] = Array.isArray(j.turnos) ? j.turnos.map((t: { agentKey: string }) => t.agentKey) : (m.mencoes ?? []);
       for (const k of alvos) meusAgentes.current.add(k);
-      if (alvos.length) setDigitando((prev) => [...new Set([...prev, ...alvos])]);
+      if (alvos.length) {
+        setDigitando((prev) => [...new Set([...prev, ...alvos])]);
+        // um "em descanso" antigo não pode aparecer como o balão de "escrevendo" do novo turno
+        setEstadoAgente((m) => ({ ...m, ...Object.fromEntries(alvos.map((k) => [k, "digitando" as EstadoAgente])) }));
+      }
       setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
       setTexto("");
       setErro(null);
@@ -377,7 +388,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               <div key={`dig-${k}`} className="flex items-end gap-2">
                 <AgentAvatar src={a?.avatarUrl} nome={a?.nome ?? k} size={30} emoji={a?.emoji} agentId={k} estado="falando" />
                 <div className={`px-3.5 py-2.5 rounded-2xl rounded-bl-md ${VIDRO_BOLHA} ${TXT_MUDO} text-[13px]`}>
-                  <span className="font-semibold">{a?.nome ?? k}</span> está escrevendo<span className="animate-pulse">…</span>
+                  <span className="font-semibold">{a?.nome ?? k}</span> {frase(estadoAgente[k] ?? "digitando") || "está escrevendo"}<span className="animate-pulse">…</span>
                 </div>
               </div>
             );
@@ -402,10 +413,12 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
           {(presentes.length > 0 || outros.length > 0) && (
             <div className="flex gap-1.5 overflow-x-auto pb-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {[...presentes, ...outros].map((a) => (
-                <button key={a.agentKey} type="button" onClick={() => prefixarAgente(a.agentKey)} title={`@${a.agentKey}${a.curso ? ` · ${a.curso}` : ""}`}
-                  className={`shrink-0 min-h-[36px] pl-1 pr-2.5 rounded-full flex items-center gap-1.5 text-[12px] font-semibold ${VIDRO_CHIP} ${canal.agentes.includes(a.agentKey) ? TXT : TXT_MUDO}`}>
+                <button key={a.agentKey} type="button" onClick={() => prefixarAgente(a.agentKey)}
+                  title={estadoAgente[a.agentKey] === "descanso" ? rotulo(a.nome, "descanso") : `@${a.agentKey}${a.curso ? ` · ${a.curso}` : ""}`}
+                  className={`shrink-0 min-h-[36px] pl-1 pr-2.5 rounded-full flex items-center gap-1.5 text-[12px] font-semibold ${VIDRO_CHIP} ${canal.agentes.includes(a.agentKey) ? TXT : TXT_MUDO} ${estadoAgente[a.agentKey] === "descanso" ? "opacity-60" : ""}`}>
                   <AgentAvatar src={a.avatarUrl} nome={a.nome} size={26} emoji={a.emoji} agentId={a.agentKey} estado={digitando.includes(a.agentKey) ? "falando" : "idle"} className={digitando.includes(a.agentKey) ? "ring-2 ring-cyan-400/80" : ""} />
                   {a.nome}
+                  {estadoAgente[a.agentKey] === "descanso" && <span className={`text-[10px] font-medium ${TXT_MUDO}`}>em descanso</span>}
                 </button>
               ))}
             </div>

@@ -16,6 +16,7 @@ import { registrarUso } from "@/lib/canal/usage";
 import { rosterComMentores, mergeProfiles, type AgentView } from "@/lib/agents/roster";
 import { EV_DIGITANDO, EV_MENSAGEM, publicarPusher, type MensagemWire, type Publicar } from "@/lib/canal/realtime";
 import { limparSaidaAgente } from "@/lib/canal/saida";
+import { estadoDeFase, type EstadoAgente } from "@/lib/canal/estadoAgente";
 
 export const N_CONTEXTO = 30;
 
@@ -53,6 +54,8 @@ export type GerarArgs = {
   history: { role: "user" | "assistant"; text: string }[];
   canal: CanalRow;
   userId: string;
+  /** a cada fase do harness (route, plan, gather, …): vira o estado mostrado na tela ("pesquisando"). */
+  onFase?: (fase: string) => void;
 };
 export type Gerar = (args: GerarArgs) => Promise<string>;
 
@@ -103,7 +106,7 @@ export function blocoCanal(canal: CanalRow, agente: AgentView, colegas: AgentVie
 
 // ───────────────────────────── gerar (default = harness) ─────────────────────────────
 
-const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userId }) => {
+const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userId, onFase }) => {
   const [{ buildHarnessDeps, renderStructuredAnswer }, { runTrajectory }, { gatewayLigado }] = await Promise.all([
     import("@/lib/agent/aura-harness"),
     import("@/lib/agent/trajectory"),
@@ -141,6 +144,8 @@ const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userI
   // leva agentKey/surface/scopeId e cada fase (plan/reason/draft) grava sua linha.
   const deps = buildHarnessDeps(hctx, {
     systemContext, history, transformarSystem,
+    // o harness já emite cada fase em step.detail; aqui só repassamos pro estado visível no canal
+    onStep: (s) => onFase?.(String(s?.detail ?? "")),
     rota: gatewayLigado() ? "gateway" : "vertex",
     ledger: { agentKey: agente.agentKey, mentorSlug: agente.tipo === "mentor" ? agente.agentKey : null, surface: "canal", scopeId: canal.id, userId: userId ?? null },
   });
@@ -198,9 +203,18 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
   const agenteComCanal = Object.assign(Object.create(null), agente, { __blocoCanal: blocoCanal(canal, agente, colegas, [...nomes].filter(([k]) => humanoIds.includes(k)).map(([, v]) => v)) }) as AgentView;
 
   await publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: "digitando" });
+  // Estado em palavras: só publica quando MUDA (o harness emite várias vezes a mesma fase).
+  let atual: EstadoAgente = "digitando";
+  let fim: EstadoAgente = "ocioso";
+  const onFase = (fase: string) => {
+    const e = estadoDeFase(fase);
+    if (e === atual) return;
+    atual = e;
+    void Promise.resolve(publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: e })).catch(() => undefined);
+  };
   try {
     // G6 (Fatia 7): nunca persistir imagem remota/HTML vindo do modelo (texto limpo sai idêntico).
-    const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId })).trim());
+    const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId, onFase })).trim());
     if (!texto) throw new Error("resposta vazia");
     const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto, mencoes: [] } });
     const wire: MensagemWire = {
@@ -214,6 +228,7 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     const erro = String((e as Error)?.message ?? e);
     // C6 (lei 5): budget da virtual key estourou → chave própria do catálogo, nunca "erro genérico".
     const teto = (e as any)?.classe === "teto";
+    if (teto) fim = "descanso"; // chegou ao limite: a tela mostra "em descanso" em vez de voltar a ocioso
     console.error("[canal] turno do agente falhou:", agente.agentKey, teto ? "teto diário (virtual key)" : erro);
     // Silêncio é pior que erro: o agente "fala" uma mensagem EFÊMERA (não persiste, some no
     // reload) com a frase amigável do catálogo de erros — nunca string à mão, nunca o stack.
@@ -226,6 +241,6 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     } catch { /* best-effort */ }
     return { ok: false, motivo: "erro", erro };
   } finally {
-    await publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: "ocioso" });
+    await publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: fim });
   }
 }

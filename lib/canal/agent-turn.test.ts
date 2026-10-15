@@ -124,6 +124,54 @@ describe("agent-turn · executarTurno", () => {
     expect(efemera.autorId).toBe("medicina");
   });
 
+  describe("#396 · estados do agente no evento de digitando", () => {
+    const estados = (eventos: [string, any][]) => eventos.filter(([ev]) => ev === EV_DIGITANDO).map(([, p]) => p.estado);
+
+    it("publica cada fase do harness só quando muda (pesquisando, investigando, redigindo) e fecha em ocioso", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura pesquisa isso", mencoes: ["aura"] })]);
+      const eventos: [string, any][] = [];
+      const gerar = vi.fn(async ({ onFase }: any) => {
+        for (const f of ["route", "plan", "gather", "gather", "reason", "critique", "draft", "finalize"]) onFase?.(f);
+        return "pronto";
+      });
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(r.ok).toBe(true);
+      // gather repetido e reason→critique (mesmo estado "investigando") não geram evento duplicado
+      expect(estados(eventos)).toEqual(["digitando", "entendendo", "planejando", "pesquisando", "investigando", "redigindo", "ocioso"]);
+      expect(eventos.filter(([ev]) => ev === EV_DIGITANDO).every(([, p]) => p.agentKey === "aura")).toBe(true);
+    });
+
+    it("sem nenhuma fase (gerar simples) o fluxo continua digitando → ocioso", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura oi", mencoes: ["aura"] })]);
+      const eventos: [string, any][] = [];
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar: async () => "oi", publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(estados(eventos)).toEqual(["digitando", "ocioso"]);
+    });
+
+    it("fase desconhecida não vira estado novo (fica em digitando)", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura oi", mencoes: ["aura"] })]);
+      const eventos: [string, any][] = [];
+      const gerar = vi.fn(async ({ onFase }: any) => { onFase?.("degradado: nenhuma evidência reunida"); return "ok"; });
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(estados(eventos)).toEqual(["digitando", "ocioso"]);
+    });
+
+    it("teto da virtual key termina em 'descanso' (e não em ocioso)", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@medicina e aí?", mencoes: ["medicina"] })]);
+      const eventos: [string, any][] = [];
+      const teto = Object.assign(new Error("llm:teto: Budget has been exceeded"), { classe: "teto", provedor: "litellm" });
+      await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A }, { prisma, gerar: async () => { throw teto; }, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(estados(eventos)).toEqual(["digitando", "descanso"]);
+    });
+
+    it("erro comum termina em ocioso", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@medicina oi", mencoes: ["medicina"] })]);
+      const eventos: [string, any][] = [];
+      await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A }, { prisma, gerar: async () => { throw new Error("gemini 404"); }, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(estados(eventos)).toEqual(["digitando", "ocioso"]);
+    });
+  });
+
   describe("PR-A3 · teto por agente (ler ≠ agir)", () => {
     const comTeto = () => {
       const f = fakePrisma(canal, [msg({ autorId: A, texto: "@medicina e aí?", mencoes: ["medicina"] })]);
