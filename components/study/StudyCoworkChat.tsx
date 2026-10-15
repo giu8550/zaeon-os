@@ -76,6 +76,8 @@ import { typeStep, safeCut } from "@/lib/ui/typewriter";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import { esperarTurno } from "@/lib/chat/turnoRetomavel";
 import { pedirAura } from "@/lib/chat/auraClient";
+import { usePluginsChat, desplugar } from "@/lib/plugins/chatPlugins";
+import { ehPedidoDeArte, OCTA_CONTEXTO } from "@/lib/octa/chatPlugin";
 import { criarEstudo, gerarArtefato } from "@/lib/studio/studioClient";
 import type { SkillNodeState } from "@/lib/skilltree/types";
 import type { SkillTreeData } from "@/components/study/SkillTreePanel";
@@ -211,6 +213,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  const plugins = usePluginsChat();   // blueprints plugados do Marketplace (Octa Code…)
+  const octaPlugado = plugins.includes("octa-code");
   const [sending, setSending] = useState(false);
   const [libOpen, setLibOpen] = useState(true);
   // Editar a própria pergunta e reenviar (estilo ChatGPT) + o A−/A+ do texto.
@@ -783,6 +787,23 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     let turnoVivo: string | null = null;
     let pararDatilografia = () => {}; // o `finally` garante que o laço de rAF nunca fica girando
 
+    // OCTA CODE plugado + pedido de arte → a peça generativa determinística vira artefato de imagem (sem LLM).
+    if (octaPlugado && ehPedidoDeArte(prompt)) {
+      try {
+        const r = await fetch("/api/octa/arte", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pedido: prompt }) });
+        const p = await r.json().catch(() => null);
+        if (!r.ok || !p?.dataUrl) patchAsst("O Octa Code não conseguiu gerar a peça agora. Tenta de novo em instantes.");
+        else {
+          patchAsst(`⬡ Octa Code · ${p.titulo} — arte generativa determinística (o mesmo pedido gera sempre a mesma peça). Traços: ${Object.entries(p.tracos as Record<string, string>).map(([k, v]) => `${k} ${v}`).join(", ")}.`);
+          window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { studioKind: "image", title: p.titulo, dataUrl: p.dataUrl, data: { prompt: `seed: ${p.seed} · hash ${String(p.hash).slice(0, 12)}` } } }));
+        }
+      } catch { patchAsst("Falha de rede ao falar com o Octa Code."); }
+      avisarEscritorio(activeMentor, "ocioso");
+      setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, streaming: false } : m)));
+      setSending(false);
+      return;
+    }
+
     const focusTitles = focusIds.map(spaceTitle);
     // MODO ACADÊMICO = FLEXÍVEL na Sala de Estudos (o rigor pleno é da Sala de Pesquisa).
     const flexClause = " " + DIRETRIZ_ESTUDOS;
@@ -800,7 +821,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade, mantendo o fio do assunto entre as mensagens.`)
       + " Nunca ofereça recursos, ferramentas ou botões da plataforma, e nunca comente o que você 'pode gerar' — fale do tema."
       + flexClause
-      + contextoDaSub();
+      + contextoDaSub()
+      + (octaPlugado ? OCTA_CONTEXTO : "");
 
     try {
       let target = "";       // parte VISÍVEL alvo (sem a sentinela)
@@ -883,7 +905,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       // a conversa pode ter virado ESTUDO (o servidor decide depois da resposta) → a bolinha "Gerar mapa" aparece
       conferirCerebro.current();
     }
-  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso, aplicarFinal, anexoRef]);
+  }, [input, sending, focusIds, spaceTitle, runStudioAction, activeMentor, skillNode, tree, avisarEscritorio, batizarSePreciso, aplicarFinal, anexoRef, octaPlugado]);
   sendRefA.current = (t: string) => { void send(t); };
 
   /** Refaz a conversa a partir da pergunta `idx` (editar/regenerar): corta dali pra baixo e reenvia. */
@@ -1296,6 +1318,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
               <div className="flex items-center gap-2">
                 <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
+                {octaPlugado && (
+                  <span title="Octa Code plugado (Marketplace): regras de código + arte generativa. Peça uma arte ou cole um código pra revisar."
+                    className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full text-[11.5px] font-bold font-tech border border-cyan-400/40 bg-gradient-to-r from-violet-500/15 to-cyan-400/15 text-cyan-700 dark:text-cyan-200">
+                    ⬡ Octa Code
+                    <button type="button" onClick={() => desplugar("octa-code")} aria-label="Desplugar o Octa Code" className="ml-0.5 w-4 h-4 grid place-items-center rounded-full hover:bg-black/10 dark:hover:bg-white/10">×</button>
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => setTreeOpen((v) => !v)}
