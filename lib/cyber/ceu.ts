@@ -308,6 +308,14 @@ export function zonaLounge(cx: number, cz: number, abre: number, cor: number, ti
   }
   return out;
 }
+/** a RODA DE TRONOS do pátio do lounge (out/2026, components/cyber/TronoFluido): 6 tronos biomecânicos em arco, virados
+ *  pro NÚCLEO de fluido no meio, com a boca aberta pra `abre` (sen/cos = x/z, como `zonaLounge`) — a passagem fica livre */
+export const RODA_TRONOS = { r: 5.6, n: 6, larg: 1.5, prof: 1.5, nucleo: 1.9 } as const;
+export function rodaDeTronos(cx: number, cz: number, abre: number): Movel[] {
+  const R = RODA_TRONOS, out: Movel[] = [{ tipo: "nucleoFluido", x: cx, z: cz, rot: 0, larg: R.nucleo, prof: R.nucleo }];
+  for (let i = 0; i < R.n; i++) { const a = abre + Math.PI / 3.2 + (i / (R.n - 1)) * (Math.PI * 2 - Math.PI / 1.6); out.push({ tipo: "trono", x: cx + Math.sin(a) * R.r, z: cz + Math.cos(a) * R.r, rot: a + Math.PI, larg: R.larg, prof: R.prof }); }
+  return out;
+}
 /** os móveis do lounge vão em cima do DECK da festa: a elevação de cada um soma DECK.h */
 function noDeck(lista: Movel[]): Movel[] { return lista.map((m) => ({ ...m, y: (m.y ?? 0.16) + DECK.h })); }
 export const MOVEIS: Record<NomeSala, Movel[]> = {
@@ -315,7 +323,7 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
   // treliça com as caixas suspensas (as torres dela são sólidas), as TORRES de som gigantes e os subs no chão, pista de
   // LED e sofás nas laterais
   // (out/2026) tudo isso em cima do DECK da festa (`y` já soma DECK.h); o pátio (a chegada, as motos) fica na frente
-  lounge: noDeck([
+  lounge: [...noDeck([
     { tipo: "palco", x: 0, z: PALCO.z, rot: 0, larg: 0, prof: 0, solido: false, y: 0 },   // colisão própria (bordaDoPalco)
     { tipo: "torreDJ", x: 0, z: TORRE_DJ.z, rot: 0, larg: 0, prof: 0, solido: false, y: PALCO.h },   // colisão própria (bordaDaTorre)
     { tipo: "mesaDJ", x: MESA_DJ.x, z: MESA_DJ.z, rot: 0, larg: MESA_DJ.larg, prof: MESA_DJ.prof, y: TORRE_DJ.topo },
@@ -336,6 +344,10 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     ...zonaLounge(-42, -40, Math.PI / 2, 0x9affd0, "mesinha"),
     ...zonaLounge(-52, -12, Math.PI / 2, 0xffc46b, "mesinha"),
   ]),
+    // as RODAS DE TRONOS no PÁTIO (no chão, fora do deck), uma de cada lado da calçada central, abertas pra ela
+    ...rodaDeTronos(30, 42, -Math.PI / 2),
+    ...rodaDeTronos(-30, 42, Math.PI / 2),
+  ],
   // os 3 espaços de CONVIVÊNCIA: minimalistas e sonorizados (CAIXAS de som discretas com música ambiente) — sofás,
   // pufes, plantas; NADA de estrutura de festa (sem palco, pista, treliça). O corredor do meio (da porta, +z, ao centro)
   // fica livre

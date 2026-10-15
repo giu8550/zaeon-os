@@ -15,7 +15,7 @@ import type { AmbienteEstudo } from "./agenda";
 import { lugaresDaCidadela } from "../cidadela";
 
 /** `cabine` = a cadeira de uma CABINE DE ESTUDO da cidadela (lib/cyber/cidadela) */
-export type TipoSpot = "sofa" | "pufe" | "puff" | "piso" | "pista" | "cabine";
+export type TipoSpot = "sofa" | "pufe" | "puff" | "trono" | "piso" | "pista" | "cabine";
 export type Spot = {
   id: string; ambiente: AmbienteEstudo | "pista"; tipo: TipoSpot;
   x: number; z: number; y: number; rumo: number;
