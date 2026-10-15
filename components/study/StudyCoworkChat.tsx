@@ -26,6 +26,8 @@ import {
 import { DIRETRIZ_ESTUDOS } from "@/lib/ai/salaPersona";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
+import LivrosCartao from "@/components/chat/LivrosCartao";
+import { semListaDeLivros } from "@/lib/livros/busca";
 import AuraThinking from "@/components/study/AuraThinking";
 import AgentePilula, { RECUO_ROSTO } from "@/components/agents/avatar/AgentePilula";
 import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
@@ -1187,12 +1189,14 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                               // Resposta da Aura: formata markdown (## títulos, **negrito**, *itálico*,
                               // `código`, bullets) em vez de mostrar os asteriscos/hashes crus. Seguro
                               // em streaming: pares não-fechados ficam como texto até fecharem.
-                              : <><ChatMarkdown text={m.text} />{m.streaming && <span aria-hidden className="z-caret" />}</>)
+                              // livros achados: o cartão (com "Abrir no leitor") substitui a lista em markdown do texto
+                              : <><ChatMarkdown text={m.answer?.livros?.length ? semListaDeLivros(m.text) : m.text} />{m.streaming && <span aria-hidden className="z-caret" />}</>)
                           : (!isUser && <AuraThinking active fase={m.fase} phases={quickThinking ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                       </div>
                       {isUser
                         ? (m.text ? <AcoesPergunta texto={m.text} ocupado={sending} onEditar={() => setEditando(m.id)} /> : null)
                         : acoesDa(m, i)}
+                      {!isUser && m.answer?.livros?.length ? <LivrosCartao livros={m.answer.livros} sala="estudos" /> : null}
                       {!isUser && (m.studioBlock || m.desenhando) ? (
                         <div className="w-full max-w-[85%]">
                           {m.studioBlock ? <BlocoOuCartao b={m.studioBlock} /> : null}

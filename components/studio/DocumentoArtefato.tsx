@@ -1,12 +1,19 @@
 "use client";
-/** Um artefato-documento ocupando a aba inteira da sala (diagrama interativo ou aula). */
+/** Um artefato-documento ocupando a aba inteira da sala (diagrama interativo, aula ou livro no leitor). */
+import dynamic from "next/dynamic";
 import DiagramView from "@/components/studio/DiagramView";
 import AulaView from "@/components/aula-interativa/AulaView";
 import type { DocArtefato } from "@/lib/chat/documentos";
 
+// o leitor carrega o pdf.js — só quando um livro é aberto
+const LeitorDocumento = dynamic(() => import("@/components/chat/LeitorDocumento"), { ssr: false, loading: () => <div className="h-full animate-pulse bg-slate-100 dark:bg-white/[0.03]" /> });
+
 export default function DocumentoArtefato({ doc }: { doc: Pick<DocArtefato, "studioKind" | "artifactId" | "titulo" | "data"> }) {
   if (doc.studioKind === "diagram") {
     return <div className="h-full p-3"><DiagramView artifactId={doc.artifactId} titulo={doc.titulo} cheio /></div>;
+  }
+  if (doc.studioKind === "pdf" && doc.data?.file?.pdfUrl) {
+    return <div className="h-full"><LeitorDocumento file={doc.data.file} /></div>;
   }
   if (doc.studioKind === "aula") {
     return (
