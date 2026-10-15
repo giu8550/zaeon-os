@@ -16,6 +16,7 @@ import AgentAvatar from "@/components/agents/AgentAvatar";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { fonteChat } from "@/lib/ui/chatFontScale";
 import { montarTopoPessoas } from "@/lib/canal/topoPessoas";
+import { podeApagar, textoConfirmarApagar, aposApagar } from "@/lib/canal/seletor";
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
@@ -46,6 +47,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [enviando, setEnviando] = useState(false);
   const [menu, setMenu] = useState<"canais" | "config" | null>(null);
   const [novoTitulo, setNovoTitulo] = useState("");
+  const [apagando, setApagando] = useState<string | null>(null);
   const [emailConvite, setEmailConvite] = useState("");
   const [sugIdx, setSugIdx] = useState(0);
   // A− / A+ do texto das mensagens: a MESMA escolha do chat das salas de estudo e pesquisa (por aparelho).
@@ -258,6 +260,42 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     setCanais((cs) => [c, ...cs]);
     setNovoTitulo(""); setMenu(null); setAtivoId(c.id);
   };
+  // Apaga um escritório (só o dono; a rota DELETE já existe). Pede confirmação, atualiza a lista e abre
+  // outro canal; se não sobrar nenhum, recria o primeiro (a sala nunca fica vazia). Regras em lib/canal/seletor.
+  const apagarCanal = async (c: Canal) => {
+    if (!podeApagar(c) || apagando) return;
+    if (!window.confirm(textoConfirmarApagar(c.titulo))) return;
+    setApagando(c.id);
+    try {
+      const r = await fetch(`/api/canal/${c.id}`, { method: "DELETE" });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setErro(j?.error || `Não deu pra apagar (${r.status})`);
+        return;
+      }
+      try { pusherRef.current?.unsubscribe(canalChannel(c.id)); pusherRef.current?.unsubscribe(presenceChannel(c.id)); } catch { /* ignore */ }
+      const depois = aposApagar(canais, c.id, ativoId);
+      setCanais(depois.restantes);
+      setNaoLidas((n) => { const resto = { ...n }; delete resto[c.id]; return resto; });
+      try { if (localStorage.getItem(LS_ULTIMO) === c.id) localStorage.removeItem(LS_ULTIMO); } catch { /* ignore */ }
+      setErro(null);
+      setMenu(null);
+      if (depois.proximoAtivo) {
+        if (depois.eraAtivo) setAtivoId(depois.proximoAtivo);
+      } else {
+        const n = await fetch("/api/canal", { method: "POST", headers: H, body: JSON.stringify({ titulo: "Meu escritório", acesso: "turma", agentes: ["aura"], primeiro: true }) });
+        if (n.ok) {
+          const novo: Canal = (await n.json()).canal;
+          setCanais([novo]);
+          setAtivoId(novo.id);
+        }
+      }
+    } catch (e) {
+      setErro(String((e as Error)?.message ?? e));
+    } finally {
+      setApagando(null);
+    }
+  };
   const patch = async (body: Record<string, unknown>) => {
     if (!ativoId) return;
     const r = await fetch(`/api/canal/${ativoId}`, { method: "PATCH", headers: H, body: JSON.stringify(body) });
@@ -308,11 +346,19 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
             {menu === "canais" && (
               <div role="listbox" className={`absolute left-0 top-full mt-1.5 z-30 w-[min(92vw,320px)] p-1.5 rounded-2xl ${VIDRO_POPOVER}`}>
                 {canais.map((c) => (
-                  <button key={c.id} type="button" role="option" aria-selected={c.id === ativoId} onClick={() => { setAtivoId(c.id); setMenu(null); }}
-                    className={`w-full ${TOQUE} flex items-center justify-between gap-2 px-3 rounded-xl text-left text-[13px] ${c.id === ativoId ? `bg-blue-500/15 dark:bg-blue-400/15 ${TXT}` : `${TXT_2} hover:bg-slate-500/10 dark:hover:bg-white/10`}`}>
-                    <span className="truncate font-medium">{c.titulo}</span>
-                    {naoLidas[c.id] ? <Badge n={naoLidas[c.id]!} /> : null}
-                  </button>
+                  <div key={c.id} className="flex items-center gap-1">
+                    <button type="button" role="option" aria-selected={c.id === ativoId} onClick={() => { setAtivoId(c.id); setMenu(null); }}
+                      className={`flex-1 min-w-0 ${TOQUE} flex items-center justify-between gap-2 px-3 rounded-xl text-left text-[13px] ${c.id === ativoId ? `bg-blue-500/15 dark:bg-blue-400/15 ${TXT}` : `${TXT_2} hover:bg-slate-500/10 dark:hover:bg-white/10`}`}>
+                      <span className="truncate font-medium">{c.titulo}</span>
+                      {naoLidas[c.id] ? <Badge n={naoLidas[c.id]!} /> : null}
+                    </button>
+                    {/* só o dono apaga (a rota também recusa não-dono); pede confirmação antes */}
+                    {podeApagar(c) && (
+                      <button type="button" onClick={() => void apagarCanal(c)} disabled={apagando === c.id}
+                        aria-label={`Apagar o escritório ${c.titulo}`} title="Apagar este escritório"
+                        className={`${TOQUE} w-10 shrink-0 rounded-xl text-[14px] ${TXT_MUDO} hover:text-rose-500 dark:hover:text-rose-300 hover:bg-rose-500/10 disabled:opacity-40`}>🗑</button>
+                    )}
+                  </div>
                 ))}
                 <div className="mt-1 flex gap-1.5 p-1">
                   <input value={novoTitulo} onChange={(e) => setNovoTitulo(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void criarCanal(); }} placeholder="novo canal" aria-label="Nome do novo canal"
