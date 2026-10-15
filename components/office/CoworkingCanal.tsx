@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AgentAvatar from "@/components/agents/AgentAvatar";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { fonteChat } from "@/lib/ui/chatFontScale";
+import { montarTopoPessoas } from "@/lib/canal/topoPessoas";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
@@ -274,9 +275,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const canal = det.canal;
   const meuId = det.eu.id;
   // Perfis no topo: dono + membros + você, e quem estiver online mesmo sem ser membro (canal aberto).
-  const onlineIds = new Set(online.map((p) => p.id));
-  const doCanal = det.pessoas.filter((p) => p.id === canal.ownerId || p.id === meuId || canal.membros.includes(p.id));
-  const pessoasNoTopo: Pessoa[] = [...doCanal, ...online.filter((o) => !doCanal.some((p) => p.id === o.id))];
+  const topo = montarTopoPessoas({ pessoas: det.pessoas, online, donoId: canal.ownerId, meuId, membros: canal.membros });
   // Sem @, responde o último agente que falou. A dica só aparece em canal de uma pessoa: com mais
   // gente, o servidor só atende quem estava conversando com o agente (lib/canal/alvo.ts).
   const ultimoAgente = [...det.mensagens].reverse().find((m) => m.autorTipo === "agente" && !m.id.startsWith("efemera-"))?.autorId;
@@ -315,9 +314,9 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
           <div className="ml-auto flex items-center gap-1.5">
             {/* pessoas do canal (dono, membros e você): anel verde = online agora; cinza = fora. Os agentes ficam embaixo. */}
-            <div className="hidden xs:flex sm:flex -space-x-2" aria-label={`${online.length} online de ${pessoasNoTopo.length}`}>
-              {pessoasNoTopo.slice(0, 6).map((p) => {
-                const aqui = onlineIds.has(p.id);
+            <div className="hidden xs:flex sm:flex -space-x-2" aria-label={`${online.length} online de ${topo.total}`}>
+              {topo.visiveis.map((p) => {
+                const aqui = topo.onlineIds.has(p.id);
                 return (
                   <span key={p.id} title={`${p.nome}${aqui ? " · online" : ""}`} className="inline-flex">
                     <AgentAvatar src={p.avatar} nome={p.nome} size={28} className={`ring-2 ${aqui ? "ring-emerald-400/70" : "ring-slate-400/40 opacity-70"}`} />
@@ -325,7 +324,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
                 );
               })}
             </div>
-            {pessoasNoTopo.length > 6 && <span className={`text-[11px] ${TXT_MUDO}`}>+{pessoasNoTopo.length - 6}</span>}
+            {topo.extras > 0 && <span className={`text-[11px] ${TXT_MUDO}`}>+{topo.extras}</span>}
             {online.length > 0 && <span className={`text-[11px] ${TXT_MUDO}`} title="online agora">{online.length} on</span>}
             {canal.cartolinaId && (
               <button type="button" onClick={abrirCartolina} className={`${TOQUE} px-3 rounded-2xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT}`} title="Abrir a cartolina da sala">▦ cartolina</button>
