@@ -25,6 +25,7 @@ import type { HarnessDeps, TrajectoryState, Step } from "@/lib/agent/trajectory"
 import { normalizeStudioKind } from "@/lib/agent/tools";
 import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
 import { artefatoDeAprender, pedeAula, pedeEngenhariaReversa, DIRETRIZ_ENGENHARIA_REVERSA } from "@/lib/agent/aprender";
+import { DIRETRIZ_MATEMATICA } from "@/lib/agent/matematica";
 
 type GenJson = <T>(system: string, user: string, opts?: { temperature?: number; model?: string; timeoutMs?: number; phase?: string }) => Promise<T>;
 
@@ -89,7 +90,9 @@ export function pickStudioKind(objective: string): string {
   // Diagrama/esquema/fluxograma ANTES de imagem: "como funciona" é estrutura (archify, interativo
   // e fiel), não ilustração de modelo de imagem. Gráfico numérico não é diagrama — fica em imagem.
   if (/diagrama|esquema|fluxograma|como funciona/.test(t)) return "diagram";
-  if (/imagem|figura|ilustra|desenh|gr[aá]fico|f[oó]rmula/.test(t)) return "image";
+  // "fórmula" NUNCA vira imagem (o chat renderiza LaTeX); gráfico de FUNÇÃO e figura de geometria saem
+  // no texto como bloco ```grafico (lib/agent/matematica) — o roteador nem manda esses pra cá.
+  if (/imagem|figura|ilustra|desenh|gr[aá]fico/.test(t)) return "image";
   return normalizeStudioKind(t); // default "guide"
 }
 
@@ -312,6 +315,7 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         "recursos, botões ou o que você 'pode gerar'. Nada de cardápio de funcionalidades. " +
         "Nunca se declare incapaz de mostrar algo visual — apenas não comente o assunto: " +
         "responda o TEMA, que a parte visual é resolvida fora do texto.",
+        DIRETRIZ_MATEMATICA,
         "proximos_passos, quando fizer sentido, são passos de ESTUDO (o que entender, ler, " +
         "praticar ou checar a seguir) — jamais ofertas de recurso da plataforma.",
         "Responda SOMENTE JSON válido.",
