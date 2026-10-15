@@ -87,6 +87,35 @@ describe("agent-turn · executarTurno", () => {
     expect(upsert).toHaveBeenCalledTimes(1);
     expect(upsert.mock.calls[0]![0].where).toEqual({ agentKey_userId: { agentKey: "aura", userId: B } });
   });
+  it("vários usuários no mesmo canal: o agente enxerga cada pessoa pelo nome e responde a quem o chamou", async () => {
+    const m1 = msg({ autorId: A, texto: "@aura resume o capítulo 2", mencoes: ["aura"] });
+    const r1 = msg({ autorTipo: "agente", autorId: "aura", texto: "O capítulo 2 trata de…", mencoes: [] });
+    const m2 = msg({ autorId: B, texto: "@aura e a parte da metodologia?", mencoes: ["aura"] });
+    const { prisma, upsert } = fakePrisma(canal, [m1, r1, m2]);
+    const gerar = vi.fn().mockResolvedValue("A metodologia usa entrevistas.");
+    const eventos: any[] = [];
+    const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: B, mensagemId: m2.id }, { prisma, gerar, publicar: async (c, ev, p) => { eventos.push([c, ev, p]); } });
+    expect(r.ok).toBe(true);
+
+    const args = gerar.mock.calls[0]![0];
+    // quem chamou é a Bia: o objetivo é a mensagem DELA, sem o @
+    expect(args.userId).toBe(B);
+    expect(args.objective).toBe("e a parte da metodologia?");
+    // o histórico distingue as duas pessoas e a própria Aura (assistant)
+    expect(args.history).toEqual([
+      { role: "user", text: "Ana: @aura resume o capítulo 2" },
+      { role: "assistant", text: "O capítulo 2 trata de…" },
+      { role: "user", text: "Bia: @aura e a parte da metodologia?" },
+    ]);
+    // o contexto do canal lista as duas pessoas
+    const bloco: string = (args.agente as any).__blocoCanal;
+    expect(bloco).toContain("Ana");
+    expect(bloco).toContain("Bia");
+    // a resposta vai pro canal (todos veem) e o uso é de quem chamou
+    expect(eventos.some(([, ev]) => ev === EV_MENSAGEM)).toBe(true);
+    await new Promise((res) => setTimeout(res, 0));
+    expect(upsert.mock.calls[0]![0].where).toEqual({ agentKey_userId: { agentKey: "aura", userId: B } });
+  });
   it("author gate: C (fora da turma) não convoca; canal inexistente idem", async () => {
     const { prisma, criadas } = fakePrisma(canal, [msg({ texto: "@aura oi", mencoes: ["aura"] })]);
     const gerar = vi.fn();
