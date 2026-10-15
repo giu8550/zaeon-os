@@ -12,11 +12,13 @@ import * as THREE from "three";
 import { CATALOGO, FILTROS, MOEDA, NOME_TIPO, filtrarVitrine, precoTexto, vendido, type FiltroVitrine, type ItemVitrine } from "@/lib/estudos/vitrine";
 import { COR_RARIDADE, NOME_RARIDADE } from "@/lib/estudos/blueprint";
 import { criarModelo } from "./modelos3d";
+import { plugar, desplugar, usePluginsChat } from "@/lib/plugins/chatPlugins";
 
 const hex = (c: string) => parseInt(c.slice(1), 16);
 
 export default function VitrineEstudos() {
   const [filtro, setFiltro] = useState<FiltroVitrine>("todos"), [busca, setBusca] = useState(""), [aberto, setAberto] = useState<ItemVitrine | null>(null);
+  const plugados = usePluginsChat();
   const itens = useMemo(() => filtrarVitrine(CATALOGO, filtro, busca), [filtro, busca]);
   const moldura = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null), slots = useRef(new Map<string, HTMLDivElement>());
 
@@ -89,6 +91,7 @@ export default function VitrineEstudos() {
                   {/* o 3D do tema (desenhado pelo canvas único, por cima) */}
                   <div ref={(el) => { if (el) slots.current.set(it.id, el); else slots.current.delete(it.id); }} className="relative mx-3 mt-2 h-[150px] rounded-md" style={{ backgroundImage: "linear-gradient(rgba(150,205,255,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(150,205,255,.07) 1px, transparent 1px)", backgroundSize: "16px 16px", border: "1px solid rgba(127,224,255,.15)" }}>
                     {it.preco === 0 && <span className="absolute left-2 top-2 rounded-sm bg-emerald-400 px-1.5 py-0.5 font-mono text-[9.5px] font-black tracking-[0.15em] text-slate-950">GRÁTIS</span>}
+                    {it.plugavel && <span className="absolute right-2 top-2 rounded-sm border border-cyan-300/60 bg-cyan-300/10 px-1.5 py-0.5 font-mono text-[9.5px] font-black tracking-[0.12em] text-cyan-100">{plugados.includes(it.plugavel) ? "✓ PLUGADO" : "⬡ PLUGÁVEL NO CHAT"}</span>}
                     {it.ironia && <span className="absolute right-2 top-2 rounded-sm border border-pink-300/50 px-1.5 py-0.5 font-mono text-[9.5px] tracking-[0.1em] text-pink-200">IRONIA</span>}
                   </div>
                   <div className="flex flex-1 flex-col px-3 pb-3 pt-2.5">
@@ -132,9 +135,17 @@ export default function VitrineEstudos() {
             <div className="mt-4 flex flex-wrap gap-1.5 font-mono text-[10px] text-sky-200/70">{aberto.tags.map((t) => <span key={t} className="rounded-sm border border-sky-300/25 px-1.5 py-0.5">#{t}</span>)}</div>
             <div className="mt-5 flex items-center justify-between gap-3">
               <div className="font-display text-[22px] font-bold" style={{ color: COR_RARIDADE[aberto.raridade] }}>{precoTexto(aberto.preco)}</div>
-              <button type="button" disabled title={`A ${MOEDA.nome} ainda não está no ar`} className="rounded-full bg-gradient-to-b from-amber-200 to-amber-400 px-4 py-2 font-mono text-[12px] font-black text-slate-950 disabled:opacity-50">{aberto.preco ? "comprar fração — em breve" : "pegar grátis — em breve"}</button>
+              {aberto.plugavel ? (
+                plugados.includes(aberto.plugavel) ? (
+                  <button type="button" onClick={() => desplugar(aberto.plugavel!)} className="rounded-full border border-emerald-300/60 bg-emerald-300/10 px-4 py-2 font-mono text-[12px] font-black text-emerald-100 hover:bg-emerald-300/20">✓ plugado no chat · desplugar</button>
+                ) : (
+                  <button type="button" onClick={() => plugar(aberto.plugavel!)} className="rounded-full bg-gradient-to-b from-cyan-200 to-cyan-400 px-4 py-2 font-mono text-[12px] font-black text-slate-950 hover:brightness-110">⬡ plugar no chat</button>
+                )
+              ) : (
+                <button type="button" disabled title={`A ${MOEDA.nome} ainda não está no ar`} className="rounded-full bg-gradient-to-b from-amber-200 to-amber-400 px-4 py-2 font-mono text-[12px] font-black text-slate-950 disabled:opacity-50">{aberto.preco ? "comprar fração — em breve" : "pegar grátis — em breve"}</button>
+              )}
             </div>
-            <p className="mt-2 text-right font-mono text-[10px] text-sky-200/50">catálogo de exemplo · a {MOEDA.nome} ainda não está no ar</p>
+            <p className="mt-2 text-right font-mono text-[10px] text-sky-200/50">{aberto.plugavel ? "grátis · aparece como ⬡ Octa Code no composer do chat da Aura" : `catálogo de exemplo · a ${MOEDA.nome} ainda não está no ar`}</p>
           </div>
         </div>
       )}
