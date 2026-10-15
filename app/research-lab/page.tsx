@@ -10,12 +10,16 @@ import "@/src/i18n";
 
 // --- IMPORTS ---
 import { Navbar } from "@/components/main/navbar";
-import { Mic, MicOff, Code2, Building2 } from "lucide-react";
+import { Mic, MicOff, Code2, Building2, Loader2 } from "lucide-react";
 import { ConversasSlotContext } from "@/components/chat/ConversasSlot";
 import ConversasDaSala from "@/components/chat/ConversasDaSala";
 import { useSidebarHover } from "@/components/lab/useSidebarHover";
 import { EVT_PESQUISA_SALVA, contarPalavras } from "@/lib/onboarding/tutorialLab";
 import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
+import SeletorDeAgente from "@/components/agents/SeletorDeAgente";
+import OctaIcon from "@/components/octa/OctaIcon";
+import { agenteChat, agentesDisponiveis, agenteValido, type AgenteChatId } from "@/lib/agents/chatAgentes";
+import { usePluginsChat } from "@/lib/plugins/chatPlugins";
 import { usePresenca } from "@/components/agents/avatar/hooks";
 import { EVT_ESTUDOS_ABA, abaEstudosAtual, irPraAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
 
@@ -808,6 +812,32 @@ export default function HomeworkPage({
     return () => window.removeEventListener(EVT_ESTUDOS_ABA, f);
   }, []);
   const irEstudos = (aba: AbaEstudos) => { setActiveTab("sala-de-estudos"); irPraAbaEstudos(aba); };
+  // O AGENTE da aba de conversa (o rosto na sidebar). Clicar no rosto abre o seletor; cada agente tem a sua tela:
+  // Aura = o chat da Sala de Estudos, Octa Code = a IDE dele (só depois de adicionado no Marketplace).
+  const agentesPlugados = usePluginsChat();
+  const [agenteId, setAgenteId] = useState<AgenteChatId>("aura");
+  const [seletorAgente, setSeletorAgente] = useState<DOMRect | null>(null);
+  const [trocandoPara, setTrocandoPara] = useState<AgenteChatId | null>(null);
+  useEffect(() => {
+    let salvo: string | null = null;
+    try { salvo = localStorage.getItem("zaeon.lab.agente"); } catch { /* storage bloqueado: fica a Aura */ }
+    setAgenteId(agenteValido(salvo, agentesPlugados));
+  }, [agentesPlugados]);
+  const agente = agenteChat(agenteId);
+  // "octa" não passa pelo setActiveTab (que só aceita as abas de link/restauração): a IDE só abre por aqui.
+  const abrirAgente = (a = agente) => (a.tela === "ide" ? setActiveTabRaw("octa") : irEstudos("meus-estudos"));
+  const trocarAgente = async (id: AgenteChatId) => {
+    setSeletorAgente(null);
+    setTrocandoPara(id);
+    const t0 = Date.now();
+    // a tela do novo agente carrega ANTES de trocar (a IDE é um chunk à parte) — o loading cobre essa espera
+    if (agenteChat(id).tela === "ide") await import("@/app/research-lab/projects/ProjectsContent").catch(() => null);
+    await new Promise((r) => setTimeout(r, Math.max(0, 450 - (Date.now() - t0))));
+    setAgenteId(id);
+    try { localStorage.setItem("zaeon.lab.agente", id); } catch { /* */ }
+    abrirAgente(agenteChat(id));
+    setTrocandoPara(null);
+  };
   // o agente está pensando/respondendo? (a presença que o chat publica — components/agents/avatar) → o nome brilha
   const { sinal: sinalAgente } = usePresenca(AGENTE_CHAT.id);
   const agenteProcessando = sinalAgente === "pensando" || sinalAgente === "falando";
@@ -2636,21 +2666,48 @@ export default function HomeworkPage({
                 lista, acima do Perfil. Sem pills no topo da sala — tudo aqui. */}
             <button
               data-tour="estudos"
-              onClick={() => irEstudos("meus-estudos")}
-              title={agenteProcessando ? `${AGENTE_CHAT.nome} está respondendo…` : `Conversar com ${AGENTE_CHAT.nome}`}
-              className={`${navItem(activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos", "blue")} ${pill(sidebarAberta)} !p-[7px]`}
+              onClick={() => abrirAgente()}
+              title={trocandoPara ? `Trocando para ${agenteChat(trocandoPara).nome}…` : agente.id === "aura" && agenteProcessando ? `${agente.nome} está respondendo…` : `Conversar com ${agente.nome}`}
+              className={`${navItem(agente.tela === "ide" ? activeTab === "octa" : activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos", "blue")} ${pill(sidebarAberta)} !p-[7px]`}
             >
-              <span className={`relative grid place-items-center shrink-0 w-[22px] h-[22px] rounded-full ${agenteProcessando ? "ring-2 ring-cyan-300/80 shadow-[0_0_14px_rgba(34,211,238,0.85)] motion-safe:animate-pulse" : ""}`}>
-                <RostoDaAba agentId={AGENTE_CHAT.id} nome={AGENTE_CHAT.nome} ativa={activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos"} size={22}>
-                  <span className="text-[13px] leading-none text-cyan-500 dark:text-cyan-300">⟁</span>
-                </RostoDaAba>
+              {/* o ROSTO: clicar nele abre o seletor de agente (o resto da pill abre a conversa do agente atual) */}
+              <span
+                role="button"
+                tabIndex={0}
+                aria-haspopup="menu"
+                aria-expanded={!!seletorAgente}
+                aria-label={`Trocar de agente (agora: ${agente.nome})`}
+                title="Trocar de agente"
+                onClick={(e) => { e.stopPropagation(); setSeletorAgente(seletorAgente ? null : e.currentTarget.getBoundingClientRect()); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setSeletorAgente(e.currentTarget.getBoundingClientRect()); } }}
+                className={`relative grid place-items-center shrink-0 w-[22px] h-[22px] rounded-full cursor-pointer hover:ring-2 hover:ring-cyan-300/70 ${agente.id === "aura" && agenteProcessando && !trocandoPara ? "ring-2 ring-cyan-300/80 shadow-[0_0_14px_rgba(34,211,238,0.85)] motion-safe:animate-pulse" : ""}`}
+              >
+                {trocandoPara ? (
+                  <Loader2 className="w-[18px] h-[18px] animate-spin text-cyan-500 dark:text-cyan-300" aria-label="Trocando de agente" />
+                ) : agente.id === "octa" ? (
+                  <OctaIcon size={22} className="text-cyan-700 dark:text-cyan-200" />
+                ) : (
+                  <RostoDaAba agentId={AGENTE_CHAT.id} nome={AGENTE_CHAT.nome} ativa={activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos"} size={22}>
+                    <span className="text-[13px] leading-none text-cyan-500 dark:text-cyan-300">⟁</span>
+                  </RostoDaAba>
+                )}
               </span>
               <Rotulo v={sidebarAberta}>
-                <span className={agenteProcessando ? "nome-agente-brilhando" : "normal-case text-[12px] tracking-wide"}>{AGENTE_CHAT.nome}</span>
+                <span className={agente.id === "aura" && agenteProcessando ? "nome-agente-brilhando" : "normal-case text-[12px] tracking-wide"}>{trocandoPara ? agenteChat(trocandoPara).nome : agente.nome}</span>
               </Rotulo>
             </button>
+            {seletorAgente && (
+              <SeletorDeAgente
+                ancora={seletorAgente}
+                agentes={agentesDisponiveis(agentesPlugados)}
+                atual={agente.id}
+                icone={(id) => (id === "octa" ? <OctaIcon size={20} /> : <span className="text-[14px] leading-none">⟁</span>)}
+                onEscolher={(id) => void trocarAgente(id)}
+                onFechar={() => setSeletorAgente(null)}
+              />
+            )}
             {/* Só o módulo ATUAL abre os submódulos (conversas); os outros ficam fechadinhos. */}
-            <Ramo aberto={sidebarAberta && activeTab === "sala-de-estudos"}>
+            <Ramo aberto={sidebarAberta && activeTab === "sala-de-estudos" && agente.tela === "chat"}>
               {activeTab === "sala-de-estudos"
                 ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
                 : <div className={RAMO}><ConversasDaSala sala="estudos" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>}
@@ -2776,13 +2833,22 @@ export default function HomeworkPage({
         </motion.nav>
       )}
 
+      {/* LOADING da troca de agente: cobre a área até a tela do novo agente estar pronta */}
+      {trocandoPara && (
+        <div role="status" className="fixed inset-0 z-[580] grid place-items-center bg-white/40 dark:bg-black/40 backdrop-blur-sm pointer-events-none">
+          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl border bg-white/90 border-blue-200 text-slate-800 dark:bg-[rgba(22,22,34,0.9)] dark:border-white/10 dark:text-white shadow-xl">
+            <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
+            <span className="text-[13px] font-bold">Trocando para {agenteChat(trocandoPara).nome}…</span>
+          </div>
+        </div>
+      )}
       <main
         style={recuoSidebar}
         className={`flex-1 flex flex-col h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : activeTab === "escritorio" ? "px-4 pt-4 pb-4" : "p-6"} gap-6`}
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
-        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos", "escritorio"].includes(activeTab) && (
+        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos", "escritorio", "octa"].includes(activeTab) && (
           <div className="flex items-end justify-between shrink-0">
             <div>
               <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
@@ -3162,6 +3228,13 @@ export default function HomeworkPage({
               <span className="text-[9px] font-black text-orange-500 uppercase tracking-[0.3em] border border-orange-500/30 px-4 py-2 rounded-full bg-orange-500/5">
                 Em Desenvolvimento
               </span>
+            </div>
+          )}
+
+          {/* OCTA CODE — o agente de código: a tela dele é a IDE (o mesmo motor da sala Projetos, com o gate de acesso dela) */}
+          {activeTab === "octa" && agente.id === "octa" && (
+            <div className="w-full h-full overflow-hidden">
+              <ProjectsContent />
             </div>
           )}
 

@@ -27,7 +27,9 @@ export type LabTab =
   | "projetos"
   | "escritorio"
   | "news"
-  | "profile";
+  | "profile"
+  /** a IDE do agente Octa Code — só se abre pelo seletor de agente (não entra em LAB_TABS: deep-link/restauração não abrem) */
+  | "octa";
 
 export type ResearchSubTab = "chat" | "pesquisas";
 
