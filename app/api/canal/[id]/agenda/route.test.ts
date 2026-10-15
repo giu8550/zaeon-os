@@ -44,7 +44,7 @@ beforeEach(() => { state.blocos = []; state.publicados = []; state.seq = 0; stat
 
 describe("agenda · author gate", () => {
   it.each([
-    ["privado", A, 200], ["privado", B, 403], ["privado", C, 403],
+    ["privado", A, 200], ["privado", B, 200], ["privado", C, 403],
     ["turma", A, 200], ["turma", B, 200], ["turma", C, 403],
     ["aberto", A, 200], ["aberto", B, 200], ["aberto", C, 200],
   ])("GET acesso=%s · user=%s → %i", async (acesso, uid, status) => {
@@ -53,7 +53,7 @@ describe("agenda · author gate", () => {
   });
 
   it.each([
-    ["privado", B, 403], ["turma", C, 403], ["turma", B, 201],
+    ["privado", B, 201], ["turma", C, 403], ["turma", B, 201],
   ])("POST acesso=%s · user=%s → %i", async (acesso, uid, status) => {
     state.canal = canal(acesso); state.user = user(uid);
     expect((await POST(post({ dia: 2, inicio: 9, fim: 15 }), ctx)).status).toBe(status);

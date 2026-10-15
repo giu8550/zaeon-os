@@ -5,9 +5,9 @@ const A = "a".repeat(24), B = "b".repeat(24), C = "c".repeat(24);
 const canal = (acesso: string) => ({ ownerId: A, acesso, membros: [B] });
 
 describe("gate · author gate (A dono, B membro, C fora)", () => {
-  it("privado: só o dono", () => {
+  it("privado: o dono e quem ele colocou como membro", () => {
     expect(podeLer(canal("privado"), A)).toBe(true);
-    expect(podeLer(canal("privado"), B)).toBe(false);
+    expect(podeLer(canal("privado"), B)).toBe(true);
     expect(podeLer(canal("privado"), C)).toBe(false);
   });
   it("turma: dono + membros", () => {
@@ -38,8 +38,9 @@ describe("gate · author gate (A dono, B membro, C fora)", () => {
   it("#396 · membro em canal com dmCom não ganha acesso por ser membro", () => {
     expect(podeLer({ ownerId: A, acesso: "turma", membros: [C], dmCom: B }, C)).toBe(false);
   });
-  it("sem dmCom o comportamento antigo não muda", () => {
-    expect(podeLer({ ownerId: A, acesso: "privado", membros: [B], dmCom: null }, B)).toBe(false);
+  it("sem dmCom: membro entra em qualquer acesso; quem não é membro só no aberto", () => {
+    expect(podeLer({ ownerId: A, acesso: "privado", membros: [B], dmCom: null }, B)).toBe(true);   // membro do privado entra (o dono a colocou)
+    expect(podeLer({ ownerId: A, acesso: "privado", membros: [B], dmCom: null }, C)).toBe(false);
     expect(podeLer({ ownerId: A, acesso: "turma", membros: [B], dmCom: null }, B)).toBe(true);
   });
   it("acesso desconhecido cai em turma", () => {

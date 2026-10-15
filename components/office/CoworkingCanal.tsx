@@ -108,7 +108,17 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   // ─── detalhe do canal ativo (+ marca lido) ───
   const carregarDetalhe = useCallback(async (id: string) => {
     const r = await fetch(`/api/canal/${id}`, { cache: "no-store" });
-    if (!r.ok) { if (r.status === 403) setErro("403"); return; }
+    if (!r.ok) {
+      // sem acesso a ESTE canal (o dono mudou o acesso, tirou a pessoa…): some da lista e abre o próximo — a tela
+      // nunca trava num canal fechado (o seletor, os convites e os outros canais continuam ao alcance)
+      if (r.status === 403 || r.status === 404) {
+        const resto = canaisRef.current.filter((c) => c.id !== id);
+        setCanais(resto);
+        try { if (localStorage.getItem(LS_ULTIMO) === id) localStorage.removeItem(LS_ULTIMO); } catch { /* ignore */ }
+        if (resto.length) setAtivoId(resto[0]!.id); else setErro("403");
+      }
+      return;
+    }
     const d: Detalhe = await r.json();
     meuIdRef.current = d.eu.id;
     const nome = d.eu.nome || "";
