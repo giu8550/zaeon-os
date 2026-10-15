@@ -32,7 +32,8 @@ describe("queue · inline por padrão, 1 turno por canal", () => {
       { canalId: CANAL, agentKey: "nina", userId: A, mensagemId: "m1" },
     ], deps);
     expect(res).toEqual(["inline", "inline"]);
-    await new Promise((r) => setTimeout(r, 80));
+    // espera os dois turnos terminarem (antes era um sleep fixo de 80ms, que falhava com a máquina carregada)
+    await vi.waitFor(() => expect(ordem).toHaveLength(4), { timeout: 2000 });
     expect(ordem).toEqual(["aura:in", "aura:out", "nina:in", "nina:out"]);
     expect(deps).toHaveBeenCalledTimes(2);
   });
