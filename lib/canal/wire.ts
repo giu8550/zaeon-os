@@ -4,6 +4,8 @@
  */
 export const EV_MENSAGEM = "mensagem";
 export const EV_DIGITANDO = "agente-digitando";
+/** a agenda do canal mudou (payload { canalId }): quem está com a bandeja aberta recarrega. */
+export const EV_AGENDA = "agenda";
 
 export const canalChannel = (canalId: string) => `canal-${canalId}`;
 export const presenceChannel = (canalId: string) => `presence-canal-${canalId}`;

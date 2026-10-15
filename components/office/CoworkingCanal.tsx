@@ -20,7 +20,8 @@ import { podeApagar, textoConfirmarApagar, aposApagar } from "@/lib/canal/seleto
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
-import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
+import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, type MensagemWire } from "@/lib/canal/wire";
+import AgendaBandeja from "./AgendaBandeja";
 import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVER, VIDRO_CHIP, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
 import { useNotificacoesSO } from "./useNotificacoesSO";
 
@@ -48,6 +49,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [menu, setMenu] = useState<"canais" | "config" | null>(null);
   const [novoTitulo, setNovoTitulo] = useState("");
   const [apagando, setApagando] = useState<string | null>(null);
+  const [agendaAberta, setAgendaAberta] = useState(false);
+  const [agendaVersao, setAgendaVersao] = useState(0);
   const [emailConvite, setEmailConvite] = useState("");
   const [sugIdx, setSugIdx] = useState(0);
   // A− / A+ do texto das mensagens: a MESMA escolha do chat das salas de estudo e pesquisa (por aparelho).
@@ -127,6 +130,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       if (nomes.includes(nome)) continue;
       const ch = p.subscribe(nome);
       ch.bind(EV_MENSAGEM, (m: MensagemWire) => aoChegar(m, c.id));
+      // alguém marcou/apagou horário na agenda deste canal → a bandeja (se aberta) recarrega
+      ch.bind(EV_AGENDA, () => { if (c.id === ativoRef.current) setAgendaVersao((v) => v + 1); });
       ch.bind(EV_DIGITANDO, (d: { agentKey: string; estado: string }) => {
         if (c.id !== ativoRef.current) return;
         // estado em palavras (pesquisando, investigando, em descanso…); valor desconhecido = "digitando"
@@ -335,8 +340,13 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   return (
     <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4" style={zoom.style}>
       <div className={`relative flex-1 min-h-0 flex flex-col rounded-[28px] overflow-hidden ${VIDRO_PAINEL}`}>
-        {/* barra: canal · presença · cartolina · config */}
+        {/* agenda semanal do canal: bandeja por cima da conversa (#396) */}
+        <AgendaBandeja canalId={ativoId} aberta={agendaAberta} onFechar={() => setAgendaAberta(false)} versao={agendaVersao} />
+        {/* barra: agenda · canal · presença · cartolina · config */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-white/50 dark:border-white/[0.08]">
+          {/* à esquerda do seletor: abre a agenda da semana */}
+          <button type="button" onClick={() => { setAgendaAberta((v) => !v); setMenu(null); }} aria-label="Agenda da semana" aria-expanded={agendaAberta}
+            title="Agenda da semana" className={`${TOQUE} rounded-2xl text-[15px] ${VIDRO_CHIP} ${TXT}`}>🗓</button>
           <div className="relative">
             <button type="button" onClick={() => setMenu(menu === "canais" ? null : "canais")} className={`${TOQUE} px-3 rounded-2xl text-[13px] font-bold ${TXT} ${VIDRO_CHIP} flex items-center gap-2`} aria-haspopup="listbox" aria-expanded={menu === "canais"}>
               <span className="max-w-[40vw] sm:max-w-[260px] truncate">{canal.titulo}</span>

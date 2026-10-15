@@ -1151,6 +1151,24 @@ model CanalMensagem {
   @@map("canal_mensagens")
 }
 
+// Agenda do escritório (#396): horário de trabalho semanal de cada pessoa no canal. Todos do canal veem.
+// Repete toda semana (sem data). `inicio`/`fim` são QUADRADOS de 1h inclusivos: 9..15 = das 9h às 16h.
+// Regras em lib/canal/agenda.ts.
+model AgendaBloco {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  canalId   String   @db.ObjectId
+  userId    String   @db.ObjectId
+  dia       Int                                // 0 = domingo … 6 = sábado
+  inicio    Int                                // quadrado inicial (hora)
+  fim       Int                                // quadrado final (hora, inclusivo)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([canalId, dia])
+  @@index([canalId, userId])
+  @@map("agenda_blocos")
+}
+
 // ─── AURA: a economia de reputação (ver lib/aura/*) ───────────────────────────────
 // ─────────────────────────── CÉREBRO · grafo de conhecimento por estudo ───────────────────────────
 // docs/HANDOFF_CEREBRO_AURA.md. Um estudo (scopeId) = UM grafo = o cérebro. É a FONTE ÚNICA de
