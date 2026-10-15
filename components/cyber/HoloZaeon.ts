@@ -42,8 +42,8 @@ type Estado = (typeof ESTADOS)[number];
 const TAM = 13, SUBIR = 2.6, DESCER = 1.8;
 const Y_FIM = GLOBO_CAPELA.y + GLOBO_CAPELA.r * 0.5 + TAM / 2;   // a parte de baixo do busto ainda dentro do globo
 
-const VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-const FRAG = `
+export const HOLO_VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+export const HOLO_FRAG = `
   uniform sampler2D uMap; uniform float uT, uRevela, uAlpha, uGlitch, uTem, uIra;
   varying vec2 vUv;
   float h(float n){ return fract(sin(n * 12.9898) * 43758.5453); }
@@ -74,7 +74,7 @@ export function criarHoloZaeon(pai: THREE.Object3D, o: { low: boolean }): HoloZa
   const texs: Partial<Record<Estado, THREE.Texture>> = {}, loader = new THREE.TextureLoader();
   const uni = { uMap: { value: null as THREE.Texture | null }, uT: { value: 0 }, uRevela: { value: 0 }, uAlpha: { value: 1 }, uGlitch: { value: 0 }, uTem: { value: 0 }, uIra: { value: 0 } };
   for (const e of ESTADOS) loader.load(`/avatars/zaeon/${e}.webp`, (tx) => { tx.colorSpace = THREE.SRGBColorSpace; texs[e] = tx; if (e === "idle" && !uni.uMap.value) { uni.uMap.value = tx; uni.uTem.value = 1; } });
-  const mat = new THREE.ShaderMaterial({ uniforms: uni, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const mat = new THREE.ShaderMaterial({ uniforms: uni, vertexShader: HOLO_VERT, fragmentShader: HOLO_FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const plano = new THREE.Mesh(new THREE.PlaneGeometry(TAM, TAM), mat); rosto.add(plano);
   // o brilho atrás do rosto
   const tGlow = glowTex("rgba(140,240,255,0.5)", "rgba(40,140,255,0.12)");

@@ -1,6 +1,6 @@
 import { R_SOM_CORACAO } from "./coracao";
 import { describe, expect, it } from "vitest";
-import { PREF_TUTORIAL, tutorialLigado, ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, FRENTE_DOS_TELOES_LOCAL, SALA_DO_SABER_LOCAL, cumpriu, deveNascerNoTubo, passoDe, type CtxGuia, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
+import { PREF_TUTORIAL, tutorialLigado, ANEL_TUBOS, NASCIMENTO, ROTEIRO, TUBO, TUBOS, TUBOS_DO_NOVATO, CENTRO_DA_CAPELA_LOCAL, FRENTE_DOS_TELOES_LOCAL, SALA_DO_SABER_LOCAL, FALAS_DO_RELICARIO, PALAVRA_FINAL, CHAVE_PROGRESSO, cumpriu, decidirTutorial, deveNascerNoTubo, lerProgresso, passoDe, retomadaDe, type CtxGuia, type IdPassoGuia, type ProgressoTutorial, estadoDoTubo, peDaRecepcao, tuboDe } from "./onboarding";
 import { CIDADE as C2, DOCA_ANGULO, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "./ceu";
 import { LAR_LOCAL } from "./landmarks";
 import { AGENTES, DROID, noPisoDaZaeon, posDoGuia } from "./agentes";
@@ -57,14 +57,16 @@ describe("quem chega NASCE num tubo de ensaio", () => {
 });
 
 describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada instrução)", () => {
-  const nada: CtxGuia = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0, droidNoSaber: -1, entrega: null, naMoto: false, motoAndou: 0 };
-  it("tubo → andar → correr → voo curto → voo longo até a capela → a Zaeon → os telões → a 1ª missão (o tablet) — sem motos, portais nem dash", () => {
-    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "correr", "voar", "voo-longo", "capela", "zaeon", "ir-teloes", "teloes", "missao", "estudo", "aviso", "inventario", "despedida", "saber"]);
+  const nada: CtxGuia = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0, droidNoSaber: -1, entrega: null, naMoto: false, motoAndou: 0, portal: false };
+  const pa = (id: IdPassoGuia) => ROTEIRO.find((p) => p.id === id)!;
+  it("tubo → andar → correr → voo curto → voo longo até a capela → a Zaeon → os telões → a 1ª missão (o tablet) → o veredito → o inventário → o portal → a Sala do Saber → o Relicário → a palavra final", () => {
+    expect(ROTEIRO.map((p) => p.id)).toEqual(["nascer", "andar", "correr", "voar", "voo-longo", "capela", "zaeon", "ir-teloes", "teloes", "missao", "estudo", "aviso", "inventario", "despedida", "portal-saber", "saber", "relicario", "palavra-final"]);
     for (const p of ROTEIRO.slice(1)) for (const f of p.falas) expect(f.length).toBeLessThanOrEqual(170);
     for (const p of ROTEIRO) if (p.alvo) expect(naIlhaPrincipal(p.alvo)).toBe(true);
-    expect(ROTEIRO.map((p) => p.falas.join(" ")).join(" ")).not.toMatch(/moto|portal|dash|\bC\b/i);
-    expect(ROTEIRO.find((p) => p.id === "capela")!.falas.join(" ")).not.toMatch(/desktop|estud/i);   // a capela agora é pra ver a Zaeon
-    expect(ROTEIRO.find((p) => p.id === "missao")!.falas[0]).toBe("Agora sua primeira missão é criar um estudo sobre qualquer tema que te interessa.");
+    // até o Relicário o tutorial é 100% MOVIMENTO: sem motos, portais nem dash nas falas (as motos só entram como a RECOMPENSA)
+    expect(ROTEIRO.slice(0, passoDe("relicario")).map((p) => p.falas.join(" ")).join(" ")).not.toMatch(/moto|portal|dash|\bC\b/i);
+    expect(pa("capela").falas.join(" ")).not.toMatch(/desktop|estud/i);   // a capela agora é pra ver a Zaeon
+    expect(pa("missao").falas[0]).toBe("Agora sua primeira missão é criar um estudo sobre qualquer tema que te interessa.");
     const c = mundo(CENTRO_DA_CAPELA_LOCAL); expect(dentroDeAlgum(c, colisoresDaCidade())).toBe(false);
     expect(Math.hypot(CENTRO_DA_CAPELA_LOCAL.x, CENTRO_DA_CAPELA_LOCAL.z)).toBeLessThan(R_SOM_CORACAO);   // perto do globo: ouve o coração
     const pe = peDaRecepcao(); expect(alturaEm(recepcao, pe)).toBe(0); expect(dentroDeAlgum(pe, colisoresDaCidade())).toBe(false);
@@ -77,22 +79,29 @@ describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada inst
     expect(Math.abs(Math.hypot(FRENTE_DOS_TELOES_LOCAL.x - p.x, FRENTE_DOS_TELOES_LOCAL.z - p.z) - Math.hypot(FRENTE_DOS_TELOES_LOCAL.x - s.x, FRENTE_DOS_TELOES_LOCAL.z - s.z))).toBeLessThan(1);
     expect(Math.hypot(FRENTE_DOS_TELOES_LOCAL.x, FRENTE_DOS_TELOES_LOCAL.z)).toBeLessThan(Math.hypot(p.x, p.z));
   });
-  it("as cenas: o Droid se apresenta e passa a missão; os telões são cena inteira; as instruções mostram as teclas", () => {
-    const pa = (id: string) => ROTEIRO.find((p) => p.id === id)!;
-    expect(pa("andar").cena).toBe("droid"); expect(pa("teloes").cena).toBe("teloes"); expect(pa("teloes").cenaInteira).toBe(true);
+  it("as cenas: o Droid se apresenta e passa a missão; a capela e os telões são cutscenes; as instruções mostram as teclas", () => {
+    expect(pa("andar").cena).toBe("droid"); expect(pa("capela").cena).toBe("capela"); expect(pa("capela").cenaInteira).toBeFalsy();   // a câmera solta na instrução (pousar)
+    expect(pa("teloes").cena).toBe("teloes"); expect(pa("teloes").cenaInteira).toBe(true);
     expect(pa("missao").cena).toBe("droid");
     expect(pa("aviso").alerta).toBe(true); expect(pa("aviso").cenaInteira).toBe(true);
-    expect(pa("despedida").falas.join(" ")).toMatch(/Pressione I pra abrir seu inventário.*Estarei te esperando na Sala do Saber/);
-    expect(pa("saber").cena).toBe("saber");
-    expect(Math.hypot(SALA_DO_SABER_LOCAL.x, SALA_DO_SABER_LOCAL.z)).toBeGreaterThan(CIDADE.bordaR);   // a biblioteca é uma sala de BORDA
     expect(pa("aviso").falas.join(" ")).toMatch(/não tem base de estudos.*Não dá pra vender nem publicar.*guardar ela no seu inventário e me entregar algo melhor depois/);
     expect(pa("andar").teclas).toEqual(["W", "A", "S", "D"]); expect(pa("correr").teclas).toEqual(["Shift"]); expect(pa("voar").teclas).toEqual(["Espaço"]);
+  });
+  it("a despedida: o Droid ensina o I, abre o PORTAL e leva a pessoa até a Sala do Saber — lá mostra o Relicário (entrega = RECOMPENSA) e dá a palavra final", () => {
+    expect(pa("despedida").falas.join(" ")).toMatch(/Pressione I.*venha comigo/);
+    expect(pa("portal-saber").cond.tipo).toBe("portal"); expect(pa("portal-saber").falas).toEqual([]);
+    for (const id of ["saber", "relicario", "palavra-final"] as const) { expect(pa(id).cenaInteira).toBe(true); expect(pa(id).cond.tipo).toBe("ouvir"); }
+    expect(pa("relicario").cena).toBe("relicario"); expect(pa("relicario").falas).toBe(FALAS_DO_RELICARIO);
+    expect(FALAS_DO_RELICARIO.join(" ")).toMatch(/RECOMPENSA/); expect(FALAS_DO_RELICARIO.join(" ")).toMatch(/MOTOS/);
+    expect(pa("palavra-final").alerta).toBe(true); expect(pa("palavra-final").falas).toBe(PALAVRA_FINAL);
+    expect(PALAVRA_FINAL.join(" ")).toMatch(/mãos vazias.*bom o suficiente/);
+    expect(Math.hypot(SALA_DO_SABER_LOCAL.x, SALA_DO_SABER_LOCAL.z)).toBeGreaterThan(CIDADE.bordaR);   // a biblioteca é uma sala de BORDA
   });
   it("sem a pessoa fazer nada, nenhum passo anda (o Droid espera) — a não ser o de só ouvir", () => {
     for (const p of ROTEIRO.slice(1)) if (p.cond.tipo !== "ouvir") expect(cumpriu(p.cond, nada)).toBe(false);
   });
   it("cada instrução se cumpre com a ação certa — e só com ela", () => {
-    const c = (id: string) => ROTEIRO.find((p) => p.id === id)!.cond;
+    const c = (id: IdPassoGuia) => pa(id).cond;
     expect(cumpriu(c("nascer"), { ...nada, nascendo: true })).toBe(false); expect(cumpriu(c("nascer"), nada)).toBe(true);
     expect(cumpriu(c("andar"), { ...nada, andou: 2 })).toBe(false); expect(cumpriu(c("andar"), { ...nada, andou: 7 })).toBe(true);
     expect(cumpriu(c("correr"), { ...nada, andou: 99 })).toBe(false); expect(cumpriu(c("correr"), { ...nada, correu: 21 })).toBe(true);
@@ -104,7 +113,54 @@ describe("o TUTORIAL do Droid: ensina FAZENDO (espera a pessoa cumprir cada inst
     expect(cumpriu(c("missao"), { ...nada, chegou: true })).toBe(false); expect(cumpriu(c("missao"), { ...nada, tabletAberto: true })).toBe(true);
     expect(cumpriu(c("estudo"), { ...nada, tabletAberto: true })).toBe(false); expect(cumpriu(c("estudo"), { ...nada, pesquisaSalva: true })).toBe(true);
     expect(cumpriu(c("inventario"), { ...nada, inventario: 3 })).toBe(false); expect(cumpriu(c("inventario"), { ...nada, inventario: Infinity })).toBe(true);
-    expect(cumpriu(c("saber"), { ...nada, droidNoSaber: 1 })).toBe(false); expect(cumpriu(c("saber"), { ...nada, droidNoSaber: 4 })).toBe(true);
+    expect(cumpriu(c("portal-saber"), { ...nada, chegou: true, inventario: Infinity })).toBe(false); expect(cumpriu(c("portal-saber"), { ...nada, portal: true })).toBe(true);
+    // (o Droid chegando na Sala do Saber por conta própria saiu do roteiro — a condição continua valendo)
+    expect(cumpriu({ tipo: "saber", s: 3 }, { ...nada, droidNoSaber: 1 })).toBe(false); expect(cumpriu({ tipo: "saber", s: 3 }, { ...nada, droidNoSaber: 4 })).toBe(true);
+  });
+});
+
+describe("o PROGRESSO do tutorial (recarregar no meio NÃO recomeça tudo)", () => {
+  const salvo = (v: unknown) => (k: string) => (k === CHAVE_PROGRESSO ? JSON.stringify(v) : null);
+  it("lerProgresso: lixo, passo desconhecido ou storage bloqueado = nada; a pesquisa salva vem junto, saneada", () => {
+    expect(lerProgresso(() => null)).toBeNull();
+    expect(lerProgresso(() => "lixo{")).toBeNull();
+    expect(lerProgresso(() => { throw new Error("storage bloqueado"); })).toBeNull();
+    expect(lerProgresso(salvo("fim"))).toBeNull();
+    expect(lerProgresso(salvo({ passo: "xyz" }))).toBeNull();
+    expect(lerProgresso(salvo({ passo: 7 }))).toBeNull();
+    expect(lerProgresso(salvo({ passo: "motos-fim" }))).toBeNull();   // só os passos do ROTEIRO (as motos não se retomam)
+    expect(lerProgresso(() => JSON.stringify({ passo: "fim" }))).toEqual({ passo: "fim", pesquisa: null });
+    expect(lerProgresso(salvo({ passo: "fim" }))).toEqual({ passo: "fim", pesquisa: null });
+    expect(lerProgresso(salvo({ passo: "capela", pesquisa: "x" }))).toEqual({ passo: "capela", pesquisa: null });
+    expect(lerProgresso(salvo({ passo: "aviso", pesquisa: { titulo: "Chocolate", palavras: "120", workId: "64f0c0ffee0000000000abcd" } }))).toEqual({ passo: "aviso", pesquisa: { titulo: "Chocolate", palavras: 120, workId: "64f0c0ffee0000000000abcd" } });
+    expect(lerProgresso(salvo({ passo: "aviso", pesquisa: { titulo: "x".repeat(300), palavras: -4, workId: 5 } }))!.pesquisa).toEqual({ titulo: "x".repeat(200), palavras: 0, workId: null });
+    expect(lerProgresso(salvo({ passo: "aviso", pesquisa: { palavras: 10 } }))!.pesquisa).toBeNull();   // sem título não é pesquisa
+  });
+  it("retomadaDe: cada passo volta pro começo da sua cena, no lugar certo", () => {
+    const r = (passo: ProgressoTutorial["passo"], pesquisa: ProgressoTutorial["pesquisa"] = null) => retomadaDe({ passo, pesquisa });
+    expect(retomadaDe(null)).toBeNull();
+    expect(r("fim")).toBe("fim");
+    expect(r("nascer")).toBe("inicio"); expect(r("andar")).toBe("inicio");   // mal saiu do tubo: recomeça
+    for (const id of ["correr", "voar", "voo-longo", "capela"] as const) expect(r(id)).toEqual({ passo: id, onde: "tubo" });
+    expect(r("zaeon")).toEqual({ passo: "zaeon", onde: "capela" }); expect(r("ir-teloes")).toEqual({ passo: "ir-teloes", onde: "capela" });
+    expect(r("teloes")).toEqual({ passo: "teloes", onde: "teloes" });
+    expect(r("missao")).toEqual({ passo: "missao", onde: "teloes" }); expect(r("estudo")).toEqual({ passo: "missao", onde: "teloes" });
+    const pq = { titulo: "Chocolate", palavras: 120, workId: null };
+    for (const id of ["aviso", "inventario", "despedida", "portal-saber"] as const) { expect(r(id, pq)).toEqual({ passo: "aviso", onde: "teloes" }); expect(r(id)).toEqual({ passo: "missao", onde: "teloes" }); }   // sem a pesquisa salva, a missão de novo
+    for (const id of ["saber", "relicario", "palavra-final"] as const) expect(r(id)).toEqual({ passo: "saber", onde: "saber" });
+  });
+  it("decidirTutorial: ?nascer=1 sempre do começo; 'fim' não força de novo (até desligar e ligar o modo); progresso = nasce retomando; senão, a regra do tubo", () => {
+    const base = { visto: true, forcarUrl: false, modoTutorial: false, fundador: false, progresso: null };
+    expect(decidirTutorial({ ...base, forcarUrl: true, progresso: { passo: "saber" } })).toEqual({ nascer: true, retomar: null });
+    expect(decidirTutorial({ ...base, modoTutorial: true, progresso: { passo: "fim" } })).toEqual({ nascer: false, retomar: null });
+    expect(decidirTutorial({ ...base, progresso: { passo: "andar" } })).toEqual({ nascer: true, retomar: null });
+    expect(decidirTutorial({ ...base, fundador: true, progresso: { passo: "capela" } })).toEqual({ nascer: true, retomar: { passo: "capela", onde: "tubo" } });
+    expect(decidirTutorial({ ...base, progresso: { passo: "relicario", pesquisa: null } })).toEqual({ nascer: true, retomar: { passo: "saber", onde: "saber" } });
+    // sem progresso: a regra do tubo (quem nunca entrou nasce; o dono não; o modo tutorial força)
+    expect(decidirTutorial({ ...base, visto: false })).toEqual({ nascer: true, retomar: null });
+    expect(decidirTutorial(base)).toEqual({ nascer: false, retomar: null });
+    expect(decidirTutorial({ ...base, visto: false, fundador: true })).toEqual({ nascer: false, retomar: null });
+    expect(decidirTutorial({ ...base, fundador: true, modoTutorial: true })).toEqual({ nascer: true, retomar: null });
   });
 });
 
@@ -145,7 +201,8 @@ describe("o ritmo das falas", () => {
     expect(tempoDeLeitura("Isso!")).toBe(RITMO_FALA.entre);
     const longa = ROTEIRO.find((p) => p.id === "aviso")!.falas[1]!;
     expect(tempoDeLeitura(longa)).toBeGreaterThan(6);
-    expect(esperaDepoisDaUltima(ROTEIRO.find((p) => p.id === "despedida")!)).toBeGreaterThan(5);
+    expect(esperaDepoisDaUltima(ROTEIRO.find((p) => p.id === "aviso")!)).toBeGreaterThan(5);
+    const desp = ROTEIRO.find((p) => p.id === "despedida")!; expect(esperaDepoisDaUltima(desp)).toBe(tempoDeLeitura(desp.falas[desp.falas.length - 1]!));
     expect(esperaDepoisDaUltima(ROTEIRO.find((p) => p.id === "andar")!)).toBe(RITMO_FALA.antesDeConferir);
   });
 });
@@ -163,10 +220,11 @@ describe("a concorrência no tutorial (o tablet guardado enquanto a pesquisa rod
 });
 
 describe("a ENTREGA na Sala do Saber e o tutorial das MOTOS", () => {
-  it("o Droid pede com zoom; o veredito anda; recusado diz o que falta; aceito vira as motos (garagem → montar → pilotar → descer)", async () => {
+  it("a entrega é UMA cena no Relicário; o veredito anda; recusado diz o que falta; aceito vira as motos (garagem → montar → pilotar → descer)", async () => {
     const { ROTEIRO_ENTREGA, ROTEIRO_MOTOS, passoDaRecusa, cumpriu } = await import("./onboarding");
-    const nada0 = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0, droidNoSaber: -1, entrega: null, naMoto: false, motoAndou: 0 } as const;
-    expect(ROTEIRO_ENTREGA[0]!.cena).toBe("droid-perto");
+    const nada0 = { nascendo: false, andou: 0, correu: 0, noAr: 0, turbo: 0, chegou: false, conversaFeita: false, tabletAberto: false, pesquisaSalva: false, inventario: 0, droidNoSaber: -1, entrega: null, naMoto: false, motoAndou: 0, portal: false } as const;
+    expect(ROTEIRO_ENTREGA).toHaveLength(1);
+    expect(ROTEIRO_ENTREGA[0]!.cena).toBe("relicario"); expect(ROTEIRO_ENTREGA[0]!.cenaInteira).toBe(true); expect(ROTEIRO_ENTREGA[0]!.cond.tipo).toBe("entrega");
     expect(cumpriu(ROTEIRO_ENTREGA[0]!.cond, nada0)).toBe(false);
     expect(cumpriu(ROTEIRO_ENTREGA[0]!.cond, { ...nada0, entrega: "recusada" })).toBe(true);
     const r = passoDaRecusa(["o RESUMO", "a CONCLUSÃO", "as REFERÊNCIAS", "as CITAÇÕES"]);

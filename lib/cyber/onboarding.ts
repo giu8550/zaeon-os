@@ -25,6 +25,51 @@ export const PREF_TUTORIAL = "zaeon_cyber_tutorial";
 export function tutorialLigado(get: (k: string) => string | null): boolean {
   try { return get(PREF_TUTORIAL) === "1"; } catch { return false; }
 }
+/**
+ * O PROGRESSO do tutorial (neste navegador): o tutorial é uma HISTÓRIA (cutscenes, falas, o mesmo fio) — recarregar a
+ * página no meio NÃO recomeça tudo: volta no último ponto de retomada (pedido do dono, out/2026). O modo tutorial das
+ * Configurações apaga o progresso ao ligar/desligar (desligar e ligar de novo = recomeçar do tubo). Acabou (ou pulou) =
+ * "fim": o modo tutorial ligado não força de novo até ser desligado e ligado.
+ */
+export const CHAVE_PROGRESSO = "zaeon:cyber:tutorial:progresso:v1";
+export type PesquisaDoProgresso = { titulo: string; palavras: number; workId: string | null };
+export type ProgressoTutorial = { passo: IdPassoGuia | "fim"; pesquisa?: PesquisaDoProgresso | null };
+export function lerProgresso(get: (k: string) => string | null): ProgressoTutorial | null {
+  try {
+    const v = JSON.parse(get(CHAVE_PROGRESSO) ?? "null") as ProgressoTutorial | null;
+    if (!v || typeof v !== "object" || typeof v.passo !== "string") return null;
+    if (v.passo !== "fim" && !ROTEIRO.some((p) => p.id === v.passo)) return null;
+    const pq = v.pesquisa && typeof v.pesquisa === "object" && typeof v.pesquisa.titulo === "string"
+      ? { titulo: v.pesquisa.titulo.slice(0, 200), palavras: Math.max(0, Number(v.pesquisa.palavras) || 0), workId: typeof v.pesquisa.workId === "string" ? v.pesquisa.workId : null } : null;
+    return { passo: v.passo, pesquisa: pq };
+  } catch { return null; }
+}
+/** onde a pessoa reaparece ao RETOMAR: na frente do tubo, no centro da capela, na frente dos telões ou na Sala do Saber */
+export type OndeRetomar = "tubo" | "capela" | "teloes" | "saber";
+/** o PONTO DE RETOMADA de um progresso salvo (null = sem progresso; "inicio" = recomeçar do tubo — mal tinha saído
+ *  dele; "fim" = sem tutorial). Cada passo volta pro começo
+ *  da sua cena (a conversa com a Zaeon recomeça inteira; a missão do tablet reabre; sem a pesquisa salva, a missão) */
+export function retomadaDe(p: ProgressoTutorial | null): { passo: IdPassoGuia; onde: OndeRetomar } | "fim" | "inicio" | null {
+  if (!p) return null;
+  if (p.passo === "fim") return "fim";
+  const i = passoDe(p.passo), ir = (id: IdPassoGuia, onde: OndeRetomar) => ({ passo: id, onde });
+  if (i <= passoDe("andar")) return "inicio";
+  if (i <= passoDe("capela")) return ir(p.passo, "tubo");
+  if (i <= passoDe("ir-teloes")) return ir(p.passo === "ir-teloes" ? "ir-teloes" : "zaeon", "capela");
+  if (i <= passoDe("estudo")) return ir(p.passo === "teloes" ? "teloes" : "missao", "teloes");
+  if (i <= passoDe("portal-saber")) return p.pesquisa ? ir("aviso", "teloes") : ir("missao", "teloes");
+  return ir("saber", "saber");
+}
+/** o modo tutorial ligado (ou ?nascer=1) e o progresso salvo → nasce no tutorial? (e de onde) */
+export function decidirTutorial(o: { visto: boolean; forcarUrl: boolean; modoTutorial: boolean; fundador: boolean; progresso: ProgressoTutorial | null }): { nascer: boolean; retomar: { passo: IdPassoGuia; onde: OndeRetomar } | null } {
+  if (o.forcarUrl) return { nascer: true, retomar: null };   // ?nascer=1: sempre do começo (teste)
+  const r = retomadaDe(o.progresso);
+  if (r === "fim") return { nascer: false, retomar: null };
+  if (r === "inicio") return { nascer: true, retomar: null };
+  if (r) return { nascer: true, retomar: r };
+  return { nascer: deveNascerNoTubo({ visto: o.visto, forcar: o.modoTutorial, fundador: o.fundador }), retomar: null };
+}
+
 /** nasce no tubo? Quem nunca entrou no cyberespaço (`visto` = o servidor já marcou o nascimento); o dono nasce na nave
  *  dele (a não ser forçado: `?nascer=1` ou o modo tutorial ligado) */
 export function deveNascerNoTubo(o: { visto: boolean; forcar: boolean; fundador: boolean }): boolean {
@@ -87,12 +132,13 @@ export function estadoDoTubo(t: number): { liquido: number; vidro: number } {
  * (Shift andando), VOAR `m` metros acima do chão (Espaço), o VOO LONGO (`m` metros de turbo: Shift no ar), CHEGAR no
  * alvo, conversar com a Zaeon, OUVIR (o passo é só a cena — anda quando as falas acabam) e abrir o TABLET.
  */
-export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "pesquisa" } | { tipo: "inventario"; s: number } | { tipo: "saber"; s: number } | { tipo: "entrega" } | { tipo: "montar" } | { tipo: "pilotar"; m: number } | { tipo: "descer" } | { tipo: "fim" };
-export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "estudo" | "aviso" | "inventario" | "despedida" | "saber" | "entrega" | "recusa" | "motos-aceite" | "motos-ver" | "moto" | "pilotar" | "descer" | "motos-fim" | "fim";
+export type CondGuia = { tipo: "nascer" } | { tipo: "andar"; m: number } | { tipo: "correr"; m: number } | { tipo: "voar"; m: number } | { tipo: "turbo"; m: number } | { tipo: "chegar" } | { tipo: "conversa" } | { tipo: "ouvir" } | { tipo: "tablet" } | { tipo: "pesquisa" } | { tipo: "inventario"; s: number } | { tipo: "saber"; s: number } | { tipo: "entrega" } | { tipo: "portal" } | { tipo: "montar" } | { tipo: "pilotar"; m: number } | { tipo: "descer" } | { tipo: "fim" };
+export type IdPassoGuia = "nascer" | "andar" | "correr" | "voar" | "voo-longo" | "capela" | "zaeon" | "ir-teloes" | "teloes" | "missao" | "estudo" | "aviso" | "inventario" | "despedida" | "portal-saber" | "saber" | "relicario" | "palavra-final" | "entrega" | "recusa" | "motos-aceite" | "motos-ver" | "moto" | "pilotar" | "descer" | "motos-fim" | "fim";
 /** a CUTSCENE do passo (lib/cyber/cutscene): enquanto o Droid fala, a câmera enquadra outra coisa — "droid" = ele (a
- *  apresentação e a missão), "teloes" = os telões PROBLEMA → SOLUÇÃO. A câmera solta na INSTRUÇÃO (a última fala),
+ *  apresentação e a missão), "teloes" = os telões PROBLEMA → SOLUÇÃO, "capela" = o centro da capela visto do alto (pra
+ *  onde a pessoa tem que ir), "relicario" = o Relicário do Saber (lib/cyber/relicario). A câmera solta na INSTRUÇÃO (a última fala),
  *  a não ser que `cenaInteira` (o passo todo é cena — a pessoa não precisa se mexer) */
-export type CenaGuia = "droid" | "droid-perto" | "teloes" | "saber" | "motos";
+export type CenaGuia = "droid" | "droid-perto" | "teloes" | "saber" | "motos" | "capela" | "relicario";
 /** um passo do tutorial: as FALAS do Droid (uma depois da outra; a última — a INSTRUÇÃO — fica na tela até a pessoa
  *  cumprir), o que ela tem que fazer, o alvo de "vem comigo até…" (o Droid vai na frente; o farol marca), a CENA e as
  *  TECLAS que a caixa de diálogo mostra em destaque */
@@ -104,6 +150,18 @@ export const CENTRO_DA_CAPELA_LOCAL = { x: 14, z: 3 };
  *  centro, entre os dois telões — dali se lê o da esquerda (problemas) e o da direita (soluções) */
 export const FRENTE_DOS_TELOES_LOCAL: P2 = noMirante(MIRANTES_ESTACAO[0]!, ESTACAO.u + 22, ESTACAO.v);
 
+/** o Droid apresentando o RELICÁRIO: como se entrega e a RECOMPENSA (pedido do dono: "entrega gera recompensa — deixe
+ *  isso claro dentro do script") */
+export const FALAS_DO_RELICARIO = [
+  "Aquele é o Relicário do Saber. Coloque nele o que você criar: um estudo, uma pesquisa, um artigo.",
+  "A Zaeon lê cada página ali mesmo — e quem estiver na sala assiste.",
+  "Toda entrega aceita tem RECOMPENSA. A primeira libera as MOTOS da cidade.",
+];
+/** a PALAVRA FINAL do Droid (o fim do tutorial): não volte de mãos vazias */
+export const PALAVRA_FINAL = ["Até lá, não apareça aqui de mãos vazias.", "Volte quando tiver algo bom o suficiente. Estarei te esperando. ✦"];
+/** onde o portal do Droid deixa a pessoa: dentro da Sala do Saber, perto da porta, de frente pro Relicário (sala local) */
+export const FRENTE_DO_SABER_SALA: P2 = { x: 0, z: 15 };
+
 /** o ROTEIRO do Droid (mundo) */
 export const ROTEIRO: PassoGuia[] = (() => {
   const centro = mundo(CENTRO_DA_CAPELA_LOCAL), teloes = mundo(FRENTE_DOS_TELOES_LOCAL);
@@ -113,7 +171,8 @@ export const ROTEIRO: PassoGuia[] = (() => {
     { id: "correr", titulo: "Correr", teclas: ["Shift"], falas: ["Bom. Seus pés ainda lembram o caminho.", "Agora segure SHIFT enquanto anda para correr. Mais rápido!"], cond: { tipo: "correr", m: 20 }, alvo: null },
     { id: "voar", titulo: "Voo curto", teclas: ["Espaço"], falas: ["Você é mais rápido do que parece.", "Mas aqui ninguém fica preso ao chão. Aperte ESPAÇO: a mochila a jato te tira do solo."], cond: { tipo: "voar", m: 4 }, alvo: null },
     { id: "voo-longo", titulo: "Voo longo", teclas: ["Espaço", "Shift"], falas: ["Isso! Você está voando.", "Para ir longe, segure SHIFT no ar: o turbo te leva muito mais rápido. Siga-me até a capela, no coração da cidadela!"], cond: { tipo: "turbo", m: 50 }, alvo: { ...centro, r: 7 } },
-    { id: "capela", titulo: "A capela", falas: ["Que voo! Agora pouse no centro da capela, ao lado do globo."], cond: { tipo: "chegar" }, alvo: { ...centro, r: 7 } },
+    // a CUTSCENE da capela: a câmera sobe e mostra o centro (o globo de luz) — e solta na instrução
+    { id: "capela", titulo: "A capela", cena: "capela", falas: ["Que voo! Lá embaixo, está vendo? O coração da capela: o globo de luz.", "Pouse no centro da capela, ao lado do globo."], cond: { tipo: "chegar" }, alvo: { ...centro, r: 7 } },
     { id: "zaeon", titulo: "A Zaeon", falas: ["Olhe o globo… alguém quer te conhecer. ✦"], cond: { tipo: "conversa" }, alvo: null },
     { id: "ir-teloes", titulo: "Os telões", teclas: ["Espaço", "Shift"], falas: ["A Zaeon gostou de você.", "Agora venha comigo: quero te mostrar o que move esta cidade."], cond: { tipo: "chegar" }, alvo: { ...teloes, r: 9 } },
     { id: "teloes", titulo: "Problema → solução", cena: "teloes", cenaInteira: true, falas: ["Neste telão, os PROBLEMAS DA TERRA: o clima, as florestas, os oceanos, a água.", "E deste lado, as SOLUÇÕES — ideias e projetos de gente como você.", "Cada solução começou como um ESTUDO. É assim que se cria valor aqui."], cond: { tipo: "ouvir" }, alvo: null },
@@ -123,21 +182,25 @@ export const ROTEIRO: PassoGuia[] = (() => {
     { id: "aviso", titulo: "O veredito do Droid", cena: "droid", cenaInteira: true, alerta: true, falas: ["Pare um instante. Deixa eu ver o que você fez…", "Essa pesquisa ainda não tem base de estudos pra ter algum valor ainda. Não dá pra vender nem publicar.", "Mas você pode guardar ela no seu inventário e me entregar algo melhor depois."], cond: { tipo: "ouvir" }, alvo: null },
     // o INVENTÁRIO abre com a pesquisa (o livro-holograma) em destaque; anda quando a pessoa fecha ou depois de `s` s
     { id: "inventario", titulo: "O inventário", falas: [], cond: { tipo: "inventario", s: 11 }, alvo: null },
-    // a DESPEDIDA: o Droid sai de cena e vai pra SALA DO SABER (a biblioteca, na borda mais vazia da Zaeon) — a câmera
-    // segue ele até lá, mostra a sala e volta devagar pro personagem: o tutorial acabou, as salas abrem
-    { id: "despedida", titulo: "Até logo", cena: "droid", cenaInteira: true, falas: ["Pressione I pra abrir seu inventário.", "E só venha falar comigo quando tiver algo de valor. Estarei te esperando na Sala do Saber."], cond: { tipo: "ouvir" }, alvo: null },
-    { id: "saber", titulo: "A Sala do Saber", cena: "saber", cenaInteira: true, falas: [], cond: { tipo: "saber", s: 3.2 }, alvo: null },
+    // a DESPEDIDA: o Droid abre um PORTAL e leva a pessoa JUNTO até a frente da SALA DO SABER (a biblioteca). Lá ele
+    // mostra o RELICÁRIO (lib/cyber/relicario), deixa claro que entrega aceita tem RECOMPENSA e dá a palavra final
+    { id: "despedida", titulo: "Até logo", cena: "droid", cenaInteira: true, falas: ["Pressione I quando quiser abrir o seu inventário.", "Agora venha comigo. Vou te levar a um lugar."], cond: { tipo: "ouvir" }, alvo: null },
+    { id: "portal-saber", titulo: "O portal", falas: [], cond: { tipo: "portal" }, alvo: null },
+    { id: "saber", titulo: "A Sala do Saber", cena: "droid-perto", cenaInteira: true, falas: ["Esta é a Sala do Saber. Aqui só fica o que tem valor."], cond: { tipo: "ouvir" }, alvo: null },
+    { id: "relicario", titulo: "O Relicário", cena: "relicario", cenaInteira: true, falas: FALAS_DO_RELICARIO, cond: { tipo: "ouvir" }, alvo: null },
+    { id: "palavra-final", titulo: "A palavra final", cena: "droid-perto", cenaInteira: true, alerta: true, falas: PALAVRA_FINAL, cond: { tipo: "ouvir" }, alvo: null },
   ];
 })();
 /** o índice de um passo */
 export const passoDe = (id: IdPassoGuia) => ROTEIRO.findIndex((p) => p.id === id);
 /**
- * A ENTREGA (depois do tutorial — lib/cyber/entregaAbnt): quem volta na SALA DO SABER e chega perto do Droid vê uma
- * cutscene com ZOOM nele, e ele pede a pesquisa. Completa e em ABNT → ele aceita e começa o tutorial das MOTOS (até lá,
- * as motos ficam travadas — menos pro dono). Recusada → ele diz o que falta.
+ * A ENTREGA (depois do tutorial — lib/cyber/relicario + lib/cyber/entregaAbnt): na SALA DO SABER, a pessoa coloca um
+ * item no RELICÁRIO (F ou clique → o inventário com ▶ nos itens que cabem). A câmera vai pro Relicário enquanto o
+ * holograma da Zaeon lê o trabalho (todos na sala veem); o veredito chega quando a leitura acaba. Aceita → a RECOMPENSA
+ * (o tutorial das MOTOS); recusada → o Droid diz o que falta.
  */
 export const ROTEIRO_ENTREGA: PassoGuia[] = [
-  { id: "entrega", titulo: "A entrega", cena: "droid-perto", cenaInteira: true, falas: ["Você voltou, viajante.", "Trouxe algo de valor? Me entregue a sua pesquisa — completa e em ABNT."], cond: { tipo: "entrega" }, alvo: null },
+  { id: "entrega", titulo: "A entrega", cena: "relicario", cenaInteira: true, falas: ["O Relicário aceitou o seu trabalho. A Zaeon vai ler — página por página."], cond: { tipo: "entrega" }, alvo: null },
 ];
 /** o Droid recusando: o que falta (até 3 itens, as falas cabem na caixa) */
 export function passoDaRecusa(faltando: string[]): PassoGuia {
@@ -145,16 +208,18 @@ export function passoDaRecusa(faltando: string[]): PassoGuia {
   return { id: "recusa", titulo: "Ainda não", cena: "droid-perto", cenaInteira: true, alerta: true, falas: ["Ainda não tem valor.", `Falta ${lista.join("; ")}${faltando.length > 3 ? "…" : "."}`.slice(0, 168), "Volte quando estiver completa e em ABNT. Estarei aqui."], cond: { tipo: "ouvir" }, alvo: null };
 }
 export const FALA_DESISTIU = "Sem pressa. Volte quando tiver algo de valor — estarei aqui.";
+/** o Droid na Sala do Saber, quando a pessoa chega perto dele (depois do tutorial) */
+export const FALA_DICA_RELICARIO = "Trouxe algo de valor? Coloque no Relicário — chegue perto dele e aperte F.";
 /** o TUTORIAL DAS MOTOS (a recompensa da entrega): o Droid mostra a garagem e ensina a montar, pilotar e descer */
 export const ROTEIRO_MOTOS: PassoGuia[] = (() => {
   const lote = LOTES.find((l) => l.id === "garagem")!;
   return [
-    { id: "motos-aceite", titulo: "Aceita", cena: "droid-perto", cenaInteira: true, falas: ["Isso sim tem valor. ✦ Aceito.", "Como recompensa, as MOTOS da Zaeon agora são suas. Vem ver."], cond: { tipo: "ouvir" }, alvo: null },
+    { id: "motos-aceite", titulo: "Aceita", cena: "droid-perto", cenaInteira: true, falas: ["Isso sim tem valor. ✦ Aceito.", "Eu prometi uma recompensa: as MOTOS da Zaeon agora são suas. Vem ver."], cond: { tipo: "ouvir" }, alvo: null },
     { id: "motos-ver", titulo: "A garagem", cena: "motos", cenaInteira: true, falas: ["Elas ficam na GARAGEM, a plataforma laranja na borda da cidade.", "Pise na luz do fio de energia na borda: ele te puxa até lá."], cond: { tipo: "ouvir" }, alvo: null },
     { id: "moto", titulo: "Montar", teclas: ["F"], falas: ["Vá até a garagem, chegue perto de uma moto e aperte F."], cond: { tipo: "montar" }, alvo: { x: lote.x, z: lote.z, r: 14 } },
     { id: "pilotar", titulo: "Pilotar", teclas: ["W", "A", "D", "Shift"], falas: ["W acelera, A e D fazem a curva e Shift dá o boost. Dá uma volta!"], cond: { tipo: "pilotar", m: 60 }, alvo: null },
     { id: "descer", titulo: "Descer", teclas: ["P", "F"], falas: ["Mandou bem! Pra parar: P pousa a moto e F desce dela."], cond: { tipo: "descer" }, alvo: null },
-    { id: "motos-fim", titulo: "As motos são suas", falas: ["As motos são suas. Até a próxima entrega, viajante. ✦"], cond: { tipo: "ouvir" }, alvo: null },
+    { id: "motos-fim", titulo: "As motos são suas", falas: ["As motos são suas. Cada nova entrega de valor, uma nova recompensa — até a próxima, viajante. ✦"], cond: { tipo: "ouvir" }, alvo: null },
   ];
 })();
 
@@ -176,7 +241,7 @@ export function lembreteDoTablet(o: { fechado: boolean; etapaLab: string | null;
 }
 
 /** o que o engine mede desde que o Droid deu a instrução do passo */
-export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean; /** s com o inventário aberto no passo (Infinity = a pessoa fechou) */ inventario: number; /** s desde que o Droid chegou na Sala do Saber (-1 = voando) */ droidNoSaber: number; /** a ENTREGA na Sala do Saber: o veredito (null = esperando) */ entrega: "aceita" | "recusada" | "desistiu" | null; naMoto: boolean; motoAndou: number };
+export type CtxGuia = { nascendo: boolean; andou: number; correu: number; noAr: number; turbo: number; chegou: boolean; conversaFeita: boolean; tabletAberto: boolean; pesquisaSalva: boolean; /** s com o inventário aberto no passo (Infinity = a pessoa fechou) */ inventario: number; /** s desde que o Droid chegou na Sala do Saber (-1 = voando) */ droidNoSaber: number; /** a ENTREGA na Sala do Saber: o veredito (null = esperando) */ entrega: "aceita" | "recusada" | "desistiu" | null; naMoto: boolean; motoAndou: number; /** o portal do Droid já levou a pessoa */ portal: boolean };
 /** a pessoa fez o que o Droid pediu? */
 export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
   switch (c.tipo) {
@@ -193,6 +258,7 @@ export function cumpriu(c: CondGuia, x: CtxGuia): boolean {
     case "inventario": return x.inventario >= c.s;
     case "saber": return x.droidNoSaber >= c.s;
     case "entrega": return x.entrega !== null;
+    case "portal": return x.portal;
     case "montar": return x.naMoto;
     case "pilotar": return x.motoAndou >= c.m || (!x.naMoto && x.motoAndou >= 10);
     case "descer": return !x.naMoto;

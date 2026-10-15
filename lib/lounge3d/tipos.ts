@@ -117,6 +117,8 @@ export const EV_RECADO = "recado-qg";
 export const EV_MUSICA = "musica-lounge";
 /** o RITUAL do dono mudou (ligou/desligou a tempestade ou os anunciadores) — `agora` = relógio do servidor */
 export const EV_RITUAL = "ritual";
+/** uma ENTREGA no Relicário do Saber (lib/cyber/relicario): todos na sala veem o item voar e a Zaeon ler */
+export const EV_RELICARIO = "relicario";
 
 /** Cor de accent determinística pelo userId (até o perfil ter campo próprio). */
 export function corDoUsuario(userId: string): string {
