@@ -153,6 +153,85 @@ describe("agent-turn · executarTurno", () => {
     expect(efemera.autorId).toBe("medicina");
   });
 
+  describe("#396 (B) · um agente passa a bola pra outro", () => {
+    const pede = () => msg({ autorId: A, texto: "@aura me ajuda com o caso clínico", mencoes: ["aura"] });
+
+    it("a resposta marca um colega → encadeia ele, como 'autonomo', cadeia+1, com quem chamou", async () => {
+      const m = pede();
+      const { prisma, criadas } = fakePrisma(canal, [m]);
+      const encadear = vi.fn();
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id },
+        { prisma, gerar: async () => "A parte clínica é com o **@Osler**.", publicar: async () => {}, encadear });
+      expect(r.ok && r.encadeado).toBe("medicina");
+      expect(encadear).toHaveBeenCalledTimes(1);
+      expect(encadear.mock.calls[0]![0]).toEqual({
+        canalId: CANAL, agentKey: "medicina", userId: A, mensagemId: criadas[0]!.id, origem: "autonomo",
+        cadeia: 1, chamadoPor: "aura", jaNaCadeia: ["aura"],
+      });
+    });
+
+    it("sem @ na resposta → não encadeia", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const encadear = vi.fn();
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id }, { prisma, gerar: async () => "Resolvido.", publicar: async () => {}, encadear });
+      expect(encadear).not.toHaveBeenCalled();
+    });
+
+    it("no limite (cadeia 2) não encadeia mais", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const encadear = vi.fn();
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id, cadeia: 2, jaNaCadeia: ["nina", "teo"] },
+        { prisma, gerar: async () => "chama o @Osler", publicar: async () => {}, encadear });
+      expect(encadear).not.toHaveBeenCalled();
+    });
+
+    it("não chama de volta quem já falou na cadeia (sem ping-pong)", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const encadear = vi.fn();
+      await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A, mensagemId: m.id, cadeia: 1, chamadoPor: "aura", jaNaCadeia: ["aura"] },
+        { prisma, gerar: async () => "volta pra @aura", publicar: async () => {}, encadear });
+      expect(encadear).not.toHaveBeenCalled();
+    });
+
+    it("se encadear falhar, a resposta que já saiu continua valendo", async () => {
+      const m = pede();
+      const { prisma, criadas } = fakePrisma(canal, [m]);
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id },
+        { prisma, gerar: async () => "é com o @Osler", publicar: async () => {}, encadear: async () => { throw new Error("fila fora"); } });
+      expect(r.ok).toBe(true);
+      expect(criadas).toHaveLength(1);
+    });
+
+    it("sem a dependência de encadear (ex.: chamada direta) nada muda", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id }, { prisma, gerar: async () => "é com o @Osler", publicar: async () => {} });
+      expect(r.ok && r.encadeado).toBeNull();
+    });
+
+    it("o prompt pede pra ficar no nicho; quem foi chamado sabe por quem e fecha com próximos passos", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const gerar = vi.fn().mockResolvedValue("ok");
+      await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A, mensagemId: m.id, cadeia: 1, chamadoPor: "aura", jaNaCadeia: ["aura"] },
+        { prisma, gerar, publicar: async () => {} });
+      const bloco: string = (gerar.mock.calls[0]![0].agente as any).__blocoCanal;
+      expect(bloco).toContain("Fique no SEU nicho");
+      expect(bloco).toContain("chamado(a) por @aura");
+      expect(bloco).toContain("próximos passos");
+    });
+
+    it("no limite, o prompt diz pra NÃO chamar outros agentes", () => {
+      const ag: any = { agentKey: "teo", nome: "Téo" };
+      const b = blocoCanal(canal as any, ag, [ag], [], { podePassar: false });
+      expect(b).toContain("Não chame outros agentes agora");
+      expect(b).not.toContain("Fique no SEU nicho");
+    });
+  });
+
   describe("#396 · estados do agente no evento de digitando", () => {
     const estados = (eventos: [string, any][]) => eventos.filter(([ev]) => ev === EV_DIGITANDO).map(([, p]) => p.estado);
 
