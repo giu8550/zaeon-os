@@ -2632,8 +2632,8 @@ export default function HomeworkPage({
           <div className="h-full flex flex-col" style={{ width: SIDEBAR_ABERTA - 2 }}>
           <div className="flex-1 min-h-0 flex flex-col gap-3 px-[7px] overflow-y-auto overflow-x-hidden no-scrollbar">
             {/* O CHAT tem a aba dele: a FOTO e o NOME do agente (o nome brilha enquanto a resposta é processada), com as
-                conversas embaixo. Depois, os dois lugares de estudo: a "Sala de Estudos" (o board) e o "Marketplace" (a
-                vitrine, destacado). Sem pills no topo da sala — tudo aqui. */}
+                conversas embaixo. Depois a "Sala de Estudos" (o board). O "Marketplace" (a vitrine, destacado) mora no pé da
+                lista, acima do Perfil. Sem pills no topo da sala — tudo aqui. */}
             <button
               data-tour="estudos"
               onClick={() => irEstudos("meus-estudos")}
@@ -2649,7 +2649,8 @@ export default function HomeworkPage({
                 <span className={agenteProcessando ? "nome-agente-brilhando" : "normal-case text-[12px] tracking-wide"}>{AGENTE_CHAT.nome}</span>
               </Rotulo>
             </button>
-            <Ramo aberto={sidebarAberta}>
+            {/* Só o módulo ATUAL abre os submódulos (conversas); os outros ficam fechadinhos. */}
+            <Ramo aberto={sidebarAberta && activeTab === "sala-de-estudos"}>
               {activeTab === "sala-de-estudos"
                 ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
                 : <div className={RAMO}><ConversasDaSala sala="estudos" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>}
@@ -2663,15 +2664,6 @@ export default function HomeworkPage({
               <DocumentTextIcon className="w-5 h-5 shrink-0" />
               <Rotulo v={sidebarAberta}>Sala de Estudos</Rotulo>
             </button>
-            <button
-              data-tour="tab-community"
-              onClick={() => irEstudos("community")}
-              title="Marketplace"
-              className={`${activeTab === "sala-de-estudos" && abaEstudos === "community" ? `${NAV_BASE} ${NAV_ACTIVE_PILL} !ring-cyan-400/50` : `${NAV_BASE} ${DESTAQUE}`} ${pill(sidebarAberta)}`}
-            >
-              <ShoppingBagIcon className="w-5 h-5 shrink-0" />
-              <Rotulo v={sidebarAberta}>Marketplace</Rotulo>
-            </button>
 
             {/* Sala de Pesquisa */}
             <button
@@ -2684,7 +2676,7 @@ export default function HomeworkPage({
               <Rotulo v={sidebarAberta}>Sala de Pesquisa</Rotulo>
             </button>
             {UNIFIED && (
-              <Ramo aberto={sidebarAberta}>
+              <Ramo aberto={sidebarAberta && activeTab === "pesquisa"}>
                 {activeTab === "pesquisa"
                   ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
                   : <div className={RAMO}><ConversasDaSala sala="pesquisa" onEntrar={() => setActiveTab("pesquisa")} /></div>}
@@ -2715,6 +2707,17 @@ export default function HomeworkPage({
             </button>
 
             <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
+
+            {/* Marketplace — área especial: fora da lista das salas, logo acima do Perfil (pedido do dono). */}
+            <button
+              data-tour="tab-community"
+              onClick={() => irEstudos("community")}
+              title="Marketplace"
+              className={`${activeTab === "sala-de-estudos" && abaEstudos === "community" ? `${NAV_BASE} ${NAV_ACTIVE_PILL} !ring-cyan-400/50` : `${NAV_BASE} ${DESTAQUE}`} ${pill(sidebarAberta)}`}
+            >
+              <ShoppingBagIcon className="w-5 h-5 shrink-0" />
+              <Rotulo v={sidebarAberta}>Marketplace</Rotulo>
+            </button>
 
             {/* Perfil */}
             <button
