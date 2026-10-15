@@ -156,6 +156,11 @@ export function consolidar(listas: LivroAchado[][], consulta: string, limite = 5
     .map((x) => x.l);
 }
 
+/** O cabeçalho da lista no texto — o cliente que desenha o cartão corta o texto a partir daqui. */
+export const MARCA_LISTA = "**Livros encontrados:**";
+/** PURO: o texto da resposta SEM a lista em markdown (quando o cliente mostra o cartão no lugar). */
+export const semListaDeLivros = (texto: string): string => { const i = String(texto ?? "").indexOf(MARCA_LISTA); return i < 0 ? texto : texto.slice(0, i).trimEnd(); };
+
 /** Lista em markdown (o ChatMarkdown torna os links clicáveis). Entra no fim da resposta. */
 export function markdownDosLivros(livros: LivroAchado[]): string {
   if (!livros.length) return "";
@@ -171,7 +176,7 @@ export function markdownDosLivros(livros: LivroAchado[]): string {
     ].filter(Boolean).join(" · ");
     return `- **${l.titulo}**${quem}${ano} — ${ROTULO_ACESSO[l.acesso]}${l.licenca ? `, ${l.licenca}` : ""} (${nomeDaFonte(l.fonte)}) · ${links}`;
   });
-  return `**Livros encontrados:**\n${linhas.join("\n")}`;
+  return `${MARCA_LISTA}\n${linhas.join("\n")}`;
 }
 
 // ───────────────────────────── a busca (rede) ─────────────────────────────

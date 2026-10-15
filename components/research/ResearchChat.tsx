@@ -18,6 +18,8 @@ import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
 import { useFalaAoChegar, useManifesto, usePublicarPresenca } from "@/components/agents/avatar/hooks";
 import { sinalDoChat } from "@/lib/avatars/presenca";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
+import LivrosCartao from "@/components/chat/LivrosCartao";
+import { semListaDeLivros } from "@/lib/livros/busca";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
@@ -666,9 +668,11 @@ export default function ResearchChat({
                   {isUser
                     ? m.text
                     : (m.text
-                        ? <ChatMarkdown text={m.text} />
+                        // livros achados: o cartão (com "Abrir no leitor") substitui a lista em markdown do texto
+                        ? <ChatMarkdown text={m.answer?.livros?.length ? semListaDeLivros(m.text) : m.text} />
                         : <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                 </div>
+                {!isUser && m.answer?.livros?.length ? <LivrosCartao livros={m.answer.livros} sala="pesquisa" /> : null}
                 {!isUser && (m.blocos?.length || m.desenhando) ? (
                   <div className="w-full max-w-[88%]">
                     {m.blocos?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}

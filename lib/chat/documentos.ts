@@ -24,6 +24,7 @@ export type DocArtefato = {
 export const ROTULO_DOC: Record<string, { emoji: string; nome: string }> = {
   diagram: { emoji: "🧭", nome: "Diagrama" },
   aula: { emoji: "🎓", nome: "Aula" },
+  pdf: { emoji: "📕", nome: "Livro" },   // livro achado pelo buscar_livro, aberto no leitor (data.file = LibraryFile)
 };
 
 export function abrirDocumento(d: DocArtefato): void {
