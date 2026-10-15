@@ -199,6 +199,9 @@ import TccSugestoes from "@/components/tcc/TccSugestoes";
 import { EVT_TCC_MUDOU, TCC_CROSS_ON, tccApi, type Revisao } from "@/lib/tcc/client";
 import { mesmoConteudo } from "@/lib/tcc/secoes";
 import ResearchReadingView from "./ResearchReadingView";
+import AbntToolbar, { type BlocoAbnt } from "@/components/research/AbntToolbar";
+import AbntPreview from "@/components/research/AbntPreview";
+import { BLOCOS, insertBlock, cleanContent } from "@/lib/abntBlocks";
 import AgentAvatar from "@/components/agents/AgentAvatar";
 import { avatarPadraoDe } from "@/lib/agents/roster";
 
@@ -843,6 +846,7 @@ export default function HomeworkPage({
     try { localStorage.setItem(`zaeon.research.caret.${key}`, JSON.stringify(data)); } catch { /* */ }
   };
   const [citInsertFlash, setCitInsertFlash] = useState(false); // barrinha sutil ao soltar citação
+  const [abntPrevia, setAbntPrevia] = useState(false); // Escrever | Prévia ABNT
   const [isWorkTypeMenuOpen, setIsWorkTypeMenuOpen] = useState(false);
   const [docTitle, setDocTitle] = useState("minha_pesquisa.pdf");
   const [docContent, setDocContent] = useState(ABNT_TEMPLATE);
@@ -2228,6 +2232,25 @@ export default function HomeworkPage({
     showToast("Imagem inserida como figura — ajuste o título/fonte no texto.");
   };
 
+  // Barra do editor: insere o bloco ABNT no caret como bloco próprio e seleciona o que o aluno vai reescrever.
+  const inserirBlocoAbnt = (b: BlocoAbnt) => {
+    const ta = textareaRef.current;
+    const cursor = ta ? (ta.selectionStart ?? docContent.length) : docContent.length;
+    const { block, select } = BLOCOS[b];
+    const r = insertBlock(docContent, cursor, block, select);
+    setDocContent(r.value);
+    requestAnimationFrame(() => {
+      const t = textareaRef.current; if (!t) return;
+      t.focus();
+      try { t.setSelectionRange(r.start, r.end); } catch { /* */ }
+    });
+  };
+  const inserirImagemAbnt = (file: File) => {
+    const ta = textareaRef.current;
+    const cursor = ta ? (ta.selectionStart ?? docContent.length) : docContent.length;
+    void insertDroppedImage(file.name, cursor, () => readFileAsDataUri(file), file.size);
+  };
+
   // Handler único do editor: citação (intacto) → imagem do desktop → imagem da biblioteca.
   const handleEditorDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
     if (e.dataTransfer.getData("text/zaeon-citation")) {
@@ -2385,7 +2408,13 @@ export default function HomeworkPage({
     setExportProgress(["Estruturando seções com IA (ABNT Structurer)..."]);
 
     // Tenta parsear marcadores estruturados do editor
-    const parsedSections = parseAbntMarkers(docContent);
+    // Contrato editor → motor: cada seção sai em blocos limpos (o motor normaliza de novo; isto
+    // garante que o que a Prévia ABNT mostrou é o que vai pro Word).
+    const parsedSections = parseAbntMarkers(docContent)?.map((s) => ({
+      ...s,
+      content: cleanContent(s.content),
+      subsections: s.subsections.map((sub) => ({ ...sub, content: cleanContent(sub.content) })),
+    })) ?? null;
 
     try {
       const response = await fetch("/api/documents/abnt-export", {
@@ -2862,8 +2891,15 @@ export default function HomeworkPage({
                         </div>
                       )}
                       {!reviewMode && (
+                        <AbntToolbar onInsert={inserirBlocoAbnt} onImagem={inserirImagemAbnt} previa={abntPrevia} onPrevia={setAbntPrevia} />
+                      )}
+                      {!reviewMode && abntPrevia && (
+                        <AbntPreview content={docContent} titulo={docTitle.replace(/\.(pdf|docx)$/i, "").replace(/_/g, " ")} />
+                      )}
+                      {!reviewMode && (
                         <textarea
                           ref={textareaRef}
+                          hidden={abntPrevia}
                           value={docContent}
                           onChange={(e) => setDocContent(e.target.value)}
                           onSelect={saveEditorCaret}
