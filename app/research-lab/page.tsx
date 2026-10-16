@@ -60,6 +60,8 @@ const ResearchesPage = dynamic(
   () => import("@/app/study-rooms/lounge/main-lounge/researches/page"),
   { ssr: false },
 );
+// A IDE do Octa Code (agente de código) — client-only: Monaco + runner no navegador.
+const OctaIDE = dynamic(() => import("@/components/octa/OctaIDE"), { ssr: false });
 // Sala Projetos (Zaeon Code) — IDE agêntica. Auto-protegida (eligible interno).
 const ProjectsContent = dynamic(
   () => import("@/app/research-lab/projects/ProjectsContent"),
@@ -831,7 +833,7 @@ export default function HomeworkPage({
     setTrocandoPara(id);
     const t0 = Date.now();
     // a tela do novo agente carrega ANTES de trocar (a IDE é um chunk à parte) — o loading cobre essa espera
-    if (agenteChat(id).tela === "ide") await import("@/app/research-lab/projects/ProjectsContent").catch(() => null);
+    if (agenteChat(id).tela === "ide") await import("@/components/octa/OctaIDE").catch(() => null);
     await new Promise((r) => setTimeout(r, Math.max(0, 450 - (Date.now() - t0))));
     setAgenteId(id);
     try { localStorage.setItem("zaeon.lab.agente", id); } catch { /* */ }
@@ -3231,10 +3233,10 @@ export default function HomeworkPage({
             </div>
           )}
 
-          {/* OCTA CODE — o agente de código: a tela dele é a IDE (o mesmo motor da sala Projetos, com o gate de acesso dela) */}
+          {/* OCTA CODE — o agente de código: a tela dele é a IDE PRÓPRIA (components/octa/OctaIDE) com a janela do agente ao lado */}
           {activeTab === "octa" && agente.id === "octa" && (
             <div className="w-full h-full overflow-hidden">
-              <ProjectsContent />
+              <OctaIDE />
             </div>
           )}
 
