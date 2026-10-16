@@ -34,6 +34,45 @@ describe("ConvidarForm (botão +)", () => {
   });
 });
 
+describe("ConvidarForm em linha (#423: abre na horizontal, ao lado do +)", () => {
+  it("campo e botão na MESMA linha, sem o título/explicação da caixa, e já com o cursor no campo", () => {
+    render(<ConvidarForm onEnviar={vi.fn()} variante="linha" />);
+    const grupo = screen.getByRole("group", { name: "Convidar pessoa" });
+    expect(grupo.className).toContain("flex");
+    expect(grupo.className).not.toContain("flex-col");
+    expect(screen.queryByText("Convidar pra conversar")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText("E-mail ou nome de quem convidar"));
+  });
+
+  it("envia com Enter e mostra a resposta na própria linha", async () => {
+    const onEnviar = vi.fn(async () => ({ ok: true, msg: "Convite enviado para Martinez." }));
+    render(<ConvidarForm onEnviar={onEnviar} variante="linha" />);
+    const campo = screen.getByLabelText("E-mail ou nome de quem convidar") as HTMLInputElement;
+    fireEvent.change(campo, { target: { value: " martinez@z.com " } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    await waitFor(() => expect(onEnviar).toHaveBeenCalledWith("martinez@z.com"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Martinez"));
+    expect(campo.value).toBe("");
+  });
+
+  it("erro também aparece na linha (inclusive no celular) e mantém o texto", async () => {
+    render(<ConvidarForm onEnviar={vi.fn(async () => ({ ok: false, msg: "Ninguém com esse e-mail na Zaeon." }))} variante="linha" />);
+    const campo = screen.getByLabelText("E-mail ou nome de quem convidar") as HTMLInputElement;
+    fireEvent.change(campo, { target: { value: "x@z.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Convidar" }));
+    const alerta = await screen.findByRole("alert");
+    expect(alerta.className).not.toContain("hidden");
+    expect(campo.value).toBe("x@z.com");
+  });
+
+  it("Esc fecha", () => {
+    const onFechar = vi.fn();
+    render(<ConvidarForm onEnviar={vi.fn()} variante="linha" onFechar={onFechar} />);
+    fireEvent.keyDown(screen.getByLabelText("E-mail ou nome de quem convidar"), { key: "Escape" });
+    expect(onFechar).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("ConvitesRecebidos (aba Privado)", () => {
   it("sem convites não desenha nada", () => {
     const { container } = render(<ConvitesRecebidos recebidos={[]} enviados={[]} ocupado={null} onResponder={() => {}} />);

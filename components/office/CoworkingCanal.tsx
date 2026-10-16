@@ -19,6 +19,7 @@ import { montarTopoPessoas } from "@/lib/canal/topoPessoas";
 import { podeApagar, textoConfirmarApagar, aposApagar } from "@/lib/canal/seletor";
 import { ABAS, abaDoCanal, filtrarPorAba, type Aba } from "@/lib/canal/convite";
 import { ConvidarForm, ConvitesRecebidos, type ConviteVista } from "./ConvitesEscritorio";
+import PessoasTopo from "./PessoasTopo";
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
@@ -441,7 +442,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
                 <div role="listbox" aria-label={`Escritórios · ${NOME_ABA[aba]}`}>
                 {daAba.length === 0 && (
                   <p className={`px-3 py-2 text-[12px] ${TXT_MUDO}`}>
-                    {aba === "privado" ? "Nenhuma conversa privada ainda. Use o + ao lado das fotos pra convidar alguém." : `Nenhum escritório de ${NOME_ABA[aba].toLowerCase()} ainda.`}
+                    {aba === "privado" ? "Nenhuma conversa privada ainda. Use o + ao lado do seletor pra convidar alguém." : `Nenhum escritório de ${NOME_ABA[aba].toLowerCase()} ainda.`}
                   </p>
                 )}
                 {daAba.map((c) => (
@@ -472,29 +473,17 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
             )}
           </div>
 
+          {/* #423: "+" (convidar) à ESQUERDA, depois do seletor; abre NA HORIZONTAL, ao lado do botão.
+              O convite cai no Privado da pessoa. (O sino de notificações entra entre o seletor e o +.) */}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <button type="button" onClick={() => setMenu(menu === "convidar" ? null : "convidar")} aria-label="Convidar pessoa" aria-expanded={menu === "convidar"}
+              title="Convidar pessoa" className={`${TOQUE} shrink-0 rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>
+            {menu === "convidar" && <ConvidarForm onEnviar={enviarConvite} variante="linha" onFechar={() => setMenu(null)} />}
+          </div>
+
           <div className="ml-auto flex items-center gap-1.5">
-            {/* pessoas do canal (dono, membros e você): anel verde = online agora; cinza = fora. Os agentes ficam embaixo. */}
-            <div className="hidden xs:flex sm:flex -space-x-2" aria-label={`${online.length} online de ${topo.total}`}>
-              {topo.visiveis.map((p) => {
-                const aqui = topo.onlineIds.has(p.id);
-                return (
-                  <span key={p.id} title={`${p.nome}${aqui ? " · online" : ""}`} className="inline-flex">
-                    <AgentAvatar src={p.avatar} nome={p.nome} size={28} className={`ring-2 ${aqui ? "ring-emerald-400/70" : "ring-slate-400/40 opacity-70"}`} />
-                  </span>
-                );
-              })}
-            </div>
-            {topo.extras > 0 && <span className={`text-[11px] ${TXT_MUDO}`}>+{topo.extras}</span>}
-            {/* "+" ao lado das fotos: convidar alguém pra conversar (o convite cai no Privado da pessoa) */}
-            <div className="relative">
-              <button type="button" onClick={() => setMenu(menu === "convidar" ? null : "convidar")} aria-label="Convidar pessoa" aria-expanded={menu === "convidar"}
-                title="Convidar pessoa" className={`${TOQUE} rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>
-              {menu === "convidar" && (
-                <div className={`absolute right-0 top-full mt-1.5 z-30 w-[min(92vw,320px)] p-3 rounded-2xl ${VIDRO_POPOVER}`}>
-                  <ConvidarForm onEnviar={enviarConvite} />
-                </div>
-              )}
-            </div>
+            {/* pessoas do canal (dono, membros e você), com espaço entre as fotos (#423). Os agentes ficam embaixo. */}
+            <PessoasTopo visiveis={topo.visiveis} extras={topo.extras} onlineIds={topo.onlineIds} total={topo.total} />
             {online.length > 0 && <span className={`text-[11px] ${TXT_MUDO}`} title="online agora">{online.length} on</span>}
             {canal.cartolinaId && (
               <button type="button" onClick={abrirCartolina} className={`${TOQUE} px-3 rounded-2xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT}`} title="Abrir a cartolina da sala">▦ cartolina</button>
