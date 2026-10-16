@@ -13,7 +13,7 @@ const USERS = [
   { id: C, name: "Ana", email: "ana1@z.com" },
   { id: X, name: "Ana", email: "ana2@z.com" },
 ];
-const state: { user: any; convites: Conv[]; canais: any[]; avisos: any[]; seq: number } = { user: null, convites: [], canais: [], avisos: [], seq: 0 };
+const state: { user: any; convites: Conv[]; canais: any[]; avisos: any[]; mensagens: any[]; seq: number } = { user: null, convites: [], canais: [], avisos: [], mensagens: [], seq: 0 };
 const novoId = () => (++state.seq).toString(16).padStart(24, "0");
 
 const casa = (r: any, w: any): boolean => {
@@ -54,6 +54,7 @@ vi.mock("@/lib/canal/server", () => ({
       update: async ({ where, data }: any) => { const c = state.convites.find((x) => x.id === where.id)!; Object.assign(c, data); return c; },
     },
     canal: { create: async ({ data }: any) => { const r = { id: novoId(), ...data }; state.canais.push(r); return r; } },
+    canalMensagem: { create: async ({ data }: any) => { const r = { id: novoId(), createdAt: new Date(), ...data }; state.mensagens.push(r); return r; } },
   },
 }));
 vi.mock("@/lib/collab/realtime", () => ({ triggerSafe: async (canal: string, ev: string, p: unknown) => { state.avisos.push([canal, ev, p]); } }));
@@ -65,7 +66,7 @@ const post = (body: unknown) => new Request("http://x/api/canal/convites", { met
 const responder = (id: string, acao: unknown) => RESPONDER(new Request("http://x", { method: "POST", body: JSON.stringify({ acao }), headers: { "content-type": "application/json" } }), { params: { id } });
 const user = (id: string) => ({ id, name: USERS.find((u) => u.id === id)?.name ?? "N", image: null, email: "e@x", role: null });
 
-beforeEach(() => { state.convites = []; state.canais = []; state.avisos = []; state.seq = 0; state.user = user(A); });
+beforeEach(() => { state.convites = []; state.canais = []; state.avisos = []; state.mensagens = []; state.seq = 0; state.user = user(A); });
 
 describe("convites · convidar", () => {
   it("por e-mail: cria pendente e avisa a pessoa no canal pessoal", async () => {
@@ -167,6 +168,23 @@ describe("convites · responder", () => {
     expect(state.canais[0]).toMatchObject({ ownerId: A, dmCom: B, acesso: "privado", membros: [], agentes: [], titulo: "Giulia e Martinez" });
     expect(state.convites[0]).toMatchObject({ status: "aceito", dmCanalId: state.canais[0].id });
     expect(state.avisos.at(-1)![0]).toBe(`user_${A}`);
+  });
+
+  it("#423 · aceitar já abre a conversa com a linha 'fulano aceitou o convite e entrou na conversa'", async () => {
+    const c = pendente();
+    state.user = user(B);
+    await responder(c.id, "aceitar");
+    expect(state.mensagens).toHaveLength(1);
+    expect(state.mensagens[0]).toMatchObject({ canalId: state.canais[0].id, autorTipo: "sistema", autorId: B, texto: "Martinez aceitou o convite e entrou na conversa" });
+    // e vai pro canal em tempo real
+    expect(state.avisos.some(([canal, ev]) => canal === `canal-${state.canais[0].id}` && ev === "mensagem")).toBe(true);
+  });
+
+  it("recusar não cria conversa nem aviso", async () => {
+    const c = pendente();
+    state.user = user(B);
+    await responder(c.id, "recusar");
+    expect(state.mensagens).toHaveLength(0);
   });
 
   it("recusar não cria conversa", async () => {

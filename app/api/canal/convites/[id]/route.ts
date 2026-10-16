@@ -9,6 +9,8 @@ import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag, isObjectId } from "@/lib/canal/server";
 import { podeResponder, statusDepois, tituloConversa } from "@/lib/canal/convite";
 import { triggerSafe } from "@/lib/collab/realtime";
+import { anunciarEntrada } from "@/lib/canal/presenca";
+import { EV_MENSAGEM, publicarPusher } from "@/lib/canal/realtime";
 
 export async function POST(req: Request, { params }: { params: { id: string } }): Promise<NextResponse> {
   const off = exigirFlag(); if (off) return off;
@@ -42,6 +44,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     },
   });
   await prisma.canalConvite.update({ where: { id: convite.id }, data: { dmCanalId: canal.id } });
+  // #423: a conversa já abre com a linha "fulano aceitou o convite e entrou na conversa"
+  await anunciarEntrada({ criar: (d) => prisma.canalMensagem.create({ data: d }), publicar: publicarPusher, evento: EV_MENSAGEM },
+    canal.id, { id: u.id, nome: u.name, avatar: u.image ?? null }, { conversa: true });
   await triggerSafe(`user_${convite.deId}`, "zaeon-notice", { text: `${u.name || "Alguém"} aceitou seu convite. A conversa de vocês está na aba Privado do escritório.` });
   return NextResponse.json({ convite: { id: convite.id, status: novo, dmCanalId: canal.id }, canal: { ...canal, souDono: false } });
 }

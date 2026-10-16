@@ -25,7 +25,9 @@ import PessoasTopo from "./PessoasTopo";
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
-import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, type MensagemWire } from "@/lib/canal/wire";
+import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
+import { deveAvisarDigitando, podarDigitando, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
+import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
 import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVER, VIDRO_CHIP, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
 import { useNotificacoesSO } from "./useNotificacoesSO";
@@ -100,6 +102,22 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   useEffect(() => { ativoRef.current = ativoId; }, [ativoId]);
   useEffect(() => { canaisRef.current = canais; }, [canais]);
 
+  // ─── #423: "fulano está digitando" (pessoas) — recebe, some sozinho no prazo, e avisa enquanto eu escrevo ───
+  const [pessoasDigitando, setPessoasDigitando] = useState<Digitando>({});
+  const ultimoAvisoDigitando = useRef<number | null>(null);
+  useEffect(() => {
+    if (!Object.keys(pessoasDigitando).length) return;
+    const t = setInterval(() => setPessoasDigitando((p) => podarDigitando(p, Date.now())), 1000);
+    return () => clearInterval(t);
+  }, [pessoasDigitando]);
+  /** Avisa os outros no máximo a cada poucos segundos (lib/canal/presenca), nunca a cada tecla. Falhar não atrapalha. */
+  const avisarDigitando = (valor: string) => {
+    const id = ativoRef.current, agora = Date.now();
+    if (!id || !deveAvisarDigitando(ultimoAvisoDigitando.current, agora, valor)) return;
+    ultimoAvisoDigitando.current = agora;
+    void fetch(`/api/canal/${id}/digitando`, { method: "POST" }).catch(() => undefined);
+  };
+
   // ─── canais: carrega; sem nenhum, cria o primeiro (a sala nunca abre vazia) ───
   useEffect(() => {
     let vivo = true;
@@ -148,6 +166,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     setDet(d);
     setDigitando([]);
     setEstadoAgente({});
+    setPessoasDigitando({});
     setNaoLidas((n) => ({ ...n, [id]: 0 }));
     try { localStorage.setItem(LS_ULTIMO, id); } catch { /* ignore */ }
   }, []);
@@ -180,6 +199,11 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         setEstadoAgente((m) => ({ ...m, [d.agentKey]: est }));
         setDigitando((prev) => (estaAtivo(est) ? [...new Set([...prev, d.agentKey])] : prev.filter((k) => k !== d.agentKey)));
       });
+      // #423: uma PESSOA está digitando neste canal (o meu próprio aviso não aparece pra mim)
+      ch.bind(EV_HUMANO_DIGITANDO, (d: { userId: string; nome: string }) => {
+        if (c.id !== ativoRef.current || !d?.userId || d.userId === meuIdRef.current) return;
+        setPessoasDigitando((prev) => ({ ...prev, [d.userId]: { nome: d.nome || "Alguém", ate: Date.now() + TTL_DIGITANDO_MS } }));
+      });
     }
     return () => { /* mantém assinaturas enquanto o componente vive; desconecta no unmount abaixo */ };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -208,6 +232,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     if (aberto) {
       setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
       if (m.autorTipo === "agente") setDigitando((prev) => prev.filter((k) => k !== m.autorId));
+      // a mensagem da pessoa chegou: ela parou de "digitar"
+      if (m.autorTipo === "humano") setPessoasDigitando((prev) => { if (!(m.autorId in prev)) return prev; const n = { ...prev }; delete n[m.autorId]; return n; });
     }
     const prioridade = prioridadeDe(m, { meuId: meuIdRef.current, meusAgentes: [...meusAgentes.current], meusAliases: meusAliases.current });
     if (!deveNotificar({ prioridade, abaVisivel: visivelRef.current, canalAberto: aberto })) return;
@@ -275,6 +301,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       }
       setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
       setTexto("");
+      ultimoAvisoDigitando.current = null; // a próxima mensagem volta a avisar na primeira tecla
       setErro(null);
       // agentes recém-convocados passam a constar no canal
       if (alvos.length) setCanais((cs) => cs.map((c) => (c.id === ativoId ? { ...c, agentes: [...new Set([...c.agentes, ...alvos])] } : c)));
@@ -568,7 +595,9 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
         {/* mensagens */}
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-3 sm:px-5 py-4 flex flex-col gap-3" onClick={() => setMenu(null)}>
-          {det.mensagens.map((m) => <Bolha key={m.id} m={m} minha={m.autorTipo === "humano" && m.autorId === meuId} aliases={aliases} />)}
+          {det.mensagens.map((m) => (m.autorTipo === "sistema"
+            ? <LinhaSistema key={m.id} texto={m.texto} hora={hora(m.createdAt)} /> // #423: "fulano entrou no escritório"
+            : <Bolha key={m.id} m={m} minha={m.autorTipo === "humano" && m.autorId === meuId} aliases={aliases} />))}
           {digitando.map((k) => {
             const a = agentes.find((x) => x.agentKey === k);
             return (
@@ -580,6 +609,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               </div>
             );
           })}
+          {/* #423: as PESSOAS digitando ("Giulia está digitando…"), além dos agentes acima */}
+          <AvisoDigitando nomes={Object.values(pessoasDigitando).map((p) => p.nome)} />
           <div ref={fimRef} />
         </div>
 
@@ -615,7 +646,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               ref={inputRef}
               value={texto}
               rows={1}
-              onChange={(e) => { setTexto(e.target.value); setCaret(e.target.selectionStart ?? e.target.value.length); }}
+              onChange={(e) => { setTexto(e.target.value); setCaret(e.target.selectionStart ?? e.target.value.length); avisarDigitando(e.target.value); }}
               onKeyUp={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               onClick={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               onKeyDown={aoTeclar}

@@ -7,6 +7,10 @@ describe("notificacoes · prioridade", () => {
   it("minha própria mensagem = nenhuma", () => {
     expect(prioridadeDe({ autorTipo: "humano", autorId: EU, texto: "oi" }, { meuId: EU })).toBe("nenhuma");
   });
+  it("#423 · aviso de que EU entrei não me notifica; o de outra pessoa entrando, sim (normal)", () => {
+    expect(prioridadeDe({ autorTipo: "sistema", autorId: EU, texto: "Giulia entrou no escritório" }, { meuId: EU })).toBe("nenhuma");
+    expect(prioridadeDe({ autorTipo: "sistema", autorId: OUTRO, texto: "Martinez entrou no escritório" }, { meuId: EU })).toBe("normal");
+  });
   it("resposta do MEU agente = alta; de outro agente = normal", () => {
     expect(prioridadeDe({ autorTipo: "agente", autorId: "aura", texto: "..." }, { meuId: EU, meusAgentes: ["aura"] })).toBe("alta");
     expect(prioridadeDe({ autorTipo: "agente", autorId: "nina", texto: "..." }, { meuId: EU, meusAgentes: ["aura"] })).toBe("normal");

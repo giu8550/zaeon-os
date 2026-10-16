@@ -8,6 +8,8 @@ import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag, isObjectId, agentesDoCanal, pessoas, paraWire, agentesPublicos } from "@/lib/canal/server";
 import { podeLer, podeGerir, normalizarAcesso } from "@/lib/canal/gate";
 import { isAgentKey } from "@/lib/agents/roster";
+import { anunciarEntrada, novosMembros } from "@/lib/canal/presenca";
+import { EV_MENSAGEM, publicarPusher } from "@/lib/canal/realtime";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const off = exigirFlag(); if (off) return off;
@@ -23,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     agentesDoCanal(u.id, canal.agentes),
   ]);
   const msgs = [...desc].reverse();
-  const gente = await pessoas([canal.ownerId, ...canal.membros, ...(canal.dmCom ? [canal.dmCom] : []), ...msgs.filter((m) => m.autorTipo === "humano").map((m) => m.autorId)]);
+  const gente = await pessoas([canal.ownerId, ...canal.membros, ...(canal.dmCom ? [canal.dmCom] : []), ...msgs.filter((m) => m.autorTipo !== "agente").map((m) => m.autorId)]); // humano e o aviso "fulano entrou" (#423)
   return NextResponse.json({
     canal: { ...canal, souDono: canal.ownerId === u.id },
     eu: { id: u.id, nome: u.name || "Você", avatar: u.image ?? null },
@@ -74,6 +76,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (isObjectId(body?.removerMembro)) { membros = membros.filter((m) => m !== body.removerMembro); data.membros = membros; }
   if (!Object.keys(data).length) return NextResponse.json({ error: "Nada pra alterar." }, { status: 400 });
   const upd = await prisma.canal.update({ where: { id: canal.id }, data });
+  // #423: quem foi ADICIONADO agora ganha a linha "fulano entrou no escritório" no chat (best-effort)
+  const novos = novosMembros(canal.membros, upd.membros ?? [], canal.ownerId);
+  if (novos.length) {
+    const gente = await pessoas(novos);
+    for (const id of novos) {
+      await anunciarEntrada({ criar: (d) => prisma.canalMensagem.create({ data: d }), publicar: publicarPusher, evento: EV_MENSAGEM },
+        canal.id, { id, nome: gente.get(id)?.nome ?? null, avatar: gente.get(id)?.avatar ?? null });
+    }
+  }
   return NextResponse.json({ canal: { ...upd, souDono: true } });
 }
 

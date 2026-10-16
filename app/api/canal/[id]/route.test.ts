@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const A = "a".repeat(24), B = "b".repeat(24), C = "c".repeat(24), CANAL = "d".repeat(24);
-const state: { canal: any; user: any; convites: any[]; atualizado: any } = { canal: null, user: null, convites: [], atualizado: null };
+const state: { canal: any; user: any; convites: any[]; atualizado: any; criadas: any[]; publicados: any[] } = { canal: null, user: null, convites: [], atualizado: null, criadas: [], publicados: [] };
 const EMAILS: Record<string, string> = { "martinez@z.com": B, "ana@z.com": C };
 
 vi.mock("@/lib/canal/server", () => ({
@@ -22,7 +22,10 @@ vi.mock("@/lib/canal/server", () => ({
       findUnique: async ({ where }: any) => (where.id === state.canal?.id ? state.canal : null),
       update: async ({ data }: any) => { state.atualizado = data; return { ...state.canal, ...data }; },
     },
-    canalMensagem: { findMany: async () => [] },
+    canalMensagem: {
+      findMany: async () => [],
+      create: async ({ data }: any) => { const r = { id: `m${state.criadas.length + 1}`, createdAt: new Date("2026-10-16T10:00:00Z"), ...data }; state.criadas.push(r); return r; },
+    },
     user: {
       findUnique: async ({ where }: any) => {
         const id = where.email ? EMAILS[where.email] : [A, B, C].includes(where.id) ? where.id : undefined;
@@ -36,6 +39,11 @@ vi.mock("@/lib/canal/server", () => ({
   },
 }));
 
+vi.mock("@/lib/canal/realtime", async () => {
+  const real = await vi.importActual<typeof import("@/lib/canal/realtime")>("@/lib/canal/realtime");
+  return { ...real, publicarPusher: async (c: string, ev: string, p: unknown) => { state.publicados.push([c, ev, p]); } };
+});
+
 import { GET, PATCH } from "./route";
 
 const ctx = { params: { id: CANAL } };
@@ -44,7 +52,39 @@ const user = (id: string) => ({ id, name: "N", image: null, email: "e@x", role: 
 const turma = { id: CANAL, ownerId: A, titulo: "t", acesso: "turma", membros: [], agentes: [], cartolinaId: null, dmCom: null };
 const dm = { ...turma, acesso: "privado", dmCom: B };
 
-beforeEach(() => { state.convites = []; state.atualizado = null; state.user = user(A); state.canal = { ...turma }; });
+beforeEach(() => { state.convites = []; state.atualizado = null; state.criadas = []; state.publicados = []; state.user = user(A); state.canal = { ...turma }; });
+
+describe("canal/[id] · #423 · aviso 'fulano entrou' quando alguém é ADICIONADO", () => {
+  it("adicionar um contato grava a linha do sistema e avisa o canal", async () => {
+    state.convites.push({ deId: A, paraId: B, status: "aceito" });
+    expect((await patch({ adicionarMembro: B })).status).toBe(200);
+    expect(state.criadas).toHaveLength(1);
+    expect(state.criadas[0]).toMatchObject({ canalId: CANAL, autorTipo: "sistema", autorId: B, texto: `${B} entrou no escritório` });
+    expect(state.publicados).toHaveLength(1);
+    expect(state.publicados[0]![1]).toBe("mensagem");
+    expect(state.publicados[0]![2]).toMatchObject({ autorTipo: "sistema", autorId: B });
+  });
+
+  it("'adicionar' quem já é membro não repete o aviso", async () => {
+    state.canal = { ...turma, membros: [B] };
+    state.convites.push({ deId: A, paraId: B, status: "aceito" });
+    await patch({ adicionarMembro: B });
+    expect(state.criadas).toHaveLength(0);
+  });
+
+  it("remover membro, mudar título ou acesso não gera aviso", async () => {
+    state.canal = { ...turma, membros: [B] };
+    await patch({ removerMembro: B });
+    await patch({ titulo: "novo" });
+    await patch({ acesso: "aberto" });
+    expect(state.criadas).toHaveLength(0);
+  });
+
+  it("quem não aceitou convite (409) não entra e não gera aviso", async () => {
+    expect((await patch({ adicionarEmail: "martinez@z.com" })).status).toBe(409);
+    expect(state.criadas).toHaveLength(0);
+  });
+});
 
 describe("canal/[id] · conversa privada (dmCom)", () => {
   it("abre pras duas pessoas e pra mais ninguém", async () => {
