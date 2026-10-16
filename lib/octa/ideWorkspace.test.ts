@@ -29,3 +29,45 @@ describe("octa · workspace da IDE", () => {
     expect(linguagem("x.weird").monaco).toBe("plaintext");
   });
 });
+
+describe("octa · #421 · SVG abre como imagem", () => {
+  it("reconhece .svg (qualquer caixa), e só ele", async () => {
+    const { ehSvg } = await import("./ideWorkspace");
+    expect(ehSvg("arte/soma.svg")).toBe(true);
+    expect(ehSvg("ARTE/Soma.SVG")).toBe(true);
+    expect(ehSvg(" arte/x.svg ")).toBe(true);
+    expect(ehSvg("index.html")).toBe(false);
+    expect(ehSvg("svg.py")).toBe(false);
+    expect(ehSvg("arte/soma.svg.bak")).toBe(false);
+    expect(ehSvg(null)).toBe(false);
+    expect(ehSvg("")).toBe(false);
+  });
+
+  it("SVG vira data URL de imagem, com o conteúdo codificado", async () => {
+    const { svgParaDataUrl } = await import("./ideWorkspace");
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#1a0b07"/></svg>';
+    const url = svgParaDataUrl(svg)!;
+    expect(url.startsWith("data:image/svg+xml;charset=utf-8,")).toBe(true);
+    expect(decodeURIComponent(url.split(",").slice(1).join(","))).toBe(svg);
+    expect(url).not.toContain("#"); // o # da cor iria quebrar a URL se não fosse codificado
+  });
+
+  it("aceita o cabeçalho <?xml …?> antes do <svg>", async () => {
+    const { svgParaDataUrl } = await import("./ideWorkspace");
+    expect(svgParaDataUrl('<?xml version="1.0"?>\n<svg viewBox="0 0 1 1"></svg>')).not.toBeNull();
+  });
+
+  it("vazio ou sem <svg> → null (a tela mostra o aviso de erro)", async () => {
+    const { svgParaDataUrl } = await import("./ideWorkspace");
+    expect(svgParaDataUrl("")).toBeNull();
+    expect(svgParaDataUrl("   ")).toBeNull();
+    expect(svgParaDataUrl(null)).toBeNull();
+    expect(svgParaDataUrl("<div>não é svg</div>")).toBeNull();
+    expect(svgParaDataUrl("<svgx></svgx>")).toBeNull();
+  });
+
+  it("o .svg continua editável como código (xml) e sem 'Rodar'", async () => {
+    const { linguagem } = await import("./ideWorkspace");
+    expect(linguagem("arte/soma.svg")).toEqual({ monaco: "xml", runner: null });
+  });
+});
