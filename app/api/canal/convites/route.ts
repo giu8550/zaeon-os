@@ -15,14 +15,18 @@ import { triggerSafe } from "@/lib/collab/realtime";
 /** Teto de convites pendentes enviados por pessoa (anti-spam). */
 export const MAX_PENDENTES = 20;
 
-type Linha = { id: string; deId: string; paraId: string; status: string; dmCanalId: string | null; createdAt: Date };
+type Linha = { id: string; deId: string; paraId: string; status: string; dmCanalId: string | null; createdAt: Date; respondidoEm?: Date | null };
+
+/** Quantos convites já respondidos (aceito/recusado) o sino mostra no histórico (#423). */
+export const MAX_HISTORICO = 20;
 
 export async function GET(): Promise<NextResponse> {
   const off = exigirFlag(); if (off) return off;
   const u = await sessaoUsuario();
   if (!u) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const linhas: Linha[] = await prisma.canalConvite.findMany({
-    where: { status: { in: ["pendente", "aceito"] }, OR: [{ deId: u.id }, { paraId: u.id }] },
+    // #423: os recusados também vêm — o sino mostra o status de cada convite (pendente, aceito, recusado)
+    where: { status: { in: ["pendente", "aceito", "recusado"] }, OR: [{ deId: u.id }, { paraId: u.id }] },
     orderBy: { createdAt: "desc" },
     take: 200,
   });
@@ -32,10 +36,17 @@ export async function GET(): Promise<NextResponse> {
     return gente.get(id) ?? { id, nome: "Alguém", avatar: null };
   };
   const vista = (l: Linha) => ({ id: l.id, status: l.status, dmCanalId: l.dmCanalId, criadoEm: l.createdAt, pessoa: outro(l) });
+  const quando = (l: Linha) => +new Date(l.respondidoEm ?? l.createdAt);
   return NextResponse.json({
     recebidos: linhas.filter((l) => l.status === "pendente" && l.paraId === u.id).map(vista),
     enviados: linhas.filter((l) => l.status === "pendente" && l.deId === u.id).map(vista),
     contatos: linhas.filter((l) => l.status === "aceito").map(vista),
+    // #423: o que já foi respondido, nas duas direções, do mais recente pro mais antigo (o sino mostra o status)
+    historico: linhas
+      .filter((l) => l.status !== "pendente")
+      .sort((a, b) => quando(b) - quando(a))
+      .slice(0, MAX_HISTORICO)
+      .map((l) => ({ ...vista(l), direcao: l.deId === u.id ? "enviado" : "recebido", respondidoEm: l.respondidoEm ?? null })),
   });
 }
 

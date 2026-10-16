@@ -1,0 +1,74 @@
+"use client";
+/**
+ * SinoConvites — o sino de notificações do escritório (#423), entre o seletor de escritórios e o "+".
+ * Por enquanto só convites: os recebidos (Aceitar / Recusar), os que você enviou e o histórico com o
+ * status de cada um. Regras (lista, frases, bolinha) em lib/canal/sino.ts; dados e chamadas no CoworkingCanal.
+ * Visual: o vidro do escritório (lib/canal/vidro) + o sino do lucide-react, como o resto do app.
+ */
+import { Bell } from "lucide-react";
+import AgentAvatar from "@/components/agents/AgentAvatar";
+import type { ItemSino } from "@/lib/canal/sino";
+import { VIDRO_CHIP, VIDRO_POPOVER, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
+
+const ROTULO: Record<ItemSino["status"], string> = { pendente: "pendente", aceito: "aceito", recusado: "recusado" };
+const COR: Record<ItemSino["status"], string> = {
+  pendente: "bg-amber-400/20 text-amber-800 dark:text-amber-200",
+  aceito: "bg-emerald-400/20 text-emerald-800 dark:text-emerald-200",
+  recusado: "bg-rose-400/20 text-rose-700 dark:text-rose-200",
+};
+
+export default function SinoConvites({ itens, contador, aberto, onAlternar, ocupado, onResponder }: {
+  itens: ItemSino[];
+  /** número da bolinha (lib/canal/sino contadorDoSino). */
+  contador: number;
+  aberto: boolean;
+  onAlternar: () => void;
+  /** id do convite sendo respondido (botões desligados). */
+  ocupado: string | null;
+  onResponder: (id: string, acao: "aceitar" | "recusar") => void;
+}) {
+  return (
+    <div className="relative shrink-0">
+      <button type="button" onClick={onAlternar} aria-expanded={aberto} aria-haspopup="dialog"
+        aria-label={contador > 0 ? `Notificações (${contador} nova${contador > 1 ? "s" : ""})` : "Notificações"} title="Notificações"
+        className={`${TOQUE} relative grid place-items-center rounded-2xl ${VIDRO_CHIP} ${TXT}`}>
+        <Bell className="w-[18px] h-[18px]" aria-hidden />
+        {contador > 0 && (
+          <span aria-hidden className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-1 grid place-items-center rounded-full text-[9.5px] font-black bg-rose-500 text-white">
+            {contador > 99 ? "99+" : contador}
+          </span>
+        )}
+      </button>
+
+      {aberto && (
+        <div role="dialog" aria-label="Notificações" className={`absolute left-0 top-full mt-1.5 z-30 w-[min(92vw,340px)] p-2 rounded-2xl ${VIDRO_POPOVER}`}>
+          <p className={`px-2 pt-1 pb-2 text-[10.5px] font-bold uppercase tracking-wider ${TXT_MUDO}`}>Convites</p>
+          {itens.length === 0 ? (
+            <p className={`px-2 pb-2 text-[12.5px] ${TXT_2}`}>Nenhum convite por aqui ainda.</p>
+          ) : (
+            <ul className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto">
+              {itens.map((it) => (
+                <li key={it.id} className="flex items-center gap-2 px-2 py-1.5 rounded-xl">
+                  <AgentAvatar src={it.pessoa.avatar} nome={it.pessoa.nome} size={26} />
+                  <span className={`flex-1 min-w-0 text-[12.5px] leading-snug ${TXT}`}>{it.texto}</span>
+                  {it.acao ? (
+                    <span className="flex items-center gap-1 shrink-0">
+                      <button type="button" onClick={() => onResponder(it.id, "aceitar")} disabled={ocupado === it.id}
+                        aria-label={`Aceitar o convite de ${it.pessoa.nome}`}
+                        className="min-h-[32px] px-2.5 rounded-lg text-[11.5px] font-bold bg-blue-600 text-white dark:bg-cyan-400 dark:text-slate-900 disabled:opacity-40">Aceitar</button>
+                      <button type="button" onClick={() => onResponder(it.id, "recusar")} disabled={ocupado === it.id}
+                        aria-label={`Recusar o convite de ${it.pessoa.nome}`}
+                        className={`min-h-[32px] px-2.5 rounded-lg text-[11.5px] font-bold ${VIDRO_CHIP} ${TXT_2} disabled:opacity-40`}>Recusar</button>
+                    </span>
+                  ) : (
+                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10.5px] font-bold ${COR[it.status]}`}>{ROTULO[it.status]}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

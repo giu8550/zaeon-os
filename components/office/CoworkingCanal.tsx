@@ -18,7 +18,9 @@ import { fonteChat } from "@/lib/ui/chatFontScale";
 import { montarTopoPessoas } from "@/lib/canal/topoPessoas";
 import { podeApagar, textoConfirmarApagar, aposApagar } from "@/lib/canal/seletor";
 import { ABAS, abaDoCanal, filtrarPorAba, type Aba } from "@/lib/canal/convite";
-import { ConvidarForm, ConvitesRecebidos, type ConviteVista } from "./ConvitesEscritorio";
+import { ConvidarForm, type ConviteVista } from "./ConvitesEscritorio";
+import SinoConvites from "./SinoConvites";
+import { montarSino, contadorDoSino, chaveVistoSino, type HistoricoSino } from "@/lib/canal/sino";
 import PessoasTopo from "./PessoasTopo";
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
@@ -29,8 +31,8 @@ import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVE
 import { useNotificacoesSO } from "./useNotificacoesSO";
 
 type Canal = { id: string; titulo: string; acesso: string; ownerId: string; membros: string[]; agentes: string[]; cartolinaId: string | null; souDono: boolean; dmCom?: string | null };
-type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[] };
-const SEM_CONVITES: Convites = { recebidos: [], enviados: [], contatos: [] };
+type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[]; historico: HistoricoSino[] };
+const SEM_CONVITES: Convites = { recebidos: [], enviados: [], contatos: [], historico: [] };
 const NOME_ABA: Record<Aba, string> = { privado: "Privado", turma: "Turma", aberto: "Aberto" };
 type Agente = { agentKey: string; tipo: string; nome: string; emoji: string; bio: string; curso: string | null; avatarUrl: string | null; ativo: boolean };
 type Pessoa = { id: string; nome: string; avatar: string | null };
@@ -52,11 +54,30 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [estadoAgente, setEstadoAgente] = useState<Record<string, EstadoAgente>>({});
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [menu, setMenu] = useState<"canais" | "config" | "convidar" | null>(null);
+  const [menu, setMenu] = useState<"canais" | "config" | "convidar" | "sino" | null>(null);
   // #396 (D): abas do seletor (dividem o espaço, não misturam) + convites da aba Privado
   const [aba, setAba] = useState<Aba>("turma");
   const [convites, setConvites] = useState<Convites>(SEM_CONVITES);
   const [respondendo, setRespondendo] = useState<string | null>(null);
+  // #423: sino — quando foi aberto pela última vez (no navegador, por pessoa) e a lista que ele mostra
+  const [vistoSino, setVistoSino] = useState<number | null>(null);
+  const meuIdSino = det?.eu.id ?? null;
+  useEffect(() => {
+    if (!meuIdSino) return;
+    try { const v = Number(localStorage.getItem(chaveVistoSino(meuIdSino))); setVistoSino(Number.isFinite(v) && v > 0 ? v : null); } catch { /* sem storage: só os pendentes contam */ }
+  }, [meuIdSino]);
+  const itensSino = useMemo(() => montarSino(convites), [convites]);
+  const contadorSino = contadorDoSino(convites, vistoSino);
+  const alternarSino = () => {
+    const abrir = menu !== "sino";
+    setMenu(abrir ? "sino" : null);
+    if (!abrir) return;
+    void carregarConvites();
+    // abriu o sino = viu as respostas; a bolinha passa a contar só os pendentes e o que chegar depois
+    const agora = Date.now();
+    setVistoSino(agora);
+    if (meuIdSino) { try { localStorage.setItem(chaveVistoSino(meuIdSino), String(agora)); } catch { /* ignore */ } }
+  };
   const [novoTitulo, setNovoTitulo] = useState("");
   const [apagando, setApagando] = useState<string | null>(null);
   const [agendaAberta, setAgendaAberta] = useState(false);
@@ -281,7 +302,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const r = await fetch("/api/canal/convites", { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
-      setConvites({ recebidos: j.recebidos ?? [], enviados: j.enviados ?? [], contatos: j.contatos ?? [] });
+      setConvites({ recebidos: j.recebidos ?? [], enviados: j.enviados ?? [], contatos: j.contatos ?? [], historico: j.historico ?? [] });
     } catch { /* sem convites não trava o escritório */ }
   }, []);
   useEffect(() => { if (canais.length) void carregarConvites(); }, [canais.length, carregarConvites]);
@@ -425,7 +446,6 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               <span className="max-w-[40vw] sm:max-w-[260px] truncate">{canal.titulo}</span>
               <span aria-hidden className={`text-[10px] ${TXT_MUDO}`}>▾</span>
               {totalNaoLidas - (naoLidas[ativoId] ?? 0) > 0 && <Badge n={totalNaoLidas - (naoLidas[ativoId] ?? 0)} />}
-              {convites.recebidos.length > 0 && <span className="w-2 h-2 rounded-full bg-rose-500" title={`${convites.recebidos.length} convite(s) no Privado`} aria-label={`${convites.recebidos.length} convite(s) novo(s)`} />}
             </button>
             {menu === "canais" && (
               <div className={`absolute left-0 top-full mt-1.5 z-30 w-[min(92vw,340px)] p-1.5 rounded-2xl ${VIDRO_POPOVER}`}>
@@ -435,7 +455,6 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
                     <button key={a} type="button" role="tab" aria-selected={aba === a} onClick={() => setAba(a)}
                       className={`flex-1 min-h-[36px] rounded-xl text-[12px] font-bold flex items-center justify-center gap-1.5 ${aba === a ? `bg-blue-500/20 dark:bg-blue-400/20 ${TXT}` : `${VIDRO_CHIP} ${TXT_2}`}`}>
                       {NOME_ABA[a]}
-                      {a === "privado" && convites.recebidos.length > 0 && <Badge n={convites.recebidos.length} />}
                     </button>
                   ))}
                 </div>
@@ -461,9 +480,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
                   </div>
                 ))}
                 </div>
-                {aba === "privado" && (
-                  <ConvitesRecebidos recebidos={convites.recebidos} enviados={convites.enviados} ocupado={respondendo} onResponder={(id, acao) => void responderConvite(id, acao)} />
-                )}
+                {/* #423: os convites saíram daqui e foram pro sino */}
                 <div className="mt-1 flex gap-1.5 p-1">
                   <input value={novoTitulo} onChange={(e) => setNovoTitulo(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void criarCanal(); }} placeholder={`novo escritório (${NOME_ABA[aba].toLowerCase()})`} aria-label="Nome do novo canal"
                     className={`flex-1 min-h-[40px] px-3 rounded-xl text-[13px] bg-white/70 dark:bg-white/[0.06] border border-white/60 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70`} />
@@ -473,8 +490,12 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
             )}
           </div>
 
-          {/* #423: "+" (convidar) à ESQUERDA, depois do seletor; abre NA HORIZONTAL, ao lado do botão.
-              O convite cai no Privado da pessoa. (O sino de notificações entra entre o seletor e o +.) */}
+          {/* #423: sino de notificações (por enquanto só convites, com o status de cada um), entre o seletor e o + */}
+          <SinoConvites itens={itensSino} contador={contadorSino} aberto={menu === "sino"} onAlternar={alternarSino}
+            ocupado={respondendo} onResponder={(id, acao) => void responderConvite(id, acao)} />
+
+          {/* #423: "+" (convidar) à ESQUERDA, depois do sino; abre NA HORIZONTAL, ao lado do botão.
+              O convite cai no sino da pessoa. */}
           <div className="flex items-center gap-1.5 min-w-0">
             <button type="button" onClick={() => setMenu(menu === "convidar" ? null : "convidar")} aria-label="Convidar pessoa" aria-expanded={menu === "convidar"}
               title="Convidar pessoa" className={`${TOQUE} shrink-0 rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>

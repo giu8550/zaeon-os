@@ -134,6 +134,25 @@ describe("convites · listar", () => {
     expect(j.enviados.map((c: any) => c.pessoa.id)).toEqual([C]);
     expect(j.contatos.map((c: any) => [c.pessoa.id, c.dmCanalId])).toEqual([[X, "9".repeat(24)]]);
   });
+
+  it("#423 · histórico pro sino: aceitos e RECUSADOS, nas duas direções, do mais recente pro mais antigo", async () => {
+    state.convites.push(
+      { id: "1".repeat(24), deId: A, paraId: B, status: "aceito", dmCanalId: "9".repeat(24), createdAt: new Date("2026-10-01"), respondidoEm: new Date("2026-10-02") },
+      { id: "2".repeat(24), deId: C, paraId: A, status: "recusado", dmCanalId: null, createdAt: new Date("2026-10-03"), respondidoEm: new Date("2026-10-05") },
+      { id: "3".repeat(24), deId: A, paraId: X, status: "recusado", dmCanalId: null, createdAt: new Date("2026-10-01"), respondidoEm: new Date("2026-10-04") },
+      { id: "4".repeat(24), deId: A, paraId: C, status: "pendente", dmCanalId: null, createdAt: new Date("2026-10-06") },
+    );
+    const j = await (await GET()).json();
+    expect(j.historico.map((h: any) => [h.pessoa.id, h.direcao, h.status])).toEqual([
+      [C, "recebido", "recusado"], // 05/10
+      [X, "enviado", "recusado"],  // 04/10
+      [B, "enviado", "aceito"],    // 02/10
+    ]);
+    // o pendente não entra no histórico; continua em "enviados"
+    expect(j.enviados.map((c: any) => c.pessoa.id)).toEqual([C]);
+    // recusado não vira contato
+    expect(j.contatos.map((c: any) => c.pessoa.id)).toEqual([B]);
+  });
 });
 
 describe("convites · responder", () => {
