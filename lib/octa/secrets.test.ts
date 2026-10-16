@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import { SecretVault, MemoryVaultStore, SecretError, redact } from "./secrets";
-import { emitirVirtualKey, classificarRespostaGateway, octaGatewayConfigurado } from "./litellm";
+import { emitirVirtualKey, classificarRespostaGateway, octaGatewayConfigurado, modeloReal } from "./litellm";
 
 const KEY = randomBytes(32).toString("base64");
 const VALOR = "ghp_SUPERSECRETO_123456";
@@ -57,7 +57,7 @@ describe("octa · cofre (§3)", () => {
 });
 
 describe("octa · LiteLLM virtual keys (§3)", () => {
-  const env = { LITELLM_URL: "http://gw:4000/", LITELLM_MASTER_KEY: "sk-master" } as any;
+  const env = { GATEWAY_URL: "http://gw:4000/", GATEWAY_MASTER_KEY: "sk-master" } as any;
   it("sem gateway configurado recusa limpo", async () => {
     expect(octaGatewayConfigurado({} as any)).toBe(false);
     expect(await emitirVirtualKey({ userId: "u", sessionId: "s", maxBudgetUsd: 1 }, fetch, {} as any)).toMatchObject({ ok: false, code: "gateway_off" });
@@ -69,6 +69,12 @@ describe("octa · LiteLLM virtual keys (§3)", () => {
     const [url, init] = (f.mock.calls[0] as any);
     expect(url).toBe("http://gw:4000/key/generate");
     expect(JSON.parse(init.body)).toMatchObject({ user_id: "u", max_budget: 2, duration: "8h" });
+  });
+  it("usa o gateway da infra e o modelo REAL do app (sem apelido)", () => {
+    expect(octaGatewayConfigurado({ LITELLM_URL: "x", LITELLM_MASTER_KEY: "y" } as any)).toBe(false); // nomes antigos não valem
+    expect(modeloReal("padrao", { GEMINI_MODEL: "gemini-3.5-flash" } as any)).toBe("vertex_ai/gemini-3.5-flash");
+    expect(modeloReal("forte", { GEMINI_MODEL_PRO: "gemini-3.1-pro" } as any)).toBe("vertex_ai/gemini-3.1-pro");
+    expect(modeloReal("forte", {} as any)).toBe("vertex_ai/gemini-2.5-pro"); // mesmo default do lib/ai/model.ts
   });
   it("budget estourado vira recusa", async () => {
     const r = await classificarRespostaGateway(new Response('{"error":"Budget has been exceeded! Current cost: 2.1"}', { status: 400 }));

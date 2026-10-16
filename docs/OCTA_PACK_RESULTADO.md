@@ -13,7 +13,7 @@ Resultado de `docs/HANDOFF_OCTA_CODE_PACK.md`. São 7 fases, uma por commit, tod
 | P7 Lacunas 3, 1, 5 | Conteúdo externo vira DADO cercado (fronteira aleatória) com sinal de injeção, e depois de um sinal toda escrita exige humano. Trace com custo e replay. Checkpoint/rollback por run fora do histórico git. `runOctaTool` costura tudo | `lib/octa/untrusted.ts`, `trace.ts`, `checkpoint.ts`, `runner.ts` | `p7.test.ts` |
 
 ## O que **não** está feito (portões do dono / infra)
-1. **Chaves reais** no LiteLLM (`LITELLM_URL`, `LITELLM_MASTER_KEY`) e `OCTA_VAULT_KEY` (`openssl rand -base64 32`). Sem elas, o cofre não sobe e a rotina de evals responde 503.
+1. **Gateway de pé** (perfil `gateway` do `docker-compose.beta.yml`) com `GATEWAY_URL` e `GATEWAY_MASTER_KEY` (os mesmos da infra), mais `OCTA_VAULT_KEY` (`openssl rand -base64 32`). O Octa chama o **modelo real do app** (`vertex_ai/<GEMINI_MODEL…>`), sem apelido. Sem isso, o cofre não sobe e a rotina de evals responde 503.
 2. **`prisma db push`**, para criar `OctaSecret`, `OctaSecretAudit` e `OctaEvalRun`.
 3. **Cron** da rotina diária, em janela segura, na VPS:
    `0 4 * * * curl -fsS -X POST -H "Authorization: Bearer $OCTA_CRON_SECRET" https://<host>/api/octa/evals/run`
