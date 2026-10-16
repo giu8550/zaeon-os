@@ -292,7 +292,8 @@ services:
       redis: { condition: service_started }
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health/liveliness || exit 1"]
+      # a imagem do LiteLLM NÃO tem wget (ficava "unhealthy" com o proxy no ar) — usa o python dela
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4)"]
       interval: 30s
       timeout: 5s
       retries: 3
