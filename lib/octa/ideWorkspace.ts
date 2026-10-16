@@ -86,3 +86,30 @@ export function carregar(): EstadoIDE {
 export function salvar(e: EstadoIDE): boolean {
   try { localStorage.setItem(CHAVE, JSON.stringify(e)); return true; } catch { return false; }
 }
+
+// ───────────────────────────── #421: SVG é imagem, não texto ─────────────────────────────
+
+/** Arquivo SVG? (a arte do Octa é gravada como arte/<tema>.svg) — esses abrem como IMAGEM na IDE. */
+export const ehSvg = (path: string | null | undefined): boolean => !!path && /\.svg$/i.test(path.trim());
+
+/**
+ * SVG → data URL pra uma <img>. Numa <img> o navegador NÃO executa <script> do SVG nem busca nada de fora —
+ * por isso a prévia usa <img> e nunca injeta o SVG na página (o aluno também edita esse arquivo).
+ * null = o texto nem parece um SVG (vazio, ou sem a tag <svg>).
+ */
+export function svgParaDataUrl(conteudo: string | null | undefined): string | null {
+  const s = String(conteudo ?? "").trim();
+  if (!/<svg[\s>]/i.test(s)) return null;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
+}
+
+/**
+ * Esquece a escolha "ver como Código" desses caminhos (#421, revisão): arquivo apagado ou regravado pelo agente
+ * volta a abrir como IMAGEM — senão uma arte nova com o mesmo nome herdava a escolha antiga e abria como código.
+ */
+export function esquecerVerCodigo(pref: Record<string, boolean>, caminhos: readonly string[]): Record<string, boolean> {
+  if (!caminhos.some((p) => p in pref)) return pref; // nada a esquecer → mesmo objeto (o React não re-renderiza à toa)
+  const novo = { ...pref };
+  for (const p of caminhos) delete novo[p];
+  return novo;
+}

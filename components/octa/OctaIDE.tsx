@@ -12,9 +12,10 @@ import { Play, Plus, X, FileText, Folder, FolderOpen, Trash2, Undo2, Send, Loade
 import OctaIcon from "./OctaIcon";
 import { useCodeRunner, type RunOutput } from "@/app/agentic-modules/codelab/useCodeRunner";
 import {
-  arvore, aplicarEdicoes, fecharAba, abrir, caminhoValido, linguagem, carregar, salvar,
+  arvore, aplicarEdicoes, fecharAba, abrir, caminhoValido, linguagem, carregar, salvar, ehSvg, esquecerVerCodigo,
   type EstadoIDE, type NoArvore,
 } from "@/lib/octa/ideWorkspace";
+import PreviaSvg from "./PreviaSvg";
 
 const Monaco = dynamic(() => import("@monaco-editor/react").then((m) => m.default), {
   ssr: false,
@@ -86,6 +87,8 @@ export default function OctaIDE() {
   const [enviando, setEnviando] = useState(false);
   const [pastas, setPastas] = useState<Set<string>>(new Set(["arte", "src", "tests"]));
   const [saidaAberta, setSaidaAberta] = useState(false);
+  // #421: por arquivo .svg, mostrar o código em vez da imagem? (padrão: imagem)
+  const [verCodigo, setVerCodigo] = useState<Record<string, boolean>>({});
   const { run, output, isRunning, isPyodideReady, clearOutput, iframeRef } = useCodeRunner();
   const fimChat = useRef<HTMLDivElement>(null);
   const abortar = useRef<AbortController | null>(null);
@@ -112,6 +115,7 @@ export default function OctaIDE() {
     if (!ide || !window.confirm(`Apagar ${p}?`)) return;
     const arquivos = { ...ide.arquivos }; delete arquivos[p];
     setIde(fecharAba({ ...ide, arquivos }, p));
+    setVerCodigo((v) => esquecerVerCodigo(v, [p])); // recriado com o mesmo nome, volta a abrir como imagem
   };
   const rodar = useCallback(async () => {
     if (!ide || !ativo || !lang?.runner) return;
@@ -143,6 +147,8 @@ export default function OctaIDE() {
       const apagados: string[] = j.apagados ?? [];
       const antes = ide;
       if (Object.keys(edicoes).length || apagados.length) setIde((e) => (e ? aplicarEdicoes(e, edicoes, apagados) : e));
+      // arte (re)gravada ou apagada pelo agente: abre como IMAGEM, não herda um "Código" antigo do mesmo caminho
+      setVerCodigo((v) => esquecerVerCodigo(v, [...Object.keys(edicoes), ...apagados]));
       const pedeApagar = (j.negados ?? []).some((n: any) => n.tool === "octa_apagar" && n.motivo === "needs_approval");
       setMsgs((v) => [...v, {
         id: uid(), role: "assistant", content: j.resposta ?? "", edicoes: Object.keys(edicoes), apagados, modelo: j.modelo,
@@ -199,8 +205,22 @@ export default function OctaIDE() {
               </div>
             ))}
           </div>
+          {/* #421: .svg (a arte do Octa) abre como IMAGEM; "Código" volta pro editor */}
+          {ativo && ehSvg(ativo) && (
+            <div className="h-8 shrink-0 flex items-center gap-1 px-2" role="tablist" aria-label="Como mostrar o SVG" style={{ background: Z.bg, borderBottom: `1px solid ${Z.borda}` }}>
+              {([["visualizar", "Visualizar"], ["codigo", "Código"]] as const).map(([k, rotulo]) => {
+                const sel = (k === "codigo") === !!verCodigo[ativo];
+                return (
+                  <button key={k} type="button" role="tab" aria-selected={sel} onClick={() => setVerCodigo((v) => ({ ...v, [ativo]: k === "codigo" }))}
+                    className="px-2.5 py-0.5 rounded text-[11.5px]" style={{ background: sel ? Z.sel : "transparent", color: sel ? Z.texto : Z.fraco }}>{rotulo}</button>
+                );
+              })}
+            </div>
+          )}
           <div className="flex-1 min-h-0">
-            {ativo ? (
+            {ativo && ehSvg(ativo) && !verCodigo[ativo] ? (
+              <PreviaSvg conteudo={ide.arquivos[ativo] ?? ""} titulo={ativo} />
+            ) : ativo ? (
               <Monaco
                 path={ativo}
                 language={lang?.monaco}
@@ -263,6 +283,15 @@ export default function OctaIDE() {
                       <button type="button" onClick={() => { const d = m.desfazer!; setIde(d); setMsgs((v) => v.map((x) => (x.id === m.id ? { ...x, desfazer: undefined, content: x.content + "\n\n(desfeito)" } : x))); }}
                         className="ml-auto flex items-center gap-1 hover:underline" style={{ color: Z.fraco }}><Undo2 className="w-3 h-3" /> desfazer</button>
                     )}
+                  </div>
+                )}
+                {/* #421: a arte que o agente gravou aparece aqui mesmo, em miniatura (clique abre em Visualizar) */}
+                {!!m.edicoes?.some((p) => ehSvg(p) && p in ide.arquivos) && (
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {m.edicoes!.filter((p) => ehSvg(p) && p in ide.arquivos).map((p) => (
+                      <PreviaSvg key={`mini-${p}`} conteudo={ide.arquivos[p] ?? ""} titulo={p} tamanho="mini"
+                        onClick={() => { setVerCodigo((v) => ({ ...v, [p]: false })); setIde((e) => (e && p in e.arquivos ? abrir(e, p) : e)); }} />
+                    ))}
                   </div>
                 )}
                 {!!m.negados?.length && (
