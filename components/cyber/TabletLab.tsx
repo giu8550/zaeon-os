@@ -22,6 +22,7 @@ export default function TabletLab({ aberto, onFechar, onIA, tutorial, onPesquisa
   /** na espera da pesquisa do tutorial, o "Guardar tablet" pisca (a lição da concorrência) */
   const [destacarGuardar, setDestacarGuardar] = useState(false);
   const [src, setSrc] = useState<string | null>(null), [carregou, setCarregou] = useState(false);
+  const iframe = useRef<HTMLIFrameElement>(null);
   const fechar = useRef(onFechar); fechar.current = onFechar;
   const ia = useRef(onIA); ia.current = onIA;
   const abertoRef = useRef(aberto); abertoRef.current = aberto;
@@ -43,11 +44,23 @@ export default function TabletLab({ aberto, onFechar, onIA, tutorial, onPesquisa
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, [src]);
-  // guardou o tablet: o foco do teclado sai do iframe (senão o WASD continuava indo pro laboratório invisível)
+  // guardou o tablet: o foco do teclado sai do iframe (senão o WASD continuava indo pro laboratório invisível) — e
+  // ENQUANTO guardado, se algo lá dentro puxar o foco (a resposta terminando re-arma o autofoco do composer; o
+  // lib/ui/autofoco já não foca com o iframe invisível, isto é a rede de segurança), o jogo pega o foco de volta na hora
   useEffect(() => {
     if (aberto) return;
-    const a = document.activeElement as HTMLElement | null; if (a?.tagName === "IFRAME") { a.blur(); window.focus(); }
+    const devolver = () => { const f = iframe.current; if (f && document.activeElement === f) { f.blur(); window.focus(); } };
+    devolver();
+    const aoSair = () => setTimeout(devolver, 0);   // o activeElement só vira o iframe depois do blur da janela
+    window.addEventListener("blur", aoSair);
+    return () => window.removeEventListener("blur", aoSair);
   }, [aberto]);
+  // abriu o tablet: o teclado vai pro laboratório (e o autofoco dele põe o cursor no chat) — sem clicar
+  useEffect(() => {
+    if (!aberto || !carregou) return;
+    const t = setTimeout(() => { try { iframe.current?.contentWindow?.focus(); } catch { /* outra origem */ } }, 80);
+    return () => clearTimeout(t);
+  }, [aberto, carregou]);
   useEffect(() => {
     if (!aberto) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); fechar.current(); } };
@@ -69,7 +82,7 @@ export default function TabletLab({ aberto, onFechar, onIA, tutorial, onPesquisa
         </div>
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-[22px] bg-slate-50 dark:bg-black">
           {!carregou && <div className="absolute inset-0 flex items-center justify-center text-sm text-sky-900/60 dark:text-cyan-100/70"><span className="animate-pulse">Abrindo o laboratório…</span></div>}
-          <iframe src={src} title="Laboratório" tabIndex={aberto ? 0 : -1} onLoad={() => setCarregou(true)} className={`h-full w-full border-0 transition-opacity duration-300 ${carregou ? "opacity-100" : "opacity-0"}`} allow="clipboard-read; clipboard-write; microphone; fullscreen" />
+          <iframe ref={iframe} src={src} title="Laboratório" tabIndex={aberto ? 0 : -1} onLoad={() => setCarregou(true)} className={`h-full w-full border-0 transition-opacity duration-300 ${carregou ? "opacity-100" : "opacity-0"}`} allow="clipboard-read; clipboard-write; microphone; fullscreen" />
         </div>
       </div>
       <style>{`

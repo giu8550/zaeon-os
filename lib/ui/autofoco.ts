@@ -50,9 +50,38 @@ export function decidirFoco(e: EstadoFoco): Decisao {
   return "focar";
 }
 
-/** Ocupa espaço na tela? `offsetParent` nulo cobre `display:none` em qualquer ancestral. */
+/**
+ * A página está DE FATO na tela, inclusive quando roda dentro de um iframe? `visibility:hidden`/`display:none` no
+ * iframe NÃO chega no documento de dentro: pra ele, tudo continua "visível". Bug de out/2026 (modo TABLET do
+ * cyberespaço): com o tablet guardado (iframe invisível, mas vivo — a concorrência), a resposta terminava, o composer
+ * re-armava o autofoco e ROUBAVA o foco do jogo — o avatar parava, o mouse destravava e o WASD ia pro chat escondido.
+ * Sobe pelos `frameElement` (mesma origem) e checa o estilo de cada um na página de cima. Outra origem = não dá pra
+ * saber → não bloqueia.
+ */
+export function frameVisivel(w: Window | null | undefined = typeof window === "undefined" ? null : window): boolean {
+  try {
+    let atual = w;
+    for (let i = 0; i < 6 && atual?.frameElement; i++) {
+      const fe = atual.frameElement as HTMLElement;
+      const pai = fe.ownerDocument?.defaultView;
+      if (!pai) return true;
+      const cs = pai.getComputedStyle(fe);
+      if (cs.visibility === "hidden" || cs.visibility === "collapse" || cs.display === "none" || Number(cs.opacity) === 0) return false;
+      if (fe.offsetParent === null && cs.position !== "fixed") return false;   // display:none num ancestral
+      const r = fe.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return false;
+      atual = pai;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+/** Ocupa espaço na tela? `offsetParent` nulo cobre `display:none` em qualquer ancestral; e o iframe (se houver) também. */
 export function elementoVisivel(el: HTMLElement | null | undefined): boolean {
   if (!el || !el.isConnected) return false;
+  if (!frameVisivel(el.ownerDocument?.defaultView)) return false;
   if (el.offsetParent === null && getComputedStyle(el).position !== "fixed") return false;
   const r = el.getBoundingClientRect();
   return r.width > 0 && r.height > 0;
