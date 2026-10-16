@@ -3,8 +3,9 @@
  * usuário/sessão, com budget e TTL. A chave real do provedor (Anthropic/Vertex) mora SÓ no gateway;
  * o Octa só manipula a virtual key, e o modelo nunca vê nenhuma das duas.
  *
- * Sem LITELLM_URL/LITELLM_MASTER_KEY → `octaGatewayConfigurado() === false` e tudo recusa limpo
- * (portão do dono: chaves reais no LiteLLM).
+ * Usa o MESMO gateway da infra (docker-compose.beta.yml, perfil "gateway"): GATEWAY_URL + GATEWAY_MASTER_KEY.
+ * Sem eles → `octaGatewayConfigurado() === false` e tudo recusa limpo (portão do dono: subir o gateway).
+ * O modelo é o REAL que o app usa (lib/ai/model.ts), chamado como `vertex_ai/<id>` — nada de apelido.
  * Endpoints do proxy LiteLLM: POST /key/generate, POST /key/delete, GET /key/info.
  */
 export type VirtualKey = { key: string; userId: string; sessionId: string; maxBudget: number; expiraEm?: string };
@@ -12,12 +13,21 @@ export type GatewayErro = { ok: false; code: "gateway_off" | "budget_exceeded" |
 
 type Fetch = typeof fetch;
 
-export function octaGatewayConfigurado(env = process.env): boolean {
-  return !!(env.LITELLM_URL && env.LITELLM_MASTER_KEY);
+export function gatewayCfg(env: NodeJS.ProcessEnv = process.env) {
+  return { url: (env.GATEWAY_URL ?? "").replace(/\/$/, ""), master: env.GATEWAY_MASTER_KEY ?? "" };
+}
+const cfg = gatewayCfg;
+
+export function octaGatewayConfigurado(env: NodeJS.ProcessEnv = process.env): boolean {
+  const c = gatewayCfg(env);
+  return !!(c.url && c.master);
 }
 
-function cfg(env = process.env) {
-  return { url: (env.LITELLM_URL ?? "").replace(/\/$/, ""), master: env.LITELLM_MASTER_KEY ?? "" };
+/** O modelo REAL em uso no app (o mesmo do chat), no formato que o gateway roteia: `vertex_ai/<id>`. */
+export function modeloReal(tier: "padrao" | "forte", env: NodeJS.ProcessEnv = process.env): string {
+  const flash = env.GEMINI_MODEL || env.GEMINI_MODEL_FLASH || "gemini-2.5-flash";
+  const pro = env.GEMINI_MODEL_PRO || "gemini-2.5-pro";
+  return `vertex_ai/${tier === "forte" ? pro : flash}`;
 }
 
 /** Emite uma virtual key com teto de gasto (USD) e duração (ex.: "8h", "1d"). */
