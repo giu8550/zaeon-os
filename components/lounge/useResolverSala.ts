@@ -1,13 +1,14 @@
 "use client";
 /**
- * useResolverSala — QUAL sala 3D abrir: convite `?sala=<token>` (POST /api/collab/join) → senão a minha mais
- * recente → senão cria uma. Compartilhado pela aba Lounge 3D e pelo cyberespaço (/lounge-cosmico).
+ * useResolverSala — QUAL sala 3D abrir: convite `?sala=<token>` (POST /api/collab/join) → no CYBERESPAÇO (`mundo`), o
+ * MUNDO — a sala única que todo mundo divide (POST /api/lounge3d/mundo; sem ele, cai no resto) → senão a minha mais
+ * recente → senão cria uma. Compartilhado pela aba Lounge 3D (salas privadas) e pelo cyberespaço (/lounge-cosmico).
  */
 import { useCallback, useEffect, useState } from "react";
 
 export type ErroSala = "off" | "login" | "erro" | null;
 
-export function useResolverSala(ativo = true, tituloNova = "Minha sala de estudos") {
+export function useResolverSala(ativo = true, tituloNova = "Minha sala de estudos", mundo = false) {
   const [salaId, setSalaId] = useState<string | null>(null);
   const [erro, setErro] = useState<ErroSala>(null);
 
@@ -18,6 +19,11 @@ export function useResolverSala(ativo = true, tituloNova = "Minha sala de estudo
         const r = await fetch("/api/collab/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
         if (r.ok) { const d = await r.json(); if (d?.id) { setSalaId(d.id); return; } }
       }
+      if (mundo) {   // o cyberespaço: todo mundo no MESMO servidor
+        const m = await fetch("/api/lounge3d/mundo", { method: "POST" });
+        if (m.status === 401) { setErro("login"); return; }
+        if (m.ok) { const d = await m.json(); if (d?.id) { setSalaId(d.id); return; } }
+      }
       const r = await fetch("/api/lounge3d", { cache: "no-store" });
       if (r.status === 404) { setErro("off"); return; }
       if (r.status === 401) { setErro("login"); return; }
@@ -27,7 +33,7 @@ export function useResolverSala(ativo = true, tituloNova = "Minha sala de estudo
       if (!c.ok) throw new Error(String(c.status));
       setSalaId((await c.json()).sala.id);
     } catch { setErro("erro"); }
-  }, [tituloNova]);
+  }, [tituloNova, mundo]);
 
   useEffect(() => { if (ativo) void resolver(); }, [ativo, resolver]);
   const tentarDeNovo = useCallback(() => { setErro(null); void resolver(); }, [resolver]);

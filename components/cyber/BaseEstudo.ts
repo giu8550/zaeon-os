@@ -23,6 +23,8 @@ export type BaseEstudoHandle = {
    * `energia` (0..1) = o dono na base (digitando no painel) → o fluxo de energia mãos → telas.
    */
   atualizar(o: { dt: number; t: number; ativa: boolean; hover: boolean; perto: boolean; energia?: number }): void;
+  /** a luz da base agora (o engine acende as 4 bases mais perto da câmera com um conjunto fixo de PointLights) */
+  luz(alvo: THREE.Vector3): { forca: number; pos: THREE.Vector3 };
   dispose(): void;
 };
 
@@ -75,12 +77,18 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
     const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(k), 3)); painel.add(new THREE.LineSegments(g, veioLinha)); }
 
   /** uma tela "tecnológica": vidro escuro + brilho + aresta + cantoneiras de luz + barra de status + linhas de texto */
-  const telas: { glow: THREE.MeshBasicMaterial; edge: THREE.LineBasicMaterial; linhas: THREE.MeshBasicMaterial[]; barras: THREE.Mesh[] }[] = [];
+  const telas: { glow: THREE.MeshBasicMaterial; edge: THREE.LineBasicMaterial }[] = [];
+  // as LINHAS de texto e os MEDIDORES de todas as telas viram 2 malhas INSTANCIADAS (cada linha/barra animava com
+  // material/escala própria: ~27 draw calls por base → 2). k = a tela, i = a linha/barra dentro dela
+  const specLinhas: { pai: THREE.Object3D; x: number; y: number; w: number; k: number; i: number }[] = [];
+  const specBarras: { pai: THREE.Object3D; x: number; y: number; k: number; i: number }[] = [];
   const criarTela = (pai: THREE.Object3D, w: number, h: number, nLinhas: number, nBarras: number): THREE.Mesh => {
-    const glow = new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    // as 2 telas LATERAIS animam igual: o mesmo material (o lote junta as duas — components/cyber/lotes)
+    const lateral = telas.length > 0 && telas.length < 3 && telas[1] ? telas[1] : null;
+    const glow = lateral?.glow ?? new THREE.MeshBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     const g = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.2, h + 0.18), glow); g.position.z = -0.02; pai.add(g);
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: 0x0a2436, transparent: true, opacity: 0.62, side: THREE.DoubleSide })); pai.add(scr);
-    const edge = new THREE.LineBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.85 }); pai.add(new THREE.LineSegments(new THREE.EdgesGeometry(scr.geometry), edge));
+    const edge = lateral?.edge ?? new THREE.LineBasicMaterial({ color: 0x66e6ff, transparent: true, opacity: 0.85 }); pai.add(new THREE.LineSegments(new THREE.EdgesGeometry(scr.geometry), edge));
     // moldura fina (bezel) atrás + cantoneiras em L (HUD) na frente
     const bezel = arestas(new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, h + 0.12, 0.05), casco)); bezel.position.z = -0.05; pai.add(bezel);
     const L = Math.min(w, h) * 0.18, cx = w / 2 + 0.05, cy = h / 2 + 0.05, c: number[] = [];
@@ -89,19 +97,11 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
     // barra de status no topo, com três luzes
     const status = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.92, 0.05), new THREE.MeshBasicMaterial({ color: acc, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending })); status.position.set(0, h / 2 - 0.08, 0.01); pai.add(status);
     for (let i = 0; i < 3; i++) { const d = new THREE.Mesh(new THREE.CircleGeometry(0.022, 10), new THREE.MeshBasicMaterial({ color: [0x9affd0, 0xffd36b, 0x66e6ff][i]! })); d.position.set(w / 2 - 0.08 - i * 0.07, h / 2 - 0.15, 0.012); pai.add(d); }
-    const linhas: THREE.MeshBasicMaterial[] = [];
-    for (let i = 0; i < nLinhas; i++) {
-      const lw = (0.25 + Math.random() * 0.6) * w;
-      const m = new THREE.MeshBasicMaterial({ color: 0x8fe8ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending });
-      const ln = new THREE.Mesh(new THREE.PlaneGeometry(lw, 0.055), m); ln.position.set(-w / 2 + 0.1 + lw / 2, h / 2 - 0.28 - i * 0.15, 0.01); pai.add(ln); linhas.push(m);
-    }
+    const k = telas.length;
+    for (let i = 0; i < nLinhas; i++) { const lw = (0.25 + Math.random() * 0.6) * w; specLinhas.push({ pai, x: -w / 2 + 0.1 + lw / 2, y: h / 2 - 0.28 - i * 0.15, w: lw, k, i }); }
     // medidores (barras verticais) no canto de baixo
-    const barras: THREE.Mesh[] = [];
-    for (let i = 0; i < nBarras; i++) {
-      const bm = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.3), new THREE.MeshBasicMaterial({ color: acc.clone().lerp(new THREE.Color(0xffffff), 0.3), transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }));
-      bm.geometry.translate(0, 0.15, 0); bm.position.set(w / 2 - 0.12 - i * 0.09, -h / 2 + 0.08, 0.01); pai.add(bm); barras.push(bm);
-    }
-    telas.push({ glow, edge, linhas, barras });
+    for (let i = 0; i < nBarras; i++) specBarras.push({ pai, x: w / 2 - 0.12 - i * 0.09, y: -h / 2 + 0.08, k, i });
+    telas.push({ glow, edge });   // (a 2ª lateral repete os materiais da 1ª: animar as duas dá o mesmo resultado)
     return scr;
   };
 
@@ -117,8 +117,25 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
     criarTela(mon, TELA_LATERAL.w, TELA_LATERAL.h, 5, 3);
     asa.updateMatrixWorld(true); lateraisPos.push(mon.getWorldPosition(new THREE.Vector3()).sub(office.getWorldPosition(new THREE.Vector3())).applyQuaternion(office.quaternion.clone().invert()));
   }
-  // luz pontual por base pesa no shader de TODA a cena (uma por pessoa): no `low` (celular) fica só o emissivo
-  const luz = low ? null : new THREE.PointLight(0x9fd8ff, 1.6, 11); if (luz) { luz.position.set(0, 3.1, -0.6); office.add(luz); }
+  // as malhas instanciadas das linhas e dos medidores (no referencial da base; as telas não se mexem dentro dela)
+  office.updateMatrixWorld(true);
+  const paraBase = new THREE.Matrix4().copy(office.matrixWorld).invert(), mI = new THREE.Matrix4(), mS = new THREE.Matrix4();
+  const noRef = (pai: THREE.Object3D, x: number, y: number) => new THREE.Matrix4().multiplyMatrices(paraBase, pai.matrixWorld).multiply(mI.makeTranslation(x, y, 0.01));
+  // aditivo: cor × opacidade = o brilho — então o "pulso" de cada linha vai na COR da instância (o material fica em 1)
+  const linhas = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 0.055), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending }), specLinhas.length);
+  specLinhas.forEach((l, j) => linhas.setMatrixAt(j, noRef(l.pai, l.x, l.y).multiply(mS.makeScale(l.w, 1, 1))));
+  const corLinha = new THREE.Color(0x8fe8ff), cI = new THREE.Color();
+  specLinhas.forEach((_, j) => linhas.setColorAt(j, cI.copy(corLinha).multiplyScalar(0.5)));
+  linhas.frustumCulled = false; office.add(linhas);
+  const geoBarra = new THREE.PlaneGeometry(0.06, 0.3); geoBarra.translate(0, 0.15, 0);
+  const barras = new THREE.InstancedMesh(geoBarra, new THREE.MeshBasicMaterial({ color: acc.clone().lerp(new THREE.Color(0xffffff), 0.3), transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }), specBarras.length);
+  const refBarras = specBarras.map((b) => noRef(b.pai, b.x, b.y));
+  refBarras.forEach((m, j) => barras.setMatrixAt(j, m)); barras.instanceMatrix.setUsage(THREE.DynamicDrawUsage); barras.frustumCulled = false; office.add(barras);
+
+  // a LUZ da base não é mais uma PointLight própria: cada uma pesava no shader de TODA a cena (17 luzes com 14 jogadores,
+  // e cada um que entrava recompilava os materiais). O engine tem 4 luzes que vão pras 4 bases mais perto da câmera
+  // (alcance de 11 m: longe, a base já não ilumina nada que se veja) — aqui fica só onde e com que força
+  const luzLocal = new THREE.Vector3(0, 3.1, -0.6); let luzForca = 1.6;
 
   // ── fluxo de ENERGIA: do painel (mãos) até as três telas, em curvas; só com o dono sentado ──
   const origem = new THREE.Vector3(0, ANEL_CTRL.y, ANEL_CTRL.z);
@@ -133,12 +150,21 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
   const fios = curvas.map((c) => { const m = new THREE.Mesh(new THREE.TubeGeometry(c, 20, 0.01, 5, false), fioMat); office.add(m); return m; });
   const tmp = new THREE.Vector3();
 
-  const cristais: { m: THREE.Mesh; baseY: number; ph: number }[] = [];
-  for (let i = 0; i < 7; i++) {
-    const ang = (i / 7) * 6.283, rad = 2.6 + Math.random() * 0.5, h = 0.35 + Math.random() * 0.8;
-    const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.17 + Math.random() * 0.13), new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: CRISTAIS[i % CRISTAIS.length]!, emissiveIntensity: 1.3, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.92, flatShading: true }));
-    c.scale.y = 1.6 + Math.random(); c.position.set(Math.cos(ang) * rad, h, Math.sin(ang) * rad); office.add(c); cristais.push({ m: c, baseY: h, ph: Math.random() * 6.28 });
-  }
+  // os 7 CRISTAIS flutuando: UMA malha instanciada (eram 7 draw calls, cada um com material próprio pulsando). O brilho
+  // (emissivo) de cada um vem da cor da instância: o remendo multiplica o emissivo por ela
+  const NC = 7, cristais = Array.from({ length: NC }, (_, i) => { const ang = (i / NC) * 6.283, rad = 2.6 + Math.random() * 0.5;
+    return { x: Math.cos(ang) * rad, z: Math.sin(ang) * rad, baseY: 0.35 + Math.random() * 0.8, r: 0.17 + Math.random() * 0.13, sy: 1.6 + Math.random(), ph: Math.random() * 6.28, rot: 0, cor: new THREE.Color(CRISTAIS[i % CRISTAIS.length]!) }; });
+  const matCristal = new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0xffffff, emissiveIntensity: 1, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.92, flatShading: true });
+  matCristal.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n#ifdef USE_COLOR\n totalEmissiveRadiance *= vColor;\n diffuseColor.rgb = diffuse;\n#endif"); };
+  matCristal.customProgramCacheKey = () => "cristal-base-v2";
+  const malhaCristais = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1), matCristal, NC);
+  malhaCristais.instanceMatrix.setUsage(THREE.DynamicDrawUsage); malhaCristais.frustumCulled = false; office.add(malhaCristais);
+  const qC = new THREE.Quaternion(), eixoY = new THREE.Vector3(0, 1, 0), pC = new THREE.Vector3(), sC = new THREE.Vector3(), mC = new THREE.Matrix4();
+  const cristaisAt = (t: number, ativa: boolean) => cristais.forEach((c, i) => {
+    malhaCristais.setMatrixAt(i, mC.compose(pC.set(c.x, c.baseY + Math.sin(t * 1.2 + c.ph) * 0.12, c.z), qC.setFromAxisAngle(eixoY, c.rot), sC.set(c.r, c.r * c.sy, c.r)));
+    malhaCristais.setColorAt(i, cI.copy(c.cor).multiplyScalar((ativa ? 1.4 : 1.0) + 0.6 * (0.5 + 0.5 * Math.sin(t * 2.5 + c.ph))));
+  });
+  cristaisAt(0, false);
 
   // neurônios subindo (corkscrew vivo, estilo cérebro) + núcleo do feixe
   const upN = low ? 50 : 90, upPos = new Float32Array(upN * 3);
@@ -152,6 +178,7 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
   let e = 0;   // energia suavizada
   return {
     group: office, layout, monitor: scr,
+    luz(alvo) { return { forca: luzForca, pos: office.localToWorld(alvo.copy(luzLocal)) }; },
     mover(l) { this.layout = l; office.position.set(l.x, office.position.y, l.z); office.rotation.y = l.rot; },
     atualizar({ dt, t, ativa, hover, perto, energia = 0 }) {
       e += (energia - e) * Math.min(1, dt * 2.5);
@@ -161,11 +188,14 @@ export function criarBase(layout: LayoutBase, accent: string, starTex: THREE.Tex
         tl.edge.opacity = foco ? (perto ? 0.75 + 0.25 * pulso : 0.95) : 0.85;
         tl.edge.color.setHex(foco && perto ? 0xffffff : 0x66e6ff);
         tl.glow.opacity = foco ? (perto ? 0.3 + 0.12 * pulso : 0.2) : 0.13 + 0.25 * e;
-        tl.linhas.forEach((m, i) => { m.opacity = (ativa ? 0.6 : 0.28) + 0.22 * (0.5 + 0.5 * Math.sin(t * (2 + 2 * e) + i + k)); });
-        tl.barras.forEach((b, i) => { b.scale.y = 0.25 + (0.35 + 0.65 * e) * (0.5 + 0.5 * Math.sin(t * (1.3 + i * 0.37) + k * 1.7 + i)); });
       });
-      if (luz) luz.intensity = 1.5 + (ativa ? 1.4 : 0) + 1.2 * e;
-      cristais.forEach((c) => { c.m.position.y = c.baseY + Math.sin(t * 1.2 + c.ph) * 0.12; c.m.rotation.y += dt * 0.6; (c.m.material as THREE.MeshStandardMaterial).emissiveIntensity = (ativa ? 1.4 : 1.0) + 0.6 * (0.5 + 0.5 * Math.sin(t * 2.5 + c.ph)); });
+      specLinhas.forEach((l, j) => linhas.setColorAt(j, cI.copy(corLinha).multiplyScalar((ativa ? 0.6 : 0.28) + 0.22 * (0.5 + 0.5 * Math.sin(t * (2 + 2 * e) + l.i + l.k)))));
+      linhas.instanceColor!.needsUpdate = true;
+      specBarras.forEach((b, j) => barras.setMatrixAt(j, mI.copy(refBarras[j]!).multiply(mS.makeScale(1, 0.25 + (0.35 + 0.65 * e) * (0.5 + 0.5 * Math.sin(t * (1.3 + b.i * 0.37) + b.k * 1.7 + b.i)), 1))));
+      barras.instanceMatrix.needsUpdate = true;
+      luzForca = 1.5 + (ativa ? 1.4 : 0) + 1.2 * e;
+      for (const c of cristais) c.rot += dt * 0.6;
+      cristaisAt(t, ativa); malhaCristais.instanceMatrix.needsUpdate = true; malhaCristais.instanceColor!.needsUpdate = true;
       (joia.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.9 + 0.6 * e + 0.2 * pulso; joia.rotation.y += dt * (0.3 + 0.9 * e);
       veio.opacity = 0.6 + 0.3 * e; veioLinha.opacity = 0.65 + 0.3 * e;
       painelMat.opacity = 0.1 + 0.3 * e;

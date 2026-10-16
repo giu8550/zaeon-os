@@ -24,9 +24,10 @@ function duracaoDe(file: File): Promise<number> {
 
 const BTN = "flex h-11 w-11 items-center justify-center rounded-full border border-cyan-300/35 bg-[#0a081e]/80 text-base text-sky-100 hover:border-cyan-200 disabled:opacity-40";
 
-export default function TocaDiscos(p: { som: SomLounge | null; offsetMs: number; api: ApiMusica; onFechar: () => void }) {
+export default function TocaDiscos(p: { som: SomLounge | null; offsetMs: number; api: ApiMusica; onFechar: () => void; /** o canal: as caixas do lounge (padrão) ou a música da NAVE do dono */ canal?: "lounge" | "nave" }) {
+  const nave = p.canal === "nave";
   const [agora, setAgora] = useState(() => Date.now());
-  const [enviando, setEnviando] = useState<string | null>(null), [erro, setErro] = useState<string | null>(null), [ocupado, setOcupado] = useState(false);
+  const [enviando, setEnviando] = useState<string | null>(null), [erro, setErro] = useState<string | null>(null), [ocupado, setOcupado] = useState(false), [volLocal, setVolLocal] = useState<number | null>(null);
   const input = useRef<HTMLInputElement | null>(null);
   useEffect(() => { const id = setInterval(() => setAgora(Date.now()), 500); return () => clearInterval(id); }, []);
   useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === "Escape") p.onFechar(); }; window.addEventListener("keydown", esc); return () => window.removeEventListener("keydown", esc); }, [p]);
@@ -50,14 +51,18 @@ export default function TocaDiscos(p: { som: SomLounge | null; offsetMs: number;
   return (
     <div role="dialog" aria-modal="true" aria-label="Toca-discos do lounge" className="absolute inset-0 z-50 flex items-center justify-center bg-[#03030a]/60 px-4" onClick={p.onFechar}>
       <div className="flex max-h-[86vh] w-full max-w-[460px] flex-col rounded-2xl border border-cyan-300/30 bg-[#070c22]/95 p-4 text-sky-100 shadow-[0_0_40px_rgba(102,230,255,.15)]" onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm font-bold text-cyan-200">Toca-discos do lounge</p>
-        <p className="mt-1 text-xs text-sky-100/60">Suas músicas tocam nas caixas de som do lounge — quem estiver por perto ouve junto, no mesmo ponto da música.</p>
+        <p className="text-sm font-bold text-cyan-200">{nave ? "Som da nave" : "Toca-discos do lounge"}</p>
+        <p className="mt-1 text-xs text-sky-100/60">{nave ? "Suas músicas saem da própria nave, por onde ela passar — quem estiver por perto ouve junto, no mesmo ponto da música." : "Suas músicas tocam nas caixas de som do lounge — quem estiver por perto ouve junto, no mesmo ponto da música."}</p>
 
         {/* tocando agora + controles */}
         <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
           <p className="truncate text-sm font-semibold text-white">{atual ? `${tocando ? "▶" : "⏸"} ${atual.nome}` : "Nenhuma música ainda"}</p>
           {atual && pos && <p className="text-xs tabular-nums text-sky-100/60">{tempo(pos.t)}{atual.dur ? ` / ${tempo(atual.dur)}` : ""}{!tocando && pos.t === 0 ? " · parado" : !tocando ? " · pausado" : ""}</p>}
           {atual && atual.dur > 0 && pos && <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-gradient-to-r from-cyan-300 to-violet-400" style={{ width: `${Math.min(100, (pos.t / atual.dur) * 100)}%` }} /></div>}
+          <label className="mt-2 flex items-center gap-2 text-[11px] text-sky-100/60"><span>🔈</span>
+            <input type="range" min={0} max={2} step={0.05} value={som?.vol ?? 1} aria-label="Volume" disabled={!faixas.length || ocupado} className="flex-1 accent-cyan-300"
+              onChange={(e) => { const v = Number(e.target.value); setVolLocal(v); }} onPointerUp={(e) => void fazer(() => p.api.controlar("volume", Number((e.target as HTMLInputElement).value)))} onKeyUp={(e) => void fazer(() => p.api.controlar("volume", Number((e.target as HTMLInputElement).value)))} />
+            <span className="w-10 text-right tabular-nums">{Math.round((volLocal ?? som?.vol ?? 1) * 100)}%</span></label>
           <div className="mt-2.5 flex items-center justify-center gap-3" role="group" aria-label="Controles">
             <button type="button" aria-label="Anterior" disabled={!faixas.length || ocupado} onClick={() => void fazer(() => p.api.controlar("anterior"))} className={BTN}>⏮</button>
             <button type="button" aria-label={tocando ? "Pausar" : "Tocar"} disabled={!faixas.length || ocupado} onClick={() => void fazer(() => p.api.controlar(tocando ? "pausar" : "tocar"))} className={`${BTN} h-12 w-12 bg-gradient-to-b from-cyan-200 to-sky-400 text-slate-950`}>{tocando ? "⏸" : "▶"}</button>

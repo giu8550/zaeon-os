@@ -16,6 +16,7 @@ import ZaeonLogo from "@/components/main/ZaeonLogo";
 import InviteButton from "@/components/sub/InviteButton";
 import VoicePicker from "@/components/settings/VoicePicker";
 import { TOUR_ATIVO } from "@/lib/onboarding/tour";
+import { musica } from "@/lib/audio/musica";
 import { LOUNGE_ROTA } from "@/lib/ui/loungeHub";
 import { projetosOn } from "@/lib/research/unifiedRoom";
 
@@ -407,7 +408,7 @@ export default function MenuNavigation() {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alvo)) { setErroEmail("Confere o e-mail."); return; }
       setErroEmail(null); setEntrandoEmail(true);
       const r = await signIn("credentials", { email: alvo, redirect: false });
-      if (r?.ok && !r.error) { router.push(LOUNGE_ROTA); return; }
+      if (r?.ok && !r.error) { musica().destravar(); router.push(LOUNGE_ROTA); return; }
       setEntrandoEmail(false);
       setErroEmail("Não consegui entrar com esse e-mail. Se for conta de fundador, entre pelo Google.");
     };
@@ -729,7 +730,7 @@ export default function MenuNavigation() {
                   {projetosOn() && canUseProjects && renderModule("projetos", "Projetos", recentProjects, "Novo projeto", "/research-lab?tab=projetos")}
 
                   {/* LOUNGE — co-criar com amigos */}
-                  {renderModule("lounge", "Cyberespaço", [], "Entrar no cyberespaço", LOUNGE_ROTA)}
+                  {renderModule("lounge", "Play game", [], "Play game", LOUNGE_ROTA)}
 
                   {/* OPTIONS — concentra voz, idioma, convite, founder e logout */}
                   <li className="w-full" onClick={() => setIsOptionsOpen(true)}>

@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { isSuperAdminEmail } from "@/lib/auth/roles";
 import { unifiedResearchRoom } from "@/lib/research/unifiedRoom";
-import { EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA } from "@/lib/chat/conversasNav";
+import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
+import { EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, EVT_ESTUDOS_IR, anunciarAbaEstudos, consumirAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
 import OmegaScholarWorkspace from "./omega/OmegaScholarWorkspace";
 import StudyRoomSuggestionDock from "./omega/StudyRoomSuggestionDock";
@@ -184,6 +185,11 @@ function NoRoomFound() {
 // CONFERIR a composição/rótulos das abas + QA de runtime antes de mergear na base.
 const StudyCoworkChat = dynamic(() => import("@/components/study/StudyCoworkChat"), { ssr: false });
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
+// "Meus Estudos" voltou a ser o BOARD (o canvas colaborativo, estética de blueprint — lib/estudos/board); o caderno
+// de blocos (MeusEstudosFeed) segue abrindo por um botão no canto do board (os estudos antigos não se perdem)
+const BoardEstudos = dynamic(() => import("@/components/estudos/BoardEstudos"), { ssr: false });
+// "Estudos" abre na VITRINE de blueprints (lib/estudos/vitrine); a busca na literatura (o Omega) fica a um clique
+const VitrineEstudos = dynamic(() => import("@/components/estudos/VitrineEstudos"), { ssr: false });
 const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlunosPanel"), { ssr: false });
 
 /**
@@ -191,8 +197,11 @@ const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlun
  * StudyCoworkChat — objetivo, sem fonte obrigatória) · Meus Estudos (caderno + biblioteca) ·
  * Estudos (Omega). O chat de Pesquisa mora na Sala de Pesquisa. Com a flag ligada, "Aulas" e
  * "Meus Alunos" somem em qualquer lugar (inclusive na workstation).
+ *
+ * `abasNaSidebar` (o laboratório): SEM as pills do topo — "Meus Estudos" e "Estudos" ficam na sidebar principal, sob
+ * "Sala de Estudos" (lib/chat/conversasNav: a sala anuncia a aba, a sidebar pede outra).
  */
-export default function StudyRoomContent({ flushTop = false, unified = false }: { flushTop?: boolean; unified?: boolean } = {}) {
+export default function StudyRoomContent({ flushTop = false, unified = false, abasNaSidebar = false }: { flushTop?: boolean; unified?: boolean; abasNaSidebar?: boolean } = {}) {
     const { data: session } = useSession();
 
     const course = (session?.user as any)?.course as string | undefined;
@@ -212,8 +221,8 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
     // (a busca). Sem aba "Chat"/"Aura", sem Aulas/Meus Alunos aqui. `meus-estudos` segue sendo o id
     // interno da CONVERSA (é o que fica ativo quando nenhuma das duas abas está).
     const allTabs = useMemo(() => [
-        { id: "feed", label: "Meus Estudos", icon: BookOpen },
-        { id: "community", label: "Estudos", icon: Users },
+        { id: "feed", label: "Sala de Estudos", icon: BookOpen },
+        { id: "community", label: "Marketplace", icon: Users },
     ], []);
 
     // Padrão = a aba "Aura" (chats/co-working). Só cai numa aba de estudo/pesquisa se
@@ -226,8 +235,12 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
     useEffect(() => {
         if (!room) return;
         try {
+            // a 1ª vez do TABLET (lib/ui/loungeHub `LAB_TABLET_PRIMEIRA`): abre no CHAT, não na última aba salva
+            if (new URLSearchParams(window.location.search).get("estudo") === "chat") { setActiveTab("meus-estudos"); tabRestored.current = true; return; }
             const saved = localStorage.getItem(`zaeon:lastTab:${room}`);
             if (saved && (saved === "meus-estudos" || allTabs.some((t) => t.id === saved))) setActiveTab(saved);
+            const pedida = consumirAbaEstudos();   // a sidebar pediu uma aba antes da sala montar
+            if (pedida) setActiveTab(pedida);
         } catch { /* ignore */ }
         tabRestored.current = true;
     }, [room, allTabs]);
@@ -235,6 +248,33 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
         if (!tabRestored.current || !room) return;
         try { localStorage.setItem(`zaeon:lastTab:${room}`, activeTab); } catch { /* ignore */ }
     }, [activeTab, room]);
+    // a sidebar destaca a aba em que a sala está, e pede outra pelos subitens de "Sala de Estudos"
+    useEffect(() => {
+        if (activeTab === "meus-estudos" || activeTab === "feed" || activeTab === "community") anunciarAbaEstudos(activeTab);
+    }, [activeTab]);
+    useEffect(() => {
+        const ir = (e: Event) => { const a = (e as CustomEvent<AbaEstudos>).detail; consumirAbaEstudos(); if (a) setActiveTab(a); };
+        window.addEventListener(EVT_ESTUDOS_IR, ir);
+        return () => window.removeEventListener(EVT_ESTUDOS_IR, ir);
+    }, []);
+
+    // o BOARD de Meus Estudos aberto por um link de convite (?board=<id>&convite=<token>) e o caderno antigo por cima
+    const [boardDoLink, setBoardDoLink] = useState<{ id: string | null; convite: string | null }>({ id: null, convite: null });
+    const [cadernoAberto, setCadernoAberto] = useState(false);
+    const [estudosVista, setEstudosVista] = useState<"vitrine" | "pesquisar">("vitrine");
+    // o tutorial do tablet abre o Marketplace direto na pesquisa (a tela roxa)
+    useEffect(() => {
+        const f = (e: Event) => { const v = (e as CustomEvent<"vitrine" | "pesquisar">).detail; if (v === "vitrine" || v === "pesquisar") setEstudosVista(v); };
+        window.addEventListener(EVT_ESTUDOS_VISTA, f);
+        return () => window.removeEventListener(EVT_ESTUDOS_VISTA, f);
+    }, []);
+    useEffect(() => {
+        try {
+            const sp = new URLSearchParams(window.location.search), id = sp.get("board");
+            if (id && /^[a-f0-9]{24}$/i.test(id)) { setBoardDoLink({ id, convite: sp.get("convite") }); setActiveTab("feed"); }
+            if (sp.get("space")) setCadernoAberto(true);   // (o link de um estudo do caderno antigo)
+        } catch { /* ignore */ }
+    }, []);
 
     // Deep-link do menu inicial: ?space=<id> → abre direto em "Meus Estudos"
     // (o MeusEstudosFeed resolve qual estudo carregar pelo mesmo param). Sem isso,
@@ -319,7 +359,8 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
             */}
             <div className={`flex-1 ${flushTop ? "mx-0 mt-3 mb-0" : "mx-6 mt-4 mb-6"} flex flex-col rounded-[2rem] overflow-hidden bg-white/50 dark:bg-slate-950/40 backdrop-blur-3xl border border-white/40 dark:border-white/10 shadow-2xl min-h-0`}>
 
-                {/* Tab bar header */}
+                {/* Tab bar header (no laboratório as abas moram na sidebar — sem pills aqui) */}
+                {!abasNaSidebar && (
                 <div ref={tabHeaderRef} className="relative flex-shrink-0 z-10 bg-white/50 dark:bg-slate-950/40">
 
                     {/* Tab buttons row */}
@@ -397,6 +438,7 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
                         )}
                     </div>
                 </div>
+                )}
 
                 {/*
                     ── CONTENT AREA ────────────────────────────────────────────
@@ -420,10 +462,23 @@ export default function StudyRoomContent({ flushTop = false, unified = false }: 
                             <StudyCoworkChat active={activeTab === "meus-estudos"} />
                         </div>
                         {activeTab === "feed" ? (
-                            // Sala unificada: "Meus Estudos" = o feed/caderno + biblioteca.
-                            <div className="h-full"><MeusEstudosFeed /></div>
+                            // "Meus Estudos" = o BOARD (cards colados e arrastados, mais de uma pessoa ao mesmo
+                            // tempo); o caderno antigo abre por cima, pelo botão do canto
+                            <div className="relative h-full">
+                                {cadernoAberto ? <MeusEstudosFeed /> : <BoardEstudos boardInicialId={boardDoLink.id} convite={boardDoLink.convite} />}
+                                <button type="button" onClick={() => setCadernoAberto((v) => !v)} className="absolute bottom-3 left-1/2 z-[95] -translate-x-1/2 rounded-full border border-sky-300/30 bg-[#05162a]/85 px-3 py-1 font-mono text-[10.5px] tracking-wide text-sky-100/80 backdrop-blur hover:text-white">
+                                    {cadernoAberto ? "← voltar pro board" : "abrir o caderno antigo"}
+                                </button>
+                            </div>
                         ) : activeTab === "meus-estudos" ? null : activeTab === "community" ? (
-                            <OmegaScholarWorkspace />
+                            <div className="relative h-full">
+                                {estudosVista === "vitrine" ? <VitrineEstudos /> : <OmegaScholarWorkspace />}
+                                <div className="absolute right-3 top-3 z-30 flex overflow-hidden rounded-full border border-sky-300/30 bg-[#05162a]/85 font-mono text-[10.5px] backdrop-blur">
+                                    {(["vitrine", "pesquisar"] as const).map((v) => (
+                                        <button key={v} type="button" onClick={() => setEstudosVista(v)} className={`px-3 py-1 ${estudosVista === v ? "bg-sky-300/20 text-white" : "text-sky-100/70 hover:text-white"}`}>{v === "vitrine" ? "vitrine" : "pesquisar na literatura"}</button>
+                                    ))}
+                                </div>
+                            </div>
                         ) : activeTab === "students" ? (
                             <MeusAlunosPanel />
                         ) : activeTab === "classes" && isTeacher ? (

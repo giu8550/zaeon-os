@@ -10,9 +10,18 @@ import "@/src/i18n";
 
 // --- IMPORTS ---
 import { Navbar } from "@/components/main/navbar";
-import { Mic, MicOff, Code2, Building2 } from "lucide-react";
+import { Mic, MicOff, Code2, Building2, Loader2 } from "lucide-react";
 import { ConversasSlotContext } from "@/components/chat/ConversasSlot";
 import ConversasDaSala from "@/components/chat/ConversasDaSala";
+import { useSidebarHover } from "@/components/lab/useSidebarHover";
+import { EVT_PESQUISA_SALVA, contarPalavras } from "@/lib/onboarding/tutorialLab";
+import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
+import SeletorDeAgente from "@/components/agents/SeletorDeAgente";
+import OctaIcon from "@/components/octa/OctaIcon";
+import { agenteChat, agentesDisponiveis, agenteValido, type AgenteChatId } from "@/lib/agents/chatAgentes";
+import { usePluginsChat } from "@/lib/plugins/chatPlugins";
+import { usePresenca } from "@/components/agents/avatar/hooks";
+import { EVT_ESTUDOS_ABA, abaEstudosAtual, irPraAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
 
 // Ramo da árvore sob o nome da sala na sidebar: o da sala aberta cresce e rola; o da outra é curto.
 // Larguras da sidebar: fechada = trilho de ícones; aberta = o conteúdo inteiro (que tem largura fixa).
@@ -72,6 +81,8 @@ const EscritorioRoom = dynamic(
 );
 // Escritório COWORKING (canal em tempo real, estilo Buzz; sem 3D). Entra no lugar do 3D quando
 // NEXT_PUBLIC_ESCRITORIO_COWORK=1 (lib/canal/flags). Client-only (Pusher/Notification API).
+const TutorialLab = dynamic(() => import("@/components/onboard/TutorialLab"), { ssr: false });
+const TourSala = dynamic(() => import("@/components/onboard/TourSala"), { ssr: false });
 const CoworkingCanal = dynamic(
   () => import("@/components/office/CoworkingCanal"),
   { ssr: false },
@@ -101,6 +112,17 @@ const NAV_ACTIVE_PILL =
 function navItem(active: boolean, accent: keyof typeof NAV_ACTIVE) {
   void accent; // accent mantido por compatibilidade; o ativo agora é sempre a pill preta
   return `${NAV_BASE} ${active ? NAV_ACTIVE_PILL : NAV_IDLE}`;
+}
+// O TRILHO (sidebar descansada): cada ícone na SUA pill (38 px, centrada nos 52 px de dentro); aberta, a pill estica com
+// o nome. Só largura/margem/cor animam aqui — a largura da sidebar quem anima é o framer (nada de transition-all nela).
+const pill = (aberta: boolean) => `shrink-0 overflow-hidden ${aberta ? "w-full" : "w-[38px]"}`;
+// O "Marketplace" (a vitrine) é DESTACADO: degradê violeta→ciano mesmo em repouso.
+const DESTAQUE = "bg-gradient-to-r from-violet-500/15 to-cyan-500/15 border-cyan-400/40 text-cyan-800 hover:border-cyan-400/70 dark:text-cyan-100 dark:border-cyan-300/30 shadow-[0_6px_16px_-8px_rgba(34,211,238,0.6)]";
+// O agente do chat da Sala de Estudos (a foto e o nome na aba do chat).
+const AGENTE_CHAT = { id: "aura", nome: "Aura" } as const;
+/** O nome do item: some no trilho (a pill recorta, e a opacidade evita a lasquinha de texto na borda). */
+function Rotulo({ v, children }: { v: boolean; children: React.ReactNode }) {
+  return <span className={`text-[10px] font-black uppercase whitespace-nowrap transition-opacity duration-200 ${v ? "opacity-100" : "opacity-0"}`}>{children}</span>;
 }
 import { startTour, getTour, nextTour, TOUR_STEPS } from "@/lib/onboarding/tour";
 import { capabilities } from "@/lib/runtime/mode";
@@ -137,6 +159,7 @@ import {
   PowerIcon,
   BeakerIcon,
   ChatBubbleLeftRightIcon,
+  ShoppingBagIcon,
   ClipboardDocumentIcon,
   DocumentChartBarIcon,
   CheckBadgeIcon,
@@ -151,7 +174,9 @@ import {
   ArrowUturnLeftIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import { LOUNGE_ROTA, pedeFoco } from "@/lib/ui/loungeHub";
+import { musica } from "@/lib/audio/musica";
+import { LOUNGE_ROTA, MSG_FECHAR_TABLET, MSG_IA, pedeFoco, pedeTablet, pedeTutorial } from "@/lib/ui/loungeHub";
+import { instalarMonitorIA } from "@/lib/ui/monitorIA";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, projetosOn, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
@@ -178,6 +203,9 @@ import TccSugestoes from "@/components/tcc/TccSugestoes";
 import { EVT_TCC_MUDOU, TCC_CROSS_ON, tccApi, type Revisao } from "@/lib/tcc/client";
 import { mesmoConteudo } from "@/lib/tcc/secoes";
 import ResearchReadingView from "./ResearchReadingView";
+import AbntToolbar, { type BlocoAbnt } from "@/components/research/AbntToolbar";
+import AbntPreview from "@/components/research/AbntPreview";
+import { BLOCOS, insertBlock, cleanContent } from "@/lib/abntBlocks";
 import AgentAvatar from "@/components/agents/AgentAvatar";
 import { avatarPadraoDe } from "@/lib/agents/roster";
 
@@ -772,31 +800,47 @@ export default function HomeworkPage({
   const [isMuralLoading, setIsMuralLoading] = useState(false);
   // --- CORE STATES ---
   const [mounted, setMounted] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  // Sidebar AUTOMÁTICA (sem botão): o mouse parado nela por 1,3 s abre e ela FICA aberta; só recolhe
-  // depois de 1,3 s com o mouse fora (e nunca no meio de uma edição — renomear conversa). Passar
-  // o mouse de raspão não abre nem fecha nada.
-  const navRef = useRef<HTMLElement>(null);
-  const timerSidebar = useRef<ReturnType<typeof setTimeout>>();
-  const DWELL_SIDEBAR_MS = 1300;
-  const entrouSidebar = () => {
-    clearTimeout(timerSidebar.current);
-    if (!isSidebarOpen) timerSidebar.current = setTimeout(() => setIsSidebarOpen(true), DWELL_SIDEBAR_MS);
+  // Sidebar POR HOVER: passar o mouse em cima abre; tirar o mouse a devolve pro canto (o trilho de ícones). Ela passa
+  // POR CIMA do módulo do chat. A lógica (e o porquê de ela ficar presa aberta antes) mora em components/lab/useSidebarHover.
+  const { aberta: isSidebarOpen, navRef, handlers: hoverSidebar } = useSidebarHover<HTMLElement>();
+  // a aba em que a Sala de Estudos está (a conversa, Meus Estudos ou Estudos) — os subitens dela moram na sidebar
+  const [abaEstudos, setAbaEstudos] = useState<AbaEstudos>("meus-estudos");
+  useEffect(() => {
+    setAbaEstudos(abaEstudosAtual());
+    const f = (e: Event) => setAbaEstudos((e as CustomEvent<AbaEstudos>).detail);
+    window.addEventListener(EVT_ESTUDOS_ABA, f);
+    return () => window.removeEventListener(EVT_ESTUDOS_ABA, f);
+  }, []);
+  const irEstudos = (aba: AbaEstudos) => { setActiveTab("sala-de-estudos"); irPraAbaEstudos(aba); };
+  // O AGENTE da aba de conversa (o rosto na sidebar). Clicar no rosto abre o seletor; cada agente tem a sua tela:
+  // Aura = o chat da Sala de Estudos, Octa Code = a IDE dele (só depois de adicionado no Marketplace).
+  const agentesPlugados = usePluginsChat();
+  const [agenteId, setAgenteId] = useState<AgenteChatId>("aura");
+  const [seletorAgente, setSeletorAgente] = useState<DOMRect | null>(null);
+  const [trocandoPara, setTrocandoPara] = useState<AgenteChatId | null>(null);
+  useEffect(() => {
+    let salvo: string | null = null;
+    try { salvo = localStorage.getItem("zaeon.lab.agente"); } catch { /* storage bloqueado: fica a Aura */ }
+    setAgenteId(agenteValido(salvo, agentesPlugados));
+  }, [agentesPlugados]);
+  const agente = agenteChat(agenteId);
+  // "octa" não passa pelo setActiveTab (que só aceita as abas de link/restauração): a IDE só abre por aqui.
+  const abrirAgente = (a = agente) => (a.tela === "ide" ? setActiveTabRaw("octa") : irEstudos("meus-estudos"));
+  const trocarAgente = async (id: AgenteChatId) => {
+    setSeletorAgente(null);
+    setTrocandoPara(id);
+    const t0 = Date.now();
+    // a tela do novo agente carrega ANTES de trocar (a IDE é um chunk à parte) — o loading cobre essa espera
+    if (agenteChat(id).tela === "ide") await import("@/app/research-lab/projects/ProjectsContent").catch(() => null);
+    await new Promise((r) => setTimeout(r, Math.max(0, 450 - (Date.now() - t0))));
+    setAgenteId(id);
+    try { localStorage.setItem("zaeon.lab.agente", id); } catch { /* */ }
+    abrirAgente(agenteChat(id));
+    setTrocandoPara(null);
   };
-  const saiuSidebar = () => {
-    clearTimeout(timerSidebar.current);
-    if (!isSidebarOpen) return;
-    const tentarFechar = () => {
-      const foco = document.activeElement;
-      if (foco && navRef.current?.contains(foco) && /^(INPUT|TEXTAREA)$/.test(foco.tagName)) {
-        timerSidebar.current = setTimeout(tentarFechar, DWELL_SIDEBAR_MS);   // editando: espera
-        return;
-      }
-      setIsSidebarOpen(false);
-    };
-    timerSidebar.current = setTimeout(tentarFechar, DWELL_SIDEBAR_MS);
-  };
-  useEffect(() => () => clearTimeout(timerSidebar.current), []);
+  // o agente está pensando/respondendo? (a presença que o chat publica — components/agents/avatar) → o nome brilha
+  const { sinal: sinalAgente } = usePresenca(AGENTE_CHAT.id);
+  const agenteProcessando = sinalAgente === "pensando" || sinalAgente === "falando";
   // Onde o chat da sala ativa desenha a lista de conversas (portal) — components/chat/ConversasSlot.
   const [slotConversas, setSlotConversas] = useState<HTMLDivElement | null>(null);
   const [isChatLeft, setIsChatLeft] = useState(false);
@@ -832,6 +876,7 @@ export default function HomeworkPage({
     try { localStorage.setItem(`zaeon.research.caret.${key}`, JSON.stringify(data)); } catch { /* */ }
   };
   const [citInsertFlash, setCitInsertFlash] = useState(false); // barrinha sutil ao soltar citação
+  const [abntPrevia, setAbntPrevia] = useState(false); // Escrever | Prévia ABNT
   const [isWorkTypeMenuOpen, setIsWorkTypeMenuOpen] = useState(false);
   const [docTitle, setDocTitle] = useState("minha_pesquisa.pdf");
   const [docContent, setDocContent] = useState(ABNT_TEMPLATE);
@@ -1490,6 +1535,19 @@ export default function HomeworkPage({
       }
     }
   }, [status]);
+
+  // NO TABLET (o laboratório num iframe por cima do cyberespaço): decidido UMA vez, na montagem — nada que mude a URL
+  // depois faz o "Voltar" carregar um cyberespaço DENTRO do tablet (era a tela de loading de novo)
+  const noTablet = useRef(false);
+  // o laboratório no tablet do TUTORIAL do novato (`?tutorial=1`): roda o tour da 1ª missão
+  const [tutorialLab, setTutorialLab] = useState(false);
+  useEffect(() => {
+    noTablet.current = window.parent !== window && (pedeTablet(window.location.search) || (() => { try { return window.parent.location.pathname.startsWith(LOUNGE_ROTA); } catch { return false; } })());
+    if (noTablet.current && pedeTutorial(window.location.search)) setTutorialLab(true);
+    if (!noTablet.current) return;
+    // a CONCORRÊNCIA: o trabalho de IA que roda aqui (qualquer aba/sub-aba) vai pra barra de IA do HUD do cyberespaço
+    return instalarMonitorIA((estado) => window.parent.postMessage({ type: MSG_IA, estado }, window.location.origin));
+  }, []);
 
   // ?foco=1 (entrada pelo "Estudar" do cyberespaço): abre JÁ em modo foco — a navbar global ouve o evento e some
   useEffect(() => {
@@ -2204,6 +2262,25 @@ export default function HomeworkPage({
     showToast("Imagem inserida como figura — ajuste o título/fonte no texto.");
   };
 
+  // Barra do editor: insere o bloco ABNT no caret como bloco próprio e seleciona o que o aluno vai reescrever.
+  const inserirBlocoAbnt = (b: BlocoAbnt) => {
+    const ta = textareaRef.current;
+    const cursor = ta ? (ta.selectionStart ?? docContent.length) : docContent.length;
+    const { block, select } = BLOCOS[b];
+    const r = insertBlock(docContent, cursor, block, select);
+    setDocContent(r.value);
+    requestAnimationFrame(() => {
+      const t = textareaRef.current; if (!t) return;
+      t.focus();
+      try { t.setSelectionRange(r.start, r.end); } catch { /* */ }
+    });
+  };
+  const inserirImagemAbnt = (file: File) => {
+    const ta = textareaRef.current;
+    const cursor = ta ? (ta.selectionStart ?? docContent.length) : docContent.length;
+    void insertDroppedImage(file.name, cursor, () => readFileAsDataUri(file), file.size);
+  };
+
   // Handler único do editor: citação (intacto) → imagem do desktop → imagem da biblioteca.
   const handleEditorDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
     if (e.dataTransfer.getData("text/zaeon-citation")) {
@@ -2294,6 +2371,10 @@ export default function HomeworkPage({
     }
   };
 
+  /** a pesquisa ficou SALVA de verdade (exportou ou o servidor confirmou): quem quiser saber escuta (o tutorial do tablet) */
+  const avisarPesquisaSalva = () => {
+    try { window.dispatchEvent(new CustomEvent(EVT_PESQUISA_SALVA, { detail: { titulo: docTitle.replace(/\.(pdf|docx)$/i, ""), palavras: contarPalavras(docContent), workId: currentWorkIdRef.current } })); } catch { /* */ }
+  };
   const handleSaveWorkspace = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (saveState === "saving") return;
@@ -2308,13 +2389,15 @@ export default function HomeworkPage({
         citations: JSON.stringify(citationNotes),
       };
 
-      await fetch("/api/workspace", {
+      const r = await fetch("/api/workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!r.ok) throw new Error(`workspace ${r.status}`);
 
       setSaveState("saved");
+      avisarPesquisaSalva();
       setTimeout(() => setSaveState("idle"), 2500);
     } catch (error) {
       console.error(error);
@@ -2355,7 +2438,13 @@ export default function HomeworkPage({
     setExportProgress(["Estruturando seções com IA (ABNT Structurer)..."]);
 
     // Tenta parsear marcadores estruturados do editor
-    const parsedSections = parseAbntMarkers(docContent);
+    // Contrato editor → motor: cada seção sai em blocos limpos (o motor normaliza de novo; isto
+    // garante que o que a Prévia ABNT mostrou é o que vai pro Word).
+    const parsedSections = parseAbntMarkers(docContent)?.map((s) => ({
+      ...s,
+      content: cleanContent(s.content),
+      subsections: s.subsections.map((sub) => ({ ...sub, content: cleanContent(sub.content) })),
+    })) ?? null;
 
     try {
       const response = await fetch("/api/documents/abnt-export", {
@@ -2426,6 +2515,7 @@ export default function HomeworkPage({
       URL.revokeObjectURL(url);
 
       showToast(`Documento ABNT exportado com sucesso!`);
+      avisarPesquisaSalva();
       setIsSaveModalOpen(false);
       setAbntStep(1);
     } catch (err) {
@@ -2545,7 +2635,7 @@ export default function HomeworkPage({
               initial={{ opacity: 0, y: -50 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -100 }}
-              className="absolute top-0 left-0 w-full z-50"
+              className="absolute top-0 left-0 w-full z-[595]"
             >
               <Navbar />
             </motion.div>
@@ -2558,53 +2648,92 @@ export default function HomeworkPage({
       {!isEmbedded && (
         <motion.nav
           ref={navRef}
-          onMouseEnter={entrouSidebar}
-          onMouseLeave={saiuSidebar}
+          {...hoverSidebar}
           initial={false}
           animate={{ width: sidebarAberta ? SIDEBAR_ABERTA : SIDEBAR_FECHADA }}
-          transition={{ type: "tween", duration: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
-          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[550] py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-colors
+          transition={{ type: "tween", duration: 0.22, ease: [0.22, 0.61, 0.36, 1] }}
+          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[590] py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-colors
             bg-gradient-to-b from-sky-100/90 to-blue-200/80 border-blue-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]
             dark:from-transparent dark:to-transparent dark:bg-[rgba(22,22,34,0.55)] dark:border-white/10 dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)]
             ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
-          {/* Conteúdo com LARGURA FIXA: a sidebar só recorta (54 ↔ 264 px) — nada se reorganiza no meio
-              da animação. Rótulos e listas ficam montados o tempo todo. */}
+          {/* Conteúdo com LARGURA FIXA: a sidebar só recorta (54 ↔ 264 px) — nada se reorganiza no meio da animação.
+              DESCANSADA (o trilho): cada ícone na sua pill, os rótulos somem; ABERTA: as pills se esticam com o nome. */}
           <div className="h-full flex flex-col" style={{ width: SIDEBAR_ABERTA - 2 }}>
-          <div className="flex-1 min-h-0 flex flex-col gap-3 px-2.5 overflow-y-auto overflow-x-hidden no-scrollbar">
-            {/* Cada SALA é um nó com as SUAS conversas embaixo (estilo ChatGPT): a sala aberta mostra a lista
-                completa (o chat dela desenha aqui por portal — components/chat/ConversasSlot); a outra, as
-                recentes (clicar entra na sala e abre a conversa — lib/chat/conversasNav). */}
-            {/* Sala de Estudos */}
+          <div className="flex-1 min-h-0 flex flex-col gap-3 px-[7px] overflow-y-auto overflow-x-hidden no-scrollbar">
+            {/* O CHAT tem a aba dele: a FOTO e o NOME do agente (o nome brilha enquanto a resposta é processada), com as
+                conversas embaixo. Depois a "Sala de Estudos" (o board). O "Marketplace" (a vitrine, destacado) mora no pé da
+                lista, acima do Perfil. Sem pills no topo da sala — tudo aqui. */}
             <button
               data-tour="estudos"
-              onClick={() => setActiveTab("sala-de-estudos")}
-              className={navItem(activeTab === "sala-de-estudos", "blue")}
+              onClick={() => abrirAgente()}
+              title={trocandoPara ? `Trocando para ${agenteChat(trocandoPara).nome}…` : agente.id === "aura" && agenteProcessando ? `${agente.nome} está respondendo…` : `Conversar com ${agente.nome}`}
+              className={`${navItem(agente.tela === "ide" ? activeTab === "octa" : activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos", "blue")} ${pill(sidebarAberta)} !p-[7px]`}
             >
-              <DocumentTextIcon className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Sala de Estudos
-                </span>
+              {/* o ROSTO: clicar nele abre o seletor de agente (o resto da pill abre a conversa do agente atual) */}
+              <span
+                role="button"
+                tabIndex={0}
+                aria-haspopup="menu"
+                aria-expanded={!!seletorAgente}
+                aria-label={`Trocar de agente (agora: ${agente.nome})`}
+                title="Trocar de agente"
+                onClick={(e) => { e.stopPropagation(); setSeletorAgente(seletorAgente ? null : e.currentTarget.getBoundingClientRect()); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setSeletorAgente(e.currentTarget.getBoundingClientRect()); } }}
+                className={`relative grid place-items-center shrink-0 w-[22px] h-[22px] rounded-full cursor-pointer hover:ring-2 hover:ring-cyan-300/70 ${agente.id === "aura" && agenteProcessando && !trocandoPara ? "ring-2 ring-cyan-300/80 shadow-[0_0_14px_rgba(34,211,238,0.85)] motion-safe:animate-pulse" : ""}`}
+              >
+                {trocandoPara ? (
+                  <Loader2 className="w-[18px] h-[18px] animate-spin text-cyan-500 dark:text-cyan-300" aria-label="Trocando de agente" />
+                ) : agente.id === "octa" ? (
+                  <OctaIcon size={22} className="text-cyan-700 dark:text-cyan-200" />
+                ) : (
+                  <RostoDaAba agentId={AGENTE_CHAT.id} nome={AGENTE_CHAT.nome} ativa={activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos"} size={22}>
+                    <span className="text-[13px] leading-none text-cyan-500 dark:text-cyan-300">⟁</span>
+                  </RostoDaAba>
+                )}
+              </span>
+              <Rotulo v={sidebarAberta}>
+                <span className={agente.id === "aura" && agenteProcessando ? "nome-agente-brilhando" : "normal-case text-[12px] tracking-wide"}>{trocandoPara ? agenteChat(trocandoPara).nome : agente.nome}</span>
+              </Rotulo>
             </button>
-            <Ramo aberto={sidebarAberta}>
+            {seletorAgente && (
+              <SeletorDeAgente
+                ancora={seletorAgente}
+                agentes={agentesDisponiveis(agentesPlugados)}
+                atual={agente.id}
+                icone={(id) => (id === "octa" ? <OctaIcon size={20} /> : <span className="text-[14px] leading-none">⟁</span>)}
+                onEscolher={(id) => void trocarAgente(id)}
+                onFechar={() => setSeletorAgente(null)}
+              />
+            )}
+            {/* Só o módulo ATUAL abre os submódulos (conversas); os outros ficam fechadinhos. */}
+            <Ramo aberto={sidebarAberta && activeTab === "sala-de-estudos" && agente.tela === "chat"}>
               {activeTab === "sala-de-estudos"
                 ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
                 : <div className={RAMO}><ConversasDaSala sala="estudos" onEntrar={() => setActiveTab("sala-de-estudos")} /></div>}
             </Ramo>
+            <button
+              data-tour="tab-feed"
+              onClick={() => irEstudos("feed")}
+              title="Sala de Estudos"
+              className={`${navItem(activeTab === "sala-de-estudos" && abaEstudos === "feed", "blue")} ${pill(sidebarAberta)}`}
+            >
+              <DocumentTextIcon className="w-5 h-5 shrink-0" />
+              <Rotulo v={sidebarAberta}>Sala de Estudos</Rotulo>
+            </button>
 
             {/* Sala de Pesquisa */}
             <button
               data-tour="pesquisa"
               onClick={() => setActiveTab("pesquisa")}
-              className={navItem(activeTab === "pesquisa", "purple")}
+              title="Sala de Pesquisa"
+              className={`${navItem(activeTab === "pesquisa", "purple")} ${pill(sidebarAberta)}`}
             >
               <AcademicCapIcon className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Sala de Pesquisa
-                </span>
+              <Rotulo v={sidebarAberta}>Sala de Pesquisa</Rotulo>
             </button>
             {UNIFIED && (
-              <Ramo aberto={sidebarAberta}>
+              <Ramo aberto={sidebarAberta && activeTab === "pesquisa"}>
                 {activeTab === "pesquisa"
                   ? <div ref={setSlotConversas} className={RAMO_ATIVO} />
                   : <div className={RAMO}><ConversasDaSala sala="pesquisa" onEntrar={() => setActiveTab("pesquisa")} /></div>}
@@ -2616,89 +2745,110 @@ export default function HomeworkPage({
             {PROJETOS && (
             <button
               onClick={() => setActiveTab("projetos")}
-              className={navItem(activeTab === "projetos", "cyan")}
+              title="Projetos"
+              className={`${navItem(activeTab === "projetos", "cyan")} ${pill(sidebarAberta)}`}
             >
               <Code2 className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Projetos
-                </span>
+              <Rotulo v={sidebarAberta}>Projetos</Rotulo>
             </button>
             )}
 
             {/* Escritório: os agentes da Zaeon como um lugar */}
             <button
               onClick={() => setActiveTab("escritorio")}
-              className={navItem(activeTab === "escritorio", "cyan")}
+              title="Escritório"
+              className={`${navItem(activeTab === "escritorio", "cyan")} ${pill(sidebarAberta)}`}
             >
               <Building2 className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Escritório
-                </span>
+              <Rotulo v={sidebarAberta}>Escritório</Rotulo>
             </button>
 
             <div className="h-[1px] bg-slate-300 dark:bg-white/10 my-1" />
+
+            {/* Marketplace — área especial: fora da lista das salas, logo acima do Perfil (pedido do dono). */}
+            <button
+              data-tour="tab-community"
+              onClick={() => irEstudos("community")}
+              title="Marketplace"
+              className={`${activeTab === "sala-de-estudos" && abaEstudos === "community" ? `${NAV_BASE} ${NAV_ACTIVE_PILL} !ring-cyan-400/50` : `${NAV_BASE} ${DESTAQUE}`} ${pill(sidebarAberta)}`}
+            >
+              <ShoppingBagIcon className="w-5 h-5 shrink-0" />
+              <Rotulo v={sidebarAberta}>Marketplace</Rotulo>
+            </button>
 
             {/* Perfil */}
             <button
               data-tour="profile-tab"
               onClick={() => setActiveTab("profile")}
-              className={navItem(activeTab === "profile", "violet")}
+              title="Perfil"
+              className={`${navItem(activeTab === "profile", "violet")} ${pill(sidebarAberta)}`}
             >
               <UserCircleIcon className="w-5 h-5 shrink-0" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Perfil
-                </span>
+              <Rotulo v={sidebarAberta}>Perfil</Rotulo>
             </button>
           </div>
 
-          {/* EXTRAS — layout + foco; pb-16 deixa o cantinho inferior livre pro FAB da Zaeon encaixar */}
-          <div className="px-2.5 pt-3 pb-16 flex flex-col gap-3">
+          {/* EXTRAS — layout, foco e voltar: colados no pé da sidebar (pedido do dono — mais espaço pras salas e conversas) */}
+          <div className="px-[7px] pt-2 pb-3 flex flex-col gap-1.5">
             <div className="h-[1px] bg-slate-300 dark:bg-white/10" />
             <button
               data-tour="layout-toggle"
               onClick={() => setIsChatLeft(!isChatLeft)}
-              className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group"
+              title="Layout"
+              className={`flex items-center gap-3 p-2 rounded-xl border border-transparent hover:bg-slate-100 dark:hover:bg-white/10 text-black dark:text-white group ${pill(sidebarAberta)}`}
             >
               <ArrowsRightLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-              <span className="text-[10px] font-black uppercase whitespace-nowrap">
-                  Layout
-                </span>
+              <Rotulo v={sidebarAberta}>Layout</Rotulo>
             </button>
             <button
               data-tour="focus-mode"
               onClick={toggleFocusMode}
-              className={`flex items-center gap-3 p-2 rounded-xl transition-all ${isFocusMode ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30" : "text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5"}`}
+              title="Foco"
+              className={`flex items-center gap-3 p-2 rounded-xl border ${isFocusMode ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30" : "border-transparent text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5"} ${pill(sidebarAberta)}`}
             >
               {isFocusMode ? (
-                <EyeIcon className="w-5 h-5" />
+                <EyeIcon className="w-5 h-5 shrink-0" />
               ) : (
-                <PowerIcon className="w-5 h-5" />
+                <PowerIcon className="w-5 h-5 shrink-0" />
               )}
-              <span className="text-[10px] font-black uppercase">Foco</span>
+              <Rotulo v={sidebarAberta}>Foco</Rotulo>
             </button>
             {/* Voltar: de volta ao cyberespaço (o lounge só é carregado enquanto se está nele). */}
             <button
               data-tour="voltar-cyberespaco"
-              onClick={() => router.push(LOUNGE_ROTA)}
+              onClick={() => {
+                // no TABLET (o lab aberto por cima do cyberespaço): só guarda o tablet — o cyberespaço já está ali atrás
+                if (noTablet.current || (window.parent !== window && pedeTablet(window.location.search))) { window.parent.postMessage({ type: MSG_FECHAR_TABLET }, window.location.origin); return; }
+                musica().destravar(); router.push(LOUNGE_ROTA);
+              }}
               aria-label="Voltar ao cyberespaço"
               title="Voltar ao cyberespaço"
-              className="flex items-center gap-3 p-2 rounded-xl text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5 group"
+              className={`flex items-center gap-3 p-2 rounded-xl border border-transparent text-black dark:text-white hover:bg-slate-100 dark:hover:bg-white/5 group ${pill(sidebarAberta)}`}
             >
               <ArrowUturnLeftIcon className="w-5 h-5 shrink-0 group-hover:text-cyan-500" />
-              <span className="text-[10px] font-black uppercase">Voltar</span>
+              <Rotulo v={sidebarAberta}>Voltar</Rotulo>
             </button>
           </div>
           </div>
         </motion.nav>
       )}
 
+      {/* LOADING da troca de agente: cobre a área até a tela do novo agente estar pronta */}
+      {trocandoPara && (
+        <div role="status" className="fixed inset-0 z-[580] grid place-items-center bg-white/40 dark:bg-black/40 backdrop-blur-sm pointer-events-none">
+          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl border bg-white/90 border-blue-200 text-slate-800 dark:bg-[rgba(22,22,34,0.9)] dark:border-white/10 dark:text-white shadow-xl">
+            <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
+            <span className="text-[13px] font-bold">Trocando para {agenteChat(trocandoPara).nome}…</span>
+          </div>
+        </div>
+      )}
       <main
         style={recuoSidebar}
-        className={`flex-1 flex flex-col h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : "p-6"} gap-6`}
+        className={`flex-1 flex flex-col h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : activeTab === "escritorio" ? "px-4 pt-4 pb-4" : "p-6"} gap-6`}
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
-        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos"].includes(activeTab) && (
+        {!["sala-de-estudos", "pesquisa", "profile", "pesquisas", "projetos", "escritorio", "octa"].includes(activeTab) && (
           <div className="flex items-end justify-between shrink-0">
             <div>
               <h1 className="text-2xl md:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">
@@ -2810,8 +2960,15 @@ export default function HomeworkPage({
                         </div>
                       )}
                       {!reviewMode && (
+                        <AbntToolbar onInsert={inserirBlocoAbnt} onImagem={inserirImagemAbnt} previa={abntPrevia} onPrevia={setAbntPrevia} />
+                      )}
+                      {!reviewMode && abntPrevia && (
+                        <AbntPreview content={docContent} titulo={docTitle.replace(/\.(pdf|docx)$/i, "").replace(/_/g, " ")} />
+                      )}
+                      {!reviewMode && (
                         <textarea
                           ref={textareaRef}
+                          hidden={abntPrevia}
                           value={docContent}
                           onChange={(e) => setDocContent(e.target.value)}
                           onSelect={saveEditorCaret}
@@ -2872,6 +3029,7 @@ export default function HomeworkPage({
                       <div className="flex gap-3">
                         {/* BOTÃO SALVAR QUE ABRE O MODAL */}
                         <button
+                          data-tour="salvar-pesquisa"
                           onClick={(e) => {
                             e.stopPropagation();
                             setIsSaveModalOpen(true);
@@ -3026,7 +3184,7 @@ export default function HomeworkPage({
             className={`w-full h-full overflow-hidden ${activeTab === "sala-de-estudos" ? "" : "hidden"}`}
           >
             {/* Sala de Estudos = Chat (Aura objetiva) · Meus Estudos · Estudos. */}
-            <StudyRoomContent flushTop unified={UNIFIED} />
+            <StudyRoomContent flushTop unified={UNIFIED} abasNaSidebar />
           </div>
 
           {!UNIFIED && activeTab === "pesquisas" && (
@@ -3070,6 +3228,13 @@ export default function HomeworkPage({
               <span className="text-[9px] font-black text-orange-500 uppercase tracking-[0.3em] border border-orange-500/30 px-4 py-2 rounded-full bg-orange-500/5">
                 Em Desenvolvimento
               </span>
+            </div>
+          )}
+
+          {/* OCTA CODE — o agente de código: a tela dele é a IDE (o mesmo motor da sala Projetos, com o gate de acesso dela) */}
+          {activeTab === "octa" && agente.id === "octa" && (
+            <div className="w-full h-full overflow-hidden">
+              <ProjectsContent />
             </div>
           )}
 
@@ -3171,6 +3336,7 @@ export default function HomeworkPage({
               initial={{ opacity: 0, scale: 0.92, y: 32 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 32 }}
+              data-tour="modal-salvar"
               className="relative w-full max-w-md bg-white dark:bg-[#0a0a0a] rounded-[32px] p-8 shadow-2xl border border-slate-200 dark:border-white/10 text-left"
             >
               {!isExporting && (
@@ -3643,8 +3809,10 @@ export default function HomeworkPage({
         )}
       </AnimatePresence>
 
-      {/* Tour guiado da Zaeon (golden path) agora é GLOBAL (montado no layout),
-          pra começar no menu inicial e continuar aqui. (Tour antigo removido.) */}
+      {/* o TUTORIAL da 1ª missão (só no tablet aberto pelo tutorial do cyberespaço — lib/onboarding/tutorialLab) */}
+      {tutorialLab && <TutorialLab />}
+      {/* fora do tutorial: na 1ª vez, o Droid mostra a SALA INTEIRA (lib/onboarding/tourSala) */}
+      <TourSala noTutorial={tutorialLab} />
     </div>
     </ConversasSlotContext.Provider>
   );

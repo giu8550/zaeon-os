@@ -1,10 +1,12 @@
+import { LIMITE_SALA } from "@/lib/lounge3d/tipos";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const m = vi.hoisted(() => ({ session: vi.fn(), userFind: vi.fn(), docFind: vi.fn(), docUpdate: vi.fn(), docCreate: vi.fn(), trigger: vi.fn(), get: vi.fn(), guard: vi.fn(), pusher: vi.fn() }));
+const m = vi.hoisted(() => ({ session: vi.fn(), userFind: vi.fn(), userUpdate: vi.fn(), llm: vi.fn(), docFind: vi.fn(), docUpdate: vi.fn(), docCreate: vi.fn(), trigger: vi.fn(), get: vi.fn(), guard: vi.fn(), pusher: vi.fn() }));
 vi.mock("next-auth", () => ({ getServerSession: m.session }));
 vi.mock("@/src/lib/auth", () => ({ authOptions: {} }));
 vi.mock("@/src/lib/ratelimit", () => ({ guard: m.guard }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { user: { findUnique: m.userFind, findMany: async () => [] }, collabDoc: { findUnique: m.docFind, update: m.docUpdate, create: m.docCreate, findMany: async () => [] } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { user: { findUnique: m.userFind, update: m.userUpdate, findMany: async () => [] }, collabDoc: { findUnique: m.docFind, update: m.docUpdate, create: m.docCreate, findMany: async () => [] } } }));
+vi.mock("@/lib/cyber/ia/motor", () => ({ falarJson: m.llm }));
 vi.mock("@/lib/collab/realtime", () => ({ triggerSafe: m.trigger, getPusher: () => m.pusher() }));
 
 import { PATCH, GET } from "./[id]/route";
@@ -14,6 +16,9 @@ import { POST as ACESSO } from "./[id]/acesso/route";
 import { POST as TOPO } from "./[id]/topo/route";
 import { POST as RECADO, DELETE as APAGAR_RECADO } from "./[id]/recado/route";
 import { POST as RT_TOKEN } from "./[id]/rt-token/route";
+import { POST as NASCEU } from "./[id]/nasceu/route";
+import { POST as PERFIL } from "./[id]/perfil/route";
+import { POST as ZAEON } from "./[id]/zaeon/route";
 import { verificarToken } from "@/server/colyseus/src/token";
 
 const ID = "0123456789abcdef01234567", ME = "aaaaaaaaaaaaaaaaaaaaaaaa", OUTRO = "bbbbbbbbbbbbbbbbbbbbbbbb";
@@ -73,10 +78,11 @@ describe("/api/lounge3d/[id]", () => {
     m.docFind.mockResolvedValue(doc([OUTRO]));
     expect((await AUTH(form(`presence-lounge3d-${ID}`), { params: { id: ID } })).status).toBe(404);
     m.docFind.mockResolvedValue(doc());
-    m.get.mockResolvedValue({ ok: true, json: async () => ({ users: [{ id: "1" }, { id: "2" }, { id: "3" }, { id: "4" }, { id: "5" }] }) });
+    const lotado = Array.from({ length: LIMITE_SALA }, (_, i) => ({ id: String(i + 1) }));
+    m.get.mockResolvedValue({ ok: true, json: async () => ({ users: lotado }) });
     const cheia = await AUTH(form(`presence-lounge3d-${ID}`), { params: { id: ID } });
     expect(cheia.status).toBe(403); expect((await cheia.json()).motivo).toBe("cheia");
-    m.get.mockResolvedValue({ ok: true, json: async () => ({ users: [{ id: "1" }, { id: "2" }, { id: "3" }, { id: "4" }, { id: ME }] }) });
+    m.get.mockResolvedValue({ ok: true, json: async () => ({ users: [...lotado.slice(1), { id: ME }] }) });
     expect((await AUTH(form(`presence-lounge3d-${ID}`), { params: { id: ID } })).status).toBe(200);
     m.get.mockResolvedValue({ ok: false, json: async () => ({}) }); // Pusher REST fora: não bloqueia a entrada
     const ok = await (await AUTH(form(`presence-lounge3d-${ID}`), { params: { id: ID } })).json();
@@ -90,18 +96,74 @@ describe("/api/lounge3d/[id]", () => {
     expect(r.status).toBe(503);
   });
 
-  it("acesso privilegiado (topo/nave): só o FUNDADOR (pela sessão) recebe 200; a Zaeon (céu) é aberta; alvo inválido 400", async () => {
+  it("acesso privilegiado (topo/nave): só o FUNDADOR (pela sessão) recebe 200 — a nave só o DONO; a Zaeon (céu) é aberta; alvo inválido 400", async () => {
     const req = (alvo: string) => new Request("http://x/", { method: "POST", body: JSON.stringify({ alvo }), headers: { "Content-Type": "application/json" } });
     m.docFind.mockResolvedValue(doc());
     // Ana (a@b.c) não está na allowlist nem tem role → 403 no topo e na nave; a Zaeon abre pra qualquer membro
-    for (const alvo of ["topo", "nave"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(403);
+    for (const alvo of ["topo", "nave", "dj", "ritual"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(403);
     expect((await ACESSO(req("ceu"), { params: { id: ID } })).status).toBe(200);
     expect((await ACESSO(req("voar-pelado"), { params: { id: ID } })).status).toBe(400);
     expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(403);
-    // fundador por role no banco → 200 (o cliente nunca decide)
+    // fundador por role no banco → 200 (o cliente nunca decide) — menos a NAVE, que é SÓ do dono (pilotaANave, pelo e-mail)
     m.userFind.mockResolvedValue({ id: ME, name: "Ana", image: null, role: "super_admin" });
-    for (const alvo of ["topo", "ceu", "nave"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(200);
+    for (const alvo of ["topo", "ceu", "dj", "ritual"]) expect((await ACESSO(req(alvo), { params: { id: ID } })).status).toBe(200);
+    expect((await ACESSO(req("nave"), { params: { id: ID } })).status).toBe(403);
     expect((await TOPO(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(200);
+    // o DONO (o e-mail dele) pilota a nave
+    m.session.mockResolvedValue({ user: { email: "donmartinezcaiudoceu@gmail.com" } });
+    expect((await ACESSO(req("nave"), { params: { id: ID } })).status).toBe(200);
+    m.session.mockResolvedValue({ user: { email: "a@b.c" } });
+  });
+
+  it("1ª entrada no cyberespaço: GET diz `novo` (nunca entrou → nasce no tubo); POST /nasceu marca 1× (idempotente); não-membro → 404", async () => {
+    m.docFind.mockResolvedValue(doc());
+    expect((await (await GET(new Request("http://x/"), { params: { id: ID } })).json()).eu.novo).toBe(true);
+    const r = await NASCEU(new Request("http://x/", { method: "POST" }), { params: { id: ID } });
+    expect(r.status).toBe(200); expect(m.userUpdate).toHaveBeenCalledWith({ where: { id: ME }, data: { cyberNasceuEm: expect.any(Date) } });
+    m.userUpdate.mockReset(); m.userFind.mockResolvedValue({ id: ME, name: "Ana", image: null, cyberNasceuEm: new Date() });
+    expect((await (await GET(new Request("http://x/"), { params: { id: ID } })).json()).eu.novo).toBe(false);
+    expect((await (await NASCEU(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).json()).jaTinha).toBe(true);
+    expect(m.userUpdate).not.toHaveBeenCalled();
+    m.docFind.mockResolvedValue(doc([OUTRO]));
+    expect((await NASCEU(new Request("http://x/", { method: "POST" }), { params: { id: ID } })).status).toBe(404);
+  });
+
+  it("perfil (o que contou pra Zaeon): só chaves conhecidas, limpo, mescla com o anterior; vazio → 400; não-membro → 404", async () => {
+    m.docFind.mockResolvedValue(doc());
+    // (o que já estava guardado — do tutorial antigo — fica; o novo só manda situação e área, e nada de nome)
+    m.userFind.mockResolvedValueOnce({ id: ME, name: "Ana", image: null }).mockResolvedValueOnce({ cyberPerfil: { nome: "Ana", objetivo: "TCC" } });
+    const r = await PERFIL(json({ perfil: { nome: " Aninha ", situacao: "estuda", area: "Medicina", senha: "x" } }), { params: { id: ID } });
+    expect(r.status).toBe(200);
+    expect(m.userUpdate).toHaveBeenCalledWith({ where: { id: ME }, data: { cyberPerfil: { nome: "Ana", objetivo: "TCC", situacao: "estuda", area: "Medicina" } } });
+    expect((await PERFIL(json({ perfil: { senha: "x" } }), { params: { id: ID } })).status).toBe(400);
+    m.docFind.mockResolvedValue(doc([OUTRO]));
+    expect((await PERFIL(json({ perfil: { area: "A" } }), { params: { id: ID } })).status).toBe(404);
+  });
+
+  it("zaeon (o turno GERATIVO): a IA responde pelo harness do CYBERESPAÇO (agente zaeon); o perfil é gravado; concluir marca o nascimento", async () => {
+    m.docFind.mockResolvedValue(doc());
+    // UMA pergunta: a resposta vira a fala do COMPROMISSO e a conversa fecha (marca o nascimento)
+    m.llm.mockResolvedValue({ classe: "ok", fala: "Medicina! Um pouco de estudo todo dia e você vai longe.", perfil: { area: "Medicina" } });
+    const corpo = { perfil: { situacao: "estuda" }, historico: [{ quem: "zaeon", texto: "Hoje você estuda, trabalha ou empreende?" }], resposta: "Estudo medicina", turno: 0, foraSeguidas: 0 };
+    const d = await (await ZAEON(json(corpo), { params: { id: ID } })).json();
+    expect(d).toMatchObject({ classe: "ok", ia: true, concluido: true, perfil: { situacao: "estuda", area: "Medicina" } });
+    expect(m.llm.mock.calls[0]![0]).toMatchObject({ agente: "zaeon", userId: ME });
+    expect(m.userUpdate).toHaveBeenLastCalledWith({ where: { id: ME }, data: { cyberPerfil: expect.objectContaining({ area: "Medicina" }), cyberNasceuEm: expect.any(Date) } });
+    // a IA perguntou algo de volta? não vale (uma pergunta só): entra a reserva local
+    m.llm.mockResolvedValue({ classe: "ok", fala: "Legal! E qual o seu nome?" });
+    expect((await (await ZAEON(json(corpo), { params: { id: ID } })).json()).ia).toBe(false);
+  });
+  it("zaeon: abuso óbvio nem chega na IA → expulsão gravada; IA quebrada/JSON inválido → a reserva local (nunca trava)", async () => {
+    m.docFind.mockResolvedValue(doc()); m.llm.mockReset();
+    const d = await (await ZAEON(json({ perfil: {}, historico: [], resposta: "vai tomar no cu", turno: 0 }), { params: { id: ID } })).json();
+    expect(d.classe).toBe("abuso"); expect(m.llm).not.toHaveBeenCalled();
+    expect(m.userUpdate).toHaveBeenLastCalledWith({ where: { id: ME }, data: { cyberExpulsoEm: expect.any(Date) } });
+    m.llm.mockRejectedValue(new Error("vertex fora"));
+    const f = await (await ZAEON(json({ perfil: { situacao: "estuda" }, historico: [], resposta: "Direito", turno: 0 }), { params: { id: ID } })).json();
+    expect(f).toMatchObject({ classe: "ok", ia: false, concluido: true, perfil: { situacao: "estuda" } });
+    m.llm.mockResolvedValue({ qualquer: "coisa" });
+    expect((await (await ZAEON(json({ perfil: { situacao: "estuda" }, historico: [], resposta: "Direito", turno: 0 }), { params: { id: ID } })).json()).ia).toBe(false);
+    expect((await ZAEON(json({ resposta: "" }), { params: { id: ID } })).status).toBe(400);
   });
 
   it("recado pro QG: só o FUNDADOR manda/apaga; autor da SESSÃO; persiste no conteúdo (sem perder as notas) e difunde", async () => {

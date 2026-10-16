@@ -53,8 +53,13 @@ export async function dispararTurno(job: CanalTurnoJob, deps: () => Promise<Turn
   } catch (e) {
     console.warn("[canal] fila indisponível, rodando inline:", (e as Error)?.message);
   }
-  void emSerie(job.canalId, async () => executarTurno(job, await deps())).catch(() => undefined);
+  void emSerie(job.canalId, async () => executarTurno(job, comEncadear(await deps(), deps))).catch(() => undefined);
   return "inline";
+}
+
+/** #396 (B): o turno pode passar a bola — o próximo agente entra pelo MESMO caminho (fila ou inline, em série por canal). */
+function comEncadear(d: TurnoDeps, deps: () => Promise<TurnoDeps>): TurnoDeps {
+  return { ...d, encadear: d.encadear ?? ((j) => dispararTurno(j, deps)) };
 }
 
 /** Dispara vários (um por agente mencionado) — em paralelo entre agentes, em série por canal. */
@@ -79,7 +84,7 @@ export async function iniciarWorkerCanal(): Promise<boolean> {
   const concurrency = Number(process.env.CANAL_WORKER_CONCURRENCY || 4);
   const worker = new Worker(
     CANAL_QUEUE,
-    async (job) => { await emSerie(job.data.canalId, async () => executarTurno(job.data, await depsReais())); },
+    async (job) => { await emSerie(job.data.canalId, async () => executarTurno(job.data, comEncadear(await depsReais(), depsReais))); },
     { connection: getRedisConnection()! as any, concurrency },
   );
   worker.on("failed", (job: any, err: Error) => console.error("[canal-worker] job falhou:", job?.id, err?.message));

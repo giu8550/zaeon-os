@@ -23,6 +23,11 @@ const LIMITS = {
   "ai-light": { tokens: 40, window: "60 s" as const },
   // tempo real do lounge (fallback de posição sem client events): 4 Hz + heartbeat ≈ 270/min → 360/min por usuário
   "lounge-pos": { tokens: 360, window: "60 s" as const },
+  // a VOZ da Zaeon no tutorial do cyberespaço (~10–15 falas fixas pré-geradas + as gerativas): limite PRÓPRIO, pra não
+  // comer o "ai-heavy" do laboratório
+  "cyber-voz": { tokens: 40, window: "60 s" as const },
+  // as CORRIDAS de moto do cyberespaço: gravar o tempo / ler o ranking
+  "cyber-corrida": { tokens: 30, window: "60 s" as const },
 } as const;
 
 type Bucket = keyof typeof LIMITS;

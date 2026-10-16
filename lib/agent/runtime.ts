@@ -29,6 +29,8 @@ export type Finding = { claim: string; source?: Source; confidence: "alta" | "m�
 /** Resultado normalizado de TODA tool. `code` (aditivo) alimenta a taxonomia de erro (A1/A2). */
 export type ToolResult = {
   ok: boolean;
+  /** book_search: os livros achados (vão inteiros pra resposta — a lista é do código, não do modelo). */
+  livros?: import("@/lib/livros/busca").LivroAchado[];
   findings?: Finding[];
   artifact?: StudioRef;
   error?: string;
@@ -43,7 +45,15 @@ export type ToolContext = AgentContext & {
   execMode?: ExecMode;
   courseTags?: string[];
   gpuAvailable?: boolean;
+  /** Modo da tarefa (Octa Code, §2 do pack). `review`/`answer` = só leitura; ausente = comportamento antigo. */
+  taskMode?: TaskMode;
 };
+
+/** `review`/`answer` não podem mutar nada; `change` pode (sujeito ao resto do permit e ao file-lock do Octa). */
+export type TaskMode = "review" | "answer" | "change";
+export function isReadOnlyMode(mode: TaskMode | undefined): boolean {
+  return mode === "review" || mode === "answer";
+}
 
 export interface ToolDef {
   name: string;
@@ -82,12 +92,13 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 // ───────────────────────────── permissão (deny-by-default, §11.2) ─────────────────────────────
 /**
- * Decisão determinística ANTES de rodar: risco × plano × GPU × execMode.
+ * Decisão determinística ANTES de rodar: risco × plano × modo da tarefa × GPU × execMode.
  * Deny-by-default: plano insuficiente = DENY; destrutivo ou GPU-por-demanda = REQUIRE_APPROVAL;
  * em `guiado`, `write` sobe pra aprovação; leitura/geração em `auto` = ALLOW.
  */
 export function permit(def: ToolDef, ctx: ToolContext): Gate {
   if (!planAtLeast(ctx.plan, def.minPlan)) return "DENY";
+  if (isReadOnlyMode(ctx.taskMode) && def.risk !== "read") return "DENY"; // modo leitura nunca escreve
   if (def.demandGpu && !ctx.gpuAvailable) return "REQUIRE_APPROVAL"; // T3 sob demanda
   if (def.risk === "destructive") return "REQUIRE_APPROVAL";
   if (ctx.execMode === "guiado" && def.risk === "write") return "REQUIRE_APPROVAL";
@@ -320,4 +331,42 @@ export const examinerDef: ToolDef = {
 };
 
 // Registra a Fase 0 + stubs no boot do módulo.
-[studioGenerateDef, researchGenerateDef, memorySearchDef, literatureSearchDef, webSearchDef, examinerDef].forEach(registerTool);
+/**
+ * book_search — acha um LIVRO e o caminho LEGAL até ele (lib/livros/busca): OpenStax, Project Gutenberg,
+ * Open Library/Internet Archive e Google Books. PDF só quando é livre de verdade; com direito autoral,
+ * empréstimo digital/prévia/página. Nunca biblioteca-sombra.
+ */
+export const bookSearchDef: ToolDef = {
+  name: "book_search",
+  runtime: "ts",
+  risk: "read",
+  minPlan: "free",
+  timeoutMs: 25_000,
+  schema: {
+    name: "book_search",
+    description: "Procura um livro (título/autor) em acervos abertos e devolve onde ler/baixar legalmente: PDF livre, leitura online, empréstimo digital ou prévia.",
+    parameters: { type: "OBJECT" as any, properties: { query: { type: "STRING" as any, description: "o pedido do usuário ou título + autor" } }, required: ["query"] },
+  },
+  async run(args) {
+    const query = String(args?.query ?? "").trim();
+    if (!query) return { ok: false, error: "consulta vazia", code: "bad_args", provenance: {} };
+    try {
+      const { buscarLivros, ROTULO_ACESSO } = await import("@/lib/livros/busca");
+      const r = await buscarLivros(query);
+      if (!r.livros.length) {
+        const fora = r.falhas.length === r.consultadas.length;
+        return { ok: false, error: fora ? "acervos fora do ar" : "nenhum livro encontrado", code: fora ? "network" : "no_results", provenance: { toolsUsed: ["book_search"], at: nowIso() } };
+      }
+      const findings = r.livros.map((l) => ({
+        claim: `${l.titulo}${l.autores.length ? ` — ${l.autores.slice(0, 2).join(", ")}` : ""}${l.ano ? ` (${l.ano})` : ""}: ${ROTULO_ACESSO[l.acesso]}`,
+        source: { title: l.titulo, url: l.pdfUrl ?? l.lerUrl ?? l.paginaUrl },
+        confidence: "alta" as const,
+      }));
+      return { ok: true, findings, livros: r.livros, provenance: { toolsUsed: ["book_search"], at: nowIso(), sources: findings.map((f) => f.source) } };
+    } catch (e: any) {
+      return { ok: false, error: `busca de livros falhou: ${e?.message ?? e}`, code: "skill_error", provenance: {} };
+    }
+  },
+};
+
+[studioGenerateDef, researchGenerateDef, memorySearchDef, literatureSearchDef, webSearchDef, examinerDef, bookSearchDef].forEach(registerTool);

@@ -30,3 +30,36 @@ export function consumirPedido(sala: SalaChat): PedidoConversa | null {
     return p && p.sala === sala ? p : null;
   } catch { return null; }
 }
+
+/**
+ * As sub-abas da Sala de Estudos moram na SIDEBAR (sob "Sala de Estudos": as conversas, "Meus Estudos" e, por último,
+ * "Estudos") — não há mais pills no topo. A sala ANUNCIA a aba dela (a sidebar destaca) e a sidebar PEDE uma aba
+ * (evento pra sala montada + bilhete pra sala que ainda vai montar). `meus-estudos` = a conversa.
+ */
+export type AbaEstudos = "meus-estudos" | "feed" | "community";
+export const EVT_ESTUDOS_ABA = "zaeon:estudos:aba";
+export const EVT_ESTUDOS_IR = "zaeon:estudos:ir";
+const CHAVE_ABA = "zaeon.estudos.aba.pedido";
+let abaAtual: AbaEstudos = "meus-estudos";
+
+/** A sala diz em que aba está (e a sidebar, que monta antes ou depois, lê com `abaEstudosAtual`). */
+export function anunciarAbaEstudos(aba: AbaEstudos): void {
+  abaAtual = aba;
+  window.dispatchEvent(new CustomEvent<AbaEstudos>(EVT_ESTUDOS_ABA, { detail: aba }));
+}
+export const abaEstudosAtual = (): AbaEstudos => abaAtual;
+
+export function irPraAbaEstudos(aba: AbaEstudos): void {
+  try { localStorage.setItem(CHAVE_ABA, aba); } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent<AbaEstudos>(EVT_ESTUDOS_IR, { detail: aba }));
+}
+
+/** A sala atendeu o pedido (ou o leu ao montar): apaga o bilhete. */
+export function consumirAbaEstudos(): AbaEstudos | null {
+  try {
+    const v = localStorage.getItem(CHAVE_ABA);
+    if (!v) return null;
+    localStorage.removeItem(CHAVE_ABA);
+    return v === "meus-estudos" || v === "feed" || v === "community" ? v : null;
+  } catch { return null; }
+}

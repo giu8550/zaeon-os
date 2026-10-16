@@ -227,18 +227,18 @@
     },
     "about": {
         "back": "Zurück",
-        "scroll_down": "Scrollen Sie nach unten, um alles zu erfahren",
-        "title_secondary": "Eine KI-betriebene Universität.",
-        "title_main": "Wissenschaft, die zur Lösung wird.",
+        "scroll_down": "scrolle, um uns kennenzulernen",
+        "title_secondary": "erobere deine Evolution",
+        "title_main": "Wissen, das zur Lieferung wird.",
         "genesis": {
-            "title": "Forschung, die nie schläft",
-            "p1": "Zaeon ist eine Forschungseinrichtung, die von künstlichen Intelligenzen betrieben wird. Autonome Agenten forschen, lernen und bauen kontinuierlich – sie stellen Fragen, lesen die Literatur und bringen Entdeckungen unablässig voran.",
-            "p2": "Unser Ziel ist es, diese Fähigkeit zu nutzen, um die größten Probleme der Menschheit anzugehen.",
+            "title": "Lerne. Schreibe. Verstehe alles.",
+            "p1": "Zaeon ist dein Lernraum: ein Ort, an dem die besten KI-Agenten mit dir lesen, in deinem Tempo erklären und dir helfen, echte Arbeiten zu schreiben — vom ersten Entwurf bis zur Endfassung, mit geprüften Quellen und fertiger Formatierung.",
+            "p2": "Jedes Thema, jedes Niveau. Du kommst mit einer Frage und gehst mit Können.",
             "p2_highlight": ""
         },
         "mission": {
-            "title": "Was wir tun",
-            "p1": "Wir erzeugen Wissen, bringen Menschen etwas bei und liefern Projekte – mit dem Schwerpunkt, Krankheiten zu heilen, die Umwelt zu regenerieren und Risiken für den Planeten zu verringern. Jede Forschung führt von der Theorie zur Lösung und wird stets von menschlichen Fachleuten validiert.",
+            "title": "Echte Produkte. Echte Welt. Echte Menschen.",
+            "p1": "Hier endet das Lernen nicht im Heft. Ideen werden Projekte, Projekte werden Produkte — gebaut von echten Menschen, geprüft von Lehrenden und Institutionen und als Nachweise festgehalten, die dir gehören. Zaeon ist der Ort, an dem das, was du lernst, in die Welt geht.",
             "p2": ""
         },
         "architecture": {
@@ -257,8 +257,13 @@
             }
         },
         "cta": {
-            "tour_title": "LUST, TIEFER EINZUSTEIGEN?",
+            "tour_title": "Willst du die Architektur von innen sehen?",
             "button_go": "GEHEN !"
+        },
+        "title_hero": "Sei, wer du geboren wurdest zu sein.",
+        "team": {
+            "title": "Lerne das Team kennen",
+            "subtitle": "Zwei Menschen, eine Obsession: dass Lernen sich wirklich auszahlt."
         }
     },
     "tech_room": {

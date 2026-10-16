@@ -30,6 +30,9 @@ model User {
   city                String?
   onboardingComplete  Boolean   @default(false)
   tourDone            Boolean   @default(false)   // tour guiado da Zaeon (onboarding) — visível no dashboard
+  cyberNasceuEm       DateTime? // 1ª entrada no CYBERESPAÇO: vazio = nunca entrou → nasce num tubo de ensaio (lib/cyber/onboarding)
+  cyberPerfil         Json?     // o que a pessoa contou pra Zaeon na capela (nome, situação, área, foco, o que quer estudar, objetivo — lib/cyber/conversaZaeon): memória dos agentes e base da gamificação
+  cyberExpulsoEm      DateTime? // a última vez que o Droid expulsou a pessoa do cyberespaço (desrespeitou a Zaeon)
   torsoImage          String?
   role                String?
   phone               String?   
@@ -1128,11 +1131,30 @@ model Canal {
   membros     String[] @default([])        // userIds (turma = via convite/adição do dono)
   agentes     String[] @default([])        // agentKeys presentes no canal
   cartolinaId String?  @db.ObjectId        // quadro compartilhado (PR da cartolina)
+  dmCom       String?  @db.ObjectId        // conversa privada 1 a 1 (#396): o outro lado; só os dois leem
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([ownerId, updatedAt])
+  @@index([dmCom, updatedAt])
   @@map("canais")
+}
+
+// Convite do escritório (#396): cai na aba PRIVADO de quem foi convidado; aceito → nasce a conversa
+// privada (Canal com dmCom) e os dois viram "contatos" (o dono pode pôr a pessoa em turma/aberto).
+// Regras em lib/canal/convite.ts.
+model CanalConvite {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  deId         String    @db.ObjectId          // quem convidou
+  paraId       String    @db.ObjectId          // quem foi convidado
+  status       String    @default("pendente")  // "pendente" | "aceito" | "recusado"
+  dmCanalId    String?   @db.ObjectId          // a conversa privada criada no aceite
+  createdAt    DateTime  @default(now())
+  respondidoEm DateTime?
+
+  @@index([paraId, status])
+  @@index([deId, status])
+  @@map("canal_convites")
 }
 
 model CanalMensagem {
@@ -1146,6 +1168,24 @@ model CanalMensagem {
 
   @@index([canalId, createdAt])
   @@map("canal_mensagens")
+}
+
+// Agenda do escritório (#396): horário de trabalho semanal de cada pessoa no canal. Todos do canal veem.
+// Repete toda semana (sem data). `inicio`/`fim` são QUADRADOS de 1h inclusivos: 9..15 = das 9h às 16h.
+// Regras em lib/canal/agenda.ts.
+model AgendaBloco {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  canalId   String   @db.ObjectId
+  userId    String   @db.ObjectId
+  dia       Int                                // 0 = domingo … 6 = sábado
+  inicio    Int                                // quadrado inicial (hora)
+  fim       Int                                // quadrado final (hora, inclusivo)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([canalId, dia])
+  @@index([canalId, userId])
+  @@map("agenda_blocos")
 }
 
 // ─── AURA: a economia de reputação (ver lib/aura/*) ───────────────────────────────
@@ -1322,4 +1362,77 @@ model ChoreCursor {
   mudancas         Int      @default(0)
 
   @@map("chore_cursors")
+}
+
+// --- FROTA DE IAs DO CYBERESPAÇO (lib/cyber/frota) ---
+/// o texto de um episódio de conversa entre IAs (gerado na 1ª vez que alguém vê — o mesmo pra todos)
+model FrotaConversa {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  epId      String   @unique
+  /// as falas na ordem (null = fala em MODO CLOAK, que só aparece como "...")
+  falas     Json
+  criadoEm  DateTime @default(now())
+  @@map("frota_conversas")
+}
+/// a "impressão" (normalizada) de toda fala de IA que um usuário pôde ver — a regra de ouro: nada se repete
+model FrotaFala {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  impressao  String   @unique
+  criadoEm   DateTime @default(now())
+  @@map("frota_falas")
+}
+
+/// CORRIDAS de moto (lib/cyber/corrida): cada corrida terminada — o ranking de cada pista é o melhor `ms` de cada usuário
+model CorridaTempo {
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  pista    String
+  userId   String   @db.ObjectId
+  nome     String
+  cor      String
+  ms       Int
+  voltas   Int[]
+  criadoEm DateTime @default(now())
+  @@index([pista, ms])
+  @@index([pista, userId])
+  @@map("corrida_tempos")
+}
+
+// ───── Octa Code — Pack Sinistro (docs/HANDOFF_OCTA_CODE_PACK.md) ─────
+// Segredo do cofre do Octa. `cifra` = AES-256-GCM com OCTA_VAULT_KEY; o valor em claro NUNCA é gravado.
+model OctaSecret {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  nome      String    @unique
+  descricao String?
+  escopo    String[]
+  oculto    Boolean   @default(true)
+  criadoEm  DateTime
+  expiraEm  DateTime?
+  versao    Int
+  cifra     String
+  @@map("octa_secrets")
+}
+
+// Auditoria de uso de segredo: quem pediu qual ação — SEM o valor.
+model OctaSecretAudit {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  em        DateTime
+  sessionId String
+  acao      String
+  nome      String
+  resultado String   // resolvido | negado | expirado | inexistente
+  @@index([nome, em])
+  @@map("octa_secret_audit")
+}
+
+// Uma execução da rotina anti-alucinação (§5) — o painel 🩺 lê as últimas por agente.
+model OctaEvalRun {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agente    String
+  em        DateTime @default(now())
+  status    String   // verde | amarelo | vermelho
+  taxaPass  Float
+  drift     Float?
+  relatorio Json
+  @@index([agente, em])
+  @@map("octa_eval_runs")
 }

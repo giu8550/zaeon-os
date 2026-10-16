@@ -12,16 +12,19 @@
  */
 import type { Presenca } from "@/lib/lounge3d/tipos";
 import type { Pose } from "@/lib/lounge3d/pose";
-import { Trilha } from "@/lib/lounge3d/netcode";
+import { RelogioRemoto, Trilha } from "@/lib/lounge3d/netcode";
 import { urlColyseus } from "@/lib/lounge3d/realtime";
 import type { ServidorIce } from "@/lib/lounge3d/ice";
 
 export type EstadoColyseus = "conectando" | "ok" | "erro" | "cheia";
 type JogadorRemoto = {
-  userId: string; name: string; color: string; fundador: boolean; qg: boolean;
+  userId: string; name: string; color: string; fundador: boolean;
   x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean;
   voando: boolean; vooY: number; vooYaw: number; parada: boolean; npX: number; npY: number; npZ: number; npYaw: number;
-  jet: number; alt: number; falando: boolean; pronto: boolean; motoS: number; motoY: number; motoYaw: number; motoDe: string; mlS: number; mlX: number; mlY: number; mlZ: number; mlYaw: number;
+  jet: number; alt: number; falando: boolean; pronto: boolean; motoS: number; motoY: number; motoYaw: number; motoDe: string; mlS: number; mlX: number; mlY: number; mlZ: number; mlYaw: number; desc: number; atk: number; hp: number; arma: boolean; mov: number;
+  /** quando a pose foi MANDADA (ms, no relógio de quem mandou; 0 = cliente/servidor antigo) */ t: number;
+  /** corrida de checkpoints: o placar e a corrida */ ck: number; cr: string;
+  /** a bordo da nave-QG (nbN −1 = fora) */ nbX: number; nbZ: number; nbN: number; nbE: number;
 };
 export type CanalVoz = {
   /** manda offer/answer/ICE pra alguém da sala (por userId) */
@@ -35,20 +38,21 @@ export type CanalVoz = {
 export type ConexaoColyseus = { enviar(p: Pose): void; voz: CanalVoz; sair(): void };
 
 /** os campos de um jogador do estado (os do Schema são acessores — espalhar com {...j} não copia) */
-const CAMPOS: (keyof JogadorRemoto)[] = ["motoS", "motoY", "motoYaw", "motoDe", "mlS", "mlX", "mlY", "mlZ", "mlYaw", "userId", "name", "color", "fundador", "qg", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto"];
+const CAMPOS: (keyof JogadorRemoto)[] = ["motoS", "motoY", "motoYaw", "motoDe", "mlS", "mlX", "mlY", "mlZ", "mlYaw", "userId", "name", "color", "fundador", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto", "desc", "atk", "hp", "arma", "mov", "t", "ck", "cr", "nbX", "nbZ", "nbN", "nbE"];
 const copiar = (j: JogadorRemoto): JogadorRemoto => { const o = {} as Record<string, unknown>; for (const k of CAMPOS) o[k] = j[k]; return o as JogadorRemoto; };
 
 export function conectarColyseus(o: {
   salaId: string; euId: string;
   remotos: Map<string, Presenca>;
-  onOnline: (lista: { id: string; name: string; color: string; fundador: boolean; qg: boolean }[]) => void;
+  onOnline: (lista: { id: string; name: string; color: string; fundador: boolean; pronto: boolean }[]) => void;
   onEstado: (e: EstadoColyseus) => void;
   /** onde mostrar quem entrou mas ainda não mandou a 1ª pose (ex.: sentado na própria base) */
   poseInicial?: (userId: string) => { x: number; z: number; facing: number; sit?: boolean } | null;
 }): ConexaoColyseus {
   let vivo = true, room: { send(t: string, m: unknown): void; leave(consented?: boolean): Promise<unknown>; onMessage(t: string, cb: (m: unknown) => void): unknown } | null = null;
   let tentativas = 0, timerReentrar: ReturnType<typeof setTimeout> | null = null, raf = 0;
-  const trilhas = new Map<string, Trilha>(), ultimo = new Map<string, JogadorRemoto>();
+  const trilhas = new Map<string, Trilha>(), ultimo = new Map<string, JogadorRemoto>(), relogios = new Map<string, RelogioRemoto>();
+  const t0 = performance.now();   // o MEU relógio das poses (vai no `t`)
   const ouvintesVoz = new Set<(from: string, data: unknown) => void>();
   const ice: ServidorIce[] = [];
   // laço de desenho no ritmo da tela (fora do navegador — testes — cai num timer de ~60 Hz)
@@ -69,6 +73,8 @@ export function conectarColyseus(o: {
         ...(j.jet >= 0 ? { jet: j.jet } : {}), ...(j.alt >= 0 ? { alt: j.alt } : {}),
         ...(j.motoS >= 0 ? { moto: { s: j.motoS, y: j.motoY, yaw: j.motoYaw, ...(j.motoDe ? { de: j.motoDe } : {}) } } : {}),
         ...(j.mlS >= 0 ? { motoLargada: { s: j.mlS, x: j.mlX, y: j.mlY, z: j.mlZ, yaw: j.mlYaw } } : {}),
+        ...(j.desc ? { desc: j.desc } : {}),
+        ...(j.mov ? { mov: j.mov } : {}), ...(j.ck ? { ck: j.ck } : {}), ...(j.cr ? { cr: j.cr } : {}), ...(j.nbN === 0 || j.nbN === 1 ? { bordo: { x: j.nbX, z: j.nbZ, nivel: j.nbN as 0 | 1, ...(j.nbE >= 0 ? { esc: j.nbE } : {}) } } : {}), ...(j.atk ? { atk: j.atk } : {}), ...(typeof j.hp === "number" && j.hp < 100 ? { hp: j.hp } : {}), ...(j.arma ? { arma: 1 } : {}),
         ts: Date.now(),
       });
     }
@@ -92,22 +98,26 @@ export function conectarColyseus(o: {
       o.onEstado("ok");
       rm.onStateChange((estado: unknown) => {
         const players = (estado as { players?: Map<string, JogadorRemoto> }).players; if (!players) return;
-        const agora = performance.now(), vistos = new Set<string>(), lista: { id: string; name: string; color: string; fundador: boolean; qg: boolean }[] = [];
+        const agora = performance.now(), vistos = new Set<string>(), lista: { id: string; name: string; color: string; fundador: boolean; pronto: boolean }[] = [];
         players.forEach((j, id) => {
-          lista.push({ id, name: j.name, color: j.color, fundador: j.fundador, qg: j.qg });
+          lista.push({ id, name: j.name, color: j.color, fundador: j.fundador, pronto: j.pronto === true });
           if (id === o.euId) return;
           vistos.add(id);
           const ant = ultimo.get(id);
           ultimo.set(id, copiar(j));
-          if (!j.pronto) {   // ainda sem a 1ª pose: sentado na própria base (não na origem do mapa)
-            const ini = o.poseInicial?.(id);
-            if (ini && !trilhas.has(id)) { const t0 = new Trilha(); t0.empurrar({ t: agora, x: ini.x, z: ini.z, facing: ini.facing }); trilhas.set(id, t0); }
-            return;
-          }
+          // ainda sem a 1ª pose: NÃO aparece (nem sentado na base). Quem entra normal manda a pose em instantes; o novato no
+          // tutorial (a instância da Zaeon dele — components/cyber/engine) só manda depois de cruzar o 1º portal, e a base
+          // dele fica vazia até lá
+          if (!j.pronto) { trilhas.delete(id); o.remotos.delete(id); return; }
           let t = trilhas.get(id); if (!t) { t = new Trilha(); trilhas.set(id, t); }
-          if (!ant || ant.x !== j.x || ant.z !== j.z || ant.facing !== j.facing || ant.moving !== j.moving || t.vazia) t.empurrar({ t: agora, x: j.x, z: j.z, facing: j.facing, moving: j.moving });
+          // a amostra vale no instante em que foi MANDADA (o `t` dela no relógio local), não na chegada do patch
+          const nova = j.t > 0 ? !ant || ant.t !== j.t : !ant || ant.x !== j.x || ant.z !== j.z || ant.facing !== j.facing || ant.moving !== j.moving;
+          if (nova || t.vazia) {
+            let rl = relogios.get(id); if (!rl) { rl = new RelogioRemoto(); relogios.set(id, rl); }
+            t.empurrar({ t: j.t > 0 ? rl.local(j.t, agora) : agora, x: j.x, z: j.z, facing: j.facing, moving: j.moving });
+          }
         });
-        for (const id of [...ultimo.keys()]) if (!vistos.has(id)) { ultimo.delete(id); trilhas.delete(id); o.remotos.delete(id); }   // saiu: o avatar some
+        for (const id of [...ultimo.keys()]) if (!vistos.has(id)) { ultimo.delete(id); trilhas.delete(id); relogios.delete(id); o.remotos.delete(id); }   // saiu: o avatar some
         o.onOnline(lista);
       });
       rm.onMessage("rtc", (m: unknown) => { const x = m as { from?: string; data?: unknown }; if (x?.from) for (const cb of ouvintesVoz) cb(x.from, x.data); });
@@ -133,7 +143,7 @@ export function conectarColyseus(o: {
   raf = proximoQuadro(desenhar);
 
   return {
-    enviar(p) { try { room?.send("pose", p); } catch { /* reconectando */ } },
+    enviar(p) { try { room?.send("pose", { ...p, t: Math.round(performance.now() - t0) + 1 }); } catch { /* reconectando */ } },
     voz: {
       enviar(to, data) { try { room?.send("rtc", { to, data }); } catch { /* sem sala */ } },
       assinar(cb) { ouvintesVoz.add(cb); return () => { ouvintesVoz.delete(cb); }; },
@@ -143,7 +153,7 @@ export function conectarColyseus(o: {
     sair() {
       vivo = false; cancelarQuadro(raf); if (timerReentrar) clearTimeout(timerReentrar);
       try { void room?.leave(true); } catch { /* já */ }
-      room = null; trilhas.clear(); ultimo.clear(); ouvintesVoz.clear();
+      room = null; trilhas.clear(); ultimo.clear(); relogios.clear(); ouvintesVoz.clear();
     },
   };
 }

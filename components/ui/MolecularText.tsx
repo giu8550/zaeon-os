@@ -4,8 +4,9 @@ import React from "react";
 import { motion } from "framer-motion";
 
 /**
- * Animação "molecular" de título: cada letra se materializa com blur + fade + um
- * leve deslocamento, em cascata (stagger).
+ * Animação "molecular" de título: cada letra se materializa com fade + um leve deslocamento, em cascata
+ * (stagger). SÓ fade-in, uma vez (`once: true`): o texto fica na página ao rolar de volta — sem blur nem
+ * will-change, pra não pesar no navegador.
  *
  * IMPORTANTE (bug corrigido): as letras são `inline-block`, o que cria um ponto de
  * quebra em CADA letra — sem cuidado, a palavra quebra no meio no fim da linha.
@@ -37,10 +38,10 @@ export default function MolecularText({
               return (
                 <motion.span
                   key={d}
-                  className="inline-block will-change-[transform,filter,opacity]"
-                  initial={{ opacity: 0, filter: "blur(8px)", y: 6 }}
-                  whileInView={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-                  viewport={{ once: false, amount: 0.35 }}   // entra E sai: anima descendo e subindo a página
+                  className="inline-block"
+                  initial={{ opacity: 0, y: 6 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.35 }}   // SÓ entra (fade-in): anima uma vez e fica — sem fade-out ao subir a página
                   transition={{ duration: 0.5, ease: "easeOut", delay: d }}
                 >
                   {c}

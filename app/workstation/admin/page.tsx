@@ -11,7 +11,8 @@ import {
     PuzzlePieceIcon,
     SpeakerWaveIcon,
     UsersIcon,
-    SparklesIcon
+    SparklesIcon,
+    CpuChipIcon
 } from "@heroicons/react/24/outline";
 
 
@@ -22,6 +23,7 @@ import PluginsModule from "./modules/PluginsModule";
 import VoiceAccessModule from "./modules/VoiceAccessModule";
 import InviteGroupsModule from "./modules/InviteGroupsModule";
 import AgentsModule from "./modules/AgentsModule";
+import FrotaModule from "./modules/FrotaModule";
 import { agentsAdmin } from "@/lib/canal/flags";
 import { adminLabelPlugins } from "@/lib/mentores/rota";
 
@@ -62,7 +64,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, isOpen }: any) => (
 
 export default function AdminControlRoom() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments" | "agents">("profiles");
+    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments" | "agents" | "frota">("profiles");
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -132,6 +134,14 @@ export default function AdminControlRoom() {
                             isOpen={isSidebarOpen}
                         />
                     )}
+                    {/* a FROTA DE IAs do cyberespaço (lib/cyber/frota) */}
+                    <SidebarItem
+                        icon={CpuChipIcon}
+                        label="Deploy agents"
+                        active={activeTab === 'frota'}
+                        onClick={() => setActiveTab('frota')}
+                        isOpen={isSidebarOpen}
+                    />
                     <SidebarItem
                         icon={DocumentChartBarIcon}
                         label="Reports"
@@ -175,6 +185,7 @@ export default function AdminControlRoom() {
                         {activeTab === 'reports' && <ReportsModule glassPanel={glassPanel} />}
                         {activeTab === 'plugins' && <PluginsModule glassPanel={glassPanel} />}
                         {activeTab === 'agents' && agentsAdmin() && <AgentsModule glassPanel={glassPanel} />}
+                        {activeTab === 'frota' && <FrotaModule glassPanel={glassPanel} />}
 
                         {activeTab === 'payments' && (
                             <div className="flex-1 flex items-center justify-center opacity-30">

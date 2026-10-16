@@ -58,7 +58,7 @@ export default function OmegaRelatedResearch() {
   if (seed.length < 3 || (!loading && papers.length === 0)) return null;
 
   return (
-    <div className="mt-3">
+    <div data-tour="relacionados" className="mt-3">
       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-white/30 mb-2 px-1">
         Pesquisas relacionadas{papers.length > 0 ? ` (${papers.length})` : ""}
       </p>

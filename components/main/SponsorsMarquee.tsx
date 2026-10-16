@@ -47,7 +47,7 @@ export default function SponsorsMarquee() {
                   [&_img]:brightness-110 [&_img]:contrast-105
                   [&_img]:drop-shadow-[0_0_10px_rgba(255,255,255,0.28)]"
               >
-                <NextImage src={s.src} alt={s.name} fill className="object-contain" sizes="150px" />
+                <NextImage src={s.src} alt={s.name} fill unoptimized className="object-contain" sizes="150px" />
               </a>
             ))}
           </motion.div>

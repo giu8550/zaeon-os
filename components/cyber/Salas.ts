@@ -2,24 +2,36 @@
  * Salas — os pavilhões da Zaeon. O LOUNGE é um CLUBE A CÉU ABERTO na plataforma própria (lá no alto, na altura do
  * início da ponta da capela — chega-se pela escada): PALCO alto de cristais de gelo com a MESA DO DJ (2 pickups +
  * controladora), a TRELIÇA de metal alta com as CAIXAS SUSPENSAS (line arrays penduradas nos braços), subs no chão,
- * TELÃO no fundo, PISTA de LED com o cristal-espelho flutuando e as LUZES saindo do palco e da treliça. Tudo pulsa com
+ * (sem telão nem pista de LED: o centro do evento é a MANDALA em cima do DJ — components/cyber/MandalaSagrada) e as LUZES saindo do palco e da treliça. Tudo pulsa com
  * os GRAVES da música (`somTocando(on, nivel)`); parado, respira devagar. Guarda-corpo de vidro em volta com a
  * ENTRADA virada pra escada (o +z da sala). Layout, móveis e colisores em
  * lib/cyber/ceu.ts (CIDADE.salas, MOVEIS, PALCO) — aqui só o three. Sem estrobo; `low` corta os detalhes miúdos.
  * Luzes/feixes/LEDs são Basic/Shader (o `camuflarGrupo` não mexe neles); corpos sólidos são Standard (viram `solidoLeve`).
  */
 import * as THREE from "three";
-import { CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
+import { BN_NA_SALA, CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
+import { BOCA_DJ } from "@/lib/cyber/buracos";
+import { DECK, GARAGEM_LOUNGE, PATIO, saidaDoLounge } from "@/lib/cyber/templo";
+import { criarOlho } from "./OlhoHolografico";
+import { criarMandala } from "./MandalaSagrada";
+import { criarTempestade } from "./Tempestade";
+import { estadoDoRitual, type EstadoShow } from "@/lib/cyber/showLounge";
 import { linhasDoRecado } from "@/lib/cyber/recado";
+import type { PisoOclusor } from "./oclusaoPisos";
+import { criarMatsTrono, montarNucleoFluido, montarTrono, type MatsTrono } from "./TronoFluido";
 
-const TEMA: Record<NomeSala, { piso: number; brilho: number; titulo: string; cor: string; alt: number; aberto: boolean }> = {
-  lounge: { piso: 0x120a24, brilho: 0xb98cff, titulo: "LOUNGE", cor: "#e2d0ff", alt: 1.6, aberto: true },   // a céu aberto: guarda-corpo
+/** o tema de cada sala (sem placa com nome: os espaços falam por si) — todas a céu aberto, com guarda-corpo */
+const TEMA: Record<NomeSala, { piso: number; brilho: number; cor: string; alt: number; aberto: boolean }> = {
+  lounge: { piso: 0x120a24, brilho: 0xb98cff, cor: "#e2d0ff", alt: 1.6, aberto: true },
+  garagem: { piso: 0x14100c, brilho: 0xffb46b, cor: "#ffe0bf", alt: 1.6, aberto: true },   // a ALA DOS VEÍCULOS (laranja)
+  biblioteca: { piso: 0x081426, brilho: 0x7fb8ff, cor: "#d6e8ff", alt: 1.6, aberto: true },
+  jardim: { piso: 0x07180f, brilho: 0x7dffb0, cor: "#d4ffe6", alt: 1.6, aberto: true },
 };
 /** paleta da festa (feixes, LEDs da pista, lasers) */
 const FESTA = [0x66e6ff, 0xb98cff, 0xff5fd2, 0x6bff9a, 0x4d7bff];
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material; /** a textura de ponto de luz (fumaça, faíscas) */ estrela?: THREE.Texture };
+type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material; /** a textura de ponto de luz (fumaça, faíscas) */ estrela?: THREE.Texture; /** caiu um raio do RITUAL na névoa do lounge (mundo): o trovão */ aoTrovao?: (em: THREE.Vector3) => void };
 export type SalasHandle = {
   alvos: THREE.Object3D[];
   /** a TELA do telão do lounge (clicável: o dono escreve o recado pro QG do Andrei) */
@@ -28,9 +40,19 @@ export type SalasHandle = {
   mostrarRecado(texto: string | null): void;
   /** as TORRES DE SOM do lounge (a música sai delas) e a MESA DO DJ (onde se abre o player) */
   caixas: THREE.Object3D[]; tocaDiscos: THREE.Object3D | null;
+  /** as CAIXAS DE SOM discretas dos espaços de convivência: de cada uma sai a música ambiente da sala (o engine toca) */
+  ambiente: { sala: NomeSala; obj: THREE.Object3D }[];
   /** tem música tocando? + a energia dos graves agora (0..1): as luzes, as caixas e a pista pulsam com ela */
   somTocando(on: boolean, nivel?: number): void;
+  /** o SHOW do lounge (lib/cyber/showLounge): o estado no ponto da música; `ritual` = a fumaça do ritual no topo (0..1); `olho` = o OLHO no centro (o ritual ou os anunciadores) */
+  show(e: EstadoShow, ritual: number, olho?: number): void;
+  /** um relâmpago da névoa do lounge agora (`vel` = a velocidade do piscar; `alvoMundo` = onde cai — ex.: uma caixa de som) */
+  raioNoLounge(vel?: number, alvoMundo?: THREE.Vector3): void;
+  /** as BATIDAS da música do lounge (contador — sobe 1 a cada grave forte) e a força do momento (0..1) */
+  batidas(): number; pulso(): number;
   atualizar(dt: number, t: number): void;
+  /** o conteúdo de cada sala por cima do piso (components/cyber/oclusaoPisos) */
+  plataformas: PisoOclusor[];
 };
 
 /** o FEIXE de luz (volumétrico fake): cone aberto com o ápice na origem, abrindo pra +y; some na ponta e nas bordas */
@@ -47,6 +69,7 @@ function materialFeixe(): THREE.ShaderMaterial {
 
 export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   const alvos: THREE.Object3D[] = [], anim: ((dt: number, t: number) => void)[] = [], calmo = reducedMotion();
+  const plataformas: PisoOclusor[] = [];
   const tela = (w: number, h: number, pintar: (g: CanvasRenderingContext2D, w: number, h: number) => void, rep = false) => {
     const c = document.createElement("canvas"); c.width = w; c.height = h; pintar(c.getContext("2d")!, w, h);
     const t = new THREE.CanvasTexture(c); if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; o.texturas.push(t); return t;
@@ -112,6 +135,14 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     anim.push(() => { const b = batida(), p = 1 + 0.12 * b + 0.08 * pulso * ativo; anel.scale.setScalar(p); domo.scale.y = 0.35 + 0.5 * b; (anel.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.6 * b; });
   };
 
+  let salaAtual: NomeSala = "lounge";
+  let showLounge: { olho: { group: THREE.Group }; mandala: ReturnType<typeof criarMandala>; nevoa: ReturnType<typeof criarTempestade>; grupo: THREE.Group } | null = null;
+  let estadoShow: EstadoShow = { nascimento: 0, forma: 0, proxima: 1, mistura: 0, complexidade: 0, area: 1, serpentes: 0, tentaculos: 0, dna: 0, nevoa: 0, nivel: 0, turno: 0, olho: 0, anelSigilos: 0, sigilo: -1 }, olhoRitual = 0, fumacaRitual = 0, tRitual = 0, musicaShow: EstadoShow = estadoShow;
+  const ambiente: { sala: NomeSala; obj: THREE.Object3D }[] = [];
+  const tema = (_m: Movel) => TEMA[salaAtual];
+  // os materiais dos TRONOS (criados na 1ª vez que um aparece; o fluido anima com o relógio)
+  let mats: MatsTrono | null = null;
+  const matsTrono = () => { if (!mats) { const m = criarMatsTrono(); mats = m; anim.push((_, t) => { m.fluido.uniforms.uT!.value = t; }); } return mats; };
   const MOVEL: Record<string, (p: THREE.Group, m: Movel, tema: typeof TEMA[NomeSala]) => void> = {
     // TELÃO alto atrás do palco (acima da coroa de cristais): é a "TV" do recado pro QG
     tv(p, m) {
@@ -237,7 +268,8 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     },
     // A TORRE DO DJ (a MEGA ESTRUTURA): do palco sobe uma coluna hexagonal de cristal com o núcleo aceso, cristais
     // gigantes inclinados em volta e anéis de LED que sobem no compasso; lá no alto, a CABINE (piso de gelo, guarda-corpo
-    // de vidro, feixes); atrás, o ELEVADOR DE LUZ (coluna com anéis subindo + a passarela até a cabine)
+    // de vidro, feixes); atrás, o ELEVADOR DE LUZ que só DESCE (coluna com anéis descendo + a passarela até a cabine) e a
+    // BOCA do buraco negro grande (o anel na cabine + o fio de luz até o buraco, lá em cima do palco) — a única entrada
     torreDJ(p) {
       const T = TORRE_DJ, A = T.topo - PALCO.h, k = T.r / 4.5, e = T.elevador;   // (o grupo já está no topo do palco)
       const nucleoMat = basica(0x66e6ff, 0.35, true);
@@ -260,20 +292,26 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const corrimao = new THREE.Mesh(new THREE.TorusGeometry(T.r + 0.1, 0.05, 6, 64), basica(0xb98cff, 0.9, true)); corrimao.rotation.x = Math.PI / 2; corrimao.position.y = A + 1.1; p.add(corrimao);
       // feixes no guarda-corpo da frente, pra pista
       for (const [i, a] of [-0.9, -0.3, 0.3, 0.9].entries()) feixe(p, Math.sin(a) * (T.r - 0.2), A + 1.15, Math.cos(a) * (T.r - 0.2), { len: 40, abre: 2.4, rumo: 0, incl: 1.2, fase: i * 1.7, cor: FESTA[(i + 1) % FESTA.length]!, varre: 0.6 });
-      // o ELEVADOR DE LUZ: anel no palco, coluna de luz até a cabine com anéis subindo, passarela até o guarda-corpo e o
-      // anel de descer lá em cima (posições no referencial da sala − o centro da torre)
+      // o ELEVADOR DE LUZ (só desce): coluna de luz da cabine até o palco com anéis descendo, a passarela do guarda-corpo
+      // e o anel de descer lá em cima (posições no referencial da sala − o centro da torre). Subir, só pelo buraco negro.
       const zS = e.sobe - T.z, zD = e.desce - T.z;
-      const anelBaixo = new THREE.Mesh(new THREE.RingGeometry(e.r - 0.15, e.r, 40), basica(0x9affd0, 0.9, true)); anelBaixo.rotation.x = -Math.PI / 2; anelBaixo.position.set(0, 0.03, zS); p.add(anelBaixo);
       const feixeElev = new THREE.Mesh(new THREE.CylinderGeometry(e.r * 0.9, e.r, A + 0.6, 24, 1, true), basica(0x9affd0, 0.16, true)); feixeElev.position.set(0, (A + 0.6) / 2, zS); p.add(feixeElev);
       const subindo: THREE.Mesh[] = [];
       for (let i = 0; i < 4; i++) { const r2 = new THREE.Mesh(new THREE.TorusGeometry(e.r * 0.95, 0.04, 6, 32), basica(0x9affd0, 0.8, true)); r2.rotation.x = Math.PI / 2; r2.position.set(0, (i / 4) * A, zS); p.add(r2); subindo.push(r2); }
       const passarela = new THREE.Mesh(new THREE.PlaneGeometry(1.6, Math.abs(zS) - T.r + 0.4), basica(0x9affd0, 0.25, true)); passarela.rotation.x = -Math.PI / 2; passarela.position.set(0, A + 0.02, (zS + -T.r) / 2); p.add(passarela);
       const anelCima = new THREE.Mesh(new THREE.RingGeometry(e.rDesce - 0.12, e.rDesce, 32), basica(0x9affd0, 0.9, true)); anelCima.rotation.x = -Math.PI / 2; anelCima.position.set(0, A + 0.03, zD); p.add(anelCima);
+      // a BOCA do par do dono, na cabine: aro quente + poço escuro + um aro girando — pisou (o dono) = atravessa pra nave
+      // (o buraco negro grande que pairava em cima do palco saiu: no lugar dele, o olho/a mandala do show)
+      const bx = BOCA_DJ.x, bz = BOCA_DJ.z - T.z;
+      const bocaAro = new THREE.Mesh(new THREE.TorusGeometry(BOCA_DJ.r, 0.06, 6, 40), basica(0xffb45a, 0.9, true)); bocaAro.rotation.x = Math.PI / 2; bocaAro.position.set(bx, A + 0.05, bz); p.add(bocaAro);
+      const bocaPoco = new THREE.Mesh(new THREE.CircleGeometry(BOCA_DJ.r - 0.05, 32), new THREE.MeshBasicMaterial({ color: 0x05030a, transparent: true, opacity: 0.9 })); bocaPoco.rotation.x = -Math.PI / 2; bocaPoco.position.set(bx, A + 0.03, bz); p.add(bocaPoco);
+      const bocaGiro = new THREE.Mesh(new THREE.RingGeometry(BOCA_DJ.r * 0.5, BOCA_DJ.r * 0.6, 32, 1, 0, Math.PI * 1.5), basica(0xff7a2c, 0.8, true)); bocaGiro.rotation.x = -Math.PI / 2; bocaGiro.position.set(bx, A + 0.04, bz); p.add(bocaGiro);
       anim.push((dt, t) => {
         const b = batida(); nucleoMat.opacity = 0.22 + 0.45 * b + 0.2 * pulso * ativo;
         aneis.forEach((an, i) => { (an.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.7 * Math.max(0, Math.sin(t * 3 - i * 0.9)) * (0.4 + 0.6 * b); });
-        subindo.forEach((r2) => { r2.position.y = (r2.position.y + dt * 3) % A; (r2.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - r2.position.y / A); });
-        (anelBaixo.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.3 * Math.sin(t * 2.5); (anelCima.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.3 * Math.sin(t * 2.5 + 1);
+        subindo.forEach((r2) => { r2.position.y = (r2.position.y - dt * 3 + A) % A; (r2.material as THREE.MeshBasicMaterial).opacity = 0.8 * (r2.position.y / A); });   // descendo
+        (anelCima.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.3 * Math.sin(t * 2.5 + 1);
+        (bocaAro.material as THREE.MeshBasicMaterial).opacity = 0.65 + 0.3 * Math.sin(t * 3); bocaGiro.rotation.z -= dt * 2;
       });
     },
     // CAIXA SUSPENSA: um LINE ARRAY pendurado no braço da treliça (cabos de aço até lá em cima) — 8 gabinetes curvando
@@ -296,8 +334,30 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       caixa(mira, W + 0.4, 0.25, D + 0.3, metal, 0, topo + 0.2, 0);
       for (const sx of [-1, 1]) caixa(mira, 0.05, TRELICA.alt - topo - 0.4, 0.05, metal, sx * (W / 2 - 0.2), (TRELICA.alt + topo) / 2 + 0.1, 0);
       const boca = new THREE.Object3D(); boca.position.set(0, (topo + y) / 2, D / 2 + 0.5); mira.add(boca); caixasSom.push(boca);   // de onde a música sai
+      // a ONDA (a que era da pista de LED): a cada batida, anéis de luz saem da boca da caixa e correm pela sala — num
+      // disco vertical na frente dela (o centro do evento é a mandala; o chão fica livre)
+      const ondaMat = new THREE.ShaderMaterial({
+        uniforms: { uT: { value: 0 }, uB: { value: 0 }, uOnda: { value: 40 }, uA: { value: 0 } },
+        vertexShader: `varying vec2 vP; void main() { vP = (uv - 0.5) * 2.0; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `uniform float uT, uB, uOnda, uA; varying vec2 vP;
+          vec3 pal(float k) { k = fract(k); return k < 0.2 ? vec3(0.4,0.9,1.0) : k < 0.4 ? vec3(0.73,0.55,1.0) : k < 0.6 ? vec3(1.0,0.37,0.82) : k < 0.8 ? vec3(0.42,1.0,0.6) : vec3(0.3,0.48,1.0); }
+          void main() {
+            float d = length(vP) * 18.0;
+            float onda = exp(-pow((d - uOnda) * 0.9, 2.0)) + 0.55 * exp(-pow((d - uOnda + 2.2) * 0.9, 2.0)) + 0.3 * exp(-pow((d - uOnda + 4.4) * 0.9, 2.0));
+            float v = onda * uA * (0.45 + 0.55 * uB) * smoothstep(18.0, 12.0, d);
+            vec3 col = pal(d * 0.04 + uT * 0.1) * v;
+            gl_FragColor = vec4(col, v);
+          }`,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      });
+      const onda = new THREE.Mesh(new THREE.PlaneGeometry(36, 36), ondaMat); onda.position.set(0, (topo + y) / 2, D / 2 + 0.6); onda.renderOrder = 3; mira.add(onda); onda.userData.semLote = true;
+      let vistaC = 0;
       const luzMat = luz.material as THREE.MeshBasicMaterial;
-      anim.push(() => { luzMat.opacity = 0.35 + 0.65 * batida(); mira.position.z = 0.02 * batida(); });
+      anim.push((dt, t) => {
+        luzMat.opacity = 0.35 + 0.65 * batida(); mira.position.z = 0.02 * batida();
+        const u = ondaMat.uniforms; u.uT!.value = t; u.uB!.value = energia; u.uA!.value = ativo;
+        if (batidas !== vistaC) { vistaC = batidas; u.uOnda!.value = 0; } else u.uOnda!.value += dt * 14;   // a onda nasce na boca a cada batida e corre pra fora
+      });
     },
     // TORRE DE SOM gigante no chão (a de antes, maior: 10 m): subs embaixo, 4 médios, corneta em cima; LEDs nas quinas
     // e um feixe no topo — a música sai das caixas SUSPENSAS; estas dão o peso visual do palco
@@ -405,43 +465,199 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       anim.push((_, t) => chamas.forEach((c, i) => { const k = 0.85 + 0.25 * Math.sin(t * (3.1 + i * 0.7) + i) + 0.2 * batida(); c.scale.set(1, k, 1); c.position.y = 0.12 + k / 2; c.rotation.y = t * 0.6 + i; }));
     },
     // PUFF: almofadão redondo, macio (esfera achatada) com o friso aceso
+    // PUFE grande (de largar o corpo): saco macio afundado + o encosto que sobe atrás (o −z), aro de luz no pé
+    // o TRONO de fluido (components/cyber/TronoFluido) e o NÚCLEO no meio da roda — um material de fluido pra todos
+    trono(p) { montarTrono(p, matsTrono(), { low: o.low }); },
+    nucleoFluido(p) { montarNucleoFluido(p, matsTrono(), { low: o.low }); },
+    pufe(p, m) {
+      const cor = new THREE.Color(m.cor ?? 0xb98cff), tecido = new THREE.MeshStandardMaterial({ color: cor.clone().multiplyScalar(0.28).add(new THREE.Color(0x1a1530)), roughness: 0.95, emissive: cor, emissiveIntensity: 0.08 });
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.72, 20, 12), tecido); corpo.scale.set(1, 0.42, 1); corpo.position.y = 0.26; p.add(corpo);
+      const encosto = new THREE.Mesh(new THREE.SphereGeometry(0.62, 18, 12), tecido); encosto.scale.set(1.02, 0.78, 0.5); encosto.position.set(0, 0.55, -0.42); encosto.rotation.x = -0.35; p.add(encosto);
+      const aro = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.02, 6, 40), basica(m.cor ?? 0xb98cff, 0.7, true)); aro.rotation.x = Math.PI / 2; aro.position.y = 0.06; p.add(aro);
+    },
+    // ESTANTE alta de livros: moldura escura, 5 prateleiras com livros (instanciados) e um friso de luz no alto
+    estante(p, m) {
+      const H = 4.2, W = m.larg, D = m.prof, mold = new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.5, metalness: 0.4, emissive: 0x0a1630, emissiveIntensity: 0.4 });
+      caixa(p, W, H, 0.08, mold, 0, H / 2, -D / 2 + 0.04);
+      for (const sx of [-1, 1]) caixa(p, 0.1, H, D, mold, sx * (W / 2 - 0.05), H / 2, 0);
+      const N = 5, livrosPor = o.low ? 10 : 22, livros = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.05 }), N * livrosPor);
+      const mx = new THREE.Matrix4(), q = new THREE.Quaternion(), cores = [0x2f4a7a, 0x6a3a5a, 0x3a6a5a, 0x7a5a2f, 0x4a3a7a, 0x2f6a7a], cor = new THREE.Color();
+      let k = 0, sem = Math.abs(m.x * 7 + m.z * 3);
+      const rnd = () => { sem = (sem * 9301 + 49297) % 233280; return sem / 233280; };
+      for (let i = 0; i < N; i++) {
+        const y0 = 0.1 + i * (H - 0.2) / N; caixa(p, W - 0.1, 0.05, D - 0.08, mold, 0, y0, 0);
+        let x = -W / 2 + 0.2;
+        for (let j = 0; j < livrosPor && x < W / 2 - 0.25; j++) {
+          const w = 0.06 + rnd() * 0.12, h = 0.45 + rnd() * 0.3; q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), rnd() < 0.1 ? 0.25 : 0);
+          livros.setMatrixAt(k, mx.compose(new THREE.Vector3(x + w / 2, y0 + 0.03 + h / 2, -0.05), q, new THREE.Vector3(w, h, D * 0.7)));
+          livros.setColorAt(k++, cor.setHex(cores[Math.floor(rnd() * cores.length)]!)); x += w + 0.015;
+        }
+      }
+      livros.count = k; livros.instanceMatrix.needsUpdate = true; if (livros.instanceColor) livros.instanceColor.needsUpdate = true; p.add(livros);
+      caixa(p, W, 0.04, 0.04, basica(0x7fb8ff, 0.85, true), 0, H + 0.02, D / 2 - 0.02);
+    },
+    // MESA DE LEITURA: tampo fino, luminária acesa e um livro holográfico aberto flutuando
+    mesaLeitura(p, m) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x141c2e, roughness: 0.4, metalness: 0.5, emissive: 0x0a1630, emissiveIntensity: 0.4 });
+      caixa(p, m.larg, 0.06, m.prof, mat, 0, 0.76, 0);
+      for (const sx of [-1, 1]) caixa(p, 0.06, 0.74, m.prof - 0.2, mat, sx * (m.larg / 2 - 0.15), 0.37, 0);
+      const haste = caixa(p, 0.04, 0.5, 0.04, mat, m.larg / 2 - 0.45, 1.04, -0.35); void haste;
+      const cupula = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.14, 16, 1, true), basica(m.cor ?? 0x7fb8ff, 0.8, true)); cupula.position.set(m.larg / 2 - 0.45, 1.3, -0.35); p.add(cupula);
+      const luz = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24), basica(m.cor ?? 0x7fb8ff, 0.18, true)); luz.rotation.x = -Math.PI / 2; luz.position.set(m.larg / 2 - 0.55, 0.8, -0.3); p.add(luz);
+      const livro = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.34), basica(0xd6e8ff, 0.55, true)); livro.position.set(-0.3, 1.0, 0); livro.rotation.x = -1.1; p.add(livro);
+      anim.push((_, t) => { livro.position.y = 1.0 + 0.04 * Math.sin(t * 1.3 + m.x); });
+    },
+    // PLANTA: em vaso (pequena) ou, larga, uma ÁRVORE DE LUZ (tronco fino + copa de cristal acesa)
+    planta(p, m) {
+      const vaso = new THREE.MeshStandardMaterial({ color: 0x16202e, roughness: 0.6, metalness: 0.3 });
+      const folha = new THREE.MeshStandardMaterial({ color: 0x1f5a3a, roughness: 0.7, emissive: 0x2fbf7a, emissiveIntensity: 0.35, flatShading: true });
+      if (m.larg >= 1.5) {
+        const tronco = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.22, 4.2, 8), vaso); tronco.position.y = 2.1; p.add(tronco);
+        const copa = new THREE.Mesh(new THREE.IcosahedronGeometry(1.6, 0), folha); copa.position.y = 5; copa.scale.set(1, 1.15, 1); p.add(copa);
+        const brilho = new THREE.Mesh(new THREE.IcosahedronGeometry(1.75, 0), basica(0x7dffb0, 0.16, true)); brilho.position.copy(copa.position); brilho.scale.copy(copa.scale); p.add(brilho);
+        anim.push((_, t) => { (brilho.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.06 * Math.sin(t * 0.7 + m.rot * 3); });
+      } else {
+        const v = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.32, 0.7, 14), vaso); v.position.y = 0.35; p.add(v);
+        for (let i = 0; i < 3; i++) { const f = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42 - i * 0.07, 0), folha); f.position.set((i - 1) * 0.16, 0.95 + i * 0.32, ((i * 7) % 3 - 1) * 0.1); p.add(f); }
+      }
+    },
+    // ESMERALDA de luz (o jardim — out/2026): um cristal verde lapidado (bipirâmide de 6 faces, alongada) pairando e
+    // girando devagar, com o miolo aceso; um feixe de luz verde cai dele até um anel no chão, "respirando" devagar
+    esmeralda(p, m) {
+      const grande = m.larg >= 2.5, h = grande ? 3.4 : 1.7, r = grande ? 1.15 : 0.58, alt = grande ? 5.2 : 2.7, cor = m.cor ?? 0x2dff8f;
+      const cristal = new THREE.Group(); cristal.position.y = alt; p.add(cristal);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x0b7a40, emissive: cor, emissiveIntensity: 0.75, roughness: 0.12, metalness: 0.25, transparent: true, opacity: 0.86, flatShading: true });
+      const cima = new THREE.Mesh(new THREE.CylinderGeometry(0, r, h * 0.62, 6), mat); cima.position.y = h * 0.31; cristal.add(cima);
+      const baixo = new THREE.Mesh(new THREE.CylinderGeometry(r, 0, h * 0.38, 6), mat); baixo.position.y = -h * 0.19; cristal.add(baixo);
+      const miolo = new THREE.Mesh(new THREE.OctahedronGeometry(r * 0.45, 0), basica(0xc8ffe2, 0.9, true)); miolo.scale.y = 1.8; cristal.add(miolo);
+      const feixe = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.35, r * 2.4, alt, o.low ? 10 : 20, 1, true), basica(cor, 0.1, true)); feixe.position.y = alt / 2; feixe.renderOrder = 3; p.add(feixe);
+      const anel = new THREE.Mesh(new THREE.RingGeometry(r * 1.9, r * 2.4, o.low ? 24 : 48), basica(cor, 0.4, true)); anel.rotation.x = -Math.PI / 2; anel.position.y = 0.04; p.add(anel);
+      const fase = m.x * 0.37 + m.z * 0.21;
+      anim.push((dt, t) => {
+        const resp = 0.5 + 0.5 * Math.sin(t * 0.55 + fase);   // a "respiração" (~11 s)
+        cristal.rotation.y += dt * 0.35; cristal.position.y = alt + Math.sin(t * 0.8 + fase) * 0.18;
+        mat.emissiveIntensity = 0.55 + 0.5 * resp; (feixe.material as THREE.MeshBasicMaterial).opacity = 0.06 + 0.08 * resp; (anel.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.3 * resp;
+      });
+    },
+    // ESPELHO D'ÁGUA: borda de pedra escura, água quase parada (reflexo frio) e pontos de luz flutuando em cima
+    espelhoAgua(p, m) {
+      const R = m.larg / 2, borda = new THREE.Mesh(new THREE.TorusGeometry(R, 0.3, 8, 64), new THREE.MeshStandardMaterial({ color: 0x1a2430, roughness: 0.6, metalness: 0.3 })); borda.rotation.x = Math.PI / 2; borda.position.y = 0.2; p.add(borda);
+      const agua = new THREE.Mesh(new THREE.CircleGeometry(R - 0.1, 48), new THREE.MeshStandardMaterial({ color: 0x0a2a3a, roughness: 0.05, metalness: 0.6, emissive: m.cor ?? 0x7dffb0, emissiveIntensity: 0.12, transparent: true, opacity: 0.9 })); agua.rotation.x = -Math.PI / 2; agua.position.y = 0.15; p.add(agua);
+      const anel = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.3, 40), basica(m.cor ?? 0x7dffb0, 0.5, true)); anel.rotation.x = -Math.PI / 2; anel.position.y = 0.17; p.add(anel);
+      // os pontos de luz: UMA malha instanciada (1 draw call; eram 16), cor alternada por instância
+      const NL = o.low ? 8 : 16, luzes = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 8, 6), basica(0xffffff, 0.9, true), NL);
+      luzes.frustumCulled = false; luzes.instanceMatrix.setUsage(THREE.DynamicDrawUsage); p.add(luzes);
+      const cl = new THREE.Color(); for (let i = 0; i < NL; i++) luzes.setColorAt(i, cl.setHex(i % 2 ? 0x7dffb0 : 0xd4ffe6));
+      const mL = new THREE.Matrix4(), cada = Array.from({ length: NL }, (_, i) => ({ a: (i / NL) * Math.PI * 2, r: 1.5 + (i % 4) * 1.2 }));
+      anim.push((dt, t) => {
+        const k = (t * 0.25) % 1; anel.scale.setScalar(1 + k * (R - 1)); (anel.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - k);   // uma ondinha saindo do meio
+        cada.forEach((L, i) => { const a = L.a + t * 0.08; luzes.setMatrixAt(i, mL.makeTranslation(Math.cos(a) * L.r, 0.6 + 0.25 * Math.sin(t * 0.9 + L.a * 3), Math.sin(a) * L.r)); });
+        luzes.instanceMatrix.needsUpdate = true;
+      });
+    },
+    // TORRE DE CARGA (garagem): coluna escura com anéis laranja subindo — a "energia" das motos
+    torreCarga(p, m) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x14100c, roughness: 0.4, metalness: 0.7, emissive: 0x2a1406, emissiveIntensity: 0.6 });
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.7, 6, 12), mat); col.position.y = 3; p.add(col);
+      const topo = new THREE.Mesh(new THREE.OctahedronGeometry(0.75), basica(0xffb46b, 0.9, true)); topo.position.y = 6.8; topo.scale.y = 1.6; p.add(topo);
+      const aneis = [0, 1, 2].map((k) => { const a = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.05, 6, 32), basica(0xffb46b, 0.6, true)); a.rotation.x = Math.PI / 2; p.add(a); return { a, k }; });
+      anim.push((_, t) => { for (const { a, k } of aneis) { const u = (t * 0.35 + k / 3) % 1; a.position.y = 0.4 + u * 5.6; (a.material as THREE.MeshBasicMaterial).opacity = 0.7 * Math.sin(Math.PI * u); } topo.rotation.y = t * 0.6; });
+    },
+    // CAIXA DE SOM discreta: coluna fina escura, tela de tecido e 2 cones com um aro aceso que respira com a música
+    caixaMinimal(p, m) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x10141e, roughness: 0.55, metalness: 0.4 });
+      caixa(p, m.larg, 2.6, m.prof, mat, 0, 1.3, 0);
+      const aros = [0.85, 1.85].map((y) => { const a = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.27, 32), basica(tema(m).brilho, 0.5, true)); a.position.set(0, y, m.prof / 2 + 0.01); p.add(a); return a; });
+      anim.push((_, t) => { const k = 0.32 + 0.18 * Math.sin(t * 1.1 + m.x); for (const a of aros) (a.material as THREE.MeshBasicMaterial).opacity = k; });
+      ambiente.push({ sala: salaAtual, obj: p });
+    },
     puff(p, m) {
       const puff = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 10), new THREE.MeshStandardMaterial({ color: 0x3b2470, roughness: 0.9, emissive: m.cor ?? 0x1a0f3a, emissiveIntensity: 0.18 })); puff.scale.set(1, 0.55, 1); puff.position.y = 0.28; p.add(puff);
       const f = new THREE.Mesh(new THREE.TorusGeometry(0.47, 0.02, 6, 32), basica(m.cor ?? 0xb98cff, 0.75, true)); f.rotation.x = Math.PI / 2; f.position.y = 0.12; p.add(f);
     },
-    // PISTA de LED: ladrilhos de 1 m com cores da festa, uma onda saindo do centro a cada batida; o CRISTAL-ESPELHO gira em cima
-    pista(p, m) {
-      const mat = new THREE.ShaderMaterial({
-        uniforms: { uT: { value: 0 }, uB: { value: 0 }, uOnda: { value: 9 }, uA: { value: 0 }, uTam: { value: new THREE.Vector2(m.larg, m.prof) } },
-        vertexShader: `varying vec2 vP; uniform vec2 uTam; void main() { vP = (uv - 0.5) * uTam; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-        fragmentShader: `uniform float uT; uniform float uB; uniform float uOnda; uniform float uA; varying vec2 vP;
-          vec3 pal(float k) { k = fract(k); return k < 0.2 ? vec3(0.4,0.9,1.0) : k < 0.4 ? vec3(0.73,0.55,1.0) : k < 0.6 ? vec3(1.0,0.37,0.82) : k < 0.8 ? vec3(0.42,1.0,0.6) : vec3(0.3,0.48,1.0); }
-          void main() {
-            vec2 c = floor(vP), f = fract(vP);
-            float h = fract(sin(dot(c, vec2(12.9898, 78.233))) * 43758.5453);
-            float junta = smoothstep(0.0, 0.06, f.x) * smoothstep(0.0, 0.06, f.y) * smoothstep(1.0, 0.94, f.x) * smoothstep(1.0, 0.94, f.y);
-            float d = length(c + 0.5), onda = exp(-pow((d - uOnda) * 1.1, 2.0));
-            float pisca = 0.5 + 0.5 * sin(uT * (0.8 + h * 1.6) + h * 30.0);
-            float v = mix(0.10 + 0.08 * pisca, 0.18 + 0.55 * pisca * uB + 0.9 * onda * uA, uA);
-            vec3 col = pal(h + floor(uT * 0.35) * 0.37) * v * junta + vec3(0.02, 0.03, 0.08);
-            gl_FragColor = vec4(col, 1.0);
-          }`,
-      });
-      const piso = new THREE.Mesh(new THREE.PlaneGeometry(m.larg, m.prof), mat); piso.rotation.x = -Math.PI / 2; piso.position.y = 0.025; p.add(piso); alvos.push(piso);
-      // o cristal-espelho (bola de espelhos facetada) + o cabo até o teto
-      const geoBola = new THREE.IcosahedronGeometry(1.6, 1); geoBola.computeVertexNormals();   // não indexada → normal por face (facetada)
-      const bola = new THREE.Mesh(geoBola, new THREE.MeshStandardMaterial({ color: 0xcfe8ff, emissive: 0x223a66, emissiveIntensity: 0.8, roughness: 0.1, metalness: 0.9 }));
-      const bolaG = new THREE.Group(); bolaG.position.y = 13; bolaG.add(bola); p.add(bolaG);   // a céu aberto: flutua (sem cabo)
-      const facetas = new THREE.Mesh(new THREE.IcosahedronGeometry(1.66, 1), new THREE.MeshBasicMaterial({ color: 0x66e6ff, wireframe: true, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false })); bolaG.add(facetas);
-      const brilho = new THREE.Mesh(new THREE.SphereGeometry(3, 16, 12), basica(0xb98cff, 0.12, true)); bolaG.add(brilho);
-      let vista = 0;
-      anim.push((dt, t) => {
-        const u = mat.uniforms; u.uT!.value = calmo ? t * 0.3 : t; u.uB!.value = energia; u.uA!.value = ativo;
-        if (batidas !== vista) { vista = batidas; u.uOnda!.value = 0; } else u.uOnda!.value += dt * 9;   // a onda nasce no centro a cada batida e corre pra fora
-        bolaG.rotation.y += dt * (0.3 + 0.9 * ativo); bolaG.position.y = 13 + 0.4 * Math.sin(t * 0.6); (brilho.material as THREE.MeshBasicMaterial).opacity = 0.06 + 0.3 * batida();
-      });
-    },
   };
+
+  /** o LOUNGE EM DOIS NÍVEIS (lib/cyber/templo): o DECK da festa (laje alta atrás de `zFrente`, com guarda-corpo de
+   *  vidro na frente), a RAMPA larga do meio, as CALÇADAS do pátio (a central, da porta até a rampa, com postes de luz;
+   *  e a da frente do deck) e o OLHO holográfico em cima do DJ */
+  function doisNiveis(g: THREE.Group, s: { r: number }) {
+    const R = s.r - 0.35, zf = DECK.zFrente, h = DECK.h + 0.16, xf = Math.sqrt(R * R - zf * zf), fr = Math.atan2(-zf, xf);
+    // o DECK: o disco cortado na frente, extrudado pra cima (forma no plano: y = −z da sala)
+    const sh = new THREE.Shape(); sh.moveTo(-xf, -zf); sh.lineTo(xf, -zf); sh.absarc(0, 0, R, fr, Math.PI - fr, false);
+    const dg = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false, curveSegments: o.low ? 32 : 72 }); dg.rotateX(-Math.PI / 2);
+    const topoMat = new THREE.MeshStandardMaterial({ color: 0x170b2c, emissive: 0x1a0d36, emissiveIntensity: 0.7, roughness: 0.35, metalness: 0.45 });
+    const ladoMat = new THREE.MeshStandardMaterial({ color: 0x0b0f1e, emissive: 0x0c1430, emissiveIntensity: 0.5, roughness: 0.5, metalness: 0.6 });
+    const deck = new THREE.Mesh(dg, [topoMat, ladoMat]); g.add(deck); alvos.push(deck);
+    // o rejunte de luz do deck (anéis concêntricos fininhos em volta da pista, como um palco de show)
+    for (const rr of [24, 36, 48]) { const a = new THREE.Mesh(new THREE.RingGeometry(rr - 0.06, rr + 0.06, o.low ? 48 : 96, 1, 0.25, Math.PI - 0.5), basica(0x7a5aff, 0.35, true)); a.rotation.x = -Math.PI / 2; a.position.set(0, h + 0.01, -12); g.add(a); }
+    // a frente do deck: faixa de LED na quina, frisos verticais no espelho e o guarda-corpo de vidro (menos na rampa)
+    const { meia, len } = DECK.rampa;
+    for (const sx of [-1, 1]) {
+      const w = xf - meia, cx = sx * (meia + w / 2);
+      caixa(g, w, 0.07, 0.07, basica(0xb98cff, 0.95, true), cx, h - 0.04, zf + 0.04);
+      caixa(g, w, 1.1, 0.06, o.paredeMat, cx, h + 0.55, zf + 0.1);
+      caixa(g, w, 0.05, 0.08, basica(0x66e6ff, 0.9, true), cx, h + 1.1, zf + 0.1);
+      for (let x = meia + 1.5; x < xf - 1; x += 3) caixa(g, 0.06, h - 0.4, 0.04, basica(FESTA[Math.floor(x / 3) % FESTA.length]!, 0.55, true), sx * x, h / 2, zf + 0.03);
+    }
+    // a RAMPA: a laje inclinada, os degraus de luz e os corrimãos de vidro dos lados
+    const L = Math.hypot(len, DECK.h), ang = Math.atan2(DECK.h, len), rampa = new THREE.Group(); rampa.position.set(0, 0.16 + DECK.h / 2, zf + len / 2); rampa.rotation.x = ang; g.add(rampa);
+    const laje = new THREE.Mesh(new THREE.BoxGeometry(meia * 2, 0.3, L), topoMat); laje.position.y = -0.15; rampa.add(laje); alvos.push(laje);
+    for (let k = 1; k < 12; k++) caixa(rampa, meia * 2 - 0.4, 0.02, 0.06, basica(0x9fe8ff, 0.5, true), 0, 0.01, -L / 2 + (k * L) / 12);
+    for (const sx of [-1, 1]) { caixa(rampa, 0.06, 1.0, L, o.paredeMat, sx * (meia + 0.3), 0.5, 0); caixa(rampa, 0.08, 0.06, L, basica(0x66e6ff, 0.9, true), sx * (meia + 0.3), 1.0, 0); }
+    // a base da rampa (a cunha embaixo), escura
+    { const cg = new THREE.BufferGeometry(), z0 = zf, z1 = zf + len, y1 = h, mx = meia;
+      const v = [-mx, 0.16, z0, mx, 0.16, z0, mx, y1, z0, -mx, y1, z0, -mx, 0.16, z1, mx, 0.16, z1];
+      cg.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); cg.setIndex([0, 2, 1, 0, 3, 2, 0, 4, 3, 1, 2, 5, 3, 4, 5, 3, 5, 2]); cg.computeVertexNormals();
+      g.add(new THREE.Mesh(cg, ladoMat)); }
+    // as CALÇADAS do pátio: a central (da porta até o pé da rampa) e a da frente do deck; postes de luz na central
+    const calcMat = new THREE.MeshStandardMaterial({ color: 0x2a2440, emissive: 0x241a44, emissiveIntensity: 0.6, roughness: 0.6, metalness: 0.2 });
+    const cm = PATIO.calcadaMeia, cz0 = zf + len, cz1 = s.r - 0.5;
+    const calc = new THREE.Mesh(new THREE.BoxGeometry(cm * 2, 0.06, cz1 - cz0), calcMat); calc.position.set(0, 0.19, (cz0 + cz1) / 2); g.add(calc);
+    for (const sx of [-1, 1]) caixa(g, 0.1, 0.03, cz1 - cz0, basica(0xb98cff, 0.85, true), sx * cm, 0.23, (cz0 + cz1) / 2);
+    const frente = new THREE.Mesh(new THREE.BoxGeometry(2 * Math.sqrt(R * R - (zf + 4) ** 2), 0.06, 4), calcMat); frente.position.set(0, 0.19, zf + 2); g.add(frente);
+    const posteMat = new THREE.MeshStandardMaterial({ color: 0x1c2438, roughness: 0.35, metalness: 0.85 });
+    for (let z = cz0 + 4; z < cz1 - 2; z += 9) for (const sx of [-1, 1]) {
+      const x = sx * (cm + 0.8); caixa(g, 0.16, 4.2, 0.16, posteMat, x, 2.1, z);
+      caixa(g, 1.1, 0.08, 0.16, posteMat, x - sx * 0.5, 4.2, z);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), basica(0xffe2b0, 1)); lamp.position.set(x - sx * 1.0, 4.05, z); g.add(lamp);
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), basica(0xffc87a, 0.18, true)); halo.position.copy(lamp.position); g.add(halo);
+    }
+    // o ELEVADOR DE LUZ da GARAGEM (as motos ficam numa plataforma 25 m abaixo, do lado esquerdo — lib/cyber/templo):
+    // a coluna do pé (na plataforma) até a altura do pátio, anéis subindo, o anel de embarque embaixo, o de descer no
+    // pátio e a passarela de luz entre eles (a viagem desliza por ela pra dentro do lounge)
+    { const G = GARAGEM_LOUNGE, e = G.elevador, alt = G.desce + 0.6, aneisG: THREE.Mesh[] = [];
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(e.r + 0.3, e.r + 0.5, alt, 24, 1, true), basica(0x66e6ff, 0.16, true)); col.position.set(e.pe.x, -G.desce + alt / 2, e.pe.z); g.add(col);
+      const nucleo = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, alt, 8, 1, true), basica(0xd8f6ff, 0.5, true)); nucleo.position.copy(col.position); g.add(nucleo);
+      for (let i = 0; i < 5; i++) { const an = new THREE.Mesh(new THREE.TorusGeometry(e.r + 0.35, 0.06, 6, 40), basica(0xb98cff, 0.8, true)); an.rotation.x = Math.PI / 2; an.position.set(e.pe.x, -G.desce, e.pe.z); g.add(an); aneisG.push(an); }
+      for (const [p, y] of [[e.pe, -G.desce + 0.05], [e.topo, 0.22]] as const) {
+        const an = new THREE.Mesh(new THREE.TorusGeometry(e.r, 0.08, 6, 40), basica(0x66e6ff, 0.9, true)); an.rotation.x = Math.PI / 2; an.position.set(p.x, y, p.z); g.add(an);
+        const disco = new THREE.Mesh(new THREE.CircleGeometry(e.r - 0.1, 32), basica(0x66e6ff, 0.18, true)); disco.rotation.x = -Math.PI / 2; disco.position.set(p.x, y + 0.01, p.z); g.add(disco);
+      }
+      const pass = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(e.topo.x - e.pe.x), 0.08, 2.2), basica(0x9fe8ff, 0.35, true)); pass.position.set((e.pe.x + e.topo.x) / 2, 0.35, e.pe.z); g.add(pass);
+      for (const n of [col, nucleo, pass, ...aneisG]) n.userData.semLote = true;
+      anim.push((_, t) => { for (const [i, an] of aneisG.entries()) an.position.y = -G.desce + ((t * 2.4 + (i * alt) / 5) % alt); });
+    }
+    // o OLHO em cima do DJ (acima do buraco negro), inclinado pra pista
+    const olho = criarOlho({ low: o.low, tam: 46 }); olho.group.position.set(0, DECK.h + 60, -44); olho.group.rotation.x = 0.55; olho.group.visible = false; g.add(olho.group);
+    olho.group.traverse((n) => { n.userData.semLote = true; });
+    // a MANDALA do show (no mesmo centro do olho), as serpentes e os tentáculos; e a NÉVOA do lounge com os trovões leves
+    const mandala = criarMandala({ low: o.low, estrela: o.estrela, tam: 60 }); mandala.group.position.copy(olho.group.position); mandala.group.rotation.x = 0.55; g.add(mandala.group);
+    const nevoa = criarTempestade({ low: o.low, yBase: DECK.h + 48, yTopo: DECK.h + 80, raioMax: 70, alvoPonta: new THREE.Vector3(0, DECK.h + 60, -44), cor: new THREE.Color(0.22, 0.13, 0.32), semAbismo: true, densidade: 0.4, nuvens: o.low ? 18 : 36 });   // (menos nuvens: não pesar)
+    nevoa.group.position.set(0, 0, 0); nevoa.group.traverse((n) => { n.userData.semLote = true; }); g.add(nevoa.group); nevoa.definir(0, false);
+    showLounge = { olho, mandala, nevoa, grupo: g };
+    anim.push((dt, t) => {
+      const tt = calmo ? t * 0.3 : t, b = batida();
+      if (olhoRitual > 0.001) { tRitual += Math.min(0.1, dt); estadoShow = estadoDoRitual(tRitual, musicaShow, olhoRitual); } else tRitual = 0;   // (as formas e os sigilos giram com o ritual ligado)
+      if (olho.group.visible) {   // (no 3º modo do show o olho nasce crescendo, no lugar da mandala)
+        olho.group.scale.setScalar(Math.max(0.001, olhoRitual > 0.001 ? 1 : estadoShow.olho));
+        olho.atualizar(tt, b, Math.max(ativo, olhoRitual, estadoShow.olho), { anel: estadoShow.anelSigilos, iris: estadoShow.olho > 0.5 ? estadoShow.sigilo : -1 });
+      }
+      // a complexidade PULSA no ritmo (o grave acrescenta camadas por um instante)
+      // (no ritual a mandala FICA junto com o olho — o show inteiro; no show normal ela dá lugar ao olho)
+      mandala.definir({ ...estadoShow, complexidade: Math.min(0.72, estadoShow.complexidade + 0.18 * b), nascimento: olhoRitual > 0.001 ? estadoShow.nascimento : estadoShow.nascimento * (1 - estadoShow.olho) }, b, tt);
+      { const c = nevoa.atualizar(t); if (c && fumacaRitual > 0.3 && o.aoTrovao) { nevoa.group.updateMatrixWorld(); o.aoTrovao(c.clone().applyMatrix4(nevoa.group.matrixWorld)); } }   // o raio do RITUAL troveja (os do show, o engine toca no compasso)
+    });
+  }
 
   for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) {
     const s = CIDADE.salas[nome], tema = TEMA[nome], porta = s.porta ?? CIDADE.salaParede.porta, ALT = tema.alt;
@@ -451,9 +667,13 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     piso.position.y = 0.08; g.add(piso); alvos.push(piso);
     const friso = new THREE.Mesh(new THREE.RingGeometry(s.r - 0.32, s.r - 0.18, 64), basica(tema.brilho, 0.7, true)); friso.rotation.x = -Math.PI / 2; friso.position.y = 0.17; g.add(friso);
     // parede de vidro com a PORTA em +z local (no CylinderGeometry: x = r·sen θ, z = r·cos θ → +z é θ = 0)
-    const parede = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r, ALT, o.low ? 32 : 48, 1, true, porta, Math.PI * 2 - 2 * porta), o.paredeMat); parede.position.y = ALT / 2; g.add(parede);
-    const aro = new THREE.TorusGeometry(s.r, 0.09, 6, 64, Math.PI * 2 - 2 * porta); aro.rotateX(Math.PI / 2); aro.rotateY(-(Math.PI / 2 + porta));
-    for (const y of [ALT, 0.25]) { const m = new THREE.Mesh(aro, basica(tema.brilho, 0.8, true)); m.position.y = y; g.add(m); }
+    // (o LOUNGE tem também a SAÍDA pra escadaria do templo, à direita — lib/cyber/templo)
+    const arcos: [number, number][] = nome === "lounge" ? (() => { const sd = saidaDoLounge(s.r), th = Math.PI / 2 - sd.ang; return [[porta, th - sd.meia], [th + sd.meia, Math.PI * 2 - porta]]; })() : [[porta, Math.PI * 2 - porta]];
+    const segP = o.low ? 32 : nome === "lounge" ? 96 : 48;
+    for (const [a0, a1] of arcos) {
+      const parede = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r, ALT, segP, 1, true, a0, a1 - a0), o.paredeMat); parede.position.y = ALT / 2; g.add(parede);
+      for (const y of [ALT, 0.25]) { const m = new THREE.Mesh(new THREE.CylinderGeometry(s.r + 0.02, s.r + 0.02, 0.16, segP, 1, true, a0, a1 - a0), basica(tema.brilho, 0.8, true)); m.position.y = y; g.add(m); }
+    }
     // portal da porta: 2 colunas + verga (no clube a céu aberto, um PÓRTICO alto na chegada da escada)
     const pz = Math.cos(porta) * s.r, px = Math.sin(porta) * s.r, colMat = new THREE.MeshStandardMaterial({ color: 0x0c1a30, emissive: tema.brilho, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.4 });
     const AP = tema.aberto ? 9 : ALT + 0.5;
@@ -463,15 +683,36 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
       const teto = new THREE.Mesh(new THREE.SphereGeometry(s.r, o.low ? 20 : 32, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x0a1830, emissive: tema.brilho, emissiveIntensity: 0.12, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false, roughness: 0.2 }));
       teto.scale.y = 0.32; teto.position.y = ALT; g.add(teto);
     }
-    // placa com o nome (sobre a porta)
-    const placa = new THREE.Sprite(new THREE.SpriteMaterial({ map: tela(512, 112, (c, w, h) => { c.fillStyle = "rgba(10,8,24,.72)"; c.beginPath(); c.roundRect(4, 4, w - 8, h - 8, 50); c.fill(); c.strokeStyle = tema.cor; c.lineWidth = 4; c.stroke(); c.fillStyle = tema.cor; c.font = "800 52px system-ui,sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(tema.titulo, w / 2, h / 2 + 2); }), transparent: true, depthWrite: false }));
-    placa.scale.set(tema.aberto ? 12.8 : 6.4, tema.aberto ? 2.8 : 1.4, 1); placa.position.set(0, AP + (tema.aberto ? 2.2 : 1.5), pz); g.add(placa);
+    if (nome === "lounge") doisNiveis(g, s);
     // móveis (`y` = elevação própria, ex.: a mesa do DJ em cima do palco; senão, no piso da sala)
+    salaAtual = nome;
     for (const m of MOVEIS[nome]) { const p = new THREE.Group(); p.position.set(m.x, m.y ?? 0.16, m.z); p.rotation.y = m.rot; g.add(p); MOVEL[m.tipo]?.(p, m, tema); }
+    // tudo que está EM CIMA do piso num grupo próprio: quem está abaixo da plataforma não enxerga (components/cyber/oclusaoPisos)
+    // — e os lotes ficam dentro dele (`limite`), senão se misturariam com o resto da cidade
+    const acima = new THREE.Group(); acima.name = `sala-${nome}-acima`; acima.userData.lote = "limite";
+    for (const c of [...g.children]) if (c !== piso) acima.add(c);
+    g.add(acima); g.userData.lote = "limite";
+    plataformas.push({ acima, r: s.r + 0.2, topo: 0.16 });
   }
   return {
-    alvos, tv: tvTela, caixas: caixasSom, tocaDiscos,
+    plataformas,
+    alvos, tv: tvTela, caixas: caixasSom, tocaDiscos, ambiente,
     somTocando(on, nivel = 0) { tocando = on; nivelAlvo = on ? Math.max(0, Math.min(1, nivel)) : 0; },
+    show(e, ritual, olhoR = ritual) {
+      if (!showLounge) return;
+      const noRitual = olhoR > 0.001; fumacaRitual = ritual; olhoRitual = olhoR; musicaShow = e;
+      // no RITUAL: o show INTEIRO (lib/cyber/showLounge `estadoDoRitual`) — o OLHO no centro com o anel dos sigilos
+      // angelicais, a mandala/caleidoscópio, as serpentes, os tentáculos e o DNA, com ou sem música (o anim atualiza)
+      estadoShow = noRitual ? estadoDoRitual(tRitual, e, olhoR) : e;
+      showLounge.olho.group.visible = noRitual || e.olho > 0.02;   // (o 3º modo do show: o olho, com os sigilos)
+      showLounge.nevoa.definir(Math.max(e.nevoa, ritual), e.nivel > 0 || ritual > 0.4);   // no RITUAL, a névoa do lounge é a fumaça do topo dele (com trovões)
+    },
+    batidas: () => batidas, pulso: () => pulso * ativo,
+    raioNoLounge(vel = 1, alvoMundo) {
+      if (!showLounge) return;
+      if (!alvoMundo) { showLounge.nevoa.raioAgora(undefined, vel); return; }
+      showLounge.nevoa.group.updateMatrixWorld(); showLounge.nevoa.raioAgora(showLounge.nevoa.group.worldToLocal(alvoMundo.clone()), vel);
+    },
     mostrarRecado(texto) {
       if (!recadoFaixa) return;
       recadoFaixa.visible = !!texto; if (!texto) return;

@@ -33,6 +33,7 @@ import {
   type DestaqueMedido,
 } from "@/lib/magazine/destaque";
 import "katex/dist/katex.min.css";
+import { temMatematica } from "@/lib/chat/matematica";
 import {
   montarLayout, obstaculoCapitular, topoDaLinha, baselineNaLinha,
   type Obstaculo, type Resultado, type Metricas,
@@ -69,6 +70,10 @@ export function corpoDaResposta(a: StructuredAnswer | undefined): string {
 export function podeVirarRevista(a: StructuredAnswer | undefined, temArtefato: boolean): boolean {
   const corpo = corpoDaResposta(a);
   if (!corpo) return false;
+  // a revista desenha o corpo em CANVAS: fórmula LaTeX e ```grafico só existem no ChatMarkdown
+  if (temMatematica(corpo)) return false;
+  // link clicável (lista de livros, fontes) só existe no ChatMarkdown — o canvas desenha texto puro
+  if (a?.livros?.length || /\[[^\]]+\]\(https?:\/\//.test(corpo)) return false;
   const palavras = contarPalavras(corpo);
   return palavras >= (temArtefato ? MIN_PALAVRAS_COM_ARTEFATO : MIN_PALAVRAS_REVISTA);
 }

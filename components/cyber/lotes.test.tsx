@@ -14,7 +14,7 @@ describe("lotes estáticos (o StaticBatch do CS Brasil)", () => {
     raiz.position.set(10, 3, 7); raiz.rotation.y = 0.7;
     const antes = pos(raiz);
     const r = fundirEstaticos(raiz);
-    expect(r).toEqual({ antes: 5, lotes: 1 });
+    expect(r).toMatchObject({ antes: 5, lotes: 1 });
     expect(malhas(raiz)).toHaveLength(1);
     expect(pos(raiz)).toEqual(antes);
   });
@@ -64,12 +64,51 @@ describe("lotes estáticos (o StaticBatch do CS Brasil)", () => {
     expect(raiz.children).toHaveLength(2);   // 1 lote de malhas + 1 lote de linhas
     expect(raiz.children.some((n) => (n as THREE.LineSegments).isLineSegments)).toBe(true);
   });
-  it("TETO de draw calls: a moto (8 no mapa) cabe em 45 depois do lote — eram 62", () => {
+  it("TETO de draw calls: a moto (8 no mapa) cabe em 45 depois do lote (com os efeitos de calor) — eram 62", () => {
     const draws = (r: THREE.Object3D) => { let n = 0; r.traverse((o) => { const x = o as THREE.Mesh; if (x.isMesh || (o as THREE.Line).isLine || (o as THREE.Points).isPoints || (o as THREE.Sprite).isSprite) n += Array.isArray(x.material) ? x.material.length : 1; }); return n; };
     const h = criarMoto({ cor: "#66e6ff", low: false }), antes = draws(h.group);
     fundirEstaticos(h.group, { passo: (k, t) => h.atualizar({ dt: 1 / 30, t, voando: k % 2 === 0, vel: (k % 4) / 3, curva: Math.sin(t), vy: Math.cos(t) * 5, boost: k % 3 === 0 ? 1 : 0, seta: (k % 3) - 1 }), manter: h.alvos });
     expect(antes).toBeGreaterThan(55);
     expect(draws(h.group)).toBeLessThanOrEqual(45);
     for (const a of h.alvos) expect(a.parent).not.toBeNull();   // o clique (montar) continua achando a moto
+  });
+  it("geometria com ATRIBUTO PRÓPRIO (shader das veias) fica de fora — e diz o porquê", () => {
+    const raiz = new THREE.Group(), mat = new THREE.MeshBasicMaterial();
+    const veia = caixa(mat, 0); veia.geometry.setAttribute("aFluxo", new THREE.Float32BufferAttribute(new Float32Array(veia.geometry.attributes.position!.count), 1));
+    raiz.add(veia, caixa(mat, 2), caixa(mat, 4));
+    fundirEstaticos(raiz);
+    expect(veia.parent).toBe(raiz);
+    expect(veia.geometry.attributes.aFluxo).toBeDefined();
+    expect(veia.userData.foraDoLote).toBe("atributo-proprio");
+    expect(malhas(raiz)).toHaveLength(2);   // a veia + 1 lote com as outras 2
+  });
+  it("materiais com shader REMENDADO (onBeforeCompile próprio) não viram um só — o remendo pode ser diferente", () => {
+    const raiz = new THREE.Group();
+    const remendo = (k: number) => { const m = new THREE.MeshBasicMaterial({ color: 0xffffff }); m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("void main() {", `void main() { float k = ${k}.0;`); }; return m; };
+    const a = remendo(1), b = remendo(2);
+    raiz.add(caixa(a, 0), caixa(a, 2), caixa(b, 4), caixa(b, 6));
+    fundirEstaticos(raiz);
+    const ms = malhas(raiz);
+    expect(ms).toHaveLength(2);   // o MESMO objeto ainda junta (2 lotes), mas a e b nunca se misturam
+    expect(new Set(ms.map((m) => m.material))).toEqual(new Set([a, b]));
+  });
+  it("CONGELA o que ficou parado (matriz local não é mais recalculada); o que se mexe, a raiz e os `manter` seguem vivos", () => {
+    const raiz = new THREE.Group(), mat = new THREE.MeshBasicMaterial(), parado = new THREE.Group(), gira = new THREE.Group(), alvo = caixa(mat, 9);
+    parado.add(new THREE.InstancedMesh(new THREE.BoxGeometry(), mat, 2)); gira.add(caixa(mat, 0)); raiz.add(parado, gira, alvo);
+    const r = fundirEstaticos(raiz, { passo: (_, t) => { gira.rotation.y = t; }, manter: [alvo] });
+    expect(r.congelados).toBeGreaterThan(0);
+    expect(parado.matrixAutoUpdate).toBe(false);
+    expect(parado.children[0]!.matrixAutoUpdate).toBe(false);
+    expect(gira.matrixAutoUpdate).toBe(true);
+    expect(alvo.matrixAutoUpdate).toBe(true);
+    expect(raiz.matrixAutoUpdate).toBe(true);
+    // a matriz do MUNDO continua seguindo o pai (a ilha que boia)
+    raiz.position.y = 5; raiz.updateMatrixWorld();
+    expect(new THREE.Vector3().setFromMatrixPosition(parado.matrixWorld).y).toBeCloseTo(5, 6);
+  });
+  it("congelar: false deixa tudo como estava", () => {
+    const raiz = new THREE.Group(), g = new THREE.Group(); raiz.add(g); g.add(new THREE.Points());
+    expect(fundirEstaticos(raiz, { congelar: false }).congelados).toBe(0);
+    expect(g.matrixAutoUpdate).toBe(true);
   });
 });

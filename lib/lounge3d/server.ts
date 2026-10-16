@@ -2,13 +2,13 @@
  * lib/lounge3d/server.ts — helpers SERVER da sala 3D: sessão, sala por id com IDOR por `members[]`,
  * conteúdo lido/salvo no CollabDoc (kind lounge_canvas). Nada daqui vai pro cliente.
  */
+import { corpoDoUsuario, pilotaANave } from "./corposDeUsuario";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { lerConteudo } from "@/lib/lounge3d/sala";
 import { isSuperAdmin } from "@/lib/auth/roles";
-import { ehDonoDoQG } from "@/lib/lounge3d/qg";
 import { KIND_SALA, corDoUsuario, type ConteudoSala } from "@/lib/lounge3d/tipos";
 
 export const OID = /^[a-f0-9]{24}$/i;
@@ -23,16 +23,16 @@ export function exigirFlag(): NextResponse | null {
 }
 
 /**
- * `fundador` = dono da Zaeon (isSuperAdmin: allowlist + User.role) e `qg` = dono do QG (Andrei Bacelar, lib/lounge3d/qg)
- * — decididos AQUI, no servidor; o cliente só pinta.
+ * `fundador` = dono da Zaeon (isSuperAdmin: allowlist + User.role); `novo` = NUNCA entrou no cyberespaço
+ * (User.cyberNasceuEm vazio → nasce num tubo de ensaio) — decididos AQUI, no servidor; o cliente só pinta.
  */
-export type Eu = { id: string; name: string; image: string | null; color: string; fundador: boolean; qg: boolean };
+export type Eu = { id: string; name: string; image: string | null; color: string; fundador: boolean; novo: boolean; /** as MOTOS liberadas (a entrega ao Droid aceita + o tutorial delas — User.cyberPerfil.motosLiberadasEm; o dono sempre) */ motos?: boolean; /** o corpo próprio (lib/lounge3d/corposDeUsuario) */ corpo?: string; /** pilota a nave-QG (o dono ou a tripulação) */ nave?: boolean };
 export async function eu(): Promise<Eu | null> {
   const s = await getServerSession(authOptions).catch(() => null);
   const email = s?.user?.email;
   if (!email) return null;
-  const u = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, image: true, role: true } });
-  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email, role: u.role }), qg: ehDonoDoQG({ email, name: u.name }) } : null;
+  const u = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, image: true, role: true, cyberNasceuEm: true, cyberPerfil: true } });
+  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: corDoUsuario(u.id), fundador: isSuperAdmin({ email, role: u.role }), novo: !u.cyberNasceuEm, motos: pilotaANave(email) || !!(u.cyberPerfil as { motosLiberadasEm?: unknown } | null)?.motosLiberadasEm, corpo: corpoDoUsuario(u.id), nave: pilotaANave(email) } : null;
 }
 
 export type SalaRow = { id: string; ownerId: string; title: string; kind: string; content: string; members: string[]; token: string; updatedAt: Date };

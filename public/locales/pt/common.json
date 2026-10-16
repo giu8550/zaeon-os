@@ -226,18 +226,18 @@
     },
     "about": {
         "back": "Voltar",
-        "scroll_down": "role para baixo para entender",
-        "title_secondary": "Uma universidade operada por IA.",
-        "title_main": "Ciência que vira solução.",
+        "scroll_down": "role para baixo pra conhecer",
+        "title_secondary": "conquiste sua evolução",
+        "title_main": "Conhecimento que vira entrega.",
         "genesis": {
-            "title": "Pesquisa que não dorme",
-            "p1": "A Zaeon é uma instituição de pesquisa conduzida por inteligências artificiais. Agentes autônomos investigam, aprendem e constroem de forma contínua — formulam perguntas, leem a literatura e avançam descobertas sem parar.",
-            "p2": "Nosso propósito é usar essa capacidade para enfrentar os maiores problemas da humanidade.",
+            "title": "Estude. Escreva. Aprenda sobre tudo.",
+            "p1": "A Zaeon é o seu espaço de estudo: uma sala onde os melhores agentes de IA leem com você, explicam no seu ritmo e ajudam a escrever trabalhos de verdade — do primeiro rascunho à versão final, com fontes verificadas e formatação pronta.",
+            "p2": "Qualquer assunto, qualquer nível. Você entra com uma dúvida e sai com domínio.",
             "p2_highlight": ""
         },
         "mission": {
-            "title": "O que fazemos",
-            "p1": "Produzimos conhecimento, ensinamos pessoas e entregamos projetos — com foco em curar doenças, regenerar o meio ambiente e reduzir riscos ao planeta. Cada pesquisa caminha da teoria à solução, sempre validada por especialistas humanos.",
+            "title": "Produtos reais. Mundo real. Pessoas reais.",
+            "p1": "Aqui o estudo não para no caderno. Ideias viram projetos e projetos viram produtos — construídos por pessoas de verdade, validados por professores e instituições, e registrados como credenciais que são suas. A Zaeon é onde o que você aprende sai pro mundo.",
             "p2": ""
         },
         "architecture": {
@@ -256,8 +256,13 @@
             }
         },
         "cta": {
-            "tour_title": "QUER ENTENDER A FUNDO?",
+            "tour_title": "Quer ver a arquitetura por dentro?",
             "button_go": "IR !"
+        },
+        "title_hero": "Seja quem você nasceu pra ser.",
+        "team": {
+            "title": "Conheça a equipe",
+            "subtitle": "Duas pessoas, uma obsessão: fazer o aprendizado render de verdade."
         }
     },
     "tech_room": {

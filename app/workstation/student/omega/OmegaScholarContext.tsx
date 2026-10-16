@@ -1,4 +1,5 @@
 "use client";
+import { EVT_OMEGA_RODAR } from "@/lib/onboarding/tutorialLab";
 import { type ReactNode, createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import type { ScholarEvent, Suggestion, ForgeResponse } from "@/lib/scholar/types";
 import type { Prereq } from "@/lib/scholar/prereqs";
@@ -128,6 +129,13 @@ export function OmegaScholarProvider({ room, onStart, children }:
       abortRef.current = null;
     }
   }, [room, onStart]);
+
+  // o TUTORIAL do tablet (lib/onboarding/tutorialLab) manda o tema escolhido direto pra tela roxa, já pesquisando
+  useEffect(() => {
+    const rodar = (e: Event) => { const t = (e as CustomEvent<{ prompt?: string }>).detail?.prompt; if (t?.trim()) { setDraft(t); void runQuery(t); } };
+    window.addEventListener(EVT_OMEGA_RODAR, rodar);
+    return () => window.removeEventListener(EVT_OMEGA_RODAR, rodar);
+  }, [runQuery]);
 
   const loadSession = useCallback((s: any) => {
     // Reabriu do histórico → toca o glitch do título por uns segundos.

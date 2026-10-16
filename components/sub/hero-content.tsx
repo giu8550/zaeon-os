@@ -1,12 +1,11 @@
 "use client";
 
-import TextoRevelado from "@/components/ui/TextoRevelado";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { ChatBubbleLeftRightIcon } from "@heroicons/react/24/outline";
+import { ChatBubbleLeftRightIcon, PlayIcon, UserPlusIcon } from "@heroicons/react/24/outline";
 
 // Componentes Internos
 import MenuNavigation from "@/components/sub/MenuNavigation";
@@ -14,16 +13,11 @@ import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 import MolecularText from "@/components/ui/MolecularText";
 import { copyEntrada } from "@/lib/ui/loungeHub";
-import AuraAoVivo from "@/components/main/AuraAoVivo";
-import AgentAvatar from "@/components/agents/AgentAvatar";
-import { useManifesto } from "@/components/agents/avatar/hooks";
+import GlitchTexto from "@/components/ui/GlitchTexto";
+import { precarregarCyber } from "@/lib/cyber/precarga";
 
-/** Ícone do "Iniciar chat": o rosto da Aura (o chat é ela); sem avatar vivo → o balão de sempre. */
-function RostoDoChat() {
-  const manifest = useManifesto("aura");
-  if (!manifest) return <ChatBubbleLeftRightIcon className="w-4 h-4" />;
-  return <AgentAvatar agentId="aura" manifest={manifest} nome="Aura" size={24} className="-my-1 -ml-1" />;
-}
+/** o botão do cyberespaço (lá embaixo, em cima do módulo) pede o login daqui quando a pessoa está deslogada */
+export const EVENTO_ABRIR_LOGIN = "zaeon:abrir-login";
 
 // Mural de modelos (v2): as IAs que o público já conhece, num lugar só.
 // Texto, não logos oficiais (limpo + evita marca de terceiros). Os "extras"
@@ -81,10 +75,14 @@ function LogoModelo({ slug, name, org }: { slug: string; name: string; org?: str
   );
 }
 
-// H1 (v3): o resultado, em três verbos — curto (< 44 caracteres), como pedem os heróis que convertem.
-const FRASE_COMPLETA = "Aprenda, Construa e Entregue.";
+// H1 (v4): a promessa — "Evolua sua vida." + "com conhecimento." (a palavra em destaque).
+// O sub-header traz os três verbos com o glitch chinês e a palavra que gira (ideias, estudos, trabalhos, pesquisas).
+const FRASE_COMPLETA = "Evolua sua vida. com conhecimento.";
+const GIRO = ["ideias", "estudos", "trabalhos", "pesquisas"];
 /** pra onde "Iniciar chat" leva quem já está logado: o chat da Aura (Sala de Estudos) */
 const CHAT_ROTA = "/research-lab?tab=sala-de-estudos";
+/** o GAME: o cyberespaço — a rota já abre a sessão em jogo (sem menu). Sem conta, o botão abre o login, que volta direto pra cá. */
+const GAME_ROTA = "/lounge-cosmico";
 
 export default function HeroPage() {
   const { t } = useTranslation();
@@ -94,9 +92,15 @@ export default function HeroPage() {
   const [showChatbox, setShowChatbox] = useState(false);
 
   const logado = status === "authenticated";
-  // "Ir pro cyberespaço" desce até a seção que explica o que é (no fim da página).
-  const irProCyberespaco = () => document.getElementById("cyberespaco")?.scrollIntoView({ behavior: "smooth", block: "start" });
   const copy = copyEntrada(logado);
+
+  // a PRÉ-CARGA do cyberespaço começa na primeira tela (o botão com a barra fica em cima do módulo, lá embaixo)
+  useEffect(() => { precarregarCyber(); }, []);
+  useEffect(() => {
+    const abrir = () => { setShowChatbox(true); window.scrollTo({ top: 0, behavior: "smooth" }); };
+    window.addEventListener(EVENTO_ABRIR_LOGIN, abrir);
+    return () => window.removeEventListener(EVENTO_ABRIR_LOGIN, abrir);
+  }, []);
 
   return (
     <main className="w-full flex flex-col items-center justify-center text-center relative zaeon-borda min-h-[calc(100svh-110px)] pt-10 md:pt-14 pb-16 md:pb-20 overflow-hidden transition-colors duration-700 font-display">
@@ -130,12 +134,16 @@ export default function HeroPage() {
             <h1 className="text-[clamp(2.25rem,6.2vw,5.75rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.05] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
               <span aria-hidden="true">
-                <MolecularText text="Aprenda," />{" "}
-                <MolecularText text="Construa" delay={0.15} />{" "}
                 <span className="whitespace-nowrap">
-                  <MolecularText text="e" delay={0.3} />{" "}
+                  <MolecularText text="Evolua" />{" "}
+                  <MolecularText text="sua" delay={0.12} />{" "}
+                  <MolecularText text="vida." delay={0.24} />
+                </span>
+                <br />
+                <span className="whitespace-nowrap">
+                  <MolecularText text="com" delay={0.36} />{" "}
                   <span className="text-cyan-600 dark:text-cyan-400">
-                    <MolecularText text="Entregue." delay={0.4} />
+                    <MolecularText text="conhecimento." delay={0.46} />
                   </span>
                 </span>
               </span>
@@ -150,11 +158,14 @@ export default function HeroPage() {
                 transition={{ duration: 0.4, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                  {/* sub-header: UM texto só — a chamada do limite (levemente destacada) e o fecho "nunca mais fique na mão" */}
+                  {/* sub-header: os três verbos com o GLITCH CHINÊS + a palavra que gira (ideias, estudos, trabalhos, pesquisas) */}
                   <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-900 dark:text-white font-light leading-relaxed">
-                    <TextoRevelado texto="Todas as IAs num lugar só — ChatGPT, Claude, Gemini, Grok, DeepSeek e muito mais." delay={0.3} />{" "}
-                    <TextoRevelado className="font-normal text-cyan-700 dark:text-cyan-200" texto="Acabou o limite de uma? Passa pra outra." delay={0.65} />{" "}
-                    <TextoRevelado texto="Nunca mais fique na mão." delay={0.9} />
+                    <GlitchTexto
+                      texto="Aprenda, construa, entregue"
+                      palavras={GIRO}
+                      classePalavra="font-normal text-cyan-700 dark:text-cyan-200"
+                      delay={0.5}
+                    />
                   </p>
               </motion.div>
             )}
@@ -171,28 +182,38 @@ export default function HeroPage() {
               transition={{ duration: 0.4, delay: 0.2 }}
               className="mt-9 flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto items-center justify-start"
             >
-              {/* Mesmo material do "Iniciar", em vidro TINGIDO: vidro incolor aqui
-                  derrubaria a hierarquia e este é o primário da página. */}
+              {/* PRIMÁRIO (vidro TINGIDO): sem conta, "Criar minha conta" (abre o login/cadastro); conectado, o chat.
+                  SECUNDÁRIO (vidro incolor): "Iniciar jogo" — o cyberespaço agora é o JOGO: entra direto na sessão
+                  (sem conta, abre o login, e o login já cai no jogo). */}
               <LiquidGlassButton
                 onClick={() => (logado ? router.push(CHAT_ROTA) : setShowChatbox(true))}
                 tom="destaque"
                 tamanho="md"
                 className="w-full sm:w-auto"
               >
-                <RostoDoChat />
-                Iniciar chat
+                {logado ? <ChatBubbleLeftRightIcon className="w-4 h-4" aria-hidden="true" /> : <UserPlusIcon className="w-4 h-4" aria-hidden="true" />}
+                {logado ? "Iniciar chat" : "Criar minha conta"}
               </LiquidGlassButton>
-              <span className="text-xs uppercase tracking-[0.2em] text-slate-700 dark:text-white/80">ou</span>
-              <button
-                type="button"
-                onClick={irProCyberespaco}
-                className="group relative flex items-center justify-center gap-2 px-8 py-4 rounded-full border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 font-medium uppercase tracking-[0.18em] text-[11px] transition-all hover:border-cyan-400 hover:scale-105 bg-transparent w-full sm:w-auto"
+              <LiquidGlassButton
+                onClick={() => (logado ? router.push(GAME_ROTA) : setShowChatbox(true))}
+                tom="neutro"
+                tamanho="md"
+                className="w-full sm:w-auto"
               >
-                ✦ Ir pro cyberespaço
-              </button>
+                <PlayIcon className="w-4 h-4" aria-hidden="true" />
+                Iniciar jogo
+              </LiquidGlassButton>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* o ACEITE do game: o mini ecossistema de ideias e blueprints que já existe — e a chance de criar o seu */}
+        {!showChatbox && (
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.45 }}
+            className="mt-4 max-w-xl text-sm leading-relaxed text-slate-700 dark:text-white/70">
+            Um mini ecossistema de <span className="font-semibold text-cyan-700 dark:text-cyan-300">ideias e blueprints</span> já disponíveis no game — e a chance de você criar o seu.
+          </motion.p>
+        )}
 
         {/* MURAL DE MODELOS removido do hero — as IAs agora vivem só na seção
             "Equipados com", abaixo dos cards dos agentes (encryption.tsx). */}
@@ -214,15 +235,7 @@ export default function HeroPage() {
         )}
       </motion.div>
 
-      {/* A AURA AO VIVO (desktop): o chat tem rosto — ela responde perguntas de verdade ali do lado do
-          título, e o cartão inteiro é o "Iniciar chat". No celular o rosto vai no botão do CTA. */}
-      <AnimatePresence>
-        {!showChatbox && (
-          <div className="hidden lg:flex absolute z-10 w-[360px] xl:w-[380px] right-[3%] xl:right-[6%] top-1/2 -translate-y-[18%]">
-            <AuraAoVivo onAbrir={() => (logado ? router.push(CHAT_ROTA) : setShowChatbox(true))} />
-          </div>
-        )}
-      </AnimatePresence>
+      {/* (v4) o cartão da Aura ao vivo saiu de cena no desktop — o hero é só a promessa + os dois CTAs. */}
 
       {/* O cyberespaço embutido mora agora em "Crie a sua própria estação de trabalho" (app/study-rooms). */}
 

@@ -1,47 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { IDS_PLATAFORMAS, PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, anelDoChao, decolaDaPlataforma, elevadorAqui, noAnelDoDisco, noArNaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma } from "./plataformas";
+import { UNIVERSIDADES_NO_MAPA, IDS_PLATAFORMAS, PLATAFORMAS, alturaDoAndar, andarDoPouso, andarNaPlataforma, decolaDaPlataforma, elevadorAqui, noArNaPlataforma, noPortalDaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma } from "./plataformas";
 import { ANDARES_SOLANA, NOMES_ANDARES, ROOFTOP, SOLANA, moveisDoAndar, mundoS, paredesDoAndar, resolverNoAndar, ESCALA_SOLANA } from "./solana";
-import { CIDADE, BURACO_NEGRO } from "./ceu";
-import { HELIPORTO, POIS } from "./landmarks";
-import { LOTES } from "./motos";
-import { posicaoDaBase } from "./bases";
+import { ALTURA_LOUNGE, CIDADE, ILHOTAS, mundo } from "./ceu";
+import { poseDaDoca } from "./naveQG";
+import { PRACA } from "./praca";
 import { VOO, passoVooSub, type EstadoVoo } from "./voo";
 
 const dist = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
 
 describe("lugares flutuantes (Universidade e Solana House)", () => {
-  it("flutuam abaixo da Zaeon, longe uns dos outros, da Zaeon e de tudo que fica no chão", () => {
+  it("a Solana House fica na ALTURA DO LOUNGE, a ~70 m da borda da Zaeon; longe da praça e dentro do mapa", () => {
     const zaeon = { x: CIDADE.centro.x, z: CIDADE.centro.z, r: CIDADE.bordaR };
+    expect(PLATAFORMAS.solana.y).toBe(CIDADE.pisoY + ALTURA_LOUNGE);
+    expect(dist(PLATAFORMAS.solana.centro, zaeon) - zaeon.r - PLATAFORMAS.solana.r).toBeCloseTo(70, 6);
+    for (const il of ILHOTAS) expect(dist(PLATAFORMAS.solana.centro, mundo(il))).toBeGreaterThan(PLATAFORMAS.solana.r + il.r + 10);   // nenhuma ilhota encosta
+    expect(dist(PLATAFORMAS.solana.centro, poseDaDoca())).toBeGreaterThan(PLATAFORMAS.solana.r + 40);                          // nem a nave atracada
+    for (const s of Object.values(CIDADE.salas)) expect(dist(PLATAFORMAS.solana.centro, mundo(s))).toBeGreaterThan(PLATAFORMAS.solana.r + s.r + 40);
     for (const id of IDS_PLATAFORMAS) {
       const P = PLATAFORMAS[id];
-      expect(P.y).toBeLessThan(CIDADE.pisoY); expect(P.y).toBeGreaterThan(60);
+      expect(P.y).toBeGreaterThan(60);
       expect(dist(P.centro, zaeon)).toBeGreaterThan(P.r + zaeon.r + 40);
       expect(Math.hypot(P.centro.x, P.centro.z) + P.r).toBeLessThan(VOO.raioMapa + 60);
     }
     expect(dist(PLATAFORMAS.univ.centro, PLATAFORMAS.solana.centro)).toBeGreaterThan(PLATAFORMAS.univ.r + PLATAFORMAS.solana.r + 20);
     expect(PLATAFORMAS.solana.y).toBeGreaterThan(PLATAFORMAS.univ.y);   // a Solana cresceu e subiu: mais alta que a UNILAB
+    for (const id of IDS_PLATAFORMAS) expect(dist(PLATAFORMAS[id].centro, PRACA)).toBeGreaterThan(PLATAFORMAS[id].r + PRACA.r + 20);
   });
-  it("os anéis do elevador de luz no chão não caem em cima de bases, marcos, heliporto, estacionamento nem do portal", () => {
-    for (const id of IDS_PLATAFORMAS) {
-      const a = PLATAFORMAS[id].anelChao;
-      for (let i = 0; i < 12; i++) expect(dist(a, posicaoDaBase(i))).toBeGreaterThan(a.r + 4);
-      for (const p of POIS) expect(dist(a, p)).toBeGreaterThan(a.r + p.footprintR);
-      expect(dist(a, HELIPORTO)).toBeGreaterThan(a.r + HELIPORTO.r);
-      for (const l of LOTES) expect(dist(a, l)).toBeGreaterThan(a.r + 10);
-      expect(dist(a, BURACO_NEGRO)).toBeGreaterThan(a.r + CIDADE.portalEntrada.r);
-      expect(dist(a, PLATAFORMAS[id].centro)).toBeLessThan(PLATAFORMAS[id].r);   // fica embaixo do disco
-    }
-  });
-  it("pisou no anel do chão → sobe; a chegada (no disco) e a volta (no chão) ficam FORA dos anéis (não volta a disparar)", () => {
+  it("o BURACO NEGRO de cada lugar fica no disco (chão firme, fora de prédio); a chegada fica FORA do anel (não volta a disparar)", () => {
     for (const id of IDS_PLATAFORMAS) {
       const P = PLATAFORMAS[id];
-      expect(anelDoChao(P.anelChao)).toBe(id);
-      expect(anelDoChao(P.volta)).toBeNull(); expect(noAnelDoDisco(id, P.chegada)).toBe(false);
-      expect(noAnelDoDisco(id, P.anelDisco)).toBe(true);
+      expect(noPortalDaPlataforma(id, P.portal)).toBe(true); expect(noPortalDaPlataforma(id, P.chegada)).toBe(false);
       expect(andarNaPlataforma(id, 0, P.chegada).fora).toBe(false);   // a chegada é chão firme
-      expect(andarNaPlataforma(id, 0, P.anelDisco).fora).toBe(false);
+      expect(andarNaPlataforma(id, 0, P.portal)).toMatchObject({ x: P.portal.x, z: P.portal.z, fora: false });   // nada empurra de cima do anel
+      expect(dist(P.portal, P.centro) + P.portal.r).toBeLessThan(P.r);
     }
-    expect(anelDoChao({ x: 0, z: 0 })).toBeNull();
   });
   it("a borda do disco é livre: passou, cai (sem parede invisível)", () => {
     for (const id of IDS_PLATAFORMAS) {
@@ -51,9 +43,10 @@ describe("lugares flutuantes (Universidade e Solana House)", () => {
     }
   });
   it("mochila: a 'bolha' de cada lugar, e o pouso no disco vindo de cima", () => {
-    const U = PLATAFORMAS.univ;
-    expect(plataformaPerto(U.chegada, U.y + 5)).toBe("univ");
-    expect(plataformaPerto(U.chegada, 0)).toBeNull();          // no chão, embaixo: não
+    const U = PLATAFORMAS.univ, S = PLATAFORMAS.solana;
+    expect(plataformaPerto(S.chegada, S.y + 5)).toBe("solana");
+    expect(plataformaPerto(S.chegada, 0)).toBeNull();          // lá embaixo (no vazio, na altura da praça): não
+    expect(plataformaPerto(U.chegada, U.y + 5)).toBe(UNIVERSIDADES_NO_MAPA ? "univ" : null);   // (universidades fora do mapa: não tem disco)          // lá embaixo (no vazio, na altura da praça): não
     expect(pousosNaPlataforma("univ", U.chegada)).toEqual([0]);
     expect(pousosNaPlataforma("univ", { x: U.centro.x + U.r + 2, z: U.centro.z })).toEqual([]);
   });

@@ -1,19 +1,20 @@
 /**
  * Campus — os OUTROS CAMPI flutuantes (UFC, Unifor, UECE — lib/cyber/campi.ts) na MESMA fundação da UNILAB (disco com
- * grade de luz, aro aceso na borda, base de cristal com propulsores antigravidade, ELEVADOR DE LUZ), cada um com a cara
+ * grade de luz, aro aceso na borda, base de cristal com propulsores antigravidade, o BURACO NEGRO da rede de túneis), cada um com a cara
  * dele (estilo do layout + cores):
  *  - os PRÉDIOS são caixas INSTANCIADAS com um shader de JANELAS procedural (as janelas saem da posição na fachada,
  *    acesas/apagadas por célula): UMA chamada de desenho por tipo (bloco, vidro, torre), mesmo com centenas de prédios;
  *  - o MARCO (Reitoria) tem o LOGO oficial nas quatro faces; os prédios com nome têm placa (logo + nome);
  *  - ruas, parques, praças e água são planos instanciados; árvores instanciadas (tronco + copa);
- *  - o PORTAL da chegada (do elevador de luz) com o logo.
+ *  - o PORTAL da chegada (do buraco negro) com o logo.
  * Custo pensado: ~40–60 chamadas por campus, tudo estático (lotes) menos os propulsores e o elevador.
  */
 import * as THREE from "three";
 import { CAMPI, layoutDoCampus, naEntrada, type IdCampus, type Predio } from "@/lib/cyber/campi";
 import { PLATAFORMAS } from "@/lib/cyber/plataformas";
 import { glowTex } from "./CenaCosmica";
-import { criarElevadorDeLuz } from "./ElevadorDeLuz";
+import { criarBuracoPortal } from "./BuracoPortal";
+import { NOS } from "@/lib/cyber/buracos";
 import { liberar } from "./Landmark";
 
 export type CampusHandle = {
@@ -124,9 +125,9 @@ export function criarCampus(id: IdCampus, o: { low: boolean }): CampusHandle {
     const s = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: texAnti, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))); s.position.set(x, -C.espessura * 0.25 - 4, z); s.scale.setScalar(R * 0.15); antis.push(s);
   }
   anim.push((_, t) => antis.forEach((s, i) => { s.material.opacity = 0.55 + 0.35 * Math.sin(t * 1.6 + i); }));
-  // ELEVADOR DE LUZ (do lado da praça)
-  const elev = PLATAFORMAS[id], lc = { x: elev.anelChao.x - C.centro.x, z: elev.anelChao.z - C.centro.z }, ld = { x: elev.anelDisco.x - C.centro.x, z: elev.anelDisco.z - C.centro.z };
-  anim.push(criarElevadorDeLuz(raiz, { chao: { ...lc, r: elev.anelChao.r, y: -C.y }, disco: { ...ld, r: elev.anelDisco.r }, low, cor: C.cores.friso }));
+  // o BURACO NEGRO (do lado da praça) — o nó da rede de túneis
+  const elev = PLATAFORMAS[id], bp = criarBuracoPortal(raiz, { x: elev.portal.x - C.centro.x, y: 0, z: elev.portal.z - C.centro.z, anelR: elev.portal.r, h: NOS[id].bh.h, r: NOS[id].bh.r, low, cor: C.cores.friso });
+  texturas.push(...bp.texturas); anim.push(bp.atualizar);
 
   // ── o CHÃO: ruas, parques, praças, água ──
   const ruaMat = new THREE.MeshStandardMaterial({ color: sofis ? 0x2a2f3a : 0x0a0f1c, roughness: 0.9, metalness: 0.1, emissive: 0x05080f, emissiveIntensity: 0.4 });
@@ -189,7 +190,7 @@ export function criarCampus(id: IdCampus, o: { low: boolean }): CampusHandle {
     s.position.set(p.x + ux * frente, 2.2, p.z + uz * frente); s.rotation.y = Math.atan2(ux, uz);
   }
 
-  // ── PORTAL da chegada (ao lado do elevador de luz): dois pilares + viga com o logo, virado pra quem chega ──
+  // ── PORTAL da chegada (ao lado do buraco negro): dois pilares + viga com o logo, virado pra quem chega ──
   {
     const pe = naEntrada(id, R - 22), rumo = Math.atan2(-pe.x, -pe.z), vao = 14, hP = 9, eixo = new THREE.Vector3(Math.cos(rumo), 0, -Math.sin(rumo));
     for (const s of [-1, 1]) { const pil = add(new THREE.Mesh(new THREE.BoxGeometry(1.4, hP, 1.4), sofis ? new THREE.MeshStandardMaterial({ color: 0xeef0f4, roughness: 0.3, metalness: 0.4 }) : pedra)); pil.position.set(pe.x + eixo.x * s * vao / 2, hP / 2, pe.z + eixo.z * s * vao / 2); }

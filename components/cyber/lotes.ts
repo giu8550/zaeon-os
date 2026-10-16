@@ -9,7 +9,14 @@
  *  - o que se mexe/pisca/some (e tudo abaixo de um grupo que se mexe vira lote só dentro dele);
  *  - grupo escondido no começo (o interior da nave, ligado pelo engine) ou marcado `userData.lote = "limite"`: vira
  *    quadro (o lote fica dentro dele e acompanha a visibilidade);
- *  - `manter` (alvos de clique/câmera), InstancedMesh, SkinnedMesh, multi-material, morph, escala espelhada.
+ *  - `manter` (alvos de clique/câmera), InstancedMesh, SkinnedMesh, multi-material, morph, escala espelhada;
+ *  - geometria com ATRIBUTOS PRÓPRIOS (além de posição/normal/uv/cor — ex.: as veias do coração): juntar perderia o atributo.
+ * Em dev, cada peça que ficou de fora ganha `userData.foraDoLote` = o motivo (o perfil de draw calls agrupa por ele).
+ *
+ * CONGELAR (o `matrixAutoUpdate = false` do spiderbench): o three recalcula a matriz de TODO objeto da cena a cada
+ * quadro, mesmo dos que nunca se mexem — com ~9 mil objetos, ~35% da CPU do quadro. No fim, todo nó que a simulação
+ * viu PARADO (menos a raiz, que o engine move, e os `manter`) para de recalcular a matriz local; a do mundo continua
+ * seguindo o pai (a ilha que boia). Medido: Zaeon com 12 jogadores 64 → 78 fps.
  * Antes de juntar, MATERIAIS iguais (mesmo tipo/cor/opacidade/textura/mistura…) viram um só — os builders criam um
  * por peça. Material que muda durante a simulação (opacidade pulsando, cor) fica com a peça dele, sozinho.
  * Peças pequenas (< 4 m) vão pra lotes separados marcados `userData.detalhe` (a região continua escondendo de longe),
@@ -18,14 +25,18 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-const CELULA = 24, PEQUENO = 4;
+const PEQUENO = 4;
+/** o tamanho da CÉLULA (m): peças do mesmo material na mesma célula viram 1 lote. `?celula=N` na URL (dev) pra medir */
+const CELULA = (() => { const q = typeof location !== "undefined" && process.env.NODE_ENV !== "production" ? Number(new URLSearchParams(location.search).get("celula")) : 0; return q > 0 ? q : 120; })();   // era 24: o "super-tile" do spiderbench — menos lotes, a região ainda esconde o detalhe de longe
+const ATRIBUTOS_OK = new Set(["position", "normal", "uv", "color"]);
+const DEV = process.env.NODE_ENV !== "production";
 
 type Foto = { m: THREE.Matrix4; v: boolean };
 
 /** junta as peças estáticas (malhas e linhas de aresta) de `raiz`; devolve quantas saíram e quantos lotes entraram */
-export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t: number) => void; quadros?: number; manter?: Iterable<THREE.Object3D> } = {}): { antes: number; lotes: number } {
+export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t: number) => void; quadros?: number; manter?: Iterable<THREE.Object3D>; congelar?: boolean } = {}): { antes: number; lotes: number; congelados: number } {
   // `?semLotes` na URL desliga (comparar antes/depois, como o `?batch=0` do CS Brasil)
-  if (typeof location !== "undefined" && new URLSearchParams(location.search).has("semLotes")) return { antes: 0, lotes: 0 };
+  if (typeof location !== "undefined" && new URLSearchParams(location.search).has("semLotes")) return { antes: 0, lotes: 0, congelados: 0 };
   const manter = new Set(o.manter ?? []);
   raiz.updateMatrixWorld(true);
   // 1) foto de todos os nós
@@ -51,14 +62,22 @@ export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t
       const m = n as THREE.Mesh & THREE.LineSegments;
       const f = n as unknown as { isInstancedMesh?: boolean; isSkinnedMesh?: boolean };
       if (linha ? !m.isLineSegments : !m.isMesh || f.isInstancedMesh || f.isSkinnedMesh) return;
-      if (Array.isArray(m.material) || manter.has(m) || m.children.length || mexe.has(m) || !m.visible || m.morphTargetInfluences) return;
-      if (!m.geometry?.attributes.position || Object.keys(m.geometry.morphAttributes).length) return;
+      const fora = (motivo: string) => { if (DEV) m.userData.foraDoLote = motivo; };
+      if (Array.isArray(m.material)) return fora("multi-material");
+      if (manter.has(m)) return fora("manter");
+      if (m.children.length) return fora("tem-filhos");
+      if (mexe.has(m)) return fora("mexe");
+      if (!m.visible) return fora("escondida");
+      if (m.morphTargetInfluences) return fora("morph");
+      if (m.userData.semLote) return fora("semLote");
+      if (!m.geometry?.attributes.position || Object.keys(m.geometry.morphAttributes).length) return fora("geometria");
+      if (Object.keys(m.geometry.attributes).some((a) => !ATRIBUTOS_OK.has(a))) return fora("atributo-proprio");   // (as veias do coração)
       // sobe até o quadro: tudo entre a peça e o quadro tem que estar parado e visível
       let q = m.parent!;
       while (!ehLimite(q)) q = q.parent!;
       const rel = new THREE.Matrix4();   // peça → quadro (produto das locais do caminho)
       for (let k: THREE.Object3D = m; k !== q; k = k.parent!) rel.premultiply(k.matrix);
-      if (rel.determinant() <= 0) return;   // espelhada: a face viraria do avesso
+      if (rel.determinant() <= 0) return fora("espelhada");   // espelhada: a face viraria do avesso
       cands.push({ obj: m, quadro: q, rel });
     });
     // materiais iguais (e que não mudam) viram um só
@@ -84,7 +103,7 @@ export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t
     }
     // funde (só vale a pena com 2+ peças)
     for (const gr of grupos.values()) {
-      if (gr.l.length < 2) continue;
+      if (gr.l.length < 2) { if (DEV) gr.l[0]!.obj.userData.foraDoLote = matMexe.has(gr.mat) ? "sozinha:material-muda" : "sozinha"; continue; }
       const cor = !!(gr.mat as THREE.MeshBasicMaterial).vertexColors;
       const geos = gr.l.map((k) => normalizar(k.obj.geometry, cor, linha).applyMatrix4(k.rel));
       const junta = mergeGeometries(geos, false); geos.forEach((g) => g.dispose());
@@ -103,7 +122,14 @@ export function fundirEstaticos(raiz: THREE.Object3D, o: { passo?: (k: number, t
   const vivas = new Set<THREE.BufferGeometry>(); raiz.traverse((n) => { const g = (n as THREE.Mesh).geometry; if (g) vivas.add(g); });
   for (const g of usadas) if (!vivas.has(g)) g.dispose();
   raiz.updateMatrixWorld(true);
-  return { antes, lotes };
+  // CONGELA o que ficou parado (`?semCongelar` desliga, pra comparar)
+  let congelados = 0;
+  const semCongelar = o.congelar === false || (typeof location !== "undefined" && new URLSearchParams(location.search).has("semCongelar"));
+  if (!semCongelar) raiz.traverse((n) => {
+    if (n === raiz || !n.matrixAutoUpdate || mexe.has(n) || manter.has(n) || !fotos.has(n) || (n as THREE.Bone).isBone) return;
+    n.updateMatrix(); n.matrixAutoUpdate = false; n.userData.congelado = true; congelados++;
+  });
+  return { antes, lotes, congelados };
 }
 
 /** cópia com o mesmo conjunto de atributos (posição, normal, uv [, cor]) e índice — o `mergeGeometries` exige */
@@ -129,6 +155,8 @@ function normalizar(g0: THREE.BufferGeometry, cor: boolean, linha = false): THRE
 function assinatura(m: THREE.Material): string {
   const x = m as THREE.MeshStandardMaterial & THREE.MeshBasicMaterial & THREE.ShaderMaterial;
   if (x.isShaderMaterial) return `shader|${m.uuid}`;   // uniforms próprios: só o mesmo objeto
+  // shader remendado (`onBeforeCompile` próprio — toon, tinta…): o remendo pode capturar valores diferentes; só o mesmo objeto
+  if (m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) return `remendo|${m.uuid}`;
   const cor = (c?: THREE.Color) => (c ? c.getHexString() : "-");
   return [m.type, cor(x.color), cor(x.emissive), x.emissiveIntensity ?? "-", x.roughness ?? "-", x.metalness ?? "-", m.opacity.toFixed(4), m.transparent, m.blending, m.side, m.depthWrite, m.depthTest,
     m.alphaTest, m.vertexColors, (x as { flatShading?: boolean }).flatShading ?? "-", x.map?.uuid ?? "-", x.alphaMap?.uuid ?? "-", x.emissiveMap?.uuid ?? "-", x.fog ?? "-", m.toneMapped, m.visible, m.colorWrite, m.polygonOffset].join("|");

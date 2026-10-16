@@ -1,6 +1,6 @@
 /**
  * Cyberespaço — a SOLANA HOUSE (PURO, sem three): o QG da Superteam Brasil, um prédio de apartamento futurista (1,5× a planta original) de 3
- * andares + ROOFTOP, num disco flutuando no céu (abaixo da Universidade e da Zaeon). Térreo = lobby/coworking; 2º andar
+ * andares + ROOFTOP, num disco flutuando no céu, ao lado da Zaeon (na altura do lounge). Térreo = lobby/coworking; 2º andar
  * = hacker house (mesas compridas, telão); 3º = o apartamento (sala, cozinha, quartos); rooftop = piscina de borda
  * infinita, bar e lounge; e embaixo do disco a GARAGEM dos devs (ampla, bancadas com computadores, servidores, lounge e
  * um carro — como nas hacker houses de verdade). Os andares se trocam no ELEVADOR (tecla F). Sacadas de vidro no 2º e 3º.
@@ -17,9 +17,11 @@ import { empurrarDasParedes, empurrarDosRetangulos, paredesDoRetangulo, type Par
 export const ESCALA_SOLANA = 1.5;
 const F = ESCALA_SOLANA;
 export const SOLANA = {
-  centro: { x: 640, z: -90 },   // bem longe da Zaeon mega (raio 252 + o anel de ilhotas ≈ 340 m do centro dela)
-  /** piso do disco (m) — mais ALTO que a Universidade (230), abaixo da Zaeon (450) */
-  y: 330,
+  /** PERTO DA ZAEON (o dono, out/2026): a borda do disco a ~70 m da borda da ilha (centro (0, −560), raio 252), a 60° —
+   *  no setor da doca, onde não há ilhotas, entre a nave atracada e o jardim; a praça fica do lado */
+  centro: { x: Math.cos(Math.PI / 3) * (252 + 70 + 45), z: -560 + Math.sin(Math.PI / 3) * (252 + 70 + 45) },
+  /** piso do disco (m) — na MESMA ALTURA do LOUNGE (o piso da Zaeon 450 + 88 — lib/cyber/ceu `ALTURA_LOUNGE`) */
+  y: 538,
   /** raio do disco andável (a borda é livre: passou, cai) e a espessura dele (sólido pra nave/moto) */
   r: 30 * F, espessura: 6,
   predio: { x0: -12 * F, x1: 12 * F, z0: -2 * F, z1: 14 * F },

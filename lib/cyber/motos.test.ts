@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, TOTAL_VAGAS, lookDaVaga, baseDoRobo, esvaziou, fabricaNova, largadasValidas, motoDe, motoLargadaDe, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, tamanhoDoLote, vagas } from "./motos";
-import { CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal, noPortalVolta } from "./ceu";
+import { ALTURA_LOUNGE, CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal } from "./ceu";
+import { NOS } from "./buracos";
+import { PRACA } from "./praca";
 import { BASES_CEU_LOCAIS } from "./bases";
 import { HELIPORTO, POIS } from "./landmarks";
 import { VOO } from "./voo";
 
 const ID_A = "a".repeat(24), ID_B = "b".repeat(24);
 
-describe("motos voadoras — estacionamentos (chão + Zaeon)", () => {
-  it("chão: 1 fila de 4; ZAEON: no mínimo 12 vagas (2 filas de 6)", () => {
+describe("motos voadoras — estacionamentos (chão + GARAGEM da Zaeon)", () => {
+  it("chão: 1 fila de 4; a GARAGEM: todas as outras (no mínimo 12); na plataforma central da Zaeon, nenhuma", () => {
     const v = vagas();
     expect(v).toHaveLength(TOTAL_VAGAS);
     expect(v.filter((x) => !x.ceu)).toHaveLength(4);
@@ -19,22 +21,24 @@ describe("motos voadoras — estacionamentos (chão + Zaeon)", () => {
     const v = vagas();
     for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++) if (v[i]!.lote === v[j]!.lote) expect(Math.hypot(v[i]!.x - v[j]!.x, v[i]!.z - v[j]!.z)).toBeGreaterThanOrEqual(4.5);
     for (const x of v) {
-      const alvo = x.ceu ? CIDADE.centro : { x: 0, z: 0 }, fx = Math.sin(x.yaw), fz = Math.cos(x.yaw), dx = alvo.x - x.x, dz = alvo.z - x.z;
+      const alvo = x.ceu ? CIDADE.centro : PRACA, fx = Math.sin(x.yaw), fz = Math.cos(x.yaw), dx = alvo.x - x.x, dz = alvo.z - x.z;
       expect((fx * dx + fz * dz) / Math.hypot(dx, dz)).toBeGreaterThan(0.9);   // a frente aponta pro centro
     }
   });
-  it("o lote da Zaeon (e a base do robô) fica no piso andável, longe do portal de volta, das bases do dono e dos colisores da cidade", () => {
-    const zaeon = LOTES.find((l) => l.id === "zaeon")!, base = baseDoRobo(zaeon);
-    for (const v of [...vagas().filter((x) => x.ceu), base]) {
-      expect(naIlhaPrincipal(v)).toBe(true);
-      expect(Math.hypot(v.x - CIDADE.centro.x, v.z - CIDADE.centro.z)).toBeLessThan(CIDADE.andavelR - 3);
-      expect(noPortalVolta(v)).toBe(false);
-      for (const b of BASES_CEU_LOCAIS) { const w = mundo(b); expect(Math.hypot(v.x - w.x, v.z - w.z)).toBeGreaterThan(8); }
-      for (const c of colisoresDaCidade()) expect(Math.hypot(v.x - c.x, v.z - c.z)).toBeGreaterThan(c.r + 2);
+  it("os lotes da GARAGEM (e as bases dos robôs) ficam no disco da garagem, na altura das salas, longe das paredes e dos móveis", () => {
+    const g = CIDADE.salas.garagem, gw = mundo(g), cs = colisoresDaCidade();
+    for (const l of LOTES.filter((x) => x.id === "garagem")) {
+      expect(l.alt).toBeCloseTo(ALTURA_LOUNGE + 0.16, 6);
+      for (const v of [...vagas().filter((x) => x.lote === LOTES.indexOf(l)), baseDoRobo(l)]) {
+        expect(Math.hypot(v.x - gw.x, v.z - gw.z)).toBeLessThan(g.r - 6);   // dentro da garagem, longe do guarda-corpo
+        for (const c of cs) expect(Math.hypot(v.x - c.x, v.z - c.z)).toBeGreaterThan(c.r + 2);
+      }
     }
+    for (const v of vagas().filter((x) => x.ceu)) expect(Math.hypot(v.x - CIDADE.centro.x, v.z - CIDADE.centro.z)).toBeGreaterThan(CIDADE.bordaR);   // nada na central
   });
-  it("o lote do chão não encosta no heliporto nem em marcos sólidos", () => {
+  it("o lote da praça cabe na ilha (sem chão!) e não encosta no heliporto nem em marcos sólidos", () => {
     const l = LOTES[0]!, r = tamanhoDoLote(l).r;
+    expect(Math.hypot(l.x - PRACA.x, l.z - PRACA.z) + r).toBeLessThan(PRACA.r - 2);
     expect(Math.hypot(l.x - HELIPORTO.x, l.z - HELIPORTO.z)).toBeGreaterThan(HELIPORTO.r + r);
     for (const p of POIS.filter((x) => x.solido !== false && x.preset !== "estacionamento")) expect(Math.hypot(l.x - p.x, l.z - p.z)).toBeGreaterThan(p.footprintR + r);
   });

@@ -29,6 +29,9 @@ export type NaveHandle = {
   abrirCabine(on: boolean): void;
   /** desenhar o convés por dentro (só comigo a bordo): de fora, a nave camuflada é só a silhueta — o interior não aparece */
   verDentro(on: boolean): void;
+  /** a REVELAÇÃO (lib/cyber/ritual): 0 = a nave INVISÍVEL (só o formato do casco e os propulsores — nenhum outro
+   *  elemento), 1 = inteira (as luzes, o halo, os raios, as pernas). Só perto das nuvens do templo, no ritual */
+  revelar(k: number): void;
   /** a rampa de trás: quanto ela desce (m) e se o fim tem guarda-corpo (pairando no ar) */
   rampa(queda: number, fimFechado: boolean): void;
   /** `voando`: recolhe as pernas e acende tudo; `vel` (0..1) = rastro e giro; `curva` inclina */
@@ -203,13 +206,14 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
   }
 
   raiz.scale.set(ESCALA_NAVE, ESCALA_NAVE_V, ESCALA_NAVE);   // achatada: mais larga que alta
-  let inclina = 0, voo = 0, giro = 0;
+  let inclina = 0, voo = 0, giro = 0, revela = 0;
   return {
     group: raiz, alvos, assento,
     aBordo(on) { aBordoLocal = on; },
     abrirCabine(on) { abrirLocal = on; },
     rampa(q, f) { interior.rampa(q, f); },
     verDentro(on) { interior.group.visible = on; },
+    revelar(k) { revela = Math.max(0, Math.min(1, k)); },
     atualizar({ dt, t, voando, vel, curva }) {
       // a redoma da cabine abre comigo de pé lá em cima (largei o leme) e fecha quando desço ou assumo o leme (voa
       // fechada — é de vidro fumê, o piloto aparece); o dorso fica translúcido SÓ na minha tela, a bordo
@@ -221,19 +225,19 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
       abertura += (alvoAbertura - abertura) * Math.min(1, dt * (parado ? 8 : 2.6));
       for (const pt of petalas) pt.pivo.quaternion.setFromAxisAngle(pt.eixo, abertura * 1.9);   // abre como uma íris: as pétalas se erguem e tombam pra fora
       voo += ((voando ? 1 : 0) - voo) * Math.min(1, dt * 3);
-      trem.scale.y = Math.max(0.01, 1 - voo); trem.visible = voo < 0.95;
+      trem.scale.y = Math.max(0.01, 1 - voo); trem.visible = voo < 0.95 && revela > 0.5;
       corpo.position.y = 1.0 + voo * (parado ? 0 : Math.sin(t * 1.1) * 0.012);   // em solo apoia nas pernas; em voo, flutua (de leve: tem gente andando lá dentro)
       inclina += (Math.max(-0.08, Math.min(0.08, -curva * 0.2)) * voo - inclina) * Math.min(1, dt * 4);   // um QG não deita nas curvas
       corpo.rotation.z = -inclina;   // (a frente é o −z: a inclinação vira de lado)
       // eixo giratório: luzes da borda giram (mais rápido com velocidade) com onda de brilho LENTA; o halo gira ao contrário
       giro += dt * (parado ? 0.05 : 0.3 + 0.9 * Math.min(1, vel)) * (0.4 + 0.6 * voo);
-      aro.rotation.y = giro; halo.rotation.y = -giro * 0.6;
+      aro.rotation.y = giro; halo.rotation.y = -giro * 0.6; aro.visible = halo.visible = revela > 0.02; friso.visible = aroRedoma.visible = revela > 0.02;
       for (let i = 0; i < NL; i++) luzes.setColorAt(i, corI.copy(corLuz).multiplyScalar(0.5 + 0.5 * (0.5 + 0.5 * Math.sin(t * 1.5 - (i / NL) * Math.PI * 2)) * (0.5 + 0.5 * voo)));
       luzes.instanceColor!.needsUpdate = true;
-      haloMat.opacity = 0.12 + 0.35 * voo;
-      const comRaios = voo > 0.05; for (const gr of grupoRaios) { gr.mat.visible = gr.bMat.visible = comRaios; } if (comRaios) atualizarRaios(t, voo);   // parada (camuflada): sem raios
-      veioMat.opacity = 0.35 + 0.4 * voo * (0.75 + 0.25 * Math.sin(t * 1.3));
-      (nucleo.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.55 * voo;
+      haloMat.opacity = (0.12 + 0.35 * voo) * revela; (friso.material as THREE.MeshBasicMaterial).opacity = 0.75 * revela; (aroRedoma.material as THREE.MeshBasicMaterial).opacity = 0.9 * revela; (luzes.material as THREE.MeshBasicMaterial).opacity = 0.9 * revela;
+      const comRaios = voo > 0.05 && revela > 0.05; for (const gr of grupoRaios) { gr.mat.visible = gr.bMat.visible = comRaios; } if (comRaios) atualizarRaios(t, voo);   // parada (camuflada): sem raios
+      veioMat.opacity = (0.35 + 0.4 * voo * (0.75 + 0.25 * Math.sin(t * 1.3))) * revela;
+      (nucleo.material as THREE.MeshBasicMaterial).opacity = (0.25 + 0.55 * voo) * revela; (anelBaixo.material as THREE.MeshBasicMaterial).opacity = 0.55 * revela;
       // propulsores: chama cresce com o empuxo (pairar = sustentação; andar = mais forte), respirando devagar
       const empuxo = voo * (0.65 + 0.35 * Math.min(1, vel));
       for (const c of chamas) {
@@ -266,6 +270,6 @@ export function criarNave(opts: { cor?: string; low: boolean }): NaveHandle {
         rGeo.attributes.position!.needsUpdate = true;
       }
     },
-    dispose() { liberar(raiz, [tex]); },
+    dispose() { liberar(raiz, [tex, ...interior.texturas]); },
   };
 }

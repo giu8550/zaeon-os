@@ -1,10 +1,14 @@
 /**
  * CenaCosmica — o cenário fixo do cyberespaço (HANDOFF §1): nebulosa do dono (shader) irradiando do buraco negro
- * estilo filme (esfera preta + anel de fótons billboard + disco de acreção quente edge-on; NÃO é Saturno),
- * estrelas redondas girando devagar, chão plano + grid contrastando com o céu.
+ * estilo filme (esfera preta + anel de fótons billboard + disco de acreção quente edge-on; NÃO é Saturno) e estrelas
+ * redondas girando devagar. SEM CHÃO (out. 2026): o hiperespaço é só vazio + áreas flutuantes — as estrelas cercam
+ * tudo, inclusive embaixo, e uma casca de estrelas bem longe acompanha a câmera (o vazio nunca fica "preto chapado").
+ * O buraco negro grande SAIU de cima do palco do lounge (out/2026: ali fica o OLHO/a mandala do show — components/cyber
+ * MandalaSagrada); o ponto `BURACO_NEGRO` de lib/cyber/ceu continua sendo o centro de onde a nebulosa irradia.
  * Dois passes: o fundo (nebulosa) numa cena ortográfica, depois a cena 3D por cima.
  */
 import * as THREE from "three";
+import { BURACO_NEGRO } from "@/lib/cyber/ceu";
 
 export function glowTex(c0: string, c1: string): THREE.CanvasTexture {
   const s = 128, cs = document.createElement("canvas"); cs.width = cs.height = s;
@@ -36,8 +40,8 @@ const NEB_FRAG = `
 
 export type CenaCosmicaHandle = {
   bgScene: THREE.Scene; bgCam: THREE.OrthographicCamera;
-  scene: THREE.Scene; floor: THREE.Mesh; starTex: THREE.Texture;
-  /** o buraco negro (horizonte + disco) — é o PORTAL pra Cidade Zaeon (clique) */
+  scene: THREE.Scene; starTex: THREE.Texture;
+  /** o buraco negro (horizonte + disco) — o par do buraco negro da nave do dono */
   buracoNegro: THREE.Object3D[];
   atualizar(o: { dt: number; t: number; cam: THREE.PerspectiveCamera; aspect: number }): void;
   /** desenha o FUNDO (nebulosa) numa textura de resolução reduzida (`escala` do tamanho da tela: 0,5 = 4× menos
@@ -58,42 +62,33 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
     });
     bgScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m)); nebulas.push(m); return m;
   };
-  neb(1.2, 0.25, 0.85, 0.08, 0.95, 0.25, 1.5); neb(1.9, 0.45, 1.0, -0.05, 0.9, 0.4, 1.0);
+  // (as nebulosas roxas presas à câmera saíram — o dono: o fundo do cyberespaço é PRETO, só as estrelas; `neb` fica pra quem quiser religar)
+  void neb;
 
   const scene = new THREE.Scene(); scene.background = null;
   scene.add(new THREE.HemisphereLight(0x5566aa, 0x0a0a16, 0.9));
   const key = new THREE.DirectionalLight(0x99bbff, 0.6); key.position.set(4, 9, 6); scene.add(key);
 
-  // estrelas redondas, densidade baixa — a nuvem fica em volta da ZAEON (a ilha no céu, sobre o buraco negro), não da praça
-  const SN = low ? 650 : 1200, spv = new Float32Array(SN * 3), CEN = { x: 0, y: 260, z: -110 }, CHAO_MIN = 10;   // (o mapa cresceu: a Zaeon a 450 m, a UNILAB e a Solana bem longe)
-  for (let i = 0; i < SN; ) {
-    const u = Math.random(), v = Math.random(), th = u * 6.283, ph = Math.acos(2 * v - 1), rr = 70 + 520 * Math.cbrt(Math.random());
-    const y = rr * Math.cos(ph);
-    if (CEN.y + y < CHAO_MIN) continue;   // nada de estrela enterrada no chão
-    spv[i * 3] = rr * Math.sin(ph) * Math.cos(th); spv[i * 3 + 1] = y; spv[i * 3 + 2] = rr * Math.sin(ph) * Math.sin(th); i++;
+  // estrelas redondas, densidade baixa — uma nuvem em volta do mapa todo (em cima E embaixo: não há chão)
+  const SN = low ? 750 : 1400, spv = new Float32Array(SN * 3), CEN = { x: 0, y: 200, z: -250 };
+  for (let i = 0; i < SN; i++) {
+    const u = Math.random(), v = Math.random(), th = u * 6.283, ph = Math.acos(2 * v - 1), rr = 90 + 900 * Math.cbrt(Math.random());
+    spv[i * 3] = rr * Math.sin(ph) * Math.cos(th); spv[i * 3 + 1] = rr * Math.cos(ph); spv[i * 3 + 2] = rr * Math.sin(ph) * Math.sin(th);
   }
   const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(spv, 3));
-  const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 1.15, map: starTex, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
-  stars.position.set(CEN.x, CEN.y, CEN.z); scene.add(stars);   // gira só em torno do eixo vertical da Zaeon (não vai parar no chão)
+  const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, map: starTex, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
+  stars.position.set(CEN.x, CEN.y, CEN.z); scene.add(stars);   // gira só em torno do eixo vertical
+  // a CASCA de estrelas bem longe: tamanho fixo na tela e presa à câmera (de qualquer ponto do mapa o céu tem fundo)
+  const FN = low ? 500 : 1000, fpv = new Float32Array(FN * 3);
+  for (let i = 0; i < FN; i++) {
+    const th = Math.random() * 6.283, ph = Math.acos(2 * Math.random() - 1), rr = 2600 + Math.random() * 500;
+    fpv[i * 3] = rr * Math.sin(ph) * Math.cos(th); fpv[i * 3 + 1] = rr * Math.cos(ph); fpv[i * 3 + 2] = rr * Math.sin(ph) * Math.sin(th);
+  }
+  const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.BufferAttribute(fpv, 3));
+  const casca = new THREE.Points(fg, new THREE.PointsMaterial({ color: 0xdfe8ff, size: 1.7, map: starTex, sizeAttenuation: false, transparent: true, opacity: 0.75, depthWrite: false, blending: THREE.AdditiveBlending }));
+  casca.frustumCulled = false; scene.add(casca);
 
-  // buraco negro estilo filme
-  const bh = new THREE.Group(); bh.position.set(0, 16, -110);
-  const horizonte = new THREE.Mesh(new THREE.SphereGeometry(6, 48, 48), new THREE.MeshBasicMaterial({ color: 0x000000 })); bh.add(horizonte);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex("rgba(255,200,130,0.55)", "rgba(180,90,30,0.18)"), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-  halo.scale.set(30, 30, 1); bh.add(halo);
-  const dMat = (c: number, op: number) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const disk = new THREE.Group();
-  for (const [a, b, c, o] of [[6.6, 15, 0xffe3b0, 0.85], [6.6, 11, 0xffb45a, 0.8], [6.6, 8.6, 0xff7a2c, 0.7]] as const) disk.add(new THREE.Mesh(new THREE.RingGeometry(a, b, 180), dMat(c, o)));
-  disk.rotation.x = -Math.PI / 2 + 0.06; bh.add(disk);
-  const photon = new THREE.Mesh(new THREE.RingGeometry(6.0, 6.6, 128), dMat(0xfff0d6, 0.95)); bh.add(photon);
-  scene.add(bh);
-
-  // chão limpo + grid
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(3600, 3600), new THREE.MeshStandardMaterial({ color: 0x0e1730, roughness: 1 }));
-  floor.rotation.x = -Math.PI / 2; scene.add(floor);
-  const grid = new THREE.GridHelper(3600, 720, 0x5a6cc0, 0x1b2550); grid.position.y = 0.02;
-  (grid.material as THREE.Material).transparent = true; (grid.material as THREE.Material).opacity = 0.42; scene.add(grid);
-
+  // (o buraco negro estilo filme que pairava em cima do palco do lounge saiu: no lugar dele, o olho/a mandala do show)
   const bhNdc = new THREE.Vector3();
   // o fundo em resolução reduzida: render target + um quadrado que estica ele na tela
   let rt: THREE.WebGLRenderTarget | null = null, quadro = 0;
@@ -103,8 +98,9 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
     vertexShader: NEB_VERT, fragmentShader: "uniform sampler2D mapa; varying vec2 vUv; void main(){ gl_FragColor = texture2D(mapa, vUv); }" });
   const cenaEstica = new THREE.Scene(); cenaEstica.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), matEstica));
   return {
-    bgScene, bgCam, scene, floor, starTex, buracoNegro: [horizonte, disk],
+    bgScene, bgCam, scene, starTex, buracoNegro: [],
     desenharFundo(R, escala) {
+      if (!nebulas.length) return;   // fundo preto: nada a desenhar
       R.getDrawingBufferSize(tam);
       const w = Math.max(1, Math.round(tam.x * escala)), h = Math.max(1, Math.round(tam.y * escala));
       if (!rt || rt.width !== w || rt.height !== h) {
@@ -115,10 +111,11 @@ export function criarCenaCosmica(low: boolean, aspect: number): CenaCosmicaHandl
       R.render(cenaEstica, bgCam);
     },
     atualizar({ dt, t, cam, aspect: asp }) {
-      bhNdc.set(0, 17, -120).project(cam);
+      bhNdc.set(BURACO_NEGRO.x, BURACO_NEGRO.y, BURACO_NEGRO.z).project(cam);
+      if (bhNdc.z > 1) bhNdc.set(-bhNdc.x, -bhNdc.y, 0);   // atrás da câmera: a nebulosa irradia do lado oposto (não pula pro meio)
+      casca.position.copy(cam.position);
       for (const m of nebulas) { m.uniforms.uTime!.value += dt; m.uniforms.uAspect!.value = asp; (m.uniforms.uCenter!.value as THREE.Vector2).set(bhNdc.x, bhNdc.y); }
       stars.rotation.y -= dt * 0.014;
-      photon.lookAt(cam.position); (halo.material as THREE.SpriteMaterial).opacity = 0.75 + 0.12 * Math.sin(t * 1.5);
     },
     dispose() {
       for (const sc of [bgScene, scene]) sc.traverse((o) => {

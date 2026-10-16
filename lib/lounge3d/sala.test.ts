@@ -25,6 +25,11 @@ describe("sanitização (XSS/lixo nunca chega ao DOM)", () => {
   });
   it("lerConteudo: string JSON, objeto ou lixo → sala válida", () => {
     expect(lerConteudo("{nope")).toEqual({ notes: [], artifacts: [] });
+    // o som da NAVE e o RITUAL do dono (lib/cyber/ritual) vivem no conteúdo também — e sobrevivem às edições de notas
+    const c = lerConteudo({ notes: [], artifacts: [], somNave: { faixas: [{ id: "f1aaaaaa", nome: "n", arq: "lm_00000000000000000000.mp3", dur: 5, deId: "d" }], estado: { i: 0, tocando: true, desde: 1, pos: 0 } }, ritual: { tempestade: 1700000000000, droids: true } });
+    expect(c.somNave?.faixas).toHaveLength(1); expect(c.ritual).toEqual({ tempestade: 1700000000000, droids: true, veu: 0, nave: false });
+    expect(lerConteudo({ ritual: { tempestade: 0, droids: false } }).ritual).toBeUndefined();
+    const dep = aplicarOps(c, { upsertNotes: [{ id: "z", x: 0, z: 0, text: "z" }] }); expect(dep.somNave).toEqual(c.somNave); expect(dep.ritual).toEqual(c.ritual);
     expect(lerConteudo(JSON.stringify({ notes: [{ id: "n", x: 0, z: 0, text: "a" }, null], artifacts: [{ id: "m", type: "molecula", x: 1, z: 1 }] })).notes).toHaveLength(1);
   });
 });
@@ -42,13 +47,13 @@ describe("aplicarOps (por item, tetos)", () => {
   });
 });
 
-describe("admissão ≤5", () => {
-  it("5 dentro → 6º recusado; quem já está dentro reconecta", () => {
-    const cinco = ["1", "2", "3", "4", "5"];
-    expect(admitir(cinco, "6")).toEqual({ ok: false, motivo: "cheia" });
-    expect(admitir(cinco, "3")).toEqual({ ok: true });
-    expect(admitir(cinco.slice(0, 4), "6")).toEqual({ ok: true });
-    expect(LIMITE_SALA).toBe(5);
+describe("admissão ≤ LIMITE_SALA", () => {
+  it("cheia → o próximo é recusado; quem já está dentro reconecta", () => {
+    const cheia = Array.from({ length: LIMITE_SALA }, (_, i) => String(i + 1));
+    expect(admitir(cheia, "novo")).toEqual({ ok: false, motivo: "cheia" });
+    expect(admitir(cheia, "3")).toEqual({ ok: true });
+    expect(admitir(cheia.slice(0, LIMITE_SALA - 1), "novo")).toEqual({ ok: true });
+    expect(LIMITE_SALA).toBe(40);   // (o MUNDO: todo mundo na mesma sala)
   });
 });
 

@@ -4,13 +4,16 @@
  * colaborativo: notas editáveis, artefatos, avatares que andam, chat efêmero.
  */
 import type { SomLounge } from "./musica";
+import type { Ritual } from "@/lib/cyber/ritual";
 
 /** Flag de BUILD (NEXT_PUBLIC_*): precisa ser build-arg no Dockerfile/compose, senão "some" em prod. */
 export const lounge3dOn = (): boolean => process.env.NEXT_PUBLIC_LOUNGE_3D === "1";
 
 export const KIND_SALA = "lounge_canvas";
 /** Teto de ocupantes por sala — aplicado NO SERVIDOR (auth do canal de presença). */
-export const LIMITE_SALA = 5;
+/** quantas pessoas cabem numa sala ao mesmo tempo — o MUNDO do cyberespaço é uma sala só pra todo mundo (lib/lounge3d/mundo;
+ *  era 5). Espelhado no Colyseus (server/colyseus/src/regras `MAX_JOGADORES`); presença do Pusher aguenta até 100 */
+export const LIMITE_SALA = 40;
 
 export const MAX_NOTAS = 200;
 export const MAX_ARTEFATOS = 50;
@@ -40,7 +43,14 @@ export type Presenca = {
   falando?: boolean;  // voz (push-to-talk) ligada agora — indicador no avatar (transporte colyseus)
   moto?: { s: number; y: number; yaw: number; de?: string };   // montado numa MOTO voadora (vaga de origem, altura, rumo; `de` = de quem era a estacionada que pegou) — qualquer pessoa
   motoLargada?: { s: number; x: number; y: number; z: number; yaw: number };   // a moto que ESTACIONOU (fica lá, não volta pra vaga)
+  desc?: number;      // DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (lib/cyber/descanso)
+  mov?: number;       // o MOVIMENTO TURBINADO (lib/cyber/movimento): 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem
+  atk?: number; hp?: number; arma?: number;   // ARENA PvP (lib/cyber/combate): o golpe (seq×4 + nº do combo), a vida (0–100), a espada na mão (1)
   ts?: number;
+  /** corrida de checkpoints: quantos pegou e a corrida ("semente:largada") */
+  ck?: number; cr?: string;
+  /** a bordo da nave-QG: posição LOCAL na planta, nível e escada */
+  bordo?: { x: number; z: number; nivel: 0 | 1; esc?: number };
 };
 
 export type NotaCanvas = {
@@ -65,8 +75,16 @@ export type ArtefatoCanvas = {
 /** o recado ATUAL pro QG (um só; o novo substitui) — quem mandou vem da SESSÃO no servidor */
 export type RecadoQG = { id: string; texto: string; deId: string; deNome: string; deCor: string; ts: number };
 export type ConteudoSala = { notes: NotaCanvas[]; artifacts: ArtefatoCanvas[]; recadoQG?: RecadoQG | null; somLounge?: SomLounge | null;
+  /** a música que sai da NAVE do dono (o 2º canal do toca-discos — o PC "som da nave" na cabine) */
+  somNave?: SomLounge | null;
+  /** o RITUAL da chegada do dono (lib/cyber/ritual): a tempestade no templo e os anunciadores */
+  ritual?: Ritual | null;
   /** onde a NAVE-QG do dono ficou estacionada (todos a veem ali, mesmo com ele offline) */
   naveQG?: { x: number; y: number; z: number; yaw: number } | null };
+/** os CANAIS do toca-discos: as caixas do lounge e a nave do dono */
+export type CanalSom = "lounge" | "nave";
+export const CAMPO_DO_CANAL: Record<CanalSom, "somLounge" | "somNave"> = { lounge: "somLounge", nave: "somNave" };
+export const canalDe = (v: unknown): CanalSom => (v === "nave" ? "nave" : "lounge");
 
 export type OpsSala = {
   upsertNotes?: unknown[]; removeNotes?: unknown[];
@@ -74,6 +92,12 @@ export type OpsSala = {
 };
 
 export type MensagemChat = { id: string; userId: string; name: string; color: string; texto: string; ts: number };
+/** junta uma mensagem no chat (as últimas 200) SEM repetir: no modo Colyseus quem envia põe a própria mensagem na hora
+ *  (a resposta do POST) e o evento do Pusher traz a MESMA de volta — o id decide (bug de out/2026: tudo saía em dobro) */
+export function juntarChat(lista: MensagemChat[], m: MensagemChat): MensagemChat[] {
+  if (!m?.id || lista.some((x) => x.id === m.id)) return lista;
+  return [...lista.slice(-199), m];
+}
 
 // ───────────── canal Pusher (presença) e eventos ─────────────
 export const canalSala = (salaId: string) => `presence-lounge3d-${salaId}`;
@@ -89,8 +113,12 @@ export const EV_CHAT = "chat";
 export const EV_CONTEUDO = "conteudo";
 /** recado do dono pro QG (broadcast pelo servidor; persiste no conteúdo da sala) */
 export const EV_RECADO = "recado-qg";
-/** o som do lounge da Zaeon mudou (playlist ou controle) — `agora` = relógio do servidor (acerta o dos clientes) */
+/** o som do lounge da Zaeon (ou o da nave: `canal`) mudou (playlist ou controle) — `agora` = relógio do servidor (acerta o dos clientes) */
 export const EV_MUSICA = "musica-lounge";
+/** o RITUAL do dono mudou (ligou/desligou a tempestade ou os anunciadores) — `agora` = relógio do servidor */
+export const EV_RITUAL = "ritual";
+/** uma ENTREGA no Relicário do Saber (lib/cyber/relicario): todos na sala veem o item voar e a Zaeon ler */
+export const EV_RELICARIO = "relicario";
 
 /** Cor de accent determinística pelo userId (até o perfil ter campo próprio). */
 export function corDoUsuario(userId: string): string {

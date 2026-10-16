@@ -26,7 +26,7 @@ type Pecas = Record<EstadoSprite, Peca>;
 
 const ROTULO: Record<EstadoSprite, string> = {
   idle: "idle · base", blink: "blink · piscar", talk: "talk · falando", talk_half: "talk ½ · sílaba",
-  smile: "smile · hover", happy: "happy · concluiu", think: "think · pensando", confused: "confused · erro",
+  smile: "smile · hover", happy: "happy · concluiu", think: "think · pensando", confused: "confused · erro", angry: "angry · brava",
 };
 const OBRIGATORIO = new Set<EstadoSprite>(["idle", "blink"]);
 const vazio = (): Peca => ({ status: "vazio", ajuste: "", ajustando: false });

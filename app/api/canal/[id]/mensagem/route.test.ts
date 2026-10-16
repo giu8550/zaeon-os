@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const A = "a".repeat(24), B = "b".repeat(24), C = "c".repeat(24), CANAL = "d".repeat(24);
-const state: { canal: any; user: any; criadas: any[]; disparos: any[]; publicados: any[] } = { canal: null, user: null, criadas: [], disparos: [], publicados: [] };
+const state: { canal: any; user: any; criadas: any[]; disparos: any[]; publicados: any[]; historico: any[] } = { canal: null, user: null, criadas: [], disparos: [], publicados: [], historico: [] };
 
 vi.mock("@/lib/canal/server", () => {
   // sem importActual: o módulo real puxa src/lib/auth → db (exige MONGODB_URI no ambiente de teste)
@@ -13,7 +13,11 @@ vi.mock("@/lib/canal/server", () => {
     isObjectId: (v: unknown) => typeof v === "string" && /^[a-f0-9]{24}$/i.test(v),
     prisma: {
       canal: { findUnique: async ({ where }: any) => (where.id === state.canal?.id ? state.canal : null), update: async () => state.canal },
-      canalMensagem: { create: async ({ data }: any) => { const r = { id: "m1", createdAt: new Date("2026-09-01T00:00:00Z"), ...data }; state.criadas.push(r); return r; } },
+      canalMensagem: {
+        create: async ({ data }: any) => { const r = { id: "m1", createdAt: new Date("2026-09-01T00:00:00Z"), ...data }; state.criadas.push(r); return r; },
+        // histórico em ordem DESC (mais recente primeiro), como a rota pede
+        findMany: async () => [...state.historico].reverse(),
+      },
     },
     sessaoUsuario: async () => state.user,
     exigirFlag: () => null,
@@ -36,10 +40,10 @@ const canal = (acesso: string) => ({ id: CANAL, ownerId: A, titulo: "t", acesso,
 const user = (id: string) => ({ id, name: "N", image: null, email: "e@x", role: null });
 
 describe("POST /api/canal/[id]/mensagem · author gate (IDOR)", () => {
-  beforeEach(() => { state.criadas = []; state.disparos = []; state.publicados = []; });
+  beforeEach(() => { state.criadas = []; state.disparos = []; state.publicados = []; state.historico = []; });
 
   it.each([
-    ["privado", A, 201], ["privado", B, 403], ["privado", C, 403],
+    ["privado", A, 201], ["privado", B, 201], ["privado", C, 403],
     ["turma", A, 201], ["turma", B, 201], ["turma", C, 403],
     ["aberto", A, 201], ["aberto", B, 201], ["aberto", C, 201],
   ])("acesso=%s · user=%s → %i", async (acesso, uid, status) => {
@@ -64,7 +68,7 @@ describe("POST /api/canal/[id]/mensagem · author gate (IDOR)", () => {
 });
 
 describe("POST /api/canal/[id]/mensagem · @mention → turno", () => {
-  beforeEach(() => { state.criadas = []; state.disparos = []; state.publicados = []; state.canal = canal("turma"); state.user = user(B); });
+  beforeEach(() => { state.criadas = []; state.disparos = []; state.publicados = []; state.historico = []; state.canal = canal("turma"); state.user = user(B); });
 
   it("grava a mensagem humana com mencoes, publica e dispara 1 turno por agente conhecido", async () => {
     const r = await POST(req("@aura e @Osler, o que acham? @fulano"), { params: { id: CANAL } });
@@ -77,10 +81,68 @@ describe("POST /api/canal/[id]/mensagem · @mention → turno", () => {
     expect(state.disparos[0]).toMatchObject({ canalId: CANAL, userId: B, mensagemId: "m1" });
     expect(j.turnos).toEqual([{ agentKey: "aura", via: "inline" }, { agentKey: "medicina", via: "inline" }]);
   });
-  it("sem @mention → nenhum turno", async () => {
+  it("sem @mention em canal compartilhado, sem agente ativo → nenhum turno", async () => {
     const r = await POST(req("só conversando"), { params: { id: CANAL } });
     expect(r.status).toBe(201);
     expect(state.disparos).toHaveLength(0);
     expect((await r.json()).turnos).toEqual([]);
+  });
+});
+
+describe("POST /api/canal/[id]/mensagem · sem @ → agente ativo (lib/canal/alvo.ts)", () => {
+  beforeEach(() => {
+    state.criadas = []; state.disparos = []; state.publicados = []; state.historico = [];
+    state.canal = { ...canal("privado"), membros: [] }; // canal de uma pessoa (dono A)
+    state.user = user(A);
+  });
+
+  it("primeiro oi sem @ → a Aura responde", async () => {
+    const r = await POST(req("eai"), { params: { id: CANAL } });
+    expect(r.status).toBe(201);
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+    expect(state.disparos[0]).toMatchObject({ canalId: CANAL, userId: A, mensagemId: "m1" });
+    expect((await r.json()).turnos).toEqual([{ agentKey: "aura", via: "inline" }]);
+    expect(state.criadas[0].mencoes).toEqual([]); // a menção gravada continua sendo só a explícita
+  });
+
+  it("no meio da conversa, sem @, continua o ÚLTIMO agente que falou", async () => {
+    state.historico = [
+      { autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "aura" },
+      { autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "medicina" },
+    ];
+    await POST(req("e agora?"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
+  });
+
+  it("@ continua mandando e troca o agente", async () => {
+    state.historico = [{ autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "aura" }];
+    await POST(req("@Osler me ajuda"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
+  });
+
+  it("#396 · conversa privada (dmCom): sem @ a IA não responde sozinha (são duas pessoas conversando)", async () => {
+    state.canal = { ...canal("privado"), membros: [], dmCom: B };
+    state.user = user(A);
+    await POST(req("oi, tudo bem?"), { params: { id: CANAL } });
+    expect(state.disparos).toHaveLength(0);
+    // com @ a IA entra na conversa normalmente
+    await POST(req("@aura resume pra gente"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+
+  it("#396 · conversa privada: o outro lado também escreve; terceiro não (403)", async () => {
+    state.canal = { ...canal("privado"), membros: [], dmCom: B };
+    state.user = user(B);
+    expect((await POST(req("oi"), { params: { id: CANAL } })).status).toBe(201);
+    state.user = user(C);
+    expect((await POST(req("oi"), { params: { id: CANAL } })).status).toBe(403);
+  });
+
+  it("canal com 2+ pessoas: outra pessoa sem @ não aciona o agente", async () => {
+    state.canal = canal("turma"); // dono A + membro B
+    state.user = user(B);
+    state.historico = [{ autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "aura" }];
+    await POST(req("concordo com isso"), { params: { id: CANAL } });
+    expect(state.disparos).toHaveLength(0);
   });
 });

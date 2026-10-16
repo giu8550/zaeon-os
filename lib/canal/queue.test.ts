@@ -32,9 +32,33 @@ describe("queue · inline por padrão, 1 turno por canal", () => {
       { canalId: CANAL, agentKey: "nina", userId: A, mensagemId: "m1" },
     ], deps);
     expect(res).toEqual(["inline", "inline"]);
-    await new Promise((r) => setTimeout(r, 80));
+    // espera os dois turnos terminarem (antes era um sleep fixo de 80ms, que falhava com a máquina carregada)
+    await vi.waitFor(() => expect(ordem).toHaveLength(4), { timeout: 2000 });
     expect(ordem).toEqual(["aura:in", "aura:out", "nina:in", "nina:out"]);
     expect(deps).toHaveBeenCalledTimes(2);
+  });
+  it("#396 (B) · inline: o agente passa a bola e o colega responde sozinho em seguida; a cadeia para no limite", async () => {
+    const ordem: string[] = [];
+    let seq = 0;
+    const prisma: any = {
+      canal: { findUnique: async () => ({ id: CANAL, ownerId: A, titulo: "t", acesso: "privado", membros: [], agentes: [] }) },
+      canalMensagem: {
+        findMany: async () => [{ id: "m1", canalId: CANAL, autorTipo: "humano", autorId: A, texto: "@aura oi", mencoes: ["aura"], createdAt: new Date() }],
+        create: async ({ data }: any) => ({ id: `n${++seq}`, createdAt: new Date(), ...data }),
+      },
+      agentProfile: { findMany: async () => [] }, mentorTemplate: { findMany: async () => [] },
+      user: { findMany: async () => [] }, agentUsage: { upsert: async () => ({}) },
+    };
+    // aura → passa pra nina → nina passa pro téo → téo tenta passar pro caio (já no limite: não vai)
+    const respostas: Record<string, string> = { aura: "isso é com a @nina", nina: "e o @teo completa", teo: "fechado; @caio pode revisar" };
+    const deps = vi.fn(async () => ({
+      prisma, publicar: async () => {},
+      gerar: async ({ agente }: any) => { ordem.push(agente.agentKey); return respostas[agente.agentKey] ?? "ok"; },
+    }));
+    await dispararTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: "m1" }, deps);
+    await vi.waitFor(() => expect(ordem).toHaveLength(3), { timeout: 2000 });
+    await new Promise((r) => setTimeout(r, 50)); // dá tempo de um 4º (que não pode existir)
+    expect(ordem).toEqual(["aura", "nina", "teo"]);
   });
   it("dispararTurno nunca lança mesmo com deps quebradas", async () => {
     await expect(dispararTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: "m" }, async () => { throw new Error("x"); })).resolves.toBe("inline");

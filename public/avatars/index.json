@@ -2,27 +2,27 @@
   "agentes": {
     "aura": {
       "agentId": "aura",
-      "versao": "muy2hv1w",
+      "versao": "muzjjo3m",
       "motor": "sprite",
       "estados": {
-        "idle": "/avatars/aura/idle.webp?v=muy2hv1w",
-        "blink": "/avatars/aura/blink.webp?v=muy2hv1w",
-        "talk": "/avatars/aura/talk.webp?v=muy2hv1w",
-        "talk_half": "/avatars/aura/talk_half.webp?v=muy2hv1w",
-        "smile": "/avatars/aura/smile.webp?v=muy2hv1w",
-        "happy": "/avatars/aura/happy.webp?v=muy2hv1w",
-        "think": "/avatars/aura/think.webp?v=muy2hv1w",
-        "confused": "/avatars/aura/confused.webp?v=muy2hv1w"
+        "idle": "/avatars/aura/idle.webp?v=muzjjo3m",
+        "blink": "/avatars/aura/blink.webp?v=muzjjo3m",
+        "talk": "/avatars/aura/talk.webp?v=muzjjo3m",
+        "talk_half": "/avatars/aura/talk_half.webp?v=muzjjo3m",
+        "smile": "/avatars/aura/smile.webp?v=muzjjo3m",
+        "happy": "/avatars/aura/happy.webp?v=muzjjo3m",
+        "think": "/avatars/aura/think.webp?v=muzjjo3m",
+        "confused": "/avatars/aura/confused.webp?v=muzjjo3m"
       },
       "pequeno": {
-        "idle": "/avatars/aura/idle.sm.webp?v=muy2hv1w",
-        "blink": "/avatars/aura/blink.sm.webp?v=muy2hv1w",
-        "talk": "/avatars/aura/talk.sm.webp?v=muy2hv1w",
-        "talk_half": "/avatars/aura/talk_half.sm.webp?v=muy2hv1w",
-        "smile": "/avatars/aura/smile.sm.webp?v=muy2hv1w",
-        "happy": "/avatars/aura/happy.sm.webp?v=muy2hv1w",
-        "think": "/avatars/aura/think.sm.webp?v=muy2hv1w",
-        "confused": "/avatars/aura/confused.sm.webp?v=muy2hv1w"
+        "idle": "/avatars/aura/idle.sm.webp?v=muzjjo3m",
+        "blink": "/avatars/aura/blink.sm.webp?v=muzjjo3m",
+        "talk": "/avatars/aura/talk.sm.webp?v=muzjjo3m",
+        "talk_half": "/avatars/aura/talk_half.sm.webp?v=muzjjo3m",
+        "smile": "/avatars/aura/smile.sm.webp?v=muzjjo3m",
+        "happy": "/avatars/aura/happy.sm.webp?v=muzjjo3m",
+        "think": "/avatars/aura/think.sm.webp?v=muzjjo3m",
+        "confused": "/avatars/aura/confused.sm.webp?v=muzjjo3m"
       },
       "cor": "#6d28d9",
       "voz": {
@@ -134,27 +134,27 @@
     },
     "nina": {
       "agentId": "nina",
-      "versao": "muy3giic",
+      "versao": "muzhsyj9",
       "motor": "sprite",
       "estados": {
-        "idle": "/avatars/nina/idle.webp?v=muy3giic",
-        "blink": "/avatars/nina/blink.webp?v=muy3giic",
-        "talk": "/avatars/nina/talk.webp?v=muy3giic",
-        "talk_half": "/avatars/nina/talk_half.webp?v=muy3giic",
-        "smile": "/avatars/nina/smile.webp?v=muy3giic",
-        "happy": "/avatars/nina/happy.webp?v=muy3giic",
-        "think": "/avatars/nina/think.webp?v=muy3giic",
-        "confused": "/avatars/nina/confused.webp?v=muy3giic"
+        "idle": "/avatars/nina/idle.webp?v=muzhsyj9",
+        "blink": "/avatars/nina/blink.webp?v=muzhsyj9",
+        "talk": "/avatars/nina/talk.webp?v=muzhsyj9",
+        "talk_half": "/avatars/nina/talk_half.webp?v=muzhsyj9",
+        "smile": "/avatars/nina/smile.webp?v=muzhsyj9",
+        "happy": "/avatars/nina/happy.webp?v=muzhsyj9",
+        "think": "/avatars/nina/think.webp?v=muzhsyj9",
+        "confused": "/avatars/nina/confused.webp?v=muzhsyj9"
       },
       "pequeno": {
-        "idle": "/avatars/nina/idle.sm.webp?v=muy3giic",
-        "blink": "/avatars/nina/blink.sm.webp?v=muy3giic",
-        "talk": "/avatars/nina/talk.sm.webp?v=muy3giic",
-        "talk_half": "/avatars/nina/talk_half.sm.webp?v=muy3giic",
-        "smile": "/avatars/nina/smile.sm.webp?v=muy3giic",
-        "happy": "/avatars/nina/happy.sm.webp?v=muy3giic",
-        "think": "/avatars/nina/think.sm.webp?v=muy3giic",
-        "confused": "/avatars/nina/confused.sm.webp?v=muy3giic"
+        "idle": "/avatars/nina/idle.sm.webp?v=muzhsyj9",
+        "blink": "/avatars/nina/blink.sm.webp?v=muzhsyj9",
+        "talk": "/avatars/nina/talk.sm.webp?v=muzhsyj9",
+        "talk_half": "/avatars/nina/talk_half.sm.webp?v=muzhsyj9",
+        "smile": "/avatars/nina/smile.sm.webp?v=muzhsyj9",
+        "happy": "/avatars/nina/happy.sm.webp?v=muzhsyj9",
+        "think": "/avatars/nina/think.sm.webp?v=muzhsyj9",
+        "confused": "/avatars/nina/confused.sm.webp?v=muzhsyj9"
       },
       "cor": "#db2777",
       "voz": {
@@ -200,27 +200,27 @@
     },
     "teo": {
       "agentId": "teo",
-      "versao": "muy3gdir",
+      "versao": "muzkbbju",
       "motor": "sprite",
       "estados": {
-        "idle": "/avatars/teo/idle.webp?v=muy3gdir",
-        "blink": "/avatars/teo/blink.webp?v=muy3gdir",
-        "talk": "/avatars/teo/talk.webp?v=muy3gdir",
-        "talk_half": "/avatars/teo/talk_half.webp?v=muy3gdir",
-        "smile": "/avatars/teo/smile.webp?v=muy3gdir",
-        "happy": "/avatars/teo/happy.webp?v=muy3gdir",
-        "think": "/avatars/teo/think.webp?v=muy3gdir",
-        "confused": "/avatars/teo/confused.webp?v=muy3gdir"
+        "idle": "/avatars/teo/idle.webp?v=muzkbbju",
+        "blink": "/avatars/teo/blink.webp?v=muzkbbju",
+        "talk": "/avatars/teo/talk.webp?v=muzkbbju",
+        "talk_half": "/avatars/teo/talk_half.webp?v=muzkbbju",
+        "smile": "/avatars/teo/smile.webp?v=muzkbbju",
+        "happy": "/avatars/teo/happy.webp?v=muzkbbju",
+        "think": "/avatars/teo/think.webp?v=muzkbbju",
+        "confused": "/avatars/teo/confused.webp?v=muzkbbju"
       },
       "pequeno": {
-        "idle": "/avatars/teo/idle.sm.webp?v=muy3gdir",
-        "blink": "/avatars/teo/blink.sm.webp?v=muy3gdir",
-        "talk": "/avatars/teo/talk.sm.webp?v=muy3gdir",
-        "talk_half": "/avatars/teo/talk_half.sm.webp?v=muy3gdir",
-        "smile": "/avatars/teo/smile.sm.webp?v=muy3gdir",
-        "happy": "/avatars/teo/happy.sm.webp?v=muy3gdir",
-        "think": "/avatars/teo/think.sm.webp?v=muy3gdir",
-        "confused": "/avatars/teo/confused.sm.webp?v=muy3gdir"
+        "idle": "/avatars/teo/idle.sm.webp?v=muzkbbju",
+        "blink": "/avatars/teo/blink.sm.webp?v=muzkbbju",
+        "talk": "/avatars/teo/talk.sm.webp?v=muzkbbju",
+        "talk_half": "/avatars/teo/talk_half.sm.webp?v=muzkbbju",
+        "smile": "/avatars/teo/smile.sm.webp?v=muzkbbju",
+        "happy": "/avatars/teo/happy.sm.webp?v=muzkbbju",
+        "think": "/avatars/teo/think.sm.webp?v=muzkbbju",
+        "confused": "/avatars/teo/confused.sm.webp?v=muzkbbju"
       },
       "cor": "#047857",
       "voz": {
@@ -233,27 +233,29 @@
     },
     "zaeon": {
       "agentId": "zaeon",
-      "versao": "muy3dkxb",
+      "versao": "muz3qxjp",
       "motor": "sprite",
       "estados": {
-        "idle": "/avatars/zaeon/idle.webp?v=muy3dkxb",
-        "blink": "/avatars/zaeon/blink.webp?v=muy3dkxb",
-        "talk": "/avatars/zaeon/talk.webp?v=muy3dkxb",
-        "talk_half": "/avatars/zaeon/talk_half.webp?v=muy3dkxb",
-        "smile": "/avatars/zaeon/smile.webp?v=muy3dkxb",
-        "happy": "/avatars/zaeon/happy.webp?v=muy3dkxb",
-        "think": "/avatars/zaeon/think.webp?v=muy3dkxb",
-        "confused": "/avatars/zaeon/confused.webp?v=muy3dkxb"
+        "idle": "/avatars/zaeon/idle.webp?v=muz3qxjp",
+        "blink": "/avatars/zaeon/blink.webp?v=muz3qxjp",
+        "talk": "/avatars/zaeon/talk.webp?v=muz3qxjp",
+        "talk_half": "/avatars/zaeon/talk_half.webp?v=muz3qxjp",
+        "smile": "/avatars/zaeon/smile.webp?v=muz3qxjp",
+        "happy": "/avatars/zaeon/happy.webp?v=muz3qxjp",
+        "think": "/avatars/zaeon/think.webp?v=muz3qxjp",
+        "confused": "/avatars/zaeon/confused.webp?v=muz3qxjp",
+        "angry": "/avatars/zaeon/angry.webp?v=muz3qxjp"
       },
       "pequeno": {
-        "idle": "/avatars/zaeon/idle.sm.webp?v=muy3dkxb",
-        "blink": "/avatars/zaeon/blink.sm.webp?v=muy3dkxb",
-        "talk": "/avatars/zaeon/talk.sm.webp?v=muy3dkxb",
-        "talk_half": "/avatars/zaeon/talk_half.sm.webp?v=muy3dkxb",
-        "smile": "/avatars/zaeon/smile.sm.webp?v=muy3dkxb",
-        "happy": "/avatars/zaeon/happy.sm.webp?v=muy3dkxb",
-        "think": "/avatars/zaeon/think.sm.webp?v=muy3dkxb",
-        "confused": "/avatars/zaeon/confused.sm.webp?v=muy3dkxb"
+        "idle": "/avatars/zaeon/idle.sm.webp?v=muz3qxjp",
+        "blink": "/avatars/zaeon/blink.sm.webp?v=muz3qxjp",
+        "talk": "/avatars/zaeon/talk.sm.webp?v=muz3qxjp",
+        "talk_half": "/avatars/zaeon/talk_half.sm.webp?v=muz3qxjp",
+        "smile": "/avatars/zaeon/smile.sm.webp?v=muz3qxjp",
+        "happy": "/avatars/zaeon/happy.sm.webp?v=muz3qxjp",
+        "think": "/avatars/zaeon/think.sm.webp?v=muz3qxjp",
+        "confused": "/avatars/zaeon/confused.sm.webp?v=muz3qxjp",
+        "angry": "/avatars/zaeon/angry.sm.webp?v=muz3qxjp"
       },
       "cor": "#2563eb",
       "voz": {

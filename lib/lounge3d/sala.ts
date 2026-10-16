@@ -4,6 +4,7 @@
  * chat→nota. Nada de three/DOM/rede aqui.
  */
 import { sanitizarSom } from "./musica";
+import { ritualDesligado, sanitizarRitual } from "@/lib/cyber/ritual";
 import {
   LIMITE_SALA, MAX_ARTEFATOS, MAX_NOTAS, MAX_TEXTO_CHAT, MAX_TEXTO_NOTA, MAX_TEXTO_RECADO,
   type ArtefatoCanvas, type ConteudoSala, type NotaCanvas, type OpsSala, type Presenca, type RecadoQG,
@@ -17,7 +18,7 @@ const COORD = 400; // metade do chão (plano 400×400 centrado) — notas/artefa
 /** presença no MAPA do cyberespaço: o mapa inteiro (a Zaeon mega fica em z −560, até −812) e qualquer altura que se
  *  alcança (teto do voo + o dorso da nave / a mochila acima do lounge). Com os 400 m antigos, quem estava na Zaeon
  *  aparecia pros outros puxado pra z −400 e as motos/nave lá em cima, 50 m ABAIXO do piso. */
-export const MAPA = { coord: VOO.raioMapa + 40, alt: VOO.yMax + 80 } as const;
+export const MAPA = { coord: VOO.raioMapa + 40, alt: VOO.yMax + 80, /** caindo no vazio (sem chão): a mochila desce até renascer — abaixo de lib/cyber/praca QUEDA_VAZIO */ queda: -80 } as const;
 
 // Controle, zero-width e separadores de linha Unicode (U+2028/2029 — num literal de regex quebram o parser).
 const CONTROLE = new RegExp("[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f\\u200b-\\u200f\\u2028\\u2029]", "g");
@@ -83,8 +84,9 @@ export function lerConteudo(json: unknown): ConteudoSala {
   if (typeof json === "string") { try { o = JSON.parse(json); } catch { o = null; } }
   const notes = Array.isArray(o?.notes) ? o.notes.map(sanitizarNota).filter((n: NotaCanvas | null): n is NotaCanvas => !!n).slice(0, MAX_NOTAS) : [];
   const artifacts = Array.isArray(o?.artifacts) ? o.artifacts.map(sanitizarArtefato).filter((a: ArtefatoCanvas | null): a is ArtefatoCanvas => !!a).slice(0, MAX_ARTEFATOS) : [];
-  const recadoQG = sanitizarRecado(o?.recadoQG), somLounge = sanitizarSom(o?.somLounge), naveQG = naveParadaDe(o?.naveQG).naveParada;
-  return { notes, artifacts, ...(recadoQG ? { recadoQG } : {}), ...(somLounge && somLounge.faixas.length ? { somLounge } : {}), ...(naveQG ? { naveQG } : {}) };
+  const recadoQG = sanitizarRecado(o?.recadoQG), somLounge = sanitizarSom(o?.somLounge), somNave = sanitizarSom(o?.somNave), naveQG = naveParadaDe(o?.naveQG).naveParada;
+  const ritual = sanitizarRitual(o?.ritual);
+  return { notes, artifacts, ...(recadoQG ? { recadoQG } : {}), ...(somLounge && somLounge.faixas.length ? { somLounge } : {}), ...(somNave && somNave.faixas.length ? { somNave } : {}), ...(ritualDesligado(ritual) ? {} : { ritual }), ...(naveQG ? { naveQG } : {}) };
 }
 
 /**
@@ -105,6 +107,8 @@ export function aplicarOps(atual: ConteudoSala, ops: OpsSala): ConteudoSala {
   const out: ConteudoSala = { notes: notes.slice(-MAX_NOTAS), artifacts: artifacts.slice(-MAX_ARTEFATOS) };
   if (atual.recadoQG) out.recadoQG = atual.recadoQG;   // editar notas não apaga o recado do QG…
   if (atual.somLounge) out.somLounge = atual.somLounge;   // …nem a playlist do lounge…
+  if (atual.somNave) out.somNave = atual.somNave;         // …nem a da nave…
+  if (atual.ritual) out.ritual = atual.ritual;            // …nem o ritual do dono…
   if (atual.naveQG) out.naveQG = atual.naveQG;            // …nem onde a nave-QG está estacionada
   return out;
 }
@@ -149,14 +153,33 @@ function naveParadaDe(v: unknown): { naveParada?: { x: number; y: number; z: num
   return x === null || y === null || z === null || yaw === null ? {} : { naveParada: { x, y, z, yaw } };
 }
 
+/** os campos da ARENA PvP (lib/cyber/combate) — inteiros nos limites; o resto some */
+export function combateDe(r: Record<string, unknown>): { atk?: number; hp?: number; arma?: number; mov?: number } {
+  const int = (v: unknown, a: number, b: number) => (typeof v === "number" && Number.isInteger(v) && v >= a && v <= b ? v : null);
+  const atk = int(r.atk, 1, 400000), hp = int(r.hp, 0, 100), arma = int(r.arma, 1, 1), mov = int(r.mov, 1, 5);
+  return { ...(mov !== null ? { mov } : {}), ...(atk !== null ? { atk } : {}), ...(hp !== null && hp < 100 ? { hp } : {}), ...(arma !== null ? { arma } : {}) };
+}
+
 /** Presença vinda da rede: só o que é número/strings curtas; lixo → null. */
+/** a corrida de checkpoints: o placar (inteiro) e o convite ("semente:largada") — lixo some */
+function corridaCkDe(r: Record<string, unknown>): { ck?: number; cr?: string } {
+  return { ...(typeof r.ck === "number" && Number.isInteger(r.ck) && r.ck > 0 && r.ck < 10000 ? { ck: r.ck } : {}), ...(typeof r.cr === "string" && /^\d{1,10}:\d{12,14}$/.test(r.cr) ? { cr: r.cr } : {}) };
+}
+/** a bordo da nave-QG (posição local na planta, com teto) */
+function bordoDe(v: unknown): { bordo?: { x: number; z: number; nivel: 0 | 1; esc?: number } } {
+  if (!v || typeof v !== "object") return {};
+  const o = v as Record<string, unknown>, x = num(o.x, -80, 80), z = num(o.z, -80, 80);
+  if (x === null || z === null || (o.nivel !== 0 && o.nivel !== 1)) return {};
+  const esc = num(o.esc, 0, 50);
+  return { bordo: { x, z, nivel: o.nivel, ...(esc !== null ? { esc } : {}) } };
+}
 export function sanitizarPresenca(raw: unknown): Presenca | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   if (typeof r.userId !== "string" || !/^[a-f0-9]{24}$/i.test(r.userId)) return null;
   const x = num(r.x, -MAPA.coord, MAPA.coord), z = num(r.z, -MAPA.coord, MAPA.coord), facing = num(r.facing, -10, 10);
   if (x === null || z === null || facing === null) return null;
-  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ...naveParadaDe(r.naveParada), ...(num(r.jet, 0, MAPA.alt) !== null ? { jet: num(r.jet, 0, MAPA.alt)! } : {}), ...(num(r.alt, 0, MAPA.alt) !== null ? { alt: num(r.alt, 0, MAPA.alt)! } : {}), ...motoDe(r.moto), ...motoLargadaDe(r.motoLargada), ts: typeof r.ts === "number" ? r.ts : Date.now() };
+  return { userId: r.userId, name: sanitizarTexto(r.name, 40) || "Alguém", color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#4aa3ff", x, z, facing, moving: r.moving === true, sit: r.sit === true, topo: r.topo === true, ceu: r.ceu === true, ...vooDe(r.voo), ...naveParadaDe(r.naveParada), ...(num(r.jet, MAPA.queda, MAPA.alt) !== null ? { jet: num(r.jet, MAPA.queda, MAPA.alt)! } : {}), ...(num(r.alt, 0, MAPA.alt) !== null ? { alt: num(r.alt, 0, MAPA.alt)! } : {}), ...motoDe(r.moto), ...motoLargadaDe(r.motoLargada), ...(typeof r.desc === "number" && Number.isInteger(r.desc) && r.desc > 0 && r.desc <= 5 ? { desc: r.desc } : {}), ...combateDe(r), ...corridaCkDe(r), ...bordoDe(r.bordo), ts: typeof r.ts === "number" ? r.ts : Date.now() };
 }
 
 /** Ponte chat → nota: um "ponto importante" da Sala de Pesquisa vira nota SUGERIDA perto do avatar. */

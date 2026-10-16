@@ -9,6 +9,7 @@ import { prisma } from "@/src/lib/prisma";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { rosterComMentores, mergeProfiles, publicView, type AgentView } from "@/lib/agents/roster";
 import type { MensagemWire } from "@/lib/canal/realtime";
+import { agentesDasSalas } from "@/lib/canal/agentesSalas";
 
 export const OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
 export const isObjectId = (v: unknown): v is string => typeof v === "string" && OBJECT_ID_RE.test(v);
@@ -38,14 +39,17 @@ export async function rosterCompleto(): Promise<AgentView[]> {
   return mergeProfiles(rosterComMentores(mentores), profiles).filter((a) => a.ativo && a.conversacional);
 }
 
-/** Agentes que ESTE usuário pode convocar no canal: base (Aura) + mentores contratados + os já presentes no canal. */
+/** Agentes que ESTE usuário pode convocar no canal — os MESMOS de todas as outras salas (o escritório é só outra forma de
+ *  chamar um ou mais deles, pedido do dono): TODAS as personas da plataforma (Zaeon, Aura, Nina, Caio, Téo, Zenita, Davi,
+ *  Scholar, Examiner — as que conversam) + os mentores que ele contratou (os mesmos do seletor do chat) + os já presentes
+ *  no canal. `AGENTES_BASE` = a Aura, que vem primeiro. */
 export const AGENTES_BASE: readonly string[] = ["aura"];
 export async function agentesDoCanal(userId: string, canalAgentes: string[] = []): Promise<AgentView[]> {
   const [roster, plugs] = await Promise.all([
     rosterCompleto(),
     prisma.pluggedMentor.findMany({ where: { userId, enabled: true }, select: { templateId: true } }).catch(() => []),
   ]);
-  const slugs = new Set<string>(AGENTES_BASE);
+  const slugs = new Set<string>([...AGENTES_BASE, ...agentesDasSalas(roster)]);
   for (const k of canalAgentes) slugs.add(k);
   if (plugs.length) {
     const tpls = await prisma.mentorTemplate.findMany({ where: { id: { in: plugs.map((p) => p.templateId) } }, select: { slug: true } }).catch(() => []);

@@ -7,7 +7,7 @@
  * geometria × escala; nos InstancedMesh, a maior instância) fica abaixo de `limiar` metros. Esconder/mostrar guarda
  * a visibilidade que a peça tinha (o laser que só acende com música, a nave por dentro…) e devolve igual — e como o
  * detalhe só some depois que a animação da região parou, ninguém fica brigando com o `visible`. Peça FORA da área da
- * região (o anel do elevador de luz lá no chão, o portal embaixo da Zaeon) nunca é detalhe: é de quem está lá.
+ * região (o buraco negro de um lugar, perto da borda) nunca é detalhe: é de quem está lá.
  */
 import * as THREE from "three";
 import { distanciaDaRegiao, estadoDaRegiao, type EstadoRegiao, type Regiao } from "@/lib/cyber/regioes";

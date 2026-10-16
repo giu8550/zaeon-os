@@ -1,7 +1,7 @@
 /**
  * LoungeRoom — a sala do CYBERESPAÇO no Colyseus: presença + posição (estado sincronizado) e o relay do
  * signaling da VOZ (WebRTC). Uma room POR SALA do app (`filterBy(["salaId"])` → o convite cai na mesma room).
- *  - entrada só com TOKEN assinado pelo app (sessão do NextAuth), da MESMA sala; teto de 5;
+ *  - entrada só com TOKEN assinado pelo app (sessão do NextAuth), da MESMA sala; teto de MAX_JOGADORES (40);
  *  - o estado (players por userId) vai pros clientes em patches a 20 Hz — quem entra já recebe todo mundo na hora
  *    (sem a assimetria "um vê, o outro não" do client event efêmero);
  *  - a mesma pessoa em 2 abas = 1 avatar (a aba nova assume, a antiga sai);
@@ -25,6 +25,12 @@ export class Jogador extends Schema {
   declare pronto: boolean;
   /** moto voadora: vaga (−1 = a pé), altura e rumo */ declare motoS: number; declare motoY: number; declare motoYaw: number; declare motoDe: string;
   /** a moto que estacionou (−1 = nenhuma): vaga, posição, rumo */ declare mlS: number; declare mlX: number; declare mlY: number; declare mlZ: number; declare mlYaw: number;
+  /** DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (lib/cyber/descanso) */ declare desc: number;
+  /** ARENA PvP (lib/cyber/combate): o golpe (seq×4 + nº; 0 = nenhum), a vida, a espada na mão */ declare atk: number; declare hp: number; declare arma: boolean;
+  /** o MOVIMENTO TURBINADO: 0 nada, 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem */ declare mov: number;
+  /** quando o cliente MANDOU esta pose (ms, relógio dele) — o netcode de quem recebe interpola por ele */ declare t: number;
+  /** CORRIDA DE CHECKPOINTS: o placar e a corrida ("semente:largada") */ declare ck: number; declare cr: string;
+  /** A BORDO da nave-QG: posição local, nível (−1 = fora) e escada (−1 = fora dela) */ declare nbX: number; declare nbZ: number; declare nbN: number; declare nbE: number;
   constructor() {
     super();
     this.userId = ""; this.name = ""; this.color = "#4aa3ff"; this.fundador = false; this.qg = false;
@@ -35,6 +41,7 @@ export class Jogador extends Schema {
     this.jet = -1; this.alt = -1; this.falando = false; this.pronto = false;
     this.motoS = -1; this.motoY = 0; this.motoYaw = 0; this.motoDe = "";
     this.mlS = -1; this.mlX = 0; this.mlY = 0; this.mlZ = 0; this.mlYaw = 0;
+    this.desc = 0; this.atk = 0; this.hp = 100; this.arma = false; this.mov = 0; this.t = 0; this.ck = 0; this.cr = ""; this.nbX = 0; this.nbZ = 0; this.nbN = -1; this.nbE = -1;
   }
   /** a pessoa do TOKEN (identidade e regalias vêm do servidor do app) */
   static de(p: PayloadToken) { const j = new Jogador(); j.userId = p.u; j.name = p.n; j.color = p.c; j.fundador = p.f; j.qg = p.q; return j; }
@@ -48,6 +55,7 @@ defineTypes(Jogador, {
   jet: "float32", alt: "float32", falando: "boolean", pronto: "boolean",
   motoS: "int8", motoY: "float32", motoYaw: "float32", motoDe: "string",
   mlS: "int8", mlX: "float32", mlY: "float32", mlZ: "float32", mlYaw: "float32",
+  desc: "uint8", atk: "uint32", hp: "uint8", arma: "boolean", mov: "uint8", t: "float64", ck: "uint16", cr: "string", nbX: "float32", nbZ: "float32", nbN: "int8", nbE: "float32",
 });
 
 export class EstadoLounge extends Schema {
@@ -86,20 +94,24 @@ export class LoungeRoom extends Room<{ state: EstadoLounge }> {
       j.topo = p.topo; j.ceu = p.ceu;
       j.voando = !!p.voo; if (p.voo) { j.vooY = p.voo.y; j.vooYaw = p.voo.yaw; }
       j.parada = !!p.naveParada; if (p.naveParada) { j.npX = p.naveParada.x; j.npY = p.naveParada.y; j.npZ = p.naveParada.z; j.npYaw = p.naveParada.yaw; }
-      j.jet = p.jet ?? -1; j.alt = p.alt ?? -1; j.pronto = true;
+      j.jet = p.jet ?? -1; j.alt = p.alt ?? -1; j.desc = p.desc; j.atk = p.atk; j.hp = p.hp; j.arma = p.arma; j.mov = p.mov; j.t = p.t; j.ck = p.ck; j.cr = p.cr; j.pronto = true;
+      j.nbN = p.bordo ? p.bordo.nivel : -1; if (p.bordo) { j.nbX = p.bordo.x; j.nbZ = p.bordo.z; j.nbE = p.bordo.esc ?? -1; }
       j.motoS = p.moto ? p.moto.s : -1; if (p.moto) { j.motoY = p.moto.y; j.motoYaw = p.moto.yaw; } j.motoDe = p.moto?.de ?? "";
       j.mlS = p.motoLargada ? p.motoLargada.s : -1; if (p.motoLargada) { j.mlX = p.motoLargada.x; j.mlY = p.motoLargada.y; j.mlZ = p.motoLargada.z; j.mlYaw = p.motoLargada.yaw; }
     });
     // "falando" (indicador no avatar) — a voz em si vai direto entre navegadores (WebRTC)
     this.onMessage("fala", (client, raw) => {
       const auth = client.auth as Auth | undefined, j = auth && this.state.players.get(auth.u);
-      if (j) j.falando = !!(raw && typeof raw === "object" && (raw as { on?: unknown }).on === true);
+      if (j) j.falando = j.pronto && !!(raw && typeof raw === "object" && (raw as { on?: unknown }).on === true);
     });
-    // signaling da voz: offer/answer/ICE pro destinatário (por userId), com o remetente da SESSÃO
+    // signaling da voz: offer/answer/ICE pro destinatário (por userId), com o remetente da SESSÃO. Só entre quem já está
+    // NO MUNDO (`pronto` = mandou a 1ª pose): o novato no tutorial (a Zaeon só dele) não fala nem ouve ninguém até
+    // cruzar o 1º portal — mesmo com um cliente modificado
     this.onMessage("rtc", (client, raw) => {
       const auth = client.auth as Auth | undefined; if (!auth) return;
       const m = sanitizarRtc(raw, new Set(this.porUsuario.keys()));
       if (!m || m.to === auth.u) return;
+      if (!this.state.players.get(auth.u)?.pronto || !this.state.players.get(m.to)?.pronto) return;
       this.porUsuario.get(m.to)?.send("rtc", { from: auth.u, data: m.data });
     });
   }

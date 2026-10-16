@@ -18,6 +18,8 @@ import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
 import { useFalaAoChegar, useManifesto, usePublicarPresenca } from "@/components/agents/avatar/hooks";
 import { sinalDoChat } from "@/lib/avatars/presenca";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
+import LivrosCartao from "@/components/chat/LivrosCartao";
+import { semListaDeLivros } from "@/lib/livros/busca";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
@@ -114,6 +116,7 @@ export default function ResearchChat({
   comAbas = false,
   compacto = false,
   lateral,
+  slotTopo,
   emCena = true,
   onAtivar,
 }: {
@@ -129,6 +132,9 @@ export default function ResearchChat({
   /** Sala com ABAS: a barra de conversas vai pra coluna ESQUERDA da sala (portal) — fica à mostra
    *  mesmo com um documento aberto no topo; sem isto, ela fica à esquerda dentro do próprio chat. */
   lateral?: HTMLElement | null;
+  /** O TOPO da sala (barra de documentos): a bolinha do cérebro (traçador de percurso) vai pra lá por
+   *  portal, só o sinal, sem nome. Sem slot, ela fica aqui, no topo do chat. */
+  slotTopo?: HTMLElement | null;
   /** A conversa está à mostra (e não um documento) — senão nenhuma conversa fica acesa na barra. */
   emCena?: boolean;
   /** Clicou numa conversa → a sala mostra o chat (o documento aberto no topo continua o mesmo). */
@@ -500,7 +506,7 @@ export default function ResearchChat({
     } finally {
       setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined } : m)));
       setSending(false);
-      if (cerebro.ligado) setTimeout(() => void cerebro.refetch(), 1500); // o gatekeeper/fixar são fire-and-forget no servidor
+      if (cerebro.ligado) cerebro.conferirDepoisDoTurno(); // o gatekeeper/fixar são fire-and-forget no servidor
     }
   }, [input, sending, wt, runResearchGenerate, materializarArtefatos, modoTcc, tccWorkId, cerebro, anexoRef, onAtivar]);
   sendRef.current = (t?: string) => { void send(t); };
@@ -559,18 +565,23 @@ export default function ResearchChat({
       <div className="relative flex-1 min-w-0 flex flex-col">
       {/* Topo do chat: bolinha do cérebro (à esquerda) e o A−/A+ do texto (à direita). */}
       <div className={`shrink-0 ${compacto ? "px-3" : "px-4 sm:px-6"} pt-2 flex items-center gap-2 min-h-[36px]`}>
-        {comAbas && cerebro.ligado && (
-          <BolinhaCerebro
-            estado={cerebro.estado}
-            completude={cerebro.mapa?.completudeAprendizado ?? 0}
-            aberto={cerebroAberto}
-            onClick={() => {
-              onAtivar?.();
-              if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
-              else setCerebroAberto((v) => !v);
-            }}
-          />
-        )}
+        {comAbas && cerebro.ligado && (() => {
+          const bolinha = (
+            <BolinhaCerebro
+              estado={cerebro.estado}
+              completude={cerebro.mapa?.completudeAprendizado ?? 0}
+              aberto={cerebroAberto}
+              soSinal={!!slotTopo}
+              onClick={() => {
+                onAtivar?.();
+                if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
+                else setCerebroAberto((v) => !v);
+              }}
+            />
+          );
+          // no topo da sala (sem nome, só o sinal que gira quando um percurso está pronto pra nascer)
+          return slotTopo ? createPortal(bolinha, slotTopo) : bolinha;
+        })()}
         <div className="flex-1" />
         <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
       </div>
@@ -657,9 +668,11 @@ export default function ResearchChat({
                   {isUser
                     ? m.text
                     : (m.text
-                        ? <ChatMarkdown text={m.text} />
+                        // livros achados: o cartão (com "Abrir no leitor") substitui a lista em markdown do texto
+                        ? <ChatMarkdown text={m.answer?.livros?.length ? semListaDeLivros(m.text) : m.text} />
                         : <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
                 </div>
+                {!isUser && m.answer?.livros?.length ? <LivrosCartao livros={m.answer.livros} sala="pesquisa" /> : null}
                 {!isUser && (m.blocos?.length || m.desenhando) ? (
                   <div className="w-full max-w-[88%]">
                     {m.blocos?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}

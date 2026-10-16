@@ -30,6 +30,12 @@ describe("runtime · planAtLeast", () => {
 });
 
 describe("runtime · permit (deny-by-default)", () => {
+  it("modo review/answer nega qualquer escrita, mesmo em auto e com aprovação", () => {
+    expect(permit(def({ risk: "write" }), ctx({ taskMode: "review" }))).toBe("DENY");
+    expect(permit(def({ risk: "destructive" }), ctx({ taskMode: "answer" }))).toBe("DENY");
+    expect(permit(def({ risk: "read" }), ctx({ taskMode: "review" }))).toBe("ALLOW");
+    expect(permit(def({ risk: "write" }), ctx({ taskMode: "change" }))).toBe("ALLOW");
+  });
   it("nega quando o plano não cobre minPlan", () => {
     expect(permit(def({ minPlan: "pro" }), ctx({ plan: "free" }))).toBe("DENY");
     expect(permit(def({ minPlan: "pro" }), ctx({ plan: "max" }))).toBe("ALLOW");

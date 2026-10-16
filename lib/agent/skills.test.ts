@@ -25,6 +25,14 @@ Corpo da skill.`;
 const ctx = { plan: "free", execMode: "auto" } as ToolContext;
 
 describe("skills · parseFrontmatter", () => {
+  it("aceita escalar dobrado (>) e mapa aninhado de 1 nível (spec agentskills.io)", () => {
+    const md = "---\nname: genart\ndescription: >\n  Arte generativa\n  determinística.\nlicense: MIT\nmetadata:\n  author: Fulana\n  version: 1.3.0\n---\ncorpo";
+    const p = parseFrontmatter(md)!;
+    expect(p.frontmatter.description).toBe("Arte generativa determinística.");
+    expect(p.frontmatter.metadata).toEqual({ author: "Fulana", version: "1.3.0" });
+    expect(p.frontmatter.license).toBe("MIT");
+    expect(p.body).toBe("corpo");
+  });
   it("extrai frontmatter + corpo; array inline", () => {
     const p = parseFrontmatter(VALID)!;
     expect(p.frontmatter.name).toBe("paper-lookup");

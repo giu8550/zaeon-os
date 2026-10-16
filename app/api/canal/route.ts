@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag } from "@/lib/canal/server";
-import { normalizarAcesso } from "@/lib/canal/gate";
+import { normalizarAcesso, podeLer } from "@/lib/canal/gate";
 import { isAgentKey } from "@/lib/agents/roster";
 
 export async function GET() {
@@ -14,11 +14,13 @@ export async function GET() {
   const u = await sessaoUsuario();
   if (!u) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const canais = await prisma.canal.findMany({
-    where: { OR: [{ ownerId: u.id }, { membros: { has: u.id } }] },
+    // dono, membro, ou o outro lado de uma conversa privada (#396: dmCom)
+    where: { OR: [{ ownerId: u.id }, { membros: { has: u.id } }, { dmCom: u.id }] },
     orderBy: { updatedAt: "desc" },
     take: 50,
   });
-  return NextResponse.json({ canais: canais.map((c) => ({ ...c, souDono: c.ownerId === u.id })) });
+  // só o que a pessoa LÊ (a mesma regra das outras rotas): a lista nunca oferece um canal que vai dar 403
+  return NextResponse.json({ canais: canais.filter((c) => podeLer(c, u.id)).map((c) => ({ ...c, souDono: c.ownerId === u.id })) });
 }
 
 export async function POST(req: Request) {

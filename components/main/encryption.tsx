@@ -7,7 +7,8 @@ import NextImage from "next/image";
 import { useTranslation } from "react-i18next";
 import ZaeonFlowDiagram from "./ZaeonFlowDiagram";
 import MentoresCarrossel from "./MentoresCarrossel";
-import EquipadosCom from "./EquipadosCom";
+import SolanaPrivacidade from "./SolanaPrivacidade";
+import ChavesApi from "./ChavesApi";
 import { TituloSecao } from "@/components/layout/secao";
 import MolecularText from "@/components/ui/MolecularText";
 
@@ -27,7 +28,7 @@ const SponsorsTicker = ({ opacity }: { opacity: any }) => {
     return (
         <motion.div style={{ opacity }} className="w-full py-8 overflow-hidden relative z-50">
             <div className="w-full flex justify-center mb-8">
-                <h3 className="text-center text-[11px] font-black tracking-[0.35em] text-cyan-700 dark:text-cyan-300 uppercase">
+                <h3 className="text-center text-[11px] font-black tracking-[0.35em] text-white uppercase">
                     <TextoRevelado texto="Financiado e apoiado por:" />
                 </h3>
             </div>
@@ -53,11 +54,16 @@ const SponsorCard = ({ item }: { item: { name: string; src: string; url: string 
         <motion.a
             href={item.url} target="_blank" rel="noopener noreferrer"
             whileHover={{ scale: 1.05, borderColor: "rgba(34, 211, 238, 0.4)", backgroundColor: "rgba(255, 255, 255, 0.05)" }}
-            className="relative flex items-center justify-center min-w-[200px] h-[100px] rounded-[1.5rem] border border-white/5 bg-[#0a0a0f]/40 backdrop-blur-md transition-all duration-500 group overflow-hidden cursor-pointer"
+            // o card fica ESCURO nos dois temas: as logos (a da Funcap é branca) foram feitas pra fundo escuro — no claro, com o
+            // card cinza-translúcido, a Funcap sumia e as outras ficavam lavadas (incidente em produção, out/2026)
+            className="relative flex items-center justify-center min-w-[200px] h-[100px] rounded-[1.5rem] border border-black/10 dark:border-white/5 bg-[#0a0a0f]/90 dark:bg-[#0a0a0f]/40 backdrop-blur-md transition-all duration-500 group overflow-hidden cursor-pointer"
         >
             <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12)_0%,transparent_70%)]" />
             <div className="relative w-full h-full p-6 flex items-center justify-center">
-                <NextImage src={item.src} alt={item.name} fill className="max-w-full max-h-full object-contain opacity-100 transition-all duration-500" />
+                {/* `unoptimized`: as logos são PNGs pequenos e locais; sem passar pelo /_next/image (que já falhou em
+                    produção e deixava os cards vazios — o next/image esconde a imagem quebrada com color:transparent). O service
+                    worker guarda /sponsors/* (stale-while-revalidate), então elas carregam mesmo com a rede ruim */}
+                <NextImage src={item.src} alt={item.name} fill unoptimized className="max-w-full max-h-full object-contain opacity-100 transition-all duration-500" />
             </div>
         </motion.a>
     );
@@ -87,17 +93,16 @@ const HireAgentsSection = () => {
                 viewport={{ once: true }}
                 transition={{ duration: 0.6 }}
             >
-                <TituloSecao className="font-display" forte="Cada um no seu quadrado." fraco="Conhecimento é específico, não geral." />
+                <TituloSecao className="font-display" forte="Estude com os melhores e mais modernos agentes de IA." />
 
+                {/* carrossel LEVE: só foto, nome e função; quem passa pelo meio da tela ganha a borda destacada */}
                 <div className="mt-10">
-                    <MentoresCarrossel semRotulo />
-                </div>
-
-                {/* Âncora do botão "Ver os modelos" do hero: as IAs vivem aqui embaixo. */}
-                <div id="modelos" className="scroll-mt-24">
-                    <EquipadosCom className="mt-14" />
+                    <MentoresCarrossel semRotulo leve />
                 </div>
             </motion.div>
+
+            {/* "ou traga as chaves de API dos seus" + o briefing das chaves (+ as casas de modelos, #modelos) */}
+            <ChavesApi className="mt-16 md:mt-20" />
         </div>
     );
 };
@@ -127,23 +132,23 @@ const ProcessFlowchart = () => {
                     relative w-full max-w-[1200px] rounded-[2rem] 
                     
                     /* --- AZUL nos dois temas (destaque) --- */
-                    border border-cyan-500/50 bg-[#1e3a8a]/85 backdrop-blur-xl shadow-[0_0_30px_rgba(6,182,212,0.25)]
+                    border border-cyan-500/50 bg-[#1e3a8a]/85 backdrop-blur-md shadow-[0_0_30px_rgba(6,182,212,0.25)]
                     
                     /* --- MODO ESCURO (Azul Transparente) --- */
                     dark:border-cyan-500/50 dark:bg-[#1e3a8a]/85 dark:shadow-[0_0_30px_rgba(6,182,212,0.15)]
                     
-                    flex flex-col md:flex-row items-center justify-between
+                    flex flex-col items-center justify-center text-center
                     p-8 md:p-12 gap-8 group overflow-hidden
                     hover:border-cyan-500/50 transition-all duration-500
                 "
             >
                 {/* Coluna da Esquerda: Ícone e Texto */}
-                <div className="flex flex-col gap-6 flex-1 text-center md:text-left items-center md:items-start z-10">
+                <div className="flex flex-col gap-4 text-center items-center z-10 max-w-2xl">
                     <h3 className="text-2xl md:text-3xl font-light text-slate-900 dark:text-white leading-tight">
                         <span className="font-bold text-cyan-600 dark:text-cyan-400 drop-shadow-md dark:drop-shadow-[0_0_10px_rgba(34,211,238,0.3)]">Blockchain</span> como Tecnologia de Uso Inteligente no Ceará
                     </h3>
 
-                    <p className="text-sm text-slate-700 dark:text-white/90 font-medium leading-relaxed max-w-lg">
+                    <p className="text-sm text-slate-700 dark:text-white/90 font-medium leading-relaxed max-w-lg mx-auto">
                         <a
                             href="https://programacentelha.com.br/wp-content/uploads/2025/01/CE-Lista-Final-Empresas-Contratadas.pdf"
                             target="_blank"
@@ -156,7 +161,7 @@ const ProcessFlowchart = () => {
                 </div>
 
                 {/* Coluna da Direita: Logos MCTI */}
-                <div className="w-full md:w-auto flex flex-col items-center justify-center border-t md:border-t-0 md:border-l border-slate-200 dark:border-white/10 pt-8 md:pt-0 md:pl-12 mt-2 md:mt-0 z-10">
+                <div className="w-full flex flex-col items-center justify-center border-t border-slate-200 dark:border-white/10 pt-8 z-10">
                     <span className="text-[10px] text-slate-800 dark:text-white/90 uppercase tracking-widest mb-6 font-semibold">Apoio Oficial</span>
 
                     {/* `h-26` não existe no Tailwind → a caixa tinha altura 0 e o logo (fill) nunca aparecia.
@@ -167,15 +172,13 @@ const ProcessFlowchart = () => {
                             alt="Ministério da Ciência, Tecnologia e Inovação — Governo do Brasil"
                             fill
                             sizes="256px"
-                            className="w-full h-full object-contain block dark:hidden"
-                        />
+                            className="w-full h-full object-contain block dark:hidden" unoptimized />
                         <NextImage
                             src="/sponsors/MCTI_dark_alpha.png"
                             alt="Ministério da Ciência, Tecnologia e Inovação — Governo do Brasil"
                             fill
                             sizes="256px"
-                            className="w-full h-full object-contain hidden dark:block"
-                        />
+                            className="w-full h-full object-contain hidden dark:block" unoptimized />
                     </div>
                 </div>
             </motion.div>
@@ -199,7 +202,7 @@ export default function Encryption() {
         <div className="w-full relative">
             <section id="como-funciona" className="relative z-[30] w-full bg-transparent pt-12 md:pt-16 pb-12 scroll-mt-28">
                 <div className="zaeon-borda">
-                    <TituloSecao className="font-display" forte="Feito pra quem estuda, trabalha ou empreende." />
+                    <TituloSecao className="font-display" forte="Transforme seu conhecimento em dinheiro." />
 
                     {/* DIAGRAMA VIVO: entrada -> cerebro Zaeon -> saida.
                         O painel nao e enfeite: o ParticleSystem da landing corre
@@ -229,11 +232,14 @@ export default function Encryption() {
                 scroll horizontal na pagina inteira. `clip` em vez de `hidden`
                 porque `hidden` criaria um contexto de rolagem e mataria qualquer
                 `sticky` daqui para dentro. */}
+            {/* NO LUGAR dos agentes: a Solana cobrindo a digital — privacidade e credenciais (v4) */}
+            <SolanaPrivacidade />
+
             <div className="relative z-40 w-full overflow-x-clip flex flex-col items-center justify-center bg-transparent pt-10">
                 <HireAgentsSection />
             </div>
 
-            {/* FLUXOGRAMA NO FINAL (Intacto) */}
+            {/* PENÚLTIMO: o fomento (Centelha), centralizado no desktop */}
             <ProcessFlowchart />
         </div>
     );

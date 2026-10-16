@@ -31,9 +31,32 @@ Os `.mp3` originais em `public/assets/sounds/` (leberch/freesound/spaceship) sã
 | arquivo | fonte | autor | licença | edição |
 |---|---|---|---|---|
 | `jetpack.wav` | "Rocket Engine" — https://opengameart.org/content/rocket-engine | theMinesAreShakin | **CC0 1.0** (domínio público) | estéreo 48 kHz → mono 22,05 kHz WAV (loop sem emenda, 6,1 s) |
+| `asa-bater.wav` | "Large Wings Flap" — https://opengameart.org/content/large-wings-flap (de "fast simple chop 5", https://freesound.org/s/127197/) | AntumDeluge / dave.des | **CC0 1.0** (domínio público) | 1 batida recortada (0,58 s), fade-out, mono 22,05 kHz WAV — as asas negras do founder |
 
 **Sintetizados no navegador (sem arquivo, CC0 — código próprio):** `jato-sopro` (o sopro/chiado do jato, por cima do ronco gravado) e `baque` (o corpo batendo no chão ao pousar) — `lib/cyber/audio.ts` (`sintetizarJetpack`, `sintetizarBaque`).
 
 ## Animações (poses capturadas)
 
 `lib/cyber/poses-ual.json` — Jump_Start / Jump_Loop / Jump_Land da **Quaternius Universal Animation Library** (https://quaternius.itch.io/universal-animation-library), **CC0 1.0**. Convertidas offline em direções de membros por quadro (o GLB original não vai pro bundle).
+
+## Voz do Droid (sem palavras)
+
+| arquivo | fonte | autor | licença | edição |
+|---|---|---|---|---|
+| `droid-agua.wav` | "Sea and River Wave Sounds" (VistulaShort.mp3) — https://opengameart.org/node/92680 | RandomMind | **CC0 1.0** (domínio público) | trecho de 8 s (25,5–33,5 s) do rio Vístula, estéreo 44,1 kHz → mono 22,05 kHz WAV, fades de 60 ms, pico 0,9 |
+| `droid-alien.ogg` | "Ambient Alien Light sfx" — https://opengameart.org/content/ambient-alien-light-sfx | Dr. Neptune | **CC0 1.0** (domínio público) | sem edição (7,9 s, estéreo) |
+
+Esculpidos no navegador (`AudioCyber.vozDroid`, `lib/cyber/audio.ts` `VOZ_DROID`): formantes em "sílabas", delay com repetição e reverb longo por convolução.
+
+## Motor da moto (gravações reais)
+
+| arquivo | fonte | autor | licença | edição |
+|---|---|---|---|---|
+| `moto-motor-alto.wav` | "Sportsbike Flyby" (superbike 1000 cc numa pista) — https://freesound.org/people/richwise/sounds/361403/ | richwise | **CC0 1.0** (domínio público) | trecho de 6,4–7,85 s (depois da passagem: rotação alta estável), passa-alta 60 Hz, tom TRAVADO em 300 Hz (re-amostragem seguindo o tom medido), volume nivelado, loop de 1,25 s (múltiplo do período, emenda de 0,15 s), AGRESSIVO (grave reforçado + saturação), reverb leve embutido (20 %, 1,6 s, convolução circular), mono 44,1 kHz |
+| `moto-motor.wav` | "XSR700 tickover loop" (marcha lenta) — https://freesound.org/people/richwise/sounds/432304/ | richwise | **CC0 1.0** (domínio público) | trecho de 0,6–4,9 s, passa-alta 25 Hz, volume meio nivelado, loop de 4 s (emenda de 0,25 s), AGRESSIVO (grave reforçado + saturação), reverb leve embutido (18 %, 1,6 s), mono 44,1 kHz |
+
+| `moto-pipoco.wav` (desacelerando) | "Car Antilag" — https://freesound.org/people/modusmogulus/sounds/797835/ · "Large backfiring motorbike passes by." — https://freesound.org/people/mudflea2/sounds/705363/ | modusmogulus · mudflea2 | **CC0 1.0** (ambos) | 17 estouros recortados (148 ms cada, ataque de 2 ms, cauda caindo, passa-alta 45 Hz), espalhados num loop de 3 s em intervalos irregulares (às vezes rajadas de 2–3), força e tom variando (0,78–1,23×), saturação + grave reforçado, reverb 16 % (1,2 s); mono 44,1 kHz |
+| `moto-boost.wav` | o mesmo "Sportsbike Flyby" (o grito da superbike) | richwise | **CC0 1.0** | o grito tocado com a afinação SUBINDO de 0,45× a 2,1× em 0,7 s (exponencial), segura e some; saturado (tanh) + reverb 28 % (1,4 s); 2,2 s mono 44,1 kHz |
+
+O jogo toca os dois afinados na rotação do motor (`lib/cyber/somMoto` `mixDaMoto`/`freqDoMotor`): a lenta embaixo, o grito da superbike da puxada até o corte.
+| `droid-louvor.wav` | a fala dos ANUNCIADORES do ritual ("Louvado seja o Senhor Jesus Cristo") — sintetizada pelo Gemini-TTS do projeto (voz Charon, pt-BR) | Zaeon | gerada no projeto (out/2026) | WAV 24 kHz mono; o dono pode trocar pelo arquivo dele (mesmo nome) |

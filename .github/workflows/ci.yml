@@ -8,6 +8,8 @@ name: CI
 # Mudanças só de doc (.md/docs) não disparam o CI.
 on:
   pull_request:
+    # ready_for_review: PR em rascunho (draft) não gasta CI; ao marcar "Ready for review" ele roda.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main, master]
     paths-ignore:
       - "**.md"
@@ -21,6 +23,8 @@ concurrency:
 
 jobs:
   build-test:
+    # Pula rascunhos (draft). Em workflow_dispatch/push não há `pull_request`, então roda.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -46,8 +50,21 @@ jobs:
           node-version: "20"
           cache: "npm"
 
+      # Supply-chain (Pack Octa §1). ANTES do npm ci: pacote novo com install script (ou versão nova) só
+      # entra depois de revisado em config/vetting/install-scripts.json; repo REJEITADO não entra nunca.
+      - name: Vetting de dependências (lockfile + install scripts + repos rejeitados)
+        run: node scripts/vet-deps.mjs
+
+      # `--ignore-scripts`: nenhum postinstall roda antes de a lista acima ser checada; os revisados rodam no rebuild.
       - name: Install deps
-        run: npm ci
+        run: |
+          npm ci --ignore-scripts
+          npm rebuild
+
+      # SCA com catraca: advisory high/critical NOVA nas deps de produção = vermelho. As herdadas estão em
+      # config/vetting/audit-baseline.json (pagar aos poucos, nunca acrescentar calado).
+      - name: SCA (npm audit, catraca)
+        run: node scripts/vet-audit.mjs
 
       - name: Prisma generate
         run: npx prisma generate

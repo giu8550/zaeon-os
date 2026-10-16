@@ -1,6 +1,7 @@
 /**
  * POST /api/canal/[id]/mensagem { texto } — grava a mensagem humana, publica no Pusher e,
- * pra cada @agente conhecido, dispara UM turno do harness daquele agente (fila/inline).
+ * pra cada agente-alvo (os @marcados; sem @, o último agente que falou no canal — lib/canal/alvo.ts),
+ * dispara UM turno do harness daquele agente (fila/inline).
  * Author gate: quem não pode escrever recebe 403 (IDOR coberto em teste).
  * Fatia 7 (CHORES_QUEUE=1): "@aura resume <url>" é CHORE (pool grátis, 1 mensagem com fonte), não
  * turno — triagem conservadora (lib/chore/triagem.ts): em dúvida, turno como sempre.
@@ -11,6 +12,8 @@ import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag, isObjectId, agentesDoCanal } from "@/lib/canal/server";
 import { podeEscrever } from "@/lib/canal/gate";
 import { montarAliases, parseMentions } from "@/lib/canal/mention";
+import { resolverAlvos } from "@/lib/canal/alvo";
+import { humanosNoCanal } from "@/lib/canal/convite";
 import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
 import { pedidoDeChore } from "@/lib/chore/triagem";
@@ -35,9 +38,25 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const agentes = await agentesDoCanal(u.id, canal.agentes);
   const mencoes = parseMentions(texto, montarAliases(agentes.map((a) => ({ agentKey: a.agentKey, nome: a.nome }))));
 
+  // Quem responde: @menção manda; sem @, continua o último agente que falou no canal (ou a Aura,
+  // no primeiro oi). Lê o histórico ANTES de gravar a mensagem atual. Ver lib/canal/alvo.ts.
+  const recentes = mencoes.length
+    ? []
+    : await prisma.canalMensagem.findMany({
+        where: { canalId: canal.id }, orderBy: { createdAt: "desc" }, take: 100, select: { autorTipo: true, autorId: true },
+      });
+  const { alvos } = resolverAlvos({
+    mencoes,
+    historico: [...recentes].reverse(),
+    remetenteId: u.id,
+    disponiveis: agentes.map((a) => a.agentKey),
+    // conversa privada conta as duas pessoas → a IA não responde sozinha numa conversa de duas pessoas
+    humanos: humanosNoCanal(canal),
+  });
+
   const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "humano", autorId: u.id, texto, mencoes } });
   // agente convocado passa a "estar" no canal (aparece na presença/seletor pra todo mundo)
-  const novos = mencoes.filter((k) => !canal.agentes.includes(k));
+  const novos = alvos.filter((k) => !canal.agentes.includes(k));
   const touch = novos.length ? { agentes: [...canal.agentes, ...novos], updatedAt: new Date() } : { updatedAt: new Date() };
   await prisma.canal.update({ where: { id: canal.id }, data: touch }).catch(() => undefined);
 
@@ -59,8 +78,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   const vias = await dispararTurnos(
-    mencoes.map((agentKey) => ({ canalId: canal.id, agentKey, userId: u.id, mensagemId: row.id })),
+    alvos.map((agentKey) => ({ canalId: canal.id, agentKey, userId: u.id, mensagemId: row.id })),
     depsReais,
   );
-  return NextResponse.json({ ok: true, mensagem: wire, turnos: mencoes.map((agentKey, i) => ({ agentKey, via: vias[i] })) }, { status: 201 });
+  return NextResponse.json({ ok: true, mensagem: wire, turnos: alvos.map((agentKey, i) => ({ agentKey, via: vias[i] })) }, { status: 201 });
 }

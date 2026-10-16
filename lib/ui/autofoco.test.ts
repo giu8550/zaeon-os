@@ -72,3 +72,34 @@ describe("decidirFoco · precedência das regras", () => {
     for (const c of combinacoes) expect(decidirFoco(c)).not.toBe("focar");
   });
 });
+
+describe("frameVisivel · o tablet guardado do cyberespaço (out/2026)", () => {
+  // um "window" de iframe falso: frameElement com o estilo calculado na página de cima
+  const janela = (estilo: Partial<CSSStyleDeclaration>, rect = { width: 800, height: 600 }, offsetParent: object | null = {}) => {
+    const pai = { getComputedStyle: () => ({ visibility: "visible", display: "block", opacity: "1", position: "static", ...estilo }), frameElement: null };
+    const fe = { ownerDocument: { defaultView: pai }, offsetParent, getBoundingClientRect: () => rect };
+    return { frameElement: fe } as unknown as Window;
+  };
+  it("fora de iframe (página normal): visível", async () => {
+    const { frameVisivel } = await import("./autofoco");
+    expect(frameVisivel({ frameElement: null } as unknown as Window)).toBe(true);
+    expect(frameVisivel(null)).toBe(true);
+  });
+  it("iframe visível: visível", async () => {
+    const { frameVisivel } = await import("./autofoco");
+    expect(frameVisivel(janela({}))).toBe(true);
+  });
+  it("tablet GUARDADO (visibility:hidden no iframe): NÃO visível → o autofoco não rouba o foco do jogo", async () => {
+    const { frameVisivel } = await import("./autofoco");
+    expect(frameVisivel(janela({ visibility: "hidden" }))).toBe(false);
+    expect(frameVisivel(janela({ display: "none" }))).toBe(false);
+    expect(frameVisivel(janela({ opacity: "0" }))).toBe(false);
+    expect(frameVisivel(janela({}, { width: 0, height: 0 }))).toBe(false);
+    expect(frameVisivel(janela({}, undefined, null))).toBe(false);   // display:none num ancestral
+  });
+  it("outra origem (acessar o frameElement lança): não bloqueia", async () => {
+    const { frameVisivel } = await import("./autofoco");
+    const w = { get frameElement() { throw new Error("SecurityError"); } } as unknown as Window;
+    expect(frameVisivel(w)).toBe(true);
+  });
+});

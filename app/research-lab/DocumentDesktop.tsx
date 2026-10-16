@@ -119,12 +119,15 @@ export default function DocumentDesktop({
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
       }}
     >
+      {/* Sem o rótulo "Documentos" na vista padrão (pedido do dono) — o título só aparece quando diz ONDE se está. */}
+      {(openPopover === "citations" || showTrash || showFolder) && (
       <h3
         className="text-[9px] font-black uppercase tracking-[0.16em] mb-2.5 flex items-center gap-1.5 shrink-0"
         style={{ color: "#9595b4" }}
       >
-        {openPopover === "citations" ? "🔖 Citações salvas" : showTrash ? "🗑️ Lixeira" : showFolder ? rotuloPasta : "🗂️ Documentos"}
+        {openPopover === "citations" ? "🔖 Citações salvas" : showTrash ? "🗑️ Lixeira" : rotuloPasta}
       </h3>
+      )}
 
       {/* Content: citações / lixeira / pastas / grid de docs */}
       <div className="flex-1 overflow-y-auto min-h-0">

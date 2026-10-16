@@ -5,8 +5,8 @@
  * estelar), querubins orbitando (sem as tochas/línguas de fogo nas muralhas — tiradas a pedido), plataforma do
  * topo com o computador e o avatar do dono (núcleo + aura + coroa) e o feixe de neurônios subindo.
  *
- * ANDÁVEL (lib/cyber/nav): escala do registro, PORTÃO nas muralhas alinhado à ESCADARIA de cristal que desce até a
- * praça. Por ser andável, a estrutura não gira (portão e escada precisam ficar alinhados) e a flutuação é sutil —
+ * ANDÁVEL (lib/cyber/nav): escala do registro, PORTÃO nas muralhas alinhado à ESCADARIA de cristal que desce até o
+ * piso em que ele se apoia (`poi.base`: a Recepção fica no piso da Cidade Zaeon). Por ser andável, a estrutura não gira (portão e escada precisam ficar alinhados) e a flutuação é sutil —
  * querubins, feixe e coroa continuam se mexendo.
  *
  * Disciplina (igual BaseEstudo/CenaCosmica): blocos repetidos instanciados, `low` reduz partículas/segmentos e
@@ -68,7 +68,7 @@ export function liberar(raiz: THREE.Object3D, extras: THREE.Texture[] = []) {
 function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Texture }, rotulo: HTMLDivElement): LandmarkHandle {
   const rm = reducedMotion();
   const S = poi.escala ?? 1, m = marcoNav(poi);
-  const g = new THREE.Group(); g.position.set(poi.x, poi.altura, poi.z); g.scale.setScalar(S);
+  const g = new THREE.Group(); g.position.set(poi.x, (poi.base ?? 0) + poi.altura, poi.z); g.scale.setScalar(S);   // `base`: o piso onde ele se apoia (a Recepção, no piso da Zaeon)
   const alvos: THREE.Object3D[] = [];
   const add = <T extends THREE.Object3D>(o: T, pai: THREE.Object3D = g, alvo = false) => { pai.add(o); if (alvo) alvos.push(o); return o; };
 
@@ -168,7 +168,7 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
     atualizar(dt, t) {
       // flutuação lenta + giro lento
       // andável: flutuação SUTIL e sem giro global (portão e escada ficam alinhados)
-      g.position.y = poi.altura + Math.sin(t * 0.5) * (m ? 0.15 : 0.4) * boiaAmp;
+      g.position.y = (poi.base ?? 0) + poi.altura + Math.sin(t * 0.5) * (m ? 0.15 : 0.4) * boiaAmp;
       if (!m) g.rotation.y += dt * 0.03 * boiaAmp;
       // querubins orbitando
       { const a = cherubGeo.attributes.position!.array as Float32Array;
@@ -188,7 +188,7 @@ function zaeon(poi: POI, { low, starTex }: { low: boolean; starTex: THREE.Textur
  * O anel "respira" devagar (sem piscar); com prefers-reduced-motion fica parado.
  */
 function heliporto(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, rotulo: HTMLDivElement): LandmarkHandle {
-  const g = new THREE.Group(); g.position.set(poi.x, 0, poi.z);
+  const g = new THREE.Group(); g.position.set(poi.x, poi.base ?? 0, poi.z);
   const r = poi.footprintR, seg = low ? 32 : 64, parado = reducedMotion();
   const disco = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 0.15, 0.12, seg), new THREE.MeshStandardMaterial({ color: 0x0c1a33, emissive: 0x16305c, emissiveIntensity: 0.5, roughness: 0.7, metalness: 0.3 }));
   disco.position.y = 0.06; g.add(disco);
@@ -210,7 +210,7 @@ function heliporto(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, 
  *  são do engine — clicar numa = montar; o piso não é alvo de clique (clicar nele = andar até ali). */
 function estacionamento(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, rotulo: HTMLDivElement): LandmarkHandle {
   const lote = LOTES.find((l) => l.id === "chao")!;
-  const g = new THREE.Group(); g.position.set(poi.x, 0, poi.z); g.rotation.y = lote.rot;
+  const g = new THREE.Group(); g.position.set(poi.x, poi.base ?? 0, poi.z); g.rotation.y = lote.rot;
   const piso = criarPisoEstacionamento({ low, parado: reducedMotion(), lote }); g.add(piso.group);
   return {
     poi, group: g, rotulo, alvos: [], topo: null, monitorTopo: null, escada: null,
@@ -222,7 +222,7 @@ function estacionamento(poi: POI, { low }: { low: boolean; starTex: THREE.Textur
 
 /** Preset genérico: obelisco de cristal flutuante com halo — prova que um novo POI é só uma entrada no registro. */
 function generico(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, rotulo: HTMLDivElement): LandmarkHandle {
-  const g = new THREE.Group(); g.position.set(poi.x, poi.altura, poi.z);
+  const g = new THREE.Group(); g.position.set(poi.x, (poi.base ?? 0) + poi.altura, poi.z);
   const corpo = new THREE.Mesh(new THREE.OctahedronGeometry(Math.max(1.5, poi.footprintR * 0.6), low ? 0 : 1), new THREE.MeshStandardMaterial({ color: 0x0b1a30, emissive: 0x2a4a80, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.2, transparent: true, opacity: 0.9 }));
   corpo.scale.y = 1.8; g.add(corpo);
   const tex = glowTex("rgba(150,230,255,.5)", "rgba(60,120,220,.12)");
@@ -231,7 +231,7 @@ function generico(poi: POI, { low }: { low: boolean; starTex: THREE.Texture }, r
   return {
     poi, group: g, rotulo, alvos: [corpo], topo: null, monitorTopo: null, escada: null,
     donoPresente() { /* sem topo */ },
-    atualizar(dt, t) { g.position.y = poi.altura + Math.sin(t * 0.5) * 0.3; corpo.rotation.y += dt * 0.1; },
+    atualizar(dt, t) { g.position.y = (poi.base ?? 0) + poi.altura + Math.sin(t * 0.5) * 0.3; corpo.rotation.y += dt * 0.1; },
     dispose() { rotulo.remove(); liberar(g, [tex]); },
   };
 }

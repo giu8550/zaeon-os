@@ -2,14 +2,15 @@
  * Cyberespaço — os LUGARES FLUTUANTES (PURO): discos no céu com chão de verdade, que qualquer pessoa visita.
  *  - "univ": a Universidade (UNILAB), a 170 m (lib/cyber/universidade.ts);
  *  - "solana": a Solana House da Superteam Brasil, com 3 andares + rooftop (lib/cyber/solana.ts);
- *  - "ufc" / "unifor" / "uece": os OUTROS CAMPI, na mesma fundação (lib/cyber/campi.ts) — o elevador de luz fica do lado
+ *  - "ufc" / "unifor" / "uece": os OUTROS CAMPI, na mesma fundação (lib/cyber/campi.ts) — o buraco negro fica do lado
  *    virado pra praça.
- * (A Zaeon, a 230 m, é a ilha do céu de lib/cyber/ceu.ts — tem o portal do buraco negro e a física dela.)
+ * (A Zaeon, a 450 m, é a ilha do céu de lib/cyber/ceu.ts — tem a física dela.)
  *
- * Como se chega: o ELEVADOR DE LUZ — um anel no chão, embaixo do disco; pisou, sobe (aparece na `chegada`). Lá em
- * cima, o anel de volta desce. Também dá pra pousar de moto/nave (o disco é sólido) e voar de mochila em volta.
- * A borda do disco é LIVRE (sem parede invisível): passou, cai. Os andares de cima da Solana House são trocados pelo
- * elevador do prédio (tecla F).
+ * Como se chega: não há mais chão (nem os elevadores de luz que subiam dele) — cada lugar tem o seu BURACO NEGRO
+ * (o `portal`, um anel no disco com o buraco negro pairando em cima), um nó da rede de túneis (lib/cyber/buracos):
+ * entrou, escolhe o destino e aparece na `chegada` dele. Também dá pra pousar de moto/nave (o disco é sólido) e voar
+ * de mochila em volta. A borda do disco é LIVRE (sem parede invisível): passou, cai. Os andares de cima da Solana
+ * House são trocados pelo elevador do prédio (tecla F).
  */
 import type { P2 } from "./colisao";
 import type { Pilar } from "./voo";
@@ -23,45 +24,46 @@ export type Anel = { x: number; z: number; r: number };
 export type Plataforma = {
   id: IdPlataforma; nome: string;
   centro: P2; y: number; r: number;
-  /** anel do elevador de luz no CHÃO (mundo) e o de volta no disco (mundo, no piso do disco) */
-  anelChao: Anel; anelDisco: Anel;
-  /** onde se aparece ao subir (mundo, no disco) e ao descer (mundo, no chão), e pra onde se olha */
-  chegada: P2 & { rumo: number }; volta: P2 & { rumo: number };
+  /** o anel do BURACO NEGRO no disco (mundo, no piso do disco) — a boca do túnel */
+  portal: Anel;
+  /** onde se aparece ao chegar pelo túnel (mundo, no disco) e pra onde se olha */
+  chegada: P2 & { rumo: number };
 };
 
 const w = (c: P2, l: P2) => ({ x: c.x + l.x, z: c.z + l.z });
 const U = UNIVERSIDADE, S = SOLANA;
 export const PLATAFORMAS: Record<IdPlataforma, Plataforma> = {
   univ: {
-    id: "univ", nome: "Universidade", centro: U.centro, y: U.y, r: U.discoR,
-    anelChao: { ...w(U.centro, { x: 0, z: -121 }), r: 3.2 }, anelDisco: { ...w(U.centro, { x: 0, z: -134 }), r: 3 },
+    id: "univ", nome: "UNILAB", centro: U.centro, y: U.y, r: U.discoR,
+    portal: { ...w(U.centro, { x: 0, z: -142 }), r: 3 },   // (a chegada fica longe do anel: o buraco não tampa a câmera de quem chega)
     chegada: { ...w(U.centro, { x: 0, z: -124 }), rumo: 0 },          // de frente pro portão (norte)
-    volta: { ...w(U.centro, { x: 0, z: -127 }), rumo: Math.PI },       // no chão, de frente pra praça (sul)
   },
   solana: {
     id: "solana", nome: "Solana House", centro: S.centro, y: S.y, r: S.r,
-    anelChao: { ...mundoS({ x: 0, z: -22 }), r: 3 }, anelDisco: { ...mundoS({ x: 0, z: -25 }), r: 2.6 },
+    portal: { ...mundoS({ x: 0, z: -38 }), r: 2.6 },
     chegada: { ...mundoS({ x: 0, z: -19 }), rumo: 0 },
-    volta: { ...mundoS({ x: 0, z: -28 }), rumo: Math.PI },
   },
-  // os campi: o anel no chão embaixo da borda virada pra praça; sobe-se olhando pro centro do campus
+  // os campi: o buraco negro perto da borda virada pra praça; chega-se olhando pro centro do campus
   ...Object.fromEntries(IDS_CAMPI.map((id) => {
-    const c = CAMPI[id], rumoDentro = Math.atan2(-naEntrada(id, 1).x, -naEntrada(id, 1).z), rumoFora = rumoDentro + Math.PI;
+    const c = CAMPI[id], rumoDentro = Math.atan2(-naEntrada(id, 1).x, -naEntrada(id, 1).z);
     return [id, {
       id, nome: c.sigla, centro: c.centro, y: c.y, r: c.r,
-      anelChao: { ...mundoC(id, naEntrada(id, c.r - 26)), r: 3.4 }, anelDisco: { ...mundoC(id, naEntrada(id, c.r - 10)), r: 3 },
-      chegada: { ...mundoC(id, naEntrada(id, c.r - 15)), rumo: rumoDentro },
-      volta: { ...mundoC(id, naEntrada(id, c.r - 30)), rumo: rumoFora },
+      portal: { ...mundoC(id, naEntrada(id, c.r - 10)), r: 3 },
+      chegada: { ...mundoC(id, naEntrada(id, c.r - 26)), rumo: rumoDentro },
     } satisfies Plataforma];
   })) as Record<IdCampus, Plataforma>,
 };
-export const IDS_PLATAFORMAS = Object.keys(PLATAFORMAS) as IdPlataforma[];
+/** as UNIVERSIDADES no mapa (a UNILAB e os campi UFC/Unifor/UECE). DESLIGADAS a pedido do dono (out/2026): pesavam no
+ *  fundo do mapa — ficam só a Zaeon, as salas dela e a Solana House. Os módulos continuam (true = voltam). */
+export const UNIVERSIDADES_NO_MAPA = false;
+/** este lugar flutuante está no mapa? */
+export const plataformaAtiva = (id: IdPlataforma) => UNIVERSIDADES_NO_MAPA || id === "solana";
+/** os lugares flutuantes que EXISTEM no mapa (física, túneis, bots, contadores) */
+export const IDS_PLATAFORMAS = (Object.keys(PLATAFORMAS) as IdPlataforma[]).filter(plataformaAtiva);
 
 const dentro = (p: P2, a: Anel) => Math.hypot(p.x - a.x, p.z - a.z) < a.r;
-/** pisou no anel do elevador no CHÃO de qual plataforma (ou null) */
-export const anelDoChao = (p: P2): IdPlataforma | null => IDS_PLATAFORMAS.find((id) => dentro(p, PLATAFORMAS[id].anelChao)) ?? null;
-/** pisou no anel de volta, lá em cima */
-export const noAnelDoDisco = (id: IdPlataforma, p: P2) => dentro(p, PLATAFORMAS[id].anelDisco);
+/** pisou no anel do buraco negro desta plataforma (no disco)? */
+export const noPortalDaPlataforma = (id: IdPlataforma, p: P2) => dentro(p, PLATAFORMAS[id].portal);
 
 /** altura (relativa ao disco) de um andar */
 export const alturaDoAndar = (id: IdPlataforma, andar: number) => (id === "solana" ? ANDARES_SOLANA[andar] ?? 0 : 0);
@@ -116,8 +118,7 @@ export function pilaresDasPlataformas(): Pilar[] { return (pilaresCache ??= calc
 function calcularPilares(): Pilar[] {
   const P = PLATAFORMAS.solana, pr = SOLANA.predio, cx = (pr.x0 + pr.x1) / 2, cz = (pr.z0 + pr.z1) / 2;
   return [
-    ...pilaresDaUniversidade(),
-    ...IDS_CAMPI.flatMap((id) => pilaresDoCampus(id)),
+    ...(UNIVERSIDADES_NO_MAPA ? [...pilaresDaUniversidade(), ...IDS_CAMPI.flatMap((id) => pilaresDoCampus(id))] : []),
     { ...P.centro, r: P.r, topo: P.y, base: P.y - SOLANA.espessura },
     { ...mundoS({ x: cx, z: cz }), r: Math.hypot(pr.x1 - cx, pr.z1 - cz), topo: P.y + ANDARES_SOLANA[ROOFTOP] + SOLANA.guardaCorpo, base: P.y },
   ];

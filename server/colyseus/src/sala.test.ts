@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client, type Room } from "@colyseus/sdk";
 import { assinarToken, verificarToken, VALIDADE_TOKEN_MS } from "./token";
-import { sanitizarPose, sanitizarRtc } from "./regras";
+import { MAX_JOGADORES, sanitizarPose, sanitizarRtc } from "./regras";
 
 const SEGREDO = "segredo-de-teste-123";
 process.env.REALTIME_SECRET = SEGREDO;
@@ -26,13 +26,19 @@ describe("token de entrada (HMAC)", () => {
 describe("regras da pose", () => {
   it("saneia números; regalias (topo/nave) só pra fundador; a Zaeon (céu) e as motos pra todos", () => {
     expect(sanitizarPose({ x: "1", z: 0, facing: 0 }, false)).toBeNull();
+    expect(sanitizarPose({ x: 1, z: 0, facing: 0, t: 1234.5 }, false)!.t).toBe(1234.5);   // o relógio de quem mandou (netcode)
+    expect(sanitizarPose({ x: 1, z: 0, facing: 0, t: "x" }, false)!.t).toBe(0);
+    // a bordo da nave: a posição LOCAL (com teto) e o nível; lixo = fora da nave
+    expect(sanitizarPose({ x: 1, z: 0, facing: 0, bordo: { x: 2.5, z: -300, nivel: 1, esc: 3 } }, false)!.bordo).toEqual({ x: 2.5, z: -80, nivel: 1, esc: 3 });
+    expect(sanitizarPose({ x: 1, z: 0, facing: 0, bordo: { x: 1, z: 1, nivel: 7 } }, false)!.bordo).toBeNull();
+    expect(sanitizarPose({ x: 1, z: 0, facing: 0 }, false)!.bordo).toBeNull();
     const p = sanitizarPose({ x: 1e9, z: -3, facing: 0.5, topo: true, ceu: true, voo: { y: 50, yaw: 1 }, jet: 7 }, false)!;
     expect(p.x).toBe(1540); expect(p.topo).toBe(false); expect(p.ceu).toBe(true); expect(p.voo).toBeNull(); expect(p.jet).toBe(7);
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, topo: true, voo: { y: 50, yaw: 1 } }, true)!.voo).toEqual({ y: 50, yaw: 1 });
     // moto: qualquer um; vaga inteira 0..7 (chão + Zaeon), altura com teto; lixo → nada
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 6, y: 231, yaw: 1 } }, false)!.moto).toEqual({ s: 6, y: 231, yaw: 1 });
-    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 16, y: 1, yaw: 0 } }, false)!.moto).toBeNull();   // 16 vagas (4 no chão + 12 na Zaeon)
-    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 15, y: 1, yaw: 0, de: "c".repeat(24) } }, false)!.moto).toEqual({ s: 15, y: 1, yaw: 0, de: "c".repeat(24) });
+    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 32, y: 1, yaw: 0 } }, false)!.moto).toBeNull();   // 32 vagas (4 no chão + 12 na Zaeon + 16 nos autódromos)
+    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 31, y: 1, yaw: 0, de: "c".repeat(24) } }, false)!.moto).toEqual({ s: 31, y: 1, yaw: 0, de: "c".repeat(24) });
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 15, y: 1, yaw: 0, de: "x" } }, false)!.moto).toEqual({ s: 15, y: 1, yaw: 0 });
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 1.5, y: 1, yaw: 0 } }, false)!.moto).toBeNull();
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 0, y: 9999, yaw: 0 } }, false)!.moto!.y).toBe(800);
@@ -94,6 +100,23 @@ describe("LoungeRoom (servidor de verdade + clientes do SDK)", () => {
     await espera(() => jogadores(b!)?.get(id(1))?.falando === true);
   });
 
+  it("voz: quem ainda não mandou pose (o novato no tutorial) não fala nem ouve ninguém", async () => {
+    const [a] = salas, n = await entrar(id(9));
+    await espera(() => jogadores(a!)?.has(id(9)) === true);
+    const praN: unknown[] = [], praA: unknown[] = [];
+    n.onMessage("rtc", (m) => praN.push(m)); a!.onMessage("rtc", (m) => praA.push(m));
+    a!.send("rtc", { to: id(9), data: { tipo: "offer", sdp: "v=0" } });
+    n.send("rtc", { to: id(1), data: { tipo: "offer", sdp: "v=0" } });
+    n.send("fala", { on: true });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(praN).toHaveLength(0); expect(praA).toHaveLength(0); expect(jogadores(a!)!.get(id(9))!.falando).toBe(false);
+    n.send("pose", { x: 0, z: 0, facing: 0, moving: false, sit: false });   // cruzou o portal: entra no mundo (e na voz)
+    await espera(() => jogadores(a!)?.get(id(9))?.pronto === true);
+    a!.send("rtc", { to: id(9), data: { tipo: "offer", sdp: "v=0" } });
+    await espera(() => praN.length === 1);
+    await n.leave(); await espera(() => jogadores(a!)?.has(id(9)) === false);
+  });
+
   it("a mesma pessoa em outra aba: continua UM avatar", async () => {
     const b2 = await entrar(id(2));
     await espera(() => jogadores(b2)?.size === 2);
@@ -101,18 +124,27 @@ describe("LoungeRoom (servidor de verdade + clientes do SDK)", () => {
     expect(jogadores(salas[0]!)!.size).toBe(2);
   });
 
-  it("teto de 5 por sala; outra sala (outro convite) é outra room", async () => {
-    await entrar(id(3)); await entrar(id(4)); await entrar(id(5));
-    await espera(() => jogadores(salas[0]!)?.size === 5);
-    await expect(entrar(id(6))).rejects.toBeTruthy();   // o 6º não entra
-    const fora = await entrar(id(7), { s: OUTRA });
+  it("teto de MAX_JOGADORES por sala; outra sala (outro convite) é outra room", async () => {
+    for (let k = 3; k <= MAX_JOGADORES; k++) await entrar(id(k));
+    await espera(() => jogadores(salas[0]!)?.size === MAX_JOGADORES, 10_000);
+    await expect(entrar(id(MAX_JOGADORES + 1))).rejects.toBeTruthy();   // o (teto+1)º não entra
+    const fora = await entrar(id(MAX_JOGADORES + 2), { s: OUTRA });
     await espera(() => jogadores(fora)?.size === 1);
-    expect(jogadores(salas[0]!)!.has(id(7))).toBe(false);
-  });
+    expect(jogadores(salas[0]!)!.has(id(MAX_JOGADORES + 2))).toBe(false);
+  }, 30_000);
 
   it("sair remove o avatar pros outros", async () => {
-    const a = salas[0]!, ultimo = salas.find((r) => (jogadores(r)?.size ?? 0) === 5 && r !== a)!;
+    const a = salas[0]!, ultimo = salas.find((r) => (jogadores(r)?.size ?? 0) === MAX_JOGADORES && r !== a)!;
     await a.leave();
     await espera(() => !jogadores(ultimo)?.has(id(1)));
+  });
+});
+
+describe("arena PvP na pose (servidor)", () => {
+  it("o golpe, a vida e a espada passam limpos", () => {
+    const p = sanitizarPose({ x: 0, z: 0, facing: 0, atk: 22, hp: 64, arma: 1 }, false)!;
+    expect(p.atk).toBe(22); expect(p.hp).toBe(64); expect(p.arma).toBe(true); expect(sanitizarPose({ x: 0, z: 0, facing: 0, mov: 2 }, false)!.mov).toBe(2); expect(sanitizarPose({ x: 0, z: 0, facing: 0, mov: 7 }, false)!.mov).toBe(0);
+    const q = sanitizarPose({ x: 0, z: 0, facing: 0, atk: -1, hp: 900, arma: true }, false)!;
+    expect(q.atk).toBe(0); expect(q.hp).toBe(100); expect(q.arma).toBe(false);
   });
 });

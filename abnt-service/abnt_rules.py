@@ -28,6 +28,20 @@ SPACE_BETWEEN_REFS  = Pt(12)  # entre entradas de referência
 
 SPACE_BEFORE_TITLE_PT = 12
 SPACE_AFTER_TITLE_PT  = 12
+SPACE_BEFORE_KEYWORDS_PT = 18   # "linha em branco" entre resumo e palavras-chave (1 linha a 1,5)
+
+# ── Capa e folha de rosto: espaço vertical em Pt, NUNCA parágrafos vazios ──
+# Cada linha tem entrelinha EXATA → a altura dos blocos é conhecida e o espaço entre
+# eles é calculado (formatter._add_cover_page). Independe de fonte e de tamanho do título.
+COVER_LINE_PT             = 18     # 12pt × 1,5
+COVER_GAP_AUTHOR_LINES    = 4      # instituição/curso → autor
+COVER_GAP_NATURE_LINES    = 2      # título → natureza do trabalho
+COVER_BOTTOM_SAFETY_PT    = 9      # folga pra cidade/ano nunca escorrer pra página seguinte
+TITLE_PAGE_TITLE_AT       = 0.35   # centro do título a 35% da altura útil
+TITLE_PAGE_GAP_NOTE_LINES = 4      # título → nota de natureza
+TITLE_PAGE_NOTE_INDENT_CM = 8.0    # nota recuada (metade direita da mancha)
+CHARS_PER_LINE_TITLE      = 60     # título em CAIXA ALTA, negrito: caracteres mais largos
+CHARS_PER_LINE_NOTE       = 36     # nota com 8 cm de recuo (16 − 8 = 8 cm úteis)
 
 # ── Recuos ─────────────────────────────────────────────────────
 PARAGRAPH_INDENT_CM   = 1.25   # recuo de parágrafo (1ª linha)

@@ -87,6 +87,35 @@ describe("agent-turn · executarTurno", () => {
     expect(upsert).toHaveBeenCalledTimes(1);
     expect(upsert.mock.calls[0]![0].where).toEqual({ agentKey_userId: { agentKey: "aura", userId: B } });
   });
+  it("vários usuários no mesmo canal: o agente enxerga cada pessoa pelo nome e responde a quem o chamou", async () => {
+    const m1 = msg({ autorId: A, texto: "@aura resume o capítulo 2", mencoes: ["aura"] });
+    const r1 = msg({ autorTipo: "agente", autorId: "aura", texto: "O capítulo 2 trata de…", mencoes: [] });
+    const m2 = msg({ autorId: B, texto: "@aura e a parte da metodologia?", mencoes: ["aura"] });
+    const { prisma, upsert } = fakePrisma(canal, [m1, r1, m2]);
+    const gerar = vi.fn().mockResolvedValue("A metodologia usa entrevistas.");
+    const eventos: any[] = [];
+    const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: B, mensagemId: m2.id }, { prisma, gerar, publicar: async (c, ev, p) => { eventos.push([c, ev, p]); } });
+    expect(r.ok).toBe(true);
+
+    const args = gerar.mock.calls[0]![0];
+    // quem chamou é a Bia: o objetivo é a mensagem DELA, sem o @
+    expect(args.userId).toBe(B);
+    expect(args.objective).toBe("e a parte da metodologia?");
+    // o histórico distingue as duas pessoas e a própria Aura (assistant)
+    expect(args.history).toEqual([
+      { role: "user", text: "Ana: @aura resume o capítulo 2" },
+      { role: "assistant", text: "O capítulo 2 trata de…" },
+      { role: "user", text: "Bia: @aura e a parte da metodologia?" },
+    ]);
+    // o contexto do canal lista as duas pessoas
+    const bloco: string = (args.agente as any).__blocoCanal;
+    expect(bloco).toContain("Ana");
+    expect(bloco).toContain("Bia");
+    // a resposta vai pro canal (todos veem) e o uso é de quem chamou
+    expect(eventos.some(([, ev]) => ev === EV_MENSAGEM)).toBe(true);
+    await new Promise((res) => setTimeout(res, 0));
+    expect(upsert.mock.calls[0]![0].where).toEqual({ agentKey_userId: { agentKey: "aura", userId: B } });
+  });
   it("author gate: C (fora da turma) não convoca; canal inexistente idem", async () => {
     const { prisma, criadas } = fakePrisma(canal, [msg({ texto: "@aura oi", mencoes: ["aura"] })]);
     const gerar = vi.fn();
@@ -122,6 +151,133 @@ describe("agent-turn · executarTurno", () => {
     const efemera = eventos.find(([ev, p]) => ev === EV_MENSAGEM && p?.efemera)![1];
     expect(efemera.texto).toMatch(/limite diário de uso acabou/);
     expect(efemera.autorId).toBe("medicina");
+  });
+
+  describe("#396 (B) · um agente passa a bola pra outro", () => {
+    const pede = () => msg({ autorId: A, texto: "@aura me ajuda com o caso clínico", mencoes: ["aura"] });
+
+    it("a resposta marca um colega → encadeia ele, como 'autonomo', cadeia+1, com quem chamou", async () => {
+      const m = pede();
+      const { prisma, criadas } = fakePrisma(canal, [m]);
+      const encadear = vi.fn();
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id },
+        { prisma, gerar: async () => "A parte clínica é com o **@Osler**.", publicar: async () => {}, encadear });
+      expect(r.ok && r.encadeado).toBe("medicina");
+      expect(encadear).toHaveBeenCalledTimes(1);
+      expect(encadear.mock.calls[0]![0]).toEqual({
+        canalId: CANAL, agentKey: "medicina", userId: A, mensagemId: criadas[0]!.id, origem: "autonomo",
+        cadeia: 1, chamadoPor: "aura", jaNaCadeia: ["aura"],
+      });
+    });
+
+    it("sem @ na resposta → não encadeia", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const encadear = vi.fn();
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id }, { prisma, gerar: async () => "Resolvido.", publicar: async () => {}, encadear });
+      expect(encadear).not.toHaveBeenCalled();
+    });
+
+    it("no limite (cadeia 2) não encadeia mais", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const encadear = vi.fn();
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id, cadeia: 2, jaNaCadeia: ["nina", "teo"] },
+        { prisma, gerar: async () => "chama o @Osler", publicar: async () => {}, encadear });
+      expect(encadear).not.toHaveBeenCalled();
+    });
+
+    it("não chama de volta quem já falou na cadeia (sem ping-pong)", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const encadear = vi.fn();
+      await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A, mensagemId: m.id, cadeia: 1, chamadoPor: "aura", jaNaCadeia: ["aura"] },
+        { prisma, gerar: async () => "volta pra @aura", publicar: async () => {}, encadear });
+      expect(encadear).not.toHaveBeenCalled();
+    });
+
+    it("se encadear falhar, a resposta que já saiu continua valendo", async () => {
+      const m = pede();
+      const { prisma, criadas } = fakePrisma(canal, [m]);
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id },
+        { prisma, gerar: async () => "é com o @Osler", publicar: async () => {}, encadear: async () => { throw new Error("fila fora"); } });
+      expect(r.ok).toBe(true);
+      expect(criadas).toHaveLength(1);
+    });
+
+    it("sem a dependência de encadear (ex.: chamada direta) nada muda", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id }, { prisma, gerar: async () => "é com o @Osler", publicar: async () => {} });
+      expect(r.ok && r.encadeado).toBeNull();
+    });
+
+    it("o prompt pede pra ficar no nicho; quem foi chamado sabe por quem e fecha com próximos passos", async () => {
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [m]);
+      const gerar = vi.fn().mockResolvedValue("ok");
+      await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A, mensagemId: m.id, cadeia: 1, chamadoPor: "aura", jaNaCadeia: ["aura"] },
+        { prisma, gerar, publicar: async () => {} });
+      const bloco: string = (gerar.mock.calls[0]![0].agente as any).__blocoCanal;
+      expect(bloco).toContain("Fique no SEU nicho");
+      expect(bloco).toContain("chamado(a) por @aura");
+      expect(bloco).toContain("próximos passos");
+    });
+
+    it("no limite, o prompt diz pra NÃO chamar outros agentes", () => {
+      const ag: any = { agentKey: "teo", nome: "Téo" };
+      const b = blocoCanal(canal as any, ag, [ag], [], { podePassar: false });
+      expect(b).toContain("Não chame outros agentes agora");
+      expect(b).not.toContain("Fique no SEU nicho");
+    });
+  });
+
+  describe("#396 · estados do agente no evento de digitando", () => {
+    const estados = (eventos: [string, any][]) => eventos.filter(([ev]) => ev === EV_DIGITANDO).map(([, p]) => p.estado);
+
+    it("publica cada fase do harness só quando muda (pesquisando, investigando, redigindo) e fecha em ocioso", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura pesquisa isso", mencoes: ["aura"] })]);
+      const eventos: [string, any][] = [];
+      const gerar = vi.fn(async ({ onFase }: any) => {
+        for (const f of ["route", "plan", "gather", "gather", "reason", "critique", "draft", "finalize"]) onFase?.(f);
+        return "pronto";
+      });
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(r.ok).toBe(true);
+      // gather repetido e reason→critique (mesmo estado "investigando") não geram evento duplicado
+      expect(estados(eventos)).toEqual(["digitando", "entendendo", "planejando", "pesquisando", "investigando", "redigindo", "ocioso"]);
+      expect(eventos.filter(([ev]) => ev === EV_DIGITANDO).every(([, p]) => p.agentKey === "aura")).toBe(true);
+    });
+
+    it("sem nenhuma fase (gerar simples) o fluxo continua digitando → ocioso", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura oi", mencoes: ["aura"] })]);
+      const eventos: [string, any][] = [];
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar: async () => "oi", publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(estados(eventos)).toEqual(["digitando", "ocioso"]);
+    });
+
+    it("fase desconhecida não vira estado novo (fica em digitando)", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura oi", mencoes: ["aura"] })]);
+      const eventos: [string, any][] = [];
+      const gerar = vi.fn(async ({ onFase }: any) => { onFase?.("degradado: nenhuma evidência reunida"); return "ok"; });
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(estados(eventos)).toEqual(["digitando", "ocioso"]);
+    });
+
+    it("teto da virtual key termina em 'descanso' (e não em ocioso)", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@medicina e aí?", mencoes: ["medicina"] })]);
+      const eventos: [string, any][] = [];
+      const teto = Object.assign(new Error("llm:teto: Budget has been exceeded"), { classe: "teto", provedor: "litellm" });
+      await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A }, { prisma, gerar: async () => { throw teto; }, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(estados(eventos)).toEqual(["digitando", "descanso"]);
+    });
+
+    it("erro comum termina em ocioso", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@medicina oi", mencoes: ["medicina"] })]);
+      const eventos: [string, any][] = [];
+      await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A }, { prisma, gerar: async () => { throw new Error("gemini 404"); }, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      expect(estados(eventos)).toEqual(["digitando", "ocioso"]);
+    });
   });
 
   describe("PR-A3 · teto por agente (ler ≠ agir)", () => {

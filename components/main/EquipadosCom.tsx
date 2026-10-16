@@ -47,7 +47,6 @@ const CASAS: Casa[] = [
 
 export default function EquipadosCom({ className = "" }: { className?: string }) {
     const [semMovimento, setSemMovimento] = useState(false);
-    const [pausado, setPausado] = useState(false);
 
     useEffect(() => {
         const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -64,14 +63,13 @@ export default function EquipadosCom({ className = "" }: { className?: string })
 
     return (
         <div className={className}>
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-slate-800 dark:text-white/90">
+            <p className="text-center font-mono text-[11px] uppercase tracking-[0.28em] text-slate-800 dark:text-white/90">
                 Equipados com
             </p>
 
+            {/* NÃO pausa no hover: o mouse por cima não para (nem faz a fila saltar pro começo) */}
             <div
                 className="relative mt-5 overflow-hidden"
-                onPointerEnter={() => setPausado(true)}
-                onPointerLeave={() => setPausado(false)}
                 style={{
                     // A mascara apaga os dois extremos: sem ela, as marcas
                     // aparecem e somem com um corte reto na borda do container.
@@ -83,9 +81,9 @@ export default function EquipadosCom({ className = "" }: { className?: string })
             >
                 <motion.div
                     className="flex w-max gap-3"
-                    animate={semMovimento || pausado ? { x: "0%" } : { x: ["0%", "-33.3333%"] }}
+                    animate={semMovimento ? { x: "0%" } : { x: ["0%", "-33.3333%"] }}
                     transition={
-                        semMovimento || pausado
+                        semMovimento
                             ? { duration: 0 }
                             : { ease: "linear", duration: 34, repeat: Infinity }
                     }

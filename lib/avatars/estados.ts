@@ -11,7 +11,7 @@
  * app/api/agents/avatars (manifestos) e scripts/avatars/gerar.ts (Etapa A, no Claude Code).
  */
 
-export const ESTADOS_SPRITE = ["idle", "blink", "talk", "talk_half", "smile", "happy", "think", "confused"] as const;
+export const ESTADOS_SPRITE = ["idle", "blink", "talk", "talk_half", "smile", "happy", "think", "confused", "angry"] as const;   // angry: opcional, gerado sob demanda (a Zaeon brava no cyberespaço)
 export type EstadoSprite = (typeof ESTADOS_SPRITE)[number];
 
 /** Sem esses dois não há "vida" (respira + pisca); o resto é bônus e cai no idle. */
