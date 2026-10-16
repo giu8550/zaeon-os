@@ -102,3 +102,14 @@ export function svgParaDataUrl(conteudo: string | null | undefined): string | nu
   if (!/<svg[\s>]/i.test(s)) return null;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
 }
+
+/**
+ * Esquece a escolha "ver como Código" desses caminhos (#421, revisão): arquivo apagado ou regravado pelo agente
+ * volta a abrir como IMAGEM — senão uma arte nova com o mesmo nome herdava a escolha antiga e abria como código.
+ */
+export function esquecerVerCodigo(pref: Record<string, boolean>, caminhos: readonly string[]): Record<string, boolean> {
+  if (!caminhos.some((p) => p in pref)) return pref; // nada a esquecer → mesmo objeto (o React não re-renderiza à toa)
+  const novo = { ...pref };
+  for (const p of caminhos) delete novo[p];
+  return novo;
+}

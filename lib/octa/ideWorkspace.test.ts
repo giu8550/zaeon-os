@@ -71,3 +71,18 @@ describe("octa · #421 · SVG abre como imagem", () => {
     expect(linguagem("arte/soma.svg")).toEqual({ monaco: "xml", runner: null });
   });
 });
+
+describe("octa · #421 · revisão: arte recriada com o mesmo nome abre como imagem", () => {
+  it("esquece a escolha 'Código' dos caminhos apagados/regravados e mantém o resto", async () => {
+    const { esquecerVerCodigo } = await import("./ideWorkspace");
+    const pref = { "arte/soma.svg": true, "arte/outra.svg": true };
+    expect(esquecerVerCodigo(pref, ["arte/soma.svg"])).toEqual({ "arte/outra.svg": true });
+    expect(pref).toEqual({ "arte/soma.svg": true, "arte/outra.svg": true }); // não muta o original
+  });
+  it("nada a esquecer → devolve o MESMO objeto (sem re-render à toa)", async () => {
+    const { esquecerVerCodigo } = await import("./ideWorkspace");
+    const pref = { "arte/outra.svg": true };
+    expect(esquecerVerCodigo(pref, ["arte/soma.svg", "main.py"])).toBe(pref);
+    expect(esquecerVerCodigo(pref, [])).toBe(pref);
+  });
+});

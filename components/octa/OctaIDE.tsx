@@ -12,7 +12,7 @@ import { Play, Plus, X, FileText, Folder, FolderOpen, Trash2, Undo2, Send, Loade
 import OctaIcon from "./OctaIcon";
 import { useCodeRunner, type RunOutput } from "@/app/agentic-modules/codelab/useCodeRunner";
 import {
-  arvore, aplicarEdicoes, fecharAba, abrir, caminhoValido, linguagem, carregar, salvar, ehSvg,
+  arvore, aplicarEdicoes, fecharAba, abrir, caminhoValido, linguagem, carregar, salvar, ehSvg, esquecerVerCodigo,
   type EstadoIDE, type NoArvore,
 } from "@/lib/octa/ideWorkspace";
 import PreviaSvg from "./PreviaSvg";
@@ -115,6 +115,7 @@ export default function OctaIDE() {
     if (!ide || !window.confirm(`Apagar ${p}?`)) return;
     const arquivos = { ...ide.arquivos }; delete arquivos[p];
     setIde(fecharAba({ ...ide, arquivos }, p));
+    setVerCodigo((v) => esquecerVerCodigo(v, [p])); // recriado com o mesmo nome, volta a abrir como imagem
   };
   const rodar = useCallback(async () => {
     if (!ide || !ativo || !lang?.runner) return;
@@ -146,6 +147,8 @@ export default function OctaIDE() {
       const apagados: string[] = j.apagados ?? [];
       const antes = ide;
       if (Object.keys(edicoes).length || apagados.length) setIde((e) => (e ? aplicarEdicoes(e, edicoes, apagados) : e));
+      // arte (re)gravada ou apagada pelo agente: abre como IMAGEM, não herda um "Código" antigo do mesmo caminho
+      setVerCodigo((v) => esquecerVerCodigo(v, [...Object.keys(edicoes), ...apagados]));
       const pedeApagar = (j.negados ?? []).some((n: any) => n.tool === "octa_apagar" && n.motivo === "needs_approval");
       setMsgs((v) => [...v, {
         id: uid(), role: "assistant", content: j.resposta ?? "", edicoes: Object.keys(edicoes), apagados, modelo: j.modelo,
