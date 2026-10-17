@@ -43,6 +43,10 @@ describe("agent-turn · helpers puros", () => {
       { role: "user", text: "Alguém: sem nome" },
     ]);
   });
+  it("#423 · montarHistorico: o aviso 'fulano entrou' vai como aviso do canal, não como fala da pessoa", () => {
+    const h = montarHistorico([msg({ autorTipo: "sistema", autorId: A, texto: "Ana entrou no escritório" })], "aura", new Map([[A, "Ana"]]));
+    expect(h).toEqual([{ role: "user", text: "[aviso do canal]: Ana entrou no escritório" }]);
+  });
   it("montarObjetivo: mensagem convocadora sem @, senão última que me menciona, senão última humana", () => {
     const al = montarAliases([{ agentKey: "aura", nome: "Aura" }, { agentKey: "medicina", nome: "Osler" }]);
     const m1 = msg({ texto: "@aura resume o capítulo 2", mencoes: ["aura"] });

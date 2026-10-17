@@ -18,18 +18,23 @@ import { fonteChat } from "@/lib/ui/chatFontScale";
 import { montarTopoPessoas } from "@/lib/canal/topoPessoas";
 import { podeApagar, textoConfirmarApagar, aposApagar } from "@/lib/canal/seletor";
 import { ABAS, abaDoCanal, filtrarPorAba, type Aba } from "@/lib/canal/convite";
-import { ConvidarForm, ConvitesRecebidos, type ConviteVista } from "./ConvitesEscritorio";
+import { ConvidarForm, type ConviteVista } from "./ConvitesEscritorio";
+import SinoConvites from "./SinoConvites";
+import { montarSino, contadorDoSino, chaveVistoSino, type HistoricoSino } from "@/lib/canal/sino";
+import PessoasTopo from "./PessoasTopo";
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
-import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, type MensagemWire } from "@/lib/canal/wire";
+import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
+import { deveAvisarDigitando, podarDigitando, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
+import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
 import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVER, VIDRO_CHIP, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
 import { useNotificacoesSO } from "./useNotificacoesSO";
 
 type Canal = { id: string; titulo: string; acesso: string; ownerId: string; membros: string[]; agentes: string[]; cartolinaId: string | null; souDono: boolean; dmCom?: string | null };
-type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[] };
-const SEM_CONVITES: Convites = { recebidos: [], enviados: [], contatos: [] };
+type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[]; historico: HistoricoSino[] };
+const SEM_CONVITES: Convites = { recebidos: [], enviados: [], contatos: [], historico: [] };
 const NOME_ABA: Record<Aba, string> = { privado: "Privado", turma: "Turma", aberto: "Aberto" };
 type Agente = { agentKey: string; tipo: string; nome: string; emoji: string; bio: string; curso: string | null; avatarUrl: string | null; ativo: boolean };
 type Pessoa = { id: string; nome: string; avatar: string | null };
@@ -51,11 +56,30 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [estadoAgente, setEstadoAgente] = useState<Record<string, EstadoAgente>>({});
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [menu, setMenu] = useState<"canais" | "config" | "convidar" | null>(null);
+  const [menu, setMenu] = useState<"canais" | "config" | "convidar" | "sino" | null>(null);
   // #396 (D): abas do seletor (dividem o espaço, não misturam) + convites da aba Privado
   const [aba, setAba] = useState<Aba>("turma");
   const [convites, setConvites] = useState<Convites>(SEM_CONVITES);
   const [respondendo, setRespondendo] = useState<string | null>(null);
+  // #423: sino — quando foi aberto pela última vez (no navegador, por pessoa) e a lista que ele mostra
+  const [vistoSino, setVistoSino] = useState<number | null>(null);
+  const meuIdSino = det?.eu.id ?? null;
+  useEffect(() => {
+    if (!meuIdSino) return;
+    try { const v = Number(localStorage.getItem(chaveVistoSino(meuIdSino))); setVistoSino(Number.isFinite(v) && v > 0 ? v : null); } catch { /* sem storage: só os pendentes contam */ }
+  }, [meuIdSino]);
+  const itensSino = useMemo(() => montarSino(convites), [convites]);
+  const contadorSino = contadorDoSino(convites, vistoSino);
+  const alternarSino = () => {
+    const abrir = menu !== "sino";
+    setMenu(abrir ? "sino" : null);
+    if (!abrir) return;
+    void carregarConvites();
+    // abriu o sino = viu as respostas; a bolinha passa a contar só os pendentes e o que chegar depois
+    const agora = Date.now();
+    setVistoSino(agora);
+    if (meuIdSino) { try { localStorage.setItem(chaveVistoSino(meuIdSino), String(agora)); } catch { /* ignore */ } }
+  };
   const [novoTitulo, setNovoTitulo] = useState("");
   const [apagando, setApagando] = useState<string | null>(null);
   const [agendaAberta, setAgendaAberta] = useState(false);
@@ -77,6 +101,22 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   useEffect(() => { visivelRef.current = visivel; }, [visivel]);
   useEffect(() => { ativoRef.current = ativoId; }, [ativoId]);
   useEffect(() => { canaisRef.current = canais; }, [canais]);
+
+  // ─── #423: "fulano está digitando" (pessoas) — recebe, some sozinho no prazo, e avisa enquanto eu escrevo ───
+  const [pessoasDigitando, setPessoasDigitando] = useState<Digitando>({});
+  const ultimoAvisoDigitando = useRef<number | null>(null);
+  useEffect(() => {
+    if (!Object.keys(pessoasDigitando).length) return;
+    const t = setInterval(() => setPessoasDigitando((p) => podarDigitando(p, Date.now())), 1000);
+    return () => clearInterval(t);
+  }, [pessoasDigitando]);
+  /** Avisa os outros no máximo a cada poucos segundos (lib/canal/presenca), nunca a cada tecla. Falhar não atrapalha. */
+  const avisarDigitando = (valor: string) => {
+    const id = ativoRef.current, agora = Date.now();
+    if (!id || !deveAvisarDigitando(ultimoAvisoDigitando.current, agora, valor)) return;
+    ultimoAvisoDigitando.current = agora;
+    void fetch(`/api/canal/${id}/digitando`, { method: "POST" }).catch(() => undefined);
+  };
 
   // ─── canais: carrega; sem nenhum, cria o primeiro (a sala nunca abre vazia) ───
   useEffect(() => {
@@ -126,6 +166,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     setDet(d);
     setDigitando([]);
     setEstadoAgente({});
+    setPessoasDigitando({});
     setNaoLidas((n) => ({ ...n, [id]: 0 }));
     try { localStorage.setItem(LS_ULTIMO, id); } catch { /* ignore */ }
   }, []);
@@ -158,6 +199,11 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         setEstadoAgente((m) => ({ ...m, [d.agentKey]: est }));
         setDigitando((prev) => (estaAtivo(est) ? [...new Set([...prev, d.agentKey])] : prev.filter((k) => k !== d.agentKey)));
       });
+      // #423: uma PESSOA está digitando neste canal (o meu próprio aviso não aparece pra mim)
+      ch.bind(EV_HUMANO_DIGITANDO, (d: { userId: string; nome: string }) => {
+        if (c.id !== ativoRef.current || !d?.userId || d.userId === meuIdRef.current) return;
+        setPessoasDigitando((prev) => ({ ...prev, [d.userId]: { nome: d.nome || "Alguém", ate: Date.now() + TTL_DIGITANDO_MS } }));
+      });
     }
     return () => { /* mantém assinaturas enquanto o componente vive; desconecta no unmount abaixo */ };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,6 +232,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     if (aberto) {
       setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
       if (m.autorTipo === "agente") setDigitando((prev) => prev.filter((k) => k !== m.autorId));
+      // a mensagem da pessoa chegou: ela parou de "digitar"
+      if (m.autorTipo === "humano") setPessoasDigitando((prev) => { if (!(m.autorId in prev)) return prev; const n = { ...prev }; delete n[m.autorId]; return n; });
     }
     const prioridade = prioridadeDe(m, { meuId: meuIdRef.current, meusAgentes: [...meusAgentes.current], meusAliases: meusAliases.current });
     if (!deveNotificar({ prioridade, abaVisivel: visivelRef.current, canalAberto: aberto })) return;
@@ -253,6 +301,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       }
       setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
       setTexto("");
+      ultimoAvisoDigitando.current = null; // a próxima mensagem volta a avisar na primeira tecla
       setErro(null);
       // agentes recém-convocados passam a constar no canal
       if (alvos.length) setCanais((cs) => cs.map((c) => (c.id === ativoId ? { ...c, agentes: [...new Set([...c.agentes, ...alvos])] } : c)));
@@ -280,7 +329,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const r = await fetch("/api/canal/convites", { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
-      setConvites({ recebidos: j.recebidos ?? [], enviados: j.enviados ?? [], contatos: j.contatos ?? [] });
+      setConvites({ recebidos: j.recebidos ?? [], enviados: j.enviados ?? [], contatos: j.contatos ?? [], historico: j.historico ?? [] });
     } catch { /* sem convites não trava o escritório */ }
   }, []);
   useEffect(() => { if (canais.length) void carregarConvites(); }, [canais.length, carregarConvites]);
@@ -424,7 +473,6 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               <span className="max-w-[40vw] sm:max-w-[260px] truncate">{canal.titulo}</span>
               <span aria-hidden className={`text-[10px] ${TXT_MUDO}`}>▾</span>
               {totalNaoLidas - (naoLidas[ativoId] ?? 0) > 0 && <Badge n={totalNaoLidas - (naoLidas[ativoId] ?? 0)} />}
-              {convites.recebidos.length > 0 && <span className="w-2 h-2 rounded-full bg-rose-500" title={`${convites.recebidos.length} convite(s) no Privado`} aria-label={`${convites.recebidos.length} convite(s) novo(s)`} />}
             </button>
             {menu === "canais" && (
               <div className={`absolute left-0 top-full mt-1.5 z-30 w-[min(92vw,340px)] p-1.5 rounded-2xl ${VIDRO_POPOVER}`}>
@@ -434,14 +482,13 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
                     <button key={a} type="button" role="tab" aria-selected={aba === a} onClick={() => setAba(a)}
                       className={`flex-1 min-h-[36px] rounded-xl text-[12px] font-bold flex items-center justify-center gap-1.5 ${aba === a ? `bg-blue-500/20 dark:bg-blue-400/20 ${TXT}` : `${VIDRO_CHIP} ${TXT_2}`}`}>
                       {NOME_ABA[a]}
-                      {a === "privado" && convites.recebidos.length > 0 && <Badge n={convites.recebidos.length} />}
                     </button>
                   ))}
                 </div>
                 <div role="listbox" aria-label={`Escritórios · ${NOME_ABA[aba]}`}>
                 {daAba.length === 0 && (
                   <p className={`px-3 py-2 text-[12px] ${TXT_MUDO}`}>
-                    {aba === "privado" ? "Nenhuma conversa privada ainda. Use o + ao lado das fotos pra convidar alguém." : `Nenhum escritório de ${NOME_ABA[aba].toLowerCase()} ainda.`}
+                    {aba === "privado" ? "Nenhuma conversa privada ainda. Use o + ao lado do seletor pra convidar alguém." : `Nenhum escritório de ${NOME_ABA[aba].toLowerCase()} ainda.`}
                   </p>
                 )}
                 {daAba.map((c) => (
@@ -460,9 +507,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
                   </div>
                 ))}
                 </div>
-                {aba === "privado" && (
-                  <ConvitesRecebidos recebidos={convites.recebidos} enviados={convites.enviados} ocupado={respondendo} onResponder={(id, acao) => void responderConvite(id, acao)} />
-                )}
+                {/* #423: os convites saíram daqui e foram pro sino */}
                 <div className="mt-1 flex gap-1.5 p-1">
                   <input value={novoTitulo} onChange={(e) => setNovoTitulo(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void criarCanal(); }} placeholder={`novo escritório (${NOME_ABA[aba].toLowerCase()})`} aria-label="Nome do novo canal"
                     className={`flex-1 min-h-[40px] px-3 rounded-xl text-[13px] bg-white/70 dark:bg-white/[0.06] border border-white/60 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70`} />
@@ -472,29 +517,21 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
             )}
           </div>
 
+          {/* #423: sino de notificações (por enquanto só convites, com o status de cada um), entre o seletor e o + */}
+          <SinoConvites itens={itensSino} contador={contadorSino} aberto={menu === "sino"} onAlternar={alternarSino}
+            ocupado={respondendo} onResponder={(id, acao) => void responderConvite(id, acao)} />
+
+          {/* #423: "+" (convidar) à ESQUERDA, depois do sino; abre NA HORIZONTAL, ao lado do botão.
+              O convite cai no sino da pessoa. */}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <button type="button" onClick={() => setMenu(menu === "convidar" ? null : "convidar")} aria-label="Convidar pessoa" aria-expanded={menu === "convidar"}
+              title="Convidar pessoa" className={`${TOQUE} shrink-0 rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>
+            {menu === "convidar" && <ConvidarForm onEnviar={enviarConvite} variante="linha" onFechar={() => setMenu(null)} />}
+          </div>
+
           <div className="ml-auto flex items-center gap-1.5">
-            {/* pessoas do canal (dono, membros e você): anel verde = online agora; cinza = fora. Os agentes ficam embaixo. */}
-            <div className="hidden xs:flex sm:flex -space-x-2" aria-label={`${online.length} online de ${topo.total}`}>
-              {topo.visiveis.map((p) => {
-                const aqui = topo.onlineIds.has(p.id);
-                return (
-                  <span key={p.id} title={`${p.nome}${aqui ? " · online" : ""}`} className="inline-flex">
-                    <AgentAvatar src={p.avatar} nome={p.nome} size={28} className={`ring-2 ${aqui ? "ring-emerald-400/70" : "ring-slate-400/40 opacity-70"}`} />
-                  </span>
-                );
-              })}
-            </div>
-            {topo.extras > 0 && <span className={`text-[11px] ${TXT_MUDO}`}>+{topo.extras}</span>}
-            {/* "+" ao lado das fotos: convidar alguém pra conversar (o convite cai no Privado da pessoa) */}
-            <div className="relative">
-              <button type="button" onClick={() => setMenu(menu === "convidar" ? null : "convidar")} aria-label="Convidar pessoa" aria-expanded={menu === "convidar"}
-                title="Convidar pessoa" className={`${TOQUE} rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>
-              {menu === "convidar" && (
-                <div className={`absolute right-0 top-full mt-1.5 z-30 w-[min(92vw,320px)] p-3 rounded-2xl ${VIDRO_POPOVER}`}>
-                  <ConvidarForm onEnviar={enviarConvite} />
-                </div>
-              )}
-            </div>
+            {/* pessoas do canal (dono, membros e você), com espaço entre as fotos (#423). Os agentes ficam embaixo. */}
+            <PessoasTopo visiveis={topo.visiveis} extras={topo.extras} onlineIds={topo.onlineIds} total={topo.total} />
             {online.length > 0 && <span className={`text-[11px] ${TXT_MUDO}`} title="online agora">{online.length} on</span>}
             {canal.cartolinaId && (
               <button type="button" onClick={abrirCartolina} className={`${TOQUE} px-3 rounded-2xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT}`} title="Abrir a cartolina da sala">▦ cartolina</button>
@@ -558,7 +595,9 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
         {/* mensagens */}
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-3 sm:px-5 py-4 flex flex-col gap-3" onClick={() => setMenu(null)}>
-          {det.mensagens.map((m) => <Bolha key={m.id} m={m} minha={m.autorTipo === "humano" && m.autorId === meuId} aliases={aliases} />)}
+          {det.mensagens.map((m) => (m.autorTipo === "sistema"
+            ? <LinhaSistema key={m.id} texto={m.texto} hora={hora(m.createdAt)} /> // #423: "fulano entrou no escritório"
+            : <Bolha key={m.id} m={m} minha={m.autorTipo === "humano" && m.autorId === meuId} aliases={aliases} />))}
           {digitando.map((k) => {
             const a = agentes.find((x) => x.agentKey === k);
             return (
@@ -570,6 +609,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               </div>
             );
           })}
+          {/* #423: as PESSOAS digitando ("Giulia está digitando…"), além dos agentes acima */}
+          <AvisoDigitando nomes={Object.values(pessoasDigitando).map((p) => p.nome)} />
           <div ref={fimRef} />
         </div>
 
@@ -605,7 +646,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               ref={inputRef}
               value={texto}
               rows={1}
-              onChange={(e) => { setTexto(e.target.value); setCaret(e.target.selectionStart ?? e.target.value.length); }}
+              onChange={(e) => { setTexto(e.target.value); setCaret(e.target.selectionStart ?? e.target.value.length); avisarDigitando(e.target.value); }}
               onKeyUp={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               onClick={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               onKeyDown={aoTeclar}

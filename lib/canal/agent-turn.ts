@@ -85,6 +85,8 @@ export type TurnoResult =
 export function montarHistorico(msgs: MsgRow[], agentKey: string, nomes: Map<string, string>): GerarArgs["history"] {
   return msgs.map((m) => {
     if (m.autorTipo === "agente" && m.autorId === agentKey) return { role: "assistant" as const, text: m.texto };
+    // #423: "Martinez entrou no escritório" é aviso do canal, não fala da pessoa
+    if (m.autorTipo === "sistema") return { role: "user" as const, text: `[aviso do canal]: ${m.texto}` };
     const nome = nomes.get(m.autorId) ?? (m.autorTipo === "agente" ? m.autorId : "Alguém");
     const rotulo = m.autorTipo === "agente" ? `[agente ${nome}]` : nome;
     return { role: "user" as const, text: `${rotulo}: ${m.texto}` };

@@ -10,6 +10,7 @@ import { escritorioCowork } from "@/lib/canal/flags";
 import { rosterComMentores, mergeProfiles, publicView, type AgentView } from "@/lib/agents/roster";
 import type { MensagemWire } from "@/lib/canal/realtime";
 import { agentesDasSalas } from "@/lib/canal/agentesSalas";
+import { tipoDoAutor } from "@/lib/canal/presenca";
 
 export const OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
 export const isObjectId = (v: unknown): v is string => typeof v === "string" && OBJECT_ID_RE.test(v);
@@ -69,9 +70,10 @@ export async function pessoas(ids: string[]): Promise<Map<string, Pessoa>> {
 type MsgRow = { id: string; canalId: string; autorTipo: string; autorId: string; texto: string; mencoes: string[]; createdAt: Date };
 export function paraWire(m: MsgRow, gente: Map<string, Pessoa>, agentes: AgentView[]): MensagemWire {
   const ag = m.autorTipo === "agente" ? agentes.find((a) => a.agentKey === m.autorId) : null;
-  const p = m.autorTipo === "humano" ? gente.get(m.autorId) : null;
+  // humano e "sistema" (#423: o aviso "fulano entrou") apontam pra uma pessoa
+  const p = m.autorTipo !== "agente" ? gente.get(m.autorId) : null;
   return {
-    id: m.id, canalId: m.canalId, autorTipo: m.autorTipo === "agente" ? "agente" : "humano", autorId: m.autorId,
+    id: m.id, canalId: m.canalId, autorTipo: tipoDoAutor(m.autorTipo), autorId: m.autorId,
     texto: m.texto, mencoes: m.mencoes ?? [], createdAt: new Date(m.createdAt).toISOString(),
     autorNome: ag?.nome ?? p?.nome ?? (m.autorTipo === "agente" ? m.autorId : "Alguém"),
     autorAvatar: ag?.avatarUrl ?? p?.avatar ?? null,
