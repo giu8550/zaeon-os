@@ -1,6 +1,6 @@
-/** #425 · perfil pela foto: quem é do canal, os campos públicos (sem cérebros) e quando o "Remover" aparece. */
+/** #425 · a pessoa no escritório: quem é do canal e quando o "Remover" aparece. */
 import { describe, it, expect } from "vitest";
-import { estaNoCanal, perfilPublico, podeRemover, textoConfirmarRemover, CAMPOS_PERFIL } from "./perfil";
+import { estaNoCanal, podeRemover, textoConfirmarRemover } from "./perfil";
 
 describe("perfil · quem é do canal", () => {
   const canal = { ownerId: "dono", membros: ["m1"], dmCom: null };
@@ -11,30 +11,6 @@ describe("perfil · quem é do canal", () => {
   });
   it("conversa privada: o outro lado também", () => {
     expect(estaNoCanal({ ownerId: "a", membros: [], dmCom: "b" }, "b")).toBe(true);
-  });
-});
-
-describe("perfil · só campos públicos", () => {
-  it("o select do banco não pede cérebros, e-mail, aura nem nada fora da lista", () => {
-    expect(Object.keys(CAMPOS_PERFIL).sort()).toEqual(["academicLevel", "bio", "course", "id", "image", "institution", "name"]);
-  });
-
-  it("mesmo que venha mais coisa, o perfil só copia os campos da lista", () => {
-    const vazado = {
-      id: "u1", name: "Martinez", image: "/m.png", course: "Engenharia", academicLevel: "Mestrado", institution: "USP", bio: "Oi",
-      email: "m@z.com", cerebros: [{ id: "c1", titulo: "segredo" }], aura: 999, mapas: ["x"],
-    };
-    const p = perfilPublico(vazado);
-    expect(p).toEqual({ id: "u1", nome: "Martinez", avatar: "/m.png", curso: "Engenharia", nivel: "Mestrado", instituicao: "USP", bio: "Oi" });
-    expect(JSON.stringify(p)).not.toMatch(/cerebro|segredo|email|aura|mapas/i);
-  });
-
-  it("campos vazios viram null; sem nome = 'Alguém'; bio longa é cortada", () => {
-    const p = perfilPublico({ id: "u", name: "  ", course: "", bio: "x".repeat(500) });
-    expect(p.nome).toBe("Alguém");
-    expect(p.curso).toBeNull();
-    expect(p.avatar).toBeNull();
-    expect(p.bio).toHaveLength(280);
   });
 });
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   tipoDoAutor, textoEntrou, novosMembros, anunciarEntrada,
   deveAvisarDigitando, podarDigitando, textoDigitando, permitirDigitando,
-  INTERVALO_DIGITANDO_MS, LIMITE_SERVIDOR_MS, quemDigita, MAX_BALOES_DIGITANDO,
+  INTERVALO_DIGITANDO_MS, LIMITE_SERVIDOR_MS, quemDigita, MAX_BALOES_DIGITANDO, estaNoFim, MARGEM_FIM_PX,
 } from "./presenca";
 
 describe("presença · 'fulano entrou'", () => {
@@ -91,5 +91,23 @@ describe("presença · #425 quem aparece em balão", () => {
   });
   it("ninguém digitando: lista vazia", () => {
     expect(quemDigita({}, pessoas)).toEqual([]);
+  });
+});
+
+describe("presença · #427 descer até o balão de quem digita", () => {
+  // lista de 1000px de conteúdo numa janela de 400px
+  const lista = (scrollTop: number) => ({ scrollTop, scrollHeight: 1000, clientHeight: 400 });
+  it("no fim da conversa: desce (o balão novo aparece)", () => {
+    expect(estaNoFim(lista(600))).toBe(true);
+  });
+  it("quase no fim (o balão acabou de entrar e empurrou um pouco): ainda conta como fim", () => {
+    expect(estaNoFim(lista(600 - MARGEM_FIM_PX))).toBe(true);
+  });
+  it("lendo mensagens antigas lá em cima: não puxa a pessoa pra baixo", () => {
+    expect(estaNoFim(lista(100))).toBe(false);
+    expect(estaNoFim(lista(600 - MARGEM_FIM_PX - 1))).toBe(false);
+  });
+  it("conversa curta (cabe toda na tela): está no fim", () => {
+    expect(estaNoFim({ scrollTop: 0, scrollHeight: 300, clientHeight: 400 })).toBe(true);
   });
 });

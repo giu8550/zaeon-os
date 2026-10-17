@@ -266,6 +266,26 @@ describe("convites · responder", () => {
   });
 });
 
+describe("convites · #427 'Convidar pra conversar' pelo menu da foto (pelo id)", () => {
+  it("convida pelo id, sem precisar de e-mail", async () => {
+    const r = await POST(post({ paraId: C }));
+    expect(r.status).toBe(201);
+    expect(state.convites[0]).toMatchObject({ deId: A, paraId: C, status: "pendente" });
+    expect((state.convites[0] as Conv & { canalId?: string }).canalId).toBeUndefined(); // convite de CONTATO
+  });
+  it("id que não existe → 404; a si mesma → 400", async () => {
+    expect((await POST(post({ paraId: "9".repeat(24) }))).status).toBe(404);
+    expect((await POST(post({ paraId: A }))).status).toBe(400);
+    expect(state.convites).toHaveLength(0);
+  });
+  it("já são contatos → devolve a conversa de vocês (não duplica)", async () => {
+    state.convites.push({ id: novoId(), deId: C, paraId: A, status: "aceito", dmCanalId: "9".repeat(24), createdAt: new Date() });
+    const j = await (await POST(post({ paraId: C }))).json();
+    expect(j).toMatchObject({ jaContatos: true, dmCanalId: "9".repeat(24) });
+    expect(state.convites).toHaveLength(1);
+  });
+});
+
 describe("convites · #425 o + chama alguém PARA A CONVERSA", () => {
   const CONVERSA = "e".repeat(24);
   // Giulia (A) é a dona da conversa de dois com o Martinez (B), o caso que deu errado em produção

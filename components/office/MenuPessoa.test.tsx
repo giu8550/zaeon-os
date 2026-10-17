@@ -1,61 +1,87 @@
 // @vitest-environment jsdom
-/** #425 · clicar na foto: o menu da pessoa (Ver perfil / Remover) e o cartão do perfil. */
+/** #425/#427 · clicar na foto: um menu só com Ver perfil, Conversar (ou Convidar pra conversar) e Remover. */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import MenuPessoa, { type PerfilCarregado } from "./MenuPessoa";
+import MenuPessoa from "./MenuPessoa";
 import PessoasTopo from "./PessoasTopo";
+import { abrirPerfil, EVT_VER_PERFIL, idDoEvento } from "@/lib/perfil/eventos";
 
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 afterEach(() => cleanup());
 
 const pessoa = { id: "m", nome: "Martinez", avatar: null };
-const perfil: PerfilCarregado = {
-  pessoa: { id: "m", nome: "Martinez", avatar: null, curso: "Engenharia", nivel: "Mestrado", instituicao: "USP", bio: "Construindo a Zaeon." },
-  papel: "dono",
-};
-const base = { pessoa, carregarPerfil: async () => perfil, podeRemover: false, onRemover: () => {} };
+const base = { pessoa, onVerPerfil: () => {}, conversa: null, podeRemover: false, onRemover: () => {} };
 
 describe("MenuPessoa", () => {
-  it("abre com 'Ver perfil'; sem permissão, nada de Remover", () => {
+  it("Ver perfil chama a abertura do perfil (não abre mais um cartãozinho)", () => {
+    const onVerPerfil = vi.fn();
+    render(<MenuPessoa {...base} onVerPerfil={onVerPerfil} />);
+    fireEvent.click(screen.getByRole("button", { name: /Ver perfil/ }));
+    expect(onVerPerfil).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("perfil-pessoa")).toBeNull();
+  });
+
+  it("já são contatos: 'Conversar' no mesmo menu", () => {
+    const onClick = vi.fn();
+    render(<MenuPessoa {...base} conversa={{ tipo: "abrir", onClick }} />);
+    fireEvent.click(screen.getByRole("button", { name: /Conversar/ }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /Convidar pra conversar/ })).toBeNull();
+  });
+
+  it("ainda não são contatos: 'Convidar pra conversar' manda o convite e mostra a resposta", async () => {
+    const onClick = vi.fn(async () => ({ ok: true, msg: "Convite enviado. Ela aceita pelo sino." }));
+    render(<MenuPessoa {...base} conversa={{ tipo: "convidar", onClick }} />);
+    fireEvent.click(screen.getByRole("button", { name: /Convidar pra conversar/ }));
+    expect((await screen.findByRole("status")).textContent).toContain("Convite enviado");
+    expect(onClick).toHaveBeenCalledTimes(1);
+    // não manda duas vezes
+    expect((screen.getByRole("button", { name: /Convidar pra conversar/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("convite que falha: mostra o motivo", async () => {
+    render(<MenuPessoa {...base} conversa={{ tipo: "convidar", onClick: async () => ({ ok: false, msg: "Já existe um convite pendente entre vocês." }) }} />);
+    fireEvent.click(screen.getByRole("button", { name: /Convidar pra conversar/ }));
+    expect((await screen.findByRole("alert")).textContent).toContain("convite pendente");
+  });
+
+  it("sem conversa (é você, ou já estão na conversa de vocês): só Ver perfil", () => {
     render(<MenuPessoa {...base} />);
-    expect(screen.getByRole("button", { name: /Ver perfil/ })).toBeTruthy();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("dono: 'Remover do escritório' no mesmo menu; quem não é dono não vê", () => {
+    const onRemover = vi.fn();
+    const { unmount } = render(<MenuPessoa {...base} podeRemover onRemover={onRemover} />);
+    fireEvent.click(screen.getByRole("button", { name: /Remover do escritório/ }));
+    expect(onRemover).toHaveBeenCalledTimes(1);
+    unmount();
+    render(<MenuPessoa {...base} />);
     expect(screen.queryByRole("button", { name: /Remover do escritório/ })).toBeNull();
   });
 
-  it("dono: aparece 'Remover do escritório' e chama onRemover", () => {
-    const onRemover = vi.fn();
-    render(<MenuPessoa {...base} podeRemover onRemover={onRemover} />);
-    fireEvent.click(screen.getByRole("button", { name: /Remover do escritório/ }));
-    expect(onRemover).toHaveBeenCalledTimes(1);
-  });
-
-  it("Ver perfil carrega e mostra o cartão: nome, papel, curso, nível, instituição e bio", async () => {
-    const carregarPerfil = vi.fn(async () => perfil);
-    render(<MenuPessoa {...base} carregarPerfil={carregarPerfil} />);
-    fireEvent.click(screen.getByRole("button", { name: /Ver perfil/ }));
-    const cartao = await screen.findByTestId("perfil-pessoa");
-    expect(carregarPerfil).toHaveBeenCalledWith("m");
-    for (const t of ["Martinez", "Dono do escritório", "Engenharia", "Mestrado", "USP", "Construindo a Zaeon."]) expect(cartao.textContent).toContain(t);
-    expect(cartao.textContent).not.toMatch(/cérebro|cerebro/i);
-  });
-
-  it("já são contatos: o cartão tem 'Conversar'", async () => {
-    const onConversar = vi.fn();
-    render(<MenuPessoa {...base} onConversar={onConversar} />);
-    fireEvent.click(screen.getByRole("button", { name: /Ver perfil/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Conversar/ }));
-    expect(onConversar).toHaveBeenCalledTimes(1);
-  });
-
-  it("perfil não carregou: aviso, e o menu continua lá", async () => {
-    render(<MenuPessoa {...base} carregarPerfil={async () => null} />);
-    fireEvent.click(screen.getByRole("button", { name: /Ver perfil/ }));
-    expect((await screen.findByRole("alert")).textContent).toContain("Não deu pra abrir o perfil");
-    expect(screen.getByRole("button", { name: /Ver perfil/ })).toBeTruthy();
+  it("as três opções juntas, na ordem", () => {
+    render(<MenuPessoa {...base} conversa={{ tipo: "abrir", onClick: () => {} }} podeRemover />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent?.trim())).toEqual(["Ver perfil", "Conversar", "Remover do escritório"]);
   });
 });
 
-describe("PessoasTopo · #425 foto clicável", () => {
+describe("abrir o perfil (evento pra página do laboratório)", () => {
+  it("dispara o evento com o id, e o id volta certinho", () => {
+    const ouvidos: (string | null)[] = [];
+    const ouvir = (e: Event) => ouvidos.push(idDoEvento(e));
+    window.addEventListener(EVT_VER_PERFIL, ouvir);
+    abrirPerfil("b".repeat(24));
+    window.removeEventListener(EVT_VER_PERFIL, ouvir);
+    expect(ouvidos).toEqual(["b".repeat(24)]);
+  });
+  it("id estranho no evento é ignorado", () => {
+    expect(idDoEvento(new CustomEvent("x", { detail: { userId: "../admin" } }))).toBeNull();
+    expect(idDoEvento(null)).toBeNull();
+  });
+});
+
+describe("PessoasTopo · foto clicável", () => {
   const p = (id: string, nome: string) => ({ id, nome, avatar: null });
 
   it("clicar na foto chama onAlternar com o id da pessoa", () => {
