@@ -28,7 +28,7 @@ import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
-import { deveAvisarDigitando, podarDigitando, quemDigita, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
+import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
 import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVER, VIDRO_CHIP, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
@@ -116,6 +116,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fimRef = useRef<HTMLDivElement>(null);
+  const listaRef = useRef<HTMLDivElement>(null); // #427: a lista de mensagens (pra descer até o balão de quem digita)
   const ativoRef = useRef<string | null>(null);
   const meuIdRef = useRef<string | null>(null);
   const meusAgentes = useRef<Set<string>>(new Set());
@@ -278,6 +279,13 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   // ─── autoscroll ───
   useEffect(() => { fimRef.current?.scrollIntoView({ block: "end" }); }, [det?.mensagens.length, digitando.length]);
+  // #427: uma PESSOA começou a digitar → o balão entra embaixo da última mensagem; desce até ele se você já
+  // está no fim da conversa (quem subiu pra ler mensagens antigas não é puxado)
+  const qtosDigitando = Object.keys(pessoasDigitando).length;
+  useEffect(() => {
+    const el = listaRef.current;
+    if (el && qtosDigitando > 0 && estaNoFim(el)) el.scrollTop = el.scrollHeight;
+  }, [qtosDigitando]);
 
   // ─── "falar com agente": prefixa @agente e foca (NUNCA redireciona) ───
   const prefixarAgente = useCallback((key: string) => {
@@ -602,7 +610,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         </div>
 
         {/* mensagens */}
-        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-3 sm:px-5 py-4 flex flex-col gap-3" onClick={() => setMenu(null)}>
+        <div ref={listaRef} data-testid="lista-mensagens" className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-3 sm:px-5 py-4 flex flex-col gap-3" onClick={() => setMenu(null)}>
           {det.mensagens.map((m) => (m.autorTipo === "sistema"
             ? <LinhaSistema key={m.id} texto={m.texto} hora={hora(m.createdAt)} /> // #423: "fulano entrou no escritório"
             : <Bolha key={m.id} m={m} minha={m.autorTipo === "humano" && m.autorId === meuId} aliases={aliases} />))}
