@@ -58,7 +58,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [estadoAgente, setEstadoAgente] = useState<Record<string, EstadoAgente>>({});
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [menu, setMenu] = useState<"canais" | "config" | "convidar" | "sino" | `pessoa:${string}` | null>(null); // #425: "pessoa:<id>" = menu da foto
+  const [menu, setMenu] = useState<"canais" | "convidar" | "sino" | `pessoa:${string}` | null>(null); // #425: "pessoa:<id>" = menu da foto
   // #396 (D): abas do seletor (dividem o espaço, não misturam) + convites da aba Privado
   const [aba, setAba] = useState<Aba>("turma");
   const [convites, setConvites] = useState<Convites>(SEM_CONVITES);
@@ -110,7 +110,6 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [apagando, setApagando] = useState<string | null>(null);
   const [agendaAberta, setAgendaAberta] = useState(false);
   const [agendaVersao, setAgendaVersao] = useState(0);
-  const [emailConvite, setEmailConvite] = useState("");
   const [sugIdx, setSugIdx] = useState(0);
   // A− / A+ do texto das mensagens: a MESMA escolha do chat das salas de estudo e pesquisa (por aparelho).
   const zoom = useChatFontScale();
@@ -488,7 +487,6 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     await patch({ removerMembro: p.id });
   };
   const conversaCom = (uid: string) => convites.contatos.find((c) => c.pessoa.id === uid)?.dmCanalId ?? null;
-  const contatosFora = convites.contatos.filter((c) => c.pessoa.id !== canal.ownerId && !canal.membros.includes(c.pessoa.id));
   // Sem @, responde o último agente que falou. A dica só aparece em canal de uma pessoa: com mais
   // gente, o servidor só atende quem estava conversando com o agente (lib/canal/alvo.ts).
   const ultimoAgente = [...det.mensagens].reverse().find((m) => m.autorTipo === "agente" && !m.id.startsWith("efemera-"))?.autorId;
@@ -585,58 +583,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
             {canal.cartolinaId && (
               <button type="button" onClick={abrirCartolina} className={`${TOQUE} px-3 rounded-2xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT}`} title="Abrir a cartolina da sala">▦ cartolina</button>
             )}
-            {canal.souDono && (
-              <div className="relative">
-                <button type="button" onClick={() => setMenu(menu === "config" ? null : "config")} className={`${TOQUE} rounded-2xl text-[14px] ${VIDRO_CHIP} ${TXT}`} aria-label="Configurar canal" aria-expanded={menu === "config"}>⚙︎</button>
-                {menu === "config" && (
-                  <div className={`absolute right-0 top-full mt-1.5 z-30 w-[min(92vw,320px)] p-3 rounded-2xl flex flex-col gap-3 ${VIDRO_POPOVER}`}>
-                    {canal.dmCom ? (
-                      <p className={`text-[12px] ${TXT_2}`}>Conversa privada: só vocês dois veem. Ela não muda de acesso nem recebe outras pessoas.</p>
-                    ) : (<>
-                    <div className="flex gap-1" role="radiogroup" aria-label="Quem o agente atende">
-                      {(["privado", "turma", "aberto"] as const).map((a) => (
-                        <button key={a} type="button" role="radio" aria-checked={canal.acesso === a} onClick={() => void patch({ acesso: a })}
-                          className={`flex-1 min-h-[40px] rounded-xl text-[12px] font-bold ${canal.acesso === a ? `bg-blue-500/20 dark:bg-blue-400/20 ${TXT}` : `${VIDRO_CHIP} ${TXT_2}`}`}>{a}</button>
-                      ))}
-                    </div>
-                    <div className="flex gap-1.5">
-                      <input value={emailConvite} onChange={(e) => setEmailConvite(e.target.value)} placeholder="e-mail de um contato (já aceitou)" aria-label="Adicionar membro por e-mail" type="email"
-                        onKeyDown={(e) => { if (e.key === "Enter" && emailConvite) { void patch({ adicionarEmail: emailConvite }); setEmailConvite(""); } }}
-                        className={`flex-1 min-h-[40px] px-3 rounded-xl text-[13px] bg-white/70 dark:bg-white/[0.06] border border-white/60 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70`} />
-                      <button type="button" onClick={() => { if (emailConvite) { void patch({ adicionarEmail: emailConvite }); setEmailConvite(""); } }} className={`min-h-[40px] px-3 rounded-xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT}`}>+</button>
-                    </div>
-                    {det.pessoas.filter((p) => canal.membros.includes(p.id)).length > 0 && (
-                      <ul className="flex flex-col gap-1">
-                        {det.pessoas.filter((p) => canal.membros.includes(p.id)).map((p) => (
-                          <li key={p.id} className={`flex items-center gap-2 text-[12.5px] ${TXT_2}`}>
-                            <AgentAvatar src={p.avatar} nome={p.nome} size={22} /><span className="truncate flex-1">{p.nome}</span>
-                            <button type="button" onClick={() => void patch({ removerMembro: p.id })} className={`min-h-[32px] px-2 rounded-lg text-[11px] ${TXT_MUDO} hover:text-rose-500 dark:hover:text-rose-300`} aria-label={`Remover ${p.nome}`}>×</button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {/* contatos (convite aceito) que ainda não estão aqui: um toque e entram */}
-                    {contatosFora.length > 0 && (
-                      <div className="flex flex-col gap-1">
-                        <p className={`text-[10.5px] font-bold uppercase tracking-wider ${TXT_MUDO}`}>Seus contatos</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {contatosFora.map((c) => (
-                            <button key={c.pessoa.id} type="button" onClick={() => void patch({ adicionarMembro: c.pessoa.id })} aria-label={`Pôr ${c.pessoa.nome} neste escritório`}
-                              className={`min-h-[32px] pl-1 pr-2.5 rounded-full flex items-center gap-1.5 text-[12px] font-semibold ${VIDRO_CHIP} ${TXT}`}>
-                              <AgentAvatar src={c.pessoa.avatar} nome={c.pessoa.nome} size={22} /> + {c.pessoa.nome}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    </>)}
-                    <input defaultValue={canal.cartolinaId ?? ""} placeholder="id da cartolina (opcional)" aria-label="Cartolina compartilhada"
-                      onBlur={(e) => { const v = e.target.value.trim(); if (v !== (canal.cartolinaId ?? "")) void patch({ cartolinaId: v || null }); }}
-                      className={`min-h-[40px] px-3 rounded-xl text-[12px] font-mono bg-white/70 dark:bg-white/[0.06] border border-white/60 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70`} />
-                  </div>
-                )}
-              </div>
-            )}
+            {/* #425: a engrenagem saiu — o tipo do escritório é escolhido no seletor ao criar, e o "remover" foi pro menu da foto */}
             {/* zoom das letras, no canto superior direito (igual ao chat das salas) */}
             <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
           </div>
