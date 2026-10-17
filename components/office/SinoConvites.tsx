@@ -4,10 +4,11 @@
  * Por enquanto só convites: os recebidos (Aceitar / Recusar), os que você enviou e o histórico com o
  * status de cada um. Regras (lista, frases, bolinha) em lib/canal/sino.ts; dados e chamadas no CoworkingCanal.
  * Visual: o vidro do escritório (lib/canal/vidro) + o sino do lucide-react, como o resto do app.
+ * #425: data/hora em cada aviso ("agora", "há 5 min", "ontem", "16/10") e o "Limpar" (só os já respondidos).
  */
 import { Bell } from "lucide-react";
 import AgentAvatar from "@/components/agents/AgentAvatar";
-import type { ItemSino } from "@/lib/canal/sino";
+import { podeLimpar, tempoRelativo, type ItemSino } from "@/lib/canal/sino";
 import { VIDRO_CHIP, VIDRO_POPOVER, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
 
 const ROTULO: Record<ItemSino["status"], string> = { pendente: "pendente", aceito: "aceito", recusado: "recusado" };
@@ -17,7 +18,7 @@ const COR: Record<ItemSino["status"], string> = {
   recusado: "bg-rose-400/20 text-rose-700 dark:text-rose-200",
 };
 
-export default function SinoConvites({ itens, contador, aberto, onAlternar, ocupado, onResponder }: {
+export default function SinoConvites({ itens, contador, aberto, onAlternar, ocupado, onResponder, onLimpar, limpando = false, agora }: {
   itens: ItemSino[];
   /** número da bolinha (lib/canal/sino contadorDoSino). */
   contador: number;
@@ -26,7 +27,13 @@ export default function SinoConvites({ itens, contador, aberto, onAlternar, ocup
   /** id do convite sendo respondido (botões desligados). */
   ocupado: string | null;
   onResponder: (id: string, acao: "aceitar" | "recusar") => void;
+  /** #425: tira do sino os convites já respondidos (fica no banco). */
+  onLimpar?: () => void;
+  limpando?: boolean;
+  /** "agora" pra calcular o "há 5 min" (padrão: o relógio; os testes fixam). */
+  agora?: number;
 }) {
+  const ref = agora ?? Date.now();
   return (
     <div className="relative shrink-0">
       <button type="button" onClick={onAlternar} aria-expanded={aberto} aria-haspopup="dialog"
@@ -42,7 +49,13 @@ export default function SinoConvites({ itens, contador, aberto, onAlternar, ocup
 
       {aberto && (
         <div role="dialog" aria-label="Notificações" className={`absolute left-0 top-full mt-1.5 z-30 w-[min(92vw,340px)] p-2 rounded-2xl ${VIDRO_POPOVER}`}>
-          <p className={`px-2 pt-1 pb-2 text-[10.5px] font-bold uppercase tracking-wider ${TXT_MUDO}`}>Convites</p>
+          <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-2">
+            <p className={`text-[10.5px] font-bold uppercase tracking-wider ${TXT_MUDO}`}>Convites</p>
+            {onLimpar && podeLimpar(itens) && (
+              <button type="button" onClick={onLimpar} disabled={limpando} title="Tirar do sino os convites já respondidos (os pendentes ficam)"
+                className={`min-h-[28px] px-2 rounded-lg text-[11px] font-bold ${TXT_2} hover:bg-slate-500/10 dark:hover:bg-white/10 disabled:opacity-40`}>Limpar</button>
+            )}
+          </div>
           {itens.length === 0 ? (
             <p className={`px-2 pb-2 text-[12.5px] ${TXT_2}`}>Nenhum convite por aqui ainda.</p>
           ) : (
@@ -50,7 +63,14 @@ export default function SinoConvites({ itens, contador, aberto, onAlternar, ocup
               {itens.map((it) => (
                 <li key={it.id} className="flex items-center gap-2 px-2 py-1.5 rounded-xl">
                   <AgentAvatar src={it.pessoa.avatar} nome={it.pessoa.nome} size={26} />
-                  <span className={`flex-1 min-w-0 text-[12.5px] leading-snug ${TXT}`}>{it.texto}</span>
+                  <span className="flex-1 min-w-0 flex flex-col">
+                    <span className={`text-[12.5px] leading-snug ${TXT}`}>{it.texto}</span>
+                    {it.em != null && (
+                      <time dateTime={new Date(it.em).toISOString()} title={new Date(it.em).toLocaleString("pt-BR")} className={`text-[10.5px] ${TXT_MUDO}`}>
+                        {tempoRelativo(it.em, ref)}
+                      </time>
+                    )}
+                  </span>
                   {it.acao ? (
                     <span className="flex items-center gap-1 shrink-0">
                       <button type="button" onClick={() => onResponder(it.id, "aceitar")} disabled={ocupado === it.id}

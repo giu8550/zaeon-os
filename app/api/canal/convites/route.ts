@@ -1,6 +1,7 @@
 /**
  * /api/canal/convites — convites do escritório (#396, item D). Regras em lib/canal/convite.ts.
- *   GET            → { recebidos (pendentes pra mim), enviados (pendentes meus), contatos (aceitos) }
+ *   GET            → { recebidos (pendentes pra mim), enviados (pendentes meus), contatos (aceitos), historico,
+ *                      sino: { vistoEm, limpoAte } } — #425: o histórico já vem sem o que a pessoa limpou.
  *   POST { para }  → convida por e-mail (ou nome, se só uma pessoa tiver aquele nome). Cai na aba
  *                    PRIVADO de quem foi convidado, que aceita ou recusa em /api/canal/convites/[id].
  * Flag NEXT_PUBLIC_ESCRITORIO_COWORK (404 desligada). Sessão obrigatória.
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag, pessoas } from "@/lib/canal/server";
 import { interpretarAlvo, conviteEmAberto } from "@/lib/canal/convite";
+import { depoisDeLimpar, estadoDoSino } from "@/lib/canal/sino";
 import { triggerSafe } from "@/lib/collab/realtime";
 
 /** Teto de convites pendentes enviados por pessoa (anti-spam). */
@@ -30,23 +32,26 @@ export async function GET(): Promise<NextResponse> {
     orderBy: { createdAt: "desc" },
     take: 200,
   });
+  // #425: o sino de cada pessoa fica no banco (visto / limpo). Sem registro (ou erro), o sino só não lembra.
+  const sino = estadoDoSino(await prisma.canalSino.findUnique({ where: { userId: u.id } }).catch(() => null));
   const gente = await pessoas(linhas.flatMap((l) => [l.deId, l.paraId]));
   const outro = (l: Linha) => {
     const id = l.deId === u.id ? l.paraId : l.deId;
     return gente.get(id) ?? { id, nome: "Alguém", avatar: null };
   };
   const vista = (l: Linha) => ({ id: l.id, status: l.status, dmCanalId: l.dmCanalId, criadoEm: l.createdAt, pessoa: outro(l) });
-  const quando = (l: Linha) => +new Date(l.respondidoEm ?? l.createdAt);
   return NextResponse.json({
     recebidos: linhas.filter((l) => l.status === "pendente" && l.paraId === u.id).map(vista),
     enviados: linhas.filter((l) => l.status === "pendente" && l.deId === u.id).map(vista),
     contatos: linhas.filter((l) => l.status === "aceito").map(vista),
     // #423: o que já foi respondido, nas duas direções, do mais recente pro mais antigo (o sino mostra o status)
-    historico: linhas
-      .filter((l) => l.status !== "pendente")
-      .sort((a, b) => quando(b) - quando(a))
-      .slice(0, MAX_HISTORICO)
-      .map((l) => ({ ...vista(l), direcao: l.deId === u.id ? "enviado" : "recebido", respondidoEm: l.respondidoEm ?? null })),
+    historico: depoisDeLimpar(
+      linhas.filter((l) => l.status !== "pendente").map((l) => ({ ...vista(l), direcao: l.deId === u.id ? "enviado" : "recebido", respondidoEm: l.respondidoEm ?? null })),
+      sino.limpoAte,
+    )
+      .sort((a, b) => +new Date(b.respondidoEm ?? b.criadoEm) - +new Date(a.respondidoEm ?? a.criadoEm))
+      .slice(0, MAX_HISTORICO),
+    sino,
   });
 }
 

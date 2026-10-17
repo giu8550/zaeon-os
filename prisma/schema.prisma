@@ -1157,6 +1157,18 @@ model CanalConvite {
   @@map("canal_convites")
 }
 
+// Sino do escritório (#425): um registro por pessoa. vistoEm = última vez que abriu o sino (a bolinha só conta
+// o que chegou depois); limpoAte = até quando o "Limpar" tirou os avisos já respondidos. No banco, não no navegador.
+model CanalSino {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String    @unique @db.ObjectId
+  vistoEm   DateTime?
+  limpoAte  DateTime?
+  updatedAt DateTime  @updatedAt
+
+  @@map("canal_sino")
+}
+
 model CanalMensagem {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   canalId   String   @db.ObjectId

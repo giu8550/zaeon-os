@@ -13,7 +13,7 @@ const USERS = [
   { id: C, name: "Ana", email: "ana1@z.com" },
   { id: X, name: "Ana", email: "ana2@z.com" },
 ];
-const state: { user: any; convites: Conv[]; canais: any[]; avisos: any[]; mensagens: any[]; seq: number } = { user: null, convites: [], canais: [], avisos: [], mensagens: [], seq: 0 };
+const state: { user: any; convites: Conv[]; canais: any[]; avisos: any[]; mensagens: any[]; seq: number; sinos: any[] } = { user: null, convites: [], canais: [], avisos: [], mensagens: [], seq: 0, sinos: [] };
 const novoId = () => (++state.seq).toString(16).padStart(24, "0");
 
 const casa = (r: any, w: any): boolean => {
@@ -54,6 +54,7 @@ vi.mock("@/lib/canal/server", () => ({
       update: async ({ where, data }: any) => { const c = state.convites.find((x) => x.id === where.id)!; Object.assign(c, data); return c; },
     },
     canal: { create: async ({ data }: any) => { const r = { id: novoId(), ...data }; state.canais.push(r); return r; } },
+    canalSino: { findUnique: async ({ where }: any) => state.sinos.find((x) => x.userId === where.userId) ?? null },
     canalMensagem: { create: async ({ data }: any) => { const r = { id: novoId(), createdAt: new Date(), ...data }; state.mensagens.push(r); return r; } },
   },
 }));
@@ -66,7 +67,7 @@ const post = (body: unknown) => new Request("http://x/api/canal/convites", { met
 const responder = (id: string, acao: unknown) => RESPONDER(new Request("http://x", { method: "POST", body: JSON.stringify({ acao }), headers: { "content-type": "application/json" } }), { params: { id } });
 const user = (id: string) => ({ id, name: USERS.find((u) => u.id === id)?.name ?? "N", image: null, email: "e@x", role: null });
 
-beforeEach(() => { state.convites = []; state.canais = []; state.avisos = []; state.mensagens = []; state.seq = 0; state.user = user(A); });
+beforeEach(() => { state.convites = []; state.canais = []; state.avisos = []; state.mensagens = []; state.seq = 0; state.sinos = []; state.user = user(A); });
 
 describe("convites · convidar", () => {
   it("por e-mail: cria pendente e avisa a pessoa no canal pessoal", async () => {
@@ -152,6 +153,46 @@ describe("convites · listar", () => {
     // o pendente não entra no histórico; continua em "enviados"
     expect(j.enviados.map((c: any) => c.pessoa.id)).toEqual([C]);
     // recusado não vira contato
+    expect(j.contatos.map((c: any) => c.pessoa.id)).toEqual([B]);
+  });
+});
+
+describe("convites · #425 sino no banco", () => {
+  const respondidos = () => state.convites.push(
+    { id: "1".repeat(24), deId: A, paraId: B, status: "aceito", dmCanalId: "9".repeat(24), createdAt: new Date("2026-10-01"), respondidoEm: new Date("2026-10-02") },
+    { id: "2".repeat(24), deId: C, paraId: A, status: "recusado", dmCanalId: null, createdAt: new Date("2026-10-08"), respondidoEm: new Date("2026-10-09") },
+    { id: "3".repeat(24), deId: X, paraId: A, status: "pendente", dmCanalId: null, createdAt: new Date("2026-10-01") },
+  );
+
+  it("sem registro: sino em branco e o histórico inteiro", async () => {
+    respondidos();
+    const j = await (await GET()).json();
+    expect(j.sino).toEqual({ vistoEm: null, limpoAte: null });
+    expect(j.historico).toHaveLength(2);
+  });
+
+  it("limpou em 05/10: o histórico só traz o que veio depois; o pendente continua", async () => {
+    respondidos();
+    state.sinos.push({ userId: A, vistoEm: new Date("2026-10-05"), limpoAte: new Date("2026-10-05") });
+    const j = await (await GET()).json();
+    expect(j.historico.map((h: any) => h.pessoa.id)).toEqual([C]);
+    expect(j.recebidos.map((c: any) => c.pessoa.id)).toEqual([X]);
+    expect(j.sino).toEqual({ vistoEm: +new Date("2026-10-05"), limpoAte: +new Date("2026-10-05") });
+  });
+
+  it("o registro é por pessoa: o limpar da outra pessoa não mexe no meu", async () => {
+    respondidos();
+    state.sinos.push({ userId: B, vistoEm: new Date("2026-10-30"), limpoAte: new Date("2026-10-30") });
+    const j = await (await GET()).json();
+    expect(j.historico).toHaveLength(2);
+    expect(j.sino.limpoAte).toBeNull();
+  });
+
+  it("limpar não muda os contatos (a conversa continua)", async () => {
+    respondidos();
+    state.sinos.push({ userId: A, vistoEm: new Date("2026-10-30"), limpoAte: new Date("2026-10-30") });
+    const j = await (await GET()).json();
+    expect(j.historico).toEqual([]);
     expect(j.contatos.map((c: any) => c.pessoa.id)).toEqual([B]);
   });
 });

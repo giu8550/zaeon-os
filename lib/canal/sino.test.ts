@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { montarSino, textoDoAviso, contadorDoSino, chaveVistoSino, type ConviteSino, type HistoricoSino } from "./sino";
+import { montarSino, textoDoAviso, contadorDoSino, tempoRelativo, depoisDeLimpar, podeLimpar, estadoDoSino, acaoDoSino, type ConviteSino, type HistoricoSino } from "./sino";
 
 const p = (id: string, nome: string) => ({ id, nome, avatar: null });
 const cv = (id: string, nome: string, status = "pendente"): ConviteSino => ({ id, status, pessoa: p(`p-${id}`, nome) });
@@ -70,7 +70,82 @@ describe("sino · bolinha", () => {
   it("depois de abrir agora, só sobram os pendentes", () => {
     expect(contadorDoSino({ recebidos: [cv("r1", "M")], historico }, +new Date("2026-10-10"))).toBe(1);
   });
-  it("chave do 'visto' é por pessoa", () => {
-    expect(chaveVistoSino("abc")).not.toBe(chaveVistoSino("def"));
+});
+
+describe("sino · #425 data e hora de cada aviso", () => {
+  // datas no fuso local (o sino mostra no fuso de quem olha)
+  const agora = new Date(2026, 9, 16, 22, 30).getTime(); // 16/10/2026 22:30
+  const em = (d: number, h: number, m = 0, mes = 9, ano = 2026) => new Date(ano, mes, d, h, m).getTime();
+
+  it.each([
+    [agora - 10_000, "agora"],
+    [agora, "agora"],
+    [agora + 120_000, "agora"],             // relógio adiantado: nunca "há -2 min"
+    [agora - 5 * 60_000, "há 5 min"],
+    [agora - 59 * 60_000, "há 59 min"],
+    [em(16, 19, 10), "há 3 h"],              // ainda hoje
+    [em(16, 0, 5), "há 22 h"],
+    [em(15, 23, 50), "ontem"],               // 22h40 atrás, mas foi no dia anterior
+    [em(15, 9), "ontem"],
+    [em(14, 22), "14/10"],
+    [em(3, 8, 0, 0), "03/01"],
+    [em(25, 12, 0, 11, 2025), "25/12/25"],   // outro ano
+  ])("%s → %s", (t, txt) => {
+    expect(tempoRelativo(t as number, agora)).toBe(txt);
+  });
+
+  it("logo depois da meia-noite: 20 min atrás é 'há 20 min', não 'ontem'", () => {
+    const meiaNoite = new Date(2026, 9, 16, 0, 10).getTime();
+    expect(tempoRelativo(new Date(2026, 9, 15, 23, 50).getTime(), meiaNoite)).toBe("há 20 min");
+    expect(tempoRelativo(new Date(2026, 9, 15, 22, 0).getTime(), meiaNoite)).toBe("ontem");
+  });
+
+  it("cada item do sino sabe quando aconteceu: pendente = convite, respondido = resposta", () => {
+    const l = montarSino({
+      recebidos: [{ id: "r", status: "pendente", pessoa: p("m", "M"), criadoEm: "2026-10-16T10:00:00Z" }],
+      enviados: [],
+      historico: [{ id: "h", status: "aceito", pessoa: p("b", "B"), direcao: "enviado", criadoEm: "2026-10-01T10:00:00Z", respondidoEm: "2026-10-02T10:00:00Z" }],
+    });
+    expect(l.map((i) => i.em)).toEqual([+new Date("2026-10-16T10:00:00Z"), +new Date("2026-10-02T10:00:00Z")]);
+  });
+
+  it("sem data nenhuma: em = null (a tela não mostra hora)", () => {
+    expect(montarSino({ recebidos: [cv("r", "M")], enviados: [], historico: [] })[0]!.em).toBeNull();
+  });
+});
+
+describe("sino · #425 Limpar", () => {
+  const hist = [
+    { id: "1", respondidoEm: "2026-10-05T10:00:00Z", criadoEm: "2026-10-01T10:00:00Z" },
+    { id: "2", respondidoEm: "2026-10-10T10:00:00Z", criadoEm: "2026-10-09T10:00:00Z" },
+    { id: "3", respondidoEm: null, criadoEm: "2026-10-12T10:00:00Z" },
+  ];
+  it("nunca limpou: tudo fica", () => {
+    expect(depoisDeLimpar(hist, null).map((h) => h.id)).toEqual(["1", "2", "3"]);
+  });
+  it("limpou em 08/10: some o que foi respondido até ali; o que veio depois aparece", () => {
+    expect(depoisDeLimpar(hist, +new Date("2026-10-08T00:00:00Z")).map((h) => h.id)).toEqual(["2", "3"]);
+  });
+  it("limpou agora: some tudo que já foi respondido", () => {
+    expect(depoisDeLimpar(hist, +new Date("2026-10-16T00:00:00Z"))).toEqual([]);
+  });
+  it("o botão só aparece se tem algo respondido (pendente não se limpa)", () => {
+    const so = montarSino({ recebidos: [cv("r", "M")], enviados: [cv("e", "A")], historico: [] });
+    expect(podeLimpar(so)).toBe(false);
+    expect(podeLimpar(montarSino({ recebidos: [], enviados: [], historico: [h("h", "B", "enviado", "aceito")] }))).toBe(true);
+  });
+});
+
+describe("sino · #425 registro no banco", () => {
+  it("datas do banco viram ms; sem registro = nada visto, nada limpo", () => {
+    expect(estadoDoSino(null)).toEqual({ vistoEm: null, limpoAte: null });
+    expect(estadoDoSino({ vistoEm: new Date("2026-10-16T10:00:00Z"), limpoAte: null }))
+      .toEqual({ vistoEm: +new Date("2026-10-16T10:00:00Z"), limpoAte: null });
+  });
+  it("só aceita as ações 'visto' e 'limpar'", () => {
+    expect(acaoDoSino("visto")).toBe("visto");
+    expect(acaoDoSino("limpar")).toBe("limpar");
+    expect(acaoDoSino("apagar")).toBeNull();
+    expect(acaoDoSino(undefined)).toBeNull();
   });
 });

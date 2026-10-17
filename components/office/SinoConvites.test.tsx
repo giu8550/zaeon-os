@@ -77,3 +77,37 @@ describe("SinoConvites · caixa aberta", () => {
     expect(screen.getByText("Nenhum convite por aqui ainda.")).toBeTruthy();
   });
 });
+
+describe("SinoConvites · #425 data/hora e Limpar", () => {
+  const agora = new Date(2026, 9, 16, 22, 30).getTime();
+  const comData = montarSino({
+    recebidos: [{ id: "r1", status: "pendente", pessoa: p("m", "Martinez"), criadoEm: new Date(agora - 5 * 60_000) }],
+    enviados: [],
+    historico: [{ id: "h1", status: "aceito", pessoa: p("b", "Bia"), direcao: "enviado", respondidoEm: new Date(2026, 9, 15, 10) }],
+  });
+
+  it("cada aviso mostra quando aconteceu", () => {
+    render(<SinoConvites {...base} itens={comData} aberto agora={agora} />);
+    const linhas = screen.getAllByRole("listitem");
+    expect(within(linhas[0]!).getByText("há 5 min").tagName).toBe("TIME");
+    expect(within(linhas[1]!).getByText("ontem")).toBeTruthy();
+  });
+
+  it("Limpar aparece quando há respondidos e chama onLimpar", () => {
+    const onLimpar = vi.fn();
+    render(<SinoConvites {...base} itens={comData} aberto agora={agora} onLimpar={onLimpar} />);
+    fireEvent.click(screen.getByRole("button", { name: "Limpar" }));
+    expect(onLimpar).toHaveBeenCalledTimes(1);
+  });
+
+  it("só pendentes: sem Limpar (pendente não se limpa)", () => {
+    const so = montarSino({ recebidos: [{ id: "r1", status: "pendente", pessoa: p("m", "M") }], enviados: [], historico: [] });
+    render(<SinoConvites {...base} itens={so} aberto onLimpar={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Limpar" })).toBeNull();
+  });
+
+  it("enquanto limpa, o botão fica desligado", () => {
+    render(<SinoConvites {...base} itens={comData} aberto onLimpar={() => {}} limpando />);
+    expect((screen.getByRole("button", { name: "Limpar" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});

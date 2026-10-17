@@ -20,7 +20,7 @@ import { podeApagar, textoConfirmarApagar, aposApagar } from "@/lib/canal/seleto
 import { ABAS, abaDoCanal, filtrarPorAba, type Aba } from "@/lib/canal/convite";
 import { ConvidarForm, type ConviteVista } from "./ConvitesEscritorio";
 import SinoConvites from "./SinoConvites";
-import { montarSino, contadorDoSino, chaveVistoSino, type HistoricoSino } from "@/lib/canal/sino";
+import { montarSino, contadorDoSino, type HistoricoSino, type EstadoSino, type AcaoSino } from "@/lib/canal/sino";
 import PessoasTopo from "./PessoasTopo";
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
@@ -33,8 +33,8 @@ import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVE
 import { useNotificacoesSO } from "./useNotificacoesSO";
 
 type Canal = { id: string; titulo: string; acesso: string; ownerId: string; membros: string[]; agentes: string[]; cartolinaId: string | null; souDono: boolean; dmCom?: string | null };
-type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[]; historico: HistoricoSino[] };
-const SEM_CONVITES: Convites = { recebidos: [], enviados: [], contatos: [], historico: [] };
+type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[]; historico: HistoricoSino[]; sino: EstadoSino };
+const SEM_CONVITES: Convites = { recebidos: [], enviados: [], contatos: [], historico: [], sino: { vistoEm: null, limpoAte: null } };
 const NOME_ABA: Record<Aba, string> = { privado: "Privado", turma: "Turma", aberto: "Aberto" };
 type Agente = { agentKey: string; tipo: string; nome: string; emoji: string; bio: string; curso: string | null; avatarUrl: string | null; ativo: boolean };
 type Pessoa = { id: string; nome: string; avatar: string | null };
@@ -61,24 +61,34 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [aba, setAba] = useState<Aba>("turma");
   const [convites, setConvites] = useState<Convites>(SEM_CONVITES);
   const [respondendo, setRespondendo] = useState<string | null>(null);
-  // #423: sino — quando foi aberto pela última vez (no navegador, por pessoa) e a lista que ele mostra
-  const [vistoSino, setVistoSino] = useState<number | null>(null);
-  const meuIdSino = det?.eu.id ?? null;
-  useEffect(() => {
-    if (!meuIdSino) return;
-    try { const v = Number(localStorage.getItem(chaveVistoSino(meuIdSino))); setVistoSino(Number.isFinite(v) && v > 0 ? v : null); } catch { /* sem storage: só os pendentes contam */ }
-  }, [meuIdSino]);
+  // #423: sino — a lista que ele mostra e a bolinha. #425: o "visto" e o "Limpar" ficam no BANCO (CanalSino),
+  // não no navegador: vêm junto com os convites e valem em qualquer aparelho.
+  const [limpandoSino, setLimpandoSino] = useState(false);
   const itensSino = useMemo(() => montarSino(convites), [convites]);
-  const contadorSino = contadorDoSino(convites, vistoSino);
+  const contadorSino = contadorDoSino(convites, convites.sino.vistoEm);
+  const gravarSino = useCallback(async (acao: AcaoSino) => {
+    const r = await fetch("/api/canal/sino", { method: "POST", headers: H, body: JSON.stringify({ acao }) }).catch(() => null);
+    const j = r?.ok ? await r.json().catch(() => null) : null;
+    return (j?.sino as EstadoSino | undefined) ?? null;
+  }, []);
   const alternarSino = () => {
     const abrir = menu !== "sino";
     setMenu(abrir ? "sino" : null);
     if (!abrir) return;
-    void carregarConvites();
-    // abriu o sino = viu as respostas; a bolinha passa a contar só os pendentes e o que chegar depois
-    const agora = Date.now();
-    setVistoSino(agora);
-    if (meuIdSino) { try { localStorage.setItem(chaveVistoSino(meuIdSino), String(agora)); } catch { /* ignore */ } }
+    // abriu o sino = viu as respostas; a bolinha passa a contar só os pendentes e o que chegar depois.
+    // Na tela já apaga na hora; o banco guarda pra próxima vez (e pros outros aparelhos).
+    setConvites((c) => ({ ...c, sino: { ...c.sino, vistoEm: Date.now() } }));
+    void gravarSino("visto").then(() => carregarConvites());
+  };
+  const limparSino = async () => {
+    setLimpandoSino(true);
+    try {
+      const sino = await gravarSino("limpar");
+      if (!sino) { setErro("Não deu pra limpar as notificações."); return; }
+      // some com o que já foi respondido; os pendentes continuam (recebidos/enviados)
+      setConvites((c) => ({ ...c, historico: [], sino }));
+      void carregarConvites();
+    } finally { setLimpandoSino(false); }
   };
   const [novoTitulo, setNovoTitulo] = useState("");
   const [apagando, setApagando] = useState<string | null>(null);
@@ -329,7 +339,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const r = await fetch("/api/canal/convites", { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
-      setConvites({ recebidos: j.recebidos ?? [], enviados: j.enviados ?? [], contatos: j.contatos ?? [], historico: j.historico ?? [] });
+      setConvites({ recebidos: j.recebidos ?? [], enviados: j.enviados ?? [], contatos: j.contatos ?? [], historico: j.historico ?? [], sino: j.sino ?? SEM_CONVITES.sino });
     } catch { /* sem convites não trava o escritório */ }
   }, []);
   useEffect(() => { if (canais.length) void carregarConvites(); }, [canais.length, carregarConvites]);
@@ -519,7 +529,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
           {/* #423: sino de notificações (por enquanto só convites, com o status de cada um), entre o seletor e o + */}
           <SinoConvites itens={itensSino} contador={contadorSino} aberto={menu === "sino"} onAlternar={alternarSino}
-            ocupado={respondendo} onResponder={(id, acao) => void responderConvite(id, acao)} />
+            ocupado={respondendo} onResponder={(id, acao) => void responderConvite(id, acao)}
+            onLimpar={() => void limparSino()} limpando={limpandoSino} />
 
           {/* #423: "+" (convidar) à ESQUERDA, depois do sino; abre NA HORIZONTAL, ao lado do botão.
               O convite cai no sino da pessoa. */}

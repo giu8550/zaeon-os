@@ -7,6 +7,8 @@
  *   - o histórico do que já foi respondido, nas duas direções ("Martinez aceitou seu convite").
  * A bolinha conta: convites recebidos pendentes + respostas novas aos convites que você enviou
  * (as que chegaram depois da última vez que você abriu o sino).
+ * #425: cada aviso tem data/hora ("agora", "há 5 min", "ontem", "16/10"); o "visto" e o "Limpar" ficam no
+ * BANCO (CanalSino, por pessoa) — valem em qualquer aparelho. Limpar só tira o que já foi respondido.
  */
 export type PessoaSino = { id: string; nome: string; avatar: string | null };
 export type ConviteSino = { id: string; status: string; pessoa: PessoaSino; criadoEm?: string | Date | null };
@@ -21,9 +23,17 @@ export type ItemSino = {
   texto: string;
   /** pede ação (Aceitar / Recusar)? */
   acao: boolean;
+  /** #425: quando aconteceu (ms) — o convite (pendente) ou a resposta (aceito/recusado). */
+  em: number | null;
 };
 
 const statusDe = (s: string): ItemSino["status"] => (s === "aceito" || s === "recusado" ? s : "pendente");
+
+const ms = (v: string | Date | null | undefined): number | null => {
+  if (v == null) return null;
+  const n = +new Date(v);
+  return Number.isFinite(n) ? n : null;
+};
 
 /** A frase de cada aviso, do ponto de vista de quem está olhando o sino. */
 export function textoDoAviso(tipo: ItemSino["tipo"], status: ItemSino["status"], nome: string): string {
@@ -40,9 +50,10 @@ export function textoDoAviso(tipo: ItemSino["tipo"], status: ItemSino["status"],
 
 /** Monta a lista do sino: recebidos pendentes → enviados pendentes → histórico (como veio, do mais recente). */
 export function montarSino(d: { recebidos: ConviteSino[]; enviados: ConviteSino[]; historico: HistoricoSino[] }): ItemSino[] {
-  const item = (c: ConviteSino, tipo: ItemSino["tipo"]): ItemSino => {
+  const item = (c: ConviteSino | HistoricoSino, tipo: ItemSino["tipo"]): ItemSino => {
     const status = statusDe(c.status);
-    return { id: c.id, tipo, status, pessoa: c.pessoa, texto: textoDoAviso(tipo, status, c.pessoa?.nome), acao: tipo === "recebido" && status === "pendente" };
+    const em = (status !== "pendente" && "respondidoEm" in c ? ms(c.respondidoEm) : null) ?? ms(c.criadoEm);
+    return { id: c.id, tipo, status, pessoa: c.pessoa, texto: textoDoAviso(tipo, status, c.pessoa?.nome), acao: tipo === "recebido" && status === "pendente", em };
   };
   const vistos = new Set<string>();
   const out: ItemSino[] = [];
@@ -70,5 +81,40 @@ export function contadorDoSino(d: { recebidos: ConviteSino[]; historico: Histori
   return d.recebidos.length + novasRespostas;
 }
 
-/** Onde o navegador lembra quando o sino foi aberto pela última vez (por pessoa). */
-export const chaveVistoSino = (userId: string) => `zaeon.escritorio.sino.visto.${userId}`;
+/**
+ * #425: a data/hora de cada aviso, no fuso de quem olha — "agora" (menos de 1 min), "há 5 min", "há 3 h"
+ * (ainda hoje), "ontem", "16/10" (este ano) ou "16/10/25" (outro ano). Data no futuro (relógio adiantado) = "agora".
+ */
+export function tempoRelativo(em: number, agora: number): string {
+  const dif = agora - em;
+  if (dif < 60_000) return "agora";
+  if (dif < 3_600_000) return `há ${Math.floor(dif / 60_000)} min`;
+  const d = new Date(em), hoje = new Date(agora);
+  const meiaNoite = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dias = Math.round((meiaNoite(hoje) - meiaNoite(d)) / 86_400_000);
+  if (dias <= 0) return `há ${Math.floor(dif / 3_600_000)} h`;
+  if (dias === 1) return "ontem";
+  const dd = String(d.getDate()).padStart(2, "0"), mm = String(d.getMonth() + 1).padStart(2, "0");
+  return d.getFullYear() === hoje.getFullYear() ? `${dd}/${mm}` : `${dd}/${mm}/${String(d.getFullYear()).slice(-2)}`;
+}
+
+/**
+ * #425: o "Limpar" do sino. Some do histórico o que foi respondido ATÉ `limpoAte`; o que chegar depois volta a
+ * aparecer. Pendentes nunca entram aqui (ficam em recebidos/enviados) — limpar não some com convite esperando ação.
+ */
+export function depoisDeLimpar<T extends { respondidoEm?: string | Date | null; criadoEm?: string | Date | null }>(historico: T[], limpoAte: number | null): T[] {
+  if (limpoAte == null) return historico;
+  return historico.filter((h) => (ms(h.respondidoEm) ?? ms(h.criadoEm) ?? 0) > limpoAte);
+}
+
+/** Tem o que limpar? (algum aviso já respondido na lista) */
+export const podeLimpar = (itens: readonly ItemSino[]): boolean => itens.some((i) => i.status !== "pendente");
+
+/** O registro do sino de cada pessoa (CanalSino) como vai pra tela: ms ou null. */
+export type EstadoSino = { vistoEm: number | null; limpoAte: number | null };
+export const estadoDoSino = (r: { vistoEm?: Date | null; limpoAte?: Date | null } | null | undefined): EstadoSino =>
+  ({ vistoEm: ms(r?.vistoEm), limpoAte: ms(r?.limpoAte) });
+
+/** Ações do sino guardadas no banco: abrir (visto) e Limpar (que também conta como visto). */
+export type AcaoSino = "visto" | "limpar";
+export const acaoDoSino = (v: unknown): AcaoSino | null => (v === "visto" || v === "limpar" ? v : null);
