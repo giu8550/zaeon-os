@@ -80,6 +80,20 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     setConvites((c) => ({ ...c, sino: { ...c.sino, vistoEm: Date.now() } }));
     void gravarSino("visto").then(() => carregarConvites());
   };
+  // #425: clicar num convite aceito no sino abre a conversa (e fecha o sino). Se a conversa ainda não está na
+  // lista (ex.: a pessoa aceitou agora), recarrega a lista antes; sem acesso, o carregarDetalhe já trata.
+  const abrirConversa = async (id: string) => {
+    setMenu(null);
+    let c = canaisRef.current.find((x) => x.id === id);
+    if (!c) {
+      const r = await fetch("/api/canal", { cache: "no-store" }).catch(() => null);
+      const lista: Canal[] = r?.ok ? ((await r.json().catch(() => null))?.canais ?? []) : [];
+      if (lista.length) setCanais(lista);
+      c = lista.find((x) => x.id === id);
+    }
+    if (c) setAba(abaDoCanal(c));
+    setAtivoId(id);
+  };
   const limparSino = async () => {
     setLimpandoSino(true);
     try {
@@ -530,7 +544,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
           {/* #423: sino de notificações (por enquanto só convites, com o status de cada um), entre o seletor e o + */}
           <SinoConvites itens={itensSino} contador={contadorSino} aberto={menu === "sino"} onAlternar={alternarSino}
             ocupado={respondendo} onResponder={(id, acao) => void responderConvite(id, acao)}
-            onLimpar={() => void limparSino()} limpando={limpandoSino} />
+            onAbrir={(id) => void abrirConversa(id)} onLimpar={() => void limparSino()} limpando={limpandoSino} />
 
           {/* #423: "+" (convidar) à ESQUERDA, depois do sino; abre NA HORIZONTAL, ao lado do botão.
               O convite cai no sino da pessoa. */}

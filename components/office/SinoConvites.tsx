@@ -4,7 +4,8 @@
  * Por enquanto só convites: os recebidos (Aceitar / Recusar), os que você enviou e o histórico com o
  * status de cada um. Regras (lista, frases, bolinha) em lib/canal/sino.ts; dados e chamadas no CoworkingCanal.
  * Visual: o vidro do escritório (lib/canal/vidro) + o sino do lucide-react, como o resto do app.
- * #425: data/hora em cada aviso ("agora", "há 5 min", "ontem", "16/10") e o "Limpar" (só os já respondidos).
+ * #425: data/hora em cada aviso ("agora", "há 5 min", "ontem", "16/10") e o "Limpar" (só os já respondidos);
+ * clicar num convite ACEITO abre a conversa com a pessoa (e o sino fecha).
  */
 import { Bell } from "lucide-react";
 import AgentAvatar from "@/components/agents/AgentAvatar";
@@ -18,7 +19,7 @@ const COR: Record<ItemSino["status"], string> = {
   recusado: "bg-rose-400/20 text-rose-700 dark:text-rose-200",
 };
 
-export default function SinoConvites({ itens, contador, aberto, onAlternar, ocupado, onResponder, onLimpar, limpando = false, agora }: {
+export default function SinoConvites({ itens, contador, aberto, onAlternar, ocupado, onResponder, onAbrir, onLimpar, limpando = false, agora }: {
   itens: ItemSino[];
   /** número da bolinha (lib/canal/sino contadorDoSino). */
   contador: number;
@@ -27,6 +28,8 @@ export default function SinoConvites({ itens, contador, aberto, onAlternar, ocup
   /** id do convite sendo respondido (botões desligados). */
   ocupado: string | null;
   onResponder: (id: string, acao: "aceitar" | "recusar") => void;
+  /** #425: abre a conversa de um convite aceito (quem chama fecha o sino). */
+  onAbrir?: (canalId: string) => void;
   /** #425: tira do sino os convites já respondidos (fica no banco). */
   onLimpar?: () => void;
   limpando?: boolean;
@@ -63,14 +66,24 @@ export default function SinoConvites({ itens, contador, aberto, onAlternar, ocup
               {itens.map((it) => (
                 <li key={it.id} className="flex items-center gap-2 px-2 py-1.5 rounded-xl">
                   <AgentAvatar src={it.pessoa.avatar} nome={it.pessoa.nome} size={26} />
-                  <span className="flex-1 min-w-0 flex flex-col">
-                    <span className={`text-[12.5px] leading-snug ${TXT}`}>{it.texto}</span>
-                    {it.em != null && (
-                      <time dateTime={new Date(it.em).toISOString()} title={new Date(it.em).toLocaleString("pt-BR")} className={`text-[10.5px] ${TXT_MUDO}`}>
-                        {tempoRelativo(it.em, ref)}
-                      </time>
-                    )}
-                  </span>
+                  {(() => {
+                    const corpo = (<>
+                      <span className={`text-[12.5px] leading-snug ${TXT}`}>{it.texto}</span>
+                      {it.em != null && (
+                        <time dateTime={new Date(it.em).toISOString()} title={new Date(it.em).toLocaleString("pt-BR")} className={`text-[10.5px] ${TXT_MUDO}`}>
+                          {tempoRelativo(it.em, ref)}
+                        </time>
+                      )}
+                    </>);
+                    const canalId = it.canalId;
+                    // aceito: o aviso inteiro é um botão que abre a conversa
+                    return canalId && onAbrir ? (
+                      <button type="button" onClick={() => onAbrir(canalId)} aria-label={`Abrir a conversa com ${it.pessoa.nome}`} title="Abrir a conversa"
+                        className="flex-1 min-w-0 flex flex-col items-start text-left rounded-lg -mx-1 px-1 hover:bg-slate-500/10 dark:hover:bg-white/10">{corpo}</button>
+                    ) : (
+                      <span className="flex-1 min-w-0 flex flex-col">{corpo}</span>
+                    );
+                  })()}
                   {it.acao ? (
                     <span className="flex items-center gap-1 shrink-0">
                       <button type="button" onClick={() => onResponder(it.id, "aceitar")} disabled={ocupado === it.id}

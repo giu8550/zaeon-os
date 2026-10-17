@@ -11,7 +11,7 @@
  * BANCO (CanalSino, por pessoa) — valem em qualquer aparelho. Limpar só tira o que já foi respondido.
  */
 export type PessoaSino = { id: string; nome: string; avatar: string | null };
-export type ConviteSino = { id: string; status: string; pessoa: PessoaSino; criadoEm?: string | Date | null };
+export type ConviteSino = { id: string; status: string; pessoa: PessoaSino; criadoEm?: string | Date | null; dmCanalId?: string | null };
 export type HistoricoSino = ConviteSino & { direcao: "enviado" | "recebido"; respondidoEm?: string | Date | null };
 
 export type ItemSino = {
@@ -25,6 +25,8 @@ export type ItemSino = {
   acao: boolean;
   /** #425: quando aconteceu (ms) — o convite (pendente) ou a resposta (aceito/recusado). */
   em: number | null;
+  /** #425: a conversa que o aceite abriu — clicar no aviso leva pra ela. Só nos aceitos. */
+  canalId: string | null;
 };
 
 const statusDe = (s: string): ItemSino["status"] => (s === "aceito" || s === "recusado" ? s : "pendente");
@@ -53,7 +55,7 @@ export function montarSino(d: { recebidos: ConviteSino[]; enviados: ConviteSino[
   const item = (c: ConviteSino | HistoricoSino, tipo: ItemSino["tipo"]): ItemSino => {
     const status = statusDe(c.status);
     const em = (status !== "pendente" && "respondidoEm" in c ? ms(c.respondidoEm) : null) ?? ms(c.criadoEm);
-    return { id: c.id, tipo, status, pessoa: c.pessoa, texto: textoDoAviso(tipo, status, c.pessoa?.nome), acao: tipo === "recebido" && status === "pendente", em };
+    return { id: c.id, tipo, status, pessoa: c.pessoa, texto: textoDoAviso(tipo, status, c.pessoa?.nome), acao: tipo === "recebido" && status === "pendente", em, canalId: status === "aceito" ? c.dmCanalId ?? null : null };
   };
   const vistos = new Set<string>();
   const out: ItemSino[] = [];

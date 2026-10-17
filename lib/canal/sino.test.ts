@@ -114,6 +114,21 @@ describe("sino · #425 data e hora de cada aviso", () => {
   });
 });
 
+describe("sino · #425 clicar no aceito abre a conversa", () => {
+  it("só o aceito leva a conversa; pendente e recusado não", () => {
+    const l = montarSino({
+      recebidos: [{ id: "r", status: "pendente", pessoa: p("m", "M"), dmCanalId: null }],
+      enviados: [],
+      historico: [
+        { id: "a", status: "aceito", pessoa: p("b", "B"), direcao: "enviado", dmCanalId: "canal-1" },
+        { id: "x", status: "recusado", pessoa: p("c", "C"), direcao: "recebido", dmCanalId: "canal-velho" },
+        { id: "s", status: "aceito", pessoa: p("d", "D"), direcao: "recebido" },
+      ],
+    });
+    expect(l.map((i) => [i.id, i.canalId])).toEqual([["r", null], ["a", "canal-1"], ["x", null], ["s", null]]);
+  });
+});
+
 describe("sino · #425 Limpar", () => {
   const hist = [
     { id: "1", respondidoEm: "2026-10-05T10:00:00Z", criadoEm: "2026-10-01T10:00:00Z" },

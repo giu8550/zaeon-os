@@ -106,6 +106,22 @@ describe("SinoConvites · #425 data/hora e Limpar", () => {
     expect(screen.queryByRole("button", { name: "Limpar" })).toBeNull();
   });
 
+  it("clicar no convite aceito abre a conversa com o id certo", () => {
+    const onAbrir = vi.fn();
+    const l = montarSino({
+      recebidos: [], enviados: [],
+      historico: [
+        { id: "h1", status: "aceito", pessoa: p("b", "Bia"), direcao: "enviado", dmCanalId: "canal-bia" },
+        { id: "h2", status: "recusado", pessoa: p("c", "Caio"), direcao: "enviado" },
+      ],
+    });
+    render(<SinoConvites {...base} itens={l} aberto onAbrir={onAbrir} />);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir a conversa com Bia" }));
+    expect(onAbrir).toHaveBeenCalledWith("canal-bia");
+    // recusado não abre nada
+    expect(screen.queryByRole("button", { name: "Abrir a conversa com Caio" })).toBeNull();
+  });
+
   it("enquanto limpa, o botão fica desligado", () => {
     render(<SinoConvites {...base} itens={comData} aberto onLimpar={() => {}} limpando />);
     expect((screen.getByRole("button", { name: "Limpar" }) as HTMLButtonElement).disabled).toBe(true);
