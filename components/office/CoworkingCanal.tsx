@@ -26,7 +26,7 @@ import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
-import { deveAvisarDigitando, podarDigitando, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
+import { deveAvisarDigitando, podarDigitando, quemDigita, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
 import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVER, VIDRO_CHIP, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
@@ -609,8 +609,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               </div>
             );
           })}
-          {/* #423: as PESSOAS digitando ("Giulia está digitando…"), além dos agentes acima */}
-          <AvisoDigitando nomes={Object.values(pessoasDigitando).map((p) => p.nome)} />
+          {/* #425: as PESSOAS digitando, em balão igual ao dos agentes (foto + três pontinhos, sem texto) */}
+          <AvisoDigitando pessoas={quemDigita(pessoasDigitando, det.pessoas)} />
           <div ref={fimRef} />
         </div>
 

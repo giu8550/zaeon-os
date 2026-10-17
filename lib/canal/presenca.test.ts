@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   tipoDoAutor, textoEntrou, novosMembros, anunciarEntrada,
   deveAvisarDigitando, podarDigitando, textoDigitando, permitirDigitando,
-  INTERVALO_DIGITANDO_MS, LIMITE_SERVIDOR_MS,
+  INTERVALO_DIGITANDO_MS, LIMITE_SERVIDOR_MS, quemDigita, MAX_BALOES_DIGITANDO,
 } from "./presenca";
 
 describe("presença · 'fulano entrou'", () => {
@@ -71,5 +71,25 @@ describe("presença · 'fulano está digitando'", () => {
     expect(permitirDigitando(m, "u1:c1", 1000 + LIMITE_SERVIDOR_MS - 1)).toBe(false);
     expect(permitirDigitando(m, "u2:c1", 1001)).toBe(true); // outra pessoa não é barrada
     expect(permitirDigitando(m, "u1:c1", 1000 + LIMITE_SERVIDOR_MS)).toBe(true);
+  });
+});
+
+describe("presença · #425 quem aparece em balão", () => {
+  const pessoas = [{ id: "a", nome: "Giulia", avatar: "/g.png" }, { id: "b", nome: "Martinez", avatar: null }];
+  it("cada pessoa digitando com a foto dela", () => {
+    expect(quemDigita({ a: { nome: "Giulia", ate: 1 } }, pessoas)).toEqual([{ id: "a", nome: "Giulia", avatar: "/g.png" }]);
+  });
+  it("quem não está na lista de pessoas: sem foto (cai nas iniciais), com o nome do aviso", () => {
+    expect(quemDigita({ z: { nome: "Visitante", ate: 1 } }, pessoas)).toEqual([{ id: "z", nome: "Visitante", avatar: null }]);
+  });
+  it("aviso sem nome: usa o nome do canal, ou 'Alguém'", () => {
+    expect(quemDigita({ b: { nome: " ", ate: 1 }, z: { nome: "", ate: 1 } }, pessoas).map((p) => p.nome)).toEqual(["Martinez", "Alguém"]);
+  });
+  it("no máximo MAX_BALOES_DIGITANDO balões", () => {
+    const d = Object.fromEntries(["a", "b", "c", "d", "e"].map((id) => [id, { nome: id, ate: 1 }]));
+    expect(quemDigita(d, pessoas)).toHaveLength(MAX_BALOES_DIGITANDO);
+  });
+  it("ninguém digitando: lista vazia", () => {
+    expect(quemDigita({}, pessoas)).toEqual([]);
   });
 });
