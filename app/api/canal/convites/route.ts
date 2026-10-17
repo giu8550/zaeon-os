@@ -4,6 +4,7 @@
  *                      sino: { vistoEm, limpoAte } } — #425: o histórico já vem sem o que a pessoa limpou.
  *   POST { para }  → convida por e-mail (ou nome, se só uma pessoa tiver aquele nome). Cai na aba
  *                    PRIVADO de quem foi convidado, que aceita ou recusa em /api/canal/convites/[id].
+ *   POST { paraId }        → #427: o mesmo convite de contato, pelo id (o "Convidar pra conversar" da foto).
  *   POST { para, canalId } → #425: convite PARA ESTA CONVERSA (só o dono dela). No aceite a pessoa entra
  *                    nela (não cria outra); conversa de dois vira grupo privado.
  * Flag NEXT_PUBLIC_ESCRITORIO_COWORK (404 desligada). Sessão obrigatória.
@@ -73,15 +74,20 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (!u) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const alvo = interpretarAlvo(body?.para);
-  if (!alvo) return NextResponse.json({ error: "Digite o e-mail (ou o nome) da pessoa." }, { status: 400 });
+  // #427: pelo id (menu da foto no escritório) — a pessoa já está na tela, não precisa de e-mail
+  const porId = isObjectId(body?.paraId) ? (body.paraId as string) : null;
+  const alvo = porId ? null : interpretarAlvo(body?.para);
+  if (!porId && !alvo) return NextResponse.json({ error: "Digite o e-mail (ou o nome) da pessoa." }, { status: 400 });
 
   // Quem é a pessoa. A Zaeon não tem "nome de usuário": e-mail é único; nome só vale se for de UMA pessoa.
   let para: { id: string; name: string | null } | null = null;
-  if ("email" in alvo) {
+  if (porId) {
+    para = await prisma.user.findUnique({ where: { id: porId }, select: { id: true, name: true } });
+    if (!para) return NextResponse.json({ error: "Pessoa não encontrada." }, { status: 404 });
+  } else if (alvo && "email" in alvo) {
     para = await prisma.user.findUnique({ where: { email: alvo.email }, select: { id: true, name: true } });
     if (!para) return NextResponse.json({ error: "Ninguém com esse e-mail na Zaeon." }, { status: 404 });
-  } else {
+  } else if (alvo) {
     const achados: { id: string; name: string | null }[] = await prisma.user.findMany({
       where: { name: { equals: alvo.nome, mode: "insensitive" } }, select: { id: true, name: true }, take: 2,
     });
@@ -89,6 +95,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (achados.length > 1) return NextResponse.json({ error: "Mais de uma pessoa com esse nome. Use o e-mail." }, { status: 409 });
     para = achados[0]!;
   }
+  if (!para) return NextResponse.json({ error: "Pessoa não encontrada." }, { status: 404 });
   if (para.id === u.id) return NextResponse.json({ error: "Você não pode convidar a si mesma(o)." }, { status: 400 });
 
   // #425: convite PARA UMA CONVERSA (o + dentro de uma conversa sua)

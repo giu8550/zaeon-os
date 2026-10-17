@@ -192,6 +192,7 @@ const PROJETOS = projetosOn();
 
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
+import { EVT_VER_PERFIL, idDoEvento } from "@/lib/perfil/eventos";
 import EditableProfile from "@/components/research/EditableProfile";
 import MiniTourToast from "@/components/research/MiniTourToast";
 import SavedCitationsSection from "./SavedCitationsSection";
@@ -762,6 +763,8 @@ export default function HomeworkPage({
     return fallback;
   })();
   const [activeTab, setActiveTabRaw] = useState<LabTab>(initialNav.tab);
+  // #427: perfil de OUTRA pessoa aberto pelo "Ver perfil" do escritório (null = o seu)
+  const [perfilVisitado, setPerfilVisitado] = useState<string | null>(null);
   // Sub-aba da Sala de Pesquisa unificada. Sem pedido explícito → a última usada → Chat.
   const [subTab, setSubTab] = useState<ResearchSubTab>(() => {
     if (initialNav.subTab) return initialNav.subTab;
@@ -1626,6 +1629,14 @@ export default function HomeworkPage({
     window.addEventListener("zaeon:set-tab", onSetTab);
     return () => window.removeEventListener("zaeon:set-tab", onSetTab);
   }, []);
+  // #427: "Ver perfil" no escritório → aba Perfil com o perfil daquela pessoa (só leitura, sem cérebros)
+  useEffect(() => {
+    const onVerPerfil = (e: Event) => { const id = idDoEvento(e); if (!id) return; setPerfilVisitado(id); setActiveTab("profile"); };
+    window.addEventListener(EVT_VER_PERFIL, onVerPerfil);
+    return () => window.removeEventListener(EVT_VER_PERFIL, onVerPerfil);
+  }, [setActiveTab]);
+  // saiu da aba Perfil → da próxima vez abre o SEU perfil
+  useEffect(() => { if (activeTab !== "profile") setPerfilVisitado(null); }, [activeTab]);
 
   // "Iniciar pesquisa" (sugestão) → abre um DOCUMENTO NOVO na aba Pesquisa com o título.
   // Pesquisa é estritamente pesquisa (não joga pra Sala de Estudos).
@@ -2781,7 +2792,7 @@ export default function HomeworkPage({
             {/* Perfil */}
             <button
               data-tour="profile-tab"
-              onClick={() => setActiveTab("profile")}
+              onClick={() => { setPerfilVisitado(null); setActiveTab("profile"); }}
               title="Perfil"
               className={`${navItem(activeTab === "profile", "violet")} ${pill(sidebarAberta)}`}
             >
@@ -3254,7 +3265,7 @@ export default function HomeworkPage({
 
           {activeTab === "profile" && (
             <div className="w-full h-full overflow-hidden">
-              <EditableProfile />
+              <EditableProfile visitante={perfilVisitado} onVoltar={() => { setPerfilVisitado(null); setActiveTab("escritorio"); }} />
             </div>
           )}
         </div>

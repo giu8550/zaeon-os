@@ -88,6 +88,17 @@ export function textoDigitando(nomes: readonly string[]): string {
   return `${ns[0]}, ${ns[1]} e mais ${ns.length - 2} estão digitando`;
 }
 
+/** Quanto (px) do fim da conversa ainda conta como "no fim" — cabe o balão novo que acabou de entrar. */
+export const MARGEM_FIM_PX = 160;
+
+/**
+ * #427: o balão de quem está digitando entra EMBAIXO da última mensagem; se a conversa não descer, ele fica
+ * fora da tela. Desce só quem já está no fim (ou quase) — quem subiu pra ler mensagens antigas não é puxado.
+ */
+export function estaNoFim(el: { scrollTop: number; scrollHeight: number; clientHeight: number }, margem = MARGEM_FIM_PX): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= margem;
+}
+
 /** No máximo tantos balões de "digitando" de pessoas ao mesmo tempo (não empurra a conversa pra cima). */
 export const MAX_BALOES_DIGITANDO = 3;
 
