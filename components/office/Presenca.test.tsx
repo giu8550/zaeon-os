@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** #423 · presença na tela: a linha "fulano entrou" e o "fulano está digitando". */
+/** #423/#425 · presença na tela: a linha "fulano entrou" e o balão de quem está digitando. */
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
@@ -16,17 +16,32 @@ describe("LinhaSistema", () => {
   });
 });
 
-describe("AvisoDigitando", () => {
-  it("uma pessoa", () => {
-    render(<AvisoDigitando nomes={["Giulia"]} />);
-    expect(screen.getByText(/Giulia está digitando/)).toBeTruthy();
+describe("AvisoDigitando (balão)", () => {
+  it("uma pessoa: um balão com a foto e os três pontinhos, sem texto na tela", () => {
+    const { container } = render(<AvisoDigitando pessoas={[{ id: "a", nome: "Giulia", avatar: null }]} />);
+    const balao = screen.getByRole("status", { name: "Giulia está digitando" });
+    expect(balao).toBeTruthy();
+    expect(screen.getAllByTestId("tres-pontos")).toHaveLength(1);
+    expect(balao.querySelectorAll(".animate-bounce")).toHaveLength(3);
+    // nada de "está digitando" escrito na tela — só pro leitor de tela
+    expect(container.textContent).not.toMatch(/digitando/);
   });
-  it("duas pessoas", () => {
-    render(<AvisoDigitando nomes={["Giulia", "Martinez"]} />);
-    expect(screen.getByText(/Giulia e Martinez estão digitando/)).toBeTruthy();
+
+  it("os pontinhos pulam um depois do outro", () => {
+    render(<AvisoDigitando pessoas={[{ id: "a", nome: "Giulia" }]} />);
+    const atrasos = Array.from(screen.getByTestId("tres-pontos").children).map((el) => (el as HTMLElement).style.animationDelay);
+    expect(atrasos).toEqual(["0ms", "150ms", "300ms"]);
   });
+
+  it("duas pessoas: dois balões, cada um com o nome dela", () => {
+    render(<AvisoDigitando pessoas={[{ id: "a", nome: "Giulia" }, { id: "b", nome: "Martinez" }]} />);
+    expect(screen.getByRole("status", { name: "Giulia está digitando" })).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Martinez está digitando" })).toBeTruthy();
+    expect(screen.getAllByTestId("tres-pontos")).toHaveLength(2);
+  });
+
   it("ninguém digitando: não aparece nada", () => {
-    const { container } = render(<AvisoDigitando nomes={[]} />);
+    const { container } = render(<AvisoDigitando pessoas={[]} />);
     expect(container.innerHTML).toBe("");
   });
 });

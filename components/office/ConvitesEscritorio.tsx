@@ -12,12 +12,14 @@ import { VIDRO_CHIP, TXT, TXT_2 } from "@/lib/canal/vidro";
 export type PessoaConvite = { id: string; nome: string; avatar: string | null };
 export type ConviteVista = { id: string; status: string; dmCanalId: string | null; pessoa: PessoaConvite };
 
-export function ConvidarForm({ onEnviar, variante = "caixa", onFechar }: {
+export function ConvidarForm({ onEnviar, variante = "caixa", onFechar, paraConversa = null }: {
   onEnviar: (para: string) => Promise<{ ok: boolean; msg: string }>;
   /** #423: "linha" = abre NA HORIZONTAL ao lado do botão + (campo, botão e resposta numa linha só). */
   variante?: "caixa" | "linha";
   /** só na "linha": Esc fecha. */
   onFechar?: () => void;
+  /** #425: convidando pra ESTA conversa (título) — o campo diz isso; sem = convite de contato. */
+  paraConversa?: string | null;
 }) {
   const [para, setPara] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -39,7 +41,8 @@ export function ConvidarForm({ onEnviar, variante = "caixa", onFechar }: {
       <div className="flex items-center gap-1.5 min-w-0" role="group" aria-label="Convidar pessoa">
         <input value={para} autoFocus onChange={(e) => { setPara(e.target.value); setResultado(null); }}
           onKeyDown={(e) => { if (e.key === "Enter") void enviar(); if (e.key === "Escape") onFechar?.(); }}
-          placeholder="e-mail (ou nome)" aria-label="E-mail ou nome de quem convidar"
+          placeholder={paraConversa ? "e-mail de quem chamar pra cá" : "e-mail (ou nome)"}
+          aria-label={paraConversa ? `E-mail ou nome de quem chamar para ${paraConversa}` : "E-mail ou nome de quem convidar"}
           className={`w-[min(46vw,220px)] min-w-0 min-h-[40px] px-3 rounded-xl text-[13px] bg-white/70 dark:bg-white/[0.06] border border-white/60 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70`} />
         <button type="button" onClick={() => void enviar()} disabled={!para.trim() || enviando}
           className={`shrink-0 min-h-[40px] px-3 rounded-xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT} disabled:opacity-40`}>Convidar</button>

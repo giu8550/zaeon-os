@@ -88,6 +88,23 @@ export function textoDigitando(nomes: readonly string[]): string {
   return `${ns[0]}, ${ns[1]} e mais ${ns.length - 2} estão digitando`;
 }
 
+/** No máximo tantos balões de "digitando" de pessoas ao mesmo tempo (não empurra a conversa pra cima). */
+export const MAX_BALOES_DIGITANDO = 3;
+
+/**
+ * #425: quem aparece em balão — cada pessoa digitando com a foto dela (das pessoas do canal; sem foto, o
+ * avatar cai nas iniciais). Ordem de chegada; corta em MAX_BALOES_DIGITANDO.
+ */
+export function quemDigita(
+  d: Digitando,
+  pessoas: readonly { id: string; nome: string; avatar?: string | null }[],
+): { id: string; nome: string; avatar: string | null }[] {
+  return Object.entries(d).slice(0, MAX_BALOES_DIGITANDO).map(([id, v]) => {
+    const p = pessoas.find((x) => x.id === id);
+    return { id, nome: (v.nome || "").trim() || p?.nome || "Alguém", avatar: p?.avatar ?? null };
+  });
+}
+
 /**
  * Limite no SERVIDOR: deixa passar 1 aviso por pessoa+canal a cada LIMITE_SERVIDOR_MS. O mapa é injetado
  * (a rota usa um do módulo); entradas velhas são limpas pra não crescer sem fim.

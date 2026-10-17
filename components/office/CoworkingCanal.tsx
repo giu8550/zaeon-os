@@ -20,21 +20,23 @@ import { podeApagar, textoConfirmarApagar, aposApagar } from "@/lib/canal/seleto
 import { ABAS, abaDoCanal, filtrarPorAba, type Aba } from "@/lib/canal/convite";
 import { ConvidarForm, type ConviteVista } from "./ConvitesEscritorio";
 import SinoConvites from "./SinoConvites";
-import { montarSino, contadorDoSino, chaveVistoSino, type HistoricoSino } from "@/lib/canal/sino";
+import { montarSino, contadorDoSino, type HistoricoSino, type EstadoSino, type AcaoSino } from "@/lib/canal/sino";
 import PessoasTopo from "./PessoasTopo";
+import MenuPessoa, { type PerfilCarregado } from "./MenuPessoa";
+import { podeRemover, textoConfirmarRemover } from "@/lib/canal/perfil";
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
-import { deveAvisarDigitando, podarDigitando, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
+import { deveAvisarDigitando, podarDigitando, quemDigita, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
 import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVER, VIDRO_CHIP, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
 import { useNotificacoesSO } from "./useNotificacoesSO";
 
 type Canal = { id: string; titulo: string; acesso: string; ownerId: string; membros: string[]; agentes: string[]; cartolinaId: string | null; souDono: boolean; dmCom?: string | null };
-type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[]; historico: HistoricoSino[] };
-const SEM_CONVITES: Convites = { recebidos: [], enviados: [], contatos: [], historico: [] };
+type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[]; historico: HistoricoSino[]; sino: EstadoSino };
+const SEM_CONVITES: Convites = { recebidos: [], enviados: [], contatos: [], historico: [], sino: { vistoEm: null, limpoAte: null } };
 const NOME_ABA: Record<Aba, string> = { privado: "Privado", turma: "Turma", aberto: "Aberto" };
 type Agente = { agentKey: string; tipo: string; nome: string; emoji: string; bio: string; curso: string | null; avatarUrl: string | null; ativo: boolean };
 type Pessoa = { id: string; nome: string; avatar: string | null };
@@ -56,35 +58,58 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [estadoAgente, setEstadoAgente] = useState<Record<string, EstadoAgente>>({});
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [menu, setMenu] = useState<"canais" | "config" | "convidar" | "sino" | null>(null);
+  const [menu, setMenu] = useState<"canais" | "convidar" | "sino" | `pessoa:${string}` | null>(null); // #425: "pessoa:<id>" = menu da foto
   // #396 (D): abas do seletor (dividem o espaço, não misturam) + convites da aba Privado
   const [aba, setAba] = useState<Aba>("turma");
   const [convites, setConvites] = useState<Convites>(SEM_CONVITES);
   const [respondendo, setRespondendo] = useState<string | null>(null);
-  // #423: sino — quando foi aberto pela última vez (no navegador, por pessoa) e a lista que ele mostra
-  const [vistoSino, setVistoSino] = useState<number | null>(null);
-  const meuIdSino = det?.eu.id ?? null;
-  useEffect(() => {
-    if (!meuIdSino) return;
-    try { const v = Number(localStorage.getItem(chaveVistoSino(meuIdSino))); setVistoSino(Number.isFinite(v) && v > 0 ? v : null); } catch { /* sem storage: só os pendentes contam */ }
-  }, [meuIdSino]);
+  // #423: sino — a lista que ele mostra e a bolinha. #425: o "visto" e o "Limpar" ficam no BANCO (CanalSino),
+  // não no navegador: vêm junto com os convites e valem em qualquer aparelho.
+  const [limpandoSino, setLimpandoSino] = useState(false);
   const itensSino = useMemo(() => montarSino(convites), [convites]);
-  const contadorSino = contadorDoSino(convites, vistoSino);
+  const contadorSino = contadorDoSino(convites, convites.sino.vistoEm);
+  const gravarSino = useCallback(async (acao: AcaoSino) => {
+    const r = await fetch("/api/canal/sino", { method: "POST", headers: H, body: JSON.stringify({ acao }) }).catch(() => null);
+    const j = r?.ok ? await r.json().catch(() => null) : null;
+    return (j?.sino as EstadoSino | undefined) ?? null;
+  }, []);
   const alternarSino = () => {
     const abrir = menu !== "sino";
     setMenu(abrir ? "sino" : null);
     if (!abrir) return;
-    void carregarConvites();
-    // abriu o sino = viu as respostas; a bolinha passa a contar só os pendentes e o que chegar depois
-    const agora = Date.now();
-    setVistoSino(agora);
-    if (meuIdSino) { try { localStorage.setItem(chaveVistoSino(meuIdSino), String(agora)); } catch { /* ignore */ } }
+    // abriu o sino = viu as respostas; a bolinha passa a contar só os pendentes e o que chegar depois.
+    // Na tela já apaga na hora; o banco guarda pra próxima vez (e pros outros aparelhos).
+    setConvites((c) => ({ ...c, sino: { ...c.sino, vistoEm: Date.now() } }));
+    void gravarSino("visto").then(() => carregarConvites());
+  };
+  // #425: clicar num convite aceito no sino abre a conversa (e fecha o sino). Se a conversa ainda não está na
+  // lista (ex.: a pessoa aceitou agora), recarrega a lista antes; sem acesso, o carregarDetalhe já trata.
+  const abrirConversa = async (id: string) => {
+    setMenu(null);
+    let c = canaisRef.current.find((x) => x.id === id);
+    if (!c) {
+      const r = await fetch("/api/canal", { cache: "no-store" }).catch(() => null);
+      const lista: Canal[] = r?.ok ? ((await r.json().catch(() => null))?.canais ?? []) : [];
+      if (lista.length) setCanais(lista);
+      c = lista.find((x) => x.id === id);
+    }
+    if (c) setAba(abaDoCanal(c));
+    setAtivoId(id);
+  };
+  const limparSino = async () => {
+    setLimpandoSino(true);
+    try {
+      const sino = await gravarSino("limpar");
+      if (!sino) { setErro("Não deu pra limpar as notificações."); return; }
+      // some com o que já foi respondido; os pendentes continuam (recebidos/enviados)
+      setConvites((c) => ({ ...c, historico: [], sino }));
+      void carregarConvites();
+    } finally { setLimpandoSino(false); }
   };
   const [novoTitulo, setNovoTitulo] = useState("");
   const [apagando, setApagando] = useState<string | null>(null);
   const [agendaAberta, setAgendaAberta] = useState(false);
   const [agendaVersao, setAgendaVersao] = useState(0);
-  const [emailConvite, setEmailConvite] = useState("");
   const [sugIdx, setSugIdx] = useState(0);
   // A− / A+ do texto das mensagens: a MESMA escolha do chat das salas de estudo e pesquisa (por aparelho).
   const zoom = useChatFontScale();
@@ -189,7 +214,11 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const nome = canalChannel(c.id);
       if (nomes.includes(nome)) continue;
       const ch = p.subscribe(nome);
-      ch.bind(EV_MENSAGEM, (m: MensagemWire) => aoChegar(m, c.id));
+      ch.bind(EV_MENSAGEM, (m: MensagemWire) => {
+        aoChegar(m, c.id);
+        // #425: "fulano entrou" no canal aberto → recarrega o canal (a foto nova aparece na barra, sem F5)
+        if (m.autorTipo === "sistema" && c.id === ativoRef.current) void carregarDetalhe(c.id);
+      });
       // alguém marcou/apagou horário na agenda deste canal → a bandeja (se aberta) recarrega
       ch.bind(EV_AGENDA, () => { if (c.id === ativoRef.current) setAgendaVersao((v) => v + 1); });
       ch.bind(EV_DIGITANDO, (d: { agentKey: string; estado: string }) => {
@@ -329,7 +358,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const r = await fetch("/api/canal/convites", { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
-      setConvites({ recebidos: j.recebidos ?? [], enviados: j.enviados ?? [], contatos: j.contatos ?? [], historico: j.historico ?? [] });
+      setConvites({ recebidos: j.recebidos ?? [], enviados: j.enviados ?? [], contatos: j.contatos ?? [], historico: j.historico ?? [], sino: j.sino ?? SEM_CONVITES.sino });
     } catch { /* sem convites não trava o escritório */ }
   }, []);
   useEffect(() => { if (canais.length) void carregarConvites(); }, [canais.length, carregarConvites]);
@@ -339,17 +368,25 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     if (c) setAba(abaDoCanal(c));
   }, [ativoId]);
 
+  // #425: o + do DONO convida pra conversa aberta (a pessoa entra nela no aceite); pra quem não é dono, é o
+  // convite de contato de antes (aceitar cria a conversa de vocês dois).
+  const conversaDoConvite = det?.canal.souDono ? det.canal : null;
   const enviarConvite = useCallback(async (para: string): Promise<{ ok: boolean; msg: string }> => {
     try {
-      const r = await fetch("/api/canal/convites", { method: "POST", headers: H, body: JSON.stringify({ para }) });
+      const corpo = conversaDoConvite ? { para, canalId: conversaDoConvite.id } : { para };
+      const r = await fetch("/api/canal/convites", { method: "POST", headers: H, body: JSON.stringify(corpo) });
       const j = await r.json().catch(() => ({}));
-      if (r.status === 201) { void carregarConvites(); return { ok: true, msg: `Convite enviado para ${j?.convite?.pessoa?.nome || para}.` }; }
+      if (r.status === 201) {
+        void carregarConvites();
+        const nome = j?.convite?.pessoa?.nome || para;
+        return { ok: true, msg: conversaDoConvite ? `Convite enviado: ${nome} entra aqui quando aceitar.` : `Convite enviado para ${nome}.` };
+      }
       if (r.ok && j?.jaContatos) return { ok: true, msg: "Vocês já são contatos — a conversa está na aba Privado." };
       return { ok: false, msg: j?.error || `Não deu pra convidar (${r.status}).` };
     } catch (e) {
       return { ok: false, msg: String((e as Error)?.message ?? e) };
     }
-  }, [carregarConvites]);
+  }, [carregarConvites, conversaDoConvite]);
 
   const responderConvite = useCallback(async (id: string, acao: "aceitar" | "recusar") => {
     setRespondendo(id);
@@ -450,7 +487,18 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const topo = montarTopoPessoas({ pessoas: det.pessoas, online, donoId: canal.ownerId, meuId, membros: canal.dmCom ? [...canal.membros, canal.dmCom] : canal.membros });
   const daAba = filtrarPorAba(canais, aba);
   // contatos (convite aceito) que ainda não estão neste canal → dá pra pôr com um toque no ⚙︎
-  const contatosFora = convites.contatos.filter((c) => c.pessoa.id !== canal.ownerId && !canal.membros.includes(c.pessoa.id));
+  // #425: menu da foto (Ver perfil / Remover do escritório)
+  const pessoaAberta = menu?.startsWith("pessoa:") ? menu.slice("pessoa:".length) : null;
+  const carregarPerfil = async (uid: string): Promise<PerfilCarregado | null> => {
+    const r = await fetch(`/api/canal/${canal.id}/pessoa/${uid}`, { cache: "no-store" });
+    return r.ok ? ((await r.json()) as PerfilCarregado) : null;
+  };
+  const removerPessoa = async (p: { id: string; nome: string }) => {
+    if (!window.confirm(textoConfirmarRemover(p.nome))) return;
+    setMenu(null);
+    await patch({ removerMembro: p.id });
+  };
+  const conversaCom = (uid: string) => convites.contatos.find((c) => c.pessoa.id === uid)?.dmCanalId ?? null;
   // Sem @, responde o último agente que falou. A dica só aparece em canal de uma pessoa: com mais
   // gente, o servidor só atende quem estava conversando com o agente (lib/canal/alvo.ts).
   const ultimoAgente = [...det.mensagens].reverse().find((m) => m.autorTipo === "agente" && !m.id.startsWith("efemera-"))?.autorId;
@@ -519,75 +567,35 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
           {/* #423: sino de notificações (por enquanto só convites, com o status de cada um), entre o seletor e o + */}
           <SinoConvites itens={itensSino} contador={contadorSino} aberto={menu === "sino"} onAlternar={alternarSino}
-            ocupado={respondendo} onResponder={(id, acao) => void responderConvite(id, acao)} />
+            ocupado={respondendo} onResponder={(id, acao) => void responderConvite(id, acao)}
+            onAbrir={(id) => void abrirConversa(id)} onLimpar={() => void limparSino()} limpando={limpandoSino} />
 
           {/* #423: "+" (convidar) à ESQUERDA, depois do sino; abre NA HORIZONTAL, ao lado do botão.
               O convite cai no sino da pessoa. */}
           <div className="flex items-center gap-1.5 min-w-0">
             <button type="button" onClick={() => setMenu(menu === "convidar" ? null : "convidar")} aria-label="Convidar pessoa" aria-expanded={menu === "convidar"}
-              title="Convidar pessoa" className={`${TOQUE} shrink-0 rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>
-            {menu === "convidar" && <ConvidarForm onEnviar={enviarConvite} variante="linha" onFechar={() => setMenu(null)} />}
+              title={conversaDoConvite ? "Chamar alguém pra esta conversa" : "Convidar pessoa"} className={`${TOQUE} shrink-0 rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>
+            {menu === "convidar" && <ConvidarForm onEnviar={enviarConvite} variante="linha" onFechar={() => setMenu(null)} paraConversa={conversaDoConvite?.titulo ?? null} />}
           </div>
 
           <div className="ml-auto flex items-center gap-1.5">
             {/* pessoas do canal (dono, membros e você), com espaço entre as fotos (#423). Os agentes ficam embaixo. */}
-            <PessoasTopo visiveis={topo.visiveis} extras={topo.extras} onlineIds={topo.onlineIds} total={topo.total} />
+            <PessoasTopo visiveis={topo.visiveis} extras={topo.extras} onlineIds={topo.onlineIds} total={topo.total}
+              aberta={pessoaAberta} onAlternar={(id) => setMenu(pessoaAberta === id ? null : `pessoa:${id}`)}
+              menuDe={(p) => {
+                const dm = p.id !== meuId ? conversaCom(p.id) : null;
+                return (
+                  <MenuPessoa key={p.id} pessoa={p} carregarPerfil={carregarPerfil}
+                    podeRemover={podeRemover({ meuId, donoId: canal.ownerId, alvoId: p.id, conversaDeDois: !!canal.dmCom, membros: canal.membros })}
+                    onRemover={() => void removerPessoa(p)}
+                    onConversar={dm && dm !== canal.id ? () => void abrirConversa(dm) : undefined} />
+                );
+              }} />
             {online.length > 0 && <span className={`text-[11px] ${TXT_MUDO}`} title="online agora">{online.length} on</span>}
             {canal.cartolinaId && (
               <button type="button" onClick={abrirCartolina} className={`${TOQUE} px-3 rounded-2xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT}`} title="Abrir a cartolina da sala">▦ cartolina</button>
             )}
-            {canal.souDono && (
-              <div className="relative">
-                <button type="button" onClick={() => setMenu(menu === "config" ? null : "config")} className={`${TOQUE} rounded-2xl text-[14px] ${VIDRO_CHIP} ${TXT}`} aria-label="Configurar canal" aria-expanded={menu === "config"}>⚙︎</button>
-                {menu === "config" && (
-                  <div className={`absolute right-0 top-full mt-1.5 z-30 w-[min(92vw,320px)] p-3 rounded-2xl flex flex-col gap-3 ${VIDRO_POPOVER}`}>
-                    {canal.dmCom ? (
-                      <p className={`text-[12px] ${TXT_2}`}>Conversa privada: só vocês dois veem. Ela não muda de acesso nem recebe outras pessoas.</p>
-                    ) : (<>
-                    <div className="flex gap-1" role="radiogroup" aria-label="Quem o agente atende">
-                      {(["privado", "turma", "aberto"] as const).map((a) => (
-                        <button key={a} type="button" role="radio" aria-checked={canal.acesso === a} onClick={() => void patch({ acesso: a })}
-                          className={`flex-1 min-h-[40px] rounded-xl text-[12px] font-bold ${canal.acesso === a ? `bg-blue-500/20 dark:bg-blue-400/20 ${TXT}` : `${VIDRO_CHIP} ${TXT_2}`}`}>{a}</button>
-                      ))}
-                    </div>
-                    <div className="flex gap-1.5">
-                      <input value={emailConvite} onChange={(e) => setEmailConvite(e.target.value)} placeholder="e-mail de um contato (já aceitou)" aria-label="Adicionar membro por e-mail" type="email"
-                        onKeyDown={(e) => { if (e.key === "Enter" && emailConvite) { void patch({ adicionarEmail: emailConvite }); setEmailConvite(""); } }}
-                        className={`flex-1 min-h-[40px] px-3 rounded-xl text-[13px] bg-white/70 dark:bg-white/[0.06] border border-white/60 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70`} />
-                      <button type="button" onClick={() => { if (emailConvite) { void patch({ adicionarEmail: emailConvite }); setEmailConvite(""); } }} className={`min-h-[40px] px-3 rounded-xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT}`}>+</button>
-                    </div>
-                    {det.pessoas.filter((p) => canal.membros.includes(p.id)).length > 0 && (
-                      <ul className="flex flex-col gap-1">
-                        {det.pessoas.filter((p) => canal.membros.includes(p.id)).map((p) => (
-                          <li key={p.id} className={`flex items-center gap-2 text-[12.5px] ${TXT_2}`}>
-                            <AgentAvatar src={p.avatar} nome={p.nome} size={22} /><span className="truncate flex-1">{p.nome}</span>
-                            <button type="button" onClick={() => void patch({ removerMembro: p.id })} className={`min-h-[32px] px-2 rounded-lg text-[11px] ${TXT_MUDO} hover:text-rose-500 dark:hover:text-rose-300`} aria-label={`Remover ${p.nome}`}>×</button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {/* contatos (convite aceito) que ainda não estão aqui: um toque e entram */}
-                    {contatosFora.length > 0 && (
-                      <div className="flex flex-col gap-1">
-                        <p className={`text-[10.5px] font-bold uppercase tracking-wider ${TXT_MUDO}`}>Seus contatos</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {contatosFora.map((c) => (
-                            <button key={c.pessoa.id} type="button" onClick={() => void patch({ adicionarMembro: c.pessoa.id })} aria-label={`Pôr ${c.pessoa.nome} neste escritório`}
-                              className={`min-h-[32px] pl-1 pr-2.5 rounded-full flex items-center gap-1.5 text-[12px] font-semibold ${VIDRO_CHIP} ${TXT}`}>
-                              <AgentAvatar src={c.pessoa.avatar} nome={c.pessoa.nome} size={22} /> + {c.pessoa.nome}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    </>)}
-                    <input defaultValue={canal.cartolinaId ?? ""} placeholder="id da cartolina (opcional)" aria-label="Cartolina compartilhada"
-                      onBlur={(e) => { const v = e.target.value.trim(); if (v !== (canal.cartolinaId ?? "")) void patch({ cartolinaId: v || null }); }}
-                      className={`min-h-[40px] px-3 rounded-xl text-[12px] font-mono bg-white/70 dark:bg-white/[0.06] border border-white/60 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70`} />
-                  </div>
-                )}
-              </div>
-            )}
+            {/* #425: a engrenagem saiu — o tipo do escritório é escolhido no seletor ao criar, e o "remover" foi pro menu da foto */}
             {/* zoom das letras, no canto superior direito (igual ao chat das salas) */}
             <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
           </div>
@@ -609,8 +617,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               </div>
             );
           })}
-          {/* #423: as PESSOAS digitando ("Giulia está digitando…"), além dos agentes acima */}
-          <AvisoDigitando nomes={Object.values(pessoasDigitando).map((p) => p.nome)} />
+          {/* #425: as PESSOAS digitando, em balão igual ao dos agentes (foto + três pontinhos, sem texto) */}
+          <AvisoDigitando pessoas={quemDigita(pessoasDigitando, det.pessoas)} />
           <div ref={fimRef} />
         </div>
 
