@@ -5,6 +5,8 @@
  * cérebros completos), parede de atestados (Credential cunhadas, link on-chain), credenciais
  * acadêmicas (badge por método) + envio de título com documento. Professores/instituições veem a
  * fila de verificação. Vidro claro === escuro. Flag NEXT_PUBLIC_AURA_ECONOMY (o pai decide render).
+ * #427: `visitante` = o perfil de OUTRA pessoa (dados de /api/perfil/[id]): só leitura, sem o envio de título,
+ * sem as filas, e SEM os cérebros (nem a seção, nem o contador); validações de estudo só com o número.
  */
 import { useCallback, useEffect, useState } from "react";
 import { levelFromAura, NIVEIS_ACADEMICOS, ROTULO_NIVEL, seloDoMetodo, type NivelAcademico } from "@/lib/aura/rules";
@@ -41,7 +43,10 @@ const TIPO_ATESTADO: Record<string, string> = {
 };
 const explorer = (assetId: string, network: string) => `https://explorer.solana.com/address/${assetId}${network === "mainnet" || network === "mainnet-beta" ? "" : `?cluster=${network}`}`;
 
-export default function AuraCard() {
+/** #427: o perfil de outra pessoa — a AURA já vem pronta (sem cérebros) e o número de validações pendentes. */
+export type AuraVisitante = { aura: Omit<Aura, "completedBrains" | "learnedNodes" | "cerebros" | "habilidadesValidadas"> | null; validacoesPendentes: number | null };
+
+export default function AuraCard({ visitante }: { visitante?: AuraVisitante } = {}) {
   const [d, setD] = useState<Aura | null>(null);
   const [estado, setEstado] = useState<"carregando" | "ok" | "off" | "erro">("carregando");
   const [fila, setFila] = useState<Fila | null>(null);
@@ -52,6 +57,7 @@ export default function AuraCard() {
   const [abrindo, setAbrindo] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
+    if (visitante) return; // perfil de outra pessoa: os dados já vieram prontos (e sem cérebros)
     try {
       const r = await fetch("/api/profile/aura", { cache: "no-store" });
       if (r.status === 404) { setEstado("off"); return; }
@@ -63,8 +69,14 @@ export default function AuraCard() {
       const fc = await fetch("/api/map/validacoes?status=pendente", { cache: "no-store" }).catch(() => null);
       setFilaCerebro(fc?.ok ? (await fc.json()).validacoes : null);
     } catch { setEstado("erro"); }
-  }, []);
+  }, [visitante]);
   useEffect(() => { void carregar(); }, [carregar]);
+  useEffect(() => {
+    if (!visitante) return;
+    if (!visitante.aura) { setEstado("off"); return; }
+    setD({ ...visitante.aura, completedBrains: 0, learnedNodes: 0 }); setEstado("ok");
+  }, [visitante]);
+  const somenteLeitura = !!visitante;
 
   const decidirCerebro = async (vId: string, status: "aprovada" | "rejeitada") => {
     const comentario = status === "rejeitada" ? (window.prompt("Motivo (opcional):") ?? "") : "";
@@ -133,9 +145,9 @@ export default function AuraCard() {
           <div className={`text-5xl font-black tabular-nums leading-none ${txt}`}>{d.aura}</div>
           <div className={`mt-1 text-[12px] ${txt2}`}>{nivel.titulo}{nivel.prox !== null ? ` · faltam ${nivel.prox} pro próximo nível` : " · nível máximo"}</div>
         </div>
-        <div className="ml-auto grid grid-cols-3 gap-4 text-center">
+        <div className={`ml-auto grid ${somenteLeitura ? "grid-cols-2" : "grid-cols-3"} gap-4 text-center`}>
           <Contador n={d.validatedSkills} t="habilidades validadas" />
-          <Contador n={d.completedBrains} t="cérebros completos" />
+          {!somenteLeitura && <Contador n={d.completedBrains} t="cérebros completos" />}
           <Contador n={d.parede.length} t="atestados on-chain" />
         </div>
       </div>
@@ -146,7 +158,7 @@ export default function AuraCard() {
         {/* credenciais acadêmicas */}
         <div className={`${card} p-5`}>
           <div className={`${label} mb-3`}>Títulos acadêmicos</div>
-          {d.academicas.length === 0 && <p className={`text-[12px] ${mudo}`}>Nenhum título ainda. Um diploma comprovado vale AURA proporcional ao nível.</p>}
+          {d.academicas.length === 0 && <p className={`text-[12px] ${mudo}`}>{somenteLeitura ? "Nenhum título ainda." : "Nenhum título ainda. Um diploma comprovado vale AURA proporcional ao nível."}</p>}
           <ul className="flex flex-col gap-2">
             {d.academicas.map((c) => {
               const selo = c.status === "verificado" ? SELO[seloDoMetodo(c.metodo as any)] : c.status === "rejeitado" ? { t: "rejeitado", c: "text-rose-700 dark:text-rose-200 border-rose-400/60" } : c.metodo === "declarado" ? SELO.nenhum : { t: "aguardando verificação", c: "text-amber-700 dark:text-amber-200 border-amber-400/60" };
@@ -158,6 +170,7 @@ export default function AuraCard() {
               );
             })}
           </ul>
+          {!somenteLeitura && (<>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
             <select value={envio.nivel} onChange={(e) => setEnvio({ ...envio, nivel: e.target.value as NivelAcademico })} className={inputCls} aria-label="Nível do título">
               {NIVEIS_ACADEMICOS.map((n) => <option key={n} value={n}>{ROTULO_NIVEL[n]}</option>)}
@@ -173,6 +186,7 @@ export default function AuraCard() {
             </button>
           </div>
           <p className={`mt-2 text-[10.5px] ${mudo}`}>O documento fica privado: só você e quem verifica veem. No perfil aparece só o título e o selo.</p>
+          </>)}
         </div>
 
         {/* parede de atestados + recentes */}
@@ -181,7 +195,7 @@ export default function AuraCard() {
             <div className={label}>Parede de atestados</div>
             <span className={`inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest ${mudo}`}><SolanaMark size={9} title="" /> verificável na Solana</span>
           </div>
-          {d.parede.length === 0 && <p className={`text-[12px] ${mudo}`}>Nenhuma credencial verificada ainda. Seus atestados on-chain aparecem aqui conforme você valida habilidades e títulos.</p>}
+          {d.parede.length === 0 && <p className={`text-[12px] ${mudo}`}>{somenteLeitura ? "Nenhuma credencial verificada ainda." : "Nenhuma credencial verificada ainda. Seus atestados on-chain aparecem aqui conforme você valida habilidades e títulos."}</p>}
           {d.parede.length > 0 && (
             <CredencialCard
               titulo={d.parede[0].title}
@@ -219,8 +233,8 @@ export default function AuraCard() {
         </div>
       </div>
 
-      {/* cérebros do aluno (percurso + duas barras) */}
-      {d.cerebros && d.cerebros.length > 0 && (
+      {/* cérebros do aluno (percurso + duas barras) — PRIVADO: nunca no perfil de outra pessoa (#427) */}
+      {!somenteLeitura && d.cerebros && d.cerebros.length > 0 && (
         <div className={`${card} p-5`}>
           <div className={`${label} mb-3`}>Cérebros · {d.cerebros.length}</div>
           <ul className="flex flex-col gap-2.5">
@@ -241,8 +255,15 @@ export default function AuraCard() {
         </div>
       )}
 
+      {/* #427: no perfil de outra pessoa, as validações aparecem só com o NÚMERO (a lista são passos dos cérebros de outros alunos) */}
+      {somenteLeitura && visitante?.validacoesPendentes != null && (
+        <div className={`${card} p-5`} data-testid="validacoes-visitante">
+          <div className={label}>Validações de estudo · {visitante.validacoesPendentes}</div>
+        </div>
+      )}
+
       {/* fila de validação dos cérebros (professor vinculado) */}
-      {filaCerebro && (
+      {!somenteLeitura && filaCerebro && (
         <div className={`${card} p-5`}>
           <div className={`${label} mb-3`}>Validações de estudo · {filaCerebro.length}</div>
           {filaCerebro.length === 0 && <p className={`text-[12px] ${mudo}`}>Nenhum nó aguardando sua chancela.</p>}
@@ -263,7 +284,7 @@ export default function AuraCard() {
       )}
 
       {/* fila do verificador (professor/instituição) */}
-      {fila && (
+      {!somenteLeitura && fila && (
         <div className={`${card} p-5`}>
           <div className={`${label} mb-3`}>Fila de verificação · {fila.length}</div>
           {fila.length === 0 && <p className={`text-[12px] ${mudo}`}>Nenhum título aguardando.</p>}

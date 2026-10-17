@@ -1,6 +1,6 @@
 "use client";
 import { CORPOS_DE_JOGADOR } from "@/lib/cyber/estiloAvatar";
-import AuraCard from "@/components/profile/AuraCard";
+import AuraCard, { type AuraVisitante } from "@/components/profile/AuraCard";
 
 /**
  * EditableProfile — visual clássico Zaeon: CÁPSULA (à esquerda) com DNA girando e a foto
@@ -8,12 +8,14 @@ import AuraCard from "@/components/profile/AuraCard";
  * disciplina, calma… e negativas como nervosismo) — hoje zeradas, prontas pra valores reais.
  * À DIREITA, a VITRINE do personagem (o corpo do cyberespaço, em pé, girando) + "Mudar skin".
  * Editável pelo próprio usuário (nome, curso → re-verificação). Sem títulos de módulo.
+ * #427: com `visitante` (o id de OUTRA pessoa, aberto pelo "Ver perfil" do escritório) a mesma página vira SÓ
+ * LEITURA com os dados dela (/api/perfil/[id]): sem editar, sem trocar foto/skin, e os CÉREBROS ficam privados.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
-import { Loader2, Check, Upload, FileText, UserCheck, ShieldCheck, ShieldAlert, Camera, Pencil, BookOpen, Award } from "lucide-react";
+import { Loader2, Check, Upload, FileText, UserCheck, ShieldCheck, ShieldAlert, Camera, Pencil, BookOpen, Award, ArrowLeft } from "lucide-react";
 import { ALL_COURSES } from "@/constants/courses";
 import NetworkMural from "@/app/workstation/profiles/NetworkMural";
 import ModalSkin from "@/components/profile/ModalSkin";
@@ -76,8 +78,15 @@ function SkillBar({ name, kind, value }: { name: string; kind: "pos" | "neg"; va
   );
 }
 
-export default function EditableProfile() {
+export default function EditableProfile({ visitante = null, onVoltar }: {
+  /** #427: id de OUTRA pessoa → perfil dela, só leitura e sem cérebros. */
+  visitante?: string | null;
+  /** volta pra onde veio (o escritório). */
+  onVoltar?: () => void;
+} = {}) {
   const [data, setData] = useState<ProfileData | null>(null);
+  const [auraVisitante, setAuraVisitante] = useState<AuraVisitante | null>(null);
+  const [naoAchou, setNaoAchou] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
@@ -93,13 +102,23 @@ export default function EditableProfile() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/profile")
+    setLoading(true); setNaoAchou(false); setEditing(false); setAuraVisitante(null);
+    // #427: perfil de outra pessoa (só quem divide escritório com ela consegue; senão 404)
+    const url = visitante ? `/api/perfil/${visitante}` : "/api/profile";
+    fetch(url, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive && d) { setData(d); setName(d.name || ""); setCourse(d.course || ""); setImg(d.image || null); } })
-      .catch(() => {})
+      .then((j) => {
+        if (!alive) return;
+        if (!j) { if (visitante) setNaoAchou(true); return; }
+        const d = visitante ? j.pessoa : j;
+        setData(d); setName(d.name || ""); setCourse(d.course || ""); setImg(d.image || null);
+        if (visitante) setAuraVisitante({ aura: j.aura ?? null, validacoesPendentes: j.validacoesPendentes ?? null });
+      })
+      .catch(() => { if (alive && visitante) setNaoAchou(true); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, []);
+  }, [visitante]);
+  const somenteLeitura = !!visitante;
 
   const courseChanged = useMemo(() => !!data && course.trim() !== (data.course || "").trim(), [course, data]);
   const courseValid = ALL_COURSES.some((c) => c.toLowerCase() === course.trim().toLowerCase());
@@ -150,6 +169,14 @@ export default function EditableProfile() {
   };
 
   if (loading) return <div className="w-full h-full flex items-center justify-center text-slate-400 dark:text-white/40"><Loader2 size={18} className="animate-spin" /></div>;
+  if (visitante && naoAchou) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center p-6">
+        <p role="alert" className="text-[13px] text-slate-600 dark:text-white/70">Não deu pra abrir esse perfil. Só dá pra ver o perfil de quem divide um escritório com você.</p>
+        {onVoltar && <button type="button" onClick={onVoltar} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline"><ArrowLeft size={13} /> Voltar ao escritório</button>}
+      </div>
+    );
+  }
 
   const card = "border px-4 py-2.5 rounded-2xl backdrop-blur-md shadow-lg bg-white/60 dark:bg-black/30 border-cyan-300/40 dark:border-cyan-400/20";
   const label = "text-[8px] uppercase font-black tracking-widest text-slate-500 dark:text-white/45";
@@ -158,11 +185,19 @@ export default function EditableProfile() {
   return (
     <div className="w-full h-full overflow-y-auto custom-scrollbar p-1">
       <div className="max-w-5xl xl:max-w-7xl pb-10">
-        {/* Editar (sem título de módulo) */}
-        <div className="flex justify-end mb-1">
-          <button onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
-            <Pencil size={13} /> {editing ? "Cancelar" : "Editar"}
-          </button>
+        {/* Editar (sem título de módulo) — no perfil de outra pessoa (#427): "Voltar ao escritório" */}
+        <div className={`flex ${somenteLeitura ? "justify-start" : "justify-end"} mb-1`}>
+          {somenteLeitura ? (
+            onVoltar && (
+              <button type="button" onClick={onVoltar} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
+                <ArrowLeft size={13} /> Voltar ao escritório
+              </button>
+            )
+          ) : (
+            <button onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
+              <Pencil size={13} /> {editing ? "Cancelar" : "Editar"}
+            </button>
+          )}
         </div>
 
         {/* HERO: cápsula (esquerda) + árvore de habilidades (meio) + o personagem em pé (direita) */}
@@ -172,14 +207,16 @@ export default function EditableProfile() {
             <div className="relative w-[150px] h-[360px] rounded-[80px] border-[3px] border-cyan-400/40 dark:border-cyan-400/30 backdrop-blur-2xl flex items-center justify-center shrink-0 shadow-[0_0_50px_-10px_rgba(34,211,238,0.4)] bg-white/30 dark:bg-cyan-950/10">
               <RealisticDNA />
               <motion.div animate={{ y: [-8, 8, -8] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }} className="relative z-10">
-                <label className="relative block w-28 h-28 rounded-full border-4 border-cyan-400/60 p-1 shadow-2xl cursor-pointer group/av bg-white dark:bg-black overflow-hidden">
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => onAvatar(e.target.files?.[0])} disabled={uploading} />
+                <label className={`relative block w-28 h-28 rounded-full border-4 border-cyan-400/60 p-1 shadow-2xl group/av bg-white dark:bg-black overflow-hidden ${somenteLeitura ? "" : "cursor-pointer"}`} data-testid="foto-perfil">
+                  {!somenteLeitura && <input type="file" accept="image/*" className="hidden" onChange={(e) => onAvatar(e.target.files?.[0])} disabled={uploading} />}
                   {img ? <Image src={img} alt="avatar" fill className="object-cover rounded-full" />
                     : <span className="absolute inset-0 flex items-center justify-center text-3xl font-black text-cyan-600 dark:text-cyan-300">{(name || "Z").charAt(0).toUpperCase()}</span>}
-                  <div className="absolute inset-0 bg-black/55 rounded-full flex flex-col items-center justify-center opacity-0 group-hover/av:opacity-100 transition-opacity">
-                    {uploading ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Camera className="w-7 h-7 text-white" />}
-                    <span className="text-[7px] uppercase font-bold text-white tracking-widest mt-0.5">{uploading ? "salvando" : "trocar"}</span>
-                  </div>
+                  {!somenteLeitura && (
+                    <div className="absolute inset-0 bg-black/55 rounded-full flex flex-col items-center justify-center opacity-0 group-hover/av:opacity-100 transition-opacity">
+                      {uploading ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Camera className="w-7 h-7 text-white" />}
+                      <span className="text-[7px] uppercase font-bold text-white tracking-widest mt-0.5">{uploading ? "salvando" : "trocar"}</span>
+                    </div>
+                  )}
                 </label>
               </motion.div>
             </div>
@@ -249,7 +286,7 @@ export default function EditableProfile() {
             <div className="flex flex-col gap-2.5">
               {SKILLS.filter((s) => s.kind === "neg").map((s) => <SkillBar key={s.name} {...s} />)}
             </div>
-            <p className="text-[10px] text-slate-400 dark:text-white/30 mt-4">Valores chegam conforme você usa a Zaeon.</p>
+            {!somenteLeitura && <p className="text-[10px] text-slate-400 dark:text-white/30 mt-4">Valores chegam conforme você usa a Zaeon.</p>}
           </div>
 
           {/* DIREITA: o personagem (vitrine 3D) — no celular/tela média vai abaixo das Habilidades, menor */}
@@ -257,7 +294,7 @@ export default function EditableProfile() {
             <div className="relative w-[200px] h-[320px] xl:w-full xl:h-[420px] rounded-3xl border border-slate-200 dark:border-white/10 bg-gradient-to-b from-white/40 to-cyan-100/30 dark:from-white/[0.02] dark:to-cyan-500/[0.06] overflow-hidden">
               <VitrinePersonagem fundador={!!data?.fundador} corpo={data?.corpo ? CORPOS_DE_JOGADOR[data.corpo] : undefined} cor={data?.corArmadura ?? minhaArmadura()} className="w-full h-full" />
             </div>
-            {!data?.fundador && (
+            {!data?.fundador && !somenteLeitura && (
               <button type="button" onClick={() => setSkinAberto(true)} aria-haspopup="dialog"
                 className="px-6 py-2.5 rounded-full text-white font-black uppercase tracking-widest text-[11px] transition-transform hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
                 style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}>
@@ -266,10 +303,12 @@ export default function EditableProfile() {
             )}
           </div>
         </div>
-        <ModalSkin aberto={skinAberto} fechar={fecharSkin} />
+        {!somenteLeitura && <ModalSkin aberto={skinAberto} fechar={fecharSkin} />}
 
         {/* AURA (economia de reputação) — só com NEXT_PUBLIC_AURA_ECONOMY=1; o cartão some sozinho se a rota der 404 */}
-        {process.env.NEXT_PUBLIC_AURA_ECONOMY === "1" && <AuraCard />}
+        {somenteLeitura
+          ? (auraVisitante?.aura && <AuraCard visitante={auraVisitante} />)
+          : (process.env.NEXT_PUBLIC_AURA_ECONOMY === "1" && <AuraCard />)}
 
         <datalist id="ep-courses">{ALL_COURSES.map((c) => <option key={c} value={c} />)}</datalist>
 
@@ -285,7 +324,7 @@ export default function EditableProfile() {
         {/* Convidado por */}
         {data?.inviter && (
           <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-4 mt-6">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-white/45 mb-2 flex items-center gap-1.5"><UserCheck size={13} /> Você foi convidado por</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-white/45 mb-2 flex items-center gap-1.5"><UserCheck size={13} /> {somenteLeitura ? "Convidado(a) por" : "Você foi convidado por"}</p>
             <div className="flex items-center gap-3">
               <span className="w-11 h-11 rounded-full overflow-hidden bg-cyan-100 dark:bg-cyan-500/15 flex items-center justify-center shrink-0">
                 {data.inviter.image ? <Image src={data.inviter.image} alt="" width={44} height={44} className="w-full h-full object-cover" />
@@ -300,8 +339,8 @@ export default function EditableProfile() {
         )}
 
         {/* Mural de fotos */}
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-white/55 mb-2 mt-6">Seu mural</p>
-        <NetworkMural />
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-white/55 mb-2 mt-6">{somenteLeitura ? "Mural" : "Seu mural"}</p>
+        {somenteLeitura && visitante ? <NetworkMural visitedUserId={visitante} /> : <NetworkMural />}
       </div>
     </div>
   );
