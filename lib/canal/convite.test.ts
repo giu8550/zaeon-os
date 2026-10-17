@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   interpretarAlvo, podeResponder, statusDepois, saoContatos, conviteEmAberto, tituloConversa,
-  abaDoCanal, filtrarPorAba, humanosNoCanal, type Convite,
+  abaDoCanal, filtrarPorAba, humanosNoCanal, ehConviteDeConversa, podeConvidarParaConversa, entrarNaConversa, type Convite,
 } from "./convite";
 
 const A = "a".repeat(24), B = "b".repeat(24), C = "c".repeat(24);
@@ -95,5 +95,28 @@ describe("convite · humanos no canal", () => {
   it("dono sozinho = 1; dono + membros sem repetir", () => {
     expect(humanosNoCanal({ ownerId: A, membros: [] })).toBe(1);
     expect(humanosNoCanal({ ownerId: A, membros: [A, B, B] })).toBe(2);
+  });
+});
+
+describe("convite · #425 chamar alguém para a conversa", () => {
+  it("convite com canalId é pra uma conversa; sem, é de contato", () => {
+    expect(ehConviteDeConversa({ canalId: "c1" })).toBe(true);
+    expect(ehConviteDeConversa({ canalId: null })).toBe(false);
+    expect(ehConviteDeConversa({})).toBe(false);
+  });
+
+  it("só o dono da conversa convida pra ela", () => {
+    expect(podeConvidarParaConversa({ ownerId: "a" }, "a")).toBe(true);
+    expect(podeConvidarParaConversa({ ownerId: "a" }, "b")).toBe(false);
+    expect(podeConvidarParaConversa({ ownerId: "a" }, null)).toBe(false);
+  });
+
+  it("conversa de dois + alguém = grupo privado com os três (o outro lado vira membro, a trava sai)", () => {
+    expect(entrarNaConversa({ membros: [], dmCom: "b" }, "c")).toEqual({ membros: ["b", "c"], dmCom: null });
+  });
+
+  it("escritório com membros: só acrescenta, sem repetir", () => {
+    expect(entrarNaConversa({ membros: ["b", "c"], dmCom: null }, "c")).toEqual({ membros: ["b", "c"], dmCom: null });
+    expect(entrarNaConversa({ membros: ["b"] }, "d")).toEqual({ membros: ["b", "d"], dmCom: null });
   });
 });

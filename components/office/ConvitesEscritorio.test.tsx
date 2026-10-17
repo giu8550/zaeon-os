@@ -72,3 +72,15 @@ describe("ConvidarForm em linha (#423: abre na horizontal, ao lado do +)", () =>
   });
 });
 
+
+describe("ConvidarForm · #425 chamar pra esta conversa", () => {
+  it("dono numa conversa: o campo diz que é pra chamar alguém PRA CÁ", () => {
+    render(<ConvidarForm onEnviar={vi.fn()} variante="linha" paraConversa="Giulia e Martinez" />);
+    const campo = screen.getByRole("textbox", { name: "E-mail ou nome de quem chamar para Giulia e Martinez" });
+    expect(campo.getAttribute("placeholder")).toBe("e-mail de quem chamar pra cá");
+  });
+  it("sem conversa (quem não é dono): o convite de contato de sempre", () => {
+    render(<ConvidarForm onEnviar={vi.fn()} variante="linha" />);
+    expect(screen.getByRole("textbox", { name: "E-mail ou nome de quem convidar" }).getAttribute("placeholder")).toBe("e-mail (ou nome)");
+  });
+});

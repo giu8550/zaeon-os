@@ -214,7 +214,11 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const nome = canalChannel(c.id);
       if (nomes.includes(nome)) continue;
       const ch = p.subscribe(nome);
-      ch.bind(EV_MENSAGEM, (m: MensagemWire) => aoChegar(m, c.id));
+      ch.bind(EV_MENSAGEM, (m: MensagemWire) => {
+        aoChegar(m, c.id);
+        // #425: "fulano entrou" no canal aberto → recarrega o canal (a foto nova aparece na barra, sem F5)
+        if (m.autorTipo === "sistema" && c.id === ativoRef.current) void carregarDetalhe(c.id);
+      });
       // alguém marcou/apagou horário na agenda deste canal → a bandeja (se aberta) recarrega
       ch.bind(EV_AGENDA, () => { if (c.id === ativoRef.current) setAgendaVersao((v) => v + 1); });
       ch.bind(EV_DIGITANDO, (d: { agentKey: string; estado: string }) => {
@@ -364,17 +368,25 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     if (c) setAba(abaDoCanal(c));
   }, [ativoId]);
 
+  // #425: o + do DONO convida pra conversa aberta (a pessoa entra nela no aceite); pra quem não é dono, é o
+  // convite de contato de antes (aceitar cria a conversa de vocês dois).
+  const conversaDoConvite = det?.canal.souDono ? det.canal : null;
   const enviarConvite = useCallback(async (para: string): Promise<{ ok: boolean; msg: string }> => {
     try {
-      const r = await fetch("/api/canal/convites", { method: "POST", headers: H, body: JSON.stringify({ para }) });
+      const corpo = conversaDoConvite ? { para, canalId: conversaDoConvite.id } : { para };
+      const r = await fetch("/api/canal/convites", { method: "POST", headers: H, body: JSON.stringify(corpo) });
       const j = await r.json().catch(() => ({}));
-      if (r.status === 201) { void carregarConvites(); return { ok: true, msg: `Convite enviado para ${j?.convite?.pessoa?.nome || para}.` }; }
+      if (r.status === 201) {
+        void carregarConvites();
+        const nome = j?.convite?.pessoa?.nome || para;
+        return { ok: true, msg: conversaDoConvite ? `Convite enviado: ${nome} entra aqui quando aceitar.` : `Convite enviado para ${nome}.` };
+      }
       if (r.ok && j?.jaContatos) return { ok: true, msg: "Vocês já são contatos — a conversa está na aba Privado." };
       return { ok: false, msg: j?.error || `Não deu pra convidar (${r.status}).` };
     } catch (e) {
       return { ok: false, msg: String((e as Error)?.message ?? e) };
     }
-  }, [carregarConvites]);
+  }, [carregarConvites, conversaDoConvite]);
 
   const responderConvite = useCallback(async (id: string, acao: "aceitar" | "recusar") => {
     setRespondendo(id);
@@ -562,8 +574,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               O convite cai no sino da pessoa. */}
           <div className="flex items-center gap-1.5 min-w-0">
             <button type="button" onClick={() => setMenu(menu === "convidar" ? null : "convidar")} aria-label="Convidar pessoa" aria-expanded={menu === "convidar"}
-              title="Convidar pessoa" className={`${TOQUE} shrink-0 rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>
-            {menu === "convidar" && <ConvidarForm onEnviar={enviarConvite} variante="linha" onFechar={() => setMenu(null)} />}
+              title={conversaDoConvite ? "Chamar alguém pra esta conversa" : "Convidar pessoa"} className={`${TOQUE} shrink-0 rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>
+            {menu === "convidar" && <ConvidarForm onEnviar={enviarConvite} variante="linha" onFechar={() => setMenu(null)} paraConversa={conversaDoConvite?.titulo ?? null} />}
           </div>
 
           <div className="ml-auto flex items-center gap-1.5">

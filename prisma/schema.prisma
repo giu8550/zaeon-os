@@ -1149,6 +1149,7 @@ model CanalConvite {
   paraId       String    @db.ObjectId          // quem foi convidado
   status       String    @default("pendente")  // "pendente" | "aceito" | "recusado"
   dmCanalId    String?   @db.ObjectId          // a conversa privada criada no aceite
+  canalId      String?   @db.ObjectId          // #425: convite PARA esta conversa (sem = convite de contato)
   createdAt    DateTime  @default(now())
   respondidoEm DateTime?
 

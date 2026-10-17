@@ -11,7 +11,11 @@
  * BANCO (CanalSino, por pessoa) — valem em qualquer aparelho. Limpar só tira o que já foi respondido.
  */
 export type PessoaSino = { id: string; nome: string; avatar: string | null };
-export type ConviteSino = { id: string; status: string; pessoa: PessoaSino; criadoEm?: string | Date | null; dmCanalId?: string | null };
+export type ConviteSino = {
+  id: string; status: string; pessoa: PessoaSino; criadoEm?: string | Date | null; dmCanalId?: string | null;
+  /** #425: convite PARA uma conversa — o título dela (sem = convite de contato). */
+  canalTitulo?: string | null;
+};
 export type HistoricoSino = ConviteSino & { direcao: "enviado" | "recebido"; respondidoEm?: string | Date | null };
 
 export type ItemSino = {
@@ -37,9 +41,23 @@ const ms = (v: string | Date | null | undefined): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** A frase de cada aviso, do ponto de vista de quem está olhando o sino. */
-export function textoDoAviso(tipo: ItemSino["tipo"], status: ItemSino["status"], nome: string): string {
+/**
+ * A frase de cada aviso, do ponto de vista de quem está olhando o sino. Com `titulo` (#425), o convite é pra
+ * entrar numa conversa que já existe ("Martinez te convidou para “Projeto X”").
+ */
+export function textoDoAviso(tipo: ItemSino["tipo"], status: ItemSino["status"], nome: string, titulo?: string | null): string {
   const n = nome || "Alguém";
+  if (titulo) {
+    const t = `“${titulo}”`;
+    if (tipo === "recebido") {
+      if (status === "pendente") return `${n} te convidou para ${t}`;
+      if (status === "aceito") return `Você entrou em ${t}`;
+      return `Você recusou o convite para ${t}`;
+    }
+    if (status === "pendente") return `Convite para ${n} entrar em ${t}: pendente`;
+    if (status === "aceito") return `${n} entrou em ${t}`;
+    return `${n} recusou o convite para ${t}`;
+  }
   if (tipo === "recebido") {
     if (status === "pendente") return `${n} quer conversar com você`;
     if (status === "aceito") return `Você aceitou o convite de ${n}`;
@@ -55,7 +73,7 @@ export function montarSino(d: { recebidos: ConviteSino[]; enviados: ConviteSino[
   const item = (c: ConviteSino | HistoricoSino, tipo: ItemSino["tipo"]): ItemSino => {
     const status = statusDe(c.status);
     const em = (status !== "pendente" && "respondidoEm" in c ? ms(c.respondidoEm) : null) ?? ms(c.criadoEm);
-    return { id: c.id, tipo, status, pessoa: c.pessoa, texto: textoDoAviso(tipo, status, c.pessoa?.nome), acao: tipo === "recebido" && status === "pendente", em, canalId: status === "aceito" ? c.dmCanalId ?? null : null };
+    return { id: c.id, tipo, status, pessoa: c.pessoa, texto: textoDoAviso(tipo, status, c.pessoa?.nome, c.canalTitulo), acao: tipo === "recebido" && status === "pendente", em, canalId: status === "aceito" ? c.dmCanalId ?? null : null };
   };
   const vistos = new Set<string>();
   const out: ItemSino[] = [];

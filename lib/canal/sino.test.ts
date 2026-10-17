@@ -164,3 +164,21 @@ describe("sino · #425 registro no banco", () => {
     expect(acaoDoSino(undefined)).toBeNull();
   });
 });
+
+describe("sino · #425 convite para uma conversa", () => {
+  it.each([
+    ["recebido", "pendente", "Martinez te convidou para “Projeto X”"],
+    ["recebido", "aceito", "Você entrou em “Projeto X”"],
+    ["recebido", "recusado", "Você recusou o convite para “Projeto X”"],
+    ["enviado", "pendente", "Convite para Martinez entrar em “Projeto X”: pendente"],
+    ["enviado", "aceito", "Martinez entrou em “Projeto X”"],
+    ["enviado", "recusado", "Martinez recusou o convite para “Projeto X”"],
+  ] as const)("%s/%s → %s", (tipo, status, frase) => {
+    expect(textoDoAviso(tipo, status, "Martinez", "Projeto X")).toBe(frase);
+  });
+
+  it("a lista usa o título quando o convite é pra uma conversa", () => {
+    const l = montarSino({ recebidos: [{ id: "r", status: "pendente", pessoa: p("m", "Martinez"), canalTitulo: "Projeto X" }], enviados: [], historico: [] });
+    expect(l[0]!.texto).toBe("Martinez te convidou para “Projeto X”");
+  });
+});

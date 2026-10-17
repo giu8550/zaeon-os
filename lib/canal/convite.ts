@@ -54,6 +54,27 @@ export function conviteEmAberto<T extends ConviteLike>(convites: T[], a: string,
   return convites.find((c) => c.status !== "recusado" && ((c.deId === a && c.paraId === b) || (c.deId === b && c.paraId === a))) ?? null;
 }
 
+// ───────────────────────── convite para uma conversa (#425) ─────────────────────────
+
+/**
+ * Convite PARA UMA CONVERSA (tem `canalId`): o dono chama alguém pra conversa aberta na tela e, no aceite, a
+ * pessoa ENTRA nela — não cria outra. Sem `canalId` é o convite de CONTATO de antes (aceitar cria a conversa
+ * de dois). Só os de contato contam como "contatos".
+ */
+export const ehConviteDeConversa = (c: { canalId?: string | null }): boolean => !!c.canalId;
+
+/** Só o dono da conversa convida pra ela. */
+export const podeConvidarParaConversa = (canal: { ownerId: string }, userId: string | null | undefined): boolean =>
+  !!userId && canal.ownerId === userId;
+
+/**
+ * Como o canal fica quando alguém entra pelo convite: vira membro. Se era a conversa de DOIS (dmCom), ela vira
+ * um GRUPO PRIVADO — o outro lado passa a ser membro também e a trava "só os dois" sai (continua "privado").
+ */
+export function entrarNaConversa(c: { membros?: string[] | null; dmCom?: string | null }, novoId: string): { membros: string[]; dmCom: null } {
+  return { membros: [...new Set([...(c.membros ?? []), ...(c.dmCom ? [c.dmCom] : []), novoId])], dmCom: null };
+}
+
 /** Título da conversa privada (cada lado vê o nome do outro na tela; este é o guardado). */
 export function tituloConversa(nomeA: string | null | undefined, nomeB: string | null | undefined): string {
   return `${(nomeA || "Alguém").trim()} e ${(nomeB || "Alguém").trim()}`.slice(0, 80);

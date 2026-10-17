@@ -53,7 +53,12 @@ vi.mock("@/lib/canal/server", () => ({
       },
       update: async ({ where, data }: any) => { const c = state.convites.find((x) => x.id === where.id)!; Object.assign(c, data); return c; },
     },
-    canal: { create: async ({ data }: any) => { const r = { id: novoId(), ...data }; state.canais.push(r); return r; } },
+    canal: {
+      create: async ({ data }: any) => { const r = { id: novoId(), ...data }; state.canais.push(r); return r; },
+      findUnique: async ({ where }: any) => state.canais.find((c) => c.id === where.id) ?? null,
+      findMany: async ({ where }: any) => state.canais.filter((c) => where.id.in.includes(c.id)).map((c) => ({ id: c.id, titulo: c.titulo })),
+      update: async ({ where, data }: any) => { const c = state.canais.find((x) => x.id === where.id)!; Object.assign(c, data); return c; },
+    },
     canalSino: { findUnique: async ({ where }: any) => state.sinos.find((x) => x.userId === where.userId) ?? null },
     canalMensagem: { create: async ({ data }: any) => { const r = { id: novoId(), createdAt: new Date(), ...data }; state.mensagens.push(r); return r; } },
   },
@@ -258,5 +263,115 @@ describe("convites · responder", () => {
     expect((await responder(c.id, "apagar")).status).toBe(400);
     expect((await responder("9".repeat(24), "aceitar")).status).toBe(404);
     expect((await responder("nope", "aceitar")).status).toBe(404);
+  });
+});
+
+describe("convites · #425 o + chama alguém PARA A CONVERSA", () => {
+  const CONVERSA = "e".repeat(24);
+  // Giulia (A) é a dona da conversa de dois com o Martinez (B), o caso que deu errado em produção
+  const conversaDeDois = () => { const c = { id: CONVERSA, ownerId: A, dmCom: B, acesso: "privado", membros: [] as string[], agentes: [], titulo: "Giulia e Martinez" }; state.canais.push(c); return c; };
+  const chamar = (para: string, canalId: unknown = CONVERSA) => POST(post({ para, canalId }));
+
+  it("dona chama a Ana: convite pendente ligado à conversa, e o aviso diz qual é", async () => {
+    conversaDeDois();
+    const r = await chamar("ana1@z.com");
+    expect(r.status).toBe(201);
+    expect((await r.json()).convite).toMatchObject({ canalId: CONVERSA, canalTitulo: "Giulia e Martinez", pessoa: { id: C } });
+    expect(state.convites).toHaveLength(1);
+    expect(state.convites[0]).toMatchObject({ deId: A, paraId: C, status: "pendente", canalId: CONVERSA });
+    expect(state.avisos.at(-1)![0]).toBe(`user_${C}`);
+    expect(state.avisos.at(-1)![2].text).toContain("Giulia e Martinez");
+  });
+
+  it("aceitar ENTRA na conversa: não cria outra, e a conversa de dois vira grupo privado com os três", async () => {
+    const conversa = conversaDeDois();
+    await chamar("ana1@z.com");
+    state.user = user(C);
+    const r = await responder(state.convites[0]!.id, "aceitar");
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(state.canais).toHaveLength(1); // nenhuma conversa nova
+    expect(j.canal.id).toBe(CONVERSA);
+    expect(conversa.dmCom).toBeNull();
+    expect(conversa.acesso).toBe("privado");
+    expect(conversa.membros.sort()).toEqual([B, C].sort());
+    expect(conversa.ownerId).toBe(A);
+    // a linha "Ana aceitou o convite e entrou na conversa" na própria conversa
+    expect(state.mensagens.map((m) => [m.canalId, m.autorTipo])).toEqual([[CONVERSA, "sistema"]]);
+    // e o sino de quem convidou abre a MESMA conversa
+    expect(state.convites[0]!.dmCanalId).toBe(CONVERSA);
+  });
+
+  it("depois do aceite: as três pessoas leem; quem é de fora continua barrado", async () => {
+    const { podeLer } = await import("@/lib/canal/gate");
+    const conversa = conversaDeDois();
+    await chamar("ana1@z.com");
+    state.user = user(C);
+    await responder(state.convites[0]!.id, "aceitar");
+    for (const quem of [A, B, C]) expect(podeLer(conversa, quem)).toBe(true);
+    expect(podeLer(conversa, X)).toBe(false);
+  });
+
+  it("recusar: ninguém entra e a conversa continua de dois", async () => {
+    const conversa = conversaDeDois();
+    await chamar("ana1@z.com");
+    state.user = user(C);
+    expect((await responder(state.convites[0]!.id, "recusar")).status).toBe(200);
+    expect(conversa.dmCom).toBe(B);
+    expect(conversa.membros).toEqual([]);
+  });
+
+  it("só a dona chama: o Martinez (que não é dono) recebe 403 e nada é criado", async () => {
+    conversaDeDois();
+    state.user = user(B);
+    const r = await chamar("ana1@z.com");
+    expect(r.status).toBe(403);
+    expect(state.convites).toHaveLength(0);
+  });
+
+  it("quem já está na conversa → 409; convite pendente repetido → 409", async () => {
+    conversaDeDois();
+    expect((await chamar("martinez@z.com")).status).toBe(409);
+    expect((await chamar("ana1@z.com")).status).toBe(201);
+    expect((await chamar("ana1@z.com")).status).toBe(409);
+    expect(state.convites).toHaveLength(1);
+  });
+
+  it("conversa inexistente ou id inválido → 404", async () => {
+    expect((await chamar("ana1@z.com")).status).toBe(404);
+    expect((await chamar("ana1@z.com", "nope")).status).toBe(404);
+  });
+
+  it("a conversa sumiu antes do aceite → 410, e o convite continua pendente", async () => {
+    conversaDeDois();
+    await chamar("ana1@z.com");
+    state.canais = [];
+    state.user = user(C);
+    expect((await responder(state.convites[0]!.id, "aceitar")).status).toBe(410);
+    expect(state.convites[0]!.status).toBe("pendente");
+  });
+
+  it("já ser contato não impede chamar pra conversa (antes o + só dizia 'vocês já são contatos')", async () => {
+    conversaDeDois();
+    state.convites.push({ id: novoId(), deId: A, paraId: C, status: "aceito", dmCanalId: "9".repeat(24), createdAt: new Date() });
+    expect((await chamar("ana1@z.com")).status).toBe(201);
+  });
+
+  it("entrar numa conversa pelo convite dela não vira 'contato'; o sino mostra o título", async () => {
+    conversaDeDois();
+    await chamar("ana1@z.com");
+    state.user = user(C);
+    await responder(state.convites[0]!.id, "aceitar");
+    const j = await (await GET()).json();
+    expect(j.contatos).toEqual([]);
+    expect(j.historico[0]).toMatchObject({ canalId: CONVERSA, canalTitulo: "Giulia e Martinez", dmCanalId: CONVERSA, status: "aceito" });
+  });
+
+  it("sem canalId continua o convite de contato de sempre (cria a conversa de dois no aceite)", async () => {
+    expect((await POST(post({ para: "ana1@z.com" }))).status).toBe(201);
+    state.user = user(C);
+    await responder(state.convites[0]!.id, "aceitar");
+    expect(state.canais).toHaveLength(1);
+    expect(state.canais[0]).toMatchObject({ ownerId: A, dmCom: C });
   });
 });
