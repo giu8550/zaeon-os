@@ -22,7 +22,8 @@ import { ConvidarForm, type ConviteVista } from "./ConvitesEscritorio";
 import SinoConvites from "./SinoConvites";
 import { montarSino, contadorDoSino, type HistoricoSino, type EstadoSino, type AcaoSino } from "@/lib/canal/sino";
 import PessoasTopo from "./PessoasTopo";
-import MenuPessoa, { type PerfilCarregado } from "./MenuPessoa";
+import MenuPessoa, { type ConversaComPessoa } from "./MenuPessoa";
+import { abrirPerfil } from "@/lib/perfil/eventos";
 import { podeRemover, textoConfirmarRemover } from "@/lib/canal/perfil";
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
@@ -495,11 +496,17 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const topo = montarTopoPessoas({ pessoas: det.pessoas, online, donoId: canal.ownerId, meuId, membros: canal.dmCom ? [...canal.membros, canal.dmCom] : canal.membros });
   const daAba = filtrarPorAba(canais, aba);
   // contatos (convite aceito) que ainda não estão neste canal → dá pra pôr com um toque no ⚙︎
-  // #425: menu da foto (Ver perfil / Remover do escritório)
+  // #425/#427: menu da foto — Ver perfil (abre a página de perfil dela) · Conversar/Convidar · Remover
   const pessoaAberta = menu?.startsWith("pessoa:") ? menu.slice("pessoa:".length) : null;
-  const carregarPerfil = async (uid: string): Promise<PerfilCarregado | null> => {
-    const r = await fetch(`/api/canal/${canal.id}/pessoa/${uid}`, { cache: "no-store" });
-    return r.ok ? ((await r.json()) as PerfilCarregado) : null;
+  const verPerfil = (uid: string) => { setMenu(null); abrirPerfil(uid); };
+  const convidarPraConversar = async (uid: string): Promise<{ ok: boolean; msg: string }> => {
+    try {
+      const r = await fetch("/api/canal/convites", { method: "POST", headers: H, body: JSON.stringify({ paraId: uid }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 201) { void carregarConvites(); return { ok: true, msg: "Convite enviado. Ela aceita pelo sino." }; }
+      if (r.ok && j?.dmCanalId) { void abrirConversa(j.dmCanalId); return { ok: true, msg: "Vocês já são contatos." }; }
+      return { ok: false, msg: j?.error || `Não deu pra convidar (${r.status}).` };
+    } catch (e) { return { ok: false, msg: String((e as Error)?.message ?? e) }; }
   };
   const removerPessoa = async (p: { id: string; nome: string }) => {
     if (!window.confirm(textoConfirmarRemover(p.nome))) return;
@@ -592,11 +599,14 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               aberta={pessoaAberta} onAlternar={(id) => setMenu(pessoaAberta === id ? null : `pessoa:${id}`)}
               menuDe={(p) => {
                 const dm = p.id !== meuId ? conversaCom(p.id) : null;
+                // você mesma: sem conversa; já são contatos: Conversar (se não estão nela agora); senão: Convidar
+                const conversa: ConversaComPessoa = p.id === meuId ? null
+                  : dm ? (dm !== canal.id ? { tipo: "abrir", onClick: () => { setMenu(null); void abrirConversa(dm); } } : null)
+                  : { tipo: "convidar", onClick: () => convidarPraConversar(p.id) };
                 return (
-                  <MenuPessoa key={p.id} pessoa={p} carregarPerfil={carregarPerfil}
+                  <MenuPessoa key={p.id} pessoa={p} onVerPerfil={() => verPerfil(p.id)} conversa={conversa}
                     podeRemover={podeRemover({ meuId, donoId: canal.ownerId, alvoId: p.id, conversaDeDois: !!canal.dmCom, membros: canal.membros })}
-                    onRemover={() => void removerPessoa(p)}
-                    onConversar={dm && dm !== canal.id ? () => void abrirConversa(dm) : undefined} />
+                    onRemover={() => void removerPessoa(p)} />
                 );
               }} />
             {online.length > 0 && <span className={`text-[11px] ${TXT_MUDO}`} title="online agora">{online.length} on</span>}
