@@ -22,6 +22,8 @@ import { ConvidarForm, type ConviteVista } from "./ConvitesEscritorio";
 import SinoConvites from "./SinoConvites";
 import { montarSino, contadorDoSino, type HistoricoSino, type EstadoSino, type AcaoSino } from "@/lib/canal/sino";
 import PessoasTopo from "./PessoasTopo";
+import MenuPessoa, { type PerfilCarregado } from "./MenuPessoa";
+import { podeRemover, textoConfirmarRemover } from "@/lib/canal/perfil";
 import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
@@ -56,7 +58,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [estadoAgente, setEstadoAgente] = useState<Record<string, EstadoAgente>>({});
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [menu, setMenu] = useState<"canais" | "config" | "convidar" | "sino" | null>(null);
+  const [menu, setMenu] = useState<"canais" | "config" | "convidar" | "sino" | `pessoa:${string}` | null>(null); // #425: "pessoa:<id>" = menu da foto
   // #396 (D): abas do seletor (dividem o espaço, não misturam) + convites da aba Privado
   const [aba, setAba] = useState<Aba>("turma");
   const [convites, setConvites] = useState<Convites>(SEM_CONVITES);
@@ -474,6 +476,18 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const topo = montarTopoPessoas({ pessoas: det.pessoas, online, donoId: canal.ownerId, meuId, membros: canal.dmCom ? [...canal.membros, canal.dmCom] : canal.membros });
   const daAba = filtrarPorAba(canais, aba);
   // contatos (convite aceito) que ainda não estão neste canal → dá pra pôr com um toque no ⚙︎
+  // #425: menu da foto (Ver perfil / Remover do escritório)
+  const pessoaAberta = menu?.startsWith("pessoa:") ? menu.slice("pessoa:".length) : null;
+  const carregarPerfil = async (uid: string): Promise<PerfilCarregado | null> => {
+    const r = await fetch(`/api/canal/${canal.id}/pessoa/${uid}`, { cache: "no-store" });
+    return r.ok ? ((await r.json()) as PerfilCarregado) : null;
+  };
+  const removerPessoa = async (p: { id: string; nome: string }) => {
+    if (!window.confirm(textoConfirmarRemover(p.nome))) return;
+    setMenu(null);
+    await patch({ removerMembro: p.id });
+  };
+  const conversaCom = (uid: string) => convites.contatos.find((c) => c.pessoa.id === uid)?.dmCanalId ?? null;
   const contatosFora = convites.contatos.filter((c) => c.pessoa.id !== canal.ownerId && !canal.membros.includes(c.pessoa.id));
   // Sem @, responde o último agente que falou. A dica só aparece em canal de uma pessoa: com mais
   // gente, o servidor só atende quem estava conversando com o agente (lib/canal/alvo.ts).
@@ -556,7 +570,17 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
           <div className="ml-auto flex items-center gap-1.5">
             {/* pessoas do canal (dono, membros e você), com espaço entre as fotos (#423). Os agentes ficam embaixo. */}
-            <PessoasTopo visiveis={topo.visiveis} extras={topo.extras} onlineIds={topo.onlineIds} total={topo.total} />
+            <PessoasTopo visiveis={topo.visiveis} extras={topo.extras} onlineIds={topo.onlineIds} total={topo.total}
+              aberta={pessoaAberta} onAlternar={(id) => setMenu(pessoaAberta === id ? null : `pessoa:${id}`)}
+              menuDe={(p) => {
+                const dm = p.id !== meuId ? conversaCom(p.id) : null;
+                return (
+                  <MenuPessoa key={p.id} pessoa={p} carregarPerfil={carregarPerfil}
+                    podeRemover={podeRemover({ meuId, donoId: canal.ownerId, alvoId: p.id, conversaDeDois: !!canal.dmCom, membros: canal.membros })}
+                    onRemover={() => void removerPessoa(p)}
+                    onConversar={dm && dm !== canal.id ? () => void abrirConversa(dm) : undefined} />
+                );
+              }} />
             {online.length > 0 && <span className={`text-[11px] ${TXT_MUDO}`} title="online agora">{online.length} on</span>}
             {canal.cartolinaId && (
               <button type="button" onClick={abrirCartolina} className={`${TOQUE} px-3 rounded-2xl text-[12px] font-bold ${VIDRO_CHIP} ${TXT}`} title="Abrir a cartolina da sala">▦ cartolina</button>
