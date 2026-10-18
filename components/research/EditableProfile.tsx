@@ -97,6 +97,8 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
   const [uploading, setUploading] = useState(false);
   const [img, setImg] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // #438: erro da FOTO aparece do lado dela (antes ia lá pro fim da página, ninguém via)
+  const [erroFoto, setErroFoto] = useState<string | null>(null);
   const [skinAberto, setSkinAberto] = useState(false);
   const fecharSkin = useCallback(() => setSkinAberto(false), []);
 
@@ -131,8 +133,9 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
   };
 
   const onAvatar = (f?: File) => {
-    if (!f || !f.type.startsWith("image/")) return;
-    setUploading(true);
+    if (!f) return;
+    if (!f.type.startsWith("image/")) { setErroFoto("Escolha uma imagem (PNG, JPG, WEBP ou GIF)."); return; }
+    setUploading(true); setErroFoto(null);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const image = new window.Image();
@@ -144,8 +147,12 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
         canvas.width = width; canvas.height = height;
         canvas.getContext("2d")!.drawImage(image, 0, 0, width, height);
         const b64 = canvas.toDataURL("image/jpeg", 0.7);
-        try { const r = await fetch("/api/user/avatar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64 }) }); if (r.ok) setImg(b64); else setMsg("Não consegui salvar a foto."); }
-        catch { setMsg("Erro ao enviar a foto."); } finally { setUploading(false); }
+        try {
+          const r = await fetch("/api/user/avatar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64 }) });
+          if (r.ok) { setImg(b64); setErroFoto(null); }
+          else { const j = await r.json().catch(() => ({})); setErroFoto(j?.error || "Não consegui salvar a foto."); }
+        }
+        catch { setErroFoto("Erro ao enviar a foto. Confira a internet e tente de novo."); } finally { setUploading(false); }
       };
       image.src = String(ev.target?.result);
     };
@@ -222,6 +229,9 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
             </div>
 
             <div className="flex flex-col gap-4 pt-10 -ml-1 flex-1 min-w-0">
+              {erroFoto && !somenteLeitura && (
+                <p role="alert" data-testid="erro-foto" className="text-[11.5px] font-semibold text-rose-600 dark:text-rose-300 -mb-2">{erroFoto}</p>
+              )}
               <div className="flex items-center">
                 <div className="hidden sm:block w-6 h-[2px] bg-cyan-400/50 shrink-0" />
                 <div className={`${card} flex-1 flex items-center gap-3`}>
