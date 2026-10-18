@@ -10,17 +10,33 @@ import type { EstadoIALab } from "./loungeHub";
 /** rotas POST que NÃO são trabalho de IA (login, presença, o cyberespaço, uploads, telemetria) */
 export const IGNORAR = ["/api/auth", "/api/cyber", "/api/lounge3d", "/api/presence", "/api/presenca", "/api/pusher", "/api/realtime", "/api/analytics", "/api/telemetry", "/api/upload", "/api/uploads", "/api/log", "/api/ping", "/api/heartbeat", "/api/tour", "/api/ai/transcript"] as const;   // (transcript = salvar a conversa depois da resposta)
 
+/**
+ * #440: os pedidos do ESCRITÓRIO que não são IA (o aviso de "digitando" a cada 3 s, o sino, convites, agenda,
+ * criar escritório…). O "digitando" acendia a barra "IA trabalhando" do metaverso por até 15 min. A mensagem
+ * (`/api/canal/<id>/mensagem`) continua contando: ela pode esperar o turno do agente.
+ */
+export const IGNORAR_PADROES: readonly RegExp[] = [
+  /^\/api\/canal\/?$/,                                                    // criar escritório
+  /^\/api\/canal\/(?:sino|convites|pusher-auth)(?:\/.*)?$/,             // sino, convites, auth do tempo real
+  /^\/api\/canal\/[^/]+\/(?:digitando|agenda|entrar)(?:\/.*)?$/,        // digitando, agenda, entrar
+];
+
 /** é uma chamada de IA? (POST, mesma origem, em /api/, fora das ignoradas) */
 export function ehChamadaDeIA(url: string, metodo: string | undefined, origem: string): boolean {
   if ((metodo ?? "GET").toUpperCase() !== "POST") return false;
   let u: URL; try { u = new URL(url, origem); } catch { return false; }
   if (u.origin !== origem || !u.pathname.startsWith("/api/")) return false;
+  if (IGNORAR_PADROES.some((r) => r.test(u.pathname))) return false;
   return !IGNORAR.some((p) => u.pathname === p || u.pathname.startsWith(p + "/"));
 }
 
-/** a resposta vem em STREAM? (sem tamanho fechado: a IA ainda está escrevendo quando os cabeçalhos chegam) */
+/**
+ * a resposta vem em STREAM? (sem tamanho fechado: a IA ainda está escrevendo quando os cabeçalhos chegam)
+ * #440: resposta JSON nunca é a IA escrevendo aos poucos — as de IA em stream são text/plain ou x-ndjson. Com a
+ * compressão do servidor, JSON chega SEM tamanho fechado; se ninguém lia o corpo, o monitor esperava 15 min.
+ */
 export const respostaEmStream = (r: { headers: { get(n: string): string | null }; body: unknown }) =>
-  !!r.body && !r.headers.get("content-length");
+  !!r.body && !r.headers.get("content-length") && !/^application\/json\b/i.test(r.headers.get("content-type") ?? "");
 
 /** o contador (puro): começa/termina chamadas e diz o estado */
 export function criarContador(agora: () => number) {
