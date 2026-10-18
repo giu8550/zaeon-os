@@ -37,3 +37,36 @@ export function elevacaoDoOlhar(c: { pos: V3; olhar: V3 }): number {
   const dx = c.olhar.x - c.pos.x, dy = c.olhar.y - c.pos.y, dz = c.olhar.z - c.pos.z;
   return Math.atan2(dy, Math.hypot(dx, dz));
 }
+
+/**
+ * MODOS DE CÂMERA (pack de realismo, out/2026): a "padrão" (a órbita de sempre, ~9 m) e a PERTO — por cima do OMBRO,
+ * como nos jogos em 3ª pessoa de hoje: a câmera a ~2,4 m, o olho na altura dos ombros e deslocado pro lado direito
+ * (o personagem fica à esquerda do centro, o caminho à frente livre). A tecla V alterna e VOLTA pro modo de antes, com
+ * a distância e o ângulo que a pessoa tinha nele.
+ */
+export type ModoCamera = "padrao" | "perto";
+export const CAMERA_PERTO = {
+  /** distância inicial e a faixa da roda do mouse nesse modo (m) */
+  dist: 2.4, distMin: 1.5, distMax: 5,
+  /** o olho: altura acima dos PÉS (m) e o deslocamento pro lado direito da tela (m) */
+  altura: 1.5, ombro: 0.5,
+  /** o ângulo inicial (rad): quase na altura dos olhos, um tiquinho de cima */
+  pitch: 0.1,
+} as const;
+/** a faixa da roda do mouse em cada modo */
+export const faixaDaDistancia = (m: ModoCamera): [number, number] => (m === "perto" ? [CAMERA_PERTO.distMin, CAMERA_PERTO.distMax] : [6, 70]);
+/** o ponto que a câmera PERTO segue: a altura dos ombros, deslocada pro lado direito de quem olha (`az` = de onde a
+ *  câmera olha, o mesmo da órbita) */
+export function olhoDoOmbro(pes: V3, az: number): V3 {
+  const P = CAMERA_PERTO;
+  return { x: pes.x + Math.cos(az) * P.ombro, y: pes.y + P.altura, z: pes.z - Math.sin(az) * P.ombro };
+}
+/** a tecla V: troca o modo guardando o estado do que sai e devolvendo o do que entra (a 1ª vez no perto: o padrão dele) */
+export function alternarModoCamera(
+  atual: ModoCamera, agora: { dist: number; pitch: number }, guardado: Partial<Record<ModoCamera, { dist: number; pitch: number }>>,
+): { modo: ModoCamera; dist: number; pitch: number; guardado: Partial<Record<ModoCamera, { dist: number; pitch: number }>> } {
+  const modo: ModoCamera = atual === "padrao" ? "perto" : "padrao";
+  const g = { ...guardado, [atual]: { ...agora } };
+  const volta = g[modo] ?? (modo === "perto" ? { dist: CAMERA_PERTO.dist, pitch: CAMERA_PERTO.pitch } : { dist: 9, pitch: 0.16 });
+  return { modo, dist: volta.dist, pitch: volta.pitch, guardado: g };
+}

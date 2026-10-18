@@ -7,6 +7,7 @@
  * cada osso, medida como "quanto girou desde a pose de repouso (T)", vai pro osso humanoide normalizado do VRM — que
  * por definição tem repouso em T e eixos alinhados ao mundo. O quadril leva também o deslocamento (sentar, pousar).
  */
+import { camadaFeminina, faseDaPassada, velDaAbertura } from "@/lib/cyber/marchaFeminina";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
@@ -137,6 +138,10 @@ export type EspelhoVrm = {
   pose(p: PoseVrm | null): void;
   /** perto (true, o padrão) roda tudo; longe pula a física do cabelo, o olhar e os materiais (components/cyber/PersonagemVivo) */
   detalhe(on: boolean): void;
+  /** o JEITO de andar: "feminina" = a camada da marcha feminina (lib/cyber/marchaFeminina) por cima do andar/correr */
+  estilo(e: "feminina" | null): void;
+  /** a marcha vale agora? (a pé no chão — sentado, voando, de moto, não) */
+  marcha(on: boolean): void;
   dispose(): void;
 };
 /** a pose de REPOUSO (T) do esqueleto mixamo, no referencial do `corpo` — medida ao criar o avatar, antes de qualquer
@@ -199,6 +204,10 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
   let piscaT = 2 + Math.random() * 3, piscando = 0;
   let pose: PoseVrm | null = null, pesoPose = 0, detalhe = true, voltouDetalhe = false;
   const qPose = new THREE.Quaternion(), ePose = new THREE.Euler();
+  let estilo: "feminina" | null = null, marchaOn = false, velMarcha = 0;
+  const baixo = new THREE.Vector3(), qCoxa = new THREE.Quaternion();
+  /** quanto a coxa vai pra FRENTE (o VRM olha pro +Z; Δ no referencial dele) */
+  const frenteDaCoxa = (b: string) => { const q = delta.get(b); if (!q) return 0; qCoxa.copy(q); return baixo.set(0, -1, 0).applyQuaternion(qCoxa).z; };
 
   return {
     atualizar(dt, t) {
@@ -215,6 +224,15 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
       if (quadrilMx && quadrilVrm) {
         relativa(quadrilMx, tq, d); d.sub(quadrilRepouso).applyQuaternion(Rinv).divideScalar(escala);
         quadrilVrm.position.copy(hipsRepouso).add(d);
+      }
+      // a MARCHA FEMININA (pack de realismo): a fase sai de qual coxa está à frente; a camada soma por cima da cópia
+      if (estilo === "feminina") {
+        const { fase, abertura } = faseDaPassada(frenteDaCoxa("leftUpperLeg"), frenteDaCoxa("rightUpperLeg"));
+        velMarcha += ((marchaOn ? velDaAbertura(abertura) : 0) - velMarcha) * Math.min(1, dt * 6);
+        if (velMarcha > 0.01) for (const [b, e] of Object.entries(camadaFeminina(fase, velMarcha))) {
+          const n = no(b); if (!n) continue;
+          ePose.set(e[0], e[1], e[2]); qPose.setFromEuler(ePose); n.quaternion.multiply(qPose);
+        }
       }
       // a POSE própria (personagens): sobrepõe a cópia osso a osso, com a respiração no peito
       pesoPose += ((pose ? 1 : 0) - pesoPose) * Math.min(1, dt * 4);
@@ -244,6 +262,8 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
       }
     },
     pose(p) { pose = p; },
+    estilo(e) { estilo = e; },
+    marcha(on) { marchaOn = on; },
     detalhe(on) { if (on && !detalhe) voltouDetalhe = true; detalhe = on; },
     dispose() {
       vrm.scene.removeFromParent();
