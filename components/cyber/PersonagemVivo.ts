@@ -81,6 +81,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
         await o.preparar?.(v.scene);
         if (!valendo()) { VRMUtils.deepDispose(v.scene); return; }
         av.usarVrm(v, { economico: true }); av.detalheVrm(comDetalhe); vrm = v;
+        if (o.corpo.pose === "feminina") av.estiloVrm("feminina");   // a marcha feminina andando (a pose parada é daqui)
         tracos = []; v.scene.traverse((n) => { const ms = (n as THREE.Mesh).material; for (const m of Array.isArray(ms) ? ms : ms ? [ms] : []) if ((m as { isOutline?: boolean }).isOutline) tracos.push(m); });
         comTraco = true;
         if (o.corpo.acessorios?.length) acessorios = vestirAcessorios(v, o.corpo.acessorios);

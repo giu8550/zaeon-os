@@ -14,7 +14,7 @@ import { empurrarParaFora, type Colisor } from "@/lib/cyber/colisao";
 import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
-import { limitarPitch, poseDaCamera } from "@/lib/cyber/camera";
+import { alternarModoCamera, faixaDaDistancia, limitarPitch, olhoDoOmbro, poseDaCamera, type ModoCamera } from "@/lib/cyber/camera";
 import { PISTA, rotDaSala, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
 import { DECK, TEMPLO, noTemplo } from "@/lib/cyber/templo";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
@@ -633,6 +633,18 @@ export class CyberEngine {
   private sitT = 0; private perto = false; private falandoCom: Ator | null = null;
   private hoverBase: string | null = null; private sobContainer = false;
   private camAz = 0; private camPitch = 0.16; private camDist = 9; private camT = new THREE.Vector3(0, 1.2, 0);
+  /** o MODO da câmera (pack de realismo): a órbita padrão ou a PERTO, por cima do ombro — a tecla V alterna e volta pro
+   *  modo de antes com o ajuste que a pessoa tinha nele (lib/cyber/camera) */
+  private camModo: ModoCamera = "padrao"; private camGuardado: Partial<Record<ModoCamera, { dist: number; pitch: number }>> = {};
+  alternarCamera() {
+    const r = alternarModoCamera(this.camModo, { dist: this.camDist, pitch: this.camPitch }, this.camGuardado);
+    this.camModo = r.modo; this.camDist = r.dist; this.camPitch = r.pitch; this.camGuardado = r.guardado;
+    this.o.onAviso?.(r.modo === "perto" ? "Câmera perto (por cima do ombro) · V volta" : "Câmera padrão · V aproxima");
+    return r.modo;
+  }
+  get modoCamera() { return this.camModo; }
+  /** a câmera perto vale agora? (a pé ou de mochila — de moto, pilotando a nave ou a bordo dela, a padrão) */
+  private get camPerto() { return this.camModo === "perto" && this.moto === null && !this.pilotando; }
   private ptrs = new Map<number, { x: number; y: number }>(); private drag: { x: number; y: number; az: number; pitch: number } | null = null; private moved = false; private pinch0 = 0; private dist0 = 9;
   /** OLHAR LIVRE (tela cheia, mouse): o 1º clique trava o ponteiro (pointer lock) e daí mexer o mouse gira a câmera,
    *  sem segurar botão. Sem mira e sem clique de ação: as ações são pela tecla F (ver `acaoPerto`). Esc solta. */
@@ -1013,6 +1025,7 @@ export class CyberEngine {
       const vivo = this.vivo && (a === this.eu || this.remotos.get(a.id) === a);
       if (!vivo) return;
       tingirVrm(vrm, proprio.corpo.tintas); acabarVrm(vrm, proprio.corpo); a.av.usarVrm(vrm);
+      if (proprio.corpo.pose === "feminina") a.av.estiloVrm("feminina", { parada: true });   // pack de realismo: a marcha e a pose em pé femininas
       if (proprio.corpo.acessorios?.length) vestirAcessorios(vrm, proprio.corpo.acessorios);
     }).catch((e) => { console.warn("[cyber] corpo próprio (VRM) não carregou:", e); a.av.esperarCorpo(false); });
   }
@@ -2790,6 +2803,7 @@ export class CyberEngine {
       if (k === "c" && !this.menu) { if (!e.repeat) this.darDash(); e.preventDefault(); return; }   // C = DASH (o arranque — desvio)
       if (k === "x" && !this.menu) { if (!e.repeat) this.atacar(); e.preventDefault(); return; }   // X = ATACAR (o combo da espada; o clique também, com o mouse travado)   // J = sentar / deitar / levantar (lounge)
       if (k === "t" && !this.menu) { if (!e.repeat) this.alternarTablet(); e.preventDefault(); return; }
+      if (k === "v" && !this.menu) { if (!e.repeat) this.alternarCamera(); e.preventDefault(); return; }   // V = a câmera PERTO (por cima do ombro) ⇄ a de antes
       if (k === "m" && !this.menu) { if (!e.repeat) this.portalPraNave(); e.preventDefault(); return; }   // M = o dono se TELEPORTA pra dentro da nave (um portal aqui, outro lá)     // T = o tablet (estudar por cima do cyberespaço)
       if (k === "k" && !this.menu && this.ehFundador(this.o.eu.id)) { if (!e.repeat) this.o.onRitualNave?.(!this.ritual?.nave); e.preventDefault(); return; }   // K = o RITUAL DA NAVE (o dono)
       // HABILIDADES (lib/cyber/habilidades): G = o Droid companheiro (founder)
@@ -2831,7 +2845,7 @@ export class CyberEngine {
         return;
       }
       if (this.ptrs.has(e.pointerId)) this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (this.ptrs.size === 2 && this.pinch0) { const [a, b] = [...this.ptrs.values()]; this.camDist = Math.min(CyberEngine.CAM_MAX, Math.max(6, (this.dist0 * this.pinch0) / Math.max(20, Math.hypot(a!.x - b!.x, a!.y - b!.y)))); this.moved = true; return; }
+      if (this.ptrs.size === 2 && this.pinch0) { const [a, b] = [...this.ptrs.values()]; { const [mn, mx] = faixaDaDistancia(this.camModo); this.camDist = Math.min(Math.min(mx, CyberEngine.CAM_MAX), Math.max(mn, (this.dist0 * this.pinch0) / Math.max(20, Math.hypot(a!.x - b!.x, a!.y - b!.y)))); } this.moved = true; return; }
       if (!this.drag) { if (e.target === cv) this.passarMouse(e.clientX, e.clientY); return; }
       const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) this.moved = true;
       this.camSegueEm = performance.now() + 1500; this.camAz = this.drag.az - dx * 0.006; this.camPitch = limitarPitch(this.drag.pitch + dy * 0.005);   // arrastar pra baixo até o chão → olhar pro céu
@@ -2846,7 +2860,7 @@ export class CyberEngine {
     on("pointercancel", (e) => { this.ptrs.delete(e.pointerId); if (!this.ptrs.size) { this.drag = null; this.pinch0 = 0; } });
     onC("pointerenter", () => { this.sobContainer = true; });
     onC("pointerleave", () => { this.sobContainer = false; this.hoverBase = null; cv.style.cursor = ""; });
-    onC("wheel", (e) => { if (this.menu) return; /* menu: a página continua rolando */ e.preventDefault(); this.camDist = Math.min(CyberEngine.CAM_MAX, Math.max(6, this.camDist * (e.deltaY > 0 ? 1.1 : 0.9))); }, { passive: false });
+    onC("wheel", (e) => { if (this.menu) return; /* menu: a página continua rolando */ e.preventDefault(); const [mn, mx] = faixaDaDistancia(this.camModo); this.camDist = Math.min(Math.min(mx, CyberEngine.CAM_MAX), Math.max(mn, this.camDist * (e.deltaY > 0 ? 1.1 : 0.9))); }, { passive: false });
   }
 
   /** olhar livre só na tela cheia (fora do menu/landing), com mouse de verdade (no celular é arrastar/joystick) */
@@ -3131,7 +3145,7 @@ export class CyberEngine {
       let d = this.motoEst.yaw + Math.PI - this.camAz; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.camAz += d * (1 - Math.exp(-dt * 2.6));
     }
-    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camDist + 1.6 * this.velTela;   // (a pé/mochila rápido: a câmera recua um pouco)
+    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camPerto ? this.camDist + 0.5 * this.velTela : this.camDist + 1.6 * this.velTela;   // (a pé/mochila rápido: a câmera recua um pouco)
     // câmera em 3ª pessoa: perto de um marco (ilha flutuante, muralhas), se a estrutura fica ENTRE a câmera e o
     // personagem, a câmera se aproxima (senão a ilha cobre a tela)
     const marco = this.lms.find((l) => Math.hypot(this.eu.pos.x - l.poi.x, this.eu.pos.z - l.poi.z) < l.poi.interactR * 1.8);
@@ -3160,7 +3174,9 @@ export class CyberEngine {
       if (h) dist = Math.max(2.2, h.distance - 0.6);
     }
     // órbita livre: por cima olha pro personagem; arrastando pra baixo encosta no chão e o olhar sobe pro céu
-    let c = poseDaCamera({ olho: { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z }, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
+    // PERTO: o olho na altura dos ombros e deslocado pro lado direito (o personagem fica à esquerda, o caminho livre)
+    const olhoCam = this.camPerto ? olhoDoOmbro({ x: this.camT.x, y: this.camT.y - 1.2, z: this.camT.z }, this.camAz) : { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z };
+    let c = poseDaCamera({ olho: olhoCam, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
     c = this.aplicarCena(c, dt);   // a CUTSCENE do tutorial (se houver) leva a câmera pra outro enquadramento
     this.cam.position.set(c.pos.x, c.pos.y, c.pos.z);
     this.cam.lookAt(c.olhar.x, c.olhar.y, c.olhar.z);
@@ -3622,6 +3638,7 @@ export class CyberEngine {
     // avatares
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
+    eu.av.recolherAsas(this.camPerto ? 0.7 : 0);   // a câmera perto: as asas recolhem em parte (abertas cobriam a tela)
     eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0, pes: eu.pes, estilo: eu.poseL }, tablet: eu.tab ?? 0, dt: t < this.pausaAte ? 0 : this.moto === null && !this.jet.noAr && eu.moving ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (hit-stop: a pose congela)   // (no sprint as pernas giram mais rápido)
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;

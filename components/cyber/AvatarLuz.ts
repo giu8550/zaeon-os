@@ -24,7 +24,7 @@ import type { VRM } from "@pixiv/three-vrm";
 import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./AvatarVrm";
 import { criarAsas, type AsasHandle } from "./AsasAnjo";
 import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
-import type { PoseVrm } from "@/lib/cyber/posesVrm";
+import { POSES_VRM, type PoseVrm } from "@/lib/cyber/posesVrm";
 
 /** o corpo DESENHADO (estilo anime — experimento, lib/cyber/estiloAvatar)? */
 const desenhado = () => typeof window !== "undefined" && estiloDe(process.env.NEXT_PUBLIC_CYBER_AVATAR_ESTILO, window.location.search) === "anime";
@@ -98,6 +98,11 @@ export type AvatarLuzHandle = {
   /** ASAS NEGRAS no lugar da mochila a jato (components/cyber/AsasAnjo) — o voo é o mesmo. `escala` < 1 encolhe
    *  (a vitrine do Perfil: abertas, elas têm ~3 m de envergadura) */
   usarAsas(o?: { escala?: number }): void;
+  /** o JEITO do corpo VRM (pack de realismo): "feminina" = a marcha feminina andando e, se `parada`, a pose feminina
+   *  (contrapposto) quando em pé e parado — os jogadores; os personagens cuidam da pose parada deles */
+  estiloVrm(e: "feminina" | null, o?: { parada?: boolean }): void;
+  /** recolhe as ASAS em parte (0..1) — a câmera perto, por cima do ombro: abertas, elas cobriam a tela. No ar, abrem */
+  recolherAsas(k: number): void;
   /** uma POSE própria no corpo VRM (lib/cyber/posesVrm — ex.: a feminina dos personagens parados); null = a do esqueleto */
   poseVrm(p: PoseVrm | null): void;
   /** corpo VRM: perto (true) roda a física do cabelo/roupa; longe pula (components/cyber/AvatarVrm `detalhe`) */
@@ -130,7 +135,9 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   // AURA: casca inflada (back-face, aditiva) em volta do corpo — o que faz dele um ser de luz
   const matAura = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
   matAura.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n transformed += normalize(normal) * 0.05;"); };
-  let escondidos: THREE.Object3D[] | null = null, poseVrm: PoseVrm | null = null;   // o corpo padrão escondido esperando o VRM (esperarCorpo)
+  let escondidos: THREE.Object3D[] | null = null, poseVrm: PoseVrm | null = null;
+  let estiloCorpo: "feminina" | null = null, paradaAuto = false, poseAutoAntes: PoseVrm | null = null;
+  let recolheAlvo = 0, recolhe = 0;   // as asas recolhidas em parte (a câmera perto)   // (pack de realismo: o jeito do corpo VRM)   // o corpo padrão escondido esperando o VRM (esperarCorpo)
   let mixer: THREE.AnimationMixer | null = null, modeloMx: THREE.Object3D | null = null, repouso: Repouso | null = null, espelho: EspelhoVrm | null = null;
   let asas: AsasHandle | null = null, estAsas = ASAS_INICIO, evAsas = { bateu: 0, abriu: false, fechou: false, modo: "chao" as ModoAsas };
   const aurasMalha: THREE.Mesh[] = [];
@@ -352,7 +359,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         corpo.position.y -= Math.max(0, alturaQuadril - (yAss + 0.08)) * wS; corpo.position.z += (0.06 + 0.1 * wR) * wS;
         corpo.rotation.x += (Math.PI / 2 - 0.2) * wD; corpo.position.y += (yAss + 0.2) * wD; corpo.position.z -= 0.92 * wD;
       }
-      if (asas) { const enc = Math.max(wS, wD); asas.group.visible = enc < 0.98; asas.group.scale.setScalar((asas.group.userData.escala ?? 1) * Math.max(0.02, 1 - enc)); }   // sentado/deitado: as asas recolhem pra dentro das costas
+      recolhe += ((ar ? 0 : recolheAlvo) - recolhe) * Math.min(1, dt * 5);   // (no ar as asas abrem de novo)
+      if (asas) { const enc = Math.max(wS, wD, recolhe); asas.group.visible = enc < 0.98; asas.group.scale.setScalar((asas.group.userData.escala ?? 1) * Math.max(0.02, 1 - enc)); }   // sentado/deitado: as asas recolhem pra dentro das costas
       if ((ossos.length || pernas.length) && pilotando > 0.02) {
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
         frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
@@ -868,6 +876,12 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           ptGeo.attributes.position!.needsUpdate = true; matPtTab.opacity = 0.9 * Math.min(1, abre * 3);
         }
       }
+      // o JEITO do corpo VRM: a marcha só a pé no chão; parada (jogadora em pé, sem fazer nada), a pose feminina
+      if (espelho && estiloCorpo) {
+        const livre = !montado && pilotando < 0.02 && jato < 0.02 && sentado < 0.02 && meditando < 0.02 && dj < 0.02 && danca < 0.02 && surf < 0.02 && wP < 0.02 && wTab < 0.02 && (descanso?.sentar ?? 0) < 0.02 && (descanso?.deitar ?? 0) < 0.02;
+        espelho.marcha(livre && andando);
+        if (paradaAuto) { const alvo = livre && !andando && !acao?.espada && !(acao?.dash) && !(acao?.sprint) ? POSES_VRM.feminina : null; if (alvo !== poseAutoAntes) { poseAutoAntes = alvo; espelho.pose(alvo ?? poseVrm); } }
+      }
       espelho?.atualizar(dt, t);   // corpo VRM: copia a pose final (depois de todas as poses acima)
     },
     passosNovos() { if (!pernas.length) return null; const n = pisadas; pisadas = 0; return n; },
@@ -882,6 +896,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     },
     semMochila() { mochila.visible = false; },
     poseVrm(p) { poseVrm = p; espelho?.pose(p); },
+    recolherAsas(k) { recolheAlvo = Math.max(0, Math.min(0.95, k)); },
+    estiloVrm(e, op) { estiloCorpo = e; paradaAuto = !!op?.parada; espelho?.estilo(e); },
     detalheVrm(on) { espelho?.detalhe(on); },
     empunhar(obj) { if (arma && arma !== obj) arma.removeFromParent(); arma = obj; if (obj) grupo.add(obj); },
     eventosAsas() {
@@ -898,7 +914,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (!modeloMx || !repouso || espelho) return;
       // o soldado (e as cascas dele: aura, tinta) somem — o esqueleto continua animando, e continua no clique
       modeloMx.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
-      espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso, { economico: op?.economico }); espelho.pose(poseVrm);
+      espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso, { economico: op?.economico }); espelho.pose(poseVrm); espelho.estilo(estiloCorpo);
       esconderOssosVazios(vrm.scene); esconderOssosVazios(modeloMx); esferaRapida(vrm.scene);   // ossos sem nada pra desenhar fora da lista (matrizes)
     },
     soltarVrm() { espelho?.dispose(); espelho = null; },
