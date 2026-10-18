@@ -18,10 +18,10 @@
  */
 import { CORPO_MAGIA, type P3 } from "./magia";
 
-export type NomeClipeRifle = "mira" | "anda" | "atira" | "esq" | "dir" | "cambaleia" | "gira" | "freia" | "morre" | "morreDir";
+export type NomeClipeRifle = "mira" | "anda" | "esq" | "dir" | "cambaleia" | "gira" | "freia" | "morre" | "morreDir";
 /** a duração (s) de cada clipe (public/anim/rifle) — o engine marca os tempos sem esperar o download */
 export const DURACAO_RIFLE: Readonly<Record<NomeClipeRifle, number>> = {
-  mira: 3.1, anda: 1.37, atira: 1.17, esq: 1.07, dir: 1.43, cambaleia: 1.83, gira: 1.7, freia: 1.47, morre: 4.4, morreDir: 3.3,
+  mira: 3.1, anda: 1.37, esq: 1.07, dir: 1.43, cambaleia: 1.83, gira: 1.7, freia: 1.47, morre: 4.4, morreDir: 3.3,
 };
 export const ehClipeRifle = (n: string): n is NomeClipeRifle => n in DURACAO_RIFLE;
 export const urlDoClipeRifle = (n: NomeClipeRifle) => `/anim/rifle/${n}.json`;
@@ -51,6 +51,8 @@ export const RIFLE = {
   giroAndando: 6.5, giroCorrendo: 3.4, giroMira: 10, limiarGiro: 1.75, velGiroClipe: 2.2,
   /** mirando: o tronco torce até `torcaoMax` rad pra mira antes de os pés acompanharem */
   torcaoMax: 0.9,
+  /** depois de um tiro, quanto tempo (s) o corpo fica na POSE DE ATAQUE (a arma no ombro) antes de voltar ao descanso */
+  posturaDepoisDoTiro: 2.5,
   /** o zoom da mira (o FOV), a distância da câmera por cima do ombro e o olho dela (pro lado direito e a altura acima
    *  dos pés — o personagem fica à esquerda e a arma à mostra) */
   fovMira: 38, distMira: 3.1, ombroMira: 0.9, alturaMira: 1.62,

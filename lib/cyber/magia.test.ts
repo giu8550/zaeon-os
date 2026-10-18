@@ -65,6 +65,6 @@ describe("a magia na rede (o caminho do Pusher)", () => {
   it("o lançamento (`mag`) e o escudo (`mov` 6) passam pela sanitização; lixo não", () => {
     const v = codificarLancamento(7, FEITICOS.nova, 1, 0);
     expect(combateDe({ mag: v, mov: MOV_ESCUDO })).toEqual({ mag: v, mov: MOV_ESCUDO });
-    expect(combateDe({ mag: -1, mov: 9 })).toEqual({}); expect(combateDe({ mag: 1.5 })).toEqual({});
+    expect(combateDe({ mag: -1, mov: 32 })).toEqual({}); expect(combateDe({ mag: 1.5 })).toEqual({});
   });
 });

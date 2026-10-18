@@ -18,11 +18,16 @@ export type RifleHandle = {
   dispose(): void;
 };
 
+/** a escala da arma (modelada com ~1,3 m; o braço do avatar alcança uma de ~1 m — o guarda-mão tem que caber na mão) */
+export const ESCALA_RIFLE = 0.8;
+/** onde as MÃOS pegam (no referencial da arma, já na escala): o guarda-mão (a de apoio) */
+export const GUARDA_MAO = { z: 0.29, y: -0.012 } as const;
 const AZUL = 0x2fa8ff, AZUL_CLARO = 0x9fdcff, VIOLETA = 0xb45cff;
 
 export function criarRifleCosmico(o: { low: boolean }): RifleHandle {
   const group = new THREE.Group(); group.name = "rifle-cosmico";
-  const corpo = new THREE.Group(); group.add(corpo);   // (o que escala ao materializar)
+  const escala = new THREE.Group(); escala.scale.setScalar(ESCALA_RIFLE); group.add(escala);
+  const corpo = new THREE.Group(); escala.add(corpo);   // (o que escala ao materializar)
   const geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [];
   const m = <T extends THREE.Material>(x: T) => { mats.push(x); return x; };
   const metal = m(new THREE.MeshStandardMaterial({ color: 0x0b1530, metalness: 0.75, roughness: 0.32, emissive: 0x061a3a, emissiveIntensity: 0.9 }));
@@ -80,7 +85,7 @@ export function criarRifleCosmico(o: { low: boolean }): RifleHandle {
   caixa(0.006, 0.006, 0.09, neon, 0, -0.005, 0.03);   // o guarda-mato (aceso)
   const carregador = caixa(0.045, 0.1, 0.06, metal, 0, -0.02, 0.15); carregador.rotation.x = 0.12;
   caixa(0.048, 0.012, 0.062, violeta, 0, -0.068, 0.157);
-  const frente = caixa(0.035, 0.07, 0.04, metalEsc, 0, 0.0, 0.42); frente.rotation.x = 0.2;   // (a mão de apoio fica por aqui)
+  caixa(0.05, 0.03, 0.2, metalEsc, 0, 0.01, GUARDA_MAO.z / ESCALA_RIFLE);   // o GUARDA-MÃO (a mão de apoio fica aqui)
   // a CORONHA vazada: um quadro de tubo de luz atrás do punho, com a soleira escura
   const tuboCoronha = (a: THREE.Vector3, b: THREE.Vector3, mat: THREE.Material, r: number) => {
     const d = b.clone().sub(a), g = new THREE.CylinderGeometry(r, r, d.length(), 8); geos.push(g);
@@ -95,13 +100,13 @@ export function criarRifleCosmico(o: { low: boolean }): RifleHandle {
   // o CLARÃO da boca (sprite) e o halo da arma (some quando materializada)
   const texClarao = new THREE.CanvasTexture((() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d")!; const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.3, "rgba(160,220,255,.85)"); gr.addColorStop(0.6, "rgba(180,92,255,.35)"); gr.addColorStop(1, "rgba(60,80,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c; })());
   const matClarao = m(new THREE.SpriteMaterial({ map: texClarao, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-  const clarao = new THREE.Sprite(matClarao); clarao.position.copy(bocaPos).setZ(0.92); clarao.scale.setScalar(0.35); group.add(clarao);
+  const clarao = new THREE.Sprite(matClarao); clarao.position.copy(bocaPos).setZ(0.92); clarao.scale.setScalar(0.35); escala.add(clarao);
   corpo.traverse((x) => { (x as THREE.Mesh).castShadow = false; });
 
   let tClarao = -1;
   const azul = new THREE.Color(AZUL_CLARO), quente = new THREE.Color(0xff8a3a);
   return {
-    group, boca: bocaPos.clone().setZ(0.9),
+    group, boca: bocaPos.clone().setZ(0.9).multiplyScalar(ESCALA_RIFLE),
     disparar() { tClarao = 0; },
     atualizar(t, dt, { revela, calor }) {
       const r = Math.max(0, Math.min(1, revela));

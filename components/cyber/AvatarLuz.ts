@@ -26,16 +26,17 @@ import { criarAsas, type AsasHandle } from "./AsasAnjo";
 import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
 import { POSE_FEMININA_A_VONTADE, type PoseVrm } from "@/lib/cyber/posesVrm";
 import { urlDoClipe, type NomeClipeMagia } from "@/lib/cyber/magia";
+import { GUARDA_MAO } from "./RifleCosmico";
 import { ehClipeRifle, pesosRifle, urlDoClipeRifle, type NomeClipeRifle } from "@/lib/cyber/rifle";
 
 /** um clipe de AÇÃO: os da magia (public/anim/magia) e os do rifle (public/anim/rifle) */
 export type NomeClipe = NomeClipeMagia | NomeClipeRifle;
 /** o RIFLE no avatar (lib/cyber/rifle): na mão (0..1), mirando (0..1), a velocidade no corpo (m/s, + = frente/direita),
- *  atirando (0..1: o tronco do "Firing Rifle"), o COICE (0..1, decai) e pra onde a arma aponta (mundo — null = pra
+ *  o COICE (0..1, decai) e pra onde a arma aponta (mundo — null = pra
  *  frente, baixa); `arma` = o objeto (components/cyber/RifleCosmico), posto nas mãos a cada quadro */
-export type RifleNoAvatar = { naMao: number; mira: number; frente: number; lado: number; atirando: number; coice: number; alvo: THREE.Vector3 | null; arma: THREE.Object3D | null };
-/** os ossos do TRONCO (o "de cima" do corpo): o clipe só do tronco manda neles por cima do andar/correr */
-const TRONCO = /Spine|Neck|Head|Shoulder|Arm|Hand/;
+export type RifleNoAvatar = { naMao: number; mira: number; frente: number; lado: number; coice: number; alvo: THREE.Vector3 | null; arma: THREE.Object3D | null };
+/** pra que lado (no eixo z do osso) os dedos de cada mão fecham pra palma (o rig mixamo espelha as mãos) */
+const SINAL_DEDO = { Left: -1, Right: -1 } as const;
 
 /** o corpo DESENHADO (estilo anime — experimento, lib/cyber/estiloAvatar)? */
 const desenhado = () => typeof window !== "undefined" && estiloDe(process.env.NEXT_PUBLIC_CYBER_AVATAR_ESTILO, window.location.search) === "anime";
@@ -60,11 +61,10 @@ function espelharClipe(c: THREE.AnimationClip): THREE.AnimationClip {
   });
   return new THREE.AnimationClip(`${c.name}_esp`, c.duration, trilhas);
 }
-function carregarClipeMagia(nome: NomeClipe, espelhar: boolean, tronco = false): Promise<THREE.AnimationClip | null> {
-  const k = `${nome}|${espelhar ? 1 : 0}|${tronco ? 1 : 0}`; let p = clipesMagia.get(k);
+function carregarClipeMagia(nome: NomeClipe, espelhar: boolean): Promise<THREE.AnimationClip | null> {
+  const k = `${nome}|${espelhar ? 1 : 0}`; let p = clipesMagia.get(k);
   if (!p) {
-    p = tronco ? carregarClipeMagia(nome, espelhar).then((c) => (c ? new THREE.AnimationClip(`${c.name}_tronco`, c.duration, c.tracks.filter((t) => TRONCO.test(t.name.split(".")[0]!))) : null))
-      : espelhar ? carregarClipeMagia(nome, false).then((c) => (c ? espelharClipe(c) : null))
+    p = espelhar ? carregarClipeMagia(nome, false).then((c) => (c ? espelharClipe(c) : null))
       : fetch(ehClipeRifle(nome) ? urlDoClipeRifle(nome) : urlDoClipe(nome)).then((r) => (r.ok ? r.json() : null)).then((j) => (j ? THREE.AnimationClip.parse(j) : null)).catch(() => null);
     clipesMagia.set(k, p);
   }
@@ -351,15 +351,18 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   // o RIFLE (lib/cyber/rifle): o estado do quadro, a arma posta nas mãos e as ações dos andares com ela (baixadas na 1ª
   // vez que ela aparece; tocam sempre, em laço, com o peso que o quadro manda)
   let rif: RifleNoAvatar | null = null, armaRifle: THREE.Object3D | null = null, pedindoRifle = false;
-  let acoesRifle: { mira: THREE.AnimationAction; anda: THREE.AnimationAction; esq: THREE.AnimationAction; dir: THREE.AnimationAction; tronco: THREE.AnimationAction; troncoAtira: THREE.AnimationAction } | null = null;
+  let acoesRifle: { mira: THREE.AnimationAction; anda: THREE.AnimationAction; esq: THREE.AnimationAction; dir: THREE.AnimationAction } | null = null;
   const prepararRifle = () => {
     if (acoesRifle || pedindoRifle || !mixer) return; pedindoRifle = true;
-    void Promise.all([carregarClipeMagia("mira", false), carregarClipeMagia("anda", false), carregarClipeMagia("esq", false), carregarClipeMagia("dir", false), carregarClipeMagia("mira", false, true), carregarClipeMagia("atira", false, true)]).then((cs) => {
+    void Promise.all([carregarClipeMagia("mira", false), carregarClipeMagia("anda", false), carregarClipeMagia("esq", false), carregarClipeMagia("dir", false)]).then((cs) => {
       if (!mixer || cs.some((c) => !c)) { pedindoRifle = false; return; }
-      const [mira, anda, esq, dir, tronco, troncoAtira] = cs.map((c) => { const x = mixer!.clipAction(c!); x.setLoop(THREE.LoopRepeat, Infinity); x.setEffectiveWeight(0); x.play(); return x; }) as THREE.AnimationAction[];
-      acoesRifle = { mira: mira!, anda: anda!, esq: esq!, dir: dir!, tronco: tronco!, troncoAtira: troncoAtira! };
+      const [mira, anda, esq, dir] = cs.map((c) => { const x = mixer!.clipAction(c!); x.setLoop(THREE.LoopRepeat, Infinity); x.setEffectiveWeight(0); x.play(); return x; }) as THREE.AnimationAction[];
+      acoesRifle = { mira: mira!, anda: anda!, esq: esq!, dir: dir! };
     });
   };
+  const vDirR = new THREE.Vector3(), vGrip = new THREE.Vector3();
+  const novaMao = () => ({ pulso: new THREE.Vector3(), dedos: new THREE.Vector3(), indicador: new THREE.Vector3(), polo: new THREE.Vector3() });
+  const maosNaArma = { esq: novaMao(), dir: novaMao(), peso: 0 };   // (só da arma: o ik/apontar usam os vA/vB/pTab)
   const qYaw = new THREE.Quaternion(), qPit = new THREE.Quaternion(), qParte = new THREE.Quaternion(), qId = new THREE.Quaternion(), vMira = new THREE.Vector3(), vEixo = new THREE.Vector3(), mArma = new THREE.Matrix4(), xA = new THREE.Vector3(), yA = new THREE.Vector3(), mInv = new THREE.Matrix4();
   const vA = new THREE.Vector3(), vB = new THREE.Vector3(), dirAlvo = new THREE.Vector3(), qPai = new THREE.Quaternion(), qOsso = new THREE.Quaternion(), qDelta = new THREE.Quaternion();
   /** as fases (0..1) do ciclo de andar/correr em que um pé encosta — medidas UMA vez da própria animação */
@@ -407,6 +410,26 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     dirAlvo.copy(cot).sub(pA).normalize(); apontar(raiz, meio, dirAlvo, w);
     meio.getWorldPosition(pB); dirAlvo.copy(alvo).sub(pB).normalize(); apontar(meio, ponta, dirAlvo, w);
   };
+  /** gira a MÃO (mundo) pra que o eixo y do osso (pulso → dedos) vá pra `dedos` e o z (o lado do indicador) fique o
+   *  mais perto possível de `indicador` — misturando com o pose da animação pelo peso `w` */
+  const mBaseMao = new THREE.Matrix4(), qMao = new THREE.Quaternion(), yM = new THREE.Vector3(), zM = new THREE.Vector3(), xM = new THREE.Vector3();
+  const orientarMao = (mao: THREE.Object3D, dedos: THREE.Vector3, indicador: THREE.Vector3, w: number) => {
+    yM.copy(dedos).normalize(); zM.copy(indicador).addScaledVector(yM, -indicador.dot(yM)).normalize(); xM.crossVectors(yM, zM);
+    qMao.setFromRotationMatrix(mBaseMao.makeBasis(xM, yM, zM));
+    mao.parent!.updateWorldMatrix(true, false); mao.parent!.getWorldQuaternion(qPai);
+    mao.quaternion.slerp(qPai.invert().multiply(qMao), w); mao.updateWorldMatrix(false, true);
+  };
+  /** os DEDOS fechados em volta da arma (cada falange gira no eixo z do osso — o eixo do lado da mão); o indicador
+   *  direito fica meio esticado no gatilho; o polegar fecha menos */
+  const dedosMao = modeloMx ? (["Left", "Right"] as const).map((lado) => ({ lado, ossos: ["Index", "Middle", "Ring", "Pinky", "Thumb"].map((d) => [1, 2, 3].map((k) => modeloMx!.getObjectByName(`mixamorig${lado}Hand${d}${k}`) ?? null)) })) : [];
+  const CURVA = { Index: [1.0, 1.1, 0.8], Middle: [1.25, 1.35, 0.9], Ring: [1.25, 1.35, 0.9], Pinky: [1.2, 1.3, 0.9], Thumb: [0.15, 0.45, 0.5] } as const, GATILHO = [0.45, 0.55, 0.35];
+  const qDedo = new THREE.Quaternion(), eixoZ = new THREE.Vector3(0, 0, 1);
+  const fecharDedos = (w: number) => {
+    for (const { lado, ossos: dedos } of dedosMao) dedos.forEach((falanges, i) => {
+      const nome = (["Index", "Middle", "Ring", "Pinky", "Thumb"] as const)[i]!, curva = lado === "Right" && nome === "Index" ? GATILHO : CURVA[nome];
+      falanges.forEach((o, k) => { if (!o) return; qDedo.setFromAxisAngle(eixoZ, SINAL_DEDO[lado] * curva[k]! * w); o.quaternion.copy(qDedo); });
+    });
+  };
   if (modeloMx) esconderOssosVazios(modeloMx);
   esferaRapida(grupo);   // (senão o 1º desenho deforma todos os vértices na CPU: jogador que entra = travada)   // os ~50 ossos do esqueleto sem nada pendurado: fora da lista de desenho (matrizes)
   return {
@@ -419,21 +442,19 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       wClipe += ((clipe ? 1 : 0) - wClipe) * Math.min(1, dt * (clipe ? 14 : 6));
       for (const a of acoesClipe.values()) a.setEffectiveWeight(clipe && a === clipe.a ? wClipe : 0);
       const resto = 1 - wClipe;
-      // o RIFLE: MIRANDO, as pernas são dos andares com a arma (frente/costas/lados pela direção no corpo); LEVANDO, as
-      // pernas são do andar/correr de sempre e o TRONCO é o da mira (peso alto: manda nos ossos de cima); ATIRANDO, o
-      // tronco do "Firing Rifle" por cima de tudo
+      // o RIFLE: na POSE DE ATAQUE (mirando / logo depois de atirar), o corpo é dos clipes da arma (parado, frente,
+      // costas, lados pela direção no corpo); em DESCANSO, o parado/andar/correr de sempre. Os BRAÇOS, nos dois, são da
+      // IK até a arma (mais abaixo)
       if (rif && rif.naMao > 0.001) prepararRifle();
       // (PARADO com a arma, o corpo todo é o da mira — a postura de quem segura um rifle; andando sem mirar, as pernas
       // voltam a ser do andar/correr)
-      const R = rif && acoesRifle ? rif.naMao : 0, vR = Math.hypot(rif?.frente ?? 0, rif?.lado ?? 0), M = R * Math.max(Math.max(0, Math.min(1, rif?.mira ?? 0)), 1 - Math.min(1, vR / 0.6));
+      const R = rif && acoesRifle ? rif.naMao : 0, M = R * Math.max(0, Math.min(1, rif?.mira ?? 0));
       if (acoesRifle) {
         const p = pesosRifle({ frente: rif?.frente ?? 0, lado: rif?.lado ?? 0 }), A = acoesRifle;
         A.mira.setEffectiveWeight(resto * M * p.parado);
         A.anda.setEffectiveWeight(resto * M * (p.frente + p.tras)); A.anda.timeScale = p.frente >= p.tras ? p.escala.frente : -p.escala.tras;   // (de costas = o andar ao contrário)
         A.esq.setEffectiveWeight(resto * M * p.esq); A.esq.timeScale = p.escala.esq;
         A.dir.setEffectiveWeight(resto * M * p.dir); A.dir.timeScale = p.escala.dir;
-        A.tronco.setEffectiveWeight(resto * (R - M) * 12);
-        A.troncoAtira.setEffectiveWeight(resto * R * Math.max(0, Math.min(1, rif?.atirando ?? 0)) * 25);
       }
       if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk * resto * (1 - M)); run.setEffectiveWeight(wRun * resto * (1 - M)); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun) * resto * (1 - M)); mixer.update(dt); }
       // PISADAS: o relógio da animação dominante (andar ou correr) cruzou a fase em que um pé encosta no chão
@@ -980,36 +1001,55 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           ptGeo.attributes.position!.needsUpdate = true; matPtTab.opacity = 0.9 * Math.min(1, abre * 3);
         }
       }
-      // o RIFLE nas mãos: a MIRA LIVRE — o tronco (as 3 vértebras) gira até a arma (da mão direita pra esquerda) apontar
-      // pra mira: primeiro em volta do eixo vertical, depois sobe/desce (sem entortar o corpo de lado). Levando (sem
-      // mirar), aponta pra frente e pra baixo. O COICE levanta o peito. Depois, a arma vai pras mãos
+      // o RIFLE nas mãos. A ARMA vem primeiro, presa ao corpo: em DESCANSO, baixa e na diagonal na frente do peito (o cano
+      // pra baixo e pra esquerda); MIRANDO, a coronha no ombro direito e o cano pra mira (a MIRA LIVRE — o tronco ainda
+      // inclina pra cima/baixo com ela). Depois as MÃOS vão até ela por IK: a direita no punho, a esquerda embaixo do
+      // guarda-mão — e os DEDOS fecham em volta (os clipes do Mixamo vêm sem dedos: sem isso, a mão abria esticada)
       if (rif && R > 0.01 && ossos.length >= 2 && lombar && espinha1 && espinha) {
-        const mE = ossos.find((x) => x.lado > 0)!.mao, mD = ossos.find((x) => x.lado < 0)!.mao;
+        const oE = ossos.find((x) => x.lado > 0)!, oD = ossos.find((x) => x.lado < 0)!, mi = Math.max(0, Math.min(1, rif.mira));
         grupo.updateMatrixWorld(true); grupo.getWorldQuaternion(qG);
-        frente.set(0, 0, -1).applyQuaternion(qG).setY(0).normalize();
-        mE.getWorldPosition(pMaoE); mD.getWorldPosition(pMaoD);
-        const cur = vA.copy(pMaoE).sub(pMaoD).normalize();
-        const alvoD = vB.copy(frente).multiplyScalar(Math.cos(0.14)).setY(-Math.sin(0.14));   // levando: o cano pra frente, um pouco baixo
-        if (rif.alvo && rif.mira > 0.001) { vMira.copy(rif.alvo).sub(pMaoD).normalize(); alvoD.lerp(vMira, rif.mira).normalize(); }
-        const yawErr = Math.atan2(alvoD.x, alvoD.z) - Math.atan2(cur.x, cur.z), yE = Math.atan2(Math.sin(yawErr), Math.cos(yawErr));
-        qYaw.setFromAxisAngle(cima, Math.max(-1.3, Math.min(1.3, yE)));
-        const depois = vMira.copy(cur).applyQuaternion(qYaw);
-        vEixo.set(alvoD.x, 0, alvoD.z).normalize().cross(cima).normalize();
-        const pE = Math.asin(Math.max(-1, Math.min(1, alvoD.y))) - Math.asin(Math.max(-1, Math.min(1, depois.y))) + 0.09 * (rif.coice ?? 0);
-        qPit.setFromAxisAngle(vEixo, Math.max(-1.1, Math.min(1.1, pE)));
-        qParte.copy(qId).slerp(qPit.multiply(qYaw), R / 3);
-        for (const b of [lombar, espinha1, espinha]) { b.getWorldQuaternion(qOsso); b.parent!.getWorldQuaternion(qPai); b.quaternion.copy(qPai.invert().multiply(qDelta.copy(qParte).multiply(qOsso))); b.updateWorldMatrix(false, true); }
-        // a ARMA: o punho na mão direita, o cano rumo à esquerda (a de apoio), o topo pra cima
+        frente.set(0, 0, -1).applyQuaternion(qG).setY(0).normalize(); lateral.crossVectors(cima, frente).normalize();   // (lateral = a ESQUERDA dele)
+        // o tronco inclina com a mira (pra cima/baixo, dividido nas 3 vértebras)
+        if (rif.alvo && mi > 0.01) {
+          espinha.getWorldPosition(vA); const pitch = Math.asin(Math.max(-1, Math.min(1, vMira.copy(rif.alvo).sub(vA).normalize().y)));
+          vEixo.copy(lateral).multiplyScalar(-1); qParte.setFromAxisAngle(vEixo, (-pitch * 0.55 * mi * R) / 3);
+          for (const b of [lombar, espinha1, espinha]) { b.getWorldQuaternion(qOsso); b.parent!.getWorldQuaternion(qPai); b.quaternion.copy(qPai.invert().multiply(qDelta.copy(qParte).multiply(qOsso))); b.updateWorldMatrix(false, true); }
+        }
+        // DESCANSO: o punho do lado direito, na altura do umbigo, um pouco à frente; o cano pra frente, baixo e cruzando
+        espinha.getWorldPosition(vA);
+        const pRest = vGrip.copy(vA).addScaledVector(lateral, -0.1).addScaledVector(cima, -0.27).addScaledVector(frente, 0.24);
+        const dRest = vDirR.copy(frente).multiplyScalar(0.62).addScaledVector(lateral, 0.55).addScaledVector(cima, -0.55).normalize();
+        // MIRA: a coronha no ombro direito (o punho ~30 cm à frente dele), o cano pro ponto da mira
+        oD.braco.getWorldPosition(pMaoD);
+        const ombro = pMaoD.addScaledVector(lateral, 0.07).addScaledVector(cima, -0.05);
+        const dMira = vMira.copy(rif.alvo ?? vEixo.copy(ombro).add(frente)).sub(ombro).normalize();
+        const dirR = dRest.lerp(dMira, mi).normalize();
+        const pGrip = pRest.lerp(vEixo.copy(ombro).addScaledVector(dMira, 0.22).addScaledVector(cima, -0.04), mi).addScaledVector(dirR, -0.045 * (rif.coice ?? 0));
+        // a base da arma: z = o cano, x = a esquerda dela, y = o topo (com o coice o cano sobe um tiquinho)
+        if ((rif.coice ?? 0) > 0.01) { xA.crossVectors(cima, dirR).normalize(); dirR.applyAxisAngle(xA, -0.06 * rif.coice); }
+        xA.crossVectors(cima, dirR).normalize(); yA.crossVectors(dirR, xA);
         if (rif.arma) {
           if (armaRifle !== rif.arma) { armaRifle?.removeFromParent(); armaRifle = rif.arma; grupo.add(armaRifle); }
-          mE.getWorldPosition(pMaoE); mD.getWorldPosition(pMaoD);
-          const z = vA.copy(pMaoE).sub(pMaoD).normalize(); xA.crossVectors(cima, z).normalize(); yA.crossVectors(z, xA);
-          const pos = pTab.copy(pMaoD).addScaledVector(z, 0.04 - 0.035 * (rif.coice ?? 0)).addScaledVector(yA, -0.035).addScaledVector(xA, 0.0);
-          mArma.makeBasis(xA, yA, z).setPosition(pos);
+          mArma.makeBasis(xA, yA, dirR).setPosition(pGrip);
           mInv.copy(grupo.matrixWorld).invert(); mArma.premultiply(mInv);
           mArma.decompose(armaRifle.position, armaRifle.quaternion, vEixo);
         }
-      } else if (armaRifle && (!rif || !rif.arma)) { armaRifle.removeFromParent(); armaRifle = null; }
+        // as MÃOS: o pulso direito atrás e à direita do punho; o esquerdo embaixo do guarda-mão, do lado esquerdo
+        const M2 = maosNaArma;
+        M2.dir.pulso.copy(pGrip).addScaledVector(dirR, -0.07).addScaledVector(xA, -0.03).addScaledVector(yA, -0.045);
+        M2.dir.polo.copy(cima).multiplyScalar(-1).addScaledVector(lateral, -0.7).addScaledVector(frente, -0.2);
+        M2.esq.pulso.copy(pGrip).addScaledVector(dirR, GUARDA_MAO.z - 0.03).addScaledVector(xA, 0.04).addScaledVector(yA, GUARDA_MAO.y - 0.02);
+        M2.esq.polo.copy(cima).multiplyScalar(-1).addScaledVector(lateral, 0.35);
+        // a ORIENTAÇÃO das mãos: a direita envolvendo o punho (palma pra arma); a esquerda com a palma pra cima e os dedos
+        // cruzando por baixo do guarda-mão
+        M2.dir.dedos.copy(dirR).multiplyScalar(0.75).addScaledVector(xA, 0.45).addScaledVector(yA, -0.3); M2.dir.indicador.copy(yA);   // (envolve o punho: dedos pra frente e pra esquerda dele, o polegar em cima)
+        M2.esq.dedos.copy(xA).multiplyScalar(-0.75).addScaledVector(dirR, 0.45).addScaledVector(yA, -0.25); M2.esq.indicador.copy(dirR).multiplyScalar(-1);
+        M2.peso = R;
+        ik(oD.braco, oD.ante, oD.mao, M2.dir.pulso, M2.dir.polo, R); ik(oE.braco, oE.ante, oE.mao, M2.esq.pulso, M2.esq.polo, R);
+        orientarMao(oD.mao, vA.copy(M2.dir.dedos), vB.copy(M2.dir.indicador), R); orientarMao(oE.mao, vA.copy(M2.esq.dedos), vB.copy(M2.esq.indicador), R);
+        fecharDedos(R);
+        espelho?.maos(M2);   // (o corpo VRM refaz a IK nos ossos dele: o braço tem outro comprimento)
+      } else { espelho?.maos(null); if (armaRifle && (!rif || !rif.arma)) { armaRifle.removeFromParent(); armaRifle = null; } }
       // o JEITO do corpo VRM: a marcha só a pé no chão; parada (jogadora em pé, sem fazer nada), a pose feminina
       if (espelho && estiloCorpo) {
         const livre = !montado && pilotando < 0.02 && jato < 0.02 && sentado < 0.02 && meditando < 0.02 && dj < 0.02 && danca < 0.02 && surf < 0.02 && wP < 0.02 && wTab < 0.02 && (descanso?.sentar ?? 0) < 0.02 && (descanso?.deitar ?? 0) < 0.02;

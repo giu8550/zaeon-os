@@ -142,8 +142,15 @@ export type EspelhoVrm = {
   estilo(e: "feminina" | null): void;
   /** a marcha vale agora? (a pé no chão — sentado, voando, de moto, não) */
   marcha(on: boolean): void;
+  /** as MÃOS presas num objeto (o rifle — lib/cyber/rifle): depois da cópia, os braços DO VRM vão por IK até os pulsos
+   *  pedidos (mundo) e as mãos giram pros dedos/indicador pedidos — a cópia só passa rotações, e o braço do VRM tem
+   *  outro comprimento: sem isso a mão parava ~10 cm fora da arma. null = solta */
+  maos(m: MaosVrm | null): void;
   dispose(): void;
 };
+/** um pulso (mundo), pra onde os dedos apontam, o lado do indicador e pra onde o cotovelo dobra */
+export type MaoVrm = { pulso: THREE.Vector3; dedos: THREE.Vector3; indicador: THREE.Vector3; polo: THREE.Vector3 };
+export type MaosVrm = { esq: MaoVrm; dir: MaoVrm; peso: number };
 /** a pose de REPOUSO (T) do esqueleto mixamo, no referencial do `corpo` — medida ao criar o avatar, antes de qualquer
  *  animação (o VRM pode chegar depois, com o esqueleto já andando) */
 export type Repouso = { q: Map<THREE.Object3D, THREE.Quaternion>; quadril: THREE.Vector3 };
@@ -206,6 +213,51 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
   const qPose = new THREE.Quaternion(), ePose = new THREE.Euler();
   let estilo: "feminina" | null = null, marchaOn = false, velMarcha = 0, faseAnt = 0, dFase = 0, ritmo = 0, apoio = 0;
   const baixo = new THREE.Vector3(), qCoxa = new THREE.Quaternion();
+  // as MÃOS na arma: os ossos de VERDADE do VRM (os que a malha usa), na cena — a IK mexe neles depois do humanoid.update
+  let maos: MaosVrm | null = null;
+  const cru = (b: string) => H.getRawBoneNode(b as VRMHumanBoneName);
+  const bracos = (["left", "right"] as const).map((l) => ({ l, a: cru(`${l}UpperArm`), b: cru(`${l}LowerArm`), m: cru(`${l}Hand`), medio: cru(`${l}MiddleProximal`), ind: cru(`${l}IndexProximal`), min: cru(`${l}LittleProximal`) }));
+  const pA = new THREE.Vector3(), pB = new THREE.Vector3(), pC = new THREE.Vector3(), eixo = new THREE.Vector3(), lado = new THREE.Vector3(), cot = new THREE.Vector3(), dir = new THREE.Vector3(), atual = new THREE.Vector3();
+  const qD = new THREE.Quaternion(), qO = new THREE.Quaternion(), qP = new THREE.Quaternion(), qRoda = new THREE.Quaternion();
+  /** gira `osso` (mundo) pra que o segmento até `filho` aponte pra `para` (peso w) */
+  const apontarOsso = (osso: THREE.Object3D, filho: THREE.Object3D, para: THREE.Vector3, w: number) => {
+    osso.updateWorldMatrix(true, false); filho.updateWorldMatrix(false, false);
+    atual.setFromMatrixPosition(filho.matrixWorld).sub(pC.setFromMatrixPosition(osso.matrixWorld)).normalize();
+    qD.setFromUnitVectors(atual, para); osso.getWorldQuaternion(qO); osso.parent!.getWorldQuaternion(qP);
+    osso.quaternion.slerp(qP.invert().multiply(qD.multiply(qO)), w); osso.updateWorldMatrix(false, true);
+  };
+  /** gira `osso` (mundo) em torno do eixo `ax` por `ang` (peso w) */
+  const girarOsso = (osso: THREE.Object3D, q: THREE.Quaternion, w: number) => {
+    osso.getWorldQuaternion(qO); osso.parent!.getWorldQuaternion(qP);
+    osso.quaternion.slerp(qP.invert().multiply(qD.copy(q).multiply(qO)), w); osso.updateWorldMatrix(false, true);
+  };
+  const prenderMaos = (m: MaosVrm) => {
+    for (const br of bracos) {
+      const alvo = br.l === "left" ? m.esq : m.dir; if (!br.a || !br.b || !br.m) continue;
+      // o braço: 2 ossos até o pulso, dobrando pro polo
+      br.a.updateWorldMatrix(true, true);
+      pA.setFromMatrixPosition(br.a.matrixWorld); pB.setFromMatrixPosition(br.b.matrixWorld); pC.setFromMatrixPosition(br.m.matrixWorld);
+      const l1 = pA.distanceTo(pB), l2 = pB.distanceTo(pC);
+      eixo.copy(alvo.pulso).sub(pA); const dist = Math.min(Math.max(eixo.length(), 1e-3), l1 + l2 - 1e-3); eixo.normalize();
+      const a = (l1 * l1 - l2 * l2 + dist * dist) / (2 * dist), h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+      lado.copy(alvo.polo).addScaledVector(eixo, -alvo.polo.dot(eixo)); if (lado.lengthSq() < 1e-8) lado.set(0, -1, 0); lado.normalize();
+      cot.copy(pA).addScaledVector(eixo, a).addScaledVector(lado, h);
+      apontarOsso(br.a, br.b, dir.copy(cot).sub(pA).normalize(), m.peso);
+      pB.setFromMatrixPosition(br.b.matrixWorld); apontarOsso(br.b, br.m, dir.copy(alvo.pulso).sub(pB).normalize(), m.peso);
+      // a mão: os dedos (pulso → falange do meio) pra onde pede; depois gira no próprio eixo até o indicador ficar do lado pedido
+      if (br.medio && br.ind && br.min) {
+        br.m.updateWorldMatrix(true, true);
+        atual.setFromMatrixPosition(br.medio.matrixWorld).sub(pC.setFromMatrixPosition(br.m.matrixWorld)).normalize();
+        girarOsso(br.m, qRoda.setFromUnitVectors(atual, dir.copy(alvo.dedos).normalize()), m.peso);
+        br.m.updateWorldMatrix(false, true);
+        const f = atual.setFromMatrixPosition(br.medio.matrixWorld).sub(pC.setFromMatrixPosition(br.m.matrixWorld)).normalize();
+        const at = lado.setFromMatrixPosition(br.ind.matrixWorld).sub(pA.setFromMatrixPosition(br.min.matrixWorld)); at.addScaledVector(f, -at.dot(f)).normalize();
+        const qr = cot.copy(alvo.indicador).addScaledVector(f, -alvo.indicador.dot(f)).normalize();
+        const ang = Math.atan2(eixo.crossVectors(at, qr).dot(f), at.dot(qr));
+        girarOsso(br.m, qRoda.setFromAxisAngle(f, ang), m.peso);
+      }
+    }
+  };
   /** quanto a coxa vai pra FRENTE (o VRM olha pro +Z; Δ no referencial dele) */
   const frenteDaCoxa = (b: string) => { const q = delta.get(b); if (!q) return 0; qCoxa.copy(q); return baixo.set(0, -1, 0).applyQuaternion(qCoxa).z; };
 
@@ -261,6 +313,7 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
       // a FÍSICA do cabelo/roupa (spring bones — o mais caro) e os materiais MToon só com DETALHE (perto): de longe o
       // cabelo parado e o uniforme do material não mudam nada que se veja
       vrm.humanoid.update(); vrm.expressionManager?.update();
+      if (maos && maos.peso > 0.01) prenderMaos(maos);
       if (detalhe) {
         vrm.lookAt?.update(dt); vrm.nodeConstraintManager?.update();
         if (voltouDetalhe) { vrm.springBoneManager?.reset(); voltouDetalhe = false; }   // (recomeça do repouso, sem o salto do rabo parado)
@@ -271,6 +324,7 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
     pose(p) { pose = p; },
     estilo(e) { estilo = e; },
     marcha(on) { marchaOn = on; },
+    maos(m) { maos = m; },
     detalhe(on) { if (on && !detalhe) voltouDetalhe = true; detalhe = on; },
     dispose() {
       vrm.scene.removeFromParent();
