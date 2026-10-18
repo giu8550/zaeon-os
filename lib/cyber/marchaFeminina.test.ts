@@ -1,20 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { MARCHA_FEMININA, camadaFeminina, faseDaPassada, velDaAbertura } from "./marchaFeminina";
+import { MARCHA_FEMININA, apoioDaFase, camadaFeminina, faseDaPassada, velDaAbertura } from "./marchaFeminina";
 import { CAMERA_PERTO, alternarModoCamera, faixaDaDistancia, olhoDoOmbro } from "./camera";
 
 describe("a marcha feminina (camada por cima do andar)", () => {
-  it("parado: nada muda", () => { expect(camadaFeminina(0.8, 0)).toEqual({}); });
-  it("a pelve gira e inclina pro lado da passada, e troca de sinal quando a outra perna vai à frente", () => {
-    const e = camadaFeminina(1, 1), d = camadaFeminina(-1, 1);
+  it("parado: nada muda", () => { expect(camadaFeminina(0.8, 0, 1)).toEqual({ ossos: {}, desloc: 0 }); });
+  it("a pelve gira com a passada e o QUADRIL vai pro lado da perna de apoio (o lado dela sobe)", () => {
+    const e = camadaFeminina(1, 1, 1).ossos, d = camadaFeminina(-1, 1, -1).ossos;
     expect(e.hips![1]).toBeCloseTo(-MARCHA_FEMININA.giroPelve, 6); expect(d.hips![1]).toBeCloseTo(MARCHA_FEMININA.giroPelve, 6);
-    expect(Math.sign(e.hips![2])).toBe(-Math.sign(d.hips![2]));
+    expect(e.hips![2]).toBeGreaterThan(0); expect(d.hips![2]).toBeLessThan(0);
+    expect(camadaFeminina(0, 1, 1).desloc).toBeCloseTo(MARCHA_FEMININA.deslocQuadril, 6); expect(camadaFeminina(0, 1, -1).desloc).toBeCloseTo(-MARCHA_FEMININA.deslocQuadril, 6);
+  });
+  it("os ombros inclinam AO CONTRÁRIO da pelve; correndo, o balanço diminui", () => {
+    const c = camadaFeminina(0, 1, 1).ossos; expect(Math.sign(c.spine![2] + c.chest![2])).toBe(-Math.sign(c.hips![2]));
+    expect(Math.abs(camadaFeminina(0, 1.6, 1).desloc)).toBeLessThan(Math.abs(camadaFeminina(0, 1, 1).desloc));
+  });
+  it("o apoio: a perna que vai pra TRÁS é a do peso", () => {
+    expect(apoioDaFase(-2, 2)).toBe(1); expect(apoioDaFase(2, 2)).toBe(-1); expect(apoioDaFase(1, 0)).toBe(0);
   });
   it("o tronco e a cabeça DESFAZEM o giro da pelve (o olhar fica reto)", () => {
-    const c = camadaFeminina(1, 1), tronco = c.spine![1] + c.chest![1] + c.head![1];
+    const c = camadaFeminina(1, 1).ossos, tronco = c.spine![1] + c.chest![1] + c.head![1];
     expect(Math.abs(c.hips![1] + tronco)).toBeLessThan(Math.abs(c.hips![1]) * 0.1);
   });
   it("os braços balançam OPOSTOS às pernas e fecham no corpo", () => {
-    const c = camadaFeminina(1, 1);
+    const c = camadaFeminina(1, 1).ossos;
     expect(Math.sign(c.leftUpperArm![0])).toBe(-Math.sign(c.rightUpperArm![0]));
     expect(c.leftUpperArm![2]).toBeGreaterThan(0); expect(c.rightUpperArm![2]).toBeLessThan(0);
   });

@@ -7,7 +7,7 @@
  * cada osso, medida como "quanto girou desde a pose de repouso (T)", vai pro osso humanoide normalizado do VRM — que
  * por definição tem repouso em T e eixos alinhados ao mundo. O quadril leva também o deslocamento (sentar, pousar).
  */
-import { camadaFeminina, faseDaPassada, velDaAbertura } from "@/lib/cyber/marchaFeminina";
+import { apoioDaFase, camadaFeminina, faseDaPassada, velDaAbertura } from "@/lib/cyber/marchaFeminina";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
@@ -204,7 +204,7 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
   let piscaT = 2 + Math.random() * 3, piscando = 0;
   let pose: PoseVrm | null = null, pesoPose = 0, detalhe = true, voltouDetalhe = false;
   const qPose = new THREE.Quaternion(), ePose = new THREE.Euler();
-  let estilo: "feminina" | null = null, marchaOn = false, velMarcha = 0;
+  let estilo: "feminina" | null = null, marchaOn = false, velMarcha = 0, faseAnt = 0, dFase = 0, ritmo = 0, apoio = 0;
   const baixo = new THREE.Vector3(), qCoxa = new THREE.Quaternion();
   /** quanto a coxa vai pra FRENTE (o VRM olha pro +Z; Δ no referencial dele) */
   const frenteDaCoxa = (b: string) => { const q = delta.get(b); if (!q) return 0; qCoxa.copy(q); return baixo.set(0, -1, 0).applyQuaternion(qCoxa).z; };
@@ -229,9 +229,16 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
       if (estilo === "feminina") {
         const { fase, abertura } = faseDaPassada(frenteDaCoxa("leftUpperLeg"), frenteDaCoxa("rightUpperLeg"));
         velMarcha += ((marchaOn ? velDaAbertura(abertura) : 0) - velMarcha) * Math.min(1, dt * 6);
-        if (velMarcha > 0.01) for (const [b, e] of Object.entries(camadaFeminina(fase, velMarcha))) {
-          const n = no(b); if (!n) continue;
-          ePose.set(e[0], e[1], e[2]); qPose.setFromEuler(ePose); n.quaternion.multiply(qPose);
+        // o APOIO (sobre qual perna está o peso): sai de como a fase muda — a perna que vai pra trás é a que pisa
+        if (dt > 0) { const df = (fase - faseAnt) / dt; dFase += (df - dFase) * Math.min(1, dt * 12); ritmo += (Math.abs(dFase) - ritmo) * Math.min(1, dt * 2); }
+        faseAnt = fase; apoio += (apoioDaFase(dFase, ritmo) - apoio) * Math.min(1, dt * 10);
+        if (velMarcha > 0.01) {
+          const cam = camadaFeminina(fase, velMarcha, apoio);
+          for (const [b, e] of Object.entries(cam.ossos)) {
+            const n = no(b); if (!n) continue;
+            ePose.set(e[0], e[1], e[2]); qPose.setFromEuler(ePose); n.quaternion.multiply(qPose);
+          }
+          if (quadrilVrm) quadrilVrm.position.x += cam.desloc / escala;   // o quadril vai pro lado do apoio (o +X do VRM = a esquerda dela)
         }
       }
       // a POSE própria (personagens): sobrepõe a cópia osso a osso, com a respiração no peito
