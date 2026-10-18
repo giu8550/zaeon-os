@@ -27,7 +27,7 @@ export type Pose = {
   /** a moto que ESTACIONOU (fica onde desceu): vaga, posição no mapa, rumo */ motoLargada: { s: number; x: number; y: number; z: number; yaw: number } | null;
   /** DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (espelha lib/cyber/descanso) */ desc: number;
   /** ARENA PvP (espelha lib/cyber/combate): o golpe (seq×4 + nº; 0 = nenhum), a vida (0–100), a espada na mão */ atk: number; hp: number; arma: boolean; /** MAGIA (espelha lib/cyber/magia): o lançamento (0 = nenhum) */ mag: number;
-  /** o MOVIMENTO TURBINADO (espelha lib/cyber/movimento): 0 nada, 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem */ mov: number;
+  /** o MOVIMENTO TURBINADO (espelha lib/cyber/movimento): os 3 bits de baixo = 0 nada, 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem, 6 escudo; 8 = o rifle na mão, 16 = mirando (lib/cyber/rifle) */ mov: number;
   /** quando o cliente MANDOU a pose (ms no relógio dele; 0 = sem) — quem recebe interpola pelo tempo de quem mandou */ t: number;
   /** CORRIDA DE CHECKPOINTS: quantos pegou e a corrida ("semente:largada" — o convite da dupla; "" = nenhuma) */ ck: number; cr: string;
   /** A BORDO da nave-QG: posição LOCAL na planta, nível (0 casa, 1 cabine) e a escada (null = fora da nave) */ bordo: { x: number; z: number; nivel: 0 | 1; esc: number | null } | null;
@@ -59,7 +59,7 @@ export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
     hp: typeof r.hp === "number" && Number.isInteger(r.hp) && r.hp >= 0 && r.hp <= 100 ? r.hp : 100,
     arma: r.arma === 1,
     mag: typeof r.mag === "number" && Number.isInteger(r.mag) && r.mag >= 0 && r.mag < 2 ** 32 ? r.mag : 0,
-    mov: typeof r.mov === "number" && Number.isInteger(r.mov) && r.mov >= 0 && r.mov <= 6 ? r.mov : 0,
+    mov: typeof r.mov === "number" && Number.isInteger(r.mov) && r.mov >= 0 && r.mov <= 31 ? r.mov : 0,
     t: num(r.t, 0, 1e12) ?? 0,
     ck: typeof r.ck === "number" && Number.isInteger(r.ck) && r.ck >= 0 && r.ck < 10000 ? r.ck : 0,
     cr: typeof r.cr === "string" && /^\d{1,10}:\d{12,14}$/.test(r.cr) ? r.cr : "",

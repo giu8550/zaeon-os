@@ -69,8 +69,10 @@ import { DASH, VOO_TURBO, iniciarDash, passoDash, podeDash, sensacaoAPe, tremorD
 import { criarEfeitosMovimento, type EfeitosMovimentoHandle } from "./EfeitosMovimento";
 import { DECOLAGEM, HEROI, pesoAlerta } from "@/lib/cyber/posesCombate";
 import { ITENS, chaveInventario, equipar as equiparNoInv, inventarioInicial, itensPermitidos, sanitizarInventario, type IdItem, type Inventario } from "@/lib/cyber/inventario";
-import { DURACAO_CLIPE, ENERGIA, ESCUDO, FEITICOS, MOV_ESCUDO, codificarLancamento, danoComEscudo, danoDaExplosao, decodificarLancamento, direcaoDaMira, escudoSegura, instanteDoDisparo, ladoDoGolpe, podeLancar, reacaoDoGolpe, recarregarEnergia, varreCorpo, duracaoLancamento, type Feitico } from "@/lib/cyber/magia";
+import { DURACAO_CLIPE, ENERGIA, ESCUDO, FEITICOS, MOV_ESCUDO, codificarLancamento, estadoDoMov, danoComEscudo, danoDaExplosao, decodificarLancamento, direcaoDaMira, escudoSegura, instanteDoDisparo, ladoDoGolpe, podeLancar, reacaoDoGolpe, recarregarEnergia, varreCorpo, duracaoLancamento, type Feitico } from "@/lib/cyber/magia";
 import { criarFxMagia, type FxMagia } from "./MagiaFx";
+import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
+import { DURACAO_RIFLE, NUM_TIRO, RIFLE, animacaoDaMorte, danoDoTiro, desviar, difAng, dispersao, fracaoDoGiro, girarAte, movComRifle, naCabeca, noCorpo, passoCalor, passoInercia, podeAtirar, pontoDaMira, precisaVirar, rifleDoMov, tirosNovos } from "@/lib/cyber/rifle";
 import { CAIDO, COMBO, HIT_STOP, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAcabou, acerta, codificarGolpe, cortouEntre, danoDoGolpe, decodificarGolpe, proximoGolpe, type EstadoAtaque, type Golpe } from "@/lib/cyber/combate";
 import { dentroDaArena, ARENA_ATIVA, BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
 import { criarArena, type ArenaHandle } from "./Arena";
@@ -79,6 +81,9 @@ import { criarLivrosEstudos, type LivrosHandle } from "./LivrosEstudos";
 import type { ItemEstudo } from "@/lib/estudos/itens";
 /** a Espada Espiritual na mão: uma MONTANTE enorme (~3 m) — o peso dela define o golpe (o dono, out/2026) */
 const ESCALA_ESPADA = 2.2;
+/** a BALA do rifle no pipeline dos projéteis da magia (components/cyber/MagiaFx): o raio de energia azul-violeta,
+ *  rápido e fino (o dano de verdade é do rifle — lib/cyber/rifle `danoDoTiro`) */
+const TIRO_FX: Feitico = { ...FEITICOS.estilhaco, nome: "Tiro", vel: RIFLE.vel, raio: RIFLE.raio, alcance: RIFLE.alcance, dano: RIFLE.dano, explosao: 0, empurra: 0.05, cor: 0xe8f6ff, brilho: 0x8a6bff };
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
 import { criarPistas, type PistasHandle } from "./PistaCorrida";
@@ -258,6 +263,9 @@ type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** 
   atkUlt?: number; golpe?: { g: Golpe; ini: number } | null; espada?: EspadaHandle | null; revela?: number; hp?: number;
   /** o MOVIMENTO TURBINADO dele (a presença `mov`): o estado, desde quando, e os pesos suavizados do sprint/dash/guarda */
   mov?: number; tMov?: number; wSpR?: number; wDaR?: number; wAlR?: number;
+  /** o RIFLE dele (lib/cyber/rifle): a arma, na mão / mirando (suavizados), o último tiro visto (seq), o "atirando" que
+   *  decai, a velocidade medida da posição (os andares com a arma) e se está morto (a animação da morte) */
+  rifle?: RifleHandle | null; wRif?: number; wMiraR?: number; tiroSeq?: number; atiraR?: number; velR?: { x: number; z: number }; posAntR?: { x: number; z: number }; morto?: boolean; pitchR?: number;
   /** DESCANSO no lounge (0..1, suavizados): sentado no sofá/puff, deitado no sofá, o tablet na mão; a altura do assento */
   sofa?: number; deita?: number; tab?: number; assentoY?: number; relaxa?: number; pes?: number; poseL?: "trono";
   /** remotos: a pose de descanso que chegou pela rede (lib/cyber/descanso `codificarDescanso`) */
@@ -318,6 +326,16 @@ const FONTES_AGUA: Fonte[] = [
 ];
 /** a moto travada (antes da entrega ao Droid) */
 const AVISO_MOTO_TRAVADA = "As motos se liberam quando o Droid aceitar uma pesquisa sua, completa e em ABNT — leve na Sala do Saber.";
+/** a CRUZ da mira (o rifle): 4 traços que abrem com a dispersão (`--abre`), o ponto do meio, o "x" do acerto e o anel
+ *  do CALOR (`--calor`, laranja; vermelho piscando travado) */
+const CRUZ_CSS = "position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:7;--abre:6px;--calor:0;--acerto:0;";
+const CRUZ_HTML = `<style>.zc-t{position:absolute;background:#e9f7ff;box-shadow:0 0 6px #5fd8ff;border-radius:1px}.zc-h{width:9px;height:2px;top:-1px}.zc-v{width:2px;height:9px;left:-1px}
+.zc-x{position:absolute;left:-9px;top:-9px;width:18px;height:18px;opacity:var(--acerto);transition:opacity .05s}.zc-x:before,.zc-x:after{content:"";position:absolute;left:8px;top:-1px;width:2px;height:20px;background:#fff;box-shadow:0 0 6px #fff}.zc-x:before{transform:rotate(45deg)}.zc-x:after{transform:rotate(-45deg)}
+[data-acerto=cabeca] .zc-x:before,[data-acerto=cabeca] .zc-x:after{background:#ffd36b;box-shadow:0 0 8px #ffb02e}
+.zc-c{position:absolute;left:-17px;top:-17px;width:34px;height:34px;border-radius:50%;background:conic-gradient(rgba(255,138,58,.9) calc(var(--calor)*360deg),transparent 0);-webkit-mask:radial-gradient(circle,transparent 15px,#000 16px);mask:radial-gradient(circle,transparent 15px,#000 16px);opacity:calc(var(--calor)*1.4)}
+[data-trava="1"] .zc-c{background:rgba(255,60,60,.9);animation:zcPisca .25s infinite alternate}@keyframes zcPisca{to{opacity:.25}}</style>
+<div class="zc-c"></div><div class="zc-t zc-h" style="left:calc(-9px - var(--abre))"></div><div class="zc-t zc-h" style="left:var(--abre)"></div>
+<div class="zc-t zc-v" style="top:calc(-9px - var(--abre))"></div><div class="zc-t zc-v" style="top:var(--abre)"></div><div class="zc-t" style="left:-1px;top:-1px;width:2px;height:2px"></div><div class="zc-x"></div>`;
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
 const TAG_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
@@ -612,9 +630,17 @@ export class CyberEngine {
   private energia: number = ENERGIA.max; private energiaGastaEm = -Infinity; private recargaMagia: Record<string, number> = {};
   private conj: { f: Feitico; t0: number; tDisparo: number; tFim: number; yaw: number; pitch: number; disparou: boolean } | null = null;
   private escudoOn = false; private seqMagia = 0; private magEnviar: { v: number; ate: number } | null = null;
-  private projeteis: { id: string; f: Feitico; de: string; deAtor: Ator; dir: THREE.Vector3; o: THREE.Vector3; t0: number; ant: THREE.Vector3 }[] = [];
+  private projeteis: { id: string; f: Feitico; de: string; deAtor: Ator; dir: THREE.Vector3; o: THREE.Vector3; t0: number; ant: THREE.Vector3; /** um tiro do rifle (não um feitiço) */ tiro?: boolean }[] = [];
   private lancamentosRemotos: { a: Ator; f: Feitico; quando: number; yaw: number; pitch: number }[] = [];
+  private tirosRemotos: { a: Ator; quando: number; yaw: number; pitch: number }[] = [];
   private fxMagia: FxMagia | null = null;
+  // ── o RIFLE CÓSMICO (lib/cyber/rifle): a arma, quanto dela está na mão (materializa), mirando (o botão direito) e o peso
+  //    da mira (a câmera aproxima), o gatilho (segurado = rajada), o calor/trava, a rajada (dispersão), o coice, a
+  //    velocidade com inércia, a virada no lugar ("Rifle Turn"), o ponto da mira e a cruz na tela
+  private rifle: RifleHandle | null = null; private wRifle = 0; private mirando = false; private wMira = 0; private gatilho = false;
+  private proxTiro = 0; private calor = 0; private travadoAte = -Infinity; private ultimoTiro = -Infinity; private rajada = 0; private wAtira = 0; private coice = 0; private seqTiro = 0;
+  private velRifle = { x: 0, z: 0 }; private giroRifle: { de: number; ang: number; t0: number; dur: number } | null = null; private freouEm = -Infinity; private morreu = false;
+  private alvoMira = new THREE.Vector3(); private cruz: HTMLDivElement | null = null; private reacaoTiroAte = -Infinity;
   private vida = VIDA_MAX; private caidoAte = -Infinity; private protegidoAte = -Infinity; private empurrao = { x: 0, z: 0 }; private wGuardaArena = 0;
   private vRastroB = new THREE.Vector3(); private vRastroP = new THREE.Vector3();
   /** o HIT-STOP (até quando a ação fica congelada — o peso do golpe que pegou) e o golpe pesado que já esmagou o chão */
@@ -958,6 +984,7 @@ export class CyberEngine {
    *  tablet surgia e soltá-la já com o foco no laboratório (o iframe) — o keyup ia pro lab, a tecla ficava presa aqui e, ao
    *  guardar o tablet, o personagem saía andando sozinho. Vale também pra janela que perde o foco (alt-tab, iframe) */
   soltarTeclas() {
+    this.gatilho = false; this.mirando = false;
     this.keys = {}; this.joy = { x: 0, y: 0, on: false }; this.voY.subir = false; this.voY.descer = false;
     if (this.espaco) { this.espaco = false; this.comandoJet(false); }
   }
@@ -1133,7 +1160,7 @@ export class CyberEngine {
     const eu = [{ x: this.eu.pos.x, z: this.eu.pos.z }, ...[...this.remotos.values()].map((a) => ({ x: a.pos.x, z: a.pos.z }))];   // desviam de quem está no caminho
     for (const p of this.personagens) { p.h.mostrar(!some); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position, eu); }
   }
-  private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } if (a.somFio) { this.som.soltarLoop(a.somFio); a.somFio = null; } a.nave?.dispose(); a.nave = null; a.espada?.dispose(); a.espada = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
+  private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } if (a.somFio) { this.som.soltarLoop(a.somFio); a.somFio = null; } a.nave?.dispose(); a.nave = null; a.espada?.dispose(); a.espada = null; a.rifle?.dispose(); a.rifle = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
   // ───────────── API pública (React → engine) ─────────────
   iniciar(go = "viajar") {
@@ -1193,6 +1220,7 @@ export class CyberEngine {
   /** ATACAR (X / clique com o mouse travado / botão ATACAR): o próximo golpe do COMBO (lib/cyber/combate); no meio de
    *  um golpe fica na fila e encadeia. Vira pra onde a câmera olha. Sem arma, de moto, pilotando, sentado ou caído: nada */
   atacar(): boolean {
+    if (this.inv.equipado === "rifle-cosmico") return false;   // (o rifle atira pelo gatilho — `puxarGatilho`)
     if (!this.inv.equipado || this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte) return false;
     if (this.ataque && !golpeAcabou(this.ataque, this.agora)) { this.filaAtaque = true; return true; }
     this.comecarGolpe(); return true;
@@ -1216,7 +1244,7 @@ export class CyberEngine {
     return 0;
   }
   /** a vida e o estado do combate (o HUD do React lê) */
-  combate() { return { vida: this.vida, max: VIDA_MAX, caido: this.agora < this.caidoAte, naArena: !!this.eu && !this.noCeu && naArena(this.eu.pos), arma: this.inv.equipado ? ITENS[this.inv.equipado].nome : null, energia: this.energia / ENERGIA.max, escudo: this.escudoOn }; }
+  combate() { return { vida: this.vida, max: VIDA_MAX, caido: this.agora < this.caidoAte, naArena: !!this.eu && !this.noCeu && naArena(this.eu.pos), arma: this.inv.equipado ? ITENS[this.inv.equipado].nome : null, energia: this.energia / ENERGIA.max, escudo: this.escudoOn, calor: this.wRifle > 0.05 ? this.calor : null, travado: this.agora < this.travadoAte }; }
   private fx(): FxMagia { this.fxMagia ??= criarFxMagia(this.cena.scene, { low: this.o.low }); return this.fxMagia; }
   /** a ZONA DE DUELO (a praça — a plataforma das motos e das corridas): só ali a magia de um tira vida do outro */
   private naZonaDeDuelo(p: { x: number; z: number }, ceu: boolean) { return !ceu && dentroDaArena(p); }
@@ -1245,6 +1273,136 @@ export class CyberEngine {
     this.escudoOn = on;
     if (on) this.eu.av.tocarClipe(ESCUDO.clipe, { segurar: true }); else this.eu.av.soltarClipe();
   }
+  // ───────────── o RIFLE CÓSMICO (lib/cyber/rifle) ─────────────
+  private rifleEquipado() { return this.inv.equipado === "rifle-cosmico"; }
+  /** dá pra estar com o rifle agora? (a pé no chão, sem lançar nem escudo, sem moto/nave/sofá/tablet, vivo) */
+  private podeRifle() {
+    return this.rifleEquipado() && !this.menu && this.moto === null && !this.pilotando && !this.descanso && !this.tabletQuer && !this.labAberto && !this.nascendo && !this.tunel && !this.jet.noAr && !this.decola && !this.conj && !this.escudoOn && this.agora >= this.caidoAte && !this.emCena && !this.viagemNave;
+  }
+  /** a tecla 1: saca o rifle (equipa) ⇄ guarda */
+  alternarRifle() {
+    const saca = !this.rifleEquipado();
+    this.equipar(saca ? "rifle-cosmico" : null);
+    this.o.onAviso?.(saca ? "Rifle Cósmico na mão · botão direito mira · clique atira · 1 guarda" : "Rifle guardado");
+    if (saca) this.som.tocar("rifle-saca", this.eu.av.group.position, { dist: DISTANCIA.eu });
+  }
+  /** o GATILHO (clique com o mouse travado / X): segurado, rajada */
+  puxarGatilho(on: boolean) { this.gatilho = on && this.rifleEquipado(); }
+  /** MIRAR (botão direito segurado) */
+  mirar(on: boolean) { this.mirando = on && this.rifleEquipado(); }
+  /** o PONTO DA MIRA: o raio do meio da tela (a câmera) — o 1º corpo, o chão, ou o alcance */
+  private atualizarMira() {
+    const o = this.cam.position, d = this.cam.getWorldDirection(this.vRastroB);
+    const corpos = [...this.remotos.values()].filter((a) => !a.morto).map((a) => ({ id: a.id, pe: { x: a.pos.x, y: a.alt, z: a.pos.z } }));
+    const m = pontoDaMira({ x: o.x, y: o.y, z: o.z }, { x: d.x, y: d.y, z: d.z }, corpos, { alcance: RIFLE.alcance, chao: this.jet.noAr ? null : this.eu.alt });
+    // (o olho da câmera fica atrás do ombro: um ponto atrás de mim viraria um tiro pra trás — empurra pra frente)
+    const frente = (m.p.x - this.eu.pos.x) * d.x + (m.p.z - this.eu.pos.z) * d.z;
+    if (frente < 2) this.alvoMira.set(o.x + d.x * 30, o.y + d.y * 30, o.z + d.z * 30); else this.alvoMira.set(m.p.x, m.p.y, m.p.z);
+  }
+  /** um TIRO: a bala sai da boca do cano rumo ao ponto da mira, com a dispersão de agora; esquenta; avisa a rede */
+  private atirar() {
+    const t = this.agora, r = this.rifle; if (!r) return;
+    this.proxTiro = t + RIFLE.cadencia; this.ultimoTiro = t; this.rajada += 1; this.coice = 1;
+    this.calor = Math.min(1, this.calor + RIFLE.calorPorTiro);
+    r.group.updateWorldMatrix(true, false);
+    const boca = r.group.localToWorld(r.boca.clone());
+    const d0 = this.alvoMira.clone().sub(boca).normalize();
+    const d = desviar({ x: d0.x, y: d0.y, z: d0.z }, dispersao(this.wMira, Math.hypot(this.velRifle.x, this.velRifle.z), this.rajada - 1), Math.random(), Math.random());
+    const dir = new THREE.Vector3(d.x, d.y, d.z);
+    this.dispararTiro("eu", this.eu, boca, dir); r.disparar();
+    this.magEnviar = { v: codificarLancamento(++this.seqTiro, { num: NUM_TIRO }, Math.atan2(d.x, d.z), Math.asin(Math.max(-1, Math.min(1, d.y)))), ate: t + 1.2 };
+    this.tremor = Math.max(this.tremor, 0.025);
+    if (this.calor >= 1) { this.travadoAte = t + RIFLE.trava; this.som.tocar("rifle-vapor", this.eu.av.group.position, { dist: DISTANCIA.eu }); this.o.onAviso?.("Rifle superaquecido — esfriando…"); }
+  }
+  /** a bala (minha ou de outro): o mesmo pipeline dos projéteis da magia, com o visual e o dano do rifle */
+  private dispararTiro(de: string, deAtor: Ator, o: THREE.Vector3, dir: THREE.Vector3) {
+    const f = TIRO_FX, id = this.fx().projetil(f); this.fx().moverProjetil(id, o, dir);
+    this.projeteis.push({ id, f, de, deAtor, dir, o: o.clone(), t0: this.agora, ant: o.clone(), tiro: true });
+    this.som.tocar("rifle-tiro", o, { dist: deAtor === this.eu ? DISTANCIA.eu : DISTANCIA.perto, volume: deAtor === this.eu ? 0.9 : 0.75, taxa: 0.94 + Math.random() * 0.12 });
+  }
+  /** um TIRO pegou alguém: a cabeça vale mais; a reação (com folga: não a cada bala); em mim, o dano (na zona de duelo) */
+  private acertarTiro(a: Ator, pr: { deAtor: Ator }, ponto: THREE.Vector3) {
+    const souEu = a === this.eu, de = { x: pr.deAtor.pos.x, z: pr.deAtor.pos.z }, pe = souEu ? this.eu.alt : a.alt;
+    const cabeca = naCabeca(ponto.y, pe), dano = danoDoTiro(cabeca);
+    const segura = souEu ? this.escudoOn && escudoSegura({ x: a.pos.x, z: a.pos.z, rumo: a.facing }, de) : !!a.escudo && escudoSegura({ x: a.pos.x, z: a.pos.z, rumo: a.facing }, de);
+    if (pr.deAtor === this.eu) { this.numero(cabeca ? `${dano}!` : String(dano), ponto, cabeca ? "#ffd36b" : "#cfe9ff"); this.marcarAcerto(cabeca); }
+    if (!segura && (souEu ? this.agora >= this.reacaoTiroAte : true) && !a.morto && !(souEu && this.agora < this.caidoAte)) {
+      if (souEu) this.reacaoTiroAte = this.agora + 0.8;
+      if (cabeca) a.av.tocarClipe("cambaleia", { velocidade: 1.9 }); else { const rc = reacaoDoGolpe(FEITICOS.estilhaco, ladoDoGolpe({ x: a.pos.x, z: a.pos.z, rumo: a.facing }, de)); a.av.tocarClipe(rc.clipe, { espelhar: rc.espelhar, velocidade: 1.5 }); }
+    }
+    if (!souEu) return;
+    if (!(this.naZonaDeDuelo(this.eu.pos, this.noCeu) && this.naZonaDeDuelo(pr.deAtor.pos, !!pr.deAtor.ceu))) return;
+    this.levar({ dano: danoComEscudo(dano, segura), de, empurra: segura ? 0 : cabeca ? 1.2 : 0.3 });
+  }
+  /** o "x" na cruz quando o MEU tiro pega (dourado na cabeça) */
+  private marcarAcerto(cabeca: boolean) {
+    const c = this.cruz; if (!c) return;
+    c.dataset.acerto = cabeca ? "cabeca" : "corpo"; c.style.setProperty("--acerto", "1");
+    window.clearTimeout(Number(c.dataset.tAcerto ?? 0)); c.dataset.tAcerto = String(window.setTimeout(() => c.style.setProperty("--acerto", "0"), 110));
+  }
+  /** a CRUZ da mira no meio da tela (abre com a dispersão; some sem o rifle) */
+  private atualizarCruz() {
+    const ver = this.wRifle > 0.6 && !this.menu;
+    if (ver && !this.cruz) { const c = document.createElement("div"); c.style.cssText = CRUZ_CSS; c.innerHTML = CRUZ_HTML; this.o.overlay.appendChild(c); this.cruz = c; }
+    if (!this.cruz) return;
+    this.cruz.style.display = ver ? "block" : "none";
+    if (!ver) return;
+    const ang = dispersao(this.wMira, Math.hypot(this.velRifle.x, this.velRifle.z), this.rajada), px = Math.max(3, (Math.tan(ang) / Math.tan((this.cam.fov * Math.PI) / 360)) * (this.h / 2));
+    this.cruz.style.setProperty("--abre", `${px.toFixed(1)}px`);
+    this.cruz.style.setProperty("--calor", this.calor.toFixed(2));
+    this.cruz.dataset.trava = this.agora < this.travadoAte ? "1" : "0";
+  }
+  /** o RIFLE a cada quadro: materializa/desfaz, a mira (o peso e o ponto), o gatilho, o calor, o coice, a morte */
+  private passoRifle(t: number, dt: number) {
+    const pode = this.podeRifle(), quer = pode ? 1 : 0;
+    if (this.rifleEquipado() && !this.rifle) { this.rifle = criarRifleCosmico({ low: this.o.low }); }
+    this.wRifle = Math.max(0, Math.min(1, this.wRifle + (quer ? dt / 0.35 : -dt / 0.3)));
+    const mirandoAgora = pode && (this.mirando || t - this.ultimoTiro < 0.55);   // (atirar do quadril ergue a arma um instante)
+    this.wMira += ((mirandoAgora ? 1 : 0) - this.wMira) * Math.min(1, dt * (mirandoAgora ? 12 : 7));
+    if (this.wRifle > 0.05) this.atualizarMira();
+    if (this.gatilho && pode && this.wRifle > 0.85 && podeAtirar(t, this.proxTiro, this.travadoAte)) this.atirar();
+    this.calor = passoCalor(this.calor, dt, t, this.ultimoTiro); if (t >= this.travadoAte && this.travadoAte > -Infinity && this.calor <= 0.35) this.travadoAte = -Infinity;
+    this.rajada = Math.max(0, this.rajada - dt * (t - this.ultimoTiro > 0.25 ? 9 : 2));
+    this.coice = Math.max(0, this.coice - dt * 14);
+    this.wAtira += ((t - this.ultimoTiro < 0.2 ? 1 : 0) - this.wAtira) * Math.min(1, dt * 16);
+    this.rifle?.atualizar(t, dt, { revela: this.wRifle, calor: this.calor });
+    // a MORTE (com qualquer arma): caiu → a animação pelo lado do golpe, segurada; renasceu → solta
+    if (this.morreu && t >= this.caidoAte) { this.morreu = false; this.eu.av.soltarClipe(); }
+    this.atualizarCruz();
+  }
+  /** o MOVIMENTO com o rifle (no chão): a velocidade com INÉRCIA; mirando, o corpo segue a câmera e anda de lado/costas;
+   *  levando, ele vira no seu ritmo pro rumo (correndo abre a curva) e, parado, a virada grande é o "Rifle Turn" */
+  private moverComRifle(eu: Ator, dir: { wx: number; wz: number } | null, correndo: boolean, dt: number): boolean {
+    const t = this.agora, mir = this.wMira > 0.5, yawMira = this.camAz + Math.PI, vAtual = Math.hypot(this.velRifle.x, this.velRifle.z);
+    const g = this.giroRifle;
+    if (g) {   // VIRANDO nos pés: o rumo segue o clipe; anda só no fim da virada
+      const u = Math.min(1, (t - g.t0) / g.dur); eu.facing = g.de + g.ang * fracaoDoGiro(u);
+      if (u >= 1 || mir) this.giroRifle = null;
+    }
+    // a velocidade pedida: mirando, o passo tático (de costas, mais devagar); levando, andar/correr (sem o sprint)
+    let alvoV = { x: 0, z: 0 };
+    if (dir && !(g && t - g.t0 < g.dur * 0.6)) {
+      const c = noCorpo({ x: dir.wx, z: dir.wz }, mir ? yawMira : eu.facing);
+      const vel = mir ? (c.frente < -0.3 ? RIFLE.velCostas : RIFLE.velMira) : correndo ? Math.min(this.velAPe, 7.5) : 4;
+      alvoV = { x: dir.wx * vel, z: dir.wz * vel };
+    }
+    const corria = vAtual > 5.5;
+    this.velRifle = passoInercia(this.velRifle, alvoV, dt, { acel: RIFLE.acel, freio: corria ? RIFLE.freioCorrida : RIFLE.freio });
+    // parou de CORRER de repente (soltou tudo): a freada com a arma ("Rifle Run To Stop") — o corpo escorrega pra parar
+    if (corria && !dir && t - this.freouEm > 1.5 && !mir) { this.freouEm = t; eu.av.tocarClipe("freia", { inicio: 0.45, velocidade: 1.25 }); }
+    eu.pos.x += this.velRifle.x * dt; eu.pos.z += this.velRifle.z * dt;
+    const v = Math.hypot(this.velRifle.x, this.velRifle.z);
+    if (!this.giroRifle) {
+      if (mir) eu.facing = girarAte(eu.facing, eu.facing + difAng(eu.facing, yawMira), RIFLE.giroMira * dt);
+      else if (dir) {
+        const rumo = Math.atan2(dir.wx, dir.wz), vira = precisaVirar(eu.facing, rumo, v);
+        if (vira) { const dur = DURACAO_RIFLE.gira / RIFLE.velGiroClipe; this.giroRifle = { de: eu.facing, ang: difAng(eu.facing, rumo), t0: t, dur }; eu.av.tocarClipe("gira", { espelhar: vira > 0, velocidade: RIFLE.velGiroClipe }); }   // (o clipe vira pra direita: pra esquerda, espelhado)
+        else eu.facing = girarAte(eu.facing, v > 0.3 ? Math.atan2(this.velRifle.x, this.velRifle.z) : rumo, (v > 5.5 ? RIFLE.giroCorrendo : RIFLE.giroAndando) * dt);
+      }
+    }
+    eu.facing = Math.atan2(Math.sin(eu.facing), Math.cos(eu.facing));   // (o rumo fica em (−π, π])
+    return v > 0.25;
+  }
   /** um projétil sai (de quem lançou, da mão dele, na direção da mira) */
   private dispararProjetil(de: string, deAtor: Ator, f: Feitico, yaw: number, pitch: number) {
     const o = deAtor.av.pontoDaMao("direita", new THREE.Vector3()), d = direcaoDaMira(yaw, pitch), dir = new THREE.Vector3(d.x, d.y, d.z);
@@ -1267,7 +1425,7 @@ export class CyberEngine {
   /** a MAGIA a cada quadro: a energia, o lançamento (o disparo no quadro certo), o escudo, os lançamentos dos outros e os
    *  projéteis (andam, varrem os corpos, explodem) */
   private passoMagia(t: number, dt: number) {
-    if (!this.fxMagia && !this.conj && !this.projeteis.length && !this.lancamentosRemotos.length && !this.escudoOn && this.energia >= ENERGIA.max) return;   // (nada de magia por perto: nem cria os efeitos)
+    if (!this.fxMagia && !this.conj && !this.projeteis.length && !this.lancamentosRemotos.length && !this.tirosRemotos.length && !this.escudoOn && this.energia >= ENERGIA.max) return;   // (nada de magia por perto: nem cria os efeitos)
     this.energia = recarregarEnergia(this.energia, dt, t, this.escudoOn ? t : this.energiaGastaEm);
     if (this.escudoOn) { this.energia = Math.max(0, this.energia - ESCUDO.gasto * dt); this.energiaGastaEm = t; if (this.energia <= 0) this.erguerEscudo(false); }
     this.fx().escudo("eu", this.escudoOn ? { pos: this.eu.av.group.position, rumo: this.eu.facing } : null);
@@ -1279,6 +1437,13 @@ export class CyberEngine {
     for (let i = this.lancamentosRemotos.length - 1; i >= 0; i--) {
       const l = this.lancamentosRemotos[i]!; if (t < l.quando) continue; this.lancamentosRemotos.splice(i, 1);
       if (this.remotos.get(l.a.id) === l.a) this.dispararProjetil(l.a.id, l.a, l.f, l.yaw, l.pitch);
+    }
+    // os TIROS dos outros: da boca do rifle dele (ou da mão), na direção que veio na rede
+    for (let i = this.tirosRemotos.length - 1; i >= 0; i--) {
+      const l = this.tirosRemotos[i]!; if (t < l.quando) continue; this.tirosRemotos.splice(i, 1);
+      if (this.remotos.get(l.a.id) !== l.a) continue;
+      const o = l.a.rifle?.group.visible ? (l.a.rifle.group.updateWorldMatrix(true, false), l.a.rifle.group.localToWorld(l.a.rifle.boca.clone())) : l.a.av.pontoDaMao("direita", new THREE.Vector3());
+      const d = direcaoDaMira(l.yaw, l.pitch); this.dispararTiro(l.a.id, l.a, o, new THREE.Vector3(d.x, d.y, d.z)); l.a.rifle?.disparar(); l.a.atiraR = 1;
     }
     const alvos: Ator[] = [this.eu, ...this.remotos.values()], pos = new THREE.Vector3();
     for (let i = this.projeteis.length - 1; i >= 0; i--) {
@@ -1293,7 +1458,9 @@ export class CyberEngine {
       const fim = acertou || acabou || pos.y < (pr.deAtor === this.eu ? this.eu.alt : pr.deAtor.alt) - 4;
       if (!fim) { this.fx().moverProjetil(pr.id, pos, pr.dir); pr.ant.copy(pos); continue; }
       const ponto = pr.ant.clone().lerp(pos, acertou ? u : 1);
-      this.fx().acabarProjetil(pr.id); this.fx().impacto(pr.f, ponto); this.projeteis.splice(i, 1);
+      this.fx().acabarProjetil(pr.id); this.projeteis.splice(i, 1);
+      if (pr.tiro) { if (acertou || !acabou) { this.fx().impacto(pr.f, ponto); this.som.tocar("acerto", ponto, { dist: DISTANCIA.perto, volume: acertou ? 0.6 : 0.25, taxa: 1.7 }); } if (acertou) this.acertarTiro(acertou, pr, ponto); continue; }   // (a bala do rifle: sem explosão)
+      this.fx().impacto(pr.f, ponto);
       this.som.tocar(pr.f.explosao ? "impacto-heroi" : "acerto", ponto, { dist: DISTANCIA.perto, volume: pr.f.explosao ? 1 : 0.7, taxa: pr.f.explosao ? 0.8 : 1.4 });
       if (acertou) this.acertarAtor(acertou, pr, pr.f.dano);
       // a EXPLOSÃO (a Nova): quem estiver perto também leva (menos), menos quem já levou em cheio
@@ -1401,6 +1568,12 @@ export class CyberEngine {
     // a MAGIA dele: um lançamento novo (a mesma animação; o projétil sai da mão dele no quadro do disparo) e o escudo
     if (p.mag && p.mag !== a.magUlt) {
       const novo = a.magUlt !== undefined, d = decodificarLancamento(p.mag); a.magUlt = p.mag;
+      if (novo && d && d.num === NUM_TIRO) {   // os TIROS dele: quantos desde o último (o seq), um atrás do outro na cadência
+        const n = a.tiroSeq === undefined ? 1 : tirosNovos(a.tiroSeq, d.seq);
+        for (let k = 0; k < n; k++) this.tirosRemotos.push({ a, quando: t + k * RIFLE.cadencia, yaw: d.yaw, pitch: d.pitch });
+        a.facing = d.yaw; a.pitchR = d.pitch;
+      }
+      if (d && d.num === NUM_TIRO) a.tiroSeq = d.seq;
       if (novo && d?.feitico) {
         const f = d.feitico, dur = DURACAO_CLIPE[f.clipe]; a.facing = d.yaw; a.av.olharPara(d.yaw);
         a.av.tocarClipe(f.clipe, { velocidade: f.velClipe });
@@ -1408,11 +1581,18 @@ export class CyberEngine {
         this.fx().carga(`r-${a.id}`, f, () => a.av.pontoDaMao("direita", new THREE.Vector3()), t + instanteDoDisparo(f, dur));
       }
     } else if (!p.mag && a.magUlt === undefined) a.magUlt = 0;
-    const escudo = (p.mov ?? 0) === MOV_ESCUDO;
+    const escudo = estadoDoMov(p.mov ?? 0) === MOV_ESCUDO;
+    // o RIFLE dele (os bits de cima da mov): na mão / mirando — a arma materializa junto
+    { const r = rifleDoMov(p.mov ?? 0), k1 = 1 / 30;
+      a.wRif = Math.max(0, Math.min(1, (a.wRif ?? 0) + (r.naMao && !a.morto ? k1 / 0.35 : -k1 / 0.3)));
+      a.wMiraR = (a.wMiraR ?? 0) + ((r.mirando ? 1 : 0) - (a.wMiraR ?? 0)) * Math.min(1, k1 * 10);
+      if (a.wRif > 0 && !a.rifle) a.rifle = criarRifleCosmico({ low: true }); }
+    // a MORTE dele: a vida chegou a 0 → a animação da morte (segurada) até renascer
+    { const morto = (p.hp ?? VIDA_MAX) <= 0; if (morto !== !!a.morto) { a.morto = morto; if (morto) a.av.tocarClipe("morre", { segurar: true, velocidade: 1.5 }); else a.av.soltarClipe(); } }   // (1,5×: a queda termina antes de renascer — lib/cyber/combate CAIDO)
     if (escudo !== !!a.escudo) { a.escudo = escudo; if (escudo) a.av.tocarClipe(ESCUDO.clipe, { segurar: true }); else a.av.soltarClipe(); }
     this.fx().escudo(`r-${a.id}`, escudo ? { pos: a.av.group.position, rumo: a.facing } : null);
     // o MOVIMENTO TURBINADO dele: o estado que chegou (e desde quando) e os pesos suavizados (a pose sem tranco)
-    const mov = p.mov ?? 0; if (mov !== a.mov) { a.mov = mov; a.tMov = t; }
+    const mov = estadoDoMov(p.mov ?? 0); if (mov !== a.mov) { a.mov = mov; a.tMov = t; }
     const k = Math.min(1, (1 / 30) * 8);
     a.wSpR = (a.wSpR ?? 0) + ((mov === 1 ? 1 : 0) - (a.wSpR ?? 0)) * k;
     a.wDaR = (a.wDaR ?? 0) + ((mov === 2 ? 1 : 0) - (a.wDaR ?? 0)) * Math.min(1, k * 2);
@@ -1457,7 +1637,7 @@ export class CyberEngine {
     this.numero(`-${o.dano}`, cab, "#ff5a6a"); this.tremor = Math.max(this.tremor, 0.18);
     this.som.tocar("acerto", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 1, taxa: 0.85 });
     if (this.hudCombate) { this.hudCombate.dataset.dano = String(this.agora); }
-    if (this.vida <= 0) { this.caidoAte = this.agora + CAIDO; this.ataque = null; this.som.tocar("impacto-heroi", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.7, taxa: 1.3 }); }
+    if (this.vida <= 0) { const m = animacaoDaMorte(ladoDoGolpe({ x: this.eu.pos.x, z: this.eu.pos.z, rumo: this.eu.facing }, o.de)); this.eu.av.tocarClipe(m.clipe, { espelhar: m.espelhar, segurar: true, velocidade: 1.5 }); this.morreu = true; this.gatilho = false; this.caidoAte = this.agora + CAIDO; this.ataque = null; this.som.tocar("impacto-heroi", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.7, taxa: 1.3 }); }
   }
   /** ESPAÇO / botão VOAR (segurar): decola e sobe; soltar cai planando até pousar */
   /** ESPAÇO / VOAR: no chão, a DECOLAGEM com impulso — agacha um instante (parado mais; andando/correndo quase nada, o
@@ -2913,7 +3093,8 @@ export class CyberEngine {
       if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }
       if (k === "j" && !this.menu) { if (!e.repeat) this.alternarDescanso(); e.preventDefault(); return; }
       if (k === "c" && !this.menu) { if (!e.repeat) this.darDash(); e.preventDefault(); return; }   // C = DASH (o arranque — desvio)
-      if (k === "x" && !this.menu) { if (!e.repeat) this.atacar(); e.preventDefault(); return; }
+      if (k === "x" && !this.menu) { if (!e.repeat) { if (this.rifleEquipado()) this.puxarGatilho(true); else this.atacar(); } e.preventDefault(); return; }
+      if (k === RIFLE.tecla && !this.menu && !this.pilotando && this.moto === null) { if (!e.repeat) this.alternarRifle(); e.preventDefault(); return; }   // 1 = saca/guarda o RIFLE
       // MAGIA (a pé): Q = Estilhaço Estelar, E = Nova Cósmica, R (segurar) = o escudo
       if ((k === "q" || k === "e") && !this.menu && !this.pilotando && this.moto === null) { if (!e.repeat) this.lancar(k === "q" ? FEITICOS.estilhaco : FEITICOS.nova); e.preventDefault(); return; }
       if (k === ESCUDO.tecla && !this.menu && !this.pilotando && this.moto === null) { if (!e.repeat) this.erguerEscudo(true); e.preventDefault(); return; }   // X = ATACAR (o combo da espada; o clique também, com o mouse travado)   // J = sentar / deitar / levantar (lounge)
@@ -2931,7 +3112,7 @@ export class CyberEngine {
     // a janela perdeu o foco (o lab do tablet, outra aba, alt-tab): o keyup não vem mais pra cá — solta tudo
     on("blur", () => this.soltarTeclas());
     { const oculto = () => { if (document.hidden) this.soltarTeclas(); }; document.addEventListener("visibilitychange", oculto); this.cleanups.push(() => document.removeEventListener("visibilitychange", oculto)); }
-    on("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "shift") { this.keys.shift = false; return; } if (k === " " || k === "spacebar") { this.espaco = false; this.voY.subir = false; this.comandoJet(false); return; } if (k === "e") this.voY.subir = false; if (k === "q") this.voY.descer = false; if (k === ESCUDO.tecla) this.erguerEscudo(false); this.keys[k] = false; });
+    on("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "shift") { this.keys.shift = false; return; } if (k === " " || k === "spacebar") { this.espaco = false; this.voY.subir = false; this.comandoJet(false); return; } if (k === "e") this.voY.subir = false; if (k === "q") this.voY.descer = false; if (k === ESCUDO.tecla) this.erguerEscudo(false); if (k === "x") this.puxarGatilho(false); this.keys[k] = false; });
     // olhar livre: trava/solta o ponteiro
     const aoTravar = () => {
       this.olharLivre = document.pointerLockElement === cv; this.drag = null; this.ptrs.clear();
@@ -2943,8 +3124,11 @@ export class CyberEngine {
       const dica = document.createElement("div"); dica.style.cssText = DICA_MIRA_CSS; dica.textContent = "Clique na cena: o mouse passa a mover a câmera · Esc solta"; this.o.overlay.appendChild(dica); this.dicaMira = dica;
       this.cleanups.push(() => { dica.remove(); if (document.pointerLockElement === cv) document.exitPointerLock(); });
     }
+    onC("contextmenu", (e) => { if (this.rifleEquipado() && !this.menu) e.preventDefault(); });   // (o botão direito é a MIRA)
     onC("pointerdown", (e) => {
-      if (this.olharLivre) { if (e.pointerType === "mouse" && e.button === 0) this.atacar(); return; }   // mouse travado: o clique ATACA (com arma; as outras ações são no F)
+      // o RIFLE: o botão direito MIRA (segurado); com o mouse travado, o esquerdo é o GATILHO (segurado = rajada)
+      if (e.pointerType === "mouse" && e.button === 2 && this.rifleEquipado() && !this.menu) { this.mirar(true); e.preventDefault(); return; }
+      if (this.olharLivre) { if (e.pointerType === "mouse" && e.button === 0) { if (this.rifleEquipado()) this.puxarGatilho(true); else this.atacar(); } return; }   // mouse travado: o clique ATACA (com arma; as outras ações são no F)
       if (e.pointerType === "mouse" && e.button === 0 && this.podeOlharLivre()) {   // 1º clique: trava o mouse (não é um clique de ação)
         this.travando = true;
         try { const pr = cv.requestPointerLock() as unknown as Promise<void> | undefined; pr?.catch?.(() => { this.travando = false; }); } catch { this.travando = false; }
@@ -2956,7 +3140,8 @@ export class CyberEngine {
     });
     on("pointermove", (e) => {
       if (this.olharLivre) {   // mexer o mouse = girar a câmera (direita gira pra direita; pra baixo olha pra baixo)
-        this.camSegueEm = performance.now() + 1500; this.camAz -= e.movementX * SENS_OLHAR; this.camPitch = limitarPitch(this.camPitch + e.movementY * SENS_OLHAR * 0.85);
+        const sens = SENS_OLHAR * (1 - 0.4 * this.wMira);   // (mirando, com o zoom: mais fino)
+        this.camSegueEm = performance.now() + 1500; this.camAz -= e.movementX * sens; this.camPitch = limitarPitch(this.camPitch + e.movementY * sens * 0.85);
         return;
       }
       if (this.ptrs.has(e.pointerId)) this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -2966,6 +3151,8 @@ export class CyberEngine {
       this.camSegueEm = performance.now() + 1500; this.camAz = this.drag.az - dx * 0.006; this.camPitch = limitarPitch(this.drag.pitch + dy * 0.005);   // arrastar pra baixo até o chão → olhar pro céu
     });
     on("pointerup", (e) => {
+      if (e.pointerType === "mouse" && e.button === 2) this.mirar(false);
+      if (e.pointerType === "mouse" && e.button === 0) this.puxarGatilho(false);
       if (this.travando) { this.travando = false; return; }
       if (this.olharLivre) return;
       const era = this.ptrs.size; this.ptrs.delete(e.pointerId); if (this.ptrs.size < 2) this.pinch0 = 0;
@@ -3252,7 +3439,7 @@ export class CyberEngine {
     }
     // de moto o alvo segue por TEMPO (não por quadro): a 60 m/s, 0,12/quadro deixava a câmera ~17 m pra trás; assim
     // fica ~v/12 (≈ 5 m no boost) — a moto "puxa" um pouco à frente, que dá a sensação de arrancada
-    if (this.camPerto) { const q = seguirPerto(this.camT, { x: this.eu.pos.x, y: 1.2 + this.eu.alt, z: this.eu.pos.z }, dt); this.camT.set(q.x, q.y, q.z); }   // PERTO: segue por tempo e com atraso limitado (voo/turbo/dash não deixam o personagem fugir)
+    if (this.camPerto || this.wMira > 0.01) { const q = seguirPerto(this.camT, { x: this.eu.pos.x, y: 1.2 + this.eu.alt, z: this.eu.pos.z }, dt); this.camT.set(q.x, q.y, q.z); }   // PERTO: segue por tempo e com atraso limitado (voo/turbo/dash não deixam o personagem fugir)
     else this.camT.lerp(this.vCamA.set(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), this.moto !== null ? 1 - Math.exp(-dt * 12) : 0.12);
     const cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
     // MOTO: câmera de perseguição — volta sozinha pra TRÁS da moto (com atraso: a curva aparece na tela), a não ser
@@ -3262,6 +3449,7 @@ export class CyberEngine {
       this.camAz += d * (1 - Math.exp(-dt * 2.6));
     }
     let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camPerto ? distPerto(this.camDist, this.velTela) : this.camDist + 1.6 * this.velTela;   // (a pé/mochila rápido: a câmera recua um pouco)
+    if (this.wMira > 0.001) dist += (RIFLE.distMira - dist) * this.wMira;   // MIRANDO com o rifle: por cima do ombro, bem perto
     // câmera em 3ª pessoa: perto de um marco (ilha flutuante, muralhas), se a estrutura fica ENTRE a câmera e o
     // personagem, a câmera se aproxima (senão a ilha cobre a tela)
     const marco = this.lms.find((l) => Math.hypot(this.eu.pos.x - l.poi.x, this.eu.pos.z - l.poi.z) < l.poi.interactR * 1.8);
@@ -3291,7 +3479,11 @@ export class CyberEngine {
     }
     // órbita livre: por cima olha pro personagem; arrastando pra baixo encosta no chão e o olhar sobe pro céu
     // PERTO: o olho na altura dos ombros e deslocado pro lado direito (o personagem fica à esquerda, o caminho livre)
-    const olhoCam = this.camPerto ? olhoDoOmbro({ x: this.camT.x, y: this.camT.y - 1.2, z: this.camT.z }, this.camAz) : { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z };
+    let olhoCam = this.camPerto ? olhoDoOmbro({ x: this.camT.x, y: this.camT.y - 1.2, z: this.camT.z }, this.camAz) : { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z };
+    if (this.wMira > 0.001) {   // MIRANDO: o olho por cima do ombro direito (mais pro lado que o modo perto: a arma à mostra)
+      const om = { x: this.camT.x + Math.cos(this.camAz) * RIFLE.ombroMira, y: this.camT.y - 1.2 + RIFLE.alturaMira, z: this.camT.z - Math.sin(this.camAz) * RIFLE.ombroMira }, k = this.wMira;
+      olhoCam = { x: olhoCam.x + (om.x - olhoCam.x) * k, y: olhoCam.y + (om.y - olhoCam.y) * k, z: olhoCam.z + (om.z - olhoCam.z) * k };
+    }
     let c = poseDaCamera({ olho: olhoCam, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
     c = this.aplicarCena(c, dt);   // a CUTSCENE do tutorial (se houver) leva a câmera pra outro enquadramento
     this.cam.position.set(c.pos.x, c.pos.y, c.pos.z);
@@ -3305,7 +3497,8 @@ export class CyberEngine {
     const alvoVel = Math.max(this.moto !== null && !this.motoPousado ? sensacaoDeVelocidade(this.motoEst) : 0, aPe, naveTurbo);
     this.velTela += (alvoVel - this.velTela) * (1 - Math.exp(-dt * (alvoVel > this.velTela ? 3 : 1.8)));
     if (!this.fovBase) this.fovBase = this.cam.fov;
-    const fov = this.fovBase + 12 * Math.min(1.15, this.velTela);
+    let fov = this.fovBase + 12 * Math.min(1.15, this.velTela);
+    if (this.wMira > 0.001) fov += (RIFLE.fovMira - fov) * this.wMira;   // (mirando: o zoom)
     if (Math.abs(fov - this.cam.fov) > 0.02) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
     // tremor: no boost, mais acima da barreira do som e um SOCO na hora em que ela quebra
     if (this.ondaT >= 0) { this.ondaT += dt; if (this.ondaT > 1.2 || this.moto === null) this.ondaT = -1; }
@@ -3559,7 +3752,12 @@ export class CyberEngine {
         if (sp > 0.6) { eu.facing = Math.atan2(this.jetV.x, this.jetV.z); andando = true; }
         if (dir) { this.alvo = null; this.alvoDepois = null; this.falandoCom = null; }
       }
-      else if (dir) { this.jetV = { x: 0, z: 0 }; this.impulsoFrente = false; this.motoAlvo = null; eu.pos.x += dir.wx * dt * vel; eu.pos.z += dir.wz * dt * vel; this.alvo = null; this.alvoDepois = null; andando = true; eu.facing = Math.atan2(dir.wx, dir.wz); this.falandoCom = null; }
+      else if (this.wRifle > 0.4 && this.podeRifle() && !this.noTopo && !this.bordo) {   // COM O RIFLE: inércia, viradas, mira (lib/cyber/rifle)
+        this.jetV = { x: 0, z: 0 }; this.impulsoFrente = false; this.alvo = null; this.alvoDepois = null;
+        if (dir) { this.motoAlvo = null; this.falandoCom = null; }
+        andando = this.moverComRifle(eu, dir, !!correndo, dt);
+      }
+      else if (dir) { this.velRifle = { x: dir.wx * vel, z: dir.wz * vel }; this.giroRifle = null; this.jetV = { x: 0, z: 0 }; this.impulsoFrente = false; this.motoAlvo = null; eu.pos.x += dir.wx * dt * vel; eu.pos.z += dir.wz * dt * vel; this.alvo = null; this.alvoDepois = null; andando = true; eu.facing = Math.atan2(dir.wx, dir.wz); this.falandoCom = null; }
       else if (this.alvo) {
         const dx = this.alvo.x - eu.pos.x, dz = this.alvo.y - eu.pos.z, d = Math.hypot(dx, dz);
         if (d > 0.12) { eu.pos.x += (dx / d) * dt * 4; eu.pos.z += (dz / d) * dt * 4; andando = true; eu.facing = Math.atan2(dx, dz); } else { this.alvo = this.alvoDepois; this.alvoDepois = null; }
@@ -3578,7 +3776,7 @@ export class CyberEngine {
         } else this.dashUlt = null;
       }
       // o SPRINT também deixa rastro (mais fraco, mais espaçado) e a corrida ninja; voando, de moto ou parado: sem guarda
-      const sprintando = andando && !this.jet.noAr && this.velAPe > 11.5;
+      const sprintando = andando && !this.jet.noAr && this.velAPe > 11.5 && this.wRifle < 0.4;   // (com o rifle não tem sprint)
       this.wSprint += ((sprintando ? 1 : 0) - this.wSprint) * Math.min(1, dt * 7);
       this.wDash += ((this.dashAtivo ? 1 : 0) - this.wDash) * Math.min(1, dt * (this.dashAtivo ? 30 : 9));
       if (sprintando && !this.dashAtivo) { this.fantasmaT -= dt; if (this.fantasmaT <= 0) { this.fantasmaT = 0.045; this.fxMov?.vento(eu.av.group.position, { x: Math.sin(eu.facing), z: Math.cos(eu.facing) }, this.corDe(euId), 2); } }   // (sprint: só os riscos de vento)
@@ -3735,7 +3933,7 @@ export class CyberEngine {
 
     // rede: eu → difusão; remotos → atores
     const desc = codificarDescanso(this.descanso && this.descanso.fase !== "indo" && this.descanso.fase !== "levantando" ? this.descanso.modo : null, this.tabletW > 0.5);
-    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.movAgora(t) ? { mov: this.movAgora(t) } : {}), ...(this.bordo && !this.pilotando ? { bordo: { x: this.bordo.x, z: this.bordo.z, nivel: this.bordo.nivel, ...(this.bordo.esc !== undefined ? { esc: this.bordo.esc } : {}) } } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.magEnviar && this.agora < this.magEnviar.ate ? { mag: this.magEnviar.v } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
+    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(movComRifle(this.movAgora(t), this.wRifle > 0.5, this.wMira > 0.5) ? { mov: movComRifle(this.movAgora(t), this.wRifle > 0.5, this.wMira > 0.5) } : {}), ...(this.bordo && !this.pilotando ? { bordo: { x: this.bordo.x, z: this.bordo.z, nivel: this.bordo.nivel, ...(this.bordo.esc !== undefined ? { esc: this.bordo.esc } : {}) } } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.magEnviar && this.agora < this.magEnviar.ate ? { mag: this.magEnviar.v } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
     this.atualizarNascimentoEGuia(dt);
     this.atualizarViagemNave(dt, t);   // o portal do M (o dono indo pra dentro da nave)
@@ -3757,7 +3955,10 @@ export class CyberEngine {
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
     eu.av.recolherAsas(this.camPerto ? 0.7 : 0);   // a câmera perto: as asas recolhem em parte (abertas cobriam a tela)
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null, sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0, pes: eu.pes, estilo: eu.poseL }, tablet: eu.tab ?? 0, dt: t < this.pausaAte ? 0 : this.moto === null && !this.jet.noAr && eu.moving ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (hit-stop: a pose congela)   // (no sprint as pernas giram mais rápido)
+    if (!this.menu) this.passoRifle(t, dt);   // (fora do ramo a pé: de moto/pilotando o rifle também se desfaz)
+    { const c = noCorpo(this.velRifle, eu.facing), comRifle = this.wRifle > 0.01 && !!this.rifle;
+      eu.av.rifle(comRifle ? { naMao: this.wRifle, mira: this.wMira, frente: eu.moving ? c.frente : 0, lado: eu.moving ? c.lado : 0, atirando: this.wAtira, coice: this.coice, alvo: this.alvoMira, arma: this.rifle!.group } : null); }
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null && (this.wRifle < 0.4 || Math.hypot(this.velRifle.x, this.velRifle.z) > 5), sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0, pes: eu.pes, estilo: eu.poseL }, tablet: eu.tab ?? 0, dt: t < this.pausaAte ? 0 : this.moto === null && !this.jet.noAr && eu.moving && this.wRifle < 0.4 ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (hit-stop: a pose congela)   // (no sprint as pernas giram mais rápido)
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
@@ -3782,6 +3983,15 @@ export class CyberEngine {
       const cada = dCam < 12 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 1 / 40;   // 12–40 m: um quadro sim, um não (LOD de animação)
       a.acum = (a.acum ?? 0) + dt;
       const animou = a.acum >= cada;
+      // o RIFLE dele: a velocidade medida da posição (os andares com a arma), atirando (decai) e a mira pra frente
+      if (a.rifle) {
+        const pa = a.posAntR ?? { x: a.pos.x, z: a.pos.z }, kv = Math.min(1, dt * 8), vx = (a.pos.x - pa.x) / Math.max(dt, 1e-3), vz = (a.pos.z - pa.z) / Math.max(dt, 1e-3);
+        a.velR = { x: (a.velR?.x ?? 0) + (vx - (a.velR?.x ?? 0)) * kv, z: (a.velR?.z ?? 0) + (vz - (a.velR?.z ?? 0)) * kv }; a.posAntR = { x: a.pos.x, z: a.pos.z };
+        a.atiraR = Math.max(0, (a.atiraR ?? 0) - dt * 4); a.pitchR = (a.pitchR ?? 0) * (1 - Math.min(1, dt * 0.5));
+        const w = a.wRif ?? 0, c = noCorpo(a.velR, a.facing), d = direcaoDaMira(a.facing, a.pitchR ?? 0);
+        a.rifle.atualizar(t, dt, { revela: w, calor: 0 });
+        a.av.rifle(w > 0.01 && a.jet === undefined && !a.moto && !pilota ? { naMao: w, mira: Math.max(a.wMiraR ?? 0, a.atiraR ?? 0), frente: a.moving ? c.frente : 0, lado: a.moving ? c.lado : 0, atirando: Math.min(1, (a.atiraR ?? 0) * 2), coice: 0, alvo: this.vRastroP.set(a.pos.x + d.x * 30, a.alt + 1.45 + d.y * 30, a.pos.z + d.z * 30).clone(), arma: a.rifle.group } : null);
+      }
       if (animou) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0, pes: a.pes, estilo: a.poseL }, tablet: a.tab ?? 0, acao: { sprint: a.wSpR ?? 0, dash: a.wDaR ?? 0, alerta: a.wAlR ?? 0, alertaT: t - (a.tMov ?? t), heroi: a.mov === 4 ? t - (a.tMov ?? t) : null, decola: a.mov === 5 ? { t: t - (a.tMov ?? t), espera: 0.07 } : null, espada: !a.espada || (a.revela ?? 0) <= 0.02 ? null : { golpe: a.golpe ? { n: a.golpe.g.n, u: Math.min(1, (t - a.golpe.ini) / a.golpe.g.dur), ativo: [a.golpe.g.ativoIni / a.golpe.g.dur, a.golpe.g.ativoFim / a.golpe.g.dur] } : null, guarda: a.moving ? 0 : 1 } }, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
       matrizDoAvatar(a.av.group, animou);   // o esqueleto dele só recalcula no quadro em que animou ou andou (components/cyber/matrizes)
       if (a.nave && a.naveP) { a.nave.group.position.set(a.naveP.x, a.naveP.y, a.naveP.z); a.nave.group.rotation.y = a.naveP.yaw + GIRO_PLANTA; a.nave.atualizar({ dt, t, voando: false, vel: 0, curva: 0 }); }
@@ -4033,7 +4243,7 @@ export class CyberEngine {
     this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.somLounge?.dispose(); this.musicaNave?.dispose(); this.livros?.dispose(); this.livros = null; this.relicario?.dispose(); this.relicario = null; if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose(); this.fxMagia?.dispose(); this.fxMagia = null;
+    this.somLounge?.dispose(); this.musicaNave?.dispose(); this.livros?.dispose(); this.livros = null; this.relicario?.dispose(); this.relicario = null; if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose(); this.fxMagia?.dispose(); this.fxMagia = null; this.rifle?.dispose(); this.rifle = null; this.cruz?.remove(); this.cruz = null;
     this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }

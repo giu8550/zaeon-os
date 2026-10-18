@@ -6,7 +6,8 @@ import { codificarGolpe } from "../cyber/combate";
 describe("ARENA PvP na presença (rede)", () => {
   it("o golpe, a vida e a espada passam limpos; lixo some", () => {
     expect(combateDe({ atk: codificarGolpe(5, 2), hp: 64, arma: 1, mov: 2 })).toEqual({ mov: 2, atk: 22, hp: 64, arma: 1 });
-    expect(combateDe({ mov: 9 })).toEqual({});
+    expect(combateDe({ mov: 24 + 1 })).toEqual({ mov: 25 });   // (o rifle mirando + o sprint — lib/cyber/rifle)
+    expect(combateDe({ mov: 32 })).toEqual({});
     expect(combateDe({ atk: -3, hp: 140, arma: "sim" })).toEqual({});
     expect(combateDe({ hp: 100 })).toEqual({});   // vida cheia não viaja
     const p = sanitizarPresenca({ userId: "a".repeat(24), name: "X", color: "#ffffff", x: 1, z: 2, facing: 0, atk: 9, hp: 30, arma: 1 });

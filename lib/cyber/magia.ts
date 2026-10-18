@@ -52,7 +52,7 @@ export function recarregarEnergia(energia: number, dt: number, agora: number, ul
   return Math.min(ENERGIA.max, energia + ENERGIA.regen * dt);
 }
 
-type P3 = { x: number; y: number; z: number };
+export type P3 = { x: number; y: number; z: number };
 /** a direção da mira: `yaw` (rumo, como o `facing` do engine: atan2(dx, dz)) e `pitch` (+ = pra cima) */
 export const direcaoDaMira = (yaw: number, pitch: number): P3 => ({ x: Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: Math.cos(yaw) * Math.cos(pitch) });
 /** onde o projétil está `t` s depois de sair de `de` na direção `dir` (null = passou do alcance) */
@@ -106,19 +106,21 @@ export function danoDaExplosao(f: Feitico, d: number): number {
 /** o LANÇAMENTO na rede: um inteiro só (cabe no uint32 do servidor) — a sequência (0..2047), o feitiço (1..3) e a mira
  *  (o rumo em 1024 passos e a inclinação em 256, de −0,6 a +0,6 rad) */
 export const MIRA_PITCH = 0.6;
-export function codificarLancamento(seq: number, f: Feitico, yaw: number, pitch: number): number {
+export function codificarLancamento(seq: number, f: { num: number }, yaw: number, pitch: number): number {
   const y = ((yaw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI), yq = Math.round((y / (2 * Math.PI)) * 1023);
   const pq = Math.round(((Math.max(-MIRA_PITCH, Math.min(MIRA_PITCH, pitch)) + MIRA_PITCH) / (2 * MIRA_PITCH)) * 255);
   return (((seq % 2048) * 4 + f.num) * 1024 + yq) * 256 + pq;
 }
-export function decodificarLancamento(v: number): { seq: number; feitico: Feitico | null; yaw: number; pitch: number } | null {
+export function decodificarLancamento(v: number): { seq: number; num: number; feitico: Feitico | null; yaw: number; pitch: number } | null {
   if (!Number.isInteger(v) || v <= 0 || v >= 2 ** 32) return null;
   const pq = v % 256, r1 = Math.floor(v / 256), yq = r1 % 1024, r2 = Math.floor(r1 / 1024), num = r2 % 4, seq = Math.floor(r2 / 4);
   const feitico = Object.values(FEITICOS).find((f) => f.num === num) ?? null;
-  return { seq, feitico, yaw: (yq / 1023) * 2 * Math.PI, pitch: (pq / 255) * 2 * MIRA_PITCH - MIRA_PITCH };
+  return { seq, num, feitico, yaw: (yq / 1023) * 2 * Math.PI, pitch: (pq / 255) * 2 * MIRA_PITCH - MIRA_PITCH };
 }
-/** a `mov` da rede (lib/lounge3d): 6 = o ESCUDO erguido */
+/** a `mov` da rede (lib/lounge3d): os 3 bits de baixo = o estado do movimento (6 = o ESCUDO erguido); os de cima, o
+ *  RIFLE (lib/cyber/rifle: 8 = na mão, 16 = mirando) */
 export const MOV_ESCUDO = 6;
+export const estadoDoMov = (mov: number) => mov & 7;
 
 /** a duração (s) de cada clipe convertido (public/anim/magia — o engine marca os tempos sem esperar o download) */
 export const DURACAO_CLIPE: Readonly<Record<NomeClipeMagia, number>> = {
