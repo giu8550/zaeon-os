@@ -14,12 +14,12 @@ import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag, isObjectId, agentesDoCanal } from "@/lib/canal/server";
 import { podeEscrever } from "@/lib/canal/gate";
 import { montarAliases, parseMentions } from "@/lib/canal/mention";
-import { resolverAlvos } from "@/lib/canal/alvo";
+import { resolverAlvos, estaForaDaConversa } from "@/lib/canal/alvo";
 import { humanosNoCanal } from "@/lib/canal/convite";
 import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
 import { pedidoDeChore } from "@/lib/chore/triagem";
-import { ehDispensa, textoDespedida, textoSaiu } from "@/lib/canal/dispensa";
+import { ehDispensa, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "@/lib/canal/dispensa";
 import { choresLigadas, criarDoPedido } from "@/lib/chore/criar";
 
 export const MAX_TEXTO = 4000;
@@ -43,25 +43,34 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   // Quem responde: @menção manda; sem @, continua o último agente que falou no canal (ou a Aura,
   // no primeiro oi). Lê o histórico ANTES de gravar a mensagem atual. Ver lib/canal/alvo.ts.
-  const recentes = mencoes.length
-    ? []
-    : await prisma.canalMensagem.findMany({
-        where: { canalId: canal.id }, orderBy: { createdAt: "desc" }, take: 100, select: { autorTipo: true, autorId: true },
-      });
+  // #440: o histórico vem sempre (com @ também): é por ele que se sabe se a agente chamada tinha saído (→ "voltou")
+  const recentes = await prisma.canalMensagem.findMany({
+    where: { canalId: canal.id }, orderBy: { createdAt: "desc" }, take: 100, select: { autorTipo: true, autorId: true, texto: true },
+  });
+  const historico = [...recentes].reverse();
   const { alvos } = resolverAlvos({
     mencoes,
-    historico: [...recentes].reverse(),
+    historico,
     remetenteId: u.id,
     disponiveis: agentes.map((a) => a.agentKey),
     // conversa privada conta as duas pessoas → a IA não responde sozinha numa conversa de duas pessoas
     humanos: humanosNoCanal(canal),
   });
 
+  // #438: a mensagem dispensa a agente da vez? (decide antes de gravar, pra barra já sair certa)
+  const humanos = humanosNoCanal(canal);
+  const dispensadas = alvos.filter((k) => {
+    const ag = agentes.find((a) => a.agentKey === k);
+    return ehDispensa(texto, { nomesDaAgente: [k, ag?.nome ?? ""], mencionada: mencoes.includes(k), humanos });
+  });
+  // #440: chamada com @ depois de ter saído → entra a linha "Zenita voltou para a conversa"
+  const voltando = mencoes.filter((k) => alvos.includes(k) && !dispensadas.includes(k) && estaForaDaConversa(historico, k));
+
   const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "humano", autorId: u.id, texto, mencoes } });
-  // agente convocado passa a "estar" no canal (aparece na presença/seletor pra todo mundo)
-  const novos = alvos.filter((k) => !canal.agentes.includes(k));
-  const touch = novos.length ? { agentes: [...canal.agentes, ...novos], updatedAt: new Date() } : { updatedAt: new Date() };
-  await prisma.canal.update({ where: { id: canal.id }, data: touch }).catch(() => undefined);
+  // agente convocado passa a "estar" no canal (aparece na barra pra todo mundo); #440: a dispensada SAI da barra
+  const agentesNoCanal = agentesDepois(canal.agentes, alvos, dispensadas);
+  const mudou = agentesNoCanal.length !== canal.agentes.length || agentesNoCanal.some((k, i) => k !== canal.agentes[i]);
+  await prisma.canal.update({ where: { id: canal.id }, data: mudou ? { agentes: agentesNoCanal, updatedAt: new Date() } : { updatedAt: new Date() } }).catch(() => undefined);
 
   const wire: MensagemWire = {
     id: row.id, canalId: row.canalId, autorTipo: "humano", autorId: u.id, texto, mencoes,
@@ -81,11 +90,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   // #438: dispensou a agente da vez → despedida + "saiu da conversa", sem turno (não gasta IA)
-  const humanos = humanosNoCanal(canal);
-  const dispensadas = alvos.filter((k) => {
+  for (const k of voltando) {
     const ag = agentes.find((a) => a.agentKey === k);
-    return ehDispensa(texto, { nomesDaAgente: [k, ag?.nome ?? ""], mencionada: mencoes.includes(k), humanos });
-  });
+    const voltou = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "sistema", autorId: k, texto: textoVoltou(ag?.nome ?? k), mencoes: [] } });
+    await publicarPusher(canal.id, EV_MENSAGEM, {
+      id: voltou.id, canalId: canal.id, autorTipo: "sistema", autorId: k, texto: voltou.texto, mencoes: [],
+      createdAt: voltou.createdAt.toISOString(), autorNome: ag?.nome ?? k, autorAvatar: null,
+    } satisfies MensagemWire);
+  }
   for (const k of dispensadas) {
     const ag = agentes.find((a) => a.agentKey === k);
     const nome = ag?.nome ?? k;
@@ -106,5 +118,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     respondem.map((agentKey) => ({ canalId: canal.id, agentKey, userId: u.id, mensagemId: row.id })),
     depsReais,
   );
-  return NextResponse.json({ ok: true, mensagem: wire, turnos: respondem.map((agentKey, i) => ({ agentKey, via: vias[i] })), ...(dispensadas.length ? { dispensadas } : {}) }, { status: 201 });
+  return NextResponse.json({
+    ok: true, mensagem: wire, turnos: respondem.map((agentKey, i) => ({ agentKey, via: vias[i] })), agentesNoCanal,
+    ...(dispensadas.length ? { dispensadas } : {}), ...(voltando.length ? { voltaram: voltando } : {}),
+  }, { status: 201 });
 }

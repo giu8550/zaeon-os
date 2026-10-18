@@ -5,14 +5,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const A = "a".repeat(24), B = "b".repeat(24), C = "c".repeat(24), CANAL = "d".repeat(24);
-const state: { canal: any; user: any; criadas: any[]; disparos: any[]; publicados: any[]; historico: any[] } = { canal: null, user: null, criadas: [], disparos: [], publicados: [], historico: [] };
+const state: { canal: any; user: any; criadas: any[]; disparos: any[]; publicados: any[]; historico: any[]; atualizacoes: any[] } = { canal: null, user: null, criadas: [], disparos: [], publicados: [], historico: [], atualizacoes: [] };
 
 vi.mock("@/lib/canal/server", () => {
   // sem importActual: o módulo real puxa src/lib/auth → db (exige MONGODB_URI no ambiente de teste)
   return {
     isObjectId: (v: unknown) => typeof v === "string" && /^[a-f0-9]{24}$/i.test(v),
     prisma: {
-      canal: { findUnique: async ({ where }: any) => (where.id === state.canal?.id ? state.canal : null), update: async () => state.canal },
+      canal: { findUnique: async ({ where }: any) => (where.id === state.canal?.id ? state.canal : null), update: async ({ data }: any) => { (state as any).atualizacoes.push(data); return state.canal; } },
       canalMensagem: {
         create: async ({ data }: any) => { const r = { id: "m1", createdAt: new Date("2026-09-01T00:00:00Z"), ...data }; state.criadas.push(r); return r; },
         // histórico em ordem DESC (mais recente primeiro), como a rota pede
@@ -187,5 +187,54 @@ describe("POST /api/canal/[id]/mensagem · #438 agente dispensada", () => {
   it("pergunta normal continua indo pra IA", async () => {
     await POST(req("@aura pode ir pesquisando sobre python?"), { params: { id: CANAL } });
     expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+});
+
+describe("POST /api/canal/[id]/mensagem · #440 sair da barra e voltar com aviso", () => {
+  beforeEach(() => {
+    state.criadas = []; state.disparos = []; state.publicados = []; state.historico = []; state.atualizacoes = [];
+    state.canal = { ...canal("turma"), agentes: ["aura", "medicina"] }; state.user = user(B);
+  });
+  const tipos = () => state.criadas.map((m) => [m.autorTipo, m.autorId, m.texto]);
+  const saiu = { autorTipo: "sistema", autorId: "medicina", texto: "Osler saiu da conversa" };
+
+  it("as frases da Giulia agora dispensam: 'pode sair @osler não precisamos mais de você'", async () => {
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }];
+    const j = await (await POST(req("pode sair @Osler não precisamos mais de você"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["medicina"]);
+    expect(state.disparos).toHaveLength(0);
+  });
+
+  it("dispensada SAI da barra do escritório (canal.agentes) — pra todo mundo", async () => {
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }];
+    const j = await (await POST(req("@Osler pode ir embora, vlw"), { params: { id: CANAL } })).json();
+    expect(j.agentesNoCanal).toEqual(["aura"]);
+    expect(state.atualizacoes.at(-1).agentes).toEqual(["aura"]);
+  });
+
+  it("chamada com @ depois de ter saído: entra 'Osler voltou para a conversa', ela volta pra barra e responde", async () => {
+    state.canal.agentes = ["aura"];
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }, saiu];
+    const j = await (await POST(req("@Osler ajude a igreja"), { params: { id: CANAL } })).json();
+    expect(tipos()).toEqual([["humano", B, "@Osler ajude a igreja"], ["sistema", "medicina", "Osler voltou para a conversa"]]);
+    expect(j.voltaram).toEqual(["medicina"]);
+    expect(j.agentesNoCanal).toEqual(["aura", "medicina"]);
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
+    // a pessoa vê ao vivo a mensagem e a linha de volta
+    expect(state.publicados.map((p) => (p[2] as any).texto)).toEqual(["@Osler ajude a igreja", "Osler voltou para a conversa"]);
+  });
+
+  it("depois de voltar, sem @ ela continua sendo a agente da vez", async () => {
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }, saiu,
+      { autorTipo: "humano", autorId: B }, { autorTipo: "sistema", autorId: "medicina", texto: "Osler voltou para a conversa" }];
+    await POST(req("e sobre o capítulo 2?"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
+  });
+
+  it("agente que nunca saiu: chamar com @ não cria linha de 'voltou'", async () => {
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }];
+    const j = await (await POST(req("@Osler e agora?"), { params: { id: CANAL } })).json();
+    expect(tipos()).toEqual([["humano", B, "@Osler e agora?"]]);
+    expect(j.voltaram).toBeUndefined();
   });
 });

@@ -69,3 +69,14 @@ export const textoDespedida = (agentKey: string) =>
 
 /** A linha do sistema que marca a saída (autorTipo "sistema", autorId = agentKey). */
 export const textoSaiu = (nome: string) => `${nome || "A agente"} saiu da conversa`;
+
+/** #440: a linha de quando ela é chamada com @ depois de ter saído (lib/canal/alvo ehLinhaVoltou reconhece). */
+export const textoVoltou = (nome: string) => `${nome || "A agente"} voltou para a conversa`;
+
+/**
+ * #440: os agentes na barra do escritório (canal.agentes) depois desta mensagem: quem foi chamado entra, quem foi
+ * dispensado sai — assim a barra para de mostrar a agente que saiu, e ela volta quando chamada com @.
+ */
+export function agentesDepois(atuais: readonly string[], chamados: readonly string[], dispensados: readonly string[]): string[] {
+  return [...new Set([...atuais, ...chamados])].filter((k) => !dispensados.includes(k));
+}

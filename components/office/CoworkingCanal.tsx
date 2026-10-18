@@ -348,8 +348,13 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       setTexto("");
       ultimoAvisoDigitando.current = null; // a próxima mensagem volta a avisar na primeira tecla
       setErro(null);
-      // agentes recém-convocados passam a constar no canal
-      if (alvos.length) setCanais((cs) => cs.map((c) => (c.id === ativoId ? { ...c, agentes: [...new Set([...c.agentes, ...alvos])] } : c)));
+      // agentes na barra: os chamados entram, a dispensada sai (#440 — o servidor manda a lista final)
+      const naBarra: string[] | null = Array.isArray(j.agentesNoCanal) ? j.agentesNoCanal : null;
+      const ajustar = (c: Canal): Canal => ({ ...c, agentes: naBarra ?? [...new Set([...c.agentes, ...alvos])] });
+      if (naBarra || alvos.length) {
+        setCanais((cs) => cs.map((c) => (c.id === ativoId ? ajustar(c) : c)));
+        setDet((d) => (d && d.canal.id === ativoId ? { ...d, canal: ajustar(d.canal) } : d));
+      }
     } catch (e) {
       setErro(String((e as Error)?.message ?? e));
     } finally {

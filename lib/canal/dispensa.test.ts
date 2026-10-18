@@ -1,6 +1,6 @@
 /** #438 · a agente entende quando é dispensada — e não confunde com tchau pra outra pessoa. */
 import { describe, it, expect } from "vitest";
-import { ehDispensa, normalizar, textoDespedida, textoSaiu } from "./dispensa";
+import { ehDispensa, normalizar, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "./dispensa";
 
 const zenita = { nomesDaAgente: ["zenita", "Zenita"], mencionada: false, humanos: 2 };
 
@@ -89,5 +89,16 @@ describe("dispensa · #440 as frases da Giulia (que não tinham saído)", () => 
     "para de responder assim tão longo",
   ])("NÃO dispensa: %s", (t) => {
     expect(ehDispensa(t, zenita)).toBe(false);
+  });
+});
+
+describe("dispensa · #440 a barra de agentes", () => {
+  it("chamados entram, dispensados saem, sem repetir", () => {
+    expect(agentesDepois(["aura", "zenita"], [], ["zenita"])).toEqual(["aura"]);
+    expect(agentesDepois(["aura"], ["zenita"], [])).toEqual(["aura", "zenita"]);
+    expect(agentesDepois(["aura", "zenita"], ["zenita"], [])).toEqual(["aura", "zenita"]);
+  });
+  it("as linhas de saída e de volta", () => {
+    expect(textoVoltou("Zenita")).toBe("Zenita voltou para a conversa");
   });
 });

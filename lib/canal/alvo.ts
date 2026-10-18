@@ -18,7 +18,7 @@
 
 export const AGENTE_PADRAO = "aura";
 
-export type MsgResumo = { autorTipo: string; autorId: string };
+export type MsgResumo = { autorTipo: string; autorId: string; /** #440: só pra distinguir a linha "voltou" da "saiu". */ texto?: string | null };
 
 export type EntradaAlvo = {
   /** agentKeys marcados com @ na mensagem (já resolvidos). */
@@ -37,9 +37,27 @@ export type EntradaAlvo = {
 
 export type SaidaAlvo = { alvos: string[]; implicito: boolean };
 
-/** #438: a linha "Zenita saiu da conversa" — sistema com o agentKey como autor. */
+/** #440: a linha "Zenita voltou para a conversa" (o texto que lib/canal/dispensa textoVoltou grava). */
+export const ehLinhaVoltou = (texto: string | null | undefined): boolean => /voltou para a conversa$/.test((texto ?? "").trim());
+
+/** #438: a linha "Zenita saiu da conversa" — sistema com o agentKey como autor (e não a de "voltou"). */
 export const saiuDaConversa = (m: MsgResumo, disponiveis: readonly string[]): boolean =>
-  m.autorTipo === "sistema" && disponiveis.includes(m.autorId);
+  m.autorTipo === "sistema" && disponiveis.includes(m.autorId) && !ehLinhaVoltou(m.texto);
+
+/** #440: a linha "Zenita voltou para a conversa" — ela está de novo na conversa (conta como a agente da vez). */
+export const voltouParaConversa = (m: MsgResumo, disponiveis: readonly string[]): boolean =>
+  m.autorTipo === "sistema" && disponiveis.includes(m.autorId) && ehLinhaVoltou(m.texto);
+
+/** #440: essa agente SAIU da conversa e ainda não voltou? (aí, chamada com @, entra a linha "voltou") */
+export function estaForaDaConversa(historico: readonly MsgResumo[], agentKey: string): boolean {
+  for (let i = historico.length - 1; i >= 0; i--) {
+    const m = historico[i]!;
+    if (m.autorId !== agentKey) continue;
+    if (m.autorTipo === "agente" || voltouParaConversa(m, [agentKey])) return false;
+    if (saiuDaConversa(m, [agentKey])) return true;
+  }
+  return false;
+}
 
 /**
  * O agente "da vez" (quem responde sem @), pela mesma regra do servidor: o último agente que falou, a não ser
@@ -49,7 +67,7 @@ export function agenteDaVez(historico: readonly MsgResumo[], disponiveis: readon
   for (let i = historico.length - 1; i >= 0; i--) {
     const m = historico[i]!;
     if (saiuDaConversa(m, disponiveis)) return null;
-    if (m.autorTipo === "agente" && disponiveis.includes(m.autorId)) return m.autorId;
+    if ((m.autorTipo === "agente" && disponiveis.includes(m.autorId)) || voltouParaConversa(m, disponiveis)) return m.autorId;
   }
   return null;
 }
@@ -62,7 +80,7 @@ export function resolverAlvos(e: EntradaAlvo): SaidaAlvo {
   for (let i = e.historico.length - 1; i >= 0; i--) {
     const m = e.historico[i]!;
     if (saiuDaConversa(m, e.disponiveis)) return { alvos: [], implicito: true };
-    if (m.autorTipo === "agente" && e.disponiveis.includes(m.autorId)) { idx = i; break; }
+    if ((m.autorTipo === "agente" && e.disponiveis.includes(m.autorId)) || voltouParaConversa(m, e.disponiveis)) { idx = i; break; }
   }
 
   if (idx >= 0) {
