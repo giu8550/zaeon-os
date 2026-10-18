@@ -12,7 +12,7 @@
 export type V3 = { x: number; y: number; z: number };
 
 /** a duração (s) da subida e de cada fase (frações do tempo) */
-export const SUBIDA = { dur: 1.6, chega: [0, 0.26], pega: [0.22, 0.42], perna: [0.42, 0.78], senta: [0.7, 0.92], ergue: [0.88, 1] } as const;
+export const SUBIDA = { dur: 1.9, chega: [0, 0.24], pega: [0.3, 0.44], perna: [0.46, 0.8], senta: [0.74, 0.93], ergue: [0.9, 1] } as const;
 /** a CÂMERA durante a subida: ¾ por trás e pela esquerda (o lado de quem sobe), perto */
 export const CAMERA_SUBIDA = { giro: 1.2, dist: 4.8, pitch: 0.24 } as const;
 /** a câmera PERTO na moto (o V alterna perto ⇄ longe): a distância, quanto ela recua com a velocidade e a altura do olho */
@@ -27,7 +27,7 @@ export function pesosSubida(u: number): { pulo: number; maos: number; pernas: nu
   // o AGACHAMENTO: no impulso do pulinho e quando ele aterrissa ao lado da moto
   const ag = (c: number, l: number) => Math.max(0, 1 - Math.abs(u - c) / l);
   return {
-    pulo, maos: fase(u, SUBIDA.pega), pernas: fase(u, [SUBIDA.chega[1] - 0.04, SUBIDA.pega[1]]), perna: fase(u, SUBIDA.perna),
+    pulo, maos: fase(u, SUBIDA.pega), pernas: fase(u, [SUBIDA.chega[1], SUBIDA.pega[0] + 0.04]), perna: fase(u, SUBIDA.perna),
     senta: fase(u, SUBIDA.senta), ergue: fase(u, SUBIDA.ergue), agacha: Math.max(ag(0.03, 0.05), ag(SUBIDA.chega[1] + 0.02, 0.06)),
   };
 }
@@ -47,10 +47,12 @@ export function caminhoDaSubida(u: number, de: V3, lado: V3, banco: V3): V3 {
   const p = lerp(lado, banco, w.perna);
   return { x: p.x, y: lado.y + (banco.y - lado.y) * w.senta + 0.1 * Math.sin(Math.PI * w.perna), z: p.z };
 }
-/** o PÉ DIREITO passando por cima da traseira: do chão ao lado → alto atrás do banco → a pedaleira (curva de Bézier) */
-export function arcoDaPerna(s: number, chao: V3, atras: V3, pedal: V3): V3 {
-  const u = Math.max(0, Math.min(1, s)), a = (1 - u) * (1 - u), b = 2 * u * (1 - u), c = u * u;
-  return { x: a * chao.x + b * atras.x + c * pedal.x, y: a * chao.y + b * atras.y + c * pedal.y, z: a * chao.z + b * atras.z + c * pedal.z };
+/** o PÉ DIREITO passando por cima da traseira: do chão ao lado → SOBE do lado de fora até acima da moto (`alto`) → por
+ *  cima, atrás do banco (`atras`) → a pedaleira (Bézier cúbica). Subir primeiro do lado de fora é o que impede a perna de
+ *  atravessar a moto (antes ela cortava em diagonal, de baixo, por dentro da carenagem) */
+export function arcoDaPerna(s: number, chao: V3, alto: V3, atras: V3, pedal: V3): V3 {
+  const u = Math.max(0, Math.min(1, s)), a = (1 - u) ** 3, b = 3 * u * (1 - u) ** 2, c = 3 * u * u * (1 - u), d = u ** 3;
+  return { x: a * chao.x + b * alto.x + c * atras.x + d * pedal.x, y: a * chao.y + b * alto.y + c * atras.y + d * pedal.y, z: a * chao.z + b * alto.z + c * atras.z + d * pedal.z };
 }
 /** a altura da moto durante a subida: parada até ele sentar; depois sobe até a de lançamento */
 export const alturaDaMoto = (u: number, parada: number, lancamento: number) => parada + (lancamento - parada) * pesosSubida(u).ergue;

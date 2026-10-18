@@ -645,7 +645,7 @@ export class CyberEngine {
   /** SUBINDO na moto (lib/cyber/montaria): desde quando, de onde saiu, a altura parada e a de lançamento — e a câmera
    *  PERTO na moto (o V alterna perto ⇄ longe; começa perto) */
   private subida: { t0: number; de: { x: number; y: number; z: number }; yParada: number; yLanc: number } | null = null;
-  private camMotoPerto = true; private vSub = { lado: new THREE.Vector3(), banco: new THREE.Vector3(), peE: new THREE.Vector3(), peD: new THREE.Vector3(), atras: new THREE.Vector3() };
+  private camMotoPerto = true; private vSub = { lado: new THREE.Vector3(), banco: new THREE.Vector3(), peE: new THREE.Vector3(), peD: new THREE.Vector3(), alto: new THREE.Vector3(), atras: new THREE.Vector3() };
   private vida = VIDA_MAX; private caidoAte = -Infinity; private protegidoAte = -Infinity; private empurrao = { x: 0, z: 0 }; private wGuardaArena = 0;
   private vRastroB = new THREE.Vector3(); private vRastroP = new THREE.Vector3();
   /** o HIT-STOP (até quando a ação fica congelada — o peso do golpe que pegou) e o golpe pesado que já esmagou o chão */
@@ -2976,13 +2976,15 @@ export class CyberEngine {
     const u = Math.min(1, (this.agora - sb.t0) / SUBIDA.dur), w = pesosSubida(u), yaw = this.motoEst.yaw, S = this.vSub;
     const ex = Math.cos(yaw), ez = -Math.sin(yaw), fx = Math.sin(yaw), fz = Math.cos(yaw);   // a esquerda e a frente da moto
     const banco = S.banco.copy(av.group.position), chaoY = sb.yParada;
-    S.lado.set(this.motoEst.x + ex * 0.72 - fx * 0.15, chaoY, this.motoEst.z + ez * 0.72 - fz * 0.15);
+    S.lado.set(this.motoEst.x + ex * 0.85 - fx * 0.15, chaoY, this.motoEst.z + ez * 0.85 - fz * 0.15);   // (do lado, um pouco afastado: a perna sobe sem tocar a moto)
     const g = caminhoDaSubida(u, sb.de, S.lado, banco); av.group.position.set(g.x, g.y, g.z);
     av.olharPara(this.eu.facing + difAng(this.eu.facing, yaw) * Math.max(w.pulo, 0.0001));
     S.peE.copy(S.lado).addScaledVector(new THREE.Vector3(ex, 0, ez), 0.12).setY(chaoY + 0.09);
     S.peD.copy(S.lado).addScaledVector(new THREE.Vector3(ex, 0, ez), -0.16).setY(chaoY + 0.09);
-    S.atras.set(banco.x - fx * 0.6, banco.y + 0.55, banco.z - fz * 0.6);
-    return { w: w.senta, ...v, subida: { u, peChaoE: S.peE, peChaoD: S.peD, atras: S.atras } };
+    // o arco do pé direito: SOBE do lado de fora (acima do banco) → por cima, atrás do banco → a pedaleira
+    S.alto.set(S.peD.x + ex * 0.12 - fx * 0.25, banco.y + 0.45, S.peD.z + ez * 0.12 - fz * 0.25);
+    S.atras.set(banco.x - fx * 0.55, banco.y + 0.5, banco.z - fz * 0.55);
+    return { w: w.senta, ...v, subida: { u, peChaoE: S.peE, peChaoD: S.peD, alto: S.alto, atras: S.atras } };
   }
   /** as motos PARADAS na vaga são sólidas pra quem anda (círculo do tamanho do corpo) */
   private colisoresDeMotos(): Colisor[] {

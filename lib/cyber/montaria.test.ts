@@ -13,14 +13,17 @@ describe("subir na moto", () => {
     const de = { x: 0, y: 0, z: 0 }, lado = { x: 2, y: 1.1, z: 0 }, banco = { x: 2.6, y: 1.9, z: 0 };
     expect(caminhoDaSubida(0, de, lado, banco)).toEqual(de);
     const meio = caminhoDaSubida(0.13, de, lado, banco); expect(meio.y).toBeGreaterThan(1.1);   // (o arco do pulinho)
-    expect(caminhoDaSubida(0.3, de, lado, banco)).toEqual(lado);
+    expect(caminhoDaSubida(0.3, de, lado, banco)).toEqual(lado);   // (aterrissou na altura da moto antes de começar a subir)
     const f = caminhoDaSubida(1, de, lado, banco); expect(f.x).toBeCloseTo(2.6); expect(f.y).toBeCloseTo(1.9);
   });
-  it("o pé que passa por cima sobe acima dos dois pontos e chega na pedaleira", () => {
-    const chao = { x: 0, y: 0, z: 0 }, atras = { x: 0.3, y: 1.6, z: -0.6 }, pedal = { x: 0.6, y: 0.4, z: 0 };
-    expect(arcoDaPerna(0, chao, atras, pedal)).toEqual(chao);
-    expect(arcoDaPerna(0.5, chao, atras, pedal).y).toBeGreaterThan(0.8);
-    expect(arcoDaPerna(1, chao, atras, pedal)).toEqual(pedal);
+  it("o pé que passa por cima SOBE do lado de fora antes de cruzar a moto e chega na pedaleira", () => {
+    // x = pra dentro da moto (0 = o lado de fora, 0.6 = o meio); y = a altura
+    const chao = { x: 0, y: 0, z: 0 }, alto = { x: -0.1, y: 1.5, z: -0.2 }, atras = { x: 0.4, y: 1.5, z: -0.6 }, pedal = { x: 0.8, y: 0.4, z: 0 };
+    expect(arcoDaPerna(0, chao, alto, atras, pedal)).toEqual(chao);
+    expect(arcoDaPerna(1, chao, alto, atras, pedal)).toEqual(pedal);
+    // enquanto ainda está baixo (abaixo de 0,9 m) o pé não entrou na moto (x pequeno)
+    for (let i = 1; i < 50; i++) { const p = arcoDaPerna(i / 50, chao, alto, atras, pedal); if (p.y < 0.9 && i < 25) expect(p.x).toBeLessThan(0.2); }
+    expect(arcoDaPerna(0.5, chao, alto, atras, pedal).y).toBeGreaterThan(1.1);
   });
   it("a moto só ergue depois que ele sentou", () => {
     expect(alturaDaMoto(0.5, 1, 2)).toBe(1);

@@ -84,7 +84,7 @@ export function carregarModeloAvatar(url = avatarGlbUrl()): Promise<GLTF> {
 export type Montado = { w: number; maoE: THREE.Vector3; maoD: THREE.Vector3; peE: THREE.Vector3; peD: THREE.Vector3;
   /** SUBINDO na moto (lib/cyber/montaria): `u` 0..1 e os pés no chão ao lado dela; o pé DIREITO passa por cima da
    *  traseira (`atras` = o alto do arco). Nesse meio tempo `w` = o quanto já sentou */
-  subida?: { u: number; peChaoE: THREE.Vector3; peChaoD: THREE.Vector3; atras: THREE.Vector3 } };
+  subida?: { u: number; peChaoE: THREE.Vector3; peChaoD: THREE.Vector3; alto: THREE.Vector3; atras: THREE.Vector3 } };
 
 export type AvatarLuzHandle = {
   group: THREE.Group;
@@ -621,7 +621,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           let alvoPe = o.lado > 0 ? montado.peE : montado.peD;
           if (sb && fs) {
             if (o.lado > 0) alvoPe = pA.copy(sb.peChaoE).lerp(montado.peE, fs.senta);   // o ESQUERDO: no chão até sentar
-            else { const q = fs.perna > 0 ? arcoDaPerna(fs.perna, sb.peChaoD, sb.atras, montado.peD) : sb.peChaoD; alvoPe = pB.set(q.x, q.y, q.z); }   // o DIREITO: por cima
+            else { const q = fs.perna > 0 ? arcoDaPerna(fs.perna, sb.peChaoD, sb.alto, sb.atras, montado.peD) : sb.peChaoD; alvoPe = pB.set(q.x, q.y, q.z); }   // o DIREITO: por cima
           }
           polo.copy(frente).addScaledVector(lateral, 0.35 * o.lado).addScaledVector(cima, 0.2);
           if (fs && o.lado < 0 && fs.perna > 0 && fs.perna < 1) polo.addScaledVector(lateral, -0.6).addScaledVector(frente, -0.4);   // (a perna que passa: o joelho pra fora e pra trás)
