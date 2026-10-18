@@ -30,6 +30,7 @@ import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
 import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
+import { agenteDaVez } from "@/lib/canal/alvo";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
@@ -520,7 +521,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const conversaCom = (uid: string) => convites.contatos.find((c) => c.pessoa.id === uid)?.dmCanalId ?? null;
   // Sem @, responde o último agente que falou. A dica só aparece em canal de uma pessoa: com mais
   // gente, o servidor só atende quem estava conversando com o agente (lib/canal/alvo.ts).
-  const ultimoAgente = [...det.mensagens].reverse().find((m) => m.autorTipo === "agente" && !m.id.startsWith("efemera-"))?.autorId;
+  // a mesma regra do servidor: o último agente que falou, a não ser que tenha saído da conversa (#438)
+  const ultimoAgente = agenteDaVez(det.mensagens.filter((m) => !m.id.startsWith("efemera-")), agentes.map((a) => a.agentKey));
   const agenteAtivo = canal.membros.length === 0 ? agentes.find((a) => a.agentKey === ultimoAgente) ?? null : null;
   const presentes = agentes.filter((a) => canal.agentes.includes(a.agentKey));
   const outros = agentes.filter((a) => !canal.agentes.includes(a.agentKey));

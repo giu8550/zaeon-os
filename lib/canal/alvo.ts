@@ -10,6 +10,10 @@
  * Canal com 2+ humanos (dono + membros): conversa entre pessoas não pode acionar IA a cada
  * mensagem (custo e ruído). Aí o agente ativo só atende quem estava falando com ele (o último
  * humano antes da resposta dele), e o primeiro contato continua exigindo @.
+ *
+ * #438: agente DISPENSADA ("pode ir", "tchau"… — lib/canal/dispensa.ts) deixa a linha de sistema
+ * "Zenita saiu da conversa" (autorTipo "sistema", autorId = agentKey). Depois dela, sem @ ninguém responde
+ * (nem o primeiro oi da Aura): a agente volta só quando alguém chamar com @.
  */
 
 export const AGENTE_PADRAO = "aura";
@@ -33,13 +37,31 @@ export type EntradaAlvo = {
 
 export type SaidaAlvo = { alvos: string[]; implicito: boolean };
 
+/** #438: a linha "Zenita saiu da conversa" — sistema com o agentKey como autor. */
+export const saiuDaConversa = (m: MsgResumo, disponiveis: readonly string[]): boolean =>
+  m.autorTipo === "sistema" && disponiveis.includes(m.autorId);
+
+/**
+ * O agente "da vez" (quem responde sem @), pela mesma regra do servidor: o último agente que falou, a não ser
+ * que ele tenha saído da conversa depois. A tela usa pra dizer "Zenita responde" no campo de mensagem.
+ */
+export function agenteDaVez(historico: readonly MsgResumo[], disponiveis: readonly string[]): string | null {
+  for (let i = historico.length - 1; i >= 0; i--) {
+    const m = historico[i]!;
+    if (saiuDaConversa(m, disponiveis)) return null;
+    if (m.autorTipo === "agente" && disponiveis.includes(m.autorId)) return m.autorId;
+  }
+  return null;
+}
+
 export function resolverAlvos(e: EntradaAlvo): SaidaAlvo {
   if (e.mencoes.length) return { alvos: [...e.mencoes], implicito: false };
 
-  // último agente (ainda convocável) que falou no canal
+  // último agente (ainda convocável) que falou no canal — ou a saída dele (#438)
   let idx = -1;
   for (let i = e.historico.length - 1; i >= 0; i--) {
     const m = e.historico[i]!;
+    if (saiuDaConversa(m, e.disponiveis)) return { alvos: [], implicito: true };
     if (m.autorTipo === "agente" && e.disponiveis.includes(m.autorId)) { idx = i; break; }
   }
 

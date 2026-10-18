@@ -146,3 +146,46 @@ describe("POST /api/canal/[id]/mensagem · sem @ → agente ativo (lib/canal/alv
     expect(state.disparos).toHaveLength(0);
   });
 });
+
+describe("POST /api/canal/[id]/mensagem · #438 agente dispensada", () => {
+  beforeEach(() => { state.criadas = []; state.disparos = []; state.publicados = []; state.historico = []; state.canal = canal("turma"); state.user = user(B); });
+  const tipos = () => state.criadas.map((m) => [m.autorTipo, m.autorId]);
+
+  it("'@aura pode ir embora, vlw': ela se despede, sai da conversa, e NÃO gasta turno de IA", async () => {
+    const r = await POST(req("@aura pode ir embora, vlw"), { params: { id: CANAL } });
+    expect(r.status).toBe(201);
+    expect((await r.json()).dispensadas).toEqual(["aura"]);
+    expect(state.disparos).toHaveLength(0);
+    expect(tipos()).toEqual([["humano", B], ["agente", "aura"], ["sistema", "aura"]]);
+    expect(state.criadas[1].texto).toContain("@aura");
+    expect(state.criadas[2].texto).toBe("Aura saiu da conversa");
+    // a pessoa vê tudo ao vivo: a mensagem, a despedida e a linha do sistema
+    expect(state.publicados.map((p) => (p[2] as any).autorTipo)).toEqual(["humano", "agente", "sistema"]);
+  });
+
+  it("sem @, dispensando a agente da vez (quem estava falando com ela)", async () => {
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }];
+    await POST(req("é só isso, obrigada"), { params: { id: CANAL } });
+    expect(state.disparos).toHaveLength(0);
+    expect(tipos().slice(1)).toEqual([["agente", "medicina"], ["sistema", "medicina"]]);
+  });
+
+  it("depois que saiu, a próxima mensagem sem @ não aciona ninguém", async () => {
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }, { autorTipo: "sistema", autorId: "medicina" }];
+    await POST(req("eu quero essa gata pra mim ><"), { params: { id: CANAL } });
+    expect(state.disparos).toHaveLength(0);
+    expect(tipos()).toEqual([["humano", B]]);
+  });
+
+  it("'tchau' pra outra pessoa (sem o nome da agente) não tira a agente: ela segue respondendo", async () => {
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }];
+    const r = await POST(req("tchau, até amanhã"), { params: { id: CANAL } });
+    expect((await r.json()).dispensadas).toBeUndefined();
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
+  });
+
+  it("pergunta normal continua indo pra IA", async () => {
+    await POST(req("@aura pode ir pesquisando sobre python?"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+});
