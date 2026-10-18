@@ -117,7 +117,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [tabletAberto, setTabletAberto] = useState(false);
   /** o trabalho de IA rodando no laboratório do tablet (mesmo guardado) — a barra de IA do HUD */
   const [iaLab, setIaLab] = useState<EstadoIALab | null>(null);
-  const lerBarras = useCallback(() => { const e = engine.current; if (!e) return null; const c = e.combate(), a = e.aguaAgora(); return { vida: c.vida, vidaMax: c.max, caido: c.caido, agua: a.v, seco: a.seco, fonte: a.fonte, sede: a.sede }; }, []);
+  const lerBarras = useCallback(() => { const e = engine.current; if (!e) return null; const c = e.combate(), a = e.aguaAgora(); return { vida: c.vida, vidaMax: c.max, caido: c.caido, agua: a.v, seco: a.seco, fonte: a.fonte, sede: a.sede, energia: c.energia, escudo: c.escudo }; }, []);
   // o INVENTÁRIO (tecla I — lib/cyber/inventario): a arma equipada vai pra mão
   const [inventarioAberto, setInventarioAberto] = useState(false);
   const [destaqueInv, setDestaqueInv] = useState<PesquisaSalva | null>(null);   // a pesquisa nova do tutorial

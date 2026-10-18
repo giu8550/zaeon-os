@@ -45,7 +45,7 @@ export type Presenca = {
   motoLargada?: { s: number; x: number; y: number; z: number; yaw: number };   // a moto que ESTACIONOU (fica lá, não volta pra vaga)
   desc?: number;      // DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (lib/cyber/descanso)
   mov?: number;       // o MOVIMENTO TURBINADO (lib/cyber/movimento): 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem
-  atk?: number; hp?: number; arma?: number;   // ARENA PvP (lib/cyber/combate): o golpe (seq×4 + nº do combo), a vida (0–100), a espada na mão (1)
+  atk?: number; hp?: number; arma?: number; mag?: number;   // ARENA PvP (lib/cyber/combate): o golpe (seq×4 + nº do combo), a vida (0–100), a espada na mão (1)
   ts?: number;
   /** corrida de checkpoints: quantos pegou e a corrida ("semente:largada") */
   ck?: number; cr?: string;
