@@ -103,7 +103,7 @@ export default function VitrinePersonagem({ fundador, cor, corpo, className = ""
       pivo.add(a.group); av = a;
       const proprio: CorpoVrm | null = corpo ?? (fundador ? CORPO_DO_FUNDADOR : null);
       if (proprio) {
-        if (!corpo || corpo.asas) a.usarAsas({ escala: QUADRO.fundador.escalaAsas });   // as asas: do founder (e de quem as ganhou)
+        if (!corpo || corpo.asas) a.usarAsas({ escala: QUADRO.fundador.escalaAsas, sempre: true });   // as asas: do founder (e de quem as ganhou)
         else a.semMochila();
         if (corpo?.pose) a.poseVrm(POSES_VRM[corpo.pose]);
         a.esperarCorpo(true);   // o corpo padrão não aparece antes do próprio

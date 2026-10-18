@@ -3,8 +3,11 @@
  * (THREE.AnimationClip.toJSON) que toca no esqueleto do avatar do cyberespaço (o Soldier.glb do three: mixamo, com o
  * quadril dentro de um nó girado −90° em X e em centímetros).
  *
- *   node scripts/anim/mixamo-para-clip.mjs "<arquivo.fbx>" <nome> public/anim/<nome>.json [alturaDoQuadril_cm]
+ *   node scripts/anim/mixamo-para-clip.mjs "<arquivo.fbx>" <nome> public/anim/<nome>.json [alturaDoQuadril_cm] [--laco|--golpe] [--sem-giro]
  *
+ * - `--laco` / `--golpe` forçam o tipo (sem eles, vai pelo nome do arquivo: idle/walk/run = laço);
+ * - `--sem-giro`: a VIRADA do corpo (o quadril girando em torno do eixo vertical ao longo do clipe — o "Rifle Turn") sai
+ *   do clipe e vai pro JSON (`giro`, rad, + = pra esquerda): quem gira o corpo é o jogo, junto com o clipe;
  * - ALTURA: o personagem do Mixamo pode ter o quadril noutra altura (92,5 cm no das magias; o do jogo, 106) — tudo do
  *   quadril é escalado por `ALTURA_DO_JOGO / alturaDoQuadril` (o 4º argumento; sem ele, a altura do 1º quadro). Sem
  *   isso o corpo afundava ou flutuava (a "falha no quadril" do catwalk);
@@ -21,7 +24,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 
-const [entrada, nome, saida, alturaArg] = process.argv.slice(2);
+const flags = process.argv.slice(2).filter((a) => a.startsWith("--")), [entrada, nome, saida, alturaArg] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 /** a altura (cm) do quadril do Soldier em pé, no referencial dele (Z pra cima) */
 const ALTURA_DO_JOGO = 106.13;
 if (!entrada || !nome || !saida) { console.error("uso: node mixamo-para-clip.mjs <fbx> <nome> <saida.json>"); process.exit(1); }
@@ -29,12 +32,16 @@ const buf = readFileSync(entrada);
 const obj = new FBXLoader().parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), "");
 const clip = obj.animations[0]; if (!clip) throw new Error("sem animação no FBX");
 // Y pra cima → Z pra cima (o nó do Soldier) e MEIA VOLTA (o personagem do Mixamo olha pro +Z; o do jogo, pro −Z)
-const giro = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+const giroSoldier = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
 const q = new THREE.Quaternion(), v = new THREE.Vector3(), r4 = (x) => Math.round(x * 1e3) / 1e3;
 /** os DEDOS (≈30 das 53 trilhas): quase não aparecem no avatar e pesam o arquivo — saem */
 const DEDO = /Thumb|Index|Middle|Ring|Pinky/;
 /** é um LAÇO? (idle, andar, correr — repete) ou um GOLPE (toca uma vez) */
-const laco = /idle|walk|run|loop/i.test(entrada) && !/to standing|start|land/i.test(entrada);
+const laco = flags.includes("--laco") || (!flags.includes("--golpe") && /idle|walk|run|loop/i.test(entrada) && !/to standing|start|land|stop/i.test(entrada));
+const semGiro = flags.includes("--sem-giro");
+/** o rumo (rad, em torno do Y do Mixamo) da frente do quadril num quaternion */
+const rumoDe = (qq) => { const f = new THREE.Vector3(0, 0, 1).applyQuaternion(qq); return Math.atan2(f.x, f.z); };
+let giro = 0;
 const tracks = [];
 const hp = clip.tracks.find((t) => t.name === "mixamorigHips.position");
 const y0 = hp ? hp.values[1] : ALTURA_DO_JOGO, x0 = hp ? hp.values[0] : 0, z0 = hp ? hp.values[2] : 0;
@@ -51,10 +58,15 @@ for (const t of clip.tracks) {
   if (osso === "mixamorigHips" && prop === "position") {
     for (let i = 0; i < valores.length; i += 3) {
       const dx = andaSozinha ? 0 : (valores[i] - x0) * k, dz = andaSozinha ? 0 : (valores[i + 2] - z0) * k;   // o balanço fica; o avanço, não
-      v.set(dx, valores[i + 1] * k, dz).applyQuaternion(giro); valores[i] = v.x; valores[i + 1] = v.y; valores[i + 2] = v.z;
+      v.set(dx, valores[i + 1] * k, dz).applyQuaternion(giroSoldier); valores[i] = v.x; valores[i + 1] = v.y; valores[i + 2] = v.z;
     }
   } else if (osso === "mixamorigHips" && prop === "quaternion") {
-    for (let i = 0; i < valores.length; i += 4) { q.fromArray(valores, i).premultiply(giro); q.toArray(valores, i); }
+    const r0 = rumoDe(q.fromArray(valores, 0)), desfaz = new THREE.Quaternion(), eixoY = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < valores.length; i += 4) {
+      q.fromArray(valores, i);
+      if (semGiro) { let d = rumoDe(q) - r0; d = Math.atan2(Math.sin(d), Math.cos(d)); if (i === valores.length - 4) giro = d; q.premultiply(desfaz.setFromAxisAngle(eixoY, -d)); }   // (a virada sai: o jogo gira)
+      q.premultiply(giroSoldier); q.toArray(valores, i);
+    }
   }
   // fecha o ciclo (só nos LAÇOS — os idles, os andares): o último quadro = o primeiro
   const n = t.times.length, tam = valores.length / n;
@@ -64,5 +76,5 @@ for (const t of clip.tracks) {
   tracks.push(tr);
 }
 const out = new THREE.AnimationClip(nome, clip.duration, tracks);
-writeFileSync(saida, JSON.stringify({ ...THREE.AnimationClip.toJSON(out), deslocamento, laco }));
-console.log(`${nome}: ${clip.duration.toFixed(2)} s, ${tracks.length} trilhas, escala ${k.toFixed(3)}, ${andaSozinha ? `anda ${JSON.stringify(deslocamento)} m (o jogo move)` : "no lugar"}${laco ? ", laço" : ""} → ${saida}`);
+writeFileSync(saida, JSON.stringify({ ...THREE.AnimationClip.toJSON(out), deslocamento, laco, ...(semGiro ? { giro: +giro.toFixed(3) } : {}) }));
+console.log(`${nome}: ${clip.duration.toFixed(2)} s, ${tracks.length} trilhas, escala ${k.toFixed(3)}, ${andaSozinha ? `anda ${JSON.stringify(deslocamento)} m (o jogo move)` : "no lugar"}${laco ? ", laço" : ""}${semGiro ? `, giro ${(giro * 180 / Math.PI).toFixed(0)}°` : ""} → ${saida}`);

@@ -62,7 +62,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
   const raiz = new THREE.Group(); raiz.name = `personagem-${o.id}`; o.cena.add(raiz);
   const av: AvatarLuzHandle = criarAvatarLuz(o.cor, o.starTex, o.low, o.gltf, { anime: true });
   av.semMochila(); av.esperarCorpo(true); raiz.add(av.group);
-  if (o.asas) av.usarAsas();
+  if (o.asas) av.usarAsas({ sempre: true });
   const poseParada = o.corpo.pose ? POSES_VRM[o.corpo.pose] : null;
   // o corpo VRM (~10 MB cada) só baixa quando a câmera chega PERTO e é solto quando ela se afasta bem — com muitos
   // personagens na cidadela, ninguém baixa todos de uma vez

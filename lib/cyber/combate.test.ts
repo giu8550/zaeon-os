@@ -11,10 +11,17 @@ describe("inventário", () => {
     expect(inv.espacos).toHaveLength(ESPACOS); expect(inv.espacos[0]).toBe("espada-espiritual"); expect(inv.equipado).toBe("espada-espiritual");
     expect(ITENS["espada-espiritual"].nivel).toBe(7);
   });
-  it("a espada (e os golpes) são só do FUNDADOR: os outros têm o inventário, vazio — e não ficam com ela nem forjando", () => {
-    expect(inventarioInicial(false)).toEqual({ espacos: Array(ESPACOS).fill(null), equipado: null });
-    expect(itensPermitidos(inventarioInicial(true), false)).toEqual({ espacos: Array(ESPACOS).fill(null), equipado: null });
+  it("a espada (e os golpes) são só do FUNDADOR: os outros têm o inventário só com o rifle — e não ficam com ela nem forjando", () => {
+    expect(inventarioInicial(false)).toEqual({ espacos: ["rifle-cosmico", ...Array(ESPACOS - 1).fill(null)], equipado: null });
+    expect(itensPermitidos(inventarioInicial(true), false)).toEqual({ espacos: [null, "rifle-cosmico", ...Array(ESPACOS - 2).fill(null)], equipado: null });
     expect(itensPermitidos(inventarioInicial(true), true)).toEqual(inventarioInicial(true));
+  });
+  it("o RIFLE é de todos: quem salvou o inventário antes ganha no 1º espaço livre (uma vez só)", () => {
+    const antigo = { espacos: ["espada-espiritual", ...Array(ESPACOS - 1).fill(null)], equipado: "espada-espiritual" as const };
+    const r = itensPermitidos(antigo, true);
+    expect(r.espacos[1]).toBe("rifle-cosmico"); expect(r.equipado).toBe("espada-espiritual");
+    expect(itensPermitidos(r, true)).toEqual(r);
+    expect(equipar(r, "rifle-cosmico").equipado).toBe("rifle-cosmico");
   });
   it("o que vem do navegador é limpo; só equipa o que está nos espaços", () => {
     expect(sanitizarInventario({ espacos: ["xyz", "espada-espiritual"], equipado: "xyz" })).toEqual({ espacos: [null, "espada-espiritual", ...Array(ESPACOS - 2).fill(null)], equipado: null });

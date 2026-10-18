@@ -4,7 +4,7 @@
  * Salvo no navegador por pessoa (`chaveInventario`); tudo que vem de fora passa por `sanitizarInventario`.
  */
 
-export type IdItem = "espada-espiritual";
+export type IdItem = "espada-espiritual" | "rifle-cosmico";
 export type Raridade = "comum" | "rara" | "epica" | "lendaria";
 export type Item = {
   id: IdItem; nome: string; tipo: "arma"; nivel: number; raridade: Raridade; descricao: string;
@@ -18,6 +18,11 @@ export const ITENS: Record<IdItem, Item> = {
     descricao: "Montante enorme de metal escuro com o núcleo de energia verde-água — pesa como uma porta. Se materializa na mão de quem a chama e se desfaz em luz.",
     arma: { dano: 12, alcance: 4.1, arco: 1.0 },   // (uma montante ENORME, ~3 m: alcance longo)
   },
+  "rifle-cosmico": {
+    id: "rifle-cosmico", nome: "Rifle Cósmico", tipo: "arma", nivel: 5, raridade: "lendaria",
+    descricao: "Rifle de energia azul-neon com veias violeta e cano triplo. Rajada automática, mira livre (botão direito) — esquenta: deixe esfriar. Tecla 1 saca e guarda.",
+    arma: { dano: 9, alcance: 90, arco: 0 },   // (os números de verdade estão em lib/cyber/rifle)
+  },
 };
 /** o dano cresce com o nível do item (+6% por nível acima do 1º) */
 export const multiplicadorDoNivel = (nivel: number) => 1 + 0.06 * (Math.max(1, nivel) - 1);
@@ -28,15 +33,28 @@ export const ehItem = (v: unknown): v is IdItem => typeof v === "string" && v in
 
 /** os itens que só o FUNDADOR tem (a espada e os golpes são do personagem do dono, out/2026) */
 export const ITENS_DO_FUNDADOR: readonly IdItem[] = ["espada-espiritual"];
-/** quem nunca abriu o inventário: o fundador com a espada no 1º espaço, já equipada; todo o resto, vazio */
+/** os itens que TODO MUNDO tem (o rifle cósmico, out/2026 — entra no 1º espaço livre de quem ainda não tem) */
+export const ITENS_DE_TODOS: readonly IdItem[] = ["rifle-cosmico"];
+/** quem nunca abriu o inventário: o fundador com a espada no 1º espaço, já equipada (e o rifle no 2º); todo o resto, o rifle */
 export function inventarioInicial(fundador = true): Inventario {
   const espacos: (IdItem | null)[] = Array.from({ length: ESPACOS }, () => null);
-  if (!fundador) return { espacos, equipado: null };
+  if (!fundador) return comItensDeTodos({ espacos, equipado: null });
   espacos[0] = "espada-espiritual";
-  return { espacos, equipado: "espada-espiritual" };
+  return comItensDeTodos({ espacos, equipado: "espada-espiritual" });
+}
+/** garante os itens de todos (quem salvou o inventário antes deles existirem ganha no 1º espaço livre) */
+export function comItensDeTodos(inv: Inventario): Inventario {
+  let espacos = inv.espacos;
+  for (const id of ITENS_DE_TODOS) {
+    if (espacos.includes(id)) continue;
+    const i = espacos.indexOf(null); if (i < 0) continue;
+    espacos = espacos.slice(); espacos[i] = id;
+  }
+  return espacos === inv.espacos ? inv : { ...inv, espacos };
 }
 /** tira o que a pessoa não pode ter (os itens do fundador, de quem não é) */
 export function itensPermitidos(inv: Inventario, fundador: boolean): Inventario {
+  inv = comItensDeTodos(inv);
   if (fundador) return inv;
   const espacos = inv.espacos.map((x) => (x && ITENS_DO_FUNDADOR.includes(x) ? null : x));
   return { espacos, equipado: inv.equipado && espacos.includes(inv.equipado) ? inv.equipado : null };
