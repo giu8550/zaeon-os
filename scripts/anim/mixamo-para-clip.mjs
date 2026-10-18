@@ -3,43 +3,66 @@
  * (THREE.AnimationClip.toJSON) que toca no esqueleto do avatar do cyberespaço (o Soldier.glb do three: mixamo, com o
  * quadril dentro de um nó girado −90° em X e em centímetros).
  *
- *   node scripts/anim/mixamo-para-clip.mjs "<arquivo.fbx>" <nome> public/anim/<nome>.json
+ *   node scripts/anim/mixamo-para-clip.mjs "<arquivo.fbx>" <nome> public/anim/<nome>.json [alturaDoQuadril_cm]
  *
+ * - ALTURA: o personagem do Mixamo pode ter o quadril noutra altura (92,5 cm no das magias; o do jogo, 106) — tudo do
+ *   quadril é escalado por `ALTURA_DO_JOGO / alturaDoQuadril` (o 4º argumento; sem ele, a altura do 1º quadro). Sem
+ *   isso o corpo afundava ou flutuava (a "falha no quadril" do catwalk);
+ * - ANDA SOZINHA ou não: se o quadril termina longe de onde começou (> 20 cm), o avanço sai (quem move é o jogo — e o
+ *   empurrão vira um recuo controlado pelo jogo); se não, o BALANÇO do corpo fica (o ataque inclina, o idle oscila);
  * - NO LUGAR: o avanço do quadril (x/z) sai — quem anda é o jogo (sem isso, ela andaria sozinha e deslizaria);
  * - o QUADRIL vai pro referencial do Soldier: rotação e posição giradas +90° em X (Y pra cima → Z pra cima) e meia
  *   volta em Y (o personagem do Mixamo olha pro +Z, o do jogo pro −Z);
  * - os outros ossos são as rotações locais do mixamo (o mesmo padrão nos dois esqueletos);
- * - o ciclo FECHA (o último quadro = o primeiro) e os números são arredondados (arquivo menor).
+ * - o ciclo FECHA nos laços (o último quadro = o primeiro); os DEDOS saem, os quadros repetidos também e os números são
+ *   arredondados (arquivo menor).
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 
-const [entrada, nome, saida] = process.argv.slice(2);
+const [entrada, nome, saida, alturaArg] = process.argv.slice(2);
+/** a altura (cm) do quadril do Soldier em pé, no referencial dele (Z pra cima) */
+const ALTURA_DO_JOGO = 106.13;
 if (!entrada || !nome || !saida) { console.error("uso: node mixamo-para-clip.mjs <fbx> <nome> <saida.json>"); process.exit(1); }
 const buf = readFileSync(entrada);
 const obj = new FBXLoader().parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), "");
 const clip = obj.animations[0]; if (!clip) throw new Error("sem animação no FBX");
 // Y pra cima → Z pra cima (o nó do Soldier) e MEIA VOLTA (o personagem do Mixamo olha pro +Z; o do jogo, pro −Z)
 const giro = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
-const q = new THREE.Quaternion(), v = new THREE.Vector3(), r4 = (x) => Math.round(x * 1e4) / 1e4;
+const q = new THREE.Quaternion(), v = new THREE.Vector3(), r4 = (x) => Math.round(x * 1e3) / 1e3;
+/** os DEDOS (≈30 das 53 trilhas): quase não aparecem no avatar e pesam o arquivo — saem */
+const DEDO = /Thumb|Index|Middle|Ring|Pinky/;
+/** é um LAÇO? (idle, andar, correr — repete) ou um GOLPE (toca uma vez) */
+const laco = /idle|walk|run|loop/i.test(entrada) && !/to standing|start|land/i.test(entrada);
 const tracks = [];
+const hp = clip.tracks.find((t) => t.name === "mixamorigHips.position");
+const y0 = hp ? hp.values[1] : ALTURA_DO_JOGO, x0 = hp ? hp.values[0] : 0, z0 = hp ? hp.values[2] : 0;
+const k = ALTURA_DO_JOGO / (Number(alturaArg) || y0);
+const nHp = hp ? hp.values.length / 3 : 0;
+const andaSozinha = hp ? Math.hypot(hp.values[(nHp - 1) * 3] - x0, hp.values[(nHp - 1) * 3 + 2] - z0) > 20 : false;
+/** o deslocamento total (m, no chão do personagem: x = pro lado, z = pra frente) — o jogo aplica como recuo/avanço */
+const deslocamento = hp ? { x: +((hp.values[(nHp - 1) * 3] - x0) / 100).toFixed(3), z: +((hp.values[(nHp - 1) * 3 + 2] - z0) / 100).toFixed(3) } : { x: 0, z: 0 };
 for (const t of clip.tracks) {
   const osso = t.name.split(".")[0], prop = t.name.split(".").pop();
-  if (prop === "scale") continue;
+  if (prop === "scale" || DEDO.test(osso)) continue;
   if (prop === "position" && osso !== "mixamorigHips") continue;   // só o quadril se move
   const valores = Float32Array.from(t.values);
   if (osso === "mixamorigHips" && prop === "position") {
-    for (let i = 0; i < valores.length; i += 3) { v.set(0, valores[i + 1], 0).applyQuaternion(giro); valores[i] = v.x; valores[i + 1] = v.y; valores[i + 2] = v.z; }   // no lugar (x/z do avanço fora) e girado
+    for (let i = 0; i < valores.length; i += 3) {
+      const dx = andaSozinha ? 0 : (valores[i] - x0) * k, dz = andaSozinha ? 0 : (valores[i + 2] - z0) * k;   // o balanço fica; o avanço, não
+      v.set(dx, valores[i + 1] * k, dz).applyQuaternion(giro); valores[i] = v.x; valores[i + 1] = v.y; valores[i + 2] = v.z;
+    }
   } else if (osso === "mixamorigHips" && prop === "quaternion") {
     for (let i = 0; i < valores.length; i += 4) { q.fromArray(valores, i).premultiply(giro); q.toArray(valores, i); }
   }
-  // fecha o ciclo: o último quadro = o primeiro
-  const n = t.times.length, k = valores.length / n;
-  for (let c = 0; c < k; c++) valores[(n - 1) * k + c] = valores[c];
+  // fecha o ciclo (só nos LAÇOS — os idles, os andares): o último quadro = o primeiro
+  const n = t.times.length, tam = valores.length / n;
+  if (laco) for (let c = 0; c < tam; c++) valores[(n - 1) * tam + c] = valores[c];
   const T = prop === "quaternion" ? THREE.QuaternionKeyframeTrack : THREE.VectorKeyframeTrack;
-  tracks.push(new T(t.name, Array.from(t.times, r4), Array.from(valores, r4)));
+  const tr = new T(t.name, Array.from(t.times, r4), Array.from(valores, r4)); tr.optimize();   // (sem os quadros repetidos)
+  tracks.push(tr);
 }
 const out = new THREE.AnimationClip(nome, clip.duration, tracks);
-writeFileSync(saida, JSON.stringify(THREE.AnimationClip.toJSON(out)));
-console.log(`${nome}: ${clip.duration.toFixed(2)} s, ${tracks.length} trilhas → ${saida}`);
+writeFileSync(saida, JSON.stringify({ ...THREE.AnimationClip.toJSON(out), deslocamento, laco }));
+console.log(`${nome}: ${clip.duration.toFixed(2)} s, ${tracks.length} trilhas, escala ${k.toFixed(3)}, ${andaSozinha ? `anda ${JSON.stringify(deslocamento)} m (o jogo move)` : "no lugar"}${laco ? ", laço" : ""} → ${saida}`);

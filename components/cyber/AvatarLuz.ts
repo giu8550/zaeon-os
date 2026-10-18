@@ -25,6 +25,7 @@ import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./Av
 import { criarAsas, type AsasHandle } from "./AsasAnjo";
 import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
 import { POSE_FEMININA_A_VONTADE, type PoseVrm } from "@/lib/cyber/posesVrm";
+import { urlDoClipe, type NomeClipeMagia } from "@/lib/cyber/magia";
 
 /** o corpo DESENHADO (estilo anime — experimento, lib/cyber/estiloAvatar)? */
 const desenhado = () => typeof window !== "undefined" && estiloDe(process.env.NEXT_PUBLIC_CYBER_AVATAR_ESTILO, window.location.search) === "anime";
@@ -36,6 +37,28 @@ export const avatarGlbUrl = (): string => process.env.NEXT_PUBLIC_CYBER_AVATAR_G
 let cache: { url: string; p: Promise<GLTF> } | null = null;
 /** as fases do pé de cada GLB (medir custa 2×64 passos de animação — antes era refeito pra cada pessoa que entrava) */
 const fasesPorModelo = new WeakMap<GLTF, { walk: number[]; run: number[] } | null>();
+/** os CLIPES de ação (magia — lib/cyber/magia): baixados UMA vez pra todos os avatares; o ESPELHADO (a reação vinda do
+ *  outro lado) troca Left↔Right e espelha as rotações no plano do meio do corpo */
+const clipesMagia = new Map<string, Promise<THREE.AnimationClip | null>>();
+function espelharClipe(c: THREE.AnimationClip): THREE.AnimationClip {
+  const trilhas = c.tracks.map((t) => {
+    const nome = t.name.replace(/Left|Right/g, (m) => (m === "Left" ? "Right" : "Left")), v = Float32Array.from(t.values);
+    if (t.name.endsWith(".quaternion")) for (let i = 0; i < v.length; i += 4) { v[i + 1] = -v[i + 1]!; v[i + 2] = -v[i + 2]!; }   // (x, −y, −z, w)
+    else if (t.name.endsWith(".position")) for (let i = 0; i < v.length; i += 3) v[i] = -v[i]!;
+    const T = t.name.endsWith(".quaternion") ? THREE.QuaternionKeyframeTrack : THREE.VectorKeyframeTrack;
+    return new T(nome, Array.from(t.times), Array.from(v));
+  });
+  return new THREE.AnimationClip(`${c.name}_esp`, c.duration, trilhas);
+}
+function carregarClipeMagia(nome: NomeClipeMagia, espelhar: boolean): Promise<THREE.AnimationClip | null> {
+  const k = `${nome}|${espelhar ? 1 : 0}`; let p = clipesMagia.get(k);
+  if (!p) {
+    p = espelhar ? carregarClipeMagia(nome, false).then((c) => (c ? espelharClipe(c) : null))
+      : fetch(urlDoClipe(nome)).then((r) => (r.ok ? r.json() : null)).then((j) => (j ? THREE.AnimationClip.parse(j) : null)).catch(() => null);
+    clipesMagia.set(k, p);
+  }
+  return p;
+}
 /** Carrega o GLB uma vez (todos os avatares clonam dele). */
 export function carregarModeloAvatar(url = avatarGlbUrl()): Promise<GLTF> {
   if (cache?.url === url) return cache.p;
@@ -101,6 +124,15 @@ export type AvatarLuzHandle = {
   /** o JEITO do corpo VRM (pack de realismo): "feminina" = a marcha feminina andando e, se `parada`, a pose feminina
    *  (contrapposto) quando em pé e parado — os jogadores; os personagens cuidam da pose parada deles */
   estiloVrm(e: "feminina" | null, o?: { parada?: boolean }): void;
+  /** toca um CLIPE de ação (magia — lib/cyber/magia) uma vez, por cima do andar/parado: `espelhar` = do outro lado;
+   *  `velocidade` = a escala de tempo; `segurar` = fica no último quadro até `soltarClipe` (o escudo) */
+  tocarClipe(nome: NomeClipeMagia, o?: { espelhar?: boolean; velocidade?: number; segurar?: boolean }): void;
+  /** sai do clipe (com a mistura de volta) */
+  soltarClipe(): void;
+  /** um clipe de ação tocando agora? */
+  noClipe(): boolean;
+  /** onde está a MÃO (mundo) — o brilho da magia e de onde o projétil sai */
+  pontoDaMao(lado: "direita" | "esquerda", out: THREE.Vector3): THREE.Vector3;
   /** recolhe as ASAS em parte (0..1) — a câmera perto, por cima do ombro: abertas, elas cobriam a tela. No ar, abrem */
   recolherAsas(k: number): void;
   /** uma POSE própria no corpo VRM (lib/cyber/posesVrm — ex.: a feminina dos personagens parados); null = a do esqueleto */
@@ -287,6 +319,9 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   grupo.add(neu);
 
   let alvo = 0, wWalk = 0, wRun = 0, pisadas = 0, uAnt = 0, acaoAnt: THREE.AnimationAction | null = null;
+  // o CLIPE de ação (magia): a ação dele, o peso misturado e se segura no fim; `pedido` = o último pedido (o download pode chegar depois)
+  const acoesClipe = new Map<string, THREE.AnimationAction>();
+  let clipe: { a: THREE.AnimationAction; segurar: boolean } | null = null, wClipe = 0, pedidoClipe = 0;
   const vA = new THREE.Vector3(), vB = new THREE.Vector3(), dirAlvo = new THREE.Vector3(), qPai = new THREE.Quaternion(), qOsso = new THREE.Quaternion(), qDelta = new THREE.Quaternion();
   /** as fases (0..1) do ciclo de andar/correr em que um pé encosta — medidas UMA vez da própria animação */
   const fasesPe = gltf && fasesPorModelo.has(gltf) ? fasesPorModelo.get(gltf)! : (() => {
@@ -340,7 +375,12 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, acao = null, montado = null, dj = 0, danca = 0, surf = 0, puxado: wP = 0, descanso = null, tablet: wTab = 0, dt, t }) {
       const k = Math.min(1, dt * 8), corre = !!correndo && andando;
       wWalk += ((andando && !corre ? 1 : 0) - wWalk) * k; wRun += ((corre ? 1 : 0) - wRun) * k;
-      if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk); run.setEffectiveWeight(wRun); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun)); mixer.update(dt); }
+      // o CLIPE de ação por cima (a mistura entra rápido e sai suave); acabou e não segura → sai
+      if (clipe && !clipe.segurar && clipe.a.time >= clipe.a.getClip().duration - 1e-3) clipe = null;
+      wClipe += ((clipe ? 1 : 0) - wClipe) * Math.min(1, dt * (clipe ? 14 : 6));
+      for (const a of acoesClipe.values()) a.setEffectiveWeight(clipe && a === clipe.a ? wClipe : 0);
+      const resto = 1 - wClipe;
+      if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk * resto); run.setEffectiveWeight(wRun * resto); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun) * resto); mixer.update(dt); }
       // PISADAS: o relógio da animação dominante (andar ou correr) cruzou a fase em que um pé encosta no chão
       if (walk && run && fasesPe) {
         const acao = wRun > wWalk ? run : walk, f = acao === run ? fasesPe.run : fasesPe.walk, u = (acao.time % acao.getClip().duration) / acao.getClip().duration;
@@ -896,6 +936,24 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     },
     semMochila() { mochila.visible = false; },
     poseVrm(p) { poseVrm = p; espelho?.pose(p); },
+    tocarClipe(nome, op) {
+      if (!mixer) return;
+      const meu = ++pedidoClipe, esp = !!op?.espelhar;
+      void carregarClipeMagia(nome, esp).then((c) => {
+        if (!c || !mixer || meu !== pedidoClipe) return;   // (chegou depois de outro pedido: vale o mais novo)
+        const k = `${nome}|${esp ? 1 : 0}`; let a = acoesClipe.get(k);
+        if (!a) { a = mixer.clipAction(c); acoesClipe.set(k, a); }
+        a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.timeScale = op?.velocidade ?? 1; a.setEffectiveWeight(clipe ? wClipe : 0); a.play();
+        clipe = { a, segurar: !!op?.segurar };
+      });
+    },
+    soltarClipe() { pedidoClipe++; clipe = null; },
+    noClipe: () => !!clipe,
+    pontoDaMao(lado, out) {
+      const o = ossos.find((x) => x.mao.name.includes(lado === "direita" ? "Right" : "Left"));
+      if (o) return o.mao.getWorldPosition(out);
+      return grupo.getWorldPosition(out).setY(out.y + 1.3);
+    },
     recolherAsas(k) { recolheAlvo = Math.max(0, Math.min(0.95, k)); },
     estiloVrm(e, op) { estiloCorpo = e; paradaAuto = !!op?.parada; espelho?.estilo(e); },
     detalheVrm(on) { espelho?.detalhe(on); },

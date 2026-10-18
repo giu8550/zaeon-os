@@ -31,7 +31,7 @@ export function barraIA(e: EstadoIALab | null, agora: number): { modo: "livre" |
   return { modo: "livre", f: 0, rotulo: "IA livre" };
 }
 
-type Leitura = { vida: number; vidaMax: number; caido: boolean; agua: number; seco: boolean; fonte: string | null; sede: boolean };
+type Leitura = { vida: number; vidaMax: number; caido: boolean; agua: number; seco: boolean; fonte: string | null; sede: boolean; /** a ENERGIA CÓSMICA da magia (0..1) e o escudo erguido */ energia?: number; escudo?: boolean };
 
 export default function BarrasHud({ ler, ia, touch }: { ler: () => Leitura | null; ia: EstadoIALab | null; touch: boolean }) {
   const [l, setL] = useState<Leitura | null>(null), [agora, setAgora] = useState(() => Date.now());
@@ -65,6 +65,9 @@ export default function BarrasHud({ ler, ia, touch }: { ler: () => Leitura | nul
         </span>
       </div>
       <Barra titulo="Vida" icone="♥" rotulo={l.caido ? "caído" : `${Math.round(l.vida)}`} f={vida} cor="bg-gradient-to-r from-rose-500 to-pink-400" brilho="0 0 10px rgba(255,80,140,.55)" />
+      {/* a ENERGIA CÓSMICA (lib/cyber/magia): Q/E lançam, R segura o escudo — some cheia, aparece quando gasta */}
+      {l.energia !== undefined && l.energia < 0.999 && <Barra titulo="Energia" icone="✦" f={l.energia} rotulo={l.escudo ? "escudo" : `${Math.round(l.energia * 100)}%`}
+        rotuloCor={l.escudo ? "text-cyan-200" : "text-white/55"} cor="bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-300" brilho="0 0 10px rgba(168,107,255,.6)" />}
       {/* a ÁGUA — o recurso mais vital (lib/cyber/agua): correr e o turbo gastam; nas fontes enche; com sede, a vida cai */}
       <Barra titulo="Água" icone="💧" f={l.agua}
         rotulo={l.sede ? "sede!" : l.fonte ? `bebendo · ${l.fonte}` : l.seco ? "seco" : `${Math.round(l.agua * 100)}%`}
