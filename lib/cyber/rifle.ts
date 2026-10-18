@@ -18,10 +18,10 @@
  */
 import { CORPO_MAGIA, type P3 } from "./magia";
 
-export type NomeClipeRifle = "mira" | "anda" | "atira" | "esq" | "dir" | "cambaleia" | "gira" | "freia" | "morre" | "morreDir" | "pula" | "paraDir";
+export type NomeClipeRifle = "mira" | "anda" | "atira" | "esq" | "dir" | "cambaleia" | "gira" | "freia" | "morre" | "morreDir";
 /** a duração (s) de cada clipe (public/anim/rifle) — o engine marca os tempos sem esperar o download */
 export const DURACAO_RIFLE: Readonly<Record<NomeClipeRifle, number>> = {
-  mira: 3.1, anda: 1.37, atira: 1.17, esq: 1.07, dir: 1.43, cambaleia: 1.83, gira: 1.7, freia: 1.47, morre: 4.4, morreDir: 3.3, pula: 2.83, paraDir: 2.07,
+  mira: 3.1, anda: 1.37, atira: 1.17, esq: 1.07, dir: 1.43, cambaleia: 1.83, gira: 1.7, freia: 1.47, morre: 4.4, morreDir: 3.3,
 };
 export const ehClipeRifle = (n: string): n is NomeClipeRifle => n in DURACAO_RIFLE;
 export const urlDoClipeRifle = (n: NomeClipeRifle) => `/anim/rifle/${n}.json`;
