@@ -8,7 +8,8 @@ vi.mock("@/lib/canal/server", async () => {
   const db: any = fakeDb();
   const canal = { id: CANAL, ownerId: A, titulo: "t", acesso: "privado", membros: [], agentes: ["aura"] };
   db.canal = { findUnique: async () => canal, update: async () => canal };
-  db.canalMensagem = { create: async ({ data }: any) => ({ id: "f".repeat(24), createdAt: new Date(), ...data }) };
+  // #440: a rota lê o histórico sempre (com @ também) — pra saber se a agente chamada tinha saído
+  db.canalMensagem = { create: async ({ data }: any) => ({ id: "f".repeat(24), createdAt: new Date(), ...data }), findMany: async () => [] };
   return {
     isObjectId: (v: unknown) => typeof v === "string" && /^[a-f0-9]{24}$/i.test(v), prisma: db,
     sessaoUsuario: async () => ({ id: A, name: "A", image: null, email: "a@x", role: null }), exigirFlag: () => null,

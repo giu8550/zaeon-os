@@ -49,3 +49,30 @@ describe("o monitor de IA do tablet (a concorrência)", () => {
     expect(ehMsgIA({ type: "outra" }, O, O)).toBe(false);
   });
 });
+
+describe("#440 · o escritório não acende 'IA trabalhando' no metaverso", () => {
+  it("os pedidos do escritório que não são IA não contam (digitando, sino, convites, agenda, criar)", () => {
+    const C = "a".repeat(24);
+    for (const p of [`/api/canal/${C}/digitando`, "/api/canal/sino", "/api/canal/convites", `/api/canal/convites/${C}`, `/api/canal/${C}/agenda`, `/api/canal/${C}/entrar`, "/api/canal", "/api/canal/pusher-auth"]) {
+      expect(ehChamadaDeIA(p, "POST", O)).toBe(false);
+    }
+  });
+  it("a mensagem do escritório continua contando (ela pode esperar o agente responder)", () => {
+    expect(ehChamadaDeIA(`/api/canal/${"a".repeat(24)}/mensagem`, "POST", O)).toBe(true);
+  });
+  it("resposta JSON sem tamanho (compressão do servidor) NÃO é IA escrevendo; text/plain e x-ndjson são", () => {
+    expect(respostaEmStream({ headers: new Headers({ "content-type": "application/json; charset=utf-8" }), body: {} })).toBe(false);
+    expect(respostaEmStream({ headers: new Headers({ "content-type": "text/plain; charset=utf-8" }), body: {} })).toBe(true);
+    expect(respostaEmStream({ headers: new Headers({ "content-type": "application/x-ndjson; charset=utf-8" }), body: {} })).toBe(true);
+  });
+  it("o caso do Martinez: um POST com JSON sem tamanho que NINGUÉM lê termina na hora (antes: 15 min)", async () => {
+    const avisos: EstadoIALab[] = [];
+    const corpo = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new TextEncoder().encode('{"ok":true}')); c.close(); } });
+    const w = { location: { origin: O }, fetch: async () => new Response(corpo, { headers: { "content-type": "application/json" } }) } as unknown as Window & typeof globalThis;
+    const desinstalar = instalarMonitorIA((e) => avisos.push(e), w);
+    void w.fetch("/api/qualquer/coisa", { method: "POST" });   // ninguém lê a resposta
+    await new Promise((r) => setTimeout(r, 0));
+    expect(avisos.at(-1)!.ativos).toBe(0);
+    desinstalar();
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolverAlvos, agenteDaVez, AGENTE_PADRAO, type MsgResumo } from "./alvo";
+import { resolverAlvos, agenteDaVez, estaForaDaConversa, AGENTE_PADRAO, type MsgResumo } from "./alvo";
 
 const A = "a".repeat(24), B = "b".repeat(24);
 const DISP = ["aura", "zaeon", "medicina"];
@@ -96,5 +96,24 @@ describe("alvo · #438 agente dispensada sai da conversa", () => {
     expect(agenteDaVez(dispensou, DISP)).toBeNull();
     expect(agenteDaVez([h("humano", A), h("agente", "aura")], DISP)).toBe("aura");
     expect(agenteDaVez([], DISP)).toBeNull();
+  });
+});
+
+describe("alvo · #440 a agente voltou", () => {
+  const saiu: MsgResumo = { autorTipo: "sistema", autorId: "medicina", texto: "Osler saiu da conversa" };
+  const voltou: MsgResumo = { autorTipo: "sistema", autorId: "medicina", texto: "Osler voltou para a conversa" };
+
+  it("está fora: saiu e não voltou; voltou ou falou depois → está dentro", () => {
+    expect(estaForaDaConversa([h("agente", "medicina"), saiu], "medicina")).toBe(true);
+    expect(estaForaDaConversa([h("agente", "medicina"), saiu, voltou], "medicina")).toBe(false);
+    expect(estaForaDaConversa([saiu, h("agente", "medicina")], "medicina")).toBe(false);
+    expect(estaForaDaConversa([h("agente", "aura")], "medicina")).toBe(false); // nunca entrou: não é "voltar"
+    expect(estaForaDaConversa([saiu], "aura")).toBe(false);                   // a saída é de outra agente
+  });
+
+  it("a linha 'voltou' não é confundida com 'saiu', e faz dela a agente da vez", () => {
+    const hist = [h("humano", A), h("agente", "medicina"), saiu, h("humano", A), voltou];
+    expect(resolverAlvos({ ...base, historico: hist }).alvos).toEqual(["medicina"]);
+    expect(agenteDaVez(hist, DISP)).toBe("medicina");
   });
 });

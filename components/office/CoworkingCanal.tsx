@@ -73,7 +73,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const contadorSino = contadorDoSino(convites, convites.sino.vistoEm);
   const gravarSino = useCallback(async (acao: AcaoSino) => {
     const r = await fetch("/api/canal/sino", { method: "POST", headers: H, body: JSON.stringify({ acao }) }).catch(() => null);
-    const j = r?.ok ? await r.json().catch(() => null) : null;
+    const j = r ? await r.json().catch(() => null) : null; // #440: lê sempre (com erro também), o pedido não fica aberto
+    if (!r?.ok) return null;
     return (j?.sino as EstadoSino | undefined) ?? null;
   }, []);
   const alternarSino = () => {
@@ -144,7 +145,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     const id = ativoRef.current, agora = Date.now();
     if (!id || !deveAvisarDigitando(ultimoAvisoDigitando.current, agora, valor)) return;
     ultimoAvisoDigitando.current = agora;
-    void fetch(`/api/canal/${id}/digitando`, { method: "POST" }).catch(() => undefined);
+    // #440: lê (e descarta) a resposta — um pedido nunca lido ficava "aberto" e o tablet do metaverso achava que era IA
+    void fetch(`/api/canal/${id}/digitando`, { method: "POST" }).then((r) => r.body?.cancel()).catch(() => undefined);
   };
 
   // ─── canais: carrega; sem nenhum, cria o primeiro (a sala nunca abre vazia) ───
@@ -346,8 +348,13 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       setTexto("");
       ultimoAvisoDigitando.current = null; // a próxima mensagem volta a avisar na primeira tecla
       setErro(null);
-      // agentes recém-convocados passam a constar no canal
-      if (alvos.length) setCanais((cs) => cs.map((c) => (c.id === ativoId ? { ...c, agentes: [...new Set([...c.agentes, ...alvos])] } : c)));
+      // agentes na barra: os chamados entram, a dispensada sai (#440 — o servidor manda a lista final)
+      const naBarra: string[] | null = Array.isArray(j.agentesNoCanal) ? j.agentesNoCanal : null;
+      const ajustar = (c: Canal): Canal => ({ ...c, agentes: naBarra ?? [...new Set([...c.agentes, ...alvos])] });
+      if (naBarra || alvos.length) {
+        setCanais((cs) => cs.map((c) => (c.id === ativoId ? ajustar(c) : c)));
+        setDet((d) => (d && d.canal.id === ativoId ? { ...d, canal: ajustar(d.canal) } : d));
+      }
     } catch (e) {
       setErro(String((e as Error)?.message ?? e));
     } finally {

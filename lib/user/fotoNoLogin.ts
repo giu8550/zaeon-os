@@ -10,6 +10,16 @@
  */
 import { fotoDoGoogleParaSalvar } from "./avatar";
 
+/**
+ * #440: a foto que o login entrega. O NextAuth passa pro evento de login o perfil JÁ CONVERTIDO pelo provider do
+ * Google ({ id, name, email, image }) — a foto vem em `image`, não no `picture` cru do Google. O #438 lia só
+ * `picture` e por isso nunca atualizava. Lê `image` (o formato real) e, por garantia, `picture`.
+ */
+export function fotoDoPerfil(profile: unknown): unknown {
+  const p = (profile ?? {}) as { image?: unknown; picture?: unknown };
+  return p.image ?? p.picture;
+}
+
 export type DepsFotoNoLogin = {
   /** a foto guardada hoje (null = sem foto / usuário não achado). */
   lerFoto: (email: string) => Promise<string | null>;
