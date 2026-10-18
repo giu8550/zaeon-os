@@ -72,7 +72,7 @@ import { ITENS, chaveInventario, equipar as equiparNoInv, inventarioInicial, ite
 import { DURACAO_CLIPE, ENERGIA, ESCUDO, FEITICOS, MOV_ESCUDO, codificarLancamento, estadoDoMov, danoComEscudo, danoDaExplosao, decodificarLancamento, direcaoDaMira, escudoSegura, instanteDoDisparo, ladoDoGolpe, podeLancar, reacaoDoGolpe, recarregarEnergia, varreCorpo, duracaoLancamento, type Feitico } from "@/lib/cyber/magia";
 import { criarFxMagia, type FxMagia } from "./MagiaFx";
 import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
-import { CAMERA_MOTO_PERTO, CAMERA_SUBIDA, SUBIDA, alturaDaMoto, caminhoDaSubida, pesosSubida } from "@/lib/cyber/montaria";
+import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { DURACAO_RIFLE, NUM_TIRO, RIFLE, animacaoDaMorte, danoDoTiro, desviar, difAng, dispersao, fracaoDoGiro, girarAte, movComRifle, naCabeca, noCorpo, passoCalor, passoInercia, podeAtirar, pontoDaMira, precisaVirar, rifleDoMov, tirosNovos } from "@/lib/cyber/rifle";
 import { CAIDO, COMBO, HIT_STOP, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAcabou, acerta, codificarGolpe, cortouEntre, danoDoGolpe, decodificarGolpe, proximoGolpe, type EstadoAtaque, type Golpe } from "@/lib/cyber/combate";
 import { dentroDaArena, ARENA_ATIVA, BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
@@ -642,10 +642,8 @@ export class CyberEngine {
   private proxTiro = 0; private calor = 0; private travadoAte = -Infinity; private ultimoTiro = -Infinity; private rajada = 0; private coice = 0; private seqTiro = 0;
   private velRifle = { x: 0, z: 0 }; private giroRifle: { de: number; ang: number; t0: number; dur: number } | null = null; private freouEm = -Infinity; private morreu = false;
   private alvoMira = new THREE.Vector3(); private cruz: HTMLDivElement | null = null; private reacaoTiroAte = -Infinity;
-  /** SUBINDO na moto (lib/cyber/montaria): desde quando, de onde saiu, a altura parada e a de lançamento — e a câmera
-   *  PERTO na moto (o V alterna perto ⇄ longe; começa perto) */
-  private subida: { t0: number; de: { x: number; y: number; z: number }; yParada: number; yLanc: number } | null = null;
-  private camMotoPerto = true; private vSub = { lado: new THREE.Vector3(), banco: new THREE.Vector3(), peE: new THREE.Vector3(), peD: new THREE.Vector3(), alto: new THREE.Vector3(), atras: new THREE.Vector3() };
+  /** a câmera PERTO na moto (o V alterna perto ⇄ longe; começa perto) */
+  private camMotoPerto = true;
   private vida = VIDA_MAX; private caidoAte = -Infinity; private protegidoAte = -Infinity; private empurrao = { x: 0, z: 0 }; private wGuardaArena = 0;
   private vRastroB = new THREE.Vector3(); private vRastroP = new THREE.Vector3();
   /** o HIT-STOP (até quando a ação fica congelada — o peso do golpe que pegou) e o golpe pesado que já esmagou o chão */
@@ -2649,10 +2647,7 @@ export class CyberEngine {
     else { this.motoDe = alvo.dono; if (alvo.dono === this.o.eu.id) { this.motoLargada = null; this.renomearInst("eu:p", "eu:r"); } }   // a minha estacionada: a mesma moto (sem trocar)
     // da VAGA: a moto já sai da plataforma PAIRANDO na altura de lançamento (acima do "rente ao chão": anda na hora)
     const y0 = lancar ? p.y - PLATAFORMA_MOTO.altura + ALTURA_LANCAMENTO : p.y;
-    // a SUBIDA (lib/cyber/montaria): a moto fica parada onde está enquanto ele pula do lado, pega o guidão, passa a perna e
-    // senta; depois ela ergue até a altura de lançamento. A câmera vem perto (¾ por trás, pela esquerda)
-    this.subida = { t0: this.agora, de: { x: this.eu.pos.x, y: this.eu.alt, z: this.eu.pos.z }, yParada: p.y, yLanc: y0 };
-    this.motoAlvo = null; this.moto = alvo.s; this.motoEst = motoParada(p.x, p.y, p.z, p.yaw); this.camSegueEm = 0;
+    this.motoAlvo = null; this.moto = alvo.s; this.motoEst = motoParada(p.x, y0, p.z, p.yaw); this.camAz = p.yaw + Math.PI; this.camSegueEm = 0;
     this.altoEm = null; this.yNav = 0; this.plat = null; this.ilhota = null;   // montado, o nível é o da moto (saiu da plataforma/ilhota)
     this.motoPousado = !lancar; this.autoPouso = false;
     this.sitT = 0; this.alvo = null; this.alvoDepois = null; this.falandoCom = null; this.jetV = { x: 0, z: 0 };
@@ -2667,7 +2662,7 @@ export class CyberEngine {
   /** dá pra descer da moto aqui? Pousada num piso de verdade — na altura da praça, só EM CIMA dela (fora é o vazio) */
   private desceDaMotoAqui() { const m = this.motoEst; return this.moto !== null && this.motoPousado && (m.y > CHAO + 0.5 || naPraca(m)); }
   desmontar() {
-    if (this.moto === null || this.subida || !this.desceDaMotoAqui()) return;
+    if (this.moto === null || !this.desceDaMotoAqui()) return;
     this.sairCorrida(); this.sairCorridaCk();
     const m = this.motoEst, lx = Math.cos(m.yaw), lz = -Math.sin(m.yaw);   // a esquerda de quem pilota
     this.motoLargada = { s: this.moto, x: m.x, y: m.y, z: m.z, yaw: m.yaw };
@@ -2969,22 +2964,7 @@ export class CyberEngine {
     h.assento.getWorldPosition(av.group.position); av.olharPara(h.group.rotation.y);
     const v = this.montadoTmp, p = h.pontos;
     p.maoE.getWorldPosition(v.maoE); p.maoD.getWorldPosition(v.maoD); p.peE.getWorldPosition(v.peE); p.peD.getWorldPosition(v.peD);
-    const sb = av === this.eu.av ? this.subida : null;
-    if (!sb) return { w: 1, ...v };
-    // SUBINDO (lib/cyber/montaria): o grupo vai de onde ele estava → o lado esquerdo da moto (pulinho) → o banco; os pés
-    // no chão ao lado dela; o alto do arco da perna direita fica atrás do banco
-    const u = Math.min(1, (this.agora - sb.t0) / SUBIDA.dur), w = pesosSubida(u), yaw = this.motoEst.yaw, S = this.vSub;
-    const ex = Math.cos(yaw), ez = -Math.sin(yaw), fx = Math.sin(yaw), fz = Math.cos(yaw);   // a esquerda e a frente da moto
-    const banco = S.banco.copy(av.group.position), chaoY = sb.yParada;
-    S.lado.set(this.motoEst.x + ex * 0.85 - fx * 0.15, chaoY, this.motoEst.z + ez * 0.85 - fz * 0.15);   // (do lado, um pouco afastado: a perna sobe sem tocar a moto)
-    const g = caminhoDaSubida(u, sb.de, S.lado, banco); av.group.position.set(g.x, g.y, g.z);
-    av.olharPara(this.eu.facing + difAng(this.eu.facing, yaw) * Math.max(w.pulo, 0.0001));
-    S.peE.copy(S.lado).addScaledVector(new THREE.Vector3(ex, 0, ez), 0.12).setY(chaoY + 0.09);
-    S.peD.copy(S.lado).addScaledVector(new THREE.Vector3(ex, 0, ez), -0.16).setY(chaoY + 0.09);
-    // o arco do pé direito: SOBE do lado de fora (acima do banco) → por cima, atrás do banco → a pedaleira
-    S.alto.set(S.peD.x + ex * 0.12 - fx * 0.25, banco.y + 0.45, S.peD.z + ez * 0.12 - fz * 0.25);
-    S.atras.set(banco.x - fx * 0.55, banco.y + 0.5, banco.z - fz * 0.55);
-    return { w: w.senta, ...v, subida: { u, peChaoE: S.peE, peChaoD: S.peD, alto: S.alto, atras: S.atras } };
+    return { w: 1, ...v };
   }
   /** as motos PARADAS na vaga são sólidas pra quem anda (círculo do tamanho do corpo) */
   private colisoresDeMotos(): Colisor[] {
@@ -3468,14 +3448,11 @@ export class CyberEngine {
     const cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
     // MOTO: câmera de perseguição — volta sozinha pra TRÁS da moto (com atraso: a curva aparece na tela), a não ser
     // que a pessoa tenha mexido o mouse/arrastado há pouco; afasta um pouco com a velocidade
-    if (this.moto !== null && this.subida) {   // SUBINDO: ¾ por trás, pela esquerda (o lado de quem sobe), perto
-      let d = this.motoEst.yaw + Math.PI - CAMERA_SUBIDA.giro - this.camAz; d = Math.atan2(Math.sin(d), Math.cos(d));
-      this.camAz += d * (1 - Math.exp(-dt * 4)); this.camPitch += (CAMERA_SUBIDA.pitch - this.camPitch) * (1 - Math.exp(-dt * 4));
-    } else if (this.moto !== null && performance.now() > this.camSegueEm) {
+    if (this.moto !== null && performance.now() > this.camSegueEm) {
       let d = this.motoEst.yaw + Math.PI - this.camAz; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.camAz += d * (1 - Math.exp(-dt * 2.6));
     }
-    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null && this.subida ? CAMERA_SUBIDA.dist : this.moto !== null && this.camMotoPerto ? CAMERA_MOTO_PERTO.dist + CAMERA_MOTO_PERTO.porVel * this.velTela : this.moto !== null ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camPerto ? distPerto(this.camDist, this.velTela) : this.camDist + 1.6 * this.velTela;   // (a pé/mochila rápido: a câmera recua um pouco)
+    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null && this.camMotoPerto ? CAMERA_MOTO_PERTO.dist + CAMERA_MOTO_PERTO.porVel * this.velTela : this.moto !== null ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camPerto ? distPerto(this.camDist, this.velTela) : this.camDist + 1.6 * this.velTela;   // (a pé/mochila rápido: a câmera recua um pouco)
     if (this.wMira > 0.001) dist += (RIFLE.distMira - dist) * this.wMira;   // MIRANDO com o rifle: por cima do ombro, bem perto
     // câmera em 3ª pessoa: perto de um marco (ilha flutuante, muralhas), se a estrutura fica ENTRE a câmera e o
     // personagem, a câmera se aproxima (senão a ilha cobre a tela)
@@ -3506,7 +3483,7 @@ export class CyberEngine {
     }
     // órbita livre: por cima olha pro personagem; arrastando pra baixo encosta no chão e o olhar sobe pro céu
     // PERTO: o olho na altura dos ombros e deslocado pro lado direito (o personagem fica à esquerda, o caminho livre)
-    let olhoCam = this.camPerto ? olhoDoOmbro({ x: this.camT.x, y: this.camT.y - 1.2, z: this.camT.z }, this.camAz) : { x: this.camT.x, y: this.camT.y + (this.moto !== null && (this.camMotoPerto || this.subida) ? CAMERA_MOTO_PERTO.olho : 0.8), z: this.camT.z };   // (na moto PERTO: o olho mais baixo, junto do piloto)
+    let olhoCam = this.camPerto ? olhoDoOmbro({ x: this.camT.x, y: this.camT.y - 1.2, z: this.camT.z }, this.camAz) : { x: this.camT.x, y: this.camT.y + (this.moto !== null && this.camMotoPerto ? CAMERA_MOTO_PERTO.olho : 0.8), z: this.camT.z };   // (na moto PERTO: o olho mais baixo, junto do piloto)
     if (this.wMira > 0.001) {   // MIRANDO: o olho por cima do ombro direito (mais pro lado que o modo perto: a arma à mostra)
       const om = { x: this.camT.x + Math.cos(this.camAz) * RIFLE.ombroMira, y: this.camT.y - 1.2 + RIFLE.alturaMira, z: this.camT.z - Math.sin(this.camAz) * RIFLE.ombroMira }, k = this.wMira;
       olhoCam = { x: olhoCam.x + (om.x - olhoCam.x) * k, y: olhoCam.y + (om.y - olhoCam.y) * k, z: olhoCam.z + (om.z - olhoCam.z) * k };
@@ -3701,16 +3678,10 @@ export class CyberEngine {
     } else if (this.moto !== null) {
       // MOTO: pilotagem de moto (lib/cyber/motoFisica) — W/S acelera/freia, A/D esterça, Shift/⚡ boost
       const c = this.comandoDeMoto(); this.acelMoto = c.acel;
-      if (this.subida) {   // SUBINDO: a moto não anda (só ergue no fim) — os comandos valem quando ele sentou
-        const u = (t - this.subida.t0) / SUBIDA.dur; this.acelMoto = 0;
-        this.motoEst = { ...this.motoEst, y: alturaDaMoto(Math.min(1, u), this.subida.yParada, this.subida.yLanc), vx: 0, vy: 0, vz: 0 };
-        if (u >= 1) this.subida = null;
-        c.acel = 0; c.boost = false; c.subir = c.descer = false;
-      }
       const deCorrida = { x: this.motoEst.x, y: this.motoEst.y, z: this.motoEst.z };
       if (this.corrida?.c.fase === "contagem" || (this.ck && faseCk(this.ck.c, Date.now()).fase === "contagem")) { c.acel = 0; c.boost = false; c.subir = c.descer = false; }   // no grid: o motor ronca, a moto não sai
       const boostAntes = this.motoEst.boost;
-      const r = this.subida ? { s: this.motoEst, pousado: this.motoPousado } : passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
+      const r = passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
       if (!r.pousado && rompeuBarreira(boostAntes, r.s.boost, Math.hypot(r.s.vx, r.s.vz))) this.ondaT = 0;   // acendeu o boost rápido: quebrou a barreira do som
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
       if (this.corrida) this.passoDaCorrida(deCorrida, dtReal);

@@ -89,3 +89,7 @@ export function seguirPerto(atual: V3, alvo: V3, dt: number): V3 {
   if (d > ATRASO_PERTO) { const f = (d - ATRASO_PERTO) / d; x += dx * f; y += dy * f; z += dz * f; }
   return { x, y, z };
 }
+
+/** a câmera PERTO na moto (o V alterna perto ⇄ longe; começa perto): a distância, quanto ela recua com a velocidade e a
+ *  altura do olho acima do alvo (mais baixo que o padrão: junto do piloto) */
+export const CAMERA_MOTO_PERTO = { dist: 4.3, porVel: 1.6, olho: 0.35 } as const;

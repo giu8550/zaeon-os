@@ -27,7 +27,6 @@ import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
 import { POSE_FEMININA_A_VONTADE, type PoseVrm } from "@/lib/cyber/posesVrm";
 import { urlDoClipe, type NomeClipeMagia } from "@/lib/cyber/magia";
 import { GUARDA_MAO } from "./RifleCosmico";
-import { arcoDaPerna, pesosSubida } from "@/lib/cyber/montaria";
 import { ehClipeRifle, pesosRifle, urlDoClipeRifle, type NomeClipeRifle } from "@/lib/cyber/rifle";
 
 /** um clipe de AÇÃO: os da magia (public/anim/magia) e os do rifle (public/anim/rifle) */
@@ -81,10 +80,7 @@ export function carregarModeloAvatar(url = avatarGlbUrl()): Promise<GLTF> {
 
 /** MONTADO numa moto voadora: o grupo do avatar vai no BANCO (o quadril encaixa ali) e mãos/pés são puxados por IK
  *  pros pontos da moto (mundo): punhos do guidão e pedaleiras. E = esquerda do piloto. */
-export type Montado = { w: number; maoE: THREE.Vector3; maoD: THREE.Vector3; peE: THREE.Vector3; peD: THREE.Vector3;
-  /** SUBINDO na moto (lib/cyber/montaria): `u` 0..1 e os pés no chão ao lado dela; o pé DIREITO passa por cima da
-   *  traseira (`atras` = o alto do arco). Nesse meio tempo `w` = o quanto já sentou */
-  subida?: { u: number; peChaoE: THREE.Vector3; peChaoD: THREE.Vector3; alto: THREE.Vector3; atras: THREE.Vector3 } };
+export type Montado = { w: number; maoE: THREE.Vector3; maoD: THREE.Vector3; peE: THREE.Vector3; peD: THREE.Vector3 };
 
 export type AvatarLuzHandle = {
   group: THREE.Group;
@@ -608,28 +604,18 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           }
         }
       }
-      const sb = montado?.subida, fs = sb ? pesosSubida(sb.u) : null;
-      if (montado && (montado.w > 0.02 || fs) && (ossos.length || pernas.length)) {
-        // MONTADO: tronco inclinado pra frente (moto esportiva) e mãos/pés no lugar por IK de 2 ossos. SUBINDO (lib/cyber/
-        // montaria): as mãos vão pro guidão, o pé esquerdo fica no chão e o DIREITO passa por cima da traseira num arco
+      if (montado && montado.w > 0.02 && (ossos.length || pernas.length)) {
+        // MONTADO: tronco inclinado pra frente (moto esportiva) e mãos/pés no lugar por IK de 2 ossos
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
         frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
-        const wMaos = fs ? fs.maos : montado.w, wPernas = fs ? fs.pernas : montado.w;
-        if (fs) corpo.position.y -= 0.16 * fs.agacha;   // (o impulso e a aterrissagem do pulinho)
-        if (lombar && pescoco) { dirAlvo.copy(frente).multiplyScalar(0.62).addScaledVector(cima, 0.78).normalize(); apontar(lombar, pescoco, dirAlvo, Math.max(montado.w, 0.5 * wMaos)); }
+        if (lombar && pescoco) { dirAlvo.copy(frente).multiplyScalar(0.62).addScaledVector(cima, 0.78).normalize(); apontar(lombar, pescoco, dirAlvo, montado.w); }
         for (const o of pernas) {   // joelhos pra frente e um pouco pra fora (abraçando a moto)
-          let alvoPe = o.lado > 0 ? montado.peE : montado.peD;
-          if (sb && fs) {
-            if (o.lado > 0) alvoPe = pA.copy(sb.peChaoE).lerp(montado.peE, fs.senta);   // o ESQUERDO: no chão até sentar
-            else { const q = fs.perna > 0 ? arcoDaPerna(fs.perna, sb.peChaoD, sb.alto, sb.atras, montado.peD) : sb.peChaoD; alvoPe = pB.set(q.x, q.y, q.z); }   // o DIREITO: por cima
-          }
           polo.copy(frente).addScaledVector(lateral, 0.35 * o.lado).addScaledVector(cima, 0.2);
-          if (fs && o.lado < 0 && fs.perna > 0 && fs.perna < 1) polo.addScaledVector(lateral, -0.6).addScaledVector(frente, -0.4);   // (a perna que passa: o joelho pra fora e pra trás)
-          ik(o.coxa, o.canela, o.pe, alvoPe.clone(), polo, wPernas);
+          ik(o.coxa, o.canela, o.pe, o.lado > 0 ? montado.peE : montado.peD, polo, montado.w);
         }
         for (const o of ossos) {    // cotovelos pra fora e pra baixo
           polo.copy(lateral).multiplyScalar(0.7 * o.lado).addScaledVector(cima, -0.5).addScaledVector(frente, -0.2);
-          ik(o.braco, o.ante, o.mao, o.lado > 0 ? montado.maoE : montado.maoD, polo, wMaos);
+          ik(o.braco, o.ante, o.mao, o.lado > 0 ? montado.maoE : montado.maoD, polo, montado.w);
         }
       }
       if ((ossos.length || pernas.length) && meditando > 0.02) {
