@@ -1,6 +1,6 @@
 /** #438 · a foto do Gmail atualiza na Zaeon a cada login com o Google — sem nunca derrubar o login. */
 import { describe, it, expect, vi } from "vitest";
-import { atualizarFotoDoGoogle } from "./fotoNoLogin";
+import { atualizarFotoDoGoogle, fotoDoPerfil } from "./fotoNoLogin";
 
 const G = "https://lh3.googleusercontent.com/a/ACg8ocL-letra-g=s96-c";
 const AZULA = "https://lh3.googleusercontent.com/a/ACg8ocK-azula=s96-c";
@@ -44,5 +44,31 @@ describe("foto do Google no login", () => {
     expect(r).toBe("manteve");
     expect(aviso).toHaveBeenCalled();
     aviso.mockRestore();
+  });
+});
+
+describe("#440 · a foto no formato REAL que o login entrega", () => {
+  // o que o Google manda cru (OIDC): a foto vem em `picture`
+  const doGoogle = { sub: "1234567890", name: "giu dev", email: "devgiu@z.com", picture: AZULA, email_verified: true };
+
+  it("o NextAuth converte com o provider do Google e a foto vai pra `image` — é isso que o evento de login recebe", async () => {
+    const { default: GoogleProvider } = await import("next-auth/providers/google");
+    const convertido = await GoogleProvider({ clientId: "x", clientSecret: "y" }).profile!(doGoogle as never, {} as never);
+    expect(convertido).toMatchObject({ email: "devgiu@z.com", image: AZULA });
+    expect((convertido as unknown as Record<string, unknown>).picture).toBeUndefined(); // o bug do #438: lia `picture`
+    expect(fotoDoPerfil(convertido)).toBe(AZULA);
+  });
+
+  it("de ponta a ponta: perfil convertido → a foto nova é salva", async () => {
+    const { default: GoogleProvider } = await import("next-auth/providers/google");
+    const convertido = await GoogleProvider({ clientId: "x", clientSecret: "y" }).profile!(doGoogle as never, {} as never);
+    const b = banco(G);
+    expect(await atualizarFotoDoGoogle({ provider: "google", email: "devgiu@z.com", picture: fotoDoPerfil(convertido) }, b.deps)).toBe("atualizou");
+    expect(b.salvos).toEqual([["devgiu@z.com", AZULA]]);
+  });
+
+  it("perfil sem foto ou vazio → nada", () => {
+    expect(fotoDoPerfil({ id: "1", email: "a@z.com" })).toBeUndefined();
+    expect(fotoDoPerfil(undefined)).toBeUndefined();
   });
 });

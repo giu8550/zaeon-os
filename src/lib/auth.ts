@@ -5,7 +5,7 @@ import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import { clientPromise } from "@/src/lib/db";
 import { MongoClient, ObjectId } from "mongodb";
 import { isSuperAdminEmail } from "@/lib/auth/roles";
-import { atualizarFotoDoGoogle } from "@/lib/user/fotoNoLogin";
+import { atualizarFotoDoGoogle, fotoDoPerfil } from "@/lib/user/fotoNoLogin";
 
 // A LISTA VIP
 const ADMIN_EMAILS = [
@@ -189,7 +189,7 @@ export const authOptions: NextAuthOptions = {
         // que a pessoa tenha posto uma foto própria. Best-effort: nunca derruba o login (lib/user/fotoNoLogin.ts).
         async signIn({ user, account, profile }) {
             await atualizarFotoDoGoogle(
-                { provider: account?.provider, email: user?.email, picture: (profile as { picture?: unknown } | undefined)?.picture },
+                { provider: account?.provider, email: user?.email, picture: fotoDoPerfil(profile) },
                 {
                     lerFoto: async (email) => {
                         const db = ((await clientPromise) as MongoClient).db();
