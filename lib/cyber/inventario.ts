@@ -31,21 +31,23 @@ export const ESPACOS = 12;
 export type Inventario = { espacos: (IdItem | null)[]; equipado: IdItem | null };
 export const ehItem = (v: unknown): v is IdItem => typeof v === "string" && v in ITENS;
 
-/** os itens que só o FUNDADOR tem (a espada e os golpes são do personagem do dono, out/2026) */
-export const ITENS_DO_FUNDADOR: readonly IdItem[] = ["espada-espiritual"];
-/** os itens que TODO MUNDO tem (o rifle cósmico, out/2026 — entra no 1º espaço livre de quem ainda não tem) */
-export const ITENS_DE_TODOS: readonly IdItem[] = ["rifle-cosmico"];
-/** quem nunca abriu o inventário: o fundador com a espada no 1º espaço, já equipada (e o rifle no 2º); todo o resto, o rifle */
+/** os itens que só o FUNDADOR tem (a espada e os golpes são do personagem do dono, out/2026; o rifle, em teste — ainda
+ *  não está pronto pra todos) */
+export const ITENS_DO_FUNDADOR: readonly IdItem[] = ["espada-espiritual", "rifle-cosmico"];
+/** os itens que chegam sozinhos no inventário (no 1º espaço livre de quem ainda não tem): de todos e só do fundador */
+export const ITENS_DE_TODOS: readonly IdItem[] = [];
+export const ITENS_NOVOS_DO_FUNDADOR: readonly IdItem[] = ["rifle-cosmico"];
+/** quem nunca abriu o inventário: o fundador com a espada no 1º espaço, já equipada (e o rifle no 2º); todo o resto, vazio */
 export function inventarioInicial(fundador = true): Inventario {
   const espacos: (IdItem | null)[] = Array.from({ length: ESPACOS }, () => null);
   if (!fundador) return comItensDeTodos({ espacos, equipado: null });
   espacos[0] = "espada-espiritual";
-  return comItensDeTodos({ espacos, equipado: "espada-espiritual" });
+  return comItensDeTodos({ espacos, equipado: "espada-espiritual" }, true);
 }
-/** garante os itens de todos (quem salvou o inventário antes deles existirem ganha no 1º espaço livre) */
-export function comItensDeTodos(inv: Inventario): Inventario {
+/** garante os itens que chegam sozinhos (quem salvou o inventário antes deles existirem ganha no 1º espaço livre) */
+export function comItensDeTodos(inv: Inventario, fundador = false): Inventario {
   let espacos = inv.espacos;
-  for (const id of ITENS_DE_TODOS) {
+  for (const id of [...ITENS_DE_TODOS, ...(fundador ? ITENS_NOVOS_DO_FUNDADOR : [])]) {
     if (espacos.includes(id)) continue;
     const i = espacos.indexOf(null); if (i < 0) continue;
     espacos = espacos.slice(); espacos[i] = id;
@@ -54,7 +56,7 @@ export function comItensDeTodos(inv: Inventario): Inventario {
 }
 /** tira o que a pessoa não pode ter (os itens do fundador, de quem não é) */
 export function itensPermitidos(inv: Inventario, fundador: boolean): Inventario {
-  inv = comItensDeTodos(inv);
+  inv = comItensDeTodos(inv, fundador);
   if (fundador) return inv;
   const espacos = inv.espacos.map((x) => (x && ITENS_DO_FUNDADOR.includes(x) ? null : x));
   return { espacos, equipado: inv.equipado && espacos.includes(inv.equipado) ? inv.equipado : null };
