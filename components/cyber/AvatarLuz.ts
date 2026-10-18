@@ -36,6 +36,14 @@ export const avatarGlbUrl = (): string => process.env.NEXT_PUBLIC_CYBER_AVATAR_G
 let cache: { url: string; p: Promise<GLTF> } | null = null;
 /** as fases do pé de cada GLB (medir custa 2×64 passos de animação — antes era refeito pra cada pessoa que entrava) */
 const fasesPorModelo = new WeakMap<GLTF, { walk: number[]; run: number[] } | null>();
+/** o ANDAR FEMININO (pack de realismo, out/2026): o "Catwalk Walk Forward" do Mixamo, convertido pro esqueleto do avatar
+ *  (scripts/anim/mixamo-para-clip.mjs → public/anim/catwalk.json). Baixa UMA vez, só quando um corpo feminino aparece */
+export const URL_ANDAR_FEMININO = "/anim/catwalk.json";
+let andarFeminino: Promise<THREE.AnimationClip | null> | null = null;
+function carregarAndarFeminino(): Promise<THREE.AnimationClip | null> {
+  andarFeminino ??= fetch(URL_ANDAR_FEMININO).then((r) => (r.ok ? r.json() : null)).then((j) => (j ? THREE.AnimationClip.parse(j) : null)).catch(() => null);
+  return andarFeminino;
+}
 /** Carrega o GLB uma vez (todos os avatares clonam dele). */
 export function carregarModeloAvatar(url = avatarGlbUrl()): Promise<GLTF> {
   if (cache?.url === url) return cache.p;
@@ -287,6 +295,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   grupo.add(neu);
 
   let alvo = 0, wWalk = 0, wRun = 0, pisadas = 0, uAnt = 0, acaoAnt: THREE.AnimationAction | null = null;
+  let walkFem: THREE.AnimationAction | null = null, fasesFem: number[] | null = null, pedindoFem = false;   // o andar feminino (carregado sob demanda)
   const vA = new THREE.Vector3(), vB = new THREE.Vector3(), dirAlvo = new THREE.Vector3(), qPai = new THREE.Quaternion(), qOsso = new THREE.Quaternion(), qDelta = new THREE.Quaternion();
   /** as fases (0..1) do ciclo de andar/correr em que um pé encosta — medidas UMA vez da própria animação */
   const fasesPe = gltf && fasesPorModelo.has(gltf) ? fasesPorModelo.get(gltf)! : (() => {
@@ -340,10 +349,10 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, acao = null, montado = null, dj = 0, danca = 0, surf = 0, puxado: wP = 0, descanso = null, tablet: wTab = 0, dt, t }) {
       const k = Math.min(1, dt * 8), corre = !!correndo && andando;
       wWalk += ((andando && !corre ? 1 : 0) - wWalk) * k; wRun += ((corre ? 1 : 0) - wRun) * k;
-      if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk); run.setEffectiveWeight(wRun); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun)); mixer.update(dt); }
+      if (mixer && idle && walk && run) { walk.setEffectiveWeight(walkFem ? 0 : wWalk); walkFem?.setEffectiveWeight(wWalk); run.setEffectiveWeight(wRun); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun)); mixer.update(dt); }
       // PISADAS: o relógio da animação dominante (andar ou correr) cruzou a fase em que um pé encosta no chão
       if (walk && run && fasesPe) {
-        const acao = wRun > wWalk ? run : walk, f = acao === run ? fasesPe.run : fasesPe.walk, u = (acao.time % acao.getClip().duration) / acao.getClip().duration;
+        const acao = wRun > wWalk ? run : walkFem ?? walk, f = acao === run ? fasesPe.run : acao === walkFem && fasesFem ? fasesFem : fasesPe.walk, u = (acao.time % acao.getClip().duration) / acao.getClip().duration;
         if (acao === acaoAnt && wWalk + wRun > 0.5 && !ar && sentado < 0.1 && !pilotando) pisadas += pisadasEntre(uAnt, u, f);
         acaoAnt = acao; uAnt = u;
       }
@@ -879,7 +888,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       // o JEITO do corpo VRM: a marcha só a pé no chão; parada (jogadora em pé, sem fazer nada), a pose feminina
       if (espelho && estiloCorpo) {
         const livre = !montado && pilotando < 0.02 && jato < 0.02 && sentado < 0.02 && meditando < 0.02 && dj < 0.02 && danca < 0.02 && surf < 0.02 && wP < 0.02 && wTab < 0.02 && (descanso?.sentar ?? 0) < 0.02 && (descanso?.deitar ?? 0) < 0.02;
-        espelho.marcha(livre && andando);
+        espelho.marcha(livre && andando && (!!correndo || !walkFem));   // (andando, o catwalk já é feminino: a camada fica pra corrida)
         if (paradaAuto) { const alvo = livre && !andando && !acao?.espada && !(acao?.dash) && !(acao?.sprint) ? POSES_VRM.feminina : null; if (alvo !== poseAutoAntes) { poseAutoAntes = alvo; espelho.pose(alvo ?? poseVrm); } }
       }
       espelho?.atualizar(dt, t);   // corpo VRM: copia a pose final (depois de todas as poses acima)
@@ -897,7 +906,26 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     semMochila() { mochila.visible = false; },
     poseVrm(p) { poseVrm = p; espelho?.pose(p); },
     recolherAsas(k) { recolheAlvo = Math.max(0, Math.min(0.95, k)); },
-    estiloVrm(e, op) { estiloCorpo = e; paradaAuto = !!op?.parada; espelho?.estilo(e); },
+    estiloVrm(e, op) {
+      estiloCorpo = e; paradaAuto = !!op?.parada; espelho?.estilo(e);
+      // o ANDAR feminino de verdade (o catwalk do Mixamo) no lugar do andar do soldado — a cópia pro VRM leva junto
+      if (e === "feminina" && mixer && walk && !walkFem && !pedindoFem) {
+        pedindoFem = true;
+        void carregarAndarFeminino().then((clip) => {
+          if (!clip || !mixer || !walk || !idle || !run) return;
+          const a = mixer.clipAction(clip); a.play(); a.setEffectiveWeight(0);
+          a.timeScale = walk.getClip().duration / clip.duration;   // a mesma cadência do andar de antes (o jogo foi afinado nela)
+          // as fases em que o pé encosta (os passos), medidas como as do andar
+          if (pernas.length >= 2) {
+            const pesos = [idle, walk, run].map((x) => x.getEffectiveWeight()), d = clip.duration, N = 64, alt: number[][] = pernas.map(() => []);
+            for (const x of [idle, walk, run]) x.setEffectiveWeight(0); a.setEffectiveWeight(1);
+            for (let i = 0; i < N; i++) { mixer.setTime(0); a.time = (d * i) / N; mixer.update(0); grupo.updateMatrixWorld(true); const y0 = grupo.getWorldPosition(vA).y; pernas.forEach((o, k) => alt[k]!.push(o.pe.getWorldPosition(vB).y - y0)); }
+            fasesFem = fasesDeContato(alt); a.setEffectiveWeight(0); a.time = 0; [idle, walk, run].forEach((x, i) => x.setEffectiveWeight(pesos[i]!)); mixer.update(0);
+          }
+          walkFem = a;
+        });
+      }
+    },
     detalheVrm(on) { espelho?.detalhe(on); },
     empunhar(obj) { if (arma && arma !== obj) arma.removeFromParent(); arma = obj; if (obj) grupo.add(obj); },
     eventosAsas() {
