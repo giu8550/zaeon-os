@@ -5,6 +5,7 @@ import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import { clientPromise } from "@/src/lib/db";
 import { MongoClient, ObjectId } from "mongodb";
 import { isSuperAdminEmail } from "@/lib/auth/roles";
+import { atualizarFotoDoGoogle } from "@/lib/user/fotoNoLogin";
 
 // A LISTA VIP
 const ADMIN_EMAILS = [
@@ -183,6 +184,24 @@ export const authOptions: NextAuthOptions = {
             const email = (user?.email || "").toLowerCase();
             if (!email) return;
             await provisionarWallet(email, user.id);
+        },
+        // #438: a cada login com o Google, a foto do Gmail atualiza na Zaeon (antes só no 1º login) — a não ser
+        // que a pessoa tenha posto uma foto própria. Best-effort: nunca derruba o login (lib/user/fotoNoLogin.ts).
+        async signIn({ user, account, profile }) {
+            await atualizarFotoDoGoogle(
+                { provider: account?.provider, email: user?.email, picture: (profile as { picture?: unknown } | undefined)?.picture },
+                {
+                    lerFoto: async (email) => {
+                        const db = ((await clientPromise) as MongoClient).db();
+                        const u = await db.collection("users").findOne({ email }, { projection: { image: 1 } });
+                        return typeof u?.image === "string" ? u.image : null;
+                    },
+                    salvarFoto: async (email, image) => {
+                        const db = ((await clientPromise) as MongoClient).db();
+                        await db.collection("users").updateOne({ email }, { $set: { image } });
+                    },
+                },
+            );
         },
     },
     secret: process.env.NEXTAUTH_SECRET,
