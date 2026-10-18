@@ -24,7 +24,7 @@ import type { VRM } from "@pixiv/three-vrm";
 import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./AvatarVrm";
 import { criarAsas, type AsasHandle } from "./AsasAnjo";
 import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
-import { POSES_VRM, type PoseVrm } from "@/lib/cyber/posesVrm";
+import { POSE_FEMININA_A_VONTADE, type PoseVrm } from "@/lib/cyber/posesVrm";
 
 /** o corpo DESENHADO (estilo anime — experimento, lib/cyber/estiloAvatar)? */
 const desenhado = () => typeof window !== "undefined" && estiloDe(process.env.NEXT_PUBLIC_CYBER_AVATAR_ESTILO, window.location.search) === "anime";
@@ -880,7 +880,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (espelho && estiloCorpo) {
         const livre = !montado && pilotando < 0.02 && jato < 0.02 && sentado < 0.02 && meditando < 0.02 && dj < 0.02 && danca < 0.02 && surf < 0.02 && wP < 0.02 && wTab < 0.02 && (descanso?.sentar ?? 0) < 0.02 && (descanso?.deitar ?? 0) < 0.02;
         espelho.marcha(livre && andando);
-        if (paradaAuto) { const alvo = livre && !andando && !acao?.espada && !(acao?.dash) && !(acao?.sprint) ? POSES_VRM.feminina : null; if (alvo !== poseAutoAntes) { poseAutoAntes = alvo; espelho.pose(alvo ?? poseVrm); } }
+        if (paradaAuto) { const alvo = livre && !andando && !acao?.espada && !(acao?.dash) && !(acao?.sprint) ? POSE_FEMININA_A_VONTADE : null; if (alvo !== poseAutoAntes) { poseAutoAntes = alvo; espelho.pose(alvo ?? poseVrm); } }
       }
       espelho?.atualizar(dt, t);   // corpo VRM: copia a pose final (depois de todas as poses acima)
     },
