@@ -57,6 +57,33 @@ export const POSE_MASCULINA: PoseVrm = {
   respira: { amp: 0.014, hz: 0.22 },
 };
 
+/** em pé, FEMININA e À VONTADE — a das JOGADORAS paradas (o dono, out/2026: "a pose idle dela poderia ser mais
+ *  feminina"; acertada ao vivo na Giulia): os dois BRAÇOS SOLTOS, iguais, com os cotovelos levemente dobrados e as
+ *  mãos relaxadas (a mão na cintura atravessava as costas — o dono preferiu assim); o peso na perna direita — o quadril sai pra esse lado e o tronco faz o S —, a perna
+ *  esquerda à frente com o joelho dobrado e a ponta do pé; o peito alto e a cabeça inclinada, olhando de lado */
+export const POSE_FEMININA_A_VONTADE: PoseVrm = {
+  ossos: {
+    hips: [0, -0.14, -0.09],
+    spine: [0.02, 0.07, 0.07],
+    chest: [-0.05, 0.05, 0.05],
+    upperChest: [-0.03, 0, 0.02],
+    neck: [0.02, -0.04, -0.04],
+    head: [0.06, 0.12, 0.16],
+    leftUpperArm: [0.08, 0.15, -1.2],
+    leftLowerArm: [0, -0.4, 0],
+    leftHand: [0, 0, 0.25],
+    rightUpperArm: [0.08, -0.15, 1.2],
+    rightLowerArm: [0, 0.4, 0],
+    rightHand: [0, 0, -0.25],
+    rightUpperLeg: [0.02, 0, 0.09],
+    rightLowerLeg: [0.02, 0, 0],
+    leftUpperLeg: [-0.3, 0, -0.06],
+    leftLowerLeg: [0.55, 0, 0],
+    leftFoot: [-0.25, 0, 0],
+  },
+  respira: { amp: 0.018, hz: 0.25 },
+};
+
 export const POSES_VRM = { feminina: POSE_FEMININA, masculina: POSE_MASCULINA } as const;
 export type NomePoseVrm = keyof typeof POSES_VRM;
 
