@@ -65,3 +65,29 @@ describe("dispensa · textos", () => {
     expect(textoSaiu("Zenita")).toBe("Zenita saiu da conversa");
   });
 });
+
+describe("dispensa · #440 as frases da Giulia (que não tinham saído)", () => {
+  it.each([
+    ["não precisamos mais de você tchau", false],          // sem @ e sem o nome — mas "não precisamos mais de você" é dispensa
+    ["pode sair @zenita não precisamos mais de você", true], // "pode sair" com mais texto depois
+    ["pode sair, não precisamos mais de você", false],
+    ["não preciso mais da sua ajuda", false],
+    ["obrigada, pode deixar", false],
+    ["pode ir, a gente continua depois", false],             // vírgula = outra frase: ainda é dispensa
+    ["pode parar de responder", false],
+  ] as const)("%s", (t, mencionada) => {
+    expect(ehDispensa(t, { ...zenita, mencionada })).toBe(true);
+  });
+
+  it.each([
+    "pode ir me explicando a parte 2",
+    "pode sair um mapa mental disso?",
+    "pode ir pra próxima questão",
+    "pode ir com calma",
+    "pode deixar mais curto?",
+    "você não precisa mais responder em inglês, responde em português",   // instrução, não dispensa
+    "para de responder assim tão longo",
+  ])("NÃO dispensa: %s", (t) => {
+    expect(ehDispensa(t, zenita)).toBe(false);
+  });
+});

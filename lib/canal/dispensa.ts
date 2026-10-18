@@ -20,14 +20,20 @@ export function normalizar(texto: string): string {
     .trim();
 }
 
-// "pode ir" só é dispensa quando termina ali (ou com embora/vlw/valeu/obrigado/tchau…): "pode ir pesquisando" não é.
-const FIM = String.raw`(?=\s*(?:$|[,.!?;:)]|vlw|valeu|obrigad|brigad|tchau|bj|beij|flw|falou))`;
+// "pode ir/sair" é dispensa, a não ser que venha um PEDIDO logo depois: um verbo em -ndo ("pode ir pesquisando"),
+// um objeto ("pode sair um resumo", "pode ir pra parte 2") ou "me/te" ("pode ir me explicando"). #440: antes só
+// valia no FIM da frase, e "pode sair, não precisamos mais de você" passava batido.
+const PEDIDO_DEPOIS = String.raw`(?!\s+(?:\w+ndo|um|uma|uns|umas|o|a|os|as|pra|para|pro|com|no|na|nos|nas|ao|aos|fazer|buscar|ver|ler|me|te|mais|algo|algum|alguma|isso|isto|aquilo|esse|essa|este|esta|outro|outra)\b)`;
 const FORTES: RegExp[] = [
-  new RegExp(String.raw`\b(?:ja )?pode (?:ir|sair|parar|descansar)(?: embora)?` + FIM),
+  new RegExp(String.raw`\b(?:ja )?pode (?:ir|sair|parar|descansar)(?: embora)?\b` + PEDIDO_DEPOIS),
+  // #440: "não precisamos mais de você", "não preciso mais da sua ajuda"
+  /\bnao (?:preciso|precisamos|precisa|vou precisar|vamos precisar) mais (?:de |da |do )?(?:voce|vc|tu|ti|sua ajuda|ajuda|nada)\b/,
+  /\bpode deixar\b(?=\s*(?:$|[,.!?]|obrigad|brigad|valeu|vlw|tchau))/,
   /\b(?:pode )?ir embora\b/,
   /\bvai embora\b/,
-  /\b(?:para|pare) de (?:responder|falar)\b/,
-  /\bnao precisa (?:mais )?(?:responder|falar)\b/,
+  // #440: "para de responder EM INGLÊS" / "não precisa mais responder assim" são instrução, não dispensa
+  /\b(?:para|pare) de (?:responder|falar)\b(?!\s+(?:em|com|assim|sobre|so|apenas|tao|desse|dessa|deste|desta|disso|tudo|ingles|portugues)\b)/,
+  /\bnao precisa (?:mais )?(?:responder|falar)\b(?!\s+(?:em|com|assim|sobre|so|apenas|tao|desse|dessa|deste|desta|disso|tudo|ingles|portugues)\b)/,
   /\b(?:e|eh) so isso\b/,
   /\bso isso\b(?=\s*(?:$|[,.!?]|obrigad|brigad|valeu|vlw|tchau))/,
   /\bdispensad[ao]\b/,
