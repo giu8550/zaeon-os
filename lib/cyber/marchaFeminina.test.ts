@@ -8,11 +8,18 @@ describe("a marcha feminina (camada por cima do andar)", () => {
     const e = camadaFeminina(1, 1, 1).ossos, d = camadaFeminina(-1, 1, -1).ossos;
     expect(e.hips![1]).toBeCloseTo(-MARCHA_FEMININA.giroPelve, 6); expect(d.hips![1]).toBeCloseTo(MARCHA_FEMININA.giroPelve, 6);
     expect(e.hips![2]).toBeGreaterThan(0); expect(d.hips![2]).toBeLessThan(0);
-    expect(camadaFeminina(0, 1, 1).desloc).toBeCloseTo(MARCHA_FEMININA.deslocQuadril, 6); expect(camadaFeminina(0, 1, -1).desloc).toBeCloseTo(-MARCHA_FEMININA.deslocQuadril, 6);
+    expect(camadaFeminina(0, 1, 1).desloc).toBe(0);   // o quadril NÃO se desloca (levava os pés junto: deslizava)
   });
   it("os ombros inclinam AO CONTRÁRIO da pelve; correndo, o balanço diminui", () => {
     const c = camadaFeminina(0, 1, 1).ossos; expect(Math.sign(c.spine![2] + c.chest![2])).toBe(-Math.sign(c.hips![2]));
-    expect(Math.abs(camadaFeminina(0, 1.6, 1).desloc)).toBeLessThan(Math.abs(camadaFeminina(0, 1, 1).desloc));
+    expect(Math.abs(camadaFeminina(0, 1.6, 1).ossos.hips![2])).toBeLessThan(Math.abs(camadaFeminina(0, 1, 1).ossos.hips![2]));
+  });
+  it("os PÉS não deslizam: as coxas desfazem o giro e a inclinação da pelve (só sobra o fechar pra linha do meio)", () => {
+    for (const [f, a] of [[1, 1], [-1, -1], [0.4, -0.7]] as const) {
+      const c = camadaFeminina(f, 1, a).ossos;
+      expect(c.leftUpperLeg![1] + c.hips![1]).toBeCloseTo(0, 9); expect(c.rightUpperLeg![1] + c.hips![1]).toBeCloseTo(0, 9);
+      expect(c.leftUpperLeg![2] + c.hips![2]).toBeCloseTo(-MARCHA_FEMININA.coxaFecha, 9); expect(c.rightUpperLeg![2] + c.hips![2]).toBeCloseTo(MARCHA_FEMININA.coxaFecha, 9);
+    }
   });
   it("o apoio: a perna que vai pra TRÁS é a do peso", () => {
     expect(apoioDaFase(-2, 2)).toBe(1); expect(apoioDaFase(2, 2)).toBe(-1); expect(apoioDaFase(1, 0)).toBe(0);

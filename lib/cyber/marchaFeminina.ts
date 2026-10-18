@@ -4,7 +4,8 @@
  * `pose: "feminina"`). Pack de realismo, out/2026, a partir do que a biomecânica da marcha mais concorda (Bruening et al.
  * 2015; Smith et al. 2002) e, na v2 (o dono: "poderia ser mais feminino"), o que os animadores fazem num andar feminino:
  *  - o QUADRIL vai pro lado da perna de APOIO (o deslocamento lateral — o que mais lê como "feminino") e a pelve
- *    inclina: o lado da perna no ar desce; e ela GIRA no plano horizontal com a passada;
+ *    inclina: o lado da perna no ar desce; e ela GIRA no plano horizontal com a passada — as pernas desfazem isso
+ *    (os pés ficam onde a passada os pôs: nada de deslizar);
  *  - os OMBROS compensam ao contrário (tronco e cabeça estáveis, o olhar reto), o peito um pouco mais alto;
  *  - os BRAÇOS junto do corpo, o cotovelo dobrado, o balanço maior, as mãos soltas;
  *  - os passos CRUZAM pra linha do meio (um pé na frente do outro).
@@ -17,8 +18,9 @@
 import type { Euler3 } from "./posesVrm";
 
 export const MARCHA_FEMININA = {
-  /** o quadril vai pro lado do apoio (m) */
-  deslocQuadril: 0.05,
+  /** o quadril vai pro lado do apoio (m) — ZERO: o quadril é a raiz do esqueleto, mover ele leva as pernas junto e os
+   *  pés DESLIZAVAM pros lados (o dono, out/2026). O balanço fica na inclinação da pelve, com as pernas compensadas */
+  deslocQuadril: 0,
   /** pelve: obliquidade (rola em Z: o lado do apoio sobe) e giro (Y) com a passada */
   obliquidade: 0.14, giroPelve: 0.17,
   /** a fração do giro da pelve que o tronco e a cabeça DESFAZEM, e a fração da inclinação que os ombros invertem */
@@ -69,8 +71,9 @@ export function camadaFeminina(fase: number, vel: number, apoio = 0): { ossos: R
   out.rightLowerArm = somar(out.rightLowerArm, [-bal * 0.4, M.cotovelo * w, 0]);
   out.leftHand = [0, 0, M.maoSolta * w];
   out.rightHand = [0, 0, -M.maoSolta * w];
-  // as coxas fecham (os pés cruzam pra linha do meio)
-  out.leftUpperLeg = [0, 0, -M.coxaFecha * w];
-  out.rightUpperLeg = [0, 0, M.coxaFecha * w];
+  // as coxas DESFAZEM o giro e a inclinação da pelve (ela é a mãe delas: sem isso os pés acompanhavam o balanço e
+  // deslizavam no chão) e fecham de leve (os pés cruzam pra linha do meio)
+  out.leftUpperLeg = [0, giro, -obl - M.coxaFecha * w];
+  out.rightUpperLeg = [0, giro, -obl + M.coxaFecha * w];
   return { ossos: out, desloc: M.deslocQuadril * a * w };
 }
