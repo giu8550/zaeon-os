@@ -359,7 +359,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         corpo.position.y -= Math.max(0, alturaQuadril - (yAss + 0.08)) * wS; corpo.position.z += (0.06 + 0.1 * wR) * wS;
         corpo.rotation.x += (Math.PI / 2 - 0.2) * wD; corpo.position.y += (yAss + 0.2) * wD; corpo.position.z -= 0.92 * wD;
       }
-      recolhe += ((ar ? 0 : recolheAlvo) - recolhe) * Math.min(1, dt * 5);   // (no ar as asas abrem de novo)
+      recolhe += ((ar ? recolheAlvo * 0.5 : recolheAlvo) - recolhe) * Math.min(1, dt * 5);   // (no ar abrem mais — batendo, ainda leem como voo — mas não cobrem a tela)
       if (asas) { const enc = Math.max(wS, wD, recolhe); asas.group.visible = enc < 0.98; asas.group.scale.setScalar((asas.group.userData.escala ?? 1) * Math.max(0.02, 1 - enc)); }   // sentado/deitado: as asas recolhem pra dentro das costas
       if ((ossos.length || pernas.length) && pilotando > 0.02) {
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);

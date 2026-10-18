@@ -70,3 +70,22 @@ export function alternarModoCamera(
   const volta = g[modo] ?? (modo === "perto" ? { dist: CAMERA_PERTO.dist, pitch: CAMERA_PERTO.pitch } : { dist: 9, pitch: 0.16 });
   return { modo, dist: volta.dist, pitch: volta.pitch, guardado: g };
 }
+
+/**
+ * A câmera PERTO EM MOVIMENTO (correndo, no dash, voando de mochila, no turbo): é normal ela recuar um pouco com a
+ * velocidade (dá a sensação) — mas NUNCA até virar a câmera padrão. `LIMITE_PERTO` = a distância máxima (m) entre a
+ * câmera e o ponto do ombro, e `ATRASO_PERTO` = o quanto o personagem pode ficar à frente do ponto que a câmera segue.
+ * Os dois somados ficam abaixo do começo da faixa da câmera padrão (6 m).
+ */
+export const LIMITE_PERTO = 4.6, ATRASO_PERTO = 1.1, RECUO_PERTO = 1.4;
+/** a distância da câmera perto com a velocidade (`velTela` 0..~1,5): recua `RECUO_PERTO` m por unidade, até o limite */
+export const distPerto = (dist: number, velTela: number) => Math.min(LIMITE_PERTO, dist + RECUO_PERTO * Math.max(0, velTela));
+/** o ponto que a câmera perto segue: anda por TEMPO (não por quadro — a 60 fps ou a 20, o mesmo atraso) e nunca fica
+ *  mais de `ATRASO_PERTO` m atrás do personagem (no turbo, 0,12 por quadro deixava ele vários metros à frente) */
+export function seguirPerto(atual: V3, alvo: V3, dt: number): V3 {
+  const k = 1 - Math.exp(-dt * 14);
+  let x = atual.x + (alvo.x - atual.x) * k, y = atual.y + (alvo.y - atual.y) * k, z = atual.z + (alvo.z - atual.z) * k;
+  const dx = alvo.x - x, dy = alvo.y - y, dz = alvo.z - z, d = Math.hypot(dx, dy, dz);
+  if (d > ATRASO_PERTO) { const f = (d - ATRASO_PERTO) / d; x += dx * f; y += dy * f; z += dz * f; }
+  return { x, y, z };
+}
