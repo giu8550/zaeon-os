@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolverAlvos, AGENTE_PADRAO, type MsgResumo } from "./alvo";
+import { resolverAlvos, agenteDaVez, AGENTE_PADRAO, type MsgResumo } from "./alvo";
 
 const A = "a".repeat(24), B = "b".repeat(24);
 const DISP = ["aura", "zaeon", "medicina"];
@@ -61,5 +61,40 @@ describe("alvo · sem @ · canal com várias pessoas", () => {
   it("com @, qualquer um convoca", () => {
     const r = resolverAlvos({ ...multi, remetenteId: B, mencoes: ["aura"], historico: [h("humano", A), h("agente", "aura")] });
     expect(r.alvos).toEqual(["aura"]);
+  });
+});
+
+describe("alvo · #438 agente dispensada sai da conversa", () => {
+  const saiu = (agentKey: string): MsgResumo => ({ autorTipo: "sistema", autorId: agentKey });
+  // o caso do Martinez: falou com a Zenita, dispensou, e continuou conversando
+  const dispensou = [h("humano", A), h("agente", "medicina"), h("humano", A), h("agente", "medicina"), saiu("medicina")];
+
+  it("depois do 'saiu da conversa', sem @ ninguém responde", () => {
+    expect(resolverAlvos({ ...base, historico: dispensou }).alvos).toEqual([]);
+    expect(resolverAlvos({ ...base, humanos: 2, historico: dispensou }).alvos).toEqual([]);
+  });
+
+  it("nem a Aura dá o primeiro oi de novo (já houve conversa com agente)", () => {
+    expect(resolverAlvos({ ...base, historico: [h("humano", A), h("agente", "aura"), saiu("aura")] }).alvos).toEqual([]);
+  });
+
+  it("chamando com @ ela volta", () => {
+    expect(resolverAlvos({ ...base, mencoes: ["medicina"], historico: dispensou }).alvos).toEqual(["medicina"]);
+  });
+
+  it("voltou com @ e respondeu: sem @ ela continua sendo a da vez", () => {
+    const voltou = [...dispensou, h("humano", A), h("agente", "medicina")];
+    expect(resolverAlvos({ ...base, historico: voltou }).alvos).toEqual(["medicina"]);
+  });
+
+  it("'fulano entrou' (sistema com o id de uma PESSOA) não conta como saída de agente", () => {
+    const entrou = [h("humano", A), h("agente", "aura"), { autorTipo: "sistema", autorId: B }];
+    expect(resolverAlvos({ ...base, historico: entrou }).alvos).toEqual(["aura"]);
+  });
+
+  it("a tela usa a mesma regra pro 'Zenita responde'", () => {
+    expect(agenteDaVez(dispensou, DISP)).toBeNull();
+    expect(agenteDaVez([h("humano", A), h("agente", "aura")], DISP)).toBe("aura");
+    expect(agenteDaVez([], DISP)).toBeNull();
   });
 });

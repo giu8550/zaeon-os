@@ -5,6 +5,8 @@
  * Author gate: quem não pode escrever recebe 403 (IDOR coberto em teste).
  * Fatia 7 (CHORES_QUEUE=1): "@aura resume <url>" é CHORE (pool grátis, 1 mensagem com fonte), não
  * turno — triagem conservadora (lib/chore/triagem.ts): em dúvida, turno como sempre.
+ * #438: mensagem que DISPENSA a agente da vez ("pode ir", "é só isso"… — lib/canal/dispensa.ts) não gasta
+ * turno: ela se despede (frase fixa) e entra a linha "Zenita saiu da conversa"; sem @, ninguém responde mais.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +19,7 @@ import { humanosNoCanal } from "@/lib/canal/convite";
 import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
 import { pedidoDeChore } from "@/lib/chore/triagem";
+import { ehDispensa, textoDespedida, textoSaiu } from "@/lib/canal/dispensa";
 import { choresLigadas, criarDoPedido } from "@/lib/chore/criar";
 
 export const MAX_TEXTO = 4000;
@@ -77,9 +80,31 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
   }
 
+  // #438: dispensou a agente da vez → despedida + "saiu da conversa", sem turno (não gasta IA)
+  const humanos = humanosNoCanal(canal);
+  const dispensadas = alvos.filter((k) => {
+    const ag = agentes.find((a) => a.agentKey === k);
+    return ehDispensa(texto, { nomesDaAgente: [k, ag?.nome ?? ""], mencionada: mencoes.includes(k), humanos });
+  });
+  for (const k of dispensadas) {
+    const ag = agentes.find((a) => a.agentKey === k);
+    const nome = ag?.nome ?? k;
+    const tchau = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "agente", autorId: k, texto: textoDespedida(k), mencoes: [] } });
+    await publicarPusher(canal.id, EV_MENSAGEM, {
+      id: tchau.id, canalId: canal.id, autorTipo: "agente", autorId: k, texto: tchau.texto, mencoes: [],
+      createdAt: tchau.createdAt.toISOString(), autorNome: nome, autorAvatar: ag?.avatarUrl ?? null,
+    } satisfies MensagemWire);
+    const saiu = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "sistema", autorId: k, texto: textoSaiu(nome), mencoes: [] } });
+    await publicarPusher(canal.id, EV_MENSAGEM, {
+      id: saiu.id, canalId: canal.id, autorTipo: "sistema", autorId: k, texto: saiu.texto, mencoes: [],
+      createdAt: saiu.createdAt.toISOString(), autorNome: nome, autorAvatar: null,
+    } satisfies MensagemWire);
+  }
+  const respondem = alvos.filter((k) => !dispensadas.includes(k));
+
   const vias = await dispararTurnos(
-    alvos.map((agentKey) => ({ canalId: canal.id, agentKey, userId: u.id, mensagemId: row.id })),
+    respondem.map((agentKey) => ({ canalId: canal.id, agentKey, userId: u.id, mensagemId: row.id })),
     depsReais,
   );
-  return NextResponse.json({ ok: true, mensagem: wire, turnos: alvos.map((agentKey, i) => ({ agentKey, via: vias[i] })) }, { status: 201 });
+  return NextResponse.json({ ok: true, mensagem: wire, turnos: respondem.map((agentKey, i) => ({ agentKey, via: vias[i] })), ...(dispensadas.length ? { dispensadas } : {}) }, { status: 201 });
 }

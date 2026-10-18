@@ -75,3 +75,14 @@ describe("EditableProfile · perfil de outra pessoa", () => {
     expect(screen.getByTestId("mural").textContent).toBe("meu");
   });
 });
+
+describe("EditableProfile · #438 erro da foto aparece do lado dela", () => {
+  it("arquivo que não é imagem: o aviso aparece perto da foto (não lá no fim da página)", async () => {
+    const { container } = render(<EditableProfile />);
+    await screen.findByText("Editar");
+    const input = container.querySelector('input[type="file"][accept="image/*"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["oi"], "nota.txt", { type: "text/plain" })] } });
+    expect((await screen.findByTestId("erro-foto")).textContent).toContain("Escolha uma imagem");
+    expect(fetchSpy.mock.calls.some((c) => c[0] === "/api/user/avatar")).toBe(false);
+  });
+});

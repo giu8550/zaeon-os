@@ -6,10 +6,16 @@
  *   presence-canal-<id>  (presença nativa do Pusher; auth em /api/canal/pusher-auth)
  */
 import { triggerSafe } from "@/lib/collab/realtime";
-import { canalChannel } from "@/lib/canal/wire";
+import { canalChannel, EV_MENSAGEM, type MensagemWire } from "@/lib/canal/wire";
+import { avisoDaMensagem } from "@/lib/canal/aviso";
 
 export * from "@/lib/canal/wire";
 
 export type Publicar = (canalId: string, evento: string, payload: unknown) => Promise<void>;
 
-export const publicarPusher: Publicar = (canalId, evento, payload) => triggerSafe(canalChannel(canalId), evento, payload);
+/**
+ * #438: mensagem nova SEMPRE cabe no Pusher (sem foto inteira; texto enorme vira aviso leve) — antes, a
+ * mensagem de quem tinha foto guardada inteira passava dos 10 KB e não chegava ao vivo. Ver lib/canal/aviso.ts.
+ */
+export const publicarPusher: Publicar = (canalId, evento, payload) =>
+  triggerSafe(canalChannel(canalId), evento, evento === EV_MENSAGEM ? avisoDaMensagem(payload as MensagemWire) : payload);

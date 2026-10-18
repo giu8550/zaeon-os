@@ -29,6 +29,8 @@ import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
+import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
+import { agenteDaVez } from "@/lib/canal/alvo";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
@@ -216,7 +218,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const nome = canalChannel(c.id);
       if (nomes.includes(nome)) continue;
       const ch = p.subscribe(nome);
-      ch.bind(EV_MENSAGEM, (m: MensagemWire) => {
+      ch.bind(EV_MENSAGEM, (m: AvisoMensagem) => {
         aoChegar(m, c.id);
         // #425: "fulano entrou" no canal aberto → recarrega o canal (a foto nova aparece na barra, sem F5)
         if (m.autorTipo === "sistema" && c.id === ativoRef.current) void carregarDetalhe(c.id);
@@ -258,10 +260,13 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     return () => { try { p.unsubscribe(nome); } catch { /* ignore */ } setOnline([]); };
   }, [ativoId, canais.length]);
 
-  const aoChegar = useCallback((m: MensagemWire, canalId: string) => {
+  const aoChegar = useCallback((m: AvisoMensagem, canalId: string) => {
     const aberto = canalId === ativoRef.current;
     if (aberto) {
-      setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
+      // #438: aviso leve (mensagem grande demais pro tempo real) → busca a conversa; senão entra na lista, com a
+      // foto da lista de pessoas quando o aviso veio sem ela (foto guardada inteira não vai pelo Pusher)
+      if (m.cortada) void carregarDetalhe(canalId);
+      else setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, comFotoDaLista(m, d.pessoas)] } : d));
       if (m.autorTipo === "agente") setDigitando((prev) => prev.filter((k) => k !== m.autorId));
       // a mensagem da pessoa chegou: ela parou de "digitar"
       if (m.autorTipo === "humano") setPessoasDigitando((prev) => { if (!(m.autorId in prev)) return prev; const n = { ...prev }; delete n[m.autorId]; return n; });
@@ -273,10 +278,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     notificar({
       canalId, prioridade,
       titulo: m.autorNome || (m.autorTipo === "agente" ? m.autorId : "Alguém"),
-      corpo: canal && !aberto ? `${canal.titulo} · ${m.texto}` : m.texto,
+      corpo: (() => { const t = m.cortada ? "Mensagem nova" : m.texto; return canal && !aberto ? `${canal.titulo} · ${t}` : t; })(),
       onClick: () => { setAtivoId(canalId); try { window.dispatchEvent(new CustomEvent("zaeon:set-tab", { detail: "escritorio" })); } catch { /* ignore */ } },
     });
-  }, [notificar]);
+  }, [notificar, carregarDetalhe]);
 
   // ─── autoscroll ───
   useEffect(() => { fimRef.current?.scrollIntoView({ block: "end" }); }, [det?.mensagens.length, digitando.length]);
@@ -516,7 +521,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const conversaCom = (uid: string) => convites.contatos.find((c) => c.pessoa.id === uid)?.dmCanalId ?? null;
   // Sem @, responde o último agente que falou. A dica só aparece em canal de uma pessoa: com mais
   // gente, o servidor só atende quem estava conversando com o agente (lib/canal/alvo.ts).
-  const ultimoAgente = [...det.mensagens].reverse().find((m) => m.autorTipo === "agente" && !m.id.startsWith("efemera-"))?.autorId;
+  // a mesma regra do servidor: o último agente que falou, a não ser que tenha saído da conversa (#438)
+  const ultimoAgente = agenteDaVez(det.mensagens.filter((m) => !m.id.startsWith("efemera-")), agentes.map((a) => a.agentKey));
   const agenteAtivo = canal.membros.length === 0 ? agentes.find((a) => a.agentKey === ultimoAgente) ?? null : null;
   const presentes = agentes.filter((a) => canal.agentes.includes(a.agentKey));
   const outros = agentes.filter((a) => !canal.agentes.includes(a.agentKey));
