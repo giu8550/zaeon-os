@@ -14,7 +14,7 @@ import { empurrarParaFora, type Colisor } from "@/lib/cyber/colisao";
 import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
-import { alternarModoCamera, faixaDaDistancia, limitarPitch, olhoDoOmbro, poseDaCamera, type ModoCamera } from "@/lib/cyber/camera";
+import { alternarModoCamera, distPerto, faixaDaDistancia, limitarPitch, olhoDoOmbro, poseDaCamera, seguirPerto, type ModoCamera } from "@/lib/cyber/camera";
 import { PISTA, rotDaSala, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
 import { DECK, TEMPLO, noTemplo } from "@/lib/cyber/templo";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
@@ -3137,7 +3137,8 @@ export class CyberEngine {
     }
     // de moto o alvo segue por TEMPO (não por quadro): a 60 m/s, 0,12/quadro deixava a câmera ~17 m pra trás; assim
     // fica ~v/12 (≈ 5 m no boost) — a moto "puxa" um pouco à frente, que dá a sensação de arrancada
-    this.camT.lerp(this.vCamA.set(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), this.moto !== null ? 1 - Math.exp(-dt * 12) : 0.12);
+    if (this.camPerto) { const q = seguirPerto(this.camT, { x: this.eu.pos.x, y: 1.2 + this.eu.alt, z: this.eu.pos.z }, dt); this.camT.set(q.x, q.y, q.z); }   // PERTO: segue por tempo e com atraso limitado (voo/turbo/dash não deixam o personagem fugir)
+    else this.camT.lerp(this.vCamA.set(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), this.moto !== null ? 1 - Math.exp(-dt * 12) : 0.12);
     const cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
     // MOTO: câmera de perseguição — volta sozinha pra TRÁS da moto (com atraso: a curva aparece na tela), a não ser
     // que a pessoa tenha mexido o mouse/arrastado há pouco; afasta um pouco com a velocidade
@@ -3145,7 +3146,7 @@ export class CyberEngine {
       let d = this.motoEst.yaw + Math.PI - this.camAz; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.camAz += d * (1 - Math.exp(-dt * 2.6));
     }
-    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camPerto ? this.camDist + 0.5 * this.velTela : this.camDist + 1.6 * this.velTela;   // (a pé/mochila rápido: a câmera recua um pouco)
+    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camPerto ? distPerto(this.camDist, this.velTela) : this.camDist + 1.6 * this.velTela;   // (a pé/mochila rápido: a câmera recua um pouco)
     // câmera em 3ª pessoa: perto de um marco (ilha flutuante, muralhas), se a estrutura fica ENTRE a câmera e o
     // personagem, a câmera se aproxima (senão a ilha cobre a tela)
     const marco = this.lms.find((l) => Math.hypot(this.eu.pos.x - l.poi.x, this.eu.pos.z - l.poi.z) < l.poi.interactR * 1.8);
