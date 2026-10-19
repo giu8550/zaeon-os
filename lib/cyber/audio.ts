@@ -62,14 +62,14 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   // o CARRO VOADOR (lib/cyber/somCarro): os loops (zumbido elétrico, propulsores, vento) e os eventos (liga, desliga, portas, vidros)
   // o CARRO é feito pra ser SILENCIOSO: tudo passa por um passa-baixa (`filtro`) — abafado, como um motor isolado; o
   // volume é ALTO (ganho > 1) pra compensar o que o filtro tira: abafado, mas bem presente no ouvido
-  "carro-zumbido": { modo: "pos", loop: true, volume: 1.3, sintetico: true, filtro: 650 },
-  "carro-giro": { modo: "pos", loop: true, volume: 1.1, sintetico: true, filtro: 850 },
-  "carro-tom": { modo: "pos", loop: true, volume: 1.0, sintetico: true, filtro: 750 },
-  "carro-turbina": { modo: "pos", loop: true, volume: 1.25, sintetico: true, filtro: 950 },
-  "carro-ar": { modo: "pos", loop: true, volume: 0.9, sintetico: true, filtro: 1300 },
-  "carro-liga": { modo: "pos", loop: false, volume: 1.1, sintetico: true, filtro: 1400 },
-  "carro-desliga": { modo: "pos", loop: false, volume: 0.95, sintetico: true, filtro: 1200 },
-  "carro-turbo": { modo: "pos", loop: false, volume: 1.1, sintetico: true, filtro: 1500 },
+  "carro-zumbido": { modo: "pos", loop: true, volume: 1.4, sintetico: true, filtro: 420 },
+  "carro-giro": { modo: "pos", loop: true, volume: 1.2, sintetico: true, filtro: 560 },
+  "carro-tom": { modo: "pos", loop: true, volume: 1.1, sintetico: true, filtro: 500 },
+  "carro-turbina": { modo: "pos", loop: true, volume: 1.35, sintetico: true, filtro: 620 },
+  "carro-ar": { modo: "pos", loop: true, volume: 1.0, sintetico: true, filtro: 850 },
+  "carro-liga": { modo: "pos", loop: false, volume: 1.2, sintetico: true, filtro: 950 },
+  "carro-desliga": { modo: "pos", loop: false, volume: 1.05, sintetico: true, filtro: 800 },
+  "carro-turbo": { modo: "pos", loop: false, volume: 1.2, sintetico: true, filtro: 1000 },
   "carro-porta": { modo: "pos", loop: false, volume: 0.9, sintetico: true },
   "carro-fecha": { modo: "pos", loop: false, volume: 0.95, sintetico: true },
   "carro-vidro": { modo: "pos", loop: false, volume: 0.7, sintetico: true },
