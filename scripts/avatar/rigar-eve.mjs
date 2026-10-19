@@ -11,7 +11,8 @@
  *   jogo alinha o repouso dele com o do avatar pelas direções dos ossos.
  * - Os PESOS: as peças RÍGIDAS vão inteiras num osso (capacete e vidro → cabeça, pescoço → pescoço, peitoral → tronco,
  *   cada braçadeira → o antebraço do lado dela); o CORPO pela distância de cada vértice aos segmentos dos ossos (1/d⁴,
- *   os 3 mais perto), sem nunca misturar o lado esquerdo com o direito.
+ *   os 4 mais perto) e depois SUAVIZADO pela malha (6 passadas de difusão entre vizinhos), sem nunca misturar o lado
+ *   esquerdo com o direito — abaixo da virilha, cada vértice é de uma perna.
  * - As CURVAS: a cintura afina, o quadril e os glúteos abrem e o busto avança (campos suaves só no tronco).
  * - As CORES: cada triângulo pega a cor da textura no meio dele e vira uma ZONA — placa (o verde-água), macacão (o
  *   creme), detalhe escuro (o cinza) — cada zona um material com o nome que as paletas do jogo conhecem ("armadura",
@@ -116,12 +117,41 @@ const FILHO = { Hips: "Spine", Spine: "Spine1", Spine1: "Spine2", Spine2: "Neck"
 for (const L of ["Left", "Right"]) Object.assign(FILHO, { [`${L}Shoulder`]: `${L}Arm`, [`${L}Arm`]: `${L}ForeArm`, [`${L}ForeArm`]: `${L}Hand`, [`${L}Hand`]: `${L}HandMiddle4`, [`${L}UpLeg`]: `${L}Leg`, [`${L}Leg`]: `${L}Foot`, [`${L}Foot`]: `${L}ToeBase`, [`${L}ToeBase`]: `${L}Toe_End` });
 const segs = Object.entries(FILHO).map(([n, f]) => ({ n, a: J[n], b: J[f], s: n.startsWith("Left") ? 1 : n.startsWith("Right") ? -1 : 0 }));
 const dSeg = (p, a, b) => { const ab = b.clone().sub(a), t = Math.max(0, Math.min(1, p.clone().sub(a).dot(ab) / ab.lengthSq())); return p.distanceTo(a.clone().addScaledVector(ab, t)); };
-const pesosDoVertice = (p) => {
-  const meio = Math.abs(p.x) < H * 0.015;
-  const cand = segs.filter((g) => (g.s === 0 ? true : !meio && Math.sign(p.x) === g.s)).map((g) => ({ n: g.n, d: dSeg(p, g.a, g.b) })).sort((x, y) => x.d - y.d).slice(0, 3);
-  const w = cand.map((c) => 1 / (Math.pow(c.d + H * 0.004, 4))), soma = w.reduce((a, b) => a + b, 0);
-  return cand.map((c, i) => [idx[c.n], w[i] / soma]);
+/** o LADO de um vértice: 0 = o meio do tronco (só os ossos do centro); abaixo da virilha, sempre o lado da perna
+ *  (as coxas dela se encostam: a linha do meio entre elas é de uma perna ou da outra — no quadril, virava uma membrana) */
+const ladoDe = (p) => (Math.abs(p.x) < H * 0.015 && p.y > virilha - H * 0.005 ? 0 : Math.sign(p.x) || 1);
+/** o peso CRU (antes de suavizar): pela distância aos segmentos do lado dele, 1/d⁴, os 4 mais perto */
+const pesoCru = (p) => {
+  const s = ladoDe(p), w = new Map();
+  const cand = segs.filter((g) => g.s === 0 || g.s === s && s !== 0).map((g) => ({ n: g.n, d: dSeg(p, g.a, g.b) })).sort((x, y) => x.d - y.d).slice(0, 4);
+  let soma = 0; for (const c of cand) { const x = 1 / Math.pow(c.d + H * 0.006, 4); w.set(idx[c.n], x); soma += x; }
+  for (const [k, x] of w) w.set(k, x / soma);
+  return w;
 };
+/** os pesos SUAVIZADOS do corpo (difusão pela malha: cada vértice puxa a média dos vizinhos — as juntas dobram sem
+ *  quina), por posição (a malha do FBX repete o vértice em cada triângulo) */
+const pesosDoCorpo = (() => {
+  const g = pecas.Body_low.index ? pecas.Body_low.toNonIndexed() : pecas.Body_low, pos = g.attributes.position;
+  const chave = (i) => `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+  const id = new Map(), vp = [], viz = [];
+  const de = (i) => { const k = chave(i); let j = id.get(k); if (j === undefined) { j = vp.length; id.set(k, j); vp.push(new THREE.Vector3().fromBufferAttribute(pos, i)); viz.push(new Set()); } return j; };
+  for (let t = 0; t < pos.count; t += 3) { const a = de(t), b = de(t + 1), c = de(t + 2); viz[a].add(b).add(c); viz[b].add(a).add(c); viz[c].add(a).add(b); }
+  let w = vp.map(pesoCru);
+  const lados = vp.map(ladoDe), ladoDoOsso = Object.fromEntries(nomes.map((n) => [idx[n], n.startsWith("Left") ? 1 : n.startsWith("Right") ? -1 : 0]));
+  for (let it = 0; it < 6; it++) {
+    w = w.map((wi, i) => {
+      const m = new Map(); for (const [k, x] of wi) m.set(k, x * 0.5);
+      const vs = [...viz[i]].filter((j) => lados[j] === lados[i] || lados[j] === 0 || lados[i] === 0);
+      for (const j of vs) for (const [k, x] of w[j]) if (ladoDoOsso[k] === 0 || ladoDoOsso[k] === lados[i]) m.set(k, (m.get(k) ?? 0) + (x * 0.5) / vs.length);
+      return m;
+    });
+  }
+  return (p) => {
+    const wi = w[id.get(`${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`)] ?? pesoCru(p);
+    const top = [...wi].sort((a, b) => b[1] - a[1]).slice(0, 4), soma = top.reduce((a, [, x]) => a + x, 0);
+    return top.map(([k, x]) => [k, x / soma]);
+  };
+})();
 const RIGIDA = { Helmet_low: "Head", Helmetglass_low: "Head", Neck_low: "Neck", Armor_low: "Spine2" };
 
 // as ZONAS de cor
@@ -156,7 +186,7 @@ for (const [nome, g0] of Object.entries(pecas)) {
       let w;
       if (rig) w = [[idx[rig], 1]];
       else if (nome === "Bracers_low") w = [[idx[p.x > 0 ? "LeftForeArm" : "RightForeArm"], 1]];
-      else w = pesosDoVertice(p);
+      else w = pesosDoCorpo(p);
       w.forEach(([b, x], m) => { SI[o * 4 + m] = b; SW[o * 4 + m] = x; });
     }
   });
@@ -165,7 +195,8 @@ for (const [nome, g0] of Object.entries(pecas)) {
     if (k === ordem.length || (k > 0 && zonaTri[ordem[k]] !== zonaTri[ordem[k - 1]])) { const z = zonaTri[ordem[k - 1]]; zonasUsadas.push(z); gr.addGroup(ini * 3, (k - ini) * 3, zonasUsadas.length - 1); ini = k; }
   }
   gr.setAttribute("position", new THREE.BufferAttribute(P, 3)); gr.setAttribute("skinIndex", new THREE.BufferAttribute(SI, 4)); gr.setAttribute("skinWeight", new THREE.BufferAttribute(SW, 4));
-  gr.computeVertexNormals();
+  // (funde os vértices repetidos pela posição e pela skin — sem a normal, que no FBX é uma por triângulo — e calcula as
+  // normais SUAVES: sem isso o corpo ficava facetado, cada triângulo chapado)
   const gm = mergeVertices(gr, 1e-4); gm.computeVertexNormals();
   const m = new THREE.SkinnedMesh(gm, zonasUsadas.map(mat)); m.name = nome; raiz.add(m); m.bind(esqueleto, new THREE.Matrix4());
   tris += tri;

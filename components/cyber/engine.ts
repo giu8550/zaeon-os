@@ -255,7 +255,7 @@ export type CyberOpts = {
   somLounge?: SomLounge | null; offsetMusica?: number;
 };
 
-type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** a MAGIA dele: o último lançamento visto e o escudo erguido */ magUlt?: number; escudo?: boolean; /** o corpo VRM já pedido (o do founder) */ vrm?: boolean; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
+type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** corpo FEMININO: veste a astronauta sempre (o traje é o padrão feminino) */ feminina?: boolean; /** a MAGIA dele: o último lançamento visto e o escudo erguido */ magUlt?: number; escudo?: boolean; /** o corpo VRM já pedido (o do founder) */ vrm?: boolean; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
   /** na cabine do DJ do lounge (0..1, suavizado): fone na cabeça, mãos na controladora */
   dj?: number;
   /** parado na pista do lounge (0..1, suavizado): dançando */
@@ -1080,7 +1080,7 @@ export class CyberEngine {
       const vivo = this.vivo && (a === this.eu || this.remotos.get(a.id) === a);
       if (!vivo) return;
       tingirVrm(vrm, proprio.corpo.tintas); acabarVrm(vrm, proprio.corpo); a.av.usarVrm(vrm);
-      if (proprio.corpo.pose === "feminina") a.av.estiloVrm("feminina", { parada: true });   // pack de realismo: a marcha e a pose em pé femininas
+      if (proprio.corpo.pose === "feminina") { a.av.estiloVrm("feminina", { parada: true }); a.feminina = true; }   // pack de realismo: a marcha e a pose em pé femininas; e o TRAJE de astronauta é o padrão delas
       if (proprio.corpo.acessorios?.length) vestirAcessorios(vrm, proprio.corpo.acessorios);
     }).catch((e) => { console.warn("[cyber] corpo próprio (VRM) não carregou:", e); a.av.esperarCorpo(false); });
   }
@@ -4052,7 +4052,7 @@ export class CyberEngine {
     if (!this.menu) this.passoCarro(t, dt);   // (fora do ramo a pé: de moto/pilotando o rifle também se desfaz)
     { const c = noCorpo(this.velRifle, eu.facing), comRifle = this.wRifle > 0.01 && !!this.rifle;
       eu.av.rifle(comRifle ? { naMao: this.wRifle, mira: this.wMira, frente: eu.moving ? c.frente : 0, lado: eu.moving ? c.lado : 0, coice: this.coice, alvo: this.alvoMira, arma: this.rifle!.group } : null);
-      eu.av.traje(this.rifleEquipado() || this.wRifle > 0.05, { paleta: this.ehFundador(euId) ? "preta" : this.paletaDe(this.eu) }); }   // com o RIFLE EQUIPADO (mesmo no ar, com a arma recolhida): o corpo de astronauta (components/cyber/CorpoAstronauta)
+      eu.av.traje(this.rifleEquipado() || this.wRifle > 0.05 || !!eu.feminina, { paleta: this.ehFundador(euId) ? "preta" : this.paletaDe(this.eu) }); }   // com o RIFLE EQUIPADO (mesmo no ar, com a arma recolhida): o corpo de astronauta (components/cyber/CorpoAstronauta)
     eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null && !this.noCarro(), correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null && (this.wRifle < 0.4 || Math.hypot(this.velRifle.x, this.velRifle.z) > 5), sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : this.noCarro() ? this.naCarro(eu.av) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0, pes: eu.pes, estilo: eu.poseL }, tablet: eu.tab ?? 0, dt: t < this.pausaAte ? 0 : this.moto === null && !this.jet.noAr && eu.moving && this.wRifle < 0.4 ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (hit-stop: a pose congela)   // (no sprint as pernas giram mais rápido)
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
@@ -4079,14 +4079,14 @@ export class CyberEngine {
       a.acum = (a.acum ?? 0) + dt;
       const animou = a.acum >= cada;
       // o RIFLE dele: a velocidade medida da posição (os andares com a arma), atirando (decai) e a mira pra frente
-      if (!a.rifle) a.av.traje(false);
+      if (!a.rifle) a.av.traje(!!a.feminina, { paleta: this.ehFundador(a.id) ? "preta" : this.paletaDe(a) });   // (sem rifle: o traje só pra quem tem corpo feminino — o padrão delas)
       if (a.rifle) {
         const pa = a.posAntR ?? { x: a.pos.x, z: a.pos.z }, kv = Math.min(1, dt * 8), vx = (a.pos.x - pa.x) / Math.max(dt, 1e-3), vz = (a.pos.z - pa.z) / Math.max(dt, 1e-3);
         a.velR = { x: (a.velR?.x ?? 0) + (vx - (a.velR?.x ?? 0)) * kv, z: (a.velR?.z ?? 0) + (vz - (a.velR?.z ?? 0)) * kv }; a.posAntR = { x: a.pos.x, z: a.pos.z };
         a.atiraR = Math.max(0, (a.atiraR ?? 0) - dt / RIFLE.posturaDepoisDoTiro); a.pitchR = (a.pitchR ?? 0) * (1 - Math.min(1, dt * 0.5));
         const w = a.wRif ?? 0, c = noCorpo(a.velR, a.facing), d = direcaoDaMira(a.facing, a.pitchR ?? 0);
         a.rifle.atualizar(t, dt, { revela: w, calor: 0 });
-        a.av.traje(w > 0.05, { paleta: this.ehFundador(a.id) ? "preta" : this.paletaDe(a) });
+        a.av.traje(w > 0.05 || !!a.feminina, { paleta: this.ehFundador(a.id) ? "preta" : this.paletaDe(a) });
         a.av.rifle(w > 0.01 && a.jet === undefined && !a.moto && !pilota ? { naMao: w, mira: Math.max(a.wMiraR ?? 0, Math.min(1, (a.atiraR ?? 0) * 4)), frente: a.moving ? c.frente : 0, lado: a.moving ? c.lado : 0, coice: 0, alvo: this.vRastroP.set(a.pos.x + d.x * 30, a.alt + 1.45 + d.y * 30, a.pos.z + d.z * 30).clone(), arma: a.rifle.group } : null);
       }
       if (animou) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0, pes: a.pes, estilo: a.poseL }, tablet: a.tab ?? 0, acao: { sprint: a.wSpR ?? 0, dash: a.wDaR ?? 0, alerta: a.wAlR ?? 0, alertaT: t - (a.tMov ?? t), heroi: a.mov === 4 ? t - (a.tMov ?? t) : null, decola: a.mov === 5 ? { t: t - (a.tMov ?? t), espera: 0.07 } : null, espada: !a.espada || (a.revela ?? 0) <= 0.02 ? null : { golpe: a.golpe ? { n: a.golpe.g.n, u: Math.min(1, (t - a.golpe.ini) / a.golpe.g.dur), ativo: [a.golpe.g.ativoIni / a.golpe.g.dur, a.golpe.g.ativoFim / a.golpe.g.dur] } : null, guarda: a.moving ? 0 : 1 } }, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
