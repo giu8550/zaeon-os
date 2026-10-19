@@ -10,6 +10,7 @@ import { SINTESE_MOTO, type NomeSomMoto } from "./somMoto";
 import { SINTESE_CORRIDA, type NomeSomCorrida } from "./somCorrida";
 import { SINTESE_ASAS, type NomeSomAsas } from "./asas";
 import { SINTESE_RIFLE, type NomeSomRifle } from "./somRifle";
+import { SINTESE_CARRO, type NomeSomCarro } from "./somCarro";
 import { sintetizarBatida, sintetizarRaio, sintetizarTrovao } from "./coracao";
 import { sintetizarAmbiente } from "./ambiente";
 import { sintetizarPuxaFio, sintetizarZumbidoFio } from "./somFio";
@@ -24,7 +25,7 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
   | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien" | "droid-louvor"
-  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | NomeSomRifle | "coracao" | "raio" | "trovao" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto" | "droid-maquina" | "tablet-abre" | "tablet-fecha";
+  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | NomeSomRifle | NomeSomCarro | "coracao" | "raio" | "trovao" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto" | "droid-maquina" | "tablet-abre" | "tablet-fecha";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -58,6 +59,20 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   "rifle-tiro": { modo: "pos", loop: false, volume: 0.55, sintetico: true },   // o rifle cósmico (lib/cyber/somRifle)
   "rifle-vapor": { modo: "pos", loop: false, volume: 0.5, sintetico: true },
   "rifle-saca": { modo: "pos", loop: false, volume: 0.4, sintetico: true },
+  // o CARRO VOADOR (lib/cyber/somCarro): os loops (zumbido elétrico, propulsores, vento) e os eventos (liga, desliga, portas, vidros)
+  // o CARRO é feito pra ser SILENCIOSO: tudo passa por um passa-baixa (`filtro`) — abafado como se ouvido com FONES tapando (bem fechado, 260–600 Hz); o
+  // volume é ALTO (ganho > 1) pra compensar o que o filtro tira: abafado, mas bem presente no ouvido
+  "carro-zumbido": { modo: "pos", loop: true, volume: 1.7, sintetico: true, filtro: 260 },
+  "carro-giro": { modo: "pos", loop: true, volume: 1.6, sintetico: true, filtro: 320 },
+  "carro-tom": { modo: "pos", loop: true, volume: 1.5, sintetico: true, filtro: 300 },
+  "carro-turbina": { modo: "pos", loop: true, volume: 1.8, sintetico: true, filtro: 360 },
+  "carro-ar": { modo: "pos", loop: true, volume: 1.4, sintetico: true, filtro: 480 },
+  "carro-liga": { modo: "pos", loop: false, volume: 1.5, sintetico: true, filtro: 560 },
+  "carro-desliga": { modo: "pos", loop: false, volume: 1.35, sintetico: true, filtro: 480 },
+  "carro-turbo": { modo: "pos", loop: false, volume: 1.5, sintetico: true, filtro: 600 },
+  "carro-porta": { modo: "pos", loop: false, volume: 0.9, sintetico: true },
+  "carro-fecha": { modo: "pos", loop: false, volume: 0.95, sintetico: true },
+  "carro-vidro": { modo: "pos", loop: false, volume: 0.7, sintetico: true },
   // MOTO por estágio (lib/cyber/somMoto, sintetizados): loops de motor (que faz a lenta)/vento/turbina + os one-shots
   "moto-motor": { modo: "pos", loop: true, volume: 0.6, ext: "wav" },   // gravação real (CREDITS.md)
   "moto-motor-alto": { modo: "pos", loop: true, volume: 0.6, ext: "wav" },   // gravação real (CREDITS.md)
@@ -167,7 +182,7 @@ export function sintetizarBaque(sr: number): Float32Array {
   for (let i = 0; i < 64; i++) out[n - 1 - i]! *= i / 64;   // fim sem clique
   return normalizar(out, 0.92);
 }
-export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_CORRIDA, ...SINTESE_ASAS, ...SINTESE_RIFLE, coracao: sintetizarBatida, raio: sintetizarRaio, trovao: sintetizarTrovao,
+export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_CORRIDA, ...SINTESE_ASAS, ...SINTESE_RIFLE, ...SINTESE_CARRO, coracao: sintetizarBatida, raio: sintetizarRaio, trovao: sintetizarTrovao,
   "ambiente-biblioteca": (sr) => sintetizarAmbiente("biblioteca", sr), "ambiente-jardim": (sr) => sintetizarAmbiente("jardim", sr),
   "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta, decola: sintetizarDecola, "impacto-heroi": sintetizarImpactoHeroi, golpe: sintetizarGolpe, acerto: sintetizarAcerto, "droid-maquina": sintetizarMaquinaNoAr, "tablet-abre": (sr: number) => sintetizarTablet(sr, true), "tablet-fecha": (sr: number) => sintetizarTablet(sr, false) };
 

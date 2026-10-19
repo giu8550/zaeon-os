@@ -72,6 +72,14 @@ import { ITENS, chaveInventario, equipar as equiparNoInv, inventarioInicial, ite
 import { DURACAO_CLIPE, ENERGIA, ESCUDO, FEITICOS, MOV_ESCUDO, codificarLancamento, estadoDoMov, danoComEscudo, danoDaExplosao, decodificarLancamento, direcaoDaMira, escudoSegura, instanteDoDisparo, ladoDoGolpe, podeLancar, reacaoDoGolpe, recarregarEnergia, varreCorpo, duracaoLancamento, type Feitico } from "@/lib/cyber/magia";
 import { criarFxMagia, type FxMagia } from "./MagiaFx";
 import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
+import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
+import { criarCarroHex, type CarroHandle } from "./CarroHex";
+import { LOOPS_CARRO, mixDoCarro, sonsDaCabine } from "@/lib/cyber/somCarro";
+import { paletaFeminina, type Paleta } from "./CorpoAstronauta";
+import { paletaDoPersonagem, type Personagem } from "@/lib/cyber/personagem";
+/** o CARRO VOADOR estacionado na praça, perto das vagas das motos (x, z, rumo) e a altura em que ele paira acima do
+ *  chão; a cabine leva 1,6 s pra abrir/fechar inteira (as portas e o vidro em cascata — components/cyber/CarroHex) */
+const CARRO_VAGA = { x: -22, z: -132, rumo: 2.01 } as const, CARRO_PAIRA = 0.45, CARRO_CABINE = 1.6;
 import { DURACAO_RIFLE, NUM_TIRO, RIFLE, animacaoDaMorte, danoDoTiro, desviar, difAng, dispersao, fracaoDoGiro, girarAte, movComRifle, naCabeca, noCorpo, passoCalor, passoInercia, podeAtirar, pontoDaMira, precisaVirar, rifleDoMov, tirosNovos } from "@/lib/cyber/rifle";
 import { CAIDO, COMBO, HIT_STOP, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAcabou, acerta, codificarGolpe, cortouEntre, danoDoGolpe, decodificarGolpe, proximoGolpe, type EstadoAtaque, type Golpe } from "@/lib/cyber/combate";
 import { dentroDaArena, ARENA_ATIVA, BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
@@ -83,7 +91,7 @@ import type { ItemEstudo } from "@/lib/estudos/itens";
 const ESCALA_ESPADA = 2.2;
 /** a BALA do rifle no pipeline dos projéteis da magia (components/cyber/MagiaFx): o raio de energia azul-violeta,
  *  rápido e fino (o dano de verdade é do rifle — lib/cyber/rifle `danoDoTiro`) */
-const TIRO_FX: Feitico = { ...FEITICOS.estilhaco, nome: "Tiro", vel: RIFLE.vel, raio: RIFLE.raio, alcance: RIFLE.alcance, dano: RIFLE.dano, explosao: 0, empurra: 0.05, cor: 0xe8f6ff, brilho: 0x8a6bff };
+const TIRO_FX: Feitico = { ...FEITICOS.estilhaco, nome: "Tiro", vel: RIFLE.vel, raio: RIFLE.raio, alcance: RIFLE.alcance, dano: RIFLE.dano, explosao: 0, empurra: 0.05, cor: 0xe8f6ff, brilho: 0x8a6bff, bala: true };
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
 import { criarPistas, type PistasHandle } from "./PistaCorrida";
@@ -128,7 +136,7 @@ import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, ty
  * Vêm do SERVIDOR (GET da sala), o cliente só pinta: `fundador` = dono — a base dele fica na ZAEON (a ilha no céu).
  * Regalias são validadas na API.
  */
-export type PessoaCyber = { id: string; name: string; color: string; fundador?: boolean; /** o corpo próprio de jogador (o servidor decide — lib/lounge3d/corposDeUsuario) */ corpo?: string; /** pilota a nave-QG: o dono ou a tripulação (o servidor decide) */ nave?: boolean };
+export type PessoaCyber = { id: string; name: string; color: string; fundador?: boolean; /** o corpo próprio de jogador (o servidor decide — lib/lounge3d/corposDeUsuario) */ corpo?: string; /** pilota a nave-QG: o dono ou a tripulação (o servidor decide) */ nave?: boolean; /** o PERSONAGEM escolhido ao entrar (gênero + cor — lib/cyber/personagem): o corpo de astronauta dele */ personagem?: Personagem | null };
 /** o TÚNEL de um buraco negro: de onde se entrou e pra onde dá pra ir */
 export type TunelAberto = { origem: IdNo; destinos: { id: IdNo; nome: string; desc: string }[] };
 /** o TOUR da anfitriã (lib/cyber/onboarding): o passo atual — o React mostra a fala */
@@ -249,7 +257,7 @@ export type CyberOpts = {
   somLounge?: SomLounge | null; offsetMusica?: number;
 };
 
-type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** a MAGIA dele: o último lançamento visto e o escudo erguido */ magUlt?: number; escudo?: boolean; /** o corpo VRM já pedido (o do founder) */ vrm?: boolean; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
+type Ator = { id: string; name: string; color: string; av: AvatarLuzHandle; /** corpo FEMININO: veste a astronauta sempre (o traje é o padrão feminino) */ feminina?: boolean; /** a MAGIA dele: o último lançamento visto e o escudo erguido */ magUlt?: number; escudo?: boolean; /** o corpo VRM já pedido (o do founder) */ vrm?: boolean; pos: THREE.Vector3; facing: number; moving: boolean; sit: number; tag: HTMLDivElement; alt: number;
   /** na cabine do DJ do lounge (0..1, suavizado): fone na cabeça, mãos na controladora */
   dj?: number;
   /** parado na pista do lounge (0..1, suavizado): dançando */
@@ -641,6 +649,17 @@ export class CyberEngine {
   private proxTiro = 0; private calor = 0; private travadoAte = -Infinity; private ultimoTiro = -Infinity; private rajada = 0; private coice = 0; private seqTiro = 0;
   private velRifle = { x: 0, z: 0 }; private giroRifle: { de: number; ang: number; t0: number; dur: number } | null = null; private freouEm = -Infinity; private morreu = false;
   private alvoMira = new THREE.Vector3(); private cruz: HTMLDivElement | null = null; private reacaoTiroAte = -Infinity;
+  /** a câmera PERTO na moto (o V alterna perto ⇄ longe; começa perto) */
+  private camMotoPerto = true;
+  /** o CARRO VOADOR (components/cyber/CarroHex): a física é a mesma das motos (lib/cyber/motoFisica). As fases: parado →
+   *  ENTRANDO (a cabine abre) → FECHANDO (ele já sentado; a cabine fecha e o carro liga) → DIRIGINDO → ABRINDO (pousado,
+   *  pediu pra sair) → SAINDO (ele já do lado de fora; a cabine fecha) → parado. `k` = a abertura da cabine (0..1) */
+  private carro: { h: CarroHandle; est: EstadoMoto; pousado: boolean; fase: "parado" | "entrando" | "fechando" | "dirigindo" | "abrindo" | "saindo"; k: number; ligado: number; potencia: number; acel: number; velAnt: number; boost: boolean; loops: Record<(typeof LOOPS_CARRO)[number], LoopSom>; somPerto: boolean } | null = null;
+  /** dentro do carro (sentado: fechando, dirigindo ou abrindo) */
+  private noCarro() { const f = this.carro?.fase; return f === "fechando" || f === "dirigindo" || f === "abrindo"; }
+  /** num veículo que a câmera persegue (moto ou carro) — e o rumo dele */
+  private noVeiculo() { return this.moto !== null || this.noCarro(); }
+  private rumoVeiculo() { return this.noCarro() ? this.carro!.est.yaw : this.motoEst.yaw; }
   private vida = VIDA_MAX; private caidoAte = -Infinity; private protegidoAte = -Infinity; private empurrao = { x: 0, z: 0 }; private wGuardaArena = 0;
   private vRastroB = new THREE.Vector3(); private vRastroP = new THREE.Vector3();
   /** o HIT-STOP (até quando a ação fica congelada — o peso do golpe que pegou) e o golpe pesado que já esmagou o chão */
@@ -673,6 +692,7 @@ export class CyberEngine {
    *  modo de antes com o ajuste que a pessoa tinha nele (lib/cyber/camera) */
   private camModo: ModoCamera = "padrao"; private camGuardado: Partial<Record<ModoCamera, { dist: number; pitch: number }>> = {};
   alternarCamera() {
+    if (this.noVeiculo()) { this.camMotoPerto = !this.camMotoPerto; this.o.onAviso?.(this.camMotoPerto ? "Câmera da moto: perto · V afasta" : "Câmera da moto: longe · V aproxima"); return this.camModo; }
     const r = alternarModoCamera(this.camModo, { dist: this.camDist, pitch: this.camPitch }, this.camGuardado);
     this.camModo = r.modo; this.camDist = r.dist; this.camPitch = r.pitch; this.camGuardado = r.guardado;
     this.o.onAviso?.(r.modo === "perto" ? "Câmera perto (por cima do ombro) · V volta" : "Câmera padrão · V aproxima");
@@ -1062,7 +1082,7 @@ export class CyberEngine {
       const vivo = this.vivo && (a === this.eu || this.remotos.get(a.id) === a);
       if (!vivo) return;
       tingirVrm(vrm, proprio.corpo.tintas); acabarVrm(vrm, proprio.corpo); a.av.usarVrm(vrm);
-      if (proprio.corpo.pose === "feminina") a.av.estiloVrm("feminina", { parada: true });   // pack de realismo: a marcha e a pose em pé femininas
+      if (proprio.corpo.pose === "feminina") { a.av.estiloVrm("feminina", { parada: true }); a.feminina = true; }   // pack de realismo: a marcha e a pose em pé femininas; e o TRAJE de astronauta é o padrão delas
       if (proprio.corpo.acessorios?.length) vestirAcessorios(vrm, proprio.corpo.acessorios);
     }).catch((e) => { console.warn("[cyber] corpo próprio (VRM) não carregou:", e); a.av.esperarCorpo(false); });
   }
@@ -1180,7 +1200,7 @@ export class CyberEngine {
   /** DASH (C / botão DASH): um arranque curto pra onde se está indo (parado: pra frente), no chão ou no ar de mochila —
    *  o começo é intocável (lib/cyber/movimento). Não vale de moto, pilotando, sentado, no tablet, no tubo ou no túnel */
   darDash(): boolean {
-    if (this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.noTopo) return false;
+    if (this.menu || this.noVeiculo() || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.noTopo) return false;
     const agora = performance.now() * 0.001;   // (o relógio de VERDADE no aperto — o do último quadro pode estar atrasado; a esquiva é questão de ms)
     if (!podeDash(this.dash, agora)) return false;
     const comAgua = gastarDashAgua(this.agua, this.agora); if (!comAgua) return false;   // sem água: não sai
@@ -1221,7 +1241,7 @@ export class CyberEngine {
    *  um golpe fica na fila e encadeia. Vira pra onde a câmera olha. Sem arma, de moto, pilotando, sentado ou caído: nada */
   atacar(): boolean {
     if (this.inv.equipado === "rifle-cosmico") return false;   // (o rifle atira pelo gatilho — `puxarGatilho`)
-    if (!this.inv.equipado || this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte) return false;
+    if (!this.inv.equipado || this.menu || this.noVeiculo() || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte) return false;
     if (this.ataque && !golpeAcabou(this.ataque, this.agora)) { this.filaAtaque = true; return true; }
     this.comecarGolpe(); return true;
   }
@@ -1250,7 +1270,7 @@ export class CyberEngine {
   private naZonaDeDuelo(p: { x: number; z: number }, ceu: boolean) { return !ceu && dentroDaArena(p); }
   /** LANÇAR (Q / E): a animação de quem lança, o brilho na mão e, no quadro do disparo, o projétil pra onde a câmera mira */
   lancar(f: Feitico): boolean {
-    if (this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte || this.bordo) return false;
+    if (this.menu || this.noVeiculo() || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte || this.bordo || this.carro?.fase !== undefined && this.carro.fase !== "parado") return false;
     if (this.conj || this.escudoOn) return false;
     const t = this.agora;
     if (!podeLancar(this.energia, f, this.recargaMagia[f.id] ?? 0, t)) { this.o.onAviso?.(this.energia < f.energia ? "Sem energia cósmica — espere recarregar" : `${f.nome}: recarregando`); return false; }
@@ -1268,12 +1288,26 @@ export class CyberEngine {
   }
   /** o ESCUDO (segurar R): os braços cruzados; gasta energia enquanto segura */
   erguerEscudo(on: boolean) {
-    if (on && (this.conj || this.moto !== null || this.pilotando || this.descanso || this.agora < this.caidoAte || this.energia < 5)) return;
+    if (on && (this.conj || this.noVeiculo() || this.pilotando || this.descanso || this.agora < this.caidoAte || this.energia < 5)) return;
     if (on === this.escudoOn) return;
     this.escudoOn = on;
     if (on) this.eu.av.tocarClipe(ESCUDO.clipe, { segurar: true }); else this.eu.av.soltarClipe();
   }
   // ───────────── o RIFLE CÓSMICO (lib/cyber/rifle) ─────────────
+  /** o PERSONAGEM escolhido por alguém (gênero + cor — o servidor manda junto com a pessoa) */
+  private personagemDe(id: string): Personagem | null { return this.pessoas.get(id)?.personagem ?? (id === this.o.eu.id ? this.o.eu.personagem ?? null : null); }
+  /** o CORPO DE ASTRONAUTA de alguém (components/cyber/CorpoAstronauta): veste com o rifle, com corpo feminino (o padrão
+   *  delas) ou sempre, pra quem escolheu o personagem — no modelo do gênero escolhido e na cor escolhida (a do fundador:
+   *  a preta) */
+  private vestirTraje(a: Ator, comRifle: boolean) {
+    const ps = this.personagemDe(a.id);
+    a.av.traje(comRifle || !!a.feminina || !!ps, { paleta: this.ehFundador(a.id) ? "preta" : ps ? paletaDoPersonagem(ps) : this.paletaDe(a), modelo: ps?.genero });
+  }
+  /** a cor da armadura de astronauta de alguém: a cor do jogador (a do fundador é a preta) */
+  private paletaDe(a: Ator): Paleta {
+    const c = (a.color.startsWith("#") ? a.color : `#${a.color}`) as `#${string}`;
+    return a.feminina ? paletaFeminina(c) : c;   // (a standard feminina: a cor feminina mais próxima da dela)
+  }
   private rifleEquipado() { return this.inv.equipado === "rifle-cosmico"; }
   /** dá pra estar com o rifle agora? (a pé no chão, sem lançar nem escudo, sem moto/nave/sofá/tablet, vivo) */
   private podeRifle() {
@@ -1644,7 +1678,7 @@ export class CyberEngine {
    *  embalo segue) e só então lança (`decolarJa`), com um empuxo forte pra cima e a velocidade que tinha no chão */
   comandoJet(on: boolean) {
     this.jet.tecla = on;
-    if (!on || this.jet.noAr || this.decola || this.menu || this.pilotando || this.moto !== null || this.noTopo || this.viagem || this.nascendo || this.tunel) return;
+    if (!on || this.jet.noAr || this.decola || this.menu || this.pilotando || this.noVeiculo() || this.noTopo || this.viagem || this.nascendo || this.tunel) return;
     if (this.sobreNave || this.bordo) { this.decolarJa(); return; }   // (de cima da nave / a bordo: o caminho de sempre)
     const v = this.velPlano > 1.5 ? Math.min(this.velPlano, 18) : 0;
     this.decola = { t0: this.agora, espera: v > 0 ? DECOLAGEM.esperaAndando : DECOLAGEM.esperaParado, momento: { x: Math.sin(this.eu.facing) * v, z: Math.cos(this.eu.facing) * v } };
@@ -2669,6 +2703,63 @@ export class CyberEngine {
     if (naIlhaPrincipal(this.eu.pos) && Math.abs(m.y - (CIDADE.pisoY + alturaNaCidade(this.eu.pos))) < 1.5) { this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; this.portalArmado = false; }
     else if (m.y > CHAO + 0.5) { this.eu.alt = m.y; this.cairDaqui(); }
   }
+  // ───────────── o CARRO VOADOR ─────────────
+  /** perto do carro parado, a pé (o F entra) */
+  private carroPerto() {
+    const c = this.carro; if (!c || c.fase !== "parado" || this.moto !== null || this.pilotando || this.jet.noAr || this.bordo || this.noCeu) return false;
+    return Math.hypot(this.eu.pos.x - c.est.x, this.eu.pos.z - c.est.z) < 4.2 && Math.abs(this.eu.alt - c.est.y) < 2;   // (o carro tem ~6 m: de qualquer lado dele)
+  }
+  /** pousado na praça (dá pra descer ali) */
+  private carroPodeSair() { const c = this.carro!; return c.pousado && naPraca({ x: c.est.x, z: c.est.z }); }
+  /** ENTRAR: ele vai pro lado da porta do motorista, a cabine abre (portas + vidro em cascata, com som) */
+  entrarNoCarro() {
+    const c = this.carro; if (!c || !this.carroPerto()) return;
+    const ex = Math.cos(c.est.yaw), ez = -Math.sin(c.est.yaw);   // (a esquerda do carro: a porta do motorista)
+    this.eu.pos.set(c.est.x + ex * 2.1, 0, c.est.z + ez * 2.1); this.eu.facing = Math.atan2(-ex, -ez);
+    c.fase = "entrando"; this.alvo = null; this.alvoDepois = null; this.jetV = { x: 0, z: 0 };
+  }
+  /** SAIR: pousado, a cabine abre, ele desce do lado do motorista e a cabine fecha (o carro fica ali) */
+  sairDoCarro() { const c = this.carro; if (!c || c.fase !== "dirigindo" || !this.carroPodeSair()) return; c.fase = "abrindo"; this.voY.subir = this.voY.descer = false; this.autoPouso = false; this.o.onAviso?.("Saindo do carro…"); this.som.tocar("carro-desliga", null, { dist: DISTANCIA.naveLocal, seguir: c.h.group }); }
+  /** o avatar SENTADO no carro: o grupo no banco, as mãos no manche e os pés no assoalho (a IK do Montado) */
+  private naCarro(av: AvatarLuzHandle): Montado | null {
+    const c = this.carro; if (!c) return null;
+    const h = c.h; h.group.updateWorldMatrix(true, true);
+    h.assento.getWorldPosition(av.group.position); av.olharPara(c.est.yaw);
+    const v = this.montadoTmp, p = h.pontos;
+    p.maoE.getWorldPosition(v.maoE); p.maoD.getWorldPosition(v.maoD); p.peE.getWorldPosition(v.peE); p.peD.getWorldPosition(v.peD);
+    return { w: 1, ...v };
+  }
+  /** o CARRO a cada quadro: nasce estacionado na praça; a cabine (as fases, com o som de cada porta e vidro), o motor
+   *  (liga/desliga, os loops misturados pela velocidade) e o corpo dele no mundo */
+  private passoCarro(t: number, dt: number) {
+    if (!this.carro) {
+      const h = criarCarroHex({ low: this.o.low }); this.cena.scene.add(h.group);
+      const loops = Object.fromEntries(LOOPS_CARRO.map((n) => [n, this.som.loop(n, h.group, { dist: DISTANCIA.padrao })])) as Record<(typeof LOOPS_CARRO)[number], LoopSom>;
+      this.carro = { h, est: motoParada(CARRO_VAGA.x, CHAO, CARRO_VAGA.z, CARRO_VAGA.rumo), pousado: true, fase: "parado", k: 0, ligado: 0, potencia: 0, acel: 0, velAnt: 0, boost: false, loops, somPerto: false };
+    }
+    const c = this.carro, kAnt = c.k;
+    if (c.fase === "entrando" || c.fase === "abrindo") c.k = Math.min(1, c.k + dt / CARRO_CABINE);
+    if (c.fase === "fechando" || c.fase === "saindo") c.k = Math.max(0, c.k - dt / CARRO_CABINE);
+    if (c.fase === "entrando" && c.k >= 1) { c.fase = "fechando"; this.sitT = 0; }   // (sentou: a cabine fecha)
+    else if (c.fase === "fechando" && c.k <= 0) { c.fase = "dirigindo"; c.pousado = true; this.camAz = c.est.yaw + Math.PI; this.camSegueEm = 0; this.som.tocar("carro-liga", null, { dist: DISTANCIA.naveLocal, seguir: c.h.group }); this.o.onAviso?.("Carro ligado · W acelera · Espaço sobe · Q desce · P pousa · F (pousado) sai"); }
+    else if (c.fase === "abrindo" && c.k >= 1) {   // desceu: do lado do motorista
+      const ex = Math.cos(c.est.yaw), ez = -Math.sin(c.est.yaw);
+      this.eu.pos.set(c.est.x + ex * 2.1, 0, c.est.z + ez * 2.1); this.eu.facing = c.est.yaw; c.fase = "saindo";
+    } else if (c.fase === "saindo" && c.k <= 0) c.fase = "parado";
+    // DENTRO dele (desde que entra até sair): o som é o do MEU veículo — alcance de quem pilota (como a minha moto), senão
+    // a câmera a ~7 m atrás já cortava quase tudo; de fora, o alcance normal de um carro passando
+    const dentro = c.fase !== "parado", dist = dentro ? DISTANCIA.naveLocal : DISTANCIA.padrao;
+    if (dentro !== c.somPerto) { c.somPerto = dentro; for (const n of LOOPS_CARRO) this.som.distanciaLoop(c.loops[n], dist); }
+    for (const n of sonsDaCabine(kAnt, c.k, c.h.nVidros)) this.som.tocar(n, null, { dist, seguir: c.h.group, taxa: 0.96 + Math.random() * 0.08 });
+    // (a cabine abrindo/fechando: o motor DESLIGADO — só as portas e os vidros soam)
+    const ligado = c.fase === "dirigindo" ? 1 : 0; c.ligado += (ligado - c.ligado) * Math.min(1, dt * 2.5);
+    const vel = Math.hypot(c.est.vx, c.est.vz);
+    if (dt > 0) { c.acel += (Math.max(-1, Math.min(1, (vel - c.velAnt) / dt / 8)) - c.acel) * Math.min(1, dt * 4); c.velAnt = vel; }   // (o CANTO: acelerando/desacelerando)
+    const mx = mixDoCarro({ ligado: c.ligado, vel, potencia: Math.min(1, c.potencia), acel: c.acel });
+    for (const n of LOOPS_CARRO) { this.som.volumeLoop(c.loops[n], mx[n].vol); this.som.taxaLoop(c.loops[n], mx[n].taxa); }
+    c.h.group.position.set(c.est.x, c.est.y + CARRO_PAIRA, c.est.z); c.h.group.rotation.y = c.est.yaw;
+    c.h.abrir(c.k); c.h.atualizar(t, dt, { vel, ligado: c.ligado > 0.3 });
+  }
   /** o dono manda onde a nave dele está estacionada (presença `naveParada`) — sem hangar, sempre que não está pilotando */
   private naveForaDoHangar() { return !!this.nave && this.euNoComando(); }   // sem hangar: a nave do dono está sempre "parada em algum lugar"
   /** (pra quem NÃO é o dono) o dono está online com a nave → a minha cópia some (só existe uma nave) */
@@ -2967,6 +3058,8 @@ export class CyberEngine {
     const out: Colisor[] = [], vs = vagas();
     vs.forEach((v, i) => { if (Math.abs(this.yDaVaga(v) - this.eu.alt) < 2.5) out.push({ x: v.x, z: v.z, r: PLATAFORMA_MOTO.r }); });   // a plataforma (com ou sem moto)
     for (const { m } of this.largadasAgora()) if (Math.abs(m.y - this.eu.alt) < 2.5) out.push({ x: m.x, z: m.z, r: 1.1 });   // as paradas no MEU nível
+    const c = this.carro;   // o CARRO parado (ou com alguém entrando/saindo): três círculos ao longo do comprimento
+    if (c && !this.noCarro() && Math.abs(c.est.y - this.eu.alt) < 2.5) for (const d of [1.4, 0, -1.5]) out.push({ x: c.est.x + Math.sin(c.est.yaw) * d, z: c.est.z + Math.cos(c.est.yaw) * d, r: 1.05 });
     return out;
   }
   /** altura do dorso da nave (onde se fica em pé) e o raio andável lá em cima */
@@ -3089,15 +3182,15 @@ export class CyberEngine {
       // ESTUDANDO no tablet: o jogo não ouve o teclado (o foco pode estar na moldura, não no iframe) — só o T, que guarda
       if (this.labAberto && k !== "t") return;
       if (k === "shift") { this.keys.shift = true; return; }
-      if (k === " " || k === "spacebar") { if (this.pilotando || this.moto !== null) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.comandoJet(true); e.preventDefault(); } return; }
+      if (k === " " || k === "spacebar") { if (this.pilotando || this.noVeiculo()) { this.voY.subir = true; e.preventDefault(); return; } if (!this.menu) { this.comandoJet(true); e.preventDefault(); } return; }
       if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }
       if (k === "j" && !this.menu) { if (!e.repeat) this.alternarDescanso(); e.preventDefault(); return; }
       if (k === "c" && !this.menu) { if (!e.repeat) this.darDash(); e.preventDefault(); return; }   // C = DASH (o arranque — desvio)
-      if (k === "x" && !this.menu) { if (!e.repeat) { if (this.rifleEquipado()) this.puxarGatilho(true); else this.atacar(); } e.preventDefault(); return; }
-      if (k === RIFLE.tecla && !this.menu && !this.pilotando && this.moto === null) { if (!e.repeat) this.alternarRifle(); e.preventDefault(); return; }   // 1 = saca/guarda o RIFLE
+      if (k === "x" && !this.menu && !this.noCarro()) { if (!e.repeat) { if (this.rifleEquipado()) this.puxarGatilho(true); else this.atacar(); } e.preventDefault(); return; }
+      if (k === RIFLE.tecla && !this.menu && !this.pilotando && !this.noVeiculo()) { if (!e.repeat) this.alternarRifle(); e.preventDefault(); return; }   // 1 = saca/guarda o RIFLE
       // MAGIA (a pé): Q = Estilhaço Estelar, E = Nova Cósmica, R (segurar) = o escudo
-      if ((k === "q" || k === "e") && !this.menu && !this.pilotando && this.moto === null) { if (!e.repeat) this.lancar(k === "q" ? FEITICOS.estilhaco : FEITICOS.nova); e.preventDefault(); return; }
-      if (k === ESCUDO.tecla && !this.menu && !this.pilotando && this.moto === null) { if (!e.repeat) this.erguerEscudo(true); e.preventDefault(); return; }   // X = ATACAR (o combo da espada; o clique também, com o mouse travado)   // J = sentar / deitar / levantar (lounge)
+      if ((k === "q" || k === "e") && !this.menu && !this.pilotando && !this.noVeiculo()) { if (!e.repeat) this.lancar(k === "q" ? FEITICOS.estilhaco : FEITICOS.nova); e.preventDefault(); return; }
+      if (k === ESCUDO.tecla && !this.menu && !this.pilotando && !this.noVeiculo()) { if (!e.repeat) this.erguerEscudo(true); e.preventDefault(); return; }   // X = ATACAR (o combo da espada; o clique também, com o mouse travado)   // J = sentar / deitar / levantar (lounge)
       if (k === "t" && !this.menu) { if (!e.repeat) this.alternarTablet(); e.preventDefault(); return; }
       if (k === "v" && !this.menu) { if (!e.repeat) this.alternarCamera(); e.preventDefault(); return; }   // V = a câmera PERTO (por cima do ombro) ⇄ a de antes
       if (k === "m" && !this.menu) { if (!e.repeat) this.portalPraNave(); e.preventDefault(); return; }   // M = o dono se TELEPORTA pra dentro da nave (um portal aqui, outro lá)     // T = o tablet (estudar por cima do cyberespaço)
@@ -3105,8 +3198,9 @@ export class CyberEngine {
       // HABILIDADES (lib/cyber/habilidades): G = o Droid companheiro (founder)
       const hab = this.menu ? null : habilidadeDaTecla(k, { fundador: this.ehFundador(this.o.eu.id), digitando: false, repetida: e.repeat, modificador: e.ctrlKey || e.metaKey || e.altKey });
       if (hab) { this.usarHabilidade(hab.id); e.preventDefault(); return; }   // F = a ação de contexto (estudar, montar, embarcar, descer…)
+      if (k === "p" && this.noCarro()) { this.autoPouso = true; e.preventDefault(); return; }   // P = pousar o carro (desce sozinho até o chão)
       if (k === "p" && (this.pilotando || this.moto !== null)) { this.pousar(); e.preventDefault(); return; }   // P = pousar (no desktop não há o botão)
-      if ((k === "e" || k === "q") && (this.pilotando || this.moto !== null)) { this.voY[k === "e" ? "subir" : "descer"] = true; this.autoPouso = false; e.preventDefault(); return; }
+      if ((k === "e" || k === "q") && (this.pilotando || this.noVeiculo())) { this.voY[k === "e" ? "subir" : "descer"] = true; this.autoPouso = false; e.preventDefault(); return; }
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { this.keys[k] = true; e.preventDefault(); }
     });
     // a janela perdeu o foco (o lab do tablet, outra aba, alt-tab): o keyup não vem mais pra cá — solta tudo
@@ -3184,7 +3278,9 @@ export class CyberEngine {
       if (a === "sair" && this.saidaSegura()) return { id: "sair-nave", rotulo: "Sair da nave", fazer: () => this.sairDaNave() };   // pairando no ar: desce-se pela rampa (e pula-se de mochila)
       return null;
     }
+    if (this.carro && this.carro.fase !== "parado") return this.carro.fase === "dirigindo" && this.carroPodeSair() ? { id: "sair-carro", rotulo: "Sair do carro", fazer: () => this.sairDoCarro() } : null;
     if (this.moto !== null) return this.desceDaMotoAqui() ? { id: "descer-moto", rotulo: "Descer da moto", fazer: () => this.desmontar() } : null;
+    if (this.carroPerto()) return { id: "entrar-carro", rotulo: "Entrar no carro", fazer: () => this.entrarNoCarro() };
     if (this.jet.noAr || this.nascendo || this.tunel || this.expulsando) return null;
     const el = this.plat ? elevadorAqui(this.plat.id, this.plat.andar, this.eu.pos) : null;
     if (el && this.plat) { const pl = this.plat; return { id: `elevador-${pl.andar}`, rotulo: el.rotulo, fazer: () => { pl.andar = el.proximo; this.som.tocar("near-ping", this.eu.av.group.position, { dist: DISTANCIA.eu }); } }; }
@@ -3440,15 +3536,15 @@ export class CyberEngine {
     // de moto o alvo segue por TEMPO (não por quadro): a 60 m/s, 0,12/quadro deixava a câmera ~17 m pra trás; assim
     // fica ~v/12 (≈ 5 m no boost) — a moto "puxa" um pouco à frente, que dá a sensação de arrancada
     if (this.camPerto || this.wMira > 0.01) { const q = seguirPerto(this.camT, { x: this.eu.pos.x, y: 1.2 + this.eu.alt, z: this.eu.pos.z }, dt); this.camT.set(q.x, q.y, q.z); }   // PERTO: segue por tempo e com atraso limitado (voo/turbo/dash não deixam o personagem fugir)
-    else this.camT.lerp(this.vCamA.set(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), this.moto !== null ? 1 - Math.exp(-dt * 12) : 0.12);
+    else this.camT.lerp(this.vCamA.set(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z), this.noVeiculo() ? 1 - Math.exp(-dt * 12) : 0.12);
     const cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
     // MOTO: câmera de perseguição — volta sozinha pra TRÁS da moto (com atraso: a curva aparece na tela), a não ser
     // que a pessoa tenha mexido o mouse/arrastado há pouco; afasta um pouco com a velocidade
-    if (this.moto !== null && performance.now() > this.camSegueEm) {
-      let d = this.motoEst.yaw + Math.PI - this.camAz; d = Math.atan2(Math.sin(d), Math.cos(d));
+    if (this.noVeiculo() && performance.now() > this.camSegueEm) {
+      let d = this.rumoVeiculo() + Math.PI - this.camAz; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.camAz += d * (1 - Math.exp(-dt * 2.6));
     }
-    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.moto !== null ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camPerto ? distPerto(this.camDist, this.velTela) : this.camDist + 1.6 * this.velTela;   // (a pé/mochila rápido: a câmera recua um pouco)
+    let dist = this.pilotando ? Math.max(this.camDist, 75) : this.noVeiculo() && this.camMotoPerto ? CAMERA_MOTO_PERTO.dist + (this.noCarro() ? 1.6 : 0) + CAMERA_MOTO_PERTO.porVel * this.velTela : this.noVeiculo() ? Math.max(this.camDist, 9) + 2.2 * this.velTela : this.camPerto ? distPerto(this.camDist, this.velTela) : this.camDist + 1.6 * this.velTela;   // (a pé/mochila rápido: a câmera recua um pouco)
     if (this.wMira > 0.001) dist += (RIFLE.distMira - dist) * this.wMira;   // MIRANDO com o rifle: por cima do ombro, bem perto
     // câmera em 3ª pessoa: perto de um marco (ilha flutuante, muralhas), se a estrutura fica ENTRE a câmera e o
     // personagem, a câmera se aproxima (senão a ilha cobre a tela)
@@ -3479,7 +3575,7 @@ export class CyberEngine {
     }
     // órbita livre: por cima olha pro personagem; arrastando pra baixo encosta no chão e o olhar sobe pro céu
     // PERTO: o olho na altura dos ombros e deslocado pro lado direito (o personagem fica à esquerda, o caminho livre)
-    let olhoCam = this.camPerto ? olhoDoOmbro({ x: this.camT.x, y: this.camT.y - 1.2, z: this.camT.z }, this.camAz) : { x: this.camT.x, y: this.camT.y + 0.8, z: this.camT.z };
+    let olhoCam = this.camPerto ? olhoDoOmbro({ x: this.camT.x, y: this.camT.y - 1.2, z: this.camT.z }, this.camAz) : { x: this.camT.x, y: this.camT.y + (this.noVeiculo() && this.camMotoPerto ? CAMERA_MOTO_PERTO.olho : 0.8), z: this.camT.z };   // (na moto PERTO: o olho mais baixo, junto do piloto)
     if (this.wMira > 0.001) {   // MIRANDO: o olho por cima do ombro direito (mais pro lado que o modo perto: a arma à mostra)
       const om = { x: this.camT.x + Math.cos(this.camAz) * RIFLE.ombroMira, y: this.camT.y - 1.2 + RIFLE.alturaMira, z: this.camT.z - Math.sin(this.camAz) * RIFLE.ombroMira }, k = this.wMira;
       olhoCam = { x: olhoCam.x + (om.x - olhoCam.x) * k, y: olhoCam.y + (om.y - olhoCam.y) * k, z: olhoCam.z + (om.z - olhoCam.z) * k };
@@ -3671,6 +3767,16 @@ export class CyberEngine {
       if (this.espaco) { this.holdT += dt; if (this.o.els.hold) this.o.els.hold.style.width = Math.min(100, (this.holdT / 1.2) * 100) + "%"; if (this.holdT >= 1.2) this.iniciar("viajar"); }
       else if (this.holdT > 0) { this.holdT = Math.max(0, this.holdT - dt * 2); if (this.o.els.hold) this.o.els.hold.style.width = (this.holdT / 1.2) * 100 + "%"; }
       const s = this.assento(); eu.pos.set(s.x, 0, s.z); eu.facing = this.rotAssento(); this.sitT = 1; eu.moving = false;
+    } else if (this.noCarro()) {
+      // CARRO: a mesma física das motos (lib/cyber/motoFisica) — só DIRIGINDO; fechando/abrindo a cabine ele fica parado
+      const cr = this.carro!;
+      if (cr.fase === "dirigindo") {
+        const c = this.comandoDeMoto(); cr.potencia = Math.max(0, c.acel) + (c.boost ? 0.5 : 0);
+        if (c.boost && !cr.boost) this.som.tocar("carro-turbo", null, { dist: DISTANCIA.naveLocal, seguir: cr.h.group });   // (o NITRO: o baque + o sopro abrindo + o assobio)
+        cr.boost = c.boost;
+        const r = passoMotoSub(cr.est, c, dtReal, this.solidosDeVoo(), MOTO.teto); cr.est = r.s; cr.pousado = r.pousado; if (r.pousado) this.autoPouso = false;
+      } else { cr.potencia = 0; cr.est = { ...cr.est, vx: 0, vy: 0, vz: 0 }; }
+      eu.pos.set(cr.est.x, 0, cr.est.z); eu.facing = cr.est.yaw; eu.moving = Math.hypot(cr.est.vx, cr.est.vz) > 1; this.sitT = 0;
     } else if (this.moto !== null) {
       // MOTO: pilotagem de moto (lib/cyber/motoFisica) — W/S acelera/freia, A/D esterça, Shift/⚡ boost
       const c = this.comandoDeMoto(); this.acelMoto = c.acel;
@@ -3711,7 +3817,7 @@ export class CyberEngine {
       if (this.keys.w || this.keys.arrowup) iz -= 1; if (this.keys.s || this.keys.arrowdown) iz += 1;
       if (this.keys.a || this.keys.arrowleft) ix -= 1; if (this.keys.d || this.keys.arrowright) ix += 1;
       if (this.joy.on) { ix += this.joy.x; iz += this.joy.y; }
-      if (this.nascendo || this.tunel || this.emCena || this.viagemNave) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }
+      if (this.nascendo || this.tunel || this.emCena || this.viagemNave || (this.carro && this.carro.fase !== "parado")) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }
       if ((this.conj && this.agora < this.conj.tFim) || this.escudoOn) { ix = 0; iz = 0; this.alvo = null; this.alvoDepois = null; }   // lançando / no escudo: plantado   // dentro do tubo / do túnel / numa cutscene: parado
       const correndo = (this.keys.shift || this.correr) && podeEsforcar(this.agua);   // (seco: anda)
       let andando = false;
@@ -3899,6 +4005,7 @@ export class CyberEngine {
     const lmAlto = this.altoEm ? this.lms.find((l) => l.poi.id === this.altoEm) : undefined;
     const pnAlt = this.bordo ? this.poseNave() : null;
     eu.alt = pnAlt && this.bordo ? alturaDoConves(pnAlt) + alturaNoBordo(this.bordo, rampaDaNave(pnAlt).queda)
+      : this.noCarro() ? this.carro!.est.y + CARRO_PAIRA
       : this.moto !== null ? this.motoEst.y
       : this.pilotando ? this.naveEst.y
       : this.jet.noAr ? this.jet.y
@@ -3933,7 +4040,7 @@ export class CyberEngine {
 
     // rede: eu → difusão; remotos → atores
     const desc = codificarDescanso(this.descanso && this.descanso.fase !== "indo" && this.descanso.fase !== "levantando" ? this.descanso.modo : null, this.tabletW > 0.5);
-    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(movComRifle(this.movAgora(t), this.wRifle > 0.5, this.wMira > 0.5) ? { mov: movComRifle(this.movAgora(t), this.wRifle > 0.5, this.wMira > 0.5) } : {}), ...(this.bordo && !this.pilotando ? { bordo: { x: this.bordo.x, z: this.bordo.z, nivel: this.bordo.nivel, ...(this.bordo.esc !== undefined ? { esc: this.bordo.esc } : {}) } } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.magEnviar && this.agora < this.magEnviar.ate ? { mag: this.magEnviar.v } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
+    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(movComRifle(this.movAgora(t), this.rifleEquipado() || this.wRifle > 0.5, this.wRifle > 0.5 && this.wMira > 0.5) ? { mov: movComRifle(this.movAgora(t), this.rifleEquipado() || this.wRifle > 0.5, this.wRifle > 0.5 && this.wMira > 0.5) } : {}), ...(this.bordo && !this.pilotando ? { bordo: { x: this.bordo.x, z: this.bordo.z, nivel: this.bordo.nivel, ...(this.bordo.esc !== undefined ? { esc: this.bordo.esc } : {}) } } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.magEnviar && this.agora < this.magEnviar.ate ? { mag: this.magEnviar.v } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
     this.atualizarNascimentoEGuia(dt);
     this.atualizarViagemNave(dt, t);   // o portal do M (o dono indo pra dentro da nave)
@@ -3955,10 +4062,12 @@ export class CyberEngine {
     eu.av.group.position.set(eu.pos.x, eu.alt, eu.pos.z); eu.av.olharPara(eu.facing);
     // fora (vista da landing / menu): MEDITANDO em frente ao computador; na base: digitando; no ar: jatos acesos
     eu.av.recolherAsas(this.camPerto ? 0.7 : 0);   // a câmera perto: as asas recolhem em parte (abertas cobriam a tela)
-    if (!this.menu) this.passoRifle(t, dt);   // (fora do ramo a pé: de moto/pilotando o rifle também se desfaz)
+    if (!this.menu) this.passoRifle(t, dt);
+    if (!this.menu) this.passoCarro(t, dt);   // (fora do ramo a pé: de moto/pilotando o rifle também se desfaz)
     { const c = noCorpo(this.velRifle, eu.facing), comRifle = this.wRifle > 0.01 && !!this.rifle;
-      eu.av.rifle(comRifle ? { naMao: this.wRifle, mira: this.wMira, frente: eu.moving ? c.frente : 0, lado: eu.moving ? c.lado : 0, coice: this.coice, alvo: this.alvoMira, arma: this.rifle!.group } : null); }
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null && (this.wRifle < 0.4 || Math.hypot(this.velRifle.x, this.velRifle.z) > 5), sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0, pes: eu.pes, estilo: eu.poseL }, tablet: eu.tab ?? 0, dt: t < this.pausaAte ? 0 : this.moto === null && !this.jet.noAr && eu.moving && this.wRifle < 0.4 ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (hit-stop: a pose congela)   // (no sprint as pernas giram mais rápido)
+      eu.av.rifle(comRifle ? { naMao: this.wRifle, mira: this.wMira, frente: eu.moving ? c.frente : 0, lado: eu.moving ? c.lado : 0, coice: this.coice, alvo: this.alvoMira, arma: this.rifle!.group } : null);
+      this.vestirTraje(eu, this.rifleEquipado() || this.wRifle > 0.05); }   // com o RIFLE EQUIPADO (mesmo no ar, com a arma recolhida), com corpo feminino ou com o PERSONAGEM escolhido: o corpo de astronauta
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null && !this.noCarro(), correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null && (this.wRifle < 0.4 || Math.hypot(this.velRifle.x, this.velRifle.z) > 5), sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint, dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : this.noCarro() ? this.naCarro(eu.av) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0, pes: eu.pes, estilo: eu.poseL }, tablet: eu.tab ?? 0, dt: t < this.pausaAte ? 0 : this.moto === null && !this.jet.noAr && eu.moving && this.wRifle < 0.4 ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (hit-stop: a pose congela)   // (no sprint as pernas giram mais rápido)
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
@@ -3984,12 +4093,14 @@ export class CyberEngine {
       a.acum = (a.acum ?? 0) + dt;
       const animou = a.acum >= cada;
       // o RIFLE dele: a velocidade medida da posição (os andares com a arma), atirando (decai) e a mira pra frente
+      if (!a.rifle) this.vestirTraje(a, false);
       if (a.rifle) {
         const pa = a.posAntR ?? { x: a.pos.x, z: a.pos.z }, kv = Math.min(1, dt * 8), vx = (a.pos.x - pa.x) / Math.max(dt, 1e-3), vz = (a.pos.z - pa.z) / Math.max(dt, 1e-3);
         a.velR = { x: (a.velR?.x ?? 0) + (vx - (a.velR?.x ?? 0)) * kv, z: (a.velR?.z ?? 0) + (vz - (a.velR?.z ?? 0)) * kv }; a.posAntR = { x: a.pos.x, z: a.pos.z };
         a.atiraR = Math.max(0, (a.atiraR ?? 0) - dt / RIFLE.posturaDepoisDoTiro); a.pitchR = (a.pitchR ?? 0) * (1 - Math.min(1, dt * 0.5));
         const w = a.wRif ?? 0, c = noCorpo(a.velR, a.facing), d = direcaoDaMira(a.facing, a.pitchR ?? 0);
         a.rifle.atualizar(t, dt, { revela: w, calor: 0 });
+        this.vestirTraje(a, w > 0.05);
         a.av.rifle(w > 0.01 && a.jet === undefined && !a.moto && !pilota ? { naMao: w, mira: Math.max(a.wMiraR ?? 0, Math.min(1, (a.atiraR ?? 0) * 4)), frente: a.moving ? c.frente : 0, lado: a.moving ? c.lado : 0, coice: 0, alvo: this.vRastroP.set(a.pos.x + d.x * 30, a.alt + 1.45 + d.y * 30, a.pos.z + d.z * 30).clone(), arma: a.rifle.group } : null);
       }
       if (animou) { a.av.animar({ montado: monta !== null ? this.naMoto(a.av, monta) : null, andando: a.moving && a.jet === undefined && !pilota && monta === null && (a.surf ?? 0) < 0.5 && (a.puxa ?? 0) < 0.5, sentado: pilota || monta !== null ? 0 : a.sit, pilotando: pilota ? 1 : 0, jato: a.jet !== undefined ? (a.vyJet ?? 0) > -3 ? 0.9 : 0.3 : 0, ar: a.jet !== undefined ? { vy: a.vyJet ?? 0, movendo: a.moving } : null, dj: a.dj ?? 0, danca: a.danca ?? 0, surf: a.surf ?? 0, puxado: a.puxa ?? 0, descanso: { sentar: a.sofa ?? 0, deitar: a.deita ?? 0, assentoY: a.assentoY ?? 0.7, relaxa: a.relaxa ?? 0, pes: a.pes, estilo: a.poseL }, tablet: a.tab ?? 0, acao: { sprint: a.wSpR ?? 0, dash: a.wDaR ?? 0, alerta: a.wAlR ?? 0, alertaT: t - (a.tMov ?? t), heroi: a.mov === 4 ? t - (a.tMov ?? t) : null, decola: a.mov === 5 ? { t: t - (a.tMov ?? t), espera: 0.07 } : null, espada: !a.espada || (a.revela ?? 0) <= 0.02 ? null : { golpe: a.golpe ? { n: a.golpe.g.n, u: Math.min(1, (t - a.golpe.ini) / a.golpe.g.dur), ativo: [a.golpe.g.ativoIni / a.golpe.g.dur, a.golpe.g.ativoFim / a.golpe.g.dur] } : null, guarda: a.moving ? 0 : 1 } }, dt: Math.min(0.1, a.acum), t }); a.acum = 0; }
@@ -4243,7 +4354,7 @@ export class CyberEngine {
     this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.somLounge?.dispose(); this.musicaNave?.dispose(); this.livros?.dispose(); this.livros = null; this.relicario?.dispose(); this.relicario = null; if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } this.som.dispose(); this.fxMagia?.dispose(); this.fxMagia = null; this.rifle?.dispose(); this.rifle = null; this.cruz?.remove(); this.cruz = null;
+    this.somLounge?.dispose(); this.musicaNave?.dispose(); this.livros?.dispose(); this.livros = null; this.relicario?.dispose(); this.relicario = null; if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } if (this.carro) { for (const n of LOOPS_CARRO) this.som.soltarLoop(this.carro.loops[n]); this.carro.h.dispose(); this.carro = null; } this.som.dispose(); this.fxMagia?.dispose(); this.fxMagia = null; this.rifle?.dispose(); this.rifle = null; this.cruz?.remove(); this.cruz = null;
     this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }

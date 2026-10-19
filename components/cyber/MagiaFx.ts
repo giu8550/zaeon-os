@@ -48,13 +48,17 @@ export function criarFxMagia(cena: THREE.Scene, o: { low: boolean }): FxMagia {
     },
     projetil(f) {
       const id = `p${++n}`, g = new THREE.Group(); raiz.add(g);
-      const nucleo = new THREE.Mesh(f.explosao ? geoEsfera : geoCristal, new THREE.MeshBasicMaterial({ color: f.cor, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
-      nucleo.scale.setScalar(f.raio * (f.explosao ? 0.75 : 0.9)); if (!f.explosao) nucleo.scale.z *= 2.4; g.add(nucleo);
-      const halo = new THREE.Sprite(add(f.brilho, 0.85)); halo.scale.setScalar(f.raio * 6); g.add(halo);
+      const nucleo = new THREE.Mesh(f.explosao || f.bala ? geoEsfera : geoCristal, new THREE.MeshBasicMaterial({ color: f.cor, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
+      // (a BALA: uma esfera esticada no rumo — redonda de qualquer ângulo, o traçante de um projétil; o cristal da magia,
+      // visto de trás, era um losango)
+      if (f.bala) nucleo.scale.set(f.raio * 0.42, f.raio * 0.42, f.raio * 3.2);
+      else { nucleo.scale.setScalar(f.raio * (f.explosao ? 0.75 : 0.9)); if (!f.explosao) nucleo.scale.z *= 2.4; }
+      g.add(nucleo);
+      const halo = new THREE.Sprite(add(f.brilho, 0.85)); halo.scale.setScalar(f.raio * (f.bala ? 2.6 : 6)); g.add(halo);
       const aneis: THREE.Mesh[] = [];
       if (f.explosao) for (let i = 0; i < 3; i++) { const a = new THREE.Mesh(geoAnel, new THREE.MeshBasicMaterial({ color: f.brilho, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })); a.scale.setScalar(f.raio * (1.3 + i * 0.25)); a.rotation.set(i * 1.1, i * 0.7, 0); g.add(a); aneis.push(a); }
       const rg = new THREE.BufferGeometry(); rg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N_RASTRO * 3), 3));
-      const rastro = new THREE.Points(rg, new THREE.PointsMaterial({ map: tex, color: f.brilho, size: f.raio * 2.4, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const rastro = new THREE.Points(rg, new THREE.PointsMaterial({ map: tex, color: f.brilho, size: f.raio * (f.bala ? 1.1 : 2.4), transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
       rastro.frustumCulled = false; raiz.add(rastro);
       projs.set(id, { g, nucleo, halo, aneis, rastro, hist: [], f });
       return id;

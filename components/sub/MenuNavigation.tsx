@@ -17,7 +17,7 @@ import InviteButton from "@/components/sub/InviteButton";
 import VoicePicker from "@/components/settings/VoicePicker";
 import { TOUR_ATIVO } from "@/lib/onboarding/tour";
 import { musica } from "@/lib/audio/musica";
-import { LOUNGE_ROTA } from "@/lib/ui/loungeHub";
+import { LAB_ROTA, LOUNGE_ROTA } from "@/lib/ui/loungeHub";
 import { projetosOn } from "@/lib/research/unifiedRoom";
 
 type ModuleKey = "estudos" | "pesquisas" | "projetos" | "lounge";
@@ -29,7 +29,9 @@ const MENU_ITEMS = [
   { labelKey: "menu.manual", href: "/workstation/admin" },
 ];
 
-export default function MenuNavigation() {
+/** `destino`: pra onde o LOGIN leva — o laboratório (o padrão: criar conta cai no lab) ou o jogo (quem abriu o login pelo
+ *  "Play game" / "Iniciar jogo"). O jogo só abre se a pessoa escolher jogar */
+export default function MenuNavigation({ destino = LAB_ROTA }: { destino?: string } = {}) {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -329,7 +331,7 @@ export default function MenuNavigation() {
     localStorage.setItem('zaeon_onboarding', JSON.stringify(onboardingData));
 
     if (provider === 'google') {
-      await signIn('google', { callbackUrl: LOUNGE_ROTA });
+      await signIn('google', { callbackUrl: destino });
     } else if (provider === 'guest') {
       alert("Acesso Convidado a ser integrado.");
       setIsSubmitting(false);
@@ -408,7 +410,7 @@ export default function MenuNavigation() {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alvo)) { setErroEmail("Confere o e-mail."); return; }
       setErroEmail(null); setEntrandoEmail(true);
       const r = await signIn("credentials", { email: alvo, redirect: false });
-      if (r?.ok && !r.error) { musica().destravar(); router.push(LOUNGE_ROTA); return; }
+      if (r?.ok && !r.error) { if (destino === LOUNGE_ROTA) musica().destravar(); router.push(destino); return; }
       setEntrandoEmail(false);
       setErroEmail("Não consegui entrar com esse e-mail. Se for conta de fundador, entre pelo Google.");
     };
@@ -426,7 +428,7 @@ export default function MenuNavigation() {
           </div>
 
           <button
-            onClick={() => signIn("google", { callbackUrl: LOUNGE_ROTA })}
+            onClick={() => signIn("google", { callbackUrl: destino })}
             className="w-full flex items-center justify-center gap-2.5 bg-black dark:bg-white text-white dark:text-black text-[13px] font-bold py-3.5 rounded-full hover:scale-[1.02] transition-transform shadow-md"
           >
             <Image src="https://authjs.dev/img/providers/google.svg" alt="G" width={16} height={16} /> Entrar com Google
