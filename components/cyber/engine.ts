@@ -75,6 +75,7 @@ import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { LOOPS_CARRO, mixDoCarro, sonsDaCabine } from "@/lib/cyber/somCarro";
+import { paletaFeminina, type Paleta } from "./CorpoAstronauta";
 /** o CARRO VOADOR estacionado na praça, perto das vagas das motos (x, z, rumo) e a altura em que ele paira acima do
  *  chão; a cabine leva 1,6 s pra abrir/fechar inteira (as portas e o vidro em cascata — components/cyber/CarroHex) */
 const CARRO_VAGA = { x: -22, z: -132, rumo: 2.01 } as const, CARRO_PAIRA = 0.45, CARRO_CABINE = 1.6;
@@ -1293,7 +1294,10 @@ export class CyberEngine {
   }
   // ───────────── o RIFLE CÓSMICO (lib/cyber/rifle) ─────────────
   /** a cor da armadura de astronauta de alguém: a cor do jogador (a do fundador é a preta) */
-  private paletaDe(a: Ator): `#${string}` { const c = a.color.startsWith("#") ? a.color : `#${a.color}`; return c as `#${string}`; }
+  private paletaDe(a: Ator): Paleta {
+    const c = (a.color.startsWith("#") ? a.color : `#${a.color}`) as `#${string}`;
+    return a.feminina ? paletaFeminina(c) : c;   // (a standard feminina: a cor feminina mais próxima da dela)
+  }
   private rifleEquipado() { return this.inv.equipado === "rifle-cosmico"; }
   /** dá pra estar com o rifle agora? (a pé no chão, sem lançar nem escudo, sem moto/nave/sofá/tablet, vivo) */
   private podeRifle() {

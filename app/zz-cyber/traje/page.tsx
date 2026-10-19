@@ -9,6 +9,7 @@ import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle } from "@/co
 import { carregarVrm, tingirVrm } from "@/components/cyber/AvatarVrm";
 import { glowTex } from "@/components/cyber/CenaCosmica";
 import { criarRifleCosmico } from "@/components/cyber/RifleCosmico";
+import { PALETAS_FEMININAS, type Paleta } from "@/components/cyber/CorpoAstronauta";
 import { CORPO_DO_FUNDADOR, CORPOS_VRM } from "@/lib/cyber/estiloAvatar";
 import type { NomeClipeRifle } from "@/lib/cyber/rifle";
 
@@ -37,7 +38,19 @@ export default function Traje() {
     const starTex = glowTex("rgba(255,255,255,1)", "rgba(190,215,255,0.5)");
     const arma = criarRifleCosmico({ low: false });
     let av: AvatarLuzHandle | null = null, vivo = true;
-    void carregarModeloAvatar().then((gltf) => {
+    // ?galeria=f: a PERSONAGEM STANDARD FEMININA em todas as cores, lado a lado (sem rosto: só o traje)
+    const galeria: AvatarLuzHandle[] = [];
+    if (new URLSearchParams(location.search).get("galeria") === "f") {
+      void carregarModeloAvatar().then((gltf) => {
+        if (!vivo) return;
+        PALETAS_FEMININAS.forEach((p, i) => {
+          const g = criarAvatarLuz("#8b5cf6", starTex, false, gltf, { anime: true }); g.olharPara(0);
+          g.group.position.set(((i % 5) - 2) * 0.95, 0, i < 5 ? 0 : -2.2); cena.add(g.group); galeria.push(g);   // (duas fileiras de 5)
+          g.traje(true, { modelo: "f", paleta: `fem:${p.nome}` });
+        });
+        cam.position.set(0, 1.7, 7.4); oc.target.set(0, 0.85, -1.1); setPronto(true);
+      });
+    } else void carregarModeloAvatar().then((gltf) => {
       if (!vivo) return;
       const a = criarAvatarLuz("#8b5cf6", starTex, false, gltf, { anime: true }); a.olharPara(0); cena.add(a.group); av = a; avRef.current = a;
       a.esperarCorpo(true);
@@ -48,7 +61,7 @@ export default function Traje() {
         .catch(() => { a.esperarCorpo(false); setPronto(true); });
     }).catch(() => {});
 
-    const corQ = new URLSearchParams(location.search).get("cor"), corTraje = (corQ === "branca" ? "branca" : corQ ? `#${corQ.replace("#", "")}` : "preta") as "branca" | "preta" | `#${string}`;
+    const corQ = new URLSearchParams(location.search).get("cor"), corTraje = (corQ === "branca" || corQ?.startsWith("fem:") ? corQ : corQ ? `#${corQ.replace("#", "")}` : "preta") as Paleta;
     const modeloTraje = new URLSearchParams(location.search).get("modelo") === "f" ? "f" as const : "m" as const;   // (?modelo=f = a astronauta)
     const alvo = new THREE.Vector3(); const t0 = performance.now(); let tAnt = 0, raf = 0, naMao = 0, wMira = 0;
     const loop = () => {
@@ -63,6 +76,7 @@ export default function Traje() {
         av.rifle(naMao > 0.01 ? { naMao, mira: wMira, frente: fr, lado: la, coice: 0, alvo, arma: arma.group } : null);
         av.animar({ andando: anda, correndo: false, dt, t });
       }
+      for (const g of galeria) g.animar({ andando: false, dt, t });
       arma.atualizar(t, dt, { revela: naMao, calor: 0 });
       oc.update(); R.render(cena, cam);
     };
@@ -70,7 +84,7 @@ export default function Traje() {
     const onR = () => { cam.aspect = el.clientWidth / el.clientHeight; cam.updateProjectionMatrix(); R.setSize(el.clientWidth, el.clientHeight); };
     window.addEventListener("resize", onR);
     (window as unknown as { __traje: unknown }).__traje = { get av() { return av; }, cam, oc, R, cena };
-    return () => { vivo = false; cancelAnimationFrame(raf); window.removeEventListener("resize", onR); av?.dispose(); arma.dispose(); R.dispose(); R.domElement.remove(); };
+    return () => { vivo = false; cancelAnimationFrame(raf); window.removeEventListener("resize", onR); av?.dispose(); for (const g of galeria) g.dispose(); arma.dispose(); R.dispose(); R.domElement.remove(); };
   }, []);
 
   const B = (on: boolean) => ({ padding: "7px 11px", borderRadius: 8, border: "1px solid #3b4280", background: on ? "#6d5cff" : "#121633", color: "#fff", fontSize: 13, cursor: "pointer" });

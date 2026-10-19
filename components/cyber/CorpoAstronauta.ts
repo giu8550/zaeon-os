@@ -35,7 +35,7 @@ export const DESENHO = { tinta: 0.011, clareia: 1.35 } as const;
 /** as PALETAS da armadura: por pedaço do nome do material (os do modelo — scripts/avatar/astronauta-m.cores.json); a
  *  "branca" é a do arquivo. A PRETA é a do fundador (placas de preto brilhante, a malha grafite por baixo); os outros
  *  jogadores vestem a COR DELES (`#rrggbb` — a cor do jogador): as placas na cor, a malha e os tubos escuros */
-export type Paleta = "branca" | "preta" | `#${string}`;
+export type Paleta = "branca" | "preta" | `#${string}` | `fem:${string}`;
 const PLACAS = ["pechera", "hombrera", "placa_pelvis", "placa_piernas", "casco", "mochila", "cinturon", "armadura"];
 type Tom = { pedacos: string[]; cor: number };
 const PRETA: Tom[] = [
@@ -50,7 +50,42 @@ export function paletaDaCor(hex: string): Tom[] {
   const malha = new THREE.Color().setHSL(hsl.h, 0.18, 0.17);
   return [{ pedacos: PLACAS, cor: placa.getHex() }, { pedacos: ["covertura"], cor: malha.getHex() }, { pedacos: ["tubos", "brazalete", "phongE", "lambert1"], cor: 0x141417 }];
 }
-const tons = (p: Paleta): Tom[] | null => (p === "branca" ? null : p === "preta" ? PRETA : paletaDaCor(p));
+/** a PERSONAGEM STANDARD FEMININA: a astronauta (o modelo "f") numa destas cores — só tons femininos, curados (a placa
+ *  e a malha por baixo de cada uma, combinadas). Cada jogadora veste a mais PRÓXIMA da cor dela (`paletaFeminina`) */
+export const PALETAS_FEMININAS: readonly { nome: string; placa: number; malha: number }[] = [
+  // (na astronauta o MACACÃO — a "malha" — é a parte grande: vai no tom pastel; as PLACAS, o detalhe, no tom forte)
+  { nome: "rosa", placa: 0xd2508a, malha: 0xf7c9dc },
+  { nome: "lilas", placa: 0x7d5ad6, malha: 0xdccdf7 },
+  { nome: "lavanda", placa: 0x6b6292, malha: 0xece6f8 },
+  { nome: "menta", placa: 0x2f9c84, malha: 0xc9f2e4 },
+  { nome: "coral", placa: 0xe2584a, malha: 0xffd3c9 },
+  { nome: "ceu", placa: 0x3d7fd6, malha: 0xcfe5ff },
+  { nome: "pessego", placa: 0xd9814b, malha: 0xffe0c7 },
+  { nome: "magenta", placa: 0xb2309e, malha: 0xf4c6ec },
+  { nome: "perola", placa: 0x8d8796, malha: 0xf5f1ec },
+  { nome: "eve", placa: 0x3d5250, malha: 0xaa9f96 },   // (a original do modelo: placas verde-água, o macacão creme)
+];
+/** a paleta feminina mais próxima de uma cor (pelo matiz, e pela claridade nas cores sem matiz) */
+export function paletaFeminina(hex: string): `fem:${string}` {
+  const c = new THREE.Color(hex), h = { h: 0, s: 0, l: 0 }; c.getHSL(h);
+  let melhor = PALETAS_FEMININAS[0]!, dm = Infinity;
+  for (const p of PALETAS_FEMININAS) {
+    if (p.nome === "eve") continue;
+    const q = { h: 0, s: 0, l: 0 }; new THREE.Color(p.placa).getHSL(q);
+    const dh = Math.min(Math.abs(h.h - q.h), 1 - Math.abs(h.h - q.h)), d = h.s < 0.15 ? Math.abs(h.l - q.l) + (q.s > 0.2 ? 0.5 : 0) : dh * 2 + Math.abs(h.s - q.s) * 0.3;
+    if (d < dm) { dm = d; melhor = p; }
+  }
+  return `fem:${melhor.nome}`;
+}
+const tons = (p: Paleta): Tom[] | null => {
+  if (p === "branca") return null;
+  if (p === "preta") return PRETA;
+  if (p.startsWith("fem:")) {
+    const f = PALETAS_FEMININAS.find((x) => x.nome === p.slice(4)) ?? PALETAS_FEMININAS[0]!;
+    return [{ pedacos: PLACAS, cor: f.placa }, { pedacos: ["covertura"], cor: f.malha }, { pedacos: ["tubos", "brazalete", "phongE", "lambert1"], cor: 0x141417 }];
+  }
+  return paletaDaCor(p);
+};
 
 const cache = new Map<string, Promise<GLTF>>();
 export function carregarAstronauta(url: string): Promise<GLTF> {
