@@ -73,7 +73,7 @@ export function sintetizarTomCarro(sr: number): Float32Array {
   for (let i = 0; i < raw.length; i++) {
     const t = i / sr, f = 2 * Math.PI * t;
     const v = serra(f * 220) * 0.5 + serra(f * 220.5) * 0.35 + serra(f * 330) * 0.3 + serra(f * 440.5) * 0.18;
-    raw[i] = lpr(v, 1300 + 600 * Math.sin(2 * Math.PI * 0.5 * t), 4);
+    raw[i] = lpr(v, 1100 + 400 * Math.sin(2 * Math.PI * 0.5 * t), 2.2);
   }
   return normalizar(fecharLoop(raw, n), 0.7);
 }
@@ -153,19 +153,20 @@ export function sintetizarTurboCarro(sr: number): Float32Array {
   }
   return normalizar(fimSemClique(out, 512), 0.8);
 }
-/** PORTA subindo (1,0 s): o SERVO (dente de serra filtrado, 150 → 210 Hz, com o motorzinho tremendo) + o CHIADO
- *  pneumático no fim do curso */
+/** PORTA subindo (1,0 s) — som de PORTA, não de motor (nada de zumbido afinado): a TRAVA soltando (um clique seco
+ *  com um brilho metálico), o CHIADO pneumático do amortecedor a gás (ruído agudo num passa-faixa que desce 3,2 → 1,6 kHz,
+ *  sobe rápido e esvai), o "fuuu" macio do ar deslocado por baixo, e o BATENTE abafado quando chega em cima */
 export function sintetizarPortaCarro(sr: number): Float32Array {
-  const n = Math.round(sr * 1.0), out = new Float32Array(n), r = prng(84), a = passaBaixa(1400, sr);
-  let fase = 0, lp = 0, hp = 0, wAnt = 0;
+  const n = Math.round(sr * 1.0), out = new Float32Array(n), r = prng(84), bf = passaFaixa(sr), a = passaBaixa(380, sr);
+  let lp = 0, fBat = 0;
   for (let i = 0; i < n; i++) {
-    const t = i / sr, f = 150 + 60 * Math.min(1, t / 0.7);
-    fase += (2 * Math.PI * f) / sr;
-    const serra = ((fase / (2 * Math.PI)) % 1) * 2 - 1; lp += (serra - lp) * a;
-    const servo = lp * (0.55 + 0.1 * Math.sin(2 * Math.PI * 23 * t)) * Math.min(1, t / 0.04) * (t < 0.72 ? 1 : Math.exp(-(t - 0.72) * 18));
-    const w = r() * 2 - 1; hp = 0.8 * (hp + w - wAnt); wAnt = w;
-    const chiado = t > 0.66 ? hp * 0.35 * Math.exp(-(t - 0.66) * 7) : 0;
-    out[i] = servo + chiado;
+    const t = i / sr, w = r() * 2 - 1;
+    const trava = t < 0.03 ? w * Math.exp(-t * 220) * 0.9 + Math.sin(2 * Math.PI * 2400 * t) * 0.35 * Math.exp(-t * 90) : 0;
+    const chiado = bf(w, 3200 - 1600 * Math.min(1, t / 0.75), 1.4) * Math.min(1, Math.max(0, t - 0.02) / 0.08) * Math.exp(-Math.max(0, t - 0.12) * 3.2);
+    lp += (w - lp) * a; const ar = lp * Math.sin(Math.PI * Math.min(1, t / 0.8)) * 1.4;
+    const tb = t - 0.78; let batente = 0;
+    if (tb > 0) { fBat += (2 * Math.PI * (95 + 50 * Math.exp(-tb * 40))) / sr; batente = Math.sin(fBat) * Math.exp(-tb * 22) * 0.6 + w * 0.2 * Math.exp(-tb * 160); }
+    out[i] = trava + chiado * 0.9 + ar + batente;
   }
   return normalizar(fimSemClique(out), 0.7);
 }

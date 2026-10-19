@@ -2735,7 +2735,7 @@ export class CyberEngine {
     const dentro = c.fase !== "parado", dist = dentro ? DISTANCIA.naveLocal : DISTANCIA.padrao;
     if (dentro !== c.somPerto) { c.somPerto = dentro; for (const n of LOOPS_CARRO) this.som.distanciaLoop(c.loops[n], dist); }
     for (const n of sonsDaCabine(kAnt, c.k, c.h.nVidros)) this.som.tocar(n, null, { dist, seguir: c.h.group, taxa: 0.96 + Math.random() * 0.08 });
-    const ligado = c.fase === "dirigindo" || c.fase === "abrindo" ? 1 : 0; c.ligado += (ligado - c.ligado) * Math.min(1, dt * 2.5);
+    const ligado = c.fase === "dirigindo" ? 1 : 0;   // (a cabine abrindo/fechando: o motor DESLIGADO — só as portas e os vidros soam) c.ligado += (ligado - c.ligado) * Math.min(1, dt * 2.5);
     const vel = Math.hypot(c.est.vx, c.est.vz);
     if (dt > 0) { c.acel += (Math.max(-1, Math.min(1, (vel - c.velAnt) / dt / 8)) - c.acel) * Math.min(1, dt * 4); c.velAnt = vel; }   // (o CANTO: acelerando/desacelerando)
     const mx = mixDoCarro({ ligado: c.ligado, vel, potencia: Math.min(1, c.potencia), acel: c.acel });
