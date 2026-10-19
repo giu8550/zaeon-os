@@ -373,7 +373,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       acoesRifle = { mira: mira!, anda: anda!, esq: esq!, dir: dir! };
     });
   };
-  const vDirR = new THREE.Vector3(), vGrip = new THREE.Vector3();
+  const vDirR = new THREE.Vector3(), vGrip = new THREE.Vector3(), vPMira = new THREE.Vector3(), vAlvo = new THREE.Vector3();
   const novaMao = () => ({ pulso: new THREE.Vector3(), dedos: new THREE.Vector3(), indicador: new THREE.Vector3(), polo: new THREE.Vector3() });
   const maosNaArma = { esq: novaMao(), dir: novaMao(), peso: 0 };   // (só da arma: o ik/apontar usam os vA/vB/pTab)
   const qYaw = new THREE.Quaternion(), qPit = new THREE.Quaternion(), qParte = new THREE.Quaternion(), qId = new THREE.Quaternion(), vMira = new THREE.Vector3(), vEixo = new THREE.Vector3(), mArma = new THREE.Matrix4(), xA = new THREE.Vector3(), yA = new THREE.Vector3(), mInv = new THREE.Matrix4();
@@ -1032,12 +1032,16 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         espinha.getWorldPosition(vA);
         const pRest = vGrip.copy(vA).addScaledVector(lateral, -0.1).addScaledVector(cima, -0.27).addScaledVector(frente, 0.24);
         const dRest = vDirR.copy(frente).multiplyScalar(0.62).addScaledVector(lateral, 0.55).addScaledVector(cima, -0.55).normalize();
-        // MIRA: a coronha no ombro direito (o punho ~30 cm à frente dele), o cano pro ponto da mira
+        // MIRA: a coronha no ombro direito (o punho ~22 cm à frente dele) e o cano pro ponto da mira — a direção sai do
+        // PUNHO (não do ombro): a linha do cano passa exatamente pelo alvo, e a bala (que sai da boca rumo a ele) segue o
+        // cano. O cano chega na mira antes do resto da pose (`km`): no meio da subida ele já aponta
         oD.braco.getWorldPosition(pMaoD);
         const ombro = pMaoD.addScaledVector(lateral, 0.07).addScaledVector(cima, -0.05);
-        const dMira = vMira.copy(rif.alvo ?? vEixo.copy(ombro).add(frente)).sub(ombro).normalize();
-        const dirR = dRest.lerp(dMira, mi).normalize();
-        const pGrip = pRest.lerp(vEixo.copy(ombro).addScaledVector(dMira, 0.22).addScaledVector(cima, -0.04), mi).addScaledVector(dirR, -0.045 * (rif.coice ?? 0));
+        const alvo = rif.alvo ? vAlvo.copy(rif.alvo) : vAlvo.copy(ombro).addScaledVector(frente, 20);
+        const pMira = vPMira.copy(ombro).addScaledVector(vMira.copy(alvo).sub(ombro).normalize(), 0.22).addScaledVector(cima, -0.04);
+        const dMira = vMira.copy(alvo).sub(pMira).normalize(), km = suave(mi * 1.5);
+        const dirR = dRest.lerp(dMira, km).normalize();
+        const pGrip = pRest.lerp(pMira, km).addScaledVector(dirR, -0.045 * (rif.coice ?? 0));
         // a base da arma: z = o cano, x = a esquerda dela, y = o topo (com o coice o cano sobe um tiquinho)
         if ((rif.coice ?? 0) > 0.01) { xA.crossVectors(cima, dirR).normalize(); dirR.applyAxisAngle(xA, -0.06 * rif.coice); }
         xA.crossVectors(cima, dirR).normalize(); yA.crossVectors(dirR, xA);

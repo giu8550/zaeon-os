@@ -89,7 +89,7 @@ import type { ItemEstudo } from "@/lib/estudos/itens";
 const ESCALA_ESPADA = 2.2;
 /** a BALA do rifle no pipeline dos projéteis da magia (components/cyber/MagiaFx): o raio de energia azul-violeta,
  *  rápido e fino (o dano de verdade é do rifle — lib/cyber/rifle `danoDoTiro`) */
-const TIRO_FX: Feitico = { ...FEITICOS.estilhaco, nome: "Tiro", vel: RIFLE.vel, raio: RIFLE.raio, alcance: RIFLE.alcance, dano: RIFLE.dano, explosao: 0, empurra: 0.05, cor: 0xe8f6ff, brilho: 0x8a6bff };
+const TIRO_FX: Feitico = { ...FEITICOS.estilhaco, nome: "Tiro", vel: RIFLE.vel, raio: RIFLE.raio, alcance: RIFLE.alcance, dano: RIFLE.dano, explosao: 0, empurra: 0.05, cor: 0xe8f6ff, brilho: 0x8a6bff, bala: true };
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, baseDoRobo, lookDaVaga, esvaziou, fabricaNova, largadasValidas, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, vagas, type AlvoMoto, type Fabrica, type Lote, type MotoLargada, type MotoMontada } from "@/lib/cyber/motos";
 import { criarRoboMotos, type RoboMotosHandle } from "./RoboMotos";
 import { criarPistas, type PistasHandle } from "./PistaCorrida";

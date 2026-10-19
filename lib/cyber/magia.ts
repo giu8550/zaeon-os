@@ -28,6 +28,8 @@ export type Feitico = {
   reacao: "leve" | "forte"; empurra: number;
   /** as cores (o núcleo e o brilho) */
   cor: number; brilho: number;
+  /** BALA (o rifle): o núcleo é um projétil redondo e alongado, não o cristal */
+  bala?: boolean;
 };
 export const FEITICOS: Readonly<Record<IdFeitico, Feitico>> = {
   estilhaco: { id: "estilhaco", nome: "Estilhaço Estelar", tecla: "q", num: 1, clipe: "ataque1m", velClipe: 1.7, disparo: 0.6,
