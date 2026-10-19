@@ -22,7 +22,7 @@ import { corDesenho, materialTinta, materialToon, materialToonSimples } from "./
 import { esconderOssosVazios, esferaRapida } from "./matrizes";
 import type { VRM } from "@pixiv/three-vrm";
 import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./AvatarVrm";
-import { vestirTraje, type TrajeHandle } from "./TrajeEspacial";
+import { ASTRONAUTAS, OLHOS_NO_CAPACETE, carregarAstronauta, vestirAstronauta, type CorpoAstronautaHandle } from "./CorpoAstronauta";
 import { criarAsas, type AsasHandle } from "./AsasAnjo";
 import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
 import { POSE_FEMININA_A_VONTADE, type PoseVrm } from "@/lib/cyber/posesVrm";
@@ -141,8 +141,9 @@ export type AvatarLuzHandle = {
   tocarClipe(nome: NomeClipe, o?: { espelhar?: boolean; velocidade?: number; segurar?: boolean; /** começa a partir de (s) */ inicio?: number }): void;
   /** o RIFLE (lib/cyber/rifle) — chamado antes do `animar`; null = sem rifle */
   rifle(e: RifleNoAvatar | null): void;
-  /** o TRAJE ESPACIAL (components/cyber/TrajeEspacial): as placas no esqueleto mixamo; do corpo VRM só o rosto, dentro
-   *  do capacete. As poses das armas de fogo ficam como foram gravadas */
+  /** o TRAJE: o CORPO DE ASTRONAUTA (components/cyber/CorpoAstronauta — um modelo riggado no Mixamo, que copia a pose
+   *  do esqueleto do avatar); do corpo VRM só o rosto, atrás da viseira. As poses das armas de fogo ficam como foram
+   *  gravadas. (Carrega na 1ª vez: até chegar, fica o corpo de sempre) */
   traje(on: boolean): void;
   /** sai do clipe (com a mistura de volta) */
   soltarClipe(): void;
@@ -354,10 +355,13 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   let clipe: { a: THREE.AnimationAction; segurar: boolean } | null = null, wClipe = 0, pedidoClipe = 0;
   // o RIFLE (lib/cyber/rifle): o estado do quadro, a arma posta nas mãos e as ações dos andares com ela (baixadas na 1ª
   // vez que ela aparece; tocam sempre, em laço, com o peso que o quadro manda)
-  let traje: TrajeHandle | null = null, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true;
+  let astro: CorpoAstronautaHandle | null = null, astroPedido = false, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true, vivoAv = true;
+  /** com o astronauta pronto: ele aparece, o corpo de antes some (do VRM, só o rosto — atrás da viseira) */
   const vestir = () => {
-    if (!espelho || !traje) return;
-    traje.ajustarCapacete(espelho.rosto(traje.ancoraRosto));
+    if (!astro || !trajeOn || !modeloMx) return;
+    astro.visivel(true); mochilaAntes = mochila.visible; mochila.visible = false;   // (o astronauta tem a própria mochila)
+    if (espelho) espelho.rosto(astro.ancoraRosto, OLHOS_NO_CAPACETE.escala);
+    else if (!soldadoEscondido) { soldadoEscondido = []; modeloMx.traverse((x) => { if ((x as THREE.SkinnedMesh).isSkinnedMesh && x.visible) { x.visible = false; soldadoEscondido!.push(x); } }); }
   };
   let rif: RifleNoAvatar | null = null, armaRifle: THREE.Object3D | null = null, pedindoRifle = false;
   let acoesRifle: { mira: THREE.AnimationAction; anda: THREE.AnimationAction; esq: THREE.AnimationAction; dir: THREE.AnimationAction } | null = null;
@@ -1065,6 +1069,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         espelho.marcha(livre && andando && R < 0.05);   // (com o rifle, o andar é o dele)
         if (paradaAuto) { const alvo = livre && !andando && !acao?.espada && !(acao?.dash) && !(acao?.sprint) && R < 0.05 ? POSE_FEMININA_A_VONTADE : null; if (alvo !== poseAutoAntes) { poseAutoAntes = alvo; espelho.pose(alvo ?? poseVrm); } }
       }
+      if (astro && trajeOn) astro.atualizar();   // o ASTRONAUTA copia a pose final (antes do rosto VRM, que se prende nele)
       espelho?.atualizar(dt, t);   // corpo VRM: copia a pose final (depois de todas as poses acima)
     },
     passosNovos() { if (!pernas.length) return null; const n = pisadas; pisadas = 0; return n; },
@@ -1085,13 +1090,17 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (on === trajeOn || !modeloMx) return;
       trajeOn = on;
       if (on) {
-        traje ??= vestirTraje(modeloMx, { cor: `#${armadura.getHexString()}`, low });
-        if (!traje) { trajeOn = false; return; }
-        traje.visivel(true); mochilaAntes = mochila.visible; mochila.visible = false;   // (a armadura não leva a mochila do jato)
-        if (espelho) vestir();
-        else { soldadoEscondido = []; modeloMx.traverse((x) => { if ((x as THREE.SkinnedMesh).isSkinnedMesh && x.visible) { x.visible = false; soldadoEscondido!.push(x); } }); }
+        if (astro) vestir();
+        else if (!astroPedido) {
+          astroPedido = true;
+          void carregarAstronauta(ASTRONAUTAS.m).then((g) => {
+            if (!vivoAv || !modeloMx) return;
+            astro = vestirAstronauta(g, modeloMx, corpo); astro.visivel(false); vestir();
+          }).catch((e) => { astroPedido = false; console.warn("[avatar] o astronauta não carregou:", e); });
+        }
       } else {
-        traje?.visivel(false); espelho?.rosto(null); mochila.visible = mochilaAntes;
+        if (astro?.cena.visible) { astro.visivel(false); mochila.visible = mochilaAntes; }
+        espelho?.rosto(null);
         for (const x of soldadoEscondido ?? []) x.visible = true; soldadoEscondido = null;
       }
     },
@@ -1133,7 +1142,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       // o soldado (e as cascas dele: aura, tinta) somem — o esqueleto continua animando, e continua no clique
       modeloMx.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
       espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso, { economico: op?.economico }); espelho.pose(poseVrm); espelho.estilo(estiloCorpo);
-      if (trajeOn) { soldadoEscondido = null; vestir(); }   // (o VRM chegou com o traje já vestido: só o rosto)
+      if (trajeOn && astro) { soldadoEscondido = null; espelho.rosto(astro.ancoraRosto, OLHOS_NO_CAPACETE.escala); }   // (o VRM chegou com o traje já vestido: só o rosto)
       esconderOssosVazios(vrm.scene); esconderOssosVazios(modeloMx); esferaRapida(vrm.scene);   // ossos sem nada pra desenhar fora da lista (matrizes)
     },
     soltarVrm() { espelho?.rosto(null); espelho?.dispose(); espelho = null; },
@@ -1143,7 +1152,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       else { matArmadura.color.copy(armadura).multiplyScalar(0.5); matArmadura.emissive.copy(armadura); matMochila.emissive.copy(armadura).multiplyScalar(0.3); matFone.emissive.copy(armadura).multiplyScalar(0.5); }
     },
     dispose() {
-      traje?.dispose(); mixer?.stopAllAction(); matArmadura.dispose(); matViseira.dispose(); matAura.dispose(); matTinta?.dispose(); espelho?.dispose(); asas?.dispose(); poGeo.dispose(); matPo.dispose();
+      vivoAv = false; astro?.dispose(); mixer?.stopAllAction(); matArmadura.dispose(); matViseira.dispose(); matAura.dispose(); matTinta?.dispose(); espelho?.dispose(); asas?.dispose(); poGeo.dispose(); matPo.dispose();
       mochila.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); const mt = (m as { material?: THREE.Material }).material; if (mt && mt !== matArmadura) mt.dispose(); }); texJato.dispose();
       fone.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); }); matFone.dispose(); matLedFone.dispose();
       prancha.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); if (m.material && m.material !== matPrancha && m.material !== matLuzPrancha) (m.material as THREE.Material).dispose(); }); matPrancha.dispose(); matLuzPrancha.dispose();
