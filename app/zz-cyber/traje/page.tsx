@@ -44,6 +44,7 @@ export default function Traje() {
         .catch(() => { a.esperarCorpo(false); setPronto(true); });
     }).catch(() => {});
 
+    const corQ = new URLSearchParams(location.search).get("cor"), corTraje = (corQ ? `#${corQ.replace("#", "")}` : "preta") as "preta" | `#${string}`;
     const alvo = new THREE.Vector3(); const t0 = performance.now(); let tAnt = 0, raf = 0, naMao = 0, wMira = 0;
     const loop = () => {
       raf = requestAnimationFrame(loop);
@@ -51,7 +52,7 @@ export default function Traje() {
       const e = est.current;
       naMao += ((e.rifle ? 1 : 0) - naMao) * Math.min(1, dt * 6); wMira += ((e.rifle && e.mira ? 1 : 0) - wMira) * Math.min(1, dt * 8);
       if (av) {
-        av.traje(e.traje, { paleta: "preta" });   // (a fundadora: a armadura preta)
+        av.traje(e.traje, { paleta: corTraje });   // (a fundadora: a armadura preta; ?cor=2f7bff = a de um jogador)
         const fr = e.andar === "frente" ? 1 : e.andar === "tras" ? -1 : 0, la = e.andar === "esq" ? -1 : e.andar === "dir" ? 1 : 0, anda = e.andar !== "parado";
         alvo.set(0, 1.45, 20);   // (ela olha pro +Z)
         av.rifle(naMao > 0.01 ? { naMao, mira: wMira, frente: fr, lado: la, coice: 0, alvo, arma: arma.group } : null);

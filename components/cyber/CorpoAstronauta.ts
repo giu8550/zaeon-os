@@ -27,15 +27,24 @@ export const DESENHO = { tinta: 0.011, clareia: 1.35 } as const;
 export const OLHOS_NO_CAPACETE = { cima: 0.085, frente: 0.05, escala: 0.86 } as const;
 
 /** as PALETAS da armadura: por pedaço do nome do material (os do modelo — scripts/avatar/astronauta-m.cores.json); a
- *  "branca" é a do arquivo. A PRETA (a do fundador): placas de preto brilhante, a malha grafite por baixo */
-export type Paleta = "branca" | "preta";
-const PALETAS: Record<Exclude<Paleta, "branca">, { pedacos: string[]; cor: number; rug: number; metal: number }[]> = {
-  preta: [
-    { pedacos: ["pechera", "hombrera", "placa_pelvis", "placa_piernas", "casco", "mochila", "cinturon", "armadura"], cor: 0x23252c, rug: 0.32, metal: 0.45 },
-    { pedacos: ["covertura"], cor: 0x4a4d57, rug: 0.8, metal: 0.05 },
-    { pedacos: ["tubos", "brazalete", "phongE", "lambert1"], cor: 0x131316, rug: 0.5, metal: 0.4 },
-  ],
-};
+ *  "branca" é a do arquivo. A PRETA é a do fundador (placas de preto brilhante, a malha grafite por baixo); os outros
+ *  jogadores vestem a COR DELES (`#rrggbb` — a cor do jogador): as placas na cor, a malha e os tubos escuros */
+export type Paleta = "branca" | "preta" | `#${string}`;
+const PLACAS = ["pechera", "hombrera", "placa_pelvis", "placa_piernas", "casco", "mochila", "cinturon", "armadura"];
+type Tom = { pedacos: string[]; cor: number };
+const PRETA: Tom[] = [
+  { pedacos: PLACAS, cor: 0x23252c },
+  { pedacos: ["covertura"], cor: 0x4a4d57 },
+  { pedacos: ["tubos", "brazalete", "phongE", "lambert1"], cor: 0x131316 },
+];
+/** a paleta da cor do jogador: a cor nas placas (um pouco mais clara — no desenho a sombra escurece), o resto escuro */
+export function paletaDaCor(hex: string): Tom[] {
+  const c = new THREE.Color(hex), hsl = { h: 0, s: 0, l: 0 }; c.getHSL(hsl);
+  const placa = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 0.85), Math.max(0.42, Math.min(0.62, hsl.l + 0.08)));
+  const malha = new THREE.Color().setHSL(hsl.h, 0.18, 0.17);
+  return [{ pedacos: PLACAS, cor: placa.getHex() }, { pedacos: ["covertura"], cor: malha.getHex() }, { pedacos: ["tubos", "brazalete", "phongE", "lambert1"], cor: 0x141417 }];
+}
+const tons = (p: Paleta): Tom[] | null => (p === "branca" ? null : p === "preta" ? PRETA : paletaDaCor(p));
 
 const cache = new Map<string, Promise<GLTF>>();
 export function carregarAstronauta(url: string): Promise<GLTF> {
@@ -158,7 +167,7 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
     pintar(p) {
       for (const x of mats) {
         if (x.name === "visera") continue;
-        const o = originais.get(x)!, t = p === "branca" ? null : PALETAS[p].find((e) => e.pedacos.some((k) => x.name.includes(k)));
+        const o = originais.get(x)!, t = tons(p)?.find((e) => e.pedacos.some((k) => x.name.includes(k)));
         if (t) x.color.setHex(t.cor).multiplyScalar(DESENHO.clareia); else x.color.copy(o);
       }
     },
