@@ -13,6 +13,8 @@
  *   cada braçadeira → o antebraço do lado dela); o CORPO pela distância de cada vértice aos segmentos dos ossos (1/d⁴,
  *   os 4 mais perto) e depois SUAVIZADO pela malha (6 passadas de difusão entre vizinhos), sem nunca misturar o lado
  *   esquerdo com o direito — abaixo da virilha, cada vértice é de uma perna.
+ * - O CORPO é subdividido uma vez antes (cada triângulo → 4, a forma igual): a malha original não tem vértices nas
+ *   juntas (quadril, joelho) e dobrava amassando.
  * - As CURVAS: a cintura afina, o quadril e os glúteos abrem e o busto avança (campos suaves só no tronco).
  * - As CORES: cada triângulo pega a cor da textura no meio dele e vira uma ZONA — placa (o verde-água), macacão (o
  *   creme), detalhe escuro (o cinza) — cada zona um material com o nome que as paletas do jogo conhecem ("armadura",
@@ -40,6 +42,26 @@ const cor = (u, v) => { const x = Math.min(TW - 1, Math.max(0, Math.round(((u % 
 // as peças, em coordenadas do mundo
 const pecas = {};
 obj.traverse((o) => { if (o.isMesh) { const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); pecas[o.name] = g; } });
+/** SUBDIVIDE (cada triângulo → 4, pelos pontos médios; a forma não muda): o corpo da Eve é de poucos polígonos — no
+ *  quadril não há NENHUM vértice entre a cintura e a coxa, só triângulos enormes que amassavam quando a perna girava */
+function subdividir(g0, vezes) {
+  let g = g0.index ? g0.toNonIndexed() : g0;
+  for (let k = 0; k < vezes; k++) {
+    const P = g.attributes.position, U = g.attributes.uv, n = P.count, pos = new Float32Array(n * 4 * 3), uv = U ? new Float32Array(n * 4 * 2) : null;
+    let o = 0;
+    const meio = (A, i, j, d) => Array.from({ length: d }, (_, c) => (A.array[i * d + c] + A.array[j * d + c]) / 2);
+    const pega = (A, i, d) => Array.from({ length: d }, (_, c) => A.array[i * d + c]);
+    for (let t = 0; t < n; t += 3) {
+      const [a, b, c] = [t, t + 1, t + 2];
+      const vp = { a: pega(P, a, 3), b: pega(P, b, 3), c: pega(P, c, 3), ab: meio(P, a, b, 3), bc: meio(P, b, c, 3), ca: meio(P, c, a, 3) };
+      const vu = U ? { a: pega(U, a, 2), b: pega(U, b, 2), c: pega(U, c, 2), ab: meio(U, a, b, 2), bc: meio(U, b, c, 2), ca: meio(U, c, a, 2) } : null;
+      for (const tri of [["a", "ab", "ca"], ["ab", "b", "bc"], ["ca", "bc", "c"], ["ab", "bc", "ca"]]) for (const v of tri) { pos.set(vp[v], o * 3); if (uv) uv.set(vu[v], o * 2); o++; }
+    }
+    g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); if (uv) g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  }
+  return g;
+}
+pecas.Body_low = subdividir(pecas.Body_low, 1);
 const pts = (g) => { const p = g.attributes.position, out = []; for (let i = 0; i < p.count; i++) out.push(new THREE.Vector3().fromBufferAttribute(p, i)); return out; };
 const corpo = pts(pecas.Body_low), H = Math.max(...corpo.map((p) => p.y));
 
@@ -98,7 +120,7 @@ if (process.env.RIG_DEBUG) for (const [k, v] of Object.entries(J)) console.log(k
 // as CURVAS (o dono pediu realçar): a cintura afina, o quadril e os glúteos abrem, o busto avança — campos suaves
 // (gaussianas na altura) só no tronco (|x| dentro da largura do quadril: os braços, em pose A, ficam de fora). O
 // peitoral (a peça rígida) acompanha o busto
-const CURVAS = { cintura: 0.86, quadril: 1.13, gluteo: 1.12, busto: 1.16 };
+const CURVAS = { cintura: 0.88, quadril: 1.1, gluteo: 1.1, busto: 1.16 };
 {
   const yCint = (J.Spine.y + J.Spine1.y) / 2, yQuad = J.Hips.y - H * 0.025, yBusto = J.Spine2.y + H * 0.015;
   const largQuad = Math.max(...corpo.filter((p) => Math.abs(p.y - yQuad) < H * 0.02).map((p) => Math.abs(p.x)));
@@ -109,8 +131,10 @@ const CURVAS = { cintura: 0.86, quadril: 1.13, gluteo: 1.12, busto: 1.16 };
       v.fromBufferAttribute(pos, i);
       if (Math.abs(v.x) > largQuad * 1.15 && !soFrente) continue;
       const kc = sino(v.y, yCint, H * 0.045), kq = sino(v.y, yQuad, H * 0.06), kb = sino(v.y, yBusto, H * 0.035);
-      const sx = 1 + (CURVAS.cintura - 1) * kc + (CURVAS.quadril - 1) * kq;
-      const sz = 1 + (CURVAS.cintura - 1) * kc * 0.7 + (v.z < 0 ? (CURVAS.gluteo - 1) * kq : 0) + (v.z > 0 ? (CURVAS.busto - 1) * kb : 0);
+      // (o quadril só ACIMA da virilha: abaixo dela engordava as coxas até elas virarem um bloco só)
+      const acima = Math.max(0, Math.min(1, (v.y - virilha) / (H * 0.03)));
+      const sx = 1 + (CURVAS.cintura - 1) * kc + (CURVAS.quadril - 1) * kq * acima;
+      const sz = 1 + (CURVAS.cintura - 1) * kc * 0.7 + (v.z < 0 ? (CURVAS.gluteo - 1) * kq * acima : 0) + (v.z > 0 ? (CURVAS.busto - 1) * kb : 0);
       pos.setXYZ(i, v.x * sx, v.y, v.z * sz);
     }
     pos.needsUpdate = true;

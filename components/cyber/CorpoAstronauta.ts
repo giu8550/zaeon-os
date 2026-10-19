@@ -70,8 +70,6 @@ export type CorpoAstronautaHandle = {
   dispose(): void;
 };
 
-/** o eixo do corpo: não entra no alinhamento do repouso (só os MEMBROS mudam de pose A pra T) */
-const TRONCO = new Set(["Hips", "Spine", "Spine1", "Spine2", "Neck", "Head"]);
 const ossosMixamo = (raiz: THREE.Object3D) => { const m = new Map<string, THREE.Object3D>(); raiz.traverse((o) => { if ((o as THREE.Bone).isBone && o.name.startsWith("mixamorig")) m.set(o.name.replace(/^mixamorig:?/, ""), o); }); return m; };
 
 /** veste o astronauta no `corpo` do avatar, seguindo o esqueleto mixamo `modelo` */
@@ -139,11 +137,11 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   cena.position.x += hipS.x - hipA.x; cena.position.z += hipS.z - hipA.z; cena.updateMatrixWorld(true);   // (o quadril em cima do quadril)
   if (qA) noCorpo(qA, new THREE.Quaternion(), hipA);
   // o REPOUSO em comum: o astronauta pode ter sido riggado noutra pose (pose A, braços pra baixo) e o Soldier em T —
-  // cada osso do astronauta gira até apontar (pro filho) pra onde o do Soldier aponta no bind. A malha vai junto (é o
+  // cada osso dos BRAÇOS do astronauta gira até apontar (pro filho) pra onde o do Soldier aponta no bind. A malha vai junto (é o
   // esqueleto dela): fica na mesma pose do Soldier, e daí pra frente o Δ de cada quadro vale igual nos dois
   const pS = new THREE.Vector3(), pS2 = new THREE.Vector3(), pA2 = new THREE.Vector3(), dS = new THREE.Vector3(), dA = new THREE.Vector3(), qR = new THREE.Quaternion(), qW = new THREE.Quaternion(), qP = new THREE.Quaternion();
   for (const [nome, a] of alvo) {
-    if (TRONCO.has(nome)) continue;   // (a coluna, o pescoço e a cabeça já estão em pé: endireitar osso a osso entortava o tronco)
+    if (!/Shoulder|Arm|Hand/.test(nome)) continue;   // (só os BRAÇOS: o tronco já está em pé e as pernas têm o jeito delas — endireitar osso a osso entortava o tronco e amassava o quadril)
     const s = rotDe(nome); if (!s) continue;
     // o filho: o 1º osso filho do astronauta que também existe na fonte (a direção do osso = dele pro filho)
     const fa = a.children.find((c) => (c as THREE.Bone).isBone && rotDe(c.name.replace(/^mixamorig:?/, "")));
