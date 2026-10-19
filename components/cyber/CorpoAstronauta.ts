@@ -17,6 +17,7 @@ import { clone as skClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { tintaFixa, toon } from "./AvatarAnime";
 import type { VRM, VRMHumanBoneName } from "@pixiv/three-vrm";
 import { MIXAMO_PRO_VRM } from "@/lib/cyber/vrmMapa";
+import { PALETAS_FEMININAS } from "@/lib/cyber/personagem";
 
 /** os MODELOS (public/avatars/traje — CREDITS.md): o masculino (riggado no Mixamo) e a feminina (a "Eve", riggada por
  *  scripts/avatar/rigar-eve.mjs). `olhos`: onde ficam os olhos do rosto VRM dentro do capacete, a partir do osso da
@@ -50,21 +51,8 @@ export function paletaDaCor(hex: string): Tom[] {
   const malha = new THREE.Color().setHSL(hsl.h, 0.18, 0.17);
   return [{ pedacos: PLACAS, cor: placa.getHex() }, { pedacos: ["covertura"], cor: malha.getHex() }, { pedacos: ["tubos", "brazalete", "phongE", "lambert1"], cor: 0x141417 }];
 }
-/** a PERSONAGEM STANDARD FEMININA: a astronauta (o modelo "f") numa destas cores — só tons femininos, curados (a placa
- *  e a malha por baixo de cada uma, combinadas). Cada jogadora veste a mais PRÓXIMA da cor dela (`paletaFeminina`) */
-export const PALETAS_FEMININAS: readonly { nome: string; placa: number; malha: number }[] = [
-  // (na astronauta o MACACÃO — a "malha" — é a parte grande: vai no tom pastel; as PLACAS, o detalhe, no tom forte)
-  { nome: "rosa", placa: 0xd2508a, malha: 0xf7c9dc },
-  { nome: "lilas", placa: 0x7d5ad6, malha: 0xdccdf7 },
-  { nome: "lavanda", placa: 0x6b6292, malha: 0xece6f8 },
-  { nome: "menta", placa: 0x2f9c84, malha: 0xc9f2e4 },
-  { nome: "coral", placa: 0xe2584a, malha: 0xffd3c9 },
-  { nome: "ceu", placa: 0x3d7fd6, malha: 0xcfe5ff },
-  { nome: "pessego", placa: 0xd9814b, malha: 0xffe0c7 },
-  { nome: "magenta", placa: 0xb2309e, malha: 0xf4c6ec },
-  { nome: "perola", placa: 0x8d8796, malha: 0xf5f1ec },
-  { nome: "eve", placa: 0x3d5250, malha: 0xaa9f96 },   // (a original do modelo: placas verde-água, o macacão creme)
-];
+// (a PERSONAGEM STANDARD FEMININA — as cores — mora em lib/cyber/personagem: o seletor e o servidor usam a mesma lista)
+export { PALETAS_FEMININAS };
 /** a paleta feminina mais próxima de uma cor (pelo matiz, e pela claridade nas cores sem matiz) */
 export function paletaFeminina(hex: string): `fem:${string}` {
   const c = new THREE.Color(hex), h = { h: 0, s: 0, l: 0 }; c.getHSL(h);

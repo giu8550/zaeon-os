@@ -12,7 +12,7 @@ import MenuNavigation from "@/components/sub/MenuNavigation";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 import MolecularText from "@/components/ui/MolecularText";
-import { copyEntrada } from "@/lib/ui/loungeHub";
+import { LAB_ROTA, copyEntrada } from "@/lib/ui/loungeHub";
 import GlitchTexto from "@/components/ui/GlitchTexto";
 import { precarregarCyber } from "@/lib/cyber/precarga";
 
@@ -90,6 +90,8 @@ export default function HeroPage() {
   const router = useRouter();
 
   const [showChatbox, setShowChatbox] = useState(false);
+  /** pra onde o login aberto agora leva: "lab" (criar conta) ou "jogo" (Iniciar jogo / Play game) */
+  const [destinoLogin, setDestinoLogin] = useState<"lab" | "jogo">("lab");
 
   const logado = status === "authenticated";
   const copy = copyEntrada(logado);
@@ -97,7 +99,8 @@ export default function HeroPage() {
   // a PRÉ-CARGA do cyberespaço começa na primeira tela (o botão com a barra fica em cima do módulo, lá embaixo)
   useEffect(() => { precarregarCyber(); }, []);
   useEffect(() => {
-    const abrir = () => { setShowChatbox(true); window.scrollTo({ top: 0, behavior: "smooth" }); };
+    // (o "Play game" da landing abre o login JÁ pro jogo: `detail.jogo`; sem ele, o login leva ao laboratório)
+    const abrir = (e: Event) => { setDestinoLogin((e as CustomEvent<{ jogo?: boolean }>).detail?.jogo ? "jogo" : "lab"); setShowChatbox(true); window.scrollTo({ top: 0, behavior: "smooth" }); };
     window.addEventListener(EVENTO_ABRIR_LOGIN, abrir);
     return () => window.removeEventListener(EVENTO_ABRIR_LOGIN, abrir);
   }, []);
@@ -182,11 +185,11 @@ export default function HeroPage() {
               transition={{ duration: 0.4, delay: 0.2 }}
               className="mt-9 flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto items-center justify-start"
             >
-              {/* PRIMÁRIO (vidro TINGIDO): sem conta, "Criar minha conta" (abre o login/cadastro); conectado, o chat.
-                  SECUNDÁRIO (vidro incolor): "Iniciar jogo" — o cyberespaço agora é o JOGO: entra direto na sessão
-                  (sem conta, abre o login, e o login já cai no jogo). */}
+              {/* PRIMÁRIO (vidro TINGIDO): sem conta, "Criar minha conta" (abre o login/cadastro — e a conta nova cai no
+                  LABORATÓRIO); conectado, o chat. SECUNDÁRIO (vidro incolor): "Iniciar jogo" — sem conta, abre o login, e
+                  esse login cai no JOGO (o jogo só abre pra quem escolhe jogar). */}
               <LiquidGlassButton
-                onClick={() => (logado ? router.push(CHAT_ROTA) : setShowChatbox(true))}
+                onClick={() => (logado ? router.push(CHAT_ROTA) : (setDestinoLogin("lab"), setShowChatbox(true)))}
                 tom="destaque"
                 tamanho="md"
                 className="w-full sm:w-auto"
@@ -195,7 +198,7 @@ export default function HeroPage() {
                 {logado ? "Iniciar chat" : "Criar minha conta"}
               </LiquidGlassButton>
               <LiquidGlassButton
-                onClick={() => (logado ? router.push(GAME_ROTA) : setShowChatbox(true))}
+                onClick={() => (logado ? router.push(GAME_ROTA) : (setDestinoLogin("jogo"), setShowChatbox(true)))}
                 tom="neutro"
                 tamanho="md"
                 className="w-full sm:w-auto"
@@ -255,7 +258,7 @@ export default function HeroPage() {
                 card de "Convide" à direita, o que deixava o conjunto assimétrico). O
                 convite não sumiu: mora dentro de OPÇÕES do próprio menu. */}
             <div className="w-full max-w-[500px]">
-              <MenuNavigation />
+              <MenuNavigation destino={destinoLogin === "jogo" ? GAME_ROTA : LAB_ROTA} />
             </div>
           </motion.div>
         )}

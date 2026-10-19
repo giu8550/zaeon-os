@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { validarNome, NOME_MAX } from "@/lib/ui/nomeUsuario";
 
-/** Passo único antes do cyberespaço: como você quer ser chamado. Pré-preenchido com o nome da conta. */
+/** O 1º passo antes do cyberespaço: como você quer ser chamado (pré-preenchido com o nome da conta). Depois vem a escolha do personagem (EscolherPersonagem). */
 export default function NomeUsuarioForm({ inicial, aoConcluir }: { inicial: string; aoConcluir: () => void }) {
   const [nome, setNome] = useState(inicial);
   const [erro, setErro] = useState("");
@@ -52,7 +52,7 @@ export default function NomeUsuarioForm({ inicial, aoConcluir }: { inicial: stri
           disabled={salvando}
           className="mt-5 min-h-[44px] w-full rounded-full bg-cyan-400 px-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60"
         >
-          {salvando ? "Salvando…" : "Play game"}
+          {salvando ? "Salvando…" : "Continuar"}
         </button>
       </form>
     </div>

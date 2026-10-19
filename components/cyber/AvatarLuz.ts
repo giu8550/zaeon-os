@@ -368,6 +368,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     astroPedido = true; const qual = modeloTraje;
     void carregarAstronauta(ASTRONAUTAS[qual].url).then((g) => {
       astroPedido = false;
+      if (vivoAv && qual !== modeloTraje && trajeOn) { pedirAstro(); return; }   // (mudou de modelo enquanto carregava: pede o certo)
       if (!vivoAv || !modeloMx || qual !== modeloTraje || astro) return;
       const doVrm = qual === "f" && !!vrmAtual;
       astro = vestirAstronauta(g, modeloMx, corpo, { rim: `#${luz.getHexString()}`, olhos: ASTRONAUTAS[qual].olhos, fonteVrm: doVrm ? vrmAtual! : undefined });
@@ -1108,10 +1109,12 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     rifle(e) { rif = e; },
     traje(on, op) {
       if (op?.paleta && op.paleta !== paletaTraje) { paletaTraje = op.paleta; astro?.pintar(paletaTraje); }
-      if (on === trajeOn || !modeloMx) return;
+      if (!modeloMx) return;
+      const quer: ModeloAstronauta = op?.modelo ?? (estiloCorpo === "feminina" ? "f" : "m");
+      if (on && trajeOn && quer !== modeloTraje) { largarAstro(); modeloTraje = quer; pedirAstro(); return; }   // (já vestido, trocou de modelo — o gênero: veste o outro)
+      if (on === trajeOn) return;
       trajeOn = on;
       if (on) {
-        const quer: ModeloAstronauta = op?.modelo ?? (estiloCorpo === "feminina" ? "f" : "m");
         if (astro && quer !== modeloTraje) largarAstro();   // (trocou de modelo: veste o outro)
         modeloTraje = quer;
         if (astro) vestir(); else pedirAstro();

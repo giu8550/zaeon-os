@@ -32,7 +32,7 @@ export default function LoungeJanela({ className = "" }: { className?: string })
     >
       <div className="absolute inset-0">{perto ? <CosmicLounge modo="janela" /> : <div className="h-full w-full bg-[#03030a]" />}</div>
       <div className="absolute left-1/2 top-3 z-40 -translate-x-1/2 w-[min(92%,300px)]">
-        <CyberCta logado={status === "authenticated"} onLogin={() => window.dispatchEvent(new Event(EVENTO_ABRIR_LOGIN))} className="!w-full bg-black/60 backdrop-blur" />
+        <CyberCta logado={status === "authenticated"} onLogin={() => window.dispatchEvent(new CustomEvent(EVENTO_ABRIR_LOGIN, { detail: { jogo: true } }))} className="!w-full bg-black/60 backdrop-blur" />
       </div>
     </section>
   );
