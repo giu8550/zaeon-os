@@ -16,15 +16,19 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { clone as skClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { tintaFixa, toon } from "./AvatarAnime";
 
-export const ASTRONAUTAS = { m: "/avatars/traje/astronauta-m.glb" } as const;
+/** os MODELOS (public/avatars/traje — CREDITS.md): o masculino (riggado no Mixamo) e a feminina (a "Eve", riggada por
+ *  scripts/avatar/rigar-eve.mjs). `olhos`: onde ficam os olhos do rosto VRM dentro do capacete, a partir do osso da
+ *  cabeça (m, no corpo: pra cima e pra frente), e quanto o VRM encolhe pra cabeça de anime caber nele */
+export const ASTRONAUTAS = {
+  m: { url: "/avatars/traje/astronauta-m.glb", olhos: { cima: 0.085, frente: 0.05, escala: 0.86 } },
+  f: { url: "/avatars/traje/astronauta-f.glb", olhos: { cima: 0.11, frente: 0.06, escala: 0.86 } },
+} as const;
+export type ModeloAstronauta = keyof typeof ASTRONAUTAS;
 /** a VISEIRA (o material "visera" do modelo): escura, mas transparente o bastante pro rosto aparecer */
 export const VISEIRA = { cor: 0x3a2a14, opacidade: 0.38 } as const;
 /** o DESENHO: a espessura do contorno de tinta (m) e o quanto a cor clareia (o toon multiplica a cor pelas faixas: sem
  *  isso o branco vira cinza-chumbo na sombra — a mesma conta do avatar desenhado) */
 export const DESENHO = { tinta: 0.011, clareia: 1.35 } as const;
-/** onde ficam os OLHOS do rosto dentro do capacete, a partir do osso da cabeça (m, no referencial do corpo: pra cima e
- *  pra frente), e quanto o VRM encolhe pra cabeça de anime caber no capacete */
-export const OLHOS_NO_CAPACETE = { cima: 0.085, frente: 0.05, escala: 0.86 } as const;
 
 /** as PALETAS da armadura: por pedaço do nome do material (os do modelo — scripts/avatar/astronauta-m.cores.json); a
  *  "branca" é a do arquivo. A PRETA é a do fundador (placas de preto brilhante, a malha grafite por baixo); os outros
@@ -67,7 +71,7 @@ export type CorpoAstronautaHandle = {
 const ossosMixamo = (raiz: THREE.Object3D) => { const m = new Map<string, THREE.Object3D>(); raiz.traverse((o) => { if ((o as THREE.Bone).isBone && o.name.startsWith("mixamorig")) m.set(o.name.replace(/^mixamorig:?/, ""), o); }); return m; };
 
 /** veste o astronauta no `corpo` do avatar, seguindo o esqueleto mixamo `modelo` */
-export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THREE.Object3D, op: { /** a cor do brilho de borda (a do jogador) */ rim?: string } = {}): CorpoAstronautaHandle {
+export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THREE.Object3D, op: { /** a cor do brilho de borda (a do jogador) */ rim?: string; olhos?: { cima: number; frente: number } } = {}): CorpoAstronautaHandle {
   const cena = skClone(gltf.scene);
   // os materiais são de cada avatar: viram DESENHO (toon) na cor de cada peça; a VISEIRA, vidro chapado transparente
   const rim = new THREE.Color(op.rim ?? "#9fb7ff");
@@ -99,8 +103,7 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   /** a rotação (e a posição) de `o` no referencial do corpo */
   const noCorpo = (o: THREE.Object3D, q: THREE.Quaternion, p: THREE.Vector3 = tp) => { mt.multiplyMatrices(corpoInv, o.matrixWorld).decompose(p, q, ts); return q; };
 
-  // o astronauta no corpo: virado como o Soldier (o modelo do Mixamo olha pro +Z, o do avatar pro −Z) e na ESCALA em
-  // que o quadril fica na altura do quadril do Soldier
+  // o astronauta no corpo: virado como o Soldier (o modelo do Mixamo olha pro +Z, o do avatar pro −Z), na escala dele
   corpo.add(cena); cena.rotation.set(0, Math.PI, 0); cena.updateMatrixWorld(true);
   // (o astronauta também vai pra pose de BIND da skin — os ossos do arquivo podem estar noutra pose, ex. o 1º quadro do Idle)
   cena.traverse((x) => { const m = x as THREE.SkinnedMesh; if (m.isSkinnedMesh) m.skeleton.pose(); });
@@ -108,7 +111,11 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   const qS = fonte.get("Hips"), qA = alvo.get("Hips");
   const hipS = new THREE.Vector3(), hipA = new THREE.Vector3();
   if (qS && qA) { noCorpo(qS, new THREE.Quaternion(), hipS); noCorpo(qA, new THREE.Quaternion(), hipA); }
-  const escala = hipA.y > 0.05 ? hipS.y / hipA.y : 1;
+  // a ESCALA pela altura da CABEÇA (o rosto VRM vai nela; e um modelo de pernas curtas, escalado pelo quadril, virava
+  // um gigante), com o quadril se não houver cabeça
+  const cS = fonte.get("Head"), cA = alvo.get("Head"), headS = new THREE.Vector3(), headA = new THREE.Vector3();
+  if (cS && cA) { noCorpo(cS, new THREE.Quaternion(), headS); noCorpo(cA, new THREE.Quaternion(), headA); }
+  const escala = headA.y > 0.05 ? headS.y / headA.y : hipA.y > 0.05 ? hipS.y / hipA.y : 1;
   cena.scale.setScalar(escala); cena.updateMatrixWorld(true);
   if (qA) noCorpo(qA, new THREE.Quaternion(), hipA);
   cena.position.x += hipS.x - hipA.x; cena.position.z += hipS.z - hipA.z; cena.updateMatrixWorld(true);   // (o quadril em cima do quadril)
@@ -157,7 +164,7 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   if (cab) {
     const pCab = new THREE.Vector3(); cab.getWorldPosition(pCab);
     const frente = new THREE.Vector3(0, 0, -1).transformDirection(corpo.matrixWorld), cimaW = new THREE.Vector3(0, 1, 0).transformDirection(corpo.matrixWorld);
-    const alvoW = pCab.addScaledVector(cimaW, OLHOS_NO_CAPACETE.cima).addScaledVector(frente, OLHOS_NO_CAPACETE.frente);
+    const olhos = op.olhos ?? ASTRONAUTAS.m.olhos, alvoW = pCab.addScaledVector(cimaW, olhos.cima).addScaledVector(frente, olhos.frente);
     cab.add(ancoraRosto); cab.updateWorldMatrix(true, false); ancoraRosto.position.copy(cab.worldToLocal(alvoW));
   }
 
