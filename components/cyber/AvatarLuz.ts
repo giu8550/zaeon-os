@@ -354,7 +354,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   let clipe: { a: THREE.AnimationAction; segurar: boolean } | null = null, wClipe = 0, pedidoClipe = 0;
   // o RIFLE (lib/cyber/rifle): o estado do quadro, a arma posta nas mãos e as ações dos andares com ela (baixadas na 1ª
   // vez que ela aparece; tocam sempre, em laço, com o peso que o quadro manda)
-  let traje: TrajeHandle | null = null, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null;
+  let traje: TrajeHandle | null = null, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true;
   const vestir = () => {
     if (!espelho || !traje) return;
     traje.ajustarCapacete(espelho.rosto(traje.ancoraRosto));
@@ -1087,11 +1087,11 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (on) {
         traje ??= vestirTraje(modeloMx, { cor: `#${armadura.getHexString()}`, low });
         if (!traje) { trajeOn = false; return; }
-        traje.visivel(true);
+        traje.visivel(true); mochilaAntes = mochila.visible; mochila.visible = false;   // (a armadura não leva a mochila do jato)
         if (espelho) vestir();
         else { soldadoEscondido = []; modeloMx.traverse((x) => { if ((x as THREE.SkinnedMesh).isSkinnedMesh && x.visible) { x.visible = false; soldadoEscondido!.push(x); } }); }
       } else {
-        traje?.visivel(false); espelho?.rosto(null);
+        traje?.visivel(false); espelho?.rosto(null); mochila.visible = mochilaAntes;
         for (const x of soldadoEscondido ?? []) x.visible = true; soldadoEscondido = null;
       }
     },

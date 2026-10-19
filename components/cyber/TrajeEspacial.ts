@@ -3,12 +3,13 @@
  * mesmo que toca as animações do rifle (public/anim/rifle). Assim as poses de mira/andar/virar/morrer ficam como foram
  * gravadas e as mãos fecham na arma sem a correção do corpo VRM (que tem braços de outro comprimento).
  *
- * O desenho: um CAVALEIRO SAGRADO tecnológico (a folha de personagem "ホーリーナイト" do dono, sem a capa) — placas
- * brancas com BORDA DOURADA, tudo curvo e pontudo, NADA quadrado: o capacete com os dois CHIFRES e a crista, as
- * OMBREIRAS em asas sobrepostas com as pontas pra cima, o peitoral, as lâminas da barriga, a saia de placas terminando
- * em DENTES dourados, cotoveleiras em leque, manoplas com o punho de pontas, joelheiras com aletas, grevas e botas de
- * BICO com espora. O "tecnológico": as costuras e frisos acesos na cor do jogador. O rosto de anime do VRM aparece
- * atrás da viseira (AvatarVrm `rosto`).
+ * O desenho: um CAVALEIRO SAGRADO tecnológico e meio ALIENÍGENA (a folha "ホーリーナイト" do dono, sem a capa) — placas
+ * brancas com BORDA DOURADA, estufadas como casco (o `bojo`), tudo redondo e pontudo, NADA quadrado: o capacete com a
+ * COROA de espinhos curvos e a crista, as OMBREIRAS em cúpulas com a coroa de espinhos e um olho de luz, o NÚCLEO de luz
+ * no peito com os fios acesos em V, os ESPINHOS DORSAIS, as lâminas da barriga, a saia e as coxas terminando em GARRAS
+ * douradas, espinhos nos antebraços, manoplas com o punho de pontas, joelheiras com aleta e espinho, grevas e botas de
+ * BICO com espora. O "tecnológico": os fios, o núcleo e os olhos acesos na cor do jogador. O rosto de anime do VRM
+ * aparece atrás da viseira (AvatarVrm `rosto`). Sem a mochila do jato (AvatarLuz `traje`).
  * O traço é de DESENHO (components/cyber/AvatarAnime): cel shading em faixas, o brilho de borda e o CONTORNO DE TINTA.
  */
 import * as THREE from "three";
@@ -33,7 +34,11 @@ const OSSO = (m: THREE.Object3D, n: string) => m.getObjectByName(`mixamorig${n}`
 /** as FORMAS das placas recortadas (unidades: o tamanho da peça; `c` = o centro, por onde a borda dourada cresce).
  *  Só curvas: m = vai, q = curva (controle, ponto) */
 type Cmd = ["m", number, number] | ["q", number, number, number, number];
-const FORMAS: Record<"asa" | "chifre" | "dente" | "folha" | "gota", { c: [number, number]; d: Cmd[] }> = {
+const FORMAS: Record<"asa" | "chifre" | "dente" | "folha" | "gota" | "garra" | "espinho", { c: [number, number]; d: Cmd[] }> = {
+  // a GARRA (a ponta pra baixo, curva como unha): a barra da saia e das coxas
+  garra: { c: [0, -0.3], d: [["m", -0.45, 0], ["q", 0, 0.1, 0.45, 0], ["q", 0.32, -0.55, -0.18, -1], ["q", -0.08, -0.45, -0.45, 0]] },
+  // o ESPINHO (base larga, curvo pro −x): coroas, costas, antebraços, joelhos
+  espinho: { c: [0, 0.3], d: [["m", -0.24, 0], ["q", 0, -0.04, 0.24, 0], ["q", 0.14, 0.55, -0.3, 1], ["q", -0.06, 0.42, -0.24, 0]] },
   // a ASA da ombreira: larga na base, a ponta em cima e pra fora
   asa: { c: [0.45, 0.35], d: [["m", 0, 0], ["q", 0.75, 0.02, 1.1, 0.95], ["q", 0.62, 0.5, 0.05, 0.42], ["q", -0.08, 0.2, 0, 0]] },
   // o CHIFRE do capacete: alto, fino, levemente curvo pra trás
@@ -54,12 +59,13 @@ function forma(nome: keyof typeof FORMAS, tam: number, k = 1): THREE.Shape {
   return s;
 }
 
-/** o perfil de uma casca torneada ao longo de y (0..len), raio r1 → r2; `redondo` arredonda as pontas (peça fechada) */
-function perfil(len: number, r1: number, r2: number, extA: number, extB: number, redondo = true, n = 12): THREE.Vector2[] {
+/** o perfil de uma casca torneada ao longo de y (0..len), raio r1 → r2; `redondo` arredonda as pontas (peça fechada);
+ *  `bojo` estufa o meio (as placas ficam orgânicas, de casco — não tubos) */
+function perfil(len: number, r1: number, r2: number, extA: number, extB: number, redondo = true, n = 12, bojo = 0): THREE.Vector2[] {
   const pts: THREE.Vector2[] = [], tot = len + extA + extB, e = 0.22;
   for (let i = 0; i <= n; i++) {
     const u = i / n, y = -extA + u * tot, k = redondo ? Math.min(1, u / e, (1 - u) / e) : 1;
-    const r = (r1 + (r2 - r1) * u) * Math.sqrt(Math.max(0, 1 - (1 - k) * (1 - k)));
+    const r = (r1 + (r2 - r1) * u) * Math.sqrt(Math.max(0, 1 - (1 - k) * (1 - k))) * (1 + bojo * Math.sin(Math.PI * u));   // (o BOJO: a placa estufa no meio — orgânica)
     pts.push(new THREE.Vector2(Math.max(r, redondo && (i === 0 || i === n) ? 0 : 0.002), y));
   }
   return pts;
@@ -116,12 +122,12 @@ export function vestirTraje(modelo: THREE.Object3D, o: { cor: string; low: boole
     comTintaEm(m);   // o CONTORNO DE TINTA: a mesma geometria, inflada, só as faces de trás (filha da peça)
     osso.attach(m); mostrarCaminho(m); pecas.push(m); m.traverse((x) => { x.frustumCulled = false; });
   };
-  type OpCasca = { achata?: number; extA?: number; extB?: number; ref?: THREE.Vector3; phi?: [number, number]; reto?: boolean; lados?: number };
+  type OpCasca = { achata?: number; extA?: number; extB?: number; ref?: THREE.Vector3; phi?: [number, number]; reto?: boolean; lados?: number; bojo?: number };
   /** uma CASCA de `a` até `b`, presa em `osso`; `phi` = [centro, largura] só um pedaço da volta (as placas abertas) */
   const casca = (osso: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, r1: number, r2: number, mat: THREE.Material, op: OpCasca = {}) => {
     const d = b.clone().sub(a), len = Math.max(0.01, d.length()); d.normalize();
     const ph = op.phi;
-    const g = new THREE.LatheGeometry(perfil(len, r1, r2, op.extA ?? 0, op.extB ?? 0, !op.reto && !ph), op.lados ?? seg, ph ? ph[0] - ph[1] / 2 : 0, ph ? ph[1] : Math.PI * 2); geos.push(g);
+    const g = new THREE.LatheGeometry(perfil(len, r1, r2, op.extA ?? 0, op.extB ?? 0, !op.reto && !ph, 12, op.bojo ?? (mat === matBranco ? 0.12 : 0.05)), op.lados ?? seg, ph ? ph[0] - ph[1] / 2 : 0, ph ? ph[1] : Math.PI * 2); geos.push(g);
     const m = new THREE.Mesh(g, mat); m.position.copy(a); m.quaternion.copy(base(d, op.ref ?? lat)); m.scale.set(1, 1, op.achata ?? 1);
     prender(osso, m); return m;
   };
@@ -136,6 +142,16 @@ export function vestirTraje(modelo: THREE.Object3D, o: { cor: string; low: boole
   const esfera = (osso: THREE.Object3D, c: THREE.Vector3, r: number, mat: THREE.Material) => {
     const g = new THREE.SphereGeometry(r, seg, Math.round(seg / 2)); geos.push(g);
     const m = new THREE.Mesh(g, mat); m.position.copy(c); prender(osso, m); return m;
+  };
+  /** uma CÚPULA (calota de esfera) com o topo em `eixo`, a barra dourada na borda; `esc` achata/estica (no referencial
+   *  da cúpula: x, y = o eixo, z) */
+  const cupula = (osso: THREE.Object3D, c: THREE.Vector3, eixo: THREE.Vector3, ref: THREE.Vector3, r: number, abre: number, esc: [number, number, number]) => {
+    const grp = new THREE.Group(), g = new THREE.SphereGeometry(r, seg, Math.round(seg / 2), 0, Math.PI * 2, 0, abre); geos.push(g);
+    grp.add(new THREE.Mesh(g, matBranco));
+    const gt = new THREE.TorusGeometry(r * Math.sin(abre), W * 0.022, 8, seg + 6); geos.push(gt);
+    const borda = new THREE.Mesh(gt, matOuro); borda.rotation.x = Math.PI / 2; borda.position.y = r * Math.cos(abre); grp.add(borda);
+    grp.scale.set(...esc); grp.quaternion.copy(base(eixo.clone().normalize(), ref)); grp.position.copy(c);
+    prender(osso, grp); return grp;
   };
   const anel = (osso: THREE.Object3D, c: THREE.Vector3, dir: THREE.Vector3, r: number, tubo: number, mat: THREE.Material = matLuz) => {
     const g = new THREE.TorusGeometry(r, tubo, 8, seg + 6); geos.push(g);
@@ -173,7 +189,11 @@ export function vestirTraje(modelo: THREE.Object3D, o: { cor: string; low: boole
     // o friso dourado do decote e a GOTA dourada no esterno, com os fios acesos abrindo em V
     anel(esp2, pn.clone().addScaledVector(cima, -0.03), cima, W * 0.33, W * 0.03, matOuro);
     const est = ps1.clone().lerp(pn, 0.62).addScaledVector(frente, W * 0.355);
-    recorte("gota", W * 0.2, est, lat, cima.clone().addScaledVector(frente, -0.35), { osso: esp2, esp: W * 0.025 });
+    // o NÚCLEO: uma esfera de luz no esterno, num engaste dourado
+    esfera(esp2, est.clone().addScaledVector(frente, W * 0.01), W * 0.055, matLuz);
+    anel(esp2, est, frente.clone().addScaledVector(cima, 0.3), W * 0.075, W * 0.018, matOuro);
+    // os ESPINHOS DORSAIS: uma fileira descendo as costas, curvos pra cima
+    for (const [osso, p, tam] of [[esp2, P(esp2).lerp(pn, 0.4), 0.3], [esp1, ps1, 0.25], [esp, ps, 0.2]] as const) recorte("espinho", W * tam, p.clone().addScaledVector(tras, W * 0.3), baixo, tras.clone().addScaledVector(cima, 0.55), { osso, esp: W * 0.03 });
     for (const s of [-1, 1]) {
       fio(esp2, est.clone().addScaledVector(cima, -W * 0.1), ps1.clone().lerp(pn, 0.2).addScaledVector(lat, s * W * 0.27).addScaledVector(frente, W * 0.29));
       fio(esp2, est.clone().addScaledVector(lat, s * W * 0.1), ps1.clone().lerp(pn, 0.85).addScaledVector(lat, s * W * 0.36).addScaledVector(frente, W * 0.24));
@@ -195,12 +215,12 @@ export function vestirTraje(modelo: THREE.Object3D, o: { cor: string; low: boole
         const ph = centro - larg / 2 + (larg * (i + 0.5)) / n, r = W * 0.475;
         const radial = tras.clone().multiplyScalar(Math.cos(ph)).addScaledVector(lat, Math.sin(ph));   // (o φ do lathe → o mundo)
         const tang = new THREE.Vector3().crossVectors(baixo, radial).normalize();
-        recorte("dente", W * 0.17, pq.clone().addScaledVector(baixo, alt - W * 0.01).addScaledVector(radial, r), tang, cima.clone().addScaledVector(radial, -0.15), { osso: quadril, mat: matOuro, borda: false, esp: W * 0.02 });
+        recorte("garra", W * 0.17, pq.clone().addScaledVector(baixo, alt - W * 0.01).addScaledVector(radial, r), tang, cima.clone().addScaledVector(radial, -0.15), { osso: quadril, mat: matOuro, borda: false, esp: W * 0.02 });
       }
     }
   }
 
-  // ── o CAPACETE: branco, a viseira de vidro (o rosto aparece), os dois CHIFRES e a crista ──
+  // ── o CAPACETE: branco, a viseira de vidro (o rosto aparece), a COROA de espinhos e a crista ──
   const capacete = new THREE.Group();
   const R = W * 0.46, centro = P(cabeca).addScaledVector(cima, W * 0.24).addScaledVector(frente, W * 0.03);
   capacete.position.copy(centro); capacete.quaternion.copy(base(cima, lat));   // (local: y = cima, z = frente, x = a esquerda)
@@ -225,8 +245,10 @@ export function vestirTraje(modelo: THREE.Object3D, o: { cor: string; low: boole
     const friso = new THREE.Mesh(gF, matOuro); friso.rotation.set(Math.PI / 2, 0, -(fr + ab + 0.06) + Math.PI); friso.position.y = Math.cos(tTopo - 0.06) * R * 1.02; friso.scale.setScalar(Math.sin(tTopo - 0.06)); capacete.add(friso);
     // a CRISTA: uma aleta curva da testa à nuca
     capacete.add(recorte("folha", R * 1.25, new THREE.Vector3(0, R * 0.78, R * 0.15), new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0.15), { esp: W * 0.03 }));
-    // os dois CHIFRES: altos, dos lados de cima, abrindo pra fora e um pouco pra trás
-    for (const s of [-1, 1]) capacete.add(recorte("chifre", R * 1.5, new THREE.Vector3(s * R * 0.42, R * 0.72, -R * 0.35), new THREE.Vector3(0, 0, 1), new THREE.Vector3(s * 0.12, 1, -0.45), { esp: W * 0.028 }));
+        // a COROA: cinco espinhos curvos pra trás (o do meio maior), saindo do alto da nuca
+    for (const [x, tam] of [[-0.62, 0.7], [-0.32, 0.95], [0, 1.15], [0.32, 0.95], [0.62, 0.7]] as const) {
+      capacete.add(recorte("espinho", R * tam, new THREE.Vector3(x * R, R * (0.78 - Math.abs(x) * 0.3), -R * 0.45), new THREE.Vector3(0, 0, 1), new THREE.Vector3(x * 0.5, 1, -0.75), { esp: W * 0.028 }));
+    }
     // as "orelhas": um disco dourado com a luz no meio
     for (const s of [-1, 1]) {
       const gl = new THREE.CylinderGeometry(W * 0.075, W * 0.075, W * 0.05, seg); geos.push(gl); const l = new THREE.Mesh(gl, matOuro); l.rotation.z = Math.PI / 2; l.position.set(s * R * 0.97, -R * 0.08, -R * 0.06); capacete.add(l);
@@ -245,24 +267,17 @@ export function vestirTraje(modelo: THREE.Object3D, o: { cor: string; low: boole
     const pb = P(braco), pa = P(ante), pm = P(mao), dBraco = pa.clone().sub(pb).normalize(), dAnte = pm.clone().sub(pa).normalize();
     const fora = lat.clone().multiplyScalar(s), clav = OSSO(modelo, `${L}Shoulder`) ?? braco;
     casca(braco, pb, pa, W * 0.14, W * 0.125, matMalha, { extA: 0.02, ref: frente });
-    // a OMBREIRA (no osso do OMBRO: com o braço baixo, ela fica — como a da folha, armada por cima do ombro): 3 CONCHAS
-    // sobrepostas abrindo pra fora (por cima, pela frente e por trás do ombro — φ = 0 é pra cima do lado esquerdo e pra
-    // baixo do direito), cada uma com a barra dourada, e as PONTAS saindo pra cima e pra fora
-    const phCima = s > 0 ? 0 : Math.PI;
-    const pOmbro = pb.clone().addScaledVector(cima, W * 0.04).addScaledVector(fora, -W * 0.08);
-    for (const [i, r1, r2, comp] of [[0, 0.27, 0.33, 0.2], [1, 0.3, 0.37, 0.18], [2, 0.33, 0.41, 0.16]] as const) {
-      const a0 = pOmbro.clone().addScaledVector(dBraco, W * (0.02 + i * 0.13)).addScaledVector(cima, -W * i * 0.03);
-      const a1 = a0.clone().addScaledVector(dBraco, W * comp);
-      casca(clav, a0, a1, W * r1, W * r2, matBranco, { ref: frente, phi: [phCima, 3.6], reto: true });
-      casca(clav, a1.clone().addScaledVector(dBraco, -W * 0.025), a1, W * r2 * 1.005, W * r2 * 1.02, matOuro, { ref: frente, phi: [phCima, 3.6], reto: true });
+    // a OMBREIRA (no osso do OMBRO: com o braço baixo, ela fica): duas CÚPULAS sobrepostas, redondas, com a barra
+    // dourada; a COROA de espinhos curvos saindo pra cima e pra fora e um olho de luz na lateral
+    const pOmbro = pb.clone().addScaledVector(cima, -W * 0.01).addScaledVector(fora, W * 0.06);
+    const eixo1 = cima.clone().addScaledVector(fora, 0.45).normalize(), eixo2 = cima.clone().addScaledVector(fora, 1.1).normalize();
+    cupula(clav, pOmbro, eixo1, frente, W * 0.24, Math.PI * 0.5, [1.05, 0.7, 1.1]);
+    cupula(clav, pOmbro.clone().addScaledVector(fora, W * 0.12).addScaledVector(cima, -W * 0.08), eixo2, frente, W * 0.2, Math.PI * 0.5, [1, 0.7, 1.05]);
+    for (const [k, tam] of [[-1, 0.24], [0, 0.34], [1, 0.24]] as const) {
+      const c = pOmbro.clone().addScaledVector(eixo1, W * 0.14).addScaledVector(fora, W * 0.12).addScaledVector(frente, k * W * 0.11);
+      recorte("espinho", W * tam, c, frente.clone().multiplyScalar(-1).addScaledVector(fora, 0.2), eixo1.clone().addScaledVector(fora, 0.5).addScaledVector(frente, k * 0.35), { osso: clav, esp: W * 0.035 });
     }
-    // a cúpula de cima (fecha a concha junto do pescoço)
-    const domo = esfera(clav, pOmbro.clone().addScaledVector(dBraco, W * 0.04), W * 0.27, matBranco); domo.scale.set(1, 0.6, 1.05);
-    // as PONTAS: duas lâminas pontudas saindo da borda de cima, pra cima e pra fora (a da frente maior)
-    for (const [k, tam, fr2] of [[0, 0.5, 0.12], [1, 0.4, -0.1]] as const) {
-      const c = pOmbro.clone().addScaledVector(dBraco, W * (0.3 + k * 0.06)).addScaledVector(cima, W * 0.36).addScaledVector(frente, W * fr2);
-      recorte("chifre", W * tam, c, frente, cima.clone().addScaledVector(fora, 0.75).addScaledVector(tras, 0.15), { osso: clav, esp: W * 0.035 });
-    }
+    esfera(clav, pOmbro.clone().addScaledVector(fora, W * 0.3).addScaledVector(cima, -W * 0.06), W * 0.03, matLuz);
     // as lâminas do braço (por cima/fora: no braço, φ = 0 é pra cima do lado esquerdo e pra baixo do direito)
     laminas(braco, pb.clone().addScaledVector(dBraco, W * 0.22), pb.clone().lerp(pa, 0.7), 2, W * 0.18, W * 0.17, { ref: frente, phi: [s > 0 ? 0 : Math.PI, 3.4] });
     anel(braco, pb.clone().lerp(pa, 0.78), dBraco, W * 0.15, W * 0.012);
@@ -273,6 +288,8 @@ export function vestirTraje(modelo: THREE.Object3D, o: { cor: string; low: boole
     casca(ante, pa.clone().addScaledVector(dAnte, 0.02), pm, W * 0.16, W * 0.125, matBranco, { extB: 0.015, ref: frente });
     fio(ante, pa.clone().lerp(pm, 0.25).addScaledVector(frente, W * 0.155), pa.clone().lerp(pm, 0.92).addScaledVector(frente, W * 0.125));
     anel(ante, pa.clone().lerp(pm, 0.2), dAnte, W * 0.158, W * 0.016, matOuro);
+    // os ESPINHOS do antebraço (no dorso — pra cima na pose de bind, palmas pra baixo), curvos pro cotovelo
+    for (const [k, tam] of [[0.45, 0.2], [0.72, 0.15]] as const) recorte("espinho", W * tam, pa.clone().lerp(pm, k).addScaledVector(cima, W * 0.14), dAnte, cima.clone().addScaledVector(dAnte, -0.7), { osso: ante, esp: W * 0.025 });
     // o PUNHO da manopla: um anel dourado e uma coroa de DENTES apontando pro cotovelo, abrindo pra fora
     const qPunho = pm.clone().addScaledVector(dAnte, -0.02);
     anel(mao, qPunho, dAnte, W * 0.14, W * 0.028, matOuro);
@@ -312,7 +329,7 @@ export function vestirTraje(modelo: THREE.Object3D, o: { cor: string; low: boole
       const ph = s * (Math.PI / 2 + 0.2) + k * 0.55;
       const radial = tras.clone().multiplyScalar(Math.cos(ph)).addScaledVector(lat, Math.sin(ph));
       const tang = new THREE.Vector3().crossVectors(dCoxa, radial).normalize();
-      recorte("dente", W * 0.15, fimTasset.clone().addScaledVector(radial, W * 0.305), tang, dCoxa.clone().negate().addScaledVector(radial, -0.15), { osso: coxa, mat: matOuro, borda: false, esp: W * 0.02 });
+      recorte("garra", W * 0.15, fimTasset.clone().addScaledVector(radial, W * 0.305), tang, dCoxa.clone().negate().addScaledVector(radial, -0.15), { osso: coxa, mat: matOuro, borda: false, esp: W * 0.02 });
     }
     // a coxote na frente da coxa (φ = π)
     casca(coxa, pc.clone().addScaledVector(dCoxa, compCoxa * 0.42), pj.clone().addScaledVector(dCoxa, -0.03), W * 0.235, W * 0.2, matBranco, { ref: lat, phi: [Math.PI, 2.3] });
@@ -320,7 +337,7 @@ export function vestirTraje(modelo: THREE.Object3D, o: { cor: string; low: boole
     const cj = pj.clone().addScaledVector(frente, W * 0.08);
     const joelho = esfera(canela, cj, W * 0.16, matBranco); joelho.scale.set(1, 1.15, 0.85);
     recorte("folha", W * 0.27, cj.clone().addScaledVector(fora, W * 0.1), fora, cima.clone().addScaledVector(fora, 0.25), { osso: canela, esp: W * 0.03 });
-    recorte("dente", W * 0.16, cj.clone().addScaledVector(baixo, W * 0.18).addScaledVector(frente, W * 0.04), lat, cima.clone().addScaledVector(frente, -0.3), { osso: canela, mat: matOuro, borda: false, esp: W * 0.025 });
+    recorte("espinho", W * 0.24, cj.clone().addScaledVector(frente, W * 0.1).addScaledVector(cima, W * 0.04), cima.clone().negate(), frente.clone().addScaledVector(cima, 0.6), { osso: canela, esp: W * 0.03 });
     // a GREVA: abre em cima e afina no tornozelo, com a crista dourada e o fio aceso
     casca(canela, pj.clone().addScaledVector(dCoxa, 0.05), pp, W * 0.19, W * 0.14, matBranco, { extB: 0.03, reto: true });
     fio(canela, pj.clone().lerp(pp, 0.2).addScaledVector(frente, W * 0.19), pj.clone().lerp(pp, 0.85).addScaledVector(frente, W * 0.145), matOuro, W * 0.02);
