@@ -9,7 +9,7 @@ import { carregarModeloAvatar, criarAvatarLuz, type AvatarLuzHandle } from "@/co
 import { carregarVrm, tingirVrm } from "@/components/cyber/AvatarVrm";
 import { glowTex } from "@/components/cyber/CenaCosmica";
 import { criarRifleCosmico } from "@/components/cyber/RifleCosmico";
-import { CORPO_DO_FUNDADOR } from "@/lib/cyber/estiloAvatar";
+import { CORPO_DO_FUNDADOR, CORPOS_VRM } from "@/lib/cyber/estiloAvatar";
 import type { NomeClipeRifle } from "@/lib/cyber/rifle";
 
 type Andar = "parado" | "frente" | "tras" | "esq" | "dir";
@@ -23,6 +23,7 @@ export default function Traje() {
   const est = useRef({ traje, rifle, mira, andar }); est.current = { traje, rifle, mira, andar };
   const avRef = useRef<AvatarLuzHandle | null>(null);
 
+  useEffect(() => { if (new URLSearchParams(location.search).get("modelo") === "f") setRifle(false); }, []);   // (?modelo=f: a astronauta sem arma — depois de montar, sem diferença com o HTML do servidor)
   useEffect(() => {
     const el = ref.current!; const R = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); R.setPixelRatio(Math.min(2, devicePixelRatio)); R.setSize(el.clientWidth, el.clientHeight); el.appendChild(R.domElement);
     const cena = new THREE.Scene(); cena.background = new THREE.Color(0x07091a);
@@ -40,7 +41,10 @@ export default function Traje() {
       if (!vivo) return;
       const a = criarAvatarLuz("#8b5cf6", starTex, false, gltf, { anime: true }); a.olharPara(0); cena.add(a.group); av = a; avRef.current = a;
       a.esperarCorpo(true);
-      carregarVrm(CORPO_DO_FUNDADOR.url).then((vrm) => { if (!vivo) return; tingirVrm(vrm, CORPO_DO_FUNDADOR.tintas); a.usarVrm(vrm); setPronto(true); })
+      const fem = new URLSearchParams(location.search).get("modelo") === "f";   // (a astronauta: um corpo feminino)
+      const corpoVrm = fem ? CORPOS_VRM.nina! : CORPO_DO_FUNDADOR;
+      if (fem) a.estiloVrm("feminina", { parada: true });   // (a marcha e a pose em pé femininas)
+      carregarVrm(corpoVrm.url).then((vrm) => { if (!vivo) return; tingirVrm(vrm, corpoVrm.tintas); a.usarVrm(vrm); setPronto(true); })
         .catch(() => { a.esperarCorpo(false); setPronto(true); });
     }).catch(() => {});
 

@@ -15,6 +15,8 @@ import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as skClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { tintaFixa, toon } from "./AvatarAnime";
+import type { VRM, VRMHumanBoneName } from "@pixiv/three-vrm";
+import { MIXAMO_PRO_VRM } from "@/lib/cyber/vrmMapa";
 
 /** os MODELOS (public/avatars/traje — CREDITS.md): o masculino (riggado no Mixamo) e a feminina (a "Eve", riggada por
  *  scripts/avatar/rigar-eve.mjs). `olhos`: onde ficam os olhos do rosto VRM dentro do capacete, a partir do osso da
@@ -71,7 +73,12 @@ export type CorpoAstronautaHandle = {
 const ossosMixamo = (raiz: THREE.Object3D) => { const m = new Map<string, THREE.Object3D>(); raiz.traverse((o) => { if ((o as THREE.Bone).isBone && o.name.startsWith("mixamorig")) m.set(o.name.replace(/^mixamorig:?/, ""), o); }); return m; };
 
 /** veste o astronauta no `corpo` do avatar, seguindo o esqueleto mixamo `modelo` */
-export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THREE.Object3D, op: { /** a cor do brilho de borda (a do jogador) */ rim?: string; olhos?: { cima: number; frente: number } } = {}): CorpoAstronautaHandle {
+export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THREE.Object3D, op: {
+  /** a cor do brilho de borda (a do jogador) */ rim?: string; olhos?: { cima: number; frente: number };
+  /** copiar as ROTAÇÕES do corpo VRM (que tem a marcha e a pose femininas por cima do esqueleto) em vez das do Soldier;
+   *  o deslocamento do quadril continua vindo do Soldier. Chamar `atualizar` DEPOIS do VRM no quadro */
+  fonteVrm?: VRM;
+} = {}): CorpoAstronautaHandle {
   const cena = skClone(gltf.scene);
   // os materiais são de cada avatar: viram DESENHO (toon) na cor de cada peça; a VISEIRA, vidro chapado transparente
   const rim = new THREE.Color(op.rim ?? "#9fb7ff");
@@ -90,6 +97,12 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   });
   const originais = new Map(mats.map((x) => [x, x.color.clone()] as const));
   const fonte = ossosMixamo(modelo), alvo = ossosMixamo(cena);
+  /** de onde vem a ROTAÇÃO de cada osso: o osso NORMALIZADO do VRM (quando há — o repouso dele é a pose T, como o do
+   *  Soldier, com as rotações locais em identidade) ou o do Soldier */
+  const vrm = op.fonteVrm, H = vrm?.humanoid, rigN = H?.normalizedHumanBonesRoot ?? null;
+  const rotDe = (nome: string): THREE.Object3D | null => { const v = MIXAMO_PRO_VRM[nome]; const r = v && H ? H.getNormalizedBoneNode(v as VRMHumanBoneName) : null; return r ?? fonte.get(nome) ?? null; };
+  /** (o rig normalizado não entra na passada de matrizes da cena — AvatarVrm: atualiza na mão) */
+  const atualizarRigN = () => { if (rigN && vrm) { vrm.scene.updateMatrixWorld(false); THREE.Object3D.prototype.updateMatrixWorld.call(rigN, true); } };
   const pares: { nome: string; s: THREE.Object3D; a: THREE.Object3D; sBindInv: THREE.Quaternion; aBind: THREE.Quaternion }[] = [];
 
   // a pose de BIND do Soldier (o esqueleto pode estar no meio de uma animação): guarda, põe em bind, mede, devolve
@@ -98,6 +111,9 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   const salvos: [THREE.Object3D, THREE.Vector3, THREE.Quaternion][] = [];
   for (const o of fonte.values()) salvos.push([o, o.position.clone(), o.quaternion.clone()]);
   (sk as THREE.Skeleton | null)?.pose();
+  // (o VRM também, quando é ele a fonte: o rig normalizado no REPOUSO — as rotações locais em identidade = a pose T)
+  const salvosVrm: [THREE.Object3D, THREE.Vector3, THREE.Quaternion][] = [];
+  if (rigN) { rigN.traverse((b) => { if (b !== rigN) { salvosVrm.push([b, b.position.clone(), b.quaternion.clone()]); b.quaternion.identity(); } }); atualizarRigN(); }
   corpo.updateWorldMatrix(true, false); modelo.updateMatrixWorld(true);
   const corpoInv = new THREE.Matrix4().copy(corpo.matrixWorld).invert(), mt = new THREE.Matrix4(), tp = new THREE.Vector3(), ts = new THREE.Vector3();
   /** a rotação (e a posição) de `o` no referencial do corpo */
@@ -125,10 +141,11 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   // esqueleto dela): fica na mesma pose do Soldier, e daí pra frente o Δ de cada quadro vale igual nos dois
   const pS = new THREE.Vector3(), pS2 = new THREE.Vector3(), pA2 = new THREE.Vector3(), dS = new THREE.Vector3(), dA = new THREE.Vector3(), qR = new THREE.Quaternion(), qW = new THREE.Quaternion(), qP = new THREE.Quaternion();
   for (const [nome, a] of alvo) {
-    const s = fonte.get(nome); if (!s) continue;
-    const filho = s.children.find((c) => (c as THREE.Bone).isBone && alvo.has(c.name.replace(/^mixamorig:?/, "")));
-    if (!filho) continue;
-    const fa = alvo.get(filho.name.replace(/^mixamorig:?/, ""))!;
+    const s = rotDe(nome); if (!s) continue;
+    // o filho: o 1º osso filho do astronauta que também existe na fonte (a direção do osso = dele pro filho)
+    const fa = a.children.find((c) => (c as THREE.Bone).isBone && rotDe(c.name.replace(/^mixamorig:?/, "")));
+    if (!fa) continue;
+    const filho = rotDe(fa.name.replace(/^mixamorig:?/, ""))!;
     s.getWorldPosition(pS); filho.getWorldPosition(pS2); dS.subVectors(pS2, pS).normalize();
     a.updateWorldMatrix(true, true); a.getWorldPosition(pA2); fa.getWorldPosition(dA); dA.sub(pA2).normalize();
     if (dA.lengthSq() < 1e-8 || dS.lengthSq() < 1e-8) continue;
@@ -137,12 +154,12 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   }
   cena.updateMatrixWorld(true);
   for (const [nome, a] of alvo) {
-    const s = fonte.get(nome); if (!s) continue;
+    const s = rotDe(nome); if (!s) continue;
     pares.push({ nome, s, a, sBindInv: noCorpo(s, new THREE.Quaternion()).invert(), aBind: noCorpo(a, new THREE.Quaternion()) });
   }
   const hipSBind = hipS.clone(), hipABind = hipA.clone();
-  for (const [o, p, q] of salvos) { o.position.copy(p); o.quaternion.copy(q); }
-  modelo.updateMatrixWorld(true);
+  for (const [o, p, q] of [...salvos, ...salvosVrm]) { o.position.copy(p); o.quaternion.copy(q); }
+  modelo.updateMatrixWorld(true); atualizarRigN();
 
   // o CONTORNO DE TINTA: pra cada malha com skin, a mesma geometria inflada (só as faces de trás) na MESMA skin. A
   // espessura é no espaço da geometria (o modelo está em cm, escalado): medida pela altura da malha no mundo
@@ -179,7 +196,7 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
       }
     },
     atualizar() {
-      corpo.updateWorldMatrix(true, false); corpoInv.copy(corpo.matrixWorld).invert(); modelo.updateMatrixWorld(true);
+      corpo.updateWorldMatrix(true, false); corpoInv.copy(corpo.matrixWorld).invert(); modelo.updateMatrixWorld(true); atualizarRigN();
       // (na ordem da hierarquia: o pai do osso já está na pose nova quando o filho é calculado)
       for (const p of pares) {
         noCorpo(p.s, qAg, pAg);
@@ -188,6 +205,7 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
         mt.multiplyMatrices(corpoInv, pai.matrixWorld).decompose(tp, qPai, ts);
         p.a.quaternion.copy(qPai.invert().multiply(qD.multiply(p.aBind)));   // local = pai⁻¹ · (Δ · bind)
         if (p.nome === "Hips") {   // o quadril DESLOCA (sentar, agachar, pousar): o mesmo tanto, na escala do astronauta
+          if (qS && p.s !== qS) noCorpo(qS, qAg, pAg);   // (o deslocamento vem sempre do Soldier)
           const alvoP = hipABind.clone().add(pAg.sub(hipSBind));
           p.a.position.copy(alvoP.applyMatrix4(corpo.matrixWorld)); pai.worldToLocal(p.a.position);
         }

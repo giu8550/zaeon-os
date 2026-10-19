@@ -12,6 +12,7 @@
  * - Os PESOS: as peças RÍGIDAS vão inteiras num osso (capacete e vidro → cabeça, pescoço → pescoço, peitoral → tronco,
  *   cada braçadeira → o antebraço do lado dela); o CORPO pela distância de cada vértice aos segmentos dos ossos (1/d⁴,
  *   os 3 mais perto), sem nunca misturar o lado esquerdo com o direito.
+ * - As CURVAS: a cintura afina, o quadril e os glúteos abrem e o busto avança (campos suaves só no tronco).
  * - As CORES: cada triângulo pega a cor da textura no meio dele e vira uma ZONA — placa (o verde-água), macacão (o
  *   creme), detalhe escuro (o cinza) — cada zona um material com o nome que as paletas do jogo conhecem ("armadura",
  *   "covertura", "tubos"; o vidro é a "visera").
@@ -79,6 +80,29 @@ for (const [s, L] of [[1, "Left"], [-1, "Right"]]) {
   J[`${L}ToeBase`] = new THREE.Vector3(coxa.x, H * 0.02, frenteDoPe * 0.55);
   J[`${L}Toe_End`] = new THREE.Vector3(coxa.x, H * 0.015, frenteDoPe);
 }
+// as CURVAS (o dono pediu realçar): a cintura afina, o quadril e os glúteos abrem, o busto avança — campos suaves
+// (gaussianas na altura) só no tronco (|x| dentro da largura do quadril: os braços, em pose A, ficam de fora). O
+// peitoral (a peça rígida) acompanha o busto
+const CURVAS = { cintura: 0.86, quadril: 1.13, gluteo: 1.12, busto: 1.16 };
+{
+  const yCint = (J.Spine.y + J.Spine1.y) / 2, yQuad = J.Hips.y - H * 0.025, yBusto = J.Spine2.y + H * 0.015;
+  const largQuad = Math.max(...corpo.filter((p) => Math.abs(p.y - yQuad) < H * 0.02).map((p) => Math.abs(p.x)));
+  const sino = (y, c, larg) => Math.exp(-(((y - c) / larg) ** 2));
+  const esculpir = (g, soFrente) => {
+    const pos = g.attributes.position, v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      if (Math.abs(v.x) > largQuad * 1.15 && !soFrente) continue;
+      const kc = sino(v.y, yCint, H * 0.045), kq = sino(v.y, yQuad, H * 0.06), kb = sino(v.y, yBusto, H * 0.035);
+      const sx = 1 + (CURVAS.cintura - 1) * kc + (CURVAS.quadril - 1) * kq;
+      const sz = 1 + (CURVAS.cintura - 1) * kc * 0.7 + (v.z < 0 ? (CURVAS.gluteo - 1) * kq : 0) + (v.z > 0 ? (CURVAS.busto - 1) * kb : 0);
+      pos.setXYZ(i, v.x * sx, v.y, v.z * sz);
+    }
+    pos.needsUpdate = true;
+  };
+  esculpir(pecas.Body_low, false); esculpir(pecas.Armor_low, true);
+}
+
 // a hierarquia (o pai de cada osso)
 const PAI = { Hips: null, Spine: "Hips", Spine1: "Spine", Spine2: "Spine1", Neck: "Spine2", Head: "Neck", HeadTop_End: "Head" };
 for (const L of ["Left", "Right"]) Object.assign(PAI, { [`${L}Shoulder`]: "Spine2", [`${L}Arm`]: `${L}Shoulder`, [`${L}ForeArm`]: `${L}Arm`, [`${L}Hand`]: `${L}ForeArm`, [`${L}HandMiddle1`]: `${L}Hand`, [`${L}HandMiddle4`]: `${L}HandMiddle1`, [`${L}UpLeg`]: "Hips", [`${L}Leg`]: `${L}UpLeg`, [`${L}Foot`]: `${L}Leg`, [`${L}ToeBase`]: `${L}Foot`, [`${L}Toe_End`]: `${L}ToeBase` });

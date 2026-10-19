@@ -355,14 +355,28 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   let clipe: { a: THREE.AnimationAction; segurar: boolean } | null = null, wClipe = 0, pedidoClipe = 0;
   // o RIFLE (lib/cyber/rifle): o estado do quadro, a arma posta nas mãos e as ações dos andares com ela (baixadas na 1ª
   // vez que ela aparece; tocam sempre, em laço, com o peso que o quadro manda)
-  let astro: CorpoAstronautaHandle | null = null, modeloTraje: ModeloAstronauta = "m", paletaTraje: Paleta = "branca", astroPedido = false, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true, vivoAv = true;
+  let vrmAtual: VRM | null = null, astroDoVrm = false, astro: CorpoAstronautaHandle | null = null, modeloTraje: ModeloAstronauta = "m", paletaTraje: Paleta = "branca", astroPedido = false, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true, vivoAv = true;
   /** com o astronauta pronto: ele aparece, o corpo de antes some (do VRM, só o rosto — atrás da viseira) */
   const vestir = () => {
     if (!astro || !trajeOn || !modeloMx) return;
-    astro.visivel(true); mochilaAntes = mochila.visible; mochila.visible = false;   // (o astronauta tem a própria mochila)
+    astro.visivel(true); if (mochila.visible) { mochilaAntes = true; mochila.visible = false; }   // (o astronauta tem a própria mochila)
     if (espelho) espelho.rosto(astro.ancoraRosto, ASTRONAUTAS[modeloTraje].olhos.escala);
     else if (!soldadoEscondido) { soldadoEscondido = []; modeloMx.traverse((x) => { if ((x as THREE.SkinnedMesh).isSkinnedMesh && x.visible) { x.visible = false; soldadoEscondido!.push(x); } }); }
+  };  /** carrega e veste o modelo da vez (a feminina copia o VRM quando ele já chegou) */
+  const pedirAstro = () => {
+    if (astro || astroPedido || !modeloMx) return;
+    astroPedido = true; const qual = modeloTraje;
+    void carregarAstronauta(ASTRONAUTAS[qual].url).then((g) => {
+      astroPedido = false;
+      if (!vivoAv || !modeloMx || qual !== modeloTraje || astro) return;
+      const doVrm = qual === "f" && !!vrmAtual;
+      astro = vestirAstronauta(g, modeloMx, corpo, { rim: `#${luz.getHexString()}`, olhos: ASTRONAUTAS[qual].olhos, fonteVrm: doVrm ? vrmAtual! : undefined });
+      astroDoVrm = doVrm; astro.pintar(paletaTraje); astro.visivel(false); vestir();
+    }).catch((e) => { astroPedido = false; console.warn("[avatar] o astronauta não carregou:", e); });
   };
+  /** descarta o astronauta (pra vestir outro): o rosto continua no modo traje até o novo chegar */
+  const largarAstro = () => { if (!astro) return; astro.dispose(); astro = null; astroDoVrm = false; };
+
   let rif: RifleNoAvatar | null = null, armaRifle: THREE.Object3D | null = null, pedindoRifle = false;
   let acoesRifle: { mira: THREE.AnimationAction; anda: THREE.AnimationAction; esq: THREE.AnimationAction; dir: THREE.AnimationAction } | null = null;
   const prepararRifle = () => {
@@ -1074,8 +1088,9 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         espelho.marcha(livre && andando && R < 0.05);   // (com o rifle, o andar é o dele)
         if (paradaAuto) { const alvo = livre && !andando && !acao?.espada && !(acao?.dash) && !(acao?.sprint) && R < 0.05 ? POSE_FEMININA_A_VONTADE : null; if (alvo !== poseAutoAntes) { poseAutoAntes = alvo; espelho.pose(alvo ?? poseVrm); } }
       }
-      if (astro && trajeOn) astro.atualizar();   // o ASTRONAUTA copia a pose final (antes do rosto VRM, que se prende nele)
+      if (astro && trajeOn && !astroDoVrm) astro.atualizar();   // o ASTRONAUTA copia a pose final (antes do rosto VRM, que se prende nele)
       espelho?.atualizar(dt, t);   // corpo VRM: copia a pose final (depois de todas as poses acima)
+      if (astro && trajeOn && astroDoVrm) { astro.atualizar(); espelho?.realinharRosto(); }   // (a ASTRONAUTA copia o VRM — a marcha e a pose femininas vêm dele —, e o rosto volta pro capacete)
     },
     passosNovos() { if (!pernas.length) return null; const n = pisadas; pisadas = 0; return n; },
     olharPara(f) { alvo = f + Math.PI; },
@@ -1097,17 +1112,9 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       trajeOn = on;
       if (on) {
         const quer: ModeloAstronauta = op?.modelo ?? (estiloCorpo === "feminina" ? "f" : "m");
-        if (astro && quer !== modeloTraje) { astro.dispose(); astro = null; astroPedido = false; }   // (trocou de modelo: veste o outro)
+        if (astro && quer !== modeloTraje) largarAstro();   // (trocou de modelo: veste o outro)
         modeloTraje = quer;
-        if (astro) vestir();
-        else if (!astroPedido) {
-          astroPedido = true;
-          const qual = modeloTraje;
-          void carregarAstronauta(ASTRONAUTAS[qual].url).then((g) => {
-            if (!vivoAv || !modeloMx || qual !== modeloTraje) { astroPedido = false; return; }
-            astro = vestirAstronauta(g, modeloMx, corpo, { rim: `#${luz.getHexString()}`, olhos: ASTRONAUTAS[qual].olhos }); astro.pintar(paletaTraje); astro.visivel(false); vestir();
-          }).catch((e) => { astroPedido = false; console.warn("[avatar] o astronauta não carregou:", e); });
-        }
+        if (astro) vestir(); else pedirAstro();
       } else {
         if (astro?.cena.visible) { astro.visivel(false); mochila.visible = mochilaAntes; }
         espelho?.rosto(null);
@@ -1149,13 +1156,15 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     },
     usarVrm(vrm, op) {
       if (!modeloMx || !repouso || espelho) return;
+      vrmAtual = vrm;
+      if (astro && modeloTraje === "f" && !astroDoVrm) { largarAstro(); if (trajeOn) pedirAstro(); }   // (a astronauta passa a copiar o VRM: veste de novo)
       // o soldado (e as cascas dele: aura, tinta) somem — o esqueleto continua animando, e continua no clique
       modeloMx.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
       espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso, { economico: op?.economico }); espelho.pose(poseVrm); espelho.estilo(estiloCorpo);
       if (trajeOn && astro) { soldadoEscondido = null; espelho.rosto(astro.ancoraRosto, ASTRONAUTAS[modeloTraje].olhos.escala); }   // (o VRM chegou com o traje já vestido: só o rosto)
       esconderOssosVazios(vrm.scene); esconderOssosVazios(modeloMx); esferaRapida(vrm.scene);   // ossos sem nada pra desenhar fora da lista (matrizes)
     },
-    soltarVrm() { espelho?.rosto(null); espelho?.dispose(); espelho = null; },
+    soltarVrm() { espelho?.rosto(null); espelho?.dispose(); espelho = null; vrmAtual = null; if (astroDoVrm) { largarAstro(); if (trajeOn) pedirAstro(); } },
     recolorir(hex) {
       armadura.set(hex);
       if (anime) { corDesenho(armadura, matArmadura.color); matArmadura.emissive.copy(armadura).multiplyScalar(0.22); matMochila.emissive.copy(armadura).multiplyScalar(0.2); matFone.emissive.copy(armadura).multiplyScalar(0.35); }

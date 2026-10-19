@@ -151,6 +151,8 @@ export type EspelhoVrm = {
    *  traje ajusta o tamanho do capacete por ela. `escala` encolhe o VRM (só o rosto aparece: a cabeça de anime é maior
    *  que a de um capacete de verdade). null = o corpo inteiro de volta */
   rosto(ancora: THREE.Object3D | null, escala?: number): number;
+  /** leva o rosto pra âncora de novo (a âncora mexeu depois do `atualizar` deste quadro — o astronauta que copia o VRM) */
+  realinharRosto(): void;
   dispose(): void;
 };
 /** um pulso (mundo), pra onde os dedos apontam, o lado do indicador e pra onde o cotovelo dobra */
@@ -348,6 +350,7 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
     estilo(e) { estilo = e; },
     marcha(on) { marchaOn = on; },
     maos(m) { maos = m; },
+    realinharRosto() { levarRosto(); },
     rosto(a, k = 1) {
       vrm.scene.scale.setScalar(escala * (a ? k : 1));
       if (a && !ancoraRosto) vrm.scene.traverse((x) => {
