@@ -2,7 +2,7 @@
  * Separa a ARMA de um modelo de casca única (a feiticeira gerada por IA: corpo, capa e cajado numa malha só) e prepara
  * o CORPO pro rig automático do Mixamo.
  *
- *   node scripts/avatar/separar-cajado.mjs <decimado.glb> <saida-dir> <basecolor> "x1,y1,z1" "x2,y2,z2" [rCabeca=0.055] [yCabeca=0.79] [rHaste=0.014]
+ *   node scripts/avatar/separar-cajado.mjs <decimado.glb> <saida-dir> <basecolor> "x1,y1,z1" "x2,y2,z2" [rCabeca=0.055] [yCabeca=0.79] [rHaste=0.014] [escalaObj=180]
  *
  * - O cajado é o que está COLADO na linha reta do topo (x1,y1,z1) ao pé (x2,y2,z2): raio `rCabeca` acima de `yCabeca`
  *   (o cristal) e `rHaste` abaixo (fino: a mão que o segura fica no corpo). Um triângulo vai pro cajado se os 3 vértices
@@ -20,7 +20,7 @@ import { OBJExporter } from "three/examples/jsm/exporters/OBJExporter.js";
 
 globalThis.FileReader ??= class { readAsArrayBuffer(b) { b.arrayBuffer().then((r) => { this.result = r; this.onloadend?.(); }); } readAsDataURL(b) { b.arrayBuffer().then((r) => { this.result = `data:${b.type};base64,${Buffer.from(r).toString("base64")}`; this.onloadend?.(); }); } };
 
-const [entrada, saidaDir, tex, a1, a2, rC = "0.055", yC = "0.79", rH = "0.014"] = process.argv.slice(2);
+const [entrada, saidaDir, tex, a1, a2, rC = "0.055", yC = "0.79", rH = "0.014", escalaObj = "180"] = process.argv.slice(2);
 if (!entrada || !saidaDir || !tex || !a1 || !a2) { console.error("uso: node separar-cajado.mjs <glb> <dir> <basecolor> x1,y1,z1 x2,y2,z2 [rCabeca] [yCabeca] [rHaste]"); process.exit(1); }
 mkdirSync(saidaDir, { recursive: true });
 const b = readFileSync(entrada);
@@ -47,11 +47,23 @@ for (let t = 0; t < idx.length; t += 3) (ehCajado[idx[t]] && ehCajado[idx[t + 1]
   for (let t = 0; t < corpoI.length; t += 3) (n.get(ach(raizV[corpoI[t]])) < total * 0.02 ? cajadoI : fica).push(corpoI[t], corpoI[t + 1], corpoI[t + 2]);
   corpoI.length = 0; corpoI.push(...fica);
 }
-const parte = (I, nome) => { const gg = geo.clone(); gg.setIndex(I); const m = new THREE.Mesh(gg, mesh.material); m.name = nome; return m; };
+/** uma parte só com os vértices que ela USA (vértice solto no OBJ quebra o rig automático do Mixamo) */
+const parte = (I, nome) => {
+  const novo = new Map(), gg = new THREE.BufferGeometry();
+  for (const i of I) if (!novo.has(i)) novo.set(i, novo.size);
+  for (const [k, at] of Object.entries(geo.attributes)) {
+    const arr = new Float32Array(novo.size * at.itemSize);
+    for (const [velho, n] of novo) for (let c = 0; c < at.itemSize; c++) arr[n * at.itemSize + c] = at.array[velho * at.itemSize + c];
+    gg.setAttribute(k, new THREE.BufferAttribute(arr, at.itemSize));
+  }
+  gg.setIndex(I.map((i) => novo.get(i))); gg.computeVertexNormals();
+  const m = new THREE.Mesh(gg, mesh.material); m.name = nome; return m;
+};
 const corpo = parte(corpoI, "corpo"), cajado = parte(cajadoI, "cajado");
 
 // o corpo pro Mixamo: OBJ (com as UVs) + MTL + a textura
 const corpoSoUv = corpo.clone(); corpoSoUv.geometry = corpo.geometry.clone(); corpoSoUv.geometry.deleteAttribute("color");
+corpoSoUv.geometry.scale(Number(escalaObj), Number(escalaObj), Number(escalaObj));   // (o Mixamo espera centímetros: ~180 de altura)
 corpoSoUv.material = new THREE.MeshStandardMaterial({ name: "feiticeira" });
 writeFileSync(join(saidaDir, "corpo.obj"), "mtllib corpo.mtl\n" + new OBJExporter().parse(corpoSoUv).replace(/^o .*$/m, (l) => `${l}\nusemtl feiticeira`));
 writeFileSync(join(saidaDir, "corpo.mtl"), "newmtl feiticeira\nKd 1 1 1\nmap_Kd textura.jpg\n");
