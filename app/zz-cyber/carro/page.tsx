@@ -19,7 +19,7 @@ export default function VitrineCarro() {
   const [ligado, setLigado] = useState(false); const ligadoRef = useRef(ligado); ligadoRef.current = ligado;
   const [som, setSom] = useState(false);
   const [kmh, setKmh] = useState(0);
-  const acel = useRef({ botao: false, w: false, s: false });
+  const acel = useRef({ botao: false, w: false, s: false, shift: false });
   const vistaRef = useRef<(v: "frente" | "lado" | "tres" | "cima") => void>(() => {});
   const tocarRef = useRef<(n: "carro-liga" | "carro-desliga") => void>(() => {});
   useEffect(() => {
@@ -42,13 +42,13 @@ export default function VitrineCarro() {
     const liberar = () => { audio.ativar(); setSom(true); };
     el.addEventListener("pointerdown", liberar);
     tocarRef.current = (n) => { liberar(); audio.tocar(n, carro.group.position, { dist: DISTANCIA.perto }); };
-    const kd = (e: KeyboardEvent) => { const k = e.key.toLowerCase(); if (k === "w") acel.current.w = true; if (k === "s") acel.current.s = true; liberar(); };
-    const ku = (e: KeyboardEvent) => { const k = e.key.toLowerCase(); if (k === "w") acel.current.w = false; if (k === "s") acel.current.s = false; };
+    const kd = (e: KeyboardEvent) => { const k = e.key.toLowerCase(); if (k === "w") acel.current.w = true; if (k === "s") acel.current.s = true; if (k === "shift" && !acel.current.shift && ligadoRef.current) { acel.current.shift = true; audio.tocar("carro-turbo", carro.group.position, { dist: DISTANCIA.perto }); } liberar(); };
+    const ku = (e: KeyboardEvent) => { const k = e.key.toLowerCase(); if (k === "w") acel.current.w = false; if (k === "s") acel.current.s = false; if (k === "shift") acel.current.shift = false; };
     addEventListener("keydown", kd); addEventListener("keyup", ku);
     const w = window as unknown as { __carro?: unknown; __som?: () => unknown };
     w.__carro = carro;
-    let k = 0, raf = 0, l = 0, vel = 0, pot = 0, hudT = 0; const clock = new THREE.Clock();
-    w.__som = () => ({ ativo: audio.ativo, ligado: l, vel, pot, k, mix: mixDoCarro({ ligado: l, vel, potencia: pot }) });
+    let k = 0, raf = 0, l = 0, vel = 0, pot = 0, hudT = 0, ac = 0; const clock = new THREE.Clock();
+    w.__som = () => ({ ativo: audio.ativo, ligado: l, vel, pot, k, ac, mix: mixDoCarro({ ligado: l, vel, potencia: pot, acel: ac }) });
     const loop = () => { raf = requestAnimationFrame(loop); const dt = Math.min(0.1, clock.getDelta()), t = clock.elapsedTime;
       const kAnt = k; k = Math.max(0, Math.min(1, k + (abertoRef.current ? 1 : -1) * dt / 1.6)); carro.abrir(k);
       for (const n of sonsDaCabine(kAnt, k, carro.nVidros)) audio.tocar(n, carro.group.position, { dist: DISTANCIA.perto, taxa: 0.96 + Math.random() * 0.08 });
@@ -56,9 +56,11 @@ export default function VitrineCarro() {
       l += ((ligadoRef.current ? 1 : 0) - l) * Math.min(1, dt * 2.5);
       const quer = ligadoRef.current && (acel.current.botao || acel.current.w) ? 1 : 0;
       pot += (quer - pot) * Math.min(1, dt * 4);
-      vel = Math.max(0, Math.min(45, vel + (quer ? 9 : acel.current.s ? -18 : -4) * dt));
+      const velAnt = vel, boost = acel.current.shift && quer;   // (Shift = turbo: mais rápido e mais longe)
+      vel = Math.max(0, Math.min(boost ? 70 : 45, vel + (quer ? (boost ? 16 : 9) : acel.current.s ? -18 : -4) * dt));
       if (!ligadoRef.current) vel = Math.max(0, vel - 10 * dt);
-      const mx = mixDoCarro({ ligado: l, vel, potencia: pot });
+      if (dt > 0) ac += (Math.max(-1, Math.min(1, (vel - velAnt) / dt / 8)) - ac) * Math.min(1, dt * 4);
+      const mx = mixDoCarro({ ligado: l, vel, potencia: pot + (boost ? 0.5 : 0), acel: ac });
       for (const n of LOOPS_CARRO) { audio.volumeLoop(loops[n], mx[n].vol); audio.taxaLoop(loops[n], mx[n].taxa); }
       carro.atualizar(t, dt, { vel, ligado: ligadoRef.current });
       hudT += dt; if (hudT > 0.15) { hudT = 0; setKmh(Math.round(vel * 3.6)); }
@@ -77,7 +79,7 @@ export default function VitrineCarro() {
       </div>
       <div style={{ position: "absolute", left: 12, bottom: 16, right: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <button onClick={() => { const on = !ligado; setLigado(on); tocarRef.current(on ? "carro-liga" : "carro-desliga"); }} style={{ ...botao(ligado ? "#3dff7a" : "#fff6"), background: ligado ? "#0d3a1fcc" : "#111b" }}>{ligado ? "⏻ Desligar" : "⏻ Ligar"}</button>
-        <button onPointerDown={segurar(true)} onPointerUp={segurar(false)} onPointerLeave={segurar(false)} onPointerCancel={segurar(false)} disabled={!ligado} style={{ ...botao("#7fd8ff"), opacity: ligado ? 1 : 0.4 }}>Segure pra acelerar (W)</button>
+        <button onPointerDown={segurar(true)} onPointerUp={segurar(false)} onPointerLeave={segurar(false)} onPointerCancel={segurar(false)} disabled={!ligado} style={{ ...botao("#7fd8ff"), opacity: ligado ? 1 : 0.4 }}>Segure pra acelerar (W · Shift turbo)</button>
         <span style={{ color: "#fff", font: "700 15px system-ui", textShadow: "0 1px 3px #000", minWidth: 80 }}>{kmh} km/h</span>
         {!som && <span style={{ color: "#fff", font: "600 12px system-ui", textShadow: "0 1px 3px #000" }}>clique na tela pra liberar o som</span>}
       </div>

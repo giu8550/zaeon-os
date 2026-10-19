@@ -18,6 +18,11 @@ describe("som do carro voador", () => {
     expect(indo["carro-turbina"].taxa).toBeGreaterThan(parado["carro-turbina"].taxa);
     expect(parado["carro-ar"].vol).toBe(0); expect(indo["carro-ar"].vol).toBeGreaterThan(0.4);
   });
+  it("o CANTO: acelerando o tom sobe, freando desce; o giro acelera com a velocidade", () => {
+    const base = { ligado: 1, vel: 20, potencia: 0.5 };
+    expect(mixDoCarro({ ...base, acel: 1 })["carro-tom"].taxa).toBeGreaterThan(mixDoCarro({ ...base, acel: -1 })["carro-tom"].taxa);
+    expect(mixDoCarro({ ...base, vel: 40 })["carro-giro"].taxa).toBeGreaterThan(mixDoCarro({ ...base, vel: 5 })["carro-giro"].taxa);
+  });
   it("a cabine: abrindo, a porta do motorista, os vidros e a porta do passageiro, na ordem; fechando, as travas", () => {
     expect(sonsDaCabine(0, 0.1, 2)).toEqual(["carro-porta"]);
     expect(sonsDaCabine(0.1, 0.5, 2)).toEqual(["carro-vidro", "carro-vidro"]);

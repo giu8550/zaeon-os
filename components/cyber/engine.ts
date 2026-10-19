@@ -652,7 +652,7 @@ export class CyberEngine {
   /** o CARRO VOADOR (components/cyber/CarroHex): a física é a mesma das motos (lib/cyber/motoFisica). As fases: parado →
    *  ENTRANDO (a cabine abre) → FECHANDO (ele já sentado; a cabine fecha e o carro liga) → DIRIGINDO → ABRINDO (pousado,
    *  pediu pra sair) → SAINDO (ele já do lado de fora; a cabine fecha) → parado. `k` = a abertura da cabine (0..1) */
-  private carro: { h: CarroHandle; est: EstadoMoto; pousado: boolean; fase: "parado" | "entrando" | "fechando" | "dirigindo" | "abrindo" | "saindo"; k: number; ligado: number; potencia: number; loops: Record<(typeof LOOPS_CARRO)[number], LoopSom> } | null = null;
+  private carro: { h: CarroHandle; est: EstadoMoto; pousado: boolean; fase: "parado" | "entrando" | "fechando" | "dirigindo" | "abrindo" | "saindo"; k: number; ligado: number; potencia: number; acel: number; velAnt: number; boost: boolean; loops: Record<(typeof LOOPS_CARRO)[number], LoopSom> } | null = null;
   /** dentro do carro (sentado: fechando, dirigindo ou abrindo) */
   private noCarro() { const f = this.carro?.fase; return f === "fechando" || f === "dirigindo" || f === "abrindo"; }
   /** num veículo que a câmera persegue (moto ou carro) — e o rumo dele */
@@ -2719,7 +2719,7 @@ export class CyberEngine {
     if (!this.carro) {
       const h = criarCarroHex({ low: this.o.low }); this.cena.scene.add(h.group);
       const loops = Object.fromEntries(LOOPS_CARRO.map((n) => [n, this.som.loop(n, h.group, { dist: DISTANCIA.perto })])) as Record<(typeof LOOPS_CARRO)[number], LoopSom>;
-      this.carro = { h, est: motoParada(CARRO_VAGA.x, CHAO, CARRO_VAGA.z, CARRO_VAGA.rumo), pousado: true, fase: "parado", k: 0, ligado: 0, potencia: 0, loops };
+      this.carro = { h, est: motoParada(CARRO_VAGA.x, CHAO, CARRO_VAGA.z, CARRO_VAGA.rumo), pousado: true, fase: "parado", k: 0, ligado: 0, potencia: 0, acel: 0, velAnt: 0, boost: false, loops };
     }
     const c = this.carro, kAnt = c.k;
     if (c.fase === "entrando" || c.fase === "abrindo") c.k = Math.min(1, c.k + dt / CARRO_CABINE);
@@ -2732,7 +2732,9 @@ export class CyberEngine {
     } else if (c.fase === "saindo" && c.k <= 0) c.fase = "parado";
     for (const n of sonsDaCabine(kAnt, c.k, c.h.nVidros)) this.som.tocar(n, c.h.group.position, { dist: DISTANCIA.perto, taxa: 0.96 + Math.random() * 0.08 });
     const ligado = c.fase === "dirigindo" || c.fase === "abrindo" ? 1 : 0; c.ligado += (ligado - c.ligado) * Math.min(1, dt * 2.5);
-    const vel = Math.hypot(c.est.vx, c.est.vz), mx = mixDoCarro({ ligado: c.ligado, vel, potencia: Math.min(1, c.potencia) });
+    const vel = Math.hypot(c.est.vx, c.est.vz);
+    if (dt > 0) { c.acel += (Math.max(-1, Math.min(1, (vel - c.velAnt) / dt / 8)) - c.acel) * Math.min(1, dt * 4); c.velAnt = vel; }   // (o CANTO: acelerando/desacelerando)
+    const mx = mixDoCarro({ ligado: c.ligado, vel, potencia: Math.min(1, c.potencia), acel: c.acel });
     for (const n of LOOPS_CARRO) { this.som.volumeLoop(c.loops[n], mx[n].vol); this.som.taxaLoop(c.loops[n], mx[n].taxa); }
     c.h.group.position.set(c.est.x, c.est.y + CARRO_PAIRA, c.est.z); c.h.group.rotation.y = c.est.yaw;
     c.h.abrir(c.k); c.h.atualizar(t, dt, { vel, ligado: c.ligado > 0.3 });
@@ -3749,6 +3751,8 @@ export class CyberEngine {
       const cr = this.carro!;
       if (cr.fase === "dirigindo") {
         const c = this.comandoDeMoto(); cr.potencia = Math.max(0, c.acel) + (c.boost ? 0.5 : 0);
+        if (c.boost && !cr.boost) this.som.tocar("carro-turbo", cr.h.group.position, { dist: DISTANCIA.perto });   // (o assobio do tubo no boost)
+        cr.boost = c.boost;
         const r = passoMotoSub(cr.est, c, dtReal, this.solidosDeVoo(), MOTO.teto); cr.est = r.s; cr.pousado = r.pousado; if (r.pousado) this.autoPouso = false;
       } else { cr.potencia = 0; cr.est = { ...cr.est, vx: 0, vy: 0, vz: 0 }; }
       eu.pos.set(cr.est.x, 0, cr.est.z); eu.facing = cr.est.yaw; eu.moving = Math.hypot(cr.est.vx, cr.est.vz) > 1; this.sitT = 0;
