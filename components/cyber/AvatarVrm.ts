@@ -146,7 +146,7 @@ export type EspelhoVrm = {
    *  pedidos (mundo) e as mãos giram pros dedos/indicador pedidos — a cópia só passa rotações, e o braço do VRM tem
    *  outro comprimento: sem isso a mão parava ~10 cm fora da arma. null = solta */
   maos(m: MaosVrm | null): void;
-  /** SÓ O ROSTO (o traje espacial — components/cyber/TrajeEspacial): esconde corpo, roupa e cabelo e leva o VRM inteiro
+  /** SÓ O ROSTO (o traje — components/cyber/CorpoAstronauta): esconde corpo e roupa (o rosto e o cabelo ficam) e leva o VRM inteiro
    *  pra que o meio dos OLHOS fique na `ancora` (dentro do capacete). Devolve a distância entre os olhos (m, mundo) — o
    *  traje ajusta o tamanho do capacete por ela. `escala` encolhe o VRM (só o rosto aparece: a cabeça de anime é maior
    *  que a de um capacete de verdade). null = o corpo inteiro de volta */
@@ -263,10 +263,10 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
       }
     }
   };
-  // SÓ O ROSTO (traje): os materiais do rosto (os do VRoid: _Face…, _Eye…) ficam; o resto some
+  // SÓ O ROSTO (traje): os materiais do rosto e do cabelo (os do VRoid: _Face…, _Eye…, _Hair…) ficam; o resto some
   let ancoraRosto: THREE.Object3D | null = null;
   const olhoE = cru("leftEye"), olhoD = cru("rightEye"), cab = cru("head");
-  const ehDoRosto = (n: string) => /_(Face|Eye)[A-Za-z]*_/.test(n) && !/Hair/i.test(n);
+  const ehDoRosto = (n: string) => /_(Face|Eye)[A-Za-z]*_|_Hair[A-Za-z]*_/.test(n);   // (o rosto e o CABELO — quem é dentro do capacete)
   const escondidosRosto: THREE.Material[] = [];
   const pO = new THREE.Vector3(), pAlvo = new THREE.Vector3();
   const meioDosOlhos = (out: THREE.Vector3) => {
