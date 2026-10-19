@@ -8,9 +8,16 @@
  * da Lamborghini — sobem girando na dobradiça da frente — revelando o COCKPIT (o banco, o painel com 3 telas, o manche).
  * `abrir(k)` 0..1; `assento` = onde o piloto senta.
  *
+ * LEVE (vários carros no mapa, como as motos): o casco é UMA malha lisa com os hexágonos, as juntas, a degradê e o
+ * vidro PINTADOS numa textura (feita uma vez); só as peças que abrem (as 2 portas, os 2 vidros que deslizam) são
+ * malhas à parte. Material padrão com brilho MODERADO (sem verniz). Geometrias, texturas e materiais são
+ * COMPARTILHADOS por todos os carros (`recursos`) — cada carro só tem os grupos e ~14 desenhos; o cockpit só desenha
+ * com a cabine aberta.
+ *
  * Referencial: +z = a FRENTE, +y = cima, y = 0 = a base da saia (o carro paira acima do chão).
  */
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 export type CarroHandle = {
   group: THREE.Group;
@@ -33,8 +40,6 @@ const CASCO = { a: 1.38, b: 0.86, c: 2.8, y0: 0.55 } as const;   // (mais ALTO: 
 /** os HEXÁGONOS, medidos em METROS na vista de cima (o mesmo tamanho no carro todo — não amassam nas pontas): o raio,
  *  o quanto esticam no comprimento (aerodinâmico), o raio dos CANTOS arredondados (fração da aresta) e a junta (m) */
 const HEX = { r: 0.6, alonga: 1.3, arred: 0.34, junta: 0.028 } as const;
-/** o afastamento (m) da PLACA e do FORRO (a junta embaixo) da superfície — longe o bastante pra não brigarem na tela */
-const PLACA = 0.022, FORRO = 0.006;
 /** as PORTAS (tesoura, "Lamborghini"): a dobradiça na frente de cada lado (altura e z), onde fica o hexágono lateral e
  *  o quanto sobem/abrem pra fora */
 const PORTA = { pivoY: 0.78, pivoZ: 0.85, ladoZ: 0.0, sobe: 0.95, abre: 0.12 } as const;
@@ -122,235 +127,197 @@ function contornoDoHex(cX: number, cZ: number, junta: number, arred: number): [n
   }
   return out;
 }
-/** a PLACA de um hexágono RENTE ao casco: o contorno (na vista de cima) projetado na superfície, afastado `sobe`, com
- *  anéis por dentro e a NORMAL DA SUPERFÍCIE em cada vértice — a luz corre contínua de uma placa pra outra (o carro lê
- *  como uma peça lisa e aerodinâmica, só com as juntas desenhando os hexágonos) */
+/** a TEXTURA do casco cobre a vista de cima: X de −a a +a, Z da ponta da cauda ao bico */
+const TEX = { zMin: -CASCO.c * TRASEIRA.cauda - 0.2, zMax: CASCO.c + 0.2, xMax: CASCO.a + 0.1, w: 512, h: 1024 } as const;
+const uvDe = (X: number, Z: number): [number, number] => [(X + TEX.xMax) / (2 * TEX.xMax), (Z - TEX.zMin) / (TEX.zMax - TEX.zMin)];
+
+/** uma PLACA (o contorno de um hexágono na vista de cima) RENTE ao casco, afastada `sobe`, com normal e UV */
 function placaNoCasco(contorno: [number, number][], cX: number, cZ: number, sobe: number): THREE.BufferGeometry {
-  const pos: number[] = [], nor: number[] = [], idx: number[] = [], n = new THREE.Vector3(), ANEIS = [0.34, 0.68, 1];
-  const vert = (X: number, Z: number) => { const [u, v] = uvDoPlano(X, Z), p = superficie(u, v); normalDoCasco(u, v, n); p.addScaledVector(n, sobe); pos.push(p.x, p.y, p.z); nor.push(n.x, n.y, n.z); return pos.length / 3 - 1; };
+  const pos: number[] = [], nor: number[] = [], uv: number[] = [], idx: number[] = [], n = new THREE.Vector3(), ANEIS = [0.5, 1];
+  const vert = (X: number, Z: number) => { const [u, v] = uvDoPlano(X, Z), p = superficie(u, v); normalDoCasco(u, v, n); p.addScaledVector(n, sobe); pos.push(p.x, p.y, p.z); nor.push(n.x, n.y, n.z); uv.push(...uvDe(p.x, p.z)); return pos.length / 3 - 1; };
   const c0 = vert(cX, cZ), L = contorno.length, aneis = ANEIS.map((k) => contorno.map(([X, Z]) => vert(cX + (X - cX) * k, cZ + (Z - cZ) * k)));
-  // (a ordem dos vértices deixa a FRENTE dos triângulos pra fora — senão a luz batia no lado de dentro e a placa ficava preta)
+  // (a ordem dos vértices deixa a FRENTE dos triângulos pra fora)
   for (let i = 0; i < L; i++) { const j = (i + 1) % L; idx.push(c0, aneis[0]![j]!, aneis[0]![i]!); }
   for (let a = 0; a < ANEIS.length - 1; a++) for (let i = 0; i < L; i++) { const j = (i + 1) % L, p = aneis[a]!, q = aneis[a + 1]!; idx.push(p[i]!, q[j]!, q[i]!, p[i]!, p[j]!, q[j]!); }
-  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); g.setIndex(idx);
-  return g;
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+  return g.toNonIndexed();
 }
-/** pinta os vértices (a degradê da lataria) */
-function pintar(g: THREE.BufferGeometry, cor: (p: THREE.Vector3) => THREE.Color) {
-  const pos = g.attributes.position!, col = new Float32Array(pos.count * 3), p = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) { const c = cor(p.fromBufferAttribute(pos, i)); col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
-  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+/** (pra juntar malhas: tudo sem índice e com normal + uv) */
+const prep = (g: THREE.BufferGeometry, uvFixo?: [number, number]) => {
+  const n = g.index ? g.toNonIndexed() : g; if (!n.attributes.normal) n.computeVertexNormals();
+  if (uvFixo || !n.attributes.uv) { const c = n.attributes.position!.count, a = new Float32Array(c * 2); for (let i = 0; i < c; i++) a.set(uvFixo ?? [0.5, 0.5], i * 2); n.setAttribute("uv", new THREE.BufferAttribute(a, 2)); }
+  for (const k of Object.keys(n.attributes)) if (k !== "position" && k !== "normal" && k !== "uv" && k !== "color") n.deleteAttribute(k);
+  return n;
+};
+const juntar = (gs: THREE.BufferGeometry[]) => { const g = mergeGeometries(gs)!; for (const x of gs) x.dispose(); return g; };
+const colorir = (g: THREE.BufferGeometry, cor: number) => { const c = new THREE.Color(cor), n = g.attributes.position!.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3); g.setAttribute("color", new THREE.BufferAttribute(a, 3)); return g; };
+
+/** a TEXTURA do casco: cada hexágono pintado (o vidro preto, a lataria na degradê do laranja ao vermelho — mais clara
+ *  em cima, no meio) e as JUNTAS finas num laranja escuro (o fundo) */
+function texturaDoCasco(low: boolean): THREE.CanvasTexture {
+  const W = low ? 256 : TEX.w, H = low ? 512 : TEX.h, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const g = cv.getContext("2d")!, px = (X: number, Z: number): [number, number] => { const [u, v] = uvDe(X, Z); return [u * W, (1 - v) * H]; };
+  g.fillStyle = "#6a1f0c"; g.fillRect(0, 0, W, H);
+  const s3 = Math.sqrt(3);
+  for (let q = -8; q <= 8; q++) for (let r = -8; r <= 8; r++) {
+    const cX = HEX.r * s3 * (q + r / 2), cZ = HEX.r * 1.5 * r * HEX.alonga;
+    if (cZ > TEX.zMax + HEX.r || cZ < TEX.zMin - HEX.r || Math.abs(cX) > TEX.xMax + HEX.r) continue;
+    const [cu, cv2] = uvDoPlano(cX, cZ), tipo = tipoDoHex(cu, cv2), vidro = tipo === "vidro";
+    const ct = contornoDoHex(cX, cZ, vidro ? 0 : HEX.junta, vidro ? 0 : HEX.arred);
+    g.beginPath(); ct.forEach(([X, Z], i) => { const [x, y] = px(X, Z); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.closePath();
+    if (vidro) { g.fillStyle = "#06070a"; g.fill(); continue; }
+    const k = THREE.MathUtils.clamp((-cZ + CASCO.c) / (CASCO.c * (1 + TRASEIRA.cauda)), 0, 1);
+    const [x0, y0] = px(cX, cZ - HEX.r * HEX.alonga), [x1, y1] = px(cX, cZ + HEX.r * HEX.alonga), gr = g.createLinearGradient(x0, y0, x1, y1);
+    const base = new THREE.Color(0xff7a2a).lerp(new THREE.Color(0xd8341e), k), claro = base.clone().lerp(new THREE.Color(0xffc29a), 0.22);
+    gr.addColorStop(0, `#${base.getHexString()}`); gr.addColorStop(1, `#${claro.getHexString()}`);   // (cada placa com um tiquinho de brilho próprio)
+    g.fillStyle = gr; g.fill();
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 
-type Mats = Record<"chassi" | "saia" | "laranja" | "laranja2" | "brilhoCauda" | "junta" | "brilhoVidro" | "aceso" | "vidro" | "dentro" | "banco" | "tela" | "branco" | "verde" | "jato", THREE.Material>;
-
-function criarMats(): Mats {
-  // a lataria: do vermelho (em cima, atrás) ao laranja (embaixo, na frente) — cor por vértice, como a degradê das refs
-  return {
-    chassi: new THREE.MeshPhysicalMaterial({ color: 0x07080b, metalness: 0.4, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.08 }),
-    saia: new THREE.MeshStandardMaterial({ color: 0x0b0c10, metalness: 0.3, roughness: 0.55 }),
-    laranja: new THREE.MeshPhysicalMaterial({ vertexColors: true, metalness: 0.15, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.12, side: THREE.DoubleSide }),
-    brilhoVidro: new THREE.LineBasicMaterial({ color: 0xffa64d, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
-    brilhoCauda: new THREE.MeshBasicMaterial({ color: 0xffa64d }),
-    laranja2: new THREE.MeshPhysicalMaterial({ color: 0xd9431f, metalness: 0.15, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.12, side: THREE.DoubleSide }),   // (as aletas: o vermelho-laranja da traseira)
-    junta: new THREE.MeshStandardMaterial({ color: 0x8a2a12, metalness: 0.2, roughness: 0.45, side: THREE.DoubleSide }),   // (a junta entre os hexágonos: lataria mais escura, não preta)
-    aceso: new THREE.MeshStandardMaterial({ color: 0xffb02e, emissive: 0xff8a10, emissiveIntensity: 1.1, roughness: 0.35, flatShading: true, side: THREE.DoubleSide }),
-    vidro: new THREE.MeshPhysicalMaterial({ color: 0x05070c, metalness: 0.2, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02, side: THREE.DoubleSide }),   // (escuro e espelhado — opaco: o interior não aparece)
-    dentro: new THREE.MeshStandardMaterial({ color: 0x050608, roughness: 0.8, side: THREE.DoubleSide }),
-    banco: new THREE.MeshStandardMaterial({ color: 0x15161b, roughness: 0.6, metalness: 0.1 }),
-    tela: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-    branco: new THREE.MeshBasicMaterial({ color: 0xf2f6ff }),
-    verde: new THREE.MeshBasicMaterial({ color: 0x3dff7a }),
-    jato: new THREE.MeshBasicMaterial({ color: 0xff9a3a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }),
+/** os RECURSOS compartilhados por TODOS os carros (geometrias, texturas, materiais) — feitos uma vez */
+type Recursos = {
+  mats: { casco: THREE.MeshStandardMaterial; chassi: THREE.MeshStandardMaterial; aceso: THREE.MeshBasicMaterial; luzes: THREE.MeshBasicMaterial; jato: THREE.MeshBasicMaterial; cabine: THREE.MeshLambertMaterial; tela: THREE.MeshBasicMaterial; sombra: THREE.MeshBasicMaterial; brilho: THREE.LineBasicMaterial };
+  geo: { casco: THREE.BufferGeometry; portas: THREE.BufferGeometry[]; vidros: { g: THREE.BufferGeometry; linha: THREE.BufferGeometry; base: THREE.Vector3; eixo: THREE.Vector3; frente: THREE.Vector3; normal: THREE.Vector3; ordem: number }[]; ladoAceso: THREE.BufferGeometry; chassi: THREE.BufferGeometry; caudaLaranja: THREE.BufferGeometry; caudaEscura: THREE.BufferGeometry; luzes: THREE.BufferGeometry; jatos: THREE.BufferGeometry; cabine: THREE.BufferGeometry; telas: THREE.BufferGeometry; sombra: THREE.BufferGeometry };
+  pivoPorta: THREE.Vector3[];
+};
+const recursos = new Map<boolean, Recursos>();
+function criarRecursos(low: boolean): Recursos {
+  const texCasco = texturaDoCasco(low);
+  const mats: Recursos["mats"] = {
+    casco: new THREE.MeshStandardMaterial({ map: texCasco, metalness: 0.25, roughness: 0.34, envMapIntensity: 0.7 }),   // (brilho MODERADO, sem verniz)
+    chassi: new THREE.MeshStandardMaterial({ color: 0x0a0b0e, metalness: 0.35, roughness: 0.38 }),
+    aceso: new THREE.MeshBasicMaterial({ color: 0xffb54a }),
+    luzes: new THREE.MeshBasicMaterial({ vertexColors: true }),
+    jato: new THREE.MeshBasicMaterial({ color: 0xff9a3a, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }),
+    cabine: new THREE.MeshLambertMaterial({ color: 0x15161b }),
+    tela: new THREE.MeshBasicMaterial({ map: (() => { const c = document.createElement("canvas"); c.width = 192; c.height = 128; const g = c.getContext("2d")!; g.fillStyle = "#0b1220"; g.fillRect(0, 0, 192, 128); g.strokeStyle = "#7fd8ff"; g.lineWidth = 2; g.strokeRect(4, 4, 184, 120); g.fillStyle = "#ffb02e"; g.fillRect(14, 16, 70, 8); g.fillStyle = "#7fd8ff"; for (let i = 0; i < 5; i++) g.fillRect(14, 36 + i * 15, 40 + ((i * 37) % 90), 5); g.strokeStyle = "#3dff7a"; g.beginPath(); g.arc(150, 70, 26, 0, Math.PI * 2); g.stroke(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })() }),
+    sombra: new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, map: (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d")!; const gr = g.createRadialGradient(32, 32, 4, 32, 32, 32); gr.addColorStop(0, "rgba(0,0,0,0.5)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })() }),
+    brilho: new THREE.LineBasicMaterial({ color: 0xffa64d, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
   };
+  // ── o CASCO: a malha lisa (sem as portas e os vidros que abrem) + a barriga da cauda ──
+  const NU = low ? 18 : 30, NV = low ? 40 : 72, pos: number[] = [], nor: number[] = [], uv: number[] = [], n = new THREE.Vector3();
+  const tipoNoPonto = (u: number, v: number) => { const p = superficie(u, v), [cX, cZ] = centroDoHex(p.x, p.z), [cu, cv] = uvDoPlano(cX, cZ), t = tipoDoHex(cu, cv); return t === "porta-e" || t === "porta-d" || (t === "vidro" && abreDoVidro(cu, cv)) ? `${cX.toFixed(2)},${cZ.toFixed(2)}` : null; };
+  const vtx = (u: number, v: number) => { const p = superficie(u, v); normalDoCasco(u, v, n); pos.push(p.x, p.y, p.z); nor.push(n.x, n.y, n.z); uv.push(...uvDe(p.x, p.z)); };
+  for (let i = 0; i < NU; i++) for (let k = 0; k < NV; k++) {
+    const u0 = (i / NU) * 2 - 1, u1 = ((i + 1) / NU) * 2 - 1, v0 = (k / NV) * 2 - 1, v1 = ((k + 1) / NV) * 2 - 1;
+    // (o vão do que abre: só os quadradinhos INTEIROS dentro da peça — a peça, por cima, cobre a borda)
+    const t = [tipoNoPonto(u0 * 0.999, v0 * 0.999), tipoNoPonto(u1 * 0.999, v0 * 0.999), tipoNoPonto(u1 * 0.999, v1 * 0.999), tipoNoPonto(u0 * 0.999, v1 * 0.999)];
+    if (t[0] && t.every((x) => x === t[0])) continue;
+    for (const [a, b] of [[u0, v0], [u0, v1], [u1, v1], [u0, v0], [u1, v1], [u1, v0]] as const) vtx(a, b);
+  }
+  const cascoTopo = new THREE.BufferGeometry(); cascoTopo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); cascoTopo.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); cascoTopo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  const barriga = (() => {   // a BARRIGA da cauda (fechando o tubo por baixo: o "upsweep" dos helicópteros)
+    const ps: number[] = [], NB = low ? 10 : 16, NVB = low ? 20 : 36, v0 = -0.2;
+    const P = (u: number, v: number) => { const t = superficie(u, v), esp = TRASEIRA.barriga * sm(-0.2, -0.5, v) * (1 - sm(-0.9, -1, v) * 0.8); return [t.x, baseEm(v) - esp * Math.pow(Math.max(0, 1 - u * u), 0.5), t.z] as const; };
+    for (let i = 0; i < NB; i++) for (let k = 0; k < NVB; k++) {
+      const u0 = (i / NB) * 2 - 1, u1 = ((i + 1) / NB) * 2 - 1, va = v0 + (k / NVB) * (-0.995 - v0), vb = v0 + ((k + 1) / NVB) * (-0.995 - v0);
+      for (const [u, v] of [[u0, va], [u0, vb], [u1, vb], [u0, va], [u1, vb], [u1, va]] as const) ps.push(...P(u, v));
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(ps, 3)); g.computeVertexNormals(); return prep(g, uvDe(0, -CASCO.c * TRASEIRA.cauda * 0.7));
+  })();
+  const casco = juntar([cascoTopo, barriga]);
+  // ── as PEÇAS que abrem: as portas (os hexágonos de cada lado do cockpit) e os hexágonos do vidro do passageiro ──
+  const s3 = Math.sqrt(3), portas: THREE.BufferGeometry[][] = [[], []], vidros: Recursos["geo"]["vidros"] = [];
+  const pivoPorta = [-1, 1].map((lado) => new THREE.Vector3(lado * 1.3, PORTA.pivoY, PORTA.pivoZ));
+  for (let q = -8; q <= 8; q++) for (let r = -8; r <= 8; r++) {
+    const cX = HEX.r * s3 * (q + r / 2), cZ = HEX.r * 1.5 * r * HEX.alonga, [cu, cv] = uvDoPlano(cX, cZ), tipo = tipoDoHex(cu, cv);
+    if (Math.abs(cZ) > CASCO.c * 1.6 || Math.abs(cX) > CASCO.a + HEX.r) continue;
+    const cheio = contornoDoHex(cX, cZ, 0, 0);
+    if (tipo === "porta-e" || tipo === "porta-d") { const i = tipo === "porta-e" ? 1 : 0, g = placaNoCasco(cheio, cX, cZ, 0.012); g.translate(-pivoPorta[i]!.x, -pivoPorta[i]!.y, -pivoPorta[i]!.z); portas[i]!.push(g); }
+    else if (tipo === "vidro" && abreDoVidro(cu, cv)) {
+      const [fu, fv] = uvDoPlano(cX, cZ + HEX.r * HEX.alonga * 0.95), base = pontoDoCasco(fu, fv, 0.012);
+      const g = placaNoCasco(cheio, cX, cZ, 0.012); g.translate(-base.x, -base.y, -base.z);
+      const linha = new THREE.BufferGeometry().setFromPoints(contornoDoHex(cX, cZ, 0.01, 0).map(([X, Z]) => { const [u, v] = uvDoPlano(X, Z); return pontoDoCasco(u, v, 0.016).sub(base); }));
+      vidros.push({ g, linha, base, eixo: pontoDoCasco(Math.min(1, cu + 0.05), cv, 0).sub(pontoDoCasco(Math.max(-1, cu - 0.05), cv, 0)).normalize(), frente: pontoDoCasco(cu, Math.min(1, cv + 0.05), 0).sub(pontoDoCasco(cu, Math.max(-1, cv - 0.05), 0)).normalize(), normal: normalDoCasco(cu, cv), ordem: cv - Math.abs(cu) * 0.3 });
+    }
+  }
+  vidros.sort((x, y) => y.ordem - x.ordem);
+  // o HEXÁGONO LATERAL aceso (no referencial da porta de cada lado — o mesmo desenho, espelhado pela porta)
+  const forma = (w: number, h: number) => { const f = new THREE.Shape(); f.moveTo(-w / 2, 0); f.lineTo(-w / 2 + h * 0.6, h / 2); f.lineTo(w / 2 - h * 0.6, h / 2); f.lineTo(w / 2, 0); f.lineTo(w / 2 - h * 0.6, -h / 2); f.lineTo(-w / 2 + h * 0.6, -h / 2); f.closePath(); return f; };
+  const ladoAceso = new THREE.ShapeGeometry(forma(1.86, 0.48));
+  // ── o CHASSI (a faixa preta), a saia e os pés — uma malha ──
+  const planta = (k: number) => { const f = new THREE.Shape(); PLANTA.forEach(([x, z], i) => (i ? f.lineTo(x * k, -z * k) : f.moveTo(x * k, -z * k))); f.closePath(); return f; };
+  const ch = new THREE.ExtrudeGeometry(planta(1.02), { depth: 0.2, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.06, bevelSegments: low ? 1 : 2 }); ch.rotateX(-Math.PI / 2); ch.translate(0, 0.3, 0);
+  const sa = new THREE.ExtrudeGeometry(planta(0.78), { depth: 0.18, bevelEnabled: false }); sa.rotateX(-Math.PI / 2); sa.translate(0, 0.1, 0);
+  const pes = [[0.9, 1.25], [-0.9, 1.25], [0.95, -0.95], [-0.95, -0.95]].map(([x, z]) => { const b = new THREE.BoxGeometry(0.36, 0.12, 0.5); b.rotateY(x! * z! > 0 ? 0.3 : -0.3); b.translate(x!, 0.06, z!); return b; });
+  const chassi = juntar([ch, sa, ...pes].map((g) => prep(g)));
+  // ── a CAUDA: a barbatana com o anel (Fenestron, inclinada 12°) e os estabilizadores biplano — laranja e escura ──
+  const vp = -0.93, bc = superficie(0, vp), lc = CASCO.a * larguraEm(vp), cauda = new THREE.Matrix4().makeTranslation(0, bc.y - 0.05, bc.z).multiply(new THREE.Matrix4().makeRotationZ((12 * Math.PI) / 180));
+  const fin = new THREE.Shape(); fin.moveTo(-0.55, 0); fin.lineTo(0.25, 0); fin.lineTo(0.05, 0.78); fin.lineTo(-0.3, 0.78); fin.closePath();
+  const furo = new THREE.Path(); furo.absarc(-0.12, 0.3, 0.2, 0, Math.PI * 2, true); fin.holes.push(furo);
+  const finG = new THREE.ExtrudeGeometry(fin, { depth: 0.14, bevelEnabled: false }); finG.rotateY(Math.PI / 2); finG.translate(-0.07, 0, 0); finG.applyMatrix4(cauda);
+  const estab = [[0.06, 0.5, 0.62], [0.22, 0.38, 0.5]].flatMap(([dy, dz, w]) => { const e = new THREE.BoxGeometry(w! * 2 + lc * 0.6, 0.03, 0.26); e.translate(0, bc.y + dy!, bc.z + dz!); return [e, ...[1, -1].map((sx) => { const p = new THREE.BoxGeometry(0.03, 0.12, 0.26); p.translate(sx * (w! + lc * 0.3), bc.y + dy! + 0.05, bc.z + dz!); return p; })]; });
+  const corCauda = uvDe(0, -CASCO.c * TRASEIRA.cauda * 0.8);
+  const caudaLaranja = juntar([finG, ...estab].map((g) => prep(g, corCauda)));
+  const anel = new THREE.TorusGeometry(0.2, 0.025, 6, low ? 16 : 24); anel.rotateY(Math.PI / 2); anel.translate(0, 0.3, -0.12); anel.applyMatrix4(cauda);
+  const disco = new THREE.CircleGeometry(0.18, low ? 12 : 20); disco.rotateY(Math.PI / 2); disco.translate(0, 0.3, -0.12); disco.applyMatrix4(cauda);
+  const caudaEscura = juntar([anel, disco].map((g) => prep(g)));
+  // ── as LUZES (as faixas brancas e os LEDs verdes — uma malha, cor por vértice) e os PROPULSORES (4 discos) ──
+  const luzes = juntar([
+    ...([[0, 0.42, 2.56, 0.5, 0], [0, 0.42, -1.88, 0.8, 0], [1.33, 0.4, -0.1, 0.9, Math.PI / 2], [-1.33, 0.4, -0.1, 0.9, Math.PI / 2]] as const).map(([x, y, z, w, ry]) => { const b = new THREE.BoxGeometry(w, 0.025, 0.02); b.rotateY(ry); b.translate(x, y, z); return colorir(prep(b), 0xf2f6ff); }),
+    ...([[1.3, 0.7], [-1.3, 0.7], [1.33, -0.9], [-1.33, -0.9], [0.45, 2.0], [-0.45, 2.0]] as const).map(([x, z]) => { const b = new THREE.SphereGeometry(0.035, 6, 4); b.translate(x, 0.5, z); return colorir(prep(b), 0x3dff7a); }),
+  ]);
+  const jatos = juntar([[0.9, 1.25], [-0.9, 1.25], [0.95, -0.95], [-0.95, -0.95]].map(([x, z]) => { const c = new THREE.CircleGeometry(0.15, 14); c.rotateX(Math.PI / 2); c.translate(x!, -0.005, z!); return prep(c); }));
+  // ── o COCKPIT (só aparece com a cabine aberta): a banheira, o banco, o painel, o manche — e as 3 telas ──
+  const caixa = (w: number, h: number, d: number, x: number, y: number, z: number, rx = 0) => { const b = new THREE.BoxGeometry(w, h, d); b.rotateX(rx); b.translate(x, y, z); return prep(b); };
+  const cabine = juntar([caixa(1.35, 0.32, 2.3, 0, 0.42, 0.3), caixa(0.6, 0.12, 0.62, 0, 0.52, -0.1), caixa(0.6, 0.66, 0.13, 0, 0.82, -0.5, -0.42), caixa(0.32, 0.2, 0.12, 0, 1.12, -0.66, -0.42), caixa(1.15, 0.2, 0.32, 0, 0.78, 0.98, 0.35), caixa(0.34, 0.04, 0.04, 0, 0.84, 0.56)]);
+  const telas = juntar(([[-0.38, 0.28], [0, 0], [0.38, -0.28]] as const).map(([x, ry]) => { const p = new THREE.PlaneGeometry(0.34, 0.24); p.rotateX(-0.55); p.rotateY(ry); p.translate(x, 0.9, 0.9); return prep(p); }).map((g) => { g.deleteAttribute("uv"); const pl = new THREE.PlaneGeometry(0.34, 0.24).toNonIndexed(); g.setAttribute("uv", pl.attributes.uv!); pl.dispose(); return g; }));
+  const sombra = new THREE.PlaneGeometry(3.4, 6.6); sombra.rotateX(-Math.PI / 2); sombra.translate(0, -0.5, -0.6);
+  return { mats, geo: { casco, portas: portas.map((ps) => (ps.length ? juntar(ps) : new THREE.BufferGeometry())), vidros, ladoAceso, chassi, caudaLaranja, caudaEscura, luzes, jatos, cabine, telas, sombra }, pivoPorta };
 }
 
 export function criarCarroHex(o: { low: boolean }): CarroHandle {
+  let R = recursos.get(o.low); if (!R) { R = criarRecursos(o.low); recursos.set(o.low, R); }
+  const { mats: M, geo: G } = R;
   const group = new THREE.Group(); group.name = "carro-hex";
-  const M = criarMats(), geos: THREE.BufferGeometry[] = [], extras: THREE.Texture[] = [];
-  const add = (g: THREE.BufferGeometry, m: THREE.Material, pai: THREE.Object3D = group) => { geos.push(g); const k = new THREE.Mesh(g, m); pai.add(k); return k; };
-  const vermelho = new THREE.Color(0xd8341e), laranja = new THREE.Color(0xff7a2a), claro = new THREE.Color(0xffb38a);
-  const corDaLataria = (p: THREE.Vector3) => { const k = THREE.MathUtils.clamp((p.y - 0.55) / 0.66 * 0.55 + (-p.z + 2.95) / 5.9 * 0.45, 0, 1); return laranja.clone().lerp(vermelho, k).lerp(claro, Math.max(0, 0.3 - Math.abs(p.x) * 0.25) * (p.y > 1.1 ? 1 : 0)); };
-
-  // ── o CHASSI (a faixa preta brilhante) e a SAIA por baixo ──
-  const forma = (k: number) => { const s = new THREE.Shape(); PLANTA.forEach(([x, z], i) => (i ? s.lineTo(x * k, -z * k) : s.moveTo(x * k, -z * k))); s.closePath(); return s; };
-  const chassi = add(new THREE.ExtrudeGeometry(forma(1.02), { depth: 0.2, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.06, bevelSegments: o.low ? 1 : 3 }), M.chassi);
-  chassi.rotation.x = -Math.PI / 2; chassi.position.y = 0.3;
-  const saia = add(new THREE.ExtrudeGeometry(forma(0.78), { depth: 0.18, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 1 }), M.saia);
-  saia.rotation.x = -Math.PI / 2; saia.position.y = 0.1;
-  // os "PÉS" angulosos da saia (os blocos embaixo das refs) e os PROPULSORES (discos acesos)
-  const jatos: THREE.Mesh[] = [];
-  for (const [x, z] of [[0.9, 1.25], [-0.9, 1.25], [0.95, -0.95], [-0.95, -0.95]] as const) {
-    const pe = add(new THREE.BoxGeometry(0.36, 0.12, 0.5), M.saia); pe.position.set(x, 0.06, z); pe.rotation.y = x * z > 0 ? 0.3 : -0.3;
-    const j = add(new THREE.CircleGeometry(0.15, 20), M.jato); j.rotation.x = Math.PI / 2; j.position.set(x, -0.005, z); jatos.push(j);
-  }
-  // as LUZES: as faixas brancas (frente, traseira e laterais) e os LEDs verdes
-  for (const [x, y, z, w, ry] of [[0, 0.42, 2.56, 0.5, 0], [0, 0.42, -1.88, 0.8, 0], [1.33, 0.4, -0.1, 0.9, Math.PI / 2], [-1.33, 0.4, -0.1, 0.9, Math.PI / 2]] as const) {
-    const f = add(new THREE.BoxGeometry(w, 0.025, 0.02), M.branco); f.position.set(x, y, z); f.rotation.y = ry;
-  }
-  for (const [x, z] of [[1.3, 0.7], [-1.3, 0.7], [1.33, -0.9], [-1.33, -0.9], [0.45, 2.0], [-0.45, 2.0]] as const) {
-    const l = add(new THREE.SphereGeometry(0.035, 8, 6), M.verde); l.position.set(x, 0.5, z);
-  }
-  // o LOGO ("zaeon") na lateral do chassi
-  const texLogo = new THREE.CanvasTexture((() => { const c = document.createElement("canvas"); c.width = 256; c.height = 64; const g = c.getContext("2d")!; g.fillStyle = "rgba(0,0,0,0)"; g.fillRect(0, 0, 256, 64); g.fillStyle = "#e9edf5"; g.font = "italic 600 40px system-ui, sans-serif"; g.fillText("zaeon", 40, 46); return c; })());
-  extras.push(texLogo);
-  const matLogo = new THREE.MeshBasicMaterial({ map: texLogo, transparent: true, depthWrite: false });
-  for (const s of [1, -1]) { const lg = add(new THREE.PlaneGeometry(0.62, 0.16), matLogo); lg.position.set(s * 1.34, 0.42, 0.45); lg.rotation.y = s * Math.PI / 2; }
-
-  // ── o CASCO de HEXÁGONOS: hexágonos grandes de cantos arredondados, RENTES à superfície (só a junta fina os desenha).
-  // No meio da frente, os do VIDRO (escuros, contínuos); nos lados do cockpit, os das PORTAS (que sobem junto com o
-  // hexágono lateral aceso); o resto, a lataria fixa ──
-  const fixo = new THREE.Group(); group.add(fixo);
-  const portas = [-1, 1].map((lado) => { const g = new THREE.Group(); g.position.set(lado * 1.3, PORTA.pivoY, PORTA.pivoZ); g.userData.lado = lado; group.add(g); return g; });
-  const noPivo = (pivo: THREE.Object3D, g: THREE.BufferGeometry) => { g.translate(-pivo.position.x, -pivo.position.y, -pivo.position.z); return g; };
-  const s3 = Math.sqrt(3), vidros: { g: THREE.Group; eixo: THREE.Vector3; ordem: number; base: THREE.Vector3; frenteT: THREE.Vector3; normal: THREE.Vector3 }[] = [];
-  for (let q = -8; q <= 8; q++) for (let r = -8; r <= 8; r++) {
-    const cX = HEX.r * s3 * (q + r / 2), cZ = HEX.r * 1.5 * r * HEX.alonga;   // o centro (em metros, na vista de cima)
-    if (cZ > CASCO.c + HEX.r || cZ < -CASCO.c * TRASEIRA.cauda - HEX.r || Math.abs(cX) > CASCO.a * larguraEm(Math.max(-1, Math.min(1, vDe(cZ)))) + HEX.r * 0.9) continue;   // (fora do carro)
-    const [cu, cv] = uvDoPlano(cX, cZ), tipo = tipoDoHex(cu, cv);
-    const contorno = contornoDoHex(cX, cZ, HEX.junta, HEX.arred), cheio = contornoDoHex(cX, cZ, 0, 0);
-    const placa = placaNoCasco(contorno, cX, cZ, PLACA), forro = placaNoCasco(cheio, cX, cZ, FORRO);   // (a junta fina, na cor da lataria — nada de colmeia)
-    if (tipo === "vidro" && !abreDoVidro(cu, cv)) { add(placaNoCasco(cheio, cX, cZ, PLACA), M.vidro, fixo); add(forro, M.chassi, fixo); geos.push(placa); continue; }   // (o resto do vidro: fixo)
-    if (tipo === "vidro") {   // o vidro: uma peça escura CONTÍNUA (sem junta) — os do lado do PASSAGEIRO são TAMPAS que levantam
-      const [fu, fv] = uvDoPlano(cX, cZ + HEX.r * HEX.alonga * 0.95), g = new THREE.Group(); g.position.copy(pontoDoCasco(fu, fv, PLACA)); group.add(g);
-      const eixo = pontoDoCasco(Math.min(1, cu + 0.05), cv, 0).sub(pontoDoCasco(Math.max(-1, cu - 0.05), cv, 0)).normalize();
-      add(noPivo(g, placaNoCasco(cheio, cX, cZ, PLACA)), M.vidro, g); add(noPivo(g, placaNoCasco(cheio, cX, cZ, FORRO)), M.chassi, g);
-      // o CONTORNO DE LUZ da placa (acende enquanto ela destrava e desliza — o movimento lê no preto sobre preto)
-      const linha = contornoDoHex(cX, cZ, 0.01, 0).map(([X, Z]) => { const [u, v] = uvDoPlano(X, Z); return pontoDoCasco(u, v, PLACA + 0.004).sub(g.position); });
-      const gl = new THREE.BufferGeometry().setFromPoints(linha); geos.push(gl); g.add(new THREE.LineLoop(gl, M.brilhoVidro));
-      // (pra onde ele desliza: a tangente do casco pra FRENTE ali; e a normal — pra onde ele destrava)
-    const frenteT = pontoDoCasco(cu, Math.min(1, cv + 0.05), 0).sub(pontoDoCasco(cu, Math.max(-1, cv - 0.05), 0)).normalize();
-    vidros.push({ g, eixo, ordem: cv - Math.abs(cu) * 0.3, base: g.position.clone(), frenteT, normal: normalDoCasco(cu, cv) }); geos.push(placa, forro); continue;
-    }
-    const cor = tipo === "porta-e" || tipo === "porta-d" ? portas[tipo === "porta-e" ? 1 : 0]! : null;
-    pintar(placa, corDaLataria);
-    if (cor) { add(noPivo(cor, placa), M.laranja, cor); add(noPivo(cor, forro), M.junta, cor); }
-    else { add(placa, M.laranja, fixo); add(forro, M.junta, fixo); }
-  }
-  // o CASCO por baixo de tudo, na cor da junta (fecha o carro: nada do interior aparece pelas frestas nem pela borda) — menos onde
-  // ficam as portas (lá quem fecha é o forro da própria porta, que sobe junto)
-  {
-    const pos: number[] = [], NU = o.low ? 16 : 32, NV = o.low ? 24 : 48;
-    const fora = (u: number, v: number) => { const p = superficie(u, v), [cX, cZ] = centroDoHex(p.x, p.z), [cu, cv] = uvDoPlano(cX, cZ), t = tipoDoHex(cu, cv); return t === "porta-e" || t === "porta-d" || (t === "vidro" && abreDoVidro(cu, cv)); };   // (debaixo do que abre: o vão do cockpit)
-    for (let i = 0; i < NU; i++) for (let k = 0; k < NV; k++) {
-      const P = (a: number, b: number) => [(a / NU) * 2 - 1, (b / NV) * 2 - 1] as const;
-      const qd = [P(i, k), P(i + 1, k), P(i + 1, k + 1), P(i, k + 1)];
-      const mu = (qd[0]![0] + qd[2]![0]) / 2, mv = (qd[0]![1] + qd[2]![1]) / 2;
-      if (fora(mu, mv)) continue;
-      for (const [x, y] of [qd[0]!, qd[1]!, qd[2]!, qd[0]!, qd[2]!, qd[3]!]) { const p = pontoDoCasco(x, y, 0); pos.push(p.x, p.y, p.z); }
-    }
-    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
-    add(g, M.junta, fixo);
-  }
-  // o HEXÁGONO LATERAL aceso (a peça grande da porta, como na imagem de lado) com a moldura preta
-  for (const p of portas) {
-    const lado = p.userData.lado as number, hx = new THREE.Group(); p.add(hx);
-    // (posto NA superfície do casco ali — um pouco pra fora dela — e inclinado como ela)
-    const [hu, hv] = uvDoPlano(lado * CASCO.a * 0.985, PORTA.ladoZ), sp = pontoDoCasco(hu, hv, 0.035), sn = normalDoCasco(hu, hv);
-    hx.position.set(sp.x - p.position.x, Math.max(0.66, sp.y) - p.position.y, sp.z - p.position.z); hx.rotation.set(0, lado * Math.PI / 2, 0); hx.rotateX(-Math.asin(Math.min(0.9, sn.y)));
-    const forma = (w: number, h: number) => { const f = new THREE.Shape(); f.moveTo(-w / 2, 0); f.lineTo(-w / 2 + h * 0.6, h / 2); f.lineTo(w / 2 - h * 0.6, h / 2); f.lineTo(w / 2, 0); f.lineTo(w / 2 - h * 0.6, -h / 2); f.lineTo(-w / 2 + h * 0.6, -h / 2); f.closePath(); return f; };
-    const moldura = add(new THREE.ShapeGeometry(forma(2.05, 0.62)), M.junta, hx); moldura.position.z = -0.005;
-    const luz = add(new THREE.ShapeGeometry(forma(1.86, 0.48)), M.aceso, hx); luz.position.z = 0.012;
-    if (lado < 0) { moldura.scale.x = -1; luz.scale.x = -1; }
-  }
-
-  // a BARRIGA da cauda: por baixo do braço, fechando o tubo — a parte de baixo SUBINDO da cabine até o braço (o
-  // "upsweep" dos helicópteros)
-  {
-    const pos: number[] = [], NU = 16, NV = 40, v0 = -0.2;
-    const P = (u: number, v: number) => { const t = superficie(u, v), esp = TRASEIRA.barriga * sm(-0.2, -0.5, v) * (1 - sm(-0.9, -1, v) * 0.8); return new THREE.Vector3(t.x, baseEm(v) - esp * Math.pow(Math.max(0, 1 - u * u), 0.5), t.z); };
-    for (let i = 0; i < NU; i++) for (let k = 0; k < NV; k++) {
-      const u0 = (i / NU) * 2 - 1, u1 = ((i + 1) / NU) * 2 - 1, va = v0 + ((k / NV) * (-0.995 - v0)), vb = v0 + (((k + 1) / NV) * (-0.995 - v0));
-      for (const p of [P(u0, va), P(u0, vb), P(u1, vb), P(u0, va), P(u1, vb), P(u1, va)]) pos.push(p.x, p.y, p.z);
-    }
-    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
-    add(g, M.junta, fixo);
-  }
-  // a PONTA da cauda: a barbatana com o ROTOR EMBUTIDO no anel (Fenestron, inclinada 12° como no H160) e os
-  // ESTABILIZADORES BIPLANO logo à frente dela (dois níveis, como no H160 / empenagem em H do RACER)
-  {
-    const vp = -0.93, base = superficie(0, vp), lado = CASCO.a * larguraEm(vp);
-    const cauda = new THREE.Group(); cauda.position.set(0, base.y - 0.05, base.z); cauda.rotation.z = (12 * Math.PI) / 180; fixo.add(cauda);
-    const fin = new THREE.Shape(); fin.moveTo(-0.55, 0); fin.lineTo(0.25, 0); fin.lineTo(0.05, 0.78); fin.lineTo(-0.3, 0.78); fin.closePath();
-    const furo = new THREE.Path(); furo.absarc(-0.12, 0.3, 0.2, 0, Math.PI * 2, true); fin.holes.push(furo);
-    const finG = add(new THREE.ExtrudeGeometry(fin, { depth: 0.14, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 }), M.laranja2, cauda);
-    finG.rotation.y = Math.PI / 2; finG.position.x = -0.07;
-    const anel = add(new THREE.TorusGeometry(0.2, 0.025, 8, 28), M.chassi, cauda); anel.position.set(0, 0.3, -0.12); anel.rotation.y = Math.PI / 2;
-    const rotor = add(new THREE.CircleGeometry(0.18, 24), M.dentro, cauda); rotor.position.set(0, 0.3, -0.12); rotor.rotation.y = Math.PI / 2;
-    for (let k = 0; k < 7; k++) { const pa = add(new THREE.BoxGeometry(0.01, 0.17, 0.035), M.chassi, cauda); pa.position.set(0, 0.3, -0.12); pa.rotation.x = (k / 7) * Math.PI * 2; pa.translateY(0.085); }
-    const luzCauda = add(new THREE.TorusGeometry(0.205, 0.006, 6, 28), M.brilhoCauda, cauda); luzCauda.position.set(0.075, 0.3, -0.12); luzCauda.rotation.y = Math.PI / 2;
-    for (const [dy, dz, w] of [[0.06, 0.5, 0.62], [0.22, 0.38, 0.5]] as const) {   // o BIPLANO: dois estabilizadores escalonados
-      const est = add(new THREE.BoxGeometry(w * 2 + lado * 0.6, 0.03, 0.26), M.laranja2, fixo); est.position.set(0, base.y + dy, base.z + dz); est.rotation.y = 0;
-      for (const sx of [1, -1]) { const ponta = add(new THREE.BoxGeometry(0.03, 0.12, 0.26), M.laranja2, fixo); ponta.position.set(sx * (w + lado * 0.3), base.y + dy + 0.05, base.z + dz); }
-    }
-  }
-
-  // ── o COCKPIT: a banheira, o banco, o painel com 3 telas e o manche ──
-  const cockpit = new THREE.Group(); group.add(cockpit);
-  const banheira = add(new THREE.BoxGeometry(1.35, 0.32, 2.3), M.dentro, cockpit); banheira.position.set(0, 0.42, 0.3);
-  const assentoMesh = add(new THREE.BoxGeometry(0.6, 0.12, 0.62), M.banco, cockpit); assentoMesh.position.set(0, 0.52, -0.1);
-  const encosto = add(new THREE.BoxGeometry(0.6, 0.66, 0.13), M.banco, cockpit); encosto.position.set(0, 0.82, -0.5); encosto.rotation.x = -0.42;   // (reclinado: carro de corrida)
-  const cabeca = add(new THREE.BoxGeometry(0.32, 0.2, 0.12), M.banco, cockpit); cabeca.position.set(0, 1.12, -0.66); cabeca.rotation.x = -0.42;
-  const texTela = new THREE.CanvasTexture((() => {
-    const c = document.createElement("canvas"); c.width = 192; c.height = 128; const g = c.getContext("2d")!;
-    g.fillStyle = "#0b1220"; g.fillRect(0, 0, 192, 128); g.strokeStyle = "#7fd8ff"; g.lineWidth = 2; g.strokeRect(4, 4, 184, 120);
-    g.fillStyle = "#ffb02e"; g.fillRect(14, 16, 70, 8); g.fillStyle = "#7fd8ff"; for (let i = 0; i < 5; i++) g.fillRect(14, 36 + i * 15, 40 + ((i * 37) % 90), 5);
-    g.strokeStyle = "#3dff7a"; g.beginPath(); g.arc(150, 70, 26, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.moveTo(150, 70); g.lineTo(168, 52); g.stroke();
-    return c; })());
-  texTela.colorSpace = THREE.SRGBColorSpace; extras.push(texTela);
-  const matTela = new THREE.MeshBasicMaterial({ map: texTela });
-  const painelDash = add(new THREE.BoxGeometry(1.15, 0.2, 0.32), M.chassi, cockpit); painelDash.position.set(0, 0.78, 0.98); painelDash.rotation.x = 0.35;
-  for (const [x, ry] of [[-0.38, 0.28], [0, 0], [0.38, -0.28]] as const) { const tl = add(new THREE.PlaneGeometry(0.34, 0.24), matTela, cockpit); tl.position.set(x, 0.9, 0.9); tl.rotation.set(-0.55, ry, 0); }
-  const coluna = add(new THREE.CylinderGeometry(0.03, 0.03, 0.34, 8), M.chassi, cockpit); coluna.position.set(0, 0.76, 0.7); coluna.rotation.x = 1.05;
-  const manche = add(new THREE.TorusGeometry(0.17, 0.025, 6, 20, Math.PI), M.chassi, cockpit); manche.position.set(0, 0.84, 0.56); manche.rotation.set(-0.5, 0, Math.PI);
-  const assento = new THREE.Object3D(); assento.position.set(0, 0.6, -0.1); group.add(assento);
+  const corpo = new THREE.Group(); group.add(corpo);   // (o que paira — boia de leve)
+  const malha = (g: THREE.BufferGeometry, m: THREE.Material, pai: THREE.Object3D = corpo) => { const k = new THREE.Mesh(g, m); pai.add(k); return k; };
+  malha(G.casco, M.casco); malha(G.chassi, M.chassi); malha(G.caudaLaranja, M.casco); malha(G.caudaEscura, M.chassi); malha(G.luzes, M.luzes); malha(G.jatos, M.jato);
+  const cockpit = new THREE.Group(); cockpit.visible = false; corpo.add(cockpit); malha(G.cabine, M.cabine, cockpit); malha(G.telas, M.tela, cockpit);
+  const sombra = new THREE.Mesh(G.sombra, M.sombra); sombra.userData.semLote = true; group.add(sombra);
+  // as PORTAS (cada uma um grupo na dobradiça da frente, com os hexágonos dela e o hexágono aceso)
+  const portas = [-1, 1].map((lado, i) => {
+    const g = new THREE.Group(); g.position.copy(R!.pivoPorta[i]!); g.userData.lado = lado; corpo.add(g);
+    malha(G.portas[i]!, M.casco, g);
+    const [hu, hv] = uvDoPlano(lado * CASCO.a * 0.985, PORTA.ladoZ), sp = pontoDoCasco(hu, hv, 0.03), sn = normalDoCasco(hu, hv);
+    const hx = malha(G.ladoAceso, M.aceso, g); hx.position.set(sp.x - g.position.x, Math.max(0.66, sp.y) - g.position.y, sp.z - g.position.z); hx.rotation.set(0, lado * Math.PI / 2, 0); hx.rotateX(-Math.asin(Math.min(0.9, sn.y))); if (lado < 0) hx.scale.x = -1;
+    return g;
+  });
+  // os VIDROS do passageiro (destravam, deslizam pra frente e empilham — com o contorno de luz enquanto movem)
+  const vidros = G.vidros.map((v) => { const g = new THREE.Group(); g.position.copy(v.base); corpo.add(g); malha(v.g, M.casco, g); g.add(new THREE.LineLoop(v.linha, M.brilho)); return { g, v }; });
+  // o banco e os pontos da IK do piloto
+  const assento = new THREE.Object3D(); assento.position.set(0, 0.6, -0.1); corpo.add(assento);
   const maoE = new THREE.Object3D(), maoD = new THREE.Object3D(), peE = new THREE.Object3D(), peD = new THREE.Object3D();
   maoE.position.set(0.17, 0.8, 0.56); maoD.position.set(-0.17, 0.8, 0.56); peE.position.set(0.18, 0.36, 1.05); peD.position.set(-0.18, 0.36, 1.05);
-  group.add(maoE, maoD, peE, peD);
-
-  // ── a SOMBRA embaixo (ele paira) ──
-  const texSombra = new THREE.CanvasTexture((() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d")!; const gr = g.createRadialGradient(32, 32, 4, 32, 32, 32); gr.addColorStop(0, "rgba(0,0,0,0.55)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c; })());
-  extras.push(texSombra);
-  const sombra = add(new THREE.PlaneGeometry(3.4, 5.4), new THREE.MeshBasicMaterial({ map: texSombra, transparent: true, depthWrite: false }));
-  sombra.rotation.x = -Math.PI / 2; sombra.position.y = -0.5; sombra.userData.semLote = true;
+  corpo.add(maoE, maoD, peE, peD);
 
   let aberto = 0;
-  // a ordem da CASCATA: os hexágonos do vidro levantam um atrás do outro, da frente pra trás; as portas vêm por último
-  vidros.sort((x, y) => y.ordem - x.ordem);
   const suave = (x: number) => { const u = Math.max(0, Math.min(1, x)); return u * u * (3 - 2 * u); };
   const aplicar = () => {
-    // a ORDEM: a porta do MOTORISTA (esquerda) primeiro; depois, em cascata, os hexágonos do vidro do lado do passageiro;
-    // por último a porta do PASSAGEIRO (direita)
+    cockpit.visible = aberto > 0.001;
     let brilho = 0;
-    vidros.forEach((v, i) => {   // DESTRAVA → DESLIZA pra frente → EMPILHA (a de trás por cima da da frente)
+    vidros.forEach(({ g, v }, i) => {   // DESTRAVA → DESLIZA pra frente → EMPILHA (a de trás por cima da da frente)
       const ini = 0.2 + (vidros.length > 1 ? (i / (vidros.length - 1)) * 0.22 : 0), k = Math.max(0, Math.min(1, (aberto - ini) / 0.4));
       const sobe = suave(k / 0.22), vai = suave((k - 0.15) / 0.85);
-      v.g.position.copy(v.base).addScaledVector(v.normal, (VIDRO.destrava + VIDRO.degrau * i) * sobe).addScaledVector(v.frenteT, VIDRO.desliza * vai);
-      v.g.quaternion.setFromAxisAngle(v.eixo, -VIDRO.inclina * vai);   // (o bico desce um tiquinho: acompanha o para-brisa)
-      brilho = Math.max(brilho, Math.sin(Math.PI * Math.min(1, k * 1.05)) * 0.95 + 0.25 * vai);   // (acende movendo; empilhado, fica um fio aceso)
+      g.position.copy(v.base).addScaledVector(v.normal, (VIDRO.destrava + VIDRO.degrau * i) * sobe).addScaledVector(v.frente, VIDRO.desliza * vai);
+      g.quaternion.setFromAxisAngle(v.eixo, -VIDRO.inclina * vai);
+      brilho = Math.max(brilho, Math.sin(Math.PI * Math.min(1, k * 1.05)) * 0.95 + 0.25 * vai);
     });
-    (M.brilhoVidro as THREE.LineBasicMaterial).opacity = Math.min(1, brilho);
-    // TESOURA: cada porta gira pra CIMA em volta da dobradiça da frente (a traseira dela sobe) e abre um pouco pra fora
-    for (const p of portas) {
-      const lado = p.userData.lado as number, e = lado > 0 ? suave(aberto / 0.45) : suave((aberto - 0.55) / 0.45);
-      p.rotation.set(PORTA.sobe * e, 0, lado * PORTA.abre * e, "ZXY");
-    }
+    M.brilho.opacity = Math.min(1, brilho);
+    // a ORDEM: a porta do MOTORISTA (esquerda) primeiro; os vidros; por último a porta do PASSAGEIRO (direita)
+    for (const p of portas) { const lado = p.userData.lado as number, e = lado > 0 ? suave(aberto / 0.45) : suave((aberto - 0.55) / 0.45); p.rotation.set(PORTA.sobe * e, 0, lado * PORTA.abre * e, "ZXY"); }
   };
   aplicar();
   return {
     group, assento, pontos: { maoE, maoD, peE, peD }, nVidros: vidros.length,
-    abrir(k) { aberto = THREE.MathUtils.clamp(k, 0, 1); aplicar(); },
-    atualizar(t, dt, op) {
-      void dt;
+    abrir(k) { const n = THREE.MathUtils.clamp(k, 0, 1); if (n !== aberto) { aberto = n; aplicar(); } },
+    atualizar(t, _dt, op) {
       const ligado = op?.ligado ?? true, vel = op?.vel ?? 0;
-      // pairando: sobe e desce devagar; os propulsores pulsam (mais fortes andando)
-      const boia = 0.04 * Math.sin(t * 1.6);
-      group.children.forEach((c) => { if (c !== sombra) c.position.y = (c.userData.y0 ??= c.position.y) + boia; });
+      corpo.position.y = 0.04 * Math.sin(t * 1.6);   // pairando: sobe e desce devagar
       const forca = ligado ? 0.6 + 0.4 * Math.min(1, vel / 20) : 0.1;
-      (M.jato as THREE.MeshBasicMaterial).opacity = forca * (0.8 + 0.2 * Math.sin(t * 13));
-      for (const j of jatos) j.scale.setScalar(0.85 + 0.25 * forca);
-      (M.aceso as THREE.MeshStandardMaterial).emissiveIntensity = 0.9 + 0.25 * Math.sin(t * 2.2);
+      M.jato.opacity = forca * (0.8 + 0.2 * Math.sin(t * 13));
     },
-    dispose() { for (const g of geos) g.dispose(); for (const m of Object.values(M)) m.dispose(); matLogo.dispose(); matTela.dispose(); for (const x of extras) x.dispose(); group.removeFromParent(); },
+    dispose() { group.removeFromParent(); },   // (as geometrias e os materiais são COMPARTILHADOS: ficam pros outros carros)
   };
 }
