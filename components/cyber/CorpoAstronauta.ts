@@ -18,7 +18,18 @@ export const ASTRONAUTAS = { m: "/avatars/traje/astronauta-m.glb" } as const;
 export const VISEIRA = { cor: 0x3a2a14, opacidade: 0.38 } as const;
 /** onde ficam os OLHOS do rosto dentro do capacete, a partir do osso da cabeça (m, no referencial do corpo: pra cima e
  *  pra frente), e quanto o VRM encolhe pra cabeça de anime caber no capacete */
-export const OLHOS_NO_CAPACETE = { cima: 0.09, frente: 0.06, escala: 0.7 } as const;
+export const OLHOS_NO_CAPACETE = { cima: 0.085, frente: 0.05, escala: 0.86 } as const;
+
+/** as PALETAS da armadura: por pedaço do nome do material (os do modelo — scripts/avatar/astronauta-m.cores.json); a
+ *  "branca" é a do arquivo. A PRETA (a do fundador): placas de preto brilhante, a malha grafite por baixo */
+export type Paleta = "branca" | "preta";
+const PALETAS: Record<Exclude<Paleta, "branca">, { pedacos: string[]; cor: number; rug: number; metal: number }[]> = {
+  preta: [
+    { pedacos: ["pechera", "hombrera", "placa_pelvis", "placa_piernas", "casco", "mochila", "cinturon", "armadura"], cor: 0x141519, rug: 0.32, metal: 0.45 },
+    { pedacos: ["covertura"], cor: 0x2b2d34, rug: 0.8, metal: 0.05 },
+    { pedacos: ["tubos", "brazalete", "phongE", "lambert1"], cor: 0x0b0b0d, rug: 0.5, metal: 0.4 },
+  ],
+};
 
 const cache = new Map<string, Promise<GLTF>>();
 export function carregarAstronauta(url: string): Promise<GLTF> {
@@ -30,6 +41,8 @@ export function carregarAstronauta(url: string): Promise<GLTF> {
 export type CorpoAstronautaHandle = {
   cena: THREE.Object3D;
   ancoraRosto: THREE.Object3D;
+  /** pinta a armadura com uma paleta */
+  pintar(p: Paleta): void;
   /** copia a pose do esqueleto do avatar (chamar depois de toda a animação/IK do quadro, antes do rosto VRM) */
   atualizar(): void;
   visivel(on: boolean): void;
@@ -47,11 +60,14 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
     if (c.name === "visera") { c.transparent = true; c.opacity = VISEIRA.opacidade; c.depthWrite = false; c.color.setHex(VISEIRA.cor); }
     return c;
   };
+  const mats: THREE.MeshStandardMaterial[] = [];
   cena.traverse((o) => {
     o.frustumCulled = false;
     const m = o as THREE.Mesh; if (!m.isMesh) return;
     m.material = Array.isArray(m.material) ? m.material.map(meu) : meu(m.material);
+    for (const x of Array.isArray(m.material) ? m.material : [m.material]) mats.push(x as THREE.MeshStandardMaterial);
   });
+  const originais = new Map(mats.map((x) => [x, { cor: x.color.getHex(), rug: x.roughness, metal: x.metalness }] as const));
   const fonte = ossosMixamo(modelo), alvo = ossosMixamo(cena);
   const pares: { nome: string; s: THREE.Object3D; a: THREE.Object3D; sBindInv: THREE.Quaternion; aBind: THREE.Quaternion }[] = [];
 
@@ -116,6 +132,13 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   const qD = new THREE.Quaternion(), qPai = new THREE.Quaternion(), qAg = new THREE.Quaternion(), pAg = new THREE.Vector3();
   return {
     cena, ancoraRosto,
+    pintar(p) {
+      for (const x of mats) {
+        if (x.name === "visera") continue;
+        const o = originais.get(x)!, t = p === "branca" ? null : PALETAS[p].find((e) => e.pedacos.some((k) => x.name.includes(k)));
+        x.color.setHex(t?.cor ?? o.cor); x.roughness = t?.rug ?? o.rug; x.metalness = t?.metal ?? o.metal;
+      }
+    },
     atualizar() {
       corpo.updateWorldMatrix(true, false); corpoInv.copy(corpo.matrixWorld).invert(); modelo.updateMatrixWorld(true);
       // (na ordem da hierarquia: o pai do osso já está na pose nova quando o filho é calculado)

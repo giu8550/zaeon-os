@@ -22,7 +22,7 @@ import { corDesenho, materialTinta, materialToon, materialToonSimples } from "./
 import { esconderOssosVazios, esferaRapida } from "./matrizes";
 import type { VRM } from "@pixiv/three-vrm";
 import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./AvatarVrm";
-import { ASTRONAUTAS, OLHOS_NO_CAPACETE, carregarAstronauta, vestirAstronauta, type CorpoAstronautaHandle } from "./CorpoAstronauta";
+import { ASTRONAUTAS, OLHOS_NO_CAPACETE, carregarAstronauta, vestirAstronauta, type CorpoAstronautaHandle, type Paleta } from "./CorpoAstronauta";
 import { criarAsas, type AsasHandle } from "./AsasAnjo";
 import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
 import { POSE_FEMININA_A_VONTADE, type PoseVrm } from "@/lib/cyber/posesVrm";
@@ -144,7 +144,7 @@ export type AvatarLuzHandle = {
   /** o TRAJE: o CORPO DE ASTRONAUTA (components/cyber/CorpoAstronauta — um modelo riggado no Mixamo, que copia a pose
    *  do esqueleto do avatar); do corpo VRM só o rosto, atrás da viseira. As poses das armas de fogo ficam como foram
    *  gravadas. (Carrega na 1ª vez: até chegar, fica o corpo de sempre) */
-  traje(on: boolean): void;
+  traje(on: boolean, op?: { /** a cor da armadura (a do fundador é a preta) */ paleta?: Paleta }): void;
   /** sai do clipe (com a mistura de volta) */
   soltarClipe(): void;
   /** um clipe de ação tocando agora? */
@@ -355,7 +355,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   let clipe: { a: THREE.AnimationAction; segurar: boolean } | null = null, wClipe = 0, pedidoClipe = 0;
   // o RIFLE (lib/cyber/rifle): o estado do quadro, a arma posta nas mãos e as ações dos andares com ela (baixadas na 1ª
   // vez que ela aparece; tocam sempre, em laço, com o peso que o quadro manda)
-  let astro: CorpoAstronautaHandle | null = null, astroPedido = false, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true, vivoAv = true;
+  let astro: CorpoAstronautaHandle | null = null, paletaTraje: Paleta = "branca", astroPedido = false, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true, vivoAv = true;
   /** com o astronauta pronto: ele aparece, o corpo de antes some (do VRM, só o rosto — atrás da viseira) */
   const vestir = () => {
     if (!astro || !trajeOn || !modeloMx) return;
@@ -1086,7 +1086,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     semMochila() { mochila.visible = false; },
     poseVrm(p) { poseVrm = p; espelho?.pose(p); },
     rifle(e) { rif = e; },
-    traje(on) {
+    traje(on, op) {
+      if (op?.paleta && op.paleta !== paletaTraje) { paletaTraje = op.paleta; astro?.pintar(paletaTraje); }
       if (on === trajeOn || !modeloMx) return;
       trajeOn = on;
       if (on) {
@@ -1095,7 +1096,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           astroPedido = true;
           void carregarAstronauta(ASTRONAUTAS.m).then((g) => {
             if (!vivoAv || !modeloMx) return;
-            astro = vestirAstronauta(g, modeloMx, corpo); astro.visivel(false); vestir();
+            astro = vestirAstronauta(g, modeloMx, corpo); astro.pintar(paletaTraje); astro.visivel(false); vestir();
           }).catch((e) => { astroPedido = false; console.warn("[avatar] o astronauta não carregou:", e); });
         }
       } else {
