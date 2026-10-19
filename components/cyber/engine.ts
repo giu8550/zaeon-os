@@ -652,7 +652,7 @@ export class CyberEngine {
   /** o CARRO VOADOR (components/cyber/CarroHex): a física é a mesma das motos (lib/cyber/motoFisica). As fases: parado →
    *  ENTRANDO (a cabine abre) → FECHANDO (ele já sentado; a cabine fecha e o carro liga) → DIRIGINDO → ABRINDO (pousado,
    *  pediu pra sair) → SAINDO (ele já do lado de fora; a cabine fecha) → parado. `k` = a abertura da cabine (0..1) */
-  private carro: { h: CarroHandle; est: EstadoMoto; pousado: boolean; fase: "parado" | "entrando" | "fechando" | "dirigindo" | "abrindo" | "saindo"; k: number; ligado: number; potencia: number; acel: number; velAnt: number; boost: boolean; loops: Record<(typeof LOOPS_CARRO)[number], LoopSom> } | null = null;
+  private carro: { h: CarroHandle; est: EstadoMoto; pousado: boolean; fase: "parado" | "entrando" | "fechando" | "dirigindo" | "abrindo" | "saindo"; k: number; ligado: number; potencia: number; acel: number; velAnt: number; boost: boolean; loops: Record<(typeof LOOPS_CARRO)[number], LoopSom>; somPerto: boolean } | null = null;
   /** dentro do carro (sentado: fechando, dirigindo ou abrindo) */
   private noCarro() { const f = this.carro?.fase; return f === "fechando" || f === "dirigindo" || f === "abrindo"; }
   /** num veículo que a câmera persegue (moto ou carro) — e o rumo dele */
@@ -1198,7 +1198,7 @@ export class CyberEngine {
   /** DASH (C / botão DASH): um arranque curto pra onde se está indo (parado: pra frente), no chão ou no ar de mochila —
    *  o começo é intocável (lib/cyber/movimento). Não vale de moto, pilotando, sentado, no tablet, no tubo ou no túnel */
   darDash(): boolean {
-    if (this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.noTopo) return false;
+    if (this.menu || this.noVeiculo() || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.noTopo) return false;
     const agora = performance.now() * 0.001;   // (o relógio de VERDADE no aperto — o do último quadro pode estar atrasado; a esquiva é questão de ms)
     if (!podeDash(this.dash, agora)) return false;
     const comAgua = gastarDashAgua(this.agua, this.agora); if (!comAgua) return false;   // sem água: não sai
@@ -1239,7 +1239,7 @@ export class CyberEngine {
    *  um golpe fica na fila e encadeia. Vira pra onde a câmera olha. Sem arma, de moto, pilotando, sentado ou caído: nada */
   atacar(): boolean {
     if (this.inv.equipado === "rifle-cosmico") return false;   // (o rifle atira pelo gatilho — `puxarGatilho`)
-    if (!this.inv.equipado || this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte) return false;
+    if (!this.inv.equipado || this.menu || this.noVeiculo() || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte) return false;
     if (this.ataque && !golpeAcabou(this.ataque, this.agora)) { this.filaAtaque = true; return true; }
     this.comecarGolpe(); return true;
   }
@@ -1268,7 +1268,7 @@ export class CyberEngine {
   private naZonaDeDuelo(p: { x: number; z: number }, ceu: boolean) { return !ceu && dentroDaArena(p); }
   /** LANÇAR (Q / E): a animação de quem lança, o brilho na mão e, no quadro do disparo, o projétil pra onde a câmera mira */
   lancar(f: Feitico): boolean {
-    if (this.menu || this.moto !== null || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte || this.bordo || this.carro?.fase !== undefined && this.carro.fase !== "parado") return false;
+    if (this.menu || this.noVeiculo() || this.pilotando || this.descanso || this.tabletQuer || this.labAberto || this.nascendo || this.tunel || this.agora < this.caidoAte || this.bordo || this.carro?.fase !== undefined && this.carro.fase !== "parado") return false;
     if (this.conj || this.escudoOn) return false;
     const t = this.agora;
     if (!podeLancar(this.energia, f, this.recargaMagia[f.id] ?? 0, t)) { this.o.onAviso?.(this.energia < f.energia ? "Sem energia cósmica — espere recarregar" : `${f.nome}: recarregando`); return false; }
@@ -1286,7 +1286,7 @@ export class CyberEngine {
   }
   /** o ESCUDO (segurar R): os braços cruzados; gasta energia enquanto segura */
   erguerEscudo(on: boolean) {
-    if (on && (this.conj || this.moto !== null || this.pilotando || this.descanso || this.agora < this.caidoAte || this.energia < 5)) return;
+    if (on && (this.conj || this.noVeiculo() || this.pilotando || this.descanso || this.agora < this.caidoAte || this.energia < 5)) return;
     if (on === this.escudoOn) return;
     this.escudoOn = on;
     if (on) this.eu.av.tocarClipe(ESCUDO.clipe, { segurar: true }); else this.eu.av.soltarClipe();
@@ -2703,7 +2703,7 @@ export class CyberEngine {
     c.fase = "entrando"; this.alvo = null; this.alvoDepois = null; this.jetV = { x: 0, z: 0 };
   }
   /** SAIR: pousado, a cabine abre, ele desce do lado do motorista e a cabine fecha (o carro fica ali) */
-  sairDoCarro() { const c = this.carro; if (!c || c.fase !== "dirigindo" || !this.carroPodeSair()) return; c.fase = "abrindo"; this.voY.subir = this.voY.descer = false; this.autoPouso = false; this.o.onAviso?.("Saindo do carro…"); this.som.tocar("carro-desliga", c.h.group.position, { dist: DISTANCIA.perto }); }
+  sairDoCarro() { const c = this.carro; if (!c || c.fase !== "dirigindo" || !this.carroPodeSair()) return; c.fase = "abrindo"; this.voY.subir = this.voY.descer = false; this.autoPouso = false; this.o.onAviso?.("Saindo do carro…"); this.som.tocar("carro-desliga", null, { dist: DISTANCIA.naveLocal, seguir: c.h.group }); }
   /** o avatar SENTADO no carro: o grupo no banco, as mãos no manche e os pés no assoalho (a IK do Montado) */
   private naCarro(av: AvatarLuzHandle): Montado | null {
     const c = this.carro; if (!c) return null;
@@ -2718,19 +2718,23 @@ export class CyberEngine {
   private passoCarro(t: number, dt: number) {
     if (!this.carro) {
       const h = criarCarroHex({ low: this.o.low }); this.cena.scene.add(h.group);
-      const loops = Object.fromEntries(LOOPS_CARRO.map((n) => [n, this.som.loop(n, h.group, { dist: DISTANCIA.perto })])) as Record<(typeof LOOPS_CARRO)[number], LoopSom>;
-      this.carro = { h, est: motoParada(CARRO_VAGA.x, CHAO, CARRO_VAGA.z, CARRO_VAGA.rumo), pousado: true, fase: "parado", k: 0, ligado: 0, potencia: 0, acel: 0, velAnt: 0, boost: false, loops };
+      const loops = Object.fromEntries(LOOPS_CARRO.map((n) => [n, this.som.loop(n, h.group, { dist: DISTANCIA.padrao })])) as Record<(typeof LOOPS_CARRO)[number], LoopSom>;
+      this.carro = { h, est: motoParada(CARRO_VAGA.x, CHAO, CARRO_VAGA.z, CARRO_VAGA.rumo), pousado: true, fase: "parado", k: 0, ligado: 0, potencia: 0, acel: 0, velAnt: 0, boost: false, loops, somPerto: false };
     }
     const c = this.carro, kAnt = c.k;
     if (c.fase === "entrando" || c.fase === "abrindo") c.k = Math.min(1, c.k + dt / CARRO_CABINE);
     if (c.fase === "fechando" || c.fase === "saindo") c.k = Math.max(0, c.k - dt / CARRO_CABINE);
     if (c.fase === "entrando" && c.k >= 1) { c.fase = "fechando"; this.sitT = 0; }   // (sentou: a cabine fecha)
-    else if (c.fase === "fechando" && c.k <= 0) { c.fase = "dirigindo"; c.pousado = true; this.camAz = c.est.yaw + Math.PI; this.camSegueEm = 0; this.som.tocar("carro-liga", c.h.group.position, { dist: DISTANCIA.perto }); this.o.onAviso?.("Carro ligado · W acelera · Espaço sobe · Q desce · P pousa · F (pousado) sai"); }
+    else if (c.fase === "fechando" && c.k <= 0) { c.fase = "dirigindo"; c.pousado = true; this.camAz = c.est.yaw + Math.PI; this.camSegueEm = 0; this.som.tocar("carro-liga", null, { dist: DISTANCIA.naveLocal, seguir: c.h.group }); this.o.onAviso?.("Carro ligado · W acelera · Espaço sobe · Q desce · P pousa · F (pousado) sai"); }
     else if (c.fase === "abrindo" && c.k >= 1) {   // desceu: do lado do motorista
       const ex = Math.cos(c.est.yaw), ez = -Math.sin(c.est.yaw);
       this.eu.pos.set(c.est.x + ex * 2.1, 0, c.est.z + ez * 2.1); this.eu.facing = c.est.yaw; c.fase = "saindo";
     } else if (c.fase === "saindo" && c.k <= 0) c.fase = "parado";
-    for (const n of sonsDaCabine(kAnt, c.k, c.h.nVidros)) this.som.tocar(n, c.h.group.position, { dist: DISTANCIA.perto, taxa: 0.96 + Math.random() * 0.08 });
+    // DENTRO dele (desde que entra até sair): o som é o do MEU veículo — alcance de quem pilota (como a minha moto), senão
+    // a câmera a ~7 m atrás já cortava quase tudo; de fora, o alcance normal de um carro passando
+    const dentro = c.fase !== "parado", dist = dentro ? DISTANCIA.naveLocal : DISTANCIA.padrao;
+    if (dentro !== c.somPerto) { c.somPerto = dentro; for (const n of LOOPS_CARRO) this.som.distanciaLoop(c.loops[n], dist); }
+    for (const n of sonsDaCabine(kAnt, c.k, c.h.nVidros)) this.som.tocar(n, null, { dist, seguir: c.h.group, taxa: 0.96 + Math.random() * 0.08 });
     const ligado = c.fase === "dirigindo" || c.fase === "abrindo" ? 1 : 0; c.ligado += (ligado - c.ligado) * Math.min(1, dt * 2.5);
     const vel = Math.hypot(c.est.vx, c.est.vz);
     if (dt > 0) { c.acel += (Math.max(-1, Math.min(1, (vel - c.velAnt) / dt / 8)) - c.acel) * Math.min(1, dt * 4); c.velAnt = vel; }   // (o CANTO: acelerando/desacelerando)
@@ -3165,11 +3169,11 @@ export class CyberEngine {
       if (k === "f" && !this.menu) { if (!e.repeat) this.executarAcao(); e.preventDefault(); return; }
       if (k === "j" && !this.menu) { if (!e.repeat) this.alternarDescanso(); e.preventDefault(); return; }
       if (k === "c" && !this.menu) { if (!e.repeat) this.darDash(); e.preventDefault(); return; }   // C = DASH (o arranque — desvio)
-      if (k === "x" && !this.menu) { if (!e.repeat) { if (this.rifleEquipado()) this.puxarGatilho(true); else this.atacar(); } e.preventDefault(); return; }
-      if (k === RIFLE.tecla && !this.menu && !this.pilotando && this.moto === null) { if (!e.repeat) this.alternarRifle(); e.preventDefault(); return; }   // 1 = saca/guarda o RIFLE
+      if (k === "x" && !this.menu && !this.noCarro()) { if (!e.repeat) { if (this.rifleEquipado()) this.puxarGatilho(true); else this.atacar(); } e.preventDefault(); return; }
+      if (k === RIFLE.tecla && !this.menu && !this.pilotando && !this.noVeiculo()) { if (!e.repeat) this.alternarRifle(); e.preventDefault(); return; }   // 1 = saca/guarda o RIFLE
       // MAGIA (a pé): Q = Estilhaço Estelar, E = Nova Cósmica, R (segurar) = o escudo
-      if ((k === "q" || k === "e") && !this.menu && !this.pilotando && this.moto === null) { if (!e.repeat) this.lancar(k === "q" ? FEITICOS.estilhaco : FEITICOS.nova); e.preventDefault(); return; }
-      if (k === ESCUDO.tecla && !this.menu && !this.pilotando && this.moto === null) { if (!e.repeat) this.erguerEscudo(true); e.preventDefault(); return; }   // X = ATACAR (o combo da espada; o clique também, com o mouse travado)   // J = sentar / deitar / levantar (lounge)
+      if ((k === "q" || k === "e") && !this.menu && !this.pilotando && !this.noVeiculo()) { if (!e.repeat) this.lancar(k === "q" ? FEITICOS.estilhaco : FEITICOS.nova); e.preventDefault(); return; }
+      if (k === ESCUDO.tecla && !this.menu && !this.pilotando && !this.noVeiculo()) { if (!e.repeat) this.erguerEscudo(true); e.preventDefault(); return; }   // X = ATACAR (o combo da espada; o clique também, com o mouse travado)   // J = sentar / deitar / levantar (lounge)
       if (k === "t" && !this.menu) { if (!e.repeat) this.alternarTablet(); e.preventDefault(); return; }
       if (k === "v" && !this.menu) { if (!e.repeat) this.alternarCamera(); e.preventDefault(); return; }   // V = a câmera PERTO (por cima do ombro) ⇄ a de antes
       if (k === "m" && !this.menu) { if (!e.repeat) this.portalPraNave(); e.preventDefault(); return; }   // M = o dono se TELEPORTA pra dentro da nave (um portal aqui, outro lá)     // T = o tablet (estudar por cima do cyberespaço)
@@ -3751,7 +3755,7 @@ export class CyberEngine {
       const cr = this.carro!;
       if (cr.fase === "dirigindo") {
         const c = this.comandoDeMoto(); cr.potencia = Math.max(0, c.acel) + (c.boost ? 0.5 : 0);
-        if (c.boost && !cr.boost) this.som.tocar("carro-turbo", cr.h.group.position, { dist: DISTANCIA.perto });   // (o assobio do tubo no boost)
+        if (c.boost && !cr.boost) this.som.tocar("carro-turbo", null, { dist: DISTANCIA.naveLocal, seguir: cr.h.group });   // (o NITRO: o baque + o sopro abrindo + o assobio)
         cr.boost = c.boost;
         const r = passoMotoSub(cr.est, c, dtReal, this.solidosDeVoo(), MOTO.teto); cr.est = r.s; cr.pousado = r.pousado; if (r.pousado) this.autoPouso = false;
       } else { cr.potencia = 0; cr.est = { ...cr.est, vx: 0, vy: 0, vz: 0 }; }

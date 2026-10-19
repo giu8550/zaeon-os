@@ -6,11 +6,12 @@
  *    `carro-zumbido` (o tremor grave da marcha lenta); e a sensação de LEVITAR do original (os pads do Vangelis) — o
  *    `carro-liga`/`carro-desliga`;
  *  - o LANDSPEEDER de Star Wars (Ben Burtt): o ronco da via expressa gravado através de uma MANGUEIRA de aspirador — o
- *    tubo oco: `carro-turbina` (ruído num filtro pente, as ressonâncias de um tubo) e o `carro-turbo` (o assobio do tubo subindo);
+ *    tubo oco: `carro-turbina` (ruído num filtro pente, as ressonâncias de um tubo);
  *  - os light cycles de TRON (Legacy): filtro, ressonância e varreduras de tom, os zumbidos AFINADOS na tonalidade da
  *    música — `carro-tom` (um tom em LÁ com a quinta, num filtro ressonante que respira);
  *  - o Nissan CANTO (o som de alerta dos elétricos da Nissan, "eu canto"; o Leaf foi pensado pra lembrar o spinner):
- *    o tom muda ACELERANDO e DESACELERANDO — `mixDoCarro` sobe/baixa o `carro-tom` com a aceleração.
+ *    o tom muda ACELERANDO e DESACELERANDO — `mixDoCarro` sobe/baixa o `carro-tom` com a aceleração;
+ *  - o NITRO (`carro-turbo`): o pós-combustor de ficção — baque grave, sopro macio abrindo e um assobio limpo subindo.
  * Os outros one-shots: o servo da porta tesoura, a trava, o vidro deslizando (`marcosDaCabine`).
  */
 
@@ -44,12 +45,13 @@ const serra = (fase: number) => ((fase / (2 * Math.PI)) % 1) * 2 - 1;
 const fimSemClique = (x: Float32Array, k = 128) => { for (let i = 0; i < Math.min(k, x.length); i++) x[x.length - 1 - i]! *= i / k; return x; };
 
 /** a VIBRAÇÃO grave (loop de 2 s — a textura do spinner de Blade Runner 2049: peças tremendo com um subwoofer): o grave
- *  de 38 Hz, um zumbido de 60 Hz baixinho e o CHOCALHAR (ruído médio em pulsos de 9 Hz) */
+ *  de 38 Hz, o mesmo tremor SATURADO uma oitava acima (76 Hz com os harmônicos ímpares — é o que um alto-falante de
+ *  notebook/celular consegue tocar: sem eles o grave some) e o CHOCALHAR (ruído médio em pulsos de 9 Hz) */
 export function sintetizarZumbidoCarro(sr: number): Float32Array {
   const n = sr * 2, x = Math.round(sr * 0.3), raw = new Float32Array(n + x), r = prng(81), bf = passaFaixa(sr);
   for (let i = 0; i < raw.length; i++) {
     const t = i / sr, pulso = Math.pow(Math.max(0, Math.sin(2 * Math.PI * 9 * t)), 6);
-    raw[i] = 0.7 * Math.sin(2 * Math.PI * 38 * t) + 0.18 * Math.sin(2 * Math.PI * 60 * t) + bf(r() * 2 - 1, 320, 2.5) * 0.9 * pulso;
+    raw[i] = 0.5 * Math.sin(2 * Math.PI * 38 * t) + 0.32 * Math.tanh(3 * Math.sin(2 * Math.PI * 76 * t)) + bf(r() * 2 - 1, 520, 2.5) * 1.6 * pulso;
   }
   return normalizar(fecharLoop(raw, n), 0.65);
 }
@@ -59,29 +61,29 @@ export function sintetizarGiroCarro(sr: number): Float32Array {
   const n = sr * 2, x = Math.round(sr * 0.3), raw = new Float32Array(n + x), r = prng(87), bf = passaFaixa(sr), bf2 = passaFaixa(sr);
   for (let i = 0; i < raw.length; i++) {
     const t = i / sr, gira = 2 * Math.PI * 6 * t, w = r() * 2 - 1;
-    const centro = 280 + 160 * Math.sin(gira), vol = 0.3 + 0.7 * Math.pow(Math.abs(Math.sin(gira)), 1.5);
+    const centro = 440 + 240 * Math.sin(gira), vol = 0.3 + 0.7 * Math.pow(Math.abs(Math.sin(gira)), 1.5);
     raw[i] = (bf(w, centro, 4) * 1.2 + bf2(w, centro * 2.4, 6) * 0.4) * vol;
   }
   return normalizar(fecharLoop(raw, n), 0.75);
 }
-/** o TOM (loop de 2 s — o hum afinado do TRON): dentes de serra em LÁ (110 Hz), a QUINTA e a oitava, levemente
+/** o TOM (loop de 2 s — o hum afinado do TRON): dentes de serra em LÁ (220 Hz), a QUINTA e a oitava, levemente
  *  desafinados (o batimento), num passa-baixa RESSONANTE que respira devagar */
 export function sintetizarTomCarro(sr: number): Float32Array {
   const n = sr * 2, x = Math.round(sr * 0.3), raw = new Float32Array(n + x), lpr = passaBaixaRes(sr);
   for (let i = 0; i < raw.length; i++) {
     const t = i / sr, f = 2 * Math.PI * t;
-    const v = serra(f * 110) * 0.5 + serra(f * 110.5) * 0.35 + serra(f * 165) * 0.3 + serra(f * 220.5) * 0.18;
-    raw[i] = lpr(v, 700 + 420 * Math.sin(2 * Math.PI * 0.5 * t), 4.5);
+    const v = serra(f * 220) * 0.5 + serra(f * 220.5) * 0.35 + serra(f * 330) * 0.3 + serra(f * 440.5) * 0.18;
+    raw[i] = lpr(v, 1300 + 600 * Math.sin(2 * Math.PI * 0.5 * t), 4);
   }
   return normalizar(fecharLoop(raw, n), 0.7);
 }
 /** o TUBO OCO (loop de 2 s — o landspeeder: a via expressa "através de uma mangueira"): ruído grave num FILTRO PENTE
- *  (as ressonâncias de um tubo, ~180 Hz e harmônicos) + um sopro agudo baixinho */
+ *  (as ressonâncias de um tubo, ~360 Hz e harmônicos) + um sopro agudo baixinho */
 export function sintetizarTurbinaCarro(sr: number): Float32Array {
   const n = sr * 2, x = Math.round(sr * 0.3), raw = new Float32Array(n + x), r = prng(82);
-  const atraso = Math.round(sr / 180), buf = new Float32Array(atraso);
+  const atraso = Math.round(sr / 360), buf = new Float32Array(atraso);
   let lp = 0, k = 0, hp = 0, wAnt = 0;
-  const a = passaBaixa(1800, sr);
+  const a = passaBaixa(2600, sr);
   for (let i = 0; i < raw.length; i++) {
     const w = r() * 2 - 1; lp += (w - lp) * a; hp = 0.85 * (hp + w - wAnt); wAnt = w;
     const y = lp + buf[k]! * 0.82; buf[k] = y; k = (k + 1) % atraso;   // (o pente: o tubo ressoando)
@@ -125,18 +127,31 @@ export function sintetizarDesligaCarro(sr: number): Float32Array {
   }
   return normalizar(fimSemClique(out), 0.7);
 }
-/** TURBO (1,0 s — o tubo do landspeeder ASSOBIANDO): ruído no filtro pente com o tubo encurtando (a ressonância sobe
- *  de 140 a 620 Hz) + o sopro */
+/** NITRO (1,6 s — o pós-combustor de ficção: o "salto" do Millennium Falcon / o boost do Podracer, sem chiado): um BAQUE
+ *  grave que cai (o tranco no peito), um SOPRO de ar com o filtro ABRINDO e fechando (o empurrão — ruído rosado, macio,
+ *  nada de pente metálico) e um ASSOBIO limpo subindo uma oitava (seno com um pouco de vibrato e a quinta por cima),
+ *  que fica e some devagar */
 export function sintetizarTurboCarro(sr: number): Float32Array {
-  const n = Math.round(sr * 1.0), out = new Float32Array(n), r = prng(89), max = Math.round(sr / 140), buf = new Float32Array(max);
-  let k = 0, lp = 0;
+  const n = Math.round(sr * 1.6), out = new Float32Array(n), r = prng(89);
+  let fBaque = 0, fAss = 0, lp1 = 0, lp2 = 0, b0 = 0, b1 = 0, b2 = 0;
   for (let i = 0; i < n; i++) {
-    const t = i / sr, f = 140 * Math.pow(620 / 140, Math.min(1, t / 0.7)), atraso = Math.max(2, Math.round(sr / f));
-    const w = r() * 2 - 1; lp += (w - lp) * 0.3;
-    const y = lp + buf[(k - atraso + max) % max]! * 0.88; buf[k] = y; k = (k + 1) % max;
-    out[i] = y * Math.min(1, t / 0.05) * (t < 0.7 ? 1 : Math.exp(-(t - 0.7) * 8));
+    const t = i / sr;
+    // o baque: 95 → 42 Hz em ~0,2 s, saturado de leve (os harmônicos fazem ele chegar no alto-falante pequeno)
+    fBaque += (2 * Math.PI * (42 + 53 * Math.exp(-t * 14))) / sr;
+    const baque = Math.tanh(2.2 * Math.sin(fBaque)) * Math.exp(-t * 7) * Math.min(1, t / 0.004);
+    // o sopro: ruído ROSADO (Paul Kellet, simplificado) num passa-baixa de 2 polos que abre 300 → 3800 Hz e volta
+    const w = r() * 2 - 1; b0 = 0.99765 * b0 + w * 0.099; b1 = 0.963 * b1 + w * 0.2965; b2 = 0.57 * b2 + w * 1.0526;
+    const rosa = (b0 + b1 + b2 + w * 0.1848) * 0.25;
+    const abre = Math.sin(Math.PI * Math.min(1, t / 1.3)), fc = 300 + 3500 * abre * abre, a = passaBaixa(fc, sr);
+    lp1 += (rosa - lp1) * a; lp2 += (lp1 - lp2) * a;
+    const sopro = lp2 * Math.min(1, t / 0.08) * Math.exp(-Math.max(0, t - 0.5) * 2.4);
+    // o assobio: 330 → 660 Hz (uma oitava, em LÁ/MI com o tom do carro), vibrato de 5 Hz, a quinta baixinha
+    const f = 330 * Math.pow(2, Math.min(1, t / 0.9)) * (1 + 0.006 * Math.sin(2 * Math.PI * 5 * t));
+    fAss += (2 * Math.PI * f) / sr;
+    const assobio = (Math.sin(fAss) + 0.25 * Math.sin(fAss * 1.5)) * Math.min(1, Math.max(0, t - 0.06) / 0.35) * Math.exp(-Math.max(0, t - 0.8) * 3.2);
+    out[i] = baque * 0.85 + sopro * 1.6 + assobio * 0.22;
   }
-  return normalizar(fimSemClique(out), 0.75);
+  return normalizar(fimSemClique(out, 512), 0.8);
 }
 /** PORTA subindo (1,0 s): o SERVO (dente de serra filtrado, 150 → 210 Hz, com o motorzinho tremendo) + o CHIADO
  *  pneumático no fim do curso */
@@ -188,10 +203,10 @@ export const SINTESE_CARRO: Record<NomeSomCarro, (sr: number) => Float32Array> =
 export function mixDoCarro(o: { ligado: number; vel: number; potencia: number; acel?: number }): Record<(typeof LOOPS_CARRO)[number], { vol: number; taxa: number }> {
   const l = Math.max(0, Math.min(1, o.ligado)), v = Math.min(1, Math.max(0, o.vel) / 45), p = Math.max(0, Math.min(1, o.potencia)), a = Math.max(-1, Math.min(1, o.acel ?? 0));
   return {
-    "carro-zumbido": { vol: l * (0.55 - 0.3 * v), taxa: 1 + 0.25 * p },
+    "carro-zumbido": { vol: l * (0.75 - 0.35 * v), taxa: 1 + 0.25 * p },
     "carro-giro": { vol: l * (0.25 + 0.5 * v), taxa: 0.65 + 0.95 * v },
-    "carro-tom": { vol: l * (0.28 + 0.3 * Math.max(p, v)), taxa: 0.85 + 0.55 * v + 0.07 * a },
-    "carro-turbina": { vol: l * (0.12 + 0.55 * Math.max(p * 0.7, v)), taxa: 0.8 + 0.5 * v },
+    "carro-tom": { vol: l * (0.4 + 0.35 * Math.max(p, v)), taxa: 0.85 + 0.55 * v + 0.07 * a },
+    "carro-turbina": { vol: l * (0.2 + 0.6 * Math.max(p * 0.7, v)), taxa: 0.8 + 0.5 * v },
     "carro-ar": { vol: l * 0.7 * Math.pow(v, 1.4), taxa: 0.85 + 0.35 * v },
   };
 }
