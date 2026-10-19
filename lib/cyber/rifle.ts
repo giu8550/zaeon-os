@@ -59,7 +59,8 @@ export const RIFLE = {
 } as const;
 /** o `mag` do tiro: o nº 3 (1 e 2 são os feitiços) */
 export const NUM_TIRO = 3;
-/** os bits do RIFLE na `mov` da rede (os 3 de baixo são o estado do movimento) */
+/** os bits do RIFLE na `mov` da rede (os 3 de baixo são o estado do movimento). MOV_RIFLE = o rifle EQUIPADO (na mão, ou
+ *  recolhido no ar — quem vê mantém o corpo de astronauta e só mostra a arma no chão) */
 export const MOV_RIFLE = 8, MOV_MIRA = 16;
 export const movComRifle = (mov: number, naMao: boolean, mirando: boolean) => (mov & 7) | (naMao ? MOV_RIFLE : 0) | (naMao && mirando ? MOV_MIRA : 0);
 export const rifleDoMov = (mov: number) => ({ naMao: (mov & MOV_RIFLE) !== 0, mirando: (mov & MOV_MIRA) !== 0 });
