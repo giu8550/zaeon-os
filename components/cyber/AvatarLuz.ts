@@ -22,6 +22,7 @@ import { corDesenho, materialTinta, materialToon, materialToonSimples } from "./
 import { esconderOssosVazios, esferaRapida } from "./matrizes";
 import type { VRM } from "@pixiv/three-vrm";
 import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./AvatarVrm";
+import { vestirTraje, type TrajeHandle } from "./TrajeEspacial";
 import { criarAsas, type AsasHandle } from "./AsasAnjo";
 import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
 import { POSE_FEMININA_A_VONTADE, type PoseVrm } from "@/lib/cyber/posesVrm";
@@ -140,6 +141,9 @@ export type AvatarLuzHandle = {
   tocarClipe(nome: NomeClipe, o?: { espelhar?: boolean; velocidade?: number; segurar?: boolean; /** começa a partir de (s) */ inicio?: number }): void;
   /** o RIFLE (lib/cyber/rifle) — chamado antes do `animar`; null = sem rifle */
   rifle(e: RifleNoAvatar | null): void;
+  /** o TRAJE ESPACIAL (components/cyber/TrajeEspacial): as placas no esqueleto mixamo; do corpo VRM só o rosto, dentro
+   *  do capacete. As poses das armas de fogo ficam como foram gravadas */
+  traje(on: boolean): void;
   /** sai do clipe (com a mistura de volta) */
   soltarClipe(): void;
   /** um clipe de ação tocando agora? */
@@ -350,6 +354,11 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   let clipe: { a: THREE.AnimationAction; segurar: boolean } | null = null, wClipe = 0, pedidoClipe = 0;
   // o RIFLE (lib/cyber/rifle): o estado do quadro, a arma posta nas mãos e as ações dos andares com ela (baixadas na 1ª
   // vez que ela aparece; tocam sempre, em laço, com o peso que o quadro manda)
+  let traje: TrajeHandle | null = null, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null;
+  const vestir = () => {
+    if (!espelho || !traje) return;
+    traje.ajustarCapacete(espelho.rosto(traje.ancoraRosto));
+  };
   let rif: RifleNoAvatar | null = null, armaRifle: THREE.Object3D | null = null, pedindoRifle = false;
   let acoesRifle: { mira: THREE.AnimationAction; anda: THREE.AnimationAction; esq: THREE.AnimationAction; dir: THREE.AnimationAction } | null = null;
   const prepararRifle = () => {
@@ -1072,6 +1081,20 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     semMochila() { mochila.visible = false; },
     poseVrm(p) { poseVrm = p; espelho?.pose(p); },
     rifle(e) { rif = e; },
+    traje(on) {
+      if (on === trajeOn || !modeloMx) return;
+      trajeOn = on;
+      if (on) {
+        traje ??= vestirTraje(modeloMx, { cor: `#${armadura.getHexString()}`, low });
+        if (!traje) { trajeOn = false; return; }
+        traje.visivel(true);
+        if (espelho) vestir();
+        else { soldadoEscondido = []; modeloMx.traverse((x) => { if ((x as THREE.SkinnedMesh).isSkinnedMesh && x.visible) { x.visible = false; soldadoEscondido!.push(x); } }); }
+      } else {
+        traje?.visivel(false); espelho?.rosto(null);
+        for (const x of soldadoEscondido ?? []) x.visible = true; soldadoEscondido = null;
+      }
+    },
     tocarClipe(nome, op) {
       if (!mixer) return;
       const meu = ++pedidoClipe, esp = !!op?.espelhar;
@@ -1110,16 +1133,17 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       // o soldado (e as cascas dele: aura, tinta) somem — o esqueleto continua animando, e continua no clique
       modeloMx.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
       espelho = espelharNoVrm(vrm, modeloMx, corpo, repouso, { economico: op?.economico }); espelho.pose(poseVrm); espelho.estilo(estiloCorpo);
+      if (trajeOn) { soldadoEscondido = null; vestir(); }   // (o VRM chegou com o traje já vestido: só o rosto)
       esconderOssosVazios(vrm.scene); esconderOssosVazios(modeloMx); esferaRapida(vrm.scene);   // ossos sem nada pra desenhar fora da lista (matrizes)
     },
-    soltarVrm() { espelho?.dispose(); espelho = null; },
+    soltarVrm() { espelho?.rosto(null); espelho?.dispose(); espelho = null; },
     recolorir(hex) {
       armadura.set(hex);
       if (anime) { corDesenho(armadura, matArmadura.color); matArmadura.emissive.copy(armadura).multiplyScalar(0.22); matMochila.emissive.copy(armadura).multiplyScalar(0.2); matFone.emissive.copy(armadura).multiplyScalar(0.35); }
       else { matArmadura.color.copy(armadura).multiplyScalar(0.5); matArmadura.emissive.copy(armadura); matMochila.emissive.copy(armadura).multiplyScalar(0.3); matFone.emissive.copy(armadura).multiplyScalar(0.5); }
     },
     dispose() {
-      mixer?.stopAllAction(); matArmadura.dispose(); matViseira.dispose(); matAura.dispose(); matTinta?.dispose(); espelho?.dispose(); asas?.dispose(); poGeo.dispose(); matPo.dispose();
+      traje?.dispose(); mixer?.stopAllAction(); matArmadura.dispose(); matViseira.dispose(); matAura.dispose(); matTinta?.dispose(); espelho?.dispose(); asas?.dispose(); poGeo.dispose(); matPo.dispose();
       mochila.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); const mt = (m as { material?: THREE.Material }).material; if (mt && mt !== matArmadura) mt.dispose(); }); texJato.dispose();
       fone.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); }); matFone.dispose(); matLedFone.dispose();
       prancha.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); if (m.material && m.material !== matPrancha && m.material !== matLuzPrancha) (m.material as THREE.Material).dispose(); }); matPrancha.dispose(); matLuzPrancha.dispose();

@@ -146,6 +146,10 @@ export type EspelhoVrm = {
    *  pedidos (mundo) e as mãos giram pros dedos/indicador pedidos — a cópia só passa rotações, e o braço do VRM tem
    *  outro comprimento: sem isso a mão parava ~10 cm fora da arma. null = solta */
   maos(m: MaosVrm | null): void;
+  /** SÓ O ROSTO (o traje espacial — components/cyber/TrajeEspacial): esconde corpo, roupa e cabelo e leva o VRM inteiro
+   *  pra que o meio dos OLHOS fique na `ancora` (dentro do capacete). Devolve a distância entre os olhos (m, mundo) — o
+   *  traje ajusta o tamanho do capacete por ela. null = o corpo inteiro de volta */
+  rosto(ancora: THREE.Object3D | null): number;
   dispose(): void;
 };
 /** um pulso (mundo), pra onde os dedos apontam, o lado do indicador e pra onde o cotovelo dobra */
@@ -258,6 +262,23 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
       }
     }
   };
+  // SÓ O ROSTO (traje): os materiais do rosto (os do VRoid: _Face…, _Eye…) ficam; o resto some
+  let ancoraRosto: THREE.Object3D | null = null;
+  const olhoE = cru("leftEye"), olhoD = cru("rightEye"), cab = cru("head");
+  const ehDoRosto = (n: string) => /_(Face|Eye)[A-Za-z]*_/.test(n) && !/Hair/i.test(n);
+  const escondidosRosto: THREE.Material[] = [];
+  const pO = new THREE.Vector3(), pAlvo = new THREE.Vector3();
+  const meioDosOlhos = (out: THREE.Vector3) => {
+    if (olhoE && olhoD) { olhoE.updateWorldMatrix(true, false); olhoD.updateWorldMatrix(true, false); return out.setFromMatrixPosition(olhoE.matrixWorld).add(pO.setFromMatrixPosition(olhoD.matrixWorld)).multiplyScalar(0.5); }
+    if (cab) { cab.updateWorldMatrix(true, false); return out.setFromMatrixPosition(cab.matrixWorld); }
+    return out.set(0, 0, 0);
+  };
+  const levarRosto = () => {
+    if (!ancoraRosto) return;
+    ancoraRosto.updateWorldMatrix(true, false);
+    pAlvo.setFromMatrixPosition(ancoraRosto.matrixWorld).applyMatrix4(corpoInv); meioDosOlhos(pO).applyMatrix4(corpoInv);
+    vrm.scene.position.add(pAlvo.sub(pO));   // (o VRM está no corpo: a diferença no referencial dele)
+  };
   /** quanto a coxa vai pra FRENTE (o VRM olha pro +Z; Δ no referencial dele) */
   const frenteDaCoxa = (b: string) => { const q = delta.get(b); if (!q) return 0; qCoxa.copy(q); return baixo.set(0, -1, 0).applyQuaternion(qCoxa).z; };
 
@@ -313,6 +334,7 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
       // a FÍSICA do cabelo/roupa (spring bones — o mais caro) e os materiais MToon só com DETALHE (perto): de longe o
       // cabelo parado e o uniforme do material não mudam nada que se veja
       vrm.humanoid.update(); vrm.expressionManager?.update();
+      levarRosto();
       if (maos && maos.peso > 0.01) prenderMaos(maos);
       if (detalhe) {
         vrm.lookAt?.update(dt); vrm.nodeConstraintManager?.update();
@@ -325,6 +347,17 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
     estilo(e) { estilo = e; },
     marcha(on) { marchaOn = on; },
     maos(m) { maos = m; },
+    rosto(a) {
+      if (a && !ancoraRosto) vrm.scene.traverse((x) => {
+        const m = x as THREE.Mesh; if (!m.isMesh) return;
+        for (const mt of Array.isArray(m.material) ? m.material : [m.material]) if (mt.visible && !ehDoRosto(mt.name)) { mt.visible = false; escondidosRosto.push(mt); }
+      });
+      if (!a && ancoraRosto) { for (const mt of escondidosRosto) mt.visible = true; escondidosRosto.length = 0; vrm.scene.position.set(0, 0, 0); }
+      ancoraRosto = a;
+      if (!olhoE || !olhoD) return 0;
+      olhoE.updateWorldMatrix(true, false); olhoD.updateWorldMatrix(true, false);
+      return pO.setFromMatrixPosition(olhoE.matrixWorld).distanceTo(pAlvo.setFromMatrixPosition(olhoD.matrixWorld));
+    },
     detalhe(on) { if (on && !detalhe) voltouDetalhe = true; detalhe = on; },
     dispose() {
       vrm.scene.removeFromParent();
