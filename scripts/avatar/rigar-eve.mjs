@@ -53,13 +53,17 @@ const peito = pts(pecas.Armor_low), capacete = pts(pecas.Helmet_low), pescoco = 
 const yPeito0 = Math.min(...peito.map((p) => p.y)), yPeito1 = Math.max(...peito.map((p) => p.y));
 const yPesc0 = Math.min(...pescoco.map((p) => p.y)), yCap0 = Math.min(...capacete.map((p) => p.y)), yCap1 = Math.max(...capacete.map((p) => p.y));
 const J = {};
-J.Hips = new THREE.Vector3(0, virilha + H * 0.035, 0);
-J.Spine = new THREE.Vector3(0, J.Hips.y + (yPeito0 - J.Hips.y) * 0.35, 0);
-J.Spine1 = new THREE.Vector3(0, J.Hips.y + (yPeito0 - J.Hips.y) * 0.75, 0);
-J.Spine2 = new THREE.Vector3(0, yPeito0 + (yPeito1 - yPeito0) * 0.35, 0);
-J.Neck = new THREE.Vector3(0, yPesc0 + (yCap0 - yPesc0) * 0.3, 0);
-J.Head = new THREE.Vector3(0, yCap0 + (yCap1 - yCap0) * 0.12, 0);
-J.HeadTop_End = new THREE.Vector3(0, yCap1, 0);
+// a COLUNA no meio do tronco (a profundidade de cada fatia do tronco — o corpo dela não está centrado em z = 0)
+const zTronco = (y) => { const f = corpo.filter((p) => Math.abs(p.y - y) < H * 0.02 && Math.abs(p.x) < H * 0.08); return f.length ? (Math.min(...f.map((p) => p.z)) + Math.max(...f.map((p) => p.z))) / 2 : 0; };
+const noMeio = (y) => new THREE.Vector3(0, y, zTronco(y));
+J.Hips = noMeio(virilha + H * 0.035);
+J.Spine = noMeio(J.Hips.y + (yPeito0 - J.Hips.y) * 0.35);
+J.Spine1 = noMeio(J.Hips.y + (yPeito0 - J.Hips.y) * 0.75);
+J.Spine2 = noMeio(yPeito0 + (yPeito1 - yPeito0) * 0.35);
+const zPesc = (Math.min(...pescoco.map((p) => p.z)) + Math.max(...pescoco.map((p) => p.z))) / 2, zCap = (Math.min(...capacete.map((p) => p.z)) + Math.max(...capacete.map((p) => p.z))) / 2;
+J.Neck = new THREE.Vector3(0, yPesc0 + (yCap0 - yPesc0) * 0.3, zPesc);
+J.Head = new THREE.Vector3(0, yCap0 + (yCap1 - yCap0) * 0.12, zCap);
+J.HeadTop_End = new THREE.Vector3(0, yCap1, zCap);
 for (const [s, L] of [[1, "Left"], [-1, "Right"]]) {
   // o braço: o pulso e o cotovelo são as pontas da braçadeira do lado (a de longe do corpo e a de perto); a mão vai
   // até a ponta dos dedos (o vértice mais pra fora)
@@ -68,19 +72,29 @@ for (const [s, L] of [[1, "Left"], [-1, "Right"]]) {
   const eixo = ponta.clone().sub(cBr).normalize();
   const proj = br.map((p) => p.clone().sub(cBr).dot(eixo)), aMin = Math.min(...proj), aMax = Math.max(...proj);
   const pulso = cBr.clone().addScaledVector(eixo, aMax), cotovelo = cBr.clone().addScaledVector(eixo, aMin - (aMax - aMin) * 0.12);
-  const ombro = new THREE.Vector3(s * Math.abs(cotovelo.x) * 0.48, yPeito1 - (yPeito1 - yPeito0) * 0.08, cBr.z * 0.5);
+  // o OMBRO: a 40% do peito ao pescoço, pra dentro da largura do tronco ali (a junta fica dentro do deltoide)
+  const yOmbro = J.Spine2.y + (J.Neck.y - J.Spine2.y) * 0.45;
+  const largOmbro = Math.max(...corpo.filter((p) => Math.abs(p.y - yOmbro) < H * 0.012 && Math.sign(p.x) === s).map((p) => Math.abs(p.x)));
+  const ombro = new THREE.Vector3(s * largOmbro * 0.72, yOmbro, zTronco(yOmbro));
   J[`${L}Shoulder`] = new THREE.Vector3(s * Math.abs(ombro.x) * 0.35, ombro.y - H * 0.005, ombro.z);
   J[`${L}Arm`] = ombro; J[`${L}ForeArm`] = cotovelo; J[`${L}Hand`] = pulso;
   J[`${L}HandMiddle1`] = pulso.clone().lerp(ponta, 0.45); J[`${L}HandMiddle4`] = ponta.clone();
-  // a perna: o centro dela logo abaixo da virilha, o joelho, o tornozelo; o pé pra frente (+z)
-  const coxa = medio(lado(s, (p) => p.y > virilha - H * 0.12 && p.y < virilha - H * 0.03));
-  const pe = lado(s, (p) => p.y < H * 0.06), frenteDoPe = Math.max(...pe.map((p) => p.z));
-  J[`${L}UpLeg`] = new THREE.Vector3(coxa.x, virilha + H * 0.01, 0);
-  J[`${L}Leg`] = new THREE.Vector3(coxa.x, virilha * 0.52, 0.004 * H);
-  J[`${L}Foot`] = new THREE.Vector3(coxa.x, H * 0.07, -0.01 * H);
-  J[`${L}ToeBase`] = new THREE.Vector3(coxa.x, H * 0.02, frenteDoPe * 0.55);
-  J[`${L}Toe_End`] = new THREE.Vector3(coxa.x, H * 0.015, frenteDoPe);
+  // a PERNA: o centro de cada fatia horizontal é o EIXO dela (as pernas da Eve convergem pros pés — um osso na
+  // vertical do quadril ficava fora da perna e a malha entortava); as ALTURAS do joelho e do tornozelo, pela proporção
+  // (a perna mais estreita não serve: as botas mudam a largura)
+  const fatia = (y) => { const f = lado(s, (p) => Math.abs(p.y - y) < H * 0.018 && Math.abs(p.x) < H * 0.16); if (f.length < 4) return null; const xs = f.map((p) => p.x); return { c: medio(f), larg: Math.max(...xs) - Math.min(...xs) }; };
+  const naAltura = (y) => { const f = fatia(y); return f ? { y, c: f.c } : null; };
+  const fq = fatia(virilha - H * 0.03) ?? { c: new THREE.Vector3(s * H * 0.06, virilha, 0) };
+  const joelho = naAltura(virilha * 0.53), tornozelo = naAltura(H * 0.075);
+  const pe = lado(s, (p) => p.y < H * 0.05), frente = pe.reduce((m, p) => (p.z > m.z ? p : m), pe[0]);
+  J[`${L}UpLeg`] = new THREE.Vector3(fq.c.x, virilha + H * 0.01, fq.c.z);
+  J[`${L}Leg`] = joelho ? new THREE.Vector3(joelho.c.x, joelho.y, joelho.c.z + H * 0.004) : new THREE.Vector3(fq.c.x, virilha * 0.52, 0);
+  J[`${L}Foot`] = tornozelo ? new THREE.Vector3(tornozelo.c.x, tornozelo.y, tornozelo.c.z) : new THREE.Vector3(fq.c.x, H * 0.07, 0);
+  J[`${L}ToeBase`] = new THREE.Vector3((J[`${L}Foot`].x + frente.x) / 2, H * 0.02, J[`${L}Foot`].z + (frente.z - J[`${L}Foot`].z) * 0.6);
+  J[`${L}Toe_End`] = new THREE.Vector3(frente.x, H * 0.015, frente.z);
 }
+if (process.env.RIG_DEBUG) for (const [k, v] of Object.entries(J)) console.log(k.padEnd(18), v.toArray().map((x) => x.toFixed(1)).join("  "));
+
 // as CURVAS (o dono pediu realçar): a cintura afina, o quadril e os glúteos abrem, o busto avança — campos suaves
 // (gaussianas na altura) só no tronco (|x| dentro da largura do quadril: os braços, em pose A, ficam de fora). O
 // peitoral (a peça rígida) acompanha o busto
