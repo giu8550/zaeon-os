@@ -1096,7 +1096,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           astroPedido = true;
           void carregarAstronauta(ASTRONAUTAS.m).then((g) => {
             if (!vivoAv || !modeloMx) return;
-            astro = vestirAstronauta(g, modeloMx, corpo); astro.pintar(paletaTraje); astro.visivel(false); vestir();
+            astro = vestirAstronauta(g, modeloMx, corpo, { rim: `#${luz.getHexString()}` }); astro.pintar(paletaTraje); astro.visivel(false); vestir();
           }).catch((e) => { astroPedido = false; console.warn("[avatar] o astronauta não carregou:", e); });
         }
       } else {
