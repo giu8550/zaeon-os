@@ -1028,10 +1028,11 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           vEixo.copy(lateral).multiplyScalar(-1); qParte.setFromAxisAngle(vEixo, (-pitch * 0.55 * mi * R) / 3);
           for (const b of [lombar, espinha1, espinha]) { b.getWorldQuaternion(qOsso); b.parent!.getWorldQuaternion(qPai); b.quaternion.copy(qPai.invert().multiply(qDelta.copy(qParte).multiply(qOsso))); b.updateWorldMatrix(false, true); }
         }
-        // DESCANSO: o punho do lado direito, na altura do umbigo, um pouco à frente; o cano pra frente, baixo e cruzando
+        // DESCANSO ("pronto baixo"): o punho do lado direito, na altura do umbigo, um pouco à frente; o cano pra FRENTE e
+        // pra baixo, só um pouco pra dentro (cruzando o peito ele apontava pro lado oposto ao da mira)
         espinha.getWorldPosition(vA);
-        const pRest = vGrip.copy(vA).addScaledVector(lateral, -0.1).addScaledVector(cima, -0.27).addScaledVector(frente, 0.24);
-        const dRest = vDirR.copy(frente).multiplyScalar(0.62).addScaledVector(lateral, 0.55).addScaledVector(cima, -0.55).normalize();
+        const pRest = vGrip.copy(vA).addScaledVector(lateral, -0.12).addScaledVector(cima, -0.25).addScaledVector(frente, 0.26);
+        const dRest = vDirR.copy(frente).multiplyScalar(0.85).addScaledVector(lateral, 0.18).addScaledVector(cima, -0.45).normalize();
         // MIRA: a coronha no ombro direito (o punho ~22 cm à frente dele) e o cano pro ponto da mira — a direção sai do
         // PUNHO (não do ombro): a linha do cano passa exatamente pelo alvo, e a bala (que sai da boca rumo a ele) segue o
         // cano. O cano chega na mira antes do resto da pose (`km`): no meio da subida ele já aponta

@@ -54,8 +54,8 @@ export const RIFLE = {
   /** depois de um tiro, quanto tempo (s) o corpo fica na POSE DE ATAQUE (a arma no ombro) antes de voltar ao descanso */
   posturaDepoisDoTiro: 2.5,
   /** o zoom da mira (o FOV), a distância da câmera por cima do ombro e o olho dela (pro lado direito e a altura acima
-   *  dos pés — o personagem fica à esquerda e a arma à mostra) */
-  fovMira: 38, distMira: 3.1, ombroMira: 0.9, alturaMira: 1.62,
+   *  dos pés — o personagem um pouco à esquerda, a ARMA perto da mira no centro da tela) */
+  fovMira: 42, distMira: 2.7, ombroMira: 0.3, alturaMira: 1.68,
 } as const;
 /** o `mag` do tiro: o nº 3 (1 e 2 são os feitiços) */
 export const NUM_TIRO = 3;
