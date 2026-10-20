@@ -9,7 +9,7 @@ export const MAX_JOGADORES = 40;
 /** o mapa inteiro (VOO.raioMapa 1500 + folga — os campi UFC/Unifor/UECE ficam na borda) e a altura máxima (VOO.yMax 720 + dorso da nave/mochila) — espelha MAPA
  *  de lib/lounge3d/sala. A Zaeon mega fica em z −560 (até −812) com piso a 450 m: com 600/400 quem estava lá
  *  aparecia pros outros puxado pro lado e as motos/nave 50 m ABAIXO do piso. */
-const COORD = 1540, ALT = 800;
+const COORD = 10000, ALT = 1800;   // (+ as pistas cósmicas até os buracos negros a ~8 km — lib/cyber/fiosCosmicos)
 /** a mochila pode estar CAINDO no vazio (o hiperespaço não tem chão): até um pouco abaixo de onde se renasce — espelha lib/cyber/praca QUEDA_VAZIO */
 const QUEDA = -80;
 

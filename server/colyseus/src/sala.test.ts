@@ -35,7 +35,7 @@ describe("regras da pose", () => {
     expect(sanitizarPose({ x: 1, z: 0, facing: 0, bordo: { x: 1, z: 1, nivel: 7 } }, false)!.bordo).toBeNull();
     expect(sanitizarPose({ x: 1, z: 0, facing: 0 }, false)!.bordo).toBeNull();
     const p = sanitizarPose({ x: 1e9, z: -3, facing: 0.5, topo: true, ceu: true, voo: { y: 50, yaw: 1 }, jet: 7 }, false)!;
-    expect(p.x).toBe(1540); expect(p.topo).toBe(false); expect(p.ceu).toBe(true); expect(p.voo).toBeNull(); expect(p.jet).toBe(7);
+    expect(p.x).toBe(10000); expect(p.topo).toBe(false); expect(p.ceu).toBe(true); expect(p.voo).toBeNull(); expect(p.jet).toBe(7);
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, topo: true, voo: { y: 50, yaw: 1 } }, true)!.voo).toEqual({ y: 50, yaw: 1 });
     // moto: qualquer um; vaga inteira 0..7 (chão + Zaeon), altura com teto; lixo → nada
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 6, y: 231, yaw: 1 } }, false)!.moto).toEqual({ s: 6, y: 231, yaw: 1 });
@@ -43,7 +43,7 @@ describe("regras da pose", () => {
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 31, y: 1, yaw: 0, de: "c".repeat(24) } }, false)!.moto).toEqual({ s: 31, y: 1, yaw: 0, de: "c".repeat(24) });
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 15, y: 1, yaw: 0, de: "x" } }, false)!.moto).toEqual({ s: 15, y: 1, yaw: 0 });
     expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 1.5, y: 1, yaw: 0 } }, false)!.moto).toBeNull();
-    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 0, y: 9999, yaw: 0 } }, false)!.moto!.y).toBe(800);
+    expect(sanitizarPose({ x: 0, z: 0, facing: 0, moto: { s: 0, y: 9999, yaw: 0 } }, false)!.moto!.y).toBe(1800);
     // a Zaeon mega (z −560…−812, piso 450, lounge 538): quem está lá chega INTEIRO pros outros
     const z = sanitizarPose({ x: -394, z: -790, facing: 0, ceu: true, alt: 550, jet: 560, moto: { s: 4, y: 452, yaw: 0 } }, false)!;
     expect([z.x, z.z, z.alt, z.jet, z.moto!.y]).toEqual([-394, -790, 550, 560, 452]);

@@ -12,8 +12,8 @@ describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", ()
     for (const f of fios) {
       const L = CIDADE.salas[f.sala], a = Math.atan2(L.z, L.x), b = Math.atan2(f.boca.z, f.boca.x);
       expect(Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))).toBeLessThan(0.02);
-      expect(Math.hypot(f.bn.x, f.bn.z)).toBeGreaterThan(700);   // bem longe da cidadela
-      const w = mundo(f.bn); expect(Math.hypot(w.x, w.z) + FIO.espiralR).toBeLessThan(VOO.raioMapa);   // dentro do mapa
+      expect(Math.hypot(f.bn.x, f.bn.z)).toBeGreaterThan(7000);   // MUITO longe da cidadela (o portal entre os níveis)
+      const w = mundo(f.bn); expect(Math.hypot(w.x, w.z) - FIO.espiralR).toBeGreaterThan(VOO.raioMapa * 3);   // bem além do mapa de voo: só o fluxo chega
       cantos.add(Math.round(Math.atan2(f.bn.z, f.bn.x) * 10));
     }
     expect(cantos.size).toBe(4);

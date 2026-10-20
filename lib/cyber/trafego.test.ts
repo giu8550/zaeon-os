@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CIDADE } from "./ceu";
 import { fiosCosmicos, pontoDoFio } from "./fiosCosmicos";
-import { ANEIS_VOO, CICLO_M, TRAFEGO, VEICULOS_CEU, estadoDoVeiculo, montarViagem, naViagem, viagemDe } from "./trafego";
+import { ANEIS_VOO, CICLO_T, TRAFEGO, VEICULOS_CEU, estadoDoVeiculo, montarViagem, naViagem, viagemDe } from "./trafego";
 
 describe("o tráfego do céu (pelas pistas cósmicas)", () => {
   it("a viagem sai do buraco negro de uma pista, passa pelo anel do hub e cai no buraco negro de outra", () => {
@@ -10,7 +10,7 @@ describe("o tráfego do céu (pelas pistas cósmicas)", () => {
     expect(Math.hypot(b.x - f[2]!.bn.x, b.y - f[2]!.bn.y, b.z - f[2]!.bn.z)).toBeLessThan(f[2]!.bn.r * 1.3);
     let noAnel = false; for (let u = 0; u <= 1; u += 0.005) { const p = naViagem(v, u); if (Math.abs(Math.hypot(p.x, p.z) - ANEIS_VOO[0].r) < 20) noAnel = true; }
     expect(noAnel).toBe(true);
-    expect(v.dur).toBeCloseTo(v.comprimento / 50, 6);
+    expect(v.dur).toBeLessThan(v.comprimento / 50); expect(v.dur).toBeGreaterThan(v.comprimento / (50 * TRAFEGO.disparo));
   });
   it("anda PELAS pistas (perto do traçado delas) e nunca por cima do piso da central", () => {
     const f = fiosCosmicos(), v = montarViagem(1, 3, 0, 1, 50, 10, 3);
@@ -30,6 +30,6 @@ describe("o tráfego do céu (pelas pistas cósmicas)", () => {
     for (let t = 0; t < 600 && !achou; t += 0.05) { const e = estadoDoVeiculo(ve, t); if (e && e.u < 0.005) { expect(e.escala).toBeLessThan(0.2); achou = true; } }
     expect(achou).toBe(true);
     expect(viagemDe(ve, 7).comprimento).toBe(viagemDe(ve, 7).comprimento);
-    for (let n = 0; n < 30; n++) for (const v of VEICULOS_CEU.slice(0, 10)) expect(viagemDe(v, n).dur).toBeLessThan(CICLO_M / v.vel);
+    for (let n = 0; n < 30; n++) for (const v of VEICULOS_CEU.slice(0, 10)) expect(viagemDe(v, n).dur).toBeLessThan(CICLO_T / v.vel);
   });
 });
