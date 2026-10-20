@@ -84,7 +84,7 @@ export const CORPOS_DE_JOGADOR: Readonly<Record<string, CorpoVrm>> = {
   // Giulia: regata preta (vira frente única com a gola em código), pantalona branca de cintura alta com cinto de corda,
   // sapato nude, pulseira de contas e brincos; cabelo castanho-escuro repartido de lado, batom vermelho e sardas (VRoid)
   giulia: { url: "/avatars/jogadores/giulia.vrm", tintas: { Bottoms: "#f4f2ec", Shoes: "#d8b28c" },
-    acessorios: ["golaFrenteUnica", "cintoCorda", "pulseiraContas", "brincos"], gravidadeCabelo: 0.35, pose: "feminina", asas: true },
+    acessorios: ["golaFrenteUnica", "cintoCorda", "pulseiraContas", "brincos"], gravidadeCabelo: 0.35, pose: "feminina" },   // (sem asas: as asas são só do fundador)
 };
 /** o corpo próprio de quem está no cyberespaço: o do FOUNDER (com as asas) ou o de jogador que o servidor mandou (com
  *  asas se o corpo tiver `asas`) */
