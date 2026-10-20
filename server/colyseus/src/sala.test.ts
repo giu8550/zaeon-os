@@ -26,6 +26,8 @@ describe("token de entrada (HMAC)", () => {
 describe("regras da pose", () => {
   it("saneia números; regalias (topo/nave) só pra fundador; a Zaeon (céu) e as motos pra todos", () => {
     expect(sanitizarPose({ x: "1", z: 0, facing: 0 }, false)).toBeNull();
+    expect(sanitizarPose({ x: 0, z: 0, facing: 0, carro: { c: 2, y: 451, yaw: 1 }, carroLargado: { c: 3, x: 1, y: 450, z: 2, yaw: 0 } }, false)).toMatchObject({ carro: { c: 2, y: 451, yaw: 1 }, carroLargado: { c: 3, x: 1, y: 450, z: 2, yaw: 0 } });
+    expect(sanitizarPose({ x: 0, z: 0, facing: 0, carro: { c: -1, y: 1, yaw: 0 }, carroLargado: { c: 1.5 } }, false)).toMatchObject({ carro: null, carroLargado: null });   // (o CARRO voador)
     expect(sanitizarPose({ x: 1, z: 0, facing: 0, t: 1234.5 }, false)!.t).toBe(1234.5);   // o relógio de quem mandou (netcode)
     expect(sanitizarPose({ x: 1, z: 0, facing: 0, t: "x" }, false)!.t).toBe(0);
     // a bordo da nave: a posição LOCAL (com teto) e o nível; lixo = fora da nave

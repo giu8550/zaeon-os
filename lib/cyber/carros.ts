@@ -59,3 +59,38 @@ export const tamanhoDoLoteCarro = (l: LoteCarro) => ({ larg: l.porFila * l.passo
 
 /** a altura do PISO onde o carro da vaga pousa: a praça (chão) ou o piso da ilha da Zaeon */
 export const pisoDaVaga = (v: VagaCarro, chao: number, ilhaY: number = CIDADE.pisoY) => (v.zaeon ? ilhaY : chao);
+
+// ───────────── ONLINE: quem está com cada carro (pela presença — como as motos, lib/cyber/motos) ─────────────
+/** quantos carros existem (o índice `c` = a posição em `vagasDeCarro()` — igual em todo cliente) */
+export const TOTAL_CARROS = vagasDeCarro().length;
+/** dirigindo o carro `c`: a altura e o rumo (a posição x/z é a da própria pessoa na presença) */
+export type CarroDirigido = { c: number; y: number; yaw: number };
+/** o carro `c` que a pessoa DEIXOU estacionado fora da vaga (fica lá até alguém pegar ou ela sair do jogo) */
+export type CarroLargado = { c: number; x: number; y: number; z: number; yaw: number };
+
+const fin = (v: unknown, min: number, max: number): number | null => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null);
+const indiceCarro = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v < TOTAL_CARROS ? v : null);
+/** saneia `carro` da presença (lixo → nada) */
+export function carroDe(v: unknown): { carro?: CarroDirigido } {
+  if (!v || typeof v !== "object") return {};
+  const o = v as Record<string, unknown>, c = indiceCarro(o.c), y = fin(o.y, -100, 800), yaw = fin(o.yaw, -10, 10);
+  return c === null || y === null || yaw === null ? {} : { carro: { c, y, yaw } };
+}
+/** saneia `carroLargado` da presença (lixo → nada) */
+export function carroLargadoDe(v: unknown): { carroLargado?: CarroLargado } {
+  if (!v || typeof v !== "object") return {};
+  const o = v as Record<string, unknown>, c = indiceCarro(o.c), x = fin(o.x, -1540, 1540), y = fin(o.y, -100, 800), z = fin(o.z, -1540, 1540), yaw = fin(o.yaw, -10, 10);
+  return c === null || x === null || y === null || z === null || yaw === null ? {} : { carroLargado: { c, x, y, z, yaw } };
+}
+
+/** alguém no mundo (`id`) e o que anuncia sobre carros */
+export type DonoDeCarro = { id: string; carro?: CarroDirigido | null; carroLargado?: CarroLargado | null };
+/** com quem está cada carro: DIRIGINDO vale mais que estacionado; dois no mesmo carro → o de menor id (todo cliente
+ *  decide igual); um estacionado que alguém está dirigindo não conta mais. Carro fora do mapa = na vaga dele */
+export type PosseCarro = { dono: string; dirige: true; y: number; yaw: number } | { dono: string; dirige: false; m: CarroLargado };
+export function posseDosCarros(lista: readonly DonoDeCarro[]): Map<number, PosseCarro> {
+  const out = new Map<number, PosseCarro>(), ord = [...lista].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const d of ord) if (d.carro && !out.has(d.carro.c)) out.set(d.carro.c, { dono: d.id, dirige: true, y: d.carro.y, yaw: d.carro.yaw });
+  for (const d of ord) if (d.carroLargado && !out.has(d.carroLargado.c)) out.set(d.carroLargado.c, { dono: d.id, dirige: false, m: d.carroLargado });
+  return out;
+}

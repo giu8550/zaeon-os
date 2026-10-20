@@ -7,6 +7,7 @@
 export type Pose = { x: number; z: number; facing: number; moving?: boolean; sit?: boolean; topo?: boolean; ceu?: boolean; voo?: { y: number; yaw: number }; naveParada?: { x: number; y: number; z: number; yaw: number }; jet?: number; alt?: number;
   /** montado numa MOTO voadora: vaga de origem + altura + rumo (qualquer pessoa) */ moto?: { s: number; y: number; yaw: number; de?: string };
   /** a moto que ESTACIONOU (fica onde desceu) */ motoLargada?: { s: number; x: number; y: number; z: number; yaw: number };
+  /** dirigindo o CARRO `c` (altura + rumo) e o carro que deixou estacionado fora da vaga (lib/cyber/carros) */ carro?: { c: number; y: number; yaw: number }; carroLargado?: { c: number; x: number; y: number; z: number; yaw: number };
   /** DESCANSO no lounge (lib/cyber/descanso `codificarDescanso`): 0 em pé, 1 sentado, 2 deitado, +3 com o tablet */ desc?: number;
   /** ARENA PvP (lib/cyber/combate): o golpe (seq×4 + nº do combo), a vida (0–100) e a espada na mão (1) */ atk?: number; hp?: number; arma?: number;
   /** o MOVIMENTO TURBINADO: 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem, 6 o escudo da magia (os outros veem a pose) */ mov?: number;
@@ -37,6 +38,10 @@ export function poseMudou(antes: Pose | null, agora: Pose): boolean {
   if (!!ma !== !!mb || (ma && mb && (ma.s !== mb.s || ma.de !== mb.de || Math.abs(ma.y - mb.y) > 0.05 || Math.abs(ma.yaw - mb.yaw) > EPS_ANG))) return true;
   const la = antes.motoLargada, lb = agora.motoLargada;
   if (!!la !== !!lb || (la && lb && (la.s !== lb.s || Math.hypot(la.x - lb.x, la.y - lb.y, la.z - lb.z) > EPS_POS || Math.abs(la.yaw - lb.yaw) > EPS_ANG))) return true;
+  const ca = antes.carro, cb = agora.carro;
+  if (!!ca !== !!cb || (ca && cb && (ca.c !== cb.c || Math.abs(ca.y - cb.y) > 0.05 || Math.abs(ca.yaw - cb.yaw) > EPS_ANG))) return true;
+  const cla = antes.carroLargado, clb = agora.carroLargado;
+  if (!!cla !== !!clb || (cla && clb && (cla.c !== clb.c || Math.hypot(cla.x - clb.x, cla.y - clb.y, cla.z - clb.z) > EPS_POS || Math.abs(cla.yaw - clb.yaw) > EPS_ANG))) return true;
   const na = antes.naveParada, nb = agora.naveParada;
   if (!!na !== !!nb || (na && nb && (Math.hypot(na.x - nb.x, na.y - nb.y, na.z - nb.z) > EPS_POS || Math.abs(na.yaw - nb.yaw) > EPS_ANG))) return true;
   if (Math.hypot(agora.x - antes.x, agora.z - antes.z) > EPS_POS) return true;

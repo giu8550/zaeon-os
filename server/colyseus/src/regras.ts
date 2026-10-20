@@ -25,6 +25,8 @@ export type Pose = {
   /** em pé num lugar alto (dorso da nave, ilhota) */ alt: number | null;
   /** montado numa moto voadora (qualquer pessoa): vaga 0..7, altura com teto, rumo */ moto: { s: number; y: number; yaw: number; de?: string } | null;
   /** a moto que ESTACIONOU (fica onde desceu): vaga, posição no mapa, rumo */ motoLargada: { s: number; x: number; y: number; z: number; yaw: number } | null;
+  /** dirigindo o CARRO voador `c` (espelha lib/cyber/carros): altura, rumo */ carro: { c: number; y: number; yaw: number } | null;
+  /** o carro que DEIXOU estacionado fora da vaga */ carroLargado: { c: number; x: number; y: number; z: number; yaw: number } | null;
   /** DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (espelha lib/cyber/descanso) */ desc: number;
   /** ARENA PvP (espelha lib/cyber/combate): o golpe (seq×4 + nº; 0 = nenhum), a vida (0–100), a espada na mão */ atk: number; hp: number; arma: boolean; /** MAGIA (espelha lib/cyber/magia): o lançamento (0 = nenhum) */ mag: number;
   /** o MOVIMENTO TURBINADO (espelha lib/cyber/movimento): os 3 bits de baixo = 0 nada, 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem, 6 escudo; 8 = o rifle na mão, 16 = mirando (lib/cyber/rifle) */ mov: number;
@@ -32,7 +34,9 @@ export type Pose = {
   /** CORRIDA DE CHECKPOINTS: quantos pegou e a corrida ("semente:largada" — o convite da dupla; "" = nenhuma) */ ck: number; cr: string;
   /** A BORDO da nave-QG: posição LOCAL na planta, nível (0 casa, 1 cabine) e a escada (null = fora da nave) */ bordo: { x: number; z: number; nivel: 0 | 1; esc: number | null } | null;
 };
-const VAGAS_MOTO = 32, TETO_MOTO = ALT;   // chão (4) + Zaeon (12) + 4 mirantes da Zaeon (16) — espelha TOTAL_VAGAS de lib/cyber/motos
+const VAGAS_MOTO = 32, TETO_MOTO = ALT;
+/** teto do índice de carro (o cliente confere contra TOTAL_CARROS de lib/cyber/carros — hoje 17; aqui, folga pra frota crescer) */
+const CARROS_MAX = 64;   // chão (4) + Zaeon (12) + 4 mirantes da Zaeon (16) — espelha TOTAL_VAGAS de lib/cyber/motos
 
 /** saneia a pose do cliente; `fundador` vem do TOKEN (servidor), nunca do cliente */
 export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
@@ -53,7 +57,7 @@ export function sanitizarPose(raw: unknown, fundador: boolean): Pose | null {
   return {
     x, z, facing, moving: r.moving === true, sit: r.sit === true,
     topo: fundador && r.topo === true, ceu: r.ceu === true,
-    voo, naveParada, jet: num(r.jet, QUEDA, ALT), alt: num(r.alt, 0, ALT), moto: motoDe(r.moto), motoLargada: motoLargadaDe(r.motoLargada),
+    voo, naveParada, jet: num(r.jet, QUEDA, ALT), alt: num(r.alt, 0, ALT), moto: motoDe(r.moto), motoLargada: motoLargadaDe(r.motoLargada), carro: carroDe(r.carro), carroLargado: carroLargadoDe(r.carroLargado),
     desc: typeof r.desc === "number" && Number.isInteger(r.desc) && r.desc >= 0 && r.desc <= 5 ? r.desc : 0,
     atk: typeof r.atk === "number" && Number.isInteger(r.atk) && r.atk >= 0 && r.atk <= 400000 ? r.atk : 0,
     hp: typeof r.hp === "number" && Number.isInteger(r.hp) && r.hp >= 0 && r.hp <= 100 ? r.hp : 100,
@@ -84,6 +88,18 @@ function motoLargadaDe(v: unknown): Pose["motoLargada"] {
   const o = v as Record<string, unknown>, x = num(o.x, -COORD, COORD), y = num(o.y, 0, ALT), z = num(o.z, -COORD, COORD), yaw = num(o.yaw, -10, 10);
   if (typeof o.s !== "number" || !Number.isInteger(o.s) || o.s < 0 || o.s >= VAGAS_MOTO || x === null || y === null || z === null || yaw === null) return null;
   return { s: o.s, x, y, z, yaw };
+}
+
+const indiceCarro = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v < CARROS_MAX ? v : null);
+function carroDe(v: unknown): Pose["carro"] {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>, c = indiceCarro(o.c), y = num(o.y, QUEDA, ALT), yaw = num(o.yaw, -10, 10);
+  return c === null || y === null || yaw === null ? null : { c, y, yaw };
+}
+function carroLargadoDe(v: unknown): Pose["carroLargado"] {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>, c = indiceCarro(o.c), x = num(o.x, -COORD, COORD), y = num(o.y, QUEDA, ALT), z = num(o.z, -COORD, COORD), yaw = num(o.yaw, -10, 10);
+  return c === null || x === null || y === null || z === null || yaw === null ? null : { c, x, y, z, yaw };
 }
 
 /** mensagem de signaling WebRTC (offer/answer/ICE) — só repassa se o destino estiver na sala e couber no teto */
