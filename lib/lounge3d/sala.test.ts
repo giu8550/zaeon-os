@@ -145,7 +145,7 @@ describe("canal e cor", () => {
   it("presença: naveParada (nave pousada fora do hangar) só com números válidos, com limites", () => {
     const base = { userId: "a".repeat(24), name: "Ana", color: "#4aa3ff", x: 1, z: 2, facing: 0 };
     expect(sanitizarPresenca({ ...base, naveParada: { x: 24, y: 0, z: 24, yaw: 1 } })?.naveParada).toEqual({ x: 24, y: 0, z: 24, yaw: 1 });
-    expect(sanitizarPresenca({ ...base, naveParada: { x: 9999, y: 9999, z: -9999, yaw: 0 } })?.naveParada).toEqual({ x: MAPA.coord, y: MAPA.alt, z: -MAPA.coord, yaw: 0 });
+    expect(sanitizarPresenca({ ...base, naveParada: { x: 99999, y: 99999, z: -99999, yaw: 0 } })?.naveParada).toEqual({ x: MAPA.coord, y: MAPA.alt, z: -MAPA.coord, yaw: 0 });
     // a nave na doca da Zaeon mega (z ≈ −300…−800, y ≈ 450): não pode ser puxada pro mapa antigo
     expect(sanitizarPresenca({ ...base, naveParada: { x: 40, y: 452.5, z: -790, yaw: 1 } })?.naveParada).toEqual({ x: 40, y: 452.5, z: -790, yaw: 1 });
     expect(sanitizarPresenca({ ...base, x: -394, z: -790, alt: 550, moto: { s: 4, y: 452, yaw: 0 } })).toMatchObject({ x: -394, z: -790, alt: 550, moto: { s: 4, y: 452 } });

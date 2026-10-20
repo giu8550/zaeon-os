@@ -224,7 +224,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const COR_SALA: Record<NomeSala, number> = { lounge: 0xb98cff, garagem: 0xffb46b, biblioteca: 0x7fb8ff, jardim: 0x7dffb0 };
   if (!NIVEIS_SEPARADOS) { const ep = criarEscadasDePedra({ low, cores: COR_SALA }); add(ep.group); alvos.push(...ep.alvos); }   // (níveis separados: sem escadas — os fios cósmicos e os buracos negros)
   // ── as PISTAS CÓSMICAS (no lugar das escadas): o fluxo de luz até o buraco negro massivo de cada canto (components/cyber/FiosCosmicos) ──
-  const fios = NIVEIS_SEPARADOS ? criarFiosCosmicos({ low, cores: COR_SALA, starTex, aoTrovao: (p) => { if (opts.aoTrovao) { hub.updateMatrixWorld(); opts.aoTrovao(p.clone().applyMatrix4(hub.matrixWorld)); } } }) : null;
+  const fios = NIVEIS_SEPARADOS ? criarFiosCosmicos({ low, cores: COR_SALA, starTex, alcanceVista: low ? 1800 : 3600, aoTrovao: (p) => { if (opts.aoTrovao) { hub.updateMatrixWorld(); opts.aoTrovao(p.clone().applyMatrix4(hub.matrixWorld)); } } }) : null;
   const euLocal = { x: 0, y: -1e4, z: 0 };   // (onde a pessoa está, local da ilha — o engine conta a cada quadro)
   if (fios) { add(fios.group, ilha); alvos.push(...fios.alvos); fios.group.traverse((n) => { n.userData.semLote = true; }); }   // (anima: fora dos lotes)
   // ── o TRÁFEGO DO CÉU: carros e motos pelos anéis de voo, saindo e entrando nos buracos negros (components/cyber/TrafegoCeu) ──
@@ -272,7 +272,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       tg.add(h.group); h.group.traverse((x) => { x.userData.semLote = true; }); h.definir(ritualAgora.i, ritualAgora.raios); tempestade = { h, g: tg };
     }
     // a PISTA DE SAÍDA (o fluxo da porta antiga até o buraco negro que leva de volta pro hub)
-    const saida = NIVEIS_SEPARADOS ? criarFiosCosmicos({ pistas: [saidaDaSala(n)], low, cores: COR_SALA, starTex, aoTrovao: (p) => { if (opts.aoTrovao) { g.updateMatrixWorld(); opts.aoTrovao(p.clone().applyMatrix4(g.matrixWorld)); } } }) : null;
+    const saida = NIVEIS_SEPARADOS ? criarFiosCosmicos({ pistas: [saidaDaSala(n)], low, cores: COR_SALA, starTex, alcanceVista: low ? 1800 : 3600, aoTrovao: (p) => { if (opts.aoTrovao) { g.updateMatrixWorld(); opts.aoTrovao(p.clone().applyMatrix4(g.matrixWorld)); } } }) : null;
     if (saida) { por(saida.group); saida.group.traverse((x) => { x.userData.semLote = true; }); }
     alvos.push(...meus);
     const v: SalaViva = { salas, templo, estacs, tempestade, saida, texturas: tex, alvos: meus, extras };

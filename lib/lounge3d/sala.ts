@@ -19,7 +19,8 @@ const COORD = 400; // metade do chão (plano 400×400 centrado) — notas/artefa
 /** presença no MAPA do cyberespaço: o mapa inteiro (a Zaeon mega fica em z −560, até −812) e qualquer altura que se
  *  alcança (teto do voo + o dorso da nave / a mochila acima do lounge). Com os 400 m antigos, quem estava na Zaeon
  *  aparecia pros outros puxado pra z −400 e as motos/nave lá em cima, 50 m ABAIXO do piso. */
-export const MAPA = { coord: VOO.raioMapa + 40, alt: VOO.yMax + 80, /** caindo no vazio (sem chão): a mochila desce até renascer — abaixo de lib/cyber/praca QUEDA_VAZIO */ queda: -80 } as const;
+/** (+ as PISTAS CÓSMICAS: o fluxo leva até os buracos negros a ~8 km da Zaeon e ~700 m acima do piso dela — lib/cyber/fiosCosmicos) */
+export const MAPA = { coord: 10000, alt: 1800, /** caindo no vazio (sem chão): a mochila desce até renascer — abaixo de lib/cyber/praca QUEDA_VAZIO */ queda: -80 } as const;
 
 // Controle, zero-width e separadores de linha Unicode (U+2028/2029 — num literal de regex quebram o parser).
 const CONTROLE = new RegExp("[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f\\u200b-\\u200f\\u2028\\u2029]", "g");
