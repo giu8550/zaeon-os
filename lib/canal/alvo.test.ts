@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolverAlvos, agenteDaVez, estaForaDaConversa, AGENTE_PADRAO, type MsgResumo } from "./alvo";
+import { resolverAlvos, agenteDaVez, estaForaDaConversa, quemRespondeSemArroba, AGENTE_PADRAO, type MsgResumo } from "./alvo";
 
 const A = "a".repeat(24), B = "b".repeat(24);
 const DISP = ["aura", "zaeon", "medicina"];
@@ -115,5 +115,22 @@ describe("alvo · #440 a agente voltou", () => {
     const hist = [h("humano", A), h("agente", "medicina"), saiu, h("humano", A), voltou];
     expect(resolverAlvos({ ...base, historico: hist }).alvos).toEqual(["medicina"]);
     expect(agenteDaVez(hist, DISP)).toBe("medicina");
+  });
+});
+
+describe("alvo · #466 a dica 'Zenita responde' usa a regra do servidor", () => {
+  const conversa = [h("humano", B), h("agente", "medicina")]; // B estava falando com o Osler
+
+  it("conversa com outra pessoa: pra quem estava falando com ela, 'Osler responde'", () => {
+    expect(quemRespondeSemArroba(conversa, DISP, B, 2)).toBe("medicina");
+  });
+  it("…pra outra pessoa, ninguém (antes a tela dizia 'Osler responde' e ninguém respondia)", () => {
+    expect(quemRespondeSemArroba(conversa, DISP, A, 2)).toBeNull();
+  });
+  it("conversa só com a agente: a agente da vez", () => {
+    expect(quemRespondeSemArroba(conversa, DISP, B, 1)).toBe("medicina");
+  });
+  it("depois que ela saiu: ninguém", () => {
+    expect(quemRespondeSemArroba([...conversa, { autorTipo: "sistema", autorId: "medicina", texto: "Osler saiu da conversa" }], DISP, B, 1)).toBeNull();
   });
 });

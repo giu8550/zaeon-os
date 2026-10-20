@@ -21,6 +21,13 @@ vi.mock("@/lib/canal/server", () => ({
     canal: {
       findUnique: async ({ where }: any) => (where.id === state.canal?.id ? state.canal : null),
       update: async ({ data }: any) => { state.atualizado = data; return { ...state.canal, ...data }; },
+      // #466: entrar/sair do escritório grava com condição (lib/canal/atomico) — no canal "de verdade" do teste
+      updateMany: async (a: any) => {
+        const { updateManyCanais } = await import("@/lib/canal/fakeCanalDb");
+        const r = await updateManyCanais(state.canal ? [state.canal] : [], a);
+        if (r.count) state.atualizado = { ...(state.atualizado ?? {}), membros: [...state.canal.membros] };
+        return r;
+      },
     },
     canalMensagem: {
       findMany: async () => [],
@@ -134,7 +141,8 @@ describe("canal/[id] · adicionar pessoa exige convite aceito", () => {
     state.atualizado = null;
     const r2 = await patch({ adicionarMembro: C });
     expect(r2.status).toBe(200);
-    expect(state.atualizado.membros).toEqual([C]);
+    // #466: o Martinez (que entrou antes) continua — antes a rota regravava a lista e o mock escondia isso
+    expect(state.atualizado.membros).toEqual([B, C]);
   });
 
   it("e-mail que não existe → 404", async () => {
@@ -146,5 +154,20 @@ describe("canal/[id] · adicionar pessoa exige convite aceito", () => {
     const r = await patch({ removerMembro: B });
     expect(r.status).toBe(200);
     expect(state.atualizado.membros).toEqual([]);
+  });
+});
+
+describe("canal/[id] · #466 entrar e sair sem apagar ninguém", () => {
+  it("o dono remove o Martinez enquanto a Ana entra: a Ana continua (antes a lista inteira era regravada)", async () => {
+    state.canal = { ...turma, membros: [B] };
+    state.convites.push({ deId: A, paraId: C, status: "aceito" });
+    await Promise.all([patch({ removerMembro: B }), patch({ adicionarMembro: C })]);
+    expect(state.canal.membros).toEqual([C]);
+  });
+  it("remover quem já saiu (clique duplo) não quebra nada", async () => {
+    state.canal = { ...turma, membros: [B] };
+    expect((await patch({ removerMembro: B })).status).toBe(200);
+    expect((await patch({ removerMembro: B })).status).toBe(200);
+    expect(state.canal.membros).toEqual([]);
   });
 });

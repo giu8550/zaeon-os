@@ -8,7 +8,8 @@ import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag, isObjectId, agentesDoCanal, pessoas, paraWire, agentesPublicos } from "@/lib/canal/server";
 import { podeLer, podeGerir, normalizarAcesso } from "@/lib/canal/gate";
 import { isAgentKey } from "@/lib/agents/roster";
-import { anunciarEntrada, novosMembros } from "@/lib/canal/presenca";
+import { anunciarEntrada } from "@/lib/canal/presenca";
+import { entrarComoMembro, sairComoMembro, type DbAtomico } from "@/lib/canal/atomico";
 import { EV_MENSAGEM, publicarPusher } from "@/lib/canal/realtime";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
@@ -55,7 +56,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (Array.isArray(body?.agentes)) data.agentes = ([...new Set(body.agentes.filter(isAgentKey))] as string[]).slice(0, 12);
   if (body?.cartolinaId === null) data.cartolinaId = null;
   else if (isObjectId(body?.cartolinaId)) data.cartolinaId = body.cartolinaId;
-  let membros = [...canal.membros];
+  // #466: entrar/sair do escritório não regrava a lista inteira (lib/canal/atomico) — senão quem entrou no mesmo
+  // instante sumia. Os outros campos (título, acesso, agentes, cartolina) seguem no update normal.
+  let entra: string | null = null;
+  let sai: string | null = null;
   // Adicionar pessoa (por e-mail ou pelo id de um contato). #396: só quem JÁ ACEITOU o convite do dono
   // (botão +) entra — ninguém é colocado num escritório sem ter concordado.
   if (typeof body?.adicionarEmail === "string" || isObjectId(body?.adicionarMembro)) {
@@ -69,15 +73,18 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         select: { id: true },
       });
       if (!aceito) return NextResponse.json({ error: "Essa pessoa ainda não aceitou um convite seu. Convide pelo botão + primeiro." }, { status: 409 });
-      if (!membros.includes(alvo.id)) membros.push(alvo.id);
+      entra = alvo.id;
     }
-    data.membros = membros;
   }
-  if (isObjectId(body?.removerMembro)) { membros = membros.filter((m) => m !== body.removerMembro); data.membros = membros; }
-  if (!Object.keys(data).length) return NextResponse.json({ error: "Nada pra alterar." }, { status: 400 });
-  const upd = await prisma.canal.update({ where: { id: canal.id }, data });
-  // #423: quem foi ADICIONADO agora ganha a linha "fulano entrou no escritório" no chat (best-effort)
-  const novos = novosMembros(canal.membros, upd.membros ?? [], canal.ownerId);
+  if (isObjectId(body?.removerMembro)) sai = body.removerMembro;
+  if (!Object.keys(data).length && !entra && !sai) return NextResponse.json({ error: "Nada pra alterar." }, { status: 400 });
+  if (Object.keys(data).length) await prisma.canal.update({ where: { id: canal.id }, data });
+  const db = prisma as unknown as DbAtomico;
+  const entrou = entra ? (await entrarComoMembro(db, canal.id, entra)) === "entrou" : false;
+  if (sai) await sairComoMembro(db, canal.id, sai);
+  const upd = (await prisma.canal.findUnique({ where: { id: canal.id } })) ?? canal;
+  // #423: quem foi ADICIONADO agora ganha a linha "fulano entrou no escritório" no chat (best-effort; #466: só se entrou agora)
+  const novos = entrou && entra ? [entra] : [];
   if (novos.length) {
     const gente = await pessoas(novos);
     for (const id of novos) {

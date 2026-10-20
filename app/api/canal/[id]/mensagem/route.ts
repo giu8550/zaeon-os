@@ -11,7 +11,8 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
-import { prisma, sessaoUsuario, exigirFlag, isObjectId, agentesDoCanal } from "@/lib/canal/server";
+import { prisma, sessaoUsuario, exigirFlag, isObjectId, agentesDoCanal, pessoas } from "@/lib/canal/server";
+import { chamadasPeloNome } from "@/lib/canal/chamada";
 import { podeEscrever } from "@/lib/canal/gate";
 import { montarAliases, parseMentions } from "@/lib/canal/mention";
 import { resolverAlvos, estaForaDaConversa } from "@/lib/canal/alvo";
@@ -41,6 +42,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const agentes = await agentesDoCanal(u.id, canal.agentes);
   const mencoes = parseMentions(texto, montarAliases(agentes.map((a) => ({ agentKey: a.agentKey, nome: a.nome }))));
+  // #466: sem @, o NOME usado pra chamar também chama ("sim continue aura…") — nunca o nome de uma pessoa da conversa
+  const chamadas = mencoes.length ? mencoes : chamadasPeloNome(texto, agentes, await nomesDasPessoas(canal));
 
   // Quem responde: @menção manda; sem @, continua o último agente que falou no canal (ou a Aura,
   // no primeiro oi). Lê o histórico ANTES de gravar a mensagem atual. Ver lib/canal/alvo.ts.
@@ -50,7 +53,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   });
   const historico = [...recentes].reverse();
   const { alvos } = resolverAlvos({
-    mencoes,
+    mencoes: chamadas,
     historico,
     remetenteId: u.id,
     disponiveis: agentes.map((a) => a.agentKey),
@@ -67,7 +70,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     humanos,
   );
   // #440: chamada com @ depois de ter saído → entra a linha "Zenita voltou para a conversa"
-  const voltando = mencoes.filter((k) => alvos.includes(k) && !dispensadas.includes(k) && estaForaDaConversa(historico, k));
+  const voltando = chamadas.filter((k) => alvos.includes(k) && !dispensadas.includes(k) && estaForaDaConversa(historico, k));
 
   const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "humano", autorId: u.id, texto, mencoes } });
   // agente convocado passa a "estar" no canal (aparece na barra pra todo mundo); #440: a dispensada SAI da barra
@@ -132,4 +135,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     ok: true, mensagem: wire, turnos: respondem.map((agentKey, i) => ({ agentKey, via: vias[i] })), agentesNoCanal,
     ...(dispensadas.length ? { dispensadas } : {}), ...(voltando.length ? { voltaram: voltando } : {}),
   }, { status: 201 });
+}
+
+/** #466: os nomes das pessoas do canal (quem tem nome de agente não chama a agente). Falhou → nenhum. */
+async function nomesDasPessoas(canal: { ownerId: string; membros: string[]; dmCom?: string | null }): Promise<string[]> {
+  try {
+    const gente = await pessoas([canal.ownerId, ...(canal.membros ?? []), ...(canal.dmCom ? [canal.dmCom] : [])]);
+    return [...gente.values()].map((p) => p.nome).filter(Boolean);
+  } catch {
+    return [];
+  }
 }

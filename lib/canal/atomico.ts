@@ -56,6 +56,24 @@ export async function entrarComoMembro(db: DbAtomico, canalId: string, userId: s
   return count > 0 ? "entrou" : "ja-estava";
 }
 
+/**
+ * #466: o dono tira alguém do escritório — SEM apagar quem entrou no mesmo instante (antes a rota regravava a
+ * lista inteira). "nao-estava" = já tinha saído (clique duplo) ou nunca foi membro.
+ */
+export async function sairComoMembro(db: DbAtomico, canalId: string, userId: string): Promise<"saiu" | "nao-estava" | null> {
+  let estava = false;
+  const r = await trocarComTentativas<CanalLista>(
+    () => db.canal.findUnique({ where: { id: canalId } }),
+    (c) => {
+      estava = (c.membros ?? []).includes(userId);
+      return estava ? { membros: (c.membros ?? []).filter((m) => m !== userId) } : null;
+    },
+    async (c, novo) => (await db.canal.updateMany({ where: { id: canalId, membros: { equals: c.membros ?? [] } }, data: novo as Record<string, unknown> })).count,
+  );
+  if (!r) return null;
+  return estava ? "saiu" : "nao-estava";
+}
+
 /** A barra de agentes (canal.agentes) depois da mensagem: chamados entram, dispensados saem — sem perder o dos outros. */
 export async function atualizarAgentes(db: DbAtomico, canalId: string, chamados: readonly string[], dispensados: readonly string[]): Promise<string[] | null> {
   const r = await trocarComTentativas<CanalLista>(

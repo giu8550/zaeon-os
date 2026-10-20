@@ -101,3 +101,12 @@ export function resolverAlvos(e: EntradaAlvo): SaidaAlvo {
   if (e.humanos <= 1 && padrao && e.disponiveis.includes(padrao)) return { alvos: [padrao], implicito: true };
   return { alvos: [], implicito: true };
 }
+
+/**
+ * #466: quem responde se EU mandar uma mensagem sem @ agora — a dica "Zenita responde" do campo de mensagem.
+ * É a mesma regra do servidor (resolverAlvos): numa conversa com outras pessoas, a agente só responde quem estava
+ * falando com ela; antes, a tela mostrava "Zenita responde" pra todo mundo numa conversa de duas pessoas.
+ */
+export function quemRespondeSemArroba(historico: readonly MsgResumo[], disponiveis: readonly string[], eu: string, humanos: number): string | null {
+  return resolverAlvos({ mencoes: [], historico: [...historico], remetenteId: eu, disponiveis: [...disponiveis], humanos }).alvos[0] ?? null;
+}
