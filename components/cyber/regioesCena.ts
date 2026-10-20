@@ -92,5 +92,8 @@ export function atualizarRegiao(r: RegiaoCena, cam: THREE.Vector3): boolean {
   return novo.anima;
 }
 
+/** esconde a região inteira AGORA (está noutro nível — lib/cyber/nivelAtivo); quando voltar, `atualizarRegiao` mostra */
+export function esconderRegiao(r: RegiaoCena) { if (r.estado.visivel) { esconder(r.raiz); r.estado = { ...r.estado, visivel: false, anima: false }; } }
+
 /** devolve tudo como era (ao desmontar a região) */
 export function soltarRegiao(r: RegiaoCena) { for (const o of r.detalhe) mostrar(o); mostrar(r.raiz); }

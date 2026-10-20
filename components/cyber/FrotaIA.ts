@@ -64,7 +64,7 @@ export type FrotaHandle = {
   dispose(): void;
 };
 /** `eu` = o MEU personagem (mundo, y dos pés): quem ganha corpo completo é escolhido pela distância até ele */
-export type CtxFrota = { cam: THREE.Vector3; eu: { x: number; y: number; z: number }; camera: THREE.Camera; largura: number; altura: number; ilhaY: number; pisoY: number; musica: boolean; obstaculos: P2[] };
+export type CtxFrota = { /** a IA está no MEU nível? (lib/cyber/niveis — as de outro nível não aparecem) */ noNivel?: (p: P2, y: number) => boolean; cam: THREE.Vector3; eu: { x: number; y: number; z: number }; camera: THREE.Camera; largura: number; altura: number; ilhaY: number; pisoY: number; musica: boolean; obstaculos: P2[] };
 
 /** escolhe a cada `ESCOLHE_A_CADA` s; corpo completo até `ALCANCE` m (mantém até `ALCANCE × FICA`); silhuetas até
  *  `ALCANCE_SILHUETA` m; um novo só toma a vaga de um que já tem corpo se estiver a menos de `TROCA` × a distância dele */
@@ -227,6 +227,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
             const { agente, blocos } = v.ags[v.i]!, e = estadoDaIA(agente.id, blocos, minuto, config.flags, ctx.musica, false);
             if (!e.visivel) continue; v.n++; v.areas[areaDe(e, e.pose === "moto" || e.pose === "mochila")]++;
             if (e.vagaMoto) v.paradas.push({ vaga: e.vagaMoto, cor: porId.get(agente.id)?.cor ?? "#7fd3ff" });
+            if (ctx.noNivel && !ctx.noNivel(e, yDe(e))) continue;   // (noutro nível: não existe pra mim)
             const d = distEu(e); if (d < ALCANCE_SILHUETA * kAlcance) v.lista.push({ id: agente.id, e, move: MOVE.has(e.pose), d });
           }
         }

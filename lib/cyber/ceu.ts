@@ -8,6 +8,7 @@
  *
  * Coordenadas: `centro` no plano (x,z) do mundo; tudo que é "local" é relativo ao centro (sem giro).
  */
+import { escadasExistem, hubAtivo, salaAtiva } from "./nivelAtivo";
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 import { colisoresDoDistritoTerra } from "./terra";
 import { CHAO } from "./praca";
@@ -105,22 +106,24 @@ export const ESCADA_LOUNGE = ESCADAS.lounge;
 export const naEscadaLocal = (l: P2, e: Escada = ESCADA_LOUNGE) => { const along = l.x * e.dir.x + l.z * e.dir.z; return { u: along - e.ini, lat: l.x * -e.dir.z + l.z * e.dir.x }; };
 /** a escada cujo corredor contém `l` (local), ou null */
 export function escadaEm(l: P2, folga = 0): Escada | null {
+  if (!escadasExistem()) return null;   // (níveis separados: no lugar das escadas, os fios cósmicos — lib/cyber/nivelAtivo)
   for (const e of Object.values(ESCADAS)) { const q = naEscadaLocal(l, e); if (q.u >= -folga && q.u <= e.len + folga && Math.abs(q.lat) <= e.meia + folga) return e; }
   return null;
 }
 /** está no corredor de alguma escada (local)? */
 const dentroDaEscada = (l: P2, folga = 0) => escadaEm(l, folga) !== null;
 /** a sala cujo disco contém `l` (local), ou null */
-export function salaEm(l: P2, folga = 0): NomeSala | null {
-  for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nome]; if (Math.hypot(l.x - L.x, l.z - L.z) <= L.r + folga) return nome; }
+export function salaEm(l: P2, folga = 0, todas = false): NomeSala | null {
+  for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nome]; if ((todas || salaAtiva(nome)) && Math.hypot(l.x - L.x, l.z - L.z) <= L.r + folga) return nome; }   // (`todas`: o mapa inteiro, sem o nível — as áreas da frota)
   return null;
 }
 /** está sobre o disco do LOUNGE (local)? (o palco/DJ só existem nele) */
-const noDiscoDoLounge = (l: P2, folga = 0) => { const L = CIDADE.salas.lounge; return Math.hypot(l.x - L.x, l.z - L.z) <= L.r + folga; };
+const noDiscoDoLounge = (l: P2, folga = 0) => { const L = CIDADE.salas.lounge; return salaAtiva("lounge") && Math.hypot(l.x - L.x, l.z - L.z) <= L.r + folga; };
 /** (local da ilha) numa escada ou no disco de uma sala — o chão que fica FORA do raio andável da central */
 export const naEscadaOuLounge = (l: P2) => dentroDaEscada(l) || salaEm(l) !== null;
 /** (local da ilha) na plataforma da GARAGEM DO LOUNGE (lib/cyber/templo) — chão, `GARAGEM_LOUNGE.desce` m abaixo do lounge */
 export function naGaragemLocal(l: P2, folga = 0): boolean {
+  if (!salaAtiva("lounge")) return false;
   const L = CIDADE.salas.lounge;
   if (Math.hypot(l.x - L.x, l.z - L.z) > L.r + 120) return false;
   return naGaragemDoLounge(naSala(L, l.x, l.z), folga);
@@ -129,6 +132,7 @@ export function naGaragemLocal(l: P2, folga = 0): boolean {
 export const naGaragem = (p: P2, folga = 0) => naGaragemLocal({ x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z }, folga);
 /** (local da ilha) no TEMPLO ou na ESCADARIA que leva a ele (lib/cyber/templo) — chão também, fora das salas */
 export function noTemploOuEscadaria(l: P2, folga = 0): boolean {
+  if (!salaAtiva("lounge")) return false;
   const L = CIDADE.salas.lounge;
   if (Math.hypot(l.x - L.x, l.z - L.z) > L.r + TEMPLO.r * 2 + 80) return false;   // (longe: nem calcula)
   const q = naSala(L, l.x, l.z);
@@ -230,9 +234,9 @@ export function colisoresDasCabines(): Colisor[] {
 
 /** colisores da plataforma (mundo): pilares da capela, a mesa do globo, paredes e móveis
  *  das salas (o lounge, lá em cima). Constante → calculado uma vez (o passo usa todo quadro). */
-let colisoresCache: Colisor[] | null = null;
+const colisoresCache = new Map<boolean, Colisor[]>();   // (com e sem as escadas — lib/cyber/nivelAtivo)
 export function colisoresDaCidade(): Colisor[] {
-  if (colisoresCache) return colisoresCache;
+  const comEscadas = escadasExistem(), salvo = colisoresCache.get(comEscadas); if (salvo) return salvo;
   const out: Colisor[] = [];
   for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) {
     const s = CIDADE.salas[nome];
@@ -253,10 +257,10 @@ export function colisoresDaCidade(): Colisor[] {
   out.push(...colisoresDoDistritoTerra(mundo));   // o Observatório da Terra (supertrees, motores, telões, globo)
   // as BALAUSTRADAS das escadas de pedra (o estilo de El Castillo): dos dois lados, do pé até a porta da sala — só se
   // entra pelo pé e sai na sala; ninguém sobe pela lateral nem cai dela
-  for (const e of Object.values(ESCADAS)) for (let u = 0.4; u <= e.len; u += e.passo) for (const s of [-1, 1]) {
+  if (comEscadas) for (const e of Object.values(ESCADAS)) for (let u = 0.4; u <= e.len; u += e.passo) for (const s of [-1, 1]) {
     const lat = s * (e.meia + e.colR); out.push({ ...mundo({ x: e.dir.x * (e.ini + u) - e.dir.z * lat, z: e.dir.z * (e.ini + u) + e.dir.x * lat }), r: e.colR });
   }
-  colisoresCache = out;
+  colisoresCache.set(comEscadas, out);
   return out;
 }
 
@@ -566,7 +570,7 @@ export function paredeDaSala(s: { x: number; z: number; r: number; porta?: numbe
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;   // ângulo no referencial da sala: a porta fica em +z local (a = π/2)
     let d = a - Math.PI / 2; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
-    if (Math.abs(d) < porta) continue;
+    if (Math.abs(d) < porta && escadasExistem()) continue;   // (níveis separados: a porta da escada FECHA — sem escada, ela dava pro vazio)
     if (s === CIDADE.salas.lounge) { const sd = saidaDoLounge(s.r); let e = a - sd.ang; while (e > Math.PI) e -= 2 * Math.PI; while (e < -Math.PI) e += 2 * Math.PI; if (Math.abs(e) < sd.meia) continue; }   // a SAÍDA pra escadaria do templo
     out.push(daSala(s, Math.cos(a) * s.r, Math.sin(a) * s.r));
   }
@@ -615,7 +619,7 @@ export const ALTURA_CORPO_ILHOTA = 0.12;
  *  parede invisível em volta da central; a escada e o lounge têm corrimão/parede) */
 export const naIlhaPrincipal = (p: P2) => {
   const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z };
-  return Math.hypot(l.x, l.z) <= CIDADE.bordaR + 0.1 || dentroDaEscada(l, 0.3) || salaEm(l, 0.3) !== null || noTemploOuEscadaria(l, 0.3) || naGaragemLocal(l, 0.3);   // (a escada de pedra é piso)
+  return (hubAtivo() && Math.hypot(l.x, l.z) <= CIDADE.bordaR + 0.1) || dentroDaEscada(l, 0.3) || salaEm(l, 0.3) !== null || noTemploOuEscadaria(l, 0.3) || naGaragemLocal(l, 0.3);   // (a escada de pedra é piso)
 };
 
 /** o PISO sob quem voa de mochila na Zaeon (altura acima do piso central), ou `null` = não há piso embaixo (saiu da
@@ -623,7 +627,7 @@ export const naIlhaPrincipal = (p: P2) => {
 export function pisoNoAr(p: P2, yRel: number): number | null {
   const h = alturaNaCidade(p);
   if (h > 0 && yRel >= h - 0.6) return h;
-  return Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= CIDADE.bordaR + 0.1 ? 0 : null;
+  return hubAtivo() && Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= CIDADE.bordaR + 0.1 ? 0 : null;
 }
 
 /** o PISO de onde se voa de mochila aqui (yRel = a altura atual acima do piso central): o teto da mochila e as paredes
@@ -671,14 +675,18 @@ export function chaoDaNave(p: { x: number; y: number; z: number }): number {
 export function solidosDaCidade(dono = true): { x: number; z: number; r: number; topo: number; base: number }[] {
   const c = CIDADE.centro, s = CIDADE.salas.lounge, L = CIDADE.pisoY + ALTURA_LOUNGE;
   const torre = mundo(daSala(s, 0, TORRE_DJ.z));
+  // (níveis separados — lib/cyber/nivelAtivo: só os sólidos do nível ativo; voando na central, as lajes das salas não existem)
+  const lounge = salaAtiva("lounge");
   return [
-    { x: c.x, z: c.z, r: CAPELA.r + 1, topo: CIDADE.pisoY + inicioDaPonta(), base: CIDADE.pisoY - 1 },
+    ...(hubAtivo() ? [{ x: c.x, z: c.z, r: CAPELA.r + 1, topo: CIDADE.pisoY + inicioDaPonta(), base: CIDADE.pisoY - 1 }] : []),
+    ...(!lounge ? [] : [
     { x: c.x + s.x, z: c.z + s.z, r: s.r, topo: L, base: L - 2.5 },   // a LAJE do lounge
     { x: torre.x, z: torre.z, r: TORRE_DJ.r, topo: L + DECK.h + TORRE_DJ.topo + (dono ? 0 : CAMPO_DJ), base: L - 0.1 },
     (() => { const t = mundo(daSala(s, TEMPLO.x, TEMPLO.z)), y = L + TEMPLO.h; return { x: t.x, z: t.z, r: TEMPLO.r, topo: y, base: y - 3 }; })(),   // a laje do TEMPLO
     (() => { const G = GARAGEM_LOUNGE, g = mundo(daSala(s, G.x, G.z)), y = L - G.desce; return { x: g.x, z: g.z, r: Math.hypot(G.larg, G.prof) / 2, topo: y, base: y - 2 }; })(),   // a plataforma da GARAGEM do lounge
     (() => { const t = mundo(daSala(s, TEMPLO.x, TEMPLO.z)), y = L + TEMPLO.h, C = TEMPLO.capela; return { x: t.x, z: t.z, r: C.r + 1, topo: y + C.altura + C.r * C.achata, base: y }; })(),   // a CAPELA do templo
-    ...(Object.keys(CIDADE.salas) as NomeSala[]).filter((n) => n !== "lounge").map((n) => { const sl = CIDADE.salas[n]; return { x: c.x + sl.x, z: c.z + sl.z, r: sl.r, topo: L, base: L - 2.5 }; }),   // as lajes das outras salas
+    ]),
+    ...(Object.keys(CIDADE.salas) as NomeSala[]).filter((n) => n !== "lounge" && salaAtiva(n)).map((n) => { const sl = CIDADE.salas[n]; return { x: c.x + sl.x, z: c.z + sl.z, r: sl.r, topo: L, base: L - 2.5 }; }),   // as lajes das outras salas
   ];
 }
 /** quanto o campo de força da cabine do DJ sobe acima dela (quem não é o dono não pousa lá) */

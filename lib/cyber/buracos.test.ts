@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BOCA_DJ, BURACO_NAVE, CHEGADA_NAVE, CHEGADA_DJ, IDS_NOS, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel } from "./buracos";
-import { CIDADE, TORRE_DJ, alturaNaCidade, colisoresDaCidade, naCabineDJ, naIlhaPrincipal, naTorreDJ, PISO_FESTA } from "./ceu";
+import { BOCA_DJ, BURACO_NAVE, CHEGADA_NAVE, CHEGADA_DJ, IDS_NOS, NOS, SALAS_NO, bocaDJMundo, chegadaDJMundo, destinosDe, ehSala, naBocaDJ, naBocaNave, noDoAnel } from "./buracos";
+import { CIDADE, TORRE_DJ, alturaNaCidade, colisoresDaCidade, naCabineDJ, naIlhaPrincipal, naTorreDJ, PISO_FESTA, salaEm } from "./ceu";
 import { IDS_PLATAFORMAS, andarNaPlataforma } from "./plataformas";
 import { PRACA, QUEDA_VAZIO, naPraca } from "./praca";
 import { COMODOS, andarNaNave } from "./naveQG";
@@ -8,8 +8,8 @@ import { dentroDeAlgum } from "./colisao";
 import { MAPA } from "@/lib/lounge3d/sala";
 
 describe("a rede de BURACOS NEGROS (o metrô do hiperespaço sem chão)", () => {
-  it("um nó em cada lugar: a Zaeon, a praça, a UNILAB, os 3 campi e a Solana House", () => {
-    expect(new Set(IDS_NOS)).toEqual(new Set(["zaeon", "praca", ...IDS_PLATAFORMAS]));
+  it("um nó em cada lugar: a Zaeon, a praça, a UNILAB, os 3 campi, a Solana House e as SALAS (os níveis)", () => {
+    expect(new Set(IDS_NOS)).toEqual(new Set(["zaeon", "praca", ...IDS_PLATAFORMAS, ...SALAS_NO]));
     expect(IDS_NOS[0]).toBe("zaeon");
     for (const id of IDS_NOS) expect(NOS[id].nome.length).toBeGreaterThan(2);
   });
@@ -22,6 +22,7 @@ describe("a rede de BURACOS NEGROS (o metrô do hiperespaço sem chão)", () => 
       for (const p of [n.anel, n.chegada]) {
         if (id === "zaeon") { expect(naIlhaPrincipal(p)).toBe(true); expect(dentroDeAlgum(p, colisoresDaCidade())).toBe(false); }
         else if (id === "praca") expect(naPraca(p, -2)).toBe(true);
+        else if (ehSala(id)) { const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z }; expect(salaEm(l, 0, true)).toBe(id); }   // (as SALAS: dentro do disco delas)
         else expect(andarNaPlataforma(id, 0, p).fora).toBe(false);
       }
       expect(n.bh.h).toBeGreaterThan(n.bh.r * 2);   // o buraco paira acima da cabeça de quem está no anel
