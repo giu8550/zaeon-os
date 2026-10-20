@@ -29,22 +29,14 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
   const malha = (g: THREE.BufferGeometry, m: THREE.Material, pai: THREE.Object3D) => { geos.push(g); mats.push(m); const x = new THREE.Mesh(g, m); x.frustumCulled = false; pai.add(x); return x; };
   const halo = glowTex("rgba(255,255,255,0.9)", "rgba(150,120,255,0.18)"); texs.push(halo);
   const sprite = (cor: THREE.ColorRepresentation, op: number, escala: number, pai: THREE.Object3D) => { const m = new THREE.SpriteMaterial({ map: halo, color: cor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }); mats.push(m); const s = new THREE.Sprite(m); s.scale.setScalar(escala); pai.add(s); return s; };
-  type Vivo = { f: FioCosmico; fluxo: { u: number; v: number; lado: number; alto: number }[]; pos: Float32Array; geo: THREE.BufferGeometry; disco: THREE.Group; aura: THREE.Sprite; tempestade: ReturnType<typeof criarTempestade>; tg: THREE.Group; linha: THREE.LineBasicMaterial; bn: THREE.Group };
+  type Vivo = { f: FioCosmico; disco: THREE.Group; aura: THREE.Sprite; tempestade: ReturnType<typeof criarTempestade>; tg: THREE.Group; bn: THREE.Group };
   const vivos: Vivo[] = [];
 
   for (const f of o.pistas ?? fiosCosmicos()) {
     const cor = new THREE.Color(o.cores[f.sala]), clara = cor.clone().lerp(new THREE.Color(0xffffff), 0.5);
     const g = new THREE.Group(); g.name = `pista-${f.sala}`; group.add(g);
-    // ── a PISTA: uma linha tênue (o traçado) — o que se vê de verdade é o fluxo correndo por ela ──
-    const passo = o.low ? 4 : 2, pts: number[] = []; for (let i = 0; i < f.eixo.length; i += passo) { const p = f.eixo[i]!; pts.push(p.x, p.y, p.z); }
-    const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3)); geos.push(lg);
-    const linha = new THREE.LineBasicMaterial({ color: cor, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }); mats.push(linha);
-    const l = new THREE.Line(lg, linha); l.frustumCulled = false; g.add(l);
-    // ── o FLUXO: partículas correndo pela pista até o buraco negro (uma faixa larga, como poeira sendo sugada) ──
-    const N = o.low ? 500 : 1600, pos = new Float32Array(N * 3), geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geos.push(geo);
-    const pm = new THREE.PointsMaterial({ size: 3.2, map: o.starTex, color: clara, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }); mats.push(pm);
-    const pp = new THREE.Points(geo, pm); pp.frustumCulled = false; g.add(pp);
-    const fluxo = Array.from({ length: N }, (_, i) => ({ u: i / N, v: (45 + ((i * 37) % 17) * 4) / f.comprimento, lado: (((i * 53) % 21) - 10) * 1.6, alto: (((i * 29) % 13) - 6) * 1.1 }));
+    // (sem a linha nem as partículas da pista — out/2026, o dono: entre a plataforma e o buraco negro, só o FLUXO DE
+    //  VEÍCULOS — components/cyber/TrafegoCeu; quem é levado continua indo pela mesma pista)
     // (sem boca nem coluna de luz: o fluxo É o caminho — quem chega perto dele é levado)
     // ── o BURACO NEGRO MASSIVO do canto ──
     const bn = new THREE.Group(); bn.position.set(f.bn.x, f.bn.y, f.bn.z); g.add(bn);
@@ -57,7 +49,7 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     const tg = new THREE.Group(); tg.position.set(f.bn.x, 0, f.bn.z); g.add(tg);
     const tempestade = criarTempestade({ low: o.low, yBase: f.bn.y - 70, yTopo: f.bn.y + 90, raioMax: FIO.espiralR + 60, alvoPonta: new THREE.Vector3(0, f.bn.y, 0), cor: cor.clone().multiplyScalar(0.35), semAbismo: true, densidade: 0.7, nuvens: o.low ? 40 : 90 });
     tg.add(tempestade.group); tempestade.definir(0.25, false);
-    vivos.push({ f, fluxo, pos, geo, disco, aura, tempestade, tg, linha, bn });
+    vivos.push({ f, disco, aura, tempestade, tg, bn });
   }
 
   const raio = new THREE.Vector3(); let vista = (o.alcanceVista ?? 2600) * 0.72;
@@ -72,19 +64,12 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     group, alvos,
     atualizar(dt, t, eu) {
       for (const v of vivos) {
-        for (let i = 0; i < v.fluxo.length; i++) {
-          const p = v.fluxo[i]!; p.u += dt * p.v * (0.6 + 8 * p.u * p.u); if (p.u > 1) p.u -= 1;   // (acelera chegando no buraco negro)
-          const q = pontoDoFio(v.f, p.u), aperta = 1 - p.u * 0.85, s = Math.sin(q.rumo), c = Math.cos(q.rumo);
-          v.pos[i * 3] = q.x + c * p.lado * aperta; v.pos[i * 3 + 1] = q.y + p.alto * aperta; v.pos[i * 3 + 2] = q.z - s * p.lado * aperta;
-        }
-        v.geo.attributes.position!.needsUpdate = true;
         v.disco.rotation.z += dt * 0.22;
         aproximar(v.bn, v.f.bn.x, v.f.bn.y, v.f.bn.z, eu, 2.6); aproximar(v.tg, v.f.bn.x, 0, v.f.bn.z, eu, 1.6);
         // o quanto a pessoa está perto do buraco negro: a tempestade (e os raios) e a aura crescem
         const k = eu ? pertoDoBuraco(v.f, eu) : 0;
         v.tempestade.definir(0.25 + 0.75 * k, k > 0.15);
         (v.aura.material as THREE.SpriteMaterial).opacity = 0.45 + 0.4 * k;
-        v.linha.opacity = 0.2 + 0.25 * k;
         const caiu = v.tempestade.atualizar(t);
         if (caiu && o.aoTrovao) o.aoTrovao(raio.copy(caiu).multiplyScalar(v.tg.scale.x).add(v.tg.position));
       }
