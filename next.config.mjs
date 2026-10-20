@@ -90,11 +90,13 @@ const nextConfig = {
         serverActions: {
             bodySizeLimit: '20mb',
         },
-        // Liga o instrumentation.ts (Next 14) SÓ quando este processo é o worker
-        // (SCHOLAR_WORKER=1). No dev/web normal fica desligado → o instrumentation não é
-        // compilado e não arrasta Prisma/bullmq pro boot. O worker (container dedicado)
-        // sobe com SCHOLAR_WORKER=1 e aí o hook liga.
-        instrumentationHook: process.env.SCHOLAR_WORKER === "1",
+        // instrumentation.ts SEMPRE compilado. Antes era `process.env.SCHOLAR_WORKER === "1"`, mas isso
+        // é decidido no BUILD — e nem o web nem o worker recebem SCHOLAR_WORKER no build (só no runtime,
+        // via `environment` do compose), então NENHUM worker de fundo subia em prod (chores, canal,
+        // scholar). O register() já sai sem fazer nada sem as flags de runtime (CHORES_WORKER,
+        // CANAL_WORKER, SCHOLAR_WORKER) e só carrega Prisma/bullmq por import() dinâmico, então o boot
+        // do web sem flag fica igual. Ver instrumentation.ts.
+        instrumentationHook: true,
         // @prisma/client + .prisma/client externos: o Next 14 tentava EMPACOTAR o Prisma
         // Client e puxava a variante wasm (erro "Can't resolve ./query_engine_bg.js"),
         // que estourou quando o instrumentation.ts passou a importar o Prisma no boot.
