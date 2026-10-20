@@ -19,7 +19,8 @@ import { humanosNoCanal } from "@/lib/canal/convite";
 import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
 import { pedidoDeChore } from "@/lib/chore/triagem";
-import { ehDispensa, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "@/lib/canal/dispensa";
+import { quemFoiDispensada, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "@/lib/canal/dispensa";
+import { atualizarAgentes, type DbAtomico } from "@/lib/canal/atomico";
 import { choresLigadas, criarDoPedido } from "@/lib/chore/criar";
 
 export const MAX_TEXTO = 4000;
@@ -59,18 +60,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   // #438: a mensagem dispensa a agente da vez? (decide antes de gravar, pra barra já sair certa)
   const humanos = humanosNoCanal(canal);
-  const dispensadas = alvos.filter((k) => {
-    const ag = agentes.find((a) => a.agentKey === k);
-    return ehDispensa(texto, { nomesDaAgente: [k, ag?.nome ?? ""], mencionada: mencoes.includes(k), humanos });
-  });
+  // #443: só sai a agente PRA QUEM foi a despedida ("a zenita pode sair, aura continua comigo" → só a Zenita)
+  const dispensadas = quemFoiDispensada(
+    texto,
+    alvos.map((k) => { const nome = agentes.find((a) => a.agentKey === k)?.nome ?? ""; return { key: k, nomes: [nome, nome.split(/\s+/)[0] ?? ""] }; }),
+    humanos,
+  );
   // #440: chamada com @ depois de ter saído → entra a linha "Zenita voltou para a conversa"
   const voltando = mencoes.filter((k) => alvos.includes(k) && !dispensadas.includes(k) && estaForaDaConversa(historico, k));
 
   const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "humano", autorId: u.id, texto, mencoes } });
   // agente convocado passa a "estar" no canal (aparece na barra pra todo mundo); #440: a dispensada SAI da barra
-  const agentesNoCanal = agentesDepois(canal.agentes, alvos, dispensadas);
-  const mudou = agentesNoCanal.length !== canal.agentes.length || agentesNoCanal.some((k, i) => k !== canal.agentes[i]);
-  await prisma.canal.update({ where: { id: canal.id }, data: mudou ? { agentes: agentesNoCanal, updatedAt: new Date() } : { updatedAt: new Date() } }).catch(() => undefined);
+  // #443: grava SEM apagar o que outra mensagem gravou ao mesmo tempo (lib/canal/atomico)
+  const agentesNoCanal = (await atualizarAgentes(prisma as unknown as DbAtomico, canal.id, alvos, dispensadas).catch(() => null))
+    ?? agentesDepois(canal.agentes, alvos, dispensadas);
+  await prisma.canal.updateMany({ where: { id: canal.id }, data: { updatedAt: new Date() } }).catch(() => undefined);
 
   const wire: MensagemWire = {
     id: row.id, canalId: row.canalId, autorTipo: "humano", autorId: u.id, texto, mencoes,
@@ -78,18 +82,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   };
   await publicarPusher(canal.id, EV_MENSAGEM, wire);
 
-  // Chore em vez de turno: 1 por mensagem, do 1º agente mencionado, na thread desta mensagem.
-  const pedido = mencoes.length && choresLigadas() ? pedidoDeChore(texto) : null;
-  if (pedido) {
-    const { dispararChore } = await import("@/lib/queue/chores");
-    const r = await criarDoPedido(prisma as any, { tipo: pedido.tipo, alvo: { url: pedido.url }, agentKey: mencoes[0], canalId: canal.id, parentId: row.id, requesterId: u.id });
-    if (!("erro" in r)) {
-      const via = r.row.status === "queued" ? await dispararChore(r.row) : "existente";
-      return NextResponse.json({ ok: true, mensagem: wire, turnos: [], chore: { id: r.row.id, tipo: r.row.tipo, agentKey: r.row.agentKey, via } }, { status: 201 });
-    }
-  }
-
-  // #438: dispensou a agente da vez → despedida + "saiu da conversa", sem turno (não gasta IA)
+  // #440/#443: chamada com @ depois de ter saído → "Zenita voltou para a conversa". ANTES da chore: o pedido de
+  // tarefa ("@zenita resume <link>") retorna logo abaixo e ficava sem a linha.
   for (const k of voltando) {
     const ag = agentes.find((a) => a.agentKey === k);
     const voltou = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "sistema", autorId: k, texto: textoVoltou(ag?.nome ?? k), mencoes: [] } });
@@ -98,6 +92,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       createdAt: voltou.createdAt.toISOString(), autorNome: ag?.nome ?? k, autorAvatar: null,
     } satisfies MensagemWire);
   }
+
+  // Chore em vez de turno: 1 por mensagem, do 1º agente mencionado, na thread desta mensagem.
+  const pedido = mencoes.length && choresLigadas() ? pedidoDeChore(texto) : null;
+  if (pedido) {
+    const { dispararChore } = await import("@/lib/queue/chores");
+    const r = await criarDoPedido(prisma as any, { tipo: pedido.tipo, alvo: { url: pedido.url }, agentKey: mencoes[0], canalId: canal.id, parentId: row.id, requesterId: u.id });
+    if (!("erro" in r)) {
+      const via = r.row.status === "queued" ? await dispararChore(r.row) : "existente";
+      return NextResponse.json({
+        ok: true, mensagem: wire, turnos: [], chore: { id: r.row.id, tipo: r.row.tipo, agentKey: r.row.agentKey, via }, agentesNoCanal,
+        ...(voltando.length ? { voltaram: voltando } : {}),
+      }, { status: 201 });
+    }
+  }
+
+  // #438: dispensou a agente da vez → despedida + "saiu da conversa", sem turno (não gasta IA)
   for (const k of dispensadas) {
     const ag = agentes.find((a) => a.agentKey === k);
     const nome = ag?.nome ?? k;

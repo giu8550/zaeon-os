@@ -54,10 +54,12 @@ vi.mock("@/lib/canal/server", () => ({
       update: async ({ where, data }: any) => { const c = state.convites.find((x) => x.id === where.id)!; Object.assign(c, data); return c; },
     },
     canal: {
-      create: async ({ data }: any) => { const r = { id: novoId(), ...data }; state.canais.push(r); return r; },
+      create: async ({ data }: any) => { if ((state as any).falhar) { (state as any).falhar = false; throw new Error("banco caiu"); } const r = { id: novoId(), ...data }; state.canais.push(r); return r; },
       findUnique: async ({ where }: any) => state.canais.find((c) => c.id === where.id) ?? null,
       findMany: async ({ where }: any) => state.canais.filter((c) => where.id.in.includes(c.id)).map((c) => ({ id: c.id, titulo: c.titulo })),
       update: async ({ where, data }: any) => { const c = state.canais.find((x) => x.id === where.id)!; Object.assign(c, data); return c; },
+      // #443: entrar na conversa grava com condição (lib/canal/atomico)
+      updateMany: async (a: any) => (await import("@/lib/canal/fakeCanalDb")).updateManyCanais(state.canais, a),
     },
     canalSino: { findUnique: async ({ where }: any) => state.sinos.find((x) => x.userId === where.userId) ?? null },
     canalMensagem: { create: async ({ data }: any) => { const r = { id: novoId(), createdAt: new Date(), ...data }; state.mensagens.push(r); return r; } },
@@ -393,5 +395,39 @@ describe("convites · #425 o + chama alguém PARA A CONVERSA", () => {
     await responder(state.convites[0]!.id, "aceitar");
     expect(state.canais).toHaveLength(1);
     expect(state.canais[0]).toMatchObject({ ownerId: A, dmCom: C });
+  });
+});
+
+describe("convites · #443 aceitar que falha no meio", () => {
+  it("a conversa não pôde ser criada: o convite VOLTA a pendente (500) e dá pra aceitar de novo", async () => {
+    const vigia = vi.spyOn(console, "error").mockImplementation(() => {});
+    state.convites.push({ id: "7".repeat(24), deId: A, paraId: B, status: "pendente", dmCanalId: null, createdAt: new Date() });
+    state.user = user(B);
+    (state as any).falhar = true;
+    const r1 = await responder("7".repeat(24), "aceitar");
+    expect(r1.status).toBe(500);
+    expect(state.convites[0]).toMatchObject({ status: "pendente", respondidoEm: null });
+    // tenta de novo: agora entra
+    const r2 = await responder("7".repeat(24), "aceitar");
+    expect(r2.status).toBe(200);
+    expect(state.convites[0]!.status).toBe("aceito");
+    expect(state.canais).toHaveLength(1);
+    vigia.mockRestore();
+  });
+
+  it("duas pessoas aceitam convites pra MESMA conversa de dois ao mesmo tempo: as duas entram", async () => {
+    const CONV = "e".repeat(24);
+    state.canais.push({ id: CONV, ownerId: A, dmCom: B, acesso: "privado", membros: [], agentes: [], titulo: "Giulia e Martinez" });
+    state.convites.push(
+      { id: "1".repeat(24), deId: A, paraId: C, status: "pendente", dmCanalId: null, createdAt: new Date(), canalId: CONV } as any,
+      { id: "2".repeat(24), deId: A, paraId: X, status: "pendente", dmCanalId: null, createdAt: new Date(), canalId: CONV } as any,
+    );
+    state.user = user(C);
+    const a = responder("1".repeat(24), "aceitar");
+    state.user = user(X);
+    const b = responder("2".repeat(24), "aceitar");
+    await Promise.all([a, b]);
+    expect([...state.canais[0].membros].sort()).toEqual([B, C, X].sort());
+    expect(state.canais[0].dmCom).toBeNull();
   });
 });

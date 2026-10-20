@@ -15,6 +15,8 @@ vi.mock("@/lib/canal/server", () => ({
     canal: {
       findUnique: async ({ where }: any) => (where.id === state.canal?.id ? state.canal : null),
       update: async ({ data }: any) => ({ ...state.canal, ...data }),
+      // #443: entrar é "põe, se ainda não estiver" (lib/canal/atomico)
+      updateMany: async (a: any) => (await import("@/lib/canal/fakeCanalDb")).updateManyCanais(state.canal ? [state.canal] : [], a),
     },
     canalMensagem: { create: async ({ data }: any) => { const r = { id: "m1", createdAt: new Date(), ...data }; state.criadas.push(r); return r; } },
   },
@@ -51,5 +53,14 @@ describe("entrar · #423 aviso de entrada", () => {
     state.canal = { id: CANAL, ownerId: A, acesso: "turma", membros: [] };
     expect((await entrar()).status).toBe(403);
     expect(state.criadas).toHaveLength(0);
+  });
+});
+
+describe("entrar · #443 clique duplo", () => {
+  it("dois 'Entrar' seguidos: vira membro uma vez só e o 'entrou' aparece uma vez só", async () => {
+    state.canal = { id: CANAL, ownerId: A, acesso: "aberto", membros: [] };
+    await Promise.all([entrar(), entrar()]);
+    expect(state.canal.membros).toEqual([B]);
+    expect(state.criadas.filter((m) => m.autorTipo === "sistema")).toHaveLength(1);
   });
 });
