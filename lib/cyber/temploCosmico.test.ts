@@ -4,7 +4,7 @@ import { NOS } from "./buracos";
 import { FIO, saidaDaSala } from "./fiosCosmicos";
 import { definirNivel } from "./nivelAtivo";
 import { nivelDoPonto } from "./niveis";
-import { ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
+import { ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
 import { ESCADARIA, TEMPLO, curvaDaEscadaria } from "./templo";
 
 const L = CIDADE.salas.lounge;
@@ -82,5 +82,21 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
     }
     expect(alturaNaCidade(W(FESTAS.x, FESTAS.z))).toBe(ALTURA_LOUNGE + FESTAS.h); expect(alturaNaCidade(W(CASAIS.x, CASAIS.z))).toBe(ALTURA_LOUNGE + CASAIS.h);
     const w = W(CASAIS.x, CASAIS.z); expect(nivelDoPonto(w, CIDADE.pisoY + ALTURA_LOUNGE + CASAIS.h)).toBe("lounge");
+  });
+
+  it("o CAMINHO DO MEIO: na linha da chegada e da pirâmide, reto atrás dela e a escadaria subindo até o monumento da Cyber Room", () => {
+    expect(CYBER.x).toBe(PIRAMIDE.x); expect(CHEGADA_SALAO.x).toBe(PIRAMIDE.x);   // a mesma linha de quem chega
+    const cs = colisoresDaCidade(); let ant = -Infinity;
+    for (let z = PIRAMIDE.z - PIRAMIDE.meia - 3; z >= CYBER.z + CYBER.r - 2; z -= 1) {
+      const w = W(CYBER.x, z), h = alturaNaCidade(w);
+      expect(h).toBeGreaterThanOrEqual(ant - 1e-6); ant = h;
+      expect(cs.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.6)).toBe(true);
+      expect(salaEm(loc(w))).toBe("lounge");
+    }
+    expect(alturaNaCidade(W(CYBER.x, CYBER.z + CYBER.r - 4))).toBe(ALTURA_LOUNGE + CYBER.h);
+    // o núcleo do monumento é sólido (a sala ainda está fechada), andando e voando
+    const n = W(CYBER.x, CYBER.z + NUCLEO_CYBER.r); expect(cs.some((c) => Math.hypot(c.x - n.x, c.z - n.z) <= c.r)).toBe(true);
+    const nc = W(CYBER.x, CYBER.z); expect(solidosDaCidade().some((o) => Math.hypot(o.x - nc.x, o.z - nc.z) < 1 && o.topo > CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h + 20)).toBe(true);
+    expect(nivelDoPonto(W(CYBER.x, CYBER.z + 20), CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h)).toBe("lounge");
   });
 });

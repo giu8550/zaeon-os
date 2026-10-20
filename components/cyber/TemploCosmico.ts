@@ -7,6 +7,7 @@
  */
 import * as THREE from "three";
 import { PIRAMIDE, PLATS, PONTES, SALAO, aberturasDe } from "@/lib/cyber/temploCosmico";
+import { criarMeio } from "./TemploMeio";
 import { criarRasta } from "./TemploRasta";
 
 export type SalaoCosmicoHandle = { group: THREE.Group; alvos: THREE.Object3D[]; atualizar(dt: number, t: number): void; dispose(): void };
@@ -24,7 +25,7 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
   const TEMA: Record<string, { laje: number; brilho: number; aro: number }> = {
     salao: { laje: 0x0b0a1e, brilho: 0x1a1048, aro: 0x66e6ff },
     rasta: { laje: 0x070c08, brilho: 0x08200e, aro: 0xffd23f }, capelaRasta: { laje: 0x0d160f, brilho: 0x184a22, aro: 0x2fae4a },
-    festas: { laje: 0x140c0c, brilho: 0x4a1418, aro: 0xe63946 }, casais: { laje: 0x160c14, brilho: 0x4a1840, aro: 0xff7ab8 },
+    festas: { laje: 0x140c0c, brilho: 0x4a1418, aro: 0xe63946 }, cyber: { laje: 0x060407, brilho: 0x1a0408, aro: 0xff2a3a }, casais: { laje: 0x160c14, brilho: 0x4a1840, aro: 0xff7ab8 },
   };
   for (const p of PLATS) {
     const tm = TEMA[p.id] ?? TEMA.salao!, y = p.h;
@@ -55,7 +56,7 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
   }
 
   // ── as PONTES: a rampa de cristal, as quinas acesas, o guarda-corpo e as faixas de luz (o ritmo de quem sobe) ──
-  const COR_PONTE: Record<string, number> = { lounge: 0x66e6ff, rasta: 0x2fae4a, festas: 0xffd23f, casais: 0xff7ab8 };
+  const COR_PONTE: Record<string, number> = { lounge: 0x66e6ff, rasta: 0x2fae4a, festas: 0xffd23f, casais: 0xff7ab8, meio: 0xff2a3a, escadaMeio: 0xff2a3a };
   const tabMat = new THREE.MeshStandardMaterial({ color: 0x14123a, emissive: 0x2a1c70, emissiveIntensity: 0.5, roughness: 0.3, metalness: 0.5 });
   for (const po of PONTES) {
     const { a, b, meia } = po, dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz), dy = po.hb - po.ha, inc = Math.atan2(dy, L), comp = Math.hypot(L, dy), cor = COR_PONTE[po.id] ?? 0x66e6ff;
@@ -71,6 +72,8 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
 
   // ── o LOUNGE RASTA (components/cyber/TemploRasta): a árvore, a escadaria das raízes, a capela maior, festas, casais e a torre ──
   const rasta = criarRasta({ low: o.low, paredeMat: o.paredeMat }); group.add(rasta.group); alvos.push(...rasta.alvos);
+  // ── o CAMINHO DO MEIO (components/cyber/TemploMeio): o caminho reto, a escadaria e o monumento da Cyber Room ──
+  const meio = criarMeio({ low: o.low }); group.add(meio.group); alvos.push(...meio.alvos);
 
   // ── o MONUMENTO ALIENÍGENA: a pirâmide ──
   const P = PIRAMIDE, mon = new THREE.Group(); mon.position.set(P.x, y0, P.z); group.add(mon);
@@ -112,13 +115,13 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
   return {
     group, alvos,
     atualizar(dt, t) {
-      rasta.atualizar(dt, t);
+      rasta.atualizar(dt, t); meio.atualizar(dt, t);
       cume.rotation.y += dt * 0.6; cume.position.y = P.alt + 4.5 + Math.sin(t * 0.9) * 0.6;
       aneis.forEach((an, i) => { an.rotation.z += dt * (0.3 + i * 0.2) * (i % 2 ? -1 : 1); an.position.y = cume.position.y; });
       corpoMat.uniforms.uT!.value = t;
       (feixe.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.06 * Math.sin(t * 1.3);
       cascaMat.opacity = 0.09 + 0.05 * Math.sin(t * 0.7);
     },
-    dispose() { rasta.dispose(); group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of mats) if (m !== o.paredeMat) m.dispose(); },
+    dispose() { rasta.dispose(); meio.dispose(); group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of mats) if (m !== o.paredeMat) m.dispose(); },
   };
 }
