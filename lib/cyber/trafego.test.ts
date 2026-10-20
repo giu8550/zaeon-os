@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CIDADE } from "./ceu";
 import { fiosCosmicos, pontoDoFio } from "./fiosCosmicos";
-import { ANEIS_VOO, CICLO_T, TRAFEGO, VEICULOS_CEU, estadoDoVeiculo, montarViagem, naViagem, viagemDe } from "./trafego";
+import { ANEIS_VOO, CICLO_T, TRAFEGO, VEICULOS_CEU, estadoDoVeiculo, jeitoDoPiloto, montarViagem, naViagem, viagemDe } from "./trafego";
 
 describe("o tráfego do céu (pelas pistas cósmicas)", () => {
   it("a viagem sai do buraco negro de uma pista, passa pelo anel do hub e cai no buraco negro de outra", () => {
@@ -31,5 +31,13 @@ describe("o tráfego do céu (pelas pistas cósmicas)", () => {
     expect(achou).toBe(true);
     expect(viagemDe(ve, 7).comprimento).toBe(viagemDe(ve, 7).comprimento);
     for (let n = 0; n < 30; n++) for (const v of VEICULOS_CEU.slice(0, 10)) expect(viagemDe(v, n).dur).toBeLessThan(CICLO_T / v.vel);
+  });
+  it("o JEITO DO PILOTO: cada um acelera e alivia (o relógio dele nunca anda pra trás) e deriva de leve dentro da faixa", () => {
+    for (const ve of VEICULOS_CEU.slice(0, 40)) {
+      let ant = -Infinity, varia = 0;
+      for (let t = 0; t < 400; t += 0.5) { const j = jeitoDoPiloto(ve, t); expect(j.t).toBeGreaterThan(ant); ant = j.t; varia = Math.max(varia, Math.abs(j.lado)); expect(Math.abs(j.lado)).toBeLessThan(9); expect(Math.abs(j.alto)).toBeLessThan(4.5); }
+      expect(varia).toBeGreaterThan(1);
+    }
+    expect(new Set(VEICULOS_CEU.map((v) => jeitoDoPiloto(v, 0).escala.toFixed(2))).size).toBeGreaterThan(10);
   });
 });

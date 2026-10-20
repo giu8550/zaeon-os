@@ -15,6 +15,8 @@ export type FiosCosmicosHandle = {
   group: THREE.Group; alvos: THREE.Object3D[];
   /** onde a pessoa está (LOCAL da ilha): a tempestade e o brilho do buraco negro crescem quando ela chega perto */
   atualizar(dt: number, t: number, eu?: V3): void;
+  /** até onde (m) a câmera desenha AGORA (a qualidade adaptativa encurta): o buraco negro fica sempre aquém disso */
+  vista(m: number): void;
   dispose(): void;
 };
 
@@ -58,11 +60,13 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     vivos.push({ f, fluxo, pos, geo, disco, aura, tempestade, tg, linha, bn });
   }
 
-  const raio = new THREE.Vector3(), vista = (o.alcanceVista ?? 2600) * 0.8;
-  /** põe `obj` (de posição real `x,y,z`) a no máximo `vista` m de quem olha, encolhido na mesma proporção */
-  const aproximar = (obj: THREE.Object3D, x: number, y: number, z: number, eu: V3 | undefined) => {
+  const raio = new THREE.Vector3(); let vista = (o.alcanceVista ?? 2600) * 0.72;
+  /** põe `obj` (de posição real `x,y,z`) a no máximo `vista` m de quem olha, encolhido na mesma proporção — e, longe,
+   *  um pouco MAIOR que o real (até `realce`×: o farol no horizonte que chama pra ir até lá) */
+  const aproximar = (obj: THREE.Object3D, x: number, y: number, z: number, eu: V3 | undefined, realce = 1) => {
     const d = eu ? Math.hypot(x - eu.x, y - eu.y, z - eu.z) : 0, k = eu && d > vista ? vista / d : 1;
-    obj.position.set(eu ? eu.x + (x - eu.x) * k : x, eu ? eu.y + (y - eu.y) * k : y, eu ? eu.z + (z - eu.z) * k : z); obj.scale.setScalar(k);
+    const longe = eu ? Math.max(0, Math.min(1, (d - 1500) / 4000)) : 0, r = 1 + (realce - 1) * longe;
+    obj.position.set(eu ? eu.x + (x - eu.x) * k : x, eu ? eu.y + (y - eu.y) * k : y, eu ? eu.z + (z - eu.z) * k : z); obj.scale.setScalar(k * r);
   };
   return {
     group, alvos,
@@ -75,7 +79,7 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
         }
         v.geo.attributes.position!.needsUpdate = true;
         v.disco.rotation.z += dt * 0.22;
-        aproximar(v.bn, v.f.bn.x, v.f.bn.y, v.f.bn.z, eu); aproximar(v.tg, v.f.bn.x, 0, v.f.bn.z, eu);
+        aproximar(v.bn, v.f.bn.x, v.f.bn.y, v.f.bn.z, eu, 2.6); aproximar(v.tg, v.f.bn.x, 0, v.f.bn.z, eu, 1.6);
         // o quanto a pessoa está perto do buraco negro: a tempestade (e os raios) e a aura crescem
         const k = eu ? pertoDoBuraco(v.f, eu) : 0;
         v.tempestade.definir(0.25 + 0.75 * k, k > 0.15);
@@ -85,6 +89,7 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
         if (caiu && o.aoTrovao) o.aoTrovao(raio.copy(caiu).multiplyScalar(v.tg.scale.x).add(v.tg.position));
       }
     },
+    vista(m) { vista = Math.max(600, m * 0.72); },
     dispose() { group.removeFromParent(); for (const v of vivos) v.tempestade.dispose(); for (const g of geos) g.dispose(); for (const m of mats) m.dispose(); for (const x of texs) x.dispose(); },
   };
 }

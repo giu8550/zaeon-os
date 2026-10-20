@@ -14,15 +14,15 @@ describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", ()
       const L = CIDADE.salas[f.sala], a = Math.atan2(L.z, L.x), b = Math.atan2(f.boca.z, f.boca.x);
       expect(Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))).toBeLessThan(0.02);
       expect(Math.hypot(f.bn.x, f.bn.z)).toBeGreaterThan(7000);   // MUITO longe da cidadela (o portal entre os níveis)
-      const w = mundo(f.bn); expect(Math.hypot(w.x, w.z) - FIO.espiralR).toBeGreaterThan(VOO.raioMapa * 3);   // bem além do mapa de voo: só o fluxo chega
+      const w = mundo(f.bn); expect(Math.hypot(w.x, w.z) + FIO.espiralR).toBeLessThan(VOO.raioMapa);   // dentro do mapa de voo: dá pra ir até ele de carro, de moto ou de mochila
       cantos.add(Math.round(Math.atan2(f.bn.z, f.bn.x) * 10));
     }
     expect(cantos.size).toBe(4);
   });
-  it("longa e sinuosa: bem mais longa que a reta até o buraco negro, e termina em ESPIRAL caindo no horizonte", () => {
+  it("quase RETA até lá (o dono, out/2026: menos sinuosa) — e termina em ESPIRAL caindo no horizonte", () => {
     for (const f of fios) {
       const reta = Math.hypot(f.bn.x - f.boca.x, f.bn.z - f.boca.z);
-      expect(f.comprimento).toBeGreaterThan(reta * 1.4);
+      expect(f.comprimento).toBeGreaterThan(reta); expect(f.comprimento).toBeLessThan(reta * 1.45);
       const fim = pontoDoFio(f, 1); expect(Math.hypot(fim.x - f.bn.x, fim.y - f.bn.y, fim.z - f.bn.z)).toBeLessThan(f.bn.r * 1.2);
       // a espiral: perto do fim, a pista dá a volta no buraco negro (o ângulo em volta dele anda mais de uma volta)
       let giro = 0, ant: number | null = null;

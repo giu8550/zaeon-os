@@ -17,11 +17,11 @@ export const FIO = {
   /** a distância (m, do centro da Zaeon) até o buraco negro do canto e o raio dele (o horizonte) */
   alcance: 8000, bnR: 140,
   /** a altura (m, acima do piso) em que o buraco negro fica e o teto da pista no meio do caminho */
-  bnY: 260, teto: 520,
+  bnY: 260, teto: 330,
   /** a ESPIRAL final: quantas voltas e de que raio começa (fecha até o horizonte) */
-  voltas: 2.2, espiralR: 900,
+  voltas: 1.2, espiralR: 600,
   /** as curvas da pista: quantas e de que largura (m) */
-  curvas: 9, largura: 620,
+  curvas: 2, largura: 160,
   /** a boca (o anel na borda, onde se pisa) */
   bocaR: 3.2,
   /** onde o efeito do buraco negro começa (m do centro dele): a tempestade, o vento */
@@ -78,7 +78,7 @@ function montarPista(sala: NomeSala): FioCosmico {
   const rFim = dBn - FIO.espiralR, N = 64;
   for (let k = 1; k <= N; k++) {
     const t = k / N, ang = a0 + da * (t * t * (3 - 2 * t)), rr = r0 + 40 + (rFim - r0 - 40) * t;
-    const curva = Math.sin(t * Math.PI * FIO.curvas * 2 + fase) * FIO.largura * Math.sin(t * Math.PI), onda = Math.sin(t * Math.PI * 11 + fase * 1.3) * 90 * Math.sin(t * Math.PI);
+    const curva = Math.sin(t * Math.PI * FIO.curvas * 2 + fase) * FIO.largura * Math.sin(t * Math.PI), onda = Math.sin(t * Math.PI * 3 + fase * 1.3) * 22 * Math.sin(t * Math.PI);
     const px = Math.cos(ang) * rr, pz = Math.sin(ang) * rr, tx = -Math.sin(ang), tz = Math.cos(ang);
     ctrl.push({ x: px + tx * curva, y: 3 + (FIO.teto - 3) * Math.sin(t * Math.PI * 0.85) + (FIO.bnY - 3) * t * 0.4 + onda, z: pz + tz * curva });
   }
@@ -106,8 +106,8 @@ function montarSaida(sala: NomeSala): FioCosmico {
   for (const [ang, rr] of [[0.6, L.r + 40], [1.4, L.r + 70], [2.2, L.r + 90]] as const) { const a = Math.atan2(-dir.z, -dir.x) + lado * ang; ctrl.push({ x: L.x + Math.cos(a) * rr, y: y0 + 10 + ang * 12, z: L.z + Math.sin(a) * rr }); }
   const ini = ctrl[ctrl.length - 1]!, bn: V3 = { x: L.x + dir.x * (FIO.saidaComprimento + L.r), y: y0 + 240, z: L.z + dir.z * (FIO.saidaComprimento + L.r) };
   for (let k = 1; k <= 36; k++) {
-    const t = k / 36, curva = Math.sin(t * Math.PI * 7 + fase) * 420 * Math.sin(t * Math.PI);
-    ctrl.push({ x: ini.x + (bn.x - ini.x) * t * 0.82 + perp.x * curva, y: ini.y + (bn.y - ini.y) * t + Math.sin(t * Math.PI) * 300, z: ini.z + (bn.z - ini.z) * t * 0.82 + perp.z * curva });
+    const t = k / 36, curva = Math.sin(t * Math.PI * 3 + fase) * 120 * Math.sin(t * Math.PI);
+    ctrl.push({ x: ini.x + (bn.x - ini.x) * t * 0.82 + perp.x * curva, y: ini.y + (bn.y - ini.y) * t + Math.sin(t * Math.PI) * 120, z: ini.z + (bn.z - ini.z) * t * 0.82 + perp.z * curva });
   }
   const ult = ctrl[ctrl.length - 1]!, angEntra = Math.atan2(ult.z - bn.z, ult.x - bn.x), sentido = r() < 0.5 ? 1 : -1, R0 = FIO.espiralR * 0.7;
   for (let k = 1; k <= 36; k++) { const t = k / 36, ang = angEntra + sentido * t * FIO.voltas * Math.PI * 2, rr = R0 + (FIO.bnR * 1.05 - R0) * Math.pow(t, 1.4); ctrl.push({ x: bn.x + Math.cos(ang) * rr, y: ult.y + (bn.y - ult.y) * t, z: bn.z + Math.sin(ang) * rr }); }
@@ -124,8 +124,8 @@ function montarSaidaDoSalao(): FioCosmico {
   const ctrl: V3[] = [{ x: B.x, y: y0, z: B.z }, { x: B.x, y: y0 + 2, z: B.z + 26 }, { x: B.x, y: y0 + 10, z: B.z + 70 }];
   const ini = ctrl[ctrl.length - 1]!;
   for (let k = 1; k <= 36; k++) {
-    const t = k / 36, curva = Math.sin(t * Math.PI * 7 + fase) * 420 * Math.sin(t * Math.PI) * Math.min(1, t * 4);
-    ctrl.push({ x: ini.x + curva, y: ini.y + (bnL.y - ini.y) * t + Math.sin(t * Math.PI) * 300, z: ini.z + (bnL.z - ini.z) * t * 0.82 });
+    const t = k / 36, curva = Math.sin(t * Math.PI * 3 + fase) * 120 * Math.sin(t * Math.PI) * Math.min(1, t * 4);
+    ctrl.push({ x: ini.x + curva, y: ini.y + (bnL.y - ini.y) * t + Math.sin(t * Math.PI) * 120, z: ini.z + (bnL.z - ini.z) * t * 0.82 });
   }
   const ult = ctrl[ctrl.length - 1]!, angEntra = Math.atan2(ult.z - bnL.z, ult.x - bnL.x), sentido = r() < 0.5 ? 1 : -1, R0 = FIO.espiralR * 0.7;
   for (let k = 1; k <= 36; k++) { const t = k / 36, ang = angEntra + sentido * t * FIO.voltas * Math.PI * 2, rr = R0 + (FIO.bnR * 1.05 - R0) * Math.pow(t, 1.4); ctrl.push({ x: bnL.x + Math.cos(ang) * rr, y: ult.y + (bnL.y - ult.y) * t, z: bnL.z + Math.sin(ang) * rr }); }
@@ -150,8 +150,14 @@ export function capturaDoFluxo(pistas: readonly FioCosmico[], p: V3, raio: numbe
   }
   return melhor;
 }
+/** voando (de carro, de moto, de mochila) PERTO DO HORIZONTE de um buraco negro: a pista dele (cai nele — o fluxo leva
+ *  pela espiral até o fim); `p` local da ilha */
+export function noBuracoNegro(pistas: readonly FioCosmico[], p: V3): FioCosmico | null {
+  for (const f of pistas) if (Math.hypot(p.x - f.bn.x, p.y - f.bn.y, p.z - f.bn.z) < f.bn.r * 2.2) return f;
+  return null;
+}
 /** a velocidade do fluxo (m/s) na fração `u`: puxa forte e ACELERA chegando no buraco negro */
-export const velDoFluxo = (u: number) => { const k = Math.max(0, Math.min(1, u)); return 55 + 520 * Math.min(1, k * 6) ** 2 + 400 * k ** 3; };   // (sai devagar da borda, dispara no vazio cósmico e cai no buraco negro)
+export const velDoFluxo = (u: number) => { const k = Math.max(0, Math.min(1, u)); return 45 + 230 * Math.min(1, k * 6) ** 2 + 260 * k ** 3; };   // (sai devagar da borda, dispara no vazio cósmico e cai no buraco negro)
 
 let cache: FioCosmico[] | null = null;
 /** as pistas (uma por sala), na ordem das salas */

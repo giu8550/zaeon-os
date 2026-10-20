@@ -6,7 +6,7 @@
  * anéis aparecem como trilhas de pontinhos. Referencial: o LOCAL da ilha (o grupo vai dentro do hub).
  */
 import * as THREE from "three";
-import { ANEIS_VOO, VEICULOS_CEU, estadoDoVeiculo, naViagem, type Viagem } from "@/lib/cyber/trafego";
+import { ANEIS_VOO, VEICULOS_CEU, estadoDoVeiculo, jeitoDoPiloto, naViagem, type Viagem } from "@/lib/cyber/trafego";
 
 /** os veículos do céu um pouco MAIORES que os de verdade: de 100+ m, o tamanho real virava um pontinho */
 const ESCALA = 1.6;
@@ -66,16 +66,22 @@ export function criarTrafegoCeu(o: { low: boolean; starTex: THREE.Texture }): Tr
   }
 
   const cache = new Map<string, Viagem>(), mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, "YXZ"), pv = new THREE.Vector3(), sv = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
-  let limpa = 0;
+  let limpa = 0; const rolagem = new Float32Array(N);   // (a inclinação de cada um, suavizada)
   return {
     group,
     atualizar(tRelogio) {
       let ic = 0, im = 0;
       for (let i = 0; i < N; i++) {
-        const ve = VEICULOS_CEU[i]!, st = estadoDoVeiculo(ve, tRelogio, cache), inst = ve.tipo === "carro" ? instCarro : instMoto, k = ve.tipo === "carro" ? ic++ : im++;
+        const ve = VEICULOS_CEU[i]!, jp = jeitoDoPiloto(ve, tRelogio), st = estadoDoVeiculo(ve, jp.t, cache), inst = ve.tipo === "carro" ? instCarro : instMoto, k = ve.tipo === "carro" ? ic++ : im++;
         if (!st || st.escala <= 0.001) { inst.setMatrixAt(k, zero); luzPos.fill(0, i * 6, i * 6 + 6); rastPos.fill(0, i * 6, i * 6 + 6); luzCor.set([0, 0, 0], i * 6); continue; }
-        const p = naViagem(st.v, st.u); e.set(-p.sobe, p.rumo, 0); q.setFromEuler(e);
-        const s = st.escala * ESCALA; inst.setMatrixAt(k, mtx.compose(pv.set(p.x, p.y, p.z), q, sv.set(s, s, s)));
+        const p0 = naViagem(st.v, st.u), adiante = naViagem(st.v, Math.min(1, st.u + 0.0025));
+        // a DERIVA dentro da faixa (some perto dos buracos negros: ali o fluxo aperta) e a INCLINAÇÃO na curva
+        const solto = Math.min(1, st.u / 0.05, (1 - st.u) / 0.05), cr = Math.cos(p0.rumo), sr = Math.sin(p0.rumo);
+        const p = { ...p0, x: p0.x + cr * jp.lado * solto, y: p0.y + jp.alto * solto, z: p0.z - sr * jp.lado * solto };
+        let dr = adiante.rumo - p0.rumo; while (dr > Math.PI) dr -= Math.PI * 2; while (dr < -Math.PI) dr += Math.PI * 2;
+        const alvoRol = Math.max(-0.6, Math.min(0.6, -dr * 9)); rolagem[i] = (rolagem[i] ?? 0) + (alvoRol - (rolagem[i] ?? 0)) * 0.08;
+        e.set(-p.sobe, p.rumo, rolagem[i]!); q.setFromEuler(e);
+        const s = st.escala * ESCALA * jp.escala; inst.setMatrixAt(k, mtx.compose(pv.set(p.x, p.y, p.z), q, sv.set(s, s, s)));
         const fx = Math.sin(p.rumo) * Math.cos(p.sobe), fy = Math.sin(p.sobe), fz = Math.cos(p.rumo) * Math.cos(p.sobe), L = ve.tipo === "carro" ? 2.3 : 1.4;
         luzPos.set([p.x + fx * L * s, p.y + 0.5 * s + fy * L * s, p.z + fz * L * s], i * 6); luzPos.set([p.x - fx * L * s, p.y + 0.4 * s - fy * L * s, p.z - fz * L * s], i * 6 + 3);
         luzCor.set([s, s, s], i * 6);
