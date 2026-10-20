@@ -18,6 +18,7 @@ import { EV_DIGITANDO, EV_MENSAGEM, publicarPusher, type MensagemWire, type Publ
 import { limparSaidaAgente } from "@/lib/canal/saida";
 import { estadoDeFase, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { proximoDaCadeia, podePassar } from "@/lib/canal/encadear";
+import { estaForaDaConversa } from "@/lib/canal/alvo";
 import { agentesDasSalas } from "@/lib/canal/agentesSalas";
 
 export const N_CONTEXTO = 30;
@@ -108,15 +109,23 @@ export function montarObjetivo(msgs: MsgRow[], agentKey: string, mensagemId: str
 export function blocoCanal(
   canal: CanalRow, agente: AgentView, colegas: AgentView[], humanos: string[],
   /** #396 (B): quem passou a bola e se este turno ainda pode passar adiante. */
-  opts: { chamadoPor?: Pick<AgentView, "agentKey" | "nome"> | null; podePassar?: boolean } = {},
+  opts: {
+    chamadoPor?: Pick<AgentView, "agentKey" | "nome"> | null; podePassar?: boolean;
+    /** #468: agentes que SAÍRAM da conversa — a IA não deve marcá-los com @ (eles não voltam por outra agente). */
+    fora?: Pick<AgentView, "agentKey" | "nome">[];
+  } = {},
 ): string {
-  const outros = colegas.filter((c) => c.agentKey !== agente.agentKey).map((c) => `@${c.agentKey} (${c.nome})`);
+  const saiu = new Set((opts.fora ?? []).map((f) => f.agentKey));
+  const outros = colegas.filter((c) => c.agentKey !== agente.agentKey && !saiu.has(c.agentKey)).map((c) => `@${c.agentKey} (${c.nome})`);
   const passa = opts.podePassar !== false;
   return [
     "=== CANAL DE COWORKING ===",
     `Canal: "${canal.titulo}". Você é ${agente.nome} e foi convocado(a) por @${agente.agentKey}.`,
     humanos.length ? `Pessoas no canal: ${humanos.join(", ")}.` : "",
     outros.length ? `Outros agentes no canal: ${outros.join(", ")}.` : "",
+    opts.fora?.length
+      ? `Saíram da conversa (NÃO marque com @; só voltam se a pessoa chamar): ${opts.fora.map((f) => `${f.nome}`).join(", ")}.`
+      : "",
     // nicho: cada agente responde a parte da área dele; o resto ele passa (o colega responde sozinho em seguida)
     passa
       ? "Fique no SEU nicho: responda só a parte da sua área. Se o pedido (ou parte dele) for da área de um colega, diga isso em UMA linha e marque UM colega com @chave — ele responde em seguida, sem a pessoa precisar chamar."
@@ -226,10 +235,15 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
   const colegas = roster.filter((a) => canal.agentes.includes(a.agentKey));
   // #396 (B): quem pode receber a bola — os agentes do canal + as personas da plataforma (ativos e que conversam)
   const ativos = roster.filter((a) => a.ativo && a.conversacional);
-  const permitidos = [...new Set([...canal.agentes, ...agentesDasSalas(ativos)])].filter((k) => ativos.some((a) => a.agentKey === k));
+  // #468: quem SAIU da conversa ("Téo saiu da conversa") não recebe a bola — só volta se uma PESSOA chamar.
+  // Antes, outra agente marcava "@teo" no texto e ele voltava sozinho, sem a linha "voltou".
+  const resumo = msgs.map((m) => ({ autorTipo: m.autorTipo, autorId: m.autorId, texto: m.texto }));
+  const fora = roster.filter((a) => a.agentKey !== agente.agentKey && estaForaDaConversa(resumo, a.agentKey));
+  const permitidos = [...new Set([...canal.agentes, ...agentesDasSalas(ativos)])]
+    .filter((k) => ativos.some((a) => a.agentKey === k) && !fora.some((f) => f.agentKey === k));
   const cadeia = input.cadeia ?? 0;
   const chamadoPor = input.chamadoPor ? roster.find((a) => a.agentKey === input.chamadoPor) ?? null : null;
-  const bloco = blocoCanal(canal, agente, colegas, [...nomes].filter(([k]) => humanoIds.includes(k)).map(([, v]) => v), { chamadoPor, podePassar: podePassar(cadeia) });
+  const bloco = blocoCanal(canal, agente, colegas, [...nomes].filter(([k]) => humanoIds.includes(k)).map(([, v]) => v), { chamadoPor, podePassar: podePassar(cadeia), fora });
   const agenteComCanal = Object.assign(Object.create(null), agente, { __blocoCanal: bloco }) as AgentView;
 
   await publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: "digitando" });

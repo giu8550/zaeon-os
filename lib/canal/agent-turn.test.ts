@@ -174,6 +174,28 @@ describe("agent-turn · executarTurno", () => {
       });
     });
 
+    it("#468: quem SAIU da conversa não volta porque outra agente o marcou (sem a linha 'voltou')", async () => {
+      const m = pede();
+      const saiu = msg({ autorTipo: "sistema", autorId: "medicina", texto: "Osler saiu da conversa" });
+      const { prisma } = fakePrisma(canal, [saiu, m]);
+      const encadear = vi.fn();
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id },
+        { prisma, gerar: async () => "O @Osler está saindo, então seguimos nós duas.", publicar: async () => {}, encadear });
+      expect(encadear).not.toHaveBeenCalled();
+      expect(r.ok && r.encadeado).toBeFalsy();
+    });
+
+    it("#468: depois que uma PESSOA chamou de volta ('voltou'), a cadeia pode chamá-lo de novo", async () => {
+      const saiu = msg({ autorTipo: "sistema", autorId: "medicina", texto: "Osler saiu da conversa" });
+      const voltou = msg({ autorTipo: "sistema", autorId: "medicina", texto: "Osler voltou para a conversa" });
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [saiu, voltou, m]);
+      const encadear = vi.fn();
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id },
+        { prisma, gerar: async () => "A parte clínica é com o **@Osler**.", publicar: async () => {}, encadear });
+      expect(encadear).toHaveBeenCalledTimes(1);
+    });
+
     it("sem @ na resposta → não encadeia", async () => {
       const m = pede();
       const { prisma } = fakePrisma(canal, [m]);
@@ -321,5 +343,14 @@ describe("agent-turn · executarTurno", () => {
     const r = await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A }, { prisma, gerar, publicar: async () => {} });
     expect(r.ok && r.mensagem.autorNome).toBe("Osler");
     expect(r.ok && r.mensagem.autorAvatar).toBeNull();
+  });
+});
+
+describe("#468 · a IA fica sabendo quem saiu", () => {
+  it("o bloco do canal lista quem saiu e tira dos 'outros agentes'", () => {
+    const ag = { agentKey: "aura", nome: "Aura" } as any;
+    const b = blocoCanal({ titulo: "teste 2" } as any, ag, [ag, { agentKey: "teo", nome: "Téo" } as any], ["Giulia"], { fora: [{ agentKey: "teo", nome: "Téo" }] });
+    expect(b).toMatch(/Saíram da conversa \(NÃO marque com @; só voltam se a pessoa chamar\): Téo\./);
+    expect(b).not.toMatch(/@teo \(Téo\)/);
   });
 });
