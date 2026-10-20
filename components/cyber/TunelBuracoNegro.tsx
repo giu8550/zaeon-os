@@ -9,10 +9,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type DestinoTunel = { id: string; nome: string; desc: string };
-export type ModoTunel = { tipo: "escolher"; origem: string; nomeOrigem: string; destinos: DestinoTunel[] } | { tipo: "dono"; para: "dj" | "nave" };
+export type ModoTunel = { tipo: "escolher"; origem: string; nomeOrigem: string; destinos: DestinoTunel[] } | { tipo: "dono"; para: "dj" | "nave" }
+  /** DIRETO (os níveis — lib/cyber/nivelAtivo): o buraco negro de um fio cósmico ou de uma sala só leva a UM lugar — sem
+   *  menu, só a travessia crescendo até chegar */
+  | { tipo: "direto"; para: string; nome: string };
 
 type Fase = "entrando" | "aberto" | "viajando" | "saindo";
-const DUR: Record<Exclude<Fase, "aberto">, number> = { entrando: 0.75, viajando: 1.5, saindo: 0.7 };
+const DUR_BASE: Record<Exclude<Fase, "aberto">, number> = { entrando: 0.75, viajando: 1.5, saindo: 0.7 };
+/** no DIRETO, o vórtice CRESCE devagar (engolindo a tela) e a travessia é mais longa — a viagem é o efeito */
+const DUR_DIRETO: Record<Exclude<Fase, "aberto">, number> = { entrando: 1.7, viajando: 2.3, saindo: 1.0 };
 const LOGO: Record<string, string> = { ufc: "/assets/cyber/logo-ufc.svg", unifor: "/assets/cyber/logo-unifor.svg", uece: "/assets/cyber/logo-uece.png" };
 const ICONE: Record<string, string> = { zaeon: "✦", praca: "◎", univ: "🎓", solana: "◈" };
 
@@ -38,6 +43,7 @@ export default function TunelBuracoNegro(p: {
   useEffect(() => {
     const c = cv.current; if (!c) return;
     const g = c.getContext("2d")!; let raf = 0, ultimo = performance.now();
+    const DUR = cb.current.modo.tipo === "direto" ? DUR_DIRETO : DUR_BASE;
     const reduzido = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     // estrelas: ângulo + distância do centro (crescem: o túnel corre em direção a quem olha)
     const N = 220, est = Array.from({ length: N }, () => ({ a: Math.random() * Math.PI * 2, r: Math.random(), v: 0.25 + Math.random() * 0.75, cor: Math.random() < 0.3 ? "255,190,120" : "200,215,255" }));
@@ -53,8 +59,8 @@ export default function TunelBuracoNegro(p: {
       const f = faseRef.current, k = (agora - t0.current) / 1000;
       // a fase manda: entrando (o vórtice fecha a tela), aberto (o túnel), viajando (acelera), saindo (abre)
       let cobre = 1, alvoVel = 1;
-      if (f === "entrando") { cobre = Math.min(1, k / DUR.entrando); alvoVel = 1 + 3 * (1 - cobre); if (k >= DUR.entrando) { cb.current.onCoberto(true); if (cb.current.modo.tipo === "dono") ir("viajando"); else ir("aberto"); } }
-      if (f === "viajando") { alvoVel = 1 + 9 * Math.min(1, k / DUR.viajando); if (k >= DUR.viajando) { cb.current.onEscolher(escolha.current ?? (cb.current.modo.tipo === "dono" ? cb.current.modo.para : null)); cb.current.onCoberto(false); ir("saindo"); } }
+      if (f === "entrando") { cobre = Math.min(1, k / DUR.entrando); alvoVel = 1 + 3 * (1 - cobre); if (k >= DUR.entrando) { cb.current.onCoberto(true); if (cb.current.modo.tipo !== "escolher") ir("viajando"); else ir("aberto"); } }
+      if (f === "viajando") { alvoVel = 1 + 9 * Math.min(1, k / DUR.viajando); if (k >= DUR.viajando) { cb.current.onEscolher(escolha.current ?? (cb.current.modo.tipo !== "escolher" ? cb.current.modo.para : null)); cb.current.onCoberto(false); ir("saindo"); } }
       if (f === "saindo") { cobre = 1 - Math.min(1, k / DUR.saindo); alvoVel = 4 * cobre; if (k >= DUR.saindo) { cancelAnimationFrame(raf); cb.current.onFim(); return; } }
       vel += (alvoVel - vel) * Math.min(1, dt * 4); if (reduzido) vel = Math.min(vel, 1.5);
       rot += dt * 0.35 * vel;
@@ -106,7 +112,7 @@ export default function TunelBuracoNegro(p: {
     window.addEventListener("keydown", k, true); return () => window.removeEventListener("keydown", k, true);
   }, [p.modo, escolher]);
 
-  const titulo = p.modo.tipo === "dono" ? (p.modo.para === "dj" ? "Cabine do DJ" : "A bordo da nave") : null;
+  const titulo = p.modo.tipo === "dono" ? (p.modo.para === "dj" ? "Cabine do DJ" : "A bordo da nave") : p.modo.tipo === "direto" ? p.modo.nome : null;
   return (
     <div role="dialog" aria-modal="true" aria-label={p.modo.tipo === "escolher" ? "Túnel do buraco negro: escolha o destino" : "Atravessando o buraco negro"} className="absolute inset-0 z-[55] select-none">
       <canvas ref={cv} className="absolute inset-0 h-full w-full" />

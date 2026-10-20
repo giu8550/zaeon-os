@@ -75,6 +75,7 @@ import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
+import { FIO as FIO_COSMICO, fioDaSala, fioNaBoca, pontoDoFio, uDaViagemFio, type FioCosmico } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
@@ -178,6 +179,8 @@ export type CyberOpts = {
   onTunel?: (t: TunelAberto) => void;
   /** pisou numa boca do PAR do dono (nave ↔ cabine do DJ): o React pede acesso ao servidor e chama `atravessarBuracoDono` */
   onBuracoDono?: (para: "dj" | "nave") => void;
+  /** um buraco negro de CAMINHO ÚNICO (o fio cósmico → a sala; a sala → o hub): sem menu, só a travessia */
+  onTunelDireto?: (d: { para: IdNo; nome: string }) => void;
   /** um aviso curto pra pessoa (caiu no vazio, buraco negro só do dono…) */
   onAviso?: (msg: string) => void;
   /** NASCE num tubo de ensaio do berçário e faz o tour da anfitriã (o React decide: 1ª vez no hiperespaço novo) */
@@ -669,6 +672,10 @@ export class CyberEngine {
   private carro: CarroFrota | null = null;
   /** os CARROS (lib/cyber/carros): a praça + os estacionamentos da Zaeon; `carro` é o da vez (o que eu uso) */
   private carros: CarroFrota[] = [];
+  /** o TECIDO CÓSMICO (lib/cyber/fiosCosmicos): a prancha levando pelo fio (k 0..1, ida ou volta), a boca armada (só
+   *  pega de novo depois de sair dela), a sala armada (o buraco negro de volta) e a travessia DIRETA pedida */
+  private fio: { f: FioCosmico; k: number; sentido: 1 | -1; abriu: boolean } | null = null; private bocaArmada = true; private salaArmada = true;
+  private direto: { para: IdNo; pose?: { x: number; z: number; rumo: number } } | null = null;
   /** o NÍVEL em que estou (lib/cyber/nivelAtivo — só ele existe pra mim) e onde eu estava no quadro anterior (um salto
    *  grande = teleporte: o túnel, o portal do Droid) */
   private nivel: IdNivel | null = null; private posNivel = { x: 0, z: 0, alt: 0, ok: false };
@@ -1899,7 +1906,7 @@ export class CyberEngine {
   private get naZaeon() { return this.noCeu || (!!this.altoEm && this.marcosDaZaeon().some((m) => m.lm.poi.id === this.altoEm)); }
   /** teleporte (corte seco — o React faz o túnel/fade): aparece no ponto `p` (mundo) do nó `id`, a pé, sem nada */
   private irParaNo(id: IdNo, p: { x: number; z: number; rumo: number } = NOS[id].chegada) {
-    this.viagem = null; this.tunel = null;
+    this.viagem = null; this.tunel = null; this.fio = null; this.salaArmada = false;
     this.pilotando = false; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0; this.falandoCom = null;
     this.jet.noAr = false; this.jetV = { x: 0, z: 0 }; this.sobreNave = false; this.ilhota = null; this.bordo = null; this.motoAlvo = null;
     const naZaeon = id === "zaeon" || ehSala(id);   // (as SALAS são níveis da Zaeon: o piso é o dela)
@@ -1912,6 +1919,27 @@ export class CyberEngine {
     this.som.tocar("rise", new THREE.Vector3(p.x, y + 1, p.z), { dist: DISTANCIA.perto });
   }
   /** o TÚNEL: o React escolheu o destino (`null` = desistiu: fica onde está, fora do túnel) */
+  /** o buraco negro de CAMINHO ÚNICO: pede a travessia direta (o React mostra o túnel, sem menu) */
+  private abrirDireto(para: IdNo, pose?: { x: number; z: number; rumo: number }) {
+    if (this.direto || this.tunel) return;
+    this.direto = { para, ...(pose ? { pose } : {}) }; this.alvo = null; this.alvoDepois = null; this.sitT = 0;
+    this.keys = {}; this.joy = { x: 0, y: 0, on: false };
+    this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.perto });
+    if (this.o.onTunelDireto) this.o.onTunelDireto({ para, nome: NOS[para].nome }); else this.viajarDireto();   // (sem o overlay: vai na hora)
+  }
+  /** a travessia direta, com a tela COBERTA pelo túnel: chega no destino */
+  viajarDireto() {
+    const d = this.direto; if (!d) return;
+    this.direto = null; this.fio = null;
+    this.irParaNo(d.para, d.pose ?? NOS[d.para].chegada);
+    this.bocaArmada = false;   // (chegou do lado de uma boca: só pega de novo depois de sair dela)
+  }
+  /** voltando de uma sala: aparece no HUB perto da boca do fio dela, de frente pro centro */
+  private chegadaDoFio(s: NomeSala) {
+    const b = fioDaSala(s).boca, d = Math.hypot(b.x, b.z) || 1, l = { x: b.x * (1 - 12 / d), z: b.z * (1 - 12 / d) }, w = mundo(l);
+    return { x: w.x, z: w.z, rumo: Math.atan2(-l.x, -l.z) };
+  }
+
   viajarPeloTunel(destino: IdNo | null) {
     if (!this.tunel) return;
     if (!destino || destino === this.tunel.origem || !NOS[destino]) { this.tunel = null; return; }
@@ -4052,6 +4080,14 @@ export class CyberEngine {
       }
       else if (this.sitT > 0.05) { const s = this.assento(); eu.pos.x += (s.x - eu.pos.x) * Math.min(1, dt * 3); eu.pos.z += (s.z - eu.pos.z) * Math.min(1, dt * 3); eu.facing = this.rotAssento(); }
       else if (this.noTopo) { const e = this.eixoTopo()!, lim = 2.0 * this.escalaZaeon(); const dx = eu.pos.x - e.x, dz = eu.pos.z - e.z, d = Math.hypot(dx, dz); if (d > lim) { eu.pos.x = e.x + (dx / d) * lim; eu.pos.z = e.z + (dz / d) * lim; } }   // não cai da plataforma
+      else if (this.fio) {
+        // o FIO CÓSMICO leva: a prancha de luz pelo axônio (as teclas não mexem); na ponta, o buraco negro massivo
+        const v = this.fio; v.k = Math.max(0, Math.min(1, v.k + (v.sentido * dt) / FIO_COSMICO.viagem));
+        const q = pontoDoFio(v.f, uDaViagemFio(v.k)), w = mundo(q);
+        eu.pos.x = w.x; eu.pos.z = w.z; eu.facing = v.sentido > 0 ? q.rumo : q.rumo + Math.PI; andando = false; this.alvo = null; this.alvoDepois = null;
+        if (v.sentido > 0 && v.k >= 1 && !v.abriu) { v.abriu = true; this.abrirDireto(v.f.sala); }   // chegou na ponta: o buraco negro leva DIRETO pra sala
+        if (v.sentido < 0 && v.k <= 0) { this.fio = null; this.bocaArmada = false; }
+      }
       else if (this.noCeu && this.viagem) {
         // a ESCADA DE ENERGIA leva: a posição segue o fluxo (as teclas não mexem), sem passo nem pulo
         const v = this.viagem; v.t += dt; const k = Math.min(1, v.t / durDaViagem(v.tipo)), q = posDaViagem(v.tipo, v.sentido, k, v.sala);
@@ -4117,7 +4153,7 @@ export class CyberEngine {
     const souDJ = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !this.sobreNave && !this.bordo && naCabineDJ(eu.pos);
     eu.dj = (eu.dj ?? 0) + ((souDJ ? 1 : 0) - (eu.dj ?? 0)) * Math.min(1, dt * 4);
     if (souDJ) { const c = pontoDaCabineDJ(), k = Math.min(1, dt * 4); eu.pos.x += (c.x - eu.pos.x) * k; eu.pos.z += (c.z - eu.pos.z) * k; eu.facing = rumoDoDJ(); }
-    eu.surf = (eu.surf ?? 0) + ((this.viagem?.tipo === "elevador" || this.viagem?.tipo === "garagem" ? 1 : 0) - (eu.surf ?? 0)) * Math.min(1, dt * 5);
+    eu.surf = (eu.surf ?? 0) + ((this.fio || this.viagem?.tipo === "elevador" || this.viagem?.tipo === "garagem" ? 1 : 0) - (eu.surf ?? 0)) * Math.min(1, dt * 5);
     eu.puxa = (eu.puxa ?? 0) + ((this.viagem?.tipo === "escada" ? 1 : 0) - (eu.puxa ?? 0)) * Math.min(1, dt * 5);
     // DANÇA: parado na PISTA do lounge → dança virado pro palco
     const danco = this.noCeu && !this.menu && !eu.moving && !this.jet.noAr && this.moto === null && !this.pilotando && !souDJ && naPistaDeDanca(eu.pos);
@@ -4133,6 +4169,7 @@ export class CyberEngine {
       : this.sobreNave ? this.topoNave()
       : this.plat ? PLATAFORMAS[this.plat.id].y + alturaDoAndar(this.plat.id, this.plat.andar)
       : this.ilhota !== null && this.cidade ? this.cidade.alturaIlhota(this.ilhota)
+      : this.fio ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + pontoDoFio(this.fio.f, uDaViagemFio(this.fio.k)).y + 0.35   // na prancha, em cima do fio
       : this.noCeu && this.viagem ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + posDaViagem(this.viagem.tipo, this.viagem.sentido, Math.min(1, this.viagem.t / durDaViagem(this.viagem.tipo)), this.viagem.sala).y   // sendo levado: a altura do caminho
       : this.noCeu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + alturaNaCidade(eu.pos)   // + o PALCO do lounge (escada = rampa)
       : this.noTopo ? this.alturaTopo() : (lmAlto?.poi.base ?? CHAO) + this.yNav + (lmAlto && marcoNav(lmAlto.poi) && this.yNav >= marcoNav(lmAlto.poi)!.nav.pisoY - 1e-6 ? this.boia(lmAlto) : 0);
@@ -4143,6 +4180,20 @@ export class CyberEngine {
       const no = noDoAnel(eu.pos, eu.alt);
       if (no && this.portalArmado) this.abrirTunel(no);
       else if (!no) this.portalArmado = true;
+      // o TECIDO CÓSMICO (níveis separados): no hub, a BOCA de um fio → a prancha leva até o buraco negro da ponta; numa
+      // sala, o buraco negro dela → direto de volta pro hub, ao lado da boca do fio dela
+      if (NIVEIS_SEPARADOS && !this.fio && !this.direto && this.noCeu && this.moto === null && !this.noCarro()) {
+        const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
+        if (this.nivel === "zaeon") {
+          const f = fioNaBoca({ x: eu.pos.x - CIDADE.centro.x, z: eu.pos.z - CIDADE.centro.z }, eu.alt - ilhaY);
+          if (f && this.bocaArmada) { this.fio = { f, k: 0, sentido: 1, abriu: false }; this.bocaArmada = false; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); }
+          else if (!f) this.bocaArmada = true;
+        } else if (this.nivel && ehSala(this.nivel)) {
+          const n = NOS[this.nivel], noAnel = Math.abs(eu.alt - n.y) < 3 && Math.hypot(eu.pos.x - n.anel.x, eu.pos.z - n.anel.z) < n.anel.r;
+          if (noAnel && this.salaArmada) { this.salaArmada = false; this.abrirDireto("zaeon", this.chegadaDoFio(this.nivel)); }
+          else if (!noAnel) this.salaArmada = true;
+        }
+      }
     }
     // o PAR DO DONO: a boca na cabine do DJ (lá em cima da torre) leva pra nave; a da nave (sala de reuniões) virou a
     // "call" do RITUAL (F — lib/cyber/ritual): o dono chega de nave, anunciado

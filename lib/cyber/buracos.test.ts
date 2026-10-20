@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { BOCA_DJ, BURACO_NAVE, CHEGADA_NAVE, CHEGADA_DJ, IDS_NOS, NOS, SALAS_NO, bocaDJMundo, chegadaDJMundo, destinosDe, ehSala, naBocaDJ, naBocaNave, noDoAnel } from "./buracos";
+import { BOCA_DJ, BURACO_NAVE, CHEGADA_NAVE, CHEGADA_DJ, IDS_NOS, NOS, SALAS_COM_NO, SALAS_NO, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel } from "./buracos";
 import { CIDADE, TORRE_DJ, alturaNaCidade, colisoresDaCidade, naCabineDJ, naIlhaPrincipal, naTorreDJ, PISO_FESTA, salaEm } from "./ceu";
-import { IDS_PLATAFORMAS, andarNaPlataforma } from "./plataformas";
+
+import { IDS_PLATAFORMAS, andarNaPlataforma, type IdPlataforma } from "./plataformas";
 import { PRACA, QUEDA_VAZIO, naPraca } from "./praca";
 import { COMODOS, andarNaNave } from "./naveQG";
 import { dentroDeAlgum } from "./colisao";
@@ -22,10 +23,16 @@ describe("a rede de BURACOS NEGROS (o metrô do hiperespaço sem chão)", () => 
       for (const p of [n.anel, n.chegada]) {
         if (id === "zaeon") { expect(naIlhaPrincipal(p)).toBe(true); expect(dentroDeAlgum(p, colisoresDaCidade())).toBe(false); }
         else if (id === "praca") expect(naPraca(p, -2)).toBe(true);
-        else if (ehSala(id)) { const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z }; expect(salaEm(l, 0, true)).toBe(id); }   // (as SALAS: dentro do disco delas)
-        else expect(andarNaPlataforma(id, 0, p).fora).toBe(false);
+        else expect(andarNaPlataforma(id as IdPlataforma, 0, p).fora).toBe(false);
       }
       expect(n.bh.h).toBeGreaterThan(n.bh.r * 2);   // o buraco paira acima da cabeça de quem está no anel
+    }
+  });
+  it("cada SALA tem o buraco negro dela dentro do disco (o caminho direto de volta pro hub), com a chegada longe do anel", () => {
+    for (const s of SALAS_COM_NO) {
+      const n = NOS[s], l = (p: { x: number; z: number }) => ({ x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z });
+      expect(salaEm(l(n.anel), 0, true)).toBe(s); expect(salaEm(l(n.chegada), 0, true)).toBe(s);
+      expect(Math.hypot(n.chegada.x - n.anel.x, n.chegada.z - n.anel.z)).toBeGreaterThanOrEqual(14);
     }
   });
   it("o túnel oferece todos os OUTROS lugares", () => {
