@@ -12,7 +12,7 @@ import { escadasExistem, hubAtivo, salaAtiva } from "./nivelAtivo";
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 import { colisoresDoDistritoTerra } from "./terra";
 import { CHAO } from "./praca";
-import { DECK, TEMPLO, alturaDaEscadaria, alturaNoLounge, bordaDoDeck, bordasDaEscadaria, colisoresDoTemplo, noCorredorDaEscadaria, noTemplo, saidaDoLounge, GARAGEM_LOUNGE, naGaragemDoLounge } from "./templo";
+import { DECK, TEMPLO, alturaDaEscadaria, alturaNoLounge, bordaDoDeck, bordasDaEscadaria, colisoresDoTemplo, noCorredorDaEscadaria, noTemplo, saidaDoLounge, GARAGEM_LOUNGE, GARAGEM_LOUNGE_EXISTE, naGaragemDoLounge } from "./templo";
 
 /** a ZAEON MEGA (out. 2026): a cidadela virou uma MEGA PLATAFORMA — 3× mais larga que antes, bem mais ALTA (450 m) e
  *  longe da UNILAB e da Solana (o mapa cresceu junto). A capela (expandida) fica só com o GLOBO no centro; o LOUNGE saiu
@@ -59,7 +59,7 @@ export const CIDADE = {
    *  os robôs que as fabricam — maior) e 2 espaços de convivência minimalistas e sonorizados (biblioteca e jardim), em
    *  leque a cada 60°, todos do lado oposto à doca da nave. As salas se ligam à central por FIOS DE ENERGIA que puxam */
   salas: {
-    lounge: { x: 0 as number, z: 0 as number, r: 70, y: 0 as number, porta: 0.15, ang: Math.PI },   // 3× maior (out/2026): pátio + deck da festa (lib/cyber/templo)
+    lounge: { x: 0 as number, z: 0 as number, r: 70, y: 0 as number, porta: 0.15, ang: Math.PI, espelho: true as boolean },   // 3× maior (out/2026): pátio + deck da festa (lib/cyber/templo); ESPELHADO — o Templo Cósmico (lib/cyber/temploCosmico)
     garagem: { x: 0 as number, z: 0 as number, r: 62, y: 0 as number, porta: 0.15, ang: (Math.PI * 4) / 3 },
     biblioteca: { x: 0 as number, z: 0 as number, r: 40, y: 0 as number, porta: 0.15, ang: (Math.PI * 5) / 3 },
     jardim: { x: 0 as number, z: 0 as number, r: 40, y: 0 as number, porta: 0.15, ang: 0 },
@@ -413,8 +413,8 @@ export function bordaDaTorre(): { x: number; z: number }[] {
 }
 /** ponto (local da ilha) → referencial da sala (o inverso de `daSala`) */
 export function naSala(s: { x: number; z: number }, x: number, z: number): { x: number; z: number } {
-  const r = rotDaSala(s), c = Math.cos(r), si = Math.sin(r), dx = x - s.x, dz = z - s.z;
-  return { x: dx * c - dz * si, z: dx * si + dz * c };
+  const r = rotDaSala(s), c = Math.cos(r), si = Math.sin(r), dx = x - s.x, dz = z - s.z, lx = dx * c - dz * si;
+  return { x: espelhoDe(s) ? -lx : lx, z: dx * si + dz * c };
 }
 /** quanto o piso sobe aqui (m), `p` no MUNDO: 0 na plataforma central; a ESCADA do lounge é uma rampa até
  *  `ALTURA_LOUNGE`; no disco do lounge, `ALTURA_LOUNGE` + o PALCO (que tem a escadinha dele, rampa também) */
@@ -494,6 +494,7 @@ export function bocaDoElevador(p: P2): "sobe" | "desce" | null {
 /** o ELEVADOR DE LUZ da GARAGEM DO LOUNGE (lib/cyber/templo): o anel no pé (na plataforma das motos) SOBE até o lado
  *  esquerdo do pátio; o anel lá em cima DESCE. `p` no mundo */
 export function bocaDaGaragem(p: P2): "sobe" | "desce" | null {
+  if (!GARAGEM_LOUNGE_EXISTE || !salaAtiva("lounge")) return null;
   const q = naSala(CIDADE.salas.lounge, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z), e = GARAGEM_LOUNGE.elevador;
   if (Math.hypot(q.x - e.pe.x, q.z - e.pe.z) < e.r) return "sobe";
   if (Math.hypot(q.x - e.topo.x, q.z - e.topo.z) < e.r) return "desce";
@@ -551,11 +552,18 @@ export function posDaViagem(tipo: "escada" | "elevador" | "garagem", sentido: "s
 export const rumoDoDJ = () => rotDaSala(CIDADE.salas.lounge);
 /** giro da sala: +z local aponta pro centro da ilha (onde fica a porta) */
 export const rotDaSala = (s: { x: number; z: number }) => Math.atan2(-s.x, -s.z);
+/** a sala é ESPELHADA (x → −x no referencial dela)? O Templo Cósmico (out/2026, pedido do dono): o lounge inteiro — a
+ *  pista, o DJ, a escadaria-veia, a capela — foi pro braço ESQUERDO de quem chega, em simetria total com o de hoje.
+ *  Todo o layout (lib/cyber/templo, ceu) continua escrito no referencial de sempre: o espelho mora só aqui (daSala/
+ *  naSala/rumoNaSala) e no render (o grupo da sala com scale.x = −1 — components/cyber/Salas, Templo) */
+export const espelhoDe = (s: { x: number; z: number }) => (s as { espelho?: boolean }).espelho === true;
 /** ponto no referencial da sala → local da ilha */
 export function daSala(s: { x: number; z: number }, lx: number, lz: number): { x: number; z: number } {
-  const r = rotDaSala(s), c = Math.cos(r), si = Math.sin(r);
-  return { x: s.x + lx * c + lz * si, z: s.z - lx * si + lz * c };
+  const r = rotDaSala(s), c = Math.cos(r), si = Math.sin(r), x = espelhoDe(s) ? -lx : lx;
+  return { x: s.x + x * c + lz * si, z: s.z - x * si + lz * c };
 }
+/** um RUMO (yaw) no referencial da sala → no mundo (com o espelho, o giro troca de sentido) */
+export const rumoNaSala = (s: { x: number; z: number }, rumo: number) => rotDaSala(s) + (espelhoDe(s) ? -rumo : rumo);
 /** colisores (no referencial da sala) de um móvel: círculos ao longo da largura dele */
 export function colisoresDoMovel(m: Movel): { x: number; z: number; r: number }[] {
   if (m.solido === false) return [];
@@ -683,7 +691,7 @@ export function solidosDaCidade(dono = true): { x: number; z: number; r: number;
     { x: c.x + s.x, z: c.z + s.z, r: s.r, topo: L, base: L - 2.5 },   // a LAJE do lounge
     { x: torre.x, z: torre.z, r: TORRE_DJ.r, topo: L + DECK.h + TORRE_DJ.topo + (dono ? 0 : CAMPO_DJ), base: L - 0.1 },
     (() => { const t = mundo(daSala(s, TEMPLO.x, TEMPLO.z)), y = L + TEMPLO.h; return { x: t.x, z: t.z, r: TEMPLO.r, topo: y, base: y - 3 }; })(),   // a laje do TEMPLO
-    (() => { const G = GARAGEM_LOUNGE, g = mundo(daSala(s, G.x, G.z)), y = L - G.desce; return { x: g.x, z: g.z, r: Math.hypot(G.larg, G.prof) / 2, topo: y, base: y - 2 }; })(),   // a plataforma da GARAGEM do lounge
+    ...(!GARAGEM_LOUNGE_EXISTE ? [] : [(() => { const G = GARAGEM_LOUNGE, g = mundo(daSala(s, G.x, G.z)), y = L - G.desce; return { x: g.x, z: g.z, r: Math.hypot(G.larg, G.prof) / 2, topo: y, base: y - 2 }; })()]),   // a plataforma da GARAGEM do lounge
     (() => { const t = mundo(daSala(s, TEMPLO.x, TEMPLO.z)), y = L + TEMPLO.h, C = TEMPLO.capela; return { x: t.x, z: t.z, r: C.r + 1, topo: y + C.altura + C.r * C.achata, base: y }; })(),   // a CAPELA do templo
     ]),
     ...(Object.keys(CIDADE.salas) as NomeSala[]).filter((n) => n !== "lounge" && salaAtiva(n)).map((n) => { const sl = CIDADE.salas[n]; return { x: c.x + sl.x, z: c.z + sl.z, r: sl.r, topo: L, base: L - 2.5 }; }),   // as lajes das outras salas

@@ -10,9 +10,9 @@
  */
 import * as THREE from "three";
 import { NIVEIS_SEPARADOS } from "@/lib/cyber/nivelAtivo";
-import { BN_NA_SALA, CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
+import { BN_NA_SALA, CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, espelhoDe, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
 import { BOCA_DJ } from "@/lib/cyber/buracos";
-import { DECK, GARAGEM_LOUNGE, PATIO, saidaDoLounge } from "@/lib/cyber/templo";
+import { DECK, GARAGEM_LOUNGE, GARAGEM_LOUNGE_EXISTE, PATIO, saidaDoLounge } from "@/lib/cyber/templo";
 import { criarOlho } from "./OlhoHolografico";
 import { criarMandala } from "./MandalaSagrada";
 import { criarTempestade } from "./Tempestade";
@@ -626,7 +626,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     // o ELEVADOR DE LUZ da GARAGEM (as motos ficam numa plataforma 25 m abaixo, do lado esquerdo — lib/cyber/templo):
     // a coluna do pé (na plataforma) até a altura do pátio, anéis subindo, o anel de embarque embaixo, o de descer no
     // pátio e a passarela de luz entre eles (a viagem desliza por ela pra dentro do lounge)
-    { const G = GARAGEM_LOUNGE, e = G.elevador, alt = G.desce + 0.6, aneisG: THREE.Mesh[] = [];
+    if (GARAGEM_LOUNGE_EXISTE) { const G = GARAGEM_LOUNGE, e = G.elevador, alt = G.desce + 0.6, aneisG: THREE.Mesh[] = [];
       const col = new THREE.Mesh(new THREE.CylinderGeometry(e.r + 0.3, e.r + 0.5, alt, 24, 1, true), basica(0x66e6ff, 0.16, true)); col.position.set(e.pe.x, -G.desce + alt / 2, e.pe.z); g.add(col);
       const nucleo = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, alt, 8, 1, true), basica(0xd8f6ff, 0.5, true)); nucleo.position.copy(col.position); g.add(nucleo);
       for (let i = 0; i < 5; i++) { const an = new THREE.Mesh(new THREE.TorusGeometry(e.r + 0.35, 0.06, 6, 40), basica(0xb98cff, 0.8, true)); an.rotation.x = Math.PI / 2; an.position.set(e.pe.x, -G.desce, e.pe.z); g.add(an); aneisG.push(an); }
@@ -663,6 +663,10 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   for (const nome of (o.apenas ?? Object.keys(CIDADE.salas)) as NomeSala[]) {
     const s = CIDADE.salas[nome], tema = TEMA[nome], porta = s.porta ?? CIDADE.salaParede.porta, ALT = tema.alt;
     const g = new THREE.Group(); g.position.set(s.x, s.y ?? 0, s.z); g.rotation.y = rotDaSala(s); (o.paiDaSala?.(nome) ?? ilha).add(g);   // (cada sala no grupo do NÍVEL dela — components/cyber/Cidade)   // o lounge: lá no alto
+    if (espelhoDe(s)) {   // o Templo Cósmico: o lounge ESPELHADO (lib/cyber/ceu `espelhoDe`) — o texto da TV e do recado desespelha
+      g.scale.x = -1;
+      for (const t of [texTV, texRecado]) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.needsUpdate = true; }
+    }
     // piso + friso de luz
     const piso = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r + 0.2, 0.16, o.low ? 32 : 48), new THREE.MeshStandardMaterial({ color: tema.piso, emissive: tema.piso, emissiveIntensity: 0.6, roughness: 0.5, metalness: 0.3 }));
     piso.position.y = 0.08; g.add(piso); alvos.push(piso);

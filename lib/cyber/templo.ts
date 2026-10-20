@@ -24,8 +24,11 @@ export const GARAGEM_LOUNGE = {
   x: -98, z: 20, larg: 46, prof: 62, desce: 25,
   elevador: { pe: { x: -78, z: 20 }, topo: { x: -62, z: 20 }, r: 1.1, dur: 4.6 },
 } as const;
+/** a garagem do lounge EXISTE? Não mais (o Templo Cósmico, out/2026: o lounge foi pro braço esquerdo e, no lugar da
+ *  garagem, fica o salão central — lib/cyber/temploCosmico). As motos continuam no nível da GARAGEM */
+export const GARAGEM_LOUNGE_EXISTE = false as boolean;
 /** está na plataforma da garagem do lounge (referencial da sala)? */
-export const naGaragemDoLounge = (q: P2, folga = 0) => { const G = GARAGEM_LOUNGE; return Math.abs(q.x - G.x) <= G.larg / 2 + folga && Math.abs(q.z - G.z) <= G.prof / 2 + folga; };
+export const naGaragemDoLounge = (q: P2, folga = 0) => { const G = GARAGEM_LOUNGE; if (!GARAGEM_LOUNGE_EXISTE) return false; return Math.abs(q.x - G.x) <= G.larg / 2 + folga && Math.abs(q.z - G.z) <= G.prof / 2 + folga; };
 
 /** o TEMPLO: centro, raio, altura do piso acima do pátio do lounge e a CAPELA dele (mais estreita que a da Zaeon, mais alta) */
 export const TEMPLO = {

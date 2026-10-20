@@ -7,15 +7,17 @@ import { RITUAL_OFF, ritualDesligado, type Ritual } from "@/lib/cyber/ritual";
 const CenaCyber = dynamic(() => import("@/components/cyber/CenaCyber"), { ssr: false });
 const EU = "a".repeat(24), MARINA = "b".repeat(24), TEO = "c".repeat(24);
 export default function Tela() {
-  const eu = useMemo(() => ({ id: EU, name: "Você", color: "#2f7bff", fundador: true }), []);   // prévia: você como dono da Zaeon
-  const membros = useMemo(() => [eu, { id: MARINA, name: "Marina", color: "#c69bff" }, { id: TEO, name: "Téo", color: "#ffd36b" }, { id: "d".repeat(24), name: "Andrei Bacelar", color: "#7fe0ff" }], [eu]);
+  const giu = typeof window !== "undefined" && location.search.includes("giulia=1");
+  const eu = useMemo(() => (giu ? { id: EU, name: "Você", color: "#d2508a", fundador: false, corpo: "giulia", personagem: { genero: "f" as const, cor: "#d2508a" } } : { id: EU, name: "Você", color: "#2f7bff", fundador: true }), [giu]);   // prévia: você como dono da Zaeon
+  const membros = useMemo(() => [eu, { id: MARINA, name: "Marina", color: "#c69bff", ...(giu ? { corpo: "giulia" } : {}) }, { id: TEO, name: "Téo", color: "#ffd36b" }, { id: "d".repeat(24), name: "Andrei Bacelar", color: "#7fe0ff" }], [eu]);
   const remotos = useRef(new Map<string, Presenca>());
   const [chat, setChat] = useState<MensagemChat[]>([]);
   useEffect(() => {
     const t0 = performance.now();
     const id = setInterval(() => {
       const t = (performance.now() - t0) / 1000, x = Math.cos(t * 0.4) * 3, z = 1.5 + Math.sin(t * 0.4) * 2.2;
-      remotos.current.set(MARINA, { userId: MARINA, name: "Marina", color: "#c69bff", x, z, facing: Math.atan2(-Math.sin(t * 0.4), Math.cos(t * 0.4)), moving: true });
+      const ov = (window as unknown as { __marina?: Partial<Presenca> }).__marina;   // (teste local: a Marina controlada pelo console)
+      remotos.current.set(MARINA, { userId: MARINA, name: "Marina", color: "#c69bff", x, z, facing: Math.atan2(-Math.sin(t * 0.4), Math.cos(t * 0.4)), moving: true, ...(ov ?? {}) });
       remotos.current.set(TEO, { userId: TEO, name: "Téo", color: "#ffd36b", x: -2.5, z: 3.2, facing: 2.5, moving: false });
     }, 110);
     const fala = setTimeout(() => setChat([{ id: "1", userId: MARINA, name: "Marina", color: "#c69bff", texto: "oi! bora estudar? ✦", ts: Date.now() }]), 5000);
