@@ -26,7 +26,7 @@ import { runtimeMode } from "@/lib/runtime/mode";
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
-export type Provider = "anthropic" | "google";
+export type Provider = "anthropic" | "google" | "openrouter" | "local";
 
 export type ModelId =
   | "sonnet"   // anthropic — fast tier
@@ -100,6 +100,40 @@ const ANTHROPIC_MODELS: Record<"sonnet" | "opus", string> = {
   sonnet: process.env.ANTHROPIC_SONNET_MODEL || "claude-sonnet-4-6",
   opus: process.env.ANTHROPIC_OPUS_MODEL || "claude-opus-4-8",
 };
+
+// ─── OpenRouter (OpenAI-compatible gateway) ──────────────────────────────────
+// Liga sem dependência nova — é só fetch no endpoint OpenAI-compatible.
+//   OPENROUTER_API_KEY   → a chave (sk-or-...). Sem ela, fica desligado.
+//   OPENROUTER_MODEL     → slug do modelo (ex.: "qwen/qwen3-coder:free").
+//                          ⚠️ confirmar o slug exato em openrouter.ai/models — os
+//                          `:free` mudam de nome/disponibilidade com frequência.
+//   AI_FORCE_OPENROUTER=on → roteia TUDO pelo OpenRouter (spike/experimento/
+//                          fallback global). Se falhar (429/rate-limit do free),
+//                          cai suave pro roteamento normal (Gemini).
+// Privacidade: endpoints `:free` podem usar o prompt p/ treino — NÃO mandar PII
+// de usuário por aqui enquanto for free. Ver PLANO_HUGGINGFACE_PRO_AGENTES.md.
+export const OPENROUTER_ENABLED = !!process.env.OPENROUTER_API_KEY;
+const OPENROUTER_FORCE = process.env.AI_FORCE_OPENROUTER === "on";
+const DEFAULT_OPENROUTER_MODEL = "qwen/qwen3-coder:free";
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+// ─── LOCAL (LiteLLM gateway → Ollama/TEI na Contabo, OpenAI-compatible) ───────
+// A Zaeon vira o próprio provedor: os modelos rodam de graça na Contabo e o
+// LiteLLM expõe UMA URL OpenAI-compatible + chave (só na tailnet da Zaeon).
+//   LOCAL_LLM_URL   → ex.: http://100.x.y.z:4000/v1/chat/completions (IP Tailscale)
+//   LOCAL_LLM_KEY   → a master key (ou uma virtual key do LiteLLM)
+//   LOCAL_LLM_MODEL → nome lógico do model_list (ex.: "gpt-oss-20b", "qwen3-coder")
+//   LOCAL_LLM_TIMEOUT_MS → teto por chamada (default 60s). Gateway pendurado
+//                       (tailnet fora, CPU lotada) vira erro → fallback, não espera.
+//   AI_FORCE_LOCAL=on → roteia TUDO pro local; falhou (modelo trocando/timeout)?
+//                       cai suave pro roteamento normal (Gemini). Nunca derruba o chat.
+export const LOCAL_LLM_ENABLED = !!process.env.LOCAL_LLM_URL;
+const LOCAL_LLM_FORCE = process.env.AI_FORCE_LOCAL === "on";
+const LOCAL_LLM_URL = process.env.LOCAL_LLM_URL || "";
+const LOCAL_LLM_KEY = process.env.LOCAL_LLM_KEY || "";
+const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || "gpt-oss-20b";
+const LOCAL_LLM_TIMEOUT_MS = Number(process.env.LOCAL_LLM_TIMEOUT_MS) || 60_000;
 
 // ─── Routing policy ────────────────────────────────────────────────────────────
 
@@ -256,8 +290,173 @@ async function callAnthropic(_decision: RouteDecision, _opts: GenerateOptions): 
   );
 }
 
+/**
+ * OpenRouter call — OpenAI-compatible, via fetch (sem SDK).
+ * Lança em não-2xx (o chamador decide se faz fallback). O `generate()` abaixo
+ * já captura e cai pro Gemini quando usado como override global.
+ */
+async function callOpenRouter(modelId: string, opts: GenerateOptions): Promise<string> {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error("OPENROUTER_API_KEY ausente — OpenRouter desligado.");
+
+  const messages: Array<{ role: string; content: string }> = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: opts.prompt });
+
+  const res = await fetch(OPENROUTER_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      // Opcionais que o OpenRouter usa p/ ranking/atribuição — não são segredo.
+      "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://zaeon.com.br",
+      "X-Title": process.env.OPENROUTER_SITE_NAME || "Zaeon",
+    },
+    body: JSON.stringify({
+      model: modelId,
+      messages,
+      temperature: opts.temperature ?? 0.4,
+      max_tokens: opts.maxOutputTokens ?? 2048,
+      ...(opts.json ? { response_format: { type: "json_object" } } : {}),
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`OpenRouter ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const data: any = await res.json();
+  return data?.choices?.[0]?.message?.content ?? "";
+}
+
+/**
+ * Chamada direta ao OpenRouter (sem passar pela política de routing). Útil pro
+ * Octa Code / spike testar um modelo de código específico. Model override cai
+ * pro OPENROUTER_MODEL do env quando omitido.
+ */
+export async function generateViaOpenRouter(
+  opts: GenerateOptions,
+  modelOverride?: string,
+): Promise<GenerateResult> {
+  const providerModel = modelOverride || OPENROUTER_MODEL;
+  const text = await callOpenRouter(providerModel, opts);
+  return {
+    text,
+    decision: {
+      model: "gemini",
+      provider: "openrouter",
+      providerModel,
+      reason: "Chamada direta ao OpenRouter (generateViaOpenRouter)",
+    },
+    usedProvider: "openrouter",
+  };
+}
+
+/**
+ * Chamada ao gateway LOCAL (LiteLLM, OpenAI-compatible). Mesma forma do OpenRouter,
+ * só muda a URL/chave/modelo. Lança em não-2xx (o chamador/fallback decide).
+ */
+async function callLocal(modelId: string, opts: GenerateOptions): Promise<string> {
+  if (!LOCAL_LLM_URL) throw new Error("LOCAL_LLM_URL ausente — gateway local desligado.");
+  const messages: Array<{ role: string; content: string }> = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: opts.prompt });
+
+  const res = await fetch(LOCAL_LLM_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(LOCAL_LLM_KEY ? { Authorization: `Bearer ${LOCAL_LLM_KEY}` } : {}),
+    },
+    signal: AbortSignal.timeout(LOCAL_LLM_TIMEOUT_MS),
+    body: JSON.stringify({
+      model: modelId,
+      messages,
+      temperature: opts.temperature ?? 0.4,
+      max_tokens: opts.maxOutputTokens ?? 2048,
+      ...(opts.json ? { response_format: { type: "json_object" } } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Local LLM ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const data: any = await res.json();
+  const text = data?.choices?.[0]?.message?.content ?? "";
+  // gpt-oss é de raciocínio: estourando max_tokens no "pensar", volta content
+  // vazio. Vazio conta como falha pra o fallback pegar, não como resposta.
+  if (!text.trim()) throw new Error(`Local LLM: resposta vazia (finish_reason=${data?.choices?.[0]?.finish_reason})`);
+  return text;
+}
+
+/**
+ * Chamada direta ao gateway local (sem política de routing). Pro Octa/CLIs/RAG
+ * escolherem um modelo específico da estante. Model override cai pro LOCAL_LLM_MODEL.
+ */
+export async function generateViaLocal(
+  opts: GenerateOptions,
+  modelOverride?: string,
+): Promise<GenerateResult> {
+  const providerModel = modelOverride || LOCAL_LLM_MODEL;
+  const text = await callLocal(providerModel, opts);
+  return {
+    text,
+    decision: {
+      model: "gemini",
+      provider: "local",
+      providerModel,
+      reason: "Chamada direta ao gateway local (generateViaLocal)",
+    },
+    usedProvider: "local",
+  };
+}
+
 /** Route + execute in one call. Always resolves through an available provider. */
 export async function generate(req: RouteRequest, opts: GenerateOptions): Promise<GenerateResult> {
+  // Switch global: com AI_FORCE_LOCAL=on + URL, tudo passa pelo gateway local
+  // (modelos grátis na Contabo). Falhou (modelo subindo/timeout em CPU)? Cai suave
+  // pro roteamento normal (Gemini) — nunca derruba o chat.
+  if (LOCAL_LLM_FORCE && LOCAL_LLM_ENABLED) {
+    try {
+      const text = await callLocal(LOCAL_LLM_MODEL, opts);
+      return {
+        text,
+        decision: {
+          model: "gemini",
+          provider: "local",
+          providerModel: LOCAL_LLM_MODEL,
+          reason: "AI_FORCE_LOCAL=on → gateway local (LiteLLM/Ollama)",
+        },
+        usedProvider: "local",
+      };
+    } catch (err) {
+      console.warn("[router] gateway local falhou, fallback p/ roteamento normal:", (err as Error).message);
+    }
+  }
+
+  // Switch global de experimento/fallback: com AI_FORCE_OPENROUTER=on + chave,
+  // tudo passa pelo OpenRouter. Falhou (429/rate-limit do free, 5xx)? Cai suave
+  // pro roteamento normal (Gemini) — nunca derruba o chat por causa do free tier.
+  if (OPENROUTER_FORCE && OPENROUTER_ENABLED) {
+    try {
+      const providerModel = OPENROUTER_MODEL;
+      const text = await callOpenRouter(providerModel, opts);
+      return {
+        text,
+        decision: {
+          model: "gemini",
+          provider: "openrouter",
+          providerModel,
+          reason: "AI_FORCE_OPENROUTER=on → OpenRouter",
+        },
+        usedProvider: "openrouter",
+      };
+    } catch (err) {
+      // Fail-soft: segue pro roteamento normal (Gemini) e registra o motivo.
+      console.warn("[router] OpenRouter falhou, fallback p/ roteamento normal:", (err as Error).message);
+    }
+  }
+
   const decision = route(req);
   const text =
     decision.provider === "anthropic"

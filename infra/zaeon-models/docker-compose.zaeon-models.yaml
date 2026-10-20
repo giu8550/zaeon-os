@@ -1,0 +1,172 @@
+# =============================================================================
+# Zaeon — Anexo de MODELOS na Contabo (co-hospedado ao lado do adapter whatsmeow)
+# =============================================================================
+# Projeto Docker ISOLADO (`zaeon-models`): rede/volumes próprios, lifecycle próprio.
+# NUNCA rodar comando docker global nesta box (ex.: `docker stop $(docker ps -q)`,
+# `docker system prune -a`) — isso mataria o adapter da chipflow. Sempre escopar:
+#   docker compose -p zaeon-models -f infra/zaeon-models/docker-compose.zaeon-models.yaml <cmd>
+#
+# CERCAS (protegem a chipflow):
+#   - cpuset "4-17": TODO serviço só roda nos núcleos 4..17. Os núcleos 0..3 ficam
+#     livres pro adapter whatsmeow (e seu 2º nó). A Zaeon FISICAMENTE não toca 0..3.
+#   - mem_limit em tudo: se algo tentar comer RAM demais, o OOM-killer mata um
+#     container DAQUI, nunca o adapter.
+#   - oom_score_adj: 500 em tudo → o kernel PREFERE matar a Zaeon sob pressão.
+#   - Nada publicado na interface pública: só o LiteLLM é exposto, e SÓ no IP
+#     do Tailscale (rede só da Zaeon) via BIND_ADDR. ollama/tei/pgvector ficam só na
+#     rede interna do compose.
+#
+# Núcleos: 18 no total (0..17). Reservados pro adapter: 0..3. Zaeon: 4..17 (14).
+# =============================================================================
+
+name: zaeon-models
+
+x-zaeon-common: &zaeon-common
+  restart: unless-stopped
+  cpuset: "4-17"          # parede física: nunca roda nos núcleos 0..3 (adapter)
+  oom_score_adj: 500      # alvo preferencial do OOM-killer (protege a chipflow)
+  networks: [zaeon_models_net]
+
+services:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Ollama — runtime dos LLMs (OpenAI-compatible em :11434/v1). CPU-only.
+  # ───────────────────────────────────────────────────────────────────────────
+  ollama:
+    <<: *zaeon-common
+    image: ollama/ollama:latest
+    container_name: zaeon_ollama
+    environment:
+      # Teto de modelos carregados AO MESMO TEMPO. Impede estourar a RAM: ao pedir
+      # um 3º/4º grande, o Ollama DESCARREGA o LRU em vez de dar OOM.
+      OLLAMA_MAX_LOADED_MODELS: "3"
+      # Descarrega modelo ocioso depois de 30min (libera RAM sozinho).
+      OLLAMA_KEEP_ALIVE: "30m"
+      # 1 geração pesada por vez (em CPU, paralelismo só deixaria tudo lento).
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_HOST: "0.0.0.0:11434"
+      # Flash attention economiza RAM do KV cache (contexto longo).
+      OLLAMA_FLASH_ATTENTION: "1"
+    volumes:
+      - ollama_models:/root/.ollama     # pesos baixados (persistem entre restarts)
+    # SEM host port: só a rede interna (LiteLLM) alcança. Zero exposição.
+    mem_limit: 42g        # cabe ~2 grandes + residentes leves; acima disso, Ollama evicta
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # TEI (Hugging Face text-embeddings-inference) — EMBEDDINGS do RAG. CPU.
+  #   Qwen3-Embedding-0.6B (~2,4 GB em fp32 no CPU). O 8B em CPU roda em fp32 =
+  #   ~32 GB e não cabe no mem_limit. Qwen3 no TEI exige >= 1.7 (por isso cpu-1.8).
+  #   Baixa o modelo do HF no 1º boot (grátis, público).
+  # ───────────────────────────────────────────────────────────────────────────
+  tei-embed:
+    <<: *zaeon-common
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+    container_name: zaeon_tei_embed
+    # --max-batch-tokens 2048 + --auto-truncate: o backend CPU (candle) NÃO tem flash
+    # attention — a RAM do warmup cresce com o QUADRADO do tamanho do lote. Com o padrão
+    # (16k) o warmup estourou 6g (OOM em loop no 1º deploy). 2048 = ~270 MB de atenção por
+    # camada; textos maiores são truncados em 2048 tokens (chunk de RAG fica em 500–1500).
+    command: ["--model-id", "Qwen/Qwen3-Embedding-0.6B", "--port", "80", "--max-batch-tokens", "2048", "--auto-truncate"]
+    environment:
+      HF_HOME: /data
+    volumes:
+      - tei_cache:/data                 # cacheia o peso do HF
+    mem_limit: 6g
+    # SEM host port: só LiteLLM/rede interna.
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # TEI (reranker) — RERANKER do RAG (cross-encoder). CPU.
+  #   BAAI/bge-reranker-v2-m3 em /rerank.
+  # ───────────────────────────────────────────────────────────────────────────
+  tei-rerank:
+    <<: *zaeon-common
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+    container_name: zaeon_tei_rerank
+    # Mesmo motivo do tei-embed (CPU sem flash attention → warmup quadrático; OOM em
+    # loop com 16k e com 8k). 2048 tokens por par query+trecho.
+    command: ["--model-id", "BAAI/bge-reranker-v2-m3", "--port", "80", "--max-batch-tokens", "2048", "--auto-truncate"]
+    environment:
+      HF_HOME: /data
+    volumes:
+      - tei_rerank_cache:/data
+    mem_limit: 7g         # fica em ~5,1 GB parado depois do warmup (medido); 7g = folga
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Postgres + pgvector — banco de vetores do RAG (dedicado da Zaeon; NÃO é o do
+  # adapter nem o do evogo).
+  # ───────────────────────────────────────────────────────────────────────────
+  pgvector:
+    <<: *zaeon-common
+    image: pgvector/pgvector:pg16
+    container_name: zaeon_pgvector
+    environment:
+      POSTGRES_USER: ${ZAEON_PG_USER:-zaeon}
+      POSTGRES_PASSWORD: ${ZAEON_PG_PASSWORD:?defina ZAEON_PG_PASSWORD no .env}
+      POSTGRES_DB: ${ZAEON_PG_DB:-zaeon_rag}
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+      # 1º boot: CREATE EXTENSION vector + CREATE DATABASE litellm.
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    mem_limit: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ZAEON_PG_USER:-zaeon} -d ${ZAEON_PG_DB:-zaeon_rag}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # LiteLLM — O GATEWAY. Única porta exposta, e SÓ no IP privado (BIND_ADDR).
+  #   É "o provedor" que as interfaces/CLIs enxergam: 1 URL OpenAI-compatible +
+  #   chave. Roteia por nome de modelo pro Ollama (LLMs) e TEI (embeddings).
+  # ───────────────────────────────────────────────────────────────────────────
+  litellm:
+    <<: *zaeon-common
+    # Mesma tag fixada do gateway da VPS. Nunca "main-stable" (quebrou
+    # /key/generate em 2026-10-07).
+    image: ghcr.io/berriai/litellm:${LITELLM_IMAGE_TAG:-v1.103.4}
+    container_name: zaeon_litellm
+    depends_on:
+      # tei-embed NÃO entra aqui: o LiteLLM sobe sem ele, e o passo 2 do runbook
+      # (infra sem modelos) não pode disparar o download do HF.
+      ollama: { condition: service_started }
+      pgvector: { condition: service_healthy }
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?defina LITELLM_MASTER_KEY no .env}
+      # Cifra as virtual keys no banco. Gerar 1x; trocar = perder as keys.
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?defina LITELLM_SALT_KEY no .env}
+      # Opcional: aponta pro pgvector pra ter VIRTUAL KEYS + budget por interface.
+      # Sem isso, funciona só com a master key (MVP).
+      # DB SEPARADA (litellm) no mesmo Postgres: o prisma do LiteLLM cria ~30 tabelas
+      # e não deve se misturar com o RAG. Criada no 1º boot por initdb/01-zaeon.sql.
+      DATABASE_URL: postgresql://${ZAEON_PG_USER:-zaeon}:${ZAEON_PG_PASSWORD}@pgvector:5432/litellm
+    volumes:
+      - ./litellm-config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    ports:
+      # ⚠️ BIND_ADDR = o IP do TAILSCALE desta box (100.x). NUNCA 0.0.0.0, e NUNCA
+      # o 10.99.0.2 — esse é o WireGuard da chipflow; a Zaeon não entra nessa rede.
+      - "${BIND_ADDR:-127.0.0.1}:4000:4000"
+    mem_limit: 1g
+    healthcheck:
+      # a imagem do LiteLLM NÃO tem wget/curl — usa o python dela
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  zaeon_models_net:
+    name: zaeon_models_net
+    driver: bridge
+
+volumes:
+  ollama_models:
+  tei_cache:
+  tei_rerank_cache:
+  pgvector_data:
