@@ -31,7 +31,7 @@ Referencial: quem chega pelo buraco negro aparece **na frente do salão central,
 ### Decisões minhas (o dono pode trocar)
 
 - **Quiz de múltipla escolha**, corrigido no servidor.
-- **Barreira de verdade:** o topo do braço esquerdo (a capela e o que fica acima) fica dentro de uma cúpula. Quem ainda não passou e tenta entrar, a pé ou voando, é empurrado de volta pro pé da escadaria. O servidor confere quem passou.
+- **O bloqueio é a própria cúpula (decisão do dono):** a capela no topo do braço esquerdo fica dentro de uma cúpula **fechada e sólida**, sem nenhuma outra entrada nem portal pra outro nível. Não tem mecanismo de empurrar. A única passagem é a porta que a Examiner abre pra quem venceu o duelo. Quem já passou encontra a porta aberta (o servidor diz quem passou).
 - **Motos:** saem só do lounge. Continuam no nível próprio da garagem, e a recompensa do Relicário segue igual.
 
 - **Nota pra passar:** acertar **6 de 7**.
