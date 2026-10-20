@@ -339,7 +339,7 @@ const comDescendentes = (objs: (THREE.Object3D | null | undefined)[]) => { const
 const cil = (c: { x: number; z: number }, r: number, y: number, abaixo: number, acima: number) => () => ({ x: c.x, z: c.z, r, y0: y - abaixo, y1: y + acima });
 /** até onde vai o TEMPLO (lib/cyber/templo), medido do centro da ilha */
 function raioDoTemplo() { const L = CIDADE.salas.lounge, t = daSala(L, TEMPLO.x, TEMPLO.z); return Math.hypot(t.x, t.z) + TEMPLO.r; }
-const AREA_ZAEON = cil(CIDADE.centro, Math.max(CIDADE.bordaR + 90, -CIDADE.salas.lounge.x + CIDADE.salas.lounge.r + 10, raioDoTemplo() + 10), CIDADE.pisoY, CIDADE.ilhaAltura + 60, 220);   // + ilhotas, a escada e o lounge
+const AREA_ZAEON = cil(CIDADE.centro, Math.max(CIDADE.bordaR + 90, -CIDADE.salas.lounge.x + CIDADE.salas.lounge.r + 10, raioDoTemplo() + 10, NIVEIS_SEPARADOS ? FIO_COSMICO.alcance + FIO_COSMICO.espiralR + 60 : 0), CIDADE.pisoY, CIDADE.ilhaAltura + 60, 220);   // (+ as pistas cósmicas até os cantos: o fluxo e as tempestades seguem animando lá longe)   // + ilhotas, a escada e o lounge
 const AREA_UNILAB = cil(UNIVERSIDADE.centro, UNIVERSIDADE.discoR, UNIVERSIDADE.y, 100, 80);
 const AREA_SOLANA = cil(PLATAFORMAS.solana.centro, PLATAFORMAS.solana.r + 10, PLATAFORMAS.solana.y, 40, 40);
 /** as FONTES de água (lib/cyber/agua): o espelho d'água do jardim e o coração da capela (o globo das veias azuis) */
@@ -4283,6 +4283,7 @@ export class CyberEngine {
     }
 
     // cidade + a minha nave (parada onde pousou, ou comigo dentro)
+    this.cidade?.jogadorEm({ x: this.eu.pos.x, y: this.eu.alt, z: this.eu.pos.z });   // (as pistas: a tempestade do buraco negro sente quem chega)
     if (this.cidade && this.regiaoPerto(this.cidade.group, "zaeon", AREA_ZAEON)) {
       // quem está na Zaeon (local da ilha): os motores de energia do Observatório da Terra reagem a eles
       const c = CIDADE.centro, pres: { x: number; z: number }[] = [];

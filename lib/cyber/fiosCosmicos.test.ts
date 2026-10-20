@@ -1,35 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { CIDADE, ESCADAS, colisoresDaCidade, mundo } from "./ceu";
-import { FIO, fioNaBoca, fiosCosmicos, pontoDoFio } from "./fiosCosmicos";
+import { CIDADE, colisoresDaCidade, mundo } from "./ceu";
+import { VOO } from "./voo";
+import { FIO, fioNaBoca, fiosCosmicos, pertoDoBuraco, pontoDoFio, uDaViagemFio } from "./fiosCosmicos";
 
-describe("o tecido cósmico (os fios-neurônio)", () => {
+describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", () => {
   const fios = fiosCosmicos();
-  it("um fio por sala, saindo da borda da Zaeon na direção dela, bem mais longo que a escada", () => {
+  it("uma pista por sala, saindo pelo vão da muralha da sala e indo pra um CANTO diferente, longe da cidadela", () => {
     expect(fios.map((f) => f.sala)).toEqual(["lounge", "garagem", "biblioteca", "jardim"]);
+    const cantos = new Set<number>();
     for (const f of fios) {
       const L = CIDADE.salas[f.sala], a = Math.atan2(L.z, L.x), b = Math.atan2(f.boca.z, f.boca.x);
       expect(Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))).toBeLessThan(0.02);
-      expect(Math.hypot(f.boca.x, f.boca.z)).toBeLessThan(CIDADE.andavelR);   // a boca fica no piso andável
-      expect(f.comprimento).toBeGreaterThan(ESCADAS[f.sala].len * 3);
-      expect(f.bn.r).toBe(FIO.bnR);
-      expect(f.ramos.length).toBe(FIO.dendritos * 3);
+      expect(Math.hypot(f.bn.x, f.bn.z)).toBeGreaterThan(700);   // bem longe da cidadela
+      const w = mundo(f.bn); expect(Math.hypot(w.x, w.z) + FIO.espiralR).toBeLessThan(VOO.raioMapa);   // dentro do mapa
+      cantos.add(Math.round(Math.atan2(f.bn.z, f.bn.x) * 10));
     }
+    expect(cantos.size).toBe(4);
   });
-  it("a prancha: começa na boca, termina na ponta (perto do buraco negro), subindo", () => {
+  it("longa e sinuosa: bem mais longa que a reta até o buraco negro, e termina em ESPIRAL caindo no horizonte", () => {
     for (const f of fios) {
-      const a = pontoDoFio(f, 0), b = pontoDoFio(f, 1);
-      expect(Math.hypot(a.x - f.boca.x, a.z - f.boca.z)).toBeLessThan(0.5);
-      expect(b.y).toBeGreaterThan(FIO.subida * 0.7);
-      expect(Math.hypot(b.x - f.bn.x, b.y - f.bn.y, b.z - f.bn.z)).toBeLessThan(FIO.bnR * 2);
+      const reta = Math.hypot(f.bn.x - f.boca.x, f.bn.z - f.boca.z);
+      expect(f.comprimento).toBeGreaterThan(reta * 1.4);
+      const fim = pontoDoFio(f, 1); expect(Math.hypot(fim.x - f.bn.x, fim.y - f.bn.y, fim.z - f.bn.z)).toBeLessThan(f.bn.r * 1.2);
+      // a espiral: perto do fim, a pista dá a volta no buraco negro (o ângulo em volta dele anda mais de uma volta)
+      let giro = 0, ant: number | null = null;
+      for (let u = 0.8; u <= 1; u += 0.002) { const p = pontoDoFio(f, u), a = Math.atan2(p.z - f.bn.z, p.x - f.bn.x); if (ant !== null) giro += Math.atan2(Math.sin(a - ant), Math.cos(a - ant)); ant = a; }
+      expect(Math.abs(giro)).toBeGreaterThan(Math.PI * 1.5);
     }
   });
-  it("a boca: pisar dentro dela (no piso) pega o fio; voando por cima, não; e não está dentro de nenhum colisor", () => {
+  it("a viagem pelo fluxo: começa na boca, vai sempre pra frente e acaba no buraco negro; o efeito cresce chegando", () => {
+    let ant = -1; for (let k = 0; k <= 1; k += 0.01) { const u = uDaViagemFio(k); expect(u).toBeGreaterThanOrEqual(ant); ant = u; }
+    expect(uDaViagemFio(0)).toBe(0); expect(uDaViagemFio(1)).toBeCloseTo(1, 6);
+    const f = fios[0]!; expect(pertoDoBuraco(f, pontoDoFio(f, 0))).toBe(0); expect(pertoDoBuraco(f, pontoDoFio(f, 1))).toBeGreaterThan(0.9);
+  });
+  it("a boca: pisar dentro (no piso) pega a pista; voando por cima, não; fora de qualquer colisor", () => {
     const col = colisoresDaCidade();
     for (const f of fios) {
-      expect(fioNaBoca(f.boca, 0)?.sala).toBe(f.sala);
-      expect(fioNaBoca(f.boca, 5)).toBeNull();
-      const w = mundo(f.boca);
-      expect(col.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.5)).toBe(true);
+      expect(fioNaBoca(f.boca, 0)?.sala).toBe(f.sala); expect(fioNaBoca(f.boca, 5)).toBeNull();
+      const w = mundo(f.boca); expect(col.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.5)).toBe(true);
     }
   });
 });
