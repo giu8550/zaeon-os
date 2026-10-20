@@ -20,6 +20,7 @@ import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/real
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
 import { pedidoDeChore } from "@/lib/chore/triagem";
 import { quemFoiDispensada, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "@/lib/canal/dispensa";
+import { atualizarAgentes, type DbAtomico } from "@/lib/canal/atomico";
 import { choresLigadas, criarDoPedido } from "@/lib/chore/criar";
 
 export const MAX_TEXTO = 4000;
@@ -70,9 +71,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "humano", autorId: u.id, texto, mencoes } });
   // agente convocado passa a "estar" no canal (aparece na barra pra todo mundo); #440: a dispensada SAI da barra
-  const agentesNoCanal = agentesDepois(canal.agentes, alvos, dispensadas);
-  const mudou = agentesNoCanal.length !== canal.agentes.length || agentesNoCanal.some((k, i) => k !== canal.agentes[i]);
-  await prisma.canal.update({ where: { id: canal.id }, data: mudou ? { agentes: agentesNoCanal, updatedAt: new Date() } : { updatedAt: new Date() } }).catch(() => undefined);
+  // #443: grava SEM apagar o que outra mensagem gravou ao mesmo tempo (lib/canal/atomico)
+  const agentesNoCanal = (await atualizarAgentes(prisma as unknown as DbAtomico, canal.id, alvos, dispensadas).catch(() => null))
+    ?? agentesDepois(canal.agentes, alvos, dispensadas);
+  await prisma.canal.updateMany({ where: { id: canal.id }, data: { updatedAt: new Date() } }).catch(() => undefined);
 
   const wire: MensagemWire = {
     id: row.id, canalId: row.canalId, autorTipo: "humano", autorId: u.id, texto, mencoes,

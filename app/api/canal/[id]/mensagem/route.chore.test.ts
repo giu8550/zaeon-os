@@ -7,7 +7,7 @@ vi.mock("@/lib/canal/server", async () => {
   const { fakeDb } = await import("@/lib/chore/fakeDb");
   const db: any = fakeDb();
   const canal = { id: CANAL, ownerId: A, titulo: "t", acesso: "privado", membros: [], agentes: ["aura"] };
-  db.canal = { findUnique: async () => canal, update: async () => canal };
+  db.canal = { findUnique: async () => canal, update: async () => canal, updateMany: async (a: any) => (await import("@/lib/canal/fakeCanalDb")).updateManyCanais([canal], a) };
   // #440: a rota lê o histórico sempre (com @ também) — pra saber se a agente chamada tinha saído
   db.canalMensagem = {
     create: async ({ data }: any) => { const r = { id: "f".repeat(24), createdAt: new Date(), ...data }; state.criadas.push(r); return r; },
