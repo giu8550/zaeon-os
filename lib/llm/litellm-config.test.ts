@@ -81,11 +81,18 @@ describe("infra/litellm.config.yaml — pool grátis", () => {
     for (const d of pool) expect(d.linhas.join("\n"), d.nome).toMatch(new RegExp(`model_info:\\s*\\{\\s*id:\\s*${esperado[d.nome]}\\s*\\}`));
   });
 
-  it("fallbacks do pool não citam zaeon-flash/zaeon-pro (§5.10)", () => {
+  it("fallback do pool = só a reserva Google; nunca zaeon-flash/zaeon-pro (o orçamento do chat)", () => {
     const linha = ativas.find((l) => /^\s*fallbacks:/.test(l));
     expect(linha).toBeTruthy();
-    expect(linha).toContain("zaeon-pool-lite");
     expect(linha).not.toMatch(/zaeon-flash|zaeon-pro/);
-    expect(linha).toMatch(/"zaeon-pool-lite":\s*\["zaeon-pool-cf",\s*"zaeon-pool-groq"\]/);
+    expect(linha).toMatch(/"zaeon-pool-lite":\s*\["zaeon-reserva-google"\]/);
+  });
+
+  it("reserva Google = Vertex flash-lite (o mais barato), com alvo vertex pro ledger contar o custo", () => {
+    const d = deps.find((x) => x.nome === "zaeon-reserva-google");
+    expect(d).toBeTruthy();
+    const corpo = d!.linhas.join("\n");
+    expect(corpo).toMatch(/model:\s*vertex_ai\/gemini-[\d.]+-flash-lite\s/);
+    expect(corpo).toMatch(/id:\s*vertex\b/);
   });
 });
