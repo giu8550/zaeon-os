@@ -16,7 +16,9 @@ import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, typ
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { alternarModoCamera, distPerto, faixaDaDistancia, limitarPitch, olhoDoOmbro, poseDaCamera, seguirPerto, type ModoCamera } from "@/lib/cyber/camera";
 import { PISTA, rotDaSala, espelhoDe, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
-import { DECK, TEMPLO, noTemplo } from "@/lib/cyber/templo";
+import { DECK, TEMPLO, curvaDaEscadaria, noTemplo } from "@/lib/cyber/templo";
+import { ALCANCE_DUELO, CUPULA, barradoNaCupula } from "@/lib/cyber/temploCosmico";
+import { ESPERA_S, FALA_DESAFIO } from "@/lib/cyber/dueloIngles";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
 import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
 import { criarTempestade, type TempestadeHandle } from "./Tempestade";
@@ -200,6 +202,11 @@ export type CyberOpts = {
   onTutorialCompleto?: () => void;
   /** as MOTOS já estão liberadas pra esta pessoa (o servidor diz — User.cyberPerfil) */
   motosLiberadas?: boolean;
+  /** já VENCEU o duelo de linguagem da Examiner (a porta da cúpula do Templo Cósmico abre — User.cyberPerfil) */
+  examinerLiberado?: boolean;
+  /** o DUELO de linguagem (lib/cyber/dueloIngles): depois da cutscene, o React abre o quiz (true) — e devolve o
+   *  resultado em `resultadoDuelo` */
+  onDuelo?: (abrir: boolean) => void;
   /** o RELICÁRIO DO SABER (lib/cyber/relicario): F/clique nele abre o INVENTÁRIO no modo de ENCAIXE (▶ nos itens que
    *  cabem); o React manda o item pro servidor e devolve o veredito em `entregarNoRelicario` */
   onRelicario?: (abrir: boolean) => void;
@@ -503,6 +510,10 @@ export class CyberEngine {
   private falaZ: { texto: string; ultima: boolean; espera: number; limite: number; buf: AudioBuffer | null | undefined; depois?: () => void; semChat?: boolean } | null = null;
   /** a ROTINA da Examiner (o altar do lounge e a pista) e o turno das falas da Zaeon na capela */
   private rotinaExaminer = new RotinaExaminer();
+  /** o Templo Cósmico: a Examiner guarda a cúpula; quem venceu o duelo passa (lib/cyber/dueloIngles) */
+  private examinerLiberado = false; private cupulaFeita: boolean | null = null;
+  private duelo: { fase: "cena" | "quiz"; t: number } | null = null; private dueloEspera = 0;
+  private olhosVermelhos: THREE.Object3D[] = []; private falaDueloAte = 0;
   private capelaZ: { proxima: number; recentes: string[]; prox: string | null } = { proxima: 0, recentes: [], prox: null };
   /** a fala que está no balão agora (uma voz que chega ATRASADA só toca se ainda for ela) */
   private falaAtual: NonNullable<CyberEngine["falaZ"]> | null = null;
@@ -756,6 +767,7 @@ export class CyberEngine {
 
   private constructor(opts: CyberOpts, gltf: GLTF | null) {
     this.o = opts; this.menu = opts.menu; this.gltf = gltf;
+    this.examinerLiberado = !!opts.examinerLiberado; this.rotinaExaminer.guardia = NIVEIS_SEPARADOS;
     this.motosLiberadas = !!opts.motosLiberadas; this.droidNoSaber = !opts.nascer;   // quem já fez o tutorial: o Droid espera na Sala do Saber
     this.solidosCidade = solidosDaCidade(!!opts.eu.fundador);
     const { container, low } = opts;
@@ -1166,6 +1178,76 @@ export class CyberEngine {
       const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = p.nome; this.o.overlay.appendChild(tag);
       this.personagens.push({ h, tag });
     }
+  }
+  // ───────────── o DUELO DE LINGUAGEM da Examiner (o Templo Cósmico — lib/cyber/dueloIngles) ─────────────
+  private examiner() { return this.personagens.find((p) => p.h.id === "examiner")?.h ?? null; }
+  /** a cúpula, a guardiã e o duelo — a cada quadro */
+  private atualizarDuelo(dt: number) {
+    if (!NIVEIS_SEPARADOS || !this.cidade) return;
+    if (this.cupulaFeita !== this.examinerLiberado) { this.cidade.cupulaAberta(this.examinerLiberado); this.cupulaFeita = this.examinerLiberado; }
+    if (this.falaDueloAte && performance.now() > this.falaDueloAte) { this.falaDueloAte = 0; this.o.onDialogo?.(null); }
+    if (this.nivel !== "lounge") { if (this.duelo) this.cancelarDuelo(); return; }
+    const L = CIDADE.salas.lounge, c = CIDADE.centro, eu = this.eu, ilhaY = this.cidade.ilha.position.y;
+    // a CÚPULA: quem ainda não venceu e entrou (pela porta ou voando por cima) volta pro pé da porta
+    if (!this.examinerLiberado && !this.moto && !this.noCarro() && eu.alt < ilhaY + ALTURA_LOUNGE + TEMPLO.h + CUPULA.alt) {
+      const fora = barradoNaCupula(naSala(L, eu.pos.x - c.x, eu.pos.z - c.z), false);
+      if (fora) { const w = mundo(daSala(L, fora.x, fora.z)); eu.pos.set(w.x, 0, w.z); eu.alt = ilhaY + alturaNaCidade(w); this.jet.noAr = false; this.jet.vy = 0; this.alvo = null; this.alvoDepois = null; }
+    }
+    const ex = this.examiner(); if (!ex) return;
+    for (const o of this.olhosVermelhos) o.scale.setScalar((o.userData.base as number) * (0.85 + 0.3 * Math.random()));   // (o brilho tremendo)
+    if (!this.duelo) {
+      if (this.examinerLiberado || Date.now() < this.dueloEspera || this.guia || this.menu || this.moto || this.noCarro()) return;
+      if (Math.hypot(eu.pos.x - ex.pos.x, eu.pos.z - ex.pos.z) < ALCANCE_DUELO && Math.abs(eu.alt - ex.alt) < 8) this.abrirDuelo();
+      return;
+    }
+    this.duelo.t += dt;
+    if (!this.olhosVermelhos.length) this.acenderOlhos(true);   // (o corpo dela ainda carregava quando o duelo abriu)
+    if (this.duelo.fase === "cena" && this.duelo.t > 4.6) { this.duelo.fase = "quiz"; this.o.onDialogo?.(null); this.soltarMouse(); this.o.onDuelo?.(true); }
+  }
+  private abrirDuelo() {
+    this.duelo = { fase: "cena", t: 0 }; this.alvo = null; this.alvoDepois = null; this.keys = {}; this.joy = { x: 0, y: 0, on: false }; this.jet.noAr = false;
+    this.acenderOlhos(true);
+    this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.perto });
+    this.o.onDialogo?.({ quem: "examiner", nome: "Examiner", cor: "#ff3344", texto: FALA_DESAFIO, instrucao: false, alerta: true });
+    if (!this.o.onDuelo) this.resultadoDuelo(false);   // (sem o React do quiz: não trava ninguém)
+  }
+  /** os OLHOS vermelhos: um brilho em cada olho do VRM dela (por cima de tudo, tremendo) */
+  private acenderOlhos(on: boolean) {
+    for (const o of this.olhosVermelhos) { o.removeFromParent(); ((o as THREE.Sprite).material as THREE.Material).dispose(); }
+    this.olhosVermelhos = [];
+    if (!on) return;
+    const ossos = this.examiner()?.olhos(); if (!ossos) return;
+    for (const b of ossos) for (const [esc, op] of [[0.07, 1], [0.32, 0.45]] as const) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.cena.starTex, color: 0xff1a2a, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }));
+      sp.renderOrder = 30; sp.userData.base = esc * (ossos.length === 1 ? 2 : 1); sp.scale.setScalar(sp.userData.base as number); b.add(sp); this.olhosVermelhos.push(sp);
+    }
+  }
+  /** o React devolve o veredito do duelo (depois da tela do resultado): venceu = a porta abre pra sempre; perdeu = volta
+   *  pra escada e espera `ESPERA_S` */
+  resultadoDuelo(passou: boolean) {
+    if (!this.duelo && !passou) return;
+    this.duelo = null; this.acenderOlhos(false); this.o.onDuelo?.(false);
+    if (passou) {
+      this.examinerLiberado = true;
+      this.o.onDialogo?.({ quem: "examiner", nome: "Examiner", cor: "#ff3344", texto: "Então você fala a língua do outro lado. A porta está aberta — e o que vem acima também.", instrucao: false });
+    } else {
+      this.dueloEspera = Date.now() + ESPERA_S * 1000; this.descerDaPorta();
+      this.o.onDialogo?.({ quem: "examiner", nome: "Examiner", cor: "#ff3344", texto: "Ainda não. Volte quando a barreira tiver caído.", instrucao: false, alerta: true });
+    }
+    this.falaDueloAte = performance.now() + 5200;
+  }
+  /** fechou o quiz no meio: não conta como derrota, mas desce um pouco (pra não abrir de novo na hora) */
+  cancelarDuelo() {
+    if (!this.duelo) return;
+    this.duelo = null; this.acenderOlhos(false); this.o.onDuelo?.(false); this.o.onDialogo?.(null);
+    this.dueloEspera = Date.now() + 8000; this.descerDaPorta();
+  }
+  /** põe quem perdeu no meio da escadaria-veia (descendo) */
+  private descerDaPorta() {
+    if (!this.cidade) return;
+    const { pts } = curvaDaEscadaria(), p = pts[Math.floor(pts.length * 0.55)]!, L = CIDADE.salas.lounge, w = mundo(daSala(L, p.x, p.z));
+    this.eu.pos.set(w.x, 0, w.z); this.eu.alt = this.cidade.ilha.position.y + alturaNaCidade(w); this.jet.noAr = false; this.alvo = null; this.alvoDepois = null;
+    this.eu.facing = Math.atan2(daSala(L, pts[0]!.x, pts[0]!.z).x - daSala(L, p.x, p.z).x, daSala(L, pts[0]!.x, pts[0]!.z).z - daSala(L, p.x, p.z).z);
   }
   /** prepara um corpo VRM ANTES de entrar na cena: os shaders compilam em paralelo (sem travar o quadro) e as texturas
    *  sobem uma por quadro (a de 2048² sozinha levava dezenas de ms) — senão tudo isso caía no 1º quadro em que ele aparece */
@@ -3712,6 +3794,10 @@ export class CyberEngine {
    *  (enquadra o rosto dela por trás de quem ouve), a apresentação e a missão do Droid (ele em destaque) e os telões
    *  PROBLEMA → SOLUÇÃO (um telão por fala). Fora da cena inteira, a câmera solta na INSTRUÇÃO (a última fala) */
   private planoDaCena(): Plano | null {
+    if (this.duelo) {   // o DUELO: a câmera colada no rosto da Examiner (os olhos acendendo)
+      const ex = this.examiner();
+      if (ex) return planoConversa({ x: ex.pos.x, y: ex.alt + 1.48, z: ex.pos.z }, { x: this.eu.pos.x, y: this.eu.alt + 1.6, z: this.eu.pos.z }, { lado: 0.28, pitch: 0.02, recuo: this.duelo.fase === "cena" ? Math.max(0.7, 2.6 - this.duelo.t * 0.5) : 0.7 });
+    }
     const g = this.guia; if (!g || this.menu || this.expulsando) return null;
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
     const eu = { x: this.eu.pos.x, y: this.eu.alt + 1.6, z: this.eu.pos.z };
@@ -4002,7 +4088,7 @@ export class CyberEngine {
     if (!this.visivel || document.hidden) return;
     atualizarCamuflagem(t);   // o relógio único de todos os hologramas do mapa
     const eu = this.eu, euId = this.o.eu.id; this.tAnt = this.agora; this.agora = t;
-    if (!this.menu) { this.atualizarNivel(); this.atualizarFluxo(dt); }   // (os NÍVEIS separados: só o meu existe — lib/cyber/niveis; e o FLUXO das pistas cósmicas)
+    if (!this.menu) { this.atualizarNivel(); this.atualizarFluxo(dt); this.atualizarDuelo(dt); }   // (os NÍVEIS separados: só o meu existe — lib/cyber/niveis; e o FLUXO das pistas cósmicas)
 
     // MENU: segurar ESPAÇO p/ viajar; personagem fica sentado contemplando
     if (this.menu) {

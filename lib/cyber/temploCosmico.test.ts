@@ -4,8 +4,9 @@ import { NOS } from "./buracos";
 import { FIO, saidaDaSala } from "./fiosCosmicos";
 import { definirNivel } from "./nivelAtivo";
 import { nivelDoPonto } from "./niveis";
-import { ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
-import { ESCADARIA, TEMPLO, curvaDaEscadaria } from "./templo";
+import { ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
+import { ESCADARIA, TEMPLO, curvaDaEscadaria, noTemplo } from "./templo";
+import { RotinaExaminer, lugarDeGuarda } from "./examiner";
 
 const L = CIDADE.salas.lounge;
 const W = (x: number, z: number) => mundo(daSala(L, x, z));
@@ -98,5 +99,19 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
     const n = W(CYBER.x, CYBER.z + NUCLEO_CYBER.r); expect(cs.some((c) => Math.hypot(c.x - n.x, c.z - n.z) <= c.r)).toBe(true);
     const nc = W(CYBER.x, CYBER.z); expect(solidosDaCidade().some((o) => Math.hypot(o.x - nc.x, o.z - nc.z) < 1 && o.topo > CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h + 20)).toBe(true);
     expect(nivelDoPonto(W(CYBER.x, CYBER.z + 20), CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h)).toBe("lounge");
+  });
+
+  it("a GUARDIÃ: a Examiner monta guarda na escadaria-veia, na frente da porta da cúpula, virada pra quem sobe; a cúpula barra quem não venceu", () => {
+    const g = lugarDeGuarda(), q = naSala(L, g.x, g.z), porta = portaDaCupula();
+    expect(noTemplo(q, 0)).toBe(false); expect(Math.hypot(q.x - porta.x, q.z - porta.z)).toBeLessThan(ALCANCE_DUELO);
+    expect(alturaNaCidade(mundo(g))).toBeGreaterThan(ALTURA_LOUNGE + TEMPLO.h - 4);   // lá no alto da escadaria
+    const f = { x: Math.sin(g.rumo), z: Math.cos(g.rumo) }, pd = daSala(L, porta.x, porta.z);
+    expect((pd.x - g.x) * f.x + (pd.z - g.z) * f.z).toBeLessThan(0);   // de COSTAS pra porta (de frente pra escada)
+    const r = new RotinaExaminer(() => 0.5); r.guardia = true; r.passo(10, true, true);
+    expect(r.estado().pos).toEqual({ x: g.x, z: g.z }); expect(r.estado().andando).toBe(false);
+    // a cúpula: dentro do templo sem ter vencido → de volta pra fora da porta; com a vitória (ou fora dele), nada
+    const fora = barradoNaCupula({ x: TEMPLO.x, z: TEMPLO.z }, false)!; expect(noTemplo(fora, 0)).toBe(false);
+    expect(barradoNaCupula({ x: TEMPLO.x, z: TEMPLO.z }, true)).toBeNull(); expect(barradoNaCupula({ x: 0, z: 0 }, false)).toBeNull();
+    expect(colisoresDaCidade().every((c) => Math.hypot(c.x - mundo(daSala(L, fora.x, fora.z)).x, c.z - mundo(daSala(L, fora.x, fora.z)).z) > c.r + 0.3)).toBe(true);
   });
 });

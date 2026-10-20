@@ -22,6 +22,7 @@ import { CHAVE_ONBOARDING, CHAVE_PROGRESSO, decidirTutorial, lerProgresso, type 
 import TunelBuracoNegro, { type ModoTunel } from "./TunelBuracoNegro";
 import RespostaZaeon from "./RespostaZaeon";
 import CaixaDialogo from "./CaixaDialogo";
+import { DueloIngles, type DueloApi } from "./DueloIngles";
 import type { EventoRelicario, ItemEncaixe } from "@/lib/cyber/relicario";
 import type { Dialogo } from "@/lib/cyber/dialogo";
 import type { PesquisaSalva } from "@/lib/ui/loungeHub";
@@ -61,6 +62,9 @@ export type CenaCyberProps = {
   novoNoCyber?: boolean;
   /** as MOTOS liberadas (o servidor diz — a entrega ao Droid aceita + o tutorial delas; o dono sempre) */
   motosLiberadas?: boolean;
+  /** já venceu o DUELO de linguagem da Examiner (a cúpula do Templo Cósmico abre) e a API do duelo (sem ela, não há quiz) */
+  examinerLiberado?: boolean;
+  dueloIngles?: DueloApi;
   marcarNascimento?: () => void;
   /** o que a pessoa contou pra Zaeon na capela (o servidor guarda em User.cyberPerfil — a memória dos agentes) */
   salvarPerfil?: (p: PerfilZaeon) => void;
@@ -166,6 +170,7 @@ export default function CenaCyber(p: CenaCyberProps) {
   const nascerNa: "praca" | "tubo" = nascer ? "tubo" : "praca";
   /** o banner de TUTORIAL COMPLETO (as salas abrem) */
   const [completo, setCompleto] = useState(false);
+  const [duelo, setDuelo] = useState(false);
   /** o ENCAIXE no Relicário do Saber (lib/cyber/relicario): o inventário no modo de entrega (▶ nos itens que cabem),
    *  o item indo pro servidor (o id) e o erro do POST */
   const [encaixeAtivo, setEncaixeAtivo] = useState(false), [encaixeEnviando, setEncaixeEnviando] = useState<string | null>(null), [encaixeErro, setEncaixeErro] = useState<string | null>(null);
@@ -277,7 +282,8 @@ export default function CenaCyber(p: CenaCyberProps) {
       onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
       onTunelDireto: (d) => { engine.current?.soltarMouse(); setTunel({ tipo: "direto", para: d.para, nome: d.nome }); },   // (os níveis: o fio cósmico / o buraco negro da sala — sem menu)
       onAviso: avisar,
-      nascer, nascerNa, retomar, motosLiberadas: !!p.motosLiberadas,
+      nascer, nascerNa, retomar, motosLiberadas: !!p.motosLiberadas, examinerLiberado: !!p.examinerLiberado,
+      onDuelo: p.dueloIngles ? (abrir) => { if (abrir && document.pointerLockElement) document.exitPointerLock(); setDuelo(abrir); } : undefined,
       onNasceu: () => { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } },   // o novato chegou na Zaeon pelo portal
       onGuia: (g) => { setGuia(g); if (!g) { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } } },   // o tutorial acabou (ou foi pulado): da próxima vez nasce na base
       onInstancia: setInstancia,
@@ -531,6 +537,8 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* o TUTORIAL do Droid: a CAIXA DE DIÁLOGO (RPG) com a fala/instrução de agora; em cima, o OBJETIVO (o "quest
           log": o passo e o "Pular") */}
       {!menu && dialogo && <CaixaDialogo d={dialogo} touch={touch} />}
+      {/* o DUELO de linguagem da Examiner (o Templo Cósmico): o quiz e o veredito */}
+      {duelo && p.dueloIngles && <DueloIngles api={p.dueloIngles} onFim={(passou) => { setDuelo(false); engine.current?.resultadoDuelo(passou); }} onCancelar={() => { setDuelo(false); engine.current?.cancelarDuelo(); }} />}
       {/* TUTORIAL COMPLETO: como o fim de uma quest — e as salas (Estudar, F, o tablet) abrem */}
       {completo && (
         <div role="status" className="pointer-events-none absolute left-1/2 top-[22%] z-[30] -translate-x-1/2 text-center motion-safe:animate-[pulse_2.8s_ease-in-out_infinite]">

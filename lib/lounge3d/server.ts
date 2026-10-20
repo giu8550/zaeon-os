@@ -27,13 +27,13 @@ export function exigirFlag(): NextResponse | null {
  * `fundador` = dono da Zaeon (isSuperAdmin: allowlist + User.role); `novo` = NUNCA entrou no cyberespaço
  * (User.cyberNasceuEm vazio → nasce num tubo de ensaio) — decididos AQUI, no servidor; o cliente só pinta.
  */
-export type Eu = { id: string; name: string; image: string | null; color: string; fundador: boolean; novo: boolean; /** as MOTOS liberadas (a entrega ao Droid aceita + o tutorial delas — User.cyberPerfil.motosLiberadasEm; o dono sempre) */ motos?: boolean; /** o corpo próprio (lib/lounge3d/corposDeUsuario) */ corpo?: string; /** pilota a nave-QG (o dono ou a tripulação) */ nave?: boolean; /** o PERSONAGEM escolhido (gênero + cor — lib/cyber/personagem); null = ainda não escolheu */ personagem?: Personagem | null };
+export type Eu = { id: string; name: string; image: string | null; color: string; fundador: boolean; novo: boolean; /** as MOTOS liberadas (a entrega ao Droid aceita + o tutorial delas — User.cyberPerfil.motosLiberadasEm; o dono sempre) */ motos?: boolean; /** o corpo próprio (lib/lounge3d/corposDeUsuario) */ corpo?: string; /** pilota a nave-QG (o dono ou a tripulação) */ nave?: boolean; /** o PERSONAGEM escolhido (gênero + cor — lib/cyber/personagem); null = ainda não escolheu */ personagem?: Personagem | null; /** venceu o DUELO de linguagem da Examiner (a cúpula do Templo Cósmico abre — User.cyberPerfil.examinerInglesEm) */ examiner?: boolean };
 export async function eu(): Promise<Eu | null> {
   const s = await getServerSession(authOptions).catch(() => null);
   const email = s?.user?.email;
   if (!email) return null;
   const u = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, image: true, role: true, cyberNasceuEm: true, cyberPerfil: true } });
-  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: lerPersonagem(u.cyberPerfil)?.cor ?? corDoUsuario(u.id), fundador: isSuperAdmin({ email, role: u.role }), novo: !u.cyberNasceuEm, motos: pilotaANave(email) || !!(u.cyberPerfil as { motosLiberadasEm?: unknown } | null)?.motosLiberadasEm, corpo: corpoDoUsuario(u.id), nave: pilotaANave(email), personagem: lerPersonagem(u.cyberPerfil) } : null;
+  return u ? { id: u.id, name: (u.name || email.split("@")[0] || "Alguém").slice(0, 40), image: u.image ?? null, color: lerPersonagem(u.cyberPerfil)?.cor ?? corDoUsuario(u.id), fundador: isSuperAdmin({ email, role: u.role }), novo: !u.cyberNasceuEm, motos: pilotaANave(email) || !!(u.cyberPerfil as { motosLiberadasEm?: unknown } | null)?.motosLiberadasEm, corpo: corpoDoUsuario(u.id), nave: pilotaANave(email), personagem: lerPersonagem(u.cyberPerfil), examiner: !!(u.cyberPerfil as { examinerInglesEm?: unknown } | null)?.examinerInglesEm } : null;
 }
 
 export type SalaRow = { id: string; ownerId: string; title: string; kind: string; content: string; members: string[]; token: string; updatedAt: Date };

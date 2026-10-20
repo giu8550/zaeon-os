@@ -6,11 +6,12 @@
  * Referencial da SALA do lounge, y = 0 no pátio (quem monta põe o grupo no lounge, com o mesmo giro e o ESPELHO dele).
  */
 import * as THREE from "three";
-import { PIRAMIDE, PLATS, PONTES, SALAO, aberturasDe } from "@/lib/cyber/temploCosmico";
+import { CUPULA, PIRAMIDE, PLATS, PONTES, SALAO, aberturasDe, portaDaCupula } from "@/lib/cyber/temploCosmico";
+import { TEMPLO } from "@/lib/cyber/templo";
 import { criarMeio } from "./TemploMeio";
 import { criarRasta } from "./TemploRasta";
 
-export type SalaoCosmicoHandle = { group: THREE.Group; alvos: THREE.Object3D[]; atualizar(dt: number, t: number): void; dispose(): void };
+export type SalaoCosmicoHandle = { group: THREE.Group; alvos: THREE.Object3D[]; atualizar(dt: number, t: number): void; /** a porta da CÚPULA da guardiã: aberta pra quem venceu o duelo */ cupula(aberta: boolean): void; dispose(): void };
 
 const aditivo = (cor: THREE.ColorRepresentation, op: number) => new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 
@@ -72,6 +73,34 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
 
   // ── o LOUNGE RASTA (components/cyber/TemploRasta): a árvore, a escadaria das raízes, a capela maior, festas, casais e a torre ──
   const rasta = criarRasta({ low: o.low, paredeMat: o.paredeMat }); group.add(rasta.group); alvos.push(...rasta.alvos);
+  // ── a CÚPULA da guardiã: o vidro de energia fechado em volta da capela do lounge (o templo lá em cima) e a PORTA na
+  //    entrada da escadaria-veia — um campo de força vermelho até a Examiner abrir (lib/cyber/dueloIngles) ──
+  const cupulaMat = new THREE.ShaderMaterial({
+    uniforms: { uT: { value: 0 } }, transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: "varying vec3 vP; varying vec3 vN; void main(){ vP = position; vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: `uniform float uT; varying vec3 vP; varying vec3 vN;
+      void main(){
+        vec2 h = vec2(atan(vP.z, vP.x) * 9.0, vP.y * 0.55); vec2 g = abs(fract(h + vec2(0.5 * floor(h.y), 0.0)) - 0.5);
+        float hex = smoothstep(0.06, 0.0, min(g.x, g.y)), borda = pow(1.0 - abs(vN.z), 2.0);
+        float onda = 0.5 + 0.5 * sin(vP.y * 0.4 - uT * 1.4);
+        gl_FragColor = vec4(vec3(0.9, 0.08, 0.16) * (0.05 + 0.32 * hex * onda + 0.18 * borda), 1.0);
+      }`,
+  });
+  const cup = new THREE.Group(); cup.position.set(TEMPLO.x, TEMPLO.h, TEMPLO.z); group.add(cup);
+  const domo = malha(new THREE.SphereGeometry(CUPULA.r, o.low ? 36 : 64, o.low ? 14 : 24, 0, Math.PI * 2, 0, Math.PI / 2), cupulaMat, cup); domo.scale.y = CUPULA.alt / CUPULA.r;
+  const base = malha(new THREE.TorusGeometry(CUPULA.r, 0.35, 6, seg * 2), aditivo(0xff2a3a, 0.8), cup); base.rotation.x = Math.PI / 2; base.position.y = 0.2;
+  const pd = portaDaCupula(), larg = 2 * TEMPLO.r * Math.sin(pd.meia), porta = new THREE.Group();
+  porta.position.set(pd.x - TEMPLO.x, 0, pd.z - TEMPLO.z); porta.rotation.y = Math.atan2(Math.cos(pd.ang), Math.sin(pd.ang)); cup.add(porta);
+  const campoMat = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uAbre: { value: 0 } }, transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: `uniform float uT, uAbre; varying vec2 vUv;
+      void main(){ if (vUv.y < uAbre) discard; float l = 0.5 + 0.5 * sin(vUv.y * 60.0 - uT * 8.0), b = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x);
+        gl_FragColor = vec4(vec3(1.0, 0.1, 0.18) * (0.25 + 0.55 * l) * b, 1.0); }` });
+  malha(new THREE.PlaneGeometry(larg, CUPULA.portaAlt), campoMat, porta).position.y = CUPULA.portaAlt / 2;
+  for (const [w, h, x, y] of [[0.5, CUPULA.portaAlt + 0.6, -larg / 2, CUPULA.portaAlt / 2], [0.5, CUPULA.portaAlt + 0.6, larg / 2, CUPULA.portaAlt / 2], [larg + 0.5, 0.5, 0, CUPULA.portaAlt + 0.3]] as const) { const b = malha(new THREE.BoxGeometry(w, h, 0.4), aditivo(0xff2a3a, 0.95), porta); b.position.set(x, y, 0); }
+  for (const x of [cup, domo, porta]) x.userData.semLote = true;
+  let abrir = 0, abrirAlvo = 0;
+
   // ── o CAMINHO DO MEIO (components/cyber/TemploMeio): o caminho reto, a escadaria e o monumento da Cyber Room ──
   const meio = criarMeio({ low: o.low }); group.add(meio.group); alvos.push(...meio.alvos);
 
@@ -116,12 +145,15 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
     group, alvos,
     atualizar(dt, t) {
       rasta.atualizar(dt, t); meio.atualizar(dt, t);
+      cupulaMat.uniforms.uT!.value = t; campoMat.uniforms.uT!.value = t;
+      abrir += (abrirAlvo - abrir) * Math.min(1, dt * 1.6); campoMat.uniforms.uAbre!.value = abrir;
       cume.rotation.y += dt * 0.6; cume.position.y = P.alt + 4.5 + Math.sin(t * 0.9) * 0.6;
       aneis.forEach((an, i) => { an.rotation.z += dt * (0.3 + i * 0.2) * (i % 2 ? -1 : 1); an.position.y = cume.position.y; });
       corpoMat.uniforms.uT!.value = t;
       (feixe.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.06 * Math.sin(t * 1.3);
       cascaMat.opacity = 0.09 + 0.05 * Math.sin(t * 0.7);
     },
+    cupula(aberta) { abrirAlvo = aberta ? 1 : 0; },
     dispose() { rasta.dispose(); meio.dispose(); group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of mats) if (m !== o.paredeMat) m.dispose(); },
   };
 }

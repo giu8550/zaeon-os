@@ -14,7 +14,7 @@
  * DE FESTAS, a TORRE e o LOUNGE PRIVATIVO dos casais. Tudo vira uma REDE de plataformas (`PLATS`) e pontes (`PONTES`):
  * o piso, os guarda-corpos (com as aberturas onde as pontes encostam) e os sólidos saem dela.
  */
-import { DECK, ESCADARIA, TEMPLO, alturaDaEscadaria, bordasDaEscadaria, curvaDaEscadaria, noCorredorDaEscadaria } from "./templo";
+import { DECK, ESCADARIA, TEMPLO, alturaDaEscadaria, bordasDaEscadaria, curvaDaEscadaria, entradaDoTemplo, noCorredorDaEscadaria, noTemplo } from "./templo";
 
 type P2 = { x: number; z: number };
 
@@ -173,3 +173,28 @@ export function solidosDoComplexo(): { x: number; z: number; r: number; topo: nu
 }
 /** a curva da escadaria das raízes (no referencial do layout) — o render desenha na do lounge, num grupo espelhado */
 export const curvaDaEscadariaRasta = () => curvaDaEscadaria();
+
+// ───────────── a GUARDIÃ do braço esquerdo: a Examiner e a CÚPULA fechada ─────────────
+/** a CÚPULA fechada em volta da capela do lounge (o templo lá em cima): raio, altura (acima do piso do templo) e a
+ *  PORTA — na entrada da escadaria-veia. Fechada pra quem não venceu o duelo de linguagem (lib/cyber/dueloIngles): sem
+ *  outra entrada nem portal — a cúpula É o bloqueio (o dono, out/2026) */
+export const CUPULA = { r: TEMPLO.r + 0.8, alt: 44, portaAlt: 9 } as const;
+/** a porta da cúpula (referencial do lounge): o centro dela, na borda do templo, e pra onde ela dá (o rumo de quem sai) */
+export function portaDaCupula(): { x: number; z: number; ang: number; meia: number } {
+  const e = entradaDoTemplo();
+  return { x: TEMPLO.x + Math.cos(e.ang) * TEMPLO.r, z: TEMPLO.z + Math.sin(e.ang) * TEMPLO.r, ang: e.ang, meia: e.meia };
+}
+/** onde a EXAMINER monta guarda: na escadaria, logo antes da porta, de frente pra quem sobe (referencial do lounge) */
+export function postoDaGuardia(): { x: number; z: number; rumoLocal: number } {
+  const p = portaDaCupula(), d = 6, x = TEMPLO.x + Math.cos(p.ang) * (TEMPLO.r + d), z = TEMPLO.z + Math.sin(p.ang) * (TEMPLO.r + d);
+  return { x, z, rumoLocal: Math.atan2(Math.cos(p.ang), Math.sin(p.ang)) };   // (yaw: olhando pra fora da porta, escada abaixo)
+}
+/** a que distância (m) da guardiã o duelo começa (quem vem subindo a escadaria) */
+export const ALCANCE_DUELO = 14;
+/** quem ainda NÃO venceu o duelo e está DENTRO da cúpula (pela porta ou voando) é posto de volta no posto da guardiã,
+ *  um pouco escada abaixo; null = pode ficar (já venceu, ou está fora) — `q` no referencial do lounge */
+export function barradoNaCupula(q: P2, liberado: boolean): P2 | null {
+  if (liberado || !noTemplo(q, 0.3)) return null;
+  const p = portaDaCupula(), d = 9;
+  return { x: TEMPLO.x + Math.cos(p.ang) * (TEMPLO.r + d), z: TEMPLO.z + Math.sin(p.ang) * (TEMPLO.r + d) };
+}

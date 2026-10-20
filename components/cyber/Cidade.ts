@@ -71,6 +71,8 @@ export type CidadeHandle = {
   caixasAmbiente: { sala: NomeSala; obj: THREE.Object3D }[];
   /** mostra na TV o último recado enviado (null = some) */
   mostrarRecadoNaTV(texto: string | null): void;
+  /** a porta da CÚPULA da guardiã (o Templo Cósmico): aberta pra quem venceu o duelo de linguagem da Examiner */
+  cupulaAberta(aberta: boolean): void;
   /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
   alturaIlhota(k: number): number;
   /** o SHOW do lounge durante a música (lib/cyber/showLounge) e a fumaça do ritual no topo do lounge (0..1) */
@@ -265,7 +267,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     if (n === "lounge") {
       templo = criarTemplo({ low, paredeMat: vidroSala, estrela: starTex, aoTrovao: opts.aoTrovao }); templo.group.position.set(L.x, ALTURA_LOUNGE, L.z); templo.group.rotation.y = rotDaSala(L); if (espelhoDe(L)) templo.group.scale.x = -1; por(templo.group); meus.push(...templo.alvos);
       // o SALÃO central do Templo Cósmico (lib/cyber/temploCosmico): a chegada, a pirâmide e a ponte pro lounge
-      salao = criarSalaoCosmico({ low, paredeMat: vidroSala }); salao.group.position.set(L.x, ALTURA_LOUNGE, L.z); salao.group.rotation.y = rotDaSala(L); if (espelhoDe(L)) salao.group.scale.x = -1; por(salao.group); meus.push(...salao.alvos);
+      salao = criarSalaoCosmico({ low, paredeMat: vidroSala }); salao.group.position.set(L.x, ALTURA_LOUNGE, L.z); salao.group.rotation.y = rotDaSala(L); if (espelhoDe(L)) salao.group.scale.x = -1; por(salao.group); meus.push(...salao.alvos); salao.cupula(cupulaAberta);
     }
     // os ESTACIONAMENTOS da GARAGEM (o piso; as motos e os robôs são do engine)
     const estacs = n !== "garagem" ? [] : LOTES.filter((l) => l.id === "garagem").map((l) => { const e = criarPisoEstacionamento({ low, parado: rm, lote: l }); e.group.position.set(l.x - CIDADE.centro.x, l.alt, l.z - CIDADE.centro.z); e.group.rotation.y = l.rot; por(e.group, true); return e; });
@@ -297,6 +299,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     for (const o of [...grupoSala[n].children]) if (o.name === "lote") { o.removeFromParent(); (o as THREE.Mesh).geometry?.dispose(); }
   }
   const vivaLounge = () => vivas.get("lounge") ?? null;
+  let cupulaAberta = false;   // (a porta da cúpula da guardiã: quem monta o lounge depois já abre/fecha certo)
   let recadoAgora: string | null = null;   // (o recado da TV do lounge: quem monta o lounge depois já mostra)
   // (o estado do ritual: quem monta uma sala no meio dele já começa com a fumaça certa)
   const ritualAgora = { i: 0, raios: false };
@@ -377,7 +380,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     montarSala: (n) => { montarSala(n); }, desmontarSala, salaMontada: (n) => vivas.has(n),
     get tvLounge() { return vivaLounge()?.salas.tv ?? null; }, get plataformas() { return [...vivas.values()].flatMap((v) => v.salas.plataformas); },
     get caixasLounge() { return vivaLounge()?.salas.caixas ?? []; }, get caixasAmbiente() { return [...vivas.values()].flatMap((v) => v.salas.ambiente); }, get tocaDiscos() { return vivaLounge()?.salas.tocaDiscos ?? null; },
-    somTocando: (on: boolean, nivel?: number) => { for (const v of vivas.values()) v.salas.somTocando(on, nivel); }, alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => { recadoAgora = t; vivaLounge()?.salas.mostrarRecado(t); },
+    somTocando: (on: boolean, nivel?: number) => { for (const v of vivas.values()) v.salas.somTocando(on, nivel); }, alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => { recadoAgora = t; vivaLounge()?.salas.mostrarRecado(t); }, cupulaAberta: (aberta: boolean) => { cupulaAberta = aberta; vivaLounge()?.salao?.cupula(aberta); },
     somDroids: observadores.emissores,
     showLounge: (e, ritual, olho) => vivaLounge()?.salas.show(e, ritual, olho),
     raioNoLounge: (vel, alvo) => vivaLounge()?.salas.raioNoLounge(vel, alvo),
