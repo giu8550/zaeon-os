@@ -21,7 +21,7 @@ type JogadorRemoto = {
   userId: string; name: string; color: string; fundador: boolean;
   x: number; z: number; facing: number; moving: boolean; sit: boolean; topo: boolean; ceu: boolean;
   voando: boolean; vooY: number; vooYaw: number; parada: boolean; npX: number; npY: number; npZ: number; npYaw: number;
-  jet: number; alt: number; falando: boolean; pronto: boolean; motoS: number; motoY: number; motoYaw: number; motoDe: string; mlS: number; mlX: number; mlY: number; mlZ: number; mlYaw: number; desc: number; atk: number; hp: number; arma: boolean; mov: number; mag: number;
+  jet: number; alt: number; falando: boolean; pronto: boolean; motoS: number; motoY: number; motoYaw: number; motoDe: string; mlS: number; mlX: number; mlY: number; mlZ: number; mlYaw: number; crC: number; crY: number; crYaw: number; clC: number; clX: number; clY: number; clZ: number; clYaw: number; desc: number; atk: number; hp: number; arma: boolean; mov: number; mag: number;
   /** quando a pose foi MANDADA (ms, no relógio de quem mandou; 0 = cliente/servidor antigo) */ t: number;
   /** corrida de checkpoints: o placar e a corrida */ ck: number; cr: string;
   /** a bordo da nave-QG (nbN −1 = fora) */ nbX: number; nbZ: number; nbN: number; nbE: number;
@@ -38,7 +38,7 @@ export type CanalVoz = {
 export type ConexaoColyseus = { enviar(p: Pose): void; voz: CanalVoz; sair(): void };
 
 /** os campos de um jogador do estado (os do Schema são acessores — espalhar com {...j} não copia) */
-const CAMPOS: (keyof JogadorRemoto)[] = ["motoS", "motoY", "motoYaw", "motoDe", "mlS", "mlX", "mlY", "mlZ", "mlYaw", "userId", "name", "color", "fundador", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto", "desc", "atk", "hp", "arma", "mov", "t", "ck", "cr", "nbX", "nbZ", "nbN", "nbE"];
+const CAMPOS: (keyof JogadorRemoto)[] = ["motoS", "motoY", "motoYaw", "motoDe", "mlS", "mlX", "mlY", "mlZ", "mlYaw", "crC", "crY", "crYaw", "clC", "clX", "clY", "clZ", "clYaw", "userId", "name", "color", "fundador", "x", "z", "facing", "moving", "sit", "topo", "ceu", "voando", "vooY", "vooYaw", "parada", "npX", "npY", "npZ", "npYaw", "jet", "alt", "falando", "pronto", "desc", "atk", "hp", "arma", "mov", "t", "ck", "cr", "nbX", "nbZ", "nbN", "nbE"];
 const copiar = (j: JogadorRemoto): JogadorRemoto => { const o = {} as Record<string, unknown>; for (const k of CAMPOS) o[k] = j[k]; return o as JogadorRemoto; };
 
 export function conectarColyseus(o: {
@@ -73,6 +73,8 @@ export function conectarColyseus(o: {
         ...(j.jet >= 0 ? { jet: j.jet } : {}), ...(j.alt >= 0 ? { alt: j.alt } : {}),
         ...(j.motoS >= 0 ? { moto: { s: j.motoS, y: j.motoY, yaw: j.motoYaw, ...(j.motoDe ? { de: j.motoDe } : {}) } } : {}),
         ...(j.mlS >= 0 ? { motoLargada: { s: j.mlS, x: j.mlX, y: j.mlY, z: j.mlZ, yaw: j.mlYaw } } : {}),
+        ...(j.crC >= 0 ? { carro: { c: j.crC, y: j.crY, yaw: j.crYaw } } : {}),   // (servidor antigo: o campo não existe → undefined ≥ 0 é falso)
+        ...(j.clC >= 0 ? { carroLargado: { c: j.clC, x: j.clX, y: j.clY, z: j.clZ, yaw: j.clYaw } } : {}),
         ...(j.desc ? { desc: j.desc } : {}),
         ...(j.mov ? { mov: j.mov } : {}), ...(j.ck ? { ck: j.ck } : {}), ...(j.cr ? { cr: j.cr } : {}), ...(j.nbN === 0 || j.nbN === 1 ? { bordo: { x: j.nbX, z: j.nbZ, nivel: j.nbN as 0 | 1, ...(j.nbE >= 0 ? { esc: j.nbE } : {}) } } : {}), ...(j.atk ? { atk: j.atk } : {}), ...(typeof j.hp === "number" && j.hp < 100 ? { hp: j.hp } : {}), ...(j.arma ? { arma: 1 } : {}), ...(j.mag ? { mag: j.mag } : {}),
         ts: Date.now(),

@@ -43,6 +43,8 @@ export type Presenca = {
   falando?: boolean;  // voz (push-to-talk) ligada agora — indicador no avatar (transporte colyseus)
   moto?: { s: number; y: number; yaw: number; de?: string };   // montado numa MOTO voadora (vaga de origem, altura, rumo; `de` = de quem era a estacionada que pegou) — qualquer pessoa
   motoLargada?: { s: number; x: number; y: number; z: number; yaw: number };   // a moto que ESTACIONOU (fica lá, não volta pra vaga)
+  carro?: { c: number; y: number; yaw: number };   // dirigindo o CARRO voador `c` (lib/cyber/carros): altura e rumo — qualquer pessoa
+  carroLargado?: { c: number; x: number; y: number; z: number; yaw: number };   // o carro que DEIXOU estacionado fora da vaga
   desc?: number;      // DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (lib/cyber/descanso)
   mov?: number;       // o MOVIMENTO TURBINADO (lib/cyber/movimento): 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem
   atk?: number; hp?: number; arma?: number; mag?: number;   // ARENA PvP (lib/cyber/combate): o golpe (seq×4 + nº do combo), a vida (0–100), a espada na mão (1)

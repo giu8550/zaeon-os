@@ -25,6 +25,7 @@ export class Jogador extends Schema {
   declare pronto: boolean;
   /** moto voadora: vaga (−1 = a pé), altura e rumo */ declare motoS: number; declare motoY: number; declare motoYaw: number; declare motoDe: string;
   /** a moto que estacionou (−1 = nenhuma): vaga, posição, rumo */ declare mlS: number; declare mlX: number; declare mlY: number; declare mlZ: number; declare mlYaw: number;
+  /** o CARRO voador: dirigindo (−1 = não), altura, rumo; e o que deixou estacionado (−1 = nenhum) */ declare crC: number; declare crY: number; declare crYaw: number; declare clC: number; declare clX: number; declare clY: number; declare clZ: number; declare clYaw: number;
   /** DESCANSO no lounge: 0 em pé, 1 sentado, 2 deitado, +3 com o tablet (lib/cyber/descanso) */ declare desc: number;
   /** ARENA PvP (lib/cyber/combate): o golpe (seq×4 + nº; 0 = nenhum), a vida, a espada na mão */ declare atk: number; declare hp: number; declare arma: boolean; /** MAGIA: o lançamento */ declare mag: number;
   /** o MOVIMENTO TURBINADO: 0 nada, 1 sprint, 2 dash, 3 guarda, 4 hero landing, 5 decolagem */ declare mov: number;
@@ -41,6 +42,7 @@ export class Jogador extends Schema {
     this.jet = -1; this.alt = -1; this.falando = false; this.pronto = false;
     this.motoS = -1; this.motoY = 0; this.motoYaw = 0; this.motoDe = "";
     this.mlS = -1; this.mlX = 0; this.mlY = 0; this.mlZ = 0; this.mlYaw = 0;
+    this.crC = -1; this.crY = 0; this.crYaw = 0; this.clC = -1; this.clX = 0; this.clY = 0; this.clZ = 0; this.clYaw = 0;
     this.desc = 0; this.atk = 0; this.hp = 100; this.arma = false; this.mag = 0; this.mov = 0; this.t = 0; this.ck = 0; this.cr = ""; this.nbX = 0; this.nbZ = 0; this.nbN = -1; this.nbE = -1;
   }
   /** a pessoa do TOKEN (identidade e regalias vêm do servidor do app) */
@@ -55,6 +57,7 @@ defineTypes(Jogador, {
   jet: "float32", alt: "float32", falando: "boolean", pronto: "boolean",
   motoS: "int8", motoY: "float32", motoYaw: "float32", motoDe: "string",
   mlS: "int8", mlX: "float32", mlY: "float32", mlZ: "float32", mlYaw: "float32",
+  crC: "int8", crY: "float32", crYaw: "float32", clC: "int8", clX: "float32", clY: "float32", clZ: "float32", clYaw: "float32",
   desc: "uint8", atk: "uint32", hp: "uint8", arma: "boolean", mag: "uint32", mov: "uint8", t: "float64", ck: "uint16", cr: "string", nbX: "float32", nbZ: "float32", nbN: "int8", nbE: "float32",
 });
 
@@ -98,6 +101,8 @@ export class LoungeRoom extends Room<{ state: EstadoLounge }> {
       j.nbN = p.bordo ? p.bordo.nivel : -1; if (p.bordo) { j.nbX = p.bordo.x; j.nbZ = p.bordo.z; j.nbE = p.bordo.esc ?? -1; }
       j.motoS = p.moto ? p.moto.s : -1; if (p.moto) { j.motoY = p.moto.y; j.motoYaw = p.moto.yaw; } j.motoDe = p.moto?.de ?? "";
       j.mlS = p.motoLargada ? p.motoLargada.s : -1; if (p.motoLargada) { j.mlX = p.motoLargada.x; j.mlY = p.motoLargada.y; j.mlZ = p.motoLargada.z; j.mlYaw = p.motoLargada.yaw; }
+      j.crC = p.carro ? p.carro.c : -1; if (p.carro) { j.crY = p.carro.y; j.crYaw = p.carro.yaw; }
+      j.clC = p.carroLargado ? p.carroLargado.c : -1; if (p.carroLargado) { j.clX = p.carroLargado.x; j.clY = p.carroLargado.y; j.clZ = p.carroLargado.z; j.clYaw = p.carroLargado.yaw; }
     });
     // "falando" (indicador no avatar) — a voz em si vai direto entre navegadores (WebRTC)
     this.onMessage("fala", (client, raw) => {

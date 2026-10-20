@@ -25,3 +25,23 @@ describe("frota de carros", () => {
     expect(new Set(vagas.map((x) => CORES_CARRO.indexOf(x.cor))).size).toBeGreaterThan(4);
   });
 });
+
+describe("carros online (presença)", () => {
+  const A = "a".repeat(24), B = "b".repeat(24);
+  it("saneia: só índices de carro que existem e números finitos", async () => {
+    const { carroDe, carroLargadoDe, TOTAL_CARROS } = await import("./carros");
+    expect(carroDe({ c: 3, y: 450.5, yaw: 1 })).toEqual({ carro: { c: 3, y: 450.5, yaw: 1 } });
+    expect(carroDe({ c: TOTAL_CARROS, y: 1, yaw: 0 })).toEqual({});
+    expect(carroDe({ c: 1.5, y: 1, yaw: 0 })).toEqual({});
+    expect(carroLargadoDe({ c: 2, x: 10, y: 450, z: -500, yaw: 0 })).toEqual({ carroLargado: { c: 2, x: 10, y: 450, z: -500, yaw: 0 } });
+    expect(carroLargadoDe({ c: 2, x: "a", y: 450, z: -500, yaw: 0 })).toEqual({});
+  });
+  it("posse: dirigir vence estacionado; empate → o menor id; carro sem ninguém não aparece", async () => {
+    const { posseDosCarros } = await import("./carros");
+    const p = posseDosCarros([{ id: B, carro: { c: 1, y: 451, yaw: 0 } }, { id: A, carroLargado: { c: 1, x: 0, y: 450, z: 0, yaw: 0 } }, { id: A, carro: { c: 2, y: 452, yaw: 1 } }, { id: B, carro: { c: 2, y: 460, yaw: 0 } }]);
+    expect(p.get(1)).toMatchObject({ dono: B, dirige: true });
+    expect(p.get(2)).toMatchObject({ dono: A, dirige: true, y: 452 });
+    expect(p.has(0)).toBe(false);
+    expect(posseDosCarros([{ id: A, carroLargado: { c: 5, x: 1, y: 450, z: 2, yaw: 0 } }]).get(5)).toMatchObject({ dono: A, dirige: false, m: { x: 1, z: 2 } });
+  });
+});
