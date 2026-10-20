@@ -9,7 +9,8 @@
  *    outro — e é a ÚNICA entrada da cabine do DJ. Só o dono atravessa (o servidor confere, POST /acesso {alvo:"dj"}).
  */
 import type { P2 } from "./colisao";
-import { ALTURA_LOUNGE, CIDADE, TORRE_DJ, daSala, mundo, naSala, type NomeSala } from "./ceu";
+import { ALTURA_LOUNGE, CIDADE, TORRE_DJ, daSala, mundo, naSala, rumoNaSala, type NomeSala } from "./ceu";
+import { BOCA_SAIDA_SALAO, CHEGADA_SALAO, SALAO } from "./temploCosmico";
 import { NIVEIS_SEPARADOS } from "./nivelAtivo";
 import { PLATAFORMAS, IDS_PLATAFORMAS, type IdPlataforma } from "./plataformas";
 import { PORTAL_PRACA, PRACA, naPracaLocal } from "./praca";
@@ -40,11 +41,16 @@ const DESC: Record<IdNo, string> = {
   biblioteca: "A Sala do Saber: o Relicário e as mesas de estudo.",
   jardim: "O espelho d'água, as esmeraldas e o silêncio.",
 };
-const NOME_SALA: Record<NomeSala, string> = { lounge: "Lounge cósmico", garagem: "Garagem", biblioteca: "Sala do Saber", jardim: "Jardim" };
+const NOME_SALA: Record<NomeSala, string> = { lounge: "Templo Cósmico", garagem: "Garagem", biblioteca: "Sala do Saber", jardim: "Jardim" };
 /** cada SALA da Zaeon é um nível (lib/cyber/nivelAtivo): o buraco negro dela fica logo dentro da porta antiga (o +z da
  *  sala, onde a escada chegava) e quem chega aparece um pouco mais pra dentro, de frente pro meio da sala */
 function noDaSala(nome: NomeSala): NoTunel {
-  const L = CIDADE.salas[nome], anel = mundo(daSala(L, 0, L.r - 7)), ch = mundo(daSala(L, 0, L.r - 23)), c = mundo(L);
+  const L = CIDADE.salas[nome];
+  if (nome === "lounge") {   // o TEMPLO CÓSMICO (lib/cyber/temploCosmico): chega-se na frente do SALÃO central, olhando pra pirâmide
+    const ch = mundo(daSala(L, CHEGADA_SALAO.x, CHEGADA_SALAO.z)), anel = mundo(daSala(L, BOCA_SAIDA_SALAO.x, BOCA_SAIDA_SALAO.z));
+    return { id: nome, nome: NOME_SALA[nome], desc: DESC[nome], anel: { ...anel, r: 2.6 }, y: CIDADE.pisoY + ALTURA_LOUNGE - SALAO.desce, chegada: { ...ch, rumo: rumoNaSala(L, CHEGADA_SALAO.rumo) }, bh: { h: 7, r: 2.4 } };
+  }
+  const anel = mundo(daSala(L, 0, L.r - 7)), ch = mundo(daSala(L, 0, L.r - 23)), c = mundo(L);
   return { id: nome, nome: NOME_SALA[nome], desc: DESC[nome], anel: { ...anel, r: 2.6 }, y: CIDADE.pisoY + ALTURA_LOUNGE, chegada: { ...ch, rumo: Math.atan2(c.x - ch.x, c.z - ch.z) }, bh: { h: 7, r: 2.4 } };
 }
 

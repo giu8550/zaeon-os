@@ -10,6 +10,7 @@
  * (O nome do arquivo ficou "fios" — a 1ª versão eram fios-neurônio.)
  */
 import { ALTURA_LOUNGE, CIDADE, daSala, type NomeSala } from "./ceu";
+import { BOCA_SAIDA_SALAO, SALAO } from "./temploCosmico";
 
 export type V3 = { x: number; y: number; z: number };
 export const FIO = {
@@ -95,6 +96,7 @@ function montarPista(sala: NomeSala): FioCosmico {
 /** a pista de SAÍDA de uma sala: da porta antiga (o lado que dava pra escada), pra FORA, serpenteando e subindo, até
  *  o buraco negro que leva de volta pro hub — a mesma espiral no fim */
 function montarSaida(sala: NomeSala): FioCosmico {
+  if (sala === "lounge") return montarSaidaDoSalao();
   const L = CIDADE.salas[sala], r = rng(semente(sala + ":saida")), fase = r() * Math.PI * 2;
   const dL = Math.hypot(L.x, L.z), dir = { x: L.x / dL, z: L.z / dL }, perp = { x: -dir.z, z: dir.x };
   // a porta antiga fica no lado da sala que olha pro centro da Zaeon: a pista sai dali e dá a volta por fora da sala
@@ -112,6 +114,26 @@ function montarSaida(sala: NomeSala): FioCosmico {
   const eixo = amostrarCurva(ctrl, 2400), acum = [0];
   for (let i = 1; i < eixo.length; i++) acum.push(acum[i - 1]! + Math.hypot(eixo[i]!.x - eixo[i - 1]!.x, eixo[i]!.y - eixo[i - 1]!.y, eixo[i]!.z - eixo[i - 1]!.z));
   return { sala, saida: true, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, r: FIO.bocaR }, bn: { ...bn, r: FIO.bnR } };
+}
+/** a SAÍDA do Templo Cósmico (o nível do lounge — lib/cyber/temploCosmico): a boca fica no SALÃO central, perto de onde
+ *  se chega, e a pista vai pra FRENTE (o +z do layout, pro lado de onde se veio), serpenteando e subindo até o buraco
+ *  negro que leva de volta pro hub. Montada no referencial do layout e convertida no fim (o espelho vem junto) */
+function montarSaidaDoSalao(): FioCosmico {
+  const L = CIDADE.salas.lounge, r = rng(semente("lounge:saida:salao")), fase = r() * Math.PI * 2, B = BOCA_SAIDA_SALAO;
+  const y0 = ALTURA_LOUNGE - SALAO.desce + 0.6, comp = FIO.saidaComprimento, bnL = { x: B.x, y: y0 + 240, z: B.z + comp };
+  const ctrl: V3[] = [{ x: B.x, y: y0, z: B.z }, { x: B.x, y: y0 + 2, z: B.z + 26 }, { x: B.x, y: y0 + 10, z: B.z + 70 }];
+  const ini = ctrl[ctrl.length - 1]!;
+  for (let k = 1; k <= 36; k++) {
+    const t = k / 36, curva = Math.sin(t * Math.PI * 7 + fase) * 420 * Math.sin(t * Math.PI) * Math.min(1, t * 4);
+    ctrl.push({ x: ini.x + curva, y: ini.y + (bnL.y - ini.y) * t + Math.sin(t * Math.PI) * 300, z: ini.z + (bnL.z - ini.z) * t * 0.82 });
+  }
+  const ult = ctrl[ctrl.length - 1]!, angEntra = Math.atan2(ult.z - bnL.z, ult.x - bnL.x), sentido = r() < 0.5 ? 1 : -1, R0 = FIO.espiralR * 0.7;
+  for (let k = 1; k <= 36; k++) { const t = k / 36, ang = angEntra + sentido * t * FIO.voltas * Math.PI * 2, rr = R0 + (FIO.bnR * 1.05 - R0) * Math.pow(t, 1.4); ctrl.push({ x: bnL.x + Math.cos(ang) * rr, y: ult.y + (bnL.y - ult.y) * t, z: bnL.z + Math.sin(ang) * rr }); }
+  const ilha = (p: V3): V3 => { const w = daSala(L, p.x, p.z); return { x: w.x, y: p.y, z: w.z }; };
+  const eixo = amostrarCurva(ctrl.map(ilha), 2400), acum = [0];
+  for (let i = 1; i < eixo.length; i++) acum.push(acum[i - 1]! + Math.hypot(eixo[i]!.x - eixo[i - 1]!.x, eixo[i]!.y - eixo[i - 1]!.y, eixo[i]!.z - eixo[i - 1]!.z));
+  const bn = ilha(bnL);
+  return { sala: "lounge", saida: true, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, r: FIO.bocaR }, bn: { ...bn, r: FIO.bnR } };
 }
 let cacheSaida: FioCosmico[] | null = null;
 /** as pistas de SAÍDA (uma por sala) */

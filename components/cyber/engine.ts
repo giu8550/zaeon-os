@@ -1910,7 +1910,7 @@ export class CyberEngine {
     this.plat = naZaeon || id === "praca" ? null : { id, andar: 0 };
     this.altoEm = naZaeon ? "ceu" : null; this.yNav = naZaeon ? CIDADE.pisoY : 0;
     this.eu.pos.set(p.x, 0, p.z); this.eu.facing = p.rumo; this.camAz = p.rumo + Math.PI;
-    const y = id === "zaeon" ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : ehSala(id) ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE : NOS[id].y;
+    const y = id === "zaeon" ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : ehSala(id) ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + NOS[id].y - CIDADE.pisoY : NOS[id].y;   // (as salas: o piso da chegada — o salão do Templo Cósmico fica abaixo do lounge)
     this.eu.alt = y; this.camT.set(p.x, y + 1.2, p.z); this.portalArmado = !noDoAnel(p, y);
     if (NIVEIS_SEPARADOS) { this.mudarNivel(nivelDoPonto(p, y)); this.posNivel = { x: p.x, z: p.z, alt: y, ok: true }; }   // (chegou: já é o nível do destino)
     this.som.tocar("rise", new THREE.Vector3(p.x, y + 1, p.z), { dist: DISTANCIA.perto });

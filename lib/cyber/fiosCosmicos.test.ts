@@ -3,6 +3,7 @@ import { CIDADE, colisoresDaCidade, mundo } from "./ceu";
 import { VOO } from "./voo";
 import { FIO, capturaDoFluxo, fioNaBoca, fiosCosmicos, pertoDoBuraco, pistasDeSaida, pontoDoFio, uDaViagemFio, velDoFluxo } from "./fiosCosmicos";
 import { ALTURA_LOUNGE, salaEm } from "./ceu";
+import { SALAO } from "./temploCosmico";
 
 describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", () => {
   const fios = fiosCosmicos();
@@ -52,7 +53,7 @@ describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", ()
     for (const f of pistasDeSaida()) {
       const L = CIDADE.salas[f.sala];
       expect(salaEm({ x: f.boca.x, z: f.boca.z }, 0, true)).toBe(f.sala);
-      expect(f.boca.y).toBeCloseTo(ALTURA_LOUNGE + 0.6, 1);
+      expect(f.boca.y).toBeCloseTo(ALTURA_LOUNGE + 0.6 - (f.sala === "lounge" ? SALAO.desce : 0), 1);   // (a do lounge sai do SALÃO do Templo Cósmico, mais baixo)
       expect(Math.hypot(f.bn.x - L.x, f.bn.z - L.z)).toBeGreaterThan(L.r + 300);
       const fim = pontoDoFio(f, 1); expect(Math.hypot(fim.x - f.bn.x, fim.y - f.bn.y, fim.z - f.bn.z)).toBeLessThan(f.bn.r * 1.3);
       // a pista não atravessa o disco da sala (contorna por fora) depois de sair da porta

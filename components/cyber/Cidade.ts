@@ -22,6 +22,7 @@ import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarEscadasDePedra } from "./EscadaPiramide";
 import { criarSalas, type SalasHandle } from "./Salas";
+import { criarSalaoCosmico, type SalaoCosmicoHandle } from "./TemploCosmico";
 import { criarTemplo } from "./Templo";
 import { criarTempestade } from "./Tempestade";
 import { criarPisoEstacionamento } from "./Estacionamento";
@@ -244,7 +245,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       for (const n of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[n], d = Math.hypot(p.x - L.x, p.z - L.z); if (d < dm) { dm = d; melhor = n; } }
       pe.remove(c); pisosDaSala.set(melhor, [...(pisosDaSala.get(melhor) ?? []), c]);
     } }
-  type SalaViva = { salas: SalasHandle; templo: ReturnType<typeof criarTemplo> | null; estacs: ReturnType<typeof criarPisoEstacionamento>[]; tempestade: { h: ReturnType<typeof criarTempestade>; g: THREE.Group } | null; saida: ReturnType<typeof criarFiosCosmicos> | null; texturas: THREE.Texture[]; alvos: THREE.Object3D[]; extras: THREE.Object3D[] };
+  type SalaViva = { salas: SalasHandle; templo: ReturnType<typeof criarTemplo> | null; salao: SalaoCosmicoHandle | null; estacs: ReturnType<typeof criarPisoEstacionamento>[]; tempestade: { h: ReturnType<typeof criarTempestade>; g: THREE.Group } | null; saida: ReturnType<typeof criarFiosCosmicos> | null; texturas: THREE.Texture[]; alvos: THREE.Object3D[]; extras: THREE.Object3D[] };
   const vivas = new Map<NomeSala, SalaViva>();
   function montarSala(n: NomeSala): SalaViva {
     const ja = vivas.get(n); if (ja) return ja;
@@ -260,7 +261,12 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     for (const c of g.children) if (!antes.has(c) && !extras.includes(c)) extras.push(c);   // (o que o Salas pôs no grupo da sala)
     // o TEMPLO (lib/cyber/templo — no referencial do lounge)
     let templo: SalaViva["templo"] = null;
-    if (n === "lounge") { templo = criarTemplo({ low, paredeMat: vidroSala, estrela: starTex, aoTrovao: opts.aoTrovao }); templo.group.position.set(L.x, ALTURA_LOUNGE, L.z); templo.group.rotation.y = rotDaSala(L); if (espelhoDe(L)) templo.group.scale.x = -1; por(templo.group); meus.push(...templo.alvos); }
+    let salao: SalaViva["salao"] = null;
+    if (n === "lounge") {
+      templo = criarTemplo({ low, paredeMat: vidroSala, estrela: starTex, aoTrovao: opts.aoTrovao }); templo.group.position.set(L.x, ALTURA_LOUNGE, L.z); templo.group.rotation.y = rotDaSala(L); if (espelhoDe(L)) templo.group.scale.x = -1; por(templo.group); meus.push(...templo.alvos);
+      // o SALÃO central do Templo Cósmico (lib/cyber/temploCosmico): a chegada, a pirâmide e a ponte pro lounge
+      salao = criarSalaoCosmico({ low, paredeMat: vidroSala }); salao.group.position.set(L.x, ALTURA_LOUNGE, L.z); salao.group.rotation.y = rotDaSala(L); if (espelhoDe(L)) salao.group.scale.x = -1; por(salao.group); meus.push(...salao.alvos);
+    }
     // os ESTACIONAMENTOS da GARAGEM (o piso; as motos e os robôs são do engine)
     const estacs = n !== "garagem" ? [] : LOTES.filter((l) => l.id === "garagem").map((l) => { const e = criarPisoEstacionamento({ low, parado: rm, lote: l }); e.group.position.set(l.x - CIDADE.centro.x, l.alt, l.z - CIDADE.centro.z); e.group.rotation.y = l.rot; por(e.group, true); return e; });
     for (const c of pisosDaSala.get(n) ?? []) por(c);
@@ -275,7 +281,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     const saida = NIVEIS_SEPARADOS ? criarFiosCosmicos({ pistas: [saidaDaSala(n)], low, cores: COR_SALA, starTex, alcanceVista: low ? 1800 : 3600, aoTrovao: (p) => { if (opts.aoTrovao) { g.updateMatrixWorld(); opts.aoTrovao(p.clone().applyMatrix4(g.matrixWorld)); } } }) : null;
     if (saida) { por(saida.group); saida.group.traverse((x) => { x.userData.semLote = true; }); }
     alvos.push(...meus);
-    const v: SalaViva = { salas, templo, estacs, tempestade, saida, texturas: tex, alvos: meus, extras };
+    const v: SalaViva = { salas, templo, salao, estacs, tempestade, saida, texturas: tex, alvos: meus, extras };
     if (n === "lounge" && recadoAgora) salas.mostrarRecado(recadoAgora);
     vivas.set(n, v); return v;
   }
@@ -283,7 +289,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     const v = vivas.get(n); if (!v) return;
     vivas.delete(n);
     for (const a of v.alvos) { const k = alvos.indexOf(a); if (k >= 0) alvos.splice(k, 1); }
-    v.templo?.dispose(); v.tempestade?.h.dispose(); v.saida?.dispose();
+    v.templo?.dispose(); v.salao?.dispose(); v.tempestade?.h.dispose(); v.saida?.dispose();
     const guardar = new Set(pisosDaSala.get(n) ?? []);   // (os estacionamentos voltam pra gaveta: montam de novo na próxima)
     for (const o of v.extras) { o.removeFromParent(); if (!guardar.has(o)) liberar(o, []); }
     for (const t of v.texturas) t.dispose();
@@ -396,7 +402,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       // (os NÍVEIS escondidos nem animam — só o da pessoa: components/cyber/Cidade `mostrarNivel`)
       for (const [n, v] of vivas) {
         if (!grupoSala[n].visible) continue;
-        v.salas.atualizar(dt, t); v.templo?.atualizar(dt, t);
+        v.salas.atualizar(dt, t); v.templo?.atualizar(dt, t); v.salao?.atualizar(dt, t);
         for (const e of v.estacs) e.atualizar(t);
         if (v.tempestade && v.tempestade.h.group.visible) { const c = v.tempestade.h.atualizar(t); if (c && opts.aoTrovao) { v.tempestade.g.updateMatrixWorld(); opts.aoTrovao(ondeTrovejou.copy(c).applyMatrix4(v.tempestade.g.matrixWorld)); } }
         v.saida?.atualizar(dt * vel, t, euLocal);
