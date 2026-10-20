@@ -49,6 +49,14 @@ export const ARVORE_RASTA = { r: 4.8, alt: 30 } as const;
 /** a TORRE (moderna, futurista) na borda do salão de festas: o pé (sólido) e a altura acima do piso dele */
 export const TORRE_RASTA = { x: FESTAS.x - 15, z: FESTAS.z + 14, r: 4, alt: 72 } as const;
 
+// ───────────── o CAMINHO DO MEIO: reto, atrás da pirâmide, e a escadaria subindo pro monumento da CYBER ROOM ─────────────
+/** o monumento (mais sinistro que a pirâmide): a plataforma dele, bem acima do lounge, na linha da pirâmide */
+export const CYBER = { x: SALAO.x, z: SALAO.z - 255, r: 30, h: 40 } as const;
+/** o NÚCLEO do monumento (sólido: a sala ainda está fechada — o resto do caminho do meio vem depois) */
+export const NUCLEO_CYBER = { r: 11, alt: 52 } as const;
+/** onde o caminho reto acaba e a escadaria começa (z) e a meia-largura dos dois */
+export const MEIO = { zEscada: SALAO.z - 150, meia: 5 } as const;
+
 // ───────────── a REDE: plataformas e pontes ─────────────
 export type PlatTC = { id: string; x: number; z: number; r: number; /** piso acima do pátio do lounge */ h: number };
 export type PonteTC = { id: string; a: P2; b: P2; /** piso nas pontas */ ha: number; hb: number; meia: number };
@@ -58,6 +66,7 @@ export const PLATS: readonly PlatTC[] = [
   { id: "capelaRasta", x: TEMPLO_RASTA.x, z: TEMPLO_RASTA.z, r: TEMPLO_RASTA.r, h: TEMPLO_RASTA.h },
   { id: "festas", x: FESTAS.x, z: FESTAS.z, r: FESTAS.r, h: FESTAS.h },
   { id: "casais", x: CASAIS.x, z: CASAIS.z, r: CASAIS.r, h: CASAIS.h },
+  { id: "cyber", x: CYBER.x, z: CYBER.z, r: CYBER.r, h: CYBER.h },
 ];
 /** uma ponte reta entre duas plataformas (de borda a borda, na linha dos centros) */
 function entre(id: string, p: PlatTC, q: PlatTC, meia: number): PonteTC {
@@ -70,6 +79,8 @@ export const PONTES: readonly PonteTC[] = [
   { id: "rasta", a: ESP(PONTE_LOUNGE.a), b: ESP(PONTE_LOUNGE.b), ha: -SALAO.desce, hb: 0, meia: PONTE_LOUNGE.meia },
   entre("festas", plat("capelaRasta"), plat("festas"), 4),
   entre("casais", plat("festas"), plat("casais"), 2.6),
+  { id: "meio", a: { x: SALAO.x, z: SALAO.z - SALAO.r + 1.5 }, b: { x: SALAO.x, z: MEIO.zEscada }, ha: -SALAO.desce, hb: -SALAO.desce, meia: MEIO.meia },
+  { id: "escadaMeio", a: { x: SALAO.x, z: MEIO.zEscada }, b: { x: CYBER.x, z: CYBER.z + CYBER.r - 1.5 }, ha: -SALAO.desce, hb: CYBER.h, meia: MEIO.meia },
 ];
 const COL = { r: 0.6, passo: 1, ponte: 0.5, ponteP: 0.8 } as const;
 
@@ -143,7 +154,8 @@ export function colisoresDoComplexo(rLounge: number): { x: number; z: number; r:
   for (let k = -P.meia; k <= P.meia; k += P.passo) for (const [x, z] of [[k, -P.meia], [k, P.meia], [-P.meia, k], [P.meia, k]] as const) out.push({ x: P.x + x, z: P.z + z, r: P.colR });
   const C = CAPELA_RASTA;
   for (let i = 0; i < C.pilares; i++) { const a = (i / C.pilares) * Math.PI * 2 + Math.PI / C.pilares; out.push({ x: TEMPLO_RASTA.x + Math.cos(a) * C.r, z: TEMPLO_RASTA.z + Math.sin(a) * C.r, r: C.pilarR + 0.2 }); }
-  out.push({ x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r });   // o tronco da ÁRVORE DA VIDA no meio do disco rasta
+  out.push({ x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r });
+  out.push({ x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 0.5 });   // o NÚCLEO do monumento da Cyber Room (fechado, por ora)   // o tronco da ÁRVORE DA VIDA no meio do disco rasta
   for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; out.push({ x: TORRE_RASTA.x + Math.cos(a) * TORRE_RASTA.r, z: TORRE_RASTA.z + Math.sin(a) * TORRE_RASTA.r, r: 0.8 }); }
   return out;
 }
@@ -155,7 +167,8 @@ export function solidosDoComplexo(): { x: number; z: number; r: number; topo: nu
     { x: PIRAMIDE.x, z: PIRAMIDE.z, r: PIRAMIDE.meia * 1.05, topo: -SALAO.desce + PIRAMIDE.alt * 0.75, base: -SALAO.desce },
     { x: TEMPLO_RASTA.x, z: TEMPLO_RASTA.z, r: CAPELA_RASTA.r + 1, topo: TEMPLO_RASTA.h + CAPELA_RASTA.altura + 12, base: TEMPLO_RASTA.h + CAPELA_RASTA.altura - 1 },   // (o teto: por baixo dele, a capela é aberta)
     { x: TORRE_RASTA.x, z: TORRE_RASTA.z, r: TORRE_RASTA.r + 0.5, topo: FESTAS.h + TORRE_RASTA.alt, base: FESTAS.h },
-    { x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r, topo: ARVORE_RASTA.alt, base: 0 },   // a árvore (o tronco até a copa)
+    { x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r, topo: ARVORE_RASTA.alt, base: 0 },
+    { x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 1, topo: CYBER.h + NUCLEO_CYBER.alt, base: CYBER.h },   // o monumento   // a árvore (o tronco até a copa)
   ];
 }
 /** a curva da escadaria das raízes (no referencial do layout) — o render desenha na do lounge, num grupo espelhado */
