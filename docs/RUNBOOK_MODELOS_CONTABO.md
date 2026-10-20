@@ -123,6 +123,43 @@ Threads × gpt-oss-20b: 12 = 4,0 · 10 = 5,1 · 8 = 6,2 · 6 = 6,5 tok/s. Geraç
 
 **Veredito:** ~6–9 tok/s serve **trabalho de fundo** (embeddings do RAG, rerank, moderação, lotes do Octa, CLIs), **não o chat ao vivo** — uma resposta de 1.000 tokens leva 2–3 min. `AI_FORCE_LOCAL=on` no app inteiro faria quase tudo estourar o `LOCAL_LLM_TIMEOUT_MS` e cair pro Gemini. Usar `generateViaLocal()` onde latência não importa.
 
+
+## 7.5 Rede privada: Tailscale (gateway alcançável de fora da box)
+Tailscale = VPN mesh à parte do WireGuard da chipflow (`100.64.0.0/10` × `10.99.0.0/24`), coexistem. Instalar precisa de **root** e o login é do dono (o usuário `zaeon` não tem sudo).
+
+**Contabo (root):**
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up                         # login do dono pela URL impressa
+tailscale ip -4                      # o IP 100.x da Contabo
+# Publica o :4000 SÓ na tailnet, apontando pro LiteLLM que continua em 127.0.0.1:
+tailscale serve --bg --tcp 4000 tcp://127.0.0.1:4000
+tailscale serve status
+```
+> **Por que `tailscale serve` e não `BIND_ADDR=100.x`:** o Docker publica a porta no boot; se o `tailscaled` ainda não tiver o IP `100.x` nessa hora, o bind falha ("cannot assign requested address") e o LiteLLM **não volta sozinho depois de um reboot**. Com o `serve`, o compose segue em `BIND_ADDR=127.0.0.1` (nada muda na Zaeon) e o próprio Tailscale encaminha o tráfego da tailnet. (Alternativa, se preferir bind direto: `BIND_ADDR=100.x` + `sysctl net.ipv4.ip_nonlocal_bind=1` persistido em `/etc/sysctl.d/`, aí `up -d litellm`.)
+> Admin do Tailscale → Machines → Contabo → **Disable key expiry** (senão a máquina sai da tailnet em ~6 meses).
+
+**NÃO regerar as chaves do `.env`** depois do 1º boot:
+- `ZAEON_PG_PASSWORD`: o Postgres gravou a senha no volume no 1º boot; trocar no `.env` **não troca no banco** → o LiteLLM perde a DB (virtual keys) e entra em loop.
+- `LITELLM_SALT_KEY`: trocar = todas as virtual keys viram lixo.
+- `LITELLM_MASTER_KEY`: pode trocar (aí `up -d litellm`), mas já é aleatória e só existe no `.env` da box.
+
+**Cada máquina que usa os modelos** (VPS do front da Zaeon, notebook, CLIs): `curl -fsSL https://tailscale.com/install.sh | sh && tailscale up` (mesma tailnet). Na VPS, o container `web` sai pela rede do host, então alcança o `100.x` sem mudar o compose do app. **Vercel não entra na tailnet** — o que rodar lá não alcança o gateway.
+
+**Teste de fora** (já na tailnet; `max_tokens` ≥ 256 — gpt-oss e qwen3 são de raciocínio e voltam vazio com pouco):
+```bash
+curl -s http://100.x.y.z:4000/v1/chat/completions -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+ -d '{"model":"gpt-oss-20b","messages":[{"role":"user","content":"responda só: OK"}],"max_tokens":256}'
+```
+
+**Virtual key por interface** (testado em 2026-10-20 no v1.103.4: gera, modelo fora do escopo → 403, apagada → 401). Gerar NA BOX (a master key não sai de lá):
+```bash
+M=$(grep ^LITELLM_MASTER_KEY= /opt/zaeon-models/.env | cut -d= -f2-)
+curl -s http://127.0.0.1:4000/key/generate -H "Authorization: Bearer $M" -H 'Content-Type: application/json' \
+ -d '{"key_alias":"web-zaeon","max_budget":5,"models":["gpt-oss-20b","qwen3-coder","qwen3-embed"]}'
+# revogar: POST /key/delete {"keys":["sk-..."]}
+```
+
 ## 8. Ligar na Zaeon (interfaces/CLIs)
 No app/CLIs, setar (via `.env` de cada um):
 ```
