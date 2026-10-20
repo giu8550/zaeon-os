@@ -275,6 +275,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       // os BURACOS NEGROS: o da rede abre o túnel com os destinos (aberto a todos); o par do dono pede acesso antes
       onTunel: (t) => { engine.current?.soltarMouse(); setTunel({ tipo: "escolher", origem: t.origem, nomeOrigem: NOS[t.origem].nome, destinos: t.destinos }); },
       onBuracoDono: (para) => { void pedir("dj", () => setTunel({ tipo: "dono", para })); },
+      onTunelDireto: (d) => { engine.current?.soltarMouse(); setTunel({ tipo: "direto", para: d.para, nome: d.nome }); },   // (os níveis: o fio cósmico / o buraco negro da sala — sem menu)
       onAviso: avisar,
       nascer, nascerNa, retomar, motosLiberadas: !!p.motosLiberadas,
       onNasceu: () => { cb.current.marcarNascimento?.(); try { localStorage.setItem(CHAVE_ONBOARDING, "1"); } catch { /* storage bloqueado */ } },   // o novato chegou na Zaeon pelo portal
@@ -556,7 +557,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       )}
       {tunel && (
         <TunelBuracoNegro modo={tunel} onCoberto={(c) => engine.current?.pausar(c)}
-          onEscolher={(id) => { if (tunel.tipo === "escolher") engine.current?.viajarPeloTunel(id as IdNo | null); else engine.current?.atravessarBuracoDono(tunel.para); }}
+          onEscolher={(id) => { if (tunel.tipo === "escolher") engine.current?.viajarPeloTunel(id as IdNo | null); else if (tunel.tipo === "direto") engine.current?.viajarDireto(); else engine.current?.atravessarBuracoDono(tunel.para); }}
           onFim={() => setTunel(null)} />
       )}
       {somAberto === "lounge" && p.musica && <TocaDiscos som={p.somLounge ?? null} offsetMs={p.offsetMusica ?? 0} api={p.musica} onFechar={() => setSomAberto(null)} />}

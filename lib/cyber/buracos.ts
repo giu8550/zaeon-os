@@ -62,8 +62,11 @@ export const NOS: Record<IdNo, NoTunel> = {
   })) as Record<IdPlataforma, NoTunel>),
   lounge: noDaSala("lounge"), garagem: noDaSala("garagem"), biblioteca: noDaSala("biblioteca"), jardim: noDaSala("jardim"),
 };
-/** as salas como destinos do túnel (só com os níveis separados — antes, chegava-se pelas escadas) */
-export const SALAS_NO: readonly NomeSala[] = NIVEIS_SEPARADOS ? ["lounge", "garagem", "biblioteca", "jardim"] : [];
+/** as SALAS (os níveis — lib/cyber/nivelAtivo) NÃO entram no túnel de escolher: cada uma tem o SEU caminho, sem menu —
+ *  do hub, o fio cósmico dela (lib/cyber/fiosCosmicos) leva direto até ela; de dentro, o buraco negro dela leva direto
+ *  de volta pro hub, ao lado da boca do fio */
+export const SALAS_NO: readonly NomeSala[] = [];
+export const SALAS_COM_NO: readonly NomeSala[] = NIVEIS_SEPARADOS ? ["lounge", "garagem", "biblioteca", "jardim"] : [];
 export const ehSala = (id: IdNo): id is NomeSala => id === "lounge" || id === "garagem" || id === "biblioteca" || id === "jardim";
 /** a ordem dos destinos no túnel */
 export const IDS_NOS: IdNo[] = ([...(["zaeon", "praca", "univ", "ufc", "unifor", "uece", "solana"] as IdNo[]).filter((id) => id === "zaeon" || id === "praca" || IDS_PLATAFORMAS.includes(id as IdPlataforma)), ...SALAS_NO]);

@@ -29,6 +29,7 @@ import { criarPisosEstudo } from "./EstacionamentosEstudo";
 import { LOTES } from "@/lib/cyber/motos";
 import { NOS } from "@/lib/cyber/buracos";
 import { criarBuracoPortal } from "./BuracoPortal";
+import { criarFiosCosmicos } from "./FiosCosmicos";
 import { NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { criarCoracao } from "./CoracaoZaeon";
 import { criarEstacoes } from "./EstacoesAgentes";
@@ -215,6 +216,9 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   //    cabeças de serpente no pé e a muralha embaixo; a Sala do Saber no topo da pirâmide (components/cyber/EscadaPiramide) ──
   const COR_SALA: Record<NomeSala, number> = { lounge: 0xb98cff, garagem: 0xffb46b, biblioteca: 0x7fb8ff, jardim: 0x7dffb0 };
   if (!NIVEIS_SEPARADOS) { const ep = criarEscadasDePedra({ low, cores: COR_SALA }); add(ep.group); alvos.push(...ep.alvos); }   // (níveis separados: sem escadas — os fios cósmicos e os buracos negros)
+  // ── o TECIDO CÓSMICO (no lugar das escadas): os fios-neurônio com o buraco negro massivo na ponta (components/cyber/FiosCosmicos) ──
+  const fios = NIVEIS_SEPARADOS ? criarFiosCosmicos({ low, cores: COR_SALA, starTex }) : null;
+  if (fios) { add(fios.group); alvos.push(...fios.alvos); fios.group.traverse((n) => { n.userData.semLote = true; }); }   // (anima: fora dos lotes)
   // ── a PLATAFORMA de cada sala (só a base; o clube em cima é o Salas): a laje de gelo com o aro de luz (a montanha
   //    invertida e o brilho antigravidade embaixo saíram — out/2026) ──
   for (const nomeSala of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nomeSala], base = new THREE.Group(); base.position.set(L.x, ALTURA_LOUNGE, L.z); add(base, grupoSala[nomeSala]);
@@ -351,6 +355,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         if (ev.raio && opts.aoRaio) { const tp = TOPO_DA_CAPELA(); opts.aoRaio(topoMundo.set(tp.x, tp.y, tp.z).applyMatrix4(ilha.matrixWorld)); }
         if (ev.tum && opts.aoBater) opts.aoBater(globoMundo.set(0, GLOBO_CAPELA.y, 0).applyMatrix4(ilha.matrixWorld)); }
       bnc.atualizar(dt * vel, t);
+      fios?.atualizar(dt * vel, t);
       // querubins
       { const a = cGeo.attributes.position!.array as Float32Array;
         cher.forEach((c, i) => { c.a += dt * c.sp * vel; a[i * 3] = Math.cos(c.a) * c.r; a[i * 3 + 1] = c.y + Math.sin(t * 0.5 + i) * 0.3; a[i * 3 + 2] = Math.sin(c.a) * c.r; });
@@ -359,6 +364,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       }   // (fim do que é do hub)
       for (const p of portaisSalas) if (grupoSala[p.n].visible) p.h.atualizar(dt * vel, t);   // (o buraco negro de volta, na sala da pessoa)
     },
-    dispose() { rotulo.remove(); templo.dispose(); for (const tp of tempestades) tp.h.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
+    dispose() { rotulo.remove(); fios?.dispose(); templo.dispose(); for (const tp of tempestades) tp.h.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };
 }
