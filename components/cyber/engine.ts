@@ -74,12 +74,16 @@ import { criarFxMagia, type FxMagia } from "./MagiaFx";
 import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
+import { LOTES_CARRO, pisoDaVaga, vagaDoLote, vagasDeCarro, type VagaCarro } from "@/lib/cyber/carros";
+import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
 import { LOOPS_CARRO, mixDoCarro, sonsDaCabine } from "@/lib/cyber/somCarro";
 import { paletaFeminina, type Paleta } from "./CorpoAstronauta";
 import { paletaDoPersonagem, type Personagem } from "@/lib/cyber/personagem";
 /** o CARRO VOADOR estacionado na praça, perto das vagas das motos (x, z, rumo) e a altura em que ele paira acima do
  *  chão; a cabine leva 1,6 s pra abrir/fechar inteira (as portas e o vidro em cascata — components/cyber/CarroHex) */
-const CARRO_VAGA = { x: -22, z: -132, rumo: 2.01 } as const, CARRO_PAIRA = 0.45, CARRO_CABINE = 1.6;
+const CARRO_PAIRA = 0.45, CARRO_CABINE = 1.6;
+/** os carros PARADOS só se desenham até aqui (m) e só se animam até `CARRO_ANIMA` (a frota tem 17 — lib/cyber/carros) */
+const CARRO_VE = 420, CARRO_ANIMA = 140;
 import { DURACAO_RIFLE, NUM_TIRO, RIFLE, animacaoDaMorte, danoDoTiro, desviar, difAng, dispersao, fracaoDoGiro, girarAte, movComRifle, naCabeca, noCorpo, passoCalor, passoInercia, podeAtirar, pontoDaMira, precisaVirar, rifleDoMov, tirosNovos } from "@/lib/cyber/rifle";
 import { CAIDO, COMBO, HIT_STOP, PROTECAO_RENASCER, VIDA_MAX, acabou as golpeAcabou, acerta, codificarGolpe, cortouEntre, danoDoGolpe, decodificarGolpe, proximoGolpe, type EstadoAtaque, type Golpe } from "@/lib/cyber/combate";
 import { dentroDaArena, ARENA_ATIVA, BONECOS, PILARES_ARENA, SPARRING, naArena, pontoDeRenascer } from "@/lib/cyber/arena";
@@ -138,6 +142,9 @@ import { FALAS_DROID, HABILIDADES, habilidadeDaTecla, prontaPraUsar, sortear, ty
  */
 export type PessoaCyber = { id: string; name: string; color: string; fundador?: boolean; /** o corpo próprio de jogador (o servidor decide — lib/lounge3d/corposDeUsuario) */ corpo?: string; /** pilota a nave-QG: o dono ou a tripulação (o servidor decide) */ nave?: boolean; /** o PERSONAGEM escolhido ao entrar (gênero + cor — lib/cyber/personagem): o corpo de astronauta dele */ personagem?: Personagem | null };
 /** o TÚNEL de um buraco negro: de onde se entrou e pra onde dá pra ir */
+/** um carro da frota: o corpo, o estado de voo (o mesmo da moto), a cabine e o som (os loops só existem enquanto ele
+ *  está em uso — 17 carros × 5 loops parados era desperdício) */
+type CarroFrota = { h: CarroHandle; vaga: VagaCarro; est: EstadoMoto; pousado: boolean; fase: "parado" | "entrando" | "fechando" | "dirigindo" | "abrindo" | "saindo"; k: number; ligado: number; potencia: number; acel: number; velAnt: number; boost: boolean; loops: Record<(typeof LOOPS_CARRO)[number], LoopSom> | null; somPerto: boolean };
 export type TunelAberto = { origem: IdNo; destinos: { id: IdNo; nome: string; desc: string }[] };
 /** o TOUR da anfitriã (lib/cyber/onboarding): o passo atual — o React mostra a fala */
 export type EstadoGuia = { passo: number; total: number; id: string; titulo: string; agente: string; cor: string };
@@ -654,7 +661,11 @@ export class CyberEngine {
   /** o CARRO VOADOR (components/cyber/CarroHex): a física é a mesma das motos (lib/cyber/motoFisica). As fases: parado →
    *  ENTRANDO (a cabine abre) → FECHANDO (ele já sentado; a cabine fecha e o carro liga) → DIRIGINDO → ABRINDO (pousado,
    *  pediu pra sair) → SAINDO (ele já do lado de fora; a cabine fecha) → parado. `k` = a abertura da cabine (0..1) */
-  private carro: { h: CarroHandle; est: EstadoMoto; pousado: boolean; fase: "parado" | "entrando" | "fechando" | "dirigindo" | "abrindo" | "saindo"; k: number; ligado: number; potencia: number; acel: number; velAnt: number; boost: boolean; loops: Record<(typeof LOOPS_CARRO)[number], LoopSom>; somPerto: boolean } | null = null;
+  private carro: CarroFrota | null = null;
+  /** os CARROS (lib/cyber/carros): a praça + os estacionamentos da Zaeon; `carro` é o da vez (o que eu uso) */
+  private carros: CarroFrota[] = [];
+  /** os PISOS dos estacionamentos de carros da Zaeon (components/cyber/EstacionamentoCarros) */
+  private pisosCarros: PisoCarrosHandle[] = [];
   /** dentro do carro (sentado: fechando, dirigindo ou abrindo) */
   private noCarro() { const f = this.carro?.fase; return f === "fechando" || f === "dirigindo" || f === "abrindo"; }
   /** num veículo que a câmera persegue (moto ou carro) — e o rumo dele */
@@ -2705,16 +2716,27 @@ export class CyberEngine {
     else if (m.y > CHAO + 0.5) { this.eu.alt = m.y; this.cairDaqui(); }
   }
   // ───────────── o CARRO VOADOR ─────────────
-  /** perto do carro parado, a pé (o F entra) */
-  private carroPerto() {
-    const c = this.carro; if (!c || c.fase !== "parado" || this.moto !== null || this.pilotando || this.jet.noAr || this.bordo || this.noCeu) return false;
-    return Math.hypot(this.eu.pos.x - c.est.x, this.eu.pos.z - c.est.z) < 4.2 && Math.abs(this.eu.alt - c.est.y) < 2;   // (o carro tem ~6 m: de qualquer lado dele)
+  /** o carro PARADO mais perto, a pé (o F entra) — da praça ou de um estacionamento da Zaeon */
+  private carroProximo(): CarroFrota | null {
+    if ((this.carro && this.carro.fase !== "parado") || this.moto !== null || this.pilotando || this.jet.noAr || this.bordo) return null;
+    let melhor: CarroFrota | null = null, dm = 4.2;   // (o carro tem ~6 m: de qualquer lado dele)
+    for (const c of this.carros) {
+      if (c.fase !== "parado" || Math.abs(this.eu.alt - c.est.y) > 2) continue;
+      const d = Math.hypot(this.eu.pos.x - c.est.x, this.eu.pos.z - c.est.z); if (d < dm) { dm = d; melhor = c; }
+    }
+    return melhor;
   }
-  /** pousado na praça (dá pra descer ali) */
-  private carroPodeSair() { const c = this.carro!; return c.pousado && naPraca({ x: c.est.x, z: c.est.z }); }
+  private carroPerto() { return this.carroProximo() !== null; }
+  /** pousado num PISO de verdade (dá pra descer ali): a praça ou o piso da Zaeon */
+  private carroPodeSair() {
+    const c = this.carro!; if (!c.pousado) return false;
+    const p = { x: c.est.x, z: c.est.z };
+    return naPraca(p) || (naIlhaPrincipal(p) && Math.abs(c.est.y - (CIDADE.pisoY + alturaNaCidade(p))) < 1.5);
+  }
   /** ENTRAR: ele vai pro lado da porta do motorista, a cabine abre (portas + vidro em cascata, com som) */
   entrarNoCarro() {
-    const c = this.carro; if (!c || !this.carroPerto()) return;
+    const c = this.carroProximo(); if (!c) return;
+    this.carro = c;
     const ex = Math.cos(c.est.yaw), ez = -Math.sin(c.est.yaw);   // (a esquerda do carro: a porta do motorista)
     this.eu.pos.set(c.est.x + ex * 2.1, 0, c.est.z + ez * 2.1); this.eu.facing = Math.atan2(-ex, -ez);
     c.fase = "entrando"; this.alvo = null; this.alvoDepois = null; this.jetV = { x: 0, z: 0 };
@@ -2733,31 +2755,57 @@ export class CyberEngine {
   /** o CARRO a cada quadro: nasce estacionado na praça; a cabine (as fases, com o som de cada porta e vidro), o motor
    *  (liga/desliga, os loops misturados pela velocidade) e o corpo dele no mundo */
   private passoCarro(t: number, dt: number) {
-    if (!this.carro) {
-      const h = criarCarroHex({ low: this.o.low }); this.cena.scene.add(h.group);
-      const loops = Object.fromEntries(LOOPS_CARRO.map((n) => [n, this.som.loop(n, h.group, { dist: DISTANCIA.padrao })])) as Record<(typeof LOOPS_CARRO)[number], LoopSom>;
-      this.carro = { h, est: motoParada(CARRO_VAGA.x, CHAO, CARRO_VAGA.z, CARRO_VAGA.rumo), pousado: true, fase: "parado", k: 0, ligado: 0, potencia: 0, acel: 0, velAnt: 0, boost: false, loops, somPerto: false };
+    if (!this.carros.length) {
+      const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
+      for (const v of vagasDeCarro()) {
+        const h = criarCarroHex({ low: this.o.low, cor: v.cor }); this.cena.scene.add(h.group);
+        const c: CarroFrota = { h, vaga: v, est: motoParada(v.x, pisoDaVaga(v, CHAO, ilhaY), v.z, v.rumo), pousado: true, fase: "parado", k: 0, ligado: 0, potencia: 0, acel: 0, velAnt: 0, boost: false, loops: null, somPerto: false };
+        h.group.position.set(c.est.x, c.est.y + CARRO_PAIRA, c.est.z); h.group.rotation.y = c.est.yaw; h.atualizar(t, 0, { vel: 0, ligado: false });
+        this.carros.push(c);
+      }
+      for (const l of LOTES_CARRO) {
+        const p = criarPisoCarros(l, { low: this.o.low }), cen = mundo(vagaDoLote(l, (l.filas - 1) / 2, (l.porFila - 1) / 2));
+        p.group.position.set(cen.x, ilhaY, cen.z); p.group.rotation.y = vagaDoLote(l, 0, 0).rumo; this.cena.scene.add(p.group); this.pisosCarros.push(p);
+      }
     }
-    const c = this.carro, kAnt = c.k;
+    for (const p of this.pisosCarros) p.atualizar(t);
+    const cam = this.cam.position;
+    for (const c of this.carros) {
+      // os PARADOS longe: nem se desenham; os parados perto: só o brilho (atualizar), sem som
+      const d = Math.hypot(c.est.x - cam.x, c.est.z - cam.z), ativo = c === this.carro && (c.fase !== "parado" || c.ligado > 0.01);
+      c.h.group.visible = ativo || d < CARRO_VE;
+      if (!ativo) { if (c.loops) { for (const n of LOOPS_CARRO) this.som.soltarLoop(c.loops[n]); c.loops = null; } if (c.h.group.visible && d < CARRO_ANIMA) c.h.atualizar(t, dt, { vel: 0, ligado: false }); continue; }
+      this.passoDoCarro(c, t, dt);
+    }
+    if (this.carro && this.carro.fase === "parado" && this.carro.ligado <= 0.01) this.carro = null;   // (estacionou: nenhum é o da vez)
+  }
+  /** o carro EM USO a cada quadro: a cabine (as fases, com o som de cada porta e vidro), o motor (liga/desliga, os loops
+   *  misturados pela velocidade) e o corpo dele no mundo */
+  private passoDoCarro(c: CarroFrota, t: number, dt: number) {
+    if (!c.loops) { const h = c.h; c.loops = Object.fromEntries(LOOPS_CARRO.map((n) => [n, this.som.loop(n, h.group, { dist: DISTANCIA.padrao })])) as Record<(typeof LOOPS_CARRO)[number], LoopSom>; c.somPerto = false; }
+    const loops = c.loops, kAnt = c.k;
     if (c.fase === "entrando" || c.fase === "abrindo") c.k = Math.min(1, c.k + dt / CARRO_CABINE);
     if (c.fase === "fechando" || c.fase === "saindo") c.k = Math.max(0, c.k - dt / CARRO_CABINE);
     if (c.fase === "entrando" && c.k >= 1) { c.fase = "fechando"; this.sitT = 0; }   // (sentou: a cabine fecha)
-    else if (c.fase === "fechando" && c.k <= 0) { c.fase = "dirigindo"; c.pousado = true; this.camAz = c.est.yaw + Math.PI; this.camSegueEm = 0; this.som.tocar("carro-liga", null, { dist: DISTANCIA.naveLocal, seguir: c.h.group }); this.o.onAviso?.("Carro ligado · W acelera · Espaço sobe · Q desce · P pousa · F (pousado) sai"); }
+    else if (c.fase === "fechando" && c.k <= 0) { c.fase = "dirigindo"; this.altoEm = null; this.yNav = 0; this.plat = null; this.ilhota = null;   // (dirigindo, o nível é o do carro — como na moto)
+      c.pousado = true; this.camAz = c.est.yaw + Math.PI; this.camSegueEm = 0; this.som.tocar("carro-liga", null, { dist: DISTANCIA.naveLocal, seguir: c.h.group }); this.o.onAviso?.("Carro ligado · W acelera · Espaço sobe · Q desce · P pousa · F (pousado) sai"); }
     else if (c.fase === "abrindo" && c.k >= 1) {   // desceu: do lado do motorista
       const ex = Math.cos(c.est.yaw), ez = -Math.sin(c.est.yaw);
       this.eu.pos.set(c.est.x + ex * 2.1, 0, c.est.z + ez * 2.1); this.eu.facing = c.est.yaw; c.fase = "saindo";
+      // pousado no piso da Zaeon → anda na ilha (como quem desce da moto lá)
+      if (naIlhaPrincipal(this.eu.pos) && Math.abs(c.est.y - (CIDADE.pisoY + alturaNaCidade(this.eu.pos))) < 1.5) { this.altoEm = "ceu"; this.yNav = CIDADE.pisoY; this.portalArmado = false; }
     } else if (c.fase === "saindo" && c.k <= 0) c.fase = "parado";
     // DENTRO dele (desde que entra até sair): o som é o do MEU veículo — alcance de quem pilota (como a minha moto), senão
     // a câmera a ~7 m atrás já cortava quase tudo; de fora, o alcance normal de um carro passando
     const dentro = c.fase !== "parado", dist = dentro ? DISTANCIA.naveLocal : DISTANCIA.padrao;
-    if (dentro !== c.somPerto) { c.somPerto = dentro; for (const n of LOOPS_CARRO) this.som.distanciaLoop(c.loops[n], dist); }
+    if (dentro !== c.somPerto) { c.somPerto = dentro; for (const n of LOOPS_CARRO) this.som.distanciaLoop(loops[n], dist); }
     for (const n of sonsDaCabine(kAnt, c.k, c.h.nVidros)) this.som.tocar(n, null, { dist, seguir: c.h.group, taxa: 0.96 + Math.random() * 0.08 });
     // (a cabine abrindo/fechando: o motor DESLIGADO — só as portas e os vidros soam)
     const ligado = c.fase === "dirigindo" ? 1 : 0; c.ligado += (ligado - c.ligado) * Math.min(1, dt * 2.5);
     const vel = Math.hypot(c.est.vx, c.est.vz);
     if (dt > 0) { c.acel += (Math.max(-1, Math.min(1, (vel - c.velAnt) / dt / 8)) - c.acel) * Math.min(1, dt * 4); c.velAnt = vel; }   // (o CANTO: acelerando/desacelerando)
     const mx = mixDoCarro({ ligado: c.ligado, vel, potencia: Math.min(1, c.potencia), acel: c.acel });
-    for (const n of LOOPS_CARRO) { this.som.volumeLoop(c.loops[n], mx[n].vol); this.som.taxaLoop(c.loops[n], mx[n].taxa); }
+    for (const n of LOOPS_CARRO) { this.som.volumeLoop(loops[n], mx[n].vol); this.som.taxaLoop(loops[n], mx[n].taxa); }
     c.h.group.position.set(c.est.x, c.est.y + CARRO_PAIRA, c.est.z); c.h.group.rotation.y = c.est.yaw;
     c.h.abrir(c.k); c.h.atualizar(t, dt, { vel, ligado: c.ligado > 0.3 });
   }
@@ -3059,8 +3107,8 @@ export class CyberEngine {
     const out: Colisor[] = [], vs = vagas();
     vs.forEach((v, i) => { if (Math.abs(this.yDaVaga(v) - this.eu.alt) < 2.5) out.push({ x: v.x, z: v.z, r: PLATAFORMA_MOTO.r }); });   // a plataforma (com ou sem moto)
     for (const { m } of this.largadasAgora()) if (Math.abs(m.y - this.eu.alt) < 2.5) out.push({ x: m.x, z: m.z, r: 1.1 });   // as paradas no MEU nível
-    const c = this.carro;   // o CARRO parado (ou com alguém entrando/saindo): três círculos ao longo do comprimento
-    if (c && !this.noCarro() && Math.abs(c.est.y - this.eu.alt) < 2.5) for (const d of [1.4, 0, -1.5]) out.push({ x: c.est.x + Math.sin(c.est.yaw) * d, z: c.est.z + Math.cos(c.est.yaw) * d, r: 1.05 });
+    // os CARROS parados (ou com alguém entrando/saindo) perto: três círculos ao longo do comprimento de cada um
+    if (!this.noCarro()) for (const c of this.carros) if (Math.abs(c.est.y - this.eu.alt) < 2.5 && Math.abs(c.est.x - this.eu.pos.x) < 12 && Math.abs(c.est.z - this.eu.pos.z) < 12) for (const d of [1.4, 0, -1.5]) out.push({ x: c.est.x + Math.sin(c.est.yaw) * d, z: c.est.z + Math.cos(c.est.yaw) * d, r: 1.05 });
     return out;
   }
   /** altura do dorso da nave (onde se fica em pé) e o raio andável lá em cima */
@@ -4355,7 +4403,7 @@ export class CyberEngine {
     this.poolBases?.dispose(); this.poolBases = null;
     for (const b of this.bases.values()) b.dispose(); this.baseQG?.dispose();
     for (const lm of this.lms) lm.dispose();
-    this.somLounge?.dispose(); this.musicaNave?.dispose(); this.livros?.dispose(); this.livros = null; this.relicario?.dispose(); this.relicario = null; if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } if (this.carro) { for (const n of LOOPS_CARRO) this.som.soltarLoop(this.carro.loops[n]); this.carro.h.dispose(); this.carro = null; } this.som.dispose(); this.fxMagia?.dispose(); this.fxMagia = null; this.rifle?.dispose(); this.rifle = null; this.cruz?.remove(); this.cruz = null;
+    this.somLounge?.dispose(); this.musicaNave?.dispose(); this.livros?.dispose(); this.livros = null; this.relicario?.dispose(); this.relicario = null; if (this.balada) { this.balada.veu.geometry.dispose(); (this.balada.veu.material as THREE.Material).dispose(); this.balada.luz.geometry.dispose(); (this.balada.luz.material as THREE.Material).dispose(); for (const f of this.balada.feixes) (f.material as THREE.Material).dispose(); this.balada.feixes[0]?.geometry.dispose(); this.balada = null; } if (this.showNave) { this.showNave.mandala.dispose(); this.showNave.nevoa.dispose(); this.showNave.group.removeFromParent(); } for (const c of this.carros) { if (c.loops) for (const n of LOOPS_CARRO) this.som.soltarLoop(c.loops[n]); c.h.dispose(); } this.carros = []; for (const p of this.pisosCarros) p.dispose(); this.pisosCarros = []; this.carro = null; this.som.dispose(); this.fxMagia?.dispose(); this.fxMagia = null; this.rifle?.dispose(); this.rifle = null; this.cruz?.remove(); this.cruz = null;
     this.pisosEstudo?.traverse((n) => { const m = n as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.(); }); this.pisosEstudo?.removeFromParent(); this.pisosEstudo = null;
     this.cidade?.dispose(); this.holo?.dispose(); this.univ?.dispose(); for (const c of this.campi) c.h.dispose(); this.solana?.dispose(); this.nave?.dispose(); for (const m of [...this.instMotos.values(), ...[...this.poolMotos.values()].flat()]) m.h.dispose();
     for (const m of this.vagaMotos) { m.g.traverse((x) => { const k = x as THREE.Mesh; k.geometry?.dispose(); }); m.g.removeFromParent(); }

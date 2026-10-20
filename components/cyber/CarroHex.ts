@@ -11,6 +11,7 @@
  * Referencial: +z = a FRENTE, +y = cima, y = 0 = a base da saia (o carro paira acima do chão).
  */
 import * as THREE from "three";
+import type { CorCarro } from "@/lib/cyber/carros";
 
 export type CarroHandle = {
   group: THREE.Group;
@@ -142,11 +143,15 @@ function pintar(g: THREE.BufferGeometry, cor: (p: THREE.Vector3) => THREE.Color)
   g.setAttribute("color", new THREE.BufferAttribute(col, 3));
 }
 
+/** a COR da lataria (lib/cyber/carros `CorCarro`): um giro de matiz sobre o laranja/vermelho original e a
+ *  saturação/claridade a somar */
+const girar = (c: THREE.Color, k?: CorCarro) => (k ? c.offsetHSL(k.matiz, k.sat ?? 0, k.luz ?? 0) : c);
+
 type Mats = Record<"chassi" | "saia" | "laranja" | "laranja2" | "brilhoCauda" | "chama" | "chamaNucleo" | "clarao" | "junta" | "brilhoVidro" | "aceso" | "vidro" | "dentro" | "banco" | "tela" | "branco" | "verde" | "jato", THREE.Material>;
 
-function criarMats(): Mats {
+function criarMats(cor?: CorCarro): Mats {
   // a lataria: do vermelho (em cima, atrás) ao laranja (embaixo, na frente) — cor por vértice, como a degradê das refs
-  return {
+  const M: Mats = {
     chassi: new THREE.MeshPhysicalMaterial({ color: 0x07080b, metalness: 0.4, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.08 }),
     saia: new THREE.MeshStandardMaterial({ color: 0x0b0c10, metalness: 0.3, roughness: 0.55 }),
     laranja: new THREE.MeshPhysicalMaterial({ vertexColors: true, metalness: 0.15, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.12, side: THREE.DoubleSide }),
@@ -166,13 +171,16 @@ function criarMats(): Mats {
     verde: new THREE.MeshBasicMaterial({ color: 0x3dff7a }),
     jato: new THREE.MeshBasicMaterial({ color: 0xff9a3a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }),
   };
+  // a COR da frota: as peças da lataria (as aletas, as juntas, o hexágono aceso e os brilhos) giram junto
+  if (cor) for (const m of [M.laranja2, M.junta, M.aceso, M.brilhoCauda, M.brilhoVidro] as (THREE.Material & { color: THREE.Color; emissive?: THREE.Color })[]) { girar(m.color, cor); if (m.emissive) girar(m.emissive, cor); }
+  return M;
 }
 
-export function criarCarroHex(o: { low: boolean }): CarroHandle {
+export function criarCarroHex(o: { low: boolean; cor?: CorCarro }): CarroHandle {
   const group = new THREE.Group(); group.name = "carro-hex";
-  const M = criarMats(), geos: THREE.BufferGeometry[] = [], extras: THREE.Texture[] = [];
+  const M = criarMats(o.cor), geos: THREE.BufferGeometry[] = [], extras: THREE.Texture[] = [];
   const add = (g: THREE.BufferGeometry, m: THREE.Material, pai: THREE.Object3D = group) => { geos.push(g); const k = new THREE.Mesh(g, m); pai.add(k); return k; };
-  const vermelho = new THREE.Color(0xd8341e), laranja = new THREE.Color(0xff7a2a), claro = new THREE.Color(0xffb38a);
+  const vermelho = girar(new THREE.Color(0xd8341e), o.cor), laranja = girar(new THREE.Color(0xff7a2a), o.cor), claro = girar(new THREE.Color(0xffb38a), o.cor);
   const corDaLataria = (p: THREE.Vector3) => { const k = THREE.MathUtils.clamp((p.y - 0.55) / 0.66 * 0.55 + (-p.z + 2.95) / 5.9 * 0.45, 0, 1); return laranja.clone().lerp(vermelho, k).lerp(claro, Math.max(0, 0.3 - Math.abs(p.x) * 0.25) * (p.y > 1.1 ? 1 : 0)); };
 
   // ── o CHASSI (a faixa preta brilhante) e a SAIA por baixo ──
