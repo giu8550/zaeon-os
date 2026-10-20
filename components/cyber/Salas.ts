@@ -32,7 +32,7 @@ const TEMA: Record<NomeSala, { piso: number; brilho: number; cor: string; alt: n
 const FESTA = [0x66e6ff, 0xb98cff, 0xff5fd2, 0x6bff9a, 0x4d7bff];
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material; /** a textura de ponto de luz (fumaça, faíscas) */ estrela?: THREE.Texture; /** caiu um raio do RITUAL na névoa do lounge (mundo): o trovão */ aoTrovao?: (em: THREE.Vector3) => void; /** o grupo onde cada sala entra (o do NÍVEL dela); sem isso, a ilha */ paiDaSala?: (n: NomeSala) => THREE.Object3D };
+type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material; /** a textura de ponto de luz (fumaça, faíscas) */ estrela?: THREE.Texture; /** caiu um raio do RITUAL na névoa do lounge (mundo): o trovão */ aoTrovao?: (em: THREE.Vector3) => void; /** o grupo onde cada sala entra (o do NÍVEL dela); sem isso, a ilha */ paiDaSala?: (n: NomeSala) => THREE.Object3D; /** monta SÓ estas salas (os níveis separados: uma de cada vez) */ apenas?: NomeSala[] };
 export type SalasHandle = {
   alvos: THREE.Object3D[];
   /** a TELA do telão do lounge (clicável: o dono escreve o recado pro QG do Andrei) */
@@ -660,7 +660,7 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     });
   }
 
-  for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) {
+  for (const nome of (o.apenas ?? Object.keys(CIDADE.salas)) as NomeSala[]) {
     const s = CIDADE.salas[nome], tema = TEMA[nome], porta = s.porta ?? CIDADE.salaParede.porta, ALT = tema.alt;
     const g = new THREE.Group(); g.position.set(s.x, s.y ?? 0, s.z); g.rotation.y = rotDaSala(s); (o.paiDaSala?.(nome) ?? ilha).add(g);   // (cada sala no grupo do NÍVEL dela — components/cyber/Cidade)   // o lounge: lá no alto
     // piso + friso de luz

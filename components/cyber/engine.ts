@@ -792,9 +792,7 @@ export class CyberEngine {
     await etapa("hiperespaco", 1);
     await etapa("praca");
     // a ILHA da praça (sempre: sem chão, as bases precisam de onde ficar)
-    { const pr = criarPraca({ low, starTex: this.cena.starTex }); camuflarGrupo(pr.group);
-      fundirEstaticos(pr.group, { passo: (_, t) => pr.atualizar(1 / 30, t), manter: [pr.piso] });
-      this.cena.scene.add(pr.group); this.praca = pr; }
+    if (!NIVEIS_SEPARADOS) this.montarPraca();   // (com os níveis separados, a praça monta quando se chega nela)
     // a ARENA PvP (a praça inteira — lib/cyber/arena): o anel de combate, os pilares, a placa e os bonecos de treino
     if (!this.o.menu && ARENA_ATIVA) { this.arena = criarArena({ low }); this.cena.scene.add(this.arena.group); }   // (desmontada: a praça é dos novatos)
     if (opts.landmarks) await etapa("mirantes");
@@ -842,8 +840,7 @@ export class CyberEngine {
         const pf = criarPisosEstudo({ low, onde: "fora" }); this.cena.scene.add(pf); fundirEstaticos(pf); this.pisosEstudo = pf; }
       }
       await etapa("solana");
-      this.solana = criarSolanaHouse({ low, starTex: this.cena.starTex }); camuflarGrupo(this.solana.group); this.cena.scene.add(this.solana.group);
-      { const so = this.solana; fundirEstaticos(so.group, { passo: (_, t) => so.atualizar(1 / 30, t) }); }
+      if (!NIVEIS_SEPARADOS) this.montarSolana();   // (com os níveis separados, a Solana monta quando se chega nela)
       pararCamuflagem(typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
       await etapa("nave");
       this.nave = criarNave({ low, cor: "#2f7bff" }); loteNave(this.nave); this.cena.scene.add(this.nave.group);
@@ -1206,7 +1203,7 @@ export class CyberEngine {
     this.rotinaExaminer.passo(dt, !!this.somLounge?.tocando, this.genteNoTemplo());
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, agora = Date.now() / 1000, some = this.instancia;   // no tutorial (instância só da pessoa), ninguém mais aparece
     const eu = [{ x: this.eu.pos.x, z: this.eu.pos.z }, ...[...this.remotos.values()].map((a) => ({ x: a.pos.x, z: a.pos.z }))];   // desviam de quem está no caminho
-    for (const p of this.personagens) { p.h.mostrar(!some); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position, eu); }
+    for (const p of this.personagens) { p.h.mostrar(!some && this.noMeuNivel(p.h.pos, p.h.alt)); p.h.atualizar(dt, t, agora, ilhaY, this.cam.position, eu); }   // (noutro nível: não aparece — a agenda segue andando)
   }
   private removerAtor(a: Ator) { a.vozH?.remover(); a.vozH = null; this.soltarSomNave(a); this.soltarSomJet(a); if (a.somAsas) { this.som.soltarLoop(a.somAsas); a.somAsas = null; } if (a.somFio) { this.som.soltarLoop(a.somFio); a.somFio = null; } a.nave?.dispose(); a.nave = null; a.espada?.dispose(); a.espada = null; a.rifle?.dispose(); a.rifle = null; a.av.dispose(); a.tag.remove(); this.falas = this.falas.filter((f) => { if (f.ator === a) { f.el.remove(); return false; } return true; }); }
 
@@ -2941,7 +2938,7 @@ export class CyberEngine {
     // (o zumbido dos postes dos fios de energia saiu com eles: as escadas agora são de pedra)
     this.somLoops.fio = s.loop("fio-puxa", this.eu.av.group, { dist: DISTANCIA.eu });
     // a MÚSICA AMBIENTE dos espaços de convivência: sai das caixas de som discretas de cada sala (lib/cyber/ambiente)
-    for (const c of this.cidade?.caixasAmbiente ?? []) if (c.sala === "biblioteca" || c.sala === "jardim") s.volumeLoop(s.loop(`ambiente-${c.sala}`, c.obj, { dist: DISTANCIA.ambiente, volume: 0.5 }), 1);
+    if (!NIVEIS_SEPARADOS) for (const c of this.cidade?.caixasAmbiente ?? []) if (c.sala === "biblioteca" || c.sala === "jardim") s.volumeLoop(s.loop(`ambiente-${c.sala}`, c.obj, { dist: DISTANCIA.ambiente, volume: 0.5 }), 1);
     // os DROIDS das estações da Terra: maquinário flutuando (lib/cyber/somDroid) — o líder mais grave e mais alto
     for (const em of this.cidade?.somDroids ?? []) { const l = s.loop("droid-maquina", em.obj, { dist: DISTANCIA.droid, volume: em.lider ? 1 : 0.55 }); s.volumeLoop(l, 1); s.taxaLoop(l, em.lider ? 0.82 : 1.18); this.somDroids.push({ em, l }); }
     if (this.nave) { this.somLoops.naveIdle = s.loop("ship-idle", this.nave.group, { dist: DISTANCIA.grande }); this.somLoops.naveVoo = s.loop("ship-flight", this.nave.group, { dist: DISTANCIA.naveLocal }); }
@@ -3087,7 +3084,7 @@ export class CyberEngine {
     if (novo && this.holo) this.som.tocar("neuron-chime", this.holo.group.position.clone().setY(this.holo.group.position.y + 2.2), { dist: DISTANCIA.padrao });
   }
   /** a playlist/estado do toca-discos do lounge (da sala) + a diferença de relógio servidor − cliente (ms) */
-  setSomLounge(som: SomLounge | null, offsetMs = 0) { this.somLounge?.aplicar(som, offsetMs); }
+  setSomLounge(som: SomLounge | null, offsetMs = 0) { this.somLoungeAgora = { som, offsetMs }; this.somLounge?.aplicar(som, offsetMs); }
   /** a música da NAVE (o PC "som da nave"): sai da própria nave do dono — a minha, pilotando ou parada, ou a dele, remota */
   setSomNave(som: SomLounge | null, offsetMs = 0) {
     this.musicaNavePendente = { som, offset: offsetMs };
@@ -3618,7 +3615,7 @@ export class CyberEngine {
   private atualizarNivel() {
     if (!NIVEIS_SEPARADOS) return;
     this.quadroNivel++;
-    if (this.espiando && this.quadroNivel - this.espiando.quadro > 2) { this.espiando = null; this.cidade?.mostrarNivel(this.nivel); }   // (a cena acabou)
+    if (this.espiando && this.quadroNivel - this.espiando.quadro > 2) { const e = this.espiando.n; this.espiando = null; this.cidade?.mostrarNivel(this.nivel); if (e !== "zaeon" && e !== this.nivel) this.desmontarSalaAqui(e); }   // (a cena acabou)
     const e = this.eu, a = this.posNivel, saltou = !a.ok || Math.hypot(e.pos.x - a.x, e.pos.z - a.z) > 25 || Math.abs(e.alt - a.alt) > 25;
     const n = proximoNivel(this.nivel, e.pos, e.alt, saltou);
     a.x = e.pos.x; a.z = e.pos.z; a.alt = e.alt; a.ok = true;
@@ -3626,11 +3623,68 @@ export class CyberEngine {
   }
   /** numa CENA do guia, mostrar outro nível (só o desenho) enquanto a cena durar — volta sozinho no quadro seguinte */
   private espiando: { n: "zaeon" | NomeSala; quadro: number } | null = null; private quadroNivel = 0;
-  private espiarNivel(n: "zaeon" | NomeSala) { if (!this.cidade || n === this.nivel) return; this.cidade.grupoDoNivel(n).visible = true; this.espiando = { n, quadro: this.quadroNivel }; }
+  private espiarNivel(n: "zaeon" | NomeSala) {
+    if (!this.cidade || n === this.nivel) return;
+    if (n !== "zaeon" && !this.cidade.salaMontada(n)) this.montarSalaAqui(n);   // (a cena mostra uma sala que não está carregada: monta enquanto durar)
+    this.cidade.grupoDoNivel(n).visible = true; this.espiando = { n, quadro: this.quadroNivel };
+  }
   private mudarNivel(n: IdNivel) {
+    const antes = this.nivel;
     this.nivel = n; definirNivel(n);
     this.cidade?.mostrarNivel(n);
+    // CARREGA UM NÍVEL DE CADA VEZ: a sala de onde saí é DESMONTADA (libera a memória) e a sala onde cheguei é MONTADA
+    // (a troca acontece com a tela coberta pelo túnel)
+    if (NIVEIS_SEPARADOS && this.cidade) {
+      if (antes && antes !== n && ehSala(antes)) this.desmontarSalaAqui(antes);
+      if (ehSala(n)) this.montarSalaAqui(n);
+    }
+    if (NIVEIS_SEPARADOS) {
+      if (n === "praca") this.montarPraca(); else if (antes === "praca") this.desmontarPraca();
+      if (n === "solana") this.montarSolana(); else if (antes === "solana") this.desmontarSolana();
+    }
     this.somLounge?.silenciar(n !== "lounge");   // (a música do lounge é DO lounge: fora dele, não existe)
+  }
+  /** a PRAÇA e a SOLANA também são níveis: montam quando se chega e desmontam quando se sai */
+  private montarPraca() {
+    if (this.praca) return;
+    const pr = criarPraca({ low: this.o.low, starTex: this.cena.starTex }); camuflarGrupo(pr.group);
+    fundirEstaticos(pr.group, { passo: (_, t) => pr.atualizar(1 / 30, t), manter: [pr.piso] });
+    this.cena.scene.add(pr.group); this.praca = pr;
+  }
+  private desmontarPraca() { const pr = this.praca; if (!pr) return; this.praca = null; this.soltarRegiaoDe(pr.group); pr.group.removeFromParent(); pr.dispose(); }
+  private montarSolana() {
+    if (this.solana) return;
+    const so = criarSolanaHouse({ low: this.o.low, starTex: this.cena.starTex }); camuflarGrupo(so.group); this.cena.scene.add(so.group);
+    fundirEstaticos(so.group, { passo: (_, t) => so.atualizar(1 / 30, t) }); this.solana = so;
+  }
+  private desmontarSolana() { const so = this.solana; if (!so) return; this.solana = null; this.soltarRegiaoDe(so.group); so.group.removeFromParent(); so.dispose(); }
+  private soltarRegiaoDe(raiz: THREE.Object3D) { const r = this.regioes.get(raiz); if (r) { soltarRegiao(r); this.regioes.delete(raiz); } }
+  /** a última música do lounge que o React mandou (quem monta o lounge depois já toca do ponto certo) */
+  private somLoungeAgora: { som: SomLounge | null; offsetMs: number } | null = null;
+  private loopsAmbiente = new Map<NomeSala, LoopSom[]>();
+  /** MONTA uma sala (o nível dela) e o que é do engine nela: o visual de holograma, os lotes estáticos, a música do lounge
+   *  e a música ambiente das salas de convivência */
+  private montarSalaAqui(n: NomeSala) {
+    const c = this.cidade!; if (c.salaMontada(n)) return;
+    c.montarSala(n);
+    const g = c.grupoDoNivel(n); camuflarGrupo(g);
+    fundirEstaticos(g, { passo: (k, t) => { c.somTocando(k % 3 !== 0, (k % 5) / 4); c.atualizar(1 / 30, t); }, manter: [...comDescendentes([...c.alvos, c.tvLounge]), ...[c.tocaDiscos, ...c.caixasLounge, ...c.caixasAmbiente.map((x) => x.obj)].flatMap((o) => (o ? comDescendentes([o]) : []))] });
+    c.somTocando(false);
+    if (n === "lounge" && this.som && this.o.urlMusica && c.caixasLounge.length && !this.somLounge) {
+      this.somLounge = criarSomLounge({ audio: this.som, caixas: c.caixasLounge, urlDe: this.o.urlMusica });
+      if (this.somLoungeAgora) this.somLounge.aplicar(this.somLoungeAgora.som, this.somLoungeAgora.offsetMs);
+    }
+    if (this.som && (n === "biblioteca" || n === "jardim")) {
+      const ls = c.caixasAmbiente.filter((x) => x.sala === n).map((x) => { const l = this.som.loop(`ambiente-${n}`, x.obj, { dist: DISTANCIA.ambiente, volume: 0.5 }); this.som.volumeLoop(l, 1); return l; });
+      this.loopsAmbiente.set(n, ls);
+    }
+  }
+  /** DESMONTA uma sala (a pessoa saiu dela): o que é do engine nela sai junto */
+  private desmontarSalaAqui(n: NomeSala) {
+    const c = this.cidade!; if (!c.salaMontada(n)) return;
+    if (n === "lounge" && this.somLounge) { this.somLounge.dispose(); this.somLounge = null; }
+    for (const l of this.loopsAmbiente.get(n) ?? []) this.som.soltarLoop(l); this.loopsAmbiente.delete(n);
+    c.desmontarSala(n);
   }
   /** lotes da base: simula perto/longe, hover e energia (a tela, os cristais e as linhas reagem) */
   private loteBase(b: BaseEstudoHandle) {
