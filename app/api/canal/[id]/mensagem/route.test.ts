@@ -265,3 +265,33 @@ describe("POST /api/canal/[id]/mensagem · #443 dispensar uma agente não tira a
     expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
   });
 });
+
+describe("POST /api/canal/[id]/mensagem · #466 chamar pelo nome, sem @", () => {
+  beforeEach(() => {
+    state.criadas = []; state.disparos = []; state.publicados = []; state.atualizacoes = [];
+    state.canal = { ...canal("turma"), agentes: ["aura", "medicina"] }; state.user = user(B);
+    // a agente da vez é o Osler (medicina)
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }];
+  });
+
+  it("o caso do print: 'sim continue aura pode ir em frente' → responde a Aura, não a agente da vez", async () => {
+    await POST(req("sim continue aura pode ir em frente"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+
+  it("'minha aura está pesada' não chama a Aura: segue a agente da vez", async () => {
+    await POST(req("minha aura está pesada hoje"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
+  });
+
+  it("chamada pelo nome depois de ter saído: 'voltou para a conversa'", async () => {
+    state.historico = [...state.historico, { autorTipo: "sistema", autorId: "aura", texto: "Aura saiu da conversa" }];
+    const j = await (await POST(req("aura, volta aqui por favor"), { params: { id: CANAL } })).json();
+    expect(j.voltaram).toEqual(["aura"]);
+  });
+
+  it("a mensagem guarda só as @ de verdade (o nome não vira @ no texto)", async () => {
+    await POST(req("aura, me explica isso"), { params: { id: CANAL } });
+    expect(state.criadas[0].mencoes).toEqual([]);
+  });
+});
