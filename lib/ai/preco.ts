@@ -18,6 +18,7 @@ export const USD_POR_MILHAO: Record<string, Preco> = {
   // Gemini 3.x (quando o projeto habilitar) — valores provisórios = 2.5 equivalentes.
   "gemini-3.5-flash":      { prompt: 0.30, completion: 2.50, cached: 0.03 },
   "gemini-3.1-pro":        { prompt: 1.25, completion: 10.00, cached: 0.125 },
+  "gemini-3.5-flash-lite": { prompt: 0.10, completion: 0.40, cached: 0.01 }, // provisório = 2.5-flash-lite (reserva Google do pool)
   // Pool grátis (Fatia 7) — free tier: custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts).
   // O MESMO "gemini-2.5-flash-lite" no Vertex custa: por isso o ledger zera pelo ALVO (custoDoAlvoUsd), não pelo nome.
   "zaeon-pool-lite":                { prompt: 0, completion: 0, cached: 0 }, // free tier — custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts)

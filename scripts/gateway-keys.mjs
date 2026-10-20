@@ -8,7 +8,7 @@
  *   node scripts/gateway-keys.mjs --revoke medicina      # POST /key/delete
  *   node scripts/gateway-keys.mjs --ambiente prod        # key_alias = agent:<agentKey>:<ambiente> (default: NODE_ENV|dev)
  *   node scripts/gateway-keys.mjs --models zaeon-flash,zaeon-pro   # allowlist
- *   node scripts/gateway-keys.mjs --pool aura,medicina   # Fatia 7: acrescenta zaeon-pool-lite/-cf/-groq à allowlist
+ *   node scripts/gateway-keys.mjs --pool aura,medicina   # Fatia 7: acrescenta zaeon-pool-lite/-cf/-groq + zaeon-reserva-google à allowlist
  *                                                        # da key EXISTENTE (ou cria) desses agentes. Nunca 2ª key.
  *
  * Lê GATEWAY_URL e GATEWAY_MASTER_KEY do ambiente/.env. IDEMPOTENTE por key_alias: existe → /key/update,
@@ -34,7 +34,8 @@ const BUDGET = Number(flag("--budget") ?? 0.5);
 const AMBIENTE = flag("--ambiente") ?? process.env.NODE_ENV ?? "dev";
 const DURATION = flag("--duration") ?? "90d";
 // Grupos do pool grátis (= GRUPOS_POOL em lib/llm/pool.ts). zaeon-pool-glm fica fora: off por padrão (§5.2).
-export const GRUPOS_POOL = ["zaeon-pool-lite", "zaeon-pool-cf", "zaeon-pool-groq"];
+// zaeon-reserva-google: o fallback do pool (Vertex flash-lite) — a key precisa enxergar o grupo do fallback.
+export const GRUPOS_POOL = ["zaeon-pool-lite", "zaeon-pool-cf", "zaeon-pool-groq", "zaeon-reserva-google"];
 const POOL = flag("--pool");
 const MODELS_BASE = (flag("--models") ?? "zaeon-flash,zaeon-pro").split(",").map((s) => s.trim()).filter(Boolean);
 const MODELS = POOL ? [...new Set([...MODELS_BASE, ...GRUPOS_POOL])] : MODELS_BASE;

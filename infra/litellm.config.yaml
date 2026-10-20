@@ -58,6 +58,19 @@ model_list:
       rpm: 30
       tpm: 8000
     model_info: { id: groq }
+  # ── RESERVA GOOGLE (decisão do dono, 2026-10-20) ─────────────────────────────────────────────
+  # Pool grátis esgotado/fora → Vertex flash-lite, PAGO e barato. O pool só leva web pública e o Vertex
+  # pago não treina com o que recebe: o risco aqui é só custo, e ele aparece — ledger com alvo "vertex"
+  # e o painel POOL conta como "vazamento" do grátis. Groq/Cloudflare saíram da cadeia: cota grátis
+  # pequena demais (Groq ~1–2 respostas/min; o fallback por ele levava ~11 s). Fora de zaeon-pool-*
+  # de propósito: o teste "pool nunca é crédito do negócio" continua valendo pros grupos grátis.
+  - model_name: zaeon-reserva-google
+    litellm_params:
+      model: vertex_ai/gemini-3.5-flash-lite
+      vertex_project: os.environ/GOOGLE_PROJECT_ID
+      vertex_location: os.environ/GEMINI_TEXT_LOCATION   # texto: "global" (ver docker-compose.beta.yml)
+      vertex_credentials: os.environ/GOOGLE_CREDENTIALS
+    model_info: { id: vertex }
   # GLM (Zhipu) — OFF por padrão (§5.2: provedor fora de BR/EUA; decisão de política). Descomentar = ligar,
   # e acrescentar "zaeon-pool-glm" ao fim da lista de fallbacks abaixo.
   # - model_name: zaeon-pool-glm
@@ -84,8 +97,9 @@ litellm_settings:
 router_settings:
   redis_host: redis
   redis_port: 6379
-  # Só o pool tem fallback, e só para OUTRO provedor grátis — nunca zaeon-flash/zaeon-pro (§5.10).
-  fallbacks: [{"zaeon-pool-lite": ["zaeon-pool-cf", "zaeon-pool-groq"]}]
+  # Só o pool tem fallback, e só para a RESERVA GOOGLE (flash-lite pago, barato e no ledger) —
+  # nunca zaeon-flash/zaeon-pro, que são o orçamento do chat. Era cf → groq até 2026-10-20 (decisão do dono).
+  fallbacks: [{"zaeon-pool-lite": ["zaeon-reserva-google"]}]
   allowed_fails: 2
   cooldown_time: 60
   num_retries: 1
