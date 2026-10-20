@@ -11,14 +11,14 @@
  *  - nas UNIVERSIDADES: colada à borda do disco, do lado virado pra Zaeon (de onde as motos chegam).
  */
 import { CIDADE, daSala, mundo } from "./ceu";
-import { GARAGEM_LOUNGE } from "./templo";
+import { GARAGEM_LOUNGE, GARAGEM_LOUNGE_EXISTE } from "./templo";
 import { PLATAFORMAS, plataformaAtiva } from "./plataformas";
 import { PLATAFORMA_MOTO, noLote, tamanhoDoLote, vagaNoLote, type Lote } from "./motos";
 
 const TODOS_COM_VAGA = ["biblioteca", "jardim", "lounge", "univ", "ufc", "unifor", "uece"] as const;
 export type AmbienteVaga = (typeof TODOS_COM_VAGA)[number];
 /** os estacionamentos que EXISTEM (as universidades só com UNIVERSIDADES_NO_MAPA) */
-export const AMBIENTES_COM_VAGA: readonly AmbienteVaga[] = TODOS_COM_VAGA.filter((a) => a === "biblioteca" || a === "jardim" || a === "lounge" || plataformaAtiva(a));
+export const AMBIENTES_COM_VAGA: readonly AmbienteVaga[] = TODOS_COM_VAGA.filter((a) => a === "biblioteca" || a === "jardim" || (a === "lounge" ? GARAGEM_LOUNGE_EXISTE : plataformaAtiva(a)));   // (o lounge perdeu a garagem: o Templo Cósmico)
 export const temVaga = (amb: string | undefined): amb is AmbienteVaga => !!amb && (AMBIENTES_COM_VAGA as readonly string[]).includes(amb);
 
 /** o máximo de vagas de cada estacionamento (o pedido do dono) */

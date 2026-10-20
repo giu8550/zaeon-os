@@ -17,7 +17,7 @@
  */
 import * as THREE from "three";
 import type { PisoOclusor } from "./oclusaoPisos";
-import { rotDaSala, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, inicioDaPonta, ESTACOES_NA_CAPELA, FOGO_NA_BORDA, TORRES_NA_BORDA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
+import { rotDaSala, espelhoDe, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, inicioDaPonta, ESTACOES_NA_CAPELA, FOGO_NA_BORDA, TORRES_NA_BORDA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
 import { criarEscadasDePedra } from "./EscadaPiramide";
@@ -260,7 +260,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     for (const c of g.children) if (!antes.has(c) && !extras.includes(c)) extras.push(c);   // (o que o Salas pôs no grupo da sala)
     // o TEMPLO (lib/cyber/templo — no referencial do lounge)
     let templo: SalaViva["templo"] = null;
-    if (n === "lounge") { templo = criarTemplo({ low, paredeMat: vidroSala, estrela: starTex, aoTrovao: opts.aoTrovao }); templo.group.position.set(L.x, ALTURA_LOUNGE, L.z); templo.group.rotation.y = rotDaSala(L); por(templo.group); meus.push(...templo.alvos); }
+    if (n === "lounge") { templo = criarTemplo({ low, paredeMat: vidroSala, estrela: starTex, aoTrovao: opts.aoTrovao }); templo.group.position.set(L.x, ALTURA_LOUNGE, L.z); templo.group.rotation.y = rotDaSala(L); if (espelhoDe(L)) templo.group.scale.x = -1; por(templo.group); meus.push(...templo.alvos); }
     // os ESTACIONAMENTOS da GARAGEM (o piso; as motos e os robôs são do engine)
     const estacs = n !== "garagem" ? [] : LOTES.filter((l) => l.id === "garagem").map((l) => { const e = criarPisoEstacionamento({ low, parado: rm, lote: l }); e.group.position.set(l.x - CIDADE.centro.x, l.alt, l.z - CIDADE.centro.z); e.group.rotation.y = l.rot; por(e.group, true); return e; });
     for (const c of pisosDaSala.get(n) ?? []) por(c);

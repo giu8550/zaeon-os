@@ -6,7 +6,7 @@
  *  - a PISTA do lounge (a festa).
  * Tudo no MUNDO; `y` é absoluto (as salas da Zaeon: o piso da ilha + a altura das salas — o engine soma a boia da ilha).
  */
-import { CIDADE, MOVEIS, PISTA, alturaNaCidade, colisoresDaCidade, daSala, mundo, naSala, rotDaSala, type NomeSala } from "../ceu";
+import { CIDADE, MOVEIS, PISTA, alturaNaCidade, colisoresDaCidade, daSala, mundo, naSala, rotDaSala, rumoNaSala, type NomeSala } from "../ceu";
 import { DECK, PATIO } from "../templo";
 import { lugaresDoLounge } from "../descanso";
 import { PLATAFORMAS, andarNaPlataforma, type IdPlataforma } from "../plataformas";
@@ -55,7 +55,7 @@ function chaoDaSala(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
     if (cs.some((c) => Math.hypot(w.x - c.x, w.z - c.z) < c.r + 1.1)) continue;
     if (ocupados.some((o) => Math.hypot(w.x - o.x, w.z - o.z) < 1.6)) continue;
     // de frente pro meio da sala (ou pro lado, um pouco variado)
-    const r = acasoDe("piso", sala, Math.round(lx * 10), Math.round(lz * 10)), rumo = rotDaSala(s) + Math.atan2(-lx, -lz) + (r() - 0.5) * 1.2;
+    const r = acasoDe("piso", sala, Math.round(lx * 10), Math.round(lz * 10)), rumo = rumoNaSala(s, Math.atan2(-lx, -lz) + (r() - 0.5) * 1.2);
     out.push({ id: `${sala}-piso-${out.length}`, ambiente: amb, tipo: "piso", x: w.x, z: w.z, y: ySala(w), rumo, zaeon: true });
   }
   return out;

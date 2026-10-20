@@ -10,7 +10,7 @@
  * FRENTE do assento (`frentes`, fora do colisor), vira de costas e abaixa até ele (nada de atravessar o móvel); pra
  * levantar, o contrário.
  */
-import { CIDADE, MOVEIS, daSala, mundo, rotDaSala, type Movel, type NomeSala } from "./ceu";
+import { CIDADE, MOVEIS, daSala, mundo, rumoNaSala, type Movel, type NomeSala } from "./ceu";
 
 type P2 = { x: number; z: number };
 export type ModoDescanso = "sentado" | "deitado";
@@ -69,9 +69,9 @@ export function lugaresDoLounge(): Lugar[] {
   if (cache) return cache;
   const out: Lugar[] = [];
   for (const sala of Object.keys(CIDADE.salas) as NomeSala[]) {
-    const rs = rotDaSala(CIDADE.salas[sala]), em = (m: Movel, lx: number, lz: number) => doMovel(sala, m, lx, lz);
+    const sl = CIDADE.salas[sala], em = (m: Movel, lx: number, lz: number) => doMovel(sala, m, lx, lz);
     MOVEIS[sala].forEach((m, i) => {
-      const rumo = m.rot + rs, id = `${sala}-${m.tipo}-${i}`;
+      const rumo = rumoNaSala(sl, m.rot), id = `${sala}-${m.tipo}-${i}`;
       if (m.tipo === "sofa") out.push({
         id, tipo: "sofa", rumo, rumoDeitado: rumo + Math.PI / 2, alturaAssento: ALTURA_SOFA, relaxa: false,
         assentos: ASSENTOS_SOFA.map((x) => em(m, x, 0.08)), deita: em(m, 0, 0.05), saida: em(m, 0, m.prof / 2 + 0.85),
