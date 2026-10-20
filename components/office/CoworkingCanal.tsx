@@ -22,10 +22,11 @@ import { ConvidarForm, type ConviteVista } from "./ConvitesEscritorio";
 import SinoConvites from "./SinoConvites";
 import { montarSino, contadorDoSino, type HistoricoSino, type EstadoSino, type AcaoSino } from "@/lib/canal/sino";
 import PessoasTopo from "./PessoasTopo";
+import BarraAgentes from "./BarraAgentes";
 import MenuPessoa, { type ConversaComPessoa } from "./MenuPessoa";
 import { abrirPerfil } from "@/lib/perfil/eventos";
 import { podeRemover, textoConfirmarRemover } from "@/lib/canal/perfil";
-import { estaAtivo, frase, normalizarEstado, rotulo, type EstadoAgente } from "@/lib/canal/estadoAgente";
+import { estaAtivo, frase, normalizarEstado, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
@@ -531,8 +532,6 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   // a mesma regra do servidor: o último agente que falou, a não ser que tenha saído da conversa (#438)
   const ultimoAgente = agenteDaVez(det.mensagens.filter((m) => !m.id.startsWith("efemera-")), agentes.map((a) => a.agentKey));
   const agenteAtivo = canal.membros.length === 0 ? agentes.find((a) => a.agentKey === ultimoAgente) ?? null : null;
-  const presentes = agentes.filter((a) => canal.agentes.includes(a.agentKey));
-  const outros = agentes.filter((a) => !canal.agentes.includes(a.agentKey));
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4" style={zoom.style}>
@@ -666,20 +665,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               ))}
             </div>
           )}
-          {/* agentes convocáveis: presentes no canal + os meus contratados (toque = @) */}
-          {(presentes.length > 0 || outros.length > 0) && (
-            <div className="flex gap-1.5 overflow-x-auto pb-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {[...presentes, ...outros].map((a) => (
-                <button key={a.agentKey} type="button" onClick={() => prefixarAgente(a.agentKey)}
-                  title={estadoAgente[a.agentKey] === "descanso" ? rotulo(a.nome, "descanso") : `@${a.agentKey}${a.curso ? ` · ${a.curso}` : ""}`}
-                  className={`shrink-0 min-h-[36px] pl-1 pr-2.5 rounded-full flex items-center gap-1.5 text-[12px] font-semibold ${VIDRO_CHIP} ${canal.agentes.includes(a.agentKey) ? TXT : TXT_MUDO} ${estadoAgente[a.agentKey] === "descanso" ? "opacity-60" : ""}`}>
-                  <AgentAvatar src={a.avatarUrl} nome={a.nome} size={26} emoji={a.emoji} agentId={a.agentKey} estado={digitando.includes(a.agentKey) ? "falando" : "idle"} className={digitando.includes(a.agentKey) ? "ring-2 ring-cyan-400/80" : ""} />
-                  {a.nome}
-                  {estadoAgente[a.agentKey] === "descanso" && <span className={`text-[10px] font-medium ${TXT_MUDO}`}>em descanso</span>}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* agentes convocáveis: presentes no canal + os meus contratados (toque = @) — #443: componente próprio */}
+          <BarraAgentes agentes={agentes} naConversa={canal.agentes} digitando={digitando} estado={estadoAgente} onChamar={prefixarAgente} />
           <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}
