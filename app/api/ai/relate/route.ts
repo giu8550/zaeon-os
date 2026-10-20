@@ -8,11 +8,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { VertexAI } from "@google-cloud/vertexai";
-import { vertexCredentials } from "@/lib/ai/vertex-credentials";
+import { vertexCredentials, vertexTextClientOpts } from "@/lib/ai/vertex-credentials";
 import { geminiText } from "@/lib/ai/gemini-text";
 import { cacheJson, hashKey } from "@/src/lib/cache";
 import { guard } from "@/src/lib/ratelimit";
 import { extractDocText, buildRelateTextContext } from "@/lib/ai/docContext";
+import { GEMINI_MODEL_FLASH } from "@/lib/ai/model";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -93,14 +94,14 @@ export async function POST(req: Request) {
     // ───────── NÍVEL SOFISTICADO (Gemini): os 2 PDFs inteiros ─────────
     // (só chega aqui com fileData A e B presentes — caso contrário caiu no metadados acima)
     try {
-        const { project, client_email, private_key, location } = vertexCredentials();
+        const { project, client_email, private_key } = vertexCredentials();
         const vertexAI = new VertexAI({
             project,
-            location,
+            ...vertexTextClientOpts(),
             googleAuthOptions: { credentials: { client_email, private_key } },
         });
         const model = vertexAI.getGenerativeModel({
-            model: process.env.SCHOLAR_GEMINI_MODEL || "gemini-2.5-flash",
+            model: process.env.SCHOLAR_GEMINI_MODEL || GEMINI_MODEL_FLASH,
             generationConfig: { temperature: 0.4 },
         });
         const parts: any[] = [

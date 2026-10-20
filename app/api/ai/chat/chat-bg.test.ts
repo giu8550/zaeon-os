@@ -4,7 +4,7 @@ const m = vi.hoisted(() => ({
   userId: "u1" as string | null, create: vi.fn(), get: vi.fn(), saveError: vi.fn(), enqueue: vi.fn(), runInline: vi.fn(),
 }));
 vi.mock("@google-cloud/vertexai", () => ({ VertexAI: class { getGenerativeModel() { return {}; } } }));
-vi.mock("@/lib/ai/vertex-credentials", () => ({ vertexCredentials: () => ({ project: "p", client_email: "e", private_key: "k", location: "l" }) }));
+vi.mock("@/lib/ai/vertex-credentials", () => ({ vertexCredentials: () => ({ project: "p", client_email: "e", private_key: "k", location: "l" }), vertexTextClientOpts: () => ({ location: "l" }) }));
 vi.mock("@/src/lib/ratelimit", () => ({ guard: async () => ({ ok: true }) }));
 vi.mock("@/lib/agent/transcript", () => ({ resolveUserId: async () => m.userId }));
 vi.mock("@/lib/agent/chat-turn-store", async (o) => ({ ...(await o<any>()), createTurn: m.create, getTurnForUser: m.get, saveError: m.saveError }));

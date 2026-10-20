@@ -12,11 +12,12 @@
  */
 import { registrarTokens } from "@/lib/llm/ledger";
 import { usageDoVertex, USAGE_VAZIO, type Usage } from "@/lib/llm/usage";
-import { vertexCredentials } from "@/lib/ai/vertex-credentials";
+import { vertexCredentials, vertexTextClientOpts } from "@/lib/ai/vertex-credentials";
+import { GEMINI_MODEL_FLASH } from "@/lib/ai/model";
 
 export const CYBER_IA = {
   modelo: process.env.CYBER_IA_MODEL || "gemini-2.5-flash-lite",
-  reserva: process.env.CYBER_IA_MODEL_RESERVA || "gemini-2.5-flash",
+  reserva: process.env.CYBER_IA_MODEL_RESERVA || GEMINI_MODEL_FLASH,
   /** a fala de um personagem é curta: pouco texto de saída e resposta rápida */
   maxSaida: 450,
   timeoutMs: Number(process.env.CYBER_IA_TIMEOUT_MS || 8000),
@@ -36,7 +37,7 @@ const textoDe = (r: any): string => (r?.response?.candidates?.[0]?.content?.part
 const vertex: TransporteIa = async (p, modelo) => {
   const { VertexAI } = await import("@google-cloud/vertexai");
   const c = vertexCredentials();
-  const v = new VertexAI({ project: c.project, location: c.location, googleAuthOptions: { credentials: { client_email: c.client_email, private_key: c.private_key } } });
+  const v = new VertexAI({ project: c.project, ...vertexTextClientOpts(), googleAuthOptions: { credentials: { client_email: c.client_email, private_key: c.private_key } } });
   const m = v.getGenerativeModel({
     model: modelo,
     generationConfig: { temperature: p.temperatura ?? CYBER_IA.temperatura, responseMimeType: "application/json", maxOutputTokens: CYBER_IA.maxSaida },

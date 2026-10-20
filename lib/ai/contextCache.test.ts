@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   ttlString,
   isCacheableEstimate,
@@ -51,5 +51,19 @@ describe("buildCacheRequest", () => {
     expect(body.contents[0].parts[0].inlineData.mimeType).toBe("application/pdf");
     expect(body.contents[0].parts[0].inlineData.data).toBe("QUJD");
     expect(body.ttl).toBe("2700s");
+  });
+});
+
+describe("generateWithCache — cache de outra location", () => {
+  it("cache criado em us-central1 com o texto no global = cache-miss sem chamar o Vertex (o cliente recria)", async () => {
+    vi.stubEnv("GEMINI_TEXT_LOCATION", "global");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const { generateWithCache, CacheMissError } = await import("./contextCache");
+    await expect(
+      generateWithCache({ cacheName: "projects/p/locations/us-central1/cachedContents/123", systemText: "s", prompt: "p" }),
+    ).rejects.toBeInstanceOf(CacheMissError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 });

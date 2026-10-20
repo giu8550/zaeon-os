@@ -8,7 +8,7 @@
  * Helpers puros (sem rede) ficam testáveis; os callers REST são verificados por tsc.
  */
 import { GoogleAuth } from "google-auth-library";
-import { vertexCredentials } from "./vertex-credentials";
+import { vertexCredentials, geminiTextLocation, vertexHost } from "./vertex-credentials";
 import { GEMINI_MODEL_FLASH } from "./model";
 
 const SCOPES = ["https://www.googleapis.com/auth/cloud-platform"];
@@ -74,12 +74,13 @@ export async function createPdfCache(opts: {
   timeoutMs?: number;
 }): Promise<{ name: string; expireTime: string } | null> {
   try {
-    const { project, client_email, private_key, location } = vertexCredentials();
+    const { project, client_email, private_key } = vertexCredentials();
+    const location = geminiTextLocation(); // o cache tem que nascer na MESMA location do generate
     const model = opts.model || GEMINI_MODEL_FLASH;
     const token = await vertexAccessToken(client_email, private_key);
     if (!token) return null;
     const url =
-      `https://${location}-aiplatform.googleapis.com/v1/projects/${project}` +
+      `https://${vertexHost(location)}/v1/projects/${project}` +
       `/locations/${location}/cachedContents`;
     const body = buildCacheRequest({
       project, location, model,
@@ -115,12 +116,18 @@ export async function generateWithCache(opts: {
   model?: string;
   timeoutMs?: number;
 }): Promise<string> {
-  const { project, client_email, private_key, location } = vertexCredentials();
+  const { project, client_email, private_key } = vertexCredentials();
+  const location = geminiTextLocation(); // o cache tem que nascer na MESMA location do generate
+  // Cache de OUTRA location (ex.: criado em us-central1 antes da virada pro "global") não serve
+  // aqui e o Vertex responde 400 com mensagem que não casa o regex abaixo → vira cache-miss e o
+  // cliente recria, em vez de erro 500 pra quem estava com o PDF aberto no deploy.
+  const locDoCache = /\/locations\/([^/]+)\//.exec(opts.cacheName)?.[1];
+  if (locDoCache && locDoCache !== location) throw new CacheMissError("cache_miss_location");
   const model = opts.model || GEMINI_MODEL_FLASH;
   const token = await vertexAccessToken(client_email, private_key);
   if (!token) throw new Error("cache_gen_no_token");
   const url =
-    `https://${location}-aiplatform.googleapis.com/v1/projects/${project}` +
+    `https://${vertexHost(location)}/v1/projects/${project}` +
     `/locations/${location}/publishers/google/models/${model}:generateContent`;
   const contents = [
     ...(opts.history ?? []),

@@ -33,3 +33,30 @@ export function vertexCredentials(): {
   const location = stripQuotes(process.env.GOOGLE_LOCATION) || "us-central1";
   return { project, client_email, private_key, location };
 }
+
+/**
+ * Location dos modelos de TEXTO do Gemini (chat, cache de PDF, agentes, Scholar).
+ * Separada de GOOGLE_LOCATION (imagem/TTS/Imagen ficam lá) porque:
+ *   - a cota compartilhada de uma região só estoura no pico (us-central1 dava 429 em rajada);
+ *     o endpoint "global" espalha a carga;
+ *   - gemini-3.5-flash só existe no "global" neste projeto (404 em us-central1, testado 2026-10-20).
+ * Sem GEMINI_TEXT_LOCATION = comportamento antigo (GOOGLE_LOCATION). Rollback = tirar a env.
+ */
+export function geminiTextLocation(): string {
+  return stripQuotes(process.env.GEMINI_TEXT_LOCATION) || stripQuotes(process.env.GOOGLE_LOCATION) || "us-central1";
+}
+
+/** Host REST do Vertex: o "global" NÃO tem prefixo de região (global-aiplatform… não existe). */
+export function vertexHost(location: string): string {
+  return location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`;
+}
+
+/**
+ * Opções de location pro `new VertexAI({...})` dos modelos de texto. O SDK 1.10 monta
+ * `${location}-aiplatform…` sozinho e no "global" devolve uma página HTML (JSON inválido),
+ * então o host vai explícito em apiEndpoint.
+ */
+export function vertexTextClientOpts(): { location: string; apiEndpoint?: string } {
+  const location = geminiTextLocation();
+  return location === "global" ? { location, apiEndpoint: vertexHost(location) } : { location };
+}

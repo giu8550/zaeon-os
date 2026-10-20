@@ -3,7 +3,7 @@ import { projetosOn } from "@/lib/research/unifiedRoom";
 import { VertexAI } from '@google-cloud/vertexai';
 import type { FunctionDeclaration } from '@google-cloud/vertexai';
 import { GEMINI_MODEL_FLASH } from '@/lib/ai/model';
-import { vertexCredentials } from '@/lib/ai/vertex-credentials';
+import { vertexCredentials, vertexTextClientOpts } from '@/lib/ai/vertex-credentials';
 import { guard } from '@/src/lib/ratelimit';
 import { sanitizeHistory } from '@/lib/ai/history';
 import { generateWithCache, CacheMissError } from "@/lib/ai/contextCache";
@@ -160,10 +160,10 @@ export async function POST(req: Request) {
         // =================================================================
         // GEMINI ROUTE (VERTEX AI) — ÚNICA IA DO APP (Gemini Flash)
         // =================================================================
-        const { project, client_email, private_key, location } = vertexCredentials();
+        const { project, client_email, private_key } = vertexCredentials();
         const vertexAI = new VertexAI({
             project,
-            location,
+            ...vertexTextClientOpts(),
             googleAuthOptions: { credentials: { client_email, private_key } }
         });
 
