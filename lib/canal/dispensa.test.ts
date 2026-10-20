@@ -1,6 +1,6 @@
 /** #438 · a agente entende quando é dispensada — e não confunde com tchau pra outra pessoa. */
 import { describe, it, expect } from "vitest";
-import { ehDispensa, normalizar, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "./dispensa";
+import { ehDispensa, normalizar, textoDespedida, textoSaiu, textoVoltou, agentesDepois, quemFoiDispensada } from "./dispensa";
 
 const zenita = { nomesDaAgente: ["zenita", "Zenita"], mencionada: false, humanos: 2 };
 
@@ -100,5 +100,60 @@ describe("dispensa · #440 a barra de agentes", () => {
   });
   it("as linhas de saída e de volta", () => {
     expect(textoVoltou("Zenita")).toBe("Zenita voltou para a conversa");
+  });
+});
+
+describe("dispensa · #443 frases normais NÃO tiram a agente (conversa só com a Zenita)", () => {
+  const sozinha = { ...zenita, humanos: 1 };
+  it.each([
+    // item 1 do card: ela saía sem ser dispensada
+    "pode ir em frente",
+    "pode ir direto ao ponto",
+    "pode sair do modo resumo e explicar melhor",
+    "o professor falou que a prova é amanhã",
+    "vou estudar isso até amanhã",
+    "só isso? achei curto",
+    // item 2: instrução virava dispensa
+    "pode parar de responder em inglês",
+    "pode parar de usar emoji",
+    // e outras do mesmo tipo
+    "pode ir mais devagar",
+    "pode sair do tópico um pouco?",
+    "falou muito bem, continua",
+    "tchau é como se diz adeus?",
+  ])("%s", (t) => {
+    expect(ehDispensa(t, sozinha)).toBe(false);
+  });
+
+  it("e as despedidas de verdade continuam valendo, mesmo conversando só com ela", () => {
+    for (const t of ["pode ir", "pode parar", "tchau", "até amanhã!", "falou", "valeu, pode ir embora", "pode parar de responder"]) {
+      expect(ehDispensa(t, sozinha)).toBe(true);
+    }
+  });
+});
+
+describe("dispensa · #443 dispensar uma agente não tira as outras", () => {
+  const aura = { key: "aura", nomes: ["Aura"] }, zen = { key: "zenita", nomes: ["Zenita"] };
+
+  it("o caso do card: '@aura @zenita a zenita pode sair, aura continua comigo' → só a Zenita sai", () => {
+    expect(quemFoiDispensada("@aura @zenita a zenita pode sair, aura continua comigo", [aura, zen], 1)).toEqual(["zenita"]);
+  });
+  it("'@zenita pode ir' com as duas na conversa → só a Zenita", () => {
+    expect(quemFoiDispensada("@zenita pode ir", [aura, zen], 1)).toEqual(["zenita"]);
+  });
+  it("'@aura @zenita podem ir' (plural) → as duas", () => {
+    expect(quemFoiDispensada("@aura @zenita podem ir, valeu", [aura, zen], 1)).toEqual(["aura", "zenita"]);
+  });
+  it("'@aura @zenita pode ir' → as duas foram chamadas no pedaço da despedida", () => {
+    expect(quemFoiDispensada("@aura @zenita pode ir", [aura, zen], 1)).toEqual(["aura", "zenita"]);
+  });
+  it("'pode ir' sem dizer quem, com duas agentes → ninguém sai (melhor ficar do que sumir errado)", () => {
+    expect(quemFoiDispensada("pode ir", [aura, zen], 1)).toEqual([]);
+  });
+  it("'tchau zenita' numa conversa com outra pessoa → só a Zenita", () => {
+    expect(quemFoiDispensada("tchau zenita", [aura, zen], 2)).toEqual(["zenita"]);
+  });
+  it("nome escrito ganha do @: '@aura obrigada, zenita pode sair' → só a Zenita", () => {
+    expect(quemFoiDispensada("@aura obrigada, zenita pode sair", [aura, zen], 1)).toEqual(["zenita"]);
   });
 });
