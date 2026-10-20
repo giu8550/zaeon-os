@@ -29,7 +29,7 @@ import { podeRemover, textoConfirmarRemover } from "@/lib/canal/perfil";
 import { estaAtivo, frase, normalizarEstado, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
-import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
+import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, EV_REMOVIDO, type MensagemWire } from "@/lib/canal/wire";
 import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
 import { quemRespondeSemArroba } from "@/lib/canal/alvo";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
@@ -226,6 +226,14 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         // #425: "fulano entrou" no canal aberto → recarrega o canal (a foto nova aparece na barra, sem F5)
         if (m.autorTipo === "sistema" && c.id === ativoRef.current) void carregarDetalhe(c.id);
       });
+      // #468: o dono me tirou deste escritório → paro de ouvir e ele some da minha lista (sem esperar o F5)
+      ch.bind(EV_REMOVIDO, (d: { userId?: string }) => {
+        if (!d?.userId || d.userId !== meuIdRef.current) return;
+        try { p.unsubscribe(canalChannel(c.id)); p.unsubscribe(presenceChannel(c.id)); } catch { /* ignore */ }
+        setCanais((cs) => cs.filter((x) => x.id !== c.id));
+        setNaoLidas((n) => { const resto = { ...n }; delete resto[c.id]; return resto; });
+        if (ativoRef.current === c.id) setAtivoId(null);
+      });
       // alguém marcou/apagou horário na agenda deste canal → a bandeja (se aberta) recarrega
       ch.bind(EV_AGENDA, () => { if (c.id === ativoRef.current) setAgendaVersao((v) => v + 1); });
       ch.bind(EV_DIGITANDO, (d: { agentKey: string; estado: string }) => {
@@ -253,7 +261,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     const ch: any = p.subscribe(nome);
     const sync = () => {
       const lista: Pessoa[] = [];
-      ch.members?.each((m: any) => lista.push({ id: String(m.id), nome: m.info?.nome ?? "Alguém", avatar: m.info?.avatar ?? null }));
+      // #468: a presença leva só o nome (a foto inteira passava do limite e a pessoa sumia do "online"); a foto vem da lista de pessoas
+      ch.members?.each((m: any) => lista.push({ id: String(m.id), nome: m.info?.nome ?? "Alguém", avatar: null }));
       setOnline(lista);
     };
     ch.bind("pusher:subscription_succeeded", sync);

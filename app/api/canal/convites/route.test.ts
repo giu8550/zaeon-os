@@ -224,8 +224,8 @@ describe("convites · responder", () => {
     await responder(c.id, "aceitar");
     expect(state.mensagens).toHaveLength(1);
     expect(state.mensagens[0]).toMatchObject({ canalId: state.canais[0].id, autorTipo: "sistema", autorId: B, texto: "Martinez aceitou o convite e entrou na conversa" });
-    // e vai pro canal em tempo real
-    expect(state.avisos.some(([canal, ev]) => canal === `canal-${state.canais[0].id}` && ev === "mensagem")).toBe(true);
+    // e vai pro canal em tempo real (#468: canal privado)
+    expect(state.avisos.some(([canal, ev]) => canal === `private-canal-${state.canais[0].id}` && ev === "mensagem")).toBe(true);
   });
 
   it("recusar não cria conversa nem aviso", async () => {
