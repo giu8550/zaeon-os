@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseMentions, montarAliases, semMencoes, normalizarAlias, sugerir, mencaoAberta } from "./mention";
+import { parseMentions, montarAliases, semMencoes, normalizarAlias, sugerir, mencaoAberta, separarMencoesColadas } from "./mention";
 
 const AGENTES = [
   { agentKey: "aura", nome: "Aura" },
@@ -46,5 +46,19 @@ describe("mention · helpers", () => {
     expect(mencaoAberta("oi @")).toEqual({ inicio: 3, prefixo: "" });
     expect(mencaoAberta("oi @aura ")).toBeNull();
     expect(mencaoAberta("don@aura")).toBeNull();
+  });
+});
+
+describe("menções · #468 coladas", () => {
+  const al = montarAliases([{ agentKey: "aura", nome: "Aura" }, { agentKey: "teo", nome: "Téo" }]);
+  it("'@aura@teo pode sair' reconhece as duas", () => {
+    expect(parseMentions("@aura@teo pode sair, aura continua comigo", al)).toEqual(["aura", "teo"]);
+  });
+  it("e-mail não vira menção nem é cortado", () => {
+    expect(separarMencoesColadas("me manda em giulia@gmail.com")).toBe("me manda em giulia@gmail.com");
+    expect(parseMentions("me manda em aura@gmail.com", al)).toEqual([]);
+  });
+  it("tira as duas do texto do pedido", () => {
+    expect(semMencoes("@aura@teo me ajudem", al)).toBe("me ajudem");
   });
 });

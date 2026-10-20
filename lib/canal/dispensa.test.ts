@@ -206,3 +206,10 @@ describe("dispensa · #468 o verbo direto e o 'também'", () => {
     expect(ehDispensa(t, sozinha)).toBe(false);
   });
 });
+
+describe("dispensa · #468 @ colados", () => {
+  it("'@aura@teo pode sair, aura continua comigo' = com espaço: só o Téo sai", () => {
+    const aura = { key: "aura", nomes: ["Aura"] }, teo = { key: "teo", nomes: ["Téo", "Teo"] };
+    expect(quemFoiDispensada("@aura@teo pode sair, aura continua comigo", [aura, teo], 1)).toEqual(["teo"]);
+  });
+});

@@ -36,10 +36,18 @@ export function montarAliases(agentes: { agentKey: string; nome: string }[]): Ma
 }
 
 /** Extrai os agentKeys mencionados (únicos, na ordem em que aparecem). */
+/**
+ * #468: menções COLADAS ("@aura@teo") viram separadas ("@aura @teo"). Só quando o @ vem logo depois de outra
+ * menção — e-mail ("nome@gmail.com") não começa com @ e fica como está.
+ */
+export function separarMencoesColadas(texto: string): string {
+  return (texto || "").replace(/(@[\p{L}\p{N}][\p{L}\p{N}_-]*)(?=@)/gu, "$1 ");
+}
+
 export function parseMentions(texto: string, aliases: Map<string, string>): string[] {
   const out: string[] = [];
   if (!texto) return out;
-  for (const m of texto.matchAll(MENTION_RE)) {
+  for (const m of separarMencoesColadas(texto).matchAll(MENTION_RE)) {
     const key = aliases.get(normalizarAlias(m[2]!));
     if (key && !out.includes(key)) out.push(key);
   }
@@ -48,7 +56,7 @@ export function parseMentions(texto: string, aliases: Map<string, string>): stri
 
 /** Remove os `@tokens` conhecidos do texto (vira o OBJETIVO do turno do agente). */
 export function semMencoes(texto: string, aliases: Map<string, string>): string {
-  return (texto || "")
+  return separarMencoesColadas(texto || "")
     .replace(MENTION_RE, (full, pre: string, tok: string) => (aliases.has(normalizarAlias(tok)) ? pre : full))
     .replace(/\s{2,}/g, " ")
     .trim();

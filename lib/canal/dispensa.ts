@@ -21,6 +21,8 @@
  *      ("podem ir"); com várias agentes e nada que diga qual, ninguém sai (melhor ficar do que sumir errado).
  */
 
+import { separarMencoesColadas } from "./mention";
+
 /** minúsculas, sem acento, sem @menções, espaços normalizados. */
 export function normalizar(texto: string): string {
   return semAcento(texto).replace(/@[\w.-]+/g, " ").replace(/\s+/g, " ").trim();
@@ -93,6 +95,7 @@ function marcarNomes(pedaco: string, candidatas: readonly Candidata[]): { s: str
  * `humanos` = quantas pessoas no canal (o "tchau" sozinho só vale na conversa só com a agente).
  */
 export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[], humanos: number): string[] {
+  texto = separarMencoesColadas(texto); // #468: "@aura@teo pode sair" = "@aura @teo pode sair"
   if (!candidatas.length || !normalizar(texto)) return [];
   const todas = semAcento(texto);
   const citada = (k: string) => {
