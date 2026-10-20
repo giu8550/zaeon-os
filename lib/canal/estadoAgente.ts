@@ -58,6 +58,19 @@ export function frase(estado: EstadoAgente): string {
   return FRASE[estado];
 }
 
+/**
+ * #468: "Aura está redigindo…" ficava preso quando o aviso de fim não chegava (servidor reiniciou no meio, a internet
+ * caiu um instante). Agora o servidor repete o estado a cada PULSO enquanto o agente trabalha, e a tela apaga sozinha
+ * quem ficou PRAZO sem aviso novo.
+ */
+export const PULSO_AGENTE_MS = 20_000;
+export const PRAZO_AGENTE_MS = 60_000;
+
+/** Quem continua escrevendo: só quem teve aviso dentro do prazo (`ate` = até quando vale o último aviso). */
+export function aindaEscrevendo(chaves: readonly string[], ate: Readonly<Record<string, number>>, agora: number): string[] {
+  return chaves.filter((k) => (ate[k] ?? 0) > agora);
+}
+
 /** Rótulo completo, em texto puro (title/aria-label). */
 export function rotulo(nome: string, estado: EstadoAgente): string {
   const f = FRASE[estado];

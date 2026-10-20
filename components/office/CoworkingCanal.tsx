@@ -26,10 +26,11 @@ import BarraAgentes from "./BarraAgentes";
 import MenuPessoa, { type ConversaComPessoa } from "./MenuPessoa";
 import { abrirPerfil } from "@/lib/perfil/eventos";
 import { podeRemover, textoConfirmarRemover } from "@/lib/canal/perfil";
-import { estaAtivo, frase, normalizarEstado, type EstadoAgente } from "@/lib/canal/estadoAgente";
+import { estaAtivo, frase, normalizarEstado, aindaEscrevendo, PRAZO_AGENTE_MS, type EstadoAgente } from "@/lib/canal/estadoAgente";
+import { avisarTrabalhoIA } from "@/lib/ui/monitorIA";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
-import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
+import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, EV_REMOVIDO, type MensagemWire } from "@/lib/canal/wire";
 import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
 import { quemRespondeSemArroba } from "@/lib/canal/alvo";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
@@ -60,6 +61,15 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [digitando, setDigitando] = useState<string[]>([]);
   // o que cada agente está fazendo (pesquisando, investigando…) e quem está "em descanso" (lib/canal/estadoAgente)
   const [estadoAgente, setEstadoAgente] = useState<Record<string, EstadoAgente>>({});
+  // #468: até quando vale o último aviso de cada agente — sem aviso novo no prazo, o "está redigindo…" some sozinho
+  const agenteAte = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!digitando.length) return;
+    const t = setInterval(() => {
+      setDigitando((prev) => { const vivos = aindaEscrevendo(prev, agenteAte.current, Date.now()); return vivos.length === prev.length ? prev : vivos; });
+    }, 5000);
+    return () => clearInterval(t);
+  }, [digitando.length]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [menu, setMenu] = useState<"canais" | "convidar" | "sino" | `pessoa:${string}` | null>(null); // #425: "pessoa:<id>" = menu da foto
@@ -126,6 +136,15 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const meuIdRef = useRef<string | null>(null);
   const meusAgentes = useRef<Set<string>>(new Set());
   const meusAliases = useRef<string[]>([]);
+  // #468: enquanto uma agente que EU chamei escreve, o monitor do tablet sabe (o metaverso mostra "IA trabalhando")
+  const trabalhoNoTablet = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const agora = new Set(digitando.filter((k) => meusAgentes.current.has(k)).map((k) => `escritorio:${ativoId}:${k}`));
+    for (const c of trabalhoNoTablet.current) if (!agora.has(c)) avisarTrabalhoIA(c, false);
+    for (const c of agora) if (!trabalhoNoTablet.current.has(c)) avisarTrabalhoIA(c, true);
+    trabalhoNoTablet.current = agora;
+  }, [digitando, ativoId]);
+  useEffect(() => () => { for (const c of trabalhoNoTablet.current) avisarTrabalhoIA(c, false); }, []);
   const canaisRef = useRef<Canal[]>([]);
   const { visivel, pedirPermissao, badgeTitulo, notificar } = useNotificacoesSO();
   const visivelRef = useRef(true);
@@ -226,6 +245,14 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         // #425: "fulano entrou" no canal aberto → recarrega o canal (a foto nova aparece na barra, sem F5)
         if (m.autorTipo === "sistema" && c.id === ativoRef.current) void carregarDetalhe(c.id);
       });
+      // #468: o dono me tirou deste escritório → paro de ouvir e ele some da minha lista (sem esperar o F5)
+      ch.bind(EV_REMOVIDO, (d: { userId?: string }) => {
+        if (!d?.userId || d.userId !== meuIdRef.current) return;
+        try { p.unsubscribe(canalChannel(c.id)); p.unsubscribe(presenceChannel(c.id)); } catch { /* ignore */ }
+        setCanais((cs) => cs.filter((x) => x.id !== c.id));
+        setNaoLidas((n) => { const resto = { ...n }; delete resto[c.id]; return resto; });
+        if (ativoRef.current === c.id) setAtivoId(null);
+      });
       // alguém marcou/apagou horário na agenda deste canal → a bandeja (se aberta) recarrega
       ch.bind(EV_AGENDA, () => { if (c.id === ativoRef.current) setAgendaVersao((v) => v + 1); });
       ch.bind(EV_DIGITANDO, (d: { agentKey: string; estado: string }) => {
@@ -233,6 +260,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         // estado em palavras (pesquisando, investigando, em descanso…); valor desconhecido = "digitando"
         const est = normalizarEstado(d.estado);
         setEstadoAgente((m) => ({ ...m, [d.agentKey]: est }));
+        if (estaAtivo(est)) agenteAte.current[d.agentKey] = Date.now() + PRAZO_AGENTE_MS;
         setDigitando((prev) => (estaAtivo(est) ? [...new Set([...prev, d.agentKey])] : prev.filter((k) => k !== d.agentKey)));
       });
       // #423: uma PESSOA está digitando neste canal (o meu próprio aviso não aparece pra mim)
@@ -253,7 +281,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     const ch: any = p.subscribe(nome);
     const sync = () => {
       const lista: Pessoa[] = [];
-      ch.members?.each((m: any) => lista.push({ id: String(m.id), nome: m.info?.nome ?? "Alguém", avatar: m.info?.avatar ?? null }));
+      // #468: a presença leva só o nome (a foto inteira passava do limite e a pessoa sumia do "online"); a foto vem da lista de pessoas
+      ch.members?.each((m: any) => lista.push({ id: String(m.id), nome: m.info?.nome ?? "Alguém", avatar: null }));
       setOnline(lista);
     };
     ch.bind("pusher:subscription_succeeded", sync);
@@ -341,6 +370,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const alvos: string[] = Array.isArray(j.turnos) ? j.turnos.map((t: { agentKey: string }) => t.agentKey) : (m.mencoes ?? []);
       for (const k of alvos) meusAgentes.current.add(k);
       if (alvos.length) {
+        for (const k of alvos) agenteAte.current[k] = Date.now() + PRAZO_AGENTE_MS;
         setDigitando((prev) => [...new Set([...prev, ...alvos])]);
         // um "em descanso" antigo não pode aparecer como o balão de "escrevendo" do novo turno
         setEstadoAgente((m) => ({ ...m, ...Object.fromEntries(alvos.map((k) => [k, "digitando" as EstadoAgente])) }));

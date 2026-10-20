@@ -28,6 +28,14 @@ const COISA = new Set([
   "para", "pela", "pelo", "que", "qual",
 ]);
 
+/**
+ * #468: nomes de agente que também são PALAVRA COMUM (ou o nome da plataforma). Esses só chamam em posição de
+ * chamado; os outros nomes (próprios) chamam em qualquer posição — mas nunca depois de "a/o/minha/sobre…".
+ */
+const NOME_COMUM = new Set(["aura", "zaeon", "scholar", "examiner", "core_active"]);
+/** Antes de um nome próprio, estas palavras fazem dele outra pessoa/coisa ("o rei davi", "são caio"). */
+const TITULO = new Set(["rei", "sao", "santo", "santa", "profeta", "senhor", "dom", "dona", "seu"]);
+
 type Tok = { w: string; antes: string; depois: string };
 
 /** Palavras (sem acento, minúsculas) com a pontuação que vem antes e depois de cada uma. */
@@ -57,8 +65,10 @@ export function chamadasPeloNome(texto: string, agentes: readonly AgenteChamavel
     const ag = agentes.find((a) => [a.agentKey, a.nome, a.nome.split(/\s+/)[0] ?? ""].map(semAcento).some((n) => n && n === t.w));
     if (!ag || humanos.has(t.w)) return;
     const ant = toks[i - 1], prox = toks[i + 1];
-    if (ant && COISA.has(ant.w) && !/[,!:]/.test(t.antes)) return;          // "a aura", "minha aura", "sobre aura"
-    const vocativo =
+    if (ant && (COISA.has(ant.w) || TITULO.has(ant.w)) && !/[,!:]/.test(t.antes)) return; // "a aura", "sobre aura", "rei davi"
+    // #468: nome PRÓPRIO (Téo, Zenita, Nina…) chama em qualquer posição ("pode seguir em frente teo com a
+    // explicação"); só os que também são palavra comum ("aura", "zaeon") precisam estar em posição de chamado
+    const vocativo = !NOME_COMUM.has(t.w) ||
       /^\s*[,!:]/.test(t.depois) ||                                        // "aura, me explica"
       (!prox && /,/.test(t.antes)) ||                                       // "me explica isso, aura"
       (ant !== undefined && PEDIDO.has(ant.w) && !/[.?]/.test(t.antes)) ||  // "continue aura", "oi aura"

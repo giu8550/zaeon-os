@@ -27,8 +27,11 @@ const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").t
 
 /** Prioridade da mensagem pra MIM. Minha própria mensagem = "nenhuma". */
 export function prioridadeDe(m: MensagemLike, ctx: ContextoNotif): Prioridade {
-  // minha mensagem, ou o aviso de que EU entrei (#423, autorTipo "sistema"), não me notifica
-  if ((m.autorTipo === "humano" || m.autorTipo === "sistema") && ctx.meuId && m.autorId === ctx.meuId) return "nenhuma";
+  // #468: linha do sistema ("entrou", "saiu da conversa", "voltou") é aviso da sala, não mensagem: não notifica nem
+  // conta como não-lida (a Aura saindo virava "(1) Zaeon" e notificação no celular)
+  if (m.autorTipo === "sistema") return "nenhuma";
+  // minha mensagem não me notifica
+  if (m.autorTipo === "humano" && ctx.meuId && m.autorId === ctx.meuId) return "nenhuma";
   if (m.autorTipo === "agente" && (ctx.meusAgentes ?? []).includes(m.autorId)) return "alta";
   const t = norm(m.texto);
   for (const a of ctx.meusAliases ?? []) {

@@ -174,6 +174,28 @@ describe("agent-turn · executarTurno", () => {
       });
     });
 
+    it("#468: quem SAIU da conversa não volta porque outra agente o marcou (sem a linha 'voltou')", async () => {
+      const m = pede();
+      const saiu = msg({ autorTipo: "sistema", autorId: "medicina", texto: "Osler saiu da conversa" });
+      const { prisma } = fakePrisma(canal, [saiu, m]);
+      const encadear = vi.fn();
+      const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id },
+        { prisma, gerar: async () => "O @Osler está saindo, então seguimos nós duas.", publicar: async () => {}, encadear });
+      expect(encadear).not.toHaveBeenCalled();
+      expect(r.ok && r.encadeado).toBeFalsy();
+    });
+
+    it("#468: depois que uma PESSOA chamou de volta ('voltou'), a cadeia pode chamá-lo de novo", async () => {
+      const saiu = msg({ autorTipo: "sistema", autorId: "medicina", texto: "Osler saiu da conversa" });
+      const voltou = msg({ autorTipo: "sistema", autorId: "medicina", texto: "Osler voltou para a conversa" });
+      const m = pede();
+      const { prisma } = fakePrisma(canal, [saiu, voltou, m]);
+      const encadear = vi.fn();
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: m.id },
+        { prisma, gerar: async () => "A parte clínica é com o **@Osler**.", publicar: async () => {}, encadear });
+      expect(encadear).toHaveBeenCalledTimes(1);
+    });
+
     it("sem @ na resposta → não encadeia", async () => {
       const m = pede();
       const { prisma } = fakePrisma(canal, [m]);
@@ -253,6 +275,24 @@ describe("agent-turn · executarTurno", () => {
       expect(eventos.filter(([ev]) => ev === EV_DIGITANDO).every(([, p]) => p.agentKey === "aura")).toBe(true);
     });
 
+    it("#468 · enquanto o agente demora, repete o estado atual (a tela apaga quem ficou sem aviso); para no fim", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura pesquisa isso", mencoes: ["aura"] })]);
+      const eventos: [string, any][] = [];
+      const gerar = vi.fn(async ({ onFase }: any) => {
+        onFase?.("gather");
+        await new Promise((r) => setTimeout(r, 60));
+        return "pronto";
+      });
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, pulsoMs: 20, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      const lista = estados(eventos);
+      expect(lista[0]).toBe("digitando");
+      expect(lista.at(-1)).toBe("ocioso");
+      expect(lista.filter((e) => e === "pesquisando").length).toBeGreaterThanOrEqual(2);
+      const depois = eventos.length;
+      await new Promise((r) => setTimeout(r, 60));
+      expect(eventos.length).toBe(depois);   // o pulso parou junto com o turno
+    });
+
     it("sem nenhuma fase (gerar simples) o fluxo continua digitando → ocioso", async () => {
       const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura oi", mencoes: ["aura"] })]);
       const eventos: [string, any][] = [];
@@ -321,5 +361,14 @@ describe("agent-turn · executarTurno", () => {
     const r = await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A }, { prisma, gerar, publicar: async () => {} });
     expect(r.ok && r.mensagem.autorNome).toBe("Osler");
     expect(r.ok && r.mensagem.autorAvatar).toBeNull();
+  });
+});
+
+describe("#468 · a IA fica sabendo quem saiu", () => {
+  it("o bloco do canal lista quem saiu e tira dos 'outros agentes'", () => {
+    const ag = { agentKey: "aura", nome: "Aura" } as any;
+    const b = blocoCanal({ titulo: "teste 2" } as any, ag, [ag, { agentKey: "teo", nome: "Téo" } as any], ["Giulia"], { fora: [{ agentKey: "teo", nome: "Téo" }] });
+    expect(b).toMatch(/Saíram da conversa \(NÃO marque com @; só voltam se a pessoa chamar\): Téo\./);
+    expect(b).not.toMatch(/@teo \(Téo\)/);
   });
 });

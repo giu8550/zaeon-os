@@ -171,3 +171,13 @@ describe("canal/[id] · #466 entrar e sair sem apagar ninguém", () => {
     expect(state.canal.membros).toEqual([]);
   });
 });
+
+describe("canal/[id] · #468 quem foi removido para de ouvir na hora", () => {
+  it("remover avisa a tela da pessoa (uma vez só, mesmo com clique duplo)", async () => {
+    state.canal = { ...turma, membros: [B] };
+    state.publicados = [];
+    await patch({ removerMembro: B });
+    await patch({ removerMembro: B });
+    expect(state.publicados.filter((p) => p[1] === "membro-removido")).toEqual([[CANAL, "membro-removido", { userId: B }]]);
+  });
+});

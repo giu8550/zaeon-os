@@ -21,6 +21,8 @@
  *      ("podem ir"); com várias agentes e nada que diga qual, ninguém sai (melhor ficar do que sumir errado).
  */
 
+import { separarMencoesColadas } from "./mention";
+
 /** minúsculas, sem acento, sem @menções, espaços normalizados. */
 export function normalizar(texto: string): string {
   return semAcento(texto).replace(/@[\w.-]+/g, " ").replace(/\s+/g, " ").trim();
@@ -36,9 +38,12 @@ export type Candidata = { key: string; nomes: string[] };
 // #466: "por favor", "pfv" também abrem e fecham ("por favor pode sair", "pode ir embora por favor")
 const ABRE = String.raw`(?:(?:a|o|voce|vc|tu|ok|okay|blz|beleza|valeu|vlw|obrigad\w*|brigad\w*|entao|bom|certo|agora|ja|ei|oi|por favor|pfv|pf|§)\s+)*`;
 // #466: "aqui", "por agora", "por favor" também fecham ("não precisamos mais de você aqui", "pode sair por agora")
-const FECHA = String.raw`(?:\s+(?:embora|agora|ja|entao|valeu|vlw|obrigad\w*|brigad\w*|tchau\w*|bj\w*|beij\w*|flw|falou|ok|blz|beleza|ta|de vez|por hoje|por enquanto|por agora|aqui|por favor|pfv|pf|§))*`;
+// #468: "também" ("@aura pode sair também"), "daqui", "da conversa" também fecham
+const FECHA = String.raw`(?:\s+(?:embora|agora|ja|entao|valeu|vlw|obrigad\w*|brigad\w*|tchau\w*|bj\w*|beij\w*|flw|falou|ok|blz|beleza|ta|de vez|por hoje|por enquanto|por agora|aqui|por favor|pfv|pf|tambem|voce tambem|vc tambem|daqui|da conversa|da sala|do chat|§))*`;
 const FORTES = [
   String.raw`(?:ja\s+)?(?:pode|podem|podes)\s+(?:ir|sair|parar|descansar)(?:\s+embora)?`,
+  // #468: o verbo direto — "sai @aura", "saia agora", "sai da conversa", "vaza"
+  String.raw`(?:sai|saia|saiam|vaza|vazem)`,
   String.raw`(?:(?:pode|podem)\s+)?(?:ir|vai|vao)\s+embora`,
   String.raw`(?:(?:pode|podem)\s+)?(?:para|pare|parar|parem)\s+de\s+(?:responder|falar)`,
   String.raw`nao\s+precisa\s+(?:mais\s+)?(?:responder|falar)`,
@@ -90,6 +95,7 @@ function marcarNomes(pedaco: string, candidatas: readonly Candidata[]): { s: str
  * `humanos` = quantas pessoas no canal (o "tchau" sozinho só vale na conversa só com a agente).
  */
 export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[], humanos: number): string[] {
+  texto = separarMencoesColadas(texto); // #468: "@aura@teo pode sair" = "@aura @teo pode sair"
   if (!candidatas.length || !normalizar(texto)) return [];
   const todas = semAcento(texto);
   const citada = (k: string) => {

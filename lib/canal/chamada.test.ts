@@ -45,3 +45,22 @@ describe("chamar pelo nome · NÃO conta", () => {
     expect(chama("@aura oi")).toEqual([]);
   });
 });
+
+describe("chamar pelo nome · #468 nome próprio em qualquer posição", () => {
+  it("o caso do print: 'pode seguir em frente teo com a explicação' → Téo", () => {
+    expect(chama("pode seguir em frente teo com a explicação")).toEqual(["teo"]);
+  });
+  it.each([
+    ["quero que a zenita explique isso", []],        // depois de "a": é sobre ela, não chamado
+    ["acho que zenita sabe isso melhor", []],         // depois de "que": falando SOBRE ela (cauteloso)
+    ["zenita sabe isso melhor?", ["zenita"]],
+    ["teo e zenita, me ajudem", ["teo", "zenita"]],
+    ["a história do rei davi", []],
+  ] as const)("%s", (t, esperado) => {
+    expect(chamadasPeloNome(t, [...AGENTES, { agentKey: "davi", nome: "Davi" }])).toEqual(esperado);
+  });
+  it("'aura' (palavra comum) continua com a regra rígida", () => {
+    expect(chama("aura e energia são a mesma coisa?")).toEqual([]);
+    expect(chama("pode seguir em frente aura com a explicação")).toEqual([]);
+  });
+});

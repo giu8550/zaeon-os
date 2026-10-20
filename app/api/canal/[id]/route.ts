@@ -10,7 +10,7 @@ import { podeLer, podeGerir, normalizarAcesso } from "@/lib/canal/gate";
 import { isAgentKey } from "@/lib/agents/roster";
 import { anunciarEntrada } from "@/lib/canal/presenca";
 import { entrarComoMembro, sairComoMembro, type DbAtomico } from "@/lib/canal/atomico";
-import { EV_MENSAGEM, publicarPusher } from "@/lib/canal/realtime";
+import { EV_MENSAGEM, EV_REMOVIDO, publicarPusher } from "@/lib/canal/realtime";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const off = exigirFlag(); if (off) return off;
@@ -81,7 +81,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (Object.keys(data).length) await prisma.canal.update({ where: { id: canal.id }, data });
   const db = prisma as unknown as DbAtomico;
   const entrou = entra ? (await entrarComoMembro(db, canal.id, entra)) === "entrou" : false;
-  if (sai) await sairComoMembro(db, canal.id, sai);
+  // #468: o canal é privado, mas quem já estava ouvindo continua até recarregar — avisa a tela dela pra parar agora
+  if (sai && (await sairComoMembro(db, canal.id, sai)) === "saiu") await publicarPusher(canal.id, EV_REMOVIDO, { userId: sai });
   const upd = (await prisma.canal.findUnique({ where: { id: canal.id } })) ?? canal;
   // #423: quem foi ADICIONADO agora ganha a linha "fulano entrou no escritório" no chat (best-effort; #466: só se entrou agora)
   const novos = entrou && entra ? [entra] : [];

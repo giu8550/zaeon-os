@@ -7,9 +7,12 @@ describe("notificacoes · prioridade", () => {
   it("minha própria mensagem = nenhuma", () => {
     expect(prioridadeDe({ autorTipo: "humano", autorId: EU, texto: "oi" }, { meuId: EU })).toBe("nenhuma");
   });
-  it("#423 · aviso de que EU entrei não me notifica; o de outra pessoa entrando, sim (normal)", () => {
-    expect(prioridadeDe({ autorTipo: "sistema", autorId: EU, texto: "Giulia entrou no escritório" }, { meuId: EU })).toBe("nenhuma");
-    expect(prioridadeDe({ autorTipo: "sistema", autorId: OUTRO, texto: "Martinez entrou no escritório" }, { meuId: EU })).toBe("normal");
+  it("#468 · linha do sistema nunca notifica nem conta como não-lida (entrou, saiu, voltou — de quem for)", () => {
+    for (const [autorId, texto] of [[EU, "Giulia entrou no escritório"], [OUTRO, "Martinez entrou no escritório"], ["aura", "Aura saiu da conversa"], ["teo", "Téo voltou para a conversa"]]) {
+      const p = prioridadeDe({ autorTipo: "sistema", autorId, texto }, { meuId: EU, meusAgentes: ["aura", "teo"], meusAliases: ["giulia"] });
+      expect(p).toBe("nenhuma");
+      expect(deveNotificar({ prioridade: p, abaVisivel: false, canalAberto: false })).toBe(false);
+    }
   });
   it("resposta do MEU agente = alta; de outro agente = normal", () => {
     expect(prioridadeDe({ autorTipo: "agente", autorId: "aura", texto: "..." }, { meuId: EU, meusAgentes: ["aura"] })).toBe("alta");
