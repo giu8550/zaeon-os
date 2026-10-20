@@ -38,7 +38,8 @@ model_list:
   # treina com o conteúdo: por isso só web pública entra aqui. Limites: conferir no console.
   - model_name: zaeon-pool-lite
     litellm_params:
-      model: gemini/gemini-2.5-flash-lite
+      # 3.5: o 2.5-flash-lite "não está mais disponível pra novos usuários" no AI Studio (404, testado 2026-10-20).
+      model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_FREE_API_KEY
       rpm: 15
     model_info: { id: gemini-free }
