@@ -12,8 +12,8 @@ describe("corpo próprio de jogador", () => {
     const p = corpoProprio({ corpo: corpoDoUsuario(giulia) }, "");
     expect(p?.asas).toBe(false); expect(p?.corpo.url).toMatch(/giulia\.vrm$/);   // (out/2026: as asas são só do founder)
   });
-  it("o founder continua com o corpo e as asas dele (e ?founder=0 desliga)", () => {
-    expect(corpoProprio({ fundador: true }, "")?.asas).toBe(true);
+  it("o founder continua com o corpo dele, agora de MOCHILA (as asas saíram — out/2026) (e ?founder=0 desliga)", () => {
+    expect(corpoProprio({ fundador: true }, "")?.asas).toBe(false);
     expect(corpoProprio({ fundador: true }, "?founder=0")).toBeNull();
     expect(corpoProprio({}, "")).toBeNull();
   });

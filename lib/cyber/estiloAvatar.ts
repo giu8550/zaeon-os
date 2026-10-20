@@ -90,7 +90,7 @@ export const CORPOS_DE_JOGADOR: Readonly<Record<string, CorpoVrm>> = {
  *  asas se o corpo tiver `asas`) */
 export function corpoProprio(p: { fundador?: boolean; corpo?: string } | undefined, busca: string): { corpo: CorpoVrm; asas: boolean } | null {
   if (!p) return null;
-  if (usaCorpoDoFundador(p.fundador, busca)) return { corpo: CORPO_DO_FUNDADOR, asas: true };
+  if (usaCorpoDoFundador(p.fundador, busca)) return { corpo: CORPO_DO_FUNDADOR, asas: false };   // (out/2026, o dono: as asas saíram — bugadas; ele voa de MOCHILA como todo mundo)
   const c = p.corpo ? CORPOS_DE_JOGADOR[p.corpo] : undefined;
   return c ? { corpo: c, asas: !!c.asas } : null;
 }
