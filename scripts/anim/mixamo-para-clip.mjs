@@ -30,7 +30,8 @@ const ALTURA_DO_JOGO = 106.13;
 if (!entrada || !nome || !saida) { console.error("uso: node mixamo-para-clip.mjs <fbx> <nome> <saida.json>"); process.exit(1); }
 const buf = readFileSync(entrada);
 const obj = new FBXLoader().parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), "");
-const clip = obj.animations[0]; if (!clip) throw new Error("sem animação no FBX");
+// (alguns FBX trazem um "Take 001" vazio antes do clipe de verdade: fica o que tem mais trilhas)
+const clip = [...obj.animations].sort((x, y) => y.tracks.length - x.tracks.length)[0]; if (!clip || !clip.tracks.length) throw new Error("sem animação no FBX");
 // Y pra cima → Z pra cima (o nó do Soldier) e MEIA VOLTA (o personagem do Mixamo olha pro +Z; o do jogo, pro −Z)
 const giroSoldier = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
 const q = new THREE.Quaternion(), v = new THREE.Vector3(), r4 = (x) => Math.round(x * 1e3) / 1e3;

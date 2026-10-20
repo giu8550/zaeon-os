@@ -270,6 +270,23 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
   const olhoE = cru("leftEye"), olhoD = cru("rightEye"), cab = cru("head");
   const ehDoRosto = (n: string) => /_(Face|Eye)[A-Za-z]*_|_Hair[A-Za-z]*_/.test(n);   // (o rosto e o CABELO — quem é dentro do capacete)
   const escondidosRosto: THREE.Material[] = [];
+  /** o PESCOÇO dentro do capacete: o corpo do VRM some (só o rosto e o cabelo ficam) e o pescoço é dele — um cilindro na
+   *  pele do rosto, do osso do pescoço até a cabeça */
+  let pescocoRosto: THREE.Mesh | null = null;
+  const mPesc = new THREE.Matrix4();
+  const criarPescoco = () => {
+    const H = vrm.humanoid, ossoP = H?.getRawBoneNode("neck"), ossoC = H?.getRawBoneNode("head");
+    if (!ossoP || !ossoC) return null;
+    let pele: THREE.Material | null = null;
+    vrm.scene.traverse((x) => { const m = x as THREE.Mesh; if (!pele && m.isMesh) for (const mt of Array.isArray(m.material) ? m.material : [m.material]) if (/_Face_00_SKIN|Face.*SKIN/.test(mt.name) && !/Outline/.test(mt.name)) { pele = mt; break; } });
+    if (!pele) return null;
+    // (desce além do osso do pescoço, até a gola do traje: do queixo pra baixo é o que aparece pela viseira)
+    const L = ossoC.position.length(), alt = L * 2.6, g = new THREE.CylinderGeometry(0.036, 0.046, alt, 14);
+    const pesc = new THREE.Mesh(g, pele); pesc.name = "pescocoRosto"; pesc.frustumCulled = false;
+    const dir = ossoC.position.clone().normalize();
+    pesc.userData.osso = ossoP; pesc.userData.local = new THREE.Matrix4().compose(dir.clone().multiplyScalar(L * 0.6 - alt / 2), new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir), new THREE.Vector3(1, 1, 1));
+    pesc.matrixAutoUpdate = false; vrm.scene.add(pesc); return pesc;
+  };
   const pO = new THREE.Vector3(), pAlvo = new THREE.Vector3();
   const meioDosOlhos = (out: THREE.Vector3) => {
     if (olhoE && olhoD) { olhoE.updateWorldMatrix(true, false); olhoD.updateWorldMatrix(true, false); return out.setFromMatrixPosition(olhoE.matrixWorld).add(pO.setFromMatrixPosition(olhoD.matrixWorld)).multiplyScalar(0.5); }
@@ -281,6 +298,11 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
     ancoraRosto.updateWorldMatrix(true, false);
     pAlvo.setFromMatrixPosition(ancoraRosto.matrixWorld).applyMatrix4(corpoInv); meioDosOlhos(pO).applyMatrix4(corpoInv);
     vrm.scene.position.add(pAlvo.sub(pO));   // (o VRM está no corpo: a diferença no referencial dele)
+    // o pescoço segue o osso do pescoço (os ossos do VRM ficam invisíveis — preso neles, não desenhava)
+    if (pescocoRosto && pescocoRosto.userData.osso) {
+      vrm.scene.updateMatrixWorld(true);
+      pescocoRosto.matrix.copy(mPesc.copy(vrm.scene.matrixWorld).invert()).multiply((pescocoRosto.userData.osso as THREE.Object3D).matrixWorld).multiply(pescocoRosto.userData.local as THREE.Matrix4);
+    }
   };
   /** quanto a coxa vai pra FRENTE (o VRM olha pro +Z; Δ no referencial dele) */
   const frenteDaCoxa = (b: string) => { const q = delta.get(b); if (!q) return 0; qCoxa.copy(q); return baixo.set(0, -1, 0).applyQuaternion(qCoxa).z; };
@@ -358,6 +380,8 @@ export function espelharNoVrm(vrm: VRM, modelo: THREE.Object3D, corpo: THREE.Obj
         for (const mt of Array.isArray(m.material) ? m.material : [m.material]) if (mt.visible && !ehDoRosto(mt.name)) { mt.visible = false; escondidosRosto.push(mt); }
       });
       if (!a && ancoraRosto) { for (const mt of escondidosRosto) mt.visible = true; escondidosRosto.length = 0; vrm.scene.position.set(0, 0, 0); }
+      if (a && !pescocoRosto) pescocoRosto = criarPescoco();
+      if (pescocoRosto) pescocoRosto.visible = !!a;
       ancoraRosto = a;
       if (!olhoE || !olhoD) return 0;
       olhoE.updateWorldMatrix(true, false); olhoD.updateWorldMatrix(true, false);

@@ -15,13 +15,16 @@ import type { NomeClipeRifle } from "@/lib/cyber/rifle";
 
 type Andar = "parado" | "frente" | "tras" | "esq" | "dir";
 const ANDARES: [Andar, string][] = [["parado", "Parado"], ["frente", "Andar ↑"], ["tras", "Ré ↓"], ["esq", "Lado ←"], ["dir", "Lado →"]];
+/** o MOVIMENTO (sem o rifle): correr, o sprint, o voo de mochila (pairando, pra frente, turbo), a queda e o dash */
+type Mov = "nada" | "correr" | "sprint" | "paira" | "voa" | "turbo" | "cai" | "dash";
+const MOVS: [Mov, string][] = [["nada", "—"], ["correr", "Correr"], ["sprint", "Sprint"], ["paira", "Pairar"], ["voa", "Voar →"], ["turbo", "Voo turbo"], ["cai", "Queda"], ["dash", "Dash"]];
 const CLIPES: [NomeClipeRifle, string][] = [["gira", "Virar"], ["freia", "Frear"], ["cambaleia", "Cambalear"], ["morre", "Morrer"], ["morreDir", "Morrer (lado)"]];
 
 export default function Traje() {
   const ref = useRef<HTMLDivElement>(null);
-  const [traje, setTraje] = useState(true), [rifle, setRifle] = useState(true), [mira, setMira] = useState(false), [andar, setAndar] = useState<Andar>("parado");
+  const [traje, setTraje] = useState(true), [rifle, setRifle] = useState(true), [mira, setMira] = useState(false), [andar, setAndar] = useState<Andar>("parado"), [mov, setMov] = useState<Mov>("nada");
   const [pronto, setPronto] = useState(false);
-  const est = useRef({ traje, rifle, mira, andar }); est.current = { traje, rifle, mira, andar };
+  const est = useRef({ traje, rifle, mira, andar, mov }); est.current = { traje, rifle, mira, andar, mov };
   const avRef = useRef<AvatarLuzHandle | null>(null);
 
   useEffect(() => { if (new URLSearchParams(location.search).get("modelo") === "f") setRifle(false); }, []);   // (?modelo=f: a astronauta sem arma — depois de montar, sem diferença com o HTML do servidor)
@@ -55,7 +58,7 @@ export default function Traje() {
       const a = criarAvatarLuz("#8b5cf6", starTex, false, gltf, { anime: true }); a.olharPara(0); cena.add(a.group); av = a; avRef.current = a;
       a.esperarCorpo(true);
       const fem = new URLSearchParams(location.search).get("modelo") === "f";   // (a astronauta: um corpo feminino)
-      const corpoVrm = fem ? CORPOS_VRM.nina! : CORPO_DO_FUNDADOR;
+      const q = new URLSearchParams(location.search).get("corpo"), corpoVrm = (q && CORPOS_VRM[q]) || (fem ? CORPOS_VRM.nina! : CORPO_DO_FUNDADOR);   // (?corpo=giulia: o rosto de outra pessoa)
       if (fem) a.estiloVrm("feminina", { parada: true });   // (a marcha e a pose em pé femininas)
       carregarVrm(corpoVrm.url).then((vrm) => { if (!vivo) return; tingirVrm(vrm, corpoVrm.tintas); a.usarVrm(vrm); setPronto(true); })
         .catch(() => { a.esperarCorpo(false); setPronto(true); });
@@ -74,7 +77,14 @@ export default function Traje() {
         const fr = e.andar === "frente" ? 1 : e.andar === "tras" ? -1 : 0, la = e.andar === "esq" ? -1 : e.andar === "dir" ? 1 : 0, anda = e.andar !== "parado";
         alvo.set(0, 1.45, 20);   // (ela olha pro +Z)
         av.rifle(naMao > 0.01 ? { naMao, mira: wMira, frente: fr, lado: la, coice: 0, alvo, arma: arma.group } : null);
-        av.animar({ andando: anda, correndo: false, dt, t });
+        const m = e.mov, noAr = m === "paira" || m === "voa" || m === "turbo" || m === "cai";
+        av.animar({
+          andando: anda || m === "correr" || m === "sprint" || m === "dash" || m === "voa" || m === "turbo", correndo: m === "correr" || m === "sprint" || m === "dash",
+          jato: m === "paira" ? 1 : m === "voa" || m === "turbo" ? 0.9 : 0,
+          ar: noAr ? { vy: m === "cai" ? -14 : 0, movendo: m === "voa" || m === "turbo", vel: m === "turbo" ? 30 : m === "voa" ? 16 : 0 } : null,
+          acao: m === "sprint" || m === "dash" ? { sprint: m === "sprint" ? 1 : 0, dash: m === "dash" ? 1 : 0, alerta: 0 } : null,
+          dt, t,
+        });
       }
       for (const g of galeria) g.animar({ andando: false, dt, t });
       arma.atualizar(t, dt, { revela: naMao, calor: 0 });
@@ -99,6 +109,8 @@ export default function Traje() {
       </div>
       <div style={{ position: "absolute", left: 12, bottom: 12, right: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
         {ANDARES.map(([k, r]) => <button key={k} style={B(andar === k)} onClick={() => setAndar(k)}>{r}</button>)}
+        <span style={{ width: 10 }} />
+        {MOVS.map(([k, r]) => <button key={k} style={B(mov === k)} onClick={() => setMov(k)}>{r}</button>)}
         <span style={{ width: 10 }} />
         {CLIPES.map(([k, r]) => <button key={k} style={B(false)} onClick={() => avRef.current?.tocarClipe(k, k.startsWith("morre") ? { segurar: true } : undefined)}>{r}</button>)}
         <button style={B(false)} onClick={() => avRef.current?.soltarClipe()}>Soltar clipe</button>

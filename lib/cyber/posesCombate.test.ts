@@ -6,7 +6,7 @@ const dirs = (p: PoseAcao) => [p.tronco, p.cabeca, ...[1, -1].flatMap((l) => [p.
 
 describe("poses de ação (hack and slash)", () => {
   it("todas as direções são unitárias", () => {
-    for (const p of [poseSprint(0.3), poseDash(), poseAlerta(1.2, 0.3), poseHeroi()]) for (const d of dirs(p)) expect(Math.hypot(...d)).toBeCloseTo(1, 5);
+    for (const p of [poseSprint(0.3), poseDash(), poseDash(1), poseAlerta(1.2, 0.3), poseHeroi()]) for (const d of dirs(p)) expect(Math.hypot(...d)).toBeCloseTo(1, 5);
   });
   it("sprint: corpo e tronco pra frente, braços esticados pra trás (as pernas são da corrida)", () => {
     const p = poseSprint(0);

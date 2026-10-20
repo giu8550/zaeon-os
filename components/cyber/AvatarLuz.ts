@@ -71,6 +71,12 @@ function carregarClipeMagia(nome: NomeClipe, espelhar: boolean): Promise<THREE.A
   }
   return p;
 }
+/** um clipe JSON qualquer (public/anim/…), baixado uma vez pra todos */
+function carregarClipeJson(url: string): Promise<THREE.AnimationClip | null> {
+  let p = clipesMagia.get(url);
+  if (!p) { p = fetch(url).then((r) => (r.ok ? r.json() : null)).then((j) => (j ? THREE.AnimationClip.parse(j) : null)).catch(() => null); clipesMagia.set(url, p); }
+  return p;
+}
 /** Carrega o GLB uma vez (todos os avatares clonam dele). */
 export function carregarModeloAvatar(url = avatarGlbUrl()): Promise<GLTF> {
   if (cache?.url === url) return cache.p;
@@ -250,6 +256,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   const caixa = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.17), matMochila); mochila.add(caixa);
   if (anime) { const traco = new THREE.Mesh(caixa.geometry, new THREE.MeshBasicMaterial({ color: TINTA.cor, side: THREE.BackSide })); traco.scale.set(1.07, 1.05, 1.14); mochila.add(traco); }   // o contorno da mochila (caixa: casca escalada)
   const frisoMochila = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.42, 0.01), new THREE.MeshBasicMaterial({ color: luz })); frisoMochila.position.z = 0.09; mochila.add(frisoMochila);
+  /** a CAIXA da mochila (sem os propulsores) — some no traje que já tem mochila */
+  const pecasCaixa = mochila.children.slice();
   const texJato = new THREE.CanvasTexture((() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d")!; const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.35, "rgba(150,230,255,.8)"); gr.addColorStop(1, "rgba(60,140,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c; })());
   const jatos: { chama: THREE.Mesh; brilho: THREE.Sprite }[] = [];
   const BOCAL_Y = -0.29;
@@ -295,6 +303,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   let jatoS = 0, wAr = 0, wQueda = 0, wMov = 0, inclinaVoo = 0, estavaNoAr = false, tAr = 0, vyAr = 0, tPouso = -1, forcaPouso = 0;
   /** o voo mais REALISTA: a velocidade suavizada, o turbo (0..1), a freada (desacelerando: o corpo ergue) e a inclinação na curva */
   let velArS = 0, turboAr = 0, freioAr = 0, bancoVoo = 0;
+  /** a pose do DASH da vez (alterna a cada dash — lib/cyber/posesCombate `poseDash`) */
+  let varDash: 0 | 1 = 1, daAnt = 0;
   const PERNA = 0.95;   // comprimento da perna do avatar (m) — escala a altura do quadril das poses capturadas
   const DUR_POUSO = duracaoClipe("Jump_Land") * 0.8;
 
@@ -356,10 +366,17 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   // o RIFLE (lib/cyber/rifle): o estado do quadro, a arma posta nas mãos e as ações dos andares com ela (baixadas na 1ª
   // vez que ela aparece; tocam sempre, em laço, com o peso que o quadro manda)
   let vrmAtual: VRM | null = null, astroDoVrm = false, astro: CorpoAstronautaHandle | null = null, modeloTraje: ModeloAstronauta = "m", paletaTraje: Paleta = "branca", astroPedido = false, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true, vivoAv = true;
+  let semMochilaNunca = false;
   /** com o astronauta pronto: ele aparece, o corpo de antes some (do VRM, só o rosto — atrás da viseira) */
   const vestir = () => {
     if (!astro || !trajeOn || !modeloMx) return;
-    astro.visivel(true); if (mochila.visible) { mochilaAntes = true; mochila.visible = false; }   // (o astronauta tem a própria mochila)
+    astro.visivel(true);
+    // a MOCHILA A JATO vai nas COSTAS do traje (segue o peito); se o modelo tem mochila própria, só os propulsores —
+    // embaixo dela. Com as asas (o fundador), nada: as asas são o voo dele
+    if (astro.costas && !asas && !semMochilaNunca) {
+      astro.costas.add(mochila); mochila.scale.setScalar(modeloTraje === "f" ? 0.78 : 1); mochila.position.set(0, -0.02, astro.temMochila ? -0.06 : 0.02); mochila.rotation.set(0, 0, 0); mochila.visible = true;
+      for (const x of pecasCaixa) x.visible = !astro.temMochila;
+    } else if (mochila.visible) { mochilaAntes = true; mochila.visible = false; }
     if (espelho) espelho.rosto(astro.ancoraRosto, ASTRONAUTAS[modeloTraje].olhos.escala);
     else if (!soldadoEscondido) { soldadoEscondido = []; modeloMx.traverse((x) => { if ((x as THREE.SkinnedMesh).isSkinnedMesh && x.visible) { x.visible = false; soldadoEscondido!.push(x); } }); }
   };  /** carrega e veste o modelo da vez (a feminina copia o VRM quando ele já chegou) */
@@ -376,7 +393,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     }).catch((e) => { astroPedido = false; console.warn("[avatar] o astronauta não carregou:", e); });
   };
   /** descarta o astronauta (pra vestir outro): o rosto continua no modo traje até o novo chegar */
-  const largarAstro = () => { if (!astro) return; astro.dispose(); astro = null; astroDoVrm = false; };
+  const largarAstro = () => { if (!astro) return; if (mochila.parent !== corpo) { corpo.add(mochila); mochila.scale.setScalar(1); mochila.position.set(0, 1.22, 0.24); for (const x of pecasCaixa) x.visible = true; } astro.dispose(); astro = null; astroDoVrm = false; };
 
   let rif: RifleNoAvatar | null = null, armaRifle: THREE.Object3D | null = null, pedindoRifle = false;
   let acoesRifle: { mira: THREE.AnimationAction; anda: THREE.AnimationAction; esq: THREE.AnimationAction; dir: THREE.AnimationAction } | null = null;
@@ -386,6 +403,16 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (!mixer || cs.some((c) => !c)) { pedindoRifle = false; return; }
       const [mira, anda, esq, dir] = cs.map((c) => { const x = mixer!.clipAction(c!); x.setLoop(THREE.LoopRepeat, Infinity); x.setEffectiveWeight(0); x.play(); return x; }) as THREE.AnimationAction[];
       acoesRifle = { mira: mira!, anda: anda!, esq: esq!, dir: dir! };
+    });
+  };
+  // a CORRIDA FEMININA (captura do Mixamo — public/anim/fem): no corpo feminino (a astronauta, os VRM femininos) ela
+  // substitui a corrida do soldado; baixa só quando um corpo feminino aparece
+  let corridaF: THREE.AnimationAction | null = null, pedindoCorridaF = false;
+  const prepararCorridaF = () => {
+    if (corridaF || pedindoCorridaF || !mixer) return; pedindoCorridaF = true;
+    void carregarClipeJson("/anim/fem/corre.json").then((c) => {
+      if (!c || !mixer) return;   // (sem o arquivo: fica a corrida de base)
+      corridaF = mixer.clipAction(c); corridaF.setLoop(THREE.LoopRepeat, Infinity); corridaF.setEffectiveWeight(0); corridaF.play();
     });
   };
   const vDirR = new THREE.Vector3(), vGrip = new THREE.Vector3(), vPMira = new THREE.Vector3(), vAlvo = new THREE.Vector3();
@@ -484,7 +511,11 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         A.esq.setEffectiveWeight(resto * M * p.esq); A.esq.timeScale = p.escala.esq;
         A.dir.setEffectiveWeight(resto * M * p.dir); A.dir.timeScale = p.escala.dir;
       }
-      if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk * resto * (1 - M)); run.setEffectiveWeight(wRun * resto * (1 - M)); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun) * resto * (1 - M)); mixer.update(dt); }
+      const fem = estiloCorpo === "feminina" || (trajeOn && modeloTraje === "f");
+      if (fem) prepararCorridaF();
+      const wRunF = fem && corridaF ? 1 : 0;
+      if (corridaF) { corridaF.setEffectiveWeight(wRun * resto * (1 - M) * wRunF); if (run) corridaF.time = (run.time / run.getClip().duration) * corridaF.getClip().duration; }   // (no compasso da corrida de base: as pisadas e a troca não dão tranco)
+      if (mixer && idle && walk && run) { walk.setEffectiveWeight(wWalk * resto * (1 - M)); run.setEffectiveWeight(wRun * resto * (1 - M) * (1 - wRunF)); idle.setEffectiveWeight(Math.max(0, 1 - wWalk - wRun) * resto * (1 - M)); mixer.update(dt); }
       // PISADAS: o relógio da animação dominante (andar ou correr) cruzou a fase em que um pé encosta no chão
       if (walk && run && fasesPe) {
         const acao = wRun > wWalk ? run : walk, f = acao === run ? fasesPe.run : fasesPe.walk, u = (acao.time % acao.getClip().duration) / acao.getClip().duration;
@@ -729,12 +760,14 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       //    ALERTA depois dele. O corpo inclina/agacha girando no quadril; a guarda só planta as pernas parada (andando,
       //    as pernas são da caminhada e os braços seguem em guarda) ──
       const wDa = acao ? acao.dash : 0, wSp = acao && !ar ? acao.sprint * (1 - wDa) : 0, wAl = acao && !ar ? acao.alerta * (1 - wDa) : 0;
+      if (wDa > 0.01 && daAnt <= 0.01) varDash = varDash === 0 ? 1 : 0;   // (cada dash, a outra pose)
+      daAnt = wDa;
       if ((wSp > 0.01 || wDa > 0.01 || wAl > 0.01) && (ossos.length || pernas.length)) {
         const pernasLivres = Math.max(0, 1 - wWalk - wRun);
         // [pose, peso, peso das pernas]: o dash planta as pernas sempre; a guarda, só parada; o sprint deixa as da corrida
         const poses: [PoseAcao, number, number][] = [];
         if (wSp > 0.01) poses.push([poseSprint(t), wSp, 0]);
-        if (wDa > 0.01 && !ar) poses.push([poseDash(), wDa, wDa]);
+        if (wDa > 0.01 && !ar) poses.push([poseDash(varDash), wDa, wDa]);
         if (wAl > 0.01) poses.push([poseAlerta(t, acao?.alertaT ?? 1), wAl, wAl * pernasLivres]);
         let inc = 0, des = 0; for (const [p, w] of poses) { inc += p.inclina * w; des += p.desce * w; }
         corpo.rotation.x += inc; corpo.position.z += -QUADRIL * Math.sin(inc); corpo.position.y += QUADRIL * (1 - Math.cos(inc)) - des;
@@ -963,8 +996,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         }
       } else { corpo.rotation.y = 0; corpo.rotation.z = 0; }
       if (surf <= 0.02) { prancha.visible = false; faiscas.visible = false; tSurf = 0; }
-      // mochila presa às costas: segue o osso do tronco (em espaço do corpo), 0,22 m atrás
-      if (espinha) { corpo.updateWorldMatrix(true, false); espinha.updateWorldMatrix(true, false); espinha.getWorldPosition(vA); corpo.worldToLocal(vA); mochila.position.set(vA.x, vA.y - 0.08, vA.z + 0.22); asas?.group.position.set(vA.x, vA.y + 0.04, vA.z + 0.13); }
+      // mochila presa às costas: segue o osso do tronco (em espaço do corpo), 0,22 m atrás (de traje, ela já vai nas costas dele)
+      if (espinha) { corpo.updateWorldMatrix(true, false); espinha.updateWorldMatrix(true, false); espinha.getWorldPosition(vA); corpo.worldToLocal(vA); if (mochila.parent === corpo) mochila.position.set(vA.x, vA.y - 0.08, vA.z + 0.22); asas?.group.position.set(vA.x, vA.y + 0.04, vA.z + 0.13); }
       // ASAS (no lugar da mochila): subindo batem; planando ondulam; no chão recolhem (lib/cyber/asas)
       if (asas) {
         const empuxo = ar && (jato >= 0.95 || ar.vy > 1.5) ? 1 : jato;   // (remotos: a subida vem pelo vy)
@@ -1104,7 +1137,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       asas = criarAsas(); asas.group.scale.setScalar(op?.escala ?? 1); asas.group.userData.escala = op?.escala ?? 1; corpo.add(asas.group); mochila.visible = false;
       asasSempre = !!op?.sempre; if (asasSempre) { wVoo = 1; estavaVoando = true; }
     },
-    semMochila() { mochila.visible = false; },
+    semMochila() { mochila.visible = false; semMochilaNunca = true; },
     poseVrm(p) { poseVrm = p; espelho?.pose(p); },
     rifle(e) { rif = e; },
     traje(on, op) {
@@ -1119,7 +1152,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         modeloTraje = quer;
         if (astro) vestir(); else pedirAstro();
       } else {
-        if (astro?.cena.visible) { astro.visivel(false); mochila.visible = mochilaAntes; }
+        if (astro?.cena.visible) { astro.visivel(false); mochila.visible = mochilaAntes && !asas; }
+        if (mochila.parent !== corpo) { corpo.add(mochila); mochila.scale.setScalar(1); mochila.position.set(0, 1.22, 0.24); for (const x of pecasCaixa) x.visible = true; }
         espelho?.rosto(null);
         for (const x of soldadoEscondido ?? []) x.visible = true; soldadoEscondido = null;
       }
@@ -1139,6 +1173,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     soltarClipe() { pedidoClipe++; clipe = null; },
     noClipe: () => !!clipe,
     pontoDaMao(lado, out) {
+      if (trajeOn && astro?.cena.visible && astro.repulsor(lado, out)) return out;   // (de traje: o repulsor da manopla)
       const o = ossos.find((x) => x.mao.name.includes(lado === "direita" ? "Right" : "Left"));
       if (o) return o.mao.getWorldPosition(out);
       return grupo.getWorldPosition(out).setY(out.y + 1.3);

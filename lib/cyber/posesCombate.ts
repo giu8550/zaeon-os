@@ -33,8 +33,20 @@ export function poseSprint(t: number): PoseAcao {
   };
 }
 
-/** a investida do dash (a perna ESQUERDA vai na frente) */
-export function poseDash(): PoseAcao {
+/** as POSES do dash (alternam a cada dash — `variante`):
+ *  0 = a INVESTIDA (a perna esquerda vai na frente, os braços pra trás);
+ *  1 = o DESLIZE baixo (o patinador): agachada, o joelho direito dobrado na frente e a perna esquerda esticada pro lado
+ *      e pra trás, o braço direito estendido à frente (a palma — o repulsor — mirando) e o esquerdo pra trás equilibrando */
+export function poseDash(variante: 0 | 1 = 0): PoseAcao {
+  if (variante === 1) return {
+    inclina: -0.42, desce: 0.32,
+    tronco: n([0.55, 0.83, 0.05]), cabeca: n([0.1, 0.99, -0.05]),
+    braco: (l) => (l > 0 ? n([-0.6, -0.7, 0.4]) : n([0.9, -0.12, -0.18])),
+    ante: (l) => (l > 0 ? n([-0.8, -0.5, 0.3]) : n([0.96, 0.08, -0.06])),
+    coxa: (l) => (l > 0 ? n([-0.55, -0.62, 0.55]) : n([0.75, -0.65, -0.12])),
+    canela: (l) => (l > 0 ? n([-0.7, -0.5, 0.5]) : n([-0.1, -0.99, 0])),
+    pe: (l) => (l > 0 ? n([-0.3, -0.9, 0.3]) : n([0.85, -0.52, 0])),
+  };
   return {
     inclina: -0.32, desce: 0.2,
     tronco: n([0.42, 0.9, 0]), cabeca: n([0.15, 0.99, 0]),

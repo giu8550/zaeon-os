@@ -120,7 +120,8 @@ if (process.env.RIG_DEBUG) for (const [k, v] of Object.entries(J)) console.log(k
 // as CURVAS (o dono pediu realçar): a cintura afina, o quadril e os glúteos abrem, o busto avança — campos suaves
 // (gaussianas na altura) só no tronco (|x| dentro da largura do quadril: os braços, em pose A, ficam de fora). O
 // peitoral (a peça rígida) acompanha o busto
-const CURVAS = { cintura: 0.88, quadril: 1.1, gluteo: 1.1, busto: 1.16 };
+// (EVE_SEM_CURVAS=1: a forma ORIGINAL do modelo, pra comparar)
+const CURVAS = process.env.EVE_SEM_CURVAS ? { cintura: 1, quadril: 1, gluteo: 1, busto: 1 } : { cintura: 0.88, quadril: 1.1, gluteo: 1.1, busto: 1.16 };
 {
   const yCint = (J.Spine.y + J.Spine1.y) / 2, yQuad = J.Hips.y - H * 0.025, yBusto = J.Spine2.y + H * 0.015;
   const largQuad = Math.max(...corpo.filter((p) => Math.abs(p.y - yQuad) < H * 0.02).map((p) => Math.abs(p.x)));
@@ -207,12 +208,39 @@ for (const [nome, g0] of Object.entries(pecas)) {
   // sem índice: cada triângulo com a sua cor/zona; os grupos por zona
   const g = g0.index ? g0.toNonIndexed() : g0, pos = g.attributes.position, uv = g.attributes.uv, n = pos.count;
   const tri = n / 3, zonaTri = [];
+  // a zona de cada triângulo: VOTO em 7 pontos da textura (o meio, os cantos puxados pra dentro e o meio das arestas) —
+  // um ponto só caía na sombra pintada da textura e o triângulo virava "detalhe escuro" no meio do macacão (as manchas
+  // pretas)
+  const corTri = [];
   for (let t = 0; t < tri; t++) {
-    let c = [0.5, 0.5, 0.5];
-    if (uv) { const u = (uv.getX(t * 3) + uv.getX(t * 3 + 1) + uv.getX(t * 3 + 2)) / 3, v = (uv.getY(t * 3) + uv.getY(t * 3 + 1) + uv.getY(t * 3 + 2)) / 3; c = cor(u, v); }
-    const z = nome === "Helmetglass_low" ? "visera" : zonaDe(c); zonaTri.push(z);
-    if (somaZona[z]) { somaZona[z][0] += c[0]; somaZona[z][1] += c[1]; somaZona[z][2] += c[2]; somaZona[z][3]++; }
+    let c = [0.5, 0.5, 0.5], z = "armadura";
+    if (uv) {
+      const us = [0, 1, 2].map((j) => uv.getX(t * 3 + j)), vs = [0, 1, 2].map((j) => uv.getY(t * 3 + j)), mu = (us[0] + us[1] + us[2]) / 3, mv = (vs[0] + vs[1] + vs[2]) / 3;
+      const pts = [[mu, mv], ...[0, 1, 2].map((j) => [mu + (us[j] - mu) * 0.6, mv + (vs[j] - mv) * 0.6]), ...[0, 1, 2].map((j) => [(us[j] + us[(j + 1) % 3]) / 2 * 0.7 + mu * 0.3, (vs[j] + vs[(j + 1) % 3]) / 2 * 0.7 + mv * 0.3])];
+      const votos = {}; for (const [u, v] of pts) { const k = zonaDe(cor(u, v)); votos[k] = (votos[k] ?? 0) + 1; }
+      z = Object.entries(votos).sort((x, y) => y[1] - x[1])[0][0]; c = cor(mu, mv);
+    }
+    zonaTri.push(nome === "Helmetglass_low" ? "visera" : z); corTri.push(c);
   }
+  // e SUAVIZA pela malha: um triângulo cercado de outra zona (≥ 70% dos vizinhos que tocam nele) passa pra ela — some o
+  // pontilhado e a borda serrilhada entre as zonas
+  if (nome !== "Helmetglass_low") {
+    const chave = (i) => `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`, porVert = new Map();
+    for (let t = 0; t < tri; t++) for (let j = 0; j < 3; j++) { const k = chave(t * 3 + j); let l = porVert.get(k); if (!l) porVert.set(k, (l = [])); l.push(t); }
+    const viz = [...Array(tri)].map(() => new Set());
+    for (const l of porVert.values()) for (const a of l) for (const b of l) if (a !== b) viz[a].add(b);
+    for (let passo = 0; passo < 3; passo++) {
+      const nova = zonaTri.slice();
+      for (let t = 0; t < tri; t++) {
+        if (!viz[t].size) continue;
+        const cont = {}; for (const o of viz[t]) cont[zonaTri[o]] = (cont[zonaTri[o]] ?? 0) + 1;
+        const [zm, n] = Object.entries(cont).sort((x, y) => y[1] - x[1])[0];
+        if (zm !== zonaTri[t] && n / viz[t].size >= 0.7) nova[t] = zm;
+      }
+      zonaTri.splice(0, tri, ...nova);
+    }
+  }
+  for (let t = 0; t < tri; t++) { const z = zonaTri[t], c = corTri[t]; if (somaZona[z]) { somaZona[z][0] += c[0]; somaZona[z][1] += c[1]; somaZona[z][2] += c[2]; somaZona[z][3]++; } }
   // reordena os triângulos por zona (um grupo por zona)
   const ordem = [...Array(tri).keys()].sort((a, b) => zonaTri[a].localeCompare(zonaTri[b]));
   const P = new Float32Array(n * 3), SI = new Uint16Array(n * 4), SW = new Float32Array(n * 4), gr = new THREE.BufferGeometry(), zonasUsadas = [];
