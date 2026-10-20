@@ -17,7 +17,7 @@ import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { fonteChat } from "@/lib/ui/chatFontScale";
 import { montarTopoPessoas } from "@/lib/canal/topoPessoas";
 import { podeApagar, textoConfirmarApagar, aposApagar } from "@/lib/canal/seletor";
-import { ABAS, abaDoCanal, filtrarPorAba, type Aba } from "@/lib/canal/convite";
+import { ABAS, abaDoCanal, filtrarPorAba, humanosNoCanal, type Aba } from "@/lib/canal/convite";
 import { ConvidarForm, type ConviteVista } from "./ConvitesEscritorio";
 import SinoConvites from "./SinoConvites";
 import { montarSino, contadorDoSino, type HistoricoSino, type EstadoSino, type AcaoSino } from "@/lib/canal/sino";
@@ -31,7 +31,7 @@ import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, type MensagemWire } from "@/lib/canal/wire";
 import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
-import { agenteDaVez } from "@/lib/canal/alvo";
+import { quemRespondeSemArroba } from "@/lib/canal/alvo";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
@@ -527,11 +527,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     await patch({ removerMembro: p.id });
   };
   const conversaCom = (uid: string) => convites.contatos.find((c) => c.pessoa.id === uid)?.dmCanalId ?? null;
-  // Sem @, responde o último agente que falou. A dica só aparece em canal de uma pessoa: com mais
-  // gente, o servidor só atende quem estava conversando com o agente (lib/canal/alvo.ts).
-  // a mesma regra do servidor: o último agente que falou, a não ser que tenha saído da conversa (#438)
-  const ultimoAgente = agenteDaVez(det.mensagens.filter((m) => !m.id.startsWith("efemera-")), agentes.map((a) => a.agentKey));
-  const agenteAtivo = canal.membros.length === 0 ? agentes.find((a) => a.agentKey === ultimoAgente) ?? null : null;
+  // A dica "Zenita responde": quem responde se EU mandar sem @ agora — a mesma regra do servidor (#466): numa
+  // conversa com outras pessoas, a agente só responde quem estava falando com ela (lib/canal/alvo.ts).
+  const quemResponde = quemRespondeSemArroba(det.mensagens.filter((m) => !m.id.startsWith("efemera-")), agentes.map((a) => a.agentKey), meuId, humanosNoCanal(canal));
+  const agenteAtivo = agentes.find((a) => a.agentKey === quemResponde) ?? null;
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4" style={zoom.style}>
