@@ -4,7 +4,7 @@
  * antes de qualquer uma gravar, que é exatamente a situação que fazia alguém ficar de fora.
  */
 import { describe, it, expect } from "vitest";
-import { entrarComoMembro, atualizarAgentes, entrarNaConversaAtomico, trocarComTentativas, type DbAtomico } from "./atomico";
+import { entrarComoMembro, sairComoMembro, atualizarAgentes, entrarNaConversaAtomico, trocarComTentativas, type DbAtomico } from "./atomico";
 import { updateManyCanais } from "./fakeCanalDb";
 
 const CANAL = "c1";
@@ -72,5 +72,18 @@ describe("tentar de novo", () => {
     const r = await trocarComTentativas(async () => ({ n: ++lidas }), () => ({ n: 0 }), async () => 0, 3);
     expect(r).toBeNull();
     expect(lidas).toBe(3);
+  });
+});
+
+describe("#466 · sair como membro", () => {
+  it("o dono tira o Martinez no mesmo instante em que a Ana entra: a Ana fica", async () => {
+    const b = banco({ membros: ["martinez"] });
+    await Promise.all([sairComoMembro(b.db, CANAL, "martinez"), entrarComoMembro(b.db, CANAL, "ana")]);
+    expect(b.canal.membros).toEqual(["ana"]);
+  });
+  it("tirar quem não está: 'nao-estava', nada muda", async () => {
+    const b = banco({ membros: ["ana"] });
+    expect(await sairComoMembro(b.db, CANAL, "martinez")).toBe("nao-estava");
+    expect(b.canal.membros).toEqual(["ana"]);
   });
 });
