@@ -13,6 +13,8 @@ describe("alvoDe", () => {
   it("os 5 formatos pelo model do corpo", () => {
     expect(alvoDe("gemini-2.5-flash-lite")).toBe("gemini-free");
     expect(alvoDe("gemini/gemini-2.5-flash-lite")).toBe("gemini-free");
+    expect(alvoDe("gemini/gemini-3.5-flash-lite")).toBe("gemini-free"); // o modelo atual do pool (litellm.config.yaml)
+    expect(alvoDe("gemini-3.5-flash")).toBe("vertex"); // o flash cheio NÃO é do pool
     expect(alvoDe("@cf/meta/llama-3.1-8b-instruct")).toBe("cloudflare");
     expect(alvoDe("openai/gpt-oss-20b")).toBe("groq");
     expect(alvoDe("gpt-oss-20b")).toBe("groq");
