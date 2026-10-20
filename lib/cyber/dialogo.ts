@@ -5,7 +5,7 @@
  * um passo só sai da tela quando a pessoa faz a ação.
  */
 export type Dialogo = {
-  quem: "droid" | "zaeon";
+  quem: "droid" | "zaeon" | "examiner";
   nome: string;
   cor: string;
   texto: string;

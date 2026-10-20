@@ -54,7 +54,7 @@ export default function CaixaDialogo({ d, touch, onAvancar }: { d: Dialogo; touc
           {d.quem === "zaeon"
             // eslint-disable-next-line @next/next/no-img-element
             ? <img src="/avatars/zaeon/idle.sm.webp" alt="" className="h-full w-full object-cover" />
-            : <RetratoDroid cor={cor} />}
+            : d.quem === "examiner" ? <RetratoExaminer /> : <RetratoDroid cor={cor} />}
         </div>
         <div className="min-w-0 flex-1">
           <p className={`min-h-[3.2em] font-semibold leading-[1.5] text-[#fff8ea] ${d.alerta ? "text-[20px] sm:text-[22px]" : "text-[18px] sm:text-[19.5px]"}`} style={{ textShadow: "0 1px 0 rgba(0,0,0,.8)" }}>
@@ -78,5 +78,21 @@ export default function CaixaDialogo({ d, touch, onAvancar }: { d: Dialogo; touc
         {pronto && !d.instrucao && <span aria-hidden className="absolute bottom-2 right-4 text-[13px] motion-safe:animate-bounce" style={{ color: cor }}>▼</span>}
       </div>
     </div>
+  );
+}
+
+/** o retrato da EXAMINER (a guardiã do Templo Cósmico): o rosto na sombra, as asas negras e os OLHOS acesos em vermelho */
+function RetratoExaminer() {
+  return (
+    <svg viewBox="0 0 88 88" className="h-full w-full" aria-hidden>
+      <defs><radialGradient id="ex-fundo" cx="50%" cy="40%" r="70%"><stop offset="0" stopColor="#2a0810" /><stop offset="1" stopColor="#050206" /></radialGradient>
+        <filter id="ex-brilho"><feGaussianBlur stdDeviation="2.2" /></filter></defs>
+      <rect width="88" height="88" fill="url(#ex-fundo)" />
+      <path d="M2 70 L22 34 L30 58 Z M86 70 L66 34 L58 58 Z" fill="#0a0a10" stroke="#3a1420" strokeWidth="1" />
+      <ellipse cx="44" cy="46" rx="17" ry="21" fill="#140a10" />
+      <path d="M27 40 Q44 14 61 40 L61 30 Q44 6 27 30 Z" fill="#06040a" />
+      <g filter="url(#ex-brilho)"><ellipse cx="37" cy="46" rx="4.4" ry="2.4" fill="#ff1a2a" /><ellipse cx="51" cy="46" rx="4.4" ry="2.4" fill="#ff1a2a" /></g>
+      <ellipse cx="37" cy="46" rx="2.4" ry="1.2" fill="#ffd0d4" /><ellipse cx="51" cy="46" rx="2.4" ry="1.2" fill="#ffd0d4" />
+    </svg>
   );
 }

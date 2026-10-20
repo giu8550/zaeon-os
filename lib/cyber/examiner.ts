@@ -8,7 +8,8 @@
  * O caminho é no referencial do lounge (`daSala`) → local da ilha; a altura vem de `alturaNaCidade` (o templo, a
  * escadaria, o deck e o pátio já estão lá).
  */
-import { CIDADE, PISTA, alturaNaCidade, daSala, mundo, rotDaSala } from "./ceu";
+import { CIDADE, PISTA, alturaNaCidade, daSala, mundo, rotDaSala, rumoNaSala } from "./ceu";
+import { postoDaGuardia } from "./temploCosmico";
 import { ESCADARIA, curvaDaEscadaria, mesaDaExaminer } from "./templo";
 import { comprimento, pontoNaRota } from "./caminhos";
 import type { P2 } from "./colisao";
@@ -43,8 +44,17 @@ export function rotaMesaPista(): P2[] {
 }
 const altura = (p: P2) => alturaNaCidade(mundo(p));
 
+/** o POSTO da guardiã (local da ilha) e o rumo dela no mundo — o Templo Cósmico: ela guarda a porta da cúpula */
+export function lugarDeGuarda(): P2 & { rumo: number } {
+  const g = postoDaGuardia(), p = naIlha(g.x, g.z);
+  return { ...p, rumo: rumoNaSala(L(), g.rumoLocal) };
+}
+
 export class RotinaExaminer {
   fase: FaseExaminer = "mesa";
+  /** o Templo Cósmico (out/2026): ela vira a GUARDIÃ do braço esquerdo — fica no posto, na porta da cúpula, de frente
+   *  pra quem sobe a escadaria (o duelo de linguagem — lib/cyber/dueloIngles); a rotina mesa↔pista não roda */
+  guardia = false;
   /** quanto do caminho ela já andou (m, 0 = a mesa, `len` = a pista) */
   private s = 0;
   private k = 0; private fica: number; private vazio = Infinity; private gente = 0; private musica = false;
@@ -53,6 +63,7 @@ export class RotinaExaminer {
   private sortear(f: readonly [number, number]) { return f[0] + this.acaso() * (f[1] - f[0]); }
   /** um passo do relógio; `musica` = está tocando no lounge agora; `genteNoTemplo` = tem jogador no templo agora */
   passo(dt: number, musica: boolean, genteNoTemplo = false) {
+    if (this.guardia) return;
     const R = ROTINA_EXAMINER;
     this.musica = musica; this.k += dt;
     if (genteNoTemplo) { this.vazio = 0; this.gente += dt; } else { this.vazio += dt; this.gente = 0; }
@@ -76,6 +87,7 @@ export class RotinaExaminer {
   /** o estado pro corpo (o mesmo formato da agenda dos personagens) */
   estado(): Estado {
     const base = { lugar: `examiner-${this.fase}`, sentado: 0, meditando: 0, moto: null };
+    if (this.guardia) { const g = lugarDeGuarda(); return { ...base, lugar: "examiner-guarda", atividade: "passear", fase: "ficando", pos: { x: g.x, z: g.z }, y: altura(g), rumo: g.rumo, andando: false, danca: 0 }; }
     if (this.fase === "descendo" || this.fase === "subindo") {
       const q = pontoNaRota(this.rota, this.s), rumo = this.fase === "descendo" ? q.rumo : q.rumo + Math.PI;
       return { ...base, atividade: "passear", fase: "andando", pos: { x: q.x, z: q.z }, y: altura(q), rumo, andando: true, danca: 0 };

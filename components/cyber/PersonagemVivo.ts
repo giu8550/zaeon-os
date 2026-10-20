@@ -30,6 +30,8 @@ export type PersonagemVivoHandle = {
   /** `agora` = relógio de parede (s); `ilhaY` = a altura atual do piso da ilha (ela boia); `cam` = pra economizar longe */
   atualizar(dt: number, t: number, agora: number, ilhaY: number, cam: THREE.Vector3, obstaculos?: readonly P2[]): void;
   mostrar(on: boolean): void;
+  /** os OSSOS dos olhos do VRM (ou a cabeça, se ele não tem) — null enquanto o corpo não carregou */
+  olhos(): THREE.Object3D[] | null;
   dispose(): void;
 };
 
@@ -105,15 +107,24 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
   const montado: Montado = { w: 1, maoE: new THREE.Vector3(), maoD: new THREE.Vector3(), peE: new THREE.Vector3(), peD: new THREE.Vector3() };
   const vagaW = mundo(o.perfil.vaga);
 
+  const olhos = () => {
+    if (!vrm) return null;
+    const h = vrm.humanoid, e = [h.getRawBoneNode("leftEye"), h.getRawBoneNode("rightEye")].filter((x): x is THREE.Object3D => !!x);
+    if (e.length === 2) return e;
+    const c = h.getRawBoneNode("head"); return c ? [c] : null;
+  };
   return {
+    olhos,
     id: o.id, nome: o.nome, cor: o.cor, group: raiz,
     get pos() { return pos; }, get alt() { return alt; }, get estado() { return estado; },
     mostrar(on) { mostrado = on; raiz.visible = on; },
     atualizar(dt, t, agora, ilhaY, cam, obstaculos = []) {
-      if (!mostrado) return;
+      // (escondido — noutro nível —, a POSIÇÃO segue em dia: é por ela que o engine sabe de que nível ele é; sem isso, quem
+      //  começava "noutro nível" no (0,0,0) nunca mais aparecia no dele)
       if (o.fixo) {   // o personagem FIXO (o DJ): sem agenda nem moto — só o corpo no lugar, na pose dele
         const f = o.fixo, dist = Math.hypot(cam.x - f.pos.x, cam.z - f.pos.z);
         pos.set(f.pos.x, 0, f.pos.z); alt = ilhaY + f.y;
+        if (!mostrado) return;
         if (dist < DIST_CARREGA) carregar(); else if (dist > DIST_SOLTA) soltar();
         raiz.visible = dist < DIST_ESCONDE; moto.group.visible = false; if (!raiz.visible) return;
         const querDetalhe = comDetalhe ? dist < DIST_DETALHE_VRM.some : dist < DIST_DETALHE_VRM.volta;
@@ -133,6 +144,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
       // DESVIA de quem está no caminho (o jogador, os outros) — o roteiro não muda, só o corpo contorna
       desvio = desviar(desvio, !e.moto && e.sentado < 0.5 ? empurrao(p0, obstaculos) : { x: 0, z: 0 }, dt);
       const p = { x: p0.x + desvio.x, z: p0.z + desvio.z }; pos.set(p.x, 0, p.z);
+      if (!mostrado) { alt = e.moto ? ilhaY + e.moto.y : ilhaY + e.y; return; }
       const dist = Math.hypot(cam.x - p.x, cam.z - p.z);
       if (dist < DIST_CARREGA) carregar(); else if (dist > DIST_SOLTA) soltar();
       raiz.visible = dist < DIST_ESCONDE; if (!raiz.visible) return;

@@ -6,6 +6,8 @@
  *    base privada por pessoa. Se a sala não abrir (cheia/erro), dá pra entrar sozinho.
  * three.js é client-only e pesado: este módulo é importado com next/dynamic (ssr:false) pelos chamadores.
  */
+import type { DueloApi } from "./DueloIngles";
+import type { PerguntaPublica, Resultado } from "@/lib/cyber/dueloIngles";
 import TelaCarregando from "./TelaCarregando";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -91,6 +93,21 @@ function Tela() {
     return r.ok ? { ok: true } : { ok: false, erro: (d as { error?: string })?.error ?? "Não autorizado." };
   }, [salaId]);
 
+  // o DUELO de linguagem da Examiner (o Templo Cósmico): as perguntas e a correção são do servidor
+  const dueloIngles = useMemo<DueloApi | undefined>(() => !salaId ? undefined : {
+    iniciar: async () => {
+      const r = await fetch(`/api/lounge3d/${salaId}/duelo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "iniciar" }) });
+      const d = (await r.json().catch(() => ({}))) as { perguntas?: PerguntaPublica[]; passou?: boolean; error?: string; faltaS?: number };
+      if (r.status === 429) return { erro: `Ela ainda não quer duelar de novo. Volte em ${Math.max(1, Math.ceil((d.faltaS ?? 60) / 60))} min.` };
+      return r.ok ? d : { erro: d.error ?? "A Examiner não respondeu." };
+    },
+    responder: async (respostas) => {
+      const r = await fetch(`/api/lounge3d/${salaId}/duelo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "responder", respostas }) });
+      const d = (await r.json().catch(() => ({}))) as Resultado & { error?: string };
+      return r.ok ? d : { erro: d.error ?? "A Examiner não respondeu." };
+    },
+  }, [salaId]);
+
   // a 1ª entrada no cyberespaço (nasceu no tubo de ensaio): o servidor marca — da próxima vez nasce na base
   const marcarNascimento = useCallback(() => { if (salaId) void fetch(`/api/lounge3d/${salaId}/nasceu`, { method: "POST" }).catch(() => {}); }, [salaId]);
   // um turno GERATIVO da conversa com a Zaeon (o harness do laboratório, no servidor); erro → o engine usa o roteiro local
@@ -127,7 +144,7 @@ function Tela() {
       remotos={sala.remotos} enviarPos={sala.enviarPos} chat={sala.chat} enviarChat={sala.enviarChat}
       tokenConvite={sala.sala?.token ?? null} online={sala.online.length || 1} aviso={aviso}
       souFundador={euSala.fundador === true} pilotoDaNave={euSala.nave === true} pedirAcesso={pedirAcesso}
-      novoNoCyber={sala.eu?.novo === true} motosLiberadas={sala.eu?.motos === true} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon} vozZaeon={vozZaeon}
+      novoNoCyber={sala.eu?.novo === true} motosLiberadas={sala.eu?.motos === true} examinerLiberado={sala.eu?.examiner === true} dueloIngles={dueloIngles} marcarNascimento={marcarNascimento} salvarPerfil={salvarPerfil} conversarZaeon={conversarZaeon} vozZaeon={vozZaeon}
       recadoQG={sala.recadoQG} enviarRecado={sala.enviarRecado}
       somLounge={sala.somLounge} offsetMusica={sala.offsetMusica} musica={sala.musica}
       somNave={sala.somNave} musicaNave={sala.musicaNave} ritual={sala.ritual} definirRitual={sala.definirRitual}
