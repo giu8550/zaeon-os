@@ -33,7 +33,7 @@ export function criarFiosCosmicos(o: { low: boolean; cores: Record<NomeSala, num
     malha(new THREE.TubeGeometry(curva, SEG, FIO.raio * 0.42, RAD, false), nucleo, g);
     malha(new THREE.TubeGeometry(curva, SEG, FIO.raio * 1.6, RAD, false), casca, g);
     // ── os DENDRITOS (mais finos) e as pontinhas acesas ──
-    const nucleoR = aditivo(clara, 0.7), cascaR = aditivo(cor, 0.1); mats.push(nucleoR, cascaR);
+    const corR = cor.clone().lerp(new THREE.Color(0xffffff), 0.2), nucleoR = aditivo(corR, 0.42), cascaR = aditivo(cor, 0.07);   // (os dendritos: na cor da sala, mais suaves que o axônio) mats.push(nucleoR, cascaR);
     for (const ramo of f.ramos) {
       const c = new THREE.CatmullRomCurve3(ramo.map(v3));
       malha(new THREE.TubeGeometry(c, o.low ? 12 : 24, FIO.raio * 0.18, 5, false), nucleoR, g);
