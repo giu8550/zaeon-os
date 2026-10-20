@@ -30,6 +30,7 @@ import { LOTES } from "@/lib/cyber/motos";
 import { NOS } from "@/lib/cyber/buracos";
 import { criarBuracoPortal } from "./BuracoPortal";
 import { criarFiosCosmicos } from "./FiosCosmicos";
+import { criarTrafegoCeu } from "./TrafegoCeu";
 import { NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { criarCoracao } from "./CoracaoZaeon";
 import { criarEstacoes } from "./EstacoesAgentes";
@@ -219,6 +220,9 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // ── o TECIDO CÓSMICO (no lugar das escadas): os fios-neurônio com o buraco negro massivo na ponta (components/cyber/FiosCosmicos) ──
   const fios = NIVEIS_SEPARADOS ? criarFiosCosmicos({ low, cores: COR_SALA, starTex }) : null;
   if (fios) { add(fios.group); alvos.push(...fios.alvos); fios.group.traverse((n) => { n.userData.semLote = true; }); }   // (anima: fora dos lotes)
+  // ── o TRÁFEGO DO CÉU: carros e motos pelos anéis de voo, saindo e entrando nos buracos negros (components/cyber/TrafegoCeu) ──
+  const trafego = NIVEIS_SEPARADOS ? criarTrafegoCeu({ low, starTex }) : null;
+  if (trafego) { add(trafego.group); trafego.group.traverse((n) => { n.userData.semLote = true; }); }
   // ── a PLATAFORMA de cada sala (só a base; o clube em cima é o Salas): a laje de gelo com o aro de luz (a montanha
   //    invertida e o brilho antigravidade embaixo saíram — out/2026) ──
   for (const nomeSala of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nomeSala], base = new THREE.Group(); base.position.set(L.x, ALTURA_LOUNGE, L.z); add(base, grupoSala[nomeSala]);
@@ -246,7 +250,14 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   // ── os ESTACIONAMENTOS das salas de estudo e do lounge (pra fora de cada sala, flutuando com a ilha): as IAs chegam
   //    de moto e deixam a moto lá (lib/cyber/estacionamentosEstudo; as motos paradas são do components/cyber/FrotaIA) ──
-  add(criarPisosEstudo({ low, onde: "zaeon" }));
+  { const pe = criarPisosEstudo({ low, onde: "zaeon" });
+    if (!NIVEIS_SEPARADOS) add(pe);
+    else for (const c of [...pe.children]) {   // (níveis separados: cada estacionamento vai pro nível da SALA mais perto — no hub, eles flutuavam soltos)
+      const p = c.position; if (p.y < 30) { add(c); continue; }   // (os do piso da central ficam no hub)
+      let melhor: NomeSala = "lounge", dm = Infinity;
+      for (const n of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[n], d = Math.hypot(p.x - L.x, p.z - L.z); if (d < dm) { dm = d; melhor = n; } }
+      grupoSala[melhor].add(c);
+    } }
 
   // ── as CABINES DE ESTUDO da hierarquia (professores junto dos pilares da capela, doutores atrás, mestrandos depois —
   //    lib/cyber/credenciais; os graduandos estudam no chão em volta das supertrees) ──
@@ -356,6 +367,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         if (ev.tum && opts.aoBater) opts.aoBater(globoMundo.set(0, GLOBO_CAPELA.y, 0).applyMatrix4(ilha.matrixWorld)); }
       bnc.atualizar(dt * vel, t);
       fios?.atualizar(dt * vel, t);
+      trafego?.atualizar(Date.now() / 1000);   // (o relógio de TODO MUNDO: o mesmo trânsito pra quem olha)
       // querubins
       { const a = cGeo.attributes.position!.array as Float32Array;
         cher.forEach((c, i) => { c.a += dt * c.sp * vel; a[i * 3] = Math.cos(c.a) * c.r; a[i * 3 + 1] = c.y + Math.sin(t * 0.5 + i) * 0.3; a[i * 3 + 2] = Math.sin(c.a) * c.r; });
@@ -364,6 +376,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       }   // (fim do que é do hub)
       for (const p of portaisSalas) if (grupoSala[p.n].visible) p.h.atualizar(dt * vel, t);   // (o buraco negro de volta, na sala da pessoa)
     },
-    dispose() { rotulo.remove(); fios?.dispose(); templo.dispose(); for (const tp of tempestades) tp.h.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
+    dispose() { rotulo.remove(); fios?.dispose(); trafego?.dispose(); templo.dispose(); for (const tp of tempestades) tp.h.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };
 }
