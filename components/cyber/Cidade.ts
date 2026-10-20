@@ -73,6 +73,8 @@ export type CidadeHandle = {
   mostrarRecadoNaTV(texto: string | null): void;
   /** a porta da CÚPULA da guardiã (o Templo Cósmico): aberta pra quem venceu o duelo de linguagem da Examiner */
   cupulaAberta(aberta: boolean): void;
+  /** até onde a câmera desenha agora (m): os buracos negros das pistas ficam aquém (components/cyber/FiosCosmicos) */
+  vistaCosmica(m: number): void;
   /** altura ATUAL do topo da ilhota k (com a flutuação já aplicada) — o engine pousa/anda nela */
   alturaIlhota(k: number): number;
   /** o SHOW do lounge durante a música (lib/cyber/showLounge) e a fumaça do ritual no topo do lounge (0..1) */
@@ -281,7 +283,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     }
     // a PISTA DE SAÍDA (o fluxo da porta antiga até o buraco negro que leva de volta pro hub)
     const saida = NIVEIS_SEPARADOS ? criarFiosCosmicos({ pistas: [saidaDaSala(n)], low, cores: COR_SALA, starTex, alcanceVista: low ? 1800 : 3600, aoTrovao: (p) => { if (opts.aoTrovao) { g.updateMatrixWorld(); opts.aoTrovao(p.clone().applyMatrix4(g.matrixWorld)); } } }) : null;
-    if (saida) { por(saida.group); saida.group.traverse((x) => { x.userData.semLote = true; }); }
+    if (saida) { por(saida.group); saida.group.traverse((x) => { x.userData.semLote = true; }); saida.vista(vistaAgora); }
     alvos.push(...meus);
     const v: SalaViva = { salas, templo, salao, estacs, tempestade, saida, texturas: tex, alvos: meus, extras };
     if (n === "lounge" && recadoAgora) salas.mostrarRecado(recadoAgora);
@@ -299,7 +301,8 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     for (const o of [...grupoSala[n].children]) if (o.name === "lote") { o.removeFromParent(); (o as THREE.Mesh).geometry?.dispose(); }
   }
   const vivaLounge = () => vivas.get("lounge") ?? null;
-  let cupulaAberta = false;   // (a porta da cúpula da guardiã: quem monta o lounge depois já abre/fecha certo)
+  let cupulaAberta = false;
+  let vistaAgora = low ? 1800 : 3600;   // (o alcance da câmera agora: quem monta uma sala depois já começa certo)   // (a porta da cúpula da guardiã: quem monta o lounge depois já abre/fecha certo)
   let recadoAgora: string | null = null;   // (o recado da TV do lounge: quem monta o lounge depois já mostra)
   // (o estado do ritual: quem monta uma sala no meio dele já começa com a fumaça certa)
   const ritualAgora = { i: 0, raios: false };
@@ -380,7 +383,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     montarSala: (n) => { montarSala(n); }, desmontarSala, salaMontada: (n) => vivas.has(n),
     get tvLounge() { return vivaLounge()?.salas.tv ?? null; }, get plataformas() { return [...vivas.values()].flatMap((v) => v.salas.plataformas); },
     get caixasLounge() { return vivaLounge()?.salas.caixas ?? []; }, get caixasAmbiente() { return [...vivas.values()].flatMap((v) => v.salas.ambiente); }, get tocaDiscos() { return vivaLounge()?.salas.tocaDiscos ?? null; },
-    somTocando: (on: boolean, nivel?: number) => { for (const v of vivas.values()) v.salas.somTocando(on, nivel); }, alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => { recadoAgora = t; vivaLounge()?.salas.mostrarRecado(t); }, cupulaAberta: (aberta: boolean) => { cupulaAberta = aberta; vivaLounge()?.salao?.cupula(aberta); },
+    somTocando: (on: boolean, nivel?: number) => { for (const v of vivas.values()) v.salas.somTocando(on, nivel); }, alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => { recadoAgora = t; vivaLounge()?.salas.mostrarRecado(t); }, cupulaAberta: (aberta: boolean) => { cupulaAberta = aberta; vivaLounge()?.salao?.cupula(aberta); }, vistaCosmica: (m: number) => { vistaAgora = m; fios?.vista(m); for (const v of vivas.values()) v.saida?.vista(m); },
     somDroids: observadores.emissores,
     showLounge: (e, ritual, olho) => vivaLounge()?.salas.show(e, ritual, olho),
     raioNoLounge: (vel, alvo) => vivaLounge()?.salas.raioNoLounge(vel, alvo),

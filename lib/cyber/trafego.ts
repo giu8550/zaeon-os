@@ -23,7 +23,7 @@ export const TRAFEGO = {
   /** respiro entre uma viagem e a próxima (s) */
   pausa: 4,
   /** as faixas: até quantos metros pro lado e pra cima do meio da pista */
-  faixaLado: 14, faixaAlto: 8,
+  faixaLado: 30, faixaAlto: 20,
 } as const;
 export const CORES_TRAFEGO = ["#ff7a2a", "#2f8bff", "#3ddc84", "#a066ff", "#ff5fa2", "#2fd6e8", "#ffd23f", "#e8e8f0"] as const;
 
@@ -75,6 +75,19 @@ export function naViagem(v: Viagem, u: number): V3 & { rumo: number; sobe: numbe
   return { x: a.x + dx * k, y: a.y + dy * k, z: a.z + dz * k, rumo: Math.atan2(dx, dz), sobe: Math.atan2(dy, Math.hypot(dx, dz)) };
 }
 
+/** a SUTILEZA de quem pilota (não um trilho): o relógio de cada um corre um pouco adiantado/atrasado (acelera e alivia —
+ *  a derivada fica bem abaixo de 1: nunca anda pra trás) e o veículo DERIVA de leve pro lado e pra cima dentro da faixa.
+ *  Tudo pelo relógio + a semente: todo mundo vê o mesmo */
+export function jeitoDoPiloto(ve: VeiculoCeu, t: number): { t: number; lado: number; alto: number; escala: number } {
+  const a = (ve.semente % 997) / 997, b = (ve.semente % 769) / 769, c = (ve.semente % 541) / 541;
+  return {
+    t: t + 3.2 * Math.sin(t * (0.045 + 0.03 * a) + a * 6.28) + 1.4 * Math.sin(t * (0.11 + 0.05 * b) + b * 6.28),
+    lado: (3 + 4 * c) * Math.sin(t * (0.12 + 0.1 * b) + c * 6.28) + 1.5 * Math.sin(t * (0.37 + 0.2 * a) + a * 3),
+    alto: (1.5 + 2.5 * a) * Math.sin(t * (0.09 + 0.08 * c) + b * 6.28),
+    escala: 0.86 + 0.28 * b,
+  };
+}
+
 /** um VEÍCULO do tráfego: o tipo, a cor e a semente das viagens dele */
 export type VeiculoCeu = { i: number; tipo: TipoVeiculo; cor: string; semente: number; vel: number };
 export const VEICULOS_CEU: VeiculoCeu[] = Array.from({ length: TRAFEGO.carros + TRAFEGO.motos }, (_, i) => {
@@ -86,7 +99,7 @@ export const VEICULOS_CEU: VeiculoCeu[] = Array.from({ length: TRAFEGO.carros + 
 export function viagemDe(ve: VeiculoCeu, n: number): Viagem {
   const r = rng(ve.semente + n * 7919), nf = fiosCosmicos().length;
   const a = Math.floor(r() * nf); let b = Math.floor(r() * nf); if (b === a) b = (b + 1 + Math.floor(r() * (nf - 1))) % nf;
-  const lado = (r() < 0.5 ? -1 : 1) * (4 + r() * (TRAFEGO.faixaLado - 4)), alto = (r() - 0.3) * TRAFEGO.faixaAlto;   // (fora do meio: o meio é de quem vai no fluxo)
+  const lado = (r() < 0.5 ? -1 : 1) * (5 + r() * (TRAFEGO.faixaLado - 5)), alto = (r() - 0.35) * TRAFEGO.faixaAlto;   // (fora do meio: o meio é de quem vai no fluxo)
   return montarViagem(a, b, 0, r() < 0.25 ? 1 : 0, ve.vel, lado, alto);
 }
 

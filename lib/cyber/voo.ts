@@ -15,7 +15,9 @@ export type ComandoVoo = { wx: number; wz: number; subir: boolean; descer: boole
 /** vel/sobe em m/s; `dtMax` = maior quadro aceito (aba que voltou do fundo); `subpasso` = passo da física */
 /** `freio`: soltar a direção para a nave em poucos metros (paira ali) */
 /** `decolar`: no chão (ou a menos disso acima dele) a nave NÃO anda de lado — tem que subir primeiro */
-export const VOO = { vel: 30, sobe: 38, inercia: 3, freio: 7, decolar: 1.5, yMax: 720, raioMapa: 1500, dtMax: 0.25, subpasso: 1 / 60, turbo: 2.6 };
+/** `raioMapa`: até os BURACOS NEGROS das pistas cósmicas (~8 km da Zaeon — lib/cyber/fiosCosmicos): de carro, de moto ou de
+ *  mochila dá pra voar até eles (out/2026, o dono) */
+export const VOO = { vel: 30, sobe: 38, inercia: 3, freio: 7, decolar: 1.5, yMax: 720, raioMapa: 9800, dtMax: 0.25, subpasso: 1 / 60, turbo: 2.6 };
 
 /** folga de pouso: o topo dos marcos flutua (±0,15 m); parada a até isso acima do chão = pousada */
 export const POUSO_TOL = 0.3;

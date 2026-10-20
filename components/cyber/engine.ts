@@ -77,7 +77,7 @@ import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
-import { FIO as FIO_COSMICO, capturaDoFluxo, fiosCosmicos, pontoDoFio, saidaDaSala, velDoFluxo, type FioCosmico } from "@/lib/cyber/fiosCosmicos";
+import { FIO as FIO_COSMICO, capturaDoFluxo, fiosCosmicos, noBuracoNegro, pontoDoFio, saidaDaSala, velDoFluxo, type FioCosmico } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
@@ -2044,6 +2044,9 @@ export class CyberEngine {
     const pistas = this.nivel === "zaeon" ? fiosCosmicos() : ehSala(this.nivel) ? [saidaDaSala(this.nivel)] : null;
     if (!pistas) return;
     const p = { x: eu.pos.x - CIDADE.centro.x, y: eu.alt - ilhaY, z: eu.pos.z - CIDADE.centro.z };
+    // voou até o HORIZONTE de um buraco negro (de carro, de moto, de mochila): ele puxa — o fluxo leva pela espiral final
+    const bn = noBuracoNegro(pistas, p);
+    if (bn) { this.fio = { f: bn, u: 0.93, abriu: false }; this.fluxoArmado = false; if (this.jet.noAr) { this.jet.noAr = false; this.jet.vy = 0; } this.alvo = null; this.alvoDepois = null; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); return; }
     const pega = capturaDoFluxo(pistas, p);
     if (!pega) { if (!capturaDoFluxo(pistas, p, FIO_COSMICO.captura * 1.5)) this.fluxoArmado = true; return; }   // (afastou: arma de novo)
     if (!this.fluxoArmado) return;
@@ -3784,6 +3787,7 @@ export class CyberEngine {
     for (const a of [this.eu, ...this.remotos.values()]) a?.av.aura(d.aura);
     // o ALCANCE: a câmera e as IAs da frota encurtam ANTES da resolução cair (lib/cyber/qualidadeAdaptativa)
     this.cam.far = Math.max(1000, this.farBase * d.alcance); this.cam.updateProjectionMatrix();
+    this.cidade?.vistaCosmica(this.cam.far);   // (os buracos negros das pistas cósmicas ficam aquém do alcance — senão somem do horizonte)
     this.frota?.alcance(d.alcance);
   }
   /** o que o contador das configs mostra: quadros por segundo de verdade e o degrau da qualidade adaptativa */
