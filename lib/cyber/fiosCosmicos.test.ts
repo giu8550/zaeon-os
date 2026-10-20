@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CIDADE, colisoresDaCidade, mundo } from "./ceu";
 import { VOO } from "./voo";
-import { FIO, fioNaBoca, fiosCosmicos, pertoDoBuraco, pontoDoFio, uDaViagemFio } from "./fiosCosmicos";
+import { FIO, capturaDoFluxo, fioNaBoca, fiosCosmicos, pertoDoBuraco, pistasDeSaida, pontoDoFio, uDaViagemFio, velDoFluxo } from "./fiosCosmicos";
+import { ALTURA_LOUNGE, salaEm } from "./ceu";
 
 describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", () => {
   const fios = fiosCosmicos();
@@ -38,6 +39,24 @@ describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", ()
     for (const f of fios) {
       expect(fioNaBoca(f.boca, 0)?.sala).toBe(f.sala); expect(fioNaBoca(f.boca, 5)).toBeNull();
       const w = mundo(f.boca); expect(col.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.5)).toBe(true);
+    }
+  });
+  it("o FLUXO pega quem chega perto da pista (a pé na borda, de mochila, de carro) — longe, não; e acelera no fim", () => {
+    const f = fios[0]!, a = pontoDoFio(f, 0.3);
+    expect(capturaDoFluxo(fios, { x: a.x + 3, y: a.y + 2, z: a.z })?.f.sala).toBe(f.sala);
+    expect(capturaDoFluxo(fios, { x: a.x + 40, y: a.y, z: a.z })).toBeNull();
+    const naBorda = capturaDoFluxo(fios, { x: f.boca.x, y: 0.9, z: f.boca.z }); expect(naBorda?.u).toBeLessThan(0.02);
+    expect(velDoFluxo(1)).toBeGreaterThan(velDoFluxo(0) * 3);
+  });
+  it("cada SALA tem a pista de SAÍDA dela: começa dentro dela (na porta antiga) e vai pra fora até um buraco negro", () => {
+    for (const f of pistasDeSaida()) {
+      const L = CIDADE.salas[f.sala];
+      expect(salaEm({ x: f.boca.x, z: f.boca.z }, 0, true)).toBe(f.sala);
+      expect(f.boca.y).toBeCloseTo(ALTURA_LOUNGE + 0.6, 1);
+      expect(Math.hypot(f.bn.x - L.x, f.bn.z - L.z)).toBeGreaterThan(L.r + 300);
+      const fim = pontoDoFio(f, 1); expect(Math.hypot(fim.x - f.bn.x, fim.y - f.bn.y, fim.z - f.bn.z)).toBeLessThan(f.bn.r * 1.3);
+      // a pista não atravessa o disco da sala (contorna por fora) depois de sair da porta
+      for (let u = 0.08; u <= 1; u += 0.01) { const p = pontoDoFio(f, u); expect(Math.hypot(p.x - L.x, p.z - L.z)).toBeGreaterThan(L.r - 2); }
     }
   });
 });

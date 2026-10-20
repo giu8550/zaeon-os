@@ -9,7 +9,7 @@
  * Tudo no referencial LOCAL da ilha (relativo ao centro da Zaeon, y = acima do piso da central). Determinístico.
  * (O nome do arquivo ficou "fios" — a 1ª versão eram fios-neurônio.)
  */
-import { CIDADE, type NomeSala } from "./ceu";
+import { ALTURA_LOUNGE, CIDADE, daSala, type NomeSala } from "./ceu";
 import { VOO } from "./voo";
 
 export type V3 = { x: number; y: number; z: number };
@@ -28,6 +28,10 @@ export const FIO = {
   viagem: 24,
   /** onde o efeito do buraco negro começa (m do centro dele): a tempestade, o vento */
   zonaEfeito: 520,
+  /** a que distância (m) da pista o FLUXO pega quem chega (a pé na borda, de mochila, de moto ou de carro) */
+  captura: 9,
+  /** a pista de SAÍDA de cada sala (da porta antiga pra fora, até o buraco negro que leva de volta pro hub): comprimento */
+  saidaComprimento: 520,
 } as const;
 
 /** cada sala tem a sua pista e o CANTO dela (o ângulo, local da ilha, do buraco negro) */
@@ -52,6 +56,8 @@ export function amostrarCurva(ctrl: readonly V3[], n: number): V3[] {
 
 export type FioCosmico = {
   sala: NomeSala;
+  /** a pista de SAÍDA de uma sala (leva de volta pro hub) — senão, a do hub (leva pra sala) */
+  saida?: boolean;
   /** a pista (amostrada), o comprimento acumulado de cada ponto e o total */
   eixo: V3[]; acum: number[]; comprimento: number;
   /** a boca (o anel na borda) e o buraco negro do canto */
@@ -90,6 +96,45 @@ function montarPista(sala: NomeSala): FioCosmico {
   for (let i = 1; i < eixo.length; i++) acum.push(acum[i - 1]! + Math.hypot(eixo[i]!.x - eixo[i - 1]!.x, eixo[i]!.y - eixo[i - 1]!.y, eixo[i]!.z - eixo[i - 1]!.z));
   return { sala, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, y: 0, r: FIO.bocaR }, bn: { ...bn, r: FIO.bnR } };
 }
+
+/** a pista de SAÍDA de uma sala: da porta antiga (o lado que dava pra escada), pra FORA, serpenteando e subindo, até
+ *  o buraco negro que leva de volta pro hub — a mesma espiral no fim */
+function montarSaida(sala: NomeSala): FioCosmico {
+  const L = CIDADE.salas[sala], r = rng(semente(sala + ":saida")), fase = r() * Math.PI * 2;
+  const dL = Math.hypot(L.x, L.z), dir = { x: L.x / dL, z: L.z / dL }, perp = { x: -dir.z, z: dir.x };
+  // a porta antiga fica no lado da sala que olha pro centro da Zaeon: a pista sai dali e dá a volta por fora da sala
+  const porta = daSala(L, 0, L.r - 3), y0 = ALTURA_LOUNGE + 0.6, lado = r() < 0.5 ? 1 : -1;
+  const ctrl: V3[] = [{ x: porta.x, y: y0, z: porta.z }, { x: porta.x - dir.x * 30, y: y0 + 2, z: porta.z - dir.z * 30 }];
+  // contorna a sala por um lado (fora do disco) e segue pra fora
+  for (const [ang, rr] of [[0.6, L.r + 40], [1.4, L.r + 70], [2.2, L.r + 90]] as const) { const a = Math.atan2(-dir.z, -dir.x) + lado * ang; ctrl.push({ x: L.x + Math.cos(a) * rr, y: y0 + 10 + ang * 12, z: L.z + Math.sin(a) * rr }); }
+  const ini = ctrl[ctrl.length - 1]!, bn: V3 = { x: L.x + dir.x * (FIO.saidaComprimento + L.r), y: y0 + 60, z: L.z + dir.z * (FIO.saidaComprimento + L.r) };
+  for (let k = 1; k <= 8; k++) {
+    const t = k / 8, curva = Math.sin(t * Math.PI * 3 + fase) * 90 * Math.sin(t * Math.PI);
+    ctrl.push({ x: ini.x + (bn.x - ini.x) * t * 0.82 + perp.x * curva, y: ini.y + (bn.y - ini.y) * t + Math.sin(t * Math.PI) * 50, z: ini.z + (bn.z - ini.z) * t * 0.82 + perp.z * curva });
+  }
+  const ult = ctrl[ctrl.length - 1]!, angEntra = Math.atan2(ult.z - bn.z, ult.x - bn.x), sentido = r() < 0.5 ? 1 : -1, R0 = FIO.espiralR * 0.7;
+  for (let k = 1; k <= 14; k++) { const t = k / 14, ang = angEntra + sentido * t * FIO.voltas * Math.PI * 2, rr = R0 + (FIO.bnR * 1.05 - R0) * Math.pow(t, 1.4); ctrl.push({ x: bn.x + Math.cos(ang) * rr, y: ult.y + (bn.y - ult.y) * t, z: bn.z + Math.sin(ang) * rr }); }
+  const eixo = amostrarCurva(ctrl, 600), acum = [0];
+  for (let i = 1; i < eixo.length; i++) acum.push(acum[i - 1]! + Math.hypot(eixo[i]!.x - eixo[i - 1]!.x, eixo[i]!.y - eixo[i - 1]!.y, eixo[i]!.z - eixo[i - 1]!.z));
+  return { sala, saida: true, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, r: FIO.bocaR }, bn: { ...bn, r: FIO.bnR } };
+}
+let cacheSaida: FioCosmico[] | null = null;
+/** as pistas de SAÍDA (uma por sala) */
+export const pistasDeSaida = (): FioCosmico[] => (cacheSaida ??= SALAS_FIO.map(montarSaida));
+export const saidaDaSala = (s: NomeSala): FioCosmico => pistasDeSaida().find((f) => f.sala === s)!;
+
+/** o FLUXO pega quem chega perto de uma pista: a pista e a fração mais perto (ou null). `p` local da ilha (y acima do
+ *  piso da central). Não pega no trecho final (a espiral, já no buraco negro) */
+export function capturaDoFluxo(pistas: readonly FioCosmico[], p: V3, raio: number = FIO.captura): { f: FioCosmico; u: number } | null {
+  let melhor: { f: FioCosmico; u: number } | null = null, dm = raio;
+  for (const f of pistas) {
+    const n = f.eixo.length - 1, ate = Math.floor(n * 0.9);
+    for (let i = 0; i <= ate; i++) { const q = f.eixo[i]!, d = Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z); if (d < dm) { dm = d; melhor = { f, u: f.acum[i]! / f.comprimento }; } }
+  }
+  return melhor;
+}
+/** a velocidade do fluxo (m/s) na fração `u`: puxa forte e ACELERA chegando no buraco negro */
+export const velDoFluxo = (u: number) => 55 + 170 * Math.pow(Math.max(0, Math.min(1, u)), 3);
 
 let cache: FioCosmico[] | null = null;
 /** as pistas (uma por sala), na ordem das salas */
