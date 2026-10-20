@@ -31,6 +31,8 @@ npx vitest run lib/canal lib/ui app/api/canal components/office
 npx tsc --noEmit
 ```
 
+Suíte inteira nesta máquina: **3558 passaram, 9 falharam**. As 9 falhas estão em 4 arquivos que já falham no Windows antes deste card: `leitor/compose`, `octa/fortify`, `octa/genart` e `studio/storage`. Nenhuma é do escritório. `tsc` passa limpo.
+
 ---
 
 ## 3. O que os testes automáticos garantem
