@@ -6,7 +6,8 @@
  *  - os níveis ABERTOS — a central da Zaeon (o hub), a praça (40 m abaixo, longe) e a Solana —: dá pra ir de um pro
  *    outro VOANDO (mochila, moto, carro, nave), e o nível troca quando se chega lá (o "streaming").
  */
-import { CIDADE, type NomeSala } from "./ceu";
+import { CIDADE, naSala, type NomeSala } from "./ceu";
+import { noComplexo } from "./temploCosmico";
 import { PRACA } from "./praca";
 import { PLATAFORMAS } from "./plataformas";
 import { TEMPLO } from "./templo";
@@ -24,6 +25,7 @@ export function salaDoPonto(p: { x: number; z: number }, y: number): NomeSala | 
   if (y < CIDADE.pisoY + ALTO_DAS_SALAS) return null;
   const lx = p.x - CIDADE.centro.x, lz = p.z - CIDADE.centro.z;
   for (const s of SALAS) { const L = CIDADE.salas[s]; if (Math.hypot(lx - L.x, lz - L.z) <= raioDoNivel(s)) return s; }
+  if (noComplexo(naSala(CIDADE.salas.lounge, lx, lz), 25)) return "lounge";   // o TEMPLO CÓSMICO (o salão e os braços — lib/cyber/temploCosmico) é do nível do lounge
   return null;
 }
 
