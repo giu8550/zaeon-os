@@ -6,7 +6,8 @@
  * Referencial da SALA do lounge, y = 0 no pátio (quem monta põe o grupo no lounge, com o mesmo giro e o ESPELHO dele).
  */
 import * as THREE from "three";
-import { PIRAMIDE, PONTE_LOUNGE, SALAO, aberturasDoSalao } from "@/lib/cyber/temploCosmico";
+import { PIRAMIDE, PLATS, PONTES, SALAO, aberturasDe } from "@/lib/cyber/temploCosmico";
+import { criarRasta } from "./TemploRasta";
 
 export type SalaoCosmicoHandle = { group: THREE.Group; alvos: THREE.Object3D[]; atualizar(dt: number, t: number): void; dispose(): void };
 
@@ -16,48 +17,60 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
   const group = new THREE.Group(); group.name = "salao-cosmico";
   const alvos: THREE.Object3D[] = [], geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [];
   const malha = <G extends THREE.BufferGeometry>(g: G, m: THREE.Material, pai: THREE.Object3D = group) => { geos.push(g); if (!mats.includes(m)) mats.push(m); const x = new THREE.Mesh(g, m); pai.add(x); return x; };
-  const S = SALAO, y0 = -S.desce, seg = o.low ? 48 : 96;
+  const seg = o.low ? 48 : 96;
 
-  // ── a LAJE do salão: obsidiana polida, com círculos de luz gravados no piso ──
-  const piso = malha(new THREE.CylinderGeometry(S.r + 0.6, S.r - 2, 2.2, seg), new THREE.MeshStandardMaterial({ color: 0x0b0a1e, emissive: 0x1a1048, emissiveIntensity: 0.45, roughness: 0.25, metalness: 0.6 }));
-  piso.position.set(S.x, y0 - 1.1, S.z); alvos.push(piso);
+  // ── as PLATAFORMAS da rede (o salão, o disco rasta, a capela maior, o salão de festas, o lounge dos casais): a laje,
+  //    o aro aceso e o guarda-corpo de vidro aberto onde as pontes e as escadarias encostam ──
+  const TEMA: Record<string, { laje: number; brilho: number; aro: number }> = {
+    salao: { laje: 0x0b0a1e, brilho: 0x1a1048, aro: 0x66e6ff },
+    rasta: { laje: 0x070c08, brilho: 0x08200e, aro: 0xffd23f }, capelaRasta: { laje: 0x0d160f, brilho: 0x184a22, aro: 0x2fae4a },
+    festas: { laje: 0x140c0c, brilho: 0x4a1418, aro: 0xe63946 }, casais: { laje: 0x160c14, brilho: 0x4a1840, aro: 0xff7ab8 },
+  };
+  for (const p of PLATS) {
+    const tm = TEMA[p.id] ?? TEMA.salao!, y = p.h;
+    const laje = malha(new THREE.CylinderGeometry(p.r + 0.6, p.r - 2, 2.2, seg), new THREE.MeshStandardMaterial({ color: tm.laje, emissive: tm.brilho, emissiveIntensity: 0.45, roughness: 0.25, metalness: 0.6 }));
+    laje.position.set(p.x, y - 1.1, p.z); alvos.push(laje);
+    const aro = malha(new THREE.TorusGeometry(p.r + 0.6, 0.3, 6, seg * 2), aditivo(tm.aro, 0.75)); aro.rotation.x = Math.PI / 2; aro.position.set(p.x, y - 0.1, p.z);
+    const abs = aberturasDe(p).sort((a, b) => a.ang - b.ang);
+    const trechos: [number, number][] = abs.length ? [] : [[0, Math.PI * 2]];   // [ângulo inicial, final] fechados, entre as aberturas
+    for (let i = 0; i < abs.length; i++) { const a = abs[i]!, b = abs[(i + 1) % abs.length]!; let fim = b.ang - b.meia; const ini = a.ang + a.meia; while (fim <= ini) fim += Math.PI * 2; trechos.push([ini, fim]); }
+    for (const [ini, fim] of trechos) {
+      // no CylinderGeometry: x = r·sen θ, z = r·cos θ → o ângulo `a` (x = cos a, z = sen a) é θ = π/2 − a
+      const g = new THREE.CylinderGeometry(p.r, p.r, 1.15, Math.max(8, Math.round(seg * (fim - ini) / (Math.PI * 2))), 1, true, Math.PI / 2 - fim, fim - ini);
+      const w = malha(g, o.paredeMat); w.position.set(p.x, y + 0.58, p.z);
+      // o friso aceso em cima: o toro nasce no plano xy a partir do +x — gira no plano (z) até o começo e deita (x = π/2)
+      const topo = malha(new THREE.TorusGeometry(p.r, 0.07, 4, 64, fim - ini), aditivo(tm.aro, 0.8)); topo.rotation.set(Math.PI / 2, 0, ini); topo.position.set(p.x, y + 1.16, p.z);
+    }
+  }
+  // o piso do SALÃO: círculos de luz gravados e os raios saindo da pirâmide
+  const S = SALAO, y0 = -S.desce;
   const gravura = aditivo(0x8a7dff, 0.35);
   for (const [r, w] of [[S.r - 1.2, 0.35], [S.r * 0.72, 0.18], [S.r * 0.46, 0.18], [PIRAMIDE.meia * 1.75, 0.5]] as const) {
     const an = malha(new THREE.RingGeometry(r - w, r, seg), gravura); an.rotation.x = -Math.PI / 2; an.position.set(S.x, y0 + 0.02, S.z);
   }
-  // os raios gravados saindo da pirâmide (12 linhas finas no piso)
   for (let k = 0; k < 12; k++) {
     const a = (k / 12) * Math.PI * 2, len = S.r - PIRAMIDE.meia * 1.75 - 2, l = malha(new THREE.PlaneGeometry(0.16, len), gravura);
     l.rotation.set(-Math.PI / 2, 0, -a + Math.PI / 2); const d = PIRAMIDE.meia * 1.75 + len / 2;
     l.position.set(S.x + Math.cos(a) * d, y0 + 0.025, S.z + Math.sin(a) * d);
   }
-  const aro = malha(new THREE.TorusGeometry(S.r + 0.6, 0.3, 6, seg * 2), aditivo(0x66e6ff, 0.75)); aro.rotation.x = Math.PI / 2; aro.position.set(S.x, y0 - 0.1, S.z);
 
-  // ── o GUARDA-CORPO de vidro (aberto onde saem as conexões) ──
-  const abs = aberturasDoSalao().sort((a, b) => a.ang - b.ang);
-  const trechos: [number, number][] = [];   // [ângulo inicial, final] fechados, entre as aberturas
-  for (let i = 0; i < abs.length; i++) { const a = abs[i]!, b = abs[(i + 1) % abs.length]!; let fim = b.ang - b.meia; const ini = a.ang + a.meia; while (fim <= ini) fim += Math.PI * 2; trechos.push([ini, fim]); }
-  for (const [ini, fim] of trechos) {
-    // no CylinderGeometry: x = r·sen θ, z = r·cos θ → o ângulo `a` (x = cos a, z = sen a) é θ = π/2 − a
-    const g = new THREE.CylinderGeometry(S.r, S.r, 1.15, Math.max(8, Math.round(seg * (fim - ini) / (Math.PI * 2))), 1, true, Math.PI / 2 - fim, fim - ini);
-    const p = malha(g, o.paredeMat); p.position.set(S.x, y0 + 0.58, S.z);
-    // o friso aceso em cima: o toro nasce no plano xy a partir do +x — gira no plano (z) até o começo e deita (x = π/2)
-    const topo = malha(new THREE.TorusGeometry(S.r, 0.07, 4, 64, fim - ini), aditivo(0x9fe8ff, 0.8)); topo.rotation.set(Math.PI / 2, 0, ini); topo.position.set(S.x, y0 + 1.16, S.z);
-  }
-
-  // ── a PONTE até o pátio do lounge: a rampa de cristal, as quinas acesas e o guarda-corpo ──
-  { const { a, b, meia } = PONTE_LOUNGE, dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz), dy = S.desce, inc = Math.atan2(dy, L), comp = Math.hypot(L, dy);
-    const ponte = new THREE.Group(); ponte.position.set((a.x + b.x) / 2, y0 + dy / 2, (a.z + b.z) / 2); ponte.rotation.y = Math.atan2(dx, dz); group.add(ponte);
-    const tab = malha(new THREE.BoxGeometry(meia * 2, 0.5, comp), new THREE.MeshStandardMaterial({ color: 0x14123a, emissive: 0x2a1c70, emissiveIntensity: 0.5, roughness: 0.3, metalness: 0.5 }), ponte);
-    tab.rotation.x = -inc; tab.position.y = -0.25; alvos.push(tab);
-    for (const s of [-1, 1]) {
-      const quina = malha(new THREE.BoxGeometry(0.18, 0.1, comp), aditivo(0x66e6ff, 0.9), ponte); quina.rotation.x = -inc; quina.position.set(s * (meia - 0.1), 0.02, 0);
-      const vidro = malha(new THREE.BoxGeometry(0.06, 1.1, comp), o.paredeMat, ponte); vidro.rotation.x = -inc; vidro.position.set(s * (meia + 0.3), 0.55, 0);
+  // ── as PONTES: a rampa de cristal, as quinas acesas, o guarda-corpo e as faixas de luz (o ritmo de quem sobe) ──
+  const COR_PONTE: Record<string, number> = { lounge: 0x66e6ff, rasta: 0x2fae4a, festas: 0xffd23f, casais: 0xff7ab8 };
+  const tabMat = new THREE.MeshStandardMaterial({ color: 0x14123a, emissive: 0x2a1c70, emissiveIntensity: 0.5, roughness: 0.3, metalness: 0.5 });
+  for (const po of PONTES) {
+    const { a, b, meia } = po, dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz), dy = po.hb - po.ha, inc = Math.atan2(dy, L), comp = Math.hypot(L, dy), cor = COR_PONTE[po.id] ?? 0x66e6ff;
+    const ponte = new THREE.Group(); ponte.position.set((a.x + b.x) / 2, po.ha + dy / 2, (a.z + b.z) / 2); ponte.rotation.y = Math.atan2(dx, dz); group.add(ponte);
+    const tab = malha(new THREE.BoxGeometry(meia * 2, 0.5, comp), tabMat, ponte); tab.rotation.x = -inc; tab.position.y = -0.25; alvos.push(tab);
+    const quinaMat = aditivo(cor, 0.9), faixa = aditivo(cor, 0.4);
+    for (const sx of [-1, 1]) {
+      const quina = malha(new THREE.BoxGeometry(0.18, 0.1, comp), quinaMat, ponte); quina.rotation.x = -inc; quina.position.set(sx * (meia - 0.1), 0.02, 0);
+      const vidro = malha(new THREE.BoxGeometry(0.06, 1.1, comp), o.paredeMat, ponte); vidro.rotation.x = -inc; vidro.position.set(sx * (meia + 0.3), 0.55, 0);
     }
-    // os degraus de luz (faixas a cada 2 m: o ritmo de quem sobe)
-    const faixa = aditivo(0xb98cff, 0.45);
     for (let k = 1; k < comp / 2; k++) { const f = malha(new THREE.PlaneGeometry(meia * 2 - 0.6, 0.12), faixa, ponte); const t = k * 2 - comp / 2; f.rotation.x = -Math.PI / 2 - inc; f.position.set(0, t * Math.sin(inc) + 0.01, t * Math.cos(inc)); }
   }
+
+  // ── o LOUNGE RASTA (components/cyber/TemploRasta): a árvore, a escadaria das raízes, a capela maior, festas, casais e a torre ──
+  const rasta = criarRasta({ low: o.low, paredeMat: o.paredeMat }); group.add(rasta.group); alvos.push(...rasta.alvos);
 
   // ── o MONUMENTO ALIENÍGENA: a pirâmide ──
   const P = PIRAMIDE, mon = new THREE.Group(); mon.position.set(P.x, y0, P.z); group.add(mon);
@@ -99,12 +112,13 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
   return {
     group, alvos,
     atualizar(dt, t) {
+      rasta.atualizar(dt, t);
       cume.rotation.y += dt * 0.6; cume.position.y = P.alt + 4.5 + Math.sin(t * 0.9) * 0.6;
       aneis.forEach((an, i) => { an.rotation.z += dt * (0.3 + i * 0.2) * (i % 2 ? -1 : 1); an.position.y = cume.position.y; });
       corpoMat.uniforms.uT!.value = t;
       (feixe.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.06 * Math.sin(t * 1.3);
       cascaMat.opacity = 0.09 + 0.05 * Math.sin(t * 0.7);
     },
-    dispose() { group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of mats) if (m !== o.paredeMat) m.dispose(); },
+    dispose() { rasta.dispose(); group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of mats) if (m !== o.paredeMat) m.dispose(); },
   };
 }

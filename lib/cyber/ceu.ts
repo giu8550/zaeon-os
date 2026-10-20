@@ -12,7 +12,7 @@ import { escadasExistem, hubAtivo, salaAtiva } from "./nivelAtivo";
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 import { colisoresDoDistritoTerra } from "./terra";
 import { CHAO } from "./praca";
-import { PIRAMIDE, SALAO, alturaNoComplexo, colisoresDoComplexo, entradaDaPonteNoLounge, noComplexo } from "./temploCosmico";
+import { ALCANCE_COMPLEXO, RASTA, alturaNoComplexo, colisoresDoComplexo, entradaDaPonteNoLounge, noComplexo, solidosDoComplexo } from "./temploCosmico";
 import { DECK, TEMPLO, alturaDaEscadaria, alturaNoLounge, bordaDoDeck, bordasDaEscadaria, colisoresDoTemplo, noCorredorDaEscadaria, noTemplo, saidaDoLounge, GARAGEM_LOUNGE, GARAGEM_LOUNGE_EXISTE, naGaragemDoLounge } from "./templo";
 
 /** a ZAEON MEGA (out. 2026): a cidadela virou uma MEGA PLATAFORMA — 3× mais larga que antes, bem mais ALTA (450 m) e
@@ -122,7 +122,7 @@ export function salaEm(l: P2, folga = 0, todas = false): NomeSala | null {
 /** (local da ilha) no complexo do TEMPLO CÓSMICO fora do disco do lounge — o salão central e as conexões */
 function noComplexoLocal(l: P2, folga = 0): boolean {
   const L = CIDADE.salas.lounge;
-  if (Math.hypot(l.x - L.x, l.z - L.z) > Math.hypot(SALAO.x, SALAO.z) + SALAO.r + 40) return false;   // (longe: nem calcula)
+  if (Math.hypot(l.x - L.x, l.z - L.z) > ALCANCE_COMPLEXO) return false;   // (longe: nem calcula)
   return noComplexo(naSala(L, l.x, l.z), folga);
 }
 /** está sobre o disco do LOUNGE (local)? (o palco/DJ só existem nele) */
@@ -329,6 +329,8 @@ export function rodaDeTronos(cx: number, cz: number, abre: number): Movel[] {
   for (let i = 0; i < R.n; i++) { const a = abre + Math.PI / 3.2 + (i / (R.n - 1)) * (Math.PI * 2 - Math.PI / 1.6); out.push({ tipo: "trono", x: cx + Math.sin(a) * R.r, z: cz + Math.cos(a) * R.r, rot: a + Math.PI, larg: R.larg, prof: R.prof }); }
   return out;
 }
+/** uma zona do LOUNGE RASTA: `dx`/`dz` a partir do centro do disco rasta, com a boca virada pro meio dele (a árvore) */
+function zonaRasta(dx: number, dz: number, cor: number, tipo: "narguile" | "fogueira" | "mesinha"): Movel[] { return zonaLounge(RASTA.x + dx, RASTA.z + dz, Math.atan2(-dx, -dz), cor, tipo); }
 /** os móveis do lounge vão em cima do DECK da festa: a elevação de cada um soma DECK.h */
 function noDeck(lista: Movel[]): Movel[] { return lista.map((m) => ({ ...m, y: (m.y ?? 0.16) + DECK.h })); }
 export const MOVEIS: Record<NomeSala, Movel[]> = {
@@ -360,6 +362,10 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     // as RODAS DE TRONOS no PÁTIO (no chão, fora do deck), uma de cada lado da calçada central, abertas pra ela
     ...rodaDeTronos(30, 42, -Math.PI / 2),
     ...rodaDeTronos(-30, 42, Math.PI / 2),
+    // o LOUNGE RASTA (o Templo Cósmico — lib/cyber/temploCosmico): rodas de sofá, fogueiras e mesinhas nas cores do
+    // reggae, em volta da árvore do meio; o caminho da ponte e o da escadaria das raízes ficam livres
+    ...zonaRasta(-30, -26, 0x2fae4a, "fogueira"), ...zonaRasta(30, -24, 0xffd23f, "narguile"), ...zonaRasta(-40, 8, 0xe63946, "narguile"),
+    ...zonaRasta(36, 30, 0x2fae4a, "mesinha"), ...zonaRasta(0, -46, 0xffd23f, "fogueira"), ...zonaRasta(-14, 44, 0xe63946, "fogueira"),
   ],
   // os 3 espaços de CONVIVÊNCIA: minimalistas e sonorizados (CAIXAS de som discretas com música ambiente) — sofás,
   // pufes, plantas; NADA de estrutura de festa (sem palco, pista, treliça). O corredor do meio (da porta, +z, ao centro)
@@ -704,8 +710,7 @@ export function solidosDaCidade(dono = true): { x: number; z: number; r: number;
     (() => { const t = mundo(daSala(s, TEMPLO.x, TEMPLO.z)), y = L + TEMPLO.h; return { x: t.x, z: t.z, r: TEMPLO.r, topo: y, base: y - 3 }; })(),   // a laje do TEMPLO
     ...(!GARAGEM_LOUNGE_EXISTE ? [] : [(() => { const G = GARAGEM_LOUNGE, g = mundo(daSala(s, G.x, G.z)), y = L - G.desce; return { x: g.x, z: g.z, r: Math.hypot(G.larg, G.prof) / 2, topo: y, base: y - 2 }; })()]),   // a plataforma da GARAGEM do lounge
     (() => { const t = mundo(daSala(s, TEMPLO.x, TEMPLO.z)), y = L + TEMPLO.h, C = TEMPLO.capela; return { x: t.x, z: t.z, r: C.r + 1, topo: y + C.altura + C.r * C.achata, base: y }; })(),   // a CAPELA do templo
-    (() => { const t = mundo(daSala(s, SALAO.x, SALAO.z)), y = L - SALAO.desce; return { x: t.x, z: t.z, r: SALAO.r, topo: y, base: y - 2.5 }; })(),   // a laje do SALÃO do Templo Cósmico
-    (() => { const t = mundo(daSala(s, PIRAMIDE.x, PIRAMIDE.z)), y = L - SALAO.desce; return { x: t.x, z: t.z, r: PIRAMIDE.meia * 1.05, topo: y + PIRAMIDE.alt * 0.75, base: y }; })(),   // a PIRÂMIDE (sólida pra quem voa)
+    ...solidosDoComplexo().map((o) => { const t = mundo(daSala(s, o.x, o.z)); return { x: t.x, z: t.z, r: o.r, topo: L + o.topo, base: L + o.base }; }),   // o TEMPLO CÓSMICO: as lajes (salão, rasta, capela, festas, casais), a pirâmide, o teto da capela maior e a torre
     ]),
     ...(Object.keys(CIDADE.salas) as NomeSala[]).filter((n) => n !== "lounge" && salaAtiva(n)).map((n) => { const sl = CIDADE.salas[n]; return { x: c.x + sl.x, z: c.z + sl.z, r: sl.r, topo: L, base: L - 2.5 }; }),   // as lajes das outras salas
   ];
