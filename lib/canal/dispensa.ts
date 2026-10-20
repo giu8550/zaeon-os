@@ -33,8 +33,10 @@ const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export type Candidata = { key: string; nomes: string[] };
 
 // ── as peças da frase (texto já sem acento, nomes trocados por §) ──
-const ABRE = String.raw`(?:(?:a|o|voce|vc|tu|ok|okay|blz|beleza|valeu|vlw|obrigad\w*|brigad\w*|entao|bom|certo|agora|ja|ei|oi|§)\s+)*`;
-const FECHA = String.raw`(?:\s+(?:embora|agora|ja|entao|valeu|vlw|obrigad\w*|brigad\w*|tchau\w*|bj\w*|beij\w*|flw|falou|ok|blz|beleza|ta|de vez|por hoje|por enquanto|§))*`;
+// #466: "por favor", "pfv" também abrem e fecham ("por favor pode sair", "pode ir embora por favor")
+const ABRE = String.raw`(?:(?:a|o|voce|vc|tu|ok|okay|blz|beleza|valeu|vlw|obrigad\w*|brigad\w*|entao|bom|certo|agora|ja|ei|oi|por favor|pfv|pf|§)\s+)*`;
+// #466: "aqui", "por agora", "por favor" também fecham ("não precisamos mais de você aqui", "pode sair por agora")
+const FECHA = String.raw`(?:\s+(?:embora|agora|ja|entao|valeu|vlw|obrigad\w*|brigad\w*|tchau\w*|bj\w*|beij\w*|flw|falou|ok|blz|beleza|ta|de vez|por hoje|por enquanto|por agora|aqui|por favor|pfv|pf|§))*`;
 const FORTES = [
   String.raw`(?:ja\s+)?(?:pode|podem|podes)\s+(?:ir|sair|parar|descansar)(?:\s+embora)?`,
   String.raw`(?:(?:pode|podem)\s+)?(?:ir|vai|vao)\s+embora`,
@@ -50,6 +52,8 @@ const FRACAS = [String.raw`tchau\w*`, String.raw`ate\s+(?:mais|logo|a proxima|am
 const NUCLEO = (nucleos: string[]) => `(?:${nucleos.join("|")})`;
 const PEDACO_FORTE = new RegExp(String.raw`^${ABRE}${NUCLEO(FORTES)}${FECHA}(?:\s+${NUCLEO([...FORTES, ...FRACAS])}${FECHA})*$`);
 const PEDACO_FRACO = new RegExp(String.raw`^${ABRE}${NUCLEO(FRACAS)}${FECHA}(?:\s+${NUCLEO(FRACAS)}${FECHA})*$`);
+// #466: pedaço que manda uma agente FICAR ("aura continua comigo", "fica aura", "a aura pode continuar")
+const FICA = new RegExp(String.raw`(?:§\s+(?:(?:pode|vai)\s+)?(?:continua|continue|continuar|fica|fique|ficar|permanece|permaneca|segue|siga|seguir)\b|\b(?:continua|continue|fica|fique|permanece|permaneca|segue|siga)\s+(?:so\s+|apenas\s+)?(?:a\s+|o\s+|aqui\s+)?§)`);
 const PLURAL = /\b(?:podem|vao|voces|vcs|parem|estao|tao|dispensad[ao]s)\b/;
 
 type Pedaco = { texto: string; pergunta: boolean };
@@ -93,9 +97,12 @@ export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[
     return [c.key, ...c.nomes].map(semAcento).filter(Boolean).some((n) => new RegExp(String.raw`(?:^|[^\w])@?${esc(n)}(?![\w])`).test(todas));
   };
   const saem = new Set<string>();
+  const ficam = new Set<string>();
   for (const p of pedacos(texto)) {
     if (p.pergunta) continue;                                   // "só isso?" é pergunta, não despedida
     const { s, quem } = marcarNomes(p.texto, candidatas);
+    // #466: "aura continua comigo" / "fica, aura" → essa agente FICA, mesmo que outro pedaço a dispense
+    if (FICA.test(s)) quem.forEach((q) => ficam.add(q.key));
     const forte = PEDACO_FORTE.test(s.trim());
     const fraco = !forte && PEDACO_FRACO.test(s.trim());
     if (!forte && !fraco) continue;
@@ -111,7 +118,7 @@ export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[
     if (fraco && humanos > 1) alvo = alvo.filter((k) => quem.some((q) => q.key === k) || citada(k));
     alvo.forEach((k) => saem.add(k));
   }
-  return candidatas.map((c) => c.key).filter((k) => saem.has(k));
+  return candidatas.map((c) => c.key).filter((k) => saem.has(k) && !ficam.has(k));
 }
 
 export type ContextoDispensa = {

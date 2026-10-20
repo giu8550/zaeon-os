@@ -157,3 +157,42 @@ describe("dispensa · #443 dispensar uma agente não tira as outras", () => {
     expect(quemFoiDispensada("@aura obrigada, zenita pode sair", [aura, zen], 1)).toEqual(["zenita"]);
   });
 });
+
+describe("dispensa · #466 despedidas com 'aqui', 'por agora', 'por favor'", () => {
+  const sozinha = { ...zenita, humanos: 1 };
+  it.each([
+    "não precisamos mais de você aqui",
+    "pode sair por agora",
+    "pode ir embora por favor",
+    "por favor pode sair",
+    "pfv pode ir",
+  ])("sai: %s", (t) => {
+    expect(ehDispensa(t, sozinha)).toBe(true);
+  });
+  it.each([
+    "pode ir mais fundo nisso",
+    "pode sair desse assunto e falar de outro",
+    "não preciso mais de você explicando isso, só me dá o resumo",
+    "por favor pode explicar de novo",
+  ])("fica: %s", (t) => {
+    expect(ehDispensa(t, sozinha)).toBe(false);
+  });
+});
+
+describe("dispensa · #466 'continua comigo' protege a agente", () => {
+  const aura = { key: "aura", nomes: ["Aura"] }, teo = { key: "teo", nomes: ["Téo", "Teo"] };
+  it("o caso do print: '@aura @teo pode sair, aura continua comigo…' → só o Téo sai", () => {
+    expect(quemFoiDispensada("@aura @teo pode sair, aura continua comigo falando sobre as origens do quatros temperamentos", [aura, teo], 1)).toEqual(["teo"]);
+  });
+  it.each([
+    "@aura @teo podem ir, fica só a aura",
+    "@aura @teo pode sair, a aura pode continuar",
+    "teo pode sair, aura segue comigo",
+    "@aura @teo pode sair, aura fica",
+  ])("só o Téo: %s", (t) => {
+    expect(quemFoiDispensada(t, [aura, teo], 1)).toEqual(["teo"]);
+  });
+  it("sem ninguém mandado ficar, as duas marcadas saem", () => {
+    expect(quemFoiDispensada("@aura @teo pode sair", [aura, teo], 1)).toEqual(["aura", "teo"]);
+  });
+});
