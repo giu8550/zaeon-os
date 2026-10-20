@@ -4,7 +4,8 @@ import { NOS } from "./buracos";
 import { FIO, saidaDaSala } from "./fiosCosmicos";
 import { definirNivel } from "./nivelAtivo";
 import { nivelDoPonto } from "./niveis";
-import { BOCA_SAIDA_SALAO, CHEGADA_SALAO, PIRAMIDE, PONTE_LOUNGE, SALAO, naPiramide } from "./temploCosmico";
+import { ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
+import { ESCADARIA, TEMPLO, curvaDaEscadaria } from "./templo";
 
 const L = CIDADE.salas.lounge;
 const W = (x: number, z: number) => mundo(daSala(L, x, z));
@@ -52,5 +53,34 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
     expect(Math.hypot(f.boca.x - loc(b).x, f.boca.z - loc(b).z)).toBeLessThan(0.5);
     let perto = Infinity; for (const q of f.eixo) perto = Math.min(perto, Math.hypot(q.x - loc(ch).x, q.z - loc(ch).z));
     expect(perto).toBeGreaterThan(FIO.captura * 1.6);
+  });
+
+  it("o LOUNGE RASTA fica à DIREITA de quem chega, no nível do pátio, e a ponte dele sobe do salão sem nada no caminho", () => {
+    const ch = NOS.lounge.chegada, f = { x: Math.sin(ch.rumo), z: Math.cos(ch.rumo) }, dir = { x: -f.z, z: f.x }, r = W(RASTA.x, RASTA.z);
+    expect((r.x - ch.x) * dir.x + (r.z - ch.z) * dir.z).toBeGreaterThan(100);
+    expect(alturaNaCidade(W(RASTA.x + 10, RASTA.z + 10))).toBe(ALTURA_LOUNGE);
+    const p = PONTES.find((x) => x.id === "rasta")!, cs = colisoresDaCidade();
+    for (let u = -0.1; u <= 1.1; u += 0.02) { const q = W(p.a.x + (p.b.x - p.a.x) * u, p.a.z + (p.b.z - p.a.z) * u); expect(cs.every((c) => Math.hypot(c.x - q.x, c.z - q.z) > c.r + 0.6)).toBe(true); expect(salaEm(loc(q))).toBe("lounge"); }
+  });
+  it("a ESCADARIA DAS RAÍZES sobe do disco rasta até a capela maior, por igual e com guarda-corpo, e o caminho da ponte até ela é livre", () => {
+    const { pts } = curvaDaEscadaria(), cs = colisoresDaCidade(); let ant = -Infinity;
+    for (const pt of pts) {
+      const q = ESP(pt), w = W(q.x, q.z), h = alturaNaCidade(w);
+      expect(h).toBeGreaterThanOrEqual(ant - 0.5); ant = h;
+      expect(cs.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.3)).toBe(true);
+    }
+    expect(alturaNaCidade(W(TEMPLO_RASTA.x, TEMPLO_RASTA.z))).toBe(ALTURA_LOUNGE + TEMPLO_RASTA.h);
+    expect(alturaDaEscadariaRasta(0)).toBeCloseTo(0, 6); expect(alturaDaEscadariaRasta(curvaDaEscadaria().len)).toBeCloseTo(TEMPLO.h, 6);
+    // da ponta da ponte rasta até o pé da escadaria, contornando a ÁRVORE do meio: nenhum móvel nem parede no caminho
+    const pr = PONTES.find((x) => x.id === "rasta")!, pe = ESP(ESCADARIA.controle[0]!), volta = { x: RASTA.x, z: RASTA.z + ARVORE_RASTA.r + 9 };
+    for (const [de, para] of [[pr.b, volta], [volta, pe]] as const) for (let u = 0; u <= 1; u += 0.02) { const w = W(de.x + (para.x - de.x) * u, de.z + (para.z - de.z) * u); expect(cs.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.4)).toBe(true); }
+  });
+  it("da capela maior: a ponte reta pro SALÃO DE FESTAS e a rampa subindo pro LOUNGE DOS CASAIS (tudo nível do lounge)", () => {
+    for (const id of ["festas", "casais"]) {
+      const p = PONTES.find((x) => x.id === id)!, cs = colisoresDaCidade(); let ant = -Infinity;
+      for (let u = -0.05; u <= 1.05; u += 0.02) { const w = W(p.a.x + (p.b.x - p.a.x) * u, p.a.z + (p.b.z - p.a.z) * u), h = alturaNaCidade(w); expect(h).toBeGreaterThanOrEqual(ant - 1e-6); ant = h; expect(cs.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.5)).toBe(true); }
+    }
+    expect(alturaNaCidade(W(FESTAS.x, FESTAS.z))).toBe(ALTURA_LOUNGE + FESTAS.h); expect(alturaNaCidade(W(CASAIS.x, CASAIS.z))).toBe(ALTURA_LOUNGE + CASAIS.h);
+    const w = W(CASAIS.x, CASAIS.z); expect(nivelDoPonto(w, CIDADE.pisoY + ALTURA_LOUNGE + CASAIS.h)).toBe("lounge");
   });
 });
