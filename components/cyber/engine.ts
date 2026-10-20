@@ -75,7 +75,7 @@ import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
-import { FIO as FIO_COSMICO, fioDaSala, fioNaBoca, pontoDoFio, uDaViagemFio, type FioCosmico } from "@/lib/cyber/fiosCosmicos";
+import { FIO as FIO_COSMICO, capturaDoFluxo, fiosCosmicos, pontoDoFio, saidaDaSala, velDoFluxo, type FioCosmico } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
@@ -674,7 +674,7 @@ export class CyberEngine {
   private carros: CarroFrota[] = [];
   /** o TECIDO CÓSMICO (lib/cyber/fiosCosmicos): a prancha levando pelo fio (k 0..1, ida ou volta), a boca armada (só
    *  pega de novo depois de sair dela), a sala armada (o buraco negro de volta) e a travessia DIRETA pedida */
-  private fio: { f: FioCosmico; k: number; sentido: 1 | -1; abriu: boolean } | null = null; private bocaArmada = true; private salaArmada = true;
+  private fio: { f: FioCosmico; u: number; abriu: boolean } | null = null; private fluxoArmado = true;
   private direto: { para: IdNo; pose?: { x: number; z: number; rumo: number } } | null = null;
   /** o NÍVEL em que estou (lib/cyber/nivelAtivo — só ele existe pra mim) e onde eu estava no quadro anterior (um salto
    *  grande = teleporte: o túnel, o portal do Droid) */
@@ -1218,7 +1218,7 @@ export class CyberEngine {
     this.R.domElement.style.touchAction = "none";
     // saiu da vista/menu: o NOVATO nasce na praça (ou no tubo, no modo tutorial); o dono, a bordo da nave
     const nasceu = this.o.nascer && (this.o.nascerNa === "tubo" ? (this.o.retomar ? this.retomarTutorial(this.o.retomar) : this.nascerNoTubo()) : this.nascerNaPraca());
-    if (!nasceu) this.spawnNaNave();
+    if (!nasceu && !this.spawnPertoDoCarro()) this.spawnNaNave();   // (o dono, pra testar o fluxo das pistas: nasce ao lado dos carros — pedido dele)
     this.o.onSessao?.(go);
   }
   setJoystick(x: number, y: number) { this.joy.x = x; this.joy.y = y; this.joy.on = Math.hypot(x, y) > 0.15; }
@@ -1906,7 +1906,7 @@ export class CyberEngine {
   private get naZaeon() { return this.noCeu || (!!this.altoEm && this.marcosDaZaeon().some((m) => m.lm.poi.id === this.altoEm)); }
   /** teleporte (corte seco — o React faz o túnel/fade): aparece no ponto `p` (mundo) do nó `id`, a pé, sem nada */
   private irParaNo(id: IdNo, p: { x: number; z: number; rumo: number } = NOS[id].chegada) {
-    this.viagem = null; this.tunel = null; this.fio = null; this.salaArmada = false;
+    this.viagem = null; this.tunel = null; this.fio = null; this.fluxoArmado = false;
     this.pilotando = false; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0; this.falandoCom = null;
     this.jet.noAr = false; this.jetV = { x: 0, z: 0 }; this.sobreNave = false; this.ilhota = null; this.bordo = null; this.motoAlvo = null;
     const naZaeon = id === "zaeon" || ehSala(id);   // (as SALAS são níveis da Zaeon: o piso é o dela)
@@ -1931,13 +1931,52 @@ export class CyberEngine {
   viajarDireto() {
     const d = this.direto; if (!d) return;
     this.direto = null; this.fio = null;
+    this.largarVeiculoNoFluxo();   // (o carro/a moto que veio pelo fluxo fica: a pessoa chega a pé)
     this.irParaNo(d.para, d.pose ?? NOS[d.para].chegada);
-    this.bocaArmada = false;   // (chegou do lado de uma boca: só pega de novo depois de sair dela)
+    this.fluxoArmado = false;   // (só pega de novo depois de se afastar das pistas)
   }
-  /** voltando de uma sala: aparece no HUB perto da boca do fio dela, de frente pro centro */
-  private chegadaDoFio(s: NomeSala) {
-    const b = fioDaSala(s).boca, d = Math.hypot(b.x, b.z) || 1, l = { x: b.x * (1 - 12 / d), z: b.z * (1 - 12 / d) }, w = mundo(l);
-    return { x: w.x, z: w.z, rumo: Math.atan2(-l.x, -l.z) };
+  /** voltando de uma sala (ou nascendo pra testar): aparece no HUB ao lado do ESTACIONAMENTO de carros (o leste), de
+   *  frente pros carros */
+  private chegadaPertoDoCarro() {
+    const l = LOTES_CARRO[0]!, v = vagaDoLote(l, 0, 1.5), d = Math.hypot(v.x, v.z) || 1, k = 1 - (l.entreFilas * 0.5 + 6) / d, w = mundo({ x: v.x * k, z: v.z * k });
+    return { x: w.x, z: w.z, rumo: v.rumo };
+  }
+  private spawnPertoDoCarro(): boolean {
+    if (!NIVEIS_SEPARADOS || !this.cidade || !this.ehFundador(this.o.eu.id)) return false;
+    this.irParaNo("zaeon", this.chegadaPertoDoCarro()); return true;
+  }
+  /** o carro/a moto que o fluxo levou: o carro volta pra vaga dele, a moto some (a fábrica repõe) — a pessoa chega a pé */
+  private largarVeiculoNoFluxo() {
+    const c = this.carro;
+    if (c && c.fase !== "parado") { c.fase = "parado"; c.k = 0; c.ligado = 0; c.h.abrir(0); this.carro = null; this.carroLargado = null; }
+    if (this.moto !== null) { this.moto = null; this.motoDe = undefined; this.motoLargada = null; this.autoPouso = false; }
+    this.jet.noAr = false; this.jet.vy = 0;
+  }
+  /** o FLUXO: quem chega perto de uma pista (a pé na borda, de mochila, de moto, de carro) é levado por ela até o buraco
+   *  negro do fim; lá, a travessia DIRETA (a pista do hub → a sala dela; a de saída de uma sala → o hub) */
+  private atualizarFluxo(dt: number) {
+    if (!NIVEIS_SEPARADOS || this.menu || this.direto || this.tunel || this.pilotando || this.bordo || this.nascendo || !this.nivel) return;
+    const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, eu = this.eu;
+    if (this.fio) {
+      const v = this.fio; v.u = Math.min(1, v.u + (dt * velDoFluxo(v.u)) / v.f.comprimento);
+      if (v.u >= 0.999 && !v.abriu) { v.abriu = true; this.abrirDireto(v.f.saida ? "zaeon" : v.f.sala, v.f.saida ? this.chegadaPertoDoCarro() : undefined); }
+      return;
+    }
+    const pistas = this.nivel === "zaeon" ? fiosCosmicos() : ehSala(this.nivel) ? [saidaDaSala(this.nivel)] : null;
+    if (!pistas) return;
+    const p = { x: eu.pos.x - CIDADE.centro.x, y: eu.alt - ilhaY, z: eu.pos.z - CIDADE.centro.z };
+    const pega = capturaDoFluxo(pistas, p);
+    if (!pega) { if (!capturaDoFluxo(pistas, p, FIO_COSMICO.captura * 1.5)) this.fluxoArmado = true; return; }   // (afastou: arma de novo)
+    if (!this.fluxoArmado) return;
+    this.fio = { f: pega.f, u: pega.u, abriu: false }; this.fluxoArmado = false;
+    if (this.jet.noAr) { this.jet.noAr = false; this.jet.vy = 0; }
+    this.alvo = null; this.alvoDepois = null; this.sitT = 0;
+    this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto });
+  }
+  /** onde o fluxo está levando agora (MUNDO) e o rumo — a pessoa, ou o carro/a moto com ela */
+  private posNoFluxo() {
+    const v = this.fio!, q = pontoDoFio(v.f, v.u), w = mundo(q), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
+    return { x: w.x, y: ilhaY + q.y, z: w.z, rumo: q.rumo };
   }
 
   viajarPeloTunel(destino: IdNo | null) {
@@ -3909,7 +3948,7 @@ export class CyberEngine {
     if (!this.visivel || document.hidden) return;
     atualizarCamuflagem(t);   // o relógio único de todos os hologramas do mapa
     const eu = this.eu, euId = this.o.eu.id; this.tAnt = this.agora; this.agora = t;
-    if (!this.menu) this.atualizarNivel();   // (os NÍVEIS separados: só o meu existe — lib/cyber/niveis)
+    if (!this.menu) { this.atualizarNivel(); this.atualizarFluxo(dt); }   // (os NÍVEIS separados: só o meu existe — lib/cyber/niveis; e o FLUXO das pistas cósmicas)
 
     // MENU: segurar ESPAÇO p/ viajar; personagem fica sentado contemplando
     if (this.menu) {
@@ -3919,7 +3958,8 @@ export class CyberEngine {
     } else if (this.noCarro()) {
       // CARRO: a mesma física das motos (lib/cyber/motoFisica) — só DIRIGINDO; fechando/abrindo a cabine ele fica parado
       const cr = this.carro!;
-      if (cr.fase === "dirigindo") {
+      if (this.fio) { const q = this.posNoFluxo(); cr.est = { ...cr.est, x: q.x, y: q.y - CARRO_PAIRA, z: q.z, yaw: q.rumo, vx: 0, vy: 0, vz: 0 }; cr.pousado = false; cr.potencia = 1; }   // (o FLUXO leva o carro com a pessoa dentro)
+      else if (cr.fase === "dirigindo") {
         const c = this.comandoDeMoto(); cr.potencia = Math.max(0, c.acel) + (c.boost ? 0.5 : 0);
         if (c.boost && !cr.boost) this.som.tocar("carro-turbo", null, { dist: DISTANCIA.naveLocal, seguir: cr.h.group });   // (o NITRO: o baque + o sopro abrindo + o assobio)
         cr.boost = c.boost;
@@ -3932,7 +3972,8 @@ export class CyberEngine {
       const deCorrida = { x: this.motoEst.x, y: this.motoEst.y, z: this.motoEst.z };
       if (this.corrida?.c.fase === "contagem" || (this.ck && faseCk(this.ck.c, Date.now()).fase === "contagem")) { c.acel = 0; c.boost = false; c.subir = c.descer = false; }   // no grid: o motor ronca, a moto não sai
       const boostAntes = this.motoEst.boost;
-      const r = passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
+      const r = this.fio ? (() => { const q = this.posNoFluxo(); return { s: { ...this.motoEst, x: q.x, y: q.y, z: q.z, yaw: q.rumo, vx: 0, vy: 0, vz: 0 }, pousado: false }; })()   // (o FLUXO leva a moto com a pessoa)
+        : passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
       if (!r.pousado && rompeuBarreira(boostAntes, r.s.boost, Math.hypot(r.s.vx, r.s.vz))) this.ondaT = 0;   // acendeu o boost rápido: quebrou a barreira do som
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
       if (this.corrida) this.passoDaCorrida(deCorrida, dtReal);
@@ -4081,12 +4122,8 @@ export class CyberEngine {
       else if (this.sitT > 0.05) { const s = this.assento(); eu.pos.x += (s.x - eu.pos.x) * Math.min(1, dt * 3); eu.pos.z += (s.z - eu.pos.z) * Math.min(1, dt * 3); eu.facing = this.rotAssento(); }
       else if (this.noTopo) { const e = this.eixoTopo()!, lim = 2.0 * this.escalaZaeon(); const dx = eu.pos.x - e.x, dz = eu.pos.z - e.z, d = Math.hypot(dx, dz); if (d > lim) { eu.pos.x = e.x + (dx / d) * lim; eu.pos.z = e.z + (dz / d) * lim; } }   // não cai da plataforma
       else if (this.fio) {
-        // o FIO CÓSMICO leva: a prancha de luz pelo axônio (as teclas não mexem); na ponta, o buraco negro massivo
-        const v = this.fio; v.k = Math.max(0, Math.min(1, v.k + (v.sentido * dt) / FIO_COSMICO.viagem));
-        const q = pontoDoFio(v.f, uDaViagemFio(v.k)), w = mundo(q);
-        eu.pos.x = w.x; eu.pos.z = w.z; eu.facing = v.sentido > 0 ? q.rumo : q.rumo + Math.PI; andando = false; this.alvo = null; this.alvoDepois = null;
-        if (v.sentido > 0 && v.k >= 1 && !v.abriu) { v.abriu = true; this.abrirDireto(v.f.sala); }   // chegou na ponta: o buraco negro leva DIRETO pra sala
-        if (v.sentido < 0 && v.k <= 0) { this.fio = null; this.bocaArmada = false; }
+        // o FLUXO leva: a prancha de luz pela pista (as teclas não mexem) até o buraco negro do fim
+        const q = this.posNoFluxo(); eu.pos.x = q.x; eu.pos.z = q.z; eu.facing = q.rumo; andando = false; this.alvo = null; this.alvoDepois = null;
       }
       else if (this.noCeu && this.viagem) {
         // a ESCADA DE ENERGIA leva: a posição segue o fluxo (as teclas não mexem), sem passo nem pulo
@@ -4169,7 +4206,7 @@ export class CyberEngine {
       : this.sobreNave ? this.topoNave()
       : this.plat ? PLATAFORMAS[this.plat.id].y + alturaDoAndar(this.plat.id, this.plat.andar)
       : this.ilhota !== null && this.cidade ? this.cidade.alturaIlhota(this.ilhota)
-      : this.fio ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + pontoDoFio(this.fio.f, uDaViagemFio(this.fio.k)).y + 0.35   // na prancha, em cima do fio
+        : this.fio && !this.noCarro() && this.moto === null ? this.posNoFluxo().y + 0.35   // na prancha, em cima do fio
       : this.noCeu && this.viagem ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + posDaViagem(this.viagem.tipo, this.viagem.sentido, Math.min(1, this.viagem.t / durDaViagem(this.viagem.tipo)), this.viagem.sala).y   // sendo levado: a altura do caminho
       : this.noCeu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + alturaNaCidade(eu.pos)   // + o PALCO do lounge (escada = rampa)
       : this.noTopo ? this.alturaTopo() : (lmAlto?.poi.base ?? CHAO) + this.yNav + (lmAlto && marcoNav(lmAlto.poi) && this.yNav >= marcoNav(lmAlto.poi)!.nav.pisoY - 1e-6 ? this.boia(lmAlto) : 0);
@@ -4180,20 +4217,6 @@ export class CyberEngine {
       const no = noDoAnel(eu.pos, eu.alt);
       if (no && this.portalArmado) this.abrirTunel(no);
       else if (!no) this.portalArmado = true;
-      // o TECIDO CÓSMICO (níveis separados): no hub, a BOCA de um fio → a prancha leva até o buraco negro da ponta; numa
-      // sala, o buraco negro dela → direto de volta pro hub, ao lado da boca do fio dela
-      if (NIVEIS_SEPARADOS && !this.fio && !this.direto && this.noCeu && this.moto === null && !this.noCarro()) {
-        const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
-        if (this.nivel === "zaeon") {
-          const f = fioNaBoca({ x: eu.pos.x - CIDADE.centro.x, z: eu.pos.z - CIDADE.centro.z }, eu.alt - ilhaY);
-          if (f && this.bocaArmada) { this.fio = { f, k: 0, sentido: 1, abriu: false }; this.bocaArmada = false; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); }
-          else if (!f) this.bocaArmada = true;
-        } else if (this.nivel && ehSala(this.nivel)) {
-          const n = NOS[this.nivel], noAnel = Math.abs(eu.alt - n.y) < 3 && Math.hypot(eu.pos.x - n.anel.x, eu.pos.z - n.anel.z) < n.anel.r;
-          if (noAnel && this.salaArmada) { this.salaArmada = false; this.abrirDireto("zaeon", this.chegadaDoFio(this.nivel)); }
-          else if (!noAnel) this.salaArmada = true;
-        }
-      }
     }
     // o PAR DO DONO: a boca na cabine do DJ (lá em cima da torre) leva pra nave; a da nave (sala de reuniões) virou a
     // "call" do RITUAL (F — lib/cyber/ritual): o dono chega de nave, anunciado

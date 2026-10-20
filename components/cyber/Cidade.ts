@@ -30,6 +30,7 @@ import { LOTES } from "@/lib/cyber/motos";
 import { NOS } from "@/lib/cyber/buracos";
 import { criarBuracoPortal } from "./BuracoPortal";
 import { criarFiosCosmicos } from "./FiosCosmicos";
+import { saidaDaSala } from "@/lib/cyber/fiosCosmicos";
 import { criarTrafegoCeu } from "./TrafegoCeu";
 import { NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { criarCoracao } from "./CoracaoZaeon";
@@ -272,10 +273,11 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // o pedestal escuro em volta do anel (o anel fica rente ao piso)
   add(new THREE.Mesh(new THREE.CylinderGeometry(pt.r + 1.4, pt.r + 1.7, 0.18, 40), new THREE.MeshStandardMaterial({ color: 0x14203a, emissive: 0x1b2b55, emissiveIntensity: 0.5 })), hub, true).position.set(pt.x, -0.06, pt.z);
 
-  // ── o BURACO NEGRO de cada SALA (o nível dela): logo dentro da porta antiga — volta pro túnel (lib/cyber/buracos) ──
-  const portaisSalas = NIVEIS_SEPARADOS ? (Object.keys(CIDADE.salas) as NomeSala[]).map((n) => {
-    const no = NOS[n], h = criarBuracoPortal(grupoSala[n], { x: no.anel.x - CIDADE.centro.x, y: ALTURA_LOUNGE + 0.17, z: no.anel.z - CIDADE.centro.z, anelR: no.anel.r, h: no.bh.h, r: no.bh.r, low, starTex, cor: COR_SALA[n] });
-    texturas.push(...h.texturas); return { n, h };
+  // ── a PISTA DE SAÍDA de cada SALA (o nível dela): o fluxo da porta antiga pra fora até o buraco negro que leva de volta
+  //    pro hub (no lugar do buraco negro de anel — out/2026, o dono: "tem que ser esse caminho cósmico agora") ──
+  const saidasSalas = NIVEIS_SEPARADOS ? (Object.keys(CIDADE.salas) as NomeSala[]).map((n) => {
+    const h = criarFiosCosmicos({ pistas: [saidaDaSala(n)], low, cores: COR_SALA, starTex, aoTrovao: (p) => { if (opts.aoTrovao) { grupoSala[n].updateMatrixWorld(); opts.aoTrovao(p.clone().applyMatrix4(grupoSala[n].matrixWorld)); } } });
+    grupoSala[n].add(h.group); h.group.traverse((x) => { x.userData.semLote = true; }); return { n, h };
   }) : [];
 
   // ── querubins orbitando a cidadela ──
@@ -378,10 +380,10 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         cGeo.attributes.position!.needsUpdate = true; }
       ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * BOIA_ILHOTA * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
       }   // (fim do que é do hub)
-      for (const p of portaisSalas) if (grupoSala[p.n].visible) p.h.atualizar(dt * vel, t);   // (o buraco negro de volta, na sala da pessoa)
+      for (const p of saidasSalas) if (grupoSala[p.n].visible) p.h.atualizar(dt * vel, t, euLocal);   // (a pista de saída, na sala da pessoa)
       if (fios?.group.visible) fios.atualizar(dt * vel, t, euLocal);
       if (trafego?.group.visible) trafego.atualizar(Date.now() / 1000);   // (o relógio de TODO MUNDO: o mesmo trânsito pra quem olha)
     },
-    dispose() { rotulo.remove(); fios?.dispose(); trafego?.dispose(); templo.dispose(); for (const tp of tempestades) tp.h.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
+    dispose() { rotulo.remove(); fios?.dispose(); for (const p of saidasSalas) p.h.dispose(); trafego?.dispose(); templo.dispose(); for (const tp of tempestades) tp.h.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };
 }
