@@ -45,6 +45,8 @@ export type CidadeHandle = {
   ilha: THREE.Group;
   /** mostra SÓ o nível (lib/cyber/nivelAtivo): a central (o hub) ou uma sala; `null` = tudo (o modo antigo) */
   mostrarNivel(n: IdNivel | null): void;
+  /** onde a pessoa está (MUNDO) — as pistas: a tempestade do buraco negro cresce quando ela chega perto */
+  jogadorEm(p: { x: number; y: number; z: number }): void;
   /** o grupo de um nível da Zaeon (o engine põe nele o que é de uma sala — o relicário, os livros…) */
   grupoDoNivel(n: "zaeon" | NomeSala): THREE.Group;
   rotulo: HTMLDivElement;
@@ -217,12 +219,13 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   //    cabeças de serpente no pé e a muralha embaixo; a Sala do Saber no topo da pirâmide (components/cyber/EscadaPiramide) ──
   const COR_SALA: Record<NomeSala, number> = { lounge: 0xb98cff, garagem: 0xffb46b, biblioteca: 0x7fb8ff, jardim: 0x7dffb0 };
   if (!NIVEIS_SEPARADOS) { const ep = criarEscadasDePedra({ low, cores: COR_SALA }); add(ep.group); alvos.push(...ep.alvos); }   // (níveis separados: sem escadas — os fios cósmicos e os buracos negros)
-  // ── o TECIDO CÓSMICO (no lugar das escadas): os fios-neurônio com o buraco negro massivo na ponta (components/cyber/FiosCosmicos) ──
-  const fios = NIVEIS_SEPARADOS ? criarFiosCosmicos({ low, cores: COR_SALA, starTex }) : null;
-  if (fios) { add(fios.group); alvos.push(...fios.alvos); fios.group.traverse((n) => { n.userData.semLote = true; }); }   // (anima: fora dos lotes)
+  // ── as PISTAS CÓSMICAS (no lugar das escadas): o fluxo de luz até o buraco negro massivo de cada canto (components/cyber/FiosCosmicos) ──
+  const fios = NIVEIS_SEPARADOS ? criarFiosCosmicos({ low, cores: COR_SALA, starTex, aoTrovao: (p) => { if (opts.aoTrovao) { hub.updateMatrixWorld(); opts.aoTrovao(p.clone().applyMatrix4(hub.matrixWorld)); } } }) : null;
+  const euLocal = { x: 0, y: -1e4, z: 0 };   // (onde a pessoa está, local da ilha — o engine conta a cada quadro)
+  if (fios) { add(fios.group, ilha); alvos.push(...fios.alvos); fios.group.traverse((n) => { n.userData.semLote = true; }); }   // (anima: fora dos lotes)
   // ── o TRÁFEGO DO CÉU: carros e motos pelos anéis de voo, saindo e entrando nos buracos negros (components/cyber/TrafegoCeu) ──
   const trafego = NIVEIS_SEPARADOS ? criarTrafegoCeu({ low, starTex }) : null;
-  if (trafego) { add(trafego.group); trafego.group.traverse((n) => { n.userData.semLote = true; }); }
+  if (trafego) { add(trafego.group, ilha); trafego.group.traverse((n) => { n.userData.semLote = true; }); }
   // ── a PLATAFORMA de cada sala (só a base; o clube em cima é o Salas): a laje de gelo com o aro de luz (a montanha
   //    invertida e o brilho antigravidade embaixo saíram — out/2026) ──
   for (const nomeSala of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nomeSala], base = new THREE.Group(); base.position.set(L.x, ALTURA_LOUNGE, L.z); add(base, grupoSala[nomeSala]);
@@ -331,8 +334,11 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     mostrarNivel(n) {
       const tudo = n === null;
       hub.visible = tudo || n === "zaeon"; for (const e of extrasDoHub) e.visible = hub.visible;
+      // as PISTAS, os buracos negros dos cantos e o TRÁFEGO são o CÉU: aparecem de qualquer nível aberto (a praça, a Solana)
+      const ceu = tudo || n === "zaeon" || n === "praca" || n === "solana"; if (fios) fios.group.visible = ceu; if (trafego) trafego.group.visible = ceu;
       for (const nome of Object.keys(grupoSala) as NomeSala[]) grupoSala[nome].visible = tudo || n === nome;
     },
+    jogadorEm(p) { euLocal.x = p.x - CIDADE.centro.x; euLocal.y = p.y - ilha.position.y; euLocal.z = p.z - CIDADE.centro.z; },
     grupoDoNivel: (n) => (n === "zaeon" ? hub : grupoSala[n]), portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     somDroids: observadores.emissores,
     showLounge: (e, ritual, olho) => salas.show(e, ritual, olho),
@@ -366,8 +372,6 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         if (ev.raio && opts.aoRaio) { const tp = TOPO_DA_CAPELA(); opts.aoRaio(topoMundo.set(tp.x, tp.y, tp.z).applyMatrix4(ilha.matrixWorld)); }
         if (ev.tum && opts.aoBater) opts.aoBater(globoMundo.set(0, GLOBO_CAPELA.y, 0).applyMatrix4(ilha.matrixWorld)); }
       bnc.atualizar(dt * vel, t);
-      fios?.atualizar(dt * vel, t);
-      trafego?.atualizar(Date.now() / 1000);   // (o relógio de TODO MUNDO: o mesmo trânsito pra quem olha)
       // querubins
       { const a = cGeo.attributes.position!.array as Float32Array;
         cher.forEach((c, i) => { c.a += dt * c.sp * vel; a[i * 3] = Math.cos(c.a) * c.r; a[i * 3 + 1] = c.y + Math.sin(t * 0.5 + i) * 0.3; a[i * 3 + 2] = Math.sin(c.a) * c.r; });
@@ -375,6 +379,8 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * BOIA_ILHOTA * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
       }   // (fim do que é do hub)
       for (const p of portaisSalas) if (grupoSala[p.n].visible) p.h.atualizar(dt * vel, t);   // (o buraco negro de volta, na sala da pessoa)
+      if (fios?.group.visible) fios.atualizar(dt * vel, t, euLocal);
+      if (trafego?.group.visible) trafego.atualizar(Date.now() / 1000);   // (o relógio de TODO MUNDO: o mesmo trânsito pra quem olha)
     },
     dispose() { rotulo.remove(); fios?.dispose(); trafego?.dispose(); templo.dispose(); for (const tp of tempestades) tp.h.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };

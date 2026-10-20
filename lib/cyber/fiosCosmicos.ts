@@ -1,39 +1,46 @@
 /**
- * Cyberespaço — o TECIDO CÓSMICO (PURO): no lugar das escadas de pedra (lib/cyber/nivelAtivo — os níveis
- * separados), da borda da Zaeon sai, na direção de cada sala, um FIO CÓSMICO como um NEURÔNIO GIGANTE: o axônio
- * longo (bem mais que a escada — ~480 m), subindo e ondulando pelo céu, com os dendritos ramificando dele, e na
- * PONTA um BURACO NEGRO MASSIVO. Pisou na BOCA do fio (o anel na borda): uma prancha de luz te leva pelo axônio até o
- * buraco negro; lá, a CONFIRMAÇÃO (o túnel só com aquele destino) — entra e vai pro nível; desiste e volta.
+ * Cyberespaço — as PISTAS CÓSMICAS (PURO): no lugar das escadas (lib/cyber/nivelAtivo — os níveis separados), da
+ * borda da Zaeon sai, por cada vão da muralha (a direção de cada sala), uma PISTA — um FLUXO de luz bem longo e
+ * sinuoso que leva pra um dos 4 CANTOS do mapa, longe da cidadela, onde fica um BURACO NEGRO MASSIVO. O fim da pista
+ * é uma TRAJETÓRIA DE VERDADE pra um buraco negro: ela entra em ESPIRAL em volta dele, fechando, até cair no horizonte.
+ * Quem pisa na BOCA (o anel na borda) é levado pelo fluxo; os carros e as motos do céu (lib/cyber/trafego) andam
+ * pelas mesmas pistas. Perto do buraco negro, a tempestade (nuvens e trovões) — components/cyber/FiosCosmicos.
  *
- * Tudo no referencial LOCAL da ilha (relativo ao centro, y = acima do piso da central). Determinístico.
+ * Tudo no referencial LOCAL da ilha (relativo ao centro da Zaeon, y = acima do piso da central). Determinístico.
+ * (O nome do arquivo ficou "fios" — a 1ª versão eram fios-neurônio.)
  */
 import { CIDADE, type NomeSala } from "./ceu";
+import { VOO } from "./voo";
 
 export type V3 = { x: number; y: number; z: number };
 export const FIO = {
-  /** o comprimento do axônio no chão (m, da borda pra fora) e quanto sobe (m) */
-  comprimento: 480, subida: 150,
-  /** a espessura do axônio (raio, m) e o raio do buraco negro da ponta (o horizonte) */
-  raio: 1.6, bnR: 24,
+  /** a distância (m, do centro da Zaeon) até o buraco negro do canto e o raio dele (o horizonte) */
+  alcance: 1150, bnR: 38,
+  /** a altura (m, acima do piso) em que o buraco negro fica e o teto da pista no meio do caminho */
+  bnY: 70, teto: 150,
+  /** a ESPIRAL final: quantas voltas e de que raio começa (fecha até o horizonte) */
+  voltas: 1.6, espiralR: 240,
+  /** as curvas da pista: quantas e de que largura (m) */
+  curvas: 3.5, largura: 150,
   /** a boca (o anel na borda, onde se pisa) */
   bocaR: 3.2,
-  /** quanto dura a viagem pela prancha (s, de ponta a ponta) */
-  viagem: 13,
-  /** dendritos por fio (cada um com 2 galhinhos) */
-  dendritos: 12,
+  /** quanto dura a viagem pelo fluxo (s, da boca ao buraco negro) */
+  viagem: 24,
+  /** onde o efeito do buraco negro começa (m do centro dele): a tempestade, o vento */
+  zonaEfeito: 520,
 } as const;
 
+/** cada sala tem a sua pista e o CANTO dela (o ângulo, local da ilha, do buraco negro) */
+const CANTO: Record<NomeSala, number> = { jardim: Math.PI / 4, lounge: (Math.PI * 3) / 4, garagem: (Math.PI * 5) / 4, biblioteca: (Math.PI * 7) / 4 };
 const SALAS_FIO: readonly NomeSala[] = ["lounge", "garagem", "biblioteca", "jardim"];
-/** um gerador pseudoaleatório pequeno (mulberry32) — o desenho é o mesmo pra todo mundo */
 function rng(semente: number) { let a = semente >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const semente = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
 
-/** Catmull-Rom (centrípeta não precisa: os pontos vêm espaçados) entre p1 e p2 */
 function cr(p0: V3, p1: V3, p2: V3, p3: V3, t: number): V3 {
   const t2 = t * t, t3 = t2 * t, f = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
   return { x: f(p0.x, p1.x, p2.x, p3.x), y: f(p0.y, p1.y, p2.y, p3.y), z: f(p0.z, p1.z, p2.z, p3.z) };
 }
-/** amostra a curva pelos pontos de controle em `n` pontos (com as pontas repetidas) */
+/** amostra a curva pelos pontos de controle em `n` pontos (Catmull-Rom, com as pontas repetidas) */
 export function amostrarCurva(ctrl: readonly V3[], n: number): V3[] {
   const out: V3[] = [], k = ctrl.length - 1;
   for (let i = 0; i <= n; i++) {
@@ -45,50 +52,51 @@ export function amostrarCurva(ctrl: readonly V3[], n: number): V3[] {
 
 export type FioCosmico = {
   sala: NomeSala;
-  /** o axônio (amostrado), o comprimento acumulado de cada ponto e o total */
+  /** a pista (amostrada), o comprimento acumulado de cada ponto e o total */
   eixo: V3[]; acum: number[]; comprimento: number;
-  /** a boca (o anel na borda) e o buraco negro da ponta */
+  /** a boca (o anel na borda) e o buraco negro do canto */
   boca: V3 & { r: number }; bn: V3 & { r: number };
-  /** os dendritos (cada um uma polilinha amostrada) e as pontinhas acesas */
-  ramos: V3[][]; bulbos: V3[];
 };
 
-function montarFio(sala: NomeSala): FioCosmico {
-  const L = CIDADE.salas[sala], a = Math.atan2(L.z, L.x), dir = { x: Math.cos(a), z: Math.sin(a) }, perp = { x: -dir.z, z: dir.x };
-  const r = rng(semente(sala)), fase = r() * Math.PI * 2, r0 = CIDADE.andavelR - 3, N = 9;
-  const ctrl: V3[] = [];
-  for (let k = 0; k <= N; k++) {
-    const t = k / N, d = r0 + t * FIO.comprimento, sobe = FIO.subida * (t * t * (3 - 2 * t)), lado = Math.sin(t * Math.PI * 2.2 + fase) * 34 * t, onda = Math.sin(t * Math.PI * 3 + fase * 0.7) * 10 * t;
-    ctrl.push({ x: dir.x * d + perp.x * lado, y: 0.5 + sobe + onda, z: dir.z * d + perp.z * lado });
+/** o buraco negro do canto: no ângulo do canto, a `alcance` m — puxado pra dentro se sairia do mapa */
+function centroDoCanto(ang: number): V3 {
+  let d: number = FIO.alcance;
+  const C = CIDADE.centro, dentro = (dd: number) => Math.hypot(C.x + Math.cos(ang) * dd, C.z + Math.sin(ang) * dd) <= VOO.raioMapa - FIO.espiralR - 40;
+  while (d > 600 && !dentro(d)) d -= 10;
+  return { x: Math.cos(ang) * d, y: FIO.bnY, z: Math.sin(ang) * d };
+}
+
+function montarPista(sala: NomeSala): FioCosmico {
+  const L = CIDADE.salas[sala], a0 = Math.atan2(L.z, L.x), a1 = CANTO[sala], r = rng(semente(sala)), fase = r() * Math.PI * 2;
+  const r0 = CIDADE.andavelR - 3, bn = centroDoCanto(a1), dBn = Math.hypot(bn.x, bn.z);
+  // o ângulo vai da direção da sala pro do canto pelo caminho curto
+  let da = a1 - a0; while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2;
+  const ctrl: V3[] = [{ x: Math.cos(a0) * r0, y: 0.5, z: Math.sin(a0) * r0 }, { x: Math.cos(a0) * (r0 + 40), y: 3, z: Math.sin(a0) * (r0 + 40) }];
+  // o MEIO: sai da borda, serpenteia (as curvas crescem no meio e somem na chegada) subindo até o teto e descendo
+  const rFim = dBn - FIO.espiralR, N = 14;
+  for (let k = 1; k <= N; k++) {
+    const t = k / N, ang = a0 + da * (t * t * (3 - 2 * t)), rr = r0 + 40 + (rFim - r0 - 40) * t;
+    const curva = Math.sin(t * Math.PI * FIO.curvas * 2 + fase) * FIO.largura * Math.sin(t * Math.PI), onda = Math.sin(t * Math.PI * 5 + fase * 1.3) * 18 * Math.sin(t * Math.PI);
+    const px = Math.cos(ang) * rr, pz = Math.sin(ang) * rr, tx = -Math.sin(ang), tz = Math.cos(ang);
+    ctrl.push({ x: px + tx * curva, y: 3 + (FIO.teto - 3) * Math.sin(t * Math.PI * 0.85) + (FIO.bnY - 3) * t * 0.4 + onda, z: pz + tz * curva });
   }
-  ctrl[0] = { x: dir.x * r0, y: 0.5, z: dir.z * r0 }; ctrl[1] = { x: dir.x * (r0 + 14), y: 1.5, z: dir.z * (r0 + 14) };   // (sai rente ao piso, reto)
-  const eixo = amostrarCurva(ctrl, 220), acum = [0];
+  // a ESPIRAL: entra na órbita do buraco negro (no sentido que a pista já vinha) e fecha até o horizonte
+  const ult = ctrl[ctrl.length - 1]!, angEntra = Math.atan2(ult.z - bn.z, ult.x - bn.x), sentido = r() < 0.5 ? 1 : -1, M = 16;
+  for (let k = 1; k <= M; k++) {
+    const t = k / M, ang = angEntra + sentido * t * FIO.voltas * Math.PI * 2, rr = FIO.espiralR + (FIO.bnR * 1.05 - FIO.espiralR) * Math.pow(t, 1.4);
+    ctrl.push({ x: bn.x + Math.cos(ang) * rr, y: ult.y + (bn.y - ult.y) * t + Math.sin(t * Math.PI * 2) * 12 * (1 - t), z: bn.z + Math.sin(ang) * rr });
+  }
+  const eixo = amostrarCurva(ctrl, 700), acum = [0];
   for (let i = 1; i < eixo.length; i++) acum.push(acum[i - 1]! + Math.hypot(eixo[i]!.x - eixo[i - 1]!.x, eixo[i]!.y - eixo[i - 1]!.y, eixo[i]!.z - eixo[i - 1]!.z));
-  const fim = eixo[eixo.length - 1]!, pen = eixo[eixo.length - 6]!, tl = Math.hypot(fim.x - pen.x, fim.y - pen.y, fim.z - pen.z) || 1;
-  const bn = { x: fim.x + ((fim.x - pen.x) / tl) * FIO.bnR * 1.5, y: fim.y + ((fim.y - pen.y) / tl) * FIO.bnR * 1.5, z: fim.z + ((fim.z - pen.z) / tl) * FIO.bnR * 1.5, r: FIO.bnR };
-  // os DENDRITOS: saem do axônio pros lados (e pra cima/baixo), curvos, cada um com 2 galhinhos
-  const ramos: V3[][] = [], bulbos: V3[] = [];
-  for (let k = 0; k < FIO.dendritos; k++) {
-    const u = 0.12 + (k / FIO.dendritos) * 0.8 + r() * 0.04, i = Math.floor(u * (eixo.length - 1)), o = eixo[i]!;
-    const lado = k % 2 ? 1 : -1, comp = 40 + r() * 70, vy = (r() - 0.35) * 0.8;
-    const p = (s: number, curva: number): V3 => ({ x: o.x + perp.x * lado * comp * s + dir.x * comp * curva, y: o.y + comp * vy * s + Math.sin(s * Math.PI) * 6, z: o.z + perp.z * lado * comp * s + dir.z * comp * curva });
-    const ctrlR = [o, p(0.35, 0.05 + r() * 0.1), p(0.7, 0.15 + r() * 0.15), p(1, 0.2 + r() * 0.25)];
-    const ramo = amostrarCurva(ctrlR, 24); ramos.push(ramo); bulbos.push(ramo[ramo.length - 1]!);
-    for (let g = 0; g < 2; g++) {   // os galhinhos
-      const b = ramo[10 + g * 7]!, cg = 14 + r() * 26, ang = (r() - 0.5) * 2.2, dx = Math.cos(ang) * perp.x * lado + Math.sin(ang) * dir.x, dz = Math.cos(ang) * perp.z * lado + Math.sin(ang) * dir.z;
-      const galho = amostrarCurva([b, { x: b.x + dx * cg * 0.5, y: b.y + (r() - 0.4) * cg * 0.4, z: b.z + dz * cg * 0.5 }, { x: b.x + dx * cg, y: b.y + (r() - 0.4) * cg * 0.7, z: b.z + dz * cg }], 12);
-      ramos.push(galho); bulbos.push(galho[galho.length - 1]!);
-    }
-  }
-  return { sala, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, y: 0, r: FIO.bocaR }, bn, ramos, bulbos };
+  return { sala, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, y: 0, r: FIO.bocaR }, bn: { ...bn, r: FIO.bnR } };
 }
 
 let cache: FioCosmico[] | null = null;
-/** os fios (um por sala), na ordem das salas */
-export const fiosCosmicos = (): FioCosmico[] => (cache ??= SALAS_FIO.map(montarFio));
+/** as pistas (uma por sala), na ordem das salas */
+export const fiosCosmicos = (): FioCosmico[] => (cache ??= SALAS_FIO.map(montarPista));
 export const fioDaSala = (s: NomeSala): FioCosmico => fiosCosmicos().find((f) => f.sala === s)!;
 
-/** o ponto do axônio na fração `u` (0 = a boca, 1 = a ponta — pelo comprimento) e o rumo (yaw: +z = frente) */
+/** o ponto da pista na fração `u` (0 = a boca, 1 = o horizonte — pelo comprimento) e o rumo (yaw: +z = frente) */
 export function pontoDoFio(f: FioCosmico, u: number): V3 & { rumo: number } {
   const alvo = Math.max(0, Math.min(1, u)) * f.comprimento;
   let lo = 0, hi = f.acum.length - 1;
@@ -97,12 +105,18 @@ export function pontoDoFio(f: FioCosmico, u: number): V3 & { rumo: number } {
   return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, rumo: Math.atan2(b.x - a.x, b.z - a.z) };
 }
 
-/** pisou na boca de qual fio? (`l` = local da ilha; `yRel` = altura acima do piso da central) */
+/** pisou na boca de qual pista? (`l` = local da ilha; `yRel` = altura acima do piso da central) */
 export function fioNaBoca(l: { x: number; z: number }, yRel: number): FioCosmico | null {
   if (Math.abs(yRel) > 1.5) return null;
   for (const f of fiosCosmicos()) if (Math.hypot(l.x - f.boca.x, l.z - f.boca.z) < f.boca.r) return f;
   return null;
 }
 
-/** a fração da viagem pela prancha (0..1) → a posição no fio (acelera e freia suave) */
-export const uDaViagemFio = (k: number) => { const t = Math.max(0, Math.min(1, k)); return t * t * (3 - 2 * t); };
+/** a fração da viagem pelo fluxo (0..1) → a posição na pista: arranca suave e ACELERA no fim (caindo no buraco negro) */
+export const uDaViagemFio = (k: number) => { const t = Math.max(0, Math.min(1, k)); return t < 0.08 ? (t * t) / 0.16 : 0.04 + (t - 0.08) * (0.96 / 0.92) * (0.85 + 0.15 * t); };
+
+/** o quanto o buraco negro da pista está "perto" (0 longe → 1 no horizonte): a tempestade, o vento, o tremor */
+export function pertoDoBuraco(f: FioCosmico, p: V3): number {
+  const d = Math.hypot(p.x - f.bn.x, p.y - f.bn.y, p.z - f.bn.z) - f.bn.r;
+  return Math.max(0, Math.min(1, 1 - d / FIO.zonaEfeito));
+}
