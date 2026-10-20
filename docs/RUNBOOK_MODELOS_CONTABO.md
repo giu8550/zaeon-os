@@ -160,6 +160,8 @@ curl -s http://127.0.0.1:4000/key/generate -H "Authorization: Bearer $M" -H 'Con
 # revogar: POST /key/delete {"keys":["sk-..."]}
 ```
 
+> **No VPS de prod, a key vai no `.env` — NUNCA no `.env.secrets`:** o `deploy.yml` REESCREVE o `.env.secrets` a cada deploy (credencial Vertex), e o que estiver lá some. Feito em 2026-10-20: `LOCAL_LLM_URL`/`LOCAL_LLM_KEY` (virtual key `web-zaeon`)/`LOCAL_LLM_MODEL` no `/root/zaeon-os/.env` (600), sem `AI_FORCE_LOCAL`. O `web` lê no próximo recreate (deploy). VPS na tailnet como `zaeon-vps` (`100.127.148.49`), instalada com `tailscale up --accept-dns=false` pra não mexer no DNS do host de prod.
+
 ## 8. Ligar na Zaeon (interfaces/CLIs)
 No app/CLIs, setar (via `.env` de cada um):
 ```
