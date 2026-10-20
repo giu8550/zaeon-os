@@ -19,7 +19,7 @@ import { humanosNoCanal } from "@/lib/canal/convite";
 import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
 import { pedidoDeChore } from "@/lib/chore/triagem";
-import { ehDispensa, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "@/lib/canal/dispensa";
+import { quemFoiDispensada, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "@/lib/canal/dispensa";
 import { choresLigadas, criarDoPedido } from "@/lib/chore/criar";
 
 export const MAX_TEXTO = 4000;
@@ -59,10 +59,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   // #438: a mensagem dispensa a agente da vez? (decide antes de gravar, pra barra já sair certa)
   const humanos = humanosNoCanal(canal);
-  const dispensadas = alvos.filter((k) => {
-    const ag = agentes.find((a) => a.agentKey === k);
-    return ehDispensa(texto, { nomesDaAgente: [k, ag?.nome ?? ""], mencionada: mencoes.includes(k), humanos });
-  });
+  // #443: só sai a agente PRA QUEM foi a despedida ("a zenita pode sair, aura continua comigo" → só a Zenita)
+  const dispensadas = quemFoiDispensada(
+    texto,
+    alvos.map((k) => { const nome = agentes.find((a) => a.agentKey === k)?.nome ?? ""; return { key: k, nomes: [nome, nome.split(/\s+/)[0] ?? ""] }; }),
+    humanos,
+  );
   // #440: chamada com @ depois de ter saído → entra a linha "Zenita voltou para a conversa"
   const voltando = mencoes.filter((k) => alvos.includes(k) && !dispensadas.includes(k) && estaForaDaConversa(historico, k));
 

@@ -238,3 +238,25 @@ describe("POST /api/canal/[id]/mensagem · #440 sair da barra e voltar com aviso
     expect(j.voltaram).toBeUndefined();
   });
 });
+
+describe("POST /api/canal/[id]/mensagem · #443 dispensar uma agente não tira as outras", () => {
+  beforeEach(() => {
+    state.criadas = []; state.disparos = []; state.publicados = []; state.historico = []; state.atualizacoes = [];
+    state.canal = { ...canal("turma"), agentes: ["aura", "medicina"] }; state.user = user(B);
+  });
+
+  it("'@aura @Osler o osler pode sair, aura continua comigo' → só o Osler sai; a Aura responde e fica na barra", async () => {
+    const j = await (await POST(req("@aura @Osler o osler pode sair, aura continua comigo"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["medicina"]);
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+    expect(j.agentesNoCanal).toEqual(["aura"]);
+    expect(state.criadas.filter((m) => m.autorTipo === "sistema").map((m) => m.autorId)).toEqual(["medicina"]);
+  });
+
+  it("'pode ir em frente' não tira ninguém: a agente da vez responde", async () => {
+    state.historico = [{ autorTipo: "humano", autorId: B }, { autorTipo: "agente", autorId: "medicina" }];
+    const j = await (await POST(req("pode ir em frente"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toBeUndefined();
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
+  });
+});
