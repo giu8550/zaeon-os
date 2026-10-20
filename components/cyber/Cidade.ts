@@ -29,6 +29,7 @@ import { criarPisosEstudo } from "./EstacionamentosEstudo";
 import { LOTES } from "@/lib/cyber/motos";
 import { NOS } from "@/lib/cyber/buracos";
 import { criarBuracoPortal } from "./BuracoPortal";
+import { NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { criarCoracao } from "./CoracaoZaeon";
 import { criarEstacoes } from "./EstacoesAgentes";
 import { criarCabinesEstudo } from "./CabinesEstudo";
@@ -40,6 +41,10 @@ export type CidadeHandle = {
   group: THREE.Group;
   /** sub-grupo da ilha (em y = pisoY) — o engine soma a flutuação dele a quem está lá em cima */
   ilha: THREE.Group;
+  /** mostra SÓ o nível (lib/cyber/nivelAtivo): a central (o hub) ou uma sala; `null` = tudo (o modo antigo) */
+  mostrarNivel(n: IdNivel | null): void;
+  /** o grupo de um nível da Zaeon (o engine põe nele o que é de uma sala — o relicário, os livros…) */
+  grupoDoNivel(n: "zaeon" | NomeSala): THREE.Group;
   rotulo: HTMLDivElement;
   /** superfícies sólidas (raycast do clique/câmera) */
   alvos: THREE.Object3D[];
@@ -88,7 +93,12 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const raiz = new THREE.Group();
   const ilha = new THREE.Group(); ilha.position.set(CIDADE.centro.x, CIDADE.pisoY, CIDADE.centro.z); raiz.add(ilha);
   const alvos: THREE.Object3D[] = [];
-  const add = <T extends THREE.Object3D>(o: T, pai: THREE.Object3D = ilha, alvo = false) => { pai.add(o); if (alvo) alvos.push(o); return o; };
+  // os NÍVEIS (lib/cyber/nivelAtivo): a central (o hub) e cada sala num grupo próprio — só o do nível da pessoa aparece.
+  // Cada um é um LIMITE dos lotes estáticos (components/cyber/lotes): esconder um não leva pedaços dos outros junto
+  const novoNivel = (nome: string) => { const g = new THREE.Group(); g.name = `nivel-${nome}`; g.userData.lote = "limite"; ilha.add(g); return g; };
+  const hub = novoNivel("zaeon");
+  const grupoSala = Object.fromEntries((Object.keys(CIDADE.salas) as NomeSala[]).map((n) => [n, novoNivel(n)])) as Record<NomeSala, THREE.Group>;
+  const add = <T extends THREE.Object3D>(o: T, pai: THREE.Object3D = hub, alvo = false) => { pai.add(o); if (alvo) alvos.push(o); return o; };
   // vidro SEMPRE transparente simples: o `transmission` do MeshPhysicalMaterial obriga o three a renderizar a cena
   // inteira de novo num alvo extra a cada quadro — era o maior custo de FPS da cena
   const vidro = (p: THREE.MeshPhysicalMaterialParameters, op: number) =>
@@ -110,7 +120,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const rocha = vidro({ color: 0x0b1a30, emissive: 0x10325e, emissiveIntensity: 0.55, roughness: 0.35, metalness: 0.1, transmission: 0.2, thickness: 2, transparent: true, opacity: 0.97 }, 0.97);
   // SEM A MONTANHA INVERTIDA (out/2026, o dono: "as superfícies de baixo não existem"): a ilha é a LAJE de vidro — a
   // borda (uma casca de `H` m de rocha) e o fundo de vidro, de onde se vê o universo (e a praça, 40 m abaixo, pela borda)
-  const casca = add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, low ? 64 : 128, 1, true), rocha), ilha, true);
+  const casca = add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, low ? 64 : 128, 1, true), rocha), hub, true);
   casca.position.y = -H / 2 - 0.05; casca.renderOrder = SOB_O_VIDRO;
   // (os 3 espinhos, os andares de servidores com as janelas e os anéis, as estalactites e as quedas de luz saíram — o dono: a base da cidadela é LIMPA, só a rocha e a agulha)
 
@@ -119,7 +129,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // azuis do coração (CoracaoZaeon) correm por cima dele. Um disco só (uma face, sem bordas): desenhado ANTES de todo
   // transparente e sem gravar profundidade, então o que está embaixo (janelas, estalactites, estrelas) aparece através
   // dele. Continua alvo do clique/câmera (o raycast não olha a opacidade)
-  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(R, low ? 64 : 128), vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, side: THREE.DoubleSide }, 0.4)), ilha, true);   // (dupla face: de baixo, a laje de vidro)
+  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(R, low ? 64 : 128), vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, side: THREE.DoubleSide }, 0.4)), hub, true);   // (dupla face: de baixo, a laje de vidro)
   piso.rotation.x = -Math.PI / 2; (piso.material as THREE.Material).depthWrite = false; piso.renderOrder = SOB_O_VIDRO + 1;
   // as LINHAS do piso: um padrão REGULAR na escala de gente (antes: 5 anéis com espaços desiguais e 16 raios de 126 m
   // — na Zaeon mega aquilo ficava torto e enorme): anéis finos a cada 18 m da capela até a borda (um mais aceso a cada 3)
@@ -140,7 +150,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const NT = TORRES_MURALHA.n, ATR = TORRES_MURALHA.alt;   // 16 torres na muralha (a Zaeon mega)
   if (TORRES_NA_BORDA) for (let k = 0; k < NT; k++) {
     const a = anguloDaTorre(k), x = Math.cos(a) * CIDADE.muralhaR, z = Math.sin(a) * CIDADE.muralhaR;
-    const torre = add(new THREE.Mesh(new THREE.CylinderGeometry(2.6, TORRES_MURALHA.rBase, ATR, 8), torreMat), ilha, true); torre.position.set(x, ATR / 2, z);
+    const torre = add(new THREE.Mesh(new THREE.CylinderGeometry(2.6, TORRES_MURALHA.rBase, ATR, 8), torreMat), hub, true); torre.position.set(x, ATR / 2, z);
     const ponta = add(new THREE.Mesh(new THREE.OctahedronGeometry(2.6), new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x9fe8ff, emissiveIntensity: 1.6, roughness: 0.2, flatShading: true })));
     ponta.scale.y = 1.8; ponta.position.set(x, ATR + 3.9, z); pontas.push(ponta);
   }
@@ -160,7 +170,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   let farol: THREE.Sprite | null = null;
   if (CAPELA_NA_ZAEON) {
     const { cidadela } = CIDADE, CA = cidadela.altura, RC = cidadela.r + 1, ACH = CAPELA.achata;
-    const pil = add(new THREE.InstancedMesh(new THREE.CylinderGeometry(1.9, 2.4, CA, 10), torreMat, cidadela.pilares), ilha, true);
+    const pil = add(new THREE.InstancedMesh(new THREE.CylinderGeometry(1.9, 2.4, CA, 10), torreMat, cidadela.pilares), hub, true);
     { const m = new THREE.Matrix4(); for (let i = 0; i < cidadela.pilares; i++) { const a = (i / cidadela.pilares) * Math.PI * 2; pil.setMatrixAt(i, m.makeTranslation(Math.cos(a) * cidadela.r, CA / 2, Math.sin(a) * cidadela.r)); } pil.instanceMatrix.needsUpdate = true; pil.computeBoundingSphere(); }
     const coroaMat = new THREE.MeshStandardMaterial({ color: 0x0c1a30, emissive: 0x66c8ff, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.4 });
     { const t = add(new THREE.Mesh(new THREE.TorusGeometry(cidadela.r, 1.4, 8, low ? 96 : 192), coroaMat)); t.rotation.x = Math.PI / 2; t.position.y = CA; }   // (só a coroa do alto: o anel azul de baixo saiu — o dono, out/2026)
@@ -193,7 +203,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   }
 
   // o GLOBO no centro da capela: mesa redonda + esfera de pontos de luz girando + um anel em volta
-  const mesaGlobo = add(new THREE.Mesh(new THREE.CylinderGeometry(CIDADE.mesaHolo.r, CIDADE.mesaHolo.r * 1.1, 2.2, 32), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), ilha, true) as THREE.Mesh; mesaGlobo.position.y = 1.1;
+  const mesaGlobo = add(new THREE.Mesh(new THREE.CylinderGeometry(CIDADE.mesaHolo.r, CIDADE.mesaHolo.r * 1.1, 2.2, 32), new THREE.MeshStandardMaterial({ color: 0x10213e, emissive: 0x2b6bd0, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })), hub, true) as THREE.Mesh; mesaGlobo.position.y = 1.1;
   const RG = GLOBO_CAPELA.r, YG = GLOBO_CAPELA.y, NG = low ? 420 : 900, gp = new Float32Array(NG * 3);
   for (let i = 0; i < NG; i++) { const u = Math.random() * 2 - 1, th = Math.random() * 6.283, s = Math.sqrt(1 - u * u); gp[i * 3] = s * Math.cos(th) * RG; gp[i * 3 + 1] = YG + u * RG; gp[i * 3 + 2] = s * Math.sin(th) * RG; }
   const gGeo = new THREE.BufferGeometry(); gGeo.setAttribute("position", new THREE.BufferAttribute(gp, 3));
@@ -204,10 +214,10 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // ── as ESCADAS DE PEDRA (out/2026, no lugar dos fios de energia): o estilo de El Castillo — degraus, balaustradas,
   //    cabeças de serpente no pé e a muralha embaixo; a Sala do Saber no topo da pirâmide (components/cyber/EscadaPiramide) ──
   const COR_SALA: Record<NomeSala, number> = { lounge: 0xb98cff, garagem: 0xffb46b, biblioteca: 0x7fb8ff, jardim: 0x7dffb0 };
-  { const ep = criarEscadasDePedra({ low, cores: COR_SALA }); add(ep.group); alvos.push(...ep.alvos); }
+  if (!NIVEIS_SEPARADOS) { const ep = criarEscadasDePedra({ low, cores: COR_SALA }); add(ep.group); alvos.push(...ep.alvos); }   // (níveis separados: sem escadas — os fios cósmicos e os buracos negros)
   // ── a PLATAFORMA de cada sala (só a base; o clube em cima é o Salas): a laje de gelo com o aro de luz (a montanha
   //    invertida e o brilho antigravidade embaixo saíram — out/2026) ──
-  for (const nomeSala of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nomeSala], base = new THREE.Group(); base.position.set(L.x, ALTURA_LOUNGE, L.z); add(base);
+  for (const nomeSala of Object.keys(CIDADE.salas) as NomeSala[]) { const L = CIDADE.salas[nomeSala], base = new THREE.Group(); base.position.set(L.x, ALTURA_LOUNGE, L.z); add(base, grupoSala[nomeSala]);
     add(new THREE.Mesh(new THREE.CylinderGeometry(L.r + 1, L.r - 1, 1.8, low ? 48 : 96), new THREE.MeshStandardMaterial({ color: 0x0a2440, emissive: COLD, emissiveIntensity: 0.3, roughness: 0.5, metalness: 0.25 })), base, true).position.y = -0.95;
     const aroL = add(new THREE.Mesh(new THREE.TorusGeometry(L.r + 1, 0.3, 6, low ? 64 : 128), new THREE.MeshBasicMaterial({ color: COR_SALA[nomeSala], transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending })), base); aroL.rotation.x = Math.PI / 2; aroL.position.y = -0.1;
   }
@@ -216,18 +226,18 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
 
   // ── SALAS (lounge) ──
   const vidroSala = vidro({ color: 0x0a1830, emissive: 0x2a3a70, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, transmission: 0.3, thickness: 1, transparent: true, opacity: 0.32, side: THREE.DoubleSide }, 0.3);
-  const salas = criarSalas(ilha, { low, texturas, estrela: starTex, paredeMat: vidroSala, aoTrovao: opts.aoTrovao });
+  const salas = criarSalas(ilha, { paiDaSala: (n) => grupoSala[n], low, texturas, estrela: starTex, paredeMat: vidroSala, aoTrovao: opts.aoTrovao });
   alvos.push(...salas.alvos);
   // ── o TEMPLO (lib/cyber/templo): a escadaria em curva que sai da direita do deck do lounge, a muralha-veia e o templo
   //    com a capela, o sigilo de Metatron e o desktop da Examiner — montado no referencial da sala do lounge ──
   const templo = criarTemplo({ low, paredeMat: vidroSala, estrela: starTex, aoTrovao: opts.aoTrovao });
-  { const L = CIDADE.salas.lounge; templo.group.position.set(L.x, ALTURA_LOUNGE, L.z); templo.group.rotation.y = rotDaSala(L); add(templo.group); alvos.push(...templo.alvos); }
+  { const L = CIDADE.salas.lounge; templo.group.position.set(L.x, ALTURA_LOUNGE, L.z); templo.group.rotation.y = rotDaSala(L); add(templo.group, grupoSala.lounge); alvos.push(...templo.alvos); }
 
   // ── os ESTACIONAMENTOS da GARAGEM (a ala dos veículos — as motos e os robôs são do engine): o piso dos lotes, lá em
   //    cima na plataforma da garagem (flutuando junto com a ilha); entra no clique de andar ──
   const estacs = LOTES.filter((l) => l.id === "garagem").map((l) => {
     const e = criarPisoEstacionamento({ low, parado: rm, lote: l });
-    e.group.position.set(l.x - CIDADE.centro.x, l.alt, l.z - CIDADE.centro.z); e.group.rotation.y = l.rot; add(e.group, ilha, true); return e;
+    e.group.position.set(l.x - CIDADE.centro.x, l.alt, l.z - CIDADE.centro.z); e.group.rotation.y = l.rot; add(e.group, grupoSala.garagem, true); return e;
   });
 
   // ── os ESTACIONAMENTOS das salas de estudo e do lounge (pra fora de cada sala, flutuando com a ilha): as IAs chegam
@@ -239,10 +249,16 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   add(criarCabinesEstudo({ low }).group);
 
   // ── o BURACO NEGRO da cidade: o nó central da rede de túneis (pisou no anel = escolhe o destino) ──
-  const pt = CIDADE.portalTunel, bnc = criarBuracoPortal(ilha, { x: pt.x, y: 0, z: pt.z, anelR: pt.r, h: NOS.zaeon.bh.h, r: NOS.zaeon.bh.r, low, starTex });
+  const pt = CIDADE.portalTunel, bnc = criarBuracoPortal(hub, { x: pt.x, y: 0, z: pt.z, anelR: pt.r, h: NOS.zaeon.bh.h, r: NOS.zaeon.bh.r, low, starTex });
   texturas.push(...bnc.texturas);
   // o pedestal escuro em volta do anel (o anel fica rente ao piso)
-  add(new THREE.Mesh(new THREE.CylinderGeometry(pt.r + 1.4, pt.r + 1.7, 0.18, 40), new THREE.MeshStandardMaterial({ color: 0x14203a, emissive: 0x1b2b55, emissiveIntensity: 0.5 })), ilha, true).position.set(pt.x, -0.06, pt.z);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(pt.r + 1.4, pt.r + 1.7, 0.18, 40), new THREE.MeshStandardMaterial({ color: 0x14203a, emissive: 0x1b2b55, emissiveIntensity: 0.5 })), hub, true).position.set(pt.x, -0.06, pt.z);
+
+  // ── o BURACO NEGRO de cada SALA (o nível dela): logo dentro da porta antiga — volta pro túnel (lib/cyber/buracos) ──
+  const portaisSalas = NIVEIS_SEPARADOS ? (Object.keys(CIDADE.salas) as NomeSala[]).map((n) => {
+    const no = NOS[n], h = criarBuracoPortal(grupoSala[n], { x: no.anel.x - CIDADE.centro.x, y: ALTURA_LOUNGE + 0.17, z: no.anel.z - CIDADE.centro.z, anelR: no.anel.r, h: no.bh.h, r: no.bh.r, low, starTex, cor: COR_SALA[n] });
+    texturas.push(...h.texturas); return { n, h };
+  }) : [];
 
   // ── querubins orbitando a cidadela ──
   const CN = low ? 0 : 180, cher = Array.from({ length: CN }, () => ({ a: Math.random() * 6.283, r: CIDADE.cidadela.r + 6 + Math.random() * 90, y: 6 + Math.random() * 70, sp: 0.02 + Math.random() * 0.07 }));
@@ -253,6 +269,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   //    Layout FIXO em lib/cyber/ceu.ts (ILHOTAS) — o mesmo da colisão: dá pra pousar no topo e andar nele.
   //    Todas aparecem (também no celular): a colisão tem que ser a mesma pra todo mundo.
   const ilhotas: { g: THREE.Group; y0: number; ph: number }[] = [];
+  const extrasDoHub: THREE.Object3D[] = [];   // (fora da `ilha`, mas do hub: as ilhotas)
   const cristalMat = new THREE.MeshStandardMaterial({ color: 0x0a1626, emissive: 0x66e6ff, emissiveIntensity: 1.1, roughness: 0.2, flatShading: true, transparent: true, opacity: 0.9 });
   ILHOTAS.forEach((il, k) => {
     const rr = il.r, y0 = CIDADE.pisoY + il.dy;
@@ -262,28 +279,29 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     const aro = new THREE.Mesh(new THREE.TorusGeometry(rr - 0.1, 0.06, 6, 48), new THREE.MeshBasicMaterial({ color: COLD, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending })); aro.rotation.x = Math.PI / 2; aro.position.y = 0.02; g.add(aro);
     for (let j = 0; j < 5; j++) { const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.4 + ((j * 37 + k * 11) % 10) / 16), cristalMat); cr.scale.y = 2 + ((j * 13 + k) % 10) / 7; const aa = (j / 5) * 6.283 + k, d = rr * 0.86; cr.position.set(Math.cos(aa) * d, 1.1, Math.sin(aa) * d); g.add(cr); }
     ilhotas.push({ g, y0, ph: il.fase });
+    extrasDoHub.push(g);
   });
 
   // ── a FUMAÇA E OS TROVÕES do ritual (lib/cyber/ritual) no topo da CAPELA e das SALAS DE ESTUDO (o templo tem a dele e o
   //    lounge, a névoa do show): nuvens girando e raios caindo — o som é do engine (`aoTrovao`) ──
   const tempestades: { h: ReturnType<typeof criarTempestade>; g: THREE.Group }[] = [];
   { const yP = inicioDaPonta(), L = CAPELA.pontaLen;
-    const nova = (x: number, z: number, y0: number, y1: number, raio: number, alvoY: number, nuvens: number) => {
-      const g = new THREE.Group(); g.position.set(x, 0, z); ilha.add(g);
+    const nova = (x: number, z: number, y0: number, y1: number, raio: number, alvoY: number, nuvens: number, dono?: NomeSala) => {
+      const g = new THREE.Group(); g.position.set(x, 0, z); (dono ? grupoSala[dono] : hub).add(g);
       const h = criarTempestade({ low, yBase: y0, yTopo: y1, raioMax: raio, alvoPonta: new THREE.Vector3(0, alvoY, 0), nuvens });
       g.add(h.group); h.group.traverse((n) => { n.userData.semLote = true; }); h.definir(0, false); tempestades.push({ h, g });
     };
     if (CAPELA_NA_ZAEON) nova(0, 0, yP + L * 0.25, yP + L * 0.85, 150, yP + L * 0.7, low ? 50 : 110);   // a capela (a ponta fura a fumaça)
-    for (const nome of ["biblioteca", "jardim"] as const) { const s = CIDADE.salas[nome]; nova(s.x, s.z, ALTURA_LOUNGE + 24, ALTURA_LOUNGE + 44, s.r + 24, ALTURA_LOUNGE + 26, low ? 28 : 60); }
+    for (const nome of ["biblioteca", "jardim"] as const) { const s = CIDADE.salas[nome]; nova(s.x, s.z, ALTURA_LOUNGE + 24, ALTURA_LOUNGE + 44, s.r + 24, ALTURA_LOUNGE + 26, low ? 28 : 60, nome); }
   }
   const ondeTrovejou = new THREE.Vector3();
 
   // o CORAÇÃO (o globo bate; veias azuis por toda a cidade e subindo a capela; o raio no topo) e as ESTAÇÕES DOS AGENTES
-  const coracao = CAPELA_NA_ZAEON ? criarCoracao({ low }) : null; if (coracao) ilha.add(coracao.group);
-  const estacoes = ESTACOES_NA_CAPELA ? criarEstacoes({ low }) : null; if (estacoes) ilha.add(estacoes.group);   // (saíram na reforma da capela)
+  const coracao = CAPELA_NA_ZAEON ? criarCoracao({ low }) : null; if (coracao) hub.add(coracao.group);
+  const estacoes = ESTACOES_NA_CAPELA ? criarEstacoes({ low }) : null; if (estacoes) hub.add(estacoes.group);   // (saíram na reforma da capela)
   // o OBSERVATÓRIO DA TERRA + os 4 AUTÓDROMOS (lib/cyber/terra) e os DROIDS OBSERVADORES
-  const distrito = criarDistritoTerra({ low, parado: rm }); ilha.add(distrito.group); alvos.push(...distrito.alvos);
-  const observadores = criarObservadores({ low }); ilha.add(observadores.group);
+  const distrito = criarDistritoTerra({ low, parado: rm }); hub.add(distrito.group); alvos.push(...distrito.alvos);
+  const observadores = criarObservadores({ low }); hub.add(observadores.group);
   // fora do lote estático (lotes.ts): o coração (pulsa por EVENTO — o raio — que a simulação da montagem não vê), as
   // estações (já instanciadas) e os droids (andam). O distrito entra: anima pelo relógio (a simulação vê) e materiais compartilhados
   for (const g of [...(coracao ? [coracao.group] : []), ...(estacoes ? [estacoes.group] : []), observadores.group]) g.traverse((n) => { n.userData.semLote = true; });
@@ -294,7 +312,13 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const fogoAmp = rm ? 0.12 : 1, vel = rm ? 0.2 : 1;
 
   return {
-    group: raiz, ilha, rotulo, alvos, portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
+    group: raiz, ilha, rotulo, alvos,
+    mostrarNivel(n) {
+      const tudo = n === null;
+      hub.visible = tudo || n === "zaeon"; for (const e of extrasDoHub) e.visible = hub.visible;
+      for (const nome of Object.keys(grupoSala) as NomeSala[]) grupoSala[nome].visible = tudo || n === nome;
+    },
+    grupoDoNivel: (n) => (n === "zaeon" ? hub : grupoSala[n]), portalTunel: bnc.alvo, tvLounge: salas.tv, plataformas: salas.plataformas, caixasLounge: salas.caixas, caixasAmbiente: salas.ambiente, tocaDiscos: salas.tocaDiscos, somTocando: (on: boolean, nivel?: number) => salas.somTocando(on, nivel), alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => salas.mostrarRecado(t),
     somDroids: observadores.emissores,
     showLounge: (e, ritual, olho) => salas.show(e, ritual, olho),
     raioNoLounge: (vel, alvo) => salas.raioNoLounge(vel, alvo),
@@ -311,9 +335,13 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
       if (brasa) (brasa.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.15 * Math.sin(t * 1.4) * fogoAmp;
       pontas.forEach((p, i) => { (p.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.3 + 0.4 * Math.sin(t * 1.2 + i); p.rotation.y += dt * 0.4 * vel; });
       if (farol) farol.material.opacity = 0.75 + 0.2 * Math.sin(t * 1.1);
-      salas.atualizar(dt, t); templo.atualizar(dt, t);
-      for (const tp of tempestades) { if (!tp.h.group.visible) continue; const c = tp.h.atualizar(t); if (c && opts.aoTrovao) { tp.g.updateMatrixWorld(); opts.aoTrovao(ondeTrovejou.copy(c).applyMatrix4(tp.g.matrixWorld)); } }
-      for (const e of estacs) e.atualizar(t);
+      // (os NÍVEIS escondidos nem animam — só o da pessoa: components/cyber/Cidade `mostrarNivel`)
+      const algumaSala = (Object.values(grupoSala) as THREE.Group[]).some((g) => g.visible);
+      if (algumaSala) salas.atualizar(dt, t);
+      if (grupoSala.lounge.visible) templo.atualizar(dt, t);
+      for (const tp of tempestades) { if (!tp.h.group.visible || !tp.g.parent?.visible) continue; const c = tp.h.atualizar(t); if (c && opts.aoTrovao) { tp.g.updateMatrixWorld(); opts.aoTrovao(ondeTrovejou.copy(c).applyMatrix4(tp.g.matrixWorld)); } }
+      if (grupoSala.garagem.visible) for (const e of estacs) e.atualizar(t);
+      if (hub.visible) {
       globo.rotation.y += dt * 0.25 * vel; aroGlobo.rotation.z += dt * 0.2 * vel;
       // o CORAÇÃO bate: o globo incha de luz, a mesa e o aro acendem; o pulso corre nas veias; o raio sai do topo
       { const ev = coracao ? coracao.atualizar(dt, t) : { raio: false, tum: false }, b = coracao ? coracao.batida() : 0;
@@ -328,6 +356,8 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
         cher.forEach((c, i) => { c.a += dt * c.sp * vel; a[i * 3] = Math.cos(c.a) * c.r; a[i * 3 + 1] = c.y + Math.sin(t * 0.5 + i) * 0.3; a[i * 3 + 2] = Math.sin(c.a) * c.r; });
         cGeo.attributes.position!.needsUpdate = true; }
       ilhotas.forEach((il, i) => { il.g.position.y = il.y0 + Math.sin(t * 0.25 + il.ph) * BOIA_ILHOTA * vel; il.g.rotation.y += dt * 0.01 * (i % 2 ? 1 : -1) * vel; });
+      }   // (fim do que é do hub)
+      for (const p of portaisSalas) if (grupoSala[p.n].visible) p.h.atualizar(dt * vel, t);   // (o buraco negro de volta, na sala da pessoa)
     },
     dispose() { rotulo.remove(); templo.dispose(); for (const tp of tempestades) tp.h.dispose(); coracao?.dispose(); estacoes?.dispose(); distrito.dispose(); observadores.dispose(); liberar(raiz, texturas); },
   };

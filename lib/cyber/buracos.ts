@@ -9,12 +9,13 @@
  *    outro — e é a ÚNICA entrada da cabine do DJ. Só o dono atravessa (o servidor confere, POST /acesso {alvo:"dj"}).
  */
 import type { P2 } from "./colisao";
-import { CIDADE, TORRE_DJ, daSala, mundo, naSala } from "./ceu";
+import { ALTURA_LOUNGE, CIDADE, TORRE_DJ, daSala, mundo, naSala, type NomeSala } from "./ceu";
+import { NIVEIS_SEPARADOS } from "./nivelAtivo";
 import { PLATAFORMAS, IDS_PLATAFORMAS, type IdPlataforma } from "./plataformas";
 import { PORTAL_PRACA, PRACA, naPracaLocal } from "./praca";
 import { COMODOS } from "./naveQG";
 
-export type IdNo = "zaeon" | "praca" | IdPlataforma;
+export type IdNo = "zaeon" | "praca" | IdPlataforma | NomeSala;
 /** um nó da rede: o anel (mundo), a altura do piso dele, onde se aparece ao chegar e o buraco negro (visual) */
 export type NoTunel = {
   id: IdNo; nome: string; desc: string;
@@ -34,7 +35,18 @@ const DESC: Record<IdNo, string> = {
   unifor: "Universidade de Fortaleza — o campus sofisticado.",
   uece: "Universidade Estadual do Ceará — compacta, em volta do pátio.",
   solana: "A casa da Superteam Brasil, com rooftop.",
+  lounge: "O templo da festa: o DJ, a pista, o show e o ritual.",
+  garagem: "A ala dos veículos: as motos da Zaeon e os robôs que as fabricam.",
+  biblioteca: "A Sala do Saber: o Relicário e as mesas de estudo.",
+  jardim: "O espelho d'água, as esmeraldas e o silêncio.",
 };
+const NOME_SALA: Record<NomeSala, string> = { lounge: "Lounge cósmico", garagem: "Garagem", biblioteca: "Sala do Saber", jardim: "Jardim" };
+/** cada SALA da Zaeon é um nível (lib/cyber/nivelAtivo): o buraco negro dela fica logo dentro da porta antiga (o +z da
+ *  sala, onde a escada chegava) e quem chega aparece um pouco mais pra dentro, de frente pro meio da sala */
+function noDaSala(nome: NomeSala): NoTunel {
+  const L = CIDADE.salas[nome], anel = mundo(daSala(L, 0, L.r - 7)), ch = mundo(daSala(L, 0, L.r - 23)), c = mundo(L);
+  return { id: nome, nome: NOME_SALA[nome], desc: DESC[nome], anel: { ...anel, r: 2.6 }, y: CIDADE.pisoY + ALTURA_LOUNGE, chegada: { ...ch, rumo: Math.atan2(c.x - ch.x, c.z - ch.z) }, bh: { h: 7, r: 2.4 } };
+}
 
 export { PORTAL_PRACA };
 
@@ -48,9 +60,13 @@ export const NOS: Record<IdNo, NoTunel> = {
     const P = PLATAFORMAS[id];
     return [id, { id, nome: P.nome, desc: DESC[id], anel: P.portal, y: P.y, chegada: P.chegada, bh: { h: 5.5, r: 1.6 } } satisfies NoTunel];
   })) as Record<IdPlataforma, NoTunel>),
+  lounge: noDaSala("lounge"), garagem: noDaSala("garagem"), biblioteca: noDaSala("biblioteca"), jardim: noDaSala("jardim"),
 };
+/** as salas como destinos do túnel (só com os níveis separados — antes, chegava-se pelas escadas) */
+export const SALAS_NO: readonly NomeSala[] = NIVEIS_SEPARADOS ? ["lounge", "garagem", "biblioteca", "jardim"] : [];
+export const ehSala = (id: IdNo): id is NomeSala => id === "lounge" || id === "garagem" || id === "biblioteca" || id === "jardim";
 /** a ordem dos destinos no túnel */
-export const IDS_NOS: IdNo[] = (["zaeon", "praca", "univ", "ufc", "unifor", "uece", "solana"] as IdNo[]).filter((id) => id === "zaeon" || id === "praca" || IDS_PLATAFORMAS.includes(id));
+export const IDS_NOS: IdNo[] = ([...(["zaeon", "praca", "univ", "ufc", "unifor", "uece", "solana"] as IdNo[]).filter((id) => id === "zaeon" || id === "praca" || IDS_PLATAFORMAS.includes(id as IdPlataforma)), ...SALAS_NO]);
 
 /** pisou no anel de qual nó? `y` = a altura dos pés (o anel só vale no piso dele) */
 export function noDoAnel(p: P2, y: number): IdNo | null {

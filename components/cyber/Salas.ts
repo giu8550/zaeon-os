@@ -9,6 +9,7 @@
  * Luzes/feixes/LEDs são Basic/Shader (o `camuflarGrupo` não mexe neles); corpos sólidos são Standard (viram `solidoLeve`).
  */
 import * as THREE from "three";
+import { NIVEIS_SEPARADOS } from "@/lib/cyber/nivelAtivo";
 import { BN_NA_SALA, CAIXAS_SUSPENSAS, CIDADE, MESA_DJ, MOVEIS, PALCO, TORRE_DJ, TRELICA, rotDaSala, type Movel, type NomeSala } from "@/lib/cyber/ceu";
 import { BOCA_DJ } from "@/lib/cyber/buracos";
 import { DECK, GARAGEM_LOUNGE, PATIO, saidaDoLounge } from "@/lib/cyber/templo";
@@ -31,7 +32,7 @@ const TEMA: Record<NomeSala, { piso: number; brilho: number; cor: string; alt: n
 const FESTA = [0x66e6ff, 0xb98cff, 0xff5fd2, 0x6bff9a, 0x4d7bff];
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material; /** a textura de ponto de luz (fumaça, faíscas) */ estrela?: THREE.Texture; /** caiu um raio do RITUAL na névoa do lounge (mundo): o trovão */ aoTrovao?: (em: THREE.Vector3) => void };
+type Opts = { low: boolean; texturas: THREE.Texture[]; paredeMat: THREE.Material; /** a textura de ponto de luz (fumaça, faíscas) */ estrela?: THREE.Texture; /** caiu um raio do RITUAL na névoa do lounge (mundo): o trovão */ aoTrovao?: (em: THREE.Vector3) => void; /** o grupo onde cada sala entra (o do NÍVEL dela); sem isso, a ilha */ paiDaSala?: (n: NomeSala) => THREE.Object3D };
 export type SalasHandle = {
   alvos: THREE.Object3D[];
   /** a TELA do telão do lounge (clicável: o dono escreve o recado pro QG do Andrei) */
@@ -661,14 +662,14 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
 
   for (const nome of Object.keys(CIDADE.salas) as NomeSala[]) {
     const s = CIDADE.salas[nome], tema = TEMA[nome], porta = s.porta ?? CIDADE.salaParede.porta, ALT = tema.alt;
-    const g = new THREE.Group(); g.position.set(s.x, s.y ?? 0, s.z); g.rotation.y = rotDaSala(s); ilha.add(g);   // o lounge: lá no alto
+    const g = new THREE.Group(); g.position.set(s.x, s.y ?? 0, s.z); g.rotation.y = rotDaSala(s); (o.paiDaSala?.(nome) ?? ilha).add(g);   // (cada sala no grupo do NÍVEL dela — components/cyber/Cidade)   // o lounge: lá no alto
     // piso + friso de luz
     const piso = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r + 0.2, 0.16, o.low ? 32 : 48), new THREE.MeshStandardMaterial({ color: tema.piso, emissive: tema.piso, emissiveIntensity: 0.6, roughness: 0.5, metalness: 0.3 }));
     piso.position.y = 0.08; g.add(piso); alvos.push(piso);
     const friso = new THREE.Mesh(new THREE.RingGeometry(s.r - 0.32, s.r - 0.18, 64), basica(tema.brilho, 0.7, true)); friso.rotation.x = -Math.PI / 2; friso.position.y = 0.17; g.add(friso);
     // parede de vidro com a PORTA em +z local (no CylinderGeometry: x = r·sen θ, z = r·cos θ → +z é θ = 0)
     // (o LOUNGE tem também a SAÍDA pra escadaria do templo, à direita — lib/cyber/templo)
-    const arcos: [number, number][] = nome === "lounge" ? (() => { const sd = saidaDoLounge(s.r), th = Math.PI / 2 - sd.ang; return [[porta, th - sd.meia], [th + sd.meia, Math.PI * 2 - porta]]; })() : [[porta, Math.PI * 2 - porta]];
+    const arcos: [number, number][] = nome === "lounge" ? (() => { const sd = saidaDoLounge(s.r), th = Math.PI / 2 - sd.ang; return [[NIVEIS_SEPARADOS ? 0 : porta, th - sd.meia], [th + sd.meia, Math.PI * 2 - (NIVEIS_SEPARADOS ? 0 : porta)]]; })() : NIVEIS_SEPARADOS ? [[0, Math.PI * 2]] : [[porta, Math.PI * 2 - porta]];   // (níveis separados: a parede fecha onde a escada chegava)
     const segP = o.low ? 32 : nome === "lounge" ? 96 : 48;
     for (const [a0, a1] of arcos) {
       const parede = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r, ALT, segP, 1, true, a0, a1 - a0), o.paredeMat); parede.position.y = ALT / 2; g.add(parede);

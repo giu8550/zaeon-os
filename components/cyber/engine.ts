@@ -42,7 +42,7 @@ import { CAMPI, IDS_CAMPI, type IdCampus } from "@/lib/cyber/campi";
 import { criarCampus, type CampusHandle } from "./Campus";
 import { PLATAFORMAS, UNIVERSIDADES_NO_MAPA, alturaDoAndar, andarDoPouso, andarNaPlataforma, decolaDaPlataforma, elevadorAqui, noArNaPlataforma, pilaresDasPlataformas, plataformaPerto, pousosNaPlataforma, tetoNaPlataforma, type IdPlataforma } from "@/lib/cyber/plataformas";
 import { CHAO, PRACA, QUEDA_VAZIO, naPraca } from "@/lib/cyber/praca";
-import { CHEGADA_NAVE, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, naBocaDJ, naBocaNave, noDoAnel, type IdNo } from "@/lib/cyber/buracos";
+import { CHEGADA_NAVE, NOS, bocaDJMundo, chegadaDJMundo, destinosDe, ehSala, naBocaDJ, naBocaNave, noDoAnel, type IdNo } from "@/lib/cyber/buracos";
 import { DROID } from "@/lib/cyber/agentes";
 import { type CtxGuia, FALA_DESISTIU, ROTEIRO_ENTREGA, ROTEIRO_MOTOS, passoDaRecusa, type PassoGuia, FALA_CONCORRENCIA, FALA_IA_ENTREGOU, FALA_VOLTE_AO_TABLET, FALA_DICA_RELICARIO, FRENTE_DO_SABER_SALA, CENTRO_DA_CAPELA_LOCAL, FRENTE_DOS_TELOES_LOCAL, type IdPassoGuia, type OndeRetomar, type ProgressoTutorial, lembreteDoTablet, PASSO_DA_MISSAO, SALA_DO_SABER_LOCAL, esperaDepoisDaUltima, passoDe, tempoDeLeitura, NASCIMENTO, RITMO_FALA, ROTEIRO, TUBOS, cumpriu, tuboDe } from "@/lib/cyber/onboarding";
 import { criarRelicario, type RelicarioHandle } from "./Relicario";
@@ -74,6 +74,8 @@ import { criarFxMagia, type FxMagia } from "./MagiaFx";
 import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
+import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
+import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
 import { LOOPS_CARRO, mixDoCarro, sonsDaCabine } from "@/lib/cyber/somCarro";
@@ -108,7 +110,7 @@ import { LOOPS_MOTO, cambioNeutro, eventosDaMoto, mixDaMoto, passoCambio, setaAc
 import { interpolar, moverRelativoCamera } from "@/lib/lounge3d/sala";
 import type { Presenca } from "@/lib/lounge3d/tipos";
 import { criarCenaCosmica, type CenaCosmicaHandle } from "./CenaCosmica";
-import { atualizarRegiao, criarRegiao, soltarRegiao, type RegiaoCena } from "./regioesCena";
+import { atualizarRegiao, criarRegiao, esconderRegiao, soltarRegiao, type RegiaoCena } from "./regioesCena";
 import { fundirEstaticos } from "./lotes";
 import { esferaRapida, matrizDoAvatar, matrizesDaCena, matrizSeMudou } from "./matrizes";
 import { umaPassadaNosTransparentes } from "./umaPassada";
@@ -537,7 +539,7 @@ export class CyberEngine {
       const { itens } = (await r.json()) as { itens: ItemEstudo[] };
       if (!this.vivo || !this.cidade || !itens?.length) return;
       this.livros?.dispose(); this.livros = criarLivrosEstudos(itens, { low: this.o.low });
-      this.livros.group.traverse((n) => { n.userData.semLote = true; }); this.cidade.ilha.add(this.livros.group);
+      this.livros.group.traverse((n) => { n.userData.semLote = true; }); this.cidade.grupoDoNivel("biblioteca").add(this.livros.group);
     } catch { /* sem os livros: a biblioteca segue como está */ }
   }
   /** o holograma do recado do dono, ao lado da tela de trabalho da base do QG (do Andrei) */
@@ -667,6 +669,9 @@ export class CyberEngine {
   private carro: CarroFrota | null = null;
   /** os CARROS (lib/cyber/carros): a praça + os estacionamentos da Zaeon; `carro` é o da vez (o que eu uso) */
   private carros: CarroFrota[] = [];
+  /** o NÍVEL em que estou (lib/cyber/nivelAtivo — só ele existe pra mim) e onde eu estava no quadro anterior (um salto
+   *  grande = teleporte: o túnel, o portal do Droid) */
+  private nivel: IdNivel | null = null; private posNivel = { x: 0, z: 0, alt: 0, ok: false };
   /** o carro que EU deixei estacionado fora da vaga (vai na presença: os outros o veem ali) */
   private carroLargado: CarroLargado | null = null;
   /** os PISOS dos estacionamentos de carros da Zaeon (components/cyber/EstacionamentoCarros) */
@@ -811,10 +816,10 @@ export class CyberEngine {
       this.cena.scene.add(this.cidade.group);
       {   // o RELICÁRIO DO SABER na biblioteca (fora dos lotes: ele anima e é alvo de clique)
         const rl = relicarioLocal(), h = criarRelicario({ low }); h.group.position.set(rl.x, ALTURA_LOUNGE, rl.z); h.group.rotation.y = rl.rumo;
-        h.group.traverse((n) => { n.userData.semLote = true; }); this.cidade.ilha.add(h.group); this.relicario = h;
+        h.group.traverse((n) => { n.userData.semLote = true; }); this.cidade.grupoDoNivel("biblioteca").add(h.group); this.relicario = h;
       }
-      this.bercario = criarBercario(this.cidade.ilha, { low });   // os tubos de ensaio, ao lado da Recepção (flutuam com a ilha)
-      this.holoZaeon = criarHoloZaeon(this.cidade.ilha, { low });   // o rosto da Zaeon (só aparece no tutorial)
+      this.bercario = criarBercario(this.cidade.grupoDoNivel("zaeon"), { low });   // os tubos de ensaio, ao lado da Recepção (flutuam com a ilha)
+      this.holoZaeon = criarHoloZaeon(this.cidade.grupoDoNivel("zaeon"), { low });   // o rosto da Zaeon (só aparece no tutorial)
       if (baseNoQG()) { this.holo = criarHoloRecado(); this.cena.scene.add(this.holo.group); }
       if (UNIVERSIDADES_NO_MAPA) {   // (desligadas a pedido do dono — performance: só a Zaeon, as salas e a Solana House)
       await etapa("univ");
@@ -869,7 +874,7 @@ export class CyberEngine {
     this.som = criarAudioCyber({ camera: this.cam, cena: this.cena.scene, low });
     const sint = opts.vozZaeon;
     if (sint) this.vozCache = criarCacheVoz(async (t) => { const b64 = await sint(t); return b64 ? base64ParaBuffer(b64) : null; });
-    if (this.cidade?.caixasLounge.length && opts.urlMusica) this.somLounge = criarSomLounge({ audio: this.som, caixas: this.cidade.caixasLounge, urlDe: opts.urlMusica });
+    if (this.cidade?.caixasLounge.length && opts.urlMusica) { this.somLounge = criarSomLounge({ audio: this.som, caixas: this.cidade.caixasLounge, urlDe: opts.urlMusica }); if (NIVEIS_SEPARADOS && this.nivel) this.somLounge.silenciar(this.nivel !== "lounge"); }
     this.setPessoas([...opts.membros]);
     if (this.cidade) this.criarDroid();
     if (this.cidade && this.gltf && personagensLigados()) setTimeout(() => this.criarPersonagens(), 2500);   // depois que a cena montou (o VRM é pesado)
@@ -1897,11 +1902,13 @@ export class CyberEngine {
     this.viagem = null; this.tunel = null;
     this.pilotando = false; this.noTopo = false; this.alvo = null; this.alvoDepois = null; this.sitT = 0; this.falandoCom = null;
     this.jet.noAr = false; this.jetV = { x: 0, z: 0 }; this.sobreNave = false; this.ilhota = null; this.bordo = null; this.motoAlvo = null;
-    this.plat = id === "zaeon" || id === "praca" ? null : { id, andar: 0 };
-    this.altoEm = id === "zaeon" ? "ceu" : null; this.yNav = id === "zaeon" ? CIDADE.pisoY : 0;
+    const naZaeon = id === "zaeon" || ehSala(id);   // (as SALAS são níveis da Zaeon: o piso é o dela)
+    this.plat = naZaeon || id === "praca" ? null : { id, andar: 0 };
+    this.altoEm = naZaeon ? "ceu" : null; this.yNav = naZaeon ? CIDADE.pisoY : 0;
     this.eu.pos.set(p.x, 0, p.z); this.eu.facing = p.rumo; this.camAz = p.rumo + Math.PI;
-    const y = id === "zaeon" ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : NOS[id].y;
+    const y = id === "zaeon" ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : ehSala(id) ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + ALTURA_LOUNGE : NOS[id].y;
     this.eu.alt = y; this.camT.set(p.x, y + 1.2, p.z); this.portalArmado = !noDoAnel(p, y);
+    if (NIVEIS_SEPARADOS) { this.mudarNivel(nivelDoPonto(p, y)); this.posNivel = { x: p.x, z: p.z, alt: y, ok: true }; }   // (chegou: já é o nível do destino)
     this.som.tocar("rise", new THREE.Vector3(p.x, y + 1, p.z), { dist: DISTANCIA.perto });
   }
   /** o TÚNEL: o React escolheu o destino (`null` = desistiu: fica onde está, fora do túnel) */
@@ -2786,7 +2793,7 @@ export class CyberEngine {
       if (!ativo) { const p = posse.get(c.i) ?? null; this.carroDeQuem(c, p && p.dono === euId && p.dirige ? null : p, t, dt); }
       // os PARADOS longe: nem se desenham; os parados perto: só o brilho (atualizar), sem som
       const d = Math.hypot(c.est.x - cam.x, c.est.z - cam.z), deOutro = !!c.posse?.dirige;
-      c.h.group.visible = ativo || deOutro || d < CARRO_VE;
+      c.h.group.visible = ativo || ((deOutro || d < CARRO_VE) && this.noMeuNivel(c.est, c.est.y));
       if (ativo) this.passoDoCarro(c, t, dt);
       else if (!deOutro) { if (c.loops) { for (const n of LOOPS_CARRO) this.som.soltarLoop(c.loops[n]); c.loops = null; } if (c.h.group.visible && d < CARRO_ANIMA) c.h.atualizar(t, dt, { vel: 0, ligado: false }); }
     }
@@ -3534,7 +3541,29 @@ export class CyberEngine {
   private regiaoPerto(raiz: THREE.Object3D, nome: string, area?: () => Regiao): boolean {
     let r = this.regioes.get(raiz);
     if (!r) { r = criarRegiao(nome, raiz, { area }); this.regioes.set(raiz, r); }
+    // de OUTRO nível: nem desenha nem anima (a Zaeon cuida dos níveis dela por dentro — components/cyber/Cidade)
+    if (this.nivel && nome !== "zaeon") { const g = r.area(); if (nivelDoPonto(g, (g.y0 + g.y1) / 2) !== this.nivel) { esconderRegiao(r); return false; } }
     return atualizarRegiao(r, this.cam.position);
+  }
+  /** o nível de um ponto do mundo está à mostra? (sem níveis: sempre) */
+  private noMeuNivel(p: { x: number; z: number }, y: number) { return !this.nivel || nivelDoPonto(p, y) === this.nivel; }
+  /** a cada quadro: em que nível estou (um salto grande = teleporte) — trocou: só o novo aparece */
+  private atualizarNivel() {
+    if (!NIVEIS_SEPARADOS) return;
+    this.quadroNivel++;
+    if (this.espiando && this.quadroNivel - this.espiando.quadro > 2) { this.espiando = null; this.cidade?.mostrarNivel(this.nivel); }   // (a cena acabou)
+    const e = this.eu, a = this.posNivel, saltou = !a.ok || Math.hypot(e.pos.x - a.x, e.pos.z - a.z) > 25 || Math.abs(e.alt - a.alt) > 25;
+    const n = proximoNivel(this.nivel, e.pos, e.alt, saltou);
+    a.x = e.pos.x; a.z = e.pos.z; a.alt = e.alt; a.ok = true;
+    if (n !== this.nivel) this.mudarNivel(n);
+  }
+  /** numa CENA do guia, mostrar outro nível (só o desenho) enquanto a cena durar — volta sozinho no quadro seguinte */
+  private espiando: { n: "zaeon" | NomeSala; quadro: number } | null = null; private quadroNivel = 0;
+  private espiarNivel(n: "zaeon" | NomeSala) { if (!this.cidade || n === this.nivel) return; this.cidade.grupoDoNivel(n).visible = true; this.espiando = { n, quadro: this.quadroNivel }; }
+  private mudarNivel(n: IdNivel) {
+    this.nivel = n; definirNivel(n);
+    this.cidade?.mostrarNivel(n);
+    this.somLounge?.silenciar(n !== "lounge");   // (a música do lounge é DO lounge: fora dele, não existe)
   }
   /** lotes da base: simula perto/longe, hover e energia (a tela, os cristais e as linhas reagem) */
   private loteBase(b: BaseEstudoHandle) {
@@ -3586,6 +3615,7 @@ export class CyberEngine {
         : planoConversa({ x: d.pos.x, y: d.alt + 0.3, z: d.pos.z }, eu, { lado: 0.4, pitch: 0.05, recuo: 0.6 });
     }
     if (p.cena === "motos") {   // a GARAGEM: as motos estacionadas, de cima, do lado da cidade
+      this.espiarNivel("garagem");   // (níveis separados: a garagem não existe daqui — na cena, ela aparece)
       const lote = LOTES.find((l) => l.id === "garagem")!, c = CIDADE.centro;
       return { foco: { x: lote.x, y: ilhaY + ALTURA_LOUNGE + 1, z: lote.z }, az: Math.atan2(c.x - lote.x, c.z - lote.z) + 0.25, pitch: 0.38, dist: 34 };
     }
@@ -3851,6 +3881,7 @@ export class CyberEngine {
     if (!this.visivel || document.hidden) return;
     atualizarCamuflagem(t);   // o relógio único de todos os hologramas do mapa
     const eu = this.eu, euId = this.o.eu.id; this.tAnt = this.agora; this.agora = t;
+    if (!this.menu) this.atualizarNivel();   // (os NÍVEIS separados: só o meu existe — lib/cyber/niveis)
 
     // MENU: segurar ESPAÇO p/ viajar; personagem fica sentado contemplando
     if (this.menu) {
@@ -4145,7 +4176,7 @@ export class CyberEngine {
     this.atualizarPersonagens(dt, t);
     if (this.frota) {
       this.frota.mostrar(!this.instancia && !this.menu);
-      this.frota.atualizar(dt, t, { cam: this.cam.position, eu: { x: this.eu.pos.x, y: this.eu.alt, z: this.eu.pos.z }, camera: this.cam, largura: this.w, altura: this.h, ilhaY: this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, pisoY: CIDADE.pisoY, musica: !!this.somLounge?.tocando,
+      this.frota.atualizar(dt, t, { noNivel: (p, y) => this.noMeuNivel(p, y), cam: this.cam.position, eu: { x: this.eu.pos.x, y: this.eu.alt, z: this.eu.pos.z }, camera: this.cam, largura: this.w, altura: this.h, ilhaY: this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, pisoY: CIDADE.pisoY, musica: !!this.somLounge?.tocando,
         obstaculos: [{ x: this.eu.pos.x, z: this.eu.pos.z }, ...[...this.remotos.values()].map((a) => ({ x: a.pos.x, z: a.pos.z })), ...this.personagens.map((p) => ({ x: p.h.pos.x, z: p.h.pos.z }))] });
     }
     // avatares
@@ -4178,7 +4209,7 @@ export class CyberEngine {
       // nem desenha (a malha com skinning não tem esfera confiável: frustumCulled=false) — perto continua animando
       // mesmo atrás de mim (o passo dele soa)
       const dCam = this.cam.position.distanceTo(a.av.group.position), naTela = this.frustum.intersectsSphere(this.esfAtor.set(a.av.group.position, 2.2)) || dCam < 4;
-      a.av.group.visible = naTela;
+      a.av.group.visible = naTela && this.noMeuNivel(a.pos, a.alt);   // (de outro nível: não existe pra mim)
       const cada = dCam < 12 ? 0 : !naTela ? (dCam < 60 ? 0.1 : Infinity) : dCam > 120 ? 0.1 : dCam > 40 ? 0.05 : 1 / 40;   // 12–40 m: um quadro sim, um não (LOD de animação)
       a.acum = (a.acum ?? 0) + dt;
       const animou = a.acum >= cada;
@@ -4225,7 +4256,7 @@ export class CyberEngine {
     if (this.nave) {
       const n = this.naveEst, curva = (n.yaw - this.yawAnt) / Math.max(dt, 1e-3); this.yawAnt = n.yaw;
       this.nave.group.position.set(n.x, n.y, n.z); this.nave.group.rotation.y = n.yaw + GIRO_PLANTA;   // estacionária: fica exatamente onde parou (a frente, com a rampa, no rumo)
-      this.nave.group.visible = this.pilotando || !this.naveDoDonoFora();
+      this.nave.group.visible = this.pilotando || (!this.naveDoDonoFora() && this.noMeuNivel(this.naveEst, this.naveEst.y));
       this.nave.atualizar({ dt, t, voando: this.pilotando && !this.pousado, vel: Math.hypot(n.vx, n.vz) / VOO.vel, curva, fechada: this.pilotando });
       if (this.pilotando) this.noAssento(eu.av, this.nave);   // o piloto aparece na cadeira, na cabine do centro
     }

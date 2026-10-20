@@ -30,7 +30,7 @@ export const contagemVazia = (): Record<AreaId, number> => Object.fromEntries(AR
 export function areaDe(p: { x: number; z: number }, transito = false): AreaId {
   if (transito) return "ceu";
   const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z };
-  const sala = salaEm(l, 2); if (sala) return sala;
+  const sala = salaEm(l, 2, true); if (sala) return sala;   // (o mapa inteiro: não depende do nível de quem olha)
   for (const amb of AMBIENTES_COM_VAGA) {   // o estacionamento conta como o lugar dele
     const e = ESTACIONAMENTOS[amb]; if (Math.hypot(p.x - e.x, p.z - e.z) <= tamanhoDoLote(e).r + 3) return amb;
   }
