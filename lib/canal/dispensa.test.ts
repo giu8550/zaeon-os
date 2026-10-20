@@ -196,3 +196,13 @@ describe("dispensa · #466 'continua comigo' protege a agente", () => {
     expect(quemFoiDispensada("@aura @teo pode sair", [aura, teo], 1)).toEqual(["aura", "teo"]);
   });
 });
+
+describe("dispensa · #468 o verbo direto e o 'também'", () => {
+  const sozinha = { ...zenita, humanos: 1 };
+  it.each(["sai @zenita", "saia agora", "sai da conversa", "@zenita pode sair também", "vaza", "pode ir você também", "sai daqui"])("sai: %s", (t) => {
+    expect(ehDispensa(t, sozinha)).toBe(true);
+  });
+  it.each(["sai um resumo disso?", "saiu o resultado da prova", "a aula saiu do ar", "quando sai o próximo capítulo", "saia do modo resumo e explica melhor", "saiu"])("fica: %s", (t) => {
+    expect(ehDispensa(t, sozinha)).toBe(false);
+  });
+});
