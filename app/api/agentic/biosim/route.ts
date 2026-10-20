@@ -1,4 +1,4 @@
-import { vertexCredentials } from "@/lib/ai/vertex-credentials";
+import { vertexCredentials, vertexTextClientOpts } from "@/lib/ai/vertex-credentials";
 /**
  * POST /api/agentic/biosim
  *
@@ -70,7 +70,7 @@ function getModel() {
   const credentials = (() => { const __v = vertexCredentials(); return { project_id: __v.project, client_email: __v.client_email, private_key: __v.private_key }; })(); // robust parse
   const vertexAI = new VertexAI({
     project:  credentials.project_id || process.env.GOOGLE_PROJECT_ID,
-    location: process.env.GOOGLE_LOCATION || 'us-central1',
+    ...vertexTextClientOpts(),
     googleAuthOptions: {
       credentials: {
         client_email: credentials.client_email,

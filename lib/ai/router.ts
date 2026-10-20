@@ -23,6 +23,7 @@
 import { VertexAI } from "@google-cloud/vertexai";
 import { GEMINI_MODEL, GEMINI_MODEL_FLASH, GEMINI_MODEL_PRO } from "./model";
 import { runtimeMode } from "@/lib/runtime/mode";
+import { vertexTextClientOpts } from "@/lib/ai/vertex-credentials";
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -243,7 +244,7 @@ function getVertexModel(
   const { project, client_email, private_key } = vertexCredentials();
   const v = new VertexAI({
     project,
-    location: process.env.GOOGLE_LOCATION || "us-central1",
+    ...vertexTextClientOpts(),
     googleAuthOptions: { credentials: { client_email, private_key } },
   });
   // No VPS (container) não há teto de 10s: deixamos o Gemini "pensar" e damos um teto
