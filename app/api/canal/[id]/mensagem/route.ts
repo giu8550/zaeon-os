@@ -80,18 +80,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   };
   await publicarPusher(canal.id, EV_MENSAGEM, wire);
 
-  // Chore em vez de turno: 1 por mensagem, do 1º agente mencionado, na thread desta mensagem.
-  const pedido = mencoes.length && choresLigadas() ? pedidoDeChore(texto) : null;
-  if (pedido) {
-    const { dispararChore } = await import("@/lib/queue/chores");
-    const r = await criarDoPedido(prisma as any, { tipo: pedido.tipo, alvo: { url: pedido.url }, agentKey: mencoes[0], canalId: canal.id, parentId: row.id, requesterId: u.id });
-    if (!("erro" in r)) {
-      const via = r.row.status === "queued" ? await dispararChore(r.row) : "existente";
-      return NextResponse.json({ ok: true, mensagem: wire, turnos: [], chore: { id: r.row.id, tipo: r.row.tipo, agentKey: r.row.agentKey, via } }, { status: 201 });
-    }
-  }
-
-  // #438: dispensou a agente da vez → despedida + "saiu da conversa", sem turno (não gasta IA)
+  // #440/#443: chamada com @ depois de ter saído → "Zenita voltou para a conversa". ANTES da chore: o pedido de
+  // tarefa ("@zenita resume <link>") retorna logo abaixo e ficava sem a linha.
   for (const k of voltando) {
     const ag = agentes.find((a) => a.agentKey === k);
     const voltou = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "sistema", autorId: k, texto: textoVoltou(ag?.nome ?? k), mencoes: [] } });
@@ -100,6 +90,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       createdAt: voltou.createdAt.toISOString(), autorNome: ag?.nome ?? k, autorAvatar: null,
     } satisfies MensagemWire);
   }
+
+  // Chore em vez de turno: 1 por mensagem, do 1º agente mencionado, na thread desta mensagem.
+  const pedido = mencoes.length && choresLigadas() ? pedidoDeChore(texto) : null;
+  if (pedido) {
+    const { dispararChore } = await import("@/lib/queue/chores");
+    const r = await criarDoPedido(prisma as any, { tipo: pedido.tipo, alvo: { url: pedido.url }, agentKey: mencoes[0], canalId: canal.id, parentId: row.id, requesterId: u.id });
+    if (!("erro" in r)) {
+      const via = r.row.status === "queued" ? await dispararChore(r.row) : "existente";
+      return NextResponse.json({
+        ok: true, mensagem: wire, turnos: [], chore: { id: r.row.id, tipo: r.row.tipo, agentKey: r.row.agentKey, via }, agentesNoCanal,
+        ...(voltando.length ? { voltaram: voltando } : {}),
+      }, { status: 201 });
+    }
+  }
+
+  // #438: dispensou a agente da vez → despedida + "saiu da conversa", sem turno (não gasta IA)
   for (const k of dispensadas) {
     const ag = agentes.find((a) => a.agentKey === k);
     const nome = ag?.nome ?? k;

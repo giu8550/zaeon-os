@@ -1,7 +1,7 @@
 /** Fatia 7: "@aura resume <url>" vira CHORE (não turno) só com CHORES_QUEUE=1; em dúvida, turno. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { A, CANAL, state } = vi.hoisted(() => ({ A: "a".repeat(24), CANAL: "d".repeat(24), state: { turnos: [] as any[], chores: [] as any[] } }));
+const { A, CANAL, state } = vi.hoisted(() => ({ A: "a".repeat(24), CANAL: "d".repeat(24), state: { turnos: [] as any[], chores: [] as any[], historico: [] as any[], criadas: [] as any[] } }));
 
 vi.mock("@/lib/canal/server", async () => {
   const { fakeDb } = await import("@/lib/chore/fakeDb");
@@ -9,7 +9,10 @@ vi.mock("@/lib/canal/server", async () => {
   const canal = { id: CANAL, ownerId: A, titulo: "t", acesso: "privado", membros: [], agentes: ["aura"] };
   db.canal = { findUnique: async () => canal, update: async () => canal };
   // #440: a rota lê o histórico sempre (com @ também) — pra saber se a agente chamada tinha saído
-  db.canalMensagem = { create: async ({ data }: any) => ({ id: "f".repeat(24), createdAt: new Date(), ...data }), findMany: async () => [] };
+  db.canalMensagem = {
+    create: async ({ data }: any) => { const r = { id: "f".repeat(24), createdAt: new Date(), ...data }; state.criadas.push(r); return r; },
+    findMany: async () => [...state.historico].reverse(),
+  };
   return {
     isObjectId: (v: unknown) => typeof v === "string" && /^[a-f0-9]{24}$/i.test(v), prisma: db,
     sessaoUsuario: async () => ({ id: A, name: "A", image: null, email: "a@x", role: null }), exigirFlag: () => null,
@@ -24,7 +27,7 @@ import { POST } from "./route";
 const req = (texto: string) => new Request("http://x", { method: "POST", body: JSON.stringify({ texto }), headers: { "content-type": "application/json" } });
 
 describe("mensagem → chore (G5b)", () => {
-  beforeEach(() => { state.turnos = []; state.chores = []; });
+  beforeEach(() => { state.turnos = []; state.chores = []; state.historico = []; state.criadas = []; });
 
   it("CHORES_QUEUE=1 + '@aura resume <url>' → 1 chore na thread da mensagem, ZERO turno", async () => {
     process.env.CHORES_QUEUE = "1";
@@ -43,5 +46,18 @@ describe("mensagem → chore (G5b)", () => {
     process.env.CHORES_QUEUE = "1";
     await POST(req("@aura faz um relatório sobre https://www.saude.gov.br/boletim"), { params: { id: CANAL } });
     expect(state.chores).toHaveLength(0); expect(state.turnos).toHaveLength(1);
+  });
+});
+
+describe("mensagem → chore · #443 a agente volta com aviso", () => {
+  beforeEach(() => { state.turnos = []; state.chores = []; state.criadas = []; });
+  it("dispensada e chamada com um pedido de tarefa ('@aura resume <link>') → entra 'Aura voltou para a conversa'", async () => {
+    process.env.CHORES_QUEUE = "1";
+    state.historico = [{ autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "aura" }, { autorTipo: "sistema", autorId: "aura", texto: "Aura saiu da conversa" }];
+    const j = await (await POST(req("@aura resume https://www.saude.gov.br/boletim"), { params: { id: CANAL } })).json();
+    expect(state.chores).toHaveLength(1);
+    expect(j.voltaram).toEqual(["aura"]);
+    expect(state.criadas.map((m) => [m.autorTipo, m.texto])).toEqual([["humano", "@aura resume https://www.saude.gov.br/boletim"], ["sistema", "Aura voltou para a conversa"]]);
+    delete process.env.CHORES_QUEUE;
   });
 });
