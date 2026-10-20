@@ -38,7 +38,7 @@ const pedidos = args.filter((a, i) => !a.startsWith("--") && !["--gateway", "--k
 const PROVEDORES = {
   groq:       { env: "GROQ_API_KEY",        base: "https://api.groq.com/openai/v1",  model: process.env.GROQ_MODEL ?? "openai/gpt-oss-20b" },
   openrouter: { env: "OPENROUTER_API_KEY",  base: "https://openrouter.ai/api/v1",   model: process.env.OPENROUTER_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free", headers: { "HTTP-Referer": "https://zaeon.com.br", "X-Title": "Zaeon provar-chaves" } },
-  gemini:     { env: "GEMINI_FREE_API_KEY", base: "https://generativelanguage.googleapis.com/v1beta/openai", model: process.env.GEMINI_FREE_MODEL ?? "gemini-2.5-flash-lite" },
+  gemini:     { env: "GEMINI_FREE_API_KEY", base: "https://generativelanguage.googleapis.com/v1beta/openai", model: process.env.GEMINI_FREE_MODEL ?? "gemini-3.5-flash-lite" },
   cloudflare: { env: "CLOUDFLARE_API_KEY",  base: () => process.env.CLOUDFLARE_ACCOUNT_ID ? `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/v1` : null, model: process.env.CLOUDFLARE_MODEL ?? "@cf/meta/llama-3.1-8b-instruct", precisa: ["CLOUDFLARE_ACCOUNT_ID"] },
   glm:        { env: "ZHIPU_API_KEY",       base: "https://open.bigmodel.cn/api/paas/v4", model: process.env.GLM_MODEL ?? "glm-4-flash" },
   mistral:    { env: "MISTRAL_API_KEY",     base: "https://api.mistral.ai/v1",      model: process.env.MISTRAL_MODEL ?? "mistral-small-latest" },
